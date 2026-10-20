@@ -248,3 +248,8 @@ Foreign account identity candidates are discarded atomically; credential-owner
 UA, explicit version pins, valid Codex selections, upstream supplier mappings
 and every unrelated provider setting remain intact. Runtime ignores stale
 synchronization values and rejects foreign API-key families before cleanup.
+
+Migrations 291–293 align the [official agent baselines](../../docs/OFFICIAL_AGENT_BASELINES.md):
+Grok API-key native identity, DeepSeek anonymous Harness owner UUIDs, and removal
+of linked ZCode copied project secrets in favor of memory-only PAT issuance.
+Manual API keys and valid native identity pins are preserved.

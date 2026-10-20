@@ -41,7 +41,7 @@ func TestCodexConfiguredProfilePreservesFallbackSource(t *testing.T) {
 		{name: "blank", global: "   ", source: "compiled_default"},
 		{name: "invalid", global: "untrusted/1", source: "compiled_default"},
 		{name: "read failure", unavailable: true, source: "compiled_default"},
-		{name: "explicit default fingerprint", global: "codex_cli_rs/0.158.0 (Ubuntu 24.04; x86_64) xterm-256color", source: "global"},
+		{name: "explicit default fingerprint", global: "codex_cli_rs/0.163.0 (Ubuntu 24.04; x86_64) xterm-256color", source: "global"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			values := map[string]string{}
@@ -57,14 +57,14 @@ func TestCodexConfiguredProfilePreservesFallbackSource(t *testing.T) {
 			for range 2 {
 				identity := resolveOpenAIOutboundIdentityFromSettings(context.Background(), nil, settings)
 				require.Equal(t, tc.source, identity.Source)
-				require.Equal(t, "codex_cli_rs/0.158.0 (Ubuntu 24.04; x86_64) xterm-256color", identity.UserAgent)
+				require.Equal(t, "codex_cli_rs/0.163.0 (Ubuntu 24.04; x86_64) xterm-256color", identity.UserAgent)
 				require.Equal(t, "codex_cli_rs", identity.Originator)
-				require.Equal(t, "0.158.0", identity.Version)
+				require.Equal(t, "0.163.0", identity.Version)
 			}
 			account := &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth, Credentials: map[string]any{"user_agent": testOpenAIAccountUserAgent}}
 			identity := resolveOpenAIOutboundIdentityFromSettings(context.Background(), account, settings)
 			require.Equal(t, "account", identity.Source)
-			require.Equal(t, "codex_cli_rs/0.158.0 (Ubuntu 22.4.0; x86_64) xterm-256color", identity.UserAgent)
+			require.Equal(t, "codex_cli_rs/0.163.0 (Ubuntu 22.4.0; x86_64) xterm-256color", identity.UserAgent)
 		})
 	}
 }
@@ -144,7 +144,7 @@ func TestOpenAIIdentityContractPrivacyPreservesSelectedIdentity(t *testing.T) {
 }
 
 func TestOpenAIIdentityContractPrivacyPreservesSynchronizedVersionForms(t *testing.T) {
-	base := "codex_cli_rs/0.158.0 "
+	base := "codex_cli_rs/0.163.0 "
 	maximumUA := base + strings.Repeat("x", maxOpenAIAccountUserAgentLength-len(base))
 	for _, version := range []string{"0.200", "0.2000.1"} {
 		t.Run(version, func(t *testing.T) {

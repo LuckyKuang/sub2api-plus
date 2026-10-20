@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"io"
 	"net/http"
 	"net/url"
@@ -13,6 +12,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 )
 
 // Business origins. The ZCode client keeps the login/business origin and the
@@ -42,11 +44,19 @@ const (
 // only used through the resolvers below.
 const CredentialRequestTimeout = 15 * time.Second
 
+type BusinessHTTPError struct{ Status int }
+
+func (e *BusinessHTTPError) Error() string {
+	return fmt.Sprintf("business endpoint returned status %d", e.Status)
+}
+
 // CodingPlanCredential is a resolved model credential plus the project scope it
 // belongs to. Team-plan traffic must also send the organization and project
 // headers, so the scope is returned rather than only the key.
 type CodingPlanCredential struct {
 	APIKey         string
+	KeyID          string
+	ExpiresAt      time.Time
 	OrganizationID string
 	ProjectID      string
 }
@@ -127,7 +137,7 @@ func (c *CredentialClient) origin(provider string) string {
 // bizHeader builds the Authorization header for one business call.
 //
 // The official client is not internally consistent for the Z.ai estate: the
-// personal coding-plan key derivation sends `Bearer <token>` while the
+// personal coding-plan key-location management sends `Bearer <token>` while the
 // subscription and team-plan paths send the bare token. The resolvers below
 // mirror each call site exactly rather than normalizing, so a future upstream
 // change on either path can be matched independently.
@@ -182,10 +192,10 @@ func (c *CredentialClient) ExchangeZaiBusinessToken(ctx context.Context, oauthAc
 	return accessToken, nil
 }
 
-// ResolveIndividualCodingPlanKey derives the personal coding-plan API key for a
+// ResolveIndividualCodingPlanKey issues the personal coding-plan PAT for a
 // linked account. It mirrors the official client: read the customer profile,
-// select a non-team organization/project, find or create the published personal
-// key, then copy its secret and join both halves.
+// select the default organization/project, find or create the published key
+// location, then issue a short-lived project access token.
 func (c *CredentialClient) ResolveIndividualCodingPlanKey(ctx context.Context, provider, accessToken string) (*CodingPlanCredential, error) {
 	ctx = withIdentity(ctx)
 	provider = NormalizeProvider(provider)
@@ -199,7 +209,7 @@ func (c *CredentialClient) ResolveIndividualCodingPlanKey(ctx context.Context, p
 	origin := c.origin(provider)
 	authorization := bizAuthorization(provider, accessToken, true)
 
-	customer, err := c.fetchCustomerInfo(ctx, origin, authorization, nil)
+	customer, err := c.fetchCustomerInfo(ctx, origin, accessToken, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -213,26 +223,10 @@ func (c *CredentialClient) ResolveIndividualCodingPlanKey(ctx context.Context, p
 	if err != nil {
 		return nil, err
 	}
-	secret, err := c.copyAPIKeySecret(ctx, listURL, authorization, nil, apiKey)
-	if err != nil {
-		return nil, err
-	}
-	if secret == "" {
-		// Z.ai requires the copied secret; BigModel historically accepted the bare
-		// key, so the two estates differ in how hard the failure is.
-		if provider == ProviderZai {
-			return nil, fmt.Errorf("zai copy endpoint returned no secret key")
-		}
-		return &CodingPlanCredential{APIKey: apiKey, OrganizationID: organizationID, ProjectID: projectID}, nil
-	}
-	return &CodingPlanCredential{
-		APIKey:         apiKey + "." + secret,
-		OrganizationID: organizationID,
-		ProjectID:      projectID,
-	}, nil
+	return c.issueProjectToken(ctx, provider, accessToken, organizationID, projectID, apiKey)
 }
 
-// ResolveTeamPlanKey derives the team-plan project key for a linked account. The
+// ResolveTeamPlanKey issues the team-plan project PAT for a linked account. The
 // team scope is supplied by the operator (or discovered at link time) because a
 // team account can own several projects, each with its own project key.
 func (c *CredentialClient) ResolveTeamPlanKey(ctx context.Context, provider, accessToken, organizationID, projectID string) (*CodingPlanCredential, error) {
@@ -254,7 +248,7 @@ func (c *CredentialClient) ResolveTeamPlanKey(ctx context.Context, provider, acc
 	}
 
 	// The scope must exist for this account before a project key can be ensured.
-	customer, err := c.fetchCustomerInfo(ctx, origin, authorization, nil)
+	customer, err := c.fetchCustomerInfo(ctx, origin, accessToken, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -268,15 +262,7 @@ func (c *CredentialClient) ResolveTeamPlanKey(ctx context.Context, provider, acc
 	if err != nil {
 		return nil, err
 	}
-	secret, err := c.copyAPIKeySecret(ctx, listURL, authorization, teamHeaders, apiKey)
-	if err != nil {
-		return nil, err
-	}
-	key := apiKey
-	if secret != "" {
-		key = apiKey + "." + secret
-	}
-	return &CodingPlanCredential{APIKey: key, OrganizationID: organizationID, ProjectID: projectID}, nil
+	return c.issueProjectToken(ctx, provider, accessToken, organizationID, projectID, apiKey)
 }
 
 // ProjectAPIKeysURL builds the project API-key collection URL.
@@ -307,10 +293,17 @@ func (c *CredentialClient) findOrCreateAPIKey(ctx context.Context, listURL, auth
 	if err != nil {
 		return "", err
 	}
+	if keyType == nil {
+		for _, key := range keys {
+			if key.Name == name && strings.TrimSpace(key.APIKey) == "" {
+				return "", fmt.Errorf("project_token_invalid_response")
+			}
+		}
+	}
 	if key := matchAPIKey(keys, name, keyType); key != "" {
 		return key, nil
 	}
-	createBody := map[string]any{"name": name}
+	createBody := map[string]any{"name": name, "usageScene": 1}
 	if keyType != nil {
 		createBody["keyType"] = *keyType
 	}
@@ -332,7 +325,7 @@ func (c *CredentialClient) findOrCreateAPIKey(ctx context.Context, listURL, auth
 	if !bizCodeAccepted(payload.Code, payload.Success, payload.Data != nil) {
 		return "", fmt.Errorf("api key creation was rejected for this account")
 	}
-	if payload.Data == nil || strings.TrimSpace(payload.Data.APIKey) == "" {
+	if payload.Data == nil || strings.TrimSpace(payload.Data.APIKey) == "" || (keyType != nil && (payload.Data.Name != name || payload.Data.KeyType == nil || *payload.Data.KeyType != *keyType)) {
 		return "", fmt.Errorf("api key creation returned no key")
 	}
 	return strings.TrimSpace(payload.Data.APIKey), nil
@@ -353,24 +346,64 @@ func (c *CredentialClient) listAPIKeys(ctx context.Context, listURL string, head
 	return payload.Data, nil
 }
 
-func (c *CredentialClient) copyAPIKeySecret(ctx context.Context, listURL, authorization string, extra map[string]string, apiKey string) (string, error) {
-	target := listURL + "/copy/" + url.PathEscape(apiKey)
+// IssueProjectToken renews the stored location under its original login owner.
+func (c *CredentialClient) IssueProjectToken(ctx context.Context, provider, token, organizationID, projectID, keyID string) (*CodingPlanCredential, error) {
+	if NormalizeProvider(provider) == "" || strings.TrimSpace(token) == "" || organizationID == "" || projectID == "" || keyID == "" {
+		return nil, fmt.Errorf("project_token_location_invalid")
+	}
+	return c.issueProjectToken(withIdentity(ctx), provider, token, organizationID, projectID, keyID)
+}
+
+// issueProjectToken follows ZCode shared/project-access-token-client.ts. A
+// disabled switch or malformed response cannot fall back to copying a secret.
+func (c *CredentialClient) issueProjectToken(ctx context.Context, provider, token, organizationID, projectID, keyID string) (*CodingPlanCredential, error) {
+	identity, _ := outboundidentity.FromContext(ctx)
+	version := identity.Version
+	if version == "" {
+		version = ResolveVersion()
+	}
+	body, _ := json.Marshal(map[string]string{"clientType": "zcode", "clientVersion": version})
+	started := time.Now()
 	var payload struct {
 		Code    json.RawMessage `json:"code"`
 		Success *bool           `json:"success"`
 		Data    *struct {
-			SecretKey string `json:"secretKey"`
+			Enable      *bool   `json:"enable"`
+			AccessToken string  `json:"accessToken"`
+			TokenType   string  `json:"tokenType"`
+			ExpiresIn   float64 `json:"expiresIn"`
+			ExpiresAt   float64 `json:"expiresAt"`
 		} `json:"data"`
 	}
-	if err := c.doJSON(ctx, http.MethodGet, target, mergeHeaders(map[string]string{
-		"Authorization": authorization,
-	}, extra), nil, &payload); err != nil {
-		return "", err
+	target := ProjectAPIKeysURL(c.origin(provider), organizationID, projectID) + "/" + url.PathEscape(keyID) + "/access_tokens"
+	if err := c.doJSON(ctx, http.MethodPost, target, map[string]string{"Authorization": "Bearer " + strings.TrimPrefix(token, "Bearer "), "Content-Type": "application/json"}, body, &payload); err != nil {
+		return nil, err
 	}
-	if !bizCodeAccepted(payload.Code, payload.Success, payload.Data != nil) || payload.Data == nil {
-		return "", nil
+	// PAT responses use projectTokenSuccessCodeSchema, which requires an
+	// explicit 0/200 code. A missing location may be reported inside HTTP 200.
+	code := strings.TrimSpace(string(payload.Code))
+	if code == "404" || code == `"404"` {
+		return nil, &BusinessHTTPError{Status: http.StatusNotFound}
 	}
-	return strings.TrimSpace(payload.Data.SecretKey), nil
+	if (code != "0" && code != "200" && code != `"0"` && code != `"200"`) || (payload.Success != nil && !*payload.Success) || payload.Data == nil {
+		return nil, fmt.Errorf("project_token_invalid_response")
+	}
+	data := payload.Data
+	if data.Enable != nil && !*data.Enable {
+		return nil, fmt.Errorf("project_token_disabled")
+	}
+	expires := time.Unix(int64(data.ExpiresAt), 0)
+	if data.ExpiresIn <= 0 || data.ExpiresIn > 365*24*3600 || data.ExpiresAt <= 0 {
+		return nil, fmt.Errorf("project_token_invalid_response")
+	}
+	if relative := started.Add(time.Duration(data.ExpiresIn * float64(time.Second))); relative.Before(expires) {
+		expires = relative
+	}
+	token = strings.TrimSpace(data.AccessToken)
+	if token == "" || strings.ContainsAny(token, "\r\n") || data.TokenType != "Bearer" || !expires.After(time.Now()) {
+		return nil, fmt.Errorf("project_token_invalid_response")
+	}
+	return &CodingPlanCredential{APIKey: token, KeyID: keyID, ExpiresAt: expires, OrganizationID: organizationID, ProjectID: projectID}, nil
 }
 
 // doJSON performs one business call and decodes the JSON body into dest. A nil
@@ -408,7 +441,7 @@ func (c *CredentialClient) doJSON(ctx context.Context, method, target string, he
 		return err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("business endpoint returned status %d", resp.StatusCode)
+		return &BusinessHTTPError{Status: resp.StatusCode}
 	}
 	if dest == nil {
 		return nil
@@ -466,7 +499,7 @@ type OrganizationInfo struct {
 }
 
 // ProjectInfo is one project. projectType "2" marks a team project, which the
-// personal key derivation must skip.
+// desktop non-team selector excludes; the current CLI default selector accepts.
 type ProjectInfo struct {
 	ProjectID   string          `json:"projectId"`
 	ProjectName string          `json:"projectName"`
@@ -484,10 +517,9 @@ type APIKeySummary struct {
 const (
 	defaultOrganizationName = "默认机构"
 	defaultProjectName      = "默认项目"
-	teamProjectType         = "2"
 )
 
-// PickPersonalScope selects the non-team organization/project the personal key
+// PickPersonalScope selects the CLI default organization/project the personal key
 // belongs to. The official client prefers the default-named organization and
 // project and otherwise takes the first eligible entry.
 func PickPersonalScope(info *CustomerInfo) (organizationID, projectID string) {
@@ -507,10 +539,6 @@ func PickPersonalScope(info *CustomerInfo) (organizationID, projectID string) {
 			continue
 		}
 		for _, project := range organization.Projects {
-			if strings.TrimSpace(string(project.ProjectType)) == teamProjectType ||
-				strings.Trim(strings.TrimSpace(string(project.ProjectType)), `"`) == teamProjectType {
-				continue
-			}
 			projectID := strings.TrimSpace(project.ProjectID)
 			if projectID == "" {
 				continue

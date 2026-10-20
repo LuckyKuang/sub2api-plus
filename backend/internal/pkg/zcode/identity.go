@@ -23,14 +23,14 @@ const (
 	// Preset is the outbound identity preset key owned by this family.
 	Preset = "zcode"
 
-	// DefaultVersion is the pinned ZCode release version.
+	// DefaultVersion is the reviewed ZCode source version.
 	//
 	// Two official version lines exist upstream: the desktop / server product
-	// version (repository root package.json, 3.14.3) and the standalone CLI
-	// package version (apps/zcode-cli/package.json, 0.16.9). The desktop product
+	// version (repository root package.json, 3.16.2) and the standalone CLI
+	// package version (apps/zcode-cli/package.json, 0.17.0). The desktop product
 	// version is pinned because the User-Agent product token names that product
 	// and the desktop application is what spawns the agent runtime.
-	DefaultVersion = "3.14.3"
+	DefaultVersion = "3.16.2"
 
 	// VersionEnv is the optional operator override for DefaultVersion. It
 	// follows the existing SUB2API_CLAUDE_CLI_VERSION /

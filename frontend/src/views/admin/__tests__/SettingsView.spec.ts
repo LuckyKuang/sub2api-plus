@@ -773,14 +773,14 @@ describe("admin SettingsView payment visible method controls", () => {
 
   it("keeps manual Codex version controls without automatic synchronization or retired submitted fields", async () => {
     getSettings.mockResolvedValue({ ...baseSettingsResponse,
-      openai_codex_client_version: "", openai_codex_client_version_effective: "0.158.0", openai_codex_client_version_source: "compiled",
+      openai_codex_client_version: "", openai_codex_client_version_effective: "0.163.0", openai_codex_client_version_source: "compiled",
       openai_codex_client_version_synced: "9.9.9", openai_codex_version_auto_sync_enabled: true,
     });
     const wrapper = mountView();
     try {
       await flushPromises();
       await openIdentityTab(wrapper);
-      expect(wrapper.text()).toContain("0.158.0");
+      expect(wrapper.text()).toContain("0.163.0");
       expect(wrapper.text()).not.toContain("9.9.9");
       expect(wrapper.text()).not.toContain("openaiCodexVersionAutoSync");
       expect(wrapper.text()).not.toContain("openaiCodexVersionSyncNow");

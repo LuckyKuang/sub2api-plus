@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
@@ -49,7 +50,7 @@ var zhipuPlanKinds = []string{
 
 // ZhipuPlanKindSupported reports whether the plan kind can be mapped onto an
 // account. Off-peak is supported: its account material mirrors start-plan
-// (the ZCode token as bearer) plus the derived coding-plan key, and the
+// (the ZCode token as bearer) plus a renewable coding-plan PAT, and the
 // per-request admission ticket is supplied separately by the ticket manager.
 func ZhipuPlanKindSupported(planKind string) bool {
 	switch strings.TrimSpace(planKind) {
@@ -70,6 +71,7 @@ type ZhipuOAuthClient interface {
 	ExchangeZaiBusinessToken(ctx context.Context, oauthAccessToken, proxyURL string) (string, error)
 	ResolveIndividualCodingPlanKey(ctx context.Context, provider, accessToken, proxyURL string) (*zcode.CodingPlanCredential, error)
 	ResolveTeamPlanKey(ctx context.Context, provider, accessToken, organizationID, projectID, proxyURL string) (*zcode.CodingPlanCredential, error)
+	IssueProjectToken(ctx context.Context, provider, accessToken, organizationID, projectID, keyID, proxyURL string) (*zcode.CodingPlanCredential, error)
 }
 
 // ZhipuOAuthService owns the ZCode platform account-link flow.
@@ -78,17 +80,22 @@ type ZhipuOAuthClient interface {
 // for every outbound call through the native Zhipu preset and then delegates the
 // HTTP work to ZhipuOAuthClient.
 type ZhipuOAuthService struct {
-	client       ZhipuOAuthClient
-	sessionStore *zcode.SessionStore
-	proxyRepo    ProxyRepository
+	client                  ZhipuOAuthClient
+	sessionStore            *zcode.SessionStore
+	proxyRepo               ProxyRepository
+	projectTokenMu          sync.Mutex
+	projectTokens           map[outboundIdentityOwner]*zhipuProjectTokenEntry
+	projectTokenGenerations map[outboundIdentityOwner]string
 }
 
 // NewZhipuOAuthService creates the service with a process-local session store.
 func NewZhipuOAuthService(client ZhipuOAuthClient, proxyRepo ProxyRepository) *ZhipuOAuthService {
 	return &ZhipuOAuthService{
-		client:       client,
-		sessionStore: zcode.NewSessionStore(),
-		proxyRepo:    proxyRepo,
+		client:                  client,
+		projectTokens:           map[outboundIdentityOwner]*zhipuProjectTokenEntry{},
+		projectTokenGenerations: map[outboundIdentityOwner]string{},
+		sessionStore:            zcode.NewSessionStore(),
+		proxyRepo:               proxyRepo,
 	}
 }
 
@@ -421,7 +428,8 @@ func (s *ZhipuOAuthService) BuildAccountMaterial(ctx context.Context, input Zhip
 		if credential == nil || strings.TrimSpace(credential.APIKey) == "" {
 			return nil, infraerrors.New(http.StatusBadGateway, "ZHIPU_OAUTH_KEY_RESOLUTION_FAILED", "the coding-plan api key could not be derived for this account")
 		}
-		credentials["api_key"] = credential.APIKey
+		credentials["oauth_access_token"] = accessToken
+		credentials["zhipu_project_key_id"] = credential.KeyID
 		credentials["access_token"] = businessToken
 		if credential.OrganizationID != "" {
 			credentials["zhipu_organization"] = credential.OrganizationID
@@ -500,7 +508,12 @@ func (s *ZhipuOAuthService) BuildAccountMaterial(ctx context.Context, input Zhip
 		credentials["api_key"] = jwt
 		credentials["zcode_jwt_token"] = jwt
 		credentials["access_token"] = businessToken
-		credentials["off_peak_plan_key"] = credential.APIKey
+		credentials["oauth_access_token"] = accessToken
+		credentials["zhipu_project_key_id"] = credential.KeyID
+		credentials["zhipu_project_key_name"] = zcode.PersonalAPIKeyName
+		if teamPlan {
+			credentials["zhipu_project_key_name"] = zcode.TeamAPIKeyName
+		}
 		if credential.OrganizationID != "" {
 			credentials["zhipu_organization"] = credential.OrganizationID
 		}
@@ -509,15 +522,20 @@ func (s *ZhipuOAuthService) BuildAccountMaterial(ctx context.Context, input Zhip
 		}
 		credentials[credentialAPIBaseURLs] = map[string]any{APIProtocolAnthropic: zcodeOffPeakAnthropicBaseURL}
 		credentials[anthropicAPIKeyAuthSchemeExtraKey] = AnthropicAPIKeyAuthSchemeAuthorizationBearer
-		// The plan key and the team scope are static request declarations, so they
-		// live in the account header overrides; only the admission ticket id is
-		// request-scoped and is injected by the ticket manager.
-		offPeakHeaders := map[string]string{"x-coding-plan-api-key": credential.APIKey}
+		// The PAT is resolved in memory for each attempt. Persist only team scope;
+		// neither a PAT nor the superseded long-lived plan key is an override.
+		offPeakHeaders := map[string]string{}
+		cleanOverrides := make(map[string]any, len(input.HeaderOverrides))
+		for name, value := range input.HeaderOverrides {
+			if !strings.EqualFold(name, "x-coding-plan-api-key") {
+				cleanOverrides[name] = value
+			}
+		}
 		if teamPlan {
 			offPeakHeaders["bigmodel-organization"] = credential.OrganizationID
 			offPeakHeaders["bigmodel-project"] = credential.ProjectID
 		}
-		credentials[credKeyHeaderOverrides] = mergeHeaderOverrides(input.HeaderOverrides, offPeakHeaders)
+		credentials[credKeyHeaderOverrides] = mergeHeaderOverrides(cleanOverrides, offPeakHeaders)
 		credentials[credKeyHeaderOverrideEnabled] = true
 		return &ZhipuAccountMaterial{
 			Credentials: credentials,

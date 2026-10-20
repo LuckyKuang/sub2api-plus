@@ -314,7 +314,7 @@ func (s blockingCompatibilityConfigStore) Decrypt(value string) (string, error) 
 
 func TestExtractionFailuresAllowAPIKeyAndOAuthDownstreamStages(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	for _, platform := range []string{service.PlatformOpenAI, service.PlatformDeepseek, service.PlatformKimi, service.PlatformMiniMax, service.PlatformZhipu, service.PlatformStepFun, service.PlatformOpenCodeGo, service.PlatformCline, service.PlatformCommandCode} {
+	for _, platform := range []string{service.PlatformOpenAI, service.PlatformGrok, service.PlatformDeepseek, service.PlatformKimi, service.PlatformMiniMax, service.PlatformZhipu, service.PlatformStepFun, service.PlatformOpenCodeGo, service.PlatformCline, service.PlatformCommandCode} {
 		for _, accountType := range []string{service.AccountTypeAPIKey, service.AccountTypeOAuth} {
 			if accountType == service.AccountTypeOAuth && (platform == service.PlatformOpenCodeGo || platform == service.PlatformCline || platform == service.PlatformCommandCode) {
 				continue // These compatible providers expose API-key accounts only.
@@ -355,7 +355,13 @@ func TestExtractionFailuresAllowAPIKeyAndOAuthDownstreamStages(t *testing.T) {
 				selectedCredential := ""
 				if decision.AllowNextStage {
 					accountSelections++
-					if account.IsOpenAIOAuth() {
+					if account.Platform == service.PlatformGrok {
+						if account.Type == service.AccountTypeOAuth {
+							selectedCredential = account.GetGrokAccessToken()
+						} else {
+							selectedCredential = account.GetCredential("api_key")
+						}
+					} else if account.IsOpenAIOAuth() {
 						selectedCredential = account.GetOpenAIAccessToken()
 					} else {
 						selectedCredential = account.GetOpenAIProtocolAPIKey()

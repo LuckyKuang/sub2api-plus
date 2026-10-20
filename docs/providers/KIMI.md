@@ -33,8 +33,8 @@ surface.
 
 Kimi and Moonshot OAuth/API-key accounts retain the Kimi Code client family.
 Account parameters may override its global profile; cross-family selections and
-the retired `kimi:apikey` mapping are rejected. The compiled identity is: `User-Agent: kimi-code-cli/2.1.1` plus the official companion
-declarations `X-Msh-Platform: kimi_code_cli`, `X-Msh-Version: 2.1.1` and the four
+the retired `kimi:apikey` mapping are rejected. The compiled identity is: `User-Agent: kimi-code-cli/2.2.0` plus the official companion
+declarations `X-Msh-Platform: kimi_code_cli`, `X-Msh-Version: 2.2.0` and the four
 device headers `X-Msh-Device-Name`, `X-Msh-Device-Model`, `X-Msh-Os-Version` and
 `X-Msh-Device-Id`. The official client declares no `Originator` and no standalone
 `Version` header, so neither is sent. `SUB2API_KIMI_CODE_VERSION` may select a
@@ -88,3 +88,9 @@ SDK `0.95.2`, OpenAI SDK `6.34.0`, with a pinned supported Linux/arm64 Node
 v22.19.0 fingerprint. OAuth/token calls retain the same UA/device identity without
 those inference SDK headers. Settings show the resolved protocol variants; see
 [SDK wire profiles](../OUTBOUND_IDENTITY.md#domestic-sdk-wire-profiles).
+
+Model discovery follows the [reviewed Kimi Code source](../OFFICIAL_AGENT_BASELINES.md).
+OAuth calls the regional `/coding/v1/models` with its account Bearer token and
+trusted device snapshot. Catalog reasoning accepts `type: only|both|none` and
+`effort.valid/default`; defaults outside the advertised efforts are discarded.
+Existing public/PAYG boolean reasoning catalogs remain readable.

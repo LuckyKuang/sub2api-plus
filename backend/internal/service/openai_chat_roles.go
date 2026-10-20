@@ -8,7 +8,13 @@ import (
 )
 
 func requiresSystemChatRole(account *Account, targetURL string) bool {
-	if account == nil || account.Type != AccountTypeAPIKey {
+	if account == nil {
+		return false
+	}
+	if account.Platform == PlatformStepFun && (account.Type == AccountTypeAPIKey || account.IsDomesticOAuth()) {
+		return true
+	}
+	if account.Type != AccountTypeAPIKey {
 		return false
 	}
 	switch account.Platform {
@@ -22,7 +28,7 @@ func requiresSystemChatRole(account *Account, targetURL string) bool {
 		return false
 	}
 	switch strings.ToLower(u.Hostname()) {
-	case "api.deepseek.com", "api.kimi.com", "api.moonshot.cn", "api.moonshot.ai", "open.bigmodel.cn", "api.z.ai":
+	case "api.stepfun.com", "api.stepfun.ai", "api.deepseek.com", "api.kimi.com", "api.moonshot.cn", "api.moonshot.ai", "open.bigmodel.cn", "api.z.ai":
 		return true
 	}
 	return false

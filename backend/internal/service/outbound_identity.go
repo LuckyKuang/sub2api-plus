@@ -1002,6 +1002,7 @@ func prepareAccountOutboundRequest(req *http.Request, account *Account) *http.Re
 		}
 		ApplyAccountOutboundIdentity(req.Context(), account, req)
 		prepareMiniMaxRequestState(req, account)
+		prepareDeepSeekRequestState(req, account)
 		PrepareCodexRequestCompression(req, account)
 	}
 	return req

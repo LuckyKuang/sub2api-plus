@@ -80,7 +80,7 @@ func TestCodexDeepAuditModernOfficialBody(t *testing.T) {
 			a.Extra = map[string]any{"openai_passthrough": pass}
 			body := []byte(`{"model":"gpt-6.1-sol","stream":true,"store":false,"input":[{"type":"message","id":"msg_11111111-1111-5111-8111-111111111111","role":"developer","content":[{"type":"input_text","text":"official base instructions"}]},{"type":"message","id":"msg_22222222-2222-5222-8222-222222222222","role":"user","content":[{"type":"input_text","text":"hello"}]}],"tool_choice":"auto","parallel_tool_calls":true,"include":["reasoning.encrypted_content"]}`)
 			c := newOpenAIRejectedFieldTestContext(body)
-			c.Request.Header.Set("User-Agent", "codex_cli_rs/0.158.0 (Ubuntu 24.04; x86_64) xterm-256color")
+			c.Request.Header.Set("User-Agent", "codex_cli_rs/0.163.0 (Ubuntu 24.04; x86_64) xterm-256color")
 
 			_, err := svc.Forward(context.Background(), c, a, body)
 			require.NoError(t, err)

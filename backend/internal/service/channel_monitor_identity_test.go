@@ -25,7 +25,7 @@ func TestChannelMonitorIdentitySnapshotAcrossPingAndModels(t *testing.T) {
 			switch provider {
 			case "openai":
 				preset = "codex"
-			case "deepseek", "kimi", "stepfun":
+			case "grok", "deepseek", "kimi", "stepfun":
 				preset = provider
 			case "zhipu":
 				preset = "zcode"
@@ -184,7 +184,7 @@ func TestChannelMonitorStreamingIdentityProtected(t *testing.T) {
 		headers := <-captured
 		require.Equal(t, builtInOutboundIdentity("codex").UserAgent, headers.Get("User-Agent"))
 		require.Equal(t, "codex_cli_rs", headers.Get("Originator"))
-		require.Equal(t, "0.158.0", headers.Get("Version"))
+		require.Equal(t, "0.163.0", headers.Get("Version"))
 		if mode == MonitorAPIModeResponses {
 			require.Equal(t, "remote_compaction_v2", headers.Get("x-codex-beta-features"))
 		} else {

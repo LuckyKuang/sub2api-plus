@@ -6,6 +6,7 @@
 |Interfaces:When a Go interface changes, update every implementation, stub, and mock.
 |Migrations:Existing SQL migrations are immutable and forward-only|Use a unique increasing prefix|Use _notx.sql only for concurrent indexes.
 |Configuration:New or changed configuration requires appropriate defaults and storage or environment bindings, relevant tests, and owning documentation|Synchronize deploy/ examples when deployment configuration changes.
+|Official Agents:OpenAI=codex|xAI=grok-build|DeepSeek=deepseek-harness|Kimi=kimi-code|MiniMax=minimax-code|StepFun=Step-Code|Zhipu=ZCode|Both OAuth and API Key follow their mapped agent versions and outbound protocols|Maintain public source URLs, reviewed baselines and code entrypoints in docs/OFFICIAL_AGENT_BASELINES.md; never record local checkout paths.
 |Protocol Documentation:Update provider/protocol docs for endpoint, auth, billing, quota, scheduling, default, or error-behavior changes.
 |README:Keep core section IDs and links aligned across README.md, README_CN.md, and README_JA.md|Put details under docs/ or deploy/.
 |Locales:Keep frontend English and Chinese locale keys aligned.

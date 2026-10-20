@@ -19,9 +19,9 @@ const declarationsView = (): OutboundIdentityView => ({
   presets: [],
   effective: [],
   declarations: [{ preset: 'kimi', headers: [
-    { name: 'User-Agent', class: 'derived', editable: false, builtin: 'kimi-code-cli/2.1.1', value: 'kimi-code-cli/2.1.1' },
+    { name: 'User-Agent', class: 'derived', editable: false, builtin: 'kimi-code-cli/2.2.0', value: 'kimi-code-cli/2.2.0' },
     { name: 'X-Msh-Platform', class: 'pinned', editable: false, builtin: 'kimi_code_cli', value: 'kimi_code_cli' },
-    { name: 'X-Msh-Version', class: 'derived', editable: false, builtin: '2.1.1', value: '2.1.1' },
+    { name: 'X-Msh-Version', class: 'derived', editable: false, builtin: '2.2.0', value: '2.2.0' },
     { name: 'X-Msh-Device-Name', class: 'runtime', editable: true, builtin: 'kimi-gateway', value: 'kimi-gateway' },
     { name: 'X-Msh-Device-Model', class: 'pinned', editable: false, builtin: 'Linux 6.8.0-31-generic x64', value: 'Linux 6.8.0-31-generic x64' },
     { name: 'X-Msh-Os-Version', class: 'pinned', editable: false, builtin: '6.8.0-31-generic', value: '6.8.0-31-generic' },
@@ -51,7 +51,7 @@ describe('OutboundIdentityEditor', () => {
   })
 
   it.each([
-    ['openai', 'upstream'], ['gemini', 'apikey'], ['anthropic', 'apikey'], ['grok', 'apikey'], ['antigravity', 'upstream'], ['typesafe', 'apikey'], ['opencode_go', 'apikey']
+    ['openai', 'upstream'], ['gemini', 'apikey'], ['anthropic', 'apikey'], ['antigravity', 'upstream'], ['typesafe', 'apikey'], ['opencode_go', 'apikey']
   ])('lets compatible %s/%s accounts select an existing identity', async (platform, accountType) => {
     const wrapper = mount(OutboundIdentityEditor, { props: { platform, accountType, modelValue: null } })
     await flushPromises()
@@ -67,7 +67,7 @@ describe('OutboundIdentityEditor', () => {
   })
 
   it.each([
-    ['openai', 'apikey'], ['deepseek', 'apikey'], ['deepseek', 'oauth'], ['kimi', 'apikey'], ['kimi', 'oauth'],
+    ['grok', 'apikey'], ['openai', 'apikey'], ['deepseek', 'apikey'], ['deepseek', 'oauth'], ['kimi', 'apikey'], ['kimi', 'oauth'],
     ['minimax', 'apikey'], ['minimax', 'oauth'], ['zhipu', 'apikey'], ['zhipu', 'oauth'],
     ['stepfun', 'apikey'], ['stepfun', 'oauth'], ['anthropic', 'bedrock'],
     ['anthropic', 'service_account'], ['gemini', 'service_account']
@@ -197,13 +197,13 @@ describe('OutboundIdentityEditor', () => {
   })
 
   it('renders the ZCode product declaration for a Zhipu account', async () => {
-    vi.mocked(previewOutboundIdentity).mockResolvedValue({ preset: 'zcode', user_agent: 'ZCode/3.14.3', originator: 'ZCode', version: '3.14.3', source: 'account', headers: { 'User-Agent': 'ZCode/3.14.3' } })
+    vi.mocked(previewOutboundIdentity).mockResolvedValue({ preset: 'zcode', user_agent: 'ZCode/3.16.2', originator: 'ZCode', version: '3.16.2', source: 'account', headers: { 'User-Agent': 'ZCode/3.16.2' } })
     const wrapper = mount(OutboundIdentityEditor, { props: { platform: 'zhipu', accountType: 'apikey', modelValue: { preset: 'zcode' } } })
     await vi.advanceTimersByTimeAsync(250)
     await flushPromises()
     const headers = wrapper.get('[data-testid="outbound-identity-account-headers"]')
     expect(headers.text()).toContain('User-Agent')
-    expect(headers.text()).toContain('ZCode/3.14.3')
+    expect(headers.text()).toContain('ZCode/3.16.2')
     // ZCode declares no Originator and no standalone version header, so neither
     // reaches the rendered header list.
     expect(headers.text()).not.toContain('Originator')
@@ -237,11 +237,11 @@ describe('OutboundIdentityEditor', () => {
   it('exposes only the runtime declarations and renders the full Kimi Code block', async () => {
     vi.mocked(previewOutboundIdentity).mockResolvedValue({
       preset: 'kimi',
-      user_agent: 'kimi-code-cli/2.1.1',
+      user_agent: 'kimi-code-cli/2.2.0',
       originator: 'kimi-code-cli',
-      version: '2.1.1',
+      version: '2.2.0',
       source: 'account',
-      headers: { 'User-Agent': 'kimi-code-cli/2.1.1', 'X-Msh-Platform': 'kimi_code_cli', 'X-Msh-Version': '2.1.1', 'X-Msh-Device-Name': 'kimi-gateway', 'X-Msh-Device-Model': 'Linux 6.8.0-31-generic x64', 'X-Msh-Os-Version': '6.8.0-31-generic', 'X-Msh-Device-Id': '11111111-1111-4111-8111-111111111111' }
+      headers: { 'User-Agent': 'kimi-code-cli/2.2.0', 'X-Msh-Platform': 'kimi_code_cli', 'X-Msh-Version': '2.2.0', 'X-Msh-Device-Name': 'kimi-gateway', 'X-Msh-Device-Model': 'Linux 6.8.0-31-generic x64', 'X-Msh-Os-Version': '6.8.0-31-generic', 'X-Msh-Device-Id': '11111111-1111-4111-8111-111111111111' }
     })
     const wrapper = mount(OutboundIdentityEditor, { props: { platform: 'kimi', accountType: 'apikey', modelValue: { preset: 'kimi' } } })
     await vi.advanceTimersByTimeAsync(250)

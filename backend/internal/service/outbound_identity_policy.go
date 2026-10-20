@@ -17,7 +17,7 @@ var compatibleOutboundDefaultKeys = []string{
 	"openai:upstream",
 	"anthropic:apikey", "anthropic:upstream",
 	"gemini:apikey", "gemini:upstream",
-	"grok:apikey", "grok:upstream",
+	"grok:upstream",
 	"antigravity:upstream", "typesafe:apikey", "opencode_go:apikey",
 	"cline:apikey", "command_code:apikey",
 }

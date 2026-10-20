@@ -52,7 +52,7 @@ SDK versions do not update this baseline.
 
 | Preset | Exact default OS/architecture declarations |
 | --- | --- |
-| Codex | Existing `codex_cli_rs/0.158.0 (Ubuntu 24.04; x86_64) xterm-256color`, unchanged |
+| Codex | Existing `codex_cli_rs/0.163.0 (Ubuntu 24.04; x86_64) xterm-256color`, unchanged |
 | Claude | `X-Stainless-OS: Linux`, `X-Stainless-Arch: x64` |
 | Gemini | `GeminiCLI/0.1.5 (Linux; x64)` |
 | Grok | `grok-shell/1.0.45 (linux; x86_64)` |
@@ -115,9 +115,9 @@ combining their UA values would violate the official managed/BYOK behavior.
 | Codex | OpenAI OAuth/setup-token, OpenAI-compatible API keys, TypeSafe API keys | Existing Codex UA/Originator/Version rules, including endpoint-specific omissions |
 | Claude Code | Anthropic OAuth/setup-token/API key, Claude on Bedrock or Vertex | `claude-cli` UA, `X-App: cli`, project-owned `X-Stainless-*` SDK/runtime declarations |
 | Gemini CLI | Gemini OAuth/API key, Gemini on Vertex | `GeminiCLI` UA |
-| Grok | Grok OAuth/API key | `grok-shell` UA, `x-grok-client-identifier`, `x-grok-client-version`, `x-grok-client-mode: headless` |
+| Grok | Grok OAuth/API key | `grok-shell` UA, `x-grok-client-identifier`, `x-grok-client-version`, `x-grok-client-mode: headless` only on CLI proxy/control destinations |
 | Antigravity | Antigravity OAuth/upstream | `antigravity` UA; the two privacy endpoints also declare the pinned `X-Goog-Api-Client` SDK |
-| DeepSeek / DSH Desktop | DeepSeek OAuth/API-key accounts | `deepseek-harness/<version> (+https://github.com/deepseek-ai/deepseek-harness)` UA; identifier and version are encoded in the UA, so no `Originator`/`Version` headers |
+| DeepSeek / Harness | DeepSeek OAuth/API-key accounts | `deepseek-harness/<version> (+https://github.com/deepseek-ai/deepseek-harness)` UA; identifier and version are encoded in the UA, so no `Originator`/`Version` headers |
 | MiniMax Code | MiniMax OAuth accounts | `MiniMaxAgent` plus pinned Anthropic SDK declarations; no product version or `Originator`/`Version` headers |
 | MiniMax Code API Key | MiniMax API-key accounts | `Anthropic/JS 0.91.1` plus matching pinned SDK declarations; version is mandatory |
 | Kimi Code | Kimi / Moonshot OAuth/API-key accounts | `kimi-code-cli/<version>` UA, `X-Msh-Platform: kimi_code_cli`, `X-Msh-Version: <version>` and four device declarations (two runtime, two pinned); the official client declares no `Originator` and no standalone `Version` header |
@@ -140,7 +140,7 @@ headers; rotation starts a new cache entry. Generic headers and incoming client
 declarations cannot replace the trusted identity. No new native client family or
 versionless exception is introduced.
 
-Only these twelve keys permit another client family, through a global default
+Only these eleven keys permit another client family, through a global default
 or account selection:
 
 | Platform | Configurable account types | Automatic preset |
@@ -148,14 +148,14 @@ or account selection:
 | OpenAI compatible upstream | `upstream` | `codex` |
 | Anthropic | `apikey`, `upstream` | `claude` |
 | Gemini | `apikey`, `upstream` | `gemini` |
-| Grok | `apikey`, `upstream` | `grok` |
+| Grok | `upstream` | `grok` |
 | Antigravity | `upstream` | `antigravity` |
 | TypeSafe / Jev | `apikey` | `codex` |
 | OpenCode Go | `apikey` | `codex` |
 | Cline | `apikey` | `codex` |
 | Command Code | `apikey` | `codex` |
 
-Anthropic/Gemini/Grok API-key entries also serve compatible endpoints, so they
+Anthropic/Gemini API-key entries also serve compatible endpoints, so they
 retain advanced overrides without guessing endpoint type from its hostname.
 System Settings presents these mappings in a collapsed advanced section.
 The API's `account_policies` declares the native preset, allowed presets and
@@ -179,12 +179,12 @@ Built-in declarations reuse existing pins in `internal/pkg/claude`,
 `internal/pkg/deepseek`, `internal/pkg/minimax`, `internal/pkg/kimi`,
 `internal/pkg/zcode` and
 `internal/service/openai_codex_identity.go`. This
-feature does not upgrade those pins. The settings page displays the exact
+baseline upgrades follow [the official agent source index](OFFICIAL_AGENT_BASELINES.md). The settings page displays the exact
 current effective identity.
 
 The exact compiled DeepSeek identity is
-`deepseek-harness/0.2.0-rc.2 (+https://github.com/deepseek-ai/deepseek-harness)`,
-with identifier `deepseek-harness` and client version `0.2.0-rc.2`. The
+`deepseek-harness/0.2.1-rc.2 (+https://github.com/deepseek-ai/deepseek-harness)`,
+with identifier `deepseek-harness` and client version `0.2.1-rc.2`. The
 parenthesized product comment belongs to the same User-Agent value the
 published harness renders from its own package manifest; it is not a second
 declaration. Only the User-Agent reaches the wire, so the preset adds no
@@ -198,15 +198,15 @@ resolve this preset by default through `nativeOutboundPreset`, so the
 and valid same-family account overrides remain available; a foreign persisted
 candidate falls through atomically to the native profile/default.
 
-The exact compiled ZCode identity is `ZCode/3.14.3`, with identifier `ZCode`
-and client version `3.14.3`. The desktop host's declaration block comes from
+The exact compiled ZCode identity is `ZCode/3.16.2`, with identifier `ZCode`
+and client version `3.16.2`. The desktop host's declaration block comes from
 `apps/zcode-cli/packages/bootstrap/src/model-config.ts` and
 `runtime-platform-headers.ts`:
 
 | Declaration | Default | Class |
 | --- | --- | --- |
-| `User-Agent` | `ZCode/3.14.3` | Derived |
-| `X-ZCode-App-Version` | `3.14.3`, always paired with UA | Derived |
+| `User-Agent` | `ZCode/3.16.2` | Derived |
+| `X-ZCode-App-Version` | `3.16.2`, always paired with UA | Derived |
 | `HTTP-Referer` | `https://zcode.z.ai` | Pinned |
 | `X-Title` | `Z Code@electron` | Pinned |
 | `X-Release-Channel` | `production` | Pinned |
@@ -227,14 +227,14 @@ both upstream version lines remain accepted. The bootstrap declarations above
 are supplemented by the pinned per-protocol SDK wire profiles below. Product
 version changes preserve those profiles.
 
-Account-link, business-key derivation and off-peak ticket clients derive their
+Account-link, project-token issuance and off-peak ticket clients derive their
 control-plane headers from the same snapshot, including standalone clients.
 Following `packages/services/src/providers/sourceHeaders.ts`, control calls omit
 `X-ZCode-Agent` and inference SDK suffixes; their `X-Os-Version` is the pinned
 Ubuntu Node `os.version()` equivalent, not inference's `os.release()`. It is a read-only baseline declaration carried
 in `control_headers` and serialized with login sessions. An absent telemetry
-`X-Device-Mid` is omitted, never fabricated. Start, poll, code exchange and key
-derivation retain one identity even across Redis instances/settings changes;
+`X-Device-Mid` is omitted, never fabricated. Start, poll, code exchange and token
+issuance retain one identity even across Redis instances/settings changes;
 account creation pins its product and configurable runtime declarations. Deferred off-peak settlement retains the acquiring credential
 owner's identity alongside its authentication, even after settings change. Gateway transports reapply the trusted declarations at send
 time; stale SDK/inbound/generic overrides cannot rewrite them. Both API-key and OAuth accounts retain the ZCode family.
@@ -269,8 +269,8 @@ UA on authorization/refresh, without the inference SDK block, because every
 provider-bound call requires a trusted client declaration. This intentional
 policy difference is displayed under OAuth/account-service headers.
 
-The exact compiled Kimi Code identity is `kimi-code-cli/2.1.1`, with identifier
-`kimi-code-cli`, client version `2.1.1` and platform declaration
+The exact compiled Kimi Code identity is `kimi-code-cli/2.2.0`, with identifier
+`kimi-code-cli`, client version `2.2.0` and platform declaration
 `kimi_code_cli`. The official client renders one product token with dashes and
 one platform token with underscores; the two are not interchangeable. Its engine
 attaches the complete block — the User-Agent plus `X-Msh-Platform`,
@@ -311,31 +311,22 @@ rendered by this preset nor blocked from account header overrides. The
 identity-header allowlist is extended by the six declarations above; an inbound
 caller or a generic header override can never select one.
 
-### Domestic-provider source evidence and source priority
+### Official-agent source evidence and source priority
 
-The local client snapshots inspected for this implementation are:
-
-| Client | Commit | Declaration source |
-| --- | --- | --- |
-| dsh-desktop | `1030515b4358b39633c80d5857cab6114b9e3ba8` | Vendored `0.2.0-rc.2` `dsh-llm/lib/types/attribution.js`, `dsh-llm-deepseek`, `dsh-llm-deepseek-account`, `dsh-llm-deepseek-api-key` |
-| kimi-code | `21406fb4c805cc8c715e6d1f16ad3fb5f25f4fe3` | `packages/oauth/src/identity.ts`, `packages/agent-core-v2/src/llm-adapter/provider/provider-definition.ts` |
-| minimax-code | `564e9166d81f87b0b767b005e4779d4697b512be` | `packages/local-runtime-v2/src/service/model-system/resolution/{model-resolver-helpers,local-model-resolver,model-resolver-byok}.ts`, `third_party/pi-mono/packages/ai/src/providers/anthropic.ts`, `pnpm-lock.yaml` |
-| ZCode | `29628c9acdb81b703bbd4080c207a0e7ce5e276e` | `apps/zcode-cli/packages/bootstrap/src/model-config.ts`, `runtime-platform-headers.ts`, `packages/shared/src/zcodeEndpoint.ts`, `packages/services/src/providers/sourceHeaders.ts`, adapter `model-execution.ts` / `runner-options.ts`, `pnpm-lock.yaml` |
-
-DSH Desktop delegates inference to its vendored Harness adapter, so its shell
-package version is not the UA version. Both account (`x-dsh-auth-token`) and API
-key (`x-api-key`) providers share that adapter's attribution. Kimi uses the same
-host declarations for its first-party OAuth and API-key calls. MiniMax's managed
-client declares `MiniMaxAgent`; `MiniMaxCode` in its OpenCode-Go adapter and
-`MiniMax-Code` in its GitHub downloader identify other destinations and are not
-MiniMax inference presets. Session IDs, authentication and per-request metadata
-remain owned by the protocol.
+All seven platforms and both credential types are owned by their corresponding
+[official agent](OFFICIAL_AGENT_BASELINES.md). That index records public GitHub
+URLs, reviewed commits/versions and code entrypoints. DeepSeek follows
+**deepseek-harness** directly. OAuth (`x-dsh-auth-token`) and API Key
+(`x-api-key`) share its Messages adapter and attribution. Kimi shares its
+first-party host declarations. MiniMax retains its official managed/BYOK wire
+difference. Grok OAuth and API Key are both native grok-build families; only
+Grok `upstream` accounts can select a compatible family.
 
 | Operation / candidate | Resolution |
 | --- | --- |
 | OAuth or API-key credential owner | Valid account candidate → global preset/type default → valid environment / compiled default |
 | Empty or invalid candidate, including invalid companion/runtime headers | Fall through atomically to the next tier |
-| Native client family | Domestic OAuth/API Key and cloud accounts retain their native family; only the twelve compatible keys above can select another family |
+| Native client family | Domestic OAuth/API Key and cloud accounts retain their native family; only the eleven compatible keys above can select another family |
 | Pre-account native authorization | Global native preset → valid environment / compiled default; ignore inherited owners and API-key mappings |
 | Retry or nested same-owner request | Reuse the selected snapshot, including all runtime values |
 | Failover to another credential owner | Resolve that owner's candidate and current defaults |
@@ -951,7 +942,7 @@ Snapshots deep-copy the protocol maps, survive OAuth session serialization, and
 are reapplied at final transport send, including retries. Arbitrary header
 maps cannot supply SDK, device or control-plane declarations.
 
-Kimi's OAuth and API-key inference use the same `kimi-code-cli/2.1.1` UA and
+Kimi's OAuth and API-key inference use the same `kimi-code-cli/2.2.0` UA and
 `X-Msh-*` declarations. Anthropic uses `X-Stainless-Package-Version: 0.95.2`;
 Chat Completions/Responses use `6.34.0` (the reviewed Anthropic/OpenAI JS lockfile
 versions). Both explicitly pin `X-Stainless-Lang: js`, `X-Stainless-OS: Linux`,
@@ -964,9 +955,9 @@ ZCode's exact default inference UAs (both account types) are:
 
 | Protocol | User-Agent |
 | --- | --- |
-| Anthropic | `ZCode/3.14.3 ai/6.0.193 ai-sdk/provider-utils/4.0.27 runtime/node.js/22` |
-| Chat Completions | `ZCode/3.14.3 ai/6.0.193 ai-sdk/provider-utils/4.0.39 runtime/node.js/22` |
-| Responses | `ZCode/3.14.3 ai/6.0.193 ai-sdk/provider-utils/4.0.27 runtime/node.js/22` |
+| Anthropic | `ZCode/3.16.2 ai/6.0.193 ai-sdk/provider-utils/4.0.27 runtime/node.js/22` |
+| Chat Completions | `ZCode/3.16.2 ai/6.0.193 ai-sdk/provider-utils/4.0.39 runtime/node.js/22` |
+| Responses | `ZCode/3.16.2 ai/6.0.193 ai-sdk/provider-utils/4.0.27 runtime/node.js/22` |
 
 `runner-options.ts` supplies the bootstrap headers to `ai`, so its `ai/6.0.193`
 suffix replaces the provider factory's suffix; provider-utils appends its own
@@ -981,9 +972,9 @@ The gateway applies trusted ZCode product declarations to all account-service
 calls, including external business origins where official NodeApiClient only
 attaches the source block to its configured ZCode origin. This is an intentional
 extension required by the provider-bound identity contract. Optional telemetry
-IDs are not copied from another installation. DeepSeek uses the official web
-login branch (`platformClientHeaders(null, client)`); its UI bundle pins
-`DSH_CLIENT_VERSION` to `0.2.0-rc.2`, not the Electron shell version.
+IDs are not copied from another installation. DeepSeek uses the official Harness web login branch
+(`platformClientHeaders(null, client)`); its selected client version is
+`0.2.1-rc.2`, independent of any desktop shell.
 
 Regression evidence: `domestic_identity_review_test.go`,
 `domestic_outbound_identity_test.go`, the complete Codex identity regressions,
@@ -1023,7 +1014,7 @@ are insufficient for the final outbound privacy boundary.
 
 | Requirement | Regression evidence |
 | --- | --- |
-| Four providers, both account types, official default UA/SDK/environment, probes | `service/domestic_identity_review_test.go` literal fixtures; `repository/outbound_identity_test.go` HTTP captures |
+| Native providers, both account types, official default UA/SDK/environment, probes | `service/domestic_identity_review_test.go` literal fixtures; `repository/outbound_identity_test.go` HTTP captures |
 | Account/global/environment precedence, invalid candidates, version updates, retry/failover snapshots | `service/outbound_identity_test.go`, `outbound_environment_test.go`, `domestic_outbound_identity_test.go`, complete Codex identity suites |
 | No branded names/values; multi-value headers, redirects, cookies, rejected auth, signed requests | `pkg/brandidentity/brandidentity_test.go`, `service/bedrock_signer_test.go`, `openai_ws_client_test.go`, `plugin_security_regression_test.go` |
 | OAuth/account-service versus inference declarations; locale, timezone, DST and kernel build/release | `pkg/cnoauth/client_test.go`, `pkg/deepseek/identity_test.go`, `pkg/zcode/identity_test.go`, settings UI tests |
@@ -1039,7 +1030,7 @@ does not demonstrate these requirements.
 ## StepFun / Step-Code
 
 StepFun OAuth (Step Plan) and API Key accounts are pinned to the same `stepfun`
-preset. Exact identity: `step (linux 6.8.0-31-generic; x64)`, identifier `step`,
+preset. Exact identity: `stepcode (linux 6.8.0-31-generic; x64)`, identifier `stepcode`,
 empty product version. Step-Code's actual OpenAI adapter imports
 `packages/providers/src/utils/pi-user-agent.ts`; the coding-agent helper that
 accepts a version is not its inference UA. `step/environment.ts` defaults
@@ -1053,7 +1044,9 @@ Ubuntu Noble kernel are fixed independent of the server host. Discovery uses
 fetch upstream; this gateway adds the same trusted product UA as an explicit
 identity-policy difference, without inference attribution or SDK headers.
 Browser navigation uses the browser's own headers; the server does not claim
-it can override them. There is no default token exchange/refresh request.
+it can override them. Cloud login uses `/api/stdhttp/v1/cli-login/init` and authenticated polling;
+its client body advertises application `0.84.4`. Model API keys have no
+fabricated expiry or refresh operation.
 No synthetic Originator, Version, device-name, locale or timezone header is
 sent. Optional high-sensitivity `x-step-*` trace fields are not generated.
 
@@ -1073,8 +1066,8 @@ does not consume the grant. `stepfun_model_restrictions_test.go` covers its
 literal discovery headers, both regions, proxy, and rejected session states.
 
 Independent StepFun tests cover exact literal wire declarations, four
-region/auth combinations, actual forwarding and probes/discovery, static-grant
-lifecycle, invalid/missing/duplicate state, single consumption, region pinning,
+region/auth combinations, actual forwarding and probes/discovery, cloud-login polling and static model-key
+lifecycle, invalid/missing flow state, single consumption, region pinning,
 versionless validation and source priority. See [StepFun](providers/STEPFUN.md).
 
 

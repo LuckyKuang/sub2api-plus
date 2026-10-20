@@ -569,3 +569,15 @@ Real-payload regressions retain the documented current-item distinction: a
 trailing bare `compaction_trigger` contributes no user text and does not make
 preceding history current; a trigger before a new user tail cannot hide that
 current user content from either engine.
+
+
+The official-agent baseline update keeps all seven providers' OAuth/API Key
+requests behind the existing HTTP/WS audit boundaries. Step-Code's outbound
+`developer`→`system` Chat adaptation occurs only after ingress audit and account
+selection, preserves instruction content/unknown siblings, and leaves the
+original retry body unchanged. DeepSeek attribution/catalog filtering, Kimi
+reasoning metadata, Step cloud-login polling and ZCode PAT issuance do not change
+canonical content extraction. Both engines still audit recognized sibling user
+text and pass through unknown structures. See `official_agent_update_test.go`,
+`openai_chat_roles_test.go`, `security_audit_content_contract_test.go` and the
+existing account-type/order/WS audit suites.

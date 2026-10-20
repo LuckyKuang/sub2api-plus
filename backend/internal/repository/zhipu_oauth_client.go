@@ -110,7 +110,7 @@ func (c *ZhipuOAuthClient) ExchangeZaiBusinessToken(ctx context.Context, oauthAc
 	return zcode.NewCredentialClient(client, c.bigModel, c.zai).ExchangeZaiBusinessToken(ctx, oauthAccessToken)
 }
 
-// ResolveIndividualCodingPlanKey derives the personal coding-plan API key.
+// ResolveIndividualCodingPlanKey locates the personal key and issues a PAT.
 func (c *ZhipuOAuthClient) ResolveIndividualCodingPlanKey(ctx context.Context, provider, accessToken, proxyURL string) (*zcode.CodingPlanCredential, error) {
 	client, err := zhipuOAuthHTTPClient(proxyURL)
 	if err != nil {
@@ -119,13 +119,22 @@ func (c *ZhipuOAuthClient) ResolveIndividualCodingPlanKey(ctx context.Context, p
 	return zcode.NewCredentialClient(client, c.bigModel, c.zai).ResolveIndividualCodingPlanKey(ctx, provider, accessToken)
 }
 
-// ResolveTeamPlanKey derives a team-plan project key.
+// ResolveTeamPlanKey locates a team project key and issues a PAT.
 func (c *ZhipuOAuthClient) ResolveTeamPlanKey(ctx context.Context, provider, accessToken, organizationID, projectID, proxyURL string) (*zcode.CodingPlanCredential, error) {
 	client, err := zhipuOAuthHTTPClient(proxyURL)
 	if err != nil {
 		return nil, err
 	}
 	return zcode.NewCredentialClient(client, c.bigModel, c.zai).ResolveTeamPlanKey(ctx, provider, accessToken, organizationID, projectID)
+}
+
+// IssueProjectToken renews a saved project location without copying its secret.
+func (c *ZhipuOAuthClient) IssueProjectToken(ctx context.Context, provider, accessToken, organizationID, projectID, keyID, proxyURL string) (*zcode.CodingPlanCredential, error) {
+	client, err := zhipuOAuthHTTPClient(proxyURL)
+	if err != nil {
+		return nil, err
+	}
+	return zcode.NewCredentialClient(client, c.bigModel, c.zai).IssueProjectToken(ctx, provider, accessToken, organizationID, projectID, keyID)
 }
 
 // Off-peak ticket protocol. The ticket client shares the same proxy-aware

@@ -171,8 +171,8 @@ The selected Grok snapshot declares both official client families: sampler and
 control operations use `grok-shell/<version> (linux; x86_64)`; Imagine image/video
 operations use `xai-grok-build/<version>` with the same selected version and
 `grok-shell` client identifier. The system settings show the media declaration
-separately. Compatible accounts that explicitly select another permitted preset
-retain that preset. Inbound headers and the shared transport cannot select a family.
+separately. Native OAuth and API-key accounts both retain grok-build. Only Grok
+`upstream` accounts may select another permitted preset. Inbound headers and the shared transport cannot select a family.
 Media start/poll requests carry an isolated `x-grok-session-id` when available;
 they do not acquire sampler request/model/agent fields.
 
@@ -267,3 +267,9 @@ OAuth refresh can replace a stale subscription snapshot with the JWT `tier`
 when that value is more recent. Cross-client model mapping
 (`grok_cross_client_model_map_enabled`) stays opt-in. Password authorization
 remains disabled.
+
+The [official grok-build baseline](../OFFICIAL_AGENT_BASELINES.md) remains
+`1.0.45`. Public `api.x.ai` HTTP and realtime WebSocket forwarding/probes omit
+`x-grok-client-mode` and CLI-proxy authentication declarations; CLI proxy/control
+calls retain their official destination-specific declarations. Migration 291
+removes obsolete Grok API-key compatible-family selections/defaults atomically.

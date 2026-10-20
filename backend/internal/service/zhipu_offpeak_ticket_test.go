@@ -109,6 +109,7 @@ func zhipuOffPeakIntPtr(value int) *int { return &value }
 func newZhipuOffPeakTestManager(t *testing.T, client *zhipuOffPeakStub) *ZhipuOffPeakTicketManager {
 	t.Helper()
 	manager := NewZhipuOffPeakTicketManager(client)
+	manager.projectTokens = newZhipuOAuthTestService(t, &zhipuOAuthStubClient{individual: &zcode.CodingPlanCredential{APIKey: "ak.sk", ExpiresAt: time.Now().Add(time.Hour)}})
 	t.Cleanup(manager.Stop)
 	return manager
 }
@@ -119,7 +120,8 @@ func zhipuOffPeakTestAccount() *Account {
 		Platform: PlatformZhipu,
 		Type:     AccountTypeOAuth,
 		Credentials: map[string]any{
-			"plan_kind":         ZhipuPlanOffPeak,
+			"plan_kind":      ZhipuPlanOffPeak,
+			"oauth_provider": "bigmodel", "access_token": "login",
 			"api_key":           "zcode-jwt",
 			"zcode_jwt_token":   "zcode-jwt",
 			"off_peak_plan_key": "ak.sk",
@@ -475,9 +477,9 @@ func TestZhipuOffPeakForwardAndProbeRequireAdmissionBeforeAnySend(t *testing.T) 
 		// A nil transport intentionally makes any accidental model dispatch fail:
 		// the admission error must be returned before that side effect.
 		if probe {
-			_, err = (&AccountTestService{}).doOpenAIAccountTestUpstream(req, "", account, false)
+			_, err = (&AccountTestService{cnOAuthService: &CNOAuthService{zhipu: manager.projectTokens}}).doOpenAIAccountTestUpstream(req, "", account, false)
 		} else {
-			_, err = (&OpenAIGatewayService{}).doOpenAIUpstream(req, "", account)
+			_, err = (&OpenAIGatewayService{cnOAuthService: &CNOAuthService{zhipu: manager.projectTokens}}).doOpenAIUpstream(req, "", account)
 		}
 		require.ErrorContains(t, err, "ticket denied")
 		require.Empty(t, req.Header.Get("X-Off-Peak-Ticket-ID"))

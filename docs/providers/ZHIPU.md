@@ -70,21 +70,42 @@ authorization alone.
 
 | Plan kind | Inference credential | Protocol | Endpoint |
 | --- | --- | --- | --- |
-| `individual-coding-plan` | derived project API key (`<apiKey>.<secretKey>`) | Chat Completions / Anthropic | estate coding + Anthropic origins |
-| `team-coding-plan` | derived team project key (`keyType=2`) plus `bigmodel-organization` / `bigmodel-project` | Chat Completions / Anthropic | estate coding + Anthropic origins |
+| `individual-coding-plan` | short-lived project access token (PAT) | Chat Completions / Anthropic | estate coding + Anthropic origins |
+| `team-coding-plan` | short-lived team project PAT (`keyType=2` location) plus `bigmodel-organization` / `bigmodel-project` | Chat Completions / Anthropic | estate coding + Anthropic origins |
 | `start-plan` | the ZCode token as a bearer credential | Anthropic | `https://zcode.z.ai/api/v1/zcode-plan/anthropic` |
-| `off-peak` | the ZCode token as a bearer credential plus the derived project key | Anthropic | `https://zcode.z.ai/api/v1/off-peak/anthropic` |
+| `off-peak` | the ZCode token as a bearer credential plus the project PAT | Anthropic | `https://zcode.z.ai/api/v1/off-peak/anthropic` |
 
-Deriving a project key follows the published sequence: read the customer profile,
-select a non-team organization/project (the default-named pair is preferred, and
-`projectType == "2"` team projects are skipped for personal keys), find or create
-the published key name, then copy its secret. Z.ai requires the copied secret;
-BigModel historically accepted the bare key.
+Linked coding accounts resolve the default-named visible organization/project
+(or explicit team scope), find/create the official key location with
+`usageScene:1`, then call `POST .../api_keys/{id}/access_tokens` with Bearer
+business auth and `{clientType:"zcode",clientVersion:<trusted version>}`.
+Customer lookup uses bare business auth; personal Z.ai key management uses
+Bearer and BigModel uses bare auth; team key management uses bare auth plus
+scope headers. No `/copy` request or `<apiKey>.<secretKey>` fallback remains.
 
-On the Z.ai estate the handshake returns an **OAuth** token that must first be
-exchanged through `POST /api/auth/z/login` for a business token; every business
-and key-derivation call uses the business token. BigModel already returns a
-business token and needs no exchange.
+A PAT is cached only in memory by credential owner, login generation, scope,
+proxy and selected identity. Expiry is the earlier of the two official lifetime
+fields; refresh starts two minutes plus up to one minute jitter early. Concurrent
+callers share issuance; cancelling one waiter does not cancel the shared call.
+Only an explicit model 401 rejects that attempt's PAT and replays a replayable
+request once. A late rejection cannot invalidate a newer PAT. Transient refresh
+failures can retain an unexpired PAT for a five-second retry; disabled, malformed,
+auth-rejected or expired material never falls back to a long key. Inference,
+probes, model discovery and off-peak admission use the original owner.
+Ticket status and detached idle settlement resolve PATs again from that owner,
+with the same one-time explicit-401 retry; PAT rotation alone does not acquire
+another ticket. Final model authentication removes every case variant of the
+old auth/plan-key headers and installs the owner's PAT and, for off-peak, JWT.
+
+Z.ai exchanges its original OAuth token through `POST /api/auth/z/login` for
+business auth before issuance. BigModel uses its original login directly.
+Persistent credentials retain original login and project location, never PATs.
+Migration 293 removes old linked-account project secrets and plan-key overrides;
+manual API-key accounts and start-plan ZCode JWTs are preserved. Older Z.ai links
+without original OAuth material work only while their stored business token is
+valid and then require reauthorization. See the
+[official agent baseline](../OFFICIAL_AGENT_BASELINES.md) for the source commit
+and the explicit unreleased product `3.16.2` baseline.
 
 Accounts created by the link use `api_protocol=adaptive` with explicit
 per-protocol base URLs, so neither estate ever falls back to another estate's
@@ -151,7 +172,7 @@ Both OAuth and API-key accounts are pinned to that family. Valid account
 parameters can override the global profile; cross-family selections and the
 retired `zhipu:apikey` default mapping are rejected.
 
-The preset sends `ZCode/3.14.3` together with `X-ZCode-App-Version: 3.14.3`,
+The preset sends `ZCode/3.16.2` together with `X-ZCode-App-Version: 3.16.2`,
 `HTTP-Referer: https://zcode.z.ai`, `X-Title: Z Code@electron`,
 `X-Release-Channel: production`, and `X-ZCode-Agent: glm`. Its five host
 facts (`X-Client-Language`, `X-Client-Timezone`, `X-Platform`, `X-Os-Category`,

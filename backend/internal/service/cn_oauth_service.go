@@ -24,6 +24,7 @@ type CNOAuthService struct {
 	refreshAPI  *OAuthRefreshAPI
 	admin       AdminService
 	modelTester *AccountTestService
+	zhipu       *ZhipuOAuthService
 }
 
 func NewCNOAuthService(proxyRepo ProxyRepository, accountRepo AccountRepository, admin AdminService) *CNOAuthService {
@@ -327,6 +328,9 @@ func cnOAuthCredentials(flow *cnoauth.Flow, grant *cnoauth.Grant) map[string]any
 		creds["oauth_device_id"] = flow.DeviceID
 		creds["account_mode"] = AccountModePayG
 		return creds
+	}
+	if flow.Platform == PlatformStepFun && grant.StepLogin != nil {
+		creds["step_login"] = grant.StepLogin
 	}
 	if grant.RefreshToken != "" && flow.Platform != PlatformStepFun {
 		creds["refresh_token"] = grant.RefreshToken

@@ -53,6 +53,10 @@ func (zhipuHandlerStubClient) ResolveIndividualCodingPlanKey(context.Context, st
 	return &zcode.CodingPlanCredential{APIKey: "ak.sk", OrganizationID: "org-1", ProjectID: "proj-1"}, nil
 }
 
+func (zhipuHandlerStubClient) IssueProjectToken(context.Context, string, string, string, string, string, string) (*zcode.CodingPlanCredential, error) {
+	return &zcode.CodingPlanCredential{APIKey: "test-pat"}, nil
+}
+
 func (zhipuHandlerStubClient) ResolveTeamPlanKey(context.Context, string, string, string, string, string) (*zcode.CodingPlanCredential, error) {
 	return &zcode.CodingPlanCredential{APIKey: "tak.tsk", OrganizationID: "org-t", ProjectID: "proj-t"}, nil
 }

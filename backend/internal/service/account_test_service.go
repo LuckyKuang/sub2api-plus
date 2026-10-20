@@ -1865,7 +1865,7 @@ func (s *AccountTestService) testGrokRealtime(c *gin.Context, ctx context.Contex
 		applyGrokCLIHeaders(headers)
 	}
 	account.ApplyHeaderOverrides(headers)
-	ApplyAccountOutboundHeaders(ctx, account, headers)
+	ApplyAccountOutboundIdentity(ctx, account, &http.Request{URL: u, Header: headers})
 
 	dialer := s.grokWSDialer
 	if dialer == nil {

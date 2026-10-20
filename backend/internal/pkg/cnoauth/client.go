@@ -39,9 +39,10 @@ var ErrInvalidGrant = errors.New("invalid_grant: reauthorize this account")
 
 // Grant remains server-side until persisted to the credential-owning account.
 type Grant struct {
-	AccessToken  string    `json:"access_token"`
-	RefreshToken string    `json:"refresh_token,omitempty"`
-	ExpiresAt    time.Time `json:"expires_at,omitempty"`
+	AccessToken  string     `json:"access_token"`
+	RefreshToken string     `json:"refresh_token,omitempty"`
+	ExpiresAt    time.Time  `json:"expires_at,omitempty"`
+	StepLogin    *StepLogin `json:"step_login,omitempty"`
 }
 type Flow struct {
 	Platform      string    `json:"platform"`
@@ -142,9 +143,13 @@ func snapshot(ctx context.Context, platform string) context.Context {
 	return outboundidentity.WithIdentity(ctx, identity)
 }
 func (c *Client) request(ctx context.Context, proxy, target string, body io.Reader, contentType string) (map[string]any, int, error) {
+	return c.requestWithMethod(ctx, proxy, http.MethodPost, target, body, contentType, nil)
+}
+
+func (c *Client) requestWithMethod(ctx context.Context, proxy, method, target string, body io.Reader, contentType string, headers map[string]string) (map[string]any, int, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, body)
+	req, err := http.NewRequestWithContext(ctx, method, target, body)
 	if err != nil {
 		return nil, 0, errors.New("invalid oauth request")
 	}
@@ -156,7 +161,12 @@ func (c *Client) request(ctx context.Context, proxy, target string, body io.Read
 		identity = minimax.ControlIdentity(identity)
 	}
 	*req = *req.WithContext(outboundidentity.WithIdentity(ctx, identity))
-	req.Header.Set("Content-Type", contentType)
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
 	req.Header.Set("Accept", "application/json")
 	outboundidentity.ApplyContext(req)
 	doer := c.HTTP
@@ -214,7 +224,7 @@ func (c *Client) Start(ctx context.Context, platform, region, proxy string) (*Fl
 	ctx = snapshot(ctx, platform)
 	f := &Flow{Platform: platform, Region: region, Interval: 5, ExpiresAt: time.Now().Add(TTL)}
 	if platform == "stepfun" {
-		return startStepFun(f)
+		return c.startStepFun(ctx, f, proxy)
 	}
 	f.Verifier, err = randomToken()
 	if err != nil {
@@ -299,7 +309,10 @@ func (c *Client) Poll(ctx context.Context, f *Flow, proxy string) (*Grant, error
 	if time.Now().After(f.ExpiresAt) {
 		return nil, ErrExpired
 	}
-	if f.Platform == "deepseek" || f.Platform == "stepfun" {
+	if f.Platform == "stepfun" {
+		return c.pollStepFun(snapshot(ctx, f.Platform), f, proxy)
+	}
+	if f.Platform == "deepseek" {
 		return nil, ErrPending
 	}
 	values := url.Values{"grant_type": {deviceGrant}, "device_code": {f.DeviceCode}, "client_id": {kimiClientID}}
@@ -317,7 +330,7 @@ func (c *Client) Poll(ctx context.Context, f *Flow, proxy string) (*Grant, error
 }
 func (c *Client) Exchange(ctx context.Context, f *Flow, callback, proxy string) (*Grant, error) {
 	if f.Platform == "stepfun" {
-		return exchangeStepFun(f, callback)
+		return nil, errors.New("step login uses server polling")
 	}
 	if f.Platform != "deepseek" {
 		return nil, errors.New("callback unsupported")

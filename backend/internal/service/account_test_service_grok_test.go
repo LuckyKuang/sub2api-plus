@@ -611,6 +611,8 @@ func TestOutboundIdentityGrokRealtimeProbeAndForward(t *testing.T) {
 			require.Equal(t, xai.CLIUserAgent("3.9.1"), dialer.lastHeaders.Get("User-Agent"))
 			require.Equal(t, "3.9.1", dialer.lastHeaders.Get("X-Grok-Client-Version"))
 			require.Equal(t, "Bearer test-token", dialer.lastHeaders.Get("Authorization"))
+			require.Empty(t, dialer.lastHeaders.Get("X-Grok-Client-Mode"), "public realtime never receives the CLI proxy mode")
+			require.Empty(t, dialer.lastHeaders.Get("X-Grok-Token-Auth"))
 		})
 	}
 }

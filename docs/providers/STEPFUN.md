@@ -19,28 +19,28 @@ Explicit deployment upstream allowlists must include the selected API hostname.
 ## Browser login
 
 Accounts → StepFun offers Step Plan browser login and manual API Key entry.
-The browser URL is `https://platform.stepfun.com/cli-login?port=53683&state=…`
-(international: `platform.stepfun.ai`). After authorization, paste the complete
-`http://127.0.0.1:53683/callback?...` URL into the login panel, even if that
-loopback page cannot load. The remote server does not bind a callback listener
-on the administrator's computer. Treat that URL as a secret.
+Cloud login follows Step-Code `step-provider/login-client.ts`. The server creates
+32 random bytes as a 64-character hex poll token and sends it only as a Bearer
+credential to `POST https://platform.stepfun.com/api/stdhttp/v1/cli-login/init`
+(global: `platform.stepfun.ai`). The JSON profile is `step_plan` or
+`step_plan_oversea`, with the selected platform origin and client
+`{name:"stepcode", version:"0.84.4", platform:"linux-x64"}`.
 
-The panel sends it in an authenticated POST body. Backend validation requires
-the exact loopback destination, one matching state, one credential, the
-initiating administrator/platform, and an unexpired session. Ambiguous,
-malformed, cancelled and expired callbacks cannot create an account. Sessions
-expire after ten minutes, live in the shared Redis session store, and are
-claimed once before account creation. Redis failure never falls back locally
-in a deployment configured with Redis. Credentials are not echoed in responses
-or errors. Callback fields clear after import, cancellation or expiry.
+The browser opens `/cli-login-remote?flow_id=…`; this public URL contains no
+credential. The panel polls the server, which calls `GET .../poll/{flow_id}`
+with the same server-held poll token. Pending, ready and failed are terminally
+validated, with provider interval/expiry bounded by the local ten-minute session.
+No callback URL or pasted model credential is used. Administrator, provider,
+region, proxy and trusted identity stay bound to the session. Redis deployments
+fail closed; completion claims the ready grant once before the account write.
 
-Production callbacks return `api_key`/`access_token` (also the official
-camel-case aliases). An optional `expires_in` is retained. With no lifetime,
-the credential is static and has no invented expiry or refresh token. This
-source publishes no default token endpoint: authorization-code exchange,
-device-code polling and automatic refresh are not enabled. Revoked/expired
-credentials require browser reauthorization. Relinking retains the account's
-region, proxy, metadata and identity; expired credential fields are replaced.
+A ready `credential.api_key` is the model credential. It is static unless the
+provider separately revokes it; no model expiry or refresh token is invented.
+Optional `credential.login` account-session material is retained separately as
+`step_login` and never used as model authentication or model expiry. Browser
+reauthorization replaces revoked model credentials while retaining account
+settings, region and proxy. The gateway does not currently use the optional
+account-session refresh API.
 
 ## Models, billing and monitoring
 
@@ -140,10 +140,10 @@ monitoring is unsupported. Migration 277 extends platform/probe constraints.
 
 ## Source and regression evidence
 
-The supplied Step-Code reference at commit
-`519e4de4ed2162d3667be1821cb92ada6b884e5a` uses:
+The [official Step-Code source](../OFFICIAL_AGENT_BASELINES.md) at commit
+`be88ee77071188975475bcb5ef4e1edd0913d8ad` uses:
 
-- `packages/providers/src/step-provider/index.ts` and `callback-server.ts`:
+- `packages/providers/src/step-provider/index.ts` and `login-client.ts`:
   auth, static credentials, catalog and native protocol.
 - `packages/coding-agent/src/step/onboarding.ts`: regional endpoint profiles.
 - `packages/coding-agent/src/step/defaults.ts`: recognized native model IDs used
@@ -160,7 +160,7 @@ matched all eight documented inference identity headers. No live credential
 was used for that SDK wire check.
 
 Requirement-based tests use literal official URLs/headers and adversarial
-callbacks; transport tests exercise model forwarding, probes and discovery
+cloud-login responses; transport tests exercise model forwarding, probes and discovery
 for both account types and regions. Real-provider authorization still requires
 an operator's account; mock wire tests do not assert live authorization success.
 

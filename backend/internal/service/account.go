@@ -1809,6 +1809,10 @@ func (a *Account) GetOpenAIApiKey() string {
 // 注意 IsOpenAIApiKey 语义上仅指 openai 平台账号，调度倍率/WS 能力门控
 // 继续以其为准，不受本方法影响。
 func (a *Account) GetOpenAIProtocolAPIKey() string {
+	if usesZhipuProjectToken(a) && a.GetCredential("plan_kind") != ZhipuPlanOffPeak {
+		return a.GetCredential("access_token")
+	}
+
 	if a.IsDomesticOAuth() {
 		return a.GetCredential("access_token")
 	}

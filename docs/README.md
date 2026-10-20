@@ -56,6 +56,7 @@ belong in GitHub Release notes.
 
 ## Development and Maintenance
 
+- [Official agent sources, versions and outbound review entrypoints](OFFICIAL_AGENT_BASELINES.md)
 - [Contributing](../CONTRIBUTING.md)
 - [Release process](RELEASING.md)
 - [CI validation coverage and authority migration](CI_VALIDATION.md)

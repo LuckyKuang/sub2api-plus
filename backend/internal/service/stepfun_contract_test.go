@@ -5,6 +5,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -36,7 +37,7 @@ func stepFunTestAccount(kind, region string) *Account {
 // CLI helper. OpenAI JS 6.40.0 source and Ubuntu 24.04 are independent inputs.
 func requireStepFunWire(t *testing.T, req *http.Request, inference bool) {
 	t.Helper()
-	want := map[string]string{"User-Agent": "step (linux 6.8.0-31-generic; x64)"}
+	want := map[string]string{"User-Agent": "stepcode (linux 6.8.0-31-generic; x64)"}
 	if inference {
 		for k, v := range map[string]string{"X-Step-Client": "stepcode", "X-Stainless-Lang": "js", "X-Stainless-Package-Version": "6.40.0", "X-Stainless-OS": "Linux", "X-Stainless-Arch": "x64", "X-Stainless-Runtime": "node", "X-Stainless-Runtime-Version": "v22.19.0"} {
 			want[k] = v
@@ -117,13 +118,30 @@ func TestStepFunOAuthAndAPIKeyActualForwardAndProbe(t *testing.T) {
 	}
 }
 
+// Step-Code be88ee77 login-client.ts: init + authenticated polling, never callbacks.
+func stepFunCloudLogin(t *testing.T, svc *CNOAuthService, key string) {
+	t.Helper()
+	svc.client = &cnoauth.Client{HTTP: cnOAuthDoer(func(req *http.Request) (*http.Response, error) {
+		body := `{"status":0,"flow_id":"flow","poll_interval_sec":1,"expires_at":` + fmt.Sprint(time.Now().Add(time.Minute).Unix()) + `}`
+		if req.Method == http.MethodGet {
+			body = `{"state":"ready","credential":{"api_key":"` + key + `"}}`
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
+	})}
+}
+func stepFunPollNow(t *testing.T, svc *CNOAuthService, id string) {
+	t.Helper()
+	require.NoError(t, svc.store.Update(context.Background(), id, func(_ context.Context, session *cnoauth.Session) error { session.NextPoll = time.Time{}; return nil }))
+}
+
 func TestStepFunLoginOwnerCancellationAndSingleConsumption(t *testing.T) {
 	admin := &cnOAuthAdminStub{}
 	svc := NewCNOAuthService(nil, nil, admin)
+	stepFunCloudLogin(t, svc, "private-step-key")
 	view, err := svc.Start(context.Background(), 7, "stepfun", "global", nil, 0)
 	require.NoError(t, err)
-	auth, _ := url.Parse(view.AuthorizeURL)
-	callback := "http://127.0.0.1:53683/callback?state=" + auth.Query().Get("state") + "&api_key=private-step-key"
+	stepFunPollNow(t, svc, view.SessionID)
+	callback := ""
 	_, err = svc.Advance(context.Background(), 8, "stepfun", view.SessionID, callback, false)
 	require.Error(t, err)
 	_, err = svc.Advance(context.Background(), 7, "kimi", view.SessionID, callback, false)
@@ -276,12 +294,13 @@ func TestStepFunLoginAcrossReplicasConsumesGrantOnce(t *testing.T) {
 	first := NewCNOAuthService(nil, nil, admin)
 	second := NewCNOAuthService(nil, nil, admin)
 	first.store, second.store = cnoauth.NewStore(client), cnoauth.NewStore(client)
+	stepFunCloudLogin(t, first, "replica-key")
+	stepFunCloudLogin(t, second, "replica-key")
 	ctx := context.Background()
 	view, err := first.Start(ctx, 7, "stepfun", "global", nil, 0)
 	require.NoError(t, err)
-	auth, err := url.Parse(view.AuthorizeURL)
-	require.NoError(t, err)
-	_, err = second.Advance(ctx, 7, "stepfun", view.SessionID, "http://127.0.0.1:53683/callback?state="+auth.Query().Get("state")+"&api_key=replica-key", false)
+	stepFunPollNow(t, second, view.SessionID)
+	_, err = second.Advance(ctx, 7, "stepfun", view.SessionID, "", false)
 	require.NoError(t, err)
 	var wg sync.WaitGroup
 	for n := 0; n < 8; n++ {
@@ -347,7 +366,7 @@ func TestStepFunCompletionReceiptSurvivesConcurrentSessionRead(t *testing.T) {
 }
 
 func TestStepFunReauthorizationPreservesRegionAndAccountMetadata(t *testing.T) {
-	for _, lifetime := range []string{"", "&expires_in=3600"} {
+	for _, lifetime := range []string{"static"} {
 		t.Run(lifetime, func(t *testing.T) {
 			a := stepFunTestAccount("oauth", "global")
 			a.Credentials["expires_at"] = time.Now().Add(-time.Hour).Format(time.RFC3339)
@@ -355,13 +374,15 @@ func TestStepFunReauthorizationPreservesRegionAndAccountMetadata(t *testing.T) {
 			a.Credentials["model_mapping"] = map[string]any{"public": "step-3.7-flash"}
 			admin := &cnOAuthAdminStub{}
 			svc := NewCNOAuthService(nil, &refreshAPIAccountRepo{account: a}, admin)
+			stepFunCloudLogin(t, svc, "new-key")
 			ctx := context.Background()
 			view, err := svc.Start(ctx, 7, "stepfun", "cn", nil, a.ID)
 			require.NoError(t, err)
 			auth, err := url.Parse(view.AuthorizeURL)
 			require.NoError(t, err)
 			require.Equal(t, "platform.stepfun.ai", auth.Host, "relink uses the stored region")
-			_, err = svc.Advance(ctx, 7, "stepfun", view.SessionID, "http://127.0.0.1:53683/callback?state="+auth.Query().Get("state")+"&access_token=new-key"+lifetime, false)
+			stepFunPollNow(t, svc, view.SessionID)
+			_, err = svc.Advance(ctx, 7, "stepfun", view.SessionID, "", false)
 			require.NoError(t, err)
 			_, err = svc.Complete(ctx, 7, "stepfun", view.SessionID, CNOAuthCompleteInput{ModelMapping: map[string]string{"unexpected": "unexpected"}})
 			require.NoError(t, err)
@@ -370,13 +391,7 @@ func TestStepFunReauthorizationPreservesRegionAndAccountMetadata(t *testing.T) {
 			require.Equal(t, "new-key", creds["access_token"])
 			require.Equal(t, a.Credentials["model_mapping"], creds["model_mapping"])
 			require.NotContains(t, creds, "refresh_token")
-			if lifetime == "" {
-				require.NotContains(t, creds, "expires_at")
-			} else {
-				expiry, err := time.Parse(time.RFC3339, creds["expires_at"].(string))
-				require.NoError(t, err)
-				require.WithinDuration(t, time.Now().Add(time.Hour), expiry, 2*time.Second)
-			}
+			require.NotContains(t, creds, "expires_at", "cloud API keys have no fabricated expiry")
 			require.NoError(t, validateStepFunCredentials("stepfun", "oauth", creds))
 		})
 	}

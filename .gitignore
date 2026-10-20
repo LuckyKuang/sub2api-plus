@@ -150,6 +150,7 @@ docs/*
 !docs/AUTHENTICATION.md
 !docs/MODEL_PLAZA.md
 !docs/OUTBOUND_IDENTITY.md
+!docs/OFFICIAL_AGENT_BASELINES.md
 !docs/README.md
 !docs/RELEASING.md
 !docs/CI_VALIDATION.md

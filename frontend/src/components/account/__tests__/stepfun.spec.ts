@@ -12,7 +12,7 @@ import { getPlatformTagClass, getPlatformTextClass } from '@/components/admin/ch
 vi.mock('vue-i18n', async original => ({ ...await original<typeof import('vue-i18n')>(), useI18n: () => ({ t: (key: string) => key }) }))
 vi.mock('@/api/admin/cnOAuth', () => ({ cnOAuthRequest: vi.fn() }))
 
-const pending = () => ({ session_id: 'session', authorize_url: 'https://platform.stepfun.ai/cli-login?port=53683&state=state', expires_at: new Date(Date.now() + 60000).toISOString(), interval_seconds: 5, status: 'pending' as const })
+const pending = () => ({ session_id: 'session', authorize_url: 'https://platform.stepfun.ai/cli-login-remote?flow_id=flow', expires_at: new Date(Date.now() + 60000).toISOString(), interval_seconds: 5, status: 'pending' as const })
 
 describe('StepFun official access requirements', () => {
   beforeEach(() => { vi.useFakeTimers(); vi.mocked(cnOAuthRequest).mockReset(); vi.mocked(cnOAuthRequest).mockResolvedValue(pending()) })
@@ -24,21 +24,17 @@ describe('StepFun official access requirements', () => {
     expect(getPlatformTextClass('stepfun')).toContain('text-cyan-700')
   })
 
-  it('offers browser login in either region, requires explicit callback import and never device-polls', async () => {
+  // Step-Code be88ee77 login-client.ts uses browser approval + server polling.
+  it('offers browser login and polls without accepting callback credentials', async () => {
     const wrapper = mount(CNOAuthPanel, { props: { platform: 'stepfun', accountInput: { name: 'Step Plan' } } })
     await wrapper.get('select').setValue(wrapper.findAll('option').find(option => option.text().includes('domestic.international'))!.element.value)
     await wrapper.get('button').trigger('click'); await flushPromises()
     expect(cnOAuthRequest).toHaveBeenCalledWith('stepfun', 'start', { region: 'global', proxy_id: undefined, account_id: undefined })
-    expect(wrapper.get('a').attributes('href')).toBe('https://platform.stepfun.ai/cli-login?port=53683&state=state')
-    expect(wrapper.find('[data-testid="cn-oauth-user-code"]').exists()).toBe(false)
-    expect(wrapper.text()).toContain('admin.accounts.oauth.domestic.stepfunDescription')
-    await vi.advanceTimersByTimeAsync(20000)
-    expect(cnOAuthRequest).toHaveBeenCalledTimes(1)
-    const callback = 'http://127.0.0.1:53683/callback?state=state&api_key=private-key'
-    await wrapper.get('textarea').setValue(callback)
+    expect(wrapper.get('a').attributes('href')).toBe('https://platform.stepfun.ai/cli-login-remote?flow_id=flow')
+    expect(wrapper.find('textarea').exists()).toBe(false)
     vi.mocked(cnOAuthRequest).mockResolvedValueOnce({ ...pending(), status: 'ready' })
-    await wrapper.findAll('button').find(b => b.text().includes('domestic.exchange'))!.trigger('click'); await flushPromises()
-    expect(cnOAuthRequest).toHaveBeenLastCalledWith('stepfun', 'exchange', { session_id: 'session', callback })
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(cnOAuthRequest).toHaveBeenLastCalledWith('stepfun', 'poll', { session_id: 'session' })
     expect(wrapper.html()).not.toContain('private-key')
     vi.mocked(cnOAuthRequest).mockResolvedValueOnce({ ...pending(), status: 'completed', account_id: 42 })
     await wrapper.findAll('button').find(b => b.text().includes('domestic.create'))!.trigger('click'); await flushPromises()
@@ -46,14 +42,14 @@ describe('StepFun official access requirements', () => {
     wrapper.unmount()
   })
 
-  it('clears entered callback credentials on cancellation and expiry', async () => {
+  it('stops polling and removes authorization links at expiry', async () => {
     const wrapper = mount(CNOAuthPanel, { props: { platform: 'stepfun' } })
     await wrapper.get('button').trigger('click'); await flushPromises()
-    await wrapper.get('textarea').setValue('private-key')
     await vi.advanceTimersByTimeAsync(61000)
-    expect(wrapper.find('textarea').exists()).toBe(false)
-    expect(wrapper.html()).not.toContain('private-key')
-    expect(cnOAuthRequest).toHaveBeenCalledTimes(1)
+    expect(wrapper.find('a').exists()).toBe(false)
+    const calls = vi.mocked(cnOAuthRequest).mock.calls.length
+    await vi.advanceTimersByTimeAsync(10000)
+    expect(cnOAuthRequest).toHaveBeenCalledTimes(calls)
     wrapper.unmount()
     expect(cnOAuthRequest).toHaveBeenLastCalledWith('stepfun', 'cancel', { session_id: 'session' })
   })

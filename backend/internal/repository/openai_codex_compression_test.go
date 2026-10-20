@@ -57,9 +57,9 @@ func TestCodexOAuthHTTPCompressionWire(t *testing.T) {
 				if strings.HasPrefix(tc.name, "signed") {
 					req.Header.Set("Authorization", "AgentAssertion fixture")
 				}
-				req.Header.Set("User-Agent", "codex_cli_rs/0.158.0 (Ubuntu 24.04; x86_64) xterm-256color")
+				req.Header.Set("User-Agent", "codex_cli_rs/0.163.0 (Ubuntu 24.04; x86_64) xterm-256color")
 				req.Header.Set("Originator", "codex_cli_rs")
-				req.Header.Set("Version", "0.158.0")
+				req.Header.Set("Version", "0.163.0")
 				account := &service.Account{ID: 91, Platform: service.PlatformOpenAI, Type: tc.kind, Credentials: map[string]any{"auth_mode": tc.authMode}}
 				service.PrepareCodexRequestCompression(req, account)
 				for attempt := 0; attempt < 2; attempt++ {
@@ -87,7 +87,7 @@ func TestCodexOAuthHTTPCompressionWire(t *testing.T) {
 					}
 					require.Equal(t, int64(len(wire.body)), wire.length)
 					require.Equal(t, "codex_cli_rs", wire.header.Get("Originator"))
-					require.Equal(t, "0.158.0", wire.header.Get("Version"))
+					require.Equal(t, "0.163.0", wire.header.Get("Version"))
 				}
 			})
 		}

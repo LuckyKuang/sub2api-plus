@@ -38,11 +38,11 @@ unchanged.
 
 ## Outbound identity
 
-DeepSeek API-key accounts use the pinned **DeepSeek** preset by default
+DeepSeek OAuth and API-key accounts use the pinned **DeepSeek** preset by default
 (`nativeOutboundPreset`), so DeepSeek receives exactly one declaration:
 
 ```
-User-Agent: deepseek-harness/0.2.0-rc.2 (+https://github.com/deepseek-ai/deepseek-harness)
+User-Agent: deepseek-harness/0.2.1-rc.2 (+https://github.com/deepseek-ai/deepseek-harness)
 ```
 
 The parenthesized product comment belongs to that same User-Agent value
@@ -53,7 +53,7 @@ User-Agent; those two declarations are now absent on this platform. The harness
 `x-deepseek-harness-user-id`, `-session-id` and `-compact` request headers keep
 their protocol-layer ownership and are never rewritten by the identity layer.
 
-OAuth and API-key accounts retain the DSH family. System Settings configures
+OAuth and API-key accounts retain the Harness family. System Settings configures
 the global DeepSeek profile; valid account parameters can override that profile.
 There is no configurable `deepseek:apikey` mapping or cross-family account override.
 Protocol selection
@@ -62,9 +62,26 @@ billing and the ingress audit order are unaffected: identity chooses outbound
 declarations only. Ingress audit order and Plus session/quota accounting are
 unchanged.
 
-The **DeepSeek · DSH Desktop** card in System Settings shows this exact UA.
-The desktop delegates both its account-token and API-key model requests to the
-same vendored Harness adapter; its shell package version does not select the
-identity version. The resolver applies the same native family to OAuth owners,
-with atomic account/global/default fallback and a stable per-operation snapshot.
-Source evidence and the shared matrix are in [Outbound identity](../OUTBOUND_IDENTITY.md).
+The **DeepSeek · Harness** card follows the official
+[deepseek-harness source](../OFFICIAL_AGENT_BASELINES.md) directly. The compiled
+version is the reviewed `0.2.1-rc.2` prerelease; valid pins at `0.2.0-rc.2` or
+newer retain their priority. It uses no desktop-shell version.
+
+Native Messages requests carry an independently persisted anonymous UUID v4 in
+`x-deepseek-harness-user-id` and a request/owner-scoped session UUID. Same-request
+retries retain both; failover gets a new session. The gateway is stateless and
+does not claim to recreate a desktop conversation lifetime. Migration 292
+backfills existing owners. These values contain neither a provider user ID nor
+a credential. Caller attribution/compaction headers are removed; no gateway
+native compaction operation is invented. Discovery/control/Chat extensions do
+not acquire native Messages turn headers.
+
+OAuth model discovery calls `/models` with `x-dsh-auth-token`. Listed models
+require usable `api_capabilities.anthropic_messages`, text output, supported
+input modalities and valid positive capacities. Explicit Harness minimum
+versions gate availability against the selected trusted version; without a
+minimum, only built-in `deepseek-flash` and `deepseek-v4-pro` are offered.
+Unknown rows and array values are skipped without hiding recognized modalities;
+duplicate IDs retain the first row, following Harness's decoder.
+API-key `/models` sync remains an explicit gateway extension to the official
+agent's built-in credential-gated catalog. No OAuth token is used there.

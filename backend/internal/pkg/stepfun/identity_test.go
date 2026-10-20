@@ -11,8 +11,8 @@ import (
 
 func TestOfficialStepCodeIdentityAndRegionBaselines(t *testing.T) {
 	identity := DefaultIdentity()
-	require.Equal(t, "step (linux 6.8.0-31-generic; x64)", identity.UserAgent)
-	require.Equal(t, "step", identity.Originator)
+	require.Equal(t, "stepcode (linux 6.8.0-31-generic; x64)", identity.UserAgent)
+	require.Equal(t, "stepcode", identity.Originator)
 	require.Empty(t, identity.Version)
 	headers := http.Header{"User-Agent": {"inbound"}, "X-Step-Client": {"foreign"}, "Originator": {"codex"}, "Version": {"1.2.3"}}
 	identity.ForProtocol("chat_completions").Apply(headers)

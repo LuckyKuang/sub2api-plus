@@ -43,8 +43,9 @@ func ProvideZhipuOAuthService(proxyRepo ProxyRepository, oauthClient ZhipuOAuthC
 // ProvideZhipuOffPeakTicketManager creates the off-peak ticket manager and
 // registers it as the request-path ticket provider. Registration happens here so
 // the protocol builder never depends on the settings or account services.
-func ProvideZhipuOffPeakTicketManager(oauthClient ZhipuOffPeakClient) *ZhipuOffPeakTicketManager {
+func ProvideZhipuOffPeakTicketManager(oauthClient ZhipuOffPeakClient, linked *ZhipuOAuthService) *ZhipuOffPeakTicketManager {
 	manager := NewZhipuOffPeakTicketManager(oauthClient)
+	manager.projectTokens = linked
 	SetZhipuOffPeakTicketProvider(manager)
 	return manager
 }
@@ -1127,11 +1128,12 @@ func ProvideClaudeResetCreditService(accounts AccountRepository, tokens *ClaudeT
 	return s
 }
 
-func ProvideCNOAuthService(proxyRepo ProxyRepository, accountRepo AccountRepository, admin AdminService, redisClient *redis.Client, refreshAPI *OAuthRefreshAPI, gateway *OpenAIGatewayService, tester *AccountTestService) *CNOAuthService {
+func ProvideCNOAuthService(proxyRepo ProxyRepository, accountRepo AccountRepository, admin AdminService, redisClient *redis.Client, refreshAPI *OAuthRefreshAPI, gateway *OpenAIGatewayService, tester *AccountTestService, linked *ZhipuOAuthService) *CNOAuthService {
 	svc := NewCNOAuthService(proxyRepo, accountRepo, admin)
 	svc.store = cnoauth.NewStore(redisClient)
 	svc.refreshAPI = refreshAPI
 	svc.modelTester = tester
+	svc.zhipu = linked
 	gateway.cnOAuthService = svc
 	tester.cnOAuthService = svc
 	return svc

@@ -55,10 +55,11 @@ continue to apply. These accounts do not use the OpenAI/Claude token clients.
 Native grants cannot be rerouted by `base_url`, `api_base_urls`, `api_protocol`,
 inbound authentication headers or generic header overrides. OAuth and inference
 requests do not follow redirects. Tests and actual forwarding share the native
-credential refresh and authentication boundary. No grant is sent to the public
-API-key billing/quota or model-discovery endpoints; model selection uses the
-existing provider catalog. Live model sync remains unsupported for these OAuth
-accounts. OAuth-specific quota discovery is not added by this login feature.
+credential refresh and authentication boundary. DeepSeek OAuth discovery calls `GET https://api.deepseek.com/models` with
+`x-dsh-auth-token`; Kimi uses its regional `GET /coding/v1/models` with Bearer
+auth. Native OAuth origins stay fixed and redirects are disabled. These are
+account catalogs; no grant is sent to public API-key billing or quota endpoints.
+MiniMax OAuth model sync and OAuth-specific quota discovery remain unsupported.
 
 The default inference allowlist and `deploy/config.example.yaml` include the
 hosts above. Deployments replacing `security.url_allowlist.upstream_hosts` must
@@ -110,14 +111,14 @@ requires a new login; the grant is never returned to the browser for replay.
 
 Protocols were checked against local official client sources:
 
-- `dsh-desktop/vendor/dsh-runtime/0.2.0-rc.2/`: vendored
-  `dsh-deepseek-account-platform` (`types/index.js`, `types/protocol.js`),
-  `dsh-deepseek-account` platform headers and `dsh-llm-deepseek-account` auth.
+- [deepseek-harness](../OFFICIAL_AGENT_BASELINES.md):
+  `packages/credentials/deepseek-account-platform/src/{types,protocol}.ts`,
+  account platform declarations and `llm-deepseek-account` auth/listing.
 - `kimi-code/packages/oauth/src/`: `oauth.ts`, `constants.ts`, `region.ts`,
   `identity.ts`, `managed-kimi-code.ts`.
 - `minimax-code/packages/oauth-core/src/`: `oauth-client.ts`, `endpoint-config.ts`,
   `contracts.ts`; `packages/config/src/config.ts` inference destinations and
-  `packages/local-runtime/src/runtime/model-resolver-helpers.ts` request headers.
+  `packages/local-runtime-v2/src/service/model-system/resolution/` request headers.
 
 `internal/pkg/cnoauth` tests cover wire formats, PKCE/state, regions, errors,
 refresh, scope validation and Redis/local session isolation. Service tests cover

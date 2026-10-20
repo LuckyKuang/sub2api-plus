@@ -17,6 +17,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/antigravity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/claude"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/geminicli"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 )
 
 const (
@@ -238,6 +239,10 @@ func (s *AccountTestService) SyncUpstreamModelCatalog(ctx context.Context, accou
 		}
 	}
 
+	if account.Platform == PlatformDeepseek && account.Type == AccountTypeOAuth {
+		_, metadata, _ := extractDeepSeekHarnessCatalog(body, "")
+		catalog.Metadata = metadata
+	}
 	if account.Platform == PlatformStepFun {
 		catalog.Metadata = extractStepFunMetadata(body)
 	}
@@ -483,11 +488,11 @@ func mergeUpstreamModelMetadata(primary, fallback UpstreamModelMetadata) (Upstre
 		merged.Reasoning = &reasoning
 		changed = true
 	}
-	if strings.TrimSpace(merged.DefaultReasoningLevel) == "" && strings.TrimSpace(fallback.DefaultReasoningLevel) != "" {
+	if (merged.Reasoning == nil || *merged.Reasoning) && strings.TrimSpace(merged.DefaultReasoningLevel) == "" && strings.TrimSpace(fallback.DefaultReasoningLevel) != "" {
 		merged.DefaultReasoningLevel = strings.TrimSpace(fallback.DefaultReasoningLevel)
 		changed = true
 	}
-	if len(merged.SupportedReasoningLevels) == 0 && len(fallback.SupportedReasoningLevels) > 0 {
+	if (merged.Reasoning == nil || *merged.Reasoning) && len(merged.SupportedReasoningLevels) == 0 && len(fallback.SupportedReasoningLevels) > 0 {
 		merged.SupportedReasoningLevels = append([]string(nil), fallback.SupportedReasoningLevels...)
 		changed = true
 	}
@@ -785,6 +790,14 @@ func (s *AccountTestService) fetchUpstreamModelList(ctx context.Context, account
 	if account.Platform == PlatformStepFun {
 		extractModels = extractStepFunModelIDs
 	}
+	if account.Platform == PlatformDeepseek && account.Type == AccountTypeOAuth {
+		identity, _ := outboundidentity.FromContext(req.Context())
+		filtered, _, filterErr := extractDeepSeekHarnessCatalog(body, identity.Version)
+		if filterErr != nil {
+			return nil, nil, filterErr
+		}
+		body = filtered
+	}
 	models, err := extractModels(body)
 	if err != nil {
 		return nil, nil, newUpstreamModelSyncUpstreamError("Upstream model list response was not valid JSON", err)
@@ -930,6 +943,8 @@ func (s *AccountTestService) buildUpstreamModelsRequest(ctx context.Context, acc
 	switch {
 	case account.Platform == PlatformAntigravity:
 		return s.buildAntigravityAPIKeyModelsRequest(ctx, account)
+	case account.IsDomesticOAuth() && (account.Platform == PlatformDeepseek || account.Platform == PlatformKimi):
+		return s.buildDomesticOAuthModelsRequest(ctx, account)
 	case account.IsGrok():
 		return s.buildGrokUpstreamModelsRequest(ctx, account)
 	case account.IsOpenAI() || account.IsMultiProtocolAPIKey():
@@ -1344,6 +1359,15 @@ func (s *AccountTestService) fetchAntigravityOAuthUpstreamModels(ctx context.Con
 }
 
 func (s *AccountTestService) doUpstreamModelsRequest(req *http.Request, proxyURL string, account *Account) (*http.Response, error) {
+	if req.URL.String() == modelsDevRegistryURL {
+		return s.doUpstreamModelsRequestPrepared(req, proxyURL, account)
+	}
+	return s.cnOAuthService.roundTripZhipuLinked(req, account, func(next *http.Request) (*http.Response, error) {
+		return s.doUpstreamModelsRequestPrepared(next, proxyURL, account)
+	})
+}
+
+func (s *AccountTestService) doUpstreamModelsRequestPrepared(req *http.Request, proxyURL string, account *Account) (*http.Response, error) {
 	if account.IsDomesticOAuth() && account.Platform == PlatformStepFun {
 		if err := prepareStepFunOAuthRequest(req, account); err != nil {
 			return nil, err
@@ -1431,7 +1455,7 @@ type upstreamModelCapabilityEntry struct {
 	upstreamModelEntry
 	DisplayName              string                     `json:"display_name"`
 	Description              string                     `json:"description"`
-	Reasoning                *bool                      `json:"reasoning"`
+	Reasoning                json.RawMessage            `json:"reasoning"`
 	DefaultReasoningLevel    string                     `json:"default_reasoning_level"`
 	SupportedReasoningLevels []json.RawMessage          `json:"supported_reasoning_levels"`
 	ReasoningOptions         []modelsDevReasoningOption `json:"reasoning_options"`
@@ -1536,11 +1560,15 @@ func upstreamMetadataFromCapabilityEntry(modelID string, entry upstreamModelCapa
 	if len(levels) == 0 {
 		levels = reasoningLevelsFromModelsDevOptions(entry.ReasoningOptions)
 	}
-	reasoning := entry.Reasoning
+	reasoning, structuredLevels, structuredDefault := parseUpstreamReasoning(entry.Reasoning)
+	if reasoning != nil && strings.HasPrefix(strings.TrimSpace(string(entry.Reasoning)), "{") {
+		levels = structuredLevels
+		entry.DefaultReasoningLevel = structuredDefault
+	}
 	if reasoning == nil {
 		reasoning = entry.SupportsThinking
 	}
-	if len(levels) == 0 && entry.SupportsThinking != nil && *entry.SupportsThinking {
+	if len(levels) == 0 && (reasoning == nil || *reasoning) && entry.SupportsThinking != nil && *entry.SupportsThinking {
 		level := "high"
 		fixedLevel := normalizeReasoningLevel(modelID[strings.LastIndex(modelID, "-")+1:])
 		if fixedLevel != "" && fixedLevel != "none" {
@@ -1598,7 +1626,7 @@ func upstreamMetadataFromCapabilityEntry(modelID string, entry upstreamModelCapa
 		maxOutputTokens = entry.MaxOutputTokensCamel
 	}
 	defaultReasoningLevel := normalizeReasoningLevel(entry.DefaultReasoningLevel)
-	if defaultReasoningLevel == "" && len(levels) > 0 {
+	if defaultReasoningLevel == "" && len(levels) > 0 && !strings.HasPrefix(strings.TrimSpace(string(entry.Reasoning)), "{") {
 		defaultReasoningLevel = levels[0]
 	}
 	displayName := strings.TrimSpace(entry.DisplayName)

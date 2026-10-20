@@ -107,6 +107,10 @@ func (s *zhipuOAuthStubClient) ResolveTeamPlanKey(_ context.Context, _, _, organ
 	return s.team, nil
 }
 
+func (s *zhipuOAuthStubClient) IssueProjectToken(ctx context.Context, provider, token, org, project, key, proxy string) (*zcode.CodingPlanCredential, error) {
+	return s.ResolveIndividualCodingPlanKey(ctx, provider, token, proxy)
+}
+
 func newZhipuOAuthTestService(t *testing.T, client *zhipuOAuthStubClient) *ZhipuOAuthService {
 	t.Helper()
 	svc := NewZhipuOAuthService(client, nil)
@@ -256,7 +260,8 @@ func TestZhipuOAuthBuildAccountMaterialForEachPlan(t *testing.T) {
 			User:        ZhipuLinkUser{ID: "u-1"},
 		})
 		require.NoError(t, err)
-		require.Equal(t, "ak.sk", material.Credentials["api_key"])
+		require.NotContains(t, material.Credentials, "api_key")
+		require.Equal(t, "bm-token", material.Credentials["oauth_access_token"])
 		require.Equal(t, "bm-token", material.Credentials["access_token"])
 		require.Equal(t, AccountModeCoding, material.Credentials["account_mode"])
 		require.Equal(t, APIProtocolAdaptive, material.Credentials["api_protocol"])
@@ -292,7 +297,7 @@ func TestZhipuOAuthBuildAccountMaterialForEachPlan(t *testing.T) {
 			AccessToken: "bm-token",
 		})
 		require.NoError(t, err)
-		require.Equal(t, "tak.tsk", material.Credentials["api_key"])
+		require.NotContains(t, material.Credentials, "api_key")
 		require.Equal(t, [2]string{"org-team", "proj-team"}, client.lastTeamScope)
 		require.Equal(t, true, material.Credentials[credKeyHeaderOverrideEnabled])
 		overrides, ok := material.Credentials[credKeyHeaderOverrides].(map[string]any)
@@ -335,13 +340,13 @@ func TestZhipuOAuthBuildAccountMaterialForEachPlan(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "zcode-jwt", material.Credentials["api_key"])
 		require.Equal(t, "zcode-jwt", material.Credentials["zcode_jwt_token"])
-		require.Equal(t, "ak.sk", material.Credentials["off_peak_plan_key"])
+		require.NotContains(t, material.Credentials, "off_peak_plan_key")
 		require.Equal(t, AnthropicAPIKeyAuthSchemeAuthorizationBearer, material.Credentials[anthropicAPIKeyAuthSchemeExtraKey])
 		require.Equal(t, map[string]any{APIProtocolAnthropic: zcodeOffPeakAnthropicBaseURL}, material.Credentials[credentialAPIBaseURLs])
 		require.Equal(t, zcodeOffPeakAnthropicBaseURL, material.BaseURL)
 		overrides, ok := material.Credentials[credKeyHeaderOverrides].(map[string]any)
 		require.True(t, ok)
-		require.Equal(t, "ak.sk", overrides["x-coding-plan-api-key"])
+		require.NotContains(t, overrides, "x-coding-plan-api-key")
 		require.NotContains(t, overrides, "bigmodel-organization", "a personal off-peak plan carries no team scope")
 
 		// The team variant adds the scope headers.
@@ -373,7 +378,7 @@ func TestZhipuOAuthBuildAccountMaterialForEachPlan(t *testing.T) {
 			})
 			require.NoError(t, err, provider)
 			require.Equal(t, map[string]any{APIProtocolAnthropic: zcodeOffPeakAnthropicBaseURL}, idle.Credentials[credentialAPIBaseURLs])
-			require.Equal(t, "ak.sk", idle.Credentials["off_peak_plan_key"])
+			require.NotContains(t, idle.Credentials, "off_peak_plan_key")
 			require.Equal(t, AnthropicAPIKeyAuthSchemeAuthorizationBearer, idle.Credentials[anthropicAPIKeyAuthSchemeExtraKey])
 		}
 	})
@@ -456,7 +461,7 @@ func TestZhipuOAuthStartLinkPropagatesPlatformFailure(t *testing.T) {
 func TestZhipuOAuthIdentitySurvivesSettingsChangeAndMaterialCreation(t *testing.T) {
 	client := &zhipuOAuthStubClient{initFlow: zhipuTestFlowInit(), exchange: zhipuTestReady(zcode.ProviderBigModel), individual: &zcode.CodingPlanCredential{APIKey: "derived-key"}}
 	svc := newZhipuOAuthTestService(t, client)
-	version := "3.14.3"
+	version := "3.16.2"
 	ctx := outboundidentity.WithResolver(context.Background(), func(context.Context, string) outboundidentity.Identity {
 		identity := zcode.DefaultIdentity()
 		identity.UserAgent, identity.Version = "ZCode/"+version, version
@@ -479,8 +484,9 @@ func TestZhipuOAuthIdentitySurvivesSettingsChangeAndMaterialCreation(t *testing.
 	account := &Account{ID: 99, Platform: PlatformZhipu, Type: AccountTypeOAuth, Credentials: material.Credentials}
 	resolved, ok := outboundidentity.FromContext(WithAccountOutboundIdentity(ctx, account))
 	require.True(t, ok)
-	require.Equal(t, "ZCode/3.14.3", resolved.UserAgent)
-	require.Equal(t, "derived-key", account.GetOpenAIProtocolAPIKey())
+	require.Equal(t, "ZCode/3.16.2", resolved.UserAgent)
+	require.Equal(t, "business-token", account.GetOpenAIProtocolAPIKey(), "request construction retains original owner; send-time resolver installs the PAT")
+	require.NotContains(t, material.Credentials, "api_key")
 }
 
 func TestZhipuOAuthSelectedProxyCannotFallBackToDirect(t *testing.T) {

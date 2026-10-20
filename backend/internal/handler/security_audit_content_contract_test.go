@@ -14,6 +14,8 @@ import (
 
 func TestUpstreamProtocolAdditionsKeepCanonicalCurrentUserContent(t *testing.T) {
 	for _, tc := range []struct{ name, protocol, body string }{
+		{"Step-Code native developer instructions and unknown siblings", service.ContentModerationProtocolOpenAIChat,
+			`{"model":"step-3.7-flash","messages":[{"role":"developer","content":"application instruction"},{"role":"user","content":"audit current request"}],"stream":true,"future_options":{"opaque":true}}`},
 		{"developer and legacy functions", service.ContentModerationProtocolOpenAIChat,
 			`{"model":"gpt-5.5","messages":[{"role":"developer","content":"application instruction"},{"role":"assistant","function_call":{"name":"lookup","arguments":"{\"q\":\"old\"}"}},{"role":"function","name":"lookup","content":"historical result"},{"role":"user","content":"audit current request"}],"functions":[{"name":"lookup","parameters":{"type":"object"}}],"function_call":{"name":"lookup"},"future_options":{"opaque":true}}`},
 		{"web search history", service.ContentModerationProtocolOpenAIResponses,
