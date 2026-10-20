@@ -394,6 +394,9 @@ func (s *defaultOpenAIAccountScheduler) Select(
 }
 
 func (s *defaultOpenAIAccountScheduler) selectUncoordinated(ctx context.Context, req OpenAIAccountScheduleRequest) (selection *AccountSelectionResult, decision OpenAIAccountScheduleDecision, err error) {
+	if !openAISessionRouteApplies(req) {
+		ctx = WithoutOpenAISessionRoute(ctx)
+	}
 	if s != nil && s.service != nil && s.service.openAIGroupRequiresPrivacySet(ctx, req.GroupID) {
 		req.RequirePrivacySet = true
 	}
@@ -546,6 +549,9 @@ func (s *defaultOpenAIAccountScheduler) selectBySessionHash(
 	ctx context.Context,
 	req OpenAIAccountScheduleRequest,
 ) (*AccountSelectionResult, bool, error) {
+	if !openAISessionRouteApplies(req) {
+		ctx = WithoutOpenAISessionRoute(ctx)
+	}
 	sessionHash := strings.TrimSpace(req.SessionHash)
 	if sessionHash == "" || s == nil || s.service == nil || (s.service.cache == nil && s.service.sessionRouteStore == nil) {
 		return nil, false, nil

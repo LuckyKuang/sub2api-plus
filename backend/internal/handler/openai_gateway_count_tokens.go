@@ -275,7 +275,7 @@ func (h *OpenAIGatewayHandler) CountTokens(c *gin.Context) {
 	policyRejectedAccountCount := 0
 	for {
 		selection, _, err := h.gatewayService.SelectAccountWithSchedulerForCapability(
-			c.Request.Context(),
+			service.WithoutOpenAISessionRoute(c.Request.Context()),
 			apiKey.GroupID,
 			"",
 			sessionHash,

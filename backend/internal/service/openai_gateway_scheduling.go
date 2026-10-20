@@ -280,6 +280,9 @@ func (s *OpenAIGatewayService) bindOpenAIStickySessionAccount(ctx context.Contex
 	if account == nil || sessionHash == "" || account.ID <= 0 {
 		return nil
 	}
+	if account.Platform != PlatformOpenAI {
+		ctx = WithoutOpenAISessionRoute(ctx)
+	}
 	if err := s.setStickySessionAccountID(ctx, groupID, sessionHash, account.ID, ttl); err != nil {
 		return err
 	}
@@ -305,7 +308,7 @@ func (s *OpenAIGatewayService) SelectAccountForModel(ctx context.Context, groupI
 // SelectAccountForModelWithExclusions selects an account supporting the requested model while excluding specified accounts.
 // SelectAccountForModelWithExclusions 选择支持指定模型的账号，同时排除指定的账号。
 func (s *OpenAIGatewayService) SelectAccountForModelWithExclusions(ctx context.Context, groupID *int64, sessionHash string, requestedModel string, excludedIDs map[int64]struct{}) (*Account, error) {
-	if sessionHash != "" && s.openAISessionRouteStore() != nil {
+	if sessionHash != "" && s.openAISessionRouteStoreForRequest(ctx) != nil {
 		// This discovery-only API cannot carry an attempt to forwarding.
 		// Session callers must use the selection API and its fenced context.
 		return nil, ErrOpenAISessionRouteNotAccepted
@@ -347,6 +350,7 @@ func (s *OpenAIGatewayService) SelectAccountForTokenCount(
 	requiredCapability OpenAIEndpointCapability,
 	platform string,
 ) (*Account, error) {
+	ctx = WithoutOpenAISessionRoute(ctx)
 	ctx = WithOpenAIProfitControlSuppressed(ctx)
 	ctx = s.withOpenAIQuotaAutoPauseContext(ctx)
 	return s.selectAccountForModelWithExclusions(
@@ -1028,6 +1032,9 @@ func (s *OpenAIGatewayService) selectAccountForModelWithExclusions(ctx context.C
 // selectAccountForModelWithExclusionsStickyHit 与 selectAccountForModelWithExclusions 相同，
 // 另返回账号是否来自粘性会话命中。
 func (s *OpenAIGatewayService) selectAccountForModelWithExclusionsStickyHit(ctx context.Context, groupID *int64, platform string, sessionHash string, requestedModel string, excludedIDs map[int64]struct{}, requireCompact bool, stickyAccountID int64, requiredCapability OpenAIEndpointCapability, preferLowUpstreamRate bool) (*Account, bool, error) {
+	if !openAISessionRouteApplies(OpenAIAccountScheduleRequest{Platform: platform, RequiredCapability: requiredCapability, RequireCompact: requireCompact}) {
+		ctx = WithoutOpenAISessionRoute(ctx)
+	}
 	platform = NormalizeOpenAICompatiblePlatform(platform)
 	if sessionHash != "" && platform == PlatformOpenAI {
 		if _, err := s.getStickySessionAccountID(ctx, groupID, sessionHash); errors.Is(err, ErrOpenAISessionRouteStoreUnavailable) {
@@ -1281,6 +1288,9 @@ func (s *OpenAIGatewayService) SelectAccountWithLoadAwareness(ctx context.Contex
 }
 
 func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Context, groupID *int64, platform string, sessionHash string, requestedModel string, excludedIDs map[int64]struct{}, requireCompact bool, requiredCapability OpenAIEndpointCapability, useUpstreamTokenCost bool) (*AccountSelectionResult, error) {
+	if !openAISessionRouteApplies(OpenAIAccountScheduleRequest{Platform: platform, RequiredCapability: requiredCapability, RequireCompact: requireCompact}) {
+		ctx = WithoutOpenAISessionRoute(ctx)
+	}
 	platform = NormalizeOpenAICompatiblePlatform(platform)
 	if s.checkChannelPricingRestriction(ctx, groupID, requestedModel) {
 		slog.Warn("channel pricing restriction blocked request",

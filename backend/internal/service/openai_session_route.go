@@ -103,12 +103,52 @@ func (s *OpenAIGatewayService) openAISessionRouteStore() OpenAISessionRouteStore
 	return s.sessionRouteStore
 }
 
+type openAISessionRouteDisabledKey struct{}
+
+// WithoutOpenAISessionRoute keeps excluded requests on ordinary TTL affinity.
+// They must not read, create or migrate a text/WS conversation's durable owner.
+func WithoutOpenAISessionRoute(ctx context.Context) context.Context {
+	if openAISessionRouteDisabled(ctx) {
+		return ctx
+	}
+	return context.WithValue(ctx, openAISessionRouteDisabledKey{}, true)
+}
+
+func openAISessionRouteDisabled(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	disabled, _ := ctx.Value(openAISessionRouteDisabledKey{}).(bool)
+	return disabled
+}
+
+func (s *OpenAIGatewayService) openAISessionRouteStoreForRequest(ctx context.Context) OpenAISessionRouteStore {
+	if openAISessionRouteDisabled(ctx) {
+		return nil
+	}
+	return s.openAISessionRouteStore()
+}
+
+// Only generation paths with admission, renewal, semantic acceptance and
+// fencing participate. Platform is the resolved target (including Composite).
+func openAISessionRouteApplies(req OpenAIAccountScheduleRequest) bool {
+	if (req.Platform != "" && req.Platform != PlatformOpenAI) || req.RequiredImageCapability != "" || req.RequireCompact {
+		return false
+	}
+	switch req.RequiredCapability {
+	case "", OpenAIEndpointCapabilityResponses, OpenAIEndpointCapabilityChatCompletions:
+		return true
+	default:
+		return false
+	}
+}
+
 // openAISessionRouteCanonicalOwner returns the committed owner of the session's
 // authoritative route, or 0 when the session has no route yet (or the store is
 // unusable). Callers use it to decide whether a later signal may establish the
 // route or must leave an existing owner alone.
 func (s *OpenAIGatewayService) openAISessionRouteCanonicalOwner(ctx context.Context, groupID *int64, sessionHash string) int64 {
-	store := s.openAISessionRouteStore()
+	store := s.openAISessionRouteStoreForRequest(ctx)
 	if store == nil {
 		return 0
 	}
@@ -132,7 +172,7 @@ func (s *OpenAIGatewayService) openAISessionRouteCanonicalOwner(ctx context.Cont
 // only a permanent unavailability may migrate it, and that path commits a new
 // owner explicitly.
 func (s *OpenAIGatewayService) openAISessionRouteKeepsCanonicalOwner(ctx context.Context, groupID *int64, sessionHash string, accountID int64) bool {
-	store := s.openAISessionRouteStore()
+	store := s.openAISessionRouteStoreForRequest(ctx)
 	if store == nil || accountID <= 0 {
 		return false
 	}

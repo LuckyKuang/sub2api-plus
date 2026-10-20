@@ -146,6 +146,17 @@ continuation cannot use affinity as permission to send to another account.
 Clients without a stable session signal retain the existing content fallback;
 it cannot guarantee affinity across changing requests or WS reconnects.
 
+Durable ownership is limited to native OpenAI text generation (Responses,
+Chat Completions and Messages adapters) and Responses WebSocket turns. Other
+OpenAI-compatible platforms, including Composite routes resolved to those
+platforms, retain their existing Redis TTL affinity and failover semantics.
+Images, embeddings, alpha search, Live, token counting and legacy
+`/responses/compact` do not read or write the durable route, acquire migration
+leases, or change a text/WS owner. Their selection and post-slot binding use
+ordinary affinity even when the durable store is configured or unavailable.
+Native remote compaction inside a Responses generation retains that
+generation's ownership lifecycle.
+
 Recoverable failures retain the selected owner during existing bounded retry
 budgets. OAuth keeps its credential-refresh and transient-429 window. Native
 API keys use the existing same-account count for short transient 429s before

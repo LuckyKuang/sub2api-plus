@@ -167,7 +167,7 @@ func (s *OpenAIGatewayService) getStickySessionAccountID(ctx context.Context, gr
 
 	// The authoritative store wins over the cache: a committed owner must
 	// survive TTL expiry, restart and a stale cache entry.
-	if store := s.openAISessionRouteStore(); store != nil {
+	if store := s.openAISessionRouteStoreForRequest(ctx); store != nil {
 		digest := OpenAISessionRouteDigest(sessionHash)
 		if digest != "" {
 			route, routeErr := store.Get(ctx, openAISessionRouteDomain(derefGroupID(groupID)), digest)
@@ -229,7 +229,7 @@ func (s *OpenAIGatewayService) setStickySessionAccountID(ctx context.Context, gr
 
 	// Keep the authoritative route in step with the cache write. A store failure
 	// fails the bind instead of leaving a binding that only lasts one TTL.
-	if store := s.openAISessionRouteStore(); store != nil {
+	if store := s.openAISessionRouteStoreForRequest(ctx); store != nil {
 		if err := s.upsertOpenAISessionRoute(ctx, store, derefGroupID(groupID), sessionHash, accountID); err != nil {
 			return err
 		}

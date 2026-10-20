@@ -120,7 +120,7 @@ type openAISessionRouteAttempt struct {
 }
 
 func openAIRouteAttempt(ctx context.Context) *openAISessionRouteAttempt {
-	if ctx == nil {
+	if ctx == nil || openAISessionRouteDisabled(ctx) {
 		return nil
 	}
 	a, _ := ctx.Value(openAISessionRouteAttemptKey{}).(*openAISessionRouteAttempt)
@@ -529,13 +529,24 @@ func openAISessionMessageToolHistoryComplete(request gjson.Result) bool {
 
 // A route write during selection must never implicitly migrate its owner.
 func openAISessionRouteSelectionDeferred(ctx context.Context) bool {
+	if openAISessionRouteDisabled(ctx) {
+		return false
+	}
 	deferred, _ := ctx.Value(openAISessionRouteSelectionKey{}).(bool)
 	return deferred
 }
 
 func (s *OpenAIGatewayService) selectAccountWithCanonicalRoute(ctx context.Context, req OpenAIAccountScheduleRequest, selectCandidate func(context.Context, string, map[int64]struct{}) (*AccountSelectionResult, OpenAIAccountScheduleDecision, error)) (*AccountSelectionResult, OpenAIAccountScheduleDecision, error) {
-	store := s.openAISessionRouteStore()
-	if store == nil || req.SessionHash == "" || NormalizeOpenAICompatiblePlatform(req.Platform) != PlatformOpenAI {
+	if !openAISessionRouteApplies(req) || openAISessionRouteDisabled(ctx) {
+		ctx = WithoutOpenAISessionRoute(ctx)
+		selection, decision, err := selectCandidate(ctx, req.SessionHash, req.ExcludedIDs)
+		if selection != nil {
+			selection.sessionRouteDisabled = true
+		}
+		return selection, decision, err
+	}
+	store := s.openAISessionRouteStoreForRequest(ctx)
+	if store == nil || req.SessionHash == "" {
 		return selectCandidate(ctx, req.SessionHash, req.ExcludedIDs)
 	}
 	// Affinity cannot bypass the request's public-model authorization merely
