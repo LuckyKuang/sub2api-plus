@@ -119,6 +119,10 @@ func snapshotOAuthRefreshAccount(account *Account) *Account {
 		proxyID := *account.ProxyID
 		snapshot.ProxyID = &proxyID
 	}
+	if account.Proxy != nil {
+		proxy := *account.Proxy
+		snapshot.Proxy = &proxy
+	}
 	return &snapshot
 }
 
@@ -194,6 +198,9 @@ func (api *OAuthRefreshAPI) RefreshIfNeeded(
 	if api.tokenCache != nil {
 		acquired, lockErr := api.tokenCache.AcquireRefreshLock(ctx, cacheKey, api.lockTTL)
 		if lockErr != nil {
+			if account.IsDomesticOAuth() {
+				return nil, NewProviderCredentialFailure("native_oauth_refresh_lock_unavailable", lockErr)
+			}
 			// Redis 错误，降级为无锁刷新（进程内互斥锁仍生效）
 			slog.Warn("oauth_refresh_lock_failed_degraded",
 				"account_id", account.ID,
@@ -224,6 +231,9 @@ func (api *OAuthRefreshAPI) RefreshIfNeeded(
 	}
 	if freshAccount.ID != account.ID {
 		return nil, fmt.Errorf("%w: account identity mismatch", errOAuthRefreshAccountRereadFailed)
+	}
+	if account.Platform == PlatformOpenAI && !sameOpenAIRefreshOwner(account, freshAccount) {
+		return nil, oauthRefreshPersistenceFailure("openai_oauth_owner_changed", nil)
 	}
 	if !freshAccount.IsActive() {
 		if requestPath {
@@ -266,6 +276,9 @@ func (api *OAuthRefreshAPI) RefreshIfNeeded(
 		// 重新读取 DB，如果 refresh_token 已更新则说明是竞争，返回成功
 		if isInvalidGrantError(refreshErr) {
 			if recoveredAccount, recovered := api.tryRecoverFromRefreshRace(ctx, freshAccount); recovered {
+				if account.Platform == PlatformOpenAI && !sameOpenAIRefreshOwner(account, recoveredAccount) {
+					return nil, oauthRefreshPersistenceFailure("openai_oauth_owner_changed", nil)
+				}
 				if requestPath && recoveredAccount.Platform == PlatformGrok {
 					if eligibilityErr := grokOAuthRequestAccountEligibilityError(recoveredAccount); eligibilityErr != nil {
 						return nil, withGrokCredentialFailureSnapshot(eligibilityErr, recoveredAccount)
@@ -350,6 +363,9 @@ func (api *OAuthRefreshAPI) RefreshIfNeeded(
 			// while the provider call was in flight. Return the durable row so
 			// post-refresh cache publication cannot restore that stale snapshot.
 			freshAccount = durableAccount
+		} else if freshAccount.Platform == PlatformOpenAI && freshAccount.Type == AccountTypeOAuth ||
+			freshAccount.IsDomesticOAuth() && (freshAccount.Platform == PlatformKimi || freshAccount.Platform == PlatformMiniMax) {
+			return api.persistOAuthRefresh(ctx, cacheKey, attemptedAccount, newCredentials)
 		} else if updateErr := persistAccountCredentials(ctx, api.accountRepo, freshAccount, newCredentials); updateErr != nil {
 			slog.Error("oauth_refresh_update_failed",
 				"account_id", freshAccount.ID,

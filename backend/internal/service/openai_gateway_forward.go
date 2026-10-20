@@ -36,6 +36,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		executionScope: initialScope,
 	})
 	ctx = WithOutboundIdentityScope(ctx, c)
+	captureNativeConversationScope(ctx, c, account, body)
 	ctx = WithAccountOutboundIdentity(ctx, account)
 	defer bindOpenAISessionRouteRequestContext(ctx, c)()
 	defer func() { finalizeClientDisconnectForwardResult(ctx, c, result, err) }()
@@ -839,6 +840,8 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	if err != nil {
 		return nil, err
 	}
+	ctx = withRequestCredentialOwner(ctx, account, token)
+	defer bindRequestCredentialOwnerContext(ctx, c)()
 	SetOpsUpstreamModel(c, upstreamModel)
 
 	if result, handled, wsErr := s.tryCodexHTTPWebSocket(ctx, c, account, body, token, originalModel, upstreamModel, clientPromptCacheKey, startTime); handled {
@@ -1272,8 +1275,12 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			// 常规错误处理，由 failover 决策接管。
 			if !authRecoveryTried && isOpenAIUnauthorizedRecoverableStatus(resp.StatusCode) && s.canForceRefreshOpenAIAuthOnUnauthorized(account) {
 				authRecoveryTried = true
-				refreshedToken, refreshErr := s.recoverOpenAIAuthAfterUnauthorized(ctx, account)
+				refreshedToken, refreshErr := s.recoverOpenAIAuthAfterUnauthorized(ctx, account, token)
 				if refreshErr != nil {
+					var credentialFailure *CredentialFailureError
+					if errors.As(refreshErr, &credentialFailure) {
+						return nil, s.accountCredentialFailure(ctx, c, account, refreshErr)
+					}
 					logger.LegacyPrintf("service.openai_gateway", "[OpenAI] 401 same-account recovery skipped after refresh failure (account: %s): %v", account.Name, refreshErr)
 				} else {
 					appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
@@ -1289,6 +1296,8 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 						Message:            upstreamMsg,
 					})
 					token = refreshedToken
+					ctx = withRequestCredentialOwner(ctx, account, token)
+					defer bindRequestCredentialOwnerContext(ctx, c)()
 					logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Retrying same account once after 401 credential refresh (account: %s)", account.Name)
 					continue
 				}

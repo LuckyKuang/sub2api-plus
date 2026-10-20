@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"net/http"
 	"net/url"
 	"sort"
@@ -14,31 +15,30 @@ import (
 	"time"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/cnoauth"
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/zcode"
 	"github.com/tidwall/gjson"
 	"golang.org/x/sync/singleflight"
 )
 
-// 国产供应商 Coding Plan 滚动窗口额度探测服务（Kimi For Coding / 智谱 GLM Coding Plan）。
-//
-// 与 grok_quota_service 不同：CN 供应商走数据面 API Key（无 OAuth token provider），
-// 额度端点为只读 GET，解析 5h + weekly 两档滚动窗口并落 account.Extra 快照，
-// 供账号调度阈值评估（account_scheduling_threshold_eval.go）做主动停调。
-//
-// 解析逻辑对齐 cc-switch（farion1231/cc-switch）services/coding_plan.rs 的
-// query_kimi / query_zhipu，包括智谱 unit 字段优先分类与 reset 兜底启发式。
+// CN provider quota probes persist recognized read-only usage windows for
+// scheduling. Native Kimi uses its managed OAuth grant; linked ZCode uses the
+// same in-memory project PAT manager as inference, never a persisted API key.
 const (
 	cnQuotaUpstreamTimeout = 15 * time.Second
 	cnQuotaMaxBodyBytes    = 256 * 1024
 
 	// Extra 快照键后缀（加 provider 前缀，如 kimi_5h_used_percent）。
-	cnExtraSuffix5hUsed       = "5h_used_percent"
-	cnExtraSuffix5hReset      = "5h_reset_at"
-	cnExtraSuffixWeeklyUsed   = "weekly_used_percent"
-	cnExtraSuffixWeeklyReset  = "weekly_reset_at"
-	cnExtraSuffixMonthlyUsed  = "monthly_used_percent"
-	cnExtraSuffixMonthlyReset = "monthly_reset_at"
-	cnExtraSuffixUsageUpdated = "usage_updated_at"
+	cnExtraSuffix5hUsed           = "5h_used_percent"
+	cnExtraSuffix5hReset          = "5h_reset_at"
+	cnExtraSuffixWeeklyUsed       = "weekly_used_percent"
+	cnExtraSuffixWeeklyReset      = "weekly_reset_at"
+	cnExtraSuffixMonthlyUsed      = "monthly_used_percent"
+	cnExtraSuffixMonthlyReset     = "monthly_reset_at"
+	cnExtraSuffixMonthlyCodeUsed  = "monthly_code_used_percent"
+	cnExtraSuffixMonthlyCodeReset = "monthly_code_reset_at"
+	cnExtraSuffixUsageUpdated     = "usage_updated_at"
 )
 
 // cnExtraKey 拼接 provider 维度的 extra 键。
@@ -46,7 +46,7 @@ func cnExtraKey(provider, suffix string) string { return provider + "_" + suffix
 
 // CNQuotaTier 表示一个滚动用量窗口档位（5h / weekly）。
 type CNQuotaTier struct {
-	Window      string  `json:"window"`             // "5h" | "weekly" | "monthly"
+	Window      string  `json:"window"`             // "5h" | "weekly" | "monthly" | "monthly_code"
 	UsedPercent float64 `json:"used_percent"`       // 已用百分比（0-100+，不做裁剪）
 	ResetAt     string  `json:"reset_at,omitempty"` // RFC3339，空表示无重置时间
 }
@@ -71,11 +71,12 @@ type CNProviderQuotaProbeResult struct {
 // CNProviderQuotaService 探测 Kimi / Zhipu / MiniMax Coding Plan、OpenCode Go、
 // Command Code 与 Cline（ClinePass）的滚动窗口用量。
 type CNProviderQuotaService struct {
-	accountRepo  AccountRepository
-	proxyRepo    ProxyRepository
-	httpUpstream HTTPUpstream
-	cfg          *config.Config
-	flight       singleflight.Group
+	accountRepo    AccountRepository
+	proxyRepo      ProxyRepository
+	httpUpstream   HTTPUpstream
+	cfg            *config.Config
+	flight         singleflight.Group
+	cnOAuthService *CNOAuthService
 }
 
 // NewCNProviderQuotaService 构造 Coding Plan 额度探测服务。
@@ -104,7 +105,8 @@ func (s *CNProviderQuotaService) QueryUsage(ctx context.Context, accountID int64
 }
 
 // QueryUsageForAccount 探测已加载账号（配额监控 fetcher 复用，避免二次 GetByID）。
-// singleflight key 与 QueryUsage 相同，按账号 ID 与 admin 侧并发探测合并。
+// Native CN quota flights share only the same credential/proxy generation;
+// compatible providers retain their own existing account-level contract.
 func (s *CNProviderQuotaService) QueryUsageForAccount(ctx context.Context, account *Account) (*CNProviderQuotaProbeResult, error) {
 	if s == nil || s.accountRepo == nil || s.httpUpstream == nil {
 		return nil, infraerrors.New(http.StatusInternalServerError, "CN_QUOTA_NOT_CONFIGURED", "cn provider quota service is not configured")
@@ -113,6 +115,15 @@ func (s *CNProviderQuotaService) QueryUsageForAccount(ctx context.Context, accou
 		return nil, err
 	}
 	key := "cn_quota:" + strconv.FormatInt(account.ID, 10)
+	if cnQuotaRequiresGeneration(account) {
+		var err error
+		account, err = snapshotCNQuotaAccount(account)
+		if err != nil {
+			return nil, err
+		}
+		_ = s.resolveProxyURL(ctx, account)
+		key += ":" + cnQuotaGeneration(account)
+	}
 	probeIdentityCtx := context.WithoutCancel(WithAccountOutboundIdentity(ctx, account))
 	resultCh := s.flight.DoChan(key, func() (any, error) {
 		probeCtx, cancel := context.WithTimeout(probeIdentityCtx, cnQuotaUpstreamTimeout+5*time.Second)
@@ -147,12 +158,29 @@ func (s *CNProviderQuotaService) queryUsageForAccount(ctx context.Context, accou
 		return nil, infraerrors.New(http.StatusBadRequest, "CN_QUOTA_NOT_CODING_PLAN", "account is not a kimi/zhipu/minimax coding plan or opencode go account")
 	}
 
+	nativeKimi := account.IsDomesticOAuth() && provider == PlatformKimi
+	linkedZhipu := provider == PlatformZhipu && usesZhipuProjectToken(account)
 	apiKey := strings.TrimSpace(account.GetCNAPIKey())
-	if apiKey == "" {
+	if !nativeKimi && !linkedZhipu && apiKey == "" {
 		return nil, infraerrors.New(http.StatusBadRequest, "CN_QUOTA_NO_APIKEY", "account api_key is empty")
 	}
-
+	if (nativeKimi || linkedZhipu) && s.cnOAuthService == nil {
+		return nil, NewProviderCredentialFailure("native_oauth_service_unavailable", nil)
+	}
 	baseURL := account.GetOpenAIBaseURL()
+	if nativeKimi {
+		if _, err := cnoauth.NormalizeRegion(account.Platform, account.GetCredential("oauth_region")); err != nil {
+			return nil, NewAccountCredentialFailure("native_oauth_region_invalid", err)
+		}
+		baseURL = cnoauth.ModelBase(PlatformKimi, account.GetCredential("oauth_region"))
+	}
+	if linkedZhipu {
+		provider := zcode.NormalizeProvider(account.GetCredential("oauth_provider"))
+		if provider == "" {
+			return nil, NewAccountCredentialFailure("project_token_provider_invalid", nil)
+		}
+		baseURL = zhipuCodingBaseURL(provider)
+	}
 	var (
 		targetURL  string
 		authHeader string
@@ -172,7 +200,7 @@ func (s *CNProviderQuotaService) queryUsageForAccount(ctx context.Context, accou
 		// 否则官方 API 回「当前用户不存在coding plan」。组织 ID 存在即视为
 		// 团队版（个人版凭据不含该字段，走原个人版查询路径）。
 		zhipuOrg = strings.TrimSpace(account.GetCredential("zhipu_organization"))
-		if zhipuOrg != "" {
+		if (linkedZhipu && zhipuTeamProject(account)) || (!linkedZhipu && zhipuOrg != "") {
 			targetURL += "?type=2"
 		}
 	case PlatformMiniMax:
@@ -210,12 +238,26 @@ func (s *CNProviderQuotaService) queryUsageForAccount(ctx context.Context, accou
 	// 探测与真实转发保持同一套账号级请求头覆写，避免探测通过但转发失败。
 	account.ApplyHeaderOverrides(req.Header)
 
-	resp, err := s.httpUpstream.Do(prepareAccountOutboundRequest(req, account), proxyURL, account.ID, maxInt(account.Concurrency, 1))
+	queryOwner := account
+	send := func(attempt *http.Request) (*http.Response, error) {
+		queryOwner = cnQuotaRequestOwner(attempt, account)
+		return s.httpUpstream.Do(prepareAccountOutboundRequest(attempt, queryOwner), proxyURL, queryOwner.ID, maxInt(queryOwner.Concurrency, 1))
+	}
+	var resp *http.Response
+	switch {
+	case nativeKimi:
+		resp, err = s.cnOAuthService.roundTripNativeOAuthWithPrepare(req, account, s.cnOAuthService.prepareKimiQuotaRequest, send)
+	case linkedZhipu:
+		resp, err = s.roundTripZhipuQuota(req, account, send)
+	default:
+		req.Header.Set("Authorization", authHeader)
+		resp, err = send(req)
+	}
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "CN_QUOTA_REQUEST_FAILED", "upstream request failed: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, cnQuotaMaxBodyBytes))
+	bodyBytes, readErr := io.ReadAll(io.LimitReader(resp.Body, cnQuotaMaxBodyBytes+1))
 
 	now := time.Now().UTC()
 	result := &CNProviderQuotaProbeResult{
@@ -247,6 +289,10 @@ func (s *CNProviderQuotaService) queryUsageForAccount(ctx context.Context, accou
 		}
 	}
 
+	if readErr != nil || len(bodyBytes) > cnQuotaMaxBodyBytes || !gjson.ValidBytes(bodyBytes) {
+		result.Error = "Invalid quota response"
+		return result, nil
+	}
 	var tiers []CNQuotaTier
 	switch provider {
 	case PlatformKimi:
@@ -269,11 +315,27 @@ func (s *CNProviderQuotaService) queryUsageForAccount(ctx context.Context, accou
 		tiers = parseMiniMaxUsageTiers(bodyBytes)
 		result.PlanLevel = strings.TrimSpace(gjson.GetBytes(bodyBytes, "current_subscribe_title").String())
 	}
+	if len(tiers) == 0 {
+		result.Error = "Quota response contains no recognized usage windows"
+		return result, nil
+	}
 	result.Tiers = tiers
 	result.Success = true
 	result.CredentialValid = true
 
 	updates := cnQuotaExtraUpdates(provider, tiers, now)
+	if cnQuotaRequiresGeneration(queryOwner) {
+		cnQuotaBoundExtraUpdates(queryOwner, updates)
+		if repository, ok := s.accountRepo.(CNProviderQuotaSnapshotRepository); ok {
+			applied, persistErr := repository.UpdateCNProviderQuotaIfUnchanged(ctx, queryOwner, updates)
+			if persistErr != nil {
+				slog.Warn("cn_quota_persist_failed", "account_id", queryOwner.ID, "provider", provider, "error", persistErr)
+			} else {
+				result.Persisted = applied
+			}
+		}
+		return result, nil
+	}
 	if err := s.accountRepo.UpdateExtra(ctx, account.ID, updates); err != nil {
 		slog.Warn("cn_quota_persist_failed", "account_id", account.ID, "provider", provider, "error", err)
 	} else {
@@ -344,7 +406,11 @@ func (s *CNProviderQuotaService) resolveProxyURL(ctx context.Context, account *A
 
 // zhipuQuotaURL 根据 base_url 解析智谱额度端点（与数据面推理域名同主机）。
 func zhipuQuotaURL(baseURL string) string {
-	return zhipuQuotaHost(baseURL) + "/api/monitor/usage/quota/limit"
+	host := zhipuQuotaHost(baseURL)
+	if host == "" {
+		return ""
+	}
+	return host + "/api/monitor/usage/quota/limit"
 }
 
 // kimiQuotaURL 根据 base_url 解析 Kimi For Coding 额度端点。
@@ -383,25 +449,46 @@ func minimaxQuotaURL(baseURL string) string {
 }
 
 func zhipuQuotaHost(baseURL string) string {
-	switch u := strings.ToLower(baseURL); {
-	case strings.Contains(u, "bigmodel.cn"):
+	u, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil || !strings.EqualFold(u.Scheme, "https") || u.User != nil || (u.Port() != "" && u.Port() != "443") {
+		return ""
+	}
+	switch strings.ToLower(u.Hostname()) {
+	case "open.bigmodel.cn":
 		return "https://open.bigmodel.cn"
-	case strings.Contains(u, "z.ai"):
+	case "api.z.ai":
 		return "https://api.z.ai"
 	default:
-		// 国产优先：未知域名回落国内站（与前端 zhipu 预设一致）。
-		return "https://open.bigmodel.cn"
+		return ""
 	}
 }
 
-// parseKimiUsageTiers 解析 Kimi For Coding 的 /usages 响应。
+// parseKimiUsageTiers accepts native managed OAuth usage ratios (including
+// independent monthly total/code limits) and the API-key usage response.
 //
 //   - limits[].detail.{limit,remaining,resetTime} → 5h 窗口（取首个 detail）
 //   - usage.{limit,remaining,resetTime} → 周窗口
 //
 // utilization = (limit-remaining)/limit*100。
 func parseKimiUsageTiers(body []byte) []CNQuotaTier {
+	if !gjson.ValidBytes(body) {
+		return nil
+	}
 	var tiers []CNQuotaTier
+	if usages := gjson.GetBytes(body, "usages"); usages.Exists() {
+		for _, spec := range []struct{ key, window string }{
+			{"limit_5h", "5h"}, {"limit_7d", "weekly"},
+			{"limit_month_total", "monthly"}, {"limit_month_code", "monthly_code"},
+		} {
+			node := usages.Get(spec.key)
+			ratio, ok := cnParseF64(node.Get("used_ratio").Value())
+			if !ok || math.IsNaN(ratio) || math.IsInf(ratio, 0) || ratio < 0 || math.IsInf(ratio*100, 0) {
+				continue
+			}
+			tiers = append(tiers, CNQuotaTier{Window: spec.window, UsedPercent: ratio * 100, ResetAt: cnNormalizeResetTime(node.Get("reset_time").Value())})
+		}
+		return tiers
+	}
 
 	if limits := gjson.GetBytes(body, "limits"); limits.IsArray() {
 		limits.ForEach(func(_, item gjson.Result) bool {
@@ -409,8 +496,11 @@ func parseKimiUsageTiers(body []byte) []CNQuotaTier {
 			if !detail.Exists() {
 				return true
 			}
-			limit, _ := cnParseF64(detail.Get("limit").Value())
-			remaining, _ := cnParseF64(detail.Get("remaining").Value())
+			limit, limitOK := cnParseF64(detail.Get("limit").Value())
+			remaining, remainingOK := cnParseF64(detail.Get("remaining").Value())
+			if !limitOK || !remainingOK || math.IsNaN(limit) || math.IsNaN(remaining) || math.IsInf(limit, 0) || math.IsInf(remaining, 0) || limit < 0 || remaining < 0 {
+				return true
+			}
 			used := limit - remaining
 			if used < 0 {
 				used = 0
@@ -429,8 +519,11 @@ func parseKimiUsageTiers(body []byte) []CNQuotaTier {
 	}
 
 	if usage := gjson.GetBytes(body, "usage"); usage.Exists() {
-		limit, _ := cnParseF64(usage.Get("limit").Value())
-		remaining, _ := cnParseF64(usage.Get("remaining").Value())
+		limit, limitOK := cnParseF64(usage.Get("limit").Value())
+		remaining, remainingOK := cnParseF64(usage.Get("remaining").Value())
+		if !limitOK || !remainingOK || math.IsNaN(limit) || math.IsNaN(remaining) || math.IsInf(limit, 0) || math.IsInf(remaining, 0) || limit < 0 || remaining < 0 {
+			return tiers
+		}
 		used := limit - remaining
 		if used < 0 {
 			used = 0
@@ -682,6 +775,20 @@ func cnQuotaExtraUpdates(provider string, tiers []CNQuotaTier, now time.Time) ma
 			updates[cnExtraKey(provider, cnExtraSuffixMonthlyUsed)] = t.UsedPercent
 			if t.ResetAt != "" {
 				updates[cnExtraKey(provider, cnExtraSuffixMonthlyReset)] = t.ResetAt
+			}
+		case "monthly_code":
+			updates[cnExtraKey(provider, cnExtraSuffixMonthlyCodeUsed)] = t.UsedPercent
+			if t.ResetAt != "" {
+				updates[cnExtraKey(provider, cnExtraSuffixMonthlyCodeReset)] = t.ResetAt
+			}
+		}
+	}
+	// A newly observed Kimi window without a reset must not inherit the old
+	// generation's future reset and become eligible for a false quota pause.
+	if provider == PlatformKimi {
+		for _, tier := range tiers {
+			if tier.Window == "5h" || tier.Window == "weekly" || tier.Window == "monthly" || tier.Window == "monthly_code" {
+				updates[cnExtraKey(provider, tier.Window+"_reset_at")] = tier.ResetAt
 			}
 		}
 	}

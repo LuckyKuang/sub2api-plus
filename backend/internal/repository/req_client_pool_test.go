@@ -16,6 +16,7 @@ import (
 	"unsafe"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/servertiming"
 	"github.com/imroc/req/v3"
 	"github.com/stretchr/testify/require"
@@ -46,6 +47,32 @@ func TestGetSharedReqClient_ForceHTTP2SeparatesCache(t *testing.T) {
 
 	require.NotSame(t, clientDefault, clientForce)
 	require.NotEqual(t, buildReqClientKey(base), buildReqClientKey(force))
+}
+
+func TestGrokControlIdentityPoolIsIsolatedFromSignedClients(t *testing.T) {
+	base := reqClientOptions{Timeout: time.Second}
+	grok := base
+	grok.GrokControlIdentity = true
+	require.NotEqual(t, buildReqClientKey(base), buildReqClientKey(grok))
+	client, err := getSharedReqClient(base)
+	require.NoError(t, err)
+	control, err := getSharedReqClient(grok)
+	require.NoError(t, err)
+	require.NotSame(t, client, control)
+	const authorization = "AWS4-HMAC-SHA256 Credential=fixture, SignedHeaders=host;user-agent, Signature=fixture"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "signed-original/1.0", r.Header.Get("User-Agent"))
+		require.Equal(t, authorization, r.Header.Get("Authorization"))
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	ctx := outboundidentity.WithIdentity(context.Background(), outboundidentity.Identity{
+		Preset: "grok", UserAgent: "grok-shell/1.0.45 (linux; x86_64)",
+		Headers: map[string]string{"User-Agent": "grok-shell/1.0.45 (linux; x86_64)"},
+	})
+	response, err := client.R().SetContext(ctx).SetHeader("User-Agent", "signed-original/1.0").SetHeader("Authorization", authorization).Get(server.URL)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusNoContent, response.StatusCode)
 }
 
 func TestGetSharedReqClient_ReuseCachedClient(t *testing.T) {

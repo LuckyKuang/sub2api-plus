@@ -564,3 +564,36 @@ func (u *projectTokenWireUpstream) Do(req *http.Request, proxy string, id int64,
 func (u *projectTokenWireUpstream) DoWithTLS(req *http.Request, proxy string, id int64, concurrency int, profile *tlsfingerprint.Profile) (*http.Response, error) {
 	return u.Do(req, proxy, id, concurrency)
 }
+
+func TestZhipuProjectTokenFailuresSeparateGrantFromSharedDependency(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		err       error
+		scope     GatewayFailureScope
+		permanent bool
+	}{
+		{"login401", &zcode.BusinessHTTPError{Status: 401}, GatewayFailureScopeAccount, true},
+		{"permission403", &zcode.BusinessHTTPError{Status: 403}, GatewayFailureScopeAccount, true},
+		{"rate429", &zcode.BusinessHTTPError{Status: 429}, GatewayFailureScopeProvider, false},
+		{"service503", &zcode.BusinessHTTPError{Status: 503}, GatewayFailureScopeProvider, false},
+		{"malformed", errors.New("malformed provider response"), GatewayFailureScopeProvider, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a := projectTokenTestAccount(42)
+			client := &projectTokenTestClient{err: tc.err}
+			manager := newProjectTokenTestService(t, client)
+			_, err := manager.projectToken(context.Background(), a, "")
+			var failure *CredentialFailureError
+			require.ErrorAs(t, err, &failure)
+			require.Equal(t, tc.scope, failure.Scope)
+			require.Equal(t, tc.permanent, failure.Permanent)
+			require.ErrorIs(t, err, tc.err)
+			if tc.permanent {
+				require.NotNil(t, failure.account)
+				require.Equal(t, a.Credentials, failure.account.Credentials)
+			} else {
+				require.Nil(t, failure.account)
+			}
+		})
+	}
+}

@@ -79,6 +79,19 @@ func (r *tokenRefreshAccountRepo) UpdateCredentials(ctx context.Context, id int6
 	return nil
 }
 
+func (r *tokenRefreshAccountRepo) UpdateOAuthCredentialsIfUnchanged(ctx context.Context, id int64, platform string, expected map[string]any, proxy *int64, credentials map[string]any) (bool, error) {
+	r.conditionalSuccessCalls++
+	if r.conditionalSuccessErr != nil {
+		return false, r.conditionalSuccessErr
+	}
+	current := r.accountsByID[id]
+	if current == nil || current.Platform != platform || current.Type != AccountTypeOAuth || !current.IsActive() ||
+		!reflect.DeepEqual(current.Credentials, expected) || !reflect.DeepEqual(current.ProxyID, proxy) {
+		return false, nil
+	}
+	return true, r.UpdateCredentials(ctx, id, credentials)
+}
+
 func (r *tokenRefreshAccountRepo) GetByID(ctx context.Context, id int64) (*Account, error) {
 	if r.respectReadContext && ctx.Err() != nil {
 		return nil, ctx.Err()

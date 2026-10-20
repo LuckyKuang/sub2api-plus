@@ -3382,11 +3382,13 @@ func TestFetchCodexModelsManifestAPIKeyRejectsBaseURLFragment(t *testing.T) {
 // manifest upstream errors (#4544).
 type codexModelsAccountStateRepo struct {
 	AccountRepository
-	mu                  sync.Mutex
-	setErrorCalls       int
-	lastErrorMsg        string
-	setTempUnschedCalls int
-	lastTempReason      string
+	mu                   sync.Mutex
+	setErrorCalls        int
+	credentialErrorCalls int
+	credentialSnapshot   map[string]any
+	lastErrorMsg         string
+	setTempUnschedCalls  int
+	lastTempReason       string
 }
 
 func (r *codexModelsAccountStateRepo) SetError(_ context.Context, _ int64, errorMsg string) error {
@@ -3397,12 +3399,27 @@ func (r *codexModelsAccountStateRepo) SetError(_ context.Context, _ int64, error
 	return nil
 }
 
+func (r *codexModelsAccountStateRepo) SetCredentialErrorIfUnchanged(_ context.Context, _ int64, _, _ string, credentials map[string]any, _ *int64, message string) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.credentialErrorCalls++
+	r.credentialSnapshot = credentials
+	r.setErrorCalls++
+	r.lastErrorMsg = message
+	return true, nil
+}
+
 func (r *codexModelsAccountStateRepo) SetTempUnschedulable(_ context.Context, _ int64, _ time.Time, reason string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.setTempUnschedCalls++
 	r.lastTempReason = reason
 	return nil
+}
+
+func (r *codexModelsAccountStateRepo) SetCredentialTempUnschedulableIfUnchanged(ctx context.Context, id int64, _, _ string, _ map[string]any, _ *int64, until time.Time, message string) (bool, error) {
+	err := r.SetTempUnschedulable(ctx, id, until, message)
+	return err == nil, err
 }
 
 func newCodexModels401TestService(repo AccountRepository) *OpenAIGatewayService {
@@ -3456,6 +3473,8 @@ func TestFetchCodexModelsManifestOAuth401TokenRevokedDisablesAccount(t *testing.
 	require.Error(t, err)
 	require.True(t, IsRetryableCodexModelsManifestError(err))
 	require.Equal(t, 1, repo.setErrorCalls, "revoked token should permanently disable the account")
+	require.Equal(t, 1, repo.credentialErrorCalls, "the manifest must quarantine the exact rejected grant")
+	require.Equal(t, account.Credentials, repo.credentialSnapshot)
 	require.Contains(t, repo.lastErrorMsg, "Token revoked")
 	require.Equal(t, 0, repo.setTempUnschedCalls)
 }

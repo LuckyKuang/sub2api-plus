@@ -140,6 +140,14 @@ headers; rotation starts a new cache entry. Generic headers and incoming client
 declarations cannot replace the trusted identity. No new native client family or
 versionless exception is introduced.
 
+Kimi/Zhipu/MiniMax quota probes and monitor caches separate credential/proxy
+generations. One-time Kimi 401 recovery preserves the trusted identity snapshot
+while recording the refreshed credential owner that actually answered the query.
+Quota windows persist with atomic exact-owner/proxy comparison and scheduler
+invalidation; threshold/reset decisions reject old or unbound generations. The
+stored generation is a digest of ownership inputs, not another outbound identity
+declaration. See [quota ownership and legacy data](providers/DOMESTIC_OAUTH.md).
+
 Only these eleven keys permit another client family, through a global default
 or account selection:
 
@@ -190,7 +198,12 @@ published harness renders from its own package manifest; it is not a second
 declaration. Only the User-Agent reaches the wire, so the preset adds no
 `Originator`, `Version` or harness request-state header; per-request
 `x-deepseek-harness-user-id`, `-session-id` and `-compact` values stay owned by
-the protocol layer. `SUB2API_DEEPSEEK_HARNESS_VERSION` may select a supported
+the protocol layer. The official inbound Harness session header is a routing
+signal within DeepSeek groups. Its outbound session UUID is derived from the
+authenticated tenant, logical conversation and credential owner; subsequent
+turns and same-owner retries keep it, while failover changes the owner projection.
+Caller session values never become trusted client declarations.
+`SUB2API_DEEPSEEK_HARNESS_VERSION` may select a supported
 version (`0.2.0-rc.2` remains the accepted floor) while the product token, the
 `(+url)` comment and the identifier stay fixed. DeepSeek API-key accounts
 resolve this preset by default through `nativeOutboundPreset`, so the
@@ -271,7 +284,10 @@ can switch families. Valid account parameter overrides retain precedence.
 Messages requests for both native presets carry protocol-owned
 `X-Mavis-Session-Id` (gateway-generated), `X-Mavis-Agent-Id: main` (the official
 default agent) and `X-Mavis-Timezone-Offset` (selected timezone UTC offset in seconds). A
-request scope retains these across retries; failover resolves the new owner.
+request scope retains these across retries. The inbound MiniMax session header
+is a routing signal within MiniMax groups. Its outbound UUID stays stable across
+turns for the same authenticated tenant, conversation and credential owner;
+failover resolves the new owner and therefore a different UUID.
 They are not configurable identity declarations. Official OAuth uses fetch
 without a product UA. The gateway deliberately keeps its trusted `MiniMaxAgent`
 UA on authorization/refresh, without the inference SDK block, because every
@@ -358,6 +374,20 @@ during version updates. See the [official endpoint contract](providers/GROK.md#e
 The exact compiled Grok sampler identity is `grok-shell/1.0.45 (linux; x86_64)`, with
 identifier `grok-shell`, client version `1.0.45`, and CLI/control mode `headless`. Official public API
 requests omit the CLI mode declaration.
+The mode is rendered only for the exact native proxy/control hosts
+`cli-chat-proxy.grok.com`, `auth.x.ai` and `accounts.x.ai`. Custom suppliers,
+public/regional API hosts and cross-host redirects omit it while retaining the
+same selected User-Agent, identifier and version. Rendering for a destination
+never mutates the owner's snapshot. Token exchange and refresh freeze the
+snapshot once per operation and use a dedicated Grok control transport pool to
+render every HTTP attempt, including redirects and explicitly overridden token
+destinations. Other providers and signed transports retain their preparation
+and signing order.
+Compatible Responses WebSocket handshakes use a dedicated Grok-only transport
+to render the same owner snapshot for every destination and redirect. Delayed
+pool prewarming retains the selected snapshot after the request context ends;
+it does not resolve a newer account or global identity. Other WebSocket presets
+retain their prepared headers, including signed User-Agent declarations.
 OS and architecture use the fixed Ubuntu baseline, in the official Linux/x86_64
 spellings, independently of Go's runtime platform.
 `XAI_GROK_CLI_VERSION` may select a supported version while retaining that
@@ -501,6 +531,11 @@ blank/null values explicitly clear it and omitted values are preserved.
 
 Codex continues to use its established source chain: valid credential-owner
 `credentials.user_agent` → valid `openai_codex_user_agent` → compiled default.
+Both write validation and runtime resolution check each raw candidate before
+trimming ordinary surrounding spaces. Leading/trailing CR/LF and other invalid
+header bytes reject management writes; persisted invalid candidates fall through
+atomically to the next source. The global cache retains the raw value so a
+cached read cannot repair an invalid candidate into a higher-priority identity.
 The settings cache retains an absent global candidate as empty, including on
 read failure. The shared resolver supplies the compiled identity and reports
 `compiled_default`; only an explicitly configured valid global UA reports

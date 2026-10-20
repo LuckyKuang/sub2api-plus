@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
@@ -31,7 +32,7 @@ func TestGrokOAuthClientExchangeAndRefreshUseFormFields(t *testing.T) {
 		require.Equal(t, identity.UserAgent, r.Header.Get("User-Agent"))
 		require.Equal(t, identity.Originator, r.Header.Get("x-grok-client-identifier"))
 		require.Equal(t, identity.Version, r.Header.Get("x-grok-client-version"))
-		require.Equal(t, xai.CLIClientMode, r.Header.Get("x-grok-client-mode"))
+		require.Empty(t, r.Header.Get("x-grok-client-mode"), "an explicitly overridden loopback token endpoint is not an official CLI control destination")
 		require.NoError(t, r.ParseForm())
 		require.Equal(t, "client-id", r.Form.Get("client_id"))
 
@@ -79,6 +80,41 @@ func TestGrokOAuthClientExchangeAndRefreshUseFormFields(t *testing.T) {
 	require.Equal(t, "refresh-access", refreshed.AccessToken)
 	require.Equal(t, "refresh-rotated", refreshed.RefreshToken)
 	require.Equal(t, int64(7200), refreshed.ExpiresIn)
+}
+
+func TestGrokOAuthControlIdentitySnapshotSurvivesRedirect(t *testing.T) {
+	var resolutions atomic.Int32
+	ctx := outboundidentity.WithResolver(context.Background(), func(context.Context, string) outboundidentity.Identity {
+		version := "1.0.45"
+		if resolutions.Add(1) > 1 {
+			version = "9.9.9"
+		}
+		return outboundidentity.Identity{
+			Preset: "grok", UserAgent: "grok-shell/" + version + " (linux; x86_64)", Originator: "grok-shell", Version: version, Source: "global",
+			Headers: map[string]string{"x-grok-client-identifier": "grok-shell", "x-grok-client-version": version, "x-grok-client-mode": "headless"},
+		}
+	})
+	assertIdentity := func(r *http.Request) {
+		require.Equal(t, "grok-shell/1.0.45 (linux; x86_64)", r.Header.Get("User-Agent"))
+		require.Equal(t, "grok-shell", r.Header.Get("X-Grok-Client-Identifier"))
+		require.Equal(t, "1.0.45", r.Header.Get("X-Grok-Client-Version"))
+		require.Empty(t, r.Header.Get("X-Grok-Client-Mode"), "neither loopback destination is an official control host")
+	}
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assertIdentity(r)
+		_ = json.NewEncoder(w).Encode(map[string]any{"access_token": "redirected-access", "refresh_token": "rotated-refresh"})
+	}))
+	defer target.Close()
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assertIdentity(r)
+		http.Redirect(w, r, target.URL, http.StatusTemporaryRedirect)
+	}))
+	defer origin.Close()
+	client := &grokOAuthClient{tokenURL: origin.URL}
+	result, err := client.RefreshToken(ctx, "fixture-refresh", "", "client-id")
+	require.NoError(t, err)
+	require.Equal(t, "redirected-access", result.AccessToken)
+	require.EqualValues(t, 1, resolutions.Load(), "all control attempts must render the first selected snapshot")
 }
 
 func TestGrokOAuthClientRefreshForbiddenClassifiesOnlyExplicitEntitlement(t *testing.T) {

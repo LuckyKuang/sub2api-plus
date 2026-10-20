@@ -28,6 +28,17 @@ result cannot be persisted. Caller/cycle expiry stops refresh without adding
 account errors or cooldowns. A refresh already persisted within its attempt may
 finish bounded detached cleanup without being retried or counted as a failure.
 
+Kimi and MiniMax recover one explicit upstream 401 on the selected account before
+account failover. A replayable request forces refresh only if the rejected access
+token is still current; a concurrent rotation is reused. The retry retains the
+same credential owner, proxy and outbound identity. A second 401 or an invalid
+refresh grant makes that grant unavailable for scheduling; shared refresh,
+locking or persistence failures stop the provider attempt without quarantining
+other accounts. Non-replayable bodies are never resent. Refresh success is
+conditionally written against the complete grant and proxy used for refresh,
+so a concurrent reauthorization cannot be overwritten. A configured Redis
+refresh-lock failure stops refresh rather than allowing uncoordinated rotation.
+
 DeepSeek accepts a loopback callback, not a remote web callback. This panel uses
 `http://127.0.0.1:53682/oauth/callback`. After authorizing, copy the **complete URL**
 from the browser address bar and paste it into the panel, even if the browser
@@ -58,8 +69,29 @@ requests do not follow redirects. Tests and actual forwarding share the native
 credential refresh and authentication boundary. DeepSeek OAuth discovery calls `GET https://api.deepseek.com/models` with
 `x-dsh-auth-token`; Kimi uses its regional `GET /coding/v1/models` with Bearer
 auth. Native OAuth origins stay fixed and redirects are disabled. These are
-account catalogs; no grant is sent to public API-key billing or quota endpoints.
-MiniMax OAuth model sync and OAuth-specific quota discovery remain unsupported.
+account catalogs. Kimi managed usage calls its fixed regional
+`GET /coding/v1/usages` using the same OAuth grant, device snapshot and one-time
+401 recovery. API-key billing endpoints never receive native grants. MiniMax
+OAuth model sync and OAuth-specific quota discovery remain unsupported.
+
+Kimi, Zhipu and MiniMax coding-plan probes isolate concurrent queries and monitor
+caches by account ID, platform, account type, the complete credential document,
+and selected proxy. A Kimi 401 recovery binds the result to the actual refreshed
+grant used by the successful query. A late response from a replaced grant cannot
+overwrite quota state or publish scheduler invalidation: both persist atomically
+only while that exact credential/proxy snapshot still matches the account.
+`success` describes the provider response; `persisted` is true only after that
+comparison and durable write succeed. Missing conditional storage never falls
+back to an unconditional quota write.
+
+Scheduling thresholds and quota-derived reset cooldowns require a matching
+`<provider>_quota_generation` binding. Existing unbound windows and windows from a
+previous authorization remain observational until a successful probe records the
+current generation. Reauthorization and proxy changes therefore cannot inherit
+the previous grant's exhausted windows. A successful recognized response replaces
+the provider's windows; omitted windows cannot retain an older percentage/reset.
+The binding stores a digest, never raw credential or proxy secrets. Command Code,
+Cline and OpenCode Go keep their own existing quota contracts.
 
 The default inference allowlist and `deploy/config.example.yaml` include the
 hosts above. Deployments replacing `security.url_allowlist.upstream_hosts` must
@@ -75,9 +107,24 @@ UTC; language/timezone dropdowns configure them globally or per account. The
 `auth_init` body locale matches its header; the offset is captured before login
 and retained through callback exchange. The bundle ID is officially empty;
 inference retains its Harness UA. MiniMax inference retains the versionless
-`MiniMaxAgent` family and declares a gateway-generated per-request session
-UUID, the official default agent `main`, and the selected timezone UTC offset in seconds in its `X-Mavis-*` protocol headers. They are retained when
-the same request is retried and are never global identity settings.
+`MiniMaxAgent` family and declares a gateway-generated session UUID, the official
+default agent `main`, and the selected timezone UTC offset in seconds in its
+`X-Mavis-*` protocol headers. DeepSeek's Harness session header and MiniMax's
+Mavis session header seed sticky routing only within their respective groups.
+Outbound session UUIDs are isolated by authenticated tenant and credential owner
+and remain stable across conversation turns; switching accounts changes the
+outbound UUID. These protocol fields never select the outbound client identity.
+
+Native Anthropic streams defer structural frames until meaningful output or an
+unrecognized frame, with a 64 KiB prefix limit and a five-second maximum wait
+(a shorter configured keepalive interval takes precedence). Authentication/quota errors before that boundary enter the
+same recovery path as HTTP errors, including one Kimi/MiniMax OAuth refresh on
+the selected owner before failover. Unknown content is preserved conservatively.
+Errors after output never replay the request. Buffered and streaming protocol
+conversions report incomplete/error streams as failures and retain observed
+usage; missing upstream completion never synthesizes a successful terminal frame.
+A complete `message_stop` frame finishes conversion without waiting for the
+upstream socket to close. Timeouts before completion retain observed usage.
 
 ## Admin API and session lifecycle
 
@@ -115,7 +162,9 @@ Protocols were checked against local official client sources:
   `packages/credentials/deepseek-account-platform/src/{types,protocol}.ts`,
   account platform declarations and `llm-deepseek-account` auth/listing.
 - `kimi-code/packages/oauth/src/`: `oauth.ts`, `constants.ts`, `region.ts`,
-  `identity.ts`, `managed-kimi-code.ts`.
+  `identity.ts`, `managed-kimi-code.ts`, `managed-usage.ts`;
+  `packages/agent-core-v2/src/human/credentials/credentials.ts` same-account
+  authentication recovery.
 - `minimax-code/packages/oauth-core/src/`: `oauth-client.ts`, `endpoint-config.ts`,
   `contracts.ts`; `packages/config/src/config.ts` inference destinations and
   `packages/local-runtime-v2/src/service/model-system/resolution/` request headers.

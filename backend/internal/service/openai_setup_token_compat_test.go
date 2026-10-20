@@ -57,7 +57,11 @@ func TestOpenAIGatewayServiceGetAccessTokenSetupToken(t *testing.T) {
 
 	delete(account.Credentials, "access_token")
 	_, _, err = svc.GetAccessToken(context.Background(), account)
-	require.EqualError(t, err, "access_token not found in credentials")
+	var failure *UpstreamFailoverError
+	require.ErrorAs(t, err, &failure)
+	require.True(t, failure.IsCredentialFailure())
+	require.True(t, failure.AllowsOpenAIAccountSwitch(), "a missing inference credential must try the next account")
+	require.Equal(t, CredentialUnavailableClientMessage, failure.ClientMessage)
 
 	for _, platform := range []string{PlatformAnthropic, PlatformGrok} {
 		foreign := &Account{

@@ -1673,6 +1673,7 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusInternalServerError, "OPENAI_CODEX_MODELS_CREDENTIALS_FAILED", "resolve credential account: %v", err)
 	}
+	credAccount = snapshotRequestCredentialAccount(credAccount)
 
 	requestEndpoint := chatgptCodexModelsURL
 	authToken := ""
@@ -1701,6 +1702,8 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_CODEX_MODELS_ACCOUNT_TYPE_UNSUPPORTED", "account type %q cannot fetch the Codex models manifest", credAccount.Type)
 	}
 
+	recordRequestCredentialOwner(ctx, credAccount, authToken)
+	ctx = withRequestCredentialOwner(ctx, account, authToken)
 	identity := s.resolveOpenAIOutboundIdentity(ctx, credAccount)
 	// The manifest URL is a Codex protocol request for both OAuth and custom
 	// API-key upstreams. Do not let the caller's client_version split it from

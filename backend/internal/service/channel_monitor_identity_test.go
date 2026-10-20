@@ -98,7 +98,17 @@ func TestChannelMonitorIdentitySnapshotAcrossPingAndModels(t *testing.T) {
 					wire := expected.ForProtocol(request.protocol)
 					require.Equal(t, wire.UserAgent, request.headers.Get("User-Agent"))
 					for name, value := range wire.Headers {
+						if name == "x-grok-client-mode" {
+							continue
+						}
 						require.Equal(t, value, request.headers.Get(name), name)
+					}
+					if preset == "grok" {
+						require.Equal(t, "headless", wire.Headers["x-grok-client-mode"], "the selected snapshot retains native CLI mode")
+						require.Equal(t, "grok-shell/"+version+" (linux; x86_64)", request.headers.Get("User-Agent"))
+						require.Equal(t, "grok-shell", request.headers.Get("X-Grok-Client-Identifier"))
+						require.Equal(t, version, request.headers.Get("X-Grok-Client-Version"))
+						require.Empty(t, request.headers.Get("X-Grok-Client-Mode"), "loopback monitor destinations do not receive native CLI mode")
 					}
 					if preset == "codex" {
 						require.Equal(t, "codex_cli_rs", request.headers.Get("Originator"))
@@ -157,7 +167,17 @@ func TestChannelMonitorDefaultIdentityForProviders(t *testing.T) {
 			expected := builtInOutboundIdentity(test.preset).ForProtocol("chat_completions")
 			require.Equal(t, expected.UserAgent, headers.Get("User-Agent"))
 			for name, value := range expected.Headers {
+				if name == "x-grok-client-mode" {
+					continue
+				}
 				require.Equal(t, value, headers.Get(name), name)
+			}
+			if test.preset == "grok" {
+				require.Equal(t, "headless", expected.Headers["x-grok-client-mode"], "the selected snapshot retains native CLI mode")
+				require.Equal(t, "grok-shell/1.0.45 (linux; x86_64)", headers.Get("User-Agent"))
+				require.Equal(t, "grok-shell", headers.Get("X-Grok-Client-Identifier"))
+				require.Equal(t, "1.0.45", headers.Get("X-Grok-Client-Version"))
+				require.Empty(t, headers.Get("X-Grok-Client-Mode"), "loopback monitor destinations do not receive native CLI mode")
 			}
 		})
 	}

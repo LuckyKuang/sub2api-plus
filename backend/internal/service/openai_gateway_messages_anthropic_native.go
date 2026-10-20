@@ -85,10 +85,12 @@ func (s *OpenAIGatewayService) forwardAnthropicViaNativeAnthropicEndpoint(
 	logger.LegacyPrintf("service.gateway", "[CN Anthropic 直通] account=%d(%s) platform=%s model=%s upstream=%s stream=%v",
 		account.ID, account.Name, account.Platform, originalModel, upstreamModel, clientStream)
 
-	apiKey := strings.TrimSpace(account.GetOpenAIProtocolAPIKey())
-	if apiKey == "" {
-		return nil, fmt.Errorf("account %d missing api_key", account.ID)
+	apiKey, _, err := s.GetRequestCredential(ctx, c, account)
+	if err != nil {
+		return nil, err
 	}
+	ctx = withRequestCredentialOwner(ctx, account, apiKey)
+	defer bindRequestCredentialOwnerContext(ctx, c)()
 	targetURL, err := s.nativeAnthropicTargetURL(account)
 	if err != nil {
 		return nil, err
@@ -101,6 +103,7 @@ func (s *OpenAIGatewayService) forwardAnthropicViaNativeAnthropicEndpoint(
 
 	upstreamCtx, releaseUpstreamCtx := detachStreamUpstreamContext(ctx, clientStream)
 	defer releaseUpstreamCtx()
+	upstreamCtx = withNativeAnthropicPreflight(upstreamCtx)
 	upstreamReq, _, err := s.buildNativeAnthropicUpstreamRequest(upstreamCtx, c, account, body, apiKey, targetURL)
 	if err != nil {
 		return nil, err
@@ -259,10 +262,25 @@ func (s *OpenAIGatewayService) handleNativeAnthropicBufferedResponse(
 		observer = beginUpstreamResponseModelObservation(c)
 	}
 	observer.ObserveAnthropic(body)
-
 	var raw json.RawMessage
 	if err := json.Unmarshal(body, &raw); err != nil {
 		return nil, invalidNonStreamingJSONFailoverError(ctx, s.rateLimitService, resp, account, body, err, billingModel)
+	}
+	if gjson.GetBytes(body, "type").String() == "error" {
+		if status := nativeAnthropicErrorStatus(gjson.GetBytes(body, "error.type").String()); status != 0 {
+			// A provider error envelope is still a failure when the transport
+			// returned HTTP 200. Nothing has reached the client, so apply the
+			// existing status policy before a successful result can be recorded.
+			semanticResponse := *resp
+			semanticResponse.StatusCode = status
+			semanticResponse.Status = http.StatusText(status)
+			message := gjson.GetBytes(body, "error.message").String()
+			if failure := s.failoverOpenAIUpstreamHTTPError(ctx, c, account, &semanticResponse, body, message, upstreamModel); failure != nil {
+				return nil, failure
+			}
+			semanticResponse.Body = io.NopCloser(bytes.NewReader(body))
+			return s.handleAnthropicErrorResponse(&semanticResponse, c, account, billingModel)
+		}
 	}
 
 	usage := parseClaudeUsageFromResponseBody(body)
@@ -308,7 +326,7 @@ func (s *OpenAIGatewayService) handleNativeAnthropicStreamingResponse(
 	upstreamModel string,
 	reasoningEffort *string,
 	startTime time.Time,
-) (*OpenAIForwardResult, error) {
+) (forwardResult *OpenAIForwardResult, forwardErr error) {
 	observer := upstreamResponseModelObserverFromContext(c)
 	if observer == nil {
 		observer = beginUpstreamResponseModelObservation(c)
@@ -345,6 +363,14 @@ func (s *OpenAIGatewayService) handleNativeAnthropicStreamingResponse(
 	var timing streamOutputTiming
 	clientDisconnected := false
 	sawTerminalEvent := false
+	terminalEventPending := false
+	sawUpstreamError := false
+	accountSideEffectsApplied := false
+	defer func() {
+		if forwardResult != nil {
+			forwardResult.UsageIncomplete = !sawTerminalEvent || sawUpstreamError
+		}
+	}()
 
 	scanner := bufio.NewScanner(resp.Body)
 	maxLineSize := defaultMaxLineSize
@@ -434,14 +460,14 @@ func (s *OpenAIGatewayService) handleNativeAnthropicStreamingResponse(
 				if !clientDisconnected {
 					flusher.Flush()
 				}
-				if !sawTerminalEvent {
+				if !sawTerminalEvent || sawUpstreamError {
 					return s.nativeAnthropicStreamResult(c, resp, usage, &timing, clientDisconnected, originalModel, billingModel, upstreamModel, reasoningEffort, startTime),
 						fmt.Errorf("stream usage incomplete: missing terminal event")
 				}
 				return s.nativeAnthropicStreamResult(c, resp, usage, &timing, clientDisconnected, originalModel, billingModel, upstreamModel, reasoningEffort, startTime), nil
 			}
 			if ev.err != nil {
-				if sawTerminalEvent {
+				if sawTerminalEvent && !sawUpstreamError {
 					return s.nativeAnthropicStreamResult(c, resp, usage, &timing, clientDisconnected, originalModel, billingModel, upstreamModel, reasoningEffort, startTime), nil
 				}
 				if clientDisconnected {
@@ -463,17 +489,17 @@ func (s *OpenAIGatewayService) handleNativeAnthropicStreamingResponse(
 			line := ev.line
 			if data, ok := extractAnthropicSSEDataLine(line); ok {
 				trimmed := strings.TrimSpace(data)
+				if gjson.Get(trimmed, "type").String() == "error" && !accountSideEffectsApplied && nativeAnthropicErrorStatus(gjson.Get(trimmed, "error.type").String()) != 0 {
+					status, disabled := s.handleOpenAIStreamTerminalAccountSideEffectsContext(ctx, account, []byte(trimmed), gjson.Get(trimmed, "error.message").String(), resp.Header, upstreamModel)
+					accountSideEffectsApplied = disabled || status == http.StatusUnauthorized || status == http.StatusTooManyRequests || status == 529
+				}
+				sawUpstreamError = sawUpstreamError || gjson.Get(trimmed, "type").String() == "error"
 				observer.ObserveAnthropic([]byte(trimmed))
-				if anthropicStreamEventIsTerminal("", trimmed) {
-					sawTerminalEvent = true
+				if gjson.Get(trimmed, "type").String() == "message_stop" {
+					terminalEventPending = true
 				}
 				timing.Observe(startTime, observeAnthropicSSEOutput([]byte("data: "+trimmed)))
 				parseSSEUsagePassthrough(data, usage)
-			} else {
-				trimmed := strings.TrimSpace(line)
-				if strings.HasPrefix(trimmed, "event:") && anthropicStreamEventIsTerminal(strings.TrimSpace(strings.TrimPrefix(trimmed, "event:")), "") {
-					sawTerminalEvent = true
-				}
 			}
 
 			if !clientDisconnected {
@@ -493,6 +519,16 @@ func (s *OpenAIGatewayService) handleNativeAnthropicStreamingResponse(
 				} else {
 					inPartialEvent = true
 				}
+			}
+			// Anthropic message_stop completes the response independently of
+			// transport EOF. Deliver its payload and SSE event boundary first.
+			if line == "" && terminalEventPending {
+				sawTerminalEvent = true
+				result := s.nativeAnthropicStreamResult(c, resp, usage, &timing, clientDisconnected, originalModel, billingModel, upstreamModel, reasoningEffort, startTime)
+				if sawUpstreamError {
+					return result, fmt.Errorf("upstream anthropic stream error before terminal event")
+				}
+				return result, nil
 			}
 
 		case <-intervalCh:

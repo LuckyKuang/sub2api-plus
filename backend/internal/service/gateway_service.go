@@ -748,6 +748,14 @@ func (e *UpstreamFailoverError) ShouldRetryNextAccount() bool {
 	return e != nil && e.NextAccountAction != NextAccountStop
 }
 
+// AllowsOpenAIAccountSwitch separates a safe next-attempt decision from health
+// scoring. An explicitly retryable transport/credential failure may change the
+// selected account without attributing a shared failure to that credential.
+// Legacy request/provider-scoped errors still cannot authorize owner migration.
+func (e *UpstreamFailoverError) AllowsOpenAIAccountSwitch() bool {
+	return e.ShouldRetryNextAccount() && (e.NextAccountAction == NextAccountRetry || e.ShouldReportAccountScheduleFailure())
+}
+
 func (e *UpstreamFailoverError) IsCredentialFailure() bool {
 	return e != nil && e.Stage == GatewayFailureStageAccountAuth
 }

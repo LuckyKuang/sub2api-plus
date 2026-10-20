@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
@@ -153,13 +154,15 @@ func TestKimiCodingMissingReasoningClearsStaleCapabilities(t *testing.T) {
 					account.Credentials["oauth_provider"] = "kimi"
 					account.Credentials["oauth_region"] = "cn"
 					account.Credentials["access_token"] = "oauth-token"
+					account.Credentials["refresh_token"] = "managed-refresh-token"
+					account.Credentials["expires_at"] = time.Now().Add(time.Hour).UTC().Format(time.RFC3339)
 				}
 				upstream := &httpUpstreamRecorder{responses: []*http.Response{
 					{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"data":[{"id":"kimi-k3","limit":{"context":262144},"modalities":{"input":["text"]},"supported_reasoning_levels":["high"],"default_reasoning_level":"high"` + declaration + `}]}`))},
 					{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"kimi":{"api":"https://api.kimi.com/coding","models":{"kimi-k3":{"id":"kimi-k3","reasoning":true,"limit":{"context":262144},"modalities":{"input":["text"]}}}}`))},
 				}}
 				repo := &upstreamModelMetadataRepoStub{}
-				svc := &AccountTestService{httpUpstream: upstream, accountRepo: repo, cfg: &config.Config{}}
+				svc := &AccountTestService{httpUpstream: upstream, accountRepo: repo, cfg: &config.Config{}, cnOAuthService: NewCNOAuthService(nil, nil, nil)}
 				catalog, err := svc.SyncUpstreamModelCatalog(context.Background(), account)
 				require.NoError(t, err)
 				got := catalog.Metadata["kimi-k3"]
@@ -236,9 +239,13 @@ func TestDomesticOAuthNativeModelDiscovery(t *testing.T) {
 	} {
 		t.Run(tc.platform+tc.region, func(t *testing.T) {
 			a := &Account{ID: 1, Platform: tc.platform, Type: "oauth", Credentials: map[string]any{"oauth_provider": tc.platform, "oauth_region": tc.region, "access_token": "secret", "base_url": "https://attacker.test"}}
+			if tc.platform == PlatformKimi {
+				a.Credentials["refresh_token"] = "managed-refresh-token"
+				a.Credentials["expires_at"] = time.Now().Add(time.Hour).UTC().Format(time.RFC3339)
+			}
 			_, ctx := outboundIdentityTestSettings(t, emptyOutboundIdentitySettings())
 			upstream := &httpUpstreamRecorder{resp: &http.Response{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"data":[]}`))}}
-			svc := &AccountTestService{httpUpstream: upstream, cfg: &config.Config{}}
+			svc := &AccountTestService{httpUpstream: upstream, cfg: &config.Config{}, cnOAuthService: NewCNOAuthService(nil, nil, nil)}
 			req, err := svc.buildUpstreamModelsRequest(ctx, a)
 			require.NoError(t, err)
 			_, err = svc.doUpstreamModelsRequest(req, "", a)

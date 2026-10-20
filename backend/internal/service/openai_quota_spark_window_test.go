@@ -195,8 +195,8 @@ func TestResetCreditShadowRejected(t *testing.T) {
 
 func TestResetCreditTargetedSendsStableCreditAndRedeemIDs(t *testing.T) {
 	account := &Account{
-		ID: 203, Platform: PlatformOpenAI, Type: AccountTypeOAuth,
-		Credentials: map[string]any{"chatgpt_account_id": "account-targeted"},
+		ID: 203, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive,
+		Credentials: map[string]any{"chatgpt_account_id": "account-targeted", "access_token": "fake-token"},
 	}
 	repo := &stubQuotaAccountRepo{accounts: map[int64]*Account{account.ID: account}}
 	tokenCache := &stubQuotaTokenCache{tokens: map[string]string{OpenAITokenCacheKey(account): "fake-token"}}
@@ -365,6 +365,7 @@ func TestPrepareUpstreamCallShadowResolve(t *testing.T) {
 		Status:   StatusActive,
 		Credentials: map[string]any{
 			"chatgpt_account_id": "org-parent123",
+			"access_token":       "fake-access-token",
 		},
 	}
 	repo := &stubQuotaAccountRepo{accounts: map[int64]*Account{200: shadow, 100: parent}}
@@ -538,6 +539,7 @@ func TestQueryUsageIncludesResetCreditExpirations_EndToEnd(t *testing.T) {
 		Status:   StatusActive,
 		Credentials: map[string]any{
 			"chatgpt_account_id": "org-parent123",
+			"access_token":       "fake-token",
 		},
 	}
 	repo := &stubQuotaAccountRepo{accounts: map[int64]*Account{100: account}}
@@ -601,6 +603,7 @@ func TestQueryUsageResetCreditDetails401NonFatal(t *testing.T) {
 		Status:   StatusActive,
 		Credentials: map[string]any{
 			"chatgpt_account_id": "org-parent123",
+			"access_token":       "fake-token",
 		},
 	}
 	repo := &stubQuotaAccountRepo{accounts: map[int64]*Account{100: account}}
@@ -731,7 +734,7 @@ func TestQueryUsageShadowResolve_EndToEnd(t *testing.T) {
 	}
 	parent := &Account{
 		ID: 100, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive,
-		Credentials: map[string]any{"chatgpt_account_id": "org-e2e-parent"},
+		Credentials: map[string]any{"chatgpt_account_id": "org-e2e-parent", "access_token": "fake-token-e2e"},
 	}
 	repo := &stubQuotaAccountRepo{accounts: map[int64]*Account{200: shadow, 100: parent}}
 

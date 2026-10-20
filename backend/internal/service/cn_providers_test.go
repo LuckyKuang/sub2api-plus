@@ -297,7 +297,7 @@ func TestZhipuQuotaHost(t *testing.T) {
 	t.Parallel()
 	require.Equal(t, "https://open.bigmodel.cn", zhipuQuotaHost("https://open.bigmodel.cn/api/paas/v4"))
 	require.Equal(t, "https://api.z.ai", zhipuQuotaHost("https://api.z.ai/api/paas/v4"))
-	require.Equal(t, "https://open.bigmodel.cn", zhipuQuotaHost("https://custom.example.com")) // 默认国内站
+	require.Empty(t, zhipuQuotaHost("https://custom.example.com")) // 未知主机不得发送凭据到官方站
 	require.Equal(t, "https://open.bigmodel.cn/api/monitor/usage/quota/limit", zhipuQuotaURL("https://open.bigmodel.cn/api/paas/v4"))
 }
 
@@ -426,6 +426,7 @@ func TestCNProviderThresholdCandidates(t *testing.T) {
 			"kimi_weekly_reset_at":     "2026-08-18T00:00:00Z",
 		},
 	}
+	bindCNQuotaTestSnapshot(account)
 	cands := cnProviderThresholdCandidates(account, PlatformKimi)
 	// 仅返回非 nil 候选（两窗口均存在 → 2 条）。
 	var present []*accountSchedulingThresholdCandidate
@@ -441,6 +442,7 @@ func TestCNProviderThresholdCandidates(t *testing.T) {
 		Platform: PlatformKimi,
 		Extra:    map[string]any{"kimi_5h_reset_at": "2026-08-14T15:00:00Z"}, // 无 used_percent
 	}
+	bindCNQuotaTestSnapshot(partial)
 	require.Empty(t, filterNil(cnProviderThresholdCandidates(partial, PlatformKimi)))
 
 	// 空 Extra / nil account 安全返回。
@@ -472,6 +474,7 @@ func TestEvaluateAccountSchedulingThreshold_KimiCodingPlan(t *testing.T) {
 			"kimi_weekly_reset_at":     now.Add(7 * 24 * time.Hour).Format(time.RFC3339),
 		},
 	}
+	bindCNQuotaTestSnapshot(account)
 	decision := EvaluateAccountSchedulingThreshold(account, map[string]int{PlatformKimi: 80}, now)
 	require.True(t, decision.ShouldPause)
 	require.Equal(t, PlatformKimi, decision.Platform)
@@ -494,6 +497,7 @@ func TestEvaluateAccountSchedulingThreshold_MiniMaxCodingPlan(t *testing.T) {
 			"minimax_weekly_reset_at":     now.Add(7 * 24 * time.Hour).Format(time.RFC3339),
 		},
 	}
+	bindCNQuotaTestSnapshot(account)
 	decision := EvaluateAccountSchedulingThreshold(account, map[string]int{PlatformMiniMax: 80}, now)
 	require.True(t, decision.ShouldPause)
 	require.Equal(t, PlatformMiniMax, decision.Platform)
@@ -516,6 +520,7 @@ func TestEvaluateAccountSchedulingThreshold_CNWindowResetSkipped(t *testing.T) {
 			"zhipu_5h_reset_at":     now.Add(-1 * time.Hour).Format(time.RFC3339),
 		},
 	}
+	bindCNQuotaTestSnapshot(expired)
 	require.False(t, EvaluateAccountSchedulingThreshold(expired, map[string]int{PlatformZhipu: 80}, now).ShouldPause)
 
 	// 用量低于阈值。
@@ -526,6 +531,7 @@ func TestEvaluateAccountSchedulingThreshold_CNWindowResetSkipped(t *testing.T) {
 			"zhipu_5h_reset_at":     now.Add(3 * time.Hour).Format(time.RFC3339),
 		},
 	}
+	bindCNQuotaTestSnapshot(low)
 	require.False(t, EvaluateAccountSchedulingThreshold(low, map[string]int{PlatformZhipu: 80}, now).ShouldPause)
 }
 
@@ -546,6 +552,7 @@ func TestCNProviderQuotaSnapshotReset(t *testing.T) {
 			"kimi_weekly_reset_at": pastWeekly.Format(time.RFC3339),
 		},
 	}
+	bindCNQuotaTestSnapshot(account)
 	got := cnProviderQuotaSnapshotReset(account, now)
 	require.NotNil(t, got)
 	require.True(t, future5h.Equal(*got))
@@ -559,6 +566,7 @@ func TestCNProviderQuotaSnapshotReset(t *testing.T) {
 			"kimi_weekly_reset_at": futureWeekly.Format(time.RFC3339),
 		},
 	}
+	bindCNQuotaTestSnapshot(both)
 	gotBoth := cnProviderQuotaSnapshotReset(both, now)
 	require.NotNil(t, gotBoth)
 	require.True(t, future5h.Equal(*gotBoth))
@@ -572,6 +580,7 @@ func TestCNProviderQuotaSnapshotReset(t *testing.T) {
 			"kimi_weekly_reset_at": pastWeekly.Format(time.RFC3339),
 		},
 	}
+	bindCNQuotaTestSnapshot(expired)
 	require.Nil(t, cnProviderQuotaSnapshotReset(expired, now))
 
 	// payg 账号（非 coding）→ nil（余额型走余额检测）。
@@ -580,6 +589,7 @@ func TestCNProviderQuotaSnapshotReset(t *testing.T) {
 		Credentials: map[string]any{"account_mode": AccountModePayG},
 		Extra:       map[string]any{"kimi_5h_reset_at": future5h.Format(time.RFC3339)},
 	}
+	bindCNQuotaTestSnapshot(payg)
 	require.Nil(t, cnProviderQuotaSnapshotReset(payg, now))
 }
 

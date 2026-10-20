@@ -59,7 +59,13 @@ func (p *GrokTokenProvider) SetTempUnschedCache(cache TempUnschedCache) {
 	p.tempUnschedCache = cache
 }
 
-func (p *GrokTokenProvider) GetAccessToken(ctx context.Context, account *Account) (string, error) {
+func (p *GrokTokenProvider) GetAccessToken(ctx context.Context, account *Account) (token string, tokenErr error) {
+	concurrentEvidence := false
+	defer func() {
+		if tokenErr == nil && !concurrentEvidence {
+			recordRequestCredentialOwner(ctx, account, token)
+		}
+	}()
 	ctx = WithAccountOutboundIdentity(ctx, account)
 	if account == nil {
 		return "", errors.New("account is nil")
@@ -105,6 +111,7 @@ func (p *GrokTokenProvider) GetAccessToken(ctx context.Context, account *Account
 			}
 		} else if result != nil && result.LockHeld {
 			if p.refreshPolicy.OnLockHeld == ProviderLockHeldWaitForCache {
+				concurrentEvidence = true
 				token, waitErr := p.waitForRefreshedToken(refreshCtx, account, cacheKey)
 				return token, withGrokCredentialFailureSnapshot(waitErr, account)
 			}
@@ -140,6 +147,7 @@ func (p *GrokTokenProvider) GetAccessToken(ctx context.Context, account *Account
 			if !grokCredentialProxyIDsEqual(latestAccount.ProxyID, selectedProxyID) {
 				return "", withGrokCredentialFailureSnapshot(errOAuthRefreshAccountStateChanged, latestAccount)
 			}
+			account = latestAccount
 			accessToken = latestAccount.GetGrokAccessToken()
 			if strings.TrimSpace(accessToken) == "" {
 				return "", withGrokCredentialFailureSnapshot(errGrokOAuthAccessTokenMissing, latestAccount)
@@ -289,6 +297,7 @@ func (p *GrokTokenProvider) waitForRefreshedToken(ctx context.Context, account *
 						}
 						_ = p.tokenCache.SetAccessToken(waitCtx, cacheKey, token, ttl)
 					}
+					recordRequestCredentialOwner(ctx, latest, token)
 					return token, nil
 				}
 			}

@@ -211,7 +211,10 @@ func (i Identity) ForRequest(req *http.Request) Identity {
 	rendered := i.ForProtocol(RequestProtocol(req))
 	if rendered.Preset == "grok" && req != nil && req.URL != nil {
 		host := strings.ToLower(req.URL.Hostname())
-		if host == "api.x.ai" || strings.HasSuffix(host, ".api.x.ai") {
+		// Mode belongs to the CLI proxy and native authorization/control
+		// destinations. A compatible supplier or redirected request must not
+		// acquire it merely because its host differs from the public API.
+		if host != "cli-chat-proxy.grok.com" && host != "auth.x.ai" && host != "accounts.x.ai" {
 			rendered.Headers = maps.Clone(rendered.Headers)
 			delete(rendered.Headers, "x-grok-client-mode")
 		}

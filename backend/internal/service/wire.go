@@ -1128,7 +1128,7 @@ func ProvideClaudeResetCreditService(accounts AccountRepository, tokens *ClaudeT
 	return s
 }
 
-func ProvideCNOAuthService(proxyRepo ProxyRepository, accountRepo AccountRepository, admin AdminService, redisClient *redis.Client, refreshAPI *OAuthRefreshAPI, gateway *OpenAIGatewayService, tester *AccountTestService, linked *ZhipuOAuthService) *CNOAuthService {
+func ProvideCNOAuthService(proxyRepo ProxyRepository, accountRepo AccountRepository, admin AdminService, redisClient *redis.Client, refreshAPI *OAuthRefreshAPI, gateway *OpenAIGatewayService, tester *AccountTestService, linked *ZhipuOAuthService, quota *CNProviderQuotaService) *CNOAuthService {
 	svc := NewCNOAuthService(proxyRepo, accountRepo, admin)
 	svc.store = cnoauth.NewStore(redisClient)
 	svc.refreshAPI = refreshAPI
@@ -1136,5 +1136,6 @@ func ProvideCNOAuthService(proxyRepo ProxyRepository, accountRepo AccountReposit
 	svc.zhipu = linked
 	gateway.cnOAuthService = svc
 	tester.cnOAuthService = svc
+	quota.cnOAuthService = svc
 	return svc
 }

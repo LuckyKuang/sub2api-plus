@@ -84,6 +84,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	stageOpenAICodexTurnStateScope(c, firstClientMessage)
 	ctx = WithOutboundIdentityScope(ctx, c)
 	ctx = WithAccountOutboundIdentity(ctx, account)
+	ctx = withRequestCredentialOwner(ctx, account, token)
 	defer bindOpenAISessionRouteRequestContext(ctx, c)()
 	if s == nil {
 		return errors.New("service is nil")

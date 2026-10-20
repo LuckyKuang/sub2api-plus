@@ -1637,10 +1637,19 @@ func (a *Account) GetCNAPIKey() string {
 // 用于路由到对应的额度查询端点。非 coding 模式或无法识别时返回空串。
 // 只认官方域名：自定义中转不得把第三方 Key 发往厂商官方额度端点。
 func (a *Account) GetCodingPlanProvider() string {
-	if a.IsDomesticOAuth() {
+	if a == nil {
 		return ""
 	}
-	if a == nil {
+	if a.IsDomesticOAuth() {
+		if a.Platform == PlatformKimi {
+			return PlatformKimi
+		}
+		return ""
+	}
+	if a.Platform == PlatformZhipu && a.Type == AccountTypeOAuth {
+		if a.GetCredential("plan_kind") == ZhipuPlanIndividualCodingPlan || a.GetCredential("plan_kind") == ZhipuPlanTeamCodingPlan {
+			return PlatformZhipu
+		}
 		return ""
 	}
 	if a.IsOpenCodeGoPlan() {
@@ -1665,7 +1674,7 @@ func (a *Account) GetCodingPlanProvider() string {
 	switch {
 	case isKimiCodingBaseURL(a.GetOpenAIBaseURL()):
 		return PlatformKimi
-	case strings.Contains(baseURL, "bigmodel.cn"), strings.Contains(baseURL, "api.z.ai"):
+	case zhipuQuotaHost(baseURL) != "":
 		return PlatformZhipu
 	case miniMaxQuotaHost(baseURL) != "":
 		return PlatformMiniMax

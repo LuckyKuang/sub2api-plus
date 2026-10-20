@@ -140,7 +140,11 @@ func TestCNOAuthNativeSendAndRefresh(t *testing.T) {
 			a.Credentials["api_protocol"] = APIProtocolResponses
 			require.Equal(t, APIProtocolAnthropic, a.GetAPIProtocol())
 			require.NotContains(t, a.GetAnthropicProtocolBaseURL(), "evil")
-			require.Empty(t, a.GetCodingPlanProvider())
+			if platform == PlatformKimi {
+				require.Equal(t, PlatformKimi, a.GetCodingPlanProvider())
+			} else {
+				require.Empty(t, a.GetCodingPlanProvider())
+			}
 			require.Empty(t, a.GetCNAPIKey())
 			repo := &refreshAPIAccountRepo{account: a}
 			svc := NewCNOAuthService(nil, repo, nil)

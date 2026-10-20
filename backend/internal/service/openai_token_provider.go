@@ -135,7 +135,13 @@ func (p *OpenAITokenProvider) ensureMetrics() {
 }
 
 // GetAccessToken returns a valid access_token.
-func (p *OpenAITokenProvider) GetAccessToken(ctx context.Context, account *Account) (string, error) {
+func (p *OpenAITokenProvider) GetAccessToken(ctx context.Context, account *Account) (token string, tokenErr error) {
+	concurrentEvidence := false
+	defer func() {
+		if tokenErr == nil && !concurrentEvidence {
+			recordRequestCredentialOwner(ctx, account, token)
+		}
+	}()
 	p.ensureMetrics()
 	if account == nil {
 		return "", errors.New("account is nil")
@@ -150,6 +156,10 @@ func (p *OpenAITokenProvider) GetAccessToken(ctx context.Context, account *Accou
 	if p.tokenCache != nil {
 		if token, err := p.tokenCache.GetAccessToken(ctx, cacheKey); err == nil && strings.TrimSpace(token) != "" {
 			slog.Debug("openai_token_cache_hit", "account_id", account.ID)
+			if p.accountRepo != nil && strings.TrimSpace(token) != strings.TrimSpace(account.GetOpenAIAccessToken()) {
+				concurrentEvidence = true
+				return p.concurrentRefreshToken(ctx, account, token)
+			}
 			return token, nil
 		} else if err != nil {
 			slog.Warn("openai_token_cache_get_failed", "account_id", account.ID, "error", err)
@@ -166,8 +176,10 @@ func (p *OpenAITokenProvider) GetAccessToken(ctx context.Context, account *Accou
 			const reason = "openai access_token expired and refresh_token is missing"
 			// 永久故障：缺失 refresh_token 时账号无法自愈，必须立即从调度池剔除，
 			// 否则会被反复选中、每次都在 token 阶段直接返回错误，对用户呈现持续 502。
-			p.disableAccountMissingRefreshToken(account, reason)
-			return "", errors.New(reason)
+			if err := p.disableAccountMissingRefreshToken(ctx, account, reason); err != nil {
+				return "", NewProviderCredentialFailure("credential_state_unavailable", err)
+			}
+			return "", NewAccountCredentialFailure("account_credential_expired", errors.New(reason))
 		}
 		needsRefresh = false
 	}
@@ -179,7 +191,8 @@ func (p *OpenAITokenProvider) GetAccessToken(ctx context.Context, account *Accou
 
 		result, err := p.refreshAPI.RefreshIfNeeded(ctx, account, p.executor, openAITokenRefreshSkew)
 		if err != nil {
-			if p.refreshPolicy.OnRefreshError == ProviderRefreshErrorReturn {
+			var failure *CredentialFailureError
+			if errors.As(err, &failure) || p.refreshPolicy.OnRefreshError == ProviderRefreshErrorReturn || ctx.Err() != nil {
 				return "", err
 			}
 			slog.Warn("openai_token_refresh_failed", "account_id", account.ID, "error", err)
@@ -195,7 +208,8 @@ func (p *OpenAITokenProvider) GetAccessToken(ctx context.Context, account *Accou
 				}
 				if strings.TrimSpace(token) != "" {
 					slog.Debug("openai_token_cache_hit_after_wait", "account_id", account.ID)
-					return token, nil
+					concurrentEvidence = true
+					return p.concurrentRefreshToken(ctx, account, token)
 				}
 			}
 		} else if result.Refreshed {
@@ -226,7 +240,8 @@ func (p *OpenAITokenProvider) GetAccessToken(ctx context.Context, account *Accou
 			}
 			if strings.TrimSpace(token) != "" {
 				slog.Debug("openai_token_cache_hit_after_wait", "account_id", account.ID)
-				return token, nil
+				concurrentEvidence = true
+				return p.concurrentRefreshToken(ctx, account, token)
 			}
 		}
 	}
@@ -240,7 +255,11 @@ func (p *OpenAITokenProvider) GetAccessToken(ctx context.Context, account *Accou
 	if p.tokenCache != nil {
 		latestAccount, isStale := CheckTokenVersion(ctx, account, p.accountRepo)
 		if isStale && latestAccount != nil {
+			if !sameOpenAIRefreshOwner(account, latestAccount) {
+				return "", NewProviderCredentialFailure("openai_oauth_owner_changed", nil)
+			}
 			slog.Debug("openai_token_version_stale_use_latest", "account_id", account.ID)
+			account = latestAccount
 			accessToken = latestAccount.GetOpenAIAccessToken()
 			if strings.TrimSpace(accessToken) == "" {
 				return "", errors.New("access_token not found after version check")
@@ -282,7 +301,9 @@ func (p *OpenAITokenProvider) GetAccessToken(ctx context.Context, account *Accou
 // awaited from the cache instead. When the shared refresh path decides that no
 // refresh is necessary, the recovery fails instead of replaying the credential
 // the upstream just rejected.
-func (p *OpenAITokenProvider) ForceRefreshToken(ctx context.Context, account *Account) (string, error) {
+// rejectedToken is the exact bearer used on the failed attempt, which can
+// differ from the account-selection snapshot after a concurrent refresh.
+func (p *OpenAITokenProvider) ForceRefreshToken(ctx context.Context, account *Account, rejectedToken string) (string, error) {
 	p.ensureMetrics()
 	if p == nil {
 		return "", errors.New("openai token provider is nil")
@@ -303,6 +324,7 @@ func (p *OpenAITokenProvider) ForceRefreshToken(ctx context.Context, account *Ac
 		return "", errors.New("token refresh is not configured")
 	}
 	cacheKey := OpenAITokenCacheKey(account)
+	rejectedToken = strings.TrimSpace(rejectedToken)
 	// The upstream rejected the cached credential; never replay it.
 	if p.tokenCache != nil {
 		if err := p.tokenCache.DeleteAccessToken(ctx, cacheKey); err != nil {
@@ -323,16 +345,17 @@ func (p *OpenAITokenProvider) ForceRefreshToken(ctx context.Context, account *Ac
 		if waitErr != nil {
 			return "", waitErr
 		}
-		if strings.TrimSpace(token) == "" {
+		if strings.TrimSpace(token) == "" || strings.TrimSpace(token) == rejectedToken {
 			return "", errors.New("concurrent refresh committed no token")
 		}
 		p.metrics.refreshSuccess.Add(1)
-		return token, nil
+		return p.concurrentRefreshToken(ctx, account, token)
 	}
 	if result == nil || result.Account == nil {
 		return "", errors.New("token refresh returned no account")
 	}
-	if !result.Refreshed && !result.LockHeld {
+	token := strings.TrimSpace(result.Account.GetOpenAIAccessToken())
+	if token == rejectedToken {
 		// The shared refresh path decided no refresh was necessary (e.g. the
 		// account carries no expires_at, so the window comparison is skipped).
 		// Retrying with that token would replay the credential the upstream
@@ -340,11 +363,28 @@ func (p *OpenAITokenProvider) ForceRefreshToken(ctx context.Context, account *Ac
 		// fail over instead.
 		return "", errors.New("credential was not refreshed; refusing to retry with the rejected token")
 	}
-	token := strings.TrimSpace(result.Account.GetOpenAIAccessToken())
 	if token == "" {
 		return "", errors.New("refreshed account has no access token")
 	}
 	p.metrics.refreshSuccess.Add(1)
+	recordRequestCredentialOwner(ctx, result.Account, token)
+	return token, nil
+}
+
+// A lock winner may have refreshed after account ownership or proxy changed.
+// Verify its durable grant before a waiting request uses the cached token.
+func (p *OpenAITokenProvider) concurrentRefreshToken(ctx context.Context, selected *Account, token string) (string, error) {
+	if p.accountRepo == nil {
+		return "", NewProviderCredentialFailure("openai_oauth_state_unavailable", nil)
+	}
+	current, err := p.accountRepo.GetByID(ctx, selected.ID)
+	if err != nil || !sameOpenAIRefreshOwner(selected, current) {
+		return "", NewProviderCredentialFailure("openai_oauth_owner_changed", err)
+	}
+	if strings.TrimSpace(token) != strings.TrimSpace(current.GetOpenAIAccessToken()) {
+		return "", NewProviderCredentialFailure("openai_oauth_cache_conflict", nil)
+	}
+	recordRequestCredentialOwner(ctx, current, token)
 	return token, nil
 }
 
@@ -353,21 +393,30 @@ func (p *OpenAITokenProvider) ForceRefreshToken(ctx context.Context, account *Ac
 // 这是一种永久性故障：仅靠后续请求或 TokenRefreshService 不会自愈
 // （NeedsRefresh 也会因 refresh_token 为空直接跳过），
 // 必须主动剔除以避免账号被持续选中导致用户端反复 502。
-// 使用 background context 是因为请求 context 可能很快结束。
-func (p *OpenAITokenProvider) disableAccountMissingRefreshToken(account *Account, reason string) {
+// 使用有界请求 context；条件写入不会覆盖并发刷新或重新授权。
+func (p *OpenAITokenProvider) disableAccountMissingRefreshToken(ctx context.Context, account *Account, reason string) error {
 	if p == nil || p.accountRepo == nil || account == nil {
-		return
+		return nil
 	}
-	if p.runtimeBlocker != nil {
-		p.runtimeBlocker.BlockAccountScheduling(account, time.Time{}, "missing_refresh_token")
+	repo, ok := p.accountRepo.(credentialFailureRepository)
+	if !ok {
+		return errors.New("conditional credential repository is unavailable")
 	}
-	bgCtx := context.Background()
-	if err := p.accountRepo.SetError(bgCtx, account.ID, reason); err != nil {
+	bgCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	applied, err := repo.SetCredentialErrorIfUnchanged(bgCtx, account.ID, account.Platform, account.Type, account.Credentials, account.ProxyID, reason)
+	if err != nil {
 		slog.Warn("openai_token_provider.set_error_failed",
 			"account_id", account.ID,
 			"error", err,
 		)
-		return
+		return err
+	}
+	if !applied {
+		return nil
+	}
+	if p.runtimeBlocker != nil {
+		p.runtimeBlocker.BlockAccountScheduling(account, time.Time{}, "missing_refresh_token")
 	}
 	if p.tokenCache != nil {
 		cacheKey := OpenAITokenCacheKey(account)
@@ -382,6 +431,7 @@ func (p *OpenAITokenProvider) disableAccountMissingRefreshToken(account *Account
 		"account_id", account.ID,
 		"reason", reason,
 	)
+	return nil
 }
 
 func (p *OpenAITokenProvider) waitForTokenAfterLockRace(ctx context.Context, cacheKey string) (string, error) {

@@ -99,3 +99,25 @@ or null reasoning means thinking is disabled, so stale effort declarations and
 registry metadata cannot re-enable it. Explicit `none`/`false` likewise clears
 efforts and their default. Existing public/PAYG boolean reasoning catalogs remain
 readable; missing reasoning on those endpoints remains unspecified.
+
+## Managed usage and account recovery
+
+Native Kimi OAuth usage queries use the fixed regional `/coding/v1/usages`
+endpoint with Bearer access-token authentication and the same trusted device
+identity as inference. A 401 refreshes the selected account once before retry;
+concurrent token rotation is reused, and an invalid refresh grant allows account
+failover. Shared refresh dependencies do not quarantine an otherwise valid grant.
+
+Managed `usages.limit_5h`, `limit_7d`, `limit_month_total` and `limit_month_code`
+map to independent five-hour, weekly, monthly-total and monthly-code windows.
+Finite numeric or numeric-string `used_ratio` values become percentages; each
+window retains its own reset time. Both monthly windows participate in scheduling
+thresholds. The API-key `limits[].detail` / `usage` response remains supported.
+Malformed responses and responses with no recognized valid window report a
+failed probe without replacing the last valid quota snapshot.
+
+Concurrent probes and monitor caches are isolated by credential/proxy generation.
+After 401 recovery, conditional persistence binds usage to the refreshed grant
+that actually supplied it. Reauthorization cannot inherit the old grant's quota
+pause; legacy unbound windows become authoritative after the next successful
+probe. See [quota snapshot ownership](DOMESTIC_OAUTH.md).

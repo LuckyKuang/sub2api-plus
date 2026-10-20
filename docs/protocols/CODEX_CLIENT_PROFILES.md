@@ -293,6 +293,7 @@ the next independently resolved request.
 | Valid | Any | `account`; retain that account's client family and fingerprint |
 | Empty or invalid | Valid | `global`; retain the configured global family and fingerprint |
 | Empty or invalid | Empty or invalid | `compiled_default` |
+| Raw candidate containing CR/LF or other invalid header bytes, including leading/trailing bytes | Any | Treat that candidate as invalid before whitespace normalization and proceed to the next source; cached global reads preserve this behavior |
 | Empty or invalid | Missing, blank, or unavailable persisted setting, including a cached read | `compiled_default`; the settings reader must not synthesize a global candidate |
 | Credential shadow | Any | Resolve the credential-owning parent and apply the same matrix; a shadow does not supply a UA |
 | Legacy candidate with compatibility disabled | Any | Treat that candidate as invalid and proceed to the next source |

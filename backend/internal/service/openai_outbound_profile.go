@@ -142,16 +142,18 @@ func NormalizeOpenAICodexUserAgent(userAgent string) (string, error) {
 // configured identity. Legacy aliases are accepted only through the closed
 // migration set when the global compatibility mode is enabled.
 func NormalizeOpenAICodexUserAgentWithCompatibility(userAgent string, allowLegacyCompatibility bool) (string, error) {
-	userAgent = strings.TrimSpace(userAgent)
-	if userAgent == "" {
+	if strings.Trim(userAgent, " \t") == "" {
 		return "", nil
 	}
-	if len(userAgent) > maxOpenAIAccountUserAgentLength {
-		return "", infraerrors.Newf(http.StatusBadRequest, "OPENAI_CODEX_USER_AGENT_INVALID", "OpenAI Codex user_agent must be at most %d characters", maxOpenAIAccountUserAgentLength)
-	}
+	// Validate the raw candidate before canonicalizing surrounding whitespace.
+	// Trimming first would turn a CR/LF-wrapped invalid account/global value
+	// into an accepted identity instead of rejecting it or falling through.
 	_, pairedUserAgent, ok := openai.PairConfiguredCodexClientIdentity(userAgent, allowLegacyCompatibility)
 	if !ok {
 		return "", infraerrors.New(http.StatusBadRequest, "OPENAI_CODEX_USER_AGENT_INVALID", "OpenAI Codex user_agent must be a supported Codex User-Agent")
+	}
+	if len(pairedUserAgent) > maxOpenAIAccountUserAgentLength {
+		return "", infraerrors.Newf(http.StatusBadRequest, "OPENAI_CODEX_USER_AGENT_INVALID", "OpenAI Codex user_agent must be at most %d characters", maxOpenAIAccountUserAgentLength)
 	}
 	return pairedUserAgent, nil
 }
@@ -205,12 +207,8 @@ func resolveOpenAIOutboundIdentityWithVersionAndCompatibility(accountUA, systemU
 }
 
 func validOpenAIOutboundIdentityWithCompatibility(userAgent string, allowLegacyCompatibility bool) (openAIOutboundIdentity, bool) {
-	userAgent = strings.TrimSpace(userAgent)
-	if len(userAgent) > maxOpenAIAccountUserAgentLength {
-		return openAIOutboundIdentity{}, false
-	}
 	profile, pairedUA, ok := openai.PairConfiguredCodexClientIdentity(userAgent, allowLegacyCompatibility)
-	if !ok {
+	if !ok || len(pairedUA) > maxOpenAIAccountUserAgentLength {
 		return openAIOutboundIdentity{}, false
 	}
 	version := openAIOutboundIdentityVersion(pairedUA)

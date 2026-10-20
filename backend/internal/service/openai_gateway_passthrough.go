@@ -136,6 +136,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 	reqStream bool,
 	startTime time.Time,
 ) (*OpenAIForwardResult, error) {
+	ctx = WithOutboundIdentityScope(ctx, c)
 	requestedModel := reqModel
 	upstreamPassthroughModel := ""
 	if isOpenAIResponsesCompactPath(c) {
@@ -351,6 +352,8 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 	if err != nil {
 		return nil, err
 	}
+	ctx = withRequestCredentialOwner(ctx, account, token)
+	defer bindRequestCredentialOwnerContext(ctx, c)()
 
 	if result, handled, wsErr := s.tryCodexHTTPWebSocket(ctx, c, account, body, token, requestedModel, policyModel, gjson.GetBytes(body, "prompt_cache_key").String(), startTime); handled {
 		if result != nil {
@@ -465,8 +468,12 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 			// 401 同账号恢复：与非透传路径相同，仅 OAuth-like Bearer 且仅 401。
 			if !authRecoveryTried && isOpenAIUnauthorizedRecoverableStatus(resp.StatusCode) && s.canForceRefreshOpenAIAuthOnUnauthorized(account) {
 				authRecoveryTried = true
-				refreshedToken, refreshErr := s.recoverOpenAIAuthAfterUnauthorized(ctx, account)
+				refreshedToken, refreshErr := s.recoverOpenAIAuthAfterUnauthorized(ctx, account, token)
 				if refreshErr != nil {
+					var credentialFailure *CredentialFailureError
+					if errors.As(refreshErr, &credentialFailure) {
+						return nil, s.accountCredentialFailure(ctx, c, account, refreshErr)
+					}
 					logger.LegacyPrintf("service.openai_gateway", "[OpenAI passthrough] 401 same-account recovery skipped after refresh failure (account: %s): %v", account.Name, refreshErr)
 				} else {
 					appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
@@ -482,6 +489,8 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 						Message:            upstreamMsg,
 					})
 					token = refreshedToken
+					ctx = withRequestCredentialOwner(ctx, account, token)
+					defer bindRequestCredentialOwnerContext(ctx, c)()
 					logger.LegacyPrintf("service.openai_gateway", "[OpenAI passthrough] Retrying same account once after 401 credential refresh (account: %s)", account.Name)
 					continue
 				}
@@ -900,6 +909,9 @@ func shouldFailoverOpenAIPassthroughResponse(account *Account, statusCode int, r
 		return true
 	}
 	if account != nil && account.IsPoolMode() && account.IsPoolModeRetryableStatus(statusCode) {
+		return true
+	}
+	if statusCode == http.StatusUnauthorized && usesHTTP401CredentialFence(account) && account.ShouldHandleErrorCode(statusCode) {
 		return true
 	}
 	switch statusCode {
@@ -1482,6 +1494,9 @@ func openAIStreamFailedEventSemanticStatus(payload []byte, message string) int {
 			return status
 		}
 	}
+	if openAIStreamCredentialAuthFailure(payload) {
+		return http.StatusUnauthorized
+	}
 	switch {
 	case strings.Contains(combined, "rate_limit"):
 		return http.StatusTooManyRequests
@@ -1709,6 +1724,21 @@ func (s *OpenAIGatewayService) handleOpenAIStreamTerminalAccountSideEffects(
 	headers http.Header,
 	canonicalModel ...string,
 ) (int, bool) {
+	ctx := context.Background()
+	if c != nil && c.Request != nil {
+		ctx = c.Request.Context()
+	}
+	return s.handleOpenAIStreamTerminalAccountSideEffectsContext(ctx, account, payload, message, headers, canonicalModel...)
+}
+
+func (s *OpenAIGatewayService) handleOpenAIStreamTerminalAccountSideEffectsContext(
+	ctx context.Context,
+	account *Account,
+	payload []byte,
+	message string,
+	headers http.Header,
+	canonicalModel ...string,
+) (int, bool) {
 	statusCode := openAIStreamFailureStatus(payload, message)
 	switch statusCode {
 	case http.StatusForbidden:
@@ -1717,10 +1747,6 @@ func (s *OpenAIGatewayService) handleOpenAIStreamTerminalAccountSideEffects(
 		}
 		fallthrough
 	case http.StatusUnauthorized, http.StatusTooManyRequests, 529:
-		ctx := context.Background()
-		if c != nil && c.Request != nil {
-			ctx = c.Request.Context()
-		}
 		model := firstNonEmpty(canonicalModel...)
 		if model == "" {
 			model = firstNonEmpty(gjson.GetBytes(payload, "model").String(), gjson.GetBytes(payload, "response.model").String())

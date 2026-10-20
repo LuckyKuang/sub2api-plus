@@ -1040,7 +1040,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 					if failoverErr.ShouldReportAccountScheduleFailure() {
 						h.gatewayService.ReportOpenAIAccountScheduleResult(account, openAIAccountScheduleModel(c, account, forwardModel, requireCompact, nil), false, nil, err)
 					}
-					if !failoverErr.ShouldRetryNextAccount() || (account.Platform == service.PlatformOpenAI && !failoverErr.ShouldReportAccountScheduleFailure()) {
+					if !failoverErr.ShouldRetryNextAccount() || (account.Platform == service.PlatformOpenAI && !failoverErr.AllowsOpenAIAccountSwitch()) {
 						h.handleFailoverExhausted(c, failoverErr, streamStarted)
 						return
 					}
@@ -1639,7 +1639,7 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 					if failoverErr.ShouldReportAccountScheduleFailure() {
 						h.gatewayService.ReportOpenAIAccountScheduleResult(account, openAIAccountScheduleModel(c, account, currentRoutingModel, false, nil), false, nil, err)
 					}
-					if !failoverErr.ShouldRetryNextAccount() || (account.Platform == service.PlatformOpenAI && !failoverErr.ShouldReportAccountScheduleFailure()) {
+					if !failoverErr.ShouldRetryNextAccount() || (account.Platform == service.PlatformOpenAI && !failoverErr.AllowsOpenAIAccountSwitch()) {
 						h.handleAnthropicFailoverExhausted(c, failoverErr, streamStarted)
 						return
 					}
@@ -2599,7 +2599,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			h.gatewayService.ReportOpenAIAccountScheduleResult(account, openAIAccountScheduleModel(c, account, wsForwardModel, false, nil), false, nil, failoverErr)
 		}
 		releaseAccountSlot()
-		if !failoverErr.ShouldRetryNextAccount() || (account.Platform == service.PlatformOpenAI && !failoverErr.ShouldReportAccountScheduleFailure()) {
+		if !failoverErr.ShouldRetryNextAccount() || (account.Platform == service.PlatformOpenAI && !failoverErr.AllowsOpenAIAccountSwitch()) {
 			closeOpenAIWSFailoverExhausted(c, wsConn, failoverErr)
 			return false
 		}
@@ -3694,6 +3694,9 @@ func (h *OpenAIGatewayHandler) handleFailoverExhausted(c *gin.Context, failoverE
 }
 
 func credentialFailoverClientResponse(failoverErr *service.UpstreamFailoverError) (int, string) {
+	if failoverErr != nil && failoverErr.ClientMessage == service.CredentialUnavailableClientMessage {
+		return http.StatusServiceUnavailable, service.CredentialUnavailableClientMessage
+	}
 	if failoverErr != nil && failoverErr.Reason == service.OpenAIUpstreamAccessStateReason && strings.TrimSpace(failoverErr.ClientMessage) != "" {
 		status := failoverErr.ClientStatusCode
 		if status <= 0 {

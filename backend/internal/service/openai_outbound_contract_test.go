@@ -339,9 +339,22 @@ func TestOpenAIIdentityContractHTTPPassthroughCompatiblePresets(t *testing.T) {
 				require.NoError(t, err)
 				want := http.Header{}
 				builtInOutboundIdentity(preset).ForProtocol("responses").Apply(want)
-				requireOpenAIIdentityContractHeaders(t, headers, want, "Bearer sk-test")
+				httpWant := want.Clone()
+				if preset == "grok" {
+					// compat.example is a compatible supplier. Native CLI mode
+					// stays in the snapshot and is omitted on its HTTP wire.
+					require.Equal(t, "headless", want.Get("X-Grok-Client-Mode"))
+					httpWant.Del("X-Grok-Client-Mode")
+					require.Empty(t, headers.Get("X-Grok-Client-Mode"))
+					require.Equal(t, "grok-shell/1.0.45 (linux; x86_64)", headers.Get("User-Agent"))
+					require.Equal(t, "grok-shell", headers.Get("X-Grok-Client-Identifier"))
+					require.Equal(t, "1.0.45", headers.Get("X-Grok-Client-Version"))
+				}
+				requireOpenAIIdentityContractHeaders(t, headers, httpWant, "Bearer sk-test")
 				wsHeaders, _, err := svc.buildOpenAIWSHeaders(context.Background(), c, account, "sk-test", OpenAIWSProtocolDecision{Transport: OpenAIUpstreamTransportResponsesWebsocketV2}, false, "", "", "", "gpt-5.5", "")
 				require.NoError(t, err)
+				// This assertion covers the protocol header builder. It has no
+				// destination request, so it still returns the selected snapshot.
 				requireOpenAIIdentityContractHeaders(t, wsHeaders, want, "Bearer sk-test")
 			})
 		}

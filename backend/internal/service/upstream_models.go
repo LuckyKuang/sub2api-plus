@@ -1367,6 +1367,14 @@ func (s *AccountTestService) doUpstreamModelsRequest(req *http.Request, proxyURL
 	if req.URL.String() == modelsDevRegistryURL {
 		return s.doUpstreamModelsRequestPrepared(req, proxyURL, account)
 	}
+	if account.IsDomesticOAuth() && account.Platform == PlatformKimi {
+		if s.cnOAuthService == nil {
+			return nil, NewProviderCredentialFailure("native_oauth_service_unavailable", nil)
+		}
+		return s.cnOAuthService.roundTripNativeOAuthWithPrepare(req, account, s.cnOAuthService.prepareKimiModelsRequest, func(next *http.Request) (*http.Response, error) {
+			return s.doUpstreamModelsRequestPrepared(next, proxyURL, account)
+		})
+	}
 	return s.cnOAuthService.roundTripZhipuLinked(req, account, func(next *http.Request) (*http.Response, error) {
 		return s.doUpstreamModelsRequestPrepared(next, proxyURL, account)
 	})

@@ -33,6 +33,12 @@ observations do not invent available quota. Pay-as-you-go balance detection
 continues to use supported upstream insufficient-balance responses; it does not
 claim an automatic official balance endpoint.
 
+API-key quota flights, monitor caches and scheduling windows are bound to the
+credential/proxy generation. Late queries cannot overwrite a replacement key's
+windows, and legacy unbound windows do not pause scheduling before the next
+successful probe. See [quota snapshot ownership](DOMESTIC_OAUTH.md). Managed
+OAuth-specific quota discovery remains unsupported.
+
 ## Outbound identity
 
 MiniMax Code's managed-login and BYOK paths have different defaults:
@@ -59,3 +65,11 @@ policy difference, not a claim about an upstream SDK default.
 Settings show both presets separately. `MiniMaxCode` in OpenCode Go and
 `MiniMax-Code` in the GitHub downloader describe other destinations. See the
 [source and priority matrix](../OUTBOUND_IDENTITY.md#domestic-provider-source-evidence-and-source-priority).
+
+Managed OAuth requests recover one explicit upstream 401 on the same account
+before failover. Refresh is tied to the rejected access-token generation, so a
+concurrent rotation is reused. The retry preserves the request body, selected
+identity and proxy. A second rejection or invalid refresh grant makes that grant
+unavailable; shared refresh/locking/storage failures stop the attempt without
+marking the account invalid. Bodies without a safe replay source are never sent
+twice, and refresh results cannot overwrite a concurrently reauthorized grant.

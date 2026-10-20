@@ -1322,7 +1322,22 @@ func hashSensitiveValueForLog(raw string) string {
 }
 
 // GetAccessToken gets the access token for an OpenAI account
-func (s *OpenAIGatewayService) GetAccessToken(ctx context.Context, account *Account) (string, string, error) {
+func (s *OpenAIGatewayService) GetAccessToken(ctx context.Context, account *Account) (token, kind string, credentialErr error) {
+	providerAcquired := false
+	defer func() {
+		if credentialErr == nil && !providerAcquired {
+			recordRequestCredentialOwner(ctx, account, token)
+		}
+		// Grok OAuth retains its provider-specific acquisition, recovery and CAS
+		// lifecycle in getRequestCredential. All other grants share the typed
+		// pre-send failure contract, including direct HTTP/WS callers.
+		if account != nil && !account.IsGrokOAuth() && credentialErr != nil {
+			credentialErr = s.accountCredentialFailure(ctx, nil, account, classifyCredentialAcquisitionFailure(account, credentialErr))
+		}
+	}()
+	if account == nil {
+		return "", "", errors.New("account is nil")
+	}
 	if account.IsShadow() {
 		credAccount, err := resolveCredentialAccount(ctx, s.accountRepo, account)
 		if err != nil {
@@ -1331,7 +1346,19 @@ func (s *OpenAIGatewayService) GetAccessToken(ctx context.Context, account *Acco
 		account = credAccount
 	}
 	if account.IsDomesticOAuth() {
-		return account.GetCredential("access_token"), "oauth", nil
+		if accessToken := strings.TrimSpace(account.GetCredential("access_token")); accessToken != "" {
+			return accessToken, "oauth", nil
+		}
+		return "", "", NewAccountCredentialFailure("account_credential_missing", errors.New("native OAuth access token is missing"))
+	}
+	if account.Platform == PlatformZhipu && account.Type == AccountTypeOAuth {
+		// Linked ZCode plans keep their protocol credential separate from
+		// OpenAI OAuth. The sending wrapper resolves project PATs and off-peak
+		// admission from this same owner after acquisition succeeds.
+		if credential := strings.TrimSpace(account.GetOpenAIProtocolAPIKey()); credential != "" {
+			return credential, "oauth", nil
+		}
+		return "", "", NewAccountCredentialFailure("account_credential_missing", errors.New("linked ZCode protocol credential is missing"))
 	}
 	switch account.Type {
 	case AccountTypeOAuth:
@@ -1340,6 +1367,7 @@ func (s *OpenAIGatewayService) GetAccessToken(ctx context.Context, account *Acco
 		}
 		if account.Platform == PlatformGrok {
 			if s.grokTokenProvider != nil {
+				providerAcquired = true
 				accessToken, err := s.grokTokenProvider.GetAccessToken(ctx, account)
 				if err != nil {
 					return "", "", err
@@ -1354,6 +1382,7 @@ func (s *OpenAIGatewayService) GetAccessToken(ctx context.Context, account *Acco
 		}
 		// 使用 TokenProvider 获取缓存的 token
 		if s.openAITokenProvider != nil {
+			providerAcquired = true
 			accessToken, err := s.openAITokenProvider.GetAccessToken(ctx, account)
 			if err != nil {
 				return "", "", err

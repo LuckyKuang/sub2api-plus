@@ -71,6 +71,7 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 	defer finishRoute()
 	defer func() { forwardErr = openAISessionRouteForwardError(ctx, forwardErr) }()
 	ctx = WithOutboundIdentityScope(ctx, c)
+	captureNativeConversationScope(ctx, c, account, body)
 	ctx = WithAccountOutboundIdentity(ctx, account)
 	defer bindOpenAISessionRouteRequestContext(ctx, c)()
 	return s.forwardAsChatCompletions(ctx, c, account, body, promptCacheKey, defaultMappedModel)
@@ -395,6 +396,8 @@ func (s *OpenAIGatewayService) forwardAsChatCompletions(
 	if err != nil {
 		return nil, fmt.Errorf("get access token: %w", err)
 	}
+	ctx = withRequestCredentialOwner(ctx, account, token)
+	defer bindRequestCredentialOwnerContext(ctx, c)()
 
 	// 6. Build upstream request
 	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)

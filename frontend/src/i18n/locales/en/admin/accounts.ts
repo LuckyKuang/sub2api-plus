@@ -163,6 +163,8 @@ export default {
         window5h: '5h',
         windowWeekly: '7d',
         windowMonthly: '30d',
+        windowMonthlyTotal: 'Monthly total',
+        windowMonthlyCode: 'Monthly code',
         probe: 'Query',
         probeTooltip: 'Query the provider quota endpoint for 5-hour / weekly rolling window usage',
         balanceProbeTooltip: 'Query the provider balance endpoint for the account balance',

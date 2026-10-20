@@ -119,6 +119,9 @@ func explicitOpenAIRequestSessionID(c *gin.Context, body []byte) string {
 	}
 
 	sessionID := explicitOpenAIHeaderSessionID(c)
+	if sessionID == "" {
+		sessionID = nativeConversationHeaderSessionID(c, nativeConversationRequestPlatform(c))
+	}
 	if sessionID == "" && isGrokRequestContext(c) {
 		sessionID = strings.TrimSpace(c.GetHeader(grokConversationIDHeader))
 	}

@@ -122,23 +122,6 @@ func TestForwardAsAnthropic_OpenAIOAuthConvergesFingerprintBeforePlusCacheAuthor
 // thinking-enabled 兜底，导致 kimi/zhipu/deepseek 平台分组的 /v1/messages 请求
 // usage_log.reasoning_effort 恒为 NULL。
 
-func nativeAnthropicTestAccount() *Account {
-	return &Account{
-		ID:          702,
-		Name:        "kimi-native",
-		Platform:    PlatformKimi,
-		Type:        AccountTypeAPIKey,
-		Concurrency: 1,
-		Credentials: map[string]any{
-			"api_key":      "sk-test",
-			"api_protocol": APIProtocolAnthropic,
-			"api_base_urls": map[string]any{
-				APIProtocolAnthropic: "http://anthropic.example",
-			},
-		},
-	}
-}
-
 func nativeAnthropicGLMTestAccount() *Account {
 	account := nativeAnthropicTestAccount()
 	account.Name = "zhipu-native"

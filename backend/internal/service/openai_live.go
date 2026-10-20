@@ -271,6 +271,7 @@ func (s *OpenAIGatewayService) createUpstreamLiveCall(
 		logLiveCreateStageFailure(ctx, account.ID, "access_token", err)
 		return nil, err
 	}
+	ctx = withRequestCredentialOwner(ctx, account, token)
 	body, err := json.Marshal(struct {
 		SDP     string          `json:"sdp"`
 		Session json.RawMessage `json:"session"`
@@ -426,6 +427,7 @@ func (s *OpenAIGatewayService) liveSidebandHeaders(
 	if err != nil {
 		return nil, err
 	}
+	ctx = withRequestCredentialOwner(ctx, account, token)
 	headers, err := s.buildOpenAIAuthenticationHeaders(ctx, account, token)
 	if err != nil {
 		return nil, err

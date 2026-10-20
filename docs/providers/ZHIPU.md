@@ -97,7 +97,26 @@ during refresh removes that token from the transient-failure fallback too. Infer
 probes, model discovery and off-peak admission use the original owner.
 Ticket status and detached idle settlement resolve PATs again from that owner,
 with the same one-time explicit-401 retry; PAT rotation alone does not acquire
-another ticket. Final model authentication removes every case variant of the
+another ticket.
+Personal/team coding-plan quota monitoring also uses this in-memory PAT manager.
+It calls the fixed estate's `/api/monitor/usage/quota/limit` with raw PAT
+authentication (without `Bearer`); team requests add `?type=2` and the PAT's
+organization/project headers. One explicit 401 rejects and replaces that PAT
+once. Quota queries neither require nor persist a long `api_key`, and malformed
+or unrecognized quota responses never replace a valid usage snapshot.
+Quota query flights, monitor caches and persisted scheduling windows are bound to
+the credential/proxy generation. Late old-login responses cannot overwrite a
+new link's windows; legacy unbound data does not pause scheduling until probed
+again. PAT rotation retains its login owner's binding. See
+[quota snapshot ownership](DOMESTIC_OAUTH.md).
+API-key quota discovery accepts only HTTPS `open.bigmodel.cn` or `api.z.ai`, with
+an omitted port or port 443. Userinfo, HTTP, other ports, lookalike names and
+provider text in a relay path/query do not qualify; unknown origins never default
+to the domestic monitor with the relay's credential.
+Project-token control-plane 401/403 failures retain the exact rejected login
+snapshot and permit account failover. Missing login material also invalidates
+only its owner. Rate limits, network failures, malformed PAT responses and shared
+service failures stop that provider attempt without quarantining valid accounts. Final model authentication removes every case variant of the
 old auth/plan-key headers and installs the owner's PAT and, for off-peak, JWT.
 Team organization/project headers are installed from the resolved PAT scope at
 that same boundary, independently of generic header overrides. Personal plans
@@ -121,7 +140,13 @@ and the explicit unreleased product `3.16.2` baseline.
 
 Accounts created by the link use `api_protocol=adaptive` with explicit
 per-protocol base URLs, so neither estate ever falls back to another estate's
-compiled default.
+compiled default. Personal/team plans use their declared Chat Completions and
+Anthropic endpoints. Start-plan and off-peak links expose only an Anthropic
+gateway; Responses and Chat Completions requests use the existing Anthropic
+adapters and retain the plan's JWT, PAT and ticket authentication. Missing linked
+credentials enter account failover before model traffic or client output.
+Start-plan and off-peak JWT authentication always uses `Authorization: Bearer`,
+independently of the API-key account's optional auth-scheme metadata.
 
 ## Off-peak idle plan
 
@@ -205,10 +230,6 @@ forwarding use the derived plan credential.
 
 ## Known limitations
 
-- **Start-plan and off-peak are Anthropic-protocol only.** Their endpoints exist
-  only under the ZCode plan gateway, so a Chat Completions request routed to such
-  an account falls back to the estate's default Chat Completions origin and will
-  not be admitted. The official client also uses `anthropic-messages` for both.
 - **No refresh.** ZCode ships no refresh-token exchange, so an expired link must
   be re-authorized. Plus stores the refresh token when the platform supplies one
   but never rotates it, and registers no token refresher for these accounts.
@@ -220,9 +241,6 @@ forwarding use the derived plan credential.
 
 ## Unaffected areas
 
-Endpoint selection for API-key accounts, the Chat Completions / Responses /
-Anthropic adapters, `x-api-key` or bearer authentication, `anthropic-version`,
-beta handling, model discovery, coding-plan quota and pay-as-you-go balance
-probes, billing, scheduling, proxying and the ingress security-audit boundary all
-keep their existing behavior. Count-token requests for GLM remain a local
-estimate and send no upstream request.
+Endpoint selection for API-key accounts, pay-as-you-go balance probes and the
+ingress security-audit boundary keep their existing behavior. Count-token
+requests for GLM remain a local estimate and send no upstream request.

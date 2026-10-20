@@ -104,7 +104,8 @@ const snapshotData = computed<CNProviderQuotaProbeResult | null>(() => {
   const used5h = readExtraNumber(`${platform}_5h_used_percent`)
   const usedWeekly = readExtraNumber(`${platform}_weekly_used_percent`)
   const usedMonthly = readExtraNumber(`${platform}_monthly_used_percent`)
-  if (used5h == null && usedWeekly == null && usedMonthly == null) return null
+  const usedMonthlyCode = readExtraNumber(`${platform}_monthly_code_used_percent`)
+  if (used5h == null && usedWeekly == null && usedMonthly == null && usedMonthlyCode == null) return null
   const tiers: CNProviderQuotaProbeResult['tiers'] = []
   if (used5h != null) {
     tiers.push({ window: '5h', used_percent: used5h, reset_at: readExtraString(`${platform}_5h_reset_at`) || undefined })
@@ -114,6 +115,9 @@ const snapshotData = computed<CNProviderQuotaProbeResult | null>(() => {
   }
   if (usedMonthly != null) {
     tiers.push({ window: 'monthly', used_percent: usedMonthly, reset_at: readExtraString(`${platform}_monthly_reset_at`) || undefined })
+  }
+  if (usedMonthlyCode != null) {
+    tiers.push({ window: 'monthly_code', used_percent: usedMonthlyCode, reset_at: readExtraString(`${platform}_monthly_code_reset_at`) || undefined })
   }
   return { success: true, tiers } as CNProviderQuotaProbeResult
 })
@@ -162,6 +166,8 @@ const truncatedError = computed(() => {
 
 const windowLabel = (window: string) => {
   if (window === 'weekly') return t('admin.accounts.cnProviders.windowWeekly')
+  if (window === 'monthly_code') return t('admin.accounts.cnProviders.windowMonthlyCode')
+  if (window === 'monthly' && props.account.platform === 'kimi') return t('admin.accounts.cnProviders.windowMonthlyTotal')
   if (window === 'monthly') return t('admin.accounts.cnProviders.windowMonthly')
   return t('admin.accounts.cnProviders.window5h')
 }

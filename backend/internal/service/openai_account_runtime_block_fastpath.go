@@ -210,9 +210,17 @@ func (s *OpenAIGatewayService) handleOpenAIAccountUpstreamError(ctx context.Cont
 			message = upstreamMsg
 		}
 		if s != nil && s.rateLimitService != nil {
-			s.rateLimitService.handleAuthError(stateCtx, account, message)
+			if statusCode == http.StatusUnauthorized {
+				owner := account
+				if frozen, ok := requestCredentialOwner(stateCtx, account); ok {
+					owner = frozen
+				}
+				s.rateLimitService.handleHTTP401CredentialError(stateCtx, account, owner, message)
+			} else {
+				s.rateLimitService.handleAuthError(stateCtx, account, message)
+			}
 		}
-		if s != nil {
+		if s != nil && statusCode != http.StatusUnauthorized {
 			s.BlockAccountScheduling(account, time.Time{}, "openai_access_state")
 		}
 		return true
@@ -282,7 +290,9 @@ func (s *OpenAIGatewayService) handleOpenAIAccountUpstreamError(ctx context.Cont
 	tempModel := tempUnschedulableModel(stateCtx, nil)
 	modelTempMatched := tempModel != "" && tempUnschedRulesApply(account, statusCode, responseBody, tempModel) &&
 		len(matchTempUnschedulableRules(account, statusCode, responseBody)) > 0
-	if shouldDisable && !modelTempMatched {
+	// The mapped-provider 401 handler owns the exact-grant CAS and its
+	// notification. Repeating an unconditional block here would bypass it.
+	if shouldDisable && !modelTempMatched && (statusCode != http.StatusUnauthorized || !usesHTTP401CredentialFence(account)) {
 		s.BlockAccountScheduling(account, time.Time{}, "upstream_disable")
 	}
 	// Pool-mode retryable upstream errors are already bounded by the request-local

@@ -923,7 +923,9 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 		result.EnableClientDatelineNormalization = true
 	}
 	result.AntigravityUserAgentVersion = antigravity.NormalizeUserAgentVersion(settings[SettingKeyAntigravityUserAgentVersion])
-	result.OpenAICodexUserAgent = strings.TrimSpace(settings[SettingKeyOpenAICodexUserAgent])
+	// Preserve the candidate for raw validation on save/cache refresh; trimming
+	// here could repair invalid control bytes during an unrelated settings edit.
+	result.OpenAICodexUserAgent = settings[SettingKeyOpenAICodexUserAgent]
 	result.OpenAICodexEnvironmentTimezone = strings.TrimSpace(settings[SettingKeyOpenAICodexEnvironmentTimezone])
 	result.OpenAICodexEgressCountry = strings.TrimSpace(settings[SettingKeyOpenAICodexEgressCountry])
 	result.OpenAICodexWSEnabled = parseCodexTransportBool(settings[SettingKeyOpenAICodexWSEnabled], true)

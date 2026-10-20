@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -71,6 +72,10 @@ type openAIWSAcquireRequest struct {
 	Account *Account
 	WSURL   string
 	Headers http.Header
+	// Retain Grok's selected owner snapshot for delayed background handshakes.
+	outboundIdentity outboundidentity.Identity
+	// Credential generation is private pool state, never an outbound header.
+	credentialGeneration string
 	// HeadersFactory is evaluated inside dialConn. It exists so credentials
 	// whose authorization is per-dial (Agent Identity) are never cached in
 	// lastAcquire or delayed prewarm state.
@@ -84,15 +89,16 @@ type openAIWSAcquireRequest struct {
 }
 
 type openAIWSHandshakeCompatibilityKey struct {
-	betaFeatures        string
-	sessionIdentity     string
-	userAgent           string
-	originator          string
-	version             string
-	codexInstallationID string
-	threadID            string
-	clientRequestID     string
-	codexWindowID       string
+	credentialGeneration string
+	betaFeatures         string
+	sessionIdentity      string
+	userAgent            string
+	originator           string
+	version              string
+	codexInstallationID  string
+	threadID             string
+	clientRequestID      string
+	codexWindowID        string
 }
 
 type openAIWSConnLease struct {
@@ -1115,6 +1121,10 @@ type openAIWSAcquireQueueWait struct {
 }
 
 func (p *openAIWSConnPool) Acquire(ctx context.Context, req openAIWSAcquireRequest) (*openAIWSConnLease, error) {
+	req.credentialGeneration = openAIWSCredentialGeneration(ctx, req)
+	if identity, ok := outboundidentity.FromContext(ctx); ok && identity.Preset == "grok" {
+		req.outboundIdentity = identity
+	}
 	if p != nil {
 		p.metrics.acquireTotal.Add(1)
 	}
@@ -1161,7 +1171,7 @@ retryAcquire:
 		return nil, errCodexUpstreamWSDisabled
 	}
 	accountID := req.Account.ID
-	compatibility := normalizeOpenAIWSHandshakeCompatibility(req.Headers)
+	compatibility := req.handshakeCompatibility()
 	routingAffinity := normalizeOpenAIWSRoutingAffinity(req.Headers)
 	effectiveMaxConns := p.effectiveMaxConnsByAccount(req.Account)
 	if effectiveMaxConns <= 0 {
@@ -2148,6 +2158,9 @@ func (p *openAIWSConnPool) dialConn(ctx context.Context, req openAIWSAcquireRequ
 	if !p.upstreamAllowed(ctx, req.Account) {
 		return nil, errCodexUpstreamWSDisabled
 	}
+	if req.outboundIdentity.UserAgent != "" {
+		ctx = outboundidentity.WithIdentity(ctx, req.outboundIdentity)
+	}
 	headers := cloneHeader(req.Headers)
 	var err error
 	if req.HeadersFactory != nil {
@@ -2188,7 +2201,7 @@ func (p *openAIWSConnPool) dialConn(ctx context.Context, req openAIWSAcquireRequ
 	accountID := req.Account.ID
 	evict := func() { p.evictConn(accountID, id) }
 	pooledConn.onPeerClosed.Store(&evict)
-	pooledConn.handshakeCompatibility = normalizeOpenAIWSHandshakeCompatibility(req.Headers)
+	pooledConn.handshakeCompatibility = req.handshakeCompatibility()
 	pooledConn.routingAffinity = normalizeOpenAIWSRoutingAffinity(req.Headers)
 	return pooledConn, nil
 }
@@ -2369,7 +2382,13 @@ func cloneOpenAIWSAcquireRequestPtr(req *openAIWSAcquireRequest) *openAIWSAcquir
 func sameOpenAIWSPrewarmTarget(a, b openAIWSAcquireRequest) bool {
 	return stringsTrim(a.WSURL) == stringsTrim(b.WSURL) &&
 		stringsTrim(a.ProxyURL) == stringsTrim(b.ProxyURL) &&
-		normalizeOpenAIWSHandshakeCompatibility(a.Headers) == normalizeOpenAIWSHandshakeCompatibility(b.Headers)
+		a.handshakeCompatibility() == b.handshakeCompatibility()
+}
+
+func (req openAIWSAcquireRequest) handshakeCompatibility() openAIWSHandshakeCompatibilityKey {
+	key := normalizeOpenAIWSHandshakeCompatibility(req.Headers)
+	key.credentialGeneration = req.credentialGeneration
+	return key
 }
 
 func normalizeOpenAIWSBetaFeatures(headers http.Header) string {

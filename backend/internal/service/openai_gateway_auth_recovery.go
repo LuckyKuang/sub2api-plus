@@ -29,7 +29,7 @@ func (s *OpenAIGatewayService) canForceRefreshOpenAIAuthOnUnauthorized(account *
 // recoverOpenAIAuthAfterUnauthorized force-refreshes the credential owner's
 // token after an upstream 401 and returns the new access token for the
 // same-account retry. Shadows resolve to their credential owner first.
-func (s *OpenAIGatewayService) recoverOpenAIAuthAfterUnauthorized(ctx context.Context, account *Account) (string, error) {
+func (s *OpenAIGatewayService) recoverOpenAIAuthAfterUnauthorized(ctx context.Context, account *Account, rejectedToken string) (string, error) {
 	if s == nil || account == nil {
 		return "", errors.New("account is nil")
 	}
@@ -47,7 +47,7 @@ func (s *OpenAIGatewayService) recoverOpenAIAuthAfterUnauthorized(ctx context.Co
 	if s.openAITokenProvider == nil {
 		return "", errors.New("token provider is not configured")
 	}
-	return s.openAITokenProvider.ForceRefreshToken(ctx, credAccount)
+	return s.openAITokenProvider.ForceRefreshToken(ctx, credAccount, rejectedToken)
 }
 
 // isOpenAIUnauthorizedRecoverableStatus keeps the 401-only boundary explicit:

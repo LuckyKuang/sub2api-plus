@@ -68,6 +68,7 @@ func (s *OpenAIGatewayService) ForwardAlphaSearch(ctx context.Context, c *gin.Co
 	if err != nil {
 		return nil, err
 	}
+	ctx = withRequestCredentialOwner(ctx, account, token)
 
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {

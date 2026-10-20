@@ -184,6 +184,9 @@ func cnProviderQuotaSnapshotReset(account *Account, now time.Time) *time.Time {
 	if account == nil || len(account.Extra) == 0 {
 		return nil
 	}
+	if !cnQuotaSnapshotMatches(account) {
+		return nil
+	}
 	switch {
 	case account.IsOpenCodeGo():
 	case account.IsCommandCode():
@@ -199,6 +202,9 @@ func cnProviderQuotaSnapshotReset(account *Account, now time.Time) *time.Time {
 	suffixes := []string{cnExtraSuffix5hReset, cnExtraSuffixWeeklyReset}
 	if cnQuotaHasMonthlyWindow(provider) {
 		suffixes = append(suffixes, cnExtraSuffixMonthlyReset)
+	}
+	if provider == PlatformKimi {
+		suffixes = append(suffixes, cnExtraSuffixMonthlyCodeReset)
 	}
 	var earliest *time.Time
 	for _, suffix := range suffixes {

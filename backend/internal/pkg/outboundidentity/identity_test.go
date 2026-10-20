@@ -23,7 +23,7 @@ func TestIdentitySnapshotRemovesUntrustedDeclarationsAndPreservesProtocol(t *tes
 	require.Equal(t, "grok-shell/1.2.3 (linux; x86_64)", req.Header.Get("User-Agent"))
 	require.Equal(t, "1.2.3", req.Header.Get("X-Grok-Client-Version"))
 	require.Equal(t, "grok-shell", req.Header.Get("X-Grok-Client-Identifier"))
-	require.Equal(t, "headless", req.Header.Get("X-Grok-Client-Mode"))
+	require.Empty(t, req.Header.Get("X-Grok-Client-Mode"), "a compatible supplier is not a CLI control destination")
 	for _, key := range []string{"user-agent", "originator", "Version", "X-Stainless-Os", "X-Goog-Api-Client"} {
 		require.NotContains(t, req.Header, key)
 	}
@@ -63,4 +63,44 @@ func TestProtocolIdentitySnapshotIsDeepCopiedAndIdempotent(t *testing.T) {
 	ApplyContext(req)
 	require.Equal(t, "client/1.0.0", req.UserAgent())
 	require.Empty(t, req.Header.Get("X-Stainless-Package-Version"))
+}
+
+func TestGrokClientModeIsLimitedToNativeProxyAndControlDestinations(t *testing.T) {
+	identity := Identity{
+		Preset: "grok", UserAgent: "grok-shell/1.0.45 (linux; x86_64)", Originator: "grok-shell", Version: "1.0.45",
+		Headers: map[string]string{"User-Agent": "grok-shell/1.0.45 (linux; x86_64)", "x-grok-client-identifier": "grok-shell", "x-grok-client-version": "1.0.45", "x-grok-client-mode": "headless"},
+	}
+	ctx := WithIdentity(context.Background(), identity)
+	for _, tc := range []struct {
+		url, mode string
+	}{
+		{"https://cli-chat-proxy.grok.com/v1/responses", "headless"},
+		{"https://CLI-CHAT-PROXY.GROK.COM/v1/billing", "headless"},
+		{"https://auth.x.ai/oauth2/token", "headless"},
+		{"https://accounts.x.ai/", "headless"},
+		{"https://api.x.ai/v1/responses", ""},
+		{"https://eu-west-1.api.x.ai/v1/responses", ""},
+		{"https://supplier.example/v1/responses", ""},
+		{"https://cli-chat-proxy.grok.com.supplier.example/v1/responses", ""},
+		{"https://auth.x.ai.supplier.example/oauth2/token", ""},
+		{"https://supplier.example/v1/billing", ""},
+		// Returning to the proxy must render from the unchanged owner snapshot.
+		{"wss://cli-chat-proxy.grok.com/v1/realtime", "headless"},
+		{"wss://supplier.example/v1/realtime", ""},
+	} {
+		t.Run(tc.url, func(t *testing.T) {
+			req, err := http.NewRequestWithContext(ctx, http.MethodPost, tc.url, nil)
+			require.NoError(t, err)
+			req.Header.Set("X-Grok-Client-Mode", "untrusted")
+			ApplyContext(req)
+			ApplyContext(req)
+			require.Equal(t, tc.mode, req.Header.Get("X-Grok-Client-Mode"))
+			require.Equal(t, "grok-shell/1.0.45 (linux; x86_64)", req.UserAgent())
+			require.Equal(t, "grok-shell", req.Header.Get("X-Grok-Client-Identifier"))
+			require.Equal(t, "1.0.45", req.Header.Get("X-Grok-Client-Version"))
+		})
+	}
+	snapshot, ok := FromContext(ctx)
+	require.True(t, ok)
+	require.Equal(t, "headless", snapshot.Headers["x-grok-client-mode"])
 }

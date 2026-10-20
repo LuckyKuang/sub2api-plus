@@ -46,7 +46,7 @@ func prepareDeepSeekRequestState(req *http.Request, account *Account) {
 		if id, err := uuid.Parse(user); err != nil || id.Version() != 4 || id.String() != user {
 			user = uuid.NewString()
 		}
-		value, _ = scope.deepseekTurns.LoadOrStore(key, deepSeekRequestState{user: user, session: uuid.NewString()})
+		value, _ = scope.deepseekTurns.LoadOrStore(key, deepSeekRequestState{user: user, session: nativeConversationOwnerSession(req.Context(), account)})
 	}
 	state, valid := value.(deepSeekRequestState)
 	if !valid {

@@ -102,4 +102,44 @@ describe('CNProviderQuotaCell', () => {
     await flushPromises()
     expect(queryQuota).toHaveBeenCalledWith(account.id)
   })
+  it('renders independent Kimi monthly total and code snapshots and keeps them after an invalid probe', async () => {
+    const kimi = {
+      ...account,
+      id: 1707,
+      platform: 'kimi',
+      type: 'oauth',
+      credentials: { account_mode: 'coding', oauth_provider: 'kimi' },
+      extra: {
+        kimi_monthly_used_percent: 90,
+        kimi_monthly_reset_at: '2026-12-01T00:00:00Z',
+        kimi_monthly_code_used_percent: 10,
+        kimi_monthly_code_reset_at: '2026-12-02T00:00:00Z',
+        kimi_usage_updated_at: new Date().toISOString()
+      }
+    } as Account
+    const wrapper = mount(CNProviderQuotaCell, { props: { account: kimi } })
+    await flushPromises()
+    expect(queryQuota).not.toHaveBeenCalled()
+    const bars = wrapper.findAllComponents(UsageProgressBar)
+    expect(bars.map(bar => [bar.props('label'), bar.props('utilization'), bar.props('resetsAt')])).toEqual([
+      ['admin.accounts.cnProviders.windowMonthlyTotal', 90, '2026-12-01T00:00:00Z'],
+      ['admin.accounts.cnProviders.windowMonthlyCode', 10, '2026-12-02T00:00:00Z']
+    ])
+    queryQuota.mockResolvedValue({ success: false, error: 'Invalid quota response' })
+    await wrapper.get('[data-test="cn-provider-quota-probe"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Invalid quota response')
+    expect(wrapper.findAllComponents(UsageProgressBar).map(bar => bar.props('utilization'))).toEqual([90, 10])
+    queryQuota.mockResolvedValue({ success: true, tiers: [
+      { window: 'monthly', used_percent: 80, reset_at: '2026-12-03T00:00:00Z' },
+      { window: 'monthly_code', used_percent: 20, reset_at: '2026-12-04T00:00:00Z' }
+    ] })
+    await wrapper.get('[data-test="cn-provider-quota-probe"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.findAllComponents(UsageProgressBar).map(bar => [bar.props('label'), bar.props('utilization'), bar.props('resetsAt')])).toEqual([
+      ['admin.accounts.cnProviders.windowMonthlyTotal', 80, '2026-12-03T00:00:00Z'],
+      ['admin.accounts.cnProviders.windowMonthlyCode', 20, '2026-12-04T00:00:00Z']
+    ])
+  })
+
 })

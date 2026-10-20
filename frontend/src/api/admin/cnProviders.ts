@@ -7,7 +7,7 @@ import { apiClient } from '../client'
 
 /** 滚动用量窗口档（5 小时 / 每周），对齐后端 service.CNQuotaTier。 */
 export interface CNQuotaTier {
-  window: '5h' | 'weekly' | 'monthly'
+  window: '5h' | 'weekly' | 'monthly' | 'monthly_code'
   used_percent: number
   reset_at?: string
 }

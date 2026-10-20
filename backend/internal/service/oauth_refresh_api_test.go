@@ -144,6 +144,9 @@ func (e *refreshAPIExecutorStub) Refresh(_ context.Context, _ *Account) (map[str
 }
 
 func (e *refreshAPIExecutorStub) CacheKey(account *Account) string {
+	if account.Platform == PlatformOpenAI {
+		return OpenAITokenCacheKey(account)
+	}
 	return "test:api:" + account.Platform
 }
 

@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"errors"
-	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"net/http"
 	"net/url"
 	"strings"
@@ -11,6 +10,7 @@ import (
 
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	sharedhttp "github.com/LuckyKuang/sub2api-plus/internal/pkg/httpclient"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/xai"
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
 	"github.com/LuckyKuang/sub2api-plus/internal/util/logredact"
@@ -33,6 +33,7 @@ func NewGrokOAuthClient() service.GrokOAuthClient {
 }
 
 func (c *grokOAuthClient) ExchangeCode(ctx context.Context, code, codeVerifier, redirectURI, proxyURL, clientID string) (*xai.TokenResponse, error) {
+	ctx = grokOAuthIdentityContext(ctx)
 	client, err := createGrokReqClient(proxyURL)
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "GROK_OAUTH_CLIENT_INIT_FAILED", "create HTTP client: %v", err)
@@ -67,6 +68,7 @@ func (c *grokOAuthClient) ExchangeCode(ctx context.Context, code, codeVerifier, 
 }
 
 func (c *grokOAuthClient) RefreshToken(ctx context.Context, refreshToken, proxyURL, clientID string) (*xai.TokenResponse, error) {
+	ctx = grokOAuthIdentityContext(ctx)
 	client, err := createGrokReqClient(proxyURL)
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "GROK_OAUTH_CLIENT_INIT_FAILED", "create HTTP client: %v", err)
@@ -115,9 +117,22 @@ func (c *grokOAuthClient) ConvertSSOToBuild(ctx context.Context, ssoToken, proxy
 
 func createGrokReqClient(proxyURL string) (*req.Client, error) {
 	return getSharedReqClient(reqClientOptions{
-		ProxyURL: proxyURL,
-		Timeout:  60 * time.Second,
+		ProxyURL:            proxyURL,
+		Timeout:             60 * time.Second,
+		GrokControlIdentity: true,
 	})
+}
+
+// A control operation resolves once. Its per-attempt renderer may omit a
+// destination-specific declaration, but cannot reselect a source or fingerprint.
+func grokOAuthIdentityContext(ctx context.Context) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if identity, ok := outboundidentity.Default(ctx, "grok"); ok {
+		return outboundidentity.WithIdentity(ctx, identity)
+	}
+	return ctx
 }
 
 func createGrokSSOHTTPClient(proxyURL string) (*http.Client, error) {

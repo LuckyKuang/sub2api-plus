@@ -43,6 +43,7 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	defer finishRoute()
 	defer func() { firstByteResultErr = openAISessionRouteForwardError(ctx, firstByteResultErr) }()
 	ctx = WithOutboundIdentityScope(ctx, c)
+	captureNativeConversationScope(ctx, c, account, body)
 	ctx = WithAccountOutboundIdentity(ctx, account)
 	defer bindOpenAISessionRouteRequestContext(ctx, c)()
 	rememberOpenCodeInboundBody(c, body)
@@ -374,6 +375,8 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	if err != nil {
 		return nil, fmt.Errorf("get access token: %w", err)
 	}
+	ctx = withRequestCredentialOwner(ctx, account, token)
+	defer bindRequestCredentialOwnerContext(ctx, c)()
 
 	// 6. Build upstream request
 	if account.UsesOpenAICodexProtocol() && account.Platform != PlatformGrok {

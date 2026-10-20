@@ -5,8 +5,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/minimax"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 )
@@ -16,7 +14,7 @@ type miniMaxRequestState struct{ session, offset string }
 // MiniMax Code sets these for managed and BYOK model calls. The gateway owns
 // the turn/session; never trust caller-supplied agent/session attribution.
 func prepareMiniMaxRequestState(req *http.Request, account *Account) {
-	if account == nil || account.Platform != PlatformMiniMax || outboundidentity.RequestProtocol(req) != APIProtocolAnthropic {
+	if req == nil || account == nil || account.Platform != PlatformMiniMax || outboundidentity.RequestProtocol(req) != APIProtocolAnthropic {
 		return
 	}
 	identity, ok := outboundidentity.FromContext(req.Context())
@@ -24,11 +22,14 @@ func prepareMiniMaxRequestState(req *http.Request, account *Account) {
 		return
 	}
 	scope := outboundIdentityScopeFromContext(req.Context())
+	if scope == nil {
+		return
+	}
 	key := outboundIdentityOwnerKey(account)
 	value, ok := scope.minimaxTurns.Load(key)
 	if !ok {
 		offset := identity.TimezoneOffset(time.Now())
-		value, _ = scope.minimaxTurns.LoadOrStore(key, miniMaxRequestState{session: uuid.NewString(), offset: strconv.Itoa(offset)})
+		value, _ = scope.minimaxTurns.LoadOrStore(key, miniMaxRequestState{session: nativeConversationOwnerSession(req.Context(), account), offset: strconv.Itoa(offset)})
 	}
 	state, ok := value.(miniMaxRequestState)
 	if !ok {

@@ -21,8 +21,8 @@ import (
 //  1. 按模型分流的供应商（多模型聚合平台，如 OpenCode、Command Code）：显式
 //     api_protocol 直接生效；否则先得到该模型支持的协议集合（见 modelProtocolSet），
 //     入站协议在集合中时同协议直通，不在时走集合首项（首选协议）。
-//  2. adaptive（按入站协议分流）：供应商提供入站协议的原生端点则走同协议，
-//     否则回落 Chat Completions。
+//  2. adaptive（按入站协议分流）：ZCode linked start/off-peak 仅走 Anthropic；
+//     其余供应商提供入站协议的原生端点则走同协议，否则回落 Chat Completions。
 //  3. 显式 anthropic 协议 → Anthropic。
 //  4. shouldForwardOpenAIResponsesViaRawChatCompletions（显式 chat_completions、
 //     探针确认不支持 Responses 等）→ Chat Completions。
@@ -34,6 +34,14 @@ func resolveUpstreamProtocol(account *Account, inbound, model string, catalog []
 		return account.resolveModelRoutedProtocolFor(model, inbound, catalog)
 	}
 	if account.IsAdaptiveAPIProtocol() {
+		if account.Platform == PlatformZhipu && account.Type == AccountTypeOAuth {
+			switch account.GetCredential("plan_kind") {
+			case ZhipuPlanStartPlan, ZhipuPlanOffPeak:
+				// Linked JWT plans expose only their declared Anthropic gateway,
+				// not the estate-wide Chat endpoint in the provider catalog.
+				return APIProtocolAnthropic
+			}
+		}
 		if account.providerSupportsProtocol(inbound) {
 			return inbound
 		}

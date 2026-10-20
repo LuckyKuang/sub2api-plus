@@ -133,6 +133,11 @@ headers or fabricated values:
 - Client-facing Responses WebSocket ingress bridged to the xAI HTTP/SSE
   upstream
 
+When an API-key account is marked as not supporting Responses, the Messages
+adapter sends Chat Completions with that account's Grok API key and validated
+Grok base URL. An empty result from another provider's key getter must never
+quarantine a valid Grok grant.
+
 The optional SSO import converts an operator-supplied Grok Web SSO cookie into
 Build OAuth credentials through the trusted xAI device flow. The raw cookie is
 used only for that conversion and is not persisted in account credentials.

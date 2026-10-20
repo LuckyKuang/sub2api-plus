@@ -449,17 +449,22 @@ func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Acc
 		// 问题变成影子永久死亡。母账号被标记 temp-unschedulable 后由 parentHealthyForShadow 级联排除影子。
 		// 非影子时 resolveCredentialAccount 返回自身;母账号缺失/损坏(orphan 影子,罕见)时回退到原 account。
 		authAccount := account
-		if resolved, rerr := resolveCredentialAccount(ctx, s.accountRepo, account); rerr == nil && resolved != nil {
+		if frozen, ok := requestCredentialOwner(ctx, account); ok {
+			authAccount = frozen
+		} else if resolved, rerr := resolveCredentialAccount(ctx, s.accountRepo, account); rerr == nil && resolved != nil {
 			authAccount = resolved
 		}
 		// OpenAI: token_invalidated / token_revoked 表示 token 被永久作废（非过期），直接标记 error
 		openai401Code := extractUpstreamErrorCode(responseBody)
+		if openai401Code == "" {
+			openai401Code = strings.TrimSpace(gjson.GetBytes(responseBody, "response.error.code").String())
+		}
 		if authAccount.Platform == PlatformOpenAI && (openai401Code == "token_invalidated" || openai401Code == "token_revoked") {
 			msg := "Token revoked (401): account authentication permanently revoked"
 			if upstreamMsg != "" {
 				msg = "Token revoked (401): " + upstreamMsg
 			}
-			s.handleAuthError(ctx, authAccount, msg)
+			s.handleHTTP401CredentialError(ctx, account, authAccount, msg)
 			shouldDisable = true
 			break
 		}
@@ -469,14 +474,14 @@ func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Acc
 			if upstreamMsg != "" {
 				msg = "Unauthorized (401): " + upstreamMsg
 			}
-			s.handleAuthError(ctx, authAccount, msg)
+			s.handleHTTP401CredentialError(ctx, account, authAccount, msg)
 			shouldDisable = true
 			break
 		}
 		// OAuth 账号在 401 错误时临时不可调度（给 token 刷新窗口）；非 OAuth 账号保持原有 SetError 行为。
 		if authAccount.Type == AccountTypeOAuth {
 			// 1. 失效缓存
-			if s.tokenCacheInvalidator != nil {
+			if !usesHTTP401CredentialFence(authAccount) && s.tokenCacheInvalidator != nil {
 				if err := s.tokenCacheInvalidator.InvalidateToken(ctx, authAccount); err != nil {
 					slog.Warn("oauth_401_invalidate_cache_failed", "account_id", authAccount.ID, "error", err)
 				}
@@ -488,7 +493,7 @@ func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Acc
 				if upstreamMsg != "" {
 					msg = "OAuth 401 (no refresh_token): " + upstreamMsg
 				}
-				s.handleAuthError(ctx, authAccount, msg)
+				s.handleHTTP401CredentialError(ctx, account, authAccount, msg)
 				shouldDisable = true
 				break
 			}
@@ -524,6 +529,11 @@ func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Acc
 				cooldownMinutes = 10
 			}
 			until := time.Now().Add(time.Duration(cooldownMinutes) * time.Minute)
+			if usesHTTP401CredentialFence(authAccount) {
+				s.handleHTTP401CredentialCooldown(ctx, account, authAccount, until, msg)
+				shouldDisable = true
+				break
+			}
 			s.notifyAccountSchedulingBlocked(authAccount, until, "oauth_401")
 			if err := s.accountRepo.SetTempUnschedulable(ctx, authAccount.ID, until, msg); err != nil {
 				slog.Warn("oauth_401_set_temp_unschedulable_failed", "account_id", authAccount.ID, "error", err)
@@ -535,7 +545,7 @@ func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Acc
 			if upstreamMsg != "" {
 				msg = "Authentication failed (401): " + upstreamMsg
 			}
-			s.handleAuthError(ctx, authAccount, msg)
+			s.handleHTTP401CredentialError(ctx, account, authAccount, msg)
 			shouldDisable = true
 		}
 	case 402:

@@ -48,8 +48,12 @@ func TestOutboundIdentityBrandedCandidatesFallThroughBeforeTransport(t *testing.
 			headers := <-captured
 			require.Equal(t, selected.UserAgent, headers.Get("User-Agent"))
 			for name, value := range selected.Headers {
+				if name == "x-grok-client-mode" {
+					continue
+				}
 				require.Equal(t, value, headers.Get(name), name)
 			}
+			require.Empty(t, headers.Get("X-Grok-Client-Mode"), "a local compatible supplier does not acquire CLI mode")
 			require.Equal(t, "Bearer test-token", headers.Get("Authorization"))
 			// Persisted legacy/corrupt global candidates use the compiled fallback.
 			svc.outboundIdentityCache.Store(&cachedOutboundIdentitySettings{settings: invalidConfig})

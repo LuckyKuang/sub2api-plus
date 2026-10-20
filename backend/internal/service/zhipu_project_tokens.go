@@ -126,7 +126,7 @@ func (s *ZhipuOAuthService) projectToken(ctx context.Context, account *Account, 
 		return nil, err
 	}
 	if s == nil || s.client == nil {
-		return nil, errors.New("project_token_service_unavailable")
+		return nil, NewProviderCredentialFailure("project_token_service_unavailable", nil)
 	}
 	selectedCtx, generation := zhipuProjectTokenScope(ctx, account)
 	owner := outboundIdentityOwnerKey(account)
@@ -165,7 +165,7 @@ func (s *ZhipuOAuthService) projectToken(ctx context.Context, account *Account, 
 		defer cancel()
 		provider := zcode.NormalizeProvider(account.GetCredential("oauth_provider"))
 		if provider == "" {
-			return nil, errors.New("project_token_provider_invalid")
+			return nil, WithCredentialFailureAccount(NewAccountCredentialFailure("project_token_provider_invalid", nil), account)
 		}
 
 		providerLogin := strings.TrimSpace(account.GetCredential("oauth_access_token"))
@@ -188,7 +188,7 @@ func (s *ZhipuOAuthService) projectToken(ctx context.Context, account *Account, 
 				break
 			}
 			if token == "" {
-				return nil, errors.New("project_token_login_required")
+				return nil, WithCredentialFailureAccount(NewAccountCredentialFailure("project_token_login_required", nil), account)
 			}
 			if keyID != "" && org != "" && project != "" {
 				value, err = s.client.IssueProjectToken(callCtx, provider, token, org, project, keyID, account.proxyURLOrEmpty())
@@ -226,16 +226,16 @@ func (s *ZhipuOAuthService) projectToken(ctx context.Context, account *Account, 
 				}
 				entry.mu.Unlock()
 			}
-			return nil, errors.New("project_token_resolution_failed")
+			return nil, zhipuProjectTokenFailure(callCtx, account, err)
 		}
 		if value == nil || value.APIKey == "" || !value.ExpiresAt.After(time.Now()) {
-			return nil, errors.New("project_token_invalid_response")
+			return nil, NewProviderCredentialFailure("project_token_invalid_response", nil)
 		}
 		s.projectTokenMu.Lock()
 		current := s.projectTokens[owner] == entry && s.projectTokenGenerations[owner] == generation
 		s.projectTokenMu.Unlock()
 		if !current {
-			return nil, errors.New("project_token_scope_invalidated")
+			return nil, NewProviderCredentialFailure("project_token_scope_invalidated", nil)
 		}
 		copy := *value
 		entry.mu.Lock()
@@ -258,14 +258,28 @@ func (s *ZhipuOAuthService) projectToken(ctx context.Context, account *Account, 
 		current := s.projectTokens[owner] == entry
 		s.projectTokenMu.Unlock()
 		if !current {
-			return nil, errors.New("project_token_scope_invalidated")
+			return nil, NewProviderCredentialFailure("project_token_scope_invalidated", nil)
 		}
 		value, valid := result.Val.(*zcode.CodingPlanCredential)
 		if !valid || value == nil {
-			return nil, errors.New("project_token_invalid_response")
+			return nil, NewProviderCredentialFailure("project_token_invalid_response", nil)
 		}
 		return value, nil
 	}
+}
+
+func zhipuProjectTokenFailure(ctx context.Context, account *Account, err error) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	var status *zcode.BusinessHTTPError
+	if errors.As(err, &status) && (status.Status == http.StatusUnauthorized || status.Status == http.StatusForbidden) {
+		return WithCredentialFailureAccount(NewAccountCredentialFailure("project_token_login_rejected", err), account)
+	}
+	return NewProviderCredentialFailure("project_token_resolution_failed", err)
 }
 
 func zhipuProjectTokenTargetAllowed(req *http.Request, a *Account) bool {
@@ -316,11 +330,11 @@ func (s *CNOAuthService) prepareZhipuLinkedRequest(req *http.Request, a *Account
 		return nil
 	}
 	if !zhipuProjectTokenTargetAllowed(req, a) {
-		return errors.New("project_token_destination_rejected")
+		return NewProviderCredentialFailure("project_token_destination_rejected", nil)
 	}
 	*req = *req.WithContext(WithHTTPUpstreamRedirectsDisabled(req.Context()))
 	if s == nil || s.zhipu == nil {
-		return errors.New("project_token_service_unavailable")
+		return NewProviderCredentialFailure("project_token_service_unavailable", nil)
 	}
 	value, err := s.zhipu.projectToken(req.Context(), a, "")
 	if err != nil {
@@ -328,7 +342,7 @@ func (s *CNOAuthService) prepareZhipuLinkedRequest(req *http.Request, a *Account
 	}
 	org, project, err := zhipuProjectTokenTeamScope(a, value)
 	if err != nil {
-		return err
+		return NewProviderCredentialFailure("project_token_team_scope_missing", err)
 	}
 	// Scope is a declaration of this PAT's owner, not a generic header
 	// override (linked OAuth accounts deliberately cannot use those overrides).
@@ -347,7 +361,7 @@ func (s *CNOAuthService) prepareZhipuLinkedRequest(req *http.Request, a *Account
 			jwt = strings.TrimSpace(a.GetOpenAIProtocolAPIKey())
 		}
 		if jwt == "" {
-			return errors.New("off_peak_model_credential_missing")
+			return WithCredentialFailureAccount(NewAccountCredentialFailure("off_peak_model_credential_missing", nil), a)
 		}
 		req.Header.Set("Authorization", "Bearer "+jwt)
 		req.Header.Set("X-Coding-Plan-Api-Key", value.APIKey)

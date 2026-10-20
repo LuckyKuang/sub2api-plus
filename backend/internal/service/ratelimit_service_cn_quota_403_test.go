@@ -22,13 +22,15 @@ func newCNQuotaExhaustedTestAccount(resetIn time.Duration) *Account {
 		extra[cnExtraKey(PlatformKimi, cnExtraSuffix5hReset)] = time.Now().Add(resetIn).UTC().Format(time.RFC3339)
 		extra[cnExtraKey(PlatformKimi, cnExtraSuffixWeeklyReset)] = time.Now().Add(7 * 24 * time.Hour).UTC().Format(time.RFC3339)
 	}
-	return &Account{
+	account := &Account{
 		ID:          401,
 		Platform:    PlatformKimi,
 		Type:        AccountTypeAPIKey,
 		Credentials: map[string]any{"account_mode": AccountModeCoding},
 		Extra:       extra,
 	}
+	bindCNQuotaTestSnapshot(account)
+	return account
 }
 
 const kimiWeeklyQuotaExhaustedBody = `{"error":{"message":"You've reached your weekly (7-day) usage limit. Your quota will reset when the current 7-day window ends. To continue now, purchase extra usage or upgrade your plan: https://www.kimi.com/membership/subscription?tab=quota","type":"access_terminated_error"}}`

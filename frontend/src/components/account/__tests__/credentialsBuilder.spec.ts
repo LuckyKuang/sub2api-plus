@@ -14,6 +14,7 @@ import {
   buildPlanTypeOptions,
   cloneOpenCodeGoProtocolRules,
   cnQuotaCellVisible,
+  cnBalanceCellVisible,
   defaultCNBaseUrl,
   defaultOpenCodeProtocolRules,
   isCustomGrokBaseUrl,
@@ -598,5 +599,19 @@ describe('Codex subscription analytics labels', () => {
     ['unknown', 'Account'], ['promax', 'Pro 500']
   ])('groups %s without changing its status label', (sku, label) => {
     expect(openAIPlanTypeLabel(sku, 'analytics')).toBe(label)
+  })
+})
+
+describe('native OAuth quota capabilities', () => {
+  it('offers quota only for Kimi managed usage and ZCode personal/team plans', () => {
+    expect(cnQuotaCellVisible({ platform: 'kimi', type: 'oauth', credentials: { oauth_provider: 'kimi', account_mode: 'coding' } })).toBe(true)
+    for (const plan_kind of ['individual-coding-plan', 'team-coding-plan']) {
+      expect(cnQuotaCellVisible({ platform: 'zhipu', type: 'oauth', credentials: { oauth_provider: 'bigmodel', account_mode: 'coding', plan_kind } })).toBe(true)
+    }
+    for (const plan_kind of ['start-plan', 'off-peak']) {
+      expect(cnQuotaCellVisible({ platform: 'zhipu', type: 'oauth', credentials: { oauth_provider: 'zai', account_mode: 'coding', plan_kind } })).toBe(false)
+    }
+    expect(cnQuotaCellVisible({ platform: 'minimax', type: 'oauth', credentials: { oauth_provider: 'minimax', account_mode: 'coding' } })).toBe(false)
+    expect(cnBalanceCellVisible({ platform: 'deepseek', type: 'oauth', credentials: { oauth_provider: 'deepseek', account_mode: 'payg' } })).toBe(false)
   })
 })

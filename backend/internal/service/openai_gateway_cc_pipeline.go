@@ -183,11 +183,29 @@ func (s *OpenAIGatewayService) openAIChatCompletionsTargetURL(account *Account) 
 }
 
 // resolveCCFallbackTarget 解析两条 CC 回退路径共用的账号凭证与上游端点
-// （回退路径仅面向 APIKey 账号，凭证恒为 openai api_key）。
-func (s *OpenAIGatewayService) resolveCCFallbackTarget(account *Account) (apiKey string, targetURL string, err error) {
-	apiKey = strings.TrimSpace(account.GetOpenAIProtocolAPIKey())
-	if apiKey == "" {
-		return "", "", fmt.Errorf("account %d missing api_key", account.ID)
+// （APIKey 账号，以及保留各自官方凭据/地址语义的 Grok 和 ZCode linked 账号）。
+func (s *OpenAIGatewayService) resolveCCFallbackTarget(ctx context.Context, c *gin.Context, account *Account) (apiKey string, targetURL string, err error) {
+	if account.IsGrok() {
+		apiKey, _, err = s.GetRequestCredential(ctx, c, account)
+		if err != nil {
+			return "", "", err
+		}
+		targetURL, err = buildGrokChatCompletionsURL(account, s.cfg, s.settingService)
+		return apiKey, targetURL, err
+	}
+	if account.Platform == PlatformZhipu && account.Type == AccountTypeOAuth {
+		apiKey, _, err = s.GetRequestCredential(ctx, c, account)
+		if err != nil {
+			return "", "", err
+		}
+	} else {
+		apiKey = strings.TrimSpace(account.GetOpenAIProtocolAPIKey())
+		if apiKey == "" {
+			if account.Type == AccountTypeAPIKey {
+				return "", "", s.accountCredentialFailure(ctx, c, account, NewAccountCredentialFailure("account_credential_missing", nil))
+			}
+			return "", "", fmt.Errorf("account %d missing api_key", account.ID)
+		}
 	}
 	targetURL, err = s.openAIChatCompletionsTargetURL(account)
 	if err != nil {

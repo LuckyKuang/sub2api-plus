@@ -1,7 +1,6 @@
 package service
 
 import (
-	"errors"
 	"net/http"
 )
 
@@ -12,21 +11,29 @@ func (s *OpenAIGatewayService) SetPluginManager(manager *PluginManager) {
 // doOpenAIUpstream 只在 OpenAI OAuth 能力绑定已启用时把真实请求交给插件。
 // 插件返回标准 http.Response，响应解析、错误映射、SSE 和计费仍由现有核心链处理。
 func (s *OpenAIGatewayService) doOpenAIUpstream(request *http.Request, proxyURL string, account *Account) (*http.Response, error) {
+	attemptCtx := request.Context()
 	*request = *request.WithContext(WithAccountOutboundIdentity(request.Context(), account))
-	return s.cnOAuthService.roundTripZhipuLinked(request, account, func(req *http.Request) (*http.Response, error) {
-		return s.doOpenAIUpstreamPrepared(req, proxyURL, account)
+	response, responseErr := s.cnOAuthService.roundTripZhipuLinked(request, account, func(req *http.Request) (*http.Response, error) {
+		return s.cnOAuthService.roundTripNativeOAuth(req, account, func(native *http.Request) (*http.Response, error) {
+			resp, err := s.doOpenAIUpstreamPrepared(native, proxyURL, account)
+			if resp != nil {
+				resp.Request = native
+			}
+			if enabled, _ := native.Context().Value(nativeAnthropicPreflightKey{}).(bool); enabled && err == nil {
+				if err = s.prepareNativeAnthropicResponse(native.Context(), resp); err != nil && resp != nil && resp.Body != nil {
+					_ = resp.Body.Close()
+				}
+			}
+			return resp, err
+		})
 	})
+	if response != nil {
+		finalizeTransmittedRequestCredentialOwner(attemptCtx, response.Request)
+	}
+	return response, responseErr
 }
 
 func (s *OpenAIGatewayService) doOpenAIUpstreamPrepared(request *http.Request, proxyURL string, account *Account) (*http.Response, error) {
-	if account.IsDomesticOAuth() {
-		if s.cnOAuthService == nil {
-			return nil, errors.New("native OAuth service unavailable")
-		}
-		if err := s.cnOAuthService.prepareRequest(request, account); err != nil {
-			return nil, err
-		}
-	}
 	if err := applyZhipuOffPeakTicketHeader(request.Context(), account, request.Header); err != nil {
 		return nil, err
 	}
@@ -44,7 +51,9 @@ func (s *OpenAIGatewayService) doOpenAIUpstreamPrepared(request *http.Request, p
 func (s *AccountTestService) doOpenAIAccountTestUpstream(request *http.Request, proxyURL string, account *Account, useTLSFallback bool) (*http.Response, error) {
 	*request = *request.WithContext(WithAccountOutboundIdentity(request.Context(), account))
 	return s.cnOAuthService.roundTripZhipuLinked(request, account, func(req *http.Request) (*http.Response, error) {
-		return s.doOpenAIAccountTestUpstreamPrepared(req, proxyURL, account, useTLSFallback)
+		return s.cnOAuthService.roundTripNativeOAuth(req, account, func(native *http.Request) (*http.Response, error) {
+			return s.doOpenAIAccountTestUpstreamPrepared(native, proxyURL, account, useTLSFallback)
+		})
 	})
 }
 
@@ -54,14 +63,6 @@ func (s *AccountTestService) doOpenAIAccountTestUpstreamPrepared(
 	account *Account,
 	useTLSFallback bool,
 ) (*http.Response, error) {
-	if account.IsDomesticOAuth() {
-		if s.cnOAuthService == nil {
-			return nil, errors.New("native OAuth service unavailable")
-		}
-		if err := s.cnOAuthService.prepareRequest(request, account); err != nil {
-			return nil, err
-		}
-	}
 	if err := applyZhipuOffPeakTicketHeader(request.Context(), account, request.Header); err != nil {
 		return nil, err
 	}

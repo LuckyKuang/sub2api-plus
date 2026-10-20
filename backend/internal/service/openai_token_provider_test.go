@@ -666,7 +666,10 @@ func TestOpenAITokenProvider_Real_LockFailedWait(t *testing.T) {
 		cache.mu.Unlock()
 	}()
 
-	provider := NewOpenAITokenProvider(nil, cache, nil)
+	current := snapshotOAuthRefreshAccount(account)
+	current.Status = StatusActive
+	current.Credentials["access_token"] = "refreshed-by-other"
+	provider := NewOpenAITokenProvider(&refreshAPIAccountRepo{account: current}, cache, nil)
 	token, err := provider.GetAccessToken(context.Background(), account)
 	require.NoError(t, err)
 	// Should get either the fallback token or the refreshed one
@@ -835,7 +838,10 @@ func TestOpenAITokenProvider_Real_LockRace_PollingHitsCache(t *testing.T) {
 		cache.mu.Unlock()
 	}()
 
-	provider := NewOpenAITokenProvider(nil, cache, nil)
+	current := snapshotOAuthRefreshAccount(account)
+	current.Status = StatusActive
+	current.Credentials["access_token"] = "winner-token"
+	provider := NewOpenAITokenProvider(&refreshAPIAccountRepo{account: current}, cache, nil)
 	token, err := provider.GetAccessToken(context.Background(), account)
 	require.NoError(t, err)
 	require.Equal(t, "winner-token", token)
@@ -892,7 +898,10 @@ func TestOpenAITokenProvider_RuntimeMetrics_LockWaitHitAndSnapshot(t *testing.T)
 		cache.mu.Unlock()
 	}()
 
-	provider := NewOpenAITokenProvider(nil, cache, nil)
+	current := snapshotOAuthRefreshAccount(account)
+	current.Status = StatusActive
+	current.Credentials["access_token"] = "winner-token"
+	provider := NewOpenAITokenProvider(&refreshAPIAccountRepo{account: current}, cache, nil)
 	token, err := provider.GetAccessToken(context.Background(), account)
 	require.NoError(t, err)
 	require.Equal(t, "winner-token", token)
@@ -933,7 +942,7 @@ func TestOpenAITokenProvider_RuntimeMetrics_LockAcquireFailure(t *testing.T) {
 
 func TestOpenAITokenProvider_NoRefreshTokenExpired_DisablesAccount(t *testing.T) {
 	cache := newOpenAITokenCacheStub()
-	repo := &rateLimitAccountRepoStub{}
+	repo := &openAIMissingRefreshQuarantineRepo{rateLimitAccountRepoStub: &rateLimitAccountRepoStub{}}
 
 	expiresAt := time.Now().Add(-time.Minute).UTC().Format(time.RFC3339)
 	account := &Account{

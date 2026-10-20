@@ -1842,6 +1842,9 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesOAuth(
 	if err != nil {
 		return nil, err
 	}
+	ctx = withRequestCredentialOwner(ctx, account, token)
+	defer bindRequestCredentialOwnerContext(ctx, c)()
+	upstreamCtx = withRequestCredentialOwner(upstreamCtx, account, token)
 
 	var responsesBody []byte
 	var targetURL string

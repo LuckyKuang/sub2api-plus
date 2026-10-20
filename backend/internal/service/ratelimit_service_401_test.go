@@ -38,11 +38,20 @@ func (r *rateLimitAccountRepoStub) SetError(ctx context.Context, id int64, error
 	return nil
 }
 
+func (r *rateLimitAccountRepoStub) SetCredentialErrorIfUnchanged(ctx context.Context, id int64, _, _ string, _ map[string]any, _ *int64, message string) (bool, error) {
+	return true, r.SetError(ctx, id, message)
+}
+
 func (r *rateLimitAccountRepoStub) SetTempUnschedulable(ctx context.Context, id int64, until time.Time, reason string) error {
 	r.tempCalls++
 	r.lastTempID = id
 	r.lastTempReason = reason
 	return r.tempErr
+}
+
+func (r *rateLimitAccountRepoStub) SetCredentialTempUnschedulableIfUnchanged(ctx context.Context, id int64, _, _ string, _ map[string]any, _ *int64, until time.Time, reason string) (bool, error) {
+	err := r.SetTempUnschedulable(ctx, id, until, reason)
+	return err == nil, err
 }
 
 func (r *rateLimitAccountRepoStub) SetRateLimited(ctx context.Context, id int64, resetAt time.Time) error {
@@ -176,7 +185,8 @@ func TestRateLimitService_HandleUpstreamError_SparkShadow401RedirectsToParent(t 
 		ID:          parentID,
 		Platform:    PlatformOpenAI,
 		Type:        AccountTypeOAuth,
-		Credentials: map[string]any{"refresh_token": "rt-mother"},
+		Status:      StatusActive,
+		Credentials: map[string]any{"access_token": "mother-token", "refresh_token": "rt-mother"},
 	}
 	repo.accountsByID[parentID] = mother
 
@@ -190,7 +200,12 @@ func TestRateLimitService_HandleUpstreamError_SparkShadow401RedirectsToParent(t 
 		// 影子不持凭据:GetCredential("refresh_token") == ""
 	}
 
-	shouldDisable := service.HandleUpstreamError(context.Background(), shadow, 401, http.Header{}, []byte("unauthorized"))
+	ctx := WithOutboundIdentityScope(context.Background(), nil)
+	token, _, err := (&OpenAIGatewayService{accountRepo: repo}).GetAccessToken(ctx, shadow)
+	require.NoError(t, err)
+	ctx = withRequestCredentialOwner(ctx, shadow, token)
+	require.Equal(t, "mother-token", token)
+	shouldDisable := service.HandleUpstreamError(ctx, shadow, 401, http.Header{}, []byte("unauthorized"))
 
 	require.True(t, shouldDisable)
 	require.Equal(t, 0, repo.setErrorCalls, "spark shadow must not be permanently disabled on a parent-token 401")

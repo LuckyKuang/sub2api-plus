@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/apicompat"
 	"github.com/gin-gonic/gin"
@@ -61,7 +62,16 @@ func TestAnthropicChatStreamAuthoritativeUsage(t *testing.T) {
 						if adapter == "native" {
 							svc := &OpenAIGatewayService{cfg: rawChatCompletionsTestConfig(), httpUpstream: upstream}
 							result, err := svc.forwardChatCompletionsViaNativeAnthropic(context.Background(), c, nativeAnthropicTestAccount(), body, "")
-							require.NoError(t, err)
+							if terminal == "eof" {
+								require.Error(t, err)
+								require.NotNil(t, result)
+								require.True(t, result.UsageIncomplete)
+								require.Contains(t, rec.Body.String(), `"upstream_error"`)
+								require.NotContains(t, rec.Body.String(), `"finish_reason":"stop"`)
+							} else {
+								require.NoError(t, err)
+								require.False(t, result.UsageIncomplete)
+							}
 							require.Equal(t, tc.totalInput, result.Usage.InputTokens)
 							require.Equal(t, tc.output, result.Usage.OutputTokens)
 							require.Equal(t, tc.cached, result.Usage.CacheReadInputTokens)
@@ -83,6 +93,12 @@ func TestAnthropicChatStreamAuthoritativeUsage(t *testing.T) {
 								continue
 							}
 							payload := strings.TrimPrefix(line, "data: ")
+							if adapter == "native" && terminal == "eof" && strings.Contains(payload, `"error"`) {
+								if tc.want {
+									require.NotNil(t, last)
+									require.NotNil(t, last.Usage)
+								}
+							}
 							if payload == "[DONE]" {
 								done++
 								if tc.want {
@@ -109,7 +125,11 @@ func TestAnthropicChatStreamAuthoritativeUsage(t *testing.T) {
 								require.Equal(t, tc.created, chunk.Usage.PromptTokensDetails.CacheCreationTokens)
 							}
 						}
-						require.Equal(t, 1, done)
+						if adapter == "native" && terminal == "eof" {
+							require.Zero(t, done)
+						} else {
+							require.Equal(t, 1, done)
+						}
 						if tc.want {
 							require.Equal(t, 1, count)
 						} else {
@@ -119,5 +139,74 @@ func TestAnthropicChatStreamAuthoritativeUsage(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+func TestNativeAnthropicChatErrorDrainRetainsUsageWithoutSuccess(t *testing.T) {
+	// The provider can send authoritative usage while the gateway drains after
+	// an error. Preserve those amounts without synthesizing a finish chunk.
+	prefix := strings.Split(miniAnthropicSSEStream(), "event: message_delta")[0]
+	payload := prefix + nativeErrorSSE("authentication_error") + "event: message_delta\ndata: {\"type\":\"message_delta\",\"usage\":{\"input_tokens\":0,\"output_tokens\":19,\"cache_read_input_tokens\":4}}\n\n"
+	for _, ending := range []string{"eof", "stop", "idle", "read_error"} {
+		t.Run(ending, func(t *testing.T) {
+			var result *OpenAIForwardResult
+			var err error
+			var recorder *httptest.ResponseRecorder
+			switch ending {
+			case "idle":
+				outcome, rec := forwardNativePipeTest(t, "/v1/chat/completions", true, 1, payload)
+				result, err, recorder = outcome.result, outcome.err, rec
+			case "read_error":
+				recorder = httptest.NewRecorder()
+				c, _ := gin.CreateTestContext(recorder)
+				c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+				resp := nativeSSETestResponse("")
+				resp.Body = &streamReadCloser{payload: []byte(payload), err: io.ErrUnexpectedEOF}
+				result, err = (&OpenAIGatewayService{}).handleCCStreamingFromNativeAnthropic(context.Background(), nativeAnthropicTestAccount(), resp, c, "k3", "k3", "k3", nil, time.Now())
+			default:
+				body := payload
+				if ending == "stop" {
+					body += "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+				}
+				result, err, recorder = forwardNativeSSETest(t, "/v1/chat/completions", true, body)
+			}
+			require.Error(t, err)
+			var failover *UpstreamFailoverError
+			require.NotErrorAs(t, err, &failover)
+			require.NotNil(t, result)
+			require.True(t, result.UsageIncomplete)
+			require.Equal(t, 14, result.Usage.InputTokens)
+			require.Equal(t, 19, result.Usage.OutputTokens)
+			require.Equal(t, 4, result.Usage.CacheReadInputTokens)
+			require.NotContains(t, recorder.Body.String(), "[DONE]")
+			require.NotContains(t, recorder.Body.String(), `"finish_reason":"stop"`)
+			usageChunks, errorTerminals := 0, 0
+			for _, line := range strings.Split(recorder.Body.String(), "\n") {
+				if !strings.HasPrefix(line, "data: ") {
+					continue
+				}
+				require.Zero(t, errorTerminals, "no chunks follow the error terminal")
+				data := strings.TrimPrefix(line, "data: ")
+				if strings.Contains(data, `"error"`) {
+					errorTerminals++
+					require.Equal(t, 1, usageChunks, "observed usage precedes the error terminal")
+					continue
+				}
+				var chunk apicompat.ChatCompletionsChunk
+				require.NoError(t, json.Unmarshal([]byte(data), &chunk))
+				if chunk.Usage == nil {
+					continue
+				}
+				usageChunks++
+				require.Empty(t, chunk.Choices)
+				require.Equal(t, 14, chunk.Usage.PromptTokens)
+				require.Equal(t, 19, chunk.Usage.CompletionTokens)
+				require.Equal(t, 33, chunk.Usage.TotalTokens)
+				require.NotNil(t, chunk.Usage.PromptTokensDetails)
+				require.Equal(t, 4, chunk.Usage.PromptTokensDetails.CachedTokens)
+			}
+			require.Equal(t, 1, usageChunks)
+			require.Equal(t, 1, errorTerminals)
+		})
 	}
 }

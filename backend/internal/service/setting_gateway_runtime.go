@@ -355,9 +355,10 @@ func (s *SettingService) GetOpenAICodexOutboundProfile(ctx context.Context) (str
 		if legacyErr != nil && !errors.Is(legacyErr, ErrSettingNotFound) {
 			slog.Warn("failed to get codex legacy client profile compatibility setting", "error", legacyErr)
 		}
-		ua := strings.TrimSpace(value)
 		cached := &cachedOpenAICodexUserAgent{
-			value:                      ua,
+			// Keep the raw candidate so identity validation can reject control
+			// bytes before trimming, including on subsequent cached reads.
+			value:                      value,
 			legacyCompatibilityEnabled: strings.TrimSpace(legacyValue) == "true",
 			expiresAt:                  time.Now().Add(openAICodexUserAgentCacheTTL).UnixNano(),
 		}

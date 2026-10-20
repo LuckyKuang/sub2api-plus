@@ -644,6 +644,14 @@ function officialAccountAPISupported(account: CNUsageCellAccount, mode: string):
 export function cnQuotaCellVisible(account: CNUsageCellAccount): boolean {
   const { platform } = account
   const mode = cnUsageCellAccountMode(account)
+  if (account.type === 'oauth') {
+    if (platform === 'kimi') return account.credentials?.oauth_provider === 'kimi' && mode === 'coding'
+    if (platform === 'zhipu') {
+      return (account.credentials?.oauth_provider === 'bigmodel' || account.credentials?.oauth_provider === 'zai') &&
+        (account.credentials?.plan_kind === 'individual-coding-plan' || account.credentials?.plan_kind === 'team-coding-plan') && mode === 'coding'
+    }
+    return false
+  }
   if (platform === 'opencode_go') return mode !== 'zen'
   // Command Code、Cline：订阅窗口与积分由一次探测同时刷新。
   if (OFFICIAL_ACCOUNT_API_PLATFORMS.includes(platform)) return officialAccountAPISupported(account, mode)
@@ -651,6 +659,7 @@ export function cnQuotaCellVisible(account: CNUsageCellAccount): boolean {
 }
 
 export function cnBalanceCellVisible(account: CNUsageCellAccount): boolean {
+  if (account.type === 'oauth') return false
   const { platform } = account
   const mode = cnUsageCellAccountMode(account)
   if (OFFICIAL_ACCOUNT_API_PLATFORMS.includes(platform)) return officialAccountAPISupported(account, mode)

@@ -45,9 +45,9 @@ func TestNativeAnthropicTimingAcrossPlatformsAndAdapters(t *testing.T) {
 				case "messages":
 					result, err = svc.handleNativeAnthropicStreamingResponse(context.Background(), resp, c, account, "model", "model", "model", nil, start)
 				case "chat/completions":
-					result, err = svc.handleCCStreamingFromNativeAnthropic(resp, c, "model", "model", "model", nil, start)
+					result, err = svc.handleCCStreamingFromNativeAnthropic(context.Background(), account, resp, c, "model", "model", "model", nil, start)
 				case "responses":
-					result, err = svc.handleResponsesStreamingFromNativeAnthropic(resp, c, "model", "model", "model", nil, start, apicompat.ResponsesClientToolMapping{})
+					result, err = svc.handleResponsesStreamingFromNativeAnthropic(context.Background(), account, resp, c, "model", "model", "model", nil, start, apicompat.ResponsesClientToolMapping{})
 				}
 				require.NoError(t, err)
 				require.NotNil(t, result)
@@ -81,11 +81,18 @@ func TestNativeAnthropicAdaptersRequireActualUpstreamCompletion(t *testing.T) {
 				var result *OpenAIForwardResult
 				var err error
 				if endpoint == "responses" {
-					result, err = svc.handleResponsesStreamingFromNativeAnthropic(resp, c, "model", "model", "model", nil, time.Now(), apicompat.ResponsesClientToolMapping{})
+					result, err = svc.handleResponsesStreamingFromNativeAnthropic(context.Background(), nativeAnthropicTestAccount(), resp, c, "model", "model", "model", nil, time.Now(), apicompat.ResponsesClientToolMapping{})
 				} else {
-					result, err = svc.handleCCStreamingFromNativeAnthropic(resp, c, "model", "model", "model", nil, time.Now())
+					result, err = svc.handleCCStreamingFromNativeAnthropic(context.Background(), nativeAnthropicTestAccount(), resp, c, "model", "model", "model", nil, time.Now())
 				}
-				require.NoError(t, err)
+				if mode != "complete" {
+					require.ErrorContains(t, err, "upstream anthropic stream error")
+					require.NotContains(t, recorder.Body.String(), "response.completed")
+					require.NotContains(t, recorder.Body.String(), `"finish_reason":"stop"`)
+					require.Contains(t, recorder.Body.String(), "Upstream stream")
+				} else {
+					require.NoError(t, err)
+				}
 				require.NotNil(t, result)
 				require.Equal(t, mode == "complete", result.UsageComplete())
 				require.NotNil(t, result.FirstTokenMs)

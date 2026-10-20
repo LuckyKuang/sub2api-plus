@@ -311,6 +311,68 @@ follow the same no-retry rule for the current request.
 Transport failures, account-scoped 401/403/429, and OAuth 429 windows keep
 their existing retry and failover behavior.
 
+Account health scoring and permission to try another account are independent.
+A connection failure or gateway timeout explicitly permits a bounded attempt
+through another account/egress without blaming the selected credential for a
+shared transport failure. Before the first semantic output, an unusable grant
+(including an expired token without a refresh token or a missing API key) also
+enters the same request's account failover loop. Permanent quarantine compares
+the failed platform, account type, complete credential document and proxy in one
+atomic write; a concurrently reauthorized grant is preserved. Shared credential
+dependencies and configuration failures stop without scanning or disabling the
+account pool. Exhaustion returns a fixed credential-unavailable message without
+provider error details.
+
+Successful OpenAI OAuth rotations use the same exact-grant conditional write and
+atomic scheduler notification. A concurrent authorization wins over an older
+refresh response; the durable account is reread and its replacement token can
+recover the same request. Credential caches are invalidated at that boundary.
+Owner or proxy changes, ambiguous persistence, and unchanged-token conflicts stop
+without replaying a rejected token or penalizing the account.
+
+Permanent HTTP 401 quarantine for the seven official provider mappings also
+uses the exact credential snapshot that produced the bearer sent on that
+attempt, including a token refreshed after selection. Durable quarantine must commit
+before any process-local scheduling block; a late response from an older grant
+cannot disable a concurrent login or API-key replacement. Spark shadow requests
+retain the parent snapshot acquired before transport. HTTP refresh retries and
+WS attempts bind independent immutable evidence while their outbound identity
+stays frozen. A token reused across different credential snapshots marks future
+attempt evidence ambiguous and skips quarantine. Without
+evidence for the actual bearer, a late 401 can fail over but cannot permanently
+quarantine a newly reread parent grant.
+
+Recoverable OAuth 401 cooldowns use the same exact-grant conditional write.
+Token-cache invalidation and runtime blocking follow a successful cooldown
+write; stale, ambiguous or unavailable evidence cannot pause a newer login.
+Native OAuth transports publish their final transmitted grant once to their
+own outer attempt, so pre-expiry refresh and internal retries retain correct
+evidence for HTTP and streaming authentication responses.
+The native Messages, Chat and Responses readers apply existing account-side
+authentication and quota handling once for a recognized stream error, including
+after output. They continue collecting usage and preserve the no-replay boundary;
+unknown errors and shared overload do not acquire account penalties.
+Native non-streaming Messages also classify recognized JSON error envelopes
+received with HTTP 200 before recording success or writing client output; their
+semantic status follows the existing HTTP error and account-failover policy.
+
+WS pool compatibility also includes a private digest of the actual credential
+generation, Authorization, destination and proxy. Ordinary, preferred, pinned
+and prewarmed connections follow the same rule: changed credentials cannot reuse
+an older authenticated socket. A forced preferred connection from another
+generation is unavailable. Agent Identity retains its per-dial signing contract;
+the compatibility digest does not include signature bytes.
+
+For these mappings, passthrough HTTP 401 also permits account failover before
+client output, after the existing same-account OpenAI OAuth refresh attempt.
+Explicit custom-status exclusions retain their existing meaning. Other
+passthrough statuses continue to use their documented classifications.
+
+The replacement becomes the session owner only after accepted semantic output
+or a successful metered result. Later turns retain that owner. Capacity shedding,
+unsafe continuations that cannot be reconstructed, and failures after actual
+output retain their existing no-replay boundaries on HTTP and WebSocket paths.
+
 ## Responses Stream Sequence Numbers
 
 Gateway-synthesized and re-emitted Responses SSE frames always write

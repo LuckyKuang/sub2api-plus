@@ -254,7 +254,11 @@ func invalidateProxyProbeSnapshots(ctx context.Context, exec sqlExecutor, proxyI
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	return accountIDs, nil
+	cnAccountIDs, err := invalidateProxyCNQuotaSnapshots(ctx, exec, proxyID)
+	if err != nil {
+		return nil, err
+	}
+	return append(accountIDs, cnAccountIDs...), nil
 }
 
 func enqueueProxyProbeAccountChanges(ctx context.Context, exec sqlExecutor, accountIDs []int64) error {
