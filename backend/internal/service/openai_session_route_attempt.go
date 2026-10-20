@@ -648,11 +648,36 @@ func (s *OpenAIGatewayService) selectAccountWithCanonicalRoute(ctx context.Conte
 	}
 	if selection == nil {
 		// Candidate selection cannot consult stale response/session bindings or
-		// eagerly write a new owner. All auth, model and transport filters remain.
-		selection, decision, err = selectCandidate(ctx, "", excluded)
-		if err != nil || selection == nil || selection.Account == nil {
-			return selection, decision, err
+		// eagerly write a new owner. Request-local profile denials must be
+		// filtered before CreateIfAbsent makes a candidate authoritative.
+		var clientPolicyErr error
+		for {
+			selection, decision, err = selectCandidate(ctx, "", excluded)
+			if err != nil || selection == nil || selection.Account == nil {
+				if clientPolicyErr != nil && (err == nil || errors.Is(err, ErrNoAvailableAccounts)) {
+					return nil, decision, clientPolicyErr
+				}
+				return selection, decision, err
+			}
+			if err := s.checkOpenAIClientRestriction(ctx, selection.Account); err != nil {
+				if selection.ReleaseFunc != nil {
+					selection.ReleaseFunc()
+				}
+				if _, alreadyExcluded := excluded[selection.Account.ID]; alreadyExcluded {
+					return nil, decision, err
+				}
+				excluded[selection.Account.ID] = struct{}{}
+				clientPolicyErr = err
+				continue
+			}
+			break
 		}
+	} else if err := s.checkOpenAIClientRestriction(ctx, selection.Account); err != nil {
+		// An established owner cannot be bypassed by a request-local denial.
+		if selection.ReleaseFunc != nil {
+			selection.ReleaseFunc()
+		}
+		return nil, decision, err
 	}
 	if !exists {
 		route, err = store.CreateIfAbsent(ctx, OpenAISessionRoute{AuthzDomain: domain, SessionDigest: digest, OwnerAccountID: selection.Account.ID})
@@ -680,6 +705,12 @@ func (s *OpenAIGatewayService) selectAccountWithCanonicalRoute(ctx context.Conte
 			}
 			if selection == nil {
 				return nil, decision, ErrOpenAISessionRouteLeaseLost
+			}
+			if err := s.checkOpenAIClientRestriction(ctx, selection.Account); err != nil {
+				if selection.ReleaseFunc != nil {
+					selection.ReleaseFunc()
+				}
+				return nil, decision, err
 			}
 		}
 	}

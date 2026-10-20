@@ -2902,6 +2902,23 @@ func TestOpenAIResponsesWebSocket_FailoverOnUpstreamUsageLimitEvent(t *testing.T
 }
 
 func TestOpenAIResponsesWebSocket_SkipsClientProfileIneligibleAccountAndUsesEligibleCandidate(t *testing.T) {
+	t.Run("cache-only", func(t *testing.T) {
+		testOpenAIWebSocketClientProfileFallback(t, nil)
+	})
+	t.Run("durable", func(t *testing.T) {
+		store := &handlerClientPolicyRouteStore{}
+		testOpenAIWebSocketClientProfileFallback(t, store)
+		store.mu.Lock()
+		defer store.mu.Unlock()
+		require.Equal(t, []int64{9905}, store.createdOwners, "rejected candidates must never become durable owners")
+		require.EqualValues(t, 9905, store.route.OwnerAccountID)
+		require.EqualValues(t, 1, store.route.Generation)
+		require.Zero(t, store.migrations)
+	})
+}
+
+func testOpenAIWebSocketClientProfileFallback(t *testing.T, sessionRouteStore service.OpenAISessionRouteStore) {
+	t.Helper()
 	gin.SetMode(gin.TestMode)
 
 	upstreamHitCh := make(chan []byte, 1)
@@ -2985,6 +3002,7 @@ func TestOpenAIResponsesWebSocket_SkipsClientProfileIneligibleAccountAndUsesElig
 	accountRepo := &openAIWSFailoverHandlerAccountRepoStub{accounts: accounts}
 	rateLimitSvc := service.NewRateLimitService(accountRepo, nil, cfg, nil, nil)
 	billingCacheSvc := service.NewBillingCacheService(nil, nil, nil, nil, nil, nil, cfg, nil)
+	t.Cleanup(billingCacheSvc.Stop)
 	gatewaySvc := service.NewOpenAIGatewayService(
 		accountRepo,
 		nil,
@@ -3008,7 +3026,7 @@ func TestOpenAIResponsesWebSocket_SkipsClientProfileIneligibleAccountAndUsesElig
 		nil,
 		nil,
 		nil,
-		nil, // sessionRouteStore
+		sessionRouteStore,
 	)
 
 	cache := &concurrencyCacheMock{

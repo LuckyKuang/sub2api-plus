@@ -140,6 +140,13 @@ inside the authenticated API key and routing group. A healthy owner takes
 precedence over weighted scoring, price, latency and concurrency escape settings.
 Local concurrency pressure waits on that account's existing bounded wait plan;
 queue exhaustion or a temporary profit veto does not move the conversation.
+Before creating a durable route, HTTP and WebSocket selection skip candidates
+whose inbound client-profile policy denies the request. Rejected candidates
+release their slots without becoming owners or receiving a credential-health
+penalty. If all candidates deny the request, HTTP returns a policy 403 and WS
+closes with a policy violation without creating a route. A denied existing
+owner, including a concurrent first-route winner, remains authoritative: the
+request is rejected rather than using that denial to authorize migration.
 The canonical-owner path still enforces public-model channel restrictions and
 the OAuth shared-response user/group/policy authorization boundary. A denied
 continuation cannot use affinity as permission to send to another account.

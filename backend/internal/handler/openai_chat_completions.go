@@ -171,6 +171,9 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 
 	// 分组利润控制：chat completions 文本入口请求级装门并固定 pricingAt。
 	ccPricingCtx, pricingAt := h.gatewayService.WithOpenAIRequestPricingContext(c.Request.Context(), apiKey.GroupID)
+	if requestPlatform == service.PlatformOpenAI {
+		ccPricingCtx = service.WithOpenAIClientRestriction(ccPricingCtx, c, body)
+	}
 	c.Request = c.Request.WithContext(ccPricingCtx)
 
 	for {
@@ -194,6 +197,12 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 		)
 		if err != nil {
 			if h.handleOpenAISessionRouteError(c, err, streamStarted) {
+				return
+			}
+			var clientPolicyErr *service.CodexClientRestrictionError
+			if errors.As(err, &clientPolicyErr) {
+				service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalPolicyDenied)
+				h.handleStreamingAwareError(c, http.StatusForbidden, "forbidden_error", clientPolicyErr.Error(), streamStarted)
 				return
 			}
 			if errors.Is(err, service.ErrOpenAIOAuthSessionAccessDenied) {

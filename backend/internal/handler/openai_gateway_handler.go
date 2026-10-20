@@ -776,6 +776,9 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	// 生图意图只影响能力路由与图片计费，不关门：混合 /v1/responses 请求的
 	// token 计费部分仍受利润门保护，独立图片/视频端点才在门外。
 	pricingCtx, pricingAt := h.gatewayService.WithOpenAIRequestPricingContext(c.Request.Context(), apiKey.GroupID)
+	if requestPlatform == service.PlatformOpenAI {
+		pricingCtx = service.WithOpenAIClientRestriction(pricingCtx, c, body)
+	}
 	c.Request = c.Request.WithContext(pricingCtx)
 
 	for {
@@ -803,6 +806,12 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		)
 		if err != nil {
 			if h.handleOpenAISessionRouteError(c, err, streamStarted) {
+				return
+			}
+			var clientPolicyErr *service.CodexClientRestrictionError
+			if errors.As(err, &clientPolicyErr) {
+				service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalPolicyDenied)
+				h.handleStreamingAwareError(c, http.StatusForbidden, "forbidden_error", clientPolicyErr.Error(), streamStarted)
 				return
 			}
 			if errors.Is(err, service.ErrOpenAIOAuthSessionAccessDenied) {
@@ -1427,6 +1436,9 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 
 	// 分组利润控制：Messages 文本入口同样请求级装门并固定 pricingAt。
 	msgPricingCtx, pricingAt := h.gatewayService.WithOpenAIRequestPricingContext(c.Request.Context(), apiKey.GroupID)
+	if requestPlatform == service.PlatformOpenAI {
+		msgPricingCtx = service.WithOpenAIClientRestriction(msgPricingCtx, c, body)
+	}
 	c.Request = c.Request.WithContext(msgPricingCtx)
 
 	for {
@@ -1454,6 +1466,12 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 		)
 		if err != nil {
 			if h.handleOpenAISessionRouteError(c, err, streamStarted) {
+				return
+			}
+			var clientPolicyErr *service.CodexClientRestrictionError
+			if errors.As(err, &clientPolicyErr) {
+				service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalPolicyDenied)
+				h.anthropicStreamingAwareError(c, http.StatusForbidden, "permission_error", clientPolicyErr.Error(), streamStarted)
 				return
 			}
 			if errors.Is(err, service.ErrOpenAIOAuthSessionAccessDenied) {
@@ -2628,6 +2646,9 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 	// 建连时刻只用于选号/准入，不作为任何 turn 的计费定价时刻。
 	wsPricingCtx, _ := h.gatewayService.WithOpenAIRequestPricingContext(ctx, apiKey.GroupID)
 	ctx = wsPricingCtx
+	if requestPlatform == service.PlatformOpenAI {
+		ctx = service.WithOpenAIClientRestriction(ctx, c, firstMessage)
+	}
 
 	for {
 		if ctx.Err() != nil {
@@ -2651,6 +2672,12 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		if err != nil {
 			if service.IsOpenAISessionRouteError(err) {
 				closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, "session routing is temporarily unavailable; please reconnect")
+				return
+			}
+			var clientPolicyErr *service.CodexClientRestrictionError
+			if errors.As(err, &clientPolicyErr) {
+				service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalPolicyDenied)
+				closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, clientPolicyErr.Error())
 				return
 			}
 			if errors.Is(err, service.ErrOpenAIOAuthSessionAccessDenied) {
