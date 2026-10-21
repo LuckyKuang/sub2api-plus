@@ -100,7 +100,7 @@ func cnQuotaBoundExtraUpdates(account *Account, updates map[string]any) {
 	// A valid response replaces this owner's complete recognized snapshot.
 	// An omitted window cannot inherit another grant's percent or reset time.
 	for _, window := range []string{"5h", "weekly", "monthly", "monthly_code"} {
-		for _, suffix := range []string{"_used_percent", "_reset_at"} {
+		for _, suffix := range []string{"_used_percent", "_reset_at", "_unlimited"} {
 			key := cnExtraKey(provider, window+suffix)
 			if _, exists := updates[key]; !exists {
 				updates[key] = nil

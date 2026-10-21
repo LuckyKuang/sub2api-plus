@@ -387,6 +387,9 @@ func cnQuotaHasMonthlyWindow(provider string) bool {
 }
 
 func cnThresholdCandidate(extra map[string]any, provider, window string) *accountSchedulingThresholdCandidate {
+	if unlimited, _ := extra[cnExtraKey(provider, window+"_unlimited")].(bool); unlimited {
+		return nil
+	}
 	var usedKey, resetKey string
 	switch window {
 	case "5h":

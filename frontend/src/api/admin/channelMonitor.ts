@@ -32,6 +32,7 @@ export interface MonitorQuotaTier {
   window: string
   /** 同窗口多档时的机器标识（gemini shared/pro/flash、grok requests/tokens、antigravity 模型名） */
   label?: string
+  unlimited?: boolean
   used_percent: number
   used?: number
   limit?: number

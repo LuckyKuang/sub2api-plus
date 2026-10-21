@@ -123,6 +123,7 @@ export default {
         typesafe: 'TypeSafe / Jev',
       },
       cnProviders: {
+        unlimited: 'Unlimited',
         accountMode: {
           title: 'Account Type',
           payg: 'Pay-as-you-go',

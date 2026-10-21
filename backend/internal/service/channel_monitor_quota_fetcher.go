@@ -403,6 +403,7 @@ func (f *ChannelMonitorQuotaFetcher) fetchCNQuota(ctx context.Context, account *
 		for _, t := range result.Tiers {
 			snapshot.Tiers = append(snapshot.Tiers, domain.MonitorQuotaTier{
 				Window:      t.Window,
+				Unlimited:   t.Unlimited,
 				UsedPercent: t.UsedPercent,
 				ResetAt:     t.ResetAt,
 			})
@@ -549,7 +550,7 @@ func deriveQuotaCheckResult(snapshot *domain.MonitorQuotaSnapshot, model string,
 // 空串表示无告警。
 func quotaDegradedHint(snapshot *domain.MonitorQuotaSnapshot) string {
 	for _, tier := range snapshot.Tiers {
-		if tier.UsedPercent >= monitorQuotaDegradedUsedPercent {
+		if !tier.Unlimited && tier.UsedPercent >= monitorQuotaDegradedUsedPercent {
 			name := tier.Window
 			if tier.Label != "" {
 				name = tier.Label + "/" + tier.Window

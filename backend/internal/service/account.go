@@ -207,6 +207,9 @@ func (a *Account) IsSchedulable() bool {
 	if a.TempUnschedulableUntil != nil && now.Before(*a.TempUnschedulableUntil) {
 		return false
 	}
+	if a.miniMaxOAuthPlanExhausted(now) {
+		return false
+	}
 	if a.IsAPIKeyOrBedrock() && a.IsQuotaExceeded() {
 		return false
 	}
@@ -1641,8 +1644,8 @@ func (a *Account) GetCodingPlanProvider() string {
 		return ""
 	}
 	if a.IsDomesticOAuth() {
-		if a.Platform == PlatformKimi {
-			return PlatformKimi
+		if a.Platform == PlatformKimi || a.Platform == PlatformMiniMax {
+			return a.Platform
 		}
 		return ""
 	}

@@ -128,6 +128,15 @@ V1/V2 的用户只读接口保留原有权限。V2 的 `GET /api/v1/channel-moni
 
 遵循 [CONTRIBUTING.md](../CONTRIBUTING.md) 的容器要求，相关测试覆盖分类、配置、状态转换、工作进程、登录与模式门禁及页面。Handler 回归验证普通用户、无分组权限用户、管理员和协助视图共享同一全站状态与事件。`channel_monitor_v3_integration_test.go` 使用独立 PostgreSQL／Redis，并通过真实迁移和 SQL 验证跨用户及独占分组的全站聚合、停用／删除分组的统一排除、免费成功、终态覆盖重试、取消和策略排除、复合分组、延迟终态修正、事件持久化、历史对齐、配置冲突和超过 200 个未结束事件的计数。
 
+## V1 配额快照
+
+`quota` / `quota_probe` 的账号配额快照支持可选的
+`tiers[].unlimited: true`，表示该窗口不限量。管理端与用户端显示“不限量”，
+忽略该档的 `used_percent`，不绘制 0% 用量条，也不据此触发高用量告警。
+缺少该字段的既有有限窗口保持原有语义。MiniMax 原生 OAuth 的 5 小时／周窗口
+通过官方个人工作区查询，并遵守凭据／代理代际隔离；详情见
+[MiniMax 额度协议](providers/MINIMAX.md)。
+
 ## V3 联合主动探测
 
 `channel_monitor_v1_enabled` 是 DB 设置，默认 `false`。总开关开启时，V1 展示模式始终允许探测；V2 不允许探测；V3 仅在额外 V1 开关也开启时允许自动及手动探测。读取设置失败时探测停止。V3 下用户只看到 V3；V1 用户 API 返回空列表／404，只有单独选择 V1 模式时开放。管理员可维护 V1 配置。

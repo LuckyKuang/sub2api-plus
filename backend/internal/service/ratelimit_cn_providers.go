@@ -121,6 +121,66 @@ func cnProviderResponseIndicatesInsufficientBalance(body []byte) bool {
 		strings.Contains(s, "no enough balance")
 }
 
+// MiniMax Code's llm-error-classifier.ts distinguishes Token Plan exhaustion
+// (2056/2067) from Credits exhaustion (1400010161), including HTTP 500 wrappers.
+// Inspect only provider-defined status fields, never incidental message digits.
+func (s *RateLimitService) handleMiniMaxUsageError(ctx context.Context, account *Account, status int, body []byte, message string) bool {
+	if account == nil || account.Platform != PlatformMiniMax || status < 400 || status == http.StatusUnauthorized {
+		return false
+	}
+	var code int64
+	for _, path := range []string{"status_code", "base_resp.status_code", "error.status_code"} {
+		value := gjson.GetBytes(body, path)
+		if value.Type == gjson.Number {
+			switch value.Float() {
+			case 2056, 2067, 1400010161:
+				code = value.Int()
+			}
+		}
+		if code != 0 {
+			break
+		}
+	}
+	if code == 0 {
+		return false
+	}
+	// Native OAuth may have refreshed after the outer handler selected an
+	// account. Cool down only the grant that actually produced this response.
+	owner := account
+	if requestCredentialOwnerBound(ctx, account) {
+		frozen, ok := requestCredentialOwner(ctx, account)
+		if !ok || frozen.ID != account.ID || frozen.Platform != PlatformMiniMax {
+			slog.Warn("minimax_usage_owner_unavailable", "account_id", account.ID, "code", code)
+			return true
+		}
+		owner = frozen
+	}
+	now := time.Now()
+	until := now.Add(time.Duration(openAI403CooldownMinutesDefault) * time.Minute)
+	reason := cnQuotaExhaustedReasonPrefix
+	if code == 1400010161 {
+		until, reason = now.Add(s.cnBalanceCooldownDuration()), cnBalanceLowReasonPrefix
+	} else if reset := cnProviderQuotaSnapshotReset(owner, now); reset != nil {
+		until = *reset
+	}
+	notifyReason := reason
+	if message != "" {
+		reason += ": " + message
+	}
+	repo, ok := s.accountRepo.(credentialCooldownRepository)
+	if !ok {
+		slog.Warn("minimax_usage_cooldown_unavailable", "account_id", owner.ID, "code", code)
+		return true
+	}
+	applied, err := repo.SetCredentialTempUnschedulableIfUnchanged(ctx, owner.ID, owner.Platform, owner.Type, owner.Credentials, owner.ProxyID, until, reason)
+	if err != nil {
+		slog.Warn("minimax_usage_cooldown_failed", "account_id", owner.ID, "code", code, "error", err)
+	} else if applied {
+		s.notifyAccountSchedulingBlocked(owner, until, notifyReason)
+	}
+	return true
+}
+
 // handleCNProviderInsufficientBalance 把余额不足标记为可恢复的临时停调：
 // 写入 balance_low 快照 + SetTempUnschedulable 一个余额检测周期，
 // 由周期任务在余额恢复后清除。返回前已通知调度阻塞。
@@ -208,6 +268,10 @@ func cnProviderQuotaSnapshotReset(account *Account, now time.Time) *time.Time {
 	}
 	var earliest *time.Time
 	for _, suffix := range suffixes {
+		window := strings.TrimSuffix(suffix, "_reset_at")
+		if unlimited, _ := account.Extra[cnExtraKey(provider, window+"_unlimited")].(bool); unlimited {
+			continue
+		}
 		t := parseSchedulingResetAt(account.Extra[cnExtraKey(provider, suffix)])
 		if t == nil || !t.After(now) {
 			continue

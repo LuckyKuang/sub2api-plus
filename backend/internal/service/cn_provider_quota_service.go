@@ -23,7 +23,7 @@ import (
 )
 
 // CN provider quota probes persist recognized read-only usage windows for
-// scheduling. Native Kimi uses its managed OAuth grant; linked ZCode uses the
+// scheduling. Native Kimi/MiniMax use their managed OAuth grants; linked ZCode uses the
 // same in-memory project PAT manager as inference, never a persisted API key.
 const (
 	cnQuotaUpstreamTimeout = 15 * time.Second
@@ -46,9 +46,10 @@ func cnExtraKey(provider, suffix string) string { return provider + "_" + suffix
 
 // CNQuotaTier 表示一个滚动用量窗口档位（5h / weekly）。
 type CNQuotaTier struct {
-	Window      string  `json:"window"`             // "5h" | "weekly" | "monthly" | "monthly_code"
-	UsedPercent float64 `json:"used_percent"`       // 已用百分比（0-100+，不做裁剪）
-	ResetAt     string  `json:"reset_at,omitempty"` // RFC3339，空表示无重置时间
+	Window      string  `json:"window"`              // "5h" | "weekly" | "monthly" | "monthly_code"
+	UsedPercent float64 `json:"used_percent"`        // 已用百分比（0-100+，不做裁剪）
+	Unlimited   bool    `json:"unlimited,omitempty"` // Unlimited windows have no utilization percentage.
+	ResetAt     string  `json:"reset_at,omitempty"`  // RFC3339，空表示无重置时间
 }
 
 // CNProviderQuotaProbeResult 是 Coding Plan 额度探测的返回结构（管理端 + UI 消费）。
@@ -159,12 +160,13 @@ func (s *CNProviderQuotaService) queryUsageForAccount(ctx context.Context, accou
 	}
 
 	nativeKimi := account.IsDomesticOAuth() && provider == PlatformKimi
+	nativeMiniMax := account.IsDomesticOAuth() && provider == PlatformMiniMax
 	linkedZhipu := provider == PlatformZhipu && usesZhipuProjectToken(account)
 	apiKey := strings.TrimSpace(account.GetCNAPIKey())
-	if !nativeKimi && !linkedZhipu && apiKey == "" {
+	if !nativeKimi && !nativeMiniMax && !linkedZhipu && apiKey == "" {
 		return nil, infraerrors.New(http.StatusBadRequest, "CN_QUOTA_NO_APIKEY", "account api_key is empty")
 	}
-	if (nativeKimi || linkedZhipu) && s.cnOAuthService == nil {
+	if (nativeKimi || nativeMiniMax || linkedZhipu) && s.cnOAuthService == nil {
 		return nil, NewProviderCredentialFailure("native_oauth_service_unavailable", nil)
 	}
 	baseURL := account.GetOpenAIBaseURL()
@@ -205,6 +207,13 @@ func (s *CNProviderQuotaService) queryUsageForAccount(ctx context.Context, accou
 		}
 	case PlatformMiniMax:
 		targetURL = minimaxQuotaURL(baseURL)
+		if nativeMiniMax {
+			_, origin, originErr := miniMaxOAuthQuotaOrigins(account)
+			if originErr != nil {
+				return nil, originErr
+			}
+			targetURL = origin + miniMaxOAuthQuotaPath
+		}
 		authHeader = "Bearer " + apiKey
 	}
 
@@ -247,6 +256,8 @@ func (s *CNProviderQuotaService) queryUsageForAccount(ctx context.Context, accou
 	switch {
 	case nativeKimi:
 		resp, err = s.cnOAuthService.roundTripNativeOAuthWithPrepare(req, account, s.cnOAuthService.prepareKimiQuotaRequest, send)
+	case nativeMiniMax:
+		resp, queryOwner, err = s.roundTripMiniMaxOAuthQuota(callCtx, account)
 	case linkedZhipu:
 		resp, err = s.roundTripZhipuQuota(req, account, send)
 	default:
@@ -255,6 +266,9 @@ func (s *CNProviderQuotaService) queryUsageForAccount(ctx context.Context, accou
 	}
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "CN_QUOTA_REQUEST_FAILED", "upstream request failed: %v", err)
+	}
+	if resp == nil || resp.Body == nil {
+		return nil, infraerrors.New(http.StatusBadGateway, "CN_QUOTA_RESPONSE_MISSING", "quota response is missing")
 	}
 	defer func() { _ = resp.Body.Close() }()
 	bodyBytes, readErr := io.ReadAll(io.LimitReader(resp.Body, cnQuotaMaxBodyBytes+1))
@@ -312,7 +326,11 @@ func (s *CNProviderQuotaService) queryUsageForAccount(ctx context.Context, accou
 			result.Error = fmt.Sprintf("API error (%d): %s", status.Int(), msg)
 			return result, nil
 		}
-		tiers = parseMiniMaxUsageTiers(bodyBytes)
+		if nativeMiniMax {
+			tiers = parseMiniMaxOAuthUsageTiers(bodyBytes)
+		} else {
+			tiers = parseMiniMaxUsageTiers(bodyBytes)
+		}
 		result.PlanLevel = strings.TrimSpace(gjson.GetBytes(bodyBytes, "current_subscribe_title").String())
 	}
 	if len(tiers) == 0 {
@@ -760,6 +778,10 @@ func cnQuotaExtraUpdates(provider string, tiers []CNQuotaTier, now time.Time) ma
 		cnExtraKey(provider, cnExtraSuffixUsageUpdated): now.Format(time.RFC3339),
 	}
 	for _, t := range tiers {
+		if t.Unlimited {
+			updates[cnExtraKey(provider, t.Window+"_unlimited")] = true
+			continue
+		}
 		switch t.Window {
 		case "5h":
 			updates[cnExtraKey(provider, cnExtraSuffix5hUsed)] = t.UsedPercent

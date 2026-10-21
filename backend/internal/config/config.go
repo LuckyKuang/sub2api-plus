@@ -2099,6 +2099,9 @@ func setDefaults() {
 		"api.deepseek.com",
 		"agent.minimax.cn",
 		"agent.minimax.io",
+		"agent.minimaxi.com",  // MiniMax OAuth CN account service
+		"www.minimaxi.com",    // MiniMax OAuth CN quota
+		"platform.minimax.io", // MiniMax OAuth global quota
 		"api.moonshot.ai",
 		"api.moonshot.cn",
 		"open.bigmodel.cn",

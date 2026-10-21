@@ -2,7 +2,9 @@
 
 Both **OAuth and API Key** accounts for each platform use its official agent
 below. This is the source index for future version and outbound-protocol reviews;
-it contains no developer checkout paths. Reviewed on 2026-10-20.
+it contains no developer checkout paths. Reviewed on 2026-10-20. MiniMax account,
+quota and error-classifier entrypoints were additionally reviewed on 2026-10-21
+at the same pinned commit.
 
 | Platform | Official source | Reviewed commit | Selected agent version |
 | --- | --- | --- | --- |
@@ -25,7 +27,7 @@ explicitly follows a prerelease. Neither is represented as a stable Release.
 | grok-build | `crates/codegen/xai-grok-sampler`, `xai-grok-voice`, `xai-grok-imagine`, OAuth and billing clients | `pkg/xai`, `service/grok_*`, `account_test_service_grok_test.go` |
 | deepseek-harness | `packages/llm/llm/src/attribution.ts`, `llm-deepseek/src/adapter.ts`, `llm-deepseek-account/src/{listing,resolve-catalog}.ts`, account-platform and anonymous-user-id packages | `pkg/deepseek`, `pkg/cnoauth/client.go`, `service/{deepseek_request_state,domestic_agent_models,cn_oauth_service}.go` |
 | kimi-code | `packages/oauth/src/{identity,oauth,managed-kimi-code,managed-usage}.ts`, `packages/agent-core-v2/src/llm-adapter` | `pkg/kimi`, `pkg/cnoauth/client.go`, `service/{domestic_agent_models,upstream_models,cn_oauth_service}.go` |
-| minimax-code | `packages/oauth-core/src`, `packages/local-runtime-v2/src/service/model-system/resolution/{model-resolver-helpers,model-resolver-byok}.ts`, Anthropic provider and lockfile | `pkg/minimax`, `pkg/cnoauth/client.go`, `service/minimax_request_state.go`, domestic wire tests |
+| minimax-code | `packages/oauth-core/src`, `packages/local-runtime-v2/src/service/model-system/resolution/{model-resolver-helpers,model-resolver-byok}.ts`, [`packages/tui/src/account/matrix-account-client.ts`](https://github.com/MiniMax-AI/minimax-code/blob/5821f7c9b0363a9b97a57fff3deaa4cd2da165a4/packages/tui/src/account/matrix-account-client.ts) personal workspace/region quota, `packages/shared/src/llm-error-classifier.ts` plan/Credits errors, Anthropic provider and lockfile | `pkg/minimax`, `pkg/cnoauth/client.go`, `service/{minimax_request_state,minimax_oauth_quota,cn_provider_quota_service}.go`, domestic wire/quota tests |
 | Step-Code | `packages/providers/src/step-provider/{index,login-client}.ts`, `api/openai-completions.ts`, `utils/pi-user-agent.ts`, coding-agent `step/{defaults,environment}.ts` | `pkg/stepfun`, `pkg/cnoauth/stepfun.go`, `service/{stepfun_*,openai_chat_roles}.go`, login panel/composable tests |
 | ZCode | `packages/shared/src/{project-access-token-client,project-access-token}.ts`, CLI `auth/coding-plan-api-key.ts`, `model/off-peak-request-auth.ts`, bootstrap `model-config.ts`, runtime-platform headers and lockfile | `pkg/zcode`, `service/{zhipu_oauth_service,zhipu_project_tokens,zhipu_offpeak_ticket}.go` |
 

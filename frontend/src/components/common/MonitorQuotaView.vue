@@ -9,17 +9,22 @@
 
     <!-- 用量窗口条形图（复用账号页 UsageProgressBar：同阈值配色、同倒计时格式） -->
     <div v-if="snapshot.success && tierRows.length" class="space-y-1">
-      <UsageProgressBar
-        v-for="row in tierRows"
-        :key="row.key"
-        data-testid="monitor-quota-tier"
-        :label="row.label"
-        :title="row.title"
-        label-width="auto"
-        :color="row.color"
-        :utilization="row.tier.used_percent"
-        :resets-at="row.tier.reset_at ?? null"
-      />
+      <template v-for="row in tierRows" :key="row.key">
+        <div v-if="row.tier.unlimited" data-testid="monitor-quota-unlimited" class="flex gap-2 text-xs text-gray-500 dark:text-gray-400">
+          <span>{{ row.label }}</span>
+          <span>{{ t('admin.accounts.cnProviders.unlimited') }}</span>
+        </div>
+        <UsageProgressBar
+          v-else
+          data-testid="monitor-quota-tier"
+          :label="row.label"
+          :title="row.title"
+          label-width="auto"
+          :color="row.color"
+          :utilization="row.tier.used_percent"
+          :resets-at="row.tier.reset_at ?? null"
+        />
+      </template>
     </div>
 
     <!-- 余额（国产 payg；支持多币种） -->

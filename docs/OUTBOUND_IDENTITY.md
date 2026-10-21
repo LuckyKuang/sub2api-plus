@@ -148,6 +148,13 @@ invalidation; threshold/reset decisions reject old or unbound generations. The
 stored generation is a digest of ownership inputs, not another outbound identity
 declaration. See [quota ownership and legacy data](providers/DOMESTIC_OAUTH.md).
 
+MiniMax OAuth quota resolves the personal workspace group and calls the fixed
+regional account/quota origins with the same grant, proxy and trusted `minimax`
+snapshot. Its recognized five-hour/weekly windows feed existing scheduling
+thresholds and the native OAuth finite-exhaustion gate until reset (including
+when early-pause thresholds are disabled); unknown query failures do not
+quarantine a grant. Credits remain independent of token-plan windows.
+
 Only these eleven keys permit another client family, through a global default
 or account selection:
 
@@ -293,6 +300,23 @@ without a product UA. The gateway deliberately keeps its trusted `MiniMaxAgent`
 UA on authorization/refresh, without the inference SDK block, because every
 provider-bound call requires a trusted client declaration. This intentional
 policy difference is displayed under OAuth/account-service headers.
+
+The official
+[`matrix-account-client.ts`](https://github.com/MiniMax-AI/minimax-code/blob/5821f7c9b0363a9b97a57fff3deaa4cd2da165a4/packages/tui/src/account/matrix-account-client.ts)
+uses `MiniMaxCode` for Matrix identity/workspace/membership requests and fetches
+token-plan remains without a product UA. The gateway retains the existing
+trusted `MiniMaxAgent` preset for both operations, without adding that source
+string as a selectable family. OAuth quota selects the personal workspace's
+`op_group_id` for `X-Group-Id`; its fixed quota origins are
+`https://www.minimaxi.com` (China) and `https://platform.minimax.io` (global).
+Identity/account lookup uses the corresponding `https://agent.minimaxi.com` or
+`https://agent.minimax.io` origin. Matrix query declarations retain the official
+`app_id=3001`, `biz_id=3`, `version_code=22201` (a Matrix application code,
+independent of the versionless product UA), and the pinned Linux fingerprint.
+Timezone comes from the same trusted account snapshot. Attribution is calculated
+over the validated URL and actual body before dispatch; send-time identity
+rendering preserves it. Generic headers cannot select the workspace,
+change these destinations, supply authentication or overwrite identity.
 
 The exact compiled Kimi Code identity is `kimi-code-cli/2.2.0`, with identifier
 `kimi-code-cli`, client version `2.2.0` and platform declaration

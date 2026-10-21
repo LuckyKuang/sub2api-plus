@@ -288,6 +288,7 @@ export default {
         typesafe: 'TypeSafe / Jev',
       },
       cnProviders: {
+        unlimited: '不限量',
         accountMode: {
           title: '账号类型',
           payg: '按量付费',

@@ -646,6 +646,7 @@ export function cnQuotaCellVisible(account: CNUsageCellAccount): boolean {
   const mode = cnUsageCellAccountMode(account)
   if (account.type === 'oauth') {
     if (platform === 'kimi') return account.credentials?.oauth_provider === 'kimi' && mode === 'coding'
+    if (platform === 'minimax') return account.credentials?.oauth_provider === 'minimax' && mode === 'coding'
     if (platform === 'zhipu') {
       return (account.credentials?.oauth_provider === 'bigmodel' || account.credentials?.oauth_provider === 'zai') &&
         (account.credentials?.plan_kind === 'individual-coding-plan' || account.credentials?.plan_kind === 'team-coding-plan') && mode === 'coding'

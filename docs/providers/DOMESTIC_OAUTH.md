@@ -72,7 +72,15 @@ auth. Native OAuth origins stay fixed and redirects are disabled. These are
 account catalogs. Kimi managed usage calls its fixed regional
 `GET /coding/v1/usages` using the same OAuth grant, device snapshot and one-time
 401 recovery. API-key billing endpoints never receive native grants. MiniMax
-OAuth model sync and OAuth-specific quota discovery remain unsupported.
+OAuth model sync remains unsupported. Its coding quota follows the official
+[`matrix-account-client.ts` at the reviewed baseline](https://github.com/MiniMax-AI/minimax-code/blob/5821f7c9b0363a9b97a57fff3deaa4cd2da165a4/packages/tui/src/account/matrix-account-client.ts):
+identity and workspace/membership lookup on `https://agent.minimaxi.com` (China)
+or `https://agent.minimax.io` (global) select the personal workspace
+(`workspace_type: 0`) and its `op_group_id`. The same OAuth grant then calls
+`GET /v1/api/openplatform/coding_plan/remains` with `X-Group-Id` on the fixed
+`https://www.minimaxi.com` or `https://platform.minimax.io` origin respectively.
+Team groups, configured inference URLs and generic headers cannot replace this
+personal billing scope. Redirects remain disabled.
 
 Kimi, Zhipu and MiniMax coding-plan probes isolate concurrent queries and monitor
 caches by account ID, platform, account type, the complete credential document,
@@ -93,9 +101,20 @@ the provider's windows; omitted windows cannot retain an older percentage/reset.
 The binding stores a digest, never raw credential or proxy secrets. Command Code,
 Cline and OpenCode Go keep their own existing quota contracts.
 
+MiniMax OAuth exposes recognized five-hour and weekly windows with reset times
+in the account table and quota monitor. `status=3` stays explicitly unlimited,
+not a fabricated utilization. Matching finite snapshots feed the existing
+scheduling thresholds; native OAuth is additionally excluded at full exhaustion
+until its known reset even if early-pause thresholds are disabled, allowing a
+sticky session to move to an available account temporarily. Quota exhaustion never permanently disables the
+credential. Query failures or unrecognized responses remain unknown and retain
+the last recognized snapshot without adding credential errors. Credits are
+independent of token-plan quota; missing Credits, a missing plan or unknown quota
+does not establish an invalid grant.
+
 The default inference allowlist and `deploy/config.example.yaml` include the
 hosts above. Deployments replacing `security.url_allowlist.upstream_hosts` must
-add the required exact inference hosts to their own list.
+add the required exact inference and account/quota hosts to their own list.
 
 The selected [outbound identity](../OUTBOUND_IDENTITY.md) is snapshotted for the
 whole authorization session, then saved with the account. In particular Kimi's
@@ -167,7 +186,9 @@ Protocols were checked against local official client sources:
   authentication recovery.
 - `minimax-code/packages/oauth-core/src/`: `oauth-client.ts`, `endpoint-config.ts`,
   `contracts.ts`; `packages/config/src/config.ts` inference destinations and
-  `packages/local-runtime-v2/src/service/model-system/resolution/` request headers.
+  `packages/local-runtime-v2/src/service/model-system/resolution/` request headers;
+  [`packages/tui/src/account/matrix-account-client.ts`](https://github.com/MiniMax-AI/minimax-code/blob/5821f7c9b0363a9b97a57fff3deaa4cd2da165a4/packages/tui/src/account/matrix-account-client.ts)
+  personal workspace, account lookup and regional token-plan quota.
 
 `internal/pkg/cnoauth` tests cover wire formats, PKCE/state, regions, errors,
 refresh, scope validation and Redis/local session isolation. Service tests cover

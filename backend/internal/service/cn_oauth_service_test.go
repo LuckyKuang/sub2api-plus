@@ -140,8 +140,10 @@ func TestCNOAuthNativeSendAndRefresh(t *testing.T) {
 			a.Credentials["api_protocol"] = APIProtocolResponses
 			require.Equal(t, APIProtocolAnthropic, a.GetAPIProtocol())
 			require.NotContains(t, a.GetAnthropicProtocolBaseURL(), "evil")
-			if platform == PlatformKimi {
-				require.Equal(t, PlatformKimi, a.GetCodingPlanProvider())
+			// Official managed usage clients exist for Kimi and MiniMax Code
+			// (matrix-account-client.ts at reviewed commit 5821f7c9).
+			if platform == PlatformKimi || platform == PlatformMiniMax {
+				require.Equal(t, platform, a.GetCodingPlanProvider())
 			} else {
 				require.Empty(t, a.GetCodingPlanProvider())
 			}
