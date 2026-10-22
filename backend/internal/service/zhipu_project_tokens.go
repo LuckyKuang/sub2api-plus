@@ -371,15 +371,21 @@ func (s *CNOAuthService) prepareZhipuLinkedRequest(req *http.Request, a *Account
 	return nil
 }
 
-// Each HTTP attempt resolves from the original account. Only an explicit 401
+// Each HTTP attempt resolves from the acquired owner. Only an explicit 401
 // rejects that attempt's PAT; 403/network/model failures never rotate it.
 func (s *CNOAuthService) roundTripZhipuLinked(req *http.Request, a *Account, send func(*http.Request) (*http.Response, error)) (*http.Response, error) {
+	owner, err := requestCredentialAccount(req.Context(), a)
+	if err != nil {
+		return nil, err
+	}
+	a = snapshotRequestCredentialAccount(owner)
 	if !usesZhipuProjectToken(a) {
 		return send(req)
 	}
 	if err := s.prepareZhipuLinkedRequest(req, a); err != nil {
 		return nil, err
 	}
+	recordTransmittedRequestCredentialOwner(req, a, a.GetOpenAIProtocolAPIKey())
 	sendAttempt := func(attempt *http.Request) (*http.Response, error) {
 		token := strings.TrimPrefix(attempt.Header.Get("Authorization"), "Bearer ")
 		if a.GetCredential("plan_kind") == ZhipuPlanOffPeak {

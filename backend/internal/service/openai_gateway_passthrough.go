@@ -355,11 +355,6 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		return result, wsErr
 	}
 
-	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
-	}
-
 	if c != nil {
 		c.Set("openai_passthrough", true)
 	}
@@ -392,6 +387,10 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		releaseUpstreamCtx()
 		if buildErr != nil {
 			return nil, buildErr
+		}
+		proxyURL, proxyErr := requestCredentialOwnerProxyURL(ctx, account)
+		if proxyErr != nil {
+			return nil, proxyErr
 		}
 
 		upstreamStart := time.Now()
@@ -431,9 +430,12 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 			if !agentTaskRecoveryTried && s.isAgentIdentityAccount(ctx, account) && isAgentIdentityTaskInvalidHTTPResponse(resp.StatusCode, probeBody) {
 				agentTaskRecoveryTried = true
 				expectedTaskID := account.GetCredential("task_id")
-				if recoveryErr := s.recoverAgentIdentityTask(ctx, account, expectedTaskID); recoveryErr != nil {
+				recoveredCtx, recoveryErr := s.recoverAgentIdentityTask(ctx, account, expectedTaskID)
+				if recoveryErr != nil {
 					return nil, fmt.Errorf("agent identity task recovery failed: %w", recoveryErr)
 				}
+				ctx = recoveredCtx
+				defer bindRequestCredentialOwnerContext(ctx, c)()
 				continue
 			}
 			upstreamMsg := sanitizeUpstreamErrorMessage(strings.TrimSpace(extractUpstreamErrorMessage(probeBody)))
@@ -693,33 +695,43 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 	body []byte,
 	token string,
 ) (*http.Request, error) {
-	if err := validateOpenAIOAuthSessionAccess(c, account); err != nil {
-		return nil, err
+	if account != nil && account.IsShadow() {
+		if err := validateOpenAIOAuthSessionAccess(c, account); err != nil {
+			return nil, err
+		}
 	}
 	ctx = WithOutboundIdentityScope(ctx, c)
 	ctx = WithAccountOutboundIdentity(ctx, account)
+	credentialAccount, credentialErr := requestCredentialAccount(ctx, account)
+	if credentialErr != nil {
+		return nil, credentialErr
+	}
+	account = credentialAccount
+	if err := validateOpenAIOAuthSessionAccess(c, account); err != nil {
+		return nil, err
+	}
 	// Codex 可见时区对齐：与 buildUpstreamRequest 同一改写语义（幂等，
 	// 失败保留原始自洽内容），覆盖普通透传与 WS→HTTP bridge。
 	body = s.rewriteOpenAICodexEnvironmentContextBytes(ctx, account, body)
 	targetURL := openaiPlatformAPIURL
-	switch account.Type {
+	switch credentialAccount.Type {
 	case AccountTypeOAuth:
 		targetURL = chatgptCodexURL
 	case AccountTypeSetupToken:
-		if account.IsOpenAIOAuthLike() {
+		if credentialAccount.IsOpenAIOAuthLike() {
 			targetURL = chatgptCodexURL
 		}
 	case AccountTypeAPIKey:
-		baseURL := account.GetOpenAIBaseURL()
-		if account.UsesNativeCNResponses() && account.IsAdaptiveAPIProtocol() {
-			baseURL = account.GetCNProtocolBaseURL(APIProtocolResponses)
+		baseURL := credentialAccount.GetOpenAIBaseURL()
+		if credentialAccount.UsesNativeCNResponses() && credentialAccount.IsAdaptiveAPIProtocol() {
+			baseURL = credentialAccount.GetCNProtocolBaseURL(APIProtocolResponses)
 		}
 		if baseURL != "" {
 			validatedURL, err := s.validateUpstreamBaseURL(baseURL)
 			if err != nil {
 				return nil, err
 			}
-			targetURL = buildOpenAIResponsesURLForPlatform(account.Platform, validatedURL)
+			targetURL = buildOpenAIResponsesURLForPlatform(credentialAccount.Platform, validatedURL)
 		}
 	}
 	targetURL = appendOpenAIResponsesRequestPathSuffix(targetURL, openAIResponsesRequestPathSuffix(c))
@@ -833,7 +845,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 	}
 
 	// 账号级请求头覆写（仅 openai api_key 账号启用时生效；OAuth 路径 no-op）
-	account.ApplyHeaderOverrides(req.Header)
+	credentialAccount.ApplyHeaderOverrides(req.Header)
 	if err := s.alignOpenAIUpstreamSessionIdentityFromBody(c, account, req.Header, body); err != nil {
 		return nil, err
 	}

@@ -30,6 +30,10 @@ type openAIOutboundIdentity struct {
 	Source string
 }
 
+type codexDefaultIdentityCacheKey struct {
+	owner outboundIdentityOwner
+}
+
 // resolveOpenAIOutboundIdentityFromSettings is the single authority for
 // selecting a trusted OpenAI Codex outbound identity. A valid account-level
 // identity wins over a valid system identity; an empty or invalid candidate
@@ -41,8 +45,24 @@ type openAIOutboundIdentity struct {
 // request-classification switch, not an administrator override for an account's
 // configured outbound client identity.
 func resolveOpenAIOutboundIdentityFromSettings(ctx context.Context, account *Account, settingService *SettingService) openAIOutboundIdentity {
+	owner, err := requestCredentialAccount(ctx, account)
+	if err != nil {
+		return openAIOutboundIdentity{}
+	}
+	account = owner
+	ctx = withOutboundIdentitySettingsOwner(ctx, account)
 	if scope := outboundIdentityScopeFromContext(ctx); scope != nil {
-		key := outboundIdentityOwnerKey(account)
+		candidate := ""
+		if account != nil {
+			candidate = account.GetOpenAIUserAgent()
+		}
+		key := requestCredentialIdentityCacheKey(ctx, account, candidate)
+		if account == nil {
+			// Compatible presets resolve Codex defaults without an account
+			// candidate, but still belong to the invoking credential owner.
+			settingsOwner, _ := ctx.Value(outboundIdentitySettingsOwnerKey{}).(outboundIdentityOwner)
+			key = codexDefaultIdentityCacheKey{owner: settingsOwner}
+		}
 		if cached, ok := scope.codex.Load(key); ok {
 			if identity, valid := cached.(openAIOutboundIdentity); valid {
 				return identity
@@ -58,25 +78,44 @@ func resolveOpenAIOutboundIdentityFromSettings(ctx context.Context, account *Acc
 	return resolveOpenAIOutboundIdentityFromCurrentSettings(ctx, account, settingService)
 }
 
+type codexOutboundSettingsSnapshot struct {
+	userAgent                string
+	version                  string
+	allowLegacyCompatibility bool
+}
+
 func resolveOpenAIOutboundIdentityFromCurrentSettings(ctx context.Context, account *Account, settingService *SettingService) openAIOutboundIdentity {
+	read := func() codexOutboundSettingsSnapshot {
+		settings := codexOutboundSettingsSnapshot{version: codexCLIVersion}
+		if settingService != nil {
+			settings.userAgent, settings.allowLegacyCompatibility = settingService.GetOpenAICodexOutboundProfile(ctx)
+			settings.version = settingService.GetOpenAICodexClientVersion(ctx)
+		}
+		return settings
+	}
+	var settings codexOutboundSettingsSnapshot
+	if snapshot := requestIdentitySettingsSnapshot(ctx); snapshot != nil {
+		snapshot.codexSettingsOnce.Do(func() { snapshot.codexSettings = read() })
+		settings = snapshot.codexSettings
+	} else {
+		settings = read()
+	}
 	accountUA := ""
 	if account != nil {
 		accountUA = account.GetOpenAIUserAgent()
 	}
-	systemUA := ""
-	allowLegacyCompatibility := false
-	version := codexCLIVersion
-	if settingService != nil {
-		systemUA, allowLegacyCompatibility = settingService.GetOpenAICodexOutboundProfile(ctx)
-		version = settingService.GetOpenAICodexClientVersion(ctx)
-	}
-	return resolveOpenAIOutboundIdentityWithVersionAndCompatibility(accountUA, systemUA, version, allowLegacyCompatibility)
+	return resolveOpenAIOutboundIdentityWithVersionAndCompatibility(accountUA, settings.userAgent, settings.version, settings.allowLegacyCompatibility)
 }
 
 // resolveOpenAIOutboundIdentity uses the account-specific Codex UA when it is
 // valid, then the system setting, and finally the compiled-in default. A value
 // is only valid when it can be paired with an official Codex originator.
 func (s *OpenAIGatewayService) resolveOpenAIOutboundIdentity(ctx context.Context, account *Account) openAIOutboundIdentity {
+	owner, err := requestCredentialAccount(ctx, account)
+	if err != nil {
+		return openAIOutboundIdentity{}
+	}
+	account = owner
 	// Spark shadows never own credentials or an outbound identity. All normal
 	// forwarding paths build authentication first and therefore fail closed when
 	// this lookup fails; resolving here makes the final header stage agree with

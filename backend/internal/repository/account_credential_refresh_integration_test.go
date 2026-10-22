@@ -24,7 +24,7 @@ func (s *AccountRepoSuite) TestCNOAuthRefreshCASAppliesAndPublishesDurableState(
 		s.repo.schedulerCache = cache
 		_, err = s.repo.sql.ExecContext(s.ctx, "TRUNCATE scheduler_outbox")
 		s.Require().NoError(err)
-		applied, err := s.repo.UpdateOAuthCredentialsIfUnchanged(s.ctx, account.ID, platform, observed.Credentials, observed.ProxyID, replacement)
+		applied, err := s.repo.UpdateOAuthCredentialsIfUnchanged(s.ctx, &service.Account{ID: account.ID, Platform: platform, Credentials: observed.Credentials, ProxyID: observed.ProxyID, Type: service.AccountTypeOAuth, Proxy: observed.Proxy, Status: service.StatusActive}, replacement)
 		s.Require().NoError(err)
 		s.Require().True(applied, platform)
 		fresh, err := s.repo.GetByID(s.ctx, account.ID)
@@ -74,7 +74,7 @@ func (s *AccountRepoSuite) TestCNOAuthRefreshCASRejectsConcurrentOwnerAndGrantCh
 			s.repo.schedulerCache = cache
 			_, err = s.repo.sql.ExecContext(s.ctx, "TRUNCATE scheduler_outbox")
 			s.Require().NoError(err)
-			applied, err := s.repo.UpdateOAuthCredentialsIfUnchanged(s.ctx, account.ID, platform, observed.Credentials, observed.ProxyID, map[string]any{"access_token": "obsolete-response", "refresh_token": "obsolete-response"})
+			applied, err := s.repo.UpdateOAuthCredentialsIfUnchanged(s.ctx, &service.Account{ID: account.ID, Platform: platform, Credentials: observed.Credentials, ProxyID: observed.ProxyID, Type: service.AccountTypeOAuth, Proxy: observed.Proxy, Status: service.StatusActive}, map[string]any{"access_token": "obsolete-response", "refresh_token": "obsolete-response"})
 			s.Require().NoError(err)
 			s.Require().False(applied, platform+"/"+change)
 			fresh, err := s.repo.GetByID(s.ctx, account.ID)
@@ -107,7 +107,7 @@ func TestCNOAuthRefreshCASRollsBackWhenOutboxInsertFails(t *testing.T) {
 	repo := newAccountRepositoryWithSQL(client, &failAtomicSchedulerOutboxSQLExecutor{sqlExecutor: integrationDB}, cache)
 	observed, err := repo.GetByID(context.Background(), account.ID)
 	require.NoError(t, err)
-	applied, err := repo.UpdateOAuthCredentialsIfUnchanged(context.Background(), account.ID, service.PlatformKimi, observed.Credentials, observed.ProxyID, map[string]any{"access_token": "must-roll-back", "refresh_token": "must-roll-back"})
+	applied, err := repo.UpdateOAuthCredentialsIfUnchanged(context.Background(), &service.Account{ID: account.ID, Platform: service.PlatformKimi, Credentials: observed.Credentials, ProxyID: observed.ProxyID, Type: service.AccountTypeOAuth, Proxy: observed.Proxy, Status: service.StatusActive}, map[string]any{"access_token": "must-roll-back", "refresh_token": "must-roll-back"})
 	require.Error(t, err)
 	require.False(t, applied)
 	fresh, err := repo.GetByID(context.Background(), account.ID)

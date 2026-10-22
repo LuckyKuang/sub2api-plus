@@ -720,9 +720,9 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 		return nil, err
 	}
 
-	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
+	proxyURL, err := requestCredentialOwnerProxyURL(upstreamCtx, account)
+	if err != nil {
+		return nil, err
 	}
 	upstreamStart := time.Now()
 	resp, err := s.doOpenAIUpstream(upstreamReq, proxyURL, account)
@@ -888,11 +888,15 @@ func (s *OpenAIGatewayService) buildOpenAIImagesRequest(
 	token string,
 	endpoint string,
 ) (*http.Request, error) {
+	credentialAccount, err := requestCredentialAccount(ctx, account)
+	if err != nil {
+		return nil, err
+	}
 	targetURL := openAIImagesGenerationsURL
 	if endpoint == openAIImagesEditsEndpoint {
 		targetURL = openAIImagesEditsURL
 	}
-	baseURL := account.GetOpenAIBaseURL()
+	baseURL := credentialAccount.GetOpenAIBaseURL()
 	if baseURL != "" {
 		validatedURL, err := s.validateUpstreamBaseURL(baseURL)
 		if err != nil {
@@ -926,7 +930,7 @@ func (s *OpenAIGatewayService) buildOpenAIImagesRequest(
 	if strings.TrimSpace(contentType) != "" {
 		req.Header.Set("Content-Type", contentType)
 	}
-	account.applyOpenAIHeaderOverrides(req.Header)
+	credentialAccount.applyOpenAIHeaderOverrides(req.Header)
 	stripOpenAILegacyResponsesBeta(req.Header)
 	s.applyOpenAIImageUserAgent(ctx, account, req.Header)
 	return req, nil

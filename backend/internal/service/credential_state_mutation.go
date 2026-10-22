@@ -12,17 +12,18 @@ import (
 // A repository applies the whole mutation and its scheduler outbox atomically.
 // A false result must never be followed by an unconditional write/notification.
 type CredentialStateMutation struct {
-	Extra                   map[string]any
-	RateLimitUntil          *time.Time
-	ExtendRateLimitOnly     bool
-	ClearRateLimit          bool
-	ObservedLimitedAt       *time.Time
-	ObservedResetAt         *time.Time
-	TempUnschedulableUntil  *time.Time
-	TempUnschedulableReason string
-	ClearTempUnschedulable  bool
-	ObservedTempUntil       *time.Time
-	ObservedTempReason      string
+	Extra                             map[string]any
+	RateLimitUntil                    *time.Time
+	ExtendRateLimitOnly               bool
+	ClearRateLimit                    bool
+	ObservedLimitedAt                 *time.Time
+	ObservedResetAt                   *time.Time
+	TempUnschedulableUntil            *time.Time
+	TempUnschedulableReason           string
+	ClearTempUnschedulable            bool
+	RequireTempUnschedulableUnchanged bool
+	ObservedTempUntil                 *time.Time
+	ObservedTempReason                string
 }
 
 type CredentialStateMutationRepository interface {
@@ -42,7 +43,8 @@ func credentialStateGeneration(account *Account) string {
 		Credentials    map[string]any
 		ProxyID        *int64
 		ProxyURL       string
-	}{account.ID, account.Platform, account.Type, account.Credentials, account.ProxyID, credentialStateProxyURL(account)})
+		ProxyStatus    string
+	}{account.ID, account.Platform, account.Type, account.Credentials, account.ProxyID, credentialStateProxyURL(account), credentialStateProxyStatus(account)})
 	if err != nil {
 		return ""
 	}
@@ -59,6 +61,13 @@ func CredentialStateGeneration(account *Account) string {
 func credentialStateProxyURL(account *Account) string {
 	if account != nil && account.Proxy != nil {
 		return account.Proxy.URL()
+	}
+	return ""
+}
+
+func credentialStateProxyStatus(account *Account) string {
+	if account != nil && account.Proxy != nil {
+		return account.Proxy.Status
 	}
 	return ""
 }

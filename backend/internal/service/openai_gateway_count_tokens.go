@@ -456,9 +456,13 @@ func (s *OpenAIGatewayService) buildInputTokensUpstreamRequest(
 	body []byte,
 	token string,
 ) (*http.Request, error) {
+	credentialAccount, err := requestCredentialAccount(ctx, account)
+	if err != nil {
+		return nil, err
+	}
 	targetURL := openaiPlatformAPIInputTokensURL
-	if account.Type == AccountTypeAPIKey {
-		if baseURL := account.GetOpenAIBaseURL(); strings.TrimSpace(baseURL) != "" {
+	if credentialAccount.Type == AccountTypeAPIKey {
+		if baseURL := credentialAccount.GetOpenAIBaseURL(); strings.TrimSpace(baseURL) != "" {
 			validatedURL, err := s.validateUpstreamBaseURL(baseURL)
 			if err != nil {
 				return nil, err
@@ -496,7 +500,7 @@ func (s *OpenAIGatewayService) buildInputTokensUpstreamRequest(
 		}
 	}
 
-	account.applyOpenAIHeaderOverrides(req.Header)
+	credentialAccount.applyOpenAIHeaderOverrides(req.Header)
 	identity := s.applyOpenAIOutboundIdentity(ctx, account, req.Header, true)
 	SetOpsRoutingDiagnostics(c, &OpsRoutingDiagnostics{OutboundIdentitySource: identity.Source})
 

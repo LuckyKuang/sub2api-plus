@@ -5,6 +5,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -29,7 +30,7 @@ func (r *refreshCleanupRepo) GetByID(context.Context, int64) (*Account, error) {
 	return snapshotRequestCredentialAccount(r.current), nil
 }
 
-func (r *refreshCleanupRepo) UpdateOAuthCredentialsIfUnchanged(ctx context.Context, id int64, platform string, expected map[string]any, proxy *int64, replacement map[string]any) (bool, error) {
+func (r *refreshCleanupRepo) UpdateOAuthCredentialsIfUnchanged(ctx context.Context, expectedOwner *Account, replacement map[string]any) (bool, error) {
 	r.persistCalls++
 	if r.persistErr != nil {
 		return false, r.persistErr
@@ -37,7 +38,7 @@ func (r *refreshCleanupRepo) UpdateOAuthCredentialsIfUnchanged(ctx context.Conte
 	if r.beforePersist != nil {
 		r.beforePersist(ctx)
 	}
-	if !agentTaskTestCredentialsMatch(r.current, id, platform, expected, proxy) {
+	if !agentTaskTestCredentialsMatch(r.current, expectedOwner) {
 		return false, nil
 	}
 	r.current.Credentials = cloneRequestCredentialMap(replacement)
@@ -45,6 +46,10 @@ func (r *refreshCleanupRepo) UpdateOAuthCredentialsIfUnchanged(ctx context.Conte
 		r.afterPersist()
 	}
 	return true, nil
+}
+
+func (r *refreshCleanupRepo) UpdateGrokOAuthCredentialsIfUnchanged(ctx context.Context, expectedOwner *Account, replacement map[string]any) (bool, error) {
+	return r.UpdateOAuthCredentialsIfUnchanged(ctx, expectedOwner, replacement)
 }
 
 func TestDirectRefreshSuccessCASMissAtAttemptDeadlineDoesNotRetry(t *testing.T) {
@@ -197,6 +202,7 @@ func TestRefreshCleanupFencesGrantCooldownAndRuntime(t *testing.T) {
 				cache := &refreshCleanupDisplayCache{tempUnschedCacheStub: tempUnschedCacheStub{lastState: &TempUnschedState{UntilUnix: until.Unix(), ErrorMessage: "stale-cache"}}}
 				scheduler := &tokenRefreshSchedulerCache{}
 				svc := &TokenRefreshService{accountRepo: repo, runtimeBlocker: runtime, tempUnschedCache: cache, schedulerCache: scheduler}
+				ctx = svc.withCredentialRefreshRuntimeSnapshot(ctx, observed)
 				switch interleaving {
 				case "relinked", "new_deadline", "new_reason":
 					repo.beforeCAS = func() {
@@ -256,6 +262,45 @@ func TestRefreshCleanupUsesActualPreRefreshRead(t *testing.T) {
 			require.True(t, repo.applied, "successful refresh may clear the cooldown observed by its authoritative pre-call read")
 			require.Nil(t, repo.current.TempUnschedulableUntil)
 		})
+	}
+}
+
+func TestRefreshCleanupCannotClearRuntimeFailureInstalledAfterTokenPersistence(t *testing.T) {
+	for _, unified := range []bool{false, true} {
+		platforms := []string{PlatformOpenAI, PlatformGrok, PlatformDeepseek, PlatformKimi, PlatformMiniMax, PlatformStepFun, PlatformZhipu}
+		if unified {
+			// OAuthRefreshAPI rotates these four official grant families.
+			// DeepSeek, StepFun and linked ZCode do not use this refresh flow.
+			platforms = []string{PlatformOpenAI, PlatformGrok, PlatformKimi, PlatformMiniMax}
+		}
+		for _, platform := range platforms {
+			t.Run(fmt.Sprintf("%s/unified=%t", platform, unified), func(t *testing.T) {
+				until := time.Now().Add(time.Hour).Truncate(time.Second)
+				current := &Account{ID: 489, Platform: platform, Type: AccountTypeOAuth, Status: StatusActive,
+					Credentials:            map[string]any{"oauth_provider": platform, "access_token": "old", "refresh_token": "refresh"},
+					TempUnschedulableUntil: &until, TempUnschedulableReason: "observed-before-refresh"}
+				repo := &refreshCleanupRepo{current: current}
+				runtime := &OpenAIGatewayService{}
+				runtime.BlockAccountScheduling(current, until, "original-failure")
+				var failureOwner *Account
+				repo.afterPersist = func() {
+					// A request using the newly committed token fails before the
+					// older refresh enters cleanup. Its durable write may fail, so
+					// only this generation's immediate runtime quarantine remains.
+					failureOwner = snapshotRequestCredentialAccount(repo.current)
+					runtime.BlockAccountScheduling(failureOwner, until, "new-token-failure")
+				}
+				svc := &TokenRefreshService{accountRepo: repo, runtimeBlocker: runtime, cfg: &config.TokenRefreshConfig{MaxRetries: 1}}
+				if unified {
+					svc.refreshAPI = NewOAuthRefreshAPI(repo, nil)
+				}
+				refresher := &tokenRefresherStub{credentials: map[string]any{"oauth_provider": platform, "access_token": "rotated", "refresh_token": "rotated-refresh"}}
+				require.NoError(t, svc.refreshWithRetry(t.Context(), current, refresher, refresher, time.Hour))
+				require.True(t, repo.applied, "the unchanged pre-refresh durable cooldown may be cleared")
+				require.NotNil(t, failureOwner)
+				require.True(t, runtime.peekOpenAIAccountRuntimeBlock(failureOwner).blocked, "an older refresh cannot clear a later failure of the new token")
+			})
+		}
 	}
 }
 

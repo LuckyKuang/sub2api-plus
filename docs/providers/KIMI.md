@@ -126,3 +126,10 @@ After 401 recovery, conditional persistence binds usage to the refreshed grant
 that actually supplied it. Reauthorization cannot inherit the old grant's quota
 pause; legacy unbound windows become authoritative after the next successful
 probe. See [quota snapshot ownership](DOMESTIC_OAUTH.md).
+
+Moonshot PAYG balance probes likewise freeze the full API-key/proxy owner and
+isolate concurrent work by its generation. Their balance metadata and threshold
+pause/recovery writes are conditional on that owner. All three also compare the
+cooldown deadline and reason seen before the probe, including a previously absent
+cooldown, preserving newer reactive balance markers and failures. `success` describes the
+provider response; `persisted` is true only after its conditional local write.

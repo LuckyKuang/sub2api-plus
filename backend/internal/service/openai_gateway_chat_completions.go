@@ -413,9 +413,9 @@ func (s *OpenAIGatewayService) forwardAsChatCompletions(
 	}
 
 	// 7. Send request
-	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
+	proxyURL, err := requestCredentialOwnerProxyURL(ctx, account)
+	if err != nil {
+		return nil, err
 	}
 	resp, err := s.doOpenAIUpstream(upstreamReq, proxyURL, account)
 	if err != nil {
@@ -431,10 +431,12 @@ func (s *OpenAIGatewayService) forwardAsChatCompletions(
 		respBody, upstreamMsg, completeErrorBody := s.readOpenAIUpstreamErrorWithCompleteness(resp)
 		if !agentIdentityTaskRecoveryWasTried(ctx) && s.isAgentIdentityAccount(ctx, account) && isAgentIdentityTaskInvalidHTTPResponse(resp.StatusCode, respBody) {
 			expectedTaskID := account.GetCredential("task_id")
-			if err := s.recoverAgentIdentityTask(ctx, account, expectedTaskID); err != nil {
+			recoveredCtx, err := s.recoverAgentIdentityTask(ctx, account, expectedTaskID)
+			if err != nil {
 				return nil, fmt.Errorf("agent identity task recovery failed: %w", err)
 			}
-			return s.ForwardAsChatCompletions(markAgentIdentityTaskRecoveryTried(ctx), c, account, body, promptCacheKey, defaultMappedModel)
+			defer bindRequestCredentialOwnerContext(recoveredCtx, c)()
+			return s.ForwardAsChatCompletions(markAgentIdentityTaskRecoveryTried(recoveredCtx), c, account, body, promptCacheKey, defaultMappedModel)
 		}
 		if account.Type == AccountTypeAPIKey &&
 			!account.routesByModel() &&

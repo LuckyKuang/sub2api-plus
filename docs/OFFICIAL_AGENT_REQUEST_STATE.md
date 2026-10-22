@@ -15,7 +15,7 @@ apply it, including retries, probes, HTTP/WS and auxiliary calls.
 | Codex | parent/root/fork references | Use the same mapping as their corresponding thread or turn, including embedded turn metadata. Missing turns or start timestamps are not invented. |
 | Grok | OAuth state, nonce | New UUIDv7 per authorization. The stored nonce is checked against the signed ID token. |
 | Grok | device, agent | Persistent random UUIDv4 device seed; official UUIDv5 agent derivation. Process restarts do not create a new device. |
-| Grok | conversation/session | UUIDv7, scoped to the authenticated tenant, logical conversation and credential owner. |
+| Grok | conversation/session | New sessions use UUIDv7; resumed UUIDv4 sessions and UUIDv4 sessions with official auxiliary labels retain their format. Scoped to the authenticated tenant, logical conversation and credential owner. |
 | Grok | sampler request | UUIDv4 per logical prompt; unchanged across retries of that prompt, new on the next WS turn. Auxiliary prompts, including each Composer image caption, keep independent request IDs while retaining the parent conversation. |
 | DeepSeek | harness session | `session-<UUIDv4>`, persistent for the tenant/conversation/owner. The separate anonymous user ID keeps its existing persistent owner scope. |
 | MiniMax | Mavis session | `mvs_<32 lowercase UUIDv4 hex digits>`, persistent for the tenant/conversation/owner. |
@@ -68,6 +68,26 @@ failover acquires and freezes the replacement owner before mapping the original
 logical IDs again. See
 [CODEX_CLIENT_PROFILES.md](protocols/CODEX_CLIENT_PROFILES.md).
 
+HTTP and WS transports also take the target URL, proxy and configured header
+overrides from that acquired owner. A bound proxy without its hydrated proof
+cannot silently become a direct connection. Model discovery, capability probes
+and image downloads follow the same rule. The selected route retains resource
+accounting. Acquisition may replace an earlier account identity candidate,
+but it retains that owner's first global/default identity settings across
+refresh, retries and auxiliary requests. Failover to another owner resolves
+the replacement owner's candidate and current defaults.
+AgentIdentity completes initial task registration before recording attempt
+evidence and sending the first inference or models request. Task recovery
+creates new attempt evidence only after proving
+that the signing grant is unchanged except for its task ID. The retry signs
+with the recovered task; earlier attempts keep their original evidence.
+Domestic native OAuth and ZCode project-token adapters resolve this owner before
+preparing authentication. After a permitted expiry or 401 refresh, final
+transport evidence supplies the identity, headers, proxy and TLS configuration
+together, including model discovery and quota queries. Capability probe results
+also use conditional state updates; an old probe cannot change a replacement
+grant's routing capability.
+
 ## Cache and opaque state
 
 Native Codex Responses/WS preserve an absent `prompt_cache_key`. A caller's
@@ -92,6 +112,13 @@ may resume the same owner, while a relink to another principal cannot attach to
 the old call. Records without a complete valid creation snapshot require a new
 call.
 
+Messages compatibility caches bind response IDs and opaque turn state to the
+acquired principal or API-key digest before deciding to replay state or trim
+history. A routine refresh retains the same known principal; reauthorization or
+API-key replacement cannot authorize the old cache, including when an API-key
+row contains unrelated OAuth claim fields. Unknown principals cannot read or
+populate these continuation caches.
+
 ## Conditional state and failover
 
 Quota, billing and reactive errors belong to the grant that produced them.
@@ -101,6 +128,12 @@ outbox update are atomic. A mismatch or storage error cannot trigger an
 unconditional follow-up write or publish a cooldown for a replacement grant.
 An unsuccessful refresh CAS also leaves the current grant's access-token cache
 untouched.
+The proxy proof covers protocol, host, port, authentication and status, even
+when the proxy row ID stays unchanged. Repository predicates hold a share lock
+on the matching proxy until commit, so a repair while waiting for the account
+lock cannot leave an old result authorized by the statement's earlier snapshot.
+Missing hydration cannot authorize a mutation. Grok's explicit missing-proxy
+failure can fence the still-deleted proxy; restoring it invalidates that proof.
 Immediate runtime quarantine remains bound to the observed credential generation
 while an uncertain commit outcome is resolved. Successful refresh and state
 mutations evict the scheduler snapshot with a
@@ -109,6 +142,13 @@ never publish a row read before a concurrent login could replace it.
 Runtime blocks and Grok model/quota/billing snapshots carry the credential
 generation. Slim scheduler projections retain that non-secret digest, but cannot
 act as mutation evidence.
+Refresh captures the runtime block before the attempt and clears only that
+unchanged sequence. A later failure using the newly persisted token remains
+quarantined even if its durable cooldown write fails.
+Native Kimi and DeepSeek PAYG balance probes coalesce only identical credential
+and proxy generations. Balance persistence, low-balance flags and scheduling
+changes also compare the exact cooldown observed before probing, so a late
+healthy or low result cannot replace a newer failure or another grant's state.
 CN quota projections additionally retain the existing CN credential/proxy-status
 digest, `<provider>_quota_generation`, recognized window values/reset times and
 unlimited flags. Hydrated rows recompute these digests from the complete grant;

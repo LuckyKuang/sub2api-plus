@@ -642,7 +642,7 @@ func (r *errorPolicyRepoStub) SetError(ctx context.Context, id int64, errorMsg s
 
 // Policy fixtures hold an unchanged grant; the durable conditional transition
 // succeeds. Concurrency and CAS misses are covered by the credential-fence tests.
-func (r *errorPolicyRepoStub) SetCredentialErrorIfUnchanged(_ context.Context, _ int64, _, _ string, _ map[string]any, _ *int64, message string) (bool, error) {
+func (r *errorPolicyRepoStub) SetCredentialErrorIfUnchanged(_ context.Context, expectedOwner *Account, message string) (bool, error) {
 	r.credentialErrorCalls++
 	r.setErrCalls++
 	r.lastErrorMsg = message

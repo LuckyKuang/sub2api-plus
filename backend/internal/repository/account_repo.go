@@ -1313,6 +1313,13 @@ func (r *accountRepository) SetGrokCredentialErrorIfMatch(
 	snapshot service.GrokCredentialMutationSnapshot,
 	errorMsg string,
 ) (bool, error) {
+	args := []any{service.StatusError, errorMsg, id, service.StatusActive, service.PlatformGrok, service.AccountTypeOAuth,
+		snapshot.CredentialsJSON, snapshot.ProxyID, string(service.GrokCredentialReasonProxyInvalid),
+		service.SchedulerOutboxEventAccountChanged}
+	proxyPredicate, args, err := grokCredentialMutationProxyPredicate(snapshot, 8, args, errorMsg == string(service.GrokCredentialReasonProxyInvalid))
+	if err != nil {
+		return false, err
+	}
 	result, err := r.sql.ExecContext(ctx, `
 		WITH updated AS (
 		UPDATE accounts AS a
@@ -1337,13 +1344,12 @@ func (r *accountRepository) SetGrokCredentialErrorIfMatch(
 					SELECT 1 FROM proxies p WHERE p.id = a.proxy_id AND p.deleted_at IS NULL
 				)
 			))
+		AND `+proxyPredicate+`
 		RETURNING a.id
 		)
 		INSERT INTO scheduler_outbox (event_type, account_id, group_id, payload)
 		SELECT $10, updated.id, NULL, NULL FROM updated
-	`, service.StatusError, errorMsg, id, service.StatusActive, service.PlatformGrok, service.AccountTypeOAuth,
-		snapshot.CredentialsJSON, snapshot.ProxyID, string(service.GrokCredentialReasonProxyInvalid),
-		service.SchedulerOutboxEventAccountChanged)
+	`, args...)
 	if err != nil {
 		return false, err
 	}
@@ -1360,16 +1366,29 @@ func (r *accountRepository) SetGrokCredentialErrorIfMatch(
 // credential document matches the state observed by reconciliation. Exact
 // JSONB equality includes _token_version when present and prevents a concurrent
 // reauthorization from being overwritten by a stale check-then-mutate path.
-func (r *accountRepository) SetGrokOAuthErrorIfCredentialsUnchanged(
-	ctx context.Context,
-	id int64,
-	expectedCredentials map[string]any,
-	errorMsg string,
-) (bool, error) {
+func (r *accountRepository) SetGrokOAuthErrorIfCredentialsUnchanged(ctx context.Context, expectedOwner *service.Account, errorMsg string) (bool, error) {
+	if err := validateGrokOAuthCredentialMutationOwner(expectedOwner); err != nil {
+		return false, err
+	}
+
+	id := expectedOwner.ID
+	expectedCredentials := expectedOwner.Credentials
 	if r == nil || r.sql == nil {
 		return false, errors.New("account repository SQL executor is not configured")
 	}
 	expectedJSON, err := json.Marshal(normalizeJSONMap(expectedCredentials))
+	if err != nil {
+		return false, err
+	}
+	args := []any{service.StatusError,
+		errorMsg,
+		id,
+		service.PlatformGrok,
+		service.AccountTypeOAuth,
+		service.StatusActive,
+		string(expectedJSON),
+		service.SchedulerOutboxEventAccountChanged, expectedOwner.ProxyID}
+	proxyPredicate, args, err := credentialMutationProxyPredicate(expectedOwner.ProxyID, expectedOwner.Proxy, 9, args)
 	if err != nil {
 		return false, err
 	}
@@ -1386,21 +1405,14 @@ func (r *accountRepository) SetGrokOAuthErrorIfCredentialsUnchanged(
 			AND a.type = $5
 			AND a.status = $6
 			AND a.credentials = $7::jsonb
+			AND a.proxy_id IS NOT DISTINCT FROM $9
 			AND NULLIF(BTRIM(a.credentials->>'refresh_token'), '') IS NULL
+		AND `+proxyPredicate+`
 		RETURNING a.id
 		)
 		INSERT INTO scheduler_outbox (event_type, account_id, group_id, payload)
 		SELECT $8, updated.id, NULL, NULL FROM updated
-	`,
-		service.StatusError,
-		errorMsg,
-		id,
-		service.PlatformGrok,
-		service.AccountTypeOAuth,
-		service.StatusActive,
-		string(expectedJSON),
-		service.SchedulerOutboxEventAccountChanged,
-	)
+	`, args...)
 	if err != nil {
 		return false, err
 	}
@@ -1420,13 +1432,14 @@ func (r *accountRepository) SetGrokOAuthErrorIfCredentialsUnchanged(
 // proxy still match the fresh snapshot used by the upstream refresh call. The
 // scheduler outbox insert is part of the same PostgreSQL statement, so a
 // durable invalidation failure rolls the credential update back as well.
-func (r *accountRepository) UpdateGrokOAuthCredentialsIfUnchanged(
-	ctx context.Context,
-	id int64,
-	expectedCredentials map[string]any,
-	expectedProxyID *int64,
-	credentials map[string]any,
-) (bool, error) {
+func (r *accountRepository) UpdateGrokOAuthCredentialsIfUnchanged(ctx context.Context, expectedOwner *service.Account, credentials map[string]any) (bool, error) {
+	if err := validateGrokOAuthCredentialMutationOwner(expectedOwner); err != nil {
+		return false, err
+	}
+
+	id := expectedOwner.ID
+	expectedCredentials := expectedOwner.Credentials
+	expectedProxyID := expectedOwner.ProxyID
 	if r == nil || r.sql == nil {
 		return false, errors.New("account repository SQL executor is not configured")
 	}
@@ -1435,6 +1448,17 @@ func (r *accountRepository) UpdateGrokOAuthCredentialsIfUnchanged(
 		return false, err
 	}
 	credentialsJSON, err := json.Marshal(normalizeJSONMap(credentials))
+	if err != nil {
+		return false, err
+	}
+	args := []any{string(credentialsJSON),
+		id,
+		service.PlatformGrok,
+		service.AccountTypeOAuth,
+		string(expectedJSON),
+		expectedProxyID,
+		service.SchedulerOutboxEventAccountChanged, service.StatusActive}
+	proxyPredicate, args, err := credentialMutationProxyPredicate(expectedOwner.ProxyID, expectedOwner.Proxy, 6, args)
 	if err != nil {
 		return false, err
 	}
@@ -1449,19 +1473,13 @@ func (r *accountRepository) UpdateGrokOAuthCredentialsIfUnchanged(
 			AND a.type = $4
 			AND a.credentials = $5::jsonb
 			AND a.proxy_id IS NOT DISTINCT FROM $6
+			AND a.status = $8
+		AND `+proxyPredicate+`
 		RETURNING a.id
 		)
 		INSERT INTO scheduler_outbox (event_type, account_id, group_id, payload)
 		SELECT $7, updated.id, NULL, NULL FROM updated
-	`,
-		string(credentialsJSON),
-		id,
-		service.PlatformGrok,
-		service.AccountTypeOAuth,
-		string(expectedJSON),
-		expectedProxyID,
-		service.SchedulerOutboxEventAccountChanged,
-	)
+	`, args...)
 	if err != nil {
 		return false, err
 	}
@@ -1480,17 +1498,31 @@ func (r *accountRepository) UpdateGrokOAuthCredentialsIfUnchanged(
 // counterpart to reconciliation's stricter missing-refresh-token mutation. It
 // matches the complete credential document used by the failed upstream attempt
 // but deliberately does not require the refresh token to be absent.
-func (r *accountRepository) SetGrokOAuthRefreshErrorIfCredentialsUnchanged(
-	ctx context.Context,
-	id int64,
-	expectedCredentials map[string]any,
-	expectedProxyID *int64,
-	errorMsg string,
-) (bool, error) {
+func (r *accountRepository) SetGrokOAuthRefreshErrorIfCredentialsUnchanged(ctx context.Context, expectedOwner *service.Account, errorMsg string) (bool, error) {
+	if err := validateGrokOAuthCredentialMutationOwner(expectedOwner); err != nil {
+		return false, err
+	}
+
+	id := expectedOwner.ID
+	expectedCredentials := expectedOwner.Credentials
+	expectedProxyID := expectedOwner.ProxyID
 	if r == nil || r.sql == nil {
 		return false, errors.New("account repository SQL executor is not configured")
 	}
 	expectedJSON, err := json.Marshal(normalizeJSONMap(expectedCredentials))
+	if err != nil {
+		return false, err
+	}
+	args := []any{service.StatusError,
+		errorMsg,
+		id,
+		service.PlatformGrok,
+		service.AccountTypeOAuth,
+		service.StatusActive,
+		string(expectedJSON),
+		expectedProxyID,
+		service.SchedulerOutboxEventAccountChanged}
+	proxyPredicate, args, err := credentialMutationProxyPredicate(expectedOwner.ProxyID, expectedOwner.Proxy, 8, args)
 	if err != nil {
 		return false, err
 	}
@@ -1508,21 +1540,12 @@ func (r *accountRepository) SetGrokOAuthRefreshErrorIfCredentialsUnchanged(
 			AND a.status = $6
 			AND a.credentials = $7::jsonb
 			AND a.proxy_id IS NOT DISTINCT FROM $8
+		AND `+proxyPredicate+`
 		RETURNING a.id
 		)
 		INSERT INTO scheduler_outbox (event_type, account_id, group_id, payload)
 		SELECT $9, updated.id, NULL, NULL FROM updated
-	`,
-		service.StatusError,
-		errorMsg,
-		id,
-		service.PlatformGrok,
-		service.AccountTypeOAuth,
-		service.StatusActive,
-		string(expectedJSON),
-		expectedProxyID,
-		service.SchedulerOutboxEventAccountChanged,
-	)
+	`, args...)
 	if err != nil {
 		return false, err
 	}
@@ -1540,18 +1563,31 @@ func (r *accountRepository) SetGrokOAuthRefreshErrorIfCredentialsUnchanged(
 // SetGrokOAuthRefreshTempUnschedulableIfCredentialsUnchanged applies a bounded
 // transient refresh quarantine only while the active Grok OAuth credential
 // document still matches the exact upstream attempt.
-func (r *accountRepository) SetGrokOAuthRefreshTempUnschedulableIfCredentialsUnchanged(
-	ctx context.Context,
-	id int64,
-	expectedCredentials map[string]any,
-	expectedProxyID *int64,
-	until time.Time,
-	reason string,
-) (bool, error) {
+func (r *accountRepository) SetGrokOAuthRefreshTempUnschedulableIfCredentialsUnchanged(ctx context.Context, expectedOwner *service.Account, until time.Time, reason string) (bool, error) {
+	if err := validateGrokOAuthCredentialMutationOwner(expectedOwner); err != nil {
+		return false, err
+	}
+
+	id := expectedOwner.ID
+	expectedCredentials := expectedOwner.Credentials
+	expectedProxyID := expectedOwner.ProxyID
 	if r == nil || r.sql == nil {
 		return false, errors.New("account repository SQL executor is not configured")
 	}
 	expectedJSON, err := json.Marshal(normalizeJSONMap(expectedCredentials))
+	if err != nil {
+		return false, err
+	}
+	args := []any{until,
+		reason,
+		id,
+		service.PlatformGrok,
+		service.AccountTypeOAuth,
+		service.StatusActive,
+		string(expectedJSON),
+		expectedProxyID,
+		service.SchedulerOutboxEventAccountChanged}
+	proxyPredicate, args, err := credentialMutationProxyPredicate(expectedOwner.ProxyID, expectedOwner.Proxy, 8, args)
 	if err != nil {
 		return false, err
 	}
@@ -1569,21 +1605,12 @@ func (r *accountRepository) SetGrokOAuthRefreshTempUnschedulableIfCredentialsUnc
 			AND a.credentials = $7::jsonb
 			AND a.proxy_id IS NOT DISTINCT FROM $8
 			AND (a.temp_unschedulable_until IS NULL OR a.temp_unschedulable_until < $1)
+		AND `+proxyPredicate+`
 		RETURNING a.id
 		)
 		INSERT INTO scheduler_outbox (event_type, account_id, group_id, payload)
 		SELECT $9, updated.id, NULL, NULL FROM updated
-	`,
-		until,
-		reason,
-		id,
-		service.PlatformGrok,
-		service.AccountTypeOAuth,
-		service.StatusActive,
-		string(expectedJSON),
-		expectedProxyID,
-		service.SchedulerOutboxEventAccountChanged,
-	)
+	`, args...)
 	if err != nil {
 		return false, err
 	}
@@ -2354,6 +2381,12 @@ func (r *accountRepository) SetGrokCredentialTempUnschedulableIfMatch(
 	until time.Time,
 	reason string,
 ) (bool, error) {
+	args := []any{until, reason, id, service.StatusActive, service.PlatformGrok, service.AccountTypeOAuth,
+		snapshot.CredentialsJSON, snapshot.ProxyID, service.SchedulerOutboxEventAccountChanged}
+	proxyPredicate, args, err := grokCredentialMutationProxyPredicate(snapshot, 8, args, false)
+	if err != nil {
+		return false, err
+	}
 	result, err := r.sql.ExecContext(ctx, `
 		WITH updated AS (
 		UPDATE accounts AS a
@@ -2375,12 +2408,12 @@ func (r *accountRepository) SetGrokCredentialTempUnschedulableIfMatch(
 			AND (a.auto_pause_on_expired IS NOT TRUE OR a.expires_at IS NULL OR a.expires_at > NOW())
 			AND a.credentials = $7::jsonb
 			AND a.proxy_id IS NOT DISTINCT FROM $8
+		AND `+proxyPredicate+`
 		RETURNING a.id
 		)
 		INSERT INTO scheduler_outbox (event_type, account_id, group_id, payload)
 		SELECT $9, updated.id, NULL, NULL FROM updated
-	`, until, reason, id, service.StatusActive, service.PlatformGrok, service.AccountTypeOAuth,
-		snapshot.CredentialsJSON, snapshot.ProxyID, service.SchedulerOutboxEventAccountChanged)
+	`, args...)
 	if err != nil {
 		return false, err
 	}

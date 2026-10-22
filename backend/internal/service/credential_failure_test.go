@@ -18,7 +18,8 @@ import (
 
 type openAIMissingRefreshQuarantineRepo struct{ *rateLimitAccountRepoStub }
 
-func (r *openAIMissingRefreshQuarantineRepo) SetCredentialErrorIfUnchanged(ctx context.Context, id int64, _, _ string, _ map[string]any, _ *int64, reason string) (bool, error) {
+func (r *openAIMissingRefreshQuarantineRepo) SetCredentialErrorIfUnchanged(ctx context.Context, expectedOwner *Account, reason string) (bool, error) {
+	id := expectedOwner.ID
 	return true, r.SetError(ctx, id, reason)
 }
 
@@ -30,9 +31,9 @@ type credentialFenceRepo struct {
 	calls    int
 }
 
-func (r *credentialFenceRepo) SetCredentialErrorIfUnchanged(_ context.Context, id int64, platform, kind string, credentials map[string]any, proxy *int64, _ string) (bool, error) {
+func (r *credentialFenceRepo) SetCredentialErrorIfUnchanged(_ context.Context, expectedOwner *Account, _ string) (bool, error) {
 	r.calls++
-	r.observed = &Account{ID: id, Platform: platform, Type: kind, Credentials: credentials, ProxyID: proxy}
+	r.observed = snapshotRequestCredentialAccount(expectedOwner)
 	return r.applied, r.err
 }
 

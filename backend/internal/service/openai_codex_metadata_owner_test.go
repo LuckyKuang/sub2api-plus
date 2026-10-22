@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -31,6 +33,8 @@ type codexMetadataOwnerWire struct {
 	headers http.Header
 	body    []byte
 	err     error
+	proxy   string
+	host    string
 }
 
 func codexMetadataOwnerAccount(principal string, passthrough bool) *Account {
@@ -91,34 +95,61 @@ func TestCodexHTTPMetadataUsesAcquiredOwnerAfterSelectedRowRelink(t *testing.T) 
 		t.Run(adapter, func(t *testing.T) {
 			store := newTestOutboundIDStore()
 			captures := make(chan codexMetadataOwnerWire, 3)
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				wire := codexMetadataOwnerWire{headers: r.Header.Clone()}
-				wire.body, wire.err = io.ReadAll(r.Body)
-				if wire.err == nil && r.Header.Get("Content-Encoding") == "zstd" {
-					decoder, err := zstd.NewReader(nil)
-					if err != nil {
-						wire.err = err
-					} else {
-						wire.body, wire.err = decoder.DecodeAll(wire.body, nil)
-						decoder.Close()
+			proxyHandler := func(proxy string) http.HandlerFunc {
+				return func(w http.ResponseWriter, r *http.Request) {
+					wire := codexMetadataOwnerWire{headers: r.Header.Clone(), proxy: proxy}
+					wire.body, wire.err = io.ReadAll(r.Body)
+					if wire.err == nil && r.Header.Get("Content-Encoding") == "zstd" {
+						decoder, err := zstd.NewReader(nil)
+						if err != nil {
+							wire.err = err
+						} else {
+							wire.body, wire.err = decoder.DecodeAll(wire.body, nil)
+							decoder.Close()
+						}
 					}
+					captures <- wire
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusBadRequest)
+					_, _ = io.WriteString(w, `{"error":{"type":"invalid_request_error","message":"fixture stop"}}`)
 				}
-				captures <- wire
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusBadRequest)
-				_, _ = io.WriteString(w, `{"error":{"type":"invalid_request_error","message":"fixture stop"}}`)
-			}))
-			defer server.Close()
-			target, err := url.Parse(server.URL)
-			require.NoError(t, err)
+			}
+			oldProxyServer := httptest.NewServer(proxyHandler("old"))
+			defer oldProxyServer.Close()
+			newProxyServer := httptest.NewServer(proxyHandler("new"))
+			defer newProxyServer.Close()
+			newAccount := func(principal string) *Account {
+				selected := codexMetadataOwnerAccount(principal, adapter == "passthrough")
+				proxyURL := oldProxyServer.URL
+				ua := "codex_cli_rs/0.163.0 (Ubuntu 24.04; x86_64) xterm-256color"
+				if principal == "new" {
+					proxyURL = newProxyServer.URL
+					ua = "codex_vscode/0.163.0 (Windows 11; aarch64) WindowsTerminal"
+				}
+				parsed, err := url.Parse(proxyURL)
+				require.NoError(t, err)
+				port, err := strconv.Atoi(parsed.Port())
+				require.NoError(t, err)
+				selected.Proxy = &Proxy{ID: 901, Protocol: "http", Host: parsed.Hostname(), Port: port}
+				selected.ProxyID = &selected.Proxy.ID
+				selected.Credentials["user_agent"] = ua
+				return selected
+			}
 			body, turnMetadata := codexMetadataOwnerInput(t, adapter == "messages-bridge")
 			send := func(principal string, relink bool) codexMetadataOwnerWire {
 				t.Helper()
-				selected := codexMetadataOwnerAccount(principal, adapter == "passthrough")
-				upstream := &codexModelsHTTPUpstreamStub{do: func(request *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
+				selected := newAccount(principal)
+				upstream := &codexModelsHTTPUpstreamStub{do: func(request *http.Request, proxyURL string, accountID int64, _ int) (*http.Response, error) {
+					require.Equal(t, selected.ID, accountID, "resource accounting remains on the selected row")
 					redirected := request.Clone(request.Context())
-					redirected.URL.Scheme, redirected.URL.Host, redirected.Host = target.Scheme, target.Host, target.Host
-					return server.Client().Do(redirected)
+					redirected.URL.Scheme, redirected.URL.Host, redirected.Host = "http", "codex-wire.invalid", "codex-wire.invalid"
+					proxy, err := url.Parse(proxyURL)
+					if err != nil {
+						return nil, err
+					}
+					transport := &http.Transport{Proxy: http.ProxyURL(proxy)}
+					defer transport.CloseIdleConnections()
+					return (&http.Client{Transport: transport}).Do(redirected)
 				}}
 				svc := newOpenAIRejectedFieldTestService(nil)
 				svc.httpUpstream = upstream
@@ -128,8 +159,9 @@ func TestCodexHTTPMetadataUsesAcquiredOwnerAfterSelectedRowRelink(t *testing.T) 
 					token := selected.GetOpenAIAccessToken()
 					recordRequestCredentialOwner(ctx, selected, token)
 					if relink {
-						newGrant := codexMetadataOwnerAccount("new", adapter == "passthrough")
+						newGrant := newAccount("new")
 						selected.Credentials, selected.Extra = newGrant.Credentials, newGrant.Extra
+						selected.ProxyID, selected.Proxy = newGrant.ProxyID, newGrant.Proxy
 					}
 					return token
 				}}, nil)
@@ -144,6 +176,7 @@ func TestCodexHTTPMetadataUsesAcquiredOwnerAfterSelectedRowRelink(t *testing.T) 
 				SetOpenAIClientTransport(c, OpenAIClientTransportHTTP)
 				ctx, cancel := context.WithTimeout(WithOutboundIDStore(t.Context(), store), 5*time.Second)
 				defer cancel()
+				var err error
 				switch adapter {
 				case "chat-responses-bridge":
 					c.Request.URL.Path = "/v1/chat/completions"
@@ -169,6 +202,12 @@ func TestCodexHTTPMetadataUsesAcquiredOwnerAfterSelectedRowRelink(t *testing.T) 
 			oldOnly := send("old", false)
 			raced := send("old", true)
 			newOnly := send("new", false)
+			require.Equal(t, "old", raced.proxy, "the actual HTTP transport must use the acquired grant's proxy")
+			require.Equal(t, "new", newOnly.proxy)
+			require.Equal(t, "codex_cli_rs/0.163.0 (Ubuntu 24.04; x86_64) xterm-256color", raced.headers.Get("User-Agent"))
+			require.Equal(t, "codex_cli_rs", raced.headers.Get("Originator"))
+			require.Equal(t, "0.163.0", raced.headers.Get("Version"))
+			require.Equal(t, "codex_vscode", newOnly.headers.Get("Originator"))
 			require.Equal(t, "Bearer old-token", raced.headers.Get("Authorization"))
 			require.Equal(t, "old-principal", raced.headers.Get("Chatgpt-Account-Id"))
 			for _, name := range []string{"thread-id", "x-client-request-id", "x-codex-parent-thread-id", "x-codex-window-id", "x-codex-turn-metadata"} {
@@ -296,5 +335,132 @@ func TestCodexMetadataShadowParentUsesAcquiredGrantWithoutReread(t *testing.T) {
 		require.NoError(t, err, "the acquired parent must not trigger a later repository lookup")
 		require.Equal(t, "old-principal", fingerprintOwner.GetChatGPTAccountID())
 		require.Equal(t, "old-token", fingerprintOwner.GetOpenAIAccessToken())
+	}
+}
+
+func TestCodexAPIKeyDestinationAndOverridesUseAcquiredGrant(t *testing.T) {
+	for _, transport := range []string{"http", "passthrough", "websocket"} {
+		for _, relink := range []string{"apikey", "oauth", "agent-identity", "native-cn"} {
+			t.Run(transport+"/"+relink, func(t *testing.T) {
+				captured := make(chan codexMetadataOwnerWire, 1)
+				oldServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					body, err := io.ReadAll(r.Body)
+					captured <- codexMetadataOwnerWire{headers: r.Header.Clone(), proxy: "old", host: r.Host, body: body, err: err}
+					w.WriteHeader(http.StatusNoContent)
+				}))
+				defer oldServer.Close()
+				newServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					captured <- codexMetadataOwnerWire{headers: r.Header.Clone(), proxy: "new", host: r.Host}
+					w.WriteHeader(http.StatusNoContent)
+				}))
+				defer newServer.Close()
+				selected := &Account{ID: 9705, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Credentials: map[string]any{
+					"api_key": "old-key", "base_url": oldServer.URL, "header_override_enabled": true,
+					"user_agent":       "codex_vscode/0.163.0 (Ubuntu 24.04; aarch64) vscode",
+					"header_overrides": map[string]any{"X-Acquired-Grant": "old"}}}
+				ctx := WithOutboundIdentityScope(t.Context(), nil)
+				recordRequestCredentialOwner(ctx, selected, "old-key")
+				ctx = withRequestCredentialOwner(ctx, selected, "old-key")
+				selected.Credentials = map[string]any{"api_key": "replacement-key", "base_url": newServer.URL, "header_override_enabled": true,
+					"header_overrides": map[string]any{"X-Acquired-Grant": "replacement"}}
+				switch relink {
+				case "oauth", "agent-identity":
+					selected.Type = AccountTypeOAuth
+					selected.Credentials["access_token"] = "replacement-oauth-token"
+					selected.Credentials["chatgpt_account_id"] = "replacement-principal"
+					if relink == "agent-identity" {
+						selected.Credentials["auth_mode"] = OpenAIAuthModeAgentIdentity
+					}
+				case "native-cn":
+					selected.Platform = PlatformDeepseek
+				}
+				body := []byte(`{"model":"gpt-5.4","input":"hello","store":true,"previous_response_id":"owned-response"}`)
+				c := newOpenAIRejectedFieldTestContext(body)
+				svc := newOpenAIRejectedFieldTestService(nil)
+				// The destination is an isolated local HTTP capture fixture.
+				svc.cfg.Security.URLAllowlist.AllowInsecureHTTP = true
+				var request *http.Request
+				var err error
+				switch transport {
+				case "http":
+					request, err = svc.buildUpstreamRequest(ctx, c, selected, body, "old-key", false, "", false)
+				case "passthrough":
+					request, err = svc.buildUpstreamRequestOpenAIPassthrough(ctx, c, selected, body, "old-key")
+				case "websocket":
+					var target string
+					target, err = svc.buildOpenAIResponsesWSURL(ctx, selected)
+					require.NoError(t, err)
+					require.True(t, strings.HasPrefix(target, "ws"+strings.TrimPrefix(oldServer.URL, "http")), "the acquired bearer cannot move to the replacement destination")
+					headers, _, headerErr := svc.buildOpenAIWSHeaders(ctx, c, selected, "old-key", OpenAIWSProtocolDecision{Transport: OpenAIUpstreamTransportResponsesWebsocketV2}, false, "", "", "", "gpt-5.4", "")
+					require.NoError(t, headerErr)
+					// Send the same destination/headers via HTTP so the capture is
+					// independent of the URL/header builders under test.
+					request, err = http.NewRequestWithContext(ctx, http.MethodGet, "http"+strings.TrimPrefix(target, "ws"), nil)
+					if err == nil {
+						request.Header = headers
+					}
+				}
+				require.NoError(t, err)
+				response, err := oldServer.Client().Do(request)
+				require.NoError(t, err)
+				require.NoError(t, response.Body.Close())
+				wire := <-captured
+				require.NoError(t, wire.err)
+				require.Equal(t, "old", wire.proxy)
+				require.Equal(t, strings.TrimPrefix(oldServer.URL, "http://"), wire.host, "the acquired API key cannot acquire the replacement OAuth Host")
+				require.Equal(t, "Bearer old-key", wire.headers.Get("Authorization"))
+				require.Equal(t, "old", wire.headers.Get("X-Acquired-Grant"))
+				require.Equal(t, "codex_vscode/0.163.0 (Ubuntu 24.04; aarch64) vscode", wire.headers.Get("User-Agent"))
+				require.Equal(t, "codex_vscode", wire.headers.Get("Originator"))
+				require.Equal(t, "0.163.0", wire.headers.Get("Version"))
+				require.Empty(t, wire.headers.Get("Chatgpt-Account-Id"))
+				if transport != "websocket" {
+					require.True(t, gjson.GetBytes(wire.body, "store").Bool(), "an OpenAI API-key body cannot adopt replacement native-CN stateless normalization")
+					require.Equal(t, "owned-response", gjson.GetBytes(wire.body, "previous_response_id").String())
+				}
+			})
+		}
+	}
+}
+
+// Session-sharing authorization applies even without optional session/cache
+// fields. Resolving a credential owner preserves both an acquired OAuth policy
+// after a type relink and any additional selected-shadow authorization gate.
+func TestCodexFrozenBuildersPreserveSessionSharingAuthorization(t *testing.T) {
+	for _, transport := range []string{"http", "passthrough", "websocket"} {
+		for _, route := range []string{"relinked-oauth-owner", "restricted-shadow"} {
+			t.Run(transport+"/"+route, func(t *testing.T) {
+				owner := codexMetadataOwnerAccount("old", false)
+				selected := owner
+				if route == "restricted-shadow" {
+					shadow := newOpenAIOAuthSessionPolicyAccount(9706, 11)
+					shadow.ParentAccountID = &owner.ID
+					selected = &shadow
+				} else {
+					policyAccount := newOpenAIOAuthSessionPolicyAccount(owner.ID, 11)
+					owner.Extra = policyAccount.Extra
+				}
+				ctx := WithOutboundIdentityScope(t.Context(), nil)
+				recordRequestCredentialOwner(ctx, owner, "old-token")
+				ctx = withRequestCredentialOwner(ctx, selected, "old-token")
+				if route == "relinked-oauth-owner" {
+					selected.Type = AccountTypeAPIKey
+					selected.Credentials = map[string]any{"api_key": "replacement-key"}
+				}
+				c := newOAuthSessionPolicyGinContext(101, 9001, 13)
+				service := newOpenAIRejectedFieldTestService(nil)
+				body := []byte(`{"model":"gpt-5.4","input":"hello"}`)
+				var err error
+				switch transport {
+				case "http":
+					_, err = service.buildUpstreamRequest(ctx, c, selected, body, "old-token", false, "", false)
+				case "passthrough":
+					_, err = service.buildUpstreamRequestOpenAIPassthrough(ctx, c, selected, body, "old-token")
+				case "websocket":
+					_, _, err = service.buildOpenAIWSHeaders(ctx, c, selected, "old-token", OpenAIWSProtocolDecision{Transport: OpenAIUpstreamTransportResponsesWebsocketV2}, false, "", "", "", "gpt-5.4", "")
+				}
+				require.ErrorIs(t, err, ErrOpenAIOAuthSessionAccessDenied)
+			})
+		}
 	}
 }

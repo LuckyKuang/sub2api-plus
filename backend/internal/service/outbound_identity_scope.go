@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"maps"
 	"net/http"
 	"reflect"
@@ -15,12 +16,60 @@ import (
 
 type outboundIdentityScopeKey struct{}
 
+type outboundIdentitySettingsOwnerKey struct{}
+
+type outboundIdentitySettingsSnapshot struct {
+	defaults           sync.Map
+	codexSettingsOnce  sync.Once
+	codexSettings      codexOutboundSettingsSnapshot
+	presetSettingsOnce sync.Once
+	presetSettings     OutboundIdentitySettings
+}
+
+func withOutboundIdentitySettingsOwner(ctx context.Context, account *Account) context.Context {
+	if account == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, outboundIdentitySettingsOwnerKey{}, credentialOwnerKey(account))
+}
+
+func requestIdentitySettingsSnapshot(ctx context.Context) *outboundIdentitySettingsSnapshot {
+	scope := outboundIdentityScopeFromContext(ctx)
+	if scope == nil {
+		return nil
+	}
+	owner, _ := ctx.Value(outboundIdentitySettingsOwnerKey{}).(outboundIdentityOwner)
+	stored, _ := scope.settings.LoadOrStore(owner, &outboundIdentitySettingsSnapshot{})
+	snapshot, _ := stored.(*outboundIdentitySettingsSnapshot)
+	return snapshot
+}
+
+type acquiredIdentityCacheKey struct {
+	owner     outboundIdentityOwner
+	candidate string
+}
+
+func requestCredentialIdentityCacheKey(ctx context.Context, account *Account, candidate string) any {
+	key := outboundIdentityOwnerKey(account)
+	if ctx != nil {
+		if sent, ok := ctx.Value(requestCredentialTransportKey{}).(requestCredentialTransportEvidence); ok && sent.owner != nil && outboundIdentityOwnerKey(sent.owner) == key {
+			return acquiredIdentityCacheKey{owner: key, candidate: candidate}
+		}
+		if evidence, ok := ctx.Value(requestCredentialOwnerContextKey{}).(requestCredentialOwnerEvidence); ok &&
+			(evidence.selected == key || credentialOwnerKeyFromEvidence(evidence) == key) {
+			return acquiredIdentityCacheKey{owner: key, candidate: candidate}
+		}
+	}
+	return key
+}
+
 // A scope belongs to one accepted request or WS connection. The existing
 // resolvers still select identities; the scope only retains their first result
 // for each credential owner across retries and nested credential operations.
 type outboundIdentityScope struct {
 	codex            sync.Map
 	presets          sync.Map
+	settings         sync.Map
 	credentialOwners sync.Map
 	grokRequests     sync.Map
 	minimaxTurns     sync.Map
@@ -200,6 +249,9 @@ func withRequestCredentialOwner(ctx context.Context, selected *Account, token st
 	if !acquired && selected != nil && !selected.IsShadow() && credentialOwnerHasToken(selected, token) {
 		evidence.owner = snapshotRequestCredentialAccount(selected)
 	}
+	// A newly acquired attempt cannot inherit a native sender's evidence from
+	// an earlier retry or failover. The sender publishes its own snapshot later.
+	ctx = context.WithValue(ctx, requestCredentialTransportKey{}, false)
 	return context.WithValue(ctx, requestCredentialOwnerContextKey{}, evidence)
 }
 
@@ -225,6 +277,51 @@ func requestCredentialOwner(ctx context.Context, selected *Account) (*Account, b
 		}
 	}
 	return snapshotRequestCredentialAccount(evidence.owner), evidence.owner != nil
+}
+
+// Once credentials have been acquired, both the selected route and its parent
+// must resolve the same immutable owner. Pre-acquisition helpers retain their
+// explicit account; ambiguous acquired evidence cannot fall back to that row.
+func requestCredentialAccount(ctx context.Context, account *Account) (*Account, error) {
+	if ctx == nil || account == nil {
+		return account, nil
+	}
+	evidence, bound := ctx.Value(requestCredentialOwnerContextKey{}).(requestCredentialOwnerEvidence)
+	key := outboundIdentityOwnerKey(account)
+	applies := bound && (evidence.selected == key || credentialOwnerKeyFromEvidence(evidence) == key)
+	if sent, ok := ctx.Value(requestCredentialTransportKey{}).(requestCredentialTransportEvidence); ok {
+		expected := credentialOwnerKey(account)
+		if applies {
+			expected = credentialOwnerKeyFromEvidence(evidence)
+		}
+		if sent.owner == nil || outboundIdentityOwnerKey(sent.owner) != expected {
+			return nil, errors.New("request transmitted credential owner is unavailable")
+		}
+		return snapshotRequestCredentialAccount(sent.owner), nil
+	}
+	if !applies {
+		return account, nil
+	}
+	selected := evidence.selected.unsaved
+	if selected == nil {
+		selected = &Account{ID: evidence.selected.id}
+	}
+	owner, known := requestCredentialOwner(ctx, selected)
+	if !known {
+		return nil, errors.New("request credential owner is unavailable")
+	}
+	return owner, nil
+}
+
+func requestCredentialOwnerProxyURL(ctx context.Context, account *Account) (string, error) {
+	owner, err := requestCredentialAccount(ctx, account)
+	if err != nil || owner == nil {
+		return "", err
+	}
+	if owner.ProxyID != nil && owner.Proxy == nil {
+		return "", errors.New("request credential proxy is unavailable")
+	}
+	return resolveAccountProxyURL(owner), nil
 }
 
 // A native transport can refresh after its outer protocol handler acquired a

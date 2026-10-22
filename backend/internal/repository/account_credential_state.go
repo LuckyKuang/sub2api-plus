@@ -14,8 +14,11 @@ import (
 var _ service.CredentialStateMutationRepository = (*accountRepository)(nil)
 
 func (r *accountRepository) ApplyCredentialStateMutation(ctx context.Context, owner *service.Account, mutation service.CredentialStateMutation) (bool, error) {
-	if r == nil || r.sql == nil || owner == nil || owner.ID <= 0 || owner.IsShadow() || owner.CredentialGeneration != "" || owner.CNQuotaGeneration != "" {
+	if r == nil || r.sql == nil {
 		return false, errors.New("credential state mutation requires an owner snapshot")
+	}
+	if err := validateCredentialMutationOwner(owner); err != nil {
+		return false, err
 	}
 	if mutation.ClearRateLimit && (mutation.RateLimitUntil != nil || mutation.ObservedLimitedAt == nil || mutation.ObservedResetAt == nil) {
 		return false, errors.New("credential rate-limit clear requires exact observed state")
@@ -28,15 +31,18 @@ func (r *accountRepository) ApplyCredentialStateMutation(ctx context.Context, ow
 		return false, err
 	}
 	args := []any{owner.ID, owner.Platform, owner.Type, string(expected), owner.ProxyID}
+	proxyPredicate, args, err := credentialMutationProxyPredicate(owner.ProxyID, owner.Proxy, 5, args)
+	if err != nil {
+		return false, err
+	}
 	arg := func(value any) string {
 		args = append(args, value)
 		return fmt.Sprintf("$%d", len(args))
 	}
 	sets := []string{}
-	predicates := []string{"a.id = $1", "a.platform = $2", "a.type = $3", "a.credentials = $4::jsonb", "a.proxy_id IS NOT DISTINCT FROM $5", "a.deleted_at IS NULL"}
-	if owner.ProxyID != nil && owner.Proxy != nil {
-		proxy := owner.Proxy
-		predicates = append(predicates, "EXISTS (SELECT 1 FROM proxies p WHERE p.id = a.proxy_id AND p.deleted_at IS NULL AND p.protocol = "+arg(proxy.Protocol)+" AND p.host = "+arg(proxy.Host)+" AND p.port = "+arg(proxy.Port)+" AND COALESCE(p.username, '') = "+arg(proxy.Username)+" AND COALESCE(p.password, '') = "+arg(proxy.Password)+")")
+	predicates := []string{"a.id = $1", "a.platform = $2", "a.type = $3", "a.credentials = $4::jsonb", "a.proxy_id IS NOT DISTINCT FROM $5", "a.deleted_at IS NULL", "a.status = " + arg(owner.Status), proxyPredicate}
+	if mutation.RequireTempUnschedulableUnchanged {
+		predicates = append(predicates, "a.temp_unschedulable_until IS NOT DISTINCT FROM "+arg(mutation.ObservedTempUntil)+"::timestamptz", "COALESCE(a.temp_unschedulable_reason, '') = "+arg(mutation.ObservedTempReason))
 	}
 	if len(mutation.Extra) > 0 {
 		raw, err := json.Marshal(mutation.Extra)

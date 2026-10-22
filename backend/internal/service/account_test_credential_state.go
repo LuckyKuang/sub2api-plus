@@ -33,7 +33,7 @@ func (s *AccountTestService) setProbeCredentialError(ctx context.Context, select
 		slog.Warn("probe_credential_state_unavailable", "account_id", owner.ID)
 		return
 	}
-	if _, err := repo.SetCredentialErrorIfUnchanged(ctx, owner.ID, owner.Platform, owner.Type, owner.Credentials, owner.ProxyID, message); err != nil {
+	if _, err := repo.SetCredentialErrorIfUnchanged(ctx, owner, message); err != nil {
 		slog.Warn("probe_credential_state_failed", "account_id", owner.ID, "error", err)
 	}
 }

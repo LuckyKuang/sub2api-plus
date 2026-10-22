@@ -327,6 +327,9 @@ func (s *CNProviderBalanceCheckService) checkOne(ctx context.Context, account *A
 
 // applyBalanceResult 按余额探测结果停调或恢复账号。
 func (s *CNProviderBalanceCheckService) applyBalanceResult(ctx context.Context, account *Account, result *CNProviderBalanceResult, threshold float64) cnBalanceCheckOutcome {
+	if result != nil && result.owner != nil || cnBalanceRequiresOwner(account) {
+		return s.applyOwnedBalanceResult(ctx, account, result, threshold)
+	}
 	// 双币种（deepseek CNY+USD）任一币种余额达标即可继续调度；仅当全部低于
 	// 阈值（或不可用）才停调。
 	low := !result.Available || allCNBalancesBelowThreshold(result, threshold)
@@ -354,6 +357,45 @@ func (s *CNProviderBalanceCheckService) applyBalanceResult(ctx context.Context, 
 		return cnBalanceCleared
 	}
 	return cnBalanceNoChange
+}
+
+// Native balances authorize scheduling changes only for the grant that answered
+// the probe. The cooldown observed before that call must also remain unchanged.
+func (s *CNProviderBalanceCheckService) applyOwnedBalanceResult(ctx context.Context, selected *Account, result *CNProviderBalanceResult, threshold float64) cnBalanceCheckOutcome {
+	if selected == nil || result == nil || !result.Success || result.owner == nil || result.owner.ID != selected.ID || result.Provider != result.owner.Platform || !cnBalanceRequiresOwner(result.owner) {
+		return cnBalanceNoChange
+	}
+	owner := result.owner
+	repo, ok := s.accountRepo.(CredentialStateMutationRepository)
+	if !ok {
+		log.Printf("[CNBalance] conditional scheduling unavailable: account=%d", owner.ID)
+		return cnBalanceNoChange
+	}
+	mutation := CredentialStateMutation{RequireTempUnschedulableUnchanged: true, ObservedTempUntil: owner.TempUnschedulableUntil, ObservedTempReason: owner.TempUnschedulableReason}
+	var outcome cnBalanceCheckOutcome
+	if !result.Available || allCNBalancesBelowThreshold(result, threshold) {
+		if !owner.IsSchedulable() {
+			return cnBalanceNoChange
+		}
+		until := time.Now().Add(s.cooldown())
+		mutation.TempUnschedulableUntil = &until
+		mutation.TempUnschedulableReason = cnBalanceLowReason(fmt.Sprintf("余额 %.4g %s 低于阈值 %.2f", result.Balance, result.Currency, threshold))
+		outcome = cnBalancePaused
+	} else if owner.TempUnschedulableUntil != nil && strings.HasPrefix(owner.TempUnschedulableReason, cnBalanceLowReasonPrefix) {
+		mutation.ClearTempUnschedulable = true
+		outcome = cnBalanceCleared
+	} else {
+		return cnBalanceNoChange
+	}
+	applied, err := repo.ApplyCredentialStateMutation(ctx, owner, mutation)
+	if err != nil {
+		log.Printf("[CNBalance] conditional scheduling failed: account=%d err=%v", owner.ID, err)
+		return cnBalanceNoChange
+	}
+	if !applied {
+		return cnBalanceNoChange
+	}
+	return outcome
 }
 
 func (s *CNProviderBalanceCheckService) platforms() []string {

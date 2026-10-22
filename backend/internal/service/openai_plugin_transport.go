@@ -12,6 +12,13 @@ func (s *OpenAIGatewayService) SetPluginManager(manager *PluginManager) {
 // 插件返回标准 http.Response，响应解析、错误映射、SSE 和计费仍由现有核心链处理。
 func (s *OpenAIGatewayService) doOpenAIUpstream(request *http.Request, proxyURL string, account *Account) (*http.Response, error) {
 	attemptCtx := request.Context()
+	if requestCredentialOwnerBound(attemptCtx, account) {
+		var err error
+		proxyURL, err = requestCredentialOwnerProxyURL(attemptCtx, account)
+		if err != nil {
+			return nil, err
+		}
+	}
 	*request = *request.WithContext(WithAccountOutboundIdentity(request.Context(), account))
 	response, responseErr := s.cnOAuthService.roundTripZhipuLinked(request, account, func(req *http.Request) (*http.Response, error) {
 		return s.cnOAuthService.roundTripNativeOAuth(req, account, func(native *http.Request) (*http.Response, error) {
@@ -34,15 +41,26 @@ func (s *OpenAIGatewayService) doOpenAIUpstream(request *http.Request, proxyURL 
 }
 
 func (s *OpenAIGatewayService) doOpenAIUpstreamPrepared(request *http.Request, proxyURL string, account *Account) (*http.Response, error) {
+	credentialAccount, err := requestCredentialAccount(request.Context(), account)
+	if err != nil {
+		return nil, err
+	}
+	_, nativeOwner := request.Context().Value(requestCredentialTransportKey{}).(requestCredentialTransportEvidence)
+	if nativeOwner || requestCredentialOwnerBound(request.Context(), account) {
+		proxyURL, err = requestCredentialOwnerProxyURL(request.Context(), account)
+		if err != nil {
+			return nil, err
+		}
+	}
 	request = prepareAccountOutboundRequest(request, account)
 	if err := OutboundPreparationError(request.Context()); err != nil {
 		return nil, err
 	}
-	if err := applyZhipuOffPeakTicketHeader(request.Context(), account, request.Header); err != nil {
+	if err := applyZhipuOffPeakTicketHeader(request.Context(), credentialAccount, request.Header); err != nil {
 		return nil, err
 	}
 	if s.pluginManager != nil {
-		response, handled, err := s.pluginManager.RoundTripOpenAIOAuth(request.Context(), request, proxyURL, account)
+		response, handled, err := s.pluginManager.RoundTripOpenAIOAuth(request.Context(), request, proxyURL, credentialAccount)
 		if handled {
 			return response, err
 		}
@@ -67,15 +85,26 @@ func (s *AccountTestService) doOpenAIAccountTestUpstreamPrepared(
 	account *Account,
 	useTLSFallback bool,
 ) (*http.Response, error) {
+	credentialAccount, err := requestCredentialAccount(request.Context(), account)
+	if err != nil {
+		return nil, err
+	}
+	_, nativeOwner := request.Context().Value(requestCredentialTransportKey{}).(requestCredentialTransportEvidence)
+	if nativeOwner || requestCredentialOwnerBound(request.Context(), account) {
+		proxyURL, err = requestCredentialOwnerProxyURL(request.Context(), account)
+		if err != nil {
+			return nil, err
+		}
+	}
 	request = prepareAccountOutboundRequest(request, account)
 	if err := OutboundPreparationError(request.Context()); err != nil {
 		return nil, err
 	}
-	if err := applyZhipuOffPeakTicketHeader(request.Context(), account, request.Header); err != nil {
+	if err := applyZhipuOffPeakTicketHeader(request.Context(), credentialAccount, request.Header); err != nil {
 		return nil, err
 	}
 	if s.pluginManager != nil {
-		response, handled, err := s.pluginManager.RoundTripOpenAIOAuth(request.Context(), request, proxyURL, account)
+		response, handled, err := s.pluginManager.RoundTripOpenAIOAuth(request.Context(), request, proxyURL, credentialAccount)
 		if handled {
 			return response, err
 		}
@@ -86,7 +115,7 @@ func (s *AccountTestService) doOpenAIAccountTestUpstreamPrepared(
 			proxyURL,
 			account.ID,
 			account.Concurrency,
-			s.tlsFPProfileService.ResolveTLSProfile(account),
+			s.tlsFPProfileService.ResolveTLSProfile(credentialAccount),
 		)
 	}
 	return s.httpUpstream.Do(request, proxyURL, account.ID, account.Concurrency)

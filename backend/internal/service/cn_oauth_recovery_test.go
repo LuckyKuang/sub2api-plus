@@ -19,7 +19,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func (r *refreshAPIAccountRepo) UpdateOAuthCredentialsIfUnchanged(ctx context.Context, id int64, platform string, expected map[string]any, proxy *int64, credentials map[string]any) (bool, error) {
+func (r *refreshAPIAccountRepo) UpdateOAuthCredentialsIfUnchanged(ctx context.Context, expectedOwner *Account, credentials map[string]any) (bool, error) {
+	id := expectedOwner.ID
+	platform := expectedOwner.Platform
+	expected := expectedOwner.Credentials
+	proxy := expectedOwner.ProxyID
 	r.successCASCalls++
 	r.lastExpectedCredentials = shallowCopyMap(expected)
 	if proxy != nil {
@@ -34,7 +38,7 @@ func (r *refreshAPIAccountRepo) UpdateOAuthCredentialsIfUnchanged(ctx context.Co
 	if r.updateErr != nil {
 		return false, r.updateErr
 	}
-	if r.account == nil || r.account.ID != id || r.account.Platform != platform || r.account.Type != AccountTypeOAuth || !reflect.DeepEqual(r.account.Credentials, expected) || !reflect.DeepEqual(r.account.ProxyID, proxy) {
+	if r.account == nil || r.account.ID != id || r.account.Platform != platform || r.account.Type != AccountTypeOAuth || !reflect.DeepEqual(r.account.Credentials, expected) || (!reflect.DeepEqual(r.account.ProxyID, proxy) || !reflect.DeepEqual(r.account.Proxy, expectedOwner.Proxy)) {
 		return false, nil
 	}
 	return true, r.UpdateCredentials(ctx, id, credentials)

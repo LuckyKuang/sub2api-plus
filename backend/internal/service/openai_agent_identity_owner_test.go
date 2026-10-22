@@ -17,7 +17,7 @@ func TestAgentIdentityTaskCannotCrossConcurrentRelink(t *testing.T) {
 	// OUTBOUND_IDENTITY requires the assertion, client triple and execution IDs
 	// to belong to one snapshot, even when task bootstrap re-reads the row.
 	for _, phase := range []string{"before_task_read", "during_registration"} {
-		for _, changed := range []string{"runtime", "key", "auth_mode", "proxy"} {
+		for _, changed := range []string{"runtime", "key", "auth_mode", "proxy", "proxy_status", "fingerprint", "header"} {
 			t.Run(phase+"/"+changed, func(t *testing.T) {
 				_, originalKey := newTestAgentIdentityKey(t)
 				_, replacementKey := newTestAgentIdentityKey(t)
@@ -41,6 +41,12 @@ func TestAgentIdentityTaskCannotCrossConcurrentRelink(t *testing.T) {
 					case "proxy":
 						proxyID := int64(19)
 						repo.account.ProxyID = &proxyID
+					case "proxy_status":
+						repo.account.Proxy = &Proxy{Status: "inactive"}
+					case "fingerprint":
+						repo.account.Credentials["user_agent"] = testOpenAIAccountUserAgent
+					case "header":
+						repo.account.Credentials["chatgpt_account_id"] = "organization-relinked"
 					}
 				}
 				registrations := 0
@@ -86,7 +92,6 @@ func TestAgentIdentityTaskReadAdoptsOnlySameOwnerTask(t *testing.T) {
 	}}
 	current := cloneAgentIdentityTestAccount(account)
 	current.Credentials["task_id"] = "task-from-other-worker"
-	current.Credentials["user_agent"] = DefaultOpenAICodexUserAgent
 	repo := &agentIdentityCredentialsRepo{account: current}
 	identity := resolveOpenAIOutboundIdentityFromSettings(context.Background(), account, nil)
 	headers, err := buildAgentIdentityAuthenticationHeadersWithIdentity(context.Background(), repo, nil, &sync.Mutex{}, account, identity)
@@ -119,6 +124,113 @@ func TestAgentIdentityTaskRecoveryAdvancesOnlyNextAcquisition(t *testing.T) {
 	recordRequestCredentialOwner(ctx, account, "")
 	_, known = requestCredentialOwner(withRequestCredentialOwner(ctx, account, ""), account)
 	require.False(t, known, "a different signer under the same empty bearer remains ambiguous")
+}
+
+func TestAgentIdentityTaskRecoveryBindsNewAttemptWithoutRewritingOld(t *testing.T) {
+	for _, shadow := range []bool{false, true} {
+		t.Run(map[bool]string{false: "direct", true: "shadow"}[shadow], func(t *testing.T) {
+			_, key := newTestAgentIdentityKey(t)
+			proxyID := int64(18)
+			owner := &Account{ID: 456, Platform: PlatformOpenAI, Type: AccountTypeOAuth, ProxyID: &proxyID,
+				Proxy: &Proxy{ID: proxyID, Protocol: "http", Host: "proxy-original.invalid", Port: 8080, Username: "original", Password: "secret", Status: StatusActive},
+				Credentials: map[string]any{
+					"auth_mode": OpenAIAuthModeAgentIdentity, "agent_runtime_id": "runtime-original", "agent_private_key": key,
+					"task_id": "task-old", "user_agent": testOpenAIAccountUserAgent,
+				}}
+			selected := snapshotRequestCredentialAccount(owner)
+			if shadow {
+				selected = &Account{ID: 457, Platform: PlatformOpenAI, Type: AccountTypeOAuth, ParentAccountID: &owner.ID}
+			}
+			ctx := WithOutboundIdentityScope(context.Background(), nil)
+			recordRequestCredentialOwner(ctx, owner, "")
+			first := withRequestCredentialOwner(ctx, selected, "")
+			current := snapshotRequestCredentialAccount(owner)
+			current.Credentials["task_id"] = "task-new"
+			repo := &agentIdentityCredentialsRepo{account: current}
+			svc := &OpenAIGatewayService{accountRepo: repo}
+
+			next, err := svc.recoverAgentIdentityTask(first, selected, "task-old")
+			require.NoError(t, err)
+			oldOwner, known := requestCredentialOwner(first, selected)
+			require.True(t, known)
+			newOwner, known := requestCredentialOwner(next, selected)
+			require.True(t, known)
+			require.Equal(t, "task-old", oldOwner.GetCredential("task_id"))
+			require.Equal(t, "task-new", newOwner.GetCredential("task_id"))
+			require.Equal(t, testOpenAIAccountUserAgent, newOwner.GetCredential("user_agent"))
+			require.Equal(t, owner.ProxyID, newOwner.ProxyID)
+			require.Equal(t, owner.Proxy, newOwner.Proxy)
+			require.Equal(t, "runtime-original", newOwner.GetCredential("agent_runtime_id"))
+			require.Equal(t, key, newOwner.GetCredential("agent_private_key"))
+			require.Empty(t, repo.credentials, "adopting a same-signer task must not rewrite repository credentials")
+
+			// Authentication and recursive acquisition can receive an older owner
+			// pointer. The new attempt's authority must still supply its task.
+			stale := snapshotRequestCredentialAccount(owner)
+			oldHeaders, err := svc.buildOpenAIAuthenticationHeaders(first, selected, "")
+			require.NoError(t, err)
+			newHeaders, err := svc.buildOpenAIAuthenticationHeaders(next, stale, "")
+			require.NoError(t, err)
+			require.Equal(t, "task-old", decodeAgentAssertionTask(t, oldHeaders.Get("Authorization")))
+			require.Equal(t, "task-new", decodeAgentAssertionTask(t, newHeaders.Get("Authorization")))
+			_, kind, err := svc.GetAccessToken(next, stale)
+			require.NoError(t, err)
+			require.Equal(t, OpenAIAuthModeAgentIdentity, kind)
+			reacquired, known := requestCredentialOwner(withRequestCredentialOwner(next, selected, ""), selected)
+			require.True(t, known)
+			require.Equal(t, "task-new", reacquired.GetCredential("task_id"), "recursive acquisition must not republish the rejected task")
+		})
+	}
+}
+
+func TestAgentIdentityTaskRecoveryRejectsRelinkedSigner(t *testing.T) {
+	for _, changed := range []string{"runtime", "key", "type", "auth_mode", "proxy", "proxy_status", "fingerprint", "header"} {
+		for _, source := range []string{"selected", "repository"} {
+			t.Run(source+"/"+changed, func(t *testing.T) {
+				_, key := newTestAgentIdentityKey(t)
+				_, replacementKey := newTestAgentIdentityKey(t)
+				account := &Account{ID: 458, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Credentials: map[string]any{
+					"auth_mode": OpenAIAuthModeAgentIdentity, "agent_runtime_id": "runtime-original", "agent_private_key": key, "task_id": "task-old",
+				}}
+				ctx := WithOutboundIdentityScope(context.Background(), nil)
+				recordRequestCredentialOwner(ctx, account, "")
+				ctx = withRequestCredentialOwner(ctx, account, "")
+				current := snapshotRequestCredentialAccount(account)
+				current.Credentials["task_id"] = "task-new"
+				relinked := current
+				if source == "selected" {
+					relinked = account
+				}
+				switch changed {
+				case "runtime":
+					relinked.Credentials["agent_runtime_id"] = "runtime-relinked"
+				case "key":
+					relinked.Credentials["agent_private_key"] = replacementKey
+				case "type":
+					relinked.Type = AccountTypeAPIKey
+				case "auth_mode":
+					relinked.Credentials["auth_mode"] = "oauth"
+				case "proxy":
+					proxyID := int64(19)
+					relinked.ProxyID = &proxyID
+				case "proxy_status":
+					relinked.Proxy = &Proxy{Status: "inactive"}
+				case "fingerprint":
+					relinked.Credentials["user_agent"] = testOpenAIAccountUserAgent
+				case "header":
+					relinked.Credentials["chatgpt_account_id"] = "organization-relinked"
+				}
+				repo := &agentIdentityCredentialsRepo{account: current}
+				svc := &OpenAIGatewayService{accountRepo: repo}
+				_, err := svc.recoverAgentIdentityTask(ctx, account, "task-old")
+				require.Error(t, err)
+				oldOwner, known := requestCredentialOwner(ctx, account)
+				require.True(t, known)
+				require.Equal(t, "task-old", oldOwner.GetCredential("task_id"))
+				require.Empty(t, repo.credentials, "a relink must not be overwritten by task recovery")
+			})
+		}
+	}
 }
 
 func TestAgentIdentityShadowCannotSignWithRelinkedParent(t *testing.T) {

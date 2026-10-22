@@ -3,6 +3,15 @@
 Native OAuth login is available in account creation and editing. See
 [login, refresh, endpoints and operational details](DOMESTIC_OAUTH.md).
 
+PAYG balance probes freeze the complete API-key and proxy snapshot before sending
+the request. Concurrent probes share work only within that generation. A late
+response cannot update a replacement key's balance metadata or cooldown. Metadata,
+pause and recovery also compare the exact cooldown deadline and reason observed
+before the probe, preserving newer reactive balance markers and cooldowns.
+The `success` field reports a valid provider response, while `persisted` requires
+the conditional local write to have committed. Missing conditional storage never
+authorizes an unconditional state change.
+
 Sub2API Plus accepts DeepSeek accounts through the OpenAI-compatible gateway
 and Claude Code-style Anthropic entry points.
 

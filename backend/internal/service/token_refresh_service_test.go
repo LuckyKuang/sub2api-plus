@@ -79,14 +79,18 @@ func (r *tokenRefreshAccountRepo) UpdateCredentials(ctx context.Context, id int6
 	return nil
 }
 
-func (r *tokenRefreshAccountRepo) UpdateOAuthCredentialsIfUnchanged(ctx context.Context, id int64, platform string, expected map[string]any, proxy *int64, credentials map[string]any) (bool, error) {
+func (r *tokenRefreshAccountRepo) UpdateOAuthCredentialsIfUnchanged(ctx context.Context, expectedOwner *Account, credentials map[string]any) (bool, error) {
+	id := expectedOwner.ID
+	platform := expectedOwner.Platform
+	expected := expectedOwner.Credentials
+	proxy := expectedOwner.ProxyID
 	r.conditionalSuccessCalls++
 	if r.conditionalSuccessErr != nil {
 		return false, r.conditionalSuccessErr
 	}
 	current := r.accountsByID[id]
 	if current == nil || current.Platform != platform || current.Type != AccountTypeOAuth || !current.IsActive() ||
-		!reflect.DeepEqual(current.Credentials, expected) || !reflect.DeepEqual(current.ProxyID, proxy) {
+		!reflect.DeepEqual(current.Credentials, expected) || (!reflect.DeepEqual(current.ProxyID, proxy) || !reflect.DeepEqual(current.Proxy, expectedOwner.Proxy)) {
 		return false, nil
 	}
 	return true, r.UpdateCredentials(ctx, id, credentials)
@@ -130,14 +134,19 @@ func (r *tokenRefreshAccountRepo) SetTempUnschedulable(ctx context.Context, id i
 	return r.setTempUnschedErr
 }
 
-func (r *tokenRefreshAccountRepo) SetCredentialErrorIfUnchanged(ctx context.Context, id int64, platform, kind string, expected map[string]any, proxy *int64, reason string) (bool, error) {
+func (r *tokenRefreshAccountRepo) SetCredentialErrorIfUnchanged(ctx context.Context, expectedOwner *Account, reason string) (bool, error) {
+	id := expectedOwner.ID
+	platform := expectedOwner.Platform
+	kind := expectedOwner.Type
+	expected := expectedOwner.Credentials
+	proxy := expectedOwner.ProxyID
 	if r.beforeConditionalState != nil {
 		hook := r.beforeConditionalState
 		r.beforeConditionalState = nil
 		hook()
 	}
 	current := r.accountsByID[id]
-	if current == nil || !current.IsActive() || current.Platform != platform || current.Type != kind || !reflect.DeepEqual(current.Credentials, expected) || !reflect.DeepEqual(current.ProxyID, proxy) {
+	if current == nil || !current.IsActive() || current.Platform != platform || current.Type != kind || !reflect.DeepEqual(current.Credentials, expected) || (!reflect.DeepEqual(current.ProxyID, proxy) || !reflect.DeepEqual(current.Proxy, expectedOwner.Proxy)) {
 		return false, nil
 	}
 	if err := r.SetError(ctx, id, reason); err != nil {
@@ -147,14 +156,19 @@ func (r *tokenRefreshAccountRepo) SetCredentialErrorIfUnchanged(ctx context.Cont
 	return true, nil
 }
 
-func (r *tokenRefreshAccountRepo) SetCredentialTempUnschedulableIfUnchanged(ctx context.Context, id int64, platform, kind string, expected map[string]any, proxy *int64, until time.Time, reason string) (bool, error) {
+func (r *tokenRefreshAccountRepo) SetCredentialTempUnschedulableIfUnchanged(ctx context.Context, expectedOwner *Account, until time.Time, reason string) (bool, error) {
+	id := expectedOwner.ID
+	platform := expectedOwner.Platform
+	kind := expectedOwner.Type
+	expected := expectedOwner.Credentials
+	proxy := expectedOwner.ProxyID
 	if r.beforeConditionalState != nil {
 		hook := r.beforeConditionalState
 		r.beforeConditionalState = nil
 		hook()
 	}
 	current := r.accountsByID[id]
-	if current == nil || !current.IsActive() || current.Platform != platform || current.Type != kind || !reflect.DeepEqual(current.Credentials, expected) || !reflect.DeepEqual(current.ProxyID, proxy) || current.TempUnschedulableUntil != nil && !current.TempUnschedulableUntil.Before(until) {
+	if current == nil || !current.IsActive() || current.Platform != platform || current.Type != kind || !reflect.DeepEqual(current.Credentials, expected) || (!reflect.DeepEqual(current.ProxyID, proxy) || !reflect.DeepEqual(current.Proxy, expectedOwner.Proxy)) || current.TempUnschedulableUntil != nil && !current.TempUnschedulableUntil.Before(until) {
 		return false, nil
 	}
 	if err := r.SetTempUnschedulable(ctx, id, until, reason); err != nil {
@@ -223,13 +237,10 @@ func grokCredentialSnapshotMatchesAccount(account *Account, snapshot GrokCredent
 		grokCredentialProxyIDsEqual(account.ProxyID, snapshot.ProxyID)
 }
 
-func (r *tokenRefreshAccountRepo) SetGrokOAuthRefreshErrorIfCredentialsUnchanged(
-	_ context.Context,
-	id int64,
-	expectedCredentials map[string]any,
-	expectedProxyID *int64,
-	errorMsg string,
-) (bool, error) {
+func (r *tokenRefreshAccountRepo) SetGrokOAuthRefreshErrorIfCredentialsUnchanged(_ context.Context, expectedOwner *Account, errorMsg string) (bool, error) {
+	id := expectedOwner.ID
+	expectedCredentials := expectedOwner.Credentials
+	expectedProxyID := expectedOwner.ProxyID
 	r.conditionalErrorCalls++
 	if r.conditionalErrorErr != nil {
 		return false, r.conditionalErrorErr
@@ -254,7 +265,7 @@ func (r *tokenRefreshAccountRepo) SetGrokOAuthRefreshErrorIfCredentialsUnchanged
 		account.ProxyID = &proxyID
 	}
 	if account.Status != StatusActive || account.Platform != PlatformGrok || account.Type != AccountTypeOAuth ||
-		!reflect.DeepEqual(account.Credentials, expectedCredentials) || !reflect.DeepEqual(account.ProxyID, expectedProxyID) {
+		!reflect.DeepEqual(account.Credentials, expectedCredentials) || (!reflect.DeepEqual(account.ProxyID, expectedProxyID) || !reflect.DeepEqual(account.Proxy, expectedOwner.Proxy)) {
 		return false, nil
 	}
 	r.setErrorCalls++
@@ -265,18 +276,25 @@ func (r *tokenRefreshAccountRepo) SetGrokOAuthRefreshErrorIfCredentialsUnchanged
 	return true, nil
 }
 
-func (r *tokenRefreshAccountRepo) UpdateGrokOAuthCredentialsIfUnchanged(
-	_ context.Context,
-	id int64,
-	expectedCredentials map[string]any,
-	expectedProxyID *int64,
-	credentials map[string]any,
-) (bool, error) {
+func (r *tokenRefreshAccountRepo) UpdateGrokOAuthCredentialsIfUnchanged(_ context.Context, expectedOwner *Account, credentials map[string]any) (bool, error) {
+	id := expectedOwner.ID
+	expectedCredentials := expectedOwner.Credentials
+	expectedProxyID := expectedOwner.ProxyID
 	r.conditionalSuccessCalls++
 	if r.conditionalSuccessErr != nil {
 		return false, r.conditionalSuccessErr
 	}
 	account := r.accountsByID[id]
+	if account == nil || account.Status != StatusActive || account.Platform != PlatformGrok ||
+		account.Type != AccountTypeOAuth || !reflect.DeepEqual(account.Credentials, expectedCredentials) ||
+		(!reflect.DeepEqual(account.ProxyID, expectedProxyID) || !reflect.DeepEqual(account.Proxy, expectedOwner.Proxy)) {
+		return false, nil
+	}
+	r.updateCalls++
+	r.updateCredentialsCalls++
+	account.Credentials = shallowCopyMap(credentials)
+	r.lastAccount = account
+	// A separate scheduling writer commits after the credential CAS.
 	if account != nil && r.mutateSchedulingOnSuccessCAS {
 		r.mutateSchedulingOnSuccessCAS = false
 		account.Status = StatusDisabled
@@ -284,29 +302,16 @@ func (r *tokenRefreshAccountRepo) UpdateGrokOAuthCredentialsIfUnchanged(
 		resetAt := time.Now().Add(30 * time.Minute)
 		account.RateLimitResetAt = &resetAt
 	}
-	if account == nil || account.Platform != PlatformGrok ||
-		account.Type != AccountTypeOAuth || !reflect.DeepEqual(account.Credentials, expectedCredentials) ||
-		!reflect.DeepEqual(account.ProxyID, expectedProxyID) {
-		return false, nil
-	}
-	r.updateCalls++
-	r.updateCredentialsCalls++
-	account.Credentials = shallowCopyMap(credentials)
-	r.lastAccount = account
 	if r.cancelOnUpdate != nil {
 		r.cancelOnUpdate()
 	}
 	return true, nil
 }
 
-func (r *tokenRefreshAccountRepo) SetGrokOAuthRefreshTempUnschedulableIfCredentialsUnchanged(
-	_ context.Context,
-	id int64,
-	expectedCredentials map[string]any,
-	expectedProxyID *int64,
-	until time.Time,
-	reason string,
-) (bool, error) {
+func (r *tokenRefreshAccountRepo) SetGrokOAuthRefreshTempUnschedulableIfCredentialsUnchanged(_ context.Context, expectedOwner *Account, until time.Time, reason string) (bool, error) {
+	id := expectedOwner.ID
+	expectedCredentials := expectedOwner.Credentials
+	expectedProxyID := expectedOwner.ProxyID
 	r.conditionalTempCalls++
 	if r.conditionalTempErr != nil {
 		return false, r.conditionalTempErr
@@ -331,7 +336,7 @@ func (r *tokenRefreshAccountRepo) SetGrokOAuthRefreshTempUnschedulableIfCredenti
 		account.ProxyID = &proxyID
 	}
 	if account.Status != StatusActive || account.Platform != PlatformGrok || account.Type != AccountTypeOAuth ||
-		!reflect.DeepEqual(account.Credentials, expectedCredentials) || !reflect.DeepEqual(account.ProxyID, expectedProxyID) {
+		!reflect.DeepEqual(account.Credentials, expectedCredentials) || (!reflect.DeepEqual(account.ProxyID, expectedProxyID) || !reflect.DeepEqual(account.Proxy, expectedOwner.Proxy)) {
 		return false, nil
 	}
 	r.setTempUnschedCalls++

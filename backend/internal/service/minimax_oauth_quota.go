@@ -41,6 +41,11 @@ func miniMaxOAuthQuotaOrigins(account *Account) (matrix, platform string, err er
 // same OAuth grant. A 401 anywhere restarts the complete chain after the shared
 // coordinator refreshes; a new Bearer can never reuse an old workspace group.
 func (s *CNProviderQuotaService) roundTripMiniMaxOAuthQuota(ctx context.Context, account *Account) (*http.Response, *Account, error) {
+	owner, err := requestCredentialAccount(ctx, account)
+	if err != nil {
+		return nil, nil, err
+	}
+	account = snapshotRequestCredentialAccount(owner)
 	_, platform, err := miniMaxOAuthQuotaOrigins(account)
 	if err != nil {
 		return nil, nil, err
@@ -80,6 +85,7 @@ func (s *CNProviderQuotaService) roundTripMiniMaxOAuthQuota(ctx context.Context,
 			return NewAccountCredentialFailure("native_oauth_access_token_missing", nil)
 		}
 		attempt.Header.Set("Authorization", "Bearer "+token)
+		recordTransmittedRequestCredentialOwner(attempt, owner, token)
 		return withCNQuotaRequestOwner(attempt, owner)
 	}
 	var queryOwner *Account

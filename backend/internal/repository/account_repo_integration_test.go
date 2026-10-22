@@ -88,7 +88,12 @@ type failAtomicSchedulerOutboxSQLExecutor struct {
 func (e *failAtomicSchedulerOutboxSQLExecutor) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
 	if strings.Contains(query, "WITH updated AS") && strings.Contains(query, "INSERT INTO scheduler_outbox") && len(args) > 0 {
 		args = append([]any(nil), args...)
-		args[len(args)-1] = nil // event_type is NOT NULL; the whole statement must roll back.
+		for index, value := range args {
+			if event, ok := value.(string); ok && event == service.SchedulerOutboxEventAccountChanged {
+				args[index] = nil // event_type is NOT NULL; the whole statement must roll back.
+				break
+			}
+		}
 	}
 	return e.sqlExecutor.ExecContext(ctx, query, args...)
 }
@@ -1190,12 +1195,7 @@ func (s *AccountRepoSuite) TestSetGrokOAuthErrorIfCredentialsUnchanged_AppliesAn
 	_, err = s.repo.sql.ExecContext(s.ctx, "TRUNCATE scheduler_outbox")
 	s.Require().NoError(err)
 
-	applied, err := s.repo.SetGrokOAuthErrorIfCredentialsUnchanged(
-		s.ctx,
-		account.ID,
-		observed.Credentials,
-		"missing refresh token",
-	)
+	applied, err := s.repo.SetGrokOAuthErrorIfCredentialsUnchanged(s.ctx, &service.Account{ID: account.ID, Credentials: observed.Credentials, Platform: service.PlatformGrok, Type: service.AccountTypeOAuth, Status: service.StatusActive}, "missing refresh token")
 
 	s.Require().NoError(err)
 	s.Require().True(applied)
@@ -1241,12 +1241,7 @@ func (s *AccountRepoSuite) TestSetGrokOAuthErrorIfCredentialsUnchanged_SkipsConc
 	_, err = s.repo.sql.ExecContext(s.ctx, "TRUNCATE scheduler_outbox")
 	s.Require().NoError(err)
 
-	applied, err := s.repo.SetGrokOAuthErrorIfCredentialsUnchanged(
-		s.ctx,
-		account.ID,
-		observed.Credentials,
-		"stale reconciliation",
-	)
+	applied, err := s.repo.SetGrokOAuthErrorIfCredentialsUnchanged(s.ctx, &service.Account{ID: account.ID, Credentials: observed.Credentials, Platform: service.PlatformGrok, Type: service.AccountTypeOAuth, Status: service.StatusActive}, "stale reconciliation")
 
 	s.Require().NoError(err)
 	s.Require().False(applied)
@@ -1290,17 +1285,11 @@ func (s *AccountRepoSuite) TestUpdateGrokOAuthCredentialsIfUnchanged_AppliesAndE
 	_, err = s.repo.sql.ExecContext(s.ctx, "TRUNCATE scheduler_outbox")
 	s.Require().NoError(err)
 
-	applied, err := s.repo.UpdateGrokOAuthCredentialsIfUnchanged(
-		s.ctx,
-		account.ID,
-		observed.Credentials,
-		observed.ProxyID,
-		map[string]any{
-			"access_token":   "rotated-access",
-			"refresh_token":  "rotated-refresh",
-			"_token_version": int64(11),
-		},
-	)
+	applied, err := s.repo.UpdateGrokOAuthCredentialsIfUnchanged(s.ctx, &service.Account{ID: account.ID, Credentials: observed.Credentials, ProxyID: observed.ProxyID, Platform: service.PlatformGrok, Type: service.AccountTypeOAuth, Proxy: observed.Proxy, Status: service.StatusActive}, map[string]any{
+		"access_token":   "rotated-access",
+		"refresh_token":  "rotated-refresh",
+		"_token_version": int64(11),
+	})
 
 	s.Require().NoError(err)
 	s.Require().True(applied)
@@ -1348,17 +1337,11 @@ func (s *AccountRepoSuite) TestUpdateGrokOAuthCredentialsIfUnchanged_SkipsConcur
 	_, err = s.repo.sql.ExecContext(s.ctx, "TRUNCATE scheduler_outbox")
 	s.Require().NoError(err)
 
-	applied, err := s.repo.UpdateGrokOAuthCredentialsIfUnchanged(
-		s.ctx,
-		account.ID,
-		observed.Credentials,
-		observed.ProxyID,
-		map[string]any{
-			"access_token":   "provider-access",
-			"refresh_token":  "provider-refresh",
-			"_token_version": int64(22),
-		},
-	)
+	applied, err := s.repo.UpdateGrokOAuthCredentialsIfUnchanged(s.ctx, &service.Account{ID: account.ID, Credentials: observed.Credentials, ProxyID: observed.ProxyID, Platform: service.PlatformGrok, Type: service.AccountTypeOAuth, Proxy: observed.Proxy, Status: service.StatusActive}, map[string]any{
+		"access_token":   "provider-access",
+		"refresh_token":  "provider-refresh",
+		"_token_version": int64(22),
+	})
 
 	s.Require().NoError(err)
 	s.Require().False(applied)
@@ -1398,12 +1381,7 @@ func (s *AccountRepoSuite) TestGrokOAuthConditionalMutation_DetachesBoundedSnaps
 		cancel:      cancel,
 	}, cacheRecorder)
 
-	applied, err := repo.SetGrokOAuthErrorIfCredentialsUnchanged(
-		ctx,
-		account.ID,
-		observed.Credentials,
-		"missing refresh token",
-	)
+	applied, err := repo.SetGrokOAuthErrorIfCredentialsUnchanged(ctx, &service.Account{ID: account.ID, Credentials: observed.Credentials, Platform: service.PlatformGrok, Type: service.AccountTypeOAuth, Status: service.StatusActive}, "missing refresh token")
 
 	s.Require().NoError(err)
 	s.Require().True(applied)
@@ -1471,9 +1449,9 @@ func (s *AccountRepoSuite) TestCredentialConditionalMutationCannotRepublishAcros
 			repo.schedulerCache = cache
 			var applied bool
 			if operation == "failure" {
-				applied, err = repo.SetCredentialErrorIfUnchanged(s.ctx, account.ID, account.Platform, account.Type, observed.Credentials, observed.ProxyID, "revoked")
+				applied, err = repo.SetCredentialErrorIfUnchanged(s.ctx, &service.Account{ID: account.ID, Platform: account.Platform, Type: account.Type, Credentials: observed.Credentials, ProxyID: observed.ProxyID, Proxy: observed.Proxy, Status: service.StatusActive}, "revoked")
 			} else {
-				applied, err = repo.UpdateGrokOAuthCredentialsIfUnchanged(s.ctx, account.ID, observed.Credentials, observed.ProxyID, map[string]any{"access_token": "rotated", "refresh_token": "rotated-refresh"})
+				applied, err = repo.UpdateGrokOAuthCredentialsIfUnchanged(s.ctx, &service.Account{ID: account.ID, Credentials: observed.Credentials, ProxyID: observed.ProxyID, Platform: service.PlatformGrok, Type: service.AccountTypeOAuth, Proxy: observed.Proxy, Status: service.StatusActive}, map[string]any{"access_token": "rotated", "refresh_token": "rotated-refresh"})
 			}
 
 			s.Require().NoError(err)
@@ -1510,12 +1488,7 @@ func TestGrokOAuthConditionalMutationRollsBackWhenOutboxInsertFails(t *testing.T
 	require.NoError(t, err)
 	repo := newAccountRepositoryWithSQL(client, &failAtomicSchedulerOutboxSQLExecutor{sqlExecutor: integrationDB}, nil)
 
-	applied, err := repo.SetGrokOAuthErrorIfCredentialsUnchanged(
-		context.Background(),
-		account.ID,
-		account.Credentials,
-		"missing refresh token",
-	)
+	applied, err := repo.SetGrokOAuthErrorIfCredentialsUnchanged(context.Background(), account, "missing refresh token")
 
 	require.Error(t, err)
 	require.False(t, applied)

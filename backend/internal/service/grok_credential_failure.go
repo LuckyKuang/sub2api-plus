@@ -56,6 +56,8 @@ type GrokCredentialMutationSnapshot struct {
 	RefreshToken    string
 	TokenVersion    int64
 	ProxyID         *int64
+	Proxy           *Proxy
+	ProxyMissing    bool
 }
 
 type grokCredentialFailureSnapshotError struct {
@@ -310,6 +312,11 @@ func (s *OpenAIGatewayService) applyGrokCredentialAccountFailure(ctx context.Con
 	if token, err := s.validateCurrentGrokCredentialFailure(ctx, account.ID, snapshot, class); err != nil || token != "" {
 		return token, err
 	}
+	if class.reason == GrokCredentialReasonProxyInvalid {
+		// The authoritative account reread above confirmed the configured row
+		// is unavailable. Repository mutation must lock that missing state.
+		snapshot.ProxyMissing = true
+	}
 
 	if class.permanent {
 		if token, ok := s.grokCredentialConcurrentlyRefreshedToken(ctx, account.ID, snapshot); ok {
@@ -553,6 +560,10 @@ func grokCredentialMutationSnapshot(account *Account) GrokCredentialMutationSnap
 	if account.ProxyID != nil {
 		proxyID := *account.ProxyID
 		snapshot.ProxyID = &proxyID
+	}
+	if account.Proxy != nil {
+		proxy := *account.Proxy
+		snapshot.Proxy = &proxy
 	}
 	return snapshot
 }

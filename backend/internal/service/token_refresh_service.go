@@ -48,8 +48,8 @@ type tokenRefreshRegistration struct {
 // This contract is intentionally Grok-only; existing provider behavior remains
 // unchanged.
 type GrokOAuthRefreshMutationRepository interface {
-	SetGrokOAuthRefreshErrorIfCredentialsUnchanged(ctx context.Context, id int64, expectedCredentials map[string]any, expectedProxyID *int64, errorMsg string) (bool, error)
-	SetGrokOAuthRefreshTempUnschedulableIfCredentialsUnchanged(ctx context.Context, id int64, expectedCredentials map[string]any, expectedProxyID *int64, until time.Time, reason string) (bool, error)
+	SetGrokOAuthRefreshErrorIfCredentialsUnchanged(ctx context.Context, owner *Account, errorMsg string) (bool, error)
+	SetGrokOAuthRefreshTempUnschedulableIfCredentialsUnchanged(ctx context.Context, owner *Account, until time.Time, reason string) (bool, error)
 }
 
 // TokenRefreshService OAuth token自动刷新服务
@@ -867,6 +867,7 @@ func (s *TokenRefreshService) refreshWithRetryWithRateGate(
 		}
 		attemptCtx, cancelAttempt := context.WithTimeout(ctx, s.attemptTimeout())
 		observedBeforeRefresh := snapshotRequestCredentialAccount(account)
+		cleanupCtx := s.withCredentialRefreshRuntimeSnapshot(ctx, observedBeforeRefresh)
 		var newCredentials map[string]any
 		var err error
 		shortCircuit := false
@@ -925,7 +926,7 @@ func (s *TokenRefreshService) refreshWithRetryWithRateGate(
 					if !ok {
 						err = &providerConfigurationRefreshError{err: errors.New("credential refresh success CAS repository is not configured")}
 					} else {
-						applied, saveErr := conditionalRepo.UpdateOAuthCredentialsIfUnchanged(attemptCtx, observedBeforeRefresh.ID, observedBeforeRefresh.Platform, observedBeforeRefresh.Credentials, observedBeforeRefresh.ProxyID, newCredentials)
+						applied, saveErr := conditionalRepo.UpdateOAuthCredentialsIfUnchanged(attemptCtx, observedBeforeRefresh, newCredentials)
 						if saveErr != nil {
 							err = &providerCycleContainmentRefreshError{err: fmt.Errorf("failed to conditionally persist refreshed credentials: %w", saveErr)}
 						} else if !applied {
@@ -992,7 +993,7 @@ func (s *TokenRefreshService) refreshWithRetryWithRateGate(
 				cleanupAccount = observedBeforeRefresh
 				cleanupAccount.Credentials = cloneRequestCredentialMap(newCredentials)
 			}
-			s.postRefreshActions(ctx, cleanupAccount)
+			s.postRefreshActions(cleanupCtx, cleanupAccount)
 			return nil
 		}
 		if ctxErr := oauthRefreshContextError(ctx); ctxErr != nil {
@@ -1044,13 +1045,7 @@ func (s *TokenRefreshService) refreshWithRetryWithRateGate(
 						err: errors.New("grok OAuth conditional refresh mutation repository is not configured"),
 					}
 				} else {
-					persistentlyBlocked, setErr = conditionalRepo.SetGrokOAuthRefreshErrorIfCredentialsUnchanged(
-						ctx,
-						account.ID,
-						account.Credentials,
-						account.ProxyID,
-						errorMsg,
-					)
+					persistentlyBlocked, setErr = conditionalRepo.SetGrokOAuthRefreshErrorIfCredentialsUnchanged(ctx, account, errorMsg)
 					if setErr == nil && !persistentlyBlocked {
 						slog.Info("token_refresh.grok_error_status_skipped_stale_credentials", "account_id", account.ID)
 						return errRefreshSkipped
@@ -1061,7 +1056,7 @@ func (s *TokenRefreshService) refreshWithRetryWithRateGate(
 				if !ok {
 					return &providerConfigurationRefreshError{err: errors.New("credential refresh failure CAS repository is not configured")}
 				}
-				persistentlyBlocked, setErr = conditionalRepo.SetCredentialErrorIfUnchanged(ctx, account.ID, account.Platform, account.Type, account.Credentials, account.ProxyID, errorMsg)
+				persistentlyBlocked, setErr = conditionalRepo.SetCredentialErrorIfUnchanged(ctx, account, errorMsg)
 				if setErr == nil && !persistentlyBlocked {
 					return errRefreshSkipped
 				}
@@ -1148,14 +1143,7 @@ func (s *TokenRefreshService) refreshWithRetryWithRateGate(
 				err: errors.New("grok OAuth conditional refresh mutation repository is not configured"),
 			}
 		}
-		applied, setErr := conditionalRepo.SetGrokOAuthRefreshTempUnschedulableIfCredentialsUnchanged(
-			ctx,
-			account.ID,
-			account.Credentials,
-			account.ProxyID,
-			until,
-			reason,
-		)
+		applied, setErr := conditionalRepo.SetGrokOAuthRefreshTempUnschedulableIfCredentialsUnchanged(ctx, account, until, reason)
 		if setErr != nil {
 			slog.Warn("token_refresh.set_temp_unschedulable_failed",
 				"account_id", account.ID,
@@ -1181,7 +1169,7 @@ func (s *TokenRefreshService) refreshWithRetryWithRateGate(
 		if !ok {
 			return &providerConfigurationRefreshError{err: errors.New("credential refresh cooldown CAS repository is not configured")}
 		}
-		applied, setErr := conditionalRepo.SetCredentialTempUnschedulableIfUnchanged(ctx, account.ID, account.Platform, account.Type, account.Credentials, account.ProxyID, until, reason)
+		applied, setErr := conditionalRepo.SetCredentialTempUnschedulableIfUnchanged(ctx, account, until, reason)
 		if setErr != nil {
 			return &providerCycleContainmentRefreshError{err: fmt.Errorf("failed to conditionally persist OAuth refresh cooldown: %w", setErr)}
 		}

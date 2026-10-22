@@ -841,7 +841,7 @@ func (s *SettingService) resolveDefaultOutboundIdentity(ctx context.Context, pre
 		identity := resolveOpenAIOutboundIdentityFromSettings(ctx, nil, s)
 		return outboundidentity.Identity{Preset: preset, UserAgent: identity.UserAgent, Originator: identity.Originator, Version: identity.Version, Source: identity.Source, Headers: map[string]string{"User-Agent": identity.UserAgent, "Originator": identity.Originator, "Version": identity.Version}}
 	}
-	settings := s.GetOutboundIdentitySettings(ctx)
+	settings := s.requestOutboundIdentitySettings(ctx)
 	if selection, ok := settings.Profiles[preset]; ok {
 		selection.Preset = preset
 		if i, err := buildOutboundIdentity(selection); err == nil {
@@ -860,21 +860,42 @@ func (s *SettingService) resolveDefaultOutboundIdentity(ctx context.Context, pre
 	return i
 }
 
+func (s *SettingService) requestOutboundIdentitySettings(ctx context.Context) OutboundIdentitySettings {
+	if snapshot := requestIdentitySettingsSnapshot(ctx); snapshot != nil {
+		snapshot.presetSettingsOnce.Do(func() { snapshot.presetSettings = s.GetOutboundIdentitySettings(ctx) })
+		return cloneOutboundIdentitySettings(snapshot.presetSettings)
+	}
+	return s.GetOutboundIdentitySettings(ctx)
+}
+
 // WithAccountOutboundIdentity resolves after authentication/audit/account
 // selection. Existing OpenAI/Codex paths deliberately keep their own resolver.
 func WithAccountOutboundIdentity(ctx context.Context, account *Account) context.Context {
+	owner, err := requestCredentialAccount(ctx, account)
+	if err != nil {
+		return outboundidentity.WithIdentity(WithOutboundPreparationError(ctx, err), outboundidentity.Identity{})
+	}
+	account = owner
 	if account == nil {
 		return ctx
 	}
 	ctx = WithOutboundIdentityScope(ctx, nil)
+	ctx = withOutboundIdentitySettingsOwner(ctx, account)
 	scope := outboundIdentityScopeFromContext(ctx)
-	key := outboundIdentityOwnerKey(account)
+	candidate, _ := json.Marshal(account.Credentials[outboundIdentityCredential])
+	key := requestCredentialIdentityCacheKey(ctx, account, account.Platform+":"+account.Type+":"+string(candidate))
 	if cached, ok := scope.presets.Load(key); ok {
 		if identity, valid := cached.(outboundidentity.Identity); valid {
 			return outboundidentity.WithIdentity(ctx, identity)
 		}
 	}
-	resolved := resolveAccountOutboundIdentityContext(ctx, account)
+	identityCtx := ctx
+	if _, acquired := key.(acquiredIdentityCacheKey); acquired {
+		// A pre-acquisition identity for this row is not evidence about a
+		// refreshed or relinked grant returned by the token provider.
+		identityCtx = outboundidentity.WithIdentity(ctx, outboundidentity.Identity{})
+	}
+	resolved := resolveAccountOutboundIdentityContext(identityCtx, account)
 	identity, _ := outboundidentity.FromContext(resolved)
 	// An empty identity records the deliberate choice of the existing Codex
 	// resolver. A later mapping update cannot switch families during this request.
@@ -917,7 +938,7 @@ func resolveAccountOutboundIdentityContext(ctx context.Context, account *Account
 	// Default mappings are resolved by the runtime callback with a typed account
 	// key, without passing credentials into the package or transport layer.
 	// Hide a previous account snapshot while resolving a failover account.
-	if i, ok := outboundidentity.Default(cleanCtx, outboundDefaultKey(account)); ok {
+	if i, ok := requestDefaultOutboundIdentity(cleanCtx, outboundDefaultKey(account)); ok {
 		if account.Platform == PlatformOpenAI && i.Preset == "codex" {
 			return cleanCtx
 		}
@@ -953,6 +974,7 @@ func ApplyAccountOutboundHeaders(ctx context.Context, account *Account, headers 
 func WithStandaloneOutboundIdentity(ctx context.Context, platform string) context.Context {
 	// A nil-account Codex cache in the forwarding scope is a different owner.
 	ctx = context.WithValue(ctx, outboundIdentityScopeKey{}, &outboundIdentityScope{})
+	ctx = context.WithValue(ctx, outboundIdentitySettingsOwnerKey{}, outboundIdentityOwner{})
 	ctx = outboundidentity.WithIdentity(ctx, outboundidentity.Identity{})
 	key := platform + ":" + AccountTypeAPIKey
 	identity, ok := outboundidentity.Default(ctx, key)
@@ -968,15 +990,52 @@ func WithStandaloneOutboundIdentity(ctx context.Context, platform string) contex
 // a caller's account snapshot, compatible API-key default, or cached scope.
 func withNativeOAuthOutboundIdentity(ctx context.Context, platform string) context.Context {
 	ctx = context.WithValue(ctx, outboundIdentityScopeKey{}, &outboundIdentityScope{})
+	ctx = context.WithValue(ctx, outboundIdentitySettingsOwnerKey{}, outboundIdentityOwner{})
 	ctx = outboundidentity.WithIdentity(ctx, outboundidentity.Identity{})
 	return outboundidentity.WithIdentity(ctx, outboundDefaultIdentity(ctx, nativeOutboundPreset(platform)))
 }
 
 func outboundDefaultIdentity(ctx context.Context, preset string) outboundidentity.Identity {
-	if i, ok := outboundidentity.Default(ctx, preset); ok {
+	if i, ok := requestDefaultOutboundIdentity(ctx, preset); ok {
 		return i
 	}
 	return builtInOutboundIdentity(preset)
+}
+
+type outboundDefaultSnapshot struct {
+	identity outboundidentity.Identity
+	valid    bool
+}
+
+// Account candidates may change at credential acquisition, but their fallback
+// cannot reread global settings already used by this owner's refresh or probe.
+func requestDefaultOutboundIdentity(ctx context.Context, key string) (outboundidentity.Identity, bool) {
+	resolve := func() (outboundidentity.Identity, bool) {
+		identity, valid := outboundidentity.Default(ctx, key)
+		if !valid {
+			preset := key
+			if platform, accountType, typed := strings.Cut(key, ":"); typed {
+				preset = nativeAccountOutboundPreset(platform, accountType)
+			}
+			identity = builtInOutboundIdentity(preset)
+			valid = identity.UserAgent != ""
+		}
+		return identity, valid
+	}
+	if settings := requestIdentitySettingsSnapshot(ctx); settings != nil {
+		if stored, ok := settings.defaults.Load(key); ok {
+			if snapshot, valid := stored.(outboundDefaultSnapshot); valid {
+				return snapshot.identity, snapshot.valid
+			}
+		}
+		identity, valid := resolve()
+		stored, _ := settings.defaults.LoadOrStore(key, outboundDefaultSnapshot{identity: identity, valid: valid})
+		if snapshot, valid := stored.(outboundDefaultSnapshot); valid {
+			return snapshot.identity, snapshot.valid
+		}
+		return identity, valid
+	}
+	return resolve()
 }
 
 func validateAccountIdentityPreset(account *Account, preset string) error {
@@ -1037,6 +1096,12 @@ func resolveAccountIdentitySelection(ctx context.Context, account *Account, sele
 
 func prepareAccountOutboundRequest(req *http.Request, account *Account) *http.Request {
 	if req != nil {
+		owner, err := requestCredentialAccount(req.Context(), account)
+		if err != nil {
+			*req = *req.WithContext(WithOutboundPreparationError(req.Context(), err))
+			return req
+		}
+		account = owner
 		if hasDomesticRequestHeaderContract(account) && domesticCredentialOwnerAccount(req.Context(), account) == nil {
 			*req = *req.WithContext(WithOutboundPreparationError(req.Context(), errors.New("domestic outbound credential owner is unavailable")))
 			return req
@@ -1110,7 +1175,7 @@ func (s *SettingService) resolveOutboundIdentityKey(ctx context.Context, key str
 	preset := key
 	if platform, accountType, ok := strings.Cut(key, ":"); ok {
 		preset = nativeAccountOutboundPreset(platform, accountType)
-		if configured := s.GetOutboundIdentitySettings(ctx).Defaults[key]; allowsOutboundDefaultMapping(key) && validateAccountIdentityPreset(&Account{Platform: platform, Type: accountType}, configured) == nil {
+		if configured := s.requestOutboundIdentitySettings(ctx).Defaults[key]; allowsOutboundDefaultMapping(key) && validateAccountIdentityPreset(&Account{Platform: platform, Type: accountType}, configured) == nil {
 			preset = configured
 		}
 	}

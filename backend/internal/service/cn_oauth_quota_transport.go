@@ -47,6 +47,7 @@ func (s *CNOAuthService) prepareKimiControlRequest(req *http.Request, account *A
 	deleteHeaderAllForms(req.Header, "Authorization")
 	deleteHeaderAllForms(req.Header, "x-api-key")
 	req.Header.Set("Authorization", "Bearer "+token)
+	recordTransmittedRequestCredentialOwner(req, account, token)
 	if operation == "usages" {
 		return withCNQuotaRequestOwner(req, account)
 	}
@@ -56,6 +57,11 @@ func (s *CNOAuthService) prepareKimiControlRequest(req *http.Request, account *A
 // Usage monitoring is on the fixed provider estate and authenticates with the
 // raw project PAT. Team scope comes from that PAT, not generic account headers.
 func (s *CNProviderQuotaService) roundTripZhipuQuota(req *http.Request, account *Account, send func(*http.Request) (*http.Response, error)) (*http.Response, error) {
+	owner, err := requestCredentialAccount(req.Context(), account)
+	if err != nil {
+		return nil, err
+	}
+	account = snapshotRequestCredentialAccount(owner)
 	if s.cnOAuthService == nil || s.cnOAuthService.zhipu == nil {
 		return nil, NewProviderCredentialFailure("project_token_service_unavailable", nil)
 	}
@@ -76,6 +82,10 @@ func (s *CNProviderQuotaService) roundTripZhipuQuota(req *http.Request, account 
 		deleteHeaderAllForms(req.Header, "bigmodel-organization")
 		deleteHeaderAllForms(req.Header, "bigmodel-project")
 		req.Header.Set("Authorization", value.APIKey)
+		recordTransmittedRequestCredentialOwner(req, account, account.GetOpenAIProtocolAPIKey())
+		if err := withCNQuotaRequestOwner(req, account); err != nil {
+			return nil, err
+		}
 		if org != "" {
 			req.Header.Set("bigmodel-organization", org)
 			req.Header.Set("bigmodel-project", project)

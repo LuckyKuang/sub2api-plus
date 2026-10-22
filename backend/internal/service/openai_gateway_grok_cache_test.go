@@ -545,6 +545,123 @@ func TestGrokDefaultSessionIsV7AndIndependentOfModelCache(t *testing.T) {
 	require.NotEqual(t, firstCache, firstID.String())
 }
 
+// OFFICIAL_AGENT_REQUEST_STATE.md: equal prompts may reuse prompt cache, but
+// without a declared conversation each accepted request owns a new execution
+// session. Its retries and auxiliary prompts retain that request's session.
+func TestGrokContentCacheDoesNotMergeIndependentExecutionSessions(t *testing.T) {
+	for _, accountType := range []string{AccountTypeOAuth, AccountTypeAPIKey} {
+		t.Run(accountType, func(t *testing.T) {
+			store := newTestOutboundIDStore()
+			account := &Account{ID: 8201, Platform: PlatformGrok, Type: accountType, Credentials: map[string]any{"access_token": "token", "sub": "principal", "api_key": "api-key"}}
+			body := []byte(`{"model":"grok-4.7","instructions":"shared instructions","input":"identical independent prompt"}`)
+			build := func(c *gin.Context, turn int, operation string) (*http.Request, string) {
+				t.Helper()
+				cache := resolveGrokCacheIdentity(c, body, "", "grok-4.7")
+				ctx := withGrokLogicalOperation(withGrokLogicalTurn(WithOutboundIDStore(context.Background(), store), turn), operation)
+				req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.x.ai/v1/responses", nil)
+				require.NoError(t, err)
+				require.NoError(t, applyGrokRequestMetadataForRequest(req, c, account, body, cache))
+				return req, cache
+			}
+			firstContext := newGrokCacheTestContext(8202)
+			first, firstCache := build(firstContext, 1, "")
+			retry, retryCache := build(firstContext, 1, "")
+			auxiliary, _ := build(firstContext, 1, "composer-image:1")
+			nextTurn, _ := build(firstContext, 2, "")
+			independent, secondCache := build(newGrokCacheTestContext(8202), 1, "")
+			require.NotEmpty(t, firstCache)
+			require.Equal(t, firstCache, retryCache)
+			require.Equal(t, firstCache, secondCache, "content remains a valid cache reuse signal")
+			for _, header := range []string{"X-Grok-Session-Id", "X-Grok-Conv-Id", "X-Grok-Conv-Group-Id"} {
+				require.NotEmpty(t, first.Header.Get(header), header)
+				require.Equal(t, first.Header.Get(header), retry.Header.Get(header), header)
+				require.Equal(t, first.Header.Get(header), auxiliary.Header.Get(header), header)
+				require.NotEqual(t, first.Header.Get(header), nextTurn.Header.Get(header), header+" cannot use an earlier unlabelled WS turn's session")
+				require.NotEqual(t, first.Header.Get(header), independent.Header.Get(header), header+" cannot merge equal independent prompts")
+			}
+			id, err := uuid.Parse(first.Header.Get("X-Grok-Session-Id"))
+			require.NoError(t, err)
+			require.Equal(t, uuid.Version(7), id.Version())
+			require.Equal(t, first.Header.Get("X-Grok-Req-Id"), retry.Header.Get("X-Grok-Req-Id"))
+			require.NotEqual(t, first.Header.Get("X-Grok-Req-Id"), auxiliary.Header.Get("X-Grok-Req-Id"))
+			store.mu.Lock()
+			persisted := len(store.values)
+			store.mu.Unlock()
+			require.Equal(t, 1, persisted, "only the installation device persists; content-derived execution sessions do not")
+		})
+	}
+}
+
+// Explicit native resumed sessions retain v4, while an explicit cache seed
+// starts a v7 session. Equal raw strings cannot poison each other's mapping.
+func TestGrokConversationUUIDVersionsCannotPoisonAnotherCarrier(t *testing.T) {
+	const rawID = "11111111-1111-4111-8111-111111111111"
+	for _, firstCarrier := range []string{"session", "cache"} {
+		t.Run(firstCarrier+"_first", func(t *testing.T) {
+			store := newTestOutboundIDStore()
+			account := &Account{ID: 8301, Platform: PlatformGrok, Type: AccountTypeOAuth, Credentials: map[string]any{"access_token": "token", "sub": "principal"}}
+			build := func(carrier string) string {
+				t.Helper()
+				c := newGrokCacheTestContext(8302)
+				body := []byte(`{"model":"grok-4.7","input":"hello"}`)
+				if carrier == "session" {
+					c.Request.Header.Set("X-Grok-Session-Id", rawID)
+				} else {
+					body = []byte(`{"model":"grok-4.7","input":"hello","prompt_cache_key":"` + rawID + `"}`)
+				}
+				cache := resolveGrokCacheIdentity(c, body, "", "grok-4.7")
+				req, err := http.NewRequestWithContext(WithOutboundIDStore(context.Background(), store), http.MethodPost, "https://api.x.ai/v1/responses", nil)
+				require.NoError(t, err)
+				require.NoError(t, applyGrokRequestMetadataForRequest(req, c, account, nil, cache), "another valid carrier cannot poison this session's stored UUID version")
+				return req.Header.Get("X-Grok-Session-Id")
+			}
+			secondCarrier := "cache"
+			if firstCarrier == "cache" {
+				secondCarrier = "session"
+			}
+			first, second := build(firstCarrier), build(secondCarrier)
+			require.NotEqual(t, first, second)
+			require.Equal(t, first, build(firstCarrier), "a replica resumes the same carrier mapping")
+			require.Equal(t, second, build(secondCarrier))
+			ids := map[string]string{firstCarrier: first, secondCarrier: second}
+			for carrier, version := range map[string]uuid.Version{"session": 4, "cache": 7} {
+				id, err := uuid.Parse(ids[carrier])
+				require.NoError(t, err)
+				require.Equal(t, version, id.Version(), carrier)
+			}
+		})
+	}
+}
+
+func TestGrokCacheConversationEvidenceFollowsEachExplicitSeed(t *testing.T) {
+	store := newTestOutboundIDStore()
+	account := &Account{ID: 8401, Platform: PlatformGrok, Type: AccountTypeAPIKey, Credentials: map[string]any{"api_key": "key"}}
+	c := newGrokCacheTestContext(8402)
+	cacheFor := func(c *gin.Context, seed string) string {
+		return resolveGrokCacheIdentity(c, []byte(`{"prompt_cache_key":"`+seed+`","input":"hello"}`), "", "grok-4.7")
+	}
+	firstCache, secondCache := cacheFor(c, "first-conversation"), cacheFor(c, "second-conversation")
+	build := func(c *gin.Context, cache string) string {
+		t.Helper()
+		req, err := http.NewRequestWithContext(WithOutboundIDStore(context.Background(), store), http.MethodPost, "https://api.x.ai/v1/responses", nil)
+		require.NoError(t, err)
+		require.NoError(t, applyGrokRequestMetadataForRequest(req, c, account, nil, cache))
+		return req.Header.Get("X-Grok-Session-Id")
+	}
+	first, second := build(c, firstCache), build(c, secondCache)
+	require.NotEqual(t, first, second, "a WS context cannot retain its first turn's unrelated explicit seed")
+	// Composer captions omit cache fields of their own, but inherit their
+	// parent's frozen cache association even after another seed is prepared.
+	parentContext := withGrokConversationCacheIdentity(WithOutboundIDStore(context.Background(), store), firstCache)
+	auxiliary, err := http.NewRequestWithContext(withGrokLogicalOperation(parentContext, "composer-image:1"), http.MethodPost, "https://api.x.ai/v1/responses", nil)
+	require.NoError(t, err)
+	require.NoError(t, applyGrokRequestMetadataForRequest(auxiliary, c, account, nil, ""))
+	require.Equal(t, first, auxiliary.Header.Get("X-Grok-Session-Id"))
+	replica := newGrokCacheTestContext(8402)
+	require.Equal(t, first, build(replica, cacheFor(replica, "first-conversation")))
+	require.Equal(t, second, build(replica, cacheFor(replica, "second-conversation")))
+}
+
 func TestResolveGrokCacheIdentityConcurrentDeterminism(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	const workers = 50

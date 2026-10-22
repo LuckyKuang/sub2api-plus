@@ -17,6 +17,12 @@ The policy applies before upstream credential use on these ingress paths:
 - OpenAI Alpha Search (`/alpha/search`)
 - OpenAI Responses WebSocket
 
+The Messages Count Tokens bridge audits the original inbound Messages body
+before routing, billing eligibility, account selection or AgentIdentity task
+registration. Both audit engines follow the shared
+[content coverage contract](../SECURITY_AUDIT_CONTENT_COVERAGE.md), including
+unknown-content pass-through and auditing recognized siblings.
+
 ## Built-in official profiles
 
 The built-in registry is a closed, source-controlled list of the underlying
@@ -223,6 +229,12 @@ preserves state; relinking that row or changing owner strips it. Late responses
 cannot relabel another blob. Unknown, expired and legacy provenance cannot
 authorize replay. HTTP, WS and shared-cache replicas enforce the same rule;
 credential-shadow requests use their immutable transmitted parent snapshot.
+Messages compatibility continuations and cached turn-state use that same
+acquired principal in addition to their tenant/sharing scope. Acquisition
+precedes replay lookup and history trimming; API-key replacement and OAuth
+relink start with full history and no previous owner's opaque state. OAuth
+claims supplied on API-key or setup-token rows cannot override their actual
+bearer identity.
 Session/response connection references also retain their credential owner and
 execution scope. All replicas must be upgraded together before relying on the
 new mapping and provenance format; old processes do not enforce it.
@@ -274,7 +286,8 @@ fingerprint identity.
 
 Responses HTTP, passthrough, Chat Completions and Messages freeze the owner of
 the acquired credential before mapping client metadata or staging fingerprints.
-Header/body IDs and installation projection share that immutable owner,
+The upstream destination, proxy, configured headers, trusted client identity,
+header/body IDs and installation projection share that immutable owner,
 including resolved shadow parents and refresh results. Later selected-row
 changes cannot alter its namespace; ambiguous acquired-owner evidence stops
 preparation. A replacement account acquires its own credential snapshot and

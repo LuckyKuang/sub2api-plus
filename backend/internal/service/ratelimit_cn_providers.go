@@ -173,7 +173,7 @@ func (s *RateLimitService) handleMiniMaxUsageError(ctx context.Context, account 
 		slog.Warn("minimax_usage_cooldown_unavailable", "account_id", owner.ID, "code", code)
 		return true
 	}
-	applied, err := repo.SetCredentialTempUnschedulableIfUnchanged(ctx, owner.ID, owner.Platform, owner.Type, owner.Credentials, owner.ProxyID, until, reason)
+	applied, err := repo.SetCredentialTempUnschedulableIfUnchanged(ctx, owner, until, reason)
 	if err != nil {
 		slog.Warn("minimax_usage_cooldown_failed", "account_id", owner.ID, "code", code, "error", err)
 	} else if applied {

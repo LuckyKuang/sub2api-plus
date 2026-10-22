@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1708,6 +1709,149 @@ func newCodexModelsTestAccount() *Account {
 	}
 }
 
+type modelsManifestCredentialAccountRepo struct {
+	AccountRepository
+	owner *Account
+	reads int
+}
+
+func (r *modelsManifestCredentialAccountRepo) GetByID(_ context.Context, id int64) (*Account, error) {
+	r.reads++
+	if r.owner != nil && r.owner.ID == id {
+		return r.owner, nil
+	}
+	return nil, errors.New("credential account not found")
+}
+
+type modelsManifestSnapshotSettingsRepo struct {
+	outboundIdentityTestRepo
+	onRead func()
+	once   sync.Once
+}
+
+func (r *modelsManifestSnapshotSettingsRepo) GetValue(ctx context.Context, key string) (string, error) {
+	r.once.Do(r.onRead)
+	return r.outboundIdentityTestRepo.GetValue(ctx, key)
+}
+
+func TestFetchCodexModelsManifestShadowFreezesCredentialProxyAcrossRelink(t *testing.T) {
+	var directCalls, foreignProxyCalls atomic.Int32
+	direct := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		directCalls.Add(1)
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	t.Cleanup(direct.Close)
+	foreignProxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		foreignProxyCalls.Add(1)
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	t.Cleanup(foreignProxy.Close)
+	requests := make(chan *http.Request, 1)
+	ownerProxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		requests <- req.Clone(context.Background())
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"models":[]}`)
+	}))
+	t.Cleanup(ownerProxy.Close)
+	proxyAccount := func(id int64, rawURL string) *Proxy {
+		parsed, err := url.Parse(rawURL)
+		require.NoError(t, err)
+		port, err := strconv.Atoi(parsed.Port())
+		require.NoError(t, err)
+		return &Proxy{ID: id, Protocol: parsed.Scheme, Host: parsed.Hostname(), Port: port, Status: StatusActive}
+	}
+	owner := newCodexModelsTestAccount()
+	owner.Proxy = proxyAccount(901, ownerProxy.URL)
+	owner.ProxyID = &owner.Proxy.ID
+	owner.Credentials["user_agent"] = "codex_vscode/0.163.0 (Ubuntu 24.04; aarch64) vscode"
+	parentID := owner.ID
+	selected := &Account{ID: 902, Platform: PlatformOpenAI, Type: AccountTypeOAuth, ParentAccountID: &parentID, Proxy: proxyAccount(903, foreignProxy.URL)}
+	selected.ProxyID = &selected.Proxy.ID
+	repo := &modelsManifestCredentialAccountRepo{owner: owner}
+	settingsRepo := &modelsManifestSnapshotSettingsRepo{onRead: func() {
+		// The acquisition is complete before settings are read. A concurrent
+		// relink must not redirect its bearer token through another proxy.
+		newParentID := int64(999)
+		selected.ParentAccountID = &newParentID
+		owner.Credentials["access_token"] = "replacement-access-token"
+		owner.Credentials["chatgpt_account_id"] = "replacement-account"
+		owner.Credentials["user_agent"] = DefaultOpenAICodexUserAgent
+		owner.Proxy = selected.Proxy
+		owner.ProxyID = selected.ProxyID
+	}}
+	service := &OpenAIGatewayService{accountRepo: repo, settingService: NewSettingService(settingsRepo, nil)}
+	original := chatgptCodexModelsURL
+	chatgptCodexModelsURL = direct.URL + "/backend-api/codex/models"
+	t.Cleanup(func() { chatgptCodexModelsURL = original })
+
+	manifest, err := service.FetchCodexModelsManifest(context.Background(), selected, "", "")
+	require.NoError(t, err)
+	require.JSONEq(t, `{"models":[]}`, string(manifest.Body))
+	require.Equal(t, int32(0), directCalls.Load())
+	require.Equal(t, int32(0), foreignProxyCalls.Load())
+	require.Equal(t, 1, repo.reads, "send must not resolve the relinked parent")
+	select {
+	case request := <-requests:
+		require.Equal(t, "Bearer test-access-token", request.Header.Get("Authorization"))
+		require.Equal(t, "acc-123", request.Header.Get("ChatGPT-Account-ID"))
+		require.Equal(t, "codex_vscode/0.163.0 (Ubuntu 24.04; aarch64) vscode", request.UserAgent())
+		require.Equal(t, "codex_vscode", request.Header.Get("Originator"))
+		require.Equal(t, "0.163.0", request.Header.Get("Version"))
+		require.Equal(t, "0.163.0", request.URL.Query().Get("client_version"))
+		require.Equal(t, "/backend-api/codex/models", request.URL.Path)
+	default:
+		t.Fatal("credential owner proxy received no models request")
+	}
+}
+
+func TestFetchCodexModelsManifestMissingCredentialProxyNeverSends(t *testing.T) {
+	var sends atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		sends.Add(1)
+		_, _ = io.WriteString(w, `{"models":[]}`)
+	}))
+	t.Cleanup(server.Close)
+	original := chatgptCodexModelsURL
+	chatgptCodexModelsURL = server.URL
+	t.Cleanup(func() { chatgptCodexModelsURL = original })
+	for _, accountType := range []string{AccountTypeOAuth, AccountTypeAPIKey} {
+		t.Run(accountType, func(t *testing.T) {
+			account := newCodexModelsTestAccount()
+			if accountType == AccountTypeAPIKey {
+				account = newCodexModelsAPIKeyTestAccount("https://models-upstream.example/v1")
+			}
+			proxyID := int64(44)
+			account.ProxyID = &proxyID
+			service := newCodexModelsAPIKeyTestService(&codexModelsHTTPUpstreamStub{do: func(_ *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
+				sends.Add(1)
+				return nil, errors.New("unexpected send")
+			}})
+			_, err := service.FetchCodexModelsManifest(context.Background(), account, "", "")
+			var applicationError *infraerrors.ApplicationError
+			require.ErrorAs(t, err, &applicationError)
+			require.Equal(t, "OPENAI_CODEX_MODELS_PROXY_INVALID", applicationError.Reason)
+		})
+	}
+	require.Equal(t, int32(0), sends.Load())
+}
+
+func TestFetchCodexModelsManifestAmbiguousCredentialOwnerNeverSends(t *testing.T) {
+	account := newCodexModelsAPIKeyTestAccount("https://old-upstream.example/v1")
+	ctx := WithOutboundIdentityScope(context.Background(), nil)
+	recordRequestCredentialOwner(ctx, account, "sk-upstream")
+	account.Credentials["base_url"] = "https://replacement-upstream.example/v1"
+	sends := 0
+	service := newCodexModelsAPIKeyTestService(&codexModelsHTTPUpstreamStub{do: func(_ *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
+		sends++
+		return nil, errors.New("unexpected send")
+	}})
+	_, err := service.FetchCodexModelsManifest(ctx, account, "", "")
+	var applicationError *infraerrors.ApplicationError
+	require.ErrorAs(t, err, &applicationError)
+	require.Equal(t, "OPENAI_CODEX_MODELS_CREDENTIALS_FAILED", applicationError.Reason)
+	require.Zero(t, sends)
+}
+
 func TestFetchCodexModelsManifestPassthrough(t *testing.T) {
 	manifestBody := `{"models":[{"slug":"gpt-5.5","display_name":"GPT-5.5"}]}`
 
@@ -1880,6 +2024,54 @@ func TestFetchCodexModelsManifestAgentIdentityRecoversInvalidTaskOnce(t *testing
 		require.Equal(t, want, identity)
 	}
 	require.Equal(t, []string{"0.200.1", "0.200.1"}, queryVersions)
+}
+
+func TestFetchCodexModelsManifestAgentIdentityBootstrapsBeforeInvalidTaskRecovery(t *testing.T) {
+	key, privateKey := newTestAgentIdentityKey(t)
+	account := &Account{ID: 46, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Credentials: map[string]any{
+		"auth_mode": OpenAIAuthModeAgentIdentity, "agent_runtime_id": key.runtimeID, "agent_private_key": privateKey,
+		"chatgpt_account_id": "account-models-bootstrap-retry",
+	}}
+	repo := &stubQuotaAccountRepo{accounts: map[int64]*Account{account.ID: account}}
+	registerCalls := 0
+	var assertions []string
+	var events []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(r.URL.Path, "/task/register") {
+			events = append(events, "register")
+			registerCalls++
+			task := "task-models-bootstrap"
+			if registerCalls > 1 {
+				task = "task-models-recovered"
+			}
+			_, _ = io.WriteString(w, `{"task_id":"`+task+`"}`)
+			return
+		}
+		events = append(events, "models")
+		assertions = append(assertions, r.Header.Get("Authorization"))
+		if len(assertions) == 1 {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = io.WriteString(w, `{"error":{"code":"invalid_task_id"}}`)
+			return
+		}
+		_, _ = io.WriteString(w, `{"models":[]}`)
+	}))
+	defer server.Close()
+	originalModelsURL, originalAuthBase := chatgptCodexModelsURL, openAIAgentIdentityAuthAPIBaseURL
+	chatgptCodexModelsURL, openAIAgentIdentityAuthAPIBaseURL = server.URL, server.URL
+	t.Cleanup(func() {
+		chatgptCodexModelsURL, openAIAgentIdentityAuthAPIBaseURL = originalModelsURL, originalAuthBase
+	})
+	svc := &OpenAIGatewayService{accountRepo: repo}
+	manifest, err := svc.FetchCodexModelsManifest(context.Background(), account, "", "")
+	require.NoError(t, err)
+	require.JSONEq(t, `{"models":[]}`, string(manifest.Body))
+	require.Equal(t, 2, registerCalls)
+	require.Equal(t, []string{"register", "models", "register", "models"}, events)
+	require.Len(t, assertions, 2)
+	require.Equal(t, "task-models-bootstrap", decodeAgentAssertionTask(t, assertions[0]))
+	require.Equal(t, "task-models-recovered", decodeAgentAssertionTask(t, assertions[1]))
 }
 
 func TestFetchCodexModelsManifestAgentIdentityRedactsUpstreamErrors(t *testing.T) {
@@ -3399,7 +3591,8 @@ func (r *codexModelsAccountStateRepo) SetError(_ context.Context, _ int64, error
 	return nil
 }
 
-func (r *codexModelsAccountStateRepo) SetCredentialErrorIfUnchanged(_ context.Context, _ int64, _, _ string, credentials map[string]any, _ *int64, message string) (bool, error) {
+func (r *codexModelsAccountStateRepo) SetCredentialErrorIfUnchanged(_ context.Context, expectedOwner *Account, message string) (bool, error) {
+	credentials := expectedOwner.Credentials
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.credentialErrorCalls++
@@ -3417,7 +3610,8 @@ func (r *codexModelsAccountStateRepo) SetTempUnschedulable(_ context.Context, _ 
 	return nil
 }
 
-func (r *codexModelsAccountStateRepo) SetCredentialTempUnschedulableIfUnchanged(ctx context.Context, id int64, _, _ string, _ map[string]any, _ *int64, until time.Time, message string) (bool, error) {
+func (r *codexModelsAccountStateRepo) SetCredentialTempUnschedulableIfUnchanged(ctx context.Context, expectedOwner *Account, until time.Time, message string) (bool, error) {
+	id := expectedOwner.ID
 	err := r.SetTempUnschedulable(ctx, id, until, message)
 	return err == nil, err
 }

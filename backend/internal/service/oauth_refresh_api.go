@@ -25,13 +25,7 @@ type OAuthRefreshExecutor interface {
 // complete credential document and proxy used by the upstream attempt, and
 // atomically publish scheduler invalidation with a successful update.
 type GrokOAuthRefreshSuccessRepository interface {
-	UpdateGrokOAuthCredentialsIfUnchanged(
-		ctx context.Context,
-		id int64,
-		expectedCredentials map[string]any,
-		expectedProxyID *int64,
-		credentials map[string]any,
-	) (bool, error)
+	UpdateGrokOAuthCredentialsIfUnchanged(ctx context.Context, owner *Account, credentials map[string]any) (bool, error)
 }
 
 const (
@@ -319,13 +313,7 @@ func (api *OAuthRefreshAPI) RefreshIfNeeded(
 					err: fmt.Errorf("grok OAuth refresh success CAS repository is not configured"),
 				}
 			}
-			applied, updateErr := conditionalRepo.UpdateGrokOAuthCredentialsIfUnchanged(
-				ctx,
-				freshAccount.ID,
-				attemptedAccount.Credentials,
-				attemptedAccount.ProxyID,
-				newCredentials,
-			)
+			applied, updateErr := conditionalRepo.UpdateGrokOAuthCredentialsIfUnchanged(ctx, attemptedAccount, newCredentials)
 			if updateErr != nil {
 				slog.Error("oauth_refresh_update_failed",
 					"account_id", freshAccount.ID,

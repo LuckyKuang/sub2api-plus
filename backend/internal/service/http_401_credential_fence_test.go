@@ -32,14 +32,19 @@ func (r *http401CredentialFenceRepo) SetError(context.Context, int64, string) er
 	return errors.New("unconditional credential mutation is forbidden")
 }
 
-func (r *http401CredentialFenceRepo) SetCredentialErrorIfUnchanged(_ context.Context, id int64, platform, kind string, credentials map[string]any, proxyID *int64, message string) (bool, error) {
+func (r *http401CredentialFenceRepo) SetCredentialErrorIfUnchanged(_ context.Context, expectedOwner *Account, message string) (bool, error) {
+	id := expectedOwner.ID
+	platform := expectedOwner.Platform
+	kind := expectedOwner.Type
+	credentials := expectedOwner.Credentials
+	proxyID := expectedOwner.ProxyID
 	r.casCalls++
-	r.attempted = snapshotOAuthRefreshAccount(&Account{ID: id, Platform: platform, Type: kind, Credentials: credentials, ProxyID: proxyID})
+	r.attempted = snapshotOAuthRefreshAccount(expectedOwner)
 	if r.writeErr != nil {
 		return false, r.writeErr
 	}
 	current := r.current
-	if current == nil || current.Status != StatusActive || current.ID != id || current.Platform != platform || current.Type != kind || !reflect.DeepEqual(current.Credentials, credentials) || !reflect.DeepEqual(current.ProxyID, proxyID) {
+	if current == nil || current.Status != StatusActive || current.ID != id || current.Platform != platform || current.Type != kind || !reflect.DeepEqual(current.Credentials, credentials) || (!reflect.DeepEqual(current.ProxyID, proxyID) || !reflect.DeepEqual(current.Proxy, expectedOwner.Proxy)) {
 		return false, nil
 	}
 	current.Status, current.ErrorMessage, current.Schedulable = StatusError, message, false

@@ -6,8 +6,11 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"reflect"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/tlsfingerprint"
 	"github.com/stretchr/testify/require"
@@ -43,17 +46,82 @@ func (u *cnBalanceResponseUpstream) DoWithTLS(
 
 type cnBalanceProbeRepo struct {
 	AccountRepository
-	account     *Account
-	extraWrites []map[string]any
+	mu                      sync.Mutex
+	account                 *Account
+	extraWrites             []map[string]any
+	stateWrites             []CredentialStateMutation
+	unconditionalStateCalls int
+	unconditionalExtraCalls int
 }
 
 func (r *cnBalanceProbeRepo) GetByID(_ context.Context, _ int64) (*Account, error) {
-	return r.account, nil
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return snapshotRequestCredentialAccount(r.account), nil
 }
 
 func (r *cnBalanceProbeRepo) UpdateExtra(_ context.Context, _ int64, updates map[string]any) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.unconditionalExtraCalls++
 	r.extraWrites = append(r.extraWrites, updates)
 	return nil
+}
+
+func (r *cnBalanceProbeRepo) SetTempUnschedulable(_ context.Context, _ int64, until time.Time, reason string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.unconditionalStateCalls++
+	r.account.TempUnschedulableUntil, r.account.TempUnschedulableReason = &until, reason
+	return nil
+}
+
+func (r *cnBalanceProbeRepo) ClearTempUnschedulable(context.Context, int64) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.unconditionalStateCalls++
+	r.account.TempUnschedulableUntil, r.account.TempUnschedulableReason = nil, ""
+	return nil
+}
+
+func (r *cnBalanceProbeRepo) ApplyCredentialStateMutation(_ context.Context, owner *Account, mutation CredentialStateMutation) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	current := r.account
+	if current == nil || owner == nil || current.ID != owner.ID || current.Platform != owner.Platform || current.Type != owner.Type || current.Status != owner.Status ||
+		!reflect.DeepEqual(current.Credentials, owner.Credentials) || !reflect.DeepEqual(current.ProxyID, owner.ProxyID) || !reflect.DeepEqual(current.Proxy, owner.Proxy) {
+		return false, nil
+	}
+	if mutation.RequireTempUnschedulableUnchanged || mutation.ClearTempUnschedulable {
+		if current.TempUnschedulableUntil == nil || mutation.ObservedTempUntil == nil {
+			if current.TempUnschedulableUntil != nil || mutation.ObservedTempUntil != nil {
+				return false, nil
+			}
+		} else if !current.TempUnschedulableUntil.Equal(*mutation.ObservedTempUntil) {
+			return false, nil
+		}
+		if current.TempUnschedulableReason != mutation.ObservedTempReason {
+			return false, nil
+		}
+	}
+	if len(mutation.Extra) > 0 {
+		r.extraWrites = append(r.extraWrites, cloneRequestCredentialMap(mutation.Extra))
+		if current.Extra == nil {
+			current.Extra = map[string]any{}
+		}
+		for key, value := range mutation.Extra {
+			current.Extra[key] = value
+		}
+	}
+	if mutation.TempUnschedulableUntil != nil {
+		until := *mutation.TempUnschedulableUntil
+		current.TempUnschedulableUntil, current.TempUnschedulableReason = &until, mutation.TempUnschedulableReason
+	}
+	if mutation.ClearTempUnschedulable {
+		current.TempUnschedulableUntil, current.TempUnschedulableReason = nil, ""
+	}
+	r.stateWrites = append(r.stateWrites, mutation)
+	return true, nil
 }
 
 func newDeepSeekBalanceProbeAccount() *Account {

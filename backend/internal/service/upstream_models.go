@@ -1367,7 +1367,11 @@ func (s *AccountTestService) doUpstreamModelsRequest(req *http.Request, proxyURL
 	if req.URL.String() == modelsDevRegistryURL {
 		return s.doUpstreamModelsRequestPrepared(req, proxyURL, account)
 	}
-	if account.IsDomesticOAuth() && account.Platform == PlatformKimi {
+	credentialAccount, err := requestCredentialAccount(req.Context(), account)
+	if err != nil {
+		return nil, err
+	}
+	if credentialAccount.IsDomesticOAuth() && credentialAccount.Platform == PlatformKimi {
 		if s.cnOAuthService == nil {
 			return nil, NewProviderCredentialFailure("native_oauth_service_unavailable", nil)
 		}
@@ -1381,15 +1385,26 @@ func (s *AccountTestService) doUpstreamModelsRequest(req *http.Request, proxyURL
 }
 
 func (s *AccountTestService) doUpstreamModelsRequestPrepared(req *http.Request, proxyURL string, account *Account) (*http.Response, error) {
-	if account.IsDomesticOAuth() && account.Platform == PlatformStepFun {
-		if err := prepareStepFunOAuthRequest(req, account); err != nil {
+	credentialAccount, err := requestCredentialAccount(req.Context(), account)
+	if err != nil {
+		return nil, err
+	}
+	_, nativeOwner := req.Context().Value(requestCredentialTransportKey{}).(requestCredentialTransportEvidence)
+	if nativeOwner || requestCredentialOwnerBound(req.Context(), account) {
+		proxyURL, err = requestCredentialOwnerProxyURL(req.Context(), account)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if credentialAccount.IsDomesticOAuth() && credentialAccount.Platform == PlatformStepFun {
+		if err := prepareStepFunOAuthRequest(req, credentialAccount); err != nil {
 			return nil, err
 		}
 	}
 	if s.tlsFPProfileService == nil {
 		return s.httpUpstream.DoWithTLS(prepareAccountOutboundRequest(req, account), proxyURL, account.ID, account.Concurrency, nil)
 	}
-	return s.httpUpstream.DoWithTLS(prepareAccountOutboundRequest(req, account), proxyURL, account.ID, account.Concurrency, s.tlsFPProfileService.ResolveTLSProfile(account))
+	return s.httpUpstream.DoWithTLS(prepareAccountOutboundRequest(req, account), proxyURL, account.ID, account.Concurrency, s.tlsFPProfileService.ResolveTLSProfile(credentialAccount))
 }
 
 func upstreamModelsProxyURL(account *Account) string {

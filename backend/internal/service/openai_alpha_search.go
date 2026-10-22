@@ -529,7 +529,7 @@ func (s *OpenAIGatewayService) ensureOpenAIAlphaSearchAuthMetadata(ctx context.C
 		if !ok {
 			return nil, NewProviderCredentialFailure("openai_alpha_search_metadata_persistence_unavailable", nil)
 		}
-		applied, err := repo.UpdateOAuthCredentialsIfUnchanged(ctx, account.ID, account.Platform, account.Credentials, account.ProxyID, credentials)
+		applied, err := repo.UpdateOAuthCredentialsIfUnchanged(ctx, account, credentials)
 		if err != nil {
 			return nil, NewProviderCredentialFailure("openai_alpha_search_metadata_persistence_failed", err)
 		}

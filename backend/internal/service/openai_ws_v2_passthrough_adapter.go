@@ -864,7 +864,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 	usageMeta.captureRequestedReasoningEffort(originalFirstClientMessage, capturedSessionModel)
 	_, initialUpstreamModel := usageMeta.turnModels(initialRequestModel)
 	SetOpsUpstreamModel(c, initialUpstreamModel)
-	wsURL, err := s.buildOpenAIResponsesWSURL(account)
+	wsURL, err := s.buildOpenAIResponsesWSURL(ctx, account)
 	if err != nil {
 		return fmt.Errorf("build ws url: %w", err)
 	}
@@ -911,9 +911,9 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 	if buildHdrErr != nil {
 		return fmt.Errorf("build ws headers: %w", buildHdrErr)
 	}
-	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
+	proxyURL, err := requestCredentialOwnerProxyURL(ctx, account)
+	if err != nil {
+		return err
 	}
 
 	dialer := s.getOpenAIWSPassthroughDialer()
@@ -947,9 +947,12 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 		dialErr := &openAIWSDialError{StatusCode: statusCode, ResponseHeaders: cloneHeader(handshakeHeaders), ResponseBody: responseBody, Err: err}
 		if s.isAgentIdentityAccount(ctx, account) && isAgentIdentityTaskInvalidWSDialError(dialErr) && !agentTaskRecoveryTried {
 			agentTaskRecoveryTried = true
-			if recoveryErr := s.recoverAgentIdentityTask(ctx, account, account.GetCredential("task_id")); recoveryErr != nil {
+			recoveredCtx, recoveryErr := s.recoverAgentIdentityTask(ctx, account, account.GetCredential("task_id"))
+			if recoveryErr != nil {
 				return fmt.Errorf("agent identity task recovery failed: %w", recoveryErr)
 			}
+			ctx = recoveredCtx
+			defer bindRequestCredentialOwnerContext(ctx, c)()
 			continue
 		}
 		logOpenAIWSV2Passthrough(

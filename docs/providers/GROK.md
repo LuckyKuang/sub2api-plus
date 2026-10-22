@@ -34,7 +34,11 @@ its retries, a persistent UUIDv5 agent ID, the final model, and (when an
 authoritative tenant-isolated association exists) independent conversation/session
 IDs plus the official UUIDv5 root-group ID. New gateway session mappings use
 UUIDv7; resumed UUIDv4 sessions and official UUIDv4 auxiliary labels preserve
-their type. Mappings are persisted atomically, scoped by tenant and credential
+their type. Stored mappings include the UUID version in their scope so the same
+raw value in a resumed session and a new cache-seeded session cannot conflict.
+The corrected mapping namespace creates a new mapping on its first use after
+upgrade; drain older workers so sessions do not alternate between namespaces.
+Mappings are persisted atomically, scoped by tenant and credential
 owner, and fail closed when durable mapping is unavailable. The installation
 uses a persisted virtual-device seed for the UUIDv5 agent identity, avoiding raw
 host machine information. This agent identity survives restarts and is distinct
@@ -132,6 +136,7 @@ headers or fabricated values:
 - Responses: `/v1/responses`, `/responses`, `/backend-api/codex/responses`
 - Chat Completions: `/v1/chat/completions`, `/chat/completions`
 - Claude-compatible Messages: `/v1/messages`
+- Claude-compatible local token counting: `/v1/messages/count_tokens`
 - Standalone search (Grok groups only): `/x_search` (native `x_search`) and
   `/web_search`
 - Voice (Grok groups only): `/tts`, `/stt`, custom voices, and `/realtime`
@@ -139,6 +144,12 @@ headers or fabricated values:
 - Video generation, editing, extension, and status lookup
 - Client-facing Responses WebSocket ingress bridged to the xAI HTTP/SSE
   upstream
+
+Local token counting enters the same Messages Content Moderation and Prompt
+Audit gates after authentication and basic validation, before estimation. It
+does not select a provider account. Unknown valid blocks pass through while
+recognized sibling content remains auditable under the shared
+[content coverage contract](../SECURITY_AUDIT_CONTENT_COVERAGE.md).
 
 When an API-key account is marked as not supporting Responses, the Messages
 adapter sends Chat Completions with that account's Grok API key and validated
@@ -158,6 +169,11 @@ otherwise the conversation ID is the official fallback. Compatibility-client
 session signals and anchored prefix derivation are gateway fallbacks only.
 The gateway namespaces cache values by tenant API key and model. Conversation,
 session and root-group associations are resolved independently and tenant-isolated.
+An explicit cache seed can establish a conversation fallback; a content-derived
+cache key cannot. Without an explicit conversation/session/cache declaration,
+the execution session is a fresh UUIDv7 retained only for that logical request,
+its retries and auxiliary prompts. Independent identical prompts and subsequent
+unlabelled WS turns receive different sessions while retaining cache reuse.
 An auxiliary request can therefore use a new conversation ID while sharing the
 parent's session, cache key and root group; descendants sharing an explicit
 conversation-group declaration retain that grouping.
@@ -306,6 +322,12 @@ removes obsolete Grok API-key compatible-family selections/defaults atomically.
 Billing and response quota snapshots carry an opaque credential/proxy generation.
 Probe coalescing uses that generation; conditional persistence, cooldowns and
 recovery compare the exact sent credentials before changing account state.
+Their owner evidence includes the hydrated proxy endpoint, credentials and
+status, compared under a proxy-row share lock in the same atomic mutation.
+Missing hydration never bypasses the comparison. A proxy-invalid failure must
+explicitly identify the missing configured proxy; quarantine locks its deleted
+row and rejects a concurrent restoration. A same-row route or status repair
+also invalidates old generation-bound observations and runtime blocks.
 Manual connection tests and derived auto-pause thresholds use the same fence.
 Slim scheduler records retain only the grant digest needed to check these
 observations; they cannot act as credential snapshots for state mutations.

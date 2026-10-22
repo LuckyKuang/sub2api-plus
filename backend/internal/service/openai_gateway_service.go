@@ -1338,6 +1338,13 @@ func (s *OpenAIGatewayService) GetAccessToken(ctx context.Context, account *Acco
 	if account == nil {
 		return "", "", errors.New("account is nil")
 	}
+	if acquired, err := requestCredentialAccount(ctx, account); err != nil {
+		return "", "", err
+	} else if acquired != nil && acquired.IsOpenAIAgentIdentity() {
+		// Recursive task retries must reacquire the explicit task-only update,
+		// never republish a stale selected row over the next attempt's evidence.
+		account = acquired
+	}
 	if account.IsShadow() {
 		credAccount, err := resolveCredentialAccount(ctx, s.accountRepo, account)
 		if err != nil {
@@ -1363,6 +1370,10 @@ func (s *OpenAIGatewayService) GetAccessToken(ctx context.Context, account *Acco
 	switch account.Type {
 	case AccountTypeOAuth:
 		if account.IsOpenAIAgentIdentity() {
+			account = snapshotRequestCredentialAccount(account)
+			if err := s.ensureAgentIdentityTask(ctx, account, ""); err != nil {
+				return "", "", err
+			}
 			return "", OpenAIAuthModeAgentIdentity, nil
 		}
 		if account.Platform == PlatformGrok {

@@ -250,7 +250,16 @@ func (s *CNProviderQuotaService) queryUsageForAccount(ctx context.Context, accou
 	queryOwner := account
 	send := func(attempt *http.Request) (*http.Response, error) {
 		queryOwner = cnQuotaRequestOwner(attempt, account)
-		return s.httpUpstream.Do(prepareAccountOutboundRequest(attempt, queryOwner), proxyURL, queryOwner.ID, maxInt(queryOwner.Concurrency, 1))
+		attemptProxy := proxyURL
+		_, nativeOwner := attempt.Context().Value(requestCredentialTransportKey{}).(requestCredentialTransportEvidence)
+		if nativeOwner || requestCredentialOwnerBound(attempt.Context(), account) {
+			var err error
+			attemptProxy, err = requestCredentialOwnerProxyURL(attempt.Context(), account)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return s.httpUpstream.Do(prepareAccountOutboundRequest(attempt, queryOwner), attemptProxy, account.ID, maxInt(account.Concurrency, 1))
 	}
 	var resp *http.Response
 	switch {

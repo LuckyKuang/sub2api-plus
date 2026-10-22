@@ -49,7 +49,11 @@ type alphaSearchMetadataRepo struct {
 	whoamiDone   <-chan struct{}
 }
 
-func (r *alphaSearchMetadataRepo) UpdateOAuthCredentialsIfUnchanged(_ context.Context, id int64, platform string, expected map[string]any, proxy *int64, replacement map[string]any) (bool, error) {
+func (r *alphaSearchMetadataRepo) UpdateOAuthCredentialsIfUnchanged(_ context.Context, expectedOwner *Account, replacement map[string]any) (bool, error) {
+	id := expectedOwner.ID
+	platform := expectedOwner.Platform
+	expected := expectedOwner.Credentials
+	proxy := expectedOwner.ProxyID
 	if r.whoamiDone != nil {
 		<-r.whoamiDone
 	}
@@ -62,7 +66,7 @@ func (r *alphaSearchMetadataRepo) UpdateOAuthCredentialsIfUnchanged(_ context.Co
 	}
 	current := r.current
 	if current == nil || current.ID != id || current.Platform != platform || current.Type != AccountTypeOAuth || current.Status != StatusActive ||
-		!reflect.DeepEqual(current.Credentials, expected) || !reflect.DeepEqual(current.ProxyID, proxy) {
+		!reflect.DeepEqual(current.Credentials, expected) || (!reflect.DeepEqual(current.ProxyID, proxy) || !reflect.DeepEqual(current.Proxy, expectedOwner.Proxy)) {
 		return false, nil
 	}
 	current.Credentials = cloneRequestCredentialMap(replacement)

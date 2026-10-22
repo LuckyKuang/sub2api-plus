@@ -28,7 +28,12 @@ func validateOpenAIWSBearerToken(account *Account, token string) error {
 	return nil
 }
 
-func (s *OpenAIGatewayService) buildOpenAIResponsesWSURL(account *Account) (string, error) {
+func (s *OpenAIGatewayService) buildOpenAIResponsesWSURL(ctx context.Context, account *Account) (string, error) {
+	var credentialErr error
+	account, credentialErr = requestCredentialAccount(ctx, account)
+	if credentialErr != nil {
+		return "", credentialErr
+	}
 	if account == nil {
 		return "", errors.New("account is nil")
 	}
@@ -90,11 +95,21 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	routingModel string,
 	routingServiceTier string,
 ) (http.Header, openAIWSSessionHeaderResolution, error) {
-	if err := validateOpenAIOAuthSessionAccess(c, account); err != nil {
-		return nil, openAIWSSessionHeaderResolution{}, err
+	if account != nil && account.IsShadow() {
+		if err := validateOpenAIOAuthSessionAccess(c, account); err != nil {
+			return nil, openAIWSSessionHeaderResolution{}, err
+		}
 	}
 	ctx = WithOutboundIdentityScope(ctx, c)
 	ctx = WithAccountOutboundIdentity(ctx, account)
+	var credentialErr error
+	account, credentialErr = requestCredentialAccount(ctx, account)
+	if credentialErr != nil {
+		return nil, openAIWSSessionHeaderResolution{}, credentialErr
+	}
+	if err := validateOpenAIOAuthSessionAccess(c, account); err != nil {
+		return nil, openAIWSSessionHeaderResolution{}, err
+	}
 	headers := make(http.Header)
 	if account == nil || !account.IsOpenAIAgentIdentity() {
 		headers.Set("authorization", "Bearer "+token)

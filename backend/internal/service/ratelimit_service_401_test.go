@@ -38,7 +38,8 @@ func (r *rateLimitAccountRepoStub) SetError(ctx context.Context, id int64, error
 	return nil
 }
 
-func (r *rateLimitAccountRepoStub) SetCredentialErrorIfUnchanged(ctx context.Context, id int64, _, _ string, _ map[string]any, _ *int64, message string) (bool, error) {
+func (r *rateLimitAccountRepoStub) SetCredentialErrorIfUnchanged(ctx context.Context, expectedOwner *Account, message string) (bool, error) {
+	id := expectedOwner.ID
 	return true, r.SetError(ctx, id, message)
 }
 
@@ -49,7 +50,8 @@ func (r *rateLimitAccountRepoStub) SetTempUnschedulable(ctx context.Context, id 
 	return r.tempErr
 }
 
-func (r *rateLimitAccountRepoStub) SetCredentialTempUnschedulableIfUnchanged(ctx context.Context, id int64, _, _ string, _ map[string]any, _ *int64, until time.Time, reason string) (bool, error) {
+func (r *rateLimitAccountRepoStub) SetCredentialTempUnschedulableIfUnchanged(ctx context.Context, expectedOwner *Account, until time.Time, reason string) (bool, error) {
+	id := expectedOwner.ID
 	err := r.SetTempUnschedulable(ctx, id, until, reason)
 	return err == nil, err
 }

@@ -2207,6 +2207,7 @@ func (h *GatewayHandler) CountTokens(c *gin.Context) {
 
 	setOpsRequestContext(c, "", false)
 
+	securityAuditBody := append([]byte(nil), body...)
 	bodyRef := service.NewRequestBodyRef(body)
 	parsedReq, err := service.ParseGatewayRequest(bodyRef, domain.PlatformAnthropic)
 	if err != nil {
@@ -2215,12 +2216,8 @@ func (h *GatewayHandler) CountTokens(c *gin.Context) {
 		return
 	}
 	body = parsedReq.Body.Bytes()
-	// count_tokens 走 messages 严格校验时，复用已解析请求，避免二次反序列化。
-	SetClaudeCodeClientContext(c, body, parsedReq)
 	ensureCompositeTargetPlatform(c, apiKey, parsedReq.Model)
 	reqLog = reqLog.With(zap.String("model", parsedReq.Model), zap.Bool("stream", parsedReq.Stream))
-	// 在请求上下文中记录 thinking 状态，供 Antigravity 最终模型 key 推导/模型维度限流使用
-	c.Request = c.Request.WithContext(service.WithThinkingEnabled(c.Request.Context(), parsedReq.ThinkingEnabled, h.metadataBridgeEnabled()))
 
 	// 验证 model 必填
 	if parsedReq.Model == "" {
@@ -2237,6 +2234,13 @@ func (h *GatewayHandler) CountTokens(c *gin.Context) {
 
 	setOpsRequestContext(c, parsedReq.Model, parsedReq.Stream)
 	setOpsEndpointContext(c, "", int16(service.RequestTypeFromLegacy(parsedReq.Stream, false)))
+	if decision := h.checkSecurityAudit(c, reqLog, apiKey, subject, service.ContentModerationProtocolAnthropicMessages, parsedReq.Model, securityAuditBody); decision != nil && !decision.AllowNextStage {
+		h.anthropicSecurityAuditError(c, decision)
+		return
+	}
+	// Classification and bridge context follow the original-content audit.
+	SetClaudeCodeClientContext(c, body, parsedReq)
+	c.Request = c.Request.WithContext(service.WithThinkingEnabled(c.Request.Context(), parsedReq.ThinkingEnabled, h.metadataBridgeEnabled()))
 
 	// 获取订阅信息（可能为nil）
 	subscription, _ := middleware2.GetSubscriptionFromContext(c)

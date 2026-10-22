@@ -102,7 +102,12 @@ func (r *openAIAccountTestRepo) SetError(_ context.Context, id int64, errorMsg s
 	return nil
 }
 
-func (r *openAIAccountTestRepo) SetCredentialErrorIfUnchanged(ctx context.Context, id int64, platform, kind string, credentials map[string]any, proxyID *int64, message string) (bool, error) {
+func (r *openAIAccountTestRepo) SetCredentialErrorIfUnchanged(ctx context.Context, expectedOwner *Account, message string) (bool, error) {
+	id := expectedOwner.ID
+	platform := expectedOwner.Platform
+	kind := expectedOwner.Type
+	credentials := expectedOwner.Credentials
+	proxyID := expectedOwner.ProxyID
 	current, err := r.GetByID(ctx, id)
 	if err != nil {
 		return false, err

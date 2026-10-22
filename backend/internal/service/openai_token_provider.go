@@ -404,7 +404,7 @@ func (p *OpenAITokenProvider) disableAccountMissingRefreshToken(ctx context.Cont
 	}
 	bgCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	applied, err := repo.SetCredentialErrorIfUnchanged(bgCtx, account.ID, account.Platform, account.Type, account.Credentials, account.ProxyID, reason)
+	applied, err := repo.SetCredentialErrorIfUnchanged(bgCtx, account, reason)
 	if err != nil {
 		slog.Warn("openai_token_provider.set_error_failed",
 			"account_id", account.ID,

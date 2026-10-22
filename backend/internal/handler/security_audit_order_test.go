@@ -23,6 +23,7 @@ type promptAuditOrderCase struct {
 func TestPromptAuditGatePrecedesAccountBillingAndUpstreamSideEffects(t *testing.T) {
 	tests := []promptAuditOrderCase{
 		{file: "gateway_handler.go", function: "Messages", auditToken: "checkSecurityAudit"},
+		{file: "gateway_handler.go", function: "CountTokens", auditToken: "checkSecurityAudit"},
 		{file: "gateway_handler_chat_completions.go", function: "ChatCompletions", auditToken: "checkSecurityAudit"},
 		{file: "gateway_handler_responses.go", function: "Responses", auditToken: "checkSecurityAudit"},
 		{file: "gemini_v1beta_handler.go", function: "GeminiV1BetaModels", auditToken: "checkSecurityAudit"},
@@ -34,6 +35,9 @@ func TestPromptAuditGatePrecedesAccountBillingAndUpstreamSideEffects(t *testing.
 		{file: "openai_gateway_handler.go", function: "Responses", auditToken: "checkSecurityAudit"},
 		{file: "openai_gateway_handler.go", function: "Messages", auditToken: "checkSecurityAudit"},
 		{file: "openai_gateway_handler.go", function: "ResponsesWebSocket", auditToken: "checkSecurityAuditStage"},
+		{file: "openai_gateway_count_tokens.go", function: "CountTokens", auditToken: "checkSecurityAudit"},
+		{file: "openai_gateway_count_tokens.go", function: "GrokCountTokens", auditToken: "checkSecurityAudit"},
+		{file: "openai_gateway_count_tokens.go", function: "ResponsesInputTokens", auditToken: "checkSecurityAudit"},
 		{file: "openai_chat_completions.go", function: "ChatCompletions", auditToken: "checkSecurityAudit"},
 		{file: "openai_images.go", function: "Images", auditToken: "checkSecurityAudit"},
 		{file: "grok_media.go", function: "handleGrokMedia", auditToken: "checkSecurityAudit"},
@@ -53,6 +57,7 @@ func TestPromptAuditGatePrecedesAccountBillingAndUpstreamSideEffects(t *testing.
 		"AcquireOpenAIWSIngressLease(",
 		"reserveInflightBalance(", "reserveInflightBalanceCtx(",
 		"resolveGeminiCachedContentOrWrite(", "geminiCachedContentService.List(",
+		"EstimateGrokCountTokens(", "GetRequestCredential(",
 	}
 	for _, tt := range tests {
 		t.Run(tt.file+"/"+tt.function, func(t *testing.T) {
@@ -70,6 +75,15 @@ func TestPromptAuditGatePrecedesAccountBillingAndUpstreamSideEffects(t *testing.
 			}
 			require.True(t, foundSideEffect, "coverage case must contain a downstream side effect")
 		})
+	}
+}
+
+func TestCountTokensClassificationFollowsOriginalContentAudit(t *testing.T) {
+	source := stripGoComments(goFunctionSource(t, "gateway_handler.go", "CountTokens"))
+	auditIndex := strings.Index(source, "checkSecurityAudit(")
+	require.NotEqual(t, -1, auditIndex)
+	for _, operation := range []string{"SetClaudeCodeClientContext(", "service.WithThinkingEnabled("} {
+		require.Greater(t, strings.Index(source, operation), auditIndex, operation+" must follow ingress audit")
 	}
 }
 

@@ -52,8 +52,9 @@ func (r *stubQuotaAccountRepo) UpdateCredentials(_ context.Context, id int64, cr
 	return nil
 }
 
-func (r *stubQuotaAccountRepo) UpdateOAuthCredentialsIfUnchanged(ctx context.Context, id int64, platform string, expected map[string]any, proxy *int64, credentials map[string]any) (bool, error) {
-	if !agentTaskTestCredentialsMatch(r.accounts[id], id, platform, expected, proxy) {
+func (r *stubQuotaAccountRepo) UpdateOAuthCredentialsIfUnchanged(ctx context.Context, expectedOwner *Account, credentials map[string]any) (bool, error) {
+	id := expectedOwner.ID
+	if !agentTaskTestCredentialsMatch(r.accounts[id], expectedOwner) {
 		return false, nil
 	}
 	return true, r.UpdateCredentials(ctx, id, credentials)

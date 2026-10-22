@@ -72,12 +72,16 @@ func (r *poolHealthAccountRepo) UpdateCredentials(_ context.Context, id int64, _
 	return nil
 }
 
-func (r *poolHealthAccountRepo) UpdateOAuthCredentialsIfUnchanged(_ context.Context, id int64, platform string, expected map[string]any, proxy *int64, replacement map[string]any) (bool, error) {
+func (r *poolHealthAccountRepo) UpdateOAuthCredentialsIfUnchanged(_ context.Context, expectedOwner *Account, replacement map[string]any) (bool, error) {
+	id := expectedOwner.ID
+	platform := expectedOwner.Platform
+	expected := expectedOwner.Credentials
+	proxy := expectedOwner.ProxyID
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	account := r.accounts[id]
 	if account == nil || account.Platform != platform || account.Type != AccountTypeOAuth || account.Status != StatusActive ||
-		!reflect.DeepEqual(account.Credentials, expected) || !reflect.DeepEqual(account.ProxyID, proxy) {
+		!reflect.DeepEqual(account.Credentials, expected) || (!reflect.DeepEqual(account.ProxyID, proxy) || !reflect.DeepEqual(account.Proxy, expectedOwner.Proxy)) {
 		return false, nil
 	}
 	account.Credentials = cloneRequestCredentialMap(replacement)
@@ -85,8 +89,8 @@ func (r *poolHealthAccountRepo) UpdateOAuthCredentialsIfUnchanged(_ context.Cont
 	return true, nil
 }
 
-func (r *poolHealthAccountRepo) UpdateGrokOAuthCredentialsIfUnchanged(ctx context.Context, id int64, expected map[string]any, proxy *int64, replacement map[string]any) (bool, error) {
-	return r.UpdateOAuthCredentialsIfUnchanged(ctx, id, PlatformGrok, expected, proxy, replacement)
+func (r *poolHealthAccountRepo) UpdateGrokOAuthCredentialsIfUnchanged(ctx context.Context, expectedOwner *Account, replacement map[string]any) (bool, error) {
+	return r.UpdateOAuthCredentialsIfUnchanged(ctx, expectedOwner, replacement)
 }
 
 func (r *poolHealthAccountRepo) SetError(context.Context, int64, string) error {
@@ -96,18 +100,18 @@ func (r *poolHealthAccountRepo) SetError(context.Context, int64, string) error {
 	return nil
 }
 
-func (r *poolHealthAccountRepo) SetGrokOAuthErrorIfCredentialsUnchanged(context.Context, int64, map[string]any, string) (bool, error) {
+func (r *poolHealthAccountRepo) SetGrokOAuthErrorIfCredentialsUnchanged(context.Context, *Account, string) (bool, error) {
 	return false, nil
 }
 
-func (r *poolHealthAccountRepo) SetGrokOAuthRefreshErrorIfCredentialsUnchanged(context.Context, int64, map[string]any, *int64, string) (bool, error) {
+func (r *poolHealthAccountRepo) SetGrokOAuthRefreshErrorIfCredentialsUnchanged(context.Context, *Account, string) (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.setErrorCalls++
 	return true, nil
 }
 
-func (r *poolHealthAccountRepo) SetGrokOAuthRefreshTempUnschedulableIfCredentialsUnchanged(context.Context, int64, map[string]any, *int64, time.Time, string) (bool, error) {
+func (r *poolHealthAccountRepo) SetGrokOAuthRefreshTempUnschedulableIfCredentialsUnchanged(context.Context, *Account, time.Time, string) (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.setTempUnschedCalls++
@@ -178,12 +182,12 @@ type breakerTripAccountRepo struct {
 	setTempCalls  atomic.Int64
 }
 
-func (r *breakerTripAccountRepo) SetGrokOAuthRefreshErrorIfCredentialsUnchanged(context.Context, int64, map[string]any, *int64, string) (bool, error) {
+func (r *breakerTripAccountRepo) SetGrokOAuthRefreshErrorIfCredentialsUnchanged(context.Context, *Account, string) (bool, error) {
 	r.setErrorCalls.Add(1)
 	return true, nil
 }
 
-func (r *breakerTripAccountRepo) SetGrokOAuthRefreshTempUnschedulableIfCredentialsUnchanged(context.Context, int64, map[string]any, *int64, time.Time, string) (bool, error) {
+func (r *breakerTripAccountRepo) SetGrokOAuthRefreshTempUnschedulableIfCredentialsUnchanged(context.Context, *Account, time.Time, string) (bool, error) {
 	r.setTempCalls.Add(1)
 	return true, nil
 }
@@ -220,18 +224,15 @@ func (r *productionPathRateRepo) UpdateCredentials(_ context.Context, id int64, 
 	return nil
 }
 
-func (r *productionPathRateRepo) UpdateGrokOAuthCredentialsIfUnchanged(
-	_ context.Context,
-	id int64,
-	expectedCredentials map[string]any,
-	expectedProxyID *int64,
-	credentials map[string]any,
-) (bool, error) {
+func (r *productionPathRateRepo) UpdateGrokOAuthCredentialsIfUnchanged(_ context.Context, expectedOwner *Account, credentials map[string]any) (bool, error) {
+	id := expectedOwner.ID
+	expectedCredentials := expectedOwner.Credentials
+	expectedProxyID := expectedOwner.ProxyID
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	account := r.accounts[id]
 	if account == nil || !reflect.DeepEqual(account.Credentials, expectedCredentials) ||
-		!reflect.DeepEqual(account.ProxyID, expectedProxyID) {
+		(!reflect.DeepEqual(account.ProxyID, expectedProxyID) || !reflect.DeepEqual(account.Proxy, expectedOwner.Proxy)) {
 		return false, nil
 	}
 	account.Credentials = shallowCopyMap(credentials)

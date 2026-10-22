@@ -38,7 +38,8 @@ func (r *openAIAuthPolicyAccountRepo) SetTempUnschedulable(context.Context, int6
 	return nil
 }
 
-func (r *openAIAuthPolicyAccountRepo) SetCredentialTempUnschedulableIfUnchanged(ctx context.Context, id int64, _, _ string, _ map[string]any, _ *int64, until time.Time, reason string) (bool, error) {
+func (r *openAIAuthPolicyAccountRepo) SetCredentialTempUnschedulableIfUnchanged(ctx context.Context, expectedOwner *Account, until time.Time, reason string) (bool, error) {
+	id := expectedOwner.ID
 	r.credentialCooldownCalls++
 	err := r.SetTempUnschedulable(ctx, id, until, reason)
 	return err == nil, err

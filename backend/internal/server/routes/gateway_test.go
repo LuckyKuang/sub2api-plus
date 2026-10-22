@@ -27,6 +27,10 @@ func newGatewayRoutesTestRouter(platform ...string) *gin.Engine {
 }
 
 func newGatewayRoutesTestRouterWithConfig(cfg *config.Config, platform ...string) *gin.Engine {
+	return newGatewayRoutesTestRouterWithAuthSubject(cfg, nil, platform...)
+}
+
+func newGatewayRoutesTestRouterWithAuthSubject(cfg *config.Config, subject *servermiddleware.AuthSubject, platform ...string) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 
@@ -47,6 +51,9 @@ func newGatewayRoutesTestRouterWithConfig(cfg *config.Config, platform ...string
 				GroupID: &groupID,
 				Group:   &service.Group{Platform: groupPlatform},
 			})
+			if subject != nil {
+				c.Set(string(servermiddleware.ContextKeyUser), *subject)
+			}
 			c.Next()
 		}),
 		nil,
@@ -415,9 +422,9 @@ func TestGatewayRoutesGrokAllowsCLICompatibilityEntrypoints(t *testing.T) {
 		require.NotContains(t, w.Body.String(), "not supported for Grok groups")
 	}
 
-	countTokensRouter := newGatewayRoutesTestRouterWithConfig(&config.Config{
+	countTokensRouter := newGatewayRoutesTestRouterWithAuthSubject(&config.Config{
 		Gateway: config.GatewayConfig{MaxBodySize: 1024 * 1024},
-	}, service.PlatformGrok)
+	}, &servermiddleware.AuthSubject{UserID: 1, Concurrency: 1}, service.PlatformGrok)
 	for _, path := range []string{"/v1/messages/count_tokens", "/messages/count_tokens"} {
 		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{"model":"grok","messages":[{"role":"user","content":"hi"}]}`))
 		req.Header.Set("Content-Type", "application/json")

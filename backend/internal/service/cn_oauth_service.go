@@ -473,6 +473,11 @@ func (s *CNOAuthService) roundTripNativeOAuth(req *http.Request, a *Account, sen
 }
 
 func (s *CNOAuthService) roundTripNativeOAuthWithPrepare(req *http.Request, a *Account, prepare func(*http.Request, *Account) error, send func(*http.Request) (*http.Response, error)) (*http.Response, error) {
+	owner, err := requestCredentialAccount(req.Context(), a)
+	if err != nil {
+		return nil, err
+	}
+	a = snapshotRequestCredentialAccount(owner)
 	if a == nil || !a.IsDomesticOAuth() {
 		return send(req)
 	}

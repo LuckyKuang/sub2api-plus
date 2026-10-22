@@ -48,7 +48,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 	}()
 	responseModelObserver := &upstreamResponseModelObserver{}
 
-	wsURL, err := s.buildOpenAIResponsesWSURL(account)
+	wsURL, err := s.buildOpenAIResponsesWSURL(ctx, account)
 	if err != nil {
 		return nil, wrapOpenAIWSFallback("build_ws_url", err)
 	}
@@ -205,6 +205,10 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 
 	acquireCtx, acquireCancel := context.WithTimeout(ctx, s.openAIWSAcquireTimeout())
 	defer acquireCancel()
+	proxyURL, proxyErr := requestCredentialOwnerProxyURL(ctx, account)
+	if proxyErr != nil {
+		return nil, wrapOpenAIWSFallback("credential_owner_proxy", proxyErr)
+	}
 
 	lease, err := s.getOpenAIWSConnPool().Acquire(acquireCtx, openAIWSAcquireRequest{
 		Account: account,
@@ -216,21 +220,17 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		},
 		PreferredConnID: preferredConnID,
 		ForceNewConn:    forceNewConn,
-		ProxyURL: func() string {
-			if account.ProxyID != nil && account.Proxy != nil {
-				return account.Proxy.URL()
-			}
-			return ""
-		}(),
+		ProxyURL:        proxyURL,
 	})
 	if err != nil {
 		var agentDialErr *openAIWSDialError
 		if s.isAgentIdentityAccount(ctx, account) && errors.As(err, &agentDialErr) && isAgentIdentityTaskInvalidWSDialError(agentDialErr) && agentTaskRecoveryTried != nil && !*agentTaskRecoveryTried {
 			*agentTaskRecoveryTried = true
-			if recoveryErr := s.recoverAgentIdentityTask(ctx, account, account.GetCredential("task_id")); recoveryErr != nil {
+			recoveredCtx, recoveryErr := s.recoverAgentIdentityTask(ctx, account, account.GetCredential("task_id"))
+			if recoveryErr != nil {
 				return nil, fmt.Errorf("agent identity task recovery failed: %w", recoveryErr)
 			}
-			return nil, &agentIdentityTaskRecoveredError{}
+			return nil, &agentIdentityTaskRecoveredError{ctx: recoveredCtx}
 		}
 		s.handleOpenAIWSDialTransientFailure(ctx, account, mappedModel, err)
 		dialStatus, dialClass, dialCloseStatus, dialCloseReason, dialRespServer, dialRespVia, dialRespCFRay, dialRespReqID := summarizeOpenAIWSDialError(err)

@@ -317,10 +317,14 @@ func (r *agentIdentityCredentialsRepo) GetByID(_ context.Context, _ int64) (*Acc
 	return cloneAgentIdentityTestAccount(r.account), nil
 }
 
-func (r *agentIdentityCredentialsRepo) UpdateOAuthCredentialsIfUnchanged(_ context.Context, id int64, platform string, expected map[string]any, proxy *int64, credentials map[string]any) (bool, error) {
+func (r *agentIdentityCredentialsRepo) UpdateOAuthCredentialsIfUnchanged(_ context.Context, expectedOwner *Account, credentials map[string]any) (bool, error) {
+	id := expectedOwner.ID
+	platform := expectedOwner.Platform
+	expected := expectedOwner.Credentials
+	proxy := expectedOwner.ProxyID
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.account == nil || r.account.ID != id || r.account.Platform != platform || !reflect.DeepEqual(expected, r.account.Credentials) || !oauthRefreshProxyIDsEqual(proxy, r.account.ProxyID) {
+	if r.account == nil || r.account.ID != id || r.account.Platform != platform || !reflect.DeepEqual(expected, r.account.Credentials) || !oauthRefreshProxyIDsEqual(proxy, r.account.ProxyID) || !reflect.DeepEqual(expectedOwner.Proxy, r.account.Proxy) {
 		return false, nil
 	}
 	r.credentials = cloneRequestCredentialMap(credentials)
@@ -335,9 +339,9 @@ func (r *agentIdentityCredentialsRepo) UpdateCredentials(_ context.Context, _ in
 	return nil
 }
 
-func agentTaskTestCredentialsMatch(account *Account, id int64, platform string, expected map[string]any, proxy *int64) bool {
-	return account != nil && account.ID == id && account.Platform == platform && account.Type == AccountTypeOAuth &&
-		reflect.DeepEqual(account.Credentials, expected) && oauthRefreshProxyIDsEqual(account.ProxyID, proxy)
+func agentTaskTestCredentialsMatch(account, expectedOwner *Account) bool {
+	return account != nil && expectedOwner != nil && account.ID == expectedOwner.ID && account.Platform == expectedOwner.Platform && account.Type == AccountTypeOAuth &&
+		reflect.DeepEqual(account.Credentials, expectedOwner.Credentials) && oauthRefreshProxyIDsEqual(account.ProxyID, expectedOwner.ProxyID) && reflect.DeepEqual(account.Proxy, expectedOwner.Proxy)
 }
 
 func mustAgentIdentityJSON(t *testing.T, value any) []byte {

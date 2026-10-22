@@ -109,7 +109,11 @@ func (r *grokReconcileRepo) UpdateCredentials(_ context.Context, id int64, crede
 	return nil
 }
 
-func (r *grokReconcileRepo) UpdateOAuthCredentialsIfUnchanged(_ context.Context, id int64, platform string, expected map[string]any, proxy *int64, replacement map[string]any) (bool, error) {
+func (r *grokReconcileRepo) UpdateOAuthCredentialsIfUnchanged(_ context.Context, expectedOwner *Account, replacement map[string]any) (bool, error) {
+	id := expectedOwner.ID
+	platform := expectedOwner.Platform
+	expected := expectedOwner.Credentials
+	proxy := expectedOwner.ProxyID
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for i := range r.accounts {
@@ -118,7 +122,7 @@ func (r *grokReconcileRepo) UpdateOAuthCredentialsIfUnchanged(_ context.Context,
 			continue
 		}
 		if account.Platform != platform || account.Type != AccountTypeOAuth || account.Status != StatusActive ||
-			!reflect.DeepEqual(account.Credentials, expected) || !reflect.DeepEqual(account.ProxyID, proxy) {
+			!reflect.DeepEqual(account.Credentials, expected) || (!reflect.DeepEqual(account.ProxyID, proxy) || !reflect.DeepEqual(account.Proxy, expectedOwner.Proxy)) {
 			return false, nil
 		}
 		account.Credentials = cloneRequestCredentialMap(replacement)
@@ -161,12 +165,9 @@ func (r *grokReconcileRepo) SetError(_ context.Context, id int64, message string
 	return nil
 }
 
-func (r *grokReconcileRepo) SetGrokOAuthErrorIfCredentialsUnchanged(
-	_ context.Context,
-	id int64,
-	expectedCredentials map[string]any,
-	message string,
-) (bool, error) {
+func (r *grokReconcileRepo) SetGrokOAuthErrorIfCredentialsUnchanged(_ context.Context, expectedOwner *Account, message string) (bool, error) {
+	id := expectedOwner.ID
+	expectedCredentials := expectedOwner.Credentials
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.conditionalCalls++
@@ -198,13 +199,10 @@ func (r *grokReconcileRepo) SetGrokOAuthErrorIfCredentialsUnchanged(
 	return false, nil
 }
 
-func (r *grokReconcileRepo) SetGrokOAuthRefreshErrorIfCredentialsUnchanged(
-	_ context.Context,
-	id int64,
-	expectedCredentials map[string]any,
-	expectedProxyID *int64,
-	message string,
-) (bool, error) {
+func (r *grokReconcileRepo) SetGrokOAuthRefreshErrorIfCredentialsUnchanged(_ context.Context, expectedOwner *Account, message string) (bool, error) {
+	id := expectedOwner.ID
+	expectedCredentials := expectedOwner.Credentials
+	expectedProxyID := expectedOwner.ProxyID
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for i := range r.accounts {
@@ -222,7 +220,7 @@ func (r *grokReconcileRepo) SetGrokOAuthRefreshErrorIfCredentialsUnchanged(
 			}
 		}
 		if account.Platform != PlatformGrok || account.Type != AccountTypeOAuth || account.Status != StatusActive ||
-			!reflect.DeepEqual(account.ProxyID, expectedProxyID) ||
+			(!reflect.DeepEqual(account.ProxyID, expectedProxyID) || !reflect.DeepEqual(account.Proxy, expectedOwner.Proxy)) ||
 			!reflect.DeepEqual(account.Credentials, expectedCredentials) {
 			return false, nil
 		}
@@ -236,14 +234,10 @@ func (r *grokReconcileRepo) SetGrokOAuthRefreshErrorIfCredentialsUnchanged(
 	return false, nil
 }
 
-func (r *grokReconcileRepo) SetGrokOAuthRefreshTempUnschedulableIfCredentialsUnchanged(
-	_ context.Context,
-	id int64,
-	expectedCredentials map[string]any,
-	expectedProxyID *int64,
-	until time.Time,
-	reason string,
-) (bool, error) {
+func (r *grokReconcileRepo) SetGrokOAuthRefreshTempUnschedulableIfCredentialsUnchanged(_ context.Context, expectedOwner *Account, until time.Time, reason string) (bool, error) {
+	id := expectedOwner.ID
+	expectedCredentials := expectedOwner.Credentials
+	expectedProxyID := expectedOwner.ProxyID
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for i := range r.accounts {
@@ -252,7 +246,7 @@ func (r *grokReconcileRepo) SetGrokOAuthRefreshTempUnschedulableIfCredentialsUnc
 			continue
 		}
 		if account.Platform != PlatformGrok || account.Type != AccountTypeOAuth || account.Status != StatusActive ||
-			!reflect.DeepEqual(account.ProxyID, expectedProxyID) ||
+			(!reflect.DeepEqual(account.ProxyID, expectedProxyID) || !reflect.DeepEqual(account.Proxy, expectedOwner.Proxy)) ||
 			!reflect.DeepEqual(account.Credentials, expectedCredentials) {
 			return false, nil
 		}

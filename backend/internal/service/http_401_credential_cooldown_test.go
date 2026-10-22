@@ -24,14 +24,19 @@ func (r *http401CredentialCooldownRepo) SetTempUnschedulable(context.Context, in
 	return errors.New("unconditional credential cooldown is forbidden")
 }
 
-func (r *http401CredentialCooldownRepo) SetCredentialTempUnschedulableIfUnchanged(_ context.Context, id int64, platform, kind string, credentials map[string]any, proxyID *int64, until time.Time, message string) (bool, error) {
+func (r *http401CredentialCooldownRepo) SetCredentialTempUnschedulableIfUnchanged(_ context.Context, expectedOwner *Account, until time.Time, message string) (bool, error) {
+	id := expectedOwner.ID
+	platform := expectedOwner.Platform
+	kind := expectedOwner.Type
+	credentials := expectedOwner.Credentials
+	proxyID := expectedOwner.ProxyID
 	r.cooldownCalls++
-	r.attempted = snapshotRequestCredentialAccount(&Account{ID: id, Platform: platform, Type: kind, Credentials: credentials, ProxyID: proxyID})
+	r.attempted = snapshotRequestCredentialAccount(expectedOwner)
 	if r.writeErr != nil {
 		return false, r.writeErr
 	}
 	current := r.current
-	if current == nil || current.Status != StatusActive || current.ID != id || current.Platform != platform || current.Type != kind || !reflect.DeepEqual(current.Credentials, credentials) || !reflect.DeepEqual(current.ProxyID, proxyID) {
+	if current == nil || current.Status != StatusActive || current.ID != id || current.Platform != platform || current.Type != kind || !reflect.DeepEqual(current.Credentials, credentials) || (!reflect.DeepEqual(current.ProxyID, proxyID) || !reflect.DeepEqual(current.Proxy, expectedOwner.Proxy)) {
 		return false, nil
 	}
 	current.TempUnschedulableUntil, current.TempUnschedulableReason = &until, message

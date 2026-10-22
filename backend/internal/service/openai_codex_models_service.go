@@ -1674,6 +1674,9 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 		return nil, infraerrors.Newf(http.StatusInternalServerError, "OPENAI_CODEX_MODELS_CREDENTIALS_FAILED", "resolve credential account: %v", err)
 	}
 	credAccount = snapshotRequestCredentialAccount(credAccount)
+	if credAccount == nil {
+		return nil, infraerrors.New(http.StatusInternalServerError, "OPENAI_CODEX_MODELS_CREDENTIALS_FAILED", "credential account is unavailable")
+	}
 
 	requestEndpoint := chatgptCodexModelsURL
 	authToken := ""
@@ -1702,8 +1705,17 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_CODEX_MODELS_ACCOUNT_TYPE_UNSUPPORTED", "account type %q cannot fetch the Codex models manifest", credAccount.Type)
 	}
 
+	if credAccount.IsOpenAIAgentIdentity() {
+		if err := s.ensureAgentIdentityTask(ctx, credAccount, ""); err != nil {
+			return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_CODEX_MODELS_AUTH_FAILED", "bootstrap Codex models agent identity task: %v", err)
+		}
+	}
 	recordRequestCredentialOwner(ctx, credAccount, authToken)
 	ctx = withRequestCredentialOwner(ctx, account, authToken)
+	credAccount, err = requestCredentialAccount(ctx, account)
+	if err != nil || credAccount == nil {
+		return nil, infraerrors.New(http.StatusBadGateway, "OPENAI_CODEX_MODELS_CREDENTIALS_FAILED", "request credential owner is unavailable")
+	}
 	identity := s.resolveOpenAIOutboundIdentity(ctx, credAccount)
 	// The manifest URL is a Codex protocol request for both OAuth and custom
 	// API-key upstreams. Do not let the caller's client_version split it from
@@ -1754,9 +1766,9 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 	}
 	applyOpenAICodexResidencyFromSettings(ctx, s.settingService, headers, useCodexResidency)
 
-	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
+	proxyURL, err := requestCredentialOwnerProxyURL(ctx, account)
+	if err != nil {
+		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_CODEX_MODELS_PROXY_INVALID", "invalid credential proxy configuration: %v", err)
 	}
 
 	request := openAIModelsRequest{
@@ -1782,22 +1794,30 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 			return manifest, fetchErr
 		}
 		expectedTaskID := strings.TrimSpace(credAccount.GetCredential("task_id"))
-		if recoverErr := s.recoverAgentIdentityTask(fetchCtx, credAccount, expectedTaskID); recoverErr != nil {
+		recoveredCtx, recoverErr := s.recoverAgentIdentityTask(fetchCtx, account, expectedTaskID)
+		if recoverErr != nil {
 			return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_CODEX_MODELS_AUTH_FAILED", "agent identity task recovery failed: %v", recoverErr)
 		}
+		fetchCtx = recoveredCtx
 		authHeaders, authErr := s.buildOpenAIAuthenticationHeaders(fetchCtx, credAccount, "")
 		if authErr != nil {
 			return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_CODEX_MODELS_AUTH_FAILED", "build Codex models authentication after task recovery: %v", authErr)
 		}
-		request.headers.Del("Authorization")
-		request.headers.Del("ChatGPT-Account-ID")
+		retryRequest := request
+		retryRequest.headers = request.headers.Clone()
+		retryRequest.credentialAccount, authErr = requestCredentialAccount(fetchCtx, account)
+		if authErr != nil {
+			return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_CODEX_MODELS_AUTH_FAILED", "resolve recovered Codex models credential owner: %v", authErr)
+		}
+		retryRequest.headers.Del("Authorization")
+		retryRequest.headers.Del("ChatGPT-Account-ID")
 		for key, values := range authHeaders {
 			for _, value := range values {
-				request.headers.Add(key, value)
+				retryRequest.headers.Add(key, value)
 			}
 		}
-		setOpenAIChatGPTAccountHeaders(request.headers, credAccount)
-		return s.fetchCodexModelsManifestUpstream(fetchCtx, request, ifNoneMatch)
+		setOpenAIChatGPTAccountHeaders(retryRequest.headers, retryRequest.credentialAccount)
+		return s.fetchCodexModelsManifestUpstream(fetchCtx, retryRequest, ifNoneMatch)
 	}
 	return s.fetchCachedOpenAIModels(ctx, request, oauthFetch, ifNoneMatch)
 }

@@ -11,8 +11,22 @@ import (
 // SetCredentialErrorIfUnchanged fences request-path credential quarantine
 // against concurrent rotation, reauthorization and account/proxy changes. The
 // state transition and scheduler notification commit in the same statement.
-func (r *accountRepository) SetCredentialErrorIfUnchanged(ctx context.Context, id int64, platform, kind string, credentials map[string]any, proxyID *int64, reason string) (bool, error) {
+func (r *accountRepository) SetCredentialErrorIfUnchanged(ctx context.Context, expectedOwner *service.Account, reason string) (bool, error) {
+	if err := validateCredentialMutationOwner(expectedOwner); err != nil {
+		return false, err
+	}
+
+	id := expectedOwner.ID
+	platform := expectedOwner.Platform
+	kind := expectedOwner.Type
+	credentials := expectedOwner.Credentials
+	proxyID := expectedOwner.ProxyID
 	expected, err := json.Marshal(normalizeJSONMap(credentials))
+	if err != nil {
+		return false, err
+	}
+	args := []any{service.StatusError, reason, id, service.StatusActive, platform, kind, string(expected), proxyID, service.SchedulerOutboxEventAccountChanged}
+	proxyPredicate, args, err := credentialMutationProxyPredicate(expectedOwner.ProxyID, expectedOwner.Proxy, 8, args)
 	if err != nil {
 		return false, err
 	}
@@ -23,11 +37,12 @@ func (r *accountRepository) SetCredentialErrorIfUnchanged(ctx context.Context, i
 		WHERE a.id = $3 AND a.deleted_at IS NULL AND a.status = $4
 			AND a.platform = $5 AND a.type = $6
 			AND a.credentials = $7::jsonb AND a.proxy_id IS NOT DISTINCT FROM $8
+		AND `+proxyPredicate+`
 		RETURNING a.id
 		)
 		INSERT INTO scheduler_outbox (event_type, account_id, group_id, payload)
 		SELECT $9, updated.id, NULL, NULL FROM updated
-	`, service.StatusError, reason, id, service.StatusActive, platform, kind, string(expected), proxyID, service.SchedulerOutboxEventAccountChanged)
+	`, args...)
 	if err != nil {
 		return false, err
 	}
@@ -42,8 +57,22 @@ func (r *accountRepository) SetCredentialErrorIfUnchanged(ctx context.Context, i
 // A recoverable 401 may cool down only the grant that received it. The active
 // status is preserved so background refresh can recover the account. A shorter
 // cooldown cannot replace a longer one, and outbox failure rolls back the write.
-func (r *accountRepository) SetCredentialTempUnschedulableIfUnchanged(ctx context.Context, id int64, platform, kind string, credentials map[string]any, proxyID *int64, until time.Time, reason string) (bool, error) {
+func (r *accountRepository) SetCredentialTempUnschedulableIfUnchanged(ctx context.Context, expectedOwner *service.Account, until time.Time, reason string) (bool, error) {
+	if err := validateCredentialMutationOwner(expectedOwner); err != nil {
+		return false, err
+	}
+
+	id := expectedOwner.ID
+	platform := expectedOwner.Platform
+	kind := expectedOwner.Type
+	credentials := expectedOwner.Credentials
+	proxyID := expectedOwner.ProxyID
 	expected, err := json.Marshal(normalizeJSONMap(credentials))
+	if err != nil {
+		return false, err
+	}
+	args := []any{until, reason, id, service.StatusActive, platform, kind, string(expected), proxyID, service.SchedulerOutboxEventAccountChanged}
+	proxyPredicate, args, err := credentialMutationProxyPredicate(expectedOwner.ProxyID, expectedOwner.Proxy, 8, args)
 	if err != nil {
 		return false, err
 	}
@@ -55,11 +84,12 @@ func (r *accountRepository) SetCredentialTempUnschedulableIfUnchanged(ctx contex
 			AND a.platform = $5 AND a.type = $6
 			AND a.credentials = $7::jsonb AND a.proxy_id IS NOT DISTINCT FROM $8
 			AND (a.temp_unschedulable_until IS NULL OR a.temp_unschedulable_until < $1)
+		AND `+proxyPredicate+`
 		RETURNING a.id
 		)
 		INSERT INTO scheduler_outbox (event_type, account_id, group_id, payload)
 		SELECT $9, updated.id, NULL, NULL FROM updated
-	`, until, reason, id, service.StatusActive, platform, kind, string(expected), proxyID, service.SchedulerOutboxEventAccountChanged)
+	`, args...)
 	if err != nil {
 		return false, err
 	}

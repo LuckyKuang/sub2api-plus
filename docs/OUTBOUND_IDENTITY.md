@@ -151,6 +151,27 @@ invalidation; threshold/reset decisions reject old or unbound generations. The
 stored generation is a digest of ownership inputs, not another outbound identity
 declaration. See [quota ownership and legacy data](providers/DOMESTIC_OAUTH.md).
 
+Credential quarantine, cooldowns, OAuth rotation and quota/billing persistence
+carry the acquired full owner snapshot into their conditional repository ports.
+A configured proxy requires its observed protocol, host, port, username,
+password and status; an ID without its hydrated proxy cannot authorize a write.
+The mutation locks the matching live proxy row with `FOR SHARE` until the account
+update and scheduler outbox commit. Editing that same proxy row therefore either
+follows the mutation or causes its stale comparison to fail, including when the
+mutation waits on a separate account update. Runtime generation digests include
+proxy status so repairing status alone also isolates previous local blocks.
+
+Kimi and DeepSeek PAYG balance probes freeze the complete credential owner before
+HTTP preparation and isolate concurrent probes by credential/proxy generation.
+Balance snapshots and threshold decisions use that same owner in conditional
+state writes; a late balance response cannot change a replaced grant's extra or
+scheduling. Balance metadata, pause and recovery additionally compare the exact
+cooldown deadline and reason observed before the probe, including an absent
+deadline, so a late healthy response cannot clear a newer reactive balance marker
+or replace a newer failure from the same grant. Missing conditional storage
+does not fall back to row-ID writes. Owner evidence remains internal to the
+result and is never included in its admin JSON response.
+
 MiniMax OAuth quota resolves the personal workspace group and calls the fixed
 regional account/quota origins with the same grant, proxy and trusted `minimax`
 snapshot. Its recognized five-hour/weekly windows feed existing scheduling
@@ -582,6 +603,18 @@ their explicit compatible-family mapping.
 The existing Codex account editor is retained. The new global `profiles` map
 cannot replace Codex configuration. See the exact default and source matrix in
 [Codex client profiles](protocols/CODEX_CLIENT_PROFILES.md).
+
+The plugin account directory resolves each bearer export in an independent
+credential scope; caller forwarding evidence cannot supply its owner. After
+token acquisition or refresh, the exported token, ChatGPT/FedRAMP headers,
+Codex identity triple and proxy all use the acquired immutable account snapshot.
+The Codex account/global/default precedence above applies to this export, with
+the same owner's fallback settings retained across acquisition. The acquired
+owner must still satisfy the plugin's capability scope and supported account
+type. Missing proxy details or ambiguous acquisition evidence prevent credential
+export. AgentIdentity accounts remain readable in directory metadata but have
+no bearer export; resolving one returns no identity and performs no task
+registration or credential write.
 
 Generic `header_overrides` cannot select or modify a client identity. Saves reject
 managed identity names with `INVALID_HEADER_OVERRIDE` (HTTP 400), including empty

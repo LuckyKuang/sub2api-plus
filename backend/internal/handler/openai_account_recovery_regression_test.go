@@ -28,7 +28,12 @@ type recoveryHandlerRepo struct {
 	quarantined []int64
 }
 
-func (r *recoveryHandlerRepo) SetCredentialErrorIfUnchanged(_ context.Context, id int64, platform, kind string, expected map[string]any, proxy *int64, reason string) (bool, error) {
+func (r *recoveryHandlerRepo) SetCredentialErrorIfUnchanged(_ context.Context, expectedOwner *service.Account, reason string) (bool, error) {
+	id := expectedOwner.ID
+	platform := expectedOwner.Platform
+	kind := expectedOwner.Type
+	expected := expectedOwner.Credentials
+	proxy := expectedOwner.ProxyID
 	want, _ := json.Marshal(expected)
 	for i := range r.accounts {
 		a := &r.accounts[i]

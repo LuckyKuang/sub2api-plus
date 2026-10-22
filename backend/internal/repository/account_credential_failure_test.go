@@ -19,8 +19,7 @@ func TestCredentialFailureQuarantineFencesExactOwnerAndCredentials(t *testing.T)
 	exec := &recordingSQLExecutor{result: rowsAffectedResult(0)}
 	repo := newAccountRepositoryWithSQL(nil, exec, nil)
 	proxy := int64(17)
-	changed, err := repo.SetCredentialErrorIfUnchanged(context.Background(), 42, service.PlatformKimi, service.AccountTypeOAuth,
-		map[string]any{"access_token": "old", "_token_version": 7}, &proxy, "grant_revoked")
+	changed, err := repo.SetCredentialErrorIfUnchanged(context.Background(), &service.Account{ID: 42, Platform: service.PlatformKimi, Type: service.AccountTypeOAuth, Credentials: map[string]any{"access_token": "old", "_token_version": 7}, ProxyID: &proxy, Proxy: &service.Proxy{ID: proxy, Status: service.StatusActive}, Status: service.StatusActive}, "grant_revoked")
 	require.NoError(t, err)
 	require.False(t, changed)
 	require.Len(t, exec.execQueries, 1)
@@ -39,8 +38,7 @@ func TestCredential401CooldownFencesExactOwnerAndPreservesLongerWindow(t *testin
 	repo := newAccountRepositoryWithSQL(nil, exec, nil)
 	proxy := int64(17)
 	until := time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC)
-	changed, err := repo.SetCredentialTempUnschedulableIfUnchanged(context.Background(), 42, service.PlatformOpenAI, service.AccountTypeOAuth,
-		map[string]any{"access_token": "sent", "refresh_token": "old", "_token_version": 7}, &proxy, until, "oauth_401")
+	changed, err := repo.SetCredentialTempUnschedulableIfUnchanged(context.Background(), &service.Account{ID: 42, Platform: service.PlatformOpenAI, Type: service.AccountTypeOAuth, Credentials: map[string]any{"access_token": "sent", "refresh_token": "old", "_token_version": 7}, ProxyID: &proxy, Proxy: &service.Proxy{ID: proxy, Status: service.StatusActive}, Status: service.StatusActive}, until, "oauth_401")
 	require.NoError(t, err)
 	require.False(t, changed)
 	require.Len(t, exec.execQueries, 1)
@@ -119,10 +117,10 @@ func credentialConditionalMutationCases() []struct {
 		apply func(context.Context, *accountRepository) (bool, error)
 	}{
 		{name: "generic-error", apply: func(ctx context.Context, repo *accountRepository) (bool, error) {
-			return repo.SetCredentialErrorIfUnchanged(ctx, 42, service.PlatformOpenAI, service.AccountTypeOAuth, credentials, nil, "revoked")
+			return repo.SetCredentialErrorIfUnchanged(ctx, &service.Account{ID: 42, Platform: service.PlatformOpenAI, Type: service.AccountTypeOAuth, Credentials: credentials, ProxyID: nil, Status: service.StatusActive}, "revoked")
 		}},
 		{name: "generic-cooldown", apply: func(ctx context.Context, repo *accountRepository) (bool, error) {
-			return repo.SetCredentialTempUnschedulableIfUnchanged(ctx, 42, service.PlatformKimi, service.AccountTypeOAuth, credentials, nil, until, "rejected")
+			return repo.SetCredentialTempUnschedulableIfUnchanged(ctx, &service.Account{ID: 42, Platform: service.PlatformKimi, Type: service.AccountTypeOAuth, Credentials: credentials, ProxyID: nil, Status: service.StatusActive}, until, "rejected")
 		}},
 		{name: "grok-request-error", apply: func(ctx context.Context, repo *accountRepository) (bool, error) {
 			return repo.SetGrokCredentialErrorIfMatch(ctx, 42, snapshot, "revoked")
@@ -131,16 +129,16 @@ func credentialConditionalMutationCases() []struct {
 			return repo.SetGrokCredentialTempUnschedulableIfMatch(ctx, 42, snapshot, until, "rejected")
 		}},
 		{name: "grok-missing-refresh", apply: func(ctx context.Context, repo *accountRepository) (bool, error) {
-			return repo.SetGrokOAuthErrorIfCredentialsUnchanged(ctx, 42, map[string]any{"access_token": "attempted"}, "missing refresh token")
+			return repo.SetGrokOAuthErrorIfCredentialsUnchanged(ctx, &service.Account{ID: 42, Credentials: map[string]any{"access_token": "attempted"}, Platform: service.PlatformGrok, Type: service.AccountTypeOAuth, Status: service.StatusActive}, "missing refresh token")
 		}},
 		{name: "grok-refresh-success", apply: func(ctx context.Context, repo *accountRepository) (bool, error) {
-			return repo.UpdateGrokOAuthCredentialsIfUnchanged(ctx, 42, credentials, nil, map[string]any{"access_token": "rotated", "refresh_token": "rotated-refresh"})
+			return repo.UpdateGrokOAuthCredentialsIfUnchanged(ctx, &service.Account{ID: 42, Credentials: credentials, ProxyID: nil, Platform: service.PlatformGrok, Type: service.AccountTypeOAuth, Status: service.StatusActive}, map[string]any{"access_token": "rotated", "refresh_token": "rotated-refresh"})
 		}},
 		{name: "grok-refresh-error", apply: func(ctx context.Context, repo *accountRepository) (bool, error) {
-			return repo.SetGrokOAuthRefreshErrorIfCredentialsUnchanged(ctx, 42, credentials, nil, "revoked")
+			return repo.SetGrokOAuthRefreshErrorIfCredentialsUnchanged(ctx, &service.Account{ID: 42, Credentials: credentials, ProxyID: nil, Platform: service.PlatformGrok, Type: service.AccountTypeOAuth, Status: service.StatusActive}, "revoked")
 		}},
 		{name: "grok-refresh-cooldown", apply: func(ctx context.Context, repo *accountRepository) (bool, error) {
-			return repo.SetGrokOAuthRefreshTempUnschedulableIfCredentialsUnchanged(ctx, 42, credentials, nil, until, "rejected")
+			return repo.SetGrokOAuthRefreshTempUnschedulableIfCredentialsUnchanged(ctx, &service.Account{ID: 42, Credentials: credentials, ProxyID: nil, Platform: service.PlatformGrok, Type: service.AccountTypeOAuth, Status: service.StatusActive}, until, "rejected")
 		}},
 	}
 }

@@ -22,14 +22,14 @@ type http401RefreshEvidenceRepo struct {
 	cooldown http401CredentialCooldownRepo
 }
 
-func (r *http401RefreshEvidenceRepo) SetCredentialErrorIfUnchanged(ctx context.Context, id int64, platform, kind string, credentials map[string]any, proxyID *int64, message string) (bool, error) {
+func (r *http401RefreshEvidenceRepo) SetCredentialErrorIfUnchanged(ctx context.Context, expectedOwner *Account, message string) (bool, error) {
 	r.fence.current = r.account
-	return r.fence.SetCredentialErrorIfUnchanged(ctx, id, platform, kind, credentials, proxyID, message)
+	return r.fence.SetCredentialErrorIfUnchanged(ctx, expectedOwner, message)
 }
 
-func (r *http401RefreshEvidenceRepo) SetCredentialTempUnschedulableIfUnchanged(ctx context.Context, id int64, platform, kind string, credentials map[string]any, proxyID *int64, until time.Time, message string) (bool, error) {
+func (r *http401RefreshEvidenceRepo) SetCredentialTempUnschedulableIfUnchanged(ctx context.Context, expectedOwner *Account, until time.Time, message string) (bool, error) {
 	r.cooldown.current = r.account
-	return r.cooldown.SetCredentialTempUnschedulableIfUnchanged(ctx, id, platform, kind, credentials, proxyID, until, message)
+	return r.cooldown.SetCredentialTempUnschedulableIfUnchanged(ctx, expectedOwner, until, message)
 }
 
 func TestHTTP401AcquiredCredentialGeneration(t *testing.T) {

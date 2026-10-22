@@ -421,7 +421,8 @@ type passthroughLifecycleCredentialRepo struct {
 	credentialSnapshot   map[string]any
 }
 
-func (r *passthroughLifecycleCredentialRepo) SetCredentialErrorIfUnchanged(_ context.Context, _ int64, _, _ string, credentials map[string]any, _ *int64, _ string) (bool, error) {
+func (r *passthroughLifecycleCredentialRepo) SetCredentialErrorIfUnchanged(_ context.Context, expectedOwner *Account, _ string) (bool, error) {
+	credentials := expectedOwner.Credentials
 	r.credentialErrorCalls++
 	r.credentialSnapshot = credentials
 	r.setErrorCalls++

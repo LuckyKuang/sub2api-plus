@@ -217,7 +217,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		wsPath = "/v1/responses"
 	} else {
 		var err error
-		wsURL, err = s.buildOpenAIResponsesWSURL(account)
+		wsURL, err = s.buildOpenAIResponsesWSURL(ctx, account)
 		if err != nil {
 			return fmt.Errorf("build ws url: %w", err)
 		}
@@ -917,6 +917,10 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	if buildHdrErr != nil {
 		return fmt.Errorf("build ws headers: %w", buildHdrErr)
 	}
+	proxyURL, proxyErr := requestCredentialOwnerProxyURL(ctx, account)
+	if proxyErr != nil {
+		return proxyErr
+	}
 	baseAcquireReq := openAIWSAcquireRequest{
 		Account: account,
 		WSURL:   wsURL,
@@ -925,12 +929,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			factoryCtx = carryOutboundIdentityScope(factoryCtx, ctx)
 			return s.refreshOpenAIAgentIdentityHeaders(factoryCtx, account, headers)
 		},
-		ProxyURL: func() string {
-			if account.ProxyID != nil && account.Proxy != nil {
-				return account.Proxy.URL()
-			}
-			return ""
-		}(),
+		ProxyURL:     proxyURL,
 		ForceNewConn: false,
 	}
 	pool := s.getOpenAIWSConnPool()
@@ -1003,9 +1002,14 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		var dialErr *openAIWSDialError
 		if acquireErr != nil && s.isAgentIdentityAccount(ctx, account) && errors.As(acquireErr, &dialErr) && isAgentIdentityTaskInvalidWSDialError(dialErr) && !agentTaskRecoveryTried {
 			agentTaskRecoveryTried = true
-			if recoveryErr := s.recoverAgentIdentityTask(ctx, account, account.GetCredential("task_id")); recoveryErr != nil {
+			recoveredCtx, recoveryErr := s.recoverAgentIdentityTask(ctx, account, account.GetCredential("task_id"))
+			if recoveryErr != nil {
 				return nil, fmt.Errorf("agent identity task recovery failed: %w", recoveryErr)
 			}
+			ctx = recoveredCtx
+			// The method's outer binding restores Gin's original context after
+			// all turns; keep this retry's evidence bound beyond this closure.
+			bindRequestCredentialOwnerContext(ctx, c)
 			return acquireTurnLease(turn, preferred, forcePreferredConn, forceNewConn)
 		}
 		if acquireErr != nil {

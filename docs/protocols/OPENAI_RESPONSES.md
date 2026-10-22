@@ -69,6 +69,17 @@ the next turn's price. Every refresh follows that turn's ingress audit, before
 concurrency acquisition and upstream writes. WS image-input usage is propagated
 through relay and adapter without adding it twice to total input tokens.
 
+OpenAI API-key capability probes freeze the acquired account's credentials,
+base URL, model mapping, header overrides, identity, TLS profile and proxy for
+the probe. A missing configured proxy or outbound preparation failure prevents
+the request. Probe capability flags are written only if that credential and
+proxy snapshot still matches; late responses after account relinking are
+discarded. The local capability flags for native domestic-provider protocols
+use the same conditional write, with no unconditional fallback when persistence
+is unavailable. Codex models discovery also uses the acquired credential
+owner's frozen proxy, including shadow accounts, and fails before sending when
+that proxy cannot be proven.
+
 ## GPT-6 Astra
 
 The gateway uses OpenAI's canonical `gpt-6-astra` model ID. Bare `gpt-6`

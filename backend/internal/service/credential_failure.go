@@ -49,7 +49,7 @@ func (s *RateLimitService) handleHTTP401CredentialError(ctx context.Context, sel
 		slog.Warn("http_401_credential_quarantine_unavailable", "account_id", owner.ID)
 		return
 	}
-	applied, err := repo.SetCredentialErrorIfUnchanged(ctx, owner.ID, owner.Platform, owner.Type, owner.Credentials, owner.ProxyID, message)
+	applied, err := repo.SetCredentialErrorIfUnchanged(ctx, owner, message)
 	if err != nil {
 		slog.Warn("http_401_credential_quarantine_failed", "account_id", owner.ID, "error", err)
 		return
@@ -107,11 +107,11 @@ func WithCredentialFailureAccount(err error, account *Account) error {
 }
 
 type credentialFailureRepository interface {
-	SetCredentialErrorIfUnchanged(context.Context, int64, string, string, map[string]any, *int64, string) (bool, error)
+	SetCredentialErrorIfUnchanged(context.Context, *Account, string) (bool, error)
 }
 
 type credentialCooldownRepository interface {
-	SetCredentialTempUnschedulableIfUnchanged(context.Context, int64, string, string, map[string]any, *int64, time.Time, string) (bool, error)
+	SetCredentialTempUnschedulableIfUnchanged(context.Context, *Account, time.Time, string) (bool, error)
 }
 
 func (s *RateLimitService) handleHTTP401CredentialCooldown(ctx context.Context, selected, owner *Account, until time.Time, message string) {
@@ -131,7 +131,7 @@ func (s *RateLimitService) handleHTTP401CredentialCooldown(ctx context.Context, 
 		slog.Warn("http_401_credential_cooldown_unavailable", "account_id", owner.ID)
 		return
 	}
-	applied, err := repo.SetCredentialTempUnschedulableIfUnchanged(ctx, owner.ID, owner.Platform, owner.Type, owner.Credentials, owner.ProxyID, until, message)
+	applied, err := repo.SetCredentialTempUnschedulableIfUnchanged(ctx, owner, until, message)
 	if err != nil {
 		slog.Warn("http_401_credential_cooldown_failed", "account_id", owner.ID, "error", err)
 		return
@@ -185,7 +185,7 @@ func (s *OpenAIGatewayService) accountCredentialFailure(ctx context.Context, c *
 			scope, reason, action = GatewayFailureScopeProvider, "credential_state_unavailable", NextAccountStop
 		} else {
 			writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-			applied, mutationErr := repo.SetCredentialErrorIfUnchanged(writeCtx, failed.ID, failed.Platform, failed.Type, failed.Credentials, failed.ProxyID, string(reason))
+			applied, mutationErr := repo.SetCredentialErrorIfUnchanged(writeCtx, failed, string(reason))
 			cancel()
 			if mutationErr != nil {
 				scope, reason, action = GatewayFailureScopeProvider, "credential_state_unavailable", NextAccountStop

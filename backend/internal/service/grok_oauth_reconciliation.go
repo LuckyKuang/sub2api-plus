@@ -61,7 +61,7 @@ type GrokOAuthReconciler interface {
 // OAuth account when its credential document still exactly matches the state
 // observed immediately before the mutation.
 type GrokOAuthConditionalErrorRepository interface {
-	SetGrokOAuthErrorIfCredentialsUnchanged(ctx context.Context, id int64, expectedCredentials map[string]any, errorMsg string) (bool, error)
+	SetGrokOAuthErrorIfCredentialsUnchanged(ctx context.Context, owner *Account, errorMsg string) (bool, error)
 }
 
 type GrokOAuthReconcileInput struct {
@@ -229,12 +229,7 @@ func (s *TokenRefreshService) ReconcileGrokOAuth(ctx context.Context, input Grok
 			}
 			account = latest
 			item.Reason = latestReason
-			applied, err := conditionalErrorRepo.SetGrokOAuthErrorIfCredentialsUnchanged(
-				ctx,
-				account.ID,
-				account.Credentials,
-				"Grok OAuth credential reconciliation: missing refresh token",
-			)
+			applied, err := conditionalErrorRepo.SetGrokOAuthErrorIfCredentialsUnchanged(ctx, account, "Grok OAuth credential reconciliation: missing refresh token")
 			if err != nil {
 				item.Outcome = GrokOAuthReconcileOutcomeFailed
 				result.Failed++

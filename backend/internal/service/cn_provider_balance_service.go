@@ -56,6 +56,7 @@ type CNProviderBalanceResult struct {
 	FetchedAt  int64                    `json:"fetched_at"`
 	Persisted  bool                     `json:"persisted"`
 	Error      string                   `json:"error,omitempty"`
+	owner      *Account
 }
 
 // CNProviderBalanceService 探测 Kimi / DeepSeek payg 账号的账户余额。
@@ -92,7 +93,7 @@ func (s *CNProviderBalanceService) QueryBalance(ctx context.Context, accountID i
 }
 
 // QueryBalanceForAccount 探测已加载账号（配额监控 fetcher / 周期余额检测复用，
-// 避免二次 GetByID）。singleflight key 与 QueryBalance 相同，按账号 ID 合并。
+// 避免二次 GetByID）。原生 payg 查询只合并同一完整凭据及代理快照。
 func (s *CNProviderBalanceService) QueryBalanceForAccount(ctx context.Context, account *Account) (*CNProviderBalanceResult, error) {
 	if s == nil || s.accountRepo == nil || s.httpUpstream == nil {
 		return nil, infraerrors.New(http.StatusInternalServerError, "CN_BALANCE_NOT_CONFIGURED", "cn provider balance service is not configured")
@@ -101,7 +102,29 @@ func (s *CNProviderBalanceService) QueryBalanceForAccount(ctx context.Context, a
 		return nil, err
 	}
 	key := "cn_balance:" + strconv.FormatInt(account.ID, 10)
-	probeIdentityCtx := context.WithoutCancel(WithAccountOutboundIdentity(ctx, account))
+	if cnBalanceRequiresOwner(account) {
+		var err error
+		account, err = snapshotCNQuotaAccount(account)
+		if err != nil {
+			return nil, err
+		}
+		if account.IsShadow() || account.ID <= 0 {
+			return nil, infraerrors.New(http.StatusBadRequest, "CN_BALANCE_OWNER_INVALID", "balance probe requires a credential-owning account")
+		}
+		_ = s.resolveProxyURL(ctx, account)
+		if account.ProxyID != nil && (account.Proxy == nil || account.Proxy.ID != *account.ProxyID) || account.ProxyID == nil && account.Proxy != nil {
+			return nil, infraerrors.New(http.StatusBadRequest, "CN_BALANCE_PROXY_UNAVAILABLE", "balance probe requires its hydrated proxy")
+		}
+		account = snapshotRequestCredentialAccount(account)
+		key += ":" + credentialStateGeneration(account) + ":" + account.Status
+	}
+	probeIdentityCtx := ctx
+	if cnBalanceRequiresOwner(account) {
+		probeIdentityCtx = WithOutboundIdentityScope(probeIdentityCtx, nil)
+		recordRequestCredentialOwner(probeIdentityCtx, account, account.GetCNAPIKey())
+		probeIdentityCtx = withRequestCredentialOwner(probeIdentityCtx, account, account.GetCNAPIKey())
+	}
+	probeIdentityCtx = context.WithoutCancel(WithAccountOutboundIdentity(probeIdentityCtx, account))
 	resultCh := s.flight.DoChan(key, func() (any, error) {
 		probeCtx, cancel := context.WithTimeout(probeIdentityCtx, cnBalanceUpstreamTimeout+5*time.Second)
 		defer cancel()
@@ -119,6 +142,8 @@ func (s *CNProviderBalanceService) QueryBalanceForAccount(ctx context.Context, a
 			return nil, infraerrors.New(http.StatusInternalServerError, "CN_BALANCE_PROBE_RESULT_INVALID", "invalid cn provider balance probe result")
 		}
 		cloned := *result
+		cloned.Balances = append([]CNProviderBalanceEntry(nil), result.Balances...)
+		cloned.owner = snapshotRequestCredentialAccount(result.owner)
 		return &cloned, nil
 	}
 }
@@ -159,7 +184,11 @@ func (s *CNProviderBalanceService) queryBalanceForAccount(ctx context.Context, a
 	req.Header.Set("Accept", "application/json")
 	account.ApplyHeaderOverrides(req.Header)
 
-	resp, err := s.httpUpstream.Do(prepareAccountOutboundRequest(req, account), proxyURL, account.ID, maxInt(account.Concurrency, 1))
+	req = prepareAccountOutboundRequest(req, account)
+	if err := OutboundPreparationError(req.Context()); err != nil {
+		return nil, err
+	}
+	resp, err := s.httpUpstream.Do(req, proxyURL, account.ID, maxInt(account.Concurrency, 1))
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "CN_BALANCE_REQUEST_FAILED", "upstream request failed: %v", err)
 	}
@@ -172,6 +201,7 @@ func (s *CNProviderBalanceService) queryBalanceForAccount(ctx context.Context, a
 		FetchedAt:  now.Unix(),
 		StatusCode: resp.StatusCode,
 		Available:  true,
+		owner:      snapshotRequestCredentialAccount(account),
 	}
 
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
@@ -227,12 +257,24 @@ func (s *CNProviderBalanceService) queryBalanceForAccount(ctx context.Context, a
 	result.Success = true
 
 	updates := cnBalanceExtraUpdates(provider, result, now)
-	if err := s.accountRepo.UpdateExtra(ctx, account.ID, updates); err != nil {
+	repo, ok := s.accountRepo.(CredentialStateMutationRepository)
+	if !ok {
+		slog.Warn("cn_balance_conditional_persistence_unavailable", "account_id", account.ID, "provider", provider)
+		return result, nil
+	}
+	if applied, err := repo.ApplyCredentialStateMutation(ctx, result.owner, CredentialStateMutation{
+		Extra: updates, RequireTempUnschedulableUnchanged: true,
+		ObservedTempUntil: result.owner.TempUnschedulableUntil, ObservedTempReason: result.owner.TempUnschedulableReason,
+	}); err != nil {
 		slog.Warn("cn_balance_persist_failed", "account_id", account.ID, "provider", provider, "error", err)
 	} else {
-		result.Persisted = true
+		result.Persisted = applied
 	}
 	return result, nil
+}
+
+func cnBalanceRequiresOwner(account *Account) bool {
+	return account != nil && (account.Platform == PlatformKimi || account.Platform == PlatformDeepseek) && !account.IsCommandCode() && !account.IsCline()
 }
 
 // cnBalanceExtraUpdates 构造 provider 维度的余额快照更新。

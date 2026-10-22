@@ -24,8 +24,13 @@ func (r *credentialMutationFenceRepo) ApplyCredentialStateMutation(ctx context.C
 	}
 	return r.rateLimitAccountRepoStub.ApplyCredentialStateMutation(ctx, owner, mutation)
 }
-func (r *credentialMutationFenceRepo) SetCredentialErrorIfUnchanged(ctx context.Context, id int64, platform, kind string, creds map[string]any, proxy *int64, message string) (bool, error) {
-	if r.current.ID != id || r.current.Platform != platform || r.current.Type != kind || !reflect.DeepEqual(creds, r.current.Credentials) || !reflect.DeepEqual(proxy, r.current.ProxyID) {
+func (r *credentialMutationFenceRepo) SetCredentialErrorIfUnchanged(ctx context.Context, expectedOwner *Account, message string) (bool, error) {
+	id := expectedOwner.ID
+	platform := expectedOwner.Platform
+	kind := expectedOwner.Type
+	creds := expectedOwner.Credentials
+	proxy := expectedOwner.ProxyID
+	if r.current.ID != id || r.current.Platform != platform || r.current.Type != kind || !reflect.DeepEqual(creds, r.current.Credentials) || (!reflect.DeepEqual(proxy, r.current.ProxyID) || !reflect.DeepEqual(expectedOwner.Proxy, r.current.Proxy)) {
 		return false, nil
 	}
 	return true, r.SetError(ctx, id, message)

@@ -55,8 +55,6 @@ func openAICodexStateOwner(ctx context.Context, account *Account) string {
 			return ""
 		}
 		principal = fmt.Sprintf("agent-runtime:%s:public-key:%x", key.runtimeID, key.privateKey[32:])
-	} else if accountID := strings.TrimSpace(account.GetChatGPTAccountID()); accountID != "" {
-		principal = "chatgpt:" + accountID + ":user:" + strings.TrimSpace(account.GetCredential("chatgpt_user_id"))
 	} else if account.Type == AccountTypeAPIKey {
 		if key := strings.TrimSpace(account.GetCredential("api_key")); key != "" {
 			principal = "api-key:" + key
@@ -65,6 +63,8 @@ func openAICodexStateOwner(ctx context.Context, account *Account) string {
 		if key := strings.TrimSpace(account.GetOpenAIAccessToken()); key != "" {
 			principal = "setup-token:" + key
 		}
+	} else if accountID := strings.TrimSpace(account.GetChatGPTAccountID()); accountID != "" {
+		principal = "chatgpt:" + accountID + ":user:" + strings.TrimSpace(account.GetCredential("chatgpt_user_id"))
 	}
 	if principal == "" {
 		return ""

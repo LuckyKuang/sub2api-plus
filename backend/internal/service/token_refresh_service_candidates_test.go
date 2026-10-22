@@ -79,12 +79,16 @@ func (r *tokenRefreshCandidateRepo) UpdateCredentials(_ context.Context, id int6
 	return nil
 }
 
-func (r *tokenRefreshCandidateRepo) UpdateOAuthCredentialsIfUnchanged(_ context.Context, id int64, platform string, expected map[string]any, proxy *int64, replacement map[string]any) (bool, error) {
+func (r *tokenRefreshCandidateRepo) UpdateOAuthCredentialsIfUnchanged(_ context.Context, expectedOwner *Account, replacement map[string]any) (bool, error) {
+	id := expectedOwner.ID
+	platform := expectedOwner.Platform
+	expected := expectedOwner.Credentials
+	proxy := expectedOwner.ProxyID
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for i := range r.accounts {
 		current := &r.accounts[i]
-		if current.ID == id && current.Status == StatusActive && current.Platform == platform && current.Type == AccountTypeOAuth && reflect.DeepEqual(current.Credentials, expected) && reflect.DeepEqual(current.ProxyID, proxy) {
+		if current.ID == id && current.Status == StatusActive && current.Platform == platform && current.Type == AccountTypeOAuth && reflect.DeepEqual(current.Credentials, expected) && (reflect.DeepEqual(current.ProxyID, proxy) && reflect.DeepEqual(current.Proxy, expectedOwner.Proxy)) {
 			current.Credentials = cloneRequestCredentialMap(replacement)
 			r.updatedCredentialIDs = append(r.updatedCredentialIDs, id)
 			return true, nil
@@ -108,12 +112,17 @@ func (r *tokenRefreshCandidateRepo) SetTempUnschedulable(_ context.Context, _ in
 	return nil
 }
 
-func (r *tokenRefreshCandidateRepo) SetCredentialErrorIfUnchanged(_ context.Context, id int64, platform, kind string, expected map[string]any, proxy *int64, reason string) (bool, error) {
+func (r *tokenRefreshCandidateRepo) SetCredentialErrorIfUnchanged(_ context.Context, expectedOwner *Account, reason string) (bool, error) {
+	id := expectedOwner.ID
+	platform := expectedOwner.Platform
+	kind := expectedOwner.Type
+	expected := expectedOwner.Credentials
+	proxy := expectedOwner.ProxyID
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for i := range r.accounts {
 		current := &r.accounts[i]
-		if current.ID == id && current.Status == StatusActive && current.Platform == platform && current.Type == kind && reflect.DeepEqual(current.Credentials, expected) && reflect.DeepEqual(current.ProxyID, proxy) {
+		if current.ID == id && current.Status == StatusActive && current.Platform == platform && current.Type == kind && reflect.DeepEqual(current.Credentials, expected) && (reflect.DeepEqual(current.ProxyID, proxy) && reflect.DeepEqual(current.Proxy, expectedOwner.Proxy)) {
 			current.Status, current.Schedulable, current.ErrorMessage = StatusError, false, reason
 			r.setErrorCalls++
 			return true, nil
@@ -122,12 +131,17 @@ func (r *tokenRefreshCandidateRepo) SetCredentialErrorIfUnchanged(_ context.Cont
 	return false, nil
 }
 
-func (r *tokenRefreshCandidateRepo) SetCredentialTempUnschedulableIfUnchanged(_ context.Context, id int64, platform, kind string, expected map[string]any, proxy *int64, until time.Time, reason string) (bool, error) {
+func (r *tokenRefreshCandidateRepo) SetCredentialTempUnschedulableIfUnchanged(_ context.Context, expectedOwner *Account, until time.Time, reason string) (bool, error) {
+	id := expectedOwner.ID
+	platform := expectedOwner.Platform
+	kind := expectedOwner.Type
+	expected := expectedOwner.Credentials
+	proxy := expectedOwner.ProxyID
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for i := range r.accounts {
 		current := &r.accounts[i]
-		if current.ID == id && current.Status == StatusActive && current.Platform == platform && current.Type == kind && reflect.DeepEqual(current.Credentials, expected) && reflect.DeepEqual(current.ProxyID, proxy) && (current.TempUnschedulableUntil == nil || current.TempUnschedulableUntil.Before(until)) {
+		if current.ID == id && current.Status == StatusActive && current.Platform == platform && current.Type == kind && reflect.DeepEqual(current.Credentials, expected) && (reflect.DeepEqual(current.ProxyID, proxy) && reflect.DeepEqual(current.Proxy, expectedOwner.Proxy)) && (current.TempUnschedulableUntil == nil || current.TempUnschedulableUntil.Before(until)) {
 			current.TempUnschedulableUntil, current.TempUnschedulableReason = &until, reason
 			r.setTempUnschedCalls++
 			r.lastTempUnschedReason = reason

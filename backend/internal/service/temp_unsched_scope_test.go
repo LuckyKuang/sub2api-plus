@@ -31,7 +31,7 @@ func (r *tempUnschedScopeRepoStub) SetError(context.Context, int64, string) erro
 	return nil
 }
 
-func (r *tempUnschedScopeRepoStub) SetCredentialErrorIfUnchanged(context.Context, int64, string, string, map[string]any, *int64, string) (bool, error) {
+func (r *tempUnschedScopeRepoStub) SetCredentialErrorIfUnchanged(context.Context, *Account, string) (bool, error) {
 	r.credentialErrorCalls++
 	r.errorCalls++
 	return true, nil
@@ -43,7 +43,8 @@ func (r *tempUnschedScopeRepoStub) SetTempUnschedulable(_ context.Context, _ int
 	return nil
 }
 
-func (r *tempUnschedScopeRepoStub) SetCredentialTempUnschedulableIfUnchanged(ctx context.Context, id int64, _, _ string, _ map[string]any, _ *int64, until time.Time, message string) (bool, error) {
+func (r *tempUnschedScopeRepoStub) SetCredentialTempUnschedulableIfUnchanged(ctx context.Context, expectedOwner *Account, until time.Time, message string) (bool, error) {
+	id := expectedOwner.ID
 	err := r.SetTempUnschedulable(ctx, id, until, message)
 	return err == nil, err
 }
