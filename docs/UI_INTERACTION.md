@@ -135,6 +135,10 @@ Existing visible rows update while reading; insertions wait behind a new-record
 notice while scrolling, selecting text, focusing controls or expanding mobile
 rows. Background reads retain row identity and expansion.
 
+HTML revalidation includes the per-response CSP nonce in its ETag. Reloading
+must return a fresh HTML body when the nonce changes, so the cached initialization
+script always agrees with the response policy. Fingerprinted asset caching is unchanged.
+
 Refresh icons spin only during I/O. Right overlays use a 200ms transform; figures
 use tabular digits. Overview charts disable replay animation.
 `prefers-reduced-motion` disables console transitions and animations.
