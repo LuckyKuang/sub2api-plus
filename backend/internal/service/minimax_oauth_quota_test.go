@@ -19,6 +19,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
 	"github.com/LuckyKuang/sub2api-plus/internal/domain"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/cnoauth"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -66,45 +67,46 @@ func TestMiniMaxOAuthQuotaFixedRegionPersonalGrantAndControlIdentity(t *testing.
 				if region == "global" {
 					controlHost, quotaHost = "agent.minimax.io", "platform.minimax.io"
 				}
-				require.Equal(t, "Bearer old", req.Header.Get("Authorization"))
-				require.Equal(t, "MiniMaxAgent", req.UserAgent())
-				require.Empty(t, req.Header.Get("X-Stainless-Package-Version"))
-				require.Empty(t, req.Header.Get("Originator"))
-				require.Empty(t, req.Header.Get("Version"))
-				require.True(t, HTTPUpstreamRedirectsDisabled(req.Context()))
-				require.Equal(t, "https", req.URL.Scheme)
+				assert.Equal(t, "Bearer old", req.Header.Get("Authorization"))
+				assert.Empty(t, req.Header.Get("X-Stainless-Package-Version"))
+				assert.Empty(t, req.Header.Get("Originator"))
+				assert.Empty(t, req.Header.Get("Version"))
+				assert.True(t, HTTPUpstreamRedirectsDisabled(req.Context()))
+				assert.Equal(t, "https", req.URL.Scheme)
 				if req.URL.Path == miniMaxOAuthQuotaPath {
-					require.Equal(t, quotaHost, req.URL.Host)
-					require.Equal(t, http.MethodGet, req.Method)
-					require.Empty(t, req.URL.RawQuery)
-					require.Equal(t, "personal-group", req.Header.Get("X-Group-Id"))
-					require.Empty(t, req.Header.Get("yy"))
+					assert.Equal(t, "MiniMaxAgent", req.UserAgent())
+					assert.Equal(t, quotaHost, req.URL.Host)
+					assert.Equal(t, http.MethodGet, req.Method)
+					assert.Empty(t, req.URL.RawQuery)
+					assert.Equal(t, "personal-group", req.Header.Get("X-Group-Id"))
+					assert.Empty(t, req.Header.Get("yy"))
 				} else {
-					require.Equal(t, controlHost, req.URL.Host)
-					require.Empty(t, req.Header.Get("X-Group-Id"))
+					assert.Equal(t, "MiniMaxCode", req.UserAgent())
+					assert.Equal(t, controlHost, req.URL.Host)
+					assert.Empty(t, req.Header.Get("X-Group-Id"))
 					q := req.URL.Query()
-					require.Equal(t, "22201", q.Get("version_code"))
-					require.Equal(t, "linux", q.Get("os_name"))
-					require.Equal(t, "0", q.Get("timezone_offset"))
+					assert.Equal(t, "22201", q.Get("version_code"))
+					assert.Equal(t, "linux", q.Get("os_name"))
+					assert.Equal(t, "0", q.Get("timezone_offset"))
 					language := "zh"
 					if region == "global" {
 						language = "en"
 					}
-					require.Equal(t, language, q.Get("lang"))
+					assert.Equal(t, language, q.Get("lang"))
 					payload := "{}"
 					if req.URL.Path == "/v1/api/user/info" {
-						require.Equal(t, http.MethodGet, req.Method)
-						require.Equal(t, "0", q.Get("user_id"))
+						assert.Equal(t, http.MethodGet, req.Method)
+						assert.Equal(t, "0", q.Get("user_id"))
 					} else {
-						require.Equal(t, http.MethodPost, req.Method)
-						require.Contains(t, req.URL.RawQuery, "user_id=user%7E*+%2B&client=mcode")
+						assert.Equal(t, http.MethodPost, req.Method)
+						assert.Contains(t, req.URL.RawQuery, "user_id=user%7E*+%2B&client=mcode")
 						body, err := io.ReadAll(req.Body)
-						require.NoError(t, err)
+						assert.NoError(t, err)
 						payload = string(body)
 						if req.URL.Path == "/matrix/api/v1/commerce/get_membership_info" {
-							require.JSONEq(t, `{"workspace_id":42}`, payload)
+							assert.JSONEq(t, `{"workspace_id":42}`, payload)
 						} else {
-							require.Equal(t, "{}", payload)
+							assert.Equal(t, "{}", payload)
 						}
 					}
 					// Independently verify the official attribution formula over the captured
@@ -115,16 +117,16 @@ func TestMiniMaxOAuthQuotaFixedRegionPersonalGrantAndControlIdentity(t *testing.
 					for from, to := range map[string]string{"%21": "!", "%27": "'", "%28": "(", "%29": ")", "%2A": "*"} {
 						encoded = strings.ReplaceAll(encoded, from, to)
 					}
-					require.Equal(t, digest(encoded+"_"+payload+digest(q.Get("unix"))+"ooui"), req.Header.Get("yy"))
+					assert.Equal(t, digest(encoded+"_"+payload+digest(q.Get("unix"))+"ooui"), req.Header.Get("yy"))
 					ms, err := strconv.ParseInt(q.Get("unix"), 10, 64)
-					require.NoError(t, err)
+					assert.NoError(t, err)
 					seconds := strconv.FormatInt(ms/1000, 10)
 					signature := seconds + "I*7Cf%WZ#S&%1RlZJ&C2"
 					if req.Method == http.MethodPost {
 						signature += payload
 					}
-					require.Equal(t, seconds, req.Header.Get("x-timestamp"))
-					require.Equal(t, digest(signature), req.Header.Get("x-signature"))
+					assert.Equal(t, seconds, req.Header.Get("x-timestamp"))
+					assert.Equal(t, digest(signature), req.Header.Get("x-signature"))
 				}
 				return miniMaxQuotaTestReply(req)
 			})

@@ -83,6 +83,23 @@ func TestCodexProtocolOptionsPreserveCanonicalAuditContent(t *testing.T) {
 	}
 }
 
+func TestOfficialAgentRequestStatePreservesCanonicalAuditContent(t *testing.T) {
+	const responses = `{"model":"gpt-5","input":[{"type":"future_state","opaque":true},{"type":"message","role":"user","content":[{"type":"input_text","text":"audit current request"}]}],"client_metadata":{"x-codex-installation-id":"6f1a136d-e931-4d31-8b2e-674616ed6317","x-codex-turn-metadata":"{\"thread_id\":\"019a0a42-6000-7001-8000-000000000001\",\"parent_thread_id\":\"019a0a42-5000-7001-8000-000000000002\",\"turn_id\":\"019a0a42-7000-7001-8000-000000000003\",\"context_window_id\":\"019a0a42-6000-7001-8000-000000000001:4\"}"}}`
+	for _, tc := range []struct{ name, protocol, body string }{
+		{"codex_http", service.ContentModerationProtocolOpenAIResponses, responses},
+		{"codex_ws", service.ContentModerationProtocolOpenAIResponses, `{"type":"response.create","response":` + responses + `}`},
+		{"zcode_messages", service.ContentModerationProtocolAnthropicMessages, `{"model":"glm-4.7","max_tokens":128,"metadata":{"user_id":"{\"session_id\":\"6f1a136d-e931-4d31-8b2e-674616ed6317\",\"query_id\":\"3c4bd6f6-b8d0-4e67-b297-3a2682becff3\"}"},"messages":[{"role":"user","content":[{"type":"text","text":"audit current request"},{"type":"future_state","opaque":true}]}]}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			moderation := service.ExtractContentModerationInput(tc.protocol, []byte(tc.body))
+			require.Equal(t, "audit current request", moderation.Text)
+			prompt, err := securityaudit.ExtractPromptSnapshot(securityaudit.Request{Protocol: tc.protocol, Body: []byte(tc.body)})
+			require.NoError(t, err)
+			require.Equal(t, "audit current request", prompt.ScanText)
+		})
+	}
+}
+
 func TestSonnet55StableToolsetsRetainCanonicalAuditContent(t *testing.T) {
 	for _, toolType := range []string{"computer_toolset_20260801", "browser_toolset_20260801"} {
 		t.Run(toolType, func(t *testing.T) {

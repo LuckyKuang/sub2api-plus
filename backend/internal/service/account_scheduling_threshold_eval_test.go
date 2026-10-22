@@ -485,6 +485,7 @@ func TestEvaluateAccountSchedulingThreshold_GrokUsesConfiguredThresholds(t *test
 			"grok_sched_reset_at":    wantUntil.Format(time.RFC3339),
 		},
 	}
+	account.Extra["grok_sched_credential_generation"] = grokCredentialGeneration(account)
 
 	decision := EvaluateAccountSchedulingThreshold(account, map[string]int{
 		PlatformGrok: 90,
@@ -517,6 +518,7 @@ func TestEvaluateAccountSchedulingThreshold_GrokUsesOnlyHeaderQuotaWindow(t *tes
 			},
 		},
 	}
+	account.Extra["grok_sched_credential_generation"] = grokCredentialGeneration(account)
 	decision := EvaluateAccountSchedulingThreshold(account, map[string]int{PlatformGrok: 90}, now)
 	require.False(t, decision.ShouldPause, "high billing % alone must not pause under scheduling windows")
 

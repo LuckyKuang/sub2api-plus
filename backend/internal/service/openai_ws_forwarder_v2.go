@@ -325,6 +325,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		len(handshakeTurnState),
 	)
 	if handshakeTurnState != "" {
+		s.noteOpenAICodexTurnStateProvenance(c, account, handshakeTurnState)
 		if stateStore != nil && sessionHash != "" {
 			stateStore.BindSessionTurnState(openAICodexCredentialOwnerID(account), groupID, sessionHash, handshakeTurnState, s.openAIWSSessionStickyTTL())
 		}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -190,17 +191,11 @@ func (s *RateLimitService) handleCNProviderInsufficientBalance(
 	upstreamMsg string,
 ) {
 	msg := cnBalanceLowReason(upstreamMsg)
-
-	if err := s.accountRepo.UpdateExtra(ctx, account.ID, map[string]any{
-		cnExtraKey(account.Platform, cnBalanceExtraSuffixLow): true,
-	}); err != nil {
-		slog.Warn("cn_balance_low_mark_failed", "account_id", account.ID, "error", err)
-	}
-
 	until := time.Now().Add(s.cnBalanceCooldownDuration())
-	s.notifyAccountSchedulingBlocked(account, until, "cn_insufficient_balance")
-	if err := s.accountRepo.SetTempUnschedulable(ctx, account.ID, until, msg); err != nil {
-		slog.Warn("cn_balance_set_temp_unschedulable_failed", "account_id", account.ID, "error", err)
+	if !s.applyCNProviderCredentialState(ctx, account, CredentialStateMutation{
+		Extra:                  map[string]any{cnExtraKey(account.Platform, cnBalanceExtraSuffixLow): true},
+		TempUnschedulableUntil: &until, TempUnschedulableReason: msg,
+	}, until, "cn_insufficient_balance") {
 		return
 	}
 	slog.Info("cn_provider_insufficient_balance",
@@ -289,13 +284,15 @@ func cnProviderQuotaSnapshotReset(account *Account, now time.Time) *time.Time {
 // 无快照或写库失败时返回 nil，由调用方落入各自的兜底逻辑（避免写库失败
 // 时账号完全失去持久冷却）。
 func (s *RateLimitService) cooldownCNProviderToQuotaSnapshotReset(ctx context.Context, account *Account, reason, logEvent string) *time.Time {
-	until := cnProviderQuotaSnapshotReset(account, time.Now())
+	owner, ok := credentialStateMutationOwner(ctx, account)
+	if !ok {
+		return nil
+	}
+	until := cnProviderQuotaSnapshotReset(owner, time.Now())
 	if until == nil {
 		return nil
 	}
-	s.notifyAccountSchedulingBlocked(account, *until, reason)
-	if err := s.accountRepo.SetRateLimited(ctx, account.ID, *until); err != nil {
-		slog.Warn("rate_limit_set_failed", "account_id", account.ID, "error", err)
+	if !s.applyCNProviderCredentialState(ctx, account, CredentialStateMutation{RateLimitUntil: until, ExtendRateLimitOnly: true}, *until, reason) {
 		return nil
 	}
 	slog.Info(logEvent,
@@ -310,9 +307,7 @@ func (s *RateLimitService) cooldownCNProviderToQuotaSnapshotReset(ctx context.Co
 // 各分支（并发限制、配额耗尽兜底）共用。告警 key 由 notifyReason 派生，保持
 // 各分支既有日志 key 稳定（<prefix>_set_temp_unschedulable_failed）。
 func (s *RateLimitService) setCNProviderTempUnschedulable(ctx context.Context, account *Account, until time.Time, notifyReason, storeReason, logEvent string) {
-	s.notifyAccountSchedulingBlocked(account, until, notifyReason)
-	if err := s.accountRepo.SetTempUnschedulable(ctx, account.ID, until, storeReason); err != nil {
-		slog.Warn(notifyReason+"_set_temp_unschedulable_failed", "account_id", account.ID, "error", err)
+	if !s.applyCNProviderCredentialState(ctx, account, CredentialStateMutation{TempUnschedulableUntil: &until, TempUnschedulableReason: storeReason}, until, notifyReason) {
 		return
 	}
 	slog.Info(logEvent,
@@ -320,6 +315,28 @@ func (s *RateLimitService) setCNProviderTempUnschedulable(ctx context.Context, a
 		"platform", account.Platform,
 		"until", until.UTC(),
 	)
+}
+
+func (s *RateLimitService) applyCNProviderCredentialState(ctx context.Context, account *Account, mutation CredentialStateMutation, until time.Time, reason string) bool {
+	owner, known := credentialStateMutationOwner(ctx, account)
+	if !known {
+		slog.Warn("cn_credential_snapshot_unavailable", "account_id", account.ID)
+		return false
+	}
+	repo, ok := s.accountRepo.(CredentialStateMutationRepository)
+	if !ok {
+		slog.Warn("cn_credential_state_repository_unavailable", "account_id", owner.ID)
+		return false
+	}
+	applied, err := repo.ApplyCredentialStateMutation(ctx, owner, mutation)
+	if err != nil {
+		slog.Warn("cn_credential_state_mutation_failed", "account_id", owner.ID, "error", err)
+		return false
+	}
+	if applied {
+		s.notifyAccountSchedulingBlocked(owner, until, reason)
+	}
+	return applied
 }
 
 // applyCNProviderReactive429 处理国产供应商的 429 响应。
@@ -336,9 +353,7 @@ func (s *RateLimitService) applyCNProviderReactive429(
 		}
 		if resetAt := parseOpenAIRateLimitResetTime(responseBody); resetAt != nil {
 			resetTime := time.Unix(*resetAt, 0)
-			s.notifyAccountSchedulingBlocked(account, resetTime, "429")
-			if err := s.accountRepo.SetRateLimited(ctx, account.ID, resetTime); err != nil {
-				slog.Warn("rate_limit_set_failed", "account_id", account.ID, "error", err)
+			if !s.applyCNProviderCredentialState(ctx, account, CredentialStateMutation{RateLimitUntil: &resetTime, ExtendRateLimitOnly: true}, resetTime, "429") {
 				return true
 			}
 			slog.Info("opencode_go_rate_limited",
@@ -364,5 +379,17 @@ func (s *RateLimitService) applyCNProviderReactive429(
 		s.cooldownCNProviderToQuotaSnapshotReset(ctx, account, "429", "cn_coding_plan_rate_limited") != nil {
 		return true
 	}
-	return false
+	// Keep the existing compatible-endpoint reset sources, but fence every CN
+	// fallback as well: falling through to the generic writer loses the grant.
+	if result := calculateAnthropic429ResetTime(headers); result != nil {
+		s.applyCNProviderCredentialState(ctx, account, CredentialStateMutation{RateLimitUntil: &result.resetAt, ExtendRateLimitOnly: true}, result.resetAt, "429")
+		return true
+	}
+	if ts, err := strconv.ParseInt(headers.Get("anthropic-ratelimit-unified-reset"), 10, 64); err == nil {
+		resetAt := time.Unix(ts, 0)
+		s.applyCNProviderCredentialState(ctx, account, CredentialStateMutation{RateLimitUntil: &resetAt, ExtendRateLimitOnly: true}, resetAt, "429")
+		return true
+	}
+	s.apply429FallbackRateLimit(ctx, account, "no_reset_time")
+	return true
 }

@@ -28,10 +28,23 @@ for that personal billing context.
 The query reuses the selected OAuth grant, proxy and trusted `minimax` identity.
 These origins are fixed by region; `base_url`, API-key inference hosts and
 generic header overrides cannot redirect the grant. Redirects are disabled.
-The official account client declares `MiniMaxCode` on Matrix account calls;
-the gateway keeps its existing trusted `MiniMaxAgent` preset on all these
-provider-bound calls. This policy difference does not introduce another client
-family or versionless exception.
+Matrix account calls render the official `MiniMaxCode` User-Agent from the same
+selected owner snapshot. Managed inference and quota remains retain
+`MiniMaxAgent`; BYOK inference retains `Anthropic/JS 0.91.1`. Matrix is a fixed
+destination profile, not an additional selectable identity family. OAuth/token
+and quota remains retain a trusted product UA where official fetch omits one.
+
+Native Messages requests use `Accept: application/json` and
+`anthropic-dangerous-direct-browser-access: true`, matching the official Pi
+adapter. The gateway strips foreign Claude/Codex session and SDK helper headers.
+`X-Mavis-Session-Id` uses `mvs_<32 hexadecimal UUIDv4 characters>`. Explicit
+tenant/conversation/owner mappings are persisted atomically; retries and resumed
+turns reuse them, while failover uses the new owner. Without a reliable session
+signal, only the current logical request shares an ID.
+New authorizations persist an internal `oauth_login_id`; access/refresh token
+rotation retains the session, while relinking the same row or replacing an API
+key uses a new owner mapping. Legacy grants keep their account-row scope until
+reauthorization. The internal login ID is never sent upstream.
 
 API-key quota requests are enabled only for coding-mode accounts whose
 configured inference URL has an approved HTTPS hostname:

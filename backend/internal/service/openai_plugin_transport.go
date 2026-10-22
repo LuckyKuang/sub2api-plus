@@ -34,6 +34,10 @@ func (s *OpenAIGatewayService) doOpenAIUpstream(request *http.Request, proxyURL 
 }
 
 func (s *OpenAIGatewayService) doOpenAIUpstreamPrepared(request *http.Request, proxyURL string, account *Account) (*http.Response, error) {
+	request = prepareAccountOutboundRequest(request, account)
+	if err := OutboundPreparationError(request.Context()); err != nil {
+		return nil, err
+	}
 	if err := applyZhipuOffPeakTicketHeader(request.Context(), account, request.Header); err != nil {
 		return nil, err
 	}
@@ -43,7 +47,7 @@ func (s *OpenAIGatewayService) doOpenAIUpstreamPrepared(request *http.Request, p
 			return response, err
 		}
 	}
-	return s.httpUpstream.Do(prepareAccountOutboundRequest(request, account), proxyURL, account.ID, account.Concurrency)
+	return s.httpUpstream.Do(request, proxyURL, account.ID, account.Concurrency)
 }
 
 // doOpenAIAccountTestUpstream 让 OpenAI OAuth 账号测试与真实转发使用同一插件路径。
@@ -63,6 +67,10 @@ func (s *AccountTestService) doOpenAIAccountTestUpstreamPrepared(
 	account *Account,
 	useTLSFallback bool,
 ) (*http.Response, error) {
+	request = prepareAccountOutboundRequest(request, account)
+	if err := OutboundPreparationError(request.Context()); err != nil {
+		return nil, err
+	}
 	if err := applyZhipuOffPeakTicketHeader(request.Context(), account, request.Header); err != nil {
 		return nil, err
 	}
@@ -74,12 +82,12 @@ func (s *AccountTestService) doOpenAIAccountTestUpstreamPrepared(
 	}
 	if useTLSFallback {
 		return s.httpUpstream.DoWithTLS(
-			prepareAccountOutboundRequest(request, account),
+			request,
 			proxyURL,
 			account.ID,
 			account.Concurrency,
 			s.tlsFPProfileService.ResolveTLSProfile(account),
 		)
 	}
-	return s.httpUpstream.Do(prepareAccountOutboundRequest(request, account), proxyURL, account.ID, account.Concurrency)
+	return s.httpUpstream.Do(request, proxyURL, account.ID, account.Concurrency)
 }

@@ -104,7 +104,7 @@ func (s *AccountTestService) testCNProviderAdaptiveAnthropicConnection(c *gin.Co
 		body, _ := io.ReadAll(resp.Body)
 		errMsg := fmt.Sprintf("Adaptive Anthropic endpoint returned %d: %s", resp.StatusCode, string(body))
 		if resp.StatusCode == http.StatusUnauthorized && s.accountRepo != nil {
-			_ = s.accountRepo.SetError(ctx, account.ID, errMsg)
+			s.setProbeCredentialError(ctx, account, resp.Request, errMsg)
 		}
 		return s.sendErrorAndEnd(c, errMsg)
 	}
@@ -185,11 +185,9 @@ func (s *AccountTestService) testCNProviderAdaptiveResponsesConnection(c *gin.Co
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "text/event-stream")
 	req.Header.Set("Authorization", "Bearer "+authToken)
-	applyOpenAICodexProbeHeaders(req.Header)
 	applyOpenCodeUpstreamUserAgent(account, apiURL, req.Header)
 	account.ApplyHeaderOverrides(req.Header)
 	applyOpenCodeSessionHeader(c, account, apiURL, req.Header, payloadBytes)
-	applyOpenAICodexBetaFeatures(ctx, c, account, req.Header)
 
 	resp, err := s.doCNProviderAdaptiveRequest(req, account)
 	if err != nil {
@@ -200,7 +198,7 @@ func (s *AccountTestService) testCNProviderAdaptiveResponsesConnection(c *gin.Co
 		body, _ := io.ReadAll(resp.Body)
 		errMsg := fmt.Sprintf("Adaptive Responses endpoint returned %d: %s", resp.StatusCode, string(body))
 		if resp.StatusCode == http.StatusUnauthorized && s.accountRepo != nil {
-			_ = s.accountRepo.SetError(ctx, account.ID, errMsg)
+			s.setProbeCredentialError(ctx, account, resp.Request, errMsg)
 		}
 		return s.sendErrorAndEnd(c, errMsg)
 	}
@@ -290,7 +288,7 @@ func (s *AccountTestService) testCNProviderAnthropicConnection(c *gin.Context, a
 		body, _ := io.ReadAll(resp.Body)
 		errMsg := fmt.Sprintf("Anthropic endpoint returned %d: %s", resp.StatusCode, string(body))
 		if (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) && s.accountRepo != nil {
-			_ = s.accountRepo.SetError(ctx, account.ID, errMsg)
+			s.setProbeCredentialError(ctx, account, resp.Request, errMsg)
 		}
 		return s.sendErrorAndEnd(c, errMsg)
 	}

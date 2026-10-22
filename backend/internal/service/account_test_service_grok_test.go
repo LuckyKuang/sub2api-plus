@@ -30,6 +30,23 @@ type grokAccountTestRateLimitRepo struct {
 	resetAt          time.Time
 }
 
+func (r *grokAccountTestRateLimitRepo) ApplyCredentialStateMutation(ctx context.Context, owner *Account, mutation CredentialStateMutation) (bool, error) {
+	if owner == nil || !sameRequestCredentialGrant(owner, r.accountsByID[owner.ID]) {
+		return false, nil
+	}
+	if mutation.Extra != nil {
+		if err := r.UpdateExtra(ctx, owner.ID, mutation.Extra); err != nil {
+			return false, err
+		}
+	}
+	if mutation.RateLimitUntil != nil {
+		if err := r.SetRateLimited(ctx, owner.ID, *mutation.RateLimitUntil); err != nil {
+			return false, err
+		}
+	}
+	return true, nil
+}
+
 func TestObserveGrokTestResponseClassifiesBodyOnlyQuotaErrors(t *testing.T) {
 	account := &Account{ID: 1901, Platform: PlatformGrok, Type: AccountTypeOAuth}
 	repo := &grokQuotaAccountRepo{mockAccountRepoForPlatform: &mockAccountRepoForPlatform{

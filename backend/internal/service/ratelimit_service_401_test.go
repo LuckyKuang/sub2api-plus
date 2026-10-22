@@ -61,6 +61,25 @@ func (r *rateLimitAccountRepoStub) SetRateLimited(ctx context.Context, id int64,
 	return nil
 }
 
+func (r *rateLimitAccountRepoStub) ApplyCredentialStateMutation(ctx context.Context, owner *Account, mutation CredentialStateMutation) (bool, error) {
+	if mutation.TempUnschedulableUntil != nil {
+		if err := r.SetTempUnschedulable(ctx, owner.ID, *mutation.TempUnschedulableUntil, mutation.TempUnschedulableReason); err != nil {
+			return false, err
+		}
+	}
+	if mutation.RateLimitUntil != nil {
+		if err := r.SetRateLimited(ctx, owner.ID, *mutation.RateLimitUntil); err != nil {
+			return false, err
+		}
+	}
+	if len(mutation.Extra) > 0 {
+		if err := r.UpdateExtra(ctx, owner.ID, mutation.Extra); err != nil {
+			return false, err
+		}
+	}
+	return true, nil
+}
+
 func (r *rateLimitAccountRepoStub) UpdateCredentials(ctx context.Context, id int64, credentials map[string]any) error {
 	r.updateCredentialsCalls++
 	r.lastCredentials = shallowCopyMap(credentials)

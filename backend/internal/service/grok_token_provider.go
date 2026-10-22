@@ -187,7 +187,12 @@ func (p *GrokTokenProvider) GetAccessToken(ctx context.Context, account *Account
 // shared refresh lock protocol, and the refresh API's own account re-read.
 // Credential rotation for non-active (disabled/error) accounts remains
 // blocked inside RefreshIfNeeded; their still-valid tokens are probed as-is.
-func (p *GrokTokenProvider) GetAccessTokenForManualTest(ctx context.Context, account *Account) (string, error) {
+func (p *GrokTokenProvider) GetAccessTokenForManualTest(ctx context.Context, account *Account) (token string, tokenErr error) {
+	defer func() {
+		if tokenErr == nil {
+			recordRequestCredentialOwner(ctx, account, token)
+		}
+	}()
 	ctx = WithAccountOutboundIdentity(ctx, account)
 	if account == nil {
 		return "", errors.New("account is nil")

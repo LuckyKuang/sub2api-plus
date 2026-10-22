@@ -18,6 +18,16 @@ type openAIAlignedPromptCacheIdentity struct {
 	Scope    string
 }
 
+// Native Responses carries the caller's cache policy on the wire. A missing
+// field is meaningful (Codex PromptCacheKey::Omit); only compatibility adapters
+// may synthesize a cache key from their own conversation policy.
+func isNativeOpenAIResponsesRequest(c *gin.Context, account *Account) bool {
+	if account == nil || account.Platform != PlatformOpenAI || c == nil || c.Request == nil || c.Request.URL == nil {
+		return false
+	}
+	return strings.HasSuffix(strings.TrimSuffix(c.Request.URL.Path, "/"), "/responses")
+}
+
 // ensureOpenAIResponsesPromptCacheIdentity resolves a single opaque identity
 // for the Responses body and upstream session headers. Explicit client values
 // win; content fallback is limited to requests with a meaningful user anchor.
@@ -33,6 +43,10 @@ func (s *OpenAIGatewayService) ensureOpenAIResponsesPromptCacheIdentity(
 	}
 
 	rawIdentity := strings.TrimSpace(gjson.GetBytes(body, "prompt_cache_key").String())
+	if isNativeOpenAIResponsesRequest(c, account) && rawIdentity == "" &&
+		!isOpenAICompatMessagesBridgeContext(c) && !isOpenAICompatMessagesBridgeBody(body) {
+		return body, "", false, nil
+	}
 	if rawIdentity == "" {
 		rawIdentity = strings.TrimSpace(seed)
 	}
@@ -246,14 +260,57 @@ func openAICodexNonRootSessionID(c *gin.Context) string {
 	return explicitOpenAIHeaderSessionID(c)
 }
 
-// Root sessions follow the finalized prompt cache; non-root agents retain
-// their own isolated session, as in official client.rs::responses_session_id.
+// Session routing keeps the existing tenant or explicitly authorized sharing
+// boundary. Fingerprint convergence controls metadata, not this authorization
+// domain; a full-device profile must never merge unrelated callers' routing.
+func (s *OpenAIGatewayService) resolveOpenAICodexSessionIdentity(c *gin.Context, account *Account, raw string) (string, error) {
+	tenant := getAPIKeyIDFromContext(c)
+	if account != nil && account.IsOpenAIOAuthSessionSharingEnabled() {
+		var err error
+		raw, err = s.resolveOpenAIUpstreamSessionID(c, account, raw)
+		if err != nil {
+			return "", err
+		}
+		tenant = 0
+	}
+	owner := codexAccountIdentitySource(c, account)
+	owner, err := codexRequestIdentityOwner(openAICodexTurnStateContext(c), owner)
+	if err != nil {
+		return "", err
+	}
+	if owner == nil {
+		return raw, nil
+	}
+	routingOwner := *owner
+	routingOwner.Extra = map[string]any{CodexFingerprintModeExtraKey: "off"}
+	return resolveCodexAccountIdentityValueForOwner(openAICodexTurnStateContext(c), &routingOwner, tenant, "session", raw)
+}
+
+// Native sessions remain independent of prompt cache. Gateway-owned adapters
+// and legacy compact keep their explicitly selected cache alignment policy.
 func (s *OpenAIGatewayService) alignOpenAIUpstreamSessionIdentityFromBody( //nolint:unused // compact/session identity alignment helper
 	c *gin.Context,
 	account *Account,
 	headers http.Header,
 	body []byte,
 ) error {
+	if isNativeOpenAIResponsesRequest(c, account) {
+		// Session affinity is independent from a custom cache key or its omission.
+		// Resolve the original session once, rather than rehashing an already
+		// projected header or borrowing the body cache's namespace.
+		raw := explicitOpenAIHeaderSessionID(c)
+		if raw == "" {
+			headers.Del(codexSessionIDHeader)
+			headers.Del("session_id")
+			return nil
+		}
+		identity, err := s.resolveOpenAICodexSessionIdentity(c, account, raw)
+		if err != nil {
+			return err
+		}
+		setOpenAIUpstreamSessionIdentityForAccount(headers, account, identity)
+		return nil
+	}
 	if account != nil && account.IsOpenAI() && !isOpenAIResponsesCompactPath(c) {
 		if raw := openAICodexNonRootSessionID(c); raw != "" {
 			identity, err := s.resolveOpenAIPromptCacheIdentity(c, account, raw)

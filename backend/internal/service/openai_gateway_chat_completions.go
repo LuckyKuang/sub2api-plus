@@ -320,18 +320,6 @@ func (s *OpenAIGatewayService) forwardAsChatCompletions(
 		} else if promptCacheKey != "" {
 			reqBody["prompt_cache_key"] = promptCacheKey
 		}
-		// This path aligns prompt_cache_key below with the shared body/header
-		// identity helper. Keep account identity rewriting limited to metadata so
-		// recovery retries cannot scope an already aligned key a second time.
-		promptCacheValue, hasPromptCacheValue := reqBody["prompt_cache_key"]
-		delete(reqBody, "prompt_cache_key")
-		applyCodexAccountIdentityClientMetadataMap(reqBody, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c))
-		if hasPromptCacheValue {
-			reqBody["prompt_cache_key"] = promptCacheValue
-		}
-		if _, fingerprintErr := s.prepareCodexFingerprintMap(ctx, c, account, reqBody); fingerprintErr != nil {
-			return nil, fingerprintErr
-		}
 		responsesBody, err = json.Marshal(reqBody)
 		if err != nil {
 			return nil, fmt.Errorf("remarshal after codex transform: %w", err)
@@ -398,6 +386,18 @@ func (s *OpenAIGatewayService) forwardAsChatCompletions(
 	}
 	ctx = withRequestCredentialOwner(ctx, account, token)
 	defer bindRequestCredentialOwnerContext(ctx, c)()
+	if account.UsesOpenAICodexProtocol() {
+		// Metadata and fingerprints must use the owner of the acquired token.
+		// Prompt-cache identity was aligned independently above and is preserved.
+		responsesBody, _, err = applyCodexAccountIdentityClientMetadataRaw(responsesBody, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c), ctx)
+		if err != nil {
+			return nil, err
+		}
+		responsesBody, _, err = s.prepareCodexFingerprintRaw(ctx, c, account, responsesBody)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	// 6. Build upstream request
 	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)

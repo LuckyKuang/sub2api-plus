@@ -16,6 +16,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
 	"github.com/coder/websocket"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 )
@@ -153,12 +154,12 @@ func TestOpenAIWSHTTPBridgeLaterTurn429RetriesCurrentTurnOnReplacementAccount(t 
 		ID: 129, Name: "limited", Platform: PlatformOpenAI, Type: AccountTypeOAuth,
 		Status: StatusActive, Schedulable: true, Concurrency: 1,
 		Extra:       map[string]any{"openai_oauth_responses_websockets_v2_mode": OpenAIWSIngressModeHTTPBridge},
-		Credentials: map[string]any{"chatgpt_account_id": "account-a", "chatgpt_user_id": "user-a"},
+		Credentials: map[string]any{"access_token": "access-token-a", "chatgpt_account_id": "account-a", "chatgpt_user_id": "user-a"},
 	}
 	nextAccount := *account
 	nextAccount.ID = 130
 	nextAccount.Name = "replacement"
-	nextAccount.Credentials = map[string]any{"chatgpt_account_id": "account-b", "chatgpt_user_id": "user-b"}
+	nextAccount.Credentials = map[string]any{"access_token": "access-token-b", "chatgpt_account_id": "account-b", "chatgpt_user_id": "user-b"}
 
 	serverErrCh := make(chan error, 1)
 	failoverCh := make(chan []byte, 1)
@@ -255,11 +256,30 @@ func TestOpenAIWSHTTPBridgeLaterTurn429RetriesCurrentTurnOnReplacementAccount(t 
 	}
 	require.Len(t, upstream.bodies, 3)
 	require.Contains(t, string(upstream.bodies[0]), "first")
-	require.Equal(t, scopeCodexAccountIdentityValue(account, 0, "session", "client-session"), gjson.GetBytes(upstream.bodies[1], "client_metadata.session_id").String())
-	require.Equal(t, scopeCodexAccountIdentityValue(account, 0, "thread", "client-thread"), gjson.GetBytes(upstream.bodies[1], "client_metadata.thread_id").String())
 	require.NotContains(t, string(upstream.bodies[2]), "previous_response_id")
 	require.Contains(t, string(upstream.bodies[2]), "second")
-	require.Equal(t, scopeCodexAccountIdentityValue(&nextAccount, 0, "session", "client-session"), gjson.GetBytes(upstream.bodies[2], "client_metadata.session_id").String())
-	require.Equal(t, scopeCodexAccountIdentityValue(&nextAccount, 0, "thread", "client-thread"), gjson.GetBytes(upstream.bodies[2], "client_metadata.thread_id").String())
+	// OFFICIAL_AGENT_REQUEST_STATE.md: migration maps the original logical
+	// identifiers to each actual grant's UUIDv7 namespace, with no double-map
+	// or untrusted raw-ID replay. Derive expectations from those invariants.
+	for field, raw := range map[string]string{"session_id": "client-session", "thread_id": "client-thread"} {
+		firstOwnerID := gjson.GetBytes(upstream.bodies[1], "client_metadata."+field).String()
+		nextOwnerID := gjson.GetBytes(upstream.bodies[2], "client_metadata."+field).String()
+		for _, value := range []string{firstOwnerID, nextOwnerID} {
+			id, err := uuid.Parse(value)
+			require.NoError(t, err)
+			require.Equal(t, uuid.Version(7), id.Version())
+			require.NotEqual(t, raw, value)
+		}
+		require.NotEqual(t, firstOwnerID, nextOwnerID, "replacement credentials must isolate execution identifiers")
+	}
+	for index, req := range upstream.requests {
+		if index < 2 {
+			require.Equal(t, "Bearer access-token-a", req.Header.Get("Authorization"))
+			require.Equal(t, "account-a", req.Header.Get("Chatgpt-Account-Id"))
+		} else {
+			require.Equal(t, "Bearer access-token-b", req.Header.Get("Authorization"))
+			require.Equal(t, "account-b", req.Header.Get("Chatgpt-Account-Id"))
+		}
+	}
 	require.Empty(t, upstream.requests[2].Header.Get(openAIWSTurnStateHeader))
 }

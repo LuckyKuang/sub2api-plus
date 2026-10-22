@@ -183,32 +183,8 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		}
 		reqStream = gjson.GetBytes(body, "stream").Bool()
 
-		accountScopedBody, accountScoped, scopeErr := applyCodexAccountIdentityClientMetadataRaw(body, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c))
-		if scopeErr != nil {
-			return nil, scopeErr
-		}
-		if accountScoped {
-			body = accountScopedBody
-		}
-
-		// Resolve the request policy once and reuse the exact same fingerprint IDs
-		// for headers and client_metadata. Legacy /responses/compact intentionally
-		// converges only the installation identity; ordinary/native compact turns
-		// retain their configured device/session/full policy.
-		fingerprintedBody, _, fingerprintErr := s.prepareCodexFingerprintRaw(ctx, c, account, body)
-		if fingerprintErr != nil {
-			return nil, fingerprintErr
-		}
-		body = fingerprintedBody
 	}
 	if account != nil && account.IsOpenAI() {
-		if account.Type == AccountTypeAPIKey && !isOpenAIResponsesCompactPath(c) {
-			scoped, _, err := applyCodexAccountIdentityClientMetadataRaw(body, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c))
-			if err != nil {
-				return nil, err
-			}
-			body = scoped
-		}
 		responsesLite := isOpenAIResponsesLiteHeader(c.GetHeader(responsesLiteHeader)) || isOpenAIResponsesLiteWebSocketPayload(body)
 		normalizedBody, normalized, normalizeErr := normalizeOpenAIResponsesCompatibilityBodyWithOptions(body, account, openAIResponsesCompatibilityOptions{
 			Config:        s.cfg,
@@ -354,6 +330,18 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 	}
 	ctx = withRequestCredentialOwner(ctx, account, token)
 	defer bindRequestCredentialOwnerContext(ctx, c)()
+	if account.UsesOpenAICodexProtocol() || account.Type == AccountTypeAPIKey && !isOpenAIResponsesCompactPath(c) {
+		body, _, err = applyCodexAccountIdentityClientMetadataRaw(body, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c), ctx)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if account.UsesOpenAICodexProtocol() {
+		body, _, err = s.prepareCodexFingerprintRaw(ctx, c, account, body)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	if result, handled, wsErr := s.tryCodexHTTPWebSocket(ctx, c, account, body, token, requestedModel, policyModel, gjson.GetBytes(body, "prompt_cache_key").String(), startTime); handled {
 		if result != nil {
@@ -517,7 +505,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		// 在各 handler 的写头点强制放行，铸造账号在此统一记录，供出站守卫剥离
 		// failover 换号后的跨账号回带（openai_codex_turn_state.go）。
 		if extractOpenAICodexTurnState(resp.Header) != "" {
-			s.noteOpenAICodexTurnStateProvenance(c, account)
+			s.noteOpenAICodexTurnStateProvenance(c, account, extractOpenAICodexTurnState(resp.Header))
 		}
 
 		retryBody, retryErr := prepareOpenAIEncryptedRecoveryBody(body)
@@ -705,6 +693,9 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 	body []byte,
 	token string,
 ) (*http.Request, error) {
+	if err := validateOpenAIOAuthSessionAccess(c, account); err != nil {
+		return nil, err
+	}
 	ctx = WithOutboundIdentityScope(ctx, c)
 	ctx = WithAccountOutboundIdentity(ctx, account)
 	// Codex 可见时区对齐：与 buildUpstreamRequest 同一改写语义（幂等，
@@ -827,7 +818,9 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 		req.Header.Set("accept", "text/event-stream")
 	}
 
-	applyCodexAccountIdentityHeaders(req.Header, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c))
+	if err := applyCodexAccountIdentityHeaders(ctx, req.Header, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c)); err != nil {
+		return nil, err
+	}
 
 	// 指纹收敛：使用 forwardOpenAIPassthrough 中预计算的收敛 ID 改写出站头，
 	// 与请求体 client_metadata 共享同一份 IDs（与非透传路径相同的相对位置：
@@ -852,6 +845,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 	identity := s.applyOpenAIOutboundIdentity(ctx, account, req.Header, true)
 	ApplyAccountOutboundHeaders(ctx, account, req.Header)
 	clearOpenAICodexLegacySessionAliases(req.Header, account)
+	stripCodexDirectInstallationHeader(req.Header, account)
 	stripOpenAILegacyResponsesBeta(req.Header)
 	applyOpenAICodexGuardianHeader(c, account, req.Header, gjson.GetBytes(body, "model").String())
 	SetOpsRoutingDiagnostics(c, &OpsRoutingDiagnostics{OutboundIdentitySource: identity.Source})

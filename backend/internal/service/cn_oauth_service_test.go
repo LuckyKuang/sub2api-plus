@@ -135,6 +135,8 @@ func TestCNOAuthNativeSendAndRefresh(t *testing.T) {
 				region = "cn"
 			}
 			a := &Account{ID: 42, Platform: platform, Type: AccountTypeOAuth, Status: StatusActive, Credentials: cnOAuthCredentials(&cnoauth.Flow{Platform: platform, Region: region}, &cnoauth.Grant{AccessToken: "old", RefreshToken: "refresh", ExpiresAt: time.Now().Add(-time.Minute)})}
+			loginID := a.GetCredential(domesticOAuthLoginIDCredential)
+			require.NotEmpty(t, loginID)
 			// Generic endpoint/protocol/header edits cannot reroute native grants.
 			a.Credentials["base_url"] = "https://evil.test"
 			a.Credentials["api_protocol"] = APIProtocolResponses
@@ -180,6 +182,7 @@ func TestCNOAuthNativeSendAndRefresh(t *testing.T) {
 				require.Empty(t, req.Header.Get("x-dsh-auth-token"))
 				require.Equal(t, 1, refreshes)
 				require.Equal(t, "rotated", repo.account.GetCredential("refresh_token"))
+				require.Equal(t, loginID, repo.account.GetCredential(domesticOAuthLoginIDCredential), "normal refresh retains the authorization lifetime")
 				require.Equal(t, 1, repo.updateCredentialsCalls)
 				require.NoError(t, svc.prepareRequest(req, a))
 				require.Equal(t, 1, refreshes)

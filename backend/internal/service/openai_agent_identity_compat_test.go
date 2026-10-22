@@ -15,6 +15,7 @@ import (
 
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 )
@@ -140,14 +141,15 @@ func TestOpenAIAgentIdentityPassthroughKeepsSessionAndPromptCacheHeaders(t *test
 	require.Equal(t, "account-agent-passthrough", req.Header.Get("chatgpt-account-id"))
 	require.Empty(t, req.Header.Get("session_id"))
 	require.Empty(t, req.Header.Get("conversation_id"))
-	require.Equal(t, cacheIdentity, req.Header.Get(codexSessionIDHeader))
+	require.NotEmpty(t, req.Header.Get(codexSessionIDHeader))
+	require.NotEqual(t, cacheIdentity, req.Header.Get(codexSessionIDHeader))
 	requestBody, err := io.ReadAll(req.Body)
 	require.NoError(t, err)
 	require.Equal(t, cacheIdentity, gjson.GetBytes(requestBody, "prompt_cache_key").String())
 
-	// Authentication mode must not affect session isolation or prompt-cache
-	// behavior. Compare the same request with the existing OAuth path instead
-	// of pinning this test to an implementation-specific hash.
+	// A signing runtime and an OAuth principal are distinct credential owners.
+	// Their v7 sessions are isolated while the tenant's logical cache stays stable
+	// (docs/OFFICIAL_AGENT_REQUEST_STATE.md).
 	oauthAccount := &Account{
 		ID:       26,
 		Platform: PlatformOpenAI,
@@ -167,7 +169,12 @@ func TestOpenAIAgentIdentityPassthroughKeepsSessionAndPromptCacheHeaders(t *test
 	require.Equal(t, cacheIdentity, oauthCacheIdentity)
 	oauthReq, err := svc.buildUpstreamRequestOpenAIPassthrough(context.Background(), oauthContext, oauthAccount, oauthBody, "oauth-token")
 	require.NoError(t, err)
-	require.Equal(t, oauthReq.Header.Get("session-id"), req.Header.Get("session-id"))
+	require.NotEqual(t, oauthReq.Header.Get("session-id"), req.Header.Get("session-id"))
+	for _, headers := range []http.Header{oauthReq.Header, req.Header} {
+		id, err := uuid.Parse(headers.Get("session-id"))
+		require.NoError(t, err)
+		require.Equal(t, uuid.Version(7), id.Version())
+	}
 	require.Equal(t, oauthReq.Header.Get("session_id"), req.Header.Get("session_id"))
 	require.Equal(t, oauthReq.Header.Get("conversation_id"), req.Header.Get("conversation_id"))
 }
@@ -537,6 +544,20 @@ func (r *accountTestAgentIdentityRepo) GetByID(_ context.Context, _ int64) (*Acc
 func (r *accountTestAgentIdentityRepo) UpdateCredentials(_ context.Context, _ int64, credentials map[string]any) error {
 	r.account.Credentials = credentials
 	return nil
+}
+
+func (r *accountTestAgentIdentityRepo) UpdateOAuthCredentialsIfUnchanged(ctx context.Context, id int64, platform string, expected map[string]any, proxy *int64, credentials map[string]any) (bool, error) {
+	if !agentTaskTestCredentialsMatch(r.account, id, platform, expected, proxy) {
+		return false, nil
+	}
+	return true, r.UpdateCredentials(ctx, id, credentials)
+}
+
+func (r *agentIdentityForwardRepo) UpdateOAuthCredentialsIfUnchanged(ctx context.Context, id int64, platform string, expected map[string]any, proxy *int64, credentials map[string]any) (bool, error) {
+	if !agentTaskTestCredentialsMatch(r.account, id, platform, expected, proxy) {
+		return false, nil
+	}
+	return true, r.UpdateCredentials(ctx, id, credentials)
 }
 
 func (r *accountTestAgentIdentityRepo) UpdateExtra(_ context.Context, _ int64, _ map[string]any) error {

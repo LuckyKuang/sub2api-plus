@@ -361,15 +361,16 @@ func TestProxyLiveSidebandForwardsTextAndBinary(t *testing.T) {
 				},
 			}
 			record := &LiveCallRecord{
-				CallID:     "call_proxy",
-				CallHash:   hashLiveCallID("call_proxy"),
-				AccountID:  account.ID,
-				APIKeyID:   22,
-				UserID:     33,
-				LeaseID:    "lease-1",
-				CreatedAt:  time.Now(),
-				ExpiresAt:  time.Now().Add(time.Minute),
-				Controller: LiveControllerPending,
+				OutboundSnapshot: &LiveOutboundSnapshot{Owner: openAICodexStateOwner(context.Background(), account), SessionID: "01912345-6789-7abc-8def-0123456789ab", ThreadID: "01912345-7000-7fed-9234-123456789abc", UserAgent: "codex_cli_rs/0.163.0 (Ubuntu 24.04; x86_64) xterm-256color", Originator: "codex_cli_rs", Version: "0.163.0"},
+				CallID:           "call_proxy",
+				CallHash:         hashLiveCallID("call_proxy"),
+				AccountID:        account.ID,
+				APIKeyID:         22,
+				UserID:           33,
+				LeaseID:          "lease-1",
+				CreatedAt:        time.Now(),
+				ExpiresAt:        time.Now().Add(time.Minute),
+				Controller:       LiveControllerPending,
 			}
 			attestationCipher := newLiveAttestationCipher(&config.Config{
 				JWT: config.JWTConfig{Secret: "live-sideband-test-secret"},

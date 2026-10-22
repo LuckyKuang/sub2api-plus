@@ -35,7 +35,7 @@ func (r *accountRepository) SetCredentialErrorIfUnchanged(ctx context.Context, i
 	if err != nil || changed == 0 {
 		return false, err
 	}
-	r.syncSchedulerAccountSnapshotDetached(ctx, id)
+	r.deleteSchedulerAccountSnapshotDetached(ctx, id)
 	return true, nil
 }
 
@@ -67,6 +67,6 @@ func (r *accountRepository) SetCredentialTempUnschedulableIfUnchanged(ctx contex
 	if err != nil || changed == 0 {
 		return false, err
 	}
-	r.syncSchedulerAccountSnapshotDetached(ctx, id)
+	r.deleteSchedulerAccountSnapshotDetached(ctx, id)
 	return true, nil
 }

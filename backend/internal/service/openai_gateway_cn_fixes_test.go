@@ -411,7 +411,7 @@ func TestHandle403_CNProviderConcurrencyLimitAlwaysUsesTemporaryCooldown(t *test
 	require.True(t, blocker.until[0].After(time.Now()))
 }
 
-func TestHandle403_KimiConcurrencyLimitRepositoryFailureKeepsRuntimeBlock(t *testing.T) {
+func TestHandle403_KimiConcurrencyLimitRepositoryFailureDoesNotBlockUnprovenGeneration(t *testing.T) {
 	repo := &rateLimitAccountRepoStub{tempErr: errors.New("repository unavailable")}
 	counter := &openAI403CounterCacheStub{counts: []int64{openAI403DisableThreshold}}
 	blocker := &runtimeBlockRecorder{}
@@ -429,10 +429,7 @@ func TestHandle403_KimiConcurrencyLimitRepositoryFailureKeepsRuntimeBlock(t *tes
 	require.Equal(t, 1, repo.tempCalls, "the temporary cooldown should still be persisted when possible")
 	require.Equal(t, 0, repo.setErrorCalls, "persistence failure must not fall back to permanent account error")
 	require.Equal(t, []int64{openAI403DisableThreshold}, counter.counts, "persistence failure must not enter the permanent-error counter path")
-	require.Len(t, blocker.accounts, 1, "the in-memory runtime block must survive repository failure")
-	require.Same(t, account, blocker.accounts[0])
-	require.Equal(t, cnConcurrencyLimitReasonPrefix, blocker.reasons[0])
-	require.True(t, blocker.until[0].After(time.Now()))
+	require.Empty(t, blocker.accounts, "a failed CAS cannot authorize a runtime block for the current credential generation")
 }
 
 func TestHandle403_CNProviderNearMatchRetainsNormalPermanentErrorPolicy(t *testing.T) {

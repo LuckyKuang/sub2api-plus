@@ -5,8 +5,8 @@ accounts. Both account types expose OpenAI-compatible traffic through the
 gateway.
 
 Manage the UA and paired client declarations in **System Settings → Outbound
-identity**. Native OAuth retains the Grok family; API-key accounts can choose
-another preset. Forwarding, quota probes and Realtime handshakes consume the
+identity**. Native OAuth and API-key accounts retain the Grok family; only compatible
+upstream accounts can choose another permitted preset. Forwarding, quota probes and Realtime handshakes consume the
 same trusted account identity. See [outbound identity](../OUTBOUND_IDENTITY.md).
 
 The HTTP/TLS transport adds the subscription proxy's `X-XAI-Token-Auth` hint
@@ -29,9 +29,16 @@ valid credential-owning account, configured global preset or environment pin
 still outranks the compiled default.
 
 Inference requests also carry the official request-owned
-sampler declarations: a new request ID, a process-stable random agent ID, the
-final model, and (when authoritative tenant-isolated association exists)
-independent conversation/session IDs plus the official UUIDv5 root-group ID. OAuth
+sampler declarations: a UUIDv4 request ID retained for the logical prompt and
+its retries, a persistent UUIDv5 agent ID, the final model, and (when an
+authoritative tenant-isolated association exists) independent conversation/session
+IDs plus the official UUIDv5 root-group ID. New gateway session mappings use
+UUIDv7; resumed UUIDv4 sessions and official UUIDv4 auxiliary labels preserve
+their type. Mappings are persisted atomically, scoped by tenant and credential
+owner, and fail closed when durable mapping is unavailable. The installation
+uses a persisted virtual-device seed for the UUIDv5 agent identity, avoiding raw
+host machine information. This agent identity survives restarts and is distinct
+from the official process-scoped UUIDv4 agent-instance identity. OAuth
 requests include the credential owner's `sub` as `x-grok-user-id`. The gateway
 does not fabricate a turn index, retry count, deployment ID, or tracing lineage
 it does not own, and generic account header overrides cannot replace any of
@@ -201,7 +208,21 @@ API.
 
 ## OAuth Configuration
 
-The OAuth flow uses PKCE. Default public client values can be overridden:
+The OAuth authorization-code flow uses PKCE and fresh UUIDv7 state/nonce. The
+server retains the nonce, issuer, client ID and outbound identity snapshot with
+the single-use authorization session. Before returning a user identity it
+validates the ID token signature, permitted asymmetric algorithm, issuer,
+audience, expiry, subject and nonce against the official discovery/JWKS origin.
+The official team-principal exception uses only the access token returned by
+the trusted token exchange. Token exchange and refresh redirects must retain
+the configured endpoint's scheme, host and port, with the standard ten-hop
+limit. Cross-origin redirects and HTTPS downgrades stop before sending the
+code, verifier or refresh token to the next destination. Explicit operator URL
+overrides remain the initial trusted endpoint; they cannot delegate trust by
+redirect. Permitted redirects retain the operation's identity snapshot.
+Refresh grants do not require a new login nonce.
+Authorization sessions started before nonce binding was installed must restart.
+Default public client values can be overridden:
 
 The built-in authorization request identifies `grok-build` as its referrer and
 requests the current Grok Build scopes for API proxy, conversation, and
@@ -244,10 +265,11 @@ before replacing it.
 
 ## Quotas and Media Eligibility
 
-xAI quota display is passive: Sub2API Plus records supported upstream
-rate-limit headers but does not invent subscription quota values. Before a
-usable upstream observation, quota remains unknown while local usage is still
-shown.
+xAI usage combines the official billing summary with supported upstream
+rate-limit observations. A manual quota probe can collect fresh headers from
+the sampler; billing refresh uses the official billing endpoint. Neither path
+invents subscription quota values. Before a usable upstream observation, quota
+remains unknown while local usage is still shown.
 
 Authentication, entitlement, and rate-limit failures temporarily affect account
 scheduling according to their status. Shared model-capacity / high-demand
@@ -278,3 +300,19 @@ The [official grok-build baseline](../OFFICIAL_AGENT_BASELINES.md) remains
 `x-grok-client-mode` and CLI-proxy authentication declarations; CLI proxy/control
 calls retain their official destination-specific declarations. Migration 291
 removes obsolete Grok API-key compatible-family selections/defaults atomically.
+
+### Credential-owned observations
+
+Billing and response quota snapshots carry an opaque credential/proxy generation.
+Probe coalescing uses that generation; conditional persistence, cooldowns and
+recovery compare the exact sent credentials before changing account state.
+Manual connection tests and derived auto-pause thresholds use the same fence.
+Slim scheduler records retain only the grant digest needed to check these
+observations; they cannot act as credential snapshots for state mutations.
+A late response cannot authorize media or install scheduling state for a new
+login. Reads ignore legacy unbound or mismatched observations until a fresh
+probe succeeds. Explicit administrator media overrides retain precedence.
+Normal refresh preserves session mapping while invalidating obsolete credential
+observations; a fresh token does not inherit an older token’s late error.
+Replacing an API key changes its session mapping; OAuth session ownership is
+bound to the authenticated subject/team so ordinary token rotation preserves it.

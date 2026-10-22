@@ -135,7 +135,7 @@ func TestEveryDomesticAccountTransportRemovesBrandedCustomHeaders(t *testing.T) 
 	for _, test := range []struct{ platform, kind, ua string }{
 		{"deepseek", "oauth", "deepseek-harness/0.2.1-rc.2 (+https://github.com/deepseek-ai/deepseek-harness)"},
 		{"deepseek", "apikey", "deepseek-harness/0.2.1-rc.2 (+https://github.com/deepseek-ai/deepseek-harness)"},
-		{"kimi", "oauth", "kimi-code-cli/2.2.0"}, {"kimi", "apikey", "kimi-code-cli/2.2.0"},
+		{"kimi", "oauth", "kimi-code-cli/2.3.0"}, {"kimi", "apikey", "kimi-code-cli/2.3.0"},
 		{"minimax", "oauth", "MiniMaxAgent"}, {"minimax", "apikey", "Anthropic/JS 0.91.1"},
 		{"zhipu", "oauth", "ZCode/3.16.2 ai/6.0.193 ai-sdk/provider-utils/4.0.27 runtime/node.js/22"},
 		{"zhipu", "apikey", "ZCode/3.16.2 ai/6.0.193 ai-sdk/provider-utils/4.0.27 runtime/node.js/22"},

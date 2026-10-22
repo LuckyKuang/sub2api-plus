@@ -33,6 +33,7 @@ func TestGatewayCacheLiveCallIdentityAndController(t *testing.T) {
 		CreatedAt:             time.Now(),
 		ExpiresAt:             time.Now().Add(time.Hour),
 		Controller:            service.LiveControllerPending,
+		OutboundSnapshot:      &service.LiveOutboundSnapshot{Owner: "owner-v2:principal", SessionID: "01912345-6789-7abc-8def-0123456789ab", ThreadID: "01912345-7000-7abc-8def-0123456789ab", UserAgent: "codex_cli_rs/0.163.0 (Ubuntu 24.04; x86_64) xterm-256color", Originator: "codex_cli_rs", Version: "0.163.0"},
 	}
 	require.NoError(t, cache.SaveLiveCall(context.Background(), record, time.Hour))
 
@@ -41,6 +42,7 @@ func TestGatewayCacheLiveCallIdentityAndController(t *testing.T) {
 	require.Equal(t, record.CallID, loaded.CallID)
 	require.Equal(t, record.AccountID, loaded.AccountID)
 	require.Equal(t, record.AttestationCiphertext, loaded.AttestationCiphertext)
+	require.Equal(t, record.OutboundSnapshot, loaded.OutboundSnapshot)
 
 	claimed, err := cache.ClaimLiveController(context.Background(), record.CallHash, service.LiveControllerObserver, "observer-1")
 	require.NoError(t, err)

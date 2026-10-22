@@ -218,8 +218,12 @@ facts (`X-Client-Language`, `X-Client-Timezone`, `X-Platform`, `X-Os-Category`,
 update UA and its companion together while preserving host and product facts.
 No Codex `Originator` or standalone `Version` header is sent. Inference adds the pinned per-protocol AI SDK UA suffixes; control-plane
 calls omit those suffixes and `X-ZCode-Agent`. Control OS version follows
-`os.version()`, while inference follows `os.release()`. No telemetry device ID
-is invented. See [Outbound identity](../OUTBOUND_IDENTITY.md)
+`os.version()`, while inference follows `os.release()`. A persistent random
+UUIDv4 device ID is shared by the selected installation scope; valid configured
+account/global `X-Device-Mid` pins take precedence. Control requests send it in
+`X-Device-Mid`; Anthropic inference uses the same ID in JSON-string
+`metadata.user_id`, with empty `account_uuid` and the owner-scoped session ID.
+Ordinary inference does not gain a device header. See [Outbound identity](../OUTBOUND_IDENTITY.md)
 for exact defaults, source evidence and the source-priority matrix.
 
 The account-link handshake and the credential-derivation calls are pre-account
@@ -227,6 +231,18 @@ authorization operations. The session retains one native identity across start,
 poll, exchange and credential derivation, including Redis round trips. The
 created account pins that identity, and both OpenAI-compatible and Anthropic
 forwarding use the derived plan credential.
+
+Model calls generate a request UUIDv4 for every physical attempt and retain one
+trace UUIDv4 across retries of the logical request. Session/query attribution is
+generated only when the accepted request supplies that context, within tenant
+and credential-owner boundaries. The gateway uses session type `other` because
+it cannot infer a caller's agent execution role. Foreign Claude/Codex runtime
+headers and caller-supplied Anthropic device metadata are replaced. Persistent
+ID-store failures stop the request before upstream transmission.
+Each new account link persists an internal `oauth_login_id`. Project-token
+renewal retains it; relinking the same row or replacing an API key uses another
+session namespace. Legacy grants keep their account-row scope until relinking.
+This internal login ID is never sent upstream.
 
 ## Known limitations
 

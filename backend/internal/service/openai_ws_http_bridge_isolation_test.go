@@ -149,7 +149,7 @@ func TestOpenAIWSHTTPBridgeSessionIsolationAcrossSameSessionHash(t *testing.T) {
 	stateStore := NewOpenAIWSStateStore(nil)
 	svc := &OpenAIGatewayService{cfg: cfg, httpUpstream: upstream, openaiWSResolver: NewOpenAIWSProtocolResolver(cfg), openaiWSStateStore: stateStore}
 	account := &Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeOAuth,
-		Credentials: map[string]any{"access_token": "test-token"},
+		Credentials: map[string]any{"access_token": "test-token", "chatgpt_account_id": "bridge-owner"},
 		Extra:       map[string]any{"openai_oauth_responses_websockets_v2_mode": OpenAIWSIngressModeHTTPBridge},
 		Concurrency: 2, Status: StatusActive, Schedulable: true}
 	groupID := int64(7)

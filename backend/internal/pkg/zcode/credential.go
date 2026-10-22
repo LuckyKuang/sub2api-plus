@@ -430,7 +430,9 @@ func (c *CredentialClient) doJSON(ctx context.Context, method, target string, he
 		req.Header.Set(name, value)
 	}
 	req.Header.Set("Accept", "application/json")
-	prepareRequest(req)
+	if err := prepareRequest(req); err != nil {
+		return err
+	}
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return err

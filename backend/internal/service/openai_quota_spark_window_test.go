@@ -52,6 +52,13 @@ func (r *stubQuotaAccountRepo) UpdateCredentials(_ context.Context, id int64, cr
 	return nil
 }
 
+func (r *stubQuotaAccountRepo) UpdateOAuthCredentialsIfUnchanged(ctx context.Context, id int64, platform string, expected map[string]any, proxy *int64, credentials map[string]any) (bool, error) {
+	if !agentTaskTestCredentialsMatch(r.accounts[id], id, platform, expected, proxy) {
+		return false, nil
+	}
+	return true, r.UpdateCredentials(ctx, id, credentials)
+}
+
 func (r *stubQuotaAccountRepo) UpdateExtra(_ context.Context, id int64, updates map[string]any) error {
 	if r.extraUpdateErr != nil {
 		return r.extraUpdateErr

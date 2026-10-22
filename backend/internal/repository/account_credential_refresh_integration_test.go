@@ -11,7 +11,7 @@ import (
 )
 
 func (s *AccountRepoSuite) TestCNOAuthRefreshCASAppliesAndPublishesDurableState() {
-	for _, platform := range []string{service.PlatformOpenAI, service.PlatformKimi, service.PlatformMiniMax} {
+	for _, platform := range []string{service.PlatformOpenAI, service.PlatformGrok, service.PlatformDeepseek, service.PlatformKimi, service.PlatformMiniMax, service.PlatformStepFun, service.PlatformZhipu} {
 		account := mustCreateAccount(s.T(), s.client, &service.Account{
 			Name: "native-refresh-success-" + platform, Platform: platform, Type: service.AccountTypeOAuth,
 			Status: service.StatusActive, Schedulable: true,
@@ -33,9 +33,8 @@ func (s *AccountRepoSuite) TestCNOAuthRefreshCASAppliesAndPublishesDurableState(
 		s.Require().Equal("rotated", fresh.GetCredential("refresh_token"))
 		s.Require().Equal(service.StatusActive, fresh.Status)
 		s.Require().True(fresh.Schedulable)
-		s.Require().Len(cache.setAccounts, 1)
-		s.Require().Equal("rotated", cache.setAccounts[0].GetCredential("refresh_token"))
-		s.Require().NoError(cache.setCtxErr)
+		s.Require().Empty(cache.setAccounts, "refresh must not publish a snapshot that can race a newer login")
+		s.Require().Equal([]int64{account.ID}, cache.deleteIDs)
 		var count int
 		err = scanSingleRow(s.ctx, s.repo.sql, "SELECT COUNT(*) FROM scheduler_outbox WHERE event_type=$1 AND account_id=$2", []any{service.SchedulerOutboxEventAccountChanged, account.ID}, &count)
 		s.Require().NoError(err)
@@ -44,7 +43,7 @@ func (s *AccountRepoSuite) TestCNOAuthRefreshCASAppliesAndPublishesDurableState(
 }
 
 func (s *AccountRepoSuite) TestCNOAuthRefreshCASRejectsConcurrentOwnerAndGrantChanges() {
-	for _, platform := range []string{service.PlatformOpenAI, service.PlatformKimi, service.PlatformMiniMax} {
+	for _, platform := range []string{service.PlatformOpenAI, service.PlatformGrok, service.PlatformDeepseek, service.PlatformKimi, service.PlatformMiniMax, service.PlatformStepFun, service.PlatformZhipu} {
 		for _, change := range []string{"reauthorization", "metadata", "proxy", "type", "platform", "status"} {
 			account := mustCreateAccount(s.T(), s.client, &service.Account{Name: "native-refresh-fence-" + platform + "-" + change, Platform: platform, Type: service.AccountTypeOAuth, Status: service.StatusActive, Schedulable: true, Credentials: map[string]any{"oauth_provider": platform, "access_token": "observed", "refresh_token": "observed-rt", "_token_version": 7}})
 			observed, err := s.repo.GetByID(s.ctx, account.ID)
@@ -60,7 +59,11 @@ func (s *AccountRepoSuite) TestCNOAuthRefreshCASRejectsConcurrentOwnerAndGrantCh
 			case "type":
 				_, err = s.repo.sql.ExecContext(s.ctx, "UPDATE accounts SET type=$1 WHERE id=$2", service.AccountTypeAPIKey, account.ID)
 			case "platform":
-				_, err = s.repo.sql.ExecContext(s.ctx, "UPDATE accounts SET platform=$1 WHERE id=$2", service.PlatformDeepseek, account.ID)
+				replacementPlatform := service.PlatformDeepseek
+				if platform == replacementPlatform {
+					replacementPlatform = service.PlatformOpenAI
+				}
+				_, err = s.repo.sql.ExecContext(s.ctx, "UPDATE accounts SET platform=$1 WHERE id=$2", replacementPlatform, account.ID)
 			case "status":
 				_, err = s.repo.sql.ExecContext(s.ctx, "UPDATE accounts SET status=$1,schedulable=FALSE WHERE id=$2", service.StatusError, account.ID)
 			}
@@ -82,6 +85,7 @@ func (s *AccountRepoSuite) TestCNOAuthRefreshCASRejectsConcurrentOwnerAndGrantCh
 			s.Require().Equal(current.ProxyID, fresh.ProxyID)
 			s.Require().Equal(current.Status, fresh.Status)
 			s.Require().Empty(cache.setAccounts)
+			s.Require().Empty(cache.deleteIDs)
 			var count int
 			err = scanSingleRow(s.ctx, s.repo.sql, "SELECT COUNT(*) FROM scheduler_outbox WHERE account_id=$1", []any{account.ID}, &count)
 			s.Require().NoError(err)
@@ -99,7 +103,8 @@ func TestCNOAuthRefreshCASRollsBackWhenOutboxInsertFails(t *testing.T) {
 	})
 	_, err := integrationDB.ExecContext(context.Background(), "DELETE FROM scheduler_outbox WHERE account_id=$1", account.ID)
 	require.NoError(t, err)
-	repo := newAccountRepositoryWithSQL(client, &failAtomicSchedulerOutboxSQLExecutor{sqlExecutor: integrationDB}, nil)
+	cache := &schedulerCacheRecorder{}
+	repo := newAccountRepositoryWithSQL(client, &failAtomicSchedulerOutboxSQLExecutor{sqlExecutor: integrationDB}, cache)
 	observed, err := repo.GetByID(context.Background(), account.ID)
 	require.NoError(t, err)
 	applied, err := repo.UpdateOAuthCredentialsIfUnchanged(context.Background(), account.ID, service.PlatformKimi, observed.Credentials, observed.ProxyID, map[string]any{"access_token": "must-roll-back", "refresh_token": "must-roll-back"})
@@ -108,6 +113,8 @@ func TestCNOAuthRefreshCASRollsBackWhenOutboxInsertFails(t *testing.T) {
 	fresh, err := repo.GetByID(context.Background(), account.ID)
 	require.NoError(t, err)
 	require.Equal(t, observed.Credentials, fresh.Credentials)
+	require.Empty(t, cache.setAccounts)
+	require.Empty(t, cache.deleteIDs)
 	var count int
 	require.NoError(t, integrationDB.QueryRowContext(context.Background(), "SELECT COUNT(*) FROM scheduler_outbox WHERE account_id=$1", account.ID).Scan(&count))
 	require.Zero(t, count)

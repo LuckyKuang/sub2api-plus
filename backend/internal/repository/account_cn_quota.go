@@ -15,6 +15,9 @@ func (r *accountRepository) UpdateCNProviderQuotaIfUnchanged(ctx context.Context
 	if r == nil || r.sql == nil || expected == nil {
 		return false, errors.New("quota snapshot repository is not configured")
 	}
+	if expected.CredentialGeneration != "" || expected.CNQuotaGeneration != "" {
+		return false, errors.New("quota snapshot mutation requires a hydrated credential owner")
+	}
 	if expected.Platform != service.PlatformKimi && expected.Platform != service.PlatformZhipu && expected.Platform != service.PlatformMiniMax {
 		return false, errors.New("unsupported quota snapshot platform")
 	}
@@ -54,6 +57,6 @@ func (r *accountRepository) UpdateCNProviderQuotaIfUnchanged(ctx context.Context
 	if err != nil || affected == 0 {
 		return false, err
 	}
-	r.syncSchedulerAccountSnapshotDetached(ctx, expected.ID)
+	r.deleteSchedulerAccountSnapshotDetached(ctx, expected.ID)
 	return true, nil
 }

@@ -7,6 +7,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -45,12 +46,16 @@ func TestNativeConversationSessionRoutingAndOwnerIsolation(t *testing.T) {
 				project := func(c *gin.Context, account *Account, body []byte) string {
 					ctx := WithOutboundIdentityScope(context.Background(), c)
 					captureNativeConversationScope(ctx, c, account, body)
-					return nativeConversationOwnerSession(ctx, account)
+					id, err := nativeConversationOwnerSession(ctx, account)
+					require.NoError(t, err)
+					return id
 				}
 				first := project(c, a, body)
 				require.NotEqual(t, "official-conversation", first)
-				_, err := uuid.Parse(first)
+				idText := strings.TrimPrefix(strings.TrimPrefix(first, "session-"), "mvs_")
+				parsed, err := uuid.Parse(idText)
 				require.NoError(t, err)
+				require.Equal(t, uuid.Version(4), parsed.Version())
 				require.Equal(t, first, project(next, a, nextBody))
 				require.NotEqual(t, first, project(other, a, body))
 				require.NotEqual(t, first, project(otherTenant, a, body))
@@ -66,9 +71,11 @@ func TestNativeConversationSessionRoutingAndOwnerIsolation(t *testing.T) {
 			projectForeign := func(c *gin.Context) string {
 				ctx := WithOutboundIdentityScope(context.Background(), c)
 				captureNativeConversationScope(ctx, c, owner, body)
-				return nativeConversationOwnerSession(ctx, owner)
+				id, err := nativeConversationOwnerSession(ctx, owner)
+				require.NoError(t, err)
+				return id
 			}
-			require.Equal(t, projectForeign(foreign), projectForeign(foreignNext), "foreign provider headers cannot affect outbound session projection either")
+			require.NotEqual(t, projectForeign(foreign), projectForeign(foreignNext), "without a native conversation scope separate requests mint independent sessions")
 		})
 	}
 }
@@ -108,7 +115,10 @@ func TestNativeConversationScopeCapturesOriginalBodyOnce(t *testing.T) {
 	ctx := WithOutboundIdentityScope(context.Background(), c)
 	body := []byte(`{"model":"native","messages":[{"role":"user","content":"hello"}]}`)
 	captureNativeConversationScope(ctx, c, a, body)
-	first := nativeConversationOwnerSession(ctx, a)
+	first, err := nativeConversationOwnerSession(ctx, a)
+	require.NoError(t, err)
 	captureNativeConversationScope(ctx, c, a, bytes.ReplaceAll(body, []byte("hello"), []byte("rewritten")))
-	require.Equal(t, first, nativeConversationOwnerSession(ctx, a))
+	second, err := nativeConversationOwnerSession(ctx, a)
+	require.NoError(t, err)
+	require.NotEqual(t, first, second, "no explicit conversation does not persist an arbitrary content-derived session")
 }

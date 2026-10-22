@@ -110,9 +110,9 @@ func TestForwardAsAnthropic_OpenAIOAuthConvergesFingerprintBeforePlusCacheAuthor
 	cacheIdentity := strings.TrimSpace(upstream.lastReq.Header.Get("session-id"))
 	require.NotEmpty(t, cacheIdentity)
 	require.Empty(t, upstream.lastReq.Header.Get("session_id"))
-	require.Equal(t, "messages-owner-installation", upstream.lastReq.Header.Get("x-codex-installation-id"))
+	require.Empty(t, upstream.lastReq.Header.Get("x-codex-installation-id"))
 	require.Equal(t, "messages-owner-installation", gjson.GetBytes(upstream.lastBody, "client_metadata.x-codex-installation-id").String())
-	require.Equal(t, resolveConvergedSessionID(account), gjson.GetBytes(upstream.lastBody, "client_metadata.session_id").String())
+	require.False(t, gjson.GetBytes(upstream.lastBody, "client_metadata.session_id").Exists(), "an adapter without logical metadata must not fabricate an account-wide session")
 	require.Equal(t, upstream.lastReq.Header.Get("thread-id"), upstream.lastReq.Header.Get("x-client-request-id"))
 	require.Empty(t, upstream.lastReq.Header.Get("conversation_id"))
 }
@@ -294,7 +294,7 @@ func TestNativeAnthropicPassthroughLeavesOtherThinkingUntouched(t *testing.T) {
 			_, err := svc.ForwardAsAnthropic(context.Background(),
 				adaptiveProtocolTestContext("/v1/messages", body), nativeAnthropicGLMTestAccount(), body, "", "")
 			require.NoError(t, err)
-			require.JSONEq(t, tt.body, string(upstream.lastBody))
+			requireZCodeUnsessionedBusinessBody(t, upstream.lastReq, upstream.lastBody, tt.body)
 		})
 	}
 }

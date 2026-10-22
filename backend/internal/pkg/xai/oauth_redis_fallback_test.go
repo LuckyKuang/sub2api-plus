@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
@@ -32,4 +33,27 @@ func TestSessionStoreRedisFallbackIsLimitedToFailedWrites(t *testing.T) {
 	require.Equal(t, "local", got.State)
 	require.True(t, store.TryConsumeSession("local-only"))
 	require.False(t, store.TryConsumeSession("local-only"))
+}
+
+func TestSessionStoreRedisRetainsOIDCBindingAcrossReplicas(t *testing.T) {
+	mr := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr(), MaxRetries: -1})
+	t.Cleanup(func() { _ = client.Close() })
+	first, second := NewRedisSessionStore(client), NewRedisSessionStore(client)
+	defer first.Stop()
+	defer second.Stop()
+	want := &OAuthSession{
+		State: "state", Nonce: "bound-nonce", Issuer: OAuthIssuer, ClientID: "client",
+		CodeVerifier: "pkce-verifier", CreatedAt: time.Now(),
+		Identity: outboundidentity.Identity{Preset: "grok", UserAgent: "grok-shell/1.0.45 (linux; x86_64)", Version: "1.0.45"},
+	}
+	first.Set("cross-replica", want)
+	got, ok := second.Get("cross-replica")
+	require.True(t, ok)
+	require.Equal(t, want.Nonce, got.Nonce)
+	require.Equal(t, want.Issuer, got.Issuer)
+	require.Equal(t, want.CodeVerifier, got.CodeVerifier)
+	require.Equal(t, want.Identity, got.Identity)
+	require.True(t, second.TryConsumeSession("cross-replica"))
+	require.False(t, first.TryConsumeSession("cross-replica"))
 }

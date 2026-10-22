@@ -552,7 +552,7 @@ func (u *projectTokenWireUpstream) Do(req *http.Request, proxy string, id int64,
 	u.auth = append(u.auth, req.Header.Get("Authorization"))
 	body, err := io.ReadAll(req.Body)
 	require.NoError(u.t, err)
-	require.JSONEq(u.t, `{"model":"glm-5.3","messages":[]}`, string(body))
+	requireZCodeUnsessionedBusinessBody(u.t, req, body, `{"model":"glm-5.3","messages":[]}`)
 	require.Contains(u.t, req.UserAgent(), "ZCode/3.16.2")
 	require.Equal(u.t, "3.16.2", req.Header.Get("X-ZCode-App-Version"))
 	status := 200

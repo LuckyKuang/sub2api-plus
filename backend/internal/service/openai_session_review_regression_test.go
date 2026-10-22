@@ -42,7 +42,11 @@ func TestCodexWSMigrationCyberPolicyRegression(t *testing.T) {
 				svc := newPassthroughLifecycleService(cfg, upstream)
 				account := passthroughLifecycleAccount()
 				account.Type = accountType
-				account.Credentials["access_token"] = "fixture-token"
+				if accountType == AccountTypeOAuth {
+					// The ingress fixture transmits sk-test; bind an actual OAuth
+					// grant so migration reaches upstream policy classification.
+					account.Credentials = map[string]any{"access_token": "sk-test", "chatgpt_account_id": "migration-policy-owner", "chatgpt_user_id": "migration-policy-user"}
+				}
 				account.Extra["openai_oauth_responses_websockets_v2_mode"] = OpenAIWSIngressModePassthrough
 				svc.accountRepo = schedulerTestOpenAIAccountRepo{accounts: []Account{
 					{ID: 900, Platform: PlatformOpenAI, Type: accountType, Status: StatusError}, *account,

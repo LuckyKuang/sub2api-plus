@@ -3442,7 +3442,7 @@ func TestOpenAIBuildUpstreamRequestPreservesCodexIdentityHeaders(t *testing.T) {
 	req, err := svc.buildUpstreamRequest(c.Request.Context(), c, account, body, "token", false, "", true)
 	require.NoError(t, err)
 	require.Equal(t, "window-http", req.Header.Get("X-Codex-Window-ID"))
-	require.Equal(t, "installation-http", req.Header.Get("X-Codex-Installation-ID"))
+	require.Empty(t, req.Header.Get("X-Codex-Installation-ID"))
 	require.Empty(t, req.Header.Get("X-Test"))
 	require.True(t, openai.HasKnownCodexClientEvidence(req.Header))
 }

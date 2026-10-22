@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net/http"
 )
 
@@ -36,6 +37,9 @@ func cnQuotaGeneration(account *Account) string {
 	if account == nil {
 		return ""
 	}
+	if account.CNQuotaGeneration != "" {
+		return account.CNQuotaGeneration
+	}
 	proxyStatus := ""
 	if account.Proxy != nil {
 		proxyStatus = account.Proxy.Status
@@ -54,6 +58,15 @@ func cnQuotaGeneration(account *Account) string {
 	return hex.EncodeToString(digest[:])
 }
 
+// CNQuotaGeneration projects the pre-existing CN credential/proxy-status hash
+// into a scheduler row without retaining the authorization secrets.
+func CNQuotaGeneration(account *Account) string {
+	if !cnQuotaRequiresGeneration(account) {
+		return ""
+	}
+	return cnQuotaGeneration(account)
+}
+
 func cnQuotaSnapshotMatches(account *Account) bool {
 	if !cnQuotaRequiresGeneration(account) {
 		return true
@@ -65,6 +78,9 @@ func cnQuotaSnapshotMatches(account *Account) bool {
 func snapshotCNQuotaAccount(account *Account) (*Account, error) {
 	if account == nil {
 		return nil, ErrAccountNilInput
+	}
+	if account.CredentialGeneration != "" || account.CNQuotaGeneration != "" {
+		return nil, errors.New("quota request requires a hydrated credential owner")
 	}
 	snapshot := snapshotOAuthRefreshAccount(account)
 	var err error

@@ -42,7 +42,7 @@ func TestAuxiliaryClientsSendIdentityWithoutTransportWiring(t *testing.T) {
 		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			seen++
 			require.Empty(t, r.Header.Get("X-ZCode-Agent"))
-			require.Empty(t, r.Header.Get("X-Device-Mid"))
+			require.Equal(t, "c9cfbfa7-e7c9-4cec-8b1e-e11fa92c32f2", r.Header.Get("X-Device-Mid"))
 			// Official sourceHeaders.ts uses os.version() on OAuth/business
 			// calls; inference separately uses os.release(). Do not derive
 			// this expected block from ControlIdentity under test.

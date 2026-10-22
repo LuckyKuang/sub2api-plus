@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -39,6 +40,53 @@ type grokQuotaAccountRepo struct {
 	recoveryObservedAt    time.Time
 	recoveryObservedReset time.Time
 	recoveryClearResult   bool
+}
+
+func (r *grokQuotaAccountRepo) ApplyCredentialStateMutation(ctx context.Context, owner *Account, mutation CredentialStateMutation) (bool, error) {
+	if r.mockAccountRepoForPlatform != nil && r.accountsByID != nil {
+		current := r.accountsByID[owner.ID]
+		if current == nil || current.Platform != owner.Platform || current.Type != owner.Type || !reflect.DeepEqual(current.Credentials, owner.Credentials) || !reflect.DeepEqual(current.ProxyID, owner.ProxyID) || credentialStateProxyURL(current) != credentialStateProxyURL(owner) {
+			return false, nil
+		}
+	}
+	if mutation.Extra != nil {
+		if err := r.UpdateExtra(ctx, owner.ID, mutation.Extra); err != nil {
+			return false, err
+		}
+	}
+	if mutation.RateLimitUntil != nil {
+		if err := r.SetRateLimited(ctx, owner.ID, *mutation.RateLimitUntil); err != nil {
+			return false, err
+		}
+	}
+	if mutation.TempUnschedulableUntil != nil {
+		if err := r.SetTempUnschedulable(ctx, owner.ID, *mutation.TempUnschedulableUntil, mutation.TempUnschedulableReason); err != nil {
+			return false, err
+		}
+	}
+	if mutation.ClearRateLimit {
+		return r.ClearRateLimitIfObserved(ctx, owner.ID, *mutation.ObservedLimitedAt, *mutation.ObservedResetAt)
+	}
+	return true, nil
+}
+
+// Fixtures describing current observations must explicitly bind them to the
+// fixture's credential generation. Stale/unowned regression fixtures omit this.
+func bindGrokSnapshotFixture(account *Account) {
+	if account == nil {
+		return
+	}
+	generation := grokCredentialGeneration(account)
+	if billing, err := grokBillingSnapshotFromExtra(account.Extra); err == nil && billing != nil {
+		copy := *billing
+		copy.CredentialGeneration = generation
+		account.Extra[grokBillingExtraKey] = &copy
+	}
+	if quota, err := grokQuotaSnapshotFromExtra(account.Extra); err == nil && quota != nil {
+		copy := *quota
+		copy.CredentialGeneration = generation
+		account.Extra[grokQuotaSnapshotExtraKey] = &copy
+	}
 }
 
 func (r *grokQuotaAccountRepo) UpdateExtra(_ context.Context, id int64, updates map[string]any) error {
@@ -1329,6 +1377,7 @@ func TestShouldAutoPauseGrokAccountByQuota(t *testing.T) {
 					grokQuotaSnapshotExtraKey: tt.snapshot,
 				},
 			}
+			bindGrokSnapshotFixture(account)
 			got, _ := shouldAutoPauseGrokAccountByQuota(account)
 			require.Equal(t, tt.want, got)
 		})

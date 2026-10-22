@@ -64,7 +64,7 @@ const (
 	Preset = "kimi"
 
 	// DefaultVersion is the pinned published Kimi Code version.
-	DefaultVersion = "2.2.0"
+	DefaultVersion = "2.3.0"
 
 	// StableVersion is the oldest client version this build advertises. The CLI,
 	// the `kimi web` server and the native binaries share one released version

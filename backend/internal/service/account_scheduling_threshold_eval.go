@@ -343,6 +343,9 @@ func grokThresholdCandidates(account *Account) []*accountSchedulingThresholdCand
 	if account == nil {
 		return nil
 	}
+	if generation, _ := account.Extra["grok_sched_credential_generation"].(string); generation == "" || generation != grokCredentialGeneration(account) {
+		return nil
+	}
 	return []*accountSchedulingThresholdCandidate{
 		{
 			window:      "quota",

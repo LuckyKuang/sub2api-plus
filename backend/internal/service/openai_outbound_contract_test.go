@@ -17,6 +17,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 )
@@ -423,8 +424,8 @@ func TestOpenAIIdentityContractOfficialClientTurnContextHeaders(t *testing.T) {
 
 // Official Codex clients embed per-turn context in the request body's
 // client_metadata (turn lineage and MCP attribution). Proxying must preserve
-// every client-owned key verbatim through account namespacing and fingerprint
-// convergence; only the gateway-converged identity carriers may be rewritten.
+// unknown client-owned keys through account namespacing and fingerprint
+// convergence; turn references must follow the same typed identity mapping.
 // mcp_attribution is the official client's own responsibility: the gateway
 // passes it through without generating, parsing, or trimming it.
 func TestOpenAIIdentityContractClientMetadataClientKeysSurviveProxy(t *testing.T) {
@@ -444,9 +445,9 @@ func TestOpenAIIdentityContractClientMetadataClientKeysSurviveProxy(t *testing.T
 			require.NoError(t, err)
 			require.NotNil(t, upstream.lastBody)
 
-			// Client-owned turn lineage and MCP attribution pass through verbatim.
-			require.Equal(t, "client-parent-turn", gjson.GetBytes(upstream.lastBody, "client_metadata.parent_turn_id").String())
-			require.Equal(t, "client-root-turn", gjson.GetBytes(upstream.lastBody, "client_metadata.root_turn_id").String())
+			// Turn lineage is namespaced as v7; unrelated attribution is unchanged.
+			require.Equal(t, uuid.Version(7), uuid.MustParse(gjson.GetBytes(upstream.lastBody, "client_metadata.parent_turn_id").String()).Version())
+			require.Equal(t, uuid.Version(7), uuid.MustParse(gjson.GetBytes(upstream.lastBody, "client_metadata.root_turn_id").String()).Version())
 			require.Equal(t, "keep", gjson.GetBytes(upstream.lastBody, "client_metadata.future_client_field").String())
 			require.JSONEq(t, mcpAttribution, gjson.GetBytes(upstream.lastBody, "client_metadata.mcp_attribution").Raw)
 			// The gateway namespaces identity carriers; the turn id stays present.
@@ -624,7 +625,9 @@ func TestOpenAIIdentityContractLiveRegistrationSnapshot(t *testing.T) {
 			} else {
 				encrypted, err := cipher.Encrypt("test-attestation")
 				require.NoError(t, err)
-				headers, err = svc.liveSidebandHeaders(context.Background(), account, &LiveCallRecord{AttestationCiphertext: encrypted})
+				identity := resolveOpenAIOutboundIdentityWithVersion(testOpenAIAccountUserAgent, "", "0.200.1")
+				snapshot := &LiveOutboundSnapshot{Owner: openAICodexStateOwner(context.Background(), account), SessionID: "01912345-6789-7abc-8def-0123456789ab", ThreadID: "01912345-7000-7fed-9234-123456789abc", UserAgent: identity.UserAgent, Originator: identity.Originator, Version: identity.Version}
+				headers, _, err = svc.liveSidebandHeaders(context.Background(), account, &LiveCallRecord{AttestationCiphertext: encrypted, OutboundSnapshot: snapshot})
 				require.NoError(t, err)
 			}
 			require.Len(t, registered, 1)

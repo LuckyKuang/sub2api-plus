@@ -59,10 +59,12 @@ func (s *OpenAIGatewayService) ForwardGrokVoice(ctx context.Context, c *gin.Cont
 			return nil, fmt.Errorf("invalid grok voice endpoint path")
 		}
 	}
+	ctx = WithOutboundIdentityScope(ctx, c)
 	token, _, err := s.getRequestCredential(ctx, c, account)
 	if err != nil {
 		return nil, err
 	}
+	ctx = withRequestCredentialOwner(ctx, account, token)
 	targetURL, err := buildGrokVoiceURL(account, s.cfg, endpoint)
 	if err != nil {
 		return nil, err

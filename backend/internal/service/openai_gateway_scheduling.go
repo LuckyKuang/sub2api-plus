@@ -595,7 +595,7 @@ func shouldAutoPauseGrokAccountByQuota(account *Account) (bool, openAIQuotaAutoP
 	if account == nil || !account.IsGrok() || account.Type != AccountTypeOAuth {
 		return false, openAIQuotaAutoPauseDecision{}
 	}
-	snapshot, err := grokQuotaSnapshotFromExtra(account.Extra)
+	snapshot, err := grokAccountQuotaSnapshot(account)
 	if err != nil || snapshot == nil {
 		return false, openAIQuotaAutoPauseDecision{}
 	}

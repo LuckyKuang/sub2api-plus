@@ -171,33 +171,34 @@ details and are not persisted as client session IDs.
 Thread and client-request identifiers remain paired request context and never
 replace the session-scoped cache identity.
 
-For OpenAI Responses and Compact requests, the gateway resolves one opaque,
-tenant-isolated cache identity from an explicit `prompt_cache_key`, a supported
-session header, or a stable content prefix with a meaningful user/input anchor.
-It writes the finalized UUID to both the upstream `prompt_cache_key` and the
-canonical `session-id` header. Official Codex never sends a `conversation_id`
-header, so Codex-protocol outbound requests never carry one, and the official
-wire format spells the session header `session-id` only: every Codex-protocol
-outbound path (HTTP forward, passthrough, Messages bridge, WebSocket
-handshake, compact probe, alpha search) drops the legacy `session_id` alias
-regardless of fingerprint mode, matching the official `build_session_headers`.
-Non-Codex compatible-supplier paths (OpenAI API-key accounts) keep the Plus
-`session-id` + `session_id` dual spelling, and inbound `session_id` remains
-accepted for sticky routing. A model-only request does not receive a content-derived key. API-key
-Chat Completions requests converted to Responses use the same behavior, while
-raw Chat Completions forwarding does not receive Responses-only cache fields.
+Native OpenAI `/responses` requests preserve omission of `prompt_cache_key`.
+An explicit custom cache key is tenant-scoped independently of the execution
+session; it does not replace the `session-id` header, and a missing session
+header is not manufactured from the cache key. HTTP forwarding, passthrough
+and Responses WebSocket handshakes use this same rule for root and subagent
+requests. Gateway-owned Chat/Messages adapters and legacy compact conversion
+retain their explicit cache-generation policies; a model-only request receives
+no content-derived key. Raw Chat Completions forwarding receives no
+Responses-only cache fields.
 
-The logical cache identity is scoped to the authenticated tenant, never to the
-credential owner: one tenant and logical session keep a single
-`prompt_cache_key`/`session-id` when a scheduler failover changes the OAuth
-account, while another API key (a different authorization domain) always
-resolves to a different identity. Sticky-routing seeds derive from the same
-authorization domain (`user:{uid}:key:{id}`), so two tenants that submit an
-identical raw `session-id`/`conversation_id` never share a route binding, and
-legacy tenant-less bindings are not read as a fallback source. Credential
-identity still rotates on failover: per-credential headers such as
-`x-codex-installation-id`, `thread-id`, `x-codex-window-id` and
-`x-client-request-id` remain scoped to the selected account namespace.
+The ordinary logical cache identity belongs to the authenticated tenant and
+logical cache seed, so it remains stable when the scheduler changes credential
+owner. Existing opt-in OAuth session-sharing policy retains its separate
+account/user/policy authorization domain. Neither policy allows one tenant's
+raw session string to acquire another tenant's routing binding. Legacy
+tenant-less route bindings are not a fallback source.
+
+Execution session, thread and turn identities have a different scope: they are
+mapped for the selected credential owner, and therefore change on owner
+failover while remaining stable for repeated sends to the same owner. Native
+sessions and threads use UUIDv7. Valid incoming UUIDv7 timestamps are retained;
+legacy IDs use an atomic durable UUIDv7 mapping. Installation uses a preserved
+configured device pin or a persistent UUIDv4 mapping. It is carried in body
+`client_metadata` and canonical turn metadata, never a direct
+`x-codex-installation-id` Responses/WS header. Both OAuth and API-key native
+requests emit the official `session-id` spelling and remove `session_id` and
+`conversation_id`; compatible supplier protocols retain their defined aliases.
+Inbound legacy aliases remain accepted for sticky routing.
 
 Native official Codex bodies carry their base prompt as a `developer`/`system`
 input item and send no top-level `instructions` field. The gateway therefore
@@ -215,11 +216,15 @@ items. HTTP passthrough and WebSocket compatibility bodies receive the same
 merge. The only exception is the HTTP `/responses/compact` endpoint, whose
 request shape differs and is handled separately. Remote Compact v2
 (`compaction_trigger` on `/responses`) still carries the include declaration,
-matching the official Responses client. Client-owned
-`client_metadata` keys — `turn_id`, `parent_turn_id`,
-`root_turn_id`, `mcp_attribution`, and unknown future keys — pass through the
-proxy verbatim; `mcp_attribution` is the official client's own responsibility
-and the gateway never generates, parses, or trims it.
+matching the official Responses client. `turn_id`, `parent_turn_id` and
+`root_turn_id` use the same typed mapping so references still target the
+corresponding turn. A turn remains stable through its tool loop and retries;
+no turn is invented for prewarm or an absent declaration. Original
+`turn_started_at_unix_ms` and window counters remain unchanged.
+`window_id` stays `<mapped thread>:<counter>`, and `context_window_id` changes
+only when the client's compaction context changes. Unknown metadata keys and
+`mcp_attribution` remain untouched; the gateway does not generate or trim the
+client's MCP attribution.
 
 The declaration never depends on the transport or the attempt number: WebSocket
 reconnects replay the request payload unchanged, so a retried turn still carries
@@ -619,17 +624,16 @@ endpoint remains a distinct supported OpenAI API surface. Response retrieve,
 cancel, and other non-create subpaths are not session turns and receive no
 fingerprint mutation.
 
-Fingerprint preparation runs before final request construction. Plus
-prompt-cache/session isolation is authoritative for the final `session-id`
-header on Codex-protocol outbound. Root sessions align to the cache key;
-declared non-root agents retain a separate isolated session, matching official
-Codex's non-root exception (the legacy `session_id` alias is removed
-for every Codex account), while fingerprint convergence remains authoritative
-for installation and thread/turn metadata. `off` disables only fingerprint-owned
-header and body mutation; it does not disable Plus cache isolation, security,
-session sharing, or compact policy. WebSocket connection reuse compares final
-stable handshake carriers even when `off` or `device` leaves those values
-client-owned. Usage-log `session_id` stays the sanitized client-original value.
+Fingerprint preparation runs before final request construction. The typed
+mapper applies metadata convergence without creating new turns or resetting
+compaction windows on each generation. `session` mode keeps separate actual
+threads and their parent/fork references; `full` mode converges the metadata
+thread scope. Routing `session-id` still uses the tenant/session-sharing
+execution domain, independently of custom or omitted cache keys. `off`
+disables optional convergence, while owner isolation, official carrier
+selection, security and sharing policy still apply. WebSocket reuse compares
+final stable handshake carriers in every mode. Usage-log `session_id` stays
+the sanitized client-original value.
 
 Only credential-owning OpenAI OAuth accounts participate. Personal access
 token and Agent Identity accounts follow the same endpoint semantics because

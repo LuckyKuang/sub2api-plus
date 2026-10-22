@@ -82,17 +82,18 @@ type BillingProductSummary struct {
 // Cents fields remain the authoritative monthly numbers; dollar fields are the
 // operator-facing absolute money view (prepaid / on-demand / monthly $).
 type BillingSummary struct {
-	PeriodType         string                  `json:"period_type,omitempty"` // weekly | monthly | unknown
-	UsagePercent       *float64                `json:"usage_percent,omitempty"`
-	PeriodStart        string                  `json:"period_start,omitempty"`
-	PeriodEnd          string                  `json:"period_end,omitempty"`
-	ProductUsage       []BillingProductSummary `json:"product_usage,omitempty"`
-	MonthlyLimitCents  *float64                `json:"monthly_limit_cents,omitempty"`
-	UsedCents          *float64                `json:"used_cents,omitempty"`
-	IncludedUsedCents  *float64                `json:"included_used_cents,omitempty"`
-	BillingPeriodStart string                  `json:"billing_period_start,omitempty"`
-	BillingPeriodEnd   string                  `json:"billing_period_end,omitempty"`
-	UsedPercent        *float64                `json:"used_percent,omitempty"`
+	CredentialGeneration string                  `json:"credential_generation,omitempty"`
+	PeriodType           string                  `json:"period_type,omitempty"` // weekly | monthly | unknown
+	UsagePercent         *float64                `json:"usage_percent,omitempty"`
+	PeriodStart          string                  `json:"period_start,omitempty"`
+	PeriodEnd            string                  `json:"period_end,omitempty"`
+	ProductUsage         []BillingProductSummary `json:"product_usage,omitempty"`
+	MonthlyLimitCents    *float64                `json:"monthly_limit_cents,omitempty"`
+	UsedCents            *float64                `json:"used_cents,omitempty"`
+	IncludedUsedCents    *float64                `json:"included_used_cents,omitempty"`
+	BillingPeriodStart   string                  `json:"billing_period_start,omitempty"`
+	BillingPeriodEnd     string                  `json:"billing_period_end,omitempty"`
+	UsedPercent          *float64                `json:"used_percent,omitempty"`
 	// Absolute money (USD). Prepaid/on-demand come from credits probe as dollars.
 	// MonthlyLimit/MonthlyUsed are cents/100 for consistent $ display.
 	PrepaidBalance       *float64 `json:"prepaid_balance,omitempty"`

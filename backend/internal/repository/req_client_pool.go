@@ -34,9 +34,9 @@ type reqClientOptions struct {
 	// 不应把 Gemini / Grok / GeminiCLI 等其他供应商也拖进同一份 bundle，
 	// 更不应因一份通用 SSL_CERT_FILE 配置错误而让全部供应商一起 fail early。
 	OpenAICodexClient bool
-	// Grok control grants use destination-aware identity rendering on every
-	// attempt, including redirects. Other providers and signed transports keep
-	// their existing preparation and signing order.
+	// Grok control grants retain the configured token endpoint's origin and use
+	// destination-aware identity rendering on every permitted attempt. Other
+	// providers and signed transports keep their existing preparation/signing.
 	GrokControlIdentity bool
 }
 
@@ -107,6 +107,7 @@ func getSharedReqClient(opts reqClientOptions) (*req.Client, error) {
 	}
 	client = instrumentReqClient(client)
 	if opts.GrokControlIdentity {
+		client.SetRedirectPolicy(req.DefaultRedirectPolicy(), grokOAuthSameOriginRedirectPolicy)
 		client.GetTransport().WrapRoundTripFunc(func(rt http.RoundTripper) req.HttpRoundTripFunc {
 			return func(request *http.Request) (*http.Response, error) {
 				request = request.Clone(request.Context())

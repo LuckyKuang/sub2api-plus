@@ -272,7 +272,9 @@ func (s *OpenAIGatewayService) sendCCUpstreamRequest(
 		if account.IsGrokOAuth() {
 			applyGrokCLIHeaders(upstreamReq.Header)
 		}
-		applyGrokRequestMetadata(upstreamReq.Header, body, resolveGrokRequestConversation(c, body, grokCacheIdentity), account.GetCredential("sub"))
+		if err := applyGrokRequestMetadataForRequest(upstreamReq, c, account, body, grokCacheIdentity); err != nil {
+			return nil, err
+		}
 	}
 	// OpenAI identity is always the final stage. Other providers retain their
 	// existing generic override behavior.

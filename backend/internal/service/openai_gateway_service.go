@@ -599,7 +599,7 @@ type OpenAIGatewayService struct {
 	openaiProxyStreamFailOpenLogAt atomic.Int64
 
 	openaiWSFallbackUntil               sync.Map // key: int64(accountID), value: time.Time
-	openaiAccountRuntimeBlockUntil      sync.Map // key: int64(accountID), value: time.Time
+	openaiAccountRuntimeBlockUntil      sync.Map // credential owner/generation key, value: time.Time
 	openaiAccountRuntimeBlockLocks      sync.Map // key: int64(accountID), value: *sync.Mutex
 	openaiAccountRuntimeBlockGeneration sync.Map // key: int64(accountID), value: uint64
 	openaiAccountRuntimeBlockSequence   atomic.Uint64

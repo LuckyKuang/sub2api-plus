@@ -3,6 +3,11 @@
 Native OAuth login is available in account creation and editing. See
 [login, refresh, endpoints and operational details](DOMESTIC_OAUTH.md).
 
+New OAuth authorizations persist an internal `oauth_login_id`; routine token
+rotation preserves it. An old attempt cannot refresh or adopt a new login on
+the same account row. Legacy grants retain their account-row scope until
+reauthorization. This internal ID is never sent upstream.
+
 Sub2API Plus accepts Kimi and Moonshot-compatible account endpoints through the
 normal OpenAI-compatible account and channel configuration. This release adds
 Kimi/Moonshot model, billing, and gateway compatibility updates from upstream
@@ -33,8 +38,8 @@ surface.
 
 Kimi and Moonshot OAuth/API-key accounts retain the Kimi Code client family.
 Account parameters may override its global profile; cross-family selections and
-the retired `kimi:apikey` mapping are rejected. The compiled identity is: `User-Agent: kimi-code-cli/2.2.0` plus the official companion
-declarations `X-Msh-Platform: kimi_code_cli`, `X-Msh-Version: 2.2.0` and the four
+the retired `kimi:apikey` mapping are rejected. The compiled identity is: `User-Agent: kimi-code-cli/2.3.0` plus the official companion
+declarations `X-Msh-Platform: kimi_code_cli`, `X-Msh-Version: 2.3.0` and the four
 device headers `X-Msh-Device-Name`, `X-Msh-Device-Model`, `X-Msh-Os-Version` and
 `X-Msh-Device-Id`. The official client declares no `Originator` and no standalone
 `Version` header, so neither is sent. `SUB2API_KIMI_CODE_VERSION` may select a

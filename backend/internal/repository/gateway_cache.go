@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -328,22 +329,25 @@ func openAICodexTurnStateOriginKey(seed string) string {
 	return openAICodexTurnStateOriginPrefix + hex.EncodeToString(sum[:])
 }
 
-func (c *gatewayCache) SetOpenAICodexTurnStateOrigin(ctx context.Context, seed string, accountID int64, ttl time.Duration) error {
-	if c == nil || c.rdb == nil || strings.TrimSpace(seed) == "" || accountID <= 0 {
+func (c *gatewayCache) SetOpenAICodexTurnStateOrigin(ctx context.Context, seed string, owner string, ttl time.Duration) error {
+	if c == nil || c.rdb == nil || strings.TrimSpace(seed) == "" || !strings.HasPrefix(owner, "owner-v2:") {
 		return errors.New("invalid Codex turn-state provenance")
 	}
-	return c.rdb.Set(ctx, openAICodexTurnStateOriginKey(seed), accountID, ttl).Err()
+	return c.rdb.Set(ctx, openAICodexTurnStateOriginKey(seed), owner, ttl).Err()
 }
 
-func (c *gatewayCache) GetOpenAICodexTurnStateOrigin(ctx context.Context, seed string) (int64, error) {
+func (c *gatewayCache) GetOpenAICodexTurnStateOrigin(ctx context.Context, seed string) (string, error) {
 	if c == nil || c.rdb == nil || strings.TrimSpace(seed) == "" {
-		return 0, errors.New("invalid Codex turn-state provenance")
+		return "", errors.New("invalid Codex turn-state provenance")
 	}
-	accountID, err := c.rdb.Get(ctx, openAICodexTurnStateOriginKey(seed)).Int64()
+	owner, err := c.rdb.Get(ctx, openAICodexTurnStateOriginKey(seed)).Result()
 	if errors.Is(err, redis.Nil) {
-		return 0, nil
+		return "", nil
 	}
-	return accountID, err
+	if err == nil && !strings.HasPrefix(owner, "owner-v2:") {
+		return "", nil
+	}
+	return owner, err
 }
 
 // FindCyberSessionBlocked checks bounded batches in caller order and stops at
@@ -429,29 +433,34 @@ func (c *gatewayCache) SaveLiveCall(ctx context.Context, record *service.LiveCal
 	if record == nil || record.CallHash == "" || record.CallID == "" {
 		return fmt.Errorf("invalid live call record")
 	}
+	snapshot, err := json.Marshal(record.OutboundSnapshot)
+	if err != nil {
+		return fmt.Errorf("encode live outbound snapshot: %w", err)
+	}
 	values := map[string]any{
-		"call_id":          record.CallID,
-		"account_id":       record.AccountID,
-		"api_key_id":       record.APIKeyID,
-		"user_id":          record.UserID,
-		"group_id":         record.GroupID,
-		"subscription_id":  record.SubscriptionID,
-		"lease_id":         record.LeaseID,
-		"model":            record.Model,
-		"created_at":       record.CreatedAt.UnixMilli(),
-		"expires_at":       record.ExpiresAt.UnixMilli(),
-		"controller":       record.Controller,
-		"controller_owner": record.ControllerOwner,
-		"user_agent":       record.UserAgent,
-		"ip_address":       record.IPAddress,
-		"inbound_endpoint": record.InboundEndpoint,
-		"attestation":      record.AttestationCiphertext,
+		"call_id":           record.CallID,
+		"account_id":        record.AccountID,
+		"api_key_id":        record.APIKeyID,
+		"user_id":           record.UserID,
+		"group_id":          record.GroupID,
+		"subscription_id":   record.SubscriptionID,
+		"lease_id":          record.LeaseID,
+		"model":             record.Model,
+		"created_at":        record.CreatedAt.UnixMilli(),
+		"expires_at":        record.ExpiresAt.UnixMilli(),
+		"controller":        record.Controller,
+		"controller_owner":  record.ControllerOwner,
+		"user_agent":        record.UserAgent,
+		"ip_address":        record.IPAddress,
+		"inbound_endpoint":  record.InboundEndpoint,
+		"attestation":       record.AttestationCiphertext,
+		"outbound_snapshot": string(snapshot),
 	}
 	key := liveCallKey(record.CallHash)
 	pipe := c.rdb.TxPipeline()
 	pipe.HSet(ctx, key, values)
 	pipe.Expire(ctx, key, ttl)
-	_, err := pipe.Exec(ctx)
+	_, err = pipe.Exec(ctx)
 	return err
 }
 
@@ -469,6 +478,12 @@ func (c *gatewayCache) GetLiveCall(ctx context.Context, callHash string) (*servi
 	}
 	createdAt := time.UnixMilli(parseInt("created_at"))
 	expiresAt := time.UnixMilli(parseInt("expires_at"))
+	var snapshot *service.LiveOutboundSnapshot
+	if raw := values["outbound_snapshot"]; raw != "" {
+		if err := json.Unmarshal([]byte(raw), &snapshot); err != nil {
+			return nil, fmt.Errorf("decode live outbound snapshot: %w", err)
+		}
+	}
 	return &service.LiveCallRecord{
 		CallID:                values["call_id"],
 		CallHash:              callHash,
@@ -487,6 +502,7 @@ func (c *gatewayCache) GetLiveCall(ctx context.Context, callHash string) (*servi
 		IPAddress:             values["ip_address"],
 		InboundEndpoint:       values["inbound_endpoint"],
 		AttestationCiphertext: values["attestation"],
+		OutboundSnapshot:      snapshot,
 	}, nil
 }
 

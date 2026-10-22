@@ -15,5 +15,5 @@ func RuntimeHeaders() map[string]string {
 
 // The official control plane uses os.version(), inference uses os.release().
 func controlRuntimeHeaders() map[string]string {
-	return map[string]string{"X-Os-Version": outboundidentity.DefaultKernelVersion}
+	return map[string]string{"X-Os-Version": outboundidentity.DefaultKernelVersion, HeaderDeviceMid: ""}
 }

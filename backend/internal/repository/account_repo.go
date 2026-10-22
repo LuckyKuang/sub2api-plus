@@ -1351,7 +1351,7 @@ func (r *accountRepository) SetGrokCredentialErrorIfMatch(
 	if err != nil || affected == 0 {
 		return false, err
 	}
-	r.syncSchedulerAccountSnapshotDetached(ctx, id)
+	r.deleteSchedulerAccountSnapshotDetached(ctx, id)
 	return true, nil
 }
 
@@ -1411,7 +1411,7 @@ func (r *accountRepository) SetGrokOAuthErrorIfCredentialsUnchanged(
 	if rowsAffected == 0 {
 		return false, nil
 	}
-	r.syncSchedulerAccountSnapshotDetached(ctx, id)
+	r.deleteSchedulerAccountSnapshotDetached(ctx, id)
 	return true, nil
 }
 
@@ -1472,7 +1472,7 @@ func (r *accountRepository) UpdateGrokOAuthCredentialsIfUnchanged(
 	if rowsAffected == 0 {
 		return false, nil
 	}
-	r.syncSchedulerAccountSnapshotDetached(ctx, id)
+	r.deleteSchedulerAccountSnapshotDetached(ctx, id)
 	return true, nil
 }
 
@@ -1533,7 +1533,7 @@ func (r *accountRepository) SetGrokOAuthRefreshErrorIfCredentialsUnchanged(
 	if rowsAffected == 0 {
 		return false, nil
 	}
-	r.syncSchedulerAccountSnapshotDetached(ctx, id)
+	r.deleteSchedulerAccountSnapshotDetached(ctx, id)
 	return true, nil
 }
 
@@ -1594,7 +1594,7 @@ func (r *accountRepository) SetGrokOAuthRefreshTempUnschedulableIfCredentialsUnc
 	if rowsAffected == 0 {
 		return false, nil
 	}
-	r.syncSchedulerAccountSnapshotDetached(ctx, id)
+	r.deleteSchedulerAccountSnapshotDetached(ctx, id)
 	return true, nil
 }
 
@@ -1620,16 +1620,6 @@ func (r *accountRepository) syncSchedulerAccountSnapshot(ctx context.Context, ac
 	}
 }
 
-func (r *accountRepository) syncSchedulerAccountSnapshotDetached(ctx context.Context, accountID int64) {
-	base := context.Background()
-	if ctx != nil {
-		base = context.WithoutCancel(ctx)
-	}
-	propagationCtx, cancel := context.WithTimeout(base, 2*time.Second)
-	defer cancel()
-	r.syncSchedulerAccountSnapshot(propagationCtx, accountID)
-}
-
 func (r *accountRepository) deleteSchedulerAccountSnapshot(ctx context.Context, accountID int64) {
 	if r == nil || r.schedulerCache == nil || accountID <= 0 {
 		return
@@ -1637,6 +1627,19 @@ func (r *accountRepository) deleteSchedulerAccountSnapshot(ctx context.Context, 
 	if err := r.schedulerCache.DeleteAccount(ctx, accountID); err != nil {
 		logger.LegacyPrintf("repository.account", "[Scheduler] delete account snapshot failed: id=%d err=%v", accountID, err)
 	}
+}
+
+// A committed credential mutation can be followed by a newer login at any
+// moment. Eviction cannot republish the older grant, and cleanup must complete
+// within a bounded context even if the triggering request was canceled.
+func (r *accountRepository) deleteSchedulerAccountSnapshotDetached(ctx context.Context, accountID int64) {
+	base := context.Background()
+	if ctx != nil {
+		base = context.WithoutCancel(ctx)
+	}
+	cleanupCtx, cancel := context.WithTimeout(base, 2*time.Second)
+	defer cancel()
+	r.deleteSchedulerAccountSnapshot(cleanupCtx, accountID)
 }
 
 func (r *accountRepository) syncSchedulerAccountSnapshots(ctx context.Context, accountIDs []int64) {
@@ -2385,7 +2388,7 @@ func (r *accountRepository) SetGrokCredentialTempUnschedulableIfMatch(
 	if err != nil || affected == 0 {
 		return false, err
 	}
-	r.syncSchedulerAccountSnapshotDetached(ctx, id)
+	r.deleteSchedulerAccountSnapshotDetached(ctx, id)
 	return true, nil
 }
 

@@ -1242,7 +1242,7 @@ func grokBillingSnapshotNeedsRefresh(account *Account, now time.Time) bool {
 	if account == nil {
 		return false
 	}
-	billing, err := grokBillingSnapshotFromExtra(account.Extra)
+	billing, err := grokAccountBillingSnapshot(account)
 	if err != nil || billing == nil || billing.Partial || len(billing.FailedWindows) > 0 {
 		return true
 	}

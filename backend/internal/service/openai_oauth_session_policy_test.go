@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
@@ -418,6 +419,7 @@ func TestOpenAIOAuthSessionPolicyIsAppliedByAllOutboundBuilders(t *testing.T) {
 
 	ordinaryContext := newOAuthSessionPolicyGinContext(101, 9001, 11)
 	ordinaryContext.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
+	ordinaryContext.Request.Header.Set("session-id", "shared-session")
 	ordinary, err := service.buildUpstreamRequest(
 		context.Background(), ordinaryContext, &account, body, "oauth-token", true, "shared-session", true,
 	)
@@ -425,6 +427,7 @@ func TestOpenAIOAuthSessionPolicyIsAppliedByAllOutboundBuilders(t *testing.T) {
 
 	passthroughContext := newOAuthSessionPolicyGinContext(202, 9001, 12)
 	passthroughContext.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
+	passthroughContext.Request.Header.Set("session-id", "shared-session")
 	passthrough, err := service.buildUpstreamRequestOpenAIPassthrough(
 		context.Background(), passthroughContext, &account, body, "oauth-token",
 	)
@@ -448,9 +451,13 @@ func TestOpenAIOAuthSessionPolicyIsAppliedByAllOutboundBuilders(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	namespacedExpected, err := service.resolveOpenAIUpstreamSessionID(ordinaryContext, &account, "shared-session")
+	// The authorized user shares one persistent v7 session across allowed
+	// groups/builders. A prompt cache key alone is no longer a session seed.
+	expected := ordinary.Header.Get(codexSessionIDHeader)
+	id, err := uuid.Parse(expected)
 	require.NoError(t, err)
-	expected := generateSessionUUID(namespacedExpected)
+	require.Equal(t, uuid.Version(7), id.Version())
+	require.NotEqual(t, "shared-session", expected)
 	require.Empty(t, ordinary.Header.Get("session_id"))
 	require.Equal(t, expected, ordinary.Header.Get(codexSessionIDHeader))
 	require.Empty(t, ordinary.Header.Get("conversation_id"))

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
@@ -260,6 +261,11 @@ func TestZhipuOAuthBuildAccountMaterialForEachPlan(t *testing.T) {
 			User:        ZhipuLinkUser{ID: "u-1"},
 		})
 		require.NoError(t, err)
+		loginIDValue, ok := material.Credentials[domesticOAuthLoginIDCredential].(string)
+		require.True(t, ok)
+		loginID, err := uuid.Parse(loginIDValue)
+		require.NoError(t, err)
+		require.Equal(t, uuid.Version(4), loginID.Version())
 		require.NotContains(t, material.Credentials, "api_key")
 		require.Equal(t, "bm-token", material.Credentials["oauth_access_token"])
 		require.Equal(t, "bm-token", material.Credentials["access_token"])
@@ -470,6 +476,10 @@ func TestZhipuOAuthIdentitySurvivesSettingsChangeAndMaterialCreation(t *testing.
 	})
 	link, err := svc.StartLink(ctx, StartZhipuLinkInput{Provider: zcode.ProviderBigModel})
 	require.NoError(t, err)
+	deviceID := client.identities[0].ControlHeaders[zcode.HeaderDeviceMid]
+	parsedDevice, err := uuid.Parse(deviceID)
+	require.NoError(t, err)
+	require.Equal(t, uuid.Version(4), parsedDevice.Version())
 	version = "9.9.9"
 	_, err = svc.PollLink(ctx, link.SessionID)
 	require.NoError(t, err)
@@ -485,6 +495,7 @@ func TestZhipuOAuthIdentitySurvivesSettingsChangeAndMaterialCreation(t *testing.
 	resolved, ok := outboundidentity.FromContext(WithAccountOutboundIdentity(ctx, account))
 	require.True(t, ok)
 	require.Equal(t, "ZCode/3.16.2", resolved.UserAgent)
+	require.Equal(t, deviceID, resolved.ControlHeaders[zcode.HeaderDeviceMid])
 	require.Equal(t, "business-token", account.GetOpenAIProtocolAPIKey(), "request construction retains original owner; send-time resolver installs the PAT")
 	require.NotContains(t, material.Credentials, "api_key")
 }

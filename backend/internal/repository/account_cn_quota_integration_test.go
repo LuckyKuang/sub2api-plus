@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func (s *AccountRepoSuite) TestCNQuotaCASAppliesExactOwnerAndPublishesSchedulerState() {
+func (s *AccountRepoSuite) TestCNQuotaCASAppliesExactOwnerAndEvictsSchedulerState() {
 	for _, platform := range []string{service.PlatformKimi, service.PlatformZhipu, service.PlatformMiniMax} {
 		for _, accountType := range []string{service.AccountTypeOAuth, service.AccountTypeAPIKey} {
 			account := mustCreateAccount(s.T(), s.client, &service.Account{Name: "quota-cas-" + platform + accountType, Platform: platform, Type: accountType, Status: service.StatusActive, Credentials: map[string]any{"access_token": "actual-query-grant", "api_key": "actual-query-key"}, Extra: map[string]any{"unrelated": "preserved"}})
@@ -30,8 +30,8 @@ func (s *AccountRepoSuite) TestCNQuotaCASAppliesExactOwnerAndPublishesSchedulerS
 			s.Require().Equal("preserved", saved.Extra["unrelated"])
 			s.Require().Equal(float64(100), saved.Extra[platform+"_5h_used_percent"])
 			s.Require().Equal(expected.Credentials, saved.Credentials)
-			s.Require().Len(cache.setAccounts, 1)
-			s.Require().Equal("query-generation", cache.setAccounts[0].Extra[platform+"_quota_generation"])
+			s.Require().Empty(cache.setAccounts, "a quota observation cannot publish a snapshot that a concurrent login could supersede")
+			s.Require().Equal([]int64{account.ID}, cache.deleteIDs)
 			var count int
 			s.Require().NoError(scanSingleRow(s.ctx, s.repo.sql, "SELECT COUNT(*) FROM scheduler_outbox WHERE account_id=$1", []any{account.ID}, &count))
 			s.Require().Equal(1, count)
@@ -79,6 +79,7 @@ func (s *AccountRepoSuite) TestCNQuotaCASRejectsEveryChangedOwnerField() {
 		s.Require().Equal(float64(10), saved.Extra["kimi_5h_used_percent"], change)
 		s.Require().Equal("healthy-new-owner", saved.Extra["kimi_quota_generation"], change)
 		s.Require().Empty(cache.setAccounts, change)
+		s.Require().Empty(cache.deleteIDs, change)
 		var count int
 		s.Require().NoError(scanSingleRow(s.ctx, s.repo.sql, "SELECT COUNT(*) FROM scheduler_outbox WHERE account_id=$1", []any{account.ID}, &count))
 		s.Require().Zero(count, change)
@@ -103,11 +104,15 @@ func TestCNQuotaCASRollsBackWhenDurableInvalidationFails(t *testing.T) {
 		_ = client.Account.DeleteOneID(account.ID).Exec(context.Background())
 	})
 	repo := newAccountRepositoryWithSQL(client, &failCNQuotaOutboxExecutor{sqlExecutor: integrationDB}, nil)
+	cache := &schedulerCacheRecorder{}
+	repo.schedulerCache = cache
 	expected, err := repo.GetByID(context.Background(), account.ID)
 	require.NoError(t, err)
 	applied, err := repo.UpdateCNProviderQuotaIfUnchanged(context.Background(), expected, map[string]any{"kimi_5h_used_percent": 100})
 	require.Error(t, err)
 	require.False(t, applied)
+	require.Empty(t, cache.setAccounts)
+	require.Empty(t, cache.deleteIDs)
 	saved, err := repo.GetByID(context.Background(), account.ID)
 	require.NoError(t, err)
 	require.Equal(t, float64(10), saved.Extra["kimi_5h_used_percent"])

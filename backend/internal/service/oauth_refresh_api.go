@@ -103,10 +103,11 @@ func (m *contextMutex) Unlock() {
 
 // OAuthRefreshResult 统一刷新结果
 type OAuthRefreshResult struct {
-	Refreshed      bool           // 实际执行了刷新
-	NewCredentials map[string]any // 刷新后的 credentials（nil 表示未刷新）
-	Account        *Account       // 成功时为最新 account；刷新错误时为实际尝试的凭据快照
-	LockHeld       bool           // 锁被其他 worker 持有（未执行刷新）
+	Refreshed        bool           // 实际执行了刷新
+	NewCredentials   map[string]any // 刷新后的 credentials（nil 表示未刷新）
+	Account          *Account       // 成功时为最新 account；刷新错误时为实际尝试的凭据快照
+	AttemptedAccount *Account       // upstream 前的完整快照，用于成功后的条件清理
+	LockHeld         bool           // 锁被其他 worker 持有（未执行刷新）
 }
 
 func snapshotOAuthRefreshAccount(account *Account) *Account {
@@ -114,7 +115,12 @@ func snapshotOAuthRefreshAccount(account *Account) *Account {
 		return nil
 	}
 	snapshot := *account
-	snapshot.Credentials = shallowCopyMap(account.Credentials)
+	snapshot.Credentials = cloneRequestCredentialMap(account.Credentials)
+	snapshot.Extra = cloneRequestCredentialMap(account.Extra)
+	if account.TempUnschedulableUntil != nil {
+		until := *account.TempUnschedulableUntil
+		snapshot.TempUnschedulableUntil = &until
+	}
 	if account.ProxyID != nil {
 		proxyID := *account.ProxyID
 		snapshot.ProxyID = &proxyID
@@ -382,9 +388,10 @@ func (api *OAuthRefreshAPI) RefreshIfNeeded(
 	}
 
 	return &OAuthRefreshResult{
-		Refreshed:      true,
-		NewCredentials: newCredentials,
-		Account:        freshAccount,
+		Refreshed:        true,
+		NewCredentials:   newCredentials,
+		Account:          freshAccount,
+		AttemptedAccount: attemptedAccount,
 	}, nil
 }
 

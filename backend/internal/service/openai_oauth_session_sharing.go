@@ -73,21 +73,29 @@ func (s *OpenAIGatewayService) resolveOpenAIUpstreamSessionID(c *gin.Context, ac
 	if account == nil || !account.IsOpenAIOAuthSessionSharingEnabled() {
 		return isolateOpenAISessionID(getAPIKeyIDFromContext(c), raw), nil
 	}
-	if !account.IsOpenAIOAuthSessionGroupAllowed(getAPIKeyGroupIDFromContext(c)) {
-		return "", ErrOpenAIOAuthSessionAccessDenied
+	if err := validateOpenAIOAuthSessionAccess(c, account); err != nil {
+		return "", err
 	}
-	policy, _, valid := account.OpenAIOAuthSessionPolicy()
-	if !valid || !policy.Enabled || account.OpenAIOAuthSessionScopeAccountID() <= 0 {
-		return "", ErrOpenAIOAuthSessionAccessDenied
-	}
+	policy, _, _ := account.OpenAIOAuthSessionPolicy()
 	userID := getAPIKeyUserIDFromContext(c)
-	if userID <= 0 {
-		return "", ErrOpenAIOAuthSessionAccessDenied
-	}
 	h := xxhash.New()
 	_, _ = fmt.Fprintf(h, "openai-oauth-session:v2:account:%d:scope:%s:user:%d:raw:", account.OpenAIOAuthSessionScopeAccountID(), policy.ScopeVersion, userID)
 	_, _ = h.WriteString(raw)
 	return fmt.Sprintf("%016x", h.Sum64()), nil
+}
+
+// Sharing is an authorization boundary even when a native request omits both
+// session and cache IDs. Absence of optional protocol state cannot bypass it.
+func validateOpenAIOAuthSessionAccess(c *gin.Context, account *Account) error {
+	if account == nil || !account.IsOpenAIOAuthSessionSharingEnabled() {
+		return nil
+	}
+	policy, _, valid := account.OpenAIOAuthSessionPolicy()
+	if !valid || !policy.Enabled || account.OpenAIOAuthSessionScopeAccountID() <= 0 ||
+		!account.IsOpenAIOAuthSessionGroupAllowed(getAPIKeyGroupIDFromContext(c)) || getAPIKeyUserIDFromContext(c) <= 0 {
+		return ErrOpenAIOAuthSessionAccessDenied
+	}
+	return nil
 }
 
 func (s *OpenAIGatewayService) openAIOAuthSharedSessionCacheKey(userID int64, sessionHash string) string {

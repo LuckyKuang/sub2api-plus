@@ -25,35 +25,40 @@ func normalizeDeepSeekAnonymousUser(platform string, credentials map[string]any)
 
 // Harness llm-deepseek/adapter.ts owns these per-request declarations for both
 // account and API-key providers. They never participate in identity selection.
-func prepareDeepSeekRequestState(req *http.Request, account *Account) {
+func prepareDeepSeekRequestState(req *http.Request, account *Account) error {
 	if req == nil || account == nil || account.Platform != PlatformDeepseek {
-		return
+		return nil
 	}
 	for _, name := range []string{"X-Deepseek-Harness-User-Id", "X-Deepseek-Harness-Session-Id", "X-Deepseek-Harness-Compact"} {
 		deleteHeaderAllForms(req.Header, name)
 	}
 	if outboundidentity.RequestProtocol(req) != APIProtocolAnthropic {
-		return
+		return nil
 	}
 	scope := outboundIdentityScopeFromContext(req.Context())
 	if scope == nil {
-		return
+		return nil
 	}
-	key := outboundIdentityOwnerKey(account)
+	key := domesticCredentialOwnerScope(req.Context(), account)
 	value, ok := scope.deepseekTurns.Load(key)
 	if !ok {
-		user := account.GetCredential(deepSeekAnonymousUserCredential)
+		user := domesticCredentialOwnerAccount(req.Context(), account).GetCredential(deepSeekAnonymousUserCredential)
 		if id, err := uuid.Parse(user); err != nil || id.Version() != 4 || id.String() != user {
 			user = uuid.NewString()
 		}
-		value, _ = scope.deepseekTurns.LoadOrStore(key, deepSeekRequestState{user: user, session: nativeConversationOwnerSession(req.Context(), account)})
+		session, err := nativeConversationOwnerSession(req.Context(), account)
+		if err != nil {
+			return err
+		}
+		value, _ = scope.deepseekTurns.LoadOrStore(key, deepSeekRequestState{user: user, session: session})
 	}
 	state, valid := value.(deepSeekRequestState)
 	if !valid {
-		return
+		return nil
 	}
 	req.Header.Set("X-Deepseek-Harness-User-Id", state.user)
 	req.Header.Set("X-Deepseek-Harness-Session-Id", state.session)
 	// No native compaction operation exists in this gateway. A caller cannot
 	// label an ordinary request as compaction by supplying the optional header.
+	return nil
 }

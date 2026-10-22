@@ -9,6 +9,7 @@ import (
 	"time"
 
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/xai"
 )
 
@@ -56,6 +57,7 @@ type GrokAuthURLResult struct {
 }
 
 func (s *GrokOAuthService) GenerateAuthURL(ctx context.Context, proxyID *int64, redirectURI string) (*GrokAuthURLResult, error) {
+	ctx = withNativeOAuthOutboundIdentity(ctx, PlatformGrok)
 	state, err := xai.GenerateState()
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusInternalServerError, "GROK_OAUTH_STATE_FAILED", "failed to generate state: %v", err)
@@ -85,7 +87,9 @@ func (s *GrokOAuthService) GenerateAuthURL(ctx context.Context, proxyID *int64, 
 		return nil, infraerrors.Newf(http.StatusBadRequest, "GROK_OAUTH_INVALID_AUTHORIZE_URL", "%v", err)
 	}
 
+	identity, _ := outboundidentity.FromContext(ctx)
 	s.sessionStore.Set(sessionID, &xai.OAuthSession{
+		Nonce: nonce, Issuer: xai.OAuthIssuer, Identity: identity,
 		State:         state,
 		CodeVerifier:  codeVerifier,
 		CodeChallenge: codeChallenge,
@@ -136,6 +140,12 @@ func (s *GrokOAuthService) ExchangeCode(ctx context.Context, input *GrokExchange
 	if !ok {
 		return nil, infraerrors.New(http.StatusBadRequest, "GROK_OAUTH_SESSION_NOT_FOUND", "session not found or expired")
 	}
+	if session.Identity.UserAgent != "" {
+		ctx = outboundidentity.WithIdentity(ctx, session.Identity)
+	}
+	if session.Nonce == "" || session.Issuer != xai.OAuthIssuer {
+		return nil, infraerrors.New(http.StatusBadRequest, "GROK_OAUTH_SESSION_OBSOLETE", "restart authorization to bind identity validation")
+	}
 
 	parsed := xai.ParseAuthorizationInput(input.Code)
 	code := strings.TrimSpace(parsed.Code)
@@ -179,7 +189,15 @@ func (s *GrokOAuthService) ExchangeCode(ctx context.Context, input *GrokExchange
 	if err := validateGrokTokenResponse(tokenResp); err != nil {
 		return nil, err
 	}
-	return s.tokenInfoFromResponse(tokenResp, session.ClientID, nil), nil
+	identity, err := s.oauthClient.ValidateAuthorizationTokens(ctx, tokenResp, xai.OIDCLoginContext{Issuer: session.Issuer, ClientID: session.ClientID, Nonce: session.Nonce}, proxyURL)
+	if err != nil || identity == nil {
+		return nil, infraerrors.New(http.StatusBadGateway, "GROK_OAUTH_ID_TOKEN_INVALID", "Grok authorization identity validation failed")
+	}
+	info := s.tokenInfoFromResponse(tokenResp, session.ClientID, nil)
+	// Identity claims come only from the verified ID token or the official team
+	// principal branch of this freshly exchanged, trusted token response.
+	info.Subject, info.Email, info.TeamID = identity.Subject, identity.Email, identity.TeamID
+	return info, nil
 }
 
 func (s *GrokOAuthService) requireOAuthClient() error {

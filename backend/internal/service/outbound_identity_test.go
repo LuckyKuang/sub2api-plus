@@ -624,7 +624,7 @@ func TestBuiltInKimiOutboundIdentityMatchesOfficialClient(t *testing.T) {
 	pinned := builtInOutboundIdentity("kimi")
 	require.Equal(t, "kimi", pinned.Preset)
 	require.Equal(t, "compiled_default", pinned.Source)
-	require.Equal(t, "kimi-code-cli/2.2.0", pinned.UserAgent)
+	require.Equal(t, "kimi-code-cli/2.3.0", pinned.UserAgent)
 	require.Equal(t, kimi.ProductToken, pinned.Originator)
 	require.Equal(t, kimi.DefaultVersion, pinned.Version)
 	require.Equal(t, pinned, kimi.DefaultIdentity())
@@ -838,14 +838,26 @@ func TestOutboundIdentityDeclarationsCoverEveryBuiltInHeader(t *testing.T) {
 
 	for _, declarations := range view.Declarations {
 		builtin := builtInOutboundIdentity(declarations.Preset)
-		require.Len(t, declarations.Headers, len(builtin.Headers), declarations.Preset)
+		declared := map[string]string{}
+		for name, value := range builtin.ControlHeaders {
+			declared[name] = value
+		}
+		for name, value := range builtin.Headers {
+			declared[name] = value
+		}
+		require.Len(t, declarations.Headers, len(declared), declarations.Preset)
 		seen := map[string]bool{}
 		for _, header := range declarations.Headers {
 			require.NotEmpty(t, header.Name, declarations.Preset)
 			require.False(t, seen[header.Name], header.Name)
 			seen[header.Name] = true
-			require.Contains(t, builtin.Headers, header.Name, "the page must not claim an undeclared header")
-			require.NotEmpty(t, header.Builtin, header.Name)
+			require.Contains(t, declared, header.Name, "the page must not claim an undeclared header")
+			if declarations.Preset == "zcode" && header.Name == "X-Device-Mid" {
+				require.Empty(t, header.Builtin, "an installation is allocated by the persistent store")
+				require.NotContains(t, builtin.Headers, header.Name, "control device must not leak into inference headers")
+			} else {
+				require.NotEmpty(t, header.Builtin, header.Name)
+			}
 			require.Contains(t, []string{outboundHeaderDerived, outboundHeaderPinned, outboundHeaderRuntime}, header.Class, header.Name)
 			require.Equal(t, header.Class == outboundHeaderRuntime, header.Editable, header.Name)
 		}

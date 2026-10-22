@@ -52,15 +52,20 @@ func newGrokMediaEligibilityRouter(account *service.Account) *gin.Engine {
 
 func TestGrokMediaEligibilityHandlerGetReturnsModeAndReason(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	router := newGrokMediaEligibilityRouter(&service.Account{
-		ID:       12,
-		Platform: service.PlatformGrok,
-		Type:     service.AccountTypeOAuth,
+	account := &service.Account{
+		ID:          12,
+		Platform:    service.PlatformGrok,
+		Type:        service.AccountTypeOAuth,
+		Credentials: map[string]any{"access_token": "media-grant"},
 		Extra: map[string]any{
 			"grok_billing_snapshot": map[string]any{"status_code": 200, "partial": true},
 			"unrelated_setting":     "preserve",
 		},
-	})
+	}
+	billingSnapshot, ok := account.Extra["grok_billing_snapshot"].(map[string]any)
+	require.True(t, ok)
+	billingSnapshot["credential_generation"] = service.CredentialStateGeneration(account)
+	router := newGrokMediaEligibilityRouter(account)
 
 	req := httptest.NewRequest(http.MethodGet, "/accounts/12/grok-media-eligibility", nil)
 	rec := httptest.NewRecorder()

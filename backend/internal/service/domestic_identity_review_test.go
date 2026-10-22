@@ -156,7 +156,7 @@ func officialDomesticAnthropicHeaders(platform, kind string) map[string]string {
 	case PlatformDeepseek:
 		headers["User-Agent"] = "deepseek-harness/0.2.1-rc.2 (+https://github.com/deepseek-ai/deepseek-harness)"
 	case PlatformKimi:
-		headers = map[string]string{"User-Agent": "kimi-code-cli/2.2.0", "X-Msh-Platform": "kimi_code_cli", "X-Msh-Version": "2.2.0", "X-Msh-Device-Name": "ubuntu", "X-Msh-Device-Model": "Linux 6.8.0-31-generic x64", "X-Msh-Os-Version": "6.8.0-31-generic"}
+		headers = map[string]string{"User-Agent": "kimi-code-cli/2.3.0", "X-Msh-Platform": "kimi_code_cli", "X-Msh-Version": "2.3.0", "X-Msh-Device-Name": "ubuntu", "X-Msh-Device-Model": "Linux 6.8.0-31-generic x64", "X-Msh-Os-Version": "6.8.0-31-generic"}
 	case PlatformMiniMax:
 		headers["User-Agent"] = "MiniMaxAgent"
 		if kind == AccountTypeAPIKey {

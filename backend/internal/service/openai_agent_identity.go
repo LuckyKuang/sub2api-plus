@@ -324,6 +324,13 @@ func ensureAgentIdentityTaskForAccountWithIdentity(ctx context.Context, repo Acc
 	if credAccount == nil || !credAccount.IsOpenAIAgentIdentity() {
 		return errors.New("agent identity credentials are unavailable")
 	}
+	if requestCredentialOwnerBound(ctx, account) {
+		owner, known := requestCredentialOwner(ctx, account)
+		if !known || !sameAgentIdentitySigningOwner(owner, credAccount) {
+			return errors.New("agent identity signing owner changed")
+		}
+	}
+	observed := snapshotRequestCredentialAccount(credAccount)
 	currentTaskID := strings.TrimSpace(credAccount.GetCredential("task_id"))
 	if currentTaskID != "" && (expectedTaskID == "" || currentTaskID != expectedTaskID) {
 		return nil
@@ -348,23 +355,26 @@ func ensureAgentIdentityTaskForAccountWithIdentity(ctx context.Context, repo Acc
 	// would allow sequential duplicate registrations after the first writer
 	// has already persisted a new task.
 	if repo != nil && credAccount.ID > 0 {
-		if refreshed, refreshErr := repo.GetByID(ctx, credAccount.ID); refreshErr == nil && refreshed != nil {
-			if refreshed.IsShadow() {
-				if resolved, resolveErr := resolveCredentialAccount(ctx, repo, refreshed); resolveErr == nil && resolved != nil {
-					refreshed = resolved
-				}
-			}
-			if refreshed.IsOpenAIAgentIdentity() {
-				credAccount = refreshed
-				if !account.IsShadow() {
-					account.Credentials = shallowCopyMap(credAccount.Credentials)
-				}
-			}
+		refreshed, err := repo.GetByID(ctx, credAccount.ID)
+		if err != nil {
+			return fmt.Errorf("read agent identity task owner: %w", err)
 		}
+		if !sameAgentIdentitySigningOwner(observed, refreshed) {
+			return errors.New("agent identity signing owner changed")
+		}
+		credAccount = snapshotRequestCredentialAccount(refreshed)
 	}
 	currentTaskID = strings.TrimSpace(credAccount.GetCredential("task_id"))
 	if currentTaskID != "" && (expectedTaskID == "" || currentTaskID != expectedTaskID) {
+		if !account.IsShadow() {
+			account.Credentials = cloneRequestCredentialMap(observed.Credentials)
+			account.Credentials["task_id"] = currentTaskID
+		}
 		return nil
+	}
+	conditional, ok := repo.(OAuthRefreshSuccessRepository)
+	if !ok {
+		return errors.New("agent identity conditional task persistence is unavailable")
 	}
 	newTaskID, err := registerAgentIdentityTaskWithIdentity(ctx, credAccount, identity)
 	if err != nil {
@@ -375,16 +385,42 @@ func ensureAgentIdentityTaskForAccountWithIdentity(ctx context.Context, repo Acc
 		credentials[key] = value
 	}
 	credentials["task_id"] = newTaskID
-	if err := persistAccountCredentials(ctx, repo, credAccount, credentials); err != nil {
+	applied, err := conditional.UpdateOAuthCredentialsIfUnchanged(ctx, credAccount.ID, credAccount.Platform, credAccount.Credentials, credAccount.ProxyID, credentials)
+	if err != nil {
 		return err
 	}
-	if !account.IsShadow() && account != credAccount {
-		account.Credentials = shallowCopyMap(credAccount.Credentials)
+	if !applied {
+		return errors.New("agent identity task owner changed during registration")
+	}
+	if !account.IsShadow() {
+		account.Credentials = cloneRequestCredentialMap(observed.Credentials)
+		account.Credentials["task_id"] = newTaskID
 	}
 	if wsInvalidator != nil {
 		wsInvalidator.InvalidateAgentIdentityWSConnections(credAccount.ID)
 	}
 	return nil
+}
+
+// Task recovery may adopt another task for the same signing key. It must never
+// combine a previously resolved identity/ID namespace with a relinked key or
+// proxy. A task ID is deliberately absent from this principal comparison.
+func sameAgentIdentitySigningOwner(left, right *Account) bool {
+	return left != nil && right != nil && left.ID == right.ID && left.Platform == right.Platform &&
+		left.Type == right.Type && left.IsOpenAIAgentIdentity() && right.IsOpenAIAgentIdentity() &&
+		oauthRefreshProxyIDsEqual(left.ProxyID, right.ProxyID) && left.proxyURLOrEmpty() == right.proxyURLOrEmpty() &&
+		openAICodexStateOwner(context.Background(), left) != "" &&
+		openAICodexStateOwner(context.Background(), left) == openAICodexStateOwner(context.Background(), right)
+}
+
+func sameAgentIdentityTaskGrant(left, right *Account) bool {
+	if !sameAgentIdentitySigningOwner(left, right) {
+		return false
+	}
+	before, after := snapshotRequestCredentialAccount(left), snapshotRequestCredentialAccount(right)
+	delete(before.Credentials, "task_id")
+	delete(after.Credentials, "task_id")
+	return sameRequestCredentialGrant(before, after)
 }
 
 func (s *OpenAIGatewayService) ensureAgentIdentityTask(ctx context.Context, account *Account, expectedTaskID string) error {
@@ -454,6 +490,9 @@ func (s *OpenAIGatewayService) buildOpenAIAuthenticationHeaders(ctx context.Cont
 		}
 		credAccount = resolved
 	}
+	if err := validateAgentIdentitySigningSnapshot(ctx, account, credAccount); err != nil {
+		return nil, err
+	}
 	headers := make(http.Header)
 	if credAccount != nil && credAccount.IsOpenAIAgentIdentity() {
 		agentHeaders, err := buildAgentIdentityAuthenticationHeadersWithIdentity(ctx, s.accountRepo, s, &s.agentIdentityTaskMu, credAccount, s.resolveOpenAIOutboundIdentity(ctx, credAccount))
@@ -486,6 +525,19 @@ func buildAgentIdentityAuthenticationHeadersWithIdentity(ctx context.Context, re
 	return headers, nil
 }
 
+func validateAgentIdentitySigningSnapshot(ctx context.Context, selected, signer *Account) error {
+	if !requestCredentialOwnerBound(ctx, selected) {
+		return nil
+	}
+	owner, known := requestCredentialOwner(ctx, selected)
+	if signer.IsOpenAIAgentIdentity() || owner.IsOpenAIAgentIdentity() {
+		if !known || !sameAgentIdentitySigningOwner(owner, signer) {
+			return errors.New("agent identity signing owner changed")
+		}
+	}
+	return nil
+}
+
 func (s *OpenAIGatewayService) refreshOpenAIAgentIdentityHeaders(ctx context.Context, account *Account, headers http.Header) (http.Header, error) {
 	if account == nil {
 		return cloneHeader(headers), nil
@@ -497,6 +549,9 @@ func (s *OpenAIGatewayService) refreshOpenAIAgentIdentityHeaders(ctx context.Con
 			return nil, err
 		}
 		credAccount = resolved
+	}
+	if err := validateAgentIdentitySigningSnapshot(ctx, account, credAccount); err != nil {
+		return nil, err
 	}
 	if !credAccount.IsOpenAIAgentIdentity() {
 		return cloneHeader(headers), nil

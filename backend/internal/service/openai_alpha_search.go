@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -69,21 +70,33 @@ func (s *OpenAIGatewayService) ForwardAlphaSearch(ctx context.Context, c *gin.Co
 		return nil, err
 	}
 	ctx = withRequestCredentialOwner(ctx, account, token)
+	owner, knownOwner := requestCredentialOwner(ctx, account)
+	if !knownOwner {
+		return nil, NewProviderCredentialFailure("openai_alpha_search_owner_unavailable", nil)
+	}
 
 	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
+	if owner.ProxyID != nil && owner.Proxy != nil {
+		proxyURL = owner.Proxy.URL()
 	}
-	if err := s.ensureOpenAIAlphaSearchAuthMetadata(ctx, account, token, proxyURL); err != nil {
+	enrichedOwner, err := s.ensureOpenAIAlphaSearchAuthMetadata(ctx, owner, token, proxyURL)
+	if err != nil {
 		return nil, err
 	}
+	// whoami verified metadata for this exact bearer. Extend only this attempt's
+	// evidence; older attempts and acquired-token scope entries keep their proof.
+	evidence, _ := ctx.Value(requestCredentialOwnerContextKey{}).(requestCredentialOwnerEvidence)
+	evidence.owner = snapshotRequestCredentialAccount(enrichedOwner)
+	evidence.transmitted = &atomic.Pointer[requestCredentialTransportEvidence]{}
+	ctx = context.WithValue(ctx, requestCredentialOwnerContextKey{}, evidence)
+	defer bindRequestCredentialOwnerContext(ctx, c)()
 	SetOpsUpstreamModel(c, upstreamModel)
 
 	// Codex Personal Access Token（at-...）目前可访问 ChatGPT Codex
 	// /responses，但会被 standalone /alpha/search 的 access enforcement
 	// 拒绝为 no_matching_rule。对 PAT 账号使用等价的 hosted web_search
 	// Responses 路径兜底，避免把可用账号误判为搜索不可用。
-	if account.IsOpenAIPersonalAccessToken() {
+	if enrichedOwner.IsOpenAIPersonalAccessToken() {
 		return s.forwardAlphaSearchViaResponsesWebSearch(ctx, c, account, body, token, proxyURL, requestedModel, upstreamModel)
 	}
 
@@ -283,7 +296,9 @@ func (s *OpenAIGatewayService) buildOpenAIAlphaSearchResponsesWebSearchRequest(c
 	// Official standalone search sends only turn-metadata and originator on the
 	// request; it carries no session headers, so the gateway does not synthesize
 	// any session alias here.
-	applyCodexAccountIdentityHeaders(req.Header, codexAccountIdentitySource(c, account), apiKeyID)
+	if err := applyCodexAccountIdentityHeaders(ctx, req.Header, codexAccountIdentitySource(c, account), apiKeyID); err != nil {
+		return nil, err
+	}
 	account.ApplyHeaderOverrides(req.Header)
 	identity := s.applyOpenAIOutboundIdentity(ctx, account, req.Header, true)
 	SetOpsRoutingDiagnostics(c, &OpsRoutingDiagnostics{OutboundIdentitySource: identity.Source})
@@ -404,7 +419,9 @@ func (s *OpenAIGatewayService) buildOpenAIAlphaSearchRequest(ctx context.Context
 	if turnMetadata := openAIAlphaSearchInboundHeader(c, "X-Codex-Turn-Metadata"); turnMetadata != "" {
 		req.Header.Set("X-Codex-Turn-Metadata", turnMetadata)
 	}
-	applyCodexAccountIdentityHeaders(req.Header, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c))
+	if err := applyCodexAccountIdentityHeaders(ctx, req.Header, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c)); err != nil {
+		return nil, err
+	}
 
 	account.ApplyHeaderOverrides(req.Header)
 	stripOpenAIAlphaSearchResponsesHeaders(req.Header)
@@ -484,36 +501,45 @@ func sanitizeOpenAIAlphaSearchBody(body []byte) ([]byte, error) {
 	return out, nil
 }
 
-func (s *OpenAIGatewayService) ensureOpenAIAlphaSearchAuthMetadata(ctx context.Context, account *Account, token string, proxyURL string) error {
+func (s *OpenAIGatewayService) ensureOpenAIAlphaSearchAuthMetadata(ctx context.Context, account *Account, token string, proxyURL string) (*Account, error) {
 	if s == nil || account == nil || !account.IsOpenAIPersonalAccessToken() {
-		return nil
+		return account, nil
 	}
 	if strings.TrimSpace(account.GetChatGPTAccountID()) != "" {
-		return nil
+		return account, nil
 	}
 	var oauthService *OpenAIOAuthService
 	if s.openAITokenProvider != nil {
 		oauthService = s.openAITokenProvider.openAIOAuthService
 	}
 	if oauthService == nil {
-		return nil
+		return account, nil
 	}
-	tokenInfo, err := oauthService.ValidateCodexPersonalAccessToken(ctx, token, proxyURL)
+	tokenInfo, err := oauthService.validateCodexPersonalAccessTokenWithAccount(ctx, token, proxyURL, account)
 	if err != nil {
-		return fmt.Errorf("validate Codex PAT metadata for alpha/search: %w", err)
+		return nil, fmt.Errorf("validate Codex PAT metadata for alpha/search: %w", err)
 	}
-	credentials := shallowCopyMap(account.Credentials)
+	credentials := cloneRequestCredentialMap(account.Credentials)
 	for key, value := range oauthService.BuildAccountCredentials(tokenInfo) {
 		credentials[key] = value
 	}
 	credentials = NormalizeOpenAIPersonalAccessTokenCredentials(account, tokenInfo, credentials)
-	account.Credentials = shallowCopyMap(credentials)
 	if s.accountRepo != nil {
-		if err := persistAccountCredentials(ctx, s.accountRepo, account, credentials); err != nil {
-			return fmt.Errorf("persist Codex PAT metadata for alpha/search: %w", err)
+		repo, ok := s.accountRepo.(OAuthRefreshSuccessRepository)
+		if !ok {
+			return nil, NewProviderCredentialFailure("openai_alpha_search_metadata_persistence_unavailable", nil)
+		}
+		applied, err := repo.UpdateOAuthCredentialsIfUnchanged(ctx, account.ID, account.Platform, account.Credentials, account.ProxyID, credentials)
+		if err != nil {
+			return nil, NewProviderCredentialFailure("openai_alpha_search_metadata_persistence_failed", err)
+		}
+		if !applied {
+			return nil, NewProviderCredentialFailure("openai_alpha_search_metadata_owner_changed", nil)
 		}
 	}
-	return nil
+	enriched := snapshotRequestCredentialAccount(account)
+	enriched.Credentials = cloneRequestCredentialMap(credentials)
+	return enriched, nil
 }
 
 // isOpenAIAlphaSearchEndpointUnsupported 识别「API key 上游没有实现

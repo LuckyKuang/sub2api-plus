@@ -68,13 +68,27 @@ type LiveCallRecord struct {
 	InboundEndpoint string
 	// AttestationCiphertext 仅用于让同一会话的 Sideband 复用创建时的证明。
 	AttestationCiphertext string
+	OutboundSnapshot      *LiveOutboundSnapshot
+}
+
+// LiveOutboundSnapshot contains no credential material. The call's declarations
+// survive controller changes, reconnects and account/global settings edits.
+type LiveOutboundSnapshot struct {
+	Owner      string `json:"owner"`
+	SessionID  string `json:"session_id"`
+	ThreadID   string `json:"thread_id"`
+	UserAgent  string `json:"user_agent"`
+	Originator string `json:"originator"`
+	Version    string `json:"version"`
+	Residency  string `json:"residency,omitempty"`
 }
 
 type LiveCallCreated struct {
-	SDP      []byte
-	CallID   string
-	Location string
-	Account  *Account
+	SDP              []byte
+	CallID           string
+	Location         string
+	Account          *Account
+	OutboundSnapshot *LiveOutboundSnapshot
 }
 
 // LiveCallStore 由 GatewayCache 的 Redis 实现可选提供，避免扩大旧缓存接口。

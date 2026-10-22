@@ -22,8 +22,11 @@ type outboundIdentityScope struct {
 	codex            sync.Map
 	presets          sync.Map
 	credentialOwners sync.Map
+	grokRequests     sync.Map
 	minimaxTurns     sync.Map
 	deepseekTurns    sync.Map
+	zcodeTurns       sync.Map
+	zcodeQuery       string
 	conversationOnce sync.Once
 	conversation     string
 }
@@ -36,9 +39,10 @@ type requestCredentialEvidenceKey struct {
 type requestCredentialOwnerContextKey struct{}
 
 type requestCredentialOwnerEvidence struct {
-	selected    outboundIdentityOwner
-	owner       *Account
-	transmitted *atomic.Pointer[requestCredentialTransportEvidence]
+	selected        outboundIdentityOwner
+	credentialOwner outboundIdentityOwner
+	owner           *Account
+	transmitted     *atomic.Pointer[requestCredentialTransportEvidence]
 }
 
 type requestCredentialTransportEvidence struct {
@@ -52,11 +56,7 @@ type acquiredRequestCredentialEvidence struct {
 }
 
 func snapshotRequestCredentialAccount(owner *Account) *Account {
-	snapshot := snapshotOAuthRefreshAccount(owner)
-	if snapshot != nil && owner.Credentials != nil {
-		snapshot.Credentials = cloneRequestCredentialMap(owner.Credentials)
-	}
-	return snapshot
+	return snapshotOAuthRefreshAccount(owner)
 }
 
 func cloneRequestCredentialMap(source map[string]any) map[string]any {
@@ -115,7 +115,17 @@ func credentialOwnerKey(account *Account) outboundIdentityOwner {
 }
 
 func credentialOwnerHasToken(owner *Account, token string) bool {
-	if owner == nil || strings.TrimSpace(token) == "" {
+	if owner == nil {
+		return false
+	}
+	// AgentIdentity authenticates with a signed assertion, never an access
+	// token. Freeze the validated signing owner before registration/signing;
+	// an empty bearer credential must still be rejected for every other type.
+	if owner.IsOpenAIAgentIdentity() {
+		_, err := agentIdentityKeyFromAccount(owner)
+		return strings.TrimSpace(token) == "" && err == nil
+	}
+	if strings.TrimSpace(token) == "" {
 		return false
 	}
 	var expected string
@@ -145,11 +155,22 @@ func recordRequestCredentialOwner(ctx context.Context, owner *Account, token str
 		key := requestCredentialEvidenceKey{owner: outboundIdentityOwnerKey(owner), token: sha256.Sum256([]byte(strings.TrimSpace(token)))}
 		evidence := &acquiredRequestCredentialEvidence{owner: snapshotRequestCredentialAccount(owner)}
 		stored, loaded := scope.credentialOwners.LoadOrStore(key, evidence)
-		if loaded {
+		for loaded {
 			previous, ok := stored.(*acquiredRequestCredentialEvidence)
-			if ok && previous.owner != nil && !sameRequestCredentialGrant(previous.owner, evidence.owner) {
-				scope.credentialOwners.CompareAndSwap(key, previous, &acquiredRequestCredentialEvidence{})
+			if !ok || previous.owner == nil || sameRequestCredentialGrant(previous.owner, evidence.owner) {
+				break
 			}
+			replacement := &acquiredRequestCredentialEvidence{}
+			if sameAgentIdentityTaskGrant(previous.owner, evidence.owner) {
+				// Task bootstrap changes the assertion's task, not its signer.
+				// Existing attempts retain their own frozen evidence; the next
+				// acquisition must carry the task that will actually be sent.
+				replacement = evidence
+			}
+			if scope.credentialOwners.CompareAndSwap(key, previous, replacement) {
+				break
+			}
+			stored, loaded = scope.credentialOwners.Load(key)
 		}
 	}
 }
@@ -165,7 +186,7 @@ func withRequestCredentialOwner(ctx context.Context, selected *Account, token st
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	evidence := requestCredentialOwnerEvidence{selected: outboundIdentityOwnerKey(selected), transmitted: &atomic.Pointer[requestCredentialTransportEvidence]{}}
+	evidence := requestCredentialOwnerEvidence{selected: outboundIdentityOwnerKey(selected), credentialOwner: credentialOwnerKey(selected), transmitted: &atomic.Pointer[requestCredentialTransportEvidence]{}}
 	acquired := false
 	if scope := outboundIdentityScopeFromContext(ctx); scope != nil {
 		key := requestCredentialEvidenceKey{owner: credentialOwnerKey(selected), token: sha256.Sum256([]byte(strings.TrimSpace(token)))}
@@ -239,6 +260,9 @@ func finalizeTransmittedRequestCredentialOwner(ctx context.Context, sent *http.R
 }
 
 func credentialOwnerKeyFromEvidence(evidence requestCredentialOwnerEvidence) outboundIdentityOwner {
+	if evidence.credentialOwner.id != 0 || evidence.credentialOwner.unsaved != nil {
+		return evidence.credentialOwner
+	}
 	if evidence.owner != nil {
 		return outboundIdentityOwnerKey(evidence.owner)
 	}

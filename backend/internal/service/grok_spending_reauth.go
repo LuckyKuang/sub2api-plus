@@ -13,7 +13,7 @@ const grokSpendingLimitProbeCooldown = 10 * time.Minute
 
 func grokSpendingLimitResetAt(account *Account, now time.Time) time.Time {
 	if account != nil {
-		if billing, err := grokBillingSnapshotFromExtra(account.Extra); err == nil && billing != nil {
+		if billing, err := grokAccountBillingSnapshot(account); err == nil && billing != nil {
 			for _, raw := range []string{billing.PeriodEnd, billing.BillingPeriodEnd} {
 				if resetAt, err := time.Parse(time.RFC3339, strings.TrimSpace(raw)); err == nil && resetAt.After(now) {
 					return resetAt
@@ -26,17 +26,17 @@ func grokSpendingLimitResetAt(account *Account, now time.Time) time.Time {
 
 // clearGrokNeedsReauthExtra drops the soft reauth flag after successful refresh
 // or reauth. Best-effort; never fails the request path.
-func clearGrokNeedsReauthExtra(ctx context.Context, repo AccountRepository, accountID int64) {
-	if repo == nil || accountID <= 0 {
+func clearGrokNeedsReauthExtra(ctx context.Context, repo AccountRepository, account *Account) {
+	if repo == nil || account == nil || account.ID <= 0 {
 		return
 	}
 	stateCtx, cancel := openAIAccountStateContext(ctx)
 	defer cancel()
-	_ = repo.UpdateExtra(stateCtx, accountID, map[string]any{
+	_, _ = applyGrokCredentialMutation(stateCtx, repo, account, CredentialStateMutation{Extra: map[string]any{
 		"grok_needs_reauth":        false,
 		"grok_needs_reauth_reason": "",
 		"grok_needs_reauth_at":     "",
-	})
+	}})
 }
 
 func accountGrokNeedsReauth(account *Account) bool {

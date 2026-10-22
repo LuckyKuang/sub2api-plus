@@ -109,6 +109,8 @@ func accountReadableSnapshotJSON(account *Account) []byte {
 	}
 	clone := *account
 	clone.Credentials = nil
+	clone.CredentialGeneration = ""
+	clone.CNQuotaGeneration = ""
 	clone.Groups = nil
 	clone.AccountGroups = nil
 	data, err := json.Marshal(&clone)

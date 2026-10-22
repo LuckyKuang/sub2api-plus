@@ -605,3 +605,30 @@ remain unassociated rather than assigning a session bill to individual turns.
 Regressions: `handler/live_requests_test.go` covers audit-before-observation,
 rejection, interleaved turns and failover identity; the existing audit ordering
 and pass-through tests remain applicable. See [UI_INTERACTION](UI_INTERACTION.md).
+
+## Official agent typed IDs and outbound ownership
+
+The 2026-10-22 alignment maps Codex v7 thread/turn/parent/window relationships,
+adds ZCode request attribution and persists device/conversation IDs. These are
+outbound protocol context, not canonical prompt fields. Preparation and its
+mapping-table writes run after the existing HTTP/WS ingress audit gate, as do
+account selection, refresh and forwarding. Both engines still consume the
+original canonical request, including recognized text next to unknown valid
+items. Identity storage failures are infrastructure errors after audit; they
+must not be reported as audit violations or extraction failures.
+
+`TestOfficialAgentRequestStatePreservesCanonicalAuditContent` covers real
+Responses HTTP/WS metadata and ZCode Messages metadata for both engines. It
+asserts that IDs/user metadata cannot hide successfully extracted sibling text.
+The existing HTTP/WS/account-type allow, block, pass-through and side-effect-order
+suites remain required. See [OFFICIAL_AGENT_REQUEST_STATE.md](OFFICIAL_AGENT_REQUEST_STATE.md).
+
+Responses WebSocket `ctx_pool` and HTTP bridge follow-up frames run their
+canonical audit hook immediately after basic validation, before typed metadata,
+fingerprint or handshake preparation can access persistent ID mappings. The
+hook receives the original frame and runs once per client turn, independent of
+upstream retries. `TestCodexWSFollowupAuditPrecedesPersistentIdentityMapping`
+captures real second-turn rejection in both modes and asserts zero ID-store
+access, turn-resource acquisition and upstream writes after the accepted first
+turn. Legacy IDs and unknown valid siblings cannot move preparation ahead of
+the audit boundary; the canonical extraction/pass-through rules are unchanged.

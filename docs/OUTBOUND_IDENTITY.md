@@ -28,11 +28,14 @@ Kimi Code and ZCode persist runtime declarations.
 
 ## Default client environment and privacy
 
-Native OpenAI API-key records also own stable installation, thread, parent and
-window projections. The namespace uses the credential-owning account ID, never
-the bearer token or unverified organization/project values. Rotation preserves
-the projection; different records remain isolated, and credential shadows use
-their parent. HTTP and WS share these projections and align
+Native OpenAI API-key records own separate installation and execution
+projections. Installation/device identity uses the credential-owning account
+record and remains stable when its API key is replaced. Execution session,
+thread, turn, parent and window mappings also include an irreversible digest of
+the actual API key, so replacement on the same record cannot inherit the old
+key's execution state. Unverified organization/project values never select
+either namespace. Different records remain isolated, and credential shadows
+use their actual credential-owning parent. HTTP and WS share these projections and align
 `x-client-request-id` with the final `thread-id`. This does not enable OAuth
 fingerprint convergence modes for API keys. Ordinary logical cache keys use
 the same tenant derivation across OAuth and API keys, independently of the
@@ -206,9 +209,10 @@ declaration. Only the User-Agent reaches the wire, so the preset adds no
 `Originator`, `Version` or harness request-state header; per-request
 `x-deepseek-harness-user-id`, `-session-id` and `-compact` values stay owned by
 the protocol layer. The official inbound Harness session header is a routing
-signal within DeepSeek groups. Its outbound session UUID is derived from the
-authenticated tenant, logical conversation and credential owner; subsequent
-turns and same-owner retries keep it, while failover changes the owner projection.
+signal within DeepSeek groups. Its outbound session is `session-<UUIDv4>`, randomly allocated and persisted for
+the authenticated tenant, logical conversation and credential owner. Subsequent
+turns and same-owner retries retain it; failover or reauthorization changes the
+owner namespace.
 Caller session values never become trusted client declarations.
 `SUB2API_DEEPSEEK_HARNESS_VERSION` may select a supported
 version (`0.2.0-rc.2` remains the accepted floor) while the product token, the
@@ -252,8 +256,10 @@ control-plane headers from the same snapshot, including standalone clients.
 Following `packages/services/src/providers/sourceHeaders.ts`, control calls omit
 `X-ZCode-Agent` and inference SDK suffixes; their `X-Os-Version` is the pinned
 Ubuntu Node `os.version()` equivalent, not inference's `os.release()`. It is a read-only baseline declaration carried
-in `control_headers` and serialized with login sessions. An absent telemetry
-`X-Device-Mid` is omitted, never fabricated. Start, poll, code exchange and token
+in `control_headers` and serialized with login sessions. An absent configured telemetry
+`X-Device-Mid` resolves to a persisted random UUIDv4 before the first request.
+The control header and corresponding body declaration share that device ID;
+inference requests retain their own protocol declarations. Start, poll, code exchange and token
 issuance retain one identity even across Redis instances/settings changes;
 account creation pins its product and configurable runtime declarations. Deferred off-peak settlement retains the acquiring credential
 owner's identity alongside its authentication, even after settings change. Gateway transports reapply the trusted declarations at send
@@ -292,9 +298,9 @@ Messages requests for both native presets carry protocol-owned
 `X-Mavis-Session-Id` (gateway-generated), `X-Mavis-Agent-Id: main` (the official
 default agent) and `X-Mavis-Timezone-Offset` (selected timezone UTC offset in seconds). A
 request scope retains these across retries. The inbound MiniMax session header
-is a routing signal within MiniMax groups. Its outbound UUID stays stable across
-turns for the same authenticated tenant, conversation and credential owner;
-failover resolves the new owner and therefore a different UUID.
+is a routing signal within MiniMax groups. Its outbound value is `mvs_<32 lowercase UUIDv4 hex digits>`, randomly allocated
+and persisted for the authenticated tenant, conversation and credential owner.
+Failover or reauthorization resolves a different owner namespace.
 They are not configurable identity declarations. Official OAuth uses fetch
 without a product UA. The gateway deliberately keeps its trusted `MiniMaxAgent`
 UA on authorization/refresh, without the inference SDK block, because every
@@ -302,11 +308,12 @@ provider-bound call requires a trusted client declaration. This intentional
 policy difference is displayed under OAuth/account-service headers.
 
 The official
-[`matrix-account-client.ts`](https://github.com/MiniMax-AI/minimax-code/blob/5821f7c9b0363a9b97a57fff3deaa4cd2da165a4/packages/tui/src/account/matrix-account-client.ts)
-uses `MiniMaxCode` for Matrix identity/workspace/membership requests and fetches
-token-plan remains without a product UA. The gateway retains the existing
-trusted `MiniMaxAgent` preset for both operations, without adding that source
-string as a selectable family. OAuth quota selects the personal workspace's
+[`matrix-account-client.ts`](https://github.com/MiniMax-AI/minimax-code/blob/da22f11c55d4748155d7162c1030414228a00565/packages/tui/src/account/matrix-account-client.ts)
+uses `MiniMaxCode` for Matrix identity/workspace/membership requests, including
+`/v1/api/user/info`. The gateway renders this exact operation-specific profile
+without the inference SDK block. Token-plan remains uses the trusted managed
+profile because the official fetch has no explicit product UA; this is an
+explicit identity-policy extension, not a selectable client family. OAuth quota selects the personal workspace's
 `op_group_id` for `X-Group-Id`; its fixed quota origins are
 `https://www.minimaxi.com` (China) and `https://platform.minimax.io` (global).
 Identity/account lookup uses the corresponding `https://agent.minimaxi.com` or
@@ -318,8 +325,8 @@ over the validated URL and actual body before dispatch; send-time identity
 rendering preserves it. Generic headers cannot select the workspace,
 change these destinations, supply authentication or overwrite identity.
 
-The exact compiled Kimi Code identity is `kimi-code-cli/2.2.0`, with identifier
-`kimi-code-cli`, client version `2.2.0` and platform declaration
+The exact compiled Kimi Code identity is `kimi-code-cli/2.3.0`, with identifier
+`kimi-code-cli`, client version `2.3.0` and platform declaration
 `kimi_code_cli`. The official client renders one product token with dashes and
 one platform token with underscores; the two are not interchangeable. Its engine
 attaches the complete block — the User-Agent plus `X-Msh-Platform`,
@@ -404,9 +411,12 @@ public/regional API hosts and cross-host redirects omit it while retaining the
 same selected User-Agent, identifier and version. Rendering for a destination
 never mutates the owner's snapshot. Token exchange and refresh freeze the
 snapshot once per operation and use a dedicated Grok control transport pool to
-render every HTTP attempt, including redirects and explicitly overridden token
-destinations. Other providers and signed transports retain their preparation
-and signing order.
+render every permitted HTTP attempt, including explicitly overridden token
+destinations. Token redirects retain the initial endpoint's scheme, host and
+port and the standard ten-hop bound; a redirect cannot delegate trust to
+another origin or downgrade HTTPS before the grant is sent. Same-origin
+redirects retain the frozen snapshot. Other providers and signed transports
+retain their preparation and signing order.
 Compatible Responses WebSocket handshakes use a dedicated Grok-only transport
 to render the same owner snapshot for every destination and redirect. Delayed
 pool prewarming retains the selected snapshot after the request context ends;
@@ -940,8 +950,10 @@ transport profile at the shared final preparation boundary unless the owning
 operation explicitly selected a more specialized profile.
 
 Grok inference builders own the sampler declarations
-separately from the identity triple. They issue a fresh `x-grok-req-id`, retain
-one random process-level `x-grok-agent-id`, declare the final model, attach the
+separately from the identity triple. They retain one random UUIDv4 `x-grok-req-id` across retries of a logical prompt
+and allocate another for the next prompt. `x-grok-agent-id` is the official
+UUIDv5 derivation from a persisted random UUIDv4 device seed. They declare the
+final model, attach the
 OAuth credential owner's `sub` when available, and reuse the tenant-isolated
 conversation snapshot for conversation/session headers and the official UUIDv5
 conversation-group derivation. Generic overrides cannot set these fields. The
@@ -950,7 +962,8 @@ billing and media-status lookups, and omits optional turn, retry, deployment,
 and tracing declarations when it does not possess the corresponding
 authoritative value. One constructed sampler request keeps its request
 association snapshot across transport retries and redirects; a newly constructed
-logical sampler call or resubmit renders a new association. Imagine start/poll
+logical prompt renders a new association; a retry/resubmit of the same prompt
+retains it. Synthetic conversation/session IDs are UUIDv7. Imagine start/poll
 operations carry their isolated session association without sampler fields.
 
 Grok sampler `Accept` is a request-owned operation declaration rather than an
@@ -1010,7 +1023,7 @@ Snapshots deep-copy the protocol maps, survive OAuth session serialization, and
 are reapplied at final transport send, including retries. Arbitrary header
 maps cannot supply SDK, device or control-plane declarations.
 
-Kimi's OAuth and API-key inference use the same `kimi-code-cli/2.2.0` UA and
+Kimi's OAuth and API-key inference use the same `kimi-code-cli/2.3.0` UA and
 `X-Msh-*` declarations. Anthropic uses `X-Stainless-Package-Version: 0.95.2`;
 Chat Completions/Responses use `6.34.0` (the reviewed Anthropic/OpenAI JS lockfile
 versions). Both explicitly pin `X-Stainless-Lang: js`, `X-Stainless-OS: Linux`,
@@ -1091,6 +1104,7 @@ are insufficient for the final outbound privacy boundary.
 | ZCode linked discovery reaches final PAT auth on both estates; every model/ticket 401 invalidates its PAT; concurrent transient refresh cannot resurrect rejected material | `service/zhipu_project_tokens_test.go` |
 | Linked ZCode forwarding/probes set redirect prohibition; both HTTP transport methods prevent redirected credential dispatch | `service/zhipu_project_tokens_test.go`, `repository/http_upstream_test.go` |
 | Kimi reasoning survives optional effort errors; Coding absent/null/disabled reasoning clears stale efforts without changing public/PAYG metadata defaults | `service/official_agent_update_test.go` |
+| Codex turn-state provenance retains string principal evidence across Redis replicas, hashes private session seeds, expires and rejects legacy numeric owners; Live snapshots survive Redis persistence and controller changes | `repository/gateway_cache_codex_identity_integration_test.go` against real Redis; existing turn-state and Live service suites |
 
 All paths above run without live provider credentials. Database-dependent
 migration and Channel Monitor V3 behavior is additionally exercised against
@@ -1146,3 +1160,10 @@ V1 streaming probes use the same `postMonitorRequest` identity/SSRF path and
 same-operation snapshot as JSON probes and HEAD Ping. `stream_probe` controls only
 the request body stream flag and Accept header; custom headers cannot replace
 managed identity. The monitor stream and identity regressions cover this path.
+
+## Official request-state contract
+
+[OFFICIAL_AGENT_REQUEST_STATE.md](OFFICIAL_AGENT_REQUEST_STATE.md) defines UUID
+versions, relationship preservation, request/conversation/device lifetimes,
+credential ownership, persisted random mappings and failure behavior. These
+fields supplement the trusted identity triple; they never select its source.

@@ -13,6 +13,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/deepseek"
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
+	"github.com/google/uuid"
 )
 
 // CNOAuthService owns browser login sessions and never echoes granted credentials.
@@ -324,6 +325,7 @@ func cnOAuthCredentials(flow *cnoauth.Flow, grant *cnoauth.Grant) map[string]any
 		protocol = APIProtocolChatCompletions
 	}
 	creds := map[string]any{"oauth_provider": flow.Platform, "oauth_region": flow.Region, "access_token": grant.AccessToken, "account_mode": AccountModeCoding, "api_protocol": protocol, "base_url": cnoauth.ModelBase(flow.Platform, flow.Region), "api_base_urls": map[string]any{protocol: cnoauth.ModelBase(flow.Platform, flow.Region)}}
+	creds[domesticOAuthLoginIDCredential] = uuid.NewString()
 	if flow.Platform == PlatformDeepseek {
 		creds["oauth_device_id"] = flow.DeviceID
 		creds["account_mode"] = AccountModePayG
@@ -410,6 +412,7 @@ func sameCNOAuthOwner(selected, current *Account) bool {
 		selected.Platform == current.Platform && selected.Type == current.Type && current.IsDomesticOAuth() &&
 		selected.GetCredential("oauth_provider") == current.GetCredential("oauth_provider") &&
 		selected.GetCredential("oauth_region") == current.GetCredential("oauth_region") &&
+		selected.GetCredential(domesticOAuthLoginIDCredential) == current.GetCredential(domesticOAuthLoginIDCredential) &&
 		cnOAuthSameProxyID(selected.ProxyID, current.ProxyID) &&
 		selected.proxyURLOrEmpty() == current.proxyURLOrEmpty()
 }

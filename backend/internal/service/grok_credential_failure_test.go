@@ -1580,7 +1580,10 @@ func TestCredentialFailureCASMissDoesNotRecoverIneligibleLatestCredential(t *tes
 				require.Empty(t, token)
 				require.Zero(t, repo.setErrorCalls)
 				require.Zero(t, repo.setTempUnschedCalls)
-				require.Equal(t, stateCase.wantRuntimeBlocked, svc.isOpenAIAccountRuntimeBlocked(account))
+				// A block installed for the replacement grant must survive the old
+				// grant's CAS miss, without applying to that old grant itself.
+				require.Equal(t, stateCase.wantRuntimeBlocked, svc.isOpenAIAccountRuntimeBlocked(repo.accountsByID[account.ID]))
+				require.False(t, svc.isOpenAIAccountRuntimeBlocked(account))
 			})
 		}
 	}

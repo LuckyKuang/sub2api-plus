@@ -123,6 +123,35 @@ func createGrokReqClient(proxyURL string) (*req.Client, error) {
 	})
 }
 
+// Token responses can authorize the official team-principal exception without
+// an ID token. Preserve the configured endpoint's trust boundary before a
+// redirect can dispatch an authorization code, verifier or refresh token.
+// The client also installs req.DefaultRedirectPolicy for the ten-hop limit.
+func grokOAuthSameOriginRedirectPolicy(request *http.Request, via []*http.Request) error {
+	if request == nil || request.URL == nil || len(via) == 0 || via[0] == nil || via[0].URL == nil {
+		return errors.New("invalid Grok OAuth redirect")
+	}
+	origin, destination := via[0].URL, request.URL
+	port := func(u *url.URL) string {
+		if value := u.Port(); value != "" {
+			return value
+		}
+		switch strings.ToLower(u.Scheme) {
+		case "https":
+			return "443"
+		case "http":
+			return "80"
+		default:
+			return ""
+		}
+	}
+	if destination.User != nil || !strings.EqualFold(origin.Scheme, destination.Scheme) ||
+		!strings.EqualFold(origin.Hostname(), destination.Hostname()) || port(origin) != port(destination) {
+		return errors.New("grok OAuth redirect changes token endpoint origin")
+	}
+	return nil
+}
+
 // A control operation resolves once. Its per-attempt renderer may omit a
 // destination-specific declaration, but cannot reselect a source or fingerprint.
 func grokOAuthIdentityContext(ctx context.Context) context.Context {

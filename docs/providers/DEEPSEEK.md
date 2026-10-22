@@ -68,13 +68,26 @@ version is the reviewed `0.2.1-rc.2` prerelease; valid pins at `0.2.0-rc.2` or
 newer retain their priority. It uses no desktop-shell version.
 
 Native Messages requests carry an independently persisted anonymous UUID v4 in
-`x-deepseek-harness-user-id` and a request/owner-scoped session UUID. Same-request
-retries retain both; failover gets a new session. The gateway is stateless and
-does not claim to recreate a desktop conversation lifetime. Migration 292
+`x-deepseek-harness-user-id` and `session-<UUIDv4>` in the session header,
+following the official UI/session-controller default. Other official entrypoints
+accept other session formats; inbound formats remain valid routing signals.
+Explicit tenant/conversation/owner mappings are persisted atomically across
+turns and restarts. Retries retain both IDs; failover resolves another owner.
+New authorizations persist an internal `oauth_login_id`; normal token rotation
+keeps it, while relinking the same account row or replacing an API key creates
+a separate session mapping. Legacy grants without this field retain their
+account-row scope until reauthorization. It is never sent upstream.
+Without a reliable session signal, only the current logical request shares an
+ID. Migration 292
 backfills existing owners. These values contain neither a provider user ID nor
 a credential. Caller attribution/compaction headers are removed; no gateway
 native compaction operation is invented. Discovery/control/Chat extensions do
 not acquire native Messages turn headers.
+
+Native streaming Messages use `Accept: text/event-stream`; the non-streaming
+gateway extension uses JSON. Foreign Claude/Codex session and SDK runtime
+headers are removed. Files and mid-conversation tool-change beta declarations
+are derived from the actual native body.
 
 OAuth model discovery calls `/models` with `x-dsh-auth-token`. Listed models
 require usable `api_capabilities.anthropic_messages`, text output, supported

@@ -668,10 +668,12 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 		return nil, fmt.Errorf("account platform %s is not supported for grok media", account.Platform)
 	}
 
+	ctx = WithOutboundIdentityScope(ctx, c)
 	token, _, err := s.getRequestCredential(ctx, c, account)
 	if err != nil {
 		return nil, err
 	}
+	ctx = withRequestCredentialOwner(ctx, account, token)
 	if endpoint == GrokMediaEndpointVideoContent {
 		return s.forwardGrokMediaVideoContent(ctx, c, account, token, requestID, startTime)
 	}
@@ -721,7 +723,9 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 	if account.IsGrokOAuth() && isGrokCLIProxyTarget(targetURL) {
 		applyGrokCLIHeaders(upstreamReq.Header)
 	}
-	applyGrokMediaSessionHeader(upstreamReq.Header, c)
+	if err := applyGrokMediaSessionHeader(upstreamReq, c, account); err != nil {
+		return nil, err
+	}
 	if endpoint.RequiresRequestBody() {
 		contentType = strings.TrimSpace(contentType)
 		if contentType == "" {
@@ -834,7 +838,9 @@ func (s *OpenAIGatewayService) forwardGrokMediaVideoContent(
 	if account.IsGrokOAuth() && isGrokCLIProxyTarget(statusURL) {
 		applyGrokCLIHeaders(statusReq.Header)
 	}
-	applyGrokMediaSessionHeader(statusReq.Header, c)
+	if err := applyGrokMediaSessionHeader(statusReq, c, account); err != nil {
+		return nil, err
+	}
 	account.ApplyHeaderOverrides(statusReq.Header)
 
 	proxyURL := ""

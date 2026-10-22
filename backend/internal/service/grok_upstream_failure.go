@@ -543,6 +543,7 @@ func (s *OpenAIGatewayService) applyGrokUpstreamFailureDecision(
 	account *Account,
 	decision GrokUpstreamFailureDecision,
 ) bool {
+	account = grokResponseOwner(ctx, account)
 	if s == nil || account == nil || !decision.ShouldCooldown || decision.Cooldown <= 0 {
 		return false
 	}
@@ -556,7 +557,7 @@ func (s *OpenAIGatewayService) applyGrokUpstreamFailureDecision(
 		low := strings.ToLower(decision.Reason)
 		if decision.Model != "" && isGrokModelSpecificFreeUsage(low, decision.Model) {
 			until := time.Now().Add(decision.Cooldown)
-			markGrokModelQuotaBlock(account.ID, decision.Model, until)
+			markGrokModelQuotaBlock(account, decision.Model, until)
 			// The upstream explicitly scoped exhaustion to this model, so an
 			// account-wide cool would incorrectly take healthy sibling models out
 			// of rotation.

@@ -1364,6 +1364,7 @@ func (s *GatewayService) DoGrokNativeResponsesJSON(ctx context.Context, account 
 	if !account.IsGrok() {
 		return nil, errors.New("grok account required")
 	}
+	ctx = WithOutboundIdentityScope(ctx, nil)
 	token, _, err := s.GetAccessToken(ctx, account)
 	if err != nil {
 		// Credential/token failures should try the next Grok account in the pool.
@@ -1372,6 +1373,7 @@ func (s *GatewayService) DoGrokNativeResponsesJSON(ctx context.Context, account 
 			Reason:     GatewayFailureReason("grok_search_token"),
 		}
 	}
+	ctx = withRequestCredentialOwner(ctx, account, token)
 	targetURL, err := buildGrokResponsesURL(account, nil, s.settingService)
 	if err != nil {
 		return nil, err
@@ -1394,7 +1396,9 @@ func (s *GatewayService) DoGrokNativeResponsesJSON(ctx context.Context, account 
 	upstreamReq.Header.Set("Accept", grokSamplerAcceptHeader(false))
 	upstreamReq.Header.Set("User-Agent", defaultGrokUpstreamUserAgent())
 	applyGrokCLIHeaders(upstreamReq.Header)
-	applyGrokRequestMetadata(upstreamReq.Header, body, grokConversationSnapshot{}, account.GetCredential("sub"))
+	if err := applyGrokRequestMetadataForRequest(upstreamReq, nil, account, body, ""); err != nil {
+		return nil, err
+	}
 	account.ApplyHeaderOverrides(upstreamReq.Header)
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {

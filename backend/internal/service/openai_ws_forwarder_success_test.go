@@ -593,7 +593,7 @@ func TestOpenAIGatewayService_BuildOpenAIWSHeadersPreservesCodexIdentity(t *test
 
 	require.NoError(t, err)
 	require.Equal(t, "window-ws", headers.Get("X-Codex-Window-ID"))
-	require.Equal(t, "installation-ws", headers.Get("X-Codex-Installation-ID"))
+	require.Empty(t, headers.Get("X-Codex-Installation-ID"))
 	require.Equal(t, "thread-parent-ws", headers.Get("X-Codex-Parent-Thread-ID"))
 	require.Empty(t, headers.Get("X-Test"))
 }
@@ -652,10 +652,9 @@ func TestOpenAIGatewayService_BuildOpenAIWSHeadersDeviceModePreservesNamespacedC
 	)
 
 	require.NoError(t, err)
-	require.Equal(t, ids.installationID, headers.Get("x-codex-installation-id"))
-	require.NotEqual(t, "client-installation", headers.Get("x-codex-installation-id"))
+	require.Empty(t, headers.Get("x-codex-installation-id"))
 	require.Equal(t, scopeCodexAccountIdentityValue(account, 0, "window", "client-window"), headers.Get("x-codex-window-id"))
-	expectedSessionIdentity, resolveErr := svc.resolveOpenAIUpstreamPromptCacheHeaderIdentity(
+	expectedSessionIdentity, resolveErr := svc.resolveOpenAICodexSessionIdentity(
 		c,
 		account,
 		"client-session",
@@ -996,15 +995,15 @@ func TestOpenAIGatewayService_Forward_WSv2_OAuthStoreFalseByDefault(t *testing.T
 	require.True(t, gjson.Get(requestJSON, "stream").Bool(), "OAuth Codex 规范化后应强制 stream=true")
 	require.Equal(t, "native-wsv2", gjson.Get(requestJSON, "input.0.namespace").String(), "OAuth WSv2 应保留原生 namespace")
 	require.Equal(t, "http-ws-owner-installation", gjson.Get(requestJSON, "client_metadata.x-codex-installation-id").String())
-	require.Equal(t, resolveConvergedSessionID(account), gjson.Get(requestJSON, "client_metadata.session_id").String())
-	require.NotEmpty(t, gjson.Get(requestJSON, "client_metadata.turn_id").String())
+	require.False(t, gjson.Get(requestJSON, "client_metadata.session_id").Exists())
+	require.False(t, gjson.Get(requestJSON, "client_metadata.turn_id").Exists())
 	require.Equal(t, openAIWSBetaV2Value, captureDialer.lastHeaders.Get("OpenAI-Beta"))
 	require.Equal(t, "remote_compaction_v2", captureDialer.lastHeaders.Get("x-codex-beta-features"))
-	require.Equal(t, "http-ws-owner-installation", captureDialer.lastHeaders.Get("x-codex-installation-id"))
-	require.Equal(t, resolveConvergedThreadID(account, "sess-oauth-1"), captureDialer.lastHeaders.Get("thread-id"))
+	require.Empty(t, captureDialer.lastHeaders.Get("x-codex-installation-id"))
+	require.Empty(t, captureDialer.lastHeaders.Get("thread-id"))
 	require.Equal(t, captureDialer.lastHeaders.Get("thread-id"), captureDialer.lastHeaders.Get("x-client-request-id"))
 	// Header and body cache identities must use the same account-aware resolver.
-	expectedSessionIdentity, resolveErr := svc.resolveOpenAIUpstreamPromptCacheHeaderIdentity(c, account, "sess-oauth-1")
+	expectedSessionIdentity, resolveErr := svc.resolveOpenAICodexSessionIdentity(c, account, "sess-oauth-1")
 	require.NoError(t, resolveErr)
 	require.Equal(t, expectedSessionIdentity, captureDialer.lastHeaders.Get(codexSessionIDHeader))
 	require.Empty(t, captureDialer.lastHeaders.Get("session_id"))
@@ -1240,7 +1239,7 @@ func TestOpenAIGatewayService_Forward_WSv2_OAuthHonorsAccountUserAgent(t *testin
 	require.Equal(t, codexCLIVersion, captureDialer.lastHeaders.Get("version"))
 }
 
-func TestOpenAIGatewayService_Forward_WSv2_HeaderSessionFallbackFromPromptCacheKey(t *testing.T) {
+func TestOpenAIGatewayService_Forward_WSv2_CacheDoesNotCreateSessionHeader(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	rec := httptest.NewRecorder()
@@ -1301,7 +1300,8 @@ func TestOpenAIGatewayService_Forward_WSv2_HeaderSessionFallbackFromPromptCacheK
 	// Header and body cache identities must use the same account-aware resolver.
 	expectedCacheIdentity, resolveErr := svc.resolveOpenAIUpstreamPromptCacheHeaderIdentity(c, account, "pcache_123")
 	require.NoError(t, resolveErr)
-	require.Equal(t, expectedCacheIdentity, captureDialer.lastHeaders.Get(codexSessionIDHeader))
+	require.Empty(t, captureDialer.lastHeaders.Get(codexSessionIDHeader))
+	require.Equal(t, expectedCacheIdentity, gjson.Get(requestToJSONString(captureConn.lastWrite), "prompt_cache_key").String())
 	require.Empty(t, captureDialer.lastHeaders.Get("session_id"))
 	require.Empty(t, captureDialer.lastHeaders.Get("conversation_id"))
 	require.NotNil(t, captureConn.lastWrite)

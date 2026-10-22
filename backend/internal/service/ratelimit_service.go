@@ -1360,6 +1360,10 @@ func (s *RateLimitService) apply429FallbackRateLimit(ctx context.Context, accoun
 
 	resetAt := time.Now().Add(cooldown)
 	slog.Warn("rate_limit_429_fallback_used", "account_id", account.ID, "platform", account.Platform, "reason", reason, "using_default", cooldown.String())
+	if account.IsCNProvider() {
+		s.applyCNProviderCredentialState(ctx, account, CredentialStateMutation{RateLimitUntil: &resetAt, ExtendRateLimitOnly: true}, resetAt, "429_fallback")
+		return
+	}
 	s.notifyAccountSchedulingBlocked(account, resetAt, "429_fallback")
 	if err := s.accountRepo.SetRateLimited(ctx, account.ID, resetAt); err != nil {
 		slog.Warn("rate_limit_set_failed", "account_id", account.ID, "error", err)
@@ -2321,7 +2325,14 @@ func hasNonEmptyMapValue(extra map[string]any, key string) bool {
 
 func (s *RateLimitService) GetTempUnschedStatus(ctx context.Context, accountID int64) (*TempUnschedState, error) {
 	now := time.Now().Unix()
-	if s.tempUnschedCache != nil {
+	account, err := s.accountRepo.GetByID(ctx, accountID)
+	if err != nil {
+		return nil, err
+	}
+	// A row-ID cache cannot prove which grant produced a cooldown. Fenced
+	// providers use the durable row, including after refresh or relink.
+	fenced := usesHTTP401CredentialFence(account)
+	if s.tempUnschedCache != nil && !fenced {
 		state, err := s.tempUnschedCache.GetTempUnsched(ctx, accountID)
 		if err != nil {
 			return nil, err
@@ -2331,11 +2342,7 @@ func (s *RateLimitService) GetTempUnschedStatus(ctx context.Context, accountID i
 		}
 	}
 
-	account, err := s.accountRepo.GetByID(ctx, accountID)
-	if err != nil {
-		return nil, err
-	}
-	if account.TempUnschedulableUntil == nil {
+	if account == nil || account.TempUnschedulableUntil == nil {
 		return nil, nil
 	}
 	if account.TempUnschedulableUntil.Unix() <= now {
@@ -2358,7 +2365,7 @@ func (s *RateLimitService) GetTempUnschedStatus(ctx context.Context, accountID i
 		}
 	}
 
-	if s.tempUnschedCache != nil {
+	if s.tempUnschedCache != nil && !fenced {
 		if err := s.tempUnschedCache.SetTempUnsched(ctx, accountID, state); err != nil {
 			slog.Warn("temp_unsched_cache_set_failed", "account_id", accountID, "error", err)
 		}

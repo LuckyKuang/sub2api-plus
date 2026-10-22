@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"time"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
 )
@@ -42,6 +43,10 @@ func (r *accountRepository) UpdateOAuthCredentialsIfUnchanged(ctx context.Contex
 	if err != nil || changed == 0 {
 		return false, err
 	}
-	r.syncSchedulerAccountSnapshotDetached(ctx, id)
+	// A snapshot read followed by publication can overwrite a concurrent login.
+	// Evict instead; the atomic outbox drives the authoritative scheduler reload.
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+	defer cancel()
+	r.deleteSchedulerAccountSnapshot(cleanupCtx, id)
 	return true, nil
 }

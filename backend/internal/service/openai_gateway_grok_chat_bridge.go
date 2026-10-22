@@ -568,10 +568,12 @@ func (s *OpenAIGatewayService) forwardGrokChatCompletionsViaResponses(
 	}
 	responsesBody = updatedBody
 
+	ctx = WithOutboundIdentityScope(ctx, c)
 	token, _, err := s.getRequestCredential(ctx, c, account)
 	if err != nil {
 		return nil, fmt.Errorf("get grok access token: %w", err)
 	}
+	ctx = withRequestCredentialOwner(ctx, account, token)
 	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
 	upstreamReq, err := s.buildGrokResponsesRequest(upstreamCtx, c, account, responsesBody, token, cacheIdentity, s.cfg, s.settingService)
 	releaseUpstreamCtx()

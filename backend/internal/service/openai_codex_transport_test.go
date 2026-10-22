@@ -314,7 +314,7 @@ func TestCodexTransportDisabledBridgeRejectsOpaqueContinuation(t *testing.T) {
 				defer conn.CloseNow()
 				c, _ := gin.CreateTestContext(httptest.NewRecorder())
 				c.Request = r
-				errCh <- svc.ProxyResponsesWebSocketFromClient(r.Context(), c, conn, account, "fixture", first,
+				errCh <- svc.ProxyResponsesWebSocketFromClient(r.Context(), c, conn, account, account.GetOpenAIProtocolAPIKey(), first,
 					&OpenAIWSIngressHooks{
 						BeforeTurn:    func(int) error { beforeTurns.Add(1); return nil },
 						BeforeRequest: func(int, []byte, string) error { audits.Add(1); return nil },

@@ -88,7 +88,7 @@ func TestCompatibleIdentityPolicyHasExactlyElevenAdvancedMappings(t *testing.T) 
 func TestNativeIdentityStoredForeignCandidatesNeverReachWire(t *testing.T) {
 	expectedUA := map[string]string{
 		"deepseek": "deepseek-harness/0.2.1-rc.2 (+https://github.com/deepseek-ai/deepseek-harness)",
-		"kimi":     "kimi-code-cli/2.2.0", "minimax": "MiniMaxAgent",
+		"kimi":     "kimi-code-cli/2.3.0", "minimax": "MiniMaxAgent",
 		"minimax_apikey": "Anthropic/JS 0.91.1", "zcode": "ZCode/3.16.2",
 		"stepfun": "stepcode (linux 6.8.0-31-generic; x64)",
 		"grok":    "grok-shell/1.0.45 (linux; x86_64)",

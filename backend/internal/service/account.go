@@ -24,12 +24,16 @@ import (
 )
 
 type Account struct {
-	ID                      int64
-	Name                    string
-	Notes                   *string
-	Platform                string
-	Type                    string
-	Credentials             map[string]any
+	ID          int64
+	Name        string
+	Notes       *string
+	Platform    string
+	Type        string
+	Credentials map[string]any
+	// CredentialGeneration is a non-secret digest carried only by slim scheduler
+	// projections. Hydrated accounts compute it from their complete grant.
+	CredentialGeneration    string `json:"credential_generation,omitempty"`
+	CNQuotaGeneration       string `json:"cn_quota_generation,omitempty"`
 	Extra                   map[string]any
 	ProxyID                 *int64
 	ProxyFallbackOriginID   *int64
@@ -1988,7 +1992,7 @@ func (a *Account) GrokMediaGenerationEligibility() (bool, string) {
 		return true, "non_oauth"
 	}
 
-	billing, err := grokBillingSnapshotFromExtra(a.Extra)
+	billing, err := grokAccountBillingSnapshot(a)
 	if err != nil || billing == nil {
 		return false, "billing_unobserved"
 	}

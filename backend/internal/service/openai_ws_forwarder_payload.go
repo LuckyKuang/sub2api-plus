@@ -90,6 +90,9 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	routingModel string,
 	routingServiceTier string,
 ) (http.Header, openAIWSSessionHeaderResolution, error) {
+	if err := validateOpenAIOAuthSessionAccess(c, account); err != nil {
+		return nil, openAIWSSessionHeaderResolution{}, err
+	}
 	ctx = WithOutboundIdentityScope(ctx, c)
 	ctx = WithAccountOutboundIdentity(ctx, account)
 	headers := make(http.Header)
@@ -98,6 +101,10 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	}
 
 	sessionResolution := resolveOpenAIWSSessionHeaders(c, promptCacheKey)
+	if isNativeOpenAIResponsesRequest(c, account) {
+		sessionResolution.SessionID = explicitOpenAIHeaderSessionID(c)
+		sessionResolution.SessionSource = "header_session_id"
+	}
 	if c != nil && c.Request != nil {
 		if v := strings.TrimSpace(c.Request.Header.Get("accept-language")); v != "" {
 			headers.Set("accept-language", v)
@@ -158,9 +165,8 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 			headers.Set("conversation_id", sessionResolution.ConversationID)
 		}
 	}
-	// Preserve the Plus cache/session identity before account namespace and
-	// fingerprint projection rewrite the wider Codex identity surface. The
-	// cache identity is the final authority for both session spellings.
+	// Compatible adapters retain their explicit cache/session policy. Native
+	// Responses resolves its independent original session after this projection.
 	cacheSessionIdentity := strings.TrimSpace(headers.Get(codexSessionIDHeader))
 	if state := strings.TrimSpace(turnState); state != "" {
 		headers.Set(openAIWSTurnStateHeader, state)
@@ -168,7 +174,9 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	if metadata := strings.TrimSpace(turnMetadata); metadata != "" {
 		headers.Set(openAIWSTurnMetadataHeader, metadata)
 	}
-	applyCodexAccountIdentityHeaders(headers, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c))
+	if err := applyCodexAccountIdentityHeaders(ctx, headers, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c)); err != nil {
+		return nil, sessionResolution, err
+	}
 	if err := s.applyStagedCodexFingerprintHeadersForAccount(ctx, c, account, headers); err != nil {
 		return nil, sessionResolution, err
 	}
@@ -193,7 +201,18 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	headers.Set("OpenAI-Beta", betaValue)
 	// The request/body stage owns installation and thread metadata. Preserve the
 	// already isolated cache session and restore it after fingerprint mutation.
-	if cacheSessionIdentity != "" {
+	if isNativeOpenAIResponsesRequest(c, account) {
+		raw := explicitOpenAIHeaderSessionID(c)
+		if raw == "" {
+			headers.Del(codexSessionIDHeader)
+		} else {
+			mapped, err := s.resolveOpenAICodexSessionIdentity(c, account, raw)
+			if err != nil {
+				return nil, sessionResolution, err
+			}
+			setOpenAIUpstreamSessionIdentityForAccount(headers, account, mapped)
+		}
+	} else if cacheSessionIdentity != "" {
 		setOpenAIUpstreamSessionIdentityForAccount(headers, account, cacheSessionIdentity)
 	}
 	alignOpenAICodexThreadHeaders(headers)
@@ -206,6 +225,7 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 		selected.ForProtocol(APIProtocolResponses).Apply(headers)
 	}
 	clearOpenAICodexLegacySessionAliases(headers, account)
+	stripCodexDirectInstallationHeader(headers, account)
 	applyOpenAICodexGuardianHeader(c, account, headers, routingModel)
 	SetOpsRoutingDiagnostics(c, &OpsRoutingDiagnostics{OutboundIdentitySource: identity.Source})
 	setOpenAICodexRoutingHint(headers, account, routingModel, routingServiceTier)

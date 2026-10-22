@@ -221,6 +221,10 @@ func TestGrokOAuthHandlerRuntimeSanityDoesNotExposeSecrets(t *testing.T) {
 
 type grokOAuthHandlerClient struct{}
 
+func (c *grokOAuthHandlerClient) ValidateAuthorizationTokens(context.Context, *xai.TokenResponse, xai.OIDCLoginContext, string) (*xai.OIDCIdentity, error) {
+	return nil, errors.New("unexpected authorization validation")
+}
+
 func (c *grokOAuthHandlerClient) ExchangeCode(context.Context, string, string, string, string, string) (*xai.TokenResponse, error) {
 	return nil, errors.New("unexpected exchange")
 }

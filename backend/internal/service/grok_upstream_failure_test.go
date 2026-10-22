@@ -252,8 +252,8 @@ func TestHandleGrokAccountUpstreamError_MultiAgentCapacityBlocksOnlyThatModel(t 
 	)
 
 	require.Zero(t, repo.tempUnschedCalls)
-	require.True(t, isGrokModelQuotaBlocked(account.ID, "grok-4.20-multi-agent-0309", time.Now()))
-	require.False(t, isGrokModelQuotaBlocked(account.ID, "grok-4.5", time.Now()))
+	require.True(t, isGrokModelQuotaBlocked(account, "grok-4.20-multi-agent-0309", time.Now()))
+	require.False(t, isGrokModelQuotaBlocked(account, "grok-4.5", time.Now()))
 }
 
 func TestHandleGrokAccountUpstreamError_CapacityNeverCoolsAccount(t *testing.T) {

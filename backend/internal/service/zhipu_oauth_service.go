@@ -12,6 +12,7 @@ import (
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/zcode"
+	"github.com/google/uuid"
 )
 
 // Credential keys and ZCode platform endpoints owned by this flow.
@@ -187,6 +188,12 @@ func (s *ZhipuOAuthService) StartLink(ctx context.Context, input StartZhipuLinkI
 	// The handshake is a pre-account authorization operation, so it advertises the
 	// platform's native preset rather than any account snapshot.
 	flowCtx := withNativeOAuthOutboundIdentity(ctx, PlatformZhipu)
+	identity, _ := outboundidentity.FromContext(flowCtx)
+	identity, err = zcode.EnsureDeviceIdentity(flowCtx, identity)
+	if err != nil {
+		return nil, err
+	}
+	flowCtx = outboundidentity.WithIdentity(flowCtx, identity)
 	init, err := s.client.StartFlow(flowCtx, provider, pollToken, proxyURL)
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "ZHIPU_OAUTH_START_FAILED", "failed to start zhipu oauth flow: %v", err)
@@ -195,7 +202,6 @@ func (s *ZhipuOAuthService) StartLink(ctx context.Context, input StartZhipuLinkI
 	if expiresAt.IsZero() || time.Until(expiresAt) > zcode.SessionTTL {
 		expiresAt = time.Now().Add(zcode.SessionTTL)
 	}
-	identity, _ := outboundidentity.FromContext(flowCtx)
 	session := &zcode.OAuthSession{
 		Identity:        identity,
 		State:           zcode.AuthorizeState(init.AuthorizeURL),
@@ -380,12 +386,18 @@ func (s *ZhipuOAuthService) BuildAccountMaterial(ctx context.Context, input Zhip
 		flowCtx = withNativeOAuthOutboundIdentity(ctx, PlatformZhipu)
 	}
 	identity, _ := outboundidentity.FromContext(flowCtx)
+	identity, err := zcode.EnsureDeviceIdentity(flowCtx, identity)
+	if err != nil {
+		return nil, err
+	}
+	flowCtx = outboundidentity.WithIdentity(flowCtx, identity)
 
 	credentials := map[string]any{
-		outboundIdentityCredential: selectionFromIdentity(identity),
-		"account_mode":             AccountModeCoding,
-		"plan_kind":                planKind,
-		"oauth_provider":           provider,
+		domesticOAuthLoginIDCredential: uuid.NewString(),
+		outboundIdentityCredential:     selectionFromIdentity(identity),
+		"account_mode":                 AccountModeCoding,
+		"plan_kind":                    planKind,
+		"oauth_provider":               provider,
 		// Every linked plan is served through explicit per-protocol endpoints, so
 		// the account is adaptive and never falls back to a platform default.
 		"api_protocol": APIProtocolAdaptive,

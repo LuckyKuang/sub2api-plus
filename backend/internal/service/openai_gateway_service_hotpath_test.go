@@ -241,7 +241,7 @@ func TestOpenAIGatewayService_Forward_NormalizesMaxTokensAndStripsPromptCacheOpt
 		out := runForward(t, []byte(`{"model":"gpt-5.6-sol","stream":false,"prompt_cache_options":{"mode":"extended","ttl":"24h"},"input":[{"type":"message","role":"user","content":"hi"}]}`))
 		require.Equal(t, "extended", gjson.GetBytes(out, "prompt_cache_options.mode").String())
 		require.Equal(t, "24h", gjson.GetBytes(out, "prompt_cache_options.ttl").String())
-		require.NotEmpty(t, gjson.GetBytes(out, "prompt_cache_key").String())
+		require.False(t, gjson.GetBytes(out, "prompt_cache_key").Exists(), "native omission is independent of prompt_cache_options")
 	})
 }
 

@@ -54,8 +54,10 @@ func TestDeepSeekHarnessRequestAttribution(t *testing.T) {
 				require.Equal(t, user, req.Header.Get("X-Deepseek-Harness-User-Id"))
 				require.Empty(t, req.Header.Get("X-Deepseek-Harness-Compact"))
 				got := req.Header.Get("X-Deepseek-Harness-Session-Id")
-				_, err = uuid.Parse(got)
+				require.True(t, strings.HasPrefix(got, "session-"), "official Harness session-<UUIDv4> contract")
+				id, err := uuid.Parse(strings.TrimPrefix(got, "session-"))
 				require.NoError(t, err)
+				require.Equal(t, uuid.Version(4), id.Version())
 				if n == 0 {
 					session = got
 				} else if n == 1 {
@@ -234,8 +236,8 @@ func TestDeepSeekHarnessListingSkipsUnknownRowsAndModalities(t *testing.T) {
 func TestDomesticOAuthNativeModelDiscovery(t *testing.T) {
 	for _, tc := range []struct{ platform, region, target, header, auth, ua string }{
 		{"deepseek", "cn", "https://api.deepseek.com/models", "x-dsh-auth-token", "secret", "deepseek-harness/0.2.1-rc.2 (+https://github.com/deepseek-ai/deepseek-harness)"},
-		{"kimi", "cn", "https://api.kimi.com/coding/v1/models", "Authorization", "Bearer secret", "kimi-code-cli/2.2.0"},
-		{"kimi", "global", "https://api.kimi.ai/coding/v1/models", "Authorization", "Bearer secret", "kimi-code-cli/2.2.0"},
+		{"kimi", "cn", "https://api.kimi.com/coding/v1/models", "Authorization", "Bearer secret", "kimi-code-cli/2.3.0"},
+		{"kimi", "global", "https://api.kimi.ai/coding/v1/models", "Authorization", "Bearer secret", "kimi-code-cli/2.3.0"},
 	} {
 		t.Run(tc.platform+tc.region, func(t *testing.T) {
 			a := &Account{ID: 1, Platform: tc.platform, Type: "oauth", Credentials: map[string]any{"oauth_provider": tc.platform, "oauth_region": tc.region, "access_token": "secret", "base_url": "https://attacker.test"}}

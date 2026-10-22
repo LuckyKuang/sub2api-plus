@@ -4,6 +4,15 @@ SQL migrations are embedded in the application and applied automatically at
 startup. The runner records each filename and SHA256 checksum in
 `schema_migrations`.
 
+Migration `294_outbound_identity_ids.sql` stores official-client random IDs by
+semantic namespace and irreversible scope digest. PostgreSQL atomically chooses
+the first value across replicas. Records have no scheduling-cache TTL, so an
+application restart or cache eviction cannot rotate an active conversation ID.
+They contain no prompts or credentials; backing up/restoring the database also
+preserves these installation and session identities. This operational table is
+owned by the SQL repository, like `openai_session_routes`, rather than Ent.
+See [outbound identity](../../docs/OUTBOUND_IDENTITY.md).
+
 ## Mandatory Rules
 
 - Existing migration files are immutable: never modify, delete, or rename them.

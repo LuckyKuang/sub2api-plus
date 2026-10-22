@@ -147,7 +147,7 @@ func TestSendCCUpstreamRequestUsesGrokTransportProfile(t *testing.T) {
 	require.NoError(t, resp.Body.Close())
 	require.Equal(t, HTTPUpstreamProfileGrok, HTTPUpstreamProfileFromContext(upstream.lastReq.Context()))
 	require.Equal(t, "grok-4.7", upstream.lastReq.Header.Get("x-grok-model-override"))
-	require.Equal(t, "session-77", upstream.lastReq.Header.Get("x-grok-session-id"))
+	require.Empty(t, upstream.lastReq.Header.Get("x-grok-session-id"), "a legacy cache argument without an authenticated tenant cannot authorize a session")
 	require.NotEmpty(t, upstream.lastReq.Header.Get("x-grok-req-id"))
 }
 

@@ -4,9 +4,12 @@ package repository
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -82,7 +85,7 @@ func TestGrokOAuthClientExchangeAndRefreshUseFormFields(t *testing.T) {
 	require.Equal(t, int64(7200), refreshed.ExpiresIn)
 }
 
-func TestGrokOAuthControlIdentitySnapshotSurvivesRedirect(t *testing.T) {
+func TestGrokOAuthControlIdentitySnapshotSurvivesSameOriginRedirect(t *testing.T) {
 	var resolutions atomic.Int32
 	ctx := outboundidentity.WithResolver(context.Background(), func(context.Context, string) outboundidentity.Identity {
 		version := "1.0.45"
@@ -98,23 +101,137 @@ func TestGrokOAuthControlIdentitySnapshotSurvivesRedirect(t *testing.T) {
 		require.Equal(t, "grok-shell/1.0.45 (linux; x86_64)", r.Header.Get("User-Agent"))
 		require.Equal(t, "grok-shell", r.Header.Get("X-Grok-Client-Identifier"))
 		require.Equal(t, "1.0.45", r.Header.Get("X-Grok-Client-Version"))
-		require.Empty(t, r.Header.Get("X-Grok-Client-Mode"), "neither loopback destination is an official control host")
+		require.Empty(t, r.Header.Get("X-Grok-Client-Mode"), "the loopback token origin is not an official control host")
 	}
-	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	var calls atomic.Int32
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
 		assertIdentity(r)
+		require.Equal(t, http.MethodPost, r.Method)
+		require.NoError(t, r.ParseForm())
+		require.Equal(t, "fixture-refresh", r.Form.Get("refresh_token"))
+		if r.URL.Path == "/token" {
+			http.Redirect(w, r, "/token/continued", http.StatusTemporaryRedirect)
+			return
+		}
+		require.Equal(t, "/token/continued", r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"access_token": "redirected-access", "refresh_token": "rotated-refresh"})
 	}))
-	defer target.Close()
-	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assertIdentity(r)
-		http.Redirect(w, r, target.URL, http.StatusTemporaryRedirect)
-	}))
 	defer origin.Close()
-	client := &grokOAuthClient{tokenURL: origin.URL}
+	client := &grokOAuthClient{tokenURL: origin.URL + "/token"}
 	result, err := client.RefreshToken(ctx, "fixture-refresh", "", "client-id")
 	require.NoError(t, err)
 	require.Equal(t, "redirected-access", result.AccessToken)
+	require.EqualValues(t, 2, calls.Load())
 	require.EqualValues(t, 1, resolutions.Load(), "all control attempts must render the first selected snapshot")
+}
+
+func TestGrokOAuthTokenRedirectCannotTrustAnotherOriginOrLeakGrant(t *testing.T) {
+	// This unsigned Team claim would bypass ID-token validation if a response
+	// from the redirect target were incorrectly treated as the trusted exchange.
+	forgedTeamToken := "e30." + base64.RawURLEncoding.EncodeToString([]byte(`{"principal_type":"Team","principal_id":"attacker-team"}`)) + ".untrusted-signature"
+	for _, status := range []int{http.StatusTemporaryRedirect, http.StatusPermanentRedirect} {
+		for _, grant := range []string{"authorization_code", "refresh_token"} {
+			t.Run(strconv.Itoa(status)+"/"+grant, func(t *testing.T) {
+				var targetCalls atomic.Int32
+				target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+					targetCalls.Add(1)
+					w.Header().Set("Content-Type", "application/json")
+					_ = json.NewEncoder(w).Encode(map[string]any{"access_token": forgedTeamToken, "token_type": "Bearer"})
+				}))
+				defer target.Close()
+				var originCalls atomic.Int32
+				origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					originCalls.Add(1)
+					require.NoError(t, r.ParseForm())
+					require.Equal(t, grant, r.Form.Get("grant_type"))
+					if grant == "authorization_code" {
+						require.Equal(t, "private-code", r.Form.Get("code"))
+						require.Equal(t, "private-verifier", r.Form.Get("code_verifier"))
+					} else {
+						require.Equal(t, "private-refresh", r.Form.Get("refresh_token"))
+					}
+					http.Redirect(w, r, target.URL+"/forged-team", status)
+				}))
+				defer origin.Close()
+				client := &grokOAuthClient{tokenURL: origin.URL + "/token"}
+				var tokens *xai.TokenResponse
+				var err error
+				if grant == "authorization_code" {
+					tokens, err = client.ExchangeCode(context.Background(), "private-code", "private-verifier", "http://127.0.0.1/callback", "", "client-id")
+				} else {
+					tokens, err = client.RefreshToken(context.Background(), "private-refresh", "", "client-id")
+				}
+				require.Error(t, err)
+				require.Nil(t, tokens, "another origin's Team token cannot become a trusted exchange result")
+				require.EqualValues(t, 1, originCalls.Load())
+				require.Zero(t, targetCalls.Load(), "no request, including the grant body, may reach the redirect target")
+			})
+		}
+	}
+}
+
+func TestGrokOAuthTokenSameOriginRedirectLimit(t *testing.T) {
+	var calls atomic.Int32
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		http.Redirect(w, r, "/token/again", http.StatusTemporaryRedirect)
+	}))
+	defer origin.Close()
+	client := &grokOAuthClient{tokenURL: origin.URL + "/token"}
+	tokens, err := client.RefreshToken(context.Background(), "private-refresh", "", "client-id")
+	require.Error(t, err)
+	require.Nil(t, tokens)
+	require.EqualValues(t, 10, calls.Load(), "the same-origin policy must retain the standard redirect limit")
+}
+
+func TestGrokOAuthTokenRedirectRejectsHTTPSDowngrade(t *testing.T) {
+	var targetCalls atomic.Int32
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		targetCalls.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer target.Close()
+	origin := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL+"/token", http.StatusTemporaryRedirect)
+	}))
+	defer origin.Close()
+	client := origin.Client()
+	client.CheckRedirect = grokOAuthSameOriginRedirectPolicy
+	response, err := client.PostForm(origin.URL, url.Values{"refresh_token": {"private-refresh"}})
+	if response != nil {
+		_ = response.Body.Close()
+	}
+	require.Error(t, err)
+	require.Zero(t, targetCalls.Load(), "HTTPS grants must not be replayed over HTTP")
+}
+
+func TestGrokOAuthTokenRedirectOriginIncludesSchemeHostAndPort(t *testing.T) {
+	origin, err := http.NewRequest(http.MethodPost, "https://auth.x.ai/token", nil)
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		destination string
+		allowed     bool
+	}{
+		{"https://auth.x.ai/another-path", true},
+		{"https://AUTH.X.AI:443/another-path", true},
+		{"https://auth.x.ai:444/token", false},
+		{"https://other.x.ai/token", false},
+		{"http://auth.x.ai:443/token", false},
+		{"https://user@auth.x.ai/token", false},
+	} {
+		t.Run(tc.destination, func(t *testing.T) {
+			destination, err := http.NewRequest(http.MethodPost, tc.destination, nil)
+			require.NoError(t, err)
+			err = grokOAuthSameOriginRedirectPolicy(destination, []*http.Request{origin})
+			if tc.allowed {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+			}
+		})
+	}
 }
 
 func TestGrokOAuthClientRefreshForbiddenClassifiesOnlyExplicitEntitlement(t *testing.T) {

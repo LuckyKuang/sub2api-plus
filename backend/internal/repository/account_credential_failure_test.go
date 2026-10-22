@@ -4,6 +4,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -51,4 +52,95 @@ func TestCredential401CooldownFencesExactOwnerAndPreservesLongerWindow(t *testin
 	require.Equal(t, service.StatusActive, exec.execArgs[0][3])
 	require.JSONEq(t, `{"access_token":"sent","refresh_token":"old","_token_version":7}`, exec.execArgs[0][6].(string))
 	require.Equal(t, &proxy, exec.execArgs[0][7])
+}
+
+func TestCredentialConditionalMutationsEvictSchedulerWithBoundedDetachedContext(t *testing.T) {
+	for _, mutation := range credentialConditionalMutationCases() {
+		t.Run(mutation.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			cache := &oauthRefreshSchedulerCacheRecorder{}
+			exec := &recordingSQLExecutor{result: rowsAffectedResult(1), afterExec: cancel}
+			repo := newAccountRepositoryWithSQL(nil, exec, cache)
+
+			applied, err := mutation.apply(ctx, repo)
+
+			require.NoError(t, err)
+			require.True(t, applied)
+			require.ErrorIs(t, ctx.Err(), context.Canceled)
+			require.Len(t, exec.execQueries, 1, "no follow-up credential write is allowed after the atomic transition")
+			require.Equal(t, []int64{42}, cache.deleteIDs)
+			require.Empty(t, cache.setAccounts, "an older credential operation must never publish a scheduler snapshot")
+			require.NoError(t, cache.deleteCtxErr, "committed mutations finish eviction after caller cancellation")
+			require.True(t, cache.deleteHasDeadline)
+			require.Positive(t, time.Until(cache.deleteDeadline))
+			require.LessOrEqual(t, time.Until(cache.deleteDeadline), 2*time.Second)
+		})
+	}
+}
+
+func TestCredentialConditionalMutationFailureDoesNotNotifyScheduler(t *testing.T) {
+	dbErr := errors.New("atomic outbox insert failed")
+	rowsErr := errors.New("mutation result unavailable")
+	for _, mutation := range credentialConditionalMutationCases() {
+		for _, outcome := range []struct {
+			name string
+			exec *recordingSQLExecutor
+			err  error
+		}{
+			{name: "cas-miss", exec: &recordingSQLExecutor{result: rowsAffectedResult(0)}},
+			{name: "atomic-write-error", exec: &recordingSQLExecutor{err: dbErr}, err: dbErr},
+			{name: "unknown-result", exec: &recordingSQLExecutor{result: oauthRefreshRowsAffectedErrorResult{err: rowsErr}}, err: rowsErr},
+		} {
+			t.Run(mutation.name+"/"+outcome.name, func(t *testing.T) {
+				cache := &oauthRefreshSchedulerCacheRecorder{}
+				repo := newAccountRepositoryWithSQL(nil, outcome.exec, cache)
+
+				applied, err := mutation.apply(context.Background(), repo)
+
+				require.ErrorIs(t, err, outcome.err)
+				require.False(t, applied)
+				require.Empty(t, cache.deleteIDs)
+				require.Empty(t, cache.setAccounts)
+			})
+		}
+	}
+}
+
+func credentialConditionalMutationCases() []struct {
+	name  string
+	apply func(context.Context, *accountRepository) (bool, error)
+} {
+	credentials := map[string]any{"access_token": "attempted", "refresh_token": "attempted-refresh"}
+	until := time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC)
+	snapshot := service.GrokCredentialMutationSnapshot{CredentialsJSON: `{"access_token":"attempted","refresh_token":"attempted-refresh"}`}
+	return []struct {
+		name  string
+		apply func(context.Context, *accountRepository) (bool, error)
+	}{
+		{name: "generic-error", apply: func(ctx context.Context, repo *accountRepository) (bool, error) {
+			return repo.SetCredentialErrorIfUnchanged(ctx, 42, service.PlatformOpenAI, service.AccountTypeOAuth, credentials, nil, "revoked")
+		}},
+		{name: "generic-cooldown", apply: func(ctx context.Context, repo *accountRepository) (bool, error) {
+			return repo.SetCredentialTempUnschedulableIfUnchanged(ctx, 42, service.PlatformKimi, service.AccountTypeOAuth, credentials, nil, until, "rejected")
+		}},
+		{name: "grok-request-error", apply: func(ctx context.Context, repo *accountRepository) (bool, error) {
+			return repo.SetGrokCredentialErrorIfMatch(ctx, 42, snapshot, "revoked")
+		}},
+		{name: "grok-request-cooldown", apply: func(ctx context.Context, repo *accountRepository) (bool, error) {
+			return repo.SetGrokCredentialTempUnschedulableIfMatch(ctx, 42, snapshot, until, "rejected")
+		}},
+		{name: "grok-missing-refresh", apply: func(ctx context.Context, repo *accountRepository) (bool, error) {
+			return repo.SetGrokOAuthErrorIfCredentialsUnchanged(ctx, 42, map[string]any{"access_token": "attempted"}, "missing refresh token")
+		}},
+		{name: "grok-refresh-success", apply: func(ctx context.Context, repo *accountRepository) (bool, error) {
+			return repo.UpdateGrokOAuthCredentialsIfUnchanged(ctx, 42, credentials, nil, map[string]any{"access_token": "rotated", "refresh_token": "rotated-refresh"})
+		}},
+		{name: "grok-refresh-error", apply: func(ctx context.Context, repo *accountRepository) (bool, error) {
+			return repo.SetGrokOAuthRefreshErrorIfCredentialsUnchanged(ctx, 42, credentials, nil, "revoked")
+		}},
+		{name: "grok-refresh-cooldown", apply: func(ctx context.Context, repo *accountRepository) (bool, error) {
+			return repo.SetGrokOAuthRefreshTempUnschedulableIfCredentialsUnchanged(ctx, 42, credentials, nil, until, "rejected")
+		}},
+	}
 }

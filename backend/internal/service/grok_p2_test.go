@@ -12,10 +12,11 @@ import (
 
 func TestGrokModelQuotaBlock_FiltersOnlyNamedModel(t *testing.T) {
 	id := time.Now().UnixNano()%1_000_000 + 5000
-	markGrokModelQuotaBlock(id, "grok-4.5", time.Now().Add(time.Hour))
+	account := &Account{ID: id, Platform: PlatformGrok, Type: AccountTypeOAuth}
+	markGrokModelQuotaBlock(account, "grok-4.5", time.Now().Add(time.Hour))
 	now := time.Now()
-	require.True(t, isGrokModelQuotaBlocked(id, "grok-4.5", now))
-	require.False(t, isGrokModelQuotaBlocked(id, "grok-4.3", now))
+	require.True(t, isGrokModelQuotaBlocked(account, "grok-4.5", now))
+	require.False(t, isGrokModelQuotaBlocked(account, "grok-4.3", now))
 
 	accounts := []Account{
 		{ID: id, Platform: PlatformGrok, Type: AccountTypeOAuth},
@@ -28,7 +29,6 @@ func TestGrokModelQuotaBlock_FiltersOnlyNamedModel(t *testing.T) {
 
 func TestGrokModelQuotaBlockFiltersMappedUpstreamModel(t *testing.T) {
 	id := time.Now().UnixNano()%1_000_000 + 7000
-	markGrokModelQuotaBlock(id, "grok-4.5", time.Now().Add(time.Hour))
 	account := Account{
 		ID:       id,
 		Platform: PlatformGrok,
@@ -37,6 +37,7 @@ func TestGrokModelQuotaBlockFiltersMappedUpstreamModel(t *testing.T) {
 			"model_mapping": map[string]any{"gpt-*": "grok-4.5"},
 		},
 	}
+	markGrokModelQuotaBlock(&account, "grok-4.5", time.Now().Add(time.Hour))
 
 	require.Empty(t, filterGrokModelQuotaBlockedAccounts([]Account{account}, "gpt-5", time.Now()))
 }
@@ -83,8 +84,8 @@ func TestApplyGrokUpstreamFailure_ModelSpecificFreeUsage(t *testing.T) {
 	svc.handleGrokAccountUpstreamError(context.Background(), account, 400, nil, body)
 
 	require.Zero(t, repo.tempUnschedCalls, "model-scoped free usage must not cool sibling models")
-	require.True(t, isGrokModelQuotaBlocked(account.ID, "grok-4.5", time.Now()))
-	require.False(t, isGrokModelQuotaBlocked(account.ID, "grok-4.3", time.Now()))
+	require.True(t, isGrokModelQuotaBlocked(account, "grok-4.5", time.Now()))
+	require.False(t, isGrokModelQuotaBlocked(account, "grok-4.3", time.Now()))
 }
 
 func TestApplyGrokUpstreamFailure_SpendingLimitRemainsRecoverable(t *testing.T) {

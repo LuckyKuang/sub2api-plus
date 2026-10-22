@@ -150,20 +150,35 @@ func withIdentity(ctx context.Context) context.Context {
 	return outboundidentity.WithIdentity(ctx, identity)
 }
 
-func prepareRequest(req *http.Request) {
+func prepareRequest(req *http.Request) error {
 	*req = *req.WithContext(withIdentity(req.Context()))
 	identity, _ := outboundidentity.FromContext(req.Context())
+	identity, err := EnsureDeviceIdentity(req.Context(), identity)
+	if err != nil {
+		return err
+	}
 	*req = *req.WithContext(outboundidentity.WithIdentity(req.Context(), ControlIdentity(identity)))
 	outboundidentity.ApplyContext(req)
+	return nil
 }
 
 // ControlIdentity follows services/sourceHeaders.ts, not model-config.ts.
-// X-ZCode-Agent belongs only to inference; a missing telemetry device ID is
-// omitted rather than invented. Keep all chosen product/runtime declarations.
+// X-ZCode-Agent belongs only to inference; device identity is captured by
+// EnsureDeviceIdentity before this projection. Keep chosen host declarations.
 func ControlIdentity(identity outboundidentity.Identity) outboundidentity.Identity {
 	identity.Headers = maps.Clone(identity.Headers)
 	delete(identity.Headers, "X-ZCode-Agent")
 	maps.Copy(identity.Headers, identity.ControlHeaders)
+	return identity
+}
+
+// ModelIdentity restores model-only declarations when a trusted snapshot has
+// also been used for a control operation. DeviceMid stays a metadata carrier.
+func ModelIdentity(identity outboundidentity.Identity) outboundidentity.Identity {
+	identity.Headers = maps.Clone(identity.Headers)
+	delete(identity.Headers, HeaderDeviceMid)
+	identity.Headers["X-ZCode-Agent"] = "glm"
+	identity.Headers["X-Os-Version"] = outboundidentity.DefaultKernelRelease
 	return identity
 }
 

@@ -248,6 +248,7 @@ type outboundDeclaredHeader struct {
 var outboundPresetHeaderClasses = map[string]map[string]string{
 	"zcode": {
 		zcode.HeaderAppVersion: outboundHeaderDerived,
+		zcode.HeaderDeviceMid:  outboundHeaderRuntime,
 		"X-Client-Language":    outboundHeaderRuntime,
 		"X-Client-Timezone":    outboundHeaderRuntime,
 		"X-Platform":           outboundHeaderPinned,
@@ -276,6 +277,12 @@ var outboundPresetHeaderClasses = map[string]map[string]string{
 
 var outboundPresetHeaderValidators = map[string]map[string]func(string) error{
 	"zcode": {
+		zcode.HeaderDeviceMid: func(value string) error {
+			if strings.TrimSpace(value) == "" {
+				return nil
+			}
+			return validateOutboundIdentityDeviceID(value)
+		},
 		"X-Client-Language": outboundidentity.ValidateLanguage,
 		"X-Client-Timezone": outboundidentity.ValidateTimezone,
 	},
@@ -317,13 +324,17 @@ func outboundHeaderClassName(preset, name string) string {
 // one it does.
 func declaredOutboundHeaders(preset string) []outboundDeclaredHeader {
 	builtin := builtInOutboundIdentity(preset)
+	declarations := maps.Clone(builtin.Headers)
+	if preset == zcode.Preset {
+		declarations[zcode.HeaderDeviceMid] = builtin.ControlHeaders[zcode.HeaderDeviceMid]
+	}
 	headers := make([]outboundDeclaredHeader, 0, len(builtin.Headers))
 	seen := make(map[string]bool, len(builtin.Headers))
 	appendName := func(name string) {
 		if seen[name] {
 			return
 		}
-		if _, ok := builtin.Headers[name]; !ok {
+		if _, ok := declarations[name]; !ok {
 			return
 		}
 		seen[name] = true
@@ -338,7 +349,7 @@ func declaredOutboundHeaders(preset string) []outboundDeclaredHeader {
 		appendName(name)
 	}
 	rest := make([]string, 0, len(builtin.Headers))
-	for name := range builtin.Headers {
+	for name := range declarations {
 		if !seen[name] {
 			rest = append(rest, name)
 		}
@@ -444,6 +455,9 @@ func normalizeOutboundHeaderValues(preset string, values map[string]string) (map
 			return nil, fmt.Errorf("identity header %q is %s and cannot be configured", header.Name, header.Class)
 		}
 		trimmed := strings.TrimSpace(value)
+		if preset == zcode.Preset && header.Name == zcode.HeaderDeviceMid && trimmed == "" {
+			continue
+		}
 		if header.Validate != nil {
 			if err := header.Validate(trimmed); err != nil {
 				return nil, fmt.Errorf("invalid %s: %w", header.Name, err)
@@ -473,7 +487,17 @@ func applyOutboundHeaderValues(identity outboundidentity.Identity, preset string
 		return identity, false
 	}
 	headers := maps.Clone(identity.Headers)
-	maps.Copy(headers, normalized)
+	identity.ControlHeaders = maps.Clone(identity.ControlHeaders)
+	for name, value := range normalized {
+		if preset == zcode.Preset && name == zcode.HeaderDeviceMid {
+			if identity.ControlHeaders == nil {
+				identity.ControlHeaders = map[string]string{}
+			}
+			identity.ControlHeaders[name] = value
+		} else {
+			headers[name] = value
+		}
+	}
 	identity.Headers = headers
 	return identity, true
 }
@@ -495,11 +519,19 @@ func mergeOutboundRuntimeHeaders(identity, resolved outboundidentity.Identity) o
 		if header.Class != outboundHeaderRuntime {
 			continue
 		}
-		value := resolved.Headers[header.Name]
+		value := outboundIdentityDeclarationValue(resolved, header.Name)
 		if value == "" {
 			continue
 		}
-		headers[header.Name] = value
+		if identity.Preset == zcode.Preset && header.Name == zcode.HeaderDeviceMid {
+			identity.ControlHeaders = maps.Clone(identity.ControlHeaders)
+			if identity.ControlHeaders == nil {
+				identity.ControlHeaders = map[string]string{}
+			}
+			identity.ControlHeaders[header.Name] = value
+		} else {
+			headers[header.Name] = value
+		}
 		merged = true
 	}
 	if !merged {
@@ -768,6 +800,14 @@ func (s *SettingService) materializeRuntimeOutboundHeaders(ctx context.Context) 
 			if settings.Runtime[preset][header.Name] != "" {
 				continue
 			}
+			if preset == zcode.Preset && header.Name == zcode.HeaderDeviceMid {
+				device, err := resolveOutboundMappedID(dbCtx, "zcode-device", "installation-default", 4)
+				if err != nil {
+					return err
+				}
+				missing[header.Name] = device
+				continue
+			}
 			if builtin := builtInOutboundIdentity(preset).Headers[header.Name]; builtin != "" {
 				missing[header.Name] = builtin
 			}
@@ -997,12 +1037,24 @@ func resolveAccountIdentitySelection(ctx context.Context, account *Account, sele
 
 func prepareAccountOutboundRequest(req *http.Request, account *Account) *http.Request {
 	if req != nil {
+		if hasDomesticRequestHeaderContract(account) && domesticCredentialOwnerAccount(req.Context(), account) == nil {
+			*req = *req.WithContext(WithOutboundPreparationError(req.Context(), errors.New("domestic outbound credential owner is unavailable")))
+			return req
+		}
+		if hasDomesticRequestHeaderContract(account) && outboundIdentityScopeFromContext(req.Context()) == nil {
+			*req = *req.WithContext(WithOutboundIdentityScope(req.Context(), nil))
+		}
 		if account != nil && account.Platform == PlatformGrok && HTTPUpstreamProfileFromContext(req.Context()) == HTTPUpstreamProfileDefault {
 			*req = *req.WithContext(WithHTTPUpstreamProfile(req.Context(), HTTPUpstreamProfileGrok))
 		}
 		ApplyAccountOutboundIdentity(req.Context(), account, req)
-		prepareMiniMaxRequestState(req, account)
-		prepareDeepSeekRequestState(req, account)
+		prepareDomesticRequestHeaders(req, account)
+		for _, prepare := range []func(*http.Request, *Account) error{prepareMiniMaxRequestState, prepareDeepSeekRequestState, prepareZCodeRequestState} {
+			if err := prepare(req, account); err != nil {
+				*req = *req.WithContext(WithOutboundPreparationError(req.Context(), err))
+				return req
+			}
+		}
 		PrepareCodexRequestCompression(req, account)
 	}
 	return req
@@ -1255,14 +1307,24 @@ func outboundPresetDeclarations(preset string, builtin, effective outboundidenti
 			Name:     header.Name,
 			Class:    header.Class,
 			Editable: header.Class == outboundHeaderRuntime,
-			Builtin:  builtin.Headers[header.Name],
-			Value:    effective.Headers[header.Name],
+			Builtin:  outboundIdentityDeclarationValue(builtin, header.Name),
+			Value:    outboundIdentityDeclarationValue(effective, header.Name),
 		})
 	}
 	return declarations
 }
 
+func outboundIdentityDeclarationValue(identity outboundidentity.Identity, name string) string {
+	if identity.Preset == zcode.Preset && name == zcode.HeaderDeviceMid {
+		return identity.ControlHeaders[name]
+	}
+	return identity.Headers[name]
+}
+
 func (s *SettingService) installOutboundIdentityResolver() {
+	zcode.SetDeviceIDResolver(func(ctx context.Context) (string, error) {
+		return resolveOutboundMappedID(ctx, "zcode-device", "installation-default", 4)
+	})
 	outboundidentity.SetDefaultResolver(s.resolveOutboundIdentityKey)
 }
 
@@ -1270,7 +1332,7 @@ func selectionFromIdentity(identity outboundidentity.Identity) OutboundIdentityS
 	headers := map[string]string{}
 	for _, h := range declaredOutboundHeaders(identity.Preset) {
 		if h.Class == outboundHeaderRuntime {
-			headers[h.Name] = identity.Headers[h.Name]
+			headers[h.Name] = outboundIdentityDeclarationValue(identity, h.Name)
 		}
 	}
 	return OutboundIdentitySelection{Preset: identity.Preset, UserAgent: identity.UserAgent, Version: identity.Version, Headers: headers, Timezone: identity.Timezone, Language: identity.Language}

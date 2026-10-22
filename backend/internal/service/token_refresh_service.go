@@ -866,6 +866,7 @@ func (s *TokenRefreshService) refreshWithRetryWithRateGate(
 			}
 		}
 		attemptCtx, cancelAttempt := context.WithTimeout(ctx, s.attemptTimeout())
+		observedBeforeRefresh := snapshotRequestCredentialAccount(account)
 		var newCredentials map[string]any
 		var err error
 		shortCircuit := false
@@ -896,7 +897,10 @@ func (s *TokenRefreshService) refreshWithRetryWithRateGate(
 				shortCircuit = true
 			} else {
 				credentialsPersisted = result.NewCredentials != nil
-				_ = result.NewCredentials // 统一 API 已设置 _token_version 并更新 DB，无需重复操作
+				newCredentials = result.NewCredentials
+				if result.AttemptedAccount != nil {
+					observedBeforeRefresh = snapshotRequestCredentialAccount(result.AttemptedAccount)
+				}
 			}
 		} else {
 			// 降级：直接调用 refresher（兼容旧路径）
@@ -914,19 +918,44 @@ func (s *TokenRefreshService) refreshWithRetryWithRateGate(
 				err = oauthRefreshContextError(attemptCtx)
 			}
 			if err == nil && newCredentials != nil {
+				newCredentials = cloneRequestCredentialMap(newCredentials)
 				newCredentials["_token_version"] = time.Now().UnixMilli()
-				if saveErr := persistAccountCredentials(attemptCtx, s.accountRepo, account, newCredentials); saveErr != nil {
+				if usesHTTP401CredentialFence(observedBeforeRefresh) {
+					conditionalRepo, ok := s.accountRepo.(OAuthRefreshSuccessRepository)
+					if !ok {
+						err = &providerConfigurationRefreshError{err: errors.New("credential refresh success CAS repository is not configured")}
+					} else {
+						applied, saveErr := conditionalRepo.UpdateOAuthCredentialsIfUnchanged(attemptCtx, observedBeforeRefresh.ID, observedBeforeRefresh.Platform, observedBeforeRefresh.Credentials, observedBeforeRefresh.ProxyID, newCredentials)
+						if saveErr != nil {
+							err = &providerCycleContainmentRefreshError{err: fmt.Errorf("failed to conditionally persist refreshed credentials: %w", saveErr)}
+						} else if !applied {
+							err = errRefreshSkipped
+						} else {
+							credentialsPersisted = true
+							account = snapshotRequestCredentialAccount(observedBeforeRefresh)
+							account.Credentials = cloneRequestCredentialMap(newCredentials)
+						}
+					}
+				} else if saveErr := persistAccountCredentials(attemptCtx, s.accountRepo, account, newCredentials); saveErr != nil {
 					err = fmt.Errorf("failed to save credentials: %w", saveErr)
 				} else {
 					credentialsPersisted = true
 				}
+			}
+			if err == nil && newCredentials == nil && usesHTTP401CredentialFence(observedBeforeRefresh) {
+				err = &providerCycleContainmentRefreshError{err: errors.New("OAuth refresh returned no credential evidence")}
+			}
+			if err != nil && usesHTTP401CredentialFence(observedBeforeRefresh) {
+				// A callback may mutate its input while the attempt is in flight.
+				// Failure evidence belongs to the grant frozen before that call.
+				account = observedBeforeRefresh
 			}
 		}
 		attemptTimedOut := errors.Is(oauthRefreshContextError(attemptCtx), context.DeadlineExceeded) && oauthRefreshContextError(ctx) == nil
 		cancelAttempt()
 		releaseAttempt()
 		persistedAfterAttemptDeadline := attemptTimedOut && credentialsPersisted && err == nil
-		if attemptTimedOut && !persistedAfterAttemptDeadline && !isProviderScopedTerminalRefreshError(err) {
+		if attemptTimedOut && !persistedAfterAttemptDeadline && !isProviderScopedTerminalRefreshError(err) && !errors.Is(err, errRefreshSkipped) {
 			cause := err
 			if cause == nil {
 				cause = context.DeadlineExceeded
@@ -956,7 +985,14 @@ func (s *TokenRefreshService) refreshWithRetryWithRateGate(
 				s.postRefreshStateSyncWithCleanup(ctx, account)
 				return nil
 			}
-			s.postRefreshActions(ctx, account)
+			cleanupAccount := account
+			if usesHTTP401CredentialFence(account) && newCredentials != nil {
+				// Couple the grant produced by this refresh with the cooldown
+				// observed before its upstream call, never a later durable read.
+				cleanupAccount = observedBeforeRefresh
+				cleanupAccount.Credentials = cloneRequestCredentialMap(newCredentials)
+			}
+			s.postRefreshActions(ctx, cleanupAccount)
 			return nil
 		}
 		if ctxErr := oauthRefreshContextError(ctx); ctxErr != nil {
@@ -994,7 +1030,8 @@ func (s *TokenRefreshService) refreshWithRetryWithRateGate(
 		if isNonRetryableRefreshError(err) {
 			errorMsg := "Token refresh failed (non-retryable): " + logredact.RedactText(err.Error())
 			isGrokOAuth := account.IsGrokOAuth()
-			if !isGrokOAuth {
+			fenced := usesHTTP401CredentialFence(account)
+			if !fenced {
 				s.notifyAccountSchedulingBlocked(account, time.Time{}, "token_refresh_non_retryable")
 			}
 			s.clearAntigravityForceTokenRefresh(ctx, account, "non_retryable")
@@ -1019,6 +1056,15 @@ func (s *TokenRefreshService) refreshWithRetryWithRateGate(
 						return errRefreshSkipped
 					}
 				}
+			} else if fenced {
+				conditionalRepo, ok := s.accountRepo.(credentialFailureRepository)
+				if !ok {
+					return &providerConfigurationRefreshError{err: errors.New("credential refresh failure CAS repository is not configured")}
+				}
+				persistentlyBlocked, setErr = conditionalRepo.SetCredentialErrorIfUnchanged(ctx, account.ID, account.Platform, account.Type, account.Credentials, account.ProxyID, errorMsg)
+				if setErr == nil && !persistentlyBlocked {
+					return errRefreshSkipped
+				}
 			} else {
 				setErr = s.accountRepo.SetError(ctx, account.ID, errorMsg)
 				persistentlyBlocked = setErr == nil
@@ -1028,16 +1074,16 @@ func (s *TokenRefreshService) refreshWithRetryWithRateGate(
 					"account_id", account.ID,
 					"error", setErr,
 				)
-				if isGrokOAuth {
+				if fenced {
 					return &providerCycleContainmentRefreshError{
-						err: fmt.Errorf("failed to conditionally persist Grok OAuth refresh failure: %w", setErr),
+						err: fmt.Errorf("failed to conditionally persist OAuth refresh failure: %w", setErr),
 					}
 				}
-			} else if isGrokOAuth && persistentlyBlocked {
+			} else if fenced && persistentlyBlocked {
 				s.notifyAccountSchedulingBlocked(account, time.Time{}, "token_refresh_non_retryable")
 			}
 			cacheInvalidationFailed := false
-			if account.Type == AccountTypeOAuth && (!isGrokOAuth || persistentlyBlocked) {
+			if account.Type == AccountTypeOAuth && (!fenced || persistentlyBlocked) {
 				if s.cacheInvalidator == nil {
 					cacheInvalidationFailed = true
 				} else if invalidateErr := s.cacheInvalidator.InvalidateToken(ctx, account); invalidateErr != nil {
@@ -1130,6 +1176,21 @@ func (s *TokenRefreshService) refreshWithRetryWithRateGate(
 		}
 		return lastErr
 	}
+	if usesHTTP401CredentialFence(account) {
+		conditionalRepo, ok := s.accountRepo.(credentialCooldownRepository)
+		if !ok {
+			return &providerConfigurationRefreshError{err: errors.New("credential refresh cooldown CAS repository is not configured")}
+		}
+		applied, setErr := conditionalRepo.SetCredentialTempUnschedulableIfUnchanged(ctx, account.ID, account.Platform, account.Type, account.Credentials, account.ProxyID, until, reason)
+		if setErr != nil {
+			return &providerCycleContainmentRefreshError{err: fmt.Errorf("failed to conditionally persist OAuth refresh cooldown: %w", setErr)}
+		}
+		if !applied {
+			return errRefreshSkipped
+		}
+		s.notifyAccountSchedulingBlocked(account, until, "token_refresh_retry_exhausted")
+		return lastErr
+	}
 
 	s.notifyAccountSchedulingBlocked(account, until, "token_refresh_retry_exhausted")
 	if setErr := s.accountRepo.SetTempUnschedulable(ctx, account.ID, until, reason); setErr != nil {
@@ -1184,7 +1245,9 @@ func (s *TokenRefreshService) postRefreshActions(ctx context.Context, account *A
 	}
 	// 刷新成功后清除临时不可调度状态（处理 OAuth 401 恢复场景）
 	if account.TempUnschedulableUntil != nil && time.Now().Before(*account.TempUnschedulableUntil) {
-		if clearErr := s.accountRepo.ClearTempUnschedulable(ctx, account.ID); clearErr != nil {
+		if usesHTTP401CredentialFence(account) {
+			s.clearRefreshedCredentialCooldown(ctx, account)
+		} else if clearErr := s.accountRepo.ClearTempUnschedulable(ctx, account.ID); clearErr != nil {
 			slog.Warn("token_refresh.clear_temp_unschedulable_failed",
 				"account_id", account.ID,
 				"error", clearErr,
@@ -1194,7 +1257,7 @@ func (s *TokenRefreshService) postRefreshActions(ctx context.Context, account *A
 			s.notifyAccountSchedulingBlockCleared(account.ID)
 		}
 		// 同步清除 Redis 缓存，避免调度器读到过期的临时不可调度状态
-		if s.tempUnschedCache != nil {
+		if s.tempUnschedCache != nil && !usesHTTP401CredentialFence(account) {
 			if clearErr := s.tempUnschedCache.DeleteTempUnsched(ctx, account.ID); clearErr != nil {
 				slog.Warn("token_refresh.clear_temp_unsched_cache_failed",
 					"account_id", account.ID,
@@ -1208,7 +1271,7 @@ func (s *TokenRefreshService) postRefreshActions(ctx context.Context, account *A
 	s.ensureAntigravityPrivacy(ctx, account)
 	// Grok: clear soft reauth flag after a successful credential refresh.
 	if account != nil && account.Platform == PlatformGrok && accountGrokNeedsReauth(account) {
-		clearGrokNeedsReauthExtra(ctx, s.accountRepo, account.ID)
+		clearGrokNeedsReauthExtra(ctx, s.accountRepo, account)
 	}
 }
 
@@ -1236,7 +1299,15 @@ func (s *TokenRefreshService) postRefreshStateSync(ctx context.Context, account 
 	}
 	// 同步更新调度器缓存，确保调度获取的 Account 对象包含最新的 credentials
 	if s.schedulerCache != nil {
-		if err := s.schedulerCache.SetAccount(ctx, account); err != nil {
+		var err error
+		if usesHTTP401CredentialFence(account) {
+			// Publishing a snapshot from before/during refresh can overwrite a
+			// newer login. Eviction forces the next hydrate to read durable state.
+			err = s.schedulerCache.DeleteAccount(ctx, account.ID)
+		} else {
+			err = s.schedulerCache.SetAccount(ctx, account)
+		}
+		if err != nil {
 			slog.Warn("token_refresh.sync_scheduler_cache_failed",
 				"account_id", account.ID,
 				"error", err,

@@ -8,7 +8,6 @@ import (
 	"sync"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
-	"github.com/google/uuid"
 )
 
 // codexUpstreamMinVersion 上游 /backend-api/codex 接受的最低 version 头：
@@ -173,15 +172,6 @@ func ensureCodexIdentityHeaders(h http.Header) {
 	if strings.TrimSpace(h.Get("version")) == "" {
 		h.Set("version", identity.version)
 	}
-}
-
-// applyOpenAICodexProbeHeaders 为合成探测请求补齐 Codex 身份和引擎指纹。
-func applyOpenAICodexProbeHeaders(h http.Header) {
-	if h == nil {
-		return
-	}
-	ensureCodexIdentityHeaders(h)
-	h.Set("X-Codex-Window-ID", uuid.NewString())
 }
 
 // Version selection is explicit override > compiled release. No remote release

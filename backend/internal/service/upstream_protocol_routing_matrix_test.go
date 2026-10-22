@@ -387,6 +387,27 @@ func matchesGrokChatFallbackCredentialRepair(tc routingMatrixCase, want, got rou
 		})
 }
 
+// The official Anthropic SDK/adapters declare this protocol version on native
+// requests (docs/OUTBOUND_IDENTITY.md). Preserve the historical golden and
+// accept only this exact added declaration; URL/auth/body/model/error routing
+// must still match the historical observations byte for byte.
+func matchesOfficialAnthropicVersionDeclaration(tc routingMatrixCase, want, got routingObservation) bool {
+	if tc.accountType != AccountTypeAPIKey || len(want.Requests) != 1 || len(got.Requests) != 1 {
+		return false
+	}
+	switch tc.platform {
+	case PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax:
+	default:
+		return false
+	}
+	if want.Requests[0].AnthropicVersion != "" || got.Requests[0].AnthropicVersion != "2023-06-01" || got.Requests[0].BodyKind != "messages" {
+		return false
+	}
+	got.Requests = append([]routingUpstreamRequest(nil), got.Requests...)
+	got.Requests[0].AnthropicVersion = ""
+	return reflect.DeepEqual(want, got)
+}
+
 func TestUpstreamProtocolRoutingMatrixMatchesMainGolden(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	data, err := os.ReadFile(routingMatrixGoldenPath)
@@ -405,6 +426,7 @@ func TestUpstreamProtocolRoutingMatrixMatchesMainGolden(t *testing.T) {
 	credentialDifferences := 0
 	unsupportedDifferences := 0
 	grokFallbackRepairs := 0
+	protocolDeclarations := 0
 	for i, tc := range cases {
 		index := golden.Results[i]
 		require.GreaterOrEqual(t, index, 0)
@@ -432,6 +454,10 @@ func TestUpstreamProtocolRoutingMatrixMatchesMainGolden(t *testing.T) {
 			grokFallbackRepairs++
 			continue
 		}
+		if matchesOfficialAnthropicVersionDeclaration(tc, want, got) {
+			protocolDeclarations++
+			continue
+		}
 		mismatched++
 		if len(differences) < 12 {
 			differences = append(differences, fmt.Sprintf("%s\nmain: %s\ncurrent: %s", tc.key(), want, got))
@@ -449,4 +475,5 @@ func TestUpstreamProtocolRoutingMatrixMatchesMainGolden(t *testing.T) {
 	// Six protocol settings × four addresses × two spellings, with the
 	// Responses probe explicitly false, must all recover the valid Grok key.
 	require.Equal(t, 6*4*2, grokFallbackRepairs, "valid Grok API keys must reach Chat Completions")
+	require.Equal(t, 4*480, protocolDeclarations, "all four native Anthropic adapters require the official protocol declaration")
 }

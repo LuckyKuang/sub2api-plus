@@ -148,10 +148,10 @@ func TestOutboundIdentitySettingsAPI(t *testing.T) {
 	kimiPreview := request(http.MethodPost, "/preview", `{"platform":"kimi","type":"apikey","selection":{"preset":"kimi"}}`)
 	require.Equal(t, http.StatusOK, kimiPreview.Code)
 	require.Equal(t, "kimi", gjson.Get(kimiPreview.Body.String(), "data.preset").String())
-	require.Equal(t, "kimi-code-cli/2.2.0", gjson.Get(kimiPreview.Body.String(), "data.user_agent").String())
-	require.Equal(t, "2.2.0", gjson.Get(kimiPreview.Body.String(), "data.version").String())
+	require.Equal(t, "kimi-code-cli/2.3.0", gjson.Get(kimiPreview.Body.String(), "data.user_agent").String())
+	require.Equal(t, "2.3.0", gjson.Get(kimiPreview.Body.String(), "data.version").String())
 	require.Equal(t, "kimi_code_cli", gjson.Get(kimiPreview.Body.String(), `data.headers.X-Msh-Platform`).String())
-	require.Equal(t, "2.2.0", gjson.Get(kimiPreview.Body.String(), `data.headers.X-Msh-Version`).String())
+	require.Equal(t, "2.3.0", gjson.Get(kimiPreview.Body.String(), `data.headers.X-Msh-Version`).String())
 	require.False(t, gjson.Get(kimiPreview.Body.String(), `data.headers.Originator`).Exists(), "Kimi Code declares no Originator header")
 	require.False(t, gjson.Get(kimiPreview.Body.String(), `data.headers.Version`).Exists(), "Kimi Code declares no standalone version header")
 	for _, name := range []string{"X-Msh-Device-Name", "X-Msh-Device-Model", "X-Msh-Os-Version", "X-Msh-Device-Id"} {

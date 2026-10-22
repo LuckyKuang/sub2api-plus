@@ -123,7 +123,7 @@ func TestCodexCanonicalProfitVetoPreservesOwnerRegression(t *testing.T) {
 }
 
 // V16/V17: real HTTP/WS builders must isolate native API-key metadata using
-// stable credential owners, independently of bearer values and transport.
+// stable credential owners, with matching identities across HTTP and WS for the same grant.
 func TestCodexAPIKeyWireIsolationRegression(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
@@ -134,7 +134,7 @@ func TestCodexAPIKeyWireIsolationRegression(t *testing.T) {
 	}
 	svc := &OpenAIGatewayService{}
 	build := func(id int64, token string, ws bool) http.Header {
-		a := &Account{ID: id, Platform: PlatformOpenAI, Type: AccountTypeAPIKey}
+		a := &Account{ID: id, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Credentials: map[string]any{"api_key": token}}
 		if ws {
 			h, _, err := svc.buildOpenAIWSHeaders(context.Background(), c, a, token, OpenAIWSProtocolDecision{Transport: OpenAIUpstreamTransportResponsesWebsocketV2}, true, "", "", "session", "", "")
 			require.NoError(t, err)
@@ -146,11 +146,13 @@ func TestCodexAPIKeyWireIsolationRegression(t *testing.T) {
 	}
 	a := build(101, "key-a", false)
 	b := build(102, "key-b", false)
-	for _, key := range []string{"thread-id", "x-codex-parent-thread-id", "x-codex-installation-id", "x-codex-window-id"} {
+	for _, key := range []string{"thread-id", "x-codex-parent-thread-id", "x-codex-window-id"} {
 		require.NotEmpty(t, a.Get(key), key)
 		require.NotEqual(t, a.Get(key), b.Get(key), key)
-		require.Equal(t, a.Get(key), build(101, "rotated", false).Get(key), key)
-		require.Equal(t, a.Get(key), build(101, "rotated", true).Get(key), key)
+		require.Equal(t, a.Get(key), build(101, "key-a", false).Get(key), key)
+		require.Equal(t, a.Get(key), build(101, "key-a", true).Get(key), key)
 	}
 	require.Equal(t, a.Get("thread-id"), a.Get("x-client-request-id"))
+	require.Empty(t, a.Get("x-codex-installation-id"))
+	require.NotEqual(t, a.Get("thread-id"), build(101, "key-relinked", true).Get("thread-id"))
 }

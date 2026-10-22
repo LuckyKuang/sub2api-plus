@@ -29,7 +29,7 @@ func (api *OAuthRefreshAPI) persistOAuthRefresh(ctx context.Context, cacheKey st
 	// was canceled immediately after CAS. Finish bounded local cleanup/readback.
 	readCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), defaultRefreshPostPersistCleanupTimeout)
 	defer cancel()
-	if attempted.Platform == PlatformOpenAI && api.tokenCache != nil {
+	if applied && attempted.Platform == PlatformOpenAI && api.tokenCache != nil {
 		if err := api.tokenCache.DeleteAccessToken(readCtx, cacheKey); err != nil {
 			return nil, oauthRefreshPersistenceFailure(prefix+"_cache_invalidation_failed", err)
 		}
@@ -49,7 +49,7 @@ func (api *OAuthRefreshAPI) persistOAuthRefresh(ctx context.Context, cacheKey st
 	if attempted.Platform == PlatformOpenAI && !applied && strings.TrimSpace(current.GetCredential("access_token")) == strings.TrimSpace(attempted.GetCredential("access_token")) {
 		return nil, oauthRefreshPersistenceFailure(prefix+"_persistence_conflict", nil)
 	}
-	result := &OAuthRefreshResult{Account: current, Refreshed: applied}
+	result := &OAuthRefreshResult{Account: current, Refreshed: applied, AttemptedAccount: attempted}
 	if applied {
 		result.NewCredentials = credentials
 	}

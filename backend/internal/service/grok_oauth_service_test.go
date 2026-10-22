@@ -6,6 +6,8 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
+	"net/url"
 	"testing"
 	"time"
 
@@ -20,6 +22,13 @@ type grokOAuthClientStub struct {
 	exchangeCalls       int
 	exchangeRedirectURI string
 	identities          []outboundidentity.Identity
+	validationError     error
+	validatedLogin      xai.OIDCLoginContext
+}
+
+func (s *grokOAuthClientStub) ValidateAuthorizationTokens(_ context.Context, _ *xai.TokenResponse, login xai.OIDCLoginContext, _ string) (*xai.OIDCIdentity, error) {
+	s.validatedLogin = login
+	return &xai.OIDCIdentity{Subject: "verified-user"}, s.validationError
 }
 
 func (s *grokOAuthClientStub) captureIdentity(ctx context.Context) {
@@ -123,6 +132,10 @@ func TestGrokOAuthServiceExchangeCodeConsumesOnlyAfterValidation(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, 1, client.exchangeCalls)
+	parsed, parseErr := url.Parse(auth.AuthURL)
+	require.NoError(t, parseErr)
+	require.Equal(t, parsed.Query().Get("nonce"), client.validatedLogin.Nonce)
+	require.Equal(t, xai.OAuthIssuer, client.validatedLogin.Issuer)
 
 	_, err = svc.ExchangeCode(context.Background(), &GrokExchangeCodeInput{
 		SessionID: auth.SessionID,
@@ -132,6 +145,19 @@ func TestGrokOAuthServiceExchangeCodeConsumesOnlyAfterValidation(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "GROK_OAUTH_SESSION_NOT_FOUND")
 	require.Equal(t, 1, client.exchangeCalls)
+}
+
+func TestGrokOAuthIdentityFailureReturnsNoAccountAndConsumesGrant(t *testing.T) {
+	client := &grokOAuthClientStub{validationError: errors.New("invalid signature")}
+	svc := NewGrokOAuthService(nil, client)
+	defer svc.Stop()
+	auth, err := svc.GenerateAuthURL(context.Background(), nil, "")
+	require.NoError(t, err)
+	info, err := svc.ExchangeCode(context.Background(), &GrokExchangeCodeInput{SessionID: auth.SessionID, Code: "code", State: auth.State})
+	require.ErrorContains(t, err, "GROK_OAUTH_ID_TOKEN_INVALID")
+	require.Nil(t, info)
+	_, exists := svc.sessionStore.Get(auth.SessionID)
+	require.False(t, exists)
 }
 
 func TestGrokOAuthServiceExchangeCodeRejectsMissingClientWithoutConsumingSession(t *testing.T) {

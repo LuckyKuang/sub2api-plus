@@ -249,7 +249,7 @@ func (s *CNProviderQuotaService) newMiniMaxOAuthQuotaRequest(ctx context.Context
 	ctx = WithHTTPUpstreamRedirectsDisabled(WithAccountOutboundIdentity(ctx, owner))
 	identity, _ := outboundidentity.FromContext(ctx)
 	if identity.Preset == minimax.Preset {
-		identity = minimax.ControlIdentity(identity)
+		identity = minimax.ControlIdentityForURL(identity, validated)
 	}
 	ctx = outboundidentity.WithIdentity(ctx, identity)
 	var body io.Reader

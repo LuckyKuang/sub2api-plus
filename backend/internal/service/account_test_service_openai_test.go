@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -99,6 +100,17 @@ func (r *openAIAccountTestRepo) SetError(_ context.Context, id int64, errorMsg s
 	r.setErrorID = id
 	r.setErrorMsg = errorMsg
 	return nil
+}
+
+func (r *openAIAccountTestRepo) SetCredentialErrorIfUnchanged(ctx context.Context, id int64, platform, kind string, credentials map[string]any, proxyID *int64, message string) (bool, error) {
+	current, err := r.GetByID(ctx, id)
+	if err != nil {
+		return false, err
+	}
+	if current == nil || current.Platform != platform || current.Type != kind || !reflect.DeepEqual(current.Credentials, credentials) || !reflect.DeepEqual(current.ProxyID, proxyID) {
+		return false, nil
+	}
+	return true, r.SetError(ctx, id, message)
 }
 
 func TestAccountTestService_OpenAIResponsesProbeAdvertisesSessionCapability(t *testing.T) {
@@ -544,6 +556,8 @@ func TestAccountTestService_OpenAI401SetsPermanentErrorOnly(t *testing.T) {
 		Concurrency: 1,
 		Credentials: map[string]any{"access_token": "test-token"},
 	}
+
+	repo.accountsByID = map[int64]*Account{account.ID: account}
 
 	err := svc.testOpenAIAccountConnection(ctx, account, "gpt-5.4", "", "")
 	require.Error(t, err)

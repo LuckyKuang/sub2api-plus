@@ -216,11 +216,23 @@ history for tool outputs before attempting cross-owner forwarding.
 WS replay history is complete only when it originates in an observed complete
 turn and all required tool dependencies remain available.
 
-Turn-state and session/response connection references are keyed by credential
-owner and execution scope. Same-owner reconnects may reuse their state;
-cross-owner sends cannot reuse it. Internal state without an owner key becomes
-unreachable on upgrade. All gateway replicas must be upgraded together before
-relying on this stricter isolation; older processes do not enforce it.
+Opaque turn-state provenance binds the execution scope, the exact blob's
+irreversible digest, and the actual upstream principal. A reused local account
+row is not owner evidence. A normal access-token refresh for the same principal
+preserves state; relinking that row or changing owner strips it. Late responses
+cannot relabel another blob. Unknown, expired and legacy provenance cannot
+authorize replay. HTTP, WS and shared-cache replicas enforce the same rule;
+credential-shadow requests use their immutable transmitted parent snapshot.
+Session/response connection references also retain their credential owner and
+execution scope. All replicas must be upgraded together before relying on the
+new mapping and provenance format; old processes do not enforce it.
+
+API-key replacement on the same account record retains its installation/device
+identity but changes execution session, thread, turn, parent and window mappings.
+The execution namespace includes the actual key's irreversible digest; a stable
+account ID alone cannot authorize old turn-state or response references. This
+is independent of the logical cache namespace, which ordinarily survives
+credential-owner failover within its authorized tenant scope.
 
 Every credential-owning OpenAI OAuth account stores an explicit
 `extra.codex_fingerprint_mode`. New accounts default to `device`; missing,
@@ -229,9 +241,9 @@ setup-token, and credential-shadow accounts do not own this setting.
 
 | Mode | Upstream-visible identity behavior |
 | --- | --- |
-| `off` | Do not mutate fingerprint-owned body or header carriers. Plus cache, security, session-sharing, and compact policy still apply. |
+| `off` | Disable optional convergence. Typed owner isolation, official carriers, cache, security, sharing and compact policy still apply. |
 | `device` (default) | Converge only the installation identifier to an account-level stable value; preserve each client's session and thread boundaries. |
-| `session` | Converge installation and session identifiers; derive a stable thread from the client-original session. |
+| `session` | Converge installation and metadata session identifiers; retain distinct mappings for actual threads and their parent/fork relationships. |
 | `full` | Converge installation, session, and thread identifiers to account-level values. |
 
 Administration create, edit, bulk edit, Codex import, PAT creation, and CRS
@@ -248,10 +260,10 @@ endpoint is unavailable.
 
 | Request path | Fingerprint policy | Final session/cache authority |
 | --- | --- | --- |
-| Ordinary Responses create turns and Chat/Messages Responses bridges | Configured mode | Plus prompt-cache/session identity |
-| Native remote Compact v2 (`/responses` with `compaction_trigger`) | Configured mode | Plus prompt-cache/session identity |
+| Ordinary Responses create turns and Chat/Messages Responses bridges | Configured mode | Independent execution-session and cache policy |
+| Native remote Compact v2 (`/responses` with `compaction_trigger`) | Configured mode | Independent execution-session and cache policy |
 | ChatGPT Codex OAuth legacy compact compatibility path | `off`, or installation-only for every other mode | Legacy compact session/cache/thread namespace |
-| HTTP-to-WebSocket and direct Responses WebSocket `response.create` turns | Configured mode per turn | Plus WebSocket session/cache identity |
+| HTTP-to-WebSocket and direct Responses WebSocket `response.create` turns | Configured mode per turn | Independent execution-session and cache policy |
 | Count-tokens, alpha-search, response retrieve/cancel subpaths, and other non-session endpoints | No fingerprint mutation | Endpoint policy |
 
 Personal access token and Agent Identity accounts are OpenAI OAuth credential
@@ -260,16 +272,41 @@ excluded. Credential shadows read the mode and stable installation source from
 their credential-owning parent; the shadow never creates an independent
 fingerprint identity.
 
-Fingerprint body/header staging happens before the final cache and outbound
-identity stages. Root sessions align the official `session-id` to the finalized
-Plus cache key; declared non-root agents retain their separate isolated session.
-Every Codex-protocol outbound path drops the legacy `session_id`
-alias; fingerprinting owns installation and thread/turn carriers. Malformed,
-null, array, or scalar embedded `x-codex-turn-metadata` values are rebuilt as
-JSON objects when that carrier is present, while valid unrelated fields are
-kept. Missing carriers are not synthesized solely for embedded metadata.
-WebSocket pool reuse compares every final stable handshake carrier in all four
-modes, including client-owned values preserved by `off` and `device`.
+Responses HTTP, passthrough, Chat Completions and Messages freeze the owner of
+the acquired credential before mapping client metadata or staging fingerprints.
+Header/body IDs and installation projection share that immutable owner,
+including resolved shadow parents and refresh results. Later selected-row
+changes cannot alter its namespace; ambiguous acquired-owner evidence stops
+preparation. A replacement account acquires its own credential snapshot and
+maps the original logical IDs for that owner.
+
+Each subsequent native or HTTP bridge Responses WS turn completes basic
+validation and canonical ingress audit before metadata/fingerprint preparation
+or persistent ID-store access. Audit receives the original frame and runs once
+per accepted client turn; retries retain that audited turn. Unknown valid
+siblings preserve the shared extraction/pass-through rules.
+
+Native Responses HTTP/WS requests keep explicit execution session and custom cache
+keys separate; omitted cache keys remain omitted for both roots and subagents.
+Gateway-created compatibility adapters and legacy compact retain their own
+explicit fallback policies. Native OAuth and API-key requests use only
+`session-id`, removing legacy aliases and direct installation headers.
+Installation appears in `client_metadata` and existing canonical turn metadata.
+
+Session/thread/turn/context-window IDs use UUIDv7, preserving the timestamp of
+valid incoming v7 values. Legacy values use the durable atomic mapping store;
+installation defaults use persistent random v4 values, and valid device pins
+remain stable. Window IDs retain `<mapped thread>:<actual counter>`. Parent,
+root and fork references use the target object's mapping. Original turn start
+time is preserved, repeated generations of the same turn retain its ID, and
+missing turns/prewarm do not acquire fabricated IDs. Metadata session/full
+convergence never changes the routing session's authorization domain.
+
+Malformed embedded metadata that already has a carrier is rebuilt with only
+known installation information; it does not invent logical session, thread,
+turn or window state. Unknown valid fields stay intact. Missing canonical
+carriers are not fabricated. WebSocket reuse compares final stable handshake
+carriers in all four modes.
 
 Outbound User-Agent identity has one immutable source order: a valid
 credential-owner `credentials.user_agent`, then a valid global
@@ -285,6 +322,12 @@ different source or split the three declarations.
 Agent Identity task registration and its immediately retried upstream request
 reuse one resolved snapshot; a concurrent settings update takes effect only on
 the next independently resolved request.
+The Agent Identity principal binds the runtime and signing public-key
+fingerprint, including when no bearer token exists. A task-ID update for that
+same principal may be adopted while preserving the frozen identity, execution
+IDs and state owner. A concurrent runtime, signing-key or proxy change fails
+before signing or sending; registration uses a credential compare-and-swap so
+its result cannot overwrite a newer account binding.
 
 ### Mandatory source-priority matrix and exact default
 
@@ -349,8 +392,15 @@ Pooled WS reuse and prewarm targets compare all three identity declarations;
 an updated triple cannot reuse an idle connection with the old handshake.
 Background prewarm retains the originating request scope during Agent Identity
 header renewal.
-One Live observer retains its scope across connection retries; a newly started
-controller or observer resolves a fresh scope.
+Live creation persists a call-owned snapshot containing the selected
+UA/Originator/Version, UUIDv7 session/thread, residency and a digest of the real
+principal. Controllers, observers and reconnects load that same shared snapshot,
+including across replicas. Changes to account/global UA affect new calls only.
+Authentication tokens may refresh for the same principal and are not stored in
+the snapshot; relinked accounts cannot attach to an existing call. A legacy call
+record without a complete snapshot cannot reconstruct its creation identity
+and fails with `ErrLiveIdentityMismatch`; start a new call after upgrade. The
+snapshot is validated before any sideband dial.
 
 Final header application removes every case variant and duplicate of managed
 identity headers, including foreign SDK declarations, before rendering the
@@ -487,8 +537,11 @@ presets do not acquire Codex residency through the models adapter.
 
 ## Codex source compatibility boundaries
 
-The protocol baseline is official source `1b6e0d8145`. Identity-shape alignment
-does not mean every client feature, body, OS fingerprint or transport is identical.
+The current protocol review baseline is the pinned Codex commit in
+[Official agent outbound baselines](../OFFICIAL_AGENT_BASELINES.md). Earlier
+commit links in this document record evidence for individual features rather
+than a different current baseline. Identity-shape alignment does not mean every
+client feature, body, OS fingerprint or transport is identical.
 
 - HTTP-to-WS converts the Responses Lite header into the per-generation
   `client_metadata.ws_request_header_x_openai_internal_codex_responses_lite`
@@ -505,10 +558,10 @@ does not mean every client feature, body, OS fingerprint or transport is identic
   subagent declaration and those credentials. API-key failover, compact, unknown
   roles, duplicate values and unrelated reviewer models do not inherit the role.
   These context headers neither authorize requests nor bypass either audit engine.
-- Non-root requests declared by `x-openai-subagent` or turn metadata retain their
-  explicit session separately from `prompt_cache_key`. Both seeds still use the
-  selected account's tenant/session-sharing namespace. Root requests retain cache
-  alignment. The same distinction applies to HTTP and WS handshake identity.
+- Native root and subagent requests retain their explicit session separately
+  from `prompt_cache_key`. Omitted cache fields remain omitted. Execution IDs
+  follow owner and tenant/sharing scope; ordinary logical cache keys retain
+  their separate tenant scope across failover. HTTP and WS follow the same rule.
 - OAuth-like HTTP Responses uses Zstd level 3 at the final HTTP/plugin transport
   boundary, after JSON adaptation. The encoded body has a replayable `GetBody`
   and matching length/encoding declarations. This covers probes and HTTP bridges

@@ -287,7 +287,6 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 		if codexResult.PromptCacheKey != "" {
 			promptCacheKey = codexResult.PromptCacheKey
 		}
-		applyCodexAccountIdentityClientMetadataMap(reqBody, codexAccountIdentitySource(c, account), apiKeyID)
 		delete(reqBody, "prompt_cache_key")
 		if shouldAutoInjectPromptCacheKeyForCompat(upstreamModel) {
 			compatTurnState = s.getOpenAICompatSessionTurnState(ctx, c, account, promptCacheKey)
@@ -295,9 +294,6 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 		// OAuth codex transform forces stream=true upstream, so always use
 		// the streaming response handler regardless of what the client asked.
 		isStream = true
-		if _, fingerprintErr := s.prepareCodexFingerprintMap(ctx, c, account, reqBody); fingerprintErr != nil {
-			return nil, fingerprintErr
-		}
 		responsesBody, err = json.Marshal(reqBody)
 		if err != nil {
 			return nil, fmt.Errorf("remarshal after codex transform: %w", err)
@@ -377,6 +373,16 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	}
 	ctx = withRequestCredentialOwner(ctx, account, token)
 	defer bindRequestCredentialOwnerContext(ctx, c)()
+	if account.UsesOpenAICodexProtocol() && account.Platform != PlatformGrok {
+		responsesBody, _, err = applyCodexAccountIdentityClientMetadataRaw(responsesBody, codexAccountIdentitySource(c, account), apiKeyID, ctx)
+		if err != nil {
+			return nil, err
+		}
+		responsesBody, _, err = s.prepareCodexFingerprintRaw(ctx, c, account, responsesBody)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	// 6. Build upstream request
 	if account.UsesOpenAICodexProtocol() && account.Platform != PlatformGrok {

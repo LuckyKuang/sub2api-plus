@@ -23,6 +23,8 @@ func TestOpenAIRefreshSuccessCASPreservesConcurrentAuthorization(t *testing.T) {
 			account := newOpenAIAuthRecoveryTestAccount()
 			account.Credentials["expires_at"] = time.Now().Add(-time.Minute).UTC().Format(time.RFC3339)
 			repo := &refreshAPIAccountRepo{account: snapshotOAuthRefreshAccount(account)}
+			cache := &refreshAPICacheStub{lockResult: true}
+			deletesBeforeCAS := 0
 			repo.beforeSuccessCAS = func(r *refreshAPIAccountRepo) {
 				current := snapshotOAuthRefreshAccount(r.account)
 				current.Credentials["access_token"] = "new-login-token"
@@ -30,8 +32,8 @@ func TestOpenAIRefreshSuccessCASPreservesConcurrentAuthorization(t *testing.T) {
 				current.Credentials["expires_at"] = time.Now().Add(time.Hour).UTC().Format(time.RFC3339)
 				current.Credentials["_token_version"] = 999
 				r.account = current
+				deletesBeforeCAS = cache.deleteCalls
 			}
-			cache := &refreshAPICacheStub{lockResult: true}
 			executor := &refreshAPIExecutorStub{needsRefresh: true, credentials: map[string]any{"access_token": "obsolete-response", "refresh_token": "consumed-refresh"}}
 			provider := NewOpenAITokenProvider(repo, cache, nil)
 			provider.SetRefreshAPI(NewOAuthRefreshAPI(repo, cache), executor)
@@ -50,8 +52,73 @@ func TestOpenAIRefreshSuccessCASPreservesConcurrentAuthorization(t *testing.T) {
 			require.Equal(t, 1, repo.successCASCalls)
 			require.Zero(t, repo.updateCredentialsCalls, "the obsolete response must never overwrite a concurrent authorization")
 			require.Equal(t, 1, executor.refreshCalls)
-			require.GreaterOrEqual(t, cache.deleteCalls, 1, "cached credentials must be invalidated at the CAS/readback boundary")
-			require.Equal(t, OpenAITokenCacheKey(account), cache.deleteKey)
+			require.Equal(t, deletesBeforeCAS, cache.deleteCalls, "a lost refresh CAS must not invalidate the newer grant's cache")
+			if force {
+				require.Equal(t, 1, deletesBeforeCAS, "401 recovery drops the rejected token before the concurrent login")
+				require.Equal(t, OpenAITokenCacheKey(account), cache.deleteKey)
+			} else {
+				require.Zero(t, deletesBeforeCAS)
+			}
+		})
+	}
+}
+
+type openAIRefreshPersistenceGrantCache struct {
+	refreshAPICacheStub
+	token string
+}
+
+func (c *openAIRefreshPersistenceGrantCache) DeleteAccessToken(ctx context.Context, key string) error {
+	c.token = ""
+	return c.refreshAPICacheStub.DeleteAccessToken(ctx, key)
+}
+
+func TestOpenAIRefreshCASMissCannotDeleteConcurrentGrantCache(t *testing.T) {
+	for _, scenario := range []string{"reauthorization", "metadata-conflict", "owner-changed", "readback-failure"} {
+		t.Run(scenario, func(t *testing.T) {
+			selected := newOpenAIAuthRecoveryTestAccount()
+			repo := &refreshAPIAccountRepo{account: snapshotOAuthRefreshAccount(selected)}
+			cache := &openAIRefreshPersistenceGrantCache{refreshAPICacheStub: refreshAPICacheStub{lockResult: true}}
+			repo.beforeSuccessCAS = func(r *refreshAPIAccountRepo) {
+				current := snapshotOAuthRefreshAccount(r.account)
+				current.Credentials["model_mapping"] = map[string]any{"a": "b"}
+				if scenario != "metadata-conflict" {
+					current.Credentials["access_token"] = "new-login-token"
+					current.Credentials["refresh_token"] = "new-login-refresh"
+				}
+				if scenario == "owner-changed" {
+					current.Type = AccountTypeAPIKey
+				}
+				if scenario == "readback-failure" {
+					r.getByIDErrAfterCall, r.getByIDErrAfterCallErr = 2, errors.New("current state unavailable")
+				}
+				r.account = current
+				// A concurrent login has already populated the row-ID cache before
+				// this obsolete refresh result reaches its failed conditional write.
+				cache.token = "current-grant-cache-token"
+			}
+			executor := &refreshAPIExecutorStub{needsRefresh: true, credentials: map[string]any{"access_token": "obsolete-response", "refresh_token": "consumed-refresh"}}
+
+			result, err := NewOAuthRefreshAPI(repo, cache).RefreshIfNeeded(context.Background(), selected, executor, time.Hour)
+
+			if scenario == "reauthorization" {
+				require.NoError(t, err)
+				require.NotNil(t, result)
+				require.False(t, result.Refreshed)
+				require.Nil(t, result.NewCredentials)
+				require.Equal(t, "new-login-token", result.Account.GetCredential("access_token"))
+			} else {
+				require.Nil(t, result)
+				var failure *CredentialFailureError
+				require.ErrorAs(t, err, &failure)
+				require.Equal(t, GatewayFailureScopeProvider, failure.Scope)
+			}
+			require.Equal(t, "current-grant-cache-token", cache.token)
+			require.Zero(t, cache.deleteCalls, "CAS miss is not authorization to delete a current owner's cache")
+			require.Equal(t, 1, repo.successCASCalls)
+			require.Zero(t, repo.updateCredentialsCalls)
+			require.Equal(t, 1, executor.refreshCalls)
+			require.Equal(t, "old-token", selected.GetCredential("access_token"))
 		})
 	}
 }

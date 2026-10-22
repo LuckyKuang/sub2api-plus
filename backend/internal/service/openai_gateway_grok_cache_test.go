@@ -389,38 +389,34 @@ func TestGrokConversationHeaderIsScopedToGrokRequestScheduling(t *testing.T) {
 }
 
 func TestApplyGrokRequestMetadataUsesTrustedRequestValues(t *testing.T) {
-	headers := http.Header{
-		"X-Grok-Req-Id":         {"pinned"},
-		"X-Grok-Model-Override": {"wrong-model"},
-		"X-Grok-Session-Id":     {"wrong-session"},
-	}
-	applyGrokRequestMetadata(headers, []byte(`{"model":"grok-4.7"}`), grokConversationSnapshot{ConversationID: "trusted-session", SessionID: "trusted-session", RootSessionID: "root-session-123"}, " user-42 ")
-
-	require.NotEmpty(t, headers.Get("x-grok-req-id"))
-	require.NotEqual(t, "pinned", headers.Get("x-grok-req-id"))
-	requestID, err := uuid.Parse(headers.Get("x-grok-req-id"))
+	c := newGrokCacheTestContext(777)
+	c.Request.Header.Set("X-Grok-Session-Id", "logical-session")
+	account := &Account{ID: 77, Platform: PlatformGrok, Type: AccountTypeAPIKey, Credentials: map[string]any{"sub": "user-42"}}
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, "https://api.x.ai/v1/responses", nil)
+	require.NoError(t, err)
+	req.Header.Set("X-Grok-Agent-Id", "untrusted")
+	require.NoError(t, applyGrokRequestMetadataForRequest(req, c, account, []byte(`{"model":"grok-4.7"}`), "cache"))
+	requestID, err := uuid.Parse(req.Header.Get("x-grok-req-id"))
 	require.NoError(t, err)
 	require.Equal(t, uuid.Version(4), requestID.Version())
-	require.Equal(t, "grok-4.7", headers.Get("x-grok-model-override"))
-	require.Equal(t, "trusted-session", headers.Get("x-grok-conv-id"))
-	require.Equal(t, "trusted-session", headers.Get("x-grok-session-id"))
-	require.Equal(t, "user-42", headers.Get("x-grok-user-id"))
-	agentID, err := uuid.Parse(headers.Get("x-grok-agent-id"))
+	agentID, err := uuid.Parse(req.Header.Get("x-grok-agent-id"))
 	require.NoError(t, err)
-	require.Equal(t, uuid.Version(4), agentID.Version())
-	require.Equal(t, grokAgentID, agentID.String())
-	require.Equal(t,
-		"111fc242-925b-5a7d-826e-2974daad239f",
-		headers.Get("x-grok-conv-group-id"),
-	)
-
-	previousRequestID := headers.Get("x-grok-req-id")
-	applyGrokRequestMetadata(headers, []byte(`{}`), grokConversationSnapshot{}, "")
-	require.NotEqual(t, previousRequestID, headers.Get("x-grok-req-id"))
-	require.Equal(t, grokAgentID, headers.Get("x-grok-agent-id"))
-	for _, name := range []string{"x-grok-model-override", "x-grok-conv-id", "x-grok-session-id", "x-grok-conv-group-id", "x-grok-user-id"} {
-		require.Empty(t, headers.Get(name), name)
-	}
+	require.Equal(t, uuid.Version(5), agentID.Version())
+	sessionID, err := uuid.Parse(req.Header.Get("x-grok-session-id"))
+	require.NoError(t, err)
+	require.Equal(t, uuid.Version(7), sessionID.Version())
+	require.Equal(t, "grok-4.7", req.Header.Get("x-grok-model-override"))
+	require.Equal(t, "user-42", req.Header.Get("x-grok-user-id"))
+	require.NoError(t, applyGrokRequestMetadataForRequest(req, c, account, []byte(`{"model":"grok-4.7"}`), "cache"))
+	require.Equal(t, requestID.String(), req.Header.Get("x-grok-req-id"))
+	next := newGrokCacheTestContext(777)
+	next.Request.Header.Set("X-Grok-Session-Id", "logical-session")
+	nextReq, err := http.NewRequest(http.MethodPost, "https://api.x.ai/v1/responses", nil)
+	require.NoError(t, err)
+	require.NoError(t, applyGrokRequestMetadataForRequest(nextReq, next, account, []byte(`{"model":"grok-4.7"}`), "cache"))
+	require.NotEqual(t, requestID.String(), nextReq.Header.Get("x-grok-req-id"))
+	require.Equal(t, sessionID.String(), nextReq.Header.Get("x-grok-session-id"))
+	require.Equal(t, agentID.String(), nextReq.Header.Get("x-grok-agent-id"))
 }
 
 func TestDoGrokNativeResponsesJSONAppliesSamplerMetadata(t *testing.T) {
@@ -441,6 +437,112 @@ func TestDoGrokNativeResponsesJSONAppliesSamplerMetadata(t *testing.T) {
 	require.NotEmpty(t, upstream.lastReq.Header.Get("x-grok-agent-id"))
 	require.Equal(t, "grok-4.7", upstream.lastReq.Header.Get("x-grok-model-override"))
 	require.Equal(t, HTTPUpstreamProfileGrok, HTTPUpstreamProfileFromContext(upstream.lastReq.Context()))
+}
+
+func TestGrokRequestIDChangesPerWSTurnAndKeepsRetryIdentity(t *testing.T) {
+	c := newGrokCacheTestContext(778)
+	c.Request.Header.Set("X-Grok-Session-Id", "same-connection")
+	account := &Account{ID: 78, Platform: PlatformGrok, Type: AccountTypeOAuth, Credentials: map[string]any{"access_token": "token", "sub": "user-78"}}
+	ctx := WithOutboundIdentityScope(context.Background(), c)
+	build := func(turn int, owner *Account) *http.Request {
+		req, err := http.NewRequestWithContext(withGrokLogicalTurn(ctx, turn), http.MethodPost, "https://api.x.ai/v1/responses", nil)
+		require.NoError(t, err)
+		require.NoError(t, applyGrokRequestMetadataForRequest(req, c, owner, []byte(`{"model":"grok-4.5"}`), "cache"))
+		return req
+	}
+	first, retry, next := build(1, account), build(1, account), build(2, account)
+	require.Equal(t, first.Header.Get("X-Grok-Req-Id"), retry.Header.Get("X-Grok-Req-Id"))
+	require.NotEqual(t, first.Header.Get("X-Grok-Req-Id"), next.Header.Get("X-Grok-Req-Id"))
+	require.Equal(t, first.Header.Get("X-Grok-Session-Id"), next.Header.Get("X-Grok-Session-Id"))
+	refreshed := snapshotRequestCredentialAccount(account)
+	refreshed.Credentials["access_token"] = "refreshed"
+	require.Equal(t, first.Header.Get("X-Grok-Session-Id"), build(2, refreshed).Header.Get("X-Grok-Session-Id"))
+	reauthorized := snapshotRequestCredentialAccount(account)
+	reauthorized.Credentials["sub"] = "other-login"
+	require.NotEqual(t, first.Header.Get("X-Grok-Session-Id"), build(2, reauthorized).Header.Get("X-Grok-Session-Id"))
+	apiKey := &Account{ID: 79, Platform: PlatformGrok, Type: AccountTypeAPIKey, Credentials: map[string]any{"api_key": "first-owner-key"}}
+	before := build(1, apiKey).Header.Get("X-Grok-Session-Id")
+	apiKey.Credentials["api_key"] = "replacement-owner-key"
+	require.NotEqual(t, before, build(1, apiKey).Header.Get("X-Grok-Session-Id"))
+}
+
+// Official side_call.rs/title_refresh.rs create a distinct req_id for each
+// auxiliary sampler prompt while retaining the parent's session association.
+// OFFICIAL_AGENT_REQUEST_STATE.md extends that lifetime to Composer captions.
+func TestGrokAuxiliaryPromptsHaveIndependentRetryStableRequestIDs(t *testing.T) {
+	c := newGrokCacheTestContext(77801)
+	c.Request.Header.Set("X-Grok-Session-Id", "composer-session")
+	account := &Account{ID: 7801, Platform: PlatformGrok, Type: AccountTypeAPIKey, Credentials: map[string]any{"api_key": "composer-key"}}
+	ctx := WithOutboundIdentityScope(context.Background(), c)
+	build := func(turn int, operation string) *http.Request {
+		reqCtx := withGrokLogicalOperation(withGrokLogicalTurn(ctx, turn), operation)
+		req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, "https://api.x.ai/v1/responses", nil)
+		require.NoError(t, err)
+		require.NoError(t, applyGrokRequestMetadataForRequest(req, c, account, []byte(`{"model":"grok-build-0.1"}`), ""))
+		return req
+	}
+	firstImage, firstRetry := build(1, "composer-image:1"), build(1, "composer-image:1")
+	secondImage, parent, nextTurn := build(1, "composer-image:2"), build(1, ""), build(2, "composer-image:1")
+	require.Equal(t, firstImage.Header.Get("X-Grok-Req-Id"), firstRetry.Header.Get("X-Grok-Req-Id"))
+	seen := make(map[string]bool)
+	for _, req := range []*http.Request{firstImage, secondImage, parent, nextTurn} {
+		id, err := uuid.Parse(req.Header.Get("X-Grok-Req-Id"))
+		require.NoError(t, err)
+		require.Equal(t, uuid.Version(4), id.Version())
+		require.False(t, seen[id.String()], "each logical prompt needs its own request ID")
+		seen[id.String()] = true
+		require.Equal(t, firstImage.Header.Get("X-Grok-Session-Id"), req.Header.Get("X-Grok-Session-Id"))
+		require.Equal(t, firstImage.Header.Get("X-Grok-Agent-Id"), req.Header.Get("X-Grok-Agent-Id"))
+	}
+}
+
+func TestGrokConversationTypesStayIndependentAndDurable(t *testing.T) {
+	store := newTestOutboundIDStore()
+	account := &Account{ID: 79, Platform: PlatformGrok, Type: AccountTypeAPIKey}
+	build := func(tenant int64) *http.Request {
+		c := newGrokCacheTestContext(tenant)
+		c.Request.Header.Set("X-Grok-Session-Id", "root-session")
+		c.Request.Header.Set("X-Grok-Conv-Id", "side-call-5a572cb3-d283-4698-b3ed-de1618d67d3d")
+		req, err := http.NewRequestWithContext(WithOutboundIDStore(context.Background(), store), http.MethodPost, "https://api.x.ai/v1/responses", nil)
+		require.NoError(t, err)
+		require.NoError(t, applyGrokRequestMetadataForRequest(req, c, account, nil, "parent-cache"))
+		return req
+	}
+	first, replica, otherTenant := build(779), build(779), build(780)
+	require.Equal(t, first.Header.Get("X-Grok-Session-Id"), replica.Header.Get("X-Grok-Session-Id"))
+	require.Equal(t, first.Header.Get("X-Grok-Agent-Id"), replica.Header.Get("X-Grok-Agent-Id"))
+	require.NotEqual(t, first.Header.Get("X-Grok-Session-Id"), otherTenant.Header.Get("X-Grok-Session-Id"))
+	conversation := first.Header.Get("X-Grok-Conv-Id")
+	require.True(t, strings.HasPrefix(conversation, "side-call-"))
+	parsed, err := uuid.Parse(strings.TrimPrefix(conversation, "side-call-"))
+	require.NoError(t, err)
+	require.Equal(t, uuid.Version(4), parsed.Version())
+	require.NotEqual(t, first.Header.Get("X-Grok-Session-Id"), parsed.String())
+	req, err := http.NewRequestWithContext(WithOutboundIDStore(context.Background(), nil), http.MethodPost, "https://api.x.ai/v1/responses", nil)
+	require.NoError(t, err)
+	require.ErrorIs(t, applyGrokRequestMetadataForRequest(req, nil, account, nil, ""), ErrOutboundIDStoreUnavailable)
+	require.Empty(t, req.Header.Get("X-Grok-Agent-Id"))
+}
+
+func TestGrokDefaultSessionIsV7AndIndependentOfModelCache(t *testing.T) {
+	c := newGrokCacheTestContext(781)
+	account := &Account{ID: 81, Platform: PlatformGrok, Type: AccountTypeAPIKey, Credentials: map[string]any{"api_key": "key"}}
+	body := []byte(`{"prompt_cache_key":"caller-conversation","input":"hello"}`)
+	firstCache := resolveGrokCacheIdentity(c, body, "", "grok-4.5")
+	secondCache := resolveGrokCacheIdentity(c, body, "", "grok-4.6")
+	require.NotEqual(t, firstCache, secondCache)
+	build := func(cache string) *http.Request {
+		req, err := http.NewRequest(http.MethodPost, "https://api.x.ai/v1/responses", nil)
+		require.NoError(t, err)
+		require.NoError(t, applyGrokRequestMetadataForRequest(req, c, account, nil, cache))
+		return req
+	}
+	first, second := build(firstCache), build(secondCache)
+	firstID, err := uuid.Parse(first.Header.Get("X-Grok-Session-Id"))
+	require.NoError(t, err)
+	require.Equal(t, uuid.Version(7), firstID.Version(), "a cache UUIDv4 does not turn a new session into a resumed session")
+	require.Equal(t, firstID.String(), second.Header.Get("X-Grok-Session-Id"))
+	require.NotEqual(t, firstCache, firstID.String())
 }
 
 func TestResolveGrokCacheIdentityConcurrentDeterminism(t *testing.T) {

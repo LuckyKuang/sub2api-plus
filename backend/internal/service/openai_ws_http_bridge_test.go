@@ -453,7 +453,7 @@ func TestOpenAIWSHTTPBridgeAPIKeyReusesClientToolMappingWhenFollowupOmitsTools(t
 		rec := httptest.NewRecorder()
 		ginCtx, _ := gin.CreateTestContext(rec)
 		ginCtx.Request = r.Clone(r.Context())
-		errCh <- svc.ProxyResponsesWebSocketFromClient(r.Context(), ginCtx, conn, account, "sk-test", firstMessage, nil)
+		errCh <- svc.ProxyResponsesWebSocketFromClient(r.Context(), ginCtx, conn, account, "sk-upstream", firstMessage, nil)
 	}))
 	defer wsServer.Close()
 
@@ -497,6 +497,9 @@ func TestOpenAIWSHTTPBridgeAPIKeyReusesClientToolMappingWhenFollowupOmitsTools(t
 
 	require.Len(t, upstream.bodies, 2)
 	firstTools := gjson.GetBytes(upstream.bodies[0], "tools").Array()
+	for _, request := range upstream.requests {
+		require.Equal(t, "Bearer sk-upstream", request.Header.Get("Authorization"), "bridge turns retain the fixture's acquired credential")
+	}
 	require.Len(t, firstTools, 1)
 	require.Equal(t, "function", firstTools[0].Get("type").String())
 	secondTools := gjson.GetBytes(upstream.bodies[1], "tools").Array()
@@ -1504,7 +1507,7 @@ func TestProxyOpenAIWSHTTPBridgeTurnFinalizesPromptCacheIdentity(t *testing.T) {
 		account             *Account
 		payload             string
 		wantOptions         bool
-		wantGeneratedKey    bool
+		wantOmittedKey      bool
 		wantOriginalKeyGone bool
 	}{
 		{
@@ -1531,15 +1534,15 @@ func TestProxyOpenAIWSHTTPBridgeTurnFinalizesPromptCacheIdentity(t *testing.T) {
 			wantOriginalKeyGone: true,
 		},
 		{
-			name: "api_key_derives_identity_from_meaningful_input",
+			name: "native_api_key_preserves_cache_omission",
 			account: &Account{
 				ID:          83,
 				Platform:    PlatformOpenAI,
 				Type:        AccountTypeAPIKey,
 				Concurrency: 1,
 			},
-			payload:          `{"type":"response.create","model":"gpt-5.6","input":[{"role":"user","content":"stable first turn"}]}`,
-			wantGeneratedKey: true,
+			payload:        `{"type":"response.create","model":"gpt-5.6","input":[{"role":"user","content":"stable first turn"}]}`,
+			wantOmittedKey: true,
 		},
 	}
 
@@ -1580,16 +1583,17 @@ func TestProxyOpenAIWSHTTPBridgeTurnFinalizesPromptCacheIdentity(t *testing.T) {
 			require.Len(t, events, 2)
 
 			cacheIdentity := gjson.GetBytes(upstream.lastBody, "prompt_cache_key").String()
-			require.NotEmpty(t, cacheIdentity)
-			require.Equal(t, cacheIdentity, upstream.lastReq.Header.Get(codexSessionIDHeader))
+			require.Equal(t, !tt.wantOmittedKey, gjson.GetBytes(upstream.lastBody, "prompt_cache_key").Exists())
+			require.Empty(t, upstream.lastReq.Header.Get(codexSessionIDHeader), "cache must not create missing native session")
 			require.Empty(t, upstream.lastReq.Header.Get("session_id"))
-			require.Equal(t, "thread-cache-bridge", upstream.lastReq.Header.Get("x-client-request-id"))
+			require.NotEqual(t, "thread-cache-bridge", upstream.lastReq.Header.Get("thread-id"))
+			require.Equal(t, upstream.lastReq.Header.Get("thread-id"), upstream.lastReq.Header.Get("x-client-request-id"))
 			require.Equal(t, tt.wantOptions, gjson.GetBytes(upstream.lastBody, "prompt_cache_options").Exists())
 			if tt.wantOriginalKeyGone {
 				require.NotContains(t, []string{"client-cache-key", "oauth-cache-key"}, cacheIdentity)
 			}
-			if tt.wantGeneratedKey {
-				require.NotEqual(t, deriveOpenAIAnchoredContentSessionSeed([]byte(tt.payload)), cacheIdentity)
+			if tt.wantOmittedKey {
+				require.Empty(t, cacheIdentity)
 			}
 		})
 	}
@@ -1710,7 +1714,7 @@ func TestProxyOpenAIWSHTTPBridgeTurnPromotesCodexAdditionalToolsForMixedCache(t 
 	require.False(t, gjson.GetBytes(upstream.lastBody, `tools.#(type=="custom")`).Exists())
 	require.False(t, gjson.GetBytes(upstream.lastBody, `tools.#(type=="namespace")`).Exists())
 	require.Equal(t, "isolated-ws-cache-id", gjson.GetBytes(upstream.lastBody, "prompt_cache_key").String())
-	require.Equal(t, "isolated-ws-cache-id", upstream.lastReq.Header.Get(grokConversationIDHeader))
+	require.Empty(t, upstream.lastReq.Header.Get(grokConversationIDHeader), "no tenant context was supplied")
 	require.Empty(t, upstream.lastReq.Header.Get("X-Grok-Client-Tool-Cache"))
 }
 
@@ -1756,7 +1760,8 @@ func TestProxyResponsesWebSocketFromClientForGrokUsesXAIHTTPBridgeAndPreservesMa
 		Concurrency: 1,
 		Status:      StatusActive,
 		Credentials: map[string]any{
-			"base_url": xai.DefaultCLIBaseURL,
+			"base_url":     xai.DefaultCLIBaseURL,
+			"access_token": "access-token",
 		},
 	}
 
@@ -1871,7 +1876,7 @@ func TestProxyResponsesWebSocketFromClientForGrokUsesXAIHTTPBridgeAndPreservesMa
 	require.Equal(t, "grok-4.3", gjson.GetBytes(upstream.bodies[1], "model").String())
 	require.Equal(t, "grok-4.3", gjson.GetBytes(upstream.bodies[2], "model").String())
 	require.NotEmpty(t, gjson.GetBytes(upstream.lastBody, "prompt_cache_key").String())
-	require.Equal(t, gjson.GetBytes(upstream.lastBody, "prompt_cache_key").String(), upstream.lastReq.Header.Get(grokConversationIDHeader))
+	requireGrokIndependentConversation(t, upstream.lastReq, gjson.GetBytes(upstream.lastBody, "prompt_cache_key").String())
 	require.False(t, gjson.GetBytes(upstream.lastBody, "tools").Exists(), "no implicit search authorization")
 	require.False(t, gjson.GetBytes(upstream.lastBody, "tool_choice").Exists())
 	firstIdentity := gjson.GetBytes(upstream.bodies[0], "prompt_cache_key").String()
@@ -1882,9 +1887,13 @@ func TestProxyResponsesWebSocketFromClientForGrokUsesXAIHTTPBridgeAndPreservesMa
 	require.NotEqual(t, firstIdentity, secondIdentity)
 	require.NotEmpty(t, thirdIdentity)
 	require.Equal(t, secondIdentity, thirdIdentity)
-	require.Equal(t, firstIdentity, upstream.requests[0].Header.Get(grokConversationIDHeader))
-	require.Equal(t, secondIdentity, upstream.requests[1].Header.Get(grokConversationIDHeader))
-	require.Equal(t, thirdIdentity, upstream.requests[2].Header.Get(grokConversationIDHeader))
+	requireGrokIndependentConversation(t, upstream.requests[0], firstIdentity)
+	requireGrokIndependentConversation(t, upstream.requests[1], secondIdentity)
+	requireGrokIndependentConversation(t, upstream.requests[2], thirdIdentity)
+	require.Equal(t, upstream.requests[0].Header.Get(grokConversationIDHeader), upstream.requests[1].Header.Get(grokConversationIDHeader), "model changes retain the conversation")
+	require.Equal(t, upstream.requests[1].Header.Get(grokConversationIDHeader), upstream.requests[2].Header.Get(grokConversationIDHeader))
+	require.NotEqual(t, upstream.requests[0].Header.Get("X-Grok-Req-Id"), upstream.requests[1].Header.Get("X-Grok-Req-Id"), "new WS turns own new prompt IDs")
+	require.NotEqual(t, upstream.requests[1].Header.Get("X-Grok-Req-Id"), upstream.requests[2].Header.Get("X-Grok-Req-Id"))
 	require.False(t, gjson.GetBytes(upstream.lastBody, "type").Exists())
 	require.False(t, gjson.GetBytes(upstream.lastBody, "generate").Exists())
 	require.False(t, gjson.GetBytes(upstream.lastBody, "prompt_cache_retention").Exists())
@@ -1993,7 +2002,7 @@ func TestOpenAIWSHTTPBridgeAcceptsFirstFrameAboveLegacy16MiB(t *testing.T) {
 
 		proxyCtx, cancelProxy := context.WithTimeout(r.Context(), 20*time.Second)
 		defer cancelProxy()
-		errCh <- svc.ProxyResponsesWebSocketFromClient(proxyCtx, ginCtx, conn, account, "sk-test", firstMessage, hooks)
+		errCh <- svc.ProxyResponsesWebSocketFromClient(proxyCtx, ginCtx, conn, account, "sk-upstream", firstMessage, hooks)
 	}))
 	defer wsServer.Close()
 
@@ -2048,6 +2057,7 @@ func TestOpenAIWSHTTPBridgeAcceptsFirstFrameAboveLegacy16MiB(t *testing.T) {
 	require.NotNil(t, upstream.lastReq)
 	require.Equal(t, http.MethodPost, upstream.lastReq.Method)
 	require.Equal(t, "https://env-openai.example/v1/responses", upstream.lastReq.URL.String())
+	require.Equal(t, "Bearer sk-upstream", upstream.lastReq.Header.Get("Authorization"))
 	require.Equal(t, "env-openai", account.GetCredential("model_provider"))
 	require.Less(t, int64(len(upstream.lastBody)), cfg.Gateway.OpenAIWS.HTTPBridgeThresholdBytes)
 	require.Greater(t, len(upstream.lastBody), 16*1024*1024)
@@ -2156,7 +2166,7 @@ func TestOpenAIWSHTTPBridgeKeepsContinuationFramesOnHTTPWithoutPreviousResponseI
 		req.Header.Set("User-Agent", "codex_cli_rs/0.135.0")
 		ginCtx.Request = req
 
-		errCh <- svc.ProxyResponsesWebSocketFromClient(r.Context(), ginCtx, conn, account, "sk-test", firstMessage, nil)
+		errCh <- svc.ProxyResponsesWebSocketFromClient(r.Context(), ginCtx, conn, account, "sk-upstream", firstMessage, nil)
 	}))
 	defer wsServer.Close()
 
@@ -2199,6 +2209,9 @@ func TestOpenAIWSHTTPBridgeKeepsContinuationFramesOnHTTPWithoutPreviousResponseI
 	}
 
 	require.Len(t, upstream.bodies, 2, "进入 HTTP bridge 后同一客户端 WS 连接内应保持 HTTP/SSE bridge")
+	for _, request := range upstream.requests {
+		require.Equal(t, "Bearer sk-upstream", request.Header.Get("Authorization"), "HTTP continuation retains its acquired credential")
+	}
 	require.False(t, gjson.GetBytes(upstream.bodies[0], "previous_response_id").Exists())
 	require.False(t, gjson.GetBytes(upstream.bodies[1], "previous_response_id").Exists())
 	secondInput := gjson.GetBytes(upstream.bodies[1], "input").Array()
@@ -2276,7 +2289,7 @@ func TestOpenAIWSHTTPBridge_IdleTimeoutClosesClientSession(t *testing.T) {
 		rec := httptest.NewRecorder()
 		ginCtx, _ := gin.CreateTestContext(rec)
 		ginCtx.Request = r.Clone(r.Context())
-		errCh <- svc.ProxyResponsesWebSocketFromClient(r.Context(), ginCtx, conn, account, "sk-test", firstMessage, nil)
+		errCh <- svc.ProxyResponsesWebSocketFromClient(r.Context(), ginCtx, conn, account, "sk-upstream", firstMessage, nil)
 	}))
 	defer wsServer.Close()
 
@@ -2315,4 +2328,5 @@ func TestOpenAIWSHTTPBridge_IdleTimeoutClosesClientSession(t *testing.T) {
 		t.Fatal("timed out waiting for idle HTTP bridge session to close")
 	}
 	require.Len(t, upstream.bodies, 1, "an idle client must not leave a continuation request running")
+	require.Equal(t, "Bearer sk-upstream", upstream.lastReq.Header.Get("Authorization"))
 }

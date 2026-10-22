@@ -364,7 +364,9 @@ func (c *OffPeakClient) do(ctx context.Context, method, path string, auth OffPea
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	prepareRequest(req)
+	if err := prepareRequest(req); err != nil {
+		return nil, err
+	}
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return nil, err

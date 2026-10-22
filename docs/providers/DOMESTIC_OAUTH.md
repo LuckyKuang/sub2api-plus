@@ -93,7 +93,13 @@ comparison and durable write succeed. Missing conditional storage never falls
 back to an unconditional quota write.
 
 Scheduling thresholds and quota-derived reset cooldowns require a matching
-`<provider>_quota_generation` binding. Existing unbound windows and windows from a
+`<provider>_quota_generation` binding. Slim scheduler records retain the original
+CN credential/proxy-status digest and recognized quota windows, including
+unlimited flags, so filtering credentials does not invalidate a valid observation.
+These projected records cannot be used for upstream credentials or state writes;
+hydrated accounts recompute the digest from the complete grant. Existing cached
+metadata gains this projection on its next account snapshot refresh.
+Existing unbound windows and windows from a
 previous authorization remain observational until a successful probe records the
 current generation. Reauthorization and proxy changes therefore cannot inherit
 the previous grant's exhausted windows. A successful recognized response replaces

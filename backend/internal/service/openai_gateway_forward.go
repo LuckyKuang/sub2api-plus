@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -521,15 +522,6 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		}
 	}
 
-	if account.Platform == PlatformOpenAI && account.Type == AccountTypeAPIKey && !isCompactRequest {
-		decoded, decodeErr := ensureReqBody()
-		if decodeErr != nil {
-			return nil, decodeErr
-		}
-		if applyCodexAccountIdentityClientMetadataMap(decoded, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c)) {
-			markDecodedModified()
-		}
-	}
 	if account.UsesOpenAICodexProtocol() {
 		decoded, decodeErr := ensureReqBody()
 		if decodeErr != nil {
@@ -569,37 +561,8 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		if codexResult.Modified {
 			markDecodedModified()
 		}
-		// 带真实 device_id 时补齐 client_metadata 安装标识，与真实 Codex 对齐（compact 形态不同，跳过）。
-		if !isCompactRequest && applyCodexClientMetadata(decoded, account) {
-			markDecodedModified()
-		}
 		if currentClientPromptCacheKey, ok := decoded["prompt_cache_key"].(string); ok {
 			clientPromptCacheKey = currentClientPromptCacheKey
-		}
-		// Account namespace is orthogonal to fingerprint convergence: preserve
-		// each client's identity cardinality, but never reuse it across OAuth
-		// credentials after scheduler failover.
-		if !isCompactRequest && applyCodexAccountIdentityClientMetadataMap(decoded, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c)) {
-			markDecodedModified()
-		}
-		stageCodexFingerprintIDs(c, nil)
-		// 指纹收敛：一次性解析收敛 ID，请求体和出站头共享同一份 IDs（保证 turn_id 等随机字段一致）。
-		// fingerprintIDs 在此处解析，后续 buildUpstreamRequest 中使用同一份。
-		if !isCompactRequest {
-			var clientHeaders http.Header
-			if c != nil && c.Request != nil {
-				clientHeaders = c.Request.Header
-			}
-			fpIDs := resolveCodexFingerprintIDsFromRequest(codexAccountIdentitySource(c, account), clientHeaders)
-			if fpIDs != nil {
-				if applyCodexFingerprintClientMetadata(decoded, fpIDs) {
-					markDecodedModified()
-				}
-			}
-			// 将 fpIDs 存入 gin context，供 buildUpstreamRequest 中头改写使用。
-			// 无条件覆写（含 nil）：failover 从收敛账号切到 off 账号时，上一
-			// 账号的 IDs 不得残留（stageCodexFingerprintIDs 注释）。
-			stageCodexFingerprintIDs(c, fpIDs)
 		}
 		if codexResult.NormalizedModel != "" {
 			upstreamModel = codexResult.NormalizedModel
@@ -609,8 +572,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			// so the header builder derives the same namespace exactly once.
 			promptCacheKey = clientPromptCacheKey
 		} else if currentPromptCacheKey, ok := decoded["prompt_cache_key"].(string); ok && currentPromptCacheKey != "" {
-			// Fingerprint convergence may inject a default key when the client did
-			// not provide one; preserve that existing fallback.
+			// Preserve cache policy already applied by a gateway-owned adapter.
 			promptCacheKey = currentPromptCacheKey
 		} else if codexResult.PromptCacheKey != "" {
 			promptCacheKey = codexResult.PromptCacheKey
@@ -842,6 +804,37 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	}
 	ctx = withRequestCredentialOwner(ctx, account, token)
 	defer bindRequestCredentialOwnerContext(ctx, c)()
+	stageCodexFingerprintIDs(c, nil)
+	if !isCompactRequest {
+		owner, ownerErr := codexRequestIdentityOwner(ctx, account)
+		if ownerErr != nil {
+			return nil, ownerErr
+		}
+		if account.UsesOpenAICodexProtocol() && owner.GetOpenAIDeviceID() != "" {
+			var decoded map[string]any
+			if err := json.Unmarshal(body, &decoded); err != nil {
+				return nil, err
+			}
+			if applyCodexClientMetadata(decoded, owner) {
+				body, err = json.Marshal(decoded)
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
+		body, _, err = applyCodexAccountIdentityClientMetadataRaw(body, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c), ctx)
+		if err != nil {
+			return nil, err
+		}
+		if account.UsesOpenAICodexProtocol() {
+			body, _, err = s.prepareCodexFingerprintRaw(ctx, c, account, body)
+			if err != nil {
+				return nil, err
+			}
+		}
+		requestView = newOpenAIRequestView(body)
+		reqBody = nil
+	}
 	SetOpsUpstreamModel(c, upstreamModel)
 
 	if result, handled, wsErr := s.tryCodexHTTPWebSocket(ctx, c, account, body, token, originalModel, upstreamModel, clientPromptCacheKey, startTime); handled {
@@ -1559,6 +1552,9 @@ func shouldForwardOpenAIResponsesViaRawChatCompletions(account *Account) bool {
 }
 
 func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Context, account *Account, body []byte, token string, isStream bool, promptCacheKey string, isCodexCLI bool) (*http.Request, error) {
+	if err := validateOpenAIOAuthSessionAccess(c, account); err != nil {
+		return nil, err
+	}
 	ctx = WithOutboundIdentityScope(ctx, c)
 	ctx = WithAccountOutboundIdentity(ctx, account)
 	// Codex 可见时区对齐：按账号/全局配置改写 environment_context 的
@@ -1693,7 +1689,9 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 
 	// 账号 namespace 不改变客户端身份基数，但确保 scheduler failover 后不会把
 	// 同一组 Codex IDs 发送给另一份 OAuth 凭据。可选指纹收敛随后仍可覆盖这些值。
-	applyCodexAccountIdentityHeaders(req.Header, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c))
+	if err := applyCodexAccountIdentityHeaders(ctx, req.Header, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c)); err != nil {
+		return nil, err
+	}
 
 	// 指纹收敛：使用 Forward() 中预计算的收敛 ID 改写出站头，与请求体使用同一份 IDs。
 	if err := s.applyStagedCodexFingerprintHeadersForAccount(ctx, c, account, req.Header); err != nil {
@@ -1722,6 +1720,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 	identity := s.applyOpenAIOutboundIdentity(ctx, account, req.Header, true)
 	ApplyAccountOutboundHeaders(ctx, account, req.Header)
 	clearOpenAICodexLegacySessionAliases(req.Header, account)
+	stripCodexDirectInstallationHeader(req.Header, account)
 	stripOpenAILegacyResponsesBeta(req.Header)
 	applyOpenAICodexGuardianHeader(c, account, req.Header, gjson.GetBytes(body, "model").String())
 	SetOpsRoutingDiagnostics(c, &OpsRoutingDiagnostics{OutboundIdentitySource: identity.Source})

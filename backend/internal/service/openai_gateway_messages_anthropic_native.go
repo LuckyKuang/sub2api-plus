@@ -180,6 +180,9 @@ func (s *OpenAIGatewayService) buildNativeAnthropicUpstreamRequest(
 	if beta, ok := account.HeaderOverrideValue("anthropic-beta"); ok {
 		clientBeta = beta
 	}
+	if hasDomesticRequestHeaderContract(account) {
+		clientBeta = domesticAnthropicBeta(account, body, clientBeta)
+	}
 	if sanitized, changed := sanitizeAnthropicBodyForBetaTokens(body, clientBeta); changed {
 		body = sanitized
 	}

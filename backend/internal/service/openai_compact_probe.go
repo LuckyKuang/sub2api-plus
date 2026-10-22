@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"strings"
@@ -154,14 +155,29 @@ func mergeExtraUpdates(base map[string]any, more map[string]any) map[string]any 
 	return out
 }
 
-// compactProbeSessionID 返回探测请求使用的会话标识。真实 Codex 的
-// session-id / thread-id 恒为 UUID（codex-protocol ThreadId 是 UUIDv7），
-// 探测既然与真实流量走同一个 /responses 端点，标识形态就必须同构——
-// 否则上游能凭 "probe_compact_5" 这类字面量一眼区分出探测流量。
-// 账号级稳定派生：重复探测复用同一会话，而不是每次新开一个。
-func compactProbeSessionID(accountID int64) string {
-	if accountID <= 0 {
-		return deriveStableUUIDv4("sub2api:codex-compact-probe:v1:anonymous")
+// A synthetic compact probe owns a stable session/thread and one window. It
+// has no user submission, so it must not invent a turn ID or turn start time.
+type openAICompactProbeIDs struct{ session, thread, installation string }
+
+func resolveOpenAICompactProbeIDs(ctx context.Context, account *Account) (openAICompactProbeIDs, error) {
+	var ids openAICompactProbeIDs
+	var err error
+	account, err = codexRequestIdentityOwner(ctx, account)
+	if err != nil {
+		return ids, err
 	}
-	return deriveStableUUIDv4("sub2api:codex-compact-probe:v1:" + strconv.FormatInt(accountID, 10))
+	ids.session, err = resolveCodexAccountIdentityValue(ctx, account, 0, "session", "compact-probe-session")
+	if err != nil {
+		return ids, err
+	}
+	ids.thread, err = resolveCodexAccountIdentityValue(ctx, account, 0, "thread", "compact-probe-thread")
+	if err != nil {
+		return ids, err
+	}
+	if pin := account.GetOpenAIDeviceID(); pin != "" {
+		ids.installation = pin
+	} else {
+		ids.installation, err = resolveOutboundMappedID(ctx, "codex-installation-v2", codexAccountIdentityNamespace(account), 4)
+	}
+	return ids, err
 }
