@@ -148,6 +148,18 @@ func (r *usageLogRepository) ListWithFilters(ctx context.Context, params paginat
 		args = append(args, *filters.EndTime)
 	}
 
+	var snapshotMaxID *int64
+	if filters.SnapshotMaxID != nil {
+		value := *filters.SnapshotMaxID
+		if value < 0 {
+			if err := scanSingleRow(ctx, r.sql, "SELECT COALESCE(MAX(id), 0) FROM usage_logs "+buildWhere(conditions), args, &value); err != nil {
+				return nil, nil, err
+			}
+		}
+		snapshotMaxID = &value
+		conditions = append(conditions, fmt.Sprintf("id <= $%d", len(args)+1))
+		args = append(args, value)
+	}
 	whereClause := buildWhere(conditions)
 	var (
 		logs []service.UsageLog
@@ -166,6 +178,7 @@ func (r *usageLogRepository) ListWithFilters(ctx context.Context, params paginat
 	if err := r.hydrateUsageLogAssociations(ctx, logs); err != nil {
 		return nil, nil, err
 	}
+	page.SnapshotMaxID = snapshotMaxID
 	return logs, page, nil
 }
 

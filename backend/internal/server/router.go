@@ -8,6 +8,7 @@ import (
 
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
 	"github.com/LuckyKuang/sub2api-plus/internal/handler"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/liverequestcache"
 	middleware2 "github.com/LuckyKuang/sub2api-plus/internal/server/middleware"
 	"github.com/LuckyKuang/sub2api-plus/internal/server/routes"
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
@@ -122,6 +123,14 @@ func registerRoutes(
 	redisClient *redis.Client,
 ) {
 	// 通用路由（健康检查、状态等）
+	liveRequests := service.NewLiveRequestService(liverequestcache.New(redisClient))
+	r.Use(handler.LiveRequestContext(liveRequests))
+	if h.Usage != nil {
+		h.Usage.SetLiveRequests(liveRequests)
+	}
+	if h.Admin != nil && h.Admin.Usage != nil {
+		h.Admin.Usage.SetLiveRequests(liveRequests)
+	}
 	routes.RegisterCommonRoutes(r)
 
 	// API v1

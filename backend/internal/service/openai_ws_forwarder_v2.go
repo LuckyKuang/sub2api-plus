@@ -378,7 +378,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 
 	usage := &OpenAIUsage{}
 	imageCounter := newOpenAIImageOutputCounter()
-	var timing streamOutputTiming
+	timing := requestStreamOutputTiming(c)
 	responseID := ""
 	var finalResponse []byte
 	wroteDownstream := false

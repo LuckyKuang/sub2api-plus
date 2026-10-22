@@ -47,7 +47,7 @@ func (s *GatewayService) handleBedrockStreamingResponse(
 	}
 
 	usage := &ClaudeUsage{}
-	var timing streamOutputTiming
+	timing := requestStreamOutputTiming(c)
 	clientDisconnected := false
 	resultWithUsage := func(disconnected bool) *streamingResult {
 		return &streamingResult{

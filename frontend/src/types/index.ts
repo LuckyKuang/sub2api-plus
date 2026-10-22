@@ -489,6 +489,7 @@ export interface ApiError {
 }
 
 export interface PaginatedResponse<T> {
+  snapshot_max_id?: number
   items: T[]
   total: number
   page: number
@@ -2173,6 +2174,7 @@ export interface UserErrorListParams {
 }
 
 export interface UsageQueryParams {
+  snapshot_max_id?: number | 'new'
   page?: number
   page_size?: number
   api_key_id?: number

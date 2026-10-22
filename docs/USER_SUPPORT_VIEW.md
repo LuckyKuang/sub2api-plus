@@ -41,3 +41,12 @@ API 密钥沿用用户 DTO，返回完整密钥、完整 IP 白名单/黑名单�
 - 连续切换两个用户并退出 > 页面、余额、公告及任务不残留前一个用户的数据，管理员登录身份保持不变。
 
 回归覆盖独立读取身份、完整密钥/认证信息响应一致性、跨用户/密钥越权、写路由缺失、真实管理员审计、下载状态不变，以及前端读取映射、请求取消和只读交互。检查命令与容器要求见 [CONTRIBUTING.md](../CONTRIBUTING.md)。
+
+## Request inspection reads
+
+The allowlisted read-only routes include `/usage/live` and existing `/usage/:id`,
+rewritten to `/admin/support/users/:user_id/usage/...`. Live reads use the support
+read subject, user field projection and user-error visibility setting. No gateway
+request is created by inspecting a record. Target changes invalidate pending
+responses and remount pages; column preferences include the target ID. Layout
+classification resolves support resource aliases through the personal-route map.

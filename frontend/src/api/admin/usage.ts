@@ -272,7 +272,13 @@ export async function cancelCleanupTask(taskId: number): Promise<{ id: number; s
   return data
 }
 
+export async function getById(id: number, signal?: AbortSignal): Promise<AdminUsageLog> {
+  const { data } = await apiClient.get<AdminUsageLog>(`/admin/usage/${id}`, { signal })
+  return data
+}
+
 export const adminUsageAPI = {
+  getById,
   list,
   listClientDisconnectEvents,
   getStats,

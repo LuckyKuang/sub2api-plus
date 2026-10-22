@@ -378,9 +378,12 @@ type UserDashboardStats = usagestats.UserDashboardStats
 type PlatformDashboardStats = usagestats.PlatformDashboardStats
 
 // GetUserDashboardStats 获取用户专属的仪表盘统计
-func (r *usageLogRepository) GetUserDashboardStats(ctx context.Context, userID int64) (*UserDashboardStats, error) {
+func (r *usageLogRepository) GetUserDashboardStats(ctx context.Context, userID int64, userTimezone string) (*UserDashboardStats, error) {
 	stats := &UserDashboardStats{}
-	today := timezone.Today()
+	now := timezone.NowInUserLocation(userTimezone)
+	today := timezone.StartOfDayInUserLocation(now, userTimezone)
+	stats.Timezone = today.Location().String()
+	stats.GeneratedAt = now.UTC().Format(time.RFC3339)
 
 	// API Key 统计
 	if err := scanSingleRow(

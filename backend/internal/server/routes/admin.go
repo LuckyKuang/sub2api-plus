@@ -746,6 +746,8 @@ func registerUsageRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	usage := admin.Group("/usage")
 	{
 		usage.GET("", h.Admin.Usage.List)
+		usage.GET("/live", h.Admin.Usage.LiveRequests)
+		usage.GET("/:id", h.Admin.Usage.GetByID)
 		usage.GET("/stats", h.Admin.Usage.Stats)
 		usage.GET("/client-disconnect-events", h.Admin.Usage.ListClientDisconnectEvents)
 		usage.GET("/search-users", h.Admin.Usage.SearchUsers)

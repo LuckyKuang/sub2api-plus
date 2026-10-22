@@ -10,9 +10,11 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/config"
 	"github.com/LuckyKuang/sub2api-plus/internal/server/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -383,6 +385,32 @@ func TestFrontendServer_ServeIndexHTML(t *testing.T) {
 
 		assert.Equal(t, http.StatusNotModified, w2.Code)
 		assert.Empty(t, w2.Body.String())
+	})
+
+	t.Run("revalidation_keeps_html_and_csp_nonce_coherent", func(t *testing.T) {
+		server, err := NewFrontendServer(&mockSettingsProvider{settings: map[string]string{"test": "value"}})
+		require.NoError(t, err)
+		router := gin.New()
+		router.Use(middleware.SecurityHeaders(config.CSPConfig{Enabled: true}, nil))
+		router.Use(server.Middleware())
+		noncePattern := regexp.MustCompile(`'nonce-([^']+)'`)
+		first := httptest.NewRecorder()
+		router.ServeHTTP(first, httptest.NewRequest(http.MethodGet, "/", nil))
+		firstNonce := noncePattern.FindStringSubmatch(first.Header().Get("Content-Security-Policy"))
+		require.Len(t, firstNonce, 2)
+		require.Contains(t, first.Body.String(), `nonce="`+firstNonce[1]+`"`)
+		request := httptest.NewRequest(http.MethodGet, "/", nil)
+		request.Header.Set("If-None-Match", first.Header().Get("ETag"))
+		second := httptest.NewRecorder()
+		router.ServeHTTP(second, request)
+		// A 304 would reuse the first body with the second response's CSP header.
+		require.Equal(t, http.StatusOK, second.Code)
+		secondNonce := noncePattern.FindStringSubmatch(second.Header().Get("Content-Security-Policy"))
+		require.Len(t, secondNonce, 2)
+		require.NotEqual(t, firstNonce[1], secondNonce[1])
+		require.Contains(t, second.Body.String(), `nonce="`+secondNonce[1]+`"`)
+		require.NotContains(t, second.Body.String(), `nonce="`+firstNonce[1]+`"`)
+		require.NotEqual(t, first.Header().Get("ETag"), second.Header().Get("ETag"))
 	})
 
 	t.Run("sets_cache_control_header", func(t *testing.T) {

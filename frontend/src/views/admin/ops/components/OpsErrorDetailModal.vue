@@ -1,5 +1,5 @@
 <template>
-  <BaseDialog :show="show" :title="title" width="full" :close-on-click-outside="true" @close="close">
+  <DetailContentHost :embedded="embedded" :show="show" :title="title" width="full" :placement="placement" :close-on-click-outside="true" @close="close">
     <div v-if="loading" class="flex items-center justify-center py-16">
       <div class="flex flex-col items-center gap-3">
         <div class="h-8 w-8 animate-spin rounded-full border-b-2 border-primary-600"></div>
@@ -11,9 +11,9 @@
       {{ emptyText }}
     </div>
 
-    <div v-else class="space-y-6 p-6">
+    <div v-else class="space-y-6" :class="placement !== 'right' ? 'p-6' : ''">
       <!-- Summary -->
-      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2" :class="placement !== 'right' ? 'lg:grid-cols-4' : ''">
         <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
           <div class="text-xs font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.requestId') }}</div>
           <div class="mt-1 break-all font-mono text-sm font-medium text-gray-900 dark:text-white">
@@ -241,13 +241,13 @@
         {{ t('admin.ops.errorDetail.backToList') }}
       </button>
     </template>
-  </BaseDialog>
+  </DetailContentHost>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
-import BaseDialog from '@/components/common/BaseDialog.vue'
+import DetailContentHost from '@/components/common/DetailContentHost.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { useAppStore } from '@/stores'
 import { opsAPI, type OpsErrorDetail } from '@/api/admin/ops'
@@ -255,6 +255,8 @@ import { formatDateTime } from '@/utils/format'
 import { resolveUpstreamPayload } from '../utils/errorDetailResponse'
 
 interface Props {
+  embedded?: boolean
+  placement?: 'center' | 'right'
   show: boolean
   errorId: number | null
   errorType?: 'request' | 'upstream'
@@ -374,7 +376,10 @@ function toggleUpstreamDetail(id: number) {
   expandedUpstreamDetailIds.value = next
 }
 
+let detailGeneration = 0
+onBeforeUnmount(() => { detailGeneration++ })
 async function fetchCorrelatedUpstreamErrors(requestErrorId: number) {
+  const seq = detailGeneration
   correlatedUpstreamLoading.value = true
   try {
     const res = await opsAPI.listRequestErrorUpstreamErrors(
@@ -382,12 +387,12 @@ async function fetchCorrelatedUpstreamErrors(requestErrorId: number) {
       { page: 1, page_size: 100, view: 'all' },
       { include_detail: true }
     )
-    correlatedUpstream.value = res.items || []
+    if (seq === detailGeneration) correlatedUpstream.value = res.items || []
   } catch (err) {
     console.error('[OpsErrorDetailModal] Failed to load correlated upstream errors', err)
-    correlatedUpstream.value = []
+    if (seq === detailGeneration) correlatedUpstream.value = []
   } finally {
-    correlatedUpstreamLoading.value = false
+    if (seq === detailGeneration) correlatedUpstreamLoading.value = false
   }
 }
 
@@ -414,22 +419,28 @@ function prettyObject(value: unknown): string {
 }
 
 async function fetchDetail(id: number) {
+  const seq = detailGeneration
   loading.value = true
   try {
     const kind = props.errorType || (detail.value?.phase === 'upstream' ? 'upstream' : 'request')
     const d = kind === 'upstream' ? await opsAPI.getUpstreamErrorDetail(id) : await opsAPI.getRequestErrorDetail(id)
-    detail.value = d
+    if (seq === detailGeneration) detail.value = d
   } catch (err: any) {
-    detail.value = null
-    appStore.showError(err?.message || t('admin.ops.failedToLoadErrorDetail'))
+    if (seq === detailGeneration) {
+      detail.value = null
+      appStore.showError(err?.message || t('admin.ops.failedToLoadErrorDetail'))
+    }
   } finally {
-    loading.value = false
+    if (seq === detailGeneration) loading.value = false
   }
 }
 
 watch(
-  () => [props.show, props.errorId] as const,
+  () => [props.show, props.errorId, props.errorType] as const,
   ([show, id]) => {
+    detailGeneration++
+    detail.value = null
+    correlatedUpstream.value = []
     if (!show) {
       detail.value = null
       return

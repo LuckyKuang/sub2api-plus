@@ -1,6 +1,6 @@
 <template>
   <div
-    class="stat-card !min-h-[6.5rem] !rounded-3xl !border-0 !p-4 shadow-sm ring-1 ring-gray-900/5 dark:!bg-dark-800 dark:ring-dark-700"
+    class="stat-card !min-h-[6.5rem] !p-4"
     :title="title || undefined"
   >
     <div

@@ -66,6 +66,12 @@ func (h *OpenAIGatewayHandler) checkSecurityAuditStage(c *gin.Context, reqLog *z
 }
 
 func runSecurityAudit(c *gin.Context, reqLog *zap.Logger, coordinator *securityaudit.Coordinator, legacy *service.ContentModerationService, apiKey *service.APIKey, subject middleware2.AuthSubject, protocol, model string, body []byte, stage string) (result *securityaudit.Decision) {
+	result = evaluateSecurityAudit(c, reqLog, coordinator, legacy, apiKey, subject, protocol, model, body, stage)
+	observeAuditedRequest(c, apiKey, subject, model, stage, result)
+	return result
+}
+
+func evaluateSecurityAudit(c *gin.Context, reqLog *zap.Logger, coordinator *securityaudit.Coordinator, legacy *service.ContentModerationService, apiKey *service.APIKey, subject middleware2.AuthSubject, protocol, model string, body []byte, stage string) (result *securityaudit.Decision) {
 	defer func() { markOpsSecurityAuditDecision(c, result) }()
 	if c == nil || c.Request == nil {
 		return nil

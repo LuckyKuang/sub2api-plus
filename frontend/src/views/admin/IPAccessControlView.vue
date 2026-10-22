@@ -1,6 +1,6 @@
 <template>
   <AppLayout>
-    <div class="mx-auto w-full max-w-7xl space-y-6 p-4 sm:p-6">
+    <div class="w-full space-y-6">
       <section class="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 class="text-xl font-semibold text-gray-900 dark:text-white">{{ t('admin.ipAccessControl.title') }}</h1>

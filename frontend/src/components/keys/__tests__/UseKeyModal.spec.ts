@@ -883,7 +883,8 @@ describe('UseKeyModal', () => {
     await flushPromises()
 
     expect(fetchMock).toHaveBeenCalledWith(
-      'https://example.com/v1/models?client_version=0.158.0',
+      // Reviewed baseline: docs/OFFICIAL_AGENT_BASELINES.md, rust-v0.163.0.
+      'https://example.com/v1/models?client_version=0.163.0',
       expect.objectContaining({
         headers: expect.objectContaining({ Authorization: 'Bearer sk-composite-test' })
       })

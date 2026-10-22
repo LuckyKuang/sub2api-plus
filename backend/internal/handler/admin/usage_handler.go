@@ -21,11 +21,50 @@ import (
 
 // UsageHandler handles admin usage-related requests
 type UsageHandler struct {
+	liveRequests   *service.LiveRequestService
 	usageService   *service.UsageService
 	apiKeyService  *service.APIKeyService
 	adminService   service.AdminService
 	cleanupService *service.UsageCleanupService
 	disconnectRisk *service.ClientDisconnectRiskService
+}
+
+func (h *UsageHandler) SetLiveRequests(s *service.LiveRequestService) {
+	h.liveRequests = s
+	if h.usageService != nil {
+		s.SetUsageReader(h.usageService)
+	}
+}
+
+func (h *UsageHandler) LiveRequests(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), time.Second)
+	defer cancel()
+	data, err := h.liveRequests.List(ctx, 0)
+	if err != nil {
+		response.Error(c, http.StatusServiceUnavailable, "Live requests unavailable")
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	response.Success(c, data)
+}
+
+// GetByID uses the admin route's authentication and the admin-only DTO projection.
+func (h *UsageHandler) GetByID(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		response.BadRequest(c, "Invalid usage ID")
+		return
+	}
+	record, err := h.usageService.GetByID(c.Request.Context(), id)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	// Localized is a method on the embedded user DTO and returns that base type.
+	// Keep the complete admin projection, as the admin list endpoint does.
+	projected := dto.UsageLogFromServiceAdmin(record)
+	projected.Localized(c.GetHeader("Accept-Language"))
+	response.Success(c, projected)
 }
 
 func (h *UsageHandler) SetClientDisconnectRiskService(risk *service.ClientDisconnectRiskService) {
@@ -319,6 +358,12 @@ func (h *UsageHandler) List(c *gin.Context) {
 		ExactTotal:            exactTotal,
 	}
 
+	boundary, err := usagestats.ParseSnapshotMaxID(c.Query("snapshot_max_id"))
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	filters.SnapshotMaxID = boundary
 	records, result, err := h.usageService.ListWithFilters(c.Request.Context(), params, filters)
 	if err != nil {
 		response.ErrorFrom(c, err)
@@ -329,7 +374,10 @@ func (h *UsageHandler) List(c *gin.Context) {
 	for i := range records {
 		out = append(out, *dto.UsageLogFromServiceAdmin(&records[i]))
 	}
-	response.Paginated(c, out, result.Total, page, pageSize)
+	response.Success(c, struct {
+		response.PaginatedData
+		SnapshotMaxID *int64 `json:"snapshot_max_id,omitempty"`
+	}{response.PaginatedData{Items: out, Total: result.Total, Page: page, PageSize: pageSize, Pages: max(1, result.Pages)}, result.SnapshotMaxID})
 }
 
 func parseUsageCompletionFilters(c *gin.Context) (string, string, bool) {

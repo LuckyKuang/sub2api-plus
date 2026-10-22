@@ -221,6 +221,8 @@ type APIKeyDailyUsagePoint struct {
 
 // UserDashboardStats 用户仪表盘统计
 type UserDashboardStats struct {
+	Timezone    string `json:"timezone,omitempty"`
+	GeneratedAt string `json:"generated_at,omitempty"`
 	// API Key 统计
 	TotalAPIKeys  int64 `json:"total_api_keys"`
 	ActiveAPIKeys int64 `json:"active_api_keys"`
@@ -269,12 +271,14 @@ type PlatformDashboardStats struct {
 
 // UsageLogFilters represents filters for usage log queries
 type UsageLogFilters struct {
-	UserID    int64
-	APIKeyID  int64
-	AccountID int64
-	GroupID   int64
-	RequestID string
-	Model     string
+	// -1 captures a new insertion boundary; nil preserves legacy queries.
+	SnapshotMaxID *int64
+	UserID        int64
+	APIKeyID      int64
+	AccountID     int64
+	GroupID       int64
+	RequestID     string
+	Model         string
 	// ModelFilterSource controls how Model is matched. Empty preserves raw usage_logs.model semantics.
 	ModelFilterSource     string
 	RequestType           *int16

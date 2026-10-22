@@ -28,6 +28,7 @@ belong in GitHub Release notes.
 - [Codex client profile restrictions](protocols/CODEX_CLIENT_PROFILES.md)
 - [Asynchronous image tasks and Gemini/Vertex batches](ASYNC_IMAGE_TASKS.md)
 - [Usage timing and completion semantics](USAGE_TIMING.md)
+- [Console layout, request inspection and refresh](UI_INTERACTION.md)
 
 ## Access, Pricing and Administration
 

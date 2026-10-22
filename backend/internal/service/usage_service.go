@@ -306,8 +306,8 @@ func (s *UsageService) Delete(ctx context.Context, id int64) error {
 }
 
 // GetUserDashboardStats returns per-user dashboard summary stats.
-func (s *UsageService) GetUserDashboardStats(ctx context.Context, userID int64) (*usagestats.UserDashboardStats, error) {
-	stats, err := s.usageRepo.GetUserDashboardStats(ctx, userID)
+func (s *UsageService) GetUserDashboardStats(ctx context.Context, userID int64, userTimezone string) (*usagestats.UserDashboardStats, error) {
+	stats, err := s.usageRepo.GetUserDashboardStats(ctx, userID, userTimezone)
 	if err != nil {
 		return nil, fmt.Errorf("get user dashboard stats: %w", err)
 	}

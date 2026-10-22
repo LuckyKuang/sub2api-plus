@@ -61,7 +61,7 @@
             <div class="grid gap-3 sm:grid-cols-3">
               <div
                 data-testid="profile-overview-metric-balance"
-                class="rounded-2xl bg-white px-4 py-3 shadow-sm ring-1 ring-white/70 dark:bg-dark-900 dark:ring-dark-700"
+                class="glass-surface px-4 py-3 ring-1 ring-white/70 dark:ring-dark-700"
               >
                 <p class="text-xs font-medium uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">
                   {{ t('profile.accountBalance') }}
@@ -72,7 +72,7 @@
               </div>
               <div
                 data-testid="profile-overview-metric-concurrency"
-                class="rounded-2xl bg-white px-4 py-3 shadow-sm ring-1 ring-white/70 dark:bg-dark-900 dark:ring-dark-700"
+                class="glass-surface px-4 py-3 ring-1 ring-white/70 dark:ring-dark-700"
               >
                 <p class="text-xs font-medium uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">
                   {{ t('profile.concurrencyLimit') }}
@@ -83,7 +83,7 @@
               </div>
               <div
                 data-testid="profile-overview-metric-member-since"
-                class="rounded-2xl bg-white px-4 py-3 shadow-sm ring-1 ring-white/70 dark:bg-dark-900 dark:ring-dark-700"
+                class="glass-surface px-4 py-3 ring-1 ring-white/70 dark:ring-dark-700"
               >
                 <p class="text-xs font-medium uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">
                   {{ t('profile.memberSince') }}
@@ -102,7 +102,7 @@
       <div data-testid="profile-main-column" class="space-y-6">
         <section
           data-testid="profile-basics-panel"
-          class="card border border-gray-100 bg-white p-6 dark:border-dark-700 dark:bg-dark-800"
+          class="card border p-6"
         >
           <div class="mb-5 flex items-start justify-between gap-4">
             <div>
@@ -116,14 +116,14 @@
           </div>
 
           <div class="grid gap-6 sm:grid-cols-1 md:grid-cols-2">
-            <div class="rounded-3xl border border-gray-100 bg-gray-50 p-5 dark:border-dark-700 dark:bg-dark-900">
+            <div class="glass-surface border p-5">
               <ProfileAvatarCard
                 :user="user"
                 embedded
               />
             </div>
 
-            <div class="rounded-3xl border border-gray-100 bg-gray-50 p-5 dark:border-dark-700 dark:bg-dark-900">
+            <div class="glass-surface border p-5">
               <ProfileEditForm
                 :initial-username="user?.username || ''"
                 embedded
@@ -134,7 +134,7 @@
 
         <section
           data-testid="profile-auth-bindings-panel"
-          class="card border border-gray-100 bg-white p-6 dark:border-dark-700 dark:bg-dark-800"
+          class="card border p-6"
         >
           <ProfileIdentityBindingsSection
             :user="user"
@@ -154,7 +154,7 @@
       <div data-testid="profile-side-column" class="space-y-6">
         <section
           v-if="sourceHints.length"
-          class="card border border-gray-100 bg-white p-6 dark:border-dark-700 dark:bg-dark-800"
+          class="card border p-6"
         >
           <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
             {{ t('profile.linkedProfileSources') }}
@@ -167,7 +167,7 @@
             <div
               v-for="hint in sourceHints"
               :key="hint.key"
-              class="flex items-start gap-3 rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3 text-sm text-gray-600 dark:border-dark-700 dark:bg-dark-900 dark:text-gray-300"
+              class="glass-surface flex items-start gap-3 border px-4 py-3 text-sm text-gray-600 dark:text-gray-300"
             >
               <Icon name="link" size="sm" class="mt-0.5 text-gray-400 dark:text-gray-500" />
               <span>{{ hint.text }}</span>

@@ -39,7 +39,7 @@
       </div>
       <p v-if="!loading && !error" class="text-xs text-gray-500 dark:text-dark-400" aria-live="polite">{{ t('availableChannels.catalog.modelCount', { count: visible.length }) }}</p>
       <div v-if="loading" class="catalog-grid" aria-busy="true" :aria-label="t('common.loading')">
-        <div v-for="i in 12" :key="i" class="h-52 animate-pulse rounded-[20px] bg-gray-200 dark:bg-dark-800" />
+        <div v-for="i in 12" :key="i" class="glass-surface h-52 animate-pulse" />
       </div>
       <div v-else-if="error" role="alert" class="py-12 text-center">
         <p class="text-red-600 dark:text-red-400">{{ error }}</p><button class="btn btn-secondary mt-4" @click="loadCatalog">{{ t('availableChannels.catalog.retry') }}</button>

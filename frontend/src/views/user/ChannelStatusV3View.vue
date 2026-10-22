@@ -1,6 +1,6 @@
 <template>
   <AppLayout>
-    <div class="service-status mx-auto w-full max-w-6xl space-y-5 pb-8">
+    <div class="service-status w-full space-y-5">
       <header class="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">{{ t('channelMonitorV3.title') }}</h1>
@@ -47,7 +47,7 @@
 
         <section v-if="tab === 'platforms'" id="v3-platform-panel" role="tabpanel" aria-labelledby="v3-platform-tab">
           <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            <button v-for="item in platforms" :key="item.platform" class="platform-card rounded-xl border border-gray-200 bg-white p-5 text-left transition hover:border-gray-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-500 dark:border-dark-700 dark:bg-dark-800 dark:hover:border-dark-500" @click="openDetail(item.platform)">
+            <button v-for="item in platforms" :key="item.platform" class="platform-card glass-surface p-5 text-left transition hover:border-gray-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-500 dark:hover:border-dark-500" @click="openDetail(item.platform)">
               <div class="flex items-center justify-between gap-3">
                 <div class="flex items-center gap-2.5">
                   <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-gray-100 text-gray-600 dark:bg-dark-700 dark:text-gray-300"><ProviderIcon :provider="item.platform" :size="20" /></span>
@@ -75,7 +75,7 @@
 
         <section v-else id="v3-events-panel" class="space-y-3" role="tabpanel" aria-labelledby="v3-events-tab">
           <div class="flex justify-between text-xs text-gray-500 dark:text-gray-400"><span>{{ t('channelMonitorV3.events') }}</span><span>{{ t('channelMonitorV3.recent30Days') }}</span></div>
-          <details v-for="event in incidents" :key="event.id" class="rounded-xl border border-gray-200 bg-white dark:border-dark-700 dark:bg-dark-800" :open="!event.resolved_at">
+          <details v-for="event in incidents" :key="event.id" class="glass-surface" :open="!event.resolved_at">
             <summary class="cursor-pointer p-5">
               <span class="font-medium text-gray-900 dark:text-white">{{ t(`channelMonitorV3.eventTitle.${event.severity}`, { platform: platformLabel(event.platform) }) }}</span>
               <span class="status-badge ml-3" :class="`status-${event.resolved_at ? 'normal' : event.severity}`">{{ t(`channelMonitorV3.phase.${event.phase}`) }}</span>

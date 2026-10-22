@@ -1,6 +1,7 @@
 <template>
   <AppLayout>
     <div class="space-y-6">
+      <template v-if="activeTab !== 'live'">
       <UsageStatsCards :stats="usageStats" :show-account-cost="false" :strike-standard-cost="true" />
 
       <div class="space-y-4">
@@ -158,6 +159,7 @@
                   <span>{{ col.label }}</span>
                   <Icon v-if="isCurrentColumnVisible(col.key)" name="check" size="sm" class="text-primary-500" />
                 </button>
+                <button type="button" class="w-full border-t px-4 py-2 text-left text-sm text-primary-600" @click="restoreRecommendedColumns">{{ t('inspection.resetColumns') }}</button>
               </div>
             </div>
             <button v-if="activeTab !== 'errors'" type="button" @click="exportToCSV" :disabled="exporting" class="btn btn-primary">
@@ -167,16 +169,22 @@
         </div>
       </div>
 
-      <div v-if="errorViewEnabled" class="flex gap-2 border-b border-gray-200 dark:border-dark-700">
+      </template>
+      <div class="flex gap-2 border-b border-gray-200 dark:border-dark-700">
+        <button class="tab" :class="{ 'tab-active': activeTab === 'live' }" @click="activeTab = 'live'">{{ t('inspection.live') }}</button>
         <button class="tab" :class="{ 'tab-active': activeTab === 'usage' }" @click="activeTab = 'usage'">
           {{ t('usage.tabs.usage') }}
         </button>
-        <button class="tab" :class="{ 'tab-active': activeTab === 'errors' }" @click="switchToErrors">
+        <button v-if="errorViewEnabled" class="tab" :class="{ 'tab-active': activeTab === 'errors' }" @click="switchToErrors">
           {{ t('usage.tabs.errors') }}
         </button>
       </div>
 
       <template v-if="activeTab === 'usage'">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <RefreshControl :state="historyRefresh" switch-visible manual />
+          <button v-if="newRecordsAvailable" type="button" class="btn btn-secondary" @click="showLatestRecords">{{ t('inspection.newRecords') }}</button>
+        </div>
         <UsageTable
           :data="usageLogs"
           :loading="loading"
@@ -198,8 +206,10 @@
           @update:page="handlePageChange"
           @update:pageSize="handlePageSizeChange"
         />
+
       </template>
 
+      <LiveRequestsPanel v-else-if="activeTab === 'live'" mode="user" />
       <UserErrorRequestsTable
         v-else-if="errorViewEnabled"
         :rows="errorRows"
@@ -223,6 +233,7 @@ import { useLocaleRefresh } from '@/utils/localeRefresh'
 import { firstByteMs, strictFirstTokenMs, averageTps, tpsNote } from '@/utils/usageTiming'
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute, useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { FeatureFlags, resolveFeatureFlag } from '@/utils/featureFlags'
 import { keysAPI, usageAPI, userGroupsAPI } from '@/api'
@@ -255,9 +266,16 @@ import type {
   UserErrorRequest,
 } from '@/types'
 import type { Column } from '@/components/common/types'
+import { useColumnPreferenceKey } from '@/composables/useColumnPreferenceKey'
+import { useAutoRefresh } from '@/composables/useAutoRefresh'
+import { useUsageSnapshot } from '@/composables/useUsageSnapshot'
+import RefreshControl from '@/components/common/RefreshControl.vue'
+import LiveRequestsPanel from '@/components/usage/LiveRequestsPanel.vue'
 import { COMMON_ERROR_STATUS_CODES } from '@/utils/errorBadges'
 
 const { t } = useI18n()
+const route = useRoute()
+const router = useRouter()
 const appStore = useAppStore()
 
 type DistributionMetric = 'tokens' | 'actual_cost'
@@ -357,7 +375,7 @@ const modelDistributionMetric = ref<DistributionMetric>('tokens')
 const groupDistributionMetric = ref<DistributionMetric>('tokens')
 const endpointDistributionMetric = ref<DistributionMetric>('tokens')
 const endpointDistributionSource = ref<EndpointSource>('inbound')
-const activeTab = ref<'usage' | 'errors'>('usage')
+const activeTab = ref<'usage' | 'errors' | 'live'>('usage')
 const errorViewEnabled = computed(() => appStore.cachedPublicSettings?.allow_user_view_error_requests ?? false)
 
 const filters = ref<UsageQueryParams>({
@@ -437,10 +455,12 @@ const normalizedFilters = computed<UsageQueryParams>(() => {
   }
 })
 
+const historySnapshot = useUsageSnapshot()
 const buildUsageListParams = (page: number, pageSize: number): UsageQueryParams => ({
   page,
   page_size: pageSize,
   ...normalizedFilters.value,
+  snapshot_max_id: historySnapshot.forFilters(normalizedFilters.value),
   sort_by: sortState.sort_by,
   sort_order: sortState.sort_order,
 })
@@ -456,6 +476,7 @@ const loadLogs = async () => {
     })
     if (!controller.signal.aborted) {
       usageLogs.value = res.items
+      historySnapshot.accept(res, pagination.page === 1 && sortState.sort_by === 'created_at' && sortState.sort_order === 'desc')
       pagination.total = res.total
     }
   } catch (error: any) {
@@ -551,12 +572,9 @@ const applyFilters = () => {
   resetErrorRows()
 }
 
-const refreshData = () => {
-  void loadLogs()
-  void loadStats()
-  void loadModelStats()
-  void loadChartData()
-  if (activeTab.value === 'errors') void loadErrors()
+const refreshData = async () => {
+  historySnapshot.reset()
+  await Promise.all([loadLogs(), loadStats(), loadModelStats(), loadChartData(), ...(activeTab.value === 'errors' ? [loadErrors()] : [])])
 }
 
 const resetFilters = () => {
@@ -652,6 +670,7 @@ const exportToCSV = async () => {
     const totalPages = Math.ceil(pagination.total / pageSize)
     for (let page = 1; page <= totalPages; page++) {
       const response = await usageAPI.query({ ...exportParams, page })
+      if (page === 1 && response.snapshot_max_id != null) exportParams.snapshot_max_id = response.snapshot_max_id
       allLogs.push(...response.items)
     }
     if (allLogs.length === 0) {
@@ -727,7 +746,7 @@ const exportToCSV = async () => {
 
 const ALWAYS_VISIBLE = ['created_at']
 const DEFAULT_HIDDEN_COLUMNS = ['user_agent']
-const HIDDEN_COLUMNS_KEY = 'user-usage-hidden-columns'
+const HIDDEN_COLUMNS_KEY = useColumnPreferenceKey('user-usage-restored-v2-hidden-columns')
 
 const allColumns = computed<Column[]>(() => [
   { key: 'api_key', label: t('usage.apiKeyFilter'), sortable: false },
@@ -754,13 +773,14 @@ const isColumnVisible = (key: string) => !hiddenColumns.has(key)
 const toggleColumn = (key: string) => {
   if (hiddenColumns.has(key)) hiddenColumns.delete(key)
   else hiddenColumns.add(key)
-  localStorage.setItem(HIDDEN_COLUMNS_KEY, JSON.stringify([...hiddenColumns]))
+  try { localStorage.setItem(HIDDEN_COLUMNS_KEY, JSON.stringify([...hiddenColumns])) } catch { /* storage unavailable */ }
 }
 const loadSavedColumns = () => {
   try {
     const saved = localStorage.getItem(HIDDEN_COLUMNS_KEY)
     const values = saved ? JSON.parse(saved) as string[] : DEFAULT_HIDDEN_COLUMNS
-    values.forEach((key) => hiddenColumns.add(key))
+    if (!Array.isArray(values)) throw new Error('Invalid column preferences')
+    values.filter(key => allColumns.value.some(col => col.key === key)).forEach((key) => hiddenColumns.add(key))
   } catch {
     DEFAULT_HIDDEN_COLUMNS.forEach((key) => hiddenColumns.add(key))
   }
@@ -768,8 +788,8 @@ const loadSavedColumns = () => {
 
 // 错误请求 tab 独立列设置(机制同用量列设置,存储互不影响)
 const ERR_ALWAYS_VISIBLE = ['status', 'created_at']
-const ERR_DEFAULT_HIDDEN_COLUMNS = ['user_agent']
-const ERR_HIDDEN_COLUMNS_KEY = 'user-usage-error-hidden-columns'
+const ERR_DEFAULT_HIDDEN_COLUMNS = ['user_agent', 'endpoint', 'client_ip', 'group', 'type', 'platform']
+const ERR_HIDDEN_COLUMNS_KEY = useColumnPreferenceKey('user-usage-error-hidden-columns')
 
 // key 须与 UserErrorRequestsTable 的 allColumns 一致
 const errAllColumns = computed<Column[]>(() => [
@@ -788,6 +808,13 @@ const errAllColumns = computed<Column[]>(() => [
 ])
 
 const errHiddenColumns = reactive<Set<string>>(new Set())
+function restoreRecommendedColumns() {
+  const errors = activeTab.value === 'errors'
+  const hidden = errors ? errHiddenColumns : hiddenColumns
+  hidden.clear()
+  ;(errors ? ERR_DEFAULT_HIDDEN_COLUMNS : DEFAULT_HIDDEN_COLUMNS).forEach(key => hidden.add(key))
+  try { localStorage.setItem(errors ? ERR_HIDDEN_COLUMNS_KEY : HIDDEN_COLUMNS_KEY, JSON.stringify([...hidden])) } catch { /* storage unavailable */ }
+}
 const errToggleableColumns = computed(() =>
   errAllColumns.value.filter((col) => !ERR_ALWAYS_VISIBLE.includes(col.key))
 )
@@ -917,6 +944,7 @@ const switchToErrors = () => {
 }
 
 onMounted(() => {
+  if (route.query.record != null) { const { record: _record, ...query } = route.query; void router.replace({ path: route.path, query, hash: route.hash }) }
   loadSavedColumns()
   loadSavedErrColumns()
   document.addEventListener('click', handleColumnClickOutside)
@@ -933,4 +961,34 @@ watch(endpointDistributionSource, () => {
   // Endpoint source switching is handled by the chart component using already loaded stats.
 })
 useLocaleRefresh(() => Promise.all([loadLogs(), loadFilterOptions()]))
+
+const newRecordsAvailable = ref(false)
+const historyRefresh = useAutoRefresh({
+  storageKey: useColumnPreferenceKey('user-usage-auto-refresh'), intervals: [15, 30, 60], defaultInterval: 30, defaultEnabled: true, temporaryPause: true,
+  active: () => activeTab.value === 'usage',
+  shouldPause: () => loading.value,
+  onRefresh: async () => {
+    const params = { ...buildUsageListParams(1, pagination.page_size), snapshot_max_id: 'new' as const, sort_by: 'created_at', sort_order: 'desc' as const }
+    const filterKey = JSON.stringify(filters.value)
+    const controller = new AbortController()
+    abortController?.abort(); abortController = controller
+    const res = await usageAPI.query(params, { signal: controller.signal })
+    if (controller.signal.aborted || filterKey !== JSON.stringify(filters.value)) return
+    const reading = window.scrollY >= 160 || !!window.getSelection()?.toString() || !!document.querySelector('[role="dialog"], [role="tooltip"]') || !!document.activeElement?.closest('button, input, select, textarea, a, summary, [tabindex], [contenteditable="true"]')
+    if (pagination.page === 1 && sortState.sort_by === 'created_at' && sortState.sort_order === 'desc' && !reading) {
+      usageLogs.value = res.items; pagination.total = res.total; historySnapshot.accept(res, true)
+    } else {
+      const latest = new Map(res.items.map(item => [item.id, item]))
+      usageLogs.value = usageLogs.value.map(item => latest.get(item.id) ?? item)
+      if (historySnapshot.observe(res.items[0]?.id)) newRecordsAvailable.value = true
+    }
+  },
+})
+function showLatestRecords() {
+  historySnapshot.reset()
+  newRecordsAvailable.value = false
+  pagination.page = 1
+  sortState.sort_by = 'created_at'; sortState.sort_order = 'desc'
+  void loadLogs()
+}
 </script>

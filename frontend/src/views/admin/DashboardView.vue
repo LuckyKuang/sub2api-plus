@@ -1,8 +1,12 @@
 <template>
   <AppLayout>
     <div class="space-y-6">
+      <div class="flex items-center justify-end gap-3">
+        <RefreshControl :state="overviewRefresh" />
+        <button v-if="!stats && overviewRefresh.error.value" class="btn btn-secondary" @click="refreshAll">{{ t('inspection.retry') }}</button>
+      </div>
       <!-- Loading State -->
-      <div v-if="loading" class="flex items-center justify-center py-12">
+      <div v-if="loading && !stats" class="flex items-center justify-center py-12">
         <LoadingSpinner />
       </div>
 
@@ -291,7 +295,7 @@
                   @change="onDateRangeChange"
                 />
               </div>
-              <button @click="loadDashboardStats" :disabled="chartsLoading" class="btn btn-secondary">
+              <button @click="refreshAll" :disabled="chartsLoading || overviewRefresh.fetching.value" class="btn btn-secondary">
                 {{ t('common.refresh') }}
               </button>
               <div class="ml-auto flex items-center gap-2">
@@ -341,7 +345,7 @@
               </div>
             </div>
             <div class="h-64">
-              <div v-if="userTrendLoading" class="flex h-full items-center justify-center">
+              <div v-if="userTrendLoading && !userTrendChartData" class="flex h-full items-center justify-center">
                 <LoadingSpinner size="md" />
               </div>
               <Line v-else-if="userTrendChartData" :data="userTrendChartData" :options="lineOptions" />
@@ -361,7 +365,10 @@
 
 <script setup lang="ts">
 import { useDocumentDarkMode } from '@/composables/useDocumentDarkMode'
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { useAutoRefresh } from '@/composables/useAutoRefresh'
+import { useColumnPreferenceKey } from '@/composables/useColumnPreferenceKey'
+import RefreshControl from '@/components/common/RefreshControl.vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
@@ -485,6 +492,7 @@ const chartColors = computed(() => ({
 
 // Line chart options (for user trend chart)
 const lineOptions = computed(() => ({
+  animation: false as const,
   responsive: true,
   maintainAspectRatio: false,
   interaction: {
@@ -683,20 +691,20 @@ const onDateRangeChange = (range: {
 }
 
 // Load data
-const loadDashboardSnapshot = async (includeStats: boolean) => {
+const loadDashboardSnapshot = async (includeStats: boolean, includeCharts = true, quiet = false) => {
   const currentSeq = ++chartLoadSeq
   if (includeStats && !stats.value) {
     loading.value = true
   }
-  chartsLoading.value = true
+  chartsLoading.value = includeCharts
   try {
     const response = await adminAPI.dashboard.getSnapshotV2({
       start_date: startDate.value,
       end_date: endDate.value,
       granularity: granularity.value,
       include_stats: includeStats,
-      include_trend: true,
-      include_model_stats: true,
+      include_trend: includeCharts,
+      include_model_stats: includeCharts,
       include_group_stats: false,
       include_users_trend: false
     })
@@ -704,10 +712,13 @@ const loadDashboardSnapshot = async (includeStats: boolean) => {
     if (includeStats && response.stats) {
       stats.value = response.stats
     }
-    trendData.value = response.trend || []
-    modelStats.value = response.models || []
+    if (includeCharts) {
+      trendData.value = response.trend || []
+      modelStats.value = response.models || []
+    }
   } catch (error) {
     if (currentSeq !== chartLoadSeq) return
+    if (quiet) throw error
     appStore.showError(t('admin.dashboard.failedToLoad'))
     console.error('Error loading dashboard snapshot:', error)
   } finally {
@@ -725,7 +736,7 @@ const setUserTrendMetric = (metric: 'tokens' | 'actual_cost') => {
   loadUsersTrend()
 }
 
-const loadUsersTrend = async () => {
+const loadUsersTrend = async (quiet = false) => {
   const currentSeq = ++usersTrendLoadSeq
   userTrendLoading.value = true
   try {
@@ -741,7 +752,7 @@ const loadUsersTrend = async () => {
   } catch (error) {
     if (currentSeq !== usersTrendLoadSeq) return
     console.error('Error loading users trend:', error)
-    userTrend.value = []
+    if (quiet) throw error
   } finally {
     if (currentSeq === usersTrendLoadSeq) {
       userTrendLoading.value = false
@@ -749,7 +760,7 @@ const loadUsersTrend = async () => {
   }
 }
 
-const loadUserSpendingRanking = async () => {
+const loadUserSpendingRanking = async (quiet = false) => {
   const currentSeq = ++rankingLoadSeq
   rankingLoading.value = true
   rankingError.value = false
@@ -767,24 +778,13 @@ const loadUserSpendingRanking = async () => {
   } catch (error) {
     if (currentSeq !== rankingLoadSeq) return
     console.error('Error loading user spending ranking:', error)
-    rankingItems.value = []
-    rankingTotalActualCost.value = 0
-    rankingTotalRequests.value = 0
-    rankingTotalTokens.value = 0
     rankingError.value = true
+    if (quiet) throw error
   } finally {
     if (currentSeq === rankingLoadSeq) {
       rankingLoading.value = false
     }
   }
-}
-
-const loadDashboardStats = async () => {
-  await Promise.all([
-    loadDashboardSnapshot(true),
-    loadUsersTrend(),
-    loadUserSpendingRanking()
-  ])
 }
 
 const loadChartData = async () => {
@@ -795,9 +795,28 @@ const loadChartData = async () => {
   ])
 }
 
+let chartUpdatedAt = 0
+let forceCharts = false
+const overviewRefresh = useAutoRefresh({
+  storageKey: useColumnPreferenceKey('admin-overview-refresh'), intervals: [30, 60, 120], defaultInterval: 30, defaultEnabled: true,
+  shouldPause: () => chartsLoading.value,
+  onRefresh: async () => {
+    const includeCharts = forceCharts || Date.now() - chartUpdatedAt >= 60000
+    forceCharts = false
+    const results = await Promise.allSettled([
+      loadDashboardSnapshot(true, includeCharts, true),
+      ...(includeCharts ? [loadUsersTrend(true), loadUserSpendingRanking(true)] : []),
+    ])
+    const failure = results.find(result => result.status === 'rejected')
+    if (failure?.status === 'rejected') throw failure.reason
+    if (includeCharts) chartUpdatedAt = Date.now()
+  },
+})
+const refreshAll = () => { forceCharts = true; return overviewRefresh.refresh() }
+onBeforeUnmount(() => { chartLoadSeq++; usersTrendLoadSeq++; rankingLoadSeq++ })
 onMounted(() => {
   void refreshBatchImageAccess()
-  loadDashboardStats()
+  void refreshAll()
 })
 </script>
 

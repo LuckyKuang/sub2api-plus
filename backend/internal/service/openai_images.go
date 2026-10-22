@@ -1078,7 +1078,7 @@ func (s *OpenAIGatewayService) handleOpenAIImagesStreamingResponse(
 
 	usage := OpenAIUsage{}
 	imageCounter := newOpenAIImageOutputCounter()
-	var timing streamOutputTiming
+	timing := requestStreamOutputTiming(c)
 	var firstTokenMs *int
 	clientDisconnected := false
 	lastDownstreamWriteAt := time.Now()

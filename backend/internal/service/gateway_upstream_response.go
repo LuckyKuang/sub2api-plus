@@ -744,7 +744,7 @@ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http
 	}
 
 	usage := &ClaudeUsage{}
-	var timing streamOutputTiming
+	timing := requestStreamOutputTiming(c)
 	resultWithUsage := func(disconnected bool) *streamingResult {
 		return &streamingResult{
 			usage:            usage,

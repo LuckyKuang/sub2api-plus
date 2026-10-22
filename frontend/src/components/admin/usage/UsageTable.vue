@@ -229,7 +229,7 @@
         <template #cell-cost="{ row }">
           <div class="text-sm">
             <div class="flex items-center gap-1.5">
-              <span class="font-medium text-green-600 dark:text-green-400">${{ row.actual_cost?.toFixed(6) || '0.000000' }}</span>
+              <span class="font-medium text-green-600 dark:text-green-400">{{ usageMoney(row.actual_cost) }}</span>
               <span
                 v-if="row.long_context_billing_applied"
                 data-testid="long-context-billing-marker"
@@ -264,12 +264,16 @@
               aria-hidden="true"
             ></span>
             <div class="grid grid-cols-[max-content_max-content] items-baseline gap-x-2 gap-y-0.5 text-xs">
-              <span class="inline-flex items-center gap-1 text-gray-400 dark:text-gray-500" :title="t('usage.latencyFirstByteHint')">
+              <span class="inline-flex items-center gap-1 text-gray-400 dark:text-gray-500">
                 {{ t('usage.latencyFirstByte') }}
                 <div
                   v-if="hasLatencyDetails(row)"
                   data-testid="latency-details-trigger"
                   class="group relative"
+                  tabindex="0" role="button" :aria-label="t('usage.latencyDetails')"
+                  @focus="showLatencyTooltip($event, row)" @blur="hideLatencyTooltip"
+                  @click="showLatencyTooltip($event, row)"
+                  @keydown.enter.prevent="showLatencyTooltip($event, row)" @keydown.escape="hideLatencyTooltip"
                   @mouseenter="showLatencyTooltip($event, row)"
                   @mouseleave="hideLatencyTooltip"
                 >
@@ -287,8 +291,8 @@
               <span v-else data-testid="first-latency-value" class="text-gray-400 dark:text-gray-500">-</span>
               <span class="text-gray-400 dark:text-gray-500">{{ t('usage.latencyDuration') }}</span>
               <span data-testid="latency-duration" class="font-medium tabular-nums" :class="durationTextClass(row)">{{ formatDuration(row.duration_ms) }}</span>
-              <span class="cursor-help text-gray-400 dark:text-gray-500" :title="t('usage.latencyTpsHint')">{{ t('usage.latencyTps') }}</span>
-              <span data-testid="latency-tps" class="cursor-help whitespace-nowrap font-medium tabular-nums" :class="averageTps(row) == null ? 'text-gray-400 dark:text-gray-500' : 'text-cyan-600 dark:text-cyan-400'" :title="averageTpsTitle(row)">{{ formatTpsDisplay(averageTps(row)) }}</span>
+              <span class="cursor-help text-gray-400 dark:text-gray-500">{{ t('usage.latencyTps') }}</span>
+              <span data-testid="latency-tps" class="cursor-help whitespace-nowrap font-medium tabular-nums" :class="averageTps(row) == null ? 'text-gray-400 dark:text-gray-500' : 'text-cyan-600 dark:text-cyan-400'">{{ formatTpsDisplay(averageTps(row)) }}</span>
             </div>
           </div>
         </template>
@@ -452,7 +456,7 @@
       <div class="whitespace-nowrap rounded-lg border border-gray-700 bg-gray-900 px-3 py-2.5 text-xs text-white shadow-xl dark:border-gray-600 dark:bg-gray-800">
         <div class="space-y-1.5">
           <div class="text-xs font-semibold text-gray-300 mb-1">{{ t('usage.latencyDetails') }}</div>
-          <div v-if="latencyTooltipData" class="flex items-center justify-between gap-4" :title="t('usage.latencyFirstByteHint')">
+          <div v-if="latencyTooltipData" class="flex items-center justify-between gap-4">
             <span class="text-gray-400">{{ t('usage.latencyFirstByte') }}</span>
             <span data-testid="detail-first-byte" class="font-medium text-white">{{ formatDuration(firstByteMs(latencyTooltipData)) }}</span>
           </div>
@@ -691,6 +695,7 @@ import Icon from '@/components/icons/Icon.vue'
 import { fetchBatch, getEntry } from '@/utils/ipGeoLookup'
 import type { AdminUsageLog } from '@/types'
 import { firstByteMs, formatTpsNumber, strictFirstTokenMs, averageTps, tpsNote, firstTokenUnavailableReason } from '@/utils/usageTiming'
+import { usageMoney } from '@/utils/usageInspection'
 import type { Column } from '@/components/common/types'
 
 interface Props {
@@ -867,10 +872,6 @@ const hasLatencyDetails = (row: AdminUsageLog): boolean =>
   row.first_byte_ms != null || row.first_token_ms != null || row.last_token_ms != null || row.duration_ms != null ||
   row.first_output_ms != null || !!row.first_output_kind || !!firstTokenUnavailableReason(row) || !!tpsNote(row)
 
-const averageTpsTitle = (row: AdminUsageLog): string => {
-  const note = tpsNote(row)
-  return note ? `${t('usage.latencyTpsHint')} ${t(note)}` : t('usage.latencyTpsHint')
-}
 
 // Shared modality labels for latency detail tooltip.
 // role=kind  → value under "First Output Kind" (text → "Text")
@@ -990,12 +991,12 @@ const hideTokenTooltip = () => {
 }
 
 // Latency detail tooltip functions
-const showLatencyTooltip = (event: MouseEvent, row: AdminUsageLog) => {
+const showLatencyTooltip = (event: Event, row: AdminUsageLog) => {
   const target = event.currentTarget as HTMLElement
   const rect = target.getBoundingClientRect()
   latencyTooltipData.value = row
-  latencyTooltipPosition.value.x = rect.right + 8
-  latencyTooltipPosition.value.y = rect.top + rect.height / 2
+  latencyTooltipPosition.value.x = Math.max(12, Math.min(rect.right + 8, window.innerWidth - 300))
+  latencyTooltipPosition.value.y = Math.max(160, Math.min(rect.top + rect.height / 2, window.innerHeight - 160))
   latencyTooltipVisible.value = true
 }
 

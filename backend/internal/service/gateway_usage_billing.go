@@ -832,6 +832,7 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 		requestedModel, multiplier, imageMultiplier, accountRateMultiplier, billingType, cacheTTLOverridden, cost)
 	usageLog.RequestedServiceTier = &requestedServiceTier
 	usageLog.ResponseServiceTier = &responseServiceTier
+	bindLiveUsage(ctx, usageLog)
 
 	// 计算账号统计定价费用（使用最终上游模型匹配自定义规则）。纯存储费不是一次模型请求，
 	// 账号统计成本回落 total_cost（官方存储价）。

@@ -286,37 +286,18 @@ Modify user dropdown in `AppHeader.vue`:
 
 ### Sidebar
 
-- **Desktop (md+)**: Always visible, can be collapsed to icon-only view
-- **Mobile**: Hidden by default, shown via menu toggle in header
+- **Desktop (1024px+)**: Sticky brand and navigation cards; collapse changes the grid column from 256px to 72px.
+- **Below 1024px**: Closed by default. The header button opens a focus-trapped drawer with backdrop and scroll lock.
 
 ### Header
 
-- **Desktop**: Shows full user info and balance
-- **Mobile**: Shows compact view with hamburger menu
+- **Wide toolbar**: Shows user info, balance and secondary tools.
+- **Compact toolbar**: Keeps the title and menu button; secondary tools move into the user menu.
 
-To improve mobile experience, you can add overlay and transitions:
-
-```vue
-<!-- AppSidebar.vue enhancement for mobile -->
-<aside
-  class="fixed left-0 top-0 z-40 h-screen transition-transform duration-300"
-  :class="[
-    sidebarCollapsed ? 'w-16' : 'w-64',
-    // Hide on mobile when collapsed
-    'md:translate-x-0',
-    sidebarCollapsed ? '-translate-x-full md:translate-x-0' : 'translate-x-0'
-  ]"
->
-  <!-- ... -->
-</aside>
-
-<!-- Add overlay for mobile -->
-<div
-  v-if="!sidebarCollapsed"
-  @click="toggleSidebar"
-  class="fixed inset-0 z-30 bg-black bg-opacity-50 md:hidden"
-></div>
-```
+`AppLayout` already owns these interactions. Reuse it without adding page-level
+sidebar margins, maximum widths or another outer inset. Shared geometry and glass
+tokens live in `src/styles/console.css`; see the
+[console interaction contract](../../../../docs/UI_INTERACTION.md).
 
 ---
 

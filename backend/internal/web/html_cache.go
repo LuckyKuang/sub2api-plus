@@ -5,6 +5,7 @@ package web
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"strings"
 	"sync"
 )
 
@@ -21,6 +22,16 @@ type HTMLCache struct {
 type CachedHTML struct {
 	Content []byte
 	ETag    string
+}
+
+// The CSP nonce changes the rendered representation, even when settings and
+// assets are unchanged. A new nonce must not revalidate a cached HTML body.
+func (c *CachedHTML) etagForNonce(nonce string) string {
+	if nonce == "" {
+		return c.ETag
+	}
+	hash := sha256.Sum256([]byte(nonce))
+	return strings.TrimSuffix(c.ETag, `"`) + "-" + hex.EncodeToString(hash[:8]) + `"`
 }
 
 // NewHTMLCache creates a new HTML cache instance

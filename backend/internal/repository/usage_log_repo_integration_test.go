@@ -936,7 +936,7 @@ func (s *UsageLogRepoSuite) TestGetUserDashboardStats() {
 
 	s.createUsageLog(user, apiKey, account, 10, 20, 0.5, time.Now())
 
-	stats, err := s.repo.GetUserDashboardStats(s.ctx, user.ID)
+	stats, err := s.repo.GetUserDashboardStats(s.ctx, user.ID, "")
 	s.Require().NoError(err, "GetUserDashboardStats")
 	s.Require().Equal(int64(1), stats.TotalAPIKeys)
 	s.Require().Equal(int64(1), stats.TotalRequests)

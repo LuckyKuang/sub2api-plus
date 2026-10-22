@@ -47,6 +47,33 @@ describe('DataTable', () => {
     localStorage.clear()
   })
 
+  it.each(['desktop', 'mobile'])('keeps existing rows mounted during background refresh on %s', async viewport => {
+    if (viewport === 'mobile') stubMobileMatchMedia()
+    const wrapper = mount(DataTable, {
+      props: { columns: [{ key: 'name', label: 'Name' }], data: [{ id: 1, name: 'Existing request' }] },
+      slots: { 'cell-name': '<span data-record>Existing request</span>' }
+    })
+    const original = wrapper.get('[data-record]').element
+    await wrapper.setProps({ loading: true })
+    expect(wrapper.get('[data-record]').element).toBe(original)
+    expect(wrapper.attributes('aria-busy')).toBe('true')
+    expect(wrapper.find('.animate-pulse').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('lets row controls act without also opening the detail', async () => {
+    const row = { id: 1, name: 'Request' }
+    const wrapper = mount(DataTable, {
+      props: { columns: [{ key: 'name', label: 'Name' }], data: [row], clickableRows: true },
+      slots: { 'cell-name': '<div><span data-label>Request</span><button>Copy</button><a href="#detail">Link</a><input /></div>' }
+    })
+    for (const selector of ['button', 'a', 'input']) await wrapper.get(`tbody ${selector}`).trigger('click')
+    expect(wrapper.emitted('rowClick')).toBeUndefined()
+    await wrapper.get('[data-label]').trigger('click')
+    expect(wrapper.emitted('rowClick')).toEqual([[row]])
+    wrapper.unmount()
+  })
+
   it('renders paired sort arrows and highlights the active direction', async () => {
     const wrapper = mount(DataTable, {
       props: {

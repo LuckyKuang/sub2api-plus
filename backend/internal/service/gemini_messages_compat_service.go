@@ -2233,7 +2233,7 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 	writeSSE(c.Writer, "message_start", messageStart)
 	flusher.Flush()
 
-	var timing streamOutputTiming
+	timing := requestStreamOutputTiming(c)
 	var usage ClaudeUsage
 	finishReason := ""
 	terminalSeen := false
@@ -3064,7 +3064,7 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 	if observer == nil {
 		observer = beginUpstreamResponseModelObservation(c)
 	}
-	var timing streamOutputTiming
+	timing := requestStreamOutputTiming(c)
 	terminalSeen := false
 	var best geminiResponseSignal
 	sawDataEvent := false

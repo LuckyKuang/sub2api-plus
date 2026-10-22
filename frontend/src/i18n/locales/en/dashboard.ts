@@ -426,7 +426,6 @@ export default {
     timingUnavailableInvalid: 'Invalid token or duration data',
     averageTps: 'Average TPS',
     averageTpsNote: 'Average TPS note',
-    latencyTpsHint: 'Request-average output tokens per second = non-media output tokens ÷ total forwarding/turn duration, including first-token waiting. May include billed reasoning tokens; not pure model generation speed.',
 	incomplete: 'Incomplete',
 	incompleteHint: 'The request ended before a complete terminal result. Displayed usage and cost may be partial.',
 	clientDisconnected: 'Client disconnected',

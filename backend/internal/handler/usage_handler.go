@@ -46,6 +46,7 @@ type userGroupStat struct {
 
 // UsageHandler handles usage-related requests
 type UsageHandler struct {
+	liveRequests   *service.LiveRequestService
 	usageService   *service.UsageService
 	apiKeyService  *service.APIKeyService
 	opsService     *service.OpsService
@@ -246,6 +247,12 @@ func (h *UsageHandler) List(c *gin.Context) {
 		SortOrder: c.DefaultQuery("sort_order", "desc"),
 	}
 
+	boundary, err := usagestats.ParseSnapshotMaxID(c.Query("snapshot_max_id"))
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	parsed.Filters.SnapshotMaxID = boundary
 	records, result, err := h.usageService.ListWithFilters(c.Request.Context(), params, parsed.Filters)
 	if err != nil {
 		response.ErrorFrom(c, err)
@@ -256,7 +263,10 @@ func (h *UsageHandler) List(c *gin.Context) {
 	for i := range records {
 		out = append(out, *dto.UsageLogFromService(&records[i]).Localized(c.GetHeader("Accept-Language")))
 	}
-	response.Paginated(c, out, result.Total, page, pageSize)
+	response.Success(c, struct {
+		response.PaginatedData
+		SnapshotMaxID *int64 `json:"snapshot_max_id,omitempty"`
+	}{response.PaginatedData{Items: out, Total: result.Total, Page: page, PageSize: pageSize, Pages: max(1, result.Pages)}, result.SnapshotMaxID})
 }
 
 // ListErrors handles listing the current user's failed requests (redacted).
@@ -455,7 +465,7 @@ func (h *UsageHandler) DashboardStats(c *gin.Context) {
 		return
 	}
 
-	stats, err := h.usageService.GetUserDashboardStats(c.Request.Context(), subject.UserID)
+	stats, err := h.usageService.GetUserDashboardStats(c.Request.Context(), subject.UserID, c.Query("timezone"))
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return

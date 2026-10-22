@@ -130,6 +130,10 @@ vi.mock('@/stores/app', () => ({
   }),
 }))
 
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: () => ({ user: { id: 7, role: 'admin' }, isAdmin: true }),
+}))
+
 vi.mock('vue-i18n', async () => {
   const actual = await vi.importActual<typeof import('vue-i18n')>('vue-i18n')
   return {
@@ -142,6 +146,7 @@ vi.mock('vue-i18n', async () => {
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({ query: {} }),
+  useRouter: () => ({ replace: vi.fn() }),
 }))
 
 const layoutStub = { template: '<div><slot /></div>' }
@@ -248,7 +253,7 @@ describe('usage reasoning effort page display', () => {
     localStorage.clear()
   })
 
-  it('user usage page only shows the requested reasoning effort', async () => {
+  it('user usage page shows the requested reasoning effort by default', async () => {
     const wrapper = mount(UserUsageView, {
       global: { stubs: sharedPageStubs },
     })
