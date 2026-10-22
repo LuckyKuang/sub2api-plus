@@ -31,6 +31,8 @@ export interface PlatformDashboardStats {
 }
 
 export interface UserDashboardStats {
+  timezone?: string
+  generated_at?: string
   total_api_keys: number
   active_api_keys: number
   total_requests: number
@@ -246,8 +248,8 @@ export async function getByDateRange(
  * @param id - Usage log ID
  * @returns Usage log details
  */
-export async function getById(id: number): Promise<UsageLog> {
-  const { data } = await apiClient.get<UsageLog>(`/usage/${id}`)
+export async function getById(id: number, signal?: AbortSignal): Promise<UsageLog> {
+  const { data } = await apiClient.get<UsageLog>(`/usage/${id}`, { signal })
   return data
 }
 

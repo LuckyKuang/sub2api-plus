@@ -1,6 +1,6 @@
 <template>
-  <div v-if="!isDesktopViewport" class="space-y-3">
-    <template v-if="loading">
+  <div v-if="!isDesktopViewport" class="space-y-3" :aria-busy="loading">
+    <template v-if="loading && !data?.length">
       <div v-for="i in 5" :key="i" class="rounded-2xl border border-gray-200 bg-white p-4 dark:border-dark-700 dark:bg-dark-800">
         <div class="space-y-3">
           <div v-for="column in dataColumns" :key="column.key" class="flex justify-between">
@@ -51,9 +51,9 @@
         class="rounded-2xl border border-gray-200 bg-white p-4 dark:border-dark-700 dark:bg-dark-800"
         :class="{
           'cursor-pointer': clickableRows,
-          'table-row-selected': selectable && isRowSelected(row, index)
+          'table-row-selected': (selectable && isRowSelected(row, index)) || activeRowKey === resolveRowKey(row, index)
         }"
-        @click="clickableRows && emit('rowClick', row)"
+        @click="handleRowClick($event, row)"
       >
         <div class="space-y-3">
           <div v-if="selectable" class="flex justify-end">
@@ -94,6 +94,7 @@
     v-else
     ref="tableWrapperRef"
     class="table-wrapper table-container"
+    :aria-busy="loading"
     :class="{
       'actions-expanded': actionsExpanded,
       'is-scrollable': isScrollable
@@ -120,6 +121,7 @@
           <th
             v-for="(column, index) in columns"
             :key="column.key"
+            :data-field="column.key"
             scope="col"
             :aria-sort="column.sortable ? getColumnAriaSort(column.key) : undefined"
             :class="[
@@ -168,7 +170,7 @@
       </thead>
       <tbody class="table-body divide-y divide-gray-200 bg-white dark:divide-dark-700 dark:bg-dark-800">
         <!-- Loading skeleton -->
-        <tr v-if="loading" v-for="i in 5" :key="i">
+        <tr v-if="loading && !data?.length" v-for="i in 5" :key="i">
           <td v-if="selectable" class="w-11 min-w-11 px-3 py-4">
             <div class="mx-auto h-4 w-4 animate-pulse rounded bg-gray-200 dark:bg-dark-700"></div>
           </td>
@@ -216,9 +218,9 @@
             class="table-data-row"
             :class="{
               'cursor-pointer': clickableRows,
-              'table-row-selected': selectable && isRowSelected(item.row, item.index)
+              'table-row-selected': (selectable && isRowSelected(item.row, item.index)) || activeRowKey === resolveRowKey(item.row, item.index)
             }"
-            @click="clickableRows && emit('rowClick', item.row)"
+            @click="handleRowClick($event, item.row)"
           >
             <td v-if="selectable" class="w-11 min-w-11 px-3 py-4 text-center">
               <input
@@ -234,6 +236,7 @@
             <td
               v-for="(column, colIndex) in columns"
               :key="column.key"
+              :data-field="column.key"
               :class="[
                 'whitespace-nowrap py-4 text-sm text-gray-900 dark:text-gray-100',
                 getAdaptivePaddingClass(),
@@ -455,6 +458,7 @@ interface Props {
   serverSideSort?: boolean
   /** Emit 'rowClick' on row/card click and show pointer cursor (interactive cells should @click.stop) */
   clickableRows?: boolean
+  activeRowKey?: string | number | null
   /** Estimated row height in px for the virtualizer (default 56) */
   estimateRowHeight?: number
   /** Number of rows to render beyond the visible area (default 5) */
@@ -483,6 +487,11 @@ const props = withDefaults(defineProps<Props>(), {
   selectable: false,
   selectedKeys: () => []
 })
+
+function handleRowClick(event: MouseEvent, row: unknown) {
+  if (!props.clickableRows || (event.target as Element | null)?.closest('button, a, input, select, textarea, [role="button"]')) return
+  emit('rowClick', row)
+}
 
 const sortKey = ref<string>('')
 const sortOrder = ref<'asc' | 'desc'>('asc')

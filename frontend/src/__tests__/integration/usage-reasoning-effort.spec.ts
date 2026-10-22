@@ -130,6 +130,10 @@ vi.mock('@/stores/app', () => ({
   }),
 }))
 
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: () => ({ user: { id: 7, role: 'admin' }, isAdmin: true }),
+}))
+
 vi.mock('vue-i18n', async () => {
   const actual = await vi.importActual<typeof import('vue-i18n')>('vue-i18n')
   return {
@@ -145,6 +149,7 @@ vi.mock('vue-router', () => ({
 }))
 
 const layoutStub = { template: '<div><slot /></div>' }
+const detailWorkspaceStub = { template: '<div><slot :select="() => {}" :selected-id="null" /></div>' }
 const chartStub = { template: '<div />' }
 const iconStub = { template: '<span />' }
 const adminFiltersStub = defineComponent({
@@ -201,6 +206,7 @@ const adminMappedLog = {
 }
 
 const sharedPageStubs = {
+  UsageRecordWorkspace: detailWorkspaceStub,
   AppLayout: layoutStub,
   Pagination: true,
   Select: true,
@@ -252,6 +258,10 @@ describe('usage reasoning effort page display', () => {
     const wrapper = mount(UserUsageView, {
       global: { stubs: sharedPageStubs },
     })
+    await flushPromises()
+
+    await wrapper.get('[data-testid="usage-column-settings"]').trigger('click')
+    await wrapper.get('[data-testid="usage-column-toggle-reasoning_effort"]').trigger('click')
     await flushPromises()
 
     const cell = reasoningCellText(wrapper)

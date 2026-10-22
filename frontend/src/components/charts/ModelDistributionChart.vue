@@ -96,7 +96,7 @@
       </div>
     </div>
 
-    <div v-if="activeView === 'model_distribution' && loading" class="flex h-48 items-center justify-center">
+    <div v-if="activeView === 'model_distribution' && loading && !displayModelStats.length" class="flex h-48 items-center justify-center">
       <LoadingSpinner />
     </div>
     <div
@@ -171,11 +171,11 @@
       {{ t('admin.dashboard.noDataAvailable') }}
     </div>
 
-    <div v-else-if="rankingLoading" class="flex h-48 items-center justify-center">
+    <div v-else-if="rankingLoading && !rankingDisplayItems.length" class="flex h-48 items-center justify-center">
       <LoadingSpinner />
     </div>
     <div
-      v-else-if="rankingError"
+      v-else-if="rankingError && !rankingDisplayItems.length"
       class="flex h-48 items-center justify-center text-sm text-gray-500 dark:text-gray-400"
     >
       {{ t('admin.dashboard.failedToLoad') }}
@@ -446,6 +446,7 @@ const rankingDisplayItems = computed<RankingDisplayItem[]>(() => {
 })
 
 const doughnutOptions = computed(() => ({
+  animation: false as const,
   responsive: true,
   maintainAspectRatio: false,
   plugins: {
@@ -469,6 +470,7 @@ const doughnutOptions = computed(() => ({
 }))
 
 const rankingDoughnutOptions = computed(() => ({
+  animation: false as const,
   responsive: true,
   maintainAspectRatio: false,
   plugins: {

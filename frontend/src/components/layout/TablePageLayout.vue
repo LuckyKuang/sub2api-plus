@@ -1,5 +1,5 @@
 <template>
-  <div class="table-page-layout" :class="{ 'mobile-mode': isMobile }">
+  <div ref="layoutRef" class="table-page-layout" :class="{ 'mobile-mode': isMobile }" :style="{ '--table-page-height': availableHeight }">
     <!-- 固定区域：操作按钮 -->
     <div v-if="$slots.actions" class="layout-section-fixed">
       <slot name="actions" />
@@ -28,18 +28,31 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 
 const isMobile = ref(false)
+const layoutRef = ref<HTMLElement | null>(null)
+const availableHeight = ref('auto')
+let observer: ResizeObserver | undefined
 
 const checkMobile = () => {
   isMobile.value = window.innerWidth < 1024
+  if (!layoutRef.value || isMobile.value) { availableHeight.value = 'auto'; return }
+  const top = layoutRef.value.getBoundingClientRect().top + window.scrollY
+  const main = layoutRef.value.closest('main')
+  const padding = main ? parseFloat(getComputedStyle(main).paddingBottom) : 32
+  availableHeight.value = `${Math.max(320, window.innerHeight - top - padding)}px`
 }
 
 onMounted(() => {
   checkMobile()
   window.addEventListener('resize', checkMobile)
+  if (typeof ResizeObserver !== 'undefined' && layoutRef.value?.parentElement) {
+    observer = new ResizeObserver(checkMobile)
+    observer.observe(layoutRef.value.parentElement)
+  }
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', checkMobile)
+  observer?.disconnect()
 })
 </script>
 
@@ -47,7 +60,7 @@ onUnmounted(() => {
 /* 桌面端：Flexbox 布局 */
 .table-page-layout {
   @apply flex flex-col gap-6;
-  height: calc(100vh - 64px - 4rem); /* 减去 header + lg:p-8 的上下padding */
+  height: var(--table-page-height, auto);
 }
 
 .layout-section-fixed {

@@ -1,6 +1,6 @@
 <template>
   <AppLayout>
-    <div class="service-status mx-auto w-full max-w-6xl space-y-5 pb-8">
+    <div class="service-status w-full space-y-5 pb-8">
       <header class="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">{{ t('channelMonitorV3.title') }}</h1>

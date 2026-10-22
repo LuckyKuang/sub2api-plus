@@ -83,6 +83,19 @@ describe('OpsErrorLogTable user/api-key/account columns', () => {
 })
 
 describe('OpsErrorLogTable column order', () => {
+  it('keeps key/group context and a keyboard detail entry in the compact seven-column list', async () => {
+    const wrapper = mountTable({ user_id: 2, user_email: 'user@example.test', api_key_name: 'inspection-key', account_id: 9, account_name: 'account-A', group_name: 'inspection-group' })
+    await wrapper.setProps({ compact: true, activeRowKey: 1, visibleColumnKeys: ['created_at', 'user', 'account', 'model', 'category', 'status', 'message'] })
+    expect(wrapper.findAll('thead th')).toHaveLength(7)
+    expect(wrapper.findAll('thead th')[0].text()).toBe('admin.ops.errorLog.time')
+    expect(wrapper.text()).toContain('inspection-key')
+    expect(wrapper.text()).toContain('inspection-group')
+    expect(wrapper.get('tbody tr[data-index]').classes()).toContain('table-row-selected')
+    await wrapper.get('button[aria-label="inspection.view"]').trigger('click')
+    expect(wrapper.emitted('openErrorDetail')).toEqual([[1]])
+    wrapper.unmount()
+  })
+
   it('puts time and response content first for ops without changing time sorting', async () => {
     const wrapper = mountTable({})
     await wrapper.setProps({ summaryFirst: true })

@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 
+vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ user: { id: 7 } }) }))
+vi.mock('vue-router', () => ({ useRoute: () => ({ query: {}, path: '/usage' }) }))
+vi.mock('@/components/usage/UsageRecordWorkspace.vue', () => ({ default: { template: '<div><slot :select="() => {}" :selected-id="null" /></div>' } }))
+
 import UsageView from '../UsageView.vue'
 import Select, { type SelectOption } from '@/components/common/Select.vue'
 import DateRangePicker from '@/components/common/DateRangePicker.vue'

@@ -6,6 +6,9 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { defineComponent, ref } from 'vue'
 
+vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ user: { id: 1 } }) }))
+vi.mock('@/components/usage/UsageRecordWorkspace.vue', () => ({ default: { template: '<div><slot :select="() => {}" :selected-id="null" /></div>' } }))
+
 import UsageView from '../UsageView.vue'
 
 const {
@@ -501,7 +504,7 @@ describe('admin UsageView request ID column visibility', () => {
     vi.useRealTimers()
   })
 
-  it('shows the service tier column by default and persists hiding it', async () => {
+  it('defaults to eight summary columns and persists optional service tier visibility', async () => {
     const wrapper = mount(UsageView, {
       global: {
         stubs: {
@@ -528,23 +531,17 @@ describe('admin UsageView request ID column visibility', () => {
     await wrapper.vm.$nextTick()
 
     const usageTable = wrapper.findComponent(UsageTableStub)
-    expect(usageTable.props('columns')).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ key: 'request_id', label: 'Request ID' }),
-        expect.objectContaining({ key: 'session_id', label: 'Session ID' }),
-        expect.objectContaining({ key: 'service_tier', label: 'Service tier' }),
-      ]),
-    )
-    expect(usageTable.props('columns')).not.toEqual(
-      expect.arrayContaining([expect.objectContaining({ key: 'upstream_request_id' })]),
-    )
+    // Accepted UI requirement: eight summary columns; correlation and service tier are opt-in.
+    expect(usageTable.props('columns').map((column: { key: string }) => column.key)).toEqual([
+      'created_at', 'user', 'account', 'model', 'completion_status', 'tokens', 'cost', 'latency',
+    ])
     expect(usageTable.props('showServiceTier')).toBe(true)
     await wrapper.get('[data-testid="usage-column-settings"]').trigger('click')
     await wrapper.get('[data-testid="usage-column-toggle-service_tier"]').trigger('click')
-    expect(usageTable.props('columns').map((column: { key: string }) => column.key)).not.toContain('service_tier')
-    expect(localStorage.setItem).toHaveBeenCalledWith('usage-hidden-columns', expect.stringContaining('"service_tier"'))
-    await wrapper.get('[data-testid="usage-column-toggle-service_tier"]').trigger('click')
     expect(usageTable.props('columns').map((column: { key: string }) => column.key)).toContain('service_tier')
+    expect(localStorage.setItem).toHaveBeenCalledWith('usage-hidden-columns:1:self', expect.not.stringContaining('"service_tier"'))
+    await wrapper.get('[data-testid="usage-column-toggle-service_tier"]').trigger('click')
+    expect(usageTable.props('columns').map((column: { key: string }) => column.key)).not.toContain('service_tier')
     wrapper.unmount()
   })
 })
@@ -651,8 +648,7 @@ describe('admin UsageView errors tab filter forwarding', () => {
     await flushPromises()
 
     // 切换到「错误请求」标签（第二个 tab 按钮）触发 loadAdminErrors
-    const tabs = wrapper.findAll('[data-testid="usage-detail-tab"]')
-    await tabs[1].trigger('click')
+    await wrapper.get('[data-tab="errors"]').trigger('click')
     await flushPromises()
 
     expect(listErrorLogs).toHaveBeenCalledWith(expect.objectContaining({
@@ -683,8 +679,7 @@ describe('admin UsageView errors tab filter forwarding', () => {
     const vm = wrapper.vm as any
     vm.onDateRangeChange({ startDate: '2026-08-01', endDate: '2026-08-02', preset: 'custom' })
     await flushPromises()
-    const tabs = wrapper.findAll('[data-testid="usage-detail-tab"]')
-    await tabs[1].trigger('click')
+    await wrapper.get('[data-tab="errors"]').trigger('click')
     await flushPromises()
     vm.onErrorViewChange('all')
     await flushPromises()
@@ -737,8 +732,8 @@ describe('admin UsageView ranking tab', () => {
     expect(wrapper.find('[data-test="ranking"]').exists()).toBe(false)
 
     const tabs = wrapper.findAll('[data-testid="usage-detail-tab"]')
-    expect(tabs).toHaveLength(4)
-    await tabs[2].trigger('click')
+    expect(tabs).toHaveLength(5)
+    await wrapper.get('[data-tab="ranking"]').trigger('click')
     await flushPromises()
     expect(wrapper.find('[data-test="ranking"]').exists()).toBe(true)
 

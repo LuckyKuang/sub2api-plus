@@ -2,6 +2,23 @@
 @tailwind components;
 @tailwind utilities;
 
+.app-layout { --page-width: 1280px; --page-gutter: 16px; }
+.app-layout[data-page-layout="data"] { --page-width: 1600px; }
+.app-layout[data-page-layout="form"] { --page-width: 960px; }
+.app-page { width: 100%; max-width: var(--page-width); min-width: 0; margin-inline: auto; }
+.app-content { transition: margin-left 200ms ease-out; }
+.app-main { min-width: 0; }
+.app-header-inner { max-width: calc(var(--page-width) + var(--page-gutter) * 2); margin-inline: auto; padding-inline: var(--page-gutter); }
+.detail-dialog.modal-content { position: absolute; inset: 0 0 0 auto; width: min(100%, 480px); max-width: none; height: 100dvh; max-height: 100dvh; margin: 0; border-radius: 0; }
+.detail-dialog .modal-body { overscroll-behavior: contain; padding-bottom: max(24px, env(safe-area-inset-bottom)); }
+.modal-enter-active .modal-content.detail-dialog, .modal-leave-active .modal-content.detail-dialog { transition: transform 200ms ease-out; }
+.modal-enter-from .modal-content.detail-dialog, .modal-leave-to .modal-content.detail-dialog { transform: translateX(100%); }
+@media (min-width: 768px) { .app-layout { --page-gutter: 24px; } }
+@media (min-width: 1024px) { .app-layout { --page-gutter: 32px; } }
+@media (prefers-reduced-motion: reduce) {
+  .app-layout *, .modal-overlay *, .modal-overlay { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; scroll-behavior: auto !important; }
+}
+
 @layer base {
   :root {
     --table-header-bg: theme('colors.gray.100');

@@ -1,5 +1,5 @@
 <template>
-  <div :class="flat ? '' : 'card overflow-hidden'">
+  <div :class="[flat ? '' : 'card overflow-hidden', { 'usage-compact': compact }]" :style="{ '--usage-table-width': compactTableWidth + 'px' }">
     <div
       v-if="showIpGeoToolbar"
       class="flex items-center justify-end gap-2 border-b border-gray-200 px-4 py-2 dark:border-dark-700"
@@ -21,6 +21,9 @@
         :columns="columns"
         :data="data"
         :loading="loading"
+        :clickable-rows="detailsEnabled"
+        :active-row-key="selectedId"
+        @rowClick="row => emit('rowClick', row)"
         :server-side-sort="serverSideSort"
         :default-sort-key="defaultSortKey"
         :default-sort-order="defaultSortOrder"
@@ -31,8 +34,9 @@
             <button
               v-if="row.user?.email"
               class="font-medium text-primary-600 underline decoration-dashed underline-offset-2 transition-colors hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300"
-              @click="$emit('userClick', row.user_id, row.user?.email)"
-              :title="t('admin.usage.clickToViewBalance')"
+              :class="compact ? 'block max-w-full truncate text-left' : ''"
+              @click.stop="$emit('userClick', row.user_id, row.user?.email)"
+              :title="compact ? `${row.user.email} · ${t('admin.usage.clickToViewBalance')}` : t('admin.usage.clickToViewBalance')"
             >
               {{ row.user.email }}
             </button>
@@ -41,18 +45,27 @@
               {{ t('admin.usage.userDeletedBadge') }}
             </span>
             <span class="ml-1 text-gray-500 dark:text-gray-400">#{{ row.user_id }}</span>
+            <div v-if="compact" class="truncate text-xs text-gray-500" :title="row.api_key?.name">{{ row.api_key?.name || '—' }}</div>
           </div>
         </template>
 
         <template #cell-api_key="{ row }">
-          <span class="text-sm text-gray-900 dark:text-white">{{ row.api_key?.name || '-' }}</span>
+          <span class="text-sm text-gray-900 dark:text-white" :class="compact ? 'block truncate' : ''" :title="row.api_key?.name">{{ row.api_key?.name || '-' }}</span>
+          <div v-if="compact && !showAccountBilling" class="truncate text-xs text-gray-500">{{ row.group?.name || '—' }}</div>
         </template>
 
         <template #cell-account="{ row }">
-          <span class="text-sm text-gray-900 dark:text-white">{{ row.account?.name || '-' }}</span>
+          <span class="text-sm text-gray-900 dark:text-white" :class="compact ? 'block truncate' : ''" :title="row.account?.name">{{ row.account?.name || '-' }}</span>
+          <div v-if="compact" class="truncate text-xs text-gray-500">{{ row.group?.name || '—' }}</div>
         </template>
 
         <template #cell-model="{ row }">
+          <div v-if="compact" class="max-w-[210px] space-y-1 text-xs">
+            <div class="truncate font-medium" :title="row.model">{{ row.model }}</div>
+            <div class="flex flex-wrap gap-1 text-gray-500"><span>{{ getRequestTypeLabel(row) }}</span><span v-if="row.reasoning_effort">· {{ row.reasoning_effort }}</span></div>
+            <span v-if="row.upstream_model_mismatch" class="text-amber-600" :title="modelAuditTitle(row)">{{ t('usage.modelMismatch') }}</span>
+          </div>
+          <template v-else>
           <div class="space-y-0.5 text-xs">
             <div v-if="row.model_mapping_chain && row.model_mapping_chain.includes('→')" class="space-y-0.5">
               <div v-for="(step, i) in row.model_mapping_chain.split('→')" :key="i"
@@ -96,6 +109,11 @@
               </span>
             </div>
           </div>
+          </template>
+        </template>
+
+        <template #cell-completion_status="{ row }">
+          <span class="badge" :class="usageCompletion(row) === 'completed' ? 'badge-success' : usageCompletion(row) === 'unknown' ? 'badge-gray' : 'badge-warning'">{{ t(`inspection.${usageCompletion(row)}`) }}</span>
         </template>
 
         <template #cell-service_tier="{ row }">
@@ -161,6 +179,12 @@
         </template>
 
         <template #cell-tokens="{ row }">
+          <div v-if="compact" class="space-y-1 text-xs tabular-nums">
+            <div>{{ row.input_tokens?.toLocaleString() ?? '—' }} → {{ row.output_tokens?.toLocaleString() ?? '—' }}</div>
+            <div class="text-gray-500">{{ t('inspection.cacheRead') }} {{ row.cache_read_tokens?.toLocaleString() ?? '—' }}</div>
+            <div v-if="row.image_count > 0" class="text-pink-600">{{ row.image_count }} {{ t('inspection.images') }}</div>
+          </div>
+          <template v-else>
           <!-- 图片生成请求（仅按次计费时显示图片格式） -->
           <div v-if="isImageUsage(row)" class="flex items-center gap-1.5">
             <svg class="h-4 w-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -224,12 +248,13 @@
               </div>
             </div>
           </div>
+          </template>
         </template>
 
         <template #cell-cost="{ row }">
           <div class="text-sm">
             <div class="flex items-center gap-1.5">
-              <span class="font-medium text-green-600 dark:text-green-400">${{ row.actual_cost?.toFixed(6) || '0.000000' }}</span>
+              <span class="font-medium text-green-600 dark:text-green-400">{{ usageMoney(row.actual_cost) }}</span>
               <span
                 v-if="row.long_context_billing_applied"
                 data-testid="long-context-billing-marker"
@@ -293,8 +318,9 @@
           </div>
         </template>
 
-        <template #cell-created_at="{ value }">
-          <span class="text-sm text-gray-600 dark:text-gray-400">{{ formatDateTime(value) }}</span>
+        <template #cell-created_at="{ value, row }">
+          <button v-if="detailsEnabled" type="button" class="text-left text-xs text-primary-600 underline decoration-dotted underline-offset-4 dark:text-primary-400" :aria-label="`${t('inspection.view')} · ${formatDateTime(value)}`" @click.stop="emit('rowClick', row)">{{ formatDateTime(value) }}</button>
+          <span v-else class="text-sm text-gray-600 dark:text-gray-400">{{ formatDateTime(value) }}</span>
         </template>
 
         <template #cell-request_id="{ row }">
@@ -692,6 +718,7 @@ import { fetchBatch, getEntry } from '@/utils/ipGeoLookup'
 import type { AdminUsageLog } from '@/types'
 import { firstByteMs, formatTpsNumber, strictFirstTokenMs, averageTps, tpsNote, firstTokenUnavailableReason } from '@/utils/usageTiming'
 import type { Column } from '@/components/common/types'
+import { usageCompletion, usageMoney } from '@/utils/usageInspection'
 
 interface Props {
   data: AdminUsageLog[]
@@ -705,6 +732,9 @@ interface Props {
   showUpstreamEndpoint?: boolean
   /** 嵌入统一卡片内使用：去掉自身卡片外观 */
   flat?: boolean
+  compact?: boolean
+  detailsEnabled?: boolean
+  selectedId?: number | null
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -721,6 +751,7 @@ const emit = defineEmits<{
   userClick: [userID: number, email?: string]
   sort: [key: string, order: 'asc' | 'desc']
   ipGeoBatchFailed: []
+  rowClick: [row: AdminUsageLog]
 }>()
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -728,6 +759,8 @@ const copiedRequestId = ref<string | null>(null)
 const copiedUserAgent = ref<string | null>(null)
 const showAccountBilling = props.showAccountBilling
 const showUpstreamEndpoint = props.showUpstreamEndpoint
+const compactWidths: Record<string, number> = { created_at: 124, model: 180, api_key: 140, user: 140, account: 140, completion_status: 95, tokens: 110, cost: 110, latency: 145 }
+const compactTableWidth = computed(() => props.columns.reduce((width, column) => width + (compactWidths[column.key] ?? 160), 0))
 const ipGeoBatchLoading = ref(false)
 
 const showIpGeoToolbar = computed(() => props.columns.some((col) => col.key === 'ip_address'))
@@ -1004,3 +1037,15 @@ const hideLatencyTooltip = () => {
   latencyTooltipData.value = null
 }
 </script>
+
+<style scoped>
+.usage-compact :deep(table) { table-layout: fixed; min-width: var(--usage-table-width); }
+.usage-compact :deep(th), .usage-compact :deep(td) { width: 160px; padding-inline: 10px; white-space: normal; overflow-wrap: anywhere; }
+.usage-compact :deep([data-field="created_at"]) { width: 124px; }
+.usage-compact :deep([data-field="model"]) { width: 180px; }
+.usage-compact :deep([data-field="user"]), .usage-compact :deep([data-field="api_key"]), .usage-compact :deep([data-field="account"]) { width: 140px; }
+.usage-compact :deep([data-field="completion_status"]) { width: 95px; }
+.usage-compact :deep([data-field="tokens"]), .usage-compact :deep([data-field="cost"]) { width: 110px; }
+.usage-compact :deep([data-field="latency"]) { width: 145px; }
+@media (max-width: 767px) { .usage-compact :deep([data-field]) { width: auto; padding-inline: 0; } }
+</style>

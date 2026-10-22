@@ -586,3 +586,15 @@ administrative catalog operation with no user prompt payload. PAT rejection,
 team-scope rendering and redirect prohibition run at the final outbound boundary;
 they add no inference ingress, canonical content field, account-type audit
 exception or side effect before the existing audit decision.
+
+## Non-blocking console request observation
+
+`LiveRequestContext` attaches local metadata without publishing before audit.
+`runSecurityAudit` publishes observation only after the coordinator returns; an
+audit denial is terminal and is never published as processing. The observer does
+not modify extraction, decisions or downstream ordering. Redis failures cannot
+become audit violations or forwarding errors. Responses WS retry observations
+use a separate turn offset without modifying the security-audit turn/dedupe keys.
+Regressions: `handler/live_requests_test.go` covers audit-before-observation,
+rejection, interleaved turns and failover identity; the existing audit ordering
+and pass-through tests remain applicable. See [UI_INTERACTION](UI_INTERACTION.md).

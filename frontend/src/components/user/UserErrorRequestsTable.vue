@@ -1,5 +1,6 @@
 <template>
-  <div class="flex min-h-0 flex-1 flex-col">
+  <DetailWorkspace :show="showDetail" :title="t('usage.errors.detail.title')" @close="showDetail = false">
+    <div class="error-compact flex min-h-0 flex-1 flex-col" :style="{ '--error-table-width': compactTableWidth + 'px' }">
     <div class="card flex min-h-0 flex-1 flex-col overflow-hidden">
       <IpGeoBatchToolbar :ips="rows.map((r) => r.client_ip)" @failed="emit('ipGeoBatchFailed')" />
 
@@ -7,6 +8,7 @@
         :columns="columns"
         :data="rows"
         :loading="loading"
+        :active-row-key="showDetail ? selectedId : undefined"
         clickable-rows
         server-side-sort
         default-sort-key="created_at"
@@ -21,11 +23,12 @@
 
         <template #cell-key_name="{ row }">
           <div class="text-sm">
-            <span class="text-gray-900 dark:text-white">{{ row.key_name || '-' }}</span>
+            <span class="block max-w-[160px] truncate text-gray-900 dark:text-white" :title="row.key_name">{{ row.key_name || '-' }}</span>
             <span
               v-if="row.key_deleted"
               class="ml-1 inline-flex items-center rounded px-1 py-px text-[10px] font-medium leading-tight bg-rose-100 text-rose-600 ring-1 ring-inset ring-rose-200 dark:bg-rose-500/20 dark:text-rose-400 dark:ring-rose-500/30"
             >{{ t('usage.errors.keyDeleted') }}</span>
+            <span v-if="!columns.some(column => column.key === 'group')" class="block max-w-[160px] truncate text-xs text-gray-500" :title="row.group_name">{{ row.group_name || '—' }}</span>
           </div>
         </template>
 
@@ -89,7 +92,7 @@
         </template>
 
         <template #cell-created_at="{ row }">
-          <span class="text-sm text-gray-600 dark:text-gray-400">{{ formatDateTime(row.created_at) }}</span>
+          <button type="button" class="text-left text-sm text-primary-600 underline decoration-dotted" :aria-label="t('inspection.view')" @click.stop="openDetail(row.id)">{{ formatDateTime(row.created_at) }}</button>
         </template>
 
         <template #cell-user_agent="{ row }">
@@ -116,14 +119,16 @@
       />
     </div>
 
-    <UserErrorDetailModal v-model:show="showDetail" :error-id="selectedId" />
-  </div>
+    </div>
+    <template #detail><UserErrorDetailModal embedded v-model:show="showDetail" :error-id="selectedId" /></template>
+  </DetailWorkspace>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import DataTable from '@/components/common/DataTable.vue'
+import DetailWorkspace from '@/components/common/DetailWorkspace.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import UserErrorDetailModal from '@/components/user/UserErrorDetailModal.vue'
@@ -163,9 +168,8 @@ function onSort(key: string, order: 'asc' | 'desc') {
 
 const { t } = useI18n()
 
-// 列序对齐用户端用量明细:Key → 模型 → 端点 → IP → 分组 → 类型 → 平台 → 分类
-// → 结果(状态→消息)→ 时间 → UA(用量明细 UA 同在时间之后的尾部)
 const allColumns = computed<Column[]>(() => [
+  { key: 'created_at', label: t('usage.errors.time'), sortable: true },
   { key: 'key_name', label: t('usage.errors.keyName') },
   { key: 'model', label: t('usage.errors.model'), sortable: true },
   { key: 'endpoint', label: t('usage.errors.endpoint') },
@@ -176,7 +180,6 @@ const allColumns = computed<Column[]>(() => [
   { key: 'category', label: t('usage.errors.category') },
   { key: 'status', label: t('usage.errors.status'), sortable: true },
   { key: 'message', label: t('usage.errors.message') },
-  { key: 'created_at', label: t('usage.errors.time'), sortable: true },
   { key: 'user_agent', label: t('usage.userAgent') },
 ])
 
@@ -185,6 +188,8 @@ const columns = computed<Column[]>(() =>
     ? allColumns.value.filter((c) => props.visibleColumnKeys!.includes(c.key))
     : allColumns.value
 )
+const compactWidths: Record<string, number> = { created_at: 124, key_name: 140, model: 160, category: 100, status: 90, message: 240 }
+const compactTableWidth = computed(() => columns.value.reduce((width, column) => width + (compactWidths[column.key] ?? 160), 0))
 
 function requestTypeBadge(row: UserErrorRequest): { label: string; className: string } | null {
   const kind = numericRequestTypeKind(row.request_type, row.stream)
@@ -202,3 +207,15 @@ function openDetail(id: number) {
 
 const statusClass = statusCodeBadgeClass
 </script>
+
+<style scoped>
+.error-compact :deep(table) { table-layout: fixed; min-width: var(--error-table-width); }
+.error-compact :deep(th), .error-compact :deep(td) { width: 160px; padding-inline: 10px; white-space: normal; overflow-wrap: anywhere; }
+.error-compact :deep([data-field="created_at"]) { width: 124px; }
+.error-compact :deep([data-field="key_name"]) { width: 140px; }
+.error-compact :deep([data-field="category"]) { width: 100px; }
+.error-compact :deep([data-field="status"]) { width: 90px; }
+.error-compact :deep([data-field="message"]) { width: 240px; }
+.error-compact :deep(td [class*="max-w-"]) { max-width: 100%; }
+@media (max-width: 767px) { .error-compact :deep([data-field]) { width: auto; padding-inline: 0; } }
+</style>

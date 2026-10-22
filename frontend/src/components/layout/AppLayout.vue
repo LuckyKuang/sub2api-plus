@@ -1,20 +1,22 @@
 <template>
-  <div class="min-h-screen bg-canvas dark:bg-dark-950">
+  <div class="app-layout min-h-screen bg-canvas dark:bg-dark-950" :data-page-layout="layout">
     <!-- Sidebar -->
     <AppSidebar />
 
     <!-- Main Content Area -->
     <div
-      class="relative min-h-screen transition-all duration-300"
+      class="app-content relative min-h-screen"
       :class="[sidebarCollapsed ? 'lg:ml-[72px]' : 'lg:ml-64']"
     >
       <!-- Header -->
       <AppHeader />
 
       <!-- Main Content -->
-      <main class="p-4 md:p-6 lg:p-8">
-        <AdminSupportBanner v-if="supportUser" :target="supportUser" class="mb-5" />
-        <slot />
+      <main class="app-main p-4 md:p-6 lg:p-8">
+        <div class="app-page">
+          <AdminSupportBanner v-if="supportUser" :target="supportUser" class="mb-5" />
+          <slot />
+        </div>
       </main>
     </div>
   </div>
@@ -23,6 +25,8 @@
 <script setup lang="ts">
 import '@/styles/onboarding.css'
 import { computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
+import { pageLayout } from '@/utils/pageLayout'
 import { useAppStore } from '@/stores'
 import { useAuthStore } from '@/stores/auth'
 import { useOnboardingTour } from '@/composables/useOnboardingTour'
@@ -34,6 +38,8 @@ import AppSidebar from './AppSidebar.vue'
 import AppHeader from './AppHeader.vue'
 
 const appStore = useAppStore()
+const route = useRoute()
+const layout = computed(() => pageLayout(route.path))
 const authStore = useAuthStore()
 const sidebarCollapsed = computed(() => appStore.sidebarCollapsed)
 const view = useUserView()

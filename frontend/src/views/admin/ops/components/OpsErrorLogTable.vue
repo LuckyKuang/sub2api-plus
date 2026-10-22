@@ -1,5 +1,5 @@
 <template>
-  <div class="flex h-full min-h-0 flex-col">
+  <div class="flex h-full min-h-0 flex-col" :class="{ 'error-compact': compact }" :style="{ '--error-table-width': compactTableWidth + 'px' }">
     <div class="flex min-h-0 flex-1 flex-col overflow-hidden" :class="flat ? '' : 'card'">
       <IpGeoBatchToolbar :ips="rows.map((r) => r.client_ip)" @failed="emit('ipGeoBatchFailed')" />
 
@@ -7,6 +7,7 @@
         :columns="columns"
         :data="rows"
         :loading="loading"
+        :active-row-key="activeRowKey"
         clickable-rows
         server-side-sort
         default-sort-key="created_at"
@@ -15,7 +16,9 @@
         @rowClick="(row) => emit('openErrorDetail', row.id)"
       >
         <template #cell-created_at="{ row }">
+          <button v-if="compact" type="button" class="text-left text-sm text-primary-600 underline decoration-dotted" :aria-label="t('inspection.view')" @click.stop="emit('openErrorDetail', row.id)">{{ formatDateTime(row.created_at) }}</button>
           <span
+            v-else
             class="text-sm text-gray-600 dark:text-gray-400"
             :title="row.request_id || row.client_request_id"
           >{{ formatDateTime(row.created_at) }}</span>
@@ -65,17 +68,21 @@
         </template>
 
         <template #cell-user="{ row }">
-          <div v-if="row.user_id" class="text-sm">
+          <div v-if="row.user_id" class="text-sm" :class="compact ? 'max-w-[180px]' : ''">
             <button
               v-if="userClickable && row.user_email"
-              class="font-medium text-primary-600 underline decoration-dashed underline-offset-2 transition-colors hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300"
-              :title="t('admin.usage.clickToViewBalance')"
+              class="max-w-full truncate font-medium text-primary-600 underline decoration-dashed underline-offset-2 transition-colors hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300"
+              :title="row.user_email + ' · ' + t('admin.usage.clickToViewBalance')"
               @click.stop="emit('userClick', row.user_id, row.user_email)"
             >
               {{ row.user_email }}
             </button>
-            <span v-else class="font-medium text-gray-900 dark:text-white">{{ row.user_email || '-' }}</span>
-            <span class="ml-1 text-gray-500 dark:text-gray-400">#{{ row.user_id }}</span>
+            <span v-else class="font-medium text-gray-900 dark:text-white" :class="compact ? 'block truncate' : ''" :title="row.user_email">{{ row.user_email || '#' + row.user_id }}</span>
+            <span v-if="!compact" class="ml-1 text-gray-500 dark:text-gray-400">#{{ row.user_id }}</span>
+            <div v-if="compact && !columns.some(column => column.key === 'api_key')" class="truncate text-xs text-gray-500" :title="row.api_key_name">
+              {{ row.api_key_name || (row.api_key_id ? '#' + row.api_key_id : '—') }}
+              <span v-if="row.api_key_deleted"> · {{ t('admin.ops.errorLog.keyDeletedBadge') }}</span>
+            </div>
           </div>
           <span v-else class="text-sm text-gray-400 dark:text-gray-500">-</span>
         </template>
@@ -95,9 +102,11 @@
           <span
             v-if="row.account_id"
             class="text-sm text-gray-900 dark:text-white"
-            :title="t('admin.ops.errorLog.accountId') + ' ' + row.account_id"
+            :class="compact ? 'block max-w-[160px] truncate' : ''"
+            :title="(row.account_name || '') + ' · ' + t('admin.ops.errorLog.accountId') + ' ' + row.account_id"
           >{{ row.account_name || '#' + row.account_id }}</span>
           <span v-else class="text-sm text-gray-400 dark:text-gray-500">-</span>
+          <div v-if="compact && !columns.some(column => column.key === 'group')" class="max-w-[160px] truncate text-xs text-gray-500" :title="row.group_name">{{ row.group_name || (row.group_id ? '#' + row.group_id : '—') }}</div>
         </template>
 
         <template #cell-category="{ row }">
@@ -243,6 +252,10 @@ const columns = computed<Column[]>(() => {
   const visibleColumns = props.visibleColumnKeys
     ? allColumns.value.filter((c) => props.visibleColumnKeys!.includes(c.key))
     : allColumns.value
+  if (props.compact) return [
+    ...visibleColumns.filter(column => column.key === 'created_at'),
+    ...visibleColumns.filter(column => column.key !== 'created_at'),
+  ]
   if (!props.summaryFirst) return visibleColumns
 
   return [
@@ -251,6 +264,9 @@ const columns = computed<Column[]>(() => {
     ...visibleColumns.filter((c) => c.key !== 'created_at' && c.key !== 'message'),
   ]
 })
+
+const compactWidths: Record<string, number> = { created_at: 124, user: 140, account: 140, model: 160, category: 100, status: 120, message: 240 }
+const compactTableWidth = computed(() => columns.value.reduce((width, column) => width + (compactWidths[column.key] ?? 160), 0))
 
 function isUpstreamRow(log: OpsErrorLog): boolean {
   const phase = String(log.phase || '').toLowerCase()
@@ -323,6 +339,8 @@ interface Props {
   summaryFirst?: boolean
   /** 嵌入统一卡片内使用：去掉自身卡片外观 */
   flat?: boolean
+  compact?: boolean
+  activeRowKey?: number
 }
 
 interface Emits {
@@ -365,3 +383,15 @@ function formatSmartMessage(msg: string): string {
   return msg.length > 200 ? msg.substring(0, 200) + '...' : msg
 }
 </script>
+
+<style scoped>
+.error-compact :deep(table) { table-layout: fixed; min-width: var(--error-table-width); }
+.error-compact :deep(th), .error-compact :deep(td) { width: 160px; padding-inline: 10px; white-space: normal; overflow-wrap: anywhere; }
+.error-compact :deep([data-field="created_at"]) { width: 124px; }
+.error-compact :deep([data-field="user"]), .error-compact :deep([data-field="account"]) { width: 140px; }
+.error-compact :deep([data-field="category"]) { width: 100px; }
+.error-compact :deep([data-field="status"]) { width: 120px; }
+.error-compact :deep([data-field="message"]) { width: 240px; }
+.error-compact :deep(td [class*="max-w-"]) { max-width: 100%; }
+@media (max-width: 767px) { .error-compact :deep([data-field]) { width: auto; padding-inline: 0; } }
+</style>
