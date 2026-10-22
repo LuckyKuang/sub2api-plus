@@ -46,7 +46,7 @@ onBeforeUnmount(() => { observer?.disconnect(); document.removeEventListener('ke
 </script>
 
 <style scoped>
-.detail-workspace { display: grid; min-width: 0; gap: 24px; align-items: start; }
+.detail-workspace { display: grid; min-width: 0; gap: var(--shell-gap, 24px); align-items: start; }
 .detail-workspace-open { grid-template-columns: minmax(0, 1fr) 440px; }
-.detail-workspace-panel { position: sticky; top: 80px; max-height: calc(100dvh - 96px); display: flex; flex-direction: column; overflow: hidden; }
+.detail-workspace-panel { position: sticky; top: var(--shell-sticky-offset, 112px); max-height: calc(100dvh - var(--shell-sticky-offset, 112px) - var(--shell-inset-bottom, 24px)); display: flex; flex-direction: column; overflow: hidden; }
 </style>

@@ -13113,8 +13113,11 @@ watch(
 
 /* ============ 系统设置 Tab 导航 ============ */
 .settings-tabs-shell {
-  @apply sticky z-20 -mx-1 rounded-2xl border border-gray-200 bg-white p-1.5;
-  top: 4.75rem;
+  @apply sticky z-20 rounded-2xl border p-1.5;
+  top: var(--shell-sticky-offset);
+  background: var(--surface-fill);
+  border-color: var(--surface-edge);
+  backdrop-filter: var(--surface-filter);
   box-shadow:
     0 12px 28px rgb(0 0 0 / 0.07),
     0 1px 0 rgb(255 255 255 / 0.9) inset;

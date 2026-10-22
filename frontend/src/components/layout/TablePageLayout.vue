@@ -37,7 +37,8 @@ const checkMobile = () => {
   if (!layoutRef.value || isMobile.value) { availableHeight.value = 'auto'; return }
   const top = layoutRef.value.getBoundingClientRect().top + window.scrollY
   const main = layoutRef.value.closest('main')
-  const padding = main ? parseFloat(getComputedStyle(main).paddingBottom) : 32
+  const shell = layoutRef.value.closest('.app-layout')
+  const padding = shell ? parseFloat(getComputedStyle(shell).paddingBottom) : main ? parseFloat(getComputedStyle(main).paddingBottom) : 24
   availableHeight.value = `${Math.max(320, window.innerHeight - top - padding)}px`
 }
 
@@ -59,7 +60,8 @@ onUnmounted(() => {
 <style scoped>
 /* 桌面端：Flexbox 布局 */
 .table-page-layout {
-  @apply flex flex-col gap-6;
+  @apply flex flex-col;
+  gap: var(--shell-gap, 24px);
   height: var(--table-page-height, auto);
 }
 
@@ -73,7 +75,8 @@ onUnmounted(() => {
 
 /* 表格滚动容器 - 增强版表体滚动方案 */
 .table-scroll-container {
-  @apply flex flex-col overflow-hidden h-full bg-white dark:bg-dark-800 rounded-2xl border border-gray-200 dark:border-dark-700 shadow-sm;
+  @apply flex flex-col overflow-hidden h-full;
+  border-radius: var(--surface-radius);
 }
 
 .table-scroll-container :deep(.table-wrapper) {

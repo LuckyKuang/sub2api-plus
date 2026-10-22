@@ -1,21 +1,24 @@
 <template>
-  <header class="glass sticky top-0 z-30 border-b border-gray-200/50 dark:border-dark-700/50">
-    <div class="app-header-inner flex h-16 items-center justify-between gap-2">
+  <header ref="headerRef" class="app-header shell-surface">
+    <div class="app-header-inner flex items-center justify-between gap-2">
       <!-- Left: Mobile Menu Toggle + Page Title -->
       <div class="flex min-w-0 flex-1 items-center gap-2 sm:gap-4">
         <button
           @click="toggleMobileSidebar"
           class="btn-ghost btn-icon lg:hidden"
           :aria-label="t('common.toggleMenu')"
+          :aria-expanded="appStore.mobileOpen"
+          aria-controls="app-navigation"
         >
           <Icon name="menu" size="md" />
         </button>
 
-        <div class="hidden min-w-0 lg:block">
-          <h1 class="truncate text-lg font-semibold text-gray-900 dark:text-white" :title="pageTitle">
+        <img v-if="appStore.publicSettingsLoaded" :src="siteLogo || '/logo.svg'" alt="" class="header-mobile-logo h-7 w-7 shrink-0 rounded-lg object-contain lg:hidden" />
+        <div class="min-w-0">
+          <h1 class="truncate text-sm font-semibold text-gray-900 dark:text-white sm:text-lg" :title="pageTitle">
             {{ pageTitle }}
           </h1>
-          <p v-if="pageDescription" class="truncate text-xs text-gray-500 dark:text-dark-400" :title="pageDescription">
+          <p v-if="pageDescription && !compactHeader" class="truncate text-xs text-gray-500 dark:text-dark-400" :title="pageDescription">
             {{ pageDescription }}
           </p>
         </div>
@@ -28,7 +31,7 @@
 
         <!-- Docs Link -->
         <a
-          v-if="docUrl"
+          v-if="docUrl && !compactHeader"
           :href="docUrl"
           target="_blank"
           rel="noopener noreferrer"
@@ -40,7 +43,7 @@
 
         <!-- Model Plaza Entry (icon only below sm) -->
         <router-link
-          v-if="user && modelPlazaEnabled"
+          v-if="user && modelPlazaEnabled && !compactHeader"
           :to="{ path: '/model-plaza', query: { embedded: '1' } }"
           :title="t('nav.modelPlaza')"
           :aria-label="t('nav.modelPlaza')"
@@ -51,14 +54,14 @@
         </router-link>
 
         <!-- Language Switcher -->
-        <LocaleSwitcher />
+        <LocaleSwitcher v-if="!compactHeader" />
 
         <!-- Subscription Progress (for users with active subscriptions; not mounted at all when the feature is off) -->
-        <SubscriptionProgressMini v-if="user && subscriptionFeatureEnabled" />
+        <SubscriptionProgressMini v-if="user && subscriptionFeatureEnabled && !compactHeader" />
 
         <!-- Balance Display -->
         <div
-          v-if="user"
+          v-if="user && !compactHeader"
           class="group relative hidden items-center gap-2 rounded-xl bg-primary-50 px-3 py-1.5 dark:bg-primary-900/20 sm:flex"
         >
           <svg
@@ -106,9 +109,12 @@
         <!-- User Dropdown -->
         <div v-if="user" class="relative" ref="dropdownRef">
           <button
+            ref="userMenuButton"
             @click="toggleDropdown"
             class="flex items-center gap-2 rounded-xl p-1.5 transition-colors hover:bg-gray-100 dark:hover:bg-dark-800"
             :aria-label="t('common.userMenu')"
+            :aria-expanded="dropdownOpen"
+            aria-haspopup="true"
           >
             <div class="flex h-8 w-8 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 text-sm font-medium text-white shadow-sm">
               <img
@@ -119,20 +125,20 @@
               >
               <span v-else>{{ userInitials }}</span>
             </div>
-            <div class="hidden text-left md:block">
-              <div class="text-sm font-medium text-gray-900 dark:text-white">
+            <div v-if="!compactHeader" class="max-w-32 text-left">
+              <div class="truncate text-sm font-medium text-gray-900 dark:text-white">
                 {{ displayName }}
               </div>
               <div class="text-xs text-gray-500 dark:text-dark-400">
                 {{ t('admin.users.roles.' + user.role) }}
               </div>
             </div>
-            <Icon name="chevronDown" size="sm" class="hidden text-gray-400 md:block" />
+            <Icon v-if="!compactHeader" name="chevronDown" size="sm" class="text-gray-400" />
           </button>
 
           <!-- Dropdown Menu -->
           <transition name="dropdown">
-            <div v-if="dropdownOpen" class="dropdown right-0 mt-2 w-56">
+            <div v-if="dropdownOpen" class="dropdown header-user-dropdown right-0 mt-2" @keydown.esc.stop="closeDropdownAndFocus">
               <!-- User Info -->
               <div class="border-b border-gray-100 px-4 py-3 dark:border-dark-700">
                 <div class="text-sm font-medium text-gray-900 dark:text-white">
@@ -142,7 +148,7 @@
               </div>
 
               <!-- Balance (mobile only) -->
-              <div class="border-b border-gray-100 px-4 py-2 dark:border-dark-700 sm:hidden">
+              <div v-if="compactHeader" class="border-b border-gray-100 px-4 py-2 dark:border-dark-700">
                 <div class="text-xs text-gray-500 dark:text-dark-400">
                   {{ t('common.balance') }}
                 </div>
@@ -155,6 +161,14 @@
               </div>
 
               <div class="py-1">
+                <template v-if="compactHeader">
+                  <a v-if="docUrl" :href="docUrl" target="_blank" rel="noopener noreferrer" class="dropdown-item" @click="closeDropdown"><Icon name="book" size="sm" />{{ t('nav.docs') }}</a>
+                  <router-link v-if="modelPlazaEnabled" :to="{ path: '/model-plaza', query: { embedded: '1' } }" class="dropdown-item" @click="closeDropdown"><Icon name="grid" size="sm" />{{ t('nav.modelPlaza') }}</router-link>
+                  <div class="flex flex-col items-start gap-3 px-4 py-2">
+                    <LocaleSwitcher />
+                    <SubscriptionProgressMini v-if="subscriptionFeatureEnabled" inline class="w-full" />
+                  </div>
+                </template>
                 <router-link to="/profile" @click="closeDropdown" class="dropdown-item">
                   <Icon name="user" size="sm" />
                   {{ t('nav.profile') }}
@@ -255,6 +269,7 @@
 import { adminSupportContext } from '@/utils/adminSupportContext'
 import { useUserView } from '@/composables/useUserView'
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { useElementSize } from '@vueuse/core'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAppStore, useAuthStore, useOnboardingStore } from '@/stores'
@@ -272,6 +287,10 @@ const router = useRouter()
 const route = useRoute()
 const { t } = useI18n()
 const appStore = useAppStore()
+const headerRef = ref<HTMLElement | null>(null)
+const { width: headerWidth } = useElementSize(headerRef)
+const compactHeader = computed(() => headerWidth.value < 1000)
+const siteLogo = computed(() => sanitizeUrl(appStore.siteLogo || '', { allowRelative: true, allowDataUrl: true }))
 const authStore = useAuthStore()
 const adminSettingsStore = useAdminSettingsStore()
 const onboardingStore = useOnboardingStore()
@@ -280,6 +299,7 @@ const view = useUserView()
 const user = computed(() => view.user)
 const dropdownOpen = ref(false)
 const dropdownRef = ref<HTMLElement | null>(null)
+const userMenuButton = ref<HTMLButtonElement | null>(null)
 const contactInfo = computed(() => appStore.contactInfo)
 const docUrl = computed(() => sanitizeUrl(appStore.docUrl))
 const modelPlazaEnabled = computed(() => isFeatureFlagEnabled(FeatureFlags.modelPlaza))
@@ -358,6 +378,11 @@ function toggleDropdown() {
 
 function closeDropdown() {
   dropdownOpen.value = false
+}
+
+function closeDropdownAndFocus() {
+  closeDropdown()
+  userMenuButton.value?.focus()
 }
 
 async function handleLogout() {

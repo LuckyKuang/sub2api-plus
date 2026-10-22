@@ -65,8 +65,9 @@ function mountBadge() {
 }
 
 describe('VersionBadge dropdown width', () => {
-  it('uses a fixed 20rem width for long custom version strings', () => {
-    expect(componentSource).toContain('mt-2 w-80 overflow-hidden')
+  it('keeps the 20rem preferred width for long custom version strings', () => {
+    expect(componentSource).toContain('mt-2 w-80')
+    expect(componentSource).toContain('version-dropdown glass-surface')
     expect(componentSource).not.toContain("'w-64'")
   })
 

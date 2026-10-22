@@ -29,7 +29,7 @@
         <div
           v-if="dropdownOpen"
           ref="dropdownRef"
-          class="absolute left-0 z-50 mt-2 w-80 overflow-hidden whitespace-normal rounded-xl border border-gray-200 bg-white shadow-lg transition-all duration-200 dark:border-dark-700 dark:bg-dark-800"
+          class="version-dropdown glass-surface absolute left-0 z-50 mt-2 w-80 whitespace-normal transition-all duration-200"
         >
           <!-- Header with refresh button -->
           <div

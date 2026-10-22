@@ -28,7 +28,7 @@
         <div
           v-for="subscription in subscriptions"
           :key="subscription.id"
-          class="overflow-hidden rounded-2xl border bg-white dark:bg-dark-800"
+          class="glass-surface overflow-hidden border"
           :class="platformBorderClass(subscription.group?.platform || '')"
         >
           <!-- Header -->

@@ -23,7 +23,7 @@
       </div>
 
       <!-- Card Container -->
-      <div class="card-glass rounded-2xl p-8 shadow-glass">
+      <div class="card-glass p-8 shadow-glass">
         <slot />
       </div>
 

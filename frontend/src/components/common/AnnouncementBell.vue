@@ -27,7 +27,7 @@
           @click="closeModal"
         >
           <div
-            class="w-full max-w-[620px] overflow-hidden rounded-3xl bg-white shadow-2xl ring-1 ring-black/5 dark:bg-dark-800 dark:ring-white/10"
+            class="glass-surface w-full max-w-[620px] overflow-hidden ring-1 ring-black/5 dark:ring-white/10"
             @click.stop
           >
             <!-- Header with Gradient -->
@@ -187,7 +187,7 @@
           @click="closeDetail"
         >
           <div
-            class="w-full max-w-[780px] overflow-hidden rounded-3xl bg-white shadow-2xl ring-1 ring-black/5 dark:bg-dark-800 dark:ring-white/10"
+            class="glass-surface w-full max-w-[780px] overflow-hidden ring-1 ring-black/5 dark:ring-white/10"
             @click.stop
           >
             <!-- Header with Decorative Elements -->

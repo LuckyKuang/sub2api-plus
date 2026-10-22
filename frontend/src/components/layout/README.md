@@ -27,9 +27,13 @@ import { AppLayout } from '@/components/layout'
 **Features:**
 
 - Responsive sidebar (collapsible)
-- Fixed header at top
+- Floating sticky toolbar and independent brand/navigation glass cards
 - Main content area with slot
-- Automatically adjusts margin based on sidebar state
+- Fluid grid adjusts its navigation column when collapsed
+- Shared 24px desktop outer inset and card gap; responsive 16px/12px spacing
+
+See [the console interaction contract](../../../../docs/UI_INTERACTION.md) for
+surface tokens, breakpoints, sticky offsets and mobile focus behavior.
 
 ---
 

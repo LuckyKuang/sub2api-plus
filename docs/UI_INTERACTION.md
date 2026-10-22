@@ -1,21 +1,38 @@
 # Console layout and request inspection
 
 The console retains its colors, typography, navigation and business permissions.
-Content is centered inside the area remaining beside the sidebar.
-`frontend/src/utils/pageLayout.ts` owns route classification. `AppLayout` and
-`AppHeader` share widths and responsive 16/24/32px gutters.
+The brand, navigation, toolbar and business panels are independent glass cards.
+User, admin, support and operations pages share the same fluid content boundaries;
+there are no route-specific maximum page widths. Individual forms and external
+content may retain a readable inner width.
 
-| Layout | Maximum width | Routes |
-| --- | --- | --- |
-| Overview | 1280px | User/admin dashboards, admin payment dashboard, subscriptions, affiliate, custom pages; admin settings/plugins |
-| Data | 1600px | Usage, keys, async/batch images, channels, monitoring, orders; remaining admin routes including accounts/users/groups, payment lists/plans, audit, risk and Prompt Audit |
-| Form | 960px | Profile, redeem, purchase and internal payment flows |
+`frontend/src/styles/console.css` owns the shared layout and surface tokens.
 
-Support routes resolve through the personal-resource mapping. Public landing/auth
-pages and external content retain their own layouts. Payment QR/provider forms
-retain narrow inner forms. Settings may constrain individual reading sections,
-without another whole-page inset. `TablePageLayout` measures remaining viewport
-height and uses document scrolling below 1024px.
+| Viewport | Outer inset on all four sides | Card gap | Navigation |
+| --- | --- | --- | --- |
+| Desktop, at least 1024px | 24px | 24px | 256px column; 72px when collapsed |
+| Tablet, 768–1023px | 16px | 16px | Drawer |
+| Phone, below 768px | 12px | 12px | Drawer |
+
+Safe-area insets may increase the outer inset. The brand and toolbar are 64px
+high; navigation and business content start on the same horizontal line.
+The toolbar and desktop sidebar stick at the outer top inset. Sticky settings
+tabs and details derive their offsets from these tokens. `TablePageLayout`
+measures the remaining viewport height, including the bottom outer inset, and
+uses document scrolling below 1024px. Public/auth layouts retain their own geometry;
+operations fullscreen remains a dedicated full-screen view.
+
+Cards use translucent fills, a fine edge, soft shadow and backdrop blur over a
+subtle shared gradient. Dense tables, inputs and fixed columns use more opaque
+fills for legibility. Nested panels and rows do not add another blur layer.
+Light/dark themes share geometry. Unsupported blur and reduced-transparency
+preferences use an opaque surface; reduced-motion preferences disable transitions.
+
+On compact toolbars, secondary tools remain available in the user menu without
+mounting duplicate locale/subscription controls. The mobile drawer traps focus,
+locks background scrolling and makes the main content inert; Escape, backdrop,
+close button and route navigation close it. It restores focus to the opener and
+shares the dialog stack with other dialogs. Resizing to desktop closes the drawer.
 
 ## Lists and details
 
@@ -32,8 +49,9 @@ Admin error selection highlights the active row. The separate operations table
 retains its own column configuration.
 
 Details start closed. At **1520px of actual workspace width**, a 440px panel and
-24px gap fit beside the 1044px admin summary table, including card/live padding
-inside the 1600px page. Smaller workspaces use a right overlay, maximum 480px;
+24px gap fit beside the summary table and its panel padding. The threshold uses
+the available content width after navigation and outer insets. Smaller workspaces
+use a right overlay, maximum 480px;
 phones use the viewport. Extra columns can scroll inside the table. The sidebar
 is never automatically collapsed.
 
