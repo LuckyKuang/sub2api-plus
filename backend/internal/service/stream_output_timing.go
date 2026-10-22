@@ -1,11 +1,13 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"time"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/apicompat"
+	"github.com/gin-gonic/gin"
 )
 
 func observeAnthropicSSEOutput(data []byte) apicompat.StreamOutputObservation {
@@ -34,11 +36,41 @@ func observeAnthropicSSEOutput(data []byte) apicompat.StreamOutputObservation {
 }
 
 type streamOutputTiming struct {
+	onFirstOutput   func(int, string)
 	firstByteMs     *int
 	firstTokenMs    *int
 	lastTokenMs     *int
 	firstOutputMs   *int
 	firstOutputKind string
+}
+
+type liveOutputObserverKey struct{}
+
+func WithLiveOutputObserver(ctx context.Context, observer func(int, int, string)) context.Context {
+	return context.WithValue(ctx, liveOutputObserverKey{}, observer)
+}
+
+func newStreamOutputTiming(ctx context.Context, turn ...int) streamOutputTiming {
+	if ctx == nil {
+		return streamOutputTiming{}
+	}
+	observer, _ := ctx.Value(liveOutputObserverKey{}).(func(int, int, string))
+	logicalTurn := 0
+	if len(turn) > 0 {
+		logicalTurn = turn[0]
+	}
+	return streamOutputTiming{onFirstOutput: func(ms int, kind string) {
+		if observer != nil {
+			observer(logicalTurn, ms, kind)
+		}
+	}}
+}
+
+func requestStreamOutputTiming(c *gin.Context, turn ...int) streamOutputTiming {
+	if c == nil || c.Request == nil {
+		return streamOutputTiming{}
+	}
+	return newStreamOutputTiming(c.Request.Context(), turn...)
 }
 
 func (t *streamOutputTiming) Observe(startedAt time.Time, observation apicompat.StreamOutputObservation) {
@@ -57,6 +89,9 @@ func (t *streamOutputTiming) ObserveAt(startedAt, observedAt time.Time, observat
 		value := elapsed
 		t.firstOutputMs = &value
 		t.firstOutputKind = string(observation.Kind)
+		if t.onFirstOutput != nil {
+			t.onFirstOutput(elapsed, t.firstOutputKind)
+		}
 	}
 	if observation.TokenLikeDelta {
 		value := elapsed

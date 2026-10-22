@@ -1,4 +1,4 @@
-import { createApp, h } from 'vue'
+import { createApp, h, ref, nextTick } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { retryAfterSeconds, useAutoRefresh, type UseAutoRefreshOptions } from '../useAutoRefresh'
 
@@ -21,6 +21,40 @@ beforeEach(() => {
 afterEach(() => { disposers.splice(0).forEach(dispose => dispose()); vi.useRealTimers() })
 
 describe('automatic refresh interaction contract', () => {
+  it('reenables a temporary pause on internal-tab reactivation', async () => {
+    const active = ref(true), fetch = vi.fn()
+    const { state } = mountRefresh({ temporaryPause: true, active: () => active.value, onRefresh: fetch })
+    state.setEnabled(false)
+    active.value = false; await nextTick()
+    active.value = true; await nextTick(); await vi.advanceTimersByTimeAsync(0)
+    expect(state.enabled.value).toBe(true)
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+  // Approved usage-page lifecycle: interval persists; off is temporary.
+  it('ignores a saved off state, keeps manual refresh off, and reactivates on foreground return', async () => {
+    localStorage.setItem('refresh-test', JSON.stringify({ enabled: false, interval_seconds: 5 }))
+    const fetch = vi.fn()
+    const { state } = mountRefresh({ temporaryPause: true, onRefresh: fetch })
+    expect(state.enabled.value).toBe(true)
+    expect(state.intervalSeconds.value).toBe(5)
+    state.setEnabled(false)
+    await state.refresh()
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(state.enabled.value).toBe(false)
+    expect(state.countdown.value).toBe(0)
+    await vi.advanceTimersByTimeAsync(15000)
+    expect(fetch).toHaveBeenCalledTimes(1)
+    window.dispatchEvent(new Event('online'))
+    expect(state.enabled.value).toBe(false)
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true })
+    document.dispatchEvent(new Event('visibilitychange'))
+    Object.defineProperty(document, 'hidden', { configurable: true, value: false })
+    document.dispatchEvent(new Event('visibilitychange'))
+    await vi.advanceTimersByTimeAsync(0)
+    expect(state.enabled.value).toBe(true)
+    expect(fetch).toHaveBeenCalledTimes(2)
+    expect(JSON.parse(localStorage.getItem('refresh-test')!)).toEqual({ interval_seconds: 5 })
+  })
   it('coalesces manual and automatic refresh while a request is pending', async () => {
     let finish!: () => void
     const fetch = vi.fn(() => new Promise<void>(resolve => { finish = resolve }))

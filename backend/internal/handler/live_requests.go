@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/ctxkey"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/ip"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/response"
 	"github.com/LuckyKuang/sub2api-plus/internal/securityaudit"
 	middleware2 "github.com/LuckyKuang/sub2api-plus/internal/server/middleware"
@@ -39,6 +40,7 @@ func LiveRequestContext(tracker *service.LiveRequestService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		state := &liveRequestContext{service: tracker, active: map[int]service.LiveRequest{}, seen: map[int]bool{}, retrying: map[int]bool{}, started: time.Now().UTC(), stop: make(chan struct{})}
 		c.Set(liveRequestContextKey, state)
+		c.Request = c.Request.WithContext(service.WithLiveOutputObserver(c.Request.Context(), state.output))
 		returned := false
 		defer func() {
 			close(state.stop)
@@ -62,6 +64,19 @@ func LiveRequestContext(tracker *service.LiveRequestService) gin.HandlerFunc {
 				if turn == 0 {
 					record := state.active[turn]
 					record.AccountID = c.GetInt64(opsAccountIDKey)
+					record.HTTPStatus = c.Writer.Status()
+					if record.HTTPStatus == 401 || record.HTTPStatus == 403 || record.HTTPStatus == 429 {
+						outcome = "rejected"
+					}
+					if outcome == "failed" {
+						record.Reason = "upstream_error"
+					}
+					if outcome == "rejected" {
+						record.Reason = "request_rejected"
+					}
+					if outcome == "cancelled" {
+						record.Reason = "client_disconnected"
+					}
 					state.active[turn] = record
 				}
 				state.finishLocked(turn, outcome, nil)
@@ -79,6 +94,29 @@ func requestActivity(c *gin.Context) *liveRequestContext {
 	value, _ := c.Get(liveRequestContextKey)
 	state, _ := value.(*liveRequestContext)
 	return state
+}
+
+func (s *liveRequestContext) output(turn, ms int, kind string) {
+	defer func() {
+		if recover() != nil {
+			slog.Error("live_request_observation_exception", "stage", "first_output", "reason", "observer_panic")
+		}
+	}()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if turn > 0 {
+		turn += s.attemptOffset
+	}
+	r, ok := s.active[turn]
+	if !ok {
+		return
+	}
+	r.Status, r.FirstOutputMs, r.FirstOutputKind = "transmitting", &ms, kind
+	r.Version++
+	r.UpdatedAt = time.Now().UTC()
+	r.ElapsedMs = r.UpdatedAt.Sub(r.StartedAt).Milliseconds()
+	s.active[turn] = r
+	s.service.Publish(r)
 }
 
 func observeAuditedRequest(c *gin.Context, apiKey *service.APIKey, subject middleware2.AuthSubject, model, stage string, decision *securityaudit.Decision) {
@@ -135,12 +173,19 @@ func observeAuditedRequest(c *gin.Context, apiKey *service.APIKey, subject middl
 	requestID, _ := c.Request.Context().Value(ctxkey.ClientRequestID).(string)
 	record := service.LiveRequest{ID: uuid.NewString(), Version: 1, UserID: subject.UserID, APIKeyID: apiKey.ID, KeyName: apiKey.Name,
 		Model: model, Endpoint: c.FullPath(), RequestID: requestID, RequestType: kind, Turn: turn, Status: "processing", StartedAt: start, UpdatedAt: now, ElapsedMs: now.Sub(start).Milliseconds()}
+	ua, clientIP := c.Request.UserAgent(), ip.GetClientIP(c)
+	record.UserAgent, record.IPAddress = &ua, &clientIP
+	if turn == 0 {
+		c.Request = c.Request.WithContext(service.WithLiveUsageBinding(c.Request.Context(), state.service, record.ID, record.UserID, record.APIKeyID))
+	}
 	if apiKey.Group != nil {
 		record.GroupName = apiKey.Group.Name
 	}
 	state.active[turn] = record
 	if decision != nil && !decision.AllowNextStage {
-		state.finishLocked(turn, "failed", nil)
+		record.Reason = "policy"
+		state.active[turn] = record
+		state.finishLocked(turn, "rejected", nil)
 	} else {
 		record.AccountID = state.accountID
 		state.active[turn] = record
@@ -194,6 +239,19 @@ func (s *liveRequestContext) finishLocked(turn int, status string, result *servi
 		record.FirstByteMs = result.FirstByteMs
 		record.FirstTokenMs = result.FirstTokenMs
 		record.FirstOutputKind = result.FirstOutputKind
+		record.FirstOutputMs, record.LastTokenMs = result.FirstOutputMs, result.LastTokenMs
+		record.TimingVersion = 1
+		complete := result.UsageComplete()
+		record.IsComplete = &complete
+	}
+	if status == "failed" {
+		record.Reason = "upstream_error"
+	}
+	if status == "client_disconnected" || status == "cancelled" {
+		record.Reason = "client_disconnected"
+	}
+	if status == "incomplete" {
+		record.Reason = "incomplete"
 	}
 	delete(s.active, turn)
 	delete(s.retrying, turn)
@@ -251,7 +309,26 @@ func finishLiveRequestTurn(c *gin.Context, turn int, result *service.OpenAIForwa
 	state.finishLocked(turn, status, result)
 }
 
-func (h *UsageHandler) SetLiveRequests(s *service.LiveRequestService) { h.liveRequests = s }
+func liveTurnUsageContext(c *gin.Context, ctx context.Context, turn int) context.Context {
+	s := requestActivity(c)
+	if s == nil {
+		return ctx
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	r, ok := s.active[turn+s.attemptOffset]
+	if !ok {
+		return ctx
+	}
+	return service.WithLiveUsageBinding(ctx, s.service, r.ID, r.UserID, r.APIKeyID)
+}
+
+func (h *UsageHandler) SetLiveRequests(s *service.LiveRequestService) {
+	h.liveRequests = s
+	if h.usageService != nil {
+		s.SetUsageReader(h.usageService)
+	}
+}
 
 func (h *UsageHandler) LiveRequests(c *gin.Context) {
 	subject, ok := middleware2.GetReadSubjectFromContext(c)
@@ -270,7 +347,7 @@ func (h *UsageHandler) LiveRequests(c *gin.Context) {
 	if !allowErrors {
 		filtered := data.Items[:0]
 		for _, record := range data.Items {
-			if record.Status != "failed" {
+			if record.Status != "failed" && record.Status != "rejected" {
 				filtered = append(filtered, record)
 			}
 		}

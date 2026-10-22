@@ -431,7 +431,6 @@ export default {
     timingUnavailableInvalid: 'Token 或耗时数据无效',
     averageTps: '平均 TPS',
     averageTpsNote: '平均 TPS 说明',
-    latencyTpsHint: '请求平均输出速率 = 非图片、音频输出 Token 数 ÷ 总转发/轮次耗时，包含首 Token 等待。可能包含计费推理 Token，不代表模型纯生成速度。',
 	incomplete: '未完成',
 	incompleteHint: '请求在完整终态前结束，当前显示的用量和费用可能只是部分结果。',
 	clientDisconnected: '客户端已断开',

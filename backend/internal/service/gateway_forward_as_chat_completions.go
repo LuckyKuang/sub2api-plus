@@ -390,7 +390,7 @@ func (s *GatewayService) handleCCStreamingFromAnthropic(
 	ccState.Model = originalModel
 
 	var usage ClaudeUsage
-	var timing streamOutputTiming
+	timing := requestStreamOutputTiming(c)
 
 	scanner := bufio.NewScanner(resp.Body)
 	maxLineSize := defaultMaxLineSize

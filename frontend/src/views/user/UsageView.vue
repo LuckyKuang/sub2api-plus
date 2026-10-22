@@ -182,12 +182,10 @@
 
       <template v-if="activeTab === 'usage'">
         <div class="flex flex-wrap items-center justify-between gap-3">
-          <RefreshControl :state="historyRefresh" />
+          <RefreshControl :state="historyRefresh" switch-visible manual />
           <button v-if="newRecordsAvailable" type="button" class="btn btn-secondary" @click="showLatestRecords">{{ t('inspection.newRecords') }}</button>
         </div>
-        <UsageRecordWorkspace :rows="usageLogs" mode="user" v-slot="{ select, selectedId }">
         <UsageTable
-          compact details-enabled :selected-id="selectedId" @rowClick="select"
           :data="usageLogs"
           :loading="loading"
           :columns="visibleColumns"
@@ -208,7 +206,7 @@
           @update:page="handlePageChange"
           @update:pageSize="handlePageSizeChange"
         />
-        </UsageRecordWorkspace>
+
       </template>
 
       <LiveRequestsPanel v-else-if="activeTab === 'live'" mode="user" />
@@ -235,7 +233,7 @@ import { useLocaleRefresh } from '@/utils/localeRefresh'
 import { firstByteMs, strictFirstTokenMs, averageTps, tpsNote } from '@/utils/usageTiming'
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { FeatureFlags, resolveFeatureFlag } from '@/utils/featureFlags'
 import { keysAPI, usageAPI, userGroupsAPI } from '@/api'
@@ -268,7 +266,6 @@ import type {
   UserErrorRequest,
 } from '@/types'
 import type { Column } from '@/components/common/types'
-import UsageRecordWorkspace from '@/components/usage/UsageRecordWorkspace.vue'
 import { useColumnPreferenceKey } from '@/composables/useColumnPreferenceKey'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
 import { useUsageSnapshot } from '@/composables/useUsageSnapshot'
@@ -278,6 +275,7 @@ import { COMMON_ERROR_STATUS_CODES } from '@/utils/errorBadges'
 
 const { t } = useI18n()
 const route = useRoute()
+const router = useRouter()
 const appStore = useAppStore()
 
 type DistributionMetric = 'tokens' | 'actual_cost'
@@ -747,14 +745,12 @@ const exportToCSV = async () => {
 }
 
 const ALWAYS_VISIBLE = ['created_at']
-const DEFAULT_HIDDEN_COLUMNS = ['user_agent', 'reasoning_effort', 'endpoint', 'ip_address', 'group', 'stream', 'billing_mode']
-const HIDDEN_COLUMNS_KEY = useColumnPreferenceKey('user-usage-hidden-columns')
+const DEFAULT_HIDDEN_COLUMNS = ['user_agent']
+const HIDDEN_COLUMNS_KEY = useColumnPreferenceKey('user-usage-restored-v2-hidden-columns')
 
 const allColumns = computed<Column[]>(() => [
-  { key: 'created_at', label: t('usage.time'), sortable: true },
+  { key: 'api_key', label: t('usage.apiKeyFilter'), sortable: false },
   { key: 'model', label: t('usage.model'), sortable: true },
-  { key: 'api_key', label: t('inspection.source'), sortable: false },
-  { key: 'completion_status', label: t('inspection.status'), sortable: false },
   { key: 'reasoning_effort', label: t('usage.reasoningEffort'), sortable: false },
   { key: 'endpoint', label: t('usage.endpoint'), sortable: false },
   { key: 'ip_address', label: 'IP', sortable: false },
@@ -764,6 +760,7 @@ const allColumns = computed<Column[]>(() => [
   { key: 'tokens', label: t('usage.tokens'), sortable: false },
   { key: 'cost', label: t('usage.cost'), sortable: false },
   { key: 'latency', label: t('usage.latency'), sortable: false },
+  { key: 'created_at', label: t('usage.time'), sortable: true },
   { key: 'user_agent', label: t('usage.userAgent'), sortable: false },
 ])
 
@@ -947,6 +944,7 @@ const switchToErrors = () => {
 }
 
 onMounted(() => {
+  if (route.query.record != null) { const { record: _record, ...query } = route.query; void router.replace({ path: route.path, query, hash: route.hash }) }
   loadSavedColumns()
   loadSavedErrColumns()
   document.addEventListener('click', handleColumnClickOutside)
@@ -966,8 +964,9 @@ useLocaleRefresh(() => Promise.all([loadLogs(), loadFilterOptions()]))
 
 const newRecordsAvailable = ref(false)
 const historyRefresh = useAutoRefresh({
-  storageKey: useColumnPreferenceKey('user-usage-auto-refresh'), intervals: [15, 30, 60], defaultInterval: 30,
-  shouldPause: () => activeTab.value !== 'usage' || loading.value,
+  storageKey: useColumnPreferenceKey('user-usage-auto-refresh'), intervals: [15, 30, 60], defaultInterval: 30, defaultEnabled: true, temporaryPause: true,
+  active: () => activeTab.value === 'usage',
+  shouldPause: () => loading.value,
   onRefresh: async () => {
     const params = { ...buildUsageListParams(1, pagination.page_size), snapshot_max_id: 'new' as const, sort_by: 'created_at', sort_order: 'desc' as const }
     const filterKey = JSON.stringify(filters.value)
@@ -975,9 +974,14 @@ const historyRefresh = useAutoRefresh({
     abortController?.abort(); abortController = controller
     const res = await usageAPI.query(params, { signal: controller.signal })
     if (controller.signal.aborted || filterKey !== JSON.stringify(filters.value)) return
-    if (pagination.page === 1 && sortState.sort_by === 'created_at' && sortState.sort_order === 'desc' && window.scrollY < 160 && !route.query.record && !document.querySelector('[role="dialog"]')) {
+    const reading = window.scrollY >= 160 || !!window.getSelection()?.toString() || !!document.querySelector('[role="dialog"], [role="tooltip"]') || !!document.activeElement?.closest('button, input, select, textarea, a, summary, [tabindex], [contenteditable="true"]')
+    if (pagination.page === 1 && sortState.sort_by === 'created_at' && sortState.sort_order === 'desc' && !reading) {
       usageLogs.value = res.items; pagination.total = res.total; historySnapshot.accept(res, true)
-    } else if (historySnapshot.observe(res.items[0]?.id)) newRecordsAvailable.value = true
+    } else {
+      const latest = new Map(res.items.map(item => [item.id, item]))
+      usageLogs.value = usageLogs.value.map(item => latest.get(item.id) ?? item)
+      if (historySnapshot.observe(res.items[0]?.id)) newRecordsAvailable.value = true
+    }
   },
 })
 function showLatestRecords() {

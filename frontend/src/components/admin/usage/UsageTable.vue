@@ -1,5 +1,5 @@
 <template>
-  <div :class="[flat ? '' : 'card overflow-hidden', { 'usage-compact': compact }]" :style="{ '--usage-table-width': compactTableWidth + 'px' }">
+  <div :class="flat ? '' : 'card overflow-hidden'">
     <div
       v-if="showIpGeoToolbar"
       class="flex items-center justify-end gap-2 border-b border-gray-200 px-4 py-2 dark:border-dark-700"
@@ -21,9 +21,6 @@
         :columns="columns"
         :data="data"
         :loading="loading"
-        :clickable-rows="detailsEnabled"
-        :active-row-key="selectedId"
-        @rowClick="row => emit('rowClick', row)"
         :server-side-sort="serverSideSort"
         :default-sort-key="defaultSortKey"
         :default-sort-order="defaultSortOrder"
@@ -34,9 +31,8 @@
             <button
               v-if="row.user?.email"
               class="font-medium text-primary-600 underline decoration-dashed underline-offset-2 transition-colors hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300"
-              :class="compact ? 'block max-w-full truncate text-left' : ''"
-              @click.stop="$emit('userClick', row.user_id, row.user?.email)"
-              :title="compact ? `${row.user.email} · ${t('admin.usage.clickToViewBalance')}` : t('admin.usage.clickToViewBalance')"
+              @click="$emit('userClick', row.user_id, row.user?.email)"
+              :title="t('admin.usage.clickToViewBalance')"
             >
               {{ row.user.email }}
             </button>
@@ -45,27 +41,18 @@
               {{ t('admin.usage.userDeletedBadge') }}
             </span>
             <span class="ml-1 text-gray-500 dark:text-gray-400">#{{ row.user_id }}</span>
-            <div v-if="compact" class="truncate text-xs text-gray-500" :title="row.api_key?.name">{{ row.api_key?.name || '—' }}</div>
           </div>
         </template>
 
         <template #cell-api_key="{ row }">
-          <span class="text-sm text-gray-900 dark:text-white" :class="compact ? 'block truncate' : ''" :title="row.api_key?.name">{{ row.api_key?.name || '-' }}</span>
-          <div v-if="compact && !showAccountBilling" class="truncate text-xs text-gray-500">{{ row.group?.name || '—' }}</div>
+          <span class="text-sm text-gray-900 dark:text-white">{{ row.api_key?.name || '-' }}</span>
         </template>
 
         <template #cell-account="{ row }">
-          <span class="text-sm text-gray-900 dark:text-white" :class="compact ? 'block truncate' : ''" :title="row.account?.name">{{ row.account?.name || '-' }}</span>
-          <div v-if="compact" class="truncate text-xs text-gray-500">{{ row.group?.name || '—' }}</div>
+          <span class="text-sm text-gray-900 dark:text-white">{{ row.account?.name || '-' }}</span>
         </template>
 
         <template #cell-model="{ row }">
-          <div v-if="compact" class="max-w-[210px] space-y-1 text-xs">
-            <div class="truncate font-medium" :title="row.model">{{ row.model }}</div>
-            <div class="flex flex-wrap gap-1 text-gray-500"><span>{{ getRequestTypeLabel(row) }}</span><span v-if="row.reasoning_effort">· {{ row.reasoning_effort }}</span></div>
-            <span v-if="row.upstream_model_mismatch" class="text-amber-600" :title="modelAuditTitle(row)">{{ t('usage.modelMismatch') }}</span>
-          </div>
-          <template v-else>
           <div class="space-y-0.5 text-xs">
             <div v-if="row.model_mapping_chain && row.model_mapping_chain.includes('→')" class="space-y-0.5">
               <div v-for="(step, i) in row.model_mapping_chain.split('→')" :key="i"
@@ -109,11 +96,6 @@
               </span>
             </div>
           </div>
-          </template>
-        </template>
-
-        <template #cell-completion_status="{ row }">
-          <span class="badge" :class="usageCompletion(row) === 'completed' ? 'badge-success' : usageCompletion(row) === 'unknown' ? 'badge-gray' : 'badge-warning'">{{ t(`inspection.${usageCompletion(row)}`) }}</span>
         </template>
 
         <template #cell-service_tier="{ row }">
@@ -179,12 +161,6 @@
         </template>
 
         <template #cell-tokens="{ row }">
-          <div v-if="compact" class="space-y-1 text-xs tabular-nums">
-            <div>{{ row.input_tokens?.toLocaleString() ?? '—' }} → {{ row.output_tokens?.toLocaleString() ?? '—' }}</div>
-            <div class="text-gray-500">{{ t('inspection.cacheRead') }} {{ row.cache_read_tokens?.toLocaleString() ?? '—' }}</div>
-            <div v-if="row.image_count > 0" class="text-pink-600">{{ row.image_count }} {{ t('inspection.images') }}</div>
-          </div>
-          <template v-else>
           <!-- 图片生成请求（仅按次计费时显示图片格式） -->
           <div v-if="isImageUsage(row)" class="flex items-center gap-1.5">
             <svg class="h-4 w-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -248,7 +224,6 @@
               </div>
             </div>
           </div>
-          </template>
         </template>
 
         <template #cell-cost="{ row }">
@@ -289,12 +264,16 @@
               aria-hidden="true"
             ></span>
             <div class="grid grid-cols-[max-content_max-content] items-baseline gap-x-2 gap-y-0.5 text-xs">
-              <span class="inline-flex items-center gap-1 text-gray-400 dark:text-gray-500" :title="t('usage.latencyFirstByteHint')">
+              <span class="inline-flex items-center gap-1 text-gray-400 dark:text-gray-500">
                 {{ t('usage.latencyFirstByte') }}
                 <div
                   v-if="hasLatencyDetails(row)"
                   data-testid="latency-details-trigger"
                   class="group relative"
+                  tabindex="0" role="button" :aria-label="t('usage.latencyDetails')"
+                  @focus="showLatencyTooltip($event, row)" @blur="hideLatencyTooltip"
+                  @click="showLatencyTooltip($event, row)"
+                  @keydown.enter.prevent="showLatencyTooltip($event, row)" @keydown.escape="hideLatencyTooltip"
                   @mouseenter="showLatencyTooltip($event, row)"
                   @mouseleave="hideLatencyTooltip"
                 >
@@ -312,15 +291,14 @@
               <span v-else data-testid="first-latency-value" class="text-gray-400 dark:text-gray-500">-</span>
               <span class="text-gray-400 dark:text-gray-500">{{ t('usage.latencyDuration') }}</span>
               <span data-testid="latency-duration" class="font-medium tabular-nums" :class="durationTextClass(row)">{{ formatDuration(row.duration_ms) }}</span>
-              <span class="cursor-help text-gray-400 dark:text-gray-500" :title="t('usage.latencyTpsHint')">{{ t('usage.latencyTps') }}</span>
-              <span data-testid="latency-tps" class="cursor-help whitespace-nowrap font-medium tabular-nums" :class="averageTps(row) == null ? 'text-gray-400 dark:text-gray-500' : 'text-cyan-600 dark:text-cyan-400'" :title="averageTpsTitle(row)">{{ formatTpsDisplay(averageTps(row)) }}</span>
+              <span class="cursor-help text-gray-400 dark:text-gray-500">{{ t('usage.latencyTps') }}</span>
+              <span data-testid="latency-tps" class="cursor-help whitespace-nowrap font-medium tabular-nums" :class="averageTps(row) == null ? 'text-gray-400 dark:text-gray-500' : 'text-cyan-600 dark:text-cyan-400'">{{ formatTpsDisplay(averageTps(row)) }}</span>
             </div>
           </div>
         </template>
 
-        <template #cell-created_at="{ value, row }">
-          <button v-if="detailsEnabled" type="button" class="text-left text-xs text-primary-600 underline decoration-dotted underline-offset-4 dark:text-primary-400" :aria-label="`${t('inspection.view')} · ${formatDateTime(value)}`" @click.stop="emit('rowClick', row)">{{ formatDateTime(value) }}</button>
-          <span v-else class="text-sm text-gray-600 dark:text-gray-400">{{ formatDateTime(value) }}</span>
+        <template #cell-created_at="{ value }">
+          <span class="text-sm text-gray-600 dark:text-gray-400">{{ formatDateTime(value) }}</span>
         </template>
 
         <template #cell-request_id="{ row }">
@@ -478,7 +456,7 @@
       <div class="whitespace-nowrap rounded-lg border border-gray-700 bg-gray-900 px-3 py-2.5 text-xs text-white shadow-xl dark:border-gray-600 dark:bg-gray-800">
         <div class="space-y-1.5">
           <div class="text-xs font-semibold text-gray-300 mb-1">{{ t('usage.latencyDetails') }}</div>
-          <div v-if="latencyTooltipData" class="flex items-center justify-between gap-4" :title="t('usage.latencyFirstByteHint')">
+          <div v-if="latencyTooltipData" class="flex items-center justify-between gap-4">
             <span class="text-gray-400">{{ t('usage.latencyFirstByte') }}</span>
             <span data-testid="detail-first-byte" class="font-medium text-white">{{ formatDuration(firstByteMs(latencyTooltipData)) }}</span>
           </div>
@@ -717,8 +695,8 @@ import Icon from '@/components/icons/Icon.vue'
 import { fetchBatch, getEntry } from '@/utils/ipGeoLookup'
 import type { AdminUsageLog } from '@/types'
 import { firstByteMs, formatTpsNumber, strictFirstTokenMs, averageTps, tpsNote, firstTokenUnavailableReason } from '@/utils/usageTiming'
+import { usageMoney } from '@/utils/usageInspection'
 import type { Column } from '@/components/common/types'
-import { usageCompletion, usageMoney } from '@/utils/usageInspection'
 
 interface Props {
   data: AdminUsageLog[]
@@ -732,9 +710,6 @@ interface Props {
   showUpstreamEndpoint?: boolean
   /** 嵌入统一卡片内使用：去掉自身卡片外观 */
   flat?: boolean
-  compact?: boolean
-  detailsEnabled?: boolean
-  selectedId?: number | null
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -751,7 +726,6 @@ const emit = defineEmits<{
   userClick: [userID: number, email?: string]
   sort: [key: string, order: 'asc' | 'desc']
   ipGeoBatchFailed: []
-  rowClick: [row: AdminUsageLog]
 }>()
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -759,8 +733,6 @@ const copiedRequestId = ref<string | null>(null)
 const copiedUserAgent = ref<string | null>(null)
 const showAccountBilling = props.showAccountBilling
 const showUpstreamEndpoint = props.showUpstreamEndpoint
-const compactWidths: Record<string, number> = { created_at: 124, model: 180, api_key: 140, user: 140, account: 140, completion_status: 95, tokens: 110, cost: 110, latency: 145 }
-const compactTableWidth = computed(() => props.columns.reduce((width, column) => width + (compactWidths[column.key] ?? 160), 0))
 const ipGeoBatchLoading = ref(false)
 
 const showIpGeoToolbar = computed(() => props.columns.some((col) => col.key === 'ip_address'))
@@ -900,10 +872,6 @@ const hasLatencyDetails = (row: AdminUsageLog): boolean =>
   row.first_byte_ms != null || row.first_token_ms != null || row.last_token_ms != null || row.duration_ms != null ||
   row.first_output_ms != null || !!row.first_output_kind || !!firstTokenUnavailableReason(row) || !!tpsNote(row)
 
-const averageTpsTitle = (row: AdminUsageLog): string => {
-  const note = tpsNote(row)
-  return note ? `${t('usage.latencyTpsHint')} ${t(note)}` : t('usage.latencyTpsHint')
-}
 
 // Shared modality labels for latency detail tooltip.
 // role=kind  → value under "First Output Kind" (text → "Text")
@@ -1023,12 +991,12 @@ const hideTokenTooltip = () => {
 }
 
 // Latency detail tooltip functions
-const showLatencyTooltip = (event: MouseEvent, row: AdminUsageLog) => {
+const showLatencyTooltip = (event: Event, row: AdminUsageLog) => {
   const target = event.currentTarget as HTMLElement
   const rect = target.getBoundingClientRect()
   latencyTooltipData.value = row
-  latencyTooltipPosition.value.x = rect.right + 8
-  latencyTooltipPosition.value.y = rect.top + rect.height / 2
+  latencyTooltipPosition.value.x = Math.max(12, Math.min(rect.right + 8, window.innerWidth - 300))
+  latencyTooltipPosition.value.y = Math.max(160, Math.min(rect.top + rect.height / 2, window.innerHeight - 160))
   latencyTooltipVisible.value = true
 }
 
@@ -1037,15 +1005,3 @@ const hideLatencyTooltip = () => {
   latencyTooltipData.value = null
 }
 </script>
-
-<style scoped>
-.usage-compact :deep(table) { table-layout: fixed; min-width: var(--usage-table-width); }
-.usage-compact :deep(th), .usage-compact :deep(td) { width: 160px; padding-inline: 10px; white-space: normal; overflow-wrap: anywhere; }
-.usage-compact :deep([data-field="created_at"]) { width: 124px; }
-.usage-compact :deep([data-field="model"]) { width: 180px; }
-.usage-compact :deep([data-field="user"]), .usage-compact :deep([data-field="api_key"]), .usage-compact :deep([data-field="account"]) { width: 140px; }
-.usage-compact :deep([data-field="completion_status"]) { width: 95px; }
-.usage-compact :deep([data-field="tokens"]), .usage-compact :deep([data-field="cost"]) { width: 110px; }
-.usage-compact :deep([data-field="latency"]) { width: 145px; }
-@media (max-width: 767px) { .usage-compact :deep([data-field]) { width: auto; padding-inline: 0; } }
-</style>

@@ -372,7 +372,7 @@ func (s *OpenAIGatewayService) handleCCStreamingFromNativeAnthropic(
 	ccState.Model = originalModel
 
 	var usage ClaudeUsage
-	var timing streamOutputTiming
+	timing := requestStreamOutputTiming(c)
 	clientDisconnected := false
 	sawMessageStop, sawUpstreamError := false, false
 	accountSideEffectsApplied := false

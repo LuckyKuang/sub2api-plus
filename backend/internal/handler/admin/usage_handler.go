@@ -29,7 +29,12 @@ type UsageHandler struct {
 	disconnectRisk *service.ClientDisconnectRiskService
 }
 
-func (h *UsageHandler) SetLiveRequests(s *service.LiveRequestService) { h.liveRequests = s }
+func (h *UsageHandler) SetLiveRequests(s *service.LiveRequestService) {
+	h.liveRequests = s
+	if h.usageService != nil {
+		s.SetUsageReader(h.usageService)
+	}
+}
 
 func (h *UsageHandler) LiveRequests(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), time.Second)

@@ -327,7 +327,7 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 	scanner := s.newUpstreamSSEScanner(resp.Body)
 
 	var usage OpenAIUsage
-	var timing streamOutputTiming
+	timing := requestStreamOutputTiming(c)
 	clientDisconnected := false
 	clientOutputStarted := false
 	pendingLines := make([]string, 0, 8)

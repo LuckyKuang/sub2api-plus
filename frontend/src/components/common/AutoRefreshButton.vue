@@ -15,7 +15,7 @@
       <span>
         {{ fetching ? t('inspection.updating') : paused && enabled ? t('inspection.paused') : enabled
           ? t('common.autoRefresh.countdown', { seconds: countdown })
-          : t('common.autoRefresh.title')
+          : intervalOnly ? t('common.autoRefresh.seconds', { n: intervalSeconds }) : t('common.autoRefresh.title')
         }}
       </span>
     </button>
@@ -26,6 +26,7 @@
     >
       <div class="p-1.5">
         <button
+          v-if="!intervalOnly"
           @click="$emit('update:enabled', !enabled)"
           class="flex w-full items-center justify-between rounded-md px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-dark-700"
         >
@@ -34,7 +35,7 @@
             <path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd" />
           </svg>
         </button>
-        <div class="my-1 border-t border-gray-100 dark:border-dark-700"></div>
+        <div v-if="!intervalOnly" class="my-1 border-t border-gray-100 dark:border-dark-700"></div>
         <button
           v-for="sec in intervals"
           :key="sec"
@@ -62,6 +63,7 @@ defineProps<{
   intervalSeconds: number
   countdown: number
   intervals: readonly number[]
+  intervalOnly?: boolean
 }>()
 
 defineEmits<{

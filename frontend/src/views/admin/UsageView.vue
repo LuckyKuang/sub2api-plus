@@ -126,12 +126,10 @@
 
         <div v-show="activeTab === 'usage'" class="overflow-hidden rounded-b-2xl">
           <div class="flex flex-wrap items-center justify-between gap-3 p-4">
-            <RefreshControl :state="historyRefresh" />
+            <RefreshControl :state="historyRefresh" switch-visible manual />
             <button v-if="newRecordsAvailable" type="button" class="btn btn-secondary" @click="showLatestRecords">{{ t('inspection.newRecords') }}</button>
           </div>
-          <UsageRecordWorkspace :active="activeTab === 'usage'" :rows="usageLogs" mode="admin" v-slot="{ select, selectedId }">
           <UsageTable
-            compact details-enabled :selected-id="selectedId" @rowClick="select"
             :show-service-tier="true"
             flat
             :data="usageLogs"
@@ -145,11 +143,10 @@
             @ipGeoBatchFailed="handleIpGeoBatchFailed"
           />
           <Pagination v-if="pagination.total > 0" :page="pagination.page" :total="pagination.total" :page-size="pagination.page_size" @update:page="handlePageChange" @update:pageSize="handlePageSizeChange" />
-          </UsageRecordWorkspace>
+
         </div>
         <LiveRequestsPanel v-if="activeTab === 'live'" mode="admin" />
         <div v-show="activeTab === 'errors'" class="overflow-hidden rounded-b-2xl">
-          <DetailWorkspace :show="showErrorModal && activeTab === 'errors'" :title="t('admin.ops.errorDetail.title')" @close="showErrorModal = false">
           <OpsErrorLogTable
             flat
             compact
@@ -164,8 +161,8 @@
             @update:page="onErrPage"
             @update:pageSize="onErrPageSize"
             @ipGeoBatchFailed="handleIpGeoBatchFailed" />
-            <template #detail><OpsErrorDetailModal embedded v-model:show="showErrorModal" placement="right" :error-id="selectedErrorId" :error-type="'request'" /></template>
-          </DetailWorkspace>
+            <OpsErrorDetailModal v-model:show="showErrorModal" :error-id="selectedErrorId" :error-type="'request'" />
+
         </div>
         <!-- 懒挂载：首次切到该 tab 才请求排行数据，之后随筛选自动刷新 -->
         <div v-if="rankingMounted" v-show="activeTab === 'ranking'" class="overflow-hidden rounded-b-2xl">
@@ -205,7 +202,7 @@ import { firstByteMs, strictFirstTokenMs, averageTps, tpsNote } from '@/utils/us
 import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { saveAs } from 'file-saver'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'; import { adminAPI } from '@/api/admin'; import { adminUsageAPI } from '@/api/admin/usage'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import { formatReasoningEffort } from '@/utils/format'
@@ -214,7 +211,6 @@ import AppLayout from '@/components/layout/AppLayout.vue'; import Pagination fro
 import UsageStatsCards from '@/components/admin/usage/UsageStatsCards.vue'; import UsageFilters from '@/components/admin/usage/UsageFilters.vue'
 import UsageTable from '@/components/admin/usage/UsageTable.vue'; import UsageExportProgress from '@/components/admin/usage/UsageExportProgress.vue'
 import ClientDisconnectEventsPanel from '@/components/admin/usage/ClientDisconnectEventsPanel.vue'
-import UsageRecordWorkspace from '@/components/usage/UsageRecordWorkspace.vue'
 import { useColumnPreferenceKey } from '@/composables/useColumnPreferenceKey'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
 import { useUsageSnapshot } from '@/composables/useUsageSnapshot'
@@ -225,7 +221,6 @@ import UsageCleanupDialog from '@/components/admin/usage/UsageCleanupDialog.vue'
 import UserBalanceHistoryModal from '@/components/admin/user/UserBalanceHistoryModal.vue'
 import OpsErrorLogTable from '@/views/admin/ops/components/OpsErrorLogTable.vue'
 import OpsErrorDetailModal from '@/views/admin/ops/components/OpsErrorDetailModal.vue'
-import DetailWorkspace from '@/components/common/DetailWorkspace.vue'
 import { listErrorLogs } from '@/api/admin/ops'
 import type { OpsErrorLog } from '@/api/admin/ops'
 import ModelDistributionChart from '@/components/charts/ModelDistributionChart.vue'; import GroupDistributionChart from '@/components/charts/GroupDistributionChart.vue'; import TokenUsageTrend from '@/components/charts/TokenUsageTrend.vue'
@@ -239,6 +234,7 @@ type DistributionMetric = 'tokens' | 'actual_cost'
 type EndpointSource = 'inbound' | 'upstream' | 'path'
 type ModelDistributionSource = 'requested' | 'upstream' | 'mapping'
 const route = useRoute()
+const router = useRouter()
 const usageStats = ref<AdminUsageStatsResponse | null>(null); const usageLogs = ref<AdminUsageLog[]>([]); const loading = ref(false); const exporting = ref(false)
 const trendData = ref<TrendDataPoint[]>([]); const requestedModelStats = ref<ModelStat[]>([]); const upstreamModelStats = ref<ModelStat[]>([]); const mappingModelStats = ref<ModelStat[]>([]); const groupStats = ref<GroupStat[]>([]); const chartsLoading = ref(false); const modelStatsLoading = ref(false); const granularity = ref<'day' | 'hour'>('hour')
 const modelDistributionMetric = ref<DistributionMetric>('tokens')
@@ -667,16 +663,14 @@ const exportToExcel = async () => {
 
 // Column visibility
 const ALWAYS_VISIBLE = ['user', 'created_at']
-const DEFAULT_HIDDEN_COLUMNS = ['api_key', 'service_tier', 'reasoning_effort', 'endpoint', 'group', 'stream', 'billing_mode', 'request_id', 'user_agent', 'session_id', 'ip_address']
-const HIDDEN_COLUMNS_KEY = useColumnPreferenceKey('usage-hidden-columns')
+const DEFAULT_HIDDEN_COLUMNS = ['reasoning_effort', 'user_agent']
+const HIDDEN_COLUMNS_KEY = useColumnPreferenceKey('admin-usage-restored-v2-hidden-columns')
 
 const allColumns = computed(() => [
-  { key: 'created_at', label: t('usage.time'), sortable: true },
-  { key: 'user', label: t('inspection.owner'), sortable: false },
+  { key: 'user', label: t('admin.usage.user'), sortable: false },
   { key: 'api_key', label: t('usage.apiKeyFilter'), sortable: false },
-  { key: 'account', label: t('inspection.routing'), sortable: false },
+  { key: 'account', label: t('admin.usage.account'), sortable: false },
   { key: 'model', label: t('usage.model'), sortable: true },
-  { key: 'completion_status', label: t('inspection.status'), sortable: false },
   { key: 'service_tier', label: t('admin.usage.serviceTier'), sortable: false },
   { key: 'reasoning_effort', label: t('usage.reasoningEffort'), sortable: false },
   { key: 'endpoint', label: t('usage.endpoint'), sortable: false },
@@ -686,6 +680,7 @@ const allColumns = computed(() => [
   { key: 'tokens', label: t('usage.tokens'), sortable: false },
   { key: 'cost', label: t('usage.cost'), sortable: false },
   { key: 'latency', label: t('usage.latency'), sortable: false },
+  { key: 'created_at', label: t('usage.time'), sortable: true },
   { key: 'request_id', label: t('admin.usage.requestId'), sortable: false },
   { key: 'user_agent', label: t('usage.userAgent'), sortable: false },
   { key: 'session_id', label: t('usage.sessionId'), sortable: false },
@@ -910,6 +905,7 @@ const handleColumnClickOutside = (event: MouseEvent) => {
 }
 
 onMounted(() => {
+  if (route.query.record != null) { const { record: _record, ...query } = route.query; void router.replace({ path: route.path, query, hash: route.hash }) }
   applyRouteQueryFilters()
   void loadRouteUserFilterLabel()
   loadLogs()
@@ -932,8 +928,9 @@ defineExpose({ requestedModelStats, refreshData })
 
 const newRecordsAvailable = ref(false)
 const historyRefresh = useAutoRefresh({
-  storageKey: useColumnPreferenceKey('admin-usage-auto-refresh'), intervals: [15, 30, 60], defaultInterval: 30,
-  shouldPause: () => activeTab.value !== 'usage' || loading.value,
+  storageKey: useColumnPreferenceKey('admin-usage-auto-refresh'), intervals: [15, 30, 60], defaultInterval: 30, defaultEnabled: true, temporaryPause: true,
+  active: () => activeTab.value === 'usage',
+  shouldPause: () => loading.value,
   onRefresh: async () => {
     const params = { ...buildUsageListParams(1, pagination.page_size, false), snapshot_max_id: 'new' as const, sort_by: 'created_at', sort_order: 'desc' as const }
     const filterKey = JSON.stringify(filters.value)
@@ -941,9 +938,14 @@ const historyRefresh = useAutoRefresh({
     abortController?.abort(); abortController = controller
     const res = await adminUsageAPI.list(params, { signal: controller.signal })
     if (controller.signal.aborted || filterKey !== JSON.stringify(filters.value)) return
-    if (pagination.page === 1 && sortState.sort_by === 'created_at' && sortState.sort_order === 'desc' && window.scrollY < 160 && !route.query.record) {
+    const reading = window.scrollY >= 160 || !!window.getSelection()?.toString() || !!document.querySelector('[role="dialog"], [role="tooltip"]') || !!document.activeElement?.closest('button, input, select, textarea, a, summary, [tabindex], [contenteditable="true"]')
+    if (pagination.page === 1 && sortState.sort_by === 'created_at' && sortState.sort_order === 'desc' && !reading) {
       usageLogs.value = res.items; pagination.total = res.total; historySnapshot.accept(res, true)
-    } else if (historySnapshot.observe(res.items[0]?.id)) newRecordsAvailable.value = true
+    } else {
+      const latest = new Map(res.items.map(item => [item.id, item]))
+      usageLogs.value = usageLogs.value.map(item => latest.get(item.id) ?? item)
+      if (historySnapshot.observe(res.items[0]?.id)) newRecordsAvailable.value = true
+    }
   },
 })
 function showLatestRecords() {

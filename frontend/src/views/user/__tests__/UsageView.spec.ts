@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ user: { id: 7 } }) }))
-vi.mock('vue-router', () => ({ useRoute: () => ({ query: {}, path: '/usage' }) }))
-vi.mock('@/components/usage/UsageRecordWorkspace.vue', () => ({ default: { template: '<div><slot :select="() => {}" :selected-id="null" /></div>' } }))
+const { routeState, routeReplace } = vi.hoisted(() => ({ routeState: { query: {} as Record<string, string>, path: '/usage', hash: '#records' }, routeReplace: vi.fn() }))
+vi.mock('vue-router', () => ({ useRoute: () => routeState, useRouter: () => ({ replace: routeReplace }) }))
 
 import UsageView from '../UsageView.vue'
 import Select, { type SelectOption } from '@/components/common/Select.vue'
@@ -182,7 +182,20 @@ function mountUsageView() {
 }
 
 describe('user UsageView', () => {
+  it('restores independent historical columns and strips only obsolete record links', async () => {
+    routeState.query = { record: '123', api_key_id: '9' }
+    const wrapper = mountUsageView()
+    await flushPromises()
+    expect(wrapper.findComponent(UsageTable).props('columns').map((column: { key: string }) => column.key)).toEqual([
+      'api_key', 'model', 'reasoning_effort', 'endpoint', 'ip_address', 'group', 'stream', 'billing_mode', 'tokens', 'cost', 'latency', 'created_at',
+    ])
+    expect(routeReplace).toHaveBeenCalledWith({ path: '/usage', query: { api_key_id: '9' }, hash: '#records' })
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   beforeEach(() => {
+    routeState.query = {}; routeReplace.mockReset()
     query.mockReset()
     getStats.mockReset()
     getDashboardModels.mockReset()

@@ -1,4 +1,4 @@
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onBeforeUnmount, onActivated, watch } from 'vue'
 
 export interface UseAutoRefreshOptions {
   storageKey: string
@@ -8,6 +8,9 @@ export interface UseAutoRefreshOptions {
   minimumIntervalSeconds?: () => number
   onRefresh: () => Promise<void> | void
   shouldPause?: () => boolean
+  /** Usage pages: off lasts only for this visit; persist only the interval. */
+  temporaryPause?: boolean
+  active?: () => boolean
 }
 
 export function retryAfterSeconds(error: unknown, now = Date.now()): number | null {
@@ -39,21 +42,21 @@ export function useAutoRefresh(options: UseAutoRefreshOptions) {
   try {
     const saved = JSON.parse(localStorage.getItem(options.storageKey) ?? 'null')
     if (saved) {
-      enabled.value = saved.enabled === true
+      if (!options.temporaryPause) enabled.value = saved.enabled === true
       if (intervals.includes(Number(saved.interval_seconds))) intervalSeconds.value = Number(saved.interval_seconds)
     }
   } catch { /* Invalid or restricted storage uses defaults. */ }
 
   function save() {
-    try { localStorage.setItem(options.storageKey, JSON.stringify({ enabled: enabled.value, interval_seconds: intervalSeconds.value })) } catch { /* optional preference */ }
+    try { localStorage.setItem(options.storageKey, JSON.stringify({ ...(!options.temporaryPause ? { enabled: enabled.value } : {}), interval_seconds: intervalSeconds.value })) } catch { /* optional preference */ }
   }
   function resetCountdown() {
     deadline = Math.max(Date.now() + Math.max(intervalSeconds.value, options.minimumIntervalSeconds?.() ?? 0) * 1000, retryNotBefore)
-    countdown.value = Math.max(0, Math.ceil((deadline - Date.now()) / 1000))
+    countdown.value = enabled.value ? Math.max(0, Math.ceil((deadline - Date.now()) / 1000)) : 0
   }
   function run(): Promise<void> {
     if (pending) return pending
-    if (disposed || Date.now() < retryNotBefore) return Promise.resolve()
+    if (disposed || document.hidden || navigator.onLine === false || Date.now() < retryNotBefore) return Promise.resolve()
     fetching.value = true
     pending = Promise.resolve().then(async () => {
       try {
@@ -78,13 +81,13 @@ export function useAutoRefresh(options: UseAutoRefreshOptions) {
     return pending
   }
   function isPaused() {
-    return document.hidden || navigator.onLine === false || options.shouldPause?.() === true
+    return document.hidden || navigator.onLine === false || options.active?.() === false || options.shouldPause?.() === true
   }
   function tick() {
     if (!enabled.value || disposed) return
     const wasPaused = paused.value
     paused.value = isPaused()
-    if (paused.value || fetching.value) return
+    if (paused.value || fetching.value) { countdown.value = 0; return }
     if (wasPaused) deadline = Math.max(Date.now(), retryNotBefore)
     countdown.value = Math.max(0, Math.ceil((deadline - Date.now()) / 1000))
     if (countdown.value === 0) void run()
@@ -101,7 +104,7 @@ export function useAutoRefresh(options: UseAutoRefreshOptions) {
   function setEnabled(value: boolean) {
     enabled.value = value
     save()
-    if (value) start()
+    if (value) { start(); if (options.temporaryPause && !isPaused()) void run() }
     else { stop(); countdown.value = 0; paused.value = false }
   }
   function setInterval_(seconds: number) {
@@ -110,18 +113,31 @@ export function useAutoRefresh(options: UseAutoRefreshOptions) {
     save()
     resetCountdown()
   }
+  function activate() {
+    if (options.active?.() === false) return
+    if (options.temporaryPause) { enabled.value = true; start() }
+    paused.value = isPaused()
+    if (enabled.value && !paused.value) void run()
+  }
+  function visibilityChanged() {
+    if (document.hidden) { paused.value = true; countdown.value = 0 }
+    else if (options.temporaryPause) activate()
+    else tick()
+  }
+  if (options.active) watch(options.active, (active, previous) => { if (active && !previous) activate(); else tick() })
+  onActivated(() => { if (options.temporaryPause) activate() })
   onMounted(() => {
     if (enabled.value) start()
-    document.addEventListener('visibilitychange', tick)
+    document.addEventListener('visibilitychange', visibilityChanged)
     window.addEventListener('online', tick)
     window.addEventListener('offline', tick)
   })
   onBeforeUnmount(() => {
     disposed = true
     stop()
-    document.removeEventListener('visibilitychange', tick)
+    document.removeEventListener('visibilitychange', visibilityChanged)
     window.removeEventListener('online', tick)
     window.removeEventListener('offline', tick)
   })
-  return { enabled, intervalSeconds, countdown, fetching, paused, error, lastUpdated, intervals, setEnabled, setInterval: setInterval_, resetCountdown, start, stop, refresh: run }
+  return { enabled, intervalSeconds, countdown, fetching, paused, error, lastUpdated, intervals, setEnabled, setInterval: setInterval_, resetCountdown, start, stop, refresh: run, activate }
 }

@@ -34,44 +34,59 @@ locks background scrolling and makes the main content inert; Escape, backdrop,
 close button and route navigation close it. It restores focus to the opener and
 shares the dialog stack with other dialogs. Resizing to desktop closes the drawer.
 
-## Lists and details
+## Usage lists
 
-User usage defaults to seven columns: time, model/type, key/group, completion,
-tokens, billed cost and performance. Admin usage has eight: time, user/key,
-account/group, model, completion, tokens, cost and performance. Detailed columns
-remain in the integrated column menu and exports. Preferences are scoped by
-authenticated identity and support target; legacy hidden-column arrays migrate
-once per scope. The reset action restores recommended columns.
+Historical usage restores the independent columns and cell content from
+`9c05b0c37ff05abc375b0a35fd8cffc1727837b0`. User order is API key, model,
+reasoning effort, endpoint, IP, group, type, billing mode, tokens, cost, latency,
+time, User-Agent (only User-Agent starts hidden). Admin order is user, API key,
+account, model, service tier, reasoning effort, endpoint, group, type, billing
+mode, tokens, cost, latency, time, request ID, User-Agent, session ID, IP
+(reasoning effort and User-Agent start hidden). Wide tables scroll within their
+card. Existing precision, permissions, billing and timing definitions remain.
 
-Error lists default to six user / seven admin columns, retaining key/group
-summaries, local scrolling for optional columns and a keyboard detail entry.
-Admin error selection highlights the active row. The separate operations table
-retains its own column configuration.
+Usage and live rows have no side panel, row detail selection, or detail request.
+Old `record` query links return to the list while retaining other queries and
+hash. Established usage detail APIs remain available to other clients. Admin
+error records retain the established diagnostic modal. Shared detail workspaces
+on other pages retain their existing responsive behavior.
 
-Details start closed. At **1520px of actual workspace width**, a 440px panel and
-24px gap fit beside the summary table and its panel padding. The threshold uses
-the available content width after navigation and outer insets. Smaller workspaces
-use a right overlay, maximum 480px;
-phones use the viewport. Extra columns can scroll inside the table. The sidebar
-is never automatically collapsed.
+Live columns are time, admin-only user/key, model, type, group, result, speed,
+performance, input → output, billed cost, client/IP. **Performance is visible by
+default**; only client/IP starts hidden. Time, model and result are fixed. Column
+menus retain integrated checkboxes. Layout-version preference keys isolate role,
+authenticated identity and support target; the restored layouts do not inherit
+compact-era hidden columns, and do not delete old preferences. Reset restores
+the stated defaults.
 
-Usage details use `?record=<id>`, preserving other query parameters. First selection
-pushes history; subsequent selections replace it. Close returns to the list;
-closing a direct link removes only `record`. Closing after filters change retains
-the current query and hash instead of restoring the old list location. Previous/next stays within the loaded
-page. Late responses cannot replace a newer/closed selection. Missing or forbidden
-records display a local failure. Error/live selections use the same responsive
-workspace but are transient, without persistent deep links.
+Result uses a colored dot and short label/reason. Processing and observed
+transmission are active; completed is successful; explicit failures, rejections,
+cancellations, disconnects and incomplete responses are abnormal. Handler-returned
+`finished` is status pending; expired observations are unknown. Pending and unknown
+belong only to All, never the successful or abnormal filters. HTTP status is
+auxiliary metadata. Reasons use stable public categories, never raw diagnostics.
+Only the existing semantic first-output observer advances transmission; headers,
+keepalives and lifecycle frames do not. No response parser is added.
 
-Overlays reuse the dialog stack, focus loop and scroll lock. Docked details do
-not lock the list. Escape closes details and focus returns to the opener when
-still mounted. Row buttons, links and input controls do not also open details.
-Each usage row has a keyboard detail button.
+Speed shows measured first byte and forwarding duration; active elapsed is labeled
+separately and never substitutes for forwarding duration or the TPS denominator.
+Performance uses strict first-token timing and the existing request-average TPS.
+Real timing version, native compaction and media counts govern availability. There
+is no independent reasoning-token count in usage, so none is displayed. TPS has
+no formula/native title tooltip; one latency popup retains measured timings and
+unavailability reasons, accessible on hover, focus and touch.
 
-User detail uses owner-checked `/usage/:id`. Its established public numeric
-`account_id` remains API-compatible; the user UI does not show admin account
-details. `/admin/usage/:id` uses the admin guard/projection, including routing and
-account costs. Support reads retain the target-user projection.
+Phone rows show model/type and cost, result/time, then tokens/cache and group.
+More fields expands within the same stable row, with full group, performance,
+client/IP and copy access, using only already-received data. No drawer or detail
+fetch is involved. Long model names, IPv6 and User-Agent wrap inside the row.
+Only the current desktop/mobile layout is mounted.
+
+Live result/model/group and admin user filters operate on the received window,
+not all historical requests. Export current window exports only those filtered
+rows, preserving exact numeric values and blanks for missing fields. CSV text
+cells are escaped against spreadsheet formula injection. Full-history export
+remains in history.
 
 ## Historical insertion boundary
 
@@ -82,7 +97,7 @@ boundaries are returned in `snapshot_max_id` and apply to list and count queries
 Sorting retains an ID tie breaker.
 
 The UI holds the boundary for paging/export, resetting on filters or explicit
-refresh. Polling reads a fresh boundary separately; reading old pages/details
+refresh. Polling reads a fresh boundary separately; reading old pages
 shows an update notice instead of inserting rows. Exports retain initial filters.
 No exact new-record count is inferred from offset pagination.
 
@@ -101,14 +116,24 @@ old data and an inline stale indicator, without repeated error toasts.
 
 | View | Default | Reads |
 | --- | --- | --- |
-| History | Off; optional 15/30/60s | List only |
-| Live | 2s; at least 5s when empty | Redis observation snapshot |
+| History | On, 30s; optional 15/30/60s | List only |
+| Live | On, 2s; at least 5s when empty | Redis observation snapshot + bounded canonical usage lookup |
 | Overview | 30s | Statistics; charts at least 60s apart unless explicitly requested |
 
 Visible live tabs of the same identity divide an approximate 30-reads/minute
 budget using expiring local-storage registrations. Hidden tabs unregister;
 restricted storage uses a conservative interval. This is best effort, not a quota
 guarantee. Existing global/Heavy limits remain authoritative and are not raised.
+
+Usage pages expose a switch, actual next-refresh countdown and manual refresh.
+Only the interval persists. Off lasts for the current stay: browser reload,
+route/tab reactivation and browser foreground return enable and fetch once.
+Manual refresh while off reads once and remains off; a mere network reconnect
+respects off. Hidden/offline periods pause scheduling, with server Retry-After
+and budget/backoff still authoritative. Other pages retain their prior policy.
+Existing visible rows update while reading; insertions wait behind a new-record
+notice while scrolling, selecting text, focusing controls or expanding mobile
+rows. Background reads retain row identity and expansion.
 
 Refresh icons spin only during I/O. Right overlays use a 200ms transform; figures
 use tabular digits. Overview charts disable replay animation.
@@ -141,18 +166,29 @@ execution. Unauthenticated/basic-validation rejections are outside this stream;
 existing task/error history covers other records.
 
 `processing` indicates no finer stage was observed. HTTP handler return is
-`finished`, not proof of successful protocol completion or billing. HTTP/stream
-errors, cancellations and known WS completion/partial outcomes are distinguished.
-WS final timing/counts can use existing average TPS; missing HTTP timing/counts
-remain unavailable. No token estimate, ETA, percentage, success rate or billing
-linkage is invented. Historical usage/error records remain authoritative.
+`finished`, not proof of successful protocol completion or billing. Existing
+stream errors override HTTP 200; known WS terminal outcomes stay independent per
+logical turn. No success rate, ETA, completion percentage or token estimate is
+inferred.
+
+The existing usage builders attach the final billing key (request ID, user and
+API key) to the specific HTTP observation or WS turn through task context. This
+does not change billing-key precedence or deduplication. Associations expire in
+Redis; ambiguous multiple money events are not assigned a session fee. The read
+service performs one bounded lookup (at most 200 keys) of persisted usage, with
+batch group names. There are no browser per-row reads or statistics scans. Actual
+cost, cache/media counts, inbound User-Agent/IP, timing and completion come from
+those existing records. Missing records remain unlinked, never free. Partial
+usage and tiny nonzero fees retain their actual values. User projection never
+exposes account routing or admin cost/diagnostics; the existing user-error setting
+also hides observed rejections and failures. Explicit stream failures cannot be
+overwritten by a completed usage row.
 
 One 250ms display clock uses server time and monotonic elapsed time. Interpolation
 stops on pause, error or a 15s data gap, retaining the last displayed elapsed value.
-Final observed elapsed values replace interpolation. A selected processing record absent from
-a later snapshot becomes unknown. Owner-scoped user reads omit account routing;
-the user-error setting also hides observed failures. Support target/auth changes
-invalidate old responses and remount the corresponding page.
+Final measured forwarding duration remains separate. A retained active record
+absent from a later snapshot becomes unknown. Support target/auth changes discard
+old responses and remount the corresponding page.
 
 ## Overview definitions
 

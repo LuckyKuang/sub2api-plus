@@ -83,6 +83,66 @@ func TestLiveObservationDoesNotPublishUnauditedOrRejectedAsActive(t *testing.T) 
 	require.Equal(t, http.StatusForbidden, w.Code)
 }
 
+func TestLiveOutputCannotPublishBeforeAuditOrAfterTerminal(t *testing.T) {
+	r := gin.New()
+	r.Use(LiveRequestContext(nil))
+	r.POST("/request", func(c *gin.Context) {
+		s := requestActivity(c)
+		s.output(0, 10, "text")
+		require.Empty(t, s.active)
+		observeAuditedRequest(c, &service.APIKey{ID: 9}, middleware2.AuthSubject{UserID: 7}, "model", "http", nil)
+		s.output(0, 250, "text")
+		require.Equal(t, "transmitting", s.active[0].Status)
+		require.Equal(t, 250, *s.active[0].FirstOutputMs)
+		s.mu.Lock()
+		s.finishLocked(0, "failed", nil)
+		s.mu.Unlock()
+		s.output(0, 500, "text")
+		require.Empty(t, s.active)
+	})
+	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/request", nil))
+}
+
+func TestLiveHTTP200IsPendingAndStreamErrorRemainsFailed(t *testing.T) {
+	cache := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: cache.Addr()})
+	t.Cleanup(func() { _ = client.Close() })
+	tracker := service.NewLiveRequestService(client)
+	r := gin.New()
+	r.Use(LiveRequestContext(tracker))
+	r.POST("/:outcome", func(c *gin.Context) {
+		observeAuditedRequest(c, &service.APIKey{ID: 9}, middleware2.AuthSubject{UserID: 7}, c.Param("outcome"), "http", nil)
+		if c.Param("outcome") == "stream-error" {
+			service.MarkOpsStreamError(c, "upstream_error", "private upstream diagnostic", 502)
+		}
+		c.Status(http.StatusOK)
+	})
+	for _, path := range []string{"/pending", "/stream-error"} {
+		r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, path, nil))
+	}
+	require.Eventually(t, func() bool {
+		data, err := tracker.List(context.Background(), 7)
+		if err != nil || len(data.Items) != 2 {
+			return false
+		}
+		for _, item := range data.Items {
+			if item.FinishedAt == nil {
+				return false
+			}
+			if item.Model == "pending" {
+				require.Equal(t, "finished", item.Status)
+			} else {
+				require.Equal(t, "failed", item.Status)
+				require.Equal(t, "upstream_error", item.Reason)
+			}
+			require.Equal(t, 200, item.HTTPStatus)
+			require.Nil(t, item.ActualCost)
+			require.NotContains(t, item.Reason, "private")
+		}
+		return true
+	}, time.Second, time.Millisecond)
+}
+
 // A retry is one logical turn. The proxy restarts its own numbering after failover.
 func TestLiveObservationFailoverRetainsLogicalTurnAndNextTurnIsDistinct(t *testing.T) {
 	r := gin.New()

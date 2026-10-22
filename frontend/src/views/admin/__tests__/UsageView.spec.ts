@@ -7,7 +7,6 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { defineComponent, ref } from 'vue'
 
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ user: { id: 1 } }) }))
-vi.mock('@/components/usage/UsageRecordWorkspace.vue', () => ({ default: { template: '<div><slot :select="() => {}" :selected-id="null" /></div>' } }))
 
 import UsageView from '../UsageView.vue'
 
@@ -136,6 +135,7 @@ vi.mock('vue-i18n', async () => {
 })
 
 vi.mock('vue-router', () => ({
+  useRouter: () => ({ replace: vi.fn() }),
   useRoute: () => ({
     query: routeQuery
   })
@@ -504,7 +504,7 @@ describe('admin UsageView request ID column visibility', () => {
     vi.useRealTimers()
   })
 
-  it('defaults to eight summary columns and persists optional service tier visibility', async () => {
+  it('restores baseline historical columns and persists optional service tier visibility', async () => {
     const wrapper = mount(UsageView, {
       global: {
         stubs: {
@@ -531,17 +531,17 @@ describe('admin UsageView request ID column visibility', () => {
     await wrapper.vm.$nextTick()
 
     const usageTable = wrapper.findComponent(UsageTableStub)
-    // Accepted UI requirement: eight summary columns; correlation and service tier are opt-in.
+    // Approved baseline restoration: independent fields, service tier and correlation visible; only effort/UA hidden.
     expect(usageTable.props('columns').map((column: { key: string }) => column.key)).toEqual([
-      'created_at', 'user', 'account', 'model', 'completion_status', 'tokens', 'cost', 'latency',
+      'user', 'api_key', 'account', 'model', 'service_tier', 'endpoint', 'group', 'stream', 'billing_mode', 'tokens', 'cost', 'latency', 'created_at', 'request_id', 'session_id', 'ip_address',
     ])
     expect(usageTable.props('showServiceTier')).toBe(true)
     await wrapper.get('[data-testid="usage-column-settings"]').trigger('click')
     await wrapper.get('[data-testid="usage-column-toggle-service_tier"]').trigger('click')
-    expect(usageTable.props('columns').map((column: { key: string }) => column.key)).toContain('service_tier')
-    expect(localStorage.setItem).toHaveBeenCalledWith('usage-hidden-columns:1:self', expect.not.stringContaining('"service_tier"'))
-    await wrapper.get('[data-testid="usage-column-toggle-service_tier"]').trigger('click')
     expect(usageTable.props('columns').map((column: { key: string }) => column.key)).not.toContain('service_tier')
+    expect(localStorage.setItem).toHaveBeenCalledWith('admin-usage-restored-v2-hidden-columns:1:self', expect.stringContaining('"service_tier"'))
+    await wrapper.get('[data-testid="usage-column-toggle-service_tier"]').trigger('click')
+    expect(usageTable.props('columns').map((column: { key: string }) => column.key)).toContain('service_tier')
     wrapper.unmount()
   })
 })
