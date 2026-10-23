@@ -8,12 +8,12 @@
         <header class="page-header mb-0 flex flex-wrap items-start justify-between gap-4 border-b border-gray-100 px-5 py-4 dark:border-dark-700 sm:px-6">
           <div class="min-w-0">
             <h1 class="page-title flex items-center gap-2 text-xl font-black text-gray-900 dark:text-white">
-              <span class="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-blue-50 text-blue-500 dark:bg-blue-900/30 dark:text-blue-400">
+              <span class="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-blue-50/[0.15] text-blue-500 dark:bg-blue-900/30 dark:text-blue-400">
                 <Icon name="chart" size="sm" />
               </span>
               {{ t('channelMonitorV2.title') }}
             </h1>
-            <div class="page-description mt-1.5 flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+            <div class="page-description mt-1.5 flex flex-wrap items-center gap-2 text-xs surface-muted">
               <span class="relative flex h-2 w-2 shrink-0">
                 <span
                   class="relative inline-flex h-2 w-2 rounded-full"
@@ -27,7 +27,7 @@
               <span v-else-if="snapshot?.coverage.data_through">
                 {{ t('channelMonitorV2.updatedTo', { time: formatTime(snapshot.coverage.data_through) }) }}
               </span>
-              <span v-else class="text-gray-400">{{ t('common.loading') }}</span>
+              <span v-else class="surface-muted">{{ t('common.loading') }}</span>
               <span
                 v-if="snapshot && !snapshot.coverage.coverage_complete && !bootstrapActive"
                 class="badge badge-warning"
@@ -44,7 +44,7 @@
             </div>
           </div>
           <button
-            class="btn btn-secondary btn-icon flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-dark-700 dark:text-gray-400 dark:hover:bg-dark-600"
+            class="btn btn-secondary btn-icon flex h-8 w-8 items-center justify-center rounded-lg surface-inset hover:surface-hover surface-muted"
             type="button"
             :title="t('common.refresh')"
             :disabled="loading"
@@ -108,7 +108,7 @@
             </button>
           </div>
 
-          <span class="mx-0.5 hidden h-5 w-px shrink-0 bg-gray-200 dark:bg-dark-700 sm:block" aria-hidden="true"></span>
+          <span class="mx-0.5 hidden h-5 w-px shrink-0 surface-inset sm:block" aria-hidden="true"></span>
 
           <FilterMultiSelect
             v-model="filter.platforms"
@@ -141,7 +141,7 @@
             {{ t('channelMonitorV2.clearFilters') }}
           </button>
 
-          <span class="mx-0.5 hidden h-5 w-px shrink-0 bg-gray-200 dark:bg-dark-700 md:block" aria-hidden="true"></span>
+          <span class="mx-0.5 hidden h-5 w-px shrink-0 surface-inset md:block" aria-hidden="true"></span>
 
           <Select
             v-model="matrixGroupBy"
@@ -263,7 +263,7 @@
         />
         <div
           v-else-if="loading"
-          class="card flex min-h-[320px] items-center justify-center text-sm text-gray-400 ring-1 ring-gray-900/5"
+          class="card flex min-h-[320px] items-center justify-center text-sm ring-1 ring-gray-900/5 surface-muted"
         >
           <span class="animate-pulse">{{ t('common.loading') }}</span>
         </div>
@@ -310,7 +310,7 @@
                     <div class="flex items-center gap-2">
                       <span :class="statusDot(row.health)" aria-hidden="true"></span>
                       <div>
-                        <span class="block text-xs text-gray-500 dark:text-dark-400">{{ row.platform }}</span>
+                        <span class="block text-xs surface-muted">{{ row.platform }}</span>
                         <strong class="font-semibold text-gray-900 dark:text-white">
                           {{ row.model === '__other__' ? t('channelMonitorV2.otherModels') : row.model }}
                         </strong>
@@ -319,11 +319,11 @@
                   </td>
                   <td>
                     <span class="block">{{ formatPercent(1 - row.metrics.error_rate) }}</span>
-                    <small class="text-xs text-gray-400">{{ t('channelMonitorV2.metrics.errorRateValue', { value: formatPercent(row.metrics.error_rate) }) }}</small>
+                    <small class="text-xs surface-muted">{{ t('channelMonitorV2.metrics.errorRateValue', { value: formatPercent(row.metrics.error_rate) }) }}</small>
                   </td>
                   <td>
                     <span class="block">{{ formatMs(row.metrics.ttft.p50_ms) }}</span>
-                    <small class="text-xs text-gray-400">{{ latencyDetail(row.metrics.ttft) }}</small>
+                    <small class="text-xs surface-muted">{{ latencyDetail(row.metrics.ttft) }}</small>
                   </td>
                   <td v-if="showThroughput" :title="exactTps(row.metrics.tpm)">{{ formatTps(row.metrics.tpm) }}</td>
                   <td>{{ formatPercent(row.metrics.cache_rate) }}</td>
@@ -337,15 +337,15 @@
             <div
               v-for="row in errorRows"
               :key="row.category"
-              class="rounded-2xl bg-gray-50 p-4 text-sm dark:bg-dark-900/30"
+              class="rounded-2xl surface-inset p-4 text-sm"
               :class="row.ignored ? 'opacity-60' : ''"
             >
               <button
                 type="button"
-                class="grid w-full grid-cols-[minmax(100px,200px)_1fr_auto_auto] items-center gap-3 text-left"
+                class="grid w-full grid-cols-[minmax(100px,200px)_1fr_auto_auto] items-center gap-3 text-left surface-control"
                 @click="toggleError(row.category)"
               >
-                <span class="flex min-w-0 items-center gap-1.5 truncate text-gray-700 dark:text-gray-200">
+                <span class="flex min-w-0 items-center gap-1.5 truncate surface-muted">
                   <span class="truncate">{{ errorLabel(row.category) }}</span>
                   <span v-if="row.ignored" class="badge badge-gray shrink-0 !px-1.5 !py-0 text-[10px]">{{ t('channelMonitorV2.ignored') }}</span>
                 </span>
@@ -367,19 +367,19 @@
                   <div
                     v-for="(detail, index) in row.details || []"
                     :key="`${row.category}:${index}:${detail.message}`"
-                    class="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600 dark:bg-dark-800 dark:text-dark-300"
+                    class="rounded-lg surface-inset px-3 py-2 text-xs surface-muted"
                   >
                     <div class="mb-1 flex flex-wrap items-center gap-2">
                       <span class="badge badge-gray !px-1.5 !py-0 text-[10px]">{{ detail.platform || '-' }}</span>
                       <span class="truncate font-medium">{{ detail.model || '-' }}</span>
-                      <span v-if="detail.status_code" class="text-gray-400">{{ t('channelMonitorV2.errorDetail.http', { code: detail.status_code }) }}</span>
-                      <span v-if="detail.upstream_status_code" class="text-gray-400">{{ t('channelMonitorV2.errorDetail.upstream', { code: detail.upstream_status_code }) }}</span>
-                      <span class="ml-auto text-gray-400">×{{ detail.count }}</span>
+                      <span v-if="detail.status_code" class="surface-muted">{{ t('channelMonitorV2.errorDetail.http', { code: detail.status_code }) }}</span>
+                      <span v-if="detail.upstream_status_code" class="surface-muted">{{ t('channelMonitorV2.errorDetail.upstream', { code: detail.upstream_status_code }) }}</span>
+                      <span class="ml-auto surface-muted">×{{ detail.count }}</span>
                     </div>
                     <p class="break-words leading-relaxed">{{ detail.message || detail.error_type || t('channelMonitorV2.errorDetail.noMessage') }}</p>
                   </div>
                 </template>
-                <p v-else class="text-xs text-gray-400">{{ t('channelMonitorV2.errorDetail.empty') }}</p>
+                <p v-else class="text-xs surface-muted">{{ t('channelMonitorV2.errorDetail.empty') }}</p>
               </div>
             </div>
           </div>
@@ -402,7 +402,7 @@
                   v-for="row in userRows"
                   :key="row.user_id || row.display_label"
                   :class="row.is_self
-                    ? 'bg-primary-50 ring-1 ring-inset ring-primary-200/80 dark:bg-primary-900/25 dark:ring-primary-700/50'
+                    ? 'bg-primary-50/[0.15] ring-1 ring-inset ring-primary-200/80 dark:bg-primary-900/25 dark:ring-primary-700/50'
                     : ''"
                 >
                   <td><MonitorRankBadge :rank="row.rank" /></td>
@@ -420,11 +420,11 @@
                   </td>
                   <td>
                     <span class="block">{{ formatPercent(1 - row.metrics.error_rate) }}</span>
-                    <small class="text-xs text-gray-400">{{ t('channelMonitorV2.metrics.errorRateValue', { value: formatPercent(row.metrics.error_rate) }) }}</small>
+                    <small class="text-xs surface-muted">{{ t('channelMonitorV2.metrics.errorRateValue', { value: formatPercent(row.metrics.error_rate) }) }}</small>
                   </td>
                   <td>
                     <span class="block">{{ formatMs(row.metrics.ttft.p50_ms) }}</span>
-                    <small class="text-xs text-gray-400">{{ latencyDetail(row.metrics.ttft) }}</small>
+                    <small class="text-xs surface-muted">{{ latencyDetail(row.metrics.ttft) }}</small>
                   </td>
                   <td v-if="showThroughput" :title="exactTps(row.metrics.tpm)">{{ formatTps(row.metrics.tpm) }}</td>
                   <td>{{ formatPercent(row.metrics.cache_rate) }}</td>
@@ -434,7 +434,7 @@
             </table>
           </div>
 
-          <div v-if="tabLoading" class="empty-state py-10 text-sm text-gray-400">{{ t('common.loading') }}</div>
+          <div v-if="tabLoading" class="empty-state py-10 text-sm surface-muted">{{ t('common.loading') }}</div>
           <div v-else-if="activeRowsEmpty" class="empty-state py-10">
             <p class="empty-state-title text-base">
               {{

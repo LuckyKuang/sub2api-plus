@@ -209,6 +209,7 @@ export interface LoginAgreementDocument {
 }
 
 export interface PublicSettings {
+  console_appearance?: import('./appearance').ConsoleAppearance
   registration_enabled: boolean
   email_verify_enabled: boolean
   force_email_on_third_party_signup: boolean

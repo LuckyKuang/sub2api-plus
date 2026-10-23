@@ -16,7 +16,7 @@
           <button
             v-if="draft.user_id"
             type="button"
-            class="absolute right-2 top-8 p-1 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+            class="absolute right-2 top-8 p-1 hover:text-gray-700 dark:hover:text-gray-200 surface-control surface-muted"
             :title="t('admin.usage.disconnectEvents.clearFilter')"
             @click="onClearUser"
           >
@@ -24,17 +24,17 @@
           </button>
           <div
             v-if="showUserDropdown && userResults.length > 0"
-            class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border border-gray-200 bg-white shadow-lg dark:border-dark-600 dark:bg-dark-800"
+            class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border border-gray-200 shadow-lg dark:border-dark-600 surface-panel"
           >
             <button
               v-for="user in userResults"
               :key="user.id"
               type="button"
-              class="block w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-dark-700"
+              class="block w-full px-3 py-2 text-left text-sm hover:surface-hover surface-control"
               @click="selectUser(user)"
             >
               <span>{{ user.email }}</span>
-              <span v-if="user.deleted" class="ml-2 text-xs text-gray-400">{{ t('admin.usage.userDeletedBadge') }}</span>
+              <span v-if="user.deleted" class="ml-2 text-xs surface-muted">{{ t('admin.usage.userDeletedBadge') }}</span>
             </button>
           </div>
         </div>
@@ -53,7 +53,7 @@
           <button
             v-if="draft.api_key_id"
             type="button"
-            class="absolute right-2 top-8 p-1 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+            class="absolute right-2 top-8 p-1 hover:text-gray-700 dark:hover:text-gray-200 surface-control surface-muted"
             :title="t('admin.usage.disconnectEvents.clearFilter')"
             @click="onClearAPIKey"
           >
@@ -61,13 +61,13 @@
           </button>
           <div
             v-if="showAPIKeyDropdown && apiKeyResults.length > 0"
-            class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border border-gray-200 bg-white shadow-lg dark:border-dark-600 dark:bg-dark-800"
+            class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border border-gray-200 shadow-lg dark:border-dark-600 surface-panel"
           >
             <button
               v-for="key in apiKeyResults"
               :key="key.id"
               type="button"
-              class="block w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-dark-700"
+              class="block w-full px-3 py-2 text-left text-sm hover:surface-hover surface-control"
               @click="selectAPIKey(key)"
             >
               {{ key.name || `#${key.id}` }}
@@ -168,7 +168,7 @@
       </div>
 
       <div class="mt-3 flex flex-wrap items-center justify-between gap-3">
-        <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.usage.disconnectEvents.hint') }}</p>
+        <p class="text-xs surface-muted">{{ t('admin.usage.disconnectEvents.hint') }}</p>
         <div class="flex gap-2">
           <button type="button" class="btn btn-secondary" @click="resetFilters">{{ t('common.reset') }}</button>
           <button type="button" class="btn btn-primary inline-flex items-center gap-2" :disabled="loading" @click="applyFilters">
@@ -181,47 +181,47 @@
 
     <div class="table-container min-w-0 w-full max-w-full overflow-x-auto">
       <table class="w-full min-w-[2200px] divide-y divide-gray-200 dark:divide-dark-700">
-        <thead class="bg-gray-50 dark:bg-dark-800">
+        <thead class="surface-inset">
           <tr>
-            <th v-for="heading in headings" :key="heading" class="whitespace-nowrap px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400">{{ heading }}</th>
+            <th v-for="heading in headings" :key="heading" class="whitespace-nowrap px-4 py-3 text-left text-xs font-medium uppercase surface-muted">{{ heading }}</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-gray-100 bg-white dark:divide-dark-800 dark:bg-dark-800">
+        <tbody class="divide-y divide-gray-100 surface-inset dark:divide-dark-800">
           <tr v-if="loading">
-            <td :colspan="headings.length" class="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400">{{ t('common.loading') }}</td>
+            <td :colspan="headings.length" class="px-4 py-12 text-center text-sm surface-muted">{{ t('common.loading') }}</td>
           </tr>
           <tr v-else-if="events.length === 0">
-            <td :colspan="headings.length" class="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400">{{ t('admin.usage.disconnectEvents.empty') }}</td>
+            <td :colspan="headings.length" class="px-4 py-12 text-center text-sm surface-muted">{{ t('admin.usage.disconnectEvents.empty') }}</td>
           </tr>
           <template v-else>
-          <tr v-for="event in events" :key="`${event.user_id}:${event.generation}:${event.request_id}`" class="hover:bg-gray-50 dark:hover:bg-dark-700/60">
-            <td class="whitespace-nowrap px-4 py-4 text-sm text-gray-700 dark:text-gray-300">{{ formatDateTime(event.accepted_at) }}</td>
-            <td class="whitespace-nowrap px-4 py-4 text-sm text-gray-700 dark:text-gray-300">{{ event.finalized_at ? formatDateTime(event.finalized_at) : '-' }}</td>
-            <td class="max-w-[240px] truncate px-4 py-4 text-sm text-gray-700 dark:text-gray-300" :title="event.user_email || ''">{{ event.user_email || '-' }}</td>
-            <td class="max-w-[220px] truncate px-4 py-4 text-sm text-gray-700 dark:text-gray-300" :title="event.api_key_name || ''">{{ event.api_key_name || '-' }}</td>
-            <td class="max-w-[240px] px-4 py-4 text-sm text-gray-700 dark:text-gray-300">
+          <tr v-for="event in events" :key="`${event.user_id}:${event.generation}:${event.request_id}`" class="hover:surface-hover">
+            <td class="whitespace-nowrap px-4 py-4 text-sm surface-muted">{{ formatDateTime(event.accepted_at) }}</td>
+            <td class="whitespace-nowrap px-4 py-4 text-sm surface-muted">{{ event.finalized_at ? formatDateTime(event.finalized_at) : '-' }}</td>
+            <td class="max-w-[240px] truncate px-4 py-4 text-sm surface-muted" :title="event.user_email || ''">{{ event.user_email || '-' }}</td>
+            <td class="max-w-[220px] truncate px-4 py-4 text-sm surface-muted" :title="event.api_key_name || ''">{{ event.api_key_name || '-' }}</td>
+            <td class="max-w-[240px] px-4 py-4 text-sm surface-muted">
               <div class="flex items-center gap-2">
                 <span class="truncate font-mono" :title="event.request_id">{{ event.request_id || '-' }}</span>
-                <button v-if="event.request_id" type="button" class="shrink-0 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200" :title="t('common.copy')" @click="copyValue(event.request_id)"><Icon name="copy" size="xs" /></button>
+                <button v-if="event.request_id" type="button" class="shrink-0 hover:text-gray-700 dark:hover:text-gray-200 surface-control surface-muted" :title="t('common.copy')" @click="copyValue(event.request_id)"><Icon name="copy" size="xs" /></button>
               </div>
             </td>
-            <td class="max-w-[240px] px-4 py-4 text-sm text-gray-700 dark:text-gray-300">
+            <td class="max-w-[240px] px-4 py-4 text-sm surface-muted">
               <div class="flex items-center gap-2">
                 <span class="truncate font-mono" :title="event.session_id || ''">{{ event.session_id || '-' }}</span>
-                <button v-if="event.session_id" type="button" class="shrink-0 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200" :title="t('common.copy')" @click="copyValue(event.session_id)"><Icon name="copy" size="xs" /></button>
+                <button v-if="event.session_id" type="button" class="shrink-0 hover:text-gray-700 dark:hover:text-gray-200 surface-control surface-muted" :title="t('common.copy')" @click="copyValue(event.session_id)"><Icon name="copy" size="xs" /></button>
               </div>
             </td>
-            <td class="whitespace-nowrap px-4 py-4 text-sm text-gray-700 dark:text-gray-300">{{ event.protocol || '-' }}</td>
+            <td class="whitespace-nowrap px-4 py-4 text-sm surface-muted">{{ event.protocol || '-' }}</td>
             <td class="whitespace-nowrap px-4 py-4"><span class="inline-flex rounded-md px-2 py-1 text-xs font-medium" :class="statusClass(event.completion_status)">{{ statusLabel(event.completion_status) }}</span></td>
-            <td class="whitespace-nowrap px-4 py-4 text-sm text-gray-700 dark:text-gray-300">{{ outcomeLabel(event.outcome) }}</td>
-            <td class="whitespace-nowrap px-4 py-4 text-sm text-gray-700 dark:text-gray-300">{{ event.usage_source ? usageSourceLabel(event.usage_source) : '-' }}</td>
-            <td class="whitespace-nowrap px-4 py-4 text-sm" :class="event.usage_missing ? 'font-medium text-red-600 dark:text-red-300' : 'text-gray-700 dark:text-gray-300'">{{ event.usage_missing ? t('common.yes') : t('common.no') }}</td>
-            <td class="whitespace-nowrap px-4 py-4 text-sm text-gray-700 dark:text-gray-300">{{ event.consecutive_after ?? '-' }}</td>
-            <td class="whitespace-nowrap px-4 py-4 text-sm text-gray-700 dark:text-gray-300">{{ event.threshold ?? '-' }}</td>
-            <td class="whitespace-nowrap px-4 py-4 text-sm text-gray-700 dark:text-gray-300">{{ enforcementLabel(event.enforce) }}</td>
+            <td class="whitespace-nowrap px-4 py-4 text-sm surface-muted">{{ outcomeLabel(event.outcome) }}</td>
+            <td class="whitespace-nowrap px-4 py-4 text-sm surface-muted">{{ event.usage_source ? usageSourceLabel(event.usage_source) : '-' }}</td>
+            <td class="whitespace-nowrap px-4 py-4 text-sm" :class="event.usage_missing ? 'font-medium text-red-600 dark:text-red-300' : 'surface-muted'">{{ event.usage_missing ? t('common.yes') : t('common.no') }}</td>
+            <td class="whitespace-nowrap px-4 py-4 text-sm surface-muted">{{ event.consecutive_after ?? '-' }}</td>
+            <td class="whitespace-nowrap px-4 py-4 text-sm surface-muted">{{ event.threshold ?? '-' }}</td>
+            <td class="whitespace-nowrap px-4 py-4 text-sm surface-muted">{{ enforcementLabel(event.enforce) }}</td>
             <td class="whitespace-nowrap px-4 py-4 text-sm">
-              <span v-if="event.auto_banned" class="inline-flex rounded-md bg-red-100 px-2 py-1 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-300">{{ t('admin.usage.disconnectEvents.banned') }}</span>
-              <span v-else class="text-gray-400">-</span>
+              <span v-if="event.auto_banned" class="inline-flex rounded-md bg-red-100/[0.15] px-2 py-1 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-300">{{ t('admin.usage.disconnectEvents.banned') }}</span>
+              <span v-else class="surface-muted">-</span>
             </td>
           </tr>
           </template>
@@ -469,10 +469,10 @@ function enforcementLabel(enforce: boolean | undefined): string {
   return enforce ? t('admin.usage.disconnectEvents.enforced') : t('admin.usage.disconnectEvents.auditOnly')
 }
 function statusClass(status: ClientDisconnectCompletionStatus): string {
-  if (status === 'client_disconnected' || status === 'usage_missing') return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
-  if (status === 'completed') return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
-  if (status === 'pending') return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
-  return 'bg-gray-100 text-gray-700 dark:bg-dark-700 dark:text-gray-300'
+  if (status === 'client_disconnected' || status === 'usage_missing') return 'bg-red-100/[0.15] text-red-700 dark:bg-red-900/30 dark:text-red-300'
+  if (status === 'completed') return 'bg-emerald-100/[0.15] text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+  if (status === 'pending') return 'bg-amber-100/[0.15] text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+  return 'surface-inset surface-muted dark:surface-inset'
 }
 function copyValue(value: string) { void navigator.clipboard?.writeText(value) }
 

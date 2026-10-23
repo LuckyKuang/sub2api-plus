@@ -5,12 +5,12 @@
         class="glass-surface page-header mb-0 p-5 ring-1 ring-gray-900/5 dark:ring-dark-700 sm:p-6"
       >
         <h1 class="page-title flex items-center gap-2 text-xl font-black text-gray-900 dark:text-white">
-          <span class="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-blue-50 text-blue-500 dark:bg-blue-900/30 dark:text-blue-400">
+          <span class="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-blue-50/[0.15] text-blue-500 dark:bg-blue-900/30 dark:text-blue-400">
             <Icon name="chart" size="sm" />
           </span>
           {{ t('admin.channelMonitor.title') }}
         </h1>
-        <p class="page-description mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+        <p class="page-description mt-1.5 text-xs surface-muted">
           {{
             getChannelMonitorMode() === 'v3'
               ? t('channelMonitorV3.modeV3Hint')
@@ -54,7 +54,7 @@
 
       <TablePageLayout v-else>
       <template #filters>
-        <p v-if="!activeProbesEnabled" class="mb-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-200" role="status">
+        <p v-if="!activeProbesEnabled" class="mb-3 rounded-lg bg-amber-50/[0.15] p-3 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-200" role="status">
           {{ t('admin.channelMonitor.probesDisabledHint') }}
         </p>
         <MonitorFiltersBar

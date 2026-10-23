@@ -5,17 +5,17 @@
     </h3>
     <div
       v-if="!hasUsers(props.users)"
-      class="flex h-32 items-center justify-center text-sm text-gray-500 dark:text-gray-400"
+      class="flex h-32 items-center justify-center text-sm surface-muted"
     >
       {{ t('payment.admin.noData') }}
     </div>
     <div v-else class="space-y-2">
       <div v-for="[currency, currencyUsers] in sortedUsers(props.users)" :key="currency" class="space-y-2">
-        <p class="text-xs font-semibold text-gray-500 dark:text-gray-400">{{ currency }}</p>
+        <p class="text-xs font-semibold surface-muted">{{ currency }}</p>
         <div
           v-for="(user, idx) in currencyUsers"
           :key="user.user_id"
-          class="flex items-center justify-between rounded-lg px-3 py-2 hover:bg-gray-50 dark:hover:bg-dark-700"
+          class="flex items-center justify-between rounded-lg px-3 py-2 hover:surface-hover"
         >
           <div class="flex items-center gap-3">
             <span
@@ -26,7 +26,7 @@
             >
               {{ idx + 1 }}
             </span>
-            <span class="text-sm text-gray-700 dark:text-gray-300">{{ user.email }}</span>
+            <span class="text-sm surface-muted">{{ user.email }}</span>
           </div>
           <span class="text-sm font-medium text-gray-900 dark:text-white">
             {{ formatMoney(currency, user.amount) }}
@@ -48,10 +48,10 @@ const props = defineProps<{
 }>()
 
 function rankClass(idx: number): string {
-  if (idx === 0) return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-  if (idx === 1) return 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
-  if (idx === 2) return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
-  return 'bg-gray-100 text-gray-500 dark:bg-dark-700 dark:text-gray-400'
+  if (idx === 0) return 'bg-yellow-100/[0.15] text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+  if (idx === 1) return 'surface-inset surface-muted dark:surface-inset'
+  if (idx === 2) return 'bg-amber-100/[0.15] text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+  return 'surface-inset surface-muted dark:surface-inset'
 }
 
 function hasUsers(usersByCurrency: Record<string, TopUserPaymentStats[]>): boolean {

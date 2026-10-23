@@ -7,13 +7,13 @@
       <div class="flex flex-wrap items-center justify-end gap-2">
         <div
           v-if="showSourceToggle"
-          class="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 dark:border-dark-700 dark:bg-dark-800"
+          class="inline-flex rounded-lg border border-gray-200 surface-inset p-0.5 dark:border-dark-700"
         >
           <button
             type="button"
-            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors"
+            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors surface-control"
             :class="source === 'inbound'
-              ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-700 dark:text-white'
+              ? 'surface-field text-gray-900 shadow-sm dark:surface-field dark:text-white'
               : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
             @click="emit('update:source', 'inbound')"
           >
@@ -21,9 +21,9 @@
           </button>
           <button
             type="button"
-            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors"
+            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors surface-control"
             :class="source === 'upstream'
-              ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-700 dark:text-white'
+              ? 'surface-field text-gray-900 shadow-sm dark:surface-field dark:text-white'
               : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
             @click="emit('update:source', 'upstream')"
           >
@@ -31,9 +31,9 @@
           </button>
           <button
             type="button"
-            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors"
+            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors surface-control"
             :class="source === 'path'
-              ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-700 dark:text-white'
+              ? 'surface-field text-gray-900 shadow-sm dark:surface-field dark:text-white'
               : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
             @click="emit('update:source', 'path')"
           >
@@ -43,13 +43,13 @@
 
         <div
           v-if="showMetricToggle"
-          class="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 dark:border-dark-700 dark:bg-dark-800"
+          class="inline-flex rounded-lg border border-gray-200 surface-inset p-0.5 dark:border-dark-700"
         >
           <button
             type="button"
-            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors"
+            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors surface-control"
             :class="metric === 'tokens'
-              ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-700 dark:text-white'
+              ? 'surface-field text-gray-900 shadow-sm dark:surface-field dark:text-white'
               : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
             @click="emit('update:metric', 'tokens')"
           >
@@ -57,9 +57,9 @@
           </button>
           <button
             type="button"
-            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors"
+            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors surface-control"
             :class="metric === 'actual_cost'
-              ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-700 dark:text-white'
+              ? 'surface-field text-gray-900 shadow-sm dark:surface-field dark:text-white'
               : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
             @click="emit('update:metric', 'actual_cost')"
           >
@@ -78,7 +78,7 @@
       <div class="max-h-48 w-full min-w-0 flex-1 overflow-auto">
         <table class="w-full text-xs">
           <thead>
-            <tr class="text-gray-500 dark:text-gray-400">
+            <tr class="surface-muted">
               <th class="pb-2 text-left">{{ t('usage.endpoint') }}</th>
               <th class="pb-2 text-right">{{ t('admin.dashboard.requests') }}</th>
               <th class="pb-2 text-right">{{ t('admin.dashboard.tokens') }}</th>
@@ -90,7 +90,7 @@
             <template v-for="item in displayEndpointStats" :key="item.endpoint">
               <tr
                 class="border-t border-gray-100 transition-colors dark:border-dark-700"
-                :class="enableBreakdown ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-dark-700/40' : ''"
+                :class="enableBreakdown ? 'cursor-pointer hover:surface-hover dark:hover:surface-hover' : ''"
                 @click="enableBreakdown && toggleBreakdown(item.endpoint)"
               >
                 <td class="max-w-[180px] truncate py-1.5 font-medium" :class="enableBreakdown ? 'text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300' : 'text-gray-900 dark:text-white'" :title="item.endpoint">
@@ -100,16 +100,16 @@
                     {{ item.endpoint }}
                   </span>
                 </td>
-                <td class="py-1.5 text-right text-gray-600 dark:text-gray-400">
+                <td class="py-1.5 text-right surface-muted">
                   {{ formatNumber(item.requests) }}
                 </td>
-                <td class="py-1.5 text-right text-gray-600 dark:text-gray-400">
-                  {{ formatTokens(item.total_tokens) }} <span v-if="endpointTokenShare(item.total_tokens)" class="text-gray-400">({{ endpointTokenShare(item.total_tokens) }})</span>
+                <td class="py-1.5 text-right surface-muted">
+                  {{ formatTokens(item.total_tokens) }} <span v-if="endpointTokenShare(item.total_tokens)" class="surface-muted">({{ endpointTokenShare(item.total_tokens) }})</span>
                 </td>
                 <td class="py-1.5 text-right text-green-600 dark:text-green-400">
                   ${{ formatCost(item.actual_cost) }}
                 </td>
-                <td class="py-1.5 text-right text-gray-400 dark:text-gray-500">
+                <td class="py-1.5 text-right surface-muted">
                   ${{ formatCost(item.cost) }}
                 </td>
               </tr>
@@ -125,7 +125,7 @@
         </table>
       </div>
     </div>
-    <div v-else class="flex h-48 items-center justify-center text-sm text-gray-500 dark:text-gray-400">
+    <div v-else class="flex h-48 items-center justify-center text-sm surface-muted">
       {{ t('admin.dashboard.noDataAvailable') }}
     </div>
   </div>

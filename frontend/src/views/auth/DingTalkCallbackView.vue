@@ -5,7 +5,7 @@
         <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
           {{ t('auth.dingtalk.callbackTitle') }}
         </h2>
-        <p class="mt-2 text-sm text-gray-500 dark:text-dark-400">
+        <p class="mt-2 text-sm surface-muted">
           {{ isProcessing ? t('auth.dingtalk.callbackProcessing') : t('auth.dingtalk.callbackHint') }}
         </p>
       </div>
@@ -24,28 +24,28 @@
         >
           <div
             v-if="adoptionRequired && (suggestedDisplayName || suggestedAvatarUrl)"
-            class="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-dark-600 dark:bg-dark-800/60"
+            class="rounded-xl border border-gray-200 surface-inset p-4 dark:border-dark-600"
           >
             <div class="space-y-3">
               <div class="space-y-1">
                 <p class="text-sm font-medium text-gray-900 dark:text-white">
                   {{ t('auth.oauthFlow.profileDetailsTitle', { providerName }) }}
                 </p>
-                <p class="text-xs text-gray-500 dark:text-dark-400">
+                <p class="text-xs surface-muted">
                   {{ t('auth.oauthFlow.profileDetailsDescription', { providerName }) }}
                 </p>
               </div>
 
               <label
                 v-if="suggestedDisplayName"
-                class="flex items-start gap-3 rounded-lg border border-gray-200 bg-white p-3 text-sm dark:border-dark-600 dark:bg-dark-900/50"
+                class="flex items-start gap-3 rounded-lg border border-gray-200 surface-inset p-3 text-sm dark:border-dark-600"
               >
                 <input v-model="adoptDisplayName" type="checkbox" class="mt-1 h-4 w-4" />
                 <span class="space-y-1">
                   <span class="block font-medium text-gray-900 dark:text-white">
                     {{ t('auth.oauthFlow.useDisplayName') }}
                   </span>
-                  <span class="block text-gray-500 dark:text-dark-400">
+                  <span class="block surface-muted">
                     {{ suggestedDisplayName }}
                   </span>
                 </span>
@@ -53,7 +53,7 @@
 
               <label
                 v-if="suggestedAvatarUrl"
-                class="flex items-start gap-3 rounded-lg border border-gray-200 bg-white p-3 text-sm dark:border-dark-600 dark:bg-dark-900/50"
+                class="flex items-start gap-3 rounded-lg border border-gray-200 surface-inset p-3 text-sm dark:border-dark-600"
               >
                 <input v-model="adoptAvatar" type="checkbox" class="mt-1 h-4 w-4" />
                 <img
@@ -65,7 +65,7 @@
                   <span class="block font-medium text-gray-900 dark:text-white">
                     {{ t('auth.oauthFlow.useAvatar') }}
                   </span>
-                  <span class="block break-all text-gray-500 dark:text-dark-400">
+                  <span class="block break-all surface-muted">
                     {{ suggestedAvatarUrl }}
                   </span>
                 </span>
@@ -74,7 +74,7 @@
           </div>
 
           <template v-if="needsInvitation">
-            <p class="text-sm text-gray-700 dark:text-gray-300">
+            <p class="text-sm surface-muted">
               {{ t('auth.dingtalk.invitationRequired') }}
             </p>
             <div>
@@ -97,7 +97,7 @@
           </template>
 
           <template v-else-if="needsAdoptionConfirmation">
-            <p class="text-sm text-gray-700 dark:text-gray-300">
+            <p class="text-sm surface-muted">
               {{ t('auth.oauthFlow.reviewProfileBeforeContinue', { providerName }) }}
             </p>
             <button class="btn btn-primary w-full" :disabled="isSubmitting" @click="handleContinueLogin">
@@ -106,13 +106,13 @@
           </template>
 
           <template v-else-if="needsChooser">
-            <div class="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-dark-600 dark:bg-dark-800/60">
+            <div class="rounded-xl border border-gray-200 surface-inset p-4 dark:border-dark-600">
               <div class="space-y-4">
                 <div class="space-y-1">
                   <p class="text-sm font-medium text-gray-900 dark:text-white">
                     {{ t('auth.oauthFlow.chooseHowToContinue') }}
                   </p>
-                  <p class="text-xs text-gray-500 dark:text-dark-400">
+                  <p class="text-xs surface-muted">
                     {{
                       pendingAccountEmail
                         ? t('auth.oauthFlow.suggestedEmail', { email: pendingAccountEmail })
@@ -142,7 +142,7 @@
           </template>
 
           <template v-else-if="needsCreateAccount">
-            <p class="text-sm text-gray-700 dark:text-gray-300">
+            <p class="text-sm surface-muted">
               {{ t('auth.oauthFlow.createAccountHint') }}
             </p>
             <PendingOAuthCreateAccountForm
@@ -156,7 +156,7 @@
           </template>
 
           <template v-else-if="needsBindLogin">
-            <p class="text-sm text-gray-700 dark:text-gray-300">
+            <p class="text-sm surface-muted">
               {{ t('auth.oauthFlow.bindLoginHint', { providerName }) }}
             </p>
             <div class="space-y-3">
@@ -198,7 +198,7 @@
           </template>
 
           <template v-else-if="needsTotpChallenge">
-            <p class="text-sm text-gray-700 dark:text-gray-300">
+            <p class="text-sm surface-muted">
               {{
                 t('auth.oauthFlow.totpHint', {
                   providerName,

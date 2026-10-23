@@ -1,10 +1,10 @@
 <template>
-  <form class="rounded-xl border border-gray-200 bg-white p-6 dark:border-dark-700 dark:bg-dark-800" @submit.prevent="save">
+  <form class="surface-card rounded-xl border border-gray-200 p-6 dark:border-dark-700" @submit.prevent="save">
     <h2 class="text-base font-semibold text-gray-900 dark:text-white">{{ t('channelMonitorV3.settings.title') }}</h2>
-    <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">{{ t('channelMonitorV3.settings.description') }}</p>
+    <p class="mt-2 text-sm surface-muted">{{ t('channelMonitorV3.settings.description') }}</p>
     <fieldset v-if="draft" class="mt-6" :disabled="saving || loading">
       <legend class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('channelMonitorV3.settings.platformsTitle') }}</legend>
-      <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">{{ t('channelMonitorV3.settings.platformsHint') }}</p>
+      <p class="mt-2 text-sm surface-muted">{{ t('channelMonitorV3.settings.platformsHint') }}</p>
       <div class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <div v-for="platform in CONCRETE_PLATFORM_OPTIONS" :key="platform.value" class="flex items-center gap-3">
           <Toggle :model-value="!draft.disabled_platforms.includes(platform.value)" :aria-label="t('channelMonitorV3.settings.platformToggle', { platform: platform.label })" :data-testid="`v3-platform-${platform.value}`" :disabled="saving || loading" @update:model-value="setPlatform(platform.value, $event)" />
@@ -18,7 +18,7 @@
         <input v-model.number="draft[field.key]" class="input mt-2" type="number" required :min="field.min" :max="field.max" :step="field.step || 1" />
       </label>
     </div>
-    <p v-else class="mt-5 text-sm text-gray-500">{{ loading ? t('common.loading') : t('channelMonitorV3.settings.loadFailed') }}</p>
+    <p v-else class="mt-5 text-sm surface-muted">{{ loading ? t('common.loading') : t('channelMonitorV3.settings.loadFailed') }}</p>
     <div class="mt-6 flex gap-3"><button class="btn btn-primary" type="submit" :disabled="!draft || saving || loading">{{ t('common.save') }}</button><button class="btn btn-secondary" type="button" :disabled="saving || loading" @click="load">{{ t('common.refresh') }}</button></div>
   </form>
 </template>

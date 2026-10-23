@@ -12,22 +12,22 @@
         <EmptyState :title="t('dashboard.noUsageRecords')" :description="t('dashboard.startUsingApi')" />
       </div>
       <div v-else class="space-y-3">
-        <div v-for="log in data" :key="log.id" class="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-gray-50 p-4 transition-colors hover:bg-gray-100 dark:bg-dark-800/50 dark:hover:bg-dark-800">
+        <div v-for="log in data" :key="log.id" class="flex flex-wrap items-center justify-between gap-3 rounded-xl surface-inset p-4 transition-colors hover:surface-hover">
           <div class="flex min-w-0 items-center gap-4">
-            <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-100 dark:bg-primary-900/30">
+            <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-100/[0.15] dark:bg-primary-900/30">
               <Icon name="beaker" size="md" class="text-primary-600 dark:text-primary-400" />
             </div>
             <div class="min-w-0">
               <p class="truncate text-sm font-medium text-gray-900 dark:text-white" :title="log.model">{{ log.model }}</p>
-              <p class="text-xs text-gray-500 dark:text-dark-400">{{ formatDateTime(log.created_at) }}</p>
+              <p class="text-xs surface-muted">{{ formatDateTime(log.created_at) }}</p>
             </div>
           </div>
           <div class="text-right">
             <p class="text-sm font-semibold">
               <span class="text-green-600 dark:text-green-400" :title="t('dashboard.actual')">{{ usageMoney(log.actual_cost) }}</span>
-              <span class="font-normal text-gray-400 dark:text-gray-500" :title="t('dashboard.standard')"> / {{ usageMoney(log.total_cost) }}</span>
+              <span class="font-normal surface-muted" :title="t('dashboard.standard')"> / {{ usageMoney(log.total_cost) }}</span>
             </p>
-            <p class="text-xs text-gray-500 dark:text-dark-400">
+            <p class="text-xs surface-muted">
               {{ requestTokenTotal(log).toLocaleString() }} Token
               <span v-if="requestTokenShare(log, log.input_tokens)">&middot; {{ t('dashboard.input') }} {{ requestTokenShare(log, log.input_tokens) }}</span>
               <span v-if="requestTokenShare(log, log.output_tokens)">&middot; {{ t('dashboard.output') }} {{ requestTokenShare(log, log.output_tokens) }}</span>

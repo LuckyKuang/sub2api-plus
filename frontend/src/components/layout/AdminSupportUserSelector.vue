@@ -13,14 +13,14 @@
   >
     <template #selected="{ option }">
       <span class="flex min-w-0 items-center gap-2">
-        <span class="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-primary-100 text-xs font-semibold text-primary-700 dark:bg-primary-900/40 dark:text-primary-300">
+        <span class="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-primary-100/[0.15] text-xs font-semibold text-primary-700 dark:bg-primary-900/40 dark:text-primary-300">
           {{ optionInitial(option as AccountOption | undefined) }}
         </span>
         <span v-if="!collapsed" class="min-w-0 text-left">
           <span class="block truncate text-xs font-semibold text-gray-800 dark:text-gray-100">
             {{ (option as AccountOption | undefined)?.label ?? t('admin.support.selectorLabel') }}
           </span>
-          <span class="block truncate text-[10px] text-gray-500 dark:text-gray-400">
+          <span class="block truncate text-[10px] surface-muted">
             {{ selectedUserId === actorUserId ? t('admin.support.selfAccount') : t('admin.support.readOnlyTarget') }}
           </span>
         </span>
@@ -29,17 +29,17 @@
 
     <template #option="{ option, selected }">
       <div class="flex min-w-0 flex-1 items-center gap-2">
-        <span class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md bg-gray-100 text-xs font-semibold text-gray-700 dark:bg-dark-700 dark:text-gray-200">
+        <span class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md surface-inset text-xs font-semibold surface-muted">
           {{ optionInitial(option as AccountOption) }}
         </span>
         <span class="min-w-0 flex-1">
           <span class="flex items-center gap-1.5">
             <span class="truncate text-sm font-medium">{{ (option as AccountOption).label }}</span>
-            <span v-if="(option as AccountOption).value === actorUserId" class="rounded bg-primary-50 px-1.5 py-0.5 text-[10px] text-primary-700 dark:bg-primary-900/30 dark:text-primary-300">
+            <span v-if="(option as AccountOption).value === actorUserId" class="rounded bg-primary-50/[0.15] px-1.5 py-0.5 text-[10px] text-primary-700 dark:bg-primary-900/30 dark:text-primary-300">
               {{ t('admin.support.self') }}
             </span>
           </span>
-          <span class="block truncate text-xs text-gray-500 dark:text-gray-400">
+          <span class="block truncate text-xs surface-muted">
             {{ (option as AccountOption).email }} · #{{ (option as AccountOption).value }}
           </span>
         </span>
@@ -150,13 +150,6 @@ onMounted(() => {
 .admin-support-selector :deep(.select-trigger) {
   min-height: 42px;
   padding: 0.45rem 0.55rem;
-  border-color: rgb(229 231 235 / 0.9);
-  background: rgb(249 250 251 / 0.75);
-}
-
-.dark .admin-support-selector :deep(.select-trigger) {
-  border-color: rgb(55 65 81 / 0.9);
-  background: rgb(31 41 55 / 0.55);
 }
 
 .admin-support-selector-collapsed :deep(.select-trigger) {

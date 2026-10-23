@@ -763,9 +763,10 @@ describe('admin UsageTable tooltip', () => {
     })
 
     expect(wrapper.get('[data-testid="first-latency-value"]').text()).toBe('-')
-    expect(wrapper.get('[data-testid="first-latency-value"]').classes()).toContain('text-gray-400')
+    // docs/UI_INTERACTION.md: missing timing remains neutral with readable glass-surface text.
+    expect(wrapper.get('[data-testid="first-latency-value"]').classes()).toContain('surface-muted')
     expect(wrapper.get('[data-testid="latency-bar"]').classes()).toContain('bg-gray-300')
-    expect(wrapper.get('[data-testid="latency-duration"]').classes()).toContain('text-gray-400')
+    expect(wrapper.get('[data-testid="latency-duration"]').classes()).toContain('surface-muted')
     expect(wrapper.get('[data-testid="latency-duration"]').text()).toBe('-')
     expect(wrapper.find('[data-testid="latency-details-trigger"]').exists()).toBe(true)
   })

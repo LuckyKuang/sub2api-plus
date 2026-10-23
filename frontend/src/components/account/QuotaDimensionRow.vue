@@ -71,15 +71,15 @@ function getTimezoneOffsetLabel(tz: string): string {
   <div>
     <!-- Title row (only when global notify is enabled) -->
     <div v-if="quotaNotifyGlobalEnabled" class="flex items-center gap-2 mb-1">
-      <span class="text-xs font-medium text-gray-700 dark:text-gray-300 flex-1 min-w-0">{{ label }}</span>
-      <span v-if="limit && limit > 0" class="text-xs font-medium text-gray-700 dark:text-gray-300 flex-1 min-w-0">{{ t('admin.accounts.quotaNotify.alert') }}</span>
+      <span class="text-xs font-medium flex-1 min-w-0 surface-muted">{{ label }}</span>
+      <span v-if="limit && limit > 0" class="text-xs font-medium flex-1 min-w-0 surface-muted">{{ t('admin.accounts.quotaNotify.alert') }}</span>
     </div>
-    <label v-else class="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1 block">{{ label }}</label>
+    <label v-else class="text-xs font-medium mb-1 block surface-muted">{{ label }}</label>
 
     <!-- Input row -->
     <div class="flex items-center gap-2">
       <div :class="['relative', quotaNotifyGlobalEnabled ? 'flex-1 min-w-0' : 'flex-1']">
-        <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400 text-sm">$</span>
+        <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-sm surface-muted">$</span>
         <input :value="limit" @input="onLimitInput" type="number" min="0" step="0.01" class="input pl-6 py-1.5 text-sm" :placeholder="t('admin.accounts.quotaLimitPlaceholder')" />
       </div>
       <QuotaNotifyToggle
@@ -92,7 +92,7 @@ function getTimezoneOffsetLabel(tz: string): string {
 
     <!-- Reset mode row (daily/weekly only) -->
     <div v-if="hasResetMode" class="mt-1 flex items-center gap-2 flex-wrap">
-      <label class="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{{ t('admin.accounts.quotaResetMode') }}</label>
+      <label class="text-xs whitespace-nowrap surface-muted">{{ t('admin.accounts.quotaResetMode') }}</label>
       <Select
         :model-value="resetMode || 'rolling'"
         @update:model-value="onModeChange"
@@ -104,7 +104,7 @@ function getTimezoneOffsetLabel(tz: string): string {
       <template v-if="resetMode === 'fixed'">
         <!-- Weekly: day of week selector -->
         <template v-if="dim === 'weekly'">
-          <label class="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{{ t('admin.accounts.quotaWeeklyResetDay') }}</label>
+          <label class="text-xs whitespace-nowrap surface-muted">{{ t('admin.accounts.quotaWeeklyResetDay') }}</label>
           <Select
             :model-value="resetDay ?? 1"
             @update:model-value="emit('update:resetDay', Number($event))"
@@ -114,7 +114,7 @@ function getTimezoneOffsetLabel(tz: string): string {
             :options="dayOptions.map(d => ({ value: d.value, label: t('admin.accounts.dayOfWeek.' + d.key) }))"
           />
         </template>
-        <label class="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{{ t('admin.accounts.quotaResetHour') }}</label>
+        <label class="text-xs whitespace-nowrap surface-muted">{{ t('admin.accounts.quotaResetHour') }}</label>
         <Select
           :model-value="resetHour ?? 0"
           @update:model-value="emit('update:resetHour', Number($event))"
@@ -134,7 +134,7 @@ function getTimezoneOffsetLabel(tz: string): string {
           />
         </template>
       </template>
-      <span class="text-[11px] text-gray-500 dark:text-gray-400">
+      <span class="text-[11px] surface-muted">
         <template v-if="resetMode === 'fixed'">{{ hintFixed }}</template>
         <template v-else>{{ hintRolling }}</template>
       </span>

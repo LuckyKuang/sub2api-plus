@@ -7,7 +7,7 @@
       <h2 class="text-lg font-medium text-gray-900 dark:text-white">
         {{ t('profile.avatar.title') }}
       </h2>
-      <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+      <p class="mt-1 text-sm surface-muted">
         {{ t('profile.avatar.description') }}
       </p>
     </div>
@@ -36,7 +36,7 @@
           <p v-else class="text-sm font-medium text-gray-900 dark:text-white">
             {{ displayName }}
           </p>
-          <p class="text-sm text-gray-500 dark:text-gray-400">
+          <p class="text-sm surface-muted">
             {{ t('profile.avatar.uploadHint') }}
           </p>
         </div>

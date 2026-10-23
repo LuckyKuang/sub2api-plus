@@ -31,7 +31,7 @@
         </router-link>
         <VersionBadge v-if="isAdmin" />
       </div>
-    <button v-if="mobileVisible" type="button" class="sidebar-mobile-close btn-ghost btn-icon" :aria-label="t('common.close')" @click="closeMobile"><Icon name="x" size="md" /></button>
+    <button v-if="mobileVisible" type="button" class="sidebar-mobile-close btn-ghost btn-icon surface-control" :aria-label="t('common.close')" @click="closeMobile"><Icon name="x" size="md" /></button>
     </div>
 
     <div class="sidebar-panel shell-surface">
@@ -46,7 +46,7 @@
             <template v-if="item.children?.length">
               <button
                 type="button"
-                class="sidebar-link mb-1 w-full"
+                class="sidebar-link mb-1 w-full surface-control"
                 :class="{
                   'sidebar-link-active': isGroupActive(item) && !isGroupExpanded(item),
                   'sidebar-link-collapsed': sidebarCollapsed
@@ -159,7 +159,7 @@
       <!-- Theme Toggle -->
       <button
         @click="toggleTheme"
-        class="sidebar-link theme-toggle mb-2 w-full"
+        class="sidebar-link theme-toggle mb-2 w-full surface-control"
         :class="{ 'sidebar-link-collapsed': sidebarCollapsed }"
         :title="sidebarCollapsed ? (isDark ? t('nav.lightMode') : t('nav.darkMode')) : undefined"
       >
@@ -173,7 +173,7 @@
       <!-- Collapse Button -->
       <button v-if="isDesktop"
         @click="toggleSidebar"
-        class="sidebar-link w-full"
+        class="sidebar-link w-full surface-control"
         :class="{ 'sidebar-link-collapsed': sidebarCollapsed }"
         :title="sidebarCollapsed ? t('nav.expand') : t('nav.collapse')"
       >
@@ -189,7 +189,7 @@
   <transition name="fade">
     <div
       v-if="mobileVisible"
-      class="sidebar-backdrop fixed inset-0 z-[35] bg-black/35 lg:hidden"
+      class="sidebar-backdrop fixed inset-0 z-[35] lg:hidden surface-overlay"
       aria-hidden="true"
       @click="closeMobile"
     ></div>

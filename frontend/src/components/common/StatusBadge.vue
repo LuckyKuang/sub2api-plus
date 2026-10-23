@@ -6,7 +6,7 @@
         variantClass
       ]"
     ></span>
-    <span class="text-sm text-gray-700 dark:text-gray-300">
+    <span class="text-sm surface-muted">
       {{ label }}
     </span>
   </div>

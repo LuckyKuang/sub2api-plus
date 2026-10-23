@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { ref } from 'vue'
 
 import DateRangePicker from '../DateRangePicker.vue'
@@ -33,7 +33,36 @@ const formatLocalDate = (date: Date): string => {
   return `${year}-${month}-${day}`
 }
 
+enableAutoUnmount(afterEach)
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
+
 describe('DateRangePicker', () => {
+  // docs/UI_INTERACTION.md: retain the anchor when it fits; otherwise keep the
+  // expanded panel 12px from the viewport edge without applying date changes.
+  it('keeps the panel within a narrow viewport and repositions on resize', async () => {
+    vi.stubGlobal('innerWidth', 1280)
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      return { left: 96, width: this.classList.contains('date-picker-dropdown') ? 320 : 200 } as DOMRect
+    })
+    const wrapper = mount(DateRangePicker, {
+      props: { startDate: '2026-10-01', endDate: '2026-10-22' },
+      global: { stubs: { Icon: true } },
+    })
+    await wrapper.get('.date-picker-trigger').trigger('click')
+    await flushPromises()
+    expect(Number.parseFloat(wrapper.get<HTMLElement>('.date-picker-dropdown').element.style.left || '0')).toBe(0)
+
+    vi.stubGlobal('innerWidth', 390)
+    window.dispatchEvent(new Event('resize'))
+    await flushPromises()
+    // The former fixed alignment ended at x=416. A 320px panel must instead
+    // start at x=58 and end at x=378 in this 390px viewport.
+    expect(Number.parseFloat(wrapper.get<HTMLElement>('.date-picker-dropdown').element.style.left || '0')).toBe(-38)
+    expect(wrapper.emitted('change')).toBeUndefined()
+    expect(wrapper.emitted('update:startDate')).toBeUndefined()
+    expect(wrapper.emitted('update:endDate')).toBeUndefined()
+  })
+
   it('uses last 24 hours as the default recognized preset', () => {
     const now = new Date()
     const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000)

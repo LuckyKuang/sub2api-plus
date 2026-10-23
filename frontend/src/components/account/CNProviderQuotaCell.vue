@@ -8,7 +8,7 @@
          复用账号页 UsageProgressBar：同阈值配色、同倒计时格式。 -->
     <div v-if="data?.success && data.tiers?.length" class="space-y-1">
       <template v-for="tier in data.tiers" :key="tier.window">
-        <div v-if="tier.unlimited" data-test="cn-provider-quota-unlimited" class="flex gap-2 text-xs text-gray-500 dark:text-gray-400">
+        <div v-if="tier.unlimited" data-test="cn-provider-quota-unlimited" class="flex gap-2 text-xs surface-muted">
           <span>{{ windowLabel(tier.window) }}</span>
           <span>{{ t('admin.accounts.cnProviders.unlimited') }}</span>
         </div>
@@ -31,7 +31,7 @@
       <button
         type="button"
         data-test="cn-provider-quota-probe"
-        class="inline-flex items-center gap-0.5 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-medium leading-4 text-blue-600 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-blue-400 dark:hover:bg-blue-900/30"
+        class="inline-flex items-center gap-0.5 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-medium leading-4 text-blue-600 transition-colors hover:bg-blue-50/25 disabled:cursor-not-allowed disabled:opacity-50 dark:text-blue-400 dark:hover:bg-blue-900/30 surface-control"
         :disabled="loading"
         :title="t('admin.accounts.cnProviders.probeTooltip')"
         @click="handleProbe()"

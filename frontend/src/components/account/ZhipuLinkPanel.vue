@@ -3,25 +3,25 @@
     <div class="flex items-start justify-between gap-3">
       <div>
         <p class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.accounts.oauth.zhipu.title') }}</p>
-        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.oauth.zhipu.desc') }}</p>
+        <p class="mt-1 text-xs surface-muted">{{ t('admin.accounts.oauth.zhipu.desc') }}</p>
       </div>
       <span
         v-if="polling"
         data-testid="zhipu-link-polling"
-        class="shrink-0 rounded bg-amber-50 px-2 py-0.5 text-xs text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
+        class="shrink-0 rounded bg-amber-50/[0.15] px-2 py-0.5 text-xs text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
       >
         {{ t('admin.accounts.oauth.zhipu.waiting') }}
       </span>
       <span
         v-else-if="ready"
         data-testid="zhipu-link-ready"
-        class="shrink-0 rounded bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"
+        class="shrink-0 rounded bg-emerald-50/[0.15] px-2 py-0.5 text-xs text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"
       >
         {{ ready.user.user_name || ready.user.user_email || ready.user.user_id }}
       </span>
     </div>
 
-    <p v-if="!capabilities?.enabled" class="mt-3 text-xs text-gray-500 dark:text-gray-400">
+    <p v-if="!capabilities?.enabled" class="mt-3 text-xs surface-muted">
       {{ t('admin.accounts.oauth.zhipu.unavailable') }}
     </p>
 
@@ -80,14 +80,14 @@
             {{ t('admin.accounts.oauth.zhipu.cancel') }}
           </button>
         </div>
-        <p class="break-all rounded bg-gray-50 p-2 font-mono text-[11px] leading-relaxed text-gray-600 dark:bg-dark-700 dark:text-gray-300">
+        <p class="break-all rounded surface-inset p-2 font-mono text-[11px] leading-relaxed surface-muted">
           {{ session.authorize_url }}
         </p>
         <p class="input-hint">{{ t('admin.accounts.oauth.zhipu.browserHint') }}</p>
       </div>
 
       <div v-if="!ready" class="mt-3 space-y-2">
-        <button type="button" class="text-xs text-indigo-600 hover:underline dark:text-indigo-400" @click="showFallback = !showFallback">
+        <button type="button" class="text-xs text-indigo-600 hover:underline dark:text-indigo-400 surface-control" @click="showFallback = !showFallback">
           {{ showFallback ? t('admin.accounts.oauth.zhipu.hideFallback') : t('admin.accounts.oauth.zhipu.showFallback') }}
         </button>
         <div v-if="showFallback" class="space-y-2">

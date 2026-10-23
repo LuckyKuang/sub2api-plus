@@ -45,7 +45,7 @@
         </div>
         <button
           type="button"
-          class="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-sm font-medium text-primary-600 transition-colors hover:bg-primary-50 hover:text-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500/30 dark:text-primary-400 dark:hover:bg-primary-900/20 dark:hover:text-primary-300"
+          class="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-sm font-medium text-primary-600 transition-colors hover:bg-primary-50/25 hover:text-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500/30 dark:text-primary-400 dark:hover:bg-primary-900/20 dark:hover:text-primary-300 surface-control"
           @click="addGroup"
         >
           <Icon name="plus" size="sm" />
@@ -57,7 +57,7 @@
         <div
           v-for="group in mappings"
           :key="group.id"
-          class="space-y-3 rounded-lg border border-gray-200 bg-gray-50/40 p-3 dark:border-dark-600 dark:bg-dark-800/40"
+          class="space-y-3 rounded-lg border border-gray-200 surface-inset p-3 dark:border-dark-600"
         >
           <div
             class="grid grid-cols-1 items-start gap-3 md:grid-cols-[minmax(0,1fr)_1.25rem_minmax(0,1fr)_2.75rem]"
@@ -107,7 +107,7 @@
 
             <button
               type="button"
-              class="flex h-11 w-11 items-center justify-center self-end rounded-lg text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/30 dark:hover:bg-red-900/20 dark:hover:text-red-400"
+              class="flex h-11 w-11 items-center justify-center self-end rounded-lg transition-colors hover:bg-red-50/25 hover:text-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/30 dark:hover:bg-red-900/20 dark:hover:text-red-400 surface-control surface-muted"
               :title="t('admin.groups.form.removeReasoningEffortMapping')"
               :aria-label="t('admin.groups.form.removeReasoningEffortMapping')"
               @click="removeGroup(group.id)"
@@ -153,7 +153,7 @@
               </p>
             </div>
 
-            <div class="hidden h-11 items-center justify-center self-end text-gray-400 md:flex dark:text-dark-400">
+            <div class="hidden h-11 items-center justify-center self-end md:flex surface-muted">
               <Icon name="arrowRight" size="sm" />
             </div>
 
@@ -183,7 +183,7 @@
 
             <button
               type="button"
-              class="flex h-11 w-11 items-center justify-center self-end rounded-lg text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/30 dark:hover:bg-red-900/20 dark:hover:text-red-400"
+              class="flex h-11 w-11 items-center justify-center self-end rounded-lg transition-colors hover:bg-red-50/25 hover:text-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/30 dark:hover:bg-red-900/20 dark:hover:text-red-400 surface-control surface-muted"
               :title="t('admin.groups.form.removeReasoningEffortPair')"
               :aria-label="t('admin.groups.form.removeReasoningEffortPair')"
               @click="removePair(group.id, pair.id)"
@@ -194,7 +194,7 @@
 
           <button
             type="button"
-            class="inline-flex min-h-9 items-center gap-1.5 text-sm font-medium text-primary-600 transition-colors hover:text-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500/30 dark:text-primary-400 dark:hover:text-primary-300"
+            class="inline-flex min-h-9 items-center gap-1.5 text-sm font-medium text-primary-600 transition-colors hover:text-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500/30 dark:text-primary-400 dark:hover:text-primary-300 surface-control"
             @click="addPair(group.id)"
           >
             <Icon name="plus" size="sm" />

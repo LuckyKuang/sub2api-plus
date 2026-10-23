@@ -1,7 +1,7 @@
 <template>
   <AppLayout>
     <div class="space-y-6">
-      <div class="flex flex-wrap items-center justify-between gap-3 text-xs text-gray-500">
+      <div class="flex flex-wrap items-center justify-between gap-3 text-xs surface-muted">
         <span v-if="stats">{{ t('inspection.timezone', { zone: stats.timezone || 'UTC' }) }}</span>
         <RefreshControl :state="overviewRefresh" />
         <button v-if="!stats && overviewRefresh.error.value" class="btn btn-secondary" @click="refreshAll">{{ t('inspection.retry') }}</button>

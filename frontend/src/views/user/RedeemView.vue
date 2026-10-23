@@ -5,7 +5,7 @@
       <div class="card overflow-hidden">
         <div class="bg-gradient-to-br from-primary-500 to-primary-600 px-6 py-8 text-center">
           <div
-            class="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm"
+            class="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl surface-inset backdrop-blur-sm"
           >
             <Icon name="creditCard" size="xl" class="text-white" />
           </div>
@@ -29,7 +29,7 @@
               </label>
               <div class="relative mt-1">
                 <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
-                  <Icon name="gift" size="md" class="text-gray-400 dark:text-dark-500" />
+                  <Icon name="gift" size="md" class="surface-muted" />
                 </div>
                 <input
                   id="code"
@@ -82,12 +82,12 @@
       <transition name="fade">
         <div
           v-if="redeemResult"
-          class="card border-emerald-200 bg-emerald-50 dark:border-emerald-800/50 dark:bg-emerald-900/20"
+          class="card border-emerald-200 bg-emerald-50/[0.15] dark:border-emerald-800/50 dark:bg-emerald-900/20"
         >
           <div class="p-6">
             <div class="flex items-start gap-4">
               <div
-                class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-900/30"
+                class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-emerald-100/[0.15] dark:bg-emerald-900/30"
               >
                 <Icon name="checkCircle" size="md" class="text-emerald-600 dark:text-emerald-400" />
               </div>
@@ -136,12 +136,12 @@
       <transition name="fade">
         <div
           v-if="errorMessage"
-          class="card border-red-200 bg-red-50 dark:border-red-800/50 dark:bg-red-900/20"
+          class="card border-red-200 bg-red-50/[0.15] dark:border-red-800/50 dark:bg-red-900/20"
         >
           <div class="p-6">
             <div class="flex items-start gap-4">
               <div
-                class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-red-100 dark:bg-red-900/30"
+                class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-red-100/[0.15] dark:bg-red-900/30"
               >
                 <Icon
                   name="exclamationCircle"
@@ -164,12 +164,12 @@
 
       <!-- Information Card -->
       <div
-        class="card border-primary-200 bg-primary-50 dark:border-primary-800/50 dark:bg-primary-900/20"
+        class="card border-primary-200 bg-primary-50/[0.15] dark:border-primary-800/50 dark:bg-primary-900/20"
       >
         <div class="p-6">
           <div class="flex items-start gap-4">
             <div
-              class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-primary-100 dark:bg-primary-900/30"
+              class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-primary-100/[0.15] dark:bg-primary-900/30"
             >
               <Icon name="infoCircle" size="md" class="text-primary-600 dark:text-primary-400" />
             </div>
@@ -230,7 +230,7 @@
             <div
               v-for="item in history"
               :key="item.id"
-              class="flex items-center justify-between rounded-xl bg-gray-50 p-4 dark:bg-dark-800"
+              class="flex items-center justify-between rounded-xl surface-inset p-4"
             >
               <div class="flex items-center gap-4">
                 <div
@@ -238,13 +238,13 @@
                     'flex h-10 w-10 items-center justify-center rounded-xl',
                     isBalanceType(item.type)
                       ? item.value >= 0
-                        ? 'bg-emerald-100 dark:bg-emerald-900/30'
-                        : 'bg-red-100 dark:bg-red-900/30'
+                        ? 'bg-emerald-100/[0.15] dark:bg-emerald-900/30'
+                        : 'bg-red-100/[0.15] dark:bg-red-900/30'
                       : isSubscriptionType(item.type)
-                        ? 'bg-purple-100 dark:bg-purple-900/30'
+                        ? 'bg-purple-100/[0.15] dark:bg-purple-900/30'
                         : item.value >= 0
-                          ? 'bg-blue-100 dark:bg-blue-900/30'
-                          : 'bg-orange-100 dark:bg-orange-900/30'
+                          ? 'bg-blue-100/[0.15] dark:bg-blue-900/30'
+                          : 'bg-orange-100/[0.15] dark:bg-orange-900/30'
                   ]"
                 >
                   <!-- 余额类型图标 -->
@@ -281,7 +281,7 @@
                   <p class="text-sm font-medium text-gray-900 dark:text-white">
                     {{ getHistoryItemTitle(item) }}
                   </p>
-                  <p class="text-xs text-gray-500 dark:text-dark-400">
+                  <p class="text-xs surface-muted">
                     {{ formatDateTime(item.used_at) }}
                   </p>
                 </div>
@@ -305,17 +305,17 @@
                 </p>
                 <p
                   v-if="!isAdminAdjustment(item.type)"
-                  class="font-mono text-xs text-gray-400 dark:text-dark-500"
+                  class="font-mono text-xs surface-muted"
                 >
                   {{ item.code.slice(0, 8) }}...
                 </p>
-                <p v-else class="text-xs text-gray-400 dark:text-dark-500">
+                <p v-else class="text-xs surface-muted">
                   {{ t('redeem.adminAdjustment') }}
                 </p>
                 <!-- Display notes for admin adjustments -->
                 <p
                   v-if="item.notes"
-                  class="mt-1 text-xs text-gray-500 dark:text-dark-400 italic max-w-[200px] truncate"
+                  class="mt-1 text-xs italic max-w-[200px] truncate surface-muted"
                   :title="item.notes"
                 >
                   {{ item.notes }}
@@ -327,11 +327,11 @@
           <!-- Empty State -->
           <div v-else class="empty-state py-8">
             <div
-              class="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gray-100 dark:bg-dark-800"
+              class="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl surface-inset"
             >
-              <Icon name="clock" size="xl" class="text-gray-400 dark:text-dark-500" />
+              <Icon name="clock" size="xl" class="surface-muted" />
             </div>
-            <p class="text-sm text-gray-500 dark:text-dark-400">
+            <p class="text-sm surface-muted">
               {{ t('redeem.historyWillAppear') }}
             </p>
           </div>

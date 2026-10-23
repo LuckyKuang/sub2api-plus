@@ -7,7 +7,7 @@
       class="!hidden w-full table-fixed border-collapse text-sm lg:!table"
     >
       <thead>
-        <tr class="border-b border-gray-100 bg-gray-50/50 text-xs font-medium uppercase tracking-wide text-gray-500 dark:border-dark-700 dark:bg-dark-800/50 dark:text-gray-400">
+        <tr class="border-b border-gray-100 surface-inset text-xs font-medium uppercase tracking-wide dark:border-dark-700 surface-muted">
           <th class="w-[180px] px-4 py-3 text-center">{{ columns.name }}</th>
           <th class="w-[200px] px-4 py-3 text-left">{{ columns.description }}</th>
           <th class="w-[140px] px-4 py-3 text-left">{{ columns.platform }}</th>
@@ -26,7 +26,7 @@
         <tr>
           <td colspan="5" class="py-12 text-center">
             <Icon name="inbox" size="xl" class="mx-auto mb-3 h-12 w-12 text-gray-400" />
-            <p class="text-sm text-gray-500 dark:text-gray-400">{{ emptyLabel }}</p>
+            <p class="text-sm surface-muted">{{ emptyLabel }}</p>
           </td>
         </tr>
       </tbody>
@@ -41,7 +41,7 @@
         <tr
           v-for="(section, secIdx) in channel.platforms"
           :key="`${channel.name}-${section.platform}`"
-          class="transition-colors hover:bg-gray-50/40 dark:hover:bg-dark-800/40"
+          class="transition-colors hover:surface-hover"
           :class="{ 'border-t border-gray-100/70 dark:border-dark-700/50': secIdx > 0 }"
         >
           <!-- 渠道名：只在第一行渲染并用 rowspan 纵向合并 -->
@@ -57,10 +57,10 @@
           <td
             v-if="secIdx === 0"
             :rowspan="channel.platforms.length"
-            class="px-4 py-3 align-middle text-xs text-gray-500 dark:text-gray-400"
+            class="px-4 py-3 align-middle text-xs surface-muted"
           >
             <template v-if="channel.description">{{ channel.description }}</template>
-            <span v-else class="text-gray-400">-</span>
+            <span v-else class="surface-muted">-</span>
           </td>
 
           <!-- 平台徽章 -->
@@ -105,7 +105,7 @@
                   />
                   <span
                     v-if="hasPeakRate(g)"
-                    class="inline-flex items-center gap-1 rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
+                    class="inline-flex items-center gap-1 rounded-md bg-amber-50/[0.15] px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
                     :title="peakRateTitle(g)"
                   >
                     <Icon name="clock" size="xs" class="h-3 w-3" />
@@ -118,7 +118,7 @@
                 class="flex flex-wrap items-center gap-1.5"
               >
                 <span
-                  class="inline-flex items-center gap-0.5 text-[10px] font-medium uppercase text-gray-500 dark:text-gray-400"
+                  class="inline-flex items-center gap-0.5 text-[10px] font-medium uppercase surface-muted"
                   :title="t('availableChannels.publicTooltip')"
                 >
                   <Icon name="globe" size="xs" class="h-3 w-3" />
@@ -139,7 +139,7 @@
                   />
                   <span
                     v-if="hasPeakRate(g)"
-                    class="inline-flex items-center gap-1 rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
+                    class="inline-flex items-center gap-1 rounded-md bg-amber-50/[0.15] px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
                     :title="peakRateTitle(g)"
                   >
                     <Icon name="clock" size="xs" class="h-3 w-3" />
@@ -147,7 +147,7 @@
                   </span>
                 </div>
               </div>
-              <span v-if="section.groups.length === 0" class="text-xs text-gray-400">-</span>
+              <span v-if="section.groups.length === 0" class="text-xs surface-muted">-</span>
             </div>
           </td>
 
@@ -163,7 +163,7 @@
                 :show-platform="false"
                 :platform-hint="section.platform"
               />
-              <span v-if="section.supported_models.length === 0" class="text-xs text-gray-400">
+              <span v-if="section.supported_models.length === 0" class="text-xs surface-muted">
                 {{ noModelsLabel }}
               </span>
             </div>
@@ -178,7 +178,7 @@
       </div>
       <div v-else-if="rows.length === 0" data-testid="mobile-empty" class="py-12 text-center">
         <Icon name="inbox" size="xl" class="mx-auto mb-3 h-12 w-12 text-gray-400" />
-        <p class="text-sm text-gray-500 dark:text-gray-400">{{ emptyLabel }}</p>
+        <p class="text-sm surface-muted">{{ emptyLabel }}</p>
       </div>
       <section
         v-else
@@ -190,7 +190,7 @@
           <h3 class="break-words text-sm font-semibold text-gray-900 dark:text-white">
             {{ channel.name }}
           </h3>
-          <p class="mt-1 break-words text-xs leading-5 text-gray-500 dark:text-gray-400">
+          <p class="mt-1 break-words text-xs leading-5 surface-muted">
             {{ channel.description || '-' }}
           </p>
         </header>
@@ -213,7 +213,7 @@
 
             <dl class="mt-3 space-y-3">
               <div class="min-w-0">
-                <dt class="mb-1.5 text-[11px] font-medium text-gray-500 dark:text-gray-400">
+                <dt class="mb-1.5 text-[11px] font-medium surface-muted">
                   {{ columns.groups }}
                 </dt>
                 <dd class="flex min-w-0 flex-col gap-2">
@@ -244,7 +244,7 @@
                       />
                       <span
                         v-if="hasPeakRate(g)"
-                        class="inline-flex items-center gap-1 rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
+                        class="inline-flex items-center gap-1 rounded-md bg-amber-50/[0.15] px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
                         :title="peakRateTitle(g)"
                       >
                         <Icon name="clock" size="xs" class="h-3 w-3" />
@@ -257,7 +257,7 @@
                     class="flex min-w-0 flex-wrap items-center gap-1.5"
                   >
                     <span
-                      class="inline-flex items-center gap-0.5 text-[10px] font-medium uppercase text-gray-500 dark:text-gray-400"
+                      class="inline-flex items-center gap-0.5 text-[10px] font-medium uppercase surface-muted"
                       :title="t('availableChannels.publicTooltip')"
                     >
                       <Icon name="globe" size="xs" class="h-3 w-3" />
@@ -279,7 +279,7 @@
                       />
                       <span
                         v-if="hasPeakRate(g)"
-                        class="inline-flex items-center gap-1 rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
+                        class="inline-flex items-center gap-1 rounded-md bg-amber-50/[0.15] px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
                         :title="peakRateTitle(g)"
                       >
                         <Icon name="clock" size="xs" class="h-3 w-3" />
@@ -287,12 +287,12 @@
                       </span>
                     </div>
                   </div>
-                  <span v-if="section.groups.length === 0" class="text-xs text-gray-400">-</span>
+                  <span v-if="section.groups.length === 0" class="text-xs surface-muted">-</span>
                 </dd>
               </div>
 
               <div class="min-w-0">
-                <dt class="mb-1.5 text-[11px] font-medium text-gray-500 dark:text-gray-400">
+                <dt class="mb-1.5 text-[11px] font-medium surface-muted">
                   {{ columns.supportedModels }}
                 </dt>
                 <dd class="flex min-w-0 flex-wrap gap-1">
@@ -306,7 +306,7 @@
                     :show-platform="false"
                     :platform-hint="section.platform"
                   />
-                  <span v-if="section.supported_models.length === 0" class="text-xs text-gray-400">
+                  <span v-if="section.supported_models.length === 0" class="text-xs surface-muted">
                     {{ noModelsLabel }}
                   </span>
                 </dd>

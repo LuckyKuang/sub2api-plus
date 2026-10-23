@@ -3,15 +3,15 @@
     <!-- Today Revenue -->
     <div class="card p-4">
       <div class="flex items-center gap-3">
-        <div class="rounded-lg bg-green-100 p-2 dark:bg-green-900/30">
+        <div class="rounded-lg bg-green-100/[0.15] p-2 dark:bg-green-900/30">
           <Icon name="dollar" size="md" class="text-green-600 dark:text-green-400" :stroke-width="2" />
         </div>
         <div>
-          <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('payment.admin.todayRevenue') }}</p>
+          <p class="text-xs font-medium surface-muted">{{ t('payment.admin.todayRevenue') }}</p>
           <p v-for="[currency, amount] in sortedAmounts(stats.today_amount)" :key="currency" class="text-xl font-bold text-gray-900 dark:text-white">
             {{ formatMoney(currency, amount) }}
           </p>
-          <p class="text-xs text-gray-500 dark:text-gray-400">
+          <p class="text-xs surface-muted">
             {{ stats.today_count }} {{ t('payment.admin.orders') }}
           </p>
         </div>
@@ -21,15 +21,15 @@
     <!-- Total Revenue -->
     <div class="card p-4">
       <div class="flex items-center gap-3">
-        <div class="rounded-lg bg-blue-100 p-2 dark:bg-blue-900/30">
+        <div class="rounded-lg bg-blue-100/[0.15] p-2 dark:bg-blue-900/30">
           <Icon name="creditCard" size="md" class="text-blue-600 dark:text-blue-400" :stroke-width="2" />
         </div>
         <div>
-          <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('payment.admin.totalRevenue') }}</p>
+          <p class="text-xs font-medium surface-muted">{{ t('payment.admin.totalRevenue') }}</p>
           <p v-for="[currency, amount] in sortedAmounts(stats.total_amount)" :key="currency" class="text-xl font-bold text-gray-900 dark:text-white">
             {{ formatMoney(currency, amount) }}
           </p>
-          <p class="text-xs text-gray-500 dark:text-gray-400">
+          <p class="text-xs surface-muted">
             {{ stats.total_count }} {{ t('payment.admin.orders') }}
           </p>
         </div>
@@ -39,11 +39,11 @@
     <!-- Today Orders -->
     <div class="card p-4">
       <div class="flex items-center gap-3">
-        <div class="rounded-lg bg-purple-100 p-2 dark:bg-purple-900/30">
+        <div class="rounded-lg bg-purple-100/[0.15] p-2 dark:bg-purple-900/30">
           <Icon name="chart" size="md" class="text-purple-600 dark:text-purple-400" :stroke-width="2" />
         </div>
         <div>
-          <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('payment.admin.todayOrders') }}</p>
+          <p class="text-xs font-medium surface-muted">{{ t('payment.admin.todayOrders') }}</p>
           <p class="text-xl font-bold text-gray-900 dark:text-white">{{ stats.today_count }}</p>
         </div>
       </div>
@@ -52,11 +52,11 @@
     <!-- Average Amount -->
     <div class="card p-4">
       <div class="flex items-center gap-3">
-        <div class="rounded-lg bg-amber-100 p-2 dark:bg-amber-900/30">
+        <div class="rounded-lg bg-amber-100/[0.15] p-2 dark:bg-amber-900/30">
           <Icon name="chart" size="md" class="text-amber-600 dark:text-amber-400" :stroke-width="2" />
         </div>
         <div>
-          <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('payment.admin.avgAmount') }}</p>
+          <p class="text-xs font-medium surface-muted">{{ t('payment.admin.avgAmount') }}</p>
           <p v-for="[currency, amount] in sortedAmounts(stats.avg_amount)" :key="currency" class="text-xl font-bold text-gray-900 dark:text-white">
             {{ formatMoney(currency, amount) }}
           </p>

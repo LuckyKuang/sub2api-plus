@@ -13,6 +13,7 @@ import {
   type ReleaseInfo
 } from '@/api/admin/system'
 import { getPublicSettings as fetchPublicSettingsAPI } from '@/api/auth'
+import { defaultConsoleAppearance, type ConsoleAppearance } from '@/types/appearance'
 
 export const useAppStore = defineStore('app', () => {
   // ==================== State ====================
@@ -33,6 +34,8 @@ export const useAppStore = defineStore('app', () => {
   const apiBaseUrl = ref<string>('')
   const docUrl = ref<string>('')
   const cachedPublicSettings = ref<PublicSettings | null>(null)
+  const consoleAppearancePreview = ref<ConsoleAppearance | null>(null)
+  const consoleAppearance = ref<ConsoleAppearance>(defaultConsoleAppearance())
   let publicSettingsRequest: Promise<PublicSettings | null> | null = null
   let publicSettingsRequestId = 0
 
@@ -327,6 +330,7 @@ export const useAppStore = defineStore('app', () => {
       window.__APP_CONFIG__ = { ...config }
     }
     cachedPublicSettings.value = config
+    consoleAppearance.value = { ...(config.console_appearance ?? defaultConsoleAppearance()) }
     siteName.value = config.site_name || 'Sub2API Plus'
     siteLogo.value = config.site_logo || ''
     siteVersion.value = config.version || ''
@@ -334,6 +338,17 @@ export const useAppStore = defineStore('app', () => {
     apiBaseUrl.value = config.api_base_url || ''
     docUrl.value = config.doc_url || ''
     publicSettingsLoaded.value = true
+  }
+
+  function applyConsoleAppearance(appearance: ConsoleAppearance): void {
+    // A public-settings request started before this save must not restore its
+    // older appearance when it eventually completes.
+    publicSettingsRequestId++
+    publicSettingsRequest = null
+    publicSettingsLoading.value = false
+    consoleAppearance.value = { ...appearance }
+    if (cachedPublicSettings.value) cachedPublicSettings.value = { ...cachedPublicSettings.value, console_appearance: { ...appearance } }
+    if (typeof window !== 'undefined' && window.__APP_CONFIG__) window.__APP_CONFIG__ = { ...window.__APP_CONFIG__, console_appearance: { ...appearance } }
   }
 
   /**
@@ -493,6 +508,9 @@ export const useAppStore = defineStore('app', () => {
     apiBaseUrl,
     docUrl,
     cachedPublicSettings,
+    consoleAppearancePreview,
+    consoleAppearance,
+    applyConsoleAppearance,
 
     // Version state
     versionLoaded,

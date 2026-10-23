@@ -7,7 +7,7 @@
   >
     <div class="space-y-4">
       <!-- No Group Assigned Warning -->
-      <div v-if="!platform" class="flex items-start gap-3 p-4 rounded-lg bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800">
+      <div v-if="!platform" class="flex items-start gap-3 p-4 rounded-lg bg-yellow-50/[0.15] dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800">
         <svg class="w-5 h-5 text-yellow-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
         </svg>
@@ -24,7 +24,7 @@
       <!-- Platform-specific content -->
       <template v-else>
         <!-- Description -->
-        <p class="text-sm text-gray-600 dark:text-gray-400">
+        <p class="text-sm surface-muted">
           {{ platformDescription }}
         </p>
 
@@ -51,7 +51,7 @@
           </nav>
         </div>
 
-        <p v-if="platform === 'openai' && (activeClientTab === 'codex' || activeClientTab === 'codex-ws')" class="text-xs text-gray-500 dark:text-gray-400" data-testid="codex-transport-hint">
+        <p v-if="platform === 'openai' && (activeClientTab === 'codex' || activeClientTab === 'codex-ws')" class="text-xs surface-muted" data-testid="codex-transport-hint">
           {{ t(activeClientTab === 'codex-ws' ? 'keys.useKeyModal.openai.wsTransportHint' : 'keys.useKeyModal.openai.httpTransportHint') }}
         </p>
 
@@ -64,12 +64,12 @@
             <p class="text-sm font-medium text-gray-900 dark:text-white">
               {{ t('keys.useKeyModal.openai.authModeTitle') }}
             </p>
-            <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-0.5 text-xs surface-muted">
               {{ t('keys.useKeyModal.openai.authModeDescription') }}
             </p>
           </div>
           <div
-            class="grid grid-cols-2 gap-1 rounded-lg bg-gray-100 p-1 dark:bg-dark-700"
+            class="grid grid-cols-2 gap-1 rounded-lg surface-inset p-1"
             role="radiogroup"
             :aria-label="t('keys.useKeyModal.openai.authModeTitle')"
           >
@@ -81,7 +81,7 @@
               :class="[
                 'rounded-md px-3 py-2 text-sm font-medium transition-colors',
                 codexAuthMode === 'legacy'
-                  ? 'bg-white text-primary-700 shadow-sm dark:bg-dark-800 dark:text-primary-300'
+                  ? 'surface-inset text-primary-700 shadow-sm dark:surface-inset dark:text-primary-300'
                   : 'text-gray-600 hover:text-gray-900 dark:text-dark-300 dark:hover:text-white'
               ]"
               @click="codexAuthMode = 'legacy'"
@@ -96,7 +96,7 @@
               :class="[
                 'rounded-md px-3 py-2 text-sm font-medium transition-colors',
                 codexAuthMode === 'api-key'
-                  ? 'bg-white text-primary-700 shadow-sm dark:bg-dark-800 dark:text-primary-300'
+                  ? 'surface-inset text-primary-700 shadow-sm dark:surface-inset dark:text-primary-300'
                   : 'text-gray-600 hover:text-gray-900 dark:text-dark-300 dark:hover:text-white'
               ]"
               @click="codexAuthMode = 'api-key'"
@@ -107,7 +107,7 @@
           <div
             v-if="codexAuthMode === 'api-key'"
             data-testid="codex-api-key-restart-notice"
-            class="mt-3 flex items-start gap-2 border-l-2 border-amber-400 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800 dark:border-amber-500 dark:bg-amber-950/30 dark:text-amber-200"
+            class="mt-3 flex items-start gap-2 border-l-2 border-amber-400 bg-amber-50/[0.15] px-3 py-2 text-xs leading-5 text-amber-800 dark:border-amber-500 dark:bg-amber-950/30 dark:text-amber-200"
           >
             <Icon name="exclamationCircle" size="sm" class="mt-0.5 flex-shrink-0" />
             <p>{{ t('keys.useKeyModal.openai.authModeApiKeyRestartNotice') }}</p>
@@ -149,17 +149,17 @@
               <Icon name="exclamationCircle" size="sm" class="flex-shrink-0" />
               {{ file.hint }}
             </p>
-            <div class="bg-gray-900 dark:bg-dark-900 rounded-xl overflow-hidden">
+            <div class="surface-inset rounded-xl overflow-hidden">
               <!-- Code Header -->
-              <div class="flex items-center justify-between px-4 py-2 bg-gray-800 dark:bg-dark-800 border-b border-gray-700 dark:border-dark-700">
-                <span class="min-w-0 truncate text-xs text-gray-400 font-mono">{{ file.path }}</span>
+              <div class="flex items-center justify-between px-4 py-2 surface-inset border-b border-gray-700 dark:border-dark-700">
+                <span class="min-w-0 truncate text-xs font-mono surface-muted">{{ file.path }}</span>
                 <button
                   type="button"
                   @click="copyContent(file.content, index)"
-                  class="flex flex-shrink-0 items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg transition-colors"
+                  class="flex flex-shrink-0 items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg transition-colors surface-control"
                   :class="copiedIndex === index
                     ? 'bg-green-500/20 text-green-400'
-                    : 'bg-gray-700 hover:bg-gray-600 text-gray-300 hover:text-white'"
+                    : 'surface-field hover:bg-gray-600 text-gray-300 hover:text-white'"
                 >
                   <svg v-if="copiedIndex === index" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
@@ -179,17 +179,17 @@
         <section
           v-if="showCodexModelCatalog"
           data-testid="codex-model-catalog"
-          class="overflow-hidden rounded-lg border border-gray-200 bg-gray-50 dark:border-dark-700 dark:bg-dark-800/50"
+          class="overflow-hidden rounded-lg border border-gray-200 surface-inset dark:border-dark-700"
         >
           <div class="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <div class="min-w-0">
               <h3 class="text-sm font-medium text-gray-900 dark:text-white">
                 {{ t('keys.useKeyModal.codexModelCatalog.title') }}
               </h3>
-              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              <p class="mt-1 text-xs surface-muted">
                 {{ t('keys.useKeyModal.codexModelCatalog.description') }}
               </p>
-              <p class="mt-1 truncate font-mono text-xs text-gray-700 dark:text-gray-300">
+              <p class="mt-1 truncate font-mono text-xs surface-muted">
                 {{ codexModelCatalogMode === 'remote' ? codexModelCatalogUrl : codexModelCatalogPath }}
               </p>
               <Select
@@ -248,7 +248,7 @@
         </section>
 
         <!-- Usage Note -->
-        <div v-if="showPlatformNote" class="flex items-start gap-3 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800">
+        <div v-if="showPlatformNote" class="flex items-start gap-3 p-3 rounded-lg bg-blue-50/[0.15] dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800">
           <Icon name="infoCircle" size="md" class="text-blue-500 flex-shrink-0 mt-0.5" />
           <p class="text-sm text-blue-700 dark:text-blue-300">
             {{ platformNote }}

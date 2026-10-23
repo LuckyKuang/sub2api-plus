@@ -1,5 +1,23 @@
 export default {
     settings: {
+      appearance: {
+        title: '外观与背景',
+        description: '仅管理员可设置，管理端和用户端共用背景与卡片样式。点击「保存外观」后全局生效。',
+        upload: '上传 / 替换背景', processing: '正在处理图片…',
+        uploadHint: '支持 JPG、PNG、WebP，原图不超过 10 MiB，自动缩放压缩。背景铺满窗口，不同比例的屏幕会适当裁剪。',
+        restore: '恢复默认', light: '浅色主题', dark: '深色主题', sample: '玻璃卡片预览',
+        light_mask: '浅色主题遮罩', dark_mask: '深色主题遮罩',
+        transparency: '卡片透明度', defaultTransparency: '使用系统默认', defaultValue: '系统默认',
+        transparencyHint: '数值越大越透明，统一作用于侧栏、顶栏与内容卡片，文字保持清晰。',
+        previewNotice: '预览仅当前管理员可见，点击「保存外观」后全局生效。离开此标签页会结束预览。',
+        save: '保存外观', preview: '在页面中预览', stopPreview: '结束页面预览', discard: '放弃修改', retry: '重试',
+        saved: '外观已保存，其他用户刷新页面后生效。',
+        loadFailed: '无法加载外观设置，请重试。',
+        saveFailed: '外观保存失败，已发布设置未改变，当前草稿已保留。',
+        imageError_format: '请选择 JPG、PNG 或 WebP 图片。',
+        imageError_size: '请选择不超过 10 MiB、4000 万像素且可压缩至 2 MiB 的图片。',
+        imageError_decode: '无法读取这张图片，请更换图片后重试。',
+      },
       title: '系统设置',
       description: '管理注册、邮箱验证、默认值和 SMTP 设置',
       tabs: {

@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth'
 import { getPublicSettings } from '@/api/auth'
 import { checkUpdates } from '@/api/admin/system'
 import type { PublicSettings } from '@/types'
+import { defaultConsoleAppearance } from '@/types/appearance'
 
 function createDeferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void
@@ -98,6 +99,31 @@ describe('useAppStore', () => {
   })
 
   // --- Toast 消息管理 ---
+
+  // docs/UI_INTERACTION.md: saving appearance updates this administrator
+  // immediately, including when an older public-settings request is pending.
+  it('applies saved appearance immediately and preserves it against an older request', async () => {
+    const store = useAppStore()
+    const deferred = createDeferred<PublicSettings>()
+    vi.mocked(getPublicSettings).mockReturnValueOnce(deferred.promise)
+    const pending = store.fetchPublicSettings()
+    const saved = { ...defaultConsoleAppearance(), card_transparency: 45 }
+    store.applyConsoleAppearance(saved)
+    expect(store.consoleAppearance).toEqual(saved)
+    deferred.resolve(createPublicSettings({ console_appearance: defaultConsoleAppearance() }))
+    await expect(pending).resolves.toBeNull()
+    expect(store.consoleAppearance).toEqual(saved)
+  })
+
+  it('keeps saved appearance aligned in cached public settings and injected configuration', async () => {
+    const store = useAppStore()
+    vi.mocked(getPublicSettings).mockResolvedValueOnce(createPublicSettings())
+    await store.fetchPublicSettings()
+    const saved = { ...defaultConsoleAppearance(), card_transparency: 60 }
+    store.applyConsoleAppearance(saved)
+    expect(store.cachedPublicSettings?.console_appearance).toEqual(saved)
+    expect(window.__APP_CONFIG__?.console_appearance).toEqual(saved)
+  })
 
   describe('Toast 消息管理', () => {
     it('showSuccess 创建 success 类型 toast', () => {

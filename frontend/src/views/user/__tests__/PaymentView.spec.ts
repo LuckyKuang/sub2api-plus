@@ -892,7 +892,8 @@ describe('PaymentView checkout tabs', () => {
     await flushPromises()
 
     const subscribeTab = wrapper.findAll('button').find(button => button.text() === 'payment.tabSubscribe')
-    expect(subscribeTab?.classes()).toContain('bg-white')
+    // docs/UI_INTERACTION.md: the active tab uses the shared translucent field surface.
+    expect(subscribeTab?.classes()).toContain('surface-field')
     expect(wrapper.findAllComponents(SubscriptionPlanCard).length).toBeGreaterThan(0)
   })
 })

@@ -6,7 +6,7 @@
     @close="emit('close')"
   >
     <form id="bulk-edit-user-limits-form" class="space-y-5" @submit.prevent="handleSubmit">
-      <p class="text-sm font-medium text-gray-700 dark:text-gray-300">
+      <p class="text-sm font-medium surface-muted">
         {{ t('admin.users.bulkLimits.selectedCount', { count: selectedIds.length }) }}
       </p>
 

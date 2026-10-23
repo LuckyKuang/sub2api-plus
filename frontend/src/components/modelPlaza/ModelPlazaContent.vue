@@ -3,7 +3,7 @@
     <!-- 页头(独立形态下展示标题;后台形态 AppHeader 已有页面标题) -->
     <div v-if="!embedded">
       <h1 class="text-2xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-3xl">{{ t('modelPlaza.title') }}</h1>
-      <p class="mt-1.5 text-sm text-gray-500 dark:text-dark-400">{{ t('modelPlaza.description') }}</p>
+      <p class="mt-1.5 text-sm surface-muted">{{ t('modelPlaza.description') }}</p>
     </div>
 
     <!-- 全局价格说明(管理员配置,Markdown) -->
@@ -16,7 +16,7 @@
     <!-- 未登录提示 -->
     <p
       v-if="!isAuthenticated"
-      class="flex items-center gap-1.5 text-xs text-gray-400 dark:text-dark-500"
+      class="flex items-center gap-1.5 text-xs surface-muted"
     >
       <Icon name="infoCircle" size="xs" class="h-3.5 w-3.5" />
       {{ t('modelPlaza.anonymousHint') }}
@@ -28,7 +28,7 @@
     </div>
     <div
       v-else-if="error"
-      class="rounded-2xl border border-red-200 bg-red-50 px-5 py-8 text-center text-sm text-red-600 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300"
+      class="rounded-2xl border border-red-200 bg-red-50/[0.15] px-5 py-8 text-center text-sm text-red-600 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300"
     >
       {{ t('modelPlaza.loadFailed') }}
     </div>
@@ -54,7 +54,7 @@
       </div>
       <div
         v-else
-        class="rounded-2xl border border-dashed border-gray-300 px-5 py-12 text-center text-sm text-gray-500 dark:border-dark-600 dark:text-dark-400"
+        class="rounded-2xl border border-dashed border-gray-300 px-5 py-12 text-center text-sm dark:border-dark-600 surface-muted"
       >
         {{ searchActive ? t('modelPlaza.noSearchResult') : t('modelPlaza.empty') }}
       </div>
@@ -182,11 +182,12 @@ const filteredGroups = computed(() => {
 }
 
 .plaza-description :deep(li) {
-  @apply mb-0.5 text-gray-700 dark:text-dark-200;
+  @apply mb-0.5; color: var(--surface-muted);
 }
 
 .plaza-description :deep(code) {
-  @apply rounded bg-gray-100 px-1.5 py-0.5 font-mono text-xs dark:bg-dark-800;
+  @apply rounded px-1.5 py-0.5 font-mono text-xs;
+  background-color: var(--surface-soft);
 }
 
 .plaza-description :deep(blockquote) {

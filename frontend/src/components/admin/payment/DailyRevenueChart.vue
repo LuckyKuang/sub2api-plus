@@ -10,7 +10,7 @@
       <Line v-else-if="chartData" :data="chartData" :options="chartOptions" />
       <div
         v-else
-        class="flex h-full items-center justify-center text-sm text-gray-500 dark:text-gray-400"
+        class="flex h-full items-center justify-center text-sm surface-muted"
       >
         {{ t('payment.admin.noData') }}
       </div>

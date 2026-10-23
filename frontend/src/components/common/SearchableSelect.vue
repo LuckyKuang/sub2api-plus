@@ -56,7 +56,7 @@
         <div
           v-if="isOpen"
           ref="dropdownRef"
-          class="select-dropdown-portal"
+          class="select-dropdown-portal surface-panel"
           :id="instanceId"
           :class="[instanceId]"
           :style="dropdownStyle"
@@ -105,7 +105,7 @@
                   size="sm"
                   class="flex-shrink-0 text-gray-400"
                 />
-                <span class="select-option-label" :class="option._creatable && 'italic text-gray-500 dark:text-dark-300'">{{ getOptionLabel(option) }}</span>
+                <span class="select-option-label" :class="option._creatable && 'italic surface-muted'">{{ getOptionLabel(option) }}</span>
                 <Icon
                   v-if="isSelected(option)"
                   name="check"
@@ -548,7 +548,7 @@ onUnmounted(() => {
 }
 
 .select-icon {
-  @apply flex-shrink-0 text-gray-400 dark:text-dark-400;
+  @apply flex-shrink-0; color: var(--surface-muted);
 }
 
 .select-clear {
@@ -561,7 +561,7 @@ onUnmounted(() => {
 <style>
 .select-dropdown-portal {
   @apply w-max min-w-[200px];
-  @apply bg-white dark:bg-dark-800;
+  background-color: var(--surface-panel);
   @apply rounded-xl;
   @apply border border-gray-200 dark:border-dark-700;
   @apply shadow-lg shadow-black/10 dark:shadow-black/30;
@@ -588,19 +588,19 @@ onUnmounted(() => {
 .select-dropdown-portal .select-option {
   @apply flex items-center justify-between gap-2;
   @apply px-4 py-2.5 text-sm;
-  @apply text-gray-700 dark:text-gray-300;
+  color: var(--surface-muted);
   @apply cursor-pointer transition-colors duration-150;
-  @apply hover:bg-gray-50 dark:hover:bg-dark-700;
+
   pointer-events: auto !important;
 }
 
 .select-dropdown-portal .select-option-selected {
-  @apply bg-primary-50 dark:bg-primary-900/20;
+  background-color: var(--surface-selected);
   @apply text-primary-700 dark:text-primary-300;
 }
 
 .select-dropdown-portal .select-option-focused {
-  @apply bg-gray-100 dark:bg-dark-700;
+  background-color: var(--surface-hover);
 }
 
 .select-dropdown-portal .select-option-disabled {
@@ -609,13 +609,13 @@ onUnmounted(() => {
 
 .select-dropdown-portal .select-option-group {
   @apply cursor-default select-none;
-  @apply bg-gray-50 dark:bg-dark-900;
+  background-color: var(--surface-soft);
   @apply text-[11px] font-bold uppercase tracking-wider;
-  @apply text-gray-500 dark:text-gray-400;
+  color: var(--surface-muted);
 }
 
 .select-dropdown-portal .select-option-group:hover {
-  @apply bg-gray-50 dark:bg-dark-900;
+  background-color: var(--surface-soft);
 }
 
 .select-dropdown-portal .select-option-label {
@@ -624,7 +624,7 @@ onUnmounted(() => {
 
 .select-dropdown-portal .select-empty {
   @apply px-4 py-8 text-center text-sm;
-  @apply text-gray-500 dark:text-dark-400;
+  color: var(--surface-muted);
 }
 
 .select-dropdown-enter-active,

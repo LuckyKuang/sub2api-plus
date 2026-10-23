@@ -36,7 +36,7 @@
               </button>
             </div>
           </div>
-          <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('asyncImage.list.keyHint') }}</p>
+          <p class="text-xs surface-muted">{{ t('asyncImage.list.keyHint') }}</p>
         </div>
       </template>
 
@@ -47,12 +47,12 @@
               <p class="line-clamp-2 text-sm text-gray-800 dark:text-gray-100" :title="row.prompt_preview || ''">
                 {{ row.prompt_preview || '-' }}
               </p>
-              <p class="mt-1 truncate font-mono text-xs text-gray-400 dark:text-dark-500">{{ row.task_id }}</p>
+              <p class="mt-1 truncate font-mono text-xs surface-muted">{{ row.task_id }}</p>
             </div>
           </template>
 
           <template #cell-model="{ row }">
-            <span class="block max-w-[160px] truncate text-sm text-gray-700 dark:text-gray-300" :title="row.model || ''">
+            <span class="block max-w-[160px] truncate text-sm surface-muted" :title="row.model || ''">
               {{ row.model || '-' }}
             </span>
           </template>
@@ -74,28 +74,28 @@
               <div
                 v-for="url in taskImageUrls(row)"
                 :key="url"
-                class="h-12 w-12 overflow-hidden rounded border border-gray-200 bg-gray-50 dark:border-dark-600 dark:bg-dark-800"
+                class="h-12 w-12 overflow-hidden rounded border border-gray-200 surface-inset dark:border-dark-600"
               >
                 <img :src="url" alt="" class="h-full w-full object-cover" loading="lazy" />
               </div>
             </div>
             <span v-else-if="row.status === 'failed'" class="text-xs text-red-600 dark:text-red-300">{{ row.error?.message || '-' }}</span>
-            <span v-else class="text-xs text-gray-400 dark:text-dark-500">-</span>
+            <span v-else class="text-xs surface-muted">-</span>
           </template>
 
           <template #cell-created_at="{ row }">
-            <span class="text-sm text-gray-600 dark:text-gray-300">{{ formatDate(row.created_at) }}</span>
+            <span class="text-sm surface-muted">{{ formatDate(row.created_at) }}</span>
           </template>
 
           <template #cell-actions="{ row }">
             <div class="flex justify-center gap-1">
-              <button type="button" class="icon-button" :title="t('asyncImage.actions.view')" :data-testid="`view-task-${row.task_id}`" @click="selectedTask = row">
+              <button type="button" class="icon-button surface-control" :title="t('asyncImage.actions.view')" :data-testid="`view-task-${row.task_id}`" @click="selectedTask = row">
                 <Icon name="eye" size="sm" />
               </button>
               <button v-support-readonly
                 v-if="row.status === 'failed'"
                 type="button"
-                class="icon-button icon-button-danger"
+                class="icon-button icon-button-danger surface-control"
                 :disabled="deletingTaskId === row.task_id"
                 :title="t('asyncImage.actions.delete')"
                 :data-testid="`delete-task-${row.task_id}`"
@@ -108,17 +108,17 @@
 
           <template #empty>
             <div class="flex min-h-[260px] flex-col items-center justify-center px-6 py-10 text-center">
-              <Icon name="sparkles" size="xl" class="mb-4 h-12 w-12 text-gray-400 dark:text-dark-500" />
+              <Icon name="sparkles" size="xl" class="mb-4 h-12 w-12 surface-muted" />
               <p class="text-lg font-medium text-gray-900 dark:text-gray-100">{{ t('asyncImage.list.empty') }}</p>
-              <p class="mt-1 max-w-md text-sm text-gray-500 dark:text-gray-400">{{ t('asyncImage.list.emptyHint') }}</p>
+              <p class="mt-1 max-w-md text-sm surface-muted">{{ t('asyncImage.list.emptyHint') }}</p>
             </div>
           </template>
         </DataTable>
       </template>
 
       <template #pagination>
-        <div v-if="tasks.length || offset > 0" class="flex items-center justify-end gap-3 border-t border-gray-200 bg-white px-4 py-3 dark:border-dark-700 dark:bg-dark-800">
-          <span class="mr-auto text-sm text-gray-500 dark:text-gray-400">{{ t('asyncImage.list.page', { page: currentPage }) }}</span>
+        <div v-if="tasks.length || offset > 0" class="flex items-center justify-end gap-3 border-t border-gray-200 surface-inset px-4 py-3 dark:border-dark-700">
+          <span class="mr-auto text-sm surface-muted">{{ t('asyncImage.list.page', { page: currentPage }) }}</span>
           <button type="button" class="btn btn-secondary btn-sm" :disabled="offset === 0 || loadingTasks" @click="previousPage">
             {{ t('asyncImage.list.previous') }}
           </button>
@@ -131,7 +131,7 @@
 
     <BaseDialog :show="showCreateDialog" :title="t('asyncImage.create.title')" width="wide" @close="closeCreateDialog">
       <form v-support-readonly class="space-y-5" @submit.prevent="submitTask">
-        <div v-if="eligibleKeys.length === 0" class="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800/60 dark:bg-amber-900/20 dark:text-amber-200">
+        <div v-if="eligibleKeys.length === 0" class="rounded border border-amber-200 bg-amber-50/[0.15] px-3 py-2 text-sm text-amber-800 dark:border-amber-800/60 dark:bg-amber-900/20 dark:text-amber-200">
           {{ t('asyncImage.create.noKeys') }}
         </div>
         <div v-else class="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -140,8 +140,8 @@
             <div class="mt-2 inline-flex overflow-hidden rounded border border-gray-200 dark:border-dark-600">
               <button
                 type="button"
-                class="h-9 px-4 text-sm font-medium transition-colors"
-                :class="form.mode === 'generation' ? 'bg-primary-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-dark-800 dark:text-gray-200 dark:hover:bg-dark-700'"
+                class="h-9 px-4 text-sm font-medium transition-colors surface-control"
+                :class="form.mode === 'generation' ? 'bg-primary-600 text-white' : 'surface-field text-gray-700 hover:surface-hover dark:surface-field dark:text-gray-200 dark:hover:surface-hover'"
                 :disabled="submitting"
                 @click="form.mode = 'generation'"
               >
@@ -149,8 +149,8 @@
               </button>
               <button
                 type="button"
-                class="h-9 border-l border-gray-200 px-4 text-sm font-medium transition-colors dark:border-dark-600"
-                :class="form.mode === 'edit' ? 'bg-primary-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-dark-800 dark:text-gray-200 dark:hover:bg-dark-700'"
+                class="h-9 border-l border-gray-200 px-4 text-sm font-medium transition-colors dark:border-dark-600 surface-control"
+                :class="form.mode === 'edit' ? 'bg-primary-600 text-white' : 'surface-field text-gray-700 hover:surface-hover dark:surface-field dark:text-gray-200 dark:hover:surface-hover'"
                 :disabled="submitting"
                 @click="form.mode = 'edit'"
               >
@@ -189,7 +189,7 @@
               <div class="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <span class="input-label">{{ t('asyncImage.create.referenceImages') }}</span>
-                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('asyncImage.create.referenceImagesHint') }}</p>
+                  <p class="mt-1 text-xs surface-muted">{{ t('asyncImage.create.referenceImagesHint') }}</p>
                 </div>
                 <label class="btn btn-secondary btn-sm cursor-pointer" :class="editImages.length >= MAX_EDIT_INPUT_IMAGES ? 'pointer-events-none opacity-60' : ''">
                   <Icon name="upload" size="sm" class="mr-1.5" />
@@ -205,12 +205,12 @@
                 </label>
               </div>
               <div v-if="editImages.length" class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                <div v-for="(image, index) in editImages" :key="image.url" class="relative overflow-hidden rounded border border-gray-200 bg-gray-50 dark:border-dark-600 dark:bg-dark-800">
+                <div v-for="(image, index) in editImages" :key="image.url" class="relative overflow-hidden rounded border border-gray-200 surface-inset dark:border-dark-600">
                   <img :src="image.url" :alt="image.file.name" class="aspect-square h-full w-full object-cover" />
-                  <button type="button" class="absolute right-1 top-1 inline-flex h-6 w-6 items-center justify-center rounded bg-black/60 text-white hover:bg-red-600" :title="t('asyncImage.create.removeReferenceImage')" :disabled="submitting" @click="removeReferenceImage(index)">
+                  <button type="button" class="absolute right-1 top-1 inline-flex h-6 w-6 items-center justify-center rounded bg-black/60 text-white hover:bg-red-600 surface-control" :title="t('asyncImage.create.removeReferenceImage')" :disabled="submitting" @click="removeReferenceImage(index)">
                     <Icon name="x" size="xs" />
                   </button>
-                  <p class="truncate px-2 py-1.5 text-xs text-gray-700 dark:text-gray-200" :title="image.file.name">{{ image.file.name }}</p>
+                  <p class="truncate px-2 py-1.5 text-xs surface-muted" :title="image.file.name">{{ image.file.name }}</p>
                 </div>
               </div>
               <p v-else class="mt-3 text-sm text-amber-700 dark:text-amber-300">{{ t('asyncImage.create.referenceImageRequired') }}</p>
@@ -219,7 +219,7 @@
               <div class="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <span class="input-label">{{ t('asyncImage.create.maskImage') }}</span>
-                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('asyncImage.create.maskImageHint') }}</p>
+                  <p class="mt-1 text-xs surface-muted">{{ t('asyncImage.create.maskImageHint') }}</p>
                 </div>
                 <label class="btn btn-secondary btn-sm cursor-pointer" :class="!editImages.length || editMask ? 'pointer-events-none opacity-60' : ''">
                   <Icon name="upload" size="sm" class="mr-1.5" />
@@ -233,10 +233,10 @@
                   />
                 </label>
               </div>
-              <div v-if="editMask" class="mt-3 flex max-w-sm items-center gap-3 rounded border border-gray-200 bg-gray-50 p-2 dark:border-dark-600 dark:bg-dark-800">
+              <div v-if="editMask" class="mt-3 flex max-w-sm items-center gap-3 rounded border border-gray-200 surface-inset p-2 dark:border-dark-600">
                 <img :src="editMask.url" :alt="editMask.file.name" class="h-14 w-14 rounded object-cover" />
-                <p class="min-w-0 flex-1 truncate text-sm text-gray-700 dark:text-gray-200" :title="editMask.file.name">{{ editMask.file.name }}</p>
-                <button type="button" class="icon-button" :title="t('asyncImage.create.removeMaskImage')" :disabled="submitting" @click="removeMaskImage">
+                <p class="min-w-0 flex-1 truncate text-sm surface-muted" :title="editMask.file.name">{{ editMask.file.name }}</p>
+                <button type="button" class="icon-button surface-control" :title="t('asyncImage.create.removeMaskImage')" :disabled="submitting" @click="removeMaskImage">
                   <Icon name="x" size="xs" />
                 </button>
               </div>
@@ -296,42 +296,42 @@
       <div v-if="selectedTask" class="space-y-5">
         <div class="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           <div>
-            <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('asyncImage.columns.status') }}</p>
+            <p class="text-xs surface-muted">{{ t('asyncImage.columns.status') }}</p>
             <span class="mt-1 inline-flex badge" :class="statusClass(selectedTask.status)">{{ statusLabel(selectedTask.status) }}</span>
           </div>
           <div>
-            <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('asyncImage.create.model') }}</p>
+            <p class="text-xs surface-muted">{{ t('asyncImage.create.model') }}</p>
             <p class="mt-1 truncate text-sm font-medium text-gray-900 dark:text-white">{{ selectedTask.model || '-' }}</p>
           </div>
           <div>
-            <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('asyncImage.columns.type') }}</p>
+            <p class="text-xs surface-muted">{{ t('asyncImage.columns.type') }}</p>
             <span class="mt-1 inline-flex badge" :class="requestTypeClass(selectedTask.request_type)">{{ requestTypeLabel(selectedTask.request_type) }}</span>
           </div>
           <div>
-            <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('asyncImage.detail.taskId') }}</p>
-            <p class="mt-1 truncate font-mono text-xs text-gray-700 dark:text-gray-300" :title="selectedTask.task_id">{{ selectedTask.task_id }}</p>
+            <p class="text-xs surface-muted">{{ t('asyncImage.detail.taskId') }}</p>
+            <p class="mt-1 truncate font-mono text-xs surface-muted" :title="selectedTask.task_id">{{ selectedTask.task_id }}</p>
           </div>
           <div>
-            <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('asyncImage.detail.requestedImages') }}</p>
+            <p class="text-xs surface-muted">{{ t('asyncImage.detail.requestedImages') }}</p>
             <p class="mt-1 text-sm font-medium text-gray-900 dark:text-white">{{ selectedTask.requested_images || 1 }}</p>
           </div>
           <div>
-            <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('asyncImage.detail.actualImages') }}</p>
+            <p class="text-xs surface-muted">{{ t('asyncImage.detail.actualImages') }}</p>
             <p class="mt-1 text-sm font-medium text-gray-900 dark:text-white">{{ selectedTask.actual_images ?? taskImageUrls(selectedTask).length }}</p>
           </div>
         </div>
         <div>
-          <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('asyncImage.detail.prompt') }}</p>
+          <p class="text-xs surface-muted">{{ t('asyncImage.detail.prompt') }}</p>
           <p class="mt-1 whitespace-pre-wrap text-sm text-gray-800 dark:text-gray-100">{{ selectedTask.prompt_preview || '-' }}</p>
         </div>
-        <div v-if="selectedTask.status === 'failed'" class="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900/70 dark:bg-red-950/30 dark:text-red-200">
+        <div v-if="selectedTask.status === 'failed'" class="rounded border border-red-200 bg-red-50/[0.15] px-3 py-2 text-sm text-red-800 dark:border-red-900/70 dark:bg-red-950/30 dark:text-red-200">
           <span class="font-medium">{{ t('asyncImage.detail.error') }}: </span>{{ selectedTask.error?.message || '-' }}
         </div>
-        <div v-else-if="selectedTask.status === 'processing'" class="rounded border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800 dark:border-blue-900/70 dark:bg-blue-950/30 dark:text-blue-200">
+        <div v-else-if="selectedTask.status === 'processing'" class="rounded border border-blue-200 bg-blue-50/[0.15] px-3 py-2 text-sm text-blue-800 dark:border-blue-900/70 dark:bg-blue-950/30 dark:text-blue-200">
           {{ t('asyncImage.detail.pending') }}
         </div>
         <div v-else-if="taskImageUrls(selectedTask).length" class="space-y-3">
-          <div v-if="imageCountMismatch(selectedTask)" class="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-200">
+          <div v-if="imageCountMismatch(selectedTask)" class="rounded border border-amber-200 bg-amber-50/[0.15] px-3 py-2 text-sm text-amber-800 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-200">
             {{ t('asyncImage.detail.countMismatch', { requested: selectedTask.requested_images || 1, actual: selectedTask.actual_images ?? taskImageUrls(selectedTask).length }) }}
           </div>
           <div class="flex justify-end">
@@ -341,12 +341,12 @@
             </button>
           </div>
           <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div v-for="url in taskImageUrls(selectedTask)" :key="url" class="overflow-hidden rounded border border-gray-200 bg-gray-50 dark:border-dark-600 dark:bg-dark-800">
+            <div v-for="url in taskImageUrls(selectedTask)" :key="url" class="overflow-hidden rounded border border-gray-200 surface-inset dark:border-dark-600">
               <img :src="url" alt="" class="aspect-square h-full w-full object-cover" loading="lazy" />
             </div>
           </div>
         </div>
-        <p v-else class="text-sm text-gray-500 dark:text-gray-400">{{ t('asyncImage.detail.noImage') }}</p>
+        <p v-else class="text-sm surface-muted">{{ t('asyncImage.detail.noImage') }}</p>
       </div>
     </BaseDialog>
 
@@ -488,9 +488,9 @@ function statusLabel(status: string) {
 }
 
 function statusClass(status: string) {
-  if (status === 'completed') return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
-  if (status === 'failed') return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
-  return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+  if (status === 'completed') return 'bg-emerald-100/[0.15] text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+  if (status === 'failed') return 'bg-red-100/[0.15] text-red-700 dark:bg-red-900/30 dark:text-red-300'
+  return 'bg-blue-100/[0.15] text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
 }
 
 function requestTypeLabel(requestType?: string) {
@@ -499,8 +499,8 @@ function requestTypeLabel(requestType?: string) {
 
 function requestTypeClass(requestType?: string) {
   return requestType === 'edit'
-    ? 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300'
-    : 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300'
+    ? 'bg-violet-100/[0.15] text-violet-700 dark:bg-violet-900/30 dark:text-violet-300'
+    : 'bg-cyan-100/[0.15] text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300'
 }
 
 function taskImageUrls(task: AsyncImageTask): string[] {
@@ -856,10 +856,10 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .icon-button {
-  @apply inline-flex h-8 w-8 items-center justify-center rounded border border-gray-200 text-gray-600 transition-colors hover:border-primary-300 hover:bg-primary-50 hover:text-primary-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40 dark:border-dark-600 dark:text-dark-300 dark:hover:border-primary-700 dark:hover:bg-primary-900/20 dark:hover:text-primary-300;
+  @apply inline-flex h-8 w-8 items-center justify-center rounded border border-gray-200 text-gray-600 transition-colors hover:border-primary-300 hover:bg-primary-50/25 hover:text-primary-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40 dark:border-dark-600 dark:text-dark-300 dark:hover:border-primary-700 dark:hover:bg-primary-900/20 dark:hover:text-primary-300;
 }
 
 .icon-button-danger {
-  @apply text-red-600 hover:border-red-300 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-60 dark:text-red-400 dark:hover:border-red-800 dark:hover:bg-red-950/30 dark:hover:text-red-300;
+  @apply text-red-600 hover:border-red-300 hover:bg-red-50/25 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-60 dark:text-red-400 dark:hover:border-red-800 dark:hover:bg-red-950/30 dark:hover:text-red-300;
 }
 </style>

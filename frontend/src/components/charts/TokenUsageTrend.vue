@@ -11,7 +11,7 @@
     </div>
     <div
       v-else
-      class="flex h-48 items-center justify-center text-sm text-gray-500 dark:text-gray-400"
+      class="flex h-48 items-center justify-center text-sm surface-muted"
     >
       {{ t('admin.dashboard.noDataAvailable') }}
     </div>

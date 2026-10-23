@@ -145,6 +145,23 @@ vi.mock("@/stores/adminSettings", () => ({
   }),
 }));
 
+// Keep the real appearance card mounted; isolate its API/store boundaries just
+// as the other settings sections do. Its publication behavior has its own suite.
+vi.mock("@/stores/app", () => ({
+  useAppStore: () => ({
+    consoleAppearancePreview: null,
+    applyConsoleAppearance: vi.fn(),
+    showSuccess,
+  }),
+}));
+vi.mock("@/api/admin/appearance", async () => {
+  const { defaultConsoleAppearance } = await import("@/types/appearance");
+  return {
+    getConsoleAppearance: vi.fn().mockImplementation(async () => defaultConsoleAppearance()),
+    saveConsoleAppearance: vi.fn(),
+  };
+});
+
 vi.mock("@/composables/useClipboard", () => ({
   useClipboard: () => ({
     copyToClipboard: vi.fn(),

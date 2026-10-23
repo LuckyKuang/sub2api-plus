@@ -42,7 +42,7 @@
     <span v-if="showTrophy" class="sr-only">{{ ariaLabel }}</span>
     <span
       class="text-xs font-semibold"
-      :class="showTrophy ? rankClass : 'text-gray-500 dark:text-dark-300'"
+      :class="showTrophy ? rankClass : 'surface-muted'"
     >
       {{ label }}
     </span>

@@ -3,13 +3,13 @@
     <div v-if="model" ref="content" class="min-w-0 space-y-5">
       <div>
         <h3 class="break-words font-mono text-lg font-semibold text-gray-900 [overflow-wrap:anywhere] dark:text-gray-100">{{ model.name }}</h3>
-        <p class="mt-1 text-sm text-gray-500 dark:text-dark-400">{{ model.platform }} · {{ t('availableChannels.catalog.groupQuotes', { count: model.quotes.length }) }}</p>
+        <p class="mt-1 text-sm surface-muted">{{ model.platform }} · {{ t('availableChannels.catalog.groupQuotes', { count: model.quotes.length }) }}</p>
       </div>
-      <p class="rounded-lg bg-gray-50 p-3 text-sm text-gray-600 dark:bg-dark-800 dark:text-dark-300">{{ t('availableChannels.catalog.billingGroupNote') }}</p>
+      <p class="rounded-lg surface-inset p-3 text-sm surface-muted">{{ t('availableChannels.catalog.billingGroupNote') }}</p>
       <p v-if="rateUnavailable" class="text-sm text-amber-700 dark:text-amber-300">{{ t('availableChannels.catalog.ratesUnavailable') }}</p>
       <div class="max-w-full overflow-x-auto rounded-lg border border-gray-200 dark:border-dark-700" tabindex="0" :aria-label="t('availableChannels.catalog.quoteComparison')">
-        <table class="catalog-comparison w-full text-left text-xs text-gray-700 dark:text-gray-200">
-          <thead class="bg-gray-50 text-gray-500 dark:bg-dark-800 dark:text-dark-400"><tr>
+        <table class="catalog-comparison w-full text-left text-xs surface-muted">
+          <thead class="surface-inset surface-muted"><tr>
             <th class="px-3 py-2">{{ t('modelPlaza.filters.groupLabel') }}</th>
             <th class="px-3 py-2">{{ t('availableChannels.catalog.effectiveRateLabel') }}</th>
             <th class="px-3 py-2">{{ t('availableChannels.catalog.baseInputOrUnit') }}</th>

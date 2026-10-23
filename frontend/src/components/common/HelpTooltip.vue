@@ -134,7 +134,7 @@ onBeforeUnmount(() => {
         v-show="show"
         role="tooltip"
         :class="[
-          'fixed z-[99999] -translate-x-1/2 -translate-y-full rounded-lg bg-gray-900 p-3 text-xs leading-relaxed text-white shadow-xl ring-1 ring-white/10 selection:bg-primary-200 selection:text-gray-900 before:absolute before:inset-x-0 before:top-full before:h-3 dark:bg-gray-800 dark:selection:bg-primary-200 dark:selection:text-gray-900',
+          'help-tooltip-panel fixed z-[99999] -translate-x-1/2 -translate-y-full rounded-lg surface-panel p-3 text-xs leading-relaxed shadow-xl ring-1 ring-white/10 selection:bg-primary-200 selection:text-gray-900 before:absolute before:inset-x-0 before:top-full before:h-3 dark:selection:bg-primary-200 dark:selection:text-gray-900',
           props.widthClass,
         ]"
         :style="{ top: `calc(${tooltipStyle.top} - 8px)`, left: tooltipStyle.left }"
@@ -143,7 +143,7 @@ onBeforeUnmount(() => {
         <button
           v-if="props.trigger === 'click'"
           type="button"
-          class="absolute right-1.5 top-1.5 rounded p-1 text-gray-300 transition-colors hover:bg-white/10 hover:text-white"
+          class="absolute right-1.5 top-1.5 rounded p-1 transition-colors hover:surface-hover surface-control surface-muted"
           aria-label="Close"
           @click.stop="closeTooltip"
         >
@@ -152,8 +152,28 @@ onBeforeUnmount(() => {
           </svg>
         </button>
         <slot>{{ content }}</slot>
-        <div class="absolute -bottom-1 left-1/2 h-2 w-2 -translate-x-1/2 rotate-45 bg-gray-900 dark:bg-gray-800"></div>
+        <div class="absolute -bottom-1 left-1/2 h-2 w-2 -translate-x-1/2 rotate-45 surface-field"></div>
       </div>
     </Teleport>
   </div>
 </template>
+
+<style scoped>
+/* Preserve the hover bridge in ::before; blur only the panel in ::after. */
+.help-tooltip-panel::before {
+  inset: 100% 0 auto;
+  height: 0.75rem;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.help-tooltip-panel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  backdrop-filter: var(--surface-panel-filter);
+  -webkit-backdrop-filter: var(--surface-panel-filter);
+}
+</style>

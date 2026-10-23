@@ -18,7 +18,7 @@
       >
         <template #cell-model="{ row }">
           <span v-if="row.model" class="text-sm font-medium text-gray-900 dark:text-white">{{ row.model }}</span>
-          <span v-else class="text-sm text-gray-400 dark:text-gray-500">-</span>
+          <span v-else class="text-sm surface-muted">-</span>
         </template>
 
         <template #cell-key_name="{ row }">
@@ -26,16 +26,16 @@
             <span class="block max-w-[160px] truncate text-gray-900 dark:text-white" :title="row.key_name">{{ row.key_name || '-' }}</span>
             <span
               v-if="row.key_deleted"
-              class="ml-1 inline-flex items-center rounded px-1 py-px text-[10px] font-medium leading-tight bg-rose-100 text-rose-600 ring-1 ring-inset ring-rose-200 dark:bg-rose-500/20 dark:text-rose-400 dark:ring-rose-500/30"
+              class="ml-1 inline-flex items-center rounded px-1 py-px text-[10px] font-medium leading-tight bg-rose-100/[0.15] text-rose-600 ring-1 ring-inset ring-rose-200 dark:bg-rose-500/20 dark:text-rose-400 dark:ring-rose-500/30"
             >{{ t('usage.errors.keyDeleted') }}</span>
-            <span v-if="!columns.some(column => column.key === 'group')" class="block max-w-[160px] truncate text-xs text-gray-500" :title="row.group_name">{{ row.group_name || '—' }}</span>
+            <span v-if="!columns.some(column => column.key === 'group')" class="block max-w-[160px] truncate text-xs surface-muted" :title="row.group_name">{{ row.group_name || '—' }}</span>
           </div>
         </template>
 
         <template #cell-endpoint="{ row }">
           <div class="max-w-[320px] text-xs">
-            <div class="break-all text-gray-700 dark:text-gray-300">
-              <span class="font-medium text-gray-500 dark:text-gray-400">{{ t('usage.inbound') }}:</span>
+            <div class="break-all surface-muted">
+              <span class="font-medium surface-muted">{{ t('usage.inbound') }}:</span>
               <span class="ml-1">{{ row.inbound_endpoint?.trim() || '-' }}</span>
             </div>
           </div>
@@ -54,18 +54,18 @@
         <template #cell-message="{ row }">
           <span
             v-if="row.message"
-            class="block max-w-[280px] truncate text-sm text-gray-600 dark:text-gray-400"
+            class="block max-w-[280px] truncate text-sm surface-muted"
             :title="row.message"
           >{{ row.message }}</span>
-          <span v-else class="text-sm text-gray-400 dark:text-gray-500">-</span>
+          <span v-else class="text-sm surface-muted">-</span>
         </template>
 
         <template #cell-group="{ row }">
           <span
             v-if="row.group_name"
-            class="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200"
+            class="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium bg-indigo-100/[0.15] text-indigo-800 dark:bg-indigo-900/25 dark:text-indigo-200"
           >{{ row.group_name }}</span>
-          <span v-else class="text-sm text-gray-400 dark:text-gray-500">-</span>
+          <span v-else class="text-sm surface-muted">-</span>
         </template>
 
         <template #cell-type="{ row }">
@@ -74,7 +74,7 @@
             class="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium"
             :class="requestTypeBadge(row)!.className"
           >{{ requestTypeBadge(row)!.label }}</span>
-          <span v-else class="text-sm text-gray-400 dark:text-gray-500">-</span>
+          <span v-else class="text-sm surface-muted">-</span>
         </template>
 
         <template #cell-platform="{ row }">
@@ -84,24 +84,24 @@
         <template #cell-client_ip="{ row }">
           <div @click.stop>
             <div v-if="row.client_ip">
-              <span class="text-sm font-mono text-gray-600 dark:text-gray-400">{{ row.client_ip }}</span>
+              <span class="text-sm font-mono surface-muted">{{ row.client_ip }}</span>
               <IpGeoCell :ip="row.client_ip" />
             </div>
-            <span v-else class="text-sm text-gray-400 dark:text-gray-500">-</span>
+            <span v-else class="text-sm surface-muted">-</span>
           </div>
         </template>
 
         <template #cell-created_at="{ row }">
-          <button type="button" class="text-left text-sm text-primary-600 underline decoration-dotted" :aria-label="t('inspection.view')" @click.stop="openDetail(row.id)">{{ formatDateTime(row.created_at) }}</button>
+          <button type="button" class="text-left text-sm text-primary-600 underline decoration-dotted surface-control" :aria-label="t('inspection.view')" @click.stop="openDetail(row.id)">{{ formatDateTime(row.created_at) }}</button>
         </template>
 
         <template #cell-user_agent="{ row }">
           <span
             v-if="row.user_agent"
-            class="block max-w-[320px] truncate text-sm text-gray-600 dark:text-gray-400"
+            class="block max-w-[320px] truncate text-sm surface-muted"
             :title="row.user_agent"
           >{{ row.user_agent }}</span>
-          <span v-else class="text-sm text-gray-400 dark:text-gray-500">-</span>
+          <span v-else class="text-sm surface-muted">-</span>
         </template>
 
         <template #empty><EmptyState :message="t('usage.errors.empty')" /></template>

@@ -17,7 +17,7 @@
         :class="[
           'input w-full min-h-[80px] transition-all duration-200 resize-y',
           error ? 'input-error ring-2 ring-red-500/20' : '',
-          disabled ? 'cursor-not-allowed bg-gray-100 opacity-60 dark:bg-dark-900' : ''
+          disabled ? 'cursor-not-allowed surface-inset opacity-60 dark:surface-inset' : ''
         ]"
         @input="onInput"
         @change="$emit('change', ($event.target as HTMLTextAreaElement).value)"

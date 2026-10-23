@@ -11,10 +11,12 @@ import { getSetupStatus } from '@/api/setup'
 import { updateFavicon } from '@/utils/branding'
 import { FeatureFlags, isFeatureFlagEnabled } from '@/utils/featureFlags'
 import { resolveSiteBillingMode } from '@/utils/siteBillingMode'
+import { useConsoleAppearance } from '@/composables/useConsoleAppearance'
 
 const router = useRouter()
 const route = useRoute()
 const appStore = useAppStore()
+useConsoleAppearance(() => appStore.consoleAppearancePreview ?? appStore.consoleAppearance)
 const authStore = useAuthStore()
 const subscriptionStore = useSubscriptionStore()
 const announcementStore = useAnnouncementStore()

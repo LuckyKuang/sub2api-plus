@@ -3,7 +3,7 @@
     <div
       v-if="loading"
       role="status"
-      class="absolute inset-0 flex items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-500 dark:border-dark-600 dark:bg-dark-700 dark:text-gray-400"
+      class="absolute inset-0 flex items-center justify-center rounded-lg border border-gray-200 text-sm dark:border-dark-600 surface-panel surface-muted"
     >
       {{ t('auth.captchaLoading') }}
     </div>

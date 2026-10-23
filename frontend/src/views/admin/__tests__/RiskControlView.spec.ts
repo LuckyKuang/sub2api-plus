@@ -500,6 +500,7 @@ describe('admin RiskControlView', () => {
     await findButtonByText(wrapper, 'admin.riskControl.openSettings').trigger('click')
     const pool = wrapper.get('[data-test="moderation-endpoint-pool"]')
     expect(pool.text()).toContain('admin.riskControl.endpointPool.status.degraded')
-    expect(pool.find('.bg-amber-50').exists()).toBe(true)
+    // docs/UI_INTERACTION.md: warnings retain amber with translucent paint.
+    expect(pool.find('[class~="bg-amber-50/[0.15]"]').exists()).toBe(true)
   })
 })

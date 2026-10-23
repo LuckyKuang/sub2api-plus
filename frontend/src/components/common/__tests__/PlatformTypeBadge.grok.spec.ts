@@ -59,7 +59,7 @@ describe('PlatformTypeBadge Grok plans', () => {
     const free = mount(PlatformTypeBadge, {
       props: { platform: 'grok', type: 'oauth', planType: 'free' },
     })
-    expect(free.html()).toContain('bg-gray-100')
+    expect(free.html()).toContain('surface-inset')
     expect(free.html()).not.toContain('bg-purple-100')
     expect(free.html()).not.toContain('bg-cyan-100')
 

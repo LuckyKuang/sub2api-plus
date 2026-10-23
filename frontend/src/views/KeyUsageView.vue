@@ -1,5 +1,5 @@
 <template>
-  <div class="relative flex min-h-screen flex-col bg-canvas dark:bg-dark-950">
+  <div class="relative flex min-h-screen flex-col bg-canvas dark:surface-inset">
     <!-- Header (same pattern as HomeView) -->
     <header class="relative z-20 px-6 py-4">
       <nav class="mx-auto flex max-w-6xl items-center justify-between">
@@ -16,14 +16,14 @@
             :href="docUrl"
             target="_blank"
             rel="noopener noreferrer"
-            class="rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-dark-400 dark:hover:bg-dark-800 dark:hover:text-white"
+            class="rounded-lg p-2 transition-colors hover:surface-hover hover:text-gray-700 dark:hover:text-white surface-muted"
             :title="t('home.viewDocs')"
           >
             <Icon name="book" size="md" />
           </a>
           <button
             @click="toggleTheme"
-            class="theme-toggle rounded-lg p-2 transition-colors"
+            class="theme-toggle rounded-lg p-2 transition-colors surface-control"
             :title="isDark ? t('home.switchToLight') : t('home.switchToDark')"
           >
             <Icon v-if="isDark" name="sun" size="md" />
@@ -40,7 +40,7 @@
         <h1 class="text-3xl sm:text-4xl font-bold tracking-tight mb-3 text-gray-900 dark:text-white">
           {{ t('keyUsage.title') }}
         </h1>
-        <p class="text-gray-500 dark:text-dark-400 text-base max-w-md mx-auto">
+        <p class="text-base max-w-md mx-auto surface-muted">
           {{ t('keyUsage.subtitle') }}
         </p>
       </div>
@@ -49,7 +49,7 @@
       <div class="max-w-xl mx-auto mb-14">
         <div class="flex gap-3">
           <div class="flex-1 relative">
-            <div class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-dark-500">
+            <div class="absolute left-4 top-1/2 -translate-y-1/2 surface-muted">
               <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
               </svg>
@@ -58,12 +58,12 @@
               v-model="apiKey"
               :type="keyVisible ? 'text' : 'password'"
               :placeholder="t('keyUsage.placeholder')"
-              class="input-ring w-full h-12 pl-12 pr-12 rounded-xl border border-gray-200 bg-white text-sm text-gray-900 placeholder:text-gray-400 transition-all dark:border-dark-700 dark:bg-dark-900 dark:text-white dark:placeholder:text-dark-500"
+              class="input-ring w-full h-12 pl-12 pr-12 rounded-xl border border-gray-200 surface-inset text-sm text-gray-900 placeholder:text-gray-400 transition-all dark:border-dark-700 dark:text-white dark:placeholder:text-dark-500"
               @keydown.enter="queryKey"
             />
             <button
               @click="keyVisible = !keyVisible"
-              class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 dark:text-dark-500 dark:hover:text-white transition-colors"
+              class="absolute right-4 top-1/2 -translate-y-1/2 hover:text-gray-700 dark:hover:text-white transition-colors surface-control surface-muted"
             >
               <svg v-if="!keyVisible" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
@@ -89,34 +89,34 @@
             {{ isQuerying ? t('keyUsage.querying') : t('keyUsage.query') }}
           </button>
         </div>
-        <p class="text-xs text-gray-400 dark:text-dark-500 mt-3 text-center">
+        <p class="text-xs mt-3 text-center surface-muted">
           {{ t('keyUsage.privacyNote') }}
         </p>
 
         <!-- Date Range Picker -->
         <div v-if="showDatePicker" class="mt-4">
           <div class="flex flex-wrap items-center gap-2 justify-center">
-            <span class="text-xs text-gray-500 dark:text-dark-400">{{ t('keyUsage.dateRange') }}</span>
+            <span class="text-xs surface-muted">{{ t('keyUsage.dateRange') }}</span>
             <button
               v-for="range in dateRanges"
               :key="range.key"
               @click="setDateRange(range.key)"
-              class="text-xs px-3 py-1.5 rounded-lg border transition-all"
+              class="text-xs px-3 py-1.5 rounded-lg border transition-all surface-control"
               :class="currentRange === range.key
                 ? 'bg-primary-500 text-white border-primary-500'
-                : 'border-gray-200 bg-white text-gray-700 dark:border-dark-700 dark:bg-dark-900 dark:text-dark-200 hover:border-primary-300 dark:hover:border-dark-600'"
+                : 'border-gray-200 surface-field text-gray-700 dark:border-dark-700 dark:surface-field dark:text-dark-200 hover:border-primary-300 dark:hover:border-dark-600'"
             >{{ range.label }}</button>
             <div v-if="currentRange === 'custom'" class="flex items-center gap-2 ml-1">
               <input
                 v-model="customStartDate"
                 type="date"
-                class="input-ring text-xs px-2 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-900 dark:border-dark-700 dark:bg-dark-900 dark:text-white"
+                class="input-ring text-xs px-2 py-1.5 rounded-lg border border-gray-200 surface-inset text-gray-900 dark:border-dark-700 dark:text-white"
               />
-              <span class="text-xs text-gray-400">-</span>
+              <span class="text-xs surface-muted">-</span>
               <input
                 v-model="customEndDate"
                 type="date"
-                class="input-ring text-xs px-2 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-900 dark:border-dark-700 dark:bg-dark-900 dark:text-white"
+                class="input-ring text-xs px-2 py-1.5 rounded-lg border border-gray-200 surface-inset text-gray-900 dark:border-dark-700 dark:text-white"
               />
               <button
                 @click="queryKey"
@@ -132,16 +132,16 @@
         <!-- Loading Skeleton -->
         <div v-if="showLoading" class="space-y-6">
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div class="rounded-2xl border border-gray-200 bg-white p-8 dark:border-dark-700 dark:bg-dark-900">
+            <div class="rounded-2xl border border-gray-200 surface-inset p-8 dark:border-dark-700">
               <div class="skeleton h-5 w-24 mb-6"></div>
               <div class="flex justify-center"><div class="skeleton w-44 h-44 rounded-full"></div></div>
             </div>
-            <div class="rounded-2xl border border-gray-200 bg-white p-8 dark:border-dark-700 dark:bg-dark-900">
+            <div class="rounded-2xl border border-gray-200 surface-inset p-8 dark:border-dark-700">
               <div class="skeleton h-5 w-24 mb-6"></div>
               <div class="flex justify-center"><div class="skeleton w-44 h-44 rounded-full"></div></div>
             </div>
           </div>
-          <div class="rounded-2xl border border-gray-200 bg-white p-8 dark:border-dark-700 dark:bg-dark-900">
+          <div class="rounded-2xl border border-gray-200 surface-inset p-8 dark:border-dark-700">
             <div class="skeleton h-5 w-32 mb-6"></div>
             <div class="space-y-4">
               <div class="skeleton h-4 w-full"></div>
@@ -156,14 +156,14 @@
         <div v-else-if="resultData" class="space-y-6">
           <!-- Status Badge -->
           <div v-if="statusInfo" class="fade-up flex items-center justify-center mb-2">
-            <div class="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-gray-200 bg-white shadow-sm backdrop-blur-sm dark:border-dark-700 dark:bg-dark-800">
+            <div class="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-gray-200 surface-inset shadow-sm backdrop-blur-sm dark:border-dark-700">
               <span
                 class="w-2.5 h-2.5 rounded-full pulse-dot"
                 :class="statusInfo.isActive ? 'bg-emerald-500' : 'bg-rose-500'"
               ></span>
               <span class="text-sm font-medium text-gray-900 dark:text-white">{{ statusInfo.label }}</span>
-              <span class="text-xs text-gray-400 dark:text-dark-500">|</span>
-              <span class="text-xs text-gray-500 dark:text-dark-400">{{ statusInfo.statusText }}</span>
+              <span class="text-xs surface-muted">|</span>
+              <span class="text-xs surface-muted">{{ statusInfo.statusText }}</span>
             </div>
           </div>
 
@@ -172,23 +172,23 @@
             <div
               v-for="(ring, i) in ringItems"
               :key="i"
-              class="fade-up rounded-2xl border border-gray-200 bg-white p-8 backdrop-blur-sm transition-all duration-300 hover:shadow-lg dark:border-dark-700 dark:bg-dark-800"
+              class="fade-up rounded-2xl border border-gray-200 surface-inset p-8 backdrop-blur-sm transition-all duration-300 hover:shadow-lg dark:border-dark-700"
               :class="`fade-up-delay-${Math.min(i + 1, 4)}`"
             >
               <div class="flex items-center justify-between mb-6">
-                <h3 class="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-dark-400">
+                <h3 class="text-sm font-semibold uppercase tracking-wider surface-muted">
                   {{ ring.title }}
                 </h3>
                 <!-- Clock icon -->
-                <svg v-if="ring.iconType === 'clock'" class="w-5 h-5 text-gray-400 dark:text-dark-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <svg v-if="ring.iconType === 'clock'" class="w-5 h-5 surface-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
                 </svg>
                 <!-- Calendar icon -->
-                <svg v-else-if="ring.iconType === 'calendar'" class="w-5 h-5 text-gray-400 dark:text-dark-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <svg v-else-if="ring.iconType === 'calendar'" class="w-5 h-5 surface-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
                 </svg>
                 <!-- Dollar icon -->
-                <svg v-else class="w-5 h-5 text-gray-400 dark:text-dark-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <svg v-else class="w-5 h-5 surface-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
                 </svg>
               </div>
@@ -221,12 +221,12 @@
                       <span class="text-3xl font-bold tabular-nums text-gray-900 dark:text-white">
                         {{ displayPcts[i] ?? 0 }}%
                       </span>
-                      <span class="text-xs text-gray-500 dark:text-dark-400 mt-0.5">{{ t('keyUsage.used') }}</span>
+                      <span class="text-xs mt-0.5 surface-muted">{{ t('keyUsage.used') }}</span>
                       <span
                         class="text-sm font-semibold mt-1 tabular-nums"
                         :style="{ color: RING_GRADIENTS[i % 4].from }"
                       >{{ ring.amount }}</span>
-                      <p v-if="ring.resetAt && formatResetTime(ring.resetAt)" class="text-xs text-gray-400 dark:text-gray-500 mt-0.5 tabular-nums">
+                      <p v-if="ring.resetAt && formatResetTime(ring.resetAt)" class="text-xs mt-0.5 tabular-nums surface-muted">
                         ⟳ {{ formatResetTime(ring.resetAt) }}
                       </p>
                     </template>
@@ -239,10 +239,10 @@
           <!-- Detail Card -->
           <div
             v-if="detailRows.length > 0"
-            class="fade-up fade-up-delay-3 rounded-2xl border border-gray-200 bg-white backdrop-blur-sm overflow-hidden dark:border-dark-700 dark:bg-dark-800"
+            class="fade-up fade-up-delay-3 rounded-2xl border border-gray-200 surface-inset backdrop-blur-sm overflow-hidden dark:border-dark-700"
           >
             <div class="px-8 py-5 border-b border-gray-200 dark:border-dark-700">
-              <h3 class="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-dark-400">{{ t('keyUsage.detailInfo') }}</h3>
+              <h3 class="text-sm font-semibold uppercase tracking-wider surface-muted">{{ t('keyUsage.detailInfo') }}</h3>
             </div>
             <div class="divide-y divide-gray-100 dark:divide-dark-800">
               <div
@@ -260,7 +260,7 @@
                       v-html="row.iconSvg"
                     ></svg>
                   </div>
-                  <span class="text-sm text-gray-700 dark:text-dark-200">{{ row.label }}</span>
+                  <span class="text-sm surface-muted">{{ row.label }}</span>
                 </div>
                 <span class="text-sm font-semibold tabular-nums" :class="row.valueClass || 'text-gray-900 dark:text-white'">
                   {{ row.value }}
@@ -272,20 +272,20 @@
           <!-- Usage Stats Card -->
           <div
             v-if="usageStatCells.length > 0"
-            class="fade-up fade-up-delay-3 rounded-2xl border border-gray-200 bg-white backdrop-blur-sm overflow-hidden dark:border-dark-700 dark:bg-dark-800"
+            class="fade-up fade-up-delay-3 rounded-2xl border border-gray-200 surface-inset backdrop-blur-sm overflow-hidden dark:border-dark-700"
           >
             <div class="px-8 py-5 border-b border-gray-200 dark:border-dark-700">
-              <h3 class="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-dark-400">{{ t('keyUsage.tokenStats') }}</h3>
+              <h3 class="text-sm font-semibold uppercase tracking-wider surface-muted">{{ t('keyUsage.tokenStats') }}</h3>
             </div>
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-px bg-gray-100 dark:bg-dark-800">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-px surface-inset">
               <div
                 v-for="(cell, i) in usageStatCells"
                 :key="i"
-                class="bg-white px-6 py-4 dark:bg-dark-900"
+                class="surface-inset px-6 py-4"
               >
-                <div class="text-xs text-gray-500 dark:text-dark-400 mb-1">{{ cell.label }}</div>
+                <div class="text-xs mb-1 surface-muted">{{ cell.label }}</div>
                 <div class="text-sm font-semibold tabular-nums text-gray-900 dark:text-white">
-                  {{ cell.value }} <span v-if="cell.share" class="text-xs font-normal text-gray-400">({{ cell.share }})</span>
+                  {{ cell.value }} <span v-if="cell.share" class="text-xs font-normal surface-muted">({{ cell.share }})</span>
                 </div>
               </div>
             </div>
@@ -294,19 +294,19 @@
           <!-- Daily Usage Table -->
           <div
             v-if="showDailyUsage"
-            class="fade-up fade-up-delay-4 rounded-2xl border border-gray-200 bg-white backdrop-blur-sm overflow-hidden dark:border-dark-700 dark:bg-dark-800"
+            class="fade-up fade-up-delay-4 rounded-2xl border border-gray-200 surface-inset backdrop-blur-sm overflow-hidden dark:border-dark-700"
           >
             <div class="flex flex-col gap-3 px-8 py-5 border-b border-gray-200 dark:border-dark-700 sm:flex-row sm:items-center sm:justify-between">
-              <h3 class="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-dark-400">{{ t('keyUsage.dailyDetail') }}</h3>
-              <div class="inline-flex rounded-lg border border-gray-200 bg-white p-0.5 dark:border-dark-700 dark:bg-dark-950">
+              <h3 class="text-sm font-semibold uppercase tracking-wider surface-muted">{{ t('keyUsage.dailyDetail') }}</h3>
+              <div class="inline-flex rounded-lg border border-gray-200 surface-inset p-0.5 dark:border-dark-700">
                 <button
                   v-for="option in dailyUsageOptions"
                   :key="option.value"
                   @click="setDailyUsageDays(option.value)"
-                  class="min-w-12 rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
+                  class="min-w-12 rounded-md px-3 py-1.5 text-xs font-medium transition-colors surface-control"
                   :class="dailyUsageDays === option.value
                     ? 'bg-primary-500 text-white'
-                    : 'text-gray-600 hover:bg-gray-100 dark:text-dark-300 dark:hover:bg-dark-800'"
+                    : 'text-gray-600 hover:surface-hover dark:text-dark-300 dark:hover:surface-hover'"
                 >
                   {{ option.label }}
                 </button>
@@ -315,14 +315,14 @@
             <div v-if="dailyUsageRows.length > 0" class="table-container overflow-x-auto">
               <table class="w-full">
                 <thead>
-                  <tr class="border-b border-gray-200 bg-gray-50 dark:border-dark-700 dark:bg-dark-950">
-                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-dark-400">{{ t('keyUsage.date') }}</th>
-                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-dark-400">{{ t('keyUsage.requests') }}</th>
-                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-dark-400">{{ t('keyUsage.inputTokens') }}</th>
-                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-dark-400">{{ t('keyUsage.outputTokens') }}</th>
-                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-dark-400">{{ t('keyUsage.cacheReadTokens') }}</th>
-                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-dark-400">{{ t('keyUsage.cacheWriteTokens') }}</th>
-                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-dark-400">{{ t('keyUsage.cost') }}</th>
+                  <tr class="border-b border-gray-200 surface-inset dark:border-dark-700">
+                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider surface-muted">{{ t('keyUsage.date') }}</th>
+                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider surface-muted">{{ t('keyUsage.requests') }}</th>
+                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider surface-muted">{{ t('keyUsage.inputTokens') }}</th>
+                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider surface-muted">{{ t('keyUsage.outputTokens') }}</th>
+                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider surface-muted">{{ t('keyUsage.cacheReadTokens') }}</th>
+                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider surface-muted">{{ t('keyUsage.cacheWriteTokens') }}</th>
+                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider surface-muted">{{ t('keyUsage.cost') }}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -332,17 +332,17 @@
                     class="border-b border-gray-100 last:border-b-0 dark:border-dark-800"
                   >
                     <td class="px-4 py-3 text-sm font-medium whitespace-nowrap text-gray-900 dark:text-white">{{ row.date }}</td>
-                    <td class="px-4 py-3 text-sm tabular-nums text-right text-gray-700 dark:text-dark-200">{{ fmtNum(row.requests) }}</td>
-                    <td class="px-4 py-3 text-sm tabular-nums text-right text-gray-700 dark:text-dark-200">{{ fmtNum(row.input_tokens) }} <span v-if="dailyTokenShare(row, row.input_tokens)" class="text-xs text-gray-400">({{ dailyTokenShare(row, row.input_tokens) }})</span></td>
-                    <td class="px-4 py-3 text-sm tabular-nums text-right text-gray-700 dark:text-dark-200">{{ fmtNum(row.output_tokens) }} <span v-if="dailyTokenShare(row, row.output_tokens)" class="text-xs text-gray-400">({{ dailyTokenShare(row, row.output_tokens) }})</span></td>
-                    <td class="px-4 py-3 text-sm tabular-nums text-right text-gray-700 dark:text-dark-200">{{ fmtNum(row.cache_read_tokens) }} <span v-if="dailyTokenShare(row, row.cache_read_tokens)" class="text-xs text-gray-400">({{ dailyTokenShare(row, row.cache_read_tokens) }})</span></td>
-                    <td class="px-4 py-3 text-sm tabular-nums text-right text-gray-700 dark:text-dark-200">{{ fmtNum(row.cache_write_tokens) }} <span v-if="dailyTokenShare(row, row.cache_write_tokens)" class="text-xs text-gray-400">({{ dailyTokenShare(row, row.cache_write_tokens) }})</span></td>
+                    <td class="px-4 py-3 text-sm tabular-nums text-right surface-muted">{{ fmtNum(row.requests) }}</td>
+                    <td class="px-4 py-3 text-sm tabular-nums text-right surface-muted">{{ fmtNum(row.input_tokens) }} <span v-if="dailyTokenShare(row, row.input_tokens)" class="text-xs surface-muted">({{ dailyTokenShare(row, row.input_tokens) }})</span></td>
+                    <td class="px-4 py-3 text-sm tabular-nums text-right surface-muted">{{ fmtNum(row.output_tokens) }} <span v-if="dailyTokenShare(row, row.output_tokens)" class="text-xs surface-muted">({{ dailyTokenShare(row, row.output_tokens) }})</span></td>
+                    <td class="px-4 py-3 text-sm tabular-nums text-right surface-muted">{{ fmtNum(row.cache_read_tokens) }} <span v-if="dailyTokenShare(row, row.cache_read_tokens)" class="text-xs surface-muted">({{ dailyTokenShare(row, row.cache_read_tokens) }})</span></td>
+                    <td class="px-4 py-3 text-sm tabular-nums text-right surface-muted">{{ fmtNum(row.cache_write_tokens) }} <span v-if="dailyTokenShare(row, row.cache_write_tokens)" class="text-xs surface-muted">({{ dailyTokenShare(row, row.cache_write_tokens) }})</span></td>
                     <td class="px-4 py-3 text-sm tabular-nums text-right font-medium text-gray-900 dark:text-white">{{ usd(row.actual_cost != null ? row.actual_cost : row.cost) }}</td>
                   </tr>
                 </tbody>
               </table>
             </div>
-            <div v-else class="px-8 py-8 text-center text-sm text-gray-500 dark:text-dark-400">
+            <div v-else class="px-8 py-8 text-center text-sm surface-muted">
               {{ t('keyUsage.noDailyUsage') }}
             </div>
           </div>
@@ -350,23 +350,23 @@
           <!-- Model Stats Table -->
           <div
             v-if="modelStats.length > 0"
-            class="fade-up fade-up-delay-4 rounded-2xl border border-gray-200 bg-white backdrop-blur-sm overflow-hidden dark:border-dark-700 dark:bg-dark-800"
+            class="fade-up fade-up-delay-4 rounded-2xl border border-gray-200 surface-inset backdrop-blur-sm overflow-hidden dark:border-dark-700"
           >
             <div class="px-8 py-5 border-b border-gray-200 dark:border-dark-700">
-              <h3 class="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-dark-400">{{ t('keyUsage.modelStats') }}</h3>
+              <h3 class="text-sm font-semibold uppercase tracking-wider surface-muted">{{ t('keyUsage.modelStats') }}</h3>
             </div>
             <div class="table-container overflow-x-auto">
               <table class="w-full">
                 <thead>
-                  <tr class="border-b border-gray-200 bg-gray-50 dark:border-dark-700 dark:bg-dark-950">
-                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-dark-400">{{ t('keyUsage.model') }}</th>
-                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-dark-400">{{ t('keyUsage.requests') }}</th>
-                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-dark-400">{{ t('keyUsage.inputTokens') }}</th>
-                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-dark-400">{{ t('keyUsage.outputTokens') }}</th>
-                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-dark-400">{{ t('keyUsage.cacheCreationTokens') }}</th>
-                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-dark-400">{{ t('keyUsage.cacheReadTokens') }}</th>
-                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-dark-400">{{ t('keyUsage.totalTokens') }}</th>
-                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-dark-400">{{ t('keyUsage.cost') }}</th>
+                  <tr class="border-b border-gray-200 surface-inset dark:border-dark-700">
+                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider surface-muted">{{ t('keyUsage.model') }}</th>
+                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider surface-muted">{{ t('keyUsage.requests') }}</th>
+                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider surface-muted">{{ t('keyUsage.inputTokens') }}</th>
+                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider surface-muted">{{ t('keyUsage.outputTokens') }}</th>
+                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider surface-muted">{{ t('keyUsage.cacheCreationTokens') }}</th>
+                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider surface-muted">{{ t('keyUsage.cacheReadTokens') }}</th>
+                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider surface-muted">{{ t('keyUsage.totalTokens') }}</th>
+                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider surface-muted">{{ t('keyUsage.cost') }}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -376,12 +376,12 @@
                     class="border-b border-gray-100 last:border-b-0 dark:border-dark-800"
                   >
                     <td class="px-4 py-3 text-sm font-medium whitespace-nowrap text-gray-900 dark:text-white">{{ m.model || '-' }}</td>
-                    <td class="px-4 py-3 text-sm tabular-nums text-right text-gray-700 dark:text-dark-200">{{ fmtNum(m.requests) }}</td>
-                    <td class="px-4 py-3 text-sm tabular-nums text-right text-gray-700 dark:text-dark-200">{{ fmtNum(m.input_tokens) }} <span v-if="modelTokenShare(m.input_tokens, m.total_tokens)" class="text-xs text-gray-400">({{ modelTokenShare(m.input_tokens, m.total_tokens) }})</span></td>
-                    <td class="px-4 py-3 text-sm tabular-nums text-right text-gray-700 dark:text-dark-200">{{ fmtNum(m.output_tokens) }} <span v-if="modelTokenShare(m.output_tokens, m.total_tokens)" class="text-xs text-gray-400">({{ modelTokenShare(m.output_tokens, m.total_tokens) }})</span></td>
-                    <td class="px-4 py-3 text-sm tabular-nums text-right text-gray-700 dark:text-dark-200">{{ fmtNum(m.cache_creation_tokens) }} <span v-if="modelTokenShare(m.cache_creation_tokens, m.total_tokens)" class="text-xs text-gray-400">({{ modelTokenShare(m.cache_creation_tokens, m.total_tokens) }})</span></td>
-                    <td class="px-4 py-3 text-sm tabular-nums text-right text-gray-700 dark:text-dark-200">{{ fmtNum(m.cache_read_tokens) }} <span v-if="modelTokenShare(m.cache_read_tokens, m.total_tokens)" class="text-xs text-gray-400">({{ modelTokenShare(m.cache_read_tokens, m.total_tokens) }})</span></td>
-                    <td class="px-4 py-3 text-sm tabular-nums text-right text-gray-700 dark:text-dark-200">{{ fmtNum(m.total_tokens) }} <span v-if="totalTokenShare(m.total_tokens)" class="text-xs text-gray-400">({{ totalTokenShare(m.total_tokens) }})</span></td>
+                    <td class="px-4 py-3 text-sm tabular-nums text-right surface-muted">{{ fmtNum(m.requests) }}</td>
+                    <td class="px-4 py-3 text-sm tabular-nums text-right surface-muted">{{ fmtNum(m.input_tokens) }} <span v-if="modelTokenShare(m.input_tokens, m.total_tokens)" class="text-xs surface-muted">({{ modelTokenShare(m.input_tokens, m.total_tokens) }})</span></td>
+                    <td class="px-4 py-3 text-sm tabular-nums text-right surface-muted">{{ fmtNum(m.output_tokens) }} <span v-if="modelTokenShare(m.output_tokens, m.total_tokens)" class="text-xs surface-muted">({{ modelTokenShare(m.output_tokens, m.total_tokens) }})</span></td>
+                    <td class="px-4 py-3 text-sm tabular-nums text-right surface-muted">{{ fmtNum(m.cache_creation_tokens) }} <span v-if="modelTokenShare(m.cache_creation_tokens, m.total_tokens)" class="text-xs surface-muted">({{ modelTokenShare(m.cache_creation_tokens, m.total_tokens) }})</span></td>
+                    <td class="px-4 py-3 text-sm tabular-nums text-right surface-muted">{{ fmtNum(m.cache_read_tokens) }} <span v-if="modelTokenShare(m.cache_read_tokens, m.total_tokens)" class="text-xs surface-muted">({{ modelTokenShare(m.cache_read_tokens, m.total_tokens) }})</span></td>
+                    <td class="px-4 py-3 text-sm tabular-nums text-right surface-muted">{{ fmtNum(m.total_tokens) }} <span v-if="totalTokenShare(m.total_tokens)" class="text-xs surface-muted">({{ totalTokenShare(m.total_tokens) }})</span></td>
                     <td class="px-4 py-3 text-sm tabular-nums text-right font-medium text-gray-900 dark:text-white">{{ usd(m.actual_cost != null ? m.actual_cost : m.cost) }}</td>
                   </tr>
                 </tbody>
@@ -395,7 +395,7 @@
     <!-- Footer (same pattern as HomeView) -->
     <footer class="relative z-10 border-t border-gray-200/50 px-6 py-8 dark:border-dark-800/50">
       <div class="mx-auto flex max-w-6xl flex-col items-center justify-center gap-4 text-center sm:flex-row sm:text-left">
-        <p class="text-sm text-gray-500 dark:text-dark-400">
+        <p class="text-sm surface-muted">
           &copy; {{ currentYear }} {{ siteName }}. {{ t('home.footer.allRightsReserved') }}
         </p>
         <div class="flex items-center gap-4">
@@ -404,13 +404,13 @@
             :href="docUrl"
             target="_blank"
             rel="noopener noreferrer"
-            class="text-sm text-gray-500 transition-colors hover:text-gray-700 dark:text-dark-400 dark:hover:text-white"
+            class="text-sm transition-colors hover:text-gray-700 dark:hover:text-white surface-muted"
           >{{ t('home.docs') }}</a>
           <a
             :href="githubUrl"
             target="_blank"
             rel="noopener noreferrer"
-            class="text-sm text-gray-500 transition-colors hover:text-gray-700 dark:text-dark-400 dark:hover:text-white"
+            class="text-sm transition-colors hover:text-gray-700 dark:hover:text-white surface-muted"
           >GitHub</a>
         </div>
       </div>

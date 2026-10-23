@@ -1,6 +1,6 @@
 <template>
   <div class="flex justify-between gap-2">
-    <span class="text-gray-500 dark:text-gray-400">{{ label }}</span>
+    <span class="surface-muted">{{ label }}</span>
     <span class="font-mono">{{ display }}</span>
   </div>
 </template>

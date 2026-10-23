@@ -340,6 +340,7 @@ type DefaultSubscriptionSetting struct {
 }
 
 type PublicSettings struct {
+	ConsoleAppearance                   ConsoleAppearance
 	RegistrationEnabled                 bool
 	EmailVerifyEnabled                  bool
 	ForceEmailOnThirdPartySignup        bool

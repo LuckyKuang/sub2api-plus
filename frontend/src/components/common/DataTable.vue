@@ -21,7 +21,7 @@
             <Icon
               name="inbox"
               size="xl"
-              class="mb-4 h-12 w-12 text-gray-400 dark:text-dark-500"
+              class="mb-4 h-12 w-12 surface-muted"
             />
             <p class="text-lg font-medium text-gray-900 dark:text-gray-100">
               {{ t('empty.noData') }}
@@ -33,7 +33,7 @@
 
     <template v-else>
       <div v-if="selectable" class="flex items-center justify-end gap-2 px-1">
-        <label class="flex items-center gap-2 text-sm font-medium text-gray-600 dark:text-gray-300">
+        <label class="flex items-center gap-2 text-sm font-medium surface-muted">
           <input
             type="checkbox"
             class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-dark-600 dark:bg-dark-800"
@@ -73,7 +73,7 @@
             :data-field="column.key"
             class="flex min-w-0 items-start justify-between gap-4"
           >
-            <span class="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-dark-400">
+            <span class="text-xs font-medium uppercase tracking-wider surface-muted">
               {{ column.label }}
             </span>
             <div class="min-w-0 max-w-full text-right text-sm text-gray-900 dark:text-gray-100">
@@ -101,7 +101,7 @@
     }"
   >
     <table class="w-full min-w-max divide-y divide-gray-200 dark:divide-dark-700">
-      <thead class="table-header bg-gray-50 dark:bg-dark-800">
+      <thead class="table-header surface-inset">
         <tr>
           <th
             v-if="selectable"
@@ -125,9 +125,9 @@
             scope="col"
             :aria-sort="column.sortable ? getColumnAriaSort(column.key) : undefined"
             :class="[
-              'sticky-header-cell py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-dark-400',
+              'sticky-header-cell py-3 text-left text-xs font-medium uppercase tracking-wider surface-muted',
               getAdaptivePaddingClass(),
-              { 'cursor-pointer hover:bg-gray-100 dark:hover:bg-dark-700': column.sortable },
+              { 'cursor-pointer hover:surface-hover dark:hover:surface-hover': column.sortable },
               getStickyColumnClass(column, index),
               column.class
             ]"
@@ -168,7 +168,7 @@
           </th>
         </tr>
       </thead>
-      <tbody class="table-body divide-y divide-gray-200 bg-white dark:divide-dark-700 dark:bg-dark-800">
+      <tbody class="table-body divide-y divide-gray-200 dark:divide-dark-700">
         <!-- Loading skeleton -->
         <tr v-if="loading && !data?.length" v-for="i in 5" :key="i">
           <td v-if="selectable" class="w-11 min-w-11 px-3 py-4">
@@ -185,14 +185,14 @@
         <tr v-else-if="!data || data.length === 0">
           <td
             :colspan="tableColumnCount"
-            :class="['py-12 text-center text-gray-500 dark:text-dark-400', getAdaptivePaddingClass()]"
+            :class="['py-12 text-center surface-muted', getAdaptivePaddingClass()]"
           >
             <slot name="empty">
               <div class="flex flex-col items-center">
                 <Icon
                   name="inbox"
                   size="xl"
-                  class="mb-4 h-12 w-12 text-gray-400 dark:text-dark-500"
+                  class="mb-4 h-12 w-12 surface-muted"
                 />
                 <p class="text-lg font-medium text-gray-900 dark:text-gray-100">
                   {{ t('empty.noData') }}
@@ -976,7 +976,7 @@ defineExpose({
   position: sticky;
   top: 0;
   z-index: 200;
-  background-color: var(--table-header-bg);
+  background-color: transparent;
 }
 
 
@@ -991,7 +991,7 @@ defineExpose({
   position: sticky;
   top: 0;
   z-index: 210; /* 必须高于所有表体内容 */
-  background-color: var(--table-header-bg);
+  background-color: transparent;
 }
 
 
@@ -1028,7 +1028,7 @@ defineExpose({
 
 /* 表体 sticky 列背景 */
 tbody .sticky-col {
-  background-color: var(--surface-solid);
+  background-color: transparent;
 }
 
 

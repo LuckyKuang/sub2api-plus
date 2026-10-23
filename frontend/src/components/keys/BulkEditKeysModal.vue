@@ -12,7 +12,7 @@
         <p class="font-medium text-gray-900 dark:text-white">
           {{ t('keys.bulkEdit.selectedCount', { count: pendingKeys.length }) }}
         </p>
-        <p class="text-gray-500 dark:text-gray-400">{{ t('keys.bulkEdit.hint') }}</p>
+        <p class="surface-muted">{{ t('keys.bulkEdit.hint') }}</p>
       </div>
 
       <fieldset :disabled="submitting" class="space-y-5">

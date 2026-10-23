@@ -102,11 +102,11 @@ onUnmounted(() => {
 }
 
 .table-scroll-container :deep(th) {
-  @apply px-5 py-4 text-left text-sm font-medium text-gray-600 dark:text-dark-300 border-b border-gray-200 dark:border-dark-700;
+  @apply px-5 py-4 text-left text-sm font-medium border-b border-gray-200 dark:border-dark-700; color: var(--surface-muted);
 }
 
 .table-scroll-container :deep(td) {
-  @apply px-5 py-4 text-sm text-gray-700 dark:text-gray-300;
+  @apply px-5 py-4 text-sm; color: var(--surface-muted);
   border-bottom: 1px solid var(--table-row-border);
 }
 

@@ -1,6 +1,6 @@
 <template>
   <div
-    class="relative flex min-h-screen items-center justify-center overflow-hidden bg-gray-50 px-4 dark:bg-dark-950"
+    class="relative flex min-h-screen items-center justify-center overflow-hidden surface-inset px-4"
   >
     <!-- Background Decoration -->
     <div class="pointer-events-none absolute inset-0 overflow-hidden">
@@ -46,7 +46,7 @@
         <h1 class="mb-3 text-2xl font-bold text-gray-900 dark:text-white">
           {{ t('errors.pageNotFound') }}
         </h1>
-        <p class="text-gray-500 dark:text-dark-400">
+        <p class="surface-muted">
           The page you are looking for doesn't exist or has been moved.
         </p>
       </div>
@@ -64,7 +64,7 @@
       </div>
 
       <!-- Help Link -->
-      <p class="mt-8 text-sm text-gray-400 dark:text-dark-500">
+      <p class="mt-8 text-sm surface-muted">
         Need help?
         <a
           href="#"

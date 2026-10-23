@@ -39,17 +39,17 @@
               </div>
 
               <div class="space-y-1">
-                <p class="truncate text-sm text-gray-600 dark:text-gray-300">
+                <p class="truncate text-sm surface-muted">
                   {{ primaryEmailDisplay }}
                 </p>
                 <div
                   v-if="sourceHints.length"
-                  class="flex flex-wrap gap-2 text-xs text-gray-500 dark:text-gray-400"
+                  class="flex flex-wrap gap-2 text-xs surface-muted"
                 >
                   <span
                     v-for="hint in sourceHints"
                     :key="hint.key"
-                    class="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1 ring-1 ring-primary-100 dark:bg-dark-900 dark:ring-primary-900/40"
+                    class="inline-flex items-center gap-1 rounded-full surface-inset px-3 py-1 ring-1 ring-primary-100 dark:ring-primary-900/40"
                   >
                     <Icon name="link" size="sm" />
                     {{ hint.text }}
@@ -63,7 +63,7 @@
                 data-testid="profile-overview-metric-balance"
                 class="glass-surface px-4 py-3 ring-1 ring-white/70 dark:ring-dark-700"
               >
-                <p class="text-xs font-medium uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">
+                <p class="text-xs font-medium uppercase tracking-[0.16em] surface-muted">
                   {{ t('profile.accountBalance') }}
                 </p>
                 <p class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">
@@ -74,7 +74,7 @@
                 data-testid="profile-overview-metric-concurrency"
                 class="glass-surface px-4 py-3 ring-1 ring-white/70 dark:ring-dark-700"
               >
-                <p class="text-xs font-medium uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">
+                <p class="text-xs font-medium uppercase tracking-[0.16em] surface-muted">
                   {{ t('profile.concurrencyLimit') }}
                 </p>
                 <p class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">
@@ -85,7 +85,7 @@
                 data-testid="profile-overview-metric-member-since"
                 class="glass-surface px-4 py-3 ring-1 ring-white/70 dark:ring-dark-700"
               >
-                <p class="text-xs font-medium uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">
+                <p class="text-xs font-medium uppercase tracking-[0.16em] surface-muted">
                   {{ t('profile.memberSince') }}
                 </p>
                 <p class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">
@@ -109,7 +109,7 @@
               <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
                 {{ t('profile.basicsTitle') }}
               </h3>
-              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              <p class="mt-1 text-sm surface-muted">
                 {{ t('profile.basicsDescription') }}
               </p>
             </div>
@@ -159,7 +159,7 @@
           <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
             {{ t('profile.linkedProfileSources') }}
           </h3>
-          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+          <p class="mt-1 text-sm surface-muted">
             {{ t('profile.linkedProfileSourcesDescription') }}
           </p>
 
@@ -167,9 +167,9 @@
             <div
               v-for="hint in sourceHints"
               :key="hint.key"
-              class="glass-surface flex items-start gap-3 border px-4 py-3 text-sm text-gray-600 dark:text-gray-300"
+              class="glass-surface flex items-start gap-3 border px-4 py-3 text-sm surface-muted"
             >
-              <Icon name="link" size="sm" class="mt-0.5 text-gray-400 dark:text-gray-500" />
+              <Icon name="link" size="sm" class="mt-0.5 surface-muted" />
               <span>{{ hint.text }}</span>
             </div>
           </div>

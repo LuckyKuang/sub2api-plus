@@ -233,3 +233,72 @@ User dashboard queries honor browser `timezone`, falling back to server settings
 for absent/invalid zones. `generated_at` is query start, not a consistent snapshot
 across separate profile/quota/statistics/chart queries. Selected chart dates are
 independent of today cards. [USAGE_TIMING](USAGE_TIMING.md) formulas remain unchanged.
+## Global console appearance
+
+In **System Settings → General → Appearance and background**, administrators can
+upload or replace a shared background, adjust light/dark masks independently,
+and set one card transparency for the sidebar, header, and content cards. The
+setting applies to both admin and user consoles. Each viewer retains their own
+theme choice. Text, buttons, dropdown panels, and modal surfaces retain their
+readability; surface transparency never changes ancestor `opacity` or adds a
+container filter. Glass blur stays on the existing decorative layer.
+
+Upload and adjustment produce a local draft. Page preview affects only that
+administrator and ends when leaving General or the settings page. **Save
+appearance** publishes this card independently from other general settings.
+**Restore defaults** is also a draft until saved: it clears the image, restores
+the existing gradient, resets light/dark masks to 30%/48%, and restores the
+original theme-specific card opacity. After first uploading a custom image,
+custom card transparency starts at the approved 45% (55% background opacity).
+Custom transparency ranges from 0% opaque to 100% transparent. System reduced
+transparency preferences continue to request solid card surfaces.
+
+JPG/PNG/WebP input is limited to 10 MiB and 40 megapixels. The browser flattens
+and compresses it to JPEG, at most 2560 pixels on its longest side and 2 MiB.
+The server validates bytes, declared format, full decode, dimensions (at most
+4096 per side and 16 megapixels), and re-encodes JPEG to strip metadata and
+animation before atomically storing the image and public metadata in the
+existing settings table. No extra filesystem volume or environment variable is
+required. Do not commit user images. A failed validation or database write must
+not replace the active appearance.
+
+`GET/PUT /api/v1/admin/settings/appearance` use the existing admin authentication,
+rate limiting, compliance guard, and operation audit. PUT accepts `light_mask`,
+`dark_mask`, nullable `card_transparency` (null = original theme defaults), and
+optional `background_image` (JPEG/PNG/WebP data URL; omitted/null keeps the
+current image, empty string removes it). Percentages must be integers in
+0–100. Responses, `GET /api/v1/settings/public`, and injected `__APP_CONFIG__`
+expose `console_appearance` metadata only: `background_url`, the two masks,
+and transparency. Image bytes are never embedded in these public payloads.
+
+`GET /api/v1/settings/console-background/:revision` publicly serves the active
+JPEG with a SHA-256 URL, ETag, `nosniff`, and immutable caching. A replaced or
+cleared uncached URL returns 404 with `no-store`; already cached images may
+remain in browser caches until expiry. Saving invalidates the HTML settings
+cache and immediately updates the administrator's public-settings cache. Other
+viewers get the published appearance on refresh. Failed image loads fall back
+to the built-in gradient, and stale load completions must not replace a newer
+image or a reset. Table bodies share their card's glass surface. Sticky headers
+and columns retain translucent paint and blur while scrolling; they never switch
+to a solid black background. Hover, selection, edge shadows, stacking and focus
+remain intact.
+
+Console surfaces use the shared tokens in `frontend/src/styles/console.css` and
+`surfaces.css`. `surface-card` paints standalone cards, `surface-inset` paints
+nested sections, `surface-control` paints buttons, and `surface-panel` owns
+dropdown/custom-dialog decoration. `surface-overlay` is a separate, lightly
+dimmed full-screen scrim, never a second glass panel. Shared Select, date-range,
+proxy, dialog and button styles use these same tokens. New controls must retain
+their integrated search, checkbox, focus, error and disabled behavior.
+
+With 45% card transparency, ordinary fields/buttons use 22% background opacity,
+inset sections 17.6%, menus/dialogs 55%, and sticky surfaces 31.9%. Menus/dialogs
+blur the decoration by 24px; controls use 10px. Deep-theme secondary text uses
+`#c1cdd1`, with distinct primary, selected and danger colors. Do not dim ancestor
+opacity or filter containers holding fixed menus. Preserve opaque switch thumbs,
+status/progress marks and QR quiet zones (`surface-opaque`). Reduced-transparency
+preferences and browsers without backdrop filtering use solid surface tokens.
+
+The date-range menu retains its trigger alignment when it fits, and otherwise
+stays at least 12px from the horizontal viewport edges. Opening, scrolling or
+resizing the menu must not apply date changes; Apply retains that responsibility.

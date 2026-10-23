@@ -1,7 +1,7 @@
 <template>
   <div>
     <!-- Tags display -->
-    <div class="flex flex-wrap gap-1.5 rounded-lg border border-gray-200 bg-white p-2 dark:border-dark-600 dark:bg-dark-800 min-h-[2.5rem]">
+    <div class="flex flex-wrap gap-1.5 rounded-lg border border-gray-200 surface-inset p-2 dark:border-dark-600 min-h-[2.5rem]">
       <span
         v-for="(model, idx) in models"
         :key="idx"
@@ -12,7 +12,7 @@
         <button
           type="button"
           @click="removeModel(idx)"
-          class="ml-0.5 rounded-full p-0.5 hover:bg-primary-200 dark:hover:bg-primary-800"
+          class="ml-0.5 rounded-full p-0.5 hover:bg-primary-200/25 dark:hover:bg-primary-800/25 surface-control"
         >
           <Icon name="x" size="xs" />
         </button>
@@ -30,7 +30,7 @@
         @blur="addModel"
       />
     </div>
-    <p class="mt-1 text-xs text-gray-400">
+    <p class="mt-1 text-xs surface-muted">
       {{ t('admin.channels.form.modelInputHint', 'Press Enter to add, supports paste for batch import.') }}
     </p>
   </div>

@@ -15,7 +15,7 @@
         v-if="visible"
         type="button"
         data-testid="claude-reset-count"
-        class="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium text-blue-600 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-blue-400 dark:hover:bg-blue-900/30"
+        class="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium text-blue-600 transition-colors hover:bg-blue-50/25 disabled:cursor-not-allowed disabled:opacity-50 dark:text-blue-400 dark:hover:bg-blue-900/30 surface-control"
         :disabled="loading || redeeming"
         :title="countButtonTitle"
         @click="refresh"
@@ -41,7 +41,7 @@
         v-if="visible"
         type="button"
         data-testid="claude-reset-redeem"
-        class="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium text-orange-600 transition-colors hover:bg-orange-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-orange-400 dark:hover:bg-orange-900/30"
+        class="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium text-orange-600 transition-colors hover:bg-orange-50/25 disabled:cursor-not-allowed disabled:opacity-50 dark:text-orange-400 dark:hover:bg-orange-900/30 surface-control"
         :disabled="redeeming || loading || !canRedeem"
         :title="redeemButtonTitle"
         @click="openRedeemConfirm"
@@ -68,7 +68,7 @@
       <span
         v-if="primaryCredit?.expires_at"
         data-testid="claude-reset-expiry"
-        class="inline-flex max-w-full items-center rounded bg-gray-100 px-1.5 py-0.5 text-[10px] leading-4 text-gray-600 tabular-nums dark:bg-dark-800 dark:text-gray-300"
+        class="inline-flex max-w-full items-center rounded surface-inset px-1.5 py-0.5 text-[10px] leading-4 tabular-nums surface-muted"
         :title="creditTitle"
       >
         {{ t('admin.accounts.claudeResetCredits.expiresAt', { time: formatTime(primaryCredit.expires_at, 'short') }) }}
@@ -76,7 +76,7 @@
       <span
         v-if="status.eligible && totalResets > 0 && status.available_count === 0"
         data-testid="claude-reset-not-usable"
-        class="text-[10px] text-gray-500 dark:text-gray-400"
+        class="text-[10px] surface-muted"
       >
         {{ t('admin.accounts.claudeResetCredits.notUsableNow') }}
       </span>

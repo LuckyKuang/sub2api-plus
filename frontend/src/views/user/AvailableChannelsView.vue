@@ -4,17 +4,17 @@
       <div class="flex items-start justify-between gap-3">
         <div>
           <h1 class="text-xl font-semibold text-gray-900 dark:text-gray-100">{{ t('availableChannels.title') }}</h1>
-          <p class="mt-1 text-sm text-gray-500 dark:text-dark-400">{{ t('availableChannels.description') }}</p>
+          <p class="mt-1 text-sm surface-muted">{{ t('availableChannels.description') }}</p>
         </div>
         <button ref="refreshButton" class="btn btn-secondary" :disabled="loading" :aria-label="t('common.refresh')" @click="loadCatalog">
           <Icon name="refresh" size="md" :class="{ 'animate-spin': loading }" />
         </button>
       </div>
-      <div class="space-y-4 rounded-xl border border-gray-200 bg-white p-4 dark:border-dark-700 dark:bg-dark-900">
+      <div class="surface-card space-y-4 rounded-xl border border-gray-200 p-4 dark:border-dark-700">
         <div class="flex flex-wrap items-center gap-2" role="group" :aria-label="t('modelPlaza.filters.platformLabel')">
-          <span class="mr-2 text-xs text-gray-500 dark:text-dark-400">{{ t('modelPlaza.filters.platformLabel') }}</span>
-          <button class="catalog-filter" :class="{ selected: !filters.platform }" :aria-pressed="!filters.platform" @click="selectPlatform('')">{{ t('modelPlaza.filters.all') }} <span class="opacity-60">{{ models.length }}</span></button>
-          <button v-for="platform in platforms" :key="platform" class="catalog-filter" :class="{ selected: filters.platform === platform }" :aria-pressed="filters.platform === platform" @click="selectPlatform(platform)">
+          <span class="mr-2 text-xs surface-muted">{{ t('modelPlaza.filters.platformLabel') }}</span>
+          <button class="catalog-filter surface-control" :class="{ selected: !filters.platform }" :aria-pressed="!filters.platform" @click="selectPlatform('')">{{ t('modelPlaza.filters.all') }} <span class="opacity-60">{{ models.length }}</span></button>
+          <button v-for="platform in platforms" :key="platform" class="catalog-filter surface-control" :class="{ selected: filters.platform === platform }" :aria-pressed="filters.platform === platform" @click="selectPlatform(platform)">
             <PlatformIcon :platform="platform" size="sm" />{{ platform }} <span class="opacity-60">{{ platformCount(platform) }}</span>
           </button>
         </div>
@@ -35,17 +35,17 @@
           <button class="btn btn-secondary" @click="reset">{{ t('availableChannels.catalog.reset') }}</button>
         </div>
       </div>
-      <div v-if="catalog.user_rate_status === 'unavailable'" role="status" class="flex flex-wrap items-center gap-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
-        {{ t('availableChannels.catalog.ratesUnavailable') }}<button class="underline" @click="loadCatalog">{{ t('availableChannels.catalog.retry') }}</button>
+      <div v-if="catalog.user_rate_status === 'unavailable'" role="status" class="flex flex-wrap items-center gap-3 rounded-lg bg-amber-50/[0.15] p-3 text-sm text-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+        {{ t('availableChannels.catalog.ratesUnavailable') }}<button class="underline surface-control" @click="loadCatalog">{{ t('availableChannels.catalog.retry') }}</button>
       </div>
-      <p v-if="!loading && !error" class="text-xs text-gray-500 dark:text-dark-400" aria-live="polite">{{ t('availableChannels.catalog.modelCount', { count: visible.length }) }}</p>
+      <p v-if="!loading && !error" class="text-xs surface-muted" aria-live="polite">{{ t('availableChannels.catalog.modelCount', { count: visible.length }) }}</p>
       <div v-if="loading" class="catalog-grid" aria-busy="true" :aria-label="t('common.loading')">
         <div v-for="i in 12" :key="i" class="glass-surface h-52 animate-pulse" />
       </div>
       <div v-else-if="error" role="alert" class="py-12 text-center">
         <p class="text-red-600 dark:text-red-400">{{ error }}</p><button class="btn btn-secondary mt-4" @click="loadCatalog">{{ t('availableChannels.catalog.retry') }}</button>
       </div>
-      <div v-else-if="!visible.length" class="py-12 text-center text-gray-500 dark:text-dark-400">
+      <div v-else-if="!visible.length" class="py-12 text-center surface-muted">
         <p>{{ models.length ? t('availableChannels.catalog.noMatches') : t('availableChannels.noModels') }}</p>
         <button v-if="models.length" class="btn btn-secondary mt-4" @click="reset">{{ t('availableChannels.catalog.reset') }}</button>
       </div>
@@ -139,8 +139,9 @@ useLocaleRefresh(loadCatalog)
 <style scoped>
 .catalog-page { container-type: inline-size; }
 .catalog-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
-.catalog-filter { @apply inline-flex items-center gap-1.5 rounded-lg border border-transparent px-3 py-1.5 text-xs text-gray-600 transition-colors hover:bg-gray-100 focus-visible:ring-2 focus-visible:ring-primary-500 dark:text-dark-300 dark:hover:bg-dark-800; }
-.catalog-filter.selected { @apply border-primary-200 bg-primary-50 text-primary-700 dark:border-primary-800 dark:bg-primary-900/30 dark:text-primary-300; }
+.catalog-filter { @apply inline-flex items-center gap-1.5 rounded-lg border border-transparent px-3 py-1.5 text-xs text-gray-600 transition-colors focus-visible:ring-2 focus-visible:ring-primary-500 dark:text-dark-300; }
+.catalog-filter:hover { background-color: var(--surface-hover); }
+.catalog-filter.selected { @apply border-primary-200 bg-primary-50/[0.15] text-primary-700 dark:border-primary-800 dark:bg-primary-900/30 dark:text-primary-300; }
 @container (min-width: 460px) { .catalog-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @container (min-width: 700px) { .catalog-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @container (min-width: 940px) { .catalog-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }

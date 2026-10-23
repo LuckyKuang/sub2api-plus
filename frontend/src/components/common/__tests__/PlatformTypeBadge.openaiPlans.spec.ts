@@ -62,7 +62,7 @@ describe('PlatformTypeBadge ChatGPT plan tiers', () => {
 
     const free = mountPlan('openai', 'free')
     expect(free.text()).toContain('Free')
-    expect(free.html()).toContain('bg-gray-100')
+    expect(free.html()).toContain('surface-inset')
 
     const abnormal = mountPlan('openai', 'abnormal')
     expect(abnormal.text()).toContain('admin.accounts.subscriptionAbnormal')

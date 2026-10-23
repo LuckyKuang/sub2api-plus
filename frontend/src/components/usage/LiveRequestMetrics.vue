@@ -3,14 +3,14 @@
     <div v-if="performanceColumn">{{ t('usage.latencyFirstToken') }} <span class="font-medium">{{ usageMilliseconds(liveFirstToken(row)) }}</span></div>
     <div v-else>{{ t('usage.latencyFirstByte') }} <span class="font-medium">{{ usageMilliseconds(row.first_byte_ms) }}</span></div>
     <div v-if="performanceColumn" class="font-medium text-cyan-700 dark:text-cyan-400">{{ liveRate(row) }}</div>
-    <div v-else class="text-gray-500">
+    <div v-else class="surface-muted">
       <template v-if="liveActive(row) || (row.status === 'unknown' && row.duration_ms == null)">{{ t('inspection.elapsed') }} <LiveElapsed :row="row" :clock="clock" /></template>
       <template v-else>{{ t('usage.latencyDuration') }} {{ usageMilliseconds(row.duration_ms) }}</template>
     </div>
-    <button v-if="!performanceColumn" type="button" class="rounded text-primary-600 underline decoration-dotted underline-offset-2" :aria-label="t('usage.latencyDetails')" :aria-expanded="open" @mouseenter="show" @mouseleave="open = false" @focus="show" @blur="open = false" @click="show" @keydown.escape="open = false">{{ t('usage.latencyDetails') }}</button>
+    <button v-if="!performanceColumn" type="button" class="rounded text-primary-600 underline decoration-dotted underline-offset-2 surface-control" :aria-label="t('usage.latencyDetails')" :aria-expanded="open" @mouseenter="show" @mouseleave="open = false" @focus="show" @blur="open = false" @click="show" @keydown.escape="open = false">{{ t('usage.latencyDetails') }}</button>
   </div>
   <Teleport to="body">
-    <div v-if="open" role="tooltip" class="pointer-events-none fixed z-[9999] w-64 max-w-[calc(100vw-24px)] rounded-xl border border-gray-700 bg-gray-900 p-3 text-xs text-white shadow-xl" :style="{ left: position.x + 'px', top: position.y + 'px' }">
+    <div v-if="open" role="tooltip" class="pointer-events-none fixed z-[9999] w-64 max-w-[calc(100vw-24px)] rounded-xl border border-gray-700 p-3 text-xs text-white shadow-xl surface-panel" :style="{ left: position.x + 'px', top: position.y + 'px' }">
       <dl class="space-y-2"><div v-for="item in details" :key="item[0]" class="flex justify-between gap-3"><dt class="text-gray-400">{{ item[0] }}</dt><dd class="text-right tabular-nums">{{ item[1] }}</dd></div></dl>
     </div>
   </Teleport>

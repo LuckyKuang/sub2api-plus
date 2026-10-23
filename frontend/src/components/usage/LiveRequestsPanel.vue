@@ -1,12 +1,12 @@
 <template>
   <div ref="panel" class="min-w-0 space-y-4 p-3 sm:p-4" @pointerdown="markReading" @focusin="markReading" @wheel.passive="markReading" @touchstart.passive="markReading">
     <div class="flex flex-wrap items-center justify-between gap-3">
-      <div class="text-xs text-gray-500"><p>{{ t('inspection.liveHint') }}</p><p>{{ t('inspection.liveWindow', { limit: snapshot?.limit ?? 200 }) }}</p></div>
+      <div class="text-xs surface-muted"><p>{{ t('inspection.liveHint') }}</p><p>{{ t('inspection.liveWindow', { limit: snapshot?.limit ?? 200 }) }}</p></div>
       <RefreshControl :state="refresh" switch-visible manual />
     </div>
     <div class="flex flex-wrap items-end gap-2">
-      <div class="flex min-h-9 rounded-lg bg-gray-100 p-1 dark:bg-dark-800" role="group" :aria-label="t('requestList.result')">
-        <button v-for="item in ['all', 'success', 'abnormal']" :key="item" type="button" class="rounded-md px-3 py-1 text-xs" :class="resultFilter === item ? 'bg-white shadow-sm dark:bg-dark-600' : 'text-gray-500'" :aria-pressed="resultFilter === item" @click="resultFilter = item">{{ t(`requestList.${item}`) }}</button>
+      <div class="flex min-h-9 rounded-lg surface-inset p-1" role="group" :aria-label="t('requestList.result')">
+        <button v-for="item in ['all', 'success', 'abnormal']" :key="item" type="button" class="rounded-md px-3 py-1 text-xs surface-control" :class="resultFilter === item ? 'surface-field shadow-sm dark:surface-field' : 'text-gray-500'" :aria-pressed="resultFilter === item" @click="resultFilter = item">{{ t(`requestList.${item}`) }}</button>
       </div>
       <Select v-model="modelFilter" class="min-w-0 w-44 max-w-full" :options="modelOptions" :aria-label="t('usage.model')" :searchable="false" />
       <Select v-model="groupFilter" class="min-w-0 w-40 max-w-full" :options="groupOptions" :aria-label="t('admin.usage.group')" :searchable="false" />
@@ -15,41 +15,41 @@
         <button type="button" class="btn btn-secondary text-xs" :disabled="!filteredRows.length" @click="exportWindow">{{ t('requestList.exportWindow') }}</button>
         <details class="relative">
           <summary class="btn btn-secondary cursor-pointer list-none text-xs">{{ t('requestList.columns') }}</summary>
-          <div class="absolute right-0 z-30 mt-2 w-52 rounded-xl border border-gray-200 bg-white p-2 shadow-xl dark:border-dark-600 dark:bg-dark-800">
-            <label v-for="column in allColumns" :key="column.key" class="flex min-h-9 cursor-pointer items-center gap-2 rounded px-2 text-xs hover:bg-gray-50 dark:hover:bg-dark-700">
+          <div class="absolute right-0 z-30 mt-2 w-52 rounded-xl border border-gray-200 p-2 shadow-xl dark:border-dark-600 surface-panel">
+            <label v-for="column in allColumns" :key="column.key" class="flex min-h-9 cursor-pointer items-center gap-2 rounded px-2 text-xs hover:surface-hover">
               <input type="checkbox" :checked="!hiddenColumns.includes(column.key)" :disabled="fixedColumns.includes(column.key)" @change="toggleColumn(column.key)">{{ column.label }}
             </label>
-            <button type="button" class="min-h-9 w-full border-t px-2 text-left text-xs text-primary-600" @click="resetColumns">{{ t('inspection.resetColumns') }}</button>
+            <button type="button" class="min-h-9 w-full border-t px-2 text-left text-xs text-primary-600 surface-control" @click="resetColumns">{{ t('inspection.resetColumns') }}</button>
           </div>
         </details>
       </div>
     </div>
-    <p class="text-xs text-gray-500">{{ t('requestList.windowFilters') }}</p>
+    <p class="text-xs surface-muted">{{ t('requestList.windowFilters') }}</p>
     <p v-if="snapshot?.truncated" role="status" class="text-xs text-amber-600">{{ t('inspection.liveTruncated') }}</p>
     <button v-if="pending" type="button" class="btn btn-secondary" @click="showLatest">{{ t('inspection.newRecords') }}</button>
     <div v-if="desktop" class="overflow-x-auto">
       <DataTable :columns="columns" :data="filteredRows" :loading="!snapshot && refresh.fetching.value">
         <template #cell-started_at="{ row }"><time class="whitespace-nowrap text-xs tabular-nums" :datetime="row.started_at" :title="formatDateTime(row.started_at)">{{ shortTime(row.started_at) }}</time></template>
-        <template #cell-model="{ row }"><div class="max-w-52 break-words text-sm font-medium" :title="row.model">{{ row.model }}</div><div v-if="row.reasoning_effort" class="text-xs text-gray-500">{{ row.reasoning_effort }}</div></template>
-        <template #cell-user_id="{ row }"><span class="text-xs">#{{ row.user_id }}</span><div class="max-w-40 break-all text-xs text-gray-500">{{ row.key_name }}</div></template>
-        <template #cell-request_type="{ row }"><span class="badge badge-gray">{{ typeLabel(row) }}</span><div v-if="row.turn" class="text-xs text-gray-500">#{{ row.turn }}</div></template>
+        <template #cell-model="{ row }"><div class="max-w-52 break-words text-sm font-medium" :title="row.model">{{ row.model }}</div><div v-if="row.reasoning_effort" class="text-xs surface-muted">{{ row.reasoning_effort }}</div></template>
+        <template #cell-user_id="{ row }"><span class="text-xs">#{{ row.user_id }}</span><div class="max-w-40 break-all text-xs surface-muted">{{ row.key_name }}</div></template>
+        <template #cell-request_type="{ row }"><span class="badge badge-gray">{{ typeLabel(row) }}</span><div v-if="row.turn" class="text-xs surface-muted">#{{ row.turn }}</div></template>
         <template #cell-group_name="{ row }"><span class="block max-w-36 break-words text-xs">{{ row.group_name || '—' }}</span></template>
         <template #cell-status="{ row }"><LiveRequestResult :row="row" /></template>
         <template #cell-speed="{ row }"><LiveRequestMetrics :row="row" :clock="observationClock" /></template>
         <template #cell-performance="{ row }"><LiveRequestMetrics :row="row" :clock="observationClock" performance-column /></template>
         <template #cell-tokens="{ row }"><LiveRequestTokens :row="row" /></template>
         <template #cell-actual_cost="{ row }"><span class="whitespace-nowrap text-xs font-medium tabular-nums" :class="row.actual_cost != null ? 'text-emerald-700 dark:text-emerald-400' : 'text-gray-500'">{{ cost(row) }}</span></template>
-        <template #cell-client="{ row }"><button type="button" class="max-w-44 text-left text-xs" :title="row.user_agent" @click="copyClient(row)"><span class="block truncate">{{ clientName(row) }}</span><span class="block break-all text-gray-500">{{ row.ip_address || '—' }}</span></button></template>
+        <template #cell-client="{ row }"><button type="button" class="max-w-44 text-left text-xs surface-control" :title="row.user_agent" @click="copyClient(row)"><span class="block truncate">{{ clientName(row) }}</span><span class="block break-all surface-muted">{{ row.ip_address || '—' }}</span></button></template>
       </DataTable>
     </div>
     <div v-else class="space-y-2" :aria-busy="refresh.fetching.value">
-      <p v-if="!snapshot && refresh.fetching.value" class="p-6 text-center text-sm text-gray-500">{{ t('common.loading') }}</p>
-      <p v-else-if="!filteredRows.length" class="p-6 text-center text-sm text-gray-500">{{ t('empty.noData') }}</p>
-      <article v-for="row in filteredRows" :key="row.id" class="min-w-0 rounded-xl border border-gray-200 bg-white/70 p-3 dark:border-dark-700 dark:bg-dark-900/80">
-        <div class="flex items-start justify-between gap-2"><div class="min-w-0 break-all text-sm font-medium">{{ row.model }} <span class="text-[11px] font-normal text-gray-500">{{ typeLabel(row) }}</span></div><span class="shrink-0 text-xs tabular-nums">{{ cost(row) }}</span></div>
+      <p v-if="!snapshot && refresh.fetching.value" class="p-6 text-center text-sm surface-muted">{{ t('common.loading') }}</p>
+      <p v-else-if="!filteredRows.length" class="p-6 text-center text-sm surface-muted">{{ t('empty.noData') }}</p>
+      <article v-for="row in filteredRows" :key="row.id" class="min-w-0 rounded-xl border border-gray-200 surface-inset p-3 dark:border-dark-700">
+        <div class="flex items-start justify-between gap-2"><div class="min-w-0 break-all text-sm font-medium">{{ row.model }} <span class="text-[11px] font-normal surface-muted">{{ typeLabel(row) }}</span></div><span class="shrink-0 text-xs tabular-nums">{{ cost(row) }}</span></div>
         <div class="mt-1 flex flex-wrap items-center justify-between gap-1"><div><LiveRequestResult :row="row" /></div><time class="text-xs text-gray-500" :datetime="row.started_at">{{ shortTime(row.started_at) }}</time></div>
-        <div class="mt-1 flex items-start justify-between gap-2"><div class="min-w-0"><LiveRequestTokens :row="row" /></div><span class="min-w-0 max-w-[40%] break-words text-right text-xs text-gray-500">{{ row.group_name || '—' }}</span></div>
-        <button type="button" class="mt-1 min-h-9 text-xs text-primary-600" :aria-expanded="expanded.has(row.id)" :aria-controls="`live-fields-${row.id}`" @click="toggleExpanded(row.id)">{{ t(expanded.has(row.id) ? 'requestList.less' : 'requestList.more') }}</button>
+        <div class="mt-1 flex items-start justify-between gap-2"><div class="min-w-0"><LiveRequestTokens :row="row" /></div><span class="min-w-0 max-w-[40%] break-words text-right text-xs surface-muted">{{ row.group_name || '—' }}</span></div>
+        <button type="button" class="mt-1 min-h-9 text-xs text-primary-600 surface-control" :aria-expanded="expanded.has(row.id)" :aria-controls="`live-fields-${row.id}`" @click="toggleExpanded(row.id)">{{ t(expanded.has(row.id) ? 'requestList.less' : 'requestList.more') }}</button>
         <dl v-if="expanded.has(row.id)" :id="`live-fields-${row.id}`" class="space-y-3 border-t border-gray-200 pt-3 text-xs dark:border-dark-700">
           <div v-if="mode === 'admin'"><dt class="text-gray-500">{{ t('admin.usage.user') }}</dt><dd>#{{ row.user_id }}</dd></div>
           <div><dt class="text-gray-500">{{ t('usage.apiKeyFilter') }}</dt><dd class="break-all">{{ row.key_name || '—' }}</dd></div>

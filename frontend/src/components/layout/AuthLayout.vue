@@ -1,6 +1,6 @@
 <template>
   <div class="relative flex min-h-screen items-center justify-center overflow-hidden p-4">
-    <div class="absolute inset-0 bg-canvas dark:bg-dark-950"></div>
+    <div class="absolute inset-0 bg-canvas dark:surface-inset"></div>
 
     <!-- Content Container -->
     <div class="relative z-10 w-full max-w-md">
@@ -16,7 +16,7 @@
           <h1 class="text-gradient mb-2 text-3xl font-bold">
             {{ siteName }}
           </h1>
-          <p class="text-sm text-gray-500 dark:text-dark-400">
+          <p class="text-sm surface-muted">
             {{ siteSubtitle }}
           </p>
         </template>
@@ -33,7 +33,7 @@
       </div>
 
       <!-- Copyright -->
-      <div class="mt-8 text-center text-xs text-gray-400 dark:text-dark-500">
+      <div class="mt-8 text-center text-xs surface-muted">
         &copy; {{ currentYear }} {{ siteName }}. All rights reserved.
       </div>
     </div>

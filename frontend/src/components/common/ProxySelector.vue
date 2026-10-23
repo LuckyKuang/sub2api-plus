@@ -23,7 +23,7 @@
     </button>
 
     <Transition name="select-dropdown">
-      <div v-if="isOpen" class="select-dropdown">
+      <div v-if="isOpen" class="select-dropdown surface-panel">
         <!-- Search and Batch Test Header -->
         <div class="select-header">
           <div class="select-search">
@@ -42,7 +42,7 @@
             type="button"
             @click.stop="handleBatchTest"
             :disabled="batchTesting"
-            class="batch-test-btn"
+            class="batch-test-btn surface-control"
             :title="t('admin.proxies.batchTest')"
           >
             <svg v-if="batchTesting" class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -88,7 +88,7 @@
                 <!-- Account count badge -->
                 <span
                   v-if="proxy.account_count !== undefined"
-                  class="inline-flex flex-shrink-0 items-center rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600 dark:bg-dark-600 dark:text-gray-400"
+                  class="inline-flex flex-shrink-0 items-center rounded surface-inset px-1.5 py-0.5 text-xs surface-muted"
                 >
                   {{ proxy.account_count }}
                 </span>
@@ -96,7 +96,7 @@
                 <template v-if="testResults[proxy.id]">
                   <span
                     v-if="testResults[proxy.id].success"
-                    class="inline-flex flex-shrink-0 items-center gap-1 rounded bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
+                    class="inline-flex flex-shrink-0 items-center gap-1 rounded bg-emerald-100/[0.15] px-1.5 py-0.5 text-xs text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
                   >
                     <span v-if="testResults[proxy.id].country">{{
                       testResults[proxy.id].country
@@ -107,13 +107,13 @@
                   </span>
                   <span
                     v-else
-                    class="inline-flex flex-shrink-0 items-center rounded bg-red-100 px-1.5 py-0.5 text-xs text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                    class="inline-flex flex-shrink-0 items-center rounded bg-red-100/[0.15] px-1.5 py-0.5 text-xs text-red-700 dark:bg-red-900/30 dark:text-red-400"
                   >
                     {{ t('admin.proxies.testFailed') }}
                   </span>
                 </template>
               </div>
-              <div class="truncate text-xs text-gray-500 dark:text-gray-400">
+              <div class="truncate text-xs surface-muted">
                 {{ proxy.protocol }}://{{ proxy.host }}:{{ proxy.port }}
               </div>
             </div>
@@ -123,7 +123,7 @@
               type="button"
               @click.stop="handleTestProxy(proxy)"
               :disabled="testingProxyIds.has(proxy.id)"
-              class="test-btn"
+              class="test-btn surface-control"
               :title="t('admin.proxies.testConnection')"
             >
               <svg
@@ -322,12 +322,12 @@ onUnmounted(() => {
 }
 
 .select-icon {
-  @apply flex-shrink-0 text-gray-400 dark:text-dark-400;
+  @apply flex-shrink-0; color: var(--surface-muted);
 }
 
 .select-dropdown {
   @apply absolute z-[100] mt-2 w-full;
-  @apply bg-white dark:bg-dark-800;
+  background-color: var(--surface-panel);
   @apply rounded-xl;
   @apply border border-gray-200 dark:border-dark-700;
   @apply shadow-lg shadow-black/10 dark:shadow-black/30;
@@ -353,7 +353,7 @@ onUnmounted(() => {
 .batch-test-btn {
   @apply flex-shrink-0 rounded-lg p-1.5;
   @apply text-gray-500 hover:text-emerald-600 dark:hover:text-emerald-400;
-  @apply hover:bg-emerald-50 dark:hover:bg-emerald-900/20;
+  @apply hover:bg-emerald-50/25 dark:hover:bg-emerald-900/20;
   @apply transition-colors disabled:cursor-not-allowed disabled:opacity-50;
 }
 
@@ -364,13 +364,13 @@ onUnmounted(() => {
 .select-option {
   @apply flex items-center justify-between gap-2;
   @apply px-4 py-2.5 text-sm;
-  @apply text-gray-700 dark:text-gray-300;
+  color: var(--surface-muted);
   @apply cursor-pointer transition-colors duration-150;
-  @apply hover:bg-gray-50 dark:hover:bg-dark-700;
+
 }
 
 .select-option-selected {
-  @apply bg-primary-50 dark:bg-primary-900/20;
+  @apply bg-primary-50/[0.15] dark:bg-primary-900/20;
   @apply text-primary-700 dark:text-primary-300;
 }
 
@@ -380,13 +380,13 @@ onUnmounted(() => {
 
 .select-empty {
   @apply px-4 py-8 text-center text-sm;
-  @apply text-gray-500 dark:text-dark-400;
+  color: var(--surface-muted);
 }
 
 .test-btn {
   @apply flex-shrink-0 rounded p-1;
   @apply text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400;
-  @apply hover:bg-emerald-50 dark:hover:bg-emerald-900/20;
+  @apply hover:bg-emerald-50/25 dark:hover:bg-emerald-900/20;
   @apply transition-colors disabled:cursor-not-allowed disabled:opacity-50;
 }
 

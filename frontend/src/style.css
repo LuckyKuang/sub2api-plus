@@ -1,4 +1,5 @@
 @import './styles/console.css';
+@import './styles/surfaces.css';
 
 @tailwind base;
 @tailwind components;
@@ -11,18 +12,18 @@
 
 @layer base {
   :root {
-    --table-header-bg: theme('colors.gray.100');
-    --table-body-bg: var(--surface-field);
-    --table-hover-bg: theme('colors.gray.50');
-    --table-selected-bg: theme('colors.gray.200');
+    --table-header-bg: var(--surface-sticky);
+    --table-body-bg: transparent;
+    --table-hover-bg: var(--surface-hover);
+    --table-selected-bg: var(--surface-selected);
     --table-row-border: theme('colors.gray.200');
   }
 
   .dark {
-    --table-header-bg: theme('colors.dark.900');
-    --table-body-bg: var(--surface-field);
-    --table-hover-bg: #303030;
-    --table-selected-bg: #383838;
+    --table-header-bg: var(--surface-sticky);
+    --table-body-bg: transparent;
+    --table-hover-bg: var(--surface-hover);
+    --table-selected-bg: var(--surface-selected);
     --table-row-border: theme('colors.dark.700');
   }
 
@@ -102,71 +103,36 @@
     @apply active:scale-[0.98];
   }
 
-  .btn-primary {
-    @apply bg-primary-500 text-primary-950 shadow-sm;
-    @apply hover:bg-primary-400;
-  }
+  .btn-primary { --control-accent: 20 184 166; }
 
   .btn-secondary {
     background-color: var(--surface-field);
     @apply text-gray-700 dark:text-gray-200;
     @apply border border-gray-200 dark:border-dark-600;
-    @apply shadow-sm hover:bg-gray-50 dark:hover:bg-dark-700;
+    @apply shadow-sm;
+    background-image: linear-gradient(135deg, var(--surface-glint), transparent 65%);
     @apply hover:border-gray-300 dark:hover:border-dark-500;
   }
 
   .btn-ghost {
-    @apply bg-transparent text-gray-600 dark:text-gray-300;
-    @apply hover:bg-gray-100 dark:hover:bg-dark-800;
+    background-color: var(--surface-field);
+    color: var(--surface-text);
+
   }
 
-  .btn-danger {
-    @apply bg-gradient-to-r from-red-500 to-red-600;
-    @apply text-white shadow-md shadow-red-500/25;
-    @apply hover:from-red-600 hover:to-red-700 hover:shadow-lg hover:shadow-red-500/30;
-  }
+  .btn-danger { --control-accent: 239 68 68; }
 
-  .btn-success {
-    @apply bg-gradient-to-r from-emerald-500 to-emerald-600;
-    @apply text-white shadow-md shadow-emerald-500/25;
-    @apply hover:from-emerald-600 hover:to-emerald-700 hover:shadow-lg hover:shadow-emerald-500/30;
-    @apply dark:shadow-emerald-500/20;
-  }
+  .btn-success { --control-accent: 16 185 129; }
 
-  .btn-warning {
-    @apply bg-gradient-to-r from-amber-500 to-amber-600;
-    @apply text-white shadow-md shadow-amber-500/25;
-    @apply hover:from-amber-600 hover:to-amber-700 hover:shadow-lg hover:shadow-amber-500/30;
-    @apply dark:shadow-amber-500/20;
-  }
+  .btn-warning { --control-accent: 245 158 11; }
 
-  .btn-stripe {
-    @apply bg-[#635bff] text-white shadow-md shadow-[#635bff]/25;
-    @apply hover:bg-[#5851ea] hover:shadow-lg hover:shadow-[#635bff]/30;
-    @apply dark:bg-[#7a73ff] dark:shadow-[#7a73ff]/20;
-    @apply dark:hover:bg-[#635bff];
-  }
+  .btn-stripe { --control-accent: 99 91 255; }
 
-  .btn-airwallex {
-    @apply bg-[#14171A] text-white shadow-md shadow-emerald-500/20;
-    @apply hover:bg-[#20252a] hover:shadow-lg hover:shadow-emerald-500/25;
-    @apply dark:bg-[#7AF0C4] dark:text-gray-950 dark:shadow-emerald-500/20;
-    @apply dark:hover:bg-[#62d9ad];
-  }
+  .btn-airwallex { --control-accent: 20 184 166; }
 
-  .btn-alipay {
-    @apply bg-[#00AEEF] text-white shadow-md shadow-[#00AEEF]/25;
-    @apply hover:bg-[#009dd6] hover:shadow-lg hover:shadow-[#00AEEF]/30;
-    @apply active:bg-[#008cbe];
-    @apply dark:shadow-[#00AEEF]/20;
-  }
+  .btn-alipay { --control-accent: 0 174 239; }
 
-  .btn-wxpay {
-    @apply bg-[#2BB741] text-white shadow-md shadow-[#2BB741]/25;
-    @apply hover:bg-[#24a038] hover:shadow-lg hover:shadow-[#2BB741]/30;
-    @apply active:bg-[#1d8a2f];
-    @apply dark:shadow-[#2BB741]/20;
-  }
+  .btn-wxpay { --control-accent: 43 183 65; }
 
   .btn-sm {
     @apply rounded-lg px-3 py-1.5 text-xs;
@@ -184,6 +150,24 @@
     @apply rounded-xl p-2.5;
   }
 
+  .btn-primary, .btn-danger, .btn-success, .btn-warning, .btn-stripe, .btn-airwallex, .btn-alipay, .btn-wxpay {
+    background-color: rgb(var(--control-accent) / 20%);
+    background-image: linear-gradient(135deg, var(--surface-glint), transparent 65%);
+    color: color-mix(in srgb, rgb(var(--control-accent)) 64%, #102d30);
+    border: 1px solid rgb(var(--control-accent) / 42%);
+    box-shadow: inset 0 1px 0 var(--surface-glint), 0 2px 7px rgb(0 0 0 / 5%);
+  }
+  .btn-primary { background-color: rgb(var(--control-accent) / 68%); color: #063c36; }
+  .btn-primary:hover:not(:disabled) { background-color: rgb(var(--control-accent) / 80%); }
+  :is(.btn-danger, .btn-success, .btn-warning, .btn-stripe, .btn-airwallex, .btn-alipay, .btn-wxpay):hover:not(:disabled) {
+    background-color: rgb(var(--control-accent) / 32%);
+  }
+  .dark :is(.btn-danger, .btn-success, .btn-warning, .btn-stripe, .btn-airwallex, .btn-alipay, .btn-wxpay) {
+    color: color-mix(in srgb, rgb(var(--control-accent)) 35%, white);
+  }
+  .dark .btn-primary { color: #d5fff7; }
+  .btn-secondary:hover:not(:disabled), .btn-ghost:hover:not(:disabled), .dropdown-item:hover { background-color: var(--surface-hover); }
+
   /* ============ 输入框样式 ============ */
   .input {
     @apply w-full rounded-xl px-4 py-2.5 text-sm;
@@ -193,13 +177,13 @@
     @apply placeholder:text-gray-400 dark:placeholder:text-dark-400;
     @apply transition-all duration-200;
     @apply focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30;
-    @apply disabled:cursor-not-allowed disabled:bg-gray-100 dark:disabled:bg-dark-900;
+    @apply disabled:cursor-not-allowed disabled:opacity-60;
   }
 
   /* Shared appearance for all selection triggers; menus use SearchableSelect. */
   .select-trigger {
     @apply w-full rounded-xl px-4 py-2.5 text-sm;
-    @apply bg-white dark:bg-dark-800;
+    background-color: var(--surface-field);
     @apply border border-gray-200 dark:border-dark-600;
     @apply text-gray-900 dark:text-gray-100;
     @apply cursor-pointer transition-all duration-200;
@@ -218,7 +202,7 @@
   }
 
   .select-trigger-disabled {
-    @apply cursor-not-allowed bg-gray-100 opacity-60 dark:bg-dark-900;
+    @apply cursor-not-allowed opacity-60;
   }
 
   .dark .input[type='date'],
@@ -240,7 +224,8 @@
   }
 
   .input-hint {
-    @apply mt-1 text-xs text-gray-500 dark:text-dark-400;
+    @apply mt-1 text-xs;
+    color: var(--surface-muted);
   }
 
   .input-error-text {
@@ -315,7 +300,8 @@
   }
 
   .stat-label {
-    @apply text-sm text-gray-500 dark:text-dark-400;
+    @apply text-sm;
+    color: var(--surface-muted);
   }
 
   .stat-trend {
@@ -342,7 +328,7 @@
   .table th {
     @apply px-4 py-3 text-left font-medium;
     @apply text-gray-600 dark:text-dark-300;
-    background-color: var(--table-header-bg);
+    background-color: transparent;
     @apply border-b border-gray-200 dark:border-dark-700;
   }
 
@@ -387,7 +373,8 @@
   }
 
   .badge-gray {
-    @apply bg-gray-100 text-gray-700 dark:bg-dark-700 dark:text-dark-300;
+    background-color: var(--surface-soft);
+    color: var(--surface-muted);
   }
 
   .badge-purple {
@@ -406,7 +393,7 @@
   .dropdown-item {
     @apply px-4 py-2 text-sm;
     @apply text-gray-700 dark:text-gray-300;
-    @apply hover:bg-gray-100 dark:hover:bg-dark-700;
+
     @apply cursor-pointer transition-colors;
     @apply flex items-center gap-2;
   }
@@ -414,7 +401,7 @@
   /* ============ 模态框 ============ */
   .modal-overlay {
     @apply fixed inset-0 z-50;
-    @apply bg-black/50 backdrop-blur-sm;
+    background: var(--surface-overlay);
     @apply flex items-center justify-center p-2 sm:p-4;
   }
 
@@ -506,7 +493,7 @@
   /* ============ Dialog ============ */
   .dialog-overlay {
     @apply fixed inset-0 z-50;
-    @apply bg-black/40 dark:bg-black/60;
+    background: var(--surface-overlay);
     @apply flex items-center justify-center p-4;
   }
 
@@ -528,7 +515,7 @@
 
   .dialog-footer {
     @apply border-t border-gray-100 px-6 py-4 dark:border-dark-700;
-    @apply bg-gray-50/60 dark:bg-dark-900/40;
+    background-color: var(--surface-soft);
     @apply flex items-center justify-end gap-3;
   }
 
@@ -536,7 +523,7 @@
   .toast {
     @apply fixed right-4 top-4 z-[100];
     @apply min-w-[320px] max-w-md;
-    @apply bg-white dark:bg-dark-800;
+    background-color: var(--surface-panel);
     @apply rounded-xl shadow-lg;
     @apply border-l-4;
     @apply p-4;
@@ -584,7 +571,7 @@
     @apply text-sm font-medium;
     @apply text-gray-600 dark:text-dark-300;
     @apply transition-all duration-200;
-    @apply hover:bg-gray-100 dark:hover:bg-dark-800;
+
     @apply hover:text-gray-900 dark:hover:text-white;
     padding-left: 1.0625rem;
     padding-right: 0.875rem;
@@ -661,7 +648,8 @@
   /* ============ 标签页 ============ */
   .tabs {
     @apply flex gap-1 p-1;
-    @apply rounded-xl bg-gray-100 dark:bg-dark-800;
+    @apply rounded-xl;
+    background-color: var(--surface-soft);
   }
 
   .tab {
@@ -672,7 +660,7 @@
   }
 
   .tab-active {
-    @apply bg-white dark:bg-dark-700;
+    background-color: var(--surface-selected);
     @apply text-gray-900 dark:text-white;
     @apply shadow-sm;
   }
@@ -690,14 +678,15 @@
   /* ============ 代码块 ============ */
   .code {
     @apply font-mono text-sm;
-    @apply bg-gray-100 dark:bg-dark-800;
+    background-color: var(--surface-soft);
     @apply rounded px-1.5 py-0.5;
     @apply text-primary-600 dark:text-primary-400;
   }
 
   .code-block {
     @apply font-mono text-sm;
-    @apply bg-gray-900 text-gray-100;
+    background-color: var(--surface-soft);
+    color: var(--surface-text);
     @apply overflow-x-auto rounded-xl p-4;
   }
 
@@ -751,11 +740,12 @@
 }
 
 @layer utilities {
-  /* 表头和表体共享实色背景，固定列由 DataTable 复用同一组变量。 */
-  table thead,
-  table thead th {
+  /* Headers share translucent paint; cells must not add a second opaque fill. */
+  table thead {
     background-color: var(--table-header-bg);
   }
+
+  table thead th { background-color: transparent; }
 
   table tbody {
     background-color: var(--table-body-bg);

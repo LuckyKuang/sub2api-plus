@@ -9,13 +9,13 @@
       <div class="flex flex-wrap items-center justify-end gap-2">
         <div
           v-if="showSourceToggle"
-          class="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 dark:border-dark-700 dark:bg-dark-800"
+          class="inline-flex rounded-lg border border-gray-200 surface-inset p-0.5 dark:border-dark-700"
         >
           <button
             type="button"
-            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors"
+            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors surface-control"
             :class="source === 'requested'
-              ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-700 dark:text-white'
+              ? 'surface-field text-gray-900 shadow-sm dark:surface-field dark:text-white'
               : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
             @click="emit('update:source', 'requested')"
           >
@@ -23,9 +23,9 @@
           </button>
           <button
             type="button"
-            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors"
+            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors surface-control"
             :class="source === 'upstream'
-              ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-700 dark:text-white'
+              ? 'surface-field text-gray-900 shadow-sm dark:surface-field dark:text-white'
               : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
             @click="emit('update:source', 'upstream')"
           >
@@ -33,9 +33,9 @@
           </button>
           <button
             type="button"
-            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors"
+            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors surface-control"
             :class="source === 'mapping'
-              ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-700 dark:text-white'
+              ? 'surface-field text-gray-900 shadow-sm dark:surface-field dark:text-white'
               : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
             @click="emit('update:source', 'mapping')"
           >
@@ -44,13 +44,13 @@
         </div>
         <div
           v-if="showMetricToggle"
-          class="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 dark:border-dark-700 dark:bg-dark-800"
+          class="inline-flex rounded-lg border border-gray-200 surface-inset p-0.5 dark:border-dark-700"
         >
           <button
             type="button"
-            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors"
+            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors surface-control"
             :class="metric === 'tokens'
-              ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-700 dark:text-white'
+              ? 'surface-field text-gray-900 shadow-sm dark:surface-field dark:text-white'
               : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
             @click="emit('update:metric', 'tokens')"
           >
@@ -58,22 +58,22 @@
           </button>
           <button
             type="button"
-            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors"
+            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors surface-control"
             :class="metric === 'actual_cost'
-              ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-700 dark:text-white'
+              ? 'surface-field text-gray-900 shadow-sm dark:surface-field dark:text-white'
               : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
             @click="emit('update:metric', 'actual_cost')"
           >
             {{ t('admin.dashboard.metricActualCost') }}
           </button>
         </div>
-        <div v-if="enableRankingView" class="inline-flex rounded-lg bg-gray-100 p-1 dark:bg-dark-800">
+        <div v-if="enableRankingView" class="inline-flex rounded-lg surface-inset p-1">
           <button
             type="button"
-            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors"
+            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors surface-control"
             :class="
               activeView === 'model_distribution'
-                ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-700 dark:text-white'
+                ? 'surface-field text-gray-900 shadow-sm dark:surface-field dark:text-white'
                 : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
             "
             @click="activeView = 'model_distribution'"
@@ -82,10 +82,10 @@
           </button>
           <button
             type="button"
-            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors"
+            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors surface-control"
             :class="
               activeView === 'spending_ranking'
-                ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-700 dark:text-white'
+                ? 'surface-field text-gray-900 shadow-sm dark:surface-field dark:text-white'
                 : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
             "
             @click="activeView = 'spending_ranking'"
@@ -109,7 +109,7 @@
       <div class="max-h-48 w-full min-w-0 flex-1 overflow-auto">
         <table class="w-full text-xs">
           <thead>
-            <tr class="text-gray-500 dark:text-gray-400">
+            <tr class="surface-muted">
               <th class="pb-2 text-left">{{ t('admin.dashboard.model') }}</th>
               <th class="pb-2 text-right">{{ t('admin.dashboard.requests') }}</th>
               <th class="pb-2 text-right">{{ t('admin.dashboard.tokens') }}</th>
@@ -122,7 +122,7 @@
             <template v-for="model in displayModelStats" :key="model.model">
               <tr
                 class="border-t border-gray-100 transition-colors dark:border-dark-700"
-                :class="enableBreakdown ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-dark-700/40' : ''"
+                :class="enableBreakdown ? 'cursor-pointer hover:surface-hover dark:hover:surface-hover' : ''"
                 @click="enableBreakdown && toggleBreakdown('model', model.model)"
               >
                 <td
@@ -136,11 +136,11 @@
                     {{ model.model }}
                   </span>
                 </td>
-                <td class="py-1.5 text-right text-gray-600 dark:text-gray-400">
+                <td class="py-1.5 text-right surface-muted">
                   {{ formatNumber(model.requests) }}
                 </td>
-                <td class="py-1.5 text-right text-gray-600 dark:text-gray-400">
-                  {{ formatTokens(model.total_tokens) }} <span v-if="modelTokenShare(model.total_tokens)" class="text-gray-400">({{ modelTokenShare(model.total_tokens) }})</span>
+                <td class="py-1.5 text-right surface-muted">
+                  {{ formatTokens(model.total_tokens) }} <span v-if="modelTokenShare(model.total_tokens)" class="surface-muted">({{ modelTokenShare(model.total_tokens) }})</span>
                 </td>
                 <td class="py-1.5 text-right text-green-600 dark:text-green-400">
                   ${{ formatCost(model.actual_cost) }}
@@ -148,7 +148,7 @@
                 <td v-if="showAccountCost" class="py-1.5 text-right text-orange-500 dark:text-orange-400">
                   ${{ formatCost(model.account_cost) }}
                 </td>
-                <td class="py-1.5 text-right text-gray-400 dark:text-gray-500">
+                <td class="py-1.5 text-right surface-muted">
                   ${{ formatCost(model.cost) }}
                 </td>
               </tr>
@@ -166,7 +166,7 @@
     </div>
     <div
       v-else-if="activeView === 'model_distribution'"
-      class="flex h-48 items-center justify-center text-sm text-gray-500 dark:text-gray-400"
+      class="flex h-48 items-center justify-center text-sm surface-muted"
     >
       {{ t('admin.dashboard.noDataAvailable') }}
     </div>
@@ -176,7 +176,7 @@
     </div>
     <div
       v-else-if="rankingError && !rankingDisplayItems.length"
-      class="flex h-48 items-center justify-center text-sm text-gray-500 dark:text-gray-400"
+      class="flex h-48 items-center justify-center text-sm surface-muted"
     >
       {{ t('admin.dashboard.failedToLoad') }}
     </div>
@@ -187,7 +187,7 @@
       <div class="max-h-48 w-full min-w-0 flex-1 overflow-auto">
         <table class="w-full text-xs">
           <thead>
-            <tr class="text-gray-500 dark:text-gray-400">
+            <tr class="surface-muted">
               <th class="pb-2 text-left">{{ t('admin.dashboard.spendingRankingUser') }}</th>
               <th class="pb-2 text-right">{{ t('admin.dashboard.spendingRankingRequests') }}</th>
               <th class="pb-2 text-right">{{ t('admin.dashboard.spendingRankingTokens') }}</th>
@@ -200,13 +200,13 @@
               :key="item.isOther ? 'others' : `${item.user_id}-${index}`"
               class="border-t border-gray-100 transition-colors dark:border-dark-700"
               :class="item.isOther
-                ? 'bg-gray-50/70 dark:bg-dark-700/20'
-                : 'cursor-pointer hover:bg-gray-50 dark:hover:bg-dark-700/40'"
+                ? 'surface-inset dark:surface-inset'
+                : 'cursor-pointer hover:surface-hover dark:hover:surface-hover'"
               @click="item.isOther ? undefined : emit('ranking-click', item)"
             >
               <td class="py-1.5">
                 <div class="flex min-w-0 items-center gap-2">
-                  <span class="shrink-0 text-[11px] font-semibold text-gray-500 dark:text-gray-400">
+                  <span class="shrink-0 text-[11px] font-semibold surface-muted">
                     {{ item.isOther ? 'Σ' : `#${index + 1}` }}
                   </span>
                   <span
@@ -217,11 +217,11 @@
                   </span>
                 </div>
               </td>
-              <td class="py-1.5 text-right text-gray-600 dark:text-gray-400">
+              <td class="py-1.5 text-right surface-muted">
                 {{ formatNumber(item.requests) }}
               </td>
-              <td class="py-1.5 text-right text-gray-600 dark:text-gray-400">
-                {{ formatTokens(item.tokens) }} <span v-if="rankingTokenShare(item.tokens)" class="text-gray-400">({{ rankingTokenShare(item.tokens) }})</span>
+              <td class="py-1.5 text-right surface-muted">
+                {{ formatTokens(item.tokens) }} <span v-if="rankingTokenShare(item.tokens)" class="surface-muted">({{ rankingTokenShare(item.tokens) }})</span>
               </td>
               <td class="py-1.5 text-right text-green-600 dark:text-green-400">
                 ${{ formatCost(item.actual_cost) }}
@@ -233,7 +233,7 @@
     </div>
     <div
       v-else
-      class="flex h-48 items-center justify-center text-sm text-gray-500 dark:text-gray-400"
+      class="flex h-48 items-center justify-center text-sm surface-muted"
     >
       {{ t('admin.dashboard.noDataAvailable') }}
     </div>
