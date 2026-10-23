@@ -195,7 +195,11 @@ func TestHandleCCStreamingFromAnthropic_PingWriteFailureStopsDownstream(t *testi
 			require.Zero(t, writer.flushesAfterError)
 			require.NotContains(t, writer.Body.String(), "[DONE]")
 			require.Equal(t, 7, result.Usage.OutputTokens)
-			require.NotNil(t, result.FirstTokenMs)
+			// USAGE_TIMING.md: usage-only drains and pings do not manufacture
+			// semantic output timestamps, even when seven output tokens bill.
+			require.Nil(t, result.FirstTokenMs)
+			require.Nil(t, result.LastTokenMs)
+			require.Nil(t, result.FirstOutputMs)
 			if withUsage {
 				require.Equal(t, 10, result.Usage.InputTokens)
 			} else {
