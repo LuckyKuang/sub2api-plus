@@ -378,8 +378,8 @@ const empty = computed(() => events.value.length === 0 && !loading.value)
       <div class="flex flex-wrap items-center gap-2">
         <Select :model-value="timeRange" :options="timeRangeOptions" class="w-[120px]" @change="timeRange = String($event || '24h')" />
         <Select :model-value="severity" :options="severityOptions" class="w-[88px]" @change="severity = String($event || '')" />
-        <Select :model-value="status" :options="statusOptions" class="w-[110px]" @change="status = String($event || '')" />
-        <Select :model-value="emailSent" :options="emailSentOptions" class="w-[110px]" @change="emailSent = String($event || '')" />
+        <Select :model-value="status" :options="statusOptions" class="w-52" @change="status = String($event || '')" />
+        <Select :model-value="emailSent" :options="emailSentOptions" class="w-32" @change="emailSent = String($event || '')" />
         <button
           class="flex items-center gap-1.5 rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-bold text-gray-700 transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-dark-700 dark:text-gray-300 dark:hover:bg-dark-600"
           :disabled="loading"
@@ -597,7 +597,7 @@ const empty = computed(() => events.value.length === 0 && !loading.value)
                 <Select
                   :model-value="silenceDuration"
                   :options="silenceDurationOptions"
-                  class="w-[110px]"
+                  class="w-44"
                   @change="silenceDuration = String($event || '1h')"
                 />
                 <button type="button" class="btn btn-secondary btn-sm" :disabled="detailActionLoading" @click="silenceAlert">

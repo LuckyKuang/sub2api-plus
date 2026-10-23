@@ -1,3 +1,4 @@
+import { chooseSelect, openSelect } from '@/__tests__/helpers/select'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
@@ -79,7 +80,7 @@ describe('UseKeyModal', () => {
         await shellTab!.trigger('click')
         const mode = wrapper.get('[data-testid="codex-model-catalog-mode"]')
         for (const selection of ['remote', 'file', 'remote']) {
-          await mode.setValue(selection)
+          await chooseSelect(mode, `keys.useKeyModal.codexModelCatalog.${selection === 'remote' ? 'remote' : 'local'}`)
           const config = wrapper.findAll('pre code').map((code) => code.text())
             .find((text) => text.includes('[model_providers.'))!
           expect(config).toBeDefined()
@@ -877,7 +878,7 @@ describe('UseKeyModal', () => {
     expect(unixConfig).toContain('env_key = "SUB2API_API_KEY"')
     expect(fetchMock).not.toHaveBeenCalled()
 
-    await wrapper.get('[data-testid="codex-model-catalog-mode"]').setValue('file')
+    await chooseSelect(wrapper.get('[data-testid="codex-model-catalog-mode"]'), 'keys.useKeyModal.codexModelCatalog.local')
 
     await wrapper.get('[data-testid="codex-model-catalog-fetch"]').trigger('click')
     await flushPromises()
@@ -1048,14 +1049,14 @@ describe('UseKeyModal', () => {
         expect(configToml).not.toContain('client_version')
         expect(wrapper.find('[data-testid="codex-model-catalog"]').exists()).toBe(true)
 
-        await wrapper.get('[data-testid="codex-model-catalog-mode"]').setValue('file')
+        await chooseSelect(wrapper.get('[data-testid="codex-model-catalog-mode"]'), 'keys.useKeyModal.codexModelCatalog.local')
         const fileConfig = wrapper.findAll('pre code')
           .map((code) => code.text())
           .find((content) => content.includes('model_provider = "OpenAI"'))!
         expect(fileConfig).toContain('model_catalog_json = "~/.codex/codex-models.json"')
         expect(fileConfig).not.toContain('model_catalog_url')
         expect(fileConfig.indexOf('model_catalog_json')).toBeLessThan(fileConfig.indexOf('[model_providers.OpenAI]'))
-        await wrapper.get('[data-testid="codex-model-catalog-mode"]').setValue('remote')
+        await chooseSelect(wrapper.get('[data-testid="codex-model-catalog-mode"]'), 'keys.useKeyModal.codexModelCatalog.remote')
       }
     }
     expect(fetchMock).not.toHaveBeenCalled()
@@ -1090,8 +1091,8 @@ describe('UseKeyModal', () => {
     await flushPromises()
 
     const mode = wrapper.get('[data-testid="codex-model-catalog-mode"]')
-    expect((mode.element as HTMLSelectElement).value).toBe('remote')
-    expect((mode.get('option[value="remote"]').element as HTMLOptionElement).disabled).toBe(false)
+    expect(mode.text()).toBe('keys.useKeyModal.codexModelCatalog.remote')
+    expect((await openSelect(mode)).findAll('[role="option"]')[0].attributes('aria-disabled')).toBe('false')
     expect(wrapper.find('[data-testid="codex-model-catalog-fetch"]').exists()).toBe(true)
     expect(wrapper.text()).not.toContain('old-group-model')
     expect(wrapper.text()).not.toContain('keys.useKeyModal.codexModelCatalog.modelsCount')
@@ -1128,8 +1129,8 @@ describe('UseKeyModal', () => {
 
       const oversized = responseBytes > 1024 * 1024
       const mode = wrapper.get('[data-testid="codex-model-catalog-mode"]')
-      expect((mode.element as HTMLSelectElement).value).toBe(oversized ? 'file' : 'remote')
-      expect((mode.get('option[value="remote"]').element as HTMLOptionElement).disabled).toBe(oversized)
+      expect(mode.text()).toBe(`keys.useKeyModal.codexModelCatalog.${oversized ? 'local' : 'remote'}`)
+      expect((await openSelect(mode)).findAll('[role="option"]')[0].attributes('aria-disabled')).toBe(String(oversized))
       const config = wrapper.findAll('pre code').map((code) => code.text())
         .find((content) => content.includes('model_provider = "OpenAI"'))!
       if (oversized) {
@@ -1143,7 +1144,7 @@ describe('UseKeyModal', () => {
         expect(JSON.parse(await readBlobAsText(downloaded))).toEqual(manifest)
 
         await wrapper.setProps({ apiKey: 'sk-new-group' })
-        expect((mode.get('option[value="remote"]').element as HTMLOptionElement).disabled).toBe(false)
+        expect((await openSelect(mode)).findAll('[role="option"]')[0].attributes('aria-disabled')).toBe('false')
         expect(wrapper.text()).not.toContain('keys.useKeyModal.codexModelCatalog.oversized')
       } else {
         expect(config).toContain('model_catalog_url = "https://example.com/v1/models"')

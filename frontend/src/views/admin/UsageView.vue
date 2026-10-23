@@ -663,7 +663,7 @@ const exportToExcel = async () => {
 
 // Column visibility
 const ALWAYS_VISIBLE = ['user', 'created_at']
-const DEFAULT_HIDDEN_COLUMNS = ['reasoning_effort', 'user_agent']
+const DEFAULT_HIDDEN_COLUMNS = ['api_key', 'billing_mode', 'request_id', 'session_id', 'ip_address']
 const HIDDEN_COLUMNS_KEY = useColumnPreferenceKey('admin-usage-restored-v2-hidden-columns')
 
 const allColumns = computed(() => [
@@ -671,8 +671,8 @@ const allColumns = computed(() => [
   { key: 'api_key', label: t('usage.apiKeyFilter'), sortable: false },
   { key: 'account', label: t('admin.usage.account'), sortable: false },
   { key: 'model', label: t('usage.model'), sortable: true },
-  { key: 'service_tier', label: t('admin.usage.serviceTier'), sortable: false },
   { key: 'reasoning_effort', label: t('usage.reasoningEffort'), sortable: false },
+  { key: 'service_tier', label: t('admin.usage.serviceTier'), sortable: false },
   { key: 'endpoint', label: t('usage.endpoint'), sortable: false },
   { key: 'group', label: t('admin.usage.group'), sortable: false },
   { key: 'stream', label: t('usage.type'), sortable: false },

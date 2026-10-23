@@ -1,3 +1,4 @@
+import { chooseSelect } from '@/__tests__/helpers/select'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import CNOAuthPanel from '../CNOAuthPanel.vue'
@@ -10,9 +11,8 @@ describe('CNOAuthPanel', () => {
   afterEach(() => vi.useRealTimers())
   it.each(['kimi', 'minimax'] as const)('%s offers CN/global selection, shows user code and binds proxy and relink account', async (platform) => {
     const wrapper = mount(CNOAuthPanel, { props: { platform, accountId: 42, proxyId: 3 } })
-    const globalOption = wrapper.findAll('option').find(option => option.text().includes('domestic.international'))!
-    await wrapper.get('select').setValue(globalOption.element.value)
-    await wrapper.get('button').trigger('click'); await flushPromises()
+    await chooseSelect(wrapper, 'admin.accounts.oauth.domestic.international')
+    await wrapper.get('button.btn-secondary').trigger('click'); await flushPromises()
     expect(cnOAuthRequest).toHaveBeenCalledWith(platform, 'start', { region: 'global', account_id: 42, proxy_id: 3 })
     expect(wrapper.get('a').attributes('rel')).toBe('noopener noreferrer')
     expect(wrapper.get('[data-testid="cn-oauth-user-code"]').text()).toBe('CODE')
@@ -21,7 +21,7 @@ describe('CNOAuthPanel', () => {
   it('explains DeepSeek loopback and saves server-held authorization using account metadata', async () => {
     const wrapper = mount(CNOAuthPanel, { props: { platform: 'deepseek', accountInput: { name: 'DS', group_ids: [1], concurrency: 2 } } })
     expect(wrapper.find('select').exists()).toBe(false)
-    await wrapper.get('button').trigger('click'); await flushPromises()
+    await wrapper.get('button.btn-secondary').trigger('click'); await flushPromises()
     expect(wrapper.text()).toContain('admin.accounts.oauth.domestic.callbackHint')
     await wrapper.get('textarea').setValue('http://127.0.0.1:53682/oauth/callback?code=c&state=s')
     vi.mocked(cnOAuthRequest).mockResolvedValueOnce({ ...session(), status: 'ready' })

@@ -339,14 +339,14 @@
             <span>{{ t('common.total') }}: {{ historyTotal }} {{ t('pagination.results') }}</span>
             <label>
               {{ t('pagination.perPage') }}
-              <select
+              <Select
                 v-model="historyPageSize"
-                class="input w-20"
+                class="w-24"
                 :disabled="loadingHistory || submitting"
                 @change="fetchHistory(1)"
-              >
-                <option v-for="size in [20, 50, 100]" :key="size" :value="size">{{ size }}</option>
-              </select>
+                :searchable="false"
+                :options="[20, 50, 100].map(size => ({ value: size, label: String(size) }))"
+              />
             </label>
             <button
               class="btn btn-secondary"
@@ -366,6 +366,7 @@
 </template>
 
 <script setup lang="ts">
+import Select from '@/components/common/Select.vue'
 import { useLocaleRefresh } from '@/utils/localeRefresh'
 import { supportReadonly as vSupportReadonly } from '@/directives/supportReadonly'
 import { ref, computed, onMounted } from 'vue'

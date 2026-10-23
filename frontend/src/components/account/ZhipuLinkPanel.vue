@@ -30,25 +30,23 @@
       <div class="mt-3 grid gap-3 sm:grid-cols-2">
         <div>
           <label class="input-label">{{ t('admin.accounts.oauth.zhipu.providerLabel') }}</label>
-          <select v-model="provider" class="input" :disabled="!!session" data-testid="zhipu-link-provider">
-            <option v-for="item in capabilities.providers" :key="item" :value="item">
-              {{ t(`admin.accounts.oauth.zhipu.providers.${item}`) }}
-            </option>
-          </select>
+          <Select
+            v-model="provider"
+            :disabled="!!session"
+            data-testid="zhipu-link-provider"
+            :searchable="false"
+            :options="capabilities.providers.map(item => ({ value: item, label: t(`admin.accounts.oauth.zhipu.providers.${item}`) }))"
+          />
         </div>
         <div>
           <label class="input-label">{{ t('admin.accounts.oauth.zhipu.planLabel') }}</label>
-          <select v-model="planKind" class="input" :disabled="!!session && !ready" data-testid="zhipu-link-plan">
-            <option
-              v-for="item in capabilities.plan_kinds"
-              :key="item"
-              :value="item"
-              :disabled="!capabilities.supported_plan_kinds.includes(item)"
-            >
-              {{ t(`admin.accounts.oauth.zhipu.plans.${item}`) }}
-              <template v-if="!capabilities.supported_plan_kinds.includes(item)">&nbsp;({{ t('admin.accounts.oauth.zhipu.unsupported') }})</template>
-            </option>
-          </select>
+          <Select
+            v-model="planKind"
+            :disabled="!!session && !ready"
+            data-testid="zhipu-link-plan"
+            :searchable="false"
+            :options="planOptions"
+          />
         </div>
       </div>
 
@@ -155,6 +153,7 @@
 </template>
 
 <script setup lang="ts">
+import Select from '@/components/common/Select.vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useZhipuOAuth, zhipuPlanNeedsTeamScope } from '@/composables/useZhipuOAuth'
@@ -191,6 +190,17 @@ const callback = ref('')
 const showFallback = ref(false)
 
 const needsTeamScope = computed(() => zhipuPlanNeedsTeamScope(planKind.value))
+const planOptions = computed(() => {
+  const current = capabilities.value
+  return current?.plan_kinds.map(item => {
+    const disabled = !current.supported_plan_kinds.includes(item)
+    return {
+      value: item,
+      label: t(`admin.accounts.oauth.zhipu.plans.${item}`) + (disabled ? ` (${t('admin.accounts.oauth.zhipu.unsupported')})` : ''),
+      disabled
+    }
+  }) ?? []
+})
 
 onMounted(loadCapabilities)
 watch(() => props.proxyId, cancelLink)

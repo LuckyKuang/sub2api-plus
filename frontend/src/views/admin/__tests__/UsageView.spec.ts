@@ -486,7 +486,14 @@ describe('admin UsageView distribution metric toggles', () => {
   })
 })
 
-describe('admin UsageView request ID column visibility', () => {
+describe('admin UsageView column preferences', () => {
+  // Product requirement: exactly these 13 columns start visible; personal settings override defaults.
+  const defaultColumns = [
+    'user', 'account', 'model', 'reasoning_effort', 'service_tier', 'endpoint', 'group',
+    'stream', 'tokens', 'cost', 'latency', 'created_at', 'user_agent',
+  ]
+  const preferenceKey = 'admin-usage-restored-v2-hidden-columns:1:self'
+
   beforeEach(() => {
     vi.useFakeTimers()
     vi.mocked(localStorage.getItem).mockReset().mockReturnValue(null)
@@ -502,46 +509,92 @@ describe('admin UsageView request ID column visibility', () => {
 
   afterEach(() => {
     vi.useRealTimers()
+    vi.mocked(localStorage.getItem).mockReset().mockReturnValue(null)
+    vi.mocked(localStorage.setItem).mockReset()
   })
 
-  it('restores baseline historical columns and persists optional service tier visibility', async () => {
-    const wrapper = mount(UsageView, {
-      global: {
-        stubs: {
-          AppLayout: AppLayoutStub,
-          UsageStatsCards: true,
-          UsageFilters: UsageFiltersStub,
-          UsageTable: UsageTableStub,
-          UsageExportProgress: true,
-          UsageCleanupDialog: true,
-          UserBalanceHistoryModal: true,
-          AuditLogModal: true,
-          Pagination: true,
-          Select: true,
-          DateRangePicker: true,
-          Icon: true,
-          TokenUsageTrend: true,
-          ModelDistributionChart: true,
-          GroupDistributionChart: true,
-          EndpointDistributionChart: true,
-          UserTokenRanking: true,
-        },
+  const mountView = () => mount(UsageView, {
+    global: {
+      stubs: {
+        AppLayout: AppLayoutStub,
+        UsageStatsCards: true,
+        UsageFilters: UsageFiltersStub,
+        UsageTable: UsageTableStub,
+        UsageExportProgress: true,
+        UsageCleanupDialog: true,
+        UserBalanceHistoryModal: true,
+        AuditLogModal: true,
+        Pagination: true,
+        Select: true,
+        DateRangePicker: true,
+        Icon: true,
+        TokenUsageTrend: true,
+        ModelDistributionChart: true,
+        GroupDistributionChart: true,
+        EndpointDistributionChart: true,
+        UserTokenRanking: true,
       },
-    })
+    },
+  })
+
+  it('shows only the requested default columns in order', async () => {
+    const wrapper = mountView()
     await wrapper.vm.$nextTick()
 
     const usageTable = wrapper.findComponent(UsageTableStub)
-    // Approved baseline restoration: independent fields, service tier and correlation visible; only effort/UA hidden.
-    expect(usageTable.props('columns').map((column: { key: string }) => column.key)).toEqual([
-      'user', 'api_key', 'account', 'model', 'service_tier', 'endpoint', 'group', 'stream', 'billing_mode', 'tokens', 'cost', 'latency', 'created_at', 'request_id', 'session_id', 'ip_address',
-    ])
+    expect(usageTable.props('columns').map((column: { key: string }) => column.key)).toEqual(defaultColumns)
     expect(usageTable.props('showServiceTier')).toBe(true)
+    expect(localStorage.setItem).not.toHaveBeenCalledWith(preferenceKey, expect.anything())
+    wrapper.unmount()
+  })
+
+  it('allows every hidden column to be enabled and persists personal choices across mounts', async () => {
+    let saved: string | null = null
+    vi.mocked(localStorage.getItem).mockImplementation(key => key === preferenceKey ? saved : null)
+    vi.mocked(localStorage.setItem).mockImplementation((key, value) => {
+      if (key === preferenceKey) saved = value
+    })
+    const wrapper = mountView()
+    await wrapper.vm.$nextTick()
     await wrapper.get('[data-testid="usage-column-settings"]').trigger('click')
-    await wrapper.get('[data-testid="usage-column-toggle-service_tier"]').trigger('click')
-    expect(usageTable.props('columns').map((column: { key: string }) => column.key)).not.toContain('service_tier')
-    expect(localStorage.setItem).toHaveBeenCalledWith('admin-usage-restored-v2-hidden-columns:1:self', expect.stringContaining('"service_tier"'))
-    await wrapper.get('[data-testid="usage-column-toggle-service_tier"]').trigger('click')
-    expect(usageTable.props('columns').map((column: { key: string }) => column.key)).toContain('service_tier')
+    for (const key of ['api_key', 'billing_mode', 'request_id', 'session_id', 'ip_address']) {
+      await wrapper.get(`[data-testid="usage-column-toggle-${key}"]`).trigger('click')
+      expect(wrapper.findComponent(UsageTableStub).props('columns').map((column: { key: string }) => column.key)).toContain(key)
+    }
+    await wrapper.get('[data-testid="usage-column-toggle-user_agent"]').trigger('click')
+    expect(saved).toBe('["user_agent"]')
+    wrapper.unmount()
+
+    const restored = mountView()
+    await restored.vm.$nextTick()
+    expect(restored.findComponent(UsageTableStub).props('columns').map((column: { key: string }) => column.key)).toEqual([
+      'user', 'api_key', 'account', 'model', 'reasoning_effort', 'service_tier', 'endpoint',
+      'group', 'stream', 'billing_mode', 'tokens', 'cost', 'latency', 'created_at', 'request_id', 'session_id', 'ip_address',
+    ])
+    restored.unmount()
+  })
+
+  it('preserves an existing show-all preference and restores the new defaults on reset', async () => {
+    vi.mocked(localStorage.getItem).mockImplementation(key => key === preferenceKey ? '[]' : null)
+    const wrapper = mountView()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.findComponent(UsageTableStub).props('columns')).toHaveLength(18)
+    await wrapper.get('[data-testid="usage-column-settings"]').trigger('click')
+    await wrapper.findAll('button').find(button => button.text() === 'inspection.resetColumns')!.trigger('click')
+    expect(wrapper.findComponent(UsageTableStub).props('columns').map((column: { key: string }) => column.key)).toEqual(defaultColumns)
+    expect(localStorage.setItem).toHaveBeenCalledWith(preferenceKey, '["api_key","billing_mode","request_id","session_id","ip_address"]')
+    wrapper.unmount()
+  })
+
+  it.each(['invalid JSON', 'unavailable storage'])('uses the requested defaults with %s', async failure => {
+    vi.mocked(localStorage.getItem).mockImplementation(key => {
+      if (key !== preferenceKey) return null
+      if (failure === 'unavailable storage') throw new Error('Storage unavailable')
+      return '{invalid'
+    })
+    const wrapper = mountView()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.findComponent(UsageTableStub).props('columns').map((column: { key: string }) => column.key)).toEqual(defaultColumns)
     wrapper.unmount()
   })
 })

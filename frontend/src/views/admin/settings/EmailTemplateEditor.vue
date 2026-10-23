@@ -56,39 +56,25 @@
             <label class="input-label" for="email-template-event">
               {{ t("admin.settings.emailTemplates.event") }}
             </label>
-            <select
+            <Select
               id="email-template-event"
               v-model="selectedEvent"
-              class="input"
               :disabled="loadingTemplate || eventOptions.length === 0"
-            >
-              <option
-                v-for="option in eventOptions"
-                :key="option.value"
-                :value="option.value"
-              >
-                {{ formatEventOptionLabel(option) }}
-              </option>
-            </select>
+              :searchable="false"
+              :options="eventOptions.map(option => ({ value: option.value, label: formatEventOptionLabel(option) }))"
+            />
           </div>
           <div>
             <label class="input-label" for="email-template-locale">
               {{ t("admin.settings.emailTemplates.locale") }}
             </label>
-            <select
+            <Select
               id="email-template-locale"
               v-model="selectedLocale"
-              class="input"
               :disabled="loadingTemplate || localeOptions.length === 0"
-            >
-              <option
-                v-for="localeOption in localeOptions"
-                :key="localeOption"
-                :value="localeOption"
-              >
-                {{ formatLocale(localeOption) }}
-              </option>
-            </select>
+              :searchable="false"
+              :options="localeOptions.map(localeOption => ({ value: localeOption, label: formatLocale(localeOption) }))"
+            />
           </div>
         </div>
 
@@ -230,6 +216,7 @@
 </template>
 
 <script setup lang="ts">
+import Select from '@/components/common/Select.vue'
 import { computed, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { adminAPI } from "@/api";

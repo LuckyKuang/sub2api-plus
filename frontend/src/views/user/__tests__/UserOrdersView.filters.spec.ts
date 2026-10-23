@@ -3,6 +3,7 @@ import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import UserOrdersView from '../UserOrdersView.vue'
 import Select from '@/components/common/Select.vue'
 import Pagination from '@/components/common/Pagination.vue'
+import { chooseSelect } from '@/__tests__/helpers/select'
 
 const api = vi.hoisted(() => ({ getMyOrders: vi.fn(), getRefundEligibleProviders: vi.fn() }))
 vi.mock('@/api/payment', () => ({ paymentAPI: api }))
@@ -37,7 +38,7 @@ describe('order status filtering', () => {
   it('loads the first page with the selected status', async () => {
     const wrapper = await openOrders()
     const select = wrapper.findAllComponents(Select).find(c => c.props('options').some(o => o.value === 'PENDING'))!
-    await select.get('select').setValue('string:PENDING')
+    await chooseSelect(select, 'payment.status.pending')
     await flushPromises()
     expect(api.getMyOrders).toHaveBeenLastCalledWith({ page: 1, page_size: 20, status: 'PENDING', order_source: undefined, order_type: undefined })
     expect(wrapper.getComponent(Pagination).props('page')).toBe(1)
@@ -49,8 +50,8 @@ describe('order status filtering', () => {
     const selects = wrapper.findAllComponents(Select)
     const source = selects.find(c => c.props('options').some(o => o.value === 'redeem'))!
     const type = selects.find(c => c.props('options').some(o => o.value === 'subscription'))!
-    await source.get('select').setValue('string:redeem')
-    await type.get('select').setValue('string:subscription')
+    await chooseSelect(source, source.props('options').find(o => o.value === 'redeem')!.label)
+    await chooseSelect(type, type.props('options').find(o => o.value === 'subscription')!.label)
     await flushPromises()
     expect(api.getMyOrders).toHaveBeenLastCalledWith({ page: 1, page_size: 20, status: undefined, order_source: 'redeem', order_type: 'subscription' })
   })

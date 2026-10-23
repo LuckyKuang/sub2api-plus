@@ -81,11 +81,13 @@
             <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
               {{ t('admin.usageAlert.channel') }}
             </label>
-            <select v-model="rule.channel" class="input w-full text-sm">
-              <option value="wecom">{{ t('admin.usageAlert.channelWecom') }}</option>
-              <option value="feishu">{{ t('admin.usageAlert.channelFeishu') }}</option>
-              <option value="custom">{{ t('admin.usageAlert.channelCustom') }}</option>
-            </select>
+            <Select
+              v-model="rule.channel"
+              class="w-full"
+              trigger-class="text-sm"
+              :searchable="false"
+              :options="[{ value: 'wecom', label: t('admin.usageAlert.channelWecom') }, { value: 'feishu', label: t('admin.usageAlert.channelFeishu') }, { value: 'custom', label: t('admin.usageAlert.channelCustom') }]"
+            />
           </div>
 
           <div>
@@ -298,6 +300,7 @@
 </template>
 
 <script setup lang="ts">
+import Select from '@/components/common/Select.vue'
 import Toggle from '@/components/common/Toggle.vue'
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'

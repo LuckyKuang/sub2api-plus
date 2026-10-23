@@ -107,59 +107,63 @@
 
         <label class="block">
           <span class="input-label">{{ t('admin.usage.disconnectEvents.outcome') }}</span>
-          <select v-model="draft.outcome" data-testid="disconnect-outcome-filter" class="input" @change="applyFilters">
-            <option value="">{{ t('admin.usage.disconnectEvents.allOutcomes') }}</option>
-            <option value="pending">{{ t('admin.usage.disconnectEvents.pending') }}</option>
-            <option value="completed">{{ t('admin.usage.disconnectEvents.completed') }}</option>
-            <option value="client_disconnected">{{ t('admin.usage.disconnectEvents.clientDisconnected') }}</option>
-            <option value="neutral">{{ t('admin.usage.disconnectEvents.neutral') }}</option>
-          </select>
+          <Select
+            v-model="draft.outcome"
+            data-testid="disconnect-outcome-filter"
+            @change="applyFilters"
+            :searchable="false"
+            :options="[{ value: '', label: t('admin.usage.disconnectEvents.allOutcomes') }, { value: 'pending', label: t('admin.usage.disconnectEvents.pending') }, { value: 'completed', label: t('admin.usage.disconnectEvents.completed') }, { value: 'client_disconnected', label: t('admin.usage.disconnectEvents.clientDisconnected') }, { value: 'neutral', label: t('admin.usage.disconnectEvents.neutral') }]"
+          />
         </label>
         <label class="block">
           <span class="input-label">{{ t('admin.usage.disconnectEvents.completionStatus') }}</span>
-          <select v-model="draft.completion_status" data-testid="disconnect-completion-filter" class="input" @change="applyFilters">
-            <option value="">{{ t('admin.usage.disconnectEvents.allStatuses') }}</option>
-            <option value="pending">{{ t('admin.usage.disconnectEvents.pending') }}</option>
-            <option value="completed">{{ t('admin.usage.disconnectEvents.completed') }}</option>
-            <option value="client_disconnected">{{ t('admin.usage.disconnectEvents.clientDisconnected') }}</option>
-            <option value="upstream_failed">{{ t('admin.usage.disconnectEvents.upstreamFailed') }}</option>
-            <option value="upstream_timeout">{{ t('admin.usage.disconnectEvents.upstreamTimeout') }}</option>
-            <option value="usage_missing">{{ t('admin.usage.disconnectEvents.usageMissing') }}</option>
-          </select>
+          <Select
+            v-model="draft.completion_status"
+            data-testid="disconnect-completion-filter"
+            @change="applyFilters"
+            :searchable="false"
+            :options="[{ value: '', label: t('admin.usage.disconnectEvents.allStatuses') }, { value: 'pending', label: t('admin.usage.disconnectEvents.pending') }, { value: 'completed', label: t('admin.usage.disconnectEvents.completed') }, { value: 'client_disconnected', label: t('admin.usage.disconnectEvents.clientDisconnected') }, { value: 'upstream_failed', label: t('admin.usage.disconnectEvents.upstreamFailed') }, { value: 'upstream_timeout', label: t('admin.usage.disconnectEvents.upstreamTimeout') }, { value: 'usage_missing', label: t('admin.usage.disconnectEvents.usageMissing') }]"
+          />
         </label>
         <label class="block">
           <span class="input-label">{{ t('admin.usage.disconnectEvents.usageSource') }}</span>
-          <select v-model="draft.usage_source" data-testid="disconnect-usage-source-filter" class="input" @change="applyFilters">
-            <option value="">{{ t('admin.usage.disconnectEvents.allSources') }}</option>
-            <option value="upstream_exact">{{ t('admin.usage.disconnectEvents.upstreamExact') }}</option>
-            <option value="partial">{{ t('admin.usage.disconnectEvents.partial') }}</option>
-            <option value="estimated">{{ t('admin.usage.disconnectEvents.estimated') }}</option>
-            <option value="reconciled">{{ t('admin.usage.disconnectEvents.reconciled') }}</option>
-          </select>
+          <Select
+            v-model="draft.usage_source"
+            data-testid="disconnect-usage-source-filter"
+            @change="applyFilters"
+            :searchable="false"
+            :options="[{ value: '', label: t('admin.usage.disconnectEvents.allSources') }, { value: 'upstream_exact', label: t('admin.usage.disconnectEvents.upstreamExact') }, { value: 'partial', label: t('admin.usage.disconnectEvents.partial') }, { value: 'estimated', label: t('admin.usage.disconnectEvents.estimated') }, { value: 'reconciled', label: t('admin.usage.disconnectEvents.reconciled') }]"
+          />
         </label>
         <label class="block">
           <span class="input-label">{{ t('admin.usage.disconnectEvents.usageMissing') }}</span>
-          <select v-model="draft.usage_missing" data-testid="disconnect-usage-missing-filter" class="input" @change="applyFilters">
-            <option value="">{{ t('admin.usage.disconnectEvents.allValues') }}</option>
-            <option value="true">{{ t('common.yes') }}</option>
-            <option value="false">{{ t('common.no') }}</option>
-          </select>
+          <Select
+            v-model="draft.usage_missing"
+            data-testid="disconnect-usage-missing-filter"
+            @change="applyFilters"
+            :searchable="false"
+            :options="[{ value: '', label: t('admin.usage.disconnectEvents.allValues') }, { value: 'true', label: t('common.yes') }, { value: 'false', label: t('common.no') }]"
+          />
         </label>
         <label class="block">
           <span class="input-label">{{ t('admin.usage.disconnectEvents.enforcement') }}</span>
-          <select v-model="draft.enforce" data-testid="disconnect-enforce-filter" class="input" @change="applyFilters">
-            <option value="">{{ t('admin.usage.disconnectEvents.allValues') }}</option>
-            <option value="true">{{ t('admin.usage.disconnectEvents.enforced') }}</option>
-            <option value="false">{{ t('admin.usage.disconnectEvents.auditOnly') }}</option>
-          </select>
+          <Select
+            v-model="draft.enforce"
+            data-testid="disconnect-enforce-filter"
+            @change="applyFilters"
+            :searchable="false"
+            :options="[{ value: '', label: t('admin.usage.disconnectEvents.allValues') }, { value: 'true', label: t('admin.usage.disconnectEvents.enforced') }, { value: 'false', label: t('admin.usage.disconnectEvents.auditOnly') }]"
+          />
         </label>
         <label class="block">
           <span class="input-label">{{ t('admin.usage.disconnectEvents.autoBanned') }}</span>
-          <select v-model="draft.auto_banned" data-testid="disconnect-auto-ban-filter" class="input" @change="applyFilters">
-            <option value="">{{ t('admin.usage.disconnectEvents.allValues') }}</option>
-            <option value="true">{{ t('common.yes') }}</option>
-            <option value="false">{{ t('common.no') }}</option>
-          </select>
+          <Select
+            v-model="draft.auto_banned"
+            data-testid="disconnect-auto-ban-filter"
+            @change="applyFilters"
+            :searchable="false"
+            :options="[{ value: '', label: t('admin.usage.disconnectEvents.allValues') }, { value: 'true', label: t('common.yes') }, { value: 'false', label: t('common.no') }]"
+          />
         </label>
       </div>
 
@@ -230,6 +234,7 @@
 </template>
 
 <script setup lang="ts">
+import Select from '@/components/common/Select.vue'
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'

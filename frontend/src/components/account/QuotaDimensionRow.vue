@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Select from '@/components/common/Select.vue'
 import { useI18n } from 'vue-i18n'
 import QuotaNotifyToggle from './QuotaNotifyToggle.vue'
 import type { QuotaThresholdType, QuotaResetMode } from '@/constants/account'
@@ -44,8 +45,8 @@ const onLimitInput = (e: Event) => {
   emit('update:limit', Number.isNaN(raw) ? null : raw)
 }
 
-const onModeChange = (e: Event) => {
-  const val = (e.target as HTMLSelectElement).value as QuotaResetMode
+const onModeChange = (value: string | number | boolean | null) => {
+  const val = value as QuotaResetMode
   emit('update:resetMode', val)
   if (val === 'fixed') {
     if (props.resetHour == null) emit('update:resetHour', 0)
@@ -92,26 +93,45 @@ function getTimezoneOffsetLabel(tz: string): string {
     <!-- Reset mode row (daily/weekly only) -->
     <div v-if="hasResetMode" class="mt-1 flex items-center gap-2 flex-wrap">
       <label class="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{{ t('admin.accounts.quotaResetMode') }}</label>
-      <select :value="resetMode || 'rolling'" @change="onModeChange" class="input py-1 text-xs w-auto">
-        <option value="rolling">{{ t('admin.accounts.quotaResetModeRolling') }}</option>
-        <option value="fixed">{{ t('admin.accounts.quotaResetModeFixed') }}</option>
-      </select>
+      <Select
+        :model-value="resetMode || 'rolling'"
+        @update:model-value="onModeChange"
+        class="w-auto"
+        trigger-class="py-1 text-xs"
+        :searchable="false"
+        :options="[{ value: 'rolling', label: t('admin.accounts.quotaResetModeRolling') }, { value: 'fixed', label: t('admin.accounts.quotaResetModeFixed') }]"
+      />
       <template v-if="resetMode === 'fixed'">
         <!-- Weekly: day of week selector -->
         <template v-if="dim === 'weekly'">
           <label class="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{{ t('admin.accounts.quotaWeeklyResetDay') }}</label>
-          <select :value="resetDay ?? 1" @change="emit('update:resetDay', Number(($event.target as HTMLSelectElement).value))" class="input py-1 text-xs w-28">
-            <option v-for="d in dayOptions" :key="d.value" :value="d.value">{{ t('admin.accounts.dayOfWeek.' + d.key) }}</option>
-          </select>
+          <Select
+            :model-value="resetDay ?? 1"
+            @update:model-value="emit('update:resetDay', Number($event))"
+            class="w-36"
+            trigger-class="py-1 text-xs"
+            :searchable="false"
+            :options="dayOptions.map(d => ({ value: d.value, label: t('admin.accounts.dayOfWeek.' + d.key) }))"
+          />
         </template>
         <label class="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{{ t('admin.accounts.quotaResetHour') }}</label>
-        <select :value="resetHour ?? 0" @change="emit('update:resetHour', Number(($event.target as HTMLSelectElement).value))" class="input py-1 text-xs w-24">
-          <option v-for="h in hourOptions" :key="h" :value="h">{{ String(h).padStart(2, '0') }}:00</option>
-        </select>
+        <Select
+          :model-value="resetHour ?? 0"
+          @update:model-value="emit('update:resetHour', Number($event))"
+          class="w-28"
+          trigger-class="py-1 text-xs"
+          :searchable="false"
+          :options="hourOptions.map(h => ({ value: h, label: String(h).padStart(2, '0') + ':00' }))"
+        />
         <template v-if="timezoneOptions && timezoneOptions.length > 0">
-          <select :value="resetTimezone || 'UTC'" @change="emit('update:resetTimezone', ($event.target as HTMLSelectElement).value)" class="input py-1 text-xs w-auto">
-            <option v-for="tz in timezoneOptions" :key="tz" :value="tz">{{ tz }} ({{ getTimezoneOffsetLabel(tz) }})</option>
-          </select>
+          <Select
+            :model-value="resetTimezone || 'UTC'"
+            @update:model-value="emit('update:resetTimezone', String($event))"
+            class="w-auto"
+            trigger-class="py-1 text-xs"
+            :searchable="false"
+            :options="timezoneOptions.map(tz => ({ value: tz, label: tz + ' (' + getTimezoneOffsetLabel(tz) + ')' }))"
+          />
         </template>
       </template>
       <span class="text-[11px] text-gray-500 dark:text-gray-400">

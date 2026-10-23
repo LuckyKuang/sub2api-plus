@@ -1,3 +1,4 @@
+import { chooseSelect } from '@/__tests__/helpers/select'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 
@@ -122,12 +123,12 @@ describe('ClientDisconnectEventsPanel', () => {
     await wrapper.get('[data-testid="disconnect-accepted-to"]').setValue('2026-09-02T08:00')
     await wrapper.get('[data-testid="disconnect-finalized-from"]').setValue('2026-09-01T08:01')
     await wrapper.get('[data-testid="disconnect-finalized-to"]').setValue('2026-09-02T08:01')
-    await wrapper.get('[data-testid="disconnect-outcome-filter"]').setValue('client_disconnected')
-    await wrapper.get('[data-testid="disconnect-completion-filter"]').setValue('usage_missing')
-    await wrapper.get('[data-testid="disconnect-usage-source-filter"]').setValue('partial')
-    await wrapper.get('[data-testid="disconnect-usage-missing-filter"]').setValue('true')
-    await wrapper.get('[data-testid="disconnect-enforce-filter"]').setValue('true')
-    await wrapper.get('[data-testid="disconnect-auto-ban-filter"]').setValue('true')
+    await chooseSelect(wrapper.get('[data-testid="disconnect-outcome-filter"]'), 'admin.usage.disconnectEvents.clientDisconnected')
+    await chooseSelect(wrapper.get('[data-testid="disconnect-completion-filter"]'), 'admin.usage.disconnectEvents.usageMissing')
+    await chooseSelect(wrapper.get('[data-testid="disconnect-usage-source-filter"]'), 'admin.usage.disconnectEvents.partial')
+    await chooseSelect(wrapper.get('[data-testid="disconnect-usage-missing-filter"]'), 'common.yes')
+    await chooseSelect(wrapper.get('[data-testid="disconnect-enforce-filter"]'), 'admin.usage.disconnectEvents.enforced')
+    await chooseSelect(wrapper.get('[data-testid="disconnect-auto-ban-filter"]'), 'common.yes')
     await flushPromises()
 
     expect(listClientDisconnectEvents).toHaveBeenLastCalledWith(expect.objectContaining({
@@ -173,7 +174,7 @@ describe('ClientDisconnectEventsPanel', () => {
     const wrapper = mount(ClientDisconnectEventsPanel, {
       global: { stubs: { Icon: true, Pagination: true } },
     })
-    await wrapper.get('[data-testid="disconnect-outcome-filter"]').setValue('client_disconnected')
+    await chooseSelect(wrapper.get('[data-testid="disconnect-outcome-filter"]'), 'admin.usage.disconnectEvents.clientDisconnected')
     await flushPromises()
 
     let eventCells = wrapper.get('tbody tr').findAll('td')

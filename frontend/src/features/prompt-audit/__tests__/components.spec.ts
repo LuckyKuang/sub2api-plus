@@ -1,3 +1,4 @@
+import { chooseSelect } from '@/__tests__/helpers/select'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
 import { mount } from '@vue/test-utils'
@@ -192,7 +193,7 @@ describe('Prompt Audit components', () => {
 
     await wrapper.get('[data-test="range-preset-30d"]').setValue()
     expect(wrapper.emitted('criteria-change')?.length).toBeGreaterThan(0)
-    await wrapper.get('[data-test="delete-risk"]').setValue('high')
+    await chooseSelect(wrapper.get('[data-test="delete-risk"]'), 'admin.promptAudit.riskLevels.high')
     await wrapper.get('[data-test="run-delete-preview"]').trigger('click')
     const presetPreview = wrapper.emitted('preview')?.at(-1)?.[0] as PromptEventFilters
     expect(presetPreview.risk_level).toBe('high')
@@ -253,7 +254,7 @@ describe('Prompt Audit components', () => {
     })
     expect(wrapper.get<HTMLInputElement>('[data-test="range-preset-custom"]').element.checked).toBe(true)
     expect(wrapper.get<HTMLInputElement>('[data-test="custom-range"] [aria-label="admin.promptAudit.events.startAt"]').element.value).toBe('2026-07-01T00:00')
-    expect(wrapper.get<HTMLSelectElement>('[data-test="delete-decision"]').element.value).toBe('critical')
+    expect(wrapper.get('[data-test="delete-decision"]').text()).toBe('admin.promptAudit.decisions.critical')
     expect(wrapper.get('[data-test="run-delete-preview"]').attributes()).not.toHaveProperty('disabled')
   })
 

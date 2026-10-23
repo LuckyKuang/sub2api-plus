@@ -26,10 +26,11 @@
           </label>
           <label class="relative">
             <span class="sr-only">{{ t('availableChannels.catalog.sort') }}</span>
-            <select v-model="filters.sort" class="input">
-              <option value="name">{{ t('availableChannels.catalog.sortName') }}</option>
-              <option value="price">{{ t('availableChannels.catalog.sortPrice') }}</option>
-            </select>
+            <Select
+              v-model="filters.sort"
+              :searchable="false"
+              :options="[{ value: 'name', label: t('availableChannels.catalog.sortName') }, { value: 'price', label: t('availableChannels.catalog.sortPrice') }]"
+            />
           </label>
           <button class="btn btn-secondary" @click="reset">{{ t('availableChannels.catalog.reset') }}</button>
         </div>
@@ -57,6 +58,7 @@
 </template>
 
 <script setup lang="ts">
+import Select from '@/components/common/Select.vue'
 import { useLocaleRefresh } from '@/utils/localeRefresh'
 import { computed, nextTick, onUnmounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'

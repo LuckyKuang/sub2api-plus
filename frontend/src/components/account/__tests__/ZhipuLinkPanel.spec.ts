@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import ZhipuLinkPanel from '../ZhipuLinkPanel.vue'
+import Select from '@/components/common/Select.vue'
+import { chooseSelect, openSelect } from '@/__tests__/helpers/select'
 import { createZhipuAccountFromLink, exchangeZhipuLink, getZhipuOAuthCapabilities, pollZhipuLink, startZhipuLink } from '@/api/admin/zhipu'
 
 vi.mock('vue-i18n', async (original) => ({
@@ -57,13 +59,13 @@ describe('ZhipuLinkPanel', () => {
 
   it('renders the estates and plan kinds from the server capabilities', async () => {
     const wrapper = await mountPanel()
-    const providers = wrapper.get('[data-testid="zhipu-link-provider"]').findAll('option')
-    expect(providers.map(option => option.element.value)).toEqual(['bigmodel', 'zai'])
-    const plans = wrapper.get('[data-testid="zhipu-link-plan"]').findAll('option')
-    expect(plans.map(option => option.element.value)).toEqual([
+    const controls = wrapper.findAllComponents(Select)
+    expect(controls[0].props('options').map(option => option.value)).toEqual(['bigmodel', 'zai'])
+    expect(controls[1].props('options').map(option => option.value)).toEqual([
       'individual-coding-plan', 'team-coding-plan', 'start-plan', 'off-peak'
     ])
-    expect(wrapper.text()).toContain('admin.accounts.oauth.zhipu.plans.off-peak')
+    const panel = await openSelect(wrapper.get('[data-testid="zhipu-link-plan"]'))
+    expect(panel.text()).toContain('admin.accounts.oauth.zhipu.plans.off-peak')
     wrapper.unmount()
   })
 
@@ -120,7 +122,7 @@ describe('ZhipuLinkPanel', () => {
   it('asks for the team scope only for a team plan', async () => {
     const wrapper = await mountPanel()
     expect(wrapper.find('[data-testid="zhipu-link-team-org"]').exists()).toBe(false)
-    await wrapper.get('[data-testid="zhipu-link-plan"]').setValue('team-coding-plan')
+    await chooseSelect(wrapper.get('[data-testid="zhipu-link-plan"]'), 'admin.accounts.oauth.zhipu.plans.team-coding-plan')
     expect(wrapper.find('[data-testid="zhipu-link-team-org"]').exists()).toBe(true)
 
     await wrapper.get('[data-testid="zhipu-link-start"]').trigger('click')

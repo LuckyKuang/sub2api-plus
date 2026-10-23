@@ -1,3 +1,4 @@
+import { chooseSelect } from '@/__tests__/helpers/select'
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import zh from '@/i18n/locales/zh/channelMonitorV3'
@@ -208,7 +209,7 @@ describe('V3 service status', () => {
   })
   it('changes range and filters events without adding a duplicate list to platforms', async () => {
     await render()
-    await wrapper.find('select').setValue('gemini')
+    await chooseSelect(wrapper, 'Gemini')
     expect(wrapper.findAll('.platform-card')).toHaveLength(1)
     await wrapper.find('#v3-events-tab').trigger('click')
     expect(wrapper.findAll('details')).toHaveLength(0)
@@ -225,7 +226,7 @@ describe('V3 service status', () => {
   })
   it('clears a disabled selected platform and its open details after refresh', async () => {
     await render()
-    await wrapper.find('select').setValue('openai')
+    await chooseSelect(wrapper, 'OpenAI')
     await wrapper.find('.platform-card').trigger('click')
     const value = fixture()
     value.platforms = value.platforms.filter(item => item.platform !== 'openai')
@@ -233,7 +234,7 @@ describe('V3 service status', () => {
     value.summary = { status: 'unknown', normal: 0, affected: 0, unknown: 1, recovering: 0, active_events: 0 }
     vi.mocked(getStatusSnapshot).mockResolvedValue(value)
     await wrapper.find('[aria-label="刷新"]').trigger('click'); await flushPromises()
-    expect((wrapper.find('select').element as HTMLSelectElement).value).toBe('')
+    expect(wrapper.get('.select-value').text()).toBe('全部平台')
     expect(wrapper.find('[data-testid="detail"]').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('gpt-test')
     vi.mocked(getStatusSnapshot).mockResolvedValue(fixture())

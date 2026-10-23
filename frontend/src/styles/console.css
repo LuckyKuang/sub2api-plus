@@ -80,11 +80,13 @@
   position: sticky;
   top: var(--shell-inset-top);
   z-index: 30;
+  display: flex;
+  align-items: center;
   flex: none;
   height: var(--shell-header-height);
   min-width: 0;
 }
-.app-header-inner { height: 100%; min-width: 0; padding-inline: 10px; }
+.app-header-inner { flex: 1; height: var(--shell-header-height); min-width: 0; padding-inline: 10px; }
 .app-header :where(button, select) { min-height: 44px; }
 .app-header .btn-icon, .app-header :where(button[aria-label]) { min-width: 44px; }
 .header-user-dropdown {
@@ -132,14 +134,17 @@
   .app-header-inner { padding-inline: 18px; }
 }
 
+/* Keep this fallback outside Tailwind's component variants, including !card/!dropdown. */
+:where(.card, .glass, .glass-card, .card-glass, .glass-surface, .shell-surface, .modal-content, .dialog-container, .dropdown) {
+  position: relative;
+}
+
 @layer components {
   .card, .glass, .glass-card, .card-glass, .glass-surface, .shell-surface {
     background-color: var(--surface-fill);
     border: 1px solid var(--surface-edge);
     border-radius: var(--surface-radius);
     box-shadow: var(--surface-shadow);
-    -webkit-backdrop-filter: var(--surface-filter);
-    backdrop-filter: var(--surface-filter);
   }
   .shell-surface { background-color: var(--surface-shell); }
   .glass-inset { background-color: var(--surface-soft); }
@@ -147,11 +152,20 @@
     background-color: var(--surface-fill);
     border-color: var(--surface-edge);
     box-shadow: var(--surface-shadow);
+  }
+  /* Blur only the decoration: filtering the container traps menus and fixed dialogs. */
+  :where(.card, .glass, .glass-card, .card-glass, .glass-surface, .shell-surface, .modal-content, .dialog-container, .dropdown)::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
     -webkit-backdrop-filter: var(--surface-filter);
     backdrop-filter: var(--surface-filter);
   }
   /* Data rows share their panel; do not create a blur layer per row/cell. */
-  :where(.card, .glass-surface, .shell-surface, .dropdown, .modal-content, .dialog-container) :where(.card, .glass, .glass-surface, .glass-card, .card-glass, .stat-card) {
+  :where(.card, .glass, .glass-card, .card-glass, .glass-surface, .shell-surface, .dropdown, .modal-content, .dialog-container) :where(.card, .glass, .glass-surface, .glass-card, .card-glass, .stat-card)::before {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }

@@ -1,3 +1,4 @@
+import { chooseSelect } from '@/__tests__/helpers/select'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import CNOAuthPanel from '../CNOAuthPanel.vue'
@@ -27,8 +28,8 @@ describe('StepFun official access requirements', () => {
   // Step-Code be88ee77 login-client.ts uses browser approval + server polling.
   it('offers browser login and polls without accepting callback credentials', async () => {
     const wrapper = mount(CNOAuthPanel, { props: { platform: 'stepfun', accountInput: { name: 'Step Plan' } } })
-    await wrapper.get('select').setValue(wrapper.findAll('option').find(option => option.text().includes('domestic.international'))!.element.value)
-    await wrapper.get('button').trigger('click'); await flushPromises()
+    await chooseSelect(wrapper, 'admin.accounts.oauth.domestic.international')
+    await wrapper.get('button.btn-secondary').trigger('click'); await flushPromises()
     expect(cnOAuthRequest).toHaveBeenCalledWith('stepfun', 'start', { region: 'global', proxy_id: undefined, account_id: undefined })
     expect(wrapper.get('a').attributes('href')).toBe('https://platform.stepfun.ai/cli-login-remote?flow_id=flow')
     expect(wrapper.find('textarea').exists()).toBe(false)
@@ -44,7 +45,7 @@ describe('StepFun official access requirements', () => {
 
   it('stops polling and removes authorization links at expiry', async () => {
     const wrapper = mount(CNOAuthPanel, { props: { platform: 'stepfun' } })
-    await wrapper.get('button').trigger('click'); await flushPromises()
+    await wrapper.get('button.btn-secondary').trigger('click'); await flushPromises()
     await vi.advanceTimersByTimeAsync(61000)
     expect(wrapper.find('a').exists()).toBe(false)
     const calls = vi.mocked(cnOAuthRequest).mock.calls.length
@@ -57,7 +58,7 @@ describe('StepFun official access requirements', () => {
   it('withdraws model-discovery access when a ready authorization expires', async () => {
     vi.mocked(cnOAuthRequest).mockResolvedValueOnce({ ...pending(), status: 'ready' })
     const wrapper = mount(CNOAuthPanel, { props: { platform: 'stepfun' } })
-    await wrapper.get('button').trigger('click'); await flushPromises()
+    await wrapper.get('button.btn-secondary').trigger('click'); await flushPromises()
     expect(wrapper.emitted('ready-session')?.at(-1)).toEqual(['session'])
     await vi.advanceTimersByTimeAsync(61000)
     expect(wrapper.emitted('ready-session')?.at(-1)).toEqual([undefined])
@@ -66,8 +67,8 @@ describe('StepFun official access requirements', () => {
 
   it('keeps reauthorization on the existing account region', async () => {
     const wrapper = mount(CNOAuthPanel, { props: { platform: 'stepfun', accountId: 42, initialRegion: 'global' } })
-    expect(wrapper.get('select').element.disabled).toBe(true)
-    await wrapper.get('button').trigger('click'); await flushPromises()
+    expect((wrapper.get('.select-trigger').element as HTMLButtonElement).disabled).toBe(true)
+    await wrapper.get('button.btn-secondary').trigger('click'); await flushPromises()
     expect(cnOAuthRequest).toHaveBeenCalledWith('stepfun', 'start', { region: 'global', proxy_id: undefined, account_id: 42 })
     wrapper.unmount()
   })
@@ -78,8 +79,8 @@ describe('StepFun official access requirements', () => {
   ] as const)('selects the %s endpoint without crossing product paths', async (mode, cn, global) => {
     expect(defaultCNBaseUrl('stepfun', mode)).toBe(cn)
     const wrapper = mount(CnBaseUrlPresets, { props: { platform: 'stepfun', mode, protocol: 'chat_completions', currentUrl: cn } })
-    expect(wrapper.findAll('select')).toHaveLength(1)
-    await wrapper.get('select').setValue(wrapper.findAll('option').find(option => option.text().includes('domestic.international'))!.element.value)
+    expect(wrapper.findAll('.select-trigger')).toHaveLength(1)
+    await chooseSelect(wrapper, 'admin.accounts.oauth.domestic.international')
     expect(wrapper.emitted('select')).toEqual([[{ mode, protocol: 'chat_completions', label: mode === 'coding' ? 'Step Plan Intl' : 'StepFun Intl', url: global }]])
     wrapper.unmount()
   })

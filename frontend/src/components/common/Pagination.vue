@@ -41,7 +41,7 @@
           <span class="text-sm text-gray-700 dark:text-gray-300"
             >{{ t('pagination.perPage') }}:</span
           >
-          <div class="page-size-select w-20">
+          <div class="page-size-select w-24">
             <Select
               :model-value="pageSize"
               :options="pageSizeSelectOptions"
@@ -241,10 +241,6 @@ const submitJump = () => {
 </script>
 
 <style scoped>
-.page-size-select :deep(select) {
-  @apply py-1.5 text-sm;
-}
-
 .page-size-select :deep(.select-trigger) {
   @apply px-3 py-1.5 text-sm;
 }

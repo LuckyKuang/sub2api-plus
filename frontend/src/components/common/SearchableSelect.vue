@@ -1,23 +1,28 @@
 <template>
-  <div class="relative" ref="containerRef">
+  <div class="relative" :class="$attrs.class" :style="$attrs.style" ref="containerRef">
     <button
+      v-bind="{ ...$attrs, class: undefined, style: undefined }"
       ref="triggerRef"
       type="button"
+      :role="isSearchable ? undefined : 'combobox'"
       @click="toggle"
       :disabled="disabled"
       :aria-expanded="isOpen"
-      :aria-haspopup="true"
+      aria-haspopup="listbox"
+      :aria-controls="isOpen ? instanceId : undefined"
+      :aria-activedescendant="isOpen && focusedIndex >= 0 ? `${instanceId}-option-${focusedIndex}` : undefined"
       :id="id"
-      :aria-label="ariaLabel ?? 'Select option'"
+      :aria-label="ariaLabel ?? placeholderText"
       :aria-describedby="ariaDescribedby"
+      :aria-invalid="error || undefined"
       :class="[
         'select-trigger',
+        triggerClass,
         isOpen && 'select-trigger-open',
         error && 'select-trigger-error',
         disabled && 'select-trigger-disabled'
       ]"
-      @keydown.down.prevent="onTriggerKeyDown"
-      @keydown.up.prevent="onTriggerKeyDown"
+      @keydown="onTriggerKeyDown"
     >
       <span class="select-value">
         <slot name="selected" :option="selectedOption">
@@ -52,6 +57,7 @@
           v-if="isOpen"
           ref="dropdownRef"
           class="select-dropdown-portal"
+          :id="instanceId"
           :class="[instanceId]"
           :style="dropdownStyle"
           role="listbox"
@@ -78,7 +84,8 @@
             <div
               v-for="(option, index) in filteredOptions"
               :key="`${typeof getOptionValue(option)}:${String(getOptionValue(option) ?? '')}`"
-              role="option"
+              :id="`${instanceId}-option-${index}`"
+              :role="isGroupHeaderOption(option) ? 'presentation' : 'option'"
               :aria-selected="isSelected(option)"
               :aria-disabled="isOptionDisabled(option)"
               @click.stop="!isOptionDisabled(option) && selectOption(option)"
@@ -125,6 +132,8 @@ import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
 
+defineOptions({ inheritAttrs: false })
+
 const { t } = useI18n()
 
 // Instance ID for unique click-outside detection
@@ -158,6 +167,7 @@ interface Props {
   remote?: boolean
   /** 远程搜索模式下的加载态：options 为空时下拉显示 loading 文案 */
   loading?: boolean
+  triggerClass?: string
 }
 
 interface Emits {
@@ -216,13 +226,13 @@ const dropdownStyle = computed(() => {
 
   const rect = triggerRect.value
   const viewportRight = Math.max(dropdownViewportPadding, window.innerWidth - dropdownViewportPadding)
+  const preferredMinWidth = Math.max(dropdownMinimumWidth, rect.width)
+  const minWidth = Math.min(preferredMinWidth, Math.max(0, viewportRight - dropdownViewportPadding))
   const left = Math.min(
     Math.max(dropdownViewportPadding, rect.left),
-    viewportRight
+    Math.max(dropdownViewportPadding, viewportRight - minWidth)
   )
   const availableWidth = Math.max(0, viewportRight - left)
-  const preferredMinWidth = Math.max(dropdownMinimumWidth, rect.width)
-  const minWidth = Math.min(preferredMinWidth, availableWidth)
   const style: Record<string, string> = {
     position: 'fixed',
     left: `${left}px`,
@@ -256,7 +266,7 @@ const getOptionLabel = (option: any): string => {
 
 const isOptionDisabled = (option: any): boolean => {
   if (typeof option === 'object' && option !== null) {
-    return !!option.disabled
+    return !!option.disabled || option.kind === 'group'
   }
   return false
 }
@@ -269,7 +279,7 @@ const isGroupHeaderOption = (option: any): boolean => {
 }
 
 const selectedOption = computed(() => {
-  return props.options.find((opt) => getOptionValue(opt) === props.modelValue) || null
+  return props.options.find((opt) => !isGroupHeaderOption(opt) && getOptionValue(opt) === props.modelValue) || null
 })
 
 const selectedLabel = computed(() => {
@@ -310,7 +320,7 @@ const filteredOptions = computed(() => {
 })
 
 const isSelected = (option: any): boolean => {
-  return getOptionValue(option) === props.modelValue
+  return !isGroupHeaderOption(option) && getOptionValue(option) === props.modelValue
 }
 
 const findNextEnabledIndex = (startIndex: number): number => {
@@ -389,6 +399,7 @@ watch(isOpen, (open) => {
     if (isSearchable.value) {
       nextTick(() => searchInputRef.value?.focus())
     }
+    scrollToFocused()
     // Add scroll listener to update position
     window.addEventListener('scroll', updateTriggerRect, { capture: true, passive: true })
     window.addEventListener('resize', calculateDropdownPosition)
@@ -416,6 +427,7 @@ watch(searchQuery, (query) => {
 })
 
 const selectOption = (option: any) => {
+  if (props.disabled || isOptionDisabled(option)) return
   const value = getOptionValue(option) ?? null
   emit('update:modelValue', value)
   emit('change', value, option)
@@ -430,8 +442,18 @@ const clearSelection = () => {
 }
 
 // Keyboards
-const onTriggerKeyDown = () => {
-  if (!isOpen.value) {
+const onTriggerKeyDown = (event: KeyboardEvent) => {
+  if (props.disabled || event.isComposing) return
+  if (isOpen.value) {
+    if (event.key === ' ') {
+      event.preventDefault()
+      const option = filteredOptions.value[focusedIndex.value]
+      if (option) selectOption(option)
+    } else {
+      onDropdownKeyDown(event)
+    }
+  } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault()
     isOpen.value = true
   }
 }
@@ -455,6 +477,13 @@ const onDropdownKeyDown = (e: KeyboardEvent) => {
         const opt = filteredOptions.value[focusedIndex.value]
         if (!isOptionDisabled(opt)) selectOption(opt)
       }
+      break
+    case 'Home':
+    case 'End':
+      if (e.target === searchInputRef.value) return
+      e.preventDefault()
+      focusedIndex.value = e.key === 'Home' ? findNextEnabledIndex(0) : findPrevEnabledIndex(filteredOptions.value.length - 1)
+      scrollToFocused()
       break
     case 'Escape':
       e.preventDefault()
@@ -512,26 +541,6 @@ onUnmounted(() => {
 <style scoped>
 .select-trigger {
   @apply flex w-full items-center justify-between gap-2;
-  @apply rounded-xl px-4 py-2.5 text-sm;
-  @apply bg-white dark:bg-dark-800;
-  @apply border border-gray-200 dark:border-dark-600;
-  @apply text-gray-900 dark:text-gray-100;
-  @apply transition-all duration-200;
-  @apply focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30;
-  @apply hover:border-gray-300 dark:hover:border-dark-500;
-  @apply cursor-pointer;
-}
-
-.select-trigger-open {
-  @apply border-primary-500 ring-2 ring-primary-500/30;
-}
-
-.select-trigger-error {
-  @apply border-red-500 focus:border-red-500 focus:ring-red-500/30;
-}
-
-.select-trigger-disabled {
-  @apply cursor-not-allowed bg-gray-100 opacity-60 dark:bg-dark-900;
 }
 
 .select-value {

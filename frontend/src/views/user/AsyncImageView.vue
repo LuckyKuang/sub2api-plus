@@ -160,17 +160,25 @@
           </div>
           <label class="block">
             <span class="input-label">{{ t('asyncImage.create.apiKey') }}</span>
-            <select v-model.number="form.apiKeyId" class="input w-full" :disabled="submitting" @change="loadFormModels">
-              <option v-for="key in eligibleKeys" :key="key.id" :value="key.id">{{ key.name }}</option>
-            </select>
+            <Select
+              v-model="form.apiKeyId"
+              class="w-full"
+              :disabled="submitting"
+              @change="loadFormModels"
+              :searchable="false"
+              :options="eligibleKeys.map(key => ({ value: key.id, label: key.name }))"
+            />
           </label>
           <label class="block">
             <span class="input-label">{{ t('asyncImage.create.model') }}</span>
-            <select v-model="form.model" class="input w-full" :disabled="loadingModels || availableModels.length === 0 || submitting" @change="onModelChanged">
-              <option v-if="loadingModels" value="" disabled>{{ t('asyncImage.create.modelsLoading') }}</option>
-              <option v-else-if="availableModels.length === 0" value="" disabled>{{ t('asyncImage.create.noModels') }}</option>
-              <option v-for="model in availableModels" :key="model" :value="model">{{ model }}</option>
-            </select>
+            <Select
+              v-model="form.model"
+              class="w-full"
+              :disabled="loadingModels || availableModels.length === 0 || submitting"
+              @change="onModelChanged"
+              :searchable="false"
+              :options="[...(loadingModels ? [{ value: '', label: t('asyncImage.create.modelsLoading'), disabled: true }] : []), ...(!(loadingModels) && (availableModels.length === 0) ? [{ value: '', label: t('asyncImage.create.noModels'), disabled: true }] : []), ...availableModels.map(model => ({ value: model, label: model }))]"
+            />
           </label>
           <label class="block sm:col-span-2">
             <span class="input-label">{{ t('asyncImage.create.prompt') }}</span>
@@ -236,9 +244,12 @@
           </div>
           <label class="block">
             <span class="input-label">{{ t('asyncImage.create.size') }}</span>
-            <select v-model="form.size" class="input w-full">
-              <option v-for="option in sizeOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-            </select>
+            <Select
+              v-model="form.size"
+              class="w-full"
+              :searchable="false"
+              :options="sizeOptions.map(option => ({ value: option.value, label: option.label }))"
+            />
           </label>
           <div v-if="usingCustomSize" class="grid grid-cols-1 gap-4 sm:col-span-2 sm:grid-cols-2">
             <label class="block">
@@ -254,21 +265,21 @@
           </div>
           <label v-if="selectedModelIsGPTImage2" class="block">
             <span class="input-label">{{ t('asyncImage.create.quality') }}</span>
-            <select v-model="form.quality" class="input w-full">
-              <option value="auto">{{ t('asyncImage.create.qualityAuto') }}</option>
-              <option value="low">{{ t('asyncImage.create.qualityLow') }}</option>
-              <option value="medium">{{ t('asyncImage.create.qualityMedium') }}</option>
-              <option value="high">{{ t('asyncImage.create.qualityHigh') }}</option>
-            </select>
+            <Select
+              v-model="form.quality"
+              class="w-full"
+              :searchable="false"
+              :options="[{ value: 'auto', label: t('asyncImage.create.qualityAuto') }, { value: 'low', label: t('asyncImage.create.qualityLow') }, { value: 'medium', label: t('asyncImage.create.qualityMedium') }, { value: 'high', label: t('asyncImage.create.qualityHigh') }]"
+            />
           </label>
           <label class="block">
             <span class="input-label">{{ t('asyncImage.create.count') }}</span>
-            <select v-model.number="form.n" class="input w-full">
-              <option :value="1">1</option>
-              <option :value="2">2</option>
-              <option :value="3">3</option>
-              <option :value="4">4</option>
-            </select>
+            <Select
+              v-model="form.n"
+              class="w-full"
+              :searchable="false"
+              :options="[{ value: 1, label: '1' }, { value: 2, label: '2' }, { value: 3, label: '3' }, { value: 4, label: '4' }]"
+            />
           </label>
         </div>
         <div class="flex justify-end gap-2 border-t border-gray-200 pt-4 dark:border-dark-700">

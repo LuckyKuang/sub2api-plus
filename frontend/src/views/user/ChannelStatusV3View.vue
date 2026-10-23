@@ -35,10 +35,14 @@
             <button id="v3-events-tab" ref="eventsTab" class="tab" :class="tab === 'events' ? 'tab-active' : ''" role="tab" :aria-selected="tab === 'events'" aria-controls="v3-events-panel" @click="tab = 'events'">{{ t('channelMonitorV3.events') }} <span class="ml-1 text-xs">{{ summary.active_events || '' }}</span></button>
           </div>
           <div class="flex flex-wrap items-center gap-2">
-            <select v-model="platform" class="input w-auto text-xs" :aria-label="t('channelMonitorV3.filter')">
-              <option value="">{{ t('channelMonitorV3.allPlatforms') }}</option>
-              <option v-for="item in snapshot.platforms" :key="item.platform" :value="item.platform">{{ platformLabel(item.platform) }}</option>
-            </select>
+            <Select
+              v-model="platform"
+              class="w-auto"
+              trigger-class="text-xs"
+              :aria-label="t('channelMonitorV3.filter')"
+              :searchable="false"
+              :options="[{ value: '', label: t('channelMonitorV3.allPlatforms') }, ...snapshot.platforms.map(item => ({ value: item.platform, label: platformLabel(item.platform) }))]"
+            />
             <div class="flex rounded-lg border border-gray-200 p-1 dark:border-dark-700" role="group" :aria-label="t('channelMonitorV3.range')">
               <button v-for="value in ranges" :key="value" class="rounded-md px-3 py-1.5 text-xs" :class="range === value ? 'bg-gray-100 font-medium text-gray-900 dark:bg-dark-700 dark:text-white' : 'text-gray-500 dark:text-gray-400'" :aria-pressed="range === value" @click="range = value">{{ t(`channelMonitorV3.ranges.${value}`) }}</button>
             </div>
@@ -114,6 +118,7 @@
 </template>
 
 <script setup lang="ts">
+import Select from '@/components/common/Select.vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getStatusSnapshot, type ServiceStatus, type StatusPlatform, type StatusRange, type StatusSnapshot } from '@/api/channelMonitorV3'

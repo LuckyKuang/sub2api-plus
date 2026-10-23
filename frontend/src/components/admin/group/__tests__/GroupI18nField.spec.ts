@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent, h, reactive } from 'vue'
 
 import GroupI18nField from '../GroupI18nField.vue'
+import { chooseSelect, openSelect } from '@/__tests__/helpers/select'
 import type { GroupI18n } from '@/types'
 
 vi.mock('vue-i18n', async () => {
@@ -48,11 +49,12 @@ const mountField = (
 
 type Wrapper = ReturnType<typeof mountField>['wrapper']
 
-const trigger = (wrapper: Wrapper) => wrapper.get('select')
-const selectedLabel = (wrapper: Wrapper) => (trigger(wrapper).element as HTMLSelectElement).selectedOptions[0].textContent
-const menuItems = (wrapper: Wrapper) => wrapper.findAll('select option')
+const trigger = (wrapper: Wrapper) => wrapper.get('.select-trigger')
+const selectedLabel = (wrapper: Wrapper) => trigger(wrapper).get('.select-value').text()
 const choose = async (wrapper: Wrapper, locale: string) => {
-  await trigger(wrapper).setValue(`string:${locale === 'default' ? '' : locale}`)
+  const panel = await openSelect(wrapper)
+  const index = locale === 'default' ? 0 : locale === 'en' ? 1 : 2
+  await chooseSelect(wrapper, panel.findAll('[role="option"]')[index].text())
 }
 
 describe('GroupI18nField', () => {
@@ -86,10 +88,11 @@ describe('GroupI18nField', () => {
     })
 
 
-    expect(menuItems(wrapper).map((item) => [item.attributes('value'), item.text()])).toEqual([
-      ['string:', 'admin.groups.i18nField.default'],
-      ['string:en', 'admin.groups.i18nField.edit:English'],
-      ['string:zh', 'admin.groups.i18nField.add:中文']
+    const panel = await openSelect(wrapper)
+    expect(panel.findAll('[role="option"]').map(item => item.text())).toEqual([
+      'admin.groups.i18nField.default',
+      'admin.groups.i18nField.edit:English',
+      'admin.groups.i18nField.add:中文'
     ])
   })
 
@@ -98,7 +101,7 @@ describe('GroupI18nField', () => {
 
     await choose(wrapper, 'en')
 
-    expect(wrapper.find('button').exists()).toBe(false)
+    expect(trigger(wrapper).attributes('aria-expanded')).toBe('false')
     expect(wrapper.findAll('input')).toHaveLength(1)
     const input = wrapper.get('input')
     expect(input.element.value).toBe('Standard')
@@ -145,7 +148,8 @@ describe('GroupI18nField', () => {
 
     await choose(wrapper, 'zh')
 
-    expect((trigger(wrapper).element as HTMLSelectElement).value).toBe('string:zh')
+    const panel = await openSelect(wrapper)
+    expect(panel.get('[aria-selected="true"]').text()).toBe('admin.groups.i18nField.add:中文')
   })
 
   it('requires only the default content and keeps the form placeholder for it', async () => {
@@ -179,10 +183,12 @@ describe('GroupI18nField', () => {
     expect(state.text).toBe('号池')
   })
 
-  it('uses one native language selector without a custom popup', () => {
+  it('uses one shared language menu without an extra search field', async () => {
     const { wrapper } = mountField({ text: '标准', i18n: {} })
-    expect(wrapper.findAll('select')).toHaveLength(1)
-    expect(menuItems(wrapper)).toHaveLength(3)
-    expect(wrapper.findAll('button')).toHaveLength(0)
+    expect(wrapper.findAll('select')).toHaveLength(0)
+    expect(wrapper.findAll('.select-trigger')).toHaveLength(1)
+    const panel = await openSelect(wrapper)
+    expect(panel.findAll('[role="option"]')).toHaveLength(3)
+    expect(panel.find('input').exists()).toBe(false)
   })
 })

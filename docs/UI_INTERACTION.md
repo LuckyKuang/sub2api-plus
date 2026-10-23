@@ -14,8 +14,10 @@ content may retain a readable inner width.
 | Tablet, 768–1023px | 16px | 16px | Drawer |
 | Phone, below 768px | 12px | 12px | Drawer |
 
-Safe-area insets may increase the outer inset. The brand and toolbar are 64px
-high; navigation and business content start on the same horizontal line.
+Safe-area insets may increase the outer inset. The brand, toolbar and toolbar
+inner row are 64px high. The toolbar centers its inner row across its border,
+including fractional border widths at browser zoom; navigation and business
+content start on the same horizontal line.
 The toolbar and desktop sidebar stick at the outer top inset. Sticky settings
 tabs and details derive their offsets from these tokens. `TablePageLayout`
 measures the remaining viewport height, including the bottom outer inset, and
@@ -25,6 +27,14 @@ operations fullscreen remains a dedicated full-screen view.
 Cards use translucent fills, a fine edge, soft shadow and backdrop blur over a
 subtle shared gradient. Dense tables, inputs and fixed columns use more opaque
 fills for legibility. Nested panels and rows do not add another blur layer.
+Shared surfaces apply blur to a non-interactive background pseudo-element, not
+the content container: dropdowns must paint above subsequent cards, and fixed
+dialogs must retain viewport positioning. Explicit scroll containers still own
+clipping; searchable selects and shared dialogs retain their body portals.
+Surface positioning is a low-specificity fallback and must preserve component
+and utility positioning, including the sticky toolbar and absolute dropdowns.
+Keep that fallback outside Tailwind's component layer so important card/dropdown
+variants cannot promote positioning on unrelated surfaces.
 Light/dark themes share geometry. Unsupported blur and reduced-transparency
 preferences use an opaque surface; reduced-motion preferences disable transitions.
 
@@ -40,14 +50,27 @@ opening a disclosure makes its visible controls reachable.
 
 ## Usage lists
 
+Plain selection controls, including request category and billing type filters,
+use `Select.vue` and the same teleported panel as searchable model/type controls.
+`searchable: false` hides the search input while preserving the shared menu,
+option highlights, selected checkmark, keyboard navigation and light/dark theme.
+The option count affects automatic search visibility only, never the menu renderer.
+Trigger appearance is shared in `frontend/src/style.css`; panel appearance is
+owned by `SearchableSelect.vue`. Menus teleport to the document body to escape
+card clipping and stacking contexts. Searchable, clearable and composite controls
+retain their integrated interactions. Compact controls may vary in size, with
+translated labels clear of the arrow. Direct native selects are not used.
+
 Historical usage restores the independent columns and cell content from
 `9c05b0c37ff05abc375b0a35fd8cffc1727837b0`. User order is API key, model,
 reasoning effort, endpoint, IP, group, type, billing mode, tokens, cost, latency,
-time, User-Agent (only User-Agent starts hidden). Admin order is user, API key,
-account, model, service tier, reasoning effort, endpoint, group, type, billing
-mode, tokens, cost, latency, time, request ID, User-Agent, session ID, IP
-(reasoning effort and User-Agent start hidden). Wide tables scroll within their
-card. Existing precision, permissions, billing and timing definitions remain.
+time, User-Agent (only User-Agent starts hidden). Admin defaults are user,
+account, model, reasoning effort, service tier, endpoint, group, type, tokens,
+cost, latency, time and User-Agent. API key, billing mode, request ID, session ID
+and IP start hidden and remain available through column settings. Saved personal
+column settings take precedence; reset restores these defaults. Wide tables
+scroll within their card. Existing precision, permissions, billing and timing
+definitions remain.
 
 Usage and live rows have no side panel, row detail selection, or detail request.
 Old `record` query links return to the list while retaining other queries and

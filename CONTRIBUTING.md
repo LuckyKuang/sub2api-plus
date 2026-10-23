@@ -69,13 +69,14 @@ Provider identity tests additionally follow the
 
 ## Development Checks
 
-Plain selection dropdowns use native HTML `select` controls and shared styles in
-`frontend/src/style.css`. Reuse `frontend/src/components/common/Select.vue` for
-typed values, disabled options, and option groups. Its default `searchable: 'auto'`
-preserves local search when there are more than five options; explicit
-`searchable: false` keeps a plain dropdown native. Searchable, clearable, and
-custom `selected`/`option` slot controls use the existing popover in
-`SearchableSelect.vue`, preserving integrated selected content and rich options.
+Selection dropdowns use `frontend/src/components/common/Select.vue` and the shared
+panel in `SearchableSelect.vue` for both closed and expanded appearance. Do not
+introduce native HTML `select` controls or use `.input` for dropdowns: native
+expanded menus cannot reliably share the system's theme and option styling.
+Use typed option values, disabled options, and `kind: 'group'` headers. The default
+`searchable: 'auto'` preserves local search above five options; explicit
+`searchable: false` hides only the search input. Clearable and custom
+`selected`/`option` slot controls preserve integrated selected content and rich options.
 Keep existing search-result popovers and their styling for user, account, model,
 and proxy selectors. Search remains inside the dropdown; do not expose a
 separate search input above or alongside a second selection field.
@@ -85,10 +86,17 @@ allow repeated selection without reopening it. Keep combined auto-refresh
 enable/interval actions in their original menu. Usage history and live requests
 are the explicit exception: show a temporary auto-refresh switch directly, with
 the interval choices retained in the integrated refresh menu. Do not replace composite
-controls with plain native selects or split them into separate visible fields.
-Native controls own keyboard navigation and focus for plain dropdowns.
-Keep horizontal padding and arrow placement in the shared styles; individual
-pages may adjust control width and height.
+controls with plain selectors or split them into separate visible fields.
+The shared dropdown owns keyboard navigation and focus, including disabled/group
+skipping, selection, Escape, and Tab. Keep trigger styles in `frontend/src/style.css`
+and expanded-menu styles in `SearchableSelect.vue`, including light/dark surfaces,
+borders, typography, hover, focus, selected, error and disabled states. Keep spacing
+shared, and do not add local appearance replacements. Use `triggerClass` only for
+compact height, text sizing or font; layout classes belong on the wrapper.
+Individual pages may adjust layout and compact width, height or text size, leaving
+enough space for the longest supported translation and the dropdown arrow.
+Verify the expanded panel itself in both themes and narrow viewports, including
+menus inside dialogs and scrollable cards; checking only the closed trigger is insufficient.
 
 All validation, including focused checks while iterating, must run in the
 platform validation container: Apple Containers on macOS, Docker inside WSL2

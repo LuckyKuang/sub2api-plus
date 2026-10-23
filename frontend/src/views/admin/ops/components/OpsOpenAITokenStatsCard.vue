@@ -176,7 +176,7 @@ function onNextPage() {
         <div class="w-36">
           <Select v-model="viewMode" :options="viewModeOptions" />
         </div>
-        <div v-if="viewMode === 'topn'" class="w-28">
+        <div v-if="viewMode === 'topn'" class="w-32">
           <Select v-model="topN" :options="topNOptions" />
         </div>
         <template v-else>

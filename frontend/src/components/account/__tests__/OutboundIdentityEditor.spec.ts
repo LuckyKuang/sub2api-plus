@@ -1,3 +1,5 @@
+import { chooseSelect, openSelect } from '@/__tests__/helpers/select'
+import Select from '@/components/common/Select.vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import OutboundIdentityEditor from '../OutboundIdentityEditor.vue'
@@ -55,13 +57,13 @@ describe('OutboundIdentityEditor', () => {
   ])('lets compatible %s/%s accounts select an existing identity', async (platform, accountType) => {
     const wrapper = mount(OutboundIdentityEditor, { props: { platform, accountType, modelValue: null } })
     await flushPromises()
-    expect(wrapper.get('select').findAll('option').map(option => option.attributes('value'))).toEqual(['', 'codex', 'claude', 'gemini', 'grok', 'antigravity', 'deepseek', 'minimax', 'minimax_apikey', 'kimi', 'zcode', 'stepfun'].map(value => `string:${value}`))
-    await wrapper.get('select').setValue('string:grok')
+    expect(wrapper.getComponent(Select).props('options').map(option => option.value)).toEqual(['', 'codex', 'claude', 'gemini', 'grok', 'antigravity', 'deepseek', 'minimax', 'minimax_apikey', 'kimi', 'zcode', 'stepfun'])
+    await chooseSelect(wrapper, 'Grok')
     expect(wrapper.emitted('update:modelValue')?.[0]).toEqual([{ preset: 'grok' }])
     await wrapper.setProps({ modelValue: { preset: 'grok', version: '3.9.1' } })
     await vi.advanceTimersByTimeAsync(250)
     expect(previewOutboundIdentity).toHaveBeenLastCalledWith(platform, accountType, { preset: 'grok', version: '3.9.1' })
-    await wrapper.get('select').setValue('string:')
+    await chooseSelect(wrapper, 'admin.settings.outboundIdentity.inherit')
     expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([null])
     wrapper.unmount()
   })
@@ -215,12 +217,17 @@ describe('OutboundIdentityEditor', () => {
     const wrapper = mount(OutboundIdentityEditor, { props: { platform: 'deepseek', accountType: 'oauth', modelValue: { preset: 'deepseek', timezone: 'Asia/Shanghai' } } })
     await vi.advanceTimersByTimeAsync(250)
     await flushPromises()
-    const language = wrapper.get('select[aria-label="language"]')
-    expect(language.findAll('option').map(option => option.attributes('value'))).toEqual(['string:', 'string:zh-CN', 'string:en-US'])
-    await language.setValue('string:en-US')
+    const language = wrapper.get('[aria-label="language"]')
+    const panel = await openSelect(language)
+    const choices = panel.findAll('[role="option"]')
+    expect(choices).toHaveLength(3)
+    expect(choices[0].text()).toContain('admin.settings.outboundIdentity.inherit')
+    expect(choices.slice(1).map(option => option.text().match(/\((zh-CN|en-US)\)$/)?.[1])).toEqual(['zh-CN', 'en-US'])
+    const inheritLabel = choices[0].text()
+    await chooseSelect(language, choices[2].text())
     expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([{ preset: 'deepseek', timezone: 'Asia/Shanghai', language: 'en-US' }])
     await wrapper.setProps({ modelValue: { preset: 'deepseek', timezone: 'Asia/Shanghai', language: 'en-US' } })
-    await language.setValue('string:')
+    await chooseSelect(language, inheritLabel)
     expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([{ preset: 'deepseek', timezone: 'Asia/Shanghai' }])
     wrapper.unmount()
   })
