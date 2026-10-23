@@ -34,7 +34,7 @@ orchestration; the Go and frontend builds execute inside Apple Builder:
 ```bash
 deployment_version=$(cat backend/cmd/server/VERSION)
 deployment_commit=$(git rev-parse HEAD)
-container build --platform linux/arm64 \
+container build --cpus 6 --memory 8G --platform linux/arm64 \
   --build-arg "VERSION=${deployment_version}" \
   --build-arg "COMMIT=${deployment_commit}" \
   --tag sub2api-plus:local-candidate --file Dockerfile .

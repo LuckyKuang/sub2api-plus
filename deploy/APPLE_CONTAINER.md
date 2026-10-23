@@ -240,17 +240,19 @@ container builder stop
 Local image builds also need enough builder memory. The frontend stage runs
 `pnpm run build` with `NODE_OPTIONS=--max-old-space-size=3072`, and the default
 builder allocation (2 CPU / 2 GiB) is killed with `cannot allocate memory`
-(exit 137) while `vite build` runs. Start the builder with at least 8 GiB before
-`container build`:
+(exit 137) while `vite build` runs. Pass the allocation to each build command;
+Apple Containers 1.6 can reset a previously configured builder to its defaults
+when `container build` omits these flags:
 
 ```bash
-container builder stop
-container builder start --cpus 6 --memory 8G
+container build --cpus 6 --memory 8G --platform linux/arm64 \
+  --tag sub2api-plus:local-candidate --file Dockerfile .
 ```
 
-`container builder status` reports the active allocation. Raising it is not a
-cache change and needs no rebuild: the builder keeps its cached layers, and a
-build that a 2 GiB builder already killed simply resumes.
+Use the version and commit build arguments from the
+[deployment workflow](../skills/deploy-cli/references/apple-containers.md#current-code-deployment).
+`container builder status` reports the active allocation. Raising it preserves
+cached layers; a failed build reuses its completed layers on retry.
 
 Delete the builder and its reusable build cache only after confirming it is not
 shared by another project and a subsequent full rebuild is acceptable:
