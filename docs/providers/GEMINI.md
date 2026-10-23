@@ -7,6 +7,29 @@ catalog in the selected region and return AI Studio-shaped model descriptions.
 Vertex accounts authenticated with an API key use the built-in catalog because
 the publisher-model listing path requires an access token.
 
+## Quotas, image permissions and interrupted streams
+
+Vertex service accounts support total, daily and weekly account quota limits.
+Configured limits accumulate through the same billing transaction as API-key
+and Bedrock account limits, stop scheduling when exhausted, and drive threshold
+notifications. An unconfigured limit does not enable quota accumulation.
+
+Gemini, Antigravity and composite groups enforce `allow_image_generation` on
+Messages, Chat Completions, Responses and native generation. The check recognizes
+image model names and IMAGE response modalities, including channel and account
+model mappings. A denied request returns HTTP 400 without account punishment or
+failover. `countTokens` is exempt. Existing Gemini/Antigravity groups are enabled
+by migration 295; composite groups retain their saved value. New Gemini and
+Antigravity groups default enabled, and can be disabled after creation.
+
+A disconnected stream bills only collected usage. Native streams bill delivered
+images before a terminal chunk; Messages/Chat streams do not count undelivered
+images. Once a terminal chunk arrives, normal image-count semantics apply.
+Client disconnection stays visible in Plus completion/timing diagnostics. Live
+upstream read failures retain their error and observed partial usage. Truncated
+non-EOF trailing lines never overwrite collected native usage. Cached input is
+clamped to a nonnegative uncached-input count when a prompt is blocked.
+
 ## Explicit context caching
 
 Explicit caches are scoped to the requesting gateway API key and its current

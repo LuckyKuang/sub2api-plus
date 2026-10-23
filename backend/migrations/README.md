@@ -59,6 +59,11 @@ tables, channel-usage snapshots, and mutation leases. Official numbered these
 243–245; Plus already uses those prefixes, so they land at 287–289. Historical
 SQL is unchanged.
 
+Migration `295_enable_gemini_image_generation_groups.sql` enables image
+permissions for existing Gemini and Antigravity groups. Composite and other
+platforms retain their saved value. Official migration 246 uses a prefix
+already occupied by Plus, so only this new migration is imported as 295.
+
 ## File Naming
 
 Regular migration:
@@ -211,3 +216,6 @@ Migration 280 removes `grok_client_tool_cache_enabled` only from Grok account
 extra objects. Credentials, unrelated extras, foreign-platform rows and
 non-object historical values are preserved. The retired switch no longer grants
 hosted search tools or changes cache routing. See [Grok](../../docs/providers/GROK.md#cache-and-tool-declarations).
+
+Migration 295 leaves prefixes 290–294 available for existing independently
+deployed Plus work, avoiding reuse of already applied migration numbers.

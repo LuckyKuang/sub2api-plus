@@ -836,11 +836,33 @@ class ValidationGenerationTest(unittest.TestCase):
 
 
 class ValidationLaunchTest(unittest.TestCase):
+    def test_apple_network_selection_is_explicit_and_platform_scoped(self) -> None:
+        with mock.patch.dict(push_cli.validation_runtime.os.environ, {}, clear=True):
+            self.assertEqual([], push_cli.validation_runtime.validation_network_args(
+                push_cli.Runtime("apple-containers")))
+        with mock.patch.dict(push_cli.validation_runtime.os.environ,
+                             {"SUB2API_VALIDATION_APPLE_NETWORK": "sub2api-test"}, clear=True):
+            self.assertEqual(["--network", "sub2api-test"],
+                             push_cli.validation_runtime.validation_network_args(
+                                 push_cli.Runtime("apple-containers")))
+            for runtime in ("docker", "wsl2-docker"):
+                with self.assertRaises(push_cli.validation_runtime.ValidationRuntimeError):
+                    push_cli.validation_runtime.validation_network_args(push_cli.Runtime(runtime))
+        with mock.patch.dict(push_cli.validation_runtime.os.environ,
+                             {"SUB2API_VALIDATION_APPLE_NETWORK": "--host"}, clear=True):
+            with self.assertRaises(push_cli.validation_runtime.ValidationRuntimeError):
+                push_cli.validation_runtime.validation_network_args(push_cli.Runtime("apple-containers"))
+
     def test_external_integration_configuration_is_forwarded_without_secret_values(self) -> None:
         with mock.patch.dict(push_cli.validation_runtime.os.environ,
                              {"SUB2API_TEST_POSTGRES_DSN": "postgres://private-value",
                               "SUB2API_TEST_REDIS_ADDR": "isolated-redis:6379",
-                              "SUB2API_TEST_REDIS_PASSWORD": "private-password"}, clear=True):
+                              "SUB2API_TEST_REDIS_PASSWORD": "private-password",
+                              "SUB2API_TEST_REDIS_USERNAME": "validation",
+                              "SUB2API_TEST_REDIS_DB": "15",
+                              "PROMPT_AUDIT_TEST_POSTGRES_DSN": "postgres://private-audit-value",
+                              "PROMPT_AUDIT_TEST_REDIS_ADDR": "isolated-redis:6379",
+                              "PROMPT_AUDIT_TEST_REDIS_DB": "14"}, clear=True):
             command = push_cli.validation_runtime.validation_run_command(
                 push_cli.Runtime("docker"), ["python3", "check.py"],
                 root=Path("/unused"), image="sub2api-validation:1111111111111111",
@@ -851,6 +873,7 @@ class ValidationLaunchTest(unittest.TestCase):
             self.assertEqual("--env", command[index - 1])
         self.assertNotIn("postgres://private-value", command)
         self.assertNotIn("private-password", command)
+        self.assertNotIn("postgres://private-audit-value", command)
 
     def test_wsl_host_network_is_explicit_and_never_changes_other_runtimes(self) -> None:
         with mock.patch.dict(push_cli.validation_runtime.os.environ, {}, clear=True):

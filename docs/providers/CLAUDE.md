@@ -11,6 +11,20 @@ reject temperature or forced tool use supported by that destination. The
 gateway forces upstream streaming after this single conversion and retains
 the original client model for downstream protocol behavior and accounting.
 
+## Interrupted compatibility streams
+
+Anthropic-backed Chat Completions and Responses streams stop writing after
+client disconnection and continue reading upstream usage for billing. The
+configured stream data interval timeout bounds reads; when disabled, a
+disconnected drain uses a 180-second read-interval bound. Plus retains semantic
+first/last-token timing and marks client-disconnected usage incomplete.
+
+For a connected client, upstream timeout, read error or missing terminal event
+returns a protocol error instead of a fabricated successful completion. Observed
+partial usage remains billable through the existing idempotent Plus path. An
+upstream SSE error can trigger account failover only before downstream output is
+committed, retaining the existing trusted identity and ingress audit contracts.
+
 ## Native reset-credit status
 
 Administrators can query an account's native Claude reset-credit availability

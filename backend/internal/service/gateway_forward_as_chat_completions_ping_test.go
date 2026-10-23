@@ -190,15 +190,20 @@ func TestHandleCCStreamingFromAnthropic_PingWriteFailureStopsDownstream(t *testi
 			)
 			require.NoError(t, err)
 			require.True(t, writer.failed)
+			require.True(t, result.ClientDisconnect)
 			require.Zero(t, writer.writesAfterError)
 			require.Zero(t, writer.flushesAfterError)
 			require.NotContains(t, writer.Body.String(), "[DONE]")
-			require.Zero(t, result.Usage.OutputTokens)
+			require.Equal(t, 7, result.Usage.OutputTokens)
+			// USAGE_TIMING.md: usage-only drains and pings do not manufacture
+			// semantic output timestamps, even when seven output tokens bill.
+			require.Nil(t, result.FirstTokenMs)
+			require.Nil(t, result.LastTokenMs)
+			require.Nil(t, result.FirstOutputMs)
 			if withUsage {
 				require.Equal(t, 10, result.Usage.InputTokens)
 			} else {
 				require.Zero(t, result.Usage.InputTokens)
-				require.Nil(t, result.FirstTokenMs)
 			}
 		})
 	}
