@@ -207,12 +207,33 @@ network namespace, allowing its existing loopback proxy; all checks still run
 inside the pinned Docker container. It does not start or reconfigure Compose
 services. Leave it unset to use the default Docker network.
 
-For repository integration tests without a nested Docker API, the launcher
-forwards `SUB2API_TEST_POSTGRES_DSN`, `SUB2API_TEST_REDIS_ADDR`, and optional
+For integration tests without a nested Docker API, the launcher forwards
+`SUB2API_TEST_POSTGRES_DSN`, `SUB2API_TEST_REDIS_ADDR`,
+`SUB2API_TEST_REDIS_DB`, `SUB2API_TEST_REDIS_USERNAME` and
 `SUB2API_TEST_REDIS_PASSWORD` by environment name, keeping credentials out of
-command logs. Supply disposable, isolated services reachable from the
-validation container; the integration suite applies migrations and writes
-fixtures. Remove these services and their data after the validation attempt.
+command logs. External Redis requires an explicitly selected nonzero database;
+missing or invalid selection fails instead of falling back to DB 0. The route
+rate-limit integration test also accepts this isolated external Redis.
+
+Prompt Audit uses a separate disposable database through
+`PROMPT_AUDIT_TEST_POSTGRES_DSN`, and separate Redis selection through
+`PROMPT_AUDIT_TEST_REDIS_ADDR` and `PROMPT_AUDIT_TEST_REDIS_DB`; its Redis
+credentials use the same `SUB2API_TEST_REDIS_USERNAME` / password bindings.
+These variables are also forwarded by name. Never share its database with the
+repository suite: both suites write and truncate fixtures independently.
+
+Supply disposable databases reachable from the validation container. For Apple
+Containers, `SUB2API_VALIDATION_APPLE_NETWORK` explicitly selects an existing
+named network; the default leaves runtime networking unchanged. It is rejected
+on other runtimes. Reusing PostgreSQL requires dedicated test databases and
+credentials. Redis logical databases do not isolate Pub/Sub: suites exercising
+invalidation must use a dedicated temporary Redis process, which may run inside
+the existing Redis container on a separate port with persistence disabled.
+Never grant tests access to live subscription channels. Reserve initially empty
+test Redis databases and remove only their test keys afterward. Delete disposable
+PostgreSQL databases, test roles/ACL users, temporary Redis processes/files and
+containers after validation, including failed attempts; preserve live services
+and business data.
 
 The `release-finalization` profile is not a general fast option. Only
 `release-cli finalize` may request it for a verified published tag and a tree

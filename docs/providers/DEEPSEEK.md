@@ -36,6 +36,14 @@ path only. Configured `model_mapping` keeps mapping-first semantics. OpenAI
 passthrough accounts still skip mapping admission and send the client model
 unchanged.
 
+## Responses image input
+
+OpenAI-compatible Responses image input is normalized to one string
+`image_url` field. A compatibility `url` input is accepted as a source when
+`image_url` is absent, then removed from the outbound image part; requests never
+send both aliases. Tool-result media retains the existing Plus conversion and
+the original incoming payload is audited before outbound normalization.
+
 ## Outbound identity
 
 DeepSeek API-key accounts use the pinned **DeepSeek** preset by default

@@ -4,6 +4,12 @@ Sub2API Plus supports Grok OAuth subscription accounts and standard xAI API-key
 accounts. Both account types expose OpenAI-compatible traffic through the
 gateway.
 
+Fallback token pricing recognizes `grok-4.7` / `grok-4.7-latest` and the separate
+Fast aliases `grok-4.7-fast` / `grok-4.7-build-fast`. Per million tokens, the
+standard card is $2 input, $0.50 cached input and $6 output; Fast is $4, $1 and
+$12. At 200,000 prompt tokens (inclusive), standard rates double and Fast rates
+multiply by 1.5. Configured channel/model prices retain their existing priority.
+
 Manage the UA and paired client declarations in **System Settings → Outbound
 identity**. Native OAuth retains the Grok family; API-key accounts can choose
 another preset. Forwarding, quota probes and Realtime handshakes consume the

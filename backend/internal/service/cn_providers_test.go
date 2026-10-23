@@ -962,3 +962,25 @@ func TestMiniMaxQuotaRejectsUntrustedCredentialOrigins(t *testing.T) {
 		})
 	}
 }
+
+// DeepSeek Responses documents a single string image_url, never a sibling url:
+// https://api-docs.deepseek.com/api/create-response/ . Plus accepts legacy input
+// aliases but the explicit canonical field wins, and unrelated parts survive.
+func TestDeepSeekResponsesImageCanonicalFieldAndLegacyPrecedence(t *testing.T) {
+	account := &Account{Platform: PlatformDeepseek, Type: AccountTypeAPIKey,
+		Credentials: map[string]any{"api_protocol": APIProtocolResponses}}
+	for _, fixture := range []struct{ input, want string }{
+		{`{"type":"input_image","image_url":"https://example.com/canonical.png","url":"https://example.com/legacy.png","detail":"high"}`, "https://example.com/canonical.png"},
+		{`{"type":"input_image","url":"https://example.com/legacy.png","detail":"high"}`, "https://example.com/legacy.png"},
+		{`{"type":"input_image","image_url":{"url":"https://example.com/object.png"},"detail":"high"}`, "https://example.com/object.png"},
+	} {
+		body := []byte(`{"model":"deepseek-flash","input":[{"role":"user","content":[` + fixture.input + `,{"type":"input_text","text":"describe"}]}]}`)
+		normalized := normalizeDeepSeekResponsesRequestBody(account, body)
+		part := gjson.GetBytes(normalized, "input.0.content.0")
+		require.Equal(t, fixture.want, part.Get("image_url").String())
+		require.Equal(t, gjson.String, part.Get("image_url").Type)
+		require.False(t, part.Get("url").Exists())
+		require.Equal(t, "high", part.Get("detail").String())
+		require.Equal(t, "describe", gjson.GetBytes(normalized, "input.0.content.1.text").String())
+	}
+}

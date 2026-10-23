@@ -26,6 +26,13 @@ rewrite a client-family token. A **runtime** declaration describes the host the
 official client runs on; the settings and an account selection may supply it.
 Kimi Code and ZCode persist runtime declarations.
 
+Official v0.2.18 synchronization preserves this source and fingerprint contract.
+Its TUI-to-CLI normalization is intentionally not applied to valid configured
+Codex identities. Queued/metadata overload retries keep the resolved credential
+owner's snapshot; account failover resolves the new owner. No client-family,
+versionless-family or compiled fingerprint change accompanies the Go/security
+dependency upgrade.
+
 ## Default client environment and privacy
 
 All built-in OS declarations describe one fixed **Ubuntu 24.04 x86_64** client,

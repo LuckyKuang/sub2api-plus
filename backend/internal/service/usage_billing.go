@@ -47,6 +47,10 @@ type UsageBillingCommand struct {
 	// It is intentionally excluded from the idempotency fingerprint because the
 	// fingerprint already contains the billable identity, units, and amounts.
 	UsageLog *UsageLog
+	// AccountQuotaHasDailyLimit / AccountQuotaHasWeeklyLimit 记录构造命令时账号是否设置了日/周上限，
+	// 只用于选择账号配额累加语句，不参与幂等指纹；实际累加哪些维度以数据库中的账号配置为准。
+	AccountQuotaHasDailyLimit  bool
+	AccountQuotaHasWeeklyLimit bool
 }
 
 func (c *UsageBillingCommand) Normalize() {

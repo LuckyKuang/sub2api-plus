@@ -124,6 +124,10 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 
 	// 安全审核通过后才解析渠道级模型映射，避免路由阶段先于审核门。
 	channelMapping, _ := h.gatewayService.ResolveChannelMappingAndRestrict(requestCtx, apiKey.GroupID, reqModel)
+	if geminiImageGenerationRejected(c, apiKey, body, reqModel, channelMapping.MappedModel) {
+		h.responsesErrorResponse(c, http.StatusBadRequest, "invalid_request_error", service.ImageGenerationPermissionMessage())
+		return
+	}
 
 	// Error passthrough binding
 	if h.errorPassthroughService != nil {

@@ -18,7 +18,7 @@ func TestRedisPayloadStoreRoundTripTTLNamespaceAndDelete(t *testing.T) {
 	if address == "" {
 		t.Skip(promptAuditRedisTestEnv + " is not set")
 	}
-	client := redis.NewClient(&redis.Options{Addr: address})
+	client := newPromptAuditIntegrationRedis(t, address)
 	t.Cleanup(func() { require.NoError(t, client.Close()) })
 	store := NewRedisPayloadStore(client)
 	ctx := context.Background()
@@ -45,7 +45,7 @@ func TestPromptRuntimeAggregatesConfigWorkersQueueRedisEndpointsAndGuardMetrics(
 		t.Skip(promptAuditRedisTestEnv + " is not set")
 	}
 	db := openPromptAuditIntegrationDB(t)
-	client := redis.NewClient(&redis.Options{Addr: address})
+	client := newPromptAuditIntegrationRedis(t, address)
 	t.Cleanup(func() { require.NoError(t, client.Close()) })
 
 	config := &fakeConfigStore{active: true, cfg: ActiveConfig{

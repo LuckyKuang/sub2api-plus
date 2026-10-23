@@ -4,6 +4,7 @@ import { defineComponent } from 'vue'
 
 import AccountsView from '../AccountsView.vue'
 import AccountActionMenu from '@/components/admin/account/AccountActionMenu.vue'
+import AccountTableFilters from '@/components/admin/account/AccountTableFilters.vue'
 
 const {
   listAccounts,
@@ -182,6 +183,40 @@ describe('admin AccountsView lite account list', () => {
       expect.objectContaining({ lite: '1' }),
       expect.objectContaining({ signal: expect.any(AbortSignal) })
     )
+    wrapper.unmount()
+  })
+
+  // Official v0.2.18 persists platform/status. Plus must retain lite requests.
+  it('restores valid saved platform and status filters on the initial request', async () => {
+    localStorage.setItem('account-filter-values', JSON.stringify({ platform: 'gemini', status: 'rate_limited' }))
+    const wrapper = mountView()
+    await flushPromises()
+    expect(listAccounts).toHaveBeenCalledWith(1, 20,
+      expect.objectContaining({ lite: '1', platform: 'gemini', status: 'rate_limited' }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }))
+    wrapper.unmount()
+  })
+
+  it.each(['broken json', '[]', '{"platform":"unknown","status":"unknown"}'])(
+    'ignores invalid saved account filters: %s', async (saved) => {
+      localStorage.setItem('account-filter-values', saved)
+      const wrapper = mountView()
+      await flushPromises()
+      expect(listAccounts).toHaveBeenCalledWith(1, 20,
+        expect.objectContaining({ lite: '1', platform: '', status: '' }),
+        expect.objectContaining({ signal: expect.any(AbortSignal) }))
+      wrapper.unmount()
+    })
+
+  it('persists changed account filters for the next page visit', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    wrapper.findComponent(AccountTableFilters).vm.$emit('update:filters', { platform: 'grok', status: 'inactive' })
+    wrapper.findComponent(AccountTableFilters).vm.$emit('change')
+    await flushPromises()
+    expect(JSON.parse(localStorage.getItem('account-filter-values') || '{}')).toEqual({
+      platform: 'grok', status: 'inactive'
+    })
     wrapper.unmount()
   })
 

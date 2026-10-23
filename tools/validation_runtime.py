@@ -34,6 +34,11 @@ INTEGRATION_ENV_NAMES = (
     "SUB2API_TEST_POSTGRES_DSN",
     "SUB2API_TEST_REDIS_ADDR",
     "SUB2API_TEST_REDIS_PASSWORD",
+    "SUB2API_TEST_REDIS_USERNAME",
+    "SUB2API_TEST_REDIS_DB",
+    "PROMPT_AUDIT_TEST_POSTGRES_DSN",
+    "PROMPT_AUDIT_TEST_REDIS_ADDR",
+    "PROMPT_AUDIT_TEST_REDIS_DB",
 )
 HOST_CHECKED_REMOTE_TAG_ENV = "SUB2API_HOST_CHECKED_REMOTE_TAG"
 VALIDATION_MARKER = Path("/etc/sub2api-validation")
@@ -466,6 +471,13 @@ def worktree_git_mount(runtime: Runtime, root: Path) -> list[str]:
 
 
 def validation_network_args(runtime: Runtime) -> list[str]:
+    apple_network = os.environ.get("SUB2API_VALIDATION_APPLE_NETWORK", "").strip()
+    if apple_network:
+        if runtime.name != "apple-containers" or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", apple_network):
+            raise ValidationRuntimeError(
+                "SUB2API_VALIDATION_APPLE_NETWORK requires an Apple Containers network name"
+            )
+        return ["--network", apple_network]
     mode = os.environ.get("SUB2API_VALIDATION_WSL_NETWORK", "").strip()
     if not mode:
         return []

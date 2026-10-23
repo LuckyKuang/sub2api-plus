@@ -13,6 +13,12 @@ import (
 
 func TestUpstreamProtocolAdditionsKeepCanonicalCurrentUserContent(t *testing.T) {
 	for _, tc := range []struct{ name, protocol, body string }{
+		// Official v0.2.18 tool-schema const/annotation compatibility is an
+		// outbound transform; both engines must audit the original user text.
+		{"Gemini tool constants and future siblings", service.ContentModerationProtocolGemini,
+			`{"contents":[{"role":"user","parts":[{"text":"audit current request"},{"future_media":{"opaque":true}}]}],"tools":[{"functionDeclarations":[{"name":"lookup","parameters":{"type":"OBJECT","properties":{"mode":{"type":"STRING","const":"safe","default":"not prompt","$comment":"not prompt"}}}}]}],"future_options":{"opaque":true}}`},
+		{"Messages tool constants and future siblings", service.ContentModerationProtocolAnthropicMessages,
+			`{"model":"gemini-3-flash-preview","max_tokens":32,"tools":[{"name":"lookup","input_schema":{"type":"object","properties":{"mode":{"type":"string","const":"safe","description":"schema description"}}}}],"messages":[{"role":"user","content":[{"type":"text","text":"audit current request"},{"type":"future_media","opaque":true}]}]}`},
 		{"developer and legacy functions", service.ContentModerationProtocolOpenAIChat,
 			`{"model":"gpt-5.5","messages":[{"role":"developer","content":"application instruction"},{"role":"assistant","function_call":{"name":"lookup","arguments":"{\"q\":\"old\"}"}},{"role":"function","name":"lookup","content":"historical result"},{"role":"user","content":"audit current request"}],"functions":[{"name":"lookup","parameters":{"type":"object"}}],"function_call":{"name":"lookup"},"future_options":{"opaque":true}}`},
 		{"web search history", service.ContentModerationProtocolOpenAIResponses,

@@ -106,6 +106,9 @@ func (s *GeminiMessagesCompatService) forwardClaudeBodyAsChatCompletions(
 	if err != nil {
 		return nil, s.writeChatCompletionsError(c, http.StatusBadRequest, "invalid_request_error", err.Error())
 	}
+	if geminiImageGenerationDenied(c, geminiReq, originalModel, req.Model, mappedModel) {
+		return nil, s.writeChatCompletionsError(c, http.StatusBadRequest, "invalid_request_error", ImageGenerationPermissionMessage())
+	}
 	geminiReq = ensureGeminiFunctionCallThoughtSignatures(geminiReq)
 	geminiReq = applyGeminiCompatThinkingConfig(geminiReq, claudeBody, mappedModel, clientStream)
 
@@ -260,6 +263,7 @@ func (s *GeminiMessagesCompatService) forwardClaudeBodyAsChatCompletions(
 	var firstOutputMs *int
 	var firstOutputKind string
 	clientDisconnect := false
+	streamFinished := false
 	var forwardErr error
 	if clientStream {
 		streamRes, err := s.handleChatCompletionsStreamingResponseFromGemini(c, resp, startTime, originalModel, account.Type == AccountTypeOAuth, includeUsage)
@@ -272,6 +276,7 @@ func (s *GeminiMessagesCompatService) forwardClaudeBodyAsChatCompletions(
 		firstOutputMs = streamRes.firstOutputMs
 		firstOutputKind = streamRes.firstOutputKind
 		clientDisconnect = streamRes.clientDisconnect
+		streamFinished = streamRes.finished
 		forwardErr = err
 	} else if useUpstreamStream {
 		collected, usageObj, err := collectGeminiSSE(resp.Body, account.Type == AccountTypeOAuth)
@@ -302,6 +307,10 @@ func (s *GeminiMessagesCompatService) forwardClaudeBodyAsChatCompletions(
 	imageSize := normalizeOpenAIImageSizeTier(imageInputSize)
 	if isImageGenerationModel(originalModel) {
 		imageCount = 1
+	}
+	// 客户端在收到结束分片前断开时只计已送达的图片：Chat 流不向客户端转发图片。
+	if clientDisconnect && !streamFinished {
+		imageCount = 0
 	}
 
 	return &ForwardResult{
@@ -552,6 +561,7 @@ func (s *GeminiMessagesCompatService) handleChatCompletionsStreamingResponseFrom
 	var timing streamOutputTiming
 	suppressChunkTiming := false
 	clientDisconnected := false
+	finishReason := ""
 	resultWithUsage := func() *geminiStreamResult {
 		return &geminiStreamResult{
 			usage:            &usage,
@@ -560,6 +570,7 @@ func (s *GeminiMessagesCompatService) handleChatCompletionsStreamingResponseFrom
 			firstOutputMs:    timing.firstOutputMs,
 			firstOutputKind:  timing.firstOutputKind,
 			clientDisconnect: clientDisconnected,
+			finished:         finishReason != "",
 		}
 	}
 
@@ -608,7 +619,6 @@ func (s *GeminiMessagesCompatService) handleChatCompletionsStreamingResponseFrom
 		return resultWithUsage(), nil
 	}
 
-	finishReason := ""
 	terminalSeen := false
 	sawToolUse := false
 	nextBlockIndex := 0
@@ -858,6 +868,10 @@ func (s *GeminiMessagesCompatService) handleChatCompletionsStreamingResponseFrom
 			break
 		}
 		if err != nil {
+			if geminiStreamAbortedWithBillableOutput(c, err, &usage) {
+				clientDisconnected = true
+				return resultWithUsage(), nil
+			}
 			return resultWithUsage(), fmt.Errorf("stream usage incomplete: %w", err)
 		}
 	}

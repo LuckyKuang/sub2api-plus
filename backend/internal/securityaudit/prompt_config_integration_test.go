@@ -17,6 +17,7 @@ import (
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/LuckyKuang/sub2api-plus/internal/repository"
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
+	"github.com/LuckyKuang/sub2api-plus/internal/testutil/externalredis"
 	"github.com/lib/pq"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
@@ -134,7 +135,7 @@ func TestPromptAuditConfigCASSecretRoundTripInvalidationAndTTL(t *testing.T) {
 	settingRepo := postgresPromptAuditSettingRepository{db: db}
 	require.NoError(t, settingRepo.Set(context.Background(), SettingKeyRiskControl, "true"))
 	encryptor := promptAuditTestEncryptor(t)
-	redisClient := redis.NewClient(&redis.Options{Addr: redisAddress})
+	redisClient := newPromptAuditIntegrationRedis(t, redisAddress)
 	t.Cleanup(func() { require.NoError(t, redisClient.Close()) })
 	require.NoError(t, redisClient.Ping(context.Background()).Err())
 
@@ -231,4 +232,11 @@ func TestPromptAuditConfigCASSecretRoundTripInvalidationAndTTL(t *testing.T) {
 	active, ok := degraded.Active()
 	require.True(t, ok)
 	require.Equal(t, int64(5), active.ConfigVersion)
+}
+
+func newPromptAuditIntegrationRedis(t *testing.T, address string) *redis.Client {
+	t.Helper()
+	options, err := externalredis.Options(address, "PROMPT_AUDIT_TEST_REDIS_DB")
+	require.NoError(t, err)
+	return redis.NewClient(options)
 }
