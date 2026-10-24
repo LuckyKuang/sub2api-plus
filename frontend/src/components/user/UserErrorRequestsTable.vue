@@ -1,7 +1,7 @@
 <template>
   <DetailWorkspace :workspace="workspace" :show="showDetail" :title="t('usage.errors.detail.title')" @close="showDetail = false">
     <div class="error-compact flex min-h-0 flex-1 flex-col" :style="{ '--error-table-width': compactTableWidth + 'px' }">
-    <div class="card flex min-h-0 flex-1 flex-col overflow-hidden">
+    <div class="card flex min-h-0 flex-1 flex-col overflow-hidden" :class="{ 'workspace-shell': workspace }">
       <IpGeoBatchToolbar :class="{ 'workspace-fixed': workspace }" :ips="rows.map((r) => r.client_ip)" @failed="emit('ipGeoBatchFailed')" />
 
       <DataTable

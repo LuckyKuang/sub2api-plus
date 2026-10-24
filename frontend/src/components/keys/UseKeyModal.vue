@@ -29,19 +29,16 @@
         </p>
 
         <!-- Client Tabs -->
-        <div v-if="clientTabs.length" class="overflow-x-auto border-b border-gray-200 dark:border-dark-700">
-          <nav class="-mb-px flex min-w-max gap-4 sm:gap-6" aria-label="Client">
+        <div v-if="clientTabs.length" class="overflow-x-auto py-0.5">
+          <nav class="card-tabs min-w-max" role="tablist" aria-label="Client">
             <button
               v-for="tab in clientTabs"
               :key="tab.id"
               type="button"
+              role="tab"
+              class="card-tab"
+              :aria-selected="activeClientTab === tab.id"
               @click="activeClientTab = tab.id"
-              :class="[
-                'whitespace-nowrap py-2.5 px-1 border-b-2 font-medium text-sm transition-colors',
-                activeClientTab === tab.id
-                  ? 'border-primary-500 text-primary-600 dark:text-primary-400'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
-              ]"
             >
               <span class="flex items-center gap-2">
                 <component :is="tab.icon" class="w-4 h-4" />
@@ -115,19 +112,16 @@
         </div>
 
         <!-- OS/Shell Tabs -->
-        <div v-if="showShellTabs" class="overflow-x-auto border-b border-gray-200 dark:border-dark-700">
-          <nav class="-mb-px flex min-w-max gap-4" aria-label="Tabs">
+        <div v-if="showShellTabs" class="overflow-x-auto py-0.5">
+          <nav class="card-tabs min-w-max" role="tablist" aria-label="Tabs">
             <button
               v-for="tab in currentTabs"
               :key="tab.id"
               type="button"
+              role="tab"
+              class="card-tab"
+              :aria-selected="activeTab === tab.id"
               @click="activeTab = tab.id"
-              :class="[
-                'whitespace-nowrap py-2.5 px-1 border-b-2 font-medium text-sm transition-colors',
-                activeTab === tab.id
-                  ? 'border-primary-500 text-primary-600 dark:text-primary-400'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
-              ]"
             >
               <span class="flex items-center gap-2">
                 <component :is="tab.icon" class="w-4 h-4" />

@@ -74,10 +74,14 @@ describe('UseKeyModal', () => {
         .find((item) => item.text().trim() === clientTab)
       expect(tab).toBeDefined()
       await tab!.trigger('click')
+      expect(wrapper.findAll('nav[aria-label="Client"] [aria-selected="true"]').map(item => item.text().trim())).toEqual([clientTab])
+      expect(wrapper.get('nav[aria-label="Client"]').element.parentElement?.classList.contains('border-b')).toBe(false)
+      expect(tab!.classes()).not.toContain('border-b-2')
       for (const shell of ['macOS / Linux', 'Windows']) {
         const shellTab = wrapper.findAll('button').find((item) => item.text().trim() === shell)
         expect(shellTab).toBeDefined()
         await shellTab!.trigger('click')
+        expect(wrapper.findAll('nav[aria-label="Tabs"] [aria-selected="true"]').map(item => item.text().trim())).toEqual([shell])
         const mode = wrapper.get('[data-testid="codex-model-catalog-mode"]')
         for (const selection of ['remote', 'file', 'remote']) {
           await chooseSelect(mode, `keys.useKeyModal.codexModelCatalog.${selection === 'remote' ? 'remote' : 'local'}`)

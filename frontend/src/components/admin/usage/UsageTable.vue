@@ -1,5 +1,5 @@
 <template>
-  <div :class="[flat ? '' : 'card overflow-hidden', { 'workspace-table-card': workspace }]">
+  <div :class="[flat ? '' : 'card overflow-hidden', { 'workspace-table-card': workspace, 'workspace-shell': workspace }]">
     <div
       v-if="showIpGeoToolbar"
       class="flex items-center justify-end gap-2 border-b border-gray-200 px-4 py-2 dark:border-dark-700"

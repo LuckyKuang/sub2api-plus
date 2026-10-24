@@ -250,6 +250,7 @@
       <div class="relative min-h-[320px]">
         <MonitorTrendChart
           v-if="trendView === 'line'"
+          class="workspace-shell"
           :trend="snapshot?.trend || []"
           :coverage="snapshot?.coverage || null"
           :loading="loading && !snapshot"
@@ -265,23 +266,22 @@
         />
         <div
           v-else-if="loading"
-          class="card flex min-h-[320px] items-center justify-center text-sm ring-1 ring-gray-900/5 surface-muted"
+          class="card workspace-shell flex min-h-[320px] items-center justify-center text-sm surface-muted"
         >
           <span class="animate-pulse">{{ t('common.loading') }}</span>
         </div>
       </div>
 
-      <section class="card flex min-h-0 flex-col overflow-hidden ring-1 ring-gray-900/5">
-        <div class="border-b border-gray-100 px-5 pt-4 dark:border-dark-700 sm:px-6">
-          <nav class="tabs w-full max-w-md sm:w-auto" role="tablist" :aria-label="t('channelMonitorV2.tabs.aria')">
+      <section class="card workspace-shell flex min-h-0 flex-col overflow-hidden">
+        <div class="px-5 pt-4 sm:px-6">
+          <nav class="card-tabs w-full max-w-md sm:w-auto" role="tablist" :aria-label="t('channelMonitorV2.tabs.aria')">
             <button
               v-for="item in tabs"
               :key="item.value"
               type="button"
               role="tab"
-              class="tab flex-1 sm:flex-none"
+              class="card-tab flex-1 sm:flex-none"
               :aria-selected="activeTab === item.value"
-              :class="activeTab === item.value ? 'tab-active' : ''"
               @click="activeTab = item.value"
             >
               {{ item.label }}

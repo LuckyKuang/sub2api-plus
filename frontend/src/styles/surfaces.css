@@ -13,6 +13,12 @@
   .subscription-plan-card, .modal-content, .dialog-container, .dropdown) {
   border: 1px solid var(--surface-edge);
 }
+/* A page's main content shell keeps its fill and rounded scroll clipping.
+   Its nested cards, record outlines and controls retain their own edges. */
+:root .workspace-shell {
+  border: 0 !important;
+  box-shadow: none !important;
+}
 @layer utilities {
   .surface-inset { background-color: var(--surface-soft); }
   .surface-field { background-color: var(--surface-field); }
@@ -75,13 +81,11 @@
 /* Explicit opaque surfaces: QR quiet zones and other machine-readable media. */
 :root .surface-opaque { background-color: white; background-image: none; }
 
-/* The channel matrix is a grid; record tables own their cell paint separately. */
-.matrix-header.sticky { background-color: transparent; }
-.matrix-header.sticky::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background-color: var(--surface-sticky);
+/* The matrix's scrollport owns the fill; no second layer over its header. */
+.matrix-header {
+  background-color: transparent;
+  background-image: none;
+}
+.matrix-header::before {
+  content: none;
 }

@@ -20,7 +20,7 @@
             </div>
           </div>
         </div>
-      <section v-show="workspaceTab === 'charts' && activeTab !== 'live'" class="workspace-scroll space-y-4" data-testid="usage-charts-panel">
+      <section v-show="workspaceTab === 'charts' && activeTab !== 'live'" class="workspace-shell workspace-scroll space-y-4" data-testid="usage-charts-panel">
       <UsageStatsCards :stats="usageStats" />
         <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <ModelDistributionChart
@@ -64,18 +64,17 @@
           <TokenUsageTrend :trend-data="trendData" :loading="chartsLoading" />
         </div>
       </section>
-      <div ref="recordsPanel" v-show="workspaceTab === 'records'" class="card workspace-table-card" data-testid="usage-records-panel">
-        <div class="usage-detail-tabs workspace-fixed flex flex-wrap items-center border-b border-gray-200 px-2 dark:border-dark-700 sm:px-4">
+      <div ref="recordsPanel" v-show="workspaceTab === 'records'" class="card workspace-table-card workspace-shell" data-testid="usage-records-panel">
+        <div class="usage-detail-tabs card-tabs workspace-fixed" role="tablist" :aria-label="t('usage.tabs.usage')">
           <button
             v-for="tab in detailTabs"
             :key="tab.key"
             :data-tab="tab.key"
             type="button"
+            role="tab"
+            :aria-selected="activeTab === tab.key"
             data-testid="usage-detail-tab"
-            class="-mb-px inline-flex items-center gap-1.5 border-b-2 px-3 py-3 text-sm font-medium transition-colors sm:px-4 surface-control"
-            :class="activeTab === tab.key
-              ? 'border-primary-500 text-primary-600 dark:text-primary-400'
-              : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:border-dark-500 dark:hover:text-gray-200'"
+            class="card-tab"
             @click="switchTab(tab.key)"
           >
             <Icon :name="tab.icon" size="sm" />
@@ -995,7 +994,6 @@ function showLatestRecords() {
 @media (min-width: 1024px) and (max-height: 799px) {
   .usage-date { padding: 8px 12px; }
   .usage-history-refresh { padding: 4px 12px; }
-  .usage-workspace [data-testid="usage-detail-tab"] { padding-top: 8px; padding-bottom: 8px; }
   .usage-workspace :deep(.workspace-tabs) { padding: 4px; }
   .usage-workspace :deep(.pagination-card) { padding: 8px 12px; }
   .usage-workspace :deep(.pagination-desktop) { gap: 6px; }

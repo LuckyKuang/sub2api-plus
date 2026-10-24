@@ -1008,9 +1008,9 @@ function handleToolbarRefresh() {
         data-testid="ops-panel-overview"
         role="tabpanel"
         :aria-label="t('workspace.opsMonitoring')"
-        :class="props.workspace ? 'workspace-body workspace-scroll' : 'contents'"
+        :class="props.workspace ? 'workspace-shell workspace-body workspace-scroll' : 'contents'"
       >
-        <div :class="props.workspace ? 'card flex flex-col gap-4 p-6' : 'contents'">
+        <div :class="props.workspace ? 'card workspace-shell flex flex-col gap-4 p-6' : 'contents'">
           <div v-if="overview" class="grid grid-cols-1 gap-6 lg:grid-cols-12">
             <!-- Left: Health + Realtime -->
             <div :class="['glass-surface lg:col-span-5', props.fullscreen ? 'p-6' : 'p-4']">

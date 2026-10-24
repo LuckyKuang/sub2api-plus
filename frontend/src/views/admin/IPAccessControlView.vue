@@ -17,7 +17,7 @@
         data-testid="ip-panel-failures"
         role="tabpanel"
         :aria-label="t('workspace.loginFailures')"
-        class="card workspace-table-card ip-data-panel"
+        class="card workspace-table-card workspace-shell ip-data-panel"
       >
         <div class="workspace-fixed ip-table-heading border-b border-gray-100 px-5 py-4 dark:border-dark-700">
           <h2 class="font-semibold text-gray-900 dark:text-white">{{ t('admin.ipAccessControl.failureStates.title') }}</h2>
@@ -117,7 +117,7 @@
         data-testid="ip-panel-proxies"
         role="tabpanel"
         :aria-label="t('workspace.trustedProxies')"
-        class="card workspace-body workspace-scroll"
+        class="card workspace-shell workspace-body workspace-scroll"
       >
         <div class="flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 px-5 py-4 dark:border-dark-700">
           <div>
@@ -178,7 +178,7 @@
         data-testid="ip-panel-protection"
         role="tabpanel"
         :aria-label="t('workspace.automaticProtection')"
-        class="card workspace-body workspace-scroll"
+        class="card workspace-shell workspace-body workspace-scroll"
       >
         <div class="border-b border-gray-100 px-5 py-4 dark:border-dark-700">
           <h2 class="font-semibold text-gray-900 dark:text-white">{{ t('admin.ipAccessControl.protection.title') }}</h2>
@@ -222,7 +222,7 @@
         data-testid="ip-panel-rules"
         role="tabpanel"
         :aria-label="t('workspace.rules')"
-        class="card workspace-table-card ip-data-panel"
+        class="card workspace-table-card workspace-shell ip-data-panel"
       >
         <div class="workspace-fixed ip-table-heading border-b border-gray-100 px-5 py-4 dark:border-dark-700">
           <h2 class="font-semibold text-gray-900 dark:text-white">{{ t('admin.ipAccessControl.rules.title') }}</h2>

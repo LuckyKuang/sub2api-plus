@@ -230,7 +230,7 @@ async function enablePlatform(wrapper: VueWrapper, platform: string) {
   expect(platformLabel, `${platform} platform checkbox must be present`).toBeDefined()
   await platformLabel!.get('input[type="checkbox"]').setValue(true)
   await flushPromises()
-  const platformTab = wrapper.findAll('button.channel-tab').find(button => button.text() === labelKey)
+  const platformTab = wrapper.findAll('button[role="tab"]').find(button => button.text() === labelKey)
   expect(platformTab, `enabled ${platform} pricing tab must be present`).toBeDefined()
   await platformTab!.trigger('click')
   await flushPromises()

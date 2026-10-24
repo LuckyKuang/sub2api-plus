@@ -370,7 +370,7 @@ const empty = computed(() => events.value.length === 0 && !loading.value)
 </script>
 
 <template>
-  <div class="glass-surface p-6 ring-1 ring-gray-900/5 dark:ring-dark-700" :class="{ 'workspace-table-card': props.workspace, 'ops-workspace-alerts': props.workspace }">
+  <div class="glass-surface p-6 ring-1 ring-gray-900/5 dark:ring-dark-700" :class="{ 'workspace-table-card': props.workspace, 'workspace-shell': props.workspace, 'ops-workspace-alerts': props.workspace }">
     <div class="ops-alert-heading workspace-fixed mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
       <div>
         <h3 class="text-sm font-bold text-gray-900 dark:text-white">{{ t('admin.ops.alertEvents.title') }}</h3>
@@ -407,7 +407,7 @@ const empty = computed(() => events.value.length === 0 && !loading.value)
       {{ t('admin.ops.alertEvents.empty') }}
     </div>
 
-    <div v-else class="overflow-hidden rounded-2xl border border-gray-200 dark:border-dark-700" :class="{ 'workspace-body': props.workspace }">
+    <div v-else class="overflow-hidden rounded-2xl border border-gray-200 dark:border-dark-700" :class="{ 'workspace-body': props.workspace, 'workspace-shell': props.workspace }">
       <div class="record-table-scroll max-h-[600px] overflow-y-auto" :class="{ 'workspace-table-viewport': props.workspace }" @scroll="onScroll">
         <div v-if="!isDesktopViewport" class="divide-y divide-gray-100 dark:divide-dark-800">
           <div

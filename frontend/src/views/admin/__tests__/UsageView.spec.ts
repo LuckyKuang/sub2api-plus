@@ -895,9 +895,17 @@ describe('admin UsageView ranking tab', () => {
 
     const tabs = wrapper.findAll('[data-testid="usage-detail-tab"]')
     expect(tabs).toHaveLength(5)
+    // Audited navigation contract: one selected card, no underline or baseline.
+    expect(wrapper.get('.usage-detail-tabs').classes()).not.toContain('border-b')
+    for (const tab of tabs) {
+      expect(tab.classes()).not.toContain('border-b-2')
+      expect(tab.classes()).not.toContain('-mb-px')
+      expect(tab.attributes('role')).toBe('tab')
+    }
     await wrapper.get('[data-tab="ranking"]').trigger('click')
     await flushPromises()
     expect(wrapper.find('[data-test="ranking"]').exists()).toBe(true)
+    expect(wrapper.findAll('.usage-detail-tabs [aria-selected="true"]').map(tab => tab.attributes('data-tab'))).toEqual(['ranking'])
 
     // 下钻:设置 user_id、切回用量明细 tab 并按新筛选重新拉取列表
     list.mockClear()
@@ -905,6 +913,7 @@ describe('admin UsageView ranking tab', () => {
     await flushPromises()
 
     expect((wrapper.vm as any).activeTab).toBe('usage')
+    expect(wrapper.findAll('.usage-detail-tabs [aria-selected="true"]').map(tab => tab.attributes('data-tab'))).toEqual(['usage'])
     expect((wrapper.vm as any).filters.user_id).toBe(5)
     expect(list).toHaveBeenCalledWith(expect.objectContaining({ user_id: 5 }), expect.anything())
   })

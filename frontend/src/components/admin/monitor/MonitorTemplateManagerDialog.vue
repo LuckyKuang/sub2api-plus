@@ -6,16 +6,15 @@
     @close="$emit('close')"
   >
     <!-- provider tabs -->
-    <div class="mb-4 border-b border-gray-200 dark:border-dark-700">
-      <div role="tablist" class="flex flex-wrap gap-1">
+    <div class="mb-4">
+      <div role="tablist" class="card-tabs">
         <button
           v-for="tab in providerTabs"
           :key="tab.value"
           type="button"
           role="tab"
           :aria-selected="activeProvider === tab.value"
-          class="px-4 py-2 text-sm font-medium transition-colors surface-control"
-          :class="tabClass(tab.value)"
+          class="card-tab"
           @click="activeProvider = tab.value"
         >
           {{ tab.label }}
@@ -486,12 +485,6 @@ async function doDelete() {
 }
 
 // --- misc ---
-function tabClass(value: Provider): string {
-  return activeProvider.value === value
-    ? 'border-b-2 border-primary-500 text-primary-600 dark:text-primary-400'
-    : 'border-b-2 border-transparent surface-muted hover:text-gray-700 dark:hover:text-gray-200'
-}
-
 function modeBadgeClass(mode: BodyOverrideMode): string {
   switch (mode) {
     case 'merge':

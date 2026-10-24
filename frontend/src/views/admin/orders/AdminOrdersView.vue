@@ -20,7 +20,7 @@
       </div>
 
       <!-- Table -->
-      <div class="card workspace-table-card" data-test="admin-orders-table">
+      <div class="card workspace-table-card workspace-shell" data-test="admin-orders-table">
         <OrderTable class="workspace-table-viewport" :orders="orders" :loading="ordersLoading" show-user>
           <template #actions="{ row }">
             <div class="flex items-center gap-1">

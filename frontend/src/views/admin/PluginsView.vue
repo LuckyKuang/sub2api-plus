@@ -64,7 +64,7 @@
         <p class="mt-1">{{ t("admin.plugins.menuNotice") }}</p>
       </div>
 
-      <div class="workspace-scroll" data-test="plugin-list-scroll">
+      <div class="workspace-shell workspace-scroll" data-test="plugin-list-scroll">
       <div
         v-if="loading"
         class="flex min-h-48 items-center justify-center text-sm surface-muted"

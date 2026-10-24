@@ -29,6 +29,7 @@ import { useOnboardingStore } from '@/stores/onboarding'
 import AdminSupportBanner from '@/components/admin/support/AdminSupportBanner.vue'
 import { useUserView } from '@/composables/useUserView'
 import { useTransparentTableClipping } from '@/composables/useTransparentTableClipping'
+import { useStaticTableHeaders } from '@/composables/useStaticTableHeaders'
 import { adminSupportContext } from '@/utils/adminSupportContext'
 import AppSidebar from './AppSidebar.vue'
 import AppHeader from './AppHeader.vue'
@@ -37,10 +38,8 @@ withDefaults(defineProps<{ workspace?: boolean }>(), { workspace: false })
 
 const appStore = useAppStore()
 const layoutRef = ref<HTMLElement | null>(null)
-useTransparentTableClipping(layoutRef, () => {
-  const transparency = (appStore.consoleAppearancePreview ?? appStore.consoleAppearance).card_transparency
-  return typeof transparency === 'number' && Number.isFinite(transparency) && transparency > 0
-})
+useStaticTableHeaders(layoutRef)
+useTransparentTableClipping(layoutRef, () => true)
 const authStore = useAuthStore()
 const sidebarCollapsed = computed(() => appStore.sidebarCollapsed)
 const view = useUserView()

@@ -34,7 +34,7 @@
             </button>
         </div>
 
-        <main class="card workspace-body workspace-clip px-4 sm:px-6">
+        <main class="card workspace-shell workspace-body workspace-clip px-4 sm:px-6">
           <div v-show="activeTab === 'config'" class="workspace-scroll" data-test="tab-panel-config">
             <RuntimeOverview :runtime="runtime" :loading="loading.runtime" :error="loadErrors.runtime" @refresh="loadRuntime" />
 

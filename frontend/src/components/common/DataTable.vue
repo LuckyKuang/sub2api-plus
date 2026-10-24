@@ -94,6 +94,7 @@
     v-else
     ref="tableWrapperRef"
     class="table-wrapper table-container record-table-scroll"
+    @static-table-header-measured="refreshHeaderTracking"
     :aria-busy="loading"
     :class="{
       'actions-expanded': actionsExpanded
@@ -377,6 +378,15 @@ let resizeObserver: ResizeObserver | null = null
 let resizeHandler: (() => void) | null = null
 let desktopViewportMediaQuery: MediaQueryList | null = null
 let desktopViewportListener: ((event: MediaQueryListEvent) => void) | null = null
+
+const refreshHeaderTracking = () => {
+  updateStickyOffsets()
+  if (tableWrapperRef.value && resizeObserver) {
+    resizeObserver.disconnect()
+    resizeObserver.observe(tableWrapperRef.value)
+    tableWrapperRef.value.querySelectorAll('thead th').forEach(cell => resizeObserver?.observe(cell))
+  }
+}
 
 const detachDesktopTableTracking = () => {
   resizeObserver?.disconnect()

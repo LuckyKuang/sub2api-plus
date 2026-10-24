@@ -22,8 +22,8 @@
 
       <WorkspaceTabs v-model="adminMonitorTab" :tabs="monitorTabs" :label="t('channelMonitorV2.admin.tabAria')" />
 
-      <div :class="adminMonitorTab === 'legacy' ? 'workspace-body' : 'workspace-scroll'" data-test="monitor-settings-scroll">
-      <StatusSettingsPanel v-if="adminMonitorTab === 'v3'" />
+      <div class="workspace-shell" :class="adminMonitorTab === 'legacy' ? 'workspace-body' : 'workspace-scroll'" data-test="monitor-settings-scroll">
+      <StatusSettingsPanel v-if="adminMonitorTab === 'v3'" class="workspace-shell" />
       <MonitorSettingsPanel v-else-if="adminMonitorTab === 'v2'" />
 
       <TablePageLayout v-else>

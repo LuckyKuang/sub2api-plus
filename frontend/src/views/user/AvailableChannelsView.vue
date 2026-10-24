@@ -39,7 +39,7 @@
         {{ t('availableChannels.catalog.ratesUnavailable') }}<button class="underline surface-control" @click="loadCatalog">{{ t('availableChannels.catalog.retry') }}</button>
       </div>
       <p v-if="!loading && !error" class="workspace-fixed text-xs surface-muted" aria-live="polite">{{ t('availableChannels.catalog.modelCount', { count: visible.length }) }}</p>
-      <section class="workspace-scroll" :aria-label="t('availableChannels.title')" data-testid="catalog-results">
+      <section class="workspace-shell workspace-scroll" :aria-label="t('availableChannels.title')" data-testid="catalog-results">
         <div v-if="loading" class="catalog-grid" aria-busy="true" :aria-label="t('common.loading')">
           <div v-for="i in 12" :key="i" class="glass-surface h-52 animate-pulse" />
         </div>

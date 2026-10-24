@@ -375,31 +375,25 @@
     >
       <!-- Tab Switch -->
       <div
-        class="mb-6 flex items-center justify-between gap-3 border-b border-gray-200 dark:border-dark-600"
+        class="mb-6 flex items-center justify-between gap-3"
       >
-        <div class="flex min-w-0 shrink-0">
+        <div class="card-tabs" role="tablist" :aria-label="t('admin.proxies.createProxy')">
           <button
             type="button"
+            role="tab"
+            class="card-tab"
+            :aria-selected="createMode === 'standard'"
             @click="createMode = 'standard'"
-            :class="[
-              '-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors',
-              createMode === 'standard'
-                ? 'border-primary-500 text-primary-600 dark:text-primary-400'
-                : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
-            ]"
           >
             <Icon name="plus" size="sm" class="mr-1.5 inline" />
             {{ t('admin.proxies.standardAdd') }}
           </button>
           <button
             type="button"
+            role="tab"
+            class="card-tab"
+            :aria-selected="createMode === 'batch'"
             @click="createMode = 'batch'"
-            :class="[
-              '-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors',
-              createMode === 'batch'
-                ? 'border-primary-500 text-primary-600 dark:text-primary-400'
-                : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
-            ]"
           >
             <svg
               class="mr-1.5 inline h-4 w-4"

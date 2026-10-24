@@ -12,7 +12,7 @@
 
     <!-- 滚动区域：表格 -->
     <div class="layout-section-scrollable">
-      <div class="card table-scroll-container">
+      <div class="card table-scroll-container workspace-shell">
         <slot name="table" />
       </div>
     </div>

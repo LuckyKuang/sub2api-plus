@@ -2,9 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { effectScope, nextTick, ref, type EffectScope } from 'vue'
 import { useTransparentTableClipping } from '../useTransparentTableClipping'
 
-// Audited appearance requirement: transparent sticky headers/columns must never
-// show scrolling cell text underneath them. Clipping may only affect paint;
-// native row geometry, virtual spacer heights and original styles stay intact.
+// Transparent fixed columns must hide horizontally scrolling text. Native
+// scrollports own vertical clipping; scrollTop must never trigger a late mask.
 let scope: EffectScope
 let nextFrame = 0
 const frames = new Map<number, FrameRequestCallback>()
@@ -77,15 +76,15 @@ afterEach(() => {
 })
 
 describe('transparent table clipping', () => {
-  it('clips scrolled cells at both pinned columns and the sticky header without changing row geometry', async () => {
+  it('clips only at pinned horizontal columns without changing row or spacer geometry', async () => {
     const { wrapper, row, middle, header, table } = fixture()
     scope.run(() => useTransparentTableClipping(ref(wrapper), () => true))
     await nextTick()
     flushFrames()
-    expect(middle.style.clipPath).toBe('inset(15px 28px 0px 32px)')
-    expect(row.cells[0]!.style.clipPath).toBe('inset(15px 0px 0px 0px)')
-    expect(row.cells[1]!.style.clipPath).toBe('inset(15px 0px 0px 0px)')
-    expect(row.cells[3]!.style.clipPath).toBe('inset(15px 0px 0px 0px)')
+    expect(middle.style.clipPath).toBe('inset(0px 28px 0px 32px)')
+    expect(row.cells[0]!.style.clipPath).toBe('')
+    expect(row.cells[1]!.style.clipPath).toBe('')
+    expect(row.cells[3]!.style.clipPath).toBe('')
     expect(header.rows[0]!.cells[2]!.style.clipPath).toBe('inset(0px 28px 0px 32px)')
     expect(row.getBoundingClientRect().height).toBe(50)
     expect(table.querySelector<HTMLElement>('[aria-hidden] td')!.style.height).toBe('300px')
@@ -99,7 +98,7 @@ describe('transparent table clipping', () => {
     scope.run(() => useTransparentTableClipping(ref(wrapper), () => transparent.value))
     await nextTick()
     flushFrames()
-    expect(middle.style.clipPath).toBe('inset(15px 28px 0px 32px)')
+    expect(middle.style.clipPath).toBe('inset(0px 28px 0px 32px)')
     transparent.value = false
     await nextTick()
     expect(middle.style.clipPath).toBe('inset(1px)')
@@ -123,10 +122,11 @@ describe('transparent table clipping', () => {
     const second = fixture()
     await nextTick()
     flushFrames()
-    expect(second.middle.style.clipPath).toBe('inset(15px 28px 0px 32px)')
+    expect(second.middle.style.clipPath).toBe('inset(0px 28px 0px 32px)')
     const otherReads = vi.mocked(second.wrapper.getBoundingClientRect)
     otherReads.mockClear()
     rect(first.middle, 250, 150, 150, 50)
+    first.wrapper.scrollLeft = 120
     first.wrapper.dispatchEvent(new Event('scroll'))
     first.wrapper.dispatchEvent(new Event('scroll'))
     expect(frames.size).toBe(1)
@@ -146,7 +146,7 @@ describe('transparent table clipping', () => {
     rect(middle, 112, 150, 80, 50)
     resizeObservers[0]!.notify(wrapper)
     flushFrames()
-    expect(middle.style.clipPath).toBe('inset(50%)')
+    expect(middle.style.clipPath).toBe('inset(0 0 0 100%)')
     rect(header.rows[0]!.cells[1]!, 162, 100, 20, 40)
     rect(middle, 170, 150, 80, 50)
     // Individual header widths can change while total table size stays fixed.
@@ -156,7 +156,7 @@ describe('transparent table clipping', () => {
     expect(middle.style.clipPath).toBe('inset(0px 0px 0px 12px)')
   })
 
-  it('uses painted sticky cells when the thead itself scrolls away', async () => {
+  it('never adds vertical masks even when old component sticky styles remain', async () => {
     const { wrapper, middle, header } = fixture()
     header.style.position = 'static'
     rect(header, 112, 20, 600, 40)
@@ -167,29 +167,36 @@ describe('transparent table clipping', () => {
     scope.run(() => useTransparentTableClipping(ref(wrapper), () => true))
     await nextTick()
     flushFrames()
-    expect(middle.style.clipPath).toBe('inset(15px 28px 0px 32px)')
+    expect(middle.style.clipPath).toBe('inset(0px 28px 0px 32px)')
   })
 
-  it('keeps a visible rowspan clipped when its originating row has scrolled out', async () => {
-    const { wrapper, row } = fixture()
-    row.cells[0]!.rowSpan = 2
+  it('prepares every mounted row before vertical scrolling can reveal it', async () => {
+    const { wrapper, row, middle } = fixture()
+    middle.rowSpan = 2
     rect(row, 112, 50, 600, 20)
+    rect(middle, 210, 1000, 250, 50)
     scope.run(() => useTransparentTableClipping(ref(wrapper), () => true))
     await nextTick()
     flushFrames()
-    expect(row.cells[0]!.style.clipPath).toBe('inset(15px 0px 0px 0px)')
+    expect(middle.style.clipPath).toBe('inset(0px 28px 0px 32px)')
+    rect(middle, 210, 125, 250, 50)
+    for (let i = 0; i < 50; i++) {
+      wrapper.scrollTop = i % 2 ? 0 : 500
+      wrapper.dispatchEvent(new Event('scroll'))
+    }
+    expect(frames.size).toBe(0)
+    expect(middle.style.clipPath).toBe('inset(0px 28px 0px 32px)')
   })
 
-  it('reclips on virtual spacer-only changes without observing ordinary cell styles', async () => {
+  it('does no horizontal measurement for virtual spacer height-only changes', async () => {
     const { wrapper, middle, table } = fixture()
     scope.run(() => useTransparentTableClipping(ref(wrapper), () => true))
     await nextTick()
     flushFrames()
-    rect(middle, 250, 150, 150, 50)
     table.querySelector<HTMLElement>('[aria-hidden] td')!.style.height = '280px'
     await nextTick()
     flushFrames()
-    expect(middle.style.clipPath).toBe('')
+    expect(middle.style.clipPath).toBe('inset(0px 28px 0px 32px)')
     await nextTick()
     expect(frames.size).toBe(0)
   })
@@ -204,7 +211,7 @@ describe('transparent table clipping', () => {
     scope.run(() => useTransparentTableClipping(ref(outer), () => true))
     await nextTick()
     flushFrames()
-    expect(middle.style.clipPath).toBe('inset(15px 28px 0px 32px)')
+    expect(middle.style.clipPath).toBe('inset(0px 28px 0px 32px)')
     scope.stop()
     expect(middle.style.clipPath).toBe('inset(2px)')
   })
@@ -219,6 +226,6 @@ describe('transparent table clipping', () => {
     wrapperRect.mockReturnValue({ x: 100, y: 100, left: 100, top: 100, right: 500, bottom: 300, width: 400, height: 200, toJSON: () => ({}) })
     resizeObservers[0]!.notify(wrapper)
     flushFrames()
-    expect(middle.style.clipPath).toBe('inset(15px 28px 0px 32px)')
+    expect(middle.style.clipPath).toBe('inset(0px 28px 0px 32px)')
   })
 })

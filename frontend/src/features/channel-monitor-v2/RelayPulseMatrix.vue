@@ -1,6 +1,6 @@
 <template>
   <section
-    class="card flex min-h-[360px] flex-col overflow-visible !p-6"
+    class="card workspace-shell flex min-h-[360px] flex-col overflow-visible !p-6"
   >
     <div class="card-header mb-4 flex shrink-0 flex-wrap items-start justify-between gap-3 !border-0 !p-0">
       <div class="min-w-0">
@@ -31,17 +31,15 @@
     <div class="card-body min-h-0 flex-1 !p-0">
       <div
         v-if="rows.length"
-        ref="scrollRef"
-        class="matrix-scroll max-h-[min(42vh,420px)] max-w-full overflow-auto rounded-2xl surface-inset p-2"
+        class="matrix-frame max-h-[min(42vh,420px)] max-w-full rounded-2xl surface-inset p-2"
         @wheel="onMatrixWheel"
-        @scroll="onScroll"
-        @focusout="onFocusOut"
       >
-        <div class="matrix-table w-full" :style="tableStyle">
+        <div ref="headerRailRef" class="matrix-header-rail" :style="headerRailStyle" @scroll="onHeaderScroll">
           <div
             ref="headerRef"
-            class="matrix-header matrix-row sticky top-0 z-[3] surface-inset text-[10px] font-semibold uppercase tracking-wide surface-muted"
+            class="matrix-header matrix-row w-full text-[10px] font-semibold uppercase tracking-wide surface-muted"
             :class="showThroughput ? 'matrix-row--with-tps' : ''"
+            :style="headerStyle"
           >
             <span>{{ t('channelMonitorV2.matrix.dimension') }}</span>
             <span>{{ t('channelMonitorV2.metrics.successRate') }}</span>
@@ -53,6 +51,15 @@
               <i class="not-italic">{{ axisEnd }}</i>
             </span>
           </div>
+        </div>
+        <div
+          ref="scrollRef"
+          class="matrix-scroll max-w-full overflow-auto"
+          :style="scrollStyle"
+          @scroll="onScroll"
+          @focusout="onFocusOut"
+        >
+        <div class="matrix-table w-full" :style="tableStyle">
           <div class="matrix-virtual-body relative" :style="{ height: `${bodyHeight}px` }">
           <div
             v-for="entry in visibleRows"
@@ -60,7 +67,7 @@
             :ref="measureRow"
             :data-index="entry.index"
             :data-row-key="entry.key"
-            :style="{ transform: `translateY(${entry.start - headerHeight}px)` }"
+            :style="{ transform: `translateY(${entry.start}px)` }"
             class="matrix-data-row matrix-row absolute inset-x-0 top-0 border-b border-gray-100/80 dark:border-dark-700/60"
             :class="showThroughput ? 'matrix-row--with-tps' : ''"
           >
@@ -112,6 +119,7 @@
             </div>
           </div>
           </div>
+        </div>
         </div>
       </div>
       <div v-else class="flex min-h-[200px] items-center justify-center py-8">
@@ -195,8 +203,11 @@ type AlignedSlot = { start: string; bucket?: MonitorMatrixBucket }
 
 const tooltipRef = ref<InstanceType<typeof MatrixTooltip> | null>(null)
 const scrollRef = ref<HTMLElement | null>(null)
+const headerRailRef = ref<HTMLElement | null>(null)
 const headerRef = ref<HTMLElement | null>(null)
 const headerHeight = ref(36)
+const headerWidth = ref<number | null>(null)
+const scrollbarWidth = ref(0)
 const viewportWidth = ref(typeof window === 'undefined' ? 1024 : window.innerWidth)
 const focusedRow = ref<number | null>(null)
 const pendingFocus = ref<{ row: number; column: number; key: string; start: string } | null>(null)
@@ -213,9 +224,6 @@ const domainKey = computed(() => JSON.stringify([
 function saveViewport() {
   const element = scrollRef.value
   const scrollTop = element?.scrollTop ?? props.viewState?.scrollTop ?? 0
-  // Clip the scrolling body below the transparent sticky header without
-  // changing virtual row geometry or measuring cells during scroll.
-  element?.style.setProperty('--matrix-scroll-top', `${scrollTop}px`)
   emit('update:viewState', {
     zoom: zoom.value,
     scrollTop,
@@ -235,10 +243,8 @@ const rowVirtualizer = useVirtualizer(computed(() => {
   getItemKey: (index: number) => rowKeys.value[index],
   estimateSize: () => viewportWidth.value <= 640 ? 48 : 36,
   overscan: 4,
-  paddingStart: headerHeight.value,
-  scrollPaddingStart: headerHeight.value,
   initialOffset: props.viewState?.scrollTop || 0,
-  initialRect: { width: viewportWidth.value, height: Math.min(420, typeof window === 'undefined' ? 420 : window.innerHeight * 0.42) },
+  initialRect: { width: viewportWidth.value, height: Math.max(0, Math.min(420, typeof window === 'undefined' ? 420 : window.innerHeight * 0.42) - headerHeight.value - 16) },
   observeElementRect: (instance: Parameters<typeof observeElementRect<HTMLElement>>[0], callback: Parameters<typeof observeElementRect<HTMLElement>>[1]) =>
     observeElementRect(instance, (rect) => {
       // A temporarily detached/hidden view must not erase the visible range.
@@ -258,7 +264,25 @@ const rowVirtualizer = useVirtualizer(computed(() => {
   useAnimationFrameWithResizeObserver: true,
   }
 }))
-const bodyHeight = computed(() => Math.max(0, rowVirtualizer.value.getTotalSize() - headerHeight.value))
+const bodyHeight = computed(() => rowVirtualizer.value.getTotalSize())
+const scrollStyle = computed(() => ({
+  maxHeight: `max(0px, calc(min(42vh, 420px) - ${headerHeight.value + 16}px))`,
+}))
+const headerRailStyle = computed(() => ({
+  marginRight: `${scrollbarWidth.value}px`,
+}))
+function syncHeaderGeometry() {
+  const viewport = scrollRef.value
+  const table = viewport?.querySelector<HTMLElement>('.matrix-table')
+  if (!viewport || !table) return
+  const width = table.getBoundingClientRect().width
+  if (width > 0 && width !== headerWidth.value) headerWidth.value = width
+  const gutter = Math.max(0, viewport.offsetWidth - viewport.clientWidth)
+  if (gutter !== scrollbarWidth.value) scrollbarWidth.value = gutter
+}
+function syncHorizontalScroll(source: HTMLElement | null, target: HTMLElement | null) {
+  if (source && target && source.scrollLeft !== target.scrollLeft) target.scrollLeft = source.scrollLeft
+}
 function measureRow(element: Element | ComponentPublicInstance | null) {
   if (element instanceof HTMLElement) rowVirtualizer.value.measureElement(element)
 }
@@ -277,6 +301,12 @@ function onFocusOut(event: FocusEvent) {
   hideTooltip()
 }
 function onScroll() {
+  syncHorizontalScroll(scrollRef.value, headerRailRef.value)
+  hideTooltip()
+  saveViewport()
+}
+function onHeaderScroll() {
+  syncHorizontalScroll(headerRailRef.value, scrollRef.value)
   hideTooltip()
   saveViewport()
 }
@@ -284,8 +314,12 @@ onMounted(async () => {
   headerObserver = new ResizeObserver(() => {
     const height = headerRef.value?.getBoundingClientRect().height
     if (height && height !== headerHeight.value) headerHeight.value = height
+    syncHeaderGeometry()
   })
   if (headerRef.value) headerObserver.observe(headerRef.value)
+  if (scrollRef.value) headerObserver.observe(scrollRef.value)
+  const table = scrollRef.value?.querySelector<HTMLElement>('.matrix-table')
+  if (table) headerObserver.observe(table)
   const height = headerRef.value?.getBoundingClientRect().height
   if (height) headerHeight.value = height
   await nextTick()
@@ -295,6 +329,8 @@ onMounted(async () => {
     element.scrollLeft = props.viewState?.scrollLeft || 0
     rowVirtualizer.value.scrollToOffset(element.scrollTop)
     clampScroll()
+    syncHeaderGeometry()
+    syncHorizontalScroll(element, headerRailRef.value)
   }
 })
 // Vue calls function refs with null before removing nodes. Clean after the DOM
@@ -317,12 +353,22 @@ watch(headerRef, (element, previous) => {
   }
 }, { flush: 'post' })
 watch(scrollRef, async (element, previous) => {
-  if (!element || previous) return
+  if (previous) {
+    headerObserver?.unobserve(previous)
+    const table = previous.querySelector('.matrix-table')
+    if (table) headerObserver?.unobserve(table)
+  }
+  if (!element) return
+  headerObserver?.observe(element)
+  const table = element.querySelector('.matrix-table')
+  if (table) headerObserver?.observe(table)
   await nextTick()
   element.scrollTop = props.viewState?.scrollTop || 0
   element.scrollLeft = props.viewState?.scrollLeft || 0
   rowVirtualizer.value.scrollToOffset(element.scrollTop)
   clampScroll()
+  syncHeaderGeometry()
+  syncHorizontalScroll(element, headerRailRef.value)
 }, { flush: 'post' })
 watch(viewportWidth, async (width, previous) => {
   if (width === previous) return
@@ -406,6 +452,10 @@ watch(bucketStarts, async (starts, previous) => {
 const tableStyle = computed(() => ({
   '--bucket-count': String(Math.max(1, bucketStarts.value.length)),
   minWidth: zoomed.value ? `calc(260px + ${pulseMinWidth.value})` : '0',
+}))
+const headerStyle = computed(() => ({
+  ...tableStyle.value,
+  ...(headerWidth.value == null ? {} : { width: `${headerWidth.value}px` }),
 }))
 const pulseMinWidth = computed(() => {
   const count = Math.max(1, bucketStarts.value.length)
@@ -698,8 +748,16 @@ function formatBucketRange(value: string) {
 .pulse-track {
   min-width: 0;
 }
-.matrix-virtual-body {
-  clip-path: inset(var(--matrix-scroll-top, 0px) 0 0);
+.matrix-frame {
+  overflow: hidden;
+}
+.matrix-header-rail {
+  overflow: hidden;
+  min-width: 0;
+}
+.matrix-scroll {
+  min-height: 0;
+  scrollbar-gutter: stable;
 }
 .status-dot {
   display: inline-block;

@@ -16,6 +16,7 @@ const surfaceProperties = new Set([
   ...backdropProperties, 'filter', 'transform', 'perspective', 'contain',
   'isolation', 'overflow', 'z-index', 'position', 'content', 'inset',
   'border-radius', 'pointer-events', 'background-color',
+  'border', 'box-shadow',
   'border-top-left-radius', 'border-top-right-radius',
   'border-bottom-left-radius', 'border-bottom-right-radius',
 ])
@@ -150,12 +151,34 @@ describe('shared transparent surface rendering', () => {
     })
   })
 
-  it('keeps the grid-based monitor header on the shared fill without changing its positioning', () => {
-    const header = fixture('<div class="matrix-header sticky"></div>')
-    const declarations = declarationsFor(header, '::before')
-    expect(lastValue(declarations, 'background-color')).toBe('var(--surface-sticky)')
-    expect(lastValue(declarations, 'position')).toBe('absolute')
-    expect(lastValue(declarations, 'pointer-events')).toBe('none')
+  it('lets the grid monitor header share its scrollport fill without adding another paint layer', () => {
+    const header = fixture('<div class="matrix-header surface-inset"></div>')
+    const declarations = declarationsFor(header)
+    expect(lastValue(declarations, 'background-color')).toBe('transparent')
+    expect(lastValue(declarations, 'background-image')).toBe('none')
+    expect(lastValue(declarations, 'position')).toBeUndefined()
+    expect(lastValue(declarationsFor(header, '::before'), 'content')).toBe('none')
+  })
+
+  it('removes only the main content shell frame, retaining nested cards and independent toolbars', () => {
+    const container = fixture('<div><header class="card workspace-fixed"></header><main class="card workspace-shell ring-1"><section class="card"></section><button class="surface-control"></button></main><footer class="card pagination-card"></footer></div>')
+    document.body.append(container)
+    const shell = container.querySelector('main')!
+    const declarations = declarationsFor(shell)
+    for (const property of ['border', 'box-shadow']) {
+      const shellRule = declarations.filter(declaration => declaration.prop === property).at(-1)!
+      expect(shellRule.value).toBe(property === 'border' ? '0' : 'none')
+      // Utility rings and component-specific frame styles cannot restore it.
+      expect(shellRule.important).toBe(true)
+    }
+    for (const card of container.querySelectorAll('header, section, footer')) {
+      expect(lastValue(declarationsFor(card), 'border')).toBe('1px solid var(--surface-edge)')
+      expect(lastValue(declarationsFor(card), 'box-shadow')).toBe('var(--surface-shadow)')
+    }
+    expect(lastValue(declarations, 'border-radius')).toBe('var(--surface-radius)')
+    expect(lastValue(declarations, 'background-color')).toBe('var(--surface-fill)')
+    expect(lastValue(declarationsFor(container.querySelector('button')!), 'box-shadow')).toContain('inset 0 1px 0 var(--surface-glint)')
+    container.remove()
   })
 })
 

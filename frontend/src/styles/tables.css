@@ -29,8 +29,11 @@ table.record-table {
 }
 
 :root table.record-table > thead,
+:root table.record-table > thead > tr,
 :root table.record-table > thead > tr > :is(th, td) {
-  background-color: var(--record-table-bg, var(--surface-solid)) !important;
+  /* The enclosing card owns the fill. Repainting it on the row group and
+     cells compounds alpha and gives transparent headers a different color. */
+  background-color: transparent !important;
   background-image: none !important;
   border: 0 solid transparent !important;
   border-radius: 0 !important;

@@ -71,8 +71,16 @@ channel-status monitoring toolbar, so it cannot overlap the summary metrics.
 Scroll clipping belongs to the actual viewport: large content viewports use the
 outer card radius, and inset table viewports use the panel radius. Their corners
 remain rounded at the start, middle and end of scrolling. Table headers and frozen
-columns stay in their original scroll container. Portalled menus and dialogs
-retain their positioning; no global mask, transform or clip-path is used.
+columns keep their column alignment. Desktop scrolling tables place the visible
+header above the body scrollport, so even rapid upward scrolling cannot paint
+records behind a transparent header. Portalled menus and dialogs retain their
+positioning; no global mask, transform or clip-path is used.
+
+The main content shell has no outline, inset edge or ring. Nested business cards,
+filter/title cards, pagination, controls and record rows retain their own borders.
+This keeps partially filled grids and nested cards from exposing an extra frame.
+Secondary navigation uses rounded 1px control outlines and the shared accent for
+hover and selection; it has no underline or full-width bottom baseline.
 
 Cards, nested sections, inputs, buttons, Select triggers, menus and dialogs use
 solid theme fills with their existing edges, soft shadows, highlights and focus
@@ -148,11 +156,14 @@ filling its 8px gap. Each record has a 1px outline that follows its rounded
 corners, with an accent outline on hover or selection. Outer table outlines and
 vertical pinned-column shadows are omitted; visible outer insets are 12px.
 Headers match the surrounding table background, have no independent card, and
-remain 12px from the first data row. Pinned cells preserve matching backgrounds;
-when transparency is enabled, cell-level clipping prevents scrolled content
-from overlapping headers or fixed columns. They must never cover another
-visible header incorrectly. Grouped, spanning and expanded records keep their
-business grouping; virtual rows retain accurate measurement.
+remain 12px from the first data row. Header groups and cells add no fill layers
+over the enclosing card. A static header rail and a separate body scrollport
+prevent vertical overlap without a scroll-driven masking delay. Header sorting,
+selection and column visibility stay synchronized with the source table; frozen
+columns and horizontal scrolling retain column alignment. When transparency is
+enabled, horizontal cell clipping prevents content from overlapping frozen
+columns. Grouped, spanning and expanded records keep their business grouping;
+virtual rows retain accurate measurement.
 
 Short data rows use `record-table-compact` with 10px visible outside corners
 instead of the default 16px. This includes model, group and endpoint
@@ -415,7 +426,8 @@ expanded region, dropdown and popup backgrounds, including chart hover cards.
 Text/icons, focus and 1px borders remain visible at every setting. QR quiet zones
 and accent picker swatches remain opaque. Table records retain compact rounded
 outlines with accent hover, fixed columns/headers clip content behind them, and
-scrolling viewports retain their top and rounded outline. Settings tabs share
+scrolling viewports retain rounded corners. Main content shells have no outline;
+their nested cards and controls retain visible edges. Settings tabs share
 usage tab height (62px normally, 54px in short desktop windows).
 
 Adjustments produce a local draft. Preview affects only that administrator and

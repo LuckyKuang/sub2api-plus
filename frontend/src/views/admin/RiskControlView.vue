@@ -25,7 +25,7 @@
 
         <WorkspaceTabs v-model="activePageTab" :tabs="pageTabs" :label="t('admin.riskControl.title')" />
 
-        <div v-show="activePageTab === 'overview'" id="risk-overview-panel" role="tabpanel" :aria-label="t('workspace.riskControl')" class="workspace-scroll" data-test="risk-overview">
+        <div v-show="activePageTab === 'overview'" id="risk-overview-panel" role="tabpanel" :aria-label="t('workspace.riskControl')" class="workspace-shell workspace-scroll" data-test="risk-overview">
         <div class="workspace-stack space-y-6">
         <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
           <div
@@ -253,7 +253,7 @@
         </div>
         </div>
 
-        <div v-show="activePageTab === 'records'" id="risk-records-panel" role="tabpanel" :aria-label="t('workspace.auditRecords')" class="card workspace-table-card" data-test="risk-records">
+        <div v-show="activePageTab === 'records'" id="risk-records-panel" role="tabpanel" :aria-label="t('workspace.auditRecords')" class="card workspace-table-card workspace-shell" data-test="risk-records">
           <div class="risk-records-toolbar workspace-fixed flex flex-col gap-4 border-b border-gray-100 px-6 py-4 dark:border-dark-700">
             <div class="risk-records-heading flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div class="min-w-0">
@@ -400,13 +400,14 @@
 
       <BaseDialog :show="settingsOpen" :title="t('admin.riskControl.settingsTitle')" width="extra-wide" @close="settingsOpen = false">
         <div class="space-y-6">
-          <div class="flex gap-2 overflow-x-auto border-b border-gray-100 pb-3 dark:border-dark-700">
+          <div class="card-tabs overflow-x-auto pb-3" role="tablist" :aria-label="t('admin.riskControl.settingsTitle')">
             <button
               v-for="tab in settingsTabs"
               :key="tab.id"
               type="button"
-              class="inline-flex whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors surface-control"
-              :class="activeSettingsTab === tab.id ? 'bg-primary-50/[0.15] text-primary-700 dark:bg-primary-900/30 dark:text-primary-300' : 'text-gray-500 hover:surface-hover hover:text-gray-900 dark:text-gray-400 dark:hover:surface-hover dark:hover:text-white'"
+              role="tab"
+              class="card-tab"
+              :aria-selected="activeSettingsTab === tab.id"
               @click="activeSettingsTab = tab.id"
             >
               {{ tab.label }}

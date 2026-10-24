@@ -17,7 +17,7 @@
       </div>
 
       <!-- Table -->
-      <div class="card workspace-table-card" data-test="user-orders-table">
+      <div class="card workspace-table-card workspace-shell" data-test="user-orders-table">
         <OrderTable class="workspace-table-viewport" :orders="orders" :loading="loading">
           <template #actions="{ row }">
             <div class="flex items-center gap-2">

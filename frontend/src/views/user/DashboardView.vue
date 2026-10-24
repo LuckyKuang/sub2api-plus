@@ -20,11 +20,11 @@
         <section v-show="workspaceTab === 'charts'" class="workspace-body" data-testid="dashboard-charts-panel">
           <UserDashboardCharts workspace :show-toolbar="false" v-model:startDate="startDate" v-model:endDate="endDate" v-model:granularity="granularity" :loading="loadingCharts" :trend="trendData" :models="modelStats" @dateRangeChange="changeCharts" @granularityChange="changeCharts" @refresh="refreshAll" />
         </section>
-        <section v-show="workspaceTab === 'quotas'" class="workspace-scroll space-y-3" data-testid="dashboard-quotas-panel">
+        <section v-show="workspaceTab === 'quotas'" class="workspace-shell workspace-scroll space-y-3" data-testid="dashboard-quotas-panel">
           <UserDashboardStats section="details" :stats="stats" :balance="user?.balance || 0" :frozen-balance="user?.frozen_balance" :is-simple="authStore.isSimpleMode" :platform-quotas="platformQuotas" />
         </section>
-        <section v-show="workspaceTab === 'recent'" class="workspace-scroll" data-testid="dashboard-recent-panel">
-          <UserDashboardRecentUsage :data="recentUsage" :loading="loadingUsage" :start-date="startDate" :end-date="endDate" />
+        <section v-show="workspaceTab === 'recent'" class="workspace-shell workspace-scroll" data-testid="dashboard-recent-panel">
+          <UserDashboardRecentUsage class="workspace-shell" :data="recentUsage" :loading="loadingUsage" :start-date="startDate" :end-date="endDate" />
         </section>
       </template>
     </div>

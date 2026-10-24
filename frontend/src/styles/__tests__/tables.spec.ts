@@ -33,7 +33,11 @@ function table(markup = '<thead><tr><th>User</th><th>Account</th></tr></thead><t
   return container
 }
 
-afterEach(() => { document.body.replaceChildren(); document.documentElement.removeAttribute('data-console-transparent-cards') })
+afterEach(() => {
+  document.body.replaceChildren()
+  document.documentElement.removeAttribute('data-console-transparent-cards')
+  document.documentElement.style.removeProperty('--console-card-alpha')
+})
 
 describe('record table appearance requirements', () => {
   it('keeps native table measurement with 8px row gaps and four 16px outside corners', () => {
@@ -67,7 +71,10 @@ describe('record table appearance requirements', () => {
     expect(scroll.get('border-inline')).toBe('12px solid transparent')
     expect(scroll.get('background-color')).toBe('transparent')
     expect(scroll.get('padding')).toBe('8px 0')
-    expect(paint(container.querySelector('thead')!).get('background-color')).toBe('var(--record-table-bg, var(--surface-solid))')
+    for (const layer of container.querySelectorAll('thead, thead > tr, thead > tr > th')) {
+      expect(paint(layer).get('background-color')).toBe('transparent')
+      expect(paint(layer).get('background-image')).toBe('none')
+    }
     for (const header of container.querySelectorAll('th')) {
       const headerPaint = paint(header)
       expect(headerPaint.get('background-image')).toBe('none')
@@ -76,6 +83,17 @@ describe('record table appearance requirements', () => {
       expect(headerPaint.get('border-bottom-width')).toBe('8px')
     }
     expect(paint(container.querySelector('td')!).get('border-block-width')).toBe('4px')
+  })
+
+  it.each([0, 50, 100])('does not compound header fills at %s percent card transparency', transparency => {
+    document.documentElement.style.setProperty('--console-card-alpha', String(1 - transparency / 100))
+    const container = table('<thead class="surface-inset"><tr class="surface-inset"><th rowspan="2" data-header-edge-bottom>Model</th><th>Price</th></tr><tr><th>Input</th></tr></thead><tbody><tr><td>Model</td><td>Price</td></tr></tbody>')
+    for (const layer of container.querySelectorAll('thead, thead > tr, thead > tr > th')) {
+      expect(paint(layer).get('background-color')).toBe('transparent')
+      expect(paint(layer).get('background-image')).toBe('none')
+    }
+    expect(paint(container.querySelector('[rowspan]')!).get('border-bottom-width')).toBe('8px')
+    expect(paint(container.querySelector('tbody td')!).get('background-color')).toBe('var(--record-row-bg, var(--surface-soft))')
   })
 
   it.each(['', 'data-hover', 'aria-selected="true"'])('keeps row gaps transparent for %s, including pinned cells', state => {

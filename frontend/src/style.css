@@ -1,7 +1,9 @@
 @import './styles/console.css';
 @import './styles/surfaces.css';
 @import './styles/tables.css';
+@import './styles/tableHeaders.css';
 @import './styles/workspace.css';
+@import './styles/tabs.css';
 
 @tailwind base;
 @tailwind components;

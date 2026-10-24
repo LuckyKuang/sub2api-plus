@@ -114,6 +114,43 @@ describe('DataTable', () => {
     wrapper.unmount()
   })
 
+  it('refreshes measurement refs and sticky offsets when the shared header layout replaces its hidden copy', async () => {
+    let firstWidth = 120
+    const measure = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      return new DOMRect(0, 0, this.dataset.field === 'user' ? firstWidth : 80, 48)
+    })
+    const observed: Element[] = []
+    const originalObserver = globalThis.ResizeObserver
+    vi.stubGlobal('ResizeObserver', class {
+      observe(element: Element) { observed.push(element) }
+      unobserve() {}
+      disconnect() {}
+    })
+    const wrapper = mount(DataTable, {
+      props: {
+        columns: [{ key: 'user', label: 'User', sticky: 'left' }, { key: 'account', label: 'Account', sticky: 'left' }],
+        data: [{ id: 1, user: 'User', account: 'Account' }],
+      },
+    })
+    try {
+      await flushPromises()
+      const realHead = wrapper.get('thead').element
+      const copy = realHead.cloneNode(true) as HTMLTableSectionElement
+      realHead.replaceWith(copy)
+      observed.length = 0
+      firstWidth = 221
+      wrapper.element.dispatchEvent(new Event('static-table-header-measured'))
+      await flushPromises()
+      expect(observed).toContain(copy.rows[0]!.cells[0])
+      expect((wrapper.get('tbody [data-field="account"]').element as HTMLElement).style.left).toBe('221px')
+      expect((realHead.querySelector('[data-field="account"]') as HTMLElement).style.left).toBe('221px')
+    } finally {
+      wrapper.unmount()
+      measure.mockRestore()
+      vi.stubGlobal('ResizeObserver', originalObserver)
+    }
+  })
+
   it('includes the measured selection control width in the pinned first-column offset', async () => {
     const measure = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
       return new DOMRect(0, 0, this.dataset.field ? 180 : 46, 48)

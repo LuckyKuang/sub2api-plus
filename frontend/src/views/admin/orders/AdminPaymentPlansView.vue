@@ -10,7 +10,7 @@
       </div>
 
       <!-- Plans Table -->
-      <div class="card workspace-table-card" data-test="plans-panel">
+      <div class="card workspace-table-card workspace-shell" data-test="plans-panel">
       <DataTable class="workspace-table-viewport" data-test="plans-data-scroll" :columns="planColumns" :data="plans" :loading="plansLoading">
         <template #cell-name="{ value, row }">
           <span class="text-sm font-medium" :class="getPlanNameClass(row.group_id)">{{ value }}</span>

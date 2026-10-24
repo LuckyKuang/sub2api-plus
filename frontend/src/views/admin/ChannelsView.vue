@@ -147,13 +147,14 @@
     >
       <div class="channel-dialog-body">
         <!-- Tab Bar -->
-        <div class="flex items-center border-b border-gray-200 dark:border-dark-700 flex-shrink-0 -mx-4 sm:-mx-6 px-4 sm:px-6 -mt-3 sm:-mt-4">
+        <div class="card-tabs flex-shrink-0" role="tablist" :aria-label="t('admin.channels.form.basicSettings')">
           <!-- Basic Settings Tab -->
           <button
             type="button"
+            role="tab"
             @click="activeTab = 'basic'"
-            class="channel-tab surface-control"
-            :class="activeTab === 'basic' ? 'channel-tab-active' : 'channel-tab-inactive'"
+            class="card-tab"
+            :aria-selected="activeTab === 'basic'"
           >
             {{ t('admin.channels.form.basicSettings') }}
           </button>
@@ -162,9 +163,10 @@
             v-for="section in form.platforms.filter(s => s.enabled)"
             :key="section.platform"
             type="button"
+            role="tab"
             @click="activeTab = section.platform"
-            class="channel-tab group surface-control"
-            :class="activeTab === section.platform ? 'channel-tab-active' : 'channel-tab-inactive'"
+            class="card-tab group"
+            :aria-selected="activeTab === section.platform"
           >
             <PlatformIcon :platform="section.platform" size="xs" :class="platformTextClass(section.platform)" />
             <span :class="platformTextClass(section.platform)">{{ t('admin.groups.platforms.' + section.platform, catalogPlatformLabel(section.platform)) }}</span>
@@ -1745,17 +1747,5 @@ onUnmounted(() => {
   flex-direction: column;
   height: 70vh;
   min-height: 400px;
-}
-
-.channel-tab {
-  @apply flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap;
-}
-
-.channel-tab-active {
-  @apply border-primary-600 text-primary-600 dark:border-primary-400 dark:text-primary-400;
-}
-
-.channel-tab-inactive {
-  @apply border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300;
 }
 </style>

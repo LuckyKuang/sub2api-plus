@@ -1,6 +1,7 @@
 import { onScopeDispose, watch, type Ref } from 'vue'
 
-const viewportSelector = '.record-table-scroll, .workspace-table-viewport'
+const viewportSelector = '.record-table-scroll, .workspace-table-viewport, .static-table-header-rail'
+const tableSelector = 'table.record-table, table.static-table-header-table'
 
 interface OriginalClip {
   value: string
@@ -12,9 +13,12 @@ interface TableViewport {
   table: HTMLTableElement | null
   headers: Set<HTMLTableCellElement>
   clips: Map<HTMLElement, OriginalClip>
+  scrollLeft: number
 }
 
-/** Keep transparent pinned table cells readable without opaque background blockers. */
+/** Keep horizontally scrolling cells out of transparent frozen columns.
+ * Vertical separation belongs to the static header and native body scrollport;
+ * never update vertical cell clips in response to scrolling. */
 export function useTransparentTableClipping(root: Ref<HTMLElement | null>, enabled: () => boolean): void {
   let stopTracking: (() => void) | undefined
 
@@ -25,7 +29,6 @@ export function useTransparentTableClipping(root: Ref<HTMLElement | null>, enabl
 
     const viewports = new Map<HTMLElement, TableViewport>()
     const observedTables = new Map<Element, TableViewport>()
-    const observedSpacers = new WeakSet<Element>()
     const dirty = new Set<TableViewport>()
     let frame = 0
     let disposed = false
@@ -58,7 +61,7 @@ export function useTransparentTableClipping(root: Ref<HTMLElement | null>, enabl
     }
 
     function syncTable(state: TableViewport): void {
-      const table = [...state.element.querySelectorAll<HTMLTableElement>('table.record-table')]
+      const table = [...state.element.querySelectorAll<HTMLTableElement>(tableSelector)]
         .find(candidate => candidate.closest(viewportSelector) === state.element) ?? null
       if (table !== state.table) {
         restore(state)
@@ -82,13 +85,6 @@ export function useTransparentTableClipping(root: Ref<HTMLElement | null>, enabl
         observedTables.set(header, state)
       }
       state.headers = headers
-      // Native virtual tables can rebalance only their top/bottom spacer styles
-      // while keeping total table size and rendered row identities unchanged.
-      for (const spacer of table?.querySelectorAll(':scope > tbody > tr[aria-hidden="true"] > :is(td,th)') ?? []) {
-        if (observedSpacers.has(spacer)) continue
-        mutations.observe(spacer, { attributes: true, attributeFilter: ['style'] })
-        observedSpacers.add(spacer)
-      }
     }
 
     function schedule(state?: TableViewport): void {
@@ -100,7 +96,7 @@ export function useTransparentTableClipping(root: Ref<HTMLElement | null>, enabl
 
     function register(element: HTMLElement): void {
       if (viewports.has(element)) return
-      const state: TableViewport = { element, table: null, headers: new Set(), clips: new Map() }
+      const state: TableViewport = { element, table: null, headers: new Set(), clips: new Map(), scrollLeft: element.scrollLeft }
       viewports.set(element, state)
       resize?.observe(element)
       syncTable(state)
@@ -126,31 +122,18 @@ export function useTransparentTableClipping(root: Ref<HTMLElement | null>, enabl
         if (viewport.width < 1 || viewport.height < 1) continue
         const inner = {
           left: viewport.left + state.element.clientLeft,
-          top: Math.max(0, viewport.top + state.element.clientTop),
           right: viewport.left + state.element.clientLeft + state.element.clientWidth,
-          bottom: Math.min(innerHeight, viewport.top + state.element.clientTop + state.element.clientHeight),
         }
         const headers = [...state.headers]
         const left = Math.max(inner.left, ...headers.filter(cell => cell.classList.contains('sticky-col-left'))
           .map(cell => cell.getBoundingClientRect().right))
         const right = Math.min(inner.right, ...headers.filter(cell => cell.classList.contains('sticky-col-right'))
           .map(cell => cell.getBoundingClientRect().left))
-        const head = table.tHead
-        const stickyHeaderBottoms = headers.filter(cell => {
-          const style = getComputedStyle(cell)
-          return style.position === 'sticky' && style.top !== 'auto'
-        }).map(cell => cell.getBoundingClientRect().bottom)
-        if (head && getComputedStyle(head).position === 'sticky') stickyHeaderBottoms.push(head.getBoundingClientRect().bottom)
-        const headerBottom = Math.max(inner.top, Math.min(inner.bottom, Math.max(inner.top, ...stickyHeaderBottoms)))
-
         for (const cell of state.clips.keys()) {
           if (!cell.isConnected || cell.closest('table') !== table) writes.push(() => restoreCell(state, cell))
         }
         for (const row of table.rows) {
           if (row.getAttribute('aria-hidden') === 'true') continue
-          const rowRect = row.getBoundingClientRect()
-          if ((rowRect.bottom < inner.top || rowRect.top > inner.bottom) && ![...row.cells].some(cell => cell.rowSpan > 1)) continue
-          const isHeader = row.parentElement?.tagName === 'THEAD'
           for (const cell of row.cells) {
             const rect = cell.getBoundingClientRect()
             if (rect.width < 1 || rect.height < 1) continue
@@ -158,12 +141,10 @@ export function useTransparentTableClipping(root: Ref<HTMLElement | null>, enabl
             const clip = {
               left: Math.max(rect.left, fixed ? inner.left : left),
               right: Math.min(rect.right, fixed ? inner.right : right),
-              top: Math.max(rect.top, isHeader ? inner.top : headerBottom),
-              bottom: Math.min(rect.bottom, inner.bottom),
             }
-            const offsets = [clip.top - rect.top, rect.right - clip.right, rect.bottom - clip.bottom, clip.left - rect.left]
+            const offsets = [0, rect.right - clip.right, 0, clip.left - rect.left]
               .map(value => Math.max(0, Math.round(value * 100) / 100))
-            const value = clip.right <= clip.left || clip.bottom <= clip.top ? 'inset(50%)'
+            const value = clip.right <= clip.left ? 'inset(0 0 0 100%)'
               : offsets.every(value => value === 0) ? '' : `inset(${offsets.map(value => `${value}px`).join(' ')})`
             if (!value) {
               if (state.clips.has(cell)) writes.push(() => restoreCell(state, cell))
@@ -191,8 +172,8 @@ export function useTransparentTableClipping(root: Ref<HTMLElement | null>, enabl
       }
     })
 
-    // Register SPA and teleported-dialog tables incrementally. Only explicit
-    // virtual spacer styles are observed; our clip writes cannot feed back.
+    // Register SPA and teleported-dialog tables incrementally. Clip writes and
+    // virtual spacer height changes do not alter horizontal geometry.
     const mutations = new MutationObserver(records => {
       for (const record of records) {
         const target = record.target instanceof Element ? record.target.closest<HTMLElement>(viewportSelector) : null
@@ -208,13 +189,12 @@ export function useTransparentTableClipping(root: Ref<HTMLElement | null>, enabl
 
     const onScroll = (event: Event) => {
       const target = event.target
-      if (!(target instanceof Element)) { schedule(); return }
+      if (!(target instanceof Element)) return
       const viewport = target.closest<HTMLElement>(viewportSelector)
       const state = viewport && viewports.get(viewport)
-      if (state) schedule(state)
-      else {
-        // A surrounding page/card scroll can move a table relative to the viewport.
-        for (const candidate of viewports.values()) if (target.contains(candidate.element)) schedule(candidate)
+      if (state && state.scrollLeft !== state.element.scrollLeft) {
+        state.scrollLeft = state.element.scrollLeft
+        schedule(state)
       }
     }
     const onResize = () => schedule()

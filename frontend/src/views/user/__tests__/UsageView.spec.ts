@@ -273,11 +273,15 @@ describe('user UsageView', () => {
   it('restores errors after leaving live requests and keeps one historical table per tab', async () => {
     const wrapper = mountUsageView()
     await flushPromises()
+    // Audited record navigation has a single selected card and no bottom rule.
+    expect(wrapper.get('.usage-detail-tabs').classes()).not.toContain('border-b')
     for (let cycle = 0; cycle < 2; cycle++) {
-      await wrapper.findAll('.tab').find(button => button.text() === 'Error records')!.trigger('click')
+      await wrapper.findAll('.usage-detail-tabs [role="tab"]').find(button => button.text() === 'Error records')!.trigger('click')
+      expect(wrapper.findAll('.usage-detail-tabs [aria-selected="true"]').map(button => button.text())).toEqual(['Error records'])
       expect(wrapper.findComponent(UsageTable).exists()).toBe(false)
       expect(wrapper.findComponent(UserErrorRequestsTable).props('workspace')).toBe(true)
-      await wrapper.findAll('.tab').find(button => button.text() === 'inspection.live')!.trigger('click')
+      await wrapper.findAll('.usage-detail-tabs [role="tab"]').find(button => button.text() === 'inspection.live')!.trigger('click')
+      expect(wrapper.findAll('.usage-detail-tabs [aria-selected="true"]').map(button => button.text())).toEqual(['inspection.live'])
       expect(wrapper.find('[data-testid="live-panel"]').exists()).toBe(true)
       expect(wrapper.find('[data-testid="usage-charts-panel"]').exists()).toBe(false)
       expect(wrapper.get('.usage-date').isVisible()).toBe(false)
@@ -288,7 +292,8 @@ describe('user UsageView', () => {
       expect(wrapper.get('[data-testid="usage-charts-panel"]').isVisible()).toBe(true)
       expect(wrapper.get('.usage-date').isVisible()).toBe(true)
       await wrapper.get('[role="tablist"] button:nth-child(2)').trigger('click')
-      await wrapper.findAll('.tab').find(button => button.text() === 'Usage records')!.trigger('click')
+      await wrapper.findAll('.usage-detail-tabs [role="tab"]').find(button => button.text() === 'Usage records')!.trigger('click')
+      expect(wrapper.findAll('.usage-detail-tabs [aria-selected="true"]').map(button => button.text())).toEqual(['Usage records'])
       expect(wrapper.findAllComponents(UsageTable)).toHaveLength(1)
       expect(wrapper.findAll('[data-testid="usage-column-settings"]')).toHaveLength(1)
     }

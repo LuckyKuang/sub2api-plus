@@ -21,7 +21,7 @@
           </div>
         </div>
 
-      <section v-if="activeTab !== 'live'" v-show="workspaceTab === 'charts'" class="workspace-scroll space-y-4" data-testid="usage-charts-panel">
+      <section v-if="activeTab !== 'live'" v-show="workspaceTab === 'charts'" class="workspace-shell workspace-scroll space-y-4" data-testid="usage-charts-panel">
       <UsageStatsCards :stats="usageStats" :show-account-cost="false" :strike-standard-cost="true" />
         <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <ModelDistributionChart
@@ -65,13 +65,13 @@
           <TokenUsageTrend :trend-data="trendData" :loading="chartsLoading" />
         </div>
       </section>
-      <section ref="recordsPanel" v-show="workspaceTab === 'records'" class="card workspace-table-card" data-testid="usage-records-panel">
-      <div class="usage-detail-tabs workspace-fixed flex flex-wrap gap-2 border-b border-gray-200 dark:border-dark-700">
-        <button class="tab" :class="{ 'tab-active': activeTab === 'live' }" @click="selectRecordTab('live')">{{ t('inspection.live') }}</button>
-        <button class="tab" :class="{ 'tab-active': activeTab === 'usage' }" @click="selectRecordTab('usage')">
+      <section ref="recordsPanel" v-show="workspaceTab === 'records'" class="card workspace-table-card workspace-shell" data-testid="usage-records-panel">
+      <div class="usage-detail-tabs card-tabs workspace-fixed" role="tablist" :aria-label="t('usage.tabs.usage')">
+        <button type="button" role="tab" class="card-tab" :aria-selected="activeTab === 'live'" @click="selectRecordTab('live')">{{ t('inspection.live') }}</button>
+        <button type="button" role="tab" class="card-tab" :aria-selected="activeTab === 'usage'" @click="selectRecordTab('usage')">
           {{ t('usage.tabs.usage') }}
         </button>
-        <button v-if="errorViewEnabled" class="tab" :class="{ 'tab-active': activeTab === 'errors' }" @click="switchToErrors">
+        <button v-if="errorViewEnabled" type="button" role="tab" class="card-tab" :aria-selected="activeTab === 'errors'" @click="switchToErrors">
           {{ t('usage.tabs.errors') }}
         </button>
       </div>
@@ -1045,7 +1045,6 @@ function showLatestRecords() {
   .usage-filter-fields { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 150px; overflow-x: auto; scrollbar-width: thin; padding-bottom: 2px; }
   .usage-filter-fields .input-label { margin-bottom: 2px; }
   .usage-filter-fields :deep(.select-trigger) { min-height: 32px; padding-top: 5px; padding-bottom: 5px; }
-  .usage-workspace .tab { padding-top: 8px; padding-bottom: 8px; }
   .usage-workspace :deep(.workspace-tabs) { padding: 4px; }
   .usage-workspace :deep(.pagination-card) { padding: 8px 12px; }
   .usage-workspace :deep(.pagination-desktop) { gap: 6px; }

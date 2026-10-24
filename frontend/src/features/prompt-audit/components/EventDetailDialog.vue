@@ -2,9 +2,9 @@
   <BaseDialog :show="show" :title="t('admin.promptAudit.events.detailTitle')" width="extra-wide" @close="$emit('close')">
     <div v-if="loading" class="py-12 text-center text-sm surface-muted" aria-busy="true">{{ t('common.loading') }}</div>
     <div v-else-if="event" class="flex flex-col">
-      <div class="flex flex-wrap items-center gap-3 border-b border-gray-200 pb-3 dark:border-dark-700">
-        <div class="flex flex-wrap gap-2" role="tablist">
-          <button v-for="tab in tabs" :id="tabId(tab)" :key="tab" type="button" role="tab" :aria-selected="activeTab === tab" :aria-controls="panelId(tab)" :tabindex="activeTab === tab ? 0 : -1" class="rounded-md px-3 py-1.5 text-sm surface-control" :class="activeTab === tab ? 'bg-primary-50/[0.15] text-primary-700 dark:bg-primary-950/40 dark:text-primary-300' : 'surface-muted'" @click="activeTab = tab" @keydown.left.prevent="moveTab(-1)" @keydown.right.prevent="moveTab(1)">
+      <div class="pb-3">
+        <div class="card-tabs" role="tablist">
+          <button v-for="tab in tabs" :id="tabId(tab)" :key="tab" type="button" role="tab" :aria-selected="activeTab === tab" :aria-controls="panelId(tab)" :tabindex="activeTab === tab ? 0 : -1" class="card-tab" @click="activeTab = tab" @keydown.left.prevent="moveTab(-1)" @keydown.right.prevent="moveTab(1)">
             {{ t(`admin.promptAudit.events.tabs.${tab}`) }}
           </button>
         </div>

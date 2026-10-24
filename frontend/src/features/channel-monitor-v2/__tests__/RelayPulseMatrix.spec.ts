@@ -93,7 +93,9 @@ const observers: Array<{ targets: Set<Element>; callback: ResizeObserverCallback
 let matrixStyle: HTMLStyleElement
 const rect = (width: number, height: number) => ({ x: 0, y: 0, left: 0, top: 0, right: width, bottom: height, width, height, toJSON() {} })
 function size(element: Element) {
-  if (element.classList.contains('matrix-scroll')) return rect(viewportWidth, viewportHeight)
+  // The fixed header consumes part of the matrix's total viewport height.
+  if (element.classList.contains('matrix-scroll')) return rect(viewportWidth, viewportHeight - rowHeight)
+  if (element.classList.contains('matrix-table')) return rect(viewportWidth, parseFloat((element as HTMLElement).querySelector<HTMLElement>('.matrix-virtual-body')?.style.height || '0'))
   if (element.classList.contains('matrix-data-row')) return rect(viewportWidth, rowHeight)
   if (element.classList.contains('matrix-header')) return rect(viewportWidth, rowHeight)
   if (element.classList.contains('matrix-floating-tooltip')) return rect(220, 190)
@@ -110,8 +112,8 @@ function notifyResize() {
   }
 }
 beforeEach(() => {
-  // Apply the component's real stylesheet: jsdom exposes clip-path without
-  // resolving custom properties, so the clipping helper resolves its top inset.
+  // Apply real component geometry so static separation cannot regress to a
+  // transparent sticky overlay or a JS-updated vertical clipping mask.
   matrixStyle = document.createElement('style')
   matrixStyle.textContent = matrixSource.match(/<style scoped>([\s\S]*?)<\/style>/)![1]
   document.head.append(matrixStyle)
@@ -124,8 +126,9 @@ beforeEach(() => {
   vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockImplementation(function (this: HTMLElement) { return size(this).width })
   vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) { return size(this).height })
   vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function (this: HTMLElement) { return size(this).height })
+  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function (this: HTMLElement) { return size(this).width })
   vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function (this: HTMLElement) {
-    if (this.classList.contains('matrix-scroll')) return parseFloat(this.querySelector<HTMLElement>('.matrix-virtual-body')?.style.height || '0') + rowHeight
+    if (this.classList.contains('matrix-scroll')) return parseFloat(this.querySelector<HTMLElement>('.matrix-virtual-body')?.style.height || '0')
     return size(this).height
   })
   if (!HTMLElement.prototype.scrollTo) HTMLElement.prototype.scrollTo = () => {}
@@ -185,13 +188,18 @@ async function scroll(wrapper: ReturnType<typeof mountMatrix>, top: number) {
   await wrapper.get('.matrix-scroll').trigger('scroll')
   await settle()
 }
-function bodyClipTop(wrapper: ReturnType<typeof mountMatrix>): number {
-  const body = wrapper.get('.matrix-virtual-body').element
+function expectSeparatedHeader(wrapper: ReturnType<typeof mountMatrix>) {
+  const header = wrapper.get('.matrix-header').element
+  const rail = wrapper.get('.matrix-header-rail').element
   const viewport = wrapper.get('.matrix-scroll').element
-  const clip = getComputedStyle(body).clipPath
-  const top = clip.match(/^inset\((.*?)\s+0\s+0\)$/)?.[1] ?? ''
-  return parseFloat(top.replace(/var\((--[\w-]+)(?:,\s*([^)]*))?\)/g, (_, name, fallback) =>
-    getComputedStyle(viewport).getPropertyValue(name).trim() || fallback || ''))
+  expect(header.closest('.matrix-scroll')).toBeNull()
+  expect(rail.nextElementSibling).toBe(viewport)
+  expect(rail.parentElement).toBe(viewport.parentElement)
+  expect(getComputedStyle(rail).overflow).toBe('hidden')
+  expect(wrapper.get('.matrix-scroll').classes()).toContain('overflow-auto')
+  expect(wrapper.get('.matrix-header').classes()).not.toContain('sticky')
+  expect(['', 'static']).toContain(getComputedStyle(header).position)
+  expect(['', 'none']).toContain(getComputedStyle(wrapper.get('.matrix-virtual-body').element).clipPath)
 }
 
 describe('RelayPulseMatrix', () => {
@@ -218,7 +226,7 @@ describe('RelayPulseMatrix', () => {
     expect(cells[2].classes()).toContain('health-unknown')
     const header = wrapper.get('.matrix-header')
     for (const label of ['成功率', '首 Token', '每秒 Token', '缓存率']) expect(header.text()).toContain(label)
-    expect(header.classes()).toContain('sticky')
+    expectSeparatedHeader(wrapper)
     await cells[0].trigger('mouseleave')
     await cells[2].trigger('focus')
     await settle()
@@ -257,7 +265,7 @@ describe('RelayPulseMatrix', () => {
     }
   })
 
-  it('clips rows at the transparent sticky header during real scroll events without changing virtual geometry', async () => {
+  it('keeps transparent headers outside the body scrollport without a vertical paint mask or changed virtual geometry', async () => {
     const wrapper = mountMatrix(417)
     await settle()
     const body = wrapper.get('.matrix-virtual-body').element as HTMLElement
@@ -265,11 +273,10 @@ describe('RelayPulseMatrix', () => {
     const observerCount = observers.length
     for (const top of [0, 4, 16, 30, 120, 1229, 0]) {
       await scroll(wrapper, top)
-      // The body starts immediately below the header, then moves up by the
-      // scroll distance. Its painted top must stay at the header's bottom.
-      expect(bodyClipTop(wrapper)).toBe(top)
+      // Native overflow clips the body in a separate box; fast compositor
+      // scrolling cannot paint rows under the header between JS events.
+      expectSeparatedHeader(wrapper)
       expect(body.style.height).toBe(bodyHeight)
-      expect(wrapper.get('.matrix-header').classes()).toContain('sticky')
       expect(wrapper.findAll('.matrix-data-row').length).toBeLessThan(25)
     }
     expect(observers).toHaveLength(observerCount)
@@ -354,20 +361,49 @@ describe('RelayPulseMatrix', () => {
     await wrapper.setProps({ rows: rows(417).slice(150) })
     await settle()
     expect((wrapper.get('.matrix-scroll').element as HTMLElement).scrollTop).toBe(7200)
-    expect(bodyClipTop(wrapper)).toBe(7200)
+    expectSeparatedHeader(wrapper)
     await wrapper.setProps({ rows: rows(12) })
     await settle()
     const top = (wrapper.get('.matrix-scroll').element as HTMLElement).scrollTop
-    // Twelve 36px records plus the 36px header fill a 240px viewport.
+    // Twelve 36px records fill the 204px body below a 36px static header.
     expect(top).toBe(228)
-    expect(bodyClipTop(wrapper)).toBe(228)
+    expectSeparatedHeader(wrapper)
     const viewState = wrapper.emitted('update:viewState')!.at(-1)![0]
     wrapper.unmount()
     const rebuilt = mountMatrix(12, { viewState })
     await settle()
     expect((rebuilt.get('.matrix-scroll').element as HTMLElement).scrollTop).toBe(top)
-    expect(bodyClipTop(rebuilt)).toBe(228)
+    expectSeparatedHeader(rebuilt)
     expect(rebuilt.findAll('.matrix-data-row').length).toBeGreaterThan(0)
+  })
+
+  it('aligns header and body horizontal scroll in both directions and restores the same view', async () => {
+    const wrapper = mountMatrix(417)
+    await settle()
+    const viewport = wrapper.get('.matrix-scroll')
+    viewport.element.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, ctrlKey: true, cancelable: true, bubbles: true }))
+    await settle()
+    await scroll(wrapper, 7200)
+    ;(viewport.element as HTMLElement).scrollLeft = 128
+    await viewport.trigger('scroll')
+    const rail = wrapper.get('.matrix-header-rail')
+    expect((rail.element as HTMLElement).scrollLeft).toBe(128)
+    expect(wrapper.emitted('update:viewState')!.at(-1)![0]).toMatchObject({ scrollTop: 7200, scrollLeft: 128 })
+
+    // Programmatic focus/scrolling of the static rail must keep body columns
+    // aligned too, without changing its vertical reading position.
+    ;(rail.element as HTMLElement).scrollLeft = 64
+    await rail.trigger('scroll')
+    expect((viewport.element as HTMLElement).scrollLeft).toBe(64)
+    expect((viewport.element as HTMLElement).scrollTop).toBe(7200)
+    const viewState = wrapper.emitted('update:viewState')!.at(-1)![0]
+    wrapper.unmount()
+    const rebuilt = mountMatrix(417, { viewState })
+    await settle()
+    expect((rebuilt.get('.matrix-scroll').element as HTMLElement).scrollLeft).toBe(64)
+    expect((rebuilt.get('.matrix-header-rail').element as HTMLElement).scrollLeft).toBe(64)
+    expect((rebuilt.get('.matrix-scroll').element as HTMLElement).scrollTop).toBe(7200)
+    expectSeparatedHeader(rebuilt)
   })
 
   it('measures mobile two-line rows and remeasures resize without blanks or unreachable bottom rows', async () => {

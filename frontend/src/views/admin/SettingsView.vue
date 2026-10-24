@@ -44,7 +44,7 @@
           </nav>
         </div>
 
-        <div ref="settingsBody" class="workspace-scroll workspace-stack space-y-6" data-test="settings-body-scroll">
+        <div ref="settingsBody" class="workspace-shell workspace-scroll workspace-stack space-y-6" data-test="settings-body-scroll">
         <!-- Tab: Security — Admin API Key -->
         <div v-show="activeTab === 'security'" class="space-y-6">
           <!-- Admin API Key Settings -->

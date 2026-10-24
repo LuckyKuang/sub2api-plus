@@ -118,9 +118,9 @@
             data-testid="ops-panel-logs"
             role="tabpanel"
             :aria-label="t('workspace.systemLogs')"
-            :class="isFullscreen ? '' : 'workspace-body workspace-scroll'"
+            :class="isFullscreen ? '' : 'workspace-shell workspace-body workspace-scroll'"
           >
-            <OpsSystemLogTable :platform-filter="platform" :refresh-token="dashboardRefreshToken" />
+            <OpsSystemLogTable class="workspace-shell" :platform-filter="platform" :refresh-token="dashboardRefreshToken" />
           </div>
         </template>
       </OpsDashboardHeader>

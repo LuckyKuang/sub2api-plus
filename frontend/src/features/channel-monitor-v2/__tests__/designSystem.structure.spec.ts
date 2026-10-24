@@ -45,12 +45,29 @@ describe('channel-monitor-v2 design system structure', () => {
     expect(src).toContain('MonitorTrendChart')
   })
 
+  it('keeps the main visualization borderless across matrix, line and loading states', () => {
+    const view = read('views/user/ChannelStatusV2View.vue')
+    expect(view).toMatch(/<MonitorTrendChart\b[^>]*class="workspace-shell"/s)
+    expect(view).toMatch(/<div\s+v-else-if="loading"\s+class="card workspace-shell[^"]*"/s)
+    expect(read('features/channel-monitor-v2/RelayPulseMatrix.vue')).toContain('class="card workspace-shell')
+    // Reusing the chart elsewhere retains its ordinary independent card frame.
+    expect(read('features/channel-monitor-v2/MonitorTrendChart.vue')).not.toContain('workspace-shell')
+  })
+
   it('RelayPulseMatrix uses card chrome, matrix scroll, and hover tooltips (no click modal)', () => {
     const src = read('features/channel-monitor-v2/RelayPulseMatrix.vue')
     expect(src).toContain('class="card')
     expect(src).toContain('card-header')
     expect(src).toContain('card-body')
     expect(src).toContain('matrix-scroll')
+    // Header/body are native sibling viewports; scroll handlers do not drive
+    // a vertical mask that can lag behind compositor scrolling.
+    expect(src).toContain('matrix-header-rail')
+    expect(src).not.toContain('--matrix-scroll-top')
+    expect(src).not.toContain('clip-path:')
+    expect(src).not.toContain('paddingStart:')
+    expect(src).not.toContain('scrollPaddingStart:')
+    expect(src).not.toContain('matrix-row sticky')
     expect(src).toMatch(/max-h-\[min\(42vh/)
     expect(src).toContain('overflow-auto')
     expect(src).toContain('MatrixTooltip')

@@ -57,8 +57,6 @@
   .workspace-body, .workspace-scroll, .workspace-stack { gap: 12px !important; }
   .workspace-fixed { flex: 0 0 auto; }
   .workspace-scroll { overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-gutter: stable; border-radius: var(--surface-radius); }
-  /* The scrollport owns its outline, so content cannot scroll its top edge away. */
-  .app-main .workspace-scroll:not(.workspace-scroll .workspace-scroll) { border: 1px solid var(--surface-edge); }
   .workspace-scroll > * { flex-shrink: 0; margin-top: 0 !important; margin-bottom: 0 !important; }
   .workspace-scroll > .workspace-body { flex-shrink: 1; }
   .workspace-clip, .workspace-table-card { overflow: hidden; border-radius: var(--surface-radius); }
@@ -68,7 +66,7 @@
     overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-gutter: stable;
     border-radius: var(--surface-radius-panel);
   }
-  .workspace-table-viewport thead { position: sticky; top: 0; z-index: 12; background: var(--surface-solid); }
+  .workspace-table-viewport thead { position: sticky; top: 0; z-index: 12; }
   .workspace-table-card > .pagination-card { flex: none; margin: 0; }
   .workspace-page .record-table-scroll { border-radius: var(--surface-radius-panel); }
   .table-scroll-container { border-radius: var(--surface-radius); }
