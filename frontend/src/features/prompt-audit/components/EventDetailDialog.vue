@@ -51,7 +51,7 @@
 
           <div class="space-y-3">
             <h4 class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.promptAudit.events.riskSummaries') }}</h4>
-            <article v-for="issue in event.issue_summaries" :key="`${issue.scanner_id}-${issue.code}`" class="border-l-2 border-red-400 pl-4" data-test="risk-issue">
+            <article v-for="issue in event.issue_summaries" :key="`${issue.scanner_id}-${issue.code}`" class="rounded-xl border border-red-400 p-4" data-test="risk-issue">
               <div class="flex flex-wrap items-center gap-2">
                 <h5 class="font-medium text-gray-900 dark:text-white">{{ issueTitle(issue) }}</h5>
                 <span class="text-xs text-red-600 dark:text-red-300">{{ issueSeverity(issue) }} · {{ issueAction(issue) }}</span>

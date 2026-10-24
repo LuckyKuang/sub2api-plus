@@ -2,7 +2,7 @@
   <div class="flex items-center gap-1.5">
     <span
       :class="[
-        'inline-block h-2 w-2 rounded-full',
+        'console-data-mark inline-block h-2 w-2 rounded-full',
         variantClass
       ]"
     ></span>

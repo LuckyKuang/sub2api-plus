@@ -211,10 +211,15 @@ const domainKey = computed(() => JSON.stringify([
   props.coverage.bucket_seconds,
 ]))
 function saveViewport() {
+  const element = scrollRef.value
+  const scrollTop = element?.scrollTop ?? props.viewState?.scrollTop ?? 0
+  // Clip the scrolling body below the transparent sticky header without
+  // changing virtual row geometry or measuring cells during scroll.
+  element?.style.setProperty('--matrix-scroll-top', `${scrollTop}px`)
   emit('update:viewState', {
     zoom: zoom.value,
-    scrollTop: scrollRef.value?.scrollTop ?? props.viewState?.scrollTop ?? 0,
-    scrollLeft: scrollRef.value?.scrollLeft ?? props.viewState?.scrollLeft ?? 0,
+    scrollTop,
+    scrollLeft: element?.scrollLeft ?? props.viewState?.scrollLeft ?? 0,
     domainKey: domainKey.value,
   })
 }
@@ -693,6 +698,9 @@ function formatBucketRange(value: string) {
 .pulse-track {
   min-width: 0;
 }
+.matrix-virtual-body {
+  clip-path: inset(var(--matrix-scroll-top, 0px) 0 0);
+}
 .status-dot {
   display: inline-block;
   height: 0.5rem;
@@ -746,7 +754,7 @@ function formatBucketRange(value: string) {
 }
 .pulse-cell.has-data:hover,
 .pulse-cell.has-data:focus-visible {
-  outline: 2px solid rgb(var(--color-primary-500, 99 102 241) / 0.55);
+  outline: 2px solid rgb(var(--console-accent-500, 20 184 166) / 0.55);
   outline-offset: 1px;
   z-index: 5;
 }

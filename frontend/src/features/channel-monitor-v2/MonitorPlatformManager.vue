@@ -26,7 +26,7 @@
             <span class="manager-avatar">{{ platformLabel(platform.platform).slice(0, 2).toUpperCase() }}</span>
             <span class="min-w-0 flex-1 text-left">
               <strong class="block truncate text-sm">{{ platformLabel(platform.platform) }}</strong>
-              <small class="mt-1 flex items-center gap-1.5 surface-muted"><span class="manager-dot" :class="{ paused: !platform.enabled }" />{{ t(platform.enabled ? 'channelMonitorV2.settings.platformEnabled' : 'channelMonitorV2.settings.platformPaused') }}</small>
+              <small class="mt-1 flex items-center gap-1.5 surface-muted"><span class="manager-dot console-data-mark" :class="platform.enabled ? 'bg-emerald-500' : 'bg-gray-400'" />{{ t(platform.enabled ? 'channelMonitorV2.settings.platformEnabled' : 'channelMonitorV2.settings.platformPaused') }}</small>
             </span>
             <span class="text-xs surface-muted">{{ displayMode(platform) === 'all' ? t('channelMonitorV2.settings.allShort') : platform.models.length }}</span>
           </button>
@@ -216,22 +216,21 @@ onBeforeUnmount(() => { ++catalogRevision; controller?.abort() })
 .manager-rail { min-width: 0; padding: 18px 14px; border-right: 1px solid rgb(148 163 184 / 18%); }
 .manager-platform-list { display: flex; max-height: 540px; flex-direction: column; gap: 7px; overflow-y: auto; }
 .manager-platform { display: flex; width: 100%; align-items: center; gap: 10px; border: 1px solid transparent; border-radius: 13px; padding: 12px 10px; transition: background .15s; }
-.manager-platform:hover, .manager-platform.active { background: rgb(20 184 166 / 9%); }
-.manager-platform.active { border-color: rgb(20 184 166 / 32%); }
+.manager-platform:hover, .manager-platform.active { background: rgb(var(--console-accent-500, 20 184 166) / 9%); }
+.manager-platform.active { border-color: rgb(var(--console-accent-500, 20 184 166) / 32%); }
 .manager-avatar { display: grid; width: 32px; height: 32px; flex-shrink: 0; place-items: center; border-radius: 10px; background: rgb(148 163 184 / 12%); font-size: 11px; font-weight: 700; }
-.manager-dot { width: 6px; height: 6px; border-radius: 50%; background: #14b8a6; }
-.manager-dot.paused { background: #94a3b8; }
+.manager-dot { width: 6px; height: 6px; border-radius: 50%; }
 .manager-main { min-width: 0; padding: 22px; }
 .manager-category-tabs { display: flex; flex-wrap: wrap; gap: 7px; }
 .manager-category-tabs button { display: flex; align-items: center; gap: 6px; border-radius: 10px; padding: 8px 10px; font-size: 13px; }
-.manager-category-tabs button:hover, .manager-category-tabs button[aria-pressed='true'] { background: rgb(20 184 166 / 10%); color: #0d9488; }
-.manager-note { margin-top: 12px; border: 1px solid rgb(20 184 166 / 18%); border-radius: 12px; padding: 10px 12px; background: rgb(20 184 166 / 6%); font-size: 12px; line-height: 1.7; }
+.manager-category-tabs button:hover, .manager-category-tabs button[aria-pressed='true'] { background: rgb(var(--console-accent-500, 20 184 166) / 10%); color: rgb(var(--console-accent-600, 13 148 136)); }
+.manager-note { margin-top: 12px; border: 1px solid rgb(var(--console-accent-500, 20 184 166) / 18%); border-radius: 12px; padding: 10px 12px; background: rgb(var(--console-accent-500, 20 184 166) / 6%); font-size: 12px; line-height: 1.7; }
 .manager-note.excluded { border-color: rgb(239 68 68 / 18%); background: rgb(239 68 68 / 5%); }
-.manager-batch { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; border-radius: 12px; padding: 10px; background: rgb(20 184 166 / 8%); }
+.manager-batch { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; border-radius: 12px; padding: 10px; background: rgb(var(--console-accent-500, 20 184 166) / 8%); }
 .manager-model-container { container: v2models / inline-size; }
 .manager-models { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; max-height: 390px; overflow-y: auto; padding: 1px; }
 .manager-model { display: flex; min-width: 0; align-items: center; gap: 12px; border: 1px solid rgb(148 163 184 / 19%); border-radius: 12px; padding: 12px; }
-.manager-model:hover, .manager-model.selected { background: rgb(20 184 166 / 5%); border-color: rgb(20 184 166 / 28%); }
+.manager-model:hover, .manager-model.selected { background: rgb(var(--console-accent-500, 20 184 166) / 5%); border-color: rgb(var(--console-accent-500, 20 184 166) / 28%); }
 .manager-icon { display: grid; width: 30px; height: 30px; place-items: center; border-radius: 9px; }
 .manager-icon:hover { background: rgb(148 163 184 / 12%); }
 .manager-empty { grid-column: 1 / -1; padding: 42px 20px; text-align: center; line-height: 1.8; }

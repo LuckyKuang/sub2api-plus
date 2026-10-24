@@ -26,7 +26,7 @@
         :class="overallChipClass"
       >
         <span
-          class="w-1.5 h-1.5 rounded-full mr-1.5"
+          class="console-data-mark w-1.5 h-1.5 rounded-full mr-1.5"
           :class="overallDotClass"
         ></span>
         {{ overallLabel }}

@@ -113,7 +113,7 @@
 
           <template #cell-status_code="{ row }">
             <span :class="statusBadgeClass(row.status_code)">
-              <span class="h-1.5 w-1.5 rounded-full" :class="statusDotClass(row.status_code)"></span>
+              <span class="console-data-mark h-1.5 w-1.5 rounded-full" :class="statusDotClass(row.status_code)"></span>
               {{ row.status_code }}
             </span>
           </template>
@@ -179,7 +179,7 @@
         <div class="glass-surface border p-5">
           <div class="flex flex-wrap items-center gap-3">
             <span :class="statusBadgeClass(detail.status_code)">
-              <span class="h-1.5 w-1.5 rounded-full" :class="statusDotClass(detail.status_code)"></span>
+              <span class="console-data-mark h-1.5 w-1.5 rounded-full" :class="statusDotClass(detail.status_code)"></span>
               {{ detail.status_code }} {{ statusText(detail.status_code) }}
             </span>
             <span class="break-all font-mono text-base font-semibold text-gray-900 dark:text-white">

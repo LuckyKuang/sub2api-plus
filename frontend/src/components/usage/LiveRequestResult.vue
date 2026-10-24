@@ -1,6 +1,6 @@
 <template>
   <span class="inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-medium" :class="color">
-    <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-current" :class="liveActive(row) ? 'motion-safe:animate-pulse' : ''" aria-hidden="true" />
+    <span class="console-data-mark h-1.5 w-1.5 shrink-0 rounded-full bg-current" :class="liveActive(row) ? 'motion-safe:animate-pulse' : ''" aria-hidden="true" />
     {{ t(liveStatusKey(row)) }}
   </span>
   <p v-if="row.reason" class="mt-0.5 max-w-48 whitespace-normal text-xs surface-muted">{{ t(`requestList.reason.${row.reason}`) }}</p>

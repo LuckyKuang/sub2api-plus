@@ -51,7 +51,7 @@
       {{ draft }}
       <span
         v-if="saving"
-        class="absolute -right-0.5 top-1 h-1.5 w-1.5 animate-pulse rounded-full bg-primary-500"
+        class="console-data-mark absolute -right-0.5 top-1 h-1.5 w-1.5 animate-pulse rounded-full bg-primary-500"
         data-testid="account-priority-saving"
       />
     </button>

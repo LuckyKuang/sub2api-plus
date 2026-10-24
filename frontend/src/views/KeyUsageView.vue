@@ -158,7 +158,7 @@
           <div v-if="statusInfo" class="fade-up flex items-center justify-center mb-2">
             <div class="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-gray-200 surface-inset shadow-sm dark:border-dark-700">
               <span
-                class="w-2.5 h-2.5 rounded-full pulse-dot"
+                class="console-data-mark w-2.5 h-2.5 rounded-full pulse-dot"
                 :class="statusInfo.isActive ? 'bg-emerald-500' : 'bg-rose-500'"
               ></span>
               <span class="text-sm font-medium text-gray-900 dark:text-white">{{ statusInfo.label }}</span>
@@ -978,8 +978,8 @@ onUnmounted(() => {
   transition: box-shadow 0.2s ease, border-color 0.2s ease;
 }
 .input-ring:focus {
-  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.2);
-  border-color: #14b8a6;
+  box-shadow: 0 0 0 3px rgb(var(--console-accent-500, 20 184 166) / 20%);
+  border-color: rgb(var(--console-accent-500, 20 184 166));
   outline: none;
 }
 

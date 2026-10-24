@@ -677,13 +677,13 @@ onMounted(() => {
   font-weight: bold;
 }
 .code-cmd {
-  color: #14b8a6;
+  color: rgb(var(--console-accent-500, 20 184 166));
 }
 .code-flag {
   color: #a78bfa;
 }
 .code-url {
-  color: #14b8a6;
+  color: rgb(var(--console-accent-500, 20 184 166));
 }
 .code-comment {
   color: #737373;
@@ -724,8 +724,8 @@ onMounted(() => {
 :deep(.dark) .terminal-window {
   box-shadow:
     0 25px 50px -12px rgba(0, 0, 0, 0.6),
-    0 0 0 1px rgba(20, 184, 166, 0.2),
-    0 0 40px rgba(20, 184, 166, 0.1),
+    0 0 0 1px rgb(var(--console-accent-500, 20 184 166) / 20%),
+    0 0 40px rgb(var(--console-accent-500, 20 184 166) / 10%),
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 </style>

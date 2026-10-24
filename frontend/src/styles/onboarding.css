@@ -22,7 +22,7 @@
 .driver-active-element {
   position: relative !important;
   z-index: 99999999 !important;
-  outline: 4px solid rgba(20, 184, 166, 0.2) !important;
+  outline: 1px solid rgb(var(--console-accent-500, 20 184 166) / 35%) !important;
   border-radius: var(--surface-radius-control) !important;
 }
 
@@ -92,6 +92,20 @@
   background-color: transparent !important;
 }
 .dark .theme-tour-popover .driver-popover-description { color: #d4d4d4 !important; }
+
+/* Localized tour help includes inline HTML. Its nested help cards follow the
+   shared fill and complete outline instead of keeping legacy opaque stripes. */
+.theme-tour-popover .driver-popover-description :is(div, p)[style*="background"] {
+  background: var(--surface-soft) !important;
+  border: 1px solid var(--surface-edge) !important;
+  border-radius: var(--surface-radius-item) !important;
+}
+.theme-tour-popover .driver-popover-description [style*="color: #10b981"] {
+  color: rgb(var(--console-accent-600, 13 148 136)) !important;
+}
+.dark .theme-tour-popover .driver-popover-description [style*="color: #10b981"] {
+  color: rgb(var(--console-accent-400, 45 212 191)) !important;
+}
 
 /* 5. Footer Area - Flex Row with Left/Right Containers */
 .theme-tour-popover .driver-popover-footer {
@@ -186,11 +200,12 @@
 }
 
 .theme-tour-popover .driver-popover-next-btn {
-  background-color: #14b8a6 !important;
-  color: #042f2e !important;
+  background-color: rgb(var(--console-accent-500, 20 184 166)) !important;
+  color: var(--surface-text) !important;
+  border-color: rgb(var(--console-accent-500, 20 184 166) / 65%) !important;
   box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
 }
-.theme-tour-popover .driver-popover-next-btn:hover { background-color: #2dd4bf !important; }
+.theme-tour-popover .driver-popover-next-btn:hover { background-color: rgb(var(--console-accent-400, 45 212 191)) !important; }
 
 .theme-tour-popover .driver-popover-prev-btn {
   background-color: white !important;

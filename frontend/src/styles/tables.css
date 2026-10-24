@@ -4,14 +4,15 @@
   --record-table-bg: var(--surface-solid);
   --record-row-bg: var(--surface-soft);
   border: 0 !important;
-  border-inline: 12px solid var(--record-table-bg) !important;
+  border-inline: 12px solid transparent !important;
   padding: 8px 0 !important;
   overflow-x: auto;
-  background-color: var(--record-table-bg) !important;
+  background-color: transparent !important;
   background-image: none !important;
 }
 
 table.record-table {
+  --record-row-edge: var(--surface-edge);
   border-collapse: separate !important;
   border-spacing: 0 !important;
   border: 0 !important;
@@ -44,41 +45,68 @@ table.record-table {
 }
 
 :root table.record-table > :is(tbody, tfoot) > tr:not([aria-hidden="true"]) > :is(td, th) {
+  --record-edge-top: inset 0 1px 0 var(--record-row-edge);
+  --record-edge-bottom: inset 0 -1px 0 var(--record-row-edge);
+  --record-edge-left: inset 0 0 0 transparent;
+  --record-edge-right: inset 0 0 0 transparent;
   border: 0 solid transparent !important;
   border-block-width: 4px !important;
   border-radius: 0 !important;
   background-color: var(--record-row-bg, var(--surface-soft)) !important;
   background-image: linear-gradient(var(--record-row-tint, transparent), var(--record-row-tint, transparent)) !important;
   background-clip: padding-box !important;
-  box-shadow: none !important;
+  box-shadow: var(--record-edge-top), var(--record-edge-bottom), var(--record-edge-left), var(--record-edge-right) !important;
   transition: background-color 150ms, background-image 150ms;
 }
 
 :root table.record-table > :is(tbody, tfoot):not(.record-group) > tr > :first-child {
+  --record-edge-left: inset 1px 0 0 var(--record-row-edge);
   /* The 4px transparent border leaves a visible 16px inner curve. */
   border-top-left-radius: 16px 20px !important;
   border-bottom-left-radius: 16px 20px !important;
 }
 
 :root table.record-table > :is(tbody, tfoot):not(.record-group) > tr > :last-child {
+  --record-edge-right: inset -1px 0 0 var(--record-row-edge);
   border-top-right-radius: 16px 20px !important;
   border-bottom-right-radius: 16px 20px !important;
+}
+
+/* Each logical record starts its own edge state, including nested tables. */
+table.record-table > :is(tbody, tfoot):not(.record-group) > tr,
+table.record-table > .record-group {
+  --record-row-edge: var(--surface-edge);
 }
 
 table.record-table > :is(tbody, tfoot):not(.record-group) > tr:hover,
 table.record-table > .record-group:hover {
   --record-row-tint: var(--surface-hover);
+  --record-row-edge: rgb(var(--console-accent-500, 20 184 166) / 80%);
+}
+
+table.record-table > :is(tbody, tfoot):not(.record-group) > tr:focus-within,
+table.record-table > .record-group:focus-within {
+  --record-row-edge: rgb(var(--console-accent-500, 20 184 166) / 80%);
 }
 
 table.record-table > :is(tbody, tfoot) > tr:is(.table-row-selected, [aria-selected="true"]),
 table.record-table > .record-group:is(.table-row-selected, [aria-selected="true"]) {
   --record-row-tint: var(--surface-selected);
+  --record-row-edge: rgb(var(--console-accent-500, 20 184 166) / 95%);
 }
 
 /* Rowspans and expanded details belong to one business record, not one tr. */
 :root table.record-table > .record-group > tr > :is(td, th) {
   border-block-width: 0 !important;
 }
+:root table.record-table > .record-group > tr:not([aria-hidden="true"]) > :is(td, th) {
+  --record-edge-top: inset 0 0 0 transparent;
+  --record-edge-bottom: inset 0 0 0 transparent;
+}
+:root table.record-table > .record-group > tr:not([aria-hidden="true"]) > [data-record-edges~="t"] { --record-edge-top: inset 0 1px 0 var(--record-row-edge); }
+:root table.record-table > .record-group > tr:not([aria-hidden="true"]) > [data-record-edges~="b"] { --record-edge-bottom: inset 0 -1px 0 var(--record-row-edge); }
+:root table.record-table > .record-group > tr:not([aria-hidden="true"]) > [data-record-edges~="l"] { --record-edge-left: inset 1px 0 0 var(--record-row-edge); }
+:root table.record-table > .record-group > tr:not([aria-hidden="true"]) > [data-record-edges~="r"] { --record-edge-right: inset -1px 0 0 var(--record-row-edge); }
 :root table.record-table > .record-group > tr > [data-record-edges~="t"] { border-top-width: 4px !important; }
 :root table.record-table > .record-group > tr > [data-record-edges~="b"] { border-bottom-width: 4px !important; }
 :root table.record-table > .record-group > tr > [data-record-edges~="tl"] { border-top-left-radius: 16px 20px !important; }
@@ -108,7 +136,7 @@ table.record-table-compact.record-table-dense { --record-compact-radius: 6px; }
   background: none !important;
 }
 
-/* Cells paint opaque backgrounds directly; no vertical edge shadow or fill
+/* Cells paint their own backgrounds directly; no vertical edge shadow or fill
    layer may cover the transparent card gaps. Preserve component positioning. */
 table.record-table > thead::before,
 table.record-table .sticky-col::before,
@@ -116,14 +144,18 @@ table.record-table .sticky-col::after {
   content: none !important;
 }
 
-/* A rounded sticky edge otherwise exposes cells scrolling behind its cutout.
-   The square cell blocks them with the table surface; its negative child stays
-   inside the sticky stacking context and paints only the rounded record. */
+/* Transparent pinned columns use the table clipping contract to keep scrolling
+   text out of their cutouts. Paint the outside curve inside its sticky context. */
 :root table.record-table > :is(tbody, tfoot):not(.record-group) > tr:not([aria-hidden="true"]) > .sticky-col:is(:first-child, :last-child) {
   border-radius: 0 !important;
   background-color: var(--record-table-bg, var(--surface-solid)) !important;
   background-image: none !important;
   background-clip: border-box !important;
+  box-shadow: none !important;
+}
+
+:root[data-console-transparent-cards] table.record-table > :is(tbody, tfoot):not(.record-group) > tr:not([aria-hidden="true"]) > .sticky-col:is(:first-child, :last-child) {
+  background-color: transparent !important;
 }
 
 :root table.record-table > :is(tbody, tfoot):not(.record-group) > tr:not([aria-hidden="true"]) > .sticky-col:is(:first-child, :last-child)::before {
@@ -135,6 +167,7 @@ table.record-table .sticky-col::after {
   pointer-events: none;
   background-color: var(--record-row-bg, var(--surface-soft));
   background-image: linear-gradient(var(--record-row-tint, transparent), var(--record-row-tint, transparent));
+  box-shadow: var(--record-edge-top), var(--record-edge-bottom), var(--record-edge-left), var(--record-edge-right);
 }
 
 :root table.record-table > :is(tbody, tfoot):not(.record-group) > tr:not([aria-hidden="true"]) > .sticky-col:first-child::before {
@@ -145,6 +178,15 @@ table.record-table .sticky-col::after {
 :root table.record-table > :is(tbody, tfoot):not(.record-group) > tr:not([aria-hidden="true"]) > .sticky-col:last-child::before {
   border-top-right-radius: 16px;
   border-bottom-right-radius: 16px;
+}
+
+:root table.record-table.record-table-compact > :is(tbody, tfoot):not(.record-group) > tr:not([aria-hidden="true"]) > .sticky-col:first-child::before {
+  border-top-left-radius: var(--record-compact-radius);
+  border-bottom-left-radius: var(--record-compact-radius);
+}
+:root table.record-table.record-table-compact > :is(tbody, tfoot):not(.record-group) > tr:not([aria-hidden="true"]) > .sticky-col:last-child::before {
+  border-top-right-radius: var(--record-compact-radius);
+  border-bottom-right-radius: var(--record-compact-radius);
 }
 
 /* A nested record table gets its own solid surface rather than inheriting the

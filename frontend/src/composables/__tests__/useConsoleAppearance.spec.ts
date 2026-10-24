@@ -3,8 +3,8 @@ import { effectScope, nextTick, ref, type EffectScope } from 'vue'
 import { useConsoleAppearance } from '../useConsoleAppearance'
 import { defaultConsoleAppearance } from '@/types/appearance'
 
-// Requirements: docs/UI_INTERACTION.md, including failed/stale image fallback
-// and solid content surfaces regardless of the stored transparency field.
+// Requirements: approved global appearance audit and docs/UI_INTERACTION.md:
+// only backgrounds fade; foregrounds stay readable without opacity or filters.
 let scope: EffectScope
 const images: FakeImage[] = []
 class FakeImage {
@@ -18,18 +18,18 @@ beforeEach(() => { images.length = 0; vi.stubGlobal('Image', FakeImage); scope =
 afterEach(() => { scope.stop(); vi.unstubAllGlobals() })
 
 describe('published console appearance', () => {
-  it('applies canvas masks without letting stored transparency fade content or add a filter', async () => {
+  it('publishes background alpha independently from foregrounds and canvas masks', async () => {
     const appearance = ref(defaultConsoleAppearance())
     scope.run(() => useConsoleAppearance(() => appearance.value))
     const root = document.documentElement
     expect(root.hasAttribute('data-console-custom-cards')).toBe(false)
     expect(root.style.getPropertyValue('--console-light-mask-alpha')).toBe('0.3')
     expect(root.style.getPropertyValue('--console-dark-mask-alpha')).toBe('0.48')
-    for (const transparency of [0, 45, 100]) {
+    for (const [transparency, alpha] of [[0, '1'], [45, '0.55'], [100, '0']] as const) {
       appearance.value.card_transparency = transparency
       await nextTick()
       expect(root.hasAttribute('data-console-custom-cards')).toBe(false)
-      expect(root.style.getPropertyValue('--console-card-alpha')).toBe('')
+      expect(root.style.getPropertyValue('--console-card-alpha')).toBe(alpha)
       expect(root.style.opacity).toBe('')
       expect(root.style.getPropertyValue('backdrop-filter')).toBe('')
     }
@@ -41,6 +41,27 @@ describe('published console appearance', () => {
     appearance.value = defaultConsoleAppearance()
     await nextTick()
     expect(root.hasAttribute('data-console-custom-cards')).toBe(false)
+    expect(root.style.getPropertyValue('--console-card-alpha')).toBe('1')
+  })
+
+  it('preserves the exact default accent and updates the whole palette without reloading', async () => {
+    const appearance = ref(defaultConsoleAppearance())
+    scope.run(() => useConsoleAppearance(() => appearance.value))
+    const root = document.documentElement
+    expect(root.style.getPropertyValue('--console-accent-500')).toBe('20 184 166')
+    expect(root.style.getPropertyValue('--console-accent-700')).toBe('15 118 110')
+    appearance.value.accent_color = '#f59e0b'
+    await nextTick()
+    expect(root.style.getPropertyValue('--console-accent-500')).toBe('245 158 11')
+    expect(root.style.getPropertyValue('--console-accent-700')).toBe('164 106 7')
+    appearance.value.accent_color = 'url(javascript:invalid)'
+    appearance.value.card_transparency = null
+    await nextTick()
+    expect(root.style.getPropertyValue('--console-accent-500')).toBe('20 184 166')
+    expect(root.style.getPropertyValue('--console-card-alpha')).toBe('1')
+    scope.stop()
+    expect(root.style.getPropertyValue('--console-accent-500')).toBe('')
+    expect(root.style.getPropertyValue('--console-card-alpha')).toBe('')
   })
 
   it('loads the background before showing it and falls back to the gradient on image failure', async () => {

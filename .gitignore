@@ -130,6 +130,8 @@ tests
 CLAUDE.md
 .claude
 scripts
+!frontend/scripts/
+!frontend/scripts/consoleSurfaces.js
 !backend/scripts/
 !backend/scripts/resolve-version.sh
 !skills/compress-cli/scripts/

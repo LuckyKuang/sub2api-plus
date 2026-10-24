@@ -41,7 +41,7 @@
               ? 'border-primary-500 bg-primary-500'
               : 'border-gray-300 dark:border-dark-500'"
           >
-            <div v-if="selectedGroupId === group.id" class="h-2 w-2 rounded-full bg-white"></div>
+            <div v-if="selectedGroupId === group.id" class="console-data-mark h-2 w-2 rounded-full bg-white"></div>
           </div>
           <div class="flex-1">
             <span class="font-medium text-gray-900 dark:text-white">{{ group.name }}</span>

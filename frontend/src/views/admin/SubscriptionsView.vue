@@ -253,7 +253,7 @@
                   <span class="usage-label">{{ t('admin.subscriptions.fiveHour') }}</span>
                   <div class="h-1.5 flex-1 rounded-full bg-gray-200 dark:bg-dark-600">
                     <div
-                      class="h-1.5 rounded-full transition-all"
+                      class="console-data-mark h-1.5 rounded-full transition-all"
                       :class="getProgressClass(row.five_hour_usage_usd, row.group?.five_hour_limit_usd)"
                       :style="{ width: getProgressWidth(row.five_hour_usage_usd, row.group?.five_hour_limit_usd) }"
                     ></div>
@@ -281,7 +281,7 @@
                   <span class="usage-label">{{ t('admin.subscriptions.daily') }}</span>
                   <div class="h-1.5 flex-1 rounded-full bg-gray-200 dark:bg-dark-600">
                     <div
-                      class="h-1.5 rounded-full transition-all"
+                      class="console-data-mark h-1.5 rounded-full transition-all"
                       :class="getProgressClass(row.daily_usage_usd, row.group?.daily_limit_usd)"
                       :style="{
                         width: getProgressWidth(row.daily_usage_usd, row.group?.daily_limit_usd)
@@ -318,7 +318,7 @@
                   <span class="usage-label">{{ t('admin.subscriptions.weekly') }}</span>
                   <div class="h-1.5 flex-1 rounded-full bg-gray-200 dark:bg-dark-600">
                     <div
-                      class="h-1.5 rounded-full transition-all"
+                      class="console-data-mark h-1.5 rounded-full transition-all"
                       :class="getProgressClass(row.weekly_usage_usd, row.group?.weekly_limit_usd)"
                       :style="{
                         width: getProgressWidth(row.weekly_usage_usd, row.group?.weekly_limit_usd)
@@ -355,7 +355,7 @@
                   <span class="usage-label">{{ t('admin.subscriptions.monthly') }}</span>
                   <div class="h-1.5 flex-1 rounded-full bg-gray-200 dark:bg-dark-600">
                     <div
-                      class="h-1.5 rounded-full transition-all"
+                      class="console-data-mark h-1.5 rounded-full transition-all"
                       :class="getProgressClass(row.monthly_usage_usd, row.group?.monthly_limit_usd)"
                       :style="{
                         width: getProgressWidth(row.monthly_usage_usd, row.group?.monthly_limit_usd)
@@ -475,7 +475,7 @@
               <button
                 v-if="row.status === 'revoked'"
                 @click="handleRestore(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors hover:bg-green-50/25 hover:text-green-600 dark:hover:bg-green-900/20 dark:hover:text-green-400 surface-control surface-muted"
+                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors hover:bg-primary-50/25 hover:text-primary-600 dark:hover:bg-primary-900/20 dark:hover:text-primary-400 surface-control surface-muted"
               >
                 <Icon name="refresh" size="sm" />
                 <span class="text-xs">{{ t('admin.subscriptions.restore') }}</span>

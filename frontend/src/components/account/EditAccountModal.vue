@@ -1343,7 +1343,7 @@
               type="button"
               @click="syncAntigravityUpstreamModels"
               :disabled="isSyncingAntigravityUpstream || !account?.id"
-              class="rounded-lg border border-emerald-200 px-3 py-1.5 text-sm text-emerald-600 hover:bg-emerald-50/25 disabled:cursor-not-allowed disabled:opacity-60 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-900/30 surface-control"
+              class="rounded-lg border border-primary-200 px-3 py-1.5 text-sm text-primary-600 hover:bg-primary-50/25 disabled:cursor-not-allowed disabled:opacity-60 dark:border-primary-800 dark:text-primary-400 dark:hover:bg-primary-900/30 surface-control"
             >
               {{ isSyncingAntigravityUpstream ? t('admin.accounts.syncUpstreamModelsLoading') : t('admin.accounts.syncUpstreamModels') }}
             </button>
@@ -1551,7 +1551,7 @@
                           rule.scope === option.value ? 'border-primary-500' : 'border-gray-300 dark:border-dark-500'
                         ]"
                       >
-                        <span v-if="rule.scope === option.value" class="h-1.5 w-1.5 rounded-full bg-primary-500" />
+                        <span v-if="rule.scope === option.value" class="console-data-mark h-1.5 w-1.5 rounded-full bg-primary-500" />
                       </span>
                       <span>
                         <span class="block text-sm font-medium text-gray-900 dark:text-white">{{ option.label }}</span>

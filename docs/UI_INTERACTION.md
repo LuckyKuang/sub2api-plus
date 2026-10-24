@@ -144,12 +144,14 @@ timeout and dismissal behavior.
 
 Record tables retain table semantics while presenting each record as a separate
 16px rounded card. Hover and selection paint the same rounded row without
-filling its 8px gap. Row outlines, outer table outlines and vertical pinned-column
-shadows are omitted; visible outer insets are 12px. Headers match the surrounding
-opaque table background, have no independent card, and remain 12px from the first
-data row. Pinned cells preserve matching backgrounds, block scrolled content
-behind their rounded corners, and must never cover another visible header
-incorrectly. Grouped, spanning and expanded records keep their
+filling its 8px gap. Each record has a 1px outline that follows its rounded
+corners, with an accent outline on hover or selection. Outer table outlines and
+vertical pinned-column shadows are omitted; visible outer insets are 12px.
+Headers match the surrounding table background, have no independent card, and
+remain 12px from the first data row. Pinned cells preserve matching backgrounds;
+when transparency is enabled, cell-level clipping prevents scrolled content
+from overlapping headers or fixed columns. They must never cover another
+visible header incorrectly. Grouped, spanning and expanded records keep their
 business grouping; virtual rows retain accurate measurement.
 
 Short data rows use `record-table-compact` with 10px visible outside corners
@@ -171,11 +173,13 @@ configuration; wrapped actions reserve their actual height so the last setting
 remains reachable when navigation collapses or the viewport changes.
 
 Navigation hover and keyboard focus paint an inset rounded card. The active
-link has a stronger teal fill, outline and leading stripe, retained on hover.
+link has a stronger accent fill and outline, retained on hover, without a leading stripe.
 
 The V2 channel pulse matrix mounts only visible rows with a small overscan and
 measures actual row heights, including mobile wrapping. Its header remains sticky;
-filtering clamps the scroll position and keyboard navigation can reach unmounted
+the body clips at the header edge using the saved scroll offset, including after
+restoration and filter clamping, so transparent headers never show rows behind them.
+Filtering clamps the scroll position and keyboard navigation can reach unmounted
 rows. Ordinary wheel input scrolls; Ctrl + wheel zooms the time axis. The pulse
 matrix preserves its zoom and scroll after polling or a switch to line view and
 back. A change of
@@ -396,23 +400,31 @@ independent of today cards. [USAGE_TIMING](USAGE_TIMING.md) formulas remain unch
 ## Global console appearance
 
 In **System Settings → General → Appearance and background**, administrators can
-upload or replace a shared background and adjust light/dark canvas masks
-independently. The setting applies to both admin and user consoles. Each viewer
-retains their own theme choice. The background and masks affect the page canvas;
-the sidebar, header, content cards, controls, tables and popup panels keep solid
-theme fills. There is no card-transparency control or client binding that changes
-surface opacity. Ancestor `opacity` and container filters must not be used to
-implement appearance settings.
+set a shared accent color, card background transparency, background image and
+independent light/dark canvas masks. These settings apply across both consoles;
+each viewer keeps their own light/dark choice. The default accent is `#14b8a6`,
+and default transparency is 0% (the existing theme fills). Each color and
+transparency control has its own restore-default action. Background reset clears
+the image and restores the 30%/48% masks without resetting these other controls.
 
-Upload and adjustment produce a local draft. Page preview affects only that
-administrator and ends when leaving General or the settings page. **Save
-appearance** publishes this card independently from other general settings.
-**Restore defaults** is also a draft until saved: it clears the image, restores
-the existing gradient, and resets light/dark masks to 30%/48%. Preview content
-surfaces remain solid `#f8faf9` in the light theme and `#262c2d` in the dark theme.
-Uploading, previewing, saving or resetting the background must not introduce a
-card-transparency default or change the stored compatibility value described
-below.
+Accent colors use `#RRGGBB` and synchronize controls, input/select borders and
+focus, hover, selected navigation/tabs and menus. Error/health, provider branding
+and chart category colors retain their meaning. Transparency ranges from 0%
+(opaque) to 100% (transparent) and affects card, control/button, table row,
+expanded region, dropdown and popup backgrounds, including chart hover cards.
+Text/icons, focus and 1px borders remain visible at every setting. QR quiet zones
+and accent picker swatches remain opaque. Table records retain compact rounded
+outlines with accent hover, fixed columns/headers clip content behind them, and
+scrolling viewports retain their top and rounded outline. Settings tabs share
+usage tab height (62px normally, 54px in short desktop windows).
+
+Adjustments produce a local draft. Preview affects only that administrator and
+ends when leaving General or the settings page. **Save appearance** publishes
+this card independently from other general settings. Saving applies immediately
+and survives refresh; other viewers receive the published setting on refresh.
+Use CSS custom properties and build-time background bindings, never ancestor
+`opacity`, extra container filters, or runtime stylesheet traversal. Only table
+geometry needed to prevent transparent fixed-column overlap updates on scroll.
 
 JPG/PNG/WebP input is limited to 10 MiB and 40 megapixels. The browser flattens
 and compresses it to JPEG, at most 2560 pixels on its longest side and 2 MiB.
@@ -425,15 +437,17 @@ not replace the active appearance.
 
 `GET/PUT /api/v1/admin/settings/appearance` use the existing admin authentication,
 rate limiting, compliance guard, and operation audit. PUT accepts `light_mask`,
-`dark_mask`, nullable `card_transparency`, and
-optional `background_image` (JPEG/PNG/WebP data URL; omitted/null keeps the
-current image, empty string removes it). Percentages must be integers in
-0–100. Responses, `GET /api/v1/settings/public`, and injected `__APP_CONFIG__`
-expose `console_appearance` metadata only: `background_url`, the two masks,
-and transparency. The `card_transparency` API/storage field retains its existing
-protocol and validation for compatibility, without a migration. The appearance
-editor preserves and round-trips its current value; console rendering ignores
-it. Image bytes are never embedded in these public payloads.
+`dark_mask`, nullable `card_transparency`, optional `accent_color`, and optional
+`background_image` (JPEG/PNG/WebP data URL; omitted/null keeps the current image,
+empty string removes it). Percentages must be integers in 0–100; legacy null
+transparency renders as 0%. Accent is a six-digit HEX color, stored lowercase;
+omitted/null keeps the existing accent and empty string resets it to default.
+Legacy or damaged stored accent fields fall back to default without discarding
+an otherwise valid background or masks. Invalid updates do not write settings.
+Responses, public settings and injected `__APP_CONFIG__` expose metadata only:
+`background_url`, both masks, `card_transparency` and `accent_color`. The existing
+settings JSON stores these values without a migration or environment bindings.
+Image bytes are never embedded in these public payloads.
 
 `GET /api/v1/settings/console-background/:revision` publicly serves the active
 JPEG with a SHA-256 URL, ETag, `nosniff`, and immutable caching. A replaced or
@@ -442,12 +456,11 @@ remain in browser caches until expiry. Saving invalidates the HTML settings
 cache and immediately updates the administrator's public-settings cache. Other
 viewers get the published appearance on refresh. Failed image loads fall back
 to the built-in gradient, and stale load completions must not replace a newer
-image or a reset. Table bodies, sticky headers and fixed columns use solid theme
-surfaces with no backdrop filters. Pinned cells cover horizontally scrolled
-content, with rounded hover/selection boundaries, stacking and focus intact. Long
-document-scrolling usage lists must remain fully painted after repeated vertical
-jumps. This solid-surface rule applies across console pages, including outer
-cards and popup panels.
+image or a reset. Table bodies, sticky headers and fixed columns use the shared
+theme fills with no backdrop filters. When those fills become transparent,
+cell-level clipping preserves fixed-column and header readability, rounded
+hover/selection boundaries, stacking and focus. Long document-scrolling usage
+lists must remain fully painted after repeated vertical jumps.
 
 Console surfaces use the shared tokens in `frontend/src/styles/console.css` and
 `surfaces.css`. `surface-card` paints standalone cards, `surface-inset` paints
@@ -459,8 +472,8 @@ their integrated search, checkbox, focus, error and disabled behavior.
 
 The main solid surface is `#f8faf9` in the light theme and `#262c2d` in the dark
 theme. Inset sections use `#edf2f0` and `#202627`, respectively. Shared card,
-control, panel and table tokens do not depend on card transparency or backdrop
-filter support. Deep-theme secondary text uses `#c1cdd1`, with distinct primary,
+control, panel and table fills share the configured transparency without relying
+on backdrop filters. Deep-theme secondary text uses `#c1cdd1`, with distinct primary,
 selected and danger colors. Do not dim ancestor opacity or filter containers
 holding fixed menus. Preserve opaque switch thumbs, status/progress marks and
 QR quiet zones (`surface-opaque`).

@@ -65,7 +65,7 @@ func TestConsoleAppearancePublishReplaceAndRestore(t *testing.T) {
 	svc.SetOnUpdateCallback(func() { invalidations++ })
 	defaults, err := svc.GetConsoleAppearance(ctx)
 	require.NoError(t, err)
-	require.Equal(t, ConsoleAppearance{LightMask: 30, DarkMask: 48}, defaults)
+	require.Equal(t, ConsoleAppearance{LightMask: 30, DarkMask: 48, AccentColor: "#14b8a6"}, defaults)
 	imageURL := appearancePNG(t, 4, color.NRGBA{R: 255, A: 255})
 	transparency := 45
 	appearance, err := svc.UpdateConsoleAppearance(ctx, ConsoleAppearanceUpdate{BackgroundImage: &imageURL, LightMask: 30, DarkMask: 48, CardTransparency: &transparency})
@@ -138,6 +138,10 @@ func TestConsoleAppearanceRejectedUpdatesHaveNoSideEffects(t *testing.T) {
 		value := input
 		cases = append(cases, ConsoleAppearanceUpdate{BackgroundImage: &value})
 	}
+	for _, input := range []string{"#fff", "f59e0b", "#f59e0b00", "#zz0000", " #f59e0b", "#f59e0b ", "rgb(245,158,11)", "var(--accent)"} {
+		value := input
+		cases = append(cases, ConsoleAppearanceUpdate{AccentColor: &value, BackgroundImage: &valid})
+	}
 	for index, update := range cases {
 		t.Run(string(rune('A'+index)), func(t *testing.T) {
 			repo := &appearanceRepo{values: map[string]string{SettingKeyConsoleAppearance: `{"background_url":"","light_mask":30,"dark_mask":48,"card_transparency":45}`}}
@@ -175,9 +179,86 @@ func TestConsoleAppearanceCorruptStorageAndAuditPrivacy(t *testing.T) {
 		svc := NewSettingService(repo, &config.Config{})
 		result, err := svc.GetConsoleAppearance(context.Background())
 		require.NoError(t, err)
-		require.Equal(t, ConsoleAppearance{LightMask: 30, DarkMask: 48}, result)
+		require.Equal(t, ConsoleAppearance{LightMask: 30, DarkMask: 48, AccentColor: "#14b8a6"}, result)
 	}
 	body := RedactAuditBody([]byte(`{"background_image":"private-user-image","light_mask":30}`), "application/json")
 	require.NotContains(t, body, "private-user-image")
 	require.Contains(t, body, "light_mask")
+}
+
+// The approved global accent is persistent public metadata, defaults to the
+// current green, and must not be lost when an older client omits the new field.
+func TestConsoleAppearanceAccentPublishPreserveAndRestore(t *testing.T) {
+	ctx := context.Background()
+	repo := &appearanceRepo{values: map[string]string{}}
+	svc := NewSettingService(repo, &config.Config{})
+	invalidations := 0
+	svc.SetOnUpdateCallback(func() { invalidations++ })
+	color := "#F59E0B"
+	transparency := 100
+	result, err := svc.UpdateConsoleAppearance(ctx, ConsoleAppearanceUpdate{
+		LightMask: 30, DarkMask: 48, CardTransparency: &transparency, AccentColor: &color,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "#f59e0b", result.AccentColor)
+	require.Equal(t, 100, *result.CardTransparency)
+	require.Equal(t, 1, repo.writes)
+	require.Equal(t, 1, invalidations)
+	require.Contains(t, repo.values[SettingKeyConsoleAppearance], `"accent_color":"#f59e0b"`)
+
+	reloaded, err := svc.GetConsoleAppearance(ctx)
+	require.NoError(t, err)
+	require.Equal(t, result, reloaded)
+	public, err := svc.GetPublicSettings(ctx)
+	require.NoError(t, err)
+	require.Equal(t, "#f59e0b", public.ConsoleAppearance.AccentColor)
+	injected, err := svc.GetPublicSettingsForInjection(ctx)
+	require.NoError(t, err)
+	encoded, err := json.Marshal(injected)
+	require.NoError(t, err)
+	require.Contains(t, string(encoded), `"accent_color":"#f59e0b"`)
+
+	result, err = svc.UpdateConsoleAppearance(ctx, ConsoleAppearanceUpdate{LightMask: 12, DarkMask: 58})
+	require.NoError(t, err)
+	require.Equal(t, "#f59e0b", result.AccentColor)
+	reset := ""
+	result, err = svc.UpdateConsoleAppearance(ctx, ConsoleAppearanceUpdate{LightMask: 12, DarkMask: 58, AccentColor: &reset})
+	require.NoError(t, err)
+	require.Equal(t, "#14b8a6", result.AccentColor)
+	reloaded, err = svc.GetConsoleAppearance(ctx)
+	require.NoError(t, err)
+	require.Equal(t, "#14b8a6", reloaded.AccentColor)
+}
+
+// Existing installations keep all their valid appearance metadata when the
+// optional accent is missing or corrupt. Only that field falls back to green.
+func TestConsoleAppearanceAccentStorageFallbackPreservesBackground(t *testing.T) {
+	path := "/api/v1/settings/console-background/" + strings.Repeat("a", 64)
+	for _, test := range []struct {
+		name   string
+		field  string
+		accent string
+	}{
+		{name: "legacy", accent: "#14b8a6"},
+		{name: "null", field: `,"accent_color":null`, accent: "#14b8a6"},
+		{name: "empty", field: `,"accent_color":""`, accent: "#14b8a6"},
+		{name: "invalid color", field: `,"accent_color":"#fff"`, accent: "#14b8a6"},
+		{name: "number", field: `,"accent_color":42`, accent: "#14b8a6"},
+		{name: "object", field: `,"accent_color":{}`, accent: "#14b8a6"},
+		{name: "uppercase", field: `,"accent_color":"#AABBCC"`, accent: "#aabbcc"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			raw := `{"background_url":"` + path + `","light_mask":18,"dark_mask":63,"card_transparency":72` + test.field + `}`
+			repo := &appearanceRepo{values: map[string]string{SettingKeyConsoleAppearance: raw}}
+			svc := NewSettingService(repo, &config.Config{})
+			result, err := svc.GetConsoleAppearance(context.Background())
+			require.NoError(t, err)
+			require.Equal(t, path, result.BackgroundURL)
+			require.Equal(t, 18, result.LightMask)
+			require.Equal(t, 63, result.DarkMask)
+			require.Equal(t, 72, *result.CardTransparency)
+			require.Equal(t, test.accent, result.AccentColor)
+			require.Zero(t, repo.writes)
+		})
+	}
 }

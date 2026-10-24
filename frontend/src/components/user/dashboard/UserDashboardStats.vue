@@ -100,7 +100,7 @@
                   <span class="font-mono text-red-500">{{ t('dashboard.platformQuota.disabled') }}</span>
                 </div>
                 <div class="h-1.5 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-dark-700">
-                  <div class="h-full w-full rounded-full bg-red-500" />
+                  <div class="console-data-mark h-full w-full rounded-full bg-red-500" />
                 </div>
               </template>
               <!-- limit>0：正常用量进度条 -->
@@ -113,7 +113,7 @@
                 </div>
                 <div class="h-1.5 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-dark-700">
                   <div
-                    class="h-full rounded-full transition-all"
+                    class="console-data-mark h-full rounded-full transition-all"
                     :class="quotaBarClass(calcPercent((quotaVal(item.quota, `${w}_usage_usd`) as number) ?? 0, quotaVal(item.quota, `${w}_limit_usd`) as number))"
                     :style="{ width: calcPercent((quotaVal(item.quota, `${w}_usage_usd`) as number) ?? 0, quotaVal(item.quota, `${w}_limit_usd`) as number) + '%' }"
                   />

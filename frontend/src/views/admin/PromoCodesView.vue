@@ -113,7 +113,7 @@
             <div class="flex items-center space-x-1">
               <button
                 @click="copyRegisterLink(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors hover:bg-green-50/25 hover:text-green-600 dark:hover:bg-green-900/20 dark:hover:text-green-400 surface-control surface-muted"
+                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors hover:bg-primary-50/25 hover:text-primary-600 dark:hover:bg-primary-900/20 dark:hover:text-primary-400 surface-control surface-muted"
                 :title="t('admin.promo.copyRegisterLink')"
               >
                 <Icon name="link" size="sm" />

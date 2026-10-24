@@ -4,7 +4,7 @@
     <div v-if="!success" class="flex flex-col items-center space-y-4">
       <!-- QR Code mode -->
       <template v-if="qrUrl">
-        <div class="glass-surface p-4">
+        <div class="glass-surface surface-opaque p-4">
           <canvas ref="qrCanvas" class="mx-auto"></canvas>
         </div>
         <p v-if="scanHint" class="text-center text-sm surface-muted">

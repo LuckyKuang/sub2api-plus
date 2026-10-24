@@ -7040,7 +7040,7 @@
 
             <p
               v-if="form.model_plaza_enabled && !form.model_plaza_require_auth"
-              class="border-l-4 border-amber-500 bg-amber-50/[0.15] px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-200"
+              class="rounded-xl border border-amber-500 bg-amber-50/[0.15] px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-200"
               role="alert"
             >
               {{ t('admin.settings.features.modelPlaza.publicExposureWarning') }}
@@ -13103,7 +13103,8 @@ watch(
 
 /* ============ 系统设置 Tab 导航 ============ */
 .settings-tabs-shell {
-  @apply relative z-20 rounded-2xl border p-1.5;
+  @apply relative z-20 border p-2;
+  border-radius: var(--surface-radius);
   background: var(--surface-fill);
   border-color: var(--surface-edge);
   box-shadow:
@@ -13113,6 +13114,8 @@ watch(
 
 .settings-tabs-scroll {
   @apply overflow-x-auto;
+  /* This viewport must not clip the first button's smaller outside curve. */
+  border-radius: 0;
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
@@ -13126,7 +13129,11 @@ watch(
 }
 
 .settings-tab {
-  @apply relative isolate flex h-10 min-w-[6.75rem] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-transparent px-3 text-sm font-medium text-gray-600 outline-none transition-colors duration-200 ease-out dark:text-gray-300;
+  @apply relative isolate flex h-11 min-h-11 min-w-[6.75rem] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-transparent px-3 text-sm font-medium text-gray-600 outline-none transition-colors duration-200 ease-out dark:text-gray-300;
+}
+
+@media (min-width: 1024px) and (max-height: 799px) {
+  .settings-tabs-shell { padding: 4px; }
 }
 
 @media (min-width: 768px) {
@@ -13171,14 +13178,7 @@ watch(
 }
 
 .settings-tab-active::after {
-  position: absolute;
-  right: 0.75rem;
-  bottom: 0.25rem;
-  left: 0.75rem;
-  height: 2px;
-  border-radius: 9999px;
-  content: "";
-  background: linear-gradient(90deg, #14b8a6, #2dd4bf);
+  content: none;
 }
 
 .settings-tab-icon {

@@ -134,7 +134,7 @@
                       <div class="flex min-w-0 items-center gap-2">
                         <span class="font-mono text-sm font-semibold text-gray-900 dark:text-white">#{{ item.index + 1 }}</span>
                         <span class="truncate font-mono text-sm surface-muted">{{ item.masked || '-' }}</span>
-                        <span class="h-2 w-2 flex-shrink-0 rounded-full" :class="apiKeyStatusDotClass(item.status)"></span>
+                        <span class="console-data-mark h-2 w-2 flex-shrink-0 rounded-full" :class="apiKeyStatusDotClass(item.status)"></span>
                       </div>
                       <p class="mt-1 text-xs surface-muted">
                         {{ t('admin.riskControl.preBlockAPIKeyTotals', { total: formatNumber(item.total), success: formatNumber(item.success), errors: formatNumber(item.errors) }) }}
@@ -160,7 +160,7 @@
                     </div>
                   </div>
                   <div class="mt-3 h-1.5 overflow-hidden rounded-full bg-white dark:bg-dark-900">
-                    <div class="h-full rounded-full bg-sky-500" :style="{ width: preBlockAPIKeyLoadWidth(item.total) }"></div>
+                    <div class="console-data-mark h-full rounded-full bg-sky-500" :style="{ width: preBlockAPIKeyLoadWidth(item.total) }"></div>
                   </div>
                 </div>
               </div>
@@ -198,7 +198,7 @@
                   <span class="text-sm font-semibold text-gray-900 dark:text-white">{{ queueUsagePercent }}</span>
                 </div>
                 <div class="mt-4 h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-dark-700">
-                  <div class="h-full rounded-full bg-primary-500 transition-all duration-300" :style="queueUsageStyle"></div>
+                  <div class="console-data-mark h-full rounded-full bg-primary-500 transition-all duration-300" :style="queueUsageStyle"></div>
                 </div>
               </div>
 
@@ -243,7 +243,7 @@
                   :title="worker.label"
                 >
                   <span class="text-sm font-semibold">#{{ worker.id }}</span>
-                  <span class="h-2.5 w-2.5 rounded-full" :class="workerDotClass(worker.state)"></span>
+                  <span class="console-data-mark h-2.5 w-2.5 rounded-full" :class="workerDotClass(worker.state)"></span>
                 </div>
               </div>
             </div>
@@ -498,7 +498,7 @@
                       <div class="min-w-0">
                         <p class="truncate text-sm font-semibold text-gray-900 dark:text-white">{{ endpoint.name || t('admin.riskControl.endpointPool.unnamed') }}</p>
                         <span class="mt-1 inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium" :class="endpointStatusBadgeClass(endpoint)">
-                          <span class="h-1.5 w-1.5 rounded-full" :class="endpointStatusDotClass(endpoint)"></span>
+                          <span class="console-data-mark h-1.5 w-1.5 rounded-full" :class="endpointStatusDotClass(endpoint)"></span>
                           {{ endpointStatusLabel(endpoint) }}
                         </span>
                       </div>
@@ -733,7 +733,7 @@
                           </div>
                           <div class="flex flex-shrink-0 items-center gap-1.5">
                             <span class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium" :class="apiKeyStatusBadgeClass(row.status)">
-                              <span class="h-1.5 w-1.5 rounded-full" :class="apiKeyStatusDotClass(row.status)"></span>
+                              <span class="console-data-mark h-1.5 w-1.5 rounded-full" :class="apiKeyStatusDotClass(row.status)"></span>
                               {{ apiKeyStatusLabel(row.status) }}
                             </span>
                             <button
@@ -786,7 +786,7 @@
                         <span class="font-semibold text-gray-900 dark:text-white">{{ percent(moderationTestResult.composite_score) }}</span>
                       </div>
                       <div class="h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-dark-700">
-                        <div class="h-full rounded-full" :class="moderationTestResult.flagged ? 'bg-red-500' : 'bg-emerald-500'" :style="{ width: percentWidth(moderationTestResult.composite_score) }"></div>
+                        <div class="console-data-mark h-full rounded-full" :class="moderationTestResult.flagged ? 'bg-red-500' : 'bg-emerald-500'" :style="{ width: percentWidth(moderationTestResult.composite_score) }"></div>
                       </div>
                     </div>
                     <div class="mt-3 max-h-52 space-y-2 overflow-y-auto pr-1">
@@ -796,7 +796,7 @@
                           <span class="font-mono surface-muted">{{ percent(score.score) }} / {{ percent(score.threshold) }}</span>
                         </div>
                         <div class="h-1.5 overflow-hidden rounded-full bg-gray-100 dark:bg-dark-700">
-                          <div class="h-full rounded-full" :class="score.hit ? 'bg-red-500' : 'bg-primary-500'" :style="{ width: percentWidth(score.score) }"></div>
+                          <div class="console-data-mark h-full rounded-full" :class="score.hit ? 'bg-red-500' : 'bg-primary-500'" :style="{ width: percentWidth(score.score) }"></div>
                         </div>
                       </div>
                     </div>
@@ -1255,7 +1255,7 @@
         @close="policyHelpOpen = false"
       >
         <div class="space-y-5">
-          <div class="border-l-4 border-primary-500 surface-inset px-4 py-3">
+          <div class="rounded-xl border border-primary-500 surface-inset px-4 py-3">
             <p class="text-sm surface-muted">{{ t('admin.riskControl.policyHelp.summary') }}</p>
             <p class="mt-2 text-sm font-semibold text-gray-900 dark:text-white">
               {{ t('admin.riskControl.policyHelp.current') }}{{ effectiveTextPolicyDescription }}

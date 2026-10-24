@@ -1,4 +1,7 @@
 :root {
+  --console-accent-readable: rgb(var(--console-accent-700, 15 118 110));
+  --console-control-edge: rgb(var(--console-accent-500, 20 184 166) / 36%);
+  --console-control-hover-edge: rgb(var(--console-accent-500, 20 184 166) / 65%);
   --shell-gap: 12px;
   --shell-gutter: 12px;
   --shell-header-height: 64px;
@@ -12,38 +15,42 @@
   --surface-radius-item: 10px;
   --surface-fill: var(--surface-solid);
   --surface-shell: var(--surface-solid);
-  --surface-soft: #edf2f0;
+  --surface-soft: rgb(237 242 240 / var(--console-card-alpha, 1));
   --surface-field: var(--surface-solid);
   --surface-panel: var(--surface-solid);
   --surface-sticky: var(--surface-solid);
   --surface-text: #182e31;
   --surface-muted: #52676b;
-  --surface-glint: rgb(255 255 255 / 24%);
-  --surface-hover: rgb(20 184 166 / 12%);
-  --surface-selected: rgb(20 184 166 / 18%);
-  --surface-overlay: rgb(14 30 34 / 18%);
-  --surface-solid: #f8faf9;
-  --surface-edge: rgb(255 255 255 / 68%);
-  --surface-shadow: 0 12px 36px -20px rgb(33 57 57 / 28%), inset 0 1px 0 rgb(255 255 255 / 80%);
+  --surface-glint: rgb(255 255 255 / calc(.24 * var(--console-card-alpha, 1)));
+  --surface-hover: rgb(var(--console-accent-500, 20 184 166) / calc(.12 * var(--console-card-alpha, 1)));
+  --surface-selected: rgb(var(--console-accent-500, 20 184 166) / calc(.18 * var(--console-card-alpha, 1)));
+  --surface-overlay: rgb(14 30 34 / calc(.18 * var(--console-card-alpha, 1)));
+  --surface-solid: rgb(248 250 249 / var(--console-card-alpha, 1));
+  /* Outlines remain visible even when all surface fills are transparent. */
+  --surface-edge: rgb(100 116 139 / 34%);
+  --surface-shadow: 0 12px 36px -20px rgb(33 57 57 / calc(.28 * var(--console-card-alpha, 1))), inset 0 1px 0 rgb(255 255 255 / calc(.8 * var(--console-card-alpha, 1)));
   --console-canvas: #e9efee;
-  --console-glow: rgb(20 184 166 / 13%);
+  --console-glow: rgb(var(--console-accent-500, 20 184 166) / 13%);
   --console-glow-secondary: rgb(125 149 212 / 12%);
   --console-background-mask: rgb(245 248 247 / var(--console-light-mask-alpha, 0.3));
 }
 
 .dark {
-  --surface-soft: #202627;
+  --console-accent-readable: rgb(var(--console-accent-300, 94 234 212));
+  --console-control-edge: rgb(var(--console-accent-400, 45 212 191) / 42%);
+  --console-control-hover-edge: rgb(var(--console-accent-400, 45 212 191) / 72%);
+  --surface-soft: rgb(32 38 39 / var(--console-card-alpha, 1));
   --surface-text: #eaf3f2;
   --surface-muted: #c1cdd1;
-  --surface-glint: rgb(255 255 255 / 7%);
-  --surface-hover: rgb(45 212 191 / 13%);
-  --surface-selected: rgb(45 212 191 / 20%);
-  --surface-overlay: rgb(4 12 18 / 22%);
-  --surface-solid: #262c2d;
-  --surface-edge: rgb(255 255 255 / 16%);
-  --surface-shadow: 0 14px 36px -18px rgb(0 0 0 / 55%), inset 0 1px 0 rgb(255 255 255 / 5%);
+  --surface-glint: rgb(255 255 255 / calc(.07 * var(--console-card-alpha, 1)));
+  --surface-hover: rgb(var(--console-accent-400, 45 212 191) / calc(.13 * var(--console-card-alpha, 1)));
+  --surface-selected: rgb(var(--console-accent-400, 45 212 191) / calc(.20 * var(--console-card-alpha, 1)));
+  --surface-overlay: rgb(4 12 18 / calc(.22 * var(--console-card-alpha, 1)));
+  --surface-solid: rgb(38 44 45 / var(--console-card-alpha, 1));
+  --surface-edge: rgb(203 213 225 / 28%);
+  --surface-shadow: 0 14px 36px -18px rgb(0 0 0 / calc(.55 * var(--console-card-alpha, 1))), inset 0 1px 0 rgb(255 255 255 / calc(.05 * var(--console-card-alpha, 1)));
   --console-canvas: #191f21;
-  --console-glow: rgb(20 184 166 / 10%);
+  --console-glow: rgb(var(--console-accent-500, 20 184 166) / 10%);
   --console-glow-secondary: rgb(103 125 190 / 10%);
   --console-background-mask: rgb(15 23 28 / var(--console-dark-mask-alpha, 0.48));
 }
@@ -146,21 +153,21 @@
   transition: background-color 140ms, color 140ms, box-shadow 140ms;
 }
 .sidebar-nav .sidebar-link:is(:hover, :focus-visible) {
-  background-color: color-mix(in srgb, #14b8a6 17%, var(--surface-solid));
-  box-shadow: inset 0 0 0 1px rgb(20 184 166 / 24%);
+  background-color: rgb(var(--console-accent-500, 20 184 166) / calc(.17 * var(--console-card-alpha, 1)));
+  box-shadow: inset 0 0 0 1px rgb(var(--console-accent-500, 20 184 166) / 24%);
 }
 .sidebar-nav .sidebar-link-active {
-  background-color: color-mix(in srgb, #14b8a6 25%, var(--surface-solid));
-  box-shadow: inset 0 0 0 1px rgb(20 184 166 / 50%), inset 3px 0 #14b8a6;
-  color: #0f766e;
+  background-color: rgb(var(--console-accent-500, 20 184 166) / calc(.25 * var(--console-card-alpha, 1)));
+  box-shadow: inset 0 0 0 1px rgb(var(--console-accent-500, 20 184 166) / 55%);
+  color: var(--console-accent-readable, #0f766e);
   font-weight: 650;
 }
-.dark .sidebar-nav .sidebar-link-active { color: #5eead4; }
+.dark .sidebar-nav .sidebar-link-active { color: var(--console-accent-readable, #5eead4); }
 .sidebar-nav .sidebar-link-active:is(:hover, :focus-visible) {
-  background-color: color-mix(in srgb, #14b8a6 29%, var(--surface-solid));
-  box-shadow: inset 0 0 0 1px rgb(20 184 166 / 50%), inset 3px 0 #14b8a6;
+  background-color: rgb(var(--console-accent-500, 20 184 166) / calc(.29 * var(--console-card-alpha, 1)));
+  box-shadow: inset 0 0 0 1px rgb(var(--console-accent-500, 20 184 166) / 55%);
 }
-.sidebar-nav .sidebar-link:active { background-color: color-mix(in srgb, #14b8a6 33%, var(--surface-solid)); }
+.sidebar-nav .sidebar-link:active { background-color: rgb(var(--console-accent-500, 20 184 166) / calc(.33 * var(--console-card-alpha, 1))); }
 
 /* Align a floating page action card with the shell's actual content column. */
 .app-layout { --console-content-left: max(var(--shell-gutter), env(safe-area-inset-left)); }

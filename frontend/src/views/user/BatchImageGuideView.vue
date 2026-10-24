@@ -189,7 +189,7 @@
               <button
                 type="button"
                 class="batch-row-action flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/30 surface-control"
-                :class="canDownload(row) ? 'text-gray-500 hover:bg-green-50/25 hover:text-green-600 dark:hover:bg-green-900/20 dark:hover:text-green-400' : 'text-gray-300 dark:text-dark-500'"
+                :class="canDownload(row) ? 'text-gray-500 hover:bg-primary-50/25 hover:text-primary-600 dark:hover:bg-primary-900/20 dark:hover:text-primary-400' : 'text-gray-300 dark:text-dark-500'"
                 :disabled="!canDownload(row) || downloading"
                 :title="t('batchImage.actions.downloadZip')"
                 @click="downloadJob(row)"

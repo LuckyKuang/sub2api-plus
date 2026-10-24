@@ -24,7 +24,7 @@
         <!-- 专属分组区域 -->
         <div v-if="exclusiveGroups.length > 0">
           <div class="mb-3 flex items-center gap-2">
-            <div class="h-1.5 w-1.5 rounded-full bg-purple-500"></div>
+            <div class="console-data-mark h-1.5 w-1.5 rounded-full bg-purple-500"></div>
             <h4 class="text-sm font-semibold surface-muted">{{ t('admin.users.exclusiveGroups') }}</h4>
             <span class="text-xs surface-muted">({{ exclusiveGroupConfigs.filter(c => c.isSelected).length }}/{{ exclusiveGroupConfigs.length }})</span>
           </div>
@@ -96,7 +96,7 @@
         <!-- 公开分组区域 -->
         <div v-if="publicGroups.length > 0">
           <div class="mb-3 flex flex-wrap items-center gap-2">
-            <div class="h-1.5 w-1.5 rounded-full bg-green-500"></div>
+            <div class="console-data-mark h-1.5 w-1.5 rounded-full bg-green-500"></div>
             <h4 class="text-sm font-semibold surface-muted">
               {{ restrictPublicGroups ? t('admin.users.publicGroupsRestricted') : t('admin.users.publicGroups') }}
             </h4>

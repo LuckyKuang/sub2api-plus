@@ -27,7 +27,7 @@
                 <span class="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-orange-600 px-2.5 py-1 text-xs font-medium text-white shadow-lg shadow-amber-500/30">
                   <span class="relative flex h-2 w-2">
                     <span class="absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 surface-panel"></span>
-                    <span class="relative inline-flex h-2 w-2 rounded-full bg-white"></span>
+                    <span class="console-data-mark relative inline-flex h-2 w-2 rounded-full bg-white"></span>
                   </span>
                   {{ t('announcements.unread') }}
                 </span>

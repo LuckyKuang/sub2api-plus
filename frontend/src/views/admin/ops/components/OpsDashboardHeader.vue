@@ -886,7 +886,7 @@ function handleToolbarRefresh() {
         <div v-if="!props.fullscreen" class="mt-1 flex items-center gap-3 text-xs surface-muted">
           <span class="flex items-center gap-1.5" :title="props.loading ? t('admin.ops.loadingText') : t('admin.ops.ready')">
             <span class="relative flex h-2 w-2">
-              <span class="relative inline-flex h-2 w-2 rounded-full" :class="props.loading ? 'bg-gray-400' : 'bg-green-500'"></span>
+              <span class="console-data-mark relative inline-flex h-2 w-2 rounded-full" :class="props.loading ? 'bg-gray-400' : 'bg-green-500'"></span>
             </span>
             {{ props.loading ? t('admin.ops.loadingText') : t('admin.ops.ready') }}
           </span>
@@ -1126,8 +1126,8 @@ function handleToolbarRefresh() {
                   <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
                     <div class="flex items-center gap-2">
                       <div class="relative flex h-3 w-3 shrink-0">
-                        <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75"></span>
-                        <span class="relative inline-flex h-3 w-3 rounded-full bg-blue-500"></span>
+                        <span class="console-data-mark absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75"></span>
+                        <span class="console-data-mark relative inline-flex h-3 w-3 rounded-full bg-blue-500"></span>
                       </div>
                       <h3 class="text-xs font-bold uppercase tracking-wider surface-muted">{{ t('admin.ops.realtime.title') }}</h3>
                       <HelpTooltip v-if="!props.fullscreen" :content="t('admin.ops.tooltips.qps')" />
@@ -1270,7 +1270,7 @@ function handleToolbarRefresh() {
                   <div class="flex items-center gap-2">
                     <span class="text-[10px] font-bold uppercase surface-muted">{{ t('admin.ops.sla') }}</span>
                     <HelpTooltip v-if="!props.fullscreen" :content="t('admin.ops.tooltips.sla')" />
-                    <span class="h-1.5 w-1.5 rounded-full" :class="getSLAThresholdLevel(slaPercent) === 'critical' ? 'bg-red-500' : getSLAThresholdLevel(slaPercent) === 'warning' ? 'bg-yellow-500' : 'bg-green-500'"></span>
+                    <span class="console-data-mark h-1.5 w-1.5 rounded-full" :class="getSLAThresholdLevel(slaPercent) === 'critical' ? 'bg-red-500' : getSLAThresholdLevel(slaPercent) === 'warning' ? 'bg-yellow-500' : 'bg-green-500'"></span>
                   </div>
                   <button
                     v-if="!props.fullscreen"
@@ -1285,7 +1285,7 @@ function handleToolbarRefresh() {
                   {{ slaPercent == null ? '-' : `${slaPercent.toFixed(3)}%` }}
                 </div>
                 <div class="mt-3 h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-dark-700">
-                  <div class="h-full transition-all" :class="getSLAThresholdLevel(slaPercent) === 'critical' ? 'bg-red-500' : getSLAThresholdLevel(slaPercent) === 'warning' ? 'bg-yellow-500' : 'bg-green-500'" :style="{ width: `${Math.max((slaPercent ?? 0) - 90, 0) * 10}%` }"></div>
+                  <div class="console-data-mark h-full transition-all" :class="getSLAThresholdLevel(slaPercent) === 'critical' ? 'bg-red-500' : getSLAThresholdLevel(slaPercent) === 'warning' ? 'bg-yellow-500' : 'bg-green-500'" :style="{ width: `${Math.max((slaPercent ?? 0) - 90, 0) * 10}%` }"></div>
                 </div>
                 <div class="mt-3 text-xs">
                   <div class="flex justify-between">

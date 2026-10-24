@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, mount } from '@vue/test-utils'
-import { nextTick, type Component } from 'vue'
+import { effectScope, nextTick, ref, type Component } from 'vue'
+import { useConsoleAppearance } from '@/composables/useConsoleAppearance'
+import { defaultConsoleAppearance } from '@/types/appearance'
 import GroupDistributionChart from '../GroupDistributionChart.vue'
 import TokenUsageTrend from '../TokenUsageTrend.vue'
 import DailyRevenueChart from '@/components/admin/payment/DailyRevenueChart.vue'
@@ -42,26 +44,48 @@ const cases: { name: string; component: Component; props: Record<string, unknown
 ]
 
 describe('chart hover cards', () => {
-  // User requirement: every hover surface is a rounded card without a pointed
-  // arrow, and follows the light/dark theme while the page stays mounted.
-  it.each(cases)('$name passes card appearance to the canvas renderer in both themes', async ({ component, props }) => {
+  // docs/UI_INTERACTION.md: canvas hover cards follow global transparency and
+  // theme changes live; their text and 1px borders remain visible at 100%.
+  it.each(cases)('$name updates mounted canvas options from the published appearance in both themes', async ({ component, props }) => {
     document.documentElement.classList.remove('dark')
-    const wrapper = mount(component, {
-      props,
-      global: { stubs: { HelpTooltip: true, EmptyState: true, LoadingSpinner: true } },
-    })
-    // Read the actual boundary passed to Chart.js, rather than testing only the helper.
-    const canvasOptions = () => wrapper.findComponent({ name: 'CanvasChartStub' }).props('options').plugins.tooltip
-    expect(canvasOptions()).toMatchObject({ cornerRadius: 16, caretSize: 0, padding: 12, backgroundColor: '#f8faf9', titleColor: '#182e31', bodyColor: '#52676b' })
+    const scope = effectScope()
+    const appearance = ref(defaultConsoleAppearance())
+    scope.run(() => useConsoleAppearance(() => appearance.value))
+    try {
+      const wrapper = mount(component, {
+        props,
+        global: { stubs: { HelpTooltip: true, EmptyState: true, LoadingSpinner: true } },
+      })
+      // Read the actual options boundary passed to the canvas renderer, not
+      // the helper's return value or a separately recreated color formula.
+      const canvasOptions = () => wrapper.findComponent({ name: 'CanvasChartStub' }).props('options').plugins.tooltip
+      const lightContent = { cornerRadius: 16, caretSize: 0, padding: 12, titleColor: '#182e31', bodyColor: '#52676b', footerColor: '#182e31', borderColor: 'rgba(100, 116, 139, 0.34)', borderWidth: 1 }
+      const darkContent = { cornerRadius: 16, caretSize: 0, padding: 12, titleColor: '#eaf3f2', bodyColor: '#c1cdd1', footerColor: '#eaf3f2', borderColor: 'rgba(203, 213, 225, 0.28)', borderWidth: 1 }
+      expect(canvasOptions()).toMatchObject({ ...lightContent, backgroundColor: 'rgba(248, 250, 249, 1)' })
 
-    document.documentElement.classList.add('dark')
-    await new Promise(resolve => setTimeout(resolve, 0))
-    await nextTick()
-    expect(canvasOptions()).toMatchObject({ cornerRadius: 16, caretSize: 0, padding: 12, backgroundColor: '#262c2d', titleColor: '#eaf3f2', bodyColor: '#c1cdd1' })
+      appearance.value.card_transparency = 45
+      await nextTick()
+      expect(canvasOptions()).toMatchObject({ ...lightContent, backgroundColor: 'rgba(248, 250, 249, 0.55)' })
 
-    document.documentElement.classList.remove('dark')
-    await new Promise(resolve => setTimeout(resolve, 0))
-    await nextTick()
-    expect(canvasOptions()).toMatchObject({ backgroundColor: '#f8faf9', titleColor: '#182e31', bodyColor: '#52676b' })
+      appearance.value.card_transparency = 100
+      await nextTick()
+      expect(canvasOptions()).toMatchObject({ ...lightContent, backgroundColor: 'rgba(248, 250, 249, 0)' })
+
+      document.documentElement.classList.add('dark')
+      await new Promise(resolve => setTimeout(resolve, 0))
+      await nextTick()
+      expect(canvasOptions()).toMatchObject({ ...darkContent, backgroundColor: 'rgba(38, 44, 45, 0)' })
+
+      appearance.value.card_transparency = 0
+      await nextTick()
+      expect(canvasOptions()).toMatchObject({ ...darkContent, backgroundColor: 'rgba(38, 44, 45, 1)' })
+
+      document.documentElement.classList.remove('dark')
+      await new Promise(resolve => setTimeout(resolve, 0))
+      await nextTick()
+      expect(canvasOptions()).toMatchObject({ ...lightContent, backgroundColor: 'rgba(248, 250, 249, 1)' })
+    } finally {
+      scope.stop()
+    }
   })
 })

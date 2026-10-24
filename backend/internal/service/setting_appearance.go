@@ -24,15 +24,17 @@ const (
 	settingKeyConsoleBackground = "console_background_image"
 	consoleBackgroundPrefix     = "/api/v1/settings/console-background/"
 	MaxConsoleBackgroundBytes   = 2 << 20
+	defaultConsoleAccentColor   = "#14b8a6"
 )
 
 // ConsoleAppearance is public metadata only. Image bytes are stored separately.
-// A nil transparency preserves the built-in light/dark surface tokens.
+// A nil transparency lets clients use the default opacity.
 type ConsoleAppearance struct {
 	BackgroundURL    string `json:"background_url"`
 	LightMask        int    `json:"light_mask"`
 	DarkMask         int    `json:"dark_mask"`
 	CardTransparency *int   `json:"card_transparency"`
+	AccentColor      string `json:"accent_color"`
 }
 
 type ConsoleAppearanceUpdate struct {
@@ -41,13 +43,28 @@ type ConsoleAppearanceUpdate struct {
 	LightMask        int     `json:"light_mask"`
 	DarkMask         int     `json:"dark_mask"`
 	CardTransparency *int    `json:"card_transparency"`
+	// Omitted/null preserves the color; an empty string restores the default.
+	AccentColor *string `json:"accent_color"`
 }
 
 func defaultConsoleAppearance() ConsoleAppearance {
-	return ConsoleAppearance{LightMask: 30, DarkMask: 48}
+	return ConsoleAppearance{LightMask: 30, DarkMask: 48, AccentColor: defaultConsoleAccentColor}
 }
 
 func validConsolePercentage(value int) bool { return value >= 0 && value <= 100 }
+
+func normalizeConsoleAccentColor(value string) (string, bool) {
+	if value == "" {
+		return defaultConsoleAccentColor, true
+	}
+	if len(value) != 7 || value[0] != '#' {
+		return "", false
+	}
+	if _, err := hex.DecodeString(value[1:]); err != nil {
+		return "", false
+	}
+	return strings.ToLower(value), true
+}
 
 func validConsoleBackgroundURL(value string) bool {
 	if value == "" {
@@ -66,11 +83,23 @@ func parseConsoleAppearance(raw string) ConsoleAppearance {
 	if raw == "" {
 		return appearance
 	}
-	if json.Unmarshal([]byte(raw), &appearance) != nil ||
+	// Decode the color separately so a corrupt new field cannot discard an
+	// otherwise valid background or the existing mask and opacity settings.
+	stored := struct {
+		*ConsoleAppearance
+		AccentColor json.RawMessage `json:"accent_color"`
+	}{ConsoleAppearance: &appearance}
+	if json.Unmarshal([]byte(raw), &stored) != nil ||
 		!validConsolePercentage(appearance.LightMask) || !validConsolePercentage(appearance.DarkMask) ||
 		(appearance.CardTransparency != nil && !validConsolePercentage(*appearance.CardTransparency)) ||
 		!validConsoleBackgroundURL(appearance.BackgroundURL) {
 		return defaultConsoleAppearance()
+	}
+	var accent string
+	if json.Unmarshal(stored.AccentColor, &accent) == nil {
+		if normalized, ok := normalizeConsoleAccentColor(accent); ok {
+			appearance.AccentColor = normalized
+		}
 	}
 	return appearance
 }
@@ -128,6 +157,14 @@ func (s *SettingService) UpdateConsoleAppearance(ctx context.Context, update Con
 		(update.CardTransparency != nil && !validConsolePercentage(*update.CardTransparency)) {
 		return ConsoleAppearance{}, invalidConsoleAppearance("Mask strength and transparency must be between 0 and 100")
 	}
+	var accentColor string
+	if update.AccentColor != nil {
+		var valid bool
+		accentColor, valid = normalizeConsoleAccentColor(*update.AccentColor)
+		if !valid {
+			return ConsoleAppearance{}, invalidConsoleAppearance("Accent color must use the #RRGGBB format")
+		}
+	}
 	values, err := s.settingRepo.GetMultiple(ctx, []string{SettingKeyConsoleAppearance, settingKeyConsoleBackground})
 	if err != nil {
 		return ConsoleAppearance{}, err
@@ -152,6 +189,9 @@ func (s *SettingService) UpdateConsoleAppearance(ctx context.Context, update Con
 	appearance.LightMask = update.LightMask
 	appearance.DarkMask = update.DarkMask
 	appearance.CardTransparency = update.CardTransparency
+	if update.AccentColor != nil {
+		appearance.AccentColor = accentColor
+	}
 	encoded, err := json.Marshal(appearance)
 	if err != nil {
 		return ConsoleAppearance{}, err

@@ -25,7 +25,7 @@
         <div v-for="item in statusItems" :key="item.label" class="rounded-xl border border-gray-100 surface-inset px-3 py-3 dark:border-dark-700/60">
           <dt class="text-xs surface-muted">{{ item.label }}</dt>
           <dd class="mt-1.5 flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-white">
-            <span v-if="item.dot" class="h-2 w-2 shrink-0 rounded-full" :class="item.dot" />
+            <span v-if="item.dot" class="console-data-mark h-2 w-2 shrink-0 rounded-full" :class="item.dot" />
             <span class="min-w-0 truncate">{{ item.value }}</span>
           </dd>
         </div>

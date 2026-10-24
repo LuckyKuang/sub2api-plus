@@ -23,12 +23,17 @@
 }
 .workspace-tab:hover:not(:disabled) { background: var(--surface-hover); color: var(--surface-text); }
 .workspace-tab[aria-selected="true"] {
-  background: color-mix(in srgb, #14b8a6 24%, var(--surface-solid));
-  border-color: rgb(20 184 166 / 55%);
-  box-shadow: inset 0 0 0 1px rgb(20 184 166 / 16%);
-  color: var(--surface-text);
+  background: rgb(var(--console-accent-500, 20 184 166) / calc(.24 * var(--console-card-alpha, 1)));
+  border-color: rgb(var(--console-accent-500, 20 184 166) / 65%);
+  box-shadow: inset 0 0 0 1px rgb(var(--console-accent-500, 20 184 166) / 14%);
+  color: var(--console-accent-readable, var(--surface-text));
 }
-.workspace-tab:focus-visible { outline: 2px solid #14b8a6; outline-offset: 2px; }
+.workspace-tab[aria-selected="true"]:is(:hover, :active, :focus, :focus-visible) {
+  background: rgb(var(--console-accent-500, 20 184 166) / calc(.30 * var(--console-card-alpha, 1)));
+  border-color: rgb(var(--console-accent-500, 20 184 166) / 80%);
+  color: var(--console-accent-readable, var(--surface-text));
+}
+.workspace-tab:focus-visible { outline: 2px solid rgb(var(--console-accent-500, 20 184 166) / 75%); outline-offset: 2px; }
 .workspace-tab:disabled { opacity: .5; cursor: not-allowed; }
 
 @media (min-width: 1024px) {
@@ -52,9 +57,12 @@
   .workspace-body, .workspace-scroll, .workspace-stack { gap: 12px !important; }
   .workspace-fixed { flex: 0 0 auto; }
   .workspace-scroll { overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-gutter: stable; border-radius: var(--surface-radius); }
+  /* The scrollport owns its outline, so content cannot scroll its top edge away. */
+  .app-main .workspace-scroll:not(.workspace-scroll .workspace-scroll) { border: 1px solid var(--surface-edge); }
   .workspace-scroll > * { flex-shrink: 0; margin-top: 0 !important; margin-bottom: 0 !important; }
   .workspace-scroll > .workspace-body { flex-shrink: 1; }
   .workspace-clip, .workspace-table-card { overflow: hidden; border-radius: var(--surface-radius); }
+  .workspace-clip > :first-child:is(.card, .surface-card, .settings-tabs-shell, .workspace-tabs) { border-radius: var(--surface-radius); }
   .workspace-table-viewport {
     flex: 1 1 0%; min-height: 0; min-width: 0; height: auto !important; max-height: none !important;
     overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-gutter: stable;
@@ -65,6 +73,15 @@
   .workspace-page .record-table-scroll { border-radius: var(--surface-radius-panel); }
   .table-scroll-container { border-radius: var(--surface-radius); }
   .app-layout-workspace .table-page-layout:not(.mobile-mode) { flex: 1; height: 100%; min-height: 0; gap: 12px; }
+}
+
+/* Filter bars without their own card share the table card's outside corners. */
+.table-page-layout > .layout-section-fixed:not(.table-page-pagination):has(input.input, .select-trigger):not(:has(> .card, > .surface-card)) {
+  padding: 12px;
+  border: 1px solid var(--surface-edge);
+  border-radius: var(--surface-radius);
+  background-color: var(--surface-fill);
+  background-image: linear-gradient(135deg, var(--surface-glint), transparent 65%);
 }
 
 @media (max-width: 1023px) {

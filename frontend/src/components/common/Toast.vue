@@ -169,7 +169,7 @@ const removeToast = (id: string) => {
   transition: background-color 150ms ease, color 150ms ease;
 }
 .toast-close:hover { background-color: var(--surface-hover); color: var(--surface-text); }
-.toast-close:focus-visible { outline: 2px solid rgb(20 184 166 / 65%); outline-offset: 2px; }
+.toast-close:focus-visible { outline: 2px solid rgb(var(--console-accent-500, 20 184 166) / 65%); outline-offset: 2px; }
 
 .toast-progress-track {
   position: absolute;

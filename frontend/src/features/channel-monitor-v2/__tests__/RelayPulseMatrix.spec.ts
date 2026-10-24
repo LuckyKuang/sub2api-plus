@@ -49,6 +49,7 @@ import { mount, enableAutoUnmount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import RelayPulseMatrix from '../RelayPulseMatrix.vue'
+import matrixSource from '../RelayPulseMatrix.vue?raw'
 import type { MonitorCoverage, MonitorHealth, MonitorMatrixRow, MonitorMetric } from '@/api/channelMonitorV2'
 
 const health: MonitorHealth = {
@@ -89,6 +90,7 @@ let rowHeight = 36
 let deferScrollEvents = false
 const delayedScrollTargets = new Set<HTMLElement>()
 const observers: Array<{ targets: Set<Element>; callback: ResizeObserverCallback }> = []
+let matrixStyle: HTMLStyleElement
 const rect = (width: number, height: number) => ({ x: 0, y: 0, left: 0, top: 0, right: width, bottom: height, width, height, toJSON() {} })
 function size(element: Element) {
   if (element.classList.contains('matrix-scroll')) return rect(viewportWidth, viewportHeight)
@@ -108,6 +110,11 @@ function notifyResize() {
   }
 }
 beforeEach(() => {
+  // Apply the component's real stylesheet: jsdom exposes clip-path without
+  // resolving custom properties, so the clipping helper resolves its top inset.
+  matrixStyle = document.createElement('style')
+  matrixStyle.textContent = matrixSource.match(/<style scoped>([\s\S]*?)<\/style>/)![1]
+  document.head.append(matrixStyle)
   viewportWidth = 1024; viewportHeight = 240; rowHeight = 36
   deferScrollEvents = false
   delayedScrollTargets.clear()
@@ -148,7 +155,7 @@ beforeEach(() => {
     else this.dispatchEvent(new Event('scroll'))
   })
 })
-afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
+afterEach(() => { matrixStyle.remove(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
 const coverage: MonitorCoverage = {
   requested_start: '2026-08-01T00:00:00Z', requested_end: '2026-08-01T00:18:00Z',
@@ -177,6 +184,14 @@ async function scroll(wrapper: ReturnType<typeof mountMatrix>, top: number) {
   element.scrollTop = top
   await wrapper.get('.matrix-scroll').trigger('scroll')
   await settle()
+}
+function bodyClipTop(wrapper: ReturnType<typeof mountMatrix>): number {
+  const body = wrapper.get('.matrix-virtual-body').element
+  const viewport = wrapper.get('.matrix-scroll').element
+  const clip = getComputedStyle(body).clipPath
+  const top = clip.match(/^inset\((.*?)\s+0\s+0\)$/)?.[1] ?? ''
+  return parseFloat(top.replace(/var\((--[\w-]+)(?:,\s*([^)]*))?\)/g, (_, name, fallback) =>
+    getComputedStyle(viewport).getPropertyValue(name).trim() || fallback || ''))
 }
 
 describe('RelayPulseMatrix', () => {
@@ -240,6 +255,29 @@ describe('RelayPulseMatrix', () => {
       const expected = top === 0 ? 0 : top === 7200 ? 200 : 416
       expect(wrapper.find(`[data-index="${expected}"]`).exists()).toBe(true)
     }
+  })
+
+  it('clips rows at the transparent sticky header during real scroll events without changing virtual geometry', async () => {
+    const wrapper = mountMatrix(417)
+    await settle()
+    const body = wrapper.get('.matrix-virtual-body').element as HTMLElement
+    const bodyHeight = body.style.height
+    const observerCount = observers.length
+    for (const top of [0, 4, 16, 30, 120, 1229, 0]) {
+      await scroll(wrapper, top)
+      // The body starts immediately below the header, then moves up by the
+      // scroll distance. Its painted top must stay at the header's bottom.
+      expect(bodyClipTop(wrapper)).toBe(top)
+      expect(body.style.height).toBe(bodyHeight)
+      expect(wrapper.get('.matrix-header').classes()).toContain('sticky')
+      expect(wrapper.findAll('.matrix-data-row').length).toBeLessThan(25)
+    }
+    expect(observers).toHaveLength(observerCount)
+    const first = wrapper.get('[data-index="0"] [data-column="0"]')
+    ;(first.element as HTMLElement).focus()
+    await first.trigger('keydown', { key: 'ArrowDown' })
+    await settle()
+    expect(document.activeElement).toBe(wrapper.get('[data-index="1"] [data-column="0"]').element)
   })
 
   it('releases detached row nodes from the virtualizer cache after repeated scrolling', async () => {
@@ -316,16 +354,19 @@ describe('RelayPulseMatrix', () => {
     await wrapper.setProps({ rows: rows(417).slice(150) })
     await settle()
     expect((wrapper.get('.matrix-scroll').element as HTMLElement).scrollTop).toBe(7200)
+    expect(bodyClipTop(wrapper)).toBe(7200)
     await wrapper.setProps({ rows: rows(12) })
     await settle()
     const top = (wrapper.get('.matrix-scroll').element as HTMLElement).scrollTop
-    expect(top).toBeGreaterThanOrEqual(0)
-    expect(top).toBeLessThanOrEqual(36 + 12 * 36 - viewportHeight)
+    // Twelve 36px records plus the 36px header fill a 240px viewport.
+    expect(top).toBe(228)
+    expect(bodyClipTop(wrapper)).toBe(228)
     const viewState = wrapper.emitted('update:viewState')!.at(-1)![0]
     wrapper.unmount()
     const rebuilt = mountMatrix(12, { viewState })
     await settle()
     expect((rebuilt.get('.matrix-scroll').element as HTMLElement).scrollTop).toBe(top)
+    expect(bodyClipTop(rebuilt)).toBe(228)
     expect(rebuilt.findAll('.matrix-data-row').length).toBeGreaterThan(0)
   })
 

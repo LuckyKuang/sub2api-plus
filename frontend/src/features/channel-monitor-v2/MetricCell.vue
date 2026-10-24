@@ -5,7 +5,7 @@
   >
     <div
       v-if="resolvedState"
-      class="mt-1 h-2 w-2 shrink-0 rounded-full"
+      class="console-data-mark mt-1 h-2 w-2 shrink-0 rounded-full"
       :class="dotClass"
       aria-hidden="true"
     ></div>
@@ -75,6 +75,6 @@ const dotClass = computed(() => {
   if (resolvedState.value === 'healthy') return 'bg-emerald-500'
   if (resolvedState.value === 'warning') return 'bg-amber-500'
   if (resolvedState.value === 'critical') return 'bg-red-500'
-  return 'bg-gray-300 dark:surface-inset'
+  return 'bg-gray-300 dark:bg-dark-400'
 })
 </script>

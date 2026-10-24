@@ -103,7 +103,7 @@ describe('shared surface overlay safety', () => {
   })
 })
 
-describe('shared solid surface rendering', () => {
+describe('shared transparent surface rendering', () => {
   it('never applies backdrop filtering or retains the obsolete filter tokens', () => {
     stylesheet.walkDecls(declaration => {
       if (backdropProperties.includes(declaration.prop)) {
@@ -121,30 +121,36 @@ describe('shared solid surface rendering', () => {
     }
   })
 
-  it('uses opaque theme fills independently of custom card transparency', () => {
+  // Audited global appearance contract: fill alpha reaches zero at 100%
+  // transparency, while the 1px frame remains visible in both themes.
+  it('shares fill transparency across surface roles without fading their outlines', () => {
     const root = declarationsFor(document.documentElement)
     const fills = ['--surface-fill', '--surface-shell', '--surface-field', '--surface-panel', '--surface-sticky']
     for (const property of fills) {
       expect(lastValue(root, property), property).toBe('var(--surface-solid)')
     }
-    expect(lastValue(root, '--surface-solid')).toBe('#f8faf9')
-    expect(lastValue(root, '--surface-soft')).toBe('#edf2f0')
+    expect(lastValue(root, '--surface-solid')).toBe('rgb(248 250 249 / var(--console-card-alpha, 1))')
+    expect(lastValue(root, '--surface-soft')).toBe('rgb(237 242 240 / var(--console-card-alpha, 1))')
+    expect(lastValue(root, '--surface-edge')).toBe('rgb(100 116 139 / 34%)')
     const dark = declarationsFor(fixture('<div class="dark"></div>'))
-    expect(lastValue(dark, '--surface-solid')).toBe('#262c2d')
-    expect(lastValue(dark, '--surface-soft')).toBe('#202627')
+    expect(lastValue(dark, '--surface-solid')).toBe('rgb(38 44 45 / var(--console-card-alpha, 1))')
+    expect(lastValue(dark, '--surface-soft')).toBe('rgb(32 38 39 / var(--console-card-alpha, 1))')
+    expect(lastValue(dark, '--surface-edge')).toBe('rgb(203 213 225 / 28%)')
 
     // Check every override, including media queries and custom appearance rules,
-    // so an old translucent dark-mode or preference override cannot restore it.
+    // so a page-specific preference cannot restore an opaque surface or fade
+    // an outline when the user requests fully transparent cards.
     stylesheet.walkDecls(declaration => {
       if (fills.includes(declaration.prop)) expect(declaration.value).toBe('var(--surface-solid)')
       expect(`${declaration.prop}: ${declaration.value}`).not.toMatch(/--surface-(?:inset|field|sticky)-alpha\b/)
-      if (fills.includes(declaration.prop) || declaration.prop === '--surface-soft') {
-        expect(declaration.value).not.toContain('--console-card-alpha')
+      if (['--surface-solid', '--surface-soft', '--surface-glint', '--surface-hover', '--surface-selected'].includes(declaration.prop)) {
+        expect(declaration.value).toContain('--console-card-alpha')
       }
+      if (declaration.prop === '--surface-edge') expect(declaration.value).not.toContain('--console-card-alpha')
     })
   })
 
-  it('keeps the grid-based monitor header opaque without changing its positioning', () => {
+  it('keeps the grid-based monitor header on the shared fill without changing its positioning', () => {
     const header = fixture('<div class="matrix-header sticky"></div>')
     const declarations = declarationsFor(header, '::before')
     expect(lastValue(declarations, 'background-color')).toBe('var(--surface-sticky)')

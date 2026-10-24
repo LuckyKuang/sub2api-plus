@@ -272,7 +272,7 @@
               <button
                 @click="handleTestConnection(row)"
                 :disabled="testingProxyIds.has(row.id)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors hover:bg-emerald-50/25 hover:text-emerald-600 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-emerald-900/20 dark:hover:text-emerald-400 surface-control surface-muted"
+                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors hover:bg-primary-50/25 hover:text-primary-600 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-primary-900/20 dark:hover:text-primary-400 surface-control surface-muted"
               >
                 <svg
                   v-if="testingProxyIds.has(row.id)"

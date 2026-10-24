@@ -39,7 +39,7 @@
             <div v-else class="space-y-3">
               <div v-for="method in stats.payment_methods" :key="method.type" class="flex items-center justify-between">
                 <div class="flex items-center gap-2">
-                  <span :class="['inline-block h-3 w-3 rounded-full', methodColor(method.type)]"></span>
+                  <span :class="['console-data-mark inline-block h-3 w-3 rounded-full', methodColor(method.type)]"></span>
                   <span class="text-sm surface-muted">{{ t('payment.methods.' + method.type, method.type) }}</span>
                 </div>
                 <div class="space-y-1 text-right">

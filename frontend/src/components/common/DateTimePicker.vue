@@ -374,7 +374,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .date-time-picker { position: relative; min-width: 0; }
-.date-time-picker:focus-within { border-color: rgb(20 184 166); box-shadow: 0 0 0 2px rgb(20 184 166 / 30%); }
+.date-time-picker:focus-within { border-color: rgb(var(--console-accent-500, 20 184 166)); box-shadow: 0 0 0 2px rgb(var(--console-accent-500, 20 184 166) / 30%); }
 .date-time-picker-disabled { opacity: 0.6; cursor: not-allowed; }
 .date-time-value-proxy { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; overflow: hidden; }
 .date-time-trigger { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 0.5rem; text-align: left; min-width: 0; border-radius: inherit; outline: none; }
@@ -391,11 +391,11 @@ onBeforeUnmount(() => {
 .date-time-day { min-width: 0; height: 36px; border: 1px solid transparent; border-radius: var(--surface-radius-item); font-size: 13px; font-variant-numeric: tabular-nums; }
 .date-time-day-outside { color: var(--surface-muted); opacity: 0.65; }
 .date-time-day-today { border-color: var(--surface-edge); }
-.date-time-day-selected { color: #042f2e; background: #14b8a6; border-color: #14b8a6; opacity: 1; }
+.date-time-day-selected { color: var(--console-accent-readable, var(--surface-text)); background: rgb(var(--console-accent-500, 20 184 166)); border-color: rgb(var(--console-accent-500, 20 184 166)); opacity: 1; }
 .date-time-panel button:not(:disabled):hover { background-color: var(--surface-hover); }
-.date-time-panel .date-time-day-selected:not(:disabled):hover { background-color: #2dd4bf; }
+.date-time-panel .date-time-day-selected:not(:disabled):hover { background-color: rgb(var(--console-accent-400, 45 212 191)); }
 .date-time-panel button:disabled { cursor: not-allowed; opacity: 0.35; }
-.date-time-panel :is(button, input):focus-visible { outline: 2px solid rgb(20 184 166 / 60%); outline-offset: 1px; }
+.date-time-panel :is(button, input):focus-visible { outline: 2px solid rgb(var(--console-accent-500, 20 184 166) / 60%); outline-offset: 1px; }
 .date-time-clock { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 12px; padding: 12px; border: 1px solid var(--surface-edge); border-radius: 14px; background: var(--surface-soft); }
 .date-time-clock:first-child { margin-top: 0; }
 .date-time-clock-part { flex: 1 0 90px; min-width: 0; text-align: center; }

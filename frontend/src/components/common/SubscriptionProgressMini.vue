@@ -13,7 +13,7 @@
           <div
             v-for="(sub, index) in displaySubscriptions.slice(0, 3)"
             :key="index"
-            class="h-2 w-2 rounded-full"
+            class="console-data-mark h-2 w-2 rounded-full"
             :class="getProgressDotClass(sub)"
           ></div>
         </div>
@@ -79,7 +79,7 @@
                   }}</span>
                   <div class="h-1.5 min-w-0 flex-1 rounded-full bg-gray-200 dark:bg-dark-600">
                     <div
-                      class="h-1.5 rounded-full transition-all"
+                      class="console-data-mark h-1.5 rounded-full transition-all"
                       :class="getProgressBarClass(subscription.five_hour_usage_usd, subscription.group?.five_hour_limit_usd)"
                       :style="{ width: getProgressWidth(subscription.five_hour_usage_usd, subscription.group?.five_hour_limit_usd) }"
                     ></div>
@@ -95,7 +95,7 @@
                   }}</span>
                   <div class="h-1.5 min-w-0 flex-1 rounded-full bg-gray-200 dark:bg-dark-600">
                     <div
-                      class="h-1.5 rounded-full transition-all"
+                      class="console-data-mark h-1.5 rounded-full transition-all"
                       :class="
                         getProgressBarClass(
                           subscription.daily_usage_usd,
@@ -123,7 +123,7 @@
                   }}</span>
                   <div class="h-1.5 min-w-0 flex-1 rounded-full bg-gray-200 dark:bg-dark-600">
                     <div
-                      class="h-1.5 rounded-full transition-all"
+                      class="console-data-mark h-1.5 rounded-full transition-all"
                       :class="
                         getProgressBarClass(
                           subscription.weekly_usage_usd,
@@ -151,7 +151,7 @@
                   }}</span>
                   <div class="h-1.5 min-w-0 flex-1 rounded-full bg-gray-200 dark:bg-dark-600">
                     <div
-                      class="h-1.5 rounded-full transition-all"
+                      class="console-data-mark h-1.5 rounded-full transition-all"
                       :class="
                         getProgressBarClass(
                           subscription.monthly_usage_usd,

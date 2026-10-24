@@ -2,7 +2,13 @@ export default {
     settings: {
       appearance: {
         title: '外观与背景',
-        description: '仅管理员可设置，管理端和用户端共用背景与卡片样式。点击「保存外观」后全局生效。',
+        description: '统一管理端和用户端的强调色、卡片透明度与页面背景。点击「保存外观」后全局生效。',
+        accent: '全局强调色', chooseAccent: '选择强调色', accentHex: '强调色色值',
+        accentHint: '默认绿色 #14B8A6，统一按钮、选中状态、悬停和焦点颜色。',
+        accentInvalid: '请输入六位 HEX 色值，例如 #14B8A6。',
+        accentGreen: '默认绿色', accentBlue: '蓝色', accentIndigo: '靛蓝', accentPurple: '紫色', accentPink: '粉色', accentAmber: '琥珀色',
+        transparency: '全局卡片透明度', opaque: '0% · 不透明', transparent: '100% · 透明',
+        transparencyHint: '统一调整卡片、下拉框、弹层、展开区域、表格与按钮的背景透明度，文字、图标和边框保持清晰。',
         upload: '上传 / 替换背景', processing: '正在处理图片…',
         uploadHint: '支持 JPG、PNG、WebP，原图不超过 10 MiB，自动缩放压缩。背景铺满窗口，不同比例的屏幕会适当裁剪。',
         restore: '恢复默认', light: '浅色主题', dark: '深色主题', sample: '卡片预览',

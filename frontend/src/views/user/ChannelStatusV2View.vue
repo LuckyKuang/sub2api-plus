@@ -16,7 +16,7 @@
             <div class="page-description mt-1.5 flex flex-wrap items-center gap-2 text-xs surface-muted">
               <span class="relative flex h-2 w-2 shrink-0">
                 <span
-                  class="relative inline-flex h-2 w-2 rounded-full"
+                  class="console-data-mark relative inline-flex h-2 w-2 rounded-full"
                   :class="loading || refreshing ? 'bg-gray-400' : 'bg-green-500'"
                 ></span>
               </span>
@@ -83,7 +83,7 @@
             :aria-label="t('channelMonitorV2.bootstrap.working')"
           >
             <div
-              class="h-full rounded-full bg-blue-500 transition-[width] duration-500 ease-out dark:bg-blue-400"
+              class="console-data-mark h-full rounded-full bg-blue-500 transition-[width] duration-500 ease-out dark:bg-blue-400"
               :style="{ width: `${bootstrapPercent}%` }"
             />
           </div>
@@ -353,7 +353,7 @@
                 </span>
                 <span class="h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-dark-700">
                   <i
-                    class="block h-full rounded-full"
+                    class="console-data-mark block h-full rounded-full"
                     :class="row.ignored ? 'bg-gray-400 dark:bg-gray-500' : 'bg-gradient-to-r from-red-400 to-red-500'"
                     :style="{ width: `${Math.max(2, row.rate * 100)}%` }"
                   ></i>

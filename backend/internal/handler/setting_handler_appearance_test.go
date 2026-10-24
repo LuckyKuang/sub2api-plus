@@ -30,7 +30,7 @@ func TestConsoleBackgroundHTTPAndPublicMetadata(t *testing.T) {
 	revision := hex.EncodeToString(sum[:])
 	path := "/api/v1/settings/console-background/" + revision
 	repo := &settingHandlerPublicRepoStub{values: map[string]string{
-		"console_appearance":       fmt.Sprintf(`{"background_url":%q,"light_mask":30,"dark_mask":48,"card_transparency":45}`, path),
+		"console_appearance":       fmt.Sprintf(`{"background_url":%q,"light_mask":30,"dark_mask":48,"card_transparency":45,"accent_color":"#F59E0B"}`, path),
 		"console_background_image": base64.StdEncoding.EncodeToString(imageBytes.Bytes()),
 	}}
 	h := NewSettingHandler(service.NewSettingService(repo, &config.Config{}), "test")
@@ -55,6 +55,7 @@ func TestConsoleBackgroundHTTPAndPublicMetadata(t *testing.T) {
 	require.Equal(t, 200, rec.Code)
 	require.Contains(t, rec.Body.String(), `"console_appearance"`)
 	require.Contains(t, rec.Body.String(), path)
+	require.Contains(t, rec.Body.String(), `"accent_color":"#f59e0b"`)
 	require.NotContains(t, rec.Body.String(), repo.values["console_background_image"])
 	repo.values["console_appearance"] = `{"background_url":"","light_mask":30,"dark_mask":48,"card_transparency":null}`
 	rec = httptest.NewRecorder()

@@ -277,7 +277,7 @@
                 ]"
                 :title="getOpenAICompactTitle(row)"
               >
-                <span :class="['h-1.5 w-1.5 rounded-full', getOpenAICompactMeta(row)?.dotClass]" />
+                <span :class="['console-data-mark h-1.5 w-1.5 rounded-full', getOpenAICompactMeta(row)?.dotClass]" />
                 <span>{{ getOpenAICompactMeta(row)?.label }}</span>
               </div>
             </div>

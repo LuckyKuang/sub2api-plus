@@ -353,8 +353,8 @@ onUnmounted(() => {
 .batch-test-btn {
   @apply flex-shrink-0 p-1.5;
   border-radius: var(--surface-radius-item);
-  @apply text-gray-500 hover:text-emerald-600 dark:hover:text-emerald-400;
-  @apply hover:bg-emerald-50/25 dark:hover:bg-emerald-900/20;
+  @apply text-gray-500 hover:text-primary-600 dark:hover:text-primary-400;
+  @apply hover:bg-primary-50/25 dark:hover:bg-primary-900/20;
   @apply transition-colors disabled:cursor-not-allowed disabled:opacity-50;
 }
 
@@ -391,8 +391,8 @@ onUnmounted(() => {
 .test-btn {
   @apply flex-shrink-0 p-1;
   border-radius: var(--surface-radius-item);
-  @apply text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400;
-  @apply hover:bg-emerald-50/25 dark:hover:bg-emerald-900/20;
+  @apply text-gray-400 hover:text-primary-600 dark:hover:text-primary-400;
+  @apply hover:bg-primary-50/25 dark:hover:bg-primary-900/20;
   @apply transition-colors disabled:cursor-not-allowed disabled:opacity-50;
 }
 

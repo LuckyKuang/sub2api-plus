@@ -36,7 +36,7 @@
             class="flex items-center justify-between border-b border-gray-100 p-4 dark:border-dark-700"
           >
             <div class="flex items-center gap-3">
-              <div :class="['h-1.5 w-1.5 shrink-0 rounded-full', platformAccentDotClass(subscription.group?.platform || '')]" />
+              <div :class="['console-data-mark h-1.5 w-1.5 shrink-0 rounded-full', platformAccentDotClass(subscription.group?.platform || '')]" />
               <div>
                 <div class="flex items-center gap-2">
                   <h3 class="font-semibold text-gray-900 dark:text-white">
@@ -114,7 +114,7 @@
               </div>
               <div class="relative h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-dark-600">
                 <div
-                  class="absolute inset-y-0 left-0 rounded-full transition-all duration-300"
+                  class="console-data-mark absolute inset-y-0 left-0 rounded-full transition-all duration-300"
                   :class="getProgressBarClass(subscription.five_hour_usage_usd, subscription.group.five_hour_limit_usd)"
                   :style="{ width: getProgressWidth(subscription.five_hour_usage_usd, subscription.group.five_hour_limit_usd) }"
                 ></div>
@@ -141,7 +141,7 @@
               </div>
               <div class="relative h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-dark-600">
                 <div
-                  class="absolute inset-y-0 left-0 rounded-full transition-all duration-300"
+                  class="console-data-mark absolute inset-y-0 left-0 rounded-full transition-all duration-300"
                   :class="
                     getProgressBarClass(
                       subscription.daily_usage_usd,
@@ -178,7 +178,7 @@
               </div>
               <div class="relative h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-dark-600">
                 <div
-                  class="absolute inset-y-0 left-0 rounded-full transition-all duration-300"
+                  class="console-data-mark absolute inset-y-0 left-0 rounded-full transition-all duration-300"
                   :class="
                     getProgressBarClass(
                       subscription.weekly_usage_usd,
@@ -219,7 +219,7 @@
               </div>
               <div class="relative h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-dark-600">
                 <div
-                  class="absolute inset-y-0 left-0 rounded-full transition-all duration-300"
+                  class="console-data-mark absolute inset-y-0 left-0 rounded-full transition-all duration-300"
                   :class="
                     getProgressBarClass(
                       subscription.monthly_usage_usd,

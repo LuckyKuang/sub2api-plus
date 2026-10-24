@@ -33,7 +33,7 @@ function table(markup = '<thead><tr><th>User</th><th>Account</th></tr></thead><t
   return container
 }
 
-afterEach(() => document.body.replaceChildren())
+afterEach(() => { document.body.replaceChildren(); document.documentElement.removeAttribute('data-console-transparent-cards') })
 
 describe('record table appearance requirements', () => {
   it('keeps native table measurement with 8px row gaps and four 16px outside corners', () => {
@@ -60,11 +60,12 @@ describe('record table appearance requirements', () => {
     })
   })
 
-  it.each(['', 'dark'])('uses opaque flat headers, 12px gutters and a 12px header gap in %s mode', theme => {
+  it.each(['', 'dark'])('uses flat headers, transparent 12px gutters and a 12px header gap in %s mode', theme => {
     const container = table()
     container.classList.add(...theme.split(' ').filter(Boolean))
     const scroll = paint(container)
-    expect(scroll.get('border-inline')).toBe('12px solid var(--record-table-bg)')
+    expect(scroll.get('border-inline')).toBe('12px solid transparent')
+    expect(scroll.get('background-color')).toBe('transparent')
     expect(scroll.get('padding')).toBe('8px 0')
     expect(paint(container.querySelector('thead')!).get('background-color')).toBe('var(--record-table-bg, var(--surface-solid))')
     for (const header of container.querySelectorAll('th')) {
@@ -87,7 +88,11 @@ describe('record table appearance requirements', () => {
       expect(cellPaint.get('border')).toBe('0 solid transparent')
       expect(cellPaint.get('background-color')).toBe('var(--record-row-bg, var(--surface-soft))')
       expect(cellPaint.get('background-clip')).toBe('padding-box')
-      expect(cellPaint.get('box-shadow')).toBe('none')
+      expect(cellPaint.get('--record-edge-top')).toBe('inset 0 1px 0 var(--record-row-edge)')
+      expect(cellPaint.get('--record-edge-bottom')).toBe('inset 0 -1px 0 var(--record-row-edge)')
+      expect(cellPaint.get('--record-edge-left')).toBe('inset 0 0 0 transparent')
+      expect(cellPaint.get('--record-edge-right')).toBe('inset 0 0 0 transparent')
+      expect(cellPaint.get('box-shadow')).toContain('var(--record-edge-top)')
     }
     // Interior pinned cells keep ordinary record paint. Only actual outer
     // table edges need a square blocker and an independently rounded fill.
@@ -108,6 +113,7 @@ describe('record table appearance requirements', () => {
       expect(rounded.get('pointer-events')).toBe('none')
       expect(rounded.get('background-color')).toBe('var(--record-row-bg, var(--surface-soft))')
       expect(rounded.get('background-image')).toContain('var(--record-row-tint, transparent)')
+      expect(rounded.get('box-shadow')).toContain('var(--record-edge-left)')
       // A matching border-radius shorthand can reset these longhands through
       // specificity even when declared earlier. Forbid that competing reset.
       expect(rounded.has('border-radius')).toBe(false)
@@ -118,6 +124,33 @@ describe('record table appearance requirements', () => {
     }
   })
 
+  it('uses geometric clipping instead of solid pinned blockers only when transparency is enabled', () => {
+    const container = table('<tbody><tr><td class="sticky-col sticky-col-left">User</td><td>Model</td><td class="sticky-col sticky-col-right">Actions</td></tr></tbody>')
+    const cells = container.querySelectorAll('.sticky-col')
+    for (const cell of cells) expect(paint(cell).get('background-color')).toBe('var(--record-table-bg, var(--surface-solid))')
+    document.documentElement.setAttribute('data-console-transparent-cards', '')
+    for (const cell of cells) expect(paint(cell).get('background-color')).toBe('transparent')
+  })
+
+  // Audited requirement: every record has a 1px outline even at 100% fill
+  // transparency; hovering/selection changes its color, never its row geometry.
+  it.each([
+    ['', 'var(--surface-edge)'],
+    ['data-hover', 'rgb(var(--console-accent-500, 20 184 166) / 80%)'],
+    ['aria-selected="true"', 'rgb(var(--console-accent-500, 20 184 166) / 95%)'],
+  ])('keeps independent record outlines in state %s', (state, edge) => {
+    const container = table(`<tbody><tr ${state}><td>User</td><td>Account</td></tr></tbody>`)
+    const row = container.querySelector('tr')!
+    expect(paint(row).get('--record-row-edge')).toBe(edge)
+    expect(edge).not.toContain('--console-card-alpha')
+    const first = paint(row.firstElementChild!)
+    const last = paint(row.lastElementChild!)
+    expect(first.get('--record-edge-left')).toBe('inset 1px 0 0 var(--record-row-edge)')
+    expect(last.get('--record-edge-right')).toBe('inset -1px 0 0 var(--record-row-edge)')
+    expect(first.get('border-block-width')).toBe('4px')
+    expect(last.get('border-block-width')).toBe('4px')
+  })
+
   it('paints rowspan/expanded groups as one hovered record and leaves virtual spacers unpainted', () => {
     const container = table(`<tbody class="record-group" data-hover><tr><td rowspan="2" data-record-edges="t b l tl bl">Channel</td><td data-record-edges="t r tr">Platform</td></tr><tr><td data-record-edges="b r br">Details</td></tr></tbody><tbody><tr aria-hidden="true"><td colspan="2" style="height:300px"></td></tr></tbody>`)
     expect(paint(container.querySelector('.record-group')!).get('--record-row-tint')).toBe('var(--surface-hover)')
@@ -126,11 +159,34 @@ describe('record table appearance requirements', () => {
     expect(spanning.get('border-bottom-width')).toBe('4px')
     expect(spanning.get('border-top-left-radius')).toBe('16px 20px')
     expect(spanning.get('border-bottom-left-radius')).toBe('16px 20px')
+    expect(spanning.get('--record-edge-top')).toBe('inset 0 1px 0 var(--record-row-edge)')
+    expect(spanning.get('--record-edge-bottom')).toBe('inset 0 -1px 0 var(--record-row-edge)')
+    expect(spanning.get('--record-edge-left')).toBe('inset 1px 0 0 var(--record-row-edge)')
+    const top = paint(container.querySelector('[data-record-edges="t r tr"]')!)
+    expect(top.get('--record-edge-bottom')).toBe('inset 0 0 0 transparent')
+    const bottom = paint(container.querySelector('[data-record-edges="b r br"]')!)
+    expect(bottom.get('--record-edge-top')).toBe('inset 0 0 0 transparent')
     const spacer = container.querySelector('[aria-hidden] td')!
     expect(paint(spacer).get('border')).toBe('0')
     expect(paint(spacer).get('padding')).toBe('0')
     expect(paint(spacer).get('background')).toBe('none')
+    expect(paint(spacer).get('box-shadow')).toBeUndefined()
     expect((spacer as HTMLElement).style.height).toBe('300px')
+  })
+
+  // Short statistic rows keep their existing modest corners when an outline is
+  // added; sticky edge fills must use the same corner as the visible record.
+  it.each([
+    ['record-table-compact', '10px'],
+    ['record-table-compact record-table-dense', '6px'],
+  ])('preserves short-row corners for %s', (classes, radius) => {
+    const container = table('<tbody><tr><td class="sticky-col sticky-col-left">Model</td><td class="sticky-col sticky-col-right">Usage</td></tr></tbody>')
+    const recordTable = container.querySelector('table')!
+    recordTable.classList.add(...classes.split(' '))
+    expect(paint(recordTable).get('--record-compact-radius')).toBe(radius)
+    const row = container.querySelector('tr')!
+    expect(paint(row.firstElementChild!, '::before').get('border-top-left-radius')).toBe('var(--record-compact-radius)')
+    expect(paint(row.lastElementChild!, '::before').get('border-bottom-right-radius')).toBe('var(--record-compact-radius)')
   })
 
   it('opts every authored Vue table into the shared record-card layout', () => {

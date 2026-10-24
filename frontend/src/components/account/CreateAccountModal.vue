@@ -2617,7 +2617,7 @@
                           rule.scope === option.value ? 'border-primary-500' : 'border-gray-300 dark:border-dark-500'
                         ]"
                       >
-                        <span v-if="rule.scope === option.value" class="h-1.5 w-1.5 rounded-full bg-primary-500" />
+                        <span v-if="rule.scope === option.value" class="console-data-mark h-1.5 w-1.5 rounded-full bg-primary-500" />
                       </span>
                       <span>
                         <span class="block text-sm font-medium text-gray-900 dark:text-white">{{ option.label }}</span>

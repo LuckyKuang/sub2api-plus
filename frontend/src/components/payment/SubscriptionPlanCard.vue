@@ -8,9 +8,6 @@
       'surface-inset dark:surface-inset',
     ]"
   >
-    <!-- Colored top accent bar -->
-    <div :class="['h-1.5', accentClass]" />
-
     <div class="plan-content flex min-w-0 flex-1 flex-col p-4">
       <!-- Header: name + badge + price -->
       <div class="plan-header mb-3 flex items-start justify-between gap-2">
@@ -98,7 +95,7 @@
       <!-- Subscribe Button -->
       <button
         type="button"
-        :class="['plan-purchase-action mt-auto min-h-11 w-full rounded-xl py-2.5 text-sm font-semibold shadow-sm transition-all active:scale-[0.98]', btnClass]"
+        class="btn btn-primary plan-purchase-action mt-auto min-h-11 w-full rounded-xl py-2.5 text-sm font-semibold shadow-sm transition-all active:scale-[0.98]"
         @click="emit('select', plan)"
       >
         {{ isRenewal ? t('payment.renewNow') : t('payment.subscribeNow') }}
@@ -117,12 +114,10 @@ import { hasPeakRate as groupHasPeakRate, formatPeakRateWindow, serverTimezoneLa
 import { planValiditySuffix } from './validity'
 import { currencySymbol } from '@/components/payment/currency'
 import {
-  platformAccentBarClass,
   platformBadgeLightClass,
   platformBorderClass,
   platformTextClass,
   platformIconClass,
-  platformButtonClass,
   platformDiscountClass,
   platformLabel,
 } from '@/utils/platformColors'
@@ -141,12 +136,10 @@ const isRenewal = computed(() =>
 )
 
 // Derived color classes from central config
-const accentClass = computed(() => platformAccentBarClass(platform.value))
 const borderClass = computed(() => platformBorderClass(platform.value))
 const badgeLightClass = computed(() => platformBadgeLightClass(platform.value))
 const textClass = computed(() => platformTextClass(platform.value))
 const iconClass = computed(() => platformIconClass(platform.value))
-const btnClass = computed(() => platformButtonClass(platform.value))
 const discountClass = computed(() => platformDiscountClass(platform.value))
 const pLabel = computed(() => platformLabel(platform.value))
 
