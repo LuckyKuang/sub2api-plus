@@ -898,6 +898,7 @@ func registerChannelMonitorV2Routes(admin *gin.RouterGroup, h *handler.Handlers,
 		{
 			config.GET("/config", h.ChannelMonitorV2.GetConfig)
 			config.PUT("/config", h.ChannelMonitorV2.UpdateConfig)
+			config.GET("/model-catalog", h.ChannelMonitorV2.ModelCatalog)
 		}
 		reads := monitor.Group("")
 		reads.Use(modeV2Guard)

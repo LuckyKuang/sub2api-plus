@@ -1,8 +1,8 @@
 <template>
-  <AppLayout>
+  <AppLayout workspace>
     <TablePageLayout>
       <template #filters>
-        <div class="flex flex-col gap-3">
+        <div class="card flex flex-col gap-3 p-4">
           <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
             <div class="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 xl:w-auto xl:grid-cols-[260px_168px]">
               <Select
@@ -117,7 +117,7 @@
       </template>
 
       <template #pagination>
-        <div v-if="tasks.length || offset > 0" class="flex items-center justify-end gap-3 border-t border-gray-200 surface-inset px-4 py-3 dark:border-dark-700">
+        <div v-if="tasks.length || offset > 0" class="card flex flex-wrap items-center justify-end gap-3 px-4 py-3">
           <span class="mr-auto text-sm surface-muted">{{ t('asyncImage.list.page', { page: currentPage }) }}</span>
           <button type="button" class="btn btn-secondary btn-sm" :disabled="offset === 0 || loadingTasks" @click="previousPage">
             {{ t('asyncImage.list.previous') }}
@@ -137,10 +137,10 @@
         <div v-else class="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div class="sm:col-span-2">
             <span class="input-label">{{ t('asyncImage.create.mode') }}</span>
-            <div class="mt-2 inline-flex overflow-hidden rounded border border-gray-200 dark:border-dark-600">
+            <div class="mt-2 inline-flex gap-1 rounded-[var(--surface-radius-inset)] border border-gray-200 p-1 dark:border-dark-600">
               <button
                 type="button"
-                class="h-9 px-4 text-sm font-medium transition-colors surface-control"
+                class="h-9 rounded-[var(--surface-radius-item)] px-4 text-sm font-medium transition-colors surface-control"
                 :class="form.mode === 'generation' ? 'bg-primary-600 text-white' : 'surface-field text-gray-700 hover:surface-hover dark:surface-field dark:text-gray-200 dark:hover:surface-hover'"
                 :disabled="submitting"
                 @click="form.mode = 'generation'"
@@ -149,7 +149,7 @@
               </button>
               <button
                 type="button"
-                class="h-9 border-l border-gray-200 px-4 text-sm font-medium transition-colors dark:border-dark-600 surface-control"
+                class="h-9 rounded-[var(--surface-radius-item)] px-4 text-sm font-medium transition-colors surface-control"
                 :class="form.mode === 'edit' ? 'bg-primary-600 text-white' : 'surface-field text-gray-700 hover:surface-hover dark:surface-field dark:text-gray-200 dark:hover:surface-hover'"
                 :disabled="submitting"
                 @click="form.mode = 'edit'"

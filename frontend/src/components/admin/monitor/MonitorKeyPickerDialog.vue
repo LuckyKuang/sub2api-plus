@@ -28,8 +28,8 @@
       <div v-else-if="filteredKeys.length === 0" class="py-6 text-center text-sm surface-muted">
         {{ t('admin.channelMonitor.form.noActiveKey') }}
       </div>
-      <div v-else class="max-h-96 overflow-auto rounded-lg border border-gray-200 dark:border-dark-600">
-        <table class="w-full text-sm">
+      <div v-else class="record-table-scroll max-h-96 overflow-auto rounded-lg border border-gray-200 dark:border-dark-600">
+        <table class="record-table record-table-compact w-full text-sm">
           <thead class="surface-inset sticky top-0 z-10">
             <tr class="text-left text-xs font-medium uppercase tracking-wider surface-muted">
               <th class="px-3 py-2">{{ t('common.name') }}</th>

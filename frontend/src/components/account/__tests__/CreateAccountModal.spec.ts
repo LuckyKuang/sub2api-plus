@@ -1,4 +1,5 @@
 import { defineComponent } from 'vue'
+import DateTimePicker from '@/components/common/DateTimePicker.vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -351,7 +352,7 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
     await wrapper.get('form#create-account-form input[type="text"]').setValue('custom expiry account')
     await wrapper.get('form#create-account-form input[type="password"]').setValue('test-api-key')
     await selectButtonByText(wrapper, 'payment.oneMonth')
-    await wrapper.get('input[type="datetime-local"]').setValue('2030-04-15T09:20')
+    await wrapper.getComponent(DateTimePicker).setValue('2030-04-15T09:20')
 
     await wrapper.get('form#create-account-form').trigger('submit.prevent')
     await flushPromises()

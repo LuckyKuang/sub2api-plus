@@ -220,7 +220,7 @@ function onNextPage() {
 
     <div v-else class="space-y-3">
       <div class="overflow-hidden rounded-xl border border-gray-200 dark:border-dark-700">
-        <div class="max-h-[420px] overflow-auto">
+        <div class="record-table-scroll max-h-[420px] overflow-auto">
           <div v-if="!isDesktopViewport" class="divide-y divide-gray-100 dark:divide-dark-800">
             <div v-for="row in items" :key="row.model" class="space-y-2 p-3">
               <div class="break-all text-xs font-medium text-gray-900 dark:text-gray-100">{{ row.model }}</div>
@@ -252,7 +252,7 @@ function onNextPage() {
               </div>
             </div>
           </div>
-          <table v-else class="min-w-full text-left text-xs md:text-sm">
+          <table v-else class="record-table record-table-compact min-w-full text-left text-xs md:text-sm">
             <thead class="sticky top-0 z-10 surface-inset">
               <tr class="border-b border-gray-200 dark:border-dark-700 surface-muted">
                 <th class="px-2 py-2 font-semibold">{{ t('admin.ops.openaiTokenStats.table.model') }}</th>

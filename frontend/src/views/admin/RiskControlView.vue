@@ -1,12 +1,12 @@
 <template>
-  <AppLayout>
-    <div class="space-y-6">
+  <AppLayout workspace>
+    <div class="workspace-page">
       <div v-if="loading" class="flex items-center justify-center py-16">
         <div class="h-8 w-8 animate-spin rounded-full border-b-2 border-primary-600"></div>
       </div>
 
       <template v-else>
-        <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div class="card workspace-fixed flex flex-col gap-4 px-6 py-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">{{ t('admin.riskControl.title') }}</h1>
             <p class="mt-1 text-sm surface-muted">{{ t('admin.riskControl.description') }}</p>
@@ -23,11 +23,16 @@
           </div>
         </div>
 
+        <WorkspaceTabs v-model="activePageTab" :tabs="pageTabs" :label="t('admin.riskControl.title')" />
+
+        <div v-show="activePageTab === 'overview'" id="risk-overview-panel" role="tabpanel" :aria-label="t('workspace.riskControl')" class="workspace-scroll" data-test="risk-overview">
+        <div class="workspace-stack space-y-6">
         <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
           <div
             v-for="item in overviewItems"
             :key="item.key"
-            class="rounded-lg border border-gray-100 surface-inset px-4 py-3 shadow-sm dark:border-dark-700"
+            :data-test="`risk-overview-${item.key}`"
+            class="risk-overview-card border border-gray-100 surface-inset px-4 py-3 shadow-sm dark:border-dark-700"
           >
             <div class="flex min-w-0 items-center gap-3">
               <div class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg" :class="item.iconClass">
@@ -53,7 +58,7 @@
           </div>
         </div>
 
-        <section data-test="content-extraction-runtime" class="border-y border-gray-200 py-4 dark:border-dark-700">
+        <section data-test="content-extraction-runtime" class="card px-4 py-4">
           <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div class="max-w-xl">
               <h2 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.riskControl.extractionStatus') }}</h2>
@@ -245,14 +250,17 @@
           </div>
         </div>
 
-        <div class="card">
-          <div class="flex flex-col gap-4 border-b border-gray-100 px-6 py-4 dark:border-dark-700">
-            <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <div>
+        </div>
+        </div>
+
+        <div v-show="activePageTab === 'records'" id="risk-records-panel" role="tabpanel" :aria-label="t('workspace.auditRecords')" class="card workspace-table-card" data-test="risk-records">
+          <div class="risk-records-toolbar workspace-fixed flex flex-col gap-4 border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+            <div class="risk-records-heading flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div class="min-w-0">
                 <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('admin.riskControl.records') }}</h2>
                 <p class="mt-1 text-sm surface-muted">{{ t('admin.riskControl.recordsHint') }}</p>
               </div>
-              <button type="button" class="btn btn-secondary inline-flex items-center gap-2" :disabled="logsLoading" @click="loadLogs">
+              <button type="button" class="btn btn-secondary inline-flex shrink-0 items-center gap-2" :disabled="logsLoading" @click="loadLogs">
                 <Icon name="refresh" size="sm" :class="logsLoading ? 'animate-spin' : ''" />
                 {{ t('admin.riskControl.refresh') }}
               </button>
@@ -278,18 +286,18 @@
               </div>
             </div>
 
-            <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
+            <div class="risk-records-filters grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6" data-test="risk-records-filters">
               <Select v-model="filters.result" :options="resultOptions" @change="reloadLogsFromFirstPage" />
               <Select v-model="filters.group_id" :options="groupFilterOptions" @change="reloadLogsFromFirstPage" />
               <Select v-model="filters.endpoint" :options="endpointOptions" @change="reloadLogsFromFirstPage" />
               <input v-model.trim="filters.search" type="search" class="input" :placeholder="t('admin.riskControl.filters.search')" @keyup.enter="reloadLogsFromFirstPage" />
-              <input v-model="filters.from" type="datetime-local" class="input" :title="t('admin.riskControl.filters.from')" @change="reloadLogsFromFirstPage" />
-              <input v-model="filters.to" type="datetime-local" class="input" :title="t('admin.riskControl.filters.to')" @change="reloadLogsFromFirstPage" />
+              <DateTimePicker :aria-label="t('admin.riskControl.filters.from')" v-model="filters.from" type="datetime-local" class="input" :title="t('admin.riskControl.filters.from')" @change="reloadLogsFromFirstPage" />
+              <DateTimePicker :aria-label="t('admin.riskControl.filters.to')" v-model="filters.to" type="datetime-local" class="input" :title="t('admin.riskControl.filters.to')" @change="reloadLogsFromFirstPage" />
             </div>
           </div>
 
-          <div class="table-container overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200 dark:divide-dark-700">
+          <div class="record-table-scroll table-container workspace-table-viewport" data-test="risk-records-scroll">
+            <table class="record-table min-w-full divide-y divide-gray-200 dark:divide-dark-700">
               <thead class="surface-inset">
                 <tr>
                   <th class="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider surface-muted">{{ t('admin.riskControl.table.time') }}</th>
@@ -380,6 +388,7 @@
 
           <Pagination
             v-if="pagination.total > 0"
+            class="risk-records-pagination workspace-fixed"
             :page="pagination.page"
             :total="pagination.total"
             :page-size="pagination.page_size"
@@ -1101,8 +1110,8 @@
               <input v-model.trim="sessionFilters.search" type="search" class="input" :placeholder="t('admin.riskControl.sessionBlockSearch')" @keyup.enter="reloadSessionBlocksFromFirstPage" />
               <button type="button" class="btn btn-secondary" :disabled="sessionBlocksLoading" @click="reloadSessionBlocksFromFirstPage">{{ t('admin.riskControl.refresh') }}</button>
             </div>
-            <div class="table-container overflow-x-auto">
-              <table class="min-w-full divide-y divide-gray-200 dark:divide-dark-700">
+            <div class="record-table-scroll table-container overflow-x-auto">
+              <table class="record-table min-w-full divide-y divide-gray-200 dark:divide-dark-700">
                 <thead class="surface-inset">
                   <tr>
                     <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider surface-muted">{{ t('admin.riskControl.table.time') }}</th>
@@ -1252,8 +1261,8 @@
               {{ t('admin.riskControl.policyHelp.current') }}{{ effectiveTextPolicyDescription }}
             </p>
           </div>
-          <div class="table-container overflow-x-auto">
-            <table class="min-w-[900px] w-full text-left text-sm">
+          <div class="record-table-scroll table-container overflow-x-auto">
+            <table class="record-table min-w-[900px] w-full text-left text-sm">
               <thead class="border-b border-gray-200 text-xs dark:border-dark-700 surface-muted">
                 <tr>
                   <th class="px-3 py-2">{{ t('admin.riskControl.policyHelp.globalMode') }}</th>
@@ -1346,9 +1355,11 @@
 </template>
 
 <script setup lang="ts">
+import DateTimePicker from '@/components/common/DateTimePicker.vue'
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
+import WorkspaceTabs from '@/components/common/WorkspaceTabs.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Icon from '@/components/icons/Icon.vue'
 import Select from '@/components/common/Select.vue'
@@ -1428,6 +1439,11 @@ const riskThresholdDefaults: Record<string, number> = {
 const riskThresholdCategories = Object.keys(riskThresholdDefaults)
 
 const { t } = useI18n()
+const activePageTab = ref('overview')
+const pageTabs = computed(() => [
+  { value: 'overview', label: t('workspace.riskControl'), panelId: 'risk-overview-panel' },
+  { value: 'records', label: t('workspace.auditRecords'), panelId: 'risk-records-panel' },
+])
 const appStore = useAppStore()
 const defaultBlockMessage = () => t('admin.riskControl.defaultBlockMessage')
 
@@ -2894,3 +2910,29 @@ onUnmounted(() => {
   }
 })
 </script>
+
+<style scoped>
+.risk-overview-card { border-radius: var(--surface-radius); }
+
+@media (min-width: 1024px) {
+  .risk-records-toolbar { gap: 10px; padding: 12px 20px; }
+  .risk-records-heading { gap: 12px; }
+  .risk-records-heading h2 { font-size: 16px; line-height: 24px; }
+  .risk-records-heading p { margin-top: 2px; font-size: 12px; line-height: 18px; }
+  .risk-records-heading .btn { min-height: 32px; padding: 6px 10px; font-size: 12px; line-height: 18px; }
+  .risk-records-filters { gap: 8px; }
+  .risk-records-filters :deep(.input), .risk-records-filters :deep(.select-trigger) {
+    height: 32px;
+    min-height: 32px;
+    min-width: 0;
+    padding: 6px 8px;
+    font-size: 12px;
+    line-height: 18px;
+  }
+  .risk-records-filters :deep(.date-time-trigger) { gap: 4px; font-size: 12px; line-height: 18px; }
+  .risk-records-pagination { padding: 8px 12px; }
+  .risk-records-pagination :deep(.pagination-desktop) { gap: 8px; }
+  .risk-records-pagination :deep(.pagination-button) { min-height: 32px; min-width: 32px; padding: 5px 8px; }
+  .risk-records-pagination :deep(.select-trigger), .risk-records-pagination :deep(.input) { min-height: 32px; height: 32px; padding: 5px 8px; }
+}
+</style>

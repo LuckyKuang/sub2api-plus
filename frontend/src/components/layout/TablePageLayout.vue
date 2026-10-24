@@ -18,7 +18,7 @@
     </div>
 
     <!-- 固定区域：分页器 -->
-    <div v-if="$slots.pagination" class="layout-section-fixed">
+    <div v-if="$slots.pagination" class="layout-section-fixed table-page-pagination">
       <slot name="pagination" />
     </div>
   </div>
@@ -69,6 +69,8 @@ onUnmounted(() => {
   @apply flex-shrink-0;
 }
 
+.table-page-pagination { container-name: table-page-pagination; container-type: inline-size; }
+
 .layout-section-scrollable {
   @apply flex-1 min-h-0 flex flex-col;
 }
@@ -80,7 +82,6 @@ onUnmounted(() => {
 }
 
 .table-scroll-container :deep(.table-wrapper) {
-  border: 0;
   border-radius: inherit;
   @apply flex-1 overflow-x-auto overflow-y-auto;
   /* 确保横向滚动条显示在最底部 */
@@ -93,21 +94,12 @@ onUnmounted(() => {
   display: table; /* 使用标准 table 布局以支持 sticky 列 */
 }
 
-.table-scroll-container :deep(thead) {
-  background-color: var(--table-header-bg);
-}
-
-.table-scroll-container :deep(tbody) {
-  /* 保持默认 table-row-group 显示，不使用 block */
-}
-
 .table-scroll-container :deep(th) {
-  @apply px-5 py-4 text-left text-sm font-medium border-b border-gray-200 dark:border-dark-700; color: var(--surface-muted);
+  @apply px-5 py-4 text-left text-sm font-medium; color: var(--surface-muted);
 }
 
 .table-scroll-container :deep(td) {
   @apply px-5 py-4 text-sm; color: var(--surface-muted);
-  border-bottom: 1px solid var(--table-row-border);
 }
 
 /* 移动端：恢复正常滚动 */

@@ -1,17 +1,18 @@
 <template>
   <AppLayout>
-    <div class="space-y-6">
-      <div v-if="loading" class="flex items-center justify-center py-20">
+    <div class="payment-page space-y-6">
+      <div v-if="loading" class="card flex items-center justify-center py-20">
         <div class="h-8 w-8 animate-spin rounded-full border-4 border-primary-500 border-t-transparent"></div>
       </div>
       <template v-else>
         <!-- Tab Switcher (hide during payment and subscription confirm) -->
-        <div v-if="tabs.length > 1 && paymentPhase === 'select' && !selectedPlan" class="flex space-x-1 rounded-xl surface-inset p-1">
-          <button v-for="tab in tabs" :key="tab.key"
-            class="flex-1 rounded-lg px-4 py-2.5 text-sm font-medium transition-all surface-control"
-            :class="activeTab === tab.key ? 'surface-field text-gray-900 shadow dark:surface-field dark:text-white' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'"
-            @click="activeTab = tab.key">{{ tab.label }}</button>
-        </div>
+        <WorkspaceTabs
+          v-if="tabs.length > 1 && paymentPhase === 'select' && !selectedPlan"
+          v-model="activeTab"
+          class="payment-tabs"
+          :tabs="tabs"
+          :label="`${t('payment.tabSubscribe')} / ${t('payment.tabTopUp')}`"
+        />
         <!-- Payment in progress (shared by recharge and subscription) -->
         <template v-if="paymentPhase === 'paying'">
           <PaymentStatusPanel
@@ -107,13 +108,15 @@
                 </p>
               </div>
             </div>
-            <button v-support-readonly :class="['btn w-full py-3 text-base font-medium', paymentButtonClass]" :disabled="!canSubmit || submitting" @click="handleSubmitRecharge">
-              <span v-if="submitting" class="flex items-center justify-center gap-2">
-                <span class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
-                {{ t('common.processing') }}
-              </span>
-              <span v-else>{{ t('payment.createOrder') }} {{ formatSelectedPaymentAmount(totalAmount) }}</span>
-            </button>
+            <div class="card payment-checkout-action p-4" data-testid="recharge-checkout-action">
+              <button v-support-readonly :class="['btn w-full py-3 text-base font-medium', paymentButtonClass]" :disabled="!canSubmit || submitting" @click="handleSubmitRecharge">
+                <span v-if="submitting" class="flex items-center justify-center gap-2">
+                  <span class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
+                  {{ t('common.processing') }}
+                </span>
+                <span v-else>{{ t('payment.createOrder') }} {{ formatSelectedPaymentAmount(totalAmount) }}</span>
+              </button>
+            </div>
             </template>
           </template>
           <!-- Subscribe Tab -->
@@ -199,14 +202,16 @@
                   </div>
                 </div>
               </div>
-              <button v-support-readonly :class="['btn w-full py-3 text-base font-medium', paymentButtonClass]" :disabled="!canSubmitSubscription || submitting" @click="confirmSubscribe">
-                <span v-if="submitting" class="flex items-center justify-center gap-2">
-                  <span class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
-                  {{ t('common.processing') }}
-                </span>
-                <span v-else>{{ t('payment.createOrder') }} {{ formatSelectedPaymentAmount(subTotalAmount) }}</span>
-              </button>
-              <button class="btn btn-secondary w-full" @click="selectedPlan = null">{{ t('common.cancel') }}</button>
+              <div class="card payment-checkout-action flex flex-col gap-2 p-4" data-testid="subscription-checkout-action">
+                <button v-support-readonly :class="['btn w-full py-3 text-base font-medium', paymentButtonClass]" :disabled="!canSubmitSubscription || submitting" @click="confirmSubscribe">
+                  <span v-if="submitting" class="flex items-center justify-center gap-2">
+                    <span class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
+                    {{ t('common.processing') }}
+                  </span>
+                  <span v-else>{{ t('payment.createOrder') }} {{ formatSelectedPaymentAmount(subTotalAmount) }}</span>
+                </button>
+                <button class="btn btn-secondary w-full" @click="selectedPlan = null">{{ t('common.cancel') }}</button>
+              </div>
             </template>
             <!-- Plan list -->
             <template v-else>
@@ -214,8 +219,8 @@
                 <Icon name="gift" size="xl" class="mx-auto mb-3 text-gray-300 dark:text-dark-600" />
                 <p class="surface-muted">{{ t('payment.noPlans') }}</p>
               </div>
-              <div v-else :class="planGridClass">
-                <SubscriptionPlanCard v-for="plan in checkout.plans" :key="plan.id" :plan="plan" :active-subscriptions="activeSubscriptions" @select="selectPlan" />
+              <div v-else class="payment-plan-grid grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+                <SubscriptionPlanCard v-for="plan in checkout.plans" :key="plan.id" catalog :plan="plan" :active-subscriptions="activeSubscriptions" @select="selectPlan" />
               </div>
               <!-- Active subscriptions (compact, below plan list) -->
               <div v-if="activeSubscriptions.length > 0">
@@ -312,6 +317,7 @@ import { hasPeakRate, formatPeakRateWindow, serverTimezoneLabel, type PeakRateFi
 import type { SubscriptionPlan, CheckoutInfoResponse, CreateOrderResult, OrderType } from '@/types/payment'
 import { formatRechargeBonusNumber, normalizeRechargeBonusMode, normalizeRechargeBonusTiers, quoteRechargeBonus } from '@/utils/rechargeBonus'
 import AppLayout from '@/components/layout/AppLayout.vue'
+import WorkspaceTabs from '@/components/common/WorkspaceTabs.vue'
 import AmountInput from '@/components/payment/AmountInput.vue'
 import PaymentMethodSelector from '@/components/payment/PaymentMethodSelector.vue'
 import { METHOD_ORDER, getPaymentPopupFeatures, isBuiltInAlipayMethod, isBuiltInWxpayMethod } from '@/components/payment/providerConfig'
@@ -566,18 +572,18 @@ const renderedBonusNotice = computed(() => {
 const subscriptionEnabled = computed(() => resolveFeatureFlag(appStore.cachedPublicSettings, FeatureFlags.subscription))
 
 const tabs = computed(() => {
-  const result: { key: 'recharge' | 'subscription'; label: string }[] = []
-  if (subscriptionEnabled.value) result.push({ key: 'subscription', label: t('payment.tabSubscribe') })
-  if (!checkout.value.balance_disabled) result.push({ key: 'recharge', label: t('payment.tabTopUp') })
+  const result: { value: 'recharge' | 'subscription'; label: string }[] = []
+  if (subscriptionEnabled.value) result.push({ value: 'subscription', label: t('payment.tabSubscribe') })
+  if (!checkout.value.balance_disabled) result.push({ value: 'recharge', label: t('payment.tabTopUp') })
   return result
 })
 
 // tab 列表随 checkout（balance_disabled）与订阅开关变化。当前 tab 不在列表里时收敛到第一个可用 tab，
 // 两个方向都覆盖：关闭订阅 → 回到充值；仅订阅站点重新打开订阅 → 进入订阅。列表为空时模板展示不可用提示。
 watch(tabs, (available) => {
-  if (available.some((tab) => tab.key === activeTab.value)) return
+  if (available.some((tab) => tab.value === activeTab.value)) return
   const leavingSubscription = activeTab.value === 'subscription'
-  activeTab.value = available[0]?.key ?? 'recharge'
+  activeTab.value = available[0]?.value ?? 'recharge'
   if (leavingSubscription) selectedPlan.value = null
 })
 
@@ -595,13 +601,6 @@ const subscriptionUsdToCnyRate = computed(() => {
 })
 const rechargeBonusTiers = computed(() => normalizeRechargeBonusTiers(checkout.value.recharge_bonus_tiers))
 const rechargeBonusMode = computed(() => normalizeRechargeBonusMode(checkout.value.recharge_bonus_mode))
-
-// Adaptive grid: center single card, 2-col for 2 plans, 3-col for 3+
-const planGridClass = computed(() => {
-  const n = checkout.value.plans.length
-  if (n <= 2) return 'grid grid-cols-1 gap-5 sm:grid-cols-2'
-  return 'grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3'
-})
 
 // Check if an amount fits a method's [min, max]. 0 = no limit.
 function amountFitsMethod(amt: number, methodType: string): boolean {
@@ -1266,3 +1265,31 @@ onMounted(async () => {
   }
 })
 </script>
+
+<style scoped>
+.payment-tabs {
+  position: sticky;
+  top: var(--shell-sticky-offset);
+  z-index: 25;
+}
+
+.payment-tabs :deep(.workspace-tab) {
+  flex: 1 1 0%;
+}
+
+.payment-checkout-action {
+  position: sticky;
+  bottom: var(--shell-inset-bottom);
+  z-index: 20;
+}
+
+@media (min-width: 1024px) {
+  .payment-tabs {
+    top: 0;
+  }
+
+  .payment-checkout-action {
+    bottom: 0;
+  }
+}
+</style>

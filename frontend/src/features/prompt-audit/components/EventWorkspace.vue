@@ -1,11 +1,13 @@
 <template>
-  <section aria-labelledby="prompt-events-title" class="py-6">
-    <div class="flex flex-wrap items-start justify-between gap-3">
-      <div>
+  <section aria-labelledby="prompt-events-title" class="event-workspace workspace-body workspace-clip pt-4">
+    <div class="event-heading workspace-fixed flex flex-wrap items-start justify-between gap-3">
+      <div class="min-w-0">
         <h2 id="prompt-events-title" class="text-base font-semibold text-gray-950 dark:text-white">{{ t('admin.promptAudit.events.title') }}</h2>
         <p class="mt-1 text-sm surface-muted">{{ t('admin.promptAudit.events.description') }}</p>
       </div>
-      <div class="flex flex-wrap gap-2">
+      <div class="event-actions flex flex-wrap gap-2">
+        <button type="submit" :form="filterFormId" class="btn btn-primary btn-sm" data-test="event-search">{{ t('common.search') }}</button>
+        <button type="button" class="btn btn-ghost btn-sm" data-test="event-reset" @click="resetFilters">{{ t('common.reset') }}</button>
         <button type="button" class="btn btn-secondary btn-sm" :disabled="selectedIds.length === 0" @click="$emit('batch-delete')">
           {{ t('admin.promptAudit.events.deleteSelected', { count: selectedIds.length }) }}
         </button>
@@ -15,7 +17,7 @@
       </div>
     </div>
 
-    <form class="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5" @submit.prevent="applyFilters">
+    <form :id="filterFormId" class="event-filters workspace-fixed grid gap-3 sm:grid-cols-2 lg:grid-cols-6" @submit.prevent="applyFilters">
       <label class="text-xs surface-muted">
         <span>{{ t('admin.promptAudit.events.decision') }}</span>
         <Select
@@ -48,20 +50,16 @@
       <FilterInput v-model="localFilters.keyword" :label="t('admin.promptAudit.events.keyword')" @change="filtersChanged" />
       <label class="text-xs surface-muted">
         <span>{{ t('admin.promptAudit.events.startAt') }}</span>
-        <input v-model="localFilters.start_at" type="datetime-local" class="input mt-1 w-full" :aria-label="t('admin.promptAudit.events.startAt')" @change="filtersChanged" />
+        <DateTimePicker v-model="localFilters.start_at" type="datetime-local" class="input mt-1 w-full" :aria-label="t('admin.promptAudit.events.startAt')" @change="filtersChanged" />
       </label>
       <label class="text-xs surface-muted">
         <span>{{ t('admin.promptAudit.events.endAt') }}</span>
-        <input v-model="localFilters.end_at" type="datetime-local" class="input mt-1 w-full" :aria-label="t('admin.promptAudit.events.endAt')" @change="filtersChanged" />
+        <DateTimePicker v-model="localFilters.end_at" type="datetime-local" class="input mt-1 w-full" :aria-label="t('admin.promptAudit.events.endAt')" @change="filtersChanged" />
       </label>
-      <div class="flex items-end gap-2 sm:col-span-2">
-        <button type="submit" class="btn btn-primary btn-sm">{{ t('common.search') }}</button>
-        <button type="button" class="btn btn-ghost btn-sm" @click="resetFilters">{{ t('common.reset') }}</button>
-      </div>
     </form>
-    <div v-if="error" role="alert" class="mt-4 rounded-lg bg-red-50/[0.15] px-4 py-3 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300">{{ error }}</div>
-    <div class="mt-5 overflow-x-auto rounded-xl border border-gray-200 dark:border-dark-700/60">
-      <table class="min-w-[1420px] w-full text-left text-sm">
+    <div v-if="error" role="alert" class="workspace-fixed rounded-lg bg-red-50/[0.15] px-4 py-3 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300">{{ error }}</div>
+    <div class="record-table-scroll workspace-table-viewport overflow-x-auto rounded-xl border border-gray-200 dark:border-dark-700/60" data-test="event-table-scroll">
+      <table class="record-table min-w-[1420px] w-full text-left text-sm">
         <thead class="surface-inset text-xs uppercase tracking-wide surface-muted">
           <tr>
             <th class="w-10 px-3 py-3"><input type="checkbox" :checked="allSelected" :aria-label="t('admin.promptAudit.events.selectAll')" @change="toggleAll" /></th>
@@ -122,14 +120,15 @@
           </tr>
         </tbody>
       </table>
-      <Pagination :total="total" :page="page" :page-size="pageSize" @update:page="$emit('page', $event)" @update:page-size="$emit('page-size', $event)" />
     </div>
+    <Pagination class="event-pagination workspace-fixed" :total="total" :page="page" :page-size="pageSize" @update:page="$emit('page', $event)" @update:page-size="$emit('page-size', $event)" />
   </section>
 </template>
 
 <script setup lang="ts">
+import DateTimePicker from '@/components/common/DateTimePicker.vue'
 import Select from '@/components/common/Select.vue'
-import { computed, defineComponent, h, reactive, watch } from 'vue'
+import { computed, defineComponent, h, reactive, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Pagination from '@/components/common/Pagination.vue'
 import type { PromptAuditEvent, PromptEventFilters } from '../types'
@@ -151,6 +150,7 @@ const emit = defineEmits<{
   (event: 'preview-delete'): void
 }>()
 const { t, locale } = useI18n()
+const filterFormId = `prompt-event-filters-${useId()}`
 const localFilters = reactive<PromptEventFilters>(cloneData(props.filters))
 watch(() => props.filters, (value) => Object.assign(localFilters, cloneData(value)), { deep: true })
 const allSelected = computed(() => props.events.length > 0 && props.events.every((event) => props.selectedIds.includes(event.id)))
@@ -250,3 +250,30 @@ function formatCategories(categories: string[]): string {
   return categories.map(translateCategory).join(', ')
 }
 </script>
+
+<style scoped>
+@media (min-width: 1024px) {
+  .event-workspace { padding-top: 12px; }
+  .event-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 12px; }
+  .event-heading > div:first-child { display: contents; }
+  .event-heading h2 { grid-area: 1 / 1; }
+  .event-heading p { grid-area: 2 / 1 / auto / -1; margin-top: 0; font-size: 12px; line-height: 18px; }
+  .event-actions { grid-area: 1 / 2; gap: 6px; }
+  .event-actions .btn { min-height: 32px; padding: 6px 10px; font-size: 12px; line-height: 18px; }
+  .event-filters { gap: 8px; }
+  .event-filters > :deep(label) { min-width: 0; line-height: 16px; }
+  .event-filters :deep(.input), .event-filters :deep(.select-trigger) {
+    height: 32px;
+    min-height: 32px;
+    min-width: 0;
+    padding: 6px 8px;
+    font-size: 12px;
+    line-height: 18px;
+  }
+  .event-filters :deep(.date-time-trigger) { gap: 4px; font-size: 12px; line-height: 18px; }
+  .event-pagination { padding: 8px 12px; }
+  .event-pagination :deep(.pagination-desktop) { gap: 8px; }
+  .event-pagination :deep(.pagination-button) { min-height: 32px; min-width: 32px; padding: 5px 8px; }
+  .event-pagination :deep(.select-trigger), .event-pagination :deep(.input) { min-height: 32px; height: 32px; padding: 5px 8px; }
+}
+</style>

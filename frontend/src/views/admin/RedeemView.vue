@@ -1,5 +1,5 @@
 <template>
-  <AppLayout>
+  <AppLayout workspace>
     <TablePageLayout>
       <template #filters>
         <div class="flex flex-wrap items-center gap-3">
@@ -471,7 +471,7 @@
               </label>
               <template v-if="batchUpdateForm.update_expires_at">
                 <Select v-model="batchUpdateForm.expires_mode" :options="batchExpiryModeOptions" />
-                <input
+                <DateTimePicker :aria-label="t('admin.redeem.batchFields.expiresAt')"
                   v-if="batchUpdateForm.expires_mode === 'custom'"
                   v-model="batchUpdateForm.expires_at_local"
                   type="datetime-local"
@@ -626,6 +626,7 @@
 </template>
 
 <script setup lang="ts">
+import DateTimePicker from '@/components/common/DateTimePicker.vue'
 import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'

@@ -95,7 +95,6 @@ onBeforeUnmount(() => {
             <span class="h-1.5 w-1.5 rounded-full bg-primary-500 dark:bg-primary-300"></span>
             {{ tooltipHint(item.endpoint) }}
           </p>
-          <div class="absolute left-1/2 top-full h-3 w-3 -translate-x-1/2 -translate-y-1/2 rotate-45 border-b border-r border-slate-200 surface-field dark:border-slate-700"></div>
         </div>
 
         <code

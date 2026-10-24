@@ -244,3 +244,27 @@ func TestChannelMonitorModeV2Guard(t *testing.T) {
 		})
 	}
 }
+
+func TestChannelMonitorV2CatalogRouteUsesAdminFeatureGuardBeforeModeSwitch(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, tc := range []struct {
+		enabled bool
+		mode    string
+		status  int
+	}{
+		{true, service.ChannelMonitorModeV1, http.StatusBadRequest},
+		{true, service.ChannelMonitorModeV2, http.StatusBadRequest},
+		{true, service.ChannelMonitorModeV3, http.StatusBadRequest},
+		{false, service.ChannelMonitorModeV2, http.StatusForbidden},
+	} {
+		router := gin.New()
+		handlers := &handler.Handlers{ChannelMonitorV2: handler.NewChannelMonitorV2Handler(service.NewChannelMonitorV2Service(nil), nil)}
+		registerChannelMonitorV2Routes(router.Group("/api/v1/admin"), handlers, newChannelMonitorModeSettings(tc.enabled, tc.mode))
+		recorder := httptest.NewRecorder()
+		router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/admin/channel-monitor-v2/model-catalog?group_id=invalid", nil))
+		require.Equal(t, tc.status, recorder.Code)
+		userRecorder := httptest.NewRecorder()
+		router.ServeHTTP(userRecorder, httptest.NewRequest(http.MethodGet, "/api/v1/channel-monitor-v2/model-catalog", nil))
+		require.Equal(t, http.StatusNotFound, userRecorder.Code)
+	}
+}

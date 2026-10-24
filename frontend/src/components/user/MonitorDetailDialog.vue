@@ -11,8 +11,8 @@
     <div v-else-if="!detail" class="py-8 text-center text-sm surface-muted">
       {{ t('channelStatus.detailLoadError') }}
     </div>
-    <div v-else class="table-container overflow-x-auto">
-      <table class="table">
+    <div v-else class="record-table-scroll table-container overflow-x-auto">
+      <table class="record-table table">
         <thead class="border-b border-gray-200 dark:border-dark-700">
           <tr class="text-xs uppercase tracking-wider surface-muted">
             <th>{{ t('channelStatus.detailColumns.model') }}</th>

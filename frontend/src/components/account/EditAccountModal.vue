@@ -1706,7 +1706,7 @@
       </div>
       <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
         <label class="input-label">{{ t('admin.accounts.expiresAt') }}</label>
-        <input v-model="expiresAtInput" type="datetime-local" class="input" />
+        <DateTimePicker :aria-label="t('admin.accounts.expiresAt')" v-model="expiresAtInput" type="datetime-local" class="input" />
         <div class="mt-2 flex gap-2">
           <button type="button" class="btn btn-secondary btn-sm" @click="form.expires_at = getAccountExpiryTimestamp(1)">
             {{ t('payment.oneMonth') }}
@@ -2712,22 +2712,7 @@
               {{ t('admin.accounts.mixedScheduling') }}
             </span>
           </label>
-          <div class="group relative">
-            <span
-              class="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-gray-200 text-xs text-gray-500 hover:bg-gray-300 dark:bg-dark-600 dark:text-gray-400 dark:hover:bg-dark-500"
-            >
-              ?
-            </span>
-            <!-- Tooltip（向下显示避免被弹窗裁剪） -->
-            <div
-              class="pointer-events-none absolute left-0 top-full z-[100] mt-1.5 w-72 rounded px-3 py-2 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100 surface-panel"
-            >
-              {{ t('admin.accounts.mixedSchedulingTooltip') }}
-              <div
-                class="absolute bottom-full left-3 border-4 border-transparent border-b-gray-900 dark:border-b-gray-700"
-              ></div>
-            </div>
-          </div>
+          <HelpTooltip :content="t('admin.accounts.mixedSchedulingTooltip')" width-class="w-72" />
         </div>
         <div v-if="account?.platform === 'antigravity'" class="mt-3 flex items-center gap-2">
           <label class="flex cursor-pointer items-center gap-2">
@@ -2740,21 +2725,7 @@
               {{ t('admin.accounts.allowOverages') }}
             </span>
           </label>
-          <div class="group relative">
-            <span
-              class="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-gray-200 text-xs text-gray-500 hover:bg-gray-300 dark:bg-dark-600 dark:text-gray-400 dark:hover:bg-dark-500"
-            >
-              ?
-            </span>
-            <div
-              class="pointer-events-none absolute left-0 top-full z-[100] mt-1.5 w-72 rounded px-3 py-2 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100 surface-panel"
-            >
-              {{ t('admin.accounts.allowOveragesTooltip') }}
-              <div
-                class="absolute bottom-full left-3 border-4 border-transparent border-b-gray-900 dark:border-b-gray-700"
-              ></div>
-            </div>
-          </div>
+          <HelpTooltip :content="t('admin.accounts.allowOveragesTooltip')" width-class="w-72" />
         </div>
       </div>
 
@@ -2821,6 +2792,7 @@
 </template>
 
 <script setup lang="ts">
+import DateTimePicker from '@/components/common/DateTimePicker.vue'
 import CNOAuthPanel from './CNOAuthPanel.vue'
 import { isCNOAuthPlatform } from '@/api/admin/cnOAuth'
 import OutboundIdentityEditor from './OutboundIdentityEditor.vue'

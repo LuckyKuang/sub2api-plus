@@ -1,5 +1,5 @@
 <template>
-  <AppLayout>
+  <AppLayout workspace>
     <TablePageLayout>
       <template #filters>
         <div class="flex flex-wrap items-center gap-3">
@@ -201,12 +201,12 @@
         <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div>
             <label class="input-label">{{ t('admin.announcements.form.startsAt') }}</label>
-            <input v-model="form.starts_at_str" type="datetime-local" max="9999-12-31T23:59" class="input" />
+            <DateTimePicker :aria-label="t('admin.announcements.form.startsAt')" v-model="form.starts_at_str" type="datetime-local" max="9999-12-31T23:59" class="input" />
             <p class="input-hint">{{ t('admin.announcements.form.startsAtHint') }}</p>
           </div>
           <div>
             <label class="input-label">{{ t('admin.announcements.form.endsAt') }}</label>
-            <input v-model="form.ends_at_str" type="datetime-local" max="9999-12-31T23:59" class="input" />
+            <DateTimePicker :aria-label="t('admin.announcements.form.endsAt')" v-model="form.ends_at_str" type="datetime-local" max="9999-12-31T23:59" class="input" />
             <p class="input-hint">{{ t('admin.announcements.form.endsAtHint') }}</p>
           </div>
         </div>
@@ -257,6 +257,7 @@
 </template>
 
 <script setup lang="ts">
+import DateTimePicker from '@/components/common/DateTimePicker.vue'
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'

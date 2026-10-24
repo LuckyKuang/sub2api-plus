@@ -1,8 +1,8 @@
 <template>
   <!-- 用量页"用户排行"tab 内容：无卡片外观，依赖父级统一卡片；筛选/时间范围复用页面级筛选栏 -->
-  <div>
+  <div :class="{ 'workspace-body !gap-0': workspace }">
     <!-- Toolbar -->
-    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-4 py-3 dark:border-dark-700/50 sm:px-6">
+    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-4 py-3 dark:border-dark-700/50 sm:px-6" :class="{ 'workspace-fixed': workspace }">
       <p class="text-xs surface-muted">{{ t('admin.usage.tokenRanking.subtitle') }}</p>
       <div class="flex items-center gap-3">
         <span v-if="!loading && items.length > 0" class="text-xs surface-muted">
@@ -15,8 +15,8 @@
     </div>
 
     <!-- Table -->
-    <div class="overflow-x-auto">
-      <table class="w-full min-w-max divide-y divide-gray-200 dark:divide-dark-700">
+    <div class="record-table-scroll overflow-x-auto" :class="{ 'workspace-table-viewport': workspace }">
+      <table class="record-table w-full min-w-max divide-y divide-gray-200 dark:divide-dark-700">
         <thead class="surface-inset">
           <tr>
             <th class="w-16 px-4 py-3 text-left text-xs font-medium uppercase tracking-wider sm:px-6 surface-muted">#</th>
@@ -95,6 +95,7 @@ const props = defineProps<{
   filters: Record<string, unknown>
   model?: string
   totalTokens?: number
+  workspace?: boolean
 }>()
 
 defineEmits<{ (e: 'select-user', userId: number, email: string): void }>()

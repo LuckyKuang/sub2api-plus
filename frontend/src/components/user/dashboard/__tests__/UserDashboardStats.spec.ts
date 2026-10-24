@@ -82,6 +82,30 @@ function cardPlatforms(w: VueWrapper): string[] {
 }
 
 describe('UserDashboardStats 按平台拆分', () => {
+  it('keeps summary cards fixed while retaining every quota in the details section', () => {
+    const stats = makeStats({
+      today_requests: 123,
+      total_actual_cost: 0.03,
+      today_actual_cost: 0.03,
+      by_platform: [usage('grok', 0.03)],
+    })
+    const platformQuotas = [quota({ platform: 'openai', daily_limit_usd: 10, daily_usage_usd: 2.5 })]
+    const summary = mount(UserDashboardStats, { props: { stats, balance: 5, isSimple: false, platformQuotas, section: 'summary', workspace: true } })
+    const details = mount(UserDashboardStats, { props: { stats, balance: 5, isSimple: false, platformQuotas, section: 'details' } })
+
+    expect(summary.text()).toContain('123')
+    expect(summary.text()).toContain('$5.00')
+    expect(summary.find('details').exists()).toBe(false)
+    expect(cardPlatforms(summary)).toEqual([])
+    expect(details.text()).not.toContain('inspection.todayRecords')
+    expect(details.find('details').exists()).toBe(true)
+    expect(cardPlatforms(details)).toEqual(['openai', 'grok'])
+    expect(details.text()).toContain('2.50')
+    expect(details.text()).toContain('10.00')
+    summary.unmount()
+    details.unmount()
+  })
+
   it('只有用量的平台才产生卡片；三档全空的限额记录不产生卡片', () => {
     const w = mountStats(
       makeStats({ total_actual_cost: 0.03, today_actual_cost: 0.03, by_platform: [usage('grok', 0.03)] }),

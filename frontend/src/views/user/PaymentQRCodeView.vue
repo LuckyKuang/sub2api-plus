@@ -1,11 +1,11 @@
 <template>
   <AppLayout>
-    <div class="mx-auto flex max-w-md flex-col items-center space-y-6 py-8">
+    <div class="card mx-auto flex w-full min-w-0 max-w-md flex-col items-center gap-6 p-5 sm:p-8">
       <h2 class="text-xl font-semibold text-gray-900 dark:text-white">
         {{ qrUrl ? scanTitle : t('payment.qr.payInNewWindow') }}
       </h2>
-      <div v-if="qrUrl" class="glass-surface p-6">
-        <canvas ref="qrCanvas" class="mx-auto"></canvas>
+      <div v-if="qrUrl" class="w-full rounded-[var(--surface-radius-inset)] surface-opaque p-3">
+        <canvas ref="qrCanvas" class="mx-auto max-w-full"></canvas>
       </div>
       <!-- Scan prompt for QR code -->
       <p v-if="qrUrl && !expired && scanHint" class="text-center text-sm surface-muted">

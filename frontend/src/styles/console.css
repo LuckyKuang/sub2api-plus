@@ -6,6 +6,10 @@
   --shell-inset-bottom: max(var(--shell-gutter), env(safe-area-inset-bottom));
   --shell-sticky-offset: calc(var(--shell-inset-top) + var(--shell-header-height) + var(--shell-gap));
   --surface-radius: 20px;
+  --surface-radius-inset: 16px;
+  --surface-radius-panel: 16px;
+  --surface-radius-control: 12px;
+  --surface-radius-item: 10px;
   --surface-fill: var(--surface-solid);
   --surface-shell: var(--surface-solid);
   --surface-soft: #edf2f0;
@@ -137,6 +141,34 @@
 .sidebar-mobile-close { flex: none; width: 44px; height: 44px; }
 .sidebar-nav { min-height: 0; overscroll-behavior: contain; scrollbar-width: thin; }
 .sidebar-link { min-height: 44px; }
+.sidebar-nav .sidebar-link {
+  border-radius: 12px;
+  transition: background-color 140ms, color 140ms, box-shadow 140ms;
+}
+.sidebar-nav .sidebar-link:is(:hover, :focus-visible) {
+  background-color: color-mix(in srgb, #14b8a6 17%, var(--surface-solid));
+  box-shadow: inset 0 0 0 1px rgb(20 184 166 / 24%);
+}
+.sidebar-nav .sidebar-link-active {
+  background-color: color-mix(in srgb, #14b8a6 25%, var(--surface-solid));
+  box-shadow: inset 0 0 0 1px rgb(20 184 166 / 50%), inset 3px 0 #14b8a6;
+  color: #0f766e;
+  font-weight: 650;
+}
+.dark .sidebar-nav .sidebar-link-active { color: #5eead4; }
+.sidebar-nav .sidebar-link-active:is(:hover, :focus-visible) {
+  background-color: color-mix(in srgb, #14b8a6 29%, var(--surface-solid));
+  box-shadow: inset 0 0 0 1px rgb(20 184 166 / 50%), inset 3px 0 #14b8a6;
+}
+.sidebar-nav .sidebar-link:active { background-color: color-mix(in srgb, #14b8a6 33%, var(--surface-solid)); }
+
+/* Align a floating page action card with the shell's actual content column. */
+.app-layout { --console-content-left: max(var(--shell-gutter), env(safe-area-inset-left)); }
+.console-save-bar {
+  left: var(--console-content-left);
+  right: max(var(--shell-gutter), env(safe-area-inset-right));
+  bottom: var(--shell-inset-bottom);
+}
 .version-dropdown { max-height: calc(100dvh - var(--shell-sticky-offset) - var(--shell-inset-bottom)); overflow-y: auto; }
 @media (max-width: 1023px) {
   .sidebar .version-dropdown { left: -48px; max-width: calc(100vw - (var(--shell-gutter) + 18px) * 2); }
@@ -148,6 +180,7 @@
 @media (min-width: 1024px) {
   :root { --shell-gap: 24px; --shell-gutter: 24px; --surface-radius: 24px; }
   .app-layout { grid-template-columns: var(--sidebar-width) minmax(0, 1fr); transition: grid-template-columns 200ms ease-out; }
+  .app-layout { --console-content-left: calc(max(var(--shell-gutter), env(safe-area-inset-left)) + var(--sidebar-width) + var(--shell-gap)); }
   .app-layout.sidebar-is-collapsed { --sidebar-width: 72px; }
   .sidebar { position: sticky; left: auto; align-self: start; width: 100%; transform: none; }
   .app-header-inner { padding-inline: 18px; }

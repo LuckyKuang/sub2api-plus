@@ -142,6 +142,20 @@ describe('管理员插件页二次验证', () => {
     })
   })
 
+  it('keeps upload and page guidance outside the scrollable plugin cards', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    const scroll = wrapper.get('[data-test="plugin-list-scroll"]')
+    expect(scroll.find('article').exists()).toBe(true)
+    expect(scroll.text()).toContain('Test Transport')
+    expect(scroll.text()).not.toContain('admin.plugins.uploadHint')
+    expect(scroll.find('h2').exists()).toBe(false)
+    expect(scroll.find('input[type="file"]').exists()).toBe(false)
+    expect(scroll.findComponent(BaseDialog).exists()).toBe(false)
+    expect(wrapper.get('section').classes()).toContain('workspace-fixed')
+    expect(listPlugins).toHaveBeenCalledTimes(1)
+  })
+
   it('启用插件通过 step-up 控制器执行', async () => {
     const wrapper = mountView()
     await flushPromises()

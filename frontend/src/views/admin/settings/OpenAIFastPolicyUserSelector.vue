@@ -47,7 +47,7 @@
 
     <div
       v-if="showDropdown && searchQuery.trim()"
-      class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-gray-200 shadow-lg dark:border-dark-600 surface-panel"
+      class="absolute z-50 mt-1 max-h-60 w-full space-y-0.5 overflow-auto border border-gray-200 p-1 shadow-lg dark:border-dark-600 surface-panel"
     >
       <div v-if="searchLoading" class="px-4 py-3 text-sm surface-muted">
         {{ t("common.loading") }}
@@ -63,7 +63,7 @@
           v-for="user in availableResults"
           :key="user.id"
           type="button"
-          class="flex w-full items-center justify-between gap-3 px-4 py-2 text-left text-sm hover:surface-hover surface-control"
+          class="flex w-full items-center justify-between gap-3 rounded-[var(--surface-radius-item)] px-3 py-2 text-left text-sm hover:surface-hover surface-control"
           @click="selectUser(user)"
         >
           <span class="min-w-0 truncate font-medium text-gray-900 dark:text-white">

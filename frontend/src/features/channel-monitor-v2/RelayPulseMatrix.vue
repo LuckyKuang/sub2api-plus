@@ -34,9 +34,12 @@
         ref="scrollRef"
         class="matrix-scroll max-h-[min(42vh,420px)] max-w-full overflow-auto rounded-2xl surface-inset p-2"
         @wheel="onMatrixWheel"
+        @scroll="onScroll"
+        @focusout="onFocusOut"
       >
         <div class="matrix-table w-full" :style="tableStyle">
           <div
+            ref="headerRef"
             class="matrix-header matrix-row sticky top-0 z-[3] surface-inset text-[10px] font-semibold uppercase tracking-wide surface-muted"
             :class="showThroughput ? 'matrix-row--with-tps' : ''"
           >
@@ -50,10 +53,15 @@
               <i class="not-italic">{{ axisEnd }}</i>
             </span>
           </div>
+          <div class="matrix-virtual-body relative" :style="{ height: `${bodyHeight}px` }">
           <div
-            v-for="entry in alignedRows"
-            :key="rowKey(entry.row)"
-            class="matrix-row border-b border-gray-100/80 dark:border-dark-700/60"
+            v-for="entry in visibleRows"
+            :key="entry.key"
+            :ref="measureRow"
+            :data-index="entry.index"
+            :data-row-key="entry.key"
+            :style="{ transform: `translateY(${entry.start - headerHeight}px)` }"
+            class="matrix-data-row matrix-row absolute inset-x-0 top-0 border-b border-gray-100/80 dark:border-dark-700/60"
             :class="showThroughput ? 'matrix-row--with-tps' : ''"
           >
             <div class="dimension-cell flex min-w-0 items-center gap-2 surface-inset" :title="rowLabel(entry.row)">
@@ -83,42 +91,26 @@
             </strong>
             <div class="pulse-track grid items-stretch" :style="pulseStyle">
               <span
-                v-for="slot in entry.slots"
+                v-for="(slot, column) in entry.slots"
                 :key="slot.start"
                 class="pulse-cell relative rounded-sm border-0 p-0 outline-offset-1"
                 :class="[
                   slot.bucket ? cellClass(slot.bucket.health, slot.bucket.metrics.request_count) : 'health-unknown',
                   slot.bucket ? 'has-data' : 'is-empty',
                 ]"
+                :data-column="column"
                 tabindex="0"
                 role="img"
-                :title="slot.bucket ? bucketTooltip(slot.bucket) : t('channelMonitorV2.matrix.noTrafficAt', { time: formatBucketRange(slot.start) })"
                 :aria-label="slot.bucket ? bucketTooltip(slot.bucket) : t('channelMonitorV2.matrix.noTrafficAt', { time: formatBucketRange(slot.start) })"
                 @mouseenter="showTooltip($event, slot)"
                 @mousemove="moveTooltip($event)"
                 @mouseleave="hideTooltip"
-                @focus="showTooltip($event, slot)"
+                @focus="onCellFocus($event, slot, entry.index, column)"
+                @keydown="onCellKeydown($event, entry.index, column)"
                 @blur="hideTooltip"
-              >
-                <span class="pulse-tooltip" role="tooltip">
-                  <template v-if="slot.bucket">
-                    <span class="pulse-tooltip-line pulse-tooltip-title">{{ formatBucketRange(slot.start) }}</span>
-                    <span class="pulse-tooltip-line">{{ t('channelMonitorV2.matrix.scoreLine', { score: formatScore(slot.bucket.health) }) }}</span>
-                    <span class="pulse-tooltip-line">{{ t('channelMonitorV2.metrics.successRateValue', { value: successRate(slot.bucket.metrics) }) }}</span>
-                    <span class="pulse-tooltip-line">{{ t('channelMonitorV2.metrics.ttftValue', { value: latencyPrivacy(slot.bucket.metrics.ttft) }) }}</span>
-                    <span v-if="showThroughput" class="pulse-tooltip-line">{{ t('channelMonitorV2.metrics.tpsValue', { value: formatTps(slot.bucket.metrics.tpm) }) }}</span>
-                    <span class="pulse-tooltip-line">{{ t('channelMonitorV2.metrics.cacheRateValue', { value: formatPercent(slot.bucket.metrics.cache_rate) }) }}</span>
-                    <span class="pulse-tooltip-line">{{ t('channelMonitorV2.metrics.errorRateValue', { value: formatPercent(slot.bucket.metrics.error_rate) }) }}</span>
-                    <span v-if="showThroughput" class="pulse-tooltip-line">{{ t('channelMonitorV2.metrics.rpmValue', { value: formatRate(slot.bucket.metrics.rpm) }) }}</span>
-                    <span class="pulse-tooltip-line">{{ t('channelMonitorV2.metrics.durationValue', { value: latencyPrivacy(slot.bucket.metrics.duration) }) }}</span>
-                  </template>
-                  <template v-else>
-                    <span class="pulse-tooltip-line pulse-tooltip-title">{{ formatBucketRange(slot.start) }}</span>
-                    <span class="pulse-tooltip-line">{{ t('channelMonitorV2.matrix.noTraffic') }}</span>
-                  </template>
-                </span>
-              </span>
+              />
             </div>
+          </div>
           </div>
         </div>
       </div>
@@ -144,29 +136,15 @@
       </div>
     </div>
 
-    <Teleport to="body">
-      <div
-        v-if="floatingTooltip.visible"
-        class="matrix-floating-tooltip surface-panel"
-        :style="{ left: `${floatingTooltip.x}px`, top: `${floatingTooltip.y}px` }"
-        role="tooltip"
-      >
-        <span
-          v-for="(line, index) in floatingTooltip.lines"
-          :key="`${index}:${line}`"
-          class="matrix-floating-tooltip-line"
-          :class="index === 0 ? 'matrix-floating-tooltip-title' : ''"
-        >
-          {{ line }}
-        </span>
-      </div>
-    </Teleport>
+    <MatrixTooltip ref="tooltipRef" />
   </section>
 </template>
 
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, onUpdated, ref, watch, type ComponentPublicInstance } from 'vue'
+import { defaultRangeExtractor, observeElementRect, useVirtualizer } from '@tanstack/vue-virtual'
+import MatrixTooltip from './MatrixTooltip.vue'
 import type {
   LatencyMetric,
   MonitorCoverage,
@@ -177,13 +155,11 @@ import type {
 } from '@/api/channelMonitorV2'
 import EmptyState from '@/components/common/EmptyState.vue'
 import Icon from '@/components/icons/Icon.vue'
+import { formatCompactNumber } from '@/utils/format'
 import {
   formatLatencyPrivacy,
   formatMonitorMs,
-  formatMonitorPercent,
-  formatMonitorSuccessRateFromError,
-  formatMonitorThroughput,
-  formatMonitorTokensPerSecond,
+  monitorIntlLocale,
   tokensPerSecondFromTpm,
   healthModeScore,
   healthScoreClass,
@@ -195,6 +171,7 @@ import {
   resetZoom,
   sliceByZoom,
   type ZoomState,
+  type MatrixViewState,
 } from '@/features/channel-monitor-v2/monitorZoom'
 
 type HealthMode = 'overall' | 'success' | 'ttft' | 'cache'
@@ -207,21 +184,178 @@ const props = withDefaults(
     healthMode: HealthMode
     /** When false, RPM/TPM are omitted from tooltips (user scale privacy). */
     showThroughput?: boolean
+    dimensionKey?: string
+    viewState?: MatrixViewState
   }>(),
   { showThroughput: true },
 )
 
+const emit = defineEmits<{ 'update:viewState': [state: MatrixViewState] }>()
 type AlignedSlot = { start: string; bucket?: MonitorMatrixBucket }
 
-const floatingTooltip = reactive({
-  visible: false,
-  x: 0,
-  y: 0,
-  lines: [] as string[],
-})
-
+const tooltipRef = ref<InstanceType<typeof MatrixTooltip> | null>(null)
 const scrollRef = ref<HTMLElement | null>(null)
-const zoom = ref<ZoomState>(resetZoom())
+const headerRef = ref<HTMLElement | null>(null)
+const headerHeight = ref(36)
+const viewportWidth = ref(typeof window === 'undefined' ? 1024 : window.innerWidth)
+const focusedRow = ref<number | null>(null)
+const pendingFocus = ref<{ row: number; column: number; key: string; start: string } | null>(null)
+let focusedColumn = 0
+let disposed = false
+let rowsRevision = 0
+let bucketsRevision = 0
+let headerObserver: ResizeObserver | undefined
+const zoom = ref<ZoomState>(props.viewState?.zoom || resetZoom())
+const domainKey = computed(() => JSON.stringify([
+  props.dimensionKey || [props.coverage.requested_start, props.coverage.requested_end],
+  props.coverage.bucket_seconds,
+]))
+function saveViewport() {
+  emit('update:viewState', {
+    zoom: zoom.value,
+    scrollTop: scrollRef.value?.scrollTop ?? props.viewState?.scrollTop ?? 0,
+    scrollLeft: scrollRef.value?.scrollLeft ?? props.viewState?.scrollLeft ?? 0,
+    domainKey: domainKey.value,
+  })
+}
+const rowKeys = computed(() => props.rows.map(rowKey))
+const rowVirtualizer = useVirtualizer(computed(() => {
+  // TanStack memoizes range extraction by callback identity. Capture both pins
+  // here so a focus request invalidates that memo before any browser scroll event.
+  const focused = focusedRow.value
+  const requested = pendingFocus.value?.row
+  return {
+  count: props.rows.length,
+  getScrollElement: () => scrollRef.value,
+  getItemKey: (index: number) => rowKeys.value[index],
+  estimateSize: () => viewportWidth.value <= 640 ? 48 : 36,
+  overscan: 4,
+  paddingStart: headerHeight.value,
+  scrollPaddingStart: headerHeight.value,
+  initialOffset: props.viewState?.scrollTop || 0,
+  initialRect: { width: viewportWidth.value, height: Math.min(420, typeof window === 'undefined' ? 420 : window.innerHeight * 0.42) },
+  observeElementRect: (instance: Parameters<typeof observeElementRect<HTMLElement>>[0], callback: Parameters<typeof observeElementRect<HTMLElement>>[1]) =>
+    observeElementRect(instance, (rect) => {
+      // A temporarily detached/hidden view must not erase the visible range.
+      if (rect.height <= 0) return
+      viewportWidth.value = rect.width
+      callback(rect)
+    }),
+  rangeExtractor: (range: Parameters<typeof defaultRangeExtractor>[0]) => {
+    const indexes = defaultRangeExtractor(range)
+    // Retain the source until focus reaches the requested row. A real browser
+    // delivers scroll asynchronously, so either row may be outside this range.
+    for (const pin of [focused, requested]) {
+      if (pin != null && pin < props.rows.length && !indexes.includes(pin)) indexes.push(pin)
+    }
+    return indexes.sort((a, b) => a - b)
+  },
+  useAnimationFrameWithResizeObserver: true,
+  }
+}))
+const bodyHeight = computed(() => Math.max(0, rowVirtualizer.value.getTotalSize() - headerHeight.value))
+function measureRow(element: Element | ComponentPublicInstance | null) {
+  if (element instanceof HTMLElement) rowVirtualizer.value.measureElement(element)
+}
+function clampScroll() {
+  const element = scrollRef.value
+  if (!element) return
+  const maximum = Math.max(0, rowVirtualizer.value.getTotalSize() - (element.clientHeight || rowVirtualizer.value.scrollRect?.height || 0))
+  const top = Math.min(element.scrollTop, maximum)
+  if (top !== element.scrollTop) rowVirtualizer.value.scrollToOffset(top)
+  saveViewport()
+}
+function onFocusOut(event: FocusEvent) {
+  if (scrollRef.value?.contains(event.relatedTarget as Node | null)) return
+  focusedRow.value = null
+  pendingFocus.value = null
+  hideTooltip()
+}
+function onScroll() {
+  hideTooltip()
+  saveViewport()
+}
+onMounted(async () => {
+  headerObserver = new ResizeObserver(() => {
+    const height = headerRef.value?.getBoundingClientRect().height
+    if (height && height !== headerHeight.value) headerHeight.value = height
+  })
+  if (headerRef.value) headerObserver.observe(headerRef.value)
+  const height = headerRef.value?.getBoundingClientRect().height
+  if (height) headerHeight.value = height
+  await nextTick()
+  const element = scrollRef.value
+  if (element) {
+    element.scrollTop = props.viewState?.scrollTop || 0
+    element.scrollLeft = props.viewState?.scrollLeft || 0
+    rowVirtualizer.value.scrollToOffset(element.scrollTop)
+    clampScroll()
+  }
+})
+// Vue calls function refs with null before removing nodes. Clean after the DOM
+// patch so the virtualizer releases detached rows and their ResizeObservers.
+onUpdated(() => {
+  rowVirtualizer.value.measureElement(null)
+  completePendingFocus()
+})
+onBeforeUnmount(() => {
+  disposed = true
+  pendingFocus.value = null
+  headerObserver?.disconnect()
+})
+watch(headerRef, (element, previous) => {
+  if (previous) headerObserver?.unobserve(previous)
+  if (element) {
+    headerObserver?.observe(element)
+    const height = element.getBoundingClientRect().height
+    if (height) headerHeight.value = height
+  }
+}, { flush: 'post' })
+watch(scrollRef, async (element, previous) => {
+  if (!element || previous) return
+  await nextTick()
+  element.scrollTop = props.viewState?.scrollTop || 0
+  element.scrollLeft = props.viewState?.scrollLeft || 0
+  rowVirtualizer.value.scrollToOffset(element.scrollTop)
+  clampScroll()
+}, { flush: 'post' })
+watch(viewportWidth, async (width, previous) => {
+  if (width === previous) return
+  rowVirtualizer.value.measure()
+  await nextTick()
+  // Clearing the cache can follow the same ResizeObserver delivery that measured
+  // the new layout. Read mounted rows again; a second resize event is not guaranteed.
+  scrollRef.value?.querySelectorAll<HTMLElement>('.matrix-data-row').forEach((element) => {
+    const height = element.getBoundingClientRect().height
+    // measureElement defers synchronous reads during user scrolling, but layout
+    // changes must replace the cleared estimates even if scrolling is still active.
+    if (height > 0) rowVirtualizer.value.resizeItem(Number(element.dataset.index), height)
+  })
+  await nextTick()
+  clampScroll()
+})
+watch(rowKeys, async (keys, previous) => {
+  const revision = ++rowsRevision
+  hideTooltip()
+  const pending = pendingFocus.value
+  if (pending) {
+    const index = keys.indexOf(pending.key)
+    pendingFocus.value = index < 0 ? null : { ...pending, row: index }
+  }
+  const focusedKey = focusedRow.value == null ? undefined : previous?.[focusedRow.value]
+  const hadFocus = scrollRef.value?.contains(document.activeElement)
+  if (focusedRow.value != null) {
+    const index = focusedKey ? keys.indexOf(focusedKey) : -1
+    focusedRow.value = index >= 0 ? index : keys.length ? Math.min(focusedRow.value, keys.length - 1) : null
+  }
+  const retainedFocusedRow = focusedRow.value
+  await nextTick()
+  if (disposed || revision !== rowsRevision) return
+  clampScroll()
+  if (hadFocus && retainedFocusedRow != null && !scrollRef.value?.contains(document.activeElement)) {
+    await focusCell(retainedFocusedRow, focusedColumn)
+  }
+})
 const zoomed = computed(() => isZoomed(zoom.value))
 
 const allBucketStarts = computed(() => {
@@ -246,6 +380,24 @@ const allBucketStarts = computed(() => {
 })
 /** Visible bucket window after X zoom (cursor-centered), not always the tail. */
 const bucketStarts = computed(() => sliceByZoom(allBucketStarts.value, zoom.value))
+watch(bucketStarts, async (starts, previous) => {
+  const revision = ++bucketsRevision
+  const pending = pendingFocus.value
+  if (pending) {
+    const index = starts.indexOf(pending.start)
+    const column = index >= 0 ? index : Math.min(pending.column, Math.max(0, starts.length - 1))
+    pendingFocus.value = starts.length ? { ...pending, column, start: starts[column] } : null
+  }
+  if (focusedRow.value == null || !scrollRef.value?.contains(document.activeElement)) return
+  const key = rowKeys.value[focusedRow.value]
+  const start = previous[focusedColumn]
+  const column = starts.indexOf(start)
+  focusedColumn = column >= 0 ? column : Math.min(focusedColumn, Math.max(0, starts.length - 1))
+  await nextTick()
+  if (disposed || revision !== bucketsRevision) return
+  const row = rowKeys.value.indexOf(key)
+  if (row >= 0 && !pendingFocus.value && !scrollRef.value?.contains(document.activeElement)) await focusCell(row, focusedColumn)
+})
 const tableStyle = computed(() => ({
   '--bucket-count': String(Math.max(1, bucketStarts.value.length)),
   minWidth: zoomed.value ? `calc(260px + ${pulseMinWidth.value})` : '0',
@@ -294,54 +446,107 @@ const bucketStartIndex = computed(() => {
   return map
 })
 
-/** Pre-aligned sparse slots per row so wheel zoom does not rebuild Maps every paint. */
-const alignedRows = computed(() => {
+/** Align only mounted rows; a refresh never constructs thousands of cell subtrees. */
+const visibleRows = computed(() => rowVirtualizer.value.getVirtualItems().map((item) => {
+  const row = props.rows[item.index]
   const starts = bucketStarts.value
-  const indexByStart = bucketStartIndex.value
-  return props.rows.map((row) => {
-    const slots: AlignedSlot[] = starts.map((start) => ({ start }))
-    for (const bucket of row.buckets || []) {
-      const key = new Date(bucket.bucket_start).toISOString()
-      const index = indexByStart.get(key)
-      if (index != null) slots[index] = { start: starts[index], bucket }
-    }
-    return { row, slots }
-  })
-})
+  const slots: AlignedSlot[] = starts.map((start) => ({ start }))
+  for (const bucket of row.buckets || []) {
+    const index = bucketStartIndex.value.get(new Date(bucket.bucket_start).toISOString())
+    if (index != null) slots[index] = { start: starts[index], bucket }
+  }
+  return { row, slots, key: rowKeys.value[item.index], index: item.index, start: item.start }
+}))
 
 function onMatrixWheel(event: WheelEvent) {
-  const track = scrollRef.value
-  const target = event.target as HTMLElement | null
-  const pulse = target?.closest('.pulse-track') as HTMLElement | null
-  const overMatrix = Boolean(target?.closest('.matrix-scroll'))
-  // Plain vertical wheel over the matrix zooms X (narrower range → wider cells).
-  // Shift+wheel or horizontal delta pans; leave non-matrix page scroll alone.
-  const isPan = event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY)
-  if (!overMatrix && !pulse) return
-  // When not zoomed and user scrolls vertically outside pulse, still zoom if over matrix body.
-  if (!overMatrix && !isPan) return
+  // Ordinary wheel input belongs to the scroll viewport. Ctrl explicitly zooms time.
+  if (!event.ctrlKey) return
   event.preventDefault()
-  const ratioEl = pulse || track
-  const ratio = clientXRatio(event.clientX, ratioEl)
-  zoom.value = applyWheelZoom(zoom.value, event, ratio)
+  const pulse = (event.target as HTMLElement | null)?.closest<HTMLElement>('.pulse-track')
+  const next = applyWheelZoom(zoom.value, event, clientXRatio(event.clientX, pulse || scrollRef.value))
+  if (next === zoom.value) return
+  hideTooltip()
+  zoom.value = next
+  saveViewport()
 }
-
 function resetMatrixZoom() {
+  if (!zoomed.value) return
   zoom.value = resetZoom()
+  hideTooltip()
+  saveViewport()
 }
+watch(domainKey, (key, previous) => {
+  if (key !== (previous || props.viewState?.domainKey)) zoom.value = resetZoom()
+  hideTooltip()
+  saveViewport()
+}, { immediate: true })
 
-watch(
-  () => [
-    props.coverage.requested_start,
-    props.coverage.requested_end,
-    props.coverage.coverage_start,
-    props.coverage.data_through,
-    props.coverage.bucket_seconds,
-  ],
-  () => {
-    zoom.value = resetZoom()
-  },
-)
+function completePendingFocus() {
+  const pending = pendingFocus.value
+  if (disposed || !pending) return
+  if (rowKeys.value[pending.row] !== pending.key || bucketStarts.value[pending.column] !== pending.start) {
+    pendingFocus.value = null
+    return
+  }
+  const cell = scrollRef.value?.querySelector<HTMLElement>(`[data-index="${pending.row}"] [data-column="${pending.column}"]`)
+  if (!cell) return
+  cell.focus({ preventScroll: true })
+  if (document.activeElement !== cell) return
+  focusedRow.value = pending.row
+  focusedColumn = pending.column
+  pendingFocus.value = null
+  // Transfer focus before moving the scroll viewport; the source stays mounted
+  // until this point, and the destination stays pinned through delayed scrolls.
+  rowVirtualizer.value.scrollToIndex(pending.row, { align: 'auto' })
+}
+async function focusCell(row: number, column: number) {
+  if (disposed || !props.rows.length || !bucketStarts.value.length) return
+  const nextRow = Math.max(0, Math.min(row, props.rows.length - 1))
+  const nextColumn = Math.max(0, Math.min(column, bucketStarts.value.length - 1))
+  pendingFocus.value = { row: nextRow, column: nextColumn, key: rowKeys.value[nextRow], start: bucketStarts.value[nextColumn] }
+  await nextTick()
+  // The update hook also completes this request if the virtualizer needs a later
+  // Vue patch. No synchronous scroll event or fixed frame count is required.
+  completePendingFocus()
+}
+function onCellFocus(event: FocusEvent, slot: AlignedSlot, row: number, column: number) {
+  focusedRow.value = row
+  focusedColumn = column
+  showTooltip(event, slot)
+}
+function onCellKeydown(event: KeyboardEvent, row: number, column: number) {
+  const columns = bucketStarts.value.length
+  let nextRow = row
+  let nextColumn = column
+  if (event.key === 'ArrowDown') nextRow++
+  else if (event.key === 'ArrowUp') nextRow--
+  else if (event.key === 'ArrowRight') nextColumn++
+  else if (event.key === 'ArrowLeft') nextColumn--
+  else if (event.key === 'Home') {
+    nextColumn = 0
+    if (event.ctrlKey) nextRow = 0
+  } else if (event.key === 'End') {
+    nextColumn = columns - 1
+    if (event.ctrlKey) nextRow = props.rows.length - 1
+  } else if (event.key === 'PageDown' || event.key === 'PageUp') {
+    const page = Math.max(1, Math.floor((scrollRef.value?.clientHeight || 360) / (viewportWidth.value <= 640 ? 48 : 36)) - 1)
+    nextRow += event.key === 'PageDown' ? page : -page
+  } else if (event.key === 'Tab') {
+    const flat = row * columns + column + (event.shiftKey ? -1 : 1)
+    // At the actual matrix boundaries native Tab continues to the surrounding UI.
+    if (flat < 0 || flat >= props.rows.length * columns) {
+      focusedRow.value = null
+      return
+    }
+    nextRow = Math.floor(flat / columns)
+    nextColumn = flat % columns
+  } else if (event.key === 'Escape') {
+    hideTooltip()
+    return
+  } else return
+  event.preventDefault()
+  void focusCell(Math.max(0, Math.min(nextRow, props.rows.length - 1)), Math.max(0, Math.min(nextColumn, columns - 1)))
+}
 
 function cellClass(health: MonitorHealth, requestCount: number): string {
   return healthScoreClass(health, props.healthMode, requestCount)
@@ -364,7 +569,7 @@ function successRate(metrics: MonitorMetric): string {
   const noCount = metrics.request_count <= 0
   const noTP = (metrics.rpm || 0) <= 0 && (metrics.tpm || 0) <= 0
   if (noCount && noTP && props.showThroughput) return '-'
-  return formatMonitorSuccessRateFromError(metrics.error_rate)
+  return formatPercent(1 - (metrics.error_rate || 0))
 }
 
 function formatScore(health: MonitorHealth): string {
@@ -403,31 +608,13 @@ function emptyTooltipLines(start: string): string[] {
 }
 
 function showTooltip(event: MouseEvent | FocusEvent, slot: AlignedSlot) {
-  floatingTooltip.lines = slot.bucket ? bucketTooltipLines(slot.bucket) : emptyTooltipLines(slot.start)
-  floatingTooltip.visible = true
-  positionTooltip(event)
+  tooltipRef.value?.show(event, slot.bucket ? bucketTooltipLines(slot.bucket) : emptyTooltipLines(slot.start))
 }
-
 function moveTooltip(event: MouseEvent) {
-  if (!floatingTooltip.visible) return
-  positionTooltip(event)
+  tooltipRef.value?.move(event)
 }
-
 function hideTooltip() {
-  floatingTooltip.visible = false
-}
-
-function positionTooltip(event: MouseEvent | FocusEvent) {
-  if ('clientX' in event) {
-    floatingTooltip.x = Math.min(window.innerWidth - 12, Math.max(12, event.clientX))
-    floatingTooltip.y = Math.min(window.innerHeight - 12, Math.max(12, event.clientY)) - 12
-    return
-  }
-  const target = event.target as HTMLElement | null
-  const rect = target?.getBoundingClientRect()
-  if (!rect) return
-  floatingTooltip.x = rect.left + rect.width / 2
-  floatingTooltip.y = rect.top - 10
+  tooltipRef.value?.hide()
 }
 
 function latencyPrivacy(metric: LatencyMetric) {
@@ -435,39 +622,46 @@ function latencyPrivacy(metric: LatencyMetric) {
 }
 
 function formatPercent(value: number) {
-  return formatMonitorPercent(value)
+  return `${percentFormatters.value[value < 0.01 ? 1 : 0].format((value || 0) * 100)}%`
 }
 
 function formatRate(value: number) {
-  return formatMonitorThroughput(value)
+  if (value == null || Number.isNaN(Number(value))) return '0'
+  return Math.abs(value) < 1000 ? rateFormatter.value.format(value) : formatCompactNumber(value)
 }
 
 function formatTps(tpm: number | null | undefined) {
-  return formatMonitorTokensPerSecond(tpm)
+  return formatRate(tokensPerSecondFromTpm(tpm))
 }
 
 function exactTps(tpm: number | null | undefined) {
   const tps = tokensPerSecondFromTpm(tpm)
-  return Intl.NumberFormat(locale.value || undefined, { maximumFractionDigits: 3 }).format(tps)
+  return numberFormatter.value.format(tps)
 }
 
 function formatMs(value: number | null) {
   return formatMonitorMs(value)
 }
 
+const displayLocale = computed(() => { void locale.value; return monitorIntlLocale() })
+const percentFormatters = computed(() => [1, 2].map((digits) => new Intl.NumberFormat(displayLocale.value, {
+  minimumFractionDigits: digits, maximumFractionDigits: digits,
+})))
+const rateFormatter = computed(() => new Intl.NumberFormat(displayLocale.value, { maximumFractionDigits: 1 }))
+// Construct formatters once per locale and ranges once per time window.
+const axisFormatter = computed(() => new Intl.DateTimeFormat(locale.value || undefined, {
+  month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+}))
+const timeFormatter = computed(() => new Intl.DateTimeFormat(locale.value || undefined, { hour: '2-digit', minute: '2-digit' }))
+const numberFormatter = computed(() => new Intl.NumberFormat(locale.value || undefined, { maximumFractionDigits: 3 }))
+const bucketRanges = computed(() => new Map(allBucketStarts.value.map((start) => [start,
+  `${formatAxisTime(start)} - ${timeFormatter.value.format(new Date(new Date(start).getTime() + props.coverage.bucket_seconds * 1000))}`,
+])))
 function formatAxisTime(value: string) {
-  return new Intl.DateTimeFormat(locale.value || undefined, {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(value))
+  return axisFormatter.value.format(new Date(value))
 }
-
 function formatBucketRange(value: string) {
-  const start = new Date(value)
-  const end = new Date(start.getTime() + props.coverage.bucket_seconds * 1000)
-  return `${formatAxisTime(start.toISOString())} - ${new Intl.DateTimeFormat(locale.value || undefined, { hour: '2-digit', minute: '2-digit' }).format(end)}`
+  return bucketRanges.value.get(new Date(value).toISOString()) || ''
 }
 </script>
 
@@ -555,98 +749,6 @@ function formatBucketRange(value: string) {
   outline: 2px solid rgb(var(--color-primary-500, 99 102 241) / 0.55);
   outline-offset: 1px;
   z-index: 5;
-}
-
-/* CSS-only hover tooltip — no click modal, no absolute request counts.
-   Native title is also provided so dense/scrolling layouts can always show the
-   full content even when a browser clips transformed children. */
-.pulse-tooltip {
-  pointer-events: none;
-  position: absolute;
-  bottom: calc(100% + 8px);
-  left: 50%;
-  z-index: 40;
-  min-width: 11.5rem;
-  max-width: 16rem;
-  transform: translateX(-50%) translateY(4px);
-  border-radius: 0.75rem;
-  border: 1px solid rgb(229 231 235);
-  background: var(--surface-panel);
-  padding: 0.5rem 0.625rem;
-  box-shadow: 0 10px 25px -5px rgb(0 0 0 / 0.15);
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.12s ease, transform 0.12s ease, visibility 0.12s;
-  white-space: nowrap;
-}
-.dark .pulse-tooltip {
-  border-color: rgb(55 65 81);
-  background: var(--surface-panel);
-  color: rgb(229 231 235);
-}
-.pulse-tooltip-line {
-  display: block;
-  font-size: 11px;
-  line-height: 1.45;
-  color: rgb(75 85 99);
-}
-.dark .pulse-tooltip-line {
-  color: rgb(209 213 219);
-}
-.pulse-tooltip-title {
-  margin-bottom: 0.2rem;
-  font-weight: 600;
-  color: rgb(17 24 39);
-}
-.dark .pulse-tooltip-title {
-  color: rgb(243 244 246);
-}
-.pulse-cell:hover .pulse-tooltip,
-.pulse-cell:focus-visible .pulse-tooltip {
-  opacity: 1;
-  visibility: visible;
-  transform: translateX(-50%) translateY(0);
-}
-/* Keep semantic/test text in-cell, but render the visible tooltip through body
-   Teleport so it cannot be clipped by the matrix viewport. */
-.pulse-tooltip {
-  display: none;
-}
-.matrix-floating-tooltip {
-  pointer-events: none;
-  position: fixed;
-  z-index: 9999;
-  min-width: 11.5rem;
-  max-width: min(18rem, calc(100vw - 1.5rem));
-  transform: translate(-50%, -100%);
-  border-radius: 0.75rem;
-  border: 1px solid rgb(229 231 235);
-  background: var(--surface-panel);
-  padding: 0.5rem 0.625rem;
-  box-shadow: 0 18px 40px -12px rgb(0 0 0 / 0.28);
-  white-space: nowrap;
-}
-.dark .matrix-floating-tooltip {
-  border-color: rgb(55 65 81);
-  background: var(--surface-panel);
-  color: rgb(229 231 235);
-}
-.matrix-floating-tooltip-line {
-  display: block;
-  font-size: 11px;
-  line-height: 1.45;
-  color: rgb(75 85 99);
-}
-.dark .matrix-floating-tooltip-line {
-  color: rgb(209 213 219);
-}
-.matrix-floating-tooltip-title {
-  margin-bottom: 0.2rem;
-  font-weight: 600;
-  color: rgb(17 24 39);
-}
-.dark .matrix-floating-tooltip-title {
-  color: rgb(243 244 246);
 }
 
 @media (max-width: 640px) {

@@ -5,7 +5,7 @@
       <label class="mb-2 block text-sm font-medium surface-muted">
         {{ t('payment.quickAmounts') }}
       </label>
-      <div class="grid grid-cols-3 gap-x-4 gap-y-4 pt-2">
+      <div class="grid grid-cols-3 gap-x-4 gap-y-4 pt-2 lg:grid-cols-4">
         <button
           v-for="amt in filteredAmounts"
           :key="amt"
@@ -19,6 +19,7 @@
                 : 'border-gray-200 surface-inset text-gray-700 hover:border-gray-300 dark:border-dark-600 dark:surface-inset dark:text-gray-200 dark:hover:border-dark-500',
           ]"
           :data-testid="`quick-amount-${amt}`"
+          :aria-pressed="modelValue === amt"
           @click="selectAmount(amt)"
         >
           <!-- 促销价签（单行）：仅命中档位的金额显示；红底白字、内圈点线、右侧圆孔、整体旋转 -->

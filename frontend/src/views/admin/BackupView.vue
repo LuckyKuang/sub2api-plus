@@ -222,8 +222,8 @@
           </div>
         </div>
 
-        <div class="table-container overflow-x-auto">
-          <table class="w-full min-w-[800px] text-sm">
+        <div class="record-table-scroll table-container overflow-x-auto">
+          <table class="record-table w-full min-w-[800px] text-sm">
             <thead>
               <tr class="border-b border-gray-200 text-left text-xs uppercase tracking-wide dark:border-dark-700 surface-muted">
                 <th class="px-4 py-2">ID</th>
@@ -360,8 +360,8 @@
                 <span class="flex h-6 w-6 items-center justify-center rounded-full bg-primary-100/[0.15] text-xs font-bold text-primary-700 dark:bg-primary-900/40 dark:text-primary-300">4</span>
                 {{ t('admin.backup.r2Guide.step4.title') }}
               </h3>
-              <div class="ml-8 overflow-hidden rounded-lg border border-gray-200 dark:border-dark-600">
-                <table class="w-full text-sm">
+              <div class="record-table-scroll ml-8 overflow-hidden rounded-lg border border-gray-200 dark:border-dark-600">
+                <table class="record-table record-table-compact w-full text-sm">
                   <tbody>
                     <tr v-for="(row, i) in r2ConfigRows" :key="i" class="border-b border-gray-100 dark:border-dark-700 last:border-0">
                       <td class="whitespace-nowrap surface-inset px-3 py-2 font-medium surface-muted">{{ row.field }}</td>

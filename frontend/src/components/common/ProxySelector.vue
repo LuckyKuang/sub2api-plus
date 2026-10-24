@@ -328,7 +328,7 @@ onUnmounted(() => {
 .select-dropdown {
   @apply absolute z-[100] mt-2 w-full;
   background-color: var(--surface-panel);
-  @apply rounded-xl;
+  border-radius: var(--surface-radius-panel);
   @apply border border-gray-200 dark:border-dark-700;
   @apply shadow-lg shadow-black/10 dark:shadow-black/30;
   @apply overflow-hidden;
@@ -351,22 +351,27 @@ onUnmounted(() => {
 }
 
 .batch-test-btn {
-  @apply flex-shrink-0 rounded-lg p-1.5;
+  @apply flex-shrink-0 p-1.5;
+  border-radius: var(--surface-radius-item);
   @apply text-gray-500 hover:text-emerald-600 dark:hover:text-emerald-400;
   @apply hover:bg-emerald-50/25 dark:hover:bg-emerald-900/20;
   @apply transition-colors disabled:cursor-not-allowed disabled:opacity-50;
 }
 
 .select-options {
-  @apply max-h-60 overflow-y-auto py-1;
+  @apply max-h-60 space-y-0.5 overflow-y-auto p-1.5;
 }
 
 .select-option {
   @apply flex items-center justify-between gap-2;
-  @apply px-4 py-2.5 text-sm;
+  @apply px-3 py-2.5 text-sm;
+  border-radius: var(--surface-radius-item);
   color: var(--surface-muted);
   @apply cursor-pointer transition-colors duration-150;
+}
 
+.select-option:hover {
+  background-color: var(--surface-hover);
 }
 
 .select-option-selected {
@@ -384,7 +389,8 @@ onUnmounted(() => {
 }
 
 .test-btn {
-  @apply flex-shrink-0 rounded p-1;
+  @apply flex-shrink-0 p-1;
+  border-radius: var(--surface-radius-item);
   @apply text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400;
   @apply hover:bg-emerald-50/25 dark:hover:bg-emerald-900/20;
   @apply transition-colors disabled:cursor-not-allowed disabled:opacity-50;

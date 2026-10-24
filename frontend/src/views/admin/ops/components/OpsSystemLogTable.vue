@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DateTimePicker from '@/components/common/DateTimePicker.vue'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useMediaQuery } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
@@ -463,11 +464,11 @@ onMounted(async () => {
       </label>
       <label class="text-xs surface-muted">
         {{ t('admin.ops.systemLogs.startTime') }}
-        <input v-model="filters.start_time" type="datetime-local" class="input mt-1" />
+        <DateTimePicker :aria-label="t('admin.ops.systemLogs.startTime')" v-model="filters.start_time" type="datetime-local" class="input mt-1" />
       </label>
       <label class="text-xs surface-muted">
         {{ t('admin.ops.systemLogs.endTime') }}
-        <input v-model="filters.end_time" type="datetime-local" class="input mt-1" />
+        <DateTimePicker :aria-label="t('admin.ops.systemLogs.endTime')" v-model="filters.end_time" type="datetime-local" class="input mt-1" />
       </label>
       <label class="text-xs surface-muted">
         {{ t('admin.ops.systemLogs.level') }}
@@ -541,9 +542,9 @@ onMounted(async () => {
           </div>
         </div>
       </div>
-      <div v-else class="table-container overflow-auto">
-        <table class="min-w-full table-fixed divide-y divide-gray-200 dark:divide-dark-700">
-          <thead class="surface-inset">
+      <div v-else class="record-table-scroll table-container overflow-auto">
+        <table class="record-table min-w-full table-fixed divide-y divide-gray-200 dark:divide-dark-700">
+          <thead class="sticky top-0 z-10 surface-inset">
             <tr>
               <th class="w-[170px] px-3 py-2 text-left text-[11px] font-semibold surface-muted">{{ t('admin.ops.systemLogs.time') }}</th>
               <th class="w-[160px] px-3 py-2 text-left text-[11px] font-semibold surface-muted">{{ t('admin.ops.systemLogs.host') }}</th>

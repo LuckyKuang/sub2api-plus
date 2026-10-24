@@ -1,7 +1,7 @@
 <template>
-  <AppLayout>
-    <div class="catalog-page min-w-0 space-y-5">
-      <div class="flex items-start justify-between gap-3">
+  <AppLayout workspace>
+    <div class="catalog-page workspace-page min-w-0 space-y-5">
+      <div class="card workspace-fixed flex items-start justify-between gap-3 p-4" data-testid="catalog-heading">
         <div>
           <h1 class="text-xl font-semibold text-gray-900 dark:text-gray-100">{{ t('availableChannels.title') }}</h1>
           <p class="mt-1 text-sm surface-muted">{{ t('availableChannels.description') }}</p>
@@ -10,8 +10,8 @@
           <Icon name="refresh" size="md" :class="{ 'animate-spin': loading }" />
         </button>
       </div>
-      <div class="surface-card space-y-4 rounded-xl border border-gray-200 p-4 dark:border-dark-700">
-        <div class="flex flex-wrap items-center gap-2" role="group" :aria-label="t('modelPlaza.filters.platformLabel')">
+      <div class="surface-card workspace-fixed space-y-4 rounded-xl border border-gray-200 p-4 dark:border-dark-700" data-testid="catalog-filters">
+        <div class="catalog-platforms flex flex-wrap items-center gap-2" role="group" :aria-label="t('modelPlaza.filters.platformLabel')">
           <span class="mr-2 text-xs surface-muted">{{ t('modelPlaza.filters.platformLabel') }}</span>
           <button class="catalog-filter surface-control" :class="{ selected: !filters.platform }" :aria-pressed="!filters.platform" @click="selectPlatform('')">{{ t('modelPlaza.filters.all') }} <span class="opacity-60">{{ models.length }}</span></button>
           <button v-for="platform in platforms" :key="platform" class="catalog-filter surface-control" :class="{ selected: filters.platform === platform }" :aria-pressed="filters.platform === platform" @click="selectPlatform(platform)">
@@ -19,7 +19,7 @@
           </button>
         </div>
         <div class="flex flex-wrap items-center gap-3 border-t border-gray-100 pt-3 dark:border-dark-800">
-          <label class="relative w-full min-w-0 max-w-sm">
+          <label class="catalog-search relative w-full min-w-0 max-w-sm">
             <span class="sr-only">{{ t('availableChannels.catalog.searchPlaceholder') }}</span>
             <Icon name="search" size="md" class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input v-model="filters.search" class="input w-full pl-10 pr-10" type="search" :placeholder="t('availableChannels.catalog.searchPlaceholder')" />
@@ -35,23 +35,25 @@
           <button class="btn btn-secondary" @click="reset">{{ t('availableChannels.catalog.reset') }}</button>
         </div>
       </div>
-      <div v-if="catalog.user_rate_status === 'unavailable'" role="status" class="flex flex-wrap items-center gap-3 rounded-lg bg-amber-50/[0.15] p-3 text-sm text-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+      <div v-if="catalog.user_rate_status === 'unavailable'" role="status" class="workspace-fixed flex flex-wrap items-center gap-3 rounded-lg bg-amber-50/[0.15] p-3 text-sm text-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
         {{ t('availableChannels.catalog.ratesUnavailable') }}<button class="underline surface-control" @click="loadCatalog">{{ t('availableChannels.catalog.retry') }}</button>
       </div>
-      <p v-if="!loading && !error" class="text-xs surface-muted" aria-live="polite">{{ t('availableChannels.catalog.modelCount', { count: visible.length }) }}</p>
-      <div v-if="loading" class="catalog-grid" aria-busy="true" :aria-label="t('common.loading')">
-        <div v-for="i in 12" :key="i" class="glass-surface h-52 animate-pulse" />
-      </div>
-      <div v-else-if="error" role="alert" class="py-12 text-center">
-        <p class="text-red-600 dark:text-red-400">{{ error }}</p><button class="btn btn-secondary mt-4" @click="loadCatalog">{{ t('availableChannels.catalog.retry') }}</button>
-      </div>
-      <div v-else-if="!visible.length" class="py-12 text-center surface-muted">
-        <p>{{ models.length ? t('availableChannels.catalog.noMatches') : t('availableChannels.noModels') }}</p>
-        <button v-if="models.length" class="btn btn-secondary mt-4" @click="reset">{{ t('availableChannels.catalog.reset') }}</button>
-      </div>
-      <div v-else class="catalog-grid">
-        <CatalogModelCard v-for="model in visible" :key="model.key" :model="model" :rate-unavailable="catalog.user_rate_status === 'unavailable'" @details="openDetails" />
-      </div>
+      <p v-if="!loading && !error" class="workspace-fixed text-xs surface-muted" aria-live="polite">{{ t('availableChannels.catalog.modelCount', { count: visible.length }) }}</p>
+      <section class="workspace-scroll" :aria-label="t('availableChannels.title')" data-testid="catalog-results">
+        <div v-if="loading" class="catalog-grid" aria-busy="true" :aria-label="t('common.loading')">
+          <div v-for="i in 12" :key="i" class="glass-surface h-52 animate-pulse" />
+        </div>
+        <div v-else-if="error" role="alert" class="card py-12 text-center">
+          <p class="text-red-600 dark:text-red-400">{{ error }}</p><button class="btn btn-secondary mt-4" @click="loadCatalog">{{ t('availableChannels.catalog.retry') }}</button>
+        </div>
+        <div v-else-if="!visible.length" class="card py-12 text-center surface-muted">
+          <p>{{ models.length ? t('availableChannels.catalog.noMatches') : t('availableChannels.noModels') }}</p>
+          <button v-if="models.length" class="btn btn-secondary mt-4" @click="reset">{{ t('availableChannels.catalog.reset') }}</button>
+        </div>
+        <div v-else class="catalog-grid">
+          <CatalogModelCard v-for="model in visible" :key="model.key" :model="model" :rate-unavailable="catalog.user_rate_status === 'unavailable'" @details="openDetails" />
+        </div>
+      </section>
       <CatalogPriceDetails :model="selected" :rate-unavailable="catalog.user_rate_status === 'unavailable'" @close="selectedKey = null" />
     </div>
   </AppLayout>
@@ -145,5 +147,11 @@ useLocaleRefresh(loadCatalog)
 @container (min-width: 460px) { .catalog-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @container (min-width: 700px) { .catalog-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @container (min-width: 940px) { .catalog-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
-@container (min-width: 1180px) { .catalog-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+@media (min-width: 1024px) {
+  .catalog-search { flex: 1 1 200px; width: auto; }
+}
+@media (min-width: 1024px) and (max-height: 600px) {
+  .catalog-platforms { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; }
+  .catalog-platforms > * { flex-shrink: 0; }
+}
 </style>

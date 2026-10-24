@@ -10,6 +10,13 @@ export interface ZoomState {
   offset: number
 }
 
+export interface MatrixViewState {
+  zoom: ZoomState
+  scrollTop: number
+  scrollLeft: number
+  domainKey: string
+}
+
 export const DEFAULT_ZOOM: ZoomState = { span: 1, offset: 0 }
 export const MIN_ZOOM_SPAN = 0.12
 
@@ -31,10 +38,8 @@ export function isZoomed(state: ZoomState): boolean {
 export function clampZoom(state: ZoomState): ZoomState {
   const span = clamp(state.span, MIN_ZOOM_SPAN, 1)
   const maxOffset = Math.max(0, 1 - span)
-  return {
-    span,
-    offset: clamp(state.offset, 0, maxOffset),
-  }
+  const offset = clamp(state.offset, 0, maxOffset)
+  return span === state.span && offset === state.offset ? state : { span, offset }
 }
 
 /**
@@ -54,10 +59,8 @@ export function applyWheelZoom(
     const delta = event.shiftKey ? event.deltaY : event.deltaX
     // Positive delta → pan right (increase offset)
     const panFraction = (delta / 400) * state.span
-    return clampZoom({
-      span: state.span,
-      offset: state.offset + panFraction,
-    })
+    const next = clampZoom({ span: state.span, offset: state.offset + panFraction })
+    return next.span === state.span && next.offset === state.offset ? state : next
   }
 
   // Zoom in (deltaY < 0) / out (deltaY > 0) around cursor

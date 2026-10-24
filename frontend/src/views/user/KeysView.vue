@@ -1,5 +1,5 @@
 <template>
-  <AppLayout>
+  <AppLayout workspace>
     <TablePageLayout>
       <template #filters>
         <div class="flex flex-col gap-3">
@@ -70,13 +70,13 @@
             </button>
             <div
               v-if="showColumnDropdown"
-              class="absolute right-0 top-full z-50 mt-1 max-h-80 w-48 overflow-y-auto rounded-lg border border-gray-200 py-1 shadow-lg dark:border-dark-600 surface-panel"
+              class="absolute right-0 top-full z-50 mt-1 max-h-80 w-48 space-y-0.5 overflow-y-auto border border-gray-200 p-1 shadow-lg dark:border-dark-600 surface-panel"
             >
               <button
                 v-for="col in toggleableColumns"
                 :key="col.key"
                 @click="toggleColumn(col.key)"
-                class="flex w-full items-center justify-between px-4 py-2 text-left text-sm hover:surface-hover surface-control surface-muted"
+                class="flex w-full items-center justify-between rounded-[var(--surface-radius-item)] px-3 py-2 text-left text-sm hover:surface-hover surface-control surface-muted"
               >
                 <span>{{ col.label }}</span>
                 <Icon
@@ -904,7 +904,7 @@
             <!-- Date picker (always show for precise adjustment) -->
             <div>
               <label class="input-label">{{ t('keys.expirationDate') }}</label>
-              <input
+              <DateTimePicker :aria-label="t('keys.expirationDate')"
                 v-model="formData.expiration_date"
                 type="datetime-local"
                 class="input"
@@ -1140,6 +1140,7 @@
 </template>
 
 <script setup lang="ts">
+import DateTimePicker from '@/components/common/DateTimePicker.vue'
 import { useLocaleRefresh } from '@/utils/localeRefresh'
 import { supportReadonly as vSupportReadonly } from '@/directives/supportReadonly'
 import Toggle from '@/components/common/Toggle.vue'

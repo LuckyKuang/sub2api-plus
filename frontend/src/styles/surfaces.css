@@ -4,6 +4,10 @@
 
 .surface-card { background-color: var(--surface-fill); }
 .surface-control { background-color: var(--surface-field); color: var(--surface-text); }
+:where(.surface-control) { border-radius: var(--surface-radius-control); }
+/* Surface roles keep their shape even when older callers carry rounded utilities. */
+:root :is(.surface-card, .settings-tabs-shell) { border-radius: var(--surface-radius); }
+:root .surface-panel { border-radius: var(--surface-radius-panel); }
 @layer utilities {
   .surface-inset { background-color: var(--surface-soft); }
   .surface-field { background-color: var(--surface-field); }
@@ -48,6 +52,15 @@
   background-color: var(--surface-soft);
   border-color: var(--surface-edge);
 }
+.modal-header, .dialog-header, .card-header {
+  border-top-left-radius: inherit;
+  border-top-right-radius: inherit;
+}
+.modal-footer, .dialog-footer, .card-footer,
+.modal-body:last-child, .dialog-body:last-child, .card-body:last-child {
+  border-bottom-left-radius: inherit;
+  border-bottom-right-radius: inherit;
+}
 .modal-body, .dialog-body { background-color: transparent; }
 
 .surface-decoration {
@@ -57,41 +70,9 @@
 /* Explicit opaque surfaces: QR quiet zones and other machine-readable media. */
 .surface-opaque { background-color: white; background-image: none; }
 
-/* Opaque tables and pinned cells cover scrolled rows without filter layers.
-   Keep the existing cell stacking order and edge-shadow pseudo-elements. */
-.table-wrapper {
-  background-color: var(--surface-solid);
-}
-.table-wrapper .table-header { background-color: transparent; }
-.table-wrapper thead::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background-color: var(--surface-sticky);
-  background-image: linear-gradient(135deg, var(--surface-glint), transparent 65%);
-  box-shadow: inset 0 -1px 0 var(--surface-edge);
-}
-.table-wrapper thead .sticky-header-cell { background-color: transparent; color: var(--surface-muted); }
-.table-wrapper thead .sticky-header-cell.sticky-col {
-  background-color: var(--surface-sticky);
-}
-.table-wrapper tbody :is(.sticky-col-left, .sticky-col-left-first, .sticky-col-left-second)::before,
-.table-wrapper tbody .sticky-col-right::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  border-radius: inherit;
-  background-color: var(--surface-sticky);
-  background-image: linear-gradient(135deg, var(--surface-glint), transparent 65%);
-}
-
-/* Compact tables and the channel matrix use the same solid pinned surfaces. */
-thead.sticky, .matrix-header.sticky { background-color: transparent; }
-:is(thead.sticky, .matrix-header.sticky)::before {
+/* The channel matrix is a grid; record tables own their cell paint separately. */
+.matrix-header.sticky { background-color: transparent; }
+.matrix-header.sticky::before {
   content: '';
   position: absolute;
   inset: 0;

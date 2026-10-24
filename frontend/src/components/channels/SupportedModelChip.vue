@@ -36,13 +36,13 @@
         v-show="show"
         ref="popoverEl"
         role="tooltip"
-        class="pointer-events-none fixed z-[99999] w-80 max-w-[min(22rem,calc(100vw-1rem))] rounded-lg border text-xs shadow-xl surface-panel"
+        class="pointer-events-none fixed z-[99999] w-80 max-w-[min(22rem,calc(100vw-1rem))] overflow-hidden border text-xs shadow-xl surface-panel"
         :class="[popoverBorderClass]"
         :style="popoverStyle"
       >
         <!-- Header：平台主题色背景，含模型名 + 平台徽章 -->
         <div
-          class="flex items-center justify-between gap-2 rounded-t-lg border-b px-3 py-2"
+          class="flex items-center justify-between gap-2 border-b px-3 py-2"
           :class="[popoverHeaderClass, popoverBorderClass]"
         >
           <span class="truncate font-semibold">{{ model.name }}</span>

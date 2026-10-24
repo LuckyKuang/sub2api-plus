@@ -1,6 +1,6 @@
 <template>
-  <div class="flex min-h-screen items-center justify-center surface-inset px-4">
-    <div class="w-full max-w-md space-y-6">
+  <div class="flex min-h-screen items-center justify-center bg-canvas p-[var(--shell-gutter)] dark:surface-inset">
+    <div class="card w-full min-w-0 max-w-md space-y-6 p-5 sm:p-8">
       <!-- Loading -->
       <div v-if="loading" class="flex items-center justify-center py-20">
         <div class="h-8 w-8 animate-spin rounded-full border-4 border-primary-500 border-t-transparent"></div>
@@ -33,7 +33,7 @@
           </p>
         </div>
         <!-- Order Info -->
-        <div v-if="order" class="rounded-xl surface-inset p-5 shadow-sm">
+        <div v-if="order" class="rounded-[var(--surface-radius-inset)] surface-inset p-4">
           <div class="space-y-3 text-sm">
             <div v-if="hasOrderId(order)" class="flex justify-between">
               <span class="surface-muted">{{ t('payment.orders.orderId') }}</span>
@@ -74,7 +74,7 @@
           </div>
         </div>
         <!-- EasyPay return info (when no order loaded) -->
-        <div v-else-if="returnInfo" class="rounded-xl surface-inset p-5 shadow-sm">
+        <div v-else-if="returnInfo" class="rounded-[var(--surface-radius-inset)] surface-inset p-4">
           <div class="space-y-3 text-sm">
             <div v-if="returnInfo.outTradeNo" class="flex justify-between">
               <span class="surface-muted">{{ t('payment.orders.orderId') }}</span>

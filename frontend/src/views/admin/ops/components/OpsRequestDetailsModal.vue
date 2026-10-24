@@ -241,7 +241,7 @@ function accountLabel(row: OpsRequestDetail): string {
           </div>
 
           <div v-else class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-200 dark:border-dark-700">
-            <div class="min-h-0 flex-1 overflow-auto">
+            <div class="record-table-scroll min-h-0 flex-1 overflow-auto">
               <div v-if="!isDesktopViewport" class="divide-y divide-gray-100 dark:divide-dark-800">
                 <div v-for="(row, idx) in items" :key="idx" class="space-y-2 p-4">
                   <div class="flex flex-wrap items-center gap-2">
@@ -279,7 +279,7 @@ function accountLabel(row: OpsRequestDetail): string {
                   </button>
                 </div>
               </div>
-              <table v-else class="min-w-full divide-y divide-gray-200 dark:divide-dark-700">
+              <table v-else class="record-table min-w-full divide-y divide-gray-200 dark:divide-dark-700">
                 <thead class="sticky top-0 z-10 surface-inset">
                 <tr>
                   <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider surface-muted">

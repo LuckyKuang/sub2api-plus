@@ -1151,7 +1151,19 @@ export default {
     startDate: '开始日期',
     endDate: '结束日期',
     apply: '应用',
-    selectDateRange: '选择日期范围'
+    selectDateRange: '选择日期范围',
+    selectDate: '选择日期',
+    selectDateTime: '选择日期和时间',
+    selectTime: '选择时间',
+    previousMonth: '上个月',
+    nextMonth: '下个月',
+    time: '时间',
+    hours: '小时',
+    minutes: '分钟',
+    seconds: '秒',
+    increase: '增加{unit}',
+    decrease: '减少{unit}',
+    outOfRange: '请选择允许范围和间隔内的有效时间。'
   },
 
   // Admin

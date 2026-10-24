@@ -1,5 +1,5 @@
 <template>
-  <AppLayout>
+  <AppLayout workspace>
     <TablePageLayout>
       <!-- Filters -->
       <template #filters>
@@ -279,11 +279,11 @@
       <div class="space-y-4 py-2">
         <div>
           <label class="input-label">{{ t('admin.ops.customTimeRange.startTime') }}</label>
-          <input v-model="customStartTimeInput" type="datetime-local" class="input" />
+          <DateTimePicker :aria-label="t('admin.ops.customTimeRange.startTime')" v-model="customStartTimeInput" type="datetime-local" class="input" />
         </div>
         <div>
           <label class="input-label">{{ t('admin.ops.customTimeRange.endTime') }}</label>
-          <input v-model="customEndTimeInput" type="datetime-local" class="input" />
+          <DateTimePicker :aria-label="t('admin.ops.customTimeRange.endTime')" v-model="customEndTimeInput" type="datetime-local" class="input" />
         </div>
       </div>
       <template #footer>
@@ -352,6 +352,7 @@
 </template>
 
 <script setup lang="ts">
+import DateTimePicker from '@/components/common/DateTimePicker.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminAPI, type AuditLog } from '@/api/admin'

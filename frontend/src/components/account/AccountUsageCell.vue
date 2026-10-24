@@ -228,7 +228,7 @@
             />
           </svg>
           <span
-            class="pointer-events-none absolute left-0 top-full z-50 mt-1 w-80 whitespace-normal break-words rounded px-3 py-2 text-xs leading-relaxed text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 surface-panel"
+            class="pointer-events-none absolute left-0 top-full z-50 mt-1 w-80 whitespace-normal break-words rounded-[var(--surface-radius-panel)] px-3 py-2 text-xs leading-relaxed text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 surface-panel"
           >
             {{ t('admin.accounts.ineligibleWarning') }}
           </span>
@@ -490,10 +490,10 @@
             />
           </svg>
           <span
-            class="pointer-events-none absolute left-0 top-full z-50 mt-1 w-80 whitespace-normal break-words rounded px-3 py-2 text-xs leading-relaxed text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 surface-panel"
+            class="pointer-events-none absolute left-0 top-full z-50 mt-1 w-80 whitespace-normal break-words rounded-[var(--surface-radius-panel)] px-3 py-2 text-xs leading-relaxed text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 surface-panel"
           >
             <div class="font-semibold mb-1">{{ t('admin.accounts.gemini.quotaPolicy.title') }}</div>
-            <div class="mb-2 text-gray-300">{{ t('admin.accounts.gemini.quotaPolicy.note') }}</div>
+            <div class="mb-2 surface-muted">{{ t('admin.accounts.gemini.quotaPolicy.note') }}</div>
             <div class="space-y-1">
               <div><strong>{{ geminiQuotaPolicyChannel }}:</strong></div>
               <div class="pl-2">• {{ geminiQuotaPolicyLimits }}</div>

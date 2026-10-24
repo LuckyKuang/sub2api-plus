@@ -1,6 +1,6 @@
 <template>
-  <div class="table-container plaza-pricing-table overflow-x-auto" :style="accentStyle">
-    <table class="w-full min-w-[1000px] table-auto border-collapse text-sm tabular-nums">
+  <div class="record-table-scroll table-container plaza-pricing-table overflow-x-auto" :style="accentStyle">
+    <table class="record-table w-full min-w-[1000px] table-auto border-collapse text-sm tabular-nums">
       <colgroup>
         <col class="w-[25%]" />
         <col class="w-[11%]" />
@@ -17,12 +17,13 @@
         >
           <th
             rowspan="2"
+            data-header-edge-bottom
             class="border-r border-gray-100 py-2.5 pl-5 pr-4 text-left align-middle dark:border-dark-700/60"
           >
             {{ t('modelPlaza.table.model') }}
           </th>
-          <th colspan="3" class="pz-bg pt-2 text-center">
-            <div class="pz-title border-b pb-2 font-semibold">
+          <th colspan="3" class="pt-2 text-center">
+            <div class="pz-title pb-2 font-semibold">
               {{ t('modelPlaza.table.paidPrice') }}
               <span class="pz-unit ml-1 normal-case font-normal">{{ t('modelPlaza.table.unitPerMillion') }}</span>
             </div>
@@ -31,13 +32,14 @@
             colspan="3"
             class="border-l border-gray-100 pt-2 text-center dark:border-dark-700/60"
           >
-            <div class="border-b border-gray-200 pb-2 dark:border-dark-600 surface-muted">
+            <div class="pb-2 surface-muted">
               {{ t('modelPlaza.table.officialPrice') }}
               <span class="ml-1 normal-case font-normal surface-muted">{{ t('modelPlaza.table.unitPerMillion') }}</span>
             </div>
           </th>
           <th
             rowspan="2"
+            data-header-edge-bottom
             class="border-l border-gray-100 py-2.5 pl-3 pr-5 text-right align-middle dark:border-dark-700/60"
           >
             {{ t('modelPlaza.table.rate') }}
@@ -46,9 +48,9 @@
         <tr
           class="border-b border-gray-200 text-left text-[11px] font-medium uppercase leading-4 tracking-wide dark:border-dark-700 surface-muted"
         >
-          <th class="pz-bg px-3 py-2 font-medium">{{ t('modelPlaza.table.input') }}</th>
-          <th class="pz-bg px-3 py-2 font-medium">{{ t('modelPlaza.table.output') }}</th>
-          <th class="pz-bg px-3 py-2 font-medium">{{ t('modelPlaza.table.cache') }}</th>
+          <th class="px-3 py-2 font-medium">{{ t('modelPlaza.table.input') }}</th>
+          <th class="px-3 py-2 font-medium">{{ t('modelPlaza.table.output') }}</th>
+          <th class="px-3 py-2 font-medium">{{ t('modelPlaza.table.cache') }}</th>
           <th class="border-l border-gray-100 px-3 py-2 font-medium dark:border-dark-700/60">
             {{ t('modelPlaza.table.input') }}
           </th>
@@ -56,14 +58,14 @@
           <th class="px-3 py-2 font-medium">{{ t('modelPlaza.table.cache') }}</th>
         </tr>
       </thead>
-      <tbody>
+      <tbody v-for="group in rowGroups" :key="group.key" class="record-group">
         <tr
-          v-for="{ model: m, period, key } in rows"
+          v-for="({ model: m, period, key }, rowIndex) in group.rows"
           :key="key"
-          class="border-b border-gray-100 transition-colors last:border-b-0 hover:surface-hover dark:border-dark-800"
+          class="transition-colors"
         >
           <!-- 模型名 + 非 token 计费模式徽章;分时时段行额外标注时段 -->
-          <td class="border-r border-gray-100 py-2.5 pl-5 pr-4 align-middle dark:border-dark-700/60">
+          <td :data-record-edges="recordEdges(rowIndex, group.rows.length, 'left')" class="py-2.5 pl-5 pr-4 align-middle">
             <div class="flex flex-wrap items-center gap-1.5">
               <span class="font-medium text-gray-900 dark:text-white">{{ m.name }}</span>
               <!-- 时段徽章紧跟模型名,其余徽章排在后面,空间不足时先换行的是它们 -->
@@ -113,7 +115,7 @@
 
           <!-- token 计费:输入 / 输出 / 缓存(写/读),有阶梯时每档一行;档位标签只放输入列,其余列按行对齐 -->
           <template v-if="billingMode(m) === BILLING_MODE_TOKEN">
-            <td class="pz-cell px-3 py-2.5 align-middle font-mono font-semibold text-gray-900 dark:text-gray-50">
+            <td :data-record-edges="recordEdges(rowIndex, group.rows.length)" class="pz-cell px-3 py-2.5 align-middle font-mono font-semibold text-gray-900 dark:text-gray-50">
               <template v-if="tokenIntervals(m).length">
                 <div
                   v-for="(iv, idx) in tokenIntervals(m)"
@@ -126,7 +128,7 @@
               </template>
               <template v-else>{{ paidPerMillion(m.pricing?.input_price, period) }}</template>
             </td>
-            <td class="pz-cell px-3 py-2.5 align-middle font-mono font-semibold text-gray-900 dark:text-gray-50">
+            <td :data-record-edges="recordEdges(rowIndex, group.rows.length)" class="pz-cell px-3 py-2.5 align-middle font-mono font-semibold text-gray-900 dark:text-gray-50">
               <template v-if="tokenIntervals(m).length">
                 <div
                   v-for="(iv, idx) in tokenIntervals(m)"
@@ -139,7 +141,7 @@
               </template>
               <template v-else>{{ paidPerMillion(m.pricing?.output_price, period) }}</template>
             </td>
-            <td class="pz-cell px-3 py-2.5 align-middle">
+            <td :data-record-edges="recordEdges(rowIndex, group.rows.length)" class="pz-cell px-3 py-2.5 align-middle">
               <template v-if="hasTierCachePricing(tokenIntervals(m))">
                 <div
                   v-for="(iv, idx) in tokenIntervals(m)"
@@ -183,7 +185,7 @@
 
           <!-- 按次 / 按图片计费:实付区整体合并,阶梯芯片或单一按次价 -->
           <template v-else>
-            <td colspan="3" class="pz-cell px-3 py-2.5 align-middle">
+            <td :data-record-edges="recordEdges(rowIndex, group.rows.length)" colspan="3" class="pz-cell px-3 py-2.5 align-middle">
               <div
                 v-if="requestIntervals(m).length"
                 class="flex flex-wrap items-center gap-1.5"
@@ -210,7 +212,8 @@
 
           <!-- 官方价格(参考价,不乘倍率;官方有阶梯时每档一行) -->
           <td
-            class="border-l border-gray-100 px-3 py-2.5 align-middle font-mono text-xs dark:border-dark-700/60 surface-muted"
+            :data-record-edges="recordEdges(rowIndex, group.rows.length)"
+            class="px-3 py-2.5 align-middle font-mono text-xs surface-muted"
           >
             <template v-if="officialIntervals(m).length">
               <div
@@ -224,7 +227,7 @@
             </template>
             <template v-else>{{ official(m.official_pricing?.input_price) }}</template>
           </td>
-          <td class="px-3 py-2.5 align-middle font-mono text-xs surface-muted">
+          <td :data-record-edges="recordEdges(rowIndex, group.rows.length)" class="px-3 py-2.5 align-middle font-mono text-xs surface-muted">
             <template v-if="officialIntervals(m).length">
               <div
                 v-for="(iv, idx) in officialIntervals(m)"
@@ -237,7 +240,7 @@
             </template>
             <template v-else>{{ official(m.official_pricing?.output_price) }}</template>
           </td>
-          <td class="px-3 py-2.5 align-middle">
+          <td :data-record-edges="recordEdges(rowIndex, group.rows.length)" class="px-3 py-2.5 align-middle">
             <template v-if="hasTierCachePricing(officialIntervals(m))">
               <div
                 v-for="(iv, idx) in officialIntervals(m)"
@@ -280,7 +283,8 @@
 
           <!-- 折扣倍率(分时时段行展示 生效倍率×时段倍率;生图独立倍率行展示独立倍率;专属倍率划线展示原倍率) -->
           <td
-            class="border-l border-gray-100 py-2.5 pl-3 pr-5 text-right align-middle font-mono text-xs dark:border-dark-700/60"
+            :data-record-edges="recordEdges(rowIndex, group.rows.length, 'right')"
+            class="py-2.5 pl-3 pr-5 text-right align-middle font-mono text-xs"
           >
             <span
               v-if="period"
@@ -405,17 +409,28 @@ interface PlazaRow {
   key: string
 }
 
-const rows = computed<PlazaRow[]>(() =>
-  sortedModels.value.flatMap((m) => {
+const rowGroups = computed(() =>
+  sortedModels.value.map((m) => {
     const base: PlazaRow = { model: m, period: null, key: `${m.platform}:${m.name}` }
     const periodRows = timePeriods(m).map<PlazaRow>((p, idx) => ({
       model: m,
       period: p,
       key: `${m.platform}:${m.name}:${idx}`
     }))
-    return [base, ...periodRows]
+    return { key: base.key, rows: [base, ...periodRows] }
   })
 )
+
+function recordEdges(index: number, count: number, side?: 'left' | 'right'): string {
+  const top = index === 0
+  const bottom = index === count - 1
+  return [
+    top && 't', bottom && 'b',
+    side === 'left' && 'l', side === 'right' && 'r',
+    top && side === 'left' && 'tl', top && side === 'right' && 'tr',
+    bottom && side === 'left' && 'bl', bottom && side === 'right' && 'br'
+  ].filter(Boolean).join(' ')
+}
 
 /** 时段行的生效倍率 = 生效倍率 × 时段倍率(去掉浮点噪声)。 */
 function periodRate(period: PlazaTimePricingPeriod): number {
@@ -562,34 +577,22 @@ function trimZero(n: number): string {
 /* 实付分区配色统一从 --plaza-accent(平台主色)派生,新增平台无需扩展样式 */
 .plaza-pricing-table {
   --pz-title: color-mix(in srgb, var(--plaza-accent) 88%, black);
-  --pz-bg: color-mix(in srgb, var(--plaza-accent) 7%, transparent);
-  --pz-bg-hover: color-mix(in srgb, var(--plaza-accent) 13%, transparent);
+  --pz-bg: color-mix(in srgb, var(--plaza-accent) 7%, var(--surface-soft));
 }
 
 .dark .plaza-pricing-table {
   --pz-title: color-mix(in srgb, var(--plaza-accent) 70%, white);
-  --pz-bg: color-mix(in srgb, var(--plaza-accent) 6%, transparent);
-  --pz-bg-hover: color-mix(in srgb, var(--plaza-accent) 10%, transparent);
-}
-
-.pz-bg,
-.pz-cell {
-  background-color: var(--pz-bg);
+  --pz-bg: color-mix(in srgb, var(--plaza-accent) 6%, var(--surface-soft));
 }
 
 .pz-cell {
-  transition: background-color 150ms cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-tbody tr:hover .pz-cell {
-  background-color: var(--pz-bg-hover);
+  --record-row-bg: var(--pz-bg);
 }
 
 .pz-title {
   /* color-mix 不可用的老浏览器回退为平台原色 */
   color: var(--plaza-accent);
   color: var(--pz-title);
-  border-color: color-mix(in srgb, var(--pz-title) 30%, transparent);
 }
 
 .pz-unit {

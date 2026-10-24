@@ -2,21 +2,24 @@ import { nextTick, onBeforeUnmount, onMounted, watch, type Ref } from 'vue'
 
 // Dialogs and the navigation drawer share one stack and one body scroll lock.
 const openDialogs = new Set<symbol>()
+const scrollLocks = new Set<symbol>()
 
 export function useDialogFocus(
   visible: () => boolean,
   panel: Ref<HTMLElement | null>,
   close: () => void,
-  closeOnEscape: () => boolean = () => true
+  closeOnEscape: () => boolean = () => true,
+  options: { lockScroll?: boolean; restoreFocus?: () => boolean } = {}
 ) {
   const id = Symbol('dialog')
   let previous: HTMLElement | null = null
   let revision = 0
   const isTop = () => [...openDialogs].pop() === id
   function release() {
-    const restore = isTop() ? previous : null
+    const restore = isTop() && (options.restoreFocus?.() ?? true) ? previous : null
     openDialogs.delete(id)
-    document.body.classList.toggle('modal-open', openDialogs.size > 0)
+    scrollLocks.delete(id)
+    document.body.classList.toggle('modal-open', scrollLocks.size > 0)
     previous = null
     return restore
   }
@@ -64,7 +67,8 @@ export function useDialogFocus(
     if (show) {
       previous = document.activeElement as HTMLElement
       openDialogs.add(id)
-      document.body.classList.add('modal-open')
+      if (options.lockScroll !== false) scrollLocks.add(id)
+      document.body.classList.toggle('modal-open', scrollLocks.size > 0)
       await nextTick()
       if (current === revision && visible() && isTop()) (focusable()[0] ?? panel.value)?.focus({ preventScroll: true })
     } else {

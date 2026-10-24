@@ -60,7 +60,7 @@ function mountPlans() {
     global: {
       plugins: [createPinia()],
       stubs: {
-        AppLayout: { template: '<div><slot /></div>' },
+        AppLayout: { name: 'AppLayout', props: { workspace: Boolean }, template: '<div><slot /></div>' },
         DataTable: DataTableStub,
         ConfirmDialog: true,
         GroupBadge: true,
@@ -73,6 +73,7 @@ function mountPlans() {
 
 describe('AdminPaymentPlansView', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     getGroups.mockResolvedValue([])
     getConfig.mockResolvedValue({ data: {} })
     getPlans.mockResolvedValue({
@@ -105,6 +106,31 @@ describe('AdminPaymentPlansView', () => {
         },
       ],
     })
+  })
+
+  it('keeps refresh and creation above the plan viewport and opens the editor outside it', async () => {
+    const wrapper = mountPlans()
+    try {
+      await flushPromises()
+      const toolbar = wrapper.get('[data-test="plans-toolbar"]')
+      const viewport = wrapper.get('[data-test="plans-data-scroll"]')
+      expect(wrapper.getComponent({ name: 'AppLayout' }).props('workspace')).toBe(true)
+      expect(toolbar.classes()).toContain('workspace-fixed')
+      expect(toolbar.element.parentElement).toBe(wrapper.get('.workspace-page').element)
+      expect(viewport.classes()).toContain('workspace-table-viewport')
+      expect(viewport.find('[data-test="plans-toolbar"]').exists()).toBe(false)
+      expect(viewport.find('plan-edit-dialog-stub').exists()).toBe(false)
+      expect(wrapper.get('[data-test="plans-panel"]').classes()).toContain('workspace-table-card')
+      await toolbar.get('[aria-label="刷新"]').trigger('click')
+      await flushPromises()
+      expect(getPlans).toHaveBeenCalledTimes(2)
+      const create = toolbar.findAll('button').find(button => button.text() === '创建套餐')
+      expect(create).toBeDefined()
+      await create!.trigger('click')
+      expect(wrapper.getComponent({ name: 'PlanEditDialog' }).props('show')).toBe(true)
+    } finally {
+      wrapper.unmount()
+    }
   })
 
   it('uses the configured currency symbol and keeps legacy prices in USD', async () => {

@@ -134,6 +134,30 @@ describe('PromptAuditView', () => {
     expect(wrapper.get('[data-test="blocking-toggle"]').attributes()).toHaveProperty('disabled')
   })
 
+  it('keeps a configuration draft while switching between the fixed page tabs', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    const main = wrapper.get('main')
+    expect(main.find('header').exists()).toBe(false)
+    expect(main.find('[role="tablist"]').exists()).toBe(false)
+    expect(wrapper.get('[data-test="tab-panel-config"]').classes()).toContain('workspace-scroll')
+    await wrapper.get('[data-test="tab-config"]').trigger('click')
+    await wrapper.get('[data-test="inject-secret"]').trigger('click')
+    const saveBar = wrapper.get('[data-test="prompt-save-bar"]')
+    expect(saveBar.element.parentElement).toBe(main.element.parentElement)
+    expect(saveBar.classes()).toContain('workspace-fixed')
+    expect(saveBar.classes()).not.toContain('fixed')
+    expect(main.find('[data-test="prompt-save-bar"]').exists()).toBe(false)
+    expect(wrapper.get('[data-test="tab-panel-config"]').classes()).not.toContain('pb-28')
+    await wrapper.get('[data-test="tab-events"]').trigger('click')
+    await wrapper.get('[data-test="tab-config"]').trigger('click')
+    const endpoints = wrapper.getComponent(EndpointStub).props('endpoints') as Array<{ token: string }>
+    expect(endpoints[0].token).toBe('PROMPT_AUDIT_CANARY_SECRET_DO_NOT_PERSIST')
+    expect(mocks.updateConfig).not.toHaveBeenCalled()
+    expect(mocks.getConfig).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
   it('clears plaintext token state after a successful save', async () => {
     const wrapper = mountView()
     await flushPromises()
@@ -193,8 +217,14 @@ describe('PromptAuditView', () => {
     const switches = wrapper.findAll('[role="switch"]')
     expect(switches).toHaveLength(3)
     expect(switches.every((item) => Boolean(item.attributes('aria-label')))).toBe(true)
-    expect(wrapper.html()).toContain('fixed inset-x-0 bottom-0')
-    expect(wrapper.html()).toContain('flex-wrap')
+    // The action card occupies its own non-scrolling layout slot, so wrapped
+    // switches reserve their actual height instead of covering configuration.
+    const saveCard = wrapper.get('[data-test="prompt-save-bar"]')
+    expect(saveCard.classes()).toEqual(expect.arrayContaining(['workspace-fixed', 'card']))
+    expect(saveCard.classes()).not.toContain('fixed')
+    expect(saveCard.element.parentElement).toBe(wrapper.get('.workspace-page').element)
+    expect(saveCard.find('[data-test="save-config"]').exists()).toBe(true)
+    expect(saveCard.get(':scope > div').classes()).toContain('flex-wrap')
   })
 
   it('executes single, selected-batch, and preview-confirmed filter deletion flows', async () => {

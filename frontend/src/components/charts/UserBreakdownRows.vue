@@ -1,36 +1,36 @@
 <template>
-  <tr v-if="loading" class="surface-inset">
-    <td :colspan="columnCount" class="py-3">
+  <tr v-if="loading">
+    <td :colspan="columnCount" data-record-edges="b l r bl br" class="py-3">
       <div class="flex justify-center"><LoadingSpinner /></div>
     </td>
   </tr>
-  <tr v-else-if="items.length === 0" class="surface-inset">
-    <td :colspan="columnCount" class="py-2 text-center text-xs surface-muted">
+  <tr v-else-if="items.length === 0">
+    <td :colspan="columnCount" data-record-edges="b l r bl br" class="py-2 text-center text-xs surface-muted">
       {{ t('admin.dashboard.noDataAvailable') }}
     </td>
   </tr>
   <template v-else>
     <tr
-      v-for="user in items"
+      v-for="(user, index) in items"
       :key="user.user_id"
-      class="border-t border-gray-100/50 surface-inset text-xs dark:border-dark-700/50"
+      class="text-xs"
     >
-      <td class="py-1 pl-6 surface-muted">
+      <td :data-record-edges="index === items.length - 1 ? 'b l bl' : 'l'" class="py-1 pl-6 surface-muted">
         <span class="block max-w-[120px] truncate" :title="user.email">{{ user.email || `User #${user.user_id}` }}</span>
       </td>
-      <td class="py-1 text-right surface-muted">
+      <td :data-record-edges="index === items.length - 1 ? 'b' : ''" class="py-1 text-right surface-muted">
         {{ user.requests.toLocaleString() }}
       </td>
-      <td class="py-1 text-right surface-muted">
+      <td :data-record-edges="index === items.length - 1 ? 'b' : ''" class="py-1 text-right surface-muted">
         {{ formatTokens(user.total_tokens) }} <span v-if="tokenShare(user.total_tokens)" class="surface-muted">({{ tokenShare(user.total_tokens) }})</span>
       </td>
-      <td class="py-1 text-right text-green-600 dark:text-green-400">
+      <td :data-record-edges="index === items.length - 1 ? 'b' : ''" class="py-1 text-right text-green-600 dark:text-green-400">
         ${{ formatCost(user.actual_cost) }}
       </td>
-      <td v-if="showAccountCost" class="py-1 text-right text-orange-500 dark:text-orange-400">
+      <td v-if="showAccountCost" :data-record-edges="index === items.length - 1 ? 'b' : ''" class="py-1 text-right text-orange-500 dark:text-orange-400">
         ${{ formatCost(user.account_cost) }}
       </td>
-      <td class="py-1 text-right surface-muted">
+      <td :data-record-edges="index === items.length - 1 ? 'b r br' : 'r'" class="py-1 text-right surface-muted">
         ${{ formatCost(user.cost) }}
       </td>
     </tr>

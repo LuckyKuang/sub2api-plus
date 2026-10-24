@@ -1,32 +1,28 @@
 @import './styles/console.css';
 @import './styles/surfaces.css';
+@import './styles/tables.css';
+@import './styles/workspace.css';
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-.detail-dialog.modal-content { position: absolute; inset: 0 0 0 auto; width: min(100%, 480px); max-width: none; height: 100dvh; max-height: 100dvh; margin: 0; border-radius: 0; }
+.detail-dialog.modal-content {
+  position: absolute;
+  top: var(--shell-inset-top);
+  right: max(var(--shell-gutter), env(safe-area-inset-right));
+  width: min(480px, calc(100% - max(var(--shell-gutter), env(safe-area-inset-left)) - max(var(--shell-gutter), env(safe-area-inset-right))));
+  max-width: none;
+  height: calc(100dvh - var(--shell-inset-top) - var(--shell-inset-bottom));
+  max-height: calc(100dvh - var(--shell-inset-top) - var(--shell-inset-bottom));
+  margin: 0;
+  border-radius: var(--surface-radius);
+}
 .detail-dialog .modal-body { overscroll-behavior: contain; padding-bottom: max(24px, env(safe-area-inset-bottom)); }
 .modal-enter-active .modal-content.detail-dialog, .modal-leave-active .modal-content.detail-dialog { transition: transform 200ms ease-out; }
 .modal-enter-from .modal-content.detail-dialog, .modal-leave-to .modal-content.detail-dialog { transform: translateX(100%); }
 
 @layer base {
-  :root {
-    --table-header-bg: var(--surface-sticky);
-    --table-body-bg: transparent;
-    --table-hover-bg: var(--surface-hover);
-    --table-selected-bg: var(--surface-selected);
-    --table-row-border: theme('colors.gray.200');
-  }
-
-  .dark {
-    --table-header-bg: var(--surface-sticky);
-    --table-body-bg: transparent;
-    --table-hover-bg: var(--surface-hover);
-    --table-selected-bg: var(--surface-selected);
-    --table-row-border: theme('colors.dark.700');
-  }
-
   * {
     @apply border-gray-200 dark:border-dark-700;
   }
@@ -205,9 +201,6 @@
     @apply cursor-not-allowed opacity-60;
   }
 
-  .dark .input[type='date'],
-  .dark .input[type='time'],
-  .dark .input[type='datetime-local'],
   .dark .input[type='month'],
   .dark .input[type='week'] {
     color-scheme: dark;
@@ -329,25 +322,15 @@
     @apply px-4 py-3 text-left font-medium;
     @apply text-gray-600 dark:text-dark-300;
     background-color: transparent;
-    @apply border-b border-gray-200 dark:border-dark-700;
   }
 
   .table td {
     @apply px-4 py-3;
     @apply text-gray-700 dark:text-gray-300;
-    border-bottom: 1px solid var(--table-row-border);
-  }
-
-  .table tr:last-child td {
-    @apply border-b-0;
   }
 
   .table tbody tr {
     @apply transition-colors duration-150;
-  }
-
-  .table tbody tr:hover {
-    background-color: var(--table-hover-bg);
   }
 
   /* ============ 徽章样式 ============ */
@@ -385,13 +368,14 @@
   .dropdown {
     @apply absolute z-50;
     border: 1px solid var(--surface-edge);
-    border-radius: var(--surface-radius);
-    @apply py-1;
+    border-radius: var(--surface-radius-panel);
+    @apply p-1.5;
     @apply origin-top-right animate-scale-in;
   }
 
   .dropdown-item {
     @apply px-4 py-2 text-sm;
+    border-radius: var(--surface-radius-item);
     @apply text-gray-700 dark:text-gray-300;
 
     @apply cursor-pointer transition-colors;
@@ -517,33 +501,6 @@
     @apply border-t border-gray-100 px-6 py-4 dark:border-dark-700;
     background-color: var(--surface-soft);
     @apply flex items-center justify-end gap-3;
-  }
-
-  /* ============ Toast 通知 ============ */
-  .toast {
-    @apply fixed right-4 top-4 z-[100];
-    @apply min-w-[320px] max-w-md;
-    background-color: var(--surface-panel);
-    @apply rounded-xl shadow-lg;
-    @apply border-l-4;
-    @apply p-4;
-    @apply animate-slide-in-right;
-  }
-
-  .toast-success {
-    @apply border-l-emerald-500;
-  }
-
-  .toast-error {
-    @apply border-l-red-500;
-  }
-
-  .toast-warning {
-    @apply border-l-amber-500;
-  }
-
-  .toast-info {
-    @apply border-l-primary-500;
   }
 
   /* ============ 侧边栏 ============ */
@@ -733,29 +690,9 @@
     overflow-x: auto;
   }
 
-  /* 表头固定时添加底部阴影，增强视觉层次 */
-  .table-wrapper thead.sticky {
-    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
-  }
 }
 
 @layer utilities {
-  /* Headers share translucent paint; cells must not add a second opaque fill. */
-  table thead {
-    background-color: var(--table-header-bg);
-  }
-
-  table thead th { background-color: transparent; }
-
-  table tbody {
-    background-color: var(--table-body-bg);
-  }
-
-  /* 单元格直接绘制行间分割线，覆盖固定列；虚拟滚动占位行不绘制。 */
-  table > tbody > tr:not([aria-hidden="true"]):not(:last-child) > :is(td, th) {
-    border-bottom: 1px solid var(--table-row-border);
-  }
-
   /* 文字渐变 */
   .text-gradient {
     @apply bg-gradient-to-r from-primary-500 to-accent-500 bg-clip-text text-transparent;

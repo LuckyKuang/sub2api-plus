@@ -1,8 +1,8 @@
 <template>
-  <AppLayout>
-    <div class="space-y-4">
+  <AppLayout workspace>
+    <div class="workspace-page">
       <!-- Filters -->
-      <div class="card p-4">
+      <div class="card workspace-fixed p-4" data-test="admin-orders-filters">
         <div class="flex flex-wrap items-center gap-3">
           <div class="flex-1 sm:max-w-64">
             <input v-model="orderSearch" type="text" :placeholder="t('payment.admin.searchOrders')" class="input" @input="debounceLoadOrders" />
@@ -20,44 +20,46 @@
       </div>
 
       <!-- Table -->
-      <OrderTable :orders="orders" :loading="ordersLoading" show-user>
-        <template #actions="{ row }">
-          <div class="flex items-center gap-1">
-            <button @click="showOrderDetail(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium hover:surface-hover surface-control surface-muted">
-              <Icon name="eye" size="sm" />
-              {{ t('common.view') }}
-            </button>
-            <button v-if="row.status === 'PENDING'" @click="handleCancelOrder(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-yellow-600 hover:bg-yellow-50/25 dark:text-yellow-400 dark:hover:bg-yellow-900/20 surface-control">
-              <Icon name="x" size="sm" />
-              {{ t('payment.orders.cancel') }}
-            </button>
-            <button v-if="row.status === 'FAILED'" @click="handleRetryOrder(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50/25 dark:text-blue-400 dark:hover:bg-blue-900/20 surface-control">
-              <Icon name="refresh" size="sm" />
-              {{ t('payment.admin.retry') }}
-            </button>
-            <template v-if="row.order_source !== 'redeem' && row.status === 'REFUND_REQUESTED'">
-              <span v-if="row.refund_amount" class="rounded-full bg-purple-100/[0.15] px-1.5 py-0.5 text-xs font-medium text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">{{ creditedAmountSymbol }}{{ row.refund_amount.toFixed(2) }}</span>
-              <button @click="openRefundDialog(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-purple-600 hover:bg-purple-50/25 dark:text-purple-400 dark:hover:bg-purple-900/20 surface-control">
-                <Icon name="check" size="sm" />
-                {{ t('payment.admin.approveRefund') }}
+      <div class="card workspace-table-card" data-test="admin-orders-table">
+        <OrderTable class="workspace-table-viewport" :orders="orders" :loading="ordersLoading" show-user>
+          <template #actions="{ row }">
+            <div class="flex items-center gap-1">
+              <button @click="showOrderDetail(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium hover:surface-hover surface-control surface-muted">
+                <Icon name="eye" size="sm" />
+                {{ t('common.view') }}
               </button>
-            </template>
-            <button v-else-if="row.order_source !== 'redeem' && row.status === 'REFUND_FAILED'" @click="openRefundDialog(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-purple-600 hover:bg-purple-50/25 dark:text-purple-400 dark:hover:bg-purple-900/20 surface-control">
-              <Icon name="refresh" size="sm" />
-              {{ t('payment.admin.retryRefund') }}
-            </button>
-            <button v-else-if="row.order_source !== 'redeem' && row.status === 'REFUND_PENDING'" :disabled="refundQueryingIds.has(row.id)" @click="handleQueryRefund(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-orange-600 hover:bg-orange-50/25 disabled:opacity-60 dark:text-orange-400 dark:hover:bg-orange-900/20 surface-control">
-              <Icon name="refresh" size="sm" :class="refundQueryingIds.has(row.id) ? 'animate-spin' : ''" />
-              {{ t('payment.admin.queryRefundStatus') }}
-            </button>
-            <button v-else-if="row.order_source !== 'redeem' && (row.status === 'COMPLETED' || row.status === 'PARTIALLY_REFUNDED')" @click="openRefundDialog(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50/25 dark:text-red-400 dark:hover:bg-red-900/20 surface-control">
-              <Icon name="dollar" size="sm" />
-              {{ t('payment.admin.refund') }}
-            </button>
-          </div>
-        </template>
-      </OrderTable>
-      <Pagination v-if="orderPagination.total > 0" :page="orderPagination.page" :total="orderPagination.total" :page-size="orderPagination.page_size" @update:page="handleOrderPageChange" @update:pageSize="handleOrderPageSizeChange" />
+              <button v-if="row.status === 'PENDING'" @click="handleCancelOrder(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-yellow-600 hover:bg-yellow-50/25 dark:text-yellow-400 dark:hover:bg-yellow-900/20 surface-control">
+                <Icon name="x" size="sm" />
+                {{ t('payment.orders.cancel') }}
+              </button>
+              <button v-if="row.status === 'FAILED'" @click="handleRetryOrder(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50/25 dark:text-blue-400 dark:hover:bg-blue-900/20 surface-control">
+                <Icon name="refresh" size="sm" />
+                {{ t('payment.admin.retry') }}
+              </button>
+              <template v-if="row.order_source !== 'redeem' && row.status === 'REFUND_REQUESTED'">
+                <span v-if="row.refund_amount" class="rounded-full bg-purple-100/[0.15] px-1.5 py-0.5 text-xs font-medium text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">{{ creditedAmountSymbol }}{{ row.refund_amount.toFixed(2) }}</span>
+                <button @click="openRefundDialog(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-purple-600 hover:bg-purple-50/25 dark:text-purple-400 dark:hover:bg-purple-900/20 surface-control">
+                  <Icon name="check" size="sm" />
+                  {{ t('payment.admin.approveRefund') }}
+                </button>
+              </template>
+              <button v-else-if="row.order_source !== 'redeem' && row.status === 'REFUND_FAILED'" @click="openRefundDialog(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-purple-600 hover:bg-purple-50/25 dark:text-purple-400 dark:hover:bg-purple-900/20 surface-control">
+                <Icon name="refresh" size="sm" />
+                {{ t('payment.admin.retryRefund') }}
+              </button>
+              <button v-else-if="row.order_source !== 'redeem' && row.status === 'REFUND_PENDING'" :disabled="refundQueryingIds.has(row.id)" @click="handleQueryRefund(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-orange-600 hover:bg-orange-50/25 disabled:opacity-60 dark:text-orange-400 dark:hover:bg-orange-900/20 surface-control">
+                <Icon name="refresh" size="sm" :class="refundQueryingIds.has(row.id) ? 'animate-spin' : ''" />
+                {{ t('payment.admin.queryRefundStatus') }}
+              </button>
+              <button v-else-if="row.order_source !== 'redeem' && (row.status === 'COMPLETED' || row.status === 'PARTIALLY_REFUNDED')" @click="openRefundDialog(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50/25 dark:text-red-400 dark:hover:bg-red-900/20 surface-control">
+                <Icon name="dollar" size="sm" />
+                {{ t('payment.admin.refund') }}
+              </button>
+            </div>
+          </template>
+        </OrderTable>
+      </div>
+      <Pagination v-if="orderPagination.total > 0" class="workspace-fixed" data-test="admin-orders-pagination" :page="orderPagination.page" :total="orderPagination.total" :page-size="orderPagination.page_size" @update:page="handleOrderPageChange" @update:pageSize="handleOrderPageSizeChange" />
     </div>
 
     <!-- Order Detail Dialog -->

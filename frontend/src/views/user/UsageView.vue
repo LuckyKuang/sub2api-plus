@@ -1,11 +1,8 @@
 <template>
-  <AppLayout>
-    <div class="space-y-6">
-      <template v-if="activeTab !== 'live'">
-      <UsageStatsCards :stats="usageStats" :show-account-cost="false" :strike-standard-cost="true" />
-
-      <div class="space-y-4">
-        <div class="card p-4">
+  <AppLayout workspace>
+    <div class="workspace-page usage-workspace">
+      <WorkspaceTabs v-model="workspaceTab" class="workspace-fixed" :tabs="workspaceTabs" :label="t('usage.tabs.usage')" />
+        <div v-show="activeTab !== 'live'" class="card workspace-fixed usage-date p-4">
           <div class="flex flex-wrap items-center gap-4">
             <div class="flex items-center gap-2">
               <span class="text-sm font-medium surface-muted">{{ t('admin.dashboard.timeRange') }}:</span>
@@ -24,6 +21,8 @@
           </div>
         </div>
 
+      <section v-if="activeTab !== 'live'" v-show="workspaceTab === 'charts'" class="workspace-scroll space-y-4" data-testid="usage-charts-panel">
+      <UsageStatsCards :stats="usageStats" :show-account-cost="false" :strike-standard-cost="true" />
         <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <ModelDistributionChart
             v-model:metric="modelDistributionMetric"
@@ -65,11 +64,21 @@
           />
           <TokenUsageTrend :trend-data="trendData" :loading="chartsLoading" />
         </div>
+      </section>
+      <section ref="recordsPanel" v-show="workspaceTab === 'records'" class="card workspace-table-card" data-testid="usage-records-panel">
+      <div class="usage-detail-tabs workspace-fixed flex flex-wrap gap-2 border-b border-gray-200 dark:border-dark-700">
+        <button class="tab" :class="{ 'tab-active': activeTab === 'live' }" @click="selectRecordTab('live')">{{ t('inspection.live') }}</button>
+        <button class="tab" :class="{ 'tab-active': activeTab === 'usage' }" @click="selectRecordTab('usage')">
+          {{ t('usage.tabs.usage') }}
+        </button>
+        <button v-if="errorViewEnabled" class="tab" :class="{ 'tab-active': activeTab === 'errors' }" @click="switchToErrors">
+          {{ t('usage.tabs.errors') }}
+        </button>
       </div>
 
-      <div class="card p-6">
-        <div class="flex flex-wrap items-end justify-between gap-4">
-          <div v-if="activeTab === 'errors'" class="flex flex-1 flex-wrap items-end gap-4">
+      <div v-if="activeTab !== 'live'" class="usage-workspace-filters workspace-fixed border-b border-gray-100 p-4 dark:border-dark-700/50">
+        <div class="usage-filter-layout flex flex-wrap items-end justify-between gap-4">
+          <div v-if="activeTab === 'errors'" class="usage-filter-fields flex flex-1 flex-wrap items-end gap-4">
             <div class="w-full sm:w-auto sm:min-w-[220px]">
               <label class="input-label">{{ t('usage.errors.keyName') }}</label>
               <Select v-model="errorFilter.api_key_id" :options="errorKeyOptions" @change="applyErrorFilters" />
@@ -95,7 +104,7 @@
               <Select v-model="errorFilter.status_code" :options="errorStatusOptions" @change="applyErrorFilters" />
             </div>
           </div>
-          <div v-else class="flex flex-1 flex-wrap items-end gap-4">
+          <div v-else class="usage-filter-fields flex flex-1 flex-wrap items-end gap-4">
             <div class="w-full sm:w-auto sm:min-w-[220px]">
               <label class="input-label">{{ t('usage.apiKeyFilter') }}</label>
               <Select v-model="filters.api_key_id" :options="apiKeyOptions" @change="applyFilters" />
@@ -126,7 +135,7 @@
             </div>
           </div>
 
-          <div class="flex w-full flex-wrap items-center justify-end gap-3 sm:w-auto">
+          <div class="usage-filter-actions flex w-full flex-wrap items-center justify-end gap-3 sm:w-auto">
             <button type="button" @click="refreshData" :disabled="activeTab === 'errors' ? errorLoading : loading" class="btn btn-secondary">
               {{ t('common.refresh') }}
             </button>
@@ -138,15 +147,21 @@
                 type="button"
                 data-testid="usage-column-settings"
                 @click="showColumnDropdown = !showColumnDropdown"
+                @keydown.esc.stop.prevent="showColumnDropdown = false"
                 class="btn btn-secondary px-2 md:px-3"
                 :title="t('admin.users.columnSettings')"
               >
                 <Icon name="grid" size="sm" />
                 <span class="hidden md:inline">{{ t('admin.users.columnSettings') }}</span>
               </button>
+              <Teleport to="body">
               <div
                 v-if="showColumnDropdown"
-                class="absolute right-0 top-full z-50 mt-1 max-h-80 w-48 overflow-y-auto rounded-lg border border-gray-200 py-1 shadow-lg dark:border-dark-600 surface-panel"
+                class="absolute right-0 top-full z-50 mt-1 max-h-80 w-48 space-y-0.5 overflow-y-auto border border-gray-200 p-1 shadow-lg dark:border-dark-600 surface-panel"
+                :style="columnDropdownStyle"
+                data-testid="usage-column-menu"
+                @click.stop
+                @keydown.esc.stop.prevent="showColumnDropdown = false"
               >
                 <button
                   v-for="col in currentToggleableColumns"
@@ -154,13 +169,14 @@
                   type="button"
                   :data-testid="`usage-column-toggle-${col.key}`"
                   @click="toggleCurrentColumn(col.key)"
-                  class="flex w-full items-center justify-between px-4 py-2 text-left text-sm hover:surface-hover surface-control surface-muted"
+                  class="flex w-full items-center justify-between rounded-[var(--surface-radius-item)] px-3 py-2 text-left text-sm hover:surface-hover surface-control surface-muted"
                 >
                   <span>{{ col.label }}</span>
                   <Icon v-if="isCurrentColumnVisible(col.key)" name="check" size="sm" class="text-primary-500" />
                 </button>
-                <button type="button" class="w-full border-t px-4 py-2 text-left text-sm text-primary-600 surface-control" @click="restoreRecommendedColumns">{{ t('inspection.resetColumns') }}</button>
+                <button type="button" class="w-full rounded-[var(--surface-radius-item)] border-t px-3 py-2 text-left text-sm text-primary-600 hover:surface-hover surface-control" @click="restoreRecommendedColumns">{{ t('inspection.resetColumns') }}</button>
               </div>
+              </Teleport>
             </div>
             <button v-if="activeTab !== 'errors'" type="button" @click="exportToCSV" :disabled="exporting" class="btn btn-primary">
               {{ exporting ? t('usage.exporting') : t('usage.exportCsv') }}
@@ -169,23 +185,13 @@
         </div>
       </div>
 
-      </template>
-      <div class="flex gap-2 border-b border-gray-200 dark:border-dark-700">
-        <button class="tab" :class="{ 'tab-active': activeTab === 'live' }" @click="activeTab = 'live'">{{ t('inspection.live') }}</button>
-        <button class="tab" :class="{ 'tab-active': activeTab === 'usage' }" @click="activeTab = 'usage'">
-          {{ t('usage.tabs.usage') }}
-        </button>
-        <button v-if="errorViewEnabled" class="tab" :class="{ 'tab-active': activeTab === 'errors' }" @click="switchToErrors">
-          {{ t('usage.tabs.errors') }}
-        </button>
-      </div>
-
-      <template v-if="activeTab === 'usage'">
-        <div class="flex flex-wrap items-center justify-between gap-3">
+      <div v-if="activeTab === 'usage'" class="workspace-body !gap-0">
+        <div class="usage-history-refresh workspace-fixed flex flex-wrap items-center justify-between gap-3 p-4">
           <RefreshControl :state="historyRefresh" switch-visible manual />
           <button v-if="newRecordsAvailable" type="button" class="btn btn-secondary" @click="showLatestRecords">{{ t('inspection.newRecords') }}</button>
         </div>
         <UsageTable
+          workspace
           :data="usageLogs"
           :loading="loading"
           :columns="visibleColumns"
@@ -199,6 +205,7 @@
         />
 
         <Pagination
+          class="workspace-fixed"
           v-if="pagination.total > 0"
           :page="pagination.page"
           :total="pagination.total"
@@ -207,10 +214,11 @@
           @update:pageSize="handlePageSizeChange"
         />
 
-      </template>
+      </div>
 
-      <LiveRequestsPanel v-else-if="activeTab === 'live'" mode="user" />
+      <LiveRequestsPanel workspace v-else-if="activeTab === 'live'" mode="user" />
       <UserErrorRequestsTable
+        workspace
         v-else-if="errorViewEnabled"
         :rows="errorRows"
         :total="errorTotal"
@@ -223,6 +231,7 @@
         @update:pageSize="onErrorPageSize"
         @ipGeoBatchFailed="handleIpGeoBatchFailed"
       />
+      </section>
     </div>
   </AppLayout>
 
@@ -231,12 +240,13 @@
 <script setup lang="ts">
 import { useLocaleRefresh } from '@/utils/localeRefresh'
 import { firstByteMs, strictFirstTokenMs, averageTps, tpsNote } from '@/utils/usageTiming'
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { FeatureFlags, resolveFeatureFlag } from '@/utils/featureFlags'
 import { keysAPI, usageAPI, userGroupsAPI } from '@/api'
+import WorkspaceTabs from '@/components/common/WorkspaceTabs.vue'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import Select, { type SelectOption } from '@/components/common/Select.vue'
@@ -267,6 +277,7 @@ import type {
 } from '@/types'
 import type { Column } from '@/components/common/types'
 import { useColumnPreferenceKey } from '@/composables/useColumnPreferenceKey'
+import { useAnchoredDropdown } from '@/composables/useAnchoredDropdown'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
 import { useUsageSnapshot } from '@/composables/useUsageSnapshot'
 import RefreshControl from '@/components/common/RefreshControl.vue'
@@ -276,6 +287,12 @@ import { COMMON_ERROR_STATUS_CODES } from '@/utils/errorBadges'
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
+const workspaceTab = ref(Object.keys(route.query).length ? 'records' : 'charts')
+const recordsPanel = ref<HTMLElement | null>(null)
+const workspaceTabs = computed(() => [
+  { value: 'charts', label: t('workspace.charts') },
+  { value: 'records', label: t('workspace.usageRecords') },
+])
 const appStore = useAppStore()
 
 type DistributionMetric = 'tokens' | 'actual_cost'
@@ -376,6 +393,17 @@ const groupDistributionMetric = ref<DistributionMetric>('tokens')
 const endpointDistributionMetric = ref<DistributionMetric>('tokens')
 const endpointDistributionSource = ref<EndpointSource>('inbound')
 const activeTab = ref<'usage' | 'errors' | 'live'>('usage')
+let lastHistoryTab: typeof activeTab.value = 'usage'
+watch(activeTab, (tab) => { if (tab !== 'live') lastHistoryTab = tab })
+watch(workspaceTab, async (tab) => {
+  if (tab === 'charts' && activeTab.value === 'live') activeTab.value = lastHistoryTab
+  await nextTick()
+  window.dispatchEvent(new Event('resize'))
+})
+function selectRecordTab(tab: 'usage' | 'live') {
+  workspaceTab.value = 'records'
+  activeTab.value = tab
+}
 const errorViewEnabled = computed(() => appStore.cachedPublicSettings?.allow_user_view_error_requests ?? false)
 
 const filters = ref<UsageQueryParams>({
@@ -852,6 +880,7 @@ const toggleCurrentColumn = (key: string) => {
 
 const showColumnDropdown = ref(false)
 const columnDropdownRef = ref<HTMLElement | null>(null)
+const columnDropdownStyle = useAnchoredDropdown(columnDropdownRef, () => showColumnDropdown.value)
 const handleColumnClickOutside = (event: MouseEvent) => {
   if (columnDropdownRef.value && !columnDropdownRef.value.contains(event.target as HTMLElement)) {
     showColumnDropdown.value = false
@@ -939,6 +968,7 @@ const onErrorPageSize = (pageSize: number) => {
 }
 
 const switchToErrors = () => {
+  workspaceTab.value = 'records'
   activeTab.value = 'errors'
   if (errorRows.value.length === 0) void loadErrors()
 }
@@ -965,7 +995,7 @@ useLocaleRefresh(() => Promise.all([loadLogs(), loadFilterOptions()]))
 const newRecordsAvailable = ref(false)
 const historyRefresh = useAutoRefresh({
   storageKey: useColumnPreferenceKey('user-usage-auto-refresh'), intervals: [15, 30, 60], defaultInterval: 30, defaultEnabled: true, temporaryPause: true,
-  active: () => activeTab.value === 'usage',
+  active: () => workspaceTab.value === 'records' && activeTab.value === 'usage',
   shouldPause: () => loading.value,
   onRefresh: async () => {
     const params = { ...buildUsageListParams(1, pagination.page_size), snapshot_max_id: 'new' as const, sort_by: 'created_at', sort_order: 'desc' as const }
@@ -974,7 +1004,8 @@ const historyRefresh = useAutoRefresh({
     abortController?.abort(); abortController = controller
     const res = await usageAPI.query(params, { signal: controller.signal })
     if (controller.signal.aborted || filterKey !== JSON.stringify(filters.value)) return
-    const reading = window.scrollY >= 160 || !!window.getSelection()?.toString() || !!document.querySelector('[role="dialog"], [role="tooltip"]') || !!document.activeElement?.closest('button, input, select, textarea, a, summary, [tabindex], [contenteditable="true"]')
+    const tableScrollTop = recordsPanel.value?.querySelector<HTMLElement>('.workspace-table-viewport')?.scrollTop ?? 0
+    const reading = window.scrollY >= 160 || tableScrollTop >= 160 || !!window.getSelection()?.toString() || !!document.querySelector('[role="dialog"], [role="tooltip"]') || !!document.activeElement?.closest('button, input, select, textarea, a, summary, [tabindex], [contenteditable="true"]')
     if (pagination.page === 1 && sortState.sort_by === 'created_at' && sortState.sort_order === 'desc' && !reading) {
       usageLogs.value = res.items; pagination.total = res.total; historySnapshot.accept(res, true)
     } else {
@@ -992,3 +1023,32 @@ function showLatestRecords() {
   void loadLogs()
 }
 </script>
+
+<style scoped>
+@media (min-width: 1024px) {
+  .usage-detail-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; }
+  .usage-detail-tabs > button { flex: none; white-space: nowrap; }
+  .usage-date, .usage-workspace-filters { padding: 10px 14px; }
+  .usage-history-refresh { padding: 8px 14px; }
+  .usage-filter-layout { flex-direction: column; align-items: stretch; gap: 8px; }
+  .usage-filter-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); width: 100%; flex: none; gap: 8px 10px; }
+  .usage-filter-fields > div { width: auto; min-width: 0; }
+  .usage-filter-fields .input-label { min-height: 16px; margin-bottom: 4px; font-size: 12px; line-height: 16px; }
+  .usage-filter-fields :deep(.select-trigger) { min-height: 34px; padding: 6px 10px; }
+  .usage-filter-actions { width: 100%; gap: 8px; }
+  .usage-workspace :deep(.workspace-fixed .btn) { min-height: 34px; padding-top: 6px; padding-bottom: 6px; }
+}
+@media (min-width: 1024px) and (max-height: 799px) {
+  .usage-date, .usage-workspace-filters { padding: 8px 12px; }
+  .usage-history-refresh { padding: 4px 12px; }
+  .usage-filter-layout { gap: 6px; }
+  .usage-filter-fields { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 150px; overflow-x: auto; scrollbar-width: thin; padding-bottom: 2px; }
+  .usage-filter-fields .input-label { margin-bottom: 2px; }
+  .usage-filter-fields :deep(.select-trigger) { min-height: 32px; padding-top: 5px; padding-bottom: 5px; }
+  .usage-workspace .tab { padding-top: 8px; padding-bottom: 8px; }
+  .usage-workspace :deep(.workspace-tabs) { padding: 4px; }
+  .usage-workspace :deep(.pagination-card) { padding: 8px 12px; }
+  .usage-workspace :deep(.pagination-desktop) { gap: 6px; }
+  .usage-workspace :deep(.pagination-card .input), .usage-workspace :deep(.pagination-card .select-trigger) { min-height: 32px; height: 32px; padding: 4px 8px; }
+}
+</style>

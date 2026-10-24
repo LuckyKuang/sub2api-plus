@@ -1,8 +1,8 @@
 <template>
-  <AppLayout>
-    <div class="space-y-4">
+  <AppLayout workspace>
+    <div class="workspace-page">
       <!-- Filters -->
-      <div class="card p-4">
+      <div class="card workspace-fixed p-4" data-test="user-orders-filters">
         <div class="flex flex-wrap items-center gap-3">
           <Select v-model="sourceFilter" :options="sourceFilters" class="w-36" @change="handlePageChange(1)" />
           <Select v-model="typeFilter" :options="typeFilters" class="w-36" @change="handlePageChange(1)" />
@@ -17,24 +17,28 @@
       </div>
 
       <!-- Table -->
-      <OrderTable :orders="orders" :loading="loading">
-        <template #actions="{ row }">
-          <div class="flex items-center gap-2">
-            <button v-support-readonly v-if="row.status === 'PENDING'" @click="handleCancel(row.id)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-yellow-600 hover:bg-yellow-50/25 dark:text-yellow-400 dark:hover:bg-yellow-900/20 surface-control">
-              <Icon name="x" size="sm" />
-              <span>{{ t('payment.orders.cancel') }}</span>
-            </button>
-            <button v-support-readonly v-if="canRequestRefund(row)" @click="openRefundDialog(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-purple-600 hover:bg-purple-50/25 dark:text-purple-400 dark:hover:bg-purple-900/20 surface-control">
-              <Icon name="dollar" size="sm" />
-              <span>{{ t('payment.orders.requestRefund') }}</span>
-            </button>
-          </div>
-        </template>
-      </OrderTable>
+      <div class="card workspace-table-card" data-test="user-orders-table">
+        <OrderTable class="workspace-table-viewport" :orders="orders" :loading="loading">
+          <template #actions="{ row }">
+            <div class="flex items-center gap-2">
+              <button v-support-readonly v-if="row.status === 'PENDING'" @click="handleCancel(row.id)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-yellow-600 hover:bg-yellow-50/25 dark:text-yellow-400 dark:hover:bg-yellow-900/20 surface-control">
+                <Icon name="x" size="sm" />
+                <span>{{ t('payment.orders.cancel') }}</span>
+              </button>
+              <button v-support-readonly v-if="canRequestRefund(row)" @click="openRefundDialog(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-purple-600 hover:bg-purple-50/25 dark:text-purple-400 dark:hover:bg-purple-900/20 surface-control">
+                <Icon name="dollar" size="sm" />
+                <span>{{ t('payment.orders.requestRefund') }}</span>
+              </button>
+            </div>
+          </template>
+        </OrderTable>
+      </div>
 
       <!-- Pagination -->
       <Pagination
         v-if="pagination.total > 0"
+        class="workspace-fixed"
+        data-test="user-orders-pagination"
         :page="pagination.page"
         :total="pagination.total"
         :page-size="pagination.page_size"

@@ -424,7 +424,7 @@ function cancelDelete() {
     </div>
 
     <div v-else class="max-h-[520px] overflow-hidden rounded-xl border border-gray-200 dark:border-dark-700">
-      <div class="max-h-[520px] overflow-y-auto">
+      <div class="record-table-scroll max-h-[520px] overflow-y-auto">
         <div v-if="!isDesktopViewport" class="divide-y divide-gray-100 dark:divide-dark-800">
           <div v-for="row in sortedRules" :key="row.id" class="space-y-2 p-4">
             <div class="flex items-start justify-between gap-2">
@@ -455,7 +455,7 @@ function cancelDelete() {
             </div>
           </div>
         </div>
-        <table v-else class="min-w-full divide-y divide-gray-200 dark:divide-dark-700">
+        <table v-else class="record-table min-w-full divide-y divide-gray-200 dark:divide-dark-700">
           <thead class="sticky top-0 z-10 surface-inset">
             <tr>
               <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider surface-muted">

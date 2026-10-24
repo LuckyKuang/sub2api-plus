@@ -16,6 +16,8 @@ const surfaceProperties = new Set([
   ...backdropProperties, 'filter', 'transform', 'perspective', 'contain',
   'isolation', 'overflow', 'z-index', 'position', 'content', 'inset',
   'border-radius', 'pointer-events', 'background-color',
+  'border-top-left-radius', 'border-top-right-radius',
+  'border-bottom-left-radius', 'border-bottom-right-radius',
 ])
 
 function hasAtRule(rule: Rule, names: string[]): boolean {
@@ -142,26 +144,37 @@ describe('shared solid surface rendering', () => {
     })
   })
 
-  it('gives every table and pinned region an opaque fill without changing its positioning', () => {
-    for (const parentClass of ['', 'usage-table']) {
-      const table = fixture(`<div class="${parentClass}"><div class="table-wrapper"><table><thead class="sticky"><tr><th class="sticky-header-cell sticky-col"></th></tr></thead><tbody><tr><td class="sticky-col-left"></td><td class="sticky-col-left-first"></td><td class="sticky-col-left-second"></td><td class="sticky-col-right"></td></tr></tbody></table></div></div>`)
-      expect(lastValue(declarationsFor(table.querySelector('.table-wrapper')!), 'background-color')).toBe('var(--surface-solid)')
-      const pinnedSurfaces: [Element, string][] = [
-        [table.querySelector('thead')!, '::before'],
-        [table.querySelector('th')!, ''],
-        ...['sticky-col-left', 'sticky-col-left-first', 'sticky-col-left-second']
-          .map(name => [table.querySelector(`.${name}`)!, '::before'] as [Element, string]),
-        [table.querySelector('.sticky-col-right')!, '::after'],
-        [fixture('<div class="matrix-header sticky"></div>'), '::before'],
-      ]
-      for (const [element, pseudo] of pinnedSurfaces) {
-        const declarations = declarationsFor(element, pseudo)
-        expect(lastValue(declarations, 'background-color'), `${element.className}${pseudo}`).toBe('var(--surface-sticky)')
-        if (pseudo) {
-          expect(lastValue(declarations, 'position')).toBe('absolute')
-          expect(lastValue(declarations, 'pointer-events')).toBe('none')
-        }
-      }
+  it('keeps the grid-based monitor header opaque without changing its positioning', () => {
+    const header = fixture('<div class="matrix-header sticky"></div>')
+    const declarations = declarationsFor(header, '::before')
+    expect(lastValue(declarations, 'background-color')).toBe('var(--surface-sticky)')
+    expect(lastValue(declarations, 'position')).toBe('absolute')
+    expect(lastValue(declarations, 'pointer-events')).toBe('none')
+  })
+})
+
+describe('rounded card surfaces', () => {
+  // User requirement: popup and modal paints must retain rounded corners, with
+  // the same geometry in light/dark and no clipping of descendant overlays.
+  it('gives standalone cards and hover panels explicit shared shapes', () => {
+    const card = fixture('<div class="surface-card"></div>')
+    const panel = fixture('<div class="surface-panel rounded"></div>')
+    document.body.append(card, panel)
+    expect(lastValue(declarationsFor(card), 'border-radius')).toBe('var(--surface-radius)')
+    expect(lastValue(declarationsFor(panel), 'border-radius')).toBe('var(--surface-radius-panel)')
+    card.remove()
+    panel.remove()
+    expect(lastValue(declarationsFor(document.documentElement), '--surface-radius-panel')).toBe('16px')
+    expect(lastValue(declarationsFor(document.documentElement), '--surface-radius-item')).toBe('10px')
+  })
+
+  it.each(['modal', 'dialog', 'card'])('%s header and footer paints follow their parent corners', type => {
+    const element = fixture(`<div class="${type}-content"><div class="${type}-header"></div><div class="${type}-body"></div><div class="${type}-footer"></div></div>`)
+    const header = declarationsFor(element.querySelector(`.${type}-header`)!)
+    const footer = declarationsFor(element.querySelector(`.${type}-footer`)!)
+    for (const corner of ['left', 'right']) {
+      expect(lastValue(header, `border-top-${corner}-radius`)).toBe('inherit')
+      expect(lastValue(footer, `border-bottom-${corner}-radius`)).toBe('inherit')
     }
   })
 })

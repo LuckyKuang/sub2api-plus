@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { chartTooltipStyle } from '@/utils/chartTooltip'
 import { useDocumentDarkMode } from '@/composables/useDocumentDarkMode'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -120,12 +121,7 @@ const options = computed(() => {
         labels: { color: c.text, usePointStyle: true, boxWidth: 6, font: { size: 10 } }
       },
       tooltip: {
-        backgroundColor: isDarkMode.value ? '#1f2937' : '#ffffff',
-        titleColor: isDarkMode.value ? '#f3f4f6' : '#111827',
-        bodyColor: isDarkMode.value ? '#d1d5db' : '#4b5563',
-        borderColor: c.grid,
-        borderWidth: 1,
-        padding: 10,
+        ...chartTooltipStyle(isDarkMode.value),
         displayColors: true
       }
     },

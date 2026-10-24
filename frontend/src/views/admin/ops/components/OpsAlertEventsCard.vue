@@ -10,6 +10,8 @@ import { opsAPI, type AlertEventsQuery } from '@/api/admin/ops'
 import type { AlertEvent } from '../types'
 import { formatDateTime } from '../utils/opsFormatters'
 
+const props = defineProps<{ workspace?: boolean }>()
+
 const { t } = useI18n()
 const appStore = useAppStore()
 
@@ -368,14 +370,14 @@ const empty = computed(() => events.value.length === 0 && !loading.value)
 </script>
 
 <template>
-  <div class="glass-surface p-6 ring-1 ring-gray-900/5 dark:ring-dark-700">
-    <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+  <div class="glass-surface p-6 ring-1 ring-gray-900/5 dark:ring-dark-700" :class="{ 'workspace-table-card': props.workspace, 'ops-workspace-alerts': props.workspace }">
+    <div class="ops-alert-heading workspace-fixed mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
       <div>
         <h3 class="text-sm font-bold text-gray-900 dark:text-white">{{ t('admin.ops.alertEvents.title') }}</h3>
         <p class="mt-1 text-xs surface-muted">{{ t('admin.ops.alertEvents.description') }}</p>
       </div>
 
-      <div class="flex flex-wrap items-center gap-2">
+      <div class="ops-alert-filters flex flex-wrap items-center gap-2">
         <Select :model-value="timeRange" :options="timeRangeOptions" class="w-[120px]" @change="timeRange = String($event || '24h')" />
         <Select :model-value="severity" :options="severityOptions" class="w-[88px]" @change="severity = String($event || '')" />
         <Select :model-value="status" :options="statusOptions" class="w-52" @change="status = String($event || '')" />
@@ -405,8 +407,8 @@ const empty = computed(() => events.value.length === 0 && !loading.value)
       {{ t('admin.ops.alertEvents.empty') }}
     </div>
 
-    <div v-else class="overflow-hidden rounded-xl border border-gray-200 dark:border-dark-700">
-      <div class="max-h-[600px] overflow-y-auto" @scroll="onScroll">
+    <div v-else class="overflow-hidden rounded-2xl border border-gray-200 dark:border-dark-700" :class="{ 'workspace-body': props.workspace }">
+      <div class="record-table-scroll max-h-[600px] overflow-y-auto" :class="{ 'workspace-table-viewport': props.workspace }" @scroll="onScroll">
         <div v-if="!isDesktopViewport" class="divide-y divide-gray-100 dark:divide-dark-800">
           <div
             v-for="row in events"
@@ -450,7 +452,7 @@ const empty = computed(() => events.value.length === 0 && !loading.value)
             <div class="text-[11px] surface-muted">{{ formatDimensionsSummary(row) }}</div>
           </div>
         </div>
-        <table v-else class="min-w-full divide-y divide-gray-200 dark:divide-dark-700">
+        <table v-else class="record-table min-w-full divide-y divide-gray-200 dark:divide-dark-700">
           <thead class="sticky top-0 z-10 surface-inset">
             <tr>
               <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider surface-muted">
@@ -669,8 +671,8 @@ const empty = computed(() => events.value.length === 0 && !loading.value)
           <div v-else-if="history.length === 0" class="py-6 text-center text-xs surface-muted">
             {{ t('admin.ops.alertEvents.detail.historyEmpty') }}
           </div>
-          <div v-else class="overflow-hidden rounded-lg border border-gray-100 dark:border-dark-700">
-            <table class="min-w-full divide-y divide-gray-100 dark:divide-dark-700">
+          <div v-else class="record-table-scroll overflow-hidden rounded-lg border border-gray-100 dark:border-dark-700">
+            <table class="record-table record-table-compact min-w-full divide-y divide-gray-100 dark:divide-dark-700">
               <thead class="surface-inset">
                 <tr>
                   <th class="px-3 py-2 text-left text-[11px] font-bold uppercase tracking-wider surface-muted">{{ t('admin.ops.alertEvents.table.time') }}</th>
@@ -702,3 +704,13 @@ const empty = computed(() => events.value.length === 0 && !loading.value)
   </div>
 </template>
 
+
+<style scoped>
+@media (min-width: 1024px) and (max-width: 1279px), (min-width: 1024px) and (max-height: 800px) {
+  .ops-workspace-alerts { padding: 12px 16px; }
+  .ops-workspace-alerts .ops-alert-heading { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+  .ops-workspace-alerts .ops-alert-filters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, .8fr) minmax(0, 1.8fr) minmax(0, 1.2fr) auto; width: 100%; gap: 8px; }
+  .ops-workspace-alerts .ops-alert-filters > :deep(.relative) { width: 100%; min-width: 0; }
+  .ops-workspace-alerts .ops-alert-filters :deep(.select-trigger) { min-height: 36px; padding-block: 7px; }
+}
+</style>

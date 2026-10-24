@@ -577,8 +577,9 @@ const baseSettingsResponse = {
   },
 };
 
-function mountView() {
+function mountView(attachTo?: HTMLElement) {
   return mount(SettingsView, {
+    attachTo,
     global: {
       stubs: {
         AppLayout: AppLayoutStub,
@@ -766,6 +767,37 @@ describe("admin SettingsView payment visible method controls", () => {
     });
     fetchPublicSettings.mockResolvedValue(undefined);
     adminSettingsFetch.mockResolvedValue(undefined);
+  });
+
+  it("keeps all security and gateway sections in the scroll area while tabs and saving remain outside", async () => {
+    const wrapper = mountView(document.body);
+    try {
+      await flushPromises();
+      const body = wrapper.get('[data-test="settings-body-scroll"]');
+      expect(body.find('.settings-tabs-shell').exists()).toBe(false);
+      expect(body.find('[data-test="settings-save-bar"]').exists()).toBe(false);
+      expect(body.element.closest('form')).toBe(wrapper.get('form').element);
+      const save = wrapper.get('[data-test="settings-save-bar"]');
+      expect(save.element.closest('form')).toBe(wrapper.get('form').element);
+      await openSecurityTab(wrapper);
+      const securitySections = body.findAll(':scope > div').filter(section => section.isVisible());
+      expect(securitySections).toHaveLength(2);
+      expect(securitySections[0].text()).toContain('admin.settings.adminApiKey.title');
+      expect(securitySections[1].text()).toContain('admin.settings.registration.title');
+      body.element.scrollTop = 300;
+      await openGatewayTab(wrapper);
+      expect(body.element.scrollTop).toBe(0);
+      const gatewaySections = body.findAll(':scope > div').filter(section => section.isVisible());
+      expect(gatewaySections).toHaveLength(2);
+      expect(gatewaySections[0].text()).toContain('admin.settings.overloadCooldown.title');
+      expect(gatewaySections[1].text()).toContain('admin.settings.claudeCode.title');
+      await wrapper.get('#settings-tab-general').trigger('click');
+      await wrapper.get('#settings-tab-gateway').trigger('click');
+      expect(body.findAll(':scope > div').filter(section => section.isVisible())).toHaveLength(2);
+      expect(updateSettings).not.toHaveBeenCalled();
+    } finally {
+      wrapper.unmount();
+    }
   });
 
   it.each(["v1", "v2", "v3"])("saves monitor mode %s and invalidates old public settings before refreshing", async (savedMode) => {

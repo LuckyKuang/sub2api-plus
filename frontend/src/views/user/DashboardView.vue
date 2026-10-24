@@ -1,29 +1,44 @@
 <template>
-  <AppLayout>
-    <div class="space-y-6">
-      <div class="flex flex-wrap items-center justify-between gap-3 text-xs surface-muted">
-        <span v-if="stats">{{ t('inspection.timezone', { zone: stats.timezone || 'UTC' }) }}</span>
-        <RefreshControl :state="overviewRefresh" />
-        <button v-if="!stats && overviewRefresh.error.value" class="btn btn-secondary" @click="refreshAll">{{ t('inspection.retry') }}</button>
+  <AppLayout workspace>
+    <div class="workspace-page user-dashboard">
+      <div class="card workspace-fixed dashboard-toolbar flex flex-wrap items-center gap-3 p-4">
+        <DateRangePicker v-model:start-date="startDate" v-model:end-date="endDate" @change="changeCharts" />
+        <div class="flex items-center gap-2">
+          <span class="text-sm surface-muted">{{ t('dashboard.granularity') }}</span>
+          <Select v-model="granularity" class="w-28" :options="granularityOptions" @change="changeCharts" />
+        </div>
+        <div class="dashboard-refresh flex flex-wrap items-center gap-3 text-xs surface-muted">
+          <span v-if="stats">{{ t('inspection.timezone', { zone: stats.timezone || 'UTC' }) }}</span>
+          <RefreshControl :state="overviewRefresh" />
+          <button v-if="!stats && overviewRefresh.error.value" class="btn btn-secondary" @click="refreshAll">{{ t('inspection.retry') }}</button>
+        </div>
       </div>
       <div v-if="loading && !stats" class="flex items-center justify-center py-12"><LoadingSpinner /></div>
       <template v-else-if="stats">
-        <UserDashboardStats :stats="stats" :balance="user?.balance || 0" :frozen-balance="user?.frozen_balance" :is-simple="authStore.isSimpleMode" :platform-quotas="platformQuotas" />
-        <UserDashboardCharts v-model:startDate="startDate" v-model:endDate="endDate" v-model:granularity="granularity" :loading="loadingCharts" :trend="trendData" :models="modelStats" @dateRangeChange="changeCharts" @granularityChange="changeCharts" @refresh="refreshAll" />
-        <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <div class="min-w-0 lg:col-span-2"><UserDashboardRecentUsage :data="recentUsage" :loading="loadingUsage" :start-date="startDate" :end-date="endDate" /></div>
-          <div class="lg:col-span-1"><UserDashboardQuickActions /></div>
-        </div>
+        <UserDashboardStats workspace section="summary" :stats="stats" :balance="user?.balance || 0" :frozen-balance="user?.frozen_balance" :is-simple="authStore.isSimpleMode" :platform-quotas="platformQuotas" />
+        <WorkspaceTabs v-model="workspaceTab" class="workspace-fixed" :tabs="workspaceTabs" :label="t('workspace.charts')" />
+        <section v-show="workspaceTab === 'charts'" class="workspace-body" data-testid="dashboard-charts-panel">
+          <UserDashboardCharts workspace :show-toolbar="false" v-model:startDate="startDate" v-model:endDate="endDate" v-model:granularity="granularity" :loading="loadingCharts" :trend="trendData" :models="modelStats" @dateRangeChange="changeCharts" @granularityChange="changeCharts" @refresh="refreshAll" />
+        </section>
+        <section v-show="workspaceTab === 'quotas'" class="workspace-scroll space-y-3" data-testid="dashboard-quotas-panel">
+          <UserDashboardStats section="details" :stats="stats" :balance="user?.balance || 0" :frozen-balance="user?.frozen_balance" :is-simple="authStore.isSimpleMode" :platform-quotas="platformQuotas" />
+        </section>
+        <section v-show="workspaceTab === 'recent'" class="workspace-scroll" data-testid="dashboard-recent-panel">
+          <UserDashboardRecentUsage :data="recentUsage" :loading="loadingUsage" :start-date="startDate" :end-date="endDate" />
+        </section>
       </template>
     </div>
   </AppLayout>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'; import { useUserView as useAuthStore } from '@/composables/useUserView'; import { usageAPI, type UserDashboardStats as UserStatsType } from '@/api/usage'
+import { ref, computed, nextTick, onMounted, onBeforeUnmount, watch } from 'vue'; import { useUserView as useAuthStore } from '@/composables/useUserView'; import { usageAPI, type UserDashboardStats as UserStatsType } from '@/api/usage'
 import AppLayout from '@/components/layout/AppLayout.vue'; import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import UserDashboardStats from '@/components/user/dashboard/UserDashboardStats.vue'; import UserDashboardCharts from '@/components/user/dashboard/UserDashboardCharts.vue'
-import UserDashboardRecentUsage from '@/components/user/dashboard/UserDashboardRecentUsage.vue'; import UserDashboardQuickActions from '@/components/user/dashboard/UserDashboardQuickActions.vue'
+import UserDashboardRecentUsage from '@/components/user/dashboard/UserDashboardRecentUsage.vue'
+import WorkspaceTabs from '@/components/common/WorkspaceTabs.vue'
+import DateRangePicker from '@/components/common/DateRangePicker.vue'
+import Select from '@/components/common/Select.vue'
 import type { UsageLog, TrendDataPoint, ModelStat, PlatformQuotaItem } from '@/types'
 import { getMyPlatformQuotas } from '@/api/user'
 import { formatDateLocalInput } from '@/utils/format'
@@ -33,6 +48,17 @@ import RefreshControl from '@/components/common/RefreshControl.vue'
 import { useColumnPreferenceKey } from '@/composables/useColumnPreferenceKey'
 import { supportRequestGeneration } from '@/utils/adminSupportContext'
 const { t } = useI18n()
+const workspaceTab = ref('charts')
+const workspaceTabs = computed(() => [
+  { value: 'charts', label: t('workspace.charts') },
+  { value: 'quotas', label: t('workspace.platformsQuotas') },
+  { value: 'recent', label: t('dashboard.recentUsage') },
+])
+const granularityOptions = computed(() => [
+  { value: 'day', label: t('dashboard.day') },
+  { value: 'hour', label: t('dashboard.hour') },
+])
+watch(workspaceTab, async () => { await nextTick(); window.dispatchEvent(new Event('resize')) })
 
 const authStore = useAuthStore(); const user = computed(() => authStore.user)
 const stats = ref<UserStatsType | null>(null); const loading = ref(false); const loadingUsage = ref(false); const loadingCharts = ref(false)
@@ -103,3 +129,13 @@ const changeCharts = async () => {
 onMounted(() => { void refreshAll() })
 onBeforeUnmount(() => { disposed = true; chartSeq++; recentSeq++ })
 </script>
+
+<style scoped>
+.dashboard-refresh { margin-left: auto; }
+@media (min-width: 1024px) {
+  .dashboard-toolbar { padding: 12px 16px; }
+}
+@media (min-width: 1024px) and (max-height: 799px) {
+  .dashboard-toolbar { padding-top: 8px; padding-bottom: 8px; }
+}
+</style>

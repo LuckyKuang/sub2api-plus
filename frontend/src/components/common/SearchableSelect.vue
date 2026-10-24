@@ -204,6 +204,19 @@ const triggerRect = ref<DOMRect | null>(null)
 const dropdownViewportPadding = 8
 const dropdownMinimumWidth = 200
 
+const dropdownVerticalBounds = computed(() => {
+  if (!triggerRect.value) return null
+  const viewportBottom = Math.max(dropdownViewportPadding, window.innerHeight - dropdownViewportPadding)
+  const top = Math.min(viewportBottom, Math.max(dropdownViewportPadding, triggerRect.value.bottom + 4))
+  const bottom = Math.min(viewportBottom, Math.max(dropdownViewportPadding, triggerRect.value.top - 4))
+  return {
+    top,
+    bottom,
+    spaceBelow: viewportBottom - top,
+    spaceAbove: bottom - dropdownViewportPadding,
+  }
+})
+
 // i18n placeholders
 const placeholderText = computed(() => props.placeholder ?? t('common.selectOption'))
 const searchPlaceholderText = computed(() => props.searchPlaceholder ?? t('common.searchPlaceholder'))
@@ -222,9 +235,10 @@ const isSearchable = computed(() => {
 
 // Computed style for teleported dropdown
 const dropdownStyle = computed(() => {
-  if (!triggerRect.value) return {}
+  if (!triggerRect.value || !dropdownVerticalBounds.value) return {}
 
   const rect = triggerRect.value
+  const bounds = dropdownVerticalBounds.value
   const viewportRight = Math.max(dropdownViewportPadding, window.innerWidth - dropdownViewportPadding)
   const preferredMinWidth = Math.max(dropdownMinimumWidth, rect.width)
   const minWidth = Math.min(preferredMinWidth, Math.max(0, viewportRight - dropdownViewportPadding))
@@ -242,9 +256,11 @@ const dropdownStyle = computed(() => {
   }
 
   if (dropdownPosition.value === 'top') {
-    style.bottom = `${window.innerHeight - rect.top + 4}px`
+    style.bottom = `${window.innerHeight - bounds.bottom}px`
+    style.maxHeight = `${bounds.spaceAbove}px`
   } else {
-    style.top = `${rect.bottom + 4}px`
+    style.top = `${bounds.top}px`
+    style.maxHeight = `${bounds.spaceBelow}px`
   }
 
   return style
@@ -360,12 +376,18 @@ const calculateDropdownPosition = () => {
   updateTriggerRect()
 
   nextTick(() => {
-    if (!dropdownRef.value || !triggerRect.value) return
-    const dropdownHeight = dropdownRef.value.offsetHeight || 240
-    const spaceBelow = window.innerHeight - triggerRect.value.bottom
-    const spaceAbove = triggerRect.value.top
+    const dropdown = dropdownRef.value
+    const options = optionsListRef.value
+    if (!dropdown || !options || !dropdownVerticalBounds.value) return
+    const optionsMaxHeight = Number.parseFloat(window.getComputedStyle(options).maxHeight)
+    const optionsHeight = Math.min(options.scrollHeight, Number.isFinite(optionsMaxHeight) ? optionsMaxHeight : Infinity)
+    // Measure the full options area, since the current side may already constrain the panel.
+    const dropdownHeight = optionsHeight > 0
+      ? dropdown.offsetHeight - options.offsetHeight + optionsHeight
+      : dropdown.offsetHeight || 240
+    const { spaceBelow, spaceAbove } = dropdownVerticalBounds.value
 
-    if (spaceBelow < dropdownHeight && spaceAbove > dropdownHeight) {
+    if (spaceBelow < dropdownHeight && spaceAbove > spaceBelow) {
       dropdownPosition.value = 'top'
     } else {
       dropdownPosition.value = 'bottom'
@@ -401,7 +423,7 @@ watch(isOpen, (open) => {
     }
     scrollToFocused()
     // Add scroll listener to update position
-    window.addEventListener('scroll', updateTriggerRect, { capture: true, passive: true })
+    window.addEventListener('scroll', calculateDropdownPosition, { capture: true, passive: true })
     window.addEventListener('resize', calculateDropdownPosition)
   } else {
     searchQuery.value = ''
@@ -411,7 +433,7 @@ watch(isOpen, (open) => {
       clearTimeout(remoteSearchTimer)
       remoteSearchTimer = null
     }
-    window.removeEventListener('scroll', updateTriggerRect, { capture: true })
+    window.removeEventListener('scroll', calculateDropdownPosition, { capture: true })
     window.removeEventListener('resize', calculateDropdownPosition)
   }
 })
@@ -529,7 +551,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside)
-  window.removeEventListener('scroll', updateTriggerRect, { capture: true })
+  window.removeEventListener('scroll', calculateDropdownPosition, { capture: true })
   window.removeEventListener('resize', calculateDropdownPosition)
   if (remoteSearchTimer) {
     clearTimeout(remoteSearchTimer)
@@ -553,16 +575,17 @@ onUnmounted(() => {
 
 .select-clear {
   @apply flex flex-shrink-0 cursor-pointer items-center justify-center;
-  @apply rounded text-gray-400 transition-colors;
+  @apply text-gray-400 transition-colors;
+  border-radius: var(--surface-radius-item);
   @apply hover:text-gray-600 dark:hover:text-gray-200;
 }
 </style>
 
 <style>
 .select-dropdown-portal {
-  @apply w-max min-w-[200px];
+  @apply flex w-max min-w-[200px] flex-col;
   background-color: var(--surface-panel);
-  @apply rounded-xl;
+  border-radius: var(--surface-radius-panel);
   @apply border border-gray-200 dark:border-dark-700;
   @apply shadow-lg shadow-black/10 dark:shadow-black/30;
   @apply overflow-hidden;
@@ -570,7 +593,7 @@ onUnmounted(() => {
 }
 
 .select-dropdown-portal .select-search {
-  @apply flex items-center gap-2 px-3 py-2;
+  @apply flex shrink-0 items-center gap-2 px-3 py-2;
   @apply border-b border-gray-100 dark:border-dark-700;
 }
 
@@ -582,12 +605,13 @@ onUnmounted(() => {
 }
 
 .select-dropdown-portal .select-options {
-  @apply max-h-80 overflow-y-auto py-1 outline-none;
+  @apply min-h-0 shrink max-h-80 space-y-0.5 overflow-y-auto p-1.5 outline-none;
 }
 
 .select-dropdown-portal .select-option {
   @apply flex items-center justify-between gap-2;
-  @apply px-4 py-2.5 text-sm;
+  @apply px-3 py-2.5 text-sm;
+  border-radius: var(--surface-radius-item);
   color: var(--surface-muted);
   @apply cursor-pointer transition-colors duration-150;
 

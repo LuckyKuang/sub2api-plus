@@ -244,6 +244,7 @@ async function mountSubscriptionConfirm(options: Parameters<typeof checkoutInfoW
   const wrapper = shallowMount(PaymentView, {
     global: {
       stubs: {
+        WorkspaceTabs: false,
         AppLayout: {
           template: '<div><slot /></div>',
         },
@@ -284,6 +285,7 @@ async function mountSubscriptionPlanList(planCount: number) {
   const wrapper = shallowMount(PaymentView, {
     global: {
       stubs: {
+        WorkspaceTabs: false,
         AppLayout: {
           template: '<div><slot /></div>',
         },
@@ -361,7 +363,7 @@ describe('PaymentView help text', () => {
 })
 
 describe('PaymentView subscription plan grid', () => {
-  it.each([3, 4, 6])('keeps %i plans on the existing mobile/tablet/desktop grid', async (planCount) => {
+  it.each([1, 3, 4, 8])('keeps all %i plans in a four-column desktop catalog with natural mobile rows', async (planCount) => {
     const wrapper = await mountSubscriptionPlanList(planCount)
     const cards = wrapper.findAllComponents(SubscriptionPlanCard)
 
@@ -370,8 +372,10 @@ describe('PaymentView subscription plan grid', () => {
       'grid',
       'grid-cols-1',
       'sm:grid-cols-2',
-      'lg:grid-cols-3',
+      'lg:grid-cols-4',
     ]))
+    expect(cards.every(card => card.props('catalog') === true)).toBe(true)
+    wrapper.unmount()
   })
 })
 
@@ -882,6 +886,7 @@ describe('PaymentView checkout tabs', () => {
     const wrapper = shallowMount(PaymentView, {
       global: {
         stubs: {
+          WorkspaceTabs: false,
           AppLayout: { template: '<div><slot /></div>' },
           Teleport: true,
           Transition: false,
@@ -892,9 +897,45 @@ describe('PaymentView checkout tabs', () => {
     await flushPromises()
 
     const subscribeTab = wrapper.findAll('button').find(button => button.text() === 'payment.tabSubscribe')
-    // docs/UI_INTERACTION.md: the active tab uses the shared translucent field surface.
-    expect(subscribeTab?.classes()).toContain('surface-field')
+    expect(subscribeTab?.attributes('aria-selected')).toBe('true')
+    expect(subscribeTab?.classes()).toContain('workspace-tab')
     expect(wrapper.findAllComponents(SubscriptionPlanCard).length).toBeGreaterThan(0)
+  })
+
+  it('keeps the pinned tab card across switches and preserves the recharge draft without creating an order', async () => {
+    const wrapper = await mountSubscriptionPlanList(4)
+    const navigation = wrapper.get('[role="tablist"]').element
+    const [subscribe, recharge] = wrapper.findAll('[role="tab"]')
+    expect(wrapper.get('[role="tablist"]').classes()).toEqual(expect.arrayContaining(['card', 'payment-tabs', 'workspace-tabs']))
+    await subscribe.trigger('keydown', { key: 'ArrowRight' })
+    await flushPromises()
+    expect(recharge.attributes('aria-selected')).toBe('true')
+    expect(wrapper.findComponent(SubscriptionPlanCard).exists()).toBe(false)
+    wrapper.getComponent(AmountInput).vm.$emit('update:modelValue', 50)
+    await flushPromises()
+    expect(wrapper.get('[data-testid="recharge-checkout-action"]').text()).toContain(formatPaymentAmount(50, 'CNY'))
+    await recharge.trigger('keydown', { key: 'Home' })
+    expect(subscribe.attributes('aria-selected')).toBe('true')
+    expect(wrapper.findAllComponents(SubscriptionPlanCard)).toHaveLength(4)
+    await subscribe.trigger('keydown', { key: 'End' })
+    expect(wrapper.getComponent(AmountInput).props('modelValue')).toBe(50)
+    expect(wrapper.get('[role="tablist"]').element).toBe(navigation)
+    expect(createOrder).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('keeps confirmation actions together and restores the catalog after cancelling without placing an order', async () => {
+    const wrapper = await mountSubscriptionPlanList(4)
+    const selected = wrapper.findAllComponents(SubscriptionPlanCard)[2].props('plan')
+    wrapper.findAllComponents(SubscriptionPlanCard)[2].vm.$emit('select', selected)
+    await flushPromises()
+    expect(wrapper.find('[role="tablist"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="subscription-checkout-action"]').findAll('button')).toHaveLength(2)
+    await wrapper.get('[data-testid="subscription-checkout-action"]').findAll('button')[1].trigger('click')
+    expect(wrapper.findAllComponents(SubscriptionPlanCard)).toHaveLength(4)
+    expect(wrapper.get('[role="tab"][aria-selected="true"]').text()).toBe('payment.tabSubscribe')
+    expect(createOrder).not.toHaveBeenCalled()
+    wrapper.unmount()
   })
 })
 

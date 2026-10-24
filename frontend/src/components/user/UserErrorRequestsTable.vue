@@ -1,10 +1,11 @@
 <template>
-  <DetailWorkspace :show="showDetail" :title="t('usage.errors.detail.title')" @close="showDetail = false">
+  <DetailWorkspace :workspace="workspace" :show="showDetail" :title="t('usage.errors.detail.title')" @close="showDetail = false">
     <div class="error-compact flex min-h-0 flex-1 flex-col" :style="{ '--error-table-width': compactTableWidth + 'px' }">
     <div class="card flex min-h-0 flex-1 flex-col overflow-hidden">
-      <IpGeoBatchToolbar :ips="rows.map((r) => r.client_ip)" @failed="emit('ipGeoBatchFailed')" />
+      <IpGeoBatchToolbar :class="{ 'workspace-fixed': workspace }" :ips="rows.map((r) => r.client_ip)" @failed="emit('ipGeoBatchFailed')" />
 
       <DataTable
+        :class="{ 'workspace-table-viewport': workspace }"
         :columns="columns"
         :data="rows"
         :loading="loading"
@@ -151,6 +152,7 @@ const props = defineProps<{
   loading: boolean
   page: number
   pageSize: number
+  workspace?: boolean
   /** 列设置:仅显示这些 key 的列;不传则全显(key 须与 allColumns 一致) */
   visibleColumnKeys?: string[]
 }>()

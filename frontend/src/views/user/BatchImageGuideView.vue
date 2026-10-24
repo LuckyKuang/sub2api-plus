@@ -1,5 +1,5 @@
 <template>
-  <AppLayout>
+  <AppLayout workspace>
     <TablePageLayout>
       <template #filters>
         <div class="flex flex-col gap-3">
@@ -231,7 +231,7 @@
       <template #pagination>
         <div
           v-if="visibleBatchJobs.length > 0 || pagination.page > 1"
-          class="pagination-card card flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6"
+          class="batch-pagination pagination-card card flex flex-col gap-3 px-4 py-3 sm:px-6"
         >
           <div class="flex flex-wrap items-center gap-3 text-sm surface-muted">
             <i18n-t keypath="batchImage.pagination.pageNumber" tag="span" scope="global">
@@ -281,7 +281,7 @@
     <Teleport to="body">
       <div
         v-if="openMoreJobId"
-        class="fixed z-[9999] w-44 overflow-hidden rounded-xl py-1 text-sm shadow-lg ring-1 ring-black/5 dark:ring-white/10 surface-panel"
+        class="fixed z-[9999] w-44 overflow-hidden p-1 text-sm shadow-lg ring-1 ring-black/5 dark:ring-white/10 surface-panel"
         :style="moreMenuStyle"
         @click.stop
       >
@@ -290,7 +290,7 @@
             <button v-support-readonly
               v-if="canRetry(job)"
               type="button"
-              class="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-amber-50/25 hover:text-amber-700 disabled:opacity-60 dark:hover:bg-amber-900/20 dark:hover:text-amber-300 surface-control surface-muted"
+              class="flex w-full items-center gap-2 rounded-[var(--surface-radius-item)] px-3 py-2 text-left transition-colors hover:bg-amber-50/25 hover:text-amber-700 disabled:opacity-60 dark:hover:bg-amber-900/20 dark:hover:text-amber-300 surface-control surface-muted"
               :disabled="retryingBatchId === job.id"
               @click="retryFailedJob(job)"
             >
@@ -300,7 +300,7 @@
             <button v-support-readonly
               v-if="canDeleteRecord(job)"
               type="button"
-              class="flex w-full items-center gap-2 px-3 py-2 text-left text-red-600 transition-colors hover:bg-red-50/25 disabled:opacity-60 dark:text-red-400 dark:hover:bg-red-900/20 surface-control"
+              class="flex w-full items-center gap-2 rounded-[var(--surface-radius-item)] px-3 py-2 text-left text-red-600 transition-colors hover:bg-red-50/25 disabled:opacity-60 dark:text-red-400 dark:hover:bg-red-900/20 surface-control"
               :disabled="deletingBatchId === job.id"
               @click="deleteJob(job)"
             >
@@ -377,8 +377,8 @@
           </button>
         </div>
 
-        <div v-if="items.length" class="overflow-x-auto rounded-lg border border-gray-200 surface-inset dark:border-dark-700">
-          <table class="w-full min-w-[860px] table-fixed divide-y divide-gray-200 text-sm dark:divide-dark-700">
+        <div v-if="items.length" class="record-table-scroll overflow-x-auto rounded-lg border border-gray-200 surface-inset dark:border-dark-700">
+          <table class="record-table w-full min-w-[860px] table-fixed divide-y divide-gray-200 text-sm dark:divide-dark-700">
             <colgroup>
               <col class="w-[18%]" />
               <col class="w-[34%]" />
@@ -2648,6 +2648,17 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.batch-pagination { align-items: stretch; }
+.batch-pagination > div:first-child { min-width: 0; }
+.batch-pagination > div:first-child > span,
+.batch-pagination > div:first-child > div { flex-shrink: 0; white-space: nowrap; }
+.batch-pagination > div:last-child { align-self: flex-end; flex-shrink: 0; flex-wrap: nowrap; }
+.batch-pagination > div:last-child > button { min-width: 80px; flex-shrink: 0; white-space: nowrap; }
+@container table-page-pagination (min-width: 680px) {
+  .batch-pagination { flex-direction: row; align-items: center; justify-content: space-between; }
+  .batch-pagination > div:last-child { align-self: auto; }
+}
+
 .batch-row-action {
   display: flex !important;
   flex-direction: column !important;

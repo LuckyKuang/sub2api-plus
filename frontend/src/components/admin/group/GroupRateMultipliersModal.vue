@@ -126,8 +126,8 @@
         <div v-else>
           <!-- 表格 -->
           <div class="overflow-hidden rounded-lg border border-gray-200 dark:border-dark-600">
-            <div class="max-h-[420px] overflow-auto">
-              <table class="w-full min-w-max text-sm">
+            <div class="record-table-scroll max-h-[420px] overflow-auto">
+              <table class="record-table w-full min-w-max text-sm">
                 <thead class="sticky top-0 z-[1]">
                   <tr class="border-b border-gray-200 surface-inset dark:border-dark-600">
                     <th class="px-3 py-2 text-left text-xs font-medium surface-muted">{{ t('admin.groups.columns.userEmail') }}</th>

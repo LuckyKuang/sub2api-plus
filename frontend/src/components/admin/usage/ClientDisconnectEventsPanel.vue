@@ -1,7 +1,7 @@
 <template>
-  <div class="min-w-0 w-full" data-testid="client-disconnect-events-panel">
-    <div class="border-b border-gray-100 px-4 py-4 dark:border-dark-700/50">
-      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5">
+  <div class="min-w-0 w-full" :class="{ 'workspace-body !gap-0 disconnect-workspace': workspace }" data-testid="client-disconnect-events-panel">
+    <div class="disconnect-filters border-b border-gray-100 px-4 py-4 dark:border-dark-700/50" :class="{ 'workspace-fixed': workspace }">
+      <div class="disconnect-filter-fields grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5">
         <div ref="userSearchRef" class="relative">
           <label class="input-label">{{ t('admin.usage.disconnectEvents.userAccount') }}</label>
           <input
@@ -22,9 +22,13 @@
           >
             <Icon name="x" size="xs" />
           </button>
+          <Teleport to="body" :disabled="!workspace">
           <div
             v-if="showUserDropdown && userResults.length > 0"
             class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border border-gray-200 shadow-lg dark:border-dark-600 surface-panel"
+            :style="workspace ? userDropdownStyle : undefined"
+            data-testid="disconnect-user-options"
+            @click.stop
           >
             <button
               v-for="user in userResults"
@@ -37,6 +41,7 @@
               <span v-if="user.deleted" class="ml-2 text-xs surface-muted">{{ t('admin.usage.userDeletedBadge') }}</span>
             </button>
           </div>
+          </Teleport>
         </div>
 
         <div ref="apiKeySearchRef" class="relative">
@@ -59,9 +64,13 @@
           >
             <Icon name="x" size="xs" />
           </button>
+          <Teleport to="body" :disabled="!workspace">
           <div
             v-if="showAPIKeyDropdown && apiKeyResults.length > 0"
             class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border border-gray-200 shadow-lg dark:border-dark-600 surface-panel"
+            :style="workspace ? apiKeyDropdownStyle : undefined"
+            data-testid="disconnect-api-key-options"
+            @click.stop
           >
             <button
               v-for="key in apiKeyResults"
@@ -73,6 +82,7 @@
               {{ key.name || `#${key.id}` }}
             </button>
           </div>
+          </Teleport>
         </div>
 
         <label class="block">
@@ -90,19 +100,19 @@
 
         <label class="block">
           <span class="input-label">{{ t('admin.usage.disconnectEvents.acceptedFrom') }}</span>
-          <input v-model="draft.accepted_from" data-testid="disconnect-accepted-from" type="datetime-local" class="input" />
+          <DateTimePicker :aria-label="t('admin.usage.disconnectEvents.acceptedFrom')" v-model="draft.accepted_from" data-testid="disconnect-accepted-from" type="datetime-local" class="input" />
         </label>
         <label class="block">
           <span class="input-label">{{ t('admin.usage.disconnectEvents.acceptedTo') }}</span>
-          <input v-model="draft.accepted_to" data-testid="disconnect-accepted-to" type="datetime-local" class="input" />
+          <DateTimePicker :aria-label="t('admin.usage.disconnectEvents.acceptedTo')" v-model="draft.accepted_to" data-testid="disconnect-accepted-to" type="datetime-local" class="input" />
         </label>
         <label class="block">
           <span class="input-label">{{ t('admin.usage.disconnectEvents.finalizedFrom') }}</span>
-          <input v-model="draft.finalized_from" data-testid="disconnect-finalized-from" type="datetime-local" class="input" />
+          <DateTimePicker :aria-label="t('admin.usage.disconnectEvents.finalizedFrom')" v-model="draft.finalized_from" data-testid="disconnect-finalized-from" type="datetime-local" class="input" />
         </label>
         <label class="block">
           <span class="input-label">{{ t('admin.usage.disconnectEvents.finalizedTo') }}</span>
-          <input v-model="draft.finalized_to" data-testid="disconnect-finalized-to" type="datetime-local" class="input" />
+          <DateTimePicker :aria-label="t('admin.usage.disconnectEvents.finalizedTo')" v-model="draft.finalized_to" data-testid="disconnect-finalized-to" type="datetime-local" class="input" />
         </label>
 
         <label class="block">
@@ -167,7 +177,7 @@
         </label>
       </div>
 
-      <div class="mt-3 flex flex-wrap items-center justify-between gap-3">
+      <div class="disconnect-filter-actions mt-3 flex flex-wrap items-center justify-between gap-3">
         <p class="text-xs surface-muted">{{ t('admin.usage.disconnectEvents.hint') }}</p>
         <div class="flex gap-2">
           <button type="button" class="btn btn-secondary" @click="resetFilters">{{ t('common.reset') }}</button>
@@ -179,8 +189,8 @@
       </div>
     </div>
 
-    <div class="table-container min-w-0 w-full max-w-full overflow-x-auto">
-      <table class="w-full min-w-[2200px] divide-y divide-gray-200 dark:divide-dark-700">
+    <div class="record-table-scroll table-container min-w-0 w-full max-w-full overflow-x-auto" :class="{ 'workspace-table-viewport': workspace }">
+      <table class="record-table w-full min-w-[2200px] divide-y divide-gray-200 dark:divide-dark-700">
         <thead class="surface-inset">
           <tr>
             <th v-for="heading in headings" :key="heading" class="whitespace-nowrap px-4 py-3 text-left text-xs font-medium uppercase surface-muted">{{ heading }}</th>
@@ -229,11 +239,12 @@
       </table>
     </div>
 
-    <Pagination v-if="pagination.total > 0" :page="pagination.page" :total="pagination.total" :page-size="pagination.page_size" @update:page="changePage" @update:pageSize="changePageSize" />
+    <Pagination v-if="pagination.total > 0" :class="{ 'workspace-fixed': workspace }" :page="pagination.page" :total="pagination.total" :page-size="pagination.page_size" @update:page="changePage" @update:pageSize="changePageSize" />
   </div>
 </template>
 
 <script setup lang="ts">
+import DateTimePicker from '@/components/common/DateTimePicker.vue'
 import Select from '@/components/common/Select.vue'
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -245,8 +256,11 @@ import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
 import { formatDateTime } from '@/utils/format'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
+import { useAnchoredDropdown } from '@/composables/useAnchoredDropdown'
 
 type UsageSource = NonNullable<ClientDisconnectEventQueryParams['usage_source']>
+
+const props = defineProps<{ workspace?: boolean }>()
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -261,6 +275,8 @@ const userResults = ref<SimpleUser[]>([])
 const apiKeyResults = ref<SimpleApiKey[]>([])
 const showUserDropdown = ref(false)
 const showAPIKeyDropdown = ref(false)
+const userDropdownStyle = useAnchoredDropdown(userSearchRef, () => !!props.workspace && showUserDropdown.value)
+const apiKeyDropdownStyle = useAnchoredDropdown(apiKeySearchRef, () => !!props.workspace && showAPIKeyDropdown.value)
 let userSearchTimer: ReturnType<typeof setTimeout> | undefined
 let apiKeySearchTimer: ReturnType<typeof setTimeout> | undefined
 let userSearchSequence = 0
@@ -491,3 +507,21 @@ onUnmounted(() => {
   document.removeEventListener('click', closeDropdowns)
 })
 </script>
+
+<style scoped>
+@media (min-width: 1024px) {
+  .disconnect-workspace .disconnect-filters { padding: 10px 14px; }
+  .disconnect-workspace .disconnect-filter-fields { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px 10px; }
+  .disconnect-workspace .disconnect-filter-fields > * { min-width: 0; }
+  .disconnect-workspace .input-label { min-height: 16px; margin-bottom: 4px; font-size: 12px; line-height: 16px; }
+  .disconnect-workspace :deep(.input), .disconnect-workspace :deep(.select-trigger) { min-height: 34px; padding: 6px 10px; }
+  .disconnect-workspace .disconnect-filter-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin-top: 8px; }
+  .disconnect-workspace .disconnect-filter-actions .btn { min-height: 34px; padding: 6px 10px; }
+}
+@media (min-width: 1024px) and (max-height: 799px) {
+  .disconnect-workspace .disconnect-filters { padding: 8px 12px; }
+  .disconnect-workspace .disconnect-filter-fields { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 150px; overflow-x: auto; scrollbar-width: thin; padding-bottom: 2px; }
+  .disconnect-workspace .input-label { margin-bottom: 2px; }
+  .disconnect-workspace :deep(.input), .disconnect-workspace :deep(.select-trigger) { min-height: 32px; padding-top: 5px; padding-bottom: 5px; }
+}
+</style>

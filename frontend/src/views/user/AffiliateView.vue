@@ -109,8 +109,8 @@
           <div v-if="detail.invitees.length === 0" class="mt-4 rounded-xl border border-dashed border-gray-300 p-6 text-center text-sm dark:border-dark-700 surface-muted">
             {{ t('affiliate.invitees.empty') }}
           </div>
-          <div v-else class="table-container mt-4 overflow-x-auto">
-            <table class="w-full min-w-[560px] text-left text-sm">
+          <div v-else class="record-table-scroll table-container mt-4 overflow-x-auto">
+            <table class="record-table w-full min-w-[560px] text-left text-sm">
               <thead>
                 <tr class="border-b border-gray-200 dark:border-dark-700 surface-muted">
                   <th class="px-3 py-2 font-medium">{{ t('affiliate.invitees.columns.email') }}</th>

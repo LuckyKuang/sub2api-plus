@@ -36,7 +36,7 @@
       <!-- Dropdown List -->
       <div
         v-if="showDropdown"
-        class="absolute left-0 right-0 top-full z-50 mt-1 rounded-lg border border-gray-200 shadow-lg dark:border-dark-600 surface-panel"
+        class="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden border border-gray-200 shadow-lg dark:border-dark-600 surface-panel"
       >
         <div class="sticky top-0 border-b border-gray-200 surface-inset p-2 dark:border-dark-600">
           <input
@@ -47,17 +47,17 @@
             @click.stop
           />
         </div>
-        <div class="max-h-52 overflow-auto">
+        <div class="max-h-52 space-y-0.5 overflow-auto p-1">
           <div
             v-for="model in filteredModels"
             :key="model.value"
             data-testid="model-option"
-            class="group flex items-center hover:surface-hover"
+            class="group flex items-center rounded-[var(--surface-radius-item)] hover:surface-hover"
           >
             <button
               type="button"
               data-testid="select-model"
-              class="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left text-sm surface-control"
+              class="flex min-w-0 flex-1 items-center gap-2 rounded-[var(--surface-radius-item)] px-3 py-2 text-left text-sm hover:surface-hover surface-control"
               @click="toggleModel(model.value)"
             >
               <span

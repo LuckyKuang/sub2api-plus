@@ -21,11 +21,11 @@
         <div v-if="preset === 'custom'" class="mt-3 grid gap-3 sm:grid-cols-2" data-test="custom-range">
           <label class="text-xs surface-muted">
             <span>{{ t('admin.promptAudit.events.startAt') }}</span>
-            <input v-model="local.start_at" type="datetime-local" class="input mt-1 w-full" :aria-label="t('admin.promptAudit.events.startAt')" @change="criteriaChanged" />
+            <DateTimePicker v-model="local.start_at" type="datetime-local" class="input mt-1 w-full" :aria-label="t('admin.promptAudit.events.startAt')" @change="criteriaChanged" />
           </label>
           <label class="text-xs surface-muted">
             <span>{{ t('admin.promptAudit.events.endAt') }}</span>
-            <input v-model="local.end_at" type="datetime-local" class="input mt-1 w-full" :aria-label="t('admin.promptAudit.events.endAt')" @change="criteriaChanged" />
+            <DateTimePicker v-model="local.end_at" type="datetime-local" class="input mt-1 w-full" :aria-label="t('admin.promptAudit.events.endAt')" @change="criteriaChanged" />
           </label>
           <p v-if="!canPreview" class="text-xs text-red-600 dark:text-red-400 sm:col-span-2">{{ t('admin.promptAudit.events.customRangeInvalid') }}</p>
         </div>
@@ -122,6 +122,7 @@
 </template>
 
 <script setup lang="ts">
+import DateTimePicker from '@/components/common/DateTimePicker.vue'
 import Select from '@/components/common/Select.vue'
 import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'

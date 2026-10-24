@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
+import DateTimePicker from '@/components/common/DateTimePicker.vue'
 import { mount } from '@vue/test-utils'
 import {
   BUILTIN_PLATFORM_CATALOG,
@@ -451,7 +452,7 @@ describe('EditAccountModal', () => {
     await button.trigger('click')
     const input = wrapper.get<HTMLInputElement>('input[type="datetime-local"]')
     expect(input.element.value).not.toBe('')
-    await input.setValue('')
+    await wrapper.getComponent(DateTimePicker).setValue('')
 
     await wrapper.get('form#edit-account-form').trigger('submit.prevent')
     expect(updateAccountMock.mock.calls[0]?.[1]?.expires_at).toBe(0)

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { chartTooltipStyle } from '@/utils/chartTooltip'
 import { useDocumentDarkMode } from '@/composables/useDocumentDarkMode'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -57,7 +58,8 @@ const options = computed(() => {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
-      legend: { display: false }
+      legend: { display: false },
+      tooltip: chartTooltipStyle(isDarkMode.value)
     },
     scales: {
       x: {

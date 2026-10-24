@@ -1,5 +1,5 @@
 <template>
-  <AppLayout>
+  <AppLayout workspace>
     <TablePageLayout>
       <template #filters>
         <div class="flex flex-wrap items-center gap-3">
@@ -204,7 +204,7 @@
             {{ t('admin.promo.expiresAt') }}
             <span class="ml-1 text-xs font-normal surface-muted">({{ t('common.optional') }})</span>
           </label>
-          <input
+          <DateTimePicker :aria-label="t('admin.promo.expiresAt')"
             v-model="createForm.expires_at_str"
             type="datetime-local"
             class="input"
@@ -283,7 +283,7 @@
             {{ t('admin.promo.expiresAt') }}
             <span class="ml-1 text-xs font-normal surface-muted">({{ t('common.optional') }})</span>
           </label>
-          <input
+          <DateTimePicker :aria-label="t('admin.promo.expiresAt')"
             v-model="editForm.expires_at_str"
             type="datetime-local"
             class="input"
@@ -386,6 +386,7 @@
 </template>
 
 <script setup lang="ts">
+import DateTimePicker from '@/components/common/DateTimePicker.vue'
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'

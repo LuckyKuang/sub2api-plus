@@ -1,7 +1,7 @@
 <template>
-  <AppLayout>
-    <div class="w-full space-y-6">
-      <section class="flex flex-wrap items-start justify-between gap-4">
+  <AppLayout workspace>
+    <div class="workspace-page ip-access-workspace">
+      <section class="workspace-fixed card ip-page-heading flex flex-wrap items-start justify-between gap-4 p-5">
         <div>
           <h1 class="text-xl font-semibold text-gray-900 dark:text-white">{{ t('admin.ipAccessControl.title') }}</h1>
           <p class="mt-1 max-w-3xl text-sm surface-muted">{{ t('admin.ipAccessControl.description') }}</p>
@@ -9,13 +9,19 @@
         <RouterLink class="btn btn-secondary" to="/admin/settings">{{ t('admin.ipAccessControl.backToSettings') }}</RouterLink>
       </section>
 
-      <section class="card">
-        <div class="flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 px-5 py-4 dark:border-dark-700">
-          <div>
-            <h2 class="font-semibold text-gray-900 dark:text-white">{{ t('admin.ipAccessControl.failureStates.title') }}</h2>
-            <p class="mt-1 text-sm surface-muted">{{ t('admin.ipAccessControl.failureStates.description') }}</p>
-          </div>
-          <div class="flex items-center gap-3">
+      <WorkspaceTabs v-model="activeTab" :tabs="workspaceTabs" :label="t('admin.ipAccessControl.title')" />
+
+      <section
+        v-show="activeTab === 'failures'"
+        id="ip-panel-failures"
+        data-testid="ip-panel-failures"
+        role="tabpanel"
+        :aria-label="t('workspace.loginFailures')"
+        class="card workspace-table-card ip-data-panel"
+      >
+        <div class="workspace-fixed ip-table-heading border-b border-gray-100 px-5 py-4 dark:border-dark-700">
+          <h2 class="font-semibold text-gray-900 dark:text-white">{{ t('admin.ipAccessControl.failureStates.title') }}</h2>
+          <div class="ip-failure-meta flex flex-wrap items-center gap-3">
             <span v-if="failureStatesUnavailable" class="rounded bg-rose-100/[0.15] px-2 py-1 text-xs font-medium text-rose-700 dark:bg-rose-950/50 dark:text-rose-300">
               {{ t('admin.ipAccessControl.failureStates.unavailable') }}
             </span>
@@ -26,15 +32,16 @@
               {{ t('admin.ipAccessControl.failureStates.refresh') }}
             </button>
           </div>
+          <p class="ip-table-description text-sm surface-muted">{{ t('admin.ipAccessControl.failureStates.description') }}</p>
         </div>
-        <div class="flex flex-wrap items-end gap-3 border-b border-gray-100 p-4 dark:border-dark-700">
-          <label class="min-w-52 flex-1">
+        <div class="workspace-fixed ip-table-filters ip-failure-filters flex flex-wrap items-end gap-3 border-b border-gray-100 p-4 dark:border-dark-700">
+          <label class="ip-filter-field min-w-52 flex-1">
             <span class="input-label">{{ t('common.search') }}</span>
             <input v-model.trim="failureFilters.query" class="input" :placeholder="t('admin.ipAccessControl.failureStates.searchPlaceholder')" @keyup.enter="searchFailureStates" />
           </label>
           <button type="button" class="btn btn-secondary" :disabled="failureStatesLoading" @click="searchFailureStates">{{ t('common.search') }}</button>
         </div>
-        <DataTable :columns="failureStateColumns" :data="failureStates" :loading="failureStatesLoading" row-key="normalized_ip">
+        <DataTable class="workspace-table-viewport" :columns="failureStateColumns" :data="failureStates" :loading="failureStatesLoading" row-key="normalized_ip">
           <template #cell-normalized_ip="{ value }"><span class="font-mono text-sm">{{ value }}</span></template>
           <template #cell-failure_count="{ row }"><span class="font-medium text-gray-900 dark:text-white">{{ row.failure_count }} / {{ row.failure_threshold }}</span></template>
           <template #cell-window_started_at="{ value }"><span class="whitespace-nowrap text-sm surface-muted">{{ formatTimestamp(value) }}</span></template>
@@ -89,10 +96,10 @@
           </template>
           <template #empty><div class="py-10 text-center text-sm surface-muted">{{ t('admin.ipAccessControl.failureStates.empty') }}</div></template>
         </DataTable>
-        <p class="border-t border-gray-100 px-5 py-3 text-xs dark:border-dark-700 surface-muted">
+        <p class="workspace-fixed ip-table-note border-t border-gray-100 px-5 py-3 text-xs dark:border-dark-700 surface-muted">
           {{ t('admin.ipAccessControl.failureStates.operationHint') }}
         </p>
-        <div class="border-t border-gray-100 p-4 dark:border-dark-700">
+        <div class="workspace-fixed ip-pagination border-t border-gray-100 dark:border-dark-700" data-testid="ip-failures-pagination">
           <Pagination
             v-if="failureTotal > 0"
             :total="failureTotal"
@@ -104,7 +111,14 @@
         </div>
       </section>
 
-      <section class="card">
+      <section
+        v-show="activeTab === 'proxies'"
+        id="ip-panel-proxies"
+        data-testid="ip-panel-proxies"
+        role="tabpanel"
+        :aria-label="t('workspace.trustedProxies')"
+        class="card workspace-body workspace-scroll"
+      >
         <div class="flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 px-5 py-4 dark:border-dark-700">
           <div>
             <div class="flex flex-wrap items-center">
@@ -158,7 +172,14 @@
         </div>
       </section>
 
-      <section class="card">
+      <section
+        v-show="activeTab === 'protection'"
+        id="ip-panel-protection"
+        data-testid="ip-panel-protection"
+        role="tabpanel"
+        :aria-label="t('workspace.automaticProtection')"
+        class="card workspace-body workspace-scroll"
+      >
         <div class="border-b border-gray-100 px-5 py-4 dark:border-dark-700">
           <h2 class="font-semibold text-gray-900 dark:text-white">{{ t('admin.ipAccessControl.protection.title') }}</h2>
           <p class="mt-1 text-sm surface-muted">{{ t('admin.ipAccessControl.protection.description') }}</p>
@@ -194,17 +215,26 @@
         </div>
       </section>
 
-      <section ref="rulesSection" class="card">
-        <div class="flex flex-wrap items-center justify-between gap-4 border-b border-gray-100 px-5 py-4 dark:border-dark-700">
-          <div><h2 class="font-semibold text-gray-900 dark:text-white">{{ t('admin.ipAccessControl.rules.title') }}</h2><p class="mt-1 text-sm surface-muted">{{ t('admin.ipAccessControl.rules.description') }}</p></div>
+      <section
+        v-show="activeTab === 'rules'"
+        ref="rulesSection"
+        id="ip-panel-rules"
+        data-testid="ip-panel-rules"
+        role="tabpanel"
+        :aria-label="t('workspace.rules')"
+        class="card workspace-table-card ip-data-panel"
+      >
+        <div class="workspace-fixed ip-table-heading border-b border-gray-100 px-5 py-4 dark:border-dark-700">
+          <h2 class="font-semibold text-gray-900 dark:text-white">{{ t('admin.ipAccessControl.rules.title') }}</h2>
           <button type="button" class="btn btn-primary" @click="openCreateDialog"><Icon name="plus" size="sm" class="mr-1.5" />{{ t('admin.ipAccessControl.rules.add') }}</button>
+          <p class="ip-table-description text-sm surface-muted">{{ t('admin.ipAccessControl.rules.description') }}</p>
         </div>
-        <div class="flex flex-wrap items-end gap-3 border-b border-gray-100 p-4 dark:border-dark-700">
-          <label class="min-w-52 flex-1"><span class="input-label">{{ t('common.search') }}</span><input v-model.trim="filters.query" class="input" :placeholder="t('admin.ipAccessControl.rules.searchPlaceholder')" @keyup.enter="search" /></label>
-          <label class="w-full sm:w-44"><span class="input-label">{{ t('common.status') }}</span><Select v-model="filters.status" :options="statusOptions" @change="search" /></label>
+        <div class="workspace-fixed ip-table-filters flex flex-wrap items-end gap-3 border-b border-gray-100 p-4 dark:border-dark-700">
+          <label class="ip-filter-field min-w-52 flex-1"><span class="input-label">{{ t('common.search') }}</span><input v-model.trim="filters.query" class="input" :placeholder="t('admin.ipAccessControl.rules.searchPlaceholder')" @keyup.enter="search" /></label>
+          <label class="ip-filter-field w-full sm:w-44"><span class="input-label">{{ t('common.status') }}</span><Select v-model="filters.status" :options="statusOptions" @change="search" /></label>
           <button type="button" class="btn btn-secondary" :disabled="rulesLoading" @click="search">{{ t('common.search') }}</button>
         </div>
-        <DataTable :columns="columns" :data="rules" :loading="rulesLoading" row-key="id">
+        <DataTable class="workspace-table-viewport" :columns="columns" :data="rules" :loading="rulesLoading" row-key="id">
           <template #cell-ip_or_cidr="{ value }"><span class="font-mono text-sm">{{ value }}</span></template>
           <template #cell-rule_kind="{ value }"><span :class="kindClass(value)">{{ kindLabel(value) }}</span></template>
           <template #cell-status="{ row }"><span :class="statusClass(row.status)">{{ statusLabel(row) }}</span></template>
@@ -215,8 +245,8 @@
           <template #cell-actions="{ row }"><div class="flex flex-wrap items-center gap-2"><button v-if="row.status === 'active' && !row.ip_or_cidr.includes('/') && row.rule_kind !== 'allow'" type="button" class="btn btn-secondary btn-sm" @click="confirmResetCounter(row.ip_or_cidr)">{{ t('admin.ipAccessControl.rules.resetCounter') }}</button><button v-if="row.status === 'active'" type="button" class="btn btn-danger btn-sm" @click="confirmRelease(row)">{{ row.rule_kind === 'allow' ? t('admin.ipAccessControl.rules.removeAllow') : t('admin.ipAccessControl.rules.releaseReset') }}</button><span v-else class="text-xs surface-muted">—</span></div></template>
           <template #empty><div class="py-10 text-center text-sm surface-muted">{{ t('admin.ipAccessControl.rules.empty') }}</div></template>
         </DataTable>
-		<p class="border-t border-gray-100 px-5 py-3 text-xs dark:border-dark-700 surface-muted">{{ t('admin.ipAccessControl.rules.hitCountHint') }}</p>
-        <div class="border-t border-gray-100 p-4 dark:border-dark-700"><Pagination v-if="total > 0" :total="total" :page="page" :page-size="pageSize" @update:page="changePage" @update:pageSize="changePageSize" /></div>
+		<p class="workspace-fixed ip-table-note border-t border-gray-100 px-5 py-3 text-xs dark:border-dark-700 surface-muted">{{ t('admin.ipAccessControl.rules.hitCountHint') }}</p>
+        <div class="workspace-fixed ip-pagination border-t border-gray-100 dark:border-dark-700" data-testid="ip-rules-pagination"><Pagination v-if="total > 0" :total="total" :page="page" :page-size="pageSize" @update:page="changePage" @update:pageSize="changePageSize" /></div>
       </section>
     </div>
 
@@ -226,7 +256,7 @@
         <label class="block"><span class="input-label">{{ t('admin.ipAccessControl.rules.type') }}</span><Select v-model="createForm.rule_kind" :options="createKindOptions" /></label>
         <p v-if="!manualBlockingReady" class="rounded-md border border-amber-200 bg-amber-50/[0.15] px-3 py-2 text-xs leading-5 text-amber-800 dark:border-amber-800/70 dark:bg-amber-950/30 dark:text-amber-200">{{ t('admin.ipAccessControl.rules.manualBlockUnavailable') }}</p>
         <label class="block"><span class="input-label">{{ t('admin.ipAccessControl.rules.reason') }}</span><textarea v-model.trim="createForm.reason" rows="3" class="input resize-y" /></label>
-        <label class="block"><span class="input-label">{{ t('admin.ipAccessControl.rules.expiresAt') }}</span><input v-model="createForm.expires_at" type="datetime-local" class="input" /></label>
+        <label class="block"><span class="input-label">{{ t('admin.ipAccessControl.rules.expiresAt') }}</span><DateTimePicker :aria-label="t('admin.ipAccessControl.rules.expiresAt')" v-model="createForm.expires_at" type="datetime-local" class="input" /></label>
       </div>
       <template #footer><button type="button" class="btn btn-secondary" @click="createVisible = false">{{ t('common.cancel') }}</button><button type="button" class="btn btn-primary" :disabled="creating || !createForm.ip_or_cidr || (createForm.rule_kind === 'manual_block' && !manualBlockingReady)" @click="createRule">{{ creating ? t('common.saving') : t('common.create') }}</button></template>
     </BaseDialog>
@@ -347,6 +377,7 @@
 </template>
 
 <script setup lang="ts">
+import DateTimePicker from '@/components/common/DateTimePicker.vue'
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminAPI, type IPAccessControlSettings, type IPLoginFailureState, type IPAccessRule, type IPAccessRuleKind, type IPAccessRuleStatus, type TrustedProxyStatus } from '@/api/admin'
@@ -356,6 +387,7 @@ import type { Column } from '@/components/common/types'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
+import WorkspaceTabs from '@/components/common/WorkspaceTabs.vue'
 import Toggle from '@/components/common/Toggle.vue'
 import Select from '@/components/common/Select.vue'
 import Icon from '@/components/icons/Icon.vue'
@@ -366,6 +398,13 @@ import HelpTooltip from '@/components/common/HelpTooltip.vue'
 import { isStepUpBlocked, isStepUpCancelled, stepUpBlockReason, useStepUp } from '@/composables/useStepUp'
 
 const { t } = useI18n()
+const activeTab = ref('protection')
+const workspaceTabs = computed(() => [
+  { value: 'protection', label: t('workspace.automaticProtection'), panelId: 'ip-panel-protection' },
+  { value: 'proxies', label: t('workspace.trustedProxies'), panelId: 'ip-panel-proxies' },
+  { value: 'failures', label: t('workspace.loginFailures'), panelId: 'ip-panel-failures' },
+  { value: 'rules', label: t('workspace.rules'), panelId: 'ip-panel-rules' },
+])
 const appStore = useAppStore()
 const stepUp = useStepUp()
 const showDeployGuide = ref(false)
@@ -668,6 +707,7 @@ async function manualBlockFailureState() {
   }
 }
 async function focusRulesForFailureState(state: IPLoginFailureState, showAllActive = false) {
+  activeTab.value = 'rules'
   filters.status = 'active'
   filters.query = showAllActive ? '' : (state.block_rule_ip_or_cidr || state.normalized_ip)
   page.value = 1
@@ -684,6 +724,46 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.ip-table-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 12px;
+}
+.ip-table-description { grid-column: 1 / -1; }
+.ip-failure-meta { justify-content: flex-end; }
+.ip-pagination :deep(.pagination-card) { border: 0; box-shadow: none; }
+
+@media (min-width: 1024px) and (max-width: 1279px), (min-width: 1024px) and (max-height: 800px) {
+  .ip-page-heading { padding: 12px 16px; gap: 8px 12px; }
+  .ip-page-heading > div { flex: 1; min-width: 0; }
+  .ip-page-heading > .btn { flex: none; }
+  .ip-table-heading { padding: 10px 16px; gap: 4px 12px; }
+  .ip-table-heading > .btn, .ip-table-filters > .btn { min-height: 36px; padding-block: 7px; font-size: 13px; line-height: 20px; }
+  .ip-table-filters {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(150px, .55fr) auto;
+    gap: 8px;
+    padding: 10px 16px;
+  }
+  .ip-failure-filters { grid-template-columns: minmax(0, 1fr) auto; }
+  .ip-filter-field { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px; width: auto; min-width: 0; }
+  .ip-filter-field .input-label { margin: 0; white-space: nowrap; font-size: 13px; }
+  .ip-filter-field .input, .ip-filter-field :deep(.select-trigger) { min-height: 36px; padding-block: 7px; }
+  .ip-table-note { padding: 8px 16px; }
+  .ip-pagination :deep(.pagination-card) { padding: 8px 12px; }
+  .ip-pagination :deep(.pagination-desktop) { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+  .ip-pagination :deep(.pagination-info) { gap: 8px; }
+  .ip-pagination :deep(.pagination-desktop > nav) { align-self: center; gap: 4px; }
+  .ip-pagination :deep(.pagination-desktop .pagination-button) { padding-inline: 8px; }
+}
+
+@media (max-width: 639px) {
+  .ip-table-heading { grid-template-columns: minmax(0, 1fr); }
+  .ip-table-description { grid-row: 2; }
+  .ip-failure-meta { justify-content: flex-start; }
+}
+
 .modal-enter-active,
 .modal-leave-active {
   transition: opacity 0.2s ease;

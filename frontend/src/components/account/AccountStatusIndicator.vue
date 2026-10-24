@@ -49,15 +49,11 @@
       </svg>
       <!-- Tooltip - 向下显示 -->
       <div
-        class="invisible absolute left-0 top-full z-[100] mt-1.5 min-w-[200px] max-w-[300px] rounded-lg px-3 py-2 text-xs text-white opacity-0 shadow-xl transition-all duration-200 group-hover/error:visible group-hover/error:opacity-100 surface-panel"
+        class="invisible absolute left-0 top-full z-[100] mt-1.5 min-w-[200px] max-w-[300px] rounded-[var(--surface-radius-panel)] px-3 py-2 text-xs text-white opacity-0 shadow-xl transition-all duration-200 group-hover/error:visible group-hover/error:opacity-100 surface-panel"
       >
-        <div class="whitespace-pre-wrap break-words leading-relaxed text-gray-300">
+        <div class="whitespace-pre-wrap break-words leading-relaxed surface-muted">
           {{ account.error_message }}
         </div>
-        <!-- 上方小三角 -->
-        <div
-          class="absolute bottom-full left-3 border-[6px] border-transparent border-b-gray-800 dark:border-b-gray-900"
-        ></div>
       </div>
     </div>
 
@@ -71,12 +67,9 @@
       </span>
       <!-- Tooltip -->
       <div
-        class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-56 -translate-x-1/2 whitespace-normal rounded px-3 py-2 text-center text-xs leading-relaxed text-white opacity-0 transition-opacity group-hover:opacity-100 surface-panel"
+        class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-56 -translate-x-1/2 whitespace-normal rounded-[var(--surface-radius-panel)] px-3 py-2 text-center text-xs leading-relaxed text-white opacity-0 transition-opacity group-hover:opacity-100 surface-panel"
       >
         {{ t('admin.accounts.status.rateLimitedUntil', { time: formatDateTime(account.rate_limit_reset_at) }) }}
-        <div
-          class="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-gray-900 dark:border-t-gray-700"
-        ></div>
       </div>
     </div>
 
@@ -121,7 +114,7 @@
         </span>
         <!-- Tooltip -->
         <div
-          class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-max max-w-[320px] -translate-x-1/2 whitespace-nowrap rounded px-3 py-2 text-center text-xs leading-relaxed text-white opacity-0 transition-opacity group-hover:opacity-100 surface-panel"
+          class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-max max-w-[320px] -translate-x-1/2 whitespace-nowrap rounded-[var(--surface-radius-panel)] px-3 py-2 text-center text-xs leading-relaxed text-white opacity-0 transition-opacity group-hover:opacity-100 surface-panel"
         >
           {{
             item.kind === 'credits_exhausted'
@@ -130,9 +123,6 @@
                 ? t('admin.accounts.status.modelCreditOveragesUntil', { model: formatScopeName(item.model), time: formatDateTimeToMinute(item.reset_at) })
                 : t('admin.accounts.status.modelRateLimitedUntil', { model: formatScopeName(item.model), time: formatDateTimeToMinute(item.reset_at) })
           }}
-          <div
-            class="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-gray-900 dark:border-t-gray-700"
-          ></div>
         </div>
       </div>
     </div>
@@ -147,12 +137,9 @@
       </span>
       <!-- Tooltip -->
       <div
-        class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-56 -translate-x-1/2 whitespace-normal rounded px-3 py-2 text-center text-xs leading-relaxed text-white opacity-0 transition-opacity group-hover:opacity-100 surface-panel"
+        class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-56 -translate-x-1/2 whitespace-normal rounded-[var(--surface-radius-panel)] px-3 py-2 text-center text-xs leading-relaxed text-white opacity-0 transition-opacity group-hover:opacity-100 surface-panel"
       >
         {{ t('admin.accounts.status.overloadedUntil', { time: formatTime(account.overload_until) }) }}
-        <div
-          class="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-gray-900 dark:border-t-gray-700"
-        ></div>
       </div>
     </div>
   </div>

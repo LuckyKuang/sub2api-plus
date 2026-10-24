@@ -1,16 +1,17 @@
 <template>
-  <AppLayout>
-    <div class="space-y-4">
+  <AppLayout workspace>
+    <div class="workspace-page">
       <!-- Actions -->
-      <div class="flex items-center justify-end gap-2">
-        <button @click="loadPlans" :disabled="plansLoading" class="btn btn-secondary" :title="t('common.refresh')">
+      <div class="card workspace-fixed flex flex-wrap items-center justify-end gap-2 px-4 py-3" data-test="plans-toolbar">
+        <button @click="loadPlans" :disabled="plansLoading" class="btn btn-secondary" :title="t('common.refresh')" :aria-label="t('common.refresh')">
           <Icon name="refresh" size="md" :class="plansLoading ? 'animate-spin' : ''" />
         </button>
         <button @click="openPlanEdit(null)" class="btn btn-primary">{{ t('payment.admin.createPlan') }}</button>
       </div>
 
       <!-- Plans Table -->
-      <DataTable :columns="planColumns" :data="plans" :loading="plansLoading">
+      <div class="card workspace-table-card" data-test="plans-panel">
+      <DataTable class="workspace-table-viewport" data-test="plans-data-scroll" :columns="planColumns" :data="plans" :loading="plansLoading">
         <template #cell-name="{ value, row }">
           <span class="text-sm font-medium" :class="getPlanNameClass(row.group_id)">{{ value }}</span>
         </template>
@@ -55,6 +56,7 @@
           </div>
         </template>
       </DataTable>
+      </div>
     </div>
 
     <!-- Plan Edit Dialog -->

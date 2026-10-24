@@ -1,8 +1,8 @@
 <template>
-  <AppLayout>
-    <div class="space-y-6">
+  <AppLayout workspace>
+    <div class="workspace-page">
       <section
-        class="flex flex-col gap-4 border-b border-gray-200 pb-5 dark:border-dark-700 sm:flex-row sm:items-end sm:justify-between"
+        class="card workspace-fixed flex flex-col gap-4 px-6 py-4 sm:flex-row sm:items-end sm:justify-between"
       >
         <div class="min-w-0">
           <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
@@ -53,17 +53,18 @@
         </div>
       </section>
 
-      <p class="text-xs surface-muted">
+      <p class="workspace-fixed text-xs surface-muted">
         {{ t("admin.plugins.uploadHint") }}
       </p>
 
       <div
-        class="border border-blue-200 bg-blue-50/[0.15] px-4 py-3 text-sm text-blue-800 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200"
+        class="workspace-fixed rounded-xl border border-blue-200 bg-blue-50/[0.15] px-4 py-3 text-sm text-blue-800 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200"
       >
         <p>{{ t("admin.plugins.runtimeNotice") }}</p>
         <p class="mt-1">{{ t("admin.plugins.menuNotice") }}</p>
       </div>
 
+      <div class="workspace-scroll" data-test="plugin-list-scroll">
       <div
         v-if="loading"
         class="flex min-h-48 items-center justify-center text-sm surface-muted"
@@ -84,7 +85,7 @@
         </p>
       </div>
 
-      <div v-else class="grid grid-cols-1 gap-4 xl:grid-cols-2">
+      <div v-else class="grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
         <article
           v-for="plugin in plugins"
           :key="plugin.id"
@@ -282,6 +283,7 @@
             </button>
           </div>
         </article>
+      </div>
       </div>
 
       <BaseDialog

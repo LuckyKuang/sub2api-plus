@@ -1,5 +1,5 @@
 <template>
-  <AppLayout>
+  <AppLayout workspace>
     <TablePageLayout>
       <template #filters>
         <div class="flex flex-wrap items-center gap-3">
@@ -148,12 +148,12 @@
                 <!-- 右键展开格式选择菜单 -->
                 <div
                   v-if="copyMenuProxyId === row.id"
-                  class="absolute left-0 top-full z-50 mt-1 w-auto min-w-[180px] rounded-lg border border-gray-200 py-1 shadow-lg dark:border-dark-500 surface-panel"
+                  class="absolute left-0 top-full z-50 mt-1 w-auto min-w-[180px] space-y-0.5 border border-gray-200 p-1 shadow-lg dark:border-dark-500 surface-panel"
                 >
                   <button
                     v-for="fmt in getCopyFormats(row)"
                     :key="fmt.label"
-                    class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs hover:surface-hover surface-control"
+                    class="flex w-full items-center gap-2 rounded-[var(--surface-radius-item)] px-3 py-1.5 text-left text-xs hover:surface-hover surface-control"
                     @click.stop="copyFormat(fmt.value)"
                   >
                     <span class="truncate font-mono surface-muted">{{ fmt.label }}</span>
@@ -512,7 +512,7 @@
             class="input mb-2"
             :placeholder="t('admin.proxies.expiryDaysPlaceholder')"
           />
-          <input v-model="createForm.expires_at" type="date" max="9999-12-31" class="input" />
+          <DateTimePicker :aria-label="t('admin.proxies.expiresAt')" v-model="createForm.expires_at" type="date" max="9999-12-31" class="input" />
         </div>
         <div>
           <label class="input-label">{{ t('admin.proxies.fallbackMode') }}</label>
@@ -765,7 +765,7 @@
             class="input mb-2"
             :placeholder="t('admin.proxies.expiryDaysPlaceholder')"
           />
-          <input v-model="editForm.expires_at" type="date" max="9999-12-31" class="input" />
+          <DateTimePicker :aria-label="t('admin.proxies.expiresAt')" v-model="editForm.expires_at" type="date" max="9999-12-31" class="input" />
         </div>
         <div>
           <label class="input-label">{{ t('admin.proxies.fallbackMode') }}</label>
@@ -916,8 +916,8 @@
           </div>
         </div>
 
-        <div class="max-h-80 overflow-auto rounded-lg border border-gray-200 dark:border-dark-600">
-          <table class="min-w-full divide-y divide-gray-200 text-sm dark:divide-dark-700">
+        <div class="record-table-scroll max-h-80 overflow-auto rounded-lg border border-gray-200 dark:border-dark-600">
+          <table class="record-table min-w-full divide-y divide-gray-200 text-sm dark:divide-dark-700">
             <thead class="surface-inset text-xs uppercase surface-muted">
               <tr>
                 <th class="whitespace-nowrap px-3 py-2 text-left">{{ t('admin.proxies.qualityTableTarget') }}</th>
@@ -969,8 +969,8 @@
       <div v-else-if="proxyAccounts.length === 0" class="py-6 text-center text-sm surface-muted">
         {{ t('admin.proxies.accountsEmpty') }}
       </div>
-      <div v-else class="table-container max-h-80 overflow-auto">
-        <table class="min-w-full divide-y divide-gray-200 text-sm dark:divide-dark-700">
+      <div v-else class="record-table-scroll table-container max-h-80 overflow-auto">
+        <table class="record-table record-table-compact min-w-full divide-y divide-gray-200 text-sm dark:divide-dark-700">
           <thead class="surface-inset text-xs uppercase surface-muted">
             <tr>
               <th class="px-4 py-2 text-left">{{ t('admin.proxies.accountName') }}</th>
@@ -1003,6 +1003,7 @@
 </template>
 
 <script setup lang="ts">
+import DateTimePicker from '@/components/common/DateTimePicker.vue'
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'

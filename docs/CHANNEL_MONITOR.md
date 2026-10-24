@@ -102,6 +102,8 @@ TTFT 仅使用成功请求中 `timing_version=1` 的 `first_token_ms`。不以�
 
 V1/V2 的用户只读接口保留原有权限。V2 的 `GET /api/v1/channel-monitor-v2/{dimensions,snapshot,models,matrix,errors,users}` 要求登录、渠道监控开启且模式为 V2，不额外要求管理员身份。普通用户的数据仍按授权分组过滤，吞吐、排行、其他用户身份及错误样本的展示沿用原有规则；管理端配置和管理接口仍要求管理员权限。
 
+V2 的模型展示模式、完整排除策略、历史窗口语义及管理员真实模型目录见 [V2 配置与模型目录](CHANNEL_MONITOR_V2.md)。
+
 | API | 权限与参数 |
 | --- | --- |
 | `GET /api/v1/channel-monitor-v3/snapshot` | 登录用户，功能开启且模式为 V3；`range=24h|7d|30d`（默认 24h），可选 `platform` |

@@ -1147,7 +1147,19 @@ export default {
     startDate: 'Start Date',
     endDate: 'End Date',
     apply: 'Apply',
-    selectDateRange: 'Select date range'
+    selectDateRange: 'Select date range',
+    selectDate: 'Select date',
+    selectDateTime: 'Select date and time',
+    selectTime: 'Select time',
+    previousMonth: 'Previous month',
+    nextMonth: 'Next month',
+    time: 'Time',
+    hours: 'Hours',
+    minutes: 'Minutes',
+    seconds: 'Seconds',
+    increase: 'Increase {unit}',
+    decrease: 'Decrease {unit}',
+    outOfRange: 'Choose a valid value within the allowed range and interval.'
   },
 
   // Admin

@@ -1090,7 +1090,7 @@
 
             <div
               v-if="!geminiAIStudioOAuthEnabled"
-              class="pointer-events-none absolute right-0 top-full z-50 mt-2 w-80 rounded-md border border-amber-200 bg-amber-50/[0.15] px-3 py-2 text-xs text-amber-800 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-200"
+              class="pointer-events-none absolute right-0 top-full z-50 mt-2 w-80 rounded-[var(--surface-radius-panel)] border border-amber-200 bg-amber-50/[0.15] px-3 py-2 text-xs text-amber-800 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-200"
             >
               {{ t('admin.accounts.oauth.gemini.aiStudioNotConfiguredTip') }}
             </div>
@@ -3026,7 +3026,7 @@
       </div>
       <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
         <label class="input-label">{{ t('admin.accounts.expiresAt') }}</label>
-        <input v-model="expiresAtInput" type="datetime-local" class="input" />
+        <DateTimePicker :aria-label="t('admin.accounts.expiresAt')" v-model="expiresAtInput" type="datetime-local" class="input" />
         <div class="mt-2 flex gap-2">
           <button type="button" class="btn btn-secondary btn-sm" @click="form.expires_at = getAccountExpiryTimestamp(1)">
             {{ t('payment.oneMonth') }}
@@ -3410,22 +3410,7 @@
               {{ t('admin.accounts.mixedScheduling') }}
             </span>
           </label>
-          <div class="group relative">
-            <span
-              class="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-gray-200 text-xs text-gray-500 hover:bg-gray-300 dark:bg-dark-600 dark:text-gray-400 dark:hover:bg-dark-500"
-            >
-              ?
-            </span>
-            <!-- Tooltip（向下显示避免被弹窗裁剪） -->
-            <div
-              class="pointer-events-none absolute left-0 top-full z-[100] mt-1.5 w-72 rounded px-3 py-2 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100 surface-panel"
-            >
-              {{ t('admin.accounts.mixedSchedulingTooltip') }}
-              <div
-                class="absolute bottom-full left-3 border-4 border-transparent border-b-gray-900 dark:border-b-gray-700"
-              ></div>
-            </div>
-          </div>
+          <HelpTooltip :content="t('admin.accounts.mixedSchedulingTooltip')" width-class="w-72" />
         </div>
         <div v-if="form.platform === 'antigravity'" class="mt-3 flex items-center gap-2">
           <label class="flex cursor-pointer items-center gap-2">
@@ -3438,21 +3423,7 @@
               {{ t('admin.accounts.allowOverages') }}
             </span>
           </label>
-          <div class="group relative">
-            <span
-              class="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-gray-200 text-xs text-gray-500 hover:bg-gray-300 dark:bg-dark-600 dark:text-gray-400 dark:hover:bg-dark-500"
-            >
-              ?
-            </span>
-            <div
-              class="pointer-events-none absolute left-0 top-full z-[100] mt-1.5 w-72 rounded px-3 py-2 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100 surface-panel"
-            >
-              {{ t('admin.accounts.allowOveragesTooltip') }}
-              <div
-                class="absolute bottom-full left-3 border-4 border-transparent border-b-gray-900 dark:border-b-gray-700"
-              ></div>
-            </div>
-          </div>
+          <HelpTooltip :content="t('admin.accounts.allowOveragesTooltip')" width-class="w-72" />
         </div>
 
         <!-- Group Selection - 仅标准模式显示 -->
@@ -3673,8 +3644,8 @@
         <p class="mb-4 text-xs text-amber-600 dark:text-amber-400">
           {{ t('admin.accounts.gemini.quotaPolicy.note') }}
         </p>
-        <div class="table-container overflow-x-auto">
-          <table class="w-full text-xs">
+        <div class="record-table-scroll table-container overflow-x-auto">
+          <table class="record-table w-full text-xs">
             <thead class="surface-inset">
               <tr>
                 <th class="px-3 py-2 text-left font-medium surface-muted">
@@ -3824,6 +3795,7 @@
 </template>
 
 <script setup lang="ts">
+import DateTimePicker from '@/components/common/DateTimePicker.vue'
 import OutboundIdentityEditor from './OutboundIdentityEditor.vue'
 import type { IdentitySelection } from '@/api/admin/outboundIdentity'
 import Toggle from '@/components/common/Toggle.vue'

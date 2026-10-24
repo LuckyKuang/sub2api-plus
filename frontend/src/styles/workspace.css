@@ -1,0 +1,83 @@
+/* Content scrolls inside the console; its toolbar shares the brand's top inset. */
+.workspace-tabs {
+  display: flex;
+  flex: none;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.workspace-tab {
+  flex: 0 0 auto;
+  min-width: 128px;
+  min-height: 44px;
+  padding: 10px 24px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  color: var(--surface-muted);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background-color 120ms, box-shadow 120ms;
+}
+.workspace-tab:hover:not(:disabled) { background: var(--surface-hover); color: var(--surface-text); }
+.workspace-tab[aria-selected="true"] {
+  background: color-mix(in srgb, #14b8a6 24%, var(--surface-solid));
+  border-color: rgb(20 184 166 / 55%);
+  box-shadow: inset 0 0 0 1px rgb(20 184 166 / 16%);
+  color: var(--surface-text);
+}
+.workspace-tab:focus-visible { outline: 2px solid #14b8a6; outline-offset: 2px; }
+.workspace-tab:disabled { opacity: .5; cursor: not-allowed; }
+
+@media (min-width: 1024px) {
+  .app-layout { height: 100dvh; min-height: 0; grid-template-rows: minmax(0, 1fr); overflow: hidden; }
+  .app-content { height: 100%; min-height: 0; }
+  /* A sticky inset here would count the shell padding twice. */
+  .app-layout .app-header { position: relative; top: auto; flex: none; }
+  .app-main { flex: 1; min-height: 0; overflow: auto; border-radius: var(--surface-radius); overscroll-behavior: contain; }
+  .app-layout-workspace .app-main { overflow: hidden; border-radius: 0; }
+  .app-layout-workspace .app-page { display: flex; flex-direction: column; height: 100%; min-height: 0; gap: 12px; }
+  .app-layout-workspace .support-banner-spacing { flex: none; margin-bottom: 0; }
+  .workspace-page { display: flex; flex: 1; flex-direction: column; height: 100%; min-width: 0; min-height: 0; gap: 12px !important; }
+  .workspace-page > * { margin-top: 0 !important; margin-bottom: 0 !important; }
+  .workspace-body, .workspace-stack, .workspace-scroll, .workspace-table-card {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+  }
+  .workspace-body, .workspace-scroll, .workspace-table-card { flex: 1 1 0%; }
+  .workspace-body, .workspace-scroll, .workspace-stack { gap: 12px !important; }
+  .workspace-fixed { flex: 0 0 auto; }
+  .workspace-scroll { overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-gutter: stable; border-radius: var(--surface-radius); }
+  .workspace-scroll > * { flex-shrink: 0; margin-top: 0 !important; margin-bottom: 0 !important; }
+  .workspace-scroll > .workspace-body { flex-shrink: 1; }
+  .workspace-clip, .workspace-table-card { overflow: hidden; border-radius: var(--surface-radius); }
+  .workspace-table-viewport {
+    flex: 1 1 0%; min-height: 0; min-width: 0; height: auto !important; max-height: none !important;
+    overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-gutter: stable;
+    border-radius: var(--surface-radius-panel);
+  }
+  .workspace-table-viewport thead { position: sticky; top: 0; z-index: 12; background: var(--surface-solid); }
+  .workspace-table-card > .pagination-card { flex: none; margin: 0; }
+  .workspace-page .record-table-scroll { border-radius: var(--surface-radius-panel); }
+  .table-scroll-container { border-radius: var(--surface-radius); }
+  .app-layout-workspace .table-page-layout:not(.mobile-mode) { flex: 1; height: 100%; min-height: 0; gap: 12px; }
+}
+
+@media (max-width: 1023px) {
+  .workspace-page, .workspace-body, .workspace-scroll, .workspace-stack {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    gap: 12px;
+  }
+  .workspace-page > *, .workspace-body > *, .workspace-scroll > *, .workspace-stack > * {
+    margin-top: 0;
+    margin-bottom: 0;
+  }
+  .workspace-tabs { position: sticky; top: var(--shell-sticky-offset); z-index: 20; }
+  .workspace-tab { min-width: max-content; padding: 10px 16px; }
+}

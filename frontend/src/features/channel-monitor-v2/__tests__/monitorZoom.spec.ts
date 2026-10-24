@@ -43,6 +43,20 @@ describe('monitorZoom', () => {
     expect(tight.offset + tight.span).toBeLessThanOrEqual(1.001)
   })
 
+  it('returns the same state for no-op zoom/pan boundaries and zero delta', () => {
+    const full = resetZoom()
+    const tight = { span: MIN_ZOOM_SPAN, offset: 0 }
+    const right = { span: 0.4, offset: 0.6 }
+    for (let index = 0; index < 30; index++) {
+      expect(applyWheelZoom(full, { deltaY: 100, deltaX: 0, shiftKey: false }, 0.5)).toBe(full)
+      expect(applyWheelZoom(full, { deltaY: 100, deltaX: 0, shiftKey: true }, 0.5)).toBe(full)
+      expect(applyWheelZoom(tight, { deltaY: -100, deltaX: 0, shiftKey: false }, 0.5)).toBe(tight)
+      expect(applyWheelZoom(tight, { deltaY: -100, deltaX: 0, shiftKey: true }, 0.5)).toBe(tight)
+      expect(applyWheelZoom(right, { deltaY: 100, deltaX: 0, shiftKey: true }, 0.5)).toBe(right)
+      expect(applyWheelZoom(tight, { deltaY: 0, deltaX: 0, shiftKey: false }, 0.5)).toBe(tight)
+    }
+  })
+
   it('slices series by window, not always last N points', () => {
     const items = Array.from({ length: 100 }, (_, i) => i)
     const startWindow = sliceByZoom(items, { span: 0.2, offset: 0 })

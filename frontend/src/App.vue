@@ -2,6 +2,7 @@
 import { RouterView, useRouter, useRoute } from 'vue-router'
 import { computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import Toast from '@/components/common/Toast.vue'
+import TitleTooltip from '@/components/common/TitleTooltip.vue'
 import NavigationProgress from '@/components/common/NavigationProgress.vue'
 import AdminComplianceDialog from '@/components/admin/AdminComplianceDialog.vue'
 import { resolveRouteDocumentTitle } from '@/router/title'
@@ -167,6 +168,7 @@ onMounted(async () => {
   <NavigationProgress />
   <RouterView :key="`${authStore.user?.id ?? 'anonymous'}:${authStore.user?.role ?? ''}`" />
   <Toast />
+  <TitleTooltip :key="route.fullPath" />
   <AnnouncementPopup />
   <AdminComplianceDialog />
 </template>

@@ -1,7 +1,8 @@
 <template>
   <div
     :class="[
-      'group relative flex flex-col overflow-hidden rounded-2xl border transition-all',
+      'subscription-plan-card group relative flex min-w-0 flex-col overflow-hidden rounded-2xl border transition-all',
+      { 'subscription-plan-catalog': catalog },
       'hover:shadow-xl hover:-translate-y-0.5',
       borderClass,
       'surface-inset dark:surface-inset',
@@ -10,9 +11,9 @@
     <!-- Colored top accent bar -->
     <div :class="['h-1.5', accentClass]" />
 
-    <div class="flex flex-1 flex-col p-4">
+    <div class="plan-content flex min-w-0 flex-1 flex-col p-4">
       <!-- Header: name + badge + price -->
-      <div class="mb-3 flex items-start justify-between gap-2">
+      <div class="plan-header mb-3 flex items-start justify-between gap-2">
         <div class="min-w-0 flex-1">
           <h3
             :title="plan.name"
@@ -24,7 +25,7 @@
             {{ plan.description }}
           </p>
         </div>
-        <div class="shrink-0 text-right">
+        <div class="plan-price shrink-0 text-right">
           <div class="flex items-baseline gap-1">
             <span class="text-xs surface-muted">{{ planCurrencySymbol }}</span>
             <span :class="['text-2xl font-extrabold tracking-tight', textClass]">{{ plan.price }}</span>
@@ -94,12 +95,10 @@
         </div>
       </div>
 
-      <div class="flex-1" />
-
       <!-- Subscribe Button -->
       <button
         type="button"
-        :class="['w-full rounded-xl py-2.5 text-sm font-semibold transition-all active:scale-[0.98]', btnClass]"
+        :class="['plan-purchase-action mt-auto min-h-11 w-full rounded-xl py-2.5 text-sm font-semibold shadow-sm transition-all active:scale-[0.98]', btnClass]"
         @click="emit('select', plan)"
       >
         {{ isRenewal ? t('payment.renewNow') : t('payment.subscribeNow') }}
@@ -128,7 +127,11 @@ import {
   platformLabel,
 } from '@/utils/platformColors'
 
-const props = defineProps<{ plan: SubscriptionPlan; activeSubscriptions?: UserSubscription[] }>()
+const props = defineProps<{
+  plan: SubscriptionPlan
+  activeSubscriptions?: UserSubscription[]
+  catalog?: boolean
+}>()
 const emit = defineEmits<{ select: [plan: SubscriptionPlan] }>()
 const { t } = useI18n()
 
@@ -182,3 +185,39 @@ const modelScopeLabels = computed(() => {
 
 const validitySuffix = computed(() => planValiditySuffix(props.plan, t))
 </script>
+
+<style scoped>
+.subscription-plan-catalog {
+  height: 100%;
+}
+
+@media (min-width: 1024px) {
+  .subscription-plan-catalog .plan-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .subscription-plan-catalog .plan-price {
+    text-align: left;
+  }
+
+  .subscription-plan-catalog .plan-price > div {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .subscription-plan-catalog .plan-content {
+    padding: 14px;
+  }
+
+  .subscription-plan-catalog .plan-content > .grid {
+    grid-template-columns: minmax(0, 1fr);
+    padding-inline: 10px;
+  }
+
+  .subscription-plan-catalog .plan-content > .grid > .col-span-2 {
+    grid-column: 1 / -1;
+  }
+}
+</style>

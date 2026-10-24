@@ -1,5 +1,5 @@
 <template>
-  <div class="card p-4">
+  <div class="card p-4" :class="{ 'chart-workspace': workspace }">
     <div class="mb-4 flex items-center justify-between gap-3">
       <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
         {{ !enableRankingView || activeView === 'model_distribution'
@@ -106,8 +106,8 @@
       <div class="h-48 w-48 shrink-0">
         <Doughnut :data="chartData" :options="doughnutOptions" />
       </div>
-      <div class="max-h-48 w-full min-w-0 flex-1 overflow-auto">
-        <table class="w-full text-xs">
+      <div class="record-table-scroll max-h-48 w-full min-w-0 flex-1 overflow-auto">
+        <table class="record-table record-table-compact w-full text-xs">
           <thead>
             <tr class="surface-muted">
               <th class="pb-2 text-left">{{ t('admin.dashboard.model') }}</th>
@@ -118,48 +118,46 @@
               <th class="pb-2 text-right">{{ t('admin.dashboard.standard') }}</th>
             </tr>
           </thead>
-          <tbody>
-            <template v-for="model in displayModelStats" :key="model.model">
-              <tr
-                class="border-t border-gray-100 transition-colors dark:border-dark-700"
-                :class="enableBreakdown ? 'cursor-pointer hover:surface-hover dark:hover:surface-hover' : ''"
-                @click="enableBreakdown && toggleBreakdown('model', model.model)"
+          <tbody v-for="model in displayModelStats" :key="model.model" class="record-group">
+            <tr
+              class="transition-colors"
+              :class="enableBreakdown ? 'cursor-pointer hover:surface-hover dark:hover:surface-hover' : ''"
+              @click="enableBreakdown && toggleBreakdown('model', model.model)"
+            >
+              <td :data-record-edges="expandedKey === `model-${model.model}` ? 't l tl' : 't b l tl bl'"
+                class="max-w-[100px] truncate py-1.5 font-medium"
+                :class="enableBreakdown ? 'text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300' : 'text-gray-900 dark:text-white'"
+                :title="model.model"
               >
-                <td
-                  class="max-w-[100px] truncate py-1.5 font-medium"
-                  :class="enableBreakdown ? 'text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300' : 'text-gray-900 dark:text-white'"
-                  :title="model.model"
-                >
-                  <span class="inline-flex items-center gap-1">
-                    <svg v-if="enableBreakdown && expandedKey === `model-${model.model}`" class="h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-                    <svg v-else-if="enableBreakdown" class="h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-                    {{ model.model }}
-                  </span>
-                </td>
-                <td class="py-1.5 text-right surface-muted">
-                  {{ formatNumber(model.requests) }}
-                </td>
-                <td class="py-1.5 text-right surface-muted">
-                  {{ formatTokens(model.total_tokens) }} <span v-if="modelTokenShare(model.total_tokens)" class="surface-muted">({{ modelTokenShare(model.total_tokens) }})</span>
-                </td>
-                <td class="py-1.5 text-right text-green-600 dark:text-green-400">
-                  ${{ formatCost(model.actual_cost) }}
-                </td>
-                <td v-if="showAccountCost" class="py-1.5 text-right text-orange-500 dark:text-orange-400">
-                  ${{ formatCost(model.account_cost) }}
-                </td>
-                <td class="py-1.5 text-right surface-muted">
-                  ${{ formatCost(model.cost) }}
-                </td>
-              </tr>
-              <UserBreakdownRows
-                v-if="expandedKey === `model-${model.model}`"
-                :items="breakdownItems"
-                :loading="breakdownLoading"
-                :show-account-cost="showAccountCost"
-                :total-tokens="model.total_tokens"
-              />
-            </template>
+                <span class="inline-flex items-center gap-1">
+                  <svg v-if="enableBreakdown && expandedKey === `model-${model.model}`" class="h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                  <svg v-else-if="enableBreakdown" class="h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                  {{ model.model }}
+                </span>
+              </td>
+              <td :data-record-edges="expandedKey === `model-${model.model}` ? 't' : 't b'" class="py-1.5 text-right surface-muted">
+                {{ formatNumber(model.requests) }}
+              </td>
+              <td :data-record-edges="expandedKey === `model-${model.model}` ? 't' : 't b'" class="py-1.5 text-right surface-muted">
+                {{ formatTokens(model.total_tokens) }} <span v-if="modelTokenShare(model.total_tokens)" class="surface-muted">({{ modelTokenShare(model.total_tokens) }})</span>
+              </td>
+              <td :data-record-edges="expandedKey === `model-${model.model}` ? 't' : 't b'" class="py-1.5 text-right text-green-600 dark:text-green-400">
+                ${{ formatCost(model.actual_cost) }}
+              </td>
+              <td :data-record-edges="expandedKey === `model-${model.model}` ? 't' : 't b'" v-if="showAccountCost" class="py-1.5 text-right text-orange-500 dark:text-orange-400">
+                ${{ formatCost(model.account_cost) }}
+              </td>
+              <td :data-record-edges="expandedKey === `model-${model.model}` ? 't r tr' : 't b r tr br'" class="py-1.5 text-right surface-muted">
+                ${{ formatCost(model.cost) }}
+              </td>
+            </tr>
+            <UserBreakdownRows
+              v-if="expandedKey === `model-${model.model}`"
+              :items="breakdownItems"
+              :loading="breakdownLoading"
+              :show-account-cost="showAccountCost"
+              :total-tokens="model.total_tokens"
+            />
           </tbody>
         </table>
       </div>
@@ -184,8 +182,8 @@
       <div class="h-48 w-48 shrink-0">
         <Doughnut :data="rankingChartData" :options="rankingDoughnutOptions" />
       </div>
-      <div class="max-h-48 w-full min-w-0 flex-1 overflow-auto">
-        <table class="w-full text-xs">
+      <div class="record-table-scroll max-h-48 w-full min-w-0 flex-1 overflow-auto">
+        <table class="record-table record-table-compact w-full text-xs">
           <thead>
             <tr class="surface-muted">
               <th class="pb-2 text-left">{{ t('admin.dashboard.spendingRankingUser') }}</th>
@@ -241,6 +239,8 @@
 </template>
 
 <script setup lang="ts">
+import { useDocumentDarkMode } from '@/composables/useDocumentDarkMode'
+import { chartTooltipStyle } from '@/utils/chartTooltip'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js'
@@ -254,11 +254,13 @@ import { formatTokenShare } from '@/utils/tokenShare'
 ChartJS.register(ArcElement, Tooltip, Legend)
 
 const { t } = useI18n()
+const isDarkMode = useDocumentDarkMode()
 
 type DistributionMetric = 'tokens' | 'actual_cost'
 type ModelSource = 'requested' | 'upstream' | 'mapping'
 type RankingDisplayItem = UserSpendingRankingItem & { isOther?: boolean }
 const props = withDefaults(defineProps<{
+  workspace?: boolean
   modelStats: ModelStat[]
   upstreamModelStats?: ModelStat[]
   mappingModelStats?: ModelStat[]
@@ -454,6 +456,7 @@ const doughnutOptions = computed(() => ({
       display: false
     },
     tooltip: {
+      ...chartTooltipStyle(isDarkMode.value),
       callbacks: {
         label: (context: any) => {
           const value = context.raw as number
@@ -478,6 +481,7 @@ const rankingDoughnutOptions = computed(() => ({
       display: false
     },
     tooltip: {
+      ...chartTooltipStyle(isDarkMode.value),
       callbacks: {
         label: (context: any) => {
           const value = context.raw as number
@@ -533,3 +537,14 @@ const formatCost = (value: number | null | undefined): string => {
   return safeValue.toFixed(4)
 }
 </script>
+
+<style scoped>
+@media (min-width: 1024px) {
+  .chart-workspace { display: flex; min-height: 0; flex-direction: column; overflow: hidden; padding: 14px; }
+  .chart-workspace > div:first-child { flex: none; margin-bottom: 10px; }
+  .chart-workspace > div:not(:first-child) { min-height: 0; height: auto; flex: 1; }
+  .chart-workspace > div.flex { flex-direction: row; align-items: center; gap: 10px; }
+  .chart-workspace .h-48.w-48 { width: clamp(110px, 9vw, 178px); height: clamp(110px, 9vw, 178px); flex: none; }
+  .chart-workspace .record-table-scroll { min-height: 0; max-height: 100%; align-self: stretch; }
+}
+</style>

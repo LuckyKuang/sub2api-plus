@@ -239,11 +239,11 @@
             >
               <div>
                 <label class="mb-1 block text-[11px] surface-muted">{{ t('admin.usageAlert.quietHoursStart') }}</label>
-                <input v-model="range.start" type="time" step="1" class="input text-sm" />
+                <DateTimePicker :aria-label="t('admin.usageAlert.quietHoursStart')" v-model="range.start" type="time" step="1" class="input text-sm" />
               </div>
               <div>
                 <label class="mb-1 block text-[11px] surface-muted">{{ t('admin.usageAlert.quietHoursEnd') }}</label>
-                <input v-model="range.end" type="time" step="1" class="input text-sm" />
+                <DateTimePicker :aria-label="t('admin.usageAlert.quietHoursEnd')" v-model="range.end" type="time" step="1" class="input text-sm" />
               </div>
               <button
                 type="button"
@@ -300,6 +300,7 @@
 </template>
 
 <script setup lang="ts">
+import DateTimePicker from '@/components/common/DateTimePicker.vue'
 import Select from '@/components/common/Select.vue'
 import Toggle from '@/components/common/Toggle.vue'
 import { ref, watch } from 'vue'

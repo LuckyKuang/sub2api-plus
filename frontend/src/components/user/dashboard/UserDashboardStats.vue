@@ -1,5 +1,5 @@
 <template>
-  <div class="grid grid-cols-1 gap-4 sm:grid-cols-2" :class="isSimple ? 'xl:grid-cols-3' : 'xl:grid-cols-4'">
+  <div v-if="section !== 'details'" class="grid grid-cols-1 gap-4 sm:grid-cols-2" :class="[workspace ? 'dashboard-kpis workspace-fixed' : '', isSimple ? 'xl:grid-cols-3' : 'xl:grid-cols-4']">
     <div v-if="!isSimple" class="card p-5">
       <p class="text-sm surface-muted">{{ t('dashboard.balance') }} · {{ t('common.available') }}</p>
       <p class="mt-3 text-2xl font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">${{ formatBalance(balance) }}</p>
@@ -25,7 +25,7 @@
       </div>
     </div>
   </div>
-  <details class="card p-4">
+  <details v-if="section !== 'summary'" class="card p-4">
     <summary class="cursor-pointer text-sm font-medium">{{ t('dashboard.performance') }} · {{ t('common.total') }} · {{ t('dashboard.apiKeys') }}</summary>
     <div class="mt-4 grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
       <div><p class="text-xs surface-muted">{{ t('dashboard.apiKeys') }}</p><p class="mt-1 font-semibold">{{ stats.active_api_keys }} / {{ stats.total_api_keys }}</p></div>
@@ -36,7 +36,7 @@
   </details>
 
   <!-- Row 3: Per-platform breakdown -->
-  <div v-if="!isSimple && platformCards.length > 0" class="card p-4">
+  <div v-if="section !== 'summary' && !isSimple && platformCards.length > 0" class="card p-4">
     <div class="mb-3 flex items-center justify-between">
       <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('dashboard.platformBreakdown') }}</h3>
       <span class="text-xs surface-muted">
@@ -148,13 +148,15 @@ interface FusedPlatformCard {
   quota?: PlatformQuotaItem
 }
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
+  section?: 'summary' | 'details' | 'all'
+  workspace?: boolean
   stats: UserStatsType
   balance: number
   frozenBalance?: number
   isSimple: boolean
   platformQuotas?: PlatformQuotaItem[] | null
-}>()
+}>(), { section: 'all', workspace: false })
 const { t } = useI18n()
 
 const PLATFORM_LABELS: Record<string, string> = {
@@ -330,3 +332,16 @@ const formatTokens = (t: number) => {
 }
 const formatDuration = (ms: number) => ms >= 1000 ? `${(ms / 1000).toFixed(2)}s` : `${ms.toFixed(0)}ms`
 </script>
+
+<style scoped>
+@media (min-width: 1024px) {
+  .dashboard-kpis { gap: 10px; }
+  .dashboard-kpis > .card { min-width: 0; padding: 12px; }
+  .dashboard-kpis > .card > .mt-3 { margin-top: 8px; }
+}
+@media (min-width: 1024px) and (max-height: 799px) {
+  .dashboard-kpis { display: flex; overflow-x: auto; scrollbar-width: thin; padding-bottom: 4px; }
+  .dashboard-kpis > .card { flex: 0 0 340px; padding: 10px; }
+  .dashboard-kpis > .card > .mt-3, .dashboard-kpis > .card > .mt-2 { margin-top: 4px; }
+}
+</style>

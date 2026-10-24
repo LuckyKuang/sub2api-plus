@@ -23,7 +23,7 @@ describe('AvailableChannelsTable scroll integration', () => {
   // #4555：根元素必须是 TablePageLayout 滚动链约定的 .table-wrapper，
   // 否则内容超出视口高度时被外层 overflow-hidden 裁剪且没有滚动条。
   it('mounts the table on the .table-wrapper scroll hook', () => {
-    expect(componentSource).toMatch(/<div class="table-wrapper">\s*<table/)
+    expect(mountTable().classes()).toContain('table-wrapper')
   })
 
   it('does not clip content with its own overflow-hidden card wrapper', () => {
@@ -110,6 +110,32 @@ function mountTable(props = {}) {
 }
 
 describe('AvailableChannelsTable responsive surfaces', () => {
+  it('keeps a channel with three platform rows in one continuous rounded record', () => {
+    const wrapper = mountTable({
+      rows: [{
+        ...rows[0],
+        platforms: ['anthropic', 'openai', 'gemini'].map(platform => ({
+          platform, groups: [], supported_models: [],
+        })),
+      }],
+    })
+    const groups = wrapper.findAll('[data-testid="desktop-channels"] > tbody.record-group')
+    expect(groups).toHaveLength(1)
+    const platforms = groups[0].findAll('tr')
+    const first = platforms[0].findAll('td')
+    const middle = platforms[1].findAll('td')
+    const last = platforms[2].findAll('td')
+    expect(first[0].attributes('rowspan')).toBe('3')
+    expect(first[0].attributes('data-record-edges')).toBe('t b l tl bl')
+    expect(first[1].attributes('rowspan')).toBe('3')
+    expect(first[1].attributes('data-record-edges')).toBe('t b')
+    expect(first[2].attributes('data-record-edges')).toBe('t')
+    expect(first.at(-1)!.attributes('data-record-edges')).toBe('r t tr')
+    expect(middle.map(cell => cell.attributes('data-record-edges'))).toEqual(['', '', 'r'])
+    expect(last.map(cell => cell.attributes('data-record-edges'))).toEqual(['b', 'b', 'r b br'])
+    wrapper.unmount()
+  })
+
   it('keeps the five-column table as the desktop-only surface', () => {
     const wrapper = mountTable()
     const desktop = wrapper.get('[data-testid="desktop-channels"]')

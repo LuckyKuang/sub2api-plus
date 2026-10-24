@@ -1,5 +1,5 @@
 <template>
-  <AppLayout>
+  <AppLayout workspace>
     <TablePageLayout>
       <template #filters>
         <div
@@ -74,13 +74,13 @@
               </button>
               <div
                 v-if="showColumnDropdown"
-                class="absolute right-0 top-full z-50 mt-1 max-h-80 w-48 overflow-y-auto rounded-lg border border-gray-200 py-1 shadow-lg dark:border-dark-600 surface-panel"
+                class="absolute right-0 top-full z-50 mt-1 max-h-80 w-48 space-y-0.5 overflow-y-auto border border-gray-200 p-1 shadow-lg dark:border-dark-600 surface-panel"
               >
                 <button
                   v-for="col in toggleableColumns"
                   :key="col.key"
                   @click="toggleColumn(col.key)"
-                  class="flex w-full items-center justify-between px-4 py-2 text-left text-sm hover:surface-hover surface-control surface-muted"
+                  class="flex w-full items-center justify-between rounded-[var(--surface-radius-item)] px-3 py-2 text-left text-sm hover:surface-hover surface-control surface-muted"
                 >
                   <span>{{ col.label }}</span>
                   <Icon
@@ -561,17 +561,14 @@
                 class="cursor-help text-gray-400 transition-colors hover:text-primary-500 dark:text-gray-500 dark:hover:text-primary-400"
               />
               <div
-                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-72 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
+                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-72 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100 before:absolute before:inset-x-0 before:top-full before:h-2"
               >
                 <div
-                  class="rounded-lg surface-inset p-3 text-white shadow-lg"
+                  class="surface-panel p-3 shadow-lg"
                 >
-                  <p class="text-xs leading-relaxed text-gray-300">
+                  <p class="text-xs leading-relaxed surface-muted">
                     {{ t("admin.groups.copyAccounts.tooltip") }}
                   </p>
-                  <div
-                    class="absolute -bottom-1.5 left-3 h-3 w-3 rotate-45 bg-gray-900 dark:bg-gray-800"
-                  ></div>
                 </div>
               </div>
             </div>
@@ -665,19 +662,19 @@
               />
               <!-- Tooltip Popover -->
               <div
-                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-72 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
+                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-72 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100 before:absolute before:inset-x-0 before:top-full before:h-2"
               >
                 <div
-                  class="rounded-lg surface-inset p-3 text-white shadow-lg"
+                  class="surface-panel p-3 shadow-lg"
                 >
                   <p class="mb-2 text-xs font-medium">
                     {{ t("admin.groups.exclusiveTooltip.title") }}
                   </p>
-                  <p class="mb-2 text-xs leading-relaxed text-gray-300">
+                  <p class="mb-2 text-xs leading-relaxed surface-muted">
                     {{ t("admin.groups.exclusiveTooltip.description") }}
                   </p>
-                  <div class="rounded surface-inset p-2">
-                    <p class="text-xs leading-relaxed text-gray-300">
+                  <div class="rounded-[var(--surface-radius-item)] surface-inset p-2">
+                    <p class="text-xs leading-relaxed surface-muted">
                       <span
                         class="inline-flex items-center gap-1 text-primary-400"
                         ><Icon name="lightbulb" size="xs" />
@@ -686,10 +683,6 @@
                       {{ t("admin.groups.exclusiveTooltip.exampleContent") }}
                     </p>
                   </div>
-                  <!-- Arrow -->
-                  <div
-                    class="absolute -bottom-1.5 left-3 h-3 w-3 rotate-45 bg-gray-900 dark:bg-gray-800"
-                  ></div>
                 </div>
               </div>
             </div>
@@ -1245,7 +1238,7 @@
           >
             <div>
               <label class="input-label">{{ t("admin.groups.peakRate.peakStart") }}</label>
-              <input
+              <DateTimePicker :aria-label="t('admin.groups.peakRate.peakStart')"
                 v-model="createForm.peak_start"
                 type="time"
                 class="input"
@@ -1253,7 +1246,7 @@
             </div>
             <div>
               <label class="input-label">{{ t("admin.groups.peakRate.peakEnd") }}</label>
-              <input
+              <DateTimePicker :aria-label="t('admin.groups.peakRate.peakEnd')"
                 v-model="createForm.peak_end"
                 type="time"
                 class="input"
@@ -1339,17 +1332,14 @@
                 class="cursor-help text-gray-400 transition-colors hover:text-primary-500 dark:text-gray-500 dark:hover:text-primary-400"
               />
               <div
-                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-72 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
+                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-72 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100 before:absolute before:inset-x-0 before:top-full before:h-2"
               >
                 <div
-                  class="rounded-lg surface-inset p-3 text-white shadow-lg"
+                  class="surface-panel p-3 shadow-lg"
                 >
-                  <p class="text-xs leading-relaxed text-gray-300">
+                  <p class="text-xs leading-relaxed surface-muted">
                     {{ t("admin.groups.supportedScopes.tooltip") }}
                   </p>
-                  <div
-                    class="absolute -bottom-1.5 left-3 h-3 w-3 rotate-45 bg-gray-900 dark:bg-gray-800"
-                  ></div>
                 </div>
               </div>
             </div>
@@ -1412,17 +1402,14 @@
                 class="cursor-help text-gray-400 transition-colors hover:text-primary-500 dark:text-gray-500 dark:hover:text-primary-400"
               />
               <div
-                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-72 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
+                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-72 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100 before:absolute before:inset-x-0 before:top-full before:h-2"
               >
                 <div
-                  class="rounded-lg surface-inset p-3 text-white shadow-lg"
+                  class="surface-panel p-3 shadow-lg"
                 >
-                  <p class="text-xs leading-relaxed text-gray-300">
+                  <p class="text-xs leading-relaxed surface-muted">
                     {{ t("admin.groups.mcpXml.tooltip") }}
                   </p>
-                  <div
-                    class="absolute -bottom-1.5 left-3 h-3 w-3 rotate-45 bg-gray-900 dark:bg-gray-800"
-                  ></div>
                 </div>
               </div>
             </div>
@@ -1456,17 +1443,14 @@
                 class="cursor-help text-gray-400 transition-colors hover:text-primary-500 dark:text-gray-500 dark:hover:text-primary-400"
               />
               <div
-                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-72 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
+                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-72 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100 before:absolute before:inset-x-0 before:top-full before:h-2"
               >
                 <div
-                  class="rounded-lg surface-inset p-3 text-white shadow-lg"
+                  class="surface-panel p-3 shadow-lg"
                 >
-                  <p class="text-xs leading-relaxed text-gray-300">
+                  <p class="text-xs leading-relaxed surface-muted">
                     {{ t("admin.groups.claudeCode.tooltip") }}
                   </p>
-                  <div
-                    class="absolute -bottom-1.5 left-3 h-3 w-3 rotate-45 bg-gray-900 dark:bg-gray-800"
-                  ></div>
                 </div>
               </div>
             </div>
@@ -1977,17 +1961,14 @@
                 class="cursor-help text-gray-400 transition-colors hover:text-primary-500 dark:text-gray-500 dark:hover:text-primary-400"
               />
               <div
-                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-80 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
+                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-80 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100 before:absolute before:inset-x-0 before:top-full before:h-2"
               >
                 <div
-                  class="rounded-lg surface-inset p-3 text-white shadow-lg"
+                  class="surface-panel p-3 shadow-lg"
                 >
-                  <p class="text-xs leading-relaxed text-gray-300">
+                  <p class="text-xs leading-relaxed surface-muted">
                     {{ t("admin.groups.modelRouting.tooltip") }}
                   </p>
-                  <div
-                    class="absolute -bottom-1.5 left-3 h-3 w-3 rotate-45 bg-gray-900 dark:bg-gray-800"
-                  ></div>
                 </div>
               </div>
             </div>
@@ -2083,7 +2064,7 @@
                           accountSearchResults[getCreateRuleSearchKey(rule)]
                             ?.length > 0
                         "
-                        class="absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-lg border shadow-lg dark:border-dark-600 surface-panel"
+                        class="absolute z-50 mt-1 max-h-48 w-full space-y-0.5 overflow-auto border p-1 shadow-lg dark:border-dark-600 surface-panel"
                       >
                         <button
                           v-for="account in accountSearchResults[
@@ -2092,7 +2073,7 @@
                           :key="account.id"
                           type="button"
                           @click="selectAccount(rule, account)"
-                          class="w-full px-3 py-2 text-left text-sm hover:surface-hover surface-control"
+                          class="w-full rounded-[var(--surface-radius-item)] px-3 py-2 text-left text-sm hover:surface-hover surface-control"
                           :class="{
                             'opacity-50': rule.accounts.some(
                               (a) => a.id === account.id,
@@ -2241,17 +2222,14 @@
                 class="cursor-help text-gray-400 transition-colors hover:text-primary-500 dark:text-gray-500 dark:hover:text-primary-400"
               />
               <div
-                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-72 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
+                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-72 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100 before:absolute before:inset-x-0 before:top-full before:h-2"
               >
                 <div
-                  class="rounded-lg surface-inset p-3 text-white shadow-lg"
+                  class="surface-panel p-3 shadow-lg"
                 >
-                  <p class="text-xs leading-relaxed text-gray-300">
+                  <p class="text-xs leading-relaxed surface-muted">
                     {{ t("admin.groups.copyAccounts.tooltipEdit") }}
                   </p>
-                  <div
-                    class="absolute -bottom-1.5 left-3 h-3 w-3 rotate-45 bg-gray-900 dark:bg-gray-800"
-                  ></div>
                 </div>
               </div>
             </div>
@@ -2345,19 +2323,19 @@
               />
               <!-- Tooltip Popover -->
               <div
-                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-72 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
+                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-72 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100 before:absolute before:inset-x-0 before:top-full before:h-2"
               >
                 <div
-                  class="rounded-lg surface-inset p-3 text-white shadow-lg"
+                  class="surface-panel p-3 shadow-lg"
                 >
                   <p class="mb-2 text-xs font-medium">
                     {{ t("admin.groups.exclusiveTooltip.title") }}
                   </p>
-                  <p class="mb-2 text-xs leading-relaxed text-gray-300">
+                  <p class="mb-2 text-xs leading-relaxed surface-muted">
                     {{ t("admin.groups.exclusiveTooltip.description") }}
                   </p>
-                  <div class="rounded surface-inset p-2">
-                    <p class="text-xs leading-relaxed text-gray-300">
+                  <div class="rounded-[var(--surface-radius-item)] surface-inset p-2">
+                    <p class="text-xs leading-relaxed surface-muted">
                       <span
                         class="inline-flex items-center gap-1 text-primary-400"
                         ><Icon name="lightbulb" size="xs" />
@@ -2366,10 +2344,6 @@
                       {{ t("admin.groups.exclusiveTooltip.exampleContent") }}
                     </p>
                   </div>
-                  <!-- Arrow -->
-                  <div
-                    class="absolute -bottom-1.5 left-3 h-3 w-3 rotate-45 bg-gray-900 dark:bg-gray-800"
-                  ></div>
                 </div>
               </div>
             </div>
@@ -2957,7 +2931,7 @@
           >
             <div>
               <label class="input-label">{{ t("admin.groups.peakRate.peakStart") }}</label>
-              <input
+              <DateTimePicker :aria-label="t('admin.groups.peakRate.peakStart')"
                 v-model="editForm.peak_start"
                 type="time"
                 class="input"
@@ -2965,7 +2939,7 @@
             </div>
             <div>
               <label class="input-label">{{ t("admin.groups.peakRate.peakEnd") }}</label>
-              <input
+              <DateTimePicker :aria-label="t('admin.groups.peakRate.peakEnd')"
                 v-model="editForm.peak_end"
                 type="time"
                 class="input"
@@ -3051,17 +3025,14 @@
                 class="cursor-help text-gray-400 transition-colors hover:text-primary-500 dark:text-gray-500 dark:hover:text-primary-400"
               />
               <div
-                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-72 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
+                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-72 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100 before:absolute before:inset-x-0 before:top-full before:h-2"
               >
                 <div
-                  class="rounded-lg surface-inset p-3 text-white shadow-lg"
+                  class="surface-panel p-3 shadow-lg"
                 >
-                  <p class="text-xs leading-relaxed text-gray-300">
+                  <p class="text-xs leading-relaxed surface-muted">
                     {{ t("admin.groups.supportedScopes.tooltip") }}
                   </p>
-                  <div
-                    class="absolute -bottom-1.5 left-3 h-3 w-3 rotate-45 bg-gray-900 dark:bg-gray-800"
-                  ></div>
                 </div>
               </div>
             </div>
@@ -3124,17 +3095,14 @@
                 class="cursor-help text-gray-400 transition-colors hover:text-primary-500 dark:text-gray-500 dark:hover:text-primary-400"
               />
               <div
-                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-72 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
+                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-72 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100 before:absolute before:inset-x-0 before:top-full before:h-2"
               >
                 <div
-                  class="rounded-lg surface-inset p-3 text-white shadow-lg"
+                  class="surface-panel p-3 shadow-lg"
                 >
-                  <p class="text-xs leading-relaxed text-gray-300">
+                  <p class="text-xs leading-relaxed surface-muted">
                     {{ t("admin.groups.mcpXml.tooltip") }}
                   </p>
-                  <div
-                    class="absolute -bottom-1.5 left-3 h-3 w-3 rotate-45 bg-gray-900 dark:bg-gray-800"
-                  ></div>
                 </div>
               </div>
             </div>
@@ -3168,17 +3136,14 @@
                 class="cursor-help text-gray-400 transition-colors hover:text-primary-500 dark:text-gray-500 dark:hover:text-primary-400"
               />
               <div
-                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-72 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
+                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-72 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100 before:absolute before:inset-x-0 before:top-full before:h-2"
               >
                 <div
-                  class="rounded-lg surface-inset p-3 text-white shadow-lg"
+                  class="surface-panel p-3 shadow-lg"
                 >
-                  <p class="text-xs leading-relaxed text-gray-300">
+                  <p class="text-xs leading-relaxed surface-muted">
                     {{ t("admin.groups.claudeCode.tooltip") }}
                   </p>
-                  <div
-                    class="absolute -bottom-1.5 left-3 h-3 w-3 rotate-45 bg-gray-900 dark:bg-gray-800"
-                  ></div>
                 </div>
               </div>
             </div>
@@ -3698,17 +3663,14 @@
                 class="cursor-help text-gray-400 transition-colors hover:text-primary-500 dark:text-gray-500 dark:hover:text-primary-400"
               />
               <div
-                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-80 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
+                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-80 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100 before:absolute before:inset-x-0 before:top-full before:h-2"
               >
                 <div
-                  class="rounded-lg surface-inset p-3 text-white shadow-lg"
+                  class="surface-panel p-3 shadow-lg"
                 >
-                  <p class="text-xs leading-relaxed text-gray-300">
+                  <p class="text-xs leading-relaxed surface-muted">
                     {{ t("admin.groups.modelRouting.tooltip") }}
                   </p>
-                  <div
-                    class="absolute -bottom-1.5 left-3 h-3 w-3 rotate-45 bg-gray-900 dark:bg-gray-800"
-                  ></div>
                 </div>
               </div>
             </div>
@@ -3804,7 +3766,7 @@
                           accountSearchResults[getEditRuleSearchKey(rule)]
                             ?.length > 0
                         "
-                        class="absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-lg border shadow-lg dark:border-dark-600 surface-panel"
+                        class="absolute z-50 mt-1 max-h-48 w-full space-y-0.5 overflow-auto border p-1 shadow-lg dark:border-dark-600 surface-panel"
                       >
                         <button
                           v-for="account in accountSearchResults[
@@ -3813,7 +3775,7 @@
                           :key="account.id"
                           type="button"
                           @click="selectAccount(rule, account, true)"
-                          class="w-full px-3 py-2 text-left text-sm hover:surface-hover surface-control"
+                          class="w-full rounded-[var(--surface-radius-item)] px-3 py-2 text-left text-sm hover:surface-hover surface-control"
                           :class="{
                             'opacity-50': rule.accounts.some(
                               (a) => a.id === account.id,
@@ -4075,8 +4037,8 @@
             >
               {{ t("admin.groups.compositeRoutes.empty") }}
             </div>
-            <div v-else class="table-container overflow-x-auto">
-              <table class="min-w-full divide-y divide-gray-200 text-sm dark:divide-dark-600">
+            <div v-else class="record-table-scroll table-container overflow-x-auto">
+              <table class="record-table min-w-full divide-y divide-gray-200 text-sm dark:divide-dark-600">
                 <thead class="surface-inset text-left text-xs font-medium uppercase tracking-wide surface-muted">
                   <tr>
                     <th class="px-3 py-2">
@@ -4405,6 +4367,7 @@
 </template>
 
 <script setup lang="ts">
+import DateTimePicker from '@/components/common/DateTimePicker.vue'
 import Toggle from '@/components/common/Toggle.vue'
 import { ref, reactive, computed, onMounted, onUnmounted, watch } from "vue";
 import { useI18n } from "vue-i18n";

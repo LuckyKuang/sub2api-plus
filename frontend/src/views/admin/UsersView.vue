@@ -1,5 +1,5 @@
 <template>
-  <AppLayout>
+  <AppLayout workspace>
     <TablePageLayout>
       <!-- Single Row: Search, Filters, and Actions -->
       <template #filters>
@@ -356,9 +356,8 @@
                 <!-- Hover tooltip（操作菜单未打开时显示） -->
                 <div
                   v-if="expandedGroupUserId !== row.id"
-                  class="pointer-events-none absolute left-0 top-full z-50 mt-1.5 rounded px-2.5 py-1.5 text-xs text-white opacity-0 shadow-lg transition-opacity duration-75 group-hover/ex:opacity-100 surface-panel"
+                  class="pointer-events-none absolute left-0 top-full z-50 mt-1.5 px-3 py-2 text-xs opacity-0 shadow-lg transition-opacity duration-75 group-hover/ex:opacity-100 surface-panel"
                 >
-                  <div class="absolute left-4 bottom-full border-4 border-transparent border-b-gray-900 dark:border-b-dark-600"></div>
                   <div class="flex flex-col gap-0.5 whitespace-nowrap">
                     <span v-for="g in getUserGroups(row).exclusive" :key="g.id">{{ g.name }}</span>
                   </div>
@@ -366,7 +365,7 @@
                 <!-- 点击展开分组操作菜单 -->
                 <div
                   v-if="expandedGroupUserId === row.id"
-                  class="absolute left-0 top-full z-50 mt-1.5 min-w-[160px] overflow-hidden rounded-lg border border-gray-200 py-1 text-xs shadow-xl dark:border-dark-600 surface-panel"
+                  class="absolute left-0 top-full z-50 mt-1.5 min-w-[160px] overflow-hidden border border-gray-200 p-1 text-xs shadow-xl dark:border-dark-600 surface-panel"
                 >
                   <div class="border-b border-gray-100 px-3 py-1.5 text-[10px] font-medium uppercase tracking-wider dark:border-dark-600 surface-muted">
                     {{ t('admin.users.clickToReplace') }}
@@ -374,7 +373,7 @@
                   <div
                     v-for="g in getUserGroups(row).exclusive"
                     :key="g.id"
-                    class="flex cursor-pointer items-center gap-2 px-3 py-2 transition-colors hover:bg-primary-50/25 hover:text-primary-600 dark:hover:bg-primary-900/30 dark:hover:text-primary-400 surface-muted"
+                    class="flex cursor-pointer items-center gap-2 rounded-[var(--surface-radius-item)] px-3 py-2 transition-colors hover:bg-primary-50/25 hover:text-primary-600 dark:hover:bg-primary-900/30 dark:hover:text-primary-400 surface-muted"
                     @click.stop="openGroupReplace(row, g)"
                   >
                     <Icon name="swap" size="xs" class="h-3.5 w-3.5 flex-shrink-0 opacity-50" />
@@ -391,8 +390,7 @@
                 <span class="font-medium surface-muted">{{ getUserGroups(row).publicGroups.length }}</span>
                 <span class="surface-muted">{{ t('admin.users.publicLabel') }}</span>
                 <!-- Tooltip: 向下弹出 -->
-                <div class="pointer-events-none absolute left-0 top-full z-50 mt-1.5 rounded px-2.5 py-1.5 text-xs text-white opacity-0 shadow-lg transition-opacity duration-75 group-hover/pub:opacity-100 surface-panel">
-                  <div class="absolute left-4 bottom-full border-4 border-transparent border-b-gray-900 dark:border-b-dark-600"></div>
+                <div class="pointer-events-none absolute left-0 top-full z-50 mt-1.5 px-3 py-2 text-xs opacity-0 shadow-lg transition-opacity duration-75 group-hover/pub:opacity-100 surface-panel">
                   <div class="flex flex-col gap-0.5 whitespace-nowrap">
                     <span v-for="g in getUserGroups(row).publicGroups" :key="g.id">{{ g.name }}</span>
                   </div>
@@ -442,9 +440,8 @@
                   ${{ value.toFixed(2) }}
                 </button>
                 <!-- Instant tooltip -->
-                <div class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded px-2 py-1 text-xs text-white opacity-0 shadow-lg transition-opacity duration-75 group-hover:opacity-100 surface-panel">
+                <div class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1.5 -translate-x-1/2 whitespace-nowrap px-3 py-2 text-xs opacity-0 shadow-lg transition-opacity duration-75 group-hover:opacity-100 surface-panel">
                   {{ t('admin.users.balanceHistoryTip') }}
-                  <div class="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-gray-900 dark:border-t-dark-600"></div>
                 </div>
               </div>
               <button

@@ -1,7 +1,9 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
+import { enableAutoUnmount, mount, flushPromises } from '@vue/test-utils'
 
 import UsageFilters from '../UsageFilters.vue'
+
+enableAutoUnmount(afterEach)
 
 // --- i18n messages (only what UsageFilters needs) ---
 const messages: Record<string, string> = {
@@ -128,6 +130,35 @@ describe('UsageFilters — user search dropdown', () => {
 
   afterEach(() => {
     vi.useRealTimers()
+  })
+
+  it('portals workspace search results outside the scrolling fields and still applies the selected user', async () => {
+    const filters = defaultFilters()
+    mockSearchUsers.mockResolvedValue([{ id: 7, email: 'workspace@test.com', deleted: false }])
+    const wrapper = mount(UsageFilters, {
+      attachTo: document.body,
+      props: { workspace: true, modelValue: filters, exporting: false, startDate: '2026-10-01', endDate: '2026-10-24', modelOptions: [] },
+      global: { stubs: { Select: true } },
+    })
+    const fields = wrapper.get('.usage-filter-fields').element
+    const actions = wrapper.get('.usage-filter-actions').element
+    expect(fields.contains(actions)).toBe(false)
+    expect(fields.children).toHaveLength(12)
+    const input = wrapper.get('input[placeholder="Search user..."]')
+    await input.trigger('focus')
+    await input.setValue('workspace')
+    await vi.advanceTimersByTimeAsync(300)
+    await flushPromises()
+    const menu = document.body.querySelector<HTMLElement>('[data-testid="usage-user-options"]')!
+    expect(menu).not.toBeNull()
+    expect(fields.contains(menu)).toBe(false)
+    expect(menu.style.position).toBe('fixed')
+    menu.querySelector('button')!.click()
+    await flushPromises()
+    expect(filters.user_id).toBe(7)
+    expect(wrapper.emitted('change')).toHaveLength(1)
+    expect((input.element as HTMLInputElement).value).toBe('workspace@test.com')
+    expect(document.body.querySelector('[data-testid="usage-user-options"]')).toBeNull()
   })
 
   it('(a) labels deleted users with the i18n badge and (b) sorts active users before deleted ones, (c) selection sets user_id', async () => {

@@ -1,6 +1,6 @@
 <template>
   <div
-    class="relative flex min-h-screen items-center justify-center overflow-hidden surface-inset px-4"
+    class="relative flex min-h-screen items-center justify-center overflow-hidden bg-canvas p-[var(--shell-gutter)] dark:surface-inset"
   >
     <!-- Background Decoration -->
     <div class="pointer-events-none absolute inset-0 overflow-hidden">
@@ -12,11 +12,11 @@
       ></div>
     </div>
 
-    <div class="relative z-10 w-full max-w-md text-center">
+    <div class="card relative z-10 w-full max-w-md p-5 text-center sm:p-8">
       <!-- 404 Display -->
       <div class="mb-8">
         <div class="relative inline-block">
-          <span class="text-[12rem] font-bold leading-none text-gray-100 dark:text-dark-800"
+          <span class="text-[9rem] font-bold leading-none text-gray-100 dark:text-dark-800 sm:text-[12rem]"
             >404</span
           >
           <div class="absolute inset-0 flex items-center justify-center">

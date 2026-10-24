@@ -3,7 +3,7 @@
     <div class="space-y-6">
       <!-- Ops-style elevated shell: title toolbar + filters (mirrors OpsDashboardHeader) -->
       <section
-        class="card sticky top-[var(--shell-sticky-offset)] z-20 p-0 ring-1 ring-gray-900/5"
+        class="channel-monitor-toolbar card sticky top-[var(--shell-sticky-offset)] z-20 p-0 ring-1 ring-gray-900/5"
       >
         <header class="page-header mb-0 flex flex-wrap items-start justify-between gap-4 border-b border-gray-100 px-5 py-4 dark:border-dark-700 sm:px-6">
           <div class="min-w-0">
@@ -256,6 +256,8 @@
         />
         <RelayPulseMatrix
           v-else-if="matrix"
+          v-model:view-state="matrixViewState"
+          :dimension-key="matrixDimensionKey"
           :rows="matrixRows"
           :coverage="matrix.coverage"
           :health-mode="healthMode"
@@ -287,8 +289,8 @@
           </nav>
         </div>
         <div class="min-h-0 max-h-[min(52vh,520px)] overflow-auto p-4 sm:p-5">
-          <div v-if="activeTab === 'models'" class="table-container border-0">
-            <table class="table monitor-table min-w-[720px]">
+          <div v-if="activeTab === 'models'" class="record-table-scroll table-container border-0">
+            <table class="record-table table monitor-table min-w-[720px]">
               <thead>
                 <tr>
                   <th>{{ t('channelMonitorV2.table.platformModel') }}</th>
@@ -384,8 +386,8 @@
             </div>
           </div>
 
-          <div v-else class="table-container border-0">
-            <table class="table monitor-table min-w-[640px]">
+          <div v-else class="record-table-scroll table-container border-0">
+            <table class="record-table table monitor-table min-w-[640px]">
               <thead>
                 <tr>
                   <th class="w-16">{{ t('channelMonitorV2.table.rank') }}</th>
@@ -470,6 +472,7 @@ import MetricCell from '@/features/channel-monitor-v2/MetricCell.vue'
 import MonitorRankBadge from '@/features/channel-monitor-v2/MonitorRankBadge.vue'
 import MonitorTrendChart from '@/features/channel-monitor-v2/MonitorTrendChart.vue'
 import RelayPulseMatrix from '@/features/channel-monitor-v2/RelayPulseMatrix.vue'
+import type { MatrixViewState } from '@/features/channel-monitor-v2/monitorZoom'
 import { useUserView as useAuthStore } from '@/composables/useUserView'
 import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
@@ -558,6 +561,8 @@ const trendView = ref<TrendView>(parseTrendView(route.query.trend_view))
 const dimensions = ref<MonitorDimensions>({ platforms: [], groups: [], models: [] })
 const snapshot = ref<MonitorSnapshot | null>(null)
 const matrix = ref<MonitorMatrixResponse | null>(null)
+const matrixViewState = ref<MatrixViewState>()
+const matrixDimensionKey = ref('')
 const modelRows = ref<MonitorModelRow[]>([])
 const errorRows = ref<MonitorErrorRow[]>([])
 const userRows = ref<MonitorUserRow[]>([])
@@ -655,7 +660,7 @@ const bootstrapPercent = computed(() => {
 const matrixRows = computed(() => {
   const items = matrix.value?.items || []
   // platform_group views should only show real groups, never bare platform placeholders.
-  if (matrixGroupBy.value === 'platform_group' || matrixGroupBy.value === 'platform_group_model') {
+  if (matrix.value?.group_by === 'platform_group' || matrix.value?.group_by === 'platform_group_model') {
     return items.filter((row) => row.group_id != null && Number(row.group_id) > 0)
   }
   return items
@@ -717,6 +722,14 @@ async function loadDimensions(signal?: AbortSignal, id = sequence) {
 }
 
 async function loadMetrics(signal?: AbortSignal, id = sequence) {
+  // Keep the visible payload and its dimension identity together while a new request is pending.
+  const dimensionKey = JSON.stringify([
+    filter.value.range,
+    [...filter.value.platforms].sort(),
+    [...filter.value.groupIds].sort((a, b) => a - b),
+    [...filter.value.models].sort(),
+    matrixGroupBy.value,
+  ])
   const [nextSnapshot, nextMatrix] = await Promise.all([
     api.getSnapshot(filter.value, isAdmin.value, signal),
     api.getMatrix(filter.value, matrixGroupBy.value, isAdmin.value, signal),
@@ -724,6 +737,7 @@ async function loadMetrics(signal?: AbortSignal, id = sequence) {
   if (id !== sequence) return
   snapshot.value = nextSnapshot
   matrix.value = nextMatrix
+  matrixDimensionKey.value = dimensionKey
   scheduleAutoRefresh()
   await loadTab(signal, id)
 }
@@ -932,6 +946,10 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+@media (min-width: 1024px) {
+  /* The desktop main already starts below the shell header. */
+  .channel-monitor-toolbar { top: 0; }
+}
 .status-dot {
   display: inline-block;
   height: 0.5rem;

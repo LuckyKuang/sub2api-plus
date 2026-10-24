@@ -1,8 +1,9 @@
 <template>
-  <div :class="flat ? '' : 'card overflow-hidden'">
+  <div :class="[flat ? '' : 'card overflow-hidden', { 'workspace-table-card': workspace }]">
     <div
       v-if="showIpGeoToolbar"
       class="flex items-center justify-end gap-2 border-b border-gray-200 px-4 py-2 dark:border-dark-700"
+      :class="{ 'workspace-fixed': workspace }"
     >
       <span v-if="pendingIpCount > 0" class="text-xs surface-muted">
         {{ t('usage.ipGeo.pending', { count: pendingIpCount }) }}
@@ -16,8 +17,9 @@
         {{ ipGeoBatchLoading ? t('usage.ipGeo.batchFetching') : t('usage.ipGeo.batchFetch') }}
       </button>
     </div>
-    <div class="overflow-auto">
+    <div class="min-w-0" :class="{ 'workspace-body !gap-0': workspace }">
       <DataTable
+        :class="{ 'workspace-table-viewport': workspace }"
         :columns="columns"
         :data="data"
         :loading="loading"
@@ -710,6 +712,7 @@ interface Props {
   showUpstreamEndpoint?: boolean
   /** 嵌入统一卡片内使用：去掉自身卡片外观 */
   flat?: boolean
+  workspace?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -720,7 +723,8 @@ const props = withDefaults(defineProps<Props>(), {
   showServiceTier: false,
   showAccountBilling: true,
   showUpstreamEndpoint: true,
-  flat: false
+  flat: false,
+  workspace: false
 })
 const emit = defineEmits<{
   userClick: [userID: number, email?: string]

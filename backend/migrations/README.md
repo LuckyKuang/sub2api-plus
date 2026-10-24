@@ -13,6 +13,12 @@ preserves these installation and session identities. This operational table is
 owned by the SQL repository, like `openai_session_routes`, rather than Ent.
 See [outbound identity](../../docs/OUTBOUND_IDENTITY.md).
 
+Migration `295_channel_monitor_v2_model_visibility.sql` supplies explicit display
+mode and empty exclusion defaults in V2 platform JSON while retaining operator
+lists, custom fields and raw history. It advances the configuration version once
+when needed; exclusions are applied on reads without rebuilding stored rollups.
+See [V2 model visibility](../../docs/CHANNEL_MONITOR_V2.md).
+
 ## Mandatory Rules
 
 - Existing migration files are immutable: never modify, delete, or rename them.

@@ -336,8 +336,8 @@ test('user can register successfully', async ({ page }) => {
   await page.waitForURL('/dashboard')
 
   // Verify success toast appears
-  await expect(page.locator('.toast-success')).toBeVisible()
-  await expect(page.locator('.toast-success')).toContainText('Account created successfully')
+  await expect(page.locator('.toast-card[data-toast-type="success"]')).toBeVisible()
+  await expect(page.locator('.toast-card[data-toast-type="success"]')).toContainText('Account created successfully')
 })
 
 test('shows validation errors for invalid inputs', async ({ page }) => {

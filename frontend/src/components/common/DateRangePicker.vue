@@ -40,7 +40,7 @@
         <div class="date-picker-custom">
           <div class="date-picker-field">
             <label class="date-picker-label">{{ t('dates.startDate') }}</label>
-            <input
+            <DateTimePicker :aria-label="t('dates.startDate')"
               type="date"
               v-model="localStartDate"
               :max="localEndDate || tomorrow"
@@ -53,7 +53,7 @@
           </div>
           <div class="date-picker-field">
             <label class="date-picker-label">{{ t('dates.endDate') }}</label>
-            <input
+            <DateTimePicker :aria-label="t('dates.endDate')"
               type="date"
               v-model="localEndDate"
               :min="localStartDate"
@@ -76,6 +76,7 @@
 </template>
 
 <script setup lang="ts">
+import DateTimePicker from './DateTimePicker.vue'
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
@@ -109,6 +110,12 @@ const dropdownOffset = ref(0)
 const localStartDate = ref(props.startDate)
 const localEndDate = ref(props.endDate)
 const activePreset = ref<string | null>('last24Hours')
+let escapeTimer: ReturnType<typeof setTimeout> | undefined
+
+function clearEscapeTimer() {
+  if (escapeTimer !== undefined) clearTimeout(escapeTimer)
+  escapeTimer = undefined
+}
 
 const today = computed(() => {
   // Use local timezone to avoid UTC timezone issues
@@ -278,7 +285,7 @@ function positionDropdown() {
 }
 
 watch(isOpen, async (open) => {
-  if (!open) return
+  if (!open) { clearEscapeTimer(); return }
   await nextTick()
   positionDropdown()
 })
@@ -301,9 +308,15 @@ const handleClickOutside = (event: MouseEvent) => {
 }
 
 const handleEscape = (event: KeyboardEvent) => {
-  if (event.key === 'Escape' && isOpen.value) {
-    isOpen.value = false
-  }
+  if (event.key !== 'Escape' || !isOpen.value) return
+  // A child calendar registers its document listener after this menu mounts.
+  // Browsers can run microtasks between native listeners, so wait until the
+  // next task before checking whether the calendar consumed this Escape.
+  clearEscapeTimer()
+  escapeTimer = setTimeout(() => {
+    escapeTimer = undefined
+    if (!event.defaultPrevented) isOpen.value = false
+  }, 0)
 }
 
 // Sync local state with props
@@ -333,6 +346,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  clearEscapeTimer()
   document.removeEventListener('click', handleClickOutside)
   document.removeEventListener('keydown', handleEscape)
   window.removeEventListener('resize', positionDropdown)
@@ -343,7 +357,8 @@ onUnmounted(() => {
 <style scoped>
 .date-picker-trigger {
   @apply flex items-center gap-2;
-  @apply rounded-lg px-3 py-2 text-sm;
+  @apply px-3 py-2 text-sm;
+  border-radius: var(--surface-radius-control);
   background-color: var(--surface-field);
   @apply border border-gray-200 dark:border-dark-600;
   color: var(--surface-muted);
@@ -372,7 +387,7 @@ onUnmounted(() => {
 .date-picker-dropdown {
   @apply absolute left-0 z-[100] mt-2;
   background-color: var(--surface-panel);
-  @apply rounded-xl;
+  border-radius: var(--surface-radius-panel);
   @apply border border-gray-200 dark:border-dark-700;
   @apply shadow-lg shadow-black/10 dark:shadow-black/30;
   @apply overflow-hidden;
@@ -385,7 +400,8 @@ onUnmounted(() => {
 }
 
 .date-picker-preset {
-  @apply rounded-md px-3 py-1.5 text-xs font-medium;
+  @apply px-3 py-1.5 text-xs font-medium;
+  border-radius: var(--surface-radius-item);
   color: var(--surface-muted);
 
   @apply transition-colors duration-150;
@@ -414,20 +430,12 @@ onUnmounted(() => {
 }
 
 .date-picker-input {
-  @apply w-full rounded-md px-2 py-1.5 text-sm;
+  @apply w-full px-2 py-1.5 text-sm;
+  border-radius: var(--surface-radius-item);
   background-color: var(--surface-field);
   @apply border border-gray-200 dark:border-dark-600;
   @apply text-gray-900 dark:text-gray-100;
   @apply focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30;
-}
-
-.date-picker-input::-webkit-calendar-picker-indicator {
-  @apply cursor-pointer opacity-60 hover:opacity-100;
-  filter: invert(0.5);
-}
-
-.dark .date-picker-input::-webkit-calendar-picker-indicator {
-  filter: none;
 }
 
 .date-picker-separator {
@@ -439,7 +447,8 @@ onUnmounted(() => {
 }
 
 .date-picker-apply {
-  @apply rounded-lg px-4 py-1.5 text-sm font-medium;
+  @apply px-4 py-1.5 text-sm font-medium;
+  border-radius: var(--surface-radius-item);
   @apply bg-primary-600 text-white;
   @apply hover:bg-primary-700;
   @apply transition-colors duration-150;

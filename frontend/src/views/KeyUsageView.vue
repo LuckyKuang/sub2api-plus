@@ -1,13 +1,13 @@
 <template>
-  <div class="relative flex min-h-screen flex-col bg-canvas dark:surface-inset">
+  <div class="relative flex min-h-screen flex-col gap-[var(--shell-gap)] bg-canvas p-[var(--shell-gutter)] dark:surface-inset">
     <!-- Header (same pattern as HomeView) -->
-    <header class="relative z-20 px-6 py-4">
-      <nav class="mx-auto flex max-w-6xl items-center justify-between">
-        <router-link to="/home" class="flex items-center gap-3">
-          <div class="h-10 w-10 overflow-hidden rounded-xl shadow-md">
+    <header class="shell-surface relative z-20 px-4 py-4 sm:px-6">
+      <nav class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3">
+        <router-link to="/home" class="flex min-w-0 items-center gap-3">
+          <div class="h-10 w-10 shrink-0 overflow-hidden rounded-xl shadow-md">
             <img :src="siteLogo || '/logo.svg'" alt="Logo" class="h-full w-full object-contain" />
           </div>
-          <span class="text-lg font-semibold tracking-tight text-gray-900 dark:text-white">{{ siteName }}</span>
+          <span class="truncate text-lg font-semibold tracking-tight text-gray-900 dark:text-white">{{ siteName }}</span>
         </router-link>
         <div class="flex items-center gap-3">
           <LocaleSwitcher />
@@ -34,9 +34,9 @@
     </header>
 
     <!-- Main Content -->
-    <main class="flex-1 w-full max-w-5xl mx-auto px-6 py-12">
+    <main class="mx-auto flex w-full min-w-0 max-w-5xl flex-1 flex-col gap-[var(--shell-gap)]">
       <!-- Hero -->
-      <div class="text-center mb-12">
+      <div class="card px-4 py-6 text-center sm:p-8">
         <h1 class="text-3xl sm:text-4xl font-bold tracking-tight mb-3 text-gray-900 dark:text-white">
           {{ t('keyUsage.title') }}
         </h1>
@@ -46,9 +46,9 @@
       </div>
 
       <!-- Input Section -->
-      <div class="max-w-xl mx-auto mb-14">
-        <div class="flex gap-3">
-          <div class="flex-1 relative">
+      <div class="card mx-auto w-full min-w-0 max-w-xl p-4 sm:p-6">
+        <div class="flex flex-col gap-3 sm:flex-row">
+          <div class="relative min-w-0 flex-1">
             <div class="absolute left-4 top-1/2 -translate-y-1/2 surface-muted">
               <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
@@ -77,7 +77,7 @@
           <button
             @click="queryKey"
             :disabled="isQuerying"
-            class="h-12 px-7 rounded-xl bg-primary-500 hover:bg-primary-600 text-white font-medium text-sm transition-all active:scale-[0.97] flex items-center gap-2 whitespace-nowrap disabled:opacity-60"
+            class="h-12 px-7 rounded-xl bg-primary-500 hover:bg-primary-600 text-white font-medium text-sm transition-all active:scale-[0.97] flex items-center justify-center gap-2 whitespace-nowrap disabled:opacity-60"
           >
             <svg v-if="isQuerying" class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
               <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.25"/>
@@ -106,14 +106,14 @@
                 ? 'bg-primary-500 text-white border-primary-500'
                 : 'border-gray-200 surface-field text-gray-700 dark:border-dark-700 dark:surface-field dark:text-dark-200 hover:border-primary-300 dark:hover:border-dark-600'"
             >{{ range.label }}</button>
-            <div v-if="currentRange === 'custom'" class="flex items-center gap-2 ml-1">
-              <input
+            <div v-if="currentRange === 'custom'" class="flex max-w-full flex-wrap items-center justify-center gap-2">
+              <DateTimePicker :aria-label="t('dates.startDate')"
                 v-model="customStartDate"
                 type="date"
                 class="input-ring text-xs px-2 py-1.5 rounded-lg border border-gray-200 surface-inset text-gray-900 dark:border-dark-700 dark:text-white"
               />
               <span class="text-xs surface-muted">-</span>
-              <input
+              <DateTimePicker :aria-label="t('dates.endDate')"
                 v-model="customEndDate"
                 type="date"
                 class="input-ring text-xs px-2 py-1.5 rounded-lg border border-gray-200 surface-inset text-gray-900 dark:border-dark-700 dark:text-white"
@@ -132,16 +132,16 @@
         <!-- Loading Skeleton -->
         <div v-if="showLoading" class="space-y-6">
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div class="rounded-2xl border border-gray-200 surface-inset p-8 dark:border-dark-700">
+            <div class="card p-5 sm:p-8">
               <div class="skeleton h-5 w-24 mb-6"></div>
               <div class="flex justify-center"><div class="skeleton w-44 h-44 rounded-full"></div></div>
             </div>
-            <div class="rounded-2xl border border-gray-200 surface-inset p-8 dark:border-dark-700">
+            <div class="card p-5 sm:p-8">
               <div class="skeleton h-5 w-24 mb-6"></div>
               <div class="flex justify-center"><div class="skeleton w-44 h-44 rounded-full"></div></div>
             </div>
           </div>
-          <div class="rounded-2xl border border-gray-200 surface-inset p-8 dark:border-dark-700">
+          <div class="card p-5 sm:p-8">
             <div class="skeleton h-5 w-32 mb-6"></div>
             <div class="space-y-4">
               <div class="skeleton h-4 w-full"></div>
@@ -172,7 +172,7 @@
             <div
               v-for="(ring, i) in ringItems"
               :key="i"
-              class="fade-up rounded-2xl border border-gray-200 surface-inset p-8 transition-all duration-300 hover:shadow-lg dark:border-dark-700"
+              class="card fade-up p-5 transition-all duration-300 hover:shadow-lg sm:p-8"
               :class="`fade-up-delay-${Math.min(i + 1, 4)}`"
             >
               <div class="flex items-center justify-between mb-6">
@@ -239,7 +239,7 @@
           <!-- Detail Card -->
           <div
             v-if="detailRows.length > 0"
-            class="fade-up fade-up-delay-3 rounded-2xl border border-gray-200 surface-inset overflow-hidden dark:border-dark-700"
+            class="card fade-up fade-up-delay-3 overflow-hidden"
           >
             <div class="px-8 py-5 border-b border-gray-200 dark:border-dark-700">
               <h3 class="text-sm font-semibold uppercase tracking-wider surface-muted">{{ t('keyUsage.detailInfo') }}</h3>
@@ -272,7 +272,7 @@
           <!-- Usage Stats Card -->
           <div
             v-if="usageStatCells.length > 0"
-            class="fade-up fade-up-delay-3 rounded-2xl border border-gray-200 surface-inset overflow-hidden dark:border-dark-700"
+            class="card fade-up fade-up-delay-3 overflow-hidden"
           >
             <div class="px-8 py-5 border-b border-gray-200 dark:border-dark-700">
               <h3 class="text-sm font-semibold uppercase tracking-wider surface-muted">{{ t('keyUsage.tokenStats') }}</h3>
@@ -294,7 +294,7 @@
           <!-- Daily Usage Table -->
           <div
             v-if="showDailyUsage"
-            class="fade-up fade-up-delay-4 rounded-2xl border border-gray-200 surface-inset overflow-hidden dark:border-dark-700"
+            class="card fade-up fade-up-delay-4 overflow-hidden"
           >
             <div class="flex flex-col gap-3 px-8 py-5 border-b border-gray-200 dark:border-dark-700 sm:flex-row sm:items-center sm:justify-between">
               <h3 class="text-sm font-semibold uppercase tracking-wider surface-muted">{{ t('keyUsage.dailyDetail') }}</h3>
@@ -312,8 +312,8 @@
                 </button>
               </div>
             </div>
-            <div v-if="dailyUsageRows.length > 0" class="table-container overflow-x-auto">
-              <table class="w-full">
+            <div v-if="dailyUsageRows.length > 0" class="record-table-scroll table-container overflow-x-auto">
+              <table class="record-table w-full">
                 <thead>
                   <tr class="border-b border-gray-200 surface-inset dark:border-dark-700">
                     <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider surface-muted">{{ t('keyUsage.date') }}</th>
@@ -350,13 +350,13 @@
           <!-- Model Stats Table -->
           <div
             v-if="modelStats.length > 0"
-            class="fade-up fade-up-delay-4 rounded-2xl border border-gray-200 surface-inset overflow-hidden dark:border-dark-700"
+            class="card fade-up fade-up-delay-4 overflow-hidden"
           >
             <div class="px-8 py-5 border-b border-gray-200 dark:border-dark-700">
               <h3 class="text-sm font-semibold uppercase tracking-wider surface-muted">{{ t('keyUsage.modelStats') }}</h3>
             </div>
-            <div class="table-container overflow-x-auto">
-              <table class="w-full">
+            <div class="record-table-scroll table-container overflow-x-auto">
+              <table class="record-table w-full">
                 <thead>
                   <tr class="border-b border-gray-200 surface-inset dark:border-dark-700">
                     <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider surface-muted">{{ t('keyUsage.model') }}</th>
@@ -393,7 +393,7 @@
     </main>
 
     <!-- Footer (same pattern as HomeView) -->
-    <footer class="relative z-10 border-t border-gray-200/50 px-6 py-8 dark:border-dark-800/50">
+    <footer class="shell-surface relative z-10 px-4 py-6 sm:px-6">
       <div class="mx-auto flex max-w-6xl flex-col items-center justify-center gap-4 text-center sm:flex-row sm:text-left">
         <p class="text-sm surface-muted">
           &copy; {{ currentYear }} {{ siteName }}. {{ t('home.footer.allRightsReserved') }}
@@ -419,6 +419,7 @@
 </template>
 
 <script setup lang="ts">
+import DateTimePicker from '@/components/common/DateTimePicker.vue'
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores'

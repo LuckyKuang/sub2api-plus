@@ -1,10 +1,40 @@
 <template>
-  <AppLayout>
-    <div class="space-y-6">
-      <div class="flex items-center justify-end gap-3">
+  <AppLayout workspace>
+    <div class="workspace-page admin-dashboard">
+      <div class="card workspace-fixed dashboard-toolbar p-4">
+            <div class="flex flex-wrap items-center gap-4">
+              <div class="flex items-center gap-2">
+                <span class="text-sm font-medium surface-muted"
+                  >{{ t('admin.dashboard.timeRange') }}:</span
+                >
+                <DateRangePicker
+                  v-model:start-date="startDate"
+                  v-model:end-date="endDate"
+                  @change="onDateRangeChange"
+                />
+              </div>
+              <button @click="refreshAll" :disabled="chartsLoading || overviewRefresh.fetching.value" class="btn btn-secondary">
+                {{ t('common.refresh') }}
+              </button>
+              <div class="ml-auto flex items-center gap-2">
+                <span class="text-sm font-medium surface-muted"
+                  >{{ t('admin.dashboard.granularity') }}:</span
+                >
+                <div class="w-28">
+                  <Select
+                    v-model="granularity"
+                    :options="granularityOptions"
+                    @change="loadChartData"
+                  />
+                </div>
+              </div>
+      <div class="dashboard-refresh flex flex-wrap items-center gap-3">
         <RefreshControl :state="overviewRefresh" />
         <button v-if="!stats && overviewRefresh.error.value" class="btn btn-secondary" @click="refreshAll">{{ t('inspection.retry') }}</button>
       </div>
+            </div>
+          </div>
+
       <!-- Loading State -->
       <div v-if="loading && !stats" class="flex items-center justify-center py-12">
         <LoadingSpinner />
@@ -12,7 +42,7 @@
 
       <template v-else-if="stats">
         <!-- Row 1: Core Stats -->
-        <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div class="dashboard-kpis workspace-fixed grid grid-cols-2 gap-4 lg:grid-cols-4">
           <!-- Total API Keys -->
           <div class="card p-4">
             <div class="flex items-center gap-3">
@@ -97,10 +127,8 @@
               </div>
             </div>
           </div>
-        </div>
 
-        <!-- Row 2: Token Stats -->
-        <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <!-- Token and performance stats -->
           <!-- Today Tokens -->
           <div class="card p-4">
             <div class="flex items-center gap-3">
@@ -232,90 +260,13 @@
           </div>
         </div>
 
-        <!-- Quick Actions -->
-        <div class="card p-4">
-          <div class="mb-3 flex items-center justify-between">
-            <h2 class="text-sm font-semibold text-gray-900 dark:text-white">
-              {{ t('admin.dashboard.quickActions') }}
-            </h2>
-          </div>
-          <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <button
-              v-if="canUseBatchImage"
-              type="button"
-              class="group flex items-center gap-3 rounded-lg p-3 text-left transition-colors hover:bg-sky-50/25 dark:hover:bg-sky-900/20 surface-control"
-              @click="router.push('/batch-image')"
-            >
-              <span class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-sky-100/[0.15] text-sky-600 dark:bg-sky-900/30 dark:text-sky-400">
-                <Icon name="sparkles" size="md" :stroke-width="2" />
-              </span>
-              <span class="min-w-0 flex-1">
-                <span class="block text-sm font-medium text-gray-900 dark:text-white">
-                  {{ t('admin.dashboard.batchImage') }}
-                </span>
-                <span class="block text-xs surface-muted">
-                  {{ t('admin.dashboard.batchImageDesc') }}
-                </span>
-              </span>
-              <Icon name="chevronRight" size="sm" class="text-gray-400 group-hover:text-sky-500" />
-            </button>
-            <button
-              type="button"
-              class="group flex items-center gap-3 rounded-lg p-3 text-left transition-colors hover:bg-emerald-50/25 dark:hover:bg-emerald-900/20 surface-control"
-              @click="router.push('/admin/groups')"
-            >
-              <span class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-emerald-100/[0.15] text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400">
-                <Icon name="grid" size="md" :stroke-width="2" />
-              </span>
-              <span class="min-w-0 flex-1">
-                <span class="block text-sm font-medium text-gray-900 dark:text-white">
-                  {{ t('admin.dashboard.groupPricing') }}
-                </span>
-                <span class="block text-xs surface-muted">
-                  {{ t('admin.dashboard.groupPricingDesc') }}
-                </span>
-              </span>
-              <Icon name="chevronRight" size="sm" class="text-gray-400 group-hover:text-emerald-500" />
-            </button>
-          </div>
-        </div>
-
         <!-- Charts Section -->
-        <div class="space-y-6">
-          <!-- Date Range Filter -->
-          <div class="card p-4">
-            <div class="flex flex-wrap items-center gap-4">
-              <div class="flex items-center gap-2">
-                <span class="text-sm font-medium surface-muted"
-                  >{{ t('admin.dashboard.timeRange') }}:</span
-                >
-                <DateRangePicker
-                  v-model:start-date="startDate"
-                  v-model:end-date="endDate"
-                  @change="onDateRangeChange"
-                />
-              </div>
-              <button @click="refreshAll" :disabled="chartsLoading || overviewRefresh.fetching.value" class="btn btn-secondary">
-                {{ t('common.refresh') }}
-              </button>
-              <div class="ml-auto flex items-center gap-2">
-                <span class="text-sm font-medium surface-muted"
-                  >{{ t('admin.dashboard.granularity') }}:</span
-                >
-                <div class="w-28">
-                  <Select
-                    v-model="granularity"
-                    :options="granularityOptions"
-                    @change="loadChartData"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
+        <WorkspaceTabs v-if="compactCharts" v-model="chartTab" class="workspace-fixed" :tabs="dashboardTabs" :label="t('workspace.charts')" />
+        <div class="workspace-body dashboard-charts" :class="{ 'dashboard-charts-compact': compactCharts }">
           <!-- Charts Grid -->
-          <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div v-show="!compactCharts || chartTab === 'models'" class="dashboard-chart-grid grid grid-cols-1 gap-6 lg:grid-cols-2">
             <ModelDistributionChart
+              workspace
               :model-stats="modelStats"
               :enable-ranking-view="true"
               :ranking-items="rankingItems"
@@ -329,12 +280,12 @@
               :end-date="endDate"
               @ranking-click="goToUserUsage"
             />
-            <TokenUsageTrend :trend-data="trendData" :loading="chartsLoading" />
+            <TokenUsageTrend workspace :trend-data="trendData" :loading="chartsLoading" />
           </div>
 
           <!-- User Usage Trend (Full Width) -->
-          <div class="card p-4">
-            <div class="mb-4 flex items-center justify-between gap-3">
+          <div v-show="!compactCharts || chartTab === 'users'" class="card dashboard-user-trend p-4">
+            <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
               <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.dashboard.recentUsage') }} (Top 12)</h3>
               <div class="flex gap-1" role="group" :aria-label="t('admin.dashboard.recentUsage')">
                 <button v-for="metric in (['tokens', 'actual_cost'] as const)" :key="metric" type="button"
@@ -344,7 +295,7 @@
                 </button>
               </div>
             </div>
-            <div class="h-64">
+            <div class="dashboard-line-canvas h-64">
               <div v-if="userTrendLoading && !userTrendChartData" class="flex h-full items-center justify-center">
                 <LoadingSpinner size="md" />
               </div>
@@ -364,8 +315,11 @@
 </template>
 
 <script setup lang="ts">
+import { chartTooltipStyle } from '@/utils/chartTooltip'
 import { useDocumentDarkMode } from '@/composables/useDocumentDarkMode'
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, nextTick, onMounted, onBeforeUnmount, watch } from 'vue'
+import { useMediaQuery } from '@vueuse/core'
+import WorkspaceTabs from '@/components/common/WorkspaceTabs.vue'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
 import { useColumnPreferenceKey } from '@/composables/useColumnPreferenceKey'
 import RefreshControl from '@/components/common/RefreshControl.vue'
@@ -389,7 +343,6 @@ import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import Select from '@/components/common/Select.vue'
 import ModelDistributionChart from '@/components/charts/ModelDistributionChart.vue'
 import TokenUsageTrend from '@/components/charts/TokenUsageTrend.vue'
-import { useBatchImageAccess } from '@/composables/useBatchImageAccess'
 import { formatTokenShare, sumTokenBuckets } from '@/utils/tokenShare'
 
 import {
@@ -417,7 +370,13 @@ ChartJS.register(
 
 const appStore = useAppStore()
 const router = useRouter()
-const { canUseBatchImage, refreshBatchImageAccess } = useBatchImageAccess()
+const compactCharts = useMediaQuery('(min-width: 1024px) and (max-height: 959px)')
+const chartTab = ref('models')
+const dashboardTabs = computed(() => [
+  { value: 'models', label: t('workspace.modelsTrend') },
+  { value: 'users', label: t('workspace.userTrend') },
+])
+watch(chartTab, async () => { await nextTick(); window.dispatchEvent(new Event('resize')) })
 const stats = ref<DashboardStats | null>(null)
 const loading = ref(false)
 const chartsLoading = ref(false)
@@ -513,6 +472,7 @@ const lineOptions = computed(() => ({
       }
     },
     tooltip: {
+      ...chartTooltipStyle(isDarkMode.value),
       itemSort: (a: any, b: any) => {
         const aValue = typeof a?.raw === 'number' ? a.raw : Number(a?.parsed?.y ?? 0)
         const bValue = typeof b?.raw === 'number' ? b.raw : Number(b?.parsed?.y ?? 0)
@@ -815,10 +775,34 @@ const overviewRefresh = useAutoRefresh({
 const refreshAll = () => { forceCharts = true; return overviewRefresh.refresh() }
 onBeforeUnmount(() => { chartLoadSeq++; usersTrendLoadSeq++; rankingLoadSeq++ })
 onMounted(() => {
-  void refreshBatchImageAccess()
   void refreshAll()
 })
 </script>
 
 <style scoped>
+.dashboard-refresh { margin-left: auto; }
+@media (min-width: 1024px) {
+  .dashboard-toolbar { padding: 12px 16px; }
+  .dashboard-toolbar > div { gap: 12px; }
+  .dashboard-kpis { gap: 10px; }
+  .dashboard-kpis > .card { min-width: 0; padding: 12px; }
+  .dashboard-kpis > .card > div { gap: 10px; }
+  .dashboard-charts { display: grid; grid-template-rows: minmax(0, 1fr) minmax(0, 1.02fr); gap: 12px; }
+  .dashboard-charts-compact { grid-template-rows: minmax(0, 1fr); }
+  .dashboard-chart-grid { min-height: 0; gap: 12px; }
+  .dashboard-user-trend { display: flex; min-height: 0; flex-direction: column; overflow: hidden; padding: 14px; }
+  .dashboard-user-trend > div:first-child { flex: none; margin-bottom: 10px; }
+  .dashboard-line-canvas { position: relative; height: auto; min-height: 0; flex: 1; }
+}
+@media (min-width: 1800px) and (min-height: 960px) {
+  .dashboard-kpis { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+}
+@media (min-width: 1024px) and (max-height: 959px) {
+  .dashboard-kpis > .card { padding: 10px; }
+}
+@media (min-width: 1024px) and (max-height: 799px) {
+  .dashboard-toolbar { padding-top: 8px; padding-bottom: 8px; }
+  .dashboard-kpis { display: flex; overflow-x: auto; scrollbar-width: thin; padding-bottom: 4px; }
+  .dashboard-kpis > .card { flex: 0 0 300px; }
+}
 </style>

@@ -147,6 +147,7 @@ deploy/docker-compose.override.yml
 vite.config.js
 docs/*
 !docs/CHANNEL_MONITOR.md
+!docs/CHANNEL_MONITOR_V2.md
 !docs/AUTHENTICATION.md
 !docs/MODEL_PLAZA.md
 !docs/OUTBOUND_IDENTITY.md

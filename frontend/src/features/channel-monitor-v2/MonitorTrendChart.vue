@@ -58,6 +58,7 @@
 </template>
 
 <script setup lang="ts">
+import { chartTooltipStyle } from '@/utils/chartTooltip'
 import { useDocumentDarkMode } from '@/composables/useDocumentDarkMode'
 import { useI18n } from 'vue-i18n'
 import { computed, ref, watch } from 'vue'
@@ -206,9 +207,6 @@ function smoothTrend(values: Array<number | null>): Array<number | null> {
 const chartOptions = computed(() => {
   const text = isDark.value ? '#9ca3af' : '#6b7280'
   const grid = isDark.value ? '#374151' : '#f3f4f6'
-  const tooltipBg = isDark.value ? '#1f2937' : '#ffffff'
-  const tooltipTitle = isDark.value ? '#f3f4f6' : '#111827'
-  const tooltipBody = isDark.value ? '#d1d5db' : '#4b5563'
   return {
     responsive: true,
     maintainAspectRatio: false,
@@ -216,12 +214,7 @@ const chartOptions = computed(() => {
     plugins: {
       legend: { display: false },
       tooltip: {
-        backgroundColor: tooltipBg,
-        titleColor: tooltipTitle,
-        bodyColor: tooltipBody,
-        borderColor: grid,
-        borderWidth: 1,
-        padding: 10,
+        ...chartTooltipStyle(isDark.value),
         displayColors: true,
         callbacks: {
           label(ctx: { dataset: { label?: string }; parsed: { y: number | null } }) {

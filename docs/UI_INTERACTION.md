@@ -18,11 +18,61 @@ Safe-area insets may increase the outer inset. The brand, toolbar and toolbar
 inner row are 64px high. The toolbar centers its inner row across its border,
 including fractional border widths at browser zoom; navigation and business
 content start on the same horizontal line.
-The toolbar and desktop sidebar stick at the outer top inset. Sticky settings
-tabs and details derive their offsets from these tokens. `TablePageLayout`
-measures the remaining viewport height, including the bottom outer inset, and
-uses document scrolling below 1024px. Public/auth layouts retain their own geometry;
-operations fullscreen remains a dedicated full-screen view.
+The desktop console fills the viewport. Its toolbar and brand start at the same
+outer top inset; the toolbar stays in the shell's normal flow without applying
+the sticky inset a second time. The content below it scrolls independently.
+Workspace pages keep their title, navigation, filters and pagination fixed and
+allocate the remaining height to their content or table body. `AppLayout`'s
+`workspace` prop and `styles/workspace.css` own this layout. `TablePageLayout`
+uses the same available space for its table. Below 1024px, pages return to normal
+document scrolling. Public/auth layouts retain their own geometry, and operations
+fullscreen remains a dedicated full-screen view.
+
+Dashboard quick actions are removed. Desktop dashboards fit their available
+height; shorter administrator windows switch between the model/trend charts and
+user trend instead of hiding charts below the viewport. The user dashboard
+separates charts, platform/quota information and recent usage. Date controls and
+refresh remain available; chart dates do not change the semantics of today's KPI
+cards.
+On desktop windows shorter than 800px, KPI cards share a horizontally scrolling
+row so the charts retain usable height. All KPI cards remain available; phone
+layouts keep their natural vertical flow.
+
+Operations separates monitoring, alert events and system logs; risk control
+separates configuration and audit records; IP access control separates automatic
+protection, trusted proxies, login failures and rules. Existing rule links activate
+the rules tab. Admin and user usage pages separate chart statistics and usage
+lists while retaining their existing live/history/error/ranking subviews and
+shared date selection. Switching presentation tabs does not reset filters,
+pagination or drafts. Channel-monitor mode switching retains its original
+component lifecycle so inactive modes do not acquire background polling.
+Fixed filter areas use the available width before wrapping. In shorter usage
+workspaces, the filter fields share a horizontal row with actions below it;
+search results stay portalled outside that row so scrolling cannot clip them.
+
+Plugin management and channel monitoring keep their heading/control cards fixed.
+Prompt Audit keeps its title, events/configuration navigation, event filters and
+pagination fixed, scrolling only event rows; configuration scrolls independently.
+System Settings keeps its navigation and save actions in the same form with an
+independently scrolling configuration body, preserving hidden sections and drafts.
+My Orders keeps its search and filter card and pagination fixed while order rows
+scroll. Admin Order Management and Subscription Plans use the same workspace:
+query controls, refresh/create actions and pagination stay outside the scrolling
+table. Available Channels fixes its title, description, filters and result count,
+scrolling only the channel-card area and its loading, error or empty state.
+In desktop windows up to 600px high, platform filters share a horizontally
+scrolling row so channel cards retain visible space.
+The purchase catalog keeps the subscription/recharge navigation visible,
+uses four columns for desktop plans and preset recharge amounts, and keeps checkout
+actions visible. Sticky cards inside the desktop main scrollport use a zero top
+offset; the shell has already reserved the header space. This also applies to the
+channel-status monitoring toolbar, so it cannot overlap the summary metrics.
+
+Scroll clipping belongs to the actual viewport: large content viewports use the
+outer card radius, and inset table viewports use the panel radius. Their corners
+remain rounded at the start, middle and end of scrolling. Table headers and frozen
+columns stay in their original scroll container. Portalled menus and dialogs
+retain their positioning; no global mask, transform or clip-path is used.
 
 Cards, nested sections, inputs, buttons, Select triggers, menus and dialogs use
 solid theme fills with their existing edges, soft shadows, highlights and focus
@@ -37,6 +87,110 @@ Keep that fallback outside Tailwind's component layer so important card/dropdown
 variants cannot promote positioning on unrelated surfaces.
 Light/dark themes share geometry and solid surface behavior, including when
 reduced transparency is requested. Reduced-motion preferences disable transitions.
+
+## Rounded surfaces and hover cards
+
+Shape belongs to the shared surface system, including transient UI. Shared radius
+defaults are `--surface-radius` (24px desktop, 20px below 1024px) for outer cards,
+16px for inset sections and popup panels, 12px for controls and 10px for menu items.
+Different control sizes and existing local styles may retain other rounded radii.
+Menus have inner padding so hover, focus and selection backgrounds remain
+independent rounded regions.
+Searchable select menus fit the available viewport height, keeping their search
+field visible while options scroll.
+Pagination uses separate rounded buttons rather than connected square segments.
+Modal/card headers inherit the parent's top corners and footers inherit its
+bottom corners; changing the background must never repaint square outer corners.
+Do not add global overflow clipping: inline overlays must still escape cards,
+and explicit table/body scroll containers keep ownership of scrolling.
+
+Right-side details are floating cards inset from every viewport edge, including
+safe areas. Their height excludes the top/bottom shell insets and their width
+fits the remaining viewport; mobile views keep all four rounded corners. Existing
+dialog focus loops, Escape, background scroll locks and focus restoration remain.
+
+`HelpTooltip` and delegated `TitleTooltip` render themed, arrowless rounded panels
+through body portals. Legacy HTML title attributes are suppressed while their
+card is active and restored when leaving or unmounting; dynamic title changes
+remain visible and existing accessible descriptions are preserved. Hover and
+keyboard focus expose the same text. Delegated title tips dismiss on Escape
+without consuming the key; HelpTooltip closes first while leaving its enclosing
+dialog open, so a subsequent Escape can close the dialog.
+Positions use viewport coordinates, clamp to viewport edges and remain correct
+after scrolling. Tooltip text is never interpreted as HTML. Canvas chart tooltips
+use the same rounded panel shape and omit pointed carets; tour popovers also omit
+arrows. Existing searchable/multi-select controls retain their integrated behavior.
+
+Custom HTML and external iframe documents retain ownership of their internal
+styles. The application provides the rounded embedding card; QR codes retain
+their opaque white quiet zone and are not clipped into rounded code pixels.
+
+Date, local date/time and time fields share `DateTimePicker` for their expanded
+UI: an opaque themed card with a calendar, local-time controls where applicable,
+and clear/cancel/apply actions. Browsing or cancelling does not change a bound
+value; applying or clearing preserves the field's existing model and event
+contract. Date-only fields remain dates, local date/time values are never shifted
+through UTC, and second-resolution time fields retain seconds. Min/max, step,
+required, disabled and readonly semantics remain enforced. Any native input is
+only a hidden form/constraint proxy, never the visible expanded picker. Calendar
+panels escape scrollable cards through body portals, fit the viewport, and share
+the dialog focus/Escape stack without independently locking page scrolling.
+
+Error, warning, success and information notifications share a 20px rounded solid
+card with a rounded semantic icon well, close button and inset progress track.
+Color identifies severity without changing the card shape. The stack follows
+the shell's top/right inset, fits narrow screens, and preserves announcement,
+timeout and dismissal behavior.
+
+Record tables retain table semantics while presenting each record as a separate
+16px rounded card. Hover and selection paint the same rounded row without
+filling its 8px gap. Row outlines, outer table outlines and vertical pinned-column
+shadows are omitted; visible outer insets are 12px. Headers match the surrounding
+opaque table background, have no independent card, and remain 12px from the first
+data row. Pinned cells preserve matching backgrounds, block scrolled content
+behind their rounded corners, and must never cover another visible header
+incorrectly. Grouped, spanning and expanded records keep their
+business grouping; virtual rows retain accurate measurement.
+
+Short data rows use `record-table-compact` with 10px visible outside corners
+instead of the default 16px. This includes model, group and endpoint
+distributions, compact rankings and model summaries, including expanded user
+breakdowns, price tiers and short reference/monitor tables. The extra-model
+table inside monitor tooltips uses `record-table-dense` for 6px corners on its
+very short rows. Hover and selected states keep the same corners. Available
+channel cards use at most four columns; their actual content width selects one,
+two, three or four columns. Redeem balance cards use the ordinary theme surface.
+
+Pagination responds to its containing card rather than the browser width. Wide
+cards keep information and navigation on one line; narrower cards put controls
+below their information and keep previous/next actions together. Page-size
+labels stay on one line. Redeem activity and batch-image footers follow the same
+container-based layout rules. Prompt Audit and V2 settings fill the console's
+content column. Prompt Audit's save card occupies a fixed layout slot below
+configuration; wrapped actions reserve their actual height so the last setting
+remains reachable when navigation collapses or the viewport changes.
+
+Navigation hover and keyboard focus paint an inset rounded card. The active
+link has a stronger teal fill, outline and leading stripe, retained on hover.
+
+The V2 channel pulse matrix mounts only visible rows with a small overscan and
+measures actual row heights, including mobile wrapping. Its header remains sticky;
+filtering clamps the scroll position and keyboard navigation can reach unmounted
+rows. Ordinary wheel input scrolls; Ctrl + wheel zooms the time axis. The pulse
+matrix preserves its zoom and scroll after polling or a switch to line view and
+back. A change of
+range or dimensions resets zoom after the new response arrives. One shared
+tooltip follows the pointer without rerendering the matrix or allocating time
+formatters on every movement.
+
+V2 settings use a searchable platform rail and responsive model cards with
+search, selection, batch actions and undo. Separate tabs show individual models,
+actual observed members of Other, and excluded models. Exclusion removes a model
+from every V2 statistic; moving it to Other retains its traffic. The integrated
+model picker distinguishes observed traffic, configured names and preset
+candidates. Draft changes apply only after versioned save succeeds; a conflicting
+save retains the draft and offers an explicit reload. See
+[the V2 configuration contract](CHANNEL_MONITOR_V2.md).
 
 On compact toolbars, secondary tools remain available in the user menu without
 mounting duplicate locale/subscription controls. The mobile drawer traps focus,
@@ -71,6 +225,12 @@ and IP start hidden and remain available through column settings. Saved personal
 column settings take precedence; reset restores these defaults. Wide tables
 scroll within their card. Existing precision, permissions, billing and timing
 definitions remain.
+
+Admin history keeps the visible column prefix through account pinned during
+horizontal scrolling. Headers and data use the same measured cumulative widths;
+showing the optional API key column includes it in that prefix. Reordering or
+hiding columns must never leave a visible account label covered by the user
+column. Other tables retain their existing fixed-column choices.
 
 Usage and live rows have no side panel, row detail selection, or detail request.
 Old `record` query links return to the list while retaining other queries and
@@ -284,7 +444,7 @@ viewers get the published appearance on refresh. Failed image loads fall back
 to the built-in gradient, and stale load completions must not replace a newer
 image or a reset. Table bodies, sticky headers and fixed columns use solid theme
 surfaces with no backdrop filters. Pinned cells cover horizontally scrolled
-content, with hover, selection, edge shadows, stacking and focus intact. Long
+content, with rounded hover/selection boundaries, stacking and focus intact. Long
 document-scrolling usage lists must remain fully painted after repeated vertical
 jumps. This solid-surface rule applies across console pages, including outer
 cards and popup panels.

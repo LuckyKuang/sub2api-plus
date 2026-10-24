@@ -1,4 +1,4 @@
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import DataTable from '../DataTable.vue'
@@ -45,6 +45,92 @@ describe('DataTable', () => {
   beforeEach(() => {
     stubDesktopMatchMedia()
     localStorage.clear()
+  })
+
+  it('pins an explicitly declared prefix using measured widths in both header and records', async () => {
+    const widths: Record<string, number> = { user: 187.5, api_key: 104.25, account: 143.75 }
+    const measure = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      return new DOMRect(0, 0, widths[this.dataset.field ?? ''] ?? 40, 48)
+    })
+    const callbacks: ResizeObserverCallback[] = []
+    const originalObserver = globalThis.ResizeObserver
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(callback: ResizeObserverCallback) { callbacks.push(callback) }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    })
+    const columns = [
+      { key: 'user', label: 'User', sticky: 'left' as const },
+      { key: 'api_key', label: 'API Key', sticky: 'left' as const },
+      { key: 'account', label: 'Account', sticky: 'left' as const },
+      { key: 'cost', label: 'Cost' }
+    ]
+    const wrapper = mount(DataTable, {
+      props: { columns, data: [{ id: 1, user: 'User', api_key: 'Key', account: 'Account' }] }
+    })
+    try {
+      await flushPromises()
+      for (const selector of ['thead', 'tbody']) {
+        const account = wrapper.get(`${selector} [data-field="account"]`)
+        expect(account.classes()).toContain('sticky-col-left')
+        expect((account.element as HTMLElement).style.left).toBe('291.75px')
+        expect(wrapper.get(`${selector} [data-field="cost"]`).classes()).not.toContain('sticky-col')
+      }
+
+      // Hiding the optional middle column and resizing the first column both
+      // change the pin offset; translated labels need no hard-coded widths.
+      await wrapper.setProps({ columns: columns.filter(column => column.key !== 'api_key') })
+      await flushPromises()
+      expect((wrapper.get('thead [data-field="account"]').element as HTMLElement).style.left).toBe('187.5px')
+      widths.user = 221
+      callbacks.forEach(callback => callback([], {} as ResizeObserver))
+      await wrapper.vm.$nextTick()
+      for (const selector of ['thead', 'tbody']) {
+        expect((wrapper.get(`${selector} [data-field="account"]`).element as HTMLElement).style.left).toBe('221px')
+      }
+    } finally {
+      wrapper.unmount()
+      measure.mockRestore()
+      vi.stubGlobal('ResizeObserver', originalObserver)
+    }
+  })
+
+  it('preserves default first/actions pinning and lets a column explicitly opt out', async () => {
+    const wrapper = mount(DataTable, {
+      props: {
+        columns: [{ key: 'name', label: 'Name' }, { key: 'cost', label: 'Cost' }, { key: 'actions', label: 'Actions' }],
+        data: [{ id: 1, name: 'Name' }]
+      }
+    })
+    await flushPromises()
+    for (const selector of ['thead', 'tbody']) {
+      expect(wrapper.get(`${selector} [data-field="name"]`).classes()).toContain('sticky-col-left')
+      expect(wrapper.get(`${selector} [data-field="actions"]`).classes()).toContain('sticky-col-right')
+      expect(wrapper.get(`${selector} [data-field="cost"]`).classes()).not.toContain('sticky-col')
+    }
+    await wrapper.setProps({ columns: [{ key: 'name', label: 'Name', sticky: false }, { key: 'actions', label: 'Actions', sticky: false }] })
+    expect(wrapper.findAll('.sticky-col')).toHaveLength(0)
+    wrapper.unmount()
+  })
+
+  it('includes the measured selection control width in the pinned first-column offset', async () => {
+    const measure = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      return new DOMRect(0, 0, this.dataset.field ? 180 : 46, 48)
+    })
+    const wrapper = mount(DataTable, {
+      props: { selectable: true, columns: [{ key: 'name', label: 'Name' }], data: [{ id: 1, name: 'Name' }] }
+    })
+    try {
+      await flushPromises()
+      expect(wrapper.get('thead th:first-child').classes()).toContain('sticky-col-left')
+      for (const selector of ['thead', 'tbody']) {
+        expect((wrapper.get(`${selector} [data-field="name"]`).element as HTMLElement).style.left).toBe('46px')
+      }
+    } finally {
+      wrapper.unmount()
+      measure.mockRestore()
+    }
   })
 
   it.each(['desktop', 'mobile'])('keeps existing rows mounted during background refresh on %s', async viewport => {

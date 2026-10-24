@@ -1,7 +1,7 @@
 <template>
-  <div class="flex min-h-screen items-center justify-center bg-slate-50 p-4 dark:bg-slate-950">
+  <div class="flex min-h-screen items-center justify-center bg-canvas p-[var(--shell-gutter)] dark:surface-inset">
     <div
-      class="glass-surface w-full max-w-md space-y-4 p-6"
+      class="card w-full min-w-0 max-w-md space-y-4 p-6"
     >
       <!-- Amount + Order ID -->
       <div v-if="amount" class="text-center">
@@ -19,7 +19,7 @@
           {{ error }}
         </div>
         <button
-          class="w-full text-sm underline dark:text-blue-400 dark:hover:text-blue-300 surface-control"
+          class="btn btn-secondary w-full"
           :style="{ color: methodColor }"
           @click="closeWindow"
         >
@@ -32,7 +32,7 @@
         <div class="text-5xl text-green-600 dark:text-green-400">✓</div>
         <p class="text-sm dark:text-slate-400 surface-muted">{{ t('payment.result.success') }}</p>
         <button
-          class="text-sm underline dark:text-blue-400 dark:hover:text-blue-300 surface-control"
+          class="btn btn-secondary"
           :style="{ color: methodColor }"
           @click="closeWindow"
         >

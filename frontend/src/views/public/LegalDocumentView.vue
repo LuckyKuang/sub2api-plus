@@ -1,6 +1,6 @@
 <template>
-  <div class="min-h-screen surface-inset text-gray-900 dark:text-white">
-    <header class="border-b border-gray-200 surface-inset dark:border-dark-800">
+  <div class="flex min-h-screen flex-col gap-[var(--shell-gap)] bg-canvas p-[var(--shell-gutter)] text-gray-900 dark:surface-inset dark:text-white">
+    <header class="shell-surface">
       <div class="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
         <RouterLink to="/home" class="flex min-w-0 items-center gap-3">
           <template v-if="settings">
@@ -25,14 +25,14 @@
       </div>
     </header>
 
-    <main class="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:py-10">
-      <div v-if="loading" class="flex min-h-[320px] items-center justify-center">
+    <main class="mx-auto w-full min-w-0 max-w-4xl">
+      <div v-if="loading" class="card flex min-h-[320px] items-center justify-center">
         <div class="h-8 w-8 animate-spin rounded-full border-b-2 border-primary-600"></div>
       </div>
 
       <section
         v-else-if="loadError"
-        class="rounded-lg border border-red-200 bg-red-50/[0.15] p-6 text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200"
+        class="card border-red-200 p-6 text-red-700 dark:border-red-500/30 dark:text-red-200"
       >
         <h1 class="text-lg font-semibold">{{ t('legal.loadFailed') }}</h1>
         <p class="mt-2 text-sm">{{ t('legal.retryLater') }}</p>
@@ -40,7 +40,7 @@
 
       <section
         v-else-if="!currentDocument"
-        class="rounded-lg border border-gray-200 surface-inset p-6 dark:border-dark-700"
+        class="card p-6"
       >
         <div class="flex items-start gap-3">
           <span class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md surface-inset surface-muted">
@@ -55,7 +55,7 @@
         </div>
       </section>
 
-      <article v-else>
+      <article v-else class="card p-5 sm:p-8">
         <div class="mb-8 border-b border-gray-200 pb-6 dark:border-dark-700">
           <div class="flex items-start gap-4">
             <span class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-md bg-primary-50/[0.15] text-primary-700 dark:bg-primary-500/10 dark:text-primary-300">

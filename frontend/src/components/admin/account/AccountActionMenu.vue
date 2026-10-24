@@ -5,11 +5,11 @@
       <div class="fixed inset-0 z-[9998]" @click="emit('close')"></div>
       <div
         ref="menuRef"
-        class="action-menu-content fixed z-[9999] w-52 overflow-y-auto overscroll-contain rounded-xl shadow-lg ring-1 ring-black/5 surface-panel"
+        class="action-menu-content fixed z-[9999] w-52 overflow-y-auto overscroll-contain shadow-lg ring-1 ring-black/5 surface-panel"
         :style="menuStyle"
         @click.stop
       >
-        <div class="py-1">
+        <div class="space-y-0.5 p-1.5">
           <template v-if="account">
             <button @click="$emit('test', account); $emit('close')" class="flex w-full items-center gap-2 px-4 py-2 text-sm hover:surface-hover surface-control">
               <Icon name="play" size="sm" class="text-green-500" :stroke-width="2" />
@@ -166,3 +166,14 @@ onUnmounted(() => {
   window.removeEventListener('keydown', handleKeydown)
 })
 </script>
+
+<style scoped>
+.action-menu-content {
+  border-radius: var(--surface-radius-panel);
+}
+
+.action-menu-content button {
+  @apply px-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500/50;
+  border-radius: var(--surface-radius-item);
+}
+</style>

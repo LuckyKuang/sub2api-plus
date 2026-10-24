@@ -31,7 +31,7 @@
       />
 
       <!-- Date Input -->
-      <input
+      <DateTimePicker :aria-label="attr.name"
         v-else-if="attr.type === 'date'"
         v-model="localValues[attr.id]"
         type="date"
@@ -92,6 +92,7 @@
 </template>
 
 <script setup lang="ts">
+import DateTimePicker from '@/components/common/DateTimePicker.vue'
 import { ref, watch, onMounted } from 'vue'
 import { adminAPI } from '@/api/admin'
 import type { UserAttributeDefinition, UserAttributeValuesMap } from '@/types'

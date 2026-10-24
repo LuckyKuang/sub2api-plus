@@ -1,10 +1,10 @@
 <template>
-  <div ref="panel" class="min-w-0 space-y-4 p-3 sm:p-4" @pointerdown="markReading" @focusin="markReading" @wheel.passive="markReading" @touchstart.passive="markReading">
-    <div class="flex flex-wrap items-center justify-between gap-3">
+  <div ref="panel" class="min-w-0 p-3 sm:p-4" :class="workspace ? 'workspace-body' : 'space-y-4'" @pointerdown="markReading" @focusin="markReading" @wheel.passive="markReading" @touchstart.passive="markReading">
+    <div class="flex flex-wrap items-center justify-between gap-3" :class="{ 'workspace-fixed': workspace }">
       <div class="text-xs surface-muted"><p>{{ t('inspection.liveHint') }}</p><p>{{ t('inspection.liveWindow', { limit: snapshot?.limit ?? 200 }) }}</p></div>
       <RefreshControl :state="refresh" switch-visible manual />
     </div>
-    <div class="flex flex-wrap items-end gap-2">
+    <div class="flex flex-wrap items-end gap-2" :class="{ 'workspace-fixed': workspace }">
       <div class="flex min-h-9 rounded-lg surface-inset p-1" role="group" :aria-label="t('requestList.result')">
         <button v-for="item in ['all', 'success', 'abnormal']" :key="item" type="button" class="rounded-md px-3 py-1 text-xs surface-control" :class="resultFilter === item ? 'surface-field shadow-sm dark:surface-field' : 'text-gray-500'" :aria-pressed="resultFilter === item" @click="resultFilter = item">{{ t(`requestList.${item}`) }}</button>
       </div>
@@ -24,11 +24,11 @@
         </details>
       </div>
     </div>
-    <p class="text-xs surface-muted">{{ t('requestList.windowFilters') }}</p>
-    <p v-if="snapshot?.truncated" role="status" class="text-xs text-amber-600">{{ t('inspection.liveTruncated') }}</p>
-    <button v-if="pending" type="button" class="btn btn-secondary" @click="showLatest">{{ t('inspection.newRecords') }}</button>
-    <div v-if="desktop" class="overflow-x-auto">
-      <DataTable :columns="columns" :data="filteredRows" :loading="!snapshot && refresh.fetching.value">
+    <p class="text-xs surface-muted" :class="{ 'workspace-fixed': workspace }">{{ t('requestList.windowFilters') }}</p>
+    <p v-if="snapshot?.truncated" role="status" class="text-xs text-amber-600" :class="{ 'workspace-fixed': workspace }">{{ t('inspection.liveTruncated') }}</p>
+    <button v-if="pending" type="button" class="btn btn-secondary" :class="{ 'workspace-fixed': workspace }" @click="showLatest">{{ t('inspection.newRecords') }}</button>
+    <div v-if="desktop" :class="workspace ? 'workspace-body !gap-0' : 'overflow-x-auto'">
+      <DataTable :class="{ 'workspace-table-viewport': workspace }" :columns="columns" :data="filteredRows" :loading="!snapshot && refresh.fetching.value">
         <template #cell-started_at="{ row }"><time class="whitespace-nowrap text-xs tabular-nums" :datetime="row.started_at" :title="formatDateTime(row.started_at)">{{ shortTime(row.started_at) }}</time></template>
         <template #cell-model="{ row }"><div class="max-w-52 break-words text-sm font-medium" :title="row.model">{{ row.model }}</div><div v-if="row.reasoning_effort" class="text-xs surface-muted">{{ row.reasoning_effort }}</div></template>
         <template #cell-user_id="{ row }"><span class="text-xs">#{{ row.user_id }}</span><div class="max-w-40 break-all text-xs surface-muted">{{ row.key_name }}</div></template>
@@ -63,7 +63,7 @@
         </dl>
       </article>
     </div>
-    <p v-if="copied" role="status" class="text-xs text-primary-600">{{ t('inspection.copied') }}</p>
+    <p v-if="copied" role="status" class="text-xs text-primary-600" :class="{ 'workspace-fixed': workspace }">{{ t('inspection.copied') }}</p>
   </div>
 </template>
 <script setup lang="ts">
@@ -85,7 +85,7 @@ import RefreshControl from '@/components/common/RefreshControl.vue'
 import LiveRequestResult from './LiveRequestResult.vue'
 import LiveRequestMetrics from './LiveRequestMetrics.vue'
 import LiveRequestTokens from './LiveRequestTokens.vue'
-const props = defineProps<{ mode: 'user' | 'admin' }>()
+const props = defineProps<{ mode: 'user' | 'admin'; workspace?: boolean }>()
 const { t } = useI18n()
 const auth = useAuthStore()
 const desktop = useMediaQuery('(min-width: 768px)')

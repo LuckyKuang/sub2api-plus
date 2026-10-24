@@ -34,8 +34,8 @@
         </p>
       </div>
 
-      <div v-else class="max-h-96 overflow-auto rounded-lg border border-gray-200 dark:border-dark-600">
-        <table class="min-w-full divide-y divide-gray-200 dark:divide-dark-700">
+      <div v-else class="record-table-scroll max-h-96 overflow-auto rounded-lg border border-gray-200 dark:border-dark-600">
+        <table class="record-table min-w-full divide-y divide-gray-200 dark:divide-dark-700">
           <thead class="sticky top-0 surface-inset">
             <tr>
               <th class="px-3 py-2 text-left text-xs font-medium uppercase surface-muted">

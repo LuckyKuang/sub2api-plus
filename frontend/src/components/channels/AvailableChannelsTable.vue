@@ -1,10 +1,10 @@
 <template>
-  <!-- .table-wrapper 是 TablePageLayout 滚动链的挂载点：外层 .table-scroll-container
-       负责卡片外观并 overflow-hidden，本层接收 overflow-y-auto 才能在内容超高时滚动。 -->
-  <div class="table-wrapper">
+  <div class="record-table-scroll table-wrapper">
+    <!-- .table-wrapper 是 TablePageLayout 滚动链的挂载点：外层 .table-scroll-container
+         负责卡片外观并 overflow-hidden，本层接收 overflow-y-auto 才能在内容超高时滚动。 -->
     <table
       data-testid="desktop-channels"
-      class="!hidden w-full table-fixed border-collapse text-sm lg:!table"
+      class="record-table !hidden w-full table-fixed border-collapse text-sm lg:!table"
     >
       <thead>
         <tr class="border-b border-gray-100 surface-inset text-xs font-medium uppercase tracking-wide dark:border-dark-700 surface-muted">
@@ -30,24 +30,23 @@
           </td>
         </tr>
       </tbody>
-      <!-- 每个渠道一个 tbody：首行 td rowspan 渠道名，后续行只渲染其余三列。
-           tbody 之间强分隔线表达"渠道边界"，tbody 内部用淡分隔线区分平台。 -->
+      <!-- 渠道名称和描述跨平台行合并，所有平台共同组成一张渠道卡片。 -->
       <tbody
         v-else
         v-for="(channel, chIdx) in rows"
         :key="`${channel.name}-${chIdx}`"
-        class="border-b-2 border-gray-200 last:border-b-0 dark:border-dark-600"
+        class="record-group"
       >
         <tr
           v-for="(section, secIdx) in channel.platforms"
           :key="`${channel.name}-${section.platform}`"
-          class="transition-colors hover:surface-hover"
-          :class="{ 'border-t border-gray-100/70 dark:border-dark-700/50': secIdx > 0 }"
+          class="transition-colors"
         >
           <!-- 渠道名：只在第一行渲染并用 rowspan 纵向合并 -->
           <td
             v-if="secIdx === 0"
             :rowspan="channel.platforms.length"
+            data-record-edges="t b l tl bl"
             class="px-4 py-3 text-center align-middle font-medium text-gray-900 dark:text-white"
           >
             {{ channel.name }}
@@ -57,6 +56,7 @@
           <td
             v-if="secIdx === 0"
             :rowspan="channel.platforms.length"
+            data-record-edges="t b"
             class="px-4 py-3 align-middle text-xs surface-muted"
           >
             <template v-if="channel.description">{{ channel.description }}</template>
@@ -64,7 +64,7 @@
           </td>
 
           <!-- 平台徽章 -->
-          <td class="align-top px-4 py-3">
+          <td :data-record-edges="[secIdx === 0 && 't', secIdx === channel.platforms.length - 1 && 'b'].filter(Boolean).join(' ')" class="align-top px-4 py-3">
             <span
               :class="[
                 'inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium uppercase',
@@ -77,7 +77,7 @@
           </td>
 
           <!-- 分组：专属分组在前（紫色 shield 行），公开分组在后（灰色 globe 行）。 -->
-          <td class="align-top px-4 py-3">
+          <td :data-record-edges="[secIdx === 0 && 't', secIdx === channel.platforms.length - 1 && 'b'].filter(Boolean).join(' ')" class="align-top px-4 py-3">
             <div class="flex flex-col gap-1.5">
               <div
                 v-if="exclusiveGroups(section).length > 0"
@@ -152,7 +152,7 @@
           </td>
 
           <!-- 支持模型 -->
-          <td class="align-top px-4 py-3">
+          <td :data-record-edges="['r', secIdx === 0 && 't tr', secIdx === channel.platforms.length - 1 && 'b br'].filter(Boolean).join(' ')" class="align-top px-4 py-3">
             <div class="flex flex-wrap gap-1">
               <SupportedModelChip
                 v-for="m in section.supported_models"

@@ -1,5 +1,5 @@
 <template>
-  <div class="app-layout" :class="{ 'sidebar-is-collapsed': sidebarCollapsed }">
+  <div class="app-layout" :class="{ 'sidebar-is-collapsed': sidebarCollapsed, 'app-layout-workspace': workspace }">
     <!-- Sidebar -->
     <AppSidebar />
 
@@ -31,6 +31,8 @@ import { useUserView } from '@/composables/useUserView'
 import { adminSupportContext } from '@/utils/adminSupportContext'
 import AppSidebar from './AppSidebar.vue'
 import AppHeader from './AppHeader.vue'
+
+withDefaults(defineProps<{ workspace?: boolean }>(), { workspace: false })
 
 const appStore = useAppStore()
 const authStore = useAuthStore()

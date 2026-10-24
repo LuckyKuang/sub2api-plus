@@ -1,6 +1,6 @@
 <template>
-  <AppLayout>
-    <div class="space-y-6">
+  <AppLayout workspace>
+    <div class="workspace-page">
       <!-- Loading State -->
       <div v-if="loading" class="flex items-center justify-center py-12">
         <div
@@ -9,9 +9,9 @@
       </div>
 
       <!-- Settings Form -->
-      <form v-else @submit.prevent="saveSettings" class="space-y-6" novalidate>
+      <form v-else @submit.prevent="saveSettings" class="workspace-body workspace-clip" novalidate>
         <!-- Tab Navigation -->
-        <div class="settings-tabs-shell">
+        <div class="settings-tabs-shell workspace-fixed">
           <nav
             class="settings-tabs-scroll"
             role="tablist"
@@ -44,6 +44,7 @@
           </nav>
         </div>
 
+        <div ref="settingsBody" class="workspace-scroll workspace-stack space-y-6" data-test="settings-body-scroll">
         <!-- Tab: Security — Admin API Key -->
         <div v-show="activeTab === 'security'" class="space-y-6">
           <!-- Admin API Key Settings -->
@@ -4084,8 +4085,8 @@
                     {{ t("admin.settings.defaults.platformQuotaNotice") }}
                   </p>
                 </div>
-                <div class="table-container overflow-x-auto">
-                  <table class="table min-w-full">
+                <div class="record-table-scroll table-container overflow-x-auto">
+                  <table class="record-table table min-w-full">
                     <thead>
                       <tr class="text-left text-xs surface-muted">
                         <th>{{ t("admin.settings.platformQuota.platform") }}</th>
@@ -4419,8 +4420,8 @@
                           {{ t("admin.settings.authSourceDefaults.platformQuotasOverrideHint") }}
                         </p>
                       </div>
-                      <div class="table-container overflow-x-auto">
-                        <table class="table min-w-full">
+                      <div class="record-table-scroll table-container overflow-x-auto">
+                        <table class="record-table table min-w-full">
                           <thead>
                             <tr class="text-left text-xs surface-muted">
                               <th>{{ t("admin.settings.platformQuota.platform") }}</th>
@@ -5854,8 +5855,8 @@
                         <label class="text-xs surface-muted">{{
                           t("admin.settings.webSearchEmulation.subscribedAt")
                         }}</label>
-                        <input
-                          :value="formatSubscribedAt(provider.subscribed_at)"
+                        <DateTimePicker :aria-label="t('admin.settings.webSearchEmulation.subscribedAt')"
+                          :model-value="formatSubscribedAt(provider.subscribed_at)"
                           type="date"
                           class="input text-sm"
                           @input="
@@ -6709,7 +6710,7 @@
                   <label class="mb-2 block text-sm font-medium surface-muted">
                     {{ localText("条款更新日期", "Updated date") }}
                   </label>
-                  <input
+                  <DateTimePicker :aria-label="localText('条款更新日期', 'Updated date')"
                     v-model="form.login_agreement_updated_at"
                     type="date"
                     class="input"
@@ -7363,8 +7364,8 @@
                   </button>
                 </div>
 
-                <div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-dark-700">
-                  <table class="min-w-full divide-y divide-gray-200 dark:divide-dark-700">
+                <div class="record-table-scroll overflow-x-auto rounded-lg border border-gray-200 dark:border-dark-700">
+                  <table class="record-table record-table-compact min-w-full divide-y divide-gray-200 dark:divide-dark-700">
                     <thead class="surface-inset">
                       <tr>
                         <th class="px-3 py-2 text-left">
@@ -8715,8 +8716,10 @@
           <BackupSettings />
         </div>
 
+        </div>
+
         <!-- Save Button -->
-        <div v-show="activeTab !== 'backup'" class="flex justify-end">
+        <div v-show="activeTab !== 'backup'" class="card workspace-fixed flex justify-end px-6 py-3" data-test="settings-save-bar">
           <button
             type="submit"
             :disabled="saving || loadFailed"
@@ -8789,6 +8792,7 @@
 </template>
 
 <script setup lang="ts">
+import DateTimePicker from '@/components/common/DateTimePicker.vue'
 import { ref, reactive, computed, onMounted, watch } from "vue";
 import { listPlatformIds } from "@/constants/platformCatalog";
 import { useI18n } from "vue-i18n";
@@ -8935,6 +8939,10 @@ type SettingsTab =
   | "email"
   | "backup";
 const activeTab = ref<SettingsTab>("general");
+const settingsBody = ref<HTMLElement | null>(null);
+watch(activeTab, () => {
+  if (settingsBody.value) settingsBody.value.scrollTop = 0;
+});
 const outboundIdentitySettings = ref<InstanceType<typeof OutboundIdentitySettings>>();
 const identityTabVisited = ref(false);
 watch(activeTab, (tab) => { if (tab === 'identity') identityTabVisited.value = true; }, { immediate: true });
@@ -13095,8 +13103,7 @@ watch(
 
 /* ============ 系统设置 Tab 导航 ============ */
 .settings-tabs-shell {
-  @apply sticky z-20 rounded-2xl border p-1.5;
-  top: var(--shell-sticky-offset);
+  @apply relative z-20 rounded-2xl border p-1.5;
   background: var(--surface-fill);
   border-color: var(--surface-edge);
   box-shadow:

@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 import type { DashboardStats } from '@/types'
@@ -90,6 +90,8 @@ const createDashboardStats = (): DashboardStats => ({
   tpm: 0
 })
 
+enableAutoUnmount(afterEach)
+
 describe('admin DashboardView', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -117,6 +119,33 @@ describe('admin DashboardView', () => {
       start_date: '',
       end_date: ''
     })
+  })
+
+  it('keeps the toolbar and chart instances when selecting a compact dashboard chart tab', async () => {
+    const wrapper = mount(DashboardView, {
+      attachTo: document.body,
+      global: { stubs: {
+        AppLayout: { template: '<div><slot /></div>' }, LoadingSpinner: true,
+        Icon: true, DateRangePicker: true, Select: true, RefreshControl: true,
+        ModelDistributionChart: { template: '<div data-testid="model-chart" />' },
+        TokenUsageTrend: true,
+      } },
+    })
+    await flushPromises()
+    const chart = wrapper.get('[data-testid="model-chart"]').element
+    const toolbar = wrapper.get('.dashboard-toolbar').element
+    expect(wrapper.findAll('.dashboard-kpis > .card')).toHaveLength(8)
+    expect(wrapper.text()).not.toContain('admin.dashboard.quickActions')
+    expect(wrapper.get('.dashboard-user-trend').isVisible()).toBe(false)
+    await wrapper.get('[role="tablist"] button:nth-child(2)').trigger('click')
+    expect(wrapper.get('.dashboard-user-trend').isVisible()).toBe(true)
+    expect(wrapper.get('[data-testid="model-chart"]').isVisible()).toBe(false)
+    await wrapper.get('[role="tablist"] button:first-child').trigger('click')
+    expect(wrapper.get('[data-testid="model-chart"]').element).toBe(chart)
+    expect(wrapper.get('.dashboard-toolbar').element).toBe(toolbar)
+    expect(getSnapshotV2).toHaveBeenCalledTimes(1)
+    expect(getUserUsageTrend).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
   })
 
   it('switches metrics and ignores a stale tokens response', async () => {

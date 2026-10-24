@@ -3,17 +3,17 @@
     <div class="space-y-6">
       <!-- Current Balance Card -->
       <div class="card overflow-hidden">
-        <div class="bg-gradient-to-br from-primary-500 to-primary-600 px-6 py-8 text-center">
+        <div class="redeem-balance px-6 py-8 text-center">
           <div
             class="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl surface-inset"
           >
-            <Icon name="creditCard" size="xl" class="text-white" />
+            <Icon name="creditCard" size="xl" class="text-primary-600 dark:text-primary-400" />
           </div>
-          <p class="text-sm font-medium text-primary-100">{{ t('redeem.currentBalance') }}</p>
-          <p class="mt-2 text-4xl font-bold text-white">
+          <p class="text-sm font-medium surface-muted">{{ t('redeem.currentBalance') }}</p>
+          <p class="mt-2 text-4xl font-bold">
             ${{ user?.balance?.toFixed(2) || '0.00' }}
           </p>
-          <p class="mt-2 text-sm text-primary-100">
+          <p class="mt-2 text-sm surface-muted">
             {{ t('redeem.concurrency') }}: {{ user?.concurrency || 0 }} {{ t('redeem.requests') }}
           </p>
         </div>
@@ -205,7 +205,7 @@
             {{ t('redeem.recentActivity') }}
           </h2>
         </div>
-        <div class="p-6">
+        <div class="redeem-history p-6">
           <!-- Loading State -->
           <div v-if="loadingHistory" class="flex items-center justify-center py-8">
             <svg class="h-6 w-6 animate-spin text-primary-500" fill="none" viewBox="0 0 24 24">
@@ -335,7 +335,7 @@
               {{ t('redeem.historyWillAppear') }}
             </p>
           </div>
-          <div class="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm">
+          <div class="redeem-history-pagination mt-4 text-sm">
             <span>{{ t('common.total') }}: {{ historyTotal }} {{ t('pagination.results') }}</span>
             <label>
               {{ t('pagination.perPage') }}
@@ -537,6 +537,22 @@ useLocaleRefresh(() => fetchHistory(historyPage.value))
 </script>
 
 <style scoped>
+.redeem-balance { color: var(--surface-text); background-color: var(--surface-fill); background-image: linear-gradient(135deg, var(--surface-glint), transparent 65%); }
+.redeem-history { container-name: redeem-history; container-type: inline-size; }
+.redeem-history-pagination {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 12px;
+}
+.redeem-history-pagination > label { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.redeem-history-pagination > button { min-width: 80px; white-space: nowrap; }
+@container redeem-history (max-width: 540px) {
+  .redeem-history-pagination { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .redeem-history-pagination > label { justify-self: end; }
+  .redeem-history-pagination > button { width: 100%; }
+}
+
 .fade-enter-active,
 .fade-leave-active {
   transition: all 0.3s ease;

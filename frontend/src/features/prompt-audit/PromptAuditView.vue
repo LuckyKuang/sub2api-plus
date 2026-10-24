@@ -1,8 +1,8 @@
 <template>
-  <AppLayout>
-    <div class="mx-auto max-w-[1600px]" :class="activeTab === 'config' && draft ? 'pb-28' : 'pb-8'">
-      <header class="mb-6 flex flex-wrap items-end justify-between gap-4">
-        <div>
+  <AppLayout workspace>
+    <div class="workspace-page">
+      <header class="prompt-page-heading workspace-fixed flex flex-wrap items-end justify-between gap-4">
+        <div class="min-w-0">
           <p class="text-xs font-semibold uppercase tracking-[0.16em] text-primary-600 dark:text-primary-400">{{ t('nav.securityAudit') }}</p>
           <h1 class="mt-1 text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">{{ t('admin.promptAudit.title') }}</h1>
           <p class="mt-2 max-w-3xl text-sm surface-muted">{{ t('admin.promptAudit.description') }}</p>
@@ -19,26 +19,23 @@
       </div>
 
       <template v-else>
-        <div class="mb-4" role="tablist" :aria-label="t('admin.promptAudit.title')">
-          <div class="tabs inline-flex">
+        <div class="card workspace-tabs workspace-fixed" role="tablist" :aria-label="t('admin.promptAudit.title')">
             <button
               v-for="tab in pageTabs"
               :key="tab.id"
               type="button"
               role="tab"
-              class="tab"
-              :class="{ 'tab-active': activeTab === tab.id }"
+              class="workspace-tab"
               :aria-selected="activeTab === tab.id"
               :data-test="`tab-${tab.id}`"
               @click="activeTab = tab.id"
             >
               {{ tab.label }}
             </button>
-          </div>
         </div>
 
-        <main class="card px-4 sm:px-6 lg:px-8">
-          <div v-show="activeTab === 'config'" data-test="tab-panel-config">
+        <main class="card workspace-body workspace-clip px-4 sm:px-6">
+          <div v-show="activeTab === 'config'" class="workspace-scroll" data-test="tab-panel-config">
             <RuntimeOverview :runtime="runtime" :loading="loading.runtime" :error="loadErrors.runtime" @refresh="loadRuntime" />
 
             <template v-if="draft">
@@ -54,12 +51,12 @@
             </template>
           </div>
 
-          <div v-show="activeTab === 'events'" data-test="tab-panel-events">
+          <div v-show="activeTab === 'events'" class="workspace-body workspace-clip" data-test="tab-panel-events">
             <div
               v-if="draft?.enabled && !draft.store_pass_events"
               data-test="pass-events-disabled-notice"
               role="status"
-              class="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/[0.15] px-4 py-3 text-sm text-amber-900 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-200"
+              class="prompt-events-notice workspace-fixed mt-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/[0.15] px-4 py-3 text-sm text-amber-900 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-200"
             >
               <span>{{ t('admin.promptAudit.events.passEventsDisabled') }}</span>
               <button type="button" class="btn btn-secondary btn-sm" @click="activeTab = 'config'">
@@ -88,23 +85,23 @@
           </div>
         </main>
       </template>
-    </div>
 
-    <div v-if="draft && activeTab === 'config'" class="fixed inset-x-0 bottom-0 z-30 border-t border-gray-200 surface-inset px-4 py-3 shadow-[0_-12px_35px_rgba(15,23,42,0.08)] dark:border-dark-700/80 dark:shadow-[0_-12px_35px_rgba(0,0,0,0.35)] lg:left-64">
-      <div class="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-3">
-        <div class="flex flex-wrap items-center gap-x-5 gap-y-2">
-          <SaveToggle :label="t('admin.promptAudit.saveBar.enabled')" :model-value="draft.enabled" data-test="enabled-toggle" @update:model-value="setEnabled" />
-          <SaveToggle :label="t('admin.promptAudit.saveBar.blocking')" :model-value="draft.blocking_enabled" :disabled="!draft.enabled" data-test="blocking-toggle" @update:model-value="setBlocking" />
-          <SaveToggle :label="t('admin.promptAudit.saveBar.storePass')" :model-value="draft.store_pass_events" data-test="store-pass-toggle" @update:model-value="replaceDraft({ ...draft!, store_pass_events: $event })" />
-        </div>
-        <div class="flex items-center gap-3">
-          <span class="text-sm" :class="dirty ? 'text-amber-700 dark:text-amber-300' : 'surface-muted'">
-            {{ dirty ? t('admin.promptAudit.saveBar.dirty') : t('admin.promptAudit.saveBar.synced') }}
-          </span>
-          <button type="button" class="btn btn-secondary" :disabled="!dirty || loading.saving" @click="resetDraft">{{ t('common.reset') }}</button>
-          <button type="button" class="btn btn-primary" :disabled="!dirty || loading.saving" data-test="save-config" @click="saveConfig">
-            {{ loading.saving ? t('common.saving') : t('common.save') }}
-          </button>
+      <div v-if="draft && activeTab === 'config'" class="card workspace-fixed px-4 py-3" data-test="prompt-save-bar">
+        <div class="flex min-w-0 flex-wrap items-center justify-between gap-3">
+          <div class="flex flex-wrap items-center gap-x-5 gap-y-2">
+            <SaveToggle :label="t('admin.promptAudit.saveBar.enabled')" :model-value="draft.enabled" data-test="enabled-toggle" @update:model-value="setEnabled" />
+            <SaveToggle :label="t('admin.promptAudit.saveBar.blocking')" :model-value="draft.blocking_enabled" :disabled="!draft.enabled" data-test="blocking-toggle" @update:model-value="setBlocking" />
+            <SaveToggle :label="t('admin.promptAudit.saveBar.storePass')" :model-value="draft.store_pass_events" data-test="store-pass-toggle" @update:model-value="replaceDraft({ ...draft!, store_pass_events: $event })" />
+          </div>
+          <div class="flex items-center gap-3">
+            <span class="text-sm" :class="dirty ? 'text-amber-700 dark:text-amber-300' : 'surface-muted'">
+              {{ dirty ? t('admin.promptAudit.saveBar.dirty') : t('admin.promptAudit.saveBar.synced') }}
+            </span>
+            <button type="button" class="btn btn-secondary" :disabled="!dirty || loading.saving" @click="resetDraft">{{ t('common.reset') }}</button>
+            <button type="button" class="btn btn-primary" :disabled="!dirty || loading.saving" data-test="save-config" @click="saveConfig">
+              {{ loading.saving ? t('common.saving') : t('common.save') }}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -414,3 +411,13 @@ function formatDate(value: string): string {
 
 onMounted(loadInitial)
 </script>
+
+<style scoped>
+@media (min-width: 1024px) {
+  .prompt-page-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; }
+  .prompt-page-heading > div:first-child > p:last-child { margin-top: 4px; font-size: 12px; line-height: 18px; }
+  .prompt-events-notice { flex-wrap: nowrap; gap: 8px; margin-top: 12px; padding: 8px 12px; font-size: 12px; line-height: 18px; }
+  .prompt-events-notice > span { min-width: 0; flex: 1; }
+  .prompt-events-notice > button { flex: none; }
+}
+</style>

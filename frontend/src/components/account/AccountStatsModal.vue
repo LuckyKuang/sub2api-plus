@@ -484,6 +484,7 @@
 </template>
 
 <script setup lang="ts">
+import { chartTooltipStyle } from '@/utils/chartTooltip'
 import { useDocumentDarkMode } from '@/composables/useDocumentDarkMode'
 import { ref, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -602,6 +603,7 @@ const lineChartOptions = computed(() => ({
       }
     },
     tooltip: {
+      ...chartTooltipStyle(isDarkMode.value),
       callbacks: {
         label: (context: any) => {
           const label = context.dataset.label || ''

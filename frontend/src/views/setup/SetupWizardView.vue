@@ -1,10 +1,10 @@
 <template>
   <div
-    class="flex min-h-screen items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 p-4 dark:from-dark-900 dark:to-dark-800"
+    class="flex min-h-screen items-center justify-center bg-canvas p-[var(--shell-gutter)] dark:surface-inset"
   >
-    <div class="w-full max-w-2xl">
+    <div class="flex w-full min-w-0 max-w-2xl flex-col gap-[var(--shell-gap)]">
       <!-- Logo & Title -->
-      <div class="mb-8 text-center">
+      <div class="shell-surface px-5 py-6 text-center">
         <div
           class="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-primary-500 to-primary-600 shadow-lg"
         >
@@ -15,7 +15,7 @@
       </div>
 
       <!-- Progress Steps -->
-      <div class="mb-8">
+      <div class="card px-3 py-5 sm:px-6">
         <div class="flex items-center justify-center">
           <template v-for="(step, index) in steps" :key="step.id">
             <div class="flex items-center">
@@ -58,7 +58,7 @@
       </div>
 
       <!-- Step Content -->
-      <div class="rounded-2xl surface-inset p-8 shadow-xl">
+      <div class="card p-5 sm:p-8">
         <!-- Step 1: Database -->
         <div v-if="currentStep === 0" class="space-y-6">
           <div class="mb-6 text-center">
