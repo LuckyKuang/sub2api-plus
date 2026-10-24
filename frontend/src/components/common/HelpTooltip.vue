@@ -159,21 +159,9 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-/* Preserve the hover bridge in ::before; blur only the panel in ::after. */
+/* Keep the hover bridge between the trigger and the solid tooltip panel. */
 .help-tooltip-panel::before {
   inset: 100% 0 auto;
   height: 0.75rem;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
-.help-tooltip-panel::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  border-radius: inherit;
-  pointer-events: none;
-  backdrop-filter: var(--surface-panel-filter);
-  -webkit-backdrop-filter: var(--surface-panel-filter);
 }
 </style>

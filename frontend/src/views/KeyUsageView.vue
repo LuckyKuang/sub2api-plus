@@ -156,7 +156,7 @@
         <div v-else-if="resultData" class="space-y-6">
           <!-- Status Badge -->
           <div v-if="statusInfo" class="fade-up flex items-center justify-center mb-2">
-            <div class="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-gray-200 surface-inset shadow-sm backdrop-blur-sm dark:border-dark-700">
+            <div class="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-gray-200 surface-inset shadow-sm dark:border-dark-700">
               <span
                 class="w-2.5 h-2.5 rounded-full pulse-dot"
                 :class="statusInfo.isActive ? 'bg-emerald-500' : 'bg-rose-500'"
@@ -172,7 +172,7 @@
             <div
               v-for="(ring, i) in ringItems"
               :key="i"
-              class="fade-up rounded-2xl border border-gray-200 surface-inset p-8 backdrop-blur-sm transition-all duration-300 hover:shadow-lg dark:border-dark-700"
+              class="fade-up rounded-2xl border border-gray-200 surface-inset p-8 transition-all duration-300 hover:shadow-lg dark:border-dark-700"
               :class="`fade-up-delay-${Math.min(i + 1, 4)}`"
             >
               <div class="flex items-center justify-between mb-6">
@@ -239,7 +239,7 @@
           <!-- Detail Card -->
           <div
             v-if="detailRows.length > 0"
-            class="fade-up fade-up-delay-3 rounded-2xl border border-gray-200 surface-inset backdrop-blur-sm overflow-hidden dark:border-dark-700"
+            class="fade-up fade-up-delay-3 rounded-2xl border border-gray-200 surface-inset overflow-hidden dark:border-dark-700"
           >
             <div class="px-8 py-5 border-b border-gray-200 dark:border-dark-700">
               <h3 class="text-sm font-semibold uppercase tracking-wider surface-muted">{{ t('keyUsage.detailInfo') }}</h3>
@@ -272,7 +272,7 @@
           <!-- Usage Stats Card -->
           <div
             v-if="usageStatCells.length > 0"
-            class="fade-up fade-up-delay-3 rounded-2xl border border-gray-200 surface-inset backdrop-blur-sm overflow-hidden dark:border-dark-700"
+            class="fade-up fade-up-delay-3 rounded-2xl border border-gray-200 surface-inset overflow-hidden dark:border-dark-700"
           >
             <div class="px-8 py-5 border-b border-gray-200 dark:border-dark-700">
               <h3 class="text-sm font-semibold uppercase tracking-wider surface-muted">{{ t('keyUsage.tokenStats') }}</h3>
@@ -294,7 +294,7 @@
           <!-- Daily Usage Table -->
           <div
             v-if="showDailyUsage"
-            class="fade-up fade-up-delay-4 rounded-2xl border border-gray-200 surface-inset backdrop-blur-sm overflow-hidden dark:border-dark-700"
+            class="fade-up fade-up-delay-4 rounded-2xl border border-gray-200 surface-inset overflow-hidden dark:border-dark-700"
           >
             <div class="flex flex-col gap-3 px-8 py-5 border-b border-gray-200 dark:border-dark-700 sm:flex-row sm:items-center sm:justify-between">
               <h3 class="text-sm font-semibold uppercase tracking-wider surface-muted">{{ t('keyUsage.dailyDetail') }}</h3>
@@ -350,7 +350,7 @@
           <!-- Model Stats Table -->
           <div
             v-if="modelStats.length > 0"
-            class="fade-up fade-up-delay-4 rounded-2xl border border-gray-200 surface-inset backdrop-blur-sm overflow-hidden dark:border-dark-700"
+            class="fade-up fade-up-delay-4 rounded-2xl border border-gray-200 surface-inset overflow-hidden dark:border-dark-700"
           >
             <div class="px-8 py-5 border-b border-gray-200 dark:border-dark-700">
               <h3 class="text-sm font-semibold uppercase tracking-wider surface-muted">{{ t('keyUsage.modelStats') }}</h3>

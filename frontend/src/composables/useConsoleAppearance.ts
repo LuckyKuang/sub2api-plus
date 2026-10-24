@@ -29,18 +29,10 @@ export function useConsoleAppearance(source: () => ConsoleAppearance): void {
     const percent = (value: number, fallback: number) => Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : fallback
     root.style.setProperty('--console-light-mask-alpha', String(percent(appearance.light_mask, 30) / 100))
     root.style.setProperty('--console-dark-mask-alpha', String(percent(appearance.dark_mask, 48) / 100))
-    if (typeof appearance.card_transparency === 'number' && Number.isFinite(appearance.card_transparency)) {
-      root.style.setProperty('--console-card-alpha', String(1 - percent(appearance.card_transparency, 45) / 100))
-      root.setAttribute('data-console-custom-cards', '')
-    } else {
-      root.removeAttribute('data-console-custom-cards')
-      root.style.removeProperty('--console-card-alpha')
-    }
   })
 
   onScopeDispose(() => {
     clearBackground()
-    root.removeAttribute('data-console-custom-cards')
-    for (const key of ['--console-card-alpha', '--console-light-mask-alpha', '--console-dark-mask-alpha']) root.style.removeProperty(key)
+    for (const key of ['--console-light-mask-alpha', '--console-dark-mask-alpha']) root.style.removeProperty(key)
   })
 }

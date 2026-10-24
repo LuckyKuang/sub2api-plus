@@ -28,18 +28,21 @@ const published = { background_url: '/api/v1/settings/console-background/' + 'a'
 
 // Requirements: docs/UI_INTERACTION.md. Draft changes and reset are local;
 // explicit save alone publishes, failures retain the draft, navigation discards
-// preview, and upload uses the approved shared 45% transparency by default.
+// preview, and existing transparency values never affect solid content surfaces.
 describe('appearance settings draft and publication', () => {
-  it('starts with original theme opacity and no save until a change', async () => {
+  it('shows solid previews and canvas-mask controls without editable content transparency', async () => {
     const wrapper = mount(AppearanceSettingsCard, { props: { active: true } })
     await flushPromises()
-    expect(wrapper.get<HTMLInputElement>('input[type=checkbox]').element.checked).toBe(true)
-    expect(wrapper.get('#console-appearance-transparency').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('input[type=checkbox]').exists()).toBe(false)
+    expect(wrapper.find('#console-appearance-transparency').exists()).toBe(false)
+    expect(wrapper.findAll('input[type=range]')).toHaveLength(2)
+    expect(wrapper.findAll<HTMLElement>('.appearance-sample-card').map(item => item.element.style.backgroundColor))
+      .toEqual(['rgb(248, 250, 249)', 'rgb(38, 44, 45)'])
     expect(button(wrapper, 'save').attributes('disabled')).toBeDefined()
     expect(mocks.store.consoleAppearancePreview).toBeNull()
   })
 
-  it('previews uploads and sliders locally, then publishes exactly the chosen values on Save', async () => {
+  it('previews uploads and masks locally, then publishes them without assigning content transparency', async () => {
     const wrapper = mount(AppearanceSettingsCard, { props: { active: true } })
     await flushPromises()
     const file = new File(['local'], 'wallpaper.png', { type: 'image/png' })
@@ -48,48 +51,61 @@ describe('appearance settings draft and publication', () => {
     await input.trigger('change')
     await flushPromises()
     expect(mocks.prepare).toHaveBeenCalledWith(file)
-    expect(mocks.store.consoleAppearancePreview).toMatchObject({ card_transparency: 45, background_url: 'blob:' + location.origin + '/preview-image' })
+    expect(mocks.store.consoleAppearancePreview).toMatchObject({ card_transparency: null, background_url: 'blob:' + location.origin + '/preview-image' })
     expect(mocks.save).not.toHaveBeenCalled()
-    await wrapper.get('#console-appearance-transparency').setValue('60')
     await wrapper.get('#console-appearance-light_mask').setValue('20')
-    expect(mocks.store.consoleAppearancePreview).toMatchObject({ card_transparency: 60, light_mask: 20 })
-    mocks.save.mockResolvedValue({ ...published, card_transparency: 60, light_mask: 20 })
+    expect(mocks.store.consoleAppearancePreview).toMatchObject({ card_transparency: null, light_mask: 20 })
+    mocks.save.mockResolvedValue({ ...published, card_transparency: null, light_mask: 20 })
     await button(wrapper, 'save').trigger('click'); await flushPromises()
-    expect(mocks.save).toHaveBeenCalledWith({ background_image: 'data:image/jpeg;base64,Y29tcHJlc3NlZA==', light_mask: 20, dark_mask: 48, card_transparency: 60 })
-    expect(mocks.store.applyConsoleAppearance).toHaveBeenCalledWith({ ...published, card_transparency: 60, light_mask: 20 })
+    expect(mocks.save).toHaveBeenCalledWith({ background_image: 'data:image/jpeg;base64,Y29tcHJlc3NlZA==', light_mask: 20, dark_mask: 48, card_transparency: null })
+    expect(mocks.store.applyConsoleAppearance).toHaveBeenCalledWith({ ...published, card_transparency: null, light_mask: 20 })
     expect(mocks.store.consoleAppearancePreview).toBeNull()
     expect(URL.revokeObjectURL).toHaveBeenCalled()
+  })
+
+  it.each([0, 45, 100])('keeps previews solid and round-trips stored transparency %s without exposing an edit', async cardTransparency => {
+    mocks.get.mockResolvedValue({ ...published, card_transparency: cardTransparency })
+    const wrapper = mount(AppearanceSettingsCard, { props: { active: true } })
+    await flushPromises()
+    expect(wrapper.find('#console-appearance-transparency').exists()).toBe(false)
+    expect(wrapper.findAll<HTMLElement>('.appearance-sample-card').map(item => item.element.style.backgroundColor))
+      .toEqual(['rgb(248, 250, 249)', 'rgb(38, 44, 45)'])
+    await wrapper.get('#console-appearance-light_mask').setValue('20')
+    mocks.save.mockResolvedValue({ ...published, card_transparency: cardTransparency, light_mask: 20 })
+    await button(wrapper, 'save').trigger('click'); await flushPromises()
+    expect(mocks.save).toHaveBeenCalledWith({ light_mask: 20, dark_mask: 48, card_transparency: cardTransparency })
   })
 
   it('keeps restore-defaults as a draft until Save and retains it after a failed save', async () => {
     mocks.get.mockResolvedValue(published)
     const wrapper = mount(AppearanceSettingsCard, { props: { active: true } })
     await flushPromises()
+    const restored = { ...defaultConsoleAppearance(), card_transparency: 45 }
     await button(wrapper, 'restore').trigger('click')
-    expect(mocks.store.consoleAppearancePreview).toEqual(defaultConsoleAppearance())
+    expect(mocks.store.consoleAppearancePreview).toEqual(restored)
     expect(mocks.save).not.toHaveBeenCalled()
     mocks.save.mockRejectedValueOnce(new Error('offline'))
     await button(wrapper, 'save').trigger('click'); await flushPromises()
     expect(wrapper.get('[role=alert]').text()).toContain('saveFailed')
     expect(mocks.store.applyConsoleAppearance).not.toHaveBeenCalled()
-    expect(mocks.store.consoleAppearancePreview).toEqual(defaultConsoleAppearance())
-    mocks.save.mockResolvedValue(defaultConsoleAppearance())
+    expect(mocks.store.consoleAppearancePreview).toEqual(restored)
+    mocks.save.mockResolvedValue(restored)
     await button(wrapper, 'save').trigger('click'); await flushPromises()
-    expect(mocks.save).toHaveBeenLastCalledWith({ background_image: '', light_mask: 30, dark_mask: 48, card_transparency: null })
-    expect(mocks.store.applyConsoleAppearance).toHaveBeenCalledWith(defaultConsoleAppearance())
+    expect(mocks.save).toHaveBeenLastCalledWith({ background_image: '', light_mask: 30, dark_mask: 48, card_transparency: 45 })
+    expect(mocks.store.applyConsoleAppearance).toHaveBeenCalledWith(restored)
   })
 
   it('ends preview on tab navigation and discards edits without publishing', async () => {
     mocks.get.mockResolvedValue(published)
     const wrapper = mount(AppearanceSettingsCard, { props: { active: true } })
     await flushPromises()
-    await wrapper.get('#console-appearance-transparency').setValue('70')
-    expect(mocks.store.consoleAppearancePreview).toMatchObject({ card_transparency: 70 })
+    await wrapper.get('#console-appearance-light_mask').setValue('70')
+    expect(mocks.store.consoleAppearancePreview).toMatchObject({ light_mask: 70 })
     await wrapper.setProps({ active: false })
     expect(mocks.store.consoleAppearancePreview).toBeNull()
     await wrapper.setProps({ active: true })
     await button(wrapper, 'discard').trigger('click')
-    expect(wrapper.get<HTMLInputElement>('#console-appearance-transparency').element.value).toBe('45')
+    expect(wrapper.get<HTMLInputElement>('#console-appearance-light_mask').element.value).toBe('30')
     expect(mocks.save).not.toHaveBeenCalled()
     await button(wrapper, 'preview').trigger('click')
     wrapper.unmount()

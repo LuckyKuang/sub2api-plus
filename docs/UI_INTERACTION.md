@@ -1,7 +1,7 @@
 # Console layout and request inspection
 
 The console retains its colors, typography, navigation and business permissions.
-The brand, navigation, toolbar and business panels are independent glass cards.
+The brand, navigation, toolbar and business panels are independent solid cards.
 User, admin, support and operations pages share the same fluid content boundaries;
 there are no route-specific maximum page widths. Individual forms and external
 content may retain a readable inner width.
@@ -24,19 +24,19 @@ measures the remaining viewport height, including the bottom outer inset, and
 uses document scrolling below 1024px. Public/auth layouts retain their own geometry;
 operations fullscreen remains a dedicated full-screen view.
 
-Cards use translucent fills, a fine edge, soft shadow and backdrop blur over a
-subtle shared gradient. Dense tables, inputs and fixed columns use more opaque
-fills for legibility. Nested panels and rows do not add another blur layer.
-Shared surfaces apply blur to a non-interactive background pseudo-element, not
-the content container: dropdowns must paint above subsequent cards, and fixed
-dialogs must retain viewport positioning. Explicit scroll containers still own
-clipping; searchable selects and shared dialogs retain their body portals.
+Cards, nested sections, inputs, buttons, Select triggers, menus and dialogs use
+solid theme fills with their existing edges, soft shadows, highlights and focus
+states. Console surfaces use no backdrop filters or filter-only pseudo-elements.
+The shared background image or gradient remains visible on the page canvas
+between surfaces. Dropdowns must paint above subsequent cards, and fixed dialogs
+must retain viewport positioning. Explicit scroll containers still own clipping;
+searchable selects and shared dialogs retain their body portals.
 Surface positioning is a low-specificity fallback and must preserve component
 and utility positioning, including the sticky toolbar and absolute dropdowns.
 Keep that fallback outside Tailwind's component layer so important card/dropdown
 variants cannot promote positioning on unrelated surfaces.
-Light/dark themes share geometry. Unsupported blur and reduced-transparency
-preferences use an opaque surface; reduced-motion preferences disable transitions.
+Light/dark themes share geometry and solid surface behavior, including when
+reduced transparency is requested. Reduced-motion preferences disable transitions.
 
 On compact toolbars, secondary tools remain available in the user menu without
 mounting duplicate locale/subscription controls. The mobile drawer traps focus,
@@ -236,22 +236,23 @@ independent of today cards. [USAGE_TIMING](USAGE_TIMING.md) formulas remain unch
 ## Global console appearance
 
 In **System Settings → General → Appearance and background**, administrators can
-upload or replace a shared background, adjust light/dark masks independently,
-and set one card transparency for the sidebar, header, and content cards. The
-setting applies to both admin and user consoles. Each viewer retains their own
-theme choice. Text, buttons, dropdown panels, and modal surfaces retain their
-readability; surface transparency never changes ancestor `opacity` or adds a
-container filter. Glass blur stays on the existing decorative layer.
+upload or replace a shared background and adjust light/dark canvas masks
+independently. The setting applies to both admin and user consoles. Each viewer
+retains their own theme choice. The background and masks affect the page canvas;
+the sidebar, header, content cards, controls, tables and popup panels keep solid
+theme fills. There is no card-transparency control or client binding that changes
+surface opacity. Ancestor `opacity` and container filters must not be used to
+implement appearance settings.
 
 Upload and adjustment produce a local draft. Page preview affects only that
 administrator and ends when leaving General or the settings page. **Save
 appearance** publishes this card independently from other general settings.
 **Restore defaults** is also a draft until saved: it clears the image, restores
-the existing gradient, resets light/dark masks to 30%/48%, and restores the
-original theme-specific card opacity. After first uploading a custom image,
-custom card transparency starts at the approved 45% (55% background opacity).
-Custom transparency ranges from 0% opaque to 100% transparent. System reduced
-transparency preferences continue to request solid card surfaces.
+the existing gradient, and resets light/dark masks to 30%/48%. Preview content
+surfaces remain solid `#f8faf9` in the light theme and `#262c2d` in the dark theme.
+Uploading, previewing, saving or resetting the background must not introduce a
+card-transparency default or change the stored compatibility value described
+below.
 
 JPG/PNG/WebP input is limited to 10 MiB and 40 megapixels. The browser flattens
 and compresses it to JPEG, at most 2560 pixels on its longest side and 2 MiB.
@@ -264,12 +265,15 @@ not replace the active appearance.
 
 `GET/PUT /api/v1/admin/settings/appearance` use the existing admin authentication,
 rate limiting, compliance guard, and operation audit. PUT accepts `light_mask`,
-`dark_mask`, nullable `card_transparency` (null = original theme defaults), and
+`dark_mask`, nullable `card_transparency`, and
 optional `background_image` (JPEG/PNG/WebP data URL; omitted/null keeps the
 current image, empty string removes it). Percentages must be integers in
 0–100. Responses, `GET /api/v1/settings/public`, and injected `__APP_CONFIG__`
 expose `console_appearance` metadata only: `background_url`, the two masks,
-and transparency. Image bytes are never embedded in these public payloads.
+and transparency. The `card_transparency` API/storage field retains its existing
+protocol and validation for compatibility, without a migration. The appearance
+editor preserves and round-trips its current value; console rendering ignores
+it. Image bytes are never embedded in these public payloads.
 
 `GET /api/v1/settings/console-background/:revision` publicly serves the active
 JPEG with a SHA-256 URL, ETag, `nosniff`, and immutable caching. A replaced or
@@ -278,26 +282,28 @@ remain in browser caches until expiry. Saving invalidates the HTML settings
 cache and immediately updates the administrator's public-settings cache. Other
 viewers get the published appearance on refresh. Failed image loads fall back
 to the built-in gradient, and stale load completions must not replace a newer
-image or a reset. Table bodies share their card's glass surface. Sticky headers
-and columns retain translucent paint and blur while scrolling; they never switch
-to a solid black background. Hover, selection, edge shadows, stacking and focus
-remain intact.
+image or a reset. Table bodies, sticky headers and fixed columns use solid theme
+surfaces with no backdrop filters. Pinned cells cover horizontally scrolled
+content, with hover, selection, edge shadows, stacking and focus intact. Long
+document-scrolling usage lists must remain fully painted after repeated vertical
+jumps. This solid-surface rule applies across console pages, including outer
+cards and popup panels.
 
 Console surfaces use the shared tokens in `frontend/src/styles/console.css` and
 `surfaces.css`. `surface-card` paints standalone cards, `surface-inset` paints
 nested sections, `surface-control` paints buttons, and `surface-panel` owns
-dropdown/custom-dialog decoration. `surface-overlay` is a separate, lightly
-dimmed full-screen scrim, never a second glass panel. Shared Select, date-range,
+dropdown/custom-dialog paint. `surface-overlay` is a separate, lightly
+dimmed full-screen scrim without a backdrop filter. Shared Select, date-range,
 proxy, dialog and button styles use these same tokens. New controls must retain
 their integrated search, checkbox, focus, error and disabled behavior.
 
-With 45% card transparency, ordinary fields/buttons use 22% background opacity,
-inset sections 17.6%, menus/dialogs 55%, and sticky surfaces 31.9%. Menus/dialogs
-blur the decoration by 24px; controls use 10px. Deep-theme secondary text uses
-`#c1cdd1`, with distinct primary, selected and danger colors. Do not dim ancestor
-opacity or filter containers holding fixed menus. Preserve opaque switch thumbs,
-status/progress marks and QR quiet zones (`surface-opaque`). Reduced-transparency
-preferences and browsers without backdrop filtering use solid surface tokens.
+The main solid surface is `#f8faf9` in the light theme and `#262c2d` in the dark
+theme. Inset sections use `#edf2f0` and `#202627`, respectively. Shared card,
+control, panel and table tokens do not depend on card transparency or backdrop
+filter support. Deep-theme secondary text uses `#c1cdd1`, with distinct primary,
+selected and danger colors. Do not dim ancestor opacity or filter containers
+holding fixed menus. Preserve opaque switch thumbs, status/progress marks and
+QR quiet zones (`surface-opaque`).
 
 The date-range menu retains its trigger alignment when it fits, and otherwise
 stays at least 12px from the horizontal viewport edges. Opening, scrolling or

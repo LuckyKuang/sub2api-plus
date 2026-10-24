@@ -1,5 +1,5 @@
-/* Shared console paint. Layout, sizing, focus rings and portal z-index belong
-   to the component. Blur decorations never create a containing block for menus. */
+/* Shared solid console surfaces. Layout, sizing, focus rings and portal
+   z-index belong to the component. */
 :where(.surface-card, .surface-panel, .surface-control, .select-trigger, .btn) { position: relative; }
 
 .surface-card { background-color: var(--surface-fill); }
@@ -25,24 +25,6 @@
   background-color: var(--surface-hover);
 }
 
-:is(.surface-card, .surface-panel, .surface-control, .select-trigger, .btn)::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  border-radius: inherit;
-  pointer-events: none;
-  -webkit-backdrop-filter: var(--surface-filter);
-  backdrop-filter: var(--surface-filter);
-}
-:is(.surface-control, .select-trigger, .btn)::before {
-  -webkit-backdrop-filter: blur(10px) saturate(125%);
-  backdrop-filter: blur(10px) saturate(125%);
-}
-input.input, textarea.input {
-  -webkit-backdrop-filter: blur(10px) saturate(125%);
-  backdrop-filter: blur(10px) saturate(125%);
-}
 .select-dropdown-portal .select-option:where(:hover, .select-option-focused),
 .date-picker-preset:hover { background-color: var(--surface-hover); }
 .surface-panel {
@@ -50,52 +32,36 @@ input.input, textarea.input {
   color: var(--surface-text);
   box-shadow: 0 14px 42px -12px rgb(0 0 0 / 25%), inset 0 1px 0 var(--surface-glint);
 }
-.surface-panel::before, .dropdown::before {
-  -webkit-backdrop-filter: var(--surface-panel-filter);
-  backdrop-filter: var(--surface-panel-filter);
-}
 .surface-overlay {
   background: var(--surface-overlay);
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
 }
 
-/* A dialog owns its decoration; its full-screen scrim must not be a second
-   glass panel or backdrop root that prevents the decoration from blurring. */
 .modal-overlay, .dialog-overlay {
   background: var(--surface-overlay);
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
 }
 .modal-content, .dialog-container {
-  --surface-filter: var(--surface-panel-filter);
   z-index: 0;
   background-color: var(--surface-panel);
   background-image: linear-gradient(135deg, var(--surface-glint), transparent 65%);
-}
-:is(.modal-content, .dialog-container)::before {
-  -webkit-backdrop-filter: var(--surface-panel-filter);
-  backdrop-filter: var(--surface-panel-filter);
 }
 .modal-header, .modal-footer, .dialog-header, .dialog-footer {
   background-color: var(--surface-soft);
   border-color: var(--surface-edge);
 }
 .modal-body, .dialog-body { background-color: transparent; }
-.dropdown { --surface-filter: var(--surface-panel-filter); }
 
-/* These small decorations are leaves, so filtering them cannot trap a menu. */
 .surface-decoration {
-  -webkit-backdrop-filter: blur(10px) saturate(125%);
-  backdrop-filter: blur(10px) saturate(125%);
   box-shadow: inset 0 1px 0 var(--surface-glint);
 }
 
 /* Explicit opaque surfaces: QR quiet zones and other machine-readable media. */
 .surface-opaque { background-color: white; background-image: none; }
 
-/* Sticky headers and columns remain glass while covering scrolled rows.
+/* Opaque tables and pinned cells cover scrolled rows without filter layers.
    Keep the existing cell stacking order and edge-shadow pseudo-elements. */
+.table-wrapper {
+  background-color: var(--surface-solid);
+}
 .table-wrapper .table-header { background-color: transparent; }
 .table-wrapper thead::before {
   content: '';
@@ -105,15 +71,11 @@ input.input, textarea.input {
   pointer-events: none;
   background-color: var(--surface-sticky);
   background-image: linear-gradient(135deg, var(--surface-glint), transparent 65%);
-  -webkit-backdrop-filter: var(--surface-panel-filter);
-  backdrop-filter: var(--surface-panel-filter);
   box-shadow: inset 0 -1px 0 var(--surface-edge);
 }
 .table-wrapper thead .sticky-header-cell { background-color: transparent; color: var(--surface-muted); }
 .table-wrapper thead .sticky-header-cell.sticky-col {
   background-color: var(--surface-sticky);
-  -webkit-backdrop-filter: var(--surface-panel-filter);
-  backdrop-filter: var(--surface-panel-filter);
 }
 .table-wrapper tbody :is(.sticky-col-left, .sticky-col-left-first, .sticky-col-left-second)::before,
 .table-wrapper tbody .sticky-col-right::after {
@@ -125,11 +87,9 @@ input.input, textarea.input {
   border-radius: inherit;
   background-color: var(--surface-sticky);
   background-image: linear-gradient(135deg, var(--surface-glint), transparent 65%);
-  -webkit-backdrop-filter: var(--surface-panel-filter);
-  backdrop-filter: var(--surface-panel-filter);
 }
 
-/* Compact tables and the channel matrix use the same glass when pinned. */
+/* Compact tables and the channel matrix use the same solid pinned surfaces. */
 thead.sticky, .matrix-header.sticky { background-color: transparent; }
 :is(thead.sticky, .matrix-header.sticky)::before {
   content: '';
@@ -138,17 +98,4 @@ thead.sticky, .matrix-header.sticky { background-color: transparent; }
   z-index: -1;
   pointer-events: none;
   background-color: var(--surface-sticky);
-  -webkit-backdrop-filter: var(--surface-panel-filter);
-  backdrop-filter: var(--surface-panel-filter);
-}
-
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  :root { --surface-field: var(--surface-solid); --surface-panel: var(--surface-solid); --surface-sticky: var(--surface-solid); }
-}
-@media (prefers-reduced-transparency: reduce) {
-  :root { --surface-field: var(--surface-solid); --surface-panel: var(--surface-solid); --surface-sticky: var(--surface-solid); --surface-panel-filter: none; }
-  input.input, textarea.input, .surface-decoration, :is(.surface-control, .select-trigger, .btn)::before {
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-  }
 }

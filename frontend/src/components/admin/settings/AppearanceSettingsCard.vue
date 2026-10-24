@@ -17,7 +17,7 @@
           <div v-for="theme in previewThemes" :key="theme.key" class="appearance-preview" :class="`appearance-preview-${theme.key}`">
             <img v-if="previewImageURL" :key="previewImageURL" :src="previewImageURL" alt="" class="absolute inset-0 h-full w-full object-cover" @error="($event.target as HTMLImageElement).style.visibility = 'hidden'">
             <div v-if="draft.background_url" class="absolute inset-0" :style="{ backgroundColor: `rgb(${theme.maskColor} / ${draft[theme.maskKey]}%)` }" />
-            <div class="appearance-sample-card" :style="{ backgroundColor: `rgb(${theme.cardColor} / ${draft.card_transparency === null ? theme.defaultAlpha : 100 - draft.card_transparency}%)` }">
+            <div class="appearance-sample-card" :style="{ backgroundColor: `rgb(${theme.cardColor})` }">
               <span class="text-xs opacity-75">{{ t(`admin.settings.appearance.${theme.key}`) }}</span>
               <p class="mt-2 font-semibold">{{ t('admin.settings.appearance.sample') }}</p>
               <div class="mt-3 h-1.5 w-20 rounded-full bg-teal-500/70" />
@@ -32,15 +32,6 @@
             </div>
             <input :id="`${id}-${theme.maskKey}`" v-model.number="draft[theme.maskKey]" class="w-full accent-teal-500" type="range" min="0" max="100" step="1" :disabled="busy || !draft.background_url" @input="previewing = true">
           </div>
-        </div>
-        <div>
-          <div class="flex flex-wrap items-center justify-between gap-3 text-sm surface-muted">
-            <label :for="`${id}-transparency`" class="font-medium">{{ t('admin.settings.appearance.transparency') }}</label>
-            <label class="flex items-center gap-2"><input :checked="draft.card_transparency === null" type="checkbox" class="checkbox" :disabled="busy" @change="setDefaultTransparency">{{ t('admin.settings.appearance.defaultTransparency') }}</label>
-            <output :for="`${id}-transparency`">{{ draft.card_transparency === null ? t('admin.settings.appearance.defaultValue') : `${draft.card_transparency}%` }}</output>
-          </div>
-          <input :id="`${id}-transparency`" :value="draft.card_transparency ?? 45" type="range" min="0" max="100" step="1" class="mt-3 w-full accent-teal-500" :disabled="busy || draft.card_transparency === null" :aria-describedby="`${id}-transparency-hint`" @input="setTransparency">
-          <p :id="`${id}-transparency-hint`" class="mt-1 text-xs surface-muted">{{ t('admin.settings.appearance.transparencyHint') }}</p>
         </div>
         <p v-if="previewing" role="status" class="text-sm text-teal-700 dark:text-teal-300">{{ t('admin.settings.appearance.previewNotice') }}</p>
         <div class="flex flex-wrap gap-3">
@@ -84,8 +75,8 @@ const busy = computed(() => loading.value || saving.value || processing.value)
 const previewImageURL = computed(() => resolveConsoleBackgroundURL(draft.value.background_url))
 const dirty = computed(() => JSON.stringify(draft.value) !== JSON.stringify(saved.value))
 const previewThemes = [
-  { key: 'light', maskKey: 'light_mask', maskColor: '245 248 247', cardColor: '255 255 255', defaultAlpha: 88 },
-  { key: 'dark', maskKey: 'dark_mask', maskColor: '15 23 28', cardColor: '37 42 43', defaultAlpha: 89 }
+  { key: 'light', maskKey: 'light_mask', maskColor: '245 248 247', cardColor: '248 250 249' },
+  { key: 'dark', maskKey: 'dark_mask', maskColor: '15 23 28', cardColor: '38 44 45' }
 ] as const
 
 function releaseDraftImage() {
@@ -119,7 +110,6 @@ async function upload(event: Event) {
     draftURL = URL.createObjectURL(result.blob)
     backgroundImage = result.dataURL
     draft.value.background_url = draftURL
-    draft.value.card_transparency ??= 45
     previewing.value = true
   } catch (failure) {
     if (!disposed) error.value = t('admin.settings.appearance.' + (failure instanceof BackgroundImageError ? `imageError_${failure.reason}` : 'imageError_decode'))
@@ -128,7 +118,7 @@ async function upload(event: Event) {
 
 function restoreDefaults() {
   releaseDraftImage()
-  draft.value = defaultConsoleAppearance()
+  draft.value = { ...defaultConsoleAppearance(), card_transparency: saved.value.card_transparency }
   backgroundImage = saved.value.background_url ? '' : undefined
   previewing.value = true
   error.value = ''
@@ -140,16 +130,6 @@ function discard() {
   backgroundImage = undefined
   releaseDraftImage()
   error.value = ''
-}
-
-function setDefaultTransparency(event: Event) {
-  draft.value.card_transparency = (event.target as HTMLInputElement).checked ? null : 45
-  previewing.value = true
-}
-
-function setTransparency(event: Event) {
-  draft.value.card_transparency = Number((event.target as HTMLInputElement).value)
-  previewing.value = true
 }
 
 async function save() {
@@ -188,5 +168,5 @@ onBeforeUnmount(() => { disposed = true; appStore.consoleAppearancePreview = nul
 .appearance-preview { position: relative; display: grid; min-height: 180px; place-items: center; overflow: hidden; border-radius: 16px; border: 1px solid rgb(148 163 184 / 25%); }
 .appearance-preview-light { color: #16292b; background: radial-gradient(ellipse at 8% 10%, rgb(20 184 166 / 13%), transparent 55%), #e9efee; }
 .appearance-preview-dark { color: #edf6f5; background: radial-gradient(ellipse at 8% 10%, rgb(20 184 166 / 10%), transparent 55%), #191f21; }
-.appearance-sample-card { position: relative; width: 76%; padding: 18px; border-radius: 16px; border: 1px solid rgb(148 163 184 / 25%); backdrop-filter: blur(12px); }
+.appearance-sample-card { position: relative; width: 76%; padding: 18px; border-radius: 16px; border: 1px solid rgb(148 163 184 / 25%); }
 </style>

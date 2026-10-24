@@ -58,7 +58,7 @@
                   </button>
                   <button
                     @click="closeModal"
-                    class="flex h-9 w-9 items-center justify-center rounded-lg backdrop-blur-sm transition-all hover:surface-hover hover:text-gray-700 dark:hover:text-gray-300 surface-control surface-muted"
+                    class="flex h-9 w-9 items-center justify-center rounded-lg transition-all hover:surface-hover hover:text-gray-700 dark:hover:text-gray-300 surface-control surface-muted"
                     :aria-label="t('common.close')"
                   >
                     <Icon name="x" size="sm" />
@@ -249,7 +249,7 @@
                 <!-- Close button -->
                 <button
                   @click="closeDetail"
-                  class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl backdrop-blur-sm transition-all hover:surface-hover hover:text-gray-700 hover:shadow-lg dark:hover:text-gray-300 surface-control surface-muted"
+                  class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl transition-all hover:surface-hover hover:text-gray-700 hover:shadow-lg dark:hover:text-gray-300 surface-control surface-muted"
                   :aria-label="t('common.close')"
                 >
                   <Icon name="x" size="md" />

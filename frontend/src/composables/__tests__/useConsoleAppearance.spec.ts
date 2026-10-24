@@ -4,7 +4,7 @@ import { useConsoleAppearance } from '../useConsoleAppearance'
 import { defaultConsoleAppearance } from '@/types/appearance'
 
 // Requirements: docs/UI_INTERACTION.md, including failed/stale image fallback
-// and 0%/100% transparency without fading descendants or changing menu layout.
+// and solid content surfaces regardless of the stored transparency field.
 let scope: EffectScope
 const images: FakeImage[] = []
 class FakeImage {
@@ -18,21 +18,26 @@ beforeEach(() => { images.length = 0; vi.stubGlobal('Image', FakeImage); scope =
 afterEach(() => { scope.stop(); vi.unstubAllGlobals() })
 
 describe('published console appearance', () => {
-  it('keeps original surfaces by default and applies exact transparency boundaries without changing text opacity', async () => {
+  it('applies canvas masks without letting stored transparency fade content or add a filter', async () => {
     const appearance = ref(defaultConsoleAppearance())
     scope.run(() => useConsoleAppearance(() => appearance.value))
     const root = document.documentElement
     expect(root.hasAttribute('data-console-custom-cards')).toBe(false)
     expect(root.style.getPropertyValue('--console-light-mask-alpha')).toBe('0.3')
     expect(root.style.getPropertyValue('--console-dark-mask-alpha')).toBe('0.48')
-    for (const [transparency, alpha] of [[0, '1'], [45, '0.55'], [100, '0']] as const) {
+    for (const transparency of [0, 45, 100]) {
       appearance.value.card_transparency = transparency
       await nextTick()
-      expect(root.hasAttribute('data-console-custom-cards')).toBe(true)
-      expect(root.style.getPropertyValue('--console-card-alpha')).toBe(alpha)
+      expect(root.hasAttribute('data-console-custom-cards')).toBe(false)
+      expect(root.style.getPropertyValue('--console-card-alpha')).toBe('')
       expect(root.style.opacity).toBe('')
       expect(root.style.getPropertyValue('backdrop-filter')).toBe('')
     }
+    appearance.value.light_mask = 0
+    appearance.value.dark_mask = 100
+    await nextTick()
+    expect(root.style.getPropertyValue('--console-light-mask-alpha')).toBe('0')
+    expect(root.style.getPropertyValue('--console-dark-mask-alpha')).toBe('1')
     appearance.value = defaultConsoleAppearance()
     await nextTick()
     expect(root.hasAttribute('data-console-custom-cards')).toBe(false)

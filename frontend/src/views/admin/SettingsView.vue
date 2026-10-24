@@ -13099,7 +13099,6 @@ watch(
   top: var(--shell-sticky-offset);
   background: var(--surface-fill);
   border-color: var(--surface-edge);
-  backdrop-filter: var(--surface-filter);
   box-shadow:
     0 12px 28px rgb(0 0 0 / 0.07),
     0 1px 0 rgb(255 255 255 / 0.9) inset;

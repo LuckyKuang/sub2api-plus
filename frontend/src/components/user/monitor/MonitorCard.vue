@@ -1,7 +1,7 @@
 <template>
   <button
     type="button"
-    class="glass-surface group text-left p-5 min-h-[280px] w-full backdrop-blur-xl border border-gray-200/80 shadow-card dark:border-dark-700/70 hover:-translate-y-1 hover:shadow-card-hover dark:hover:border-primary-500/30 hover:border-gray-300 transition-all duration-300 ease-out flex flex-col"
+    class="glass-surface group text-left p-5 min-h-[280px] w-full border border-gray-200/80 shadow-card dark:border-dark-700/70 hover:-translate-y-1 hover:shadow-card-hover dark:hover:border-primary-500/30 hover:border-gray-300 transition-all duration-300 ease-out flex flex-col"
     @click="emit('click')"
   >
     <!-- Header: icon + name/model + status chip -->

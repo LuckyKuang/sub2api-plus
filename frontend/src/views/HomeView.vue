@@ -249,7 +249,7 @@
         <!-- Feature Tags - Centered -->
         <div class="mb-12 flex flex-wrap items-center justify-center gap-4 md:gap-6">
           <div
-            class="inline-flex items-center gap-2.5 rounded-full border border-gray-200/50 surface-inset px-5 py-2.5 shadow-sm backdrop-blur-sm dark:border-dark-700/50"
+            class="inline-flex items-center gap-2.5 rounded-full border border-gray-200/50 surface-inset px-5 py-2.5 shadow-sm dark:border-dark-700/50"
           >
             <Icon name="swap" size="sm" class="text-primary-500" />
             <span class="text-sm font-medium surface-muted">{{
@@ -257,7 +257,7 @@
             }}</span>
           </div>
           <div
-            class="inline-flex items-center gap-2.5 rounded-full border border-gray-200/50 surface-inset px-5 py-2.5 shadow-sm backdrop-blur-sm dark:border-dark-700/50"
+            class="inline-flex items-center gap-2.5 rounded-full border border-gray-200/50 surface-inset px-5 py-2.5 shadow-sm dark:border-dark-700/50"
           >
             <Icon name="shield" size="sm" class="text-primary-500" />
             <span class="text-sm font-medium surface-muted">{{
@@ -265,7 +265,7 @@
             }}</span>
           </div>
           <div
-            class="inline-flex items-center gap-2.5 rounded-full border border-gray-200/50 surface-inset px-5 py-2.5 shadow-sm backdrop-blur-sm dark:border-dark-700/50"
+            class="inline-flex items-center gap-2.5 rounded-full border border-gray-200/50 surface-inset px-5 py-2.5 shadow-sm dark:border-dark-700/50"
           >
             <Icon name="chart" size="sm" class="text-primary-500" />
             <span class="text-sm font-medium surface-muted">{{
@@ -278,7 +278,7 @@
         <div class="mb-12 grid gap-6 md:grid-cols-3">
           <!-- Feature 1: Unified Gateway -->
           <div
-            class="group rounded-2xl border border-gray-200/50 surface-inset p-6 backdrop-blur-sm transition-all duration-300 hover:shadow-xl hover:shadow-primary-500/10 dark:border-dark-700/50"
+            class="group rounded-2xl border border-gray-200/50 surface-inset p-6 transition-all duration-300 hover:shadow-xl hover:shadow-primary-500/10 dark:border-dark-700/50"
           >
             <div
               class="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 shadow-lg shadow-blue-500/30 transition-transform group-hover:scale-110"
@@ -295,7 +295,7 @@
 
           <!-- Feature 2: Account Pool -->
           <div
-            class="group rounded-2xl border border-gray-200/50 surface-inset p-6 backdrop-blur-sm transition-all duration-300 hover:shadow-xl hover:shadow-primary-500/10 dark:border-dark-700/50"
+            class="group rounded-2xl border border-gray-200/50 surface-inset p-6 transition-all duration-300 hover:shadow-xl hover:shadow-primary-500/10 dark:border-dark-700/50"
           >
             <div
               class="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 shadow-lg shadow-primary-500/30 transition-transform group-hover:scale-110"
@@ -324,7 +324,7 @@
 
           <!-- Feature 3: Billing & Quota -->
           <div
-            class="group rounded-2xl border border-gray-200/50 surface-inset p-6 backdrop-blur-sm transition-all duration-300 hover:shadow-xl hover:shadow-primary-500/10 dark:border-dark-700/50"
+            class="group rounded-2xl border border-gray-200/50 surface-inset p-6 transition-all duration-300 hover:shadow-xl hover:shadow-primary-500/10 dark:border-dark-700/50"
           >
             <div
               class="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 shadow-lg shadow-purple-500/30 transition-transform group-hover:scale-110"
@@ -365,7 +365,7 @@
         <div class="mb-16 flex flex-wrap items-center justify-center gap-4">
           <!-- Claude - Supported -->
           <div
-            class="flex items-center gap-2 rounded-xl border border-primary-200 surface-inset px-5 py-3 ring-1 ring-primary-500/20 backdrop-blur-sm dark:border-primary-800"
+            class="flex items-center gap-2 rounded-xl border border-primary-200 surface-inset px-5 py-3 ring-1 ring-primary-500/20 dark:border-primary-800"
           >
             <div
               class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-orange-400 to-orange-500"
@@ -380,7 +380,7 @@
           </div>
           <!-- GPT - Supported -->
           <div
-            class="flex items-center gap-2 rounded-xl border border-primary-200 surface-inset px-5 py-3 ring-1 ring-primary-500/20 backdrop-blur-sm dark:border-primary-800"
+            class="flex items-center gap-2 rounded-xl border border-primary-200 surface-inset px-5 py-3 ring-1 ring-primary-500/20 dark:border-primary-800"
           >
             <div
               class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-green-500 to-green-600"
@@ -395,7 +395,7 @@
           </div>
           <!-- Gemini - Supported -->
           <div
-            class="flex items-center gap-2 rounded-xl border border-primary-200 surface-inset px-5 py-3 ring-1 ring-primary-500/20 backdrop-blur-sm dark:border-primary-800"
+            class="flex items-center gap-2 rounded-xl border border-primary-200 surface-inset px-5 py-3 ring-1 ring-primary-500/20 dark:border-primary-800"
           >
             <div
               class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-blue-600"
@@ -410,7 +410,7 @@
           </div>
           <!-- Antigravity - Supported -->
           <div
-            class="flex items-center gap-2 rounded-xl border border-primary-200 surface-inset px-5 py-3 ring-1 ring-primary-500/20 backdrop-blur-sm dark:border-primary-800"
+            class="flex items-center gap-2 rounded-xl border border-primary-200 surface-inset px-5 py-3 ring-1 ring-primary-500/20 dark:border-primary-800"
           >
             <div
               class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-rose-500 to-pink-600"
@@ -425,7 +425,7 @@
           </div>
           <!-- More - Coming Soon -->
           <div
-            class="flex items-center gap-2 rounded-xl border border-gray-200/50 surface-inset px-5 py-3 opacity-60 backdrop-blur-sm dark:border-dark-700/50"
+            class="flex items-center gap-2 rounded-xl border border-gray-200/50 surface-inset px-5 py-3 opacity-60 dark:border-dark-700/50"
           >
             <div
               class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-gray-500 to-gray-600"

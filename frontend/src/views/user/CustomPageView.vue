@@ -530,7 +530,7 @@ onUnmounted(() => {
 
 .custom-open-fab {
   @apply absolute right-3 top-3 z-10 w-max max-w-full touch-none select-none transition-colors;
-  @apply shadow-sm backdrop-blur;
+  @apply shadow-sm;
   background-color: var(--surface-soft);
 }
 

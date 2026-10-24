@@ -6,36 +6,29 @@
   --shell-inset-bottom: max(var(--shell-gutter), env(safe-area-inset-bottom));
   --shell-sticky-offset: calc(var(--shell-inset-top) + var(--shell-header-height) + var(--shell-gap));
   --surface-radius: 20px;
-  --surface-fill: rgb(255 255 255 / var(--console-card-alpha, .88));
-  --surface-shell: rgb(255 255 255 / var(--console-card-alpha, .76));
-  --surface-inset-alpha: calc(var(--console-card-alpha, .55) * .32);
-  --surface-field-alpha: calc(var(--console-card-alpha, .55) * .40);
-  --surface-sticky-alpha: calc(var(--console-card-alpha, .55) * .58);
-  --surface-soft: rgb(var(--console-card-rgb) / var(--surface-inset-alpha));
-  --surface-field: rgb(var(--console-card-rgb) / var(--surface-field-alpha));
-  --surface-panel: rgb(var(--console-card-rgb) / var(--console-card-alpha, .55));
-  --surface-sticky: rgb(var(--console-card-rgb) / var(--surface-sticky-alpha));
+  --surface-fill: var(--surface-solid);
+  --surface-shell: var(--surface-solid);
+  --surface-soft: #edf2f0;
+  --surface-field: var(--surface-solid);
+  --surface-panel: var(--surface-solid);
+  --surface-sticky: var(--surface-solid);
   --surface-text: #182e31;
   --surface-muted: #52676b;
   --surface-glint: rgb(255 255 255 / 24%);
   --surface-hover: rgb(20 184 166 / 12%);
   --surface-selected: rgb(20 184 166 / 18%);
   --surface-overlay: rgb(14 30 34 / 18%);
-  --surface-panel-filter: blur(24px) saturate(135%);
   --surface-solid: #f8faf9;
   --surface-edge: rgb(255 255 255 / 68%);
   --surface-shadow: 0 12px 36px -20px rgb(33 57 57 / 28%), inset 0 1px 0 rgb(255 255 255 / 80%);
-  --surface-filter: blur(10px) saturate(125%);
   --console-canvas: #e9efee;
   --console-glow: rgb(20 184 166 / 13%);
   --console-glow-secondary: rgb(125 149 212 / 12%);
-  --console-card-rgb: 255 255 255;
   --console-background-mask: rgb(245 248 247 / var(--console-light-mask-alpha, 0.3));
 }
 
 .dark {
-  --surface-fill: rgb(37 42 43 / var(--console-card-alpha, .89));
-  --surface-shell: rgb(31 36 38 / var(--console-card-alpha, .80));
+  --surface-soft: #202627;
   --surface-text: #eaf3f2;
   --surface-muted: #c1cdd1;
   --surface-glint: rgb(255 255 255 / 7%);
@@ -48,7 +41,6 @@
   --console-canvas: #191f21;
   --console-glow: rgb(20 184 166 / 10%);
   --console-glow-secondary: rgb(103 125 190 / 10%);
-  --console-card-rgb: 37 42 43;
   --console-background-mask: rgb(15 23 28 / var(--console-dark-mask-alpha, 0.48));
 }
 
@@ -154,7 +146,7 @@
   :root { --shell-gap: 16px; --shell-gutter: 16px; }
 }
 @media (min-width: 1024px) {
-  :root { --shell-gap: 24px; --shell-gutter: 24px; --surface-radius: 24px; --surface-filter: blur(18px) saturate(125%); }
+  :root { --shell-gap: 24px; --shell-gutter: 24px; --surface-radius: 24px; }
   .app-layout { grid-template-columns: var(--sidebar-width) minmax(0, 1fr); transition: grid-template-columns 200ms ease-out; }
   .app-layout.sidebar-is-collapsed { --sidebar-width: 72px; }
   .sidebar { position: sticky; left: auto; align-self: start; width: 100%; transform: none; }
@@ -180,32 +172,8 @@
     border-color: var(--surface-edge);
     box-shadow: var(--surface-shadow);
   }
-  /* Blur only the decoration: filtering the container traps menus and fixed dialogs. */
-  :where(.card, .glass, .glass-card, .card-glass, .glass-surface, .shell-surface, .modal-content, .dialog-container, .dropdown)::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    z-index: -1;
-    border-radius: inherit;
-    pointer-events: none;
-    -webkit-backdrop-filter: var(--surface-filter);
-    backdrop-filter: var(--surface-filter);
-  }
-  /* Data rows share their panel; do not create a blur layer per row/cell. */
-  :where(.card, .glass, .glass-card, .card-glass, .glass-surface, .shell-surface, .dropdown, .modal-content, .dialog-container) :where(.card, .glass, .glass-surface, .glass-card, .card-glass, .stat-card)::before {
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-  }
 }
 
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  :root { --surface-fill: var(--surface-solid); --surface-shell: var(--surface-solid); --surface-soft: var(--surface-solid); }
-  :root[data-console-custom-cards] .app-layout :is(.card, .glass, .glass-card, .card-glass, .glass-surface, .glass-inset, .shell-surface, .stat-card, .settings-tabs-shell) { background-color: var(--surface-solid); }
-}
-@media (prefers-reduced-transparency: reduce) {
-  :root { --surface-filter: none; --surface-fill: var(--surface-solid); --surface-shell: var(--surface-solid); --surface-soft: var(--surface-solid); }
-  :root[data-console-custom-cards] .app-layout :is(.card, .glass, .glass-card, .card-glass, .glass-surface, .glass-inset, .shell-surface, .stat-card, .settings-tabs-shell) { background-color: var(--surface-solid); }
-}
 @media (prefers-reduced-motion: reduce) {
   .app-layout *, .modal-overlay *, .modal-overlay {
     animation-duration: 1ms !important;
