@@ -66,6 +66,15 @@ class FullCoverageTests(unittest.TestCase):
         ]:
             self.assertIn(command, actual)
 
+    def test_redis_health_regressions_are_required_deployment_checks(self) -> None:
+        # Readiness/auth regressions must execute in both the local full gate
+        # and CI, rather than remaining an optional operator check.
+        command = ("python3", "deploy/tests/test_redis_health.py")
+        self.assertIn(command, self.commands("deployment-config"))
+        self.assertIn(command, [tuple(step.command) for step in validation_checks.full_steps(
+            ROOT, python="python3", migration_base=BASE,
+        )])
+
 
 class ContainerAndProfileTests(unittest.TestCase):
     def test_no_host_execution_even_with_an_environment_flag(self) -> None:

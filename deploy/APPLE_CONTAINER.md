@@ -98,6 +98,13 @@ Show workload state and run live health probes:
 ./apple-container.sh status
 ```
 
+Redis readiness requires a successful `redis-cli -e --raw ping` with exactly
+`PONG` and no diagnostic output. Authentication failures, ACL errors and
+connection failures make `status` fail. The probe sends the selected deployment
+password through stdin and sets it inside the exec shell, overriding a stale
+container environment without putting the password in command arguments. An
+empty configured password clears inherited authentication.
+
 Show Apple Containers disk usage:
 
 ```bash

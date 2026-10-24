@@ -1077,9 +1077,21 @@ probe_postgres() {
 }
 
 probe_redis() {
-    run_with_timeout 30 container exec --env-file "${REDIS_ENV_FILE}" \
-        "${REDIS_CONTAINER}" \
-        redis-cli ping
+    local reply
+    # exec may retain the container's old REDISCLI_AUTH despite an env-file
+    # override. Set the selected credential in the child shell via stdin; never
+    # include it in argv. An empty password must clear inherited authentication.
+    reply="$(printf '%s\n' "${REDIS_PASSWORD}" | \
+        run_with_timeout 30 container exec --interactive "${REDIS_CONTAINER}" sh -c '
+IFS= read -r REDISCLI_AUTH || exit 1
+if [ -n "$REDISCLI_AUTH" ]; then
+    export REDISCLI_AUTH
+else
+    unset REDISCLI_AUTH
+fi
+exec redis-cli -e --raw ping
+' 2>&1)" || return 1
+    [[ "${reply}" == "PONG" ]]
 }
 
 probe_minio() {
