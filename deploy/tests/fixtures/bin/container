@@ -282,7 +282,27 @@ case "${command}" in
         done
         ;;
     exec)
-        echo 1
+        while [[ $# -gt 0 ]]; do
+            case "$1" in
+                --env-file|--env) shift 2 ;;
+                -i|--interactive) shift ;;
+                *) break ;;
+            esac
+        done
+        target=${1-}
+        shift || true
+        if [[ "${target}" == "sub2api-apple-redis" ]]; then
+            if [[ -n "${FAKE_REDIS_SOCKET:-}" ]]; then
+                # Reproduce exec retaining the existing container credential
+                # instead of applying an env-file override. The real CLI below
+                # talks only to the test-owned Unix socket.
+                export REDISCLI_AUTH="${FAKE_REDIS_INHERITED_AUTH:-}"
+                exec "$@"
+            fi
+            printf 'PONG\n'
+        else
+            echo 1
+        fi
         ;;
     logs|copy)
         exit 0

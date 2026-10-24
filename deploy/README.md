@@ -801,7 +801,7 @@ docker compose -f docker-compose.local.yml logs --tail=100 sub2api
 docker compose -f docker-compose.local.yml exec postgres pg_isready
 
 # Check Redis connection
-docker compose -f docker-compose.local.yml exec redis redis-cli ping
+docker compose -f docker-compose.local.yml exec redis sh -c 'if [ -z "${REDISCLI_AUTH:-}" ]; then unset REDISCLI_AUTH; fi; exec redis-cli -e --raw ping'
 
 # Restart all services
 docker compose -f docker-compose.local.yml restart
@@ -823,11 +823,17 @@ docker compose logs --tail=100 sub2api
 docker compose exec postgres pg_isready
 
 # Check Redis connection
-docker compose exec redis redis-cli ping
+docker compose exec redis sh -c 'if [ -z "${REDISCLI_AUTH:-}" ]; then unset REDISCLI_AUTH; fi; exec redis-cli -e --raw ping'
 
 # Restart all services
 docker compose restart
 ```
+
+Redis health checks accept only a successful command with the exact `PONG`
+reply. Plain `redis-cli ping` can exit zero after an authentication or server
+error; use `-e` for scripts and check the response as well as the exit status.
+The examples clear an empty `REDISCLI_AUTH` for passwordless Redis, since an
+empty exported value still makes the CLI attempt authentication.
 
 ### Binary Install
 

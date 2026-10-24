@@ -29,6 +29,8 @@ RUN apt-get update \
         make \
         python3 \
         python3-pip \
+        redis-server \
+        redis-tools \
         xz-utils \
     && rm -rf /var/lib/apt/lists/*
 

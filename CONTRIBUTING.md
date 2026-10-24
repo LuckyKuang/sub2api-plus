@@ -235,6 +235,35 @@ PostgreSQL databases, test roles/ACL users, temporary Redis processes/files and
 containers after validation, including failed attempts; preserve live services
 and business data.
 
+Temporary Redis must run in the foreground under a supervisor that waits for
+its child. Do not daemonize it into an existing container whose PID 1 cannot
+reap arbitrary orphaned children. Keep its process handle and verify process
+exit and socket/port closure before deleting its configuration and credentials.
+An accepted `SHUTDOWN NOSAVE` command alone does not prove cleanup succeeded.
+
+Use `redis-cli -e` for every scripted health or cleanup command: the default CLI
+can return zero on `WRONGPASS`, `NOAUTH` or `NOPERM`. For Apple exec, do not rely
+on `--env`/`--env-file` replacing an existing `REDISCLI_AUTH`; supply the secret
+through stdin and export it in the child shell. For a test-owned process only:
+
+```bash
+printf '%s\n' "$validation_redis_password" | \
+  container exec --interactive "$validation_redis_container" sh -c '
+IFS= read -r REDISCLI_AUTH || exit 1
+if [ -n "$REDISCLI_AUTH" ]; then
+    export REDISCLI_AUTH
+else
+    unset REDISCLI_AUTH
+fi
+exec redis-cli -e -p "$1" SHUTDOWN NOSAVE
+' sh "$validation_redis_port"
+```
+
+Redis readiness regressions use real `redis-server`/`redis-cli` from the
+validation image, private Unix sockets, no TCP listeners and no persistence.
+Run `python3 deploy/tests/test_redis_health.py` inside that container; the full
+local matrix and CI `deployment-config` lane include the same suite.
+
 The `release-finalization` profile is not a general fast option. Only
 `release-cli finalize` may request it for a verified published tag and a tree
 that can be regenerated exactly from its recorded base. Both profiles bind the

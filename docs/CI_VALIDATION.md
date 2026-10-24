@@ -15,7 +15,7 @@ application, policy and deterministic-tree checks execute inside containers.
 
 | Context / lane | Coverage | Relationship to local full |
 | --- | --- | --- |
-| `deployment-config` | Installer syntax, Apple lifecycle fixture, Docker security/gateway/resources, Caddy policy | Union of local and CI deployment checks |
+| `deployment-config` | Installer syntax, Apple lifecycle fixture, real Redis authentication/readiness regressions, Docker security/gateway/resources, Caddy policy | Union of local and CI deployment checks |
 | `test` | Full unit suites on Linux amd64 and arm64; Docker-backed integration on amd64 | Same Go commands, additional architecture coverage |
 | `frontend` | Frozen install, lint, typecheck, full Vitest, production build and its locale checks | Complete local frontend coverage; critical-only tests cannot substitute |
 | `golangci-lint` | Complete backend lint | Same command |
@@ -52,6 +52,13 @@ The Apple lifecycle tests use fake runtime fixtures. Running them inside Linux
 containers does not claim live Apple Containers/WSL integration. Record any
 genuine additional platform requirements and supported-runner evidence before
 replacing the local gate.
+
+Redis health regressions also execute the actual deployment probe commands
+against test-owned foreground Redis servers on private Unix sockets. The image
+includes `redis-server` and `redis-tools` for this coverage. No live Redis or
+TCP port is used; every child is terminated and waited for before removing its
+temporary directory. The Apple exec fixture intentionally retains a stale
+credential to exercise the child-shell credential binding.
 
 Docker integration runs on a dedicated ephemeral GitHub Linux VM. Only that
 validation lane may mount the VM's Docker socket and matching CLI and use host networking

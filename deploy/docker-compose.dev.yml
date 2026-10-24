@@ -174,7 +174,11 @@ services:
     networks:
       - sub2api-network
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test:
+        - CMD-SHELL
+        - >-
+          if [ -z "$${REDISCLI_AUTH:-}" ]; then unset REDISCLI_AUTH; fi;
+          reply=$$(redis-cli -e --raw ping 2>&1) && [ "$$reply" = PONG ]
       interval: 10s
       timeout: 5s
       retries: 5
