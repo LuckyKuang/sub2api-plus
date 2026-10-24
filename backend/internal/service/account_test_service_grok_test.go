@@ -616,6 +616,9 @@ func TestOutboundIdentityGrokRealtimeProbeAndForward(t *testing.T) {
 			dialer := &grokRealtimeTestDialer{}
 			svc := &OpenAIGatewayService{cfg: &config.Config{}, openaiWSPassthroughDialer: dialer}
 			account := &Account{ID: 42, Platform: PlatformGrok, Type: accountType, Credentials: map[string]any{
+				// Direct realtime calls still require evidence that the supplied
+				// bearer belongs to this account's captured credential grant.
+				"access_token": "test-token", "api_key": "test-token",
 				outboundIdentityCredential:   OutboundIdentitySelection{Preset: "grok", Version: "3.9.1"},
 				credKeyHeaderOverrideEnabled: true, credKeyHeaderOverrides: map[string]any{"user-agent": "untrusted-override", "x-grok-client-version": "9.9.9"},
 			}}

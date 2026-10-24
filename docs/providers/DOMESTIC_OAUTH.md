@@ -73,7 +73,7 @@ account catalogs. Kimi managed usage calls its fixed regional
 `GET /coding/v1/usages` using the same OAuth grant, device snapshot and one-time
 401 recovery. API-key billing endpoints never receive native grants. MiniMax
 OAuth model sync remains unsupported. Its coding quota follows the official
-[`matrix-account-client.ts` at the reviewed baseline](https://github.com/MiniMax-AI/minimax-code/blob/5821f7c9b0363a9b97a57fff3deaa4cd2da165a4/packages/tui/src/account/matrix-account-client.ts):
+[`matrix-account-client.ts` at the reviewed baseline](https://github.com/MiniMax-AI/minimax-code/blob/da22f11c55d4748155d7162c1030414228a00565/packages/tui/src/account/matrix-account-client.ts):
 identity and workspace/membership lookup on `https://agent.minimaxi.com` (China)
 or `https://agent.minimax.io` (global) select the personal workspace
 (`workspace_type: 0`) and its `op_group_id`. The same OAuth grant then calls
@@ -193,7 +193,7 @@ Protocols were checked against local official client sources:
 - `minimax-code/packages/oauth-core/src/`: `oauth-client.ts`, `endpoint-config.ts`,
   `contracts.ts`; `packages/config/src/config.ts` inference destinations and
   `packages/local-runtime-v2/src/service/model-system/resolution/` request headers;
-  [`packages/tui/src/account/matrix-account-client.ts`](https://github.com/MiniMax-AI/minimax-code/blob/5821f7c9b0363a9b97a57fff3deaa4cd2da165a4/packages/tui/src/account/matrix-account-client.ts)
+  [`packages/tui/src/account/matrix-account-client.ts`](https://github.com/MiniMax-AI/minimax-code/blob/da22f11c55d4748155d7162c1030414228a00565/packages/tui/src/account/matrix-account-client.ts)
   personal workspace, account lookup and regional token-plan quota.
 
 `internal/pkg/cnoauth` tests cover wire formats, PKCE/state, regions, errors,

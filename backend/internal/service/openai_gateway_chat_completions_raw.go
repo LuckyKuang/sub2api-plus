@@ -209,7 +209,14 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletionsWithStartTime(
 	)
 
 	// 5. Build and send upstream request via the shared CC pipeline
-	targetURL, err := s.rawChatCompletionsURL(account)
+	targetAccount := account
+	if account.IsGrok() {
+		targetAccount, err = requestCredentialAccount(ctx, account)
+		if err != nil {
+			return nil, err
+		}
+	}
+	targetURL, err := s.rawChatCompletionsURL(targetAccount)
 	if err != nil {
 		return nil, err
 	}

@@ -14,7 +14,7 @@ or protocol transformation.
 ## Coding-plan quota origins
 
 Native OAuth coding accounts use the official account flow from
-[`matrix-account-client.ts` at the reviewed baseline](https://github.com/MiniMax-AI/minimax-code/blob/5821f7c9b0363a9b97a57fff3deaa4cd2da165a4/packages/tui/src/account/matrix-account-client.ts).
+[`matrix-account-client.ts` at the reviewed baseline](https://github.com/MiniMax-AI/minimax-code/blob/da22f11c55d4748155d7162c1030414228a00565/packages/tui/src/account/matrix-account-client.ts).
 Account identity and workspace/membership lookup resolve the personal workspace
 (`workspace_type: 0`); its `op_group_id` supplies the quota request's
 `X-Group-Id`. Team workspaces or unrelated membership groups cannot substitute
@@ -91,7 +91,7 @@ recognized snapshot and do not invalidate or quarantine the account. MiniMax
 Credits are independent from token-plan windows: absent Credits, no token plan
 or unavailable quota is not evidence of an invalid OAuth credential. The quota
 cell does not present Credits as a plan window or claim a Credits balance probe.
-The official [error classifier](https://github.com/MiniMax-AI/minimax-code/blob/5821f7c9b0363a9b97a57fff3deaa4cd2da165a4/packages/shared/src/llm-error-classifier.ts)
+The official [error classifier](https://github.com/MiniMax-AI/minimax-code/blob/da22f11c55d4748155d7162c1030414228a00565/packages/shared/src/llm-error-classifier.ts)
 identifies structured MiniMax codes `2056` and `2067` as plan exhaustion
 (the latter has automatic Credits disabled); `1400010161` means insufficient
 Credits. These trigger recoverable cooldown/failover, including HTTP 500 wrappers,

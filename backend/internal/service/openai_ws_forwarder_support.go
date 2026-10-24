@@ -130,6 +130,10 @@ func (s *OpenAIGatewayService) performOpenAIWSGeneratePrewarm(
 		}
 
 		if eventType == "error" {
+			if status, ok := openAIModelNotFoundEventStatus(message); ok {
+				lease.MarkBroken()
+				return &UpstreamFailoverError{StatusCode: status, ResponseBody: message, Scope: GatewayFailureScopeRequest, NextAccountAction: NextAccountStop}
+			}
 			errCodeRaw, errTypeRaw, errMsgRaw := parseOpenAIWSErrorEventFields(message)
 			prewarmModel, _ := reqBody["model"].(string)
 			s.persistOpenAIWSRateLimitSignal(ctx, account, lease.HandshakeHeaders(), message, errCodeRaw, errTypeRaw, errMsgRaw, prewarmModel)
@@ -137,7 +141,7 @@ func (s *OpenAIGatewayService) performOpenAIWSGeneratePrewarm(
 			if errMsg == "" {
 				errMsg = "OpenAI websocket prewarm error"
 			}
-			fallbackReason, canFallback := classifyOpenAIWSErrorEventFromRaw(errCodeRaw, errTypeRaw, errMsgRaw)
+			fallbackReason, canFallback := classifyOpenAIWSErrorEvent(message)
 			errCode, errType, errMessage := summarizeOpenAIWSErrorEventFieldsFromRaw(errCodeRaw, errTypeRaw, errMsgRaw)
 			logOpenAIWSModeInfo(
 				"prewarm_error_event account_id=%d conn_id=%s idx=%d fallback_reason=%s can_fallback=%v err_code=%s err_type=%s err_message=%s",
@@ -158,6 +162,10 @@ func (s *OpenAIGatewayService) performOpenAIWSGeneratePrewarm(
 		}
 
 		if isOpenAIWSTerminalEvent(eventType) {
+			if status, ok := openAIModelNotFoundEventStatus(message); ok {
+				lease.MarkBroken()
+				return &UpstreamFailoverError{StatusCode: status, ResponseBody: message, Scope: GatewayFailureScopeRequest, NextAccountAction: NextAccountStop}
+			}
 			prewarmTerminalCount++
 			break
 		}
@@ -266,6 +274,9 @@ func markOpenAIWSClientVisibleFailure(c *gin.Context, eventType string, payload 
 }
 
 func openAIWSPayloadTransientStatus(payload []byte) int {
+	if _, ok := openAIModelNotFoundEventStatus(payload); ok {
+		return 0
+	}
 	if len(payload) == 0 {
 		return 0
 	}
@@ -726,8 +737,18 @@ func isOpenAIWSRateLimitError(codeRaw, errTypeRaw, msgRaw string) bool {
 	return false
 }
 
+func isOpenAIWSRateLimitEvent(payload []byte, code, errType, message string) bool {
+	if _, ok := openAIModelNotFoundEventStatus(payload); ok {
+		return false
+	}
+	return isOpenAIWSRateLimitError(code, errType, message)
+}
+
 func (s *OpenAIGatewayService) persistOpenAIWSRateLimitSignal(ctx context.Context, account *Account, headers http.Header, responseBody []byte, codeRaw, errTypeRaw, msgRaw string, canonicalModel ...string) {
 	if s == nil || s.rateLimitService == nil || account == nil || account.Platform != PlatformOpenAI {
+		return
+	}
+	if _, ok := openAIModelNotFoundEventStatus(responseBody); ok {
 		return
 	}
 	if !isOpenAIWSRateLimitError(codeRaw, errTypeRaw, msgRaw) {
@@ -766,6 +787,9 @@ func (s *OpenAIGatewayService) newOpenAIWSRateLimitFailoverError(account *Accoun
 }
 
 func classifyOpenAIWSErrorEventFromRaw(codeRaw, errTypeRaw, msgRaw string) (string, bool) {
+	if codeRaw == "model_not_found" {
+		return "model_not_found", false
+	}
 	code := strings.ToLower(strings.TrimSpace(codeRaw))
 	errType := strings.ToLower(strings.TrimSpace(errTypeRaw))
 	msg := strings.ToLower(strings.TrimSpace(msgRaw))
@@ -815,10 +839,19 @@ func classifyOpenAIWSErrorEvent(message []byte) (string, bool) {
 	if len(message) == 0 {
 		return "event_error", false
 	}
-	return classifyOpenAIWSErrorEventFromRaw(parseOpenAIWSErrorEventFields(message))
+	code, errType, msg := parseOpenAIWSErrorEventFields(message)
+	if code == "model_not_found" {
+		if _, ok := openAIModelNotFoundEventStatus(message); !ok {
+			code = ""
+		}
+	}
+	return classifyOpenAIWSErrorEventFromRaw(code, errType, msg)
 }
 
 func openAIWSErrorHTTPStatusFromRaw(codeRaw, errTypeRaw string) int {
+	if codeRaw == "model_not_found" {
+		return http.StatusBadRequest
+	}
 	code := strings.ToLower(strings.TrimSpace(codeRaw))
 	errType := strings.ToLower(strings.TrimSpace(errTypeRaw))
 	switch {
@@ -846,7 +879,13 @@ func openAIWSErrorHTTPStatus(message []byte) int {
 	if len(message) == 0 {
 		return http.StatusBadGateway
 	}
+	if status, ok := openAIModelNotFoundEventStatus(message); ok {
+		return status
+	}
 	codeRaw, errTypeRaw, _ := parseOpenAIWSErrorEventFields(message)
+	if codeRaw == "model_not_found" {
+		codeRaw = ""
+	}
 	return openAIWSErrorHTTPStatusFromRaw(codeRaw, errTypeRaw)
 }
 

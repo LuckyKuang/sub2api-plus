@@ -133,9 +133,9 @@ func TestEveryDomesticAccountTransportRemovesBrandedCustomHeaders(t *testing.T) 
 	// Real HTTP capture covers the repository transport and redirect machinery;
 	// the expected UAs below are independent official-client wire fixtures.
 	for _, test := range []struct{ platform, kind, ua string }{
-		{"deepseek", "oauth", "deepseek-harness/0.2.1-rc.2 (+https://github.com/deepseek-ai/deepseek-harness)"},
-		{"deepseek", "apikey", "deepseek-harness/0.2.1-rc.2 (+https://github.com/deepseek-ai/deepseek-harness)"},
-		{"kimi", "oauth", "kimi-code-cli/2.3.0"}, {"kimi", "apikey", "kimi-code-cli/2.3.0"},
+		{"deepseek", "oauth", "deepseek-harness/0.2.1-rc.3 (+https://github.com/deepseek-ai/deepseek-harness)"},
+		{"deepseek", "apikey", "deepseek-harness/0.2.1-rc.3 (+https://github.com/deepseek-ai/deepseek-harness)"},
+		{"kimi", "oauth", "kimi-code-cli/2.3.1"}, {"kimi", "apikey", "kimi-code-cli/2.3.1"},
 		{"minimax", "oauth", "MiniMaxAgent"}, {"minimax", "apikey", "Anthropic/JS 0.91.1"},
 		{"zhipu", "oauth", "ZCode/3.16.2 ai/6.0.193 ai-sdk/provider-utils/4.0.27 runtime/node.js/22"},
 		{"zhipu", "apikey", "ZCode/3.16.2 ai/6.0.193 ai-sdk/provider-utils/4.0.27 runtime/node.js/22"},

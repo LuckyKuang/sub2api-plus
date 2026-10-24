@@ -50,7 +50,7 @@ func TestDeepSeekHarnessRequestAttribution(t *testing.T) {
 				for _, name := range []string{"x-deepseek-harness-user-id", "x-deepseek-harness-session-id", "x-deepseek-harness-compact"} {
 					require.NotContains(t, req.Header, name, "raw duplicate header casing must be removed")
 				}
-				require.Equal(t, "deepseek-harness/0.2.1-rc.2 (+https://github.com/deepseek-ai/deepseek-harness)", req.UserAgent())
+				require.Equal(t, "deepseek-harness/0.2.1-rc.3 (+https://github.com/deepseek-ai/deepseek-harness)", req.UserAgent())
 				require.Equal(t, user, req.Header.Get("X-Deepseek-Harness-User-Id"))
 				require.Empty(t, req.Header.Get("X-Deepseek-Harness-Compact"))
 				got := req.Header.Get("X-Deepseek-Harness-Session-Id")
@@ -235,9 +235,9 @@ func TestDeepSeekHarnessListingSkipsUnknownRowsAndModalities(t *testing.T) {
 
 func TestDomesticOAuthNativeModelDiscovery(t *testing.T) {
 	for _, tc := range []struct{ platform, region, target, header, auth, ua string }{
-		{"deepseek", "cn", "https://api.deepseek.com/models", "x-dsh-auth-token", "secret", "deepseek-harness/0.2.1-rc.2 (+https://github.com/deepseek-ai/deepseek-harness)"},
-		{"kimi", "cn", "https://api.kimi.com/coding/v1/models", "Authorization", "Bearer secret", "kimi-code-cli/2.3.0"},
-		{"kimi", "global", "https://api.kimi.ai/coding/v1/models", "Authorization", "Bearer secret", "kimi-code-cli/2.3.0"},
+		{"deepseek", "cn", "https://api.deepseek.com/models", "x-dsh-auth-token", "secret", "deepseek-harness/0.2.1-rc.3 (+https://github.com/deepseek-ai/deepseek-harness)"},
+		{"kimi", "cn", "https://api.kimi.com/coding/v1/models", "Authorization", "Bearer secret", "kimi-code-cli/2.3.1"},
+		{"kimi", "global", "https://api.kimi.ai/coding/v1/models", "Authorization", "Bearer secret", "kimi-code-cli/2.3.1"},
 	} {
 		t.Run(tc.platform+tc.region, func(t *testing.T) {
 			a := &Account{ID: 1, Platform: tc.platform, Type: "oauth", Credentials: map[string]any{"oauth_provider": tc.platform, "oauth_region": tc.region, "access_token": "secret", "base_url": "https://attacker.test"}}

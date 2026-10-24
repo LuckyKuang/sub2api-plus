@@ -159,11 +159,10 @@ func ResolveOffPeakBaseURL() string {
 // issued to a specific plan, so the same snapshot must be used for take, status,
 // settle and the model request that consumes the ticket.
 type OffPeakAuth struct {
-	JWT       string
-	PlanKey   string
-	TeamOrg   string
-	TeamProj  string
-	RequestID string
+	JWT      string
+	PlanKey  string
+	TeamOrg  string
+	TeamProj string
 }
 
 // Headers renders the ticket-call headers.
@@ -176,9 +175,6 @@ func (a OffPeakAuth) Headers() map[string]string {
 	if org, project := strings.TrimSpace(a.TeamOrg), strings.TrimSpace(a.TeamProj); org != "" && project != "" {
 		headers["bigmodel-organization"] = org
 		headers["bigmodel-project"] = project
-	}
-	if requestID := strings.TrimSpace(a.RequestID); requestID != "" {
-		headers["x-request-id"] = requestID
 	}
 	return headers
 }
@@ -379,27 +375,31 @@ func (c *OffPeakClient) do(ctx context.Context, method, path string, auth OffPea
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, classifyOffPeakFailure(resp, raw)
 	}
+	// The official settle client also accepts an empty 200/204 response.
+	// Other endpoints still validate their required fields after decoding {}.
+	if len(bytes.TrimSpace(raw)) == 0 {
+		return json.RawMessage("{}"), nil
+	}
 	var envelope struct {
 		Code json.RawMessage `json:"code"`
-		Msg  string          `json:"msg"`
 		Data json.RawMessage `json:"data"`
 	}
 	if err := json.Unmarshal(raw, &envelope); err != nil {
 		return nil, fmt.Errorf("decode off-peak envelope: %w", err)
 	}
-	// The platform unwraps only a zero code with a data payload; anything else is
-	// a business rejection even on HTTP 200.
+	// Official ticket endpoints accept both bare objects and {code:0,data}.
+	// Preserve nonzero business failures even when the HTTP status is successful.
 	if code := parseOffPeakCode(envelope.Code); code != 0 {
-		return nil, &OffPeakError{HTTPStatus: resp.StatusCode, Code: code, Message: envelope.Msg}
+		return nil, classifyOffPeakFailure(resp, raw)
 	}
-	if len(envelope.Data) == 0 {
-		return json.RawMessage("{}"), nil
+	if strings.Trim(strings.TrimSpace(string(envelope.Code)), `"`) == "0" && len(envelope.Data) != 0 {
+		return envelope.Data, nil
 	}
-	return envelope.Data, nil
+	return raw, nil
 }
 
-// classifyOffPeakFailure turns a non-2xx response into a typed error, carrying
-// the queue valve's Retry-After and the quota reset time.
+// classifyOffPeakFailure preserves rejection details for both HTTP failures and
+// successful HTTP responses carrying a nonzero business code.
 func classifyOffPeakFailure(resp *http.Response, raw []byte) error {
 	var payload struct {
 		Code       json.RawMessage `json:"code"`

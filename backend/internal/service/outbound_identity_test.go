@@ -309,7 +309,7 @@ func TestOutboundIdentityBedrockSigningRetainsSelectedDeclarations(t *testing.T)
 func TestBuiltInDeepSeekOutboundIdentityPinsPublishedHarness(t *testing.T) {
 	t.Setenv(deepseek.VersionEnv, "")
 
-	const pinnedUA = "deepseek-harness/0.2.1-rc.2 (+https://github.com/deepseek-ai/deepseek-harness)"
+	const pinnedUA = "deepseek-harness/0.2.1-rc.3 (+https://github.com/deepseek-ai/deepseek-harness)"
 	require.Equal(t, outboundidentity.Identity{
 		Preset:     "deepseek",
 		Language:   "zh-CN",
@@ -317,7 +317,7 @@ func TestBuiltInDeepSeekOutboundIdentityPinsPublishedHarness(t *testing.T) {
 		Source:     "compiled_default",
 		UserAgent:  pinnedUA,
 		Originator: "deepseek-harness",
-		Version:    "0.2.1-rc.2",
+		Version:    "0.2.1-rc.3",
 		Headers:    map[string]string{"User-Agent": pinnedUA},
 	}, builtInOutboundIdentity("deepseek"))
 	require.Equal(t, builtInOutboundIdentity("deepseek"), deepseek.DefaultIdentity())
@@ -624,7 +624,7 @@ func TestBuiltInKimiOutboundIdentityMatchesOfficialClient(t *testing.T) {
 	pinned := builtInOutboundIdentity("kimi")
 	require.Equal(t, "kimi", pinned.Preset)
 	require.Equal(t, "compiled_default", pinned.Source)
-	require.Equal(t, "kimi-code-cli/2.3.0", pinned.UserAgent)
+	require.Equal(t, "kimi-code-cli/2.3.1", pinned.UserAgent)
 	require.Equal(t, kimi.ProductToken, pinned.Originator)
 	require.Equal(t, kimi.DefaultVersion, pinned.Version)
 	require.Equal(t, pinned, kimi.DefaultIdentity())

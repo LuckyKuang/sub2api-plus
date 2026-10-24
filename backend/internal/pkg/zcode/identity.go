@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
+	"github.com/google/uuid"
 )
 
 const (
@@ -159,6 +160,14 @@ func prepareRequest(req *http.Request) error {
 	}
 	*req = *req.WithContext(outboundidentity.WithIdentity(req.Context(), ControlIdentity(identity)))
 	outboundidentity.ApplyContext(req)
+	// Control requests use a new correlation ID for every physical send,
+	// including PAT rejection retries. It is never ticket or grant state.
+	for name := range req.Header {
+		if strings.EqualFold(name, "x-request-id") {
+			delete(req.Header, name)
+		}
+	}
+	req.Header.Set("x-request-id", uuid.NewString())
 	return nil
 }
 

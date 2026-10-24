@@ -97,6 +97,11 @@ func applyKimiCodingReasoningDefaults(body []byte, metadata map[string]UpstreamM
 }
 
 func (s *AccountTestService) buildDomesticOAuthModelsRequest(ctx context.Context, account *Account) (*http.Request, error) {
+	owner, err := requestCredentialAccount(ctx, account)
+	if err != nil {
+		return nil, err
+	}
+	account = owner
 	region, err := cnoauth.NormalizeRegion(account.Platform, account.GetCredential("oauth_region"))
 	if err != nil {
 		return nil, err
@@ -133,6 +138,9 @@ func (s *AccountTestService) buildDomesticOAuthModelsRequest(ctx context.Context
 	if token == "" {
 		return nil, errors.New("native OAuth model credential is missing")
 	}
+	if account.Platform == PlatformDeepseek {
+		ctx = withRequestCredentialOwner(WithOutboundIdentityScope(ctx, nil), account, token)
+	}
 	if header == "Authorization" {
 		token = "Bearer " + token
 	}
@@ -146,8 +154,54 @@ func (s *AccountTestService) buildDomesticOAuthModelsRequest(ctx context.Context
 	return req, nil
 }
 
-// OAuth account listing follows Harness listing.ts/resolve-catalog.ts. API-key
-// /models remains a gateway discovery extension; no account token goes there.
+// Harness owns the Messages catalog on the official inference origin. Other
+// protocols and compatible endpoints retain their gateway discovery semantics.
+func usesDeepSeekHarnessModels(account *Account) bool {
+	if account == nil || account.Platform != PlatformDeepseek {
+		return false
+	}
+	if account.Type == AccountTypeOAuth {
+		return true
+	}
+	if account.Type != AccountTypeAPIKey || !account.IsAnthropicProtocol() {
+		return false
+	}
+	u, err := url.Parse(account.GetAnthropicProtocolBaseURL())
+	return err == nil && u.Scheme == "https" && strings.EqualFold(u.Hostname(), "api.deepseek.com") &&
+		(u.Port() == "" || u.Port() == "443") && u.User == nil && u.RawQuery == "" && u.Fragment == ""
+}
+
+func (s *AccountTestService) buildDeepSeekAPIKeyModelsRequest(ctx context.Context, account *Account) (*http.Request, error) {
+	owner, err := requestCredentialAccount(ctx, account)
+	if err != nil {
+		return nil, err
+	}
+	if !usesDeepSeekHarnessModels(owner) {
+		return s.buildOpenAIUpstreamModelsRequest(ctx, owner)
+	}
+	apiKey := strings.TrimSpace(owner.GetOpenAIProtocolAPIKey())
+	if apiKey == "" {
+		return nil, newUpstreamModelSyncConfigError("No DeepSeek API key is available", nil)
+	}
+	target := DefaultDeepseekBaseURL + "/models"
+	if _, err := s.validateUpstreamBaseURL(target); err != nil {
+		return nil, newUpstreamModelSyncConfigError("DeepSeek model destination is not allowed", err)
+	}
+	// Freeze the key's owner before resolving identity. A later key rotation must
+	// not change this request's proxy, fingerprint, or model version admission.
+	ctx = withRequestCredentialOwner(WithOutboundIdentityScope(ctx, nil), owner, apiKey)
+	ctx = WithAccountOutboundIdentity(WithHTTPUpstreamRedirectsDisabled(ctx), owner)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("x-api-key", apiKey)
+	return req, nil
+}
+
+// Both native OAuth and official Messages API-key discovery use Harness's
+// listing.ts/listed-catalog.ts version and capability admission contract.
 func extractDeepSeekHarnessCatalog(body []byte, version string) ([]byte, map[string]UpstreamModelMetadata, error) {
 	var listing struct {
 		Data []json.RawMessage `json:"data"`

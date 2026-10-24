@@ -69,6 +69,11 @@ proxy. It is enabled by `gateway.grok.grok_request_compression_enabled`
 `false` is the operator kill switch and always sends plain JSON. Enabled only
 permits negotiation; it never authorizes compression by itself.
 
+URL construction and ordinary relay headers use the same acquired credential
+snapshot as Authorization, including Chat fallbacks, media, voice and realtime.
+Resource accounting stays attached to the selected account. A configured proxy
+without its captured relation stops preparation before an upstream send.
+
 Before compressing, the gateway reads `GET {base_url}/settings` from the exact
 normalized target (scheme, host, effective port and base path) — the same
 `cli-chat-proxy.grok.com/v1` route the sampler uses — with the credential
@@ -80,7 +85,9 @@ lookups, a withdrawn advertisement, another origin, another credential owner or
 another proxy all keep plain JSON; a lookup failure never fails the inference
 and never creates an audit decision. One probe is bounded by a five-second
 timeout. The capability is cached in-process for five minutes, refreshed through
-a single-flight guard bound to target, owner and proxy configuration; there is
+a single-flight guard bound to target, owner, credential generation and proxy
+configuration (including proxy status); positive and negative entries cannot
+cross a relink or credential rotation. There is
 no persistent table or background service.
 
 The final JSON is encoded after model, tool and session adaptation, at zstd

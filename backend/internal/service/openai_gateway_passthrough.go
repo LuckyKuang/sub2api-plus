@@ -1134,13 +1134,19 @@ func (s *OpenAIGatewayService) handleErrorResponsePassthrough(
 	// context-window 超限是确定性请求失败（shouldFailoverOpenAIPassthroughResponse
 	// 已保证不切号），其文案对客户端可操作（如触发自动压缩）；在净化信封内保留
 	// 脱敏后的上游消息，而不是抹成通用文案。
-	if isOpenAIContextWindowError(upstreamMsg, body) && upstreamMsg != "" {
+	if isOpenAIModelNotFoundError(resp.StatusCode, body) {
+		writeOpenAIUpstreamClientError(c, resp.StatusCode, body, upstreamMsg)
+	} else if isOpenAIContextWindowError(upstreamMsg, body) && upstreamMsg != "" {
 		writeOpenAIPassthroughErrorEnvelope(c, resp.StatusCode, resp.Header, upstreamMsg)
 	} else {
 		writeSanitizedOpenAIPassthroughError(c, resp.StatusCode, resp.Header)
 	}
 
-	return fmt.Errorf("upstream error: %d (client response sanitized)", resp.StatusCode)
+	terminalErr := fmt.Errorf("upstream error: %d (client response sanitized)", resp.StatusCode)
+	if isOpenAIModelNotFoundError(resp.StatusCode, body) {
+		return &openAIModelNotFoundTerminalError{cause: terminalErr}
+	}
+	return terminalErr
 }
 
 func isOpenAIPassthroughAllowedRequestHeader(lowerKey string, allowTimeoutHeaders bool) bool {
@@ -1484,6 +1490,9 @@ func sanitizeOpenAICapacityShedErrorCodeForClient(payload []byte) ([]byte, bool)
 }
 
 func openAIStreamFailedEventSemanticStatus(payload []byte, message string) int {
+	if status, ok := openAIModelNotFoundEventStatus(payload); ok {
+		return status
+	}
 	if isOpenAIContextWindowError(message, payload) {
 		return http.StatusBadRequest
 	}
@@ -1524,6 +1533,9 @@ func openAIStreamFailedEventSemanticStatus(payload []byte, message string) int {
 func openAIStreamFailureStatus(payload []byte, message string) int {
 	if len(bytes.TrimSpace(payload)) == 0 || !gjson.ValidBytes(payload) {
 		return http.StatusBadGateway
+	}
+	if status, ok := openAIModelNotFoundEventStatus(payload); ok {
+		return status
 	}
 	semanticStatus := openAIStreamFailedEventSemanticStatus(payload, message)
 	switch semanticStatus {
@@ -1644,6 +1656,9 @@ func applyOpenAIStreamFailedErrorPassthroughRule(
 }
 
 func openAIStreamFailedEventShouldFailover(payload []byte, message string) bool {
+	if _, ok := openAIModelNotFoundEventStatus(payload); ok {
+		return false
+	}
 	if hit, _, _ := detectOpenAICyberPolicy(payload); hit {
 		return false
 	}
@@ -1696,6 +1711,9 @@ func openAIStreamFailedEventShouldFailover(payload []byte, message string) bool 
 }
 
 func openAIStreamErrorEventShouldFailover(payload []byte, message string) bool {
+	if _, ok := openAIModelNotFoundEventStatus(payload); ok {
+		return false
+	}
 	if hit, _, _ := detectOpenAICyberPolicy(payload); hit {
 		return false
 	}
@@ -1746,6 +1764,9 @@ func (s *OpenAIGatewayService) handleOpenAIStreamTerminalAccountSideEffectsConte
 	canonicalModel ...string,
 ) (int, bool) {
 	statusCode := openAIStreamFailureStatus(payload, message)
+	if _, ok := openAIModelNotFoundEventStatus(payload); ok {
+		return statusCode, false
+	}
 	switch statusCode {
 	case http.StatusForbidden:
 		if !openAIStream403AccountFailure(payload, message) {
@@ -1770,6 +1791,9 @@ func (s *OpenAIGatewayService) handleOpenAIStreamTerminalAccountSideEffectsConte
 }
 
 func openAIStreamFailedEventRetryableOnSameAccount(account *Account, payload []byte, message string) bool {
+	if _, ok := openAIModelNotFoundEventStatus(payload); ok {
+		return false
+	}
 	if account == nil {
 		return false
 	}
@@ -1963,7 +1987,13 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 	originalModel string,
 	mappedModel string,
 	encryptedRecoveryAllowed ...bool,
-) (*openaiStreamingResultPassthrough, error) {
+) (result *openaiStreamingResultPassthrough, returnErr error) {
+	modelNotFoundTerminal := false
+	defer func() {
+		if returnErr != nil && modelNotFoundTerminal {
+			returnErr = &openAIModelNotFoundTerminalError{cause: returnErr}
+		}
+	}()
 	resetOpsOpenAIStreamObservation(c)
 	observer := upstreamResponseModelObserverFromContext(c)
 	if observer == nil {
@@ -2166,6 +2196,12 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 				}
 			}
 			eventType := effectiveOpenAISSEEventType(dataBytes, rawEventType)
+			switch eventType {
+			case "error", "response.failed":
+				_, modelNotFoundTerminal = openAIModelNotFoundEventStatus(dataBytes)
+			case "response.completed", "response.done":
+				modelNotFoundTerminal = false
+			}
 			createdAtTracker.Observe(dataBytes, eventType)
 			if codexFailureTerminal && sawBareError && !sawResponseFailed && eventType != "response.failed" {
 				suppressCurrentEvent = true
@@ -2518,6 +2554,9 @@ func (s *OpenAIGatewayService) handlePassthroughSSEToJSON(resp *http.Response, c
 		msg := extractOpenAISSEErrorMessage(terminalPayload)
 		if msg == "" {
 			msg = "Upstream compact response failed"
+		}
+		if status, ok := openAIModelNotFoundEventStatus(terminalPayload); ok {
+			return nil, s.writeOpenAINonStreamingModelNotFound(resp, c, account, status, terminalPayload, msg)
 		}
 		if !openAIStreamClientOutputStarted(c, false) {
 			if recoveryErr := openAIEncryptedStreamRecoverySignal(terminalPayload, encryptedRecoveryAllowed); recoveryErr != nil {

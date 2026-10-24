@@ -38,9 +38,10 @@ const (
 	// HomeURL is rendered as the User-Agent product comment (`+url`).
 	HomeURL = "https://github.com/deepseek-ai/deepseek-harness"
 
-	// DefaultVersion is the pinned published harness version. The parenthesized
-	// comment is part of the same User-Agent value, not a second declaration.
-	DefaultVersion = "0.2.1-rc.2"
+	// DefaultVersion is the manually reviewed published prerelease harness
+	// version. The parenthesized comment is part of the same User-Agent value,
+	// not a second declaration.
+	DefaultVersion = "0.2.1-rc.3"
 
 	// StableVersion is the oldest client version this build advertises.
 	StableVersion = "0.2.0-rc.2"

@@ -821,7 +821,11 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 				return errOpenAIWSSessionPreempted
 			}
 			if hooks != nil && hooks.AfterTurn != nil {
-				hooks.AfterTurn(turn, result, bridgeErr)
+				observationErr := bridgeErr
+				if observationErr == nil && result != nil {
+					observationErr = result.modelNotFoundTerminalError
+				}
+				hooks.AfterTurn(turn, result, observationErr)
 			}
 			if bridgeErr != nil {
 				var failoverErr *UpstreamFailoverError
@@ -1217,7 +1221,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 					}
 				}
 				s.persistOpenAIWSRateLimitSignal(ctx, account, lease.HandshakeHeaders(), upstreamMessage, errCodeRaw, errTypeRaw, errMsgRaw, mappedModel)
-				fallbackReason, _ := classifyOpenAIWSErrorEventFromRaw(errCodeRaw, errTypeRaw, errMsgRaw)
+				fallbackReason, _ := classifyOpenAIWSErrorEvent(upstreamMessage)
 				if fallbackReason == openAIWSFallbackReasonInvalidEncryptedContent {
 					// 记录被上游拒绝的密文摘要；错误照旧透传，下一轮进场时按摘要预剥离。
 					if digests := collectOpenAIEncryptedContentDigestsRaw(payload); len(digests) > 0 {
@@ -1286,7 +1290,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 						false,
 					)
 				}
-				if !wroteDownstream && isOpenAIWSRateLimitError(errCodeRaw, errTypeRaw, errMsgRaw) {
+				if !wroteDownstream && isOpenAIWSRateLimitEvent(upstreamMessage, errCodeRaw, errTypeRaw, errMsgRaw) {
 					lease.MarkBroken()
 					return nil, s.newOpenAIWSRateLimitFailoverError(account, lease.HandshakeHeaders(), upstreamMessage, errMsgRaw)
 				}
@@ -1425,6 +1429,9 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 				}
 				if openAISessionTakeoverPending(ctx) {
 					return result, ErrOpenAISessionRouteNotAccepted
+				}
+				if _, ok := openAIModelNotFoundEventStatus(upstreamMessage); ok {
+					result.modelNotFoundTerminalError = &openAIModelNotFoundTerminalError{cause: fmt.Errorf("openai ws response failed: %s", extractOpenAISSEErrorMessage(upstreamMessage))}
 				}
 				return result, nil
 			}
@@ -2000,7 +2007,11 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		lastTurnFinishedAt = time.Now()
 		lastTurnClean = true
 		if hooks != nil && hooks.AfterTurn != nil {
-			hooks.AfterTurn(turn, result, nil)
+			var observationErr error
+			if result != nil {
+				observationErr = result.modelNotFoundTerminalError
+			}
+			hooks.AfterTurn(turn, result, observationErr)
 		}
 		if result == nil {
 			return errors.New("websocket turn result is nil")

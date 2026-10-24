@@ -40,7 +40,7 @@ func (s *OpenAIGatewayService) doOpenAIUpstream(request *http.Request, proxyURL 
 	return response, responseErr
 }
 
-func (s *OpenAIGatewayService) doOpenAIUpstreamPrepared(request *http.Request, proxyURL string, account *Account) (*http.Response, error) {
+func (s *OpenAIGatewayService) doOpenAIUpstreamPrepared(request *http.Request, proxyURL string, account *Account) (response *http.Response, responseErr error) {
 	credentialAccount, err := requestCredentialAccount(request.Context(), account)
 	if err != nil {
 		return nil, err
@@ -56,9 +56,11 @@ func (s *OpenAIGatewayService) doOpenAIUpstreamPrepared(request *http.Request, p
 	if err := OutboundPreparationError(request.Context()); err != nil {
 		return nil, err
 	}
-	if err := applyZhipuOffPeakTicketHeader(request.Context(), credentialAccount, request.Header); err != nil {
+	ticket, err := applyZhipuOffPeakTicketHeader(request.Context(), credentialAccount, request.Header)
+	if err != nil {
 		return nil, err
 	}
+	defer func() { holdZhipuOffPeakResponse(request.Context(), ticket, response, responseErr) }()
 	if s.pluginManager != nil {
 		response, handled, err := s.pluginManager.RoundTripOpenAIOAuth(request.Context(), request, proxyURL, credentialAccount)
 		if handled {
@@ -84,7 +86,7 @@ func (s *AccountTestService) doOpenAIAccountTestUpstreamPrepared(
 	proxyURL string,
 	account *Account,
 	useTLSFallback bool,
-) (*http.Response, error) {
+) (response *http.Response, responseErr error) {
 	credentialAccount, err := requestCredentialAccount(request.Context(), account)
 	if err != nil {
 		return nil, err
@@ -100,9 +102,11 @@ func (s *AccountTestService) doOpenAIAccountTestUpstreamPrepared(
 	if err := OutboundPreparationError(request.Context()); err != nil {
 		return nil, err
 	}
-	if err := applyZhipuOffPeakTicketHeader(request.Context(), credentialAccount, request.Header); err != nil {
+	ticket, err := applyZhipuOffPeakTicketHeader(request.Context(), credentialAccount, request.Header)
+	if err != nil {
 		return nil, err
 	}
+	defer func() { holdZhipuOffPeakResponse(request.Context(), ticket, response, responseErr) }()
 	if s.pluginManager != nil {
 		response, handled, err := s.pluginManager.RoundTripOpenAIOAuth(request.Context(), request, proxyURL, credentialAccount)
 		if handled {

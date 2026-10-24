@@ -166,6 +166,30 @@ func TestOpenAIManagedModelNotFoundExhaustionSanitizesMessage(t *testing.T) {
 	require.Contains(t, recorded, "access_token=***")
 }
 
+func TestOpenAIManagedModelNotFoundExhaustionKeepsTerminalCodeAcrossStatuses(t *testing.T) {
+	for _, status := range []int{http.StatusBadRequest, http.StatusForbidden, http.StatusNotFound} {
+		for _, streamStarted := range []bool{false, true} {
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+			(&OpenAIGatewayHandler{}).handleFailoverExhausted(c, &service.UpstreamFailoverError{
+				StatusCode:   status,
+				ResponseBody: []byte(`{"error":{"code":"model_not_found","message":"Model A unavailable; https://upstream.example?access_token=must-not-leak","param":"model"}}`),
+			}, streamStarted)
+			require.NotContains(t, recorder.Body.String(), "must-not-leak")
+			if streamStarted {
+				require.Equal(t, 1, strings.Count(recorder.Body.String(), "event: response.failed"))
+				require.Contains(t, recorder.Body.String(), `"code":"model_not_found"`)
+				require.NotContains(t, recorder.Body.String(), `"code":"upstream_error"`)
+			} else {
+				require.Equal(t, status, recorder.Code)
+				require.Equal(t, "model_not_found", gjson.Get(recorder.Body.String(), "error.code").String())
+				require.Equal(t, "model", gjson.Get(recorder.Body.String(), "error.param").String())
+			}
+		}
+	}
+}
+
 func TestResponsesFailoverExhaustedAfterForwardedTerminalMarksOpsWithoutDuplicateFrame(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()

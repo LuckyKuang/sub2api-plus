@@ -215,11 +215,13 @@ func parseOpenAIWSResponseUsageFromCompletedEvent(message []byte, usage *OpenAIU
 }
 
 func parseOpenAIWSErrorEventFields(message []byte) (code string, errType string, errMessage string) {
-	if len(message) == 0 {
+	if len(message) == 0 || !gjson.ValidBytes(message) {
 		return "", "", ""
 	}
 	values := gjson.GetManyBytes(message, "error.code", "error.type", "error.message")
-	return strings.TrimSpace(values[0].String()), strings.TrimSpace(values[1].String()), strings.TrimSpace(values[2].String())
+	// Keep the raw code: terminal provider codes use exact string matching.
+	// Classifiers for other error families normalize their own candidates.
+	return values[0].String(), strings.TrimSpace(values[1].String()), strings.TrimSpace(values[2].String())
 }
 
 func summarizeOpenAIWSErrorEventFieldsFromRaw(codeRaw, errTypeRaw, errMessageRaw string) (code string, errType string, errMessage string) {

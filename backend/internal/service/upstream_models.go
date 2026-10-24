@@ -214,6 +214,20 @@ func (s *AccountTestService) FetchUpstreamSupportedModels(ctx context.Context, a
 // snapshot. When no model is complete, the existing account snapshot is left
 // untouched.
 func (s *AccountTestService) SyncUpstreamModelCatalog(ctx context.Context, account *Account) (*UpstreamModelCatalog, error) {
+	selectedAccount := account
+	owner, ownerErr := requestCredentialAccount(ctx, account)
+	if ownerErr != nil {
+		return nil, ownerErr
+	}
+	deepSeekHarnessCatalog := usesDeepSeekHarnessModels(owner)
+	if deepSeekHarnessCatalog {
+		account = snapshotRequestCredentialAccount(owner)
+		token := account.GetOpenAIProtocolAPIKey()
+		if account.Type == AccountTypeOAuth {
+			token = account.GetCredential("access_token")
+		}
+		ctx = withRequestCredentialOwner(WithOutboundIdentityScope(ctx, nil), account, token)
+	}
 	ctx = WithAccountOutboundIdentity(ctx, account)
 	models, body, err := s.fetchUpstreamModelList(ctx, account)
 	liveListAvailable := err == nil
@@ -242,7 +256,7 @@ func (s *AccountTestService) SyncUpstreamModelCatalog(ctx context.Context, accou
 		applyKimiCodingReasoningDefaults(body, catalog.Metadata)
 	}
 
-	if account.Platform == PlatformDeepseek && account.Type == AccountTypeOAuth {
+	if deepSeekHarnessCatalog {
 		_, metadata, _ := extractDeepSeekHarnessCatalog(body, "")
 		catalog.Metadata = metadata
 	}
@@ -321,10 +335,26 @@ func (s *AccountTestService) SyncUpstreamModelCatalog(ctx context.Context, accou
 			SyncedAt: time.Now().UTC().Format(time.RFC3339),
 			Models:   completeMetadata,
 		}
-		if err := s.accountRepo.UpdateExtra(ctx, account.ID, map[string]any{UpstreamModelMetadataExtraKey: snapshot}); err != nil {
+		updates := map[string]any{UpstreamModelMetadataExtraKey: snapshot}
+		if deepSeekHarnessCatalog {
+			repo, ok := s.accountRepo.(CredentialStateMutationRepository)
+			if !ok {
+				return nil, newUpstreamModelSyncInternalError("Conditional DeepSeek model metadata persistence is unavailable", nil)
+			}
+			applied, err := repo.ApplyCredentialStateMutation(ctx, account, CredentialStateMutation{Extra: updates})
+			if err != nil {
+				return nil, newUpstreamModelSyncInternalError("Failed to save upstream model metadata", err)
+			}
+			if !applied {
+				return nil, newUpstreamModelSyncUpstreamError("DeepSeek account changed; retry model discovery", nil)
+			}
+		} else if err := s.accountRepo.UpdateExtra(ctx, account.ID, updates); err != nil {
 			return nil, newUpstreamModelSyncInternalError("Failed to save upstream model metadata", err)
 		}
 		account.SetUpstreamModelMetadataSnapshot(snapshot)
+		if deepSeekHarnessCatalog && sameRequestCredentialGrant(selectedAccount, account) {
+			selectedAccount.SetUpstreamModelMetadataSnapshot(snapshot)
+		}
 		persistedCapabilities = true
 	}
 
@@ -656,6 +686,8 @@ func upstreamModelRegistryBaseURL(account *Account) string {
 		return ""
 	}
 	switch {
+	case usesDeepSeekHarnessModels(account):
+		return DefaultDeepseekBaseURL
 	case account.IsOpenAI() || account.IsMultiProtocolAPIKey():
 		return account.GetOpenAIFormatBaseURL()
 	case account.IsGrok():
@@ -793,7 +825,11 @@ func (s *AccountTestService) fetchUpstreamModelList(ctx context.Context, account
 	if account.Platform == PlatformStepFun {
 		extractModels = extractStepFunModelIDs
 	}
-	if account.Platform == PlatformDeepseek && account.Type == AccountTypeOAuth {
+	credentialAccount, ownerErr := requestCredentialAccount(req.Context(), account)
+	if ownerErr != nil {
+		return nil, nil, ownerErr
+	}
+	if usesDeepSeekHarnessModels(credentialAccount) {
 		identity, _ := outboundidentity.FromContext(req.Context())
 		filtered, _, filterErr := extractDeepSeekHarnessCatalog(body, identity.Version)
 		if filterErr != nil {
@@ -948,6 +984,8 @@ func (s *AccountTestService) buildUpstreamModelsRequest(ctx context.Context, acc
 		return s.buildAntigravityAPIKeyModelsRequest(ctx, account)
 	case account.IsDomesticOAuth() && (account.Platform == PlatformDeepseek || account.Platform == PlatformKimi):
 		return s.buildDomesticOAuthModelsRequest(ctx, account)
+	case account.Platform == PlatformDeepseek && account.Type == AccountTypeAPIKey:
+		return s.buildDeepSeekAPIKeyModelsRequest(ctx, account)
 	case usesZhipuProjectToken(account) && account.GetCredential("plan_kind") != ZhipuPlanOffPeak:
 		return s.buildZhipuLinkedModelsRequest(ctx, account)
 	case account.IsGrok():

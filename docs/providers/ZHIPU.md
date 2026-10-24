@@ -160,17 +160,25 @@ issued by the platform, and the official client's queue is unbounded.
 | Status | `POST /api/v1/off-peak/ticket/status` | Batch, up to 100 tickets |
 | Settle | `POST /api/v1/off-peak/ticket/{id}/settle` | Idempotent; explicit 401 refreshes PAT once, other errors remain retryable by idle cleanup |
 
+Each physical ticket-control send, including a 401 retry, carries a fresh
+UUIDv4 `x-request-id`. Successful responses may be bare JSON or zero-code
+`{code,data}` envelopes; nonzero business codes remain failures.
+
 States are `queued`, `ready`, `active`, `expired`, `settled` and `not_found`.
 A model request is admitted only while the ticket is `ready` or `active`; a
 `queued` request is rejected by the platform.
 
-**Plus bounds the wait instead of queueing forever.** An off-peak account holds at
+**Plus bounds the wait instead of queueing forever.** An off-peak credential generation holds at
 most one ticket; a request rechecks a cached `ready` or `active` ticket with the
 platform before reusing it, and
 otherwise the server takes a ticket and polls until the platform promotes it,
 within a configurable budget. When the budget expires the request fails with a
 retryable status that reports the current queue position. A ticket that expires
-while queued is re-taken once. Tickets idle for longer than the settle window are
+while queued is re-taken once. Each admitted model request retains a lease through sending and response-body
+EOF, Close, cancellation or read failure. Active leases prevent settlement;
+the idle window starts after the final lease ends. Credential rotation admits
+new work under a separate holder while older active streams drain with their
+original ticket and owner. Tickets idle for longer than the settle window are
 settled in the background, which returns the take-number quota; a failed settle
 is retried on the next cycle because the platform reclaims un-settled tickets by
 timeout anyway.

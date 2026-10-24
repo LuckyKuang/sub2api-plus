@@ -460,7 +460,10 @@ func TestZhipuProjectTokenOffPeakTeamScope(t *testing.T) {
 			manager := NewZhipuOffPeakTicketManager(tickets)
 			t.Cleanup(manager.Stop)
 			manager.projectTokens = linked
-			_, err = manager.TicketForRequest(context.Background(), account)
+			ticket, err := manager.TicketForRequest(context.Background(), account)
+			if ticket != nil {
+				ticket.Release()
+			}
 			require.NoError(t, err)
 			require.Equal(t, zcode.OffPeakAuth{JWT: "plan-jwt", PlanKey: "pat-login-1", TeamOrg: org, TeamProj: project}, tickets.lastAuth)
 		})
@@ -504,7 +507,8 @@ func TestZhipuProjectTokenOffPeakStatusAndDetachedSettlementRenew(t *testing.T) 
 	ctx = WithOutboundIdentityScope(ctx, nil)
 	id, err := manager.TicketForRequest(ctx, a)
 	require.NoError(t, err)
-	require.Equal(t, "stable-ticket", id)
+	require.Equal(t, "stable-ticket", id.TicketID)
+	id.Release()
 	require.Equal(t, zcode.OffPeakAuth{JWT: "plan-jwt", PlanKey: "pat-login-1"}, tickets.lastAuth)
 	refresh := func() {
 		t.Helper()
@@ -517,7 +521,8 @@ func TestZhipuProjectTokenOffPeakStatusAndDetachedSettlementRenew(t *testing.T) 
 	tickets.rejectStatus = true
 	id, err = manager.TicketForRequest(ctx, a)
 	require.NoError(t, err)
-	require.Equal(t, "stable-ticket", id)
+	require.Equal(t, "stable-ticket", id.TicketID)
+	id.Release()
 	require.Equal(t, []zcode.OffPeakAuth{
 		{JWT: "plan-jwt", PlanKey: "pat-login-2"},
 		{JWT: "plan-jwt", PlanKey: "pat-login-3"},

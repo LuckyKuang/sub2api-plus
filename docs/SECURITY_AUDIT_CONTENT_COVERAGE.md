@@ -639,3 +639,12 @@ captures real second-turn rejection in both modes and asserts zero ID-store
 access, turn-resource acquisition and upstream writes after the accepted first
 turn. Legacy IDs and unknown valid siblings cannot move preparation ahead of
 the audit boundary; the canonical extraction/pass-through rules are unchanged.
+
+
+The 2026-10-24 official-agent alignment changes only outbound credential
+snapshots, catalog authentication/filtering, provider error classification and
+ticket resource lifetimes. Canonical ingress extraction and audit ordering are
+unchanged: every accepted HTTP/WS turn is audited before account selection or
+provider side effects. A terminal upstream `model_not_found` is a provider
+response, never an audit violation. Settings/catalog/ticket control probes do
+not manufacture inference content or audit decisions.

@@ -364,7 +364,8 @@ func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Acc
 		return false
 	}
 
-	if len(requestedModel) > 0 && s.HandleUpstreamModelNotFound(ctx, account, requestedModel[0], statusCode, responseBody) {
+	if (len(requestedModel) > 0 || account.Platform == PlatformOpenAI && isOpenAIModelNotFoundError(statusCode, responseBody)) &&
+		s.HandleUpstreamModelNotFound(ctx, account, firstRequestedModel(requestedModel), statusCode, responseBody) {
 		return true
 	}
 
@@ -2592,6 +2593,8 @@ func (s *RateLimitService) HandleUpstreamModelNotFound(ctx context.Context, acco
 	var cooldown time.Duration
 	var reason string
 	switch {
+	case account.Platform == PlatformOpenAI && isOpenAIModelNotFoundError(statusCode, responseBody):
+		cooldown, reason = upstreamModelNotFoundCooldown, upstreamModelNotFoundReason
 	case isUpstreamModelNotFoundError(statusCode, responseBody):
 		cooldown, reason = upstreamModelNotFoundCooldown, upstreamModelNotFoundReason
 	case statusCode == http.StatusUnauthorized && account.Type == AccountTypeAPIKey && account.IsOpenAICompatible() && isOpenAICompatibleModelNotFoundBody(responseBody):
@@ -2603,10 +2606,27 @@ func (s *RateLimitService) HandleUpstreamModelNotFound(ctx context.Context, acco
 	}
 	modelKey := modelRateLimitKeyForUpstreamModelNotFound(ctx, account, requestedModel)
 	if modelKey == "" {
+		// Missing model attribution cannot turn a model rejection into a
+		// whole-account credential/403 penalty.
+		if account.Platform == PlatformOpenAI && isOpenAIModelNotFoundError(statusCode, responseBody) {
+			return true
+		}
 		return false
 	}
 	if shouldSkipCodexPlanGatedImageModelCooldown(ctx, reason, requestedModel, modelKey) {
 		return true
+	}
+	if account.Platform == PlatformOpenAI && isOpenAIModelNotFoundError(statusCode, responseBody) {
+		owner, ok := credentialStateMutationOwner(ctx, account)
+		if !ok {
+			return true
+		}
+		// The OpenAI account error path supplies the canonical upstream model;
+		// mapping it again can cool down a different model in chained mappings.
+		modelKey = openAIModelNotFoundRateLimitKey(owner, strings.TrimSpace(requestedModel))
+		if modelKey == "" {
+			return true
+		}
 	}
 	resetAt := time.Now().Add(cooldown)
 	if err := s.accountRepo.SetModelRateLimit(ctx, account.ID, modelKey, resetAt, reason); err != nil {

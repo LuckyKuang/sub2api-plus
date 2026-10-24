@@ -2303,7 +2303,13 @@ func (r *accountRepository) SetModelRateLimit(ctx context.Context, id int64, sco
 		ctx,
 		`UPDATE accounts SET 
 			extra = jsonb_set(
-				jsonb_set(COALESCE(extra, '{}'::jsonb), '{model_rate_limits}'::text[], COALESCE(extra->'model_rate_limits', '{}'::jsonb), true),
+				jsonb_set(COALESCE(extra, '{}'::jsonb), '{model_rate_limits}'::text[],
+					COALESCE((SELECT jsonb_object_agg(entry.key, entry.value)
+						FROM jsonb_each(COALESCE(extra->'model_rate_limits', '{}'::jsonb)) AS entry
+						WHERE left(entry.key, length($4)) <> $4
+							OR jsonb_typeof(entry.value->'rate_limit_reset_at') IS DISTINCT FROM 'string'
+							OR entry.value->>'rate_limit_reset_at' !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$'
+							OR entry.value->>'rate_limit_reset_at' > $5), '{}'::jsonb), true),
 				ARRAY['model_rate_limits', $1]::text[],
 				$2::jsonb,
 				true
@@ -2313,6 +2319,8 @@ func (r *accountRepository) SetModelRateLimit(ctx context.Context, id int64, sco
 		scope,
 		raw,
 		id,
+		service.OpenAIModelNotFoundRateLimitScopePrefix,
+		now.Format(time.RFC3339),
 	)
 	if err != nil {
 		return err

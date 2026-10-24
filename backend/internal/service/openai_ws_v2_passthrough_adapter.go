@@ -1280,11 +1280,19 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 	var pendingMigrationMessages [][]byte
 	var pendingMigrationBytes int64
 	var migrationUsage OpenAIUsage
+	var modelNotFoundTerminal atomic.Bool
 	classifyUpstreamEvent := func(msgType coderws.MessageType, payload []byte, wroteDownstream bool) error {
 		if msgType != coderws.MessageText {
 			return nil
 		}
 		eventType, _, _ := parseOpenAIWSEventEnvelope(payload)
+		switch eventType {
+		case "error", "response.failed":
+			_, modelError := openAIModelNotFoundEventStatus(payload)
+			modelNotFoundTerminal.Store(modelError)
+		case "response.completed", "response.done":
+			modelNotFoundTerminal.Store(false)
+		}
 		if eventType == "response.created" {
 			failureAccountSideEffectsApplied = false
 		}
@@ -1292,14 +1300,14 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 			return nil
 		}
 		errCodeRaw, errTypeRaw, errMsgRaw := parseOpenAIWSErrorEventFields(payload)
-		isPreOutputRateLimit := eventType == "error" && !wroteDownstream && isOpenAIWSRateLimitError(errCodeRaw, errTypeRaw, errMsgRaw)
+		isPreOutputRateLimit := eventType == "error" && !wroteDownstream && isOpenAIWSRateLimitEvent(payload, errCodeRaw, errTypeRaw, errMsgRaw)
 		if (eventType == "error" || eventType == "response.failed") && !failureAccountSideEffectsApplied && !isPreOutputRateLimit {
 			failureAccountSideEffectsApplied = s.handleOpenAIWSFailureAccountSideEffects(ctx, account, capturedSessionModel, handshakeHeaders, payload)
 		}
 		if eventType != "error" {
 			return nil
 		}
-		if wroteDownstream || !isOpenAIWSRateLimitError(errCodeRaw, errTypeRaw, errMsgRaw) {
+		if wroteDownstream || !isOpenAIWSRateLimitEvent(payload, errCodeRaw, errTypeRaw, errMsgRaw) {
 			return nil
 		}
 		s.persistOpenAIWSRateLimitSignal(ctx, account, handshakeHeaders, payload, errCodeRaw, errTypeRaw, errMsgRaw, capturedSessionModel)
@@ -1413,7 +1421,11 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 					turnResult.Usage.CacheReadInputTokens,
 				)
 				if hooks != nil && hooks.AfterTurn != nil {
-					hooks.AfterTurn(turnNo, turnResult, nil)
+					var observationErr error
+					if modelNotFoundTerminal.Swap(false) && normalizeOpenAIWSTerminalEvent(turn.TerminalEventType) == "response.failed" {
+						observationErr = &openAIModelNotFoundTerminalError{cause: errors.New("upstream model_not_found")}
+					}
+					hooks.AfterTurn(turnNo, turnResult, observationErr)
 				}
 			},
 			TransformClientMessage: func(msgType coderws.MessageType, payload []byte) ([]byte, bool, error) {

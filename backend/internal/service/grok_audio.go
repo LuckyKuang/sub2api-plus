@@ -65,6 +65,15 @@ func (s *OpenAIGatewayService) ForwardGrokVoice(ctx context.Context, c *gin.Cont
 		return nil, err
 	}
 	ctx = withRequestCredentialOwner(ctx, account, token)
+	selectedAccount := account
+	account, err = requestCredentialAccount(ctx, account)
+	if err != nil {
+		return nil, err
+	}
+	proxyURL, err := requestCredentialOwnerProxyURL(ctx, account)
+	if err != nil {
+		return nil, err
+	}
 	targetURL, err := buildGrokVoiceURL(account, s.cfg, endpoint)
 	if err != nil {
 		return nil, err
@@ -92,10 +101,6 @@ func (s *OpenAIGatewayService) ForwardGrokVoice(ctx context.Context, c *gin.Cont
 	}
 	account.ApplyHeaderOverrides(req.Header)
 
-	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
-	}
 	started := time.Now()
 	byteCtx, byteTiming := beginFirstByteTiming(req.Context(), started)
 	req = req.WithContext(byteCtx)
@@ -104,7 +109,7 @@ func (s *OpenAIGatewayService) ForwardGrokVoice(ctx context.Context, c *gin.Cont
 			result.FirstByteMs = byteTiming.Milliseconds()
 		}
 	}()
-	resp, err := s.httpUpstream.Do(prepareAccountOutboundRequest(req, account), proxyURL, account.ID, account.Concurrency)
+	resp, err := s.httpUpstream.Do(prepareAccountOutboundRequest(req, account), proxyURL, selectedAccount.ID, selectedAccount.Concurrency)
 	SetOpsLatencyMs(c, OpsUpstreamLatencyMsKey, time.Since(started).Milliseconds())
 	if err != nil {
 		return nil, s.handleOpenAIUpstreamTransportError(ctx, c, account, err, false)
@@ -180,6 +185,15 @@ func (s *OpenAIGatewayService) OpenGrokRealtime(ctx context.Context, account *Ac
 	if s == nil || account == nil || account.Platform != PlatformGrok {
 		return nil, fmt.Errorf("grok realtime account is required")
 	}
+	ctx = withRequestCredentialOwner(ctx, account, token)
+	account, err := requestCredentialAccount(ctx, account)
+	if err != nil {
+		return nil, err
+	}
+	proxyURL, err := requestCredentialOwnerProxyURL(ctx, account)
+	if err != nil {
+		return nil, err
+	}
 	base, err := buildGrokVoiceURL(account, s.cfg, "realtime")
 	if err != nil {
 		return nil, err
@@ -198,10 +212,6 @@ func (s *OpenAIGatewayService) OpenGrokRealtime(ctx context.Context, account *Ac
 	}
 	account.ApplyHeaderOverrides(headers)
 	ApplyAccountOutboundIdentity(ctx, account, &http.Request{URL: u, Header: headers})
-	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
-	}
 	conn, status, _, err := s.getOpenAIWSPassthroughDialer().Dial(ctx, u.String(), headers, proxyURL)
 	if err != nil {
 		return nil, &GrokRealtimeDialError{StatusCode: status, Err: err}
@@ -326,6 +336,15 @@ func (s *OpenAIGatewayService) ProbeGrokRealtime(ctx context.Context, account *A
 	if account.Platform != PlatformGrok {
 		return fmt.Errorf("account platform %s is not supported for grok realtime", account.Platform)
 	}
+	ctx = withRequestCredentialOwner(ctx, account, token)
+	account, err := requestCredentialAccount(ctx, account)
+	if err != nil {
+		return err
+	}
+	proxyURL, err := requestCredentialOwnerProxyURL(ctx, account)
+	if err != nil {
+		return err
+	}
 	base, err := buildGrokVoiceURL(account, s.cfg, "realtime")
 	if err != nil {
 		return err
@@ -344,10 +363,6 @@ func (s *OpenAIGatewayService) ProbeGrokRealtime(ctx context.Context, account *A
 	}
 	account.ApplyHeaderOverrides(headers)
 	ApplyAccountOutboundIdentity(ctx, account, &http.Request{URL: u, Header: headers})
-	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
-	}
 	dialer := s.getOpenAIWSPassthroughDialer()
 	conn, _, _, err := dialer.Dial(ctx, u.String(), headers, proxyURL)
 	if err != nil {

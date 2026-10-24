@@ -75,7 +75,7 @@ Codex version bounds apply to built-in profiles. Policy versions use strict
 SemVer 2.0: they require a complete `MAJOR.MINOR.PATCH` core without a `v`
 prefix or leading zeroes.
 Valid prerelease and build metadata are accepted, with normal SemVer
-precedence (`0.163.0-alpha.4` is lower than `0.163.0`, and build metadata does
+precedence (`0.164.0-alpha.4` is lower than `0.164.0`, and build metadata does
 not change precedence). Historical outbound version normalization remains a
 separate compatibility concern and does not relax these policy bounds.
 
@@ -376,9 +376,9 @@ string clears it through an explicit null in the JSONB update.
 The exact compiled identity is:
 
 ```text
-User-Agent: codex_cli_rs/0.163.0 (Ubuntu 24.04; x86_64) xterm-256color
+User-Agent: codex_cli_rs/0.164.0 (Ubuntu 24.04; x86_64) xterm-256color
 Originator: codex_cli_rs
-Version: 0.163.0
+Version: 0.164.0
 ```
 
 The version resolver runs after source selection: a valid administrator version
@@ -607,7 +607,7 @@ Neither capability is implied by matching UA/Originator/Version.
 ## User-Agent suffix
 
 An administrator User-Agent may end with the official ` ({suffix})` group, for
-example `codex_cli_rs/0.163.0 (Ubuntu 24.04; x86_64) xterm-256color (mcp: server-a)`.
+example `codex_cli_rs/0.164.0 (Ubuntu 24.04; x86_64) xterm-256color (mcp: server-a)`.
 Pairing, validation, and manual version updates accept that form and keep the
 suffix unchanged. The gateway does not generate a suffix.
 
@@ -723,3 +723,11 @@ Generic account overrides cannot replace the live parent-thread header.
 Existing explicit session/full convergence policies retain their thread
 convergence behavior. Protocol metadata does not change either audit engine's
 canonical user-content extraction or side-effect ordering.
+
+
+Exact provider `model_not_found` errors are terminal for the selected
+credential/model, including HTTP 400/403/404 and statusless SSE/WS events.
+They preserve their structured code after bounded cross-owner failover and do
+not count as authentication, account health or quota failures. A generation-
+scoped negative model cache prevents a late old-grant response from blocking
+a replacement grant. Other models on that account remain schedulable.

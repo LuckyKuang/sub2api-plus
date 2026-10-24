@@ -42,7 +42,8 @@ the same tenant derivation across OAuth and API keys, independently of the
 credential-owner metadata. Existing API-key explicit keys may see one cache
 miss when upgrading to this shared derivation; subsequent owner changes keep
 the key stable. Explicit OAuth sharing retains its authorized scope.
-The Codex source matrix and exact compiled default below are unchanged.
+The Codex source-priority matrix below is unchanged. Its manually reviewed
+compiled version is `0.164.0`; the client family and environment stay fixed.
 
 All built-in OS declarations describe one fixed **Ubuntu 24.04 x86_64** client,
 independent of the gateway/container host. Device name is `ubuntu`. The baseline
@@ -55,7 +56,7 @@ SDK versions do not update this baseline.
 
 | Preset | Exact default OS/architecture declarations |
 | --- | --- |
-| Codex | Existing `codex_cli_rs/0.163.0 (Ubuntu 24.04; x86_64) xterm-256color`, unchanged |
+| Codex | `codex_cli_rs/0.164.0 (Ubuntu 24.04; x86_64) xterm-256color` |
 | Claude | `X-Stainless-OS: Linux`, `X-Stainless-Arch: x64` |
 | Gemini | `GeminiCLI/0.1.5 (Linux; x64)` |
 | Grok | `grok-shell/1.0.45 (linux; x86_64)` |
@@ -222,8 +223,8 @@ baseline upgrades follow [the official agent source index](OFFICIAL_AGENT_BASELI
 current effective identity.
 
 The exact compiled DeepSeek identity is
-`deepseek-harness/0.2.1-rc.2 (+https://github.com/deepseek-ai/deepseek-harness)`,
-with identifier `deepseek-harness` and client version `0.2.1-rc.2`. The
+`deepseek-harness/0.2.1-rc.3 (+https://github.com/deepseek-ai/deepseek-harness)`,
+with identifier `deepseek-harness` and client version `0.2.1-rc.3`. The
 parenthesized product comment belongs to the same User-Agent value the
 published harness renders from its own package manifest; it is not a second
 declaration. Only the User-Agent reaches the wire, so the preset adds no
@@ -346,8 +347,8 @@ over the validated URL and actual body before dispatch; send-time identity
 rendering preserves it. Generic headers cannot select the workspace,
 change these destinations, supply authentication or overwrite identity.
 
-The exact compiled Kimi Code identity is `kimi-code-cli/2.3.0`, with identifier
-`kimi-code-cli`, client version `2.3.0` and platform declaration
+The exact compiled Kimi Code identity is `kimi-code-cli/2.3.1`, with identifier
+`kimi-code-cli`, client version `2.3.1` and platform declaration
 `kimi_code_cli`. The official client renders one product token with dashes and
 one platform token with underscores; the two are not interchangeable. Its engine
 attaches the complete block — the User-Agent plus `X-Msh-Platform`,
@@ -1056,7 +1057,7 @@ Snapshots deep-copy the protocol maps, survive OAuth session serialization, and
 are reapplied at final transport send, including retries. Arbitrary header
 maps cannot supply SDK, device or control-plane declarations.
 
-Kimi's OAuth and API-key inference use the same `kimi-code-cli/2.3.0` UA and
+Kimi's OAuth and API-key inference use the same `kimi-code-cli/2.3.1` UA and
 `X-Msh-*` declarations. Anthropic uses `X-Stainless-Package-Version: 0.95.2`;
 Chat Completions/Responses use `6.34.0` (the reviewed Anthropic/OpenAI JS lockfile
 versions). Both explicitly pin `X-Stainless-Lang: js`, `X-Stainless-OS: Linux`,
@@ -1088,7 +1089,7 @@ attaches the source block to its configured ZCode origin. This is an intentional
 extension required by the provider-bound identity contract. Optional telemetry
 IDs are not copied from another installation. DeepSeek uses the official Harness web login branch
 (`platformClientHeaders(null, client)`); its selected client version is
-`0.2.1-rc.2`, independent of any desktop shell.
+`0.2.1-rc.3`, independent of any desktop shell.
 
 Regression evidence: `domestic_identity_review_test.go`,
 `domestic_outbound_identity_test.go`, the complete Codex identity regressions,
@@ -1134,6 +1135,11 @@ are insufficient for the final outbound privacy boundary.
 | OAuth/account-service versus inference declarations; locale, timezone, DST and kernel build/release | `pkg/cnoauth/client_test.go`, `pkg/deepseek/identity_test.go`, `pkg/zcode/identity_test.go`, settings UI tests |
 | Cancellation/expiry and delayed responses, single consumption across replicas, unavailable/changed proxies | `useCNOAuth.spec.ts`, `useZhipuOAuth.spec.ts`, both login panel suites, `pkg/zcode/session_replica_test.go`, `service/zhipu_oauth_service_test.go`, admin handler tests |
 | Off-peak official task IDs, repeat retirement, original owner identity/auth, concurrent settlement, expired admission, rejection before forward/probe and bounded waits | `service/zhipu_offpeak_ticket_test.go` |
+| Active ticket leases through send/EOF/Close/cancel/error, overlapping streams and old-owner draining on rotation | `service/zhipu_offpeak_lease_test.go` |
+| Ticket bare/envelope/empty settlement responses, business reset/retry hints and distinct physical request IDs | `pkg/zcode/offpeak_wire_test.go` |
+| Exact model_not_found over HTTP/SSE/WS, preserved terminal code and no whole-account auth/quota punishment | `service/openai_model_not_found_contract_test.go`, `handler/openai_gateway_credential_failover_test.go` |
+| Grok acquired-owner destination/ordinary headers/egress and generation-isolated capability probes | `service/grok_acquired_owner_request_test.go`, `grok_auxiliary_owner_test.go` |
+| DeepSeek native OAuth/API-key catalog auth, version/capability gates and conditional metadata writes | `service/deepseek_models_test.go` |
 | ZCode linked discovery reaches final PAT auth on both estates; every model/ticket 401 invalidates its PAT; concurrent transient refresh cannot resurrect rejected material | `service/zhipu_project_tokens_test.go` |
 | Linked ZCode forwarding/probes set redirect prohibition; both HTTP transport methods prevent redirected credential dispatch | `service/zhipu_project_tokens_test.go`, `repository/http_upstream_test.go` |
 | Kimi reasoning survives optional effort errors; Coding absent/null/disabled reasoning clears stale efforts without changing public/PAYG metadata defaults | `service/official_agent_update_test.go` |

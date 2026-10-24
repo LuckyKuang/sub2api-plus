@@ -712,7 +712,7 @@ readLoop:
 			if errMsg == "" {
 				errMsg = "Upstream websocket error"
 			}
-			fallbackReason, canFallback := classifyOpenAIWSErrorEventFromRaw(errCodeRaw, errTypeRaw, errMsgRaw)
+			fallbackReason, canFallback := classifyOpenAIWSErrorEvent(message)
 			errCode, errType, errMessage := summarizeOpenAIWSErrorEventFieldsFromRaw(errCodeRaw, errTypeRaw, errMsgRaw)
 			logOpenAIWSModeInfo(
 				"error_event account_id=%d conn_id=%s idx=%d fallback_reason=%s can_fallback=%v err_code=%s err_type=%s err_message=%s",
@@ -756,7 +756,7 @@ readLoop:
 			if !wroteDownstream && canFallback {
 				return nil, wrapOpenAIWSFallback(fallbackReason, errors.New(errMsg))
 			}
-			statusCode := openAIWSErrorHTTPStatusFromRaw(errCodeRaw, errTypeRaw)
+			statusCode := openAIWSErrorHTTPStatus(message)
 			setOpsUpstreamError(c, statusCode, errMsg, "")
 			if reqStream && !clientDisconnected {
 				flushBufferedStreamEvents("error_event")
@@ -764,14 +764,22 @@ readLoop:
 			}
 			if !reqStream {
 				s.finalizeCodexClientQuotaHeaders(c.Writer.Header(), c, account)
-				c.JSON(statusCode, gin.H{
-					"error": gin.H{
-						"type":    "upstream_error",
-						"message": errMsg,
-					},
-				})
+				if modelStatus, ok := openAIModelNotFoundEventStatus(message); ok {
+					writeOpenAIUpstreamClientError(c, modelStatus, message, sanitizeUpstreamErrorMessage(errMsg))
+				} else {
+					c.JSON(statusCode, gin.H{
+						"error": gin.H{
+							"type":    "upstream_error",
+							"message": errMsg,
+						},
+					})
+				}
 			}
-			return nil, fmt.Errorf("openai ws error event: %s", errMsg)
+			terminalErr := fmt.Errorf("openai ws error event: %s", errMsg)
+			if _, ok := openAIModelNotFoundEventStatus(message); ok {
+				return nil, &openAIModelNotFoundTerminalError{cause: terminalErr}
+			}
+			return nil, terminalErr
 		}
 
 		if reqStream {
@@ -820,6 +828,21 @@ readLoop:
 				markOpenAIWSClientVisibleFailure(c, eventType, message)
 			}
 			upstreamTerminalEvent = s.handleOpenAIWSTerminalTransientFailure(ctx, account, mappedModel, lease.HandshakeHeaders(), message)
+			if eventType == "response.failed" {
+				if status, ok := openAIModelNotFoundEventStatus(message); ok {
+					errMsg := sanitizeUpstreamErrorMessage(extractOpenAISSEErrorMessage(message))
+					if errMsg == "" {
+						errMsg = "model_not_found"
+					}
+					setOpsUpstreamError(c, status, errMsg, "")
+					if !reqStream {
+						s.finalizeCodexClientQuotaHeaders(c.Writer.Header(), c, account)
+						writeOpenAIUpstreamClientError(c, status, message, errMsg)
+					}
+					cleanExit = len(pendingJSONDocuments) == 0
+					return resultWithUsage(), &openAIModelNotFoundTerminalError{cause: fmt.Errorf("openai ws response failed: %s", errMsg)}
+				}
+			}
 			// A terminal event must be the final JSON document in its WS message.
 			// Ignore any tail for the completed client turn, but never reuse the
 			// ambiguous upstream connection for another request.

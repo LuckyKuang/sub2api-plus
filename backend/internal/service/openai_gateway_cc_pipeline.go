@@ -185,8 +185,13 @@ func (s *OpenAIGatewayService) openAIChatCompletionsTargetURL(account *Account) 
 // resolveCCFallbackTarget 解析两条 CC 回退路径共用的账号凭证与上游端点
 // （APIKey 账号，以及保留各自官方凭据/地址语义的 Grok 和 ZCode linked 账号）。
 func (s *OpenAIGatewayService) resolveCCFallbackTarget(ctx context.Context, c *gin.Context, account *Account) (apiKey string, targetURL string, err error) {
+	ctx = WithOutboundIdentityScope(ctx, c)
 	if account.IsGrok() {
 		apiKey, _, err = s.GetRequestCredential(ctx, c, account)
+		if err != nil {
+			return "", "", err
+		}
+		account, err = requestCredentialAccount(withRequestCredentialOwner(ctx, account, apiKey), account)
 		if err != nil {
 			return "", "", err
 		}
@@ -231,6 +236,23 @@ func (s *OpenAIGatewayService) sendCCUpstreamRequest(
 	userAgent string,
 	grokCacheIdentity string,
 ) (*http.Response, error) {
+	selectedAccount := account
+	if account.IsGrok() {
+		ctx = WithOutboundIdentityScope(ctx, c)
+		ctx = withRequestCredentialOwner(ctx, account, bearerToken)
+		owner, err := requestCredentialAccount(ctx, account)
+		if err != nil {
+			return nil, err
+		}
+		account = owner
+		// Both converted fallbacks and raw Chat calls may have resolved their
+		// target before a refresh. Build it again from the acquired grant.
+		targetURL, err = buildGrokChatCompletionsURL(account, s.cfg, s.settingService)
+		if err != nil {
+			return nil, err
+		}
+		userAgent = account.GetOpenAIUserAgent()
+	}
 	// DeepSeek thinking mode 要求历史 assistant 回传 reasoning_content。
 	// Responses→CC 回退在加密-only / 缺 reasoning item 且缓存未命中时会漏掉该
 	// 字段，上游 400 "The `reasoning_content` in the thinking mode must be
@@ -300,9 +322,9 @@ func (s *OpenAIGatewayService) sendCCUpstreamRequest(
 	if account.ProxyID != nil && account.Proxy != nil {
 		proxyURL = account.Proxy.URL()
 	}
-	resp, err := s.doOpenAIUpstream(upstreamReq, proxyURL, account)
+	resp, err := s.doOpenAIUpstream(upstreamReq, proxyURL, selectedAccount)
 	if err != nil {
-		return nil, s.handleOpenAIUpstreamTransportError(ctx, c, account, err, false)
+		return nil, s.handleOpenAIUpstreamTransportError(ctx, c, selectedAccount, err, false)
 	}
 	return resp, nil
 }

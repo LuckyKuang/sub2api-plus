@@ -51,7 +51,7 @@ DeepSeek OAuth and API-key accounts use the pinned **DeepSeek** preset by defaul
 (`nativeOutboundPreset`), so DeepSeek receives exactly one declaration:
 
 ```
-User-Agent: deepseek-harness/0.2.1-rc.2 (+https://github.com/deepseek-ai/deepseek-harness)
+User-Agent: deepseek-harness/0.2.1-rc.3 (+https://github.com/deepseek-ai/deepseek-harness)
 ```
 
 The parenthesized product comment belongs to that same User-Agent value
@@ -73,7 +73,7 @@ unchanged.
 
 The **DeepSeek · Harness** card follows the official
 [deepseek-harness source](../OFFICIAL_AGENT_BASELINES.md) directly. The compiled
-version is the reviewed `0.2.1-rc.2` prerelease; valid pins at `0.2.0-rc.2` or
+version is the reviewed `0.2.1-rc.3` prerelease; valid pins at `0.2.0-rc.2` or
 newer retain their priority. It uses no desktop-shell version.
 
 Native Messages requests carry an independently persisted anonymous UUID v4 in
@@ -98,12 +98,16 @@ gateway extension uses JSON. Foreign Claude/Codex session and SDK runtime
 headers are removed. Files and mid-conversation tool-change beta declarations
 are derived from the actual native body.
 
-OAuth model discovery calls `/models` with `x-dsh-auth-token`. Listed models
+OAuth model discovery calls `/models` with `x-dsh-auth-token`. Official-origin
+API-key accounts explicitly using native Anthropic Messages call `/models` with
+`x-api-key`. Both paths freeze the acquired owner and selected identity through
+response decoding and conditional metadata persistence. Listed models
 require usable `api_capabilities.anthropic_messages`, text output, supported
 input modalities and valid positive capacities. Explicit Harness minimum
 versions gate availability against the selected trusted version; without a
 minimum, only built-in `deepseek-flash` and `deepseek-v4-pro` are offered.
 Unknown rows and array values are skipped without hiding recognized modalities;
 duplicate IDs retain the first row, following Harness's decoder.
-API-key `/models` sync remains an explicit gateway extension to the official
-agent's built-in credential-gated catalog. No OAuth token is used there.
+API-key Chat/Responses/adaptive and custom compatible discovery retain their
+own catalog semantics; they are not filtered to native Messages capabilities.
+No OAuth token is used for API-key discovery.

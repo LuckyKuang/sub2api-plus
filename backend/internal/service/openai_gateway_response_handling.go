@@ -53,7 +53,13 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 	return s.handleStreamingResponseWithReasoning(ctx, resp, c, account, startTime, originalModel, mappedModel, "")
 }
 
-func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.Context, resp *http.Response, c *gin.Context, account *Account, startTime time.Time, originalModel, mappedModel, reasoningEffort string, encryptedRecoveryAllowed ...bool) (*openaiStreamingResult, error) {
+func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.Context, resp *http.Response, c *gin.Context, account *Account, startTime time.Time, originalModel, mappedModel, reasoningEffort string, encryptedRecoveryAllowed ...bool) (result *openaiStreamingResult, returnErr error) {
+	modelNotFoundTerminal := false
+	defer func() {
+		if returnErr != nil && modelNotFoundTerminal {
+			returnErr = &openAIModelNotFoundTerminalError{cause: returnErr}
+		}
+	}()
 	resetOpsOpenAIStreamObservation(c)
 	observer := upstreamResponseModelObserverFromContext(c)
 	if observer == nil {
@@ -515,6 +521,12 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 		if data, ok := extractOpenAISSEDataLine(line); ok {
 			dataBytes := []byte(data)
 			eventType := effectiveOpenAISSEEventType(dataBytes, pendingSSEEventType)
+			switch eventType {
+			case "error", "response.failed":
+				_, modelNotFoundTerminal = openAIModelNotFoundEventStatus(dataBytes)
+			case "response.completed", "response.done":
+				modelNotFoundTerminal = false
+			}
 			if codexFailureTerminal && sawBareError && !sawResponseFailed &&
 				(eventType == "response.completed" || eventType == "response.done") {
 				// A later successful terminal is authoritative over a pending bare
@@ -1798,6 +1810,9 @@ func (s *OpenAIGatewayService) handleSSEToJSON(resp *http.Response, c *gin.Conte
 		if msg == "" {
 			msg = "Upstream compact response failed"
 		}
+		if status, ok := openAIModelNotFoundEventStatus(terminalPayload); ok {
+			return nil, s.writeOpenAINonStreamingModelNotFound(resp, c, account, status, terminalPayload, msg)
+		}
 		if !openAIStreamClientOutputStarted(c, false) {
 			if recoveryErr := openAIEncryptedStreamRecoverySignal(terminalPayload, encryptedRecoveryAllowed); recoveryErr != nil {
 				return nil, recoveryErr
@@ -1988,7 +2003,8 @@ func sanitizeOpenAIResponseFailedEventForClient(payload []byte, eventType string
 	if !isFailedEvent {
 		return updated, !bytes.Equal(updated, payload)
 	}
-	if clientOutputStarted && isOpenAIContextWindowError(extractOpenAISSEErrorMessage(payload), payload) {
+	_, modelNotFound := openAIModelNotFoundEventStatus(payload)
+	if !modelNotFound && clientOutputStarted && isOpenAIContextWindowError(extractOpenAISSEErrorMessage(payload), payload) {
 		errorPath := ""
 		switch {
 		case gjson.GetBytes(updated, "response.error").Exists():
@@ -2033,6 +2049,22 @@ func sanitizeOpenAIResponseFailedEventForClient(payload []byte, eventType string
 		updated = next
 	}
 	return updated, !bytes.Equal(updated, payload)
+}
+
+func (s *OpenAIGatewayService) writeOpenAINonStreamingModelNotFound(resp *http.Response, c *gin.Context, account *Account, status int, payload []byte, message string) error {
+	message = sanitizeUpstreamErrorMessage(strings.TrimSpace(message))
+	if message == "" {
+		message = "model_not_found"
+	}
+	setOpsUpstreamError(c, status, message, "")
+	if openAICompactClientWantsStream(c) && StopOpenAICompactSSEKeepaliveCommitted(c) {
+		writeOpenAICompactSSEFailureMessage(c, status, "model_not_found", message)
+	} else {
+		responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
+		s.finalizeCodexClientQuotaHeaders(c.Writer.Header(), c, account)
+		writeOpenAIUpstreamClientError(c, status, payload, message)
+	}
+	return &openAIModelNotFoundTerminalError{cause: fmt.Errorf("non-streaming openai protocol error: %s", message)}
 }
 
 func (s *OpenAIGatewayService) writeOpenAINonStreamingProtocolError(resp *http.Response, c *gin.Context, account *Account, message string) error {

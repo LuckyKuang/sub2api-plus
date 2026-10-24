@@ -666,6 +666,7 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 	var bareErrorPayload []byte
 	var createdAtStamper responsesCreatedAtStamper
 	bareErrorMessage := ""
+	var modelNotFoundTerminalError error
 	failureAccountSideEffectsApplied := false
 	mappedModel := actualModel
 	needModelReplace := false
@@ -694,6 +695,7 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 			Stream:                        reqStream,
 			OpenAIWSMode:                  true,
 			UpstreamTerminalEvent:         upstreamTerminalEvent,
+			modelNotFoundTerminalError:    modelNotFoundTerminalError,
 			ResponseHeaders:               cloneHeader(resp.Header),
 			Duration:                      time.Since(turnStart),
 		}
@@ -824,6 +826,9 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 		replayCollector.AddEvent(eventType, upstreamMessage)
 
 		var upstreamEventErr error
+		if eventType == "response.completed" || eventType == "response.done" {
+			modelNotFoundTerminalError = nil
+		}
 		if officialOpenAIResponses && bareErrorPending && (eventType == "response.completed" || eventType == "response.done") {
 			// Some upstreams emit a recoverable bare error before the authoritative
 			// successful terminal. Do not replace that terminal with a synthetic
@@ -835,6 +840,11 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 		suppressClientMessage := officialOpenAIResponses && bareErrorPending && eventType != "response.failed"
 		if eventType == "error" || eventType == "response.failed" {
 			errMessage := extractOpenAISSEErrorMessage(upstreamMessage)
+			if _, ok := openAIModelNotFoundEventStatus(upstreamMessage); ok {
+				modelNotFoundTerminalError = &openAIModelNotFoundTerminalError{cause: fmt.Errorf("upstream model_not_found: %s", errMessage)}
+			} else {
+				modelNotFoundTerminalError = nil
+			}
 			if errMessage == "" {
 				errMessage = "upstream error event"
 			}

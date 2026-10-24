@@ -34,6 +34,8 @@ func prepareZCodeRequestState(req *http.Request, account *Account) error {
 	if protocol == "" {
 		*req = *req.WithContext(outboundidentity.WithIdentity(req.Context(), zcode.ControlIdentity(identity)))
 		outboundidentity.ApplyContext(req)
+		deleteHeaderAllForms(req.Header, "x-request-id")
+		req.Header.Set("x-request-id", uuid.NewString())
 		return nil
 	}
 	identity = zcode.ModelIdentity(identity)

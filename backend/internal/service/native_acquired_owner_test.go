@@ -144,7 +144,7 @@ func TestNativeAdaptersUseAcquiredOwnerAfterSelectedRelink(t *testing.T) {
 						require.Empty(t, wire.headers.Get("Authorization"))
 						// OUTBOUND_IDENTITY.md: the official product comment is part
 						// of the single DeepSeek UA declaration.
-						require.Equal(t, "deepseek-harness/0.2.1-rc.2 (+https://github.com/deepseek-ai/deepseek-harness)", wire.headers.Get("User-Agent"))
+						require.Equal(t, "deepseek-harness/0.2.1-rc.3 (+https://github.com/deepseek-ai/deepseek-harness)", wire.headers.Get("User-Agent"))
 					case PlatformKimi:
 						require.Equal(t, "Bearer old-token", wire.headers.Get("Authorization"))
 						require.Equal(t, "kimi-code-cli/2.3.0", wire.headers.Get("User-Agent"))

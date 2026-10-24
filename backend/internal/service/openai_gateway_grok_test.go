@@ -3016,7 +3016,7 @@ func TestForwardAsAnthropicForGrokUsesConfiguredDefaultBaseURL(t *testing.T) {
 func TestForwardGrokResponses_StreamErrorPreservesPartialResult(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	recorder := httptest.NewRecorder()
+	recorder := newOpenAIResponseFlushRecorder()
 	c, _ := gin.CreateTestContext(recorder)
 	body := []byte(`{"model":"grok","stream":true,"input":"hi"}`)
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
@@ -3029,21 +3029,32 @@ func TestForwardGrokResponses_StreamErrorPreservesPartialResult(t *testing.T) {
 			accountsByID: map[int64]*Account{61: account},
 		},
 	}
-	upstreamSSE := strings.Join([]string{
-		`data: {"type":"response.output_text.delta","delta":"h"}`,
-		"",
+	firstEvent := "data: {\"type\":\"response.output_text.delta\",\"delta\":\"h\"}\n\n"
+	terminalEvents := strings.Join([]string{
 		`data: {"type":"response.completed","response":{"id":"resp_grok_partial","model":"grok-4.5","usage":{"input_tokens":9,"output_tokens":4,"input_tokens_details":{"cached_tokens":2}}}}`,
 		"",
 		"data: [DONE]",
 		"",
 	}, "\n")
+	allowTerminal := make(chan struct{})
+	defer func() {
+		select {
+		case <-allowTerminal:
+		default:
+			close(allowTerminal)
+		}
+	}()
+	upstreamBody := &stagedOpenAISSEReadCloser{
+		segments: [][]byte{[]byte(firstEvent), []byte(terminalEvents)},
+		gates:    []<-chan struct{}{nil, allowTerminal},
+	}
 	upstream := &httpUpstreamRecorder{resp: &http.Response{
 		StatusCode: http.StatusOK,
 		Header: http.Header{
 			"Content-Type":   []string{"text/event-stream"},
 			"Xai-Request-Id": []string{"xai-rid-partial"},
 		},
-		Body: io.NopCloser(strings.NewReader(upstreamSSE)),
+		Body: upstreamBody,
 	}}
 	svc := &OpenAIGatewayService{
 		httpUpstream:      upstream,
@@ -3051,7 +3062,18 @@ func TestForwardGrokResponses_StreamErrorPreservesPartialResult(t *testing.T) {
 		accountRepo:       repo,
 	}
 
-	result, err := svc.forwardGrokResponses(context.Background(), c, account, body, "grok", true, time.Now())
+	var result *OpenAIForwardResult
+	var err error
+	done := make(chan struct{})
+	go func() {
+		result, err = svc.forwardGrokResponses(context.Background(), c, account, body, "grok", true, time.Now())
+		close(done)
+	}()
+	// Deliver the terminal usage only after the first event reaches the client,
+	// so the injected second-write failure does not depend on scanner scheduling.
+	waitOpenAIResponseFlushCount(t, recorder, 1)
+	close(allowTerminal)
+	waitOpenAIResponseFlushSignal(t, done)
 
 	require.EqualError(t, err, "stream usage incomplete: client disconnected")
 	require.NotNil(t, result, "Grok stream errors after observable output must preserve the partial result")

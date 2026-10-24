@@ -660,13 +660,13 @@ func offPeakServer(t *testing.T, handler http.HandlerFunc) (*httptest.Server, *O
 }
 
 func TestOffPeakTicketAuthHeadersCarryThePlanSnapshot(t *testing.T) {
-	auth := OffPeakAuth{JWT: "jwt", PlanKey: "ak.sk", TeamOrg: "org", TeamProj: "proj", RequestID: "req-1"}
+	auth := OffPeakAuth{JWT: "jwt", PlanKey: "ak.sk", TeamOrg: "org", TeamProj: "proj"}
 	headers := auth.Headers()
 	require.Equal(t, "Bearer jwt", headers["Authorization"])
 	require.Equal(t, "ak.sk", headers["X-Coding-Plan-Api-Key"])
 	require.Equal(t, "org", headers["bigmodel-organization"])
 	require.Equal(t, "proj", headers["bigmodel-project"])
-	require.Equal(t, "req-1", headers["x-request-id"])
+	require.NotContains(t, headers, "x-request-id", "correlation IDs belong to physical sends, not credentials")
 
 	// A half-specified team scope is omitted rather than sent incomplete.
 	partial := OffPeakAuth{JWT: "jwt", TeamOrg: "org"}.Headers()

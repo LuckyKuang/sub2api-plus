@@ -2,17 +2,18 @@
 
 Both **OAuth and API Key** accounts for each platform use its official agent
 below. This is the source index for future version and outbound-protocol reviews;
-it contains no developer checkout paths. Reviewed on 2026-10-22, including request headers, typed IDs, OAuth validation,
-quota ownership and retry/failover lifetimes.
+it contains no developer checkout paths. Reviewed on 2026-10-24 after fast-forwarding all seven official source trees,
+including request headers, typed IDs, OAuth validation, quota ownership,
+model catalogs, terminal errors and retry/failover lifetimes.
 
 | Platform | Official source | Reviewed commit | Selected agent version |
 | --- | --- | --- | --- |
-| OpenAI | [openai/codex](https://github.com/openai/codex.git) | `94350a910143c406013683ae634708320f93f1f6` | stable `rust-v0.163.0` |
+| OpenAI | [openai/codex](https://github.com/openai/codex.git) | `970111f6cb62cc02fe36a82ea7d71b37a2889c97` | stable `rust-v0.164.0` |
 | xAI | [xai-org/grok-build](https://github.com/xai-org/grok-build.git) | `2bdd1d6a6369de0e8c68132ea4539e9abd9e14a8` | `1.0.45` |
-| DeepSeek | [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness.git) | `687f282e8625c6b8d11ff58211a90524be2e4317` | `0.2.1-rc.2` (prerelease) |
-| Kimi | [MoonshotAI/kimi-code](https://github.com/MoonshotAI/kimi-code.git) | `79a76ea2da0d4dd6e81501155454e646b909c695` | stable `2.3.0` |
+| DeepSeek | [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness.git) | `22ddee3792402c3e70ec5f86a63c3e3e895a2f60` | `0.2.1-rc.3` (prerelease) |
+| Kimi | [MoonshotAI/kimi-code](https://github.com/MoonshotAI/kimi-code.git) | `7ccac2b45b8a3481c76f771bb99c043b562de2c5` | stable `2.3.1` |
 | MiniMax | [MiniMax-AI/minimax-code](https://github.com/MiniMax-AI/minimax-code) | `da22f11c55d4748155d7162c1030414228a00565` | product `0.6.5`; managed UA versionless; BYOK SDK `0.91.1` |
-| StepFun | [stepfun-ai/Step-Code](https://github.com/stepfun-ai/Step-Code.git) | `3de15c1659666aaa24860184b6a6c27e975e1095` | product `0.84.4`; inference UA versionless; OpenAI JS `6.40.0` |
+| StepFun | [stepfun-ai/Step-Code](https://github.com/stepfun-ai/Step-Code.git) | `81e79bc4b699148d6823fedde9b5e70d9a80255f` | product `0.84.4`; inference UA versionless; OpenAI JS `6.40.0` |
 | Zhipu | [zai-org/ZCode](https://github.com/zai-org/ZCode.git) | `3c5b227649371507ddc4eb46ac5133afe6db1cab` | product source `3.16.2`; separate CLI line `0.17.0` |
 
 ZCode's selected product version comes from current source and is paired with
@@ -24,7 +25,7 @@ explicitly follows a prerelease. Neither is represented as a stable Release.
 | --- | --- | --- |
 | Codex | `codex-rs/login/src/auth/default_client.rs`, `codex-rs/model-provider`, `codex-rs/codex-api`, auth and WebSocket clients, `codex-rs/protocol/src/{session_id,thread_id}.rs`, `codex-rs/core/src/{installation_id,responses_metadata,client,realtime_conversation}.rs`, `codex-rs/core/src/state/auto_compact_window.rs`, `codex-rs/core/src/session/mod.rs` | `service/openai_codex_identity.go`, `openai_gateway_service.go`, `openai_ws_client.go`, `pkg/openai`, complete Codex transport/identity suites |
 | grok-build | `crates/codegen/xai-grok-sampler`, `xai-grok-voice`, `xai-grok-imagine`, OAuth/OIDC nonce and JWT verification, billing clients and sampler request/conversation IDs | `pkg/xai`, `service/grok_*`, `account_test_service_grok_test.go` |
-| deepseek-harness | `packages/llm/llm/src/attribution.ts`, `llm-deepseek/src/adapter.ts`, `llm-deepseek-account/src/{listing,resolve-catalog}.ts`, account-platform and anonymous-user-id packages | `pkg/deepseek`, `pkg/cnoauth/client.go`, `service/{deepseek_request_state,domestic_agent_models,cn_oauth_service}.go` |
+| deepseek-harness | `packages/llm/llm/src/attribution.ts`, `llm-deepseek/src/adapter.ts`, `llm-deepseek/src/{listing,listed-catalog}.ts`, `llm-deepseek-api-key/src/{index,config}.ts`, account-platform and anonymous-user-id packages | `pkg/deepseek`, `pkg/cnoauth/client.go`, `service/{deepseek_request_state,domestic_agent_models,cn_oauth_service}.go` |
 | kimi-code | `packages/oauth/src/{identity,oauth,managed-kimi-code,managed-usage}.ts`, `packages/agent-core-v2/src/llm-adapter` | `pkg/kimi`, `pkg/cnoauth/client.go`, `service/{domestic_agent_models,upstream_models,cn_oauth_service}.go` |
 | minimax-code | `packages/oauth-core/src`, `packages/local-runtime-v2/src/service/model-system/resolution/{model-resolver-helpers,model-resolver-byok}.ts`, [`packages/tui/src/account/matrix-account-client.ts`](https://github.com/MiniMax-AI/minimax-code/blob/da22f11c55d4748155d7162c1030414228a00565/packages/tui/src/account/matrix-account-client.ts) personal workspace/region quota, `packages/shared/src/llm-error-classifier.ts` plan/Credits errors, Anthropic provider and lockfile | `pkg/minimax`, `pkg/cnoauth/client.go`, `service/{minimax_request_state,minimax_oauth_quota,cn_provider_quota_service}.go`, domestic wire/quota tests |
 | Step-Code | `packages/providers/src/step-provider/{index,login-client}.ts`, `api/openai-completions.ts`, `utils/pi-user-agent.ts`, coding-agent `step/{defaults,environment}.ts` | `pkg/stepfun`, `pkg/cnoauth/stepfun.go`, `service/{stepfun_*,openai_chat_roles}.go`, login panel/composable tests |
@@ -53,9 +54,10 @@ from the same official MiniMax agent.
 Gateway extensions remain explicit: API-key Chat/Responses adapters, configured
 compatible endpoints and model discovery can exceed an agent's native UI/API
 surface, while retaining that platform's trusted identity and account-owned
-authentication. DeepSeek OAuth uses the native account `/models` catalog and
-version/Messages gates; API-key `/models` discovery is a gateway extension to
-Harness's credential-gated built-in catalog. ZCode project tokens are only for
+authentication. DeepSeek OAuth and official-origin native Messages API-key routes use the
+shared Harness `/models` catalog and version/Messages gates, with their own
+`x-dsh-auth-token` and `x-api-key` authentication. API-key Chat/Responses and
+custom compatible catalogs remain explicit gateway extensions. ZCode project tokens are only for
 linked accounts; manually entered API keys are sent unchanged.
 
 Migration 291 removes Grok API-key foreign-family candidates/mapping; 292 gives
@@ -68,5 +70,34 @@ project-key fallback is retained.
 Migration 294 stores random outbound IDs by namespace and irreversible scope
 digest, without a scheduling-cache TTL. See [OFFICIAL_AGENT_REQUEST_STATE.md](OFFICIAL_AGENT_REQUEST_STATE.md)
 for ID versions, lifetime, grant ownership and failover contracts. Codex main
-uses a development manifest version, so its stable identity remains `0.163.0`;
+uses a development manifest version, so its stable identity is manually selected
+as `0.164.0` (stable tag commit `6aaac694803004a63c6f393d153c96d22521a6b9`);
 reviewing protocol changes never enables automatic identity-version updates.
+
+
+## October 24 protocol alignment
+
+Codex's exact `model_not_found` terminal classification follows main commit
+`60adfa8513f77c27826f0c5b770e7a7d4eca538e`, after the selected stable tag.
+HTTP 400/403/404 and statusless SSE/WS errors keep the exact code. A bounded
+gateway failover may try another eligible owner, but never penalizes the whole
+account or retries the same owner for a model rejection. Updating the identity
+version alone does not supply this behavior.
+
+Grok URL construction, ordinary relay overrides, voice/media/WS egress and
+compression settings use the acquired credential snapshot. Compression
+observations and single-flight work are isolated by target, credential
+generation and proxy configuration, including negative observations.
+
+DeepSeek rc.3 native API-key discovery uses the official auth/path and shared
+version/capability parser; metadata writes are conditional on the captured
+grant. ZCode ticket control accepts both official successful response shapes,
+emits a fresh request ID per physical send and retains an active lease through
+the complete model response lifetime. Old active grants drain independently
+after credential rotation.
+
+Kimi 2.3.1's login-region resolver does not change inference adapters or the
+locked SDK; explicitly linked account regions remain authoritative. MiniMax's
+reviewed tree is unchanged. Step-Code's five added commits change agent-local
+tools/extension turns/cwd/feedback, without provider, SDK-lock or identity
+changes. Neither versionless inference UA acquires a product version.

@@ -19,7 +19,7 @@ apply it, including retries, probes, HTTP/WS and auxiliary calls.
 | Grok | sampler request | UUIDv4 per logical prompt; unchanged across retries of that prompt, new on the next WS turn. Auxiliary prompts, including each Composer image caption, keep independent request IDs while retaining the parent conversation. |
 | DeepSeek | harness session | `session-<UUIDv4>`, persistent for the tenant/conversation/owner. The separate anonymous user ID keeps its existing persistent owner scope. |
 | MiniMax | Mavis session | `mvs_<32 lowercase UUIDv4 hex digits>`, persistent for the tenant/conversation/owner. |
-| Kimi | device | Existing configured/persisted device UUID and selected device name; client defaults now track Kimi Code 2.3.0. |
+| Kimi | device | Existing configured/persisted device UUID and selected device name; client defaults now track Kimi Code 2.3.1. |
 | ZCode | device mid | Valid configured device ID, otherwise persistent random UUIDv4. Control header and body use the same device; model requests use model declarations. |
 | ZCode | request/trace | Request UUIDv4 changes per physical send; trace stays with the logical operation across retries. Session/query declarations are emitted only with a corresponding conversation/query. |
 | Step-Code | request identity | The official versionless inference UA and pinned SDK fingerprint remain; no foreign agent ID headers are added. |
