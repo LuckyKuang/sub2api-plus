@@ -115,7 +115,7 @@
 
           <!-- token 计费:输入 / 输出 / 缓存(写/读),有阶梯时每档一行;档位标签只放输入列,其余列按行对齐 -->
           <template v-if="billingMode(m) === BILLING_MODE_TOKEN">
-            <td :data-record-edges="recordEdges(rowIndex, group.rows.length)" class="pz-cell px-3 py-2.5 align-middle font-mono font-semibold text-gray-900 dark:text-gray-50">
+            <td :data-record-edges="recordEdges(rowIndex, group.rows.length)" class="px-3 py-2.5 align-middle font-mono font-semibold text-gray-900 dark:text-gray-50">
               <template v-if="tokenIntervals(m).length">
                 <div
                   v-for="(iv, idx) in tokenIntervals(m)"
@@ -128,7 +128,7 @@
               </template>
               <template v-else>{{ paidPerMillion(m.pricing?.input_price, period) }}</template>
             </td>
-            <td :data-record-edges="recordEdges(rowIndex, group.rows.length)" class="pz-cell px-3 py-2.5 align-middle font-mono font-semibold text-gray-900 dark:text-gray-50">
+            <td :data-record-edges="recordEdges(rowIndex, group.rows.length)" class="px-3 py-2.5 align-middle font-mono font-semibold text-gray-900 dark:text-gray-50">
               <template v-if="tokenIntervals(m).length">
                 <div
                   v-for="(iv, idx) in tokenIntervals(m)"
@@ -141,7 +141,7 @@
               </template>
               <template v-else>{{ paidPerMillion(m.pricing?.output_price, period) }}</template>
             </td>
-            <td :data-record-edges="recordEdges(rowIndex, group.rows.length)" class="pz-cell px-3 py-2.5 align-middle">
+            <td :data-record-edges="recordEdges(rowIndex, group.rows.length)" class="px-3 py-2.5 align-middle">
               <template v-if="hasTierCachePricing(tokenIntervals(m))">
                 <div
                   v-for="(iv, idx) in tokenIntervals(m)"
@@ -185,7 +185,7 @@
 
           <!-- 按次 / 按图片计费:实付区整体合并,阶梯芯片或单一按次价 -->
           <template v-else>
-            <td :data-record-edges="recordEdges(rowIndex, group.rows.length)" colspan="3" class="pz-cell px-3 py-2.5 align-middle">
+            <td :data-record-edges="recordEdges(rowIndex, group.rows.length)" colspan="3" class="px-3 py-2.5 align-middle">
               <div
                 v-if="requestIntervals(m).length"
                 class="flex flex-wrap items-center gap-1.5"
@@ -574,19 +574,13 @@ function trimZero(n: number): string {
 </script>
 
 <style scoped>
-/* 实付分区配色统一从 --plaza-accent(平台主色)派生,新增平台无需扩展样式 */
+/* 实付分区文字色从平台主色派生；底色由外层卡片统一承载。 */
 .plaza-pricing-table {
   --pz-title: color-mix(in srgb, var(--plaza-accent) 88%, black);
-  --pz-bg: color-mix(in srgb, var(--plaza-accent) 7%, var(--surface-soft));
 }
 
 .dark .plaza-pricing-table {
   --pz-title: color-mix(in srgb, var(--plaza-accent) 70%, white);
-  --pz-bg: color-mix(in srgb, var(--plaza-accent) 6%, var(--surface-soft));
-}
-
-.pz-cell {
-  --record-row-bg: var(--pz-bg);
 }
 
 .pz-title {

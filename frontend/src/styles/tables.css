@@ -1,8 +1,7 @@
 /* Native table layout and zero border-spacing keep virtual row measurements
-   accurate. Only cell padding boxes are painted, including pinned/hover cells. */
+   accurate. The enclosing card owns the static fill; cells paint only states
+   and outlines inside their padding boxes, including pinned cells. */
 .record-table-scroll {
-  --record-table-bg: var(--surface-solid);
-  --record-row-bg: var(--surface-soft);
   border: 0 !important;
   border-inline: 12px solid transparent !important;
   padding: 8px 0 !important;
@@ -55,7 +54,7 @@ table.record-table {
   border: 0 solid transparent !important;
   border-block-width: 4px !important;
   border-radius: 0 !important;
-  background-color: var(--record-row-bg, var(--surface-soft)) !important;
+  background-color: transparent !important;
   background-image: linear-gradient(var(--record-row-tint, transparent), var(--record-row-tint, transparent)) !important;
   background-clip: padding-box !important;
   box-shadow: var(--record-edge-top), var(--record-edge-bottom), var(--record-edge-left), var(--record-edge-right) !important;
@@ -139,7 +138,7 @@ table.record-table-compact.record-table-dense { --record-compact-radius: 6px; }
   background: none !important;
 }
 
-/* Cells paint their own backgrounds directly; no vertical edge shadow or fill
+/* Cells paint their own states directly; no vertical edge shadow or fill
    layer may cover the transparent card gaps. Preserve component positioning. */
 table.record-table > thead::before,
 table.record-table .sticky-col::before,
@@ -151,14 +150,10 @@ table.record-table .sticky-col::after {
    text out of their cutouts. Paint the outside curve inside its sticky context. */
 :root table.record-table > :is(tbody, tfoot):not(.record-group) > tr:not([aria-hidden="true"]) > .sticky-col:is(:first-child, :last-child) {
   border-radius: 0 !important;
-  background-color: var(--record-table-bg, var(--surface-solid)) !important;
+  background-color: transparent !important;
   background-image: none !important;
   background-clip: border-box !important;
   box-shadow: none !important;
-}
-
-:root[data-console-transparent-cards] table.record-table > :is(tbody, tfoot):not(.record-group) > tr:not([aria-hidden="true"]) > .sticky-col:is(:first-child, :last-child) {
-  background-color: transparent !important;
 }
 
 :root table.record-table > :is(tbody, tfoot):not(.record-group) > tr:not([aria-hidden="true"]) > .sticky-col:is(:first-child, :last-child)::before {
@@ -168,7 +163,7 @@ table.record-table .sticky-col::after {
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background-color: var(--record-row-bg, var(--surface-soft));
+  background-color: transparent;
   background-image: linear-gradient(var(--record-row-tint, transparent), var(--record-row-tint, transparent));
   box-shadow: var(--record-edge-top), var(--record-edge-bottom), var(--record-edge-left), var(--record-edge-right);
 }
@@ -192,6 +187,6 @@ table.record-table .sticky-col::after {
   border-bottom-right-radius: var(--record-compact-radius);
 }
 
-/* A nested record table gets its own solid surface rather than inheriting the
+/* A nested record table starts its own state rather than inheriting the
    enclosing record's hover tint. */
 .record-table-scroll { --record-row-tint: transparent; }

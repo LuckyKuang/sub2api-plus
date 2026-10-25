@@ -36,6 +36,7 @@ function table(markup = '<thead><tr><th>User</th><th>Account</th></tr></thead><t
 
 afterEach(() => {
   document.body.replaceChildren()
+  document.documentElement.classList.remove('dark')
   document.documentElement.removeAttribute('data-console-transparent-cards')
   document.documentElement.style.removeProperty('--console-card-alpha')
 })
@@ -101,15 +102,36 @@ describe('record table appearance requirements', () => {
     expect(paint(container.querySelector('td')!).get('border-block-width')).toBe('4px')
   })
 
-  it.each([0, 50, 100])('does not compound header fills at %s percent card transparency', transparency => {
+  it.each(['light', 'dark'].flatMap(theme => [0, 50, 100].map(transparency => ({ theme, transparency }))))('lets the enclosing card alone paint static table fills in $theme mode at $transparency percent transparency', ({ theme, transparency }) => {
+    document.documentElement.classList.toggle('dark', theme === 'dark')
     document.documentElement.style.setProperty('--console-card-alpha', String(1 - transparency / 100))
-    const container = table('<thead class="surface-inset"><tr class="surface-inset"><th rowspan="2" data-header-edge-bottom>Model</th><th>Price</th></tr><tr><th>Input</th></tr></thead><tbody><tr><td>Model</td><td>Price</td></tr></tbody>')
+    document.documentElement.toggleAttribute('data-console-transparent-cards', transparency > 0)
+    // Ordinary rows, footer totals and spanning business records must expose
+    // the same enclosing card, including frozen edges and locally tinted cells.
+    // This deliberately supplies the old platform-specific tint so that it
+    // cannot restore a second fill layer after the shared fill is removed.
+    const container = table(`<thead class="surface-inset"><tr class="surface-inset"><th rowspan="2" data-header-edge-bottom>Model</th><th colspan="3">Price</th></tr><tr><th>Input</th><th>Output</th><th>Actions</th></tr></thead>
+      <tbody><tr><th scope="row" class="sticky-col sticky-col-left">Model</th><td>Input</td><td style="--record-row-bg: rgb(237 242 240)">Output</td><td class="sticky-col sticky-col-right">Actions</td></tr><tr aria-hidden="true"><td colspan="4" style="height:300px"></td></tr></tbody>
+      <tbody class="record-group"><tr><th rowspan="2" data-record-edges="t b l tl bl">Pricing group</th><td colspan="3" data-record-edges="t r tr">Primary tier</td></tr><tr><td colspan="3" data-record-edges="b r br">Expanded tier</td></tr></tbody>
+      <tfoot><tr><th scope="row" class="sticky-col sticky-col-left">Total</th><td colspan="2">Amount</td><td class="sticky-col sticky-col-right">Actions</td></tr></tfoot>`)
     for (const layer of container.querySelectorAll('thead, thead > tr, thead > tr > th')) {
       expect(paint(layer).get('background-color')).toBe('transparent')
       expect(paint(layer).get('background-image')).toBe('none')
     }
-    expect(paint(container.querySelector('[rowspan]')!).get('border-bottom-width')).toBe('8px')
-    expect(paint(container.querySelector('tbody td')!).get('background-color')).toBe('var(--record-row-bg, var(--surface-soft))')
+    expect(paint(container.querySelector('thead [rowspan]')!).get('border-bottom-width')).toBe('8px')
+    for (const cell of container.querySelectorAll(':is(tbody, tfoot) > tr:not([aria-hidden="true"]) > :is(td, th)')) {
+      expect(paint(cell).get('background-color')).toBe('transparent')
+    }
+    for (const cell of container.querySelectorAll('.sticky-col')) {
+      const rounded = paint(cell, '::before')
+      expect(rounded.get('background-color')).toBe('transparent')
+      expect(rounded.get('background-image')).toContain('var(--record-row-tint, transparent)')
+      expect(rounded.get('box-shadow')).toContain('var(--record-edge-top)')
+    }
+    const spacer = container.querySelector<HTMLElement>('[aria-hidden="true"] td')!
+    expect(paint(spacer).get('background')).toBe('none')
+    expect(paint(spacer).get('border')).toBe('0')
+    expect(spacer.style.height).toBe('300px')
   })
 
   it.each(['', 'data-hover', 'aria-selected="true"'])('keeps row gaps transparent for %s, including pinned cells', state => {
@@ -120,7 +142,8 @@ describe('record table appearance requirements', () => {
     for (const cell of [...row.children].slice(1, -1)) {
       const cellPaint = paint(cell)
       expect(cellPaint.get('border')).toBe('0 solid transparent')
-      expect(cellPaint.get('background-color')).toBe('var(--record-row-bg, var(--surface-soft))')
+      expect(cellPaint.get('background-color')).toBe('transparent')
+      expect(cellPaint.get('background-image')).toContain('var(--record-row-tint, transparent)')
       expect(cellPaint.get('background-clip')).toBe('padding-box')
       expect(cellPaint.get('--record-edge-top')).toBe('inset 0 1px 0 var(--record-row-edge)')
       expect(cellPaint.get('--record-edge-bottom')).toBe('inset 0 -1px 0 var(--record-row-edge)')
@@ -128,13 +151,13 @@ describe('record table appearance requirements', () => {
       expect(cellPaint.get('--record-edge-right')).toBe('inset 0 0 0 transparent')
       expect(cellPaint.get('box-shadow')).toContain('var(--record-edge-top)')
     }
-    // Interior pinned cells keep ordinary record paint. Only actual outer
-    // table edges need a square blocker and an independently rounded fill.
+    // Interior pinned cells keep ordinary record geometry. Actual outer
+    // table edges use a rounded outline/tint layer without a static fill.
     expect(paint(row.children[1]!, '::before').get('content')).toBe('none')
     for (const cell of [row.firstElementChild!, row.lastElementChild!]) {
       const blocker = paint(cell)
       expect(blocker.get('border-radius')).toBe('0')
-      expect(blocker.get('background-color')).toBe('var(--record-table-bg, var(--surface-solid))')
+      expect(blocker.get('background-color')).toBe('transparent')
       expect(blocker.get('background-image')).toBe('none')
       expect(blocker.get('background-clip')).toBe('border-box')
       expect(blocker.get('border-block-width')).toBe('4px')
@@ -145,7 +168,7 @@ describe('record table appearance requirements', () => {
       expect(rounded.get('inset')).toBe('0')
       expect(rounded.get('z-index')).toBe('-1')
       expect(rounded.get('pointer-events')).toBe('none')
-      expect(rounded.get('background-color')).toBe('var(--record-row-bg, var(--surface-soft))')
+      expect(rounded.get('background-color')).toBe('transparent')
       expect(rounded.get('background-image')).toContain('var(--record-row-tint, transparent)')
       expect(rounded.get('box-shadow')).toContain('var(--record-edge-left)')
       // A matching border-radius shorthand can reset these longhands through
@@ -156,14 +179,6 @@ describe('record table appearance requirements', () => {
       expect(rounded.get(`border-bottom-${side}-radius`)).toBe('16px')
       expect(paint(cell, '::after').get('content')).toBe('none')
     }
-  })
-
-  it('uses geometric clipping instead of solid pinned blockers only when transparency is enabled', () => {
-    const container = table('<tbody><tr><td class="sticky-col sticky-col-left">User</td><td>Model</td><td class="sticky-col sticky-col-right">Actions</td></tr></tbody>')
-    const cells = container.querySelectorAll('.sticky-col')
-    for (const cell of cells) expect(paint(cell).get('background-color')).toBe('var(--record-table-bg, var(--surface-solid))')
-    document.documentElement.setAttribute('data-console-transparent-cards', '')
-    for (const cell of cells) expect(paint(cell).get('background-color')).toBe('transparent')
   })
 
   // Audited requirement: every record has a 1px outline even at 100% fill

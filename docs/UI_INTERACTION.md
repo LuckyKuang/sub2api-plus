@@ -159,6 +159,10 @@ Record tables retain table semantics while presenting each record as a separate
 filling its 8px gap. Each record has a 1px outline that follows its rounded
 corners, with an accent outline on hover or selection. Outer table outlines and
 vertical pinned-column shadows are omitted; visible outer insets are 12px.
+Data cells, footer totals and frozen-column paint layers have no static fill;
+the enclosing card supplies their background at every transparency setting.
+This also applies to grouped price tiers in Model Plaza. Hover and selection
+add only their shared state tint and outline.
 Headers match the surrounding table background, have no independent card, and
 remain 12px from the first data row. Header groups and cells add no fill layers
 over the enclosing card. A static header rail and a separate body scrollport
@@ -167,8 +171,8 @@ scrolling record table uses this separation, including distribution tables whose
 headers were not previously sticky. Long dialog tables have a local, bounded body
 viewport; short reference tables retain their natural height. Header sorting,
 selection and column visibility stay synchronized with the source table; frozen
-columns and horizontal scrolling retain column alignment. When transparency is
-enabled, horizontal cell clipping prevents content from overlapping frozen
+columns and horizontal scrolling retain column alignment. At every transparency
+setting, horizontal cell clipping prevents content from overlapping frozen
 columns. Grouped, spanning and expanded records keep their business grouping;
 virtual rows retain accurate measurement.
 
