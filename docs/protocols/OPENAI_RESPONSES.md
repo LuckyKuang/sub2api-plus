@@ -551,6 +551,44 @@ prevent fresh snapshots from being stored. No zero-percent observation is requir
 post-reset usage may already be 7% or higher. A first-ever same-deadline reset
 cannot be inferred without a prior utilization sample.
 
+Quota, capability-probe and reset-credit observations carry the immutable
+credential-owning account and hydrated proxy that actually transmitted the
+request. HTTP, native WebSocket, HTTP-to-WebSocket bridges, account connection
+tests and compact probes use the same conditional repository port. The merge
+locks the live owner and proxy and compares the complete credentials, account
+type/status, proxy binding and proxy protocol/host/port/authentication/status.
+A missing, changed or deleted owner/proxy discards the response without an
+unconditional write, cache merge or reset notification. OpenAI 429 cooldowns and their runtime scheduling notifications use the same
+captured-owner conditional mutation; stale headers/bodies cannot block the
+successor. ChatGPT `plan_type` learning is restricted to active OpenAI OAuth
+owners and conditionally patches only that metadata field after quota/cooldown
+observations, without replacing authentication or identity fields.
+Snapshot throttles are
+isolated by that credential/proxy generation, so an old response cannot suppress
+a newly authorized account's first snapshot. The persisted owner-generation
+marker resets the snapshot time domain when the grant changes: old future
+timestamps, windows, credits and probe runtime state cannot block or leak into
+its successor; operator configuration is retained. Observation-only samples refresh
+the scheduler snapshot without producing an account-change outbox event.
+
+Migration `296_codex_observation_owner_generation.sql` separates the weekly
+baseline of a verified ChatGPT principal and proxy from exact-grant pending
+corroboration. Queued confirmed events retain the verified principal/proxy
+generation, allowing ordinary token refresh to preserve both a legitimate reset
+and a known principal's baseline. Pending samples cannot confirm across token
+rotation. A known ChatGPT principal requires both the account/team ID and user
+ID; a team ID without a user ID is isolated by the exact credential grant.
+Unknown principals use the complete credential generation; a new principal or
+proxy establishes a fresh baseline and never clears subscriptions on that first
+sample. Empty legacy event generations cannot authorize replay. Both the event
+worker and the billing path recheck the current verified principal/proxy (or exact grant for an unknown
+principal) and active source before applying a queued reset. They lock the account, then its proxy, then the
+group and subscription rows. A source-binding change observed during billing
+returns an error and rolls the charge transaction back for retry, without
+recording a successful charge or consuming its idempotency key. Deploy the
+migration with the updated backend; mixed old/new observation writers are not
+supported. No raw credential or proxy secret is stored in the generation columns.
+
 Confirmed resets have a durable monotonic sequence, so two real resets with
 the same announced deadline remain distinguishable while refreshes are idempotent.
 Each event resets the active subscriptions' 5-hour, daily, and weekly usage;
@@ -914,3 +952,20 @@ legacy Responses and WS-only beta declarations. Native Codex uses `session-id` a
 `session_id`/`conversation_id` aliases after Plus session isolation. OAuth
 ChatGPT account headers remain credential-specific. See
 [Codex client profiles](CODEX_CLIENT_PROFILES.md) for auxiliary/auth omissions.
+
+### Same-user shared OpenAI affinity
+
+Ordinary routing hashes remain scoped to the API key. Opt-in sharing derives a
+separate same-user digest from explicit session headers, `prompt_cache_key`, or
+Messages metadata. It can reuse a binding across keys only for the same
+authorized user and account and the groups allowed by that account's current
+`ScopeVersion`. Content-only hashes and random WebSocket fallback seeds never
+share. The shared v3 index requires current-policy proof; editing the sharing
+policy makes prior bindings unusable and cannot revive them later. Normal token
+refresh does not rotate `ScopeVersion`. Cache-only WebSocket selection also
+defers ordinary and shared affinity publication until the selected account
+passes client-policy checks and terminal concurrency admission; rejecting a
+candidate cannot expose it to another key through the shared index.
+
+
+Quota read-side provenance is mandatory as well as write-side CAS. Automatic quota pause, credit-reset decisions, and quota-based scheduling scores may use only observations whose `codex_usage_owner_generation` matches the current credential owner and proxy. Unmarked legacy or mismatched observations may be displayed and trigger a new probe, but cannot pause an account, consume a credit, inherit probe-failure backoff, or reset subscription usage. Operator thresholds, explicit disable flags and manual session windows remain intact. Spark shadows validate their own quota against the current parent grant using the existing parent-health lookup; the parent's global quota does not block Spark.

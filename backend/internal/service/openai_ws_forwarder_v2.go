@@ -432,6 +432,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 	}
 	resultWithUsage := func() *OpenAIForwardResult {
 		result := &OpenAIForwardResult{
+			codexUsageOwner:               capturedCodexUsageOwner(ctx, account),
 			RequestID:                     responseID,
 			ResponseID:                    responseID,
 			ImageCount:                    imageCounter.Count(),

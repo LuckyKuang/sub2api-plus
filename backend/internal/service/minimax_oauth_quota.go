@@ -53,8 +53,8 @@ func (s *CNProviderQuotaService) roundTripMiniMaxOAuthQuota(ctx context.Context,
 	if s.cnOAuthService == nil {
 		return nil, nil, NewProviderCredentialFailure("native_oauth_service_unavailable", nil)
 	}
-	if account.ProxyID != nil && account.Proxy == nil {
-		return nil, nil, NewProviderCredentialFailure("native_oauth_proxy_unavailable", nil)
+	if _, err := requestCredentialOwnerProxyURL(ctx, account); err != nil {
+		return nil, nil, NewProviderCredentialFailure("native_oauth_proxy_unavailable", err)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, platform+miniMaxOAuthQuotaPath, nil)
 	if err != nil {
@@ -166,7 +166,11 @@ func (s *CNProviderQuotaService) miniMaxOAuthQuotaAttempt(ctx context.Context, o
 		return nil, err
 	}
 	req.Header.Set("X-Group-Id", group)
-	return s.httpUpstream.Do(req, owner.proxyURLOrEmpty(), owner.ID, maxInt(owner.Concurrency, 1))
+	proxyURL, err := requestCredentialOwnerProxyURL(req.Context(), owner)
+	if err != nil {
+		return nil, err
+	}
+	return s.httpUpstream.Do(req, proxyURL, owner.ID, maxInt(owner.Concurrency, 1))
 }
 
 // Matrix attribution is public first-party protocol, independent of credential
@@ -211,7 +215,11 @@ func (s *CNProviderQuotaService) miniMaxOAuthQuotaJSON(ctx context.Context, owne
 	}
 	req.Header.Set("x-signature", miniMaxQuotaMD5(signature))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := s.httpUpstream.Do(req, owner.proxyURLOrEmpty(), owner.ID, maxInt(owner.Concurrency, 1))
+	proxyURL, err := requestCredentialOwnerProxyURL(req.Context(), owner)
+	if err != nil {
+		return gjson.Result{}, nil, err
+	}
+	resp, err := s.httpUpstream.Do(req, proxyURL, owner.ID, maxInt(owner.Concurrency, 1))
 	if err != nil {
 		return gjson.Result{}, nil, err
 	}

@@ -178,6 +178,30 @@ probe-identity changes clear the existing quota bindings. Expiration without
 fallback refreshes the bound accounts' proxy status as well. Soft deletion keeps
 the configured proxy ID, so a missing proxy cannot silently become direct egress.
 
+An account's saved proxy binding is mandatory on every physical send, including
+inference, HTTP/SSE/WS, retries, OAuth recovery, discovery, connection tests,
+usage, quota and balance queries. Missing, mismatched or invalid loaded proxy
+configuration stops the operation before sending. A proxy timeout, refused
+connection, authentication failure or other transport failure returns the
+failure; it never retries through the machine's direct network, `NO_PROXY`, an
+environment proxy or a different proxy on the same account. An acquired attempt
+retains its complete credential/identity/proxy snapshot. A new operation uses
+the committed binding, and recovery revalidates it before replay. Explicit
+administrator unbinding and the separately saved expiry policy can change the
+binding; a network error cannot invoke those mutations. Tests must count actual
+destination connections as well as configured-proxy requests so a failed TLS
+handshake cannot conceal unauthorized local egress.
+
+The same binding applies to credential refresh/revocation, PAT validation,
+AgentIdentity task registration, manual ChatGPT privacy changes, Grok observed
+models/compression discovery, and detached adaptive protocol-catalog refreshes.
+These operations acquire the complete owner before reading a token, route or
+warm cache; a second proxy lookup cannot pair old credentials with a new route.
+Account metadata produced by a response uses the captured-owner conditional
+write, with no unconditional fallback. URL-only asynchronous image results
+also carry their final inference owner's route into CDN downloads; object
+storage uploads retain their independently configured administrative route.
+
 Kimi and DeepSeek PAYG balance probes freeze the complete credential owner before
 HTTP preparation and isolate concurrent probes by credential/proxy generation.
 Balance snapshots and threshold decisions use that same owner in conditional

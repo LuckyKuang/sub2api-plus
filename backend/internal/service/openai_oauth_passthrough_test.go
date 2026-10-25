@@ -283,13 +283,34 @@ func TestOpenAIGatewayService_OAuthMessagesBridgeDoesNotInjectDefaultInstruction
 
 type openAIPassthroughFailoverRepo struct {
 	stubOpenAIAccountRepo
-	rateLimitCalls []time.Time
-	overloadCalls  []time.Time
+	rateLimitCalls          []time.Time
+	overloadCalls           []time.Time
+	unguardedRateLimitCalls int
 }
 
-func (r *openAIPassthroughFailoverRepo) SetRateLimited(_ context.Context, _ int64, resetAt time.Time) error {
-	r.rateLimitCalls = append(r.rateLimitCalls, resetAt)
-	return nil
+func (r *openAIPassthroughFailoverRepo) SetRateLimited(_ context.Context, _ int64, _ time.Time) error {
+	r.unguardedRateLimitCalls++
+	return errors.New("unconditional OpenAI cooldown is forbidden")
+}
+
+func (r *openAIPassthroughFailoverRepo) ApplyCredentialStateMutation(ctx context.Context, owner *Account, mutation CredentialStateMutation) (bool, error) {
+	if owner == nil || mutation.RateLimitUntil == nil {
+		return false, errors.New("passthrough failover fixture requires an owner-bound cooldown")
+	}
+	current, err := r.GetByID(ctx, owner.ID)
+	if err != nil {
+		return false, err
+	}
+	if current.Status != StatusActive || current.Status != owner.Status || credentialStateGeneration(current) != credentialStateGeneration(owner) {
+		return false, nil
+	}
+	if mutation.ExtendRateLimitOnly && current.RateLimitResetAt != nil && !mutation.RateLimitUntil.After(*current.RateLimitResetAt) {
+		return true, nil
+	}
+	reset := *mutation.RateLimitUntil
+	current.RateLimitResetAt = &reset
+	r.rateLimitCalls = append(r.rateLimitCalls, reset)
+	return true, nil
 }
 
 func (r *openAIPassthroughFailoverRepo) SetOverloaded(_ context.Context, _ int64, until time.Time) error {
@@ -1772,6 +1793,7 @@ func TestOpenAIGatewayService_OpenAIPassthrough_RetryableStatusesTriggerFailover
 			}
 
 			account := newAccount(tc.accountType)
+			repo.accounts = []Account{*snapshotRequestCredentialAccount(account)}
 			start := time.Now()
 			_, err := svc.Forward(context.Background(), c, account, originalBody)
 			require.Error(t, err)
@@ -1808,6 +1830,7 @@ func TestOpenAIGatewayService_OpenAIPassthrough_RetryableStatusesTriggerFailover
 			require.Equal(t, tc.statusCode, arr[len(arr)-1].UpstreamStatusCode)
 
 			tc.assertRepo(t, repo, start)
+			require.Zero(t, repo.unguardedRateLimitCalls, "OpenAI cooldown writes require the captured credential owner")
 		})
 	}
 }

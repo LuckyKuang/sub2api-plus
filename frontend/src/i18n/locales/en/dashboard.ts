@@ -652,6 +652,7 @@ export default {
   availableChannels: {
     catalog: {
       quoteComparison: 'Group quote comparison',
+      quoteDetails: 'Expand pricing and billing conditions',
       effectiveRateLabel: 'Effective rate',
       baseInputOrUnit: 'Base input / unit price',
       billingUnit: 'Billing unit',

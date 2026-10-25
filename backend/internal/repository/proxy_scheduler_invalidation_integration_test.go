@@ -86,16 +86,18 @@ func (s *ProxyRepoSuite) TestDeletePublishesBoundAccountsAndPreservesMissingProx
 	proxy := s.mustCreateProxy(&service.Proxy{Name: "deleted-proxy", Protocol: "http", Host: "old.invalid", Port: 8080, Status: service.StatusActive})
 	accountRepo := newAccountRepositoryWithSQL(s.tx.Client(), s.tx, nil)
 	var wantIDs []int64
-	for _, platform := range []string{service.PlatformOpenAI, service.PlatformGrok, service.PlatformKimi} {
-		extra := map[string]any{"keep": "unchanged"}
-		if platform == service.PlatformKimi {
-			extra["kimi_quota_generation"] = "old-route"
+	for _, platform := range []string{service.PlatformOpenAI, service.PlatformGrok, service.PlatformDeepseek, service.PlatformKimi, service.PlatformMiniMax, service.PlatformStepFun, service.PlatformZhipu} {
+		for _, kind := range []string{service.AccountTypeOAuth, service.AccountTypeAPIKey} {
+			extra := map[string]any{"keep": "unchanged"}
+			if platform == service.PlatformKimi {
+				extra["kimi_quota_generation"] = "old-route"
+			}
+			account := mustCreateAccount(s.T(), s.tx.Client(), &service.Account{
+				Name: "delete-proxy-" + platform + kind, Platform: platform, Type: kind, ProxyID: &proxy.ID,
+				Extra: extra,
+			})
+			wantIDs = append(wantIDs, account.ID)
 		}
-		account := mustCreateAccount(s.T(), s.tx.Client(), &service.Account{
-			Name: "delete-proxy-" + platform, Platform: platform, Type: service.AccountTypeOAuth, ProxyID: &proxy.ID,
-			Extra: extra,
-		})
-		wantIDs = append(wantIDs, account.ID)
 	}
 	ollama := mustCreateAccount(s.T(), s.tx.Client(), &service.Account{
 		Name: "delete-proxy-ollama", Platform: service.PlatformAnthropic, Type: service.AccountTypeAPIKey, ProxyID: &proxy.ID,

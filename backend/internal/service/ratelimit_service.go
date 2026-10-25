@@ -1271,7 +1271,7 @@ func (s *RateLimitService) handle429(ctx context.Context, account *Account, head
 	// QueryUsage→persistOpenAICodexProbeSnapshot 维护,枯竭由调度守卫处理。
 	if account.IsShadow() {
 		if account.ParentAccountID != nil {
-			notifyOpenAIAutoReset(*account.ParentAccountID)
+			notifyOpenAIAutoResetForOwner(capturedCodexUsageOwner(ctx, account))
 		}
 		return
 	}
@@ -1292,13 +1292,10 @@ func (s *RateLimitService) handle429(ctx context.Context, account *Account, head
 	}
 	// 1. OpenAI 平台：优先尝试解析 x-codex-* 响应头（用于 rate_limit_exceeded）
 	if account.Platform == PlatformOpenAI {
-		persistOpenAI429PlanType(ctx, s.accountRepo, account, responseBody)
+		defer persistOpenAI429PlanType(ctx, s.accountRepo, account, responseBody)
 		s.persistOpenAICodexSnapshot(ctx, account, headers)
-		notifyOpenAIAutoReset(account.ID)
 		if resetAt := s.calculateOpenAI429ResetTime(headers); resetAt != nil {
-			s.notifyAccountSchedulingBlocked(account, *resetAt, "429")
-			if err := s.accountRepo.SetRateLimited(ctx, account.ID, *resetAt); err != nil {
-				slog.Warn("rate_limit_set_failed", "account_id", account.ID, "error", err)
+			if !s.set429RateLimit(ctx, account, *resetAt, "429") {
 				return
 			}
 			slog.Info("openai_account_rate_limited", "account_id", account.ID, "reset_at", *resetAt)
@@ -1308,9 +1305,7 @@ func (s *RateLimitService) handle429(ctx context.Context, account *Account, head
 
 	// 2. Anthropic 平台：尝试解析 per-window 头（5h / 7d），选择实际触发的窗口
 	if result := calculateAnthropic429ResetTime(headers); result != nil {
-		s.notifyAccountSchedulingBlocked(account, result.resetAt, "429")
-		if err := s.accountRepo.SetRateLimited(ctx, account.ID, result.resetAt); err != nil {
-			slog.Warn("rate_limit_set_failed", "account_id", account.ID, "error", err)
+		if !s.set429RateLimit(ctx, account, result.resetAt, "429") {
 			return
 		}
 
@@ -1320,8 +1315,10 @@ func (s *RateLimitService) handle429(ctx context.Context, account *Account, head
 			windowEnd = *result.fiveHourReset
 		}
 		windowStart := windowEnd.Add(-5 * time.Hour)
-		if err := s.accountRepo.UpdateSessionWindow(ctx, account.ID, &windowStart, &windowEnd, "rejected"); err != nil {
-			slog.Warn("rate_limit_update_session_window_failed", "account_id", account.ID, "error", err)
+		if account.Platform != PlatformOpenAI {
+			if err := s.accountRepo.UpdateSessionWindow(ctx, account.ID, &windowStart, &windowEnd, "rejected"); err != nil {
+				slog.Warn("rate_limit_update_session_window_failed", "account_id", account.ID, "error", err)
+			}
 		}
 
 		slog.Info("anthropic_account_rate_limited", "account_id", account.ID, "reset_at", result.resetAt, "reset_in", time.Until(result.resetAt).Truncate(time.Second))
@@ -1338,9 +1335,7 @@ func (s *RateLimitService) handle429(ctx context.Context, account *Account, head
 			// 尝试解析 OpenAI 的 usage_limit_reached 错误
 			if resetAt := parseOpenAIRateLimitResetTime(responseBody); resetAt != nil {
 				resetTime := time.Unix(*resetAt, 0)
-				s.notifyAccountSchedulingBlocked(account, resetTime, "429")
-				if err := s.accountRepo.SetRateLimited(ctx, account.ID, resetTime); err != nil {
-					slog.Warn("rate_limit_set_failed", "account_id", account.ID, "error", err)
+				if !s.set429RateLimit(ctx, account, resetTime, "429") {
 					return
 				}
 				slog.Info("account_rate_limited", "account_id", account.ID, "platform", account.Platform, "reset_at", resetTime, "reset_in", time.Until(resetTime).Truncate(time.Second))
@@ -1350,9 +1345,7 @@ func (s *RateLimitService) handle429(ctx context.Context, account *Account, head
 			// 尝试解析 Gemini 格式（用于其他平台）
 			if resetAt := ParseGeminiRateLimitResetTime(responseBody); resetAt != nil {
 				resetTime := time.Unix(*resetAt, 0)
-				s.notifyAccountSchedulingBlocked(account, resetTime, "429")
-				if err := s.accountRepo.SetRateLimited(ctx, account.ID, resetTime); err != nil {
-					slog.Warn("rate_limit_set_failed", "account_id", account.ID, "error", err)
+				if !s.set429RateLimit(ctx, account, resetTime, "429") {
 					return
 				}
 				slog.Info("account_rate_limited", "account_id", account.ID, "platform", account.Platform, "reset_at", resetTime, "reset_in", time.Until(resetTime).Truncate(time.Second))
@@ -1389,17 +1382,17 @@ func (s *RateLimitService) handle429(ctx context.Context, account *Account, head
 	resetAt := time.Unix(ts, 0)
 
 	// 标记限流状态
-	s.notifyAccountSchedulingBlocked(account, resetAt, "429")
-	if err := s.accountRepo.SetRateLimited(ctx, account.ID, resetAt); err != nil {
-		slog.Warn("rate_limit_set_failed", "account_id", account.ID, "error", err)
+	if !s.set429RateLimit(ctx, account, resetAt, "429") {
 		return
 	}
 
 	// 根据重置时间反推5h窗口
 	windowEnd := resetAt
 	windowStart := resetAt.Add(-5 * time.Hour)
-	if err := s.accountRepo.UpdateSessionWindow(ctx, account.ID, &windowStart, &windowEnd, "rejected"); err != nil {
-		slog.Warn("rate_limit_update_session_window_failed", "account_id", account.ID, "error", err)
+	if account.Platform != PlatformOpenAI {
+		if err := s.accountRepo.UpdateSessionWindow(ctx, account.ID, &windowStart, &windowEnd, "rejected"); err != nil {
+			slog.Warn("rate_limit_update_session_window_failed", "account_id", account.ID, "error", err)
+		}
 	}
 
 	slog.Info("account_rate_limited", "account_id", account.ID, "reset_at", resetAt)
@@ -1418,10 +1411,7 @@ func (s *RateLimitService) apply429FallbackRateLimit(ctx context.Context, accoun
 		s.applyCNProviderCredentialState(ctx, account, CredentialStateMutation{RateLimitUntil: &resetAt, ExtendRateLimitOnly: true}, resetAt, "429_fallback")
 		return
 	}
-	s.notifyAccountSchedulingBlocked(account, resetAt, "429_fallback")
-	if err := s.accountRepo.SetRateLimited(ctx, account.ID, resetAt); err != nil {
-		slog.Warn("rate_limit_set_failed", "account_id", account.ID, "error", err)
-	}
+	s.set429RateLimit(ctx, account, resetAt, "429_fallback")
 }
 
 func (s *RateLimitService) get429FallbackCooldown(ctx context.Context, account *Account) (time.Duration, bool) {
@@ -1852,16 +1842,18 @@ func (s *RateLimitService) persistOpenAICodexSnapshot(ctx context.Context, accou
 	if snapshot == nil {
 		return
 	}
-	observeOpenAIWeeklyUsageSnapshot(ctx, account.ID, snapshot, true)
+	owner, ok := credentialStateMutationOwner(ctx, account)
+	if !ok {
+		return
+	}
 	updates := buildCodexUsageExtraUpdates(snapshot, time.Now())
 	if len(updates) == 0 {
 		return
 	}
-	if err := s.accountRepo.UpdateExtra(ctx, account.ID, updates); err != nil {
+	if _, err := persistOpenAICodexUsageObservation(ctx, s.accountRepo, account.ID, owner, updates, snapshot, true); err != nil {
 		slog.Warn("openai_codex_snapshot_persist_failed", "account_id", account.ID, "error", err)
 		return
 	}
-	notifyOpenAIAutoReset(account.ID)
 }
 
 // parseOpenAIRateLimitResetTime 解析 OpenAI 兼容格式的 429 响应，返回重置时间的 Unix 时间戳
@@ -2055,7 +2047,7 @@ func parseOpenAIRateLimitPlanType(body []byte) string {
 }
 
 func persistOpenAI429PlanType(ctx context.Context, repo AccountRepository, account *Account, body []byte) {
-	if repo == nil || account == nil || account.Platform != PlatformOpenAI {
+	if repo == nil || account == nil || account.Platform != PlatformOpenAI || account.Type != AccountTypeOAuth {
 		return
 	}
 	// spark 影子账号恒不持凭据:即便收到带 plan_type 的 429,也不能把 plan_type 写进影子 credentials
@@ -2070,15 +2062,25 @@ func persistOpenAI429PlanType(ctx context.Context, repo AccountRepository, accou
 		return
 	}
 
-	current := strings.TrimSpace(account.GetCredential("plan_type"))
+	owner, known := credentialStateMutationOwner(ctx, account)
+	if !known || owner.Type != AccountTypeOAuth {
+		return
+	}
+	current := strings.TrimSpace(owner.GetCredential("plan_type"))
 	if strings.EqualFold(current, planType) {
 		return
 	}
 
-	if _, err := repo.BulkUpdate(ctx, []int64{account.ID}, AccountBulkUpdate{
-		Credentials: map[string]any{"plan_type": planType},
-	}); err != nil {
+	guarded, ok := repo.(CredentialStateMutationRepository)
+	if !ok {
+		return
+	}
+	accepted, err := guarded.ApplyCredentialStateMutation(ctx, owner, CredentialStateMutation{OpenAIPlanType: planType})
+	if err != nil {
 		slog.Warn("openai_429_plan_type_sync_failed", "account_id", account.ID, "plan_type", planType, "error", err)
+		return
+	}
+	if !accepted || credentialStateGeneration(account) != credentialStateGeneration(owner) {
 		return
 	}
 
@@ -3118,5 +3120,33 @@ func (s *RateLimitService) triggerStreamTimeoutError(ctx context.Context, accoun
 	}
 
 	slog.Warn("stream_timeout_account_error", "account_id", account.ID, "model", model)
+	return true
+}
+
+// Runtime scheduling state follows the same successful owner CAS as the durable
+// cooldown. An obsolete header or error body must have no scheduling side effects.
+func (s *RateLimitService) set429RateLimit(ctx context.Context, account *Account, resetAt time.Time, reason string) bool {
+	if account.Platform == PlatformOpenAI {
+		owner, known := credentialStateMutationOwner(ctx, account)
+		guarded, ok := s.accountRepo.(CredentialStateMutationRepository)
+		if !known || !ok {
+			return false
+		}
+		accepted, err := guarded.ApplyCredentialStateMutation(ctx, owner, CredentialStateMutation{RateLimitUntil: &resetAt, ExtendRateLimitOnly: true})
+		if err != nil {
+			slog.Warn("rate_limit_set_failed", "account_id", account.ID, "error", err)
+			return false
+		}
+		if !accepted {
+			return false
+		}
+		s.notifyAccountSchedulingBlocked(owner, resetAt, reason)
+		return true
+	}
+	s.notifyAccountSchedulingBlocked(account, resetAt, reason)
+	if err := s.accountRepo.SetRateLimited(ctx, account.ID, resetAt); err != nil {
+		slog.Warn("rate_limit_set_failed", "account_id", account.ID, "error", err)
+		return false
+	}
 	return true
 }

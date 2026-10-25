@@ -89,7 +89,8 @@ describe('available channels user page', () => {
     expect(w.get('.catalog-model-card').text()).toContain('$0–$2')
     expect(w.get('.catalog-model-card').text()).toContain('quoteCount availableChannels.exclusive')
     await w.findAll('.catalog-model-card button')[1]!.trigger('click'); await flushPromises()
-    expect(document.querySelectorAll('.catalog-quote')).toHaveLength(2)
+    expect(document.querySelectorAll('.catalog-quote-disclosure')).toHaveLength(2)
+    expect(document.querySelectorAll('.catalog-quote')).toHaveLength(0)
     expect(document.querySelector('[role="dialog"]')!.textContent).toContain('Group 1')
     expect(document.querySelector('[role="dialog"]')!.textContent).toContain('Group 2')
     expect(document.querySelector('[role="dialog"]')!.textContent).toContain('billingGroupNote')
@@ -167,7 +168,7 @@ describe('available channels user page', () => {
     mocks.getCatalog.mockResolvedValueOnce({ groups: [group(2, [offer('same', { offer_key: 'two' })])], user_rate_status: 'loaded' })
     await w.get('button[aria-label="common.refresh"]').trigger('click'); await flushPromises()
     expect(w.findComponent(CatalogPriceDetails).props('model').quotes).toHaveLength(1)
-    expect(document.querySelectorAll('.catalog-quote')).toHaveLength(1)
+    expect(document.querySelectorAll('.catalog-quote-disclosure')).toHaveLength(1)
     expect(document.querySelector('[role="dialog"]')!.textContent).not.toContain('Group 1')
   })
   it('traps keyboard focus and restores the details trigger after Escape', async () => {
@@ -193,6 +194,7 @@ describe('available channels user page', () => {
     await w.findAll('.catalog-model-card button')[1]!.trigger('click'); await flushPromises()
     const dialog = document.querySelector('[role="dialog"]')!
     const close = dialog.querySelector<HTMLButtonElement>('[aria-label="Close modal"]')!
+    dialog.querySelector<HTMLElement>('.catalog-quote-disclosure > summary')!.click(); await flushPromises()
     const flex = Array.from(dialog.querySelectorAll<HTMLElement>('summary')).find(s => s.textContent!.includes('tiers.flex'))!
     close.focus()
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }))
@@ -202,7 +204,7 @@ describe('available channels user page', () => {
     expect(forward.defaultPrevented).toBe(true)
     expect(document.activeElement).toBe(close)
     flex.click(); await flushPromises()
-    const visiblePrice = dialog.querySelectorAll<HTMLDetailsElement>('details')[1]!.querySelector<HTMLElement>('[tabindex="0"]')!
+    const visiblePrice = flex.parentElement!.querySelector<HTMLElement>('[tabindex="0"]')!
     close.focus()
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }))
     expect(document.activeElement).toBe(visiblePrice)
@@ -220,19 +222,21 @@ describe('available channels user page', () => {
     const first = w.findAll('.catalog-model-card')[0]!.findAll('button')[1]!
     const second = w.findAll('.catalog-model-card')[1]!.findAll('button')[1]!
     await first.trigger('click'); await flushPromises()
-    const summary = document.querySelector<HTMLElement>('[role="dialog"] summary')!
-    summary.click(); await flushPromises()
-    expect(document.querySelector<HTMLDetailsElement>('details')!.open).toBe(true)
+    document.querySelector<HTMLElement>('.catalog-quote-disclosure > summary')!.click(); await flushPromises()
+    document.querySelector<HTMLElement>('.catalog-quote summary')!.click(); await flushPromises()
+    expect(document.querySelector<HTMLDetailsElement>('.catalog-quote details')!.open).toBe(true)
     document.querySelector<HTMLButtonElement>('[aria-label="Close modal"]')!.click(); await flushPromises()
     await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull())
     await first.trigger('click'); await flushPromises()
     expect(Array.from(document.querySelectorAll<HTMLDetailsElement>('details')).every(d => !d.open)).toBe(true)
-    document.querySelector<HTMLElement>('[role="dialog"] summary')!.click(); await flushPromises()
+    document.querySelector<HTMLElement>('.catalog-quote-disclosure > summary')!.click(); await flushPromises()
+    expect(Array.from(document.querySelectorAll<HTMLDetailsElement>('.catalog-quote details')).every(d => !d.open)).toBe(true)
     document.querySelector<HTMLButtonElement>('[aria-label="Close modal"]')!.click(); await flushPromises()
     await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull())
     await second.trigger('click'); await flushPromises()
     expect(document.querySelector('[role="dialog"]')!.textContent).toContain('second')
-    expect(document.querySelectorAll('details')).toHaveLength(2)
+    expect(document.querySelectorAll('.catalog-quote-disclosure')).toHaveLength(1)
+    expect(document.querySelectorAll('.catalog-quote')).toHaveLength(0)
     expect(Array.from(document.querySelectorAll<HTMLDetailsElement>('details')).every(d => !d.open)).toBe(true)
   })
 })

@@ -1,5 +1,7 @@
 package service
 
+import "context"
+
 // parentHealthyForShadow 报告 spark 影子账号的母账号凭据是否可用(影子据此可被调度)。
 //
 // 非影子账号直接返回 true（不受此检查约束）。
@@ -13,7 +15,7 @@ package service
 // **刻意排除** global 维度的 RateLimitResetAt/OverloadUntil 与母账号手动 Schedulable 开关:
 // 母账号 global 429 不得连坐 spark 影子,否则会重新耦合影子架构本应解耦的两条 429 道。
 // 母账号未找到(nil)、非 OpenAI OAuth、或凭据不可用时影子被挡。
-func parentHealthyForShadow(account *Account, lookup func(int64) *Account) bool {
+func parentHealthyForShadow(account *Account, lookup func(int64) *Account, quotaContexts ...context.Context) bool {
 	if account == nil || !account.IsShadow() {
 		return true
 	}
@@ -21,7 +23,16 @@ func parentHealthyForShadow(account *Account, lookup func(int64) *Account) bool 
 	if parent == nil {
 		return false
 	}
-	return parent.IsOpenAIOAuth() && parent.IsCredentialUsableForShadow()
+	if !parent.IsOpenAIOAuth() || !parent.IsCredentialUsableForShadow() {
+		return false
+	}
+	// Only the shadow's own Spark quota participates. Parent global quota
+	// remains independent; the existing lookup proves the current parent grant.
+	if len(quotaContexts) > 0 {
+		paused, _ := shouldAutoPauseOpenAIAccountByQuota(quotaContexts[0], account, parent)
+		return !paused
+	}
+	return true
 }
 
 // sparkModelVariants 返回所有归一到 spark 的模型 ID（当前仅 base：spark 无 effort 变体）。

@@ -263,6 +263,7 @@ func (r *tokenRefreshAccountRepo) SetGrokOAuthRefreshErrorIfCredentialsUnchanged
 		r.repairProxyOnErrorCAS = false
 		proxyID := int64(902)
 		account.ProxyID = &proxyID
+		account.Proxy = &Proxy{ID: proxyID, Protocol: "http", Host: "127.0.0.1", Port: 1081, Status: StatusActive}
 	}
 	if account.Status != StatusActive || account.Platform != PlatformGrok || account.Type != AccountTypeOAuth ||
 		!reflect.DeepEqual(account.Credentials, expectedCredentials) || (!reflect.DeepEqual(account.ProxyID, expectedProxyID) || !reflect.DeepEqual(account.Proxy, expectedOwner.Proxy)) {
@@ -334,6 +335,7 @@ func (r *tokenRefreshAccountRepo) SetGrokOAuthRefreshTempUnschedulableIfCredenti
 		r.repairProxyOnTempCAS = false
 		proxyID := int64(902)
 		account.ProxyID = &proxyID
+		account.Proxy = &Proxy{ID: proxyID, Protocol: "http", Host: "127.0.0.1", Port: 1081, Status: StatusActive}
 	}
 	if account.Status != StatusActive || account.Platform != PlatformGrok || account.Type != AccountTypeOAuth ||
 		!reflect.DeepEqual(account.Credentials, expectedCredentials) || (!reflect.DeepEqual(account.ProxyID, expectedProxyID) || !reflect.DeepEqual(account.Proxy, expectedOwner.Proxy)) {
@@ -1530,6 +1532,9 @@ func TestPathA_GrokPermanentFailureCASLetsConcurrentAccountRepairWin(t *testing.
 			assert: func(t *testing.T, account *Account) {
 				require.NotNil(t, account.ProxyID)
 				require.Equal(t, int64(902), *account.ProxyID)
+				require.NotNil(t, account.Proxy)
+				require.Equal(t, int64(902), account.Proxy.ID)
+				require.Equal(t, 1081, account.Proxy.Port)
 				require.Equal(t, "attempted-refresh", account.GetGrokRefreshToken(),
 					"proxy-only repair must prove the proxy fingerprint independently of credentials")
 			},
@@ -1546,6 +1551,7 @@ func TestPathA_GrokPermanentFailureCASLetsConcurrentAccountRepairWin(t *testing.
 				Status:      StatusActive,
 				Schedulable: true,
 				ProxyID:     &proxyID,
+				Proxy:       &Proxy{ID: proxyID, Protocol: "http", Host: "127.0.0.1", Port: 1080, Status: StatusActive},
 				Credentials: map[string]any{
 					"access_token":   "attempted-access",
 					"refresh_token":  "attempted-refresh",
@@ -1565,6 +1571,7 @@ func TestPathA_GrokPermanentFailureCASLetsConcurrentAccountRepairWin(t *testing.
 			err := service.refreshWithRetry(context.Background(), account, refresher, refresher, time.Hour)
 
 			require.ErrorIs(t, err, errRefreshSkipped)
+			require.Equal(t, 1, refresher.calls, "the failure must reach the old owner's refresh attempt")
 			require.Equal(t, 1, repo.conditionalErrorCalls)
 			require.Zero(t, repo.setErrorCalls)
 			require.Zero(t, blocker.blockCalls)
@@ -1599,6 +1606,9 @@ func TestPathA_GrokTransientFailureCASLetsConcurrentAccountRepairWin(t *testing.
 			assert: func(t *testing.T, account *Account) {
 				require.NotNil(t, account.ProxyID)
 				require.Equal(t, int64(902), *account.ProxyID)
+				require.NotNil(t, account.Proxy)
+				require.Equal(t, int64(902), account.Proxy.ID)
+				require.Equal(t, 1081, account.Proxy.Port)
 				require.Equal(t, "attempted-refresh", account.GetGrokRefreshToken(),
 					"proxy-only repair must prove the proxy fingerprint independently of credentials")
 			},
@@ -1615,6 +1625,7 @@ func TestPathA_GrokTransientFailureCASLetsConcurrentAccountRepairWin(t *testing.
 				Status:      StatusActive,
 				Schedulable: true,
 				ProxyID:     &proxyID,
+				Proxy:       &Proxy{ID: proxyID, Protocol: "http", Host: "127.0.0.1", Port: 1080, Status: StatusActive},
 				Credentials: map[string]any{
 					"access_token":   "attempted-access",
 					"refresh_token":  "attempted-refresh",
@@ -1634,6 +1645,7 @@ func TestPathA_GrokTransientFailureCASLetsConcurrentAccountRepairWin(t *testing.
 			err := service.refreshWithRetry(context.Background(), account, refresher, refresher, time.Hour)
 
 			require.ErrorIs(t, err, errRefreshSkipped)
+			require.Equal(t, 1, refresher.calls, "the failure must reach the old owner's refresh attempt")
 			require.Equal(t, 1, repo.conditionalTempCalls)
 			require.Zero(t, repo.setTempUnschedCalls)
 			require.Zero(t, blocker.blockCalls)
@@ -1643,6 +1655,50 @@ func TestPathA_GrokTransientFailureCASLetsConcurrentAccountRepairWin(t *testing.
 			tt.assert(t, account)
 		})
 	}
+}
+
+func TestPathA_GrokProxyPreparationFailureContainsProviderWithoutAccountMutation(t *testing.T) {
+	proxyID := int64(901)
+	account := &Account{
+		ID:          123,
+		Platform:    PlatformGrok,
+		Type:        AccountTypeOAuth,
+		Status:      StatusActive,
+		Schedulable: true,
+		ProxyID:     &proxyID,
+		Proxy:       &Proxy{},
+		Credentials: map[string]any{"access_token": "captured-access", "refresh_token": "captured-refresh"},
+	}
+	repo := &tokenRefreshAccountRepo{}
+	repo.accountsByID = map[int64]*Account{account.ID: account}
+	invalidator := &tokenCacheInvalidatorStub{}
+	cache := &mockTokenCacheForRefreshAPI{lockResult: true}
+	service, _ := buildPathAService(repo, cache, invalidator)
+	service.cfg.MaxRetries = 3
+	blocker := &tokenRefreshRuntimeBlocker{}
+	service.SetAccountRuntimeBlocker(blocker)
+	refresher := &tokenRefresherStub{err: errors.New("must not reach credential transport")}
+
+	err := service.refreshWithRetry(context.Background(), account, refresher, refresher, time.Hour)
+
+	var containmentErr *providerCycleContainmentRefreshError
+	require.ErrorAs(t, err, &containmentErr)
+	require.Zero(t, refresher.calls)
+	require.Equal(t, 1, repo.getByIDCalls, "a shared preparation failure must not retry the account")
+	require.Zero(t, repo.conditionalErrorCalls)
+	require.Zero(t, repo.conditionalTempCalls)
+	require.Zero(t, repo.setErrorCalls)
+	require.Zero(t, repo.setTempUnschedCalls)
+	require.Zero(t, repo.updateCalls)
+	require.Zero(t, invalidator.calls)
+	require.Zero(t, blocker.blockCalls)
+	require.Equal(t, StatusActive, account.Status)
+	require.True(t, account.Schedulable)
+	require.Nil(t, account.TempUnschedulableUntil)
+	require.Equal(t, "captured-refresh", account.GetGrokRefreshToken())
+	state := &tokenRefreshProviderState{service: service}
+	state.recordResult(err)
+	require.True(t, state.isTripped(), "the shared failure must immediately contain this provider cycle")
 }
 
 func TestTokenRefreshService_GrokMissingConditionalMutationContractContainsProviderCycle(t *testing.T) {

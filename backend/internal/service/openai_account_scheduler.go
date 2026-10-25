@@ -2027,7 +2027,7 @@ func (s *defaultOpenAIAccountScheduler) isAccountRequestCompatibleReason(ctx con
 		if err != nil {
 			return false, "", err
 		}
-		if !parentHealthyForShadow(account, func(int64) *Account { return parent }) {
+		if !parentHealthyForShadow(account, func(int64) *Account { return parent }, ctx) {
 			return false, "shadow_parent_unhealthy", nil
 		}
 	}
@@ -2788,7 +2788,7 @@ func (s *OpenAIGatewayService) hasOpenAIOAuthSessionPolicyAccessDenial(
 			!accountSupportsOpenAICapabilities(account, requiredCapability, requiredImageCapability) {
 			continue
 		}
-		if !parentHealthyForShadow(account, s.parentAccountLookup(ctx)) ||
+		if !parentHealthyForShadow(account, s.parentAccountLookup(ctx), ctx) ||
 			s.isOpenAIAccountRequestRuntimeBlocked(account, requestedModel) ||
 			s.isOpenAIProxyStreamQuarantined(ctx, account) {
 			continue
@@ -3387,7 +3387,7 @@ func (o openAILegacyUpstreamRateOrder) compare(a, b *Account) int {
 }
 
 func openAIQuotaHeadroomFactor(account *Account, now time.Time) float64 {
-	if account == nil || len(account.Extra) == 0 || openAIQuotaHeadroomSnapshotStale(account.Extra, now) {
+	if !openAICodexUsageObservationMatchesOwner(account, account) || openAIQuotaHeadroomSnapshotStale(account.Extra, now) {
 		return openAIQuotaHeadroomNeutralFactor
 	}
 	window5h, window7d := openAICanonicalQuotaWindows(account.Extra, now)
@@ -3464,8 +3464,10 @@ func openAISchedulingResetWindowEnd(account *Account, now time.Time) (time.Time,
 	if account == nil {
 		return time.Time{}, false
 	}
-	if end, ok := openAICodexWindowResetAt(account.Extra, "5h"); ok && now.Before(end) {
-		return end, true
+	if openAICodexUsageObservationMatchesOwner(account, account) {
+		if end, ok := openAICodexWindowResetAt(account.Extra, "5h"); ok && now.Before(end) {
+			return end, true
+		}
 	}
 	if end := account.SessionWindowEnd; end != nil && now.Before(*end) {
 		return *end, true

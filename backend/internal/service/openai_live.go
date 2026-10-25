@@ -502,7 +502,11 @@ func (s *OpenAIGatewayService) liveSidebandHeaders(
 	if snapshot.Residency != "" {
 		headers.Set("x-openai-internal-codex-residency", snapshot.Residency)
 	}
-	return headers, resolveAccountProxyURL(credentialOwner), nil
+	proxyURL, err := requestCredentialOwnerProxyURL(ctx, credentialOwner)
+	if err != nil {
+		return nil, "", err
+	}
+	return headers, proxyURL, nil
 }
 
 func (s *OpenAIGatewayService) dialLiveSideband(ctx context.Context, record *LiveCallRecord) (liveFrameConn, error) {

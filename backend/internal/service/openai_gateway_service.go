@@ -355,6 +355,7 @@ type OpenAIForwardResult struct {
 	// upstream Responses WebSocket turn. Empty preserves legacy/non-WS success.
 	UpstreamTerminalEvent string
 	ResponseHeaders       http.Header
+	codexUsageOwner       *Account
 	// ResponseHeadersFromHandshake marks WebSocket connection-time leftovers.
 	// Those headers may refresh the account usage cache but must not drive
 	// group follow-reset as a later inference session.
@@ -503,9 +504,10 @@ type openAIWSRetryMetrics struct {
 }
 
 type accountWriteThrottle struct {
-	minInterval time.Duration
-	mu          sync.Mutex
-	lastByID    map[int64]time.Time
+	minInterval      time.Duration
+	mu               sync.Mutex
+	lastByID         map[int64]time.Time
+	lastByGeneration map[accountWriteGeneration]time.Time
 }
 
 func newAccountWriteThrottle(minInterval time.Duration) *accountWriteThrottle {
@@ -537,6 +539,39 @@ func (t *accountWriteThrottle) Allow(id int64, now time.Time) bool {
 		}
 	}
 
+	return true
+}
+
+type accountWriteGeneration struct {
+	id         int64
+	generation string
+}
+
+func (t *accountWriteThrottle) AllowGeneration(id int64, generation string, now time.Time) bool {
+	if t == nil || id <= 0 || t.minInterval <= 0 {
+		return true
+	}
+	if generation == "" {
+		return false
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.lastByGeneration == nil {
+		t.lastByGeneration = make(map[accountWriteGeneration]time.Time)
+	}
+	key := accountWriteGeneration{id, generation}
+	if last, ok := t.lastByGeneration[key]; ok && now.Sub(last) < t.minInterval {
+		return false
+	}
+	t.lastByGeneration[key] = now
+	if len(t.lastByGeneration) > 4096 {
+		cutoff := now.Add(-4 * t.minInterval)
+		for key, writtenAt := range t.lastByGeneration {
+			if writtenAt.Before(cutoff) {
+				delete(t.lastByGeneration, key)
+			}
+		}
+	}
 	return true
 }
 

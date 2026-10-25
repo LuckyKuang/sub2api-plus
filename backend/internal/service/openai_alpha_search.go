@@ -75,9 +75,9 @@ func (s *OpenAIGatewayService) ForwardAlphaSearch(ctx context.Context, c *gin.Co
 		return nil, NewProviderCredentialFailure("openai_alpha_search_owner_unavailable", nil)
 	}
 
-	proxyURL := ""
-	if owner.ProxyID != nil && owner.Proxy != nil {
-		proxyURL = owner.Proxy.URL()
+	proxyURL, err := requestCredentialOwnerProxyURL(ctx, owner)
+	if err != nil {
+		return nil, err
 	}
 	enrichedOwner, err := s.ensureOpenAIAlphaSearchAuthMetadata(ctx, owner, token, proxyURL)
 	if err != nil {
@@ -147,7 +147,7 @@ func (s *OpenAIGatewayService) ForwardAlphaSearch(ctx context.Context, c *gin.Co
 	}
 
 	if resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices && !account.IsShadow() {
-		s.UpdateCodexUsageSnapshotFromHeaders(ctx, account.ID, resp.Header)
+		s.UpdateCodexUsageSnapshotFromHeaders(ctx, account, resp.Header)
 	}
 	writeOpenAIPassthroughResponseHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
 	s.finalizeCodexClientQuotaHeaders(c.Writer.Header(), c, account)
@@ -161,6 +161,7 @@ func (s *OpenAIGatewayService) ForwardAlphaSearch(ctx context.Context, c *gin.Co
 		return nil, nil
 	}
 	return &OpenAIForwardResult{
+		codexUsageOwner: capturedCodexUsageOwner(ctx, account),
 		RequestID:       strings.TrimSpace(resp.Header.Get("x-request-id")),
 		UpstreamHeaders: resp.Header,
 		Model:           requestedModel,
@@ -241,7 +242,7 @@ func (s *OpenAIGatewayService) forwardAlphaSearchViaResponsesWebSearch(
 	}
 
 	if resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices && !account.IsShadow() {
-		s.UpdateCodexUsageSnapshotFromHeaders(ctx, account.ID, resp.Header)
+		s.UpdateCodexUsageSnapshotFromHeaders(ctx, account, resp.Header)
 	}
 	alphaRespBody, err := openAIAlphaSearchResponseFromResponsesSSE(respBody)
 	if err != nil {
@@ -250,6 +251,7 @@ func (s *OpenAIGatewayService) forwardAlphaSearchViaResponsesWebSearch(
 	s.finalizeCodexClientQuotaHeaders(c.Writer.Header(), c, account)
 	c.Data(http.StatusOK, "application/json", alphaRespBody)
 	return &OpenAIForwardResult{
+		codexUsageOwner:  capturedCodexUsageOwner(ctx, account),
 		RequestID:        strings.TrimSpace(resp.Header.Get("x-request-id")),
 		UpstreamHeaders:  resp.Header,
 		Model:            requestedModel,

@@ -518,7 +518,16 @@ func (s *GrokQuotaService) prepareProbe(ctx context.Context, accountID int64) (*
 	if err != nil {
 		return nil, "", "", err
 	}
-	s.resolveProxyURL(ctx, account)
+	if account.ProxyID != nil && account.Proxy == nil && s.proxyRepo != nil {
+		proxy, err := s.proxyRepo.GetByID(ctx, *account.ProxyID)
+		if err != nil {
+			return nil, "", "", infraerrors.New(http.StatusBadGateway, "GROK_QUOTA_TOKEN_UNAVAILABLE", "configured account proxy is unavailable").WithCause(err)
+		}
+		account.Proxy = proxy
+	}
+	if _, err := requestCredentialOwnerProxyURL(context.Background(), account); err != nil {
+		return nil, "", "", infraerrors.New(http.StatusBadGateway, "GROK_QUOTA_TOKEN_UNAVAILABLE", "configured account proxy is unavailable").WithCause(err)
+	}
 
 	// Quota diagnostics must remain available while scheduling is paused (for
 	// example after a 402). Use the same credential checks and refresh protocol
@@ -535,23 +544,11 @@ func (s *GrokQuotaService) prepareProbe(ctx context.Context, accountID int64) (*
 	if !ok {
 		return nil, "", "", infraerrors.New(http.StatusBadGateway, "GROK_QUOTA_CREDENTIAL_CHANGED", "credential owner changed during quota preparation")
 	}
-	return owner, token, s.resolveProxyURL(ctx, owner), nil
-}
-
-func (s *GrokQuotaService) resolveProxyURL(ctx context.Context, account *Account) string {
-	if account == nil || account.ProxyID == nil {
-		return ""
+	proxyURL, err := requestCredentialOwnerProxyURL(ownerCtx, owner)
+	if err != nil {
+		return nil, "", "", infraerrors.New(http.StatusBadGateway, "GROK_QUOTA_TOKEN_UNAVAILABLE", "configured account proxy is unavailable").WithCause(err)
 	}
-	switch {
-	case account.Proxy != nil:
-		return account.Proxy.URL()
-	case s != nil && s.proxyRepo != nil:
-		if proxy, err := s.proxyRepo.GetByID(ctx, *account.ProxyID); err == nil && proxy != nil {
-			account.Proxy = proxy
-			return proxy.URL()
-		}
-	}
-	return ""
+	return owner, token, proxyURL, nil
 }
 
 func (s *GrokQuotaService) loadGrokOAuthAccount(ctx context.Context, accountID int64) (*Account, error) {

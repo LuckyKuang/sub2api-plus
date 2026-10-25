@@ -3153,7 +3153,7 @@ func TestOpenAIUpdateCodexUsageSnapshotFromHeaders(t *testing.T) {
 	headers.Set("x-codex-primary-reset-after-seconds", "600")
 	headers.Set("x-codex-secondary-reset-after-seconds", "86400")
 
-	svc.UpdateCodexUsageSnapshotFromHeaders(context.Background(), 123, headers)
+	svc.UpdateCodexUsageSnapshotFromHeaders(context.Background(), &Account{ID: 123, Platform: PlatformOpenAI, Type: AccountTypeOAuth}, headers)
 
 	select {
 	case updates := <-repo.updateExtraCalls:
@@ -3181,7 +3181,7 @@ func TestOpenAIUpdateCodexUsageSnapshotFromResetAtOnlyHeaders(t *testing.T) {
 	headers.Set("x-codex-secondary-window-minutes", "300")
 	headers.Set("x-codex-secondary-reset-at", strconv.FormatInt(secondaryResetAt.Unix(), 10))
 
-	svc.UpdateCodexUsageSnapshotFromHeaders(context.Background(), 124, headers)
+	svc.UpdateCodexUsageSnapshotFromHeaders(context.Background(), &Account{ID: 124, Platform: PlatformOpenAI, Type: AccountTypeOAuth}, headers)
 
 	select {
 	case updates := <-repo.updateExtraCalls:
@@ -4214,4 +4214,11 @@ func TestHandleCompatErrorResponseCyberPolicyEarlyReturn(t *testing.T) {
 	require.Contains(t, gotMsg, "flagged for cyber policy")
 	require.NotContains(t, gotMsg, "Upstream request failed")
 	require.NotNil(t, GetOpsCyberPolicy(c))
+}
+
+func (r *snapshotUpdateAccountRepo) UpdateOpenAICodexUsageIfUnchanged(ctx context.Context, id int64, owner *Account, updates map[string]any) (bool, error) {
+	if owner == nil {
+		return false, nil
+	}
+	return true, r.UpdateExtra(ctx, id, updates)
 }

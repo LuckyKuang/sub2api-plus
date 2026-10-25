@@ -3267,7 +3267,7 @@ func (h *AccountHandler) SetPrivacy(c *gin.Context) {
 		return
 	}
 	if mode == "" {
-		response.BadRequest(c, "Cannot set privacy: missing access_token")
+		response.BadRequest(c, "Cannot set privacy: account credentials or proxy are unavailable")
 		return
 	}
 	// 从 DB 重新读取以确保返回最新状态

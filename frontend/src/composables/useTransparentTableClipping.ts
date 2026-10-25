@@ -118,13 +118,19 @@ export function useTransparentTableClipping(root: Ref<HTMLElement | null>, enabl
         }
         const table = state.table
         if (!table) continue
+        const headers = [...state.headers]
+        // Native overflow already clips ordinary tables. Only frozen columns
+        // need per-cell masks; hidden price tables must not pay this layout cost.
+        if (!headers.some(cell => cell.matches('.sticky-col-left, .sticky-col-right'))) {
+          if (state.clips.size) writes.push(() => restore(state))
+          continue
+        }
         const viewport = state.element.getBoundingClientRect()
         if (viewport.width < 1 || viewport.height < 1) continue
         const inner = {
           left: viewport.left + state.element.clientLeft,
           right: viewport.left + state.element.clientLeft + state.element.clientWidth,
         }
-        const headers = [...state.headers]
         const left = Math.max(inner.left, ...headers.filter(cell => cell.classList.contains('sticky-col-left'))
           .map(cell => cell.getBoundingClientRect().right))
         const right = Math.min(inner.right, ...headers.filter(cell => cell.classList.contains('sticky-col-right'))
@@ -176,6 +182,13 @@ export function useTransparentTableClipping(root: Ref<HTMLElement | null>, enabl
     // virtual spacer height changes do not alter horizontal geometry.
     const mutations = new MutationObserver(records => {
       for (const record of records) {
+        if (record.type === 'attributes') {
+          const target = record.target
+          if (!(target instanceof HTMLTableCellElement)) continue
+          const previous = (record.oldValue ?? '').split(/\s+/).filter(value => value === 'sticky-col-left' || value === 'sticky-col-right').sort().join(' ')
+          const current = [...target.classList].filter(value => value === 'sticky-col-left' || value === 'sticky-col-right').sort().join(' ')
+          if (previous === current) continue
+        }
         const target = record.target instanceof Element ? record.target.closest<HTMLElement>(viewportSelector) : null
         const state = target && viewports.get(target)
         if (state) {
@@ -199,7 +212,7 @@ export function useTransparentTableClipping(root: Ref<HTMLElement | null>, enabl
     }
     const onResize = () => schedule()
     registerTree(document.body)
-    mutations.observe(document.body, { childList: true, subtree: true })
+    mutations.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'], attributeOldValue: true })
     document.addEventListener('scroll', onScroll, true)
     window.addEventListener('resize', onResize)
 

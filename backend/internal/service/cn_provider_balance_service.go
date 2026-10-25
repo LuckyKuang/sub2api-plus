@@ -111,7 +111,9 @@ func (s *CNProviderBalanceService) QueryBalanceForAccount(ctx context.Context, a
 		if account.IsShadow() || account.ID <= 0 {
 			return nil, infraerrors.New(http.StatusBadRequest, "CN_BALANCE_OWNER_INVALID", "balance probe requires a credential-owning account")
 		}
-		_ = s.resolveProxyURL(ctx, account)
+		if _, err := s.resolveProxyURL(ctx, account); err != nil {
+			return nil, err
+		}
 		if account.ProxyID != nil && (account.Proxy == nil || account.Proxy.ID != *account.ProxyID) || account.ProxyID == nil && account.Proxy != nil {
 			return nil, infraerrors.New(http.StatusBadRequest, "CN_BALANCE_PROXY_UNAVAILABLE", "balance probe requires its hydrated proxy")
 		}
@@ -173,7 +175,10 @@ func (s *CNProviderBalanceService) queryBalanceForAccount(ctx context.Context, a
 		return nil, infraerrors.New(http.StatusForbidden, "CN_BALANCE_URL_REJECTED", err.Error())
 	}
 	targetURL = validatedURL
-	proxyURL := s.resolveProxyURL(ctx, account)
+	proxyURL, err := s.resolveProxyURL(ctx, account)
+	if err != nil {
+		return nil, err
+	}
 	callCtx, cancel := context.WithTimeout(ctx, cnBalanceUpstreamTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(callCtx, http.MethodGet, targetURL, nil)
@@ -339,20 +344,17 @@ func validatePayGAccount(account *Account) error {
 	return nil
 }
 
-func (s *CNProviderBalanceService) resolveProxyURL(ctx context.Context, account *Account) string {
-	if account == nil || account.ProxyID == nil {
-		return ""
-	}
-	if account.Proxy != nil {
-		return account.Proxy.URL()
-	}
-	if s != nil && s.proxyRepo != nil {
-		if proxy, err := s.proxyRepo.GetByID(ctx, *account.ProxyID); err == nil && proxy != nil {
-			account.Proxy = proxy
-			return proxy.URL()
+func (s *CNProviderBalanceService) resolveProxyURL(ctx context.Context, account *Account) (string, error) {
+	// Hydrate the explicitly selected proxy before capturing a credential
+	// operation. Failure never changes the route into a direct connection.
+	if account != nil && account.ProxyID != nil && account.Proxy == nil && s.proxyRepo != nil {
+		proxy, err := s.proxyRepo.GetByID(ctx, *account.ProxyID)
+		if err != nil {
+			return "", err
 		}
+		account.Proxy = proxy
 	}
-	return ""
+	return requestCredentialOwnerProxyURL(ctx, account)
 }
 
 // cnBalanceURL 解析账号的余额端点。

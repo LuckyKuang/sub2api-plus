@@ -24,7 +24,7 @@ function bounds(x: number, y: number, width: number, height: number): DOMRect {
   return { x, y, width, height, top: y, left: x, right: x + width, bottom: y + height, toJSON: () => ({}) } as DOMRect
 }
 
-function fixture({ constrained = true, sticky = true } = {}) {
+function fixture({ constrained = true, sticky = true, overflowing = true } = {}) {
   const parent = document.createElement('section')
   parent.style.display = 'flex'
   const viewport = document.createElement('div')
@@ -41,7 +41,7 @@ function fixture({ constrained = true, sticky = true } = {}) {
     </tr></thead><tbody><tr><td>A</td><td>B</td><td>C</td><td>D</td></tr></tbody></table>`
   Object.defineProperties(viewport, {
     clientLeft: { value: 12 }, clientWidth: { value: 300 },
-    clientHeight: { value: constrained ? 240 : 180 }, scrollHeight: { value: constrained ? 900 : 180 },
+    clientHeight: { value: constrained ? 240 : 180 }, scrollHeight: { value: constrained && overflowing ? 900 : constrained ? 240 : 180, configurable: true },
   })
   parent.append(viewport)
   document.body.append(parent)
@@ -94,6 +94,46 @@ afterEach(() => {
 })
 
 describe('static table headers', () => {
+  it('keeps short bounded price tables native and pins their header only after rows overflow', async () => {
+    const { viewport, table, head } = fixture({ overflowing: false })
+    scope.run(() => useStaticTableHeaders(ref(viewport)))
+    await settle()
+    expect(table.tHead).toBe(head)
+    expect(document.querySelector('.static-table-header-rail')).toBeNull()
+    Object.defineProperty(viewport, 'scrollHeight', { value: 900 })
+    observers[0]!.notify(table)
+    await settle()
+    expect(document.querySelector('.static-table-header-rail thead')).toBe(head)
+  })
+
+  it('measures all resized tables before applying any header width changes', async () => {
+    const first = fixture()
+    const second = fixture()
+    scope.run(() => useStaticTableHeaders(ref(first.viewport)))
+    await settle()
+    const operations: string[] = []
+    const read = vi.mocked(HTMLElement.prototype.getBoundingClientRect)
+    const originalRead = read.getMockImplementation()!
+    read.mockImplementation(function (this: HTMLElement) {
+      operations.push('read')
+      return originalRead.call(this)
+    })
+    const originalWrite = CSSStyleDeclaration.prototype.setProperty
+    vi.spyOn(CSSStyleDeclaration.prototype, 'setProperty').mockImplementation(function (this: CSSStyleDeclaration, name, value, priority) {
+      if (name === 'width') operations.push('write')
+      return originalWrite.call(this, name, value, priority)
+    })
+    first.table.tHead!.rows[0]!.cells[0]!.dataset.width = '90'
+    second.table.tHead!.rows[0]!.cells[0]!.dataset.width = '90'
+    observers[0]!.notify(first.table)
+    observers[0]!.notify(second.table)
+    const pending = [...frames.values()]
+    frames.clear()
+    for (const callback of pending) callback(0)
+    expect(operations).toContain('write')
+    expect(operations.lastIndexOf('read')).toBeLessThan(operations.indexOf('write'))
+  })
+
   it('places the real header before the unchanged native scroll element and preserves native column associations', async () => {
     const { viewport, table, head, input } = fixture()
     scope.run(() => useStaticTableHeaders(ref(viewport)))

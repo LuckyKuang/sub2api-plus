@@ -157,7 +157,7 @@ func (s *OpenAIGatewayService) GenerateExplicitSessionHash(c *gin.Context, body 
 	if sessionID == "" {
 		return ""
 	}
-	sessionID = scopeOpenAISchedulingSeed(c, sessionID)
+	sessionID = ScopeOpenAISchedulingSeed(c, sessionID)
 
 	currentHash, legacyHash := deriveOpenAISessionHashes(sessionID)
 	attachOpenAILegacySessionHashToGin(c, legacyHash)
@@ -189,6 +189,7 @@ func (s *OpenAIGatewayService) GenerateSessionHash(c *gin.Context, body []byte) 
 	}
 
 	sessionID := explicitOpenAIRequestSessionID(c, body)
+	explicit := sessionID != ""
 	if sessionID == "" && len(body) > 0 {
 		sessionID = deriveOpenAIContentSessionSeed(body)
 	}
@@ -202,7 +203,11 @@ func (s *OpenAIGatewayService) GenerateSessionHash(c *gin.Context, body []byte) 
 
 	// Tenant isolation is part of the routing seed itself; adding the namespace
 	// only at the cache-key layer would still let two tenants share one binding.
-	sessionID = scopeOpenAISchedulingSeed(c, sessionID)
+	if explicit {
+		sessionID = ScopeOpenAISchedulingSeed(c, sessionID)
+	} else {
+		sessionID = scopeOpenAISchedulingSeed(c, sessionID)
+	}
 
 	currentHash, legacyHash := deriveOpenAISessionHashes(sessionID)
 	attachOpenAILegacySessionHashToGin(c, legacyHash)
@@ -281,6 +286,9 @@ func (s *OpenAIGatewayService) BindStickySession(ctx context.Context, groupID *i
 // failure on that second write must not make an otherwise usable account fail.
 func (s *OpenAIGatewayService) bindOpenAIStickySessionAccount(ctx context.Context, groupID *int64, sessionHash string, account *Account, ttl time.Duration) error {
 	if account == nil || sessionHash == "" || account.ID <= 0 {
+		return nil
+	}
+	if openAISessionRouteSelectionDeferred(ctx) {
 		return nil
 	}
 	if account.Platform != PlatformOpenAI {
@@ -655,8 +663,18 @@ func grokQuotaSnapshotStaleForPause(snapshot *xai.QuotaSnapshot, now time.Time) 
 	return now.Sub(updatedAt) >= openAICodexAutoPauseStaleAfter
 }
 
-func shouldAutoPauseOpenAIAccountByQuota(ctx context.Context, account *Account) (bool, openAIQuotaAutoPauseDecision) {
+func shouldAutoPauseOpenAIAccountByQuota(ctx context.Context, account *Account, owners ...*Account) (bool, openAIQuotaAutoPauseDecision) {
 	if account == nil || !account.IsOpenAI() {
+		return false, openAIQuotaAutoPauseDecision{}
+	}
+	owner := account
+	if account.IsShadow() {
+		owner, _ = requestCredentialOwner(ctx, account)
+	}
+	if len(owners) > 0 {
+		owner = owners[0]
+	}
+	if !openAICodexUsageObservationMatchesOwner(account, owner) {
 		return false, openAIQuotaAutoPauseDecision{}
 	}
 	// 自动用卡有独立阈值：达到消费阈值时必须先退出调度；仅达到普通暂停阈值时，
@@ -1130,8 +1148,15 @@ func (s *OpenAIGatewayService) tryStickySessionHit(ctx context.Context, groupID 
 	if !isOpenAICompatibleAccountEligibleForRequest(ctx, account, platform, requestedModel, false, requiredCapability) {
 		return nil
 	}
-	if !parentHealthyForShadow(account, s.parentAccountLookup(ctx)) {
+	quotaOwner := account
+	if !parentHealthyForShadow(account, func(id int64) *Account {
+		quotaOwner = s.parentAccountLookup(ctx)(id)
+		return quotaOwner
+	}) {
 		_ = s.deleteStickySessionAccountID(ctx, groupID, sessionHash)
+		return nil
+	}
+	if paused, _ := shouldAutoPauseOpenAIAccountByQuota(ctx, account, quotaOwner); paused {
 		return nil
 	}
 	if s.isOpenAIAccountRequestRuntimeBlocked(account, requestedModel) {
@@ -1373,7 +1398,16 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 				if clearSticky {
 					_ = s.deleteStickySessionAccountID(ctx, groupID, sessionHash)
 				}
-				if !clearSticky && isOpenAICompatibleAccountEligibleForRequest(ctx, account, platform, requestedModel, false, requiredCapability) {
+				quotaOwner := account
+				parentHealthy := true
+				if !clearSticky {
+					parentHealthy = parentHealthyForShadow(account, func(id int64) *Account {
+						quotaOwner = s.parentAccountLookup(ctx)(id)
+						return quotaOwner
+					})
+				}
+				quotaPaused, _ := shouldAutoPauseOpenAIAccountByQuota(ctx, account, quotaOwner)
+				if !clearSticky && !quotaPaused && isOpenAICompatibleAccountEligibleForRequest(ctx, account, platform, requestedModel, false, requiredCapability) {
 					account = s.recheckSelectedOpenAIAccountFromDB(ctx, account, groupID, platform, requestedModel, requireCompact, requiredCapability)
 					if account == nil {
 						_ = s.deleteStickySessionAccountID(ctx, groupID, sessionHash)
@@ -1383,7 +1417,7 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 						_ = s.deleteStickySessionAccountID(ctx, groupID, sessionHash)
 					} else if needsUpstreamCheck && s.isUpstreamModelRestrictedByChannel(ctx, *groupID, account, requestedModel, requireCompact) {
 						_ = s.deleteStickySessionAccountID(ctx, groupID, sessionHash)
-					} else if !parentHealthyForShadow(account, s.parentAccountLookup(ctx)) {
+					} else if !parentHealthy {
 						_ = s.deleteStickySessionAccountID(ctx, groupID, sessionHash)
 					} else {
 						result, err := s.tryAcquireAccountSlot(ctx, accountID, account.Concurrency)
@@ -1448,7 +1482,7 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 			filterStats.exclude(reason)
 			continue
 		}
-		if !parentHealthyForShadow(acc, parentLookupL2) {
+		if !parentHealthyForShadow(acc, parentLookupL2, ctx) {
 			filterStats.exclude("shadow_parent_unhealthy")
 			continue
 		}
@@ -1751,7 +1785,7 @@ func (s *OpenAIGatewayService) resolveFreshSchedulableOpenAIAccountBeforeProfitC
 		parent, err := s.accountRepo.GetByID(ctx, id)
 		parentErr = err
 		return parent
-	}) {
+	}, ctx) {
 		if parentErr != nil && !errors.Is(parentErr, ErrAccountNotFound) {
 			return nil, fmt.Errorf("%w: credential owner refresh: %w", ErrOpenAISessionRouteStoreUnavailable, parentErr)
 		}
@@ -1826,7 +1860,7 @@ func (s *OpenAIGatewayService) recheckSelectedOpenAIAccountFromDBBeforeProfitChe
 		if s.isOpenAIAccountBlockedBySchedulingThreshold(ctx, account) {
 			return nil, nil
 		}
-		if !parentHealthyForShadow(account, parentLookup) {
+		if !parentHealthyForShadow(account, parentLookup, ctx) {
 			if parentErr != nil && !errors.Is(parentErr, ErrAccountNotFound) {
 				return nil, fmt.Errorf("%w: credential owner recheck: %w", ErrOpenAISessionRouteStoreUnavailable, parentErr)
 			}
@@ -1857,7 +1891,7 @@ func (s *OpenAIGatewayService) recheckSelectedOpenAIAccountFromDBBeforeProfitChe
 	if !isOpenAICompatibleAccountEligibleForRequestBeforeProfit(ctx, latest, platform, requestedModel, requireCompact, requiredCapability) {
 		return nil, nil
 	}
-	if !parentHealthyForShadow(latest, parentLookup) {
+	if !parentHealthyForShadow(latest, parentLookup, ctx) {
 		if parentErr != nil && !errors.Is(parentErr, ErrAccountNotFound) {
 			return nil, fmt.Errorf("%w: credential owner recheck: %w", ErrOpenAISessionRouteStoreUnavailable, parentErr)
 		}
@@ -1931,7 +1965,7 @@ func (s *OpenAIGatewayService) RevalidateOpenAIAccountForWebSocketTurn(
 	if !s.isOpenAIAccountTransportCompatible(latest, requiredTransport) {
 		return nil, nil
 	}
-	if !parentHealthyForShadow(latest, s.parentAccountLookup(ctx)) {
+	if !parentHealthyForShadow(latest, s.parentAccountLookup(ctx), ctx) {
 		return nil, nil
 	}
 	if s.isOpenAIAccountRequestRuntimeBlocked(latest, requestedModel) ||

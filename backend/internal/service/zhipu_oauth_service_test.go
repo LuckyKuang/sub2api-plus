@@ -515,13 +515,13 @@ func TestZhipuOAuthSelectedProxyCannotFallBackToDirect(t *testing.T) {
 }
 func TestZhipuOAuthProxySnapshotCannotChangeAtExchangeOrCreate(t *testing.T) {
 	client := &zhipuOAuthStubClient{initFlow: zhipuTestFlowInit(), exchange: zhipuTestReady(zcode.ProviderZai)}
-	repo := &zhipuOAuthProxyRepoStub{proxy: &Proxy{Protocol: "http", Host: "first.example", Port: 8080}}
+	repo := &zhipuOAuthProxyRepoStub{proxy: &Proxy{ID: 5, Protocol: "http", Host: "first.example", Port: 8080}}
 	svc := NewZhipuOAuthService(client, repo)
 	defer svc.Stop()
 	proxyID := int64(5)
 	session, err := svc.StartLink(context.Background(), StartZhipuLinkInput{Provider: zcode.ProviderZai, ProxyID: &proxyID})
 	require.NoError(t, err)
-	repo.proxy = &Proxy{Protocol: "http", Host: "second.example", Port: 8080}
+	repo.proxy = &Proxy{ID: 5, Protocol: "http", Host: "second.example", Port: 8080}
 	_, err = svc.ExchangeLink(context.Background(), session.SessionID, "code", &proxyID)
 	require.Error(t, err)
 	require.Empty(t, client.lastExchangeArgs)

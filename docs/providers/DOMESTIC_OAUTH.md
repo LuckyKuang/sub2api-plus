@@ -92,6 +92,15 @@ only while that exact credential/proxy snapshot still matches the account.
 comparison and durable write succeed. Missing conditional storage never falls
 back to an unconditional quota write.
 
+A configured account proxy is an egress boundary for inference, account tests,
+quota and balance probes, token refresh and linked-project requests. A missing,
+deleted or invalid proxy fails before transport. Proxy connection timeouts,
+refusals and HTTP 407 failures propagate as proxy failures; they never retry on
+the host's direct network. An explicitly unbound account may use direct egress.
+A logical request captures its credential owner's hydrated proxy once; edits,
+replacement or removal affect the next acquisition, while stale in-flight
+observations cannot overwrite the replacement owner's state.
+
 Scheduling thresholds and quota-derived reset cooldowns require a matching
 `<provider>_quota_generation` binding. Slim scheduler records retain the original
 CN credential/proxy-status digest and recognized quota windows, including

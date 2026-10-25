@@ -86,7 +86,9 @@ func scopeOpenAISchedulingSeed(c *gin.Context, seed string) string {
 // ScopeOpenAISchedulingSeed exposes the tenant scoping to callers outside this
 // package. They must scope the raw seed before hashing it, never hash twice.
 func ScopeOpenAISchedulingSeed(c *gin.Context, seed string) string {
-	return scopeOpenAISchedulingSeed(c, seed)
+	scoped := scopeOpenAISchedulingSeed(c, seed)
+	attachOpenAIOAuthSharedAffinity(c, seed, DeriveSessionHashFromSeed(scoped))
+	return scoped
 }
 
 func withOpenAILegacySessionHash(ctx context.Context, legacyHash string) context.Context {

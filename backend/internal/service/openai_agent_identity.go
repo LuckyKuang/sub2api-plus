@@ -174,6 +174,10 @@ func decryptAgentTaskID(key agentIdentityKey, encoded string) (string, error) {
 }
 
 func registerAgentIdentityTaskWithIdentity(ctx context.Context, account *Account, identity openAIOutboundIdentity) (string, error) {
+	account, err := requestCredentialAccount(ctx, account)
+	if err != nil {
+		return "", err
+	}
 	key, err := agentIdentityKeyFromAccount(account)
 	if err != nil {
 		return "", err
@@ -182,9 +186,9 @@ func registerAgentIdentityTaskWithIdentity(ctx context.Context, account *Account
 	if err != nil {
 		return "", err
 	}
-	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
+	proxyURL, err := requestCredentialOwnerProxyURL(ctx, account)
+	if err != nil {
+		return "", err
 	}
 	// agent task 注册是官方 auth 面请求：默认头只有 originator / User-Agent /
 	// residency，没有独立的 version 头；同时应用 Codex 自定义 CA。

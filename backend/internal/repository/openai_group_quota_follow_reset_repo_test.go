@@ -144,7 +144,7 @@ func TestQuotaFollowResetObservationPropagatesDatabaseErrors(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT platform").WillReturnError(failure)
 	mock.ExpectRollback()
-	_, err = (&openAIGroupQuotaFollowResetRepository{db: db}).ObserveWeeklyReset(context.Background(), 42, service.OpenAIWeeklyQuotaObservation{ResetAt: time.Now(), ObservedAt: time.Now(), FromSession: true})
+	_, err = (&openAIGroupQuotaFollowResetRepository{db: db}).ObserveWeeklyReset(context.Background(), 42, service.OpenAIWeeklyQuotaObservation{Owner: &service.Account{ID: 42, Platform: service.PlatformOpenAI, Type: service.AccountTypeOAuth}, ResetAt: time.Now(), ObservedAt: time.Now(), FromSession: true})
 	require.ErrorIs(t, err, failure)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
@@ -171,7 +171,8 @@ func TestQuotaFollowResetWorkerDoesNotSkipOnDatabaseError(t *testing.T) {
 			t.Cleanup(func() { _ = db.Close() })
 			failure := errors.New("database unavailable")
 			mock.ExpectBegin()
-			mock.ExpectQuery("SELECT e.id").WillReturnRows(sqlmock.NewRows([]string{"id", "group_id", "source_account_id", "config_version", "effective_at", "include_monthly"}).AddRow(1, 2, 42, 1, time.Now(), true))
+			mock.ExpectQuery("SELECT e.id").WillReturnRows(sqlmock.NewRows([]string{"id", "group_id", "source_account_id", "config_version", "effective_at", "include_monthly", "owner_generation"}).AddRow(1, 2, 42, 1, time.Now(), true, "generation"))
+			mock.ExpectQuery("SELECT platform, type, status, credentials, proxy_id").WillReturnRows(sqlmock.NewRows([]string{"platform", "type", "status", "credentials", "proxy_id"}).AddRow("openai", "oauth", "active", []byte(`{}`), nil))
 			if stage == "group lock" {
 				mock.ExpectQuery("SELECT id FROM groups").WillReturnError(failure)
 			} else {

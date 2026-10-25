@@ -352,6 +352,7 @@ func TestRefreshIfNeeded_GrokSuccessCASLetsConcurrentReauthorizationWin(t *testi
 		Type:     AccountTypeOAuth,
 		Status:   StatusActive,
 		ProxyID:  &proxyID,
+		Proxy:    &Proxy{ID: proxyID, Protocol: "http", Host: "127.0.0.1", Port: 1080, Status: StatusActive},
 		Credentials: map[string]any{
 			"access_token":   "attempted-access",
 			"refresh_token":  "attempted-refresh",
@@ -362,6 +363,7 @@ func TestRefreshIfNeeded_GrokSuccessCASLetsConcurrentReauthorizationWin(t *testi
 	repo.beforeSuccessCAS = func(r *refreshAPIAccountRepo) {
 		repairedProxyID := int64(23)
 		r.account.ProxyID = &repairedProxyID
+		r.account.Proxy = &Proxy{ID: repairedProxyID, Protocol: "http", Host: "127.0.0.1", Port: 1081, Status: StatusActive}
 		r.account.Credentials = map[string]any{
 			"access_token":   "reauthorized-access",
 			"refresh_token":  "reauthorized-refresh",
@@ -385,6 +387,10 @@ func TestRefreshIfNeeded_GrokSuccessCASLetsConcurrentReauthorizationWin(t *testi
 	require.Equal(t, "reauthorized-refresh", result.Account.GetGrokRefreshToken())
 	require.NotNil(t, result.Account.ProxyID)
 	require.Equal(t, int64(23), *result.Account.ProxyID)
+	require.NotNil(t, result.Account.Proxy)
+	require.Equal(t, int64(23), result.Account.Proxy.ID)
+	require.Equal(t, 1081, result.Account.Proxy.Port)
+	require.Equal(t, 1, executor.refreshCalls)
 	require.Equal(t, 1, repo.successCASCalls)
 	require.Equal(t, "attempted-refresh", repo.lastExpectedCredentials["refresh_token"])
 	require.NotNil(t, repo.lastExpectedProxyID)

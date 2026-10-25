@@ -615,10 +615,10 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 	// 排除 spark 影子:其 codex_* 仅由 QueryUsage(/wham/usage bengalfox)更新(外审第7轮 P1)。
 	if !account.IsShadow() {
 		if snapshot := ParseCodexRateLimitHeaders(resp.Header); snapshot != nil {
-			s.updateCodexUsageSnapshot(ctx, account.ID, snapshot)
+			s.updateCodexUsageSnapshot(ctx, account, snapshot)
 		}
 	} else if account.ParentAccountID != nil {
-		notifyOpenAIAutoReset(*account.ParentAccountID)
+		notifyOpenAIAutoResetForOwner(capturedCodexUsageOwner(ctx, account))
 	}
 
 	if usage == nil {

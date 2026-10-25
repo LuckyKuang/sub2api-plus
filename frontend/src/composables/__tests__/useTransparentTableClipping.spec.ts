@@ -76,6 +76,40 @@ afterEach(() => {
 })
 
 describe('transparent table clipping', () => {
+  it('uses native overflow without measuring cells when no columns are pinned', async () => {
+    const { wrapper, table, middle } = fixture()
+    for (const cell of table.querySelectorAll('th,td')) cell.classList.remove('sticky-col-left', 'sticky-col-right')
+    middle.style.clipPath = 'inset(1px)'
+    scope.run(() => useTransparentTableClipping(ref(wrapper), () => true))
+    await nextTick()
+    flushFrames()
+    expect(middle.style.clipPath).toBe('inset(1px)')
+    expect(middle.getBoundingClientRect).not.toHaveBeenCalled()
+    expect(wrapper.getBoundingClientRect).not.toHaveBeenCalled()
+  })
+
+  it('restores original clips when pinned columns are removed and resumes when they return', async () => {
+    const { wrapper, table, middle, header } = fixture()
+    middle.style.setProperty('clip-path', 'inset(1px)', 'important')
+    scope.run(() => useTransparentTableClipping(ref(wrapper), () => true))
+    await nextTick()
+    flushFrames()
+    expect(middle.style.clipPath).toBe('inset(0px 28px 0px 32px)')
+    for (const cell of table.querySelectorAll('th,td')) cell.classList.remove('sticky-col-left', 'sticky-col-right')
+    await nextTick()
+    flushFrames()
+    expect(middle.style.clipPath).toBe('inset(1px)')
+    expect(middle.style.getPropertyPriority('clip-path')).toBe('important')
+    header.rows[0]!.cells[0]!.classList.add('sticky-col-left')
+    await nextTick()
+    flushFrames()
+    expect(middle.style.clipPath).toBe('inset(1px)')
+    header.rows[0]!.cells[1]!.classList.add('sticky-col-left')
+    await nextTick()
+    flushFrames()
+    expect(middle.style.clipPath).toBe('inset(0px 0px 0px 32px)')
+  })
+
   it('clips only at pinned horizontal columns without changing row or spacer geometry', async () => {
     const { wrapper, row, middle, header, table } = fixture()
     scope.run(() => useTransparentTableClipping(ref(wrapper), () => true))

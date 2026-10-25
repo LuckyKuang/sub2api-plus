@@ -282,15 +282,20 @@ func validateGrokTokenResponse(tokenResp *xai.TokenResponse) error {
 }
 
 func (s *GrokOAuthService) RefreshAccountToken(ctx context.Context, account *Account) (*GrokTokenInfo, error) {
-	ctx = WithAccountOutboundIdentity(ctx, account)
+	account, err := requestCredentialAccount(ctx, account)
+	if err != nil {
+		return nil, err
+	}
 	if account == nil || account.Platform != PlatformGrok {
 		return nil, infraerrors.New(http.StatusBadRequest, "GROK_OAUTH_INVALID_ACCOUNT", "account is not a Grok account")
 	}
 	if account.Type != AccountTypeOAuth {
 		return nil, infraerrors.New(http.StatusBadRequest, "GROK_OAUTH_INVALID_ACCOUNT_TYPE", "account is not an OAuth account")
 	}
+	account = snapshotRequestCredentialAccount(account)
+	ctx = WithAccountOutboundIdentity(ctx, account)
 
-	proxyURL, err := s.proxyURL(ctx, account.ProxyID)
+	proxyURL, err := requestCredentialOwnerProxyURL(context.Background(), account)
 	if err != nil {
 		return nil, err
 	}
@@ -410,6 +415,9 @@ func (s *GrokOAuthService) proxyURL(ctx context.Context, proxyID *int64) (string
 	if proxyID == nil {
 		return "", nil
 	}
+	if *proxyID <= 0 {
+		return "", infraerrors.New(http.StatusBadRequest, "GROK_OAUTH_PROXY_INVALID", "selected proxy configuration is invalid")
+	}
 	if s.proxyRepo == nil {
 		return "", infraerrors.New(http.StatusBadRequest, "GROK_OAUTH_PROXY_NOT_AVAILABLE", "proxy repository is not available")
 	}
@@ -423,7 +431,11 @@ func (s *GrokOAuthService) proxyURL(ctx context.Context, proxyID *int64) (string
 	if proxy == nil {
 		return "", infraerrors.New(http.StatusBadRequest, "GROK_OAUTH_PROXY_NOT_FOUND", "configured proxy was not found")
 	}
-	return proxy.URL(), nil
+	proxyURL, err := requestCredentialOwnerProxyURL(context.Background(), &Account{ProxyID: proxyID, Proxy: proxy})
+	if err != nil {
+		return "", infraerrors.New(http.StatusBadRequest, "GROK_OAUTH_PROXY_INVALID", "selected proxy configuration is invalid")
+	}
+	return proxyURL, nil
 }
 
 func applyGrokTokenClaims(info *GrokTokenInfo, token string, includeTier bool) {

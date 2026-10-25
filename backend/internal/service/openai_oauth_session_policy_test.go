@@ -545,9 +545,10 @@ func TestOpenAIOAuthSessionPolicySharedStickyBinding(t *testing.T) {
 		},
 	}
 
-	ctx := oauthSessionPolicyContext(9001)
-	require.NoError(t, service.bindOpenAIOAuthSharedSession(ctx, &groupID, "sticky", account, time.Hour))
-	accountID, err := service.getOpenAIOAuthSharedSessionAccountID(ctx, "sticky")
+	service.accountRepo = &oauthSessionPolicyAccountRepo{accounts: map[int64]*Account{account.ID: account}}
+	ctx, hash := oauthSharedAffinityRequest(service, 101, 9001, groupID, "sticky")
+	require.NoError(t, service.bindOpenAIOAuthSharedSession(ctx, &groupID, hash, account, time.Hour))
+	accountID, err := service.getOpenAIOAuthSharedSessionAccountID(ctx, hash)
 	require.NoError(t, err)
 	require.Equal(t, account.ID, accountID)
 }
@@ -567,9 +568,9 @@ func TestOpenAIOAuthSharedStickyWriteFailureDoesNotBlockAccountUse(t *testing.T)
 		},
 	}
 
-	ctx := oauthSessionPolicyContext(9001)
-	require.NoError(t, service.BindStickySession(ctx, &groupID, "sticky-degraded", account.ID))
-	accountID, err := cache.GetSessionAccountID(context.Background(), groupID, service.openAISessionCacheKey("sticky-degraded"))
+	ctx, hash := oauthSharedAffinityRequest(service, 101, 9001, groupID, "sticky-degraded")
+	require.NoError(t, service.BindStickySession(ctx, &groupID, hash, account.ID))
+	accountID, err := cache.GetSessionAccountID(context.Background(), groupID, service.openAISessionCacheKey(hash))
 	require.NoError(t, err)
 	require.Equal(t, account.ID, accountID)
 }
@@ -604,11 +605,11 @@ func TestOpenAIOAuthSessionPolicyLegacySelectionWritesSharedStickyBinding(t *tes
 		},
 	}
 
-	ctx := oauthSessionPolicyContext(9001)
-	selected, err := service.SelectAccountForModelWithExclusions(ctx, &groupID, "legacy-selection", "", nil)
+	ctx, hash := oauthSharedAffinityRequest(service, 101, 9001, groupID, "legacy-selection")
+	selected, err := service.SelectAccountForModelWithExclusions(ctx, &groupID, hash, "", nil)
 	require.NoError(t, err)
 	require.Equal(t, account.ID, selected.ID)
-	requireOpenAIOAuthStickyBindings(t, service, cache, 9001, groupID, "legacy-selection", account.ID)
+	requireOpenAIOAuthStickyBindings(t, service, cache, ctx, groupID, hash, account.ID)
 }
 
 func TestOpenAIOAuthSessionPolicyLoadAwareSelectionWritesSharedStickyBinding(t *testing.T) {
@@ -637,23 +638,22 @@ func TestOpenAIOAuthSessionPolicyLoadAwareSelectionWritesSharedStickyBinding(t *
 				}),
 			}
 
-			sessionHash := "load-aware-" + tc.name
-			ctx := oauthSessionPolicyContext(9001)
+			ctx, sessionHash := oauthSharedAffinityRequest(service, 101, 9001, groupID, "load-aware-"+tc.name)
 			selected, err := service.SelectAccountWithLoadAwareness(ctx, &groupID, sessionHash, "", nil)
 			require.NoError(t, err)
 			require.Equal(t, account.ID, selected.Account.ID)
-			requireOpenAIOAuthStickyBindings(t, service, cache, 9001, groupID, sessionHash, account.ID)
+			requireOpenAIOAuthStickyBindings(t, service, cache, ctx, groupID, sessionHash, account.ID)
 		})
 	}
 }
 
-func requireOpenAIOAuthStickyBindings(t *testing.T, service *OpenAIGatewayService, cache *oauthSessionPolicyCache, userID, groupID int64, sessionHash string, accountID int64) {
+func requireOpenAIOAuthStickyBindings(t *testing.T, service *OpenAIGatewayService, cache *oauthSessionPolicyCache, ctx context.Context, groupID int64, sessionHash string, accountID int64) {
 	t.Helper()
 
 	localID, err := cache.GetSessionAccountID(context.Background(), groupID, service.openAISessionCacheKey(sessionHash))
 	require.NoError(t, err)
 	require.Equal(t, accountID, localID)
-	sharedID, err := cache.GetSessionAccountID(context.Background(), openAIOAuthSharedSessionCacheGroupID, service.openAIOAuthSharedSessionCacheKey(userID, sessionHash))
+	sharedID, err := cache.GetSessionAccountID(context.Background(), openAIOAuthSharedSessionCacheGroupID, service.openAIOAuthSharedSessionCacheKey(openAIRequestUserID(ctx), openAIOAuthSharedAffinityDigest(ctx, sessionHash)))
 	require.NoError(t, err)
 	require.Equal(t, accountID, sharedID)
 }
@@ -817,11 +817,12 @@ func TestOpenAIOAuthSessionPolicyUnauthorizedGroupCannotEvictSharedStickyBinding
 		},
 	}
 
-	ctx := oauthSessionPolicyContext(9001)
-	require.NoError(t, service.bindOpenAIOAuthSharedSession(ctx, &allowedGroupID, "sticky", account, time.Hour))
-	require.NoError(t, service.deleteStickySessionAccountID(ctx, &blockedGroupID, "sticky"))
+	ctx, hash := oauthSharedAffinityRequest(service, 101, 9001, allowedGroupID, "sticky")
+	require.NoError(t, service.bindOpenAIOAuthSharedSession(ctx, &allowedGroupID, hash, account, time.Hour))
+	blockedCtx, blockedHash := oauthSharedAffinityRequest(service, 202, 9001, blockedGroupID, "sticky")
+	require.NoError(t, service.deleteStickySessionAccountID(blockedCtx, &blockedGroupID, blockedHash))
 
-	accountID, err := service.getOpenAIOAuthSharedSessionAccountID(ctx, "sticky")
+	accountID, err := service.getOpenAIOAuthSharedSessionAccountID(ctx, hash)
 	require.NoError(t, err)
 	require.Equal(t, account.ID, accountID)
 }

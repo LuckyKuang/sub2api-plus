@@ -138,9 +138,9 @@ func (s *AccountTestService) buildDomesticOAuthModelsRequest(ctx context.Context
 	if token == "" {
 		return nil, errors.New("native OAuth model credential is missing")
 	}
-	if account.Platform == PlatformDeepseek {
-		ctx = withRequestCredentialOwner(WithOutboundIdentityScope(ctx, nil), account, token)
-	}
+	ctx = WithOutboundIdentityScope(ctx, nil)
+	recordRequestCredentialOwner(ctx, account, token)
+	ctx = withRequestCredentialOwner(ctx, account, token)
 	if header == "Authorization" {
 		token = "Bearer " + token
 	}

@@ -251,8 +251,14 @@ func classifyGrokCredentialFailure(account *Account, err error) grokCredentialFa
 	}
 	var providerConfigErr *providerConfigurationRefreshError
 	var containmentErr *providerCycleContainmentRefreshError
+	var credentialErr *CredentialFailureError
 
 	switch {
+	case errors.As(err, &credentialErr) && credentialErr.Scope == GatewayFailureScopeProvider:
+		// Shared refresh preparation can fail before a credential is sent. Its
+		// explicit provider scope must survive Grok classification without
+		// turning dependency failures into account cooldown or quarantine.
+		return grokCredentialFailureClass{scope: GatewayFailureScopeProvider, reason: GrokCredentialReasonProviderDown, action: NextAccountStop, message: "Grok OAuth provider state is temporarily unavailable"}
 	case errors.Is(err, errGrokOAuthRefreshTokenMissing), errors.Is(err, errGrokOAuthAccessTokenMissing), errors.Is(err, errGrokOAuthAccessTokenExpired):
 		return grokCredentialFailureClass{scope: GatewayFailureScopeAccount, reason: GrokCredentialReasonMissing, action: NextAccountRetry, permanent: true, message: "Grok OAuth credentials are missing or expired"}
 	case contains("invalid_grant", "invalid_refresh_token", "token_expired", "refresh_token_reused", "refresh_token_invalidated", "app_session_terminated"):

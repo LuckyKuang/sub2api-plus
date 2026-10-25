@@ -802,6 +802,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 		if err != nil {
 			if streamCount > 0 {
 				result := &OpenAIForwardResult{
+					codexUsageOwner:  capturedCodexUsageOwner(ctx, account),
 					RequestID:        resp.Header.Get("x-request-id"),
 					UpstreamHeaders:  resp.Header,
 					Usage:            streamUsage,
@@ -828,6 +829,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 		imageOutputSizes := streamSizes
 		firstOutputMs = firstOutput
 		result := &OpenAIForwardResult{
+			codexUsageOwner:  capturedCodexUsageOwner(ctx, account),
 			RequestID:        resp.Header.Get("x-request-id"),
 			UpstreamHeaders:  resp.Header,
 			Usage:            usage,
@@ -861,6 +863,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 			firstOutputKind = string(apicompat.StreamOutputImage)
 		}
 		return &OpenAIForwardResult{
+			codexUsageOwner:  capturedCodexUsageOwner(ctx, account),
 			RequestID:        resp.Header.Get("x-request-id"),
 			UpstreamHeaders:  resp.Header,
 			Usage:            usage,

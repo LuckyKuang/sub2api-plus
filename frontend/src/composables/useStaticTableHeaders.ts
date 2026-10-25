@@ -4,7 +4,14 @@ const viewportSelector = '.record-table-scroll, .workspace-table-viewport'
 const tableSelector = 'table.record-table'
 const measureClass = 'static-table-measure-head'
 
-interface HeaderState {
+interface HeaderLayout {
+  originalMaxHeight: string
+  originalFlex: string
+  originalMargin: string
+  originalPaddingTop: string
+}
+
+interface HeaderState extends HeaderLayout {
   table: HTMLTableElement
   viewport: HTMLElement
   head: HTMLTableSectionElement
@@ -13,10 +20,6 @@ interface HeaderState {
   rail: HTMLDivElement
   headerTable: HTMLTableElement
   observer: MutationObserver
-  originalMaxHeight: string
-  originalFlex: string
-  originalMargin: string
-  originalPaddingTop: string
   originalLabel: string | null
   needsMirror: boolean
   geometry: string
@@ -78,6 +81,8 @@ function meaningfulStyle(record: MutationRecord): boolean {
   after.cssText = record.target.style.cssText
   before.removeProperty('clip-path')
   after.removeProperty('clip-path')
+  before.removeProperty('--static-table-head-height')
+  after.removeProperty('--static-table-head-height')
   return before.cssText !== after.cssText
 }
 
@@ -101,10 +106,18 @@ export function useStaticTableHeaders(root: Ref<HTMLElement | null>): void {
 
     const candidates = new Set<HTMLTableElement>()
     const states = new Map<HTMLTableElement, HeaderState>()
+    const owners = new Map<Element, Set<HTMLTableElement>>()
+    const scrollOwners = new Map<EventTarget, HeaderState>()
     const observed = new Map<Element, Set<HTMLTableElement>>()
     const dirty = new Set<HTMLTableElement>()
     let frame = 0
     let disposed = false
+
+    function index(target: Element, table: HTMLTableElement): void {
+      let tables = owners.get(target)
+      if (!tables) { tables = new Set(); owners.set(target, tables) }
+      tables.add(table)
+    }
 
     function observe(target: Element, table: HTMLTableElement): void {
       let tables = observed.get(target)
@@ -145,6 +158,8 @@ export function useStaticTableHeaders(root: Ref<HTMLElement | null>): void {
         // every remaining Vue node, rather than removing that replacement.
         for (const child of [...state.frame.childNodes]) state.frame.before(child)
         state.frame.remove()
+        scrollOwners.delete(state.viewport)
+        scrollOwners.delete(state.rail)
         states.delete(table)
       }
       for (const [target, tables] of observed) if (tables.delete(table) && !tables.size) {
@@ -153,6 +168,7 @@ export function useStaticTableHeaders(root: Ref<HTMLElement | null>): void {
       }
       candidates.delete(table)
       dirty.delete(table)
+      for (const [target, tables] of owners) if (tables.delete(table) && !tables.size) owners.delete(target)
     }
 
     function register(table: HTMLTableElement): void {
@@ -160,6 +176,7 @@ export function useStaticTableHeaders(root: Ref<HTMLElement | null>): void {
       const viewport = table.closest<HTMLElement>(viewportSelector)
       if (!viewport || !table.tHead) return
       candidates.add(table)
+      for (let target: Element | null = table; target; target = target.parentElement) index(target, table)
       observe(table, table)
       observe(viewport, table)
       schedule(table)
@@ -170,25 +187,9 @@ export function useStaticTableHeaders(root: Ref<HTMLElement | null>): void {
       node.querySelectorAll<HTMLTableElement>(tableSelector).forEach(register)
     }
 
-    function split(table: HTMLTableElement, viewport: HTMLElement): HeaderState | undefined {
+    function split(table: HTMLTableElement, viewport: HTMLElement, originalLayout: HeaderLayout): void {
       const head = table.tHead
       if (!head || head.classList.contains(measureClass)) return
-      const styles = getComputedStyle(viewport)
-      const parentStyles = viewport.parentElement && getComputedStyle(viewport.parentElement)
-      const constrained = viewport.scrollHeight > viewport.clientHeight
-        || (styles.maxHeight !== 'none' && styles.maxHeight !== '')
-        || (Number(styles.flexGrow) > 0 && parentStyles?.display.includes('flex'))
-      // Distribution lists and dialog tables also need a static header, even
-      // when their original markup never opted into position: sticky.
-      if (!constrained || !['auto', 'scroll'].includes(styles.overflowY)) return
-
-      // Computed styles are live in browsers; snapshot before adding body roles.
-      const originalLayout = {
-        originalMaxHeight: authoredMaxHeight(viewport, styles) || styles.maxHeight,
-        originalFlex: styles.flex,
-        originalMargin: `${styles.marginTop} ${styles.marginRight} ${styles.marginBottom} ${styles.marginLeft}`,
-        originalPaddingTop: styles.paddingTop,
-      }
 
       const frameElement = document.createElement('div')
       frameElement.className = 'static-table-frame'
@@ -228,82 +229,115 @@ export function useStaticTableHeaders(root: Ref<HTMLElement | null>): void {
       frameElement.style.margin = state.originalMargin
       frameElement.style.paddingTop = state.originalPaddingTop
       states.set(table, state)
+      index(frameElement, table)
+      scrollOwners.set(viewport, state)
+      scrollOwners.set(rail, state)
       observe(head, table)
       for (const cell of measure.querySelectorAll('th,td')) observe(cell, table)
-      return state
+      schedule(table)
     }
 
     function update(): void {
       frame = 0
+      const writes: Array<() => void> = []
+      const notifications: Array<() => void> = []
       for (const table of [...dirty]) {
         dirty.delete(table)
-        if (!table.isConnected) { unregister(table); continue }
-        let state = states.get(table)
+        if (!table.isConnected) { writes.push(() => unregister(table)); continue }
+        const state = states.get(table)
         const viewport = state?.viewport ?? table.closest<HTMLElement>(viewportSelector)
-        if (!viewport) { unregister(table); continue }
+        if (!viewport) { writes.push(() => unregister(table)); continue }
+        const css = getComputedStyle(viewport)
         if (state) {
           const replacement = [...table.children].find(child => child.tagName === 'THEAD' && child !== state!.measure)
           if (replacement || !state.head.isConnected || state.head.parentElement !== state.headerTable) {
-            unregister(table)
-            register(table)
+            writes.push(() => { unregister(table); register(table) })
             continue
           }
           // Transfer a v-show applied to the original component root to its shell.
-          const hidden = getComputedStyle(viewport).display === 'none'
-          if (state.frame.hidden !== hidden) state.frame.hidden = hidden
-          if (!viewport.classList.contains('static-table-body-viewport')) viewport.classList.add('static-table-body-viewport')
-          if (!table.classList.contains('static-table-source')) table.classList.add('static-table-source')
+          const hidden = css.display === 'none'
+          if (state.frame.hidden !== hidden) {
+            writes.push(() => { state.frame.hidden = hidden; if (!hidden) schedule(table) })
+          }
+          if (!viewport.classList.contains('static-table-body-viewport') || !table.classList.contains('static-table-source')) {
+            writes.push(() => { viewport.classList.add('static-table-body-viewport'); table.classList.add('static-table-source'); schedule(table) })
+            continue
+          }
         }
         const bounds = viewport.getBoundingClientRect()
         if (bounds.width < 1 || bounds.height < 1) continue
-        state ??= split(table, viewport)
-        if (!state) continue
+        if (!state) {
+          // A max-height alone does not make a one-row price table scroll. Keep
+          // its native header until real vertical overflow needs separation.
+          if (viewport.scrollHeight <= viewport.clientHeight || !['auto', 'scroll'].includes(css.overflowY)) continue
+          const layout: HeaderLayout = {
+            originalMaxHeight: authoredMaxHeight(viewport, css) || css.maxHeight,
+            originalFlex: css.flex,
+            originalMargin: `${css.marginTop} ${css.marginRight} ${css.marginBottom} ${css.marginLeft}`,
+            originalPaddingTop: css.paddingTop,
+          }
+          writes.push(() => split(table, viewport, layout))
+          continue
+        }
         const mirrored = state.needsMirror
         if (mirrored) {
-          const next = measurementHead(state.head)
-          for (const cell of state.measure.querySelectorAll('th,td')) {
-            resize?.unobserve(cell)
-            observed.delete(cell)
-          }
-          state.measure.replaceWith(next)
-          state.measure = next
-          state.needsMirror = false
-          for (const cell of next.querySelectorAll('th,td')) observe(cell, table)
+          writes.push(() => {
+            const next = measurementHead(state.head)
+            for (const cell of state.measure.querySelectorAll('th,td')) {
+              resize?.unobserve(cell)
+              observed.delete(cell)
+            }
+            state.measure.replaceWith(next)
+            state.measure = next
+            state.needsMirror = false
+            // A replacement must notify the owner after the next measured frame.
+            state.geometry = ''
+            for (const cell of next.querySelectorAll('th,td')) observe(cell, table)
+            schedule(table)
+          })
+          continue
         }
         const height = state.measure.getBoundingClientRect().height
         const width = table.getBoundingClientRect().width
         if (!height || !width) continue
         const heightValue = `${height}px`
-        if (table.style.getPropertyValue('--static-table-head-height') !== heightValue) table.style.setProperty('--static-table-head-height', heightValue)
-        const css = getComputedStyle(viewport)
         const maxHeight = authoredMaxHeight(viewport, css)
-        if (maxHeight && state.frame.style.maxHeight !== maxHeight) state.frame.style.maxHeight = maxHeight
-        if (state.originalLabel === null) {
-          const label = viewport.getAttribute('aria-label')
-          if (label && table.getAttribute('aria-label') !== label) table.setAttribute('aria-label', label)
-        }
-        state.rail.style.marginLeft = `${viewport.clientLeft + (parseFloat(css.paddingLeft) || 0)}px`
-        state.rail.style.width = `${viewport.clientWidth - (parseFloat(css.paddingLeft) || 0) - (parseFloat(css.paddingRight) || 0)}px`
-        state.headerTable.style.setProperty('width', `${width}px`, 'important')
+        const label = viewport.getAttribute('aria-label')
+        const marginLeft = `${viewport.clientLeft + (parseFloat(css.paddingLeft) || 0)}px`
+        const railWidth = `${viewport.clientWidth - (parseFloat(css.paddingLeft) || 0) - (parseFloat(css.paddingRight) || 0)}px`
+        const scrollLeft = viewport.scrollLeft
         const widths = columnWidths(state.measure)
-        let columns = state.headerTable.querySelector('colgroup')
-        if (!columns || columns.children.length !== widths.length) {
-          const next = document.createElement('colgroup')
-          for (let index = 0; index < widths.length; index++) next.append(document.createElement('col'))
-          if (columns) columns.replaceWith(next)
-          else state.headerTable.prepend(next)
-          columns = next
-        }
-        widths.forEach((columnWidth, index) => { (columns!.children[index] as HTMLElement).style.width = `${columnWidth}px` })
-        state.rail.scrollLeft = viewport.scrollLeft
         const geometry = JSON.stringify([height, width, ...widths])
-        if (mirrored || geometry !== state.geometry) {
-          state.geometry = geometry
-          // DataTable owns sticky offsets and observes its measurement cells.
-          // A replaced copy must refresh those refs after this layout is ready.
-          viewport.dispatchEvent(new Event('static-table-header-measured'))
-        }
+        writes.push(() => {
+          if (table.style.getPropertyValue('--static-table-head-height') !== heightValue) table.style.setProperty('--static-table-head-height', heightValue)
+          if (maxHeight && state.frame.style.maxHeight !== maxHeight) state.frame.style.maxHeight = maxHeight
+          if (state.originalLabel === null && label && table.getAttribute('aria-label') !== label) table.setAttribute('aria-label', label)
+          if (state.rail.style.marginLeft !== marginLeft) state.rail.style.marginLeft = marginLeft
+          if (state.rail.style.width !== railWidth) state.rail.style.width = railWidth
+          if (state.headerTable.style.width !== `${width}px`) state.headerTable.style.setProperty('width', `${width}px`, 'important')
+          let columns = state.headerTable.querySelector('colgroup')
+          if (!columns || columns.children.length !== widths.length) {
+            const next = document.createElement('colgroup')
+            for (let index = 0; index < widths.length; index++) next.append(document.createElement('col'))
+            if (columns) columns.replaceWith(next)
+            else state.headerTable.prepend(next)
+            columns = next
+          }
+          widths.forEach((columnWidth, index) => {
+            const column = columns!.children[index] as HTMLElement
+            if (column.style.width !== `${columnWidth}px`) column.style.width = `${columnWidth}px`
+          })
+          if (state.rail.scrollLeft !== scrollLeft) state.rail.scrollLeft = scrollLeft
+          if (geometry !== state.geometry) {
+            state.geometry = geometry
+            notifications.push(() => viewport.dispatchEvent(new Event('static-table-header-measured')))
+          }
+        })
       }
+      // All affected tables share a read phase. Structural changes are measured
+      // on the next frame, never by forcing layout after each individual write.
+      for (const write of writes) write()
+      for (const notify of notifications) notify()
     }
 
     const resize = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(entries => {
@@ -316,9 +350,8 @@ export function useStaticTableHeaders(root: Ref<HTMLElement | null>): void {
         if (rail) {
           // Removing a moved Vue-owned head changes its parent, not the head's
           // own subtree, so its dedicated observer cannot see this lifecycle.
-          if (record.type === 'childList') for (const state of states.values()) {
-            if (state.rail === rail && state.head.parentElement !== state.headerTable) schedule(state.table)
-          }
+          const state = scrollOwners.get(rail)
+          if (record.type === 'childList' && state && state.head.parentElement !== state.headerTable) schedule(state.table)
           continue
         }
         if (record.type === 'childList' && target instanceof HTMLTableElement && target.matches(tableSelector)
@@ -329,20 +362,17 @@ export function useStaticTableHeaders(root: Ref<HTMLElement | null>): void {
           schedule(target)
         }
         for (const node of record.addedNodes) if (node instanceof Element) registerTree(node)
-        if (record.type === 'attributes' && target) {
-          for (const table of candidates) {
-            const viewport = states.get(table)?.viewport ?? table.closest(viewportSelector)
-            if (viewport && (target === table || target === viewport || target.contains(viewport)) && meaningfulStyle(record)) schedule(table)
-          }
-        }
+        if (record.type === 'attributes' && target && meaningfulStyle(record)) for (const table of owners.get(target) ?? []) schedule(table)
       }
-      for (const table of candidates) if (!table.isConnected) unregister(table)
+      if (records.some(record => [...record.removedNodes].some(node => !node.isConnected))) {
+        for (const table of candidates) if (!table.isConnected) unregister(table)
+      }
     })
     const onScroll = (event: Event) => {
-      for (const state of states.values()) {
-        if (event.target === state.viewport && state.rail.scrollLeft !== state.viewport.scrollLeft) state.rail.scrollLeft = state.viewport.scrollLeft
-        else if (event.target === state.rail && state.viewport.scrollLeft !== state.rail.scrollLeft) state.viewport.scrollLeft = state.rail.scrollLeft
-      }
+      const state = event.target && scrollOwners.get(event.target)
+      if (!state) return
+      if (event.target === state.viewport && state.rail.scrollLeft !== state.viewport.scrollLeft) state.rail.scrollLeft = state.viewport.scrollLeft
+      else if (event.target === state.rail && state.viewport.scrollLeft !== state.rail.scrollLeft) state.viewport.scrollLeft = state.rail.scrollLeft
     }
     const onResize = () => schedule()
     registerTree(document.body)
@@ -358,6 +388,8 @@ export function useStaticTableHeaders(root: Ref<HTMLElement | null>): void {
       window.removeEventListener('resize', onResize)
       for (const table of [...candidates]) unregister(table)
       observed.clear()
+      owners.clear()
+      scrollOwners.clear()
       dirty.clear()
     }
   }, { immediate: true, flush: 'post' })

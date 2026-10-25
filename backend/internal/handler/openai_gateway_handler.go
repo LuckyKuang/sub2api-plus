@@ -1130,7 +1130,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		if result != nil {
 			// 排除 spark 影子:其 codex_* 仅由 QueryUsage(/wham/usage bengalfox)更新(外审第7轮 P1)。
 			if account.Type == service.AccountTypeOAuth && !account.IsShadow() {
-				h.gatewayService.ApplyCodexUsageSnapshotFromResult(c.Request.Context(), account.ID, result)
+				h.gatewayService.ApplyCodexUsageSnapshotFromResult(c.Request.Context(), account, result)
 			}
 			h.gatewayService.ReportOpenAIAccountScheduleResult(account, openAIAccountScheduleModel(c, account, forwardModel, requireCompact, result), openAIForwardSucceededForScheduling(err, result), result.FirstTokenMs, err)
 		} else {
@@ -2557,6 +2557,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		firstMessage,
 		openAIWSIngressFallbackSessionSeed(subject.UserID, apiKey.ID, apiKey.GroupID),
 	)
+	ctx = service.WithOpenAIOAuthSharedAffinity(ctx, c)
 	ctx = service.WithOpenAIGuardianParentAffinity(ctx, c, firstMessage, reqModel)
 	maxAccountSwitches := h.maxAccountSwitches
 	switchCount := 0
@@ -3202,7 +3203,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				)
 				// 排除 spark 影子:其 codex_* 仅由 QueryUsage(/wham/usage bengalfox)更新(外审第7轮 P1)。
 				if account.Type == service.AccountTypeOAuth && !account.IsShadow() {
-					h.gatewayService.ApplyCodexUsageSnapshotFromResult(ctx, account.ID, result)
+					h.gatewayService.ApplyCodexUsageSnapshotFromResult(ctx, account, result)
 				}
 				scheduleModel := turnUpstreamModel
 				if scheduleModel == "" {

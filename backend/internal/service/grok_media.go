@@ -746,7 +746,9 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 	account.ApplyHeaderOverrides(upstreamReq.Header)
 
 	upstreamStart := time.Now()
-	resp, err := s.httpUpstream.Do(prepareAccountOutboundRequest(upstreamReq, account), proxyURL, selectedAccount.ID, selectedAccount.Concurrency)
+	upstreamReq = prepareAccountOutboundRequest(upstreamReq, account)
+	captureImageResultDownloadOwner(upstreamReq, account)
+	resp, err := s.httpUpstream.Do(upstreamReq, proxyURL, selectedAccount.ID, selectedAccount.Concurrency)
 	SetOpsLatencyMs(c, OpsUpstreamLatencyMsKey, time.Since(upstreamStart).Milliseconds())
 	if err != nil {
 		return nil, s.handleOpenAIUpstreamTransportError(ctx, c, account, err, false)

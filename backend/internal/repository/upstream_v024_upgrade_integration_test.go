@@ -86,8 +86,8 @@ INSERT INTO settings (key,value) VALUES ('ops_runtime_log_config','{"level":"war
 		`SELECT jsonb_agg(to_jsonb(t) ORDER BY id)::text FROM accounts t`,
 		`SELECT jsonb_agg(to_jsonb(t) ORDER BY group_id)::text FROM account_groups t`,
 		`SELECT jsonb_agg(to_jsonb(t) ORDER BY id)::text FROM user_subscriptions t`,
-		`SELECT jsonb_agg(to_jsonb(t) - ARRAY['used_percent','reset_sequence','pending_reset_at','pending_observed_at','next_poll_at'] ORDER BY account_id)::text FROM openai_oauth_weekly_reset_observations t`,
-		`SELECT jsonb_agg(to_jsonb(t) - 'reset_sequence' ORDER BY id)::text FROM group_quota_follow_reset_events t`,
+		`SELECT jsonb_agg(to_jsonb(t) - ARRAY['used_percent','reset_sequence','pending_reset_at','pending_observed_at','next_poll_at','owner_generation','pending_generation'] ORDER BY account_id)::text FROM openai_oauth_weekly_reset_observations t`,
+		`SELECT jsonb_agg(to_jsonb(t) - ARRAY['reset_sequence','owner_generation'] ORDER BY id)::text FROM group_quota_follow_reset_events t`,
 		`SELECT jsonb_agg(to_jsonb(t) ORDER BY id)::text FROM user_platform_quotas t`,
 		`SELECT jsonb_agg(to_jsonb(t) ORDER BY key)::text FROM settings t WHERE key <> 'ops_runtime_log_config'`,
 		`SELECT jsonb_agg(to_jsonb(t) ORDER BY filename)::text FROM schema_migrations t WHERE filename < '259_'`,
@@ -105,12 +105,12 @@ INSERT INTO settings (key,value) VALUES ('ops_runtime_log_config','{"level":"war
 	}
 	// New observation metadata must initialize without manufacturing a reset
 	// or changing any of the old columns protected by the snapshots above.
-	require.JSONEq(t, `{"sequence":0,"used":null,"pending":null,"pending_at":null,"poll_scheduled":true}`, snapshot(`
+	require.JSONEq(t, `{"sequence":0,"used":null,"pending":null,"pending_at":null,"poll_scheduled":true,"owner":"","pending_owner":""}`, snapshot(`
 		SELECT jsonb_build_object('sequence', reset_sequence, 'used', used_percent,
 		    'pending', pending_reset_at, 'pending_at', pending_observed_at,
-		    'poll_scheduled', next_poll_at IS NOT NULL)::text
+		    'poll_scheduled', next_poll_at IS NOT NULL, 'owner', owner_generation, 'pending_owner', pending_generation)::text
 		FROM openai_oauth_weekly_reset_observations WHERE account_id=1`))
-	require.Equal(t, "0", snapshot(`SELECT reset_sequence::text FROM group_quota_follow_reset_events WHERE group_id=101`))
+	require.JSONEq(t, `{"sequence":0,"owner":""}`, snapshot(`SELECT jsonb_build_object('sequence',reset_sequence,'owner',owner_generation)::text FROM group_quota_follow_reset_events WHERE group_id=101`))
 	// Migration 286 (migrations/README.md) adds an empty translation map.
 	// Keep every pre-existing field in the preservation comparison and assert
 	// the new field's required default independently for all fixture groups.

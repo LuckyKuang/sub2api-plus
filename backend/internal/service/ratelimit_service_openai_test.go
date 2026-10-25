@@ -229,6 +229,8 @@ type openAI429SnapshotRepo struct {
 	updatedExtra       map[string]any
 	bulkUpdatedIDs     []int64
 	bulkUpdatedPayload AccountBulkUpdate
+	planOwnerID        int64
+	planType           string
 }
 
 func (r *openAI429SnapshotRepo) SetRateLimited(_ context.Context, id int64, _ time.Time) error {
@@ -283,14 +285,15 @@ func TestHandle429_OpenAISyncsObservedPlanType(t *testing.T) {
 		ID:          124,
 		Platform:    PlatformOpenAI,
 		Type:        AccountTypeOAuth,
+		Status:      StatusActive,
 		Credentials: map[string]any{"plan_type": "plus"},
 	}
 	body := []byte(`{"error":{"type":"usage_limit_reached","message":"limit reached","plan_type":"free","resets_at":1777283883}}`)
 
 	svc.handle429(context.Background(), account, http.Header{}, body)
 
-	require.Equal(t, []int64{account.ID}, repo.bulkUpdatedIDs)
-	require.Equal(t, "free", repo.bulkUpdatedPayload.Credentials["plan_type"])
+	require.Equal(t, account.ID, repo.planOwnerID)
+	require.Equal(t, "free", repo.planType)
 	require.Equal(t, "free", account.Credentials["plan_type"])
 	require.Equal(t, account.ID, repo.rateLimitedID)
 }
@@ -307,7 +310,7 @@ func TestPersistOpenAI429PlanType_CopyOnWrite(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := &openAI429SnapshotRepo{}
-			master := &Account{ID: 124, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Credentials: tc.credentials}
+			master := &Account{ID: 124, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive, Credentials: tc.credentials}
 			master.PrepareSharedSnapshot()
 			selected := *master
 			sibling := *master
@@ -315,8 +318,8 @@ func TestPersistOpenAI429PlanType_CopyOnWrite(t *testing.T) {
 
 			persistOpenAI429PlanType(context.Background(), repo, &selected, body)
 
-			require.Equal(t, []int64{master.ID}, repo.bulkUpdatedIDs)
-			require.Equal(t, map[string]any{"plan_type": "free"}, repo.bulkUpdatedPayload.Credentials)
+			require.Equal(t, master.ID, repo.planOwnerID)
+			require.Equal(t, "free", repo.planType)
 			require.Equal(t, "free", selected.GetCredential("plan_type"))
 			require.Equal(t, master.GetCredential("access_token"), selected.GetCredential("access_token"))
 			require.Equal(t, tc.wantMasterPlan, master.GetCredential("plan_type"))
@@ -630,4 +633,20 @@ func TestCalculateOpenAI429ResetTime_5MinFallbackWhenNoReset(t *testing.T) {
 	if resetAt != nil {
 		t.Errorf("expected nil when no reset_after_seconds, got %v", resetAt)
 	}
+}
+
+func (r *openAI429SnapshotRepo) ApplyCredentialStateMutation(ctx context.Context, owner *Account, mutation CredentialStateMutation) (bool, error) {
+	if mutation.RateLimitUntil != nil {
+		if err := r.SetRateLimited(ctx, owner.ID, *mutation.RateLimitUntil); err != nil {
+			return false, err
+		}
+	}
+	if mutation.OpenAIPlanType != "" {
+		r.planOwnerID = owner.ID
+		r.planType = mutation.OpenAIPlanType
+	}
+	return true, nil
+}
+func (r *openAI429SnapshotRepo) UpdateOpenAICodexUsageIfUnchanged(ctx context.Context, id int64, owner *Account, updates map[string]any) (bool, error) {
+	return true, r.UpdateExtra(ctx, id, updates)
 }

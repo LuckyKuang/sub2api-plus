@@ -1397,6 +1397,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 				}
 				imageCount := imageCounter.Count()
 				result := &OpenAIForwardResult{
+					codexUsageOwner:               capturedCodexUsageOwner(ctx, account),
 					RequestID:                     responseID,
 					Usage:                         usage,
 					Model:                         originalModel,

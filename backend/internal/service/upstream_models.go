@@ -973,6 +973,47 @@ func listVertexGeminiPublisherModels(location string, fetchPage func(page int, l
 }
 
 func (s *AccountTestService) buildUpstreamModelsRequest(ctx context.Context, account *Account) (request *http.Request, err error) {
+	selected := account
+	owner, ownerErr := requestCredentialAccount(ctx, account)
+	if ownerErr != nil {
+		return nil, ownerErr
+	}
+	if owner == nil {
+		return nil, newUpstreamModelSyncConfigError("Account is required", nil)
+	}
+	if owner.IsShadow() {
+		owner, ownerErr = resolveCredentialAccount(ctx, s.accountRepo, owner)
+		if ownerErr != nil {
+			return nil, ownerErr
+		}
+	}
+	account = snapshotRequestCredentialAccount(owner)
+	if _, err := requestCredentialOwnerProxyURL(context.Background(), account); err != nil {
+		return nil, err
+	}
+	// Freeze the builder's source before deriving destination, authentication
+	// and identity. Native refresh senders publish a later acquired snapshot.
+	switch account.Platform {
+	case PlatformOpenAI, PlatformGrok, PlatformDeepseek, PlatformKimi, PlatformMiniMax, PlatformStepFun, PlatformZhipu:
+		ctx = WithOutboundIdentityScope(ctx, nil)
+		token := account.GetOpenAIProtocolAPIKey()
+		if account.Platform == PlatformGrok && account.Type == AccountTypeAPIKey {
+			token = account.GetCredential("api_key")
+		}
+		if account.Type == AccountTypeOAuth && account.Platform != PlatformZhipu && account.Platform != PlatformStepFun {
+			token = account.GetCredential("access_token")
+		}
+		if account.IsOpenAIAgentIdentity() {
+			token = ""
+		}
+		// Let the provider report missing credentials before binding evidence.
+		// An empty bearer is never proof of an acquired grant; native refresh
+		// may still acquire one inside its provider-specific builder.
+		if strings.TrimSpace(token) != "" || account.IsOpenAIAgentIdentity() {
+			recordRequestCredentialOwner(ctx, account, token)
+			ctx = withRequestCredentialOwner(ctx, selected, token)
+		}
+	}
 	ctx = WithAccountOutboundIdentity(ctx, account)
 	defer func() {
 		if err == nil {
@@ -1041,6 +1082,11 @@ func (s *AccountTestService) buildGrokUpstreamModelsRequest(ctx context.Context,
 		authToken = strings.TrimSpace(accessToken)
 		if authToken == "" {
 			return nil, newUpstreamModelSyncConfigError("No Grok access token is available", nil)
+		}
+		ctx = withRequestCredentialOwner(ctx, account, authToken)
+		account, err = requestCredentialAccount(ctx, account)
+		if err != nil || account == nil {
+			return nil, newUpstreamModelSyncConfigError("Grok credential owner is unavailable", err)
 		}
 
 		validator, err := grokBaseURLValidator(account, s.cfg)
@@ -1295,6 +1341,10 @@ func (s *AccountTestService) buildOpenAIOAuthUpstreamModelsRequest(ctx context.C
 				req.Header.Add(key, value)
 			}
 		}
+		// Task bootstrap may update only the assertion's task on the same grant.
+		// Bind that actual signer snapshot before the manifest transport starts.
+		recordRequestCredentialOwner(ctx, credentialAccount, "")
+		req = req.WithContext(withRequestCredentialOwner(ctx, credentialAccount, ""))
 	} else {
 		accessToken := strings.TrimSpace(credentialAccount.GetOpenAIAccessToken())
 		if accessToken == "" {
@@ -1405,21 +1455,35 @@ func (s *AccountTestService) doUpstreamModelsRequest(req *http.Request, proxyURL
 	if req.URL.String() == modelsDevRegistryURL {
 		return s.doUpstreamModelsRequestPrepared(req, proxyURL, account)
 	}
-	credentialAccount, err := requestCredentialAccount(req.Context(), account)
+	attemptCtx := req.Context()
+	credentialAccount, err := requestCredentialAccount(attemptCtx, account)
 	if err != nil {
 		return nil, err
 	}
+	proxyURL, err = requestCredentialOwnerProxyURL(attemptCtx, credentialAccount)
+	if err != nil {
+		return nil, err
+	}
+	send := func(next *http.Request) (*http.Response, error) {
+		response, err := s.doUpstreamModelsRequestPrepared(next, proxyURL, account)
+		if response != nil {
+			response.Request = next
+		}
+		return response, err
+	}
+	var response *http.Response
 	if credentialAccount.IsDomesticOAuth() && credentialAccount.Platform == PlatformKimi {
 		if s.cnOAuthService == nil {
 			return nil, NewProviderCredentialFailure("native_oauth_service_unavailable", nil)
 		}
-		return s.cnOAuthService.roundTripNativeOAuthWithPrepare(req, account, s.cnOAuthService.prepareKimiModelsRequest, func(next *http.Request) (*http.Response, error) {
-			return s.doUpstreamModelsRequestPrepared(next, proxyURL, account)
-		})
+		response, err = s.cnOAuthService.roundTripNativeOAuthWithPrepare(req, account, s.cnOAuthService.prepareKimiModelsRequest, send)
+	} else {
+		response, err = s.cnOAuthService.roundTripZhipuLinked(req, account, send)
 	}
-	return s.cnOAuthService.roundTripZhipuLinked(req, account, func(next *http.Request) (*http.Response, error) {
-		return s.doUpstreamModelsRequestPrepared(next, proxyURL, account)
-	})
+	if response != nil {
+		finalizeTransmittedRequestCredentialOwner(attemptCtx, response.Request)
+	}
+	return response, err
 }
 
 func (s *AccountTestService) doUpstreamModelsRequestPrepared(req *http.Request, proxyURL string, account *Account) (*http.Response, error) {
@@ -1427,9 +1491,11 @@ func (s *AccountTestService) doUpstreamModelsRequestPrepared(req *http.Request, 
 	if err != nil {
 		return nil, err
 	}
-	_, nativeOwner := req.Context().Value(requestCredentialTransportKey{}).(requestCredentialTransportEvidence)
-	if nativeOwner || requestCredentialOwnerBound(req.Context(), account) {
-		proxyURL, err = requestCredentialOwnerProxyURL(req.Context(), account)
+	credentialAccount = snapshotRequestCredentialAccount(credentialAccount)
+	// models.dev is a public credential-free registry, separate from the
+	// account-owned provider request boundary.
+	if req.URL.String() != modelsDevRegistryURL {
+		proxyURL, err = requestCredentialOwnerProxyURL(req.Context(), credentialAccount)
 		if err != nil {
 			return nil, err
 		}
@@ -1439,10 +1505,14 @@ func (s *AccountTestService) doUpstreamModelsRequestPrepared(req *http.Request, 
 			return nil, err
 		}
 	}
-	if s.tlsFPProfileService == nil {
-		return s.httpUpstream.DoWithTLS(prepareAccountOutboundRequest(req, account), proxyURL, account.ID, account.Concurrency, nil)
+	req = prepareAccountOutboundRequest(req, credentialAccount)
+	if err := OutboundPreparationError(req.Context()); err != nil {
+		return nil, err
 	}
-	return s.httpUpstream.DoWithTLS(prepareAccountOutboundRequest(req, account), proxyURL, account.ID, account.Concurrency, s.tlsFPProfileService.ResolveTLSProfile(credentialAccount))
+	if s.tlsFPProfileService == nil {
+		return s.httpUpstream.DoWithTLS(req, proxyURL, account.ID, account.Concurrency, nil)
+	}
+	return s.httpUpstream.DoWithTLS(req, proxyURL, account.ID, account.Concurrency, s.tlsFPProfileService.ResolveTLSProfile(credentialAccount))
 }
 
 func upstreamModelsProxyURL(account *Account) string {

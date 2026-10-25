@@ -1331,6 +1331,7 @@ func filterSchedulerExtra(extra map[string]any) map[string]any {
 		"codex_5h_reset_after_seconds",
 		"codex_7d_reset_after_seconds",
 		"codex_usage_updated_at",
+		service.OpenAICodexUsageOwnerGenerationExtraKey,
 		"auto_pause_5h_threshold",
 		"auto_pause_7d_threshold",
 		"auto_pause_5h_disabled",

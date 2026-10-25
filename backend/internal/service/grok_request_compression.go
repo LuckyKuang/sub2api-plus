@@ -259,7 +259,11 @@ func (s *OpenAIGatewayService) grokRequestCompressionCapabilityAdvertised(ctx co
 		return false
 	}
 	account, err := requestCredentialAccount(ctx, account)
-	if err != nil || account == nil || (account.ProxyID != nil && account.Proxy == nil) {
+	if err != nil || account == nil {
+		return false
+	}
+	account = snapshotRequestCredentialAccount(account)
+	if _, err := requestCredentialOwnerProxyURL(context.Background(), account); err != nil {
 		return false
 	}
 	baseURL, err := grokValidatedSamplerBaseURL(account, s.cfg, settings...)
@@ -313,7 +317,12 @@ func grokRequestCompressionProxyKey(account *Account) string {
 // default User-Agent, and it never touches sampler declarations.
 func (s *OpenAIGatewayService) fetchGrokRequestCompressionCapability(ctx context.Context, account *Account, settingsURL string) bool {
 	account, ownerErr := requestCredentialAccount(ctx, account)
-	if ownerErr != nil || account == nil || (account.ProxyID != nil && account.Proxy == nil) {
+	if ownerErr != nil || account == nil {
+		return false
+	}
+	account = snapshotRequestCredentialAccount(account)
+	proxyURL, proxyErr := requestCredentialOwnerProxyURL(context.Background(), account)
+	if proxyErr != nil {
 		return false
 	}
 	if s == nil || s.httpUpstream == nil || account == nil {
@@ -351,10 +360,6 @@ func (s *OpenAIGatewayService) fetchGrokRequestCompressionCapability(ctx context
 		return false
 	}
 
-	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
-	}
 	resp, err := s.httpUpstream.Do(req, proxyURL, account.ID, maxInt(account.Concurrency, 1))
 	if err != nil {
 		slog.Warn("grok_request_compression_capability_unavailable",

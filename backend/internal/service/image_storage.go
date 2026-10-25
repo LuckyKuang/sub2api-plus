@@ -347,11 +347,21 @@ func (u *ImageResultUploader) decodeImageDataURL(rawURL string) ([]byte, string,
 }
 
 func (u *ImageResultUploader) download(ctx context.Context, rawURL string) ([]byte, string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	client, downloadCtx, owner, err := imageResultDownloadClient(ctx)
+	if err != nil {
+		return nil, "", fmt.Errorf("image result route: %w", err)
+	}
+	if client == nil {
+		client = u.httpClient
+	}
+	req, err := http.NewRequestWithContext(downloadCtx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return nil, "", fmt.Errorf("build download request: %w", err)
 	}
-	resp, err := u.httpClient.Do(req)
+	if owner != nil {
+		applyImageResultDownloadIdentity(ctx, req, owner)
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, "", fmt.Errorf("download image: %w", err)
 	}

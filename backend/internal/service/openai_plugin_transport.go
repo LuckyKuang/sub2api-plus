@@ -12,12 +12,10 @@ func (s *OpenAIGatewayService) SetPluginManager(manager *PluginManager) {
 // 插件返回标准 http.Response，响应解析、错误映射、SSE 和计费仍由现有核心链处理。
 func (s *OpenAIGatewayService) doOpenAIUpstream(request *http.Request, proxyURL string, account *Account) (*http.Response, error) {
 	attemptCtx := request.Context()
-	if requestCredentialOwnerBound(attemptCtx, account) {
-		var err error
-		proxyURL, err = requestCredentialOwnerProxyURL(attemptCtx, account)
-		if err != nil {
-			return nil, err
-		}
+	var err error
+	proxyURL, err = requestCredentialOwnerProxyURL(attemptCtx, account)
+	if err != nil {
+		return nil, err
 	}
 	*request = *request.WithContext(WithAccountOutboundIdentity(request.Context(), account))
 	response, responseErr := s.cnOAuthService.roundTripZhipuLinked(request, account, func(req *http.Request) (*http.Response, error) {
@@ -40,50 +38,65 @@ func (s *OpenAIGatewayService) doOpenAIUpstream(request *http.Request, proxyURL 
 	return response, responseErr
 }
 
-func (s *OpenAIGatewayService) doOpenAIUpstreamPrepared(request *http.Request, proxyURL string, account *Account) (response *http.Response, responseErr error) {
+func (s *OpenAIGatewayService) doOpenAIUpstreamPrepared(request *http.Request, _ string, account *Account) (response *http.Response, responseErr error) {
 	credentialAccount, err := requestCredentialAccount(request.Context(), account)
 	if err != nil {
 		return nil, err
 	}
-	_, nativeOwner := request.Context().Value(requestCredentialTransportKey{}).(requestCredentialTransportEvidence)
-	if nativeOwner || requestCredentialOwnerBound(request.Context(), account) {
-		proxyURL, err = requestCredentialOwnerProxyURL(request.Context(), account)
-		if err != nil {
-			return nil, err
-		}
+	credentialAccount = snapshotRequestCredentialAccount(credentialAccount)
+	// The account's route owns every provider-bound send, including unbound
+	// API-key paths and plugins. Explicit transport arguments cannot replace it.
+	ownerProxyURL, err := requestCredentialOwnerProxyURL(request.Context(), credentialAccount)
+	if err != nil {
+		return nil, err
 	}
-	request = prepareAccountOutboundRequest(request, account)
+	request = prepareAccountOutboundRequest(request, credentialAccount)
 	if err := OutboundPreparationError(request.Context()); err != nil {
 		return nil, err
 	}
+	captureImageResultDownloadOwner(request, credentialAccount)
 	ticket, err := applyZhipuOffPeakTicketHeader(request.Context(), credentialAccount, request.Header)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { holdZhipuOffPeakResponse(request.Context(), ticket, response, responseErr) }()
 	if s.pluginManager != nil {
-		response, handled, err := s.pluginManager.RoundTripOpenAIOAuth(request.Context(), request, proxyURL, credentialAccount)
+		response, handled, err := s.pluginManager.RoundTripOpenAIOAuth(request.Context(), request, ownerProxyURL, credentialAccount)
 		if handled {
 			return response, err
 		}
 	}
-	return s.httpUpstream.Do(request, proxyURL, account.ID, account.Concurrency)
+	return s.httpUpstream.Do(request, ownerProxyURL, account.ID, account.Concurrency)
 }
 
 // doOpenAIAccountTestUpstream 让 OpenAI OAuth 账号测试与真实转发使用同一插件路径。
 // API Key 和未命中插件的账号保持各自原有的 HTTPUpstream 行为。
 func (s *AccountTestService) doOpenAIAccountTestUpstream(request *http.Request, proxyURL string, account *Account, useTLSFallback bool) (*http.Response, error) {
+	attemptCtx := request.Context()
+	var err error
+	proxyURL, err = requestCredentialOwnerProxyURL(attemptCtx, account)
+	if err != nil {
+		return nil, err
+	}
 	*request = *request.WithContext(WithAccountOutboundIdentity(request.Context(), account))
-	return s.cnOAuthService.roundTripZhipuLinked(request, account, func(req *http.Request) (*http.Response, error) {
+	response, responseErr := s.cnOAuthService.roundTripZhipuLinked(request, account, func(req *http.Request) (*http.Response, error) {
 		return s.cnOAuthService.roundTripNativeOAuth(req, account, func(native *http.Request) (*http.Response, error) {
-			return s.doOpenAIAccountTestUpstreamPrepared(native, proxyURL, account, useTLSFallback)
+			response, err := s.doOpenAIAccountTestUpstreamPrepared(native, proxyURL, account, useTLSFallback)
+			if response != nil {
+				response.Request = native
+			}
+			return response, err
 		})
 	})
+	if response != nil {
+		finalizeTransmittedRequestCredentialOwner(attemptCtx, response.Request)
+	}
+	return response, responseErr
 }
 
 func (s *AccountTestService) doOpenAIAccountTestUpstreamPrepared(
 	request *http.Request,
-	proxyURL string,
+	_ string,
 	account *Account,
 	useTLSFallback bool,
 ) (response *http.Response, responseErr error) {
@@ -91,14 +104,14 @@ func (s *AccountTestService) doOpenAIAccountTestUpstreamPrepared(
 	if err != nil {
 		return nil, err
 	}
-	_, nativeOwner := request.Context().Value(requestCredentialTransportKey{}).(requestCredentialTransportEvidence)
-	if nativeOwner || requestCredentialOwnerBound(request.Context(), account) {
-		proxyURL, err = requestCredentialOwnerProxyURL(request.Context(), account)
-		if err != nil {
-			return nil, err
-		}
+	credentialAccount = snapshotRequestCredentialAccount(credentialAccount)
+	// The account's route owns every provider-bound send, including unbound
+	// API-key paths and plugins. Explicit transport arguments cannot replace it.
+	ownerProxyURL, err := requestCredentialOwnerProxyURL(request.Context(), credentialAccount)
+	if err != nil {
+		return nil, err
 	}
-	request = prepareAccountOutboundRequest(request, account)
+	request = prepareAccountOutboundRequest(request, credentialAccount)
 	if err := OutboundPreparationError(request.Context()); err != nil {
 		return nil, err
 	}
@@ -108,7 +121,7 @@ func (s *AccountTestService) doOpenAIAccountTestUpstreamPrepared(
 	}
 	defer func() { holdZhipuOffPeakResponse(request.Context(), ticket, response, responseErr) }()
 	if s.pluginManager != nil {
-		response, handled, err := s.pluginManager.RoundTripOpenAIOAuth(request.Context(), request, proxyURL, credentialAccount)
+		response, handled, err := s.pluginManager.RoundTripOpenAIOAuth(request.Context(), request, ownerProxyURL, credentialAccount)
 		if handled {
 			return response, err
 		}
@@ -116,11 +129,11 @@ func (s *AccountTestService) doOpenAIAccountTestUpstreamPrepared(
 	if useTLSFallback {
 		return s.httpUpstream.DoWithTLS(
 			request,
-			proxyURL,
+			ownerProxyURL,
 			account.ID,
 			account.Concurrency,
 			s.tlsFPProfileService.ResolveTLSProfile(credentialAccount),
 		)
 	}
-	return s.httpUpstream.Do(request, proxyURL, account.ID, account.Concurrency)
+	return s.httpUpstream.Do(request, ownerProxyURL, account.ID, account.Concurrency)
 }

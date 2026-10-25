@@ -33,6 +33,8 @@ type OpenAIWeeklyQuotaObservation struct {
 	ReceivedAt  time.Time
 	UsedPercent *float64
 	FromSession bool
+	// Owner is the immutable credential and proxy snapshot that sent this sample.
+	Owner *Account `json:"-"`
 }
 
 func validOpenAIWeeklyUsedPercent(value *float64) bool {
@@ -101,6 +103,13 @@ func (s *OpenAIGroupQuotaFollowResetService) Observe(ctx context.Context, accoun
 	if !observation.FromSession {
 		return
 	}
+	if observation.Owner == nil {
+		observation.Owner = codexObservationOwner(ctx, accountID)
+	}
+	if observation.Owner == nil || observation.Owner.ID != accountID {
+		return
+	}
+	observation.Owner = snapshotRequestCredentialAccount(observation.Owner)
 	observation.ReceivedAt = time.Now().UTC()
 	// The upstream observation remains valid if the downstream client has
 	// disconnected. Persist it synchronously before billing, with a bounded wait.

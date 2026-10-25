@@ -888,6 +888,14 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 		return s.sendErrorAndEnd(c, fmt.Sprintf("Unsupported account type: %s", account.Type))
 	}
 
+	recordRequestCredentialOwner(ctx, credentialAccount, authToken)
+	ctx = withRequestCredentialOwner(ctx, account, authToken)
+	capturedOwner, ok := credentialStateMutationOwner(ctx, account)
+	if !ok {
+		return s.sendErrorAndEnd(c, "OpenAI credential snapshot is unavailable")
+	}
+	credentialAccount = capturedOwner
+
 	// Set SSE headers
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")
@@ -958,8 +966,10 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 
 	if isOAuth && s.accountRepo != nil {
 		if updates, err := extractOpenAICodexProbeUpdates(resp); err == nil && len(updates) > 0 {
-			_ = s.accountRepo.UpdateExtra(ctx, account.ID, updates)
-			mergeAccountExtra(account, updates)
+			owner := capturedCodexUsageOwner(req.Context(), account)
+			if accepted, _ := persistOpenAICodexUsageObservation(ctx, s.accountRepo, account.ID, owner, updates, nil, false); accepted {
+				mergeAccountExtra(account, updates)
+			}
 		}
 	}
 
@@ -2247,6 +2257,14 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 		return s.sendErrorAndEnd(c, fmt.Sprintf("Unsupported account type: %s", account.Type))
 	}
 
+	recordRequestCredentialOwner(ctx, credentialAccount, authToken)
+	ctx = withRequestCredentialOwner(ctx, account, authToken)
+	capturedOwner, ok := credentialStateMutationOwner(ctx, account)
+	if !ok {
+		return s.sendErrorAndEnd(c, "OpenAI credential snapshot is unavailable")
+	}
+	credentialAccount = capturedOwner
+
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")
 	c.Writer.Header().Set("Connection", "keep-alive")
@@ -2317,8 +2335,10 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 	if err != nil {
 		if s.accountRepo != nil {
 			updates := buildOpenAICompactProbeExtraUpdates(nil, nil, err, false, time.Now())
-			_ = s.accountRepo.UpdateExtra(ctx, account.ID, updates)
-			mergeAccountExtra(account, updates)
+			owner := capturedCodexUsageOwner(req.Context(), account)
+			if accepted, _ := persistOpenAICodexUsageObservation(ctx, s.accountRepo, account.ID, owner, updates, nil, false); accepted {
+				mergeAccountExtra(account, updates)
+			}
 		}
 		return s.sendErrorAndEnd(c, fmt.Sprintf("Request failed: %s", err.Error()))
 	}
@@ -2342,8 +2362,10 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 			updates = mergeExtraUpdates(updates, codexUpdates)
 		}
 		if len(updates) > 0 {
-			_ = s.accountRepo.UpdateExtra(ctx, account.ID, updates)
-			mergeAccountExtra(account, updates)
+			owner := capturedCodexUsageOwner(req.Context(), account)
+			if accepted, _ := persistOpenAICodexUsageObservation(ctx, s.accountRepo, account.ID, owner, updates, nil, false); accepted {
+				mergeAccountExtra(account, updates)
+			}
 		}
 		// 探测如返回 429,主动同步限流状态,避免后续短时间内继续选中。
 		if resp.StatusCode == http.StatusTooManyRequests {

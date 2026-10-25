@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"math"
 	"time"
@@ -32,31 +33,46 @@ func (r *openAIGroupQuotaFollowResetRepository) ObserveWeeklyReset(ctx context.C
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	var eligible bool
-	err = tx.QueryRowContext(ctx, `
-		SELECT platform = $2 AND type = $3 AND parent_account_id IS NULL
-		FROM accounts
-		WHERE id = $1 AND deleted_at IS NULL
-		FOR UPDATE
-	`, accountID, service.PlatformOpenAI, service.AccountTypeOAuth).Scan(&eligible)
+	owner := observation.Owner
+	if err := validateCredentialMutationOwner(owner); err != nil {
+		return 0, err
+	}
+	if owner.ID != accountID || owner.Platform != service.PlatformOpenAI || owner.Type != service.AccountTypeOAuth {
+		return 0, nil
+	}
+	current, err := loadLockedCodexObservationOwner(ctx, tx, accountID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, nil
 	}
 	if err != nil {
 		return 0, err
 	}
-	if !eligible {
+	if current.Status != service.StatusActive || current.Status != owner.Status || service.CredentialStateGeneration(current) != service.CredentialStateGeneration(owner) {
 		return 0, nil
 	}
+	generation := service.OpenAICodexObservationGeneration(owner)
+	grantGeneration := service.CredentialStateGeneration(owner)
 
 	var previous openAIWeeklyObservationState
+	var previousGeneration, pendingGeneration string
 	err = tx.QueryRowContext(ctx, `
-		SELECT reset_at, observed_at, used_percent, reset_sequence, pending_reset_at, pending_observed_at
+		SELECT reset_at, observed_at, used_percent, reset_sequence, pending_reset_at, pending_observed_at, owner_generation, pending_generation
 		FROM openai_oauth_weekly_reset_observations
 		WHERE account_id = $1 FOR UPDATE
-	`, accountID).Scan(&previous.resetAt, &previous.observedAt, &previous.usedPercent, &previous.sequence, &previous.pendingResetAt, &previous.pendingObservedAt)
+	`, accountID).Scan(&previous.resetAt, &previous.observedAt, &previous.usedPercent, &previous.sequence, &previous.pendingResetAt, &previous.pendingObservedAt, &previousGeneration, &pendingGeneration)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return 0, err
+	}
+	newPrincipal := previousGeneration != generation
+	if newPrincipal {
+		// Keep the monotonically increasing sequence for the existing event key.
+		sequence := previous.sequence
+		if previous.resetAt.Valid {
+			sequence++
+		}
+		previous = openAIWeeklyObservationState{sequence: sequence}
+	} else if pendingGeneration != grantGeneration {
+		previous.pendingResetAt, previous.pendingObservedAt = sql.NullTime{}, sql.NullTime{}
 	}
 	next, accepted, reset := advanceOpenAIWeeklyObservation(previous, observation)
 	if !accepted {
@@ -67,17 +83,18 @@ func (r *openAIGroupQuotaFollowResetRepository) ObserveWeeklyReset(ctx context.C
 	if effectiveAt.IsZero() {
 		effectiveAt = observedAt
 	}
-	if next != previous {
+	if next != previous || newPrincipal || pendingGeneration != grantGeneration {
 		_, err = tx.ExecContext(ctx, `
 		INSERT INTO openai_oauth_weekly_reset_observations
-		    (account_id, reset_at, observed_at, used_percent, reset_sequence, pending_reset_at, pending_observed_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		    (account_id, reset_at, observed_at, used_percent, reset_sequence, pending_reset_at, pending_observed_at, owner_generation, pending_generation)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		ON CONFLICT (account_id) DO UPDATE
 		SET reset_at = EXCLUDED.reset_at, observed_at = EXCLUDED.observed_at,
 		    used_percent = EXCLUDED.used_percent, reset_sequence = EXCLUDED.reset_sequence,
 		    pending_reset_at = EXCLUDED.pending_reset_at, pending_observed_at = EXCLUDED.pending_observed_at,
+ owner_generation = EXCLUDED.owner_generation, pending_generation = EXCLUDED.pending_generation,
 		    updated_at = NOW()
-	`, accountID, resetAt, next.observedAt, next.usedPercent, next.sequence, next.pendingResetAt, next.pendingObservedAt)
+	`, accountID, resetAt, next.observedAt, next.usedPercent, next.sequence, next.pendingResetAt, next.pendingObservedAt, generation, grantGeneration)
 		if err != nil {
 			return 0, err
 		}
@@ -98,13 +115,13 @@ func (r *openAIGroupQuotaFollowResetRepository) ObserveWeeklyReset(ctx context.C
 		  AND g.platform = $2
 		  AND g.subscription_type = $3
 		  AND g.deleted_at IS NULL
-		  AND ($5 OR g.quota_reset_source_reset_at IS DISTINCT FROM $4)
+		  AND ($5 OR $6 OR g.quota_reset_source_reset_at IS DISTINCT FROM $4)
 		  AND EXISTS (
 		      SELECT 1 FROM account_groups ag
 		      WHERE ag.group_id = g.id AND ag.account_id = $1
 		  )
 		ORDER BY g.id FOR UPDATE OF g
-	`, accountID, service.PlatformOpenAI, service.SubscriptionTypeSubscription, resetAt, reset)
+	`, accountID, service.PlatformOpenAI, service.SubscriptionTypeSubscription, resetAt, reset, newPrincipal)
 	if err != nil {
 		return 0, err
 	}
@@ -144,7 +161,7 @@ func (r *openAIGroupQuotaFollowResetRepository) ObserveWeeklyReset(ctx context.C
 		if !bound {
 			continue
 		}
-		if !target.baseline.Valid {
+		if !target.baseline.Valid || newPrincipal {
 			if !observedAt.After(target.updatedAt) {
 				// Only a real session sampled after activation can establish the
 				// baseline for a newly bound source.
@@ -160,10 +177,10 @@ func (r *openAIGroupQuotaFollowResetRepository) ObserveWeeklyReset(ctx context.C
 		}
 		result, err := tx.ExecContext(ctx, `
 			INSERT INTO group_quota_follow_reset_events
-				(group_id, source_account_id, config_version, upstream_reset_at, effective_at, include_monthly, reset_sequence)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)
+				(group_id, source_account_id, config_version, upstream_reset_at, effective_at, include_monthly, reset_sequence, owner_generation)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 			ON CONFLICT (group_id, config_version, upstream_reset_at, reset_sequence) DO NOTHING
-		`, target.id, accountID, target.version, resetAt, effectiveAt, target.includeMonthly, next.sequence)
+		`, target.id, accountID, target.version, resetAt, effectiveAt, target.includeMonthly, next.sequence, generation)
 		if err != nil {
 			return 0, err
 		}
@@ -276,8 +293,9 @@ func (r *openAIGroupQuotaFollowResetRepository) ProcessNextPending(ctx context.C
 	var eventID, groupID, sourceID, configVersion int64
 	var effectiveAt time.Time
 	var includeMonthly bool
+	var eventGeneration string
 	err = tx.QueryRowContext(ctx, `
-		SELECT e.id, e.group_id, e.source_account_id, e.config_version, e.effective_at, e.include_monthly
+		SELECT e.id, e.group_id, e.source_account_id, e.config_version, e.effective_at, e.include_monthly, e.owner_generation
 		FROM group_quota_follow_reset_events e
 		WHERE e.status = 'pending'
 		  AND NOT EXISTS (
@@ -287,7 +305,7 @@ func (r *openAIGroupQuotaFollowResetRepository) ProcessNextPending(ctx context.C
 		ORDER BY e.id
 		FOR UPDATE OF e SKIP LOCKED
 		LIMIT 1
-	`).Scan(&eventID, &groupID, &sourceID, &configVersion, &effectiveAt, &includeMonthly)
+	`).Scan(&eventID, &groupID, &sourceID, &configVersion, &effectiveAt, &includeMonthly, &eventGeneration)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -295,6 +313,11 @@ func (r *openAIGroupQuotaFollowResetRepository) ProcessNextPending(ctx context.C
 		return nil, err
 	}
 
+	currentOwner, ownerErr := loadLockedCodexObservationOwner(ctx, tx, sourceID)
+	if ownerErr != nil && !errors.Is(ownerErr, sql.ErrNoRows) {
+		return nil, ownerErr
+	}
+	ownerValid := ownerErr == nil && currentOwner.Status == service.StatusActive && eventGeneration != "" && service.OpenAICodexObservationGeneration(currentOwner) == eventGeneration
 	var groupMonthlyLimit sql.NullFloat64
 	var valid bool
 	// Membership edits hold the group lock. Acquire it in a separate statement
@@ -326,7 +349,7 @@ func (r *openAIGroupQuotaFollowResetRepository) ProcessNextPending(ctx context.C
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
 	}
-	if errors.Is(err, sql.ErrNoRows) || !valid {
+	if errors.Is(err, sql.ErrNoRows) || !valid || !ownerValid {
 		_, updateErr := tx.ExecContext(ctx, `UPDATE group_quota_follow_reset_events SET status='skipped', processed_at=NOW(), updated_at=NOW(), last_error='source configuration is no longer valid' WHERE id=$1`, eventID)
 		if updateErr != nil {
 			return nil, updateErr
@@ -386,4 +409,28 @@ func (r *openAIGroupQuotaFollowResetRepository) ProcessNextPending(ctx context.C
 		return nil, err
 	}
 	return &service.GroupQuotaFollowResetResult{EventID: eventID, GroupID: groupID, UserIDs: userIDs, AffectedSubscriptions: len(userIDs)}, nil
+}
+
+// Account then proxy lock ordering matches credential/proxy mutation paths.
+// Processing rehydrates the current principal and proxy before any billing
+// effect; a stored digest alone is not accepted as current ownership evidence.
+func loadLockedCodexObservationOwner(ctx context.Context, tx sqlExecutor, accountID int64) (*service.Account, error) {
+	owner := &service.Account{ID: accountID}
+	var raw []byte
+	err := scanSingleRow(ctx, tx, `SELECT platform, type, status, credentials, proxy_id FROM accounts WHERE id=$1 AND deleted_at IS NULL AND parent_account_id IS NULL FOR UPDATE`, []any{accountID}, &owner.Platform, &owner.Type, &owner.Status, &raw, &owner.ProxyID)
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(raw, &owner.Credentials); err != nil {
+		return nil, err
+	}
+	if owner.ProxyID != nil {
+		p := &service.Proxy{ID: *owner.ProxyID}
+		err := scanSingleRow(ctx, tx, `SELECT protocol, host, port, COALESCE(username, ''), COALESCE(password, ''), status FROM proxies WHERE id=$1 AND deleted_at IS NULL FOR SHARE`, []any{*owner.ProxyID}, &p.Protocol, &p.Host, &p.Port, &p.Username, &p.Password, &p.Status)
+		if err != nil {
+			return nil, err
+		}
+		owner.Proxy = p
+	}
+	return owner, nil
 }

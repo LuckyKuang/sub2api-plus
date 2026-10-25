@@ -547,6 +547,12 @@ func (s *OpenAIGatewayService) selectAccountWithCanonicalRoute(ctx context.Conte
 	}
 	store := s.openAISessionRouteStoreForRequest(ctx)
 	if store == nil || req.SessionHash == "" {
+		// Cache-only WS admission still checks the selected candidate's client
+		// policy in the handler. Do not publish ordinary or cross-key affinity
+		// before that check and concurrency admission have succeeded.
+		if req.RequiredTransport == OpenAIUpstreamTransportResponsesWebsocketV2Ingress && req.SessionHash != "" {
+			ctx = context.WithValue(ctx, openAISessionRouteSelectionKey{}, true)
+		}
 		return selectCandidate(ctx, req.SessionHash, req.ExcludedIDs)
 	}
 	// Affinity cannot bypass the request's public-model authorization merely

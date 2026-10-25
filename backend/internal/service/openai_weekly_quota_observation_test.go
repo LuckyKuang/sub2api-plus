@@ -70,16 +70,16 @@ func TestWeeklyQuotaSnapshotEntryPoints(t *testing.T) {
 			headers.Set("X-Codex-Secondary-Reset-At", strconv.FormatInt(resetAt, 10))
 			headers.Set("X-Codex-Secondary-Window-Minutes", "10080")
 			headers.Set("X-Codex-Secondary-Used-Percent", "7")
-			usage := &OpenAIQuotaUsage{FetchedAt: now.Unix(), RateLimit: &OpenAIRateLimit{SecondaryWindow: &OpenAIRateLimitWindow{
+			usage := &OpenAIQuotaUsage{credentialOwner: account, FetchedAt: now.Unix(), RateLimit: &OpenAIRateLimit{SecondaryWindow: &OpenAIRateLimitWindow{
 				UsedPercent: 7, LimitWindowSeconds: 604800, ResetAt: resetAt,
-			}}, RateLimitResetCredits: &OpenAIRateLimitResetCredits{}}
+			}}, RateLimitResetCredits: &OpenAIRateLimitResetCredits{credentialOwner: account}}
 			switch path {
 			case "gateway":
-				(&OpenAIGatewayService{accountRepo: repo}).UpdateCodexUsageSnapshotFromHeaders(context.Background(), account.ID, headers)
+				(&OpenAIGatewayService{accountRepo: repo}).UpdateCodexUsageSnapshotFromHeaders(context.Background(), account, headers)
 			case "rate_limit":
 				(&RateLimitService{accountRepo: repo}).persistOpenAICodexSnapshot(context.Background(), account, headers)
 			case "handshake":
-				(&OpenAIGatewayService{accountRepo: repo}).ApplyCodexUsageSnapshotFromResult(context.Background(), account.ID, &OpenAIForwardResult{
+				(&OpenAIGatewayService{accountRepo: repo}).ApplyCodexUsageSnapshotFromResult(context.Background(), account, &OpenAIForwardResult{codexUsageOwner: account,
 					ResponseHeaders:              headers,
 					ResponseHeadersFromHandshake: true,
 				})

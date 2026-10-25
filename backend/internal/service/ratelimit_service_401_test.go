@@ -64,6 +64,10 @@ func (r *rateLimitAccountRepoStub) SetRateLimited(ctx context.Context, id int64,
 }
 
 func (r *rateLimitAccountRepoStub) ApplyCredentialStateMutation(ctx context.Context, owner *Account, mutation CredentialStateMutation) (bool, error) {
+	if mutation.OpenAIPlanType != "" {
+		r.updateCredentialsCalls++
+		r.lastCredentials = map[string]any{"plan_type": mutation.OpenAIPlanType}
+	}
 	if mutation.TempUnschedulableUntil != nil {
 		if err := r.SetTempUnschedulable(ctx, owner.ID, *mutation.TempUnschedulableUntil, mutation.TempUnschedulableReason); err != nil {
 			return false, err

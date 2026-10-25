@@ -11,6 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/proxyurl"
 	"github.com/gin-gonic/gin"
 )
 
@@ -318,10 +319,21 @@ func requestCredentialOwnerProxyURL(ctx context.Context, account *Account) (stri
 	if err != nil || owner == nil {
 		return "", err
 	}
-	if owner.ProxyID != nil && owner.Proxy == nil {
+	if owner.ProxyID == nil {
+		return "", nil
+	}
+	if *owner.ProxyID <= 0 || owner.Proxy == nil || owner.Proxy.ID != *owner.ProxyID {
 		return "", errors.New("request credential proxy is unavailable")
 	}
-	return resolveAccountProxyURL(owner), nil
+	if strings.TrimSpace(owner.Proxy.Host) == "" || owner.Proxy.Port < 1 || owner.Proxy.Port > 65535 {
+		return "", errors.New("request credential proxy configuration is invalid")
+	}
+	proxyURL, _, err := proxyurl.Parse(owner.Proxy.URL())
+	if err != nil {
+		// Do not include a proxy URL or parse error: it may contain credentials.
+		return "", errors.New("request credential proxy configuration is invalid")
+	}
+	return proxyURL, nil
 }
 
 // A native transport can refresh after its outer protocol handler acquired a

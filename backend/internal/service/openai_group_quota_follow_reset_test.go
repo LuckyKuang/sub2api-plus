@@ -34,7 +34,7 @@ func TestQuotaFollowResetObservationSurvivesDownstreamCancellation(t *testing.T)
 	observer := &OpenAIGroupQuotaFollowResetService{repo: recorder}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	observer.Observe(ctx, 42, OpenAIWeeklyQuotaObservation{ResetAt: time.Now().Add(7 * 24 * time.Hour), ObservedAt: time.Now(), FromSession: true})
+	observer.Observe(ctx, 42, OpenAIWeeklyQuotaObservation{Owner: &Account{ID: 42, Platform: PlatformOpenAI, Type: AccountTypeOAuth}, ResetAt: time.Now().Add(7 * 24 * time.Hour), ObservedAt: time.Now(), FromSession: true})
 	require.Equal(t, 1, recorder.calls)
 	require.NoError(t, recorder.contextErr)
 }
@@ -157,15 +157,15 @@ func TestWeeklyQuotaHandshakeHeadersDoNotObserveAfterRateLimits(t *testing.T) {
 	headers.Set("X-Codex-Primary-Used-Percent", "7")
 	(&OpenAIGatewayService{accountRepo: &autoResetTestAccountRepo{account: account}}).ApplyCodexUsageSnapshotFromResult(
 		context.Background(),
-		account.ID,
-		&OpenAIForwardResult{ResponseHeaders: headers, ResponseHeadersFromHandshake: true},
+		account,
+		&OpenAIForwardResult{codexUsageOwner: account, ResponseHeaders: headers, ResponseHeadersFromHandshake: true},
 	)
 	require.Equal(t, 1, recorder.calls, "reused handshake headers must not count as a later session")
 
 	(&OpenAIGatewayService{accountRepo: &autoResetTestAccountRepo{account: account}}).ApplyCodexUsageSnapshotFromResult(
 		context.Background(),
-		account.ID,
-		&OpenAIForwardResult{ResponseHeaders: headers},
+		account,
+		&OpenAIForwardResult{codexUsageOwner: account, ResponseHeaders: headers},
 	)
 	require.Equal(t, 2, recorder.calls)
 	require.True(t, recorder.observation.FromSession)

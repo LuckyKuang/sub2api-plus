@@ -128,6 +128,15 @@ func (s *ZhipuOAuthService) projectToken(ctx context.Context, account *Account, 
 	if s == nil || s.client == nil {
 		return nil, NewProviderCredentialFailure("project_token_service_unavailable", nil)
 	}
+	ownerAccount, ownerErr := requestCredentialAccount(ctx, account)
+	if ownerErr != nil || ownerAccount == nil {
+		return nil, NewProviderCredentialFailure("project_token_owner_unavailable", ownerErr)
+	}
+	account = snapshotRequestCredentialAccount(ownerAccount)
+	proxyURL, proxyErr := requestCredentialOwnerProxyURL(context.Background(), account)
+	if proxyErr != nil {
+		return nil, NewProviderCredentialFailure("project_token_proxy_unavailable", proxyErr)
+	}
 	selectedCtx, generation := zhipuProjectTokenScope(ctx, account)
 	owner := outboundIdentityOwnerKey(account)
 	s.projectTokenMu.Lock()
@@ -179,7 +188,7 @@ func (s *ZhipuOAuthService) projectToken(ctx context.Context, account *Account, 
 				if provider == zcode.ProviderZai {
 					// Keep typed transport/status errors so a transient business
 					// exchange can defer refresh of a still-valid PAT too.
-					token, err = s.client.ExchangeZaiBusinessToken(callCtx, token, account.proxyURLOrEmpty())
+					token, err = s.client.ExchangeZaiBusinessToken(callCtx, token, proxyURL)
 				}
 			} else {
 				token = strings.TrimSpace(account.GetCredential("access_token"))
@@ -191,7 +200,7 @@ func (s *ZhipuOAuthService) projectToken(ctx context.Context, account *Account, 
 				return nil, WithCredentialFailureAccount(NewAccountCredentialFailure("project_token_login_required", nil), account)
 			}
 			if keyID != "" && org != "" && project != "" {
-				value, err = s.client.IssueProjectToken(callCtx, provider, token, org, project, keyID, account.proxyURLOrEmpty())
+				value, err = s.client.IssueProjectToken(callCtx, provider, token, org, project, keyID, proxyURL)
 				var status *zcode.BusinessHTTPError
 				if errors.As(err, &status) && status.Status == 404 {
 					keyID = ""
@@ -199,9 +208,9 @@ func (s *ZhipuOAuthService) projectToken(ctx context.Context, account *Account, 
 			}
 			if keyID == "" {
 				if zhipuTeamProject(account) {
-					value, err = s.client.ResolveTeamPlanKey(callCtx, provider, token, org, project, account.proxyURLOrEmpty())
+					value, err = s.client.ResolveTeamPlanKey(callCtx, provider, token, org, project, proxyURL)
 				} else {
-					value, err = s.client.ResolveIndividualCodingPlanKey(callCtx, provider, token, account.proxyURLOrEmpty())
+					value, err = s.client.ResolveIndividualCodingPlanKey(callCtx, provider, token, proxyURL)
 				}
 			}
 			var status *zcode.BusinessHTTPError

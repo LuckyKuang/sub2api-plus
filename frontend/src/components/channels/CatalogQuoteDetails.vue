@@ -28,9 +28,9 @@
         <div v-if="offer.service_tier_pricing?.length" class="space-y-3">
           <h4 class="font-medium">{{ t('availableChannels.catalog.serviceTiers') }}</h4>
           <p class="text-xs surface-muted">{{ t('availableChannels.catalog.serviceTierNote') }}</p>
-          <details v-for="tier in offer.service_tier_pricing" :key="tier.name" class="space-y-2 rounded-lg border border-gray-200 p-3 dark:border-dark-700">
-            <summary class="cursor-pointer font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500">{{ t(`availableChannels.catalog.tiers.${tier.name}`) }}</summary>
-            <CatalogPriceTable :pricing="tier.pricing" :rate="rate" />
+          <details v-for="tier in offer.service_tier_pricing" :key="tier.name" :open="openTiers.has(tier.name)" class="space-y-2 rounded-lg border border-gray-200 p-3 dark:border-dark-700">
+            <summary class="cursor-pointer font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500" @click.prevent="toggleTier(tier.name)">{{ t(`availableChannels.catalog.tiers.${tier.name}`) }}</summary>
+            <CatalogPriceTable v-if="openTiers.has(tier.name)" :pricing="tier.pricing" :rate="rate" />
           </details>
         </div>
         <div v-if="Object.keys(offer.pricing.reasoning_effort_multipliers || {}).length">
@@ -56,7 +56,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { CatalogGroup, CatalogOffer, UserSupportedModelPricing } from '@/api/channels'
 import CatalogPriceTable from './CatalogPriceTable.vue'
@@ -65,6 +65,12 @@ import { catalogMoney, effectiveRate, rateSource } from './catalog'
 
 const props = defineProps<{ offer: CatalogOffer; group: CatalogGroup; rateUnavailable: boolean }>()
 const { t } = useI18n()
+const openTiers = ref(new Set<string>())
+function toggleTier(name: string) {
+  if (openTiers.value.has(name)) openTiers.value.delete(name)
+  else openTiers.value.add(name)
+}
+watch(() => props.offer, () => { openTiers.value = new Set() })
 const rate = computed(() => effectiveRate(props.group, props.offer))
 const source = computed(() => rateSource(props.group, props.offer))
 const independent = computed(() => source.value === 'media')

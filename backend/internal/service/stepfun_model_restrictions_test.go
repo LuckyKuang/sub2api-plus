@@ -23,7 +23,7 @@ func TestStepFunOAuthCatalogBeforeCreation(t *testing.T) {
 			proxyID := int64(9)
 			proxyRepo := &mockProxyRepoForOAuth{getByIDFunc: func(_ context.Context, id int64) (*Proxy, error) {
 				require.Equal(t, proxyID, id)
-				return &Proxy{Protocol: "http", Host: "proxy.example", Port: 8080}, nil
+				return &Proxy{ID: proxyID, Protocol: "http", Host: "proxy.example", Port: 8080}, nil
 			}}
 			svc := NewCNOAuthService(proxyRepo, nil, admin)
 			upstream := &httpUpstreamRecorder{resp: &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"data":[{"id":"step-3.7-flash","model_type":"大语言模型"},{"id":"step-router","model_type":"路由模型"},{"id":"step-image","model_type":"图片模型"}]}`))}}
@@ -33,6 +33,7 @@ func TestStepFunOAuthCatalogBeforeCreation(t *testing.T) {
 			require.NoError(t, svc.store.Update(ctx, id, func(_ context.Context, session *cnoauth.Session) error {
 				session.Flow.Region = region
 				session.ProxyID = &proxyID
+				session.ProxyURL = "http://proxy.example:8080"
 				return nil
 			}))
 			models, err := svc.PreviewModels(ctx, 7, "stepfun", id)

@@ -6,6 +6,18 @@ import { group, offer, pricing } from './catalogFixtures'
 vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string, params?: object) => key + (params ? JSON.stringify(params) : '') }) }))
 
 describe('catalog price details', () => {
+  it('does not mount hidden service-tier price tables before the user expands them', async () => {
+    const w = mount(CatalogQuoteDetails, { props: {
+      group: group(), offer: offer('token', { service_tier_pricing: [{ name: 'priority', pricing: pricing(6e-6) }] }), rateUnavailable: false
+    } })
+    expect(w.find('details table').exists()).toBe(false)
+    await w.get('summary').trigger('click')
+    expect(w.get('details table').text()).toContain('$6')
+    await w.get('summary').trigger('click')
+    expect(w.find('details table').exists()).toBe(false)
+    w.unmount()
+  })
+
   it('quotes video seconds with an independent rate and a unit-neutral column label', () => {
     const w = mount(CatalogQuoteDetails, { props: {
       group: group(1, [], { rate_multiplier: 3, video_rate_independent: true, video_rate_multiplier: 0.5 }),
@@ -19,7 +31,7 @@ describe('catalog price details', () => {
     expect(w.text()).not.toContain('pricing.perRequestPrice')
     w.unmount()
   })
-  it('preserves token thresholds, null cache fields and separate service-tier prices', () => {
+  it('preserves token thresholds, null cache fields and separate service-tier prices', async () => {
     const p = { ...pricing(), cache_write_1h_price: 4e-6, intervals: [{ min_tokens: 100, max_tokens: null, input_price: 4e-6 }] }
     const w = mount(CatalogQuoteDetails, { props: {
       group: group(), offer: offer('token', { pricing: p, service_tier_pricing: [{ name: 'priority', pricing: pricing(6e-6) }] }), rateUnavailable: false
@@ -28,6 +40,7 @@ describe('catalog price details', () => {
     expect(w.text()).toContain('cacheWrite1hPrice')
     expect(w.text()).not.toContain('cacheReadPrice')
     expect(w.text()).toContain('tiers.priority')
+    await w.get('summary').trigger('click')
     expect(w.text()).toContain('$6')
     w.unmount()
   })
@@ -49,7 +62,7 @@ describe('catalog price details', () => {
     const disclosures = w.findAll('details')
     expect(disclosures).toHaveLength(3)
     expect(disclosures.every(d => !(d.element as HTMLDetailsElement).open)).toBe(true)
-    expect(w.findAll('table').filter(table => table.isVisible())).toHaveLength(2)
+    expect(w.findAll('table')).toHaveLength(2)
     await disclosures[0].get('summary').trigger('click')
     expect(disclosures[0].get('table').isVisible()).toBe(true)
     expect(disclosures[0].get('table').text()).toContain('$6')
@@ -62,7 +75,7 @@ describe('catalog price details', () => {
     await disclosures[2].get('summary').trigger('click')
     expect(disclosures[2].get('table').text()).toContain('$9')
     await disclosures[0].get('summary').trigger('click')
-    expect(disclosures[0].get('table').isVisible()).toBe(false)
+    expect(disclosures[0].find('table').exists()).toBe(false)
     expect(disclosures[1].get('table').isVisible()).toBe(true)
     expect(disclosures[2].get('table').isVisible()).toBe(true)
     expect(w.text()).toContain('tiers.priority')

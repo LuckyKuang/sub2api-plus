@@ -204,7 +204,7 @@ func TestBackfillOpenAIImagesB64JSON_DownloadRequestShape(t *testing.T) {
 	account := b64BackfillAccount(true)
 	proxyID := int64(3)
 	account.ProxyID = &proxyID
-	account.Proxy = &Proxy{Protocol: "http", Host: "127.0.0.1", Port: 7890}
+	account.Proxy = &Proxy{ID: proxyID, Protocol: "http", Host: "127.0.0.1", Port: 7890}
 
 	body := []byte(`{"created":1,"data":[{"url":"https://cdn.example.com/a.png?sig=abc"}]}`)
 	got := svc.backfillOpenAIImagesB64JSON(context.Background(), account, nil, body)

@@ -16,7 +16,7 @@ import (
 )
 
 func observeWeeklyResetAt(repo service.OpenAIGroupQuotaFollowResetRepository, ctx context.Context, accountID int64, resetAt, observedAt time.Time) (int, error) {
-	return repo.ObserveWeeklyReset(ctx, accountID, service.OpenAIWeeklyQuotaObservation{ResetAt: resetAt, ObservedAt: observedAt, FromSession: true})
+	return observeQuotaWeeklyForCurrentOwner(repo, ctx, accountID, service.OpenAIWeeklyQuotaObservation{ResetAt: resetAt, ObservedAt: observedAt, FromSession: true})
 }
 
 func TestOpenAIGroupQuotaFollowResetRepository_EndToEnd(t *testing.T) {
@@ -172,9 +172,13 @@ func TestOpenAIGroupQuotaFollowResetRepository_EndToEnd(t *testing.T) {
 	require.Equal(t, 1.25, monthly)
 	require.Equal(t, 1.25, fiveHour)
 
+	deletedOwner, err := NewAccountRepository(integrationEntClient, integrationDB, nil).GetByID(ctx, accountID)
+	require.NoError(t, err)
 	_, err = integrationDB.ExecContext(ctx, `UPDATE accounts SET deleted_at = NOW() WHERE id = $1`, accountID)
 	require.NoError(t, err)
-	created, err = observeWeeklyResetAt(repo, ctx, accountID, thirdResetAt.Add(7*24*time.Hour), now.Add(4*time.Hour))
+	created, err = repo.ObserveWeeklyReset(ctx, accountID, service.OpenAIWeeklyQuotaObservation{
+		Owner: deletedOwner, ResetAt: thirdResetAt.Add(7 * 24 * time.Hour), ObservedAt: now.Add(4 * time.Hour), FromSession: true,
+	})
 	require.NoError(t, err)
 	require.Zero(t, created, "a deleted source cannot emit reset events")
 
@@ -541,4 +545,13 @@ func TestQuotaFollowReset_ObservationRechecksMembershipAfterWaitingForGroup(t *t
 	var baseline time.Time
 	require.NoError(t, integrationDB.QueryRow(`SELECT quota_reset_source_reset_at FROM groups WHERE id=$1`, f.groupID).Scan(&baseline))
 	require.Equal(t, f.baseline, baseline)
+}
+
+func observeQuotaWeeklyForCurrentOwner(repo service.OpenAIGroupQuotaFollowResetRepository, ctx context.Context, accountID int64, observation service.OpenAIWeeklyQuotaObservation) (int, error) {
+	owner, err := NewAccountRepository(integrationEntClient, integrationDB, nil).GetByID(ctx, accountID)
+	if err != nil {
+		return 0, err
+	}
+	observation.Owner = owner
+	return repo.ObserveWeeklyReset(ctx, accountID, observation)
 }

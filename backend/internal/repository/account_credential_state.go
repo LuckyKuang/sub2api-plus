@@ -20,6 +20,9 @@ func (r *accountRepository) ApplyCredentialStateMutation(ctx context.Context, ow
 	if err := validateCredentialMutationOwner(owner); err != nil {
 		return false, err
 	}
+	if mutation.OpenAIPlanType != "" && (owner.Platform != service.PlatformOpenAI || owner.Type != service.AccountTypeOAuth || owner.Status != service.StatusActive) {
+		return false, errors.New("OpenAI plan metadata requires an OpenAI owner")
+	}
 	if mutation.ClearRateLimit && (mutation.RateLimitUntil != nil || mutation.ObservedLimitedAt == nil || mutation.ObservedResetAt == nil) {
 		return false, errors.New("credential rate-limit clear requires exact observed state")
 	}
@@ -43,6 +46,9 @@ func (r *accountRepository) ApplyCredentialStateMutation(ctx context.Context, ow
 	predicates := []string{"a.id = $1", "a.platform = $2", "a.type = $3", "a.credentials = $4::jsonb", "a.proxy_id IS NOT DISTINCT FROM $5", "a.deleted_at IS NULL", "a.status = " + arg(owner.Status), proxyPredicate}
 	if mutation.RequireTempUnschedulableUnchanged {
 		predicates = append(predicates, "a.temp_unschedulable_until IS NOT DISTINCT FROM "+arg(mutation.ObservedTempUntil)+"::timestamptz", "COALESCE(a.temp_unschedulable_reason, '') = "+arg(mutation.ObservedTempReason))
+	}
+	if mutation.OpenAIPlanType != "" {
+		sets = append(sets, "credentials = a.credentials || jsonb_build_object('plan_type', "+arg(mutation.OpenAIPlanType)+"::text)")
 	}
 	if len(mutation.Extra) > 0 {
 		raw, err := json.Marshal(mutation.Extra)

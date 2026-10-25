@@ -97,6 +97,7 @@ func TestOpenAIQuotaHeadroomFactor_PrimaryUsedPercent(t *testing.T) {
 			"codex_usage_updated_at":     now.Add(-time.Minute).Format(time.RFC3339),
 		},
 	}
+	verifiedCodexUsageForTest(account)
 
 	require.InDelta(t, 0.8, openAIQuotaHeadroomFactor(account, now), 0.0001)
 }
@@ -108,6 +109,7 @@ func TestOpenAIQuotaHeadroomFactor_PrimaryMissingIsNeutral(t *testing.T) {
 			"codex_usage_updated_at": now.Add(-time.Minute).Format(time.RFC3339),
 		},
 	}
+	verifiedCodexUsageForTest(account)
 
 	require.Equal(t, openAIQuotaHeadroomNeutralFactor, openAIQuotaHeadroomFactor(account, now))
 }
@@ -121,6 +123,7 @@ func TestOpenAIQuotaHeadroomFactor_PrimaryResetExpiredIsNeutral(t *testing.T) {
 			"codex_usage_updated_at":     now.Add(-time.Minute).Format(time.RFC3339),
 		},
 	}
+	verifiedCodexUsageForTest(account)
 
 	require.Equal(t, openAIQuotaHeadroomNeutralFactor, openAIQuotaHeadroomFactor(account, now))
 }
@@ -148,6 +151,7 @@ func TestOpenAIQuotaHeadroomFactor_SecondaryLowHeadroomDiscountsPrimary(t *testi
 			"codex_usage_updated_at":       now.Add(-time.Minute).Format(time.RFC3339),
 		},
 	}
+	verifiedCodexUsageForTest(account)
 
 	require.InDelta(t, 0.4, openAIQuotaHeadroomFactor(account, now), 0.0001)
 }
@@ -173,6 +177,9 @@ func TestBuildOpenAIAccountLoadPlan_QuotaHeadroomPrefersHigher7dRemaining(t *tes
 				"codex_usage_updated_at":     now.Add(-time.Minute).Format(time.RFC3339),
 			},
 		},
+	}
+	for index := range filtered {
+		verifiedCodexUsageForTest(filtered[index])
 	}
 	sched := openAIQuotaHeadroomTestScheduler(1.0)
 
@@ -202,6 +209,9 @@ func TestBuildOpenAIAccountLoadPlan_QuotaHeadroomZeroNoEffect(t *testing.T) {
 				"codex_usage_updated_at":     now.Add(-time.Minute).Format(time.RFC3339),
 			},
 		},
+	}
+	for index := range filtered {
+		verifiedCodexUsageForTest(filtered[index])
 	}
 	sched := openAIResetTestScheduler(0)
 

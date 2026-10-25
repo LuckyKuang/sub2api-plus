@@ -67,6 +67,8 @@ type openAIAccountTestRepo struct {
 	updatedExtra       map[string]any
 	bulkUpdatedIDs     []int64
 	bulkUpdatedPayload AccountBulkUpdate
+	planOwnerID        int64
+	planType           string
 	rateLimitedID      int64
 	rateLimitedAt      *time.Time
 	clearedErrorID     int64
@@ -481,8 +483,8 @@ func TestAccountTestService_OpenAI429SyncsObservedPlanType(t *testing.T) {
 
 	err := svc.testOpenAIAccountConnection(ctx, account, "gpt-5.4", "", "")
 	require.Error(t, err)
-	require.Equal(t, []int64{account.ID}, repo.bulkUpdatedIDs)
-	require.Equal(t, "free", repo.bulkUpdatedPayload.Credentials["plan_type"])
+	require.Equal(t, account.ID, repo.planOwnerID)
+	require.Equal(t, "free", repo.planType)
 	require.Equal(t, "free", account.Credentials["plan_type"])
 	require.Equal(t, account.ID, repo.rateLimitedID)
 	require.NotNil(t, account.RateLimitResetAt)
@@ -745,4 +747,24 @@ func TestAccountTestService_OpenAIChatCompletionsPathRejectsNonJSONStream(t *tes
 	require.Contains(t, err.Error(), "Invalid Chat Completions response from /v1/chat/completions")
 	require.Contains(t, recorder.Body.String(), "/v1/chat/completions")
 	require.NotContains(t, recorder.Body.String(), `"success":true`)
+}
+
+func (r *openAIAccountTestRepo) UpdateOpenAICodexUsageIfUnchanged(ctx context.Context, id int64, owner *Account, updates map[string]any) (bool, error) {
+	if owner == nil {
+		return false, nil
+	}
+	return true, r.UpdateExtra(ctx, id, updates)
+}
+
+func (r *openAIAccountTestRepo) ApplyCredentialStateMutation(ctx context.Context, owner *Account, mutation CredentialStateMutation) (bool, error) {
+	if mutation.RateLimitUntil != nil {
+		if err := r.SetRateLimited(ctx, owner.ID, *mutation.RateLimitUntil); err != nil {
+			return false, err
+		}
+	}
+	if mutation.OpenAIPlanType != "" {
+		r.planOwnerID = owner.ID
+		r.planType = mutation.OpenAIPlanType
+	}
+	return true, nil
 }

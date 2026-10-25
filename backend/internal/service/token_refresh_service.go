@@ -952,6 +952,13 @@ func (s *TokenRefreshService) refreshWithRetryWithRateGate(
 				account = observedBeforeRefresh
 			}
 		}
+		var credentialErr *CredentialFailureError
+		if errors.As(err, &credentialErr) && credentialErr.Scope == GatewayFailureScopeProvider {
+			// A shared preparation dependency has not rejected this account's
+			// grant. Contain the provider cycle without retrying or cooling down
+			// the account, including when an internal attempt budget expires.
+			err = &providerCycleContainmentRefreshError{err: err}
+		}
 		attemptTimedOut := errors.Is(oauthRefreshContextError(attemptCtx), context.DeadlineExceeded) && oauthRefreshContextError(ctx) == nil
 		cancelAttempt()
 		releaseAttempt()

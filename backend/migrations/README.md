@@ -282,3 +282,13 @@ Migration `294_outbound_identity_ids.sql` persists official-agent request-state
 identifiers by namespace and irreversible owner-scope digest. Both independently
 deployed 295 migrations retain their original identities as described above;
 neither existing SQL file is renamed to resolve the historical prefix collision.
+
+### Codex observation ownership (296)
+
+Weekly reset observations retain a principal/proxy baseline generation and the
+exact credential generation for pending corroboration. Queued follow-reset
+events retain their verified principal/proxy generation (or the exact grant
+when the principal is unknown) and are skipped
+when that upstream principal or proxy no longer owns the source account. Legacy empty generations
+cannot authorize a reset. Ordinary token rotation preserves a known principal's
+baseline, while pending samples cannot corroborate across rotating grants.

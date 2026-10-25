@@ -1605,59 +1605,55 @@ func buildCodexUsageExtraUpdates(snapshot *OpenAICodexUsageSnapshot, fallbackNow
 	return updates
 }
 
-// updateCodexUsageSnapshot saves the Codex usage snapshot to account's Extra field
-// updateCodexUsageSnapshot 把 /responses 的 x-codex-* 全局头快照写入账号 codex_* Extra。
-// ⚠️ 调用方必须排除 spark 影子账号(account.IsShadow()):影子的 codex_* 仅由 QueryUsage
-// (/wham/usage bengalfox 道)更新,不能被全局头口径污染(外审第7轮 P1)。本函数仅持 accountID,
-// 无法在此自检影子,故守卫前置到各调用点。
-func (s *OpenAIGatewayService) updateCodexUsageSnapshot(ctx context.Context, accountID int64, snapshot *OpenAICodexUsageSnapshot) {
-	s.writeCodexUsageSnapshot(ctx, accountID, snapshot, true)
+// Gateway observations retain the actual transmitted credential/proxy snapshot.
+// Spark headers describe the parent default family, so never write them into a shadow.
+func (s *OpenAIGatewayService) updateCodexUsageSnapshot(ctx context.Context, account *Account, snapshot *OpenAICodexUsageSnapshot) {
+	s.writeCodexUsageSnapshot(ctx, account, snapshot, true)
 }
 
-func (s *OpenAIGatewayService) writeCodexUsageSnapshot(ctx context.Context, accountID int64, snapshot *OpenAICodexUsageSnapshot, fromSession bool) {
-	if snapshot == nil {
+func (s *OpenAIGatewayService) writeCodexUsageSnapshot(ctx context.Context, account *Account, snapshot *OpenAICodexUsageSnapshot, fromSession bool) {
+	if s == nil || s.accountRepo == nil || snapshot == nil || account == nil || account.IsShadow() {
 		return
 	}
-	if s == nil || s.accountRepo == nil {
+	owner, ok := credentialStateMutationOwner(ctx, account)
+	if captured := codexObservationOwner(ctx, account.ID); captured != nil {
+		owner, ok = captured, true
+	}
+	if !ok {
 		return
 	}
-	observeOpenAIWeeklyUsageSnapshot(ctx, accountID, snapshot, fromSession)
-
+	// Each session participates in weekly corroboration even when snapshot writes
+	// are throttled. Its repository independently checks the captured owner.
+	observeOpenAIWeeklyUsageSnapshot(withCodexObservationOwner(ctx, owner), account.ID, snapshot, fromSession)
 	now := time.Now()
 	updates := buildCodexUsageExtraUpdates(snapshot, now)
-	if len(updates) == 0 {
+	if len(updates) == 0 || !s.getCodexSnapshotThrottle().AllowGeneration(account.ID, credentialStateGeneration(owner), now) {
 		return
 	}
-	if !s.getCodexSnapshotThrottle().Allow(accountID, now) {
-		return
-	}
-
 	go func() {
 		updateCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		if err := s.accountRepo.UpdateExtra(updateCtx, accountID, updates); err == nil {
-			notifyOpenAIAutoReset(accountID)
-		}
+		_, _ = persistOpenAICodexUsageObservation(updateCtx, s.accountRepo, account.ID, owner, updates, nil, false)
 	}()
 }
 
-func (s *OpenAIGatewayService) UpdateCodexUsageSnapshotFromHeaders(ctx context.Context, accountID int64, headers http.Header) {
-	s.writeCodexUsageSnapshotFromHeaders(ctx, accountID, headers, true)
+func (s *OpenAIGatewayService) UpdateCodexUsageSnapshotFromHeaders(ctx context.Context, account *Account, headers http.Header) {
+	s.writeCodexUsageSnapshotFromHeaders(ctx, account, headers, true)
 }
 
-func (s *OpenAIGatewayService) ApplyCodexUsageSnapshotFromResult(ctx context.Context, accountID int64, result *OpenAIForwardResult) {
-	if result == nil {
+func (s *OpenAIGatewayService) ApplyCodexUsageSnapshotFromResult(ctx context.Context, account *Account, result *OpenAIForwardResult) {
+	if result == nil || result.codexUsageOwner == nil || account == nil || result.codexUsageOwner.ID != account.ID {
 		return
 	}
-	s.writeCodexUsageSnapshotFromHeaders(ctx, accountID, result.ResponseHeaders, !result.ResponseHeadersFromHandshake)
+	s.writeCodexUsageSnapshotFromHeaders(withCodexObservationOwner(ctx, result.codexUsageOwner), result.codexUsageOwner, result.ResponseHeaders, !result.ResponseHeadersFromHandshake)
 }
 
-func (s *OpenAIGatewayService) writeCodexUsageSnapshotFromHeaders(ctx context.Context, accountID int64, headers http.Header, fromSession bool) {
-	if accountID <= 0 || headers == nil {
+func (s *OpenAIGatewayService) writeCodexUsageSnapshotFromHeaders(ctx context.Context, account *Account, headers http.Header, fromSession bool) {
+	if account == nil || account.ID <= 0 || headers == nil {
 		return
 	}
 	if snapshot := ParseCodexRateLimitHeaders(headers); snapshot != nil {
-		s.writeCodexUsageSnapshot(ctx, accountID, snapshot, fromSession)
+		s.writeCodexUsageSnapshot(ctx, account, snapshot, fromSession)
 	}
 }
 

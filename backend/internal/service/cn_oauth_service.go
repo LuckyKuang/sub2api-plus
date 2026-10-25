@@ -13,6 +13,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/deepseek"
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/proxyurl"
 	"github.com/google/uuid"
 )
 
@@ -61,26 +62,42 @@ func (s *CNOAuthService) Start(ctx context.Context, owner int64, platform, regio
 	}
 	var account *Account
 	if accountID > 0 {
+		if s.accountRepo == nil {
+			return nil, infraerrors.BadRequest("CN_OAUTH_ACCOUNT_INVALID", "account is unavailable")
+		}
 		var err error
 		account, err = s.accountRepo.GetByID(ctx, accountID)
 		if err != nil {
 			return nil, err
 		}
-		if account.Platform != platform || account.Type != AccountTypeOAuth {
+		if account == nil || account.Platform != platform || account.Type != AccountTypeOAuth {
 			return nil, infraerrors.BadRequest("CN_OAUTH_ACCOUNT_INVALID", "account platform or authentication type does not match")
 		}
+		account = snapshotRequestCredentialAccount(account)
 		proxyID = account.ProxyID
 		if platform == PlatformStepFun {
 			region = account.GetCredential("oauth_region")
 		}
 	}
 	proxyURL := ""
-	if proxyID != nil {
-		proxy, err := s.proxyRepo.GetByID(ctx, *proxyID)
+	if account != nil {
+		var err error
+		proxyURL, err = requestCredentialOwnerProxyURL(context.Background(), account)
 		if err != nil {
-			return nil, err
+			return nil, infraerrors.BadRequest("CN_OAUTH_PROXY_UNAVAILABLE", "configured account proxy is unavailable")
 		}
-		proxyURL = proxy.URL()
+	} else if proxyID != nil {
+		if *proxyID <= 0 || s.proxyRepo == nil {
+			return nil, infraerrors.BadRequest("CN_OAUTH_PROXY_UNAVAILABLE", "selected proxy is unavailable")
+		}
+		proxy, err := s.proxyRepo.GetByID(ctx, *proxyID)
+		if err != nil || proxy == nil {
+			return nil, infraerrors.BadRequest("CN_OAUTH_PROXY_UNAVAILABLE", "selected proxy is unavailable")
+		}
+		proxyURL, err = requestCredentialOwnerProxyURL(context.Background(), &Account{ProxyID: proxyID, Proxy: proxy})
+		if err != nil {
+			return nil, infraerrors.BadRequest("CN_OAUTH_PROXY_INVALID", "selected proxy configuration is invalid")
+		}
 	}
 	flowCtx := withNativeOAuthOutboundIdentity(ctx, platform)
 	if account != nil {
@@ -184,17 +201,28 @@ func (s *CNOAuthService) PreviewModels(ctx context.Context, owner int64, platfor
 		credentials := cnOAuthCredentials(session.Flow, session.Grant)
 		credentials[outboundIdentityCredential] = selectionFromIdentity(session.Identity)
 		account = &Account{Platform: platform, Type: AccountTypeOAuth, Credentials: credentials, ProxyID: session.ProxyID}
+		if account.ProxyID != nil {
+			_, proxy, err := proxyurl.Parse(session.ProxyURL)
+			if err != nil || proxy == nil {
+				return infraerrors.BadRequest("CN_OAUTH_PROXY_UNAVAILABLE", "authorization proxy snapshot is unavailable")
+			}
+			port, err := strconv.Atoi(proxy.Port())
+			if err != nil {
+				return infraerrors.BadRequest("CN_OAUTH_PROXY_UNAVAILABLE", "authorization proxy snapshot is unavailable")
+			}
+			account.Proxy = &Proxy{ID: *account.ProxyID, Protocol: proxy.Scheme, Host: proxy.Hostname(), Port: port, Status: StatusActive}
+			if proxy.User != nil {
+				account.Proxy.Username = proxy.User.Username()
+				account.Proxy.Password, _ = proxy.User.Password()
+			}
+			if _, err := requestCredentialOwnerProxyURL(context.Background(), account); err != nil {
+				return infraerrors.BadRequest("CN_OAUTH_PROXY_UNAVAILABLE", "authorization proxy snapshot is unavailable")
+			}
+		}
 		return nil
 	}
 	if err := s.store.Update(ctx, id, validate); err != nil {
 		return nil, cnOAuthError(err)
-	}
-	if account.ProxyID != nil {
-		proxy, err := s.proxyRepo.GetByID(ctx, *account.ProxyID)
-		if err != nil {
-			return nil, cnOAuthError(err)
-		}
-		account.Proxy = proxy
 	}
 	models, err := s.modelTester.FetchUpstreamSupportedModels(ctx, account)
 	if err != nil {
@@ -388,8 +416,13 @@ func (r *CNTokenRefresher) Refresh(ctx context.Context, a *Account) (map[string]
 	if !r.CanRefresh(a) {
 		return nil, errors.New("reauthorization required")
 	}
+	a = snapshotRequestCredentialAccount(a)
+	proxyURL, err := requestCredentialOwnerProxyURL(context.Background(), a)
+	if err != nil {
+		return nil, NewProviderCredentialFailure("native_oauth_proxy_unavailable", err)
+	}
 	ctx = WithAccountOutboundIdentity(ctx, a)
-	grant, err := r.client.Refresh(ctx, a.Platform, a.GetCredential("oauth_region"), a.GetCredential("refresh_token"), a.proxyURLOrEmpty())
+	grant, err := r.client.Refresh(ctx, a.Platform, a.GetCredential("oauth_region"), a.GetCredential("refresh_token"), proxyURL)
 	if err != nil {
 		return nil, err
 	}

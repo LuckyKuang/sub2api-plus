@@ -88,6 +88,15 @@ type openAIAutoResetRecovery interface {
 
 // OpenAIQuotaAutoResetService 通过小型去重队列承接实时信号，并用分钟扫描补偿
 // 重启、漏事件和多实例读取；真正消费仍由 PostgreSQL 幂等记录串行化。
+type openAIAutoResetWorkKey struct {
+	accountID  int64
+	generation string
+}
+type openAIAutoResetWorkItem struct {
+	key   openAIAutoResetWorkKey
+	owner *Account
+}
+
 type OpenAIQuotaAutoResetService struct {
 	accountRepo AccountRepository
 	quota       openAIAutoResetQuota
@@ -99,7 +108,7 @@ type OpenAIQuotaAutoResetService struct {
 
 	ctx     context.Context
 	cancel  context.CancelFunc
-	queue   chan int64
+	queue   chan openAIAutoResetWorkItem
 	pending sync.Map
 	owner   string
 	start   sync.Once
@@ -127,7 +136,7 @@ func NewOpenAIQuotaAutoResetService(
 		leaderLock:  leaderLock,
 		ctx:         ctx,
 		cancel:      cancel,
-		queue:       make(chan int64, openAIAutoResetQueueCapacity),
+		queue:       make(chan openAIAutoResetWorkItem, openAIAutoResetQueueCapacity),
 		owner:       uuid.NewString(),
 	}
 }
@@ -161,18 +170,23 @@ func (s *OpenAIQuotaAutoResetService) Stop() {
 // Notify 是请求热路径的非阻塞入口。同一账号尚在队列时只保留一个任务；队列
 // 满时丢弃本次信号，分钟扫描仍会补偿，因此不会反向拖慢网关请求。
 func (s *OpenAIQuotaAutoResetService) Notify(accountID int64) {
+	s.notifyOwner(accountID, nil)
+}
+
+func (s *OpenAIQuotaAutoResetService) notifyOwner(accountID int64, owner *Account) {
 	if s == nil || accountID <= 0 {
 		return
 	}
-	if _, loaded := s.pending.LoadOrStore(accountID, struct{}{}); loaded {
+	item := openAIAutoResetWorkItem{key: openAIAutoResetWorkKey{accountID, credentialStateGeneration(owner)}, owner: snapshotRequestCredentialAccount(owner)}
+	if _, loaded := s.pending.LoadOrStore(item.key, struct{}{}); loaded {
 		return
 	}
 	select {
 	case <-s.ctx.Done():
-		s.pending.Delete(accountID)
-	case s.queue <- accountID:
+		s.pending.Delete(item.key)
+	case s.queue <- item:
 	default:
-		s.pending.Delete(accountID)
+		s.pending.Delete(item.key)
 		slog.Warn("openai_auto_reset_queue_full", "account_id", accountID)
 	}
 }
@@ -183,13 +197,17 @@ func (s *OpenAIQuotaAutoResetService) runWorker() {
 		select {
 		case <-s.ctx.Done():
 			return
-		case accountID := <-s.queue:
+		case item := <-s.queue:
+			accountID := item.key.accountID
 			ctx, cancel := context.WithTimeout(s.ctx, 50*time.Second)
+			if item.owner != nil {
+				ctx = withCodexObservationOwner(ctx, item.owner)
+			}
 			if err := s.evaluateAccount(ctx, accountID); err != nil && !errors.Is(err, context.Canceled) {
 				slog.Warn("openai_auto_reset_evaluate_failed", "account_id", accountID, "error_code", infraerrors.Reason(err))
 			}
 			cancel()
-			s.pending.Delete(accountID)
+			s.pending.Delete(item.key)
 		}
 	}
 }
@@ -281,6 +299,10 @@ func (s *OpenAIQuotaAutoResetService) evaluateAccount(ctx context.Context, accou
 	if err != nil || account == nil {
 		return err
 	}
+	if expected := codexObservationOwner(ctx, accountID); expected != nil && credentialStateGeneration(expected) != credentialStateGeneration(account) {
+		return nil
+	}
+	ctx = withCodexObservationOwner(ctx, account)
 	if account.IsShadow() {
 		if account.ParentAccountID != nil {
 			s.Notify(*account.ParentAccountID)
@@ -295,9 +317,13 @@ func (s *OpenAIQuotaAutoResetService) evaluateAccount(ctx context.Context, accou
 	now := time.Now()
 	assessment := s.assessExtra(account, config, now)
 	state := openAIAutoResetStateFromExtra(account.Extra)
+	verifiedObservation := openAICodexUsageObservationMatchesOwner(account, account)
+	if !verifiedObservation {
+		state = nil
+	}
 	// 达到用卡阈值本应立即查询以便用卡；但 10 分钟内已确认无卡时，重查不会改变结论，
 	// 只会让调度热路径的通知把同一账号的上游额度接口打到十几秒一次。
-	needsQuery := openAIAutoResetSnapshotStale(account.Extra, now) ||
+	needsQuery := !verifiedObservation || openAIAutoResetSnapshotStale(account.Extra, now) ||
 		(assessment.resetReached && !openAIAutoResetNoCreditConfirmed(state, now))
 	if assessment.pauseReached && !assessment.resetReached {
 		needsQuery = needsQuery || state == nil || state.Status == OpenAIAutoResetStatusChecking || state.Status == OpenAIAutoResetStatusFailed || openAIAutoResetStateStale(state, now)
@@ -513,6 +539,9 @@ func decodeOpenAIAutoResetConsumeResult(value any) openAIAutoResetConsumeResult 
 }
 
 func (s *OpenAIQuotaAutoResetService) assessExtra(account *Account, config OpenAIAutoResetCreditConfig, now time.Time) openAIAutoResetAssessment {
+	if !openAICodexUsageObservationMatchesOwner(account, account) {
+		return s.buildAssessment(account, config, 0, 0)
+	}
 	utilization5h, _ := resolveOpenAIQuotaUtilization(account.Extra, "5h", now)
 	utilization7d, _ := resolveOpenAIQuotaUtilization(account.Extra, "7d", now)
 	return s.buildAssessment(account, config, utilization5h, utilization7d)
@@ -616,11 +645,18 @@ func openAIQuotaUsageSnapshot(usage *OpenAIQuotaUsage, now time.Time) *OpenAICod
 }
 
 func (s *OpenAIQuotaAutoResetService) persistFreshUsage(ctx context.Context, accountID int64, usage *OpenAIQuotaUsage, now time.Time) error {
-	observeOpenAIWeeklyUsageSnapshot(ctx, accountID, openAIQuotaUsageSnapshot(usage, now), false)
+	if usage == nil || usage.credentialOwner == nil {
+		return errors.New("auto-reset usage requires captured credential owner")
+	}
+	if expected := codexObservationOwner(ctx, accountID); expected != nil && credentialStateGeneration(expected) != credentialStateGeneration(usage.credentialOwner) {
+		return errors.New("auto-reset usage credential owner changed")
+	}
 	updates := buildOpenAIAutoResetUsageUpdates(usage, now)
-	if len(updates) > 0 {
-		if err := s.accountRepo.UpdateExtra(ctx, accountID, updates); err != nil {
+	if !usage.observationPersisted && len(updates) > 0 {
+		if accepted, err := persistOpenAICodexUsageObservation(ctx, s.accountRepo, accountID, usage.credentialOwner, updates, nil, false); err != nil {
 			return err
+		} else if !accepted {
+			return errors.New("auto-reset usage credential owner changed")
 		}
 	}
 	return s.quota.CacheResetCreditsSnapshot(ctx, accountID, usage.RateLimitResetCredits)
@@ -776,7 +812,15 @@ func (s *OpenAIQuotaAutoResetService) persistState(ctx context.Context, accountI
 	if state == nil {
 		return nil
 	}
-	return s.accountRepo.UpdateExtra(ctx, accountID, map[string]any{OpenAIAutoResetCreditStateExtraKey: state})
+	owner := codexObservationOwner(ctx, accountID)
+	if owner == nil {
+		return errors.New("auto-reset state requires captured credential owner")
+	}
+	accepted, err := persistOpenAICodexUsageObservation(ctx, s.accountRepo, accountID, owner, map[string]any{OpenAIAutoResetCreditStateExtraKey: state}, nil, false)
+	if err == nil && !accepted {
+		return errors.New("auto-reset state credential owner changed")
+	}
+	return err
 }
 
 func (s *OpenAIQuotaAutoResetService) failState(ctx context.Context, accountID int64, state *OpenAIAutoResetCreditState, code string, cause error) error {
@@ -892,4 +936,16 @@ func notifyOpenAIAutoResetFromSchedulerAt(accountID int64, now time.Time) bool {
 	openAIAutoResetSchedulerNotifiedAt.Store(accountID, now)
 	notifyOpenAIAutoReset(accountID)
 	return true
+}
+
+func notifyOpenAIAutoResetForOwner(owner *Account) {
+	if owner == nil {
+		return
+	}
+	openAIAutoResetNotifierRegistry.RLock()
+	service := openAIAutoResetNotifierRegistry.service
+	openAIAutoResetNotifierRegistry.RUnlock()
+	if service != nil {
+		service.notifyOwner(owner.ID, owner)
+	}
 }

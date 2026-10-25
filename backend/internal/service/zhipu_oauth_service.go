@@ -600,7 +600,11 @@ func (s *ZhipuOAuthService) resolveProxyURL(ctx context.Context, proxyID *int64)
 	if err != nil || proxy == nil {
 		return "", infraerrors.BadRequest("ZHIPU_OAUTH_PROXY_NOT_FOUND", "selected proxy is unavailable")
 	}
-	return proxy.URL(), nil
+	proxyURL, err := requestCredentialOwnerProxyURL(context.Background(), &Account{ProxyID: proxyID, Proxy: proxy})
+	if err != nil {
+		return "", infraerrors.BadRequest("ZHIPU_OAUTH_PROXY_INVALID", "selected proxy configuration is invalid")
+	}
+	return proxyURL, nil
 }
 
 func linkTokenFromReady(provider string, ready *zcode.FlowReady) *ZhipuLinkToken {

@@ -12,7 +12,9 @@ import (
 // A repository applies the whole mutation and its scheduler outbox atomically.
 // A false result must never be followed by an unconditional write/notification.
 type CredentialStateMutation struct {
-	Extra                             map[string]any
+	Extra map[string]any
+	// OpenAIPlanType is provider-issued metadata; it cannot replace tokens or identity.
+	OpenAIPlanType                    string
 	RateLimitUntil                    *time.Time
 	ExtendRateLimitOnly               bool
 	ClearRateLimit                    bool

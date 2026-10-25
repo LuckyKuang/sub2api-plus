@@ -1782,6 +1782,9 @@ func (s *adminServiceImpl) resolveOpenAIOutboundIdentity(ctx context.Context, ac
 // ForceOpenAIPrivacy 强制重新设置 OpenAI OAuth 账号隐私，无论当前状态。
 // 这是管理员手动入口；官方 Codex 不会在登录/刷新时 PATCH 训练开关。
 func (s *adminServiceImpl) ForceOpenAIPrivacy(ctx context.Context, account *Account) string {
+	if s == nil || account == nil {
+		return ""
+	}
 	if account.IsCredentialShadow() {
 		return ""
 	}
@@ -1791,33 +1794,49 @@ func (s *adminServiceImpl) ForceOpenAIPrivacy(ctx context.Context, account *Acco
 	if s.privacyClientFactory == nil {
 		return ""
 	}
+	guarded, ok := s.accountRepo.(CredentialStateMutationRepository)
+	if !ok {
+		return ""
+	}
+	// A freshly created account is not yet hydrated. Acquire the complete owner
+	// once, before reading its token or route; an already acquired request keeps
+	// its immutable owner instead of combining it with a second proxy lookup.
+	owner, err := requestCredentialAccount(ctx, account)
+	if !requestCredentialOwnerBound(ctx, account) {
+		owner, err = s.accountRepo.GetByID(ctx, account.ID)
+	}
+	if err != nil || owner == nil || owner.IsCredentialShadow() || owner.Platform != PlatformOpenAI || owner.Type != AccountTypeOAuth {
+		return ""
+	}
+	owner = snapshotRequestCredentialAccount(owner)
+	proxyURL, err := requestCredentialOwnerProxyURL(context.Background(), owner)
+	if err != nil {
+		return ""
+	}
 
-	token, _ := account.Credentials["access_token"].(string)
+	token, _ := owner.Credentials["access_token"].(string)
 	if token == "" {
 		return ""
 	}
 
-	var proxyURL string
-	if account.ProxyID != nil {
-		if p, err := s.proxyRepo.GetByID(ctx, *account.ProxyID); err == nil && p != nil {
-			proxyURL = p.URL()
-		}
-	}
-
-	chatGPTAccountID, _ := account.Credentials["chatgpt_account_id"].(string)
+	chatGPTAccountID, _ := owner.Credentials["chatgpt_account_id"].(string)
 	var settings *SettingService
 	if s != nil {
 		settings = s.settingService
 	}
 	ctx = withManagedOpenAICodexResidency(ctx, settings)
-	mode := disableOpenAITraining(ctx, s.privacyClientFactory, token, proxyURL, chatGPTAccountID, s.resolveOpenAIOutboundIdentity(ctx, account))
+	mode := disableOpenAITraining(ctx, s.privacyClientFactory, token, proxyURL, chatGPTAccountID, s.resolveOpenAIOutboundIdentity(ctx, owner))
 	if mode == "" {
 		return ""
 	}
 
-	if err := s.accountRepo.UpdateExtra(ctx, account.ID, map[string]any{"privacy_mode": mode}); err != nil {
+	accepted, err := guarded.ApplyCredentialStateMutation(ctx, owner, CredentialStateMutation{Extra: map[string]any{"privacy_mode": mode}})
+	if err != nil {
 		logger.LegacyPrintf("service.admin", "force_update_openai_privacy_mode_failed: account_id=%d err=%v", account.ID, err)
 		return mode
+	}
+	if !accepted {
+		return ""
 	}
 	if account.Extra == nil {
 		account.Extra = make(map[string]any)

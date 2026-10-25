@@ -307,22 +307,48 @@ func applyPendingQuotaFollowResetForSubscription(ctx context.Context, tx sqlExec
 		return err
 	}
 
-	// Observation and worker transactions lock the group before subscriptions.
-	// Taking the same lock order establishes whether this charge is before or
-	// after a newly observed reset event, and prevents post-reset usage from
-	// being erased by a concurrently committed event.
-	var groupExists bool
-	err = scanSingleRow(ctx, tx, `
-		SELECT TRUE
-		FROM groups
-		WHERE id = $1 AND deleted_at IS NULL
-		FOR SHARE
-	`, []any{groupID}, &groupExists)
+	// Read the source before locking the group, then lock that exact account
+	// and proxy first. Recheck the binding after the group lock; a changed source
+	// must retry the transaction instead of consuming an unverified generation.
+	var observedSource sql.NullInt64
+	err = scanSingleRow(ctx, tx, `SELECT quota_reset_source_account_id FROM groups WHERE id=$1 AND deleted_at IS NULL`, []any{groupID}, &observedSource)
 	if errors.Is(err, sql.ErrNoRows) {
 		return service.ErrSubscriptionNotFound
 	}
 	if err != nil {
 		return err
+	}
+	sourceGeneration := ""
+	if observedSource.Valid {
+		owner, ownerErr := loadLockedCodexObservationOwner(ctx, tx, observedSource.Int64)
+		if ownerErr != nil && !errors.Is(ownerErr, sql.ErrNoRows) {
+			return ownerErr
+		}
+		if ownerErr == nil && owner.Platform == service.PlatformOpenAI && owner.Type == service.AccountTypeOAuth && owner.Status == service.StatusActive {
+			sourceGeneration = service.OpenAICodexObservationGeneration(owner)
+		}
+	}
+	// Observation and worker transactions lock the group before subscriptions.
+	// Taking the same lock order establishes whether this charge is before or
+	// after a newly observed reset event, and prevents post-reset usage from
+	// being erased by a concurrently committed event.
+	var groupExists bool
+	var lockedSource sql.NullInt64
+	err = scanSingleRow(ctx, tx, `
+		SELECT TRUE, quota_reset_source_account_id
+		FROM groups
+		WHERE id = $1 AND deleted_at IS NULL
+		FOR SHARE
+	`, []any{groupID}, &groupExists, &lockedSource)
+	if errors.Is(err, sql.ErrNoRows) {
+		return service.ErrSubscriptionNotFound
+	}
+	if err != nil {
+		return err
+	}
+
+	if lockedSource != observedSource {
+		return errors.New("quota reset source changed during billing; retry required")
 	}
 
 	var lockedGroupID, appliedEventID int64
@@ -364,6 +390,7 @@ func applyPendingQuotaFollowResetForSubscription(ctx context.Context, tx sqlExec
 			WHERE e.group_id = $1
 			  AND e.id > $2
 			  AND e.status IN ('pending', 'completed')
+    AND e.owner_generation <> '' AND e.owner_generation = $8
 			  AND e.source_account_id = g.quota_reset_source_account_id
 			  AND e.config_version = g.quota_reset_config_version
 			  AND g.platform = $3
@@ -377,7 +404,7 @@ func applyPendingQuotaFollowResetForSubscription(ctx context.Context, tx sqlExec
 		FROM eligible
 		ORDER BY id DESC
 		LIMIT 1
-	`, []any{groupID, appliedEventID, service.PlatformOpenAI, service.SubscriptionTypeSubscription, startsAt, expiresAt, service.AccountTypeOAuth}, &newestEventID, &effectiveAt, &resetMonthly, &monthlyEffectiveAt)
+	`, []any{groupID, appliedEventID, service.PlatformOpenAI, service.SubscriptionTypeSubscription, startsAt, expiresAt, service.AccountTypeOAuth, sourceGeneration}, &newestEventID, &effectiveAt, &resetMonthly, &monthlyEffectiveAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}

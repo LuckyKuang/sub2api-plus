@@ -265,7 +265,10 @@ func (api *OAuthRefreshAPI) RefreshIfNeeded(
 
 	// 4. 执行平台特定刷新逻辑
 	attemptedAccount := snapshotOAuthRefreshAccount(freshAccount)
-	newCredentials, refreshErr := executor.Refresh(ctx, freshAccount)
+	if _, proxyErr := requestCredentialOwnerProxyURL(context.Background(), attemptedAccount); proxyErr != nil {
+		return &OAuthRefreshResult{Account: attemptedAccount, AttemptedAccount: attemptedAccount}, NewProviderCredentialFailure("oauth_refresh_proxy_unavailable", proxyErr)
+	}
+	newCredentials, refreshErr := executor.Refresh(ctx, snapshotOAuthRefreshAccount(attemptedAccount))
 	if ctxErr := oauthRefreshContextError(ctx); ctxErr != nil {
 		// A provider implementation may ignore cancellation and return late
 		// credentials. Never persist them after the attempt/cycle boundary.

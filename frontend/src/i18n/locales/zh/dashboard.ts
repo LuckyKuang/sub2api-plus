@@ -656,6 +656,7 @@ export default {
   // Available Channels (user-facing)
   availableChannels: {
     catalog: {
+      quoteDetails: '展开价格与计费条件',
       quoteComparison: '分组报价对比',
       effectiveRateLabel: '生效倍率',
       baseInputOrUnit: '基础输入 / 单价',
