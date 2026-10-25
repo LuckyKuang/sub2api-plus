@@ -30,6 +30,12 @@ def full_steps(
             "backend-lint-policy",
         ),
         ValidationStep(
+            "Redis health regressions",
+            [python, "deploy/tests/test_redis_health.py"],
+            root,
+            "backend-lint-policy",
+        ),
+        ValidationStep(
             "Go module tidiness",
             ["go", "mod", "tidy", "-diff"],
             backend,
@@ -204,6 +210,7 @@ CI_STEP_NAMES = {
         "Apple installer syntax", "Docker Compose security",
         "Docker Compose gateway environment", "Docker runtime resources",
         "Caddy cache policy",
+        "Redis health regressions",
     ),
     "test-unit": ("Go module tidiness", "Backend unit tests"),
     "test-integration": ("Backend integration tests",),

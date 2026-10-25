@@ -295,6 +295,36 @@ func TestHandle429_OpenAISyncsObservedPlanType(t *testing.T) {
 	require.Equal(t, account.ID, repo.rateLimitedID)
 }
 
+func TestPersistOpenAI429PlanType_CopyOnWrite(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		credentials    map[string]any
+		wantMasterPlan string
+	}{
+		{name: "missing credentials"},
+		{name: "new plan", credentials: map[string]any{"access_token": "test-token"}},
+		{name: "changed plan", credentials: map[string]any{"access_token": "test-token", "plan_type": "plus"}, wantMasterPlan: "plus"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &openAI429SnapshotRepo{}
+			master := &Account{ID: 124, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Credentials: tc.credentials}
+			master.PrepareSharedSnapshot()
+			selected := *master
+			sibling := *master
+			body := []byte(`{"error":{"type":"usage_limit_reached","plan_type":"free"}}`)
+
+			persistOpenAI429PlanType(context.Background(), repo, &selected, body)
+
+			require.Equal(t, []int64{master.ID}, repo.bulkUpdatedIDs)
+			require.Equal(t, map[string]any{"plan_type": "free"}, repo.bulkUpdatedPayload.Credentials)
+			require.Equal(t, "free", selected.GetCredential("plan_type"))
+			require.Equal(t, master.GetCredential("access_token"), selected.GetCredential("access_token"))
+			require.Equal(t, tc.wantMasterPlan, master.GetCredential("plan_type"))
+			require.Equal(t, tc.wantMasterPlan, sibling.GetCredential("plan_type"))
+		})
+	}
+}
+
 // TestHandle429_SkipsSparkShadow 外审第8轮 P1:spark 影子的限流状态只由 QueryUsage(/wham/usage
 // codex_bengalfox)维护;/responses 429 携带的 global x-codex-* 不得对影子做任何 DB 限流写入,
 // 否则会把 spark 误耦合到 global codex 窗口、冷却到 global reset。

@@ -5,6 +5,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -16,6 +17,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 )
 
 // --- mock: 只记录临时不可调度写入，其余方法不应被调用 ---
@@ -108,6 +110,33 @@ func TestOpenAIHTTPCapacityShedIsRequestScopedForOAuthAccounts(t *testing.T) {
 		"gpt-5",
 	))
 	require.Zero(t, repo.tempUnschedCalls)
+}
+
+func TestOpenAICapacityShedHonorsRetryAfter(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		headers http.Header
+		body    string
+		want    time.Duration
+	}{
+		{name: "http seconds", headers: http.Header{"Retry-After": []string{"6"}}, want: 6 * time.Second},
+		{name: "http milliseconds", headers: http.Header{"Retry-After-Ms": []string{"6000"}}, want: 6 * time.Second},
+		{name: "body seconds", body: `{"error":{"headers":{"retry-after":"7"},"message":"Our servers are currently overloaded. Please try again later."}}`, want: 7 * time.Second},
+		{name: "body milliseconds", body: `{"response":{"error":{"headers":{"retry-after-ms":"7000"},"message":"Our servers are currently overloaded. Please try again later."}}}`, want: 7 * time.Second},
+		{name: "bounded", headers: http.Header{"Retry-After": []string{"60"}}, want: openAIRequestScopedRetryMaxDelay},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			failoverErr := newOpenAIUpstreamFailoverError(
+				http.StatusServiceUnavailable,
+				test.headers,
+				[]byte(test.body),
+				"Our servers are currently overloaded. Please try again later.",
+				false,
+			)
+			require.True(t, failoverErr.RequestScopedTransient)
+			require.Equal(t, test.want, failoverErr.SameAccountRetryDelay)
+		})
+	}
 }
 
 // 上游降载的真实序列是「event: error → event: response.failed」。error 帧不算
@@ -363,5 +392,196 @@ func TestOpenAIStreamErrorFrameDoesNotStartClientOutput(t *testing.T) {
 	}
 	for _, tc := range cases {
 		require.Equal(t, tc.want, openAIStreamDataStartsClientOutput(tc.data, tc.eventType), "data=%s type=%s", tc.data, tc.eventType)
+	}
+}
+
+// Upstream wire fixtures; Plus capacity policy stops replay and pool rotation.
+func TestOpenAIStreamMetadataAndKeepaliveBeforeOverloadFailOver(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	largeMetadata := strings.Repeat("x", 16*1024)
+	stream := strings.Join([]string{
+		"event: response.created",
+		`data: {"type":"response.created","response":{"id":"resp_1","metadata":{"padding":"` + largeMetadata + `"}}}`,
+		"",
+		"event: response.queued",
+		`data: {"type":"response.queued","response":{"id":"resp_1","status":"queued"}}`,
+		"",
+		"event: response.metadata",
+		`data: {"type":"response.metadata","response_id":"resp_1","metadata":{"openai_chatgpt_moderation_metadata":{"prompt":{}}}}`,
+		"",
+		"event: response.output_item.added",
+		`data: {"type":"response.output_item.added","item":{"type":"reasoning","summary":[]}}`,
+		"",
+		"event: response.reasoning_summary_part.added",
+		`data: {"type":"response.reasoning_summary_part.added","part":{"type":"summary_text","text":""}}`,
+		"",
+		"event: keepalive",
+		`data: {"type":"keepalive"}`,
+		"",
+		`data: {"type":"keepalive"}`,
+		"",
+		"event: error",
+		`data: {"type":"error","error":{"type":"service_unavailable_error","message":"Our servers are currently overloaded. Please try again later."}}`,
+		"",
+	}, "\n")
+
+	tests := []struct {
+		name string
+		run  func(*OpenAIGatewayService, *gin.Context, *http.Response, *Account) error
+	}{
+		{
+			name: "native",
+			run: func(svc *OpenAIGatewayService, c *gin.Context, resp *http.Response, account *Account) error {
+				_, err := svc.handleStreamingResponse(c.Request.Context(), resp, c, account, time.Now(), "model", "model")
+				return err
+			},
+		},
+		{
+			name: "passthrough",
+			run: func(svc *OpenAIGatewayService, c *gin.Context, resp *http.Response, account *Account) error {
+				_, err := svc.handleStreamingResponsePassthrough(c.Request.Context(), resp, c, account, time.Now(), "model", "model")
+				return err
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &OpenAIGatewayService{cfg: &config.Config{Gateway: config.GatewayConfig{MaxLineSize: defaultMaxLineSize}}}
+			rec := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(rec)
+			c.Request = httptest.NewRequest(http.MethodPost, "/", nil)
+			resp := &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(stream)),
+				Header:     http.Header{"X-Request-Id": []string{"rid-message-only-overload"}},
+			}
+			account := &Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Name: "acc"}
+
+			err := tt.run(svc, c, resp, account)
+			require.Error(t, err)
+			var failoverErr *UpstreamFailoverError
+			require.ErrorAs(t, err, &failoverErr)
+			require.False(t, failoverErr.RetryableOnSameAccount)
+			require.False(t, failoverErr.ShouldRetryNextAccount())
+			require.True(t, failoverErr.RequestScopedTransient)
+			require.Equal(t, http.StatusServiceUnavailable, failoverErr.ClientStatusCode)
+			require.Contains(t, failoverErr.ClientMessage, "servers are currently overloaded")
+			require.False(t, c.Writer.Written())
+			require.Empty(t, rec.Body.String())
+		})
+	}
+}
+
+func TestOpenAIStreamEmptyContentBeforeFailureCanFailOver(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, payload := range []string{
+		`{"type":"response.output_text.delta","delta":""}`,
+		`{"type":"response.reasoning_summary_text.delta","delta":""}`,
+		`{"type":"response.reasoning_text.delta","delta":""}`,
+		`{"type":"response.function_call_arguments.delta","delta":""}`,
+		`{"type":"response.custom_tool_call_input.delta","delta":""}`,
+		`{"type":"response.output_text.done","text":""}`,
+		`{"type":"response.reasoning_summary_text.done","text":""}`,
+		`{"type":"response.reasoning_text.done","text":""}`,
+		`{"type":"response.refusal.delta","delta":""}`,
+		`{"type":"response.refusal.done","refusal":""}`,
+		`{"type":"response.content_part.done","part":{"type":"output_text","text":""}}`,
+		`{"type":"response.reasoning_summary_part.done","part":{"type":"summary_text","text":""}}`,
+	} {
+		for _, passthrough := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/passthrough=%t", payload, passthrough), func(t *testing.T) {
+				svc := &OpenAIGatewayService{cfg: &config.Config{Gateway: config.GatewayConfig{MaxLineSize: defaultMaxLineSize}}}
+				rec := httptest.NewRecorder()
+				c, _ := gin.CreateTestContext(rec)
+				c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+				resp := &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     http.Header{},
+					Body: io.NopCloser(strings.NewReader("data: " + payload + "\n\n" +
+						`data: {"type":"response.failed","response":{"status":"failed","error":{"code":"server_is_overloaded","message":"Our servers are currently overloaded. Please try again later."}}}` + "\n\n")),
+				}
+				account := &Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
+				var err error
+				if passthrough {
+					_, err = svc.handleStreamingResponsePassthrough(c.Request.Context(), resp, c, account, time.Now(), "model", "model")
+				} else {
+					_, err = svc.handleStreamingResponse(c.Request.Context(), resp, c, account, time.Now(), "model", "model")
+				}
+				var failoverErr *UpstreamFailoverError
+				require.ErrorAs(t, err, &failoverErr)
+				require.True(t, failoverErr.RequestScopedTransient)
+				require.Empty(t, rec.Body.String())
+			})
+		}
+	}
+}
+
+func TestOpenAIStreamReplayBoundaryPreservesContentAndToolCompletion(t *testing.T) {
+	for _, payload := range []string{
+		`{"type":"response.output_text.delta","delta":" "}`,
+		`{"type":"response.function_call_arguments.delta","delta":"{}"}`,
+		`{"type":"response.custom_tool_call_input.delta","delta":"run"}`,
+		`{"type":"response.function_call_arguments.done","arguments":""}`,
+		`{"type":"response.custom_tool_call_input.done","input":""}`,
+		`{"type":"response.output_item.done","item":{"type":"function_call","arguments":""}}`,
+		`{"type":"response.output_item.done","item":{"type":"reasoning","encrypted_content":"ciphertext"}}`,
+		`{"type":"response.output_text.delta","delta":null}`,
+		`{"type":"response.output_text.delta"}`,
+		`{"type":"response.output_text.delta","delta":{}}`,
+		`{"type":"response.new_kind.delta","delta":""}`,
+	} {
+		eventType := gjson.Get(payload, "type").String()
+		require.True(t, openAIStreamDataStartsClientOutput(payload, eventType), payload)
+	}
+}
+
+func TestOpenAIStreamKeepaliveOnlyFailureDoesNotRecordFirstToken(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, passthrough := range []bool{false, true} {
+		name := "native"
+		if passthrough {
+			name = "passthrough"
+		}
+		t.Run(name, func(t *testing.T) {
+			svc := &OpenAIGatewayService{cfg: &config.Config{Gateway: config.GatewayConfig{
+				MaxLineSize: defaultMaxLineSize,
+			}}}
+			rec := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(rec)
+			c.Request = httptest.NewRequest(http.MethodPost, "/", nil)
+			resp := &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{},
+				Body: io.NopCloser(strings.NewReader(strings.Join([]string{
+					`data: {"type":"response.created","response":{"id":"resp_heartbeat"}}`,
+					"",
+					`data: {"type":"keepalive"}`,
+					"",
+					`data: {"type":"response.failed","response":{"id":"resp_heartbeat","status":"failed","error":{"code":"server_is_overloaded","message":"Our servers are currently overloaded. Please try again later."}}}`,
+					"",
+					"",
+				}, "\n"))),
+			}
+			account := &Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
+			var err error
+			if passthrough {
+				var result *openaiStreamingResultPassthrough
+				result, err = svc.handleStreamingResponsePassthrough(c.Request.Context(), resp, c, account, time.Now(), "model", "model")
+				require.NotNil(t, result)
+				require.Nil(t, result.firstTokenMs)
+			} else {
+				var result *openaiStreamingResult
+				result, err = svc.handleStreamingResponse(c.Request.Context(), resp, c, account, time.Now(), "model", "model")
+				require.NotNil(t, result)
+				require.Nil(t, result.firstTokenMs)
+			}
+			var failoverErr *UpstreamFailoverError
+			require.ErrorAs(t, err, &failoverErr)
+			require.False(t, failoverErr.RetryableOnSameAccount)
+			require.False(t, failoverErr.ShouldRetryNextAccount())
+			require.True(t, failoverErr.RequestScopedTransient)
+			require.Empty(t, rec.Body.String())
+		})
 	}
 }

@@ -94,13 +94,22 @@ The main/feature merge retained the independently committed 287/288 files above.
 Their full filenames and checksums remain immutable. The channel-monitor/session
 route migrations and Gemini cache migrations have independent dependencies;
 lexicographic execution and upgrades from either branch retain all five files.
-New migrations start after 289 and must use unique increasing prefixes.
+The seven-platform branch independently deployed 290–294 and
+`295_channel_monitor_v2_model_visibility.sql`; main independently published
+`295_enable_gemini_image_generation_groups.sql`. Their dependencies are separate,
+so synchronization retains both complete 295 filenames and original checksums.
+New migrations start after 295 and must use unique increasing prefixes.
 The migration policy checker pins the complete filenames and original Git blobs
-of these five migrations in `tools/check_new_migrations.py`. Only those unchanged
+of these twelve migrations in `tools/check_new_migrations.py`. Only those unchanged
 historical files may enter comparisons against either branch's newer baseline.
 They also reserve their numeric prefixes when comparing against an older release.
 Modified or renamed files, other old prefixes and new duplicate prefixes remain
 forbidden.
+
+Migration `295_enable_gemini_image_generation_groups.sql` enables image
+permissions for existing Gemini and Antigravity groups. Composite and other
+platforms retain their saved value. Official migration 246 uses a prefix
+already occupied by Plus, so main imported it as 295 before this synchronization.
 
 ## File Naming
 
@@ -268,3 +277,8 @@ Migrations 291–293 align the [official agent baselines](../../docs/OFFICIAL_AG
 Grok API-key native identity, DeepSeek anonymous Harness owner UUIDs, and removal
 of linked ZCode copied project secrets in favor of memory-only PAT issuance.
 Manual API keys and valid native identity pins are preserved.
+
+Migration `294_outbound_identity_ids.sql` persists official-agent request-state
+identifiers by namespace and irreversible owner-scope digest. Both independently
+deployed 295 migrations retain their original identities as described above;
+neither existing SQL file is renamed to resolve the historical prefix collision.

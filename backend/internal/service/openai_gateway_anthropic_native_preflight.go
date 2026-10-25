@@ -71,7 +71,7 @@ func (s *OpenAIGatewayService) prepareNativeAnthropicResponse(ctx context.Contex
 	eventType := ""
 	const maxPrefix = 64 * 1024
 
-	interval := s.anthropicNativeStreamInterval()
+	interval := anthropicNativeStreamInterval(s.cfg)
 	var timer *time.Timer
 	var idle <-chan time.Time
 	if interval > 0 {

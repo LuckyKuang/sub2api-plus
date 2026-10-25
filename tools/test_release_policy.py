@@ -473,6 +473,15 @@ class MigrationHistoricalMergeTests(unittest.TestCase):
         "288_gemini_cached_contents_channel_usage.sql",
         "289_gemini_cached_contents_mutation_lease.sql",
     )
+    agent_historical = (
+        "290_codex_native_identity_and_manual_versions.sql",
+        "291_pin_grok_native_agent.sql",
+        "292_deepseek_harness_anonymous_user.sql",
+        "293_zcode_project_tokens_memory_only.sql",
+        "294_outbound_identity_ids.sql",
+    )
+    visibility_historical = "295_channel_monitor_v2_model_visibility.sql"
+    image_groups_historical = "295_enable_gemini_image_generation_groups.sql"
 
     def setUp(self) -> None:
         temporary = tempfile.TemporaryDirectory()
@@ -519,7 +528,9 @@ class MigrationHistoricalMergeTests(unittest.TestCase):
         self.assertIn("1 new SQL file(s), 2 unchanged historical file(s)", output)
 
     def test_changed_historical_content_fails(self) -> None:
-        for name in (*self.historical, *self.gemini_historical):
+        for name in (*self.historical, *self.gemini_historical,
+                     *self.agent_historical, self.visibility_historical,
+                     self.image_groups_historical):
             with self.subTest(name=name):
                 self.write(name, (ROOT / "backend/migrations" / name).read_bytes() + b"-- changed\n")
                 self.commit()
@@ -554,6 +565,62 @@ class MigrationHistoricalMergeTests(unittest.TestCase):
         self.assertEqual(code, 1, output)
         self.assertIn("must be greater than existing maximum 289", output)
 
+    def test_both_295_migrations_pass_against_each_deployed_lineage(self) -> None:
+        # Acceptance: both branches already deployed their own 295 file. A
+        # merge retains both names/blobs, rather than rewriting either source.
+        common_base = self.base
+        agents = (*self.agent_historical, self.visibility_historical)
+        for branch, present, imported in (
+            ("seven-platform", agents, (self.image_groups_historical,)),
+            ("main", (self.image_groups_historical,), agents),
+        ):
+            with self.subTest(branch=branch):
+                self.git("checkout", "-q", "-B", branch, common_base)
+                for name in present:
+                    self.write(name, (ROOT / "backend/migrations" / name).read_bytes())
+                self.commit()
+                self.base = self.git("rev-parse", "HEAD").strip()
+                for name in imported:
+                    self.write(name, (ROOT / "backend/migrations" / name).read_bytes())
+                self.write("296_next_unique.sql")
+                self.commit()
+                code, output = self.check()
+                self.assertEqual(code, 0, output)
+                self.assertIn(
+                    f"1 new SQL file(s), {len(imported)} unchanged historical file(s)",
+                    output,
+                )
+
+    def test_seven_platform_historical_prefixes_do_not_allow_new_295_or_duplicates(self) -> None:
+        for name in (*self.agent_historical, self.visibility_historical,
+                     self.image_groups_historical):
+            self.write(name, (ROOT / "backend/migrations" / name).read_bytes())
+        self.write("296_next_unique.sql")
+        self.commit()
+        code, output = self.check()
+        self.assertEqual(code, 0, output)
+        self.assertIn("1 new SQL file(s), 7 unchanged historical file(s)", output)
+
+        self.write("295_unrelated.sql")
+        self.write("296_duplicate.sql")
+        self.commit()
+        code, output = self.check()
+        self.assertEqual(code, 1, output)
+        self.assertIn("prefix 295 must be greater than existing maximum 295", output)
+        self.assertIn("new migrations contain duplicate numeric prefixes", output)
+
+    def test_renaming_either_deployed_295_migration_is_forbidden(self) -> None:
+        for name in (self.visibility_historical, self.image_groups_historical):
+            with self.subTest(name=name):
+                self.write(name, (ROOT / "backend/migrations" / name).read_bytes())
+                self.commit()
+                self.base = self.git("rev-parse", "HEAD").strip()
+                (self.migrations / name).rename(self.migrations / f"296_renamed_{name[4:]}")
+                self.commit()
+                code, output = self.check()
+                self.assertEqual(code, 1, output)
+                self.assertIn("existing migrations may not be R100", output)
+
     def test_other_old_prefix_and_new_duplicates_fail(self) -> None:
         self.write("289_other.sql")
         self.write("290_new.sql")
@@ -565,20 +632,22 @@ class MigrationHistoricalMergeTests(unittest.TestCase):
         self.assertIn("new migrations contain duplicate numeric prefixes", output)
 
     def test_modification_or_deletion_of_existing_historical_file_fails(self) -> None:
-        name = self.historical[0]
-        self.write(name, (ROOT / "backend/migrations" / name).read_bytes())
-        self.commit()
-        self.base = self.git("rev-parse", "HEAD").strip()
-        self.write(name)
-        self.commit()
-        code, output = self.check()
-        self.assertEqual(code, 1, output)
-        self.assertIn("existing migrations may not be M", output)
-        (self.migrations / name).unlink()
-        self.commit()
-        code, output = self.check()
-        self.assertEqual(code, 1, output)
-        self.assertIn("existing migrations may not be D", output)
+        for name in (self.historical[0], self.visibility_historical,
+                     self.image_groups_historical):
+            with self.subTest(name=name):
+                self.write(name, (ROOT / "backend/migrations" / name).read_bytes())
+                self.commit()
+                self.base = self.git("rev-parse", "HEAD").strip()
+                self.write(name)
+                self.commit()
+                code, output = self.check()
+                self.assertEqual(code, 1, output)
+                self.assertIn("existing migrations may not be M", output)
+                (self.migrations / name).unlink()
+                self.commit()
+                code, output = self.check()
+                self.assertEqual(code, 1, output)
+                self.assertIn("existing migrations may not be D", output)
 
 
 class WorkflowProvenanceTests(unittest.TestCase):

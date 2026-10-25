@@ -137,4 +137,13 @@ func (s *ProxyExpirySuite) TestSweep_NoneMode_KeepsAccount() {
 	err = scanSingleRow(s.ctx, s.tx, `SELECT proxy_fallback_origin_id FROM accounts WHERE id=$1`, []any{aid}, &origin)
 	s.Require().NoError(err)
 	s.Require().Nil(origin)
+	var payloadRaw []byte
+	s.Require().NoError(scanSingleRow(s.ctx, s.tx,
+		`SELECT payload FROM scheduler_outbox WHERE event_type=$1 ORDER BY id DESC LIMIT 1`,
+		[]any{service.SchedulerOutboxEventAccountBulkChanged}, &payloadRaw))
+	var payload struct {
+		AccountIDs []int64 `json:"account_ids"`
+	}
+	s.Require().NoError(json.Unmarshal(payloadRaw, &payload))
+	s.Require().Equal([]int64{aid}, payload.AccountIDs, "the bound account must observe the proxy's expired status even without a quota snapshot")
 }

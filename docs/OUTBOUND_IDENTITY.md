@@ -26,6 +26,13 @@ rewrite a client-family token. A **runtime** declaration describes the host the
 official client runs on; the settings and an account selection may supply it.
 Kimi Code and ZCode persist runtime declarations.
 
+Official v0.2.18 synchronization preserves this source and fingerprint contract.
+Its TUI-to-CLI normalization is intentionally not applied to valid configured
+Codex identities. Queued/metadata overload retries keep the resolved credential
+owner's snapshot; account failover resolves the new owner. No client-family,
+versionless-family or compiled fingerprint change accompanies the Go/security
+dependency upgrade.
+
 ## Default client environment and privacy
 
 Native OpenAI API-key records own separate installation and execution
@@ -161,6 +168,15 @@ update and scheduler outbox commit. Editing that same proxy row therefore either
 follows the mutation or causes its stale comparison to fail, including when the
 mutation waits on a separate account update. Runtime generation digests include
 proxy status so repairing status alone also isolates previous local blocks.
+
+Every proxy edit or deletion commits scheduler invalidation for all undeleted
+accounts bound to that proxy in the same transaction, including accounts without
+quota observations and accounts paused by an administrator. Outbox replay
+refreshes both full account payloads and scheduler metadata. Edits to egress
+timezone, country and fallback settings also refresh the embedded proxy; only
+probe-identity changes clear the existing quota bindings. Expiration without
+fallback refreshes the bound accounts' proxy status as well. Soft deletion keeps
+the configured proxy ID, so a missing proxy cannot silently become direct egress.
 
 Kimi and DeepSeek PAYG balance probes freeze the complete credential owner before
 HTTP preparation and isolate concurrent probes by credential/proxy generation.

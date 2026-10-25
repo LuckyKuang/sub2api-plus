@@ -458,6 +458,10 @@ supplementary declarations on every successful response:
   after generic response-header filtering; the gateway never derives quota or
   billing decisions from them.
 
+Observed `plan_type` values from OpenAI `429` responses are persisted and
+applied to the current request's account with copy-on-write credentials. Cached
+scheduler masters and sibling requests retain their original credential maps.
+
 On an upstream `429`, the gateway classifies the condition before deciding how
 to schedule:
 

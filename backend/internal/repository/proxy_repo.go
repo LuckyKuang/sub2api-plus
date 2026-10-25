@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"sort"
 	"strings"
 	"time"
@@ -188,10 +189,14 @@ func updateProxyAndInvalidateProbeSnapshots(ctx context.Context, client *dbent.C
 	if err != nil {
 		return nil, err
 	}
-	if currentIdentity == proxyProbeIdentityFromService(proxyIn) {
-		return updated, nil
+	var accountIDs []int64
+	if currentIdentity != proxyProbeIdentityFromService(proxyIn) {
+		accountIDs, err = invalidateProxyProbeSnapshots(ctx, client, proxyIn.ID)
+	} else {
+		// The scheduler embeds the complete proxy, including egress metadata and
+		// fallback settings. Refresh it even when probe identity is unchanged.
+		accountIDs, err = listProxyBoundAccountIDs(ctx, client, proxyIn.ID)
 	}
-	accountIDs, err := invalidateProxyProbeSnapshots(ctx, client, proxyIn.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -243,22 +248,40 @@ func invalidateProxyProbeSnapshots(ctx context.Context, exec sqlExecutor, proxyI
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
-	accountIDs := make([]int64, 0)
 	for rows.Next() {
 		var accountID int64
 		if err := rows.Scan(&accountID); err != nil {
 			return nil, err
 		}
-		accountIDs = append(accountIDs, accountID)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	cnAccountIDs, err := invalidateProxyCNQuotaSnapshots(ctx, exec, proxyID)
+	if _, err := invalidateProxyCNQuotaSnapshots(ctx, exec, proxyID); err != nil {
+		return nil, err
+	}
+	// Probe cleanup only touches accounts with stored observations. Every
+	// binding must refresh its embedded proxy, including accounts without quota.
+	return listProxyBoundAccountIDs(ctx, exec, proxyID)
+}
+
+func listProxyBoundAccountIDs(ctx context.Context, exec sqlExecutor, proxyID int64) ([]int64, error) {
+	rows, err := exec.QueryContext(ctx, `
+		SELECT id FROM accounts WHERE proxy_id=$1 AND deleted_at IS NULL ORDER BY id
+	`, proxyID)
 	if err != nil {
 		return nil, err
 	}
-	return append(accountIDs, cnAccountIDs...), nil
+	defer func() { _ = rows.Close() }()
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
 
 func enqueueProxyProbeAccountChanges(ctx context.Context, exec sqlExecutor, accountIDs []int64) error {
@@ -277,8 +300,42 @@ func enqueueProxyProbeAccountChanges(ctx context.Context, exec sqlExecutor, acco
 }
 
 func (r *proxyRepository) Delete(ctx context.Context, id int64) error {
-	_, err := r.client.Proxy.Delete().Where(proxy.IDEQ(id)).Exec(ctx)
-	return err
+	client := r.client
+	var tx *dbent.Tx
+	if contextTx := dbent.TxFromContext(ctx); contextTx != nil {
+		client = contextTx.Client()
+	} else {
+		var err error
+		tx, err = r.client.Tx(ctx)
+		if err != nil && err != dbent.ErrTxStarted {
+			return err
+		}
+		if tx != nil {
+			defer func() { _ = tx.Rollback() }()
+			ctx = dbent.NewTxContext(ctx, tx)
+			client = tx.Client()
+		}
+	}
+	if _, err := lockProxyProbeIdentity(ctx, client, id); err != nil {
+		if errors.Is(err, service.ErrProxyNotFound) {
+			return nil
+		}
+		return err
+	}
+	accountIDs, err := invalidateProxyProbeSnapshots(ctx, client, id)
+	if err != nil {
+		return err
+	}
+	if _, err := client.Proxy.Delete().Where(proxy.IDEQ(id)).Exec(ctx); err != nil {
+		return err
+	}
+	if err := enqueueProxyProbeAccountChanges(ctx, client, accountIDs); err != nil {
+		return err
+	}
+	if tx != nil {
+		return tx.Commit()
+	}
+	return nil
 }
 
 func (r *proxyRepository) List(ctx context.Context, params pagination.PaginationParams) ([]service.Proxy, *pagination.PaginationResult, error) {

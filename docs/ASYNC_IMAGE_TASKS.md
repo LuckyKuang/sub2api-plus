@@ -133,6 +133,15 @@ While work is in progress:
 }
 ```
 
+When re-hosting upstream image URLs, downloads reject localhost, loopback,
+private, link-local, carrier-grade NAT and other non-public destinations. Every
+redirect is checked. Direct connections additionally validate the actual socket
+IP to prevent DNS rebinding; environment-proxied downloads validate target DNS
+before dispatch. A response must declare or sniff as an image. A rejected
+destination or non-image payload fails the task without storing the response.
+The existing size/time limits, trusted outbound filtering and date-path layout
+remain in effect.
+
 On success, `result` mirrors the synchronous image API body, except each image has been offloaded to object storage: `data[].url` points at the stored object and `b64_json` is stripped (so both URL and base64 upstream formats end up as compact stored links):
 
 ```json

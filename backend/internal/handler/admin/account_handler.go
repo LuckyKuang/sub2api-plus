@@ -22,6 +22,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/handler/dto"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/antigravity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/claude"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/cnmodels"
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/geminicli"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
@@ -2840,6 +2841,14 @@ func (h *AccountHandler) GetAvailableModels(c *gin.Context) {
 		return
 	}
 
+	// Native provider OAuth and API-key accounts share their own model candidates.
+	// They must not reach the generic Claude OAuth/default fallback below.
+	switch account.Platform {
+	case service.PlatformDeepseek, service.PlatformKimi, service.PlatformMiniMax, service.PlatformStepFun, service.PlatformZhipu:
+		response.Success(c, domesticAccountTestModels(account))
+		return
+	}
+
 	// Handle OpenAI accounts
 	if account.IsOpenAI() {
 		// Prefer the shared, account-keyed upstream catalog. If discovery fails,
@@ -3047,6 +3056,43 @@ func (h *AccountHandler) GetAvailableModels(c *gin.Context) {
 	}
 
 	response.Success(c, models)
+}
+
+// domesticAccountTestModels lists concrete request-side names when an account
+// has a whitelist/mapping. Otherwise it reuses the provider's maintained catalog;
+// candidates do not promise that the account's plan can serve every model.
+func domesticAccountTestModels(account *service.Account) []claude.Model {
+	ids := cnmodels.DefaultModelIDs(account.Platform)
+	mapping := make(map[string]string)
+	switch raw := account.Credentials["model_mapping"].(type) {
+	case map[string]any:
+		if len(raw) > 0 {
+			ids = nil
+			for id, target := range raw {
+				if value, ok := target.(string); ok {
+					mapping[id] = value
+				}
+			}
+		}
+	case map[string]string:
+		if len(raw) > 0 {
+			ids = nil
+			mapping = raw
+		}
+	}
+	for id, target := range mapping {
+		if strings.TrimSpace(id) != "" && strings.TrimSpace(target) != "" && !strings.Contains(id, "*") {
+			ids = append(ids, id)
+		}
+	}
+	if len(mapping) > 0 {
+		sort.Strings(ids)
+	}
+	models := make([]claude.Model, 0, len(ids))
+	for _, id := range ids {
+		models = append(models, claude.Model{ID: id, Type: "model", DisplayName: id})
+	}
+	return models
 }
 
 // antigravityAccountTestModels uses the stored mapping rather than GetModelMapping,

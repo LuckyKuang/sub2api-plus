@@ -102,6 +102,29 @@ func TestOpenAIModelNotFound_MissingModelAttributionNeverWidensPenalty(t *testin
 	require.False(t, svc.isOpenAIAccountRuntimeBlocked(account))
 }
 
+// The official exact model_not_found code stays terminal for this owner even
+// when an intermediary supplies a capacity-looking message and Retry-After.
+// Importing capacity backoff must not turn a model rejection into a retry of
+// the same owner, or report the owner's scheduling health as failed.
+func TestOpenAIModelNotFound_PrecedesCapacityHintsDuringUpstreamSync(t *testing.T) {
+	for _, status := range []int{400, 403, 404} {
+		body := []byte(`{"error":{"code":"model_not_found","message":"Our servers are currently overloaded. Please try again later."}}`)
+		failure := newOpenAIUpstreamFailoverError(
+			status,
+			http.Header{"Retry-After": []string{"6"}},
+			body,
+			"Our servers are currently overloaded. Please try again later.",
+			true,
+		)
+		require.False(t, failure.RetryableOnSameAccount)
+		require.False(t, failure.RequestScopedTransient)
+		require.Zero(t, failure.SameAccountRetryDelay)
+		require.True(t, failure.ShouldRetryNextAccount())
+		require.False(t, failure.ShouldReportAccountScheduleFailure())
+		require.Equal(t, "model_not_found", gjson.GetBytes(failure.ResponseBody, "error.code").String())
+	}
+}
+
 func TestOpenAIModelNotFound_DirectHTTPRetainsTerminalCode(t *testing.T) {
 	for _, status := range []int{400, 403, 404} {
 		t.Run(fmt.Sprint(status), func(t *testing.T) {

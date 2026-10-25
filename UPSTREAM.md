@@ -6,9 +6,9 @@ publication status. Release naming and procedures live in
 
 ## Integrated Baseline
 
-The current tree integrates official `v0.2.17`: annotated tag object
-`6d6c4e701a463dcf83c261e8428e93423d6c0b3e`, peeled commit
-`060d0160417782cd962a0c7f460f6cd4565d4916`. Plus behavior governs conflict
+The current tree integrates official `v0.2.18`: annotated tag object
+`de86961b627e48db75d61fff8c05535d44a00cbe`, peeled commit
+`ac1b8f1271be0d674fa6f074403c1410f30a3a81`. Plus behavior governs conflict
 resolution; importing source does not itself publish a Plus release.
 
 Preserve intentional Plus behavior during every import. Current contracts live
@@ -19,13 +19,15 @@ in [outbound identity](docs/OUTBOUND_IDENTITY.md),
 [upgrade prerequisites](backend/migrations/README.md#upgrade-prerequisites).
 Completed integration narratives remain in Git history.
 
-The v0.2.17 integration review additionally restores Plus outbound identity on
-the imported Gemini explicit-cache and native model-discovery paths, including
-Vertex pagination, token acquisition and detached cache cleanup. Source priority,
-client families and compiled fingerprints remain governed by the Plus contract.
-Superseded AI Studio-only discovery methods are removed in favor of the unified
-Gemini/Vertex flow. Plus retains its vendored SheetJS dependency rather than the
-official npm downgrade; release notes describe the actual Plus dependency state.
+The v0.2.18 integration preserves Plus Codex account/global/default identity
+priority and complete configured client fingerprints. Official TUI-to-CLI
+normalization does not override accepted Plus identities. Anthropic/Gemini
+stream cancellation and upstream-error handling retain Plus partial usage,
+completion diagnostics, timing, audit ordering, channel pricing and billing
+idempotency. Vertex account quotas and Gemini image permissions use the same
+Plus security boundaries. Official migration 246 is imported as Plus 295;
+historical migrations remain unchanged. Plus retains its container CI/release
+workflows, vendored SheetJS dependency and stronger dependency security floors.
 
 The Codex egress review merges Plus `main` at
 `0b5acf5796b40a695f1e42ebc01aa48875283823` and compares the client contract with
@@ -37,12 +39,31 @@ The existing Plus identity priority, fingerprint controls and ingress audit
 boundaries remain governed by the owning contracts above. Historical migrations
 from both branches retain their complete filenames and checksums.
 
+The seven-platform synchronization starts from Plus branch commit
+`90d9f67e0fc891bee6e9d13d97271d8daf7d1924` and merges Plus `main` at
+`1818c299307ac394c0e3101b45d6c6ef22515c0c`. The existing official-agent baselines
+in [OFFICIAL_AGENT_BASELINES.md](docs/OFFICIAL_AGENT_BASELINES.md) govern OpenAI,
+xAI, DeepSeek, Kimi, MiniMax, StepFun and Zhipu. Codex retains its manually
+selected `0.164.0` default, credential-owner/global/default precedence, trusted
+fingerprints, model-rejection failover and audit boundary. Compatible upstream
+fixes add semantic-output-aware overload recovery, stream cancellation billing,
+quota/scheduler improvements and authenticated Redis health checks. DeepSeek
+image aliases retain the branch's deployed compatibility behavior. Migrations
+290–294 and the existing console UI remain intact.
+The acceptance review also refreshes every bound account after proxy mutations
+and keeps native provider account-test model catalogs separate from Claude's
+defaults. These fixes retain the existing identity and protocol contracts.
+The independently deployed model-visibility and Gemini-permission migrations
+both retain prefix 295 with their complete original filenames and checksums;
+future migrations start at 296. This is a branch integration, not publication
+of a new release.
+
 ## Current Version
 
 ```text
-Git/GitHub: v0.2.17+custom.001
-Application: 0.2.17+custom.001
-GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.17-custom.001
+Git/GitHub: v0.2.18+custom.001
+Application: 0.2.18+custom.001
+GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.18-custom.001
 ```
 
 ## Release Mapping
@@ -120,6 +141,7 @@ GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.17-custom.001
 | `v0.2.15+custom.002` | `v0.2.15` | `f2669c8cf62555cd92389b3f55920e9e6e7c6ff2` | published |
 | `v0.2.15+custom.003` | `v0.2.15` | `ab80abc6d1f929a6864c8804fd077b509d21fda2` | published |
 | `v0.2.17+custom.001` | `v0.2.17` | `060d0160417782cd962a0c7f460f6cd4565d4916` | published |
+| `v0.2.18+custom.001` | `v0.2.18` | `ac1b8f1271be0d674fa6f074403c1410f30a3a81` | published |
 
 `v0.2.15+custom.003` records the integrated official main snapshot in the
 Official Commit column. Its tagged official baseline remains
@@ -127,8 +149,11 @@ Official Commit column. Its tagged official baseline remains
 
 `v0.2.17+custom.001` records official tag `v0.2.17` / peeled
 `060d0160417782cd962a0c7f460f6cd4565d4916`. Official tag VERSION is `0.2.16`;
-Plus writes `0.2.17+custom.001`. This row stays `planned` until the release
-workflow tags and publishes it.
+Plus writes `0.2.17+custom.001`.
+
+`v0.2.18+custom.001` records official tag `v0.2.18` / peeled
+`ac1b8f1271be0d674fa6f074403c1410f30a3a81`. Official tag VERSION is `0.2.17`;
+Plus writes `0.2.18+custom.001`. Its mapping is finalized after publication.
 
 `v0.2.4+custom.006` is marked withdrawn because official `v0.2.5` was imported before that snapshot overlay was published. Do not reuse or retag `.006`.
 

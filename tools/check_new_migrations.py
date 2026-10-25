@@ -17,8 +17,8 @@ MIGRATIONS = ROOT / "backend/migrations"
 NAME_RE = re.compile(r"^(\d{3})(?:[a-z])?_[a-z0-9_]+(?:_notx)?\.sql$")
 ZERO_SHA_RE = re.compile(r"^0+$")
 
-# These independently committed feature and Gemini migrations predate the main
-# merge. Their deployed filenames cannot be renumbered.
+# These independently committed feature, official-agent and Gemini migrations
+# predate their main merges. Their deployed filenames cannot be renumbered.
 # Pin both path and original Git blob; no other old or duplicate prefix is exempt.
 HISTORICAL_MERGED_MIGRATIONS = {
     "backend/migrations/287_channel_monitor_stream_probe.sql":
@@ -31,6 +31,20 @@ HISTORICAL_MERGED_MIGRATIONS = {
         "c72f097a7303166d68cdb7b57b0d77bd7737db3e",
     "backend/migrations/289_gemini_cached_contents_mutation_lease.sql":
         "e0970efebf75d763271032b7157c6a2eafa2b8ad",
+    "backend/migrations/290_codex_native_identity_and_manual_versions.sql":
+        "2a26822f3224fefb23ececa1b5af7a5fe0367450",
+    "backend/migrations/291_pin_grok_native_agent.sql":
+        "18678cb403110e47a06ae063f0521b61d1bd4252",
+    "backend/migrations/292_deepseek_harness_anonymous_user.sql":
+        "4859310b1844919553b774e1b8837f860120f04a",
+    "backend/migrations/293_zcode_project_tokens_memory_only.sql":
+        "20aed0f087e2906485d353f33b79e63fb78a1238",
+    "backend/migrations/294_outbound_identity_ids.sql":
+        "765a7fe50a291d4e18a74e01cb96ad0c44dd790d",
+    "backend/migrations/295_channel_monitor_v2_model_visibility.sql":
+        "ae727c64fd1ba4e28a87e4544f9a63aebbb3c765",
+    "backend/migrations/295_enable_gemini_image_generation_groups.sql":
+        "ae37f206fce3632de6738b3fc83e7fc45c862580",
 }
 
 

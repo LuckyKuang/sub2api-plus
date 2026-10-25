@@ -18,6 +18,20 @@ the same Content Moderation and Prompt Audit gates. Unknown valid blocks pass
 through, and recognized sibling content remains auditable under the shared
 [content coverage contract](../SECURITY_AUDIT_CONTENT_COVERAGE.md).
 
+## Interrupted compatibility streams
+
+Anthropic-backed Chat Completions and Responses streams stop writing after
+client disconnection and continue reading upstream usage for billing. The
+configured stream data interval timeout bounds reads; when disabled, a
+disconnected drain uses a 180-second read-interval bound. Plus retains semantic
+first/last-token timing and marks client-disconnected usage incomplete.
+
+For a connected client, upstream timeout, read error or missing terminal event
+returns a protocol error instead of a fabricated successful completion. Observed
+partial usage remains billable through the existing idempotent Plus path. An
+upstream SSE error can trigger account failover only before downstream output is
+committed, retaining the existing trusted identity and ingress audit contracts.
+
 ## Native reset-credit status
 
 Administrators can query an account's native Claude reset-credit availability

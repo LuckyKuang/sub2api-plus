@@ -18,6 +18,7 @@ import (
 	dbent "github.com/LuckyKuang/sub2api-plus/ent"
 	_ "github.com/LuckyKuang/sub2api-plus/ent/runtime"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/timezone"
+	"github.com/LuckyKuang/sub2api-plus/internal/testutil/externalredis"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
@@ -56,7 +57,7 @@ func TestMain(m *testing.M) {
 			log.Printf("SUB2API_TEST_REDIS_ADDR is required when SUB2API_TEST_POSTGRES_DSN is set")
 			os.Exit(1)
 		}
-		os.Exit(runIntegrationTestsWithExternalServices(ctx, m, postgresDSN, redisAddr, os.Getenv("SUB2API_TEST_REDIS_PASSWORD")))
+		os.Exit(runIntegrationTestsWithExternalServices(ctx, m, postgresDSN, redisAddr))
 	}
 
 	if !dockerIsAvailable(ctx) {
@@ -148,7 +149,7 @@ func TestMain(m *testing.M) {
 // such as Apple Containers that do not expose a Docker-compatible API to
 // testcontainers. Callers must supply an isolated PostgreSQL database because
 // integration tests apply migrations and create persistent fixture rows.
-func runIntegrationTestsWithExternalServices(ctx context.Context, m *testing.M, postgresDSN, redisAddr, redisPassword string) int {
+func runIntegrationTestsWithExternalServices(ctx context.Context, m *testing.M, postgresDSN, redisAddr string) int {
 	var err error
 	integrationPostgresDSN = postgresDSN
 	integrationDB, err = openSQLWithRetry(ctx, postgresDSN, 30*time.Second)
@@ -167,11 +168,12 @@ func runIntegrationTestsWithExternalServices(ctx context.Context, m *testing.M, 
 	integrationEntClient = dbent.NewClient(dbent.Driver(drv))
 	defer func() { _ = integrationEntClient.Close() }()
 
-	integrationRedis = redisclient.NewClient(&redisclient.Options{
-		Addr:     redisAddr,
-		Password: redisPassword,
-		DB:       0,
-	})
+	options, err := externalredis.Options(redisAddr, "SUB2API_TEST_REDIS_DB")
+	if err != nil {
+		log.Printf("invalid external integration Redis configuration: %v", err)
+		return 1
+	}
+	integrationRedis = redisclient.NewClient(options)
 	defer func() { _ = integrationRedis.Close() }()
 	if err := integrationRedis.Ping(ctx).Err(); err != nil {
 		log.Printf("failed to ping external integration redis: %v", err)

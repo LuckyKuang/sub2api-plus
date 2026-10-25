@@ -127,6 +127,23 @@ toolset state and unknown provider options pass through; recognized sibling
 user text remains available to both engines. The stable-toolset semantic test
 in `security_audit_content_contract_test.go` covers that mixed payload.
 
+## Gemini image permissions and tool schemas
+
+Gemini-family image permission checks run after canonical ingress audit and
+channel mapping, before account selection, concurrency or billing. The account
+model-mapping check remains behind that same audit boundary. Disabled image
+permissions cannot skip either audit engine. Native `countTokens` is exempt
+from the image feature gate and retains its normal audit path.
+
+Tool-schema constants, annotations and unknown sibling structures are not
+alternate audit inputs. Messages and Gemini payloads retain extractable current
+user text before the outbound tool-schema conversion. Unknown siblings remain
+pass-through under the existing extraction compatibility contract. The semantic
+fixtures in `security_audit_content_contract_test.go` cover both engines;
+`gemini_image_generation_gate_test.go` exercises actual HTTP handlers and proves
+that a blocking audit wins before the feature gate or account selection. Existing
+HTTP/WS and account-type regressions retain turn-by-turn audit coverage.
+
 ## Risk-Control User Allowlist
 
 The admin cyber-risk center stores `cyber_policy_user_allowlist` in the settings

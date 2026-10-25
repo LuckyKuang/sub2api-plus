@@ -97,3 +97,12 @@ the separate Gemini or TypeSafe gateways. OpenCode Zen `qwen3.8-max` uses Chat.
 OpenCode usage refresh caps `Retry-After` at 24 hours; a 403 is reported as
 forbidden and does not establish that a subscription is absent. The retired
 upstream billing-probe endpoint remains removed.
+
+## Cloudflare edge rejections
+
+Cloudflare 1010 responses, including structured JSON marked `cloudflare_error`
+with code 1010 or `error_name: browser_signature_banned`, are request/edge
+rejections across providers. They do not disable the credential-owning account
+or consume OpenAI's account 403 strike budget. Unrelated 403 errors retain the
+provider's existing account policy; this classification never changes identity
+selection, audits or credentials.

@@ -9,8 +9,8 @@ derives the OCI image tag by preserving the leading `v` and replacing only
 `+` with `-`.
 
 ```text
-Git/GitHub: v0.2.17+custom.001
-GHCR:       ghcr.io/luckykuang/sub2api-plus:v0.2.17-custom.001
+Git/GitHub: v0.2.18+custom.001
+GHCR:       ghcr.io/luckykuang/sub2api-plus:v0.2.18-custom.001
 ```
 
 Pin the GHCR version tag for reproducible deployments. See
@@ -599,13 +599,13 @@ Replace the immutable tag with another value reported by `list-versions` when
 needed:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- install --version 'v0.2.17+custom.001'
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- install --version 'v0.2.18+custom.001'
 ```
 
 Roll back an existing binary installation to an earlier published version:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- rollback 'v0.2.15+custom.003'
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- rollback 'v0.2.17+custom.001'
 ```
 
 Upgrade to the latest release:
@@ -629,13 +629,13 @@ curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/
 For a downloaded `install.sh`, invoke one operation at a time. For example:
 
 ```bash
-sudo ./install.sh install --version 'v0.2.17+custom.001'
+sudo ./install.sh install --version 'v0.2.18+custom.001'
 ```
 
 Roll back a downloaded-script installation one operation at a time:
 
 ```bash
-sudo ./install.sh rollback 'v0.2.15+custom.003'
+sudo ./install.sh rollback 'v0.2.17+custom.001'
 ```
 
 Or uninstall while preserving `/etc/sub2api`:
@@ -801,7 +801,7 @@ docker compose -f docker-compose.local.yml logs --tail=100 sub2api
 docker compose -f docker-compose.local.yml exec postgres pg_isready
 
 # Check Redis connection
-docker compose -f docker-compose.local.yml exec redis redis-cli ping
+docker compose -f docker-compose.local.yml exec redis sh -c 'if [ -z "${REDISCLI_AUTH:-}" ]; then unset REDISCLI_AUTH; fi; exec redis-cli -e --raw ping'
 
 # Restart all services
 docker compose -f docker-compose.local.yml restart
@@ -823,11 +823,17 @@ docker compose logs --tail=100 sub2api
 docker compose exec postgres pg_isready
 
 # Check Redis connection
-docker compose exec redis redis-cli ping
+docker compose exec redis sh -c 'if [ -z "${REDISCLI_AUTH:-}" ]; then unset REDISCLI_AUTH; fi; exec redis-cli -e --raw ping'
 
 # Restart all services
 docker compose restart
 ```
+
+Redis health checks accept only a successful command with the exact `PONG`
+reply. Plain `redis-cli ping` can exit zero after an authentication or server
+error; use `-e` for scripts and check the response as well as the exit status.
+The examples clear an empty `REDISCLI_AUTH` for passwordless Redis, since an
+empty exported value still makes the CLI attempt authentication.
 
 ### Binary Install
 

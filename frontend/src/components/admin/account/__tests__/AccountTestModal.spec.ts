@@ -77,7 +77,11 @@ function mountModal(account: Record<string, unknown> = {
     global: {
       stubs: {
         BaseDialog: { template: '<div><slot /><slot name="footer" /></div>' },
-        Select: { template: '<div class="select-stub"></div>' },
+        Select: {
+          props: ['modelValue', 'options', 'valueKey', 'labelKey', 'disabled'],
+          emits: ['update:modelValue'],
+          template: '<div class="select-stub"><button v-for="option in options" :key="option[valueKey || \'value\']" class="model-option" :disabled="disabled" @click="$emit(\'update:modelValue\', option[valueKey || \'value\'])">{{ option[labelKey || \'label\'] }}</button></div>'
+        },
         TextArea: {
           props: ['modelValue'],
           emits: ['update:modelValue'],
@@ -91,6 +95,7 @@ function mountModal(account: Record<string, unknown> = {
 
 describe('AccountTestModal', () => {
   beforeEach(() => {
+    getAvailableModels.mockReset()
     getAvailableModels.mockResolvedValue([
       { id: 'gemini-2.0-flash', display_name: 'Gemini 2.0 Flash' },
       { id: 'gemini-2.5-flash-image', display_name: 'Gemini 2.5 Flash Image' },
@@ -238,5 +243,65 @@ describe('AccountTestModal', () => {
     await flushPromises()
 
     expect((wrapper.vm as any).selectedModelId).toBe('gpt-5.6-sol')
+  })
+
+  const nativeProviders = [
+    ['deepseek', 'deepseek-v4-pro'],
+    ['kimi', 'kimi-for-coding'],
+    ['minimax', 'MiniMax-M3'],
+    ['stepfun', 'step-5-preview'],
+    ['zhipu', 'glm-5.3']
+  ] as const
+
+  for (const [platform, model] of nativeProviders) {
+    for (const type of ['oauth', 'apikey']) {
+      it(`${platform} ${type} renders the account catalog and submits the selected model`, async () => {
+        getAvailableModels.mockResolvedValue([
+          { id: model, display_name: model },
+          { id: 'custom-request-alias', display_name: 'Account custom model' }
+        ])
+        const wrapper = mountModal({ id: 73, name: 'Native account', platform, type, status: 'active' })
+        await wrapper.setProps({ show: true })
+        await flushPromises()
+
+        expect(getAvailableModels).toHaveBeenCalledExactlyOnceWith(73)
+        const choices = wrapper.findAll('button.model-option')
+        expect(choices.map(choice => choice.text())).toEqual([model, 'Account custom model'])
+        expect(wrapper.text()).not.toContain('Claude')
+        await choices[1].trigger('click')
+        const startButton = wrapper.findAll('button').find(button => button.text().includes('admin.accounts.startTest'))!
+        await startButton.trigger('click')
+        await flushPromises()
+
+        expect(global.fetch).toHaveBeenCalledTimes(1)
+        const [url, request] = vi.mocked(global.fetch).mock.calls[0]
+        expect(url).toMatch(/\/admin\/accounts\/73\/test$/)
+        expect(JSON.parse(request!.body as string)).toEqual({ model_id: 'custom-request-alias', prompt: '' })
+        wrapper.unmount()
+      })
+    }
+  }
+
+  it.each(['empty', 'error'])('does not offer or submit stale models after a native catalog %s', async (scenario) => {
+    getAvailableModels.mockResolvedValueOnce([{ id: 'claude-sonnet-custom', display_name: 'Previous account model' }])
+    const wrapper = mountModal({ id: 74, name: 'Prior account', platform: 'anthropic', type: 'oauth', status: 'active' })
+    await wrapper.setProps({ show: true })
+    await flushPromises()
+    await wrapper.setProps({ show: false })
+    if (scenario === 'empty') getAvailableModels.mockResolvedValueOnce([])
+    else {
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      getAvailableModels.mockRejectedValueOnce(new Error('Catalog unavailable'))
+    }
+    await wrapper.setProps({ account: { id: 75, name: 'Native account', platform: 'deepseek', type: 'oauth', status: 'active' } as any, show: true })
+    await flushPromises()
+
+    expect(getAvailableModels).toHaveBeenLastCalledWith(75)
+    expect(wrapper.findAll('button.model-option')).toHaveLength(0)
+    const startButton = wrapper.findAll('button').find(button => button.text().includes('admin.accounts.startTest'))!
+    expect(startButton.attributes('disabled')).toBeDefined()
+    await startButton.trigger('click')
+    expect(global.fetch).not.toHaveBeenCalled()
+    wrapper.unmount()
   })
 })

@@ -98,6 +98,13 @@ Show workload state and run live health probes:
 ./apple-container.sh status
 ```
 
+Redis readiness requires a successful `redis-cli -e --raw ping` with exactly
+`PONG` and no diagnostic output. Authentication failures, ACL errors and
+connection failures make `status` fail. The probe sends the selected deployment
+password through stdin and sets it inside the exec shell, overriding a stale
+container environment without putting the password in command arguments. An
+empty configured password clears inherited authentication.
+
 Show Apple Containers disk usage:
 
 ```bash
@@ -240,17 +247,19 @@ container builder stop
 Local image builds also need enough builder memory. The frontend stage runs
 `pnpm run build` with `NODE_OPTIONS=--max-old-space-size=3072`, and the default
 builder allocation (2 CPU / 2 GiB) is killed with `cannot allocate memory`
-(exit 137) while `vite build` runs. Start the builder with at least 8 GiB before
-`container build`:
+(exit 137) while `vite build` runs. Pass the allocation to each build command;
+Apple Containers 1.6 can reset a previously configured builder to its defaults
+when `container build` omits these flags:
 
 ```bash
-container builder stop
-container builder start --cpus 6 --memory 8G
+container build --cpus 6 --memory 8G --platform linux/arm64 \
+  --tag sub2api-plus:local-candidate --file Dockerfile .
 ```
 
-`container builder status` reports the active allocation. Raising it is not a
-cache change and needs no rebuild: the builder keeps its cached layers, and a
-build that a 2 GiB builder already killed simply resumes.
+Use the version and commit build arguments from the
+[deployment workflow](../skills/deploy-cli/references/apple-containers.md#current-code-deployment).
+`container builder status` reports the active allocation. Raising it preserves
+cached layers; a failed build reuses its completed layers on retry.
 
 Delete the builder and its reusable build cache only after confirming it is not
 shared by another project and a subsequent full rebuild is acceptable:
@@ -290,22 +299,22 @@ the release workflow preserves the leading `v` and replaces only `+` with
 `-`. The current mapping is:
 
 ```text
-Git/GitHub:         v0.2.17+custom.001
-Application:        0.2.17+custom.001
-Apple/OCI image:    ghcr.io/luckykuang/sub2api-plus:v0.2.17-custom.001
+Git/GitHub:         v0.2.18+custom.001
+Application:        0.2.18+custom.001
+Apple/OCI image:    ghcr.io/luckykuang/sub2api-plus:v0.2.18-custom.001
 ```
 
 Use the following values when building or publishing this OCI image:
 
 ```bash
 docker build \
-  --build-arg VERSION=0.2.17+custom.001 \
-  --tag ghcr.io/luckykuang/sub2api-plus:v0.2.17-custom.001 \
+  --build-arg VERSION=0.2.18+custom.001 \
+  --tag ghcr.io/luckykuang/sub2api-plus:v0.2.18-custom.001 \
   .
 ```
 
 After that image is available to the Apple `container` runtime, set
-`APPLE_CONTAINER_SUB2API_IMAGE=ghcr.io/luckykuang/sub2api-plus:v0.2.17-custom.001`. Until then, keep
+`APPLE_CONTAINER_SUB2API_IMAGE=ghcr.io/luckykuang/sub2api-plus:v0.2.18-custom.001`. Until then, keep
 the published image as the runtime base and use `APPLE_CONTAINER_SUB2API_BINARY`
 for the custom binary.
 

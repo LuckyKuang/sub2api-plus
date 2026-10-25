@@ -150,10 +150,8 @@ func (s *AccountRepoSuite) TestProxyIdentityChangeInvalidatesCNQuotaBindingAndPu
 		}
 		var count int
 		s.Require().NoError(scanSingleRow(s.ctx, s.repo.sql, "SELECT COUNT(*) FROM scheduler_outbox WHERE event_type=$1", []any{service.SchedulerOutboxEventAccountBulkChanged}, &count))
-		if change == "name" {
-			s.Require().Zero(count)
-		} else {
-			s.Require().Equal(1, count)
-		}
+		// Every proxy edit refreshes the embedded scheduler proxy. A name-only
+		// edit preserves quota ownership while still updating that snapshot.
+		s.Require().Equal(1, count)
 	}
 }
