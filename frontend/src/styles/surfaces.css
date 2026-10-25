@@ -13,11 +13,26 @@
   .subscription-plan-card, .modal-content, .dialog-container, .dropdown) {
   border: 1px solid var(--surface-edge);
 }
-/* A page's main content shell keeps its fill and rounded scroll clipping.
-   Its nested cards, record outlines and controls retain their own edges. */
-:root .workspace-shell {
+/* Page chrome has no frame of its own. Roles describe the layout owner, so
+   business cards inside grids, record outlines and controls keep their edges. */
+:root .workspace-shell,
+:root .app-main :is(.workspace-tabs, .settings-tabs-shell, .pagination-card),
+:root .app-main .workspace-fixed:is(.card, .glass-surface, .surface-card),
+:root .app-main :is(.workspace-page, .workspace-body, .workspace-stack, .workspace-scroll) > :is(.card, .glass-surface, .surface-card),
+:root .app-main .layout-section-fixed,
+:root .app-main .layout-section-fixed > :is(.card, .glass-surface, .surface-card) {
   border: 0 !important;
   box-shadow: none !important;
+  --tw-ring-shadow: 0 0 #0000 !important;
+  /* A transition from a previous shadow must not leave a temporary outline. */
+  transition-property: background-color, color !important;
+}
+/* A borderless page panel cannot retain a full-width header/footer seam. */
+:root .app-main .workspace-shell > :is(.card-header, header, [class~="border-b"], [class~="border-t"]):not(.card, .glass-surface, .surface-card, button, input, select, textarea),
+:root .app-main .workspace-fixed:is(.card, .glass-surface, .surface-card) > :is(.card-header, header, [class~="border-b"], [class~="border-t"]):not(.card, .glass-surface, .surface-card, button, input, select, textarea),
+:root .app-main :is(.workspace-page, .workspace-body, .workspace-stack, .workspace-scroll) > :is(.card, .glass-surface, .surface-card) > :is(.card-header, header, [class~="border-b"], [class~="border-t"]):not(.card, .glass-surface, .surface-card, button, input, select, textarea) {
+  border-top: 0 !important;
+  border-bottom: 0 !important;
 }
 @layer utilities {
   .surface-inset { background-color: var(--surface-soft); }

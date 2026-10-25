@@ -3644,7 +3644,7 @@
         <p class="mb-4 text-xs text-amber-600 dark:text-amber-400">
           {{ t('admin.accounts.gemini.quotaPolicy.note') }}
         </p>
-        <div class="record-table-scroll table-container overflow-x-auto">
+        <div class="record-table-scroll record-table-dialog-scroll table-container overflow-x-auto">
           <table class="record-table w-full text-xs">
             <thead class="surface-inset">
               <tr>

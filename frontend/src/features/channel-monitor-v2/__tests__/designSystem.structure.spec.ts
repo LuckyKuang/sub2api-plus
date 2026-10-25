@@ -28,8 +28,12 @@ describe('channel-monitor-v2 design system structure', () => {
     expect(src).toContain('clearFilters')
     expect(src).toContain('healthModeOptions')
     expect(src).toContain("'cache'")
-    // Shared floating shell: page toolbars stay below the global toolbar.
-    expect(src).toContain('top-[var(--shell-sticky-offset)]')
+    // Approved transparent layout: the fixed toolbar is outside the only
+    // activity scrollport, so content cannot travel behind it.
+    expect(src).toContain('<AppLayout workspace>')
+    expect(src).toContain('channel-monitor-toolbar card workspace-shell workspace-fixed')
+    expect(src).toContain('data-testid="channel-status-activity"')
+    expect(src).not.toContain('top-[var(--shell-sticky-offset)]')
     expect(src).not.toContain('dark:!bg-dark-800')
     // Overview-first KPI strip before primary viz
     expect(src.indexOf('summaryAria')).toBeLessThan(src.indexOf('MonitorTrendChart'))
@@ -37,8 +41,9 @@ describe('channel-monitor-v2 design system structure', () => {
     expect(src).not.toMatch(/min-width:\s*980px/)
     expect(src).not.toMatch(/min-w-\[980px\]/)
     // Dense tables scroll internally
-    expect(src).toMatch(/max-h-\[min\(52vh/)
-    expect(src).toContain('overflow-auto')
+    expect(src).toContain('--record-table-max-height: max(0px, calc(min(52vh, 520px)')
+    expect(src).toContain('max-height: var(--record-table-max-height)')
+    expect(src).toContain('monitor-tab-viewport record-table-scroll table-container min-h-0 overflow-auto')
     // Trend view toggle (pulse matrix / line chart) + default platform/group dimension
     expect(src).toContain("trendView")
     expect(src).toContain("'platform_group'")

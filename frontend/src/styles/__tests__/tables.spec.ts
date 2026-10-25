@@ -6,12 +6,13 @@ import postcss from 'postcss'
 
 const sourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const stylesheet = postcss.parse(readFileSync(resolve(sourceRoot, 'styles/tables.css'), 'utf8'))
+const headerStylesheet = postcss.parse(readFileSync(resolve(sourceRoot, 'styles/tableHeaders.css'), 'utf8'))
 
 // Evaluate matching rules against real table structures, including logical
 // group boundaries. State attributes stand in for browser hover in jsdom.
-function paint(element: Element, pseudo = '') {
+function paint(element: Element, pseudo = '', rules = stylesheet) {
   const result = new Map<string, string>()
-  stylesheet.walkRules(rule => {
+  rules.walkRules(rule => {
     const matches = rule.selectors.some(original => {
       let selector = original.replace(/:hover/g, '[data-hover]')
       if (pseudo) {
@@ -40,6 +41,21 @@ afterEach(() => {
 })
 
 describe('record table appearance requirements', () => {
+  it('bounds dialog tables locally without imposing a fixed height on short tables', () => {
+    // Approved layout: modal instructions/forms keep their own document flow;
+    // only a long table scrolls beneath its separate static header.
+    const container = table()
+    container.classList.add('record-table-dialog-scroll')
+    const dialogPaint = paint(container, '', headerStylesheet)
+    expect(dialogPaint.get('--record-table-max-height')).toBe('min(42vh, 420px)')
+    expect(dialogPaint.get('max-height')).toBe('var(--record-table-max-height)')
+    expect(dialogPaint.get('height')).toBeUndefined()
+    expect(dialogPaint.get('overflow')).toBe('auto')
+    expect(dialogPaint.get('overscroll-behavior')).toBe('contain')
+    container.classList.add('static-table-body-viewport')
+    expect(paint(container, '', headerStylesheet).get('max-height')).toBe('none')
+  })
+
   it('keeps native table measurement with 8px row gaps and four 16px outside corners', () => {
     const container = table()
     expect(paint(container.querySelector('table')!).get('border-spacing')).toBe('0')

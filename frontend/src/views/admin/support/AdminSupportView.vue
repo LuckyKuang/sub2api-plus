@@ -1,7 +1,7 @@
 <template>
   <component :is="page" v-if="target && !loading" :key="`${userId}:${resource}:${route.params.id || ''}`" />
   <AppLayout v-else>
-    <div class="card flex min-h-64 flex-col items-center justify-center gap-4 p-6">
+    <div class="card workspace-shell flex min-h-64 flex-col items-center justify-center gap-4 p-6">
       <LoadingSpinner v-if="loading" />
       <template v-else>
         <p class="text-red-600 dark:text-red-400">{{ error || t('admin.support.loadFailed') }}</p>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { RouterView, useRouter, useRoute } from 'vue-router'
-import { computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import Toast from '@/components/common/Toast.vue'
 import TitleTooltip from '@/components/common/TitleTooltip.vue'
 import NavigationProgress from '@/components/common/NavigationProgress.vue'
@@ -13,6 +13,13 @@ import { updateFavicon } from '@/utils/branding'
 import { FeatureFlags, isFeatureFlagEnabled } from '@/utils/featureFlags'
 import { resolveSiteBillingMode } from '@/utils/siteBillingMode'
 import { useConsoleAppearance } from '@/composables/useConsoleAppearance'
+import { useStaticTableHeaders } from '@/composables/useStaticTableHeaders'
+import { useTransparentTableClipping } from '@/composables/useTransparentTableClipping'
+
+// One document-wide owner also covers standalone routes and teleported dialogs.
+const tableRoot = ref<HTMLElement | null>(null)
+useStaticTableHeaders(tableRoot)
+useTransparentTableClipping(tableRoot, () => true)
 
 const router = useRouter()
 const route = useRoute()
@@ -143,6 +150,7 @@ onBeforeUnmount(() => {
 })
 
 onMounted(async () => {
+  tableRoot.value = document.body
   window.addEventListener('admin-compliance-required', onAdminComplianceRequired)
 
   // Check if setup is needed

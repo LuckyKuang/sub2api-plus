@@ -1,5 +1,5 @@
 <template>
-  <section class="card" :aria-labelledby="`${id}-title`" :aria-busy="loading || saving || processing">
+  <section class="card workspace-shell" :aria-labelledby="`${id}-title`" :aria-busy="loading || saving || processing">
     <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
       <h2 :id="`${id}-title`" class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('admin.settings.appearance.title') }}</h2>
       <p class="mt-1 text-sm surface-muted">{{ t('admin.settings.appearance.description') }}</p>

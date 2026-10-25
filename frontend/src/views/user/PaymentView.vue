@@ -1,7 +1,7 @@
 <template>
-  <AppLayout>
-    <div class="payment-page space-y-6">
-      <div v-if="loading" class="card flex items-center justify-center py-20">
+  <AppLayout workspace>
+    <div class="payment-page workspace-page">
+      <div v-if="loading" class="card workspace-shell workspace-scroll items-center justify-center py-20">
         <div class="h-8 w-8 animate-spin rounded-full border-4 border-primary-500 border-t-transparent"></div>
       </div>
       <template v-else>
@@ -9,10 +9,11 @@
         <WorkspaceTabs
           v-if="tabs.length > 1 && paymentPhase === 'select' && !selectedPlan"
           v-model="activeTab"
-          class="payment-tabs"
+          class="workspace-shell payment-tabs"
           :tabs="tabs"
           :label="`${t('payment.tabSubscribe')} / ${t('payment.tabTopUp')}`"
         />
+        <div class="workspace-shell workspace-scroll payment-activity" data-testid="payment-activity">
         <!-- Payment in progress (shared by recharge and subscription) -->
         <template v-if="paymentPhase === 'paying'">
           <PaymentStatusPanel
@@ -35,22 +36,22 @@
         <!-- Tab content (select phase) -->
         <template v-else>
           <!-- Neither top-up nor subscriptions available (balance recharge disabled via API while subscriptions are off) -->
-          <div v-if="tabs.length === 0" class="card py-16 text-center">
+          <div v-if="tabs.length === 0" class="card workspace-shell py-16 text-center">
             <p class="surface-muted">{{ t('payment.billingUnavailable') }}</p>
           </div>
           <!-- Top-up Tab -->
           <template v-else-if="activeTab === 'recharge'">
             <!-- Recharge Account Card -->
-            <div class="card p-5">
+            <div class="card workspace-shell p-5">
               <p class="text-xs font-medium surface-muted">{{ t('payment.rechargeAccount') }}</p>
               <p class="mt-1 text-base font-semibold text-gray-900 dark:text-white">{{ user?.username || '' }}</p>
               <p class="mt-0.5 text-sm font-medium text-green-600 dark:text-green-400">{{ t('payment.currentBalance') }}: {{ user?.balance?.toFixed(2) || '0.00' }}</p>
             </div>
-            <div v-if="enabledMethods.length === 0" class="card py-16 text-center">
+            <div v-if="enabledMethods.length === 0" class="card workspace-shell py-16 text-center">
               <p class="surface-muted">{{ t('payment.notAvailable') }}</p>
             </div>
             <template v-else>
-            <div class="card p-6">
+            <div class="card workspace-shell p-6">
               <!-- 充值赠送活动文案（后台 Markdown 配置，空则不渲染） -->
               <div
                 v-if="renderedBonusNotice"
@@ -70,14 +71,14 @@
               />
               <p v-if="amountError" class="mt-2 text-xs text-amber-600 dark:text-amber-300">{{ amountError }}</p>
             </div>
-            <div v-if="enabledMethods.length >= 1" class="card p-6">
+            <div v-if="enabledMethods.length >= 1" class="card workspace-shell p-6">
               <PaymentMethodSelector
                 :methods="methodOptions"
                 :selected="selectedMethod"
                 @select="selectedMethod = $event"
               />
             </div>
-            <div v-if="validAmount > 0" class="card p-6">
+            <div v-if="validAmount > 0" class="card workspace-shell p-6">
               <div class="space-y-2 text-sm">
                 <div class="flex justify-between">
                   <span class="surface-muted">{{ t('payment.paymentAmount') }}</span>
@@ -108,22 +109,13 @@
                 </p>
               </div>
             </div>
-            <div class="card payment-checkout-action p-4" data-testid="recharge-checkout-action">
-              <button v-support-readonly :class="['btn w-full py-3 text-base font-medium', paymentButtonClass]" :disabled="!canSubmit || submitting" @click="handleSubmitRecharge">
-                <span v-if="submitting" class="flex items-center justify-center gap-2">
-                  <span class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
-                  {{ t('common.processing') }}
-                </span>
-                <span v-else>{{ t('payment.createOrder') }} {{ formatSelectedPaymentAmount(totalAmount) }}</span>
-              </button>
-            </div>
             </template>
           </template>
           <!-- Subscribe Tab -->
           <template v-else-if="activeTab === 'subscription'">
             <!-- Subscription confirm (inline, replaces plan list) -->
             <template v-if="selectedPlan">
-              <div class="card p-5">
+              <div class="card workspace-shell p-5">
                 <!-- Header: platform badge + plan name -->
                 <div class="mb-3 flex flex-wrap items-center gap-2">
                   <span :class="['rounded-md border px-2 py-0.5 text-xs font-medium', planBadgeClass]">
@@ -179,14 +171,14 @@
                   </div>
                 </div>
               </div>
-              <div v-if="enabledMethods.length >= 1" class="card p-6">
+              <div v-if="enabledMethods.length >= 1" class="card workspace-shell p-6">
                 <PaymentMethodSelector
                   :methods="subMethodOptions"
                   :selected="selectedMethod"
                   @select="selectedMethod = $event"
                 />
               </div>
-              <div v-if="feeRate > 0 && selectedPlan.price > 0" class="card p-6">
+              <div v-if="feeRate > 0 && selectedPlan.price > 0" class="card workspace-shell p-6">
                 <div class="space-y-2 text-sm">
                   <div class="flex justify-between">
                     <span class="surface-muted">{{ t('payment.amountLabel') }}</span>
@@ -202,20 +194,10 @@
                   </div>
                 </div>
               </div>
-              <div class="card payment-checkout-action flex flex-col gap-2 p-4" data-testid="subscription-checkout-action">
-                <button v-support-readonly :class="['btn w-full py-3 text-base font-medium', paymentButtonClass]" :disabled="!canSubmitSubscription || submitting" @click="confirmSubscribe">
-                  <span v-if="submitting" class="flex items-center justify-center gap-2">
-                    <span class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
-                    {{ t('common.processing') }}
-                  </span>
-                  <span v-else>{{ t('payment.createOrder') }} {{ formatSelectedPaymentAmount(subTotalAmount) }}</span>
-                </button>
-                <button class="btn btn-secondary w-full" @click="selectedPlan = null">{{ t('common.cancel') }}</button>
-              </div>
             </template>
             <!-- Plan list -->
             <template v-else>
-              <div v-if="checkout.plans.length === 0" class="card py-16 text-center">
+              <div v-if="checkout.plans.length === 0" class="card workspace-shell py-16 text-center">
                 <Icon name="gift" size="xl" class="mx-auto mb-3 text-gray-300 dark:text-dark-600" />
                 <p class="surface-muted">{{ t('payment.noPlans') }}</p>
               </div>
@@ -248,7 +230,7 @@
             </template>
           </template>
         </template>
-        <div v-if="(checkout.help_text || checkout.help_image_url) && paymentPhase === 'select' && !selectedPlan" class="card p-4">
+        <div v-if="(checkout.help_text || checkout.help_image_url) && paymentPhase === 'select' && !selectedPlan" class="card workspace-shell p-4">
           <div class="flex flex-col items-center gap-3">
             <img v-if="checkout.help_image_url" :src="checkout.help_image_url" alt=""
               class="h-40 max-w-full cursor-pointer rounded-lg object-contain transition-opacity hover:opacity-80"
@@ -256,13 +238,41 @@
             <div v-if="checkout.help_text" class="markdown-body w-full overflow-x-auto break-words" v-html="renderedHelpText"></div>
           </div>
         </div>
-        <div v-if="checkout.redeem_purchase_enabled && checkout.redeem_purchase_url && paymentPhase === 'select' && !selectedPlan" class="card flex items-center justify-between gap-4 p-5">
+        <div v-if="checkout.redeem_purchase_enabled && checkout.redeem_purchase_url && paymentPhase === 'select' && !selectedPlan" class="card workspace-shell flex items-center justify-between gap-4 p-5">
           <div class="min-w-0 flex-1">
             <h2 class="text-lg font-semibold">{{ t('featureExtensions.purchaseTitle') }}</h2>
             <p class="mt-2 text-sm surface-muted">{{ t('featureExtensions.purchaseDescription') }}</p>
           </div>
           <RouterLink v-if="checkout.redeem_purchase_mode === 'iframe'" to="/purchase/redeem-shop" class="btn btn-primary shrink-0 whitespace-nowrap">{{ t('featureExtensions.purchaseButton') }}</RouterLink>
           <a v-else :href="checkout.redeem_purchase_url" target="_blank" rel="noopener noreferrer" class="btn btn-primary shrink-0 whitespace-nowrap">{{ t('featureExtensions.purchaseButton') }}</a>
+        </div>
+        </div>
+        <div
+          v-if="paymentPhase === 'select' && tabs.length > 0 && activeTab === 'recharge' && enabledMethods.length > 0"
+          class="card workspace-shell workspace-fixed payment-checkout-action p-4"
+          data-testid="recharge-checkout-action"
+        >
+          <button v-support-readonly :class="['btn w-full py-3 text-base font-medium', paymentButtonClass]" :disabled="!canSubmit || submitting" @click="handleSubmitRecharge">
+            <span v-if="submitting" class="flex items-center justify-center gap-2">
+              <span class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
+              {{ t('common.processing') }}
+            </span>
+            <span v-else>{{ t('payment.createOrder') }} {{ formatSelectedPaymentAmount(totalAmount) }}</span>
+          </button>
+        </div>
+        <div
+          v-else-if="paymentPhase === 'select' && activeTab === 'subscription' && selectedPlan"
+          class="card workspace-shell workspace-fixed payment-checkout-action flex flex-col gap-2 p-4"
+          data-testid="subscription-checkout-action"
+        >
+          <button v-support-readonly :class="['btn w-full py-3 text-base font-medium', paymentButtonClass]" :disabled="!canSubmitSubscription || submitting" @click="confirmSubscribe">
+            <span v-if="submitting" class="flex items-center justify-center gap-2">
+              <span class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
+              {{ t('common.processing') }}
+            </span>
+            <span v-else>{{ t('payment.createOrder') }} {{ formatSelectedPaymentAmount(subTotalAmount) }}</span>
+          </button>
+          <button class="btn btn-secondary w-full" @click="selectedPlan = null">{{ t('common.cancel') }}</button>
         </div>
       </template>
     </div>
@@ -1267,28 +1277,11 @@ onMounted(async () => {
 
 <style scoped>
 .payment-tabs {
-  position: sticky;
-  top: var(--shell-sticky-offset);
-  z-index: 25;
+  flex: none;
 }
 
 .payment-tabs :deep(.workspace-tab) {
   flex: 1 1 0%;
 }
 
-.payment-checkout-action {
-  position: sticky;
-  bottom: var(--shell-inset-bottom);
-  z-index: 20;
-}
-
-@media (min-width: 1024px) {
-  .payment-tabs {
-    top: 0;
-  }
-
-  .payment-checkout-action {
-    bottom: 0;
-  }
-}
 </style>

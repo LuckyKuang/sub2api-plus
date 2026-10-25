@@ -16,7 +16,7 @@ const surfaceProperties = new Set([
   ...backdropProperties, 'filter', 'transform', 'perspective', 'contain',
   'isolation', 'overflow', 'z-index', 'position', 'content', 'inset',
   'border-radius', 'pointer-events', 'background-color',
-  'border', 'box-shadow',
+  'border', 'border-top', 'border-bottom', 'box-shadow',
   'border-top-left-radius', 'border-top-right-radius',
   'border-bottom-left-radius', 'border-bottom-right-radius',
 ])
@@ -160,24 +160,35 @@ describe('shared transparent surface rendering', () => {
     expect(lastValue(declarationsFor(header, '::before'), 'content')).toBe('none')
   })
 
-  it('removes only the main content shell frame, retaining nested cards and independent toolbars', () => {
-    const container = fixture('<div><header class="card workspace-fixed"></header><main class="card workspace-shell ring-1"><section class="card"></section><button class="surface-control"></button></main><footer class="card pagination-card"></footer></div>')
+  // Audited requirement: page title/filter/tab/footer shells have no outlines,
+  // while independent business cards and controls retain their own borders.
+  it('removes page chrome frames without removing nested business-card or control edges', () => {
+    const container = fixture('<main class="app-main"><header class="card workspace-fixed"></header><nav class="card workspace-tabs"><button class="workspace-tab"></button></nav><div class="settings-tabs-shell"></div><section class="card workspace-shell ring-1"><header class="card-header border-b"></header><section class="card"><header class="card-header border-b"></header></section><button class="surface-control"></button></section><footer class="card pagination-card"></footer><div class="workspace-page"><section class="glass-surface"><header class="border-b"></header></section><div class="grid"><article class="card"></article></div></div><div class="table-page-layout"><div class="layout-section-fixed"><div class="card"></div></div></div></main>')
     document.body.append(container)
-    const shell = container.querySelector('main')!
+    const shell = container.querySelector('.workspace-shell')!
     const declarations = declarationsFor(shell)
-    for (const property of ['border', 'box-shadow']) {
-      const shellRule = declarations.filter(declaration => declaration.prop === property).at(-1)!
-      expect(shellRule.value).toBe(property === 'border' ? '0' : 'none')
-      // Utility rings and component-specific frame styles cannot restore it.
-      expect(shellRule.important).toBe(true)
+    for (const element of container.querySelectorAll('.workspace-shell, .workspace-fixed, .workspace-tabs, .settings-tabs-shell, .pagination-card, .workspace-page > .glass-surface, .layout-section-fixed, .layout-section-fixed > .card')) {
+      const paint = declarationsFor(element)
+      for (const property of ['border', 'box-shadow']) {
+        const shellRule = paint.filter(declaration => declaration.prop === property).at(-1)!
+        expect(shellRule.value).toBe(property === 'border' ? '0' : 'none')
+        // Utility rings and component-specific frame styles cannot restore it.
+        expect(shellRule.important).toBe(true)
+      }
+      expect(lastValue(paint, '--tw-ring-shadow')).toBe('0 0 #0000')
     }
-    for (const card of container.querySelectorAll('header, section, footer')) {
+    for (const card of container.querySelectorAll('.workspace-shell > section.card, .grid > article.card')) {
       expect(lastValue(declarationsFor(card), 'border')).toBe('1px solid var(--surface-edge)')
       expect(lastValue(declarationsFor(card), 'box-shadow')).toBe('var(--surface-shadow)')
     }
+    const mainHeader = container.querySelector('.workspace-shell > .card-header')!
+    expect(lastValue(declarationsFor(mainHeader), 'border-bottom')).toBe('0')
+    expect(lastValue(declarationsFor(container.querySelector('.workspace-page > .glass-surface > header')!), 'border-bottom')).toBe('0')
+    expect(lastValue(declarationsFor(container.querySelector('.workspace-shell > section.card > .card-header')!), 'border-bottom')).toBeUndefined()
+    expect(lastValue(declarationsFor(container.querySelector('.workspace-tab')!), 'border')).toBeUndefined()
     expect(lastValue(declarations, 'border-radius')).toBe('var(--surface-radius)')
     expect(lastValue(declarations, 'background-color')).toBe('var(--surface-fill)')
-    expect(lastValue(declarationsFor(container.querySelector('button')!), 'box-shadow')).toContain('inset 0 1px 0 var(--surface-glint)')
+    expect(lastValue(declarationsFor(container.querySelector('.surface-control')!), 'box-shadow')).toContain('inset 0 1px 0 var(--surface-glint)')
     container.remove()
   })
 })

@@ -1,5 +1,11 @@
 /* The header and native body scrollport occupy separate layout boxes. Body
    pixels cannot enter the header, even during compositor-driven fast scrolling. */
+.record-table-dialog-scroll {
+  --record-table-max-height: min(42vh, 420px);
+  max-height: var(--record-table-max-height);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
 .static-table-frame {
   display: flex;
   flex-direction: column;

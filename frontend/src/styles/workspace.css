@@ -73,10 +73,9 @@
   .app-layout-workspace .table-page-layout:not(.mobile-mode) { flex: 1; height: 100%; min-height: 0; gap: 12px; }
 }
 
-/* Filter bars without their own card share the table card's outside corners. */
+/* Filter bars own their fill and corners, without an extra page-level frame. */
 .table-page-layout > .layout-section-fixed:not(.table-page-pagination):has(input.input, .select-trigger):not(:has(> .card, > .surface-card)) {
   padding: 12px;
-  border: 1px solid var(--surface-edge);
   border-radius: var(--surface-radius);
   background-color: var(--surface-fill);
   background-image: linear-gradient(135deg, var(--surface-glint), transparent 65%);
@@ -93,6 +92,5 @@
     margin-top: 0;
     margin-bottom: 0;
   }
-  .workspace-tabs { position: sticky; top: var(--shell-sticky-offset); z-index: 20; }
   .workspace-tab { min-width: max-content; padding: 10px 16px; }
 }

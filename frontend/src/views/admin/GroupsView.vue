@@ -4037,7 +4037,7 @@
             >
               {{ t("admin.groups.compositeRoutes.empty") }}
             </div>
-            <div v-else class="record-table-scroll table-container overflow-x-auto">
+            <div v-else class="record-table-scroll record-table-dialog-scroll table-container overflow-x-auto">
               <table class="record-table min-w-full divide-y divide-gray-200 text-sm dark:divide-dark-600">
                 <thead class="surface-inset text-left text-xs font-medium uppercase tracking-wide surface-muted">
                   <tr>

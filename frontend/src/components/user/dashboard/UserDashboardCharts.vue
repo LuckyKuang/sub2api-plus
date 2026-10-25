@@ -119,12 +119,13 @@ const doughnutOptions = computed(() => ({
 </script>
 
 <style scoped>
+.record-table-scroll { --record-table-max-height: 12rem; max-height: var(--record-table-max-height); }
 @media (min-width: 1024px) {
   .user-chart-grid { display: grid; gap: 12px; }
   .user-model-chart { display: flex; min-height: 0; flex-direction: column; padding: 14px; }
   .user-model-chart > h3 { flex: none; margin-bottom: 12px; }
   .user-model-chart > div:not(.absolute) { min-height: 0; flex: 1; gap: 10px; }
   .user-model-chart .h-48.w-48 { width: clamp(110px, 9vw, 178px); height: clamp(110px, 9vw, 178px); flex: none; }
-  .user-model-chart .record-table-scroll { min-height: 0; max-height: 100%; align-self: stretch; }
+  .user-model-chart .record-table-scroll { --record-table-max-height: 100%; min-height: 0; align-self: stretch; }
 }
 </style>

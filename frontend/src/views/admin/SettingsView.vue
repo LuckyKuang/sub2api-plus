@@ -48,7 +48,7 @@
         <!-- Tab: Security — Admin API Key -->
         <div v-show="activeTab === 'security'" class="space-y-6">
           <!-- Admin API Key Settings -->
-          <div class="card">
+          <div class="card workspace-shell">
             <div
               class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
             >
@@ -205,7 +205,7 @@
         <!-- Tab: Gateway -->
         <div v-show="activeTab === 'gateway'" class="space-y-6">
           <!-- Overload Cooldown (529) Settings -->
-          <div class="card">
+          <div class="card workspace-shell">
             <div
               class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
             >
@@ -306,7 +306,7 @@
           </div>
 
           <!-- Rate Limit Cooldown (429) Settings -->
-          <div class="card">
+          <div class="card workspace-shell">
             <div
               class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
             >
@@ -413,7 +413,7 @@
           </div>
 
           <!-- Stream Timeout Settings -->
-          <div class="card">
+          <div class="card workspace-shell">
             <div
               class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
             >
@@ -583,7 +583,7 @@
           </div>
 
           <!-- Request Rectifier Settings -->
-          <div class="card">
+          <div class="card workspace-shell">
             <div
               class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
             >
@@ -782,7 +782,7 @@
             </div>
           </div>
           <!-- Beta Policy Settings -->
-          <div class="card">
+          <div class="card workspace-shell">
             <div
               class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
             >
@@ -1061,7 +1061,7 @@
             </div>
           </div>
           <!-- OpenAI Fast/Flex Policy Settings -->
-          <div class="card">
+          <div class="card workspace-shell">
             <div
               class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
             >
@@ -1415,7 +1415,7 @@
         <!-- Tab: Security — Registration, Turnstile, LinuxDo -->
         <div v-show="activeTab === 'security'" class="space-y-6">
           <!-- Registration Settings -->
-          <div class="card">
+          <div class="card workspace-shell">
             <div
               class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
             >
@@ -1747,7 +1747,7 @@
           </div>
 
           <!-- Global IP Access Control -->
-          <div class="card">
+          <div class="card workspace-shell">
             <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
               <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
                 {{ t("admin.settings.ipAccessControl.title") }}
@@ -1785,7 +1785,7 @@
           </div>
 
           <!-- API Key IP ACL Settings -->
-          <div class="card">
+          <div class="card workspace-shell">
             <div
               class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
             >
@@ -1872,7 +1872,7 @@
           </div>
 
           <!-- Panel API Rate Limit Settings -->
-          <div class="card">
+          <div class="card workspace-shell">
             <div
               class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
             >
@@ -2063,7 +2063,7 @@
           </div>
 
           <!-- 人机验证 Settings -->
-          <div class="card">
+          <div class="card workspace-shell">
             <div
               class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
             >
@@ -2467,7 +2467,7 @@
           </div>
 
           <!-- LinuxDo Connect OAuth 登录 -->
-          <div class="card">
+          <div class="card workspace-shell">
             <div
               class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
             >
@@ -2585,7 +2585,7 @@
           </div>
 
           <!-- GitHub / Google 邮箱快捷登录 -->
-          <div class="card">
+          <div class="card workspace-shell">
             <div
               class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
             >
@@ -2811,7 +2811,7 @@
           </div>
 
           <!-- WeChat Connect OAuth 登录 -->
-          <div class="card">
+          <div class="card workspace-shell">
             <div
               class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
             >
@@ -3153,7 +3153,7 @@
           </div>
 
           <!-- DingTalk Connect OAuth 登录 -->
-          <div class="card">
+          <div class="card workspace-shell">
             <div
               class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
             >
@@ -3441,7 +3441,7 @@
           </div>
 
           <!-- Generic OIDC OAuth 登录 -->
-          <div class="card">
+          <div class="card workspace-shell">
             <div
               class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
             >
@@ -3848,7 +3848,7 @@
         <!-- Tab: Users -->
         <div v-show="activeTab === 'users'" class="space-y-6">
           <!-- Default Settings -->
-          <div class="card">
+          <div class="card workspace-shell">
             <div
               class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
             >
@@ -4139,7 +4139,7 @@
             </div>
           </div>
 
-          <div class="card">
+          <div class="card workspace-shell">
             <div
               class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
             >
@@ -4482,7 +4482,7 @@
         <!-- Tab: Gateway — Claude Code, Scheduling -->
         <div v-show="activeTab === 'gateway'" class="space-y-6">
           <!-- Claude Code Settings -->
-          <div class="card">
+          <div class="card workspace-shell">
             <div
               class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
             >
@@ -4534,7 +4534,7 @@
           </div>
 
           <!-- Codex Settings -->
-          <div class="card">
+          <div class="card workspace-shell">
             <div
               class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
             >
@@ -4763,7 +4763,7 @@
           </div>
 
           <!-- Ollama Cloud Usage Settings -->
-          <div class="card" data-testid="ollama-cloud-usage-global-settings">
+          <div class="card workspace-shell" data-testid="ollama-cloud-usage-global-settings">
             <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
               <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
                 {{ t("admin.settings.ollamaCloudUsage.title") }}
@@ -4847,7 +4847,7 @@
           </div>
 
           <!-- Gateway Scheduling Settings -->
-          <div class="card">
+          <div class="card workspace-shell">
             <div
               class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
             >
@@ -5128,7 +5128,7 @@
           </div>
 
           <!-- Gateway Forwarding Behavior -->
-          <div class="card">
+          <div class="card workspace-shell">
             <div
               class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
             >
@@ -5598,7 +5598,7 @@
           </div>
 
           <!-- Web Search Emulation -->
-          <div class="card">
+          <div class="card workspace-shell">
             <div
               class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
             >
@@ -6034,7 +6034,7 @@
           </div>
 
         <!-- Usage Records Settings -->
-        <div class="card">
+        <div class="card workspace-shell">
           <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
               {{ t('admin.settings.usageRecords.title') }}
@@ -6068,7 +6068,7 @@
         <div v-show="activeTab === 'general'" class="space-y-6">
           <AppearanceSettingsCard :active="activeTab === 'general'" />
           <!-- Site Settings -->
-          <div class="card">
+          <div class="card workspace-shell">
             <div
               class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
             >
@@ -6435,7 +6435,7 @@
           </div>
 
           <!-- Custom Menu Items -->
-          <div class="card">
+          <div class="card workspace-shell">
             <div
               class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
             >
@@ -6638,7 +6638,7 @@
 
 	        <!-- Tab: Login Agreement -->
 	        <div v-show="activeTab === 'agreement'" class="space-y-6">
-	          <div class="card">
+	          <div class="card workspace-shell">
 	            <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
 	              <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
 	                <div>
@@ -6841,7 +6841,7 @@
 	        <!-- Tab: Features (功能开关) -->
         <div v-show="activeTab === 'features'" class="space-y-6">
 
-        <div class="card">
+        <div class="card workspace-shell">
           <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
               {{ t('admin.settings.features.channelMonitor.title') }}
@@ -6971,7 +6971,7 @@
           </div>
         </div>
 
-        <div class="card">
+        <div class="card workspace-shell">
           <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
               {{ t('admin.settings.features.availableChannels.title') }}
@@ -7004,7 +7004,7 @@
           </div>
         </div>
 
-        <div class="card">
+        <div class="card workspace-shell">
           <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
               {{ t('admin.settings.features.modelPlaza.title') }}
@@ -7062,7 +7062,7 @@
           </div>
         </div>
 
-        <div class="card">
+        <div class="card workspace-shell">
           <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
               {{ t('admin.settings.features.siteBillingMode.title') }}
@@ -7092,7 +7092,7 @@
           </div>
         </div>
 
-        <div class="card">
+        <div class="card workspace-shell">
           <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
               {{ t('admin.settings.features.pluginManagement.title') }}
@@ -7116,7 +7116,7 @@
           </div>
         </div>
 
-        <div class="card">
+        <div class="card workspace-shell">
           <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
               {{ t('admin.settings.features.riskControl.title') }}
@@ -7220,7 +7220,7 @@
         </div>
 
         <!-- Affiliate (邀请返利) feature card -->
-        <div class="card">
+        <div class="card workspace-shell">
           <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
               {{ t('admin.settings.features.affiliate.title') }}
@@ -7637,7 +7637,7 @@
         <!-- Tab: Payment -->
         <div v-show="activeTab === 'payment'" class="space-y-6">
           <!-- Payment System Settings -->
-          <div class="card">
+          <div class="card workspace-shell">
             <div
               class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
             >
@@ -8112,7 +8112,7 @@
             </div>
           </div>
 
-          <div class="card">
+          <div class="card workspace-shell">
             <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"><h2 class="text-lg font-semibold">{{ t('featureExtensions.purchaseSettings') }}</h2><p class="mt-1 text-sm surface-muted">{{ t('featureExtensions.purchaseSettingsHint') }}</p></div>
             <div class="space-y-4 p-6">
               <div class="flex items-center justify-between"><label class="input-label">{{ t('featureExtensions.purchaseEnabled') }}</label><Toggle v-model="form.payment_redeem_purchase_enabled" /></div>
@@ -8150,7 +8150,7 @@
 
         <div v-show="activeTab === 'email'" class="space-y-6">
           <!-- Email disabled hint - show when email_verify_enabled is off -->
-          <div v-if="!form.email_verify_enabled" class="card">
+          <div v-if="!form.email_verify_enabled" class="card workspace-shell">
             <div class="p-6">
               <div class="flex items-start gap-3">
                 <Icon
@@ -8171,7 +8171,7 @@
           </div>
 
           <!-- SMTP Settings - Only show when email verification is enabled -->
-          <div v-if="form.email_verify_enabled" class="card">
+          <div v-if="form.email_verify_enabled" class="card workspace-shell">
             <div
               class="flex items-center justify-between border-b border-gray-100 px-6 py-4 dark:border-dark-700"
             >
@@ -8334,7 +8334,7 @@
           </div>
 
           <!-- Send Test Email - Only show when email verification is enabled -->
-          <div v-if="form.email_verify_enabled" class="card">
+          <div v-if="form.email_verify_enabled" class="card workspace-shell">
             <div
               class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
             >
@@ -8401,7 +8401,7 @@
           </div>
 
           <!-- 订阅到期提醒 -->
-          <div class="card">
+          <div class="card workspace-shell">
             <div
               class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
             >
@@ -8432,7 +8432,7 @@
           <EmailTemplateEditor />
 
           <!-- Balance Low Notification -->
-          <div class="card">
+          <div class="card workspace-shell">
             <div
               class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
             >
@@ -8492,7 +8492,7 @@
           </div>
 
           <!-- Account Quota Notification -->
-          <div class="card">
+          <div class="card workspace-shell">
             <div
               class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
             >

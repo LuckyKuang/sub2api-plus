@@ -1,5 +1,5 @@
 <template>
-  <section class="card monitor-platform-manager" :aria-label="t('channelMonitorV2.settings.platformsTitle')">
+  <section class="card workspace-shell monitor-platform-manager" :aria-label="t('channelMonitorV2.settings.platformsTitle')">
     <header class="manager-heading">
       <div>
         <h3 class="text-sm font-semibold">{{ t('channelMonitorV2.settings.platformsTitle') }}</h3>
@@ -212,7 +212,7 @@ onBeforeUnmount(() => { ++catalogRevision; controller?.abort() })
 <style scoped>
 .monitor-platform-manager { overflow: visible; }
 .manager-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; padding: 20px 22px; }
-.manager-workspace { display: grid; grid-template-columns: 230px minmax(0, 1fr); border-top: 1px solid var(--surface-border, rgb(148 163 184 / 18%)); }
+.manager-workspace { display: grid; grid-template-columns: 230px minmax(0, 1fr); }
 .manager-rail { min-width: 0; padding: 18px 14px; border-right: 1px solid rgb(148 163 184 / 18%); }
 .manager-platform-list { display: flex; max-height: 540px; flex-direction: column; gap: 7px; overflow-y: auto; }
 .manager-platform { display: flex; width: 100%; align-items: center; gap: 10px; border: 1px solid transparent; border-radius: 13px; padding: 12px 10px; transition: background .15s; }
@@ -234,7 +234,7 @@ onBeforeUnmount(() => { ++catalogRevision; controller?.abort() })
 .manager-icon { display: grid; width: 30px; height: 30px; place-items: center; border-radius: 9px; }
 .manager-icon:hover { background: rgb(148 163 184 / 12%); }
 .manager-empty { grid-column: 1 / -1; padding: 42px 20px; text-align: center; line-height: 1.8; }
-.manager-undo { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid rgb(148 163 184 / 18%); padding: 10px 22px; font-size: 12px; }
+.manager-undo { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 22px; font-size: 12px; }
 @container v2models (min-width: 940px) { .manager-models { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 1000px) { .manager-workspace { grid-template-columns: 190px minmax(0, 1fr); } }
 @media (max-width: 700px) {

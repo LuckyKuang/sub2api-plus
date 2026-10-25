@@ -17,7 +17,7 @@
 
       <div
         v-if="contactInfo"
-        class="card border-primary-200 bg-primary-50/[0.15] p-6 dark:bg-primary-900/20"
+        class="card workspace-shell bg-primary-50/[0.15] p-6 dark:bg-primary-900/20"
       >
         <div class="flex items-center gap-4">
           <div class="rounded-xl bg-primary-100/[0.15] p-3 text-primary-600">
@@ -32,9 +32,10 @@
         </div>
       </div>
 
-      <ProfilePasswordForm />
+      <ProfilePasswordForm class="workspace-shell" />
 
       <ProfileBalanceNotifyCard
+        class="workspace-shell"
         v-if="user && balanceLowNotifyEnabled"
         :enabled="user.balance_notify_enabled ?? true"
         :threshold="user.balance_notify_threshold"
@@ -43,8 +44,8 @@
         :user-email="user.email"
       />
 
-      <ProfileTotpCard />
-      <ProfilePasskeyCard :enabled="passkeyEnabled" />
+      <ProfileTotpCard class="workspace-shell" />
+      <ProfilePasskeyCard class="workspace-shell" :enabled="passkeyEnabled" />
     </div>
   </AppLayout>
 </template>

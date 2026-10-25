@@ -44,7 +44,7 @@
           </div>
         </div>
 
-        <div class="card p-6">
+        <div class="card workspace-shell p-6">
           <h3 class="text-base font-semibold text-gray-900 dark:text-white">{{ t('affiliate.title') }}</h3>
           <p class="mt-1 text-sm surface-muted">{{ t('affiliate.description') }}</p>
 
@@ -83,7 +83,7 @@
           </div>
         </div>
 
-        <div class="card p-6">
+        <div class="card workspace-shell p-6">
           <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h3 class="text-base font-semibold text-gray-900 dark:text-white">{{ t('affiliate.transfer.title') }}</h3>
@@ -104,7 +104,7 @@
           </p>
         </div>
 
-        <div class="card p-6">
+        <div class="card workspace-shell p-6">
           <h3 class="text-base font-semibold text-gray-900 dark:text-white">{{ t('affiliate.invitees.title') }}</h3>
           <div v-if="detail.invitees.length === 0" class="mt-4 rounded-xl border border-dashed border-gray-300 p-6 text-center text-sm dark:border-dark-700 surface-muted">
             {{ t('affiliate.invitees.empty') }}

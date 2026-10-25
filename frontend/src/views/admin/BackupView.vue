@@ -1,7 +1,7 @@
 <template>
     <div class="space-y-6">
       <!-- S3 Storage Config -->
-      <div class="card p-6">
+      <div class="card workspace-shell p-6">
         <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 class="text-base font-semibold text-gray-900 dark:text-white">
@@ -70,7 +70,7 @@
       </div>
 
       <!-- Async image object storage -->
-      <div class="card p-6">
+      <div class="card workspace-shell p-6">
         <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 class="text-base font-semibold text-gray-900 dark:text-white">
@@ -160,7 +160,7 @@
       </div>
 
       <!-- Schedule Config -->
-      <div class="card p-6">
+      <div class="card workspace-shell p-6">
         <div class="mb-4">
           <h3 class="text-base font-semibold text-gray-900 dark:text-white">
             {{ t('admin.backup.schedule.title') }}
@@ -198,7 +198,7 @@
       </div>
 
       <!-- Backup Operations -->
-      <div class="card p-6">
+      <div class="card workspace-shell p-6">
         <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 class="text-base font-semibold text-gray-900 dark:text-white">

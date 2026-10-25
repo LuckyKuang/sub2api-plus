@@ -81,6 +81,11 @@ function meaningfulStyle(record: MutationRecord): boolean {
   return before.cssText !== after.cssText
 }
 
+/** Keep authored responsive expressions instead of freezing computed vh in px. */
+function authoredMaxHeight(viewport: HTMLElement, styles: CSSStyleDeclaration): string {
+  return viewport.style.maxHeight || styles.getPropertyValue('--record-table-max-height').trim()
+}
+
 /**
  * Put the real, Vue-owned header above its native body scrollport. A hidden
  * measurement copy keeps the body's native column layout and existing table
@@ -170,18 +175,16 @@ export function useStaticTableHeaders(root: Ref<HTMLElement | null>): void {
       if (!head || head.classList.contains(measureClass)) return
       const styles = getComputedStyle(viewport)
       const parentStyles = viewport.parentElement && getComputedStyle(viewport.parentElement)
-      const sticky = [head, ...head.querySelectorAll<HTMLElement>('th,td')].some(cell => {
-        const css = getComputedStyle(cell)
-        return css.position === 'sticky' && css.top !== 'auto'
-      })
       const constrained = viewport.scrollHeight > viewport.clientHeight
         || (styles.maxHeight !== 'none' && styles.maxHeight !== '')
         || (Number(styles.flexGrow) > 0 && parentStyles?.display.includes('flex'))
-      if (!sticky || !constrained || !['auto', 'scroll'].includes(styles.overflowY)) return
+      // Distribution lists and dialog tables also need a static header, even
+      // when their original markup never opted into position: sticky.
+      if (!constrained || !['auto', 'scroll'].includes(styles.overflowY)) return
 
       // Computed styles are live in browsers; snapshot before adding body roles.
       const originalLayout = {
-        originalMaxHeight: styles.maxHeight,
+        originalMaxHeight: authoredMaxHeight(viewport, styles) || styles.maxHeight,
         originalFlex: styles.flex,
         originalMargin: `${styles.marginTop} ${styles.marginRight} ${styles.marginBottom} ${styles.marginLeft}`,
         originalPaddingTop: styles.paddingTop,
@@ -273,6 +276,8 @@ export function useStaticTableHeaders(root: Ref<HTMLElement | null>): void {
         const heightValue = `${height}px`
         if (table.style.getPropertyValue('--static-table-head-height') !== heightValue) table.style.setProperty('--static-table-head-height', heightValue)
         const css = getComputedStyle(viewport)
+        const maxHeight = authoredMaxHeight(viewport, css)
+        if (maxHeight && state.frame.style.maxHeight !== maxHeight) state.frame.style.maxHeight = maxHeight
         if (state.originalLabel === null) {
           const label = viewport.getAttribute('aria-label')
           if (label && table.getAttribute('aria-label') !== label) table.setAttribute('aria-label', label)

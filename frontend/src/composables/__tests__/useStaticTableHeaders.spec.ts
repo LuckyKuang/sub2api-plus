@@ -24,21 +24,24 @@ function bounds(x: number, y: number, width: number, height: number): DOMRect {
   return { x, y, width, height, top: y, left: x, right: x + width, bottom: y + height, toJSON: () => ({}) } as DOMRect
 }
 
-function fixture() {
+function fixture({ constrained = true, sticky = true } = {}) {
   const parent = document.createElement('section')
   parent.style.display = 'flex'
   const viewport = document.createElement('div')
   viewport.className = 'record-table-scroll table-wrapper'
-  viewport.style.cssText = 'overflow-y:auto;flex:1 1 0%;max-height:240px;padding-top:8px'
+  viewport.style.cssText = constrained
+    ? 'overflow-y:auto;flex:1 1 0%;max-height:240px;padding-top:8px'
+    : 'overflow-y:auto;flex:0 1 auto;max-height:none;padding-top:8px'
   viewport.setAttribute('aria-label', 'Usage records')
-  viewport.innerHTML = `<table class="record-table"><thead style="position:sticky;top:0"><tr>
+  viewport.innerHTML = `<table class="record-table"><thead style="position:${sticky ? 'sticky' : 'static'};top:0"><tr>
     <th data-width="80"><input id="select-all" type="checkbox" aria-label="Select all"></th>
     <th data-width="120" data-field="account" style="left:80px"><button title="Account help">Account</button></th>
     <th data-width="200" data-field="model" aria-sort="none">Model</th>
     <th data-width="200">Cost</th>
     </tr></thead><tbody><tr><td>A</td><td>B</td><td>C</td><td>D</td></tr></tbody></table>`
   Object.defineProperties(viewport, {
-    clientLeft: { value: 12 }, clientWidth: { value: 300 }, clientHeight: { value: 240 }, scrollHeight: { value: 900 },
+    clientLeft: { value: 12 }, clientWidth: { value: 300 },
+    clientHeight: { value: constrained ? 240 : 180 }, scrollHeight: { value: constrained ? 900 : 180 },
   })
   parent.append(viewport)
   document.body.append(parent)
@@ -220,13 +223,98 @@ describe('static table headers', () => {
     expect(frames.size).toBe(0)
   })
 
-  it('does not split compact non-sticky distribution headers', async () => {
-    const { viewport, head } = fixture()
-    head.style.position = 'static'
+  it('separates compact distribution headers even when the original header is not sticky', async () => {
+    // Acceptance: every bounded data list keeps its title outside scrolling
+    // records; missing sticky markup must not exempt chart distribution rows.
+    const { viewport, head } = fixture({ sticky: false })
+    scope.run(() => useStaticTableHeaders(ref(viewport)))
+    await settle()
+    const rail = document.querySelector('.static-table-header-rail')!
+    expect(rail.querySelector('thead')).toBe(head)
+    expect(rail.nextElementSibling).toBe(viewport)
+    expect(viewport.contains(head)).toBe(false)
+    expect(viewport.classList.contains('static-table-body-viewport')).toBe(true)
+    expect(viewport.parentElement!.style.maxHeight).toBe('240px')
+  })
+
+  it('keeps short unconstrained explanation tables in their natural document flow', async () => {
+    // A short table in a dialog/page must not acquire an unnecessary private
+    // scrolling window just because it uses record-table typography.
+    const { viewport, head } = fixture({ constrained: false, sticky: false })
     scope.run(() => useStaticTableHeaders(ref(viewport)))
     await settle()
     expect(document.querySelector('.static-table-frame')).toBeNull()
     expect(viewport.querySelector('thead')).toBe(head)
+  })
+
+  it('separates a bounded dialog table without moving other dialog content into its scrollport', async () => {
+    const { parent, viewport, head } = fixture({ sticky: false })
+    parent.className = 'modal-body'
+    const introduction = document.createElement('p')
+    introduction.textContent = 'Choose a quota account before reviewing these rows.'
+    const footer = document.createElement('button')
+    footer.textContent = 'Close'
+    parent.prepend(introduction)
+    parent.append(footer)
+    viewport.classList.add('record-table-dialog-scroll')
+    scope.run(() => useStaticTableHeaders(ref(viewport)))
+    await settle()
+    const frame = document.querySelector('.static-table-frame')!
+    expect(frame.querySelector('.static-table-header-rail thead')).toBe(head)
+    expect(frame.contains(viewport)).toBe(true)
+    expect(frame.contains(introduction)).toBe(false)
+    expect(frame.contains(footer)).toBe(false)
+    expect(introduction.nextElementSibling).toBe(frame)
+    expect(frame.nextElementSibling).toBe(footer)
+  })
+
+  it('preserves an inline viewport-relative height budget when transferring it to the header frame', async () => {
+    // A resize must continue to resolve vh through CSS, not keep the pixel
+    // height measured at the original browser window size.
+    const { viewport } = fixture({ sticky: false })
+    viewport.style.maxHeight = 'min(42vh, 420px)'
+    scope.run(() => useStaticTableHeaders(ref(viewport)))
+    await settle()
+    const frame = document.querySelector<HTMLElement>('.static-table-frame')!
+    expect(frame.style.maxHeight).toBe('min(42vh, 420px)')
+    window.dispatchEvent(new Event('resize'))
+    await settle()
+    expect(frame.style.maxHeight).toBe('min(42vh, 420px)')
+    expect(frames.size).toBe(0)
+  })
+
+  it('refreshes an authored height budget when a responsive breakpoint changes its padding allowance', async () => {
+    const { viewport } = fixture({ sticky: false })
+    viewport.style.removeProperty('max-height')
+    viewport.style.setProperty('--record-table-max-height', 'max(0px, calc(min(52vh, 520px) - 2rem))')
+    scope.run(() => useStaticTableHeaders(ref(viewport)))
+    await settle()
+    const frame = document.querySelector<HTMLElement>('.static-table-frame')!
+    expect(frame.style.maxHeight).toBe('max(0px, calc(min(52vh, 520px) - 2rem))')
+    viewport.style.setProperty('--record-table-max-height', 'max(0px, calc(min(52vh, 520px) - 2.5rem))')
+    window.dispatchEvent(new Event('resize'))
+    await settle()
+    expect(frame.style.maxHeight).toBe('max(0px, calc(min(52vh, 520px) - 2.5rem))')
+    expect(frames.size).toBe(0)
+  })
+
+  it('follows dynamic inline height changes and resumes the stylesheet budget when the override is cleared', async () => {
+    // A caller may temporarily constrain a table and then restore responsive
+    // sizing. The split shell must follow that change without keeping stale px.
+    const { viewport } = fixture({ sticky: false })
+    viewport.style.setProperty('--record-table-max-height', 'min(42vh, 420px)')
+    viewport.style.maxHeight = 'min(30vh, 300px)'
+    scope.run(() => useStaticTableHeaders(ref(viewport)))
+    await settle()
+    const frame = document.querySelector<HTMLElement>('.static-table-frame')!
+    expect(frame.style.maxHeight).toBe('min(30vh, 300px)')
+    viewport.style.maxHeight = 'min(35vh, 350px)'
+    await settle()
+    expect(frame.style.maxHeight).toBe('min(35vh, 350px)')
+    viewport.style.removeProperty('max-height')
+    await settle()
+    expect(frame.style.maxHeight).toBe('min(42vh, 420px)')
+    expect(frames.size).toBe(0)
   })
 
   it('registers an initially hidden viewport when it becomes visible', async () => {

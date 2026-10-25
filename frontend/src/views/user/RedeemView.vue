@@ -2,7 +2,7 @@
   <AppLayout>
     <div class="space-y-6">
       <!-- Current Balance Card -->
-      <div class="card overflow-hidden">
+      <div class="card workspace-shell overflow-hidden">
         <div class="redeem-balance px-6 py-8 text-center">
           <div
             class="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl surface-inset"
@@ -20,7 +20,7 @@
       </div>
 
       <!-- Redeem Form -->
-      <div class="card">
+      <div class="card workspace-shell">
         <div class="p-6">
           <form v-support-readonly @submit.prevent="handleRedeem" class="space-y-5">
             <div>
@@ -82,7 +82,7 @@
       <transition name="fade">
         <div
           v-if="redeemResult"
-          class="card border-emerald-200 bg-emerald-50/[0.15] dark:border-emerald-800/50 dark:bg-emerald-900/20"
+          class="card workspace-shell border-emerald-200 bg-emerald-50/[0.15] dark:border-emerald-800/50 dark:bg-emerald-900/20"
         >
           <div class="p-6">
             <div class="flex items-start gap-4">
@@ -136,7 +136,7 @@
       <transition name="fade">
         <div
           v-if="errorMessage"
-          class="card border-red-200 bg-red-50/[0.15] dark:border-red-800/50 dark:bg-red-900/20"
+          class="card workspace-shell border-red-200 bg-red-50/[0.15] dark:border-red-800/50 dark:bg-red-900/20"
         >
           <div class="p-6">
             <div class="flex items-start gap-4">
@@ -164,7 +164,7 @@
 
       <!-- Information Card -->
       <div
-        class="card border-primary-200 bg-primary-50/[0.15] dark:border-primary-800/50 dark:bg-primary-900/20"
+        class="card workspace-shell border-primary-200 bg-primary-50/[0.15] dark:border-primary-800/50 dark:bg-primary-900/20"
       >
         <div class="p-6">
           <div class="flex items-start gap-4">
@@ -199,7 +199,7 @@
       </div>
 
       <!-- Recent Activity -->
-      <div class="card">
+      <div class="card workspace-shell">
         <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
           <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
             {{ t('redeem.recentActivity') }}

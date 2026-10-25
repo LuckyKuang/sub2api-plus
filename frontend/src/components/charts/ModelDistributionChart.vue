@@ -539,12 +539,13 @@ const formatCost = (value: number | null | undefined): string => {
 </script>
 
 <style scoped>
+.record-table-scroll { --record-table-max-height: 12rem; max-height: var(--record-table-max-height); }
 @media (min-width: 1024px) {
   .chart-workspace { display: flex; min-height: 0; flex-direction: column; overflow: hidden; padding: 14px; }
   .chart-workspace > div:first-child { flex: none; margin-bottom: 10px; }
   .chart-workspace > div:not(:first-child) { min-height: 0; height: auto; flex: 1; }
   .chart-workspace > div.flex { flex-direction: row; align-items: center; gap: 10px; }
   .chart-workspace .h-48.w-48 { width: clamp(110px, 9vw, 178px); height: clamp(110px, 9vw, 178px); flex: none; }
-  .chart-workspace .record-table-scroll { min-height: 0; max-height: 100%; align-self: stretch; }
+  .chart-workspace .record-table-scroll { --record-table-max-height: 100%; min-height: 0; align-self: stretch; }
 }
 </style>

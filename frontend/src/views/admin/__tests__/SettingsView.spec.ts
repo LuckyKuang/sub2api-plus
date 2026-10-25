@@ -779,21 +779,25 @@ describe("admin SettingsView payment visible method controls", () => {
       expect(body.element.closest('form')).toBe(wrapper.get('form').element);
       const save = wrapper.get('[data-test="settings-save-bar"]');
       expect(save.element.closest('form')).toBe(wrapper.get('form').element);
+      // jsdom's :scope selector includes descendants when they share the
+      // scroll area's workspace-shell class. Keep ownership explicit.
+      const visibleSections = () => body.findAll('div').filter(section =>
+        section.element.parentElement === body.element && section.isVisible());
       await openSecurityTab(wrapper);
-      const securitySections = body.findAll(':scope > div').filter(section => section.isVisible());
+      const securitySections = visibleSections();
       expect(securitySections).toHaveLength(2);
       expect(securitySections[0].text()).toContain('admin.settings.adminApiKey.title');
       expect(securitySections[1].text()).toContain('admin.settings.registration.title');
       body.element.scrollTop = 300;
       await openGatewayTab(wrapper);
       expect(body.element.scrollTop).toBe(0);
-      const gatewaySections = body.findAll(':scope > div').filter(section => section.isVisible());
+      const gatewaySections = visibleSections();
       expect(gatewaySections).toHaveLength(2);
       expect(gatewaySections[0].text()).toContain('admin.settings.overloadCooldown.title');
       expect(gatewaySections[1].text()).toContain('admin.settings.claudeCode.title');
       await wrapper.get('#settings-tab-general').trigger('click');
       await wrapper.get('#settings-tab-gateway').trigger('click');
-      expect(body.findAll(':scope > div').filter(section => section.isVisible())).toHaveLength(2);
+      expect(visibleSections()).toHaveLength(2);
       expect(updateSettings).not.toHaveBeenCalled();
     } finally {
       wrapper.unmount();

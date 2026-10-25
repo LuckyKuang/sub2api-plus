@@ -7,7 +7,7 @@
     <p v-if="error" role="alert" class="text-sm text-red-600">{{ error }}</p>
     <p v-if="loading" class="text-sm surface-muted">{{ t('common.loading') }}</p>
     <template v-if="view">
-      <section v-for="group in identityGroups" :key="group.key" class="card space-y-4 p-6" :data-identity-group="group.key">
+      <section v-for="group in identityGroups" :key="group.key" class="card workspace-shell space-y-4 p-6" :data-identity-group="group.key">
         <h3 class="font-semibold">{{ group.label }}</h3>
         <p v-if="group.key === 'minimax'" class="text-sm surface-muted">{{ t('admin.settings.outboundIdentity.minimaxModesHint') }}</p>
         <div class="grid gap-6" :class="group.presets.length > 1 ? 'xl:grid-cols-2' : ''">
@@ -102,7 +102,7 @@
         </div>
         </div>
       </section>
-      <details class="card space-y-4 p-6" data-testid="outbound-identity-defaults">
+      <details class="card workspace-shell space-y-4 p-6" data-testid="outbound-identity-defaults">
         <summary class="cursor-pointer font-semibold">{{ t('admin.settings.outboundIdentity.defaults') }}</summary>
         <p class="text-sm surface-muted">{{ t('admin.settings.outboundIdentity.defaultsHint') }}</p>
         <label v-for="mapping in mappings" :key="mapping.key" class="flex flex-wrap items-center justify-between gap-3 text-sm" :data-identity-mapping="mapping.key">

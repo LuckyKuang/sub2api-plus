@@ -7,7 +7,7 @@
       </div>
       <p class="rounded-lg surface-inset p-3 text-sm surface-muted">{{ t('availableChannels.catalog.billingGroupNote') }}</p>
       <p v-if="rateUnavailable" class="text-sm text-amber-700 dark:text-amber-300">{{ t('availableChannels.catalog.ratesUnavailable') }}</p>
-      <div class="record-table-scroll max-w-full overflow-x-auto rounded-lg border border-gray-200 dark:border-dark-700" tabindex="0" :aria-label="t('availableChannels.catalog.quoteComparison')">
+      <div class="record-table-scroll record-table-dialog-scroll max-w-full overflow-x-auto rounded-lg border border-gray-200 dark:border-dark-700" tabindex="0" :aria-label="t('availableChannels.catalog.quoteComparison')">
         <table class="record-table catalog-comparison w-full text-left text-xs surface-muted">
           <thead class="surface-inset surface-muted"><tr>
             <th class="px-3 py-2">{{ t('modelPlaza.filters.groupLabel') }}</th>

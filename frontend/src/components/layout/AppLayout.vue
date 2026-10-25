@@ -1,5 +1,5 @@
 <template>
-  <div ref="layoutRef" class="app-layout" :class="{ 'sidebar-is-collapsed': sidebarCollapsed, 'app-layout-workspace': workspace }">
+  <div class="app-layout" :class="{ 'sidebar-is-collapsed': sidebarCollapsed, 'app-layout-workspace': workspace }">
     <!-- Sidebar -->
     <AppSidebar />
 
@@ -21,15 +21,13 @@
 
 <script setup lang="ts">
 import '@/styles/onboarding.css'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useAppStore } from '@/stores'
 import { useAuthStore } from '@/stores/auth'
 import { useOnboardingTour } from '@/composables/useOnboardingTour'
 import { useOnboardingStore } from '@/stores/onboarding'
 import AdminSupportBanner from '@/components/admin/support/AdminSupportBanner.vue'
 import { useUserView } from '@/composables/useUserView'
-import { useTransparentTableClipping } from '@/composables/useTransparentTableClipping'
-import { useStaticTableHeaders } from '@/composables/useStaticTableHeaders'
 import { adminSupportContext } from '@/utils/adminSupportContext'
 import AppSidebar from './AppSidebar.vue'
 import AppHeader from './AppHeader.vue'
@@ -37,9 +35,6 @@ import AppHeader from './AppHeader.vue'
 withDefaults(defineProps<{ workspace?: boolean }>(), { workspace: false })
 
 const appStore = useAppStore()
-const layoutRef = ref<HTMLElement | null>(null)
-useStaticTableHeaders(layoutRef)
-useTransparentTableClipping(layoutRef, () => true)
 const authStore = useAuthStore()
 const sidebarCollapsed = computed(() => appStore.sidebarCollapsed)
 const view = useUserView()

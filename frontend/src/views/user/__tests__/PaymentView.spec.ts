@@ -287,6 +287,8 @@ async function mountSubscriptionPlanList(planCount: number) {
       stubs: {
         WorkspaceTabs: false,
         AppLayout: {
+          name: 'AppLayout',
+          props: { workspace: Boolean },
           template: '<div><slot /></div>',
         },
         Teleport: true,
@@ -904,7 +906,14 @@ describe('PaymentView checkout tabs', () => {
 
   it('keeps the pinned tab card across switches and preserves the recharge draft without creating an order', async () => {
     const wrapper = await mountSubscriptionPlanList(4)
+    // Acceptance: transparent navigation and actions must sit outside the
+    // activity scrollport, rather than covering records in a shared scroller.
+    expect(wrapper.getComponent({ name: 'AppLayout' }).props('workspace')).toBe(true)
     const navigation = wrapper.get('[role="tablist"]').element
+    const activity = wrapper.get('[data-testid="payment-activity"]')
+    expect(activity.classes()).toContain('workspace-scroll')
+    expect(navigation.parentElement).toBe(activity.element.parentElement)
+    expect(activity.element.contains(navigation)).toBe(false)
     const [subscribe, recharge] = wrapper.findAll('[role="tab"]')
     expect(wrapper.get('[role="tablist"]').classes()).toEqual(expect.arrayContaining(['card', 'payment-tabs', 'workspace-tabs']))
     await subscribe.trigger('keydown', { key: 'ArrowRight' })
@@ -913,7 +922,11 @@ describe('PaymentView checkout tabs', () => {
     expect(wrapper.findComponent(SubscriptionPlanCard).exists()).toBe(false)
     wrapper.getComponent(AmountInput).vm.$emit('update:modelValue', 50)
     await flushPromises()
-    expect(wrapper.get('[data-testid="recharge-checkout-action"]').text()).toContain(formatPaymentAmount(50, 'CNY'))
+    const action = wrapper.get('[data-testid="recharge-checkout-action"]')
+    expect(action.text()).toContain(formatPaymentAmount(50, 'CNY'))
+    expect(action.classes()).toEqual(expect.arrayContaining(['workspace-fixed', 'workspace-shell']))
+    expect(action.element.parentElement).toBe(activity.element.parentElement)
+    expect(activity.element.contains(action.element)).toBe(false)
     await recharge.trigger('keydown', { key: 'Home' })
     expect(subscribe.attributes('aria-selected')).toBe('true')
     expect(wrapper.findAllComponents(SubscriptionPlanCard)).toHaveLength(4)
@@ -930,7 +943,12 @@ describe('PaymentView checkout tabs', () => {
     wrapper.findAllComponents(SubscriptionPlanCard)[2].vm.$emit('select', selected)
     await flushPromises()
     expect(wrapper.find('[role="tablist"]').exists()).toBe(false)
-    expect(wrapper.get('[data-testid="subscription-checkout-action"]').findAll('button')).toHaveLength(2)
+    const activity = wrapper.get('[data-testid="payment-activity"]')
+    const action = wrapper.get('[data-testid="subscription-checkout-action"]')
+    expect(action.element.parentElement).toBe(activity.element.parentElement)
+    expect(activity.element.contains(action.element)).toBe(false)
+    expect(action.classes()).toEqual(expect.arrayContaining(['workspace-fixed', 'workspace-shell']))
+    expect(action.findAll('button')).toHaveLength(2)
     await wrapper.get('[data-testid="subscription-checkout-action"]').findAll('button')[1].trigger('click')
     expect(wrapper.findAllComponents(SubscriptionPlanCard)).toHaveLength(4)
     expect(wrapper.get('[role="tab"][aria-selected="true"]').text()).toBe('payment.tabSubscribe')

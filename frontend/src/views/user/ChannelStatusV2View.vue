@@ -1,11 +1,11 @@
 <template>
-  <AppLayout>
-    <div class="space-y-6">
+  <AppLayout workspace>
+    <div class="workspace-page">
       <!-- Ops-style elevated shell: title toolbar + filters (mirrors OpsDashboardHeader) -->
       <section
-        class="channel-monitor-toolbar card sticky top-[var(--shell-sticky-offset)] z-20 p-0 ring-1 ring-gray-900/5"
+        class="channel-monitor-toolbar card workspace-shell workspace-fixed p-0"
       >
-        <header class="page-header mb-0 flex flex-wrap items-start justify-between gap-4 border-b border-gray-100 px-5 py-4 dark:border-dark-700 sm:px-6">
+        <header class="page-header mb-0 flex flex-wrap items-start justify-between gap-4 px-5 py-4 sm:px-6">
           <div class="min-w-0">
             <h1 class="page-title flex items-center gap-2 text-xl font-black text-gray-900 dark:text-white">
               <span class="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-blue-50/[0.15] text-blue-500 dark:bg-blue-900/30 dark:text-blue-400">
@@ -57,7 +57,7 @@
         <!-- First-upgrade silent backfill: show until 30d product window is covered -->
         <div
           v-if="bootstrapActive"
-          class="border-b border-blue-100 bg-blue-50/90 px-5 py-3 dark:border-blue-900/40 dark:bg-blue-950/40 sm:px-6"
+          class="bg-blue-50/90 px-5 py-3 dark:bg-blue-950/40 sm:px-6"
           role="status"
           aria-live="polite"
         >
@@ -193,6 +193,7 @@
         </div>
       </section>
 
+      <div class="workspace-shell workspace-scroll" data-testid="channel-status-activity">
       <!-- Overview KPI: success · TTFT · tokens/s(optional) · cache · (+ RPM when throughput visible) -->
       <section
         v-if="snapshot"
@@ -288,8 +289,8 @@
             </button>
           </nav>
         </div>
-        <div class="min-h-0 max-h-[min(52vh,520px)] overflow-auto p-4 sm:p-5">
-          <div v-if="activeTab === 'models'" class="record-table-scroll table-container border-0">
+        <div class="min-h-0 p-4 sm:p-5">
+          <div v-if="activeTab === 'models'" class="monitor-tab-viewport record-table-scroll table-container min-h-0 overflow-auto border-0">
             <table class="record-table table monitor-table min-w-[720px]">
               <thead>
                 <tr>
@@ -335,7 +336,7 @@
             </table>
           </div>
 
-          <div v-else-if="activeTab === 'errors'" class="space-y-3">
+          <div v-else-if="activeTab === 'errors'" class="monitor-tab-viewport min-h-0 space-y-3 overflow-auto">
             <div
               v-for="row in errorRows"
               :key="row.category"
@@ -386,7 +387,7 @@
             </div>
           </div>
 
-          <div v-else class="record-table-scroll table-container border-0">
+          <div v-else class="monitor-tab-viewport record-table-scroll table-container min-h-0 overflow-auto border-0">
             <table class="record-table table monitor-table min-w-[640px]">
               <thead>
                 <tr>
@@ -455,6 +456,7 @@
           </div>
         </div>
       </section>
+      </div>
     </div>
   </AppLayout>
 </template>
@@ -946,9 +948,12 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-@media (min-width: 1024px) {
-  /* The desktop main already starts below the shell header. */
-  .channel-monitor-toolbar { top: 0; }
+.monitor-tab-viewport {
+  --record-table-max-height: max(0px, calc(min(52vh, 520px) - 2rem));
+  max-height: var(--record-table-max-height);
+}
+@media (min-width: 640px) {
+  .monitor-tab-viewport { --record-table-max-height: max(0px, calc(min(52vh, 520px) - 2.5rem)); }
 }
 .status-dot {
   display: inline-block;

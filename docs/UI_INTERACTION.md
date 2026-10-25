@@ -64,9 +64,11 @@ In desktop windows up to 600px high, platform filters share a horizontally
 scrolling row so channel cards retain visible space.
 The purchase catalog keeps the subscription/recharge navigation visible,
 uses four columns for desktop plans and preset recharge amounts, and keeps checkout
-actions visible. Sticky cards inside the desktop main scrollport use a zero top
-offset; the shell has already reserved the header space. This also applies to the
-channel-status monitoring toolbar, so it cannot overlap the summary metrics.
+actions visible. On desktop, navigation and checkout actions occupy separate fixed
+layout slots around the catalog's scrolling body. The channel-status monitoring
+toolbar likewise sits above its own scrolling activity area. Content cannot pass
+behind these controls, including at 100% transparency. Mobile layouts retain
+natural page scrolling without transparent sticky cards overlapping content.
 
 Scroll clipping belongs to the actual viewport: large content viewports use the
 outer card radius, and inset table viewports use the panel radius. Their corners
@@ -76,9 +78,11 @@ header above the body scrollport, so even rapid upward scrolling cannot paint
 records behind a transparent header. Portalled menus and dialogs retain their
 positioning; no global mask, transform or clip-path is used.
 
-The main content shell has no outline, inset edge or ring. Nested business cards,
-filter/title cards, pagination, controls and record rows retain their own borders.
-This keeps partially filled grids and nested cards from exposing an extra frame.
+Main content shells, full-width headings, filters, navigation and pagination have
+no outline, inset edge or ring, including their header/footer seams. Standalone
+settings sections and composite workspaces follow the same rule. Nested business
+cards, grid cards, controls and record rows retain their own borders. This keeps
+partially filled grids and nested cards from exposing an extra frame.
 Secondary navigation uses rounded 1px control outlines and the shared accent for
 hover and selection; it has no underline or full-width bottom baseline.
 
@@ -158,7 +162,10 @@ vertical pinned-column shadows are omitted; visible outer insets are 12px.
 Headers match the surrounding table background, have no independent card, and
 remain 12px from the first data row. Header groups and cells add no fill layers
 over the enclosing card. A static header rail and a separate body scrollport
-prevent vertical overlap without a scroll-driven masking delay. Header sorting,
+prevent vertical overlap without a scroll-driven masking delay. Every constrained
+scrolling record table uses this separation, including distribution tables whose
+headers were not previously sticky. Long dialog tables have a local, bounded body
+viewport; short reference tables retain their natural height. Header sorting,
 selection and column visibility stay synchronized with the source table; frozen
 columns and horizontal scrolling retain column alignment. When transparency is
 enabled, horizontal cell clipping prevents content from overlapping frozen

@@ -1111,7 +1111,7 @@
               <input v-model.trim="sessionFilters.search" type="search" class="input" :placeholder="t('admin.riskControl.sessionBlockSearch')" @keyup.enter="reloadSessionBlocksFromFirstPage" />
               <button type="button" class="btn btn-secondary" :disabled="sessionBlocksLoading" @click="reloadSessionBlocksFromFirstPage">{{ t('admin.riskControl.refresh') }}</button>
             </div>
-            <div class="record-table-scroll table-container overflow-x-auto">
+            <div class="record-table-scroll record-table-dialog-scroll table-container overflow-x-auto">
               <table class="record-table min-w-full divide-y divide-gray-200 dark:divide-dark-700">
                 <thead class="surface-inset">
                   <tr>
@@ -1262,7 +1262,7 @@
               {{ t('admin.riskControl.policyHelp.current') }}{{ effectiveTextPolicyDescription }}
             </p>
           </div>
-          <div class="record-table-scroll table-container overflow-x-auto">
+          <div class="record-table-scroll record-table-dialog-scroll table-container overflow-x-auto">
             <table class="record-table min-w-[900px] w-full text-left text-sm">
               <thead class="border-b border-gray-200 text-xs dark:border-dark-700 surface-muted">
                 <tr>

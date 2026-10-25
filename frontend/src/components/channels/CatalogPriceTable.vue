@@ -1,5 +1,5 @@
 <template>
-  <div class="record-table-scroll max-w-full overflow-x-auto rounded-lg border border-gray-200 dark:border-dark-700" tabindex="0" :aria-label="t('availableChannels.catalog.prices')">
+  <div class="record-table-scroll record-table-dialog-scroll max-w-full overflow-x-auto rounded-lg border border-gray-200 dark:border-dark-700" tabindex="0" :aria-label="t('availableChannels.catalog.prices')">
     <table class="record-table record-table-compact w-full text-left text-xs">
       <thead class="surface-inset surface-muted"><tr>
         <th class="px-3 py-2">{{ t('availableChannels.catalog.context') }}</th>

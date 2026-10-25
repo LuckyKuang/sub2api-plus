@@ -10,6 +10,7 @@
     <div
       v-if="descriptionHtml"
       class="glass-surface plaza-description border px-5 py-4 text-sm shadow-card dark:border-dark-700/50"
+      :class="{ 'workspace-shell': embedded }"
       v-html="descriptionHtml"
     ></div>
 
@@ -17,24 +18,27 @@
     <p
       v-if="!isAuthenticated"
       class="card flex items-center gap-1.5 px-5 py-3 text-xs surface-muted"
+      :class="{ 'workspace-shell': embedded }"
     >
       <Icon name="infoCircle" size="xs" class="h-3.5 w-3.5" />
       {{ t('modelPlaza.anonymousHint') }}
     </p>
 
     <!-- 加载/错误/空 -->
-    <div v-if="loading" class="card flex min-h-[240px] items-center justify-center">
+    <div v-if="loading" class="card flex min-h-[240px] items-center justify-center" :class="{ 'workspace-shell': embedded }">
       <div class="h-8 w-8 animate-spin rounded-full border-2 border-primary-600/25 border-t-primary-600 dark:border-primary-400/25 dark:border-t-primary-400"></div>
     </div>
     <div
       v-else-if="error"
       class="card border-red-200 px-5 py-8 text-center text-sm text-red-600 dark:border-red-500/30 dark:text-red-300"
+      :class="{ 'workspace-shell': embedded }"
     >
       {{ t('modelPlaza.loadFailed') }}
     </div>
     <template v-else>
       <!-- 筛选区:平台 → 分组 → 倍率 -->
       <PlazaFilterBar
+        :class="{ 'workspace-shell': embedded }"
         :platforms="platforms"
         :groups="groupOptions"
         :rates="rates"
@@ -55,6 +59,7 @@
       <div
         v-else
         class="card border-dashed border-gray-300 px-5 py-12 text-center text-sm dark:border-dark-600 surface-muted"
+        :class="{ 'workspace-shell': embedded }"
       >
         {{ searchActive ? t('modelPlaza.noSearchResult') : t('modelPlaza.empty') }}
       </div>

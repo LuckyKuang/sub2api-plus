@@ -31,9 +31,12 @@ const MatrixStub = defineComponent({
   name: 'RelayPulseMatrix', props: ['rows', 'coverage', 'dimensionKey', 'viewState'], emits: ['update:viewState'],
   setup: () => () => h('div', { 'data-testid': 'matrix' }),
 })
+const AppLayoutStub = defineComponent({
+  name: 'AppLayout', props: { workspace: Boolean }, template: '<main><slot /></main>',
+})
 function mountView() {
   return shallowMount(ChannelStatusV2View, { global: { stubs: {
-    AppLayout: { template: '<main><slot /></main>' }, RelayPulseMatrix: MatrixStub,
+    AppLayout: AppLayoutStub, RelayPulseMatrix: MatrixStub,
   } } })
 }
 function deferred<T>() {
@@ -49,6 +52,42 @@ beforeEach(() => {
   vi.mocked(api.getSnapshot).mockResolvedValue({ coverage, metrics: metric, health: {}, trend: [], config: { refresh_interval_seconds: 300 } } as MonitorSnapshot)
   vi.mocked(api.getMatrix).mockResolvedValue(response('platform', [platform]))
   vi.mocked(api.getModels).mockResolvedValue({ items: [] } as Awaited<ReturnType<typeof api.getModels>>)
+})
+
+describe('ChannelStatusV2 isolated activity layout', () => {
+  // Acceptance: transparent pinned controls and scrollable records occupy
+  // separate sibling boxes, including after detail-tab/view reconstruction.
+  it('keeps the toolbar outside the activity viewport through details and chart switches', async () => {
+    vi.mocked(api.getErrors).mockResolvedValue({ items: [] } as Awaited<ReturnType<typeof api.getErrors>>)
+    vi.mocked(api.getUsers).mockResolvedValue({ items: [] } as Awaited<ReturnType<typeof api.getUsers>>)
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.getComponent(AppLayoutStub).props('workspace')).toBe(true)
+    const toolbar = wrapper.get('.channel-monitor-toolbar')
+    const activity = wrapper.get('[data-testid="channel-status-activity"]')
+    expect(toolbar.element.parentElement).toBe(activity.element.parentElement)
+    expect(activity.element.contains(toolbar.element)).toBe(false)
+    expect(toolbar.classes()).toEqual(expect.arrayContaining(['workspace-fixed', 'workspace-shell']))
+    expect(toolbar.classes()).not.toContain('sticky')
+    expect(activity.classes()).toContain('workspace-scroll')
+
+    const modelViewport = activity.get('.record-table-scroll')
+    expect(modelViewport.classes()).toEqual(expect.arrayContaining(['monitor-tab-viewport', 'overflow-auto']))
+    expect(modelViewport.element.parentElement?.classList.contains('overflow-auto')).toBe(false)
+    const details = wrapper.findAll('[role="tab"]')
+    await details.find(button => button.text() === 'channelMonitorV2.tabs.users')!.trigger('click')
+    await flushPromises()
+    expect(activity.get('.record-table-scroll').classes()).toContain('monitor-tab-viewport')
+    await details.find(button => button.text() === 'channelMonitorV2.tabs.errors')!.trigger('click')
+    await flushPromises()
+    expect(activity.get('.monitor-tab-viewport').classes()).toContain('overflow-auto')
+    expect(activity.find('.record-table-scroll').exists()).toBe(false)
+
+    await wrapper.findAll('button').find(button => button.text() === 'channelMonitorV2.trendView.line')!.trigger('click')
+    expect(activity.findComponent({ name: 'MonitorTrendChart' }).exists()).toBe(true)
+    expect(wrapper.get('.channel-monitor-toolbar').element).toBe(toolbar.element)
+    expect(wrapper.get('[data-testid="channel-status-activity"]').element).toBe(activity.element)
+  })
 })
 
 describe('ChannelStatusV2 matrix payload ownership', () => {

@@ -1,7 +1,7 @@
 <template>
   <section class="w-full space-y-5 py-2">
     <header
-      class="page-header glass-surface mb-0 flex flex-wrap items-center justify-between gap-3 p-5 sm:p-6"
+      class="page-header glass-surface workspace-shell mb-0 flex flex-wrap items-center justify-between gap-3 p-5 sm:p-6"
     >
       <div class="min-w-0">
         <h2 class="page-title flex items-center gap-2 text-xl font-black text-gray-900 dark:text-white">
@@ -41,12 +41,12 @@
 
     <div
       v-if="loading"
-      class="card flex min-h-[200px] items-center justify-center text-sm surface-muted"
+      class="card workspace-shell flex min-h-[200px] items-center justify-center text-sm surface-muted"
     >
       <span class="animate-pulse">{{ t('channelMonitorV2.settings.loading') }}</span>
     </div>
 
-    <div v-else-if="!draft" class="card p-5">
+    <div v-else-if="!draft" class="card workspace-shell p-5">
       <button type="button" class="btn btn-secondary" @click="load">{{ t('channelMonitorV2.settings.retry') }}</button>
     </div>
 
@@ -56,7 +56,7 @@
         <button type="button" class="btn btn-secondary btn-sm mt-3" data-testid="reload-conflict" @click="load">{{ t('channelMonitorV2.settings.reloadConfig') }}</button>
       </div>
 
-      <div class="card divide-y divide-gray-100 dark:divide-dark-700">
+      <div class="card workspace-shell">
         <div class="flex flex-wrap items-center justify-between gap-4 px-5 py-4">
           <div>
             <strong class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('channelMonitorV2.settings.enableTitle') }}</strong>
