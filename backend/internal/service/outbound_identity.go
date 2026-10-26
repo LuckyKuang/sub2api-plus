@@ -1102,6 +1102,10 @@ func prepareAccountOutboundRequest(req *http.Request, account *Account) *http.Re
 			return req
 		}
 		account = owner
+		if !providerFilesAccountAllowed(req.Context(), account) {
+			*req = *req.WithContext(WithOutboundPreparationError(req.Context(), ErrProviderFileOwnerChanged))
+			return req
+		}
 		if hasDomesticRequestHeaderContract(account) && domesticCredentialOwnerAccount(req.Context(), account) == nil {
 			*req = *req.WithContext(WithOutboundPreparationError(req.Context(), errors.New("domestic outbound credential owner is unavailable")))
 			return req

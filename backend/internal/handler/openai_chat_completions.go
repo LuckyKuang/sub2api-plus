@@ -111,6 +111,12 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 		h.openAISecurityAuditError(c, decision)
 		return
 	}
+	if resolved, err := h.resolveProviderFilesForInference(c, apiKey, body, service.APIProtocolChatCompletions); err != nil {
+		h.providerFilesError(c, err)
+		return
+	} else {
+		body = resolved
+	}
 	if h.rejectIfCyberSessionBlocked(c, apiKey, body, reqModel, cyberBlockFormatChat) {
 		return
 	}

@@ -179,6 +179,8 @@ func credentialOwnerHasToken(owner *Account, token string) bool {
 	}
 	var expected string
 	switch {
+	case isZhipuStartPlan(owner):
+		expected = owner.GetCredential("zcode_jwt_token")
 	case owner.Platform == PlatformZhipu:
 		expected = owner.GetOpenAIProtocolAPIKey()
 	case owner.Type == AccountTypeAPIKey:

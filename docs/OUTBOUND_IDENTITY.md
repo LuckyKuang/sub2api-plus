@@ -213,6 +213,32 @@ or replace a newer failure from the same grant. Missing conditional storage
 does not fall back to row-ID writes. Owner evidence remains internal to the
 result and is never included in its admin JSON response.
 
+Provider Files upload/delete use the same trusted credential-owner identity
+resolver and strict proxy as inference. The selected account is frozen before
+multipart forwarding; no inbound SDK/auth header or generic override selects its
+client family, credential or route. Mapping publication compares that complete
+account/proxy snapshot under database locks. Local references resolve after the
+common security audit and constrain every selection/retry to their persistent
+owner. Send preparation rechecks the final acquired owner; it cannot attach a
+different owner's credential to an already rewritten remote file ID. Background
+cleanup dispatches only known remote IDs whose recorded request snapshot still
+matches, with no direct fallback or substitute account. File operations do not
+create inference-token billing records.
+
+DeepSeek first-batch Files use the reviewed Harness Anthropic family: default
+`/anthropic/v1/files`, `anthropic-beta: files-api-2025-04-14`, raw account
+`X-Dsh-Auth-Token` or API-key `X-Api-Key`. OAuth and API keys retain `deepseek`
+identity precedence and the complete versioned Harness triple. The default
+endpoint follows `config.ts` → `adapter.ts` → `messages-api.ts`/`files-api.ts`,
+as linked in [the baseline index](OFFICIAL_AGENT_BASELINES.md). MiniMax first-batch
+Files support only global API-key Chat `video_understanding` at
+`https://api.minimax.io/v1/files/upload`, Bearer API-key auth and the existing
+trusted `minimax_apikey` triple. No new identity preset or versionless exception
+is introduced. The managed agent's separate upload gateway does not authorize
+direct OAuth, CN or BYOK Anthropic Files. Limits, scope epochs, unsupported
+bridges/lifecycle operations and native-reference compatibility are defined in
+[FILES.md](providers/FILES.md).
+
 MiniMax OAuth quota resolves the personal workspace group and calls the fixed
 regional account/quota origins with the same grant, proxy and trusted `minimax`
 snapshot. Its recognized five-hour/weekly windows feed existing scheduling
@@ -326,6 +352,20 @@ issuance retain one identity even across Redis instances/settings changes;
 account creation pins its product and configurable runtime declarations. Deferred off-peak settlement retains the acquiring credential
 owner's identity alongside its authentication, even after settings change. Gateway transports reapply the trusted declarations at send
 time; stale SDK/inbound/generic overrides cannot rewrite them. Both API-key and OAuth accounts retain the ZCode family.
+
+Linked Start entitlement uses an independent
+`GET https://zcode.z.ai/api/v1/zcode-plan/billing/balance?app_version=<trusted-version>`.
+The query version, UA and `X-ZCode-App-Version` come from one trusted ZCode
+snapshot; authentication is the linked `zcode_jwt_token` as Bearer. It uses
+control-plane declarations, disables redirects and follows the same frozen
+owner's strict proxy. Inference URL/auth overrides cannot change its target or
+replace its JWT with a manual API key, project PAT or another account's token.
+Start observations remain separate from personal/team project model discovery
+and off-peak quota/tickets. The reviewed
+`services/src/model-provider/{zaiStartPlanBilling,codingPlanProviderAvailability}.ts`
+and `shared/src/{zcodeEndpoint,official-glm-model-id}.ts` paths are linked at
+[the fixed baseline](OFFICIAL_AGENT_BASELINES.md); business-login failure needs
+reauthorization rather than project-PAT renewal.
 
 Linked personal/team model discovery uses the fixed estate's coding `/models`
 endpoint and the final owner-scoped PAT resolver. Linked inference, probes and

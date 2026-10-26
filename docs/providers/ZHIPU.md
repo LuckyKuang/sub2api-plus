@@ -194,6 +194,72 @@ merging the observation. A concurrent relink, deletion or persistence failure
 produces no usable successful observation. A failed compare changes no snapshot,
 cache or outbox; an outbox failure rolls the observation back.
 
+## Start Plan entitlement
+
+Linked Start accounts use their ZCode JWT for
+`GET https://zcode.z.ai/api/v1/zcode-plan/billing/balance?app_version=<trusted-version>`.
+This is an independent control request with the same owner's strict proxy and
+ZCode control identity. It disables redirects, never issues a project PAT, and
+ignores generic inference URL/auth overrides. The existing admin quota operation
+returns a separate `start_plan` object; it does not manufacture rolling quota
+windows or a monetary balance.
+
+The observation retains `available`, `unavailable`, `pending` or `unknown`, plus
+`models_known`. Active Start plans establish product availability; missing model
+detail, including an empty balances array, leaves the model set unknown. An
+explicit empty capability list with no model name establishes an empty model
+set. Model IDs come from `model:` capabilities, or the official `show_name`
+fallback when no model capability is present. Known GLM names are canonicalized;
+new IDs are retained. Malformed fields never establish fresh permission. A
+plan without both product ID and name stays unknown rather than guessing a
+product from its status.
+
+HTTP `Date` takes precedence over the response's `server_time`, then local time.
+Expired plans/buckets cannot authorize models; future-only entitlements without
+models are pending. Reaching an effective date requires another observation,
+rather than promoting cached pending state. HTTP 401/403 and an unsuccessful
+business envelope report unavailable/authentication failure. Network failures,
+other HTTP errors, oversized bodies and invalid shapes report unknown, preserve
+the last valid observation, and do not alter login errors or scheduling flags.
+Business-login failure requires a new account link; PAT renewal cannot refresh it.
+
+Persistence compares credentials, estate/plan, identity declarations, proxy and
+the previously observed Start value in the same PostgreSQL statement as the
+scheduler outbox. A late response cannot replace a newly committed observation
+from another instance. Save/outbox failures do not publish successful results.
+Scheduler candidate metadata retains the grant digest and Start observation,
+without retaining the JWT. The Start owner digest canonicalizes credential JSON
+so equivalent typed identity declarations and database JSON retain permission;
+changing any credential or route dimension still invalidates that observation.
+
+Request selection applies an established unavailable/pending state or an
+explicit model set to the actual mapped upstream model. Staleness alone cannot
+expand that set or clear a negative result. Before any valid observation, or
+when available models remain unknown, the existing mapping and final upstream
+verdict still apply. Public model catalogs are stricter: they publish only fresh
+(15 minute), available, owner/identity-matching model IDs; unknown or negative
+Start-only catalogs remain explicitly empty and do not fall back to Claude
+defaults. Admin display distinguishes unknown and empty models and rejects late
+results after same-row reauthorization or proxy changes.
+
+Composite public aliases follow the same target-model entitlement rule. An
+exact route and a group allowlist cannot publish an unproven Start target;
+the check also applies when a route replaces an account-published name. It uses
+the winning route for each endpoint and the account's actual mapped target.
+The general catalog may list an alias with a proven path on another endpoint;
+the Codex catalog checks the Responses route specifically. An all-Start catalog
+that becomes empty after route filtering remains empty. Unrelated non-Start
+model routes retain their existing visibility.
+
+Start observations use only `zhipu_start_plan_entitlement`; they never update
+coding/off-peak model metadata, quota windows, tickets or admission state.
+The contract is pinned to
+[zaiStartPlanBilling.ts](https://github.com/zai-org/ZCode/blob/3c5b227649371507ddc4eb46ac5133afe6db1cab/packages/services/src/model-provider/zaiStartPlanBilling.ts)
+and
+[codingPlanProviderAvailability.ts](https://github.com/zai-org/ZCode/blob/3c5b227649371507ddc4eb46ac5133afe6db1cab/packages/services/src/model-provider/codingPlanProviderAvailability.ts).
+Isolated responders prove parsing and gateway behavior, not actual account
+region/plan entitlement or official service availability.
+
 ## Off-peak idle plan
 
 Off-peak is not a static credential: model traffic is admitted by a **ticket**
@@ -230,9 +296,12 @@ EOF, Close, cancellation or read failure. Active leases prevent settlement;
 the idle window starts after the final lease ends. Credential rotation admits
 new work under a separate holder while older active streams drain with their
 original ticket and owner. Tickets idle for longer than the settle window are
-settled in the background, which returns the take-number quota; a failed settle
-is retried on the next cycle because the platform reclaims un-settled tickets by
-timeout anyway.
+settled in the background; a failed settle is retried on the next cycle.
+Settlement, ready expiry and active expiry do not return a rolling-window
+take-number allowance. Every newly created ticket consumes one allowance;
+reusing a task ID is free only while its latest ticket remains unexpired.
+The next Take response or a fresh availability observation remains authoritative.
+See the [official quota contract](https://github.com/zai-org/ZCode/blob/3c5b227649371507ddc4eb46ac5133afe6db1cab/docs/off-peak-task/spec.md).
 
 The ticket protocol accepts the official bare JSON responses and zero-code
 envelopes. Empty successful settlement responses retire the ticket exactly once;
@@ -340,6 +409,70 @@ This internal login ID is never sent upstream.
   login, and an inaccessible project cannot recover through an old copied key.
 - **Team plans need their scope.** A team subscription can own several projects,
   so the organization and project must be supplied when linking.
+
+## Durable off-peak recovery
+
+`zhipu_offpeak.persistence_enabled` defaults to `false`: that mode retains the
+existing process-local tickets and cannot promise restart or cross-instance
+recovery. Enable persistence explicitly with a dedicated external keyring:
+`ZHIPU_OFFPEAK_ACTIVE_KEY_ID`, `ZHIPU_OFFPEAK_SNAPSHOT_KEYS` (a JSON map of key
+IDs to base64-encoded 32-byte AES keys), and
+`ZHIPU_OFFPEAK_SNAPSHOT_RETENTION_HOURS` (default 168, range 1–720). Missing or
+invalid keys with persistence enabled prevent startup. Every replica needs the
+same keyring. Never reuse TOTP, JWT or payment keys. Rotate by adding a key and
+selecting its ID; retain old keys until the tickets using them drain or reach
+their configured retention deadline.
+
+PostgreSQL is authoritative for ticket/task IDs, owner generations, fenced
+operation leases, individual model-request leases, and settlement intent and
+acknowledgement. Network calls hold no database transaction. Minimal JWT/project
+scope, trusted identity and the original proxy snapshot are AEAD-encrypted with
+record/account/generation/task binding. No prompt, model response or file bytes
+are stored. A retired generation can only perform original-owner Status,
+necessary PAT issuance and Settle; it cannot Take or admit new model requests.
+
+A Take intent is committed as uncertain before sending. A lost response cannot
+automatically trigger another Take, even with the same task ID. Known tickets
+recover through Status; queue timeout preserves the valid ticket. Only an
+explicit matching terminal status permits a fresh task and queue position.
+Missing or malformed status entries preserve the outstanding ticket.
+Quota-exhaustion retry times remain authoritative; settlement never returns an
+allowance. This recovery does not restore an official agent's original queue
+task or replay a model request that might already have been accepted.
+
+Each physical model request renews its own durable lease. Cancellation releases
+only that request; other requests still protect the shared ticket. Lost renewal
+cancels the physical request and preserves its original lease expiry safety
+window. Settlement waits for all leases to end. Failed settlement and failed ACK
+commits retain durable intent for the same ticket with bounded backoff; a
+persisted ACK stops dispatch and erases the secret snapshot. Temporary proxy,
+key and storage failures retain intent. Retention expiry records a sanitized
+abandoned reason and erases the snapshot without borrowing a new credential or
+falling back to a direct connection.
+
+Durable mode provides two administrator-only controls for a ZCode OAuth/API-key
+off-peak account. `GET /api/v1/admin/zhipu/accounts/:id/off-peak/segment` returns
+only opaque `record_id`, `generation` and `state`; it never returns provider
+ticket/task identifiers, ciphertext, credentials or proxy secrets. No current
+segment returns 404. `POST` to the same path plus `/terminate` requires the exact
+inspected `{record_id,generation}` pair. `{accepted:true}` acknowledges committed
+durable retirement intent; it does not claim that remote Settle completed.
+Memory mode returns 501, a mismatched pair returns 409, and unavailable durable
+storage returns a sanitized 503. Invalid account/profile/handles return 400.
+
+Termination fences old control leases and blocks new admission to that segment,
+while already admitted physical requests retain their shared leases and drain.
+After all leases finish, cleanup uses the encrypted original owner, identity and
+proxy snapshot with the existing retry/ACK policy. Repeating a retired or closed
+pair succeeds without changing a replacement segment. A waiting old acquisition
+cannot automatically Take or join a new segment after termination; a later
+independent business request may create one, including under the same credential
+generation. A late Take result is recorded only for original-segment cleanup.
+No management operation replays a model request or returns rolling-window quota.
+
+Pausing/deleting an account and process shutdown remain separate operations.
+They do not promise to kill an already admitted physical request or synchronously
+settle its ticket. Shutdown preserves durable leases/intents for expiry/restart.
 
 ## Unaffected areas
 

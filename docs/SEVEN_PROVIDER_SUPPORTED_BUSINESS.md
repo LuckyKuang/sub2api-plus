@@ -1,11 +1,12 @@
 # 七平台已实现网关业务验收范围
 
-本清单以 `fix/seven-platforms-main-sync` 上的代码合并 `85fb3c82c` 为审计对象：保留目标
-`2dab72aac` 与基于 `1818c2993` 的 surgeonfish 检查点 `e2bbc80dc` 两边实现，
-限定本轮“七平台业务覆盖”的功能边界。合并前的验证只对各自源码树有效；
-当前合并树的重新验证结果及其限制已记入矩阵，不能沿用旧结果宣称通过。
-本清单描述需要验收的既有网关行为；各项是否已经通过、
-使用哪一层测试证明，以[七平台测试矩阵](SEVEN_PROVIDER_TEST_MATRIX.md)及实际运行记录为准。
+本轮从 `fix/seven-platforms-main-sync@27c5e62f4` 完成 B0–B5 七平台能力补齐：保留合并
+`85fb3c82c` 中目标 `2dab72aac` 与 surgeonfish 检查点 `e2bbc80dc` 的实现，新增首批 Files、
+Start 权益和可选 off-peak 持久恢复。完整后端 unit/integration/lint、前端检查和构建、
+扩展关键门禁、14 条 Chromium 管理链及定向 race 已在 Apple Containers 通过。
+各项适用范围、断言与实际结果见[七平台测试矩阵](SEVEN_PROVIDER_TEST_MATRIX.md#capability-completion-verification)。
+旧提交的通过记录只对各自源码树有效，不代替新增能力的验证。
+本清单描述网关验收行为；具体使用哪一层测试证明，以矩阵和实际运行记录为准。
 不能仅凭测试文件存在、父用例通过或覆盖率数字认定一项业务完成。
 
 验收按适用的账号类型、协议、地区、套餐和独立发送入口展开。某平台提供的能力
@@ -18,18 +19,18 @@
 | --- | --- | --- | --- |
 | OpenAI / Codex | API Key、既有 OAuth 账号；授权码、设备授权、刷新与撤销等独立操作 | Responses HTTP/WS、Chat/Messages 适配、图像兼容与异步任务/S3 结果存储、模型目录、用量与配额重置、已有 Alpha Search 和 Live 创建/sideband 路径；可选 OAuth 传输插件宿主 | HTTP、WS、图像任务/存储、插件进程、模型发现、预检、登录和控制请求分别验收；各账号类型不自动共享授权能力。Codex 身份优先级及字段省略规则保持不变。 |
 | xAI / Grok | API Key、OAuth 浏览器授权；可选 SSO/device 转换 | Responses、Chat、Messages、搜索、语音/Realtime、图像、视频及状态查询；模型、计费/配额与压缩能力探测 | 媒体、Realtime、控制和辅助 HTTP 发送是独立入口；SSO 原文不落库。实际模型/套餐权限由上游决定。 |
-| DeepSeek | API Key；Harness 授权码与 PKCE 登录、重授权 | 原生 Messages；Chat/Responses 适配；模型能力过滤、用户与钱包观测；API Key 余额入口 | 原生 OAuth 使用 `x-dsh-auth-token`；官方协议未公布刷新操作，不能虚构刷新成功。当前只有一个授权地区。 |
+| DeepSeek | API Key；Harness 授权码与 PKCE 登录、重授权 | 原生 Messages；Chat/Responses 适配；模型能力过滤、用户与钱包观测；API Key 余额入口；首批 Anthropic 图片 Files 上传、本地列表/元数据、到期、删除与推理引用 | 原生 OAuth 使用 `x-dsh-auth-token`；官方协议未公布刷新操作，不能虚构刷新成功。当前只有一个授权地区。Files 仅支持已冻结的 Anthropic 家族与媒体类型，不泛称任意文件或 OpenAI Files 支持。 |
 | Kimi | API Key 的 payg/coding 配置；中国/国际设备授权、刷新和重授权 | 原生 Messages 及已有适配；模型发现、coding 用量和 API Key 余额/配额控制 | 登录、轮询、刷新、推理和控制保留同一地区、设备身份与凭据 owner；不能以通用 base URL 改写原生 issuer。 |
-| MiniMax | API Key/BYOK；中国/国际设备授权、PKCE、刷新和重授权 | 原生 Messages、BYOK Anthropic 独立入口及已有适配；既有套餐/用量控制链 | OAuth 与 BYOK 有各自身份声明；不能混用。模型目录候选不等于账号权限，原生文件引用不等于文件上传生命周期。 |
-| StepFun / Step-Code | API Key；中国/国际 Step Plan 云端浏览器登录与重授权；独立的可选 Passport 账号会话 | 原生 Chat Completions；Responses/Messages 转换；模型/能力与白名单、Step Plan 用量、现有 token 计费 | 原生 OAuth 固定到所选地区和 Plan；静态模型 key 与可选账号会话分离。不能据 SDK 适配器推断原生 Responses、Messages 或 WS。 |
-| Zhipu / ZCode | 手工 API Key；BigModel/Z.ai 账号关联；个人/团队 coding、Start Plan 与 off-peak | coding 项目解析、短期 PAT、模型/配额；Start Plan Bearer；off-peak 票据 Take/Status/Settle 与恢复 | Start/off-peak 只支持其 Anthropic 通道；团队需明确组织/项目。PAT 轮换不等于业务登录续期，不能回退复制出的长效 key。 |
+| MiniMax | API Key/BYOK；中国/国际设备授权、PKCE、刷新和重授权 | 原生 Messages、BYOK Anthropic 独立入口及已有适配；既有套餐/用量控制链；global API Key Chat 的 `video_understanding` 文件上传和视频引用 | OAuth 与 BYOK 有各自身份声明；不能混用。首批 Files 仅允许已核实 profile；删除撤销本地引用并明确报告不支持远程删除，不虚构上游 list/metadata/delete。 |
+| StepFun / Step-Code | API Key；中国/国际 Step Plan 云端浏览器登录与重授权；独立的可选 Passport 账号会话 | 官方执行主协议 Chat Completions；Responses/Messages HTTP 转换；模型/能力与白名单、Step Plan 用量、现有 token 计费 | OAuth Plan、API Key PayG、API Key Plan × CN/global 共六 profiles 分别验收。原生 OAuth 固定地区和 Plan；静态模型 key 与可选账号会话分离。两桥不能证明上游原生 Responses、Messages 或 WS。 |
+| Zhipu / ZCode | 手工 API Key；BigModel/Z.ai 账号关联；个人/团队 coding、Start Plan 与 off-peak | coding 项目解析、短期 PAT、模型/配额；Start Bearer 与独立 balance 权益/模型观测；off-peak Take/Status/Settle、可选持久恢复 | Start/off-peak 保留 Anthropic 通道，权限观测分别处理；团队需明确组织/项目。持久恢复默认关闭，启用需要专用外部密钥环；关闭时仍为进程内票据。PAT 轮换不等于业务登录续期。 |
 
 平台契约来源：
 [OpenAI Responses](protocols/OPENAI_RESPONSES.md)、
 [Codex client profiles](protocols/CODEX_CLIENT_PROFILES.md)、
 [Grok](providers/GROK.md)、
 [DeepSeek/Kimi/MiniMax 原生授权](providers/DOMESTIC_OAUTH.md)、
-[StepFun](providers/STEPFUN.md)、[Zhipu](providers/ZHIPU.md)、
+[StepFun](providers/STEPFUN.md)、[Zhipu](providers/ZHIPU.md)、[Files](providers/FILES.md)、
 [共享模型目录](CN_PROVIDER_MODELS.md)、[异步图片任务](ASYNC_IMAGE_TASKS.md)、
 [插件宿主协议](PLUGIN_DEVELOPMENT.md)。
 公共入口以[网关路由](../backend/internal/server/routes/gateway.go)为准；服务方法存在
@@ -65,6 +66,11 @@ Grok 的 issuer 失败隔离同样绑定实际发送时捕获的凭据及完整�
 和路由的 access-token 修复，新 grant、subject/team/client、base URL 或身份必须
 重新选择账号。持久化隔离和 scheduler outbox 共享事务，cache 仅在提交后发布；
 仍丢失的绑定和已经恢复、正在并发恢复的同 ID 代理需分别验收。
+
+Files 列表的游标同样属于调用方权限边界：其他用户、key、group 或平台的文件 ID
+不得改变分页结果，未知和无权访问的游标保持相同结果。Start 的 composite route
+和分组白名单也不构成平台授权，公开别名必须有其实际目标模型的有效权益证据；
+这项过滤不应移除其他平台的正常模型和路由。
 
 ## 自动化证据的界限
 
@@ -141,17 +147,26 @@ Grok 创建弹窗目前没有显示密码登录选项。保留的密码事件处
 
 ## 明确排除或仍有限制的能力
 
-- 七个官方 coding agent 的本地工作区、编辑器、终端/TUI、MCP、工具执行循环、
+- 七个官方 coding agent 的本地工作区、编辑器、终端/TUI、本地 MCP、工具执行循环、
   操作系统集成和所有 agent 内部恢复策略不属于本次网关等价实现。
-- DeepSeek/MiniMax 通用 Files 上传、元数据、所有权映射、到期和删除未由当前
-  网关路由提供；保留原生引用和内联媒体不能替代这些能力。
+- Files 以[分平台契约](providers/FILES.md)为准。DeepSeek 首批仅 Anthropic 图片家族；
+  MiniMax 首批仅 global API Key Chat 视频上传/引用及本地访问撤销。DeepSeek 其他文件
+  家族及 MiniMax 的其他地区、managed OAuth、purpose，另有未列入首批的远程管理
+  操作和跨账号重传保持明确不支持。已有原生引用
+  和内联媒体继续独立验收，不因此获得网关文件 ACL 或生命周期保证。
 - StepFun 不宣称上游原生 Responses、Messages、Responses WS；现有转换入口仍需
-  独立验收。专项语音/图像接口和额外计费也不能由 Chat 的默认 token 定价推断。
-- ZCode 不恢复官方 off-peak `task_id` 的既有队列位置；网关有自己的票据生命周期
-  和有界等待。Start/off-peak 无个人/团队 coding 的模型发现路径，业务登录失效需
-  重授权。
-- Grok 不伪造 enterprise deployment 授权、turn/resubmit/tracing lineage，
-  不宣称实现官方 doom-loop 恢复或与 Rustls 完全一致的 TLS 指纹。
+  独立验收。远程搜索 MCP 本批完成契约审计，尚未开发搜索网关；专项语音/图像接口、
+  WS 桥和额外计费不由 Chat 的默认 token 定价推断。
+- ZCode 不恢复官方 agent 已有 `task_id` 的历史队列位置，也不重放模型请求。可选持久
+  模式只恢复本网关已保存票据及原 owner 结算意图；未知 Take 结果不能自动再取号，
+  确认失效后的新票接受新排位。Start 使用独立 balance 观测，不借用 coding 项目模型；
+  off-peak 不借用 Start 权限。业务登录失效需重授权，Settle 不返还滚动窗口取号额度。
+  持久模式提供管理员 GET 当前段与 POST 精确 `record_id/generation` 终止；响应仅确认
+  退休意图已落库。旧控制流程不得重取号或加入新段，已获准物理请求按共享租约结束，
+  原快照后台结算；旧终止重复到达不得影响后来新段。内存模式明确返回 501；账号停用/
+  删除与单请求取消不等同于该管理终止，也不承诺强杀已获准的物理请求。
+- Grok enterprise deployment 按用户要求不进入本轮对齐范围。官方 turn/resubmit/
+  tracing lineage、doom-loop 恢复和与 Rustls 完全一致的 TLS 指纹也未作为已实现能力。
 - 真实平台账号的地区/套餐权限、官方服务可用性及完整浏览器/操作系统授权流程，
   需要使用实际账号和对应环境单独验收；隔离响应器的成功不构成这些结论。
 - 全量 integration、全量 race 或所有协议 × 类型 × 套餐 × 生命周期的组合，

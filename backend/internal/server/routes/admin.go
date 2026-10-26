@@ -979,5 +979,7 @@ func registerZhipuOAuthRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		zhipu.POST("/oauth/poll", h.Admin.ZhipuOAuth.PollLink)
 		zhipu.POST("/oauth/exchange-code", h.Admin.ZhipuOAuth.ExchangeLink)
 		zhipu.POST("/oauth/create-from-oauth", h.Admin.ZhipuOAuth.CreateAccountFromLink)
+		zhipu.GET("/accounts/:id/off-peak/segment", h.Admin.ZhipuOAuth.GetOffPeakSegment)
+		zhipu.POST("/accounts/:id/off-peak/segment/terminate", h.Admin.ZhipuOAuth.TerminateOffPeakSegment)
 	}
 }

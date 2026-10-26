@@ -43,11 +43,17 @@ func ProvideZhipuOAuthService(proxyRepo ProxyRepository, oauthClient ZhipuOAuthC
 // ProvideZhipuOffPeakTicketManager creates the off-peak ticket manager and
 // registers it as the request-path ticket provider. Registration happens here so
 // the protocol builder never depends on the settings or account services.
-func ProvideZhipuOffPeakTicketManager(oauthClient ZhipuOffPeakClient, projectTokens *ZhipuProjectTokenManager) *ZhipuOffPeakTicketManager {
+func ProvideZhipuOffPeakTicketManager(oauthClient ZhipuOffPeakClient, projectTokens *ZhipuProjectTokenManager, store ZhipuOffPeakStore, cfg *config.Config) (*ZhipuOffPeakTicketManager, error) {
 	manager := NewZhipuOffPeakTicketManager(oauthClient)
 	manager.projectTokens = projectTokens
+	if cfg != nil && cfg.ZhipuOffPeak.PersistenceEnabled {
+		if err := manager.WithPersistence(store, cfg.ZhipuOffPeak); err != nil {
+			manager.Stop()
+			return nil, err
+		}
+	}
 	SetZhipuOffPeakTicketProvider(manager)
-	return manager
+	return manager, nil
 }
 
 // BuildInfo contains build information
@@ -647,6 +653,12 @@ func ProvideIdempotencyCleanupService(repo IdempotencyRepository, cfg *config.Co
 	return svc
 }
 
+func ProvideProviderFilesService(repo ProviderFilesRepository, gateway *OpenAIGatewayService) *ProviderFilesService {
+	svc := NewProviderFilesService(repo, gateway)
+	svc.Start()
+	return svc
+}
+
 // ProvideGeminiCachedContentService creates GeminiCachedContentService and starts its mutation recovery loop.
 func ProvideGeminiCachedContentService(repo GeminiCachedContentRepository, compat *GeminiMessagesCompatService, cfg *config.Config) *GeminiCachedContentService {
 	svc := NewGeminiCachedContentService(repo, compat, cfg)
@@ -910,6 +922,7 @@ var ProviderSet = wire.NewSet(
 	NewAdminService,
 	NewGatewayService,
 	NewOpenAIGatewayService,
+	ProvideProviderFilesService,
 	ProvideImageStorageSettingService,
 	ProvideImageTaskService,
 	ProvideBatchImageModelPricingResolver,

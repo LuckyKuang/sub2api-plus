@@ -71,6 +71,7 @@ const (
 	ContentModerationProtocolGemini            = "gemini"
 	ContentModerationProtocolOpenAIImages      = "openai_images"
 	ContentModerationProtocolTypeSafeSystemOne = "typesafe_systemone"
+	ContentModerationProtocolProviderFiles     = "provider_files"
 
 	defaultContentModerationBaseURL          = "https://api.openai.com"
 	defaultContentModerationModel            = "omni-moderation-latest"
@@ -1213,6 +1214,7 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 			"stage", contentModerationAuditStage(input.Stage),
 			"body_bytes", len(input.Body),
 			"error_code", extractionErrorCode,
+			"file_bytes", auditcontent.FileBytes(input.Protocol, input.Body),
 			"error_kind", "content_extraction",
 			"incomplete_reasons", auditcontent.SanitizeIncompleteReasons(incompleteReasons))
 	}

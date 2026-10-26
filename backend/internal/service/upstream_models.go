@@ -247,6 +247,9 @@ func (s *AccountTestService) SyncUpstreamModelCatalog(ctx context.Context, accou
 		ctx = withRequestCredentialOwner(WithOutboundIdentityScope(ctx, nil), account, token)
 	}
 	ctx = WithAccountOutboundIdentity(ctx, account)
+	if isZhipuStartPlan(account) {
+		return s.syncZhipuStartPlanCatalog(ctx, account)
+	}
 	models, body, observedOwner, err := s.fetchUpstreamModelList(ctx, account)
 	liveListAvailable := err == nil
 	if err != nil {
@@ -827,6 +830,9 @@ func (s *AccountTestService) fetchUpstreamModelList(ctx context.Context, account
 
 	if s.httpUpstream == nil {
 		return nil, nil, nil, newUpstreamModelSyncConfigError("Upstream HTTP client is not configured", nil)
+	}
+	if isZhipuStartPlan(account) {
+		return s.fetchZhipuStartPlanModels(ctx, account)
 	}
 
 	if account.IsGemini() && account.IsVertexServiceAccount() {

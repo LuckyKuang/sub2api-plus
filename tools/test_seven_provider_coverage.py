@@ -133,6 +133,211 @@ class GoEventCoverageTests(unittest.TestCase):
                     self.assertTrue(all(child.split("/", 1)[0] in group.tests
                                         for child in group.required_subtests))
 
+    def test_capability_completion_pins_step_profiles_protocols_and_business_failures(self) -> None:
+        profiles = ("oauth_plan_cn", "oauth_plan_global", "apikey_payg_cn", "apikey_payg_global",
+                    "apikey_plan_cn", "apikey_plan_global")
+        protocols = ("chat", "responses", "messages")
+        expected = {
+            ("unit", "./internal/service", test): {
+                f"{profile}/{protocol}/stream={stream}"
+                for profile in profiles for protocol in protocols for stream in ("false", "true")
+            } for test in ("TestStepFunCapabilityBasicMatrix", "TestStepFunCapabilityParallelToolsAndResults",
+                           "TestStepFunCapabilityCompletedWithoutUsageKeepsUnknownBillingSource")
+        }
+        expected.update({
+            ("unit", "./internal/service", "TestZhipuOffPeakAdminSegmentRejectsUnsupportedModeAndProfile"): {
+                "memory-mode", "nil-account", "invalid-id", "other-platform", "coding-plan", "unsupported-type",
+            },
+            ("unit", "./internal/service", "TestZhipuOffPeakAdminSegmentMapsErrorsWithoutSecretDisclosure"): {
+                "not-found", "database-failure", "fence-conflict", "empty-record", "empty-generation",
+            },
+            ("unit", "./internal/handler/admin", "TestZhipuOffPeakSegmentHandlerValidatesBeforeControlSideEffects"): {
+                "zhipu/oauth/start-plan", "zhipu/oauth/individual-coding-plan", "stepfun/oauth/off-peak", "zhipu/upstream/off-peak",
+            },
+            ("unit", "./internal/handler/admin", "TestZhipuOffPeakSegmentHandlerReportsDisabledMissingAndStoreFailure"): {
+                "disabled-persistence", "manager-unavailable", "missing-segment", "stale-generation", "database-unavailable",
+            },
+            ("integration", "./internal/repository", "TestZhipuOffPeakStoreTerminateRejectsUnmatchedOwnerAndGeneration"): {
+                "other-account", "unknown-record", "wrong-generation",
+            },
+            ("integration", "./internal/repository", "TestZhipuOffPeakManagerPostgresTerminateCannotRetakeFromOldAcquire"): {
+                "waiting-operation-lease", "already-claimed-operation",
+            },
+            ("integration", "./internal/repository", "TestZhipuOffPeakManagerPostgresAdmissionFailureRecoversSameTicketAfterRestart"): {
+                "request-lease-insert-failure", "operation-lease-expired",
+            },
+            ("unit", "./internal/service", "TestStepFunCreditsAndWalletsNeverBecomePercentageQuota"): {
+                "token-plan", "credit-bucket", "cny-wallet", "usd-wallet",
+            },
+            ("unit", "./internal/service", "TestZhipuOffPeakMissingStatusPreservesExistingTicket"): {
+                f"{initial}/{scenario}" for initial in ("ready", "queued")
+                for scenario in ("empty", "unmatched", "unknown-state", "conflicting-duplicate", "duplicate-ready")
+            },
+            ("unit", "./internal/handler", "TestProviderFilesAuditGatePrecedesEveryACLAndWriteBoundary"): {
+                "upload-retry", "scheduler", "user-slot", "account-slot", "upload", "metadata", "list", "delete",
+            },
+            ("unit", "./internal/handler", "TestZhipuStartPlanCompositeRouteAliasRequiresProvenTargetEntitlement"): {
+                f"{scenario}/{endpoint}{allowlist}"
+                for scenario in ("no-observation", "models-unknown", "unavailable", "pending", "expired", "stale",
+                                 "different-model-authorized", "fresh-target-authorized")
+                for endpoint in ("models", "codex") for allowlist in ("", "/allowlist")
+            },
+            ("unit", "./internal/handler", "TestZhipuStartPlanCompositeRouteFilteringKeepsOtherPlatforms"): {"models", "codex"},
+            ("unit", "./internal/handler", "TestZhipuStartPlanCompositeCatalogUsesWinningRouteAndActualTarget"): {
+                f"{scenario}/{endpoint}"
+                for scenario in ("route-overrides-account-published-model", "lower-priority-proof-cannot-authorize-winner",
+                                 "winning-priority-has-proof", "responses-specific-unproven-target",
+                                 "responses-specific-proven-target", "account-mapping-resolves-actual-model",
+                                 "empty-upstream-passes-alias-through-account-mapping", "account-mapping-cannot-be-bypassed-by-raw-target")
+                for endpoint in ("models", "codex")
+            },
+            ("unit", "./internal/handler", "TestZhipuStartPlanCompositeCatalogPreservesTypedAndPersistedIdentityOwner"): {
+                "typed-selection", "persisted-json",
+            },
+            ("integration", "./internal/repository", "TestProviderFilesRepositoryPaginationCursorCannotReadAnotherScope"): {
+                f"{scope}/{direction}" for scope in ("user", "api-key", "group", "platform", "unknown")
+                for direction in ("after", "before")
+            },
+            ("integration", "./internal/repository", "TestProviderFilesRepositoryOwnerCASLocksProxyBeforeAccount"): {"reserve", "publish"},
+            ("unit", "./internal/service", "TestProviderFilesRestartCleanupUsesKnownOriginalSnapshot"): {
+                "same-owner", "proxy-changed", "credential-changed", "unknown-remote",
+                "account-disabled", "proxy-disabled", "proxy-expiry-changed",
+            },
+            ("integration", "./internal/repository", "TestProviderFilesRepositoryOwnerCASRejectsChangedAdmissionSnapshot"): {
+                f"{operation}/{mutation}" for operation in ("reserve", "publish")
+                for mutation in ("account-status", "proxy-status", "proxy-expiry")
+            },
+            ("unit", "./internal/service", "TestStepFunCapabilityFailuresNeverBecomeSuccess"): {
+                f"{profile}/{protocol}/status={status}"
+                for profile in profiles for protocol in protocols for status in (401, 403, 429, 503, 200)
+            },
+            ("unit", "./internal/service", "TestStepFunCapabilityStreamFailureAndTerminationContract"): {
+                f"{profile}/{protocol}/{scenario}"
+                for profile in profiles for protocol in protocols
+                for scenario in ("empty_connection", "partial_clean_eof", "partial_read_failure", "error_envelope",
+                                 "error_after_output_and_usage", "cancelled_after_usage", "deadline_after_usage",
+                                 "complete_without_usage", "missing_done_with_finish", "missing_done_with_usage", "complete_exact_usage")
+            },
+            ("unit", "./internal/service", "TestStepFunCapabilityLate401CannotQuarantineReplacementOwner"): {
+                f"{profile}/{protocol}/{change}"
+                for profile in profiles for protocol in protocols
+                for change in ("unchanged", "credential_replaced", "proxy_rebound", "same_proxy_edited", "region_changed")
+            },
+            ("unit", "./internal/repository", "TestStepFunProductionProxyFailureAcrossProfilesAndBridges"): {
+                f"{profile}/{protocol}/{mode}"
+                for profile in profiles for protocol in protocols for mode in ("timeout", "refused", "407")
+            },
+            ("integration", "./internal/integration", "TestStepFunBusinessMatrix"): {
+                f"{profile}/{protocol}/stream={stream}/failure={failure}"
+                for profile in profiles for protocol in protocols
+                for stream in ("false", "true") for failure in (503, 429)
+            },
+        })
+        for (profile, package, test), children in expected.items():
+            with self.subTest(profile=profile, package=package, test=test):
+                group = next(group for group in coverage.PROFILES[profile] if group.package == package)
+                self.assertIn(test, group.tests)
+                self.assertEqual({name for name in group.required_subtests if name.startswith(test + "/")},
+                                 {test + "/" + child for child in children})
+
+    def test_capability_completion_pins_files_start_and_durable_ticket_boundaries(self) -> None:
+        required = {
+            ("unit", "./internal/pkg/apicompat"): (
+                "TestStepFunParallelChatToolsKeepIndependentAnthropicBlockLifecycles",),
+            ("unit", "./internal/config"): ("TestZhipuOffPeakPersistenceConfiguration",),
+            ("unit", "./internal/securityaudit"): (
+                "TestProviderFilesPromptAuditAllowsBinaryAndLogsSafeDiagnostics",),
+            ("unit", "./internal/service"): (
+                "TestStepFunPricingOfficialRatesAndReferenceCoverage", "TestStepFunPricingCatalogAndChannelOverrides",
+                "TestStepFunOfficialCachedUsageAcrossProtocols", "TestStepFunCreditsAndWalletsNeverBecomePercentageQuota",
+                "TestProviderFilesUncertainAndCompensation", "TestProviderFilesRewriteAndACL",
+                "TestProviderFilesRejectCredentialReplacementAtActualSend", "TestProviderFilesCanonicalAuditContract",
+                "TestProviderFilesModerationAllowsBinaryAndLogsSafeDiagnostics",
+                "TestProviderFilesDeepSeekUploadInferenceReuse", "TestProviderFilesMiniMaxUploadActualChatInference",
+                "TestProviderFiles64MiBContentBoundary", "TestProviderFilesRestartCleanupUsesKnownOriginalSnapshot",
+                "TestProviderFilesMultipleOwnerReferencesFailBeforeSend", "TestProviderFilesSchedulerCannotFailoverToDifferentFileOwner",
+                "TestProviderFilesExplicitRetryPinsOriginalOwner", "TestProviderFilesMiniMaxLocalRevokeIsExplicitlyUnsupportedRemoteDelete",
+                "TestZhipuStartPlanAvailabilityBoundaries", "TestZhipuStartPlanFailureAndOwnerFence",
+                "TestZhipuStartPlanObservationCannotCrossOwnerOrReactivateOnTime",
+                "TestZhipuStartPlanPublicCatalogRechecksCachedOwnerAndIdentity",
+                "TestZhipuOffPeakSnapshotEncryptionAndRotation",
+                "TestZhipuOffPeakSnapshotKeyIDIsAuthenticated",
+                "TestZhipuOffPeakSettlementDoesNotRestoreTakeEligibility",
+                "TestZhipuOffPeakDurableUncertainTakeNeverReplaysAfterRestart",
+                "TestZhipuOffPeakDurableQueueTimeoutRetainsTicketForNextRequest",
+                "TestZhipuOffPeakDurableTakeCommitFailureCannotAdmit",
+                "TestZhipuOffPeakDurableSettlementACKMustPersistBeforeClear",
+                "TestZhipuOffPeakDurableLostHeartbeatPreservesRequestSafetyWindow",
+                "TestZhipuOffPeakDurableMissingStatusNeverClearsOrRetakes",
+                "TestZhipuOffPeakDurableRetentionWipesSnapshotWithoutChangingOwner",
+                "TestZhipuOffPeakMissingStatusPreservesExistingTicket",
+                "TestZhipuOffPeakAdminSegmentRejectsUnsupportedModeAndProfile",
+                "TestZhipuOffPeakAdminSegmentMapsErrorsWithoutSecretDisclosure",
+                "TestZhipuOffPeakAdminTerminateDrainsAndRetriesOriginalSnapshot",
+            ),
+            ("unit", "./internal/handler"): (
+                "TestProviderFilesAuditPrecedesACLRead", "TestProviderFilesUploadAuditsBeforeSelection",
+                "TestProviderFilesMultipartCleanupAndValidation", "TestProviderFilesCancelledUploadDoesNotRetainBytes",
+                "TestProviderFilesInferenceUnknownLocalAndUnsupportedBridges",
+                "TestZhipuStartPlanUnknownPublicCatalogNeverInventsDefaultPermission",
+                "TestZhipuStartPlanCompositeRouteAliasRequiresProvenTargetEntitlement",
+                "TestZhipuStartPlanCompositeRouteFilteringKeepsOtherPlatforms",
+                "TestZhipuStartPlanCompositeCatalogUsesWinningRouteAndActualTarget",
+                "TestZhipuStartPlanCompositeCatalogPreservesTypedAndPersistedIdentityOwner",
+                "TestProviderFilesAuditGatePrecedesEveryACLAndWriteBoundary",
+            ),
+            ("unit", "./internal/repository"): (
+                "TestProviderFilesProductionProxyContract", "TestZhipuStartPlanProductionBalanceStrictProxy",
+                "TestZhipuStartPlanSchedulerProjectionKeepsPermissionWithoutJWT",
+            ),
+            ("unit", "./internal/handler/admin"): (
+                "TestZhipuOffPeakSegmentHandlerOpaqueReadAndExactTermination",
+                "TestZhipuOffPeakSegmentHandlerValidatesBeforeControlSideEffects",
+                "TestZhipuOffPeakSegmentHandlerReportsDisabledMissingAndStoreFailure",
+                "TestZhipuOffPeakSegmentHandlerDuplicateOldHandleCannotTerminateNewSegment",
+            ),
+            ("unit", "./internal/server/routes"): ("TestZhipuOffPeakSegmentRoutesRequireRealAdmin",),
+            ("integration", "./internal/repository"): (
+                "TestProviderFilesRepositoryPersistenceIdempotencyAndFencing",
+                "TestProviderFilesRepositoryCrossInstanceUploadReservation", "TestProviderFilesRepositoryQuotaAndProxyCAS",
+                "TestProviderFilesPersistentUploadReferenceAndRestartCleanup",
+                "TestProviderFilesRepositoryPaginationCursorCannotReadAnotherScope",
+                "TestProviderFilesRepositoryOwnerCASLocksProxyBeforeAccount",
+                "TestProviderFilesRepositoryOwnerCASRejectsChangedAdmissionSnapshot",
+                "TestZhipuStartPlanPostgresCommitOutboxAndCrossInstanceSelection",
+                "TestZhipuStartPlanPostgresLateObservationCannotReplaceNewObservation",
+                "TestZhipuStartPlanPostgresOwnerAndOutboxFailuresPreserveObservation",
+                "TestZhipuOffPeakStoreCrossInstanceOpenHasOneCurrentGeneration",
+                "TestZhipuOffPeakStoreExpiredOperationLeaseFencesLateSaveAndAdmission",
+                "TestZhipuOffPeakStoreBeginTakeCrashRemainsUncertainAfterRestart",
+                "TestZhipuOffPeakStoreSharedRequestLeasesBlockSettlementUntilAllFinish",
+                "TestZhipuOffPeakStoreSettlementRetryKeepsIntentUntilAcknowledged",
+                "TestZhipuOffPeakStoreRetiresOldOwnerAndRegistersLateTicketForOriginalGeneration",
+                "TestZhipuOffPeakStoreAdmissionRejectsDifferentCredentialOwner",
+                "TestZhipuOffPeakStoreFailedAckWriteCannotErasePendingIntent",
+                "TestZhipuOffPeakStoreRetiredGenerationWaitsForOriginalInflightRequest",
+                "TestZhipuOffPeakStoreSettlementRechecksRequestLeaseAfterParentLockWait",
+                "TestZhipuOffPeakStoreReleaseLocksParentBeforeRequestLease",
+                "TestZhipuOffPeakManagerPostgresQueueTimeoutRestartsWithSameTicketStatus",
+                "TestZhipuOffPeakManagerPostgresAcceptedTakeResponseLossDoesNotRetakeAfterRestart",
+                "TestZhipuOffPeakManagerPostgresConfirmedExpiryCreatesOneNewTaskAndTicket",
+                "TestZhipuOffPeakManagerPostgresSettledTicketDoesNotRestoreTakeQuota",
+                "TestZhipuOffPeakStoreTerminateFencesOldSegmentAndIsIdempotent",
+                "TestZhipuOffPeakStoreTerminateWaitsForSharedInflightRequests",
+                "TestZhipuOffPeakStoreTerminateRejectsUnmatchedOwnerAndGeneration",
+                "TestZhipuOffPeakStoreTerminateDatabaseFailureKeepsOriginalIntent",
+                "TestZhipuOffPeakStoreTerminateRetainsLateTakeOnlyForCleanup",
+                "TestZhipuOffPeakManagerPostgresTerminateCannotRetakeFromOldAcquire",
+                "TestZhipuOffPeakManagerPostgresKnownStatusFailureRecoversSameTicketAfterRestart",
+                "TestZhipuOffPeakManagerPostgresAdmissionFailureRecoversSameTicketAfterRestart",
+            ),
+        }
+        for (profile, package), tests in required.items():
+            group = next(group for group in coverage.PROFILES[profile] if group.package == package)
+            for test in tests:
+                with self.subTest(profile=profile, package=package, test=test):
+                    self.assertIn(test, group.tests)
+
     def test_bridge_token_and_reset_manifests_pin_independent_sender_boundaries(self) -> None:
         group = next(group for group in coverage.PROFILES["unit"]
                      if group.package == "./internal/service")
@@ -193,7 +398,8 @@ class GoEventCoverageTests(unittest.TestCase):
             with self.subTest(package=package):
                 group = next(group for group in coverage.PROFILES["unit"] if group.package == package)
                 self.assertIn(test, group.tests)
-                self.assertEqual(set(group.required_subtests), {test + "/" + scenario for scenario in scenarios})
+                self.assertEqual({child for child in group.required_subtests if child.startswith(test + "/")},
+                                 {test + "/" + scenario for scenario in scenarios})
 
     def test_model_token_count_and_specialized_billing_entrypoints_remain_required(self) -> None:
         service_group = next(group for group in coverage.PROFILES["unit"]

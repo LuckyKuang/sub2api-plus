@@ -288,6 +288,19 @@ export default {
         typesafe: 'TypeSafe / Jev',
       },
       cnProviders: {
+        startPlan: {
+          title: 'Start Plan',
+          available: '可用',
+          unavailable: '不可用',
+          pending: '待生效',
+          unknown: '未知',
+          modelsUnknown: '模型权限未知',
+          modelsEmpty: '未授权任何模型',
+          reauthorize: '请重新登录授权该账号',
+          effectiveAt: '生效时间：{time}',
+          expiresAt: '到期时间：{time}',
+          queryFailed: '无法刷新 Start Plan 权益',
+        },
         unlimited: '不限量',
         accountMode: {
           title: '账号类型',

@@ -333,6 +333,32 @@ func TestZhipuOffPeakSweepRetriesFailedSettles(t *testing.T) {
 	require.Equal(t, []string{"t-1", "t-1"}, client.settleAttempts, "a retired ticket must not be settled again")
 }
 
+func TestZhipuOffPeakSettlementDoesNotRestoreTakeEligibility(t *testing.T) {
+	client := &zhipuOffPeakStub{
+		takes:        []*zcode.OffPeakTicket{{TicketID: "last-window-ticket", State: zcode.TicketReady}},
+		availability: &zcode.OffPeakAvailability{CanTakeNumber: false},
+	}
+	manager := newZhipuOffPeakTestManager(t, client).WithSettleIdle(time.Second)
+	manager.Stop()
+	now := time.Now()
+	manager.now = func() time.Time { return now }
+	ticket, err := manager.Acquire(context.Background(), zhipuOffPeakTestAccount(), zhipuOffPeakTestAuth(), "")
+	require.NoError(t, err)
+	ticket.Release()
+	now = now.Add(2 * time.Second)
+	manager.sweepOnce()
+	require.Equal(t, []string{"last-window-ticket"}, client.settledTickets())
+	nextTake := now.Add(time.Hour).UTC().Truncate(time.Second)
+	client.takeErr = &zcode.OffPeakError{HTTPStatus: http.StatusTooManyRequests, Code: zcode.OffPeakCodeQuotaExhausted, NextTakeAt: nextTake}
+	ticket, err = manager.Acquire(context.Background(), zhipuOffPeakTestAccount(), zhipuOffPeakTestAuth(), "")
+	require.Error(t, err)
+	require.Nil(t, ticket, "a settlement acknowledgement grants no model admission")
+	require.Contains(t, err.Error(), "off-peak take-number quota exhausted")
+	require.Contains(t, err.Error(), nextTake.Format(time.RFC3339))
+	require.Equal(t, 2, client.takeCalls, "the gateway must respect the authoritative denial without repeated Take")
+	require.Equal(t, []string{"last-window-ticket"}, client.settleAttempts)
+}
+
 // The request-path hook must be a no-op for every account that is not an
 // off-peak Zhipu account, so the injection cannot leak into other providers.
 func TestZhipuOffPeakTicketHeaderAppliesOnlyToOffPeakZhipu(t *testing.T) {

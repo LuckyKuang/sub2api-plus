@@ -447,6 +447,9 @@ func runSevenBusinessFlow(t *testing.T, services *sevenBusinessServices, provide
 			Extra:       map[string]any{"openai_responses_supported": false, "quota_limit": 100.0}, GroupIDs: []int64{group.ID}}
 		if native != nil {
 			account.Type = service.AccountTypeOAuth
+			if native.accountKind != "" {
+				account.Type = native.accountKind
+			}
 			account.Credentials = native.credentials(t, provider, owner)
 			account.Extra["openai_responses_supported"] = true
 		}
@@ -592,7 +595,7 @@ func runSevenBusinessFlow(t *testing.T, services *sevenBusinessServices, provide
 		if native == nil {
 			require.Contains(t, string(responseBody), "business success")
 		} else {
-			sevenNativeAssertToolResult(t, native.protocol, native.callID(), responseBody)
+			native.assertResult(t, responseBody)
 		}
 		requestID := response.Header.Get("X-Client-Request-ID")
 		require.NotEmpty(t, requestID)

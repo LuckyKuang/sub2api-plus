@@ -25,11 +25,11 @@ explicitly follows a prerelease. Neither is represented as a stable Release.
 | --- | --- | --- |
 | Codex | `codex-rs/login/src/auth/default_client.rs`, `codex-rs/model-provider`, `codex-rs/codex-api`, auth and WebSocket clients, `codex-rs/protocol/src/{session_id,thread_id}.rs`, `codex-rs/core/src/{installation_id,responses_metadata,client,realtime_conversation}.rs`, `codex-rs/core/src/state/auto_compact_window.rs`, `codex-rs/core/src/session/mod.rs` | `service/openai_codex_identity.go`, `openai_gateway_service.go`, `openai_ws_client.go`, `pkg/openai`, complete Codex transport/identity suites |
 | grok-build | `crates/codegen/xai-grok-sampler`, `xai-grok-voice`, `xai-grok-imagine`, OAuth/OIDC nonce and JWT verification, billing clients and sampler request/conversation IDs | `pkg/xai`, `service/grok_*`, `account_test_service_grok_test.go` |
-| deepseek-harness | `packages/llm/llm/src/attribution.ts`, `llm-deepseek/src/adapter.ts`, `llm-deepseek/src/{listing,listed-catalog}.ts`, `llm-deepseek-api-key/src/{index,config}.ts`, account-platform and anonymous-user-id packages | `pkg/deepseek`, `pkg/cnoauth/client.go`, `service/{deepseek_request_state,domestic_agent_models,cn_oauth_service}.go` |
+| deepseek-harness | `packages/llm/llm/src/attribution.ts`, `packages/llm/llm-deepseek/src/{config,adapter,messages-api,files-api,file-id,file-store}.ts`, `llm-deepseek/src/{listing,listed-catalog}.ts`, `llm-deepseek-api-key/src/{index,config}.ts`, account-platform and anonymous-user-id packages | `pkg/deepseek`, `pkg/cnoauth/client.go`, `service/{deepseek_request_state,domestic_agent_models,cn_oauth_service,provider_files}.go`, `handler/provider_files_handler.go`, `repository/provider_files_repo.go` |
 | kimi-code | `packages/oauth/src/{identity,oauth,managed-kimi-code,managed-usage}.ts`, `packages/agent-core-v2/src/llm-adapter` | `pkg/kimi`, `pkg/cnoauth/client.go`, `service/{domestic_agent_models,upstream_models,cn_oauth_service}.go` |
-| minimax-code | `packages/oauth-core/src`, `packages/local-runtime-v2/src/service/model-system/resolution/{model-resolver-helpers,model-resolver-byok}.ts`, [`packages/tui/src/account/matrix-account-client.ts`](https://github.com/MiniMax-AI/minimax-code/blob/da22f11c55d4748155d7162c1030414228a00565/packages/tui/src/account/matrix-account-client.ts) personal workspace/region quota, `packages/shared/src/llm-error-classifier.ts` plan/Credits errors, Anthropic provider and lockfile | `pkg/minimax`, `pkg/cnoauth/client.go`, `service/{minimax_request_state,minimax_oauth_quota,cn_provider_quota_service}.go`, domestic wire/quota tests |
-| Step-Code | `packages/providers/src/step-provider/{index,login-client}.ts`, `api/openai-completions.ts`, `utils/pi-user-agent.ts`, coding-agent `step/{defaults,environment}.ts` | `pkg/stepfun`, `pkg/cnoauth/stepfun.go`, `service/{stepfun_*,openai_chat_roles}.go`, login panel/composable tests |
-| ZCode | `packages/shared/src/{project-access-token-client,project-access-token}.ts`, CLI `auth/coding-plan-api-key.ts`, UUID/request-trace attribution and device-mid helpers, `model/off-peak-request-auth.ts`, bootstrap `model-config.ts`, runtime-platform headers and lockfile | `pkg/zcode`, `service/{zhipu_oauth_service,zhipu_project_tokens,zhipu_offpeak_ticket}.go` |
+| minimax-code | `packages/oauth-core/src`, `packages/local-runtime-v2/src/service/model-system/resolution/{model-resolver-helpers,model-resolver-byok}.ts`, [`packages/tui/src/account/matrix-account-client.ts`](https://github.com/MiniMax-AI/minimax-code/blob/da22f11c55d4748155d7162c1030414228a00565/packages/tui/src/account/matrix-account-client.ts) personal workspace/region quota, `packages/shared/src/llm-error-classifier.ts` plan/Credits errors, `packages/local-runtime-v2/src/service/turn-system/agent-host/assembly/{local-turn-payload-transform,messages-file-api-patcher}.ts`, Anthropic provider and lockfile | `pkg/minimax`, `pkg/cnoauth/client.go`, `service/{minimax_request_state,minimax_oauth_quota,cn_provider_quota_service,provider_files}.go`, domestic wire/quota and Files tests |
+| Step-Code | `packages/providers/src/step-provider/{index,login-client}.ts`, `api/openai-completions.ts`, `utils/pi-user-agent.ts`, coding-agent `step/{defaults,environment,search-web-tool,mcp-client}.ts` | `pkg/stepfun`, `pkg/cnoauth/stepfun.go`, `service/{stepfun_*,openai_chat_roles}.go`, login panel/composable tests; remote MCP [contract audit only](providers/STEPFUN.md#remote-web-search-mcp-contract-audit) |
+| ZCode | `packages/shared/src/{project-access-token-client,project-access-token,zcodeEndpoint,official-glm-model-id}.ts`, `packages/services/src/model-provider/{zaiStartPlanBilling,codingPlanProviderAvailability}.ts`, CLI `auth/coding-plan-api-key.ts`, UUID/request-trace attribution and device-mid helpers, `model/off-peak-request-auth.ts`, bootstrap `model-config.ts`, runtime-platform headers and lockfile | `pkg/zcode`, `service/{zhipu_oauth_service,zhipu_project_tokens,zhipu_offpeak_ticket,zhipu_start_plan_entitlement}.go` |
 
 Project paths in the last column are relative to `backend/internal/` unless
 stated otherwise. Source layout may move; locate the named symbol in the pinned
@@ -101,3 +101,38 @@ locked SDK; explicitly linked account regions remain authoritative. MiniMax's
 reviewed tree is unchanged. Step-Code's five added commits change agent-local
 tools/extension turns/cwd/feedback, without provider, SDK-lock or identity
 changes. Neither versionless inference UA acquires a product version.
+
+## Files and Start capability review
+
+The October26 review uses the same pinned trees. DeepSeek's
+[`config.ts`](https://github.com/deepseek-ai/deepseek-harness/blob/22ddee3792402c3e70ec5f86a63c3e3e895a2f60/packages/llm/llm-deepseek/src/config.ts)
+selects `/anthropic` as the default base;
+[`adapter.ts`](https://github.com/deepseek-ai/deepseek-harness/blob/22ddee3792402c3e70ec5f86a63c3e3e895a2f60/packages/llm/llm-deepseek/src/adapter.ts)
+passes that connection to Files, and
+[`messages-api.ts`](https://github.com/deepseek-ai/deepseek-harness/blob/22ddee3792402c3e70ec5f86a63c3e3e895a2f60/packages/llm/llm-deepseek/src/messages-api.ts)
+and [`files-api.ts`](https://github.com/deepseek-ai/deepseek-harness/blob/22ddee3792402c3e70ec5f86a63c3e3e895a2f60/packages/llm/llm-deepseek/src/files-api.ts)
+produce `/anthropic/v1/files` for both account and native Anthropic API-key
+profiles. A header-only test's temporary unprefixed base is not the production
+default. The gateway first batch uses Anthropic objects/beta, raw account
+`X-Dsh-Auth-Token` or API-key `X-Api-Key`, and the conservative public64MiB limit.
+
+MiniMax Code's
+[`messages-file-api-patcher.ts`](https://github.com/MiniMax-AI/minimax-code/blob/da22f11c55d4748155d7162c1030414228a00565/packages/local-runtime-v2/src/service/turn-system/agent-host/assembly/messages-file-api-patcher.ts)
+is conditional on a separately advertised managed gateway. It does not establish
+direct OAuth or BYOK Anthropic upload entitlement. The first gateway batch
+therefore uses the [public upload contract](https://platform.minimax.io/docs/api-reference/file-management-upload)
+only for global API-key Chat `video_understanding`, with actual `video_url`
+references. Managed, CN, image-understanding, local references in protocol
+bridges and unproved remote lifecycle operations remain unsupported. Both
+providers use one trusted owner/strict-proxy snapshot, durable local ACLs and
+hard inference-owner constraints; the full capability contract is
+[FILES.md](providers/FILES.md).
+
+ZCode Start follows
+[`zaiStartPlanBilling.ts`](https://github.com/zai-org/ZCode/blob/3c5b227649371507ddc4eb46ac5133afe6db1cab/packages/services/src/model-provider/zaiStartPlanBilling.ts),
+[`codingPlanProviderAvailability.ts`](https://github.com/zai-org/ZCode/blob/3c5b227649371507ddc4eb46ac5133afe6db1cab/packages/services/src/model-provider/codingPlanProviderAvailability.ts),
+[`zcodeEndpoint.ts`](https://github.com/zai-org/ZCode/blob/3c5b227649371507ddc4eb46ac5133afe6db1cab/packages/shared/src/zcodeEndpoint.ts)
+and [`official-glm-model-id.ts`](https://github.com/zai-org/ZCode/blob/3c5b227649371507ddc4eb46ac5133afe6db1cab/packages/shared/src/official-glm-model-id.ts).
+Its independent balance GET carries the trusted `app_version` and linked JWT,
+with ZCode control identity and the same owner's strict proxy. It never issues
+or substitutes a coding project PAT. See [ZHIPU.md](providers/ZHIPU.md).

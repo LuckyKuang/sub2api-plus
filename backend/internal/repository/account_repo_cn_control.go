@@ -63,6 +63,18 @@ func (r *accountRepository) UpdateCNControlExtraIfUnchanged(
 	query += proxyPredicate
 	query += fmt.Sprintf(" AND a.status = $%d", len(args)+1)
 	args = append(args, expected.Status)
+	if _, startObservation := updates["zhipu_start_plan_entitlement"]; startObservation {
+		// Different instances may observe the same owner concurrently. The
+		// response acquired against an older observation cannot overwrite a
+		// committed result, even when their clocks disagree. Other Extra keys
+		// still merge against the latest row and survive this update.
+		previous, marshalErr := json.Marshal(expected.Extra["zhipu_start_plan_entitlement"])
+		if marshalErr != nil {
+			return false, marshalErr
+		}
+		query += fmt.Sprintf(" AND COALESCE(a.extra->'zhipu_start_plan_entitlement', 'null'::jsonb) = $%d::jsonb", len(args)+1)
+		args = append(args, string(previous))
+	}
 	if (expected.Platform == service.PlatformKimi || expected.Platform == service.PlatformDeepseek) && updates[expected.Platform+"_balance_low"] != nil {
 		base := len(args)
 		query += fmt.Sprintf(" AND a.schedulable = $%d AND a.temp_unschedulable_until IS NOT DISTINCT FROM $%d::timestamptz AND COALESCE(a.temp_unschedulable_reason, '') = $%d", base+1, base+2, base+3)

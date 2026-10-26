@@ -478,6 +478,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		AudioOutputTokens:        result.Usage.AudioOutputTokens,
 		CodexRolloutBudgetUnits:  result.Usage.CodexRolloutBudgetUnits,
 		IsComplete:               usageCompletionPtr(input.IsComplete, result.UsageComplete()),
+		UsageSource:              result.UsageSource,
 		ImageCount:               result.ImageCount,
 		ImageSize:                optionalTrimmedStringPtr(result.ImageSize),
 		ImageInputSize:           optionalTrimmedStringPtr(result.ImageInputSize),
@@ -488,7 +489,9 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	}
 	if result.ClientDisconnect {
 		usageLog.CompletionStatus = UsageCompletionClientDisconnected
-		usageLog.UsageSource = result.ClientDisconnectUsageSource
+		if result.ClientDisconnectUsageSource != "" {
+			usageLog.UsageSource = result.ClientDisconnectUsageSource
+		}
 		if usageLog.UsageSource == "" {
 			usageLog.UsageSource = UsageSourcePartial
 		}

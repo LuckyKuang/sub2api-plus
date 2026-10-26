@@ -1447,7 +1447,10 @@ func mixedListingModelAllowed(groupPlatform, model string) bool {
 
 func (s *GatewayService) GetAvailableModels(ctx context.Context, groupID *int64, platform string) []string {
 	cacheKey := modelsListCacheKey(groupID, platform)
-	if s.modelsListCache != nil {
+	// Start permission is bound to the current owner, selected identity and
+	// observation deadline. The group-only cache cannot prove those values.
+	cacheModels := platform != PlatformZhipu && platform != ""
+	if cacheModels && s.modelsListCache != nil {
 		if cached, found := s.modelsListCache.Get(cacheKey); found {
 			if models, ok := cached.([]string); ok {
 				modelsListCacheHitTotal.Add(1)
@@ -1486,8 +1489,17 @@ func (s *GatewayService) GetAvailableModels(ctx context.Context, groupID *int64,
 	// Collect unique models from all accounts
 	modelSet := make(map[string]struct{})
 	hasAnyMapping := false
+	startPlanOnly := len(accounts) > 0
 
 	for _, acc := range accounts {
+		if isZhipuStartPlan(&acc) {
+			cacheModels = false
+			for _, model := range startPlanPublicModelIDs(ctx, &acc) {
+				modelSet[model] = struct{}{}
+			}
+			continue
+		}
+		startPlanOnly = false
 		// Passthrough routing accepts models independently of model_mapping, so a
 		// stale mapping on a passthrough account must not narrow the public list.
 		// Treat it like an unmapped account: skip its mapping here and let
@@ -1533,7 +1545,12 @@ func (s *GatewayService) GetAvailableModels(ctx context.Context, groupID *int64,
 	}
 	// Without configured or discovered candidates, let the handler use defaults.
 	if len(modelSet) == 0 {
-		if s.modelsListCache != nil {
+		// Non-nil empty is authoritative: Start has no proven public models.
+		// A caller must not replace unknown/negative permission with defaults.
+		if startPlanOnly {
+			return []string{}
+		}
+		if cacheModels && s.modelsListCache != nil {
 			s.modelsListCache.Set(cacheKey, []string(nil), s.modelsListCacheTTL)
 			modelsListCacheStoreTotal.Add(1)
 		}
@@ -1557,7 +1574,7 @@ func (s *GatewayService) GetAvailableModels(ctx context.Context, groupID *int64,
 		}
 	}
 
-	if s.modelsListCache != nil {
+	if cacheModels && s.modelsListCache != nil {
 		s.modelsListCache.Set(cacheKey, cloneStringSlice(models), s.modelsListCacheTTL)
 		modelsListCacheStoreTotal.Add(1)
 	}

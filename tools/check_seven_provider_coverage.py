@@ -86,6 +86,165 @@ COUNT_TOKENS_PREFLIGHT = "TestCountTokensUpstreamRejectsBrokenProxyBeforeCredent
 COUNT_TOKENS_OWNER = "TestCountTokensUpstreamKeepsCapturedOwnerDuringTokenLookup"
 COUNT_TOKENS_LOCAL = "TestCountTokensLocalEstimatesKeepZeroCredentialAndNetworkEffects"
 COUNT_TOKENS_WIRE = "TestCountTokensProductionProxyContract"
+STEP_PROFILES = ("oauth_plan_cn", "oauth_plan_global", "apikey_payg_cn", "apikey_payg_global",
+                 "apikey_plan_cn", "apikey_plan_global")
+STEP_PROTOCOLS = ("chat", "responses", "messages")
+STEP_BUSINESS_TEST = "TestStepFunBusinessMatrix"
+CAPABILITY_SERVICE_TESTS = (
+    "TestStepFunCapabilityBasicMatrix",
+    "TestStepFunCapabilityCompletedWithoutUsageKeepsUnknownBillingSource",
+    "TestStepFunCapabilityParallelToolsAndResults",
+    "TestStepFunCapabilityFailuresNeverBecomeSuccess",
+    "TestStepFunCapabilityStreamFailureAndTerminationContract",
+    "TestStepFunCapabilityLate401CannotQuarantineReplacementOwner",
+    "TestStepFunPricingOfficialRatesAndReferenceCoverage",
+    "TestStepFunPricingCatalogAndChannelOverrides",
+    "TestStepFunOfficialCachedUsageAcrossProtocols",
+    "TestStepFunCreditsAndWalletsNeverBecomePercentageQuota",
+    "TestProviderFilesUploadWireAndIdempotentReuse",
+    "TestProviderFilesUncertainAndCompensation",
+    "TestProviderFilesMiniMaxBusinessFailureAndChatReference",
+    "TestProviderFilesDeleteFailureRecoveryDoesNotRepeat",
+    "TestProviderFilesDeepSeekUploadInferenceReuse",
+    "TestProviderFilesMiniMaxUploadActualChatInference",
+    "TestProviderFilesRejectCredentialReplacementAtActualSend",
+    "TestProviderFilesCanonicalAuditContract",
+    "TestProviderFilesModerationAllowsBinaryAndLogsSafeDiagnostics",
+    "TestProviderFilesContractValidation",
+    "TestProviderFilesPrincipalDoesNotUseProxyOrDisplayIdentity",
+    "TestProviderFilesRewriteAndACL",
+    "TestProviderFilesUnknownLocalIDNeverBecomesNative",
+    "TestProviderFiles64MiBContentBoundary",
+    "TestProviderFilesRestartCleanupUsesKnownOriginalSnapshot",
+    "TestProviderFilesMultipleOwnerReferencesFailBeforeSend",
+    "TestProviderFilesSchedulerCannotFailoverToDifferentFileOwner",
+    "TestProviderFilesExplicitRetryPinsOriginalOwner",
+    "TestProviderFilesMiniMaxLocalRevokeIsExplicitlyUnsupportedRemoteDelete",
+    "TestZhipuStartPlanOfficialBalanceWireAndIsolation",
+    "TestZhipuStartPlanAvailabilityBoundaries",
+    "TestZhipuStartPlanFailureAndOwnerFence",
+    "TestZhipuStartPlanSelectionAndPublicCatalog",
+    "TestZhipuStartPlanObservationCannotCrossOwnerOrReactivateOnTime",
+    "TestZhipuStartPlanCatalogSyncUsesBalanceAndNeverProjectOrRegistry",
+    "TestZhipuStartPlanIdentityPrecedenceAndRequiredLogin",
+    "TestZhipuStartPlanPublicCatalogRechecksCachedOwnerAndIdentity",
+    "TestZhipuOffPeakSnapshotEncryptionAndRotation",
+    "TestZhipuOffPeakSnapshotKeyIDIsAuthenticated",
+    "TestZhipuOffPeakSettlementDoesNotRestoreTakeEligibility",
+    "TestZhipuOffPeakGenerationTracksOwnerNotObservations",
+    "TestZhipuOffPeakDurableUncertainTakeNeverReplaysAfterRestart",
+    "TestZhipuOffPeakDurableQueueTimeoutRetainsTicketForNextRequest",
+    "TestZhipuOffPeakDurableTakeCommitFailureCannotAdmit",
+    "TestZhipuOffPeakDurableSettlementACKMustPersistBeforeClear",
+    "TestZhipuOffPeakDurableLostHeartbeatPreservesRequestSafetyWindow",
+    "TestZhipuOffPeakDurableMissingStatusNeverClearsOrRetakes",
+    "TestZhipuOffPeakDurableRetentionWipesSnapshotWithoutChangingOwner",
+    "TestZhipuOffPeakMissingStatusPreservesExistingTicket",
+    "TestZhipuOffPeakAdminSegmentRejectsUnsupportedModeAndProfile",
+    "TestZhipuOffPeakAdminSegmentMapsErrorsWithoutSecretDisclosure",
+    "TestZhipuOffPeakAdminTerminateDrainsAndRetriesOriginalSnapshot",
+)
+CAPABILITY_SERVICE_SUBTESTS = tuple(
+    f"{test}/{profile}/{protocol}/stream={stream}"
+    for test in ("TestStepFunCapabilityBasicMatrix", "TestStepFunCapabilityParallelToolsAndResults",
+                 "TestStepFunCapabilityCompletedWithoutUsageKeepsUnknownBillingSource")
+    for profile in STEP_PROFILES for protocol in STEP_PROTOCOLS for stream in ("false", "true")
+) + tuple(
+    f"TestStepFunCapabilityFailuresNeverBecomeSuccess/{profile}/{protocol}/status={status}"
+    for profile in STEP_PROFILES for protocol in STEP_PROTOCOLS for status in (401, 403, 429, 503, 200)
+) + tuple(
+    f"TestStepFunCapabilityStreamFailureAndTerminationContract/{profile}/{protocol}/{scenario}"
+    for profile in STEP_PROFILES for protocol in STEP_PROTOCOLS
+    for scenario in ("empty_connection", "partial_clean_eof", "partial_read_failure", "error_envelope",
+                     "error_after_output_and_usage", "cancelled_after_usage", "deadline_after_usage",
+                     "complete_without_usage", "missing_done_with_finish", "missing_done_with_usage",
+                     "complete_exact_usage")
+) + tuple(
+    f"TestStepFunCapabilityLate401CannotQuarantineReplacementOwner/{profile}/{protocol}/{change}"
+    for profile in STEP_PROFILES for protocol in STEP_PROTOCOLS
+    for change in ("unchanged", "credential_replaced", "proxy_rebound", "same_proxy_edited", "region_changed")
+) + tuple(
+    f"TestStepFunPricingOfficialRatesAndReferenceCoverage/catalog={catalog}/{model}"
+    for catalog in ("false", "true")
+    for model in ("step-5-preview", "step-3.7-flash", "step-3.5-flash", "step-3.5-flash-2603", "step-1o-turbo-vision")
+) + tuple(
+    f"TestStepFunOfficialCachedUsageAcrossProtocols/{kind}/{protocol}/stream={stream}"
+    for kind in ("oauth", "apikey") for protocol in STEP_PROTOCOLS for stream in ("false", "true")
+) + tuple(
+    f"{test}/{scenario}"
+    for test, scenarios in (
+        ("TestStepFunCreditsAndWalletsNeverBecomePercentageQuota", ("token-plan", "credit-bucket", "cny-wallet", "usd-wallet")),
+        ("TestProviderFilesUploadWireAndIdempotentReuse", ("apikey", "oauth")),
+        ("TestProviderFilesUncertainAndCompensation", (
+            "lost_response_never_replays", "mapping_failure_cannot_publish_and_cleans_known_remote")),
+        ("TestProviderFilesContractValidation", ("DeepSeek_actual_media_bytes_and_expiry",
+            "MiniMax_unsupported_purpose_never_falls_through", "filename_length_is_bytes")),
+        ("TestProviderFilesRewriteAndACL", ("other_key", "other_user", "other_group", "revoked", "expired")),
+        ("TestProviderFilesRestartCleanupUsesKnownOriginalSnapshot", (
+            "same-owner", "proxy-changed", "credential-changed", "unknown-remote",
+            "account-disabled", "proxy-disabled", "proxy-expiry-changed")),
+        ("TestZhipuStartPlanOfficialBalanceWireAndIsolation", ("bigmodel", "zai")),
+        ("TestZhipuStartPlanAvailabilityBoundaries", (
+            "missing-models", "empty-balances-unknown", "explicit-empty-capability", "expired-model-bucket",
+            "foreign-model-scope", "pending", "date-beats-old-json-clock", "no-active-start", "missing-plans",
+            "wrong-plans-type", "damaged-active-plan", "missing-product-identity", "invalid-server-clock",
+            "missing-future-effective-time", "damaged-capability", "business-failure", "invalid-json")),
+        ("TestZhipuStartPlanFailureAndOwnerFence", (
+            "network", "401", "403", "relink", "plan", "estate", "proxy", "save-failure")),
+        ("TestZhipuStartPlanSelectionAndPublicCatalog", (
+            "no-observation", "models-unknown", "explicit-empty", "authorized", "unauthorized", "pending", "unavailable")),
+        ("TestZhipuStartPlanObservationCannotCrossOwnerOrReactivateOnTime", (
+            "token", "plan", "estate", "proxy", "identity", "stale-positive", "stale-negative", "pending-elapsed", "expired")),
+        ("TestZhipuStartPlanIdentityPrecedenceAndRequiredLogin", (
+            "global-version", "account-version", "legacy-no-mode", "missing-jwt")),
+        ("TestZhipuOffPeakSnapshotEncryptionAndRotation", ("record", "account", "generation", "task", "ciphertext")),
+        ("TestZhipuOffPeakDurableMissingStatusNeverClearsOrRetakes", (
+            "empty", "missing-ticket", "unknown-state", "conflicting-duplicate")),
+        ("TestZhipuOffPeakAdminSegmentRejectsUnsupportedModeAndProfile", (
+            "memory-mode", "nil-account", "invalid-id", "other-platform", "coding-plan", "unsupported-type")),
+        ("TestZhipuOffPeakAdminSegmentMapsErrorsWithoutSecretDisclosure", (
+            "not-found", "database-failure", "fence-conflict", "empty-record", "empty-generation")),
+    ) for scenario in scenarios
+) + tuple(
+    f"TestZhipuOffPeakMissingStatusPreservesExistingTicket/{initial}/{scenario}"
+    for initial in ("ready", "queued")
+    for scenario in ("empty", "unmatched", "unknown-state", "conflicting-duplicate", "duplicate-ready")
+)
+CAPABILITY_REPOSITORY_TESTS = (
+    "TestProviderFilesPersistentUploadReferenceAndRestartCleanup",
+    "TestProviderFilesRepositoryPersistenceIdempotencyAndFencing",
+    "TestProviderFilesRepositoryCrossInstanceUploadReservation",
+    "TestProviderFilesRepositoryQuotaAndProxyCAS",
+    "TestProviderFilesRepositoryPaginationCursorCannotReadAnotherScope",
+    "TestProviderFilesRepositoryOwnerCASLocksProxyBeforeAccount",
+    "TestProviderFilesRepositoryOwnerCASRejectsChangedAdmissionSnapshot",
+    "TestZhipuStartPlanPostgresCommitOutboxAndCrossInstanceSelection",
+    "TestZhipuStartPlanPostgresLateObservationCannotReplaceNewObservation",
+    "TestZhipuStartPlanPostgresOwnerAndOutboxFailuresPreserveObservation",
+    "TestZhipuOffPeakStoreCrossInstanceOpenHasOneCurrentGeneration",
+    "TestZhipuOffPeakStoreExpiredOperationLeaseFencesLateSaveAndAdmission",
+    "TestZhipuOffPeakStoreBeginTakeCrashRemainsUncertainAfterRestart",
+    "TestZhipuOffPeakStoreSharedRequestLeasesBlockSettlementUntilAllFinish",
+    "TestZhipuOffPeakStoreSettlementRetryKeepsIntentUntilAcknowledged",
+    "TestZhipuOffPeakStoreRetiresOldOwnerAndRegistersLateTicketForOriginalGeneration",
+    "TestZhipuOffPeakStoreAdmissionRejectsDifferentCredentialOwner",
+    "TestZhipuOffPeakStoreFailedAckWriteCannotErasePendingIntent",
+    "TestZhipuOffPeakStoreRetiredGenerationWaitsForOriginalInflightRequest",
+    "TestZhipuOffPeakStoreSettlementRechecksRequestLeaseAfterParentLockWait",
+    "TestZhipuOffPeakStoreReleaseLocksParentBeforeRequestLease",
+    "TestZhipuOffPeakManagerPostgresQueueTimeoutRestartsWithSameTicketStatus",
+    "TestZhipuOffPeakManagerPostgresAcceptedTakeResponseLossDoesNotRetakeAfterRestart",
+    "TestZhipuOffPeakManagerPostgresConfirmedExpiryCreatesOneNewTaskAndTicket",
+    "TestZhipuOffPeakManagerPostgresSettledTicketDoesNotRestoreTakeQuota",
+    "TestZhipuOffPeakStoreTerminateFencesOldSegmentAndIsIdempotent",
+    "TestZhipuOffPeakStoreTerminateWaitsForSharedInflightRequests",
+    "TestZhipuOffPeakStoreTerminateRejectsUnmatchedOwnerAndGeneration",
+    "TestZhipuOffPeakStoreTerminateDatabaseFailureKeepsOriginalIntent",
+    "TestZhipuOffPeakStoreTerminateRetainsLateTakeOnlyForCleanup",
+    "TestZhipuOffPeakManagerPostgresTerminateCannotRetakeFromOldAcquire",
+    "TestZhipuOffPeakManagerPostgresKnownStatusFailureRecoversSameTicketAfterRestart",
+    "TestZhipuOffPeakManagerPostgresAdmissionFailureRecoversSameTicketAfterRestart",
+)
 
 # These names deliberately pin the business cases rather than discovering cases
 # from the implementation. Removing a provider, mutation or invalid observation
@@ -128,6 +287,17 @@ APIKEY_CODING_SUBTESTS = tuple(
 
 PROFILES = {
     "unit": (
+        RegressionGroup("./internal/securityaudit", (
+            "TestProviderFilesPromptAuditAllowsBinaryAndLogsSafeDiagnostics",
+        )),
+        RegressionGroup("./internal/config", ("TestZhipuOffPeakPersistenceConfiguration",), tuple(
+            f"TestZhipuOffPeakPersistenceConfiguration/{scenario}"
+            for scenario in ("default_remains_explicitly_process_local", "missing-key", "wrong-length", "bad-json",
+                             "missing-active", "retention", "stable_env_keyring_and_retention")
+        )),
+        RegressionGroup("./internal/pkg/apicompat", (
+            "TestStepFunParallelChatToolsKeepIndependentAnthropicBlockLifecycles",
+        )),
         RegressionGroup("./internal/pkg/xai", (
             "TestOIDCIDTokenCryptographicAndClaimBoundaries",
             "TestOIDCIDTokenOfficialAsymmetricAlgorithms",
@@ -310,7 +480,7 @@ PROFILES = {
             "TestGrokMediaUsageFromResponseVideoCreateDoesNotBill",
             "TestGrokMediaUsageFromResponseVideoStatusBillsOnOfficialDone",
             ZHIPU_START_PLAN_TEST,
-        ), ("TestZhipuOAuthBuildAccountMaterialForEachPlan/start_plan_and_off-peak_are_estate_independent",)
+        ) + CAPABILITY_SERVICE_TESTS, ("TestZhipuOAuthBuildAccountMaterialForEachPlan/start_plan_and_off-peak_are_estate_independent",)
         + APIKEY_OBSERVATION_SUBTESTS + APIKEY_CODING_SUBTESTS + tuple(
             f"{NATIVE_REFRESH_COORDINATOR}/{provider}"
             for provider in ("deepseek", "kimi", "minimax", "stepfun")
@@ -542,7 +712,7 @@ PROFILES = {
                 ("messages-count", ("deepseek", "kimi", "minimax", "stepfun", "zhipu")),
             )
             for provider in providers
-        )),
+        ) + CAPABILITY_SERVICE_SUBTESTS),
         RegressionGroup("./internal/repository", (
             GROK_HTTP_WIRE,
             COUNT_TOKENS_WIRE,
@@ -555,6 +725,10 @@ PROFILES = {
             CHAT_PROXY_TEST,
             "TestZhipuOffPeakProductionClientProxyFailuresNeverDialDirect",
             "TestZhipuOffPeakProductionAcquisitionRejectsBrokenProxyBindings",
+            "TestProviderFilesProductionProxyContract",
+            "TestStepFunProductionProxyFailureAcrossProfilesAndBridges",
+            "TestZhipuStartPlanProductionBalanceStrictProxy",
+            "TestZhipuStartPlanSchedulerProjectionKeepsPermissionWithoutJWT",
         ), tuple(
             f"{CHAT_PROXY_TEST}/{platform}/{binding}"
             for platform in PROVIDERS
@@ -573,6 +747,18 @@ PROFILES = {
             f"{COUNT_TOKENS_WIRE}/{entry}/{mode}"
             for entry in ("responses-native", "messages-count")
             for mode in ("success", "unbound-direct", "refused", "timeout", "authentication-required", "missing-bound-route")
+        ) + tuple(
+            f"TestProviderFilesProductionProxyContract/{profile}/{operation}/{mode}"
+            for profile, operations in (("deepseek-apikey", ("upload", "delete")),
+                                        ("deepseek-oauth", ("upload", "delete")), ("minimax-apikey", ("upload",)))
+            for operation in operations
+            for mode in ("success", "unbound-direct", "refused", "timeout", "407", "cancelled")
+        ) + tuple(
+            f"TestStepFunProductionProxyFailureAcrossProfilesAndBridges/{profile}/{protocol}/{mode}"
+            for profile in STEP_PROFILES for protocol in STEP_PROTOCOLS for mode in ("timeout", "refused", "407")
+        ) + tuple(
+            f"TestZhipuStartPlanProductionBalanceStrictProxy/{mode}"
+            for mode in ("success", "timeout", "refused", "authentication_required", "missing", "mismatched")
         )),
         RegressionGroup("./internal/handler", (
             "TestGrokRealtimeHandlerRejectsBrokenProxyBeforeCredential",
@@ -585,6 +771,17 @@ PROFILES = {
             "TestGrokRealtimeTurnTrackerDeduplicatesPendingResponseAndAuditsAdmin",
             "TestGrokRealtimeBillingResultRequiresObservedAudio",
             "TestGrokRealtimeBillingResultUsesForcedUniqueID",
+            "TestProviderFilesMultipartCleanupAndValidation",
+            "TestProviderFilesAuditPrecedesACLRead",
+            "TestProviderFilesInferenceUnknownLocalAndUnsupportedBridges",
+            "TestProviderFilesUploadAuditsBeforeSelection",
+            "TestProviderFilesCancelledUploadDoesNotRetainBytes",
+            "TestZhipuStartPlanUnknownPublicCatalogNeverInventsDefaultPermission",
+            "TestZhipuStartPlanCompositeRouteAliasRequiresProvenTargetEntitlement",
+            "TestZhipuStartPlanCompositeRouteFilteringKeepsOtherPlatforms",
+            "TestZhipuStartPlanCompositeCatalogUsesWinningRouteAndActualTarget",
+            "TestZhipuStartPlanCompositeCatalogPreservesTypedAndPersistedIdentityOwner",
+            "TestProviderFilesAuditGatePrecedesEveryACLAndWriteBoundary",
         ), tuple(
             f"{FAILOVER_TEST}/{platform}/{status}"
             for platform in PROVIDERS
@@ -595,11 +792,52 @@ PROFILES = {
         ) + tuple(
             f"TestGrokRealtimeHandlerLateRejectionCannotCoolReplacementOwner/{change}"
             for change in ("unchanged", "relinked", "same-row-proxy-edited", "manual-pause", "other-cooldown", "proxy-authentication-required")
+        ) + tuple(
+            f"TestProviderFilesMultipartCleanupAndValidation/{scenario}"
+            for scenario in ("image_and_expiry", "no_expiry_means_permanent", "partial_expiry", "unknown_field", "fake_image")
+        ) + tuple(
+            f"TestProviderFilesAuditPrecedesACLRead/{operation}" for operation in ("list", "metadata", "delete")
+        ) + tuple(
+            f"TestZhipuStartPlanUnknownPublicCatalogNeverInventsDefaultPermission/{platform}/{endpoint}{allowlist}"
+            for platform in ("zhipu", "composite") for endpoint in ("models", "codex") for allowlist in ("", "/allowlist")
+        ) + tuple(
+            f"TestZhipuStartPlanCompositeRouteAliasRequiresProvenTargetEntitlement/{scenario}/{endpoint}{allowlist}"
+            for scenario in ("no-observation", "models-unknown", "unavailable", "pending", "expired", "stale",
+                             "different-model-authorized", "fresh-target-authorized")
+            for endpoint in ("models", "codex") for allowlist in ("", "/allowlist")
+        ) + tuple(
+            f"TestZhipuStartPlanCompositeRouteFilteringKeepsOtherPlatforms/{endpoint}" for endpoint in ("models", "codex")
+        ) + tuple(
+            f"TestZhipuStartPlanCompositeCatalogPreservesTypedAndPersistedIdentityOwner/{representation}"
+            for representation in ("typed-selection", "persisted-json")
+        ) + tuple(
+            f"TestZhipuStartPlanCompositeCatalogUsesWinningRouteAndActualTarget/{scenario}/{endpoint}"
+            for scenario in ("route-overrides-account-published-model", "lower-priority-proof-cannot-authorize-winner",
+                             "winning-priority-has-proof", "responses-specific-unproven-target",
+                             "responses-specific-proven-target", "account-mapping-resolves-actual-model",
+                             "empty-upstream-passes-alias-through-account-mapping", "account-mapping-cannot-be-bypassed-by-raw-target")
+            for endpoint in ("models", "codex")
+        ) + tuple(
+            f"TestProviderFilesAuditGatePrecedesEveryACLAndWriteBoundary/{boundary}"
+            for boundary in ("upload-retry", "scheduler", "user-slot", "account-slot", "upload", "metadata", "list", "delete")
         )),
-        RegressionGroup("./internal/handler/admin", (NATIVE_UNSUPPORTED_REFRESH,), tuple(
+        RegressionGroup("./internal/handler/admin", (NATIVE_UNSUPPORTED_REFRESH,
+            "TestZhipuOffPeakSegmentHandlerOpaqueReadAndExactTermination",
+            "TestZhipuOffPeakSegmentHandlerValidatesBeforeControlSideEffects",
+            "TestZhipuOffPeakSegmentHandlerReportsDisabledMissingAndStoreFailure",
+            "TestZhipuOffPeakSegmentHandlerDuplicateOldHandleCannotTerminateNewSegment",
+        ), tuple(
             f"{NATIVE_UNSUPPORTED_REFRESH}/{provider}/{marker}"
             for provider in ("deepseek", "zhipu") for marker in ("native-marker", "missing-native-marker")
+        ) + tuple(
+            f"TestZhipuOffPeakSegmentHandlerValidatesBeforeControlSideEffects/{profile}"
+            for profile in ("zhipu/oauth/start-plan", "zhipu/oauth/individual-coding-plan",
+                            "stepfun/oauth/off-peak", "zhipu/upstream/off-peak")
+        ) + tuple(
+            f"TestZhipuOffPeakSegmentHandlerReportsDisabledMissingAndStoreFailure/{scenario}"
+            for scenario in ("disabled-persistence", "manager-unavailable", "missing-segment", "stale-generation", "database-unavailable")
         )),
+        RegressionGroup("./internal/server/routes", ("TestZhipuOffPeakSegmentRoutesRequireRealAdmin",)),
         RegressionGroup("./internal/handler/dto", (OAUTH_OWNER_DTO,), tuple(
             f"{OAUTH_OWNER_DTO}/{provider}" for provider in PROVIDERS
         )),
@@ -690,9 +928,14 @@ PROFILES = {
             "TestGrokRequestOutcomeReturnsGenerationOfItsAtomicCommit",
             "TestSevenProviderPublicSchedulingRecoveryIsAtomic",
             "TestSuccessfulTestRecoveryCommitsOnlyRequiredState",
-        ), tuple(
+        ) + CAPABILITY_REPOSITORY_TESTS, tuple(
             f"{test}/{scenario}"
             for test, scenarios in (
+                ("TestZhipuOffPeakStoreTerminateRejectsUnmatchedOwnerAndGeneration", ("other-account", "unknown-record", "wrong-generation")),
+                ("TestZhipuOffPeakManagerPostgresTerminateCannotRetakeFromOldAcquire", ("waiting-operation-lease", "already-claimed-operation")),
+                ("TestZhipuOffPeakManagerPostgresAdmissionFailureRecoversSameTicketAfterRestart", ("request-lease-insert-failure", "operation-lease-expired")),
+                ("TestProviderFilesRepositoryOwnerCASLocksProxyBeforeAccount", ("reserve", "publish")),
+                ("TestZhipuStartPlanPostgresOwnerAndOutboxFailuresPreserveObservation", ("relink", "estate", "plan", "outbox")),
                 (CONTROL_CAS_CACHE_BOUNDARY, ("managed=false", "managed=true")),
                 ("TestGrokRequestOutcomeCASPublishesAtomicOwnerState", ("apikey", "oauth")),
                 ("TestGrokRequestOutcomeCASRejectsOwnerOrSchedulerChanges", (
@@ -837,10 +1080,17 @@ PROFILES = {
         ) + tuple(
             f"TestGrokCredentialFailureCASMissingProxyQuarantineRejectsRestoration/{scenario}"
             for scenario in ("still_missing", "same_ID_restored")
+        ) + tuple(
+            f"TestProviderFilesRepositoryPaginationCursorCannotReadAnotherScope/{scope}/{direction}"
+            for scope in ("user", "api-key", "group", "platform", "unknown") for direction in ("after", "before")
+        ) + tuple(
+            f"TestProviderFilesRepositoryOwnerCASRejectsChangedAdmissionSnapshot/{operation}/{mutation}"
+            for operation in ("reserve", "publish") for mutation in ("account-status", "proxy-status", "proxy-expiry")
         )),
         RegressionGroup("./internal/integration", (
             BUSINESS_CHAT_TEST,
             BUSINESS_NATIVE_TEST,
+            STEP_BUSINESS_TEST,
             "TestSevenProviderManagementEditsReachOtherInstanceBeforeForwarding",
             "TestSevenProviderManagementProxyEditOutboxFailureRollsBackRoute",
             "TestSevenProviderManagementLateProxyProbeCannotReplaceRepairedRoute",
@@ -862,6 +1112,10 @@ PROFILES = {
         ) + tuple(
             f"{BUSINESS_NATIVE_TEST}/{provider}"
             for provider in PROVIDERS
+        ) + tuple(
+            f"{STEP_BUSINESS_TEST}/{profile}/{protocol}/stream={stream}/failure={failure}"
+            for profile in STEP_PROFILES for protocol in STEP_PROTOCOLS
+            for stream in ("false", "true") for failure in (503, 429)
         ) + tuple(
             f"TestOpenAIAPIKeyAdminResetRecoversObservedModelTransient/{where}"
             for where in ("same-process", "other-process")

@@ -19,6 +19,19 @@ def report() -> dict:
 
 
 class FrontendCoverageTests(unittest.TestCase):
+    def test_start_plan_states_models_reauthorization_and_owner_fences_remain_required(self) -> None:
+        expected = {
+            *(f"ZhipuStartPlanCell shows the independent {state} state"
+              for state in ("available", "unavailable", "pending", "unknown")),
+            "ZhipuStartPlanCell distinguishes unknown model details from an explicit empty model set",
+            "ZhipuStartPlanCell rejects a late same-ID reauthorization result and permits the current owner",
+            "ZhipuStartPlanCell keeps a proven negative state after query failure and never promotes pending on time alone",
+            "ZhipuStartPlanCell shows reauthorization for business login failure and ignores uncommitted observations",
+            *(f"ZhipuStartPlanCell does not probe or render {plan} as Start"
+              for plan in ("off-peak", "individual-coding-plan", "team-coding-plan")),
+        }
+        self.assertEqual(set(gate.REQUIRED["src/components/account/__tests__/ZhipuStartPlanCell.spec.ts"]), expected)
+
     def test_each_required_platform_and_lifecycle_case_must_execute(self) -> None:
         self.assertEqual(gate.coverage_errors(report(), frontend=FRONTEND), [])
         for index, titles in enumerate(gate.REQUIRED.values()):

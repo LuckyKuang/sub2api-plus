@@ -18,6 +18,16 @@ PROBE_GROUP = "proxy management single and batch probe ownership"
 REAUTH_GROUP = "existing-account reauthorization owner boundaries"
 REAUTH_ENTRIES = ("openai exchange", "openai RT", "grok exchange", "grok RT", "grok SSO")
 REQUIRED = {
+    "src/components/account/__tests__/ZhipuStartPlanCell.spec.ts": (
+        *(f"ZhipuStartPlanCell shows the independent {state} state"
+          for state in ("available", "unavailable", "pending", "unknown")),
+        "ZhipuStartPlanCell distinguishes unknown model details from an explicit empty model set",
+        "ZhipuStartPlanCell rejects a late same-ID reauthorization result and permits the current owner",
+        "ZhipuStartPlanCell keeps a proven negative state after query failure and never promotes pending on time alone",
+        "ZhipuStartPlanCell shows reauthorization for business login failure and ignores uncommitted observations",
+        *(f"ZhipuStartPlanCell does not probe or render {plan} as Start"
+          for plan in ("off-peak", "individual-coding-plan", "team-coding-plan")),
+    ),
     "src/api/__tests__/admin.accounts.oauthOwner.spec.ts": (
         *(f"admin account OAuth owner precondition rejects {kind} owner before sending credentials"
           for kind in ("missing", "empty", "truncated", "extended", "non-hex", "uppercase", "padded")),

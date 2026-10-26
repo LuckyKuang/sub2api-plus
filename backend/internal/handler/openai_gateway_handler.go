@@ -41,6 +41,7 @@ type OpenAIGatewayHandler struct {
 	errorPassthroughService    *service.ErrorPassthroughService
 	contentModerationService   *service.ContentModerationService
 	securityAuditCoordinator   *securityaudit.Coordinator
+	providerFilesService       *service.ProviderFilesService
 	grokMediaEligibilityProber grokMediaEligibilityProber
 	opsService                 *service.OpsService
 	ipAccessControl            *service.IPAccessControlService
@@ -618,6 +619,12 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	if decision := h.checkSecurityAudit(c, reqLog, apiKey, subject, service.ContentModerationProtocolOpenAIResponses, reqModel, securityAuditBody); decision != nil && !decision.AllowNextStage {
 		h.openAISecurityAuditError(c, decision)
 		return
+	}
+	if resolved, err := h.resolveProviderFilesForInference(c, apiKey, body, service.APIProtocolResponses); err != nil {
+		h.providerFilesError(c, err)
+		return
+	} else {
+		body = resolved
 	}
 
 	// 只有安全审核通过后才允许协议归一化改变请求体或路由语义。
@@ -1373,6 +1380,12 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 	if decision := h.checkSecurityAudit(c, reqLog, apiKey, subject, service.ContentModerationProtocolAnthropicMessages, reqModel, body); decision != nil && !decision.AllowNextStage {
 		h.anthropicSecurityAuditError(c, decision)
 		return
+	}
+	if resolved, err := h.resolveProviderFilesForInference(c, apiKey, body, service.APIProtocolAnthropic); err != nil {
+		h.providerFilesError(c, err)
+		return
+	} else {
+		body = resolved
 	}
 
 	// 解析渠道级模型映射

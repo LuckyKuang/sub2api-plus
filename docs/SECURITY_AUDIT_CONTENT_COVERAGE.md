@@ -7,6 +7,21 @@ Moderation and Prompt Audit. The shared implementation is
 `backend/internal/auditcontent`; protocol handlers and account paths must not
 maintain alternate text extractors.
 
+Provider Files ingress uses the same boundary for authenticated
+`POST /v1/files`, `POST /v1/files/upload`, `GET /v1/files`, and
+`GET/DELETE /v1/files/:file_id`. Basic multipart/ID validation precedes audit;
+account selection, user/account concurrency, ACL/mapping reads and writes, and
+provider traffic follow it. The canonical `provider_files` upload envelope
+contains only an operation and sanitized binary byte count. File bytes are
+unextractable content: both engines permit the request without inventing prompt
+text, and their existing structured extraction diagnostics contain request ID,
+endpoint, protocol, stage, stable reason and available byte counts. Filename,
+purpose, credentials and binary data are never copied into prompt text or logs.
+List/metadata/delete have a known empty prompt body. Local file references in
+inference are resolved only after the original Chat/Responses/Messages audit;
+rewriting and owner pinning do not replace or bypass that audit. Unknown valid
+content still passes while recognized sibling user text remains auditable.
+
 Usage timing observers are separate from this ingress extraction contract.
 Classifying upstream `compaction`/`compaction_summary` output for timing does not
 add an ingress extraction rule, policy decision, or audit bypass. Encrypted

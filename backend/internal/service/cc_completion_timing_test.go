@@ -66,7 +66,7 @@ func TestCCFallbacksDoNotTreatErrorThenDoneAsCompleteUsage(t *testing.T) {
 			} else {
 				result, err = svc.Forward(context.Background(), c, forceChatResponsesFallbackAccount(), body)
 			}
-			require.NoError(t, err)
+			require.Error(t, err, "an explicit upstream error cannot become successful completion")
 			require.NotNil(t, result)
 			require.False(t, result.UsageComplete())
 			require.NotNil(t, result.FirstTokenMs)

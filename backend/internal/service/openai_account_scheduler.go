@@ -1982,6 +1982,9 @@ func (s *defaultOpenAIAccountScheduler) isAccountRequestCompatibleReason(ctx con
 	if account == nil {
 		return false, "account_nil", nil
 	}
+	if !providerFilesAccountCandidateAllowed(ctx, account) {
+		return false, "file_owner_mismatch", nil
+	}
 	// The scheduler's candidate pool is already group-scoped and may contain
 	// lightweight accounts without hydrated GroupIDs. Only the OAuth session
 	// policy is an additional access-control veto at this initial filter stage.
@@ -2349,6 +2352,40 @@ func (s *OpenAIGatewayService) SelectAccountWithSchedulerForCapability(
 	platform := PlatformOpenAI
 	if len(platformOverride) > 0 {
 		platform = platformOverride[0]
+	}
+	if constraint, ok := ctx.Value(providerFilesOwnerContextKey{}).(providerFilesOwnerConstraint); ok {
+		if _, excluded := excludedIDs[constraint.AccountID]; excluded {
+			return nil, OpenAIAccountScheduleDecision{}, ErrProviderFileOwnerChanged
+		}
+		// Apply to the legacy and advanced schedulers alike. This is a hard
+		// authorization constraint, never an affinity hint that can escape.
+		pool, err := s.listSchedulableAccounts(ctx, groupID, platform)
+		if err != nil {
+			return nil, OpenAIAccountScheduleDecision{}, err
+		}
+		excluded := cloneExcludedAccountIDs(excludedIDs)
+		if excluded == nil {
+			excluded = map[int64]struct{}{}
+		}
+		found := false
+		for i := range pool {
+			if providerFilesAccountCandidateAllowed(ctx, &pool[i]) {
+				found = true
+			} else {
+				excluded[pool[i].ID] = struct{}{}
+			}
+		}
+		if !found {
+			return nil, OpenAIAccountScheduleDecision{}, ErrProviderFileOwnerChanged
+		}
+		selection, decision, err := s.selectAccountWithScheduler(ctx, groupID, previousResponseID, sessionHash, requestedModel, excluded, requiredTransport, requiredCapability, "", requireCompact, platform, previousResponseCanMove, useUpstreamTokenCost)
+		if err == nil && selection != nil && !providerFilesAccountAllowed(ctx, selection.Account) {
+			if selection.Acquired && selection.ReleaseFunc != nil {
+				selection.ReleaseFunc()
+			}
+			return nil, decision, ErrProviderFileOwnerChanged
+		}
+		return selection, decision, err
 	}
 	return s.selectAccountWithScheduler(ctx, groupID, previousResponseID, sessionHash, requestedModel, excludedIDs, requiredTransport, requiredCapability, "", requireCompact, platform, previousResponseCanMove, useUpstreamTokenCost)
 }

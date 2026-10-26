@@ -104,6 +104,7 @@ func provideCleanup(
 	usageCleanup *service.UsageCleanupService,
 	idempotencyCleanup *service.IdempotencyCleanupService,
 	geminiCachedContent *service.GeminiCachedContentService,
+	providerFiles *service.ProviderFilesService,
 	batchImageCleanup *service.BatchImageCleanupService,
 	batchImageWorker *service.BatchImageWorkerRuntime,
 	pricing *service.PricingService,
@@ -152,6 +153,12 @@ func provideCleanup(
 			{"ZhipuOffPeakTicketManager", func() error {
 				if zhipuOffPeakTickets != nil {
 					zhipuOffPeakTickets.Stop()
+				}
+				return nil
+			}},
+			{"ProviderFilesService", func() error {
+				if providerFiles != nil {
+					providerFiles.Stop()
 				}
 				return nil
 			}},

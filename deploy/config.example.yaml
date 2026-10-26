@@ -1326,6 +1326,17 @@ update:
   proxy_url: ""
 
 # =============================================================================
+# ZCode off-peak durable ticket recovery
+# =============================================================================
+zhipu_offpeak:
+  # Without this opt-in, tickets remain process-local and are not restart-safe.
+  persistence_enabled: false
+  active_key_id: ""
+  # JSON mapping external key IDs to base64-encoded 32-byte keys. No keys here.
+  snapshot_keys: ""
+  snapshot_retention_hours: 168
+
+# =============================================================================
 # Image Storage (异步图片任务结果对象存储)
 # =============================================================================
 # 长耗时生图套 Cloudflare 会 524 超时，异步图片任务接口（/v1/images/generations/async

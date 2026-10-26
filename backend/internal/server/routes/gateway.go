@@ -182,6 +182,11 @@ func RegisterGatewayRoutes(
 	gateway.Use(compositeTarget)
 	gateway.Use(requireGroupAnthropic)
 	{
+		gateway.POST("/files", h.OpenAIGateway.ProviderFiles)
+		gateway.POST("/files/upload", h.OpenAIGateway.ProviderFiles)
+		gateway.GET("/files", h.OpenAIGateway.ProviderFiles)
+		gateway.GET("/files/:file_id", h.OpenAIGateway.ProviderFiles)
+		gateway.DELETE("/files/:file_id", h.OpenAIGateway.ProviderFiles)
 		// /v1/messages: auto-route based on group platform
 		gateway.POST("/messages", func(c *gin.Context) {
 			if isOpenAIResponsesCompatibleGatewayPlatform(c) {

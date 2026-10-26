@@ -11,10 +11,50 @@ authentication and the shared Step-Code [outbound identity](../OUTBOUND_IDENTITY
 
 The native protocol is Chat Completions (`POST <base>/chat/completions`).
 Responses and Messages clients use the existing audited conversion paths.
+This is the executed Step-Code provider contract: both
+[`features/step-provider/index.ts`](https://github.com/stepfun-ai/Step-Code/blob/81e79bc4b699148d6823fedde9b5e70d9a80255f/packages/coding-agent/src/features/step-provider/index.ts)
+and [`step-provider/index.ts`](https://github.com/stepfun-ai/Step-Code/blob/81e79bc4b699148d6823fedde9b5e70d9a80255f/packages/providers/src/step-provider/index.ts)
+select `openai-completions`, and
+[`api/openai-completions.ts`](https://github.com/stepfun-ai/Step-Code/blob/81e79bc4b699148d6823fedde9b5e70d9a80255f/packages/providers/src/api/openai-completions.ts)
+sends `client.chat.completions.create`. Older `anthropic-messages` prose in the
+official integration guide does not describe this execution path.
 No native Responses, Messages or Responses WebSocket support is inferred from
 the general SDK adapters. API keys can use an administrator-configured proxy
 base; native OAuth credentials remain pinned to their selected official region.
 Explicit deployment upstream allowlists must include the selected API hostname.
+
+The supported profile matrix has six rows: OAuth Plan CN/global, API Key Plan
+CN/global and API Key pay-as-you-go CN/global. OAuth login always yields a Plan
+profile. Each row independently accepts native Chat Completions and the HTTP
+Responses/Messages conversions, with streaming and buffered responses; the
+conversion entries are separate gateway contracts and not upstream-native
+Step APIs. A particular model's region, Plan entitlement and discovered
+capabilities still depend on the actual account.
+
+For tool streams, distinct Chat tool indexes retain their own call IDs, names
+and argument fragments. The Messages bridge emits sequential content blocks:
+the first announced tool keeps streaming; other concurrent tools accumulate
+their own fragments until their blocks can open. Each block closes after its
+arguments, and no later delta targets a closed block. Subsequent client turns
+retain both assistant calls and their corresponding tool results.
+
+An explicit upstream JSON/SSE `error` object remains an inference failure even
+under HTTP 200. An error before client output may use the established account
+failover path; an error after committed output returns an incomplete result
+without replaying that turn. HTTP 401/403/429/5xx retain the gateway's existing
+status policies. A late failure cannot quarantine a replacement key, profile or
+proxy binding; the unchanged failed owner remains eligible for error handling.
+
+The raw Chat stream accepts `[DONE]`, a finish reason, or an explicit usage
+frame as its existing completion evidence. The Responses and Messages bridges
+require `[DONE]`; a missing sentinel or read failure returns incomplete usage
+before synthetic success-finalization. A caller cancellation preserves already
+observed tokens and does not authorize another inference send. Partial results
+are marked incomplete. Successful completion without reported usage retains
+zero observed tokens and cost with `usage_source=unknown`; response completion
+does not establish exact metering. Actual reported usage remains
+`upstream_exact` for complete responses and `partial` for incomplete responses.
+The gateway does not invent precise Step token counts.
 
 ## Browser login
 
@@ -183,8 +223,60 @@ outbox, and an outbox failure rolls the observation back. Such a result is not
 reported as a usable successful observation. Periodic collection includes Step
 Plan OAuth accounts; manual API-key accounts have no Plan quota query.
 Token-plan credit buckets and a monetary balance are not projected onto these
-percentage windows. Local request usage remains available independently.
+percentage windows. A token-plan/credit-bucket or wallet-only response is an
+unsupported observation: it cannot refresh or overwrite the last authoritative
+percentage snapshot. CNY, USD and Plan Credits are not converted into one
+another, and do not supply an unpriced model with an inferred gateway USD rate.
+Local request usage remains available independently.
 Migration 277 extends platform/probe constraints.
+
+## Remote web search MCP contract audit
+
+Step-Code's `search_web` uses a provider-hosted remote service. This is distinct
+from the agent's local MCP configuration and tool-execution loop. The gateway
+does not currently expose this remote search service or claim search billing
+equivalence. This implementation batch audits the contract; adding a unified
+search gateway requires a separate explicit scope decision.
+
+At the reviewed source commit, the remote tool is `stepsearch.web_search` with
+arguments `{query, n:10}` and Bearer model/search-key authentication. The
+official profile determines an independent search endpoint:
+
+| Profile | Search endpoint |
+| --- | --- |
+| CN Plan | `https://api.stepfun.com/step_plan/v1/mcp/web_search/mcp` |
+| Global Plan | `https://api.stepfun.ai/step_plan/v1/mcp/web_search/mcp` |
+| CN pay-as-you-go | `https://api.stepfun.com/v1/mcp/web_search/mcp` |
+| Global pay-as-you-go | `https://api.stepfun.ai/v1/mcp/web_search/mcp` |
+
+An explicit search URL precedes `STEPCODE_SEARCH_WEB_MCP_URL`, then the saved
+profile endpoint. An origin-only override retains that profile's path. Model
+base-URL overrides do not redirect search. The key precedence is explicit tool
+key / CLI `--api-key`, then `STEPCODE_SEARCH_API_KEY`, then saved Step login
+credentials. `STEP_API_KEY` is intentionally excluded because it may contain a
+gateway model key that cannot be sent to the fixed Step search service.
+
+The official client pins MCP SDK `1.27.1` and uses Streamable HTTP with client
+name `stepcode` and the declared Step-Code version. It connects/initializes,
+collects the complete paginated `tools/list` snapshot, finds the declared tool
+and sends `tools/call`. A repeated pagination cursor fails. Calls bind output
+schema validation to the discovered tool generation; catalog changes cannot
+change an in-flight call's validator. Tools requiring task execution fail
+explicitly. The caller's cancellation signal is combined with a default
+30-second deadline; abort closes the transport even while initialization is
+pending, and completion closes the client. Tool errors and invalid structured
+output remain failures.
+
+These contracts come from
+[`search-web-tool.ts`](https://github.com/stepfun-ai/Step-Code/blob/81e79bc4b699148d6823fedde9b5e70d9a80255f/packages/coding-agent/src/step/search-web-tool.ts),
+[`mcp-client.ts`](https://github.com/stepfun-ai/Step-Code/blob/81e79bc4b699148d6823fedde9b5e70d9a80255f/packages/coding-agent/src/step/mcp-client.ts)
+and the pinned
+[`package.json`](https://github.com/stepfun-ai/Step-Code/blob/81e79bc4b699148d6823fedde9b5e70d9a80255f/packages/coding-agent/package.json).
+Source review does not verify live search prices, regional authorization or
+every server session/protocol version. Future gateway implementation must
+freeze those contracts, search-specific charges, session ownership, cancellation,
+proxy failures and credential isolation before declaring support. Chat token
+prices cannot serve as search prices.
 
 ## Source and regression evidence
 
@@ -216,6 +308,23 @@ and account-session separation. Transport tests exercise model forwarding,
 probes and discovery
 for both account types and regions. Real-provider authorization still requires
 an operator's account; mock wire tests do not assert live authorization success.
+
+The capability-completion regressions are maintained separately from claims of
+live provider acceptance:
+
+| Contract | Regression entrypoint |
+| --- | --- |
+| Six profiles × three HTTP entries × streaming/buffered, reasoning/text/cache and independent USD charges | `service/TestStepFunCapabilityBasicMatrix` |
+| Independent model prices, explicit channel overrides, unknown/router manual pricing, and unsupported credit/wallet observations | `service/TestStepFunPricingOfficialRatesAndReferenceCoverage`; `service/TestStepFunPricingCatalogAndChannelOverrides`; `service/TestStepFunOfficialCachedUsageAcrossProtocols`; `service/TestStepFunCreditsAndWalletsNeverBecomePercentageQuota` |
+| Two interleaved tools, complete arguments and actual second-turn Chat history | `service/TestStepFunCapabilityParallelToolsAndResults`; `apicompat/TestStepFunParallelChatToolsKeepIndependentAnthropicBlockLifecycles` |
+| Rejections, explicit HTTP 200/SSE errors, EOF/read failures, missing usage/sentinel and caller cancellation | `service/TestStepFunCapabilityFailuresNeverBecomeSuccess`; `service/TestStepFunCapabilityStreamFailureAndTerminationContract`; `service/TestStepFunCapabilityCompletedWithoutUsageKeepsUnknownBillingSource` |
+| In-flight key/profile/proxy replacement, including same-row proxy edits and unchanged-owner control | `service/TestStepFunCapabilityLate401CannotQuarantineReplacementOwner` |
+| Actual production HTTP client, timeout/refusal/407, zero direct-connection attempts and sanitized failures | `repository/TestStepFunProductionProxyFailureAcrossProfilesAndBridges` |
+| Full six-profile/three-entry/streaming matrix over verified TLS and authenticated proxies, 503/429 A→B, restored A losing to B on another gateway, real Redis leases/affinity and PostgreSQL charges/dedup | `integration/TestStepFunBusinessMatrix` |
+
+The central [seven-provider matrix](../SEVEN_PROVIDER_TEST_MATRIX.md) records
+which commands actually ran on a given tree. Listed scenarios are executable
+contracts, not a claim that every test or live-account combination has run.
 
 ## Native client selection
 

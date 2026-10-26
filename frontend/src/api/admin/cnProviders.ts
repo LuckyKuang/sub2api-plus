@@ -13,6 +13,17 @@ export interface CNQuotaTier {
   reset_at?: string
 }
 
+export interface ZhipuStartPlanEntitlement {
+  state: 'available' | 'unavailable' | 'pending' | 'unknown'
+  reason?: string
+  models_known: boolean
+  models: string[]
+  effective_at?: number
+  expires_at?: number
+  server_time: number
+  observed_at: number
+}
+
 /** 额度探测结果（Coding Plan / OpenCode Go / Command Code），对齐后端 CNProviderQuotaProbeResult。 */
 export interface CNProviderQuotaProbeResult {
   provider: string
@@ -27,6 +38,7 @@ export interface CNProviderQuotaProbeResult {
   error?: string
   /** 同一次探测得到的余额（Command Code 积分与窗口同源），其余供应商为空。 */
   balance?: CNProviderBalanceResult
+  start_plan?: ZhipuStartPlanEntitlement
 }
 
 /** 单币种余额明细（deepseek 双币种账号含 CNY + USD 两条）。 */

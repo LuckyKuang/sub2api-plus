@@ -22,6 +22,7 @@ import (
 type ZhipuOAuthHandler struct {
 	zhipuOAuthService *service.ZhipuOAuthService
 	adminService      service.AdminService
+	offPeakTickets    ZhipuOffPeakSegmentManager
 }
 
 // NewZhipuOAuthHandler creates the handler.

@@ -166,9 +166,13 @@ func (s *OpenAIGatewayService) bufferChatCompletionsAsAnthropic(
 	startTime time.Time,
 ) (*OpenAIForwardResult, error) {
 	requestID := resp.Header.Get("x-request-id")
-	ccResp, usage, err := s.readCCUpstreamJSONResponse(c, resp, writeAnthropicError)
+	ccResp, usage, usageSource, err := s.readCCUpstreamJSONResponse(c, resp, writeAnthropicError)
 	if err != nil {
-		return &OpenAIForwardResult{RequestID: requestID, Usage: usage, Model: originalModel, BillingModel: billingModel, UpstreamModel: upstreamModel, Duration: time.Since(startTime)}, err
+		var rejected *UpstreamFailoverError
+		if errors.As(err, &rejected) {
+			return nil, err
+		}
+		return &OpenAIForwardResult{RequestID: requestID, Usage: usage, UsageSource: usageSource, Model: originalModel, BillingModel: billingModel, UpstreamModel: upstreamModel, Duration: time.Since(startTime)}, err
 	}
 	anthropicResp := apicompat.ChatCompletionsResponseToAnthropic(ccResp, originalModel)
 
@@ -182,6 +186,7 @@ func (s *OpenAIGatewayService) bufferChatCompletionsAsAnthropic(
 		RequestID:                   requestID,
 		UpstreamHeaders:             resp.Header,
 		Usage:                       usage,
+		UsageSource:                 usageSource,
 		Model:                       originalModel,
 		BillingModel:                billingModel,
 		UpstreamModel:               upstreamModel,
@@ -242,7 +247,11 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsAnthropic(
 	scan := s.scanCCStream(c, resp, "openai messages chat fallback", requestID, startTime, emitChunk)
 	usage := scan.Usage
 
-	if scan.Err != nil {
+	if streamErr := scan.completionError(); streamErr != nil {
+		var rejected *UpstreamFailoverError
+		if errors.As(streamErr, &rejected) && !c.Writer.Written() {
+			return nil, rejected
+		}
 		// Broken upstream read: skip finalization so no synthetic message_stop
 		// masks the truncation, and surface the error to flag usage incomplete
 		// (mirrors forwardResponsesViaRawChatCompletions).
@@ -250,6 +259,7 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsAnthropic(
 			RequestID:                   requestID,
 			UpstreamHeaders:             resp.Header,
 			Usage:                       usage,
+			UsageSource:                 scan.usageSource(clientDisconnected),
 			Model:                       originalModel,
 			BillingModel:                billingModel,
 			UpstreamModel:               upstreamModel,
@@ -264,7 +274,12 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsAnthropic(
 			ClientDisconnect:            clientDisconnected,
 		}
 		timing.ApplyOpenAIResult(result)
-		return result, fmt.Errorf("stream usage incomplete: %w", scan.Err)
+		// Once client output is committed this request cannot be replayed,
+		// including an explicit error that arrived after successful deltas.
+		if rejected != nil {
+			return result, errors.New("stream usage incomplete: upstream error envelope")
+		}
+		return result, fmt.Errorf("stream usage incomplete: %w", streamErr)
 	}
 
 	// Finalize: close open blocks + emit message_delta/message_stop.
@@ -286,30 +301,12 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsAnthropic(
 		}
 		c.Writer.Flush()
 	}
-	if !scan.SawDone {
-		logCCStreamMissingDoneSentinel("openai messages chat fallback", requestID)
-		result := &OpenAIForwardResult{
-			RequestID:           requestID,
-			Usage:               usage,
-			Model:               originalModel,
-			BillingModel:        billingModel,
-			UpstreamModel:       upstreamModel,
-			ReasoningEffort:     reasoningEffort,
-			ServiceTier:         serviceTier,
-			ResponseServiceTier: observedDeclaredServiceTier(c),
-			Stream:              true,
-			UsageIncomplete:     scan.usageIncomplete(),
-			Duration:            time.Since(startTime),
-			ClientDisconnect:    clientDisconnected,
-		}
-		timing.ApplyOpenAIResult(result)
-		return result, errors.New("stream usage incomplete: missing [DONE]")
-	}
 
 	result := &OpenAIForwardResult{
 		RequestID:                   requestID,
 		UpstreamHeaders:             resp.Header,
 		Usage:                       usage,
+		UsageSource:                 scan.usageSource(clientDisconnected),
 		Model:                       originalModel,
 		BillingModel:                billingModel,
 		UpstreamModel:               upstreamModel,

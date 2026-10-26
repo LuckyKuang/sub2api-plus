@@ -19,6 +19,21 @@ lists, custom fields and raw history. It advances the configuration version once
 when needed; exclusions are applied on reads without rebuilding stored rollups.
 See [V2 model visibility](../../docs/CHANNEL_MONITOR_V2.md).
 
+Migration `297_provider_files.sql` stores gateway file IDs, caller ACL scope,
+credential epochs, metadata, isolated upload reservations and deletion-recovery
+state. Original file bytes and plaintext credentials are not stored. The SQL
+repository owns this operational table; Ent does not generate it. Existing
+external native references acquire no mapping automatically. See
+[Provider Files](../../docs/providers/FILES.md).
+
+Migration `298_zhipu_offpeak_tickets.sql` stores off-peak ticket generations,
+fenced control leases, per-request leases and durable settlement intent. The
+minimal original-owner cleanup snapshot is encrypted with an external keyring;
+the table does not contain model inputs/outputs. The feature defaults off;
+applying the schema alone does not enable restart recovery. Tables retain
+pending cleanup evidence after account deletion rather than cascading it away.
+See [Zhipu recovery](../../docs/providers/ZHIPU.md).
+
 ## Mandatory Rules
 
 - Existing migration files are immutable: never modify, delete, or rename them.
@@ -292,3 +307,19 @@ when the principal is unknown) and are skipped
 when that upstream principal or proxy no longer owns the source account. Legacy empty generations
 cannot authorize a reset. Ordinary token rotation preserves a known principal's
 baseline, while pending samples cannot corroborate across rotating grants.
+
+### Provider capability records (297–298)
+
+`297_provider_files.sql` adds operational metadata, authorization scope,
+idempotency and cleanup leases for the supported DeepSeek/MiniMax Files
+profiles. It does not store original bytes or plaintext provider credentials.
+See [Files](../../docs/providers/FILES.md) for the supported lifecycle and
+explicitly unsupported combinations.
+
+`298_zhipu_offpeak_tickets.sql` stores admission generations, fenced operation
+leases, per-request leases and durable settlement intent/ACK. Minimal owner
+snapshots are AEAD-encrypted with a dedicated external keyring when persistence
+is enabled. Account deletion cannot cascade away outstanding settlement intent.
+The rows contain no prompt or model response. See
+[ZCode recovery](../../docs/providers/ZHIPU.md#durable-off-peak-recovery) for
+configuration, key rotation, retention and the default process-local mode.

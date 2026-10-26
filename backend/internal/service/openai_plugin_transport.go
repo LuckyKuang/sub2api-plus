@@ -59,6 +59,7 @@ func (s *OpenAIGatewayService) doOpenAIUpstreamPrepared(request *http.Request, _
 	if err != nil {
 		return nil, err
 	}
+	request = ticket.bindRequest(request)
 	defer func() { holdZhipuOffPeakResponse(request.Context(), ticket, response, responseErr) }()
 	if s.pluginManager != nil {
 		response, handled, err := s.pluginManager.RoundTripOpenAIOAuth(request.Context(), request, ownerProxyURL, credentialAccount)
@@ -119,6 +120,7 @@ func (s *AccountTestService) doOpenAIAccountTestUpstreamPrepared(
 	if err != nil {
 		return nil, err
 	}
+	request = ticket.bindRequest(request)
 	defer func() { holdZhipuOffPeakResponse(request.Context(), ticket, response, responseErr) }()
 	if s.pluginManager != nil {
 		response, handled, err := s.pluginManager.RoundTripOpenAIOAuth(request.Context(), request, ownerProxyURL, credentialAccount)

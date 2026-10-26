@@ -121,6 +121,18 @@ func Extract(protocol string, body []byte) (Document, error) {
 		extractMediaPrompts(&document, root)
 	case "typesafe_systemone", "systemone":
 		extractSystemOne(&document, root)
+	case "provider_files":
+		// File bytes cannot be inspected by a prompt-text extractor. Metadata
+		// (including a filename or purpose) never becomes a user prompt.
+		// Empty management operations are known to carry no prompt content.
+		if _, present := root["file"]; present {
+			markIncomplete(&document, IncompleteReason{Kind: IncompleteUnextractable, Field: "file"})
+		}
+		for key := range root {
+			if key != "file" && key != "operation" {
+				markIncomplete(&document, IncompleteReason{Kind: IncompleteUnextractable, Field: "unknown"})
+			}
+		}
 	default:
 		extractDefault(&document, root)
 	}

@@ -17,7 +17,7 @@ import (
 
 // Off-peak ticket server. The ZCode idle plan is gated by a ticket issued by the
 // platform: a model request is only admitted while the ticket is ready or active,
-// and a settled ticket frees the take-number quota.
+// and settlement ends its admission without restoring rolling take quota.
 const (
 	// DefaultOffPeakBaseURL is the ZCode platform API root that serves the
 	// off-peak ticket routes.

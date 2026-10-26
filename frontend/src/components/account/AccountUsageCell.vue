@@ -452,12 +452,13 @@
         <!-- 子单元格各自按 模式×平台 判定可见；两者都不可见时（智谱 payg 无公开
              余额端点、coding 探测也不适用）才回落到占位符。 -->
         <div
-          v-if="!cnQuotaCellVisible && !cnBalanceCellVisible"
+          v-if="!cnQuotaCellVisible && !cnBalanceCellVisible && !zhipuStartPlanVisible"
           class="text-xs surface-muted"
           :title="t('admin.accounts.cnProviders.noBalanceEndpoint')"
         >-</div>
         <CNProviderQuotaCell :account="account" />
         <CNProviderBalanceCell :account="account" />
+        <ZhipuStartPlanCell :account="account" />
       </div>
     </template>
 
@@ -696,6 +697,7 @@ import CNProviderQuotaCell from './CNProviderQuotaCell.vue'
 import CNProviderBalanceCell from './CNProviderBalanceCell.vue'
 import OllamaCloudUsageCell from './OllamaCloudUsageCell.vue'
 import { cnQuotaCellVisible as cnQuotaCellVisibleFn, cnBalanceCellVisible as cnBalanceCellVisibleFn, isMultiProtocolApiKeyPlatform } from './credentialsBuilder'
+import ZhipuStartPlanCell from './ZhipuStartPlanCell.vue'
 
 // Module-level cache shared across all AccountUsageCell instances
 const _usageCache = new Map<number, { data: AccountUsageInfo; ts: number }>()
@@ -800,6 +802,7 @@ const shouldFetchUsage = computed(() => {
 // credentialsBuilder 的单一实现）：都不可见时显示 `-` 占位符。
 const cnQuotaCellVisible = computed(() => cnQuotaCellVisibleFn(props.account))
 const cnBalanceCellVisible = computed(() => cnBalanceCellVisibleFn(props.account))
+const zhipuStartPlanVisible = computed(() => props.account.platform === 'zhipu' && props.account.type === 'oauth' && props.account.credentials?.plan_kind === 'start-plan' && ['bigmodel', 'zai'].includes(String(props.account.credentials?.oauth_provider)))
 
 const isBatchManaged = computed(() => typeof props.requestBatchedUsage === 'function')
 

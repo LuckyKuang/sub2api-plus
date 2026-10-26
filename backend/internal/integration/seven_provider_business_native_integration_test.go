@@ -49,7 +49,7 @@ func newSevenNativeTrust(t *testing.T) sevenNativeTrust {
 		IsCA: true, BasicConstraintsValid: true,
 		KeyUsage:    x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature,
 		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		DNSNames:    []string{"chatgpt.com", "cli-chat-proxy.grok.com", "api.deepseek.com", "api.kimi.com", "agent.minimax.cn", "api.stepfun.com", "open.bigmodel.cn", "bigmodel.cn", "api.z.ai", "zcode.z.ai"},
+		DNSNames:    []string{"chatgpt.com", "cli-chat-proxy.grok.com", "api.deepseek.com", "api.kimi.com", "agent.minimax.cn", "api.stepfun.com", "api.stepfun.ai", "open.bigmodel.cn", "bigmodel.cn", "api.z.ai", "zcode.z.ai"},
 	}
 	der, err := x509.CreateCertificate(rand.Reader, certificate, certificate, public, private)
 	require.NoError(t, err)
@@ -188,6 +188,8 @@ type sevenNativeScenario struct {
 	trust                         sevenNativeTrust
 	protocol, ingress, host, path string
 	model, authorization, query   string
+	accountKind, region, mode     string
+	nonStreaming                  bool
 }
 
 // Requirements and independently specified wire fixtures are from the pinned
@@ -251,6 +253,9 @@ func newSevenBusinessNativeProxy(t *testing.T, native *sevenNativeScenario, stat
 		if status != http.StatusOK {
 			return sevenNativeReply{status: status, body: `{"error":{"type":"upstream_unavailable","message":"temporarily unavailable"}}`}
 		}
+		if native.nonStreaming {
+			return sevenNativeReply{body: native.nonStreamingReply()}
+		}
 		return sevenNativeReply{events: native.events()}
 	})
 	proxy.server = proxy.native.server
@@ -282,6 +287,21 @@ func (n *sevenNativeScenario) credentials(t *testing.T, provider sevenBusinessPr
 			credentials["account_mode"] = "payg"
 			credentials["oauth_device_id"] = "business-device-" + owner
 		}
+		if provider.platform == "stepfun" {
+			if n.region != "" {
+				credentials["oauth_region"] = n.region
+			}
+			if n.mode != "" {
+				credentials["account_mode"] = n.mode
+			}
+			if n.accountKind == service.AccountTypeAPIKey {
+				credentials["api_key"] = "business-native-" + owner
+				credentials["region"] = n.region
+				for _, key := range []string{"access_token", "refresh_token", "expires_at", "oauth_provider", "oauth_region", "base_url"} {
+					delete(credentials, key)
+				}
+			}
+		}
 	case "zhipu":
 		// ZCode start-plan's native bearer is its ZCode token. It has no
 		// project PAT issue step; individual/team plan tests own that flow.
@@ -299,9 +319,28 @@ func (n *sevenNativeScenario) credentials(t *testing.T, provider sevenBusinessPr
 }
 
 func (n *sevenNativeScenario) request(turn int) string {
+	body := n.streamingRequest(turn)
+	if n.nonStreaming {
+		body = strings.ReplaceAll(body, `"stream":true`, `"stream":false`)
+	}
+	return body
+}
+
+func (n *sevenNativeScenario) clientProtocol() string {
+	switch n.ingress {
+	case "/v1/responses":
+		return "responses"
+	case "/v1/messages":
+		return "anthropic"
+	default:
+		return "chat_completions"
+	}
+}
+
+func (n *sevenNativeScenario) streamingRequest(turn int) string {
 	// A subsequent native turn supplies the tool result under the same session;
 	// the new gateway must retain B and preserve the protocol's tool history.
-	switch n.protocol {
+	switch n.clientProtocol() {
 	case "responses":
 		history := `{"type":"message","role":"user","content":[{"type":"input_text","text":"lookup status"}]}`
 		if turn == 2 {
@@ -321,6 +360,48 @@ func (n *sevenNativeScenario) request(turn int) string {
 		}
 		return `{"model":"business-chat","stream":true,"messages":[` + history + `],"tools":[{"type":"function","function":{"name":"lookup","description":"lookup status","parameters":{"type":"object","properties":{"query":{"type":"string"}},"required":["query"],"additionalProperties":false}}}]} `
 	}
+}
+
+func (n *sevenNativeScenario) nonStreamingReply() string {
+	// Step's only upstream inference protocol is Chat Completions; the two
+	// client bridges must consume this same wire contract in buffered mode.
+	return fmt.Sprintf(`{"id":"chat_business","object":"chat.completion","model":%q,"choices":[{"index":0,"message":{"role":"assistant","content":null,"tool_calls":[{"id":"call_business","type":"function","function":{"name":"lookup","arguments":"{\"query\":\"status\"}"}}]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}`, n.model)
+}
+
+func (n *sevenNativeScenario) assertResult(t *testing.T, body []byte) {
+	t.Helper()
+	if !n.nonStreaming {
+		sevenNativeAssertToolResult(t, n.clientProtocol(), n.callID(), body)
+		return
+	}
+	require.True(t, json.Valid(body))
+	root := gjson.ParseBytes(body)
+	var id, name, arguments string
+	switch n.clientProtocol() {
+	case "responses":
+		require.Equal(t, "completed", root.Get("status").String())
+		require.Len(t, root.Get("output").Array(), 1)
+		require.Equal(t, "function_call", root.Get("output.0.type").String())
+		id, name, arguments = root.Get("output.0.call_id").String(), root.Get("output.0.name").String(), root.Get("output.0.arguments").String()
+		require.Equal(t, int64(10), root.Get("usage.input_tokens").Int())
+		require.Equal(t, int64(5), root.Get("usage.output_tokens").Int())
+	case "anthropic":
+		require.Equal(t, "tool_use", root.Get("stop_reason").String())
+		require.Len(t, root.Get("content").Array(), 1)
+		require.Equal(t, "tool_use", root.Get("content.0.type").String())
+		id, name, arguments = root.Get("content.0.id").String(), root.Get("content.0.name").String(), root.Get("content.0.input").Raw
+		require.Equal(t, int64(10), root.Get("usage.input_tokens").Int())
+		require.Equal(t, int64(5), root.Get("usage.output_tokens").Int())
+	default:
+		require.Equal(t, "tool_calls", root.Get("choices.0.finish_reason").String())
+		require.Len(t, root.Get("choices.0.message.tool_calls").Array(), 1)
+		id, name, arguments = root.Get("choices.0.message.tool_calls.0.id").String(), root.Get("choices.0.message.tool_calls.0.function.name").String(), root.Get("choices.0.message.tool_calls.0.function.arguments").String()
+		require.Equal(t, int64(10), root.Get("usage.prompt_tokens").Int())
+		require.Equal(t, int64(5), root.Get("usage.completion_tokens").Int())
+	}
+	require.Equal(t, n.callID(), id)
+	require.Equal(t, "lookup", name)
+	require.JSONEq(t, `{"query":"status"}`, arguments)
 }
 
 func (n *sevenNativeScenario) events() []string {
@@ -391,7 +472,7 @@ func (n *sevenNativeScenario) assertWire(t *testing.T, owner string, turn int, w
 		require.Empty(t, wire.headers.Get("Content-Encoding"))
 	}
 	require.Equal(t, n.model, gjson.GetBytes(wire.body, "model").String())
-	require.True(t, gjson.GetBytes(wire.body, "stream").Bool())
+	require.Equal(t, !n.nonStreaming, gjson.GetBytes(wire.body, "stream").Bool())
 	name, schema, history := "tools.0.name", "tools.0.input_schema", "messages"
 	switch n.protocol {
 	case "responses":

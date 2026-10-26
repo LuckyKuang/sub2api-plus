@@ -66,6 +66,8 @@ type CNProviderQuotaProbeResult struct {
 
 	// Balance 为同一次探测得到的余额（Command Code 积分与窗口同源），其余供应商为空。
 	Balance *CNProviderBalanceResult `json:"balance,omitempty"`
+	// Start is a separate entitlement observation, not a coding quota window.
+	StartPlan *ZhipuStartPlanEntitlement `json:"start_plan,omitempty"`
 }
 
 // CNProviderQuotaService 探测 Kimi / Zhipu / MiniMax Coding Plan、OpenCode Go、
@@ -126,6 +128,9 @@ func (s *CNProviderQuotaService) QueryUsageForAccount(ctx context.Context, accou
 	}
 	key := "cn_quota:" + strconv.FormatInt(account.ID, 10) + ":" + owner + ":" + account.Status
 	probeIdentityCtx := context.WithoutCancel(WithAccountOutboundIdentity(ctx, account))
+	if isZhipuStartPlan(account) {
+		key += ":" + startPlanIdentityGeneration(probeIdentityCtx, account)
+	}
 	resultCh := s.flight.DoChan(key, func() (any, error) {
 		probeCtx, cancel := context.WithTimeout(probeIdentityCtx, cnQuotaUpstreamTimeout+5*time.Second)
 		defer cancel()
@@ -143,11 +148,15 @@ func (s *CNProviderQuotaService) QueryUsageForAccount(ctx context.Context, accou
 			return nil, infraerrors.New(http.StatusInternalServerError, "CN_QUOTA_PROBE_RESULT_INVALID", "invalid cn provider quota probe result")
 		}
 		cloned := *result
+		cloned.StartPlan = cloneStartPlanEntitlement(result.StartPlan)
 		return &cloned, nil
 	}
 }
 
 func (s *CNProviderQuotaService) queryUsageForAccount(ctx context.Context, account *Account) (*CNProviderQuotaProbeResult, error) {
+	if isZhipuStartPlan(account) {
+		return s.queryZhipuStartPlanUsage(ctx, account)
+	}
 	if usesZhipuProjectToken(account) {
 		return s.queryZhipuProjectUsage(ctx, account)
 	}
@@ -372,6 +381,9 @@ func (s *CNProviderQuotaService) loadCodingPlanAccount(ctx context.Context, acco
 func validateCodingPlanAccount(account *Account) error {
 	if account == nil {
 		return infraerrors.New(http.StatusNotFound, "CN_QUOTA_ACCOUNT_NOT_FOUND", "account not found")
+	}
+	if isZhipuStartPlan(account) {
+		return nil
 	}
 	if account.IsOpenCodeGoPlan() {
 		return nil

@@ -368,7 +368,10 @@ type OpenAIForwardResult struct {
 	FirstOutputKind              string
 	ClientDisconnect             bool
 	// UsageIncomplete excludes synthesized completion after truncated/error upstream streams from TPS.
-	UsageIncomplete             bool
+	UsageIncomplete bool
+	// UsageSource records the provenance of observed usage independently of
+	// response completion. Empty preserves the existing non-CC path defaults.
+	UsageSource                 string
 	ClientDisconnectUsageSource string
 	ImageCount                  int
 	ImageSize                   string

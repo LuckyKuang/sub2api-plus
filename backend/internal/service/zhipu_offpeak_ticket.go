@@ -27,7 +27,7 @@ const (
 	// DefaultOffPeakAcquireTimeout is how long one request may wait for `ready`.
 	DefaultOffPeakAcquireTimeout = 30 * time.Second
 	// DefaultOffPeakSettleIdle is how long a ticket may sit unused before it is
-	// settled. Settling frees the account's take-number quota.
+	// settled. Settlement does not restore the rolling take-number allowance.
 	DefaultOffPeakSettleIdle = 60 * time.Second
 	// Off-peak poll floor and ceiling, mirroring the official client's clamp.
 	offPeakPollFloor = 2 * time.Second
@@ -49,8 +49,9 @@ type ZhipuOffPeakTicket struct {
 	TicketID string
 	State    string
 	// Position is the queue position when known, for diagnostics.
-	Position *int
-	release  func()
+	Position     *int
+	release      func()
+	leaseContext context.Context
 }
 
 // Release completes this model attempt. Copies of a ticket share the same
@@ -92,6 +93,7 @@ type ZhipuOffPeakTicketManager struct {
 	mu      sync.Mutex
 	holders map[int64]*zhipuOffPeakHolder
 	retired map[*zhipuOffPeakHolder]struct{}
+	durable *zhipuOffPeakDurable
 
 	stopOnce sync.Once
 	stopCh   chan struct{}
@@ -166,6 +168,9 @@ func (m *ZhipuOffPeakTicketManager) Acquire(ctx context.Context, account *Accoun
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	if durable := m.persistence(); durable != nil {
+		return m.acquireDurable(ctx, account, auth, proxyURL, durable)
+	}
 	ctx, cancel := context.WithTimeout(ctx, m.acquireTimeout)
 	defer cancel()
 	ctx = WithAccountOutboundIdentity(ctx, account)
@@ -226,13 +231,11 @@ func (m *ZhipuOffPeakTicketManager) Acquire(ctx context.Context, account *Accoun
 		if err != nil {
 			return nil, offPeakAcquireError(err)
 		}
-		holder.state = zcode.TicketNotFound
-		for _, ticket := range tickets {
-			if ticket.TicketID == holder.ticketID {
-				holder.state, holder.position = ticket.State, ticket.Position
-				break
-			}
+		ticket, matched := matchingOffPeakStatus(tickets, holder.ticketID)
+		if !matched {
+			return nil, infraerrors.New(http.StatusBadGateway, "ZHIPU_OFFPEAK_STATUS_INVALID", "off-peak status did not identify the outstanding ticket")
 		}
+		holder.state, holder.position = ticket.State, ticket.Position
 	}
 	m.touchHolder(holder)
 	if holder.taskID == "" {
@@ -431,15 +434,15 @@ func (m *ZhipuOffPeakTicketManager) nextPollDelay(ctx context.Context, holder *z
 		// floor rather than discarding admission state.
 		return offPeakPollFloor
 	}
-	for _, ticket := range tickets {
-		if ticket.TicketID != holder.ticketID {
-			continue
-		}
-		holder.state = ticket.State
-		holder.position = ticket.Position
-		if ticket.Admitted() {
-			return 0
-		}
+	ticket, matched := matchingOffPeakStatus(tickets, holder.ticketID)
+	if !matched {
+		// Missing, duplicate or unknown states cannot grant admission or turn
+		// an outstanding ticket into a terminal ticket eligible for re-take.
+		return offPeakPollFloor
+	}
+	holder.state, holder.position = ticket.State, ticket.Position
+	if ticket.Admitted() {
+		return 0
 	}
 	delay := platformDelay
 	if delay <= 0 {
@@ -474,6 +477,10 @@ func (m *ZhipuOffPeakTicketManager) sweep() {
 }
 
 func (m *ZhipuOffPeakTicketManager) sweepOnce() {
+	if durable := m.persistence(); durable != nil {
+		m.sweepDurable(durable)
+		return
+	}
 	now := m.now()
 	m.mu.Lock()
 	holders := make([]*zhipuOffPeakHolder, 0, len(m.holders))

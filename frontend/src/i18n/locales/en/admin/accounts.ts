@@ -123,6 +123,19 @@ export default {
         typesafe: 'TypeSafe / Jev',
       },
       cnProviders: {
+        startPlan: {
+          title: 'Start Plan',
+          available: 'Available',
+          unavailable: 'Unavailable',
+          pending: 'Pending activation',
+          unknown: 'Unknown',
+          modelsUnknown: 'Model permissions unknown',
+          modelsEmpty: 'No models authorized',
+          reauthorize: 'Sign in again to authorize this account',
+          effectiveAt: 'Effective: {time}',
+          expiresAt: 'Expires: {time}',
+          queryFailed: 'Could not refresh Start Plan permissions',
+        },
         unlimited: 'Unlimited',
         accountMode: {
           title: 'Account Type',

@@ -333,19 +333,59 @@ func (s *OpenAIGatewayService) sendCCUpstreamRequest(
 type ccStreamScanState struct {
 	// Usage 为 include_usage chunk 中最近一次出现的用量（上游可能重复发送，
 	// 总是保留最新值）；终态事件中的用量由调用方在 finalize 阶段自行覆盖。
-	Usage OpenAIUsage
+	Usage    OpenAIUsage
+	SawUsage bool
 	// SawDone 表示上游发出了 [DONE] 哨兵。
 	SawDone  bool
 	SawError bool
 	// Err 为 scanner 读错误（客户端 context 取消不属于此类，会原样带出）。
 	// 非 nil 时调用方必须跳过 finalize 并返回 usage-incomplete 错误，避免
 	// 把上游截断伪装成正常收尾。
-	Err          error
+	Err error
+	// ProtocolErr records an explicit upstream error independently of read I/O.
+	ProtocolErr  error
 	FirstTokenMs *int
+}
+
+// An explicit provider error is a protocol failure even when its HTTP status
+// is 200. Keep the upstream body for the established failover/error renderer;
+// never decode it as an empty successful completion or fabricate usage.
+func ccExplicitUpstreamError(body []byte) error {
+	if !gjson.GetBytes(body, "error").IsObject() {
+		return nil
+	}
+	return &UpstreamFailoverError{StatusCode: http.StatusBadGateway, ResponseBody: body}
 }
 
 func (s ccStreamScanState) usageIncomplete() bool {
 	return s.Err != nil || s.SawError || !s.SawDone
+}
+
+func ccObservedUsageSource(sawUsage, incomplete bool) string {
+	if !sawUsage {
+		return UsageSourceUnknown
+	}
+	if incomplete {
+		return UsageSourcePartial
+	}
+	return UsageSourceUpstreamExact
+}
+
+func (s ccStreamScanState) usageSource(clientDisconnected bool) string {
+	return ccObservedUsageSource(s.SawUsage, s.usageIncomplete() || clientDisconnected)
+}
+
+func (s ccStreamScanState) completionError() error {
+	if s.Err != nil {
+		return s.Err
+	}
+	if s.ProtocolErr != nil {
+		return s.ProtocolErr
+	}
+	if !s.SawDone {
+		return errors.New("missing [DONE]")
+	}
+	return nil
 }
 
 // scanCCStream 驱动两条 CC 回退路径共享的 SSE 读循环：提取 data 行、在 [DONE]
@@ -385,6 +425,8 @@ func (s *OpenAIGatewayService) scanCCStream(
 		}
 		if gjson.Get(payload, "error").IsObject() {
 			st.SawError = true
+			st.ProtocolErr = ccExplicitUpstreamError([]byte(payload))
+			break
 		}
 		// 观察上游 CC chunk 回显的 model / service_tier（计费以回显为准）。
 		// CC chunk 无 type 字段，按 untyped payload 观察（上游约束：只有终止
@@ -395,6 +437,7 @@ func (s *OpenAIGatewayService) scanCCStream(
 
 		if u := extractCCStreamUsage(payload); u != nil {
 			st.Usage = *u
+			st.SawUsage = true
 		}
 
 		var chunk apicompat.ChatCompletionsChunk
@@ -430,7 +473,7 @@ func (s *OpenAIGatewayService) scanCCStream(
 		emit(&chunk)
 	}
 
-	if err := scanner.Err(); err != nil {
+	if err := scanner.Err(); err != nil && st.Err == nil {
 		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 			logger.L().Warn(logPrefix+": stream read error",
 				zap.Error(err),
@@ -442,14 +485,8 @@ func (s *OpenAIGatewayService) scanCCStream(
 	if st.Err == nil && openAISessionTakeoverPending(c.Request.Context()) {
 		st.Err = ErrOpenAISessionRouteNotAccepted
 	}
-	return st
-}
 
-// logCCStreamMissingDoneSentinel 记录"上游未发 [DONE] 哨兵即结束"的 debug 日志。
-func logCCStreamMissingDoneSentinel(logPrefix, requestID string) {
-	logger.L().Debug(logPrefix+": upstream stream ended without done sentinel",
-		zap.String("request_id", requestID),
-	)
+	return st
 }
 
 // readCCUpstreamJSONResponse 读取并解析 CC 非流式 JSON 响应，失败时以调用方
@@ -458,19 +495,22 @@ func (s *OpenAIGatewayService) readCCUpstreamJSONResponse(
 	c *gin.Context,
 	resp *http.Response,
 	writeError compatErrorWriter,
-) (*apicompat.ChatCompletionsResponse, OpenAIUsage, error) {
+) (*apicompat.ChatCompletionsResponse, OpenAIUsage, string, error) {
 	respBody, err := ReadUpstreamResponseBody(resp.Body, s.cfg, c, openAITooLargeError)
 	if err != nil {
 		if !errors.Is(err, ErrUpstreamResponseBodyTooLarge) {
 			writeError(c, http.StatusBadGateway, "api_error", "Failed to read upstream response")
 		}
-		return nil, OpenAIUsage{}, fmt.Errorf("read upstream body: %w", err)
+		return nil, OpenAIUsage{}, UsageSourceUnknown, fmt.Errorf("read upstream body: %w", err)
+	}
+	if err := ccExplicitUpstreamError(respBody); err != nil {
+		return nil, OpenAIUsage{}, UsageSourceUnknown, err
 	}
 
 	var ccResp apicompat.ChatCompletionsResponse
 	if err := json.Unmarshal(respBody, &ccResp); err != nil {
 		writeError(c, http.StatusBadGateway, "api_error", "Failed to parse upstream response")
-		return nil, OpenAIUsage{}, fmt.Errorf("parse chat completions response: %w", err)
+		return nil, OpenAIUsage{}, UsageSourceUnknown, fmt.Errorf("parse chat completions response: %w", err)
 	}
 	// 观察上游 CC JSON 回显的 model / service_tier（计费以回显为准）。
 	// CC JSON 无 type 字段，按 untyped payload 观察（上游约束）。
@@ -478,14 +518,11 @@ func (s *OpenAIGatewayService) readCCUpstreamJSONResponse(
 		observer.ObserveOpenAI(respBody, "")
 	}
 
-	usage := OpenAIUsage{}
-	if parsed, ok := extractOpenAIUsageFromJSONBytes(respBody); ok {
-		usage = parsed
-	}
+	usage, sawUsage := extractOpenAIUsageFromJSONBytes(respBody)
 	if err := commitOpenAISessionTakeoverJSON(c.Request.Context(), respBody); err != nil {
-		return nil, usage, err
+		return nil, usage, ccObservedUsageSource(sawUsage, true), err
 	}
-	return &ccResp, usage, nil
+	return &ccResp, usage, ccObservedUsageSource(sawUsage, false), nil
 }
 
 // writeOpenAIResponsesFallbackError 以 /v1/responses 回退路径的既有错误格式回写

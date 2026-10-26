@@ -1,10 +1,12 @@
 # Seven-provider business regression matrix
 
-Audit target: code merge `85fb3c82c` on `fix/seven-platforms-main-sync`, combining
+Current implementation starts at `fix/seven-platforms-main-sync@27c5e62f4` and
+adds the capability work below. Its inherited merge `85fb3c82c` combined
 `2dab72aac` with surgeonfish checkpoint `e2bbc80dc` (based on `1818c2993`).
-Both parents contribute implementation and regression requirements. Their prior
-validation records apply only to their respective source trees. The current
-merged-source runs are recorded under [merge verification](#current-merge-verification).
+Both parents contribute implementation and regression requirements. Prior
+validation records apply only to their respective source trees. The
+[capability-completion evidence](#capability-completion-verification) is separate
+from the [historical merge verification](#current-merge-verification).
 
 Acceptance scope: all gateway business capabilities currently implemented for
 these seven platforms. The [supported-business inventory](SEVEN_PROVIDER_SUPPORTED_BUSINESS.md)
@@ -280,6 +282,52 @@ New defects found by these cases must change production behavior; weakening the
 assertion, replacing it with implementation-generated expectations, or increasing
 an arbitrary timeout is not completion.
 
+## Capability-completion implementation inventory
+
+The current batch adds the following requirement-derived cases to the existing
+seven-provider regressions. These are implemented test contracts; their presence
+does not establish a passing final-tree run. The current execution status is
+recorded under [capability-completion verification](#capability-completion-verification).
+
+| Business requirement | Independent oracle and cases | Test entrypoints |
+| --- | --- | --- |
+| Step official Chat execution and both HTTP bridges | OAuth Plan/API Key PayG/API Key Plan × CN/global × Chat/Responses/Messages × stream/nonstream: 36 ordinary responses and 36 parallel-tool/second-turn flows. Literal endpoints, Bearer, trusted Step identity, reasoning/text, independent tool IDs/arguments, protocol termination and client-facing usage; independently priced cache/output usage | `service/TestStepFunCapabilityBasicMatrix`, `TestStepFunCapabilityParallelToolsAndResults`; `pkg/apicompat/TestStepFunParallelChatToolsKeepIndependentAnthropicBlockLifecycles` |
+| Step provider errors, truncation and completion | Each of six profiles and three ingress protocols: 401/403/429/503/HTTP-200 error envelopes; empty/truncated/read-failed/error/cancelled/deadline/missing-usage/missing-DONE streams. Delivered semantic output forbids replay. Raw Chat retains its documented completion indicators; each bridge requires its upstream DONE before synthesizing a success terminal. A completed response without provider metering retains zero observed tokens/cost with unknown usage source; it does not claim exact zero metering | `service/TestStepFunCapabilityFailuresNeverBecomeSuccess`, `TestStepFunCapabilityStreamFailureAndTerminationContract`, `TestStepFunCapabilityCompletedWithoutUsageKeepsUnknownBillingSource` |
+| Step old-owner error isolation | Six profiles × three protocols × unchanged/replaced credentials/rebound proxy/same-ID endpoint edit/region edit: actual transmitted credential and route retained; a late 401 quarantines only the unchanged owner | `service/TestStepFunCapabilityLate401CannotQuarantineReplacementOwner` |
+| Step prices, cached input and unsupported units | Independent USD cards for five models, explicit cache creation/read/output prices, catalog/channel overrides and manual pricing for unknown/router IDs. Twelve existing cached-usage protocol/type/stream cases supplement the 36-cell independent account/profile billing matrix. Token-plan credits, nonempty credit buckets and CNY/USD wallets cannot become percentage-window observations or refresh their persisted freshness; this is explicit unsupported-observation evidence, not new currency support | `service/TestStepFunPricingOfficialRatesAndReferenceCoverage`, `TestStepFunPricingCatalogAndChannelOverrides`, `TestStepFunOfficialCachedUsageAcrossProtocols`, `TestStepFunCreditsAndWalletsNeverBecomePercentageQuota` |
+| Step production proxy failures | Six profiles × three protocols × timeout/refused/407: production HTTPUpstream and OAuth preparer; zero direct destination connection attempts, no credential leakage or model Authorization in CONNECT | `repository/TestStepFunProductionProxyFailureAcrossProfilesAndBridges`: 54 required children. Positive authenticated TLS/proxy flows are exercised by the separate business matrix |
+| Step persistent business flow | Six profiles × three protocols × stream/nonstream × A=503/429: 72 cases. Production auth/handler/scheduler, verified TLS, saved authenticated CONNECT proxies, real PostgreSQL/Redis; A→B, recovered A cannot steal B, new gateway retains B, actual credentials/identity/proxy, exact SQL debits/usage/dedup and released slots | `integration/TestStepFunBusinessMatrix`. Outer JSON children verify every exact subprocess PASS, so removal/skip of a CA subprocess row fails the gate |
+| Files wire, ACL and lifecycle | DeepSeek Anthropic image upload for API Key/OAuth and MiniMax global API Key Chat video upload; actual inference ID rewrite and owner restriction, isolated idempotency, unknown local ID never becomes native, expiry/revocation, upload uncertainty, known-ID compensation, credential replacement and safe delete retry | `service/TestProviderFilesUploadWireAndIdempotentReuse`, `TestProviderFilesUncertainAndCompensation`, `TestProviderFilesDeepSeekUploadInferenceReuse`, `TestProviderFilesMiniMaxUploadActualChatInference`, `TestProviderFilesDeleteFailureRecoveryDoesNotRepeat`, `TestProviderFilesRejectCredentialReplacementAtActualSend`, `TestProviderFilesRewriteAndACL`, `TestProviderFilesUnknownLocalIDNeverBecomesNative` |
+| Files ingress audit and upload cleanup | Basic multipart validation precedes account effects; audit precedes upload selection and list/metadata/delete ACL reads. Cancellation removes temporary bytes; unsupported bridges reject local references; both engines share the canonical file-reference extraction contract and allow binary data while emitting safe structured diagnostics | `handler/TestProviderFilesMultipartCleanupAndValidation`, `TestProviderFilesAuditPrecedesACLRead`, `TestProviderFilesUploadAuditsBeforeSelection`, `TestProviderFilesCancelledUploadDoesNotRetainBytes`, `TestProviderFilesInferenceUnknownLocalAndUnsupportedBridges`; `service/TestProviderFilesCanonicalAuditContract`, `TestProviderFilesModerationAllowsBinaryAndLogsSafeDiagnostics`; `securityaudit/TestProviderFilesPromptAuditAllowsBinaryAndLogsSafeDiagnostics` |
+| Files strict transport and persistence | Three supported profiles and each applicable upload/delete operation × success/direct/refused/timeout/407/cancelled; production transport with zero direct fallback. PostgreSQL checks mapping persistence, reservation uniqueness across instances, quota serialization and proxy/credential CAS | `repository/TestProviderFilesProductionProxyContract`, `TestProviderFilesRepositoryPersistenceIdempotencyAndFencing`, `TestProviderFilesRepositoryCrossInstanceUploadReservation`, `TestProviderFilesRepositoryQuotaAndProxyCAS`; migration `297_provider_files.sql` |
+| Start entitlement is separate from coding/off-peak | Exact balance URL/auth/identity; available/unavailable/pending/unknown, models unknown versus explicit empty, server clock/expiry, malformed fields, old owner/proxy/identity/freshness and failed persistence. Actual mapped-model selection and public catalogs never invent permission; account metadata projection retains the grant digest without JWT | `service/TestZhipuStartPlanOfficialBalanceWireAndIsolation`, `TestZhipuStartPlanAvailabilityBoundaries`, `TestZhipuStartPlanFailureAndOwnerFence`, `TestZhipuStartPlanSelectionAndPublicCatalog`, `TestZhipuStartPlanObservationCannotCrossOwnerOrReactivateOnTime`, `TestZhipuStartPlanPublicCatalogRechecksCachedOwnerAndIdentity`; `handler/TestZhipuStartPlanUnknownPublicCatalogNeverInventsDefaultPermission`; `repository/TestZhipuStartPlanSchedulerProjectionKeepsPermissionWithoutJWT` |
+| Start production balance, atomic publication and management UI | Real strict-proxy balance client; PostgreSQL owner/old-observation/outbox checks and cross-instance selection. Eleven Vue cases independently pin four states, model detail, late owner results, no time-only promotion, reauthorization and plan isolation | `repository/TestZhipuStartPlanProductionBalanceStrictProxy`, `TestZhipuStartPlanPostgresCommitOutboxAndCrossInstanceSelection`, `TestZhipuStartPlanPostgresLateObservationCannotReplaceNewObservation`, `TestZhipuStartPlanPostgresOwnerAndOutboxFailuresPreserveObservation`; `frontend/src/components/account/__tests__/ZhipuStartPlanCell.spec.ts` |
+| Optional durable off-peak admission and settlement | Explicit opt-in and dedicated keyring; authenticated encrypted snapshot, owner generation/fencing, uncertain Take never replayed, queue reuse, admission only after ticket commit, individual request leases, lost heartbeat safety window, original-owner retirement, same-ticket settlement retry and durable ACK before clear | `config/TestZhipuOffPeakPersistenceConfiguration`; `service/TestZhipuOffPeakSnapshotEncryptionAndRotation`, `TestZhipuOffPeakGenerationTracksOwnerNotObservations`, `TestZhipuOffPeakDurableUncertainTakeNeverReplaysAfterRestart`, `TestZhipuOffPeakDurableQueueTimeoutRetainsTicketForNextRequest`, `TestZhipuOffPeakDurableTakeCommitFailureCannotAdmit`, `TestZhipuOffPeakDurableSettlementACKMustPersistBeforeClear`, `TestZhipuOffPeakDurableLostHeartbeatPreservesRequestSafetyWindow` |
+| Durable off-peak PostgreSQL concurrency | One current generation across instances; expired operation lease fences late writes; crash keeps uncertain intent; all physical request leases protect settlement; ACK write failure retains intent; retired generation retains original in-flight protection; lock-wait recheck prevents renewal/settlement overlap | `repository/TestZhipuOffPeakStoreCrossInstanceOpenHasOneCurrentGeneration`, `TestZhipuOffPeakStoreExpiredOperationLeaseFencesLateSaveAndAdmission`, `TestZhipuOffPeakStoreBeginTakeCrashRemainsUncertainAfterRestart`, `TestZhipuOffPeakStoreSharedRequestLeasesBlockSettlementUntilAllFinish`, `TestZhipuOffPeakStoreSettlementRetryKeepsIntentUntilAcknowledged`, `TestZhipuOffPeakStoreRetiresOldOwnerAndRegistersLateTicketForOriginalGeneration`, `TestZhipuOffPeakStoreFailedAckWriteCannotErasePendingIntent`, `TestZhipuOffPeakStoreRetiredGenerationWaitsForOriginalInflightRequest`, `TestZhipuOffPeakStoreSettlementRechecksRequestLeaseAfterParentLockWait`; migration `298_zhipu_offpeak_tickets.sql` |
+| Durable off-peak manager restart and quota behavior | Actual manager plus PostgreSQL store preserves the same queue ticket across restart, does not repeat a Take whose accepted response was lost, creates one new task only after confirmed expiry, and never restores rolling-window allowance merely because a prior ticket settled | `repository/TestZhipuOffPeakManagerPostgresQueueTimeoutRestartsWithSameTicketStatus`, `TestZhipuOffPeakManagerPostgresAcceptedTakeResponseLossDoesNotRetakeAfterRestart`, `TestZhipuOffPeakManagerPostgresConfirmedExpiryCreatesOneNewTaskAndTicket`, `TestZhipuOffPeakManagerPostgresSettledTicketDoesNotRestoreTakeQuota`; memory-mode `service/TestZhipuOffPeakSettlementDoesNotRestoreTakeEligibility` |
+| Durable off-peak known-ticket Status and admission recovery | A protocol-port TCP read failure preserves the known ticket/task/ciphertext; a restarted production manager first revalidates the same ticket with Status. After a successful Status, a real PostgreSQL request-lease INSERT failure or expired operation lease cannot admit or discard the ticket. Following crash/lease expiry, restart admits the same ticket without a new Take and retains the captured owner/identity/proxy | `repository/TestZhipuOffPeakManagerPostgresKnownStatusFailureRecoversSameTicketAfterRestart`; `TestZhipuOffPeakManagerPostgresAdmissionFailureRecoversSameTicketAfterRestart`: request-lease-insert-failure / operation-lease-expired |
+| Files reuse, cleanup and pagination isolation | The 64 MiB boundary uses actual bounded content; conflicting file owners and retry selection cannot fail over to a different owner. Restart cleanup only uses a known remote ID and the verified original snapshot. PostgreSQL pagination treats inaccessible user/key/group/platform cursors like unknown IDs in both directions; owner CAS takes the proxy lock before the account lock | `service/TestProviderFiles64MiBContentBoundary`, `TestProviderFilesMultipleOwnerReferencesFailBeforeSend`, `TestProviderFilesSchedulerCannotFailoverToDifferentFileOwner`, `TestProviderFilesExplicitRetryPinsOriginalOwner`, `TestProviderFilesRestartCleanupUsesKnownOriginalSnapshot`, `TestProviderFilesMiniMaxLocalRevokeIsExplicitlyUnsupportedRemoteDelete`; `repository/TestProviderFilesPersistentUploadReferenceAndRestartCleanup`, `TestProviderFilesRepositoryPaginationCursorCannotReadAnotherScope`, `TestProviderFilesRepositoryOwnerCASLocksProxyBeforeAccount` |
+| Files every ingress side-effect boundary | The ordering regression requires upload retry lookup, scheduler selection, both concurrency slots, upload, metadata Get, list and delete to exist after the audit point; runtime blocking tests independently prove no forbidden call | `handler/TestProviderFilesAuditGatePrecedesEveryACLAndWriteBoundary`: eight required children; complements `TestProviderFilesAuditPrecedesACLRead` and `TestProviderFilesUploadAuditsBeforeSelection` |
+| Start composite public aliases | Eight entitlement situations × Models/Codex × allowlist on/off: an exact route alias is advertised only for a fresh proven target model. Route configuration and group allowlists do not create upstream permission; unrelated non-Start routes and models remain visible | `handler/TestZhipuStartPlanCompositeRouteAliasRequiresProvenTargetEntitlement`: 32 children; `TestZhipuStartPlanCompositeRouteFilteringKeepsOtherPlatforms`: two children |
+| Off-peak malformed Status and lease-release ordering | Ready/queued tickets retain the same ID/task and last valid state after empty, unmatched, unknown or duplicate Status; no admission, settlement or additional Take. Durable missing/ambiguous Status also retains its encrypted intent. PostgreSQL release uses the same parent-before-request-lease lock order as renewal and settlement | `service/TestZhipuOffPeakMissingStatusPreservesExistingTicket`: ten children; `TestZhipuOffPeakDurableMissingStatusNeverClearsOrRetakes`: four children; `repository/TestZhipuOffPeakStoreReleaseLocksParentBeforeRequestLease` |
+| Off-peak administrator termination | Administrator GET exposes only opaque segment handles; exact-pair POST acknowledges durable retirement, not completed remote settlement. Disabled mode/profile/invalid handle/storage failure are explicit. PostgreSQL fences old control results, preserves shared in-flight leases, rolls back failed retirement, retries original-owner cleanup, and isolates delayed/duplicate termination from a replacement segment. Both waiting and already-claimed old acquisitions cannot retake or join a new segment | `service/TestZhipuOffPeakAdminSegmentRejectsUnsupportedModeAndProfile`, `TestZhipuOffPeakAdminSegmentMapsErrorsWithoutSecretDisclosure`, `TestZhipuOffPeakAdminTerminateDrainsAndRetriesOriginalSnapshot`; `repository/TestZhipuOffPeakStoreTerminate*`, `TestZhipuOffPeakManagerPostgresTerminateCannotRetakeFromOldAcquire`; four `admin/TestZhipuOffPeakSegmentHandler*`; `routes/TestZhipuOffPeakSegmentRoutesRequireRealAdmin` |
+| Start composite catalog actual target and owner representation | Only the winning priority/endpoint-specific route and account-mapped target can use a fresh proven Start entitlement. Default catalog fallback cannot resurrect a filtered target. Equivalent typed/persisted identity representations preserve the same owner, while JWT replacement invalidates it | `handler/TestZhipuStartPlanCompositeCatalogUsesWinningRouteAndActualTarget`: sixteen children; `TestZhipuStartPlanCompositeCatalogPreservesTypedAndPersistedIdentityOwner`: two children |
+
+The owning capability contracts are [StepFun](providers/STEPFUN.md),
+[Files](providers/FILES.md), and [Zhipu](providers/ZHIPU.md). The critical manifest
+pins each listed top-level case and the independently specified table children.
+The parser regressions remove required execution events and reject missing,
+skipped, failed and unfinished cases. Full suite and targeted race execution are
+separate evidence, as are real-account authorization and entitlements.
+
+The four durable off-peak environment settings are forwarded by every maintained
+Compose variant, including the development build, with the documented opt-in
+default and empty keyring. `deploy/tests/docker-compose-gateway-env-test.sh`
+checks their exact defaults and unique bindings alongside the gateway settings;
+`config/TestZhipuOffPeakPersistenceConfiguration` checks loading and validation.
+Neither configuration test establishes that an operator supplied a valid shared
+keyring to a real deployment.
+
 ## Shared image storage and plugin host
 
 | Business scenario | Test entrypoints | Observable boundary |
@@ -316,9 +364,71 @@ the network fixtures; PostgreSQL/Redis cases require the integration environment
 Frontend changes require lint, typecheck, relevant Vitest and locale checks.
 Identity changes also retain the complete existing Codex identity regressions.
 
+### Capability-completion verification
+
+The capability batch starts from `27c5e62f4` on
+`fix/seven-platforms-main-sync`. The following checks ran on 2026-10-26 in Apple
+Containers using image `sub2api-validation:8449ffd7679a1e27` and dependency-cache
+generation `7b5b2a85be071953`. PostgreSQL and Redis services were disposable.
+These are results for this capability worktree; the merge results below retain
+their separate historical commit attribution.
+
+| Validation | Recorded result |
+| --- | --- |
+| Complete backend unit suite | Passed, including the Step/Files/Start/off-peak production fixes; service package 307.768s |
+| Complete backend integration suite | Passed against PostgreSQL/Redis, including the 72-cell Step business matrix; integration package 163.703s and repository 20.900s |
+| Final repository integration | Passed again after the last recovery-test fixture change, 22.533s; backend source bytes unchanged afterward |
+| Critical unit gate | All 271 required top-level tests / 2,100 required children ran and passed, including the final key-ID authentication and non-refunded-quota pins; no missing/skipped/unfinished required cases |
+| Critical integration gate | All 125 required top-level tests / 504 required children ran and passed, without missing/skipped/unfinished required cases |
+| Complete backend lint | Zero issues |
+| Focused race | Service unit and repository integration selections both passed, 5.661s / 5.342s; exact scope below, not a full race suite |
+| Frontend | Lint, typecheck, production build, 436 Vitest files / 3,979 tests, all 322 required frontend cases and 104 locale tests passed; frontend source bytes unchanged afterward |
+| Chromium management | All 14 required scenarios and the browser TypeScript check passed, without skipped or retried cases; real Vue/backend/PostgreSQL/Redis/proxies with isolated provider responders |
+| Policy and migrations | Module tidiness, build tags, Codex identity guard, README synchronization, maintained Compose environment/security/resource checks, Apple lifecycle fixture and Redis health checks passed. Migrations 297/298 were also checked directly with the maintained validator; existing SQL was byte-identical to the baseline. Final tool-only changes passed all 51 coverage-parser and six frontend-parser self-tests |
+
+Full suites can contain optional live-service or external-artifact skips;
+they do not prove those integrations. Required critical cases must actually run
+and pass. This batch did not rerun the independent MinIO/S3 storage gate: Files
+does not retain originals or alter the S3 result-storage implementation. Its
+earlier passing result below remains attributed only to the earlier commit.
+
+The browser run explicitly set `NODE_OPTIONS=--max-old-space-size=5120` in its
+8 GiB validation container. Two earlier attempts failed when Vite's type-checking
+worker exhausted its default JavaScript heap; the diagnostic run recorded
+`ERR_WORKER_OUT_OF_MEMORY`, with no cgroup OOM kill. The final run retained all
+business steps and assertions; it did not disable typechecking or accept retries.
+
+The focused race selections used `CGO_ENABLED=1`, `-count=1`, and a five-minute
+timeout per package:
+
+```bash
+go test -C backend -race -tags=unit ./internal/service -run '^Test(ProviderFiles|ZhipuStartPlan|ZhipuOffPeak|StepFunCapabilityLate401|CNAPIKey|KimiAPIKey|OpenAIQuota.*Owner|LiveSidebandProduction)' -count=1 -timeout=5m
+go test -C backend -race -tags=integration ./internal/repository -run '^Test(ProviderFiles|ZhipuStartPlan|ZhipuOffPeak|CNAPIKey|CNControlSnapshot|CNBalanceSchedule|CNProxyOwner|OpenAIQuotaOwner)' -count=1 -timeout=5m
+```
+
+Defect evidence includes independently failing business assertions for Step
+parallel tools, failed/incomplete streams and missing usage; Files cursor scope,
+lock order and late publication/cleanup; Start route aliases and owner
+representation; and off-peak Status/lock ordering. A final Go overlay restored
+only the old terminated-segment retry branch and reproduced the real PostgreSQL
+business failure: the old waiting flow incorrectly joined a new segment. The
+unchanged regression passes with the fix. Compilation and setup failures are
+not counted as defect evidence.
+
+The backend/repository closing check compared 5,162 source inputs and found no
+change against its frozen manifest. Only the critical-manifest checker and its
+self-tests subsequently changed; both were revalidated together with the full
+expanded unit gate. The completed manifest covers 5,162 backend/frontend/tools/
+deploy inputs; SHA-256 of its canonical sorted path-to-file-hash JSON is
+`8ac75041d269566b7f1ce3ccb57413ebba25221589e0a5f3d823e43bc49a1c67`.
+Detailed command logs, source manifests and red/green records are retained in
+the local ignored OpenSpec plan. No live-account permission, official service
+availability or full browser/OS authorization is inferred from these fixtures.
+
 ### Current merge verification
 
-The following checks ran in Apple Containers on 2026-10-26. Backend unit,
+This is the historical pre-capability merge record, not a result for the current
+worktree. The following checks ran in Apple Containers on 2026-10-26. Backend unit,
 integration, critical, lint and selected race runs used the final backend/tools
 bytes committed in `85fb3c82c`. The validation image was
 `sub2api-validation:8449ffd7679a1e27`, with dependency cache generation
@@ -447,17 +557,35 @@ The following remain explicit boundaries, rather than passing scenarios:
 
 - Complete official-agent workspace/TUI/OS behavior, browser-to-provider grants
   and live-account entitlements are not proven by gateway regression fixtures.
-- General DeepSeek/MiniMax Files upload, metadata/ownership tracking, expiry and
-  deletion are outside the current gateway routes. Supported native file
-  references and inline-media forwarding do not implement these management operations.
+- Files support is limited to the [explicit first-batch contracts](providers/FILES.md):
+  DeepSeek Anthropic images and MiniMax global API Key Chat understanding-video
+  upload/local references. DeepSeek's other file families, MiniMax managed
+  authorization and other regions/purposes, arbitrary media and unsupported
+  remote-management operations remain excluded. Native-reference/inline
+  compatibility does not prove Files ACL or CRUD.
 - DeepSeek and ZCode business logins have no implemented refresh contract and
   require reauthorization when invalid. Kimi/MiniMax token refresh, StepFun's
   optional Passport-session renewal and ZCode project-PAT renewal are distinct
   capabilities; passing their refresh tests does not expand another provider's
   login capabilities or rotate StepFun's static inference key.
-- The combined 21 inference flows cover their pinned protocols and account
-  types; they do not compose every login, refresh, management and billing
-  permutation into a single browser-to-provider test.
+- The historical 21 persisted inference flows and additional Step business
+  matrix each cover their own pinned dimensions when actually run; they do not
+  compose every login, refresh, management and billing permutation into a single
+  browser-to-provider test.
+- Step remote search MCP has a reviewed contract but no gateway implementation
+  in this batch. Native Responses/Messages/WS, a Responses WS bridge and extra
+  speech/image billing are not inferred from the Chat execution matrix.
+- Durable off-peak recovery is disabled by default and requires a shared dedicated
+  external keyring. Process-local mode does not gain restart/cross-instance recovery;
+  durable mode does not recover an official agent's historical task/queue position
+  or replay a possibly accepted model request. Start balance permission never
+  grants coding-project or off-peak permission. Grok enterprise deployment remains
+  outside scope by the user's decision.
+- Administrator termination is implemented only in durable mode. Its exact-pair
+  retirement fences new admission to that segment; shared physical requests drain
+  before asynchronous original-owner settlement. Account disable/delete, request
+  cancellation and shutdown remain separate operations. No test establishes
+  forced interruption or synchronous remote settlement.
 - Management evidence is layered: component lifecycle and reauthorization tests
   use backend adapters; the 14 defined Chromium flows exercise the application,
   backend, PostgreSQL and Redis for the pinned proxy-management workflow when

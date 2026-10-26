@@ -59,7 +59,7 @@ var allowedLogFields = map[string]struct{}{
 	"queue_length": {}, "queue_capacity": {}, "stage": {}, "upstream_dispatched": {},
 	"billing_preconsumed": {}, "worker_id": {}, "reclaimed_total": {}, "attempts": {},
 	"max_attempts": {}, "claim_version": {}, "http_status": {}, "retryable": {},
-	"body_bytes": {}, "incomplete_reasons": {},
+	"body_bytes": {}, "file_bytes": {}, "incomplete_reasons": {},
 }
 
 func LogInfo(event string, fields map[string]any) {
@@ -137,6 +137,7 @@ func logPromptExtractionFailure(req Request, diagnostic promptExtractionDiagnost
 	}
 	LogWarn(EventExtractionFailed, mergeLogFields(requestLogFields(req), map[string]any{
 		"status": "failed", "error_code": code, "error_kind": "content_extraction",
+		"file_bytes":         auditcontent.FileBytes(req.Protocol, req.Body),
 		"incomplete_reasons": diagnostic.Reasons,
 	}))
 }
