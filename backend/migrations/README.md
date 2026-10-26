@@ -4,6 +4,36 @@ SQL migrations are embedded in the application and applied automatically at
 startup. The runner records each filename and SHA256 checksum in
 `schema_migrations`.
 
+Migration `294_outbound_identity_ids.sql` stores official-client random IDs by
+semantic namespace and irreversible scope digest. PostgreSQL atomically chooses
+the first value across replicas. Records have no scheduling-cache TTL, so an
+application restart or cache eviction cannot rotate an active conversation ID.
+They contain no prompts or credentials; backing up/restoring the database also
+preserves these installation and session identities. This operational table is
+owned by the SQL repository, like `openai_session_routes`, rather than Ent.
+See [outbound identity](../../docs/OUTBOUND_IDENTITY.md).
+
+Migration `295_channel_monitor_v2_model_visibility.sql` supplies explicit display
+mode and empty exclusion defaults in V2 platform JSON while retaining operator
+lists, custom fields and raw history. It advances the configuration version once
+when needed; exclusions are applied on reads without rebuilding stored rollups.
+See [V2 model visibility](../../docs/CHANNEL_MONITOR_V2.md).
+
+Migration `297_provider_files.sql` stores gateway file IDs, caller ACL scope,
+credential epochs, metadata, isolated upload reservations and deletion-recovery
+state. Original file bytes and plaintext credentials are not stored. The SQL
+repository owns this operational table; Ent does not generate it. Existing
+external native references acquire no mapping automatically. See
+[Provider Files](../../docs/providers/FILES.md).
+
+Migration `298_zhipu_offpeak_tickets.sql` stores off-peak ticket generations,
+fenced control leases, per-request leases and durable settlement intent. The
+minimal original-owner cleanup snapshot is encrypted with an external keyring;
+the table does not contain model inputs/outputs. The feature defaults off;
+applying the schema alone does not enable restart recovery. Tables retain
+pending cleanup evidence after account deletion rather than cascading it away.
+See [Zhipu recovery](../../docs/providers/ZHIPU.md).
+
 ## Mandatory Rules
 
 - Existing migration files are immutable: never modify, delete, or rename them.
@@ -52,6 +82,22 @@ official source names this new migration `242_group_i18n.sql`; Plus already
 uses prefix 242, so only the new Plus 286 migration is imported. Existing
 filenames and checksums remain immutable.
 
+Migration `287_channel_monitor_stream_probe.sql` adds opt-in V1 streaming probes,
+nullable first-text/mode history and independent successful-text rollup sums/counts.
+Only supported existing replace-mode boolean `stream:true` snapshots are promoted;
+merge/off snapshots stay disabled and historical timings stay unknown. See
+[channel monitoring](../../docs/CHANNEL_MONITOR.md#v1-流式探测).
+
+Migration `288_openai_session_routes.sql` adds the authoritative logical-session
+route table `openai_session_routes`. PostgreSQL is authoritative for the
+canonical route owner; Redis only accelerates reads and carries the same
+generation. Rows store the authorization domain, an irreversible session
+digest, the owner account and the compare-and-set generation/lease state used to
+commit a migration; no prompt text, credentials, or conversation history is
+persisted. Existing sessions have no row until their next bind, and the request
+path does not consume the table yet. See
+[Responses routing](../../docs/protocols/OPENAI_RESPONSES.md).
+
 Migrations `287_gemini_cached_contents.sql`,
 `288_gemini_cached_contents_channel_usage.sql`, and
 `289_gemini_cached_contents_mutation_lease.sql` add Gemini explicit-cache
@@ -59,10 +105,26 @@ tables, channel-usage snapshots, and mutation leases. Official numbered these
 243–245; Plus already uses those prefixes, so they land at 287–289. Historical
 SQL is unchanged.
 
+The main/feature merge retained the independently committed 287/288 files above.
+Their full filenames and checksums remain immutable. The channel-monitor/session
+route migrations and Gemini cache migrations have independent dependencies;
+lexicographic execution and upgrades from either branch retain all five files.
+The seven-platform branch independently deployed 290–294 and
+`295_channel_monitor_v2_model_visibility.sql`; main independently published
+`295_enable_gemini_image_generation_groups.sql`. Their dependencies are separate,
+so synchronization retains both complete 295 filenames and original checksums.
+New migrations start after 295 and must use unique increasing prefixes.
+The migration policy checker pins the complete filenames and original Git blobs
+of these twelve migrations in `tools/check_new_migrations.py`. Only those unchanged
+historical files may enter comparisons against either branch's newer baseline.
+They also reserve their numeric prefixes when comparing against an older release.
+Modified or renamed files, other old prefixes and new duplicate prefixes remain
+forbidden.
+
 Migration `295_enable_gemini_image_generation_groups.sql` enables image
 permissions for existing Gemini and Antigravity groups. Composite and other
 platforms retain their saved value. Official migration 246 uses a prefix
-already occupied by Plus, so only this new migration is imported as 295.
+already occupied by Plus, so main imported it as 295 before this synchronization.
 
 ## File Naming
 
@@ -217,5 +279,47 @@ extra objects. Credentials, unrelated extras, foreign-platform rows and
 non-object historical values are preserved. The retired switch no longer grants
 hosted search tools or changes cache routing. See [Grok](../../docs/providers/GROK.md#cache-and-tool-declarations).
 
-Migration 295 leaves prefixes 290–294 available for existing independently
-deployed Plus work, avoiding reuse of already applied migration numbers.
+## Codex native API-key identity and manual versions
+
+Migration `290_codex_native_identity_and_manual_versions.sql` removes the retired
+Codex synchronization settings and the `openai:apikey` default-family mapping.
+Foreign account identity candidates are discarded atomically; credential-owner
+UA, explicit version pins, valid Codex selections, upstream supplier mappings
+and every unrelated provider setting remain intact. Runtime ignores stale
+synchronization values and rejects foreign API-key families before cleanup.
+
+Migrations 291–293 align the [official agent baselines](../../docs/OFFICIAL_AGENT_BASELINES.md):
+Grok API-key native identity, DeepSeek anonymous Harness owner UUIDs, and removal
+of linked ZCode copied project secrets in favor of memory-only PAT issuance.
+Manual API keys and valid native identity pins are preserved.
+
+Migration `294_outbound_identity_ids.sql` persists official-agent request-state
+identifiers by namespace and irreversible owner-scope digest. Both independently
+deployed 295 migrations retain their original identities as described above;
+neither existing SQL file is renamed to resolve the historical prefix collision.
+
+### Codex observation ownership (296)
+
+Weekly reset observations retain a principal/proxy baseline generation and the
+exact credential generation for pending corroboration. Queued follow-reset
+events retain their verified principal/proxy generation (or the exact grant
+when the principal is unknown) and are skipped
+when that upstream principal or proxy no longer owns the source account. Legacy empty generations
+cannot authorize a reset. Ordinary token rotation preserves a known principal's
+baseline, while pending samples cannot corroborate across rotating grants.
+
+### Provider capability records (297–298)
+
+`297_provider_files.sql` adds operational metadata, authorization scope,
+idempotency and cleanup leases for the supported DeepSeek/MiniMax Files
+profiles. It does not store original bytes or plaintext provider credentials.
+See [Files](../../docs/providers/FILES.md) for the supported lifecycle and
+explicitly unsupported combinations.
+
+`298_zhipu_offpeak_tickets.sql` stores admission generations, fenced operation
+leases, per-request leases and durable settlement intent/ACK. Minimal owner
+snapshots are AEAD-encrypted with a dedicated external keyring when persistence
+is enabled. Account deletion cannot cascade away outstanding settlement intent.
+The rows contain no prompt or model response. See
+[ZCode recovery](../../docs/providers/ZHIPU.md#durable-off-peak-recovery) for
+configuration, key rotation, retention and the default process-local mode.

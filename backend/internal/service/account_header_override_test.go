@@ -418,6 +418,7 @@ func TestNormalizeHeaderOverrideCredentials(t *testing.T) {
 			"conversation_id", "x-codex-turn-state", "chatgpt-account-id",
 			"Content-Type", "Cookie", "x-goog-api-key",
 			"X-Claude-Code-Session-Id", "x-client-request-id",
+			"x-codex-parent-thread-id",
 			"x-openai-subagent", "x-openai-memgen-request", "x-responsesapi-include-timing-metrics",
 			"x-openai-internal-codex-residency",
 		} {

@@ -43,10 +43,17 @@ func ProvideZhipuOAuthService(proxyRepo ProxyRepository, oauthClient ZhipuOAuthC
 // ProvideZhipuOffPeakTicketManager creates the off-peak ticket manager and
 // registers it as the request-path ticket provider. Registration happens here so
 // the protocol builder never depends on the settings or account services.
-func ProvideZhipuOffPeakTicketManager(oauthClient ZhipuOffPeakClient) *ZhipuOffPeakTicketManager {
+func ProvideZhipuOffPeakTicketManager(oauthClient ZhipuOffPeakClient, projectTokens *ZhipuProjectTokenManager, store ZhipuOffPeakStore, cfg *config.Config) (*ZhipuOffPeakTicketManager, error) {
 	manager := NewZhipuOffPeakTicketManager(oauthClient)
+	manager.projectTokens = projectTokens
+	if cfg != nil && cfg.ZhipuOffPeak.PersistenceEnabled {
+		if err := manager.WithPersistence(store, cfg.ZhipuOffPeak); err != nil {
+			manager.Stop()
+			return nil, err
+		}
+	}
 	SetZhipuOffPeakTicketProvider(manager)
-	return manager
+	return manager, nil
 }
 
 // BuildInfo contains build information
@@ -434,18 +441,6 @@ func ProvideAccountExpiryService(accountRepo AccountRepository) *AccountExpirySe
 	return svc
 }
 
-// ProvideOpenAICodexVersionSyncService creates and starts OpenAICodexVersionSyncService.
-// 出站 Codex 身份的版本号靠它跟随官方发布，无需为了跟版本而发新版本；面板可关闭。
-func ProvideOpenAICodexVersionSyncService(
-	settingRepo SettingRepository,
-	settingService *SettingService,
-	githubClient GitHubReleaseClient,
-) *OpenAICodexVersionSyncService {
-	svc := NewOpenAICodexVersionSyncService(settingRepo, settingService, githubClient, openAICodexVersionSyncInterval)
-	svc.Start()
-	return svc
-}
-
 // ProvideProxyExpiryService creates and starts ProxyExpiryService.
 func ProvideProxyExpiryService(proxyRepo ProxyRepository) *ProxyExpiryService {
 	svc := NewProxyExpiryService(proxyRepo, time.Minute)
@@ -658,6 +653,12 @@ func ProvideIdempotencyCleanupService(repo IdempotencyRepository, cfg *config.Co
 	return svc
 }
 
+func ProvideProviderFilesService(repo ProviderFilesRepository, gateway *OpenAIGatewayService) *ProviderFilesService {
+	svc := NewProviderFilesService(repo, gateway)
+	svc.Start()
+	return svc
+}
+
 // ProvideGeminiCachedContentService creates GeminiCachedContentService and starts its mutation recovery loop.
 func ProvideGeminiCachedContentService(repo GeminiCachedContentRepository, compat *GeminiMessagesCompatService, cfg *config.Config) *GeminiCachedContentService {
 	svc := NewGeminiCachedContentService(repo, compat, cfg)
@@ -837,6 +838,9 @@ func ProvideOpsIngressRejectAggregator(opsRepo OpsRepository, opsService *OpsSer
 // ProvideSettingService wires SettingService with group reader and proxy repo.
 func ProvideSettingService(settingRepo SettingRepository, groupRepo GroupRepository, proxyRepo ProxyRepository, cfg *config.Config) *SettingService {
 	svc := NewSettingService(settingRepo, cfg)
+	if store, ok := settingRepo.(OutboundIDStore); ok {
+		SetDefaultOutboundIDStore(store)
+	}
 	svc.SetDefaultSubscriptionGroupReader(groupRepo)
 	svc.SetProxyRepository(proxyRepo)
 	if err := svc.LoadForwardedClientIPSettings(context.Background()); err != nil {
@@ -918,6 +922,7 @@ var ProviderSet = wire.NewSet(
 	NewAdminService,
 	NewGatewayService,
 	NewOpenAIGatewayService,
+	ProvideProviderFilesService,
 	ProvideImageStorageSettingService,
 	ProvideImageTaskService,
 	ProvideBatchImageModelPricingResolver,
@@ -933,6 +938,7 @@ var ProviderSet = wire.NewSet(
 	ProvideGrokOAuthService,
 	wire.Bind(new(GrokOAuthTokenService), new(*GrokOAuthService)),
 	ProvideZhipuOAuthService,
+	NewZhipuProjectTokenManager,
 	ProvideCNOAuthService,
 	ProvideZhipuOffPeakTicketManager,
 	NewGeminiOAuthService,
@@ -993,7 +999,6 @@ var ProviderSet = wire.NewSet(
 	ProvideTokenRefreshService,
 	wire.Bind(new(GrokOAuthReconciler), new(*TokenRefreshService)),
 	ProvideAccountExpiryService,
-	ProvideOpenAICodexVersionSyncService,
 	ProvideProxyExpiryService,
 	ProvideSubscriptionExpiryService,
 	ProvideTimingWheelService,
@@ -1140,12 +1145,16 @@ func ProvideClaudeResetCreditService(accounts AccountRepository, tokens *ClaudeT
 	return s
 }
 
-func ProvideCNOAuthService(proxyRepo ProxyRepository, accountRepo AccountRepository, admin AdminService, redisClient *redis.Client, refreshAPI *OAuthRefreshAPI, gateway *OpenAIGatewayService, tester *AccountTestService) *CNOAuthService {
+func ProvideCNOAuthService(proxyRepo ProxyRepository, accountRepo AccountRepository, admin AdminService, redisClient *redis.Client, refreshAPI *OAuthRefreshAPI, gateway *OpenAIGatewayService, tester *AccountTestService, quota *CNProviderQuotaService, projectTokens *ZhipuProjectTokenManager) *CNOAuthService {
 	svc := NewCNOAuthService(proxyRepo, accountRepo, admin)
 	svc.store = cnoauth.NewStore(redisClient)
 	svc.refreshAPI = refreshAPI
 	svc.modelTester = tester
 	gateway.cnOAuthService = svc
 	tester.cnOAuthService = svc
+	quota.cnOAuthService = svc
+	quota.projectTokens = projectTokens
+	gateway.projectTokens = projectTokens
+	tester.projectTokens = projectTokens
 	return svc
 }

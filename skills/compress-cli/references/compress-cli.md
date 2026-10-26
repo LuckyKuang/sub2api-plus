@@ -90,6 +90,8 @@ change updates this reference, the validator, its tests, and the linked source:
   snapshot; failover resolves the new owner. Identity is applied before signing,
   and signed declarations remain stable at send time. Presets render only their
   protocol-defined headers and coherent companion/body declarations.
+- Codex versions are maintained manually in code; automatic Codex version
+  synchronization is prohibited. Explicit administrator pins remain valid.
 - Version-only changes preserve source, client family, identifier, OS,
   architecture, terminal and SDK fingerprint. New types/paths, client or
   dependency upgrades and upstream merges preserve the contract and require

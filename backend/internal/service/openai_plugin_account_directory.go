@@ -109,6 +109,8 @@ func accountReadableSnapshotJSON(account *Account) []byte {
 	}
 	clone := *account
 	clone.Credentials = nil
+	clone.CredentialGeneration = ""
+	clone.CNQuotaGeneration = ""
 	clone.Groups = nil
 	clone.AccountGroups = nil
 	data, err := json.Marshal(&clone)
@@ -143,6 +145,21 @@ func (s *OpenAIGatewayService) ResolvePluginOutboundIdentity(ctx context.Context
 	if account.Type != AccountTypeOAuth || !account.IsOpenAIOAuthLike() {
 		return nil, nil
 	}
+	// This bearer-only interface cannot export AgentIdentity signing credentials.
+	// In particular, resolving it must not bootstrap an otherwise unused task.
+	if account.IsOpenAIAgentIdentity() {
+		return nil, nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	// Directory resolution is an independent credential operation. A caller's
+	// forwarding attempt, even for the same account ID, is not its evidence.
+	ctx = context.WithValue(ctx, outboundIdentityScopeKey{}, &outboundIdentityScope{})
+	ctx = context.WithValue(ctx, requestCredentialOwnerContextKey{}, false)
+	ctx = context.WithValue(ctx, requestCredentialTransportKey{}, false)
+	// Retain this owner's fallback settings if acquisition refreshes its grant.
+	s.resolveOpenAIOutboundIdentity(ctx, account)
 	token, _, err := s.GetAccessToken(ctx, account)
 	if err != nil {
 		return nil, err
@@ -150,18 +167,29 @@ func (s *OpenAIGatewayService) ResolvePluginOutboundIdentity(ctx context.Context
 	if strings.TrimSpace(token) == "" {
 		return nil, nil
 	}
-	headers := http.Header{}
-	if err := resolveAndSetOpenAIChatGPTAccountHeaders(ctx, s.accountRepo, headers, account); err != nil {
+	ctx = withRequestCredentialOwner(ctx, account, token)
+	owner, err := requestCredentialAccount(ctx, account)
+	if err != nil {
 		return nil, err
 	}
-	// Plus 出站身份策略：仅补齐缺失的身份头，不采用官方的强制统一改写
-	// （enforceCodexIdentityHeaders）。与 plus 的 docs/OUTBOUND_IDENTITY.md 一致。
-	ensureCodexIdentityHeaders(headers)
+	// Revalidate the actual acquired owner before releasing any credential.
+	if owner == nil || owner.ID != accountID || owner.IsShadow() ||
+		!scope.Contains(owner.Platform, owner.Type) || owner.Type != AccountTypeOAuth ||
+		!owner.IsOpenAIOAuthLike() || owner.IsOpenAIAgentIdentity() {
+		return nil, nil
+	}
+	proxyURL, err := requestCredentialOwnerProxyURL(ctx, owner)
+	if err != nil {
+		return nil, err
+	}
+	headers := http.Header{}
+	setOpenAIChatGPTAccountHeaders(headers, owner)
+	s.applyOpenAIOutboundIdentity(ctx, owner, headers, true)
 	return &PluginOutboundIdentity{
-		AccountID:   account.ID,
-		Platform:    account.Platform,
-		AccountType: account.Type,
-		ProxyURL:    resolveAccountProxyURL(account),
+		AccountID:   owner.ID,
+		Platform:    owner.Platform,
+		AccountType: owner.Type,
+		ProxyURL:    proxyURL,
 		Token:       token,
 		Headers:     headers,
 	}, nil

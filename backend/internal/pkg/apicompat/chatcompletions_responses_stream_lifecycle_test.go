@@ -56,6 +56,7 @@ func TestStream_ReasoningOnlySynthesizesVisibleText(t *testing.T) {
 
 	open := map[int]string{}
 	var sawTextDelta, sawTextDone, sawMessageDone bool
+	terminals := 0
 	for _, e := range events {
 		switch e.Type {
 		case "response.output_item.added":
@@ -73,7 +74,8 @@ func TestStream_ReasoningOnlySynthesizesVisibleText(t *testing.T) {
 				sawMessageDone = true
 				require.Equal(t, "thinking before final", e.Item.Content[0].Text)
 			}
-		case "response.completed":
+		case "response.incomplete":
+			terminals++
 			require.NotNil(t, e.Response)
 			require.Equal(t, "incomplete", e.Response.Status)
 			require.NotNil(t, e.Response.IncompleteDetails)
@@ -82,11 +84,14 @@ func TestStream_ReasoningOnlySynthesizesVisibleText(t *testing.T) {
 			require.Equal(t, "reasoning", e.Response.Output[0].Type)
 			require.Equal(t, "message", e.Response.Output[1].Type)
 			require.Equal(t, "thinking before final", e.Response.Output[1].Content[0].Text)
+		case "response.completed":
+			t.Fatal("output-limit termination requires response.incomplete")
 		}
 	}
 	require.True(t, sawTextDelta, "reasoning-only stream must produce visible text delta")
 	require.True(t, sawTextDone, "reasoning-only stream must close visible text part")
 	require.True(t, sawMessageDone, "reasoning-only stream must close synthesized message item")
+	require.Equal(t, 1, terminals, "incomplete terminal must actually execute exactly once")
 }
 
 func TestStream_ReasoningOnlyBlankDoesNotSynthesizeVisibleText(t *testing.T) {
@@ -279,9 +284,13 @@ func TestStream_ValidToolCallAtOutputLimitKeepsIncompleteResponse(t *testing.T) 
 		case "response.function_call_arguments.done":
 			sawArgsDone = true
 			require.Equal(t, `{}`, event.Arguments)
-		case "response.completed":
+		case "response.incomplete":
 			require.NotNil(t, event.Response)
 			sawIncomplete = event.Response.Status == "incomplete"
+			require.NotNil(t, event.Response.IncompleteDetails)
+			require.Equal(t, "max_output_tokens", event.Response.IncompleteDetails.Reason)
+		case "response.completed":
+			t.Fatal("output-limit termination requires response.incomplete")
 		}
 	}
 	require.True(t, sawArgsDone)

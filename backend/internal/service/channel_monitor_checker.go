@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/ctxkey"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/firstbyte"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/servertiming"
@@ -46,7 +48,8 @@ func newSSRFSafeHTTPClient(timeout time.Duration) *http.Client {
 // 所有字段都是可选（零值即等价于"用默认行为"）。
 type CheckOptions struct {
 	// APIMode 仅对 OpenAI provider 生效；空串等同 chat_completions。
-	APIMode string
+	APIMode     string
+	StreamProbe bool
 	// ExtraHeaders 用户自定义 HTTP 头（merge 到 adapter 默认 headers，用户优先）。
 	ExtraHeaders map[string]string
 	// BodyOverrideMode: off | merge | replace
@@ -71,15 +74,22 @@ func runCheckForModel(ctx context.Context, provider, endpoint, apiKey, model str
 	mode := bodyOverrideMode(opts)
 
 	start := time.Now()
+	stream := opts != nil && opts.StreamProbe
+	res.StreamProbe = &stream
 	ctx, byteTiming := beginFirstByteTiming(ctx, start)
 	defer func() { res.FirstByteMs = byteTiming.Milliseconds() }()
-	respText, rawBody, statusCode, err := callProvider(ctx, provider, endpoint, apiKey, model, challenge.Prompt, opts)
+	response, err := callProvider(ctx, provider, endpoint, apiKey, model, challenge.Prompt, opts, start)
+	res.FirstTextMs = response.FirstTextMs
+	respText, rawBody, statusCode := response.Text, response.RawBody, response.StatusCode
 	latency := time.Since(start)
 	latencyMs := int(latency / time.Millisecond)
 	res.LatencyMs = &latencyMs
 
 	if err != nil {
 		res.Status = MonitorStatusError
+		if errors.Is(err, errMonitorGenerationIncomplete) {
+			res.Status = MonitorStatusFailed
+		}
 		res.Message = truncateMessage(sanitizeErrorMessage(err.Error()))
 		return res
 	}
@@ -295,32 +305,59 @@ func providerAdapterFor(provider, apiMode string) (providerAdapter, string, bool
 //   - rawBody: 完整响应体的字符串形式（已被 monitorResponseMaxBytes 截断），用于错误路径保留上游真实回包
 //   - status: HTTP 状态码
 //   - err: 网络 / 序列化错误
-func callProvider(ctx context.Context, provider, endpoint, apiKey, model, prompt string, opts *CheckOptions) (extractedText, rawBody string, status int, err error) {
+func callProvider(ctx context.Context, provider, endpoint, apiKey, model, prompt string, opts *CheckOptions, start time.Time) (monitorProviderResponse, error) {
+	var result monitorProviderResponse
 	if _, ok := outboundidentity.FromContext(ctx); !ok {
 		ctx = WithStandaloneOutboundIdentity(ctx, provider)
 	}
 	requestedAPIMode := checkAPIMode(opts)
 	if err := validateAPIMode(provider, requestedAPIMode); err != nil {
-		return "", "", 0, err
+		return result, err
 	}
 	adapter, apiMode, ok := providerAdapterFor(provider, requestedAPIMode)
 	if !ok {
-		return "", "", 0, fmt.Errorf("unsupported provider %q", provider)
+		return result, fmt.Errorf("unsupported provider %q", provider)
 	}
 	body, err := buildRequestBody(adapter, provider, apiMode, model, prompt, opts)
 	if err != nil {
-		return "", "", 0, err
+		return result, err
 	}
 	headers := mergeHeaders(adapter.buildHeaders(apiKey), opts)
 	full := joinURL(endpoint, monitorRequestPath(provider, endpoint, adapter, model))
-	respBytes, status, err := postRawJSON(ctx, full, body, headers)
+	stream := opts != nil && opts.StreamProbe
+	resp, err := postMonitorRequest(ctx, full, body, headers, stream)
 	if err != nil {
-		return "", "", status, err
+		return result, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	result.StatusCode = resp.StatusCode
+	if stream && resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		result, streamErr := consumeMonitorStream(resp, apiMode, start)
+		if streamErr != nil {
+			requestID, _ := ctx.Value(ctxkey.RequestID).(string)
+			slog.WarnContext(ctx, "channel_monitor: stream failed", "request_id", truncateMessage(sanitizeErrorMessage(requestID)),
+				"protocol", apiMode, "stage", "stream_response", "reason", monitorStreamErrorReason(streamErr),
+				"response_bytes", result.BytesRead, "status_code", resp.StatusCode)
+		}
+		return result, streamErr
+	}
+	respBytes, err := io.ReadAll(io.LimitReader(resp.Body, monitorResponseMaxBytes+1))
+	if err != nil {
+		return result, fmt.Errorf("read body: %w", err)
+	}
+	if len(respBytes) > monitorResponseMaxBytes {
+		return result, fmt.Errorf("response_too_large: monitor response exceeded byte limit")
+	}
+	result.RawBody = string(respBytes)
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 && monitorIsSSE(resp.Header.Get("Content-Type")) {
+		return result, fmt.Errorf("unexpected_stream: enable streaming probe for SSE responses")
 	}
 	if provider == MonitorProviderOpenAI && apiMode == MonitorAPIModeResponses {
-		return extractOpenAIResponsesText(respBytes), string(respBytes), status, nil
+		result.Text = extractOpenAIResponsesText(respBytes)
+	} else {
+		result.Text = extractMonitorResponseText(adapter, respBytes)
 	}
-	return extractMonitorResponseText(adapter, respBytes), string(respBytes), status, nil
+	return result, nil
 }
 
 func extractMonitorResponseText(adapter providerAdapter, respBytes []byte) string {
@@ -418,8 +455,28 @@ func mergeHeaders(base map[string]string, opts *CheckOptions) map[string]string 
 //     bodyMergeKeyDenyList[provider] 的 key 会被静默丢弃，避免破坏 challenge / model 路由
 //   - replace: 直接 marshal BodyOverride 作为完整 body
 //
-// 任何 mode 返回的 []byte 都已经是合法 JSON，可直接送入 postRawJSON。
+// 任何 mode 返回的 []byte 都已经是合法 JSON，可直接送入 postMonitorRequest。
 func buildRequestBody(adapter providerAdapter, provider, apiMode, model, prompt string, opts *CheckOptions) ([]byte, error) {
+	stream := opts != nil && opts.StreamProbe
+	if err := validateMonitorStream(provider, MonitorCheckModeProbe, stream, bodyOverrideMode(opts), monitorOverrideBody(opts)); err != nil {
+		return nil, err
+	}
+	body, err := buildMonitorRequestBody(adapter, provider, apiMode, model, prompt, opts)
+	if err != nil || !isOpenAICompatibleChatProvider(provider) {
+		return body, err
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, err
+	}
+	payload["stream"] = stream
+	if !stream {
+		delete(payload, "stream_options")
+	}
+	return json.Marshal(payload)
+}
+
+func buildMonitorRequestBody(adapter providerAdapter, provider, apiMode, model, prompt string, opts *CheckOptions) ([]byte, error) {
 	mode := bodyOverrideMode(opts)
 
 	if mode == MonitorBodyOverrideModeReplace {
@@ -548,31 +605,30 @@ func hasNonEmptyBodyValue(v any) bool {
 	}
 }
 
-// postRawJSON 发送 POST + 已序列化好的 JSON 字节，限制响应体大小，返回响应字节、HTTP status、错误。
-// adapter 自行 marshal 是为了精确控制字段顺序与类型，所以这里直接收 []byte 而不是 any。
-func postRawJSON(ctx context.Context, fullURL string, payload []byte, headers map[string]string) ([]byte, int, error) {
+// postMonitorRequest shares SSRF, identity and transport boundaries for JSON and SSE.
+func postMonitorRequest(ctx context.Context, fullURL string, payload []byte, headers map[string]string, stream bool) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fullURL, bytes.NewReader(payload))
 	if err != nil {
-		return nil, 0, fmt.Errorf("build request: %w", err)
+		return nil, fmt.Errorf("build request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
+	if stream {
+		req.Header.Set("Accept", "text/event-stream")
+	}
 	outboundidentity.ApplyContext(req)
+	if strings.HasSuffix(req.URL.Path, "/responses") || strings.HasSuffix(req.URL.Path, "/responses/compact") {
+		applyOpenAICodexBetaFeatures(ctx, nil, nil, req.Header)
+	}
 
 	resp, err := monitorHTTPClient.Do(req)
 	if err != nil {
-		return nil, 0, fmt.Errorf("do request: %w", err)
+		return nil, fmt.Errorf("do request: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
-
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, monitorResponseMaxBytes))
-	if err != nil {
-		return nil, resp.StatusCode, fmt.Errorf("read body: %w", err)
-	}
-	return respBody, resp.StatusCode, nil
+	return resp, nil
 }
 
 // monitorRequestPath 返回探测请求路径。智谱按 endpoint 区分：

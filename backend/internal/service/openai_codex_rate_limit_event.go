@@ -138,5 +138,5 @@ func (s *OpenAIGatewayService) observeOpenAICodexRateLimitEventSnapshot(ctx cont
 	if snapshot == nil {
 		return
 	}
-	s.updateCodexUsageSnapshot(ctx, account.ID, snapshot)
+	s.updateCodexUsageSnapshot(ctx, account, snapshot)
 }

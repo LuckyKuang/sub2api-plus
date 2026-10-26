@@ -46,7 +46,7 @@ func newCodexLocalQuotaHandler(enabled bool) *OpenAIGatewayHandler {
 		nil, nil, nil, nil, nil, nil, nil, &config.Config{},
 		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 		settings, nil,
-	)
+		nil)
 	return &OpenAIGatewayHandler{gatewayService: gatewayService}
 }
 

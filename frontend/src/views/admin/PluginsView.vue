@@ -1,23 +1,23 @@
 <template>
-  <AppLayout>
-    <div class="space-y-6">
+  <AppLayout workspace>
+    <div class="workspace-page">
       <section
-        class="flex flex-col gap-4 border-b border-gray-200 pb-5 dark:border-dark-700 sm:flex-row sm:items-end sm:justify-between"
+        class="card workspace-fixed flex flex-col gap-4 px-6 py-4 sm:flex-row sm:items-end sm:justify-between"
       >
         <div class="min-w-0">
           <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
             {{ t("admin.plugins.title") }}
           </h2>
-          <p class="mt-1 max-w-3xl text-sm text-gray-500 dark:text-gray-400">
+          <p class="mt-1 max-w-3xl text-sm surface-muted">
             {{ t("admin.plugins.description") }}
           </p>
           <div
-            class="mt-3 flex flex-wrap gap-2 text-xs text-gray-600 dark:text-gray-300"
+            class="mt-3 flex flex-wrap gap-2 text-xs surface-muted"
           >
-            <span class="rounded bg-gray-100 px-2 py-1 dark:bg-dark-700">{{
+            <span class="rounded surface-inset px-2 py-1">{{
               t("admin.plugins.onlyOpenAI")
             }}</span>
-            <span class="rounded bg-gray-100 px-2 py-1 dark:bg-dark-700">{{
+            <span class="rounded surface-inset px-2 py-1">{{
               t("admin.plugins.noAccountCoupling")
             }}</span>
           </div>
@@ -53,20 +53,21 @@
         </div>
       </section>
 
-      <p class="text-xs text-gray-500 dark:text-gray-400">
+      <p class="workspace-fixed text-xs surface-muted">
         {{ t("admin.plugins.uploadHint") }}
       </p>
 
       <div
-        class="border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200"
+        class="workspace-fixed rounded-xl border border-blue-200 bg-blue-50/[0.15] px-4 py-3 text-sm text-blue-800 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200"
       >
         <p>{{ t("admin.plugins.runtimeNotice") }}</p>
         <p class="mt-1">{{ t("admin.plugins.menuNotice") }}</p>
       </div>
 
+      <div class="workspace-shell workspace-scroll" data-test="plugin-list-scroll">
       <div
         v-if="loading"
-        class="flex min-h-48 items-center justify-center text-sm text-gray-500"
+        class="flex min-h-48 items-center justify-center text-sm surface-muted"
       >
         {{ t("common.loading") }}
       </div>
@@ -79,16 +80,16 @@
         <p class="mt-3 font-medium text-gray-800 dark:text-gray-200">
           {{ t("admin.plugins.empty") }}
         </p>
-        <p class="mt-1 max-w-lg text-sm text-gray-500 dark:text-gray-400">
+        <p class="mt-1 max-w-lg text-sm surface-muted">
           {{ t("admin.plugins.emptyHint") }}
         </p>
       </div>
 
-      <div v-else class="grid grid-cols-1 gap-4 xl:grid-cols-2">
+      <div v-else class="grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
         <article
           v-for="plugin in plugins"
           :key="plugin.id"
-          class="card overflow-hidden border border-gray-200 dark:border-dark-700"
+          class="card overflow-hidden border"
         >
           <div
             class="flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 p-5 dark:border-dark-700"
@@ -100,7 +101,7 @@
                 >
                   {{ plugin.name }}
                 </h3>
-                <span class="font-mono text-xs text-gray-500"
+                <span class="font-mono text-xs surface-muted"
                   >v{{ plugin.version }}</span
                 >
                 <span
@@ -110,13 +111,13 @@
                   {{ t(`admin.plugins.${plugin.state}`) }}
                 </span>
               </div>
-              <p class="mt-1 text-xs text-gray-500">
+              <p class="mt-1 text-xs surface-muted">
                 {{ plugin.plugin_key
                 }}<span v-if="plugin.author"> · {{ plugin.author }}</span>
               </p>
               <p
                 v-if="plugin.description"
-                class="mt-2 text-sm text-gray-600 dark:text-gray-300"
+                class="mt-2 text-sm surface-muted"
               >
                 {{ plugin.description }}
               </p>
@@ -133,7 +134,7 @@
 
           <div class="grid grid-cols-1 gap-x-6 gap-y-4 p-5 md:grid-cols-2">
             <div>
-              <p class="text-xs font-medium uppercase text-gray-500">
+              <p class="text-xs font-medium uppercase surface-muted">
                 {{ t("admin.plugins.compatibility") }}
               </p>
               <div class="mt-2 flex items-center gap-2">
@@ -143,7 +144,7 @@
                 >
                   {{ t(`admin.plugins.${plugin.compatibility.status}`) }}
                 </span>
-                <span class="text-xs text-gray-500 dark:text-gray-400">{{
+                <span class="text-xs surface-muted">{{
                   plugin.compatibility.message
                 }}</span>
               </div>
@@ -172,7 +173,7 @@
             </div>
 
             <div>
-              <p class="text-xs font-medium uppercase text-gray-500">
+              <p class="text-xs font-medium uppercase surface-muted">
                 {{ t("admin.plugins.runtime") }}
               </p>
               <div class="mt-2 flex flex-wrap gap-2 text-xs">
@@ -180,8 +181,8 @@
                   class="rounded px-2 py-0.5"
                   :class="
                     plugin.runtime_healthy
-                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
-                      : 'bg-gray-100 text-gray-600 dark:bg-dark-700 dark:text-gray-300'
+                      ? 'bg-emerald-100/[0.15] text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                      : 'surface-inset text-gray-600 dark:surface-inset dark:text-gray-300'
                   "
                 >
                   {{
@@ -191,7 +192,7 @@
                   }}
                 </span>
                 <span
-                  class="rounded bg-gray-100 px-2 py-0.5 text-gray-600 dark:bg-dark-700 dark:text-gray-300"
+                  class="rounded surface-inset px-2 py-0.5 surface-muted"
                 >
                   {{ t("admin.plugins.signature") }}:
                   {{ t(`admin.plugins.${plugin.signature_status}`) }}
@@ -205,7 +206,7 @@
               </p>
               <p
                 v-else-if="plugin.runtime_message"
-                class="mt-3 break-words text-xs text-gray-500"
+                class="mt-3 break-words text-xs surface-muted"
               >
                 {{ plugin.runtime_message }}
               </p>
@@ -213,7 +214,7 @@
 
             <div class="md:col-span-2">
               <label
-                class="flex items-center justify-between gap-4 text-xs font-medium text-gray-600 dark:text-gray-300"
+                class="flex items-center justify-between gap-4 text-xs font-medium surface-muted"
               >
                 <span>{{ t("admin.plugins.rollout") }}</span>
                 <span class="w-11 text-right font-mono"
@@ -283,6 +284,7 @@
           </div>
         </article>
       </div>
+      </div>
 
       <BaseDialog
         :show="configPlugin !== null"
@@ -293,12 +295,12 @@
         @close="closeConfiguration"
       >
         <div
-          class="relative min-h-[520px] overflow-hidden bg-gray-50 dark:bg-dark-900"
+          class="relative min-h-[520px] overflow-hidden surface-inset"
           :style="{ height: `${iframeHeight}px` }"
         >
           <div
             v-if="uiLoading"
-            class="absolute inset-0 z-10 flex items-center justify-center text-sm text-gray-500"
+            class="absolute inset-0 z-10 flex items-center justify-center text-sm surface-muted"
           >
             {{ t("admin.plugins.loadingUI") }}
           </div>
@@ -310,7 +312,7 @@
             <p class="mt-3 font-medium text-gray-800 dark:text-gray-200">
               {{ t("admin.plugins.uiUnavailable") }}
             </p>
-            <p class="mt-1 max-w-xl text-sm text-gray-500">{{ uiError }}</p>
+            <p class="mt-1 max-w-xl text-sm surface-muted">{{ uiError }}</p>
           </div>
           <iframe
             v-if="uiSession"
@@ -704,22 +706,22 @@ async function handleBridgeMessage(event: MessageEvent): Promise<void> {
 
 function stateClass(state: PluginInstallation["state"]): string {
   if (state === "enabled")
-    return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300";
+    return "bg-emerald-100/[0.15] text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300";
   if (state === "error" || state === "incompatible")
-    return "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300";
+    return "bg-red-100/[0.15] text-red-700 dark:bg-red-900/30 dark:text-red-300";
   if (state === "starting")
-    return "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300";
-  return "bg-gray-100 text-gray-600 dark:bg-dark-700 dark:text-gray-300";
+    return "bg-amber-100/[0.15] text-amber-700 dark:bg-amber-900/30 dark:text-amber-300";
+  return "surface-inset surface-muted dark:surface-inset";
 }
 
 function compatibilityClass(
   status: PluginInstallation["compatibility"]["status"],
 ): string {
   if (status === "compatible")
-    return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300";
+    return "bg-emerald-100/[0.15] text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300";
   if (status === "untested")
-    return "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300";
-  return "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300";
+    return "bg-amber-100/[0.15] text-amber-700 dark:bg-amber-900/30 dark:text-amber-300";
+  return "bg-red-100/[0.15] text-red-700 dark:bg-red-900/30 dark:text-red-300";
 }
 
 onMounted(() => {

@@ -558,7 +558,7 @@ func (s *GeminiMessagesCompatService) handleChatCompletionsStreamingResponseFrom
 	ccState.IncludeUsage = includeUsage
 
 	var usage ClaudeUsage
-	var timing streamOutputTiming
+	timing := requestStreamOutputTiming(c)
 	suppressChunkTiming := false
 	clientDisconnected := false
 	finishReason := ""

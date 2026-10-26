@@ -69,6 +69,7 @@ func TestOpenAIGatewayService_SelectAccountByPreviousResponseID_QuotaAutoPausedM
 			"auto_pause_5h_threshold":                       0.95,
 		},
 	}
+	verifiedCodexUsageForTest(&account)
 	cache := &stubGatewayCache{}
 	store := NewOpenAIWSStateStore(cache)
 	cfg := newOpenAIWSV2TestConfig()

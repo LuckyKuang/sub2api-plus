@@ -238,6 +238,37 @@ describe('admin RiskControlView', () => {
     }))
   })
 
+  it('keeps runtime and audit records in separate tabs without resetting record filters', async () => {
+    listLogs.mockResolvedValue({ items: [], total: 12, page: 1, page_size: 20, pages: 1 })
+    const wrapper = mount(RiskControlView, {
+      attachTo: document.body,
+      global: { stubs: { AppLayout: AppLayoutStub, BaseDialog: BaseDialogStub, Icon: true, Select: true, Toggle: true, Pagination: true, ProxySelector: true, ModelWhitelistSelector: ModelWhitelistSelectorStub } },
+    })
+    try {
+      await flushPromises()
+      expect(wrapper.get('[data-test="risk-overview"]').isVisible()).toBe(true)
+      expect(wrapper.get('[data-test="risk-records"]').isVisible()).toBe(false)
+      await findButtonByText(wrapper, 'workspace.auditRecords').trigger('click')
+      const records = wrapper.get('[data-test="risk-records"]')
+      expect(findButtonByText(wrapper, 'workspace.auditRecords').attributes('aria-selected')).toBe('true')
+      expect(records.isVisible()).toBe(true)
+      expect(wrapper.get('[data-test="risk-overview"]').isVisible()).toBe(false)
+      const filters = records.get('[data-test="risk-records-filters"]')
+      expect(filters.element.children).toHaveLength(6)
+      expect(filters.findAll('select-stub')).toHaveLength(3)
+      expect(filters.findAll('input[type="datetime-local"]')).toHaveLength(2)
+      await records.get('input[type="search"]').setValue('request-42')
+      expect(records.get('pagination-stub').element.parentElement).toBe(records.element)
+      expect(records.get('[data-test="risk-records-scroll"]').find('pagination-stub').exists()).toBe(false)
+      await findButtonByText(wrapper, 'workspace.riskControl').trigger('click')
+      await findButtonByText(wrapper, 'workspace.auditRecords').trigger('click')
+      expect(records.get<HTMLInputElement>('input[type="search"]').element.value).toBe('request-42')
+      expect(updateConfig).not.toHaveBeenCalled()
+    } finally {
+      wrapper.unmount()
+    }
+  })
+
   it('saves the selected model filter mode and models', async () => {
     const wrapper = mount(RiskControlView, {
       global: {
@@ -500,6 +531,7 @@ describe('admin RiskControlView', () => {
     await findButtonByText(wrapper, 'admin.riskControl.openSettings').trigger('click')
     const pool = wrapper.get('[data-test="moderation-endpoint-pool"]')
     expect(pool.text()).toContain('admin.riskControl.endpointPool.status.degraded')
-    expect(pool.find('.bg-amber-50').exists()).toBe(true)
+    // docs/UI_INTERACTION.md: warnings retain amber with translucent paint.
+    expect(pool.find('[class~="bg-amber-50/[0.15]"]').exists()).toBe(true)
   })
 })

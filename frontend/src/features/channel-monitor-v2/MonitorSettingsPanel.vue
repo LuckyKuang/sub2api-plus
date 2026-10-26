@@ -1,23 +1,23 @@
 <template>
-  <section class="mx-auto w-full max-w-6xl space-y-5 px-1 py-2 sm:px-2">
+  <section class="w-full space-y-5 py-2">
     <header
-      class="page-header mb-0 flex flex-wrap items-center justify-between gap-3 rounded-3xl bg-white p-5 shadow-sm ring-1 ring-gray-900/5 dark:bg-dark-800 dark:ring-dark-700 sm:p-6"
+      class="page-header glass-surface workspace-shell mb-0 flex flex-wrap items-center justify-between gap-3 p-5 sm:p-6"
     >
       <div class="min-w-0">
         <h2 class="page-title flex items-center gap-2 text-xl font-black text-gray-900 dark:text-white">
-          <span class="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-blue-50 text-blue-500 dark:bg-blue-900/30 dark:text-blue-400">
+          <span class="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-blue-50/[0.15] text-blue-500 dark:bg-blue-900/30 dark:text-blue-400">
             <Icon name="chart" size="sm" />
           </span>
           {{ t('channelMonitorV2.settings.title') }}
         </h2>
-        <p class="page-description mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+        <p class="page-description mt-1.5 text-xs surface-muted">
           {{ t('channelMonitorV2.settings.description') }}
         </p>
       </div>
       <button
         type="button"
         class="btn btn-primary"
-        :disabled="saving || !dirty"
+        :disabled="saving || !dirty || saveConflict"
         @click="save"
       >
         <Icon name="check" size="sm" />
@@ -41,17 +41,26 @@
 
     <div
       v-if="loading"
-      class="card flex min-h-[200px] items-center justify-center !rounded-3xl !border-0 text-sm text-gray-400 shadow-sm ring-1 ring-gray-900/5 dark:ring-dark-700"
+      class="card workspace-shell flex min-h-[200px] items-center justify-center text-sm surface-muted"
     >
       <span class="animate-pulse">{{ t('channelMonitorV2.settings.loading') }}</span>
     </div>
 
-    <template v-else-if="draft">
-      <div class="card divide-y divide-gray-100 !rounded-3xl !border-0 shadow-sm ring-1 ring-gray-900/5 dark:divide-dark-700 dark:!bg-dark-800 dark:ring-dark-700">
+    <div v-else-if="!draft" class="card workspace-shell p-5">
+      <button type="button" class="btn btn-secondary" @click="load">{{ t('channelMonitorV2.settings.retry') }}</button>
+    </div>
+
+    <fieldset v-else-if="draft" class="min-w-0 space-y-5" :disabled="saving">
+      <div v-if="saveConflict" class="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-100" role="alert">
+        <p>{{ t('channelMonitorV2.settings.saveConflict') }}</p>
+        <button type="button" class="btn btn-secondary btn-sm mt-3" data-testid="reload-conflict" @click="load">{{ t('channelMonitorV2.settings.reloadConfig') }}</button>
+      </div>
+
+      <div class="card workspace-shell">
         <div class="flex flex-wrap items-center justify-between gap-4 px-5 py-4">
           <div>
             <strong class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('channelMonitorV2.settings.enableTitle') }}</strong>
-            <p class="mt-0.5 text-xs text-gray-500 dark:text-dark-400">
+            <p class="mt-0.5 text-xs surface-muted">
               {{ t('channelMonitorV2.settings.enableHint') }}
             </p>
           </div>
@@ -60,7 +69,7 @@
         <div class="flex flex-wrap items-center justify-between gap-4 px-5 py-4">
           <div>
             <strong class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('channelMonitorV2.settings.refreshTitle') }}</strong>
-            <p class="mt-0.5 text-xs text-gray-500 dark:text-dark-400">{{ t('channelMonitorV2.settings.refreshHint') }}</p>
+            <p class="mt-0.5 text-xs surface-muted">{{ t('channelMonitorV2.settings.refreshHint') }}</p>
           </div>
           <div class="tabs inline-flex w-auto" role="group" :aria-label="t('channelMonitorV2.settings.refreshAria')">
             <button
@@ -83,61 +92,18 @@
         </div>
       </div>
 
-      <div class="card overflow-hidden !rounded-3xl !border-0 shadow-sm ring-1 ring-gray-900/5 dark:!bg-dark-800 dark:ring-dark-700">
-        <div class="card-header !py-3">
-          <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('channelMonitorV2.settings.platformsTitle') }}</h3>
-          <p class="mt-0.5 text-xs text-gray-500 dark:text-dark-400">
-            {{ t('channelMonitorV2.settings.platformsHint') }}
-          </p>
-          <div v-if="availablePlatforms.length" class="mt-3 flex flex-wrap items-center gap-2">
-            <Select
-              v-model="selectedPlatform"
-              class="min-w-48"
-              :options="availablePlatforms"
-              :aria-label="t('channelMonitorV2.settings.selectPlatform')"
-              :placeholder="t('channelMonitorV2.settings.selectPlatform')"
-              :disabled="saving"
-            />
-            <button
-              type="button"
-              class="btn btn-secondary btn-sm"
-              :disabled="saving || !selectedPlatform"
-              @click="addPlatform"
-            >
-              {{ t('channelMonitorV2.settings.addPlatform') }}
-            </button>
-          </div>
-        </div>
-        <div class="divide-y divide-gray-100 dark:divide-dark-700">
-          <div
-            v-for="platform in draft.platforms"
-            :key="platform.platform"
-            class="grid grid-cols-1 items-center gap-3 px-5 py-3 sm:grid-cols-[auto_7rem_minmax(0,1fr)_auto]"
-          >
-            <Toggle v-model="platform.enabled" />
-            <strong class="text-sm font-medium text-gray-900 dark:text-white">{{ platformLabel(platform.platform) }}</strong>
-            <input
-              class="input"
-              :value="platform.models.join(', ')"
-              type="text"
-              :placeholder="t('channelMonitorV2.settings.modelsPlaceholder')"
-              @change="setModels(platform, $event)"
-            />
-            <span
-              class="badge justify-self-start sm:justify-self-end"
-              :class="platform.models.length ? 'badge-gray' : 'badge badge-primary'"
-            >
-              {{ platform.models.length ? t('channelMonitorV2.settings.badgeOther') : t('channelMonitorV2.settings.badgeAllModels') }}
-            </span>
-          </div>
-        </div>
-      </div>
+      <MonitorPlatformManager
+        :key="configRevision"
+        v-model="draft.platforms"
+        :group-ids="draft.group_ids"
+        :disabled="saving"
+      />
 
-      <div class="card overflow-hidden !rounded-3xl !border-0 shadow-sm ring-1 ring-gray-900/5 dark:!bg-dark-800 dark:ring-dark-700">
-        <div class="card-header flex flex-wrap items-center justify-between gap-2 !py-3">
+      <details class="card settings-collapsible overflow-hidden">
+        <summary class="card-header cursor-pointer list-none flex flex-wrap items-center justify-between gap-2 !py-3">
           <div>
             <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('channelMonitorV2.settings.groupsTitle') }}</h3>
-            <p class="mt-0.5 text-xs text-gray-500 dark:text-dark-400">
+            <p class="mt-0.5 text-xs surface-muted">
               {{
                 draft.group_ids.length
                   ? t('channelMonitorV2.settings.groupsSelected', { count: draft.group_ids.length })
@@ -149,17 +115,20 @@
             v-if="draft.group_ids.length"
             type="button"
             class="btn btn-ghost btn-sm"
-            @click="draft.group_ids = []"
+            @click.stop.prevent="draft.group_ids = []"
           >
             {{ t('channelMonitorV2.settings.groupsAll') }}
           </button>
+        </summary>
+        <div class="px-5 pt-3">
+          <input v-model="groupQuery" class="input" type="search" :aria-label="t('channelMonitorV2.settings.searchGroups')" :placeholder="t('channelMonitorV2.settings.searchGroups')" />
         </div>
         <div class="max-h-[min(40vh,280px)] overflow-y-auto px-3 py-2 sm:px-4">
           <div class="grid grid-cols-1 gap-1 sm:grid-cols-2">
             <label
-              v-for="group in groups"
+              v-for="group in filteredGroups"
               :key="group.id"
-              class="flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition hover:bg-gray-50 dark:hover:bg-dark-800/60"
+              class="flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition hover:surface-hover"
             >
               <input
                 type="checkbox"
@@ -168,26 +137,26 @@
                 @change="toggleGroup(group.id)"
               />
               <span class="min-w-0 flex-1 truncate font-medium text-gray-800 dark:text-gray-100">{{ group.name }}</span>
-              <small class="shrink-0 text-xs text-gray-400">{{ platformLabel(group.platform) }} · #{{ group.id }}</small>
+              <small class="shrink-0 text-xs surface-muted">{{ platformLabel(group.platform) }} · #{{ group.id }}</small>
             </label>
           </div>
-          <p v-if="groups.length === 0" class="empty-state py-8 text-sm text-gray-400">{{ t('channelMonitorV2.settings.groupsEmpty') }}</p>
+          <p v-if="filteredGroups.length === 0" class="empty-state py-8 text-sm surface-muted">{{ t('channelMonitorV2.settings.groupsEmpty') }}</p>
         </div>
-      </div>
+      </details>
 
-      <div class="card overflow-hidden !rounded-3xl !border-0 shadow-sm ring-1 ring-gray-900/5 dark:!bg-dark-800 dark:ring-dark-700">
-        <div class="card-header !py-3">
+      <details class="card settings-collapsible overflow-hidden">
+        <summary class="card-header cursor-pointer list-none !py-3">
           <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('channelMonitorV2.settings.errorsTitle') }}</h3>
-          <p class="mt-0.5 text-xs text-gray-500 dark:text-dark-400">
+          <p class="mt-0.5 text-xs surface-muted">
             {{ t('channelMonitorV2.settings.errorsHint') }}
           </p>
-        </div>
+        </summary>
         <div class="max-h-[min(40vh,320px)] overflow-y-auto px-3 py-2 sm:px-4">
           <div class="grid grid-cols-1 gap-1 sm:grid-cols-2">
             <label
               v-for="category in errorCategories"
               :key="category"
-              class="flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition hover:bg-gray-50 dark:hover:bg-dark-800/60"
+              class="flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition hover:surface-hover"
             >
               <input
                 type="checkbox"
@@ -198,11 +167,11 @@
               <span class="min-w-0 flex-1 truncate font-medium text-gray-800 dark:text-gray-100">
                 {{ categoryLabel(category) }}
               </span>
-              <small class="shrink-0 font-mono text-[10px] text-gray-400">{{ category }}</small>
+              <small class="shrink-0 font-mono text-[10px] surface-muted">{{ category }}</small>
             </label>
           </div>
         </div>
-        <div class="border-t border-gray-100 px-5 py-3 text-xs text-gray-500 dark:border-dark-700 dark:text-dark-400">
+        <div class="border-t border-gray-100 px-5 py-3 text-xs dark:border-dark-700 surface-muted">
           {{
             t('channelMonitorV2.settings.ignoredSummary', {
               ignored: draft.ignored_error_categories?.length || 0,
@@ -210,15 +179,15 @@
             })
           }}
         </div>
-      </div>
+      </details>
 
-      <div class="card overflow-hidden !rounded-3xl !border-0 shadow-sm ring-1 ring-gray-900/5 dark:!bg-dark-800 dark:ring-dark-700">
-        <div class="card-header !py-3">
+      <details class="card settings-collapsible overflow-hidden">
+        <summary class="card-header cursor-pointer list-none !py-3">
           <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('channelMonitorV2.settings.healthTitle') }}</h3>
-          <p class="mt-0.5 text-xs text-gray-500 dark:text-dark-400">
+          <p class="mt-0.5 text-xs surface-muted">
             {{ t('channelMonitorV2.settings.healthHint') }}
           </p>
-        </div>
+        </summary>
         <div class="grid grid-cols-1 gap-4 px-5 py-4 sm:grid-cols-2 lg:grid-cols-4">
           <label class="block">
             <span class="input-label">{{ t('channelMonitorV2.settings.fields.minimumSample') }}</span>
@@ -253,18 +222,10 @@
             <input v-model.number="criticalCachePercent" class="input" type="number" min="0" max="100" step="0.1" />
           </label>
         </div>
-      </div>
+      </details>
 
       <div class="space-y-2">
-        <div class="rounded-2xl border border-primary-200 bg-primary-50/80 px-4 py-3 text-sm text-primary-900 dark:border-primary-800/50 dark:bg-primary-900/20 dark:text-primary-100">
-          <template v-if="namedModelCount === 0">
-            {{ t('channelMonitorV2.settings.namedModelsEmpty') }}
-          </template>
-          <template v-else>
-            {{ t('channelMonitorV2.settings.namedModelsCount', { count: namedModelCount }) }}
-          </template>
-        </div>
-        <div class="rounded-2xl border border-gray-200 bg-gray-50/80 px-4 py-3 text-xs text-gray-600 dark:border-dark-600 dark:bg-dark-800/50 dark:text-gray-300">
+        <div class="rounded-2xl border border-gray-200 surface-inset px-4 py-3 text-xs dark:border-dark-600 surface-muted">
           <p class="font-medium text-gray-800 dark:text-gray-100">{{ t('channelMonitorV2.settings.userContractTitle') }}</p>
           <ul class="mt-1.5 list-disc space-y-0.5 pl-4">
             <li>{{ t('channelMonitorV2.settings.userContract.health') }}</li>
@@ -274,15 +235,20 @@
           </ul>
         </div>
       </div>
-    </template>
+      <div class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-gray-200 px-4 py-3 text-xs dark:border-dark-600 surface-muted">
+        <span>{{ t(dirty ? 'channelMonitorV2.settings.unsavedChanges' : 'channelMonitorV2.settings.noChanges') }}</span>
+        <button type="button" class="btn btn-ghost btn-sm" :disabled="!dirty || saving" data-testid="reset-draft" @click="resetDraft">{{ t('channelMonitorV2.settings.resetChanges') }}</button>
+      </div>
+    </fieldset>
   </section>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Select from '@/components/common/Select.vue'
-import { CONCRETE_PLATFORM_OPTIONS } from '@/constants/platforms'
+import { platformLabel as getPlatformLabel } from '@/utils/platformColors'
+import MonitorPlatformManager from './MonitorPlatformManager.vue'
+import { normalizePlatform } from './monitorModelSettings'
 import Toggle from '@/components/common/Toggle.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { useAppStore } from '@/stores/app'
@@ -304,23 +270,13 @@ const saving = ref(false)
 const draft = ref<MonitorConfig | null>(null)
 const original = ref('')
 const groups = ref<AdminGroup[]>([])
-const selectedPlatform = ref('')
-const availablePlatforms = computed(() =>
-  CONCRETE_PLATFORM_OPTIONS.filter(
-    (option) => !draft.value?.platforms.some((platform) => platform.platform === option.value)
-  )
-)
-
-function addPlatform() {
-  if (!draft.value || !availablePlatforms.value.some((option) => option.value === selectedPlatform.value)) return
-  draft.value.platforms.push({ platform: selectedPlatform.value, enabled: true, models: [] })
-  selectedPlatform.value = ''
-}
-
+const groupQuery = ref('')
+const configRevision = ref(0)
+const saveConflict = ref(false)
+const filteredGroups = computed(() => groups.value.filter(group =>
+  `${group.name} ${getPlatformLabel(group.platform)} ${group.id}`.toLowerCase().includes(groupQuery.value.trim().toLowerCase())
+))
 const dirty = computed(() => (draft.value ? JSON.stringify(draft.value) !== original.value : false))
-const namedModelCount = computed(
-  () => draft.value?.platforms.filter((p) => p.enabled).reduce((sum, p) => sum + p.models.length, 0) || 0
-)
 const errorCategories = MONITOR_ERROR_CATEGORIES
 const countedErrorCategoryCount = computed(
   () => errorCategories.length - (draft.value?.ignored_error_categories?.length || 0)
@@ -377,17 +333,6 @@ const criticalErrorPercent = percentModel('critical_error_rate')
 const warningCachePercent = percentModel('warning_cache_rate')
 const criticalCachePercent = percentModel('critical_cache_rate')
 
-function setModels(platform: MonitorConfig['platforms'][number], event: Event) {
-  platform.models = [
-    ...new Set(
-      (event.target as HTMLInputElement).value
-        .split(',')
-        .map((v) => v.trim())
-        .filter(Boolean)
-    ),
-  ].sort()
-}
-
 function toggleGroup(id: number) {
   if (!draft.value) return
   draft.value.group_ids = draft.value.group_ids.includes(id)
@@ -412,29 +357,14 @@ function categoryLabel(category: string) {
   return te(key) ? t(key) : category
 }
 
-function platformLabel(value: string) {
-  return (
-    {
-      anthropic: 'Claude',
-      openai: 'OpenAI',
-      grok: 'Grok',
-      kiro: 'Kiro',
-      gemini: 'Gemini',
-      antigravity: 'Antigravity',
-      kimi: 'Kimi',
-      zhipu: 'Zhipu GLM',
-      deepseek: 'DeepSeek',
-      minimax: 'MiniMax',
-  stepfun: 'StepFun',
-      composite: 'Composite',
-    } as Record<string, string>
-  )[value] || value
-}
+const platformLabel = getPlatformLabel
 
 function normalizeConfig(value: MonitorConfig): MonitorConfig {
   const ignored = value.ignored_error_categories
   return {
     ...value,
+    platforms: value.platforms.map(normalizePlatform),
+    group_ids: [...value.group_ids],
     health_thresholds: { ...defaultThresholds, ...(value.health_thresholds || {}) },
     // Preserve explicit empty arrays from the server (operator cleared all).
     ignored_error_categories: [
@@ -443,14 +373,26 @@ function normalizeConfig(value: MonitorConfig): MonitorConfig {
   }
 }
 
+function cloneConfig(value: MonitorConfig): MonitorConfig {
+  return JSON.parse(JSON.stringify(value)) as MonitorConfig
+}
+
+function resetDraft() {
+  if (!original.value || saving.value) return
+  draft.value = JSON.parse(original.value) as MonitorConfig
+  configRevision.value++
+}
+
 async function load() {
   loading.value = true
   try {
     const [value, groupRows] = await Promise.all([getConfig(), adminAPI.groups.getAllIncludingInactive()])
     const normalized = normalizeConfig(value)
-    draft.value = structuredClone(normalized)
+    draft.value = cloneConfig(normalized)
     groups.value = groupRows
     original.value = JSON.stringify(normalized)
+    saveConflict.value = false
+    configRevision.value++
   } catch (error) {
     appStore.showError(extractApiErrorMessage(error, t('channelMonitorV2.settings.loadFailed')))
   } finally {
@@ -459,18 +401,21 @@ async function load() {
 }
 
 async function save() {
-  if (!draft.value) return
+  if (!draft.value || saving.value || saveConflict.value) return
   saving.value = true
   try {
     const payload = normalizeConfig(draft.value)
     const value = await updateConfig(payload)
     const normalized = normalizeConfig(value)
-    draft.value = structuredClone(normalized)
+    draft.value = cloneConfig(normalized)
     original.value = JSON.stringify(normalized)
+    saveConflict.value = false
+    configRevision.value++
     appStore.showSuccess(t('channelMonitorV2.settings.saveSuccess'))
   } catch (error) {
     appStore.showError(extractApiErrorMessage(error, t('channelMonitorV2.settings.saveFailed')))
-    await load()
+    const status = (error as { status?: number; response?: { status?: number } })?.status ?? (error as { response?: { status?: number } })?.response?.status
+    saveConflict.value = status === 409
   } finally {
     saving.value = false
   }
@@ -478,3 +423,10 @@ async function save() {
 
 onMounted(load)
 </script>
+
+<style scoped>
+.settings-collapsible > summary { position: relative; padding-right: 42px; }
+.settings-collapsible > summary::after { position: absolute; top: 18px; right: 20px; content: '⌄'; color: #94a3b8; transition: transform .15s; }
+.settings-collapsible[open] > summary::after { transform: rotate(180deg); }
+.settings-collapsible > summary::-webkit-details-marker { display: none; }
+</style>

@@ -99,7 +99,7 @@ func TestDeepSeekPKCEAndState(t *testing.T) {
 	c := &Client{HTTP: doerFunc(func(r *http.Request) (*http.Response, error) {
 		calls++
 		require.Equal(t, "platform.deepseek.com", r.URL.Host)
-		require.Equal(t, "0.2.0-rc.2", r.Header.Get("x-client-version"))
+		require.Equal(t, "0.2.1-rc.3", r.Header.Get("x-client-version"))
 		require.Equal(t, "web", r.Header.Get("x-client-platform"))
 		require.Equal(t, "zh_CN", r.Header.Get("x-client-locale"))
 		require.Equal(t, "0", r.Header.Get("x-client-timezone-offset"))

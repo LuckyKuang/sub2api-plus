@@ -6,19 +6,19 @@
     @close="emit('close')"
   >
     <div class="space-y-4">
-      <p class="text-sm text-gray-500 dark:text-gray-400">
+      <p class="text-sm surface-muted">
         {{ t('admin.usageAlert.description') }}
       </p>
 
-      <div v-if="loading" class="py-8 text-center text-sm text-gray-400">
+      <div v-if="loading" class="py-8 text-center text-sm surface-muted">
         {{ t('common.loading') }}
       </div>
 
       <template v-else>
         <div class="flex items-center justify-between gap-2">
-          <div class="text-sm font-medium text-gray-700 dark:text-gray-200">
+          <div class="text-sm font-medium surface-muted">
             {{ t('admin.usageAlert.rulesTitle') }}
-            <span class="ml-1 text-xs font-normal text-gray-400">({{ rules.length }}/{{ maxRules }})</span>
+            <span class="ml-1 text-xs font-normal surface-muted">({{ rules.length }}/{{ maxRules }})</span>
           </div>
           <button
             type="button"
@@ -30,7 +30,7 @@
           </button>
         </div>
 
-        <div v-if="rules.length === 0" class="rounded-lg border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500 dark:border-dark-600 dark:text-gray-400">
+        <div v-if="rules.length === 0" class="rounded-lg border border-dashed border-gray-300 p-6 text-center text-sm dark:border-dark-600 surface-muted">
           {{ t('admin.usageAlert.emptyRules') }}
         </div>
 
@@ -54,7 +54,7 @@
               </button>
               <button
                 type="button"
-                class="text-xs text-red-600 hover:underline dark:text-red-400"
+                class="text-xs text-red-600 hover:underline dark:text-red-400 surface-control"
                 :disabled="saving || testingIndex !== null"
                 @click="removeRule(index)"
               >
@@ -65,10 +65,10 @@
 
           <div class="flex items-center justify-between gap-3">
             <div>
-              <div class="text-sm font-medium text-gray-700 dark:text-gray-200">
+              <div class="text-sm font-medium surface-muted">
                 {{ t('admin.usageAlert.enabled') }}
               </div>
-              <div class="text-xs text-gray-500 dark:text-gray-400">
+              <div class="text-xs surface-muted">
                 {{ t('admin.usageAlert.enabledHint') }}
               </div>
             </div>
@@ -78,18 +78,20 @@
           </div>
 
           <div>
-            <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
+            <label class="mb-1 block text-xs font-medium surface-muted">
               {{ t('admin.usageAlert.channel') }}
             </label>
-            <select v-model="rule.channel" class="input w-full text-sm">
-              <option value="wecom">{{ t('admin.usageAlert.channelWecom') }}</option>
-              <option value="feishu">{{ t('admin.usageAlert.channelFeishu') }}</option>
-              <option value="custom">{{ t('admin.usageAlert.channelCustom') }}</option>
-            </select>
+            <Select
+              v-model="rule.channel"
+              class="w-full"
+              trigger-class="text-sm"
+              :searchable="false"
+              :options="[{ value: 'wecom', label: t('admin.usageAlert.channelWecom') }, { value: 'feishu', label: t('admin.usageAlert.channelFeishu') }, { value: 'custom', label: t('admin.usageAlert.channelCustom') }]"
+            />
           </div>
 
           <div>
-            <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
+            <label class="mb-1 block text-xs font-medium surface-muted">
               {{ t('admin.usageAlert.webhookUrl') }}
             </label>
             <input
@@ -98,13 +100,13 @@
               class="input w-full text-sm"
               :placeholder="webhookPlaceholder(rule.channel)"
             />
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 text-xs surface-muted">
               {{ webhookHint(rule.channel) }}
             </p>
           </div>
 
           <div>
-            <label class="mb-1 flex items-center gap-1 text-xs font-medium text-gray-600 dark:text-gray-400">
+            <label class="mb-1 flex items-center gap-1 text-xs font-medium surface-muted">
               {{ t('admin.usageAlert.cronExpression') }}
               <HelpTooltip>
                 <template #trigger>
@@ -124,17 +126,17 @@
               class="input w-full text-sm"
               :placeholder="t('admin.usageAlert.cronPlaceholder')"
             />
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 text-xs surface-muted">
               {{ t('admin.usageAlert.cronHelp') }}
             </p>
           </div>
 
           <div class="flex items-center justify-between gap-3">
             <div>
-              <div class="text-sm font-medium text-gray-700 dark:text-gray-200">
+              <div class="text-sm font-medium surface-muted">
                 {{ t('admin.usageAlert.thresholdEnabled') }}
               </div>
-              <div class="text-xs text-gray-500 dark:text-gray-400">
+              <div class="text-xs surface-muted">
                 {{ t('admin.usageAlert.thresholdEnabledHint') }}
               </div>
             </div>
@@ -145,7 +147,7 @@
 
           <div v-if="rule.threshold_enabled" class="space-y-3 rounded-lg border border-amber-200/70 bg-amber-50/40 p-3 dark:border-amber-900/40 dark:bg-amber-950/20">
             <div>
-              <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
+              <label class="mb-1 block text-xs font-medium surface-muted">
                 {{ t('admin.usageAlert.thresholdPercent') }}
               </label>
               <input
@@ -156,12 +158,12 @@
                 step="1"
                 class="input w-32 text-sm"
               />
-              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              <p class="mt-1 text-xs surface-muted">
                 {{ t('admin.usageAlert.thresholdPercentHint') }}
               </p>
             </div>
             <div>
-              <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
+              <label class="mb-1 block text-xs font-medium surface-muted">
                 {{ t('admin.usageAlert.thresholdWatchCron') }}
               </label>
               <input
@@ -170,12 +172,12 @@
                 class="input w-full text-sm"
                 :placeholder="t('admin.usageAlert.thresholdWatchCronPlaceholder')"
               />
-              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              <p class="mt-1 text-xs surface-muted">
                 {{ t('admin.usageAlert.thresholdWatchCronHint') }}
               </p>
             </div>
             <div>
-              <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
+              <label class="mb-1 block text-xs font-medium surface-muted">
                 {{ t('admin.usageAlert.cooldownSeconds') }}
               </label>
               <input
@@ -185,7 +187,7 @@
                 step="1"
                 class="input w-40 text-sm"
               />
-              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              <p class="mt-1 text-xs surface-muted">
                 {{ t('admin.usageAlert.cooldownSecondsHint') }}
               </p>
             </div>
@@ -193,10 +195,10 @@
 
           <div class="flex items-center justify-between gap-3">
             <div>
-              <div class="text-sm font-medium text-gray-700 dark:text-gray-200">
+              <div class="text-sm font-medium surface-muted">
                 {{ t('admin.usageAlert.forceProbe') }}
               </div>
-              <div class="text-xs text-gray-500 dark:text-gray-400">
+              <div class="text-xs surface-muted">
                 {{ t('admin.usageAlert.forceProbeHint') }}
               </div>
             </div>
@@ -208,10 +210,10 @@
           <div class="space-y-2">
             <div class="flex items-center justify-between gap-2">
               <div>
-                <div class="text-sm font-medium text-gray-700 dark:text-gray-200">
+                <div class="text-sm font-medium surface-muted">
                   {{ t('admin.usageAlert.quietHours') }}
                 </div>
-                <div class="text-xs text-gray-500 dark:text-gray-400">
+                <div class="text-xs surface-muted">
                   {{ t('admin.usageAlert.quietHoursHint') }}
                 </div>
               </div>
@@ -226,7 +228,7 @@
             </div>
             <div
               v-if="!rule.quiet_hours_ranges?.length"
-              class="text-xs text-gray-400"
+              class="text-xs surface-muted"
             >
               {{ t('admin.usageAlert.quietHoursEmpty') }}
             </div>
@@ -236,16 +238,16 @@
               class="flex flex-wrap items-end gap-2"
             >
               <div>
-                <label class="mb-1 block text-[11px] text-gray-500">{{ t('admin.usageAlert.quietHoursStart') }}</label>
-                <input v-model="range.start" type="time" step="1" class="input text-sm" />
+                <label class="mb-1 block text-[11px] surface-muted">{{ t('admin.usageAlert.quietHoursStart') }}</label>
+                <DateTimePicker :aria-label="t('admin.usageAlert.quietHoursStart')" v-model="range.start" type="time" step="1" class="input text-sm" />
               </div>
               <div>
-                <label class="mb-1 block text-[11px] text-gray-500">{{ t('admin.usageAlert.quietHoursEnd') }}</label>
-                <input v-model="range.end" type="time" step="1" class="input text-sm" />
+                <label class="mb-1 block text-[11px] surface-muted">{{ t('admin.usageAlert.quietHoursEnd') }}</label>
+                <DateTimePicker :aria-label="t('admin.usageAlert.quietHoursEnd')" v-model="range.end" type="time" step="1" class="input text-sm" />
               </div>
               <button
                 type="button"
-                class="mb-1 text-xs text-red-600 hover:underline dark:text-red-400"
+                class="mb-1 text-xs text-red-600 hover:underline dark:text-red-400 surface-control"
                 @click="removeQuietRange(index, qi)"
               >
                 {{ t('common.delete') }}
@@ -255,18 +257,18 @@
 
           <div
             v-if="rule.next_run_at || rule.last_run_at || rule.threshold_next_run_at || rule.last_threshold_alert_at || rule.last_error"
-            class="rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs dark:border-dark-700 dark:bg-dark-900/40"
+            class="rounded-lg border border-gray-200 surface-inset p-3 text-xs dark:border-dark-700"
           >
-            <div v-if="rule.next_run_at" class="text-gray-600 dark:text-gray-300">
+            <div v-if="rule.next_run_at" class="surface-muted">
               {{ t('admin.usageAlert.nextRun') }}: {{ formatTime(rule.next_run_at) }}
             </div>
-            <div v-if="rule.last_run_at" class="mt-1 text-gray-600 dark:text-gray-300">
+            <div v-if="rule.last_run_at" class="mt-1 surface-muted">
               {{ t('admin.usageAlert.lastRun') }}: {{ formatTime(rule.last_run_at) }}
             </div>
-            <div v-if="rule.threshold_next_run_at" class="mt-1 text-gray-600 dark:text-gray-300">
+            <div v-if="rule.threshold_next_run_at" class="mt-1 surface-muted">
               {{ t('admin.usageAlert.thresholdNextRun') }}: {{ formatTime(rule.threshold_next_run_at) }}
             </div>
-            <div v-if="rule.last_threshold_alert_at" class="mt-1 text-gray-600 dark:text-gray-300">
+            <div v-if="rule.last_threshold_alert_at" class="mt-1 surface-muted">
               {{ t('admin.usageAlert.lastThresholdAlert') }}: {{ formatTime(rule.last_threshold_alert_at) }}
             </div>
             <div v-if="rule.last_error" class="mt-1 text-red-600 dark:text-red-400" :title="rule.last_error">
@@ -298,6 +300,8 @@
 </template>
 
 <script setup lang="ts">
+import DateTimePicker from '@/components/common/DateTimePicker.vue'
+import Select from '@/components/common/Select.vue'
 import Toggle from '@/components/common/Toggle.vue'
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'

@@ -15,8 +15,8 @@ import (
 )
 
 func TestWeeklyQuotaQueryObservesAndCachesRawWindow(t *testing.T) {
-	account := &Account{ID: 100, Platform: PlatformOpenAI, Type: AccountTypeOAuth,
-		Credentials: map[string]any{"chatgpt_account_id": "weekly-test-account"}}
+	account := &Account{ID: 100, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive,
+		Credentials: map[string]any{"chatgpt_account_id": "weekly-test-account", "access_token": "test-token"}}
 	repo := &stubQuotaAccountRepo{accounts: map[int64]*Account{100: account}}
 	provider := NewOpenAITokenProvider(repo, &stubQuotaTokenCache{tokens: map[string]string{OpenAITokenCacheKey(account): "test-token"}}, nil)
 	resetAt := time.Now().Add(6*24*time.Hour + 22*time.Hour).Unix()
@@ -70,16 +70,16 @@ func TestWeeklyQuotaSnapshotEntryPoints(t *testing.T) {
 			headers.Set("X-Codex-Secondary-Reset-At", strconv.FormatInt(resetAt, 10))
 			headers.Set("X-Codex-Secondary-Window-Minutes", "10080")
 			headers.Set("X-Codex-Secondary-Used-Percent", "7")
-			usage := &OpenAIQuotaUsage{FetchedAt: now.Unix(), RateLimit: &OpenAIRateLimit{SecondaryWindow: &OpenAIRateLimitWindow{
+			usage := &OpenAIQuotaUsage{credentialOwner: account, FetchedAt: now.Unix(), RateLimit: &OpenAIRateLimit{SecondaryWindow: &OpenAIRateLimitWindow{
 				UsedPercent: 7, LimitWindowSeconds: 604800, ResetAt: resetAt,
-			}}, RateLimitResetCredits: &OpenAIRateLimitResetCredits{}}
+			}}, RateLimitResetCredits: &OpenAIRateLimitResetCredits{credentialOwner: account}}
 			switch path {
 			case "gateway":
-				(&OpenAIGatewayService{accountRepo: repo}).UpdateCodexUsageSnapshotFromHeaders(context.Background(), account.ID, headers)
+				(&OpenAIGatewayService{accountRepo: repo}).UpdateCodexUsageSnapshotFromHeaders(context.Background(), account, headers)
 			case "rate_limit":
 				(&RateLimitService{accountRepo: repo}).persistOpenAICodexSnapshot(context.Background(), account, headers)
 			case "handshake":
-				(&OpenAIGatewayService{accountRepo: repo}).ApplyCodexUsageSnapshotFromResult(context.Background(), account.ID, &OpenAIForwardResult{
+				(&OpenAIGatewayService{accountRepo: repo}).ApplyCodexUsageSnapshotFromResult(context.Background(), account, &OpenAIForwardResult{codexUsageOwner: account,
 					ResponseHeaders:              headers,
 					ResponseHeadersFromHandshake: true,
 				})

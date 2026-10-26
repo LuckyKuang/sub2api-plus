@@ -161,7 +161,7 @@ func TestOutboundIdentityPresetInheritanceSnapshotAndFailover(t *testing.T) {
 	require.False(t, ok, "legacy implicit-platform Codex callers keep their existing resolver")
 }
 
-func TestOutboundIdentityCodexUnchangedAndCompatibleOptIn(t *testing.T) {
+func TestOutboundIdentityCodexNativeAndCompatibleUpstream(t *testing.T) {
 	svc, ctx := outboundIdentityTestSettings(t, emptyOutboundIdentitySettings())
 	account := &Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Credentials: map[string]any{"user_agent": DefaultOpenAICodexUserAgent}}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://example.com/v1/responses", nil)
@@ -176,7 +176,11 @@ func TestOutboundIdentityCodexUnchangedAndCompatibleOptIn(t *testing.T) {
 	require.Equal(t, before, req.Header, "the current request keeps its selected Codex identity")
 	req, err = http.NewRequestWithContext(ctx, http.MethodPost, "https://example.com/v1/responses", nil)
 	require.NoError(t, err)
+	applyResolvedOpenAIOutboundIdentity(req.Header, resolveOpenAIOutboundIdentityFromSettings(ctx, account, svc), false)
 	prepareAccountOutboundRequest(req, account)
+	require.Equal(t, before, req.Header, "a fresh native API-key request also ignores the stored foreign preset")
+	upstream := &Account{ID: 2, Platform: PlatformOpenAI, Type: AccountTypeUpstream, Credentials: account.Credentials}
+	prepareAccountOutboundRequest(req, upstream)
 	require.Equal(t, builtInOutboundIdentity("claude").UserAgent, req.Header.Get("User-Agent"))
 	require.Empty(t, req.Header.Get("Originator"))
 	require.Equal(t, "cli", req.Header.Get("X-App"))
@@ -225,7 +229,7 @@ func TestOutboundIdentityValidationAndVersionOnlyChange(t *testing.T) {
 			}
 		}
 	}
-	for _, selection := range []OutboundIdentitySelection{{Preset: "unknown"}, {Preset: "claude", UserAgent: "claude-cli/3.9.1\r\nAuthorization: secret"}, {Preset: "gemini", UserAgent: strings.Repeat("x", 513)}, {Preset: "grok", Version: "invalid"}, {Preset: "deepseek", UserAgent: "deepseek/0.2.0-rc.2"}, {Preset: "deepseek", UserAgent: "deepseek-harness/0.2.0-rc.2 (sub2api)"}, {Preset: "deepseek", Version: "0.0.1"}, {Preset: "minimax", UserAgent: "minimax/0.6.2"}, {Preset: "minimax", UserAgent: "MiniMaxAgent/0.6.2"}, {Preset: "minimax", UserAgent: "MiniMaxAgent (sub2api)"}, {Preset: "minimax", Version: "0.6.2"}, {Preset: "zcode", UserAgent: "zcode/3.14.3"}, {Preset: "zcode", UserAgent: "ZCode"}, {Preset: "zcode", UserAgent: "ZCode/3.14"}, {Preset: "zcode", UserAgent: "ZCode/3.14.3 (sub2api)"}, {Preset: "zcode", Version: "invalid"}} {
+	for _, selection := range []OutboundIdentitySelection{{Preset: "unknown"}, {Preset: "claude", UserAgent: "claude-cli/3.9.1\r\nAuthorization: secret"}, {Preset: "gemini", UserAgent: strings.Repeat("x", 513)}, {Preset: "grok", Version: "invalid"}, {Preset: "deepseek", UserAgent: "deepseek/0.2.1-rc.2"}, {Preset: "deepseek", UserAgent: "deepseek-harness/0.2.1-rc.2 (sub2api)"}, {Preset: "deepseek", Version: "0.0.1"}, {Preset: "minimax", UserAgent: "minimax/0.6.2"}, {Preset: "minimax", UserAgent: "MiniMaxAgent/0.6.2"}, {Preset: "minimax", UserAgent: "MiniMaxAgent (sub2api)"}, {Preset: "minimax", Version: "0.6.2"}, {Preset: "zcode", UserAgent: "zcode/3.14.3"}, {Preset: "zcode", UserAgent: "ZCode"}, {Preset: "zcode", UserAgent: "ZCode/3.14"}, {Preset: "zcode", UserAgent: "ZCode/3.16.2 (sub2api)"}, {Preset: "zcode", Version: "invalid"}} {
 		_, err := buildOutboundIdentity(selection)
 		require.Error(t, err)
 	}
@@ -305,7 +309,7 @@ func TestOutboundIdentityBedrockSigningRetainsSelectedDeclarations(t *testing.T)
 func TestBuiltInDeepSeekOutboundIdentityPinsPublishedHarness(t *testing.T) {
 	t.Setenv(deepseek.VersionEnv, "")
 
-	const pinnedUA = "deepseek-harness/0.2.0-rc.2 (+https://github.com/deepseek-ai/deepseek-harness)"
+	const pinnedUA = "deepseek-harness/0.2.1-rc.3 (+https://github.com/deepseek-ai/deepseek-harness)"
 	require.Equal(t, outboundidentity.Identity{
 		Preset:     "deepseek",
 		Language:   "zh-CN",
@@ -313,7 +317,7 @@ func TestBuiltInDeepSeekOutboundIdentityPinsPublishedHarness(t *testing.T) {
 		Source:     "compiled_default",
 		UserAgent:  pinnedUA,
 		Originator: "deepseek-harness",
-		Version:    "0.2.0-rc.2",
+		Version:    "0.2.1-rc.3",
 		Headers:    map[string]string{"User-Agent": pinnedUA},
 	}, builtInOutboundIdentity("deepseek"))
 	require.Equal(t, builtInOutboundIdentity("deepseek"), deepseek.DefaultIdentity())
@@ -347,7 +351,7 @@ func TestDeepSeekOutboundIdentityRendersOnlyUserAgent(t *testing.T) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.deepseek.com/v1/chat/completions", nil)
 	require.NoError(t, err)
 	req.Header.Set("Originator", "codex_cli_rs")
-	req.Header.Set("Version", "0.158.0")
+	req.Header.Set("Version", "0.163.0")
 	req.Header.Set("X-DeepSeek-Harness-User-Id", "request-state")
 
 	prepareAccountOutboundRequest(req, account)
@@ -355,7 +359,7 @@ func TestDeepSeekOutboundIdentityRendersOnlyUserAgent(t *testing.T) {
 	require.Equal(t, deepseek.UserAgent(deepseek.DefaultVersion), req.Header.Get("User-Agent"))
 	require.Empty(t, req.Header.Get("Originator"))
 	require.Empty(t, req.Header.Get("Version"))
-	require.Equal(t, "request-state", req.Header.Get("X-DeepSeek-Harness-User-Id"), "request state is not an identity declaration")
+	require.Empty(t, req.Header.Get("X-DeepSeek-Harness-User-Id"), "the Harness adapter owns attribution; Chat extensions cannot forward caller state")
 }
 
 // DeepSeek platform accounts advertise the pinned harness identity by default.
@@ -428,7 +432,7 @@ func TestMiniMaxOutboundIdentityVersionlessExemptionIsNarrow(t *testing.T) {
 	require.Empty(t, accepted.Version)
 
 	// The exemption is registered for exactly one preset.
-	require.Equal(t, map[string]string{"minimax": "MiniMaxAgent", "stepfun": "step (linux 6.8.0-31-generic; x64)"}, versionlessOutboundUserAgents)
+	require.Equal(t, map[string]string{"minimax": "MiniMaxAgent", "stepfun": "stepcode (linux 6.8.0-31-generic; x64)"}, versionlessOutboundUserAgents)
 	for _, preset := range outboundPresetNames {
 		require.Equal(t, (preset == "minimax" || preset == "stepfun"), versionlessOutboundUserAgents[preset] != "", preset)
 	}
@@ -450,7 +454,7 @@ func TestMiniMaxOutboundIdentityRendersOfficialSDKAndSessionHeaders(t *testing.T
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.minimaxi.com/anthropic/v1/messages", nil)
 	require.NoError(t, err)
 	req.Header.Set("Originator", "codex_cli_rs")
-	req.Header.Set("Version", "0.158.0")
+	req.Header.Set("Version", "0.163.0")
 	req.Header.Set("X-Mavis-Session-Id", "request-state")
 	req.Header.Set("Anthropic-Version", "2023-06-01")
 
@@ -503,9 +507,9 @@ func TestMiniMaxAPIKeyDefaultIdentityIsPinnedSDK(t *testing.T) {
 func TestBuiltInZCodeOutboundIdentityPinsProductVersion(t *testing.T) {
 	t.Setenv(zcode.VersionEnv, "")
 	got := builtInOutboundIdentity("zcode")
-	require.Equal(t, "ZCode/3.14.3", got.UserAgent)
+	require.Equal(t, "ZCode/3.16.2", got.UserAgent)
 	require.Equal(t, "ZCode", got.Originator)
-	require.Equal(t, "3.14.3", got.Version)
+	require.Equal(t, "3.16.2", got.Version)
 	require.Equal(t, "compiled_default", got.Source)
 	require.Equal(t, got.Version, got.Headers[zcode.HeaderAppVersion])
 	require.Equal(t, "https://zcode.z.ai", got.Headers["HTTP-Referer"])
@@ -520,7 +524,7 @@ func TestBuiltInZCodeOutboundIdentityPinsProductVersion(t *testing.T) {
 // version and the standalone CLI package version. The override therefore accepts
 // both and declares no monotonic version floor.
 func TestZCodeOutboundIdentityEnvironmentOverrideAcceptsBothOfficialLines(t *testing.T) {
-	for _, version := range []string{"3.14.3", "0.16.9", "3.15.0-rc.1"} {
+	for _, version := range []string{"3.16.2", "0.16.9", "3.15.0-rc.1"} {
 		t.Setenv(zcode.VersionEnv, version)
 		configured := builtInOutboundIdentity("zcode")
 		require.Equal(t, "environment", configured.Source, version)
@@ -546,7 +550,7 @@ func TestZCodeOutboundIdentityRendersOfficialDeclarations(t *testing.T) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://open.bigmodel.cn/api/anthropic/v1/messages", nil)
 	require.NoError(t, err)
 	req.Header.Set("Originator", "codex_cli_rs")
-	req.Header.Set("Version", "0.158.0")
+	req.Header.Set("Version", "0.163.0")
 	req.Header.Set("X-ZCode-App-Version", "request-state")
 	req.Header.Set("Anthropic-Version", "2023-06-01")
 
@@ -620,7 +624,7 @@ func TestBuiltInKimiOutboundIdentityMatchesOfficialClient(t *testing.T) {
 	pinned := builtInOutboundIdentity("kimi")
 	require.Equal(t, "kimi", pinned.Preset)
 	require.Equal(t, "compiled_default", pinned.Source)
-	require.Equal(t, "kimi-code-cli/2.1.1", pinned.UserAgent)
+	require.Equal(t, "kimi-code-cli/2.3.1", pinned.UserAgent)
 	require.Equal(t, kimi.ProductToken, pinned.Originator)
 	require.Equal(t, kimi.DefaultVersion, pinned.Version)
 	require.Equal(t, pinned, kimi.DefaultIdentity())
@@ -645,7 +649,7 @@ func TestKimiOutboundIdentityRendersTheOfficialHeaderSet(t *testing.T) {
 	// Request state a caller must never be able to select an identity with.
 	req.Header.Set("User-Agent", "caller/1.0")
 	req.Header.Set("Originator", "codex_cli_rs")
-	req.Header.Set("Version", "0.158.0")
+	req.Header.Set("Version", "0.163.0")
 	req.Header.Set(kimi.HeaderDeviceID, "11111111-1111-4111-8111-111111111111")
 	req.Header.Set("X-Msh-Tool-Call-Id", "request-state")
 	req.Header.Set("Authorization", "Bearer credential")
@@ -702,7 +706,7 @@ func TestKimiVersionCandidateStaysInsideTheNamespace(t *testing.T) {
 		_, err := buildOutboundIdentity(OutboundIdentitySelection{Preset: "kimi", Version: version})
 		require.Error(t, err, version)
 	}
-	for _, userAgent := range []string{"kimi-code-cli", "Kimi/2.1.1", "kimi/2.1.1", "kimi-code-cli/2.1.1 (sub2api)", "kimi-code-cli/2.1.1/extra", "codex_cli_rs/0.158.0"} {
+	for _, userAgent := range []string{"kimi-code-cli", "Kimi/2.1.1", "kimi/2.1.1", "kimi-code-cli/2.2.0 (sub2api)", "kimi-code-cli/2.2.0/extra", "codex_cli_rs/0.163.0"} {
 		_, err := buildOutboundIdentity(OutboundIdentitySelection{Preset: "kimi", UserAgent: userAgent})
 		require.Error(t, err, userAgent)
 	}
@@ -834,14 +838,26 @@ func TestOutboundIdentityDeclarationsCoverEveryBuiltInHeader(t *testing.T) {
 
 	for _, declarations := range view.Declarations {
 		builtin := builtInOutboundIdentity(declarations.Preset)
-		require.Len(t, declarations.Headers, len(builtin.Headers), declarations.Preset)
+		declared := map[string]string{}
+		for name, value := range builtin.ControlHeaders {
+			declared[name] = value
+		}
+		for name, value := range builtin.Headers {
+			declared[name] = value
+		}
+		require.Len(t, declarations.Headers, len(declared), declarations.Preset)
 		seen := map[string]bool{}
 		for _, header := range declarations.Headers {
 			require.NotEmpty(t, header.Name, declarations.Preset)
 			require.False(t, seen[header.Name], header.Name)
 			seen[header.Name] = true
-			require.Contains(t, builtin.Headers, header.Name, "the page must not claim an undeclared header")
-			require.NotEmpty(t, header.Builtin, header.Name)
+			require.Contains(t, declared, header.Name, "the page must not claim an undeclared header")
+			if declarations.Preset == "zcode" && header.Name == "X-Device-Mid" {
+				require.Empty(t, header.Builtin, "an installation is allocated by the persistent store")
+				require.NotContains(t, builtin.Headers, header.Name, "control device must not leak into inference headers")
+			} else {
+				require.NotEmpty(t, header.Builtin, header.Name)
+			}
 			require.Contains(t, []string{outboundHeaderDerived, outboundHeaderPinned, outboundHeaderRuntime}, header.Class, header.Name)
 			require.Equal(t, header.Class == outboundHeaderRuntime, header.Editable, header.Name)
 		}

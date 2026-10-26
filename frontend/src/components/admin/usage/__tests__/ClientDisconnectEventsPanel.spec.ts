@@ -1,7 +1,9 @@
+import { chooseSelect } from '@/__tests__/helpers/select'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 
 import ClientDisconnectEventsPanel from '../ClientDisconnectEventsPanel.vue'
+import DateTimePicker from '@/components/common/DateTimePicker.vue'
 
 const { listClientDisconnectEvents, searchUsers, searchApiKeys, showError } = vi.hoisted(() => ({
   listClientDisconnectEvents: vi.fn(),
@@ -95,6 +97,27 @@ describe('ClientDisconnectEventsPanel', () => {
     expect(showError).not.toHaveBeenCalled()
   })
 
+  it('keeps workspace API-key suggestions outside the scrolling filter row and applies the chosen key', async () => {
+    const wrapper = mount(ClientDisconnectEventsPanel, {
+      attachTo: document.body,
+      props: { workspace: true },
+      global: { stubs: { Icon: true, Pagination: true } },
+    })
+    try {
+      await flushPromises()
+      await wrapper.get('[data-testid="disconnect-api-key-filter"]').trigger('focus')
+      await flushPromises()
+      const menu = document.body.querySelector<HTMLElement>('[data-testid="disconnect-api-key-options"]')!
+      expect(menu).not.toBeNull()
+      expect(wrapper.get('.disconnect-filter-fields').element.contains(menu)).toBe(false)
+      expect(menu.style.position).toBe('fixed')
+      menu.querySelector('button')!.click()
+      await flushPromises()
+      expect(listClientDisconnectEvents).toHaveBeenLastCalledWith(expect.objectContaining({ api_key_id: 11, page: 1 }))
+      expect(document.body.querySelector('[data-testid="disconnect-api-key-options"]')).toBeNull()
+    } finally { wrapper.unmount() }
+  })
+
   it('forwards validated event filters from the UI', async () => {
     vi.useFakeTimers()
     const wrapper = mount(ClientDisconnectEventsPanel, {
@@ -118,16 +141,17 @@ describe('ClientDisconnectEventsPanel', () => {
     await wrapper.get('[data-testid="disconnect-request-filter"]').setValue('req-server-owned')
     await wrapper.get('[data-testid="disconnect-session-filter"]').setValue('codex-session-1')
     await wrapper.get('[data-testid="disconnect-protocol-filter"]').setValue('openai.responses')
-    await wrapper.get('[data-testid="disconnect-accepted-from"]').setValue('2026-09-01T08:00')
-    await wrapper.get('[data-testid="disconnect-accepted-to"]').setValue('2026-09-02T08:00')
-    await wrapper.get('[data-testid="disconnect-finalized-from"]').setValue('2026-09-01T08:01')
-    await wrapper.get('[data-testid="disconnect-finalized-to"]').setValue('2026-09-02T08:01')
-    await wrapper.get('[data-testid="disconnect-outcome-filter"]').setValue('client_disconnected')
-    await wrapper.get('[data-testid="disconnect-completion-filter"]').setValue('usage_missing')
-    await wrapper.get('[data-testid="disconnect-usage-source-filter"]').setValue('partial')
-    await wrapper.get('[data-testid="disconnect-usage-missing-filter"]').setValue('true')
-    await wrapper.get('[data-testid="disconnect-enforce-filter"]').setValue('true')
-    await wrapper.get('[data-testid="disconnect-auto-ban-filter"]').setValue('true')
+    const dateFields = wrapper.findAllComponents(DateTimePicker)
+    await dateFields[0].setValue('2026-09-01T08:00')
+    await dateFields[1].setValue('2026-09-02T08:00')
+    await dateFields[2].setValue('2026-09-01T08:01')
+    await dateFields[3].setValue('2026-09-02T08:01')
+    await chooseSelect(wrapper.get('[data-testid="disconnect-outcome-filter"]'), 'admin.usage.disconnectEvents.clientDisconnected')
+    await chooseSelect(wrapper.get('[data-testid="disconnect-completion-filter"]'), 'admin.usage.disconnectEvents.usageMissing')
+    await chooseSelect(wrapper.get('[data-testid="disconnect-usage-source-filter"]'), 'admin.usage.disconnectEvents.partial')
+    await chooseSelect(wrapper.get('[data-testid="disconnect-usage-missing-filter"]'), 'common.yes')
+    await chooseSelect(wrapper.get('[data-testid="disconnect-enforce-filter"]'), 'admin.usage.disconnectEvents.enforced')
+    await chooseSelect(wrapper.get('[data-testid="disconnect-auto-ban-filter"]'), 'common.yes')
     await flushPromises()
 
     expect(listClientDisconnectEvents).toHaveBeenLastCalledWith(expect.objectContaining({
@@ -173,7 +197,7 @@ describe('ClientDisconnectEventsPanel', () => {
     const wrapper = mount(ClientDisconnectEventsPanel, {
       global: { stubs: { Icon: true, Pagination: true } },
     })
-    await wrapper.get('[data-testid="disconnect-outcome-filter"]').setValue('client_disconnected')
+    await chooseSelect(wrapper.get('[data-testid="disconnect-outcome-filter"]'), 'admin.usage.disconnectEvents.clientDisconnected')
     await flushPromises()
 
     let eventCells = wrapper.get('tbody tr').findAll('td')

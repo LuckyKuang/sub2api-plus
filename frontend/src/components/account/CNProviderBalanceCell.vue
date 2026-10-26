@@ -13,9 +13,15 @@
       <!-- Low balance badge (reactive 402/429 marker or probe-detected) -->
       <span
         v-if="balanceLow"
-        class="inline-flex items-center rounded bg-red-100 px-1 py-0.5 text-[10px] font-medium text-red-700 dark:bg-red-900/30 dark:text-red-300"
+        class="inline-flex items-center rounded bg-red-100/[0.15] px-1 py-0.5 text-[10px] font-medium text-red-700 dark:bg-red-900/30 dark:text-red-300"
       >
         {{ t('admin.accounts.cnProviders.balanceLow') }}
+      </span>
+    </div>
+
+    <div v-if="currentBonusEntries.length > 0" class="text-[10px] font-medium leading-4" :class="platformTextClass(account.platform)">
+      <span data-test="cn-provider-bonus-balance-value">
+        {{ t('admin.accounts.cnProviders.bonusBalance') }}: {{ bonusBalanceLabel }}
       </span>
     </div>
 
@@ -27,7 +33,7 @@
       <button
         type="button"
         data-test="cn-provider-balance-probe"
-        class="inline-flex items-center gap-0.5 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-medium leading-4 text-blue-600 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-blue-400 dark:hover:bg-blue-900/30"
+        class="inline-flex items-center gap-0.5 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-medium leading-4 text-blue-600 transition-colors hover:bg-blue-50/25 disabled:cursor-not-allowed disabled:opacity-50 dark:text-blue-400 dark:hover:bg-blue-900/30 surface-control"
         :disabled="loading"
         :title="t('admin.accounts.cnProviders.balanceProbeTooltip')"
         @click="handleProbe"
@@ -71,8 +77,9 @@ const props = defineProps<{
 
 const { t } = useI18n()
 
-// 仅 kimi / deepseek payg 账号有公开余额端点（智谱 payg 无）。
+// Kimi / DeepSeek payg API Key 与 DeepSeek 原生 OAuth 钱包分别使用各自余额入口。
 const visible = computed(() => cnBalanceCellVisible(props.account))
+const nativeDeepSeek = computed(() => props.account.platform === 'deepseek' && props.account.type === 'oauth')
 
 const loading = ref(false)
 const error = ref<string | null>(null)
@@ -100,6 +107,16 @@ const snapshotBalances = computed<CNProviderBalanceEntry[]>(() => {
     return [{ currency, balance }]
   })
 })
+const snapshotBonusBalances = computed<CNProviderBalanceEntry[]>(() => {
+  const value = props.account.extra?.[extraKey('bonus_balances')]
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item): CNProviderBalanceEntry[] => {
+    if (!item || typeof item !== 'object') return []
+    const { currency, balance } = item as Record<string, unknown>
+    if (typeof currency !== 'string' || typeof balance !== 'number' || !Number.isFinite(balance)) return []
+    return [{ currency, balance }]
+  })
+})
 const balanceLow = computed(() => props.account.extra?.[extraKey('balance_low')] === true)
 
 // 优先用探测结果，其次落库快照。多币种返回全部明细，否则主币种单条。
@@ -115,6 +132,12 @@ const currentEntries = computed<CNProviderBalanceEntry[]>(() => {
   return []
 })
 
+const currentBonusEntries = computed<CNProviderBalanceEntry[]>(() => {
+  if (!nativeDeepSeek.value) return []
+  if (data.value?.success) return data.value.bonus_balances ?? []
+  return snapshotBonusBalances.value
+})
+
 const formatEntry = (entry: CNProviderBalanceEntry): string => {
   const fixed = entry.balance >= 100 ? entry.balance.toFixed(0) : entry.balance.toFixed(2)
   return `${entry.currency || '¥'} ${fixed}`
@@ -126,8 +149,11 @@ const balanceLabel = computed(() => {
     // 未命中时渲染原始 key。CN 供应商使用自己的占位键。
     return t('admin.accounts.cnProviders.balance')
   }
-  return currentEntries.value.map(formatEntry).join(' · ')
+  const label = currentEntries.value.map(formatEntry).join(' · ')
+  return nativeDeepSeek.value ? `${t('admin.accounts.cnProviders.normalBalance')}: ${label}` : label
 })
+
+const bonusBalanceLabel = computed(() => currentBonusEntries.value.map(formatEntry).join(' · '))
 
 const extractErrorMessage = (e: unknown): string => {
   const err = e as {

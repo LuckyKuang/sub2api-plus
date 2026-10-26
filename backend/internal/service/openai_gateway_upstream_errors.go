@@ -312,9 +312,12 @@ func (s *OpenAIGatewayService) shouldFailoverOpenAIUpstreamResponse(account *Acc
 	// preserve the deterministic upstream 400 instead of returning an unwritten
 	// retry signal. Managed gateway instances always have an account repository;
 	// their handler can exclude this account and actually select another one.
-	if s != nil && s.accountRepo != nil && account != nil && account.IsOpenAICompatible() && statusCode == http.StatusBadRequest &&
-		isOpenAICompatibleModelNotFound400(upstreamBody) {
+	if s != nil && s.accountRepo != nil && account != nil && account.IsOpenAICompatible() &&
+		(isOpenAIModelNotFoundError(statusCode, upstreamBody) || statusCode == http.StatusBadRequest && isOpenAICompatibleModelNotFound400(upstreamBody)) {
 		return true
+	}
+	if isOpenAIModelNotFoundError(statusCode, upstreamBody) {
+		return false
 	}
 	if s.shouldFailoverUpstreamError(statusCode) {
 		return true
@@ -429,6 +432,15 @@ func newOpenAIUpstreamFailoverError(
 		ResponseHeaders:        responseHeaders.Clone(),
 		RetryableOnSameAccount: retryableOnSameAccount && !requestScopedCapacity,
 		RequestScopedTransient: requestScopedCapacity,
+	}
+	if isOpenAIModelNotFoundError(statusCode, responseBody) {
+		failoverErr.RetryableOnSameAccount = false
+		failoverErr.RequestScopedTransient = false
+		// A model rejection says nothing about the credential owner's health.
+		// The gateway may still try a different owner's model entitlement once.
+		failoverErr.Scope = GatewayFailureScopeRequest
+		failoverErr.NextAccountAction = NextAccountRetry
+		return failoverErr
 	}
 	if requestScopedCapacity {
 		failoverErr.SameAccountRetryDelay = openAIRequestScopedRetryDelay(responseHeaders, responseBody)
@@ -800,7 +812,7 @@ func (s *OpenAIGatewayService) handleErrorResponse(
 		Message:            upstreamMsg,
 		Detail:             upstreamDetail,
 	})
-	if shouldDisable {
+	if shouldDisable && (s.accountRepo != nil || !isOpenAIModelNotFoundError(resp.StatusCode, body)) {
 		return nil, &UpstreamFailoverError{
 			StatusCode:             resp.StatusCode,
 			ResponseBody:           body,
@@ -820,8 +832,11 @@ func (s *OpenAIGatewayService) handleErrorResponse(
 	// 兄弟路径早已这么做：handleCompatErrorResponse（ChatCompletions / Anthropic）
 	// 回真实状态码 + invalid_request_error + 真实 message；/v1/images 还额外透传
 	// code/param。原生 Responses 是唯一漏掉的一条。
-	if isOpenAIDeterministicClientError(resp.StatusCode) {
+	if isOpenAIDeterministicClientError(resp.StatusCode) || isOpenAIModelNotFoundError(resp.StatusCode, body) {
 		writeOpenAIUpstreamClientError(c, resp.StatusCode, body, upstreamMsg)
+		if isOpenAIModelNotFoundError(resp.StatusCode, body) {
+			return nil, &openAIModelNotFoundTerminalError{cause: fmt.Errorf("upstream error: %d message=%s", resp.StatusCode, upstreamMsg)}
+		}
 		if upstreamMsg == "" {
 			return nil, fmt.Errorf("upstream error: %d", resp.StatusCode)
 		}

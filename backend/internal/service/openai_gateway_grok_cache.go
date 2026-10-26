@@ -1,6 +1,8 @@
 package service
 
 import (
+	"context"
+	"crypto/sha256"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -18,11 +20,6 @@ const (
 	grokConversationGroupNamespace = "xai:grok-build:conversation-group:"
 	claudeCodeSessionHeader        = "X-Claude-Code-Session-Id"
 )
-
-// grokAgentID is the process-level bucketing key used by the official shell.
-// Keep it stable for the lifetime of this process, but do not share one fixed
-// value across every deployment.
-var grokAgentID = uuid.NewString()
 
 // Claude Code metadata.user_id often ends with _session_<uuid>.
 var claudeCodeSessionSuffixPattern = regexp.MustCompile(`_session_([a-f0-9-]+)$`)
@@ -81,7 +78,8 @@ func resolveGrokCacheIdentity(c *gin.Context, body []byte, explicitKey, upstream
 		return ""
 	}
 
-	seed := explicitGrokCacheSeed(c, body, explicitKey)
+	explicitSeed := explicitGrokCacheSeed(c, body, explicitKey)
+	seed := explicitSeed
 	if seed == "" {
 		seed = deriveOpenAIStablePrefixSessionSeed(body)
 		if seed == "" {
@@ -94,12 +92,22 @@ func resolveGrokCacheIdentity(c *gin.Context, body []byte, explicitKey, upstream
 	if seed == "" {
 		return ""
 	}
-
 	// generateSessionUUID hashes the whole seed before formatting it as a UUID.
 	// Include a versioned namespace so this identity cannot collide with other
 	// upstream session identifiers derived by sub2api.
 	isolatedSeed := fmt.Sprintf("grok-prompt-cache:v1:%d:%s:%s", apiKeyID, model, seed)
-	return generateSessionUUID(isolatedSeed)
+	identity := generateSessionUUID(isolatedSeed)
+	if c != nil {
+		// Keep explicit conversation evidence associated with this exact cache
+		// identity. Content-derived cache reuse cannot establish a conversation,
+		// and a later WS turn must not inherit the first turn's unrelated seed.
+		c.Set(grokConversationCacheSeedKey(identity), explicitSeed)
+	}
+	return identity
+}
+
+func grokConversationCacheSeedKey(identity string) string {
+	return "grok_conversation_cache_seed:" + identity
 }
 
 func explicitGrokCacheSeed(c *gin.Context, body []byte, explicitKey string) string {
@@ -170,7 +178,7 @@ func isKnownGrokFreeAccount(account *Account) bool {
 	freeSignal := false
 	paidSignal := false
 	inferredFreeSignal := false
-	if billing, err := grokBillingSnapshotFromExtra(account.Extra); err == nil && billing != nil {
+	if billing, err := grokAccountBillingSnapshot(account); err == nil && billing != nil {
 		if tier := strings.TrimSpace(billing.Plan); tier != "" {
 			if isGrokFreeSubscriptionTier(tier) {
 				freeSignal = true
@@ -190,7 +198,7 @@ func isKnownGrokFreeAccount(account *Account) bool {
 			inferredFreeSignal = true
 		}
 	}
-	if snapshot, err := grokQuotaSnapshotFromExtra(account.Extra); err == nil && snapshot != nil {
+	if snapshot, err := grokAccountQuotaSnapshot(account); err == nil && snapshot != nil {
 		if tier := strings.TrimSpace(snapshot.SubscriptionTier); tier != "" {
 			if isGrokFreeSubscriptionTier(tier) {
 				freeSignal = true
@@ -239,19 +247,47 @@ type grokConversationSnapshot struct {
 	ConversationID string
 	SessionID      string
 	RootSessionID  string
+	RequestID      string
+	AgentID        string
 }
 
-func resolveGrokRequestConversation(c *gin.Context, body []byte, cacheKey string) grokConversationSnapshot {
-	result := grokConversationSnapshot{ConversationID: cacheKey, SessionID: cacheKey, RootSessionID: cacheKey}
+func resolveGrokRequestConversation(ctx context.Context, c *gin.Context, account *Account, body []byte, cacheKey string) (grokConversationSnapshot, error) {
+	result := grokConversationSnapshot{}
 	tenant := getAPIKeyIDFromContext(c)
 	if tenant <= 0 || isOpenAIResponsesCompactPath(c) {
-		return result
+		return result, nil
 	}
-	isolate := func(seed string) string {
+	isolate := func(seed string, preserveType bool) (string, error) {
 		if strings.TrimSpace(seed) == "" {
-			return ""
+			return "", nil
 		}
-		return generateSessionUUID(fmt.Sprintf("grok-conversation:v2:%d:%s", tenant, strings.TrimSpace(seed)))
+		version, prefix := 7, ""
+		// Official resumed sessions may be UUIDv4; auxiliary conversations can
+		// be labels followed by a UUIDv4. Preserve their type without forwarding
+		// their caller-controlled identifier or merging them into the parent.
+		if parsed, err := uuid.Parse(seed); preserveType && err == nil && parsed.Version() == 4 {
+			version = 4
+		}
+		if preserveType && len(seed) > 37 && len(seed) < 100 && seed[len(seed)-37] == '-' {
+			if parsed, err := uuid.Parse(seed[len(seed)-36:]); err == nil && parsed.Version() == 4 {
+				candidate := seed[:len(seed)-36]
+				valid := true
+				for _, char := range candidate {
+					if char != '-' && (char < 'a' || char > 'z') {
+						valid = false
+						break
+					}
+				}
+				if valid {
+					prefix, version = candidate, 4
+				}
+			}
+		}
+		// The same raw value may arrive as a resumed v4 session or as an
+		// explicit cache seed for a new v7 session. They cannot share a stored
+		// UUID. A new namespace also avoids previously mixed-version records.
+		id, err := resolveOutboundMappedID(ctx, "grok-conversation-v4", fmt.Sprintf("uuid:%d:tenant:%d:owner:%s:seed:%s", version, tenant, grokSessionOwnerScope(account), strings.TrimSpace(seed)), version)
+		return prefix + id, err
 	}
 	session := ""
 	conv := ""
@@ -271,19 +307,129 @@ func resolveGrokRequestConversation(c *gin.Context, body []byte, cacheKey string
 	if session == "" {
 		session = conv
 	}
-	if scoped := isolate(session); scoped != "" {
-		result.SessionID = scoped
+	fromCache := session == ""
+	if fromCache {
+		if c != nil {
+			if cacheKey == "" && ctx != nil {
+				cacheKey, _ = ctx.Value(grokConversationCacheIdentityKey{}).(string)
+			}
+			session = c.GetString(grokConversationCacheSeedKey(cacheKey))
+		}
 	}
-	if scoped := isolate(conv); scoped != "" {
+	if session == "" {
+		id, err := grokEphemeralConversationSession(ctx, c, account, tenant)
+		if err != nil {
+			return result, err
+		}
+		result.SessionID = id
+	} else {
+		if scoped, err := isolate(session, !fromCache); err != nil {
+			return result, err
+		} else if scoped != "" {
+			result.SessionID = scoped
+		}
+	}
+	if scoped, err := isolate(conv, true); err != nil {
+		return result, err
+	} else if scoped != "" {
 		result.ConversationID = scoped
 	} else {
 		result.ConversationID = result.SessionID
 	}
 	result.RootSessionID = result.SessionID
-	if scoped := isolate(root); scoped != "" {
+	if scoped, err := isolate(root, true); err != nil {
+		return result, err
+	} else if scoped != "" {
 		result.RootSessionID = scoped
 	}
-	return result
+	return result, nil
+}
+
+type grokEphemeralConversationKey struct {
+	tenant int64
+	owner  string
+	turn   int
+}
+
+// Without a reliable conversation declaration, only this accepted logical
+// request and its retries/auxiliary prompts may share execution state. Content
+// remains useful for cache routing but never becomes a persistent session seed.
+func grokEphemeralConversationSession(ctx context.Context, c *gin.Context, account *Account, tenant int64) (string, error) {
+	ctx = WithOutboundIdentityScope(ctx, c)
+	turn, _ := ctx.Value(grokLogicalTurnKey{}).(int)
+	key := grokEphemeralConversationKey{tenant: tenant, owner: grokSessionOwnerScope(account), turn: turn}
+	candidate, err := uuid.NewV7()
+	if err != nil {
+		return "", fmt.Errorf("create Grok request session: %w", err)
+	}
+	actual, _ := outboundIdentityScopeFromContext(ctx).grokRequests.LoadOrStore(key, candidate.String())
+	id, ok := actual.(string)
+	if !ok {
+		return "", fmt.Errorf("grok conversation state is invalid")
+	}
+	return id, nil
+}
+
+func grokSessionOwnerScope(account *Account) string {
+	if account == nil {
+		return "probe"
+	}
+	owner := credentialOwnerKey(account)
+	if account.Type == AccountTypeAPIKey {
+		key := sha256.Sum256([]byte(account.GetCredential("api_key")))
+		return fmt.Sprintf("%d:%s:%x", owner.id, account.Type, key)
+	}
+	return fmt.Sprintf("%d:%s:%s:%s", owner.id, account.Type, account.GetCredential("sub"), account.GetCredential("team_id"))
+}
+
+type grokLogicalTurnKey struct{}
+type grokLogicalOperationKey struct{}
+type grokConversationCacheIdentityKey struct{}
+
+func withGrokConversationCacheIdentity(ctx context.Context, identity string) context.Context {
+	return context.WithValue(ctx, grokConversationCacheIdentityKey{}, identity)
+}
+
+func withGrokLogicalTurn(ctx context.Context, turn int) context.Context {
+	return context.WithValue(ctx, grokLogicalTurnKey{}, turn)
+}
+
+// Auxiliary sampler calls share the parent conversation but create independent
+// prompts. Keep their operation stable across retries of the same logical turn.
+func withGrokLogicalOperation(ctx context.Context, operation string) context.Context {
+	return context.WithValue(ctx, grokLogicalOperationKey{}, operation)
+}
+
+func applyGrokRequestMetadataForRequest(req *http.Request, c *gin.Context, account *Account, body []byte, cacheKey string) error {
+	ctx := WithOutboundIdentityScope(req.Context(), c)
+	owner := grokResponseOwner(ctx, account)
+	if owner == nil {
+		return fmt.Errorf("grok request credential owner unavailable")
+	}
+	conversation, err := resolveGrokRequestConversation(ctx, c, owner, body, cacheKey)
+	if err != nil {
+		return err
+	}
+	// A gateway installation is the virtual device. Its persisted random seed
+	// replaces host machine data while retaining the official UUIDv5 lifetime.
+	device, err := resolveOutboundMappedID(ctx, "grok-device", "installation", 4)
+	if err != nil {
+		return err
+	}
+	conversation.AgentID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(device)).String()
+	scope := outboundIdentityScopeFromContext(ctx)
+	turn, _ := ctx.Value(grokLogicalTurnKey{}).(int)
+	operation, _ := ctx.Value(grokLogicalOperationKey{}).(string)
+	key := fmt.Sprintf("%s:%d:%s", grokSessionOwnerScope(owner), turn, operation)
+	id, _ := scope.grokRequests.LoadOrStore(key, uuid.NewString())
+	requestID, ok := id.(string)
+	if !ok {
+		return fmt.Errorf("grok request state is invalid")
+	}
+	conversation.RequestID = requestID
+	*req = *req.WithContext(ctx)
+	applyGrokRequestMetadata(req.Header, body, conversation, owner.GetCredential("sub"))
+	return nil
 }
 
 func applyGrokConversationHeaders(headers http.Header, conversation grokConversationSnapshot) {
@@ -309,8 +455,8 @@ func applyGrokRequestMetadata(headers http.Header, body []byte, conversation gro
 	if headers == nil {
 		return
 	}
-	headers.Set("x-grok-req-id", uuid.NewString())
-	headers.Set("x-grok-agent-id", grokAgentID)
+	headers.Set("x-grok-req-id", conversation.RequestID)
+	headers.Set("x-grok-agent-id", conversation.AgentID)
 	if model := strings.TrimSpace(gjson.GetBytes(body, "model").String()); model != "" {
 		headers.Set("x-grok-model-override", model)
 	} else {
@@ -325,11 +471,19 @@ func applyGrokRequestMetadata(headers http.Header, body []byte, conversation gro
 }
 
 // Imagine start/poll clients carry session association, not sampler metadata.
-func applyGrokMediaSessionHeader(headers http.Header, c *gin.Context) {
-	conversation := resolveGrokRequestConversation(c, nil, "")
-	if conversation.SessionID != "" {
-		headers.Set("X-Grok-Session-Id", conversation.SessionID)
+func applyGrokMediaSessionHeader(req *http.Request, c *gin.Context, account *Account) error {
+	owner := grokResponseOwner(req.Context(), account)
+	if owner == nil {
+		return fmt.Errorf("grok media credential owner unavailable")
 	}
+	conversation, err := resolveGrokRequestConversation(req.Context(), c, owner, nil, "")
+	if err != nil {
+		return err
+	}
+	if conversation.SessionID != "" {
+		req.Header.Set("X-Grok-Session-Id", conversation.SessionID)
+	}
+	return nil
 }
 
 // stripGrokChatPromptCacheKey removes the Responses-only body field after it

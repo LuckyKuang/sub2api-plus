@@ -453,7 +453,7 @@ func TestOpenAIWSHTTPBridgeAPIKeyReusesClientToolMappingWhenFollowupOmitsTools(t
 		rec := httptest.NewRecorder()
 		ginCtx, _ := gin.CreateTestContext(rec)
 		ginCtx.Request = r.Clone(r.Context())
-		errCh <- svc.ProxyResponsesWebSocketFromClient(r.Context(), ginCtx, conn, account, "sk-test", firstMessage, nil)
+		errCh <- svc.ProxyResponsesWebSocketFromClient(r.Context(), ginCtx, conn, account, "sk-upstream", firstMessage, nil)
 	}))
 	defer wsServer.Close()
 
@@ -497,6 +497,9 @@ func TestOpenAIWSHTTPBridgeAPIKeyReusesClientToolMappingWhenFollowupOmitsTools(t
 
 	require.Len(t, upstream.bodies, 2)
 	firstTools := gjson.GetBytes(upstream.bodies[0], "tools").Array()
+	for _, request := range upstream.requests {
+		require.Equal(t, "Bearer sk-upstream", request.Header.Get("Authorization"), "bridge turns retain the fixture's acquired credential")
+	}
 	require.Len(t, firstTools, 1)
 	require.Equal(t, "function", firstTools[0].Get("type").String())
 	secondTools := gjson.GetBytes(upstream.bodies[1], "tools").Array()
@@ -1508,7 +1511,7 @@ func TestProxyOpenAIWSHTTPBridgeTurnFinalizesPromptCacheIdentity(t *testing.T) {
 		account             *Account
 		payload             string
 		wantOptions         bool
-		wantGeneratedKey    bool
+		wantOmittedKey      bool
 		wantOriginalKeyGone bool
 	}{
 		{
@@ -1535,15 +1538,15 @@ func TestProxyOpenAIWSHTTPBridgeTurnFinalizesPromptCacheIdentity(t *testing.T) {
 			wantOriginalKeyGone: true,
 		},
 		{
-			name: "api_key_derives_identity_from_meaningful_input",
+			name: "native_api_key_preserves_cache_omission",
 			account: &Account{
 				ID:          83,
 				Platform:    PlatformOpenAI,
 				Type:        AccountTypeAPIKey,
 				Concurrency: 1,
 			},
-			payload:          `{"type":"response.create","model":"gpt-5.6","input":[{"role":"user","content":"stable first turn"}]}`,
-			wantGeneratedKey: true,
+			payload:        `{"type":"response.create","model":"gpt-5.6","input":[{"role":"user","content":"stable first turn"}]}`,
+			wantOmittedKey: true,
 		},
 	}
 
@@ -1584,20 +1587,17 @@ func TestProxyOpenAIWSHTTPBridgeTurnFinalizesPromptCacheIdentity(t *testing.T) {
 			require.Len(t, events, 2)
 
 			cacheIdentity := gjson.GetBytes(upstream.lastBody, "prompt_cache_key").String()
-			require.NotEmpty(t, cacheIdentity)
-			require.Equal(t, cacheIdentity, upstream.lastReq.Header.Get(codexSessionIDHeader))
-			if tt.account.UsesOpenAICodexProtocol() {
-				require.Empty(t, upstream.lastReq.Header.Get("session_id"))
-			} else {
-				require.Equal(t, cacheIdentity, upstream.lastReq.Header.Get("session_id"))
-			}
-			require.Equal(t, "thread-cache-bridge", upstream.lastReq.Header.Get("x-client-request-id"))
+			require.Equal(t, !tt.wantOmittedKey, gjson.GetBytes(upstream.lastBody, "prompt_cache_key").Exists())
+			require.Empty(t, upstream.lastReq.Header.Get(codexSessionIDHeader), "cache must not create missing native session")
+			require.Empty(t, upstream.lastReq.Header.Get("session_id"))
+			require.NotEqual(t, "thread-cache-bridge", upstream.lastReq.Header.Get("thread-id"))
+			require.Equal(t, upstream.lastReq.Header.Get("thread-id"), upstream.lastReq.Header.Get("x-client-request-id"))
 			require.Equal(t, tt.wantOptions, gjson.GetBytes(upstream.lastBody, "prompt_cache_options").Exists())
 			if tt.wantOriginalKeyGone {
 				require.NotContains(t, []string{"client-cache-key", "oauth-cache-key"}, cacheIdentity)
 			}
-			if tt.wantGeneratedKey {
-				require.NotEqual(t, deriveOpenAIAnchoredContentSessionSeed([]byte(tt.payload)), cacheIdentity)
+			if tt.wantOmittedKey {
+				require.Empty(t, cacheIdentity)
 			}
 		})
 	}
@@ -1718,184 +1718,212 @@ func TestProxyOpenAIWSHTTPBridgeTurnPromotesCodexAdditionalToolsForMixedCache(t 
 	require.False(t, gjson.GetBytes(upstream.lastBody, `tools.#(type=="custom")`).Exists())
 	require.False(t, gjson.GetBytes(upstream.lastBody, `tools.#(type=="namespace")`).Exists())
 	require.Equal(t, "isolated-ws-cache-id", gjson.GetBytes(upstream.lastBody, "prompt_cache_key").String())
-	require.Equal(t, "isolated-ws-cache-id", upstream.lastReq.Header.Get(grokConversationIDHeader))
+	require.Empty(t, upstream.lastReq.Header.Get(grokConversationIDHeader), "no tenant context was supplied")
 	require.Empty(t, upstream.lastReq.Header.Get("X-Grok-Client-Tool-Cache"))
 }
 
 func TestProxyResponsesWebSocketFromClientForGrokUsesXAIHTTPBridgeAndPreservesMappedModels(t *testing.T) {
-	gin.SetMode(gin.TestMode)
+	for _, tc := range []struct {
+		name, session string
+	}{
+		{name: "explicit-session", session: "11111111-1111-7111-8111-111111111111"},
+		{name: "unlabelled-turns"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			gin.SetMode(gin.TestMode)
 
-	bridgeResponse := func(responseID, requestID string, cachedTokens int) *http.Response {
-		sseBody := strings.Join([]string{
-			`data: {"type":"response.created","response":{"id":"` + responseID + `","model":"grok-4.3"}}`,
-			"",
-			`data: {"type":"response.output_text.delta","response":{"id":"` + responseID + `"},"delta":"ok"}`,
-			"",
-			`data: {"type":"response.completed","response":{"id":"` + responseID + `","model":"grok-4.3","usage":{"input_tokens":4,"output_tokens":2,"input_tokens_details":{"cached_tokens":` + fmt.Sprintf("%d", cachedTokens) + `}}}}`,
-			"",
-		}, "\n")
-		return &http.Response{
-			StatusCode: http.StatusOK,
-			Header: http.Header{
-				"Content-Type":   []string{"text/event-stream"},
-				"Xai-Request-Id": []string{requestID},
-			},
-			Body: io.NopCloser(strings.NewReader(sseBody)),
-		}
-	}
-	upstream := &httpUpstreamRecorder{responses: []*http.Response{
-		bridgeResponse("resp_grok_ws_1", "xai-ws-req-1", 0),
-		bridgeResponse("resp_grok_ws_2", "xai-ws-req-2", 3),
-		bridgeResponse("resp_grok_ws_3", "xai-ws-req-3", 0),
-	}}
-	svc := &OpenAIGatewayService{
-		cfg: &config.Config{
-			Gateway: config.GatewayConfig{
-				MaxLineSize: defaultMaxLineSize,
-			},
-		},
-		httpUpstream: upstream,
-	}
-	account := &Account{
-		ID:          71,
-		Name:        "grok",
-		Platform:    PlatformGrok,
-		Type:        AccountTypeOAuth,
-		Concurrency: 1,
-		Status:      StatusActive,
-		Credentials: map[string]any{
-			"base_url": xai.DefaultCLIBaseURL,
-		},
-	}
-
-	errCh := make(chan error, 1)
-	wsServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		conn, err := coderws.Accept(w, r, &coderws.AcceptOptions{CompressionMode: coderws.CompressionContextTakeover})
-		if err != nil {
-			errCh <- err
-			return
-		}
-		defer func() { _ = conn.CloseNow() }()
-
-		readCtx, cancelRead := context.WithTimeout(r.Context(), 3*time.Second)
-		msgType, firstMessage, err := conn.Read(readCtx)
-		cancelRead()
-		if err != nil {
-			errCh <- err
-			return
-		}
-		if msgType != coderws.MessageText {
-			errCh <- errors.New("first message was not text")
-			return
-		}
-
-		rec := httptest.NewRecorder()
-		ginCtx, _ := gin.CreateTestContext(rec)
-		req := r.Clone(r.Context())
-		req.Header = req.Header.Clone()
-		ginCtx.Request = req
-		ginCtx.Set("api_key", &APIKey{ID: 7101})
-
-		errCh <- svc.ProxyResponsesWebSocketFromClient(r.Context(), ginCtx, conn, account, "access-token", firstMessage, &OpenAIWSIngressHooks{
-			MapRequestModel: func(_ int, originalModel string) (string, error) {
-				if originalModel == "channel-alias" {
-					return "grok-4.3", nil
+			bridgeResponse := func(responseID, requestID string, cachedTokens int) *http.Response {
+				sseBody := strings.Join([]string{
+					`data: {"type":"response.created","response":{"id":"` + responseID + `","model":"grok-4.3"}}`,
+					"",
+					`data: {"type":"response.output_text.delta","response":{"id":"` + responseID + `"},"delta":"ok"}`,
+					"",
+					`data: {"type":"response.completed","response":{"id":"` + responseID + `","model":"grok-4.3","usage":{"input_tokens":4,"output_tokens":2,"input_tokens_details":{"cached_tokens":` + fmt.Sprintf("%d", cachedTokens) + `}}}}`,
+					"",
+				}, "\n")
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header: http.Header{
+						"Content-Type":   []string{"text/event-stream"},
+						"Xai-Request-Id": []string{requestID},
+					},
+					Body: io.NopCloser(strings.NewReader(sseBody)),
 				}
-				return originalModel, nil
-			},
+			}
+			upstream := &httpUpstreamRecorder{responses: []*http.Response{
+				bridgeResponse("resp_grok_ws_1", "xai-ws-req-1", 0),
+				bridgeResponse("resp_grok_ws_2", "xai-ws-req-2", 3),
+				bridgeResponse("resp_grok_ws_3", "xai-ws-req-3", 0),
+			}}
+			svc := &OpenAIGatewayService{
+				cfg: &config.Config{
+					Gateway: config.GatewayConfig{
+						MaxLineSize: defaultMaxLineSize,
+					},
+				},
+				httpUpstream: upstream,
+			}
+			account := &Account{
+				ID:          71,
+				Name:        "grok",
+				Platform:    PlatformGrok,
+				Type:        AccountTypeOAuth,
+				Concurrency: 1,
+				Status:      StatusActive,
+				Credentials: map[string]any{
+					"base_url":     xai.DefaultCLIBaseURL,
+					"access_token": "access-token",
+				},
+			}
+
+			errCh := make(chan error, 1)
+			wsServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				conn, err := coderws.Accept(w, r, &coderws.AcceptOptions{CompressionMode: coderws.CompressionContextTakeover})
+				if err != nil {
+					errCh <- err
+					return
+				}
+				defer func() { _ = conn.CloseNow() }()
+
+				readCtx, cancelRead := context.WithTimeout(r.Context(), 3*time.Second)
+				msgType, firstMessage, err := conn.Read(readCtx)
+				cancelRead()
+				if err != nil {
+					errCh <- err
+					return
+				}
+				if msgType != coderws.MessageText {
+					errCh <- errors.New("first message was not text")
+					return
+				}
+
+				rec := httptest.NewRecorder()
+				ginCtx, _ := gin.CreateTestContext(rec)
+				req := r.Clone(r.Context())
+				req.Header = req.Header.Clone()
+				ginCtx.Request = req
+				ginCtx.Set("api_key", &APIKey{ID: 7101})
+
+				errCh <- svc.ProxyResponsesWebSocketFromClient(r.Context(), ginCtx, conn, account, "access-token", firstMessage, &OpenAIWSIngressHooks{
+					MapRequestModel: func(_ int, originalModel string) (string, error) {
+						if originalModel == "channel-alias" {
+							return "grok-4.3", nil
+						}
+						return originalModel, nil
+					},
+				})
+			}))
+			defer wsServer.Close()
+
+			dialCtx, cancelDial := context.WithTimeout(context.Background(), 3*time.Second)
+			dialOptions := &coderws.DialOptions{HTTPHeader: make(http.Header)}
+			if tc.session != "" {
+				dialOptions.HTTPHeader.Set("X-Grok-Session-Id", tc.session)
+			}
+			clientConn, _, err := coderws.Dial(dialCtx, "ws"+strings.TrimPrefix(wsServer.URL, "http"), dialOptions)
+			cancelDial()
+			require.NoError(t, err)
+
+			writeCtx, cancelWrite := context.WithTimeout(context.Background(), 3*time.Second)
+			err = clientConn.Write(writeCtx, coderws.MessageText, []byte(`{"type":"response.create","generate":true,"model":"grok","stream":true,"input":"hi","prompt_cache_retention":"24h"}`))
+			cancelWrite()
+			require.NoError(t, err)
+
+			readEvent := func() []byte {
+				readCtx, cancelRead := context.WithTimeout(context.Background(), 3*time.Second)
+				msgType, event, readErr := clientConn.Read(readCtx)
+				cancelRead()
+				require.NoError(t, readErr)
+				require.Equal(t, coderws.MessageText, msgType)
+				return event
+			}
+
+			created := readEvent()
+			delta := readEvent()
+			completed := readEvent()
+			require.Equal(t, "response.created", gjson.GetBytes(created, "type").String())
+			require.Equal(t, "response.output_text.delta", gjson.GetBytes(delta, "type").String())
+			require.Equal(t, "response.completed", gjson.GetBytes(completed, "type").String())
+			require.Equal(t, "resp_grok_ws_1", gjson.GetBytes(completed, "response.id").String())
+
+			writeCtx, cancelWrite = context.WithTimeout(context.Background(), 3*time.Second)
+			err = clientConn.Write(writeCtx, coderws.MessageText, []byte(`{"type":"response.create","generate":true,"model":"channel-alias","stream":true,"previous_response_id":"resp_grok_ws_1","input":"second turn"}`))
+			cancelWrite()
+			require.NoError(t, err)
+
+			created = readEvent()
+			delta = readEvent()
+			completed = readEvent()
+			require.Equal(t, "response.created", gjson.GetBytes(created, "type").String())
+			require.Equal(t, "response.output_text.delta", gjson.GetBytes(delta, "type").String())
+			require.Equal(t, "response.completed", gjson.GetBytes(completed, "type").String())
+			require.Equal(t, "resp_grok_ws_2", gjson.GetBytes(completed, "response.id").String())
+			require.Equal(t, "channel-alias", gjson.GetBytes(completed, "response.model").String())
+
+			writeCtx, cancelWrite = context.WithTimeout(context.Background(), 3*time.Second)
+			err = clientConn.Write(writeCtx, coderws.MessageText, []byte(`{"type":"response.create","generate":true,"model":"grok-4.3","stream":true,"previous_response_id":"resp_grok_ws_2","input":"third turn with a different model"}`))
+			cancelWrite()
+			require.NoError(t, err)
+
+			created = readEvent()
+			delta = readEvent()
+			completed = readEvent()
+			require.Equal(t, "response.created", gjson.GetBytes(created, "type").String())
+			require.Equal(t, "response.output_text.delta", gjson.GetBytes(delta, "type").String())
+			require.Equal(t, "response.completed", gjson.GetBytes(completed, "type").String())
+			require.Equal(t, "resp_grok_ws_3", gjson.GetBytes(completed, "response.id").String())
+
+			_ = clientConn.Close(coderws.StatusNormalClosure, "done")
+			select {
+			case proxyErr := <-errCh:
+				require.NoError(t, proxyErr)
+			case <-time.After(3 * time.Second):
+				require.Fail(t, "proxy did not finish after client close")
+			}
+
+			require.Len(t, upstream.requests, 3)
+			require.Len(t, upstream.bodies, 3)
+			require.Equal(t, xai.DefaultCLIBaseURL+"/responses", upstream.lastReq.URL.String())
+			require.Equal(t, "Bearer access-token", upstream.lastReq.Header.Get("Authorization"))
+			require.Equal(t, xai.CLIUserAgent(xai.CLIClientVersion), upstream.lastReq.Header.Get("User-Agent"))
+			require.Equal(t, grokCLIVersion, upstream.lastReq.Header.Get("X-Grok-Client-Version"))
+			require.Equal(t, "grok-4.6", gjson.GetBytes(upstream.bodies[0], "model").String())
+			require.Equal(t, "grok-4.3", gjson.GetBytes(upstream.bodies[1], "model").String())
+			require.Equal(t, "grok-4.3", gjson.GetBytes(upstream.bodies[2], "model").String())
+			require.NotEmpty(t, gjson.GetBytes(upstream.lastBody, "prompt_cache_key").String())
+			requireGrokIndependentConversation(t, upstream.lastReq, gjson.GetBytes(upstream.lastBody, "prompt_cache_key").String())
+			require.False(t, gjson.GetBytes(upstream.lastBody, "tools").Exists(), "no implicit search authorization")
+			require.False(t, gjson.GetBytes(upstream.lastBody, "tool_choice").Exists())
+			firstIdentity := gjson.GetBytes(upstream.bodies[0], "prompt_cache_key").String()
+			secondIdentity := gjson.GetBytes(upstream.bodies[1], "prompt_cache_key").String()
+			thirdIdentity := gjson.GetBytes(upstream.bodies[2], "prompt_cache_key").String()
+			require.NotEmpty(t, firstIdentity)
+			require.NotEmpty(t, secondIdentity)
+			require.NotEqual(t, firstIdentity, secondIdentity)
+			require.NotEmpty(t, thirdIdentity)
+			require.Equal(t, secondIdentity, thirdIdentity)
+			requireGrokIndependentConversation(t, upstream.requests[0], firstIdentity)
+			requireGrokIndependentConversation(t, upstream.requests[1], secondIdentity)
+			requireGrokIndependentConversation(t, upstream.requests[2], thirdIdentity)
+			for _, header := range []string{grokConversationIDHeader, "X-Grok-Session-Id", "X-Grok-Conv-Group-Id"} {
+				first, second, third := upstream.requests[0].Header.Get(header), upstream.requests[1].Header.Get(header), upstream.requests[2].Header.Get(header)
+				if tc.session != "" {
+					require.NotEqual(t, tc.session, first, "explicit session declarations remain tenant-isolated")
+					require.Equal(t, first, second, "model changes retain an explicitly declared conversation: "+header)
+					require.Equal(t, second, third, header)
+				} else {
+					require.NotEqual(t, first, second, "unlabelled WS turns must not turn cache reuse into shared execution state: "+header)
+					require.NotEqual(t, second, third, "equal cache identities still require independent unlabelled turns: "+header)
+					require.NotEqual(t, first, third, header)
+				}
+			}
+			require.NotEqual(t, upstream.requests[0].Header.Get("X-Grok-Req-Id"), upstream.requests[1].Header.Get("X-Grok-Req-Id"), "new WS turns own new prompt IDs")
+			require.NotEqual(t, upstream.requests[1].Header.Get("X-Grok-Req-Id"), upstream.requests[2].Header.Get("X-Grok-Req-Id"))
+			require.False(t, gjson.GetBytes(upstream.lastBody, "type").Exists())
+			require.False(t, gjson.GetBytes(upstream.lastBody, "generate").Exists())
+			require.False(t, gjson.GetBytes(upstream.lastBody, "prompt_cache_retention").Exists())
 		})
-	}))
-	defer wsServer.Close()
-
-	dialCtx, cancelDial := context.WithTimeout(context.Background(), 3*time.Second)
-	clientConn, _, err := coderws.Dial(dialCtx, "ws"+strings.TrimPrefix(wsServer.URL, "http"), nil)
-	cancelDial()
-	require.NoError(t, err)
-
-	writeCtx, cancelWrite := context.WithTimeout(context.Background(), 3*time.Second)
-	err = clientConn.Write(writeCtx, coderws.MessageText, []byte(`{"type":"response.create","generate":true,"model":"grok","stream":true,"input":"hi","prompt_cache_retention":"24h"}`))
-	cancelWrite()
-	require.NoError(t, err)
-
-	readEvent := func() []byte {
-		readCtx, cancelRead := context.WithTimeout(context.Background(), 3*time.Second)
-		msgType, event, readErr := clientConn.Read(readCtx)
-		cancelRead()
-		require.NoError(t, readErr)
-		require.Equal(t, coderws.MessageText, msgType)
-		return event
 	}
-
-	created := readEvent()
-	delta := readEvent()
-	completed := readEvent()
-	require.Equal(t, "response.created", gjson.GetBytes(created, "type").String())
-	require.Equal(t, "response.output_text.delta", gjson.GetBytes(delta, "type").String())
-	require.Equal(t, "response.completed", gjson.GetBytes(completed, "type").String())
-	require.Equal(t, "resp_grok_ws_1", gjson.GetBytes(completed, "response.id").String())
-
-	writeCtx, cancelWrite = context.WithTimeout(context.Background(), 3*time.Second)
-	err = clientConn.Write(writeCtx, coderws.MessageText, []byte(`{"type":"response.create","generate":true,"model":"channel-alias","stream":true,"previous_response_id":"resp_grok_ws_1","input":"second turn"}`))
-	cancelWrite()
-	require.NoError(t, err)
-
-	created = readEvent()
-	delta = readEvent()
-	completed = readEvent()
-	require.Equal(t, "response.created", gjson.GetBytes(created, "type").String())
-	require.Equal(t, "response.output_text.delta", gjson.GetBytes(delta, "type").String())
-	require.Equal(t, "response.completed", gjson.GetBytes(completed, "type").String())
-	require.Equal(t, "resp_grok_ws_2", gjson.GetBytes(completed, "response.id").String())
-	require.Equal(t, "channel-alias", gjson.GetBytes(completed, "response.model").String())
-
-	writeCtx, cancelWrite = context.WithTimeout(context.Background(), 3*time.Second)
-	err = clientConn.Write(writeCtx, coderws.MessageText, []byte(`{"type":"response.create","generate":true,"model":"grok-4.3","stream":true,"previous_response_id":"resp_grok_ws_2","input":"third turn with a different model"}`))
-	cancelWrite()
-	require.NoError(t, err)
-
-	created = readEvent()
-	delta = readEvent()
-	completed = readEvent()
-	require.Equal(t, "response.created", gjson.GetBytes(created, "type").String())
-	require.Equal(t, "response.output_text.delta", gjson.GetBytes(delta, "type").String())
-	require.Equal(t, "response.completed", gjson.GetBytes(completed, "type").String())
-	require.Equal(t, "resp_grok_ws_3", gjson.GetBytes(completed, "response.id").String())
-
-	_ = clientConn.Close(coderws.StatusNormalClosure, "done")
-	select {
-	case proxyErr := <-errCh:
-		require.NoError(t, proxyErr)
-	case <-time.After(3 * time.Second):
-		require.Fail(t, "proxy did not finish after client close")
-	}
-
-	require.Len(t, upstream.requests, 3)
-	require.Len(t, upstream.bodies, 3)
-	require.Equal(t, xai.DefaultCLIBaseURL+"/responses", upstream.lastReq.URL.String())
-	require.Equal(t, "Bearer access-token", upstream.lastReq.Header.Get("Authorization"))
-	require.Equal(t, xai.CLIUserAgent(xai.CLIClientVersion), upstream.lastReq.Header.Get("User-Agent"))
-	require.Equal(t, grokCLIVersion, upstream.lastReq.Header.Get("X-Grok-Client-Version"))
-	require.Equal(t, "grok-4.6", gjson.GetBytes(upstream.bodies[0], "model").String())
-	require.Equal(t, "grok-4.3", gjson.GetBytes(upstream.bodies[1], "model").String())
-	require.Equal(t, "grok-4.3", gjson.GetBytes(upstream.bodies[2], "model").String())
-	require.NotEmpty(t, gjson.GetBytes(upstream.lastBody, "prompt_cache_key").String())
-	require.Equal(t, gjson.GetBytes(upstream.lastBody, "prompt_cache_key").String(), upstream.lastReq.Header.Get(grokConversationIDHeader))
-	require.False(t, gjson.GetBytes(upstream.lastBody, "tools").Exists(), "no implicit search authorization")
-	require.False(t, gjson.GetBytes(upstream.lastBody, "tool_choice").Exists())
-	firstIdentity := gjson.GetBytes(upstream.bodies[0], "prompt_cache_key").String()
-	secondIdentity := gjson.GetBytes(upstream.bodies[1], "prompt_cache_key").String()
-	thirdIdentity := gjson.GetBytes(upstream.bodies[2], "prompt_cache_key").String()
-	require.NotEmpty(t, firstIdentity)
-	require.NotEmpty(t, secondIdentity)
-	require.NotEqual(t, firstIdentity, secondIdentity)
-	require.NotEmpty(t, thirdIdentity)
-	require.Equal(t, secondIdentity, thirdIdentity)
-	require.Equal(t, firstIdentity, upstream.requests[0].Header.Get(grokConversationIDHeader))
-	require.Equal(t, secondIdentity, upstream.requests[1].Header.Get(grokConversationIDHeader))
-	require.Equal(t, thirdIdentity, upstream.requests[2].Header.Get(grokConversationIDHeader))
-	require.False(t, gjson.GetBytes(upstream.lastBody, "type").Exists())
-	require.False(t, gjson.GetBytes(upstream.lastBody, "generate").Exists())
-	require.False(t, gjson.GetBytes(upstream.lastBody, "prompt_cache_retention").Exists())
 }
 
 func TestOpenAIWSHTTPBridgeAcceptsFirstFrameAboveLegacy16MiB(t *testing.T) {
@@ -2001,7 +2029,7 @@ func TestOpenAIWSHTTPBridgeAcceptsFirstFrameAboveLegacy16MiB(t *testing.T) {
 
 		proxyCtx, cancelProxy := context.WithTimeout(r.Context(), 20*time.Second)
 		defer cancelProxy()
-		errCh <- svc.ProxyResponsesWebSocketFromClient(proxyCtx, ginCtx, conn, account, "sk-test", firstMessage, hooks)
+		errCh <- svc.ProxyResponsesWebSocketFromClient(proxyCtx, ginCtx, conn, account, "sk-upstream", firstMessage, hooks)
 	}))
 	defer wsServer.Close()
 
@@ -2056,6 +2084,7 @@ func TestOpenAIWSHTTPBridgeAcceptsFirstFrameAboveLegacy16MiB(t *testing.T) {
 	require.NotNil(t, upstream.lastReq)
 	require.Equal(t, http.MethodPost, upstream.lastReq.Method)
 	require.Equal(t, "https://env-openai.example/v1/responses", upstream.lastReq.URL.String())
+	require.Equal(t, "Bearer sk-upstream", upstream.lastReq.Header.Get("Authorization"))
 	require.Equal(t, "env-openai", account.GetCredential("model_provider"))
 	require.Less(t, int64(len(upstream.lastBody)), cfg.Gateway.OpenAIWS.HTTPBridgeThresholdBytes)
 	require.Greater(t, len(upstream.lastBody), 16*1024*1024)
@@ -2164,7 +2193,7 @@ func TestOpenAIWSHTTPBridgeKeepsContinuationFramesOnHTTPWithoutPreviousResponseI
 		req.Header.Set("User-Agent", "codex_cli_rs/0.135.0")
 		ginCtx.Request = req
 
-		errCh <- svc.ProxyResponsesWebSocketFromClient(r.Context(), ginCtx, conn, account, "sk-test", firstMessage, nil)
+		errCh <- svc.ProxyResponsesWebSocketFromClient(r.Context(), ginCtx, conn, account, "sk-upstream", firstMessage, nil)
 	}))
 	defer wsServer.Close()
 
@@ -2207,6 +2236,9 @@ func TestOpenAIWSHTTPBridgeKeepsContinuationFramesOnHTTPWithoutPreviousResponseI
 	}
 
 	require.Len(t, upstream.bodies, 2, "进入 HTTP bridge 后同一客户端 WS 连接内应保持 HTTP/SSE bridge")
+	for _, request := range upstream.requests {
+		require.Equal(t, "Bearer sk-upstream", request.Header.Get("Authorization"), "HTTP continuation retains its acquired credential")
+	}
 	require.False(t, gjson.GetBytes(upstream.bodies[0], "previous_response_id").Exists())
 	require.False(t, gjson.GetBytes(upstream.bodies[1], "previous_response_id").Exists())
 	secondInput := gjson.GetBytes(upstream.bodies[1], "input").Array()
@@ -2284,7 +2316,7 @@ func TestOpenAIWSHTTPBridge_IdleTimeoutClosesClientSession(t *testing.T) {
 		rec := httptest.NewRecorder()
 		ginCtx, _ := gin.CreateTestContext(rec)
 		ginCtx.Request = r.Clone(r.Context())
-		errCh <- svc.ProxyResponsesWebSocketFromClient(r.Context(), ginCtx, conn, account, "sk-test", firstMessage, nil)
+		errCh <- svc.ProxyResponsesWebSocketFromClient(r.Context(), ginCtx, conn, account, "sk-upstream", firstMessage, nil)
 	}))
 	defer wsServer.Close()
 
@@ -2323,4 +2355,5 @@ func TestOpenAIWSHTTPBridge_IdleTimeoutClosesClientSession(t *testing.T) {
 		t.Fatal("timed out waiting for idle HTTP bridge session to close")
 	}
 	require.Len(t, upstream.bodies, 1, "an idle client must not leave a continuation request running")
+	require.Equal(t, "Bearer sk-upstream", upstream.lastReq.Header.Get("Authorization"))
 }

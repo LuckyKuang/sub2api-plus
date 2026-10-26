@@ -150,6 +150,7 @@ describe('OpsErrorDetailModal upstream diagnostics', () => {
       props: { show: true, errorId: 1, errorType: 'request' },
       global: {
         stubs: {
+          DetailContentHost: { template: '<div><slot /></div>' },
           BaseDialog: { template: '<div><slot /></div>' },
           Icon: true,
         },

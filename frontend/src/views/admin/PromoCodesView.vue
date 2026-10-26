@@ -1,5 +1,5 @@
 <template>
-  <AppLayout>
+  <AppLayout workspace>
     <TablePageLayout>
       <template #filters>
         <div class="flex flex-wrap items-center gap-3">
@@ -81,7 +81,7 @@
           </template>
 
           <template #cell-usage="{ row }">
-            <span class="text-sm text-gray-600 dark:text-gray-300">
+            <span class="text-sm surface-muted">
               {{ row.used_count }} / {{ row.max_uses === 0 ? '∞' : row.max_uses }}
             </span>
           </template>
@@ -98,13 +98,13 @@
           </template>
 
           <template #cell-expires_at="{ value }">
-            <span class="text-sm text-gray-500 dark:text-dark-400">
+            <span class="text-sm surface-muted">
               {{ value ? formatDateTime(value) : t('admin.promo.neverExpires') }}
             </span>
           </template>
 
           <template #cell-created_at="{ value }">
-            <span class="text-sm text-gray-500 dark:text-dark-400">
+            <span class="text-sm surface-muted">
               {{ formatDateTime(value) }}
             </span>
           </template>
@@ -113,28 +113,28 @@
             <div class="flex items-center space-x-1">
               <button
                 @click="copyRegisterLink(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-green-50 hover:text-green-600 dark:hover:bg-green-900/20 dark:hover:text-green-400"
+                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors hover:bg-primary-50/25 hover:text-primary-600 dark:hover:bg-primary-900/20 dark:hover:text-primary-400 surface-control surface-muted"
                 :title="t('admin.promo.copyRegisterLink')"
               >
                 <Icon name="link" size="sm" />
               </button>
               <button
                 @click="handleViewUsages(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-900/20 dark:hover:text-blue-400"
+                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors hover:bg-blue-50/25 hover:text-blue-600 dark:hover:bg-blue-900/20 dark:hover:text-blue-400 surface-control surface-muted"
                 :title="t('admin.promo.viewUsages')"
               >
                 <Icon name="eye" size="sm" />
               </button>
               <button
                 @click="handleEdit(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-dark-600 dark:hover:text-gray-300"
+                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors hover:surface-hover hover:text-gray-700 dark:hover:text-gray-300 surface-control surface-muted"
                 :title="t('common.edit')"
               >
                 <Icon name="edit" size="sm" />
               </button>
               <button
                 @click="handleDelete(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400"
+                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors hover:bg-red-50/25 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400 surface-control surface-muted"
                 :title="t('common.delete')"
               >
                 <Icon name="trash" size="sm" />
@@ -167,7 +167,7 @@
         <div>
           <label class="input-label">
             {{ t('admin.promo.code') }}
-            <span class="ml-1 text-xs font-normal text-gray-400">({{ t('admin.promo.autoGenerate') }})</span>
+            <span class="ml-1 text-xs font-normal surface-muted">({{ t('admin.promo.autoGenerate') }})</span>
           </label>
           <input
             v-model="createForm.code"
@@ -190,7 +190,7 @@
         <div>
           <label class="input-label">
             {{ t('admin.promo.maxUses') }}
-            <span class="ml-1 text-xs font-normal text-gray-400">({{ t('admin.promo.zeroUnlimited') }})</span>
+            <span class="ml-1 text-xs font-normal surface-muted">({{ t('admin.promo.zeroUnlimited') }})</span>
           </label>
           <input
             v-model.number="createForm.max_uses"
@@ -202,9 +202,9 @@
         <div>
           <label class="input-label">
             {{ t('admin.promo.expiresAt') }}
-            <span class="ml-1 text-xs font-normal text-gray-400">({{ t('common.optional') }})</span>
+            <span class="ml-1 text-xs font-normal surface-muted">({{ t('common.optional') }})</span>
           </label>
-          <input
+          <DateTimePicker :aria-label="t('admin.promo.expiresAt')"
             v-model="createForm.expires_at_str"
             type="datetime-local"
             class="input"
@@ -213,7 +213,7 @@
         <div>
           <label class="input-label">
             {{ t('admin.promo.notes') }}
-            <span class="ml-1 text-xs font-normal text-gray-400">({{ t('common.optional') }})</span>
+            <span class="ml-1 text-xs font-normal surface-muted">({{ t('common.optional') }})</span>
           </label>
           <textarea
             v-model="createForm.notes"
@@ -265,7 +265,7 @@
         <div>
           <label class="input-label">
             {{ t('admin.promo.maxUses') }}
-            <span class="ml-1 text-xs font-normal text-gray-400">({{ t('admin.promo.zeroUnlimited') }})</span>
+            <span class="ml-1 text-xs font-normal surface-muted">({{ t('admin.promo.zeroUnlimited') }})</span>
           </label>
           <input
             v-model.number="editForm.max_uses"
@@ -281,9 +281,9 @@
         <div>
           <label class="input-label">
             {{ t('admin.promo.expiresAt') }}
-            <span class="ml-1 text-xs font-normal text-gray-400">({{ t('common.optional') }})</span>
+            <span class="ml-1 text-xs font-normal surface-muted">({{ t('common.optional') }})</span>
           </label>
-          <input
+          <DateTimePicker :aria-label="t('admin.promo.expiresAt')"
             v-model="editForm.expires_at_str"
             type="datetime-local"
             class="input"
@@ -292,7 +292,7 @@
         <div>
           <label class="input-label">
             {{ t('admin.promo.notes') }}
-            <span class="ml-1 text-xs font-normal text-gray-400">({{ t('common.optional') }})</span>
+            <span class="ml-1 text-xs font-normal surface-muted">({{ t('common.optional') }})</span>
           </label>
           <textarea
             v-model="editForm.notes"
@@ -323,7 +323,7 @@
       <div v-if="usagesLoading" class="flex items-center justify-center py-8">
         <Icon name="refresh" size="lg" class="animate-spin text-gray-400" />
       </div>
-      <div v-else-if="usages.length === 0" class="py-8 text-center text-gray-500 dark:text-gray-400">
+      <div v-else-if="usages.length === 0" class="py-8 text-center surface-muted">
         {{ t('admin.promo.noUsages') }}
       </div>
       <div v-else class="space-y-3">
@@ -333,14 +333,14 @@
           class="flex items-center justify-between rounded-lg border border-gray-200 p-3 dark:border-dark-600"
         >
           <div class="flex items-center gap-3">
-            <div class="flex h-8 w-8 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30">
+            <div class="flex h-8 w-8 items-center justify-center rounded-full bg-green-100/[0.15] dark:bg-green-900/30">
               <Icon name="user" size="sm" class="text-green-600 dark:text-green-400" />
             </div>
             <div>
               <p class="text-sm font-medium text-gray-900 dark:text-white">
                 {{ usage.user?.email || t('admin.promo.userPrefix', { id: usage.user_id }) }}
               </p>
-              <p class="text-xs text-gray-500 dark:text-gray-400">
+              <p class="text-xs surface-muted">
                 {{ formatDateTime(usage.used_at) }}
               </p>
             </div>
@@ -386,6 +386,7 @@
 </template>
 
 <script setup lang="ts">
+import DateTimePicker from '@/components/common/DateTimePicker.vue'
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'

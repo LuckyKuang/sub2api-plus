@@ -1673,6 +1673,10 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusInternalServerError, "OPENAI_CODEX_MODELS_CREDENTIALS_FAILED", "resolve credential account: %v", err)
 	}
+	credAccount = snapshotRequestCredentialAccount(credAccount)
+	if credAccount == nil {
+		return nil, infraerrors.New(http.StatusInternalServerError, "OPENAI_CODEX_MODELS_CREDENTIALS_FAILED", "credential account is unavailable")
+	}
 
 	requestEndpoint := chatgptCodexModelsURL
 	authToken := ""
@@ -1701,6 +1705,17 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_CODEX_MODELS_ACCOUNT_TYPE_UNSUPPORTED", "account type %q cannot fetch the Codex models manifest", credAccount.Type)
 	}
 
+	if credAccount.IsOpenAIAgentIdentity() {
+		if err := s.ensureAgentIdentityTask(ctx, credAccount, ""); err != nil {
+			return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_CODEX_MODELS_AUTH_FAILED", "bootstrap Codex models agent identity task: %v", err)
+		}
+	}
+	recordRequestCredentialOwner(ctx, credAccount, authToken)
+	ctx = withRequestCredentialOwner(ctx, account, authToken)
+	credAccount, err = requestCredentialAccount(ctx, account)
+	if err != nil || credAccount == nil {
+		return nil, infraerrors.New(http.StatusBadGateway, "OPENAI_CODEX_MODELS_CREDENTIALS_FAILED", "request credential owner is unavailable")
+	}
 	identity := s.resolveOpenAIOutboundIdentity(ctx, credAccount)
 	// The manifest URL is a Codex protocol request for both OAuth and custom
 	// API-key upstreams. Do not let the caller's client_version split it from
@@ -1740,16 +1755,20 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 	if !useAPIKeyUpstream {
 		headers.Set("Version", clientVersion)
 	}
-	applyResolvedOpenAIOutboundIdentity(headers, identity, !useAPIKeyUpstream)
+	applyResolvedOpenAIOutboundIdentity(headers, identity, true)
+	// An empty preset snapshot deliberately selects the native Codex resolver.
+	useCodexResidency := true
 	if useAPIKeyUpstream {
 		if selected, ok := outboundidentity.FromContext(ctx); ok {
 			selected.Apply(headers)
+			useCodexResidency = selected.Preset == "codex"
 		}
 	}
+	applyOpenAICodexResidencyFromSettings(ctx, s.settingService, headers, useCodexResidency)
 
-	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
+	proxyURL, err := requestCredentialOwnerProxyURL(ctx, account)
+	if err != nil {
+		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_CODEX_MODELS_PROXY_INVALID", "invalid credential proxy configuration: %v", err)
 	}
 
 	request := openAIModelsRequest{
@@ -1775,22 +1794,30 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 			return manifest, fetchErr
 		}
 		expectedTaskID := strings.TrimSpace(credAccount.GetCredential("task_id"))
-		if recoverErr := s.recoverAgentIdentityTask(fetchCtx, credAccount, expectedTaskID); recoverErr != nil {
+		recoveredCtx, recoverErr := s.recoverAgentIdentityTask(fetchCtx, account, expectedTaskID)
+		if recoverErr != nil {
 			return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_CODEX_MODELS_AUTH_FAILED", "agent identity task recovery failed: %v", recoverErr)
 		}
+		fetchCtx = recoveredCtx
 		authHeaders, authErr := s.buildOpenAIAuthenticationHeaders(fetchCtx, credAccount, "")
 		if authErr != nil {
 			return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_CODEX_MODELS_AUTH_FAILED", "build Codex models authentication after task recovery: %v", authErr)
 		}
-		request.headers.Del("Authorization")
-		request.headers.Del("ChatGPT-Account-ID")
+		retryRequest := request
+		retryRequest.headers = request.headers.Clone()
+		retryRequest.credentialAccount, authErr = requestCredentialAccount(fetchCtx, account)
+		if authErr != nil {
+			return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_CODEX_MODELS_AUTH_FAILED", "resolve recovered Codex models credential owner: %v", authErr)
+		}
+		retryRequest.headers.Del("Authorization")
+		retryRequest.headers.Del("ChatGPT-Account-ID")
 		for key, values := range authHeaders {
 			for _, value := range values {
-				request.headers.Add(key, value)
+				retryRequest.headers.Add(key, value)
 			}
 		}
-		setOpenAIChatGPTAccountHeaders(request.headers, credAccount)
-		return s.fetchCodexModelsManifestUpstream(fetchCtx, request, ifNoneMatch)
+		setOpenAIChatGPTAccountHeaders(retryRequest.headers, retryRequest.credentialAccount)
+		return s.fetchCodexModelsManifestUpstream(fetchCtx, retryRequest, ifNoneMatch)
 	}
 	return s.fetchCachedOpenAIModels(ctx, request, oauthFetch, ifNoneMatch)
 }
@@ -1898,6 +1925,13 @@ func (s *OpenAIGatewayService) fetchCodexModelsManifestUpstreamForRequest(source
 }
 
 func (s *OpenAIGatewayService) fetchOpenAIModelsUpstream(ctx context.Context, request openAIModelsRequest, ifNoneMatch string) (*OpenAIModelsResponse, error) {
+	if request.credentialAccount != nil {
+		proxyURL, err := request.credentialAccount.StrictProxyURL()
+		if err != nil {
+			return nil, infraerrors.New(http.StatusBadGateway, "OPENAI_CODEX_MODELS_PROXY_INVALID", "Models configured proxy is invalid")
+		}
+		request.proxyURL = proxyURL
+	}
 	reqCtx, cancel := context.WithTimeout(ctx, codexModelsManifestRequestTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, request.url, nil)
@@ -1915,7 +1949,23 @@ func (s *OpenAIGatewayService) fetchOpenAIModelsUpstream(ctx context.Context, re
 			return nil, infraerrors.New(http.StatusInternalServerError, "OPENAI_CODEX_MODELS_UPSTREAM_NOT_CONFIGURED", "Codex models upstream HTTP client is not configured")
 		}
 		req = req.WithContext(WithHTTPUpstreamProfile(req.Context(), HTTPUpstreamProfileOpenAI))
-		resp, err = s.httpUpstream.Do(req, request.proxyURL, request.accountID, request.accountConcurrency)
+		if usesZhipuProjectToken(request.credentialAccount) {
+			resp, err = s.projectTokens.RoundTrip(req, request.credentialAccount, func(attempt *http.Request) (*http.Response, error) {
+				return s.httpUpstream.Do(attempt, request.proxyURL, request.accountID, request.accountConcurrency)
+			})
+		} else {
+			if request.credentialAccount != nil && request.credentialAccount.IsDomesticOAuth() {
+				oauth := s.cnOAuthService
+				if oauth == nil {
+					oauth = NewCNOAuthService(nil, nil, nil)
+				}
+				if err = oauth.prepareRequest(req, request.credentialAccount); err != nil {
+					return nil, err
+				}
+				prepareAccountOutboundRequest(req, cnControlRequestOwner(req.Context(), request.credentialAccount))
+			}
+			resp, err = s.httpUpstream.Do(req, request.proxyURL, request.accountID, request.accountConcurrency)
+		}
 	} else {
 		handled := false
 		if s.pluginManager != nil {
@@ -2533,6 +2583,11 @@ func validateCodexModelsManifestEnvelope(body []byte) error {
 func buildOpenAIModelsCacheKey(request openAIModelsRequest) string {
 	hasher := sha256.New()
 	_, _ = fmt.Fprintf(hasher, "%d\n%d\n%t\n%s\n%s\n", request.accountID, request.credentialAccountID, request.standardModelsList, request.proxyURL, request.url)
+	if usesZhipuProjectToken(request.credentialAccount) || (request.credentialAccount != nil && request.credentialAccount.IsDomesticOAuth()) {
+		if owner, err := cnControlOwnerFingerprint(request.credentialAccount); err == nil {
+			_, _ = fmt.Fprintf(hasher, "owner:%s\n", owner)
+		}
+	}
 	headerNames := make([]string, 0, len(request.headers))
 	for name := range request.headers {
 		headerNames = append(headerNames, name)

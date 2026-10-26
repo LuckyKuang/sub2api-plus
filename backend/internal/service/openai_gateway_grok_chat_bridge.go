@@ -502,6 +502,10 @@ func (s *OpenAIGatewayService) forwardGrokChatCompletionsViaResponses(
 	promptCacheKey string,
 	defaultMappedModel string,
 ) (forwardResult *OpenAIForwardResult, firstByteResultErr error) {
+	ctx, account, proxyURL, err := captureGrokRequestOwner(ctx, account)
+	if err != nil {
+		return nil, err
+	}
 	startTime := time.Now()
 	ctx, byteTiming := beginFirstByteTiming(ctx, startTime)
 	defer func() {
@@ -568,10 +572,12 @@ func (s *OpenAIGatewayService) forwardGrokChatCompletionsViaResponses(
 	}
 	responsesBody = updatedBody
 
+	ctx = WithOutboundIdentityScope(ctx, c)
 	token, _, err := s.getRequestCredential(ctx, c, account)
 	if err != nil {
 		return nil, fmt.Errorf("get grok access token: %w", err)
 	}
+	ctx = withRequestCredentialOwner(ctx, account, token)
 	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
 	upstreamReq, err := s.buildGrokResponsesRequest(upstreamCtx, c, account, responsesBody, token, cacheIdentity, s.cfg, s.settingService)
 	releaseUpstreamCtx()
@@ -580,10 +586,6 @@ func (s *OpenAIGatewayService) forwardGrokChatCompletionsViaResponses(
 	}
 	SetActualOpenAIUpstreamEndpoint(c, grokChatResponsesEndpoint)
 
-	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
-	}
 	resp, err := s.doOpenAIUpstream(upstreamReq, proxyURL, account)
 	if err != nil {
 		return nil, s.handleOpenAIUpstreamTransportError(ctx, c, account, err, false)

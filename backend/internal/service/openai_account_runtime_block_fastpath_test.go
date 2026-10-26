@@ -552,6 +552,7 @@ func TestOpenAIPoolModeNonRetryable5xx_StillCreatesModelTransientBlock(t *testin
 		},
 	}
 
+	gateway.accountRepo = transientCooldownAccountRepo{current: account}
 	for i := 0; i < 2; i++ {
 		shouldDisable := gateway.handleOpenAIAccountUpstreamError(
 			context.Background(),
@@ -577,6 +578,7 @@ func TestOpenAINonPoolAPIKey5xx_StillCreatesModelTransientBlock(t *testing.T) {
 		Type:     AccountTypeAPIKey,
 	}
 
+	gateway.accountRepo = transientCooldownAccountRepo{current: account}
 	for i := 0; i < 2; i++ {
 		shouldDisable := gateway.handleOpenAIAccountUpstreamError(
 			context.Background(),
@@ -848,4 +850,13 @@ func TestShouldStopOpenAIOAuth429Failover_TracksOneGrokFollowupAttempt(t *testin
 	var state OpenAIOAuth429FailoverState
 	require.False(t, svc.ShouldStopOpenAIOAuth429Failover(account, http.StatusTooManyRequests, 0, &state))
 	require.False(t, svc.ShouldStopOpenAIOAuth429Failover(apiKeyAccount, http.StatusTooManyRequests, 2, &state))
+}
+
+func (r *oauth429RateLimitRepo) ApplyCredentialStateMutation(ctx context.Context, owner *Account, mutation CredentialStateMutation) (bool, error) {
+	if mutation.RateLimitUntil != nil {
+		if err := r.SetRateLimited(ctx, owner.ID, *mutation.RateLimitUntil); err != nil {
+			return false, err
+		}
+	}
+	return true, nil
 }

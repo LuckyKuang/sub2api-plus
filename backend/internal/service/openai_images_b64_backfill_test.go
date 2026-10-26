@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -203,7 +204,7 @@ func TestBackfillOpenAIImagesB64JSON_DownloadRequestShape(t *testing.T) {
 	account := b64BackfillAccount(true)
 	proxyID := int64(3)
 	account.ProxyID = &proxyID
-	account.Proxy = &Proxy{Protocol: "http", Host: "127.0.0.1", Port: 7890}
+	account.Proxy = &Proxy{ID: proxyID, Protocol: "http", Host: "127.0.0.1", Port: 7890}
 
 	body := []byte(`{"created":1,"data":[{"url":"https://cdn.example.com/a.png?sig=abc"}]}`)
 	got := svc.backfillOpenAIImagesB64JSON(context.Background(), account, nil, body)
@@ -219,6 +220,53 @@ func TestBackfillOpenAIImagesB64JSON_DownloadRequestShape(t *testing.T) {
 	// 目的地与重定向各跳都必须解析到公网地址；重定向本身保持跟随。
 	require.True(t, HTTPUpstreamPublicHostsOnly(req.Context()))
 	require.False(t, HTTPUpstreamRedirectsDisabled(req.Context()))
+}
+
+// OFFICIAL_AGENT_REQUEST_STATE.md requires auxiliary sends to use the acquired
+// owner snapshot and to stop before transport when preparation is uncertain.
+func TestImageBackfillFreezesAcquiredProxyAndRejectsUncertainPreparation(t *testing.T) {
+	for _, scenario := range []string{"relinked", "ambiguous", "missing-proxy", "preparation-error"} {
+		t.Run(scenario, func(t *testing.T) {
+			account := b64BackfillAccount(true)
+			account.Credentials["user_agent"] = "codex_vscode/0.164.0 (Ubuntu 24.04; aarch64) vscode"
+			proxyID := int64(41)
+			account.ProxyID = &proxyID
+			account.Proxy = &Proxy{ID: proxyID, Protocol: "http", Host: "acquired-proxy.example", Port: 8080}
+			if scenario == "missing-proxy" {
+				account.Proxy = nil
+			}
+			ctx := WithOutboundIdentityScope(context.Background(), nil)
+			recordRequestCredentialOwner(ctx, account, "sk-test")
+			if scenario == "ambiguous" {
+				conflicting := snapshotRequestCredentialAccount(account)
+				conflicting.Credentials["refresh_token"] = "another-grant"
+				recordRequestCredentialOwner(ctx, conflicting, "sk-test")
+			}
+			ctx = withRequestCredentialOwner(ctx, account, "sk-test")
+			account.Proxy = &Proxy{ID: proxyID, Protocol: "http", Host: "replacement-proxy.example", Port: 9090}
+			account.Credentials["api_key"] = "replacement-key"
+			if scenario == "preparation-error" {
+				ctx = WithOutboundPreparationError(ctx, errors.New("test preparation failure"))
+			}
+			upstream := &httpUpstreamRecorder{resp: b64BackfillImageResponse(http.StatusOK, "image/png", b64BackfillPNGBytes)}
+			svc := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream}
+			encoded, err := svc.fetchOpenAIImageURLBase64(ctx, account, "https://cdn.example.com/image.png")
+			if scenario != "relinked" {
+				require.Error(t, err)
+				require.Empty(t, encoded)
+				require.Empty(t, upstream.requests, "uncertain preparation must not write upstream")
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, base64.StdEncoding.EncodeToString(b64BackfillPNGBytes), encoded)
+			require.Equal(t, "http://acquired-proxy.example:8080", upstream.lastProxyURL)
+			require.Len(t, upstream.requests, 1)
+			require.Empty(t, upstream.lastReq.Header.Get("Authorization"), "image CDN requests must not inherit inference credentials")
+			require.Equal(t, "codex_vscode/0.164.0 (Ubuntu 24.04; aarch64) vscode", upstream.lastReq.Header.Get("User-Agent"))
+			require.Equal(t, "codex_vscode", upstream.lastReq.Header.Get("Originator"))
+			require.Equal(t, "0.164.0", upstream.lastReq.Header.Get("Version"))
+		})
+	}
 }
 
 func TestBackfillOpenAIImagesB64JSON_RejectsPrivateHosts(t *testing.T) {

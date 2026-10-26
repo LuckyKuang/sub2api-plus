@@ -58,6 +58,26 @@ function mountTable(
 }
 
 describe('PlazaModelPricingTable', () => {
+  it('rounds one complete token or colspan media record and aligns both header rows', () => {
+    const token = tokenModel()
+    const image = tokenModel({ name: 'image-test', official_pricing: null })
+    image.pricing!.billing_mode = 'image'
+    image.pricing!.per_request_price = 0.04
+    const wrapper = mountTable([token, image], 1)
+    const groups = wrapper.findAll('tbody.record-group')
+    expect(groups).toHaveLength(2)
+    for (const group of groups) {
+      expect(group.findAll('tr')).toHaveLength(1)
+      const cells = group.findAll('td')
+      expect(cells[0].attributes('data-record-edges')).toBe('t b l tl bl')
+      expect(cells.at(-1)!.attributes('data-record-edges')).toBe('t b r tr br')
+      expect(cells.slice(1, -1).every(cell => cell.attributes('data-record-edges') === 't b')).toBe(true)
+    }
+    expect(groups[1].get('td[colspan="3"]').text()).toContain('$0.04')
+    expect(wrapper.findAll('th[rowspan="2"][data-header-edge-bottom]')).toHaveLength(2)
+    wrapper.unmount()
+  })
+
   it.each([
     { enabled: true, multiplier: 1, userRate: 0.05, expected: 1 },
     { enabled: true, multiplier: 0.5, userRate: null, expected: 0.5 },
@@ -678,6 +698,24 @@ describe('PlazaModelPricingTable 分时计价', () => {
       }
     })
   }
+
+  it('wraps the base price and all time periods in one model card without internal rounded corners', () => {
+    const wrapper = mountTable([timePricedModel()], 1)
+    const groups = wrapper.findAll('tbody.record-group')
+    expect(groups).toHaveLength(1)
+    const rows = groups[0].findAll('tr')
+    expect(rows).toHaveLength(3)
+    const first = rows[0].findAll('td')
+    const middle = rows[1].findAll('td')
+    const last = rows[2].findAll('td')
+    expect(first[0].attributes('data-record-edges')).toBe('t l tl')
+    expect(first.at(-1)!.attributes('data-record-edges')).toBe('t r tr')
+    expect(middle.map(cell => cell.attributes('data-record-edges'))).toEqual(['l', '', '', '', '', '', '', 'r'])
+    expect(last[0].attributes('data-record-edges')).toBe('b l bl')
+    expect(last.at(-1)!.attributes('data-record-edges')).toBe('b r br')
+    expect(last.slice(1, -1).every(cell => cell.attributes('data-record-edges') === 'b')).toBe(true)
+    wrapper.unmount()
+  })
 
   it('有分时倍率的模型展开为标准行 + 每时段一行,时段行价格按倍率折算且倍率列显示生效倍率', () => {
     const wrapper = mountTable([timePricedModel()], 0.8)

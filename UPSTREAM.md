@@ -29,12 +29,41 @@ Plus security boundaries. Official migration 246 is imported as Plus 295;
 historical migrations remain unchanged. Plus retains its container CI/release
 workflows, vendored SheetJS dependency and stronger dependency security floors.
 
+The Codex egress review merges Plus `main` at
+`0b5acf5796b40a695f1e42ebc01aa48875283823` and compares the client contract with
+openai/codex `770ed6dcea40fedb83bb831f6d5e3760a933cc9a`. OpenAI OAuth and API-key
+accounts keep native Codex identity; compatible upstream suppliers retain their
+explicit family mapping. Codex version changes are maintained manually in code
+or by an explicit administrator pin, without remote version synchronization.
+The existing Plus identity priority, fingerprint controls and ingress audit
+boundaries remain governed by the owning contracts above. Historical migrations
+from both branches retain their complete filenames and checksums.
+
+The seven-platform synchronization starts from Plus branch commit
+`90d9f67e0fc891bee6e9d13d97271d8daf7d1924` and merges Plus `main` at
+`1818c299307ac394c0e3101b45d6c6ef22515c0c`. The existing official-agent baselines
+in [OFFICIAL_AGENT_BASELINES.md](docs/OFFICIAL_AGENT_BASELINES.md) govern OpenAI,
+xAI, DeepSeek, Kimi, MiniMax, StepFun and Zhipu. Codex retains its manually
+selected `0.164.0` default, credential-owner/global/default precedence, trusted
+fingerprints, model-rejection failover and audit boundary. Compatible upstream
+fixes add semantic-output-aware overload recovery, stream cancellation billing,
+quota/scheduler improvements and authenticated Redis health checks. DeepSeek
+image aliases retain the branch's deployed compatibility behavior. Migrations
+290–294 and the existing console UI remain intact.
+The acceptance review also refreshes every bound account after proxy mutations
+and keeps native provider account-test model catalogs separate from Claude's
+defaults. These fixes retain the existing identity and protocol contracts.
+The independently deployed model-visibility and Gemini-permission migrations
+both retain prefix 295 with their complete original filenames and checksums;
+future migrations start at 296. This is a branch integration, not publication
+of a new release.
+
 ## Current Version
 
 ```text
-Git/GitHub: v0.2.18+custom.001
-Application: 0.2.18+custom.001
-GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.18-custom.001
+Git/GitHub: v0.2.18+custom.002
+Application: 0.2.18+custom.002
+GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.18-custom.002
 ```
 
 ## Release Mapping
@@ -113,6 +142,7 @@ GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.18-custom.001
 | `v0.2.15+custom.003` | `v0.2.15` | `ab80abc6d1f929a6864c8804fd077b509d21fda2` | published |
 | `v0.2.17+custom.001` | `v0.2.17` | `060d0160417782cd962a0c7f460f6cd4565d4916` | published |
 | `v0.2.18+custom.001` | `v0.2.18` | `ac1b8f1271be0d674fa6f074403c1410f30a3a81` | published |
+| `v0.2.18+custom.002` | `v0.2.18` | `ac1b8f1271be0d674fa6f074403c1410f30a3a81` | planned |
 
 `v0.2.15+custom.003` records the integrated official main snapshot in the
 Official Commit column. Its tagged official baseline remains
@@ -125,6 +155,10 @@ Plus writes `0.2.17+custom.001`.
 `v0.2.18+custom.001` records official tag `v0.2.18` / peeled
 `ac1b8f1271be0d674fa6f074403c1410f30a3a81`. Official tag VERSION is `0.2.17`;
 Plus writes `0.2.18+custom.001`. Its mapping is finalized after publication.
+
+`v0.2.18+custom.002` retains the same official baseline and adds the seven-provider
+gateway capability and regression-completion work. Its mapping status is finalized
+through a separate PR after verification of the immutable release artifacts.
 
 `v0.2.4+custom.006` is marked withdrawn because official `v0.2.5` was imported before that snapshot overlay was published. Do not reuse or retag `.006`.
 

@@ -361,6 +361,7 @@ func TestBuildSchedulerMetadataAccount_KeepsGrokMediaEligibility(t *testing.T) {
 				},
 			},
 		}
+		account.Extra["grok_billing_snapshot"].(map[string]any)["credential_generation"] = service.CredentialStateGeneration(&account)
 
 		got := buildSchedulerMetadataAccount(account)
 
@@ -369,6 +370,42 @@ func TestBuildSchedulerMetadataAccount_KeepsGrokMediaEligibility(t *testing.T) {
 		require.Equal(t, "billing_forbidden", reason)
 		require.NotNil(t, got.Extra["grok_billing_snapshot"])
 	})
+}
+
+func TestSchedulerMetadataKeepsCredentialGenerationWithoutGrantSecrets(t *testing.T) {
+	proxyID := int64(9)
+	account := service.Account{
+		ID: 45, Platform: service.PlatformGrok, Type: service.AccountTypeOAuth,
+		Credentials: map[string]any{"access_token": "current-secret", "refresh_token": "refresh-secret", "sub": "owner"},
+		ProxyID:     &proxyID, Proxy: &service.Proxy{ID: proxyID, Protocol: "http", Host: "proxy.test", Port: 8080, Username: "user", Password: "proxy-secret"},
+		Extra: map[string]any{},
+	}
+	generation := service.CredentialStateGeneration(&account)
+	account.Extra["grok_billing_snapshot"] = map[string]any{"status_code": 200, "usage_percent": 12.0, "credential_generation": generation}
+	metadata := buildSchedulerMetadataAccount(account)
+	require.Equal(t, generation, metadata.CredentialGeneration)
+	require.Equal(t, generation, service.CredentialStateGeneration(&metadata))
+	require.Empty(t, metadata.Credentials["access_token"])
+	require.Empty(t, metadata.Credentials["refresh_token"])
+	require.Nil(t, metadata.Proxy)
+	eligible, reason := metadata.GrokMediaGenerationEligibility()
+	require.True(t, eligible)
+	require.Equal(t, "eligible", reason)
+	fullPayload, metaPayload, err := marshalSchedulerCacheAccount(account)
+	require.NoError(t, err)
+	var hydrated, decodedMetadata service.Account
+	require.NoError(t, json.Unmarshal(fullPayload, &hydrated))
+	require.NoError(t, json.Unmarshal(metaPayload, &decodedMetadata))
+	require.Empty(t, hydrated.CredentialGeneration)
+	require.Equal(t, generation, decodedMetadata.CredentialGeneration)
+	_, _, err = marshalSchedulerCacheAccount(metadata)
+	require.Error(t, err, "slim accounts cannot be published as full credential snapshots")
+	account.Credentials["access_token"] = "replacement-secret"
+	metadata = buildSchedulerMetadataAccount(account)
+	require.NotEqual(t, generation, metadata.CredentialGeneration)
+	eligible, reason = metadata.GrokMediaGenerationEligibility()
+	require.False(t, eligible)
+	require.Equal(t, "billing_unobserved", reason)
 }
 
 func TestBuildSchedulerMetadataAccount_KeepsSlimGroupMembership(t *testing.T) {

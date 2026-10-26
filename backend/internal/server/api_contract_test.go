@@ -971,13 +971,12 @@ func TestAPIContracts(t *testing.T) {
 					"codex_residency":                         "off",
 					"codex_legacy_client_profile_compatibility_enabled": false,
 					"openai_codex_local_group_quota_enabled": false,
+					"openai_codex_ws_enabled":                  true,
+					"openai_codex_http_ws_enabled":             false,
+					"openai_codex_ws_deployment_allowed":       false,
 					"openai_codex_client_version":             "",
-					"openai_codex_client_version_synced":      "",
-					"openai_codex_client_version_synced_checked_at": "",
-					"openai_codex_client_version_sync_error": "",
-					"openai_codex_client_version_effective": "0.158.0",
+					"openai_codex_client_version_effective": "0.164.0",
 					"openai_codex_client_version_source": "compiled",
-					"openai_codex_version_auto_sync_enabled":  true,
 					"claude_code_client_version":              "",
 					"claude_code_client_version_synced":        "",
 					"claude_code_version_auto_sync_enabled":   true,
@@ -1311,13 +1310,12 @@ func TestAPIContracts(t *testing.T) {
 					"codex_residency":                         "off",
 					"codex_legacy_client_profile_compatibility_enabled": false,
 					"openai_codex_local_group_quota_enabled": false,
+					"openai_codex_ws_enabled":                  true,
+					"openai_codex_http_ws_enabled":             false,
+					"openai_codex_ws_deployment_allowed":       false,
 					"openai_codex_client_version":             "",
-					"openai_codex_client_version_synced":      "",
-					"openai_codex_client_version_synced_checked_at": "",
-					"openai_codex_client_version_sync_error": "",
-					"openai_codex_client_version_effective": "0.158.0",
+					"openai_codex_client_version_effective": "0.164.0",
 					"openai_codex_client_version_source": "compiled",
-					"openai_codex_version_auto_sync_enabled":  true,
 					"claude_code_client_version":              "",
 					"claude_code_client_version_synced":        "",
 					"claude_code_version_auto_sync_enabled":   true,
@@ -1584,6 +1582,7 @@ func newContractDeps(t *testing.T) *contractDeps {
 	authHandler := handler.NewAuthHandler(cfg, nil, userService, settingService, nil, redeemService, nil, nil)
 	apiKeyHandler := handler.NewAPIKeyHandler(apiKeyService)
 	usageHandler := handler.NewUsageHandler(usageService, apiKeyService, nil, nil)
+	adminUsageHandler := adminhandler.NewUsageHandler(usageService, apiKeyService, adminService, nil)
 	adminSettingHandler := adminhandler.NewSettingHandler(settingService, nil, nil, nil, nil, nil, nil)
 	adminAccountHandler := adminhandler.NewAccountHandler(adminService, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
@@ -1622,6 +1621,8 @@ func newContractDeps(t *testing.T) *contractDeps {
 	v1Usage.Use(jwtAuth)
 	v1Usage.GET("/usage", usageHandler.List)
 	v1Usage.GET("/usage/stats", usageHandler.Stats)
+	v1Usage.GET("/usage/dashboard/stats", usageHandler.DashboardStats)
+	v1Usage.GET("/usage/:id", usageHandler.GetByID)
 
 	v1Subs := v1.Group("")
 	v1Subs.Use(jwtAuth)
@@ -1634,6 +1635,7 @@ func newContractDeps(t *testing.T) *contractDeps {
 	v1Admin := v1.Group("/admin")
 	v1Admin.Use(adminAuth)
 	v1Admin.GET("/settings", adminSettingHandler.GetSettings)
+	v1Admin.GET("/usage/:id", adminUsageHandler.GetByID)
 	v1Admin.POST("/accounts/bulk-update", adminAccountHandler.BulkUpdate)
 
 	return &contractDeps{
@@ -2641,7 +2643,9 @@ func (r *stubApiKeyRepo) GetRateLimitData(ctx context.Context, id int64) (*servi
 }
 
 type stubUsageLogRepo struct {
-	userLogs map[int64][]service.UsageLog
+	userLogs          map[int64][]service.UsageLog
+	dashboardTimezone string
+	dashboardUserID   int64
 }
 
 func newStubUsageLogRepo() *stubUsageLogRepo {
@@ -2657,7 +2661,14 @@ func (r *stubUsageLogRepo) Create(ctx context.Context, log *service.UsageLog) (b
 }
 
 func (r *stubUsageLogRepo) GetByID(ctx context.Context, id int64) (*service.UsageLog, error) {
-	return nil, errors.New("not implemented")
+	for _, logs := range r.userLogs {
+		for _, record := range logs {
+			if record.ID == id {
+				return &record, nil
+			}
+		}
+	}
+	return nil, service.ErrUsageLogNotFound
 }
 
 func (r *stubUsageLogRepo) Delete(ctx context.Context, id int64) error {
@@ -2819,8 +2830,10 @@ func (r *stubUsageLogRepo) GetBatchAPIKeyUsageStats(ctx context.Context, apiKeyI
 	return nil, errors.New("not implemented")
 }
 
-func (r *stubUsageLogRepo) GetUserDashboardStats(ctx context.Context, userID int64) (*usagestats.UserDashboardStats, error) {
-	return nil, errors.New("not implemented")
+func (r *stubUsageLogRepo) GetUserDashboardStats(ctx context.Context, userID int64, userTimezone string) (*usagestats.UserDashboardStats, error) {
+	r.dashboardTimezone = userTimezone
+	r.dashboardUserID = userID
+	return &usagestats.UserDashboardStats{Timezone: userTimezone}, nil
 }
 
 func (r *stubUsageLogRepo) GetAPIKeyDashboardStats(ctx context.Context, apiKeyID int64) (*usagestats.UserDashboardStats, error) {

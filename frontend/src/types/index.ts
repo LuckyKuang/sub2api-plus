@@ -209,6 +209,7 @@ export interface LoginAgreementDocument {
 }
 
 export interface PublicSettings {
+  console_appearance?: import('./appearance').ConsoleAppearance
   registration_enabled: boolean
   email_verify_enabled: boolean
   force_email_on_third_party_signup: boolean
@@ -489,6 +490,7 @@ export interface ApiError {
 }
 
 export interface PaginatedResponse<T> {
+  snapshot_max_id?: number
   items: T[]
   total: number
   page: number
@@ -1159,6 +1161,8 @@ export interface Account {
   // 改为通过 credentials_status.has_<key> 暴露存在性。
   credentials?: Record<string, unknown>
   credentials_status?: Record<string, boolean>
+  // Opaque credential/proxy revision supplied by the admin API; never a token.
+  oauth_credential_owner?: string
   ollama_cloud_usage?: OllamaCloudUsageState
   // Extra fields including Codex usage, OpenAI compact capability, and model-level rate limits.
   extra?: (CodexUsageSnapshot & OpenAICompactState & {
@@ -2173,6 +2177,7 @@ export interface UserErrorListParams {
 }
 
 export interface UsageQueryParams {
+  snapshot_max_id?: number | 'new'
   page?: number
   page_size?: number
   api_key_id?: number

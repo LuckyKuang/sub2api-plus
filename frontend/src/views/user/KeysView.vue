@@ -1,5 +1,5 @@
 <template>
-  <AppLayout>
+  <AppLayout workspace>
     <TablePageLayout>
       <template #filters>
         <div class="flex flex-col gap-3">
@@ -29,7 +29,7 @@
             :custom-endpoints="publicSettings?.custom_endpoints || []"
           />
           <div v-if="selectedIds.length" class="flex flex-wrap items-center gap-3 text-sm">
-            <span class="text-gray-600 dark:text-gray-300">
+            <span class="surface-muted">
               {{ t('keys.bulkEdit.selectedCount', { count: selectedIds.length }) }}
             </span>
             <button
@@ -70,13 +70,13 @@
             </button>
             <div
               v-if="showColumnDropdown"
-              class="absolute right-0 top-full z-50 mt-1 max-h-80 w-48 overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-dark-600 dark:bg-dark-800"
+              class="absolute right-0 top-full z-50 mt-1 max-h-80 w-48 space-y-0.5 overflow-y-auto border border-gray-200 p-1 shadow-lg dark:border-dark-600 surface-panel"
             >
               <button
                 v-for="col in toggleableColumns"
                 :key="col.key"
                 @click="toggleColumn(col.key)"
-                class="flex w-full items-center justify-between px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-700"
+                class="flex w-full items-center justify-between rounded-[var(--surface-radius-item)] px-3 py-2 text-left text-sm hover:surface-hover surface-control surface-muted"
               >
                 <span>{{ col.label }}</span>
                 <Icon
@@ -112,7 +112,7 @@
           @sort="handleSort"
         >
           <template #cell-id="{ value }">
-            <span class="font-mono text-xs text-gray-500 dark:text-gray-400">#{{ value }}</span>
+            <span class="font-mono text-xs surface-muted">#{{ value }}</span>
           </template>
 
           <template #cell-key="{ value, row }">
@@ -122,7 +122,7 @@
               </code>
               <button
                 @click="copyToClipboard(value, row.id)"
-                class="rounded-lg p-1 transition-colors hover:bg-gray-100 dark:hover:bg-dark-700"
+                class="rounded-lg p-1 transition-colors hover:surface-hover surface-control"
                 :class="
                   copiedKeyId === row.id
                     ? 'text-green-500'
@@ -159,7 +159,7 @@
               <button
                 :ref="(el) => setGroupButtonRef(row.id, el)"
                 @click="openGroupSelector(row)"
-                class="-mx-2 -my-1 flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 transition-all duration-200 hover:bg-gray-100 dark:hover:bg-dark-700"
+                class="-mx-2 -my-1 flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 transition-all duration-200 hover:surface-hover surface-control"
                 :title="t('keys.clickToChangeGroup')"
                 :disabled="changingGroupIds.has(row.id)"
               >
@@ -175,10 +175,10 @@
                   :peak-end="row.group.peak_end"
                   :peak-rate-multiplier="row.group.peak_rate_multiplier"
                 />
-                <span v-else class="text-sm text-gray-400 dark:text-dark-500">{{
+                <span v-else class="text-sm surface-muted">{{
                   t('keys.noGroup')
                 }}</span>
-                <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('keys.selectGroup') }}</span>
+                <span class="text-xs surface-muted">{{ t('keys.selectGroup') }}</span>
                 <svg
                   class="h-3.5 w-3.5 text-gray-400 opacity-60 transition-opacity group-hover/dropdown:opacity-100"
                   fill="none"
@@ -201,8 +201,8 @@
               :class="[
                 'inline-flex min-w-8 items-center justify-center rounded px-2 py-1 text-sm font-semibold tabular-nums',
                 (value ?? 0) > 0
-                  ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-900/25 dark:text-emerald-300 dark:ring-emerald-800'
-                  : 'bg-gray-100 text-gray-500 dark:bg-dark-700 dark:text-dark-400'
+                  ? 'bg-emerald-50/[0.15] text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-900/25 dark:text-emerald-300 dark:ring-emerald-800'
+                  : 'surface-inset text-gray-500 dark:surface-inset dark:text-dark-400'
               ]"
             >
               {{ value ?? 0 }}
@@ -212,13 +212,13 @@
           <template #cell-usage="{ row }">
             <div class="text-sm">
               <div class="flex items-center gap-1.5">
-                <span class="text-gray-500 dark:text-gray-400">{{ t('keys.today') }}:</span>
+                <span class="surface-muted">{{ t('keys.today') }}:</span>
                 <span class="font-medium text-gray-900 dark:text-white">
                   ${{ (usageStats[row.id]?.today_actual_cost ?? 0).toFixed(4) }}
                 </span>
               </div>
               <div class="mt-0.5 flex items-center gap-1.5">
-                <span class="text-gray-500 dark:text-gray-400">{{ t('keys.total') }}:</span>
+                <span class="surface-muted">{{ t('keys.total') }}:</span>
                 <span class="font-medium text-gray-900 dark:text-white">
                   ${{ (usageStats[row.id]?.total_actual_cost ?? 0).toFixed(4) }}
                 </span>
@@ -226,7 +226,7 @@
               <!-- Quota progress (if quota is set) -->
               <div v-if="row.quota > 0" class="mt-1.5">
                 <div class="flex items-center gap-1.5">
-                  <span class="text-gray-500 dark:text-gray-400">{{ t('keys.quota') }}:</span>
+                  <span class="surface-muted">{{ t('keys.quota') }}:</span>
                   <span :class="[
                     'font-medium',
                     row.quota_used >= row.quota ? 'text-red-500' :
@@ -239,7 +239,7 @@
                 <div class="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-dark-600">
                   <div
                     :class="[
-                      'h-full rounded-full transition-all',
+                      'console-data-mark h-full rounded-full transition-all',
                       row.quota_used >= row.quota ? 'bg-red-500' :
                       row.quota_used >= row.quota * 0.8 ? 'bg-yellow-500' :
                       'bg-primary-500'
@@ -256,12 +256,12 @@
               <!-- 5h window -->
               <div v-if="row.rate_limit_5h > 0">
                 <div class="flex items-center justify-between text-xs">
-                  <span class="text-gray-500 dark:text-gray-400">5h</span>
+                  <span class="surface-muted">5h</span>
                   <span :class="[
                     'font-medium tabular-nums',
                     row.usage_5h >= row.rate_limit_5h ? 'text-red-500' :
                     row.usage_5h >= row.rate_limit_5h * 0.8 ? 'text-yellow-500' :
-                    'text-gray-700 dark:text-gray-300'
+                    'surface-muted'
                   ]">
                     ${{ row.usage_5h?.toFixed(2) || '0.00' }}/${{ row.rate_limit_5h?.toFixed(2) }}
                   </span>
@@ -269,7 +269,7 @@
                 <div class="h-1 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-dark-600">
                   <div
                     :class="[
-                      'h-full rounded-full transition-all',
+                      'console-data-mark h-full rounded-full transition-all',
                       row.usage_5h >= row.rate_limit_5h ? 'bg-red-500' :
                       row.usage_5h >= row.rate_limit_5h * 0.8 ? 'bg-yellow-500' :
                       'bg-emerald-500'
@@ -277,19 +277,19 @@
                     :style="{ width: Math.min((row.usage_5h / row.rate_limit_5h) * 100, 100) + '%' }"
                   />
                 </div>
-                <div v-if="row.reset_5h_at && formatResetTime(row.reset_5h_at)" class="text-[10px] text-gray-400 dark:text-gray-500 tabular-nums">
+                <div v-if="row.reset_5h_at && formatResetTime(row.reset_5h_at)" class="text-[10px] tabular-nums surface-muted">
                   ⟳ {{ formatResetTime(row.reset_5h_at) }}
                 </div>
               </div>
               <!-- 1d window -->
               <div v-if="row.rate_limit_1d > 0">
                 <div class="flex items-center justify-between text-xs">
-                  <span class="text-gray-500 dark:text-gray-400">1d</span>
+                  <span class="surface-muted">1d</span>
                   <span :class="[
                     'font-medium tabular-nums',
                     row.usage_1d >= row.rate_limit_1d ? 'text-red-500' :
                     row.usage_1d >= row.rate_limit_1d * 0.8 ? 'text-yellow-500' :
-                    'text-gray-700 dark:text-gray-300'
+                    'surface-muted'
                   ]">
                     ${{ row.usage_1d?.toFixed(2) || '0.00' }}/${{ row.rate_limit_1d?.toFixed(2) }}
                   </span>
@@ -297,7 +297,7 @@
                 <div class="h-1 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-dark-600">
                   <div
                     :class="[
-                      'h-full rounded-full transition-all',
+                      'console-data-mark h-full rounded-full transition-all',
                       row.usage_1d >= row.rate_limit_1d ? 'bg-red-500' :
                       row.usage_1d >= row.rate_limit_1d * 0.8 ? 'bg-yellow-500' :
                       'bg-emerald-500'
@@ -305,19 +305,19 @@
                     :style="{ width: Math.min((row.usage_1d / row.rate_limit_1d) * 100, 100) + '%' }"
                   />
                 </div>
-                <div v-if="row.reset_1d_at && formatResetTime(row.reset_1d_at)" class="text-[10px] text-gray-400 dark:text-gray-500 tabular-nums">
+                <div v-if="row.reset_1d_at && formatResetTime(row.reset_1d_at)" class="text-[10px] tabular-nums surface-muted">
                   ⟳ {{ formatResetTime(row.reset_1d_at) }}
                 </div>
               </div>
               <!-- 7d window -->
               <div v-if="row.rate_limit_7d > 0">
                 <div class="flex items-center justify-between text-xs">
-                  <span class="text-gray-500 dark:text-gray-400">7d</span>
+                  <span class="surface-muted">7d</span>
                   <span :class="[
                     'font-medium tabular-nums',
                     row.usage_7d >= row.rate_limit_7d ? 'text-red-500' :
                     row.usage_7d >= row.rate_limit_7d * 0.8 ? 'text-yellow-500' :
-                    'text-gray-700 dark:text-gray-300'
+                    'surface-muted'
                   ]">
                     ${{ row.usage_7d?.toFixed(2) || '0.00' }}/${{ row.rate_limit_7d?.toFixed(2) }}
                   </span>
@@ -325,7 +325,7 @@
                 <div class="h-1 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-dark-600">
                   <div
                     :class="[
-                      'h-full rounded-full transition-all',
+                      'console-data-mark h-full rounded-full transition-all',
                       row.usage_7d >= row.rate_limit_7d ? 'bg-red-500' :
                       row.usage_7d >= row.rate_limit_7d * 0.8 ? 'bg-yellow-500' :
                       'bg-emerald-500'
@@ -333,7 +333,7 @@
                     :style="{ width: Math.min((row.usage_7d / row.rate_limit_7d) * 100, 100) + '%' }"
                   />
                 </div>
-                <div v-if="row.reset_7d_at && formatResetTime(row.reset_7d_at)" class="text-[10px] text-gray-400 dark:text-gray-500 tabular-nums">
+                <div v-if="row.reset_7d_at && formatResetTime(row.reset_7d_at)" class="text-[10px] tabular-nums surface-muted">
                   ⟳ {{ formatResetTime(row.reset_7d_at) }}
                 </div>
               </div>
@@ -341,24 +341,24 @@
               <button
                 v-if="row.usage_5h > 0 || row.usage_1d > 0 || row.usage_7d > 0"
                 v-support-readonly @click.stop="confirmResetRateLimitFromTable(row)"
-                class="mt-0.5 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-gray-500 transition-colors hover:bg-gray-100 hover:text-primary-600 dark:hover:bg-dark-700 dark:hover:text-primary-400"
+                class="mt-0.5 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs transition-colors hover:surface-hover hover:text-primary-600 dark:hover:text-primary-400 surface-control surface-muted"
                 :title="t('keys.resetRateLimitUsage')"
               >
                 <Icon name="refresh" size="xs" />
                 {{ t('keys.resetUsage') }}
               </button>
             </div>
-            <span v-else class="text-sm text-gray-400 dark:text-dark-500">-</span>
+            <span v-else class="text-sm surface-muted">-</span>
           </template>
 
           <template #cell-expires_at="{ value }">
             <span v-if="value" :class="[
               'text-sm',
-              new Date(value) < new Date() ? 'text-red-500 dark:text-red-400' : 'text-gray-500 dark:text-dark-400'
+              new Date(value) < new Date() ? 'text-red-500 dark:text-red-400' : 'surface-muted'
             ]">
               {{ formatDateTime(value) }}
             </span>
-            <span v-else class="text-sm text-gray-400 dark:text-dark-500">{{ t('keys.noExpiration') }}</span>
+            <span v-else class="text-sm surface-muted">{{ t('keys.noExpiration') }}</span>
           </template>
 
           <template #cell-status="{ value }">
@@ -374,21 +374,21 @@
           </template>
 
           <template #cell-last_used_at="{ value }">
-            <span v-if="value" class="text-sm text-gray-500 dark:text-dark-400">
+            <span v-if="value" class="text-sm surface-muted">
               {{ formatDateTime(value) }}
             </span>
-            <span v-else class="text-sm text-gray-400 dark:text-dark-500">-</span>
+            <span v-else class="text-sm surface-muted">-</span>
           </template>
 
           <template #cell-last_used_ip="{ value }">
-            <span v-if="value" class="text-sm text-gray-500 dark:text-dark-400">
+            <span v-if="value" class="text-sm surface-muted">
               {{ value }}
             </span>
-            <span v-else class="text-sm text-gray-400 dark:text-dark-500">-</span>
+            <span v-else class="text-sm surface-muted">-</span>
           </template>
 
           <template #cell-created_at="{ value }">
-            <span class="text-sm text-gray-500 dark:text-dark-400">{{ formatDateTime(value) }}</span>
+            <span class="text-sm surface-muted">{{ formatDateTime(value) }}</span>
           </template>
 
           <template #cell-actions="{ row }">
@@ -396,7 +396,7 @@
               <!-- Use Key Button -->
               <button
                 @click="openUseKeyModal(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-green-50 hover:text-green-600 dark:hover:bg-green-900/20 dark:hover:text-green-400"
+                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors hover:bg-primary-50/25 hover:text-primary-600 dark:hover:bg-primary-900/20 dark:hover:text-primary-400 surface-control surface-muted"
               >
                 <Icon name="terminal" size="sm" />
                 <span class="text-xs">{{ t('keys.useKey') }}</span>
@@ -405,7 +405,7 @@
               <button
                 v-if="!publicSettings?.hide_ccs_import_button"
                 @click="importToCcswitch(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-900/20 dark:hover:text-blue-400"
+                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors hover:bg-blue-50/25 hover:text-blue-600 dark:hover:bg-blue-900/20 dark:hover:text-blue-400 surface-control surface-muted"
               >
                 <Icon name="upload" size="sm" />
                 <span class="text-xs">{{ t('keys.importToCcSwitch') }}</span>
@@ -416,8 +416,8 @@
                 :class="[
                   'flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors',
                   row.status === 'active'
-                    ? 'text-gray-500 hover:bg-yellow-50 hover:text-yellow-600 dark:hover:bg-yellow-900/20 dark:hover:text-yellow-400'
-                    : 'text-gray-500 hover:bg-green-50 hover:text-green-600 dark:hover:bg-green-900/20 dark:hover:text-green-400'
+                    ? 'text-gray-500 hover:bg-yellow-50/25 hover:text-yellow-600 dark:hover:bg-yellow-900/20 dark:hover:text-yellow-400'
+                    : 'text-gray-500 hover:bg-primary-50/25 hover:text-primary-600 dark:hover:bg-primary-900/20 dark:hover:text-primary-400'
                 ]"
               >
                 <Icon v-if="row.status === 'active'" name="ban" size="sm" />
@@ -427,7 +427,7 @@
               <!-- Edit Button -->
               <button
                 @click="editKey(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-primary-600 dark:hover:bg-dark-700 dark:hover:text-primary-400"
+                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors hover:surface-hover hover:text-primary-600 dark:hover:text-primary-400 surface-control surface-muted"
               >
                 <Icon name="edit" size="sm" />
                 <span class="text-xs">{{ t('common.edit') }}</span>
@@ -435,7 +435,7 @@
               <!-- Delete Button -->
               <button v-support-readonly
                 @click="confirmDelete(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400"
+                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors hover:bg-red-50/25 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400 surface-control surface-muted"
               >
                 <Icon name="trash" size="sm" />
                 <span class="text-xs">{{ t('common.delete') }}</span>
@@ -505,7 +505,7 @@
                 @change="selectCreateProvider(provider.value)"
               />
               <span
-                class="flex h-full flex-col items-center gap-2 rounded-xl border border-gray-200 bg-white px-2 py-3 text-center transition-colors peer-checked:border-primary-500 peer-checked:bg-primary-50/60 peer-checked:ring-1 peer-checked:ring-primary-500 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-primary-500 peer-disabled:opacity-40 dark:border-dark-600 dark:bg-dark-800 dark:peer-checked:border-primary-500 dark:peer-checked:bg-primary-500/10"
+                class="flex h-full flex-col items-center gap-2 rounded-xl border border-gray-200 surface-inset px-2 py-3 text-center transition-colors peer-checked:border-primary-500 peer-checked:bg-primary-50/60 peer-checked:ring-1 peer-checked:ring-primary-500 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-primary-500 peer-disabled:opacity-40 dark:border-dark-600 dark:peer-checked:bg-primary-500/10"
                 :class="provider.count > 0 && 'hover:border-primary-300 dark:hover:border-primary-700'"
               >
                 <span class="flex h-8 items-center justify-center gap-1.5" aria-hidden="true">
@@ -529,7 +529,7 @@
               </span>
             </label>
           </div>
-          <p class="mt-2 text-xs leading-5 text-gray-500 dark:text-gray-400" aria-live="polite">
+          <p class="mt-2 text-xs leading-5 surface-muted" aria-live="polite">
             {{ groups.length === 0 ? t('common.noGroupsAvailable') : t(`keys.providerHints.${createProvider}`) }}
           </p>
         </fieldset>
@@ -561,7 +561,7 @@
                 :peak-end="(option as unknown as GroupOption).peakEnd"
                 :peak-rate-multiplier="(option as unknown as GroupOption).peakRateMultiplier"
               />
-              <span v-else class="text-gray-400">{{ t('keys.selectGroup') }}</span>
+              <span v-else class="surface-muted">{{ t('keys.selectGroup') }}</span>
             </template>
             <template #option="{ option, selected }">
               <GroupOptionItem
@@ -660,7 +660,7 @@
           <div class="space-y-4">
             <div>
               <div class="relative">
-                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+                <span class="absolute left-3 top-1/2 -translate-y-1/2 surface-muted">$</span>
                 <input
                   v-model.number="formData.quota"
                   type="number"
@@ -677,12 +677,12 @@
             <div v-if="showEditModal && selectedKey && selectedKey.quota > 0">
               <label class="input-label">{{ t('keys.quotaUsed') }}</label>
               <div class="flex items-center gap-2">
-                <div class="flex-1 rounded-lg bg-gray-100 px-3 py-2 dark:bg-dark-700">
+                <div class="flex-1 rounded-lg surface-inset px-3 py-2">
                   <span class="font-medium text-gray-900 dark:text-white">
                     ${{ selectedKey.quota_used?.toFixed(4) || '0.0000' }}
                   </span>
-                  <span class="mx-2 text-gray-400">/</span>
-                  <span class="text-gray-500 dark:text-gray-400">
+                  <span class="mx-2 surface-muted">/</span>
+                  <span class="surface-muted">
                     ${{ selectedKey.quota?.toFixed(2) || '0.00' }}
                   </span>
                 </div>
@@ -714,7 +714,7 @@
             <div>
               <label class="input-label">{{ t('keys.rateLimit5h') }}</label>
               <div class="relative">
-                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+                <span class="absolute left-3 top-1/2 -translate-y-1/2 surface-muted">$</span>
                 <input
                   v-model.number="formData.rate_limit_5h"
                   type="number"
@@ -727,7 +727,7 @@
               <!-- Usage info (edit mode only) -->
               <div v-if="showEditModal && selectedKey && selectedKey.rate_limit_5h > 0" class="mt-2">
                 <div class="flex items-center gap-2">
-                  <div class="flex-1 rounded-lg bg-gray-100 px-3 py-2 dark:bg-dark-700 text-sm">
+                  <div class="flex-1 rounded-lg surface-inset px-3 py-2 text-sm">
                     <span :class="[
                       'font-medium',
                       selectedKey.usage_5h >= selectedKey.rate_limit_5h ? 'text-red-500' :
@@ -736,8 +736,8 @@
                     ]">
                       ${{ selectedKey.usage_5h?.toFixed(4) || '0.0000' }}
                     </span>
-                    <span class="mx-2 text-gray-400">/</span>
-                    <span class="text-gray-500 dark:text-gray-400">
+                    <span class="mx-2 surface-muted">/</span>
+                    <span class="surface-muted">
                       ${{ selectedKey.rate_limit_5h?.toFixed(2) || '0.00' }}
                     </span>
                   </div>
@@ -745,7 +745,7 @@
                 <div class="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-dark-600">
                   <div
                     :class="[
-                      'h-full rounded-full transition-all',
+                      'console-data-mark h-full rounded-full transition-all',
                       selectedKey.usage_5h >= selectedKey.rate_limit_5h ? 'bg-red-500' :
                       selectedKey.usage_5h >= selectedKey.rate_limit_5h * 0.8 ? 'bg-yellow-500' :
                       'bg-green-500'
@@ -760,7 +760,7 @@
             <div>
               <label class="input-label">{{ t('keys.rateLimit1d') }}</label>
               <div class="relative">
-                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+                <span class="absolute left-3 top-1/2 -translate-y-1/2 surface-muted">$</span>
                 <input
                   v-model.number="formData.rate_limit_1d"
                   type="number"
@@ -773,7 +773,7 @@
               <!-- Usage info (edit mode only) -->
               <div v-if="showEditModal && selectedKey && selectedKey.rate_limit_1d > 0" class="mt-2">
                 <div class="flex items-center gap-2">
-                  <div class="flex-1 rounded-lg bg-gray-100 px-3 py-2 dark:bg-dark-700 text-sm">
+                  <div class="flex-1 rounded-lg surface-inset px-3 py-2 text-sm">
                     <span :class="[
                       'font-medium',
                       selectedKey.usage_1d >= selectedKey.rate_limit_1d ? 'text-red-500' :
@@ -782,8 +782,8 @@
                     ]">
                       ${{ selectedKey.usage_1d?.toFixed(4) || '0.0000' }}
                     </span>
-                    <span class="mx-2 text-gray-400">/</span>
-                    <span class="text-gray-500 dark:text-gray-400">
+                    <span class="mx-2 surface-muted">/</span>
+                    <span class="surface-muted">
                       ${{ selectedKey.rate_limit_1d?.toFixed(2) || '0.00' }}
                     </span>
                   </div>
@@ -791,7 +791,7 @@
                 <div class="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-dark-600">
                   <div
                     :class="[
-                      'h-full rounded-full transition-all',
+                      'console-data-mark h-full rounded-full transition-all',
                       selectedKey.usage_1d >= selectedKey.rate_limit_1d ? 'bg-red-500' :
                       selectedKey.usage_1d >= selectedKey.rate_limit_1d * 0.8 ? 'bg-yellow-500' :
                       'bg-green-500'
@@ -806,7 +806,7 @@
             <div>
               <label class="input-label">{{ t('keys.rateLimit7d') }}</label>
               <div class="relative">
-                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+                <span class="absolute left-3 top-1/2 -translate-y-1/2 surface-muted">$</span>
                 <input
                   v-model.number="formData.rate_limit_7d"
                   type="number"
@@ -819,7 +819,7 @@
               <!-- Usage info (edit mode only) -->
               <div v-if="showEditModal && selectedKey && selectedKey.rate_limit_7d > 0" class="mt-2">
                 <div class="flex items-center gap-2">
-                  <div class="flex-1 rounded-lg bg-gray-100 px-3 py-2 dark:bg-dark-700 text-sm">
+                  <div class="flex-1 rounded-lg surface-inset px-3 py-2 text-sm">
                     <span :class="[
                       'font-medium',
                       selectedKey.usage_7d >= selectedKey.rate_limit_7d ? 'text-red-500' :
@@ -828,8 +828,8 @@
                     ]">
                       ${{ selectedKey.usage_7d?.toFixed(4) || '0.0000' }}
                     </span>
-                    <span class="mx-2 text-gray-400">/</span>
-                    <span class="text-gray-500 dark:text-gray-400">
+                    <span class="mx-2 surface-muted">/</span>
+                    <span class="surface-muted">
                       ${{ selectedKey.rate_limit_7d?.toFixed(2) || '0.00' }}
                     </span>
                   </div>
@@ -837,7 +837,7 @@
                 <div class="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-dark-600">
                   <div
                     :class="[
-                      'h-full rounded-full transition-all',
+                      'console-data-mark h-full rounded-full transition-all',
                       selectedKey.usage_7d >= selectedKey.rate_limit_7d ? 'bg-red-500' :
                       selectedKey.usage_7d >= selectedKey.rate_limit_7d * 0.8 ? 'bg-yellow-500' :
                       'bg-green-500'
@@ -881,8 +881,8 @@
                 :class="[
                   'rounded-lg px-3 py-1.5 text-sm transition-colors',
                   formData.expiration_preset === days
-                    ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-dark-700 dark:text-gray-400 dark:hover:bg-dark-600'
+                    ? 'bg-primary-100/[0.15] text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
+                    : 'surface-inset text-gray-600 hover:surface-hover dark:surface-inset dark:text-gray-400 dark:hover:surface-hover'
                 ]"
               >
                 {{ showEditModal ? t('keys.extendDays', { days }) : t('keys.expiresInDays', { days }) }}
@@ -893,8 +893,8 @@
                 :class="[
                   'rounded-lg px-3 py-1.5 text-sm transition-colors',
                   formData.expiration_preset === 'custom'
-                    ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-dark-700 dark:text-gray-400 dark:hover:bg-dark-600'
+                    ? 'bg-primary-100/[0.15] text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
+                    : 'surface-inset text-gray-600 hover:surface-hover dark:surface-inset dark:text-gray-400 dark:hover:surface-hover'
                 ]"
               >
                 {{ t('keys.customDate') }}
@@ -904,7 +904,7 @@
             <!-- Date picker (always show for precise adjustment) -->
             <div>
               <label class="input-label">{{ t('keys.expirationDate') }}</label>
-              <input
+              <DateTimePicker :aria-label="t('keys.expirationDate')"
                 v-model="formData.expiration_date"
                 type="datetime-local"
                 class="input"
@@ -914,7 +914,7 @@
 
             <!-- Current expiration display (only in edit mode) -->
             <div v-if="showEditModal && selectedKey?.expires_at" class="text-sm">
-              <span class="text-gray-500 dark:text-gray-400">{{ t('keys.currentExpiration') }}: </span>
+              <span class="surface-muted">{{ t('keys.currentExpiration') }}: </span>
               <span class="font-medium text-gray-900 dark:text-white">
                 {{ formatDateTime(selectedKey.expires_at) }}
               </span>
@@ -1029,31 +1029,31 @@
       @close="closeCcsClientSelect"
     >
       <div class="space-y-4">
-        <p class="text-sm text-gray-600 dark:text-gray-400">
+        <p class="text-sm surface-muted">
           {{ t('keys.ccsClientSelect.description') }}
 	        </p>
 	        <div class="grid grid-cols-2 gap-3">
 	          <button
 	            @click="handleCcsClientSelect('claude')"
-	            class="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-gray-200 dark:border-dark-600 hover:border-primary-500 dark:hover:border-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-all"
+	            class="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-gray-200 dark:border-dark-600 hover:border-primary-500 hover:bg-primary-50/25 dark:hover:bg-primary-900/20 transition-all surface-control"
 	          >
-	            <Icon name="terminal" size="xl" class="text-gray-600 dark:text-gray-400" />
+	            <Icon name="terminal" size="xl" class="surface-muted" />
 	            <span class="font-medium text-gray-900 dark:text-white">{{
 	              t('keys.ccsClientSelect.claudeCode')
 	            }}</span>
-	            <span class="text-xs text-gray-500 dark:text-gray-400">{{
+	            <span class="text-xs surface-muted">{{
 	              t('keys.ccsClientSelect.claudeCodeDesc')
 	            }}</span>
 	          </button>
 	          <button
 	            @click="handleCcsClientSelect('gemini')"
-	            class="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-gray-200 dark:border-dark-600 hover:border-primary-500 dark:hover:border-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-all"
+	            class="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-gray-200 dark:border-dark-600 hover:border-primary-500 hover:bg-primary-50/25 dark:hover:bg-primary-900/20 transition-all surface-control"
 	          >
-	            <Icon name="sparkles" size="xl" class="text-gray-600 dark:text-gray-400" />
+	            <Icon name="sparkles" size="xl" class="surface-muted" />
 	            <span class="font-medium text-gray-900 dark:text-white">{{
 	              t('keys.ccsClientSelect.geminiCli')
 	            }}</span>
-	            <span class="text-xs text-gray-500 dark:text-gray-400">{{
+	            <span class="text-xs surface-muted">{{
 	              t('keys.ccsClientSelect.geminiCliDesc')
 	            }}</span>
 	          </button>
@@ -1073,7 +1073,7 @@
       <div
         v-if="groupSelectorKeyId !== null && dropdownPosition"
         ref="dropdownRef"
-        class="animate-in fade-in slide-in-from-top-2 fixed z-[100000020] w-max max-w-[calc(100vw-16px)] overflow-hidden rounded-xl bg-white shadow-lg ring-1 ring-black/5 duration-200 sm:min-w-[380px] dark:bg-dark-800 dark:ring-white/10"
+        class="animate-in fade-in slide-in-from-top-2 fixed z-[100000020] w-max max-w-[calc(100vw-16px)] overflow-hidden rounded-xl shadow-lg ring-1 ring-black/5 duration-200 sm:min-w-[380px] dark:ring-white/10 surface-panel"
         style="pointer-events: auto !important;"
         :style="{
           top: dropdownPosition.top !== undefined ? dropdownPosition.top + 'px' : undefined,
@@ -1090,7 +1090,7 @@
             <input
               v-model="groupSearchQuery"
               type="text"
-              class="w-full rounded-lg border border-gray-200 bg-gray-50 py-1.5 pl-8 pr-3 text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-primary-300 focus:ring-1 focus:ring-primary-300 dark:border-dark-600 dark:bg-dark-700 dark:text-white dark:placeholder-gray-500 dark:focus:border-primary-600 dark:focus:ring-primary-600"
+              class="w-full rounded-lg border border-gray-200 surface-inset py-1.5 pl-8 pr-3 text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-primary-300 focus:ring-1 focus:ring-primary-300 dark:border-dark-600 dark:text-white dark:placeholder-gray-500 dark:focus:border-primary-600 dark:focus:ring-primary-600"
               :placeholder="t('keys.searchGroup')"
               @click.stop
             />
@@ -1107,8 +1107,8 @@
               'border-b border-gray-100 last:border-0 dark:border-dark-700',
               selectedKeyForGroup?.group_id === option.value ||
               (!selectedKeyForGroup?.group_id && option.value === null)
-                ? 'bg-primary-50 dark:bg-primary-900/20'
-                : 'hover:bg-gray-100 dark:hover:bg-dark-700'
+                ? 'bg-primary-50/[0.15] dark:bg-primary-900/20'
+                : 'hover:surface-hover dark:hover:surface-hover'
             ]"
             :title="option.description || undefined"
           >
@@ -1130,7 +1130,7 @@
             />
           </button>
           <!-- Empty state when search has no results -->
-          <div v-if="filteredGroupOptions.length === 0" class="py-4 text-center text-sm text-gray-400 dark:text-gray-500">
+          <div v-if="filteredGroupOptions.length === 0" class="py-4 text-center text-sm surface-muted">
             {{ t('keys.noGroupFound') }}
           </div>
         </div>
@@ -1140,6 +1140,7 @@
 </template>
 
 <script setup lang="ts">
+import DateTimePicker from '@/components/common/DateTimePicker.vue'
 import { useLocaleRefresh } from '@/utils/localeRefresh'
 import { supportReadonly as vSupportReadonly } from '@/directives/supportReadonly'
 import Toggle from '@/components/common/Toggle.vue'

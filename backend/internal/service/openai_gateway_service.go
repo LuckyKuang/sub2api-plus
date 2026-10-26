@@ -61,7 +61,7 @@ const (
 	// 陈旧版本可能被优先丢弃（HTTP 200 + 流内 server_is_overloaded）；非官方客户端配不出
 	// 官方身份时整体回退到本常量，因此它必须跟随官方 CLI 的当前发布版本，
 	// 落后多个版本会让这些请求稳定落在被优先丢弃的一侧。
-	codexCLIVersion = "0.158.0"
+	codexCLIVersion = "0.164.0"
 	// openAICodexProbeVersion is kept as an explicit alias for probe callers
 	// and version-consistency tests; both declarations must remain identical.
 	openAICodexProbeVersion = codexCLIVersion
@@ -355,6 +355,7 @@ type OpenAIForwardResult struct {
 	// upstream Responses WebSocket turn. Empty preserves legacy/non-WS success.
 	UpstreamTerminalEvent string
 	ResponseHeaders       http.Header
+	codexUsageOwner       *Account
 	// ResponseHeadersFromHandshake marks WebSocket connection-time leftovers.
 	// Those headers may refresh the account usage cache but must not drive
 	// group follow-reset as a later inference session.
@@ -367,7 +368,10 @@ type OpenAIForwardResult struct {
 	FirstOutputKind              string
 	ClientDisconnect             bool
 	// UsageIncomplete excludes synthesized completion after truncated/error upstream streams from TPS.
-	UsageIncomplete             bool
+	UsageIncomplete bool
+	// UsageSource records the provenance of observed usage independently of
+	// response completion. Empty preserves the existing non-CC path defaults.
+	UsageSource                 string
 	ClientDisconnectUsageSource string
 	ImageCount                  int
 	ImageSize                   string
@@ -391,6 +395,7 @@ type OpenAIForwardResult struct {
 	wsReplayInput                []json.RawMessage
 	wsReplayInputExists          bool
 	wsAccountFailoverReplayInput []json.RawMessage
+	modelNotFoundTerminalError   error
 }
 
 // SucceededForScheduling reports whether this result is an upstream success
@@ -502,9 +507,10 @@ type openAIWSRetryMetrics struct {
 }
 
 type accountWriteThrottle struct {
-	minInterval time.Duration
-	mu          sync.Mutex
-	lastByID    map[int64]time.Time
+	minInterval      time.Duration
+	mu               sync.Mutex
+	lastByID         map[int64]time.Time
+	lastByGeneration map[accountWriteGeneration]time.Time
 }
 
 func newAccountWriteThrottle(minInterval time.Duration) *accountWriteThrottle {
@@ -539,6 +545,39 @@ func (t *accountWriteThrottle) Allow(id int64, now time.Time) bool {
 	return true
 }
 
+type accountWriteGeneration struct {
+	id         int64
+	generation string
+}
+
+func (t *accountWriteThrottle) AllowGeneration(id int64, generation string, now time.Time) bool {
+	if t == nil || id <= 0 || t.minInterval <= 0 {
+		return true
+	}
+	if generation == "" {
+		return false
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.lastByGeneration == nil {
+		t.lastByGeneration = make(map[accountWriteGeneration]time.Time)
+	}
+	key := accountWriteGeneration{id, generation}
+	if last, ok := t.lastByGeneration[key]; ok && now.Sub(last) < t.minInterval {
+		return false
+	}
+	t.lastByGeneration[key] = now
+	if len(t.lastByGeneration) > 4096 {
+		cutoff := now.Add(-4 * t.minInterval)
+		for key, writtenAt := range t.lastByGeneration {
+			if writtenAt.Before(cutoff) {
+				delete(t.lastByGeneration, key)
+			}
+		}
+	}
+	return true
+}
+
 var defaultOpenAICodexSnapshotPersistThrottle = newAccountWriteThrottle(openAICodexSnapshotPersistMinInterval)
 
 // ErrNoAvailableCompactAccounts indicates a legacy /responses/compact request
@@ -563,6 +602,7 @@ type OpenAIGatewayService struct {
 	userGroupRateResolver *userGroupRateResolver
 	httpUpstream          HTTPUpstream
 	cnOAuthService        *CNOAuthService
+	projectTokens         *ZhipuProjectTokenManager
 	pluginManager         *PluginManager
 	deferredService       *DeferredService
 	openAITokenProvider   *OpenAITokenProvider
@@ -576,6 +616,10 @@ type OpenAIGatewayService struct {
 	userPlatformQuotaRepo UserPlatformQuotaRepository
 	liveAttestation       liveattestation.Provider
 	liveAttestationCipher SecretEncryptor
+
+	// sessionRouteStore is the authoritative logical-session route store. A nil
+	// value keeps the legacy Redis-only sticky behaviour.
+	sessionRouteStore OpenAISessionRouteStore
 
 	openaiWSPoolOnce               sync.Once
 	openaiWSStateStoreOnce         sync.Once
@@ -595,7 +639,7 @@ type OpenAIGatewayService struct {
 	openaiProxyStreamFailOpenLogAt atomic.Int64
 
 	openaiWSFallbackUntil               sync.Map // key: int64(accountID), value: time.Time
-	openaiAccountRuntimeBlockUntil      sync.Map // key: int64(accountID), value: time.Time
+	openaiAccountRuntimeBlockUntil      sync.Map // credential owner/generation key, value: time.Time
 	openaiAccountRuntimeBlockLocks      sync.Map // key: int64(accountID), value: *sync.Mutex
 	openaiAccountRuntimeBlockGeneration sync.Map // key: int64(accountID), value: uint64
 	openaiAccountRuntimeBlockSequence   atomic.Uint64
@@ -640,6 +684,7 @@ func NewOpenAIGatewayService(
 	balanceNotifyService *BalanceNotifyService,
 	settingService *SettingService,
 	userPlatformQuotaRepo UserPlatformQuotaRepository,
+	sessionRouteStore OpenAISessionRouteStore,
 ) *OpenAIGatewayService {
 	svc := &OpenAIGatewayService{
 		accountRepo:         accountRepo,
@@ -655,6 +700,7 @@ func NewOpenAIGatewayService(
 		billingService:      billingService,
 		rateLimitService:    rateLimitService,
 		billingCacheService: billingCacheService,
+		sessionRouteStore:   sessionRouteStore,
 		userGroupRateResolver: newUserGroupRateResolver(
 			userGroupRateRepo,
 			nil,
@@ -853,14 +899,16 @@ func (s *OpenAIGatewayService) getCodexClientRestrictionDetector() CodexClientRe
 }
 
 func (s *OpenAIGatewayService) getOpenAIWSProtocolResolver() OpenAIWSProtocolResolver {
-	if s != nil && s.openaiWSResolver != nil {
-		return s.openaiWSResolver
-	}
 	var cfg *config.Config
+	var settings *SettingService
+	var resolver OpenAIWSProtocolResolver
 	if s != nil {
-		cfg = s.cfg
+		cfg, settings, resolver = s.cfg, s.settingService, s.openaiWSResolver
 	}
-	return NewOpenAIWSProtocolResolver(cfg)
+	if resolver == nil {
+		resolver = NewOpenAIWSProtocolResolver(cfg)
+	}
+	return runtimeCodexWSResolver{base: resolver, settings: settings}
 }
 
 func classifyOpenAIWSReconnectReason(err error) (string, bool) {
@@ -1314,7 +1362,29 @@ func hashSensitiveValueForLog(raw string) string {
 }
 
 // GetAccessToken gets the access token for an OpenAI account
-func (s *OpenAIGatewayService) GetAccessToken(ctx context.Context, account *Account) (string, string, error) {
+func (s *OpenAIGatewayService) GetAccessToken(ctx context.Context, account *Account) (token, kind string, credentialErr error) {
+	providerAcquired := false
+	defer func() {
+		if credentialErr == nil && !providerAcquired {
+			recordRequestCredentialOwner(ctx, account, token)
+		}
+		// Grok OAuth retains its provider-specific acquisition, recovery and CAS
+		// lifecycle in getRequestCredential. All other grants share the typed
+		// pre-send failure contract, including direct HTTP/WS callers.
+		if account != nil && !account.IsGrokOAuth() && credentialErr != nil {
+			credentialErr = s.accountCredentialFailure(ctx, nil, account, classifyCredentialAcquisitionFailure(account, credentialErr))
+		}
+	}()
+	if account == nil {
+		return "", "", errors.New("account is nil")
+	}
+	if acquired, err := requestCredentialAccount(ctx, account); err != nil {
+		return "", "", err
+	} else if acquired != nil && acquired.IsOpenAIAgentIdentity() {
+		// Recursive task retries must reacquire the explicit task-only update,
+		// never republish a stale selected row over the next attempt's evidence.
+		account = acquired
+	}
 	if account.IsShadow() {
 		credAccount, err := resolveCredentialAccount(ctx, s.accountRepo, account)
 		if err != nil {
@@ -1323,15 +1393,32 @@ func (s *OpenAIGatewayService) GetAccessToken(ctx context.Context, account *Acco
 		account = credAccount
 	}
 	if account.IsDomesticOAuth() {
-		return account.GetCredential("access_token"), "oauth", nil
+		if accessToken := strings.TrimSpace(account.GetCredential("access_token")); accessToken != "" {
+			return accessToken, "oauth", nil
+		}
+		return "", "", NewAccountCredentialFailure("account_credential_missing", errors.New("native OAuth access token is missing"))
+	}
+	if account.Platform == PlatformZhipu && account.Type == AccountTypeOAuth {
+		// Linked ZCode plans keep their protocol credential separate from
+		// OpenAI OAuth. The sending wrapper resolves project PATs and off-peak
+		// admission from this same owner after acquisition succeeds.
+		if credential := strings.TrimSpace(account.GetOpenAIProtocolAPIKey()); credential != "" {
+			return credential, "oauth", nil
+		}
+		return "", "", NewAccountCredentialFailure("account_credential_missing", errors.New("linked ZCode protocol credential is missing"))
 	}
 	switch account.Type {
 	case AccountTypeOAuth:
 		if account.IsOpenAIAgentIdentity() {
+			account = snapshotRequestCredentialAccount(account)
+			if err := s.ensureAgentIdentityTask(ctx, account, ""); err != nil {
+				return "", "", err
+			}
 			return "", OpenAIAuthModeAgentIdentity, nil
 		}
 		if account.Platform == PlatformGrok {
 			if s.grokTokenProvider != nil {
+				providerAcquired = true
 				accessToken, err := s.grokTokenProvider.GetAccessToken(ctx, account)
 				if err != nil {
 					return "", "", err
@@ -1346,6 +1433,7 @@ func (s *OpenAIGatewayService) GetAccessToken(ctx context.Context, account *Acco
 		}
 		// 使用 TokenProvider 获取缓存的 token
 		if s.openAITokenProvider != nil {
+			providerAcquired = true
 			accessToken, err := s.openAITokenProvider.GetAccessToken(ctx, account)
 			if err != nil {
 				return "", "", err

@@ -107,6 +107,7 @@ type Config struct {
 	BatchImage              BatchImageConfig              `mapstructure:"batch_image"`
 	ImageStorage            ImageStorageConfig            `mapstructure:"image_storage"`
 	Plugins                 PluginConfig                  `mapstructure:"plugins"`
+	ZhipuOffPeak            ZhipuOffPeakConfig            `mapstructure:"zhipu_offpeak"`
 
 	// Enforce only API-key spending windows in simple mode.
 	SimpleModeKeyRateLimitEnabled bool `mapstructure:"simple_mode_key_rate_limit_enabled" yaml:"simple_mode_key_rate_limit_enabled"`
@@ -2099,6 +2100,9 @@ func setDefaults() {
 		"api.deepseek.com",
 		"agent.minimax.cn",
 		"agent.minimax.io",
+		"agent.minimaxi.com",  // MiniMax OAuth CN account service
+		"www.minimaxi.com",    // MiniMax OAuth CN quota
+		"platform.minimax.io", // MiniMax OAuth global quota
 		"api.moonshot.ai",
 		"api.moonshot.cn",
 		"open.bigmodel.cn",
@@ -2338,6 +2342,10 @@ func setDefaults() {
 
 	// TOTP
 	viper.SetDefault("totp.encryption_key", "")
+	viper.SetDefault("zhipu_offpeak.persistence_enabled", false)
+	viper.SetDefault("zhipu_offpeak.active_key_id", "")
+	viper.SetDefault("zhipu_offpeak.snapshot_keys", "")
+	viper.SetDefault("zhipu_offpeak.snapshot_retention_hours", 168)
 
 	// Default
 	// Admin credentials are created via the setup flow (web wizard / CLI / AUTO_SETUP).
@@ -2726,6 +2734,9 @@ func setEnvReachableDefaults() {
 }
 
 func (c *Config) Validate() error {
+	if err := c.ZhipuOffPeak.validate(); err != nil {
+		return err
+	}
 	if c.Gateway.MinOutputTokens < 16 {
 		return fmt.Errorf("gateway.min_output_tokens must be at least 16")
 	}

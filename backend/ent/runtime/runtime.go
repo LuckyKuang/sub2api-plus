@@ -701,8 +701,12 @@ func init() {
 	channelmonitorDescExtraHeaders := channelmonitorFields[16].Descriptor()
 	// channelmonitor.DefaultExtraHeaders holds the default value on creation for the extra_headers field.
 	channelmonitor.DefaultExtraHeaders = channelmonitorDescExtraHeaders.Default.(map[string]string)
+	// channelmonitorDescStreamProbe is the schema descriptor for stream_probe field.
+	channelmonitorDescStreamProbe := channelmonitorFields[17].Descriptor()
+	// channelmonitor.DefaultStreamProbe holds the default value on creation for the stream_probe field.
+	channelmonitor.DefaultStreamProbe = channelmonitorDescStreamProbe.Default.(bool)
 	// channelmonitorDescBodyOverrideMode is the schema descriptor for body_override_mode field.
-	channelmonitorDescBodyOverrideMode := channelmonitorFields[17].Descriptor()
+	channelmonitorDescBodyOverrideMode := channelmonitorFields[18].Descriptor()
 	// channelmonitor.DefaultBodyOverrideMode holds the default value on creation for the body_override_mode field.
 	channelmonitor.DefaultBodyOverrideMode = channelmonitorDescBodyOverrideMode.Default.(string)
 	// channelmonitor.BodyOverrideModeValidator is a validator for the "body_override_mode" field. It is called by the builders before save.
@@ -757,30 +761,42 @@ func init() {
 	channelmonitordailyrollup.DefaultSumFirstByteMs = channelmonitordailyrollupDescSumFirstByteMs.Default.(int64)
 	// channelmonitordailyrollup.SumFirstByteMsValidator is a validator for the "sum_first_byte_ms" field. It is called by the builders before save.
 	channelmonitordailyrollup.SumFirstByteMsValidator = channelmonitordailyrollupDescSumFirstByteMs.Validators[0].(func(int64) error)
+	// channelmonitordailyrollupDescSumFirstTextMs is the schema descriptor for sum_first_text_ms field.
+	channelmonitordailyrollupDescSumFirstTextMs := channelmonitordailyrollupFields[10].Descriptor()
+	// channelmonitordailyrollup.DefaultSumFirstTextMs holds the default value on creation for the sum_first_text_ms field.
+	channelmonitordailyrollup.DefaultSumFirstTextMs = channelmonitordailyrollupDescSumFirstTextMs.Default.(int64)
+	// channelmonitordailyrollup.SumFirstTextMsValidator is a validator for the "sum_first_text_ms" field. It is called by the builders before save.
+	channelmonitordailyrollup.SumFirstTextMsValidator = channelmonitordailyrollupDescSumFirstTextMs.Validators[0].(func(int64) error)
+	// channelmonitordailyrollupDescCountFirstText is the schema descriptor for count_first_text field.
+	channelmonitordailyrollupDescCountFirstText := channelmonitordailyrollupFields[11].Descriptor()
+	// channelmonitordailyrollup.DefaultCountFirstText holds the default value on creation for the count_first_text field.
+	channelmonitordailyrollup.DefaultCountFirstText = channelmonitordailyrollupDescCountFirstText.Default.(int)
+	// channelmonitordailyrollup.CountFirstTextValidator is a validator for the "count_first_text" field. It is called by the builders before save.
+	channelmonitordailyrollup.CountFirstTextValidator = channelmonitordailyrollupDescCountFirstText.Validators[0].(func(int) error)
 	// channelmonitordailyrollupDescCountFirstByte is the schema descriptor for count_first_byte field.
-	channelmonitordailyrollupDescCountFirstByte := channelmonitordailyrollupFields[10].Descriptor()
+	channelmonitordailyrollupDescCountFirstByte := channelmonitordailyrollupFields[12].Descriptor()
 	// channelmonitordailyrollup.DefaultCountFirstByte holds the default value on creation for the count_first_byte field.
 	channelmonitordailyrollup.DefaultCountFirstByte = channelmonitordailyrollupDescCountFirstByte.Default.(int)
 	// channelmonitordailyrollup.CountFirstByteValidator is a validator for the "count_first_byte" field. It is called by the builders before save.
 	channelmonitordailyrollup.CountFirstByteValidator = channelmonitordailyrollupDescCountFirstByte.Validators[0].(func(int) error)
 	// channelmonitordailyrollupDescSumLatencyMs is the schema descriptor for sum_latency_ms field.
-	channelmonitordailyrollupDescSumLatencyMs := channelmonitordailyrollupFields[11].Descriptor()
+	channelmonitordailyrollupDescSumLatencyMs := channelmonitordailyrollupFields[13].Descriptor()
 	// channelmonitordailyrollup.DefaultSumLatencyMs holds the default value on creation for the sum_latency_ms field.
 	channelmonitordailyrollup.DefaultSumLatencyMs = channelmonitordailyrollupDescSumLatencyMs.Default.(int64)
 	// channelmonitordailyrollupDescCountLatency is the schema descriptor for count_latency field.
-	channelmonitordailyrollupDescCountLatency := channelmonitordailyrollupFields[12].Descriptor()
+	channelmonitordailyrollupDescCountLatency := channelmonitordailyrollupFields[14].Descriptor()
 	// channelmonitordailyrollup.DefaultCountLatency holds the default value on creation for the count_latency field.
 	channelmonitordailyrollup.DefaultCountLatency = channelmonitordailyrollupDescCountLatency.Default.(int)
 	// channelmonitordailyrollupDescSumPingLatencyMs is the schema descriptor for sum_ping_latency_ms field.
-	channelmonitordailyrollupDescSumPingLatencyMs := channelmonitordailyrollupFields[13].Descriptor()
+	channelmonitordailyrollupDescSumPingLatencyMs := channelmonitordailyrollupFields[15].Descriptor()
 	// channelmonitordailyrollup.DefaultSumPingLatencyMs holds the default value on creation for the sum_ping_latency_ms field.
 	channelmonitordailyrollup.DefaultSumPingLatencyMs = channelmonitordailyrollupDescSumPingLatencyMs.Default.(int64)
 	// channelmonitordailyrollupDescCountPingLatency is the schema descriptor for count_ping_latency field.
-	channelmonitordailyrollupDescCountPingLatency := channelmonitordailyrollupFields[14].Descriptor()
+	channelmonitordailyrollupDescCountPingLatency := channelmonitordailyrollupFields[16].Descriptor()
 	// channelmonitordailyrollup.DefaultCountPingLatency holds the default value on creation for the count_ping_latency field.
 	channelmonitordailyrollup.DefaultCountPingLatency = channelmonitordailyrollupDescCountPingLatency.Default.(int)
 	// channelmonitordailyrollupDescComputedAt is the schema descriptor for computed_at field.
-	channelmonitordailyrollupDescComputedAt := channelmonitordailyrollupFields[15].Descriptor()
+	channelmonitordailyrollupDescComputedAt := channelmonitordailyrollupFields[17].Descriptor()
 	// channelmonitordailyrollup.DefaultComputedAt holds the default value on creation for the computed_at field.
 	channelmonitordailyrollup.DefaultComputedAt = channelmonitordailyrollupDescComputedAt.Default.(func() time.Time)
 	// channelmonitordailyrollup.UpdateDefaultComputedAt holds the default value on update for the computed_at field.
@@ -809,14 +825,18 @@ func init() {
 	channelmonitorhistoryDescFirstByteMs := channelmonitorhistoryFields[3].Descriptor()
 	// channelmonitorhistory.FirstByteMsValidator is a validator for the "first_byte_ms" field. It is called by the builders before save.
 	channelmonitorhistory.FirstByteMsValidator = channelmonitorhistoryDescFirstByteMs.Validators[0].(func(int) error)
+	// channelmonitorhistoryDescFirstTextMs is the schema descriptor for first_text_ms field.
+	channelmonitorhistoryDescFirstTextMs := channelmonitorhistoryFields[4].Descriptor()
+	// channelmonitorhistory.FirstTextMsValidator is a validator for the "first_text_ms" field. It is called by the builders before save.
+	channelmonitorhistory.FirstTextMsValidator = channelmonitorhistoryDescFirstTextMs.Validators[0].(func(int) error)
 	// channelmonitorhistoryDescMessage is the schema descriptor for message field.
-	channelmonitorhistoryDescMessage := channelmonitorhistoryFields[6].Descriptor()
+	channelmonitorhistoryDescMessage := channelmonitorhistoryFields[8].Descriptor()
 	// channelmonitorhistory.DefaultMessage holds the default value on creation for the message field.
 	channelmonitorhistory.DefaultMessage = channelmonitorhistoryDescMessage.Default.(string)
 	// channelmonitorhistory.MessageValidator is a validator for the "message" field. It is called by the builders before save.
 	channelmonitorhistory.MessageValidator = channelmonitorhistoryDescMessage.Validators[0].(func(string) error)
 	// channelmonitorhistoryDescCheckedAt is the schema descriptor for checked_at field.
-	channelmonitorhistoryDescCheckedAt := channelmonitorhistoryFields[8].Descriptor()
+	channelmonitorhistoryDescCheckedAt := channelmonitorhistoryFields[10].Descriptor()
 	// channelmonitorhistory.DefaultCheckedAt holds the default value on creation for the checked_at field.
 	channelmonitorhistory.DefaultCheckedAt = channelmonitorhistoryDescCheckedAt.Default.(func() time.Time)
 	channelmonitorrequesttemplateMixin := schema.ChannelMonitorRequestTemplate{}.Mixin()
@@ -868,8 +888,12 @@ func init() {
 	channelmonitorrequesttemplateDescExtraHeaders := channelmonitorrequesttemplateFields[4].Descriptor()
 	// channelmonitorrequesttemplate.DefaultExtraHeaders holds the default value on creation for the extra_headers field.
 	channelmonitorrequesttemplate.DefaultExtraHeaders = channelmonitorrequesttemplateDescExtraHeaders.Default.(map[string]string)
+	// channelmonitorrequesttemplateDescStreamProbe is the schema descriptor for stream_probe field.
+	channelmonitorrequesttemplateDescStreamProbe := channelmonitorrequesttemplateFields[5].Descriptor()
+	// channelmonitorrequesttemplate.DefaultStreamProbe holds the default value on creation for the stream_probe field.
+	channelmonitorrequesttemplate.DefaultStreamProbe = channelmonitorrequesttemplateDescStreamProbe.Default.(bool)
 	// channelmonitorrequesttemplateDescBodyOverrideMode is the schema descriptor for body_override_mode field.
-	channelmonitorrequesttemplateDescBodyOverrideMode := channelmonitorrequesttemplateFields[5].Descriptor()
+	channelmonitorrequesttemplateDescBodyOverrideMode := channelmonitorrequesttemplateFields[6].Descriptor()
 	// channelmonitorrequesttemplate.DefaultBodyOverrideMode holds the default value on creation for the body_override_mode field.
 	channelmonitorrequesttemplate.DefaultBodyOverrideMode = channelmonitorrequesttemplateDescBodyOverrideMode.Default.(string)
 	// channelmonitorrequesttemplate.BodyOverrideModeValidator is a validator for the "body_override_mode" field. It is called by the builders before save.

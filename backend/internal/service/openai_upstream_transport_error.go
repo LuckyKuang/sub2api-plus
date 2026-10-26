@@ -132,6 +132,10 @@ func (s *OpenAIGatewayService) handleOpenAIUpstreamTransportError(ctx context.Co
 	if err == nil {
 		return nil
 	}
+	var credentialErr *CredentialFailureError
+	if errors.As(err, &credentialErr) {
+		return s.accountCredentialFailure(ctx, c, account, err)
+	}
 	// 仅当请求 context 自身已取消时才认定为客户端断连：存活客户端 context 下单独收到
 	// 上游 context.Canceled 必须继续走下方故障分类（见 design D4）。
 	if isClientCanceledTransportError(ctx, err) {

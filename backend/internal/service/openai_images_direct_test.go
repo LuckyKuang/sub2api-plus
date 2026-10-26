@@ -225,6 +225,7 @@ func TestCodexDirectImagesAccountTestAndWhitelist(t *testing.T) {
 	svc := &AccountTestService{httpUpstream: upstream}
 	require.NoError(t, svc.testOpenAIImageOAuth(c, context.Background(), directImagesTestAccount(), "gpt-image-2.5-sunburst", "draw"))
 	require.Equal(t, "/backend-api/codex/images/generations", upstream.lastReq.URL.Path)
+	require.Empty(t, upstream.lastReq.Header.Get("x-codex-beta-features"), "direct image probes do not use Responses session capabilities")
 	require.Contains(t, rec.Body.String(), `"success":true`)
 	newCodexModelsOAuthCacheServer(t, `{"models":[{"slug":"gpt-5.6-luna"}]}`)
 	svc.openaiGatewayService = &OpenAIGatewayService{}

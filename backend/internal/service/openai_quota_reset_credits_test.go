@@ -154,6 +154,7 @@ func TestQueryUsageResetCreditCountPrecedence(t *testing.T) {
 				Status:   StatusActive,
 				Credentials: map[string]any{
 					"chatgpt_account_id": "org-parent123",
+					"access_token":       "fake-token",
 				},
 			}
 			repo := &stubQuotaAccountRepo{accounts: map[int64]*Account{100: account}}

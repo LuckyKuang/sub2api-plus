@@ -40,6 +40,10 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 	reqStream bool,
 	startTime time.Time,
 ) (*OpenAIForwardResult, error) {
+	ctx, account, proxyURL, err := captureGrokRequestOwner(ctx, account)
+	if err != nil {
+		return nil, err
+	}
 	if account.Type != AccountTypeOAuth && account.Type != AccountTypeAPIKey {
 		return nil, fmt.Errorf("grok account type %s is not supported by Responses forwarding", account.Type)
 	}
@@ -87,18 +91,15 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 		return nil, fmt.Errorf("apply grok prompt cache identity: %w", err)
 	}
 
+	ctx = WithOutboundIdentityScope(ctx, c)
 	token, _, err := s.getRequestCredential(ctx, c, account)
 	if err != nil {
 		return nil, err
 	}
+	ctx = withRequestCredentialOwner(ctx, account, token)
 
 	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
 	defer releaseUpstreamCtx()
-
-	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
-	}
 
 	upstreamStart := time.Now()
 	var resp *http.Response
@@ -174,10 +175,10 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 			Message:            upstreamMsg,
 		})
 		errCtx := withGrokTeamRateLimitModel(ctx, upstreamModel)
-		s.handleGrokAccountUpstreamError(errCtx, account, resp.StatusCode, resp.Header, respBody)
+		published := s.handleGrokAccountUpstreamError(errCtx, account, resp.StatusCode, resp.Header, respBody)
 		// Quota/rate-limit responses stamp the team+model overlay. Capacity is
 		// request pressure and must not hide sibling accounts.
-		if shouldMarkGrokTeamModelRateLimit(resp.StatusCode, respBody) {
+		if published && shouldMarkGrokTeamModelRateLimit(resp.StatusCode, respBody) {
 			markGrokTeamModelRateLimit(account, upstreamModel, resolveGrokTeamRateLimitUntil(time.Now().Add(grokTeamRateLimitDefaultTTL), time.Now()))
 		}
 		if s.shouldFailoverGrokUpstreamError(resp.StatusCode, respBody) {
@@ -1412,9 +1413,10 @@ func (s *OpenAIGatewayService) describeGrokComposerImage(
 		return "", OpenAIUsage{}, err
 	}
 
+	// Captioning shares the parent session while each image is its own prompt.
+	// Retrying the parent turn retains each caption's request ID independently.
+	ctx = withGrokLogicalOperation(ctx, fmt.Sprintf("composer-image:%d", index))
 	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
-	// Image-description probes are auxiliary requests, not conversation turns.
-	// Do not bind them to the caller's Grok prompt-cache identity.
 	upstreamReq, err := s.buildGrokResponsesRequest(upstreamCtx, c, account, body, token, "", s.cfg, s.settingService)
 	releaseUpstreamCtx()
 	if err != nil {
@@ -1594,6 +1596,12 @@ func addOpenAIUsage(dst *OpenAIUsage, usage OpenAIUsage) {
 }
 
 func (s *OpenAIGatewayService) buildGrokResponsesRequest(ctx context.Context, c *gin.Context, account *Account, body []byte, token, cacheIdentity string, cfg *config.Config, settings ...*SettingService) (*http.Request, error) {
+	// URL and ordinary relay headers belong to the same immutable grant as
+	// the bearer. Final transport preparation cannot repair a stale target.
+	account, err := requestCredentialAccount(ctx, account)
+	if err != nil {
+		return nil, err
+	}
 	targetURL, err := buildGrokResponsesURL(account, cfg, settings...)
 	if err != nil {
 		return nil, err
@@ -1608,7 +1616,9 @@ func (s *OpenAIGatewayService) buildGrokResponsesRequest(ctx context.Context, c 
 	if account.IsGrokOAuth() {
 		applyGrokCLIHeaders(req.Header)
 	}
-	applyGrokRequestMetadata(req.Header, body, resolveGrokRequestConversation(c, body, cacheIdentity), account.GetCredential("sub"))
+	if err := applyGrokRequestMetadataForRequest(req, c, account, body, cacheIdentity); err != nil {
+		return nil, err
+	}
 	// 账号级请求头覆写最后应用，使配置值优先于上面的内置默认头；
 	// 打到官方 CLI 网关时身份头仍由共享传输层最终强制。
 	account.ApplyHeaderOverrides(req.Header)
@@ -1652,6 +1662,11 @@ func (s *OpenAIGatewayService) updateGrokUsageSnapshotWithRateLimit(ctx context.
 	if s == nil || account == nil || account.ID <= 0 || snapshot == nil {
 		return
 	}
+	account = grokResponseOwner(ctx, account)
+	if account == nil {
+		return
+	}
+	snapshot.CredentialGeneration = grokCredentialGeneration(account)
 	accountID := account.ID
 	now := time.Now()
 	resetAt, hasActiveLimit := grokRateLimitResetAtForAccount(account, snapshot, now)
@@ -1682,25 +1697,26 @@ func (s *OpenAIGatewayService) updateGrokUsageSnapshotWithRateLimit(ctx context.
 		stateCtx, cancel = openAIAccountStateContext(ctx)
 		defer cancel()
 	}
-	// Account pointers on the request path are per-request copies (Redis/DB decode),
-	// not a shared in-process cache. Mutating Extra here matches token refresh /
-	// rate-limit writers; do not reuse the same *Account across goroutines.
-	if account.Extra == nil {
-		account.Extra = map[string]any{}
-	}
-	account.Extra[grokQuotaSnapshotExtraKey] = snapshot
-	if s.accountRepo != nil {
-		_ = s.accountRepo.UpdateExtra(stateCtx, accountID, updates)
-	}
-	// Error responses are reconciled by handleGrokAccountUpstreamError. Pool-mode
-	// API keys retain the snapshot for observability but leave account health to
-	// the upstream pool. Other accounts install the immediate runtime and durable
-	// rate-limit state when the observed window is exhausted.
-	if installRateLimit && hasActiveLimit && !account.IsPoolMode() {
-		s.rateLimitGrok(stateCtx, account, resetAt)
+	outcome := GrokRequestOutcome{Extra: updates}
+	limited := installRateLimit && hasActiveLimit && !account.IsPoolMode()
+	if limited {
+		outcome.RateLimitResetAt = &resetAt
 	} else if recovery {
-		clearGrokRateLimitAfterRecovery(stateCtx, s.accountRepo, account)
+		outcome.ClearRateLimit = true
 	}
+	collectGrokRequestOutcome(stateCtx, s.accountRepo, account, outcome, func(account *Account) {
+		if account.Extra == nil {
+			account.Extra = map[string]any{}
+		}
+		for key, value := range updates {
+			account.Extra[key] = value
+		}
+		if limited {
+			s.publishGrokRateLimit(stateCtx, account, resetAt)
+		} else if recovery {
+			account.RateLimitedAt, account.RateLimitResetAt = nil, nil
+		}
+	})
 }
 
 func (s *OpenAIGatewayService) updateGrokUsageFromResponse(ctx context.Context, account *Account, headers http.Header, statusCode int) {
@@ -1847,14 +1863,6 @@ func normalizeGrokRateLimitResetAt(account *Account, resetAt, now time.Time) tim
 	return resetAt
 }
 
-type grokRateLimitExtendingRepository interface {
-	SetRateLimitedIfLater(ctx context.Context, id int64, resetAt time.Time) error
-}
-
-type grokRateLimitRecoveryRepository interface {
-	ClearRateLimitIfObserved(ctx context.Context, id int64, observedLimitedAt, observedResetAt time.Time) (bool, error)
-}
-
 func isSuccessfulGrokRateLimitRecovery(account *Account, snapshot *xai.QuotaSnapshot) bool {
 	return isGrokOAuthAccount(account) &&
 		account.RateLimitedAt != nil &&
@@ -1865,50 +1873,46 @@ func isSuccessfulGrokRateLimitRecovery(account *Account, snapshot *xai.QuotaSnap
 }
 
 func clearGrokRateLimitAfterRecovery(ctx context.Context, repo AccountRepository, account *Account) {
+	account = grokResponseOwner(ctx, account)
 	if repo == nil || account == nil || account.RateLimitedAt == nil || account.RateLimitResetAt == nil || ctx.Err() != nil {
 		return
 	}
-	recoveryRepo, ok := repo.(grokRateLimitRecoveryRepository)
-	if !ok {
-		return
-	}
-	_, err := recoveryRepo.ClearRateLimitIfObserved(ctx, account.ID, *account.RateLimitedAt, *account.RateLimitResetAt)
-	if err != nil {
-		slog.Warn("grok_rate_limit_recovery_clear_failed", "account_id", account.ID, "error", err)
-	}
+	collectGrokRequestOutcome(ctx, repo, account, GrokRequestOutcome{ClearRateLimit: true}, func(account *Account) {
+		account.RateLimitedAt, account.RateLimitResetAt = nil, nil
+	})
 }
 
-func persistGrokRateLimit(ctx context.Context, repo AccountRepository, account *Account, resetAt time.Time) {
+func persistGrokRateLimit(ctx context.Context, repo AccountRepository, account *Account, resetAt time.Time) bool {
+	account = grokResponseOwner(ctx, account)
 	if repo == nil || account == nil || account.ID <= 0 {
+		return false
+	}
+	resetAt = normalizeGrokRateLimitResetAt(account, resetAt, time.Now())
+	stateCtx, cancel := openAIAccountStateContext(ctx)
+	defer cancel()
+	return collectGrokRequestOutcome(stateCtx, repo, account, GrokRequestOutcome{RateLimitResetAt: &resetAt}, nil)
+}
+
+func (s *OpenAIGatewayService) rateLimitGrok(ctx context.Context, account *Account, resetAt time.Time) {
+	account = grokResponseOwner(ctx, account)
+	if s == nil || account == nil {
 		return
 	}
 	resetAt = normalizeGrokRateLimitResetAt(account, resetAt, time.Now())
 	stateCtx, cancel := openAIAccountStateContext(ctx)
 	defer cancel()
-	var err error
-	if extendingRepo, ok := repo.(grokRateLimitExtendingRepository); ok {
-		err = extendingRepo.SetRateLimitedIfLater(stateCtx, account.ID, resetAt)
-	} else {
-		err = repo.SetRateLimited(stateCtx, account.ID, resetAt)
-	}
-	if err != nil {
-		slog.Warn("persist_grok_rate_limit_failed", "account_id", account.ID, "reset_at", resetAt.UTC(), "error", err)
-	}
+	collectGrokRequestOutcome(stateCtx, s.accountRepo, account, GrokRequestOutcome{RateLimitResetAt: &resetAt}, func(account *Account) {
+		s.publishGrokRateLimit(ctx, account, resetAt)
+	})
 }
 
-func (s *OpenAIGatewayService) rateLimitGrok(ctx context.Context, account *Account, resetAt time.Time) {
-	if s == nil || account == nil {
-		return
-	}
+func (s *OpenAIGatewayService) publishGrokRateLimit(ctx context.Context, account *Account, resetAt time.Time) {
 	now := time.Now()
-	resetAt = normalizeGrokRateLimitResetAt(account, resetAt, now)
-
 	runtimeUntil := resetAt
 	if account.TempUnschedulableUntil != nil && account.TempUnschedulableUntil.After(runtimeUntil) {
 		runtimeUntil = *account.TempUnschedulableUntil
 	}
 	s.BlockAccountScheduling(account, runtimeUntil, "429")
-	persistGrokRateLimit(ctx, s.accountRepo, account, resetAt)
 
 	// Propagate a short team+model cool so sibling OAuth accounts on the same
 	// xAI team skip the hot model without waiting for each to hit 429 alone.
@@ -1931,8 +1935,10 @@ func buildGrokSchedulerExtraUpdates(snapshot *xai.QuotaSnapshot) map[string]any 
 		return nil
 	}
 	updates := map[string]any{
-		"grok_sched_utilization":      util,
-		"grok_sched_usage_updated_at": time.Now().UTC().Format(time.RFC3339),
+		"grok_sched_utilization":           util,
+		"grok_sched_usage_updated_at":      time.Now().UTC().Format(time.RFC3339),
+		"grok_sched_credential_generation": snapshot.CredentialGeneration,
+		"grok_sched_reset_at":              nil,
 	}
 	if reset != nil {
 		// 防御：调度阈值暂停时长由 grok_sched_reset_at 决定。若上游返回脏的
@@ -2031,17 +2037,26 @@ func persistGrokTransientModelCooldown(account *Account, decision GrokUpstreamFa
 	if cooldown <= 0 {
 		cooldown = 3 * time.Minute
 	}
-	markGrokModelTransientBlock(account.ID, model, time.Now().Add(cooldown))
+	markGrokModelTransientBlock(account, model, time.Now().Add(cooldown))
 	return true
 }
 
-func (s *OpenAIGatewayService) handleGrokAccountUpstreamError(ctx context.Context, account *Account, statusCode int, headers http.Header, responseBody []byte) {
+func (s *OpenAIGatewayService) handleGrokAccountUpstreamError(ctx context.Context, account *Account, statusCode int, headers http.Header, responseBody []byte) (published bool) {
+	account = grokResponseOwner(ctx, account)
 	if s == nil || account == nil {
 		return
 	}
 	if isGrokContentPolicyRejection(statusCode, responseBody) {
 		return
 	}
+	owner := cnControlRequestOwner(ctx, account)
+	collector := &grokRequestOutcomeCollector{owner: owner}
+	ctx = context.WithValue(ctx, grokRequestOutcomeKey{}, collector)
+	defer func() {
+		if collector.dirty {
+			published = commitGrokRequestOutcome(ctx, s.accountRepo, owner, collector.outcome, collector.effects)
+		}
+	}()
 	now := time.Now()
 	decision := classifyGrokUpstreamFailure(statusCode, responseBody, grokRequestedModelFromCtx(ctx))
 	snapshot := parseGrokQuotaSnapshot(headers, statusCode, now)
@@ -2065,7 +2080,9 @@ func (s *OpenAIGatewayService) handleGrokAccountUpstreamError(ctx context.Contex
 			if decision.Class == GrokFailureFreeUsage {
 				if resetAt, limited := grokRateLimitResetAtForAccount(account, parseGrokQuotaSnapshot(headers, statusCode, now), now); limited && resetAt.After(now) {
 					if decision.Model != "" && isGrokModelSpecificFreeUsage(strings.ToLower(decision.Reason), decision.Model) {
-						markGrokModelQuotaBlock(account.ID, decision.Model, resetAt)
+						collectGrokRequestOutcome(ctx, s.accountRepo, account, GrokRequestOutcome{}, func(account *Account) {
+							markGrokModelQuotaBlock(account, decision.Model, resetAt)
+						})
 						return
 					}
 					s.rateLimitGrok(ctx, account, resetAt)
@@ -2106,6 +2123,7 @@ func (s *OpenAIGatewayService) handleGrokAccountUpstreamError(ctx context.Contex
 			s.tempUnscheduleGrok(ctx, account, 2*time.Minute, "grok upstream temporary error")
 		}
 	}
+	return
 }
 
 // isGrokSpendingLimitError detects xAI billing exhaustion bodies (often 403, sometimes 402).
@@ -2130,6 +2148,7 @@ func isGrokSpendingLimitError(responseBody []byte) bool {
 }
 
 func (s *OpenAIGatewayService) tempUnscheduleGrok(ctx context.Context, account *Account, cooldown time.Duration, reason string) {
+	account = grokResponseOwner(ctx, account)
 	if s == nil || account == nil {
 		return
 	}
@@ -2137,10 +2156,9 @@ func (s *OpenAIGatewayService) tempUnscheduleGrok(ctx context.Context, account *
 	if account.TempUnschedulableUntil != nil && account.TempUnschedulableUntil.After(until) {
 		until = *account.TempUnschedulableUntil
 	}
-	s.BlockAccountScheduling(account, until, reason)
-	if s.accountRepo != nil {
-		stateCtx, cancel := openAIAccountStateContext(ctx)
-		defer cancel()
-		_ = s.accountRepo.SetTempUnschedulable(stateCtx, account.ID, until, reason)
-	}
+	stateCtx, cancel := openAIAccountStateContext(ctx)
+	defer cancel()
+	collectGrokRequestOutcome(stateCtx, s.accountRepo, account, GrokRequestOutcome{TempUnschedulableUntil: &until, TempUnschedulableReason: reason}, func(account *Account) {
+		s.BlockAccountScheduling(account, until, reason)
+	})
 }

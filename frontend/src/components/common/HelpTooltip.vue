@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, useTemplateRef, nextTick } from 'vue'
+import { onBeforeUnmount, onMounted, onUpdated, ref, useId, useTemplateRef, nextTick } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const props = withDefaults(defineProps<{
   content?: string
@@ -11,17 +14,43 @@ const props = withDefaults(defineProps<{
 })
 
 const show = ref(false)
+const tooltipId = `help-tooltip-${useId()}`
 const triggerRef = useTemplateRef<HTMLElement>('trigger')
 const tooltipRef = useTemplateRef<HTMLElement>('tooltip')
 const tooltipStyle = ref({ top: '0px', left: '0px' })
+const placement = ref<'above' | 'below'>('above')
+const hasInteractiveTrigger = ref(false)
+let describedElement: HTMLElement | null = null
+let observer: ResizeObserver | undefined
+
+const interactiveSelector = 'a[href], button, input, select, textarea, summary, [tabindex]'
+
+function syncTriggerFocus() {
+  hasInteractiveTrigger.value = !!triggerRef.value?.querySelector(interactiveSelector)
+}
+
+function clearDescription() {
+  if (!describedElement) return
+  const ids = (describedElement.getAttribute('aria-describedby') ?? '').split(/\s+/).filter(id => id && id !== tooltipId)
+  if (ids.length) describedElement.setAttribute('aria-describedby', ids.join(' '))
+  else describedElement.removeAttribute('aria-describedby')
+  describedElement = null
+}
 
 function openTooltip() {
+  clearDescription()
+  describedElement = triggerRef.value?.querySelector<HTMLElement>(interactiveSelector) ?? triggerRef.value
+  if (describedElement) {
+    const ids = (describedElement.getAttribute('aria-describedby') ?? '').split(/\s+/).filter(Boolean)
+    describedElement.setAttribute('aria-describedby', [...ids, tooltipId].join(' '))
+  }
   show.value = true
   nextTick(updatePosition)
 }
 
 function closeTooltip() {
   show.value = false
+  clearDescription()
 }
 
 function onEnter() {
@@ -37,13 +66,32 @@ function isInside(container: HTMLElement | null, target: EventTarget | null): bo
 function onLeave(event: MouseEvent) {
   if (props.trigger !== 'hover') return
   if (isInside(tooltipRef.value, event.relatedTarget)) return
+  if (isInside(triggerRef.value, document.activeElement) || isInside(tooltipRef.value, document.activeElement)) return
   closeTooltip()
 }
 
 function onTooltipLeave(event: MouseEvent) {
   if (props.trigger !== 'hover') return
   if (isInside(triggerRef.value, event.relatedTarget)) return
+  if (isInside(triggerRef.value, document.activeElement) || isInside(tooltipRef.value, document.activeElement)) return
   closeTooltip()
+}
+
+function onFocusIn() {
+  if (props.trigger === 'hover') openTooltip()
+}
+
+function onFocusOut(event: FocusEvent) {
+  if (props.trigger !== 'hover') return
+  if (isInside(triggerRef.value, event.relatedTarget) || isInside(tooltipRef.value, event.relatedTarget)) return
+  closeTooltip()
+}
+
+function onTriggerKeydown(event: KeyboardEvent) {
+  if (event.target !== triggerRef.value || !['Enter', ' '].includes(event.key)) return
+  event.preventDefault()
+  if (props.trigger === 'click' && show.value) closeTooltip()
+  else openTooltip()
 }
 
 function onClick(event: MouseEvent) {
@@ -65,8 +113,9 @@ function onDocumentClick(event: MouseEvent) {
 }
 
 function onDocumentKeydown(event: KeyboardEvent) {
-  if (props.trigger !== 'click') return
-  if (event.key === 'Escape') {
+  if (show.value && event.key === 'Escape') {
+    event.preventDefault()
+    event.stopPropagation()
     closeTooltip()
   }
 }
@@ -78,24 +127,43 @@ function onViewportChange() {
 
 function updatePosition() {
   const el = triggerRef.value
-  if (!el) return
+  const panel = tooltipRef.value
+  if (!show.value || !el || !panel) return
   const rect = el.getBoundingClientRect()
+  const panelRect = panel.getBoundingClientRect()
+  const gutter = 12
+  const gap = 8
+  const spaceAbove = rect.top - gap - gutter
+  const spaceBelow = window.innerHeight - rect.bottom - gap - gutter
+  placement.value = panelRect.height <= spaceAbove || spaceAbove > spaceBelow ? 'above' : 'below'
+  const top = placement.value === 'above' ? rect.top - gap - panelRect.height : rect.bottom + gap
+  const left = rect.left + rect.width / 2 - panelRect.width / 2
   tooltipStyle.value = {
-    top: `${rect.top + window.scrollY}px`,
-    left: `${rect.left + rect.width / 2 + window.scrollX}px`,
+    top: `${Math.max(gutter, Math.min(top, window.innerHeight - gutter - panelRect.height))}px`,
+    left: `${Math.max(gutter, Math.min(left, window.innerWidth - gutter - panelRect.width))}px`,
   }
 }
 
 onMounted(() => {
+  syncTriggerFocus()
   document.addEventListener('click', onDocumentClick, true)
-  document.addEventListener('keydown', onDocumentKeydown)
+  document.addEventListener('keydown', onDocumentKeydown, true)
   window.addEventListener('resize', onViewportChange)
   window.addEventListener('scroll', onViewportChange, true)
+  if (typeof ResizeObserver !== 'undefined') {
+    observer = new ResizeObserver(onViewportChange)
+    if (triggerRef.value) observer.observe(triggerRef.value)
+    if (tooltipRef.value) observer.observe(tooltipRef.value)
+  }
 })
 
+onUpdated(syncTriggerFocus)
+
 onBeforeUnmount(() => {
+  clearDescription()
+  observer?.disconnect()
   document.removeEventListener('click', onDocumentClick, true)
-  document.removeEventListener('keydown', onDocumentKeydown)
+  document.removeEventListener('keydown', onDocumentKeydown, true)
   window.removeEventListener('resize', onViewportChange)
   window.removeEventListener('scroll', onViewportChange, true)
 })
@@ -104,9 +172,17 @@ onBeforeUnmount(() => {
 <template>
   <div
     ref="trigger"
-    class="group relative ml-1 inline-flex items-center align-middle"
+    title=""
+    class="help-tooltip-trigger group relative ml-1 inline-flex items-center rounded-full align-middle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/50"
+    :tabindex="hasInteractiveTrigger ? undefined : 0"
+    :role="!hasInteractiveTrigger ? 'button' : undefined"
+    :aria-label="!hasInteractiveTrigger ? t('common.info') : undefined"
+    :aria-expanded="!hasInteractiveTrigger ? show : undefined"
     @mouseenter="onEnter"
     @mouseleave="onLeave"
+    @focusin="onFocusIn"
+    @focusout="onFocusOut"
+    @keydown="onTriggerKeydown"
     @click="onClick"
   >
     <!-- Trigger Icon -->
@@ -132,18 +208,21 @@ onBeforeUnmount(() => {
       <div
         ref="tooltip"
         v-show="show"
+        :id="tooltipId"
         role="tooltip"
+        :data-placement="placement"
         :class="[
-          'fixed z-[99999] -translate-x-1/2 -translate-y-full rounded-lg bg-gray-900 p-3 text-xs leading-relaxed text-white shadow-xl ring-1 ring-white/10 selection:bg-primary-200 selection:text-gray-900 before:absolute before:inset-x-0 before:top-full before:h-3 dark:bg-gray-800 dark:selection:bg-primary-200 dark:selection:text-gray-900',
+          'help-tooltip-panel fixed z-[99999] surface-panel p-3 text-xs leading-relaxed shadow-xl ring-1 ring-white/10 selection:bg-primary-200 selection:text-gray-900 dark:selection:bg-primary-200 dark:selection:text-gray-900',
           props.widthClass,
         ]"
-        :style="{ top: `calc(${tooltipStyle.top} - 8px)`, left: tooltipStyle.left }"
+        :style="tooltipStyle"
         @mouseleave="onTooltipLeave"
+        @focusout="onFocusOut"
       >
         <button
           v-if="props.trigger === 'click'"
           type="button"
-          class="absolute right-1.5 top-1.5 rounded p-1 text-gray-300 transition-colors hover:bg-white/10 hover:text-white"
+          class="absolute right-1.5 top-1.5 rounded-lg p-1 transition-colors hover:surface-hover surface-control surface-muted"
           aria-label="Close"
           @click.stop="closeTooltip"
         >
@@ -151,9 +230,30 @@ onBeforeUnmount(() => {
             <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
-        <slot>{{ content }}</slot>
-        <div class="absolute -bottom-1 left-1/2 h-2 w-2 -translate-x-1/2 rotate-45 bg-gray-900 dark:bg-gray-800"></div>
+        <div class="help-tooltip-content" :class="{ 'pr-5': props.trigger === 'click' }"><slot>{{ content }}</slot></div>
       </div>
     </Teleport>
   </div>
 </template>
+
+<style scoped>
+/* Keep the hover bridge between the trigger and the solid tooltip panel. */
+.help-tooltip-panel {
+  border-radius: var(--surface-radius-panel, 16px);
+  max-width: calc(100vw - 24px);
+}
+.help-tooltip-content {
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+.help-tooltip-panel::before {
+  content: '';
+  position: absolute;
+  inset: 100% 0 auto;
+  height: 0.75rem;
+}
+.help-tooltip-panel[data-placement='below']::before {
+  inset: auto 0 100%;
+}
+</style>

@@ -1,7 +1,7 @@
 <template>
-  <div v-if="fields.length" class="space-y-2 rounded-lg bg-gray-50 p-3 dark:bg-dark-800" data-testid="identity-environment-summary">
+  <div v-if="fields.length" class="space-y-2 rounded-lg surface-inset p-3" data-testid="identity-environment-summary">
     <p class="text-sm font-medium">{{ t('admin.settings.outboundIdentity.environment') }} · Ubuntu 24.04 · x86_64</p>
-    <p class="text-xs text-gray-500">{{ t('admin.settings.outboundIdentity.environmentGroupHint') }}</p>
+    <p class="text-xs surface-muted">{{ t('admin.settings.outboundIdentity.environmentGroupHint') }}</p>
     <dl class="grid gap-1 text-xs sm:grid-cols-[auto_1fr]">
       <template v-for="field in fields" :key="field.name">
         <dt class="font-mono text-gray-500">{{ field.name }}</dt>

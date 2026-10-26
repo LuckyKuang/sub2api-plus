@@ -5,11 +5,14 @@ package service
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -34,6 +37,46 @@ func (r *alphaSearchAccountStateRepo) SetError(_ context.Context, _ int64, error
 	r.setErrorCalls++
 	r.lastError = errorMsg
 	return nil
+}
+
+type alphaSearchMetadataRepo struct {
+	AccountRepository
+	mu           sync.Mutex
+	current      *Account
+	persistErr   error
+	persistCalls int
+	expected     map[string]any
+	whoamiDone   <-chan struct{}
+}
+
+func (r *alphaSearchMetadataRepo) UpdateOAuthRefreshCredentialsIfUnchanged(_ context.Context, expectedOwner *Account, replacement map[string]any) (bool, error) {
+	id := expectedOwner.ID
+	platform := expectedOwner.Platform
+	expected := expectedOwner.Credentials
+	proxy := expectedOwner.ProxyID
+	if r.whoamiDone != nil {
+		<-r.whoamiDone
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.persistCalls++
+	r.expected = cloneRequestCredentialMap(expected)
+	if r.persistErr != nil {
+		return false, r.persistErr
+	}
+	current := r.current
+	if current == nil || current.ID != id || current.Platform != platform || current.Type != AccountTypeOAuth || current.Status != StatusActive ||
+		!reflect.DeepEqual(current.Credentials, expected) || (!reflect.DeepEqual(current.ProxyID, proxy) || !reflect.DeepEqual(current.Proxy, expectedOwner.Proxy)) {
+		return false, nil
+	}
+	current.Credentials = cloneRequestCredentialMap(replacement)
+	return true, nil
+}
+
+func (r *alphaSearchMetadataRepo) snapshot() *Account {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return snapshotRequestCredentialAccount(r.current)
 }
 
 func alphaSearchResponsesSSE(output string) string {
@@ -109,6 +152,7 @@ func TestForwardAlphaSearchOAuthAcceptsOfficialProductOriginatorAndPreservesWire
 	require.Equal(t, "Bearer oauth-token", upstream.lastReq.Header.Get("Authorization"))
 	require.Equal(t, "chatgpt-account", upstream.lastReq.Header.Get("chatgpt-account-id"))
 	require.Equal(t, "application/json", upstream.lastReq.Header.Get("Accept"))
+	require.Empty(t, upstream.lastReq.Header.Get("x-codex-beta-features"), "direct search has its own capability policy")
 	require.Equal(t, codexCLIVersion, upstream.lastReq.Header.Get("Version"))
 	require.Equal(t, alphaSearchCurrentAccountUserAgent, upstream.lastReq.Header.Get("User-Agent"))
 	require.Equal(t, "codex_cli_rs", upstream.lastReq.Header.Get("Originator"))
@@ -297,9 +341,111 @@ func TestForwardAlphaSearchPATBackfillsMissingChatGPTAccountMetadata(t *testing.
 	require.Equal(t, int32(1), atomic.LoadInt32(&whoamiCalls))
 	require.Equal(t, "acct-123", upstream.lastReq.Header.Get("ChatGPT-Account-ID"))
 	require.Equal(t, "true", upstream.lastReq.Header.Get("X-OpenAI-Fedramp"))
-	require.Equal(t, "acct-123", account.Credentials["chatgpt_account_id"])
-	require.Equal(t, "user-123", account.Credentials["chatgpt_user_id"])
-	require.Equal(t, OpenAIAuthModePersonalAccessToken, account.Credentials["auth_mode"])
+	owner, known := requestCredentialOwner(upstream.lastReq.Context(), account)
+	require.True(t, known)
+	require.Equal(t, "acct-123", owner.GetChatGPTAccountID())
+	require.Equal(t, "user-123", owner.GetCredential("chatgpt_user_id"))
+	require.Equal(t, OpenAIAuthModePersonalAccessToken, owner.GetCredential("auth_mode"))
+	require.NotContains(t, account.Credentials, "chatgpt_account_id", "without a repository, verified metadata belongs only to this attempt")
+}
+
+func TestForwardAlphaSearchPATWhoamiMetadataFencesPersistenceAndAttemptEvidence(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, change := range []string{"unchanged", "relinked_during_whoami", "store_error"} {
+		t.Run(change, func(t *testing.T) {
+			body := []byte(`{"id":"search-session","model":"gpt-5.6-sol","commands":{"search_query":[{"q":"news"}]}}`)
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/alpha/search", bytes.NewReader(body))
+			account := &Account{ID: 47, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive, Concurrency: 1,
+				Credentials: map[string]any{"access_token": "at-test-token", "auth_mode": OpenAIAuthModePersonalAccessToken, "user_agent": alphaSearchAccountUserAgent, "custom_setting": "keep"}}
+			whoamiDone := make(chan struct{})
+			repo := &alphaSearchMetadataRepo{current: account, whoamiDone: whoamiDone}
+			if change == "store_error" {
+				repo.persistErr = errors.New("scheduler outbox unavailable")
+			}
+			whoamiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				defer close(whoamiDone)
+				require.Equal(t, "Bearer at-test-token", r.Header.Get("Authorization"))
+				require.Equal(t, alphaSearchCurrentAccountUserAgent, r.Header.Get("User-Agent"), "whoami preserves the account client family and fingerprint while normalizing its version")
+				require.Equal(t, "codex_cli_rs", r.Header.Get("Originator"))
+				if change == "relinked_during_whoami" {
+					repo.mu.Lock()
+					// Simulate a relink updating both the durable row and the mutable
+					// selected object while whoami still proves the old bearer.
+					repo.current.Credentials = map[string]any{"access_token": "at-new-login", "auth_mode": OpenAIAuthModePersonalAccessToken,
+						"chatgpt_account_id": "new-login-account", "user_agent": alphaSearchCurrentAccountUserAgent, "custom_setting": "new-login-setting"}
+					repo.mu.Unlock()
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"email":"pat@example.com","chatgpt_user_id":"user-123","chatgpt_account_id":"acct-123","chatgpt_plan_type":"plus","chatgpt_account_is_fedramp":true}`))
+			}))
+			defer whoamiServer.Close()
+			oldWhoamiURL := openAICodexPATWhoamiURL
+			openAICodexPATWhoamiURL = whoamiServer.URL
+			defer func() { openAICodexPATWhoamiURL = oldWhoamiURL }()
+			upstream := &httpUpstreamRecorder{resp: &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"text/event-stream"}},
+				Body: io.NopCloser(strings.NewReader(alphaSearchResponsesSSE("search result")))}}
+			oauthService := NewOpenAIOAuthService(nil, nil)
+			service := &OpenAIGatewayService{cfg: &config.Config{}, accountRepo: repo, httpUpstream: upstream,
+				openAITokenProvider: NewOpenAITokenProvider(nil, nil, oauthService)}
+			ctx := WithOutboundIdentityScope(context.Background(), c)
+			recordRequestCredentialOwner(ctx, account, "at-test-token")
+			priorAttempt := withRequestCredentialOwner(ctx, account, "at-test-token")
+
+			result, err := service.ForwardAlphaSearch(priorAttempt, c, account, body)
+
+			select {
+			case <-whoamiDone:
+			default:
+				t.Fatal("expected PAT whoami validation before inference")
+			}
+			require.Equal(t, 1, repo.persistCalls)
+			require.Equal(t, "at-test-token", repo.expected["access_token"], "metadata CAS must compare the actual old bearer document")
+			require.Equal(t, alphaSearchAccountUserAgent, repo.expected["user_agent"], "whoami must retain the credential-owning account's source declaration")
+			require.NotContains(t, repo.expected, "chatgpt_account_id")
+			previous, known := requestCredentialOwner(priorAttempt, account)
+			require.True(t, known)
+			require.Equal(t, "at-test-token", previous.GetCredential("access_token"))
+			require.Empty(t, previous.GetChatGPTAccountID(), "new validated claims cannot rewrite an older attempt's proof")
+			durable := repo.snapshot()
+			if change == "unchanged" {
+				require.NoError(t, err)
+				require.NotNil(t, result)
+				require.Len(t, upstream.requests, 1)
+				require.Equal(t, "Bearer at-test-token", upstream.lastReq.Header.Get("Authorization"))
+				require.Equal(t, "acct-123", upstream.lastReq.Header.Get("ChatGPT-Account-ID"))
+				require.Equal(t, "true", upstream.lastReq.Header.Get("X-OpenAI-Fedramp"))
+				require.Equal(t, alphaSearchCurrentAccountUserAgent, upstream.lastReq.Header.Get("User-Agent"))
+				require.Equal(t, "codex_cli_rs", upstream.lastReq.Header.Get("Originator"))
+				require.Equal(t, codexCLIVersion, upstream.lastReq.Header.Get("Version"))
+				diagnostics := GetOpsRoutingDiagnostics(c)
+				require.NotNil(t, diagnostics)
+				require.Equal(t, openAIOutboundIdentitySourceAccount, diagnostics.OutboundIdentitySource)
+				require.Equal(t, "acct-123", durable.GetChatGPTAccountID())
+				require.Equal(t, "keep", durable.GetCredential("custom_setting"))
+				sentOwner, known := requestCredentialOwner(upstream.lastReq.Context(), account)
+				require.True(t, known)
+				require.Equal(t, "acct-123", sentOwner.GetChatGPTAccountID())
+				acquired, known := requestCredentialOwner(withRequestCredentialOwner(priorAttempt, account, "at-test-token"), account)
+				require.True(t, known, "enrichment must not make the acquired-token scope ambiguous")
+				require.Empty(t, acquired.GetChatGPTAccountID(), "only the current attempt receives whoami claims")
+				return
+			}
+			require.Error(t, err)
+			require.Nil(t, result)
+			require.Empty(t, upstream.requests, "unpersisted or superseded metadata must not authorize inference")
+			require.False(t, c.Writer.Written())
+			if change == "relinked_during_whoami" {
+				require.Equal(t, "at-new-login", durable.GetCredential("access_token"))
+				require.Equal(t, "new-login-account", durable.GetChatGPTAccountID())
+				require.Equal(t, "new-login-setting", durable.GetCredential("custom_setting"))
+			} else {
+				require.Equal(t, "at-test-token", durable.GetCredential("access_token"))
+				require.Empty(t, durable.GetChatGPTAccountID())
+			}
+		})
+	}
 }
 
 func TestForwardAlphaSearchAPIKeyMapsModelAndPassesThroughError(t *testing.T) {
@@ -338,6 +484,7 @@ func TestForwardAlphaSearchAPIKeyMapsModelAndPassesThroughError(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
 	require.JSONEq(t, upstreamBody, recorder.Body.String())
 	require.Equal(t, "https://compat.example/v4/alpha/search", upstream.lastReq.URL.String())
+	require.Empty(t, upstream.lastReq.Header.Get("x-codex-beta-features"))
 	require.Equal(t, "Bearer sk-test", upstream.lastReq.Header.Get("Authorization"))
 	require.Equal(t, "upstream-5.6", gjson.GetBytes(upstream.lastBody, "model").String())
 	require.True(t, gjson.GetBytes(upstream.lastBody, "commands.search_query").IsArray())

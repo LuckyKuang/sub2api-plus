@@ -52,6 +52,17 @@ const mountPlanCard = (groupPlatform: string, overrides: Partial<SubscriptionPla
   });
 
 describe("SubscriptionPlanCard", () => {
+  it("keeps the catalog purchase action at the card bottom and emits the unchanged selected plan", async () => {
+    const wrapper = mountPlanCard("openai", { features: ["Priority support", "Advanced models"] });
+    await wrapper.setProps({ catalog: true });
+    const action = wrapper.get("button");
+    expect(wrapper.classes()).toContain("subscription-plan-catalog");
+    expect(action.classes()).toEqual(expect.arrayContaining(["mt-auto", "min-h-11", "w-full", "font-semibold"]));
+    expect(action.element.parentElement?.lastElementChild).toBe(action.element);
+    await action.trigger("click");
+    expect(wrapper.emitted("select")).toEqual([[wrapper.props("plan")]]);
+  });
+
   it("does not show Antigravity model scopes for OpenAI plans", () => {
     const text = mountPlanCard("openai").text();
 

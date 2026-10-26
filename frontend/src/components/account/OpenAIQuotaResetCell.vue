@@ -16,7 +16,7 @@
 
       <button
         type="button"
-        class="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium text-blue-600 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-blue-400 dark:hover:bg-blue-900/30"
+        class="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium text-blue-600 transition-colors hover:bg-blue-50/25 disabled:cursor-not-allowed disabled:opacity-50 dark:text-blue-400 dark:hover:bg-blue-900/30 surface-control"
         :disabled="loading || resetting"
         :title="countButtonTitle"
         @click="handleQuery()"
@@ -40,7 +40,7 @@
 
       <button
         type="button"
-        class="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium text-orange-600 transition-colors hover:bg-orange-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-orange-400 dark:hover:bg-orange-900/30"
+        class="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium text-orange-600 transition-colors hover:bg-orange-50/25 disabled:cursor-not-allowed disabled:opacity-50 dark:text-orange-400 dark:hover:bg-orange-900/30 surface-control"
         :disabled="resetting || loading || !canReset"
         :title="resetButtonTitle"
         @click="openResetConfirm"
@@ -77,7 +77,7 @@
           {{ autoResetState.trigger_window }}
         </span>
       </span>
-      <span v-if="autoResetState.checked_at" class="text-gray-500 dark:text-gray-400">
+      <span v-if="autoResetState.checked_at" class="surface-muted">
         {{ formatResetCreditExpiry(autoResetState.checked_at, 'short') }}
       </span>
       <span
@@ -92,7 +92,7 @@
     <div v-if="primaryResetCreditExpiry" class="space-y-1">
       <div class="flex flex-wrap items-center gap-1">
         <span
-          class="inline-flex max-w-full items-center rounded bg-gray-100 px-1.5 py-0.5 text-[10px] leading-4 text-gray-600 tabular-nums dark:bg-dark-800 dark:text-gray-300"
+          class="inline-flex max-w-full items-center rounded surface-inset px-1.5 py-0.5 text-[10px] leading-4 tabular-nums surface-muted"
           :title="t('admin.accounts.openaiQuotaReset.expiresAtFull', { time: formatResetCreditExpiry(primaryResetCreditExpiry, 'full') })"
         >
           {{ t('admin.accounts.openaiQuotaReset.expiresAt', { time: formatResetCreditExpiry(primaryResetCreditExpiry, 'short') }) }}
@@ -101,7 +101,7 @@
           v-if="hiddenResetCreditCount > 0"
           type="button"
           data-testid="reset-credit-expiry-toggle"
-          class="inline-flex items-center rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium leading-4 text-gray-600 transition-colors hover:bg-gray-200 dark:bg-dark-800 dark:text-gray-300 dark:hover:bg-dark-700"
+          class="inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium leading-4 transition-colors hover:surface-hover surface-control surface-muted"
           :aria-expanded="showResetCreditDetails"
           :aria-label="resetCreditDetailsToggleLabel"
           :title="resetCreditDetailsTitle"
@@ -114,7 +114,7 @@
       <div
         v-if="showResetCreditDetails && resetCreditExpirations.length > 1"
         data-testid="reset-credit-expiry-details"
-        class="inline-grid max-w-full gap-0.5 rounded border border-gray-200 bg-white px-1.5 py-1 text-[10px] leading-4 text-gray-600 shadow-sm dark:border-dark-700 dark:bg-dark-900 dark:text-gray-300"
+        class="inline-grid max-w-full gap-0.5 rounded border border-gray-200 surface-inset px-1.5 py-1 text-[10px] leading-4 shadow-sm dark:border-dark-700 surface-muted"
       >
         <span class="sr-only">{{ t('admin.accounts.openaiQuotaReset.expirationDetails') }}</span>
         <span
@@ -221,16 +221,16 @@ const autoResetStateLabel = computed(() => {
 const autoResetStateClass = computed(() => {
   switch (autoResetState.value?.status) {
     case 'available':
-      return 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+      return 'bg-blue-50/[0.15] text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
     case 'success':
-      return 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+      return 'bg-emerald-50/[0.15] text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
     case 'no_credit':
     case 'failed':
-      return 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+      return 'bg-red-50/[0.15] text-red-700 dark:bg-red-900/30 dark:text-red-300'
     case 'resetting':
-      return 'bg-orange-50 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300'
+      return 'bg-orange-50/[0.15] text-orange-700 dark:bg-orange-900/30 dark:text-orange-300'
     default:
-      return 'bg-gray-100 text-gray-600 dark:bg-dark-800 dark:text-gray-300'
+      return 'surface-inset surface-muted dark:surface-inset'
   }
 })
 

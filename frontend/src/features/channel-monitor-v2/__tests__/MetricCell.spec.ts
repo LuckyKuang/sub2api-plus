@@ -30,7 +30,8 @@ describe('MetricCell', () => {
       },
     })
     expect(wrapper.find('strong').classes().join(' ')).not.toMatch(/red/)
-    expect(wrapper.find('strong').classes().join(' ')).toMatch(/gray|dark/)
+    // docs/UI_INTERACTION.md: missing metrics use readable, neutral glass text.
+    expect(wrapper.find('strong').classes()).toContain('surface-muted')
   })
 
   it('maps warning and critical health states to distinct colors', () => {

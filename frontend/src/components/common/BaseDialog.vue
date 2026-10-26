@@ -11,7 +11,7 @@
         @click.self="handleClose"
       >
         <!-- Modal panel -->
-        <div ref="dialogRef" :class="['modal-content', widthClasses]" @click.stop>
+        <div ref="dialogRef" tabindex="-1" :class="['modal-content', placement === 'right' ? 'detail-dialog' : widthClasses]" @click.stop>
           <!-- Header -->
           <div class="modal-header">
             <h3 :id="dialogId" class="modal-title">
@@ -20,7 +20,7 @@
             <button
               v-if="showCloseButton"
               @click="emit('close')"
-              class="-mr-2 rounded-xl p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/30 focus-visible:ring-offset-2 dark:text-dark-500 dark:hover:bg-dark-700 dark:hover:text-dark-300 dark:focus-visible:ring-offset-dark-900"
+              class="-mr-2 rounded-xl p-2 transition-colors hover:surface-hover hover:text-gray-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/30 focus-visible:ring-offset-2 dark:hover:text-dark-300 dark:focus-visible:ring-offset-dark-900 surface-control surface-muted"
               aria-label="Close modal"
             >
               <Icon name="x" size="md" />
@@ -44,11 +44,11 @@
 
 <script lang="ts">
 let dialogIdCounter = 0
-const openDialogs = new Set<string>()
 </script>
 
 <script setup lang="ts">
-import { computed, watch, onMounted, onUnmounted, ref, nextTick } from 'vue'
+import { computed, watch, ref, nextTick } from 'vue'
+import { useDialogFocus } from '@/composables/useDialogFocus'
 import Icon from '@/components/icons/Icon.vue'
 
 // 生成唯一ID以避免多个对话框时ID冲突
@@ -57,7 +57,6 @@ const dialogId = `modal-title-${++dialogIdCounter}`
 // 焦点管理
 const dialogRef = ref<HTMLElement | null>(null)
 const modalBodyRef = ref<HTMLElement | null>(null)
-let previousActiveElement: HTMLElement | null = null
 
 type DialogWidth = 'narrow' | 'normal' | 'wide' | 'extra-wide' | 'full'
 
@@ -65,6 +64,7 @@ interface Props {
   show: boolean
   title: string
   width?: DialogWidth
+  placement?: 'center' | 'right'
   closeOnEscape?: boolean
   closeOnClickOutside?: boolean
   showCloseButton?: boolean
@@ -84,6 +84,7 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const emit = defineEmits<Emits>()
+useDialogFocus(() => props.show, dialogRef, () => emit('close'), () => props.closeOnEscape)
 
 // Custom z-index style (overrides the default z-50 from CSS)
 const zIndexStyle = computed(() => {
@@ -110,58 +111,9 @@ const handleClose = () => {
   }
 }
 
-const handleEscape = (event: KeyboardEvent) => {
-  if (props.show && props.closeOnEscape && event.key === 'Escape' && [...openDialogs].pop() === dialogId) {
-    emit('close')
-  }
-}
-
-const updateScrollLock = (isOpen: boolean) => {
-  if (isOpen) openDialogs.add(dialogId)
-  else openDialogs.delete(dialogId)
-  document.body.classList.toggle('modal-open', openDialogs.size > 0)
-}
-
-// Prevent body scroll when modal is open and manage focus
-watch(
-  () => props.show,
-  async (isOpen) => {
-    if (isOpen) {
-      // 保存当前焦点元素
-      previousActiveElement = document.activeElement as HTMLElement
-      // 使用CSS类而不是直接操作style,更易于管理多个对话框
-      updateScrollLock(true)
-
-      // 等待DOM更新后设置焦点到对话框
-      await nextTick()
-      if (modalBodyRef.value) {
-        modalBodyRef.value.scrollTop = 0
-      }
-      if (dialogRef.value) {
-        const firstFocusable = dialogRef.value.querySelector<HTMLElement>(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-        )
-        firstFocusable?.focus()
-      }
-    } else {
-      updateScrollLock(false)
-      // 恢复之前的焦点
-      if (previousActiveElement && typeof previousActiveElement.focus === 'function') {
-        previousActiveElement.focus()
-      }
-      previousActiveElement = null
-    }
-  },
-  { immediate: true }
-)
-
-onMounted(() => {
-  document.addEventListener('keydown', handleEscape)
-})
-
-onUnmounted(() => {
-  document.removeEventListener('keydown', handleEscape)
-  // 确保组件卸载时移除滚动锁定
-  updateScrollLock(false)
-})
+watch(() => props.show, async show => {
+  if (!show) return
+  await nextTick()
+  if (modalBodyRef.value) modalBodyRef.value.scrollTop = 0
+}, { immediate: true })
 </script>

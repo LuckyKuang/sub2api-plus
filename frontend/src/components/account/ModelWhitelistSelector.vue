@@ -5,13 +5,13 @@
     <div class="relative mb-3">
       <div
         @click="toggleDropdown"
-        class="cursor-pointer rounded-lg border border-gray-300 bg-white px-3 py-2 dark:border-dark-500 dark:bg-dark-700"
+        class="cursor-pointer rounded-lg border border-gray-300 surface-inset px-3 py-2 dark:border-dark-500"
       >
         <div class="grid grid-cols-2 gap-1.5">
           <span
             v-for="model in modelValue"
             :key="model"
-            class="inline-flex items-center justify-between gap-1 rounded bg-gray-100 px-2 py-1 text-xs text-gray-700 dark:bg-dark-600 dark:text-gray-300"
+            class="inline-flex items-center justify-between gap-1 rounded surface-inset px-2 py-1 text-xs surface-muted"
           >
             <span class="flex items-center gap-1 truncate">
               <ModelIcon :model="model" size="14px" />
@@ -20,14 +20,14 @@
             <button
               type="button"
               @click.stop="removeModel(model)"
-              class="shrink-0 rounded-full hover:bg-gray-200 dark:hover:bg-dark-500"
+              class="shrink-0 rounded-full hover:surface-hover dark:hover:bg-dark-500 surface-control"
             >
               <Icon name="x" size="xs" class="h-3.5 w-3.5" :stroke-width="2" />
             </button>
           </span>
         </div>
         <div class="mt-2 flex items-center justify-between border-t border-gray-200 pt-2 dark:border-dark-600">
-          <span class="text-xs text-gray-400">{{ t('admin.accounts.modelCount', { count: modelValue.length }) }}</span>
+          <span class="text-xs surface-muted">{{ t('admin.accounts.modelCount', { count: modelValue.length }) }}</span>
           <svg class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
           </svg>
@@ -36,9 +36,9 @@
       <!-- Dropdown List -->
       <div
         v-if="showDropdown"
-        class="absolute left-0 right-0 top-full z-50 mt-1 rounded-lg border border-gray-200 bg-white shadow-lg dark:border-dark-600 dark:bg-dark-700"
+        class="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden border border-gray-200 shadow-lg dark:border-dark-600 surface-panel"
       >
-        <div class="sticky top-0 border-b border-gray-200 bg-white p-2 dark:border-dark-600 dark:bg-dark-700">
+        <div class="sticky top-0 border-b border-gray-200 surface-inset p-2 dark:border-dark-600">
           <input
             v-model="searchQuery"
             type="text"
@@ -47,17 +47,17 @@
             @click.stop
           />
         </div>
-        <div class="max-h-52 overflow-auto">
+        <div class="max-h-52 space-y-0.5 overflow-auto p-1">
           <div
             v-for="model in filteredModels"
             :key="model.value"
             data-testid="model-option"
-            class="group flex items-center hover:bg-gray-100 dark:hover:bg-dark-600"
+            class="group flex items-center rounded-[var(--surface-radius-item)] hover:surface-hover"
           >
             <button
               type="button"
               data-testid="select-model"
-              class="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left text-sm"
+              class="flex min-w-0 flex-1 items-center gap-2 rounded-[var(--surface-radius-item)] px-3 py-2 text-left text-sm hover:surface-hover surface-control"
               @click="toggleModel(model.value)"
             >
               <span
@@ -78,7 +78,7 @@
             <button
               type="button"
               data-testid="copy-model-id"
-              class="mr-2 rounded p-1.5 text-gray-400 opacity-70 transition-colors hover:bg-gray-200 hover:text-primary-600 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 group-hover:opacity-100 dark:text-gray-500 dark:hover:bg-dark-500 dark:hover:text-primary-400"
+              class="mr-2 rounded p-1.5 opacity-70 transition-colors hover:surface-hover hover:text-primary-600 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 group-hover:opacity-100 dark:hover:bg-dark-500 dark:hover:text-primary-400 surface-control surface-muted"
               :title="`${t('common.copy')} ${model.value}`"
               :aria-label="`${t('common.copy')} ${model.value}`"
               @click="copyModelId(model.value)"
@@ -86,7 +86,7 @@
               <Icon name="copy" size="sm" />
             </button>
           </div>
-          <div v-if="filteredModels.length === 0" class="px-3 py-4 text-center text-sm text-gray-500">
+          <div v-if="filteredModels.length === 0" class="px-3 py-4 text-center text-sm surface-muted">
             {{ t('admin.accounts.noMatchingModels') }}
           </div>
         </div>
@@ -98,7 +98,7 @@
       <button
         type="button"
         @click="fillRelated"
-        class="rounded-lg border border-blue-200 px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-900/30"
+        class="rounded-lg border border-blue-200 px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50/25 dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-900/30 surface-control"
       >
         {{ t('admin.accounts.fillRelatedModels') }}
       </button>
@@ -107,14 +107,14 @@
         type="button"
         @click="syncUpstreamModels"
         :disabled="isSyncingUpstream"
-        class="rounded-lg border border-emerald-200 px-3 py-1.5 text-sm text-emerald-600 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-900/30"
+        class="rounded-lg border border-primary-200 px-3 py-1.5 text-sm text-primary-600 hover:bg-primary-50/25 disabled:cursor-not-allowed disabled:opacity-60 dark:border-primary-800 dark:text-primary-400 dark:hover:bg-primary-900/30 surface-control"
       >
         {{ isSyncingUpstream ? t('admin.accounts.syncUpstreamModelsLoading') : t('admin.accounts.syncUpstreamModels') }}
       </button>
       <button
         type="button"
         @click="clearAll"
-        class="rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/30"
+        class="rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50/25 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/30 surface-control"
       >
         {{ t('admin.accounts.clearAllModels') }}
       </button>
@@ -122,7 +122,7 @@
 
     <!-- Custom Model Input -->
     <div class="mb-3">
-      <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('admin.accounts.customModelName') }}</label>
+      <label class="mb-1.5 block text-sm font-medium surface-muted">{{ t('admin.accounts.customModelName') }}</label>
       <div class="flex gap-2">
         <input
           v-model="customModel"
@@ -136,7 +136,7 @@
         <button
           type="button"
           @click="addCustom"
-          class="rounded-lg bg-primary-50 px-4 py-2 text-sm font-medium text-primary-600 hover:bg-primary-100 dark:bg-primary-900/30 dark:text-primary-400 dark:hover:bg-primary-900/50"
+          class="rounded-lg bg-primary-50/[0.15] px-4 py-2 text-sm font-medium text-primary-600 hover:bg-primary-100/25 dark:bg-primary-900/30 dark:text-primary-400 dark:hover:bg-primary-900/50"
         >
           {{ t('admin.accounts.addModel') }}
         </button>

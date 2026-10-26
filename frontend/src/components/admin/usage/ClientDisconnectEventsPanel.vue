@@ -1,7 +1,7 @@
 <template>
-  <div class="min-w-0 w-full" data-testid="client-disconnect-events-panel">
-    <div class="border-b border-gray-100 px-4 py-4 dark:border-dark-700/50">
-      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5">
+  <div class="min-w-0 w-full" :class="{ 'workspace-body !gap-0 disconnect-workspace': workspace }" data-testid="client-disconnect-events-panel">
+    <div class="disconnect-filters border-b border-gray-100 px-4 py-4 dark:border-dark-700/50" :class="{ 'workspace-fixed': workspace }">
+      <div class="disconnect-filter-fields grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5">
         <div ref="userSearchRef" class="relative">
           <label class="input-label">{{ t('admin.usage.disconnectEvents.userAccount') }}</label>
           <input
@@ -16,27 +16,32 @@
           <button
             v-if="draft.user_id"
             type="button"
-            class="absolute right-2 top-8 p-1 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+            class="absolute right-2 top-8 p-1 hover:text-gray-700 dark:hover:text-gray-200 surface-control surface-muted"
             :title="t('admin.usage.disconnectEvents.clearFilter')"
             @click="onClearUser"
           >
             <Icon name="x" size="xs" />
           </button>
+          <Teleport to="body" :disabled="!workspace">
           <div
             v-if="showUserDropdown && userResults.length > 0"
-            class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border border-gray-200 bg-white shadow-lg dark:border-dark-600 dark:bg-dark-800"
+            class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border border-gray-200 shadow-lg dark:border-dark-600 surface-panel"
+            :style="workspace ? userDropdownStyle : undefined"
+            data-testid="disconnect-user-options"
+            @click.stop
           >
             <button
               v-for="user in userResults"
               :key="user.id"
               type="button"
-              class="block w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-dark-700"
+              class="block w-full px-3 py-2 text-left text-sm hover:surface-hover surface-control"
               @click="selectUser(user)"
             >
               <span>{{ user.email }}</span>
-              <span v-if="user.deleted" class="ml-2 text-xs text-gray-400">{{ t('admin.usage.userDeletedBadge') }}</span>
+              <span v-if="user.deleted" class="ml-2 text-xs surface-muted">{{ t('admin.usage.userDeletedBadge') }}</span>
             </button>
           </div>
+          </Teleport>
         </div>
 
         <div ref="apiKeySearchRef" class="relative">
@@ -53,26 +58,31 @@
           <button
             v-if="draft.api_key_id"
             type="button"
-            class="absolute right-2 top-8 p-1 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+            class="absolute right-2 top-8 p-1 hover:text-gray-700 dark:hover:text-gray-200 surface-control surface-muted"
             :title="t('admin.usage.disconnectEvents.clearFilter')"
             @click="onClearAPIKey"
           >
             <Icon name="x" size="xs" />
           </button>
+          <Teleport to="body" :disabled="!workspace">
           <div
             v-if="showAPIKeyDropdown && apiKeyResults.length > 0"
-            class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border border-gray-200 bg-white shadow-lg dark:border-dark-600 dark:bg-dark-800"
+            class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border border-gray-200 shadow-lg dark:border-dark-600 surface-panel"
+            :style="workspace ? apiKeyDropdownStyle : undefined"
+            data-testid="disconnect-api-key-options"
+            @click.stop
           >
             <button
               v-for="key in apiKeyResults"
               :key="key.id"
               type="button"
-              class="block w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-dark-700"
+              class="block w-full px-3 py-2 text-left text-sm hover:surface-hover surface-control"
               @click="selectAPIKey(key)"
             >
               {{ key.name || `#${key.id}` }}
             </button>
           </div>
+          </Teleport>
         </div>
 
         <label class="block">
@@ -90,81 +100,85 @@
 
         <label class="block">
           <span class="input-label">{{ t('admin.usage.disconnectEvents.acceptedFrom') }}</span>
-          <input v-model="draft.accepted_from" data-testid="disconnect-accepted-from" type="datetime-local" class="input" />
+          <DateTimePicker :aria-label="t('admin.usage.disconnectEvents.acceptedFrom')" v-model="draft.accepted_from" data-testid="disconnect-accepted-from" type="datetime-local" class="input" />
         </label>
         <label class="block">
           <span class="input-label">{{ t('admin.usage.disconnectEvents.acceptedTo') }}</span>
-          <input v-model="draft.accepted_to" data-testid="disconnect-accepted-to" type="datetime-local" class="input" />
+          <DateTimePicker :aria-label="t('admin.usage.disconnectEvents.acceptedTo')" v-model="draft.accepted_to" data-testid="disconnect-accepted-to" type="datetime-local" class="input" />
         </label>
         <label class="block">
           <span class="input-label">{{ t('admin.usage.disconnectEvents.finalizedFrom') }}</span>
-          <input v-model="draft.finalized_from" data-testid="disconnect-finalized-from" type="datetime-local" class="input" />
+          <DateTimePicker :aria-label="t('admin.usage.disconnectEvents.finalizedFrom')" v-model="draft.finalized_from" data-testid="disconnect-finalized-from" type="datetime-local" class="input" />
         </label>
         <label class="block">
           <span class="input-label">{{ t('admin.usage.disconnectEvents.finalizedTo') }}</span>
-          <input v-model="draft.finalized_to" data-testid="disconnect-finalized-to" type="datetime-local" class="input" />
+          <DateTimePicker :aria-label="t('admin.usage.disconnectEvents.finalizedTo')" v-model="draft.finalized_to" data-testid="disconnect-finalized-to" type="datetime-local" class="input" />
         </label>
 
         <label class="block">
           <span class="input-label">{{ t('admin.usage.disconnectEvents.outcome') }}</span>
-          <select v-model="draft.outcome" data-testid="disconnect-outcome-filter" class="input" @change="applyFilters">
-            <option value="">{{ t('admin.usage.disconnectEvents.allOutcomes') }}</option>
-            <option value="pending">{{ t('admin.usage.disconnectEvents.pending') }}</option>
-            <option value="completed">{{ t('admin.usage.disconnectEvents.completed') }}</option>
-            <option value="client_disconnected">{{ t('admin.usage.disconnectEvents.clientDisconnected') }}</option>
-            <option value="neutral">{{ t('admin.usage.disconnectEvents.neutral') }}</option>
-          </select>
+          <Select
+            v-model="draft.outcome"
+            data-testid="disconnect-outcome-filter"
+            @change="applyFilters"
+            :searchable="false"
+            :options="[{ value: '', label: t('admin.usage.disconnectEvents.allOutcomes') }, { value: 'pending', label: t('admin.usage.disconnectEvents.pending') }, { value: 'completed', label: t('admin.usage.disconnectEvents.completed') }, { value: 'client_disconnected', label: t('admin.usage.disconnectEvents.clientDisconnected') }, { value: 'neutral', label: t('admin.usage.disconnectEvents.neutral') }]"
+          />
         </label>
         <label class="block">
           <span class="input-label">{{ t('admin.usage.disconnectEvents.completionStatus') }}</span>
-          <select v-model="draft.completion_status" data-testid="disconnect-completion-filter" class="input" @change="applyFilters">
-            <option value="">{{ t('admin.usage.disconnectEvents.allStatuses') }}</option>
-            <option value="pending">{{ t('admin.usage.disconnectEvents.pending') }}</option>
-            <option value="completed">{{ t('admin.usage.disconnectEvents.completed') }}</option>
-            <option value="client_disconnected">{{ t('admin.usage.disconnectEvents.clientDisconnected') }}</option>
-            <option value="upstream_failed">{{ t('admin.usage.disconnectEvents.upstreamFailed') }}</option>
-            <option value="upstream_timeout">{{ t('admin.usage.disconnectEvents.upstreamTimeout') }}</option>
-            <option value="usage_missing">{{ t('admin.usage.disconnectEvents.usageMissing') }}</option>
-          </select>
+          <Select
+            v-model="draft.completion_status"
+            data-testid="disconnect-completion-filter"
+            @change="applyFilters"
+            :searchable="false"
+            :options="[{ value: '', label: t('admin.usage.disconnectEvents.allStatuses') }, { value: 'pending', label: t('admin.usage.disconnectEvents.pending') }, { value: 'completed', label: t('admin.usage.disconnectEvents.completed') }, { value: 'client_disconnected', label: t('admin.usage.disconnectEvents.clientDisconnected') }, { value: 'upstream_failed', label: t('admin.usage.disconnectEvents.upstreamFailed') }, { value: 'upstream_timeout', label: t('admin.usage.disconnectEvents.upstreamTimeout') }, { value: 'usage_missing', label: t('admin.usage.disconnectEvents.usageMissing') }]"
+          />
         </label>
         <label class="block">
           <span class="input-label">{{ t('admin.usage.disconnectEvents.usageSource') }}</span>
-          <select v-model="draft.usage_source" data-testid="disconnect-usage-source-filter" class="input" @change="applyFilters">
-            <option value="">{{ t('admin.usage.disconnectEvents.allSources') }}</option>
-            <option value="upstream_exact">{{ t('admin.usage.disconnectEvents.upstreamExact') }}</option>
-            <option value="partial">{{ t('admin.usage.disconnectEvents.partial') }}</option>
-            <option value="estimated">{{ t('admin.usage.disconnectEvents.estimated') }}</option>
-            <option value="reconciled">{{ t('admin.usage.disconnectEvents.reconciled') }}</option>
-          </select>
+          <Select
+            v-model="draft.usage_source"
+            data-testid="disconnect-usage-source-filter"
+            @change="applyFilters"
+            :searchable="false"
+            :options="[{ value: '', label: t('admin.usage.disconnectEvents.allSources') }, { value: 'upstream_exact', label: t('admin.usage.disconnectEvents.upstreamExact') }, { value: 'partial', label: t('admin.usage.disconnectEvents.partial') }, { value: 'estimated', label: t('admin.usage.disconnectEvents.estimated') }, { value: 'reconciled', label: t('admin.usage.disconnectEvents.reconciled') }]"
+          />
         </label>
         <label class="block">
           <span class="input-label">{{ t('admin.usage.disconnectEvents.usageMissing') }}</span>
-          <select v-model="draft.usage_missing" data-testid="disconnect-usage-missing-filter" class="input" @change="applyFilters">
-            <option value="">{{ t('admin.usage.disconnectEvents.allValues') }}</option>
-            <option value="true">{{ t('common.yes') }}</option>
-            <option value="false">{{ t('common.no') }}</option>
-          </select>
+          <Select
+            v-model="draft.usage_missing"
+            data-testid="disconnect-usage-missing-filter"
+            @change="applyFilters"
+            :searchable="false"
+            :options="[{ value: '', label: t('admin.usage.disconnectEvents.allValues') }, { value: 'true', label: t('common.yes') }, { value: 'false', label: t('common.no') }]"
+          />
         </label>
         <label class="block">
           <span class="input-label">{{ t('admin.usage.disconnectEvents.enforcement') }}</span>
-          <select v-model="draft.enforce" data-testid="disconnect-enforce-filter" class="input" @change="applyFilters">
-            <option value="">{{ t('admin.usage.disconnectEvents.allValues') }}</option>
-            <option value="true">{{ t('admin.usage.disconnectEvents.enforced') }}</option>
-            <option value="false">{{ t('admin.usage.disconnectEvents.auditOnly') }}</option>
-          </select>
+          <Select
+            v-model="draft.enforce"
+            data-testid="disconnect-enforce-filter"
+            @change="applyFilters"
+            :searchable="false"
+            :options="[{ value: '', label: t('admin.usage.disconnectEvents.allValues') }, { value: 'true', label: t('admin.usage.disconnectEvents.enforced') }, { value: 'false', label: t('admin.usage.disconnectEvents.auditOnly') }]"
+          />
         </label>
         <label class="block">
           <span class="input-label">{{ t('admin.usage.disconnectEvents.autoBanned') }}</span>
-          <select v-model="draft.auto_banned" data-testid="disconnect-auto-ban-filter" class="input" @change="applyFilters">
-            <option value="">{{ t('admin.usage.disconnectEvents.allValues') }}</option>
-            <option value="true">{{ t('common.yes') }}</option>
-            <option value="false">{{ t('common.no') }}</option>
-          </select>
+          <Select
+            v-model="draft.auto_banned"
+            data-testid="disconnect-auto-ban-filter"
+            @change="applyFilters"
+            :searchable="false"
+            :options="[{ value: '', label: t('admin.usage.disconnectEvents.allValues') }, { value: 'true', label: t('common.yes') }, { value: 'false', label: t('common.no') }]"
+          />
         </label>
       </div>
 
-      <div class="mt-3 flex flex-wrap items-center justify-between gap-3">
-        <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.usage.disconnectEvents.hint') }}</p>
+      <div class="disconnect-filter-actions mt-3 flex flex-wrap items-center justify-between gap-3">
+        <p class="text-xs surface-muted">{{ t('admin.usage.disconnectEvents.hint') }}</p>
         <div class="flex gap-2">
           <button type="button" class="btn btn-secondary" @click="resetFilters">{{ t('common.reset') }}</button>
           <button type="button" class="btn btn-primary inline-flex items-center gap-2" :disabled="loading" @click="applyFilters">
@@ -175,49 +189,49 @@
       </div>
     </div>
 
-    <div class="table-container min-w-0 w-full max-w-full overflow-x-auto">
-      <table class="w-full min-w-[2200px] divide-y divide-gray-200 dark:divide-dark-700">
-        <thead class="bg-gray-50 dark:bg-dark-800">
+    <div class="record-table-scroll table-container min-w-0 w-full max-w-full overflow-x-auto" :class="{ 'workspace-table-viewport': workspace }">
+      <table class="record-table w-full min-w-[2200px] divide-y divide-gray-200 dark:divide-dark-700">
+        <thead class="surface-inset">
           <tr>
-            <th v-for="heading in headings" :key="heading" class="whitespace-nowrap px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400">{{ heading }}</th>
+            <th v-for="heading in headings" :key="heading" class="whitespace-nowrap px-4 py-3 text-left text-xs font-medium uppercase surface-muted">{{ heading }}</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-gray-100 bg-white dark:divide-dark-800 dark:bg-dark-800">
+        <tbody class="divide-y divide-gray-100 surface-inset dark:divide-dark-800">
           <tr v-if="loading">
-            <td :colspan="headings.length" class="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400">{{ t('common.loading') }}</td>
+            <td :colspan="headings.length" class="px-4 py-12 text-center text-sm surface-muted">{{ t('common.loading') }}</td>
           </tr>
           <tr v-else-if="events.length === 0">
-            <td :colspan="headings.length" class="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400">{{ t('admin.usage.disconnectEvents.empty') }}</td>
+            <td :colspan="headings.length" class="px-4 py-12 text-center text-sm surface-muted">{{ t('admin.usage.disconnectEvents.empty') }}</td>
           </tr>
           <template v-else>
-          <tr v-for="event in events" :key="`${event.user_id}:${event.generation}:${event.request_id}`" class="hover:bg-gray-50 dark:hover:bg-dark-700/60">
-            <td class="whitespace-nowrap px-4 py-4 text-sm text-gray-700 dark:text-gray-300">{{ formatDateTime(event.accepted_at) }}</td>
-            <td class="whitespace-nowrap px-4 py-4 text-sm text-gray-700 dark:text-gray-300">{{ event.finalized_at ? formatDateTime(event.finalized_at) : '-' }}</td>
-            <td class="max-w-[240px] truncate px-4 py-4 text-sm text-gray-700 dark:text-gray-300" :title="event.user_email || ''">{{ event.user_email || '-' }}</td>
-            <td class="max-w-[220px] truncate px-4 py-4 text-sm text-gray-700 dark:text-gray-300" :title="event.api_key_name || ''">{{ event.api_key_name || '-' }}</td>
-            <td class="max-w-[240px] px-4 py-4 text-sm text-gray-700 dark:text-gray-300">
+          <tr v-for="event in events" :key="`${event.user_id}:${event.generation}:${event.request_id}`" class="hover:surface-hover">
+            <td class="whitespace-nowrap px-4 py-4 text-sm surface-muted">{{ formatDateTime(event.accepted_at) }}</td>
+            <td class="whitespace-nowrap px-4 py-4 text-sm surface-muted">{{ event.finalized_at ? formatDateTime(event.finalized_at) : '-' }}</td>
+            <td class="max-w-[240px] truncate px-4 py-4 text-sm surface-muted" :title="event.user_email || ''">{{ event.user_email || '-' }}</td>
+            <td class="max-w-[220px] truncate px-4 py-4 text-sm surface-muted" :title="event.api_key_name || ''">{{ event.api_key_name || '-' }}</td>
+            <td class="max-w-[240px] px-4 py-4 text-sm surface-muted">
               <div class="flex items-center gap-2">
                 <span class="truncate font-mono" :title="event.request_id">{{ event.request_id || '-' }}</span>
-                <button v-if="event.request_id" type="button" class="shrink-0 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200" :title="t('common.copy')" @click="copyValue(event.request_id)"><Icon name="copy" size="xs" /></button>
+                <button v-if="event.request_id" type="button" class="shrink-0 hover:text-gray-700 dark:hover:text-gray-200 surface-control surface-muted" :title="t('common.copy')" @click="copyValue(event.request_id)"><Icon name="copy" size="xs" /></button>
               </div>
             </td>
-            <td class="max-w-[240px] px-4 py-4 text-sm text-gray-700 dark:text-gray-300">
+            <td class="max-w-[240px] px-4 py-4 text-sm surface-muted">
               <div class="flex items-center gap-2">
                 <span class="truncate font-mono" :title="event.session_id || ''">{{ event.session_id || '-' }}</span>
-                <button v-if="event.session_id" type="button" class="shrink-0 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200" :title="t('common.copy')" @click="copyValue(event.session_id)"><Icon name="copy" size="xs" /></button>
+                <button v-if="event.session_id" type="button" class="shrink-0 hover:text-gray-700 dark:hover:text-gray-200 surface-control surface-muted" :title="t('common.copy')" @click="copyValue(event.session_id)"><Icon name="copy" size="xs" /></button>
               </div>
             </td>
-            <td class="whitespace-nowrap px-4 py-4 text-sm text-gray-700 dark:text-gray-300">{{ event.protocol || '-' }}</td>
+            <td class="whitespace-nowrap px-4 py-4 text-sm surface-muted">{{ event.protocol || '-' }}</td>
             <td class="whitespace-nowrap px-4 py-4"><span class="inline-flex rounded-md px-2 py-1 text-xs font-medium" :class="statusClass(event.completion_status)">{{ statusLabel(event.completion_status) }}</span></td>
-            <td class="whitespace-nowrap px-4 py-4 text-sm text-gray-700 dark:text-gray-300">{{ outcomeLabel(event.outcome) }}</td>
-            <td class="whitespace-nowrap px-4 py-4 text-sm text-gray-700 dark:text-gray-300">{{ event.usage_source ? usageSourceLabel(event.usage_source) : '-' }}</td>
-            <td class="whitespace-nowrap px-4 py-4 text-sm" :class="event.usage_missing ? 'font-medium text-red-600 dark:text-red-300' : 'text-gray-700 dark:text-gray-300'">{{ event.usage_missing ? t('common.yes') : t('common.no') }}</td>
-            <td class="whitespace-nowrap px-4 py-4 text-sm text-gray-700 dark:text-gray-300">{{ event.consecutive_after ?? '-' }}</td>
-            <td class="whitespace-nowrap px-4 py-4 text-sm text-gray-700 dark:text-gray-300">{{ event.threshold ?? '-' }}</td>
-            <td class="whitespace-nowrap px-4 py-4 text-sm text-gray-700 dark:text-gray-300">{{ enforcementLabel(event.enforce) }}</td>
+            <td class="whitespace-nowrap px-4 py-4 text-sm surface-muted">{{ outcomeLabel(event.outcome) }}</td>
+            <td class="whitespace-nowrap px-4 py-4 text-sm surface-muted">{{ event.usage_source ? usageSourceLabel(event.usage_source) : '-' }}</td>
+            <td class="whitespace-nowrap px-4 py-4 text-sm" :class="event.usage_missing ? 'font-medium text-red-600 dark:text-red-300' : 'surface-muted'">{{ event.usage_missing ? t('common.yes') : t('common.no') }}</td>
+            <td class="whitespace-nowrap px-4 py-4 text-sm surface-muted">{{ event.consecutive_after ?? '-' }}</td>
+            <td class="whitespace-nowrap px-4 py-4 text-sm surface-muted">{{ event.threshold ?? '-' }}</td>
+            <td class="whitespace-nowrap px-4 py-4 text-sm surface-muted">{{ enforcementLabel(event.enforce) }}</td>
             <td class="whitespace-nowrap px-4 py-4 text-sm">
-              <span v-if="event.auto_banned" class="inline-flex rounded-md bg-red-100 px-2 py-1 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-300">{{ t('admin.usage.disconnectEvents.banned') }}</span>
-              <span v-else class="text-gray-400">-</span>
+              <span v-if="event.auto_banned" class="inline-flex rounded-md bg-red-100/[0.15] px-2 py-1 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-300">{{ t('admin.usage.disconnectEvents.banned') }}</span>
+              <span v-else class="surface-muted">-</span>
             </td>
           </tr>
           </template>
@@ -225,11 +239,13 @@
       </table>
     </div>
 
-    <Pagination v-if="pagination.total > 0" :page="pagination.page" :total="pagination.total" :page-size="pagination.page_size" @update:page="changePage" @update:pageSize="changePageSize" />
+    <Pagination v-if="pagination.total > 0" :class="{ 'workspace-fixed': workspace }" :page="pagination.page" :total="pagination.total" :page-size="pagination.page_size" @update:page="changePage" @update:pageSize="changePageSize" />
   </div>
 </template>
 
 <script setup lang="ts">
+import DateTimePicker from '@/components/common/DateTimePicker.vue'
+import Select from '@/components/common/Select.vue'
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
@@ -240,8 +256,11 @@ import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
 import { formatDateTime } from '@/utils/format'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
+import { useAnchoredDropdown } from '@/composables/useAnchoredDropdown'
 
 type UsageSource = NonNullable<ClientDisconnectEventQueryParams['usage_source']>
+
+const props = defineProps<{ workspace?: boolean }>()
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -256,6 +275,8 @@ const userResults = ref<SimpleUser[]>([])
 const apiKeyResults = ref<SimpleApiKey[]>([])
 const showUserDropdown = ref(false)
 const showAPIKeyDropdown = ref(false)
+const userDropdownStyle = useAnchoredDropdown(userSearchRef, () => !!props.workspace && showUserDropdown.value)
+const apiKeyDropdownStyle = useAnchoredDropdown(apiKeySearchRef, () => !!props.workspace && showAPIKeyDropdown.value)
 let userSearchTimer: ReturnType<typeof setTimeout> | undefined
 let apiKeySearchTimer: ReturnType<typeof setTimeout> | undefined
 let userSearchSequence = 0
@@ -464,10 +485,10 @@ function enforcementLabel(enforce: boolean | undefined): string {
   return enforce ? t('admin.usage.disconnectEvents.enforced') : t('admin.usage.disconnectEvents.auditOnly')
 }
 function statusClass(status: ClientDisconnectCompletionStatus): string {
-  if (status === 'client_disconnected' || status === 'usage_missing') return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
-  if (status === 'completed') return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
-  if (status === 'pending') return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
-  return 'bg-gray-100 text-gray-700 dark:bg-dark-700 dark:text-gray-300'
+  if (status === 'client_disconnected' || status === 'usage_missing') return 'bg-red-100/[0.15] text-red-700 dark:bg-red-900/30 dark:text-red-300'
+  if (status === 'completed') return 'bg-emerald-100/[0.15] text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+  if (status === 'pending') return 'bg-amber-100/[0.15] text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+  return 'surface-inset surface-muted dark:surface-inset'
 }
 function copyValue(value: string) { void navigator.clipboard?.writeText(value) }
 
@@ -486,3 +507,21 @@ onUnmounted(() => {
   document.removeEventListener('click', closeDropdowns)
 })
 </script>
+
+<style scoped>
+@media (min-width: 1024px) {
+  .disconnect-workspace .disconnect-filters { padding: 10px 14px; }
+  .disconnect-workspace .disconnect-filter-fields { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px 10px; }
+  .disconnect-workspace .disconnect-filter-fields > * { min-width: 0; }
+  .disconnect-workspace .input-label { min-height: 16px; margin-bottom: 4px; font-size: 12px; line-height: 16px; }
+  .disconnect-workspace :deep(.input), .disconnect-workspace :deep(.select-trigger) { min-height: 34px; padding: 6px 10px; }
+  .disconnect-workspace .disconnect-filter-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin-top: 8px; }
+  .disconnect-workspace .disconnect-filter-actions .btn { min-height: 34px; padding: 6px 10px; }
+}
+@media (min-width: 1024px) and (max-height: 799px) {
+  .disconnect-workspace .disconnect-filters { padding: 8px 12px; }
+  .disconnect-workspace .disconnect-filter-fields { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 150px; overflow-x: auto; scrollbar-width: thin; padding-bottom: 2px; }
+  .disconnect-workspace .input-label { margin-bottom: 2px; }
+  .disconnect-workspace :deep(.input), .disconnect-workspace :deep(.select-trigger) { min-height: 32px; padding-top: 5px; padding-bottom: 5px; }
+}
+</style>

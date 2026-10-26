@@ -151,6 +151,7 @@ type AccountTestService struct {
 	modelMetadataRegistry     map[string]modelsDevProvider
 	modelMetadataRegistryAt   time.Time
 	cnOAuthService            *CNOAuthService
+	projectTokens             *ZhipuProjectTokenManager
 	pluginManager             *PluginManager
 	openaiGatewayService      *OpenAIGatewayService
 	agentIdentityTaskMu       sync.Mutex
@@ -625,7 +626,7 @@ func (s *AccountTestService) testClaudeAccountConnection(c *gin.Context, account
 
 		// 403 表示账号被上游封禁，标记为 error 状态
 		if resp.StatusCode == http.StatusForbidden {
-			_ = s.accountRepo.SetError(ctx, account.ID, errMsg)
+			s.setProbeCredentialError(ctx, account, resp.Request, errMsg)
 		}
 
 		return s.sendErrorAndEnd(c, errMsg)
@@ -695,7 +696,7 @@ func (s *AccountTestService) testClaudeVertexServiceAccountConnection(c *gin.Con
 		body, _ := io.ReadAll(resp.Body)
 		errMsg := fmt.Sprintf("API returned %d: %s", resp.StatusCode, string(body))
 		if resp.StatusCode == http.StatusForbidden {
-			_ = s.accountRepo.SetError(ctx, account.ID, errMsg)
+			s.setProbeCredentialError(ctx, account, resp.Request, errMsg)
 		}
 		return s.sendErrorAndEnd(c, errMsg)
 	}
@@ -888,6 +889,14 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 		return s.sendErrorAndEnd(c, fmt.Sprintf("Unsupported account type: %s", account.Type))
 	}
 
+	recordRequestCredentialOwner(ctx, credentialAccount, authToken)
+	ctx = withRequestCredentialOwner(ctx, account, authToken)
+	capturedOwner, ok := credentialStateMutationOwner(ctx, account)
+	if !ok {
+		return s.sendErrorAndEnd(c, "OpenAI credential snapshot is unavailable")
+	}
+	credentialAccount = capturedOwner
+
 	// Set SSE headers
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")
@@ -941,7 +950,8 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 	}
 
 	credentialAccount.applyOpenAIHeaderOverrides(req.Header)
-	s.applyOpenAIOutboundIdentity(ctx, credentialAccount, req.Header, isOAuth)
+	applyOpenAICodexBetaFeatures(ctx, c, credentialAccount, req.Header)
+	s.applyOpenAIOutboundIdentity(ctx, credentialAccount, req.Header, true)
 
 	// Get proxy URL
 	proxyURL := ""
@@ -957,8 +967,10 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 
 	if isOAuth && s.accountRepo != nil {
 		if updates, err := extractOpenAICodexProbeUpdates(resp); err == nil && len(updates) > 0 {
-			_ = s.accountRepo.UpdateExtra(ctx, account.ID, updates)
-			mergeAccountExtra(account, updates)
+			owner := capturedCodexUsageOwner(req.Context(), account)
+			if accepted, _ := persistOpenAICodexUsageObservation(ctx, s.accountRepo, account.ID, owner, updates, nil, false); accepted {
+				mergeAccountExtra(account, updates)
+			}
 		}
 	}
 
@@ -979,7 +991,7 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 		// 401 Unauthorized: 标记账号为永久错误
 		if resp.StatusCode == http.StatusUnauthorized && s.accountRepo != nil {
 			errMsg := fmt.Sprintf("Authentication failed (401): %s", string(body))
-			_ = s.accountRepo.SetError(ctx, account.ID, errMsg)
+			s.setProbeCredentialError(ctx, account, resp.Request, errMsg)
 		}
 		return s.sendErrorAndEnd(c, fmt.Sprintf("API returned %d: %s", resp.StatusCode, string(body)))
 	}
@@ -1003,7 +1015,11 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 //
 // When mode is default, image/video can still be inferred from model_id for backward compat.
 func (s *AccountTestService) testGrokAccountConnection(c *gin.Context, account *Account, modelID, prompt, mode string, opts AccountTestOptions) error {
-	ctx := c.Request.Context()
+	ctx := WithOutboundIdentityScope(c.Request.Context(), c)
+	ctx, account, proxyURL, err := captureGrokRequestOwner(ctx, account)
+	if err != nil {
+		return s.sendErrorAndEnd(c, err.Error())
+	}
 
 	// Realtime is WebSocket-only and does not need HTTP upstream.
 	mode = normalizeGrokAccountTestMode(mode)
@@ -1015,21 +1031,27 @@ func (s *AccountTestService) testGrokAccountConnection(c *gin.Context, account *
 	if err != nil {
 		return s.sendErrorAndEnd(c, err.Error())
 	}
+	ctx = withRequestCredentialOwner(ctx, account, authToken)
+	owner := grokResponseOwner(ctx, account)
+	if owner == nil {
+		return s.sendErrorAndEnd(c, "Grok credential snapshot is unavailable")
+	}
+	account = owner
 
 	// Explicit standalone / media modes always win over model id.
 	switch mode {
 	case AccountTestModeGrokSearch:
-		return s.testGrokWebSearch(c, ctx, account, authToken, prompt)
+		return s.testGrokWebSearch(c, ctx, account, authToken, proxyURL, prompt)
 	case AccountTestModeGrokTTS:
-		return s.testGrokTTS(c, ctx, account, authToken, prompt)
+		return s.testGrokTTS(c, ctx, account, authToken, proxyURL, prompt)
 	case AccountTestModeGrokSTT:
-		return s.testGrokSTT(c, ctx, account, authToken, opts.AudioDataURL)
+		return s.testGrokSTT(c, ctx, account, authToken, proxyURL, opts.AudioDataURL)
 	case AccountTestModeGrokRealtime:
-		return s.testGrokRealtime(c, ctx, account, authToken, modelID)
+		return s.testGrokRealtime(c, ctx, account, authToken, proxyURL, modelID)
 	case AccountTestModeGrokImage:
-		return s.testGrokImageGeneration(c, ctx, account, authToken, resolveGrokImageTestModel(account, modelID), resolveGrokImagePrompt(prompt), opts.ImageDataURL)
+		return s.testGrokImageGeneration(c, ctx, account, authToken, proxyURL, resolveGrokImageTestModel(account, modelID), resolveGrokImagePrompt(prompt), opts.ImageDataURL)
 	case AccountTestModeGrokVideo:
-		return s.testGrokVideoGeneration(c, ctx, account, authToken, resolveGrokVideoTestModel(account, modelID), resolveGrokVideoPrompt(prompt), opts)
+		return s.testGrokVideoGeneration(c, ctx, account, authToken, proxyURL, resolveGrokVideoTestModel(account, modelID), resolveGrokVideoPrompt(prompt), opts)
 	case AccountTestModeGrokText:
 		// Force text Responses even if model_id looks like media.
 		testModelID := strings.TrimSpace(modelID)
@@ -1039,7 +1061,7 @@ func (s *AccountTestService) testGrokAccountConnection(c *gin.Context, account *
 		if mapped := strings.TrimSpace(account.GetMappedModel(testModelID)); mapped != "" {
 			testModelID = mapped
 		}
-		return s.testGrokResponsesConnection(c, ctx, account, authToken, testModelID)
+		return s.testGrokResponsesConnection(c, ctx, account, authToken, proxyURL, testModelID)
 	}
 
 	// mode == default: infer from model family (legacy UI / API clients).
@@ -1053,11 +1075,11 @@ func (s *AccountTestService) testGrokAccountConnection(c *gin.Context, account *
 
 	switch {
 	case isGrokImageGenerationModel(testModelID):
-		return s.testGrokImageGeneration(c, ctx, account, authToken, testModelID, resolveGrokImagePrompt(prompt), opts.ImageDataURL)
+		return s.testGrokImageGeneration(c, ctx, account, authToken, proxyURL, testModelID, resolveGrokImagePrompt(prompt), opts.ImageDataURL)
 	case isGrokVideoGenerationModel(testModelID):
-		return s.testGrokVideoGeneration(c, ctx, account, authToken, testModelID, resolveGrokVideoPrompt(prompt), opts)
+		return s.testGrokVideoGeneration(c, ctx, account, authToken, proxyURL, testModelID, resolveGrokVideoPrompt(prompt), opts)
 	default:
-		return s.testGrokResponsesConnection(c, ctx, account, authToken, testModelID)
+		return s.testGrokResponsesConnection(c, ctx, account, authToken, proxyURL, testModelID)
 	}
 }
 
@@ -1121,13 +1143,6 @@ func (s *AccountTestService) grokTestAccessToken(ctx context.Context, account *A
 	}
 }
 
-func (s *AccountTestService) grokTestProxyURL(account *Account) string {
-	if account.ProxyID != nil && account.Proxy != nil {
-		return account.Proxy.URL()
-	}
-	return ""
-}
-
 func (s *AccountTestService) prepareGrokTestSSE(c *gin.Context) {
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")
@@ -1152,9 +1167,17 @@ func (s *AccountTestService) applyGrokTestRequestHeaders(req *http.Request, acco
 }
 
 func (s *AccountTestService) observeGrokTestResponse(ctx context.Context, account *Account, resp *http.Response) {
-	if resp == nil {
+	account = grokResponseOwner(ctx, account)
+	if resp == nil || account == nil {
 		return
 	}
+	collector := &grokRequestOutcomeCollector{owner: account}
+	ctx = context.WithValue(ctx, grokRequestOutcomeKey{}, collector)
+	defer func() {
+		if collector.dirty {
+			commitGrokRequestOutcome(ctx, s.accountRepo, account, collector.outcome, collector.effects)
+		}
+	}()
 	now := time.Now()
 	// Error bodies carry Grok's free-usage, billing, and content-policy
 	// classifications when quota headers are absent. Read only non-success
@@ -1169,13 +1192,12 @@ func (s *AccountTestService) observeGrokTestResponse(ctx context.Context, accoun
 	snapshot := parseGrokQuotaSnapshot(resp.Header, resp.StatusCode, now)
 	stampGrokQuotaSnapshotForPlan(account, snapshot, grokRequestedModelFromCtx(ctx))
 	if snapshot != nil && s.accountRepo != nil {
+		snapshot.CredentialGeneration = grokCredentialGeneration(account)
 		resetAt, limited := grokRateLimitResetAtForAccount(account, snapshot, now)
 		if limited {
 			normalizeGrokExhaustedWindowResets(snapshot, resetAt, now)
 		}
-		_ = s.accountRepo.UpdateExtra(ctx, account.ID, map[string]any{
-			grokQuotaSnapshotExtraKey: snapshot,
-		})
+		collectGrokRequestOutcome(ctx, s.accountRepo, account, GrokRequestOutcome{Extra: map[string]any{grokQuotaSnapshotExtraKey: snapshot}}, nil)
 		if limited {
 			persistGrokRateLimit(ctx, s.accountRepo, account, resetAt)
 		} else if isSuccessfulGrokRateLimitRecovery(account, snapshot) {
@@ -1188,7 +1210,8 @@ func (s *AccountTestService) observeGrokTestResponse(ctx context.Context, accoun
 		if resp.StatusCode == http.StatusPaymentRequired && s.accountRepo != nil {
 			stateCtx, cancel := openAIAccountStateContext(ctx)
 			defer cancel()
-			_ = s.accountRepo.SetTempUnschedulable(stateCtx, account.ID, now.Add(30*time.Minute), "grok payment required")
+			until := now.Add(30 * time.Minute)
+			collectGrokRequestOutcome(stateCtx, s.accountRepo, account, GrokRequestOutcome{TempUnschedulableUntil: &until, TempUnschedulableReason: "grok payment required"}, nil)
 		}
 		return
 	}
@@ -1201,7 +1224,8 @@ func (s *AccountTestService) observeGrokTestResponse(ctx context.Context, accoun
 			persistGrokRateLimit(ctx, s.accountRepo, account, resetAt)
 		} else {
 			stateCtx, cancel := openAIAccountStateContext(ctx)
-			_ = s.accountRepo.SetTempUnschedulable(stateCtx, account.ID, now.Add(grokFreeUsageProbeCooldown), "grok free usage exhausted")
+			until := now.Add(grokFreeUsageProbeCooldown)
+			collectGrokRequestOutcome(stateCtx, s.accountRepo, account, GrokRequestOutcome{TempUnschedulableUntil: &until, TempUnschedulableReason: "grok free usage exhausted"}, nil)
 			cancel()
 		}
 		return
@@ -1234,16 +1258,11 @@ func (s *AccountTestService) observeGrokTestResponse(ctx context.Context, accoun
 		if account.TempUnschedulableUntil != nil && account.TempUnschedulableUntil.After(until) {
 			until = *account.TempUnschedulableUntil
 		}
-		_ = s.accountRepo.SetTempUnschedulable(
-			stateCtx,
-			account.ID,
-			until,
-			reason,
-		)
+		collectGrokRequestOutcome(stateCtx, s.accountRepo, account, GrokRequestOutcome{TempUnschedulableUntil: &until, TempUnschedulableReason: reason}, nil)
 	}
 }
 
-func (s *AccountTestService) testGrokResponsesConnection(c *gin.Context, ctx context.Context, account *Account, authToken, testModelID string) error {
+func (s *AccountTestService) testGrokResponsesConnection(c *gin.Context, ctx context.Context, account *Account, authToken, proxyURL, testModelID string) error {
 	apiURL, err := buildGrokResponsesURL(account, s.cfg, s.settingService)
 	if err != nil {
 		return s.sendErrorAndEnd(c, fmt.Sprintf("Invalid Grok base URL: %s", err.Error()))
@@ -1265,9 +1284,11 @@ func (s *AccountTestService) testGrokResponsesConnection(c *gin.Context, ctx con
 		return s.sendErrorAndEnd(c, "Failed to create Grok request")
 	}
 	s.applyGrokTestRequestHeaders(req, account, authToken, grokSamplerAcceptHeader(grokBodyStreamsJSON(payloadBytes)))
-	applyGrokRequestMetadata(req.Header, payloadBytes, grokConversationSnapshot{}, account.GetCredential("sub"))
+	if err := applyGrokRequestMetadataForRequest(req, c, account, payloadBytes, ""); err != nil {
+		return s.sendErrorAndEnd(c, "Grok outbound identity is unavailable")
+	}
 
-	resp, err := s.httpUpstream.Do(prepareAccountOutboundRequest(req, account), s.grokTestProxyURL(account), account.ID, account.Concurrency)
+	resp, err := s.httpUpstream.Do(prepareAccountOutboundRequest(req, account), proxyURL, account.ID, account.Concurrency)
 	if err != nil {
 		return s.sendErrorAndEnd(c, fmt.Sprintf("Grok Responses API request failed: %s", err.Error()))
 	}
@@ -1283,7 +1304,7 @@ func (s *AccountTestService) testGrokResponsesConnection(c *gin.Context, ctx con
 	return s.processOpenAIStream(c, resp.Body)
 }
 
-func (s *AccountTestService) testGrokImageGeneration(c *gin.Context, ctx context.Context, account *Account, authToken, modelID, prompt, imageDataURL string) error {
+func (s *AccountTestService) testGrokImageGeneration(c *gin.Context, ctx context.Context, account *Account, authToken, proxyURL, modelID, prompt, imageDataURL string) error {
 	// With a source image, prefer /images/edits; otherwise /images/generations.
 	endpoint := GrokMediaEndpointImagesGenerations
 	imageDataURL = strings.TrimSpace(imageDataURL)
@@ -1337,7 +1358,9 @@ func (s *AccountTestService) testGrokImageGeneration(c *gin.Context, ctx context
 		return s.sendErrorAndEnd(c, "Failed to create Grok image request")
 	}
 	s.applyGrokTestRequestHeaders(req, account, authToken, "application/json")
-	applyGrokMediaSessionHeader(req.Header, c)
+	if err := applyGrokMediaSessionHeader(req, c, account); err != nil {
+		return s.sendErrorAndEnd(c, "Grok session identity is unavailable")
+	}
 	req.ContentLength = int64(len(payloadBytes))
 	req.GetBody = func() (io.ReadCloser, error) {
 		return io.NopCloser(bytes.NewReader(payloadBytes)), nil
@@ -1354,10 +1377,12 @@ func (s *AccountTestService) testGrokImageGeneration(c *gin.Context, ctx context
 				return s.sendErrorAndEnd(c, "Failed to create Grok image retry request")
 			}
 			s.applyGrokTestRequestHeaders(req, account, authToken, "application/json")
-			applyGrokMediaSessionHeader(req.Header, c)
+			if err := applyGrokMediaSessionHeader(req, c, account); err != nil {
+				return s.sendErrorAndEnd(c, "Grok session identity is unavailable")
+			}
 			req.ContentLength = int64(len(payloadBytes))
 		}
-		resp, doErr = s.httpUpstream.Do(prepareAccountOutboundRequest(req, account), s.grokTestProxyURL(account), account.ID, account.Concurrency)
+		resp, doErr = s.httpUpstream.Do(prepareAccountOutboundRequest(req, account), proxyURL, account.ID, account.Concurrency)
 		if doErr == nil {
 			break
 		}
@@ -1414,7 +1439,7 @@ func (s *AccountTestService) testGrokImageGeneration(c *gin.Context, ctx context
 	return nil
 }
 
-func (s *AccountTestService) testGrokVideoGeneration(c *gin.Context, ctx context.Context, account *Account, authToken, modelID, prompt string, opts AccountTestOptions) error {
+func (s *AccountTestService) testGrokVideoGeneration(c *gin.Context, ctx context.Context, account *Account, authToken, proxyURL, modelID, prompt string, opts AccountTestOptions) error {
 	apiURL, err := buildGrokMediaURL(account, s.cfg, GrokMediaEndpointVideosGenerations, "")
 	if err != nil {
 		return s.sendErrorAndEnd(c, fmt.Sprintf("Invalid Grok media base URL: %s", err.Error()))
@@ -1447,9 +1472,11 @@ func (s *AccountTestService) testGrokVideoGeneration(c *gin.Context, ctx context
 		return s.sendErrorAndEnd(c, "Failed to create Grok video request")
 	}
 	s.applyGrokTestRequestHeaders(req, account, authToken, "application/json")
-	applyGrokMediaSessionHeader(req.Header, c)
+	if err := applyGrokMediaSessionHeader(req, c, account); err != nil {
+		return s.sendErrorAndEnd(c, "Grok session identity is unavailable")
+	}
 
-	resp, err := s.httpUpstream.Do(prepareAccountOutboundRequest(req, account), s.grokTestProxyURL(account), account.ID, account.Concurrency)
+	resp, err := s.httpUpstream.Do(prepareAccountOutboundRequest(req, account), proxyURL, account.ID, account.Concurrency)
 	if err != nil {
 		return s.sendErrorAndEnd(c, fmt.Sprintf("Grok video request failed: %s", err.Error()))
 	}
@@ -1490,7 +1517,7 @@ func (s *AccountTestService) testGrokVideoGeneration(c *gin.Context, ctx context
 			return s.sendErrorAndEnd(c, "Failed to create Grok video status request")
 		}
 		s.applyGrokTestRequestHeaders(statusReq, account, authToken, "application/json")
-		statusResp, err := s.httpUpstream.Do(prepareAccountOutboundRequest(statusReq, account), s.grokTestProxyURL(account), account.ID, account.Concurrency)
+		statusResp, err := s.httpUpstream.Do(prepareAccountOutboundRequest(statusReq, account), proxyURL, account.ID, account.Concurrency)
 		if err != nil {
 			return s.sendErrorAndEnd(c, fmt.Sprintf("Grok video status failed: %s", err.Error()))
 		}
@@ -1508,7 +1535,7 @@ func (s *AccountTestService) testGrokVideoGeneration(c *gin.Context, ctx context
 		}
 		switch st {
 		case "done", "completed", "succeeded", "success":
-			return s.emitGrokVideoResult(c, ctx, account, authToken, requestID, statusBody)
+			return s.emitGrokVideoResult(c, ctx, account, authToken, proxyURL, requestID, statusBody)
 		case "failed", "error", "canceled", "cancelled":
 			return s.sendErrorAndEnd(c, fmt.Sprintf("Grok video failed: %s", string(statusBody)))
 		}
@@ -1522,7 +1549,7 @@ func (s *AccountTestService) testGrokVideoGeneration(c *gin.Context, ctx context
 }
 
 // emitGrokVideoResult surfaces a playable video URL or downloads /content as data URL.
-func (s *AccountTestService) emitGrokVideoResult(c *gin.Context, ctx context.Context, account *Account, authToken, requestID string, statusBody []byte) error {
+func (s *AccountTestService) emitGrokVideoResult(c *gin.Context, ctx context.Context, account *Account, authToken, proxyURL, requestID string, statusBody []byte) error {
 	videoURL := firstNonEmpty(
 		strings.TrimSpace(gjson.GetBytes(statusBody, "video.url").String()),
 		strings.TrimSpace(gjson.GetBytes(statusBody, "url").String()),
@@ -1547,7 +1574,7 @@ func (s *AccountTestService) emitGrokVideoResult(c *gin.Context, ctx context.Con
 		return s.sendErrorAndEnd(c, "Failed to create Grok video content request")
 	}
 	s.applyGrokTestRequestHeaders(req, account, authToken, "video/*, application/octet-stream, */*")
-	resp, err := s.httpUpstream.Do(prepareAccountOutboundRequest(req, account), s.grokTestProxyURL(account), account.ID, account.Concurrency)
+	resp, err := s.httpUpstream.Do(prepareAccountOutboundRequest(req, account), proxyURL, account.ID, account.Concurrency)
 	if err != nil {
 		return s.sendErrorAndEnd(c, fmt.Sprintf("Grok video content download failed: %s", err.Error()))
 	}
@@ -1578,7 +1605,7 @@ func (s *AccountTestService) emitGrokVideoResult(c *gin.Context, ctx context.Con
 	return nil
 }
 
-func (s *AccountTestService) testGrokWebSearch(c *gin.Context, ctx context.Context, account *Account, authToken, query string) error {
+func (s *AccountTestService) testGrokWebSearch(c *gin.Context, ctx context.Context, account *Account, authToken, proxyURL, query string) error {
 	query = strings.TrimSpace(query)
 	if query == "" {
 		query = defaultGrokSearchTestQuery
@@ -1618,9 +1645,11 @@ User query:
 		return s.sendErrorAndEnd(c, "Failed to create standalone web_search probe request")
 	}
 	s.applyGrokTestRequestHeaders(req, account, authToken, "application/json")
-	applyGrokRequestMetadata(req.Header, payloadBytes, grokConversationSnapshot{}, account.GetCredential("sub"))
+	if err := applyGrokRequestMetadataForRequest(req, c, account, payloadBytes, ""); err != nil {
+		return s.sendErrorAndEnd(c, "Grok outbound identity is unavailable")
+	}
 
-	resp, err := s.httpUpstream.Do(prepareAccountOutboundRequest(req, account), s.grokTestProxyURL(account), account.ID, account.Concurrency)
+	resp, err := s.httpUpstream.Do(prepareAccountOutboundRequest(req, account), proxyURL, account.ID, account.Concurrency)
 	if err != nil {
 		return s.sendErrorAndEnd(c, fmt.Sprintf("standalone web_search probe failed: %s", err.Error()))
 	}
@@ -1671,7 +1700,7 @@ User query:
 	return nil
 }
 
-func (s *AccountTestService) testGrokTTS(c *gin.Context, ctx context.Context, account *Account, authToken, text string) error {
+func (s *AccountTestService) testGrokTTS(c *gin.Context, ctx context.Context, account *Account, authToken, proxyURL, text string) error {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		text = defaultGrokTTSTestText
@@ -1701,13 +1730,13 @@ func (s *AccountTestService) testGrokTTS(c *gin.Context, ctx context.Context, ac
 			return s.sendErrorAndEnd(c, "Failed to create Grok TTS request")
 		}
 		s.applyGrokTestRequestHeaders(req, account, authToken, "audio/*, application/json, */*")
-		resp, err := s.httpUpstream.Do(prepareAccountOutboundRequest(req, account), s.grokTestProxyURL(account), account.ID, account.Concurrency)
+		resp, err := s.httpUpstream.Do(prepareAccountOutboundRequest(req, account), proxyURL, account.ID, account.Concurrency)
 		if err != nil {
 			return s.sendErrorAndEnd(c, fmt.Sprintf("Grok TTS failed: %s", err.Error()))
 		}
+		s.observeGrokTestResponse(ctx, account, resp)
 		body, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
-		s.observeGrokTestResponse(ctx, account, resp)
 		lastCode = resp.StatusCode
 		lastBody = string(body)
 		if resp.StatusCode == http.StatusOK {
@@ -1728,7 +1757,7 @@ func (s *AccountTestService) testGrokTTS(c *gin.Context, ctx context.Context, ac
 			s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
 			return nil
 		}
-		if resp.StatusCode < 400 || resp.StatusCode >= 500 {
+		if resp.StatusCode != http.StatusBadRequest && resp.StatusCode != http.StatusUnprocessableEntity {
 			break
 		}
 	}
@@ -1737,7 +1766,7 @@ func (s *AccountTestService) testGrokTTS(c *gin.Context, ctx context.Context, ac
 
 // testGrokSTT posts audio to /v1/stt. When audioDataURL is set, uses the
 // uploaded file; otherwise a tiny synthetic silent WAV for connectivity only.
-func (s *AccountTestService) testGrokSTT(c *gin.Context, ctx context.Context, account *Account, authToken, audioDataURL string) error {
+func (s *AccountTestService) testGrokSTT(c *gin.Context, ctx context.Context, account *Account, authToken, proxyURL, audioDataURL string) error {
 	apiURL, err := buildGrokVoiceURL(account, s.cfg, "stt")
 	if err != nil {
 		return s.sendErrorAndEnd(c, fmt.Sprintf("Invalid Grok STT URL: %s", err.Error()))
@@ -1792,7 +1821,7 @@ func (s *AccountTestService) testGrokSTT(c *gin.Context, ctx context.Context, ac
 	}
 	account.ApplyHeaderOverrides(req.Header)
 
-	resp, err := s.httpUpstream.Do(prepareAccountOutboundRequest(req, account), s.grokTestProxyURL(account), account.ID, account.Concurrency)
+	resp, err := s.httpUpstream.Do(prepareAccountOutboundRequest(req, account), proxyURL, account.ID, account.Concurrency)
 	if err != nil {
 		return s.sendErrorAndEnd(c, fmt.Sprintf("Grok STT failed: %s", err.Error()))
 	}
@@ -1819,7 +1848,7 @@ func (s *AccountTestService) testGrokSTT(c *gin.Context, ctx context.Context, ac
 // (wss://api.x.ai/v1/realtime?model=...) to verify auth + endpoint reachability.
 // It does not run a full audio session — success is WS handshake, optionally
 // enriched with the first server event type when one arrives quickly.
-func (s *AccountTestService) testGrokRealtime(c *gin.Context, ctx context.Context, account *Account, authToken, modelID string) error {
+func (s *AccountTestService) testGrokRealtime(c *gin.Context, ctx context.Context, account *Account, authToken, proxyURL, modelID string) error {
 	model := strings.TrimSpace(modelID)
 	if model == "" {
 		model = defaultGrokRealtimeTestModel
@@ -1864,7 +1893,7 @@ func (s *AccountTestService) testGrokRealtime(c *gin.Context, ctx context.Contex
 		applyGrokCLIHeaders(headers)
 	}
 	account.ApplyHeaderOverrides(headers)
-	ApplyAccountOutboundHeaders(ctx, account, headers)
+	ApplyAccountOutboundIdentity(ctx, account, &http.Request{URL: u, Header: headers})
 
 	dialer := s.grokWSDialer
 	if dialer == nil {
@@ -1874,7 +1903,7 @@ func (s *AccountTestService) testGrokRealtime(c *gin.Context, ctx context.Contex
 	dialCtx, cancel := context.WithTimeout(ctx, grokRealtimeProbeTimeout)
 	defer cancel()
 
-	conn, status, _, dialErr := dialer.Dial(dialCtx, wsURL, headers, s.grokTestProxyURL(account))
+	conn, status, _, dialErr := dialer.Dial(dialCtx, wsURL, headers, proxyURL)
 	if dialErr != nil {
 		detail := dialErr.Error()
 		var hs *openAIWSHandshakeError
@@ -2154,7 +2183,7 @@ func (s *AccountTestService) testOpenAIChatCompletionsConnection(
 	// OpenAI 的身份头由最终收口阶段写入，通用覆写不得影响它们。
 	account.applyOpenAIHeaderOverrides(req.Header)
 	applyOpenCodeSessionHeader(c, account, apiURL, req.Header, payloadBytes)
-	s.applyOpenAIOutboundIdentity(ctx, account, req.Header, false)
+	s.applyOpenAIOutboundIdentity(ctx, account, req.Header, true)
 
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {
@@ -2174,7 +2203,7 @@ func (s *AccountTestService) testOpenAIChatCompletionsConnection(
 		}
 		if resp.StatusCode == http.StatusUnauthorized && s.accountRepo != nil {
 			errMsg := fmt.Sprintf("Chat Completions authentication failed (401): %s", string(body))
-			_ = s.accountRepo.SetError(ctx, account.ID, errMsg)
+			s.setProbeCredentialError(ctx, account, resp.Request, errMsg)
 		}
 		return s.sendErrorAndEnd(c, fmt.Sprintf("Chat Completions API (/v1/chat/completions) returned %d: %s", resp.StatusCode, string(body)))
 	}
@@ -2231,6 +2260,14 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 		return s.sendErrorAndEnd(c, fmt.Sprintf("Unsupported account type: %s", account.Type))
 	}
 
+	recordRequestCredentialOwner(ctx, credentialAccount, authToken)
+	ctx = withRequestCredentialOwner(ctx, account, authToken)
+	capturedOwner, ok := credentialStateMutationOwner(ctx, account)
+	if !ok {
+		return s.sendErrorAndEnd(c, "OpenAI credential snapshot is unavailable")
+	}
+	credentialAccount = capturedOwner
+
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")
 	c.Writer.Header().Set("Connection", "keep-alive")
@@ -2241,7 +2278,13 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 	if isOAuth {
 		testModelID = normalizeOpenAIModelForUpstream(credentialAccount, testModelID)
 	}
-	payloadBytes, _ := json.Marshal(createOpenAICompactProbePayload(testModelID, isOAuth))
+	probeIDs, probeIDErr := resolveOpenAICompactProbeIDs(ctx, credentialAccount)
+	if probeIDErr != nil {
+		return s.sendErrorAndEnd(c, "Failed to resolve compact probe identity")
+	}
+	payload := createOpenAICompactProbePayload(testModelID, isOAuth)
+	payload["client_metadata"] = map[string]any{"session_id": probeIDs.session, "thread_id": probeIDs.thread, "x-codex-installation-id": probeIDs.installation, "x-codex-window-id": probeIDs.thread + ":0"}
+	payloadBytes, _ := json.Marshal(payload)
 	if !agentIdentityTaskRecoveryWasTried(ctx) {
 		s.sendEvent(c, TestEvent{Type: "test_start", Model: testModelID})
 	}
@@ -2269,29 +2312,22 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 	} else {
 		req.Header.Set("Authorization", "Bearer "+authToken)
 	}
-	probeSessionID := compactProbeSessionID(account.ID)
-	req.Header.Set(codexSessionIDHeader, probeSessionID)
-
+	req.Header.Set(codexSessionIDHeader, probeIDs.session)
+	req.Header.Set("thread-id", probeIDs.thread)
+	req.Header.Set("x-client-request-id", probeIDs.thread)
+	req.Header.Set("x-codex-window-id", probeIDs.thread+":0")
 	if isOAuth {
 		req.Host = "chatgpt.com"
-
-		req.Header.Set("Version", codexCLIVersion)
 		setOpenAIChatGPTAccountHeaders(req.Header, credentialAccount)
-		// Native compact probe 与真实 /responses 转发使用同一指纹策略。
-		// 指纹层先写 installation/thread carriers；下方再恢复 probe cache
-		// session 作为官方 session-id 头的最终权威。off 返回 nil。
-		if fpIDs := resolveCodexFingerprintIDsForPolicy(credentialAccount, req.Header, codexFingerprintPolicyNativeCompact); fpIDs != nil {
-			applyCodexFingerprintHeaders(req.Header, fpIDs)
-		}
 	}
-
 	credentialAccount.applyOpenAIHeaderOverrides(req.Header)
-	// Native compact probes follow the same layered contract as live traffic:
-	// fingerprinting owns installation/thread carriers, while the probe cache
-	// identity is final for the official session-id header.
-	setOpenAIUpstreamSessionIdentityForAccount(req.Header, credentialAccount, probeSessionID)
+	setOpenAIUpstreamSessionIdentityForAccount(req.Header, credentialAccount, probeIDs.session)
+	req.Header.Set("thread-id", probeIDs.thread)
+	req.Header.Set("x-client-request-id", probeIDs.thread)
+	req.Header.Set("x-codex-window-id", probeIDs.thread+":0")
+	s.applyOpenAIOutboundIdentity(ctx, credentialAccount, req.Header, true)
 	clearOpenAICodexLegacySessionAliases(req.Header, credentialAccount)
-	s.applyOpenAIOutboundIdentity(ctx, credentialAccount, req.Header, isOAuth)
+	stripCodexDirectInstallationHeader(req.Header, credentialAccount)
 
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {
@@ -2302,8 +2338,10 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 	if err != nil {
 		if s.accountRepo != nil {
 			updates := buildOpenAICompactProbeExtraUpdates(nil, nil, err, false, time.Now())
-			_ = s.accountRepo.UpdateExtra(ctx, account.ID, updates)
-			mergeAccountExtra(account, updates)
+			owner := capturedCodexUsageOwner(req.Context(), account)
+			if accepted, _ := persistOpenAICodexUsageObservation(ctx, s.accountRepo, account.ID, owner, updates, nil, false); accepted {
+				mergeAccountExtra(account, updates)
+			}
 		}
 		return s.sendErrorAndEnd(c, fmt.Sprintf("Request failed: %s", err.Error()))
 	}
@@ -2327,8 +2365,10 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 			updates = mergeExtraUpdates(updates, codexUpdates)
 		}
 		if len(updates) > 0 {
-			_ = s.accountRepo.UpdateExtra(ctx, account.ID, updates)
-			mergeAccountExtra(account, updates)
+			owner := capturedCodexUsageOwner(req.Context(), account)
+			if accepted, _ := persistOpenAICodexUsageObservation(ctx, s.accountRepo, account.ID, owner, updates, nil, false); accepted {
+				mergeAccountExtra(account, updates)
+			}
 		}
 		// 探测如返回 429,主动同步限流状态,避免后续短时间内继续选中。
 		if resp.StatusCode == http.StatusTooManyRequests {
@@ -2339,7 +2379,7 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 	if resp.StatusCode != http.StatusOK {
 		if resp.StatusCode == http.StatusUnauthorized && s.accountRepo != nil {
 			errMsg := fmt.Sprintf("Authentication failed (401): %s", string(body))
-			_ = s.accountRepo.SetError(ctx, account.ID, errMsg)
+			s.setProbeCredentialError(ctx, account, resp.Request, errMsg)
 		}
 		return s.sendErrorAndEnd(c, fmt.Sprintf("API returned %d: %s", resp.StatusCode, string(body)))
 	}
@@ -3070,7 +3110,7 @@ func (s *AccountTestService) testOpenAIImageAPIKey(c *gin.Context, ctx context.C
 
 	// OpenAI 的身份头由最终收口阶段写入，通用覆写不得影响它们。
 	account.applyOpenAIHeaderOverrides(req.Header)
-	s.applyOpenAIOutboundIdentity(ctx, account, req.Header, false)
+	s.applyOpenAIOutboundIdentity(ctx, account, req.Header, true)
 
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {
@@ -3197,6 +3237,9 @@ func (s *AccountTestService) testOpenAIImageOAuth(c *gin.Context, ctx context.Co
 	}
 	setOpenAIChatGPTAccountHeaders(req.Header, credentialAccount)
 	credentialAccount.applyOpenAIHeaderOverrides(req.Header)
+	if !direct {
+		applyOpenAICodexBetaFeatures(ctx, c, credentialAccount, req.Header)
+	}
 	s.applyOpenAIOutboundIdentity(ctx, credentialAccount, req.Header, true)
 
 	proxyURL := ""

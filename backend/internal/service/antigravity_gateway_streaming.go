@@ -147,7 +147,7 @@ func (s *AntigravityGatewayService) handleGeminiStreamingResponse(c *gin.Context
 	scanBuf := getSSEScannerBuf64K()
 	scanner.Buffer(scanBuf[:0], maxLineSize)
 	usage := &ClaudeUsage{}
-	var timing streamOutputTiming
+	timing := requestStreamOutputTiming(c)
 	terminalSeen := false
 	resultWithUsage := func(resultUsage *ClaudeUsage, disconnected bool) *antigravityStreamResult {
 		return &antigravityStreamResult{
@@ -381,7 +381,7 @@ func (s *AntigravityGatewayService) handleGeminiStreamToNonStreaming(c *gin.Cont
 	scanner.Buffer(scanBuf[:0], maxLineSize)
 
 	usage := &ClaudeUsage{}
-	var timing streamOutputTiming
+	timing := requestStreamOutputTiming(c)
 	var last map[string]any
 	var lastWithParts map[string]any
 	var collectedParts []map[string]any // 收集所有 parts（text、thinking、functionCall、inlineData 等）
@@ -821,7 +821,7 @@ func (s *AntigravityGatewayService) collectClaudeStreamResponse(c *gin.Context, 
 	scanBuf := getSSEScannerBuf64K()
 	scanner.Buffer(scanBuf[:0], maxLineSize)
 
-	var timing streamOutputTiming
+	timing := requestStreamOutputTiming(c)
 	var last map[string]any
 	var lastWithParts map[string]any
 	var collectedParts []map[string]any // 收集所有 parts（包括 text、thinking、functionCall、inlineData 等）
@@ -1058,7 +1058,7 @@ func (s *AntigravityGatewayService) handleClaudeStreamingResponse(c *gin.Context
 	}
 
 	processor := antigravity.NewStreamingProcessor(originalModel)
-	var timing streamOutputTiming
+	timing := requestStreamOutputTiming(c)
 	// 使用 Scanner 并限制单行大小，避免 ReadString 无上限导致 OOM
 	scanner := bufio.NewScanner(resp.Body)
 	maxLineSize := defaultMaxLineSize

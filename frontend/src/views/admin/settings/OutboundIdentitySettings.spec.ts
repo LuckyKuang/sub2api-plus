@@ -1,3 +1,4 @@
+import { chooseSelect, openSelect } from '@/__tests__/helpers/select'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import OutboundIdentitySettings from './OutboundIdentitySettings.vue'
@@ -10,8 +11,8 @@ vi.mock('@/api/admin/outboundIdentity', async (original) => ({
   ...await original<typeof import('@/api/admin/outboundIdentity')>(),
   getOutboundIdentity: vi.fn(), updateOutboundIdentity: vi.fn()
 }))
-const userAgentOf = (preset: string) => preset === 'stepfun' ? 'step (linux 6.8.0-31-generic; x64)' : preset === 'minimax' ? 'MiniMaxAgent' : preset === 'minimax_apikey' ? 'Anthropic/JS 0.91.1' : preset === 'kimi' ? 'kimi-code-cli/2.1.1' : preset === 'zcode' ? 'ZCode/3.14.3' : `${preset}/1.2.3`
-const versionOf = (preset: string) => preset === 'minimax' || preset === 'stepfun' ? '' : preset === 'minimax_apikey' ? '0.91.1' : preset === 'kimi' ? '2.1.1' : preset === 'zcode' ? '3.14.3' : '1.2.3'
+const userAgentOf = (preset: string) => preset === 'stepfun' ? 'stepcode (linux 6.8.0-31-generic; x64)' : preset === 'minimax' ? 'MiniMaxAgent' : preset === 'minimax_apikey' ? 'Anthropic/JS 0.91.1' : preset === 'kimi' ? 'kimi-code-cli/2.2.0' : preset === 'zcode' ? 'ZCode/3.16.2' : `${preset}/1.2.3`
+const versionOf = (preset: string) => preset === 'minimax' || preset === 'stepfun' ? '' : preset === 'minimax_apikey' ? '0.91.1' : preset === 'kimi' ? '2.2.0' : preset === 'zcode' ? '3.16.2' : '1.2.3'
 // The Kimi Code device set is the runtime tier: the official client resolves it
 // from its own host, so the settings page exposes an editable value per header
 // and the backend declares which headers those are.
@@ -22,17 +23,17 @@ const kimiDeviceHeaders: IdentityDeclaration[] = [
   { name: 'X-Msh-Device-Id', class: 'runtime', editable: true, builtin: '11111111-1111-4111-8111-111111111111', value: '11111111-1111-4111-8111-111111111111' }
 ]
 const kimiHeaders = {
-  'User-Agent': 'kimi-code-cli/2.1.1',
+  'User-Agent': 'kimi-code-cli/2.2.0',
   'X-Msh-Platform': 'kimi_code_cli',
-  'X-Msh-Version': '2.1.1',
+  'X-Msh-Version': '2.2.0',
   'X-Msh-Device-Name': 'kimi-gateway',
   'X-Msh-Device-Model': 'Linux 6.8.0-31-generic x64',
   'X-Msh-Os-Version': '6.8.0-31-generic',
   'X-Msh-Device-Id': '11111111-1111-4111-8111-111111111111'
 }
 const zcodeHeaders = {
-  'User-Agent': 'ZCode/3.14.3',
-  'X-ZCode-App-Version': '3.14.3',
+  'User-Agent': 'ZCode/3.16.2',
+  'X-ZCode-App-Version': '3.16.2',
   'HTTP-Referer': 'https://zcode.z.ai',
   'X-Title': 'Z Code@electron',
   'X-Release-Channel': 'production',
@@ -60,7 +61,7 @@ const fixture = (): OutboundIdentityView => {
       ...(preset === 'kimi'
         ? [
             { name: 'X-Msh-Platform', class: 'pinned' as const, editable: false, builtin: 'kimi_code_cli', value: 'kimi_code_cli' },
-            { name: 'X-Msh-Version', class: 'derived' as const, editable: false, builtin: '2.1.1', value: '2.1.1' },
+            { name: 'X-Msh-Version', class: 'derived' as const, editable: false, builtin: '2.2.0', value: '2.2.0' },
             ...kimiDeviceHeaders
           ]
         : []),
@@ -87,16 +88,17 @@ describe('OutboundIdentitySettings', () => {
     expect(advanced.element.tagName).toBe('DETAILS')
     expect(advanced.attributes('open')).toBeUndefined()
     expect(advanced.findAll('[data-identity-mapping]').map(row => row.attributes('data-identity-mapping')).sort()).toEqual([
-      'openai:apikey', 'openai:upstream', 'anthropic:apikey', 'anthropic:upstream',
-      'gemini:apikey', 'gemini:upstream', 'grok:apikey', 'grok:upstream',
+      'openai:upstream', 'anthropic:apikey', 'anthropic:upstream',
+      'gemini:apikey', 'gemini:upstream', 'grok:upstream',
       'antigravity:upstream', 'typesafe:apikey', 'opencode_go:apikey', 'cline:apikey', 'command_code:apikey'
     ].sort())
-    const select = advanced.get('[data-identity-mapping="opencode_go:apikey"] select')
-    expect(select.findAll('option')[0].text()).toContain('automatic')
-    await select.setValue('string:claude')
+    const select = advanced.get('[data-identity-mapping="opencode_go:apikey"]')
+    const panel = await openSelect(select)
+    expect(panel.findAll('[role="option"]')[0].text()).toContain('automatic')
+    await chooseSelect(select, 'Claude Code')
     await wrapper.vm.save()
     expect(vi.mocked(updateOutboundIdentity).mock.calls[0][0].defaults).toEqual({ 'opencode_go:apikey': 'claude' })
-    await select.setValue('string:')
+    await chooseSelect(select, 'admin.settings.outboundIdentity.automatic')
     await wrapper.vm.save()
     expect(vi.mocked(updateOutboundIdentity).mock.calls[1][0].defaults).toEqual({})
     wrapper.unmount()
@@ -120,8 +122,8 @@ describe('OutboundIdentitySettings', () => {
   it('separates MiniMax auth defaults and displays control and SDK wire headers', async () => {
     const view = fixture()
     const zcode = view.effective.find(item => item.preset === 'zcode')!
-    view.control_plane = [{ ...zcode, headers: { 'User-Agent': 'ZCode/3.14.3', 'X-Os-Version': '#1 SMP' } }]
-    view.wire_profiles = [{ ...zcode, protocol: 'anthropic', headers: { ...zcode.headers, 'User-Agent': 'ZCode/3.14.3 ai/6.0.193 ai-sdk/provider-utils/4.0.27 runtime/node.js/22' } }]
+    view.control_plane = [{ ...zcode, headers: { 'User-Agent': 'ZCode/3.16.2', 'X-Os-Version': '#1 SMP' } }]
+    view.wire_profiles = [{ ...zcode, protocol: 'anthropic', headers: { ...zcode.headers, 'User-Agent': 'ZCode/3.16.2 ai/6.0.193 ai-sdk/provider-utils/4.0.27 runtime/node.js/22' } }]
     vi.mocked(getOutboundIdentity).mockResolvedValue(view)
     const wrapper = mount(OutboundIdentitySettings)
     await flushPromises()
@@ -165,12 +167,12 @@ describe('OutboundIdentitySettings', () => {
     await claude.findAll('input')[0].setValue('2.9.1')
     const advanced = wrapper.get('[data-testid="outbound-identity-defaults"]')
     await advanced.get('summary').trigger('click')
-    const apiKeyDefault = advanced.get('[data-identity-mapping="openai:apikey"] select')
-    await apiKeyDefault.setValue('string:grok')
+    const apiKeyDefault = advanced.get('[data-identity-mapping="openai:upstream"]')
+    await chooseSelect(apiKeyDefault, 'Grok')
     await flushPromises()
-    expect((apiKeyDefault.element as HTMLSelectElement).value).toBe('string:grok')
+    expect(apiKeyDefault.get('.select-value').text()).toBe('Grok')
     await wrapper.vm.save()
-    expect(updateOutboundIdentity).toHaveBeenCalledWith({ profiles: { claude: { preset: 'claude', user_agent: '', version: '2.9.1' } }, defaults: { 'openai:apikey': 'grok' }, runtime: {} })
+    expect(updateOutboundIdentity).toHaveBeenCalledWith({ profiles: { claude: { preset: 'claude', user_agent: '', version: '2.9.1' } }, defaults: { 'openai:upstream': 'grok' }, runtime: {} })
     wrapper.unmount()
   })
 
@@ -249,9 +251,13 @@ describe('OutboundIdentitySettings', () => {
     await flushPromises()
     const card = wrapper.get('[data-identity-preset="deepseek"]')
     expect(card.get('[data-testid="outbound-identity-control-headers"]').text()).toContain('emptyOfficialValue')
-    const language = card.get('select[aria-label="language"]')
-    expect(language.findAll('option').map(option => option.attributes('value'))).toEqual(['string:', 'string:zh-CN', 'string:en-US'])
-    await language.setValue('string:en-US')
+    const language = card.get('[aria-label="language"]')
+    const panel = await openSelect(language)
+    const choices = panel.findAll('[role="option"]')
+    expect(choices).toHaveLength(3)
+    expect(choices[0].text()).toContain('admin.settings.outboundIdentity.inherit')
+    expect(choices.slice(1).map(option => option.text().match(/\((zh-CN|en-US)\)$/)?.[1])).toEqual(['zh-CN', 'en-US'])
+    await chooseSelect(language, choices[2].text())
     card.findAllComponents(IdentityRuntimeField).find(field => field.props('name') === 'timezone')!.vm.$emit('update:modelValue', 'Asia/Shanghai')
     await wrapper.vm.save()
     expect(vi.mocked(updateOutboundIdentity).mock.calls[0][0].profiles.deepseek).toEqual({ preset: 'deepseek', user_agent: '', version: '', language: 'en-US', timezone: 'Asia/Shanghai' })
@@ -323,7 +329,7 @@ describe('OutboundIdentitySettings', () => {
     await flushPromises()
     const row = wrapper.findAll('label').find(label => label.text().includes('TypeSafe / Jev · API Key'))
     expect(row, 'the typesafe type-default row must be configurable').toBeDefined()
-    await row!.find('select').setValue('string:claude')
+    await chooseSelect(row!, 'Claude Code')
     await wrapper.vm.save()
     expect(vi.mocked(updateOutboundIdentity).mock.calls[0][0].defaults).toEqual({ 'typesafe:apikey': 'claude' })
     wrapper.unmount()
@@ -368,7 +374,7 @@ describe('OutboundIdentitySettings', () => {
     const view = fixture()
     const step = view.effective.find(item => item.preset === 'stepfun')!
     view.wire_profiles = [{ ...step, protocol: 'chat_completions', headers: {
-      'User-Agent': 'step (linux 6.8.0-31-generic; x64)',
+      'User-Agent': 'stepcode (linux 6.8.0-31-generic; x64)',
       'X-Step-Client': 'stepcode', 'X-Stainless-Package-Version': '6.40.0',
       'X-Stainless-OS': 'Linux', 'X-Stainless-Arch': 'x64'
     } }]
@@ -377,7 +383,7 @@ describe('OutboundIdentitySettings', () => {
     await flushPromises()
     const group = wrapper.get('[data-identity-group="stepfun"]')
     expect(group.findAll('[data-identity-preset]')).toHaveLength(1)
-    expect(group.text()).toContain('step (linux 6.8.0-31-generic; x64)')
+    expect(group.text()).toContain('stepcode (linux 6.8.0-31-generic; x64)')
     expect(group.text()).toContain('stepcode')
     expect(group.text()).toContain('6.40.0')
     expect(group.text()).toContain('versionlessHint')
@@ -395,7 +401,7 @@ describe('OutboundIdentitySettings', () => {
     // version, keeps the version control, and never shows the versionless hint.
     const headers = zcodeCard.get('[data-testid="outbound-identity-headers"]')
     expect(headers.text()).toContain('User-Agent')
-    expect(headers.text()).toContain('ZCode/3.14.3')
+    expect(headers.text()).toContain('ZCode/3.16.2')
     expect(headers.text()).not.toContain('Originator')
     expect(zcodeCard.text()).not.toContain('versionlessHint')
     expect(zcodeCard.find('input').exists()).toBe(true)

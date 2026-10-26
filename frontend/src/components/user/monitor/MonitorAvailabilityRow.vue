@@ -1,6 +1,6 @@
 <template>
   <div class="mt-3 flex items-end justify-between">
-    <div class="text-[11px] uppercase tracking-widest text-gray-400">
+    <div class="text-[11px] uppercase tracking-widest surface-muted">
       {{ windowLabel }}
     </div>
     <div class="flex items-baseline gap-0.5">
@@ -18,7 +18,7 @@
   </div>
   <div
     v-if="samplesLabel"
-    class="mt-1 text-[11px] text-gray-400 text-right"
+    class="mt-1 text-[11px] text-right surface-muted"
   >
     {{ samplesLabel }}
   </div>

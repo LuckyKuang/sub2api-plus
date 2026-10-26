@@ -1,0 +1,224 @@
+:root {
+  --console-accent-readable: rgb(var(--console-accent-700, 15 118 110));
+  --console-control-edge: rgb(var(--console-accent-500, 20 184 166) / 36%);
+  --console-control-hover-edge: rgb(var(--console-accent-500, 20 184 166) / 65%);
+  --shell-gap: 12px;
+  --shell-gutter: 12px;
+  --shell-header-height: 64px;
+  --shell-inset-top: max(var(--shell-gutter), env(safe-area-inset-top));
+  --shell-inset-bottom: max(var(--shell-gutter), env(safe-area-inset-bottom));
+  --shell-sticky-offset: calc(var(--shell-inset-top) + var(--shell-header-height) + var(--shell-gap));
+  --surface-radius: 20px;
+  --surface-radius-inset: 16px;
+  --surface-radius-panel: 16px;
+  --surface-radius-control: 12px;
+  --surface-radius-item: 10px;
+  --surface-fill: var(--surface-solid);
+  --surface-shell: var(--surface-solid);
+  --surface-soft: rgb(237 242 240 / var(--console-card-alpha, 1));
+  --surface-field: var(--surface-solid);
+  --surface-panel: var(--surface-solid);
+  --surface-sticky: var(--surface-solid);
+  --surface-text: #182e31;
+  --surface-muted: #52676b;
+  --surface-glint: rgb(255 255 255 / calc(.24 * var(--console-card-alpha, 1)));
+  --surface-hover: rgb(var(--console-accent-500, 20 184 166) / calc(.12 * var(--console-card-alpha, 1)));
+  --surface-selected: rgb(var(--console-accent-500, 20 184 166) / calc(.18 * var(--console-card-alpha, 1)));
+  --surface-overlay: rgb(14 30 34 / calc(.18 * var(--console-card-alpha, 1)));
+  --surface-solid: rgb(248 250 249 / var(--console-card-alpha, 1));
+  /* Outlines remain visible even when all surface fills are transparent. */
+  --surface-edge: rgb(100 116 139 / 34%);
+  --surface-shadow: 0 12px 36px -20px rgb(33 57 57 / calc(.28 * var(--console-card-alpha, 1))), inset 0 1px 0 rgb(255 255 255 / calc(.8 * var(--console-card-alpha, 1)));
+  --console-canvas: #e9efee;
+  --console-glow: rgb(var(--console-accent-500, 20 184 166) / 13%);
+  --console-glow-secondary: rgb(125 149 212 / 12%);
+  --console-background-mask: rgb(245 248 247 / var(--console-light-mask-alpha, 0.3));
+}
+
+.dark {
+  --console-accent-readable: rgb(var(--console-accent-300, 94 234 212));
+  --console-control-edge: rgb(var(--console-accent-400, 45 212 191) / 42%);
+  --console-control-hover-edge: rgb(var(--console-accent-400, 45 212 191) / 72%);
+  --surface-soft: rgb(32 38 39 / var(--console-card-alpha, 1));
+  --surface-text: #eaf3f2;
+  --surface-muted: #c1cdd1;
+  --surface-glint: rgb(255 255 255 / calc(.07 * var(--console-card-alpha, 1)));
+  --surface-hover: rgb(var(--console-accent-400, 45 212 191) / calc(.13 * var(--console-card-alpha, 1)));
+  --surface-selected: rgb(var(--console-accent-400, 45 212 191) / calc(.20 * var(--console-card-alpha, 1)));
+  --surface-overlay: rgb(4 12 18 / calc(.22 * var(--console-card-alpha, 1)));
+  --surface-solid: rgb(38 44 45 / var(--console-card-alpha, 1));
+  --surface-edge: rgb(203 213 225 / 28%);
+  --surface-shadow: 0 14px 36px -18px rgb(0 0 0 / calc(.55 * var(--console-card-alpha, 1))), inset 0 1px 0 rgb(255 255 255 / calc(.05 * var(--console-card-alpha, 1)));
+  --console-canvas: #191f21;
+  --console-glow: rgb(var(--console-accent-500, 20 184 166) / 10%);
+  --console-glow-secondary: rgb(103 125 190 / 10%);
+  --console-background-mask: rgb(15 23 28 / var(--console-dark-mask-alpha, 0.48));
+}
+
+.app-layout {
+  --sidebar-width: 256px;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--shell-gap);
+  min-height: 100dvh;
+  padding: var(--shell-inset-top) max(var(--shell-gutter), env(safe-area-inset-right)) var(--shell-inset-bottom) max(var(--shell-gutter), env(safe-area-inset-left));
+}
+
+.app-layout::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 8% 10%, var(--console-glow), transparent 55%),
+    radial-gradient(ellipse at 95% 80%, var(--console-glow-secondary), transparent 60%), var(--console-canvas);
+}
+
+:root[data-console-background] .app-layout::before {
+  background-image: linear-gradient(var(--console-background-mask), var(--console-background-mask)), var(--console-custom-background-image);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.app-content {
+  display: flex;
+  min-width: 0;
+  min-height: calc(100dvh - var(--shell-inset-top) - var(--shell-inset-bottom));
+  flex-direction: column;
+  gap: var(--shell-gap);
+}
+.app-main, .app-page { width: 100%; min-width: 0; }
+.app-main { scroll-margin-top: var(--shell-sticky-offset); }
+.support-banner-spacing { margin-bottom: var(--shell-gap); }
+.app-layout .app-page > :where(.space-y-4, .space-y-5, .space-y-6, .space-y-8),
+.app-layout .app-page :where(.space-y-4, .space-y-5, .space-y-6, .space-y-8):has(> :is(.card, .glass-surface)) {
+  display: flex;
+  flex-direction: column;
+  gap: var(--shell-gap);
+}
+.app-layout .app-page > :where(.space-y-4, .space-y-5, .space-y-6, .space-y-8) > :not([hidden]) ~ :not([hidden]),
+.app-layout .app-page :where(.space-y-4, .space-y-5, .space-y-6, .space-y-8):has(> :is(.card, .glass-surface)) > :not([hidden]) ~ :not([hidden]) {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+.app-layout .app-page :where(.grid.gap-6, .grid:has(> :is(.card, .glass-surface, .glass-card, .card-glass))) { gap: var(--shell-gap); }
+.app-page :where([id]) { scroll-margin-top: var(--shell-sticky-offset); }
+
+.app-header {
+  position: sticky;
+  top: var(--shell-inset-top);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  flex: none;
+  height: var(--shell-header-height);
+  min-width: 0;
+}
+.app-header-inner { flex: 1; height: var(--shell-header-height); min-width: 0; padding-inline: 10px; }
+.app-header :where(button, select) { min-height: 44px; }
+.app-header .btn-icon, .app-header :where(button[aria-label]) { min-width: 44px; }
+.header-user-dropdown {
+  width: min(320px, calc(100vw - var(--shell-gutter) * 2));
+  max-height: calc(100dvh - var(--shell-sticky-offset) - var(--shell-inset-bottom));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.sidebar {
+  position: fixed;
+  left: max(var(--shell-gutter), env(safe-area-inset-left));
+  top: var(--shell-inset-top);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: var(--shell-gap);
+  width: min(320px, calc(100vw - var(--shell-gutter) * 2));
+  height: calc(100dvh - var(--shell-inset-top) - var(--shell-inset-bottom));
+  min-height: 0;
+  transform: translateX(calc(-100% - var(--shell-gutter) - 32px));
+  transition: transform 200ms ease-out;
+  outline: none;
+}
+.sidebar-mobile-open { transform: translateX(0); }
+.sidebar-header { position: relative; z-index: 2; }
+.sidebar-panel { display: flex; min-height: 0; flex: 1; flex-direction: column; }
+.sidebar-footer { flex-shrink: 0; }
+.sidebar-mobile-close { flex: none; width: 44px; height: 44px; }
+.sidebar-nav { min-height: 0; overscroll-behavior: contain; scrollbar-width: thin; }
+.sidebar-link { min-height: 44px; }
+.sidebar-nav .sidebar-link {
+  border-radius: 12px;
+  transition: background-color 140ms, color 140ms, box-shadow 140ms;
+}
+.sidebar-nav .sidebar-link:is(:hover, :focus-visible) {
+  background-color: rgb(var(--console-accent-500, 20 184 166) / calc(.17 * var(--console-card-alpha, 1)));
+  box-shadow: inset 0 0 0 1px rgb(var(--console-accent-500, 20 184 166) / 24%);
+}
+.sidebar-nav .sidebar-link-active {
+  background-color: rgb(var(--console-accent-500, 20 184 166) / calc(.25 * var(--console-card-alpha, 1)));
+  box-shadow: inset 0 0 0 1px rgb(var(--console-accent-500, 20 184 166) / 55%);
+  color: var(--console-accent-readable, #0f766e);
+  font-weight: 650;
+}
+.dark .sidebar-nav .sidebar-link-active { color: var(--console-accent-readable, #5eead4); }
+.sidebar-nav .sidebar-link-active:is(:hover, :focus-visible) {
+  background-color: rgb(var(--console-accent-500, 20 184 166) / calc(.29 * var(--console-card-alpha, 1)));
+  box-shadow: inset 0 0 0 1px rgb(var(--console-accent-500, 20 184 166) / 55%);
+}
+.sidebar-nav .sidebar-link:active { background-color: rgb(var(--console-accent-500, 20 184 166) / calc(.33 * var(--console-card-alpha, 1))); }
+
+/* Align a floating page action card with the shell's actual content column. */
+.app-layout { --console-content-left: max(var(--shell-gutter), env(safe-area-inset-left)); }
+.console-save-bar {
+  left: var(--console-content-left);
+  right: max(var(--shell-gutter), env(safe-area-inset-right));
+  bottom: var(--shell-inset-bottom);
+}
+.version-dropdown { max-height: calc(100dvh - var(--shell-sticky-offset) - var(--shell-inset-bottom)); overflow-y: auto; }
+@media (max-width: 1023px) {
+  .sidebar .version-dropdown { left: -48px; max-width: calc(100vw - (var(--shell-gutter) + 18px) * 2); }
+}
+
+@media (min-width: 768px) {
+  :root { --shell-gap: 16px; --shell-gutter: 16px; }
+}
+@media (min-width: 1024px) {
+  :root { --shell-gap: 24px; --shell-gutter: 24px; --surface-radius: 24px; }
+  .app-layout { grid-template-columns: var(--sidebar-width) minmax(0, 1fr); transition: grid-template-columns 200ms ease-out; }
+  .app-layout { --console-content-left: calc(max(var(--shell-gutter), env(safe-area-inset-left)) + var(--sidebar-width) + var(--shell-gap)); }
+  .app-layout.sidebar-is-collapsed { --sidebar-width: 72px; }
+  .sidebar { position: sticky; left: auto; align-self: start; width: 100%; transform: none; }
+  .app-header-inner { padding-inline: 18px; }
+}
+
+/* Keep this fallback outside Tailwind's component variants, including !card/!dropdown. */
+:where(.card, .glass, .glass-card, .card-glass, .glass-surface, .shell-surface, .modal-content, .dialog-container, .dropdown) {
+  position: relative;
+}
+
+@layer components {
+  .card, .glass, .glass-card, .card-glass, .glass-surface, .shell-surface {
+    background-color: var(--surface-fill);
+    border: 1px solid var(--surface-edge);
+    border-radius: var(--surface-radius);
+    box-shadow: var(--surface-shadow);
+  }
+  .shell-surface { background-color: var(--surface-shell); }
+  .glass-inset { background-color: var(--surface-soft); }
+  .modal-content, .dialog-container, .dropdown {
+    background-color: var(--surface-panel);
+    border-color: var(--surface-edge);
+    box-shadow: var(--surface-shadow);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-layout *, .modal-overlay *, .modal-overlay {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -119,7 +119,7 @@ func TestDeepSeekLanguageTimezoneSourcePriorityAndPreview(t *testing.T) {
 		require.Equal(t, "Asia/Shanghai", global.Timezone)
 		for _, selection := range []OutboundIdentitySelection{
 			{Preset: "deepseek"},
-			{Preset: "deepseek", Version: "0.2.0-rc.2"},
+			{Preset: "deepseek", Version: "0.2.1-rc.2"},
 			{Preset: "deepseek", Language: "zh-CN", Timezone: "UTC"},
 			{Preset: "deepseek", Language: "ja-JP", Timezone: "UTC"},
 		} {
@@ -156,8 +156,8 @@ func TestDeepSeekLanguageTimezoneSourcePriorityAndPreview(t *testing.T) {
 }
 
 func TestCodexBrandedAccountFingerprintFallsThroughWithoutChangingPriority(t *testing.T) {
-	account := "codex_cli_rs/0.158.0 (SuB2ApI; x86_64) xterm-256color"
-	global := "codex_cli_rs/0.158.0 (Ubuntu 24.04; x86_64) custom-terminal"
+	account := "codex_cli_rs/0.163.0 (SuB2ApI; x86_64) xterm-256color"
+	global := "codex_cli_rs/0.163.0 (Ubuntu 24.04; x86_64) custom-terminal"
 	identity := resolveOpenAIOutboundIdentityCandidates(account, global)
 	require.Equal(t, "global", identity.Source)
 	require.Equal(t, global, identity.UserAgent)

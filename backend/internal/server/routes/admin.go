@@ -608,7 +608,8 @@ func registerSettingsRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	{
 		adminSettings.GET("", h.Admin.Setting.GetSettings)
 		adminSettings.PUT("", h.Admin.Setting.UpdateSettings)
-		adminSettings.POST("/openai-codex-version/sync", h.Admin.Setting.SyncOpenAICodexVersion)
+		adminSettings.GET("/appearance", h.Admin.Setting.GetConsoleAppearance)
+		adminSettings.PUT("/appearance", h.Admin.Setting.UpdateConsoleAppearance)
 		adminSettings.GET("/outbound-identity", h.Admin.Setting.GetOutboundIdentity)
 		adminSettings.PUT("/outbound-identity", h.Admin.Setting.UpdateOutboundIdentity)
 		adminSettings.POST("/outbound-identity/preview", h.Admin.Setting.PreviewOutboundIdentity)
@@ -747,6 +748,8 @@ func registerUsageRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	usage := admin.Group("/usage")
 	{
 		usage.GET("", h.Admin.Usage.List)
+		usage.GET("/live", h.Admin.Usage.LiveRequests)
+		usage.GET("/:id", h.Admin.Usage.GetByID)
 		usage.GET("/stats", h.Admin.Usage.Stats)
 		usage.GET("/client-disconnect-events", h.Admin.Usage.ListClientDisconnectEvents)
 		usage.GET("/search-users", h.Admin.Usage.SearchUsers)
@@ -895,6 +898,7 @@ func registerChannelMonitorV2Routes(admin *gin.RouterGroup, h *handler.Handlers,
 		{
 			config.GET("/config", h.ChannelMonitorV2.GetConfig)
 			config.PUT("/config", h.ChannelMonitorV2.UpdateConfig)
+			config.GET("/model-catalog", h.ChannelMonitorV2.ModelCatalog)
 		}
 		reads := monitor.Group("")
 		reads.Use(modeV2Guard)
@@ -975,5 +979,7 @@ func registerZhipuOAuthRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		zhipu.POST("/oauth/poll", h.Admin.ZhipuOAuth.PollLink)
 		zhipu.POST("/oauth/exchange-code", h.Admin.ZhipuOAuth.ExchangeLink)
 		zhipu.POST("/oauth/create-from-oauth", h.Admin.ZhipuOAuth.CreateAccountFromLink)
+		zhipu.GET("/accounts/:id/off-peak/segment", h.Admin.ZhipuOAuth.GetOffPeakSegment)
+		zhipu.POST("/accounts/:id/off-peak/segment/terminate", h.Admin.ZhipuOAuth.TerminateOffPeakSegment)
 	}
 }

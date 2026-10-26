@@ -23,6 +23,9 @@
 package minimax
 
 import (
+	"net/url"
+	"strings"
+
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 )
 
@@ -82,5 +85,24 @@ func sdkHeaders(ua string) map[string]string {
 func ControlIdentity(identity outboundidentity.Identity) outboundidentity.Identity {
 	headers := map[string]string{"User-Agent": identity.UserAgent}
 	identity.Headers = headers
+	return identity
+}
+
+// ControlIdentityForURL renders the official Matrix account client from the
+// selected owner's snapshot. This is an endpoint declaration, not another
+// selectable identity family. Token grants and plan remains retain the managed
+// profile required by the gateway's trusted-identity contract.
+func ControlIdentityForURL(identity outboundidentity.Identity, target string) outboundidentity.Identity {
+	identity = ControlIdentity(identity)
+	u, err := url.Parse(target)
+	if err != nil || u.Scheme != "https" || u.Port() != "" || (!strings.HasPrefix(u.Path, "/matrix/api/") && u.Path != "/v1/api/user/info") {
+		return identity
+	}
+	switch strings.ToLower(u.Hostname()) {
+	case "agent.minimaxi.com", "agent.minimax.io":
+		identity.UserAgent = "MiniMaxCode"
+		identity.Originator = "MiniMaxCode"
+		identity.Headers["User-Agent"] = identity.UserAgent
+	}
 	return identity
 }

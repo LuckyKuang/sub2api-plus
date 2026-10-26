@@ -1,9 +1,9 @@
 <template>
-  <div :class="flat ? 'p-4 sm:p-6' : 'card p-6'">
+  <div :class="[flat ? 'p-4 sm:p-6' : 'card p-6', { 'usage-workspace-filters': workspace }]">
     <!-- Toolbar: left filters (multi-line) + right actions -->
-    <div class="flex flex-wrap items-end justify-between gap-4">
+    <div class="usage-filter-layout flex flex-wrap items-end justify-between gap-4">
       <!-- Left: filters (allowed to wrap to multiple rows) -->
-      <div class="flex flex-1 flex-wrap items-end gap-4">
+      <div class="usage-filter-fields flex flex-1 flex-wrap items-end gap-4">
         <!-- User Search -->
         <div ref="userSearchRef" class="usage-filter-dropdown relative w-full sm:w-auto sm:min-w-[240px]">
           <label class="input-label">{{ t('admin.usage.userFilter') }}</label>
@@ -19,26 +19,31 @@
             v-if="filters.user_id"
             type="button"
             @click="clearUser"
-            class="absolute right-2 top-9 text-gray-400"
+            class="absolute right-2 top-9 surface-control surface-muted"
             aria-label="Clear user filter"
           >
             ✕
           </button>
+          <Teleport to="body" :disabled="!workspace">
           <div
             v-if="showUserDropdown && (userResults.length > 0 || userKeyword)"
-            class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border bg-white shadow-lg dark:bg-dark-800"
+            class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border shadow-lg surface-panel"
+            :style="workspace ? userDropdownStyle : undefined"
+            data-testid="usage-user-options"
+            @click.stop
           >
             <button
               v-for="u in userResults"
               :key="u.id"
               type="button"
               @click="selectUser(u)"
-              class="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-dark-700"
+              class="w-full px-4 py-2 text-left hover:surface-hover surface-control"
             >
-              <span>{{ u.email }}<span v-if="u.deleted" class="ml-1 text-xs text-gray-400">（{{ t('admin.usage.userDeletedBadge') }}）</span></span>
-              <span class="ml-2 text-xs text-gray-400">#{{ u.id }}</span>
+              <span>{{ u.email }}<span v-if="u.deleted" class="ml-1 text-xs surface-muted">（{{ t('admin.usage.userDeletedBadge') }}）</span></span>
+              <span class="ml-2 text-xs surface-muted">#{{ u.id }}</span>
             </button>
           </div>
+          </Teleport>
         </div>
 
         <!-- API Key Search -->
@@ -56,26 +61,31 @@
             v-if="filters.api_key_id"
             type="button"
             @click="onClearApiKey"
-            class="absolute right-2 top-9 text-gray-400"
+            class="absolute right-2 top-9 surface-control surface-muted"
             aria-label="Clear API key filter"
           >
             ✕
           </button>
+          <Teleport to="body" :disabled="!workspace">
           <div
             v-if="showApiKeyDropdown && apiKeyResults.length > 0"
-            class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border bg-white shadow-lg dark:bg-dark-800"
+            class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border shadow-lg surface-panel"
+            :style="workspace ? apiKeyDropdownStyle : undefined"
+            data-testid="usage-api-key-options"
+            @click.stop
           >
             <button
               v-for="k in apiKeyResults"
               :key="k.id"
               type="button"
               @click="selectApiKey(k)"
-              class="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-dark-700"
+              class="w-full px-4 py-2 text-left hover:surface-hover surface-control"
             >
               <span class="truncate">{{ k.name || `#${k.id}` }}</span>
-              <span class="ml-2 text-xs text-gray-400">#{{ k.id }}</span>
+              <span class="ml-2 text-xs surface-muted">#{{ k.id }}</span>
             </button>
           </div>
+          </Teleport>
         </div>
 
         <!-- Model Filter -->
@@ -99,26 +109,31 @@
             v-if="filters.account_id"
             type="button"
             @click="clearAccount"
-            class="absolute right-2 top-9 text-gray-400"
+            class="absolute right-2 top-9 surface-control surface-muted"
             aria-label="Clear account filter"
           >
             ✕
           </button>
+          <Teleport to="body" :disabled="!workspace">
           <div
             v-if="showAccountDropdown && (accountResults.length > 0 || accountKeyword)"
-            class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border bg-white shadow-lg dark:bg-dark-800"
+            class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border shadow-lg surface-panel"
+            :style="workspace ? accountDropdownStyle : undefined"
+            data-testid="usage-account-options"
+            @click.stop
           >
             <button
               v-for="a in accountResults"
               :key="a.id"
               type="button"
               @click="selectAccount(a)"
-              class="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-dark-700"
+              class="w-full px-4 py-2 text-left hover:surface-hover surface-control"
             >
               <span class="truncate">{{ a.name }}</span>
-              <span class="ml-2 text-xs text-gray-400">#{{ a.id }}</span>
+              <span class="ml-2 text-xs surface-muted">#{{ a.id }}</span>
             </button>
           </div>
+          </Teleport>
         </div>
 
         <!-- Request Type Filter (usage only) -->
@@ -193,7 +208,7 @@
       </div>
 
       <!-- Right: actions -->
-      <div v-if="showActions" class="flex w-full flex-wrap items-center justify-end gap-3 sm:w-auto">
+      <div v-if="showActions" class="usage-filter-actions flex w-full flex-wrap items-center justify-end gap-3 sm:w-auto">
         <button type="button" @click="$emit('refresh')" class="btn btn-secondary">
           {{ t('common.refresh') }}
         </button>
@@ -221,6 +236,7 @@ import { adminAPI } from '@/api/admin'
 import Select, { type SelectOption } from '@/components/common/Select.vue'
 import { COMMON_ERROR_STATUS_CODES } from '@/utils/errorBadges'
 import type { SimpleApiKey, SimpleUser } from '@/api/admin/usage'
+import { useAnchoredDropdown } from '@/composables/useAnchoredDropdown'
 
 type ModelValue = Record<string, any>
 
@@ -240,13 +256,15 @@ interface Props {
   errorView?: 'errors' | 'excluded' | 'all'
   /** 嵌入统一卡片内使用：去掉自身卡片外观 */
   flat?: boolean
+  workspace?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
   showActions: true,
   mode: 'usage',
   errorView: 'errors',
-  flat: false
+  flat: false,
+  workspace: false
 })
 const emit = defineEmits([
   'update:modelValue',
@@ -283,6 +301,9 @@ interface SimpleAccount {
 const accountKeyword = ref('')
 const accountResults = ref<SimpleAccount[]>([])
 const showAccountDropdown = ref(false)
+const userDropdownStyle = useAnchoredDropdown(userSearchRef, () => props.workspace && showUserDropdown.value)
+const apiKeyDropdownStyle = useAnchoredDropdown(apiKeySearchRef, () => props.workspace && showApiKeyDropdown.value)
+const accountDropdownStyle = useAnchoredDropdown(accountSearchRef, () => props.workspace && showAccountDropdown.value)
 let accountSearchTimeout: ReturnType<typeof setTimeout> | null = null
 
 const modelOptions = computed<SelectOption[]>(() => [
@@ -598,3 +619,25 @@ const getUserSearchRevision = () => userSearchSequence
 
 defineExpose({ getUserSearchRevision, setUserKeyword })
 </script>
+
+<style scoped>
+@media (min-width: 1024px) {
+  .usage-workspace-filters { padding: 10px 14px; }
+  .usage-workspace-filters .usage-filter-layout { display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
+  .usage-workspace-filters .usage-filter-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); width: 100%; flex: none; gap: 8px 10px; }
+  .usage-workspace-filters .usage-filter-fields > div { width: auto; min-width: 0; }
+  .usage-workspace-filters .input-label { min-height: 16px; margin-bottom: 4px; font-size: 12px; line-height: 16px; }
+  .usage-workspace-filters :deep(.input), .usage-workspace-filters :deep(.select-trigger) { min-height: 34px; padding: 6px 10px; }
+  .usage-workspace-filters .usage-filter-dropdown > button { top: 27px; }
+  .usage-workspace-filters .usage-filter-actions { width: 100%; gap: 8px; }
+  .usage-workspace-filters .usage-filter-actions :deep(.btn) { min-height: 34px; padding: 6px 10px; }
+}
+@media (min-width: 1024px) and (max-height: 799px) {
+  .usage-workspace-filters { padding: 8px 12px; }
+  .usage-workspace-filters .usage-filter-layout { gap: 6px; }
+  .usage-workspace-filters .usage-filter-fields { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 150px; overflow-x: auto; scrollbar-width: thin; padding-bottom: 2px; }
+  .usage-workspace-filters .input-label { margin-bottom: 2px; }
+  .usage-workspace-filters :deep(.input), .usage-workspace-filters :deep(.select-trigger) { min-height: 32px; padding-top: 5px; padding-bottom: 5px; }
+  .usage-workspace-filters .usage-filter-actions :deep(.btn) { min-height: 32px; padding-top: 5px; padding-bottom: 5px; }
+}
+</style>

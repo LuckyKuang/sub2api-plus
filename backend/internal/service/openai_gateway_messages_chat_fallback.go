@@ -126,7 +126,7 @@ func (s *OpenAIGatewayService) forwardAnthropicViaRawChatCompletions(
 	)
 
 	// 3. Build and send upstream request via the shared CC pipeline
-	apiKey, targetURL, err := s.resolveCCFallbackTarget(account)
+	apiKey, targetURL, err := s.resolveCCFallbackTarget(ctx, c, account)
 	if err != nil {
 		return nil, err
 	}
@@ -166,22 +166,19 @@ func (s *OpenAIGatewayService) bufferChatCompletionsAsAnthropic(
 	startTime time.Time,
 ) (*OpenAIForwardResult, error) {
 	requestID := resp.Header.Get("x-request-id")
-	ccResp, usage, err := s.readCCUpstreamJSONResponse(c, resp, writeAnthropicError)
+	ccResp, usage, usageSource, err := s.readCCUpstreamJSONResponse(c, resp, writeAnthropicError)
 	if err != nil {
-		return nil, err
+		var rejected *UpstreamFailoverError
+		if errors.As(err, &rejected) {
+			return nil, err
+		}
+		return &OpenAIForwardResult{RequestID: requestID, Usage: usage, UsageSource: usageSource, Model: originalModel, BillingModel: billingModel, UpstreamModel: upstreamModel, Duration: time.Since(startTime)}, err
 	}
-	anthropicResp := apicompat.ChatCompletionsResponseToAnthropic(ccResp, originalModel)
-
-	if s.responseHeaderFilter != nil {
-		responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
-	}
-	s.finalizeCodexClientQuotaHeaders(c.Writer.Header(), c, account)
-	c.JSON(http.StatusOK, anthropicResp)
-
-	return &OpenAIForwardResult{
+	result := &OpenAIForwardResult{
 		RequestID:                   requestID,
 		UpstreamHeaders:             resp.Header,
 		Usage:                       usage,
+		UsageSource:                 usageSource,
 		Model:                       originalModel,
 		BillingModel:                billingModel,
 		UpstreamModel:               upstreamModel,
@@ -191,7 +188,21 @@ func (s *OpenAIGatewayService) bufferChatCompletionsAsAnthropic(
 		ServiceTier:                 resolvedOpenAIUpstreamServiceTier(c, serviceTier),
 		Stream:                      false,
 		Duration:                    time.Since(startTime),
-	}, nil
+	}
+	if err := apicompat.ValidateChatCompletionsAnthropicToolInputs(ccResp); err != nil {
+		result.UsageIncomplete = true
+		result.UsageSource = ccObservedUsageSource(usageSource != UsageSourceUnknown, true)
+		writeAnthropicError(c, http.StatusBadGateway, "api_error", "Upstream returned invalid tool input")
+		return result, err
+	}
+	anthropicResp := apicompat.ChatCompletionsResponseToAnthropic(ccResp, originalModel)
+
+	if s.responseHeaderFilter != nil {
+		responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
+	}
+	s.finalizeCodexClientQuotaHeaders(c.Writer.Header(), c, account)
+	c.JSON(http.StatusOK, anthropicResp)
+	return result, nil
 }
 
 func (s *OpenAIGatewayService) streamChatCompletionsAsAnthropic(
@@ -210,7 +221,7 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsAnthropic(
 
 	anthropicState := apicompat.NewChatCompletionsToAnthropicStreamState(originalModel)
 	clientDisconnected := false
-	var timing streamOutputTiming
+	timing := requestStreamOutputTiming(c)
 
 	// 与 responses 兄弟不同：客户端断开后仍继续做事件转换（喂 anthropicState），
 	// 仅跳过写出，保证 finalize 阶段的 usage 汇总不受断开影响。
@@ -241,8 +252,21 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsAnthropic(
 
 	scan := s.scanCCStream(c, resp, "openai messages chat fallback", requestID, startTime, emitChunk)
 	usage := scan.Usage
+	if scan.completionError() == nil {
+		if err := anthropicState.ValidateToolCallArguments(); err != nil {
+			// A completed turn cannot have invalid tool_use input. A normal
+			// length stop is allowed by the validator and retains max_tokens.
+			// Preserve the provider's meter without finalizing or replaying
+			// an actual protocol failure.
+			scan.ProtocolErr, scan.SawError = err, true
+		}
+	}
 
-	if scan.Err != nil {
+	if streamErr := scan.completionError(); streamErr != nil {
+		var rejected *UpstreamFailoverError
+		if errors.As(streamErr, &rejected) && !c.Writer.Written() {
+			return nil, rejected
+		}
 		// Broken upstream read: skip finalization so no synthetic message_stop
 		// masks the truncation, and surface the error to flag usage incomplete
 		// (mirrors forwardResponsesViaRawChatCompletions).
@@ -250,6 +274,7 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsAnthropic(
 			RequestID:                   requestID,
 			UpstreamHeaders:             resp.Header,
 			Usage:                       usage,
+			UsageSource:                 scan.usageSource(clientDisconnected),
 			Model:                       originalModel,
 			BillingModel:                billingModel,
 			UpstreamModel:               upstreamModel,
@@ -264,7 +289,12 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsAnthropic(
 			ClientDisconnect:            clientDisconnected,
 		}
 		timing.ApplyOpenAIResult(result)
-		return result, fmt.Errorf("stream usage incomplete: %w", scan.Err)
+		// Once client output is committed this request cannot be replayed,
+		// including an explicit error that arrived after successful deltas.
+		if rejected != nil {
+			return result, errors.New("stream usage incomplete: upstream error envelope")
+		}
+		return result, fmt.Errorf("stream usage incomplete: %w", streamErr)
 	}
 
 	// Finalize: close open blocks + emit message_delta/message_stop.
@@ -286,30 +316,12 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsAnthropic(
 		}
 		c.Writer.Flush()
 	}
-	if !scan.SawDone {
-		logCCStreamMissingDoneSentinel("openai messages chat fallback", requestID)
-		result := &OpenAIForwardResult{
-			RequestID:           requestID,
-			Usage:               usage,
-			Model:               originalModel,
-			BillingModel:        billingModel,
-			UpstreamModel:       upstreamModel,
-			ReasoningEffort:     reasoningEffort,
-			ServiceTier:         serviceTier,
-			ResponseServiceTier: observedDeclaredServiceTier(c),
-			Stream:              true,
-			UsageIncomplete:     scan.usageIncomplete(),
-			Duration:            time.Since(startTime),
-			ClientDisconnect:    clientDisconnected,
-		}
-		timing.ApplyOpenAIResult(result)
-		return result, errors.New("stream usage incomplete: missing [DONE]")
-	}
 
 	result := &OpenAIForwardResult{
 		RequestID:                   requestID,
 		UpstreamHeaders:             resp.Header,
 		Usage:                       usage,
+		UsageSource:                 scan.usageSource(clientDisconnected),
 		Model:                       originalModel,
 		BillingModel:                billingModel,
 		UpstreamModel:               upstreamModel,

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
+import { DOMWrapper, flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { nextTick, reactive } from 'vue'
 import AvailableChannelsView from '../AvailableChannelsView.vue'
 import CatalogPriceDetails from '@/components/channels/CatalogPriceDetails.vue'
@@ -13,12 +13,56 @@ vi.mock('@/composables/useClipboard', () => ({ useClipboard: () => ({ copyToClip
 vi.mock('vue-i18n', async () => ({ ...await vi.importActual('vue-i18n'), useI18n: () => ({ t: (key: string) => key }) }))
 const wrappers: VueWrapper[] = []
 const data = (): ChannelCatalog => ({ groups: [group(1, [offer('first'), offer('second')]), group(2, [offer('claude', { platform: 'anthropic' })])], user_rate_status: 'loaded' })
-const global = { stubs: { AppLayout: { template: '<main><slot /></main>' }, PlatformIcon: { template: '<span />' }, Icon: { template: '<span />' } } }
+const global = { stubs: { AppLayout: { name: 'AppLayout', props: { workspace: Boolean }, template: '<main><slot /></main>' }, PlatformIcon: { template: '<span />' }, Icon: { template: '<span />' } } }
 function page() { const wrapper = mount(AvailableChannelsView, { global, attachTo: document.body }); wrappers.push(wrapper); return wrapper }
 beforeEach(() => { vi.clearAllMocks(); mocks.auth = reactive({ user: { id: 1 } }); mocks.getCatalog.mockResolvedValue(data()) })
 afterEach(() => { wrappers.splice(0).forEach(w => w.unmount()); document.body.innerHTML = '' })
 
 describe('available channels user page', () => {
+  it('keeps heading, filters and count outside the independently scrolling channel cards', async () => {
+    const w = page(); await flushPromises()
+    const results = w.get('[data-testid="catalog-results"]')
+    const heading = w.get('[data-testid="catalog-heading"]')
+    const filters = w.get('[data-testid="catalog-filters"]')
+    expect(w.getComponent({ name: 'AppLayout' }).props('workspace')).toBe(true)
+    expect(w.get('.catalog-page').classes()).toContain('workspace-page')
+    expect(results.classes()).toContain('workspace-scroll')
+    expect(results.findAll('.catalog-model-card')).toHaveLength(3)
+    for (const fixed of [heading, filters, w.get('[aria-live="polite"]')]) {
+      expect(fixed.classes()).toContain('workspace-fixed')
+      expect(fixed.element.parentElement).toBe(results.element.parentElement)
+      expect(results.element.contains(fixed.element)).toBe(false)
+    }
+    expect(heading.find('h1').exists()).toBe(true)
+    expect(filters.find('input[type="search"]').exists()).toBe(true)
+  })
+
+  it('preserves platform, search and dropdown sorting through refresh in the pinned filter card', async () => {
+    mocks.getCatalog.mockResolvedValue({ groups: [
+      group(1, [offer('model-a', { pricing: pricing(6e-6) }), offer('model-z', { pricing: pricing(1e-6) })]),
+      group(2, [offer('model-other', { platform: 'anthropic' })])
+    ], user_rate_status: 'loaded' })
+    const w = page(); await flushPromises()
+    const filters = w.get('[data-testid="catalog-filters"]')
+    const results = w.get('[data-testid="catalog-results"]')
+    await filters.findAll('.catalog-filter').find(button => button.text().startsWith('openai'))!.trigger('click')
+    await filters.get('input[type="search"]').setValue('model-')
+    await filters.get('[role="combobox"]').trigger('click'); await flushPromises()
+    const dropdown = document.querySelector('[role="listbox"]')!
+    expect(results.element.contains(dropdown)).toBe(false)
+    expect(dropdown.querySelector('input')).toBeNull()
+    const priceOption = Array.from(dropdown.querySelectorAll('[role="option"]')).find(option => option.textContent?.includes('sortPrice'))!
+    await new DOMWrapper(priceOption).trigger('click')
+    expect(results.findAll('h3').map(title => title.text())).toEqual(['model-z', 'model-a'])
+    await w.get('button[aria-label="common.refresh"]').trigger('click'); await flushPromises()
+    expect(w.get('[data-testid="catalog-results"]').element).toBe(results.element)
+    expect((filters.get('input[type="search"]').element as HTMLInputElement).value).toBe('model-')
+    expect(filters.get('[aria-pressed="true"]').text()).toContain('openai')
+    expect(filters.get('[role="combobox"]').text()).toContain('sortPrice')
+    expect(results.findAll('h3').map(title => title.text())).toEqual(['model-z', 'model-a'])
+    expect(mocks.getCatalog).toHaveBeenCalledTimes(2)
+  })
+
   it('loads catalog once, filters individual cards and copies the complete ID', async () => {
     const w = page(); await flushPromises()
     expect(mocks.getCatalog).toHaveBeenCalledOnce()
@@ -45,7 +89,8 @@ describe('available channels user page', () => {
     expect(w.get('.catalog-model-card').text()).toContain('$0–$2')
     expect(w.get('.catalog-model-card').text()).toContain('quoteCount availableChannels.exclusive')
     await w.findAll('.catalog-model-card button')[1]!.trigger('click'); await flushPromises()
-    expect(document.querySelectorAll('.catalog-quote')).toHaveLength(2)
+    expect(document.querySelectorAll('.catalog-quote-disclosure')).toHaveLength(2)
+    expect(document.querySelectorAll('.catalog-quote')).toHaveLength(0)
     expect(document.querySelector('[role="dialog"]')!.textContent).toContain('Group 1')
     expect(document.querySelector('[role="dialog"]')!.textContent).toContain('Group 2')
     expect(document.querySelector('[role="dialog"]')!.textContent).toContain('billingGroupNote')
@@ -123,7 +168,7 @@ describe('available channels user page', () => {
     mocks.getCatalog.mockResolvedValueOnce({ groups: [group(2, [offer('same', { offer_key: 'two' })])], user_rate_status: 'loaded' })
     await w.get('button[aria-label="common.refresh"]').trigger('click'); await flushPromises()
     expect(w.findComponent(CatalogPriceDetails).props('model').quotes).toHaveLength(1)
-    expect(document.querySelectorAll('.catalog-quote')).toHaveLength(1)
+    expect(document.querySelectorAll('.catalog-quote-disclosure')).toHaveLength(1)
     expect(document.querySelector('[role="dialog"]')!.textContent).not.toContain('Group 1')
   })
   it('traps keyboard focus and restores the details trigger after Escape', async () => {
@@ -149,6 +194,7 @@ describe('available channels user page', () => {
     await w.findAll('.catalog-model-card button')[1]!.trigger('click'); await flushPromises()
     const dialog = document.querySelector('[role="dialog"]')!
     const close = dialog.querySelector<HTMLButtonElement>('[aria-label="Close modal"]')!
+    dialog.querySelector<HTMLElement>('.catalog-quote-disclosure > summary')!.click(); await flushPromises()
     const flex = Array.from(dialog.querySelectorAll<HTMLElement>('summary')).find(s => s.textContent!.includes('tiers.flex'))!
     close.focus()
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }))
@@ -158,7 +204,7 @@ describe('available channels user page', () => {
     expect(forward.defaultPrevented).toBe(true)
     expect(document.activeElement).toBe(close)
     flex.click(); await flushPromises()
-    const visiblePrice = dialog.querySelectorAll<HTMLDetailsElement>('details')[1]!.querySelector<HTMLElement>('[tabindex="0"]')!
+    const visiblePrice = flex.parentElement!.querySelector<HTMLElement>('[tabindex="0"]')!
     close.focus()
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }))
     expect(document.activeElement).toBe(visiblePrice)
@@ -176,19 +222,21 @@ describe('available channels user page', () => {
     const first = w.findAll('.catalog-model-card')[0]!.findAll('button')[1]!
     const second = w.findAll('.catalog-model-card')[1]!.findAll('button')[1]!
     await first.trigger('click'); await flushPromises()
-    const summary = document.querySelector<HTMLElement>('[role="dialog"] summary')!
-    summary.click(); await flushPromises()
-    expect(document.querySelector<HTMLDetailsElement>('details')!.open).toBe(true)
+    document.querySelector<HTMLElement>('.catalog-quote-disclosure > summary')!.click(); await flushPromises()
+    document.querySelector<HTMLElement>('.catalog-quote summary')!.click(); await flushPromises()
+    expect(document.querySelector<HTMLDetailsElement>('.catalog-quote details')!.open).toBe(true)
     document.querySelector<HTMLButtonElement>('[aria-label="Close modal"]')!.click(); await flushPromises()
     await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull())
     await first.trigger('click'); await flushPromises()
     expect(Array.from(document.querySelectorAll<HTMLDetailsElement>('details')).every(d => !d.open)).toBe(true)
-    document.querySelector<HTMLElement>('[role="dialog"] summary')!.click(); await flushPromises()
+    document.querySelector<HTMLElement>('.catalog-quote-disclosure > summary')!.click(); await flushPromises()
+    expect(Array.from(document.querySelectorAll<HTMLDetailsElement>('.catalog-quote details')).every(d => !d.open)).toBe(true)
     document.querySelector<HTMLButtonElement>('[aria-label="Close modal"]')!.click(); await flushPromises()
     await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull())
     await second.trigger('click'); await flushPromises()
     expect(document.querySelector('[role="dialog"]')!.textContent).toContain('second')
-    expect(document.querySelectorAll('details')).toHaveLength(2)
+    expect(document.querySelectorAll('.catalog-quote-disclosure')).toHaveLength(1)
+    expect(document.querySelectorAll('.catalog-quote')).toHaveLength(0)
     expect(Array.from(document.querySelectorAll<HTMLDetailsElement>('details')).every(d => !d.open)).toBe(true)
   })
 })

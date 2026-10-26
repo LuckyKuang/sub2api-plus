@@ -1,4 +1,5 @@
 import { defineComponent } from 'vue'
+import DateTimePicker from '@/components/common/DateTimePicker.vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -268,6 +269,7 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
   })
 
   it.each(['apikey', 'oauth'] as const)('saves the actual StepFun %s checkbox selection during creation', async kind => {
+    if (kind === 'oauth') vi.useFakeTimers()
     const wrapper = mountModal([], true)
     await selectButtonByText(wrapper, 'StepFun')
     await wrapper.get('form#create-account-form input[type="text"]').setValue('Restricted StepFun')
@@ -278,16 +280,19 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
       previewModelsMock.mockResolvedValue(catalog)
       await wrapper.get('form#create-account-form input[type="password"]').setValue('step-key')
     } else {
-      const pending = { session_id: 'ready-step', status: 'pending', authorize_url: 'https://platform.stepfun.com/cli-login', expires_at: new Date(Date.now() + 60000).toISOString(), interval_seconds: 5 }
+      // docs/providers/STEPFUN.md: Step Plan login polls the server-held flow;
+      // the browser never exchanges a loopback callback or a private API key.
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+      const pending = { session_id: 'ready-step', status: 'pending', authorize_url: 'https://platform.stepfun.com/cli-login-remote?flow_id=public-flow', expires_at: new Date(Date.now() + 60000).toISOString(), interval_seconds: 5 }
       cnOAuthRequestMock.mockResolvedValueOnce(pending)
       await selectButtonByText(wrapper, 'admin.accounts.oauth.domestic.start')
       await flushPromises()
-      await wrapper.get('[data-testid="cn-oauth-panel"] textarea').setValue('http://127.0.0.1:53683/callback?state=s&api_key=private-key')
+      expect(wrapper.find('[data-testid="cn-oauth-panel"] textarea').exists()).toBe(false)
       cnOAuthRequestMock.mockResolvedValueOnce({ ...pending, status: 'ready' })
-      await selectButtonByText(wrapper, 'admin.accounts.oauth.domestic.exchange')
+      await vi.advanceTimersByTimeAsync(5000)
       await flushPromises()
-      expect(cnOAuthRequestMock).toHaveBeenLastCalledWith('stepfun', 'exchange', {
-        session_id: 'ready-step', callback: 'http://127.0.0.1:53683/callback?state=s&api_key=private-key'
+      expect(cnOAuthRequestMock).toHaveBeenLastCalledWith('stepfun', 'poll', {
+        session_id: 'ready-step'
       })
       expect(wrapper.findComponent({ name: 'CNOAuthPanel' }).emitted('ready-session')?.at(-1)).toEqual(['ready-step'])
       expect(wrapper.findComponent({ name: 'ModelWhitelistSelector' }).props('oauthSessionId')).toBe('ready-step')
@@ -348,7 +353,7 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
     await wrapper.get('form#create-account-form input[type="text"]').setValue('custom expiry account')
     await wrapper.get('form#create-account-form input[type="password"]').setValue('test-api-key')
     await selectButtonByText(wrapper, 'payment.oneMonth')
-    await wrapper.get('input[type="datetime-local"]').setValue('2030-04-15T09:20')
+    await wrapper.getComponent(DateTimePicker).setValue('2030-04-15T09:20')
 
     await wrapper.get('form#create-account-form').trigger('submit.prevent')
     await flushPromises()

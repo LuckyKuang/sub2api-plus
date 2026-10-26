@@ -32,6 +32,8 @@ type ChannelMonitorRequestTemplate struct {
 	Description string `json:"description,omitempty"`
 	// ExtraHeaders holds the value of the "extra_headers" field.
 	ExtraHeaders map[string]string `json:"extra_headers,omitempty"`
+	// StreamProbe holds the value of the "stream_probe" field.
+	StreamProbe bool `json:"stream_probe,omitempty"`
 	// BodyOverrideMode holds the value of the "body_override_mode" field.
 	BodyOverrideMode string `json:"body_override_mode,omitempty"`
 	// BodyOverride holds the value of the "body_override" field.
@@ -67,6 +69,8 @@ func (*ChannelMonitorRequestTemplate) scanValues(columns []string) ([]any, error
 		switch columns[i] {
 		case channelmonitorrequesttemplate.FieldExtraHeaders, channelmonitorrequesttemplate.FieldBodyOverride:
 			values[i] = new([]byte)
+		case channelmonitorrequesttemplate.FieldStreamProbe:
+			values[i] = new(sql.NullBool)
 		case channelmonitorrequesttemplate.FieldID:
 			values[i] = new(sql.NullInt64)
 		case channelmonitorrequesttemplate.FieldName, channelmonitorrequesttemplate.FieldProvider, channelmonitorrequesttemplate.FieldAPIMode, channelmonitorrequesttemplate.FieldDescription, channelmonitorrequesttemplate.FieldBodyOverrideMode:
@@ -137,6 +141,12 @@ func (_m *ChannelMonitorRequestTemplate) assignValues(columns []string, values [
 				if err := json.Unmarshal(*value, &_m.ExtraHeaders); err != nil {
 					return fmt.Errorf("unmarshal field extra_headers: %w", err)
 				}
+			}
+		case channelmonitorrequesttemplate.FieldStreamProbe:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field stream_probe", values[i])
+			} else if value.Valid {
+				_m.StreamProbe = value.Bool
 			}
 		case channelmonitorrequesttemplate.FieldBodyOverrideMode:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -213,6 +223,9 @@ func (_m *ChannelMonitorRequestTemplate) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("extra_headers=")
 	builder.WriteString(fmt.Sprintf("%v", _m.ExtraHeaders))
+	builder.WriteString(", ")
+	builder.WriteString("stream_probe=")
+	builder.WriteString(fmt.Sprintf("%v", _m.StreamProbe))
 	builder.WriteString(", ")
 	builder.WriteString("body_override_mode=")
 	builder.WriteString(_m.BodyOverrideMode)

@@ -120,6 +120,10 @@ func (r *kimiQuotaTestRepo) UpdateExtra(ctx context.Context, id int64, updates m
 	return nil
 }
 
+func (r *kimiQuotaTestRepo) UpdateCNProviderQuotaIfUnchanged(ctx context.Context, expected *Account, updates map[string]any) (bool, error) {
+	return true, r.UpdateExtra(ctx, expected.ID, updates)
+}
+
 type kimiQuotaTestUpstream struct {
 	recordingHTTPUpstream
 	request *http.Request

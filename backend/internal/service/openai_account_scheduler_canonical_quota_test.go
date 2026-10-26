@@ -45,7 +45,7 @@ func TestOpenAIQuotaHeadroomFactorUsesCanonicalWindows(t *testing.T) {
 						}
 					}
 					// 周余量 75%，5h 余量低于 10% 时沿用现有的减半规则。
-					require.InDelta(t, 0.375, openAIQuotaHeadroomFactor(&Account{Extra: extra}, now), 1e-9)
+					require.InDelta(t, 0.375, openAIQuotaHeadroomFactor(verifiedCodexUsageForTest(&Account{Extra: extra}), now), 1e-9)
 				})
 			}
 		})
@@ -60,17 +60,17 @@ func TestOpenAIQuotaHeadroomFactorCanonicalPrecedence(t *testing.T) {
 		"codex_usage_updated_at":       now.Format(time.RFC3339),
 	}
 	// 没有窗口长度的历史数据仍沿用 primary=7d、secondary=5h。
-	require.InDelta(t, 0.6, openAIQuotaHeadroomFactor(&Account{Extra: extra}, now), 1e-9)
+	require.InDelta(t, 0.6, openAIQuotaHeadroomFactor(verifiedCodexUsageForTest(&Account{Extra: extra}), now), 1e-9)
 	extra["codex_7d_used_percent"] = 80.0
 	extra["codex_5h_used_percent"] = 10.0
-	require.InDelta(t, 0.2, openAIQuotaHeadroomFactor(&Account{Extra: extra}, now), 1e-9)
+	require.InDelta(t, 0.2, openAIQuotaHeadroomFactor(verifiedCodexUsageForTest(&Account{Extra: extra}), now), 1e-9)
 
 	// 规范窗口有效时，不应被另一个原始窗口的过期时间误判为已重置。
 	extra["codex_7d_reset_at"] = now.Add(time.Hour).Format(time.RFC3339)
 	extra["codex_primary_reset_at"] = now.Add(-time.Minute).Format(time.RFC3339)
-	require.InDelta(t, 0.2, openAIQuotaHeadroomFactor(&Account{Extra: extra}, now), 1e-9)
+	require.InDelta(t, 0.2, openAIQuotaHeadroomFactor(verifiedCodexUsageForTest(&Account{Extra: extra}), now), 1e-9)
 	extra["codex_7d_reset_at"] = now.Add(-time.Minute).Format(time.RFC3339)
-	require.Equal(t, openAIQuotaHeadroomNeutralFactor, openAIQuotaHeadroomFactor(&Account{Extra: extra}, now))
+	require.Equal(t, openAIQuotaHeadroomNeutralFactor, openAIQuotaHeadroomFactor(verifiedCodexUsageForTest(&Account{Extra: extra}), now))
 }
 
 func TestOpenAIQuotaHeadroomFactorRawWindowReset(t *testing.T) {
@@ -83,9 +83,9 @@ func TestOpenAIQuotaHeadroomFactorRawWindowReset(t *testing.T) {
 		"codex_secondary_reset_at":     now.Add(time.Hour).Format(time.RFC3339),
 		"codex_usage_updated_at":       now.Add(-time.Hour).Format(time.RFC3339),
 	}
-	require.InDelta(t, 0.75, openAIQuotaHeadroomFactor(&Account{Extra: extra}, now), 1e-9)
+	require.InDelta(t, 0.75, openAIQuotaHeadroomFactor(verifiedCodexUsageForTest(&Account{Extra: extra}), now), 1e-9)
 	extra["codex_secondary_reset_at"] = now.Add(-time.Minute).Format(time.RFC3339)
-	require.Equal(t, openAIQuotaHeadroomNeutralFactor, openAIQuotaHeadroomFactor(&Account{Extra: extra}, now))
+	require.Equal(t, openAIQuotaHeadroomNeutralFactor, openAIQuotaHeadroomFactor(verifiedCodexUsageForTest(&Account{Extra: extra}), now))
 }
 
 func TestOpenAISchedulerCanonicalResetScoresMatchSnapshot(t *testing.T) {
@@ -94,6 +94,9 @@ func TestOpenAISchedulerCanonicalResetScoresMatchSnapshot(t *testing.T) {
 	accounts := []*Account{
 		{ID: 1, Extra: map[string]any{"codex_5h_reset_at": now.Add(10 * time.Minute).Format(time.RFC3339)}},
 		{ID: 2, Extra: map[string]any{"codex_5h_reset_at": now.Add(4 * time.Hour).Format(time.RFC3339)}},
+	}
+	for index := range accounts {
+		verifiedCodexUsageForTest(accounts[index])
 	}
 	plan := scheduler.buildOpenAIAccountLoadPlan(context.Background(), OpenAIAccountScheduleRequest{}, accounts, nil)
 	scores := openAIPlanScores(plan)
@@ -112,6 +115,7 @@ func TestOpenAISchedulingResetWindowEnd(t *testing.T) {
 		"codex_usage_updated_at":       updated.Format(time.RFC3339),
 		"codex_5h_reset_after_seconds": 3600,
 	}}
+	verifiedCodexUsageForTest(account)
 	end, ok := openAISchedulingResetWindowEnd(account, now)
 	require.True(t, ok)
 	require.Equal(t, updated.Add(time.Hour), end)

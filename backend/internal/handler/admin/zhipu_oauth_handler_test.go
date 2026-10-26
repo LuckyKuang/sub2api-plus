@@ -28,6 +28,12 @@ var errZhipuStubRejected = errors.New("stub platform rejection")
 // need; account creation is exercised by the service suite.
 type zhipuHandlerStubClient struct{}
 
+var _ service.ZhipuOAuthClient = zhipuHandlerStubClient{}
+
+func (zhipuHandlerStubClient) IssueProjectAccessToken(context.Context, string, string, string, string, string, string) (*zcode.ProjectAccessToken, error) {
+	return &zcode.ProjectAccessToken{Token: "ephemeral-project-pat", ExpiresAt: time.Now().Add(time.Hour)}, nil
+}
+
 func (zhipuHandlerStubClient) StartFlow(context.Context, string, string, string) (*zcode.FlowInit, error) {
 	return &zcode.FlowInit{
 		FlowID:          "flow-1",
@@ -50,11 +56,15 @@ func (zhipuHandlerStubClient) ExchangeZaiBusinessToken(context.Context, string, 
 }
 
 func (zhipuHandlerStubClient) ResolveIndividualCodingPlanKey(context.Context, string, string, string) (*zcode.CodingPlanCredential, error) {
-	return &zcode.CodingPlanCredential{APIKey: "ak.sk", OrganizationID: "org-1", ProjectID: "proj-1"}, nil
+	return &zcode.CodingPlanCredential{APIKey: "ephemeral-personal-pat", KeyID: "personal-key-id", ExpiresAt: time.Now().Add(time.Hour), OrganizationID: "org-1", ProjectID: "proj-1"}, nil
+}
+
+func (zhipuHandlerStubClient) IssueProjectToken(context.Context, string, string, string, string, string, string) (*zcode.CodingPlanCredential, error) {
+	return &zcode.CodingPlanCredential{APIKey: "test-pat"}, nil
 }
 
 func (zhipuHandlerStubClient) ResolveTeamPlanKey(context.Context, string, string, string, string, string) (*zcode.CodingPlanCredential, error) {
-	return &zcode.CodingPlanCredential{APIKey: "tak.tsk", OrganizationID: "org-t", ProjectID: "proj-t"}, nil
+	return &zcode.CodingPlanCredential{APIKey: "ephemeral-team-pat", KeyID: "team-key-id", ExpiresAt: time.Now().Add(time.Hour), OrganizationID: "org-t", ProjectID: "proj-t"}, nil
 }
 
 func zhipuOAuthTestRouter(t *testing.T) *gin.Engine {

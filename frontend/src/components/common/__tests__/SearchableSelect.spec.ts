@@ -1,4 +1,4 @@
-import { mount } from '@vue/test-utils'
+import { DOMWrapper, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 
@@ -13,6 +13,7 @@ vi.mock('vue-i18n', async () => {
 })
 
 const originalInnerWidth = window.innerWidth
+const originalInnerHeight = window.innerHeight
 let unmountWrapper: (() => void) | undefined
 
 const setViewportWidth = (width: number) => {
@@ -20,6 +21,10 @@ const setViewportWidth = (width: number) => {
     configurable: true,
     value: width,
   })
+}
+
+const setViewportHeight = (height: number) => {
+  Object.defineProperty(window, 'innerHeight', { configurable: true, value: height })
 }
 
 const mockTriggerRect = (left: number, width: number) => {
@@ -61,6 +66,7 @@ afterEach(() => {
   unmountWrapper = undefined
   document.body.innerHTML = ''
   setViewportWidth(originalInnerWidth)
+  setViewportHeight(originalInnerHeight)
   vi.useRealTimers()
   vi.restoreAllMocks()
 })
@@ -78,16 +84,16 @@ describe('Select dropdown viewport constraints', () => {
     expect(dropdown?.style.maxWidth).toBe('996px')
   })
 
-  it('shrinks the minimum width to fit near the right viewport edge', async () => {
+  it('aligns leftward near the right edge so compact controls keep readable menus', async () => {
     setViewportWidth(320)
     mockTriggerRect(220, 80)
 
     const dropdown = await openSelect()
 
     expect(dropdown).not.toBeNull()
-    expect(dropdown?.style.left).toBe('220px')
-    expect(dropdown?.style.minWidth).toBe('92px')
-    expect(dropdown?.style.maxWidth).toBe('92px')
+    expect(dropdown?.style.left).toBe('112px')
+    expect(dropdown?.style.minWidth).toBe('200px')
+    expect(dropdown?.style.maxWidth).toBe('200px')
   })
 
   it('clamps a trigger left of the viewport to the safe padding', async () => {
@@ -102,16 +108,123 @@ describe('Select dropdown viewport constraints', () => {
     expect(dropdown?.style.maxWidth).toBe('304px')
   })
 
-  it('clamps an offscreen-right trigger position to the viewport boundary', async () => {
+  it('keeps an offscreen-right trigger menu inside the viewport with readable options', async () => {
     setViewportWidth(320)
     mockTriggerRect(400, 80)
 
     const dropdown = await openSelect()
 
     expect(dropdown).not.toBeNull()
-    expect(dropdown?.style.left).toBe('312px')
-    expect(dropdown?.style.minWidth).toBe('0px')
-    expect(dropdown?.style.maxWidth).toBe('0px')
+    expect(dropdown?.style.left).toBe('112px')
+    expect(dropdown?.style.minWidth).toBe('200px')
+    expect(dropdown?.style.maxWidth).toBe('200px')
+  })
+
+  const mockVerticalLayout = () => {
+    let top = 131
+    let bottom = 171
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => ({
+      x: 200, y: top, top, right: 344, bottom, left: 200, width: 144, height: bottom - top,
+      toJSON: () => ({}),
+    }))
+    const chromeHeight = (panel: HTMLElement) => panel.querySelector('.select-search') ? 39 : 2
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      if (this.classList.contains('select-dropdown-portal')) {
+        const limit = Number.parseFloat(this.style.maxHeight)
+        return Math.min(320 + chromeHeight(this), Number.isFinite(limit) ? limit : Infinity)
+      }
+      if (this.classList.contains('select-options')) {
+        const panel = this.parentElement!
+        return Math.max(0, panel.offsetHeight - chromeHeight(panel))
+      }
+      return this.getAttribute('role') === 'option' ? 28 : 40
+    })
+    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains('select-options') ? 320 : this.offsetHeight
+    })
+    vi.spyOn(HTMLElement.prototype, 'offsetTop', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.getAttribute('role') === 'option'
+        ? 6 + Array.from(this.parentElement!.children).indexOf(this) * 28
+        : 0
+    })
+    return (nextTop: number, nextBottom: number) => { top = nextTop; bottom = nextBottom }
+  }
+
+  const mountLongSelect = async (searchable = true) => {
+    const wrapper = mount(Select, {
+      attachTo: document.body,
+      props: {
+        modelValue: 0,
+        searchable,
+        options: Array.from({ length: 11 }, (_, value) => ({ value, label: `Status ${value}` })),
+      },
+    })
+    unmountWrapper = () => wrapper.unmount()
+    await wrapper.get('.select-trigger').trigger('click')
+    await nextTick()
+    return wrapper
+  }
+
+  it.each([true, false])('contains all eleven options in a 480px viewport and reaches the last by keyboard (searchable=%s)', async (searchable) => {
+    setViewportWidth(1024)
+    setViewportHeight(480)
+    mockVerticalLayout()
+    const wrapper = await mountLongSelect(searchable)
+    const panel = document.querySelector<HTMLElement>('[role="listbox"]')!
+    const list = panel.querySelector<HTMLElement>('.select-options')!
+    expect(panel.style.top).toBe('175px')
+    expect(Number.parseFloat(panel.style.maxHeight)).toBe(297)
+    expect(Number.parseFloat(panel.style.top) + panel.offsetHeight).toBeLessThanOrEqual(472)
+    expect(panel.querySelectorAll('[role="option"]')).toHaveLength(11)
+    const search = panel.querySelector<HTMLInputElement>('.select-search-input')
+    expect(!!search).toBe(searchable)
+    if (search) expect(document.activeElement).toBe(search)
+    const keyboardTarget = search ? new DOMWrapper(search) : wrapper.get('.select-trigger')
+    await keyboardTarget.trigger('keydown', { key: 'ArrowUp' })
+    const last = list.querySelectorAll<HTMLElement>('[role="option"]')[10]!
+    expect(list.scrollTop).toBeGreaterThan(0)
+    expect(last.offsetTop + last.offsetHeight).toBeLessThanOrEqual(list.scrollTop + list.offsetHeight)
+    expect(last.classList).toContain('select-option-focused')
+    await keyboardTarget.trigger('keydown', { key: 'Enter' })
+    expect(wrapper.emitted('update:modelValue')).toEqual([[10]])
+    expect(document.activeElement).toBe(wrapper.get('.select-trigger').element)
+  })
+
+  it('uses the larger space above when neither side can fit the full searchable menu, even after it has shrunk', async () => {
+    setViewportHeight(480)
+    const moveTrigger = mockVerticalLayout()
+    moveTrigger(340, 380)
+    await mountLongSelect()
+    const panel = document.querySelector<HTMLElement>('[role="listbox"]')!
+    expect(panel.style.top).toBe('')
+    expect(panel.style.bottom).toBe('144px')
+    expect(Number.parseFloat(panel.style.maxHeight)).toBe(328)
+    expect(480 - Number.parseFloat(panel.style.bottom) - panel.offsetHeight).toBeGreaterThanOrEqual(8)
+    // Another measurement must not mistake the already constrained menu for its full height.
+    window.dispatchEvent(new Event('scroll'))
+    await nextTick(); await nextTick()
+    expect(panel.style.bottom).toBe('144px')
+    expect(panel.style.maxHeight).toBe('328px')
+  })
+
+  it('recomputes the viewport bounds on resize and the opening side when the trigger scrolls', async () => {
+    setViewportHeight(700)
+    const moveTrigger = mockVerticalLayout()
+    await mountLongSelect()
+    const panel = document.querySelector<HTMLElement>('[role="listbox"]')!
+    expect(panel.style.top).toBe('175px')
+    expect(panel.offsetHeight).toBe(359)
+    setViewportHeight(480)
+    window.dispatchEvent(new Event('resize'))
+    await nextTick(); await nextTick()
+    expect(panel.style.maxHeight).toBe('297px')
+    expect(Number.parseFloat(panel.style.top) + panel.offsetHeight).toBeLessThanOrEqual(472)
+    moveTrigger(340, 380)
+    window.dispatchEvent(new Event('scroll'))
+    await nextTick(); await nextTick()
+    expect(panel.style.top).toBe('')
+    expect(panel.style.bottom).toBe('144px')
+    expect(panel.style.maxHeight).toBe('328px')
   })
 })
 

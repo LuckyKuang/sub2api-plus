@@ -103,6 +103,20 @@ func (_u *ChannelMonitorRequestTemplateUpdate) SetExtraHeaders(v map[string]stri
 	return _u
 }
 
+// SetStreamProbe sets the "stream_probe" field.
+func (_u *ChannelMonitorRequestTemplateUpdate) SetStreamProbe(v bool) *ChannelMonitorRequestTemplateUpdate {
+	_u.mutation.SetStreamProbe(v)
+	return _u
+}
+
+// SetNillableStreamProbe sets the "stream_probe" field if the given value is not nil.
+func (_u *ChannelMonitorRequestTemplateUpdate) SetNillableStreamProbe(v *bool) *ChannelMonitorRequestTemplateUpdate {
+	if v != nil {
+		_u.SetStreamProbe(*v)
+	}
+	return _u
+}
+
 // SetBodyOverrideMode sets the "body_override_mode" field.
 func (_u *ChannelMonitorRequestTemplateUpdate) SetBodyOverrideMode(v string) *ChannelMonitorRequestTemplateUpdate {
 	_u.mutation.SetBodyOverrideMode(v)
@@ -269,6 +283,9 @@ func (_u *ChannelMonitorRequestTemplateUpdate) sqlSave(ctx context.Context) (_no
 	if value, ok := _u.mutation.ExtraHeaders(); ok {
 		_spec.SetField(channelmonitorrequesttemplate.FieldExtraHeaders, field.TypeJSON, value)
 	}
+	if value, ok := _u.mutation.StreamProbe(); ok {
+		_spec.SetField(channelmonitorrequesttemplate.FieldStreamProbe, field.TypeBool, value)
+	}
 	if value, ok := _u.mutation.BodyOverrideMode(); ok {
 		_spec.SetField(channelmonitorrequesttemplate.FieldBodyOverrideMode, field.TypeString, value)
 	}
@@ -414,6 +431,20 @@ func (_u *ChannelMonitorRequestTemplateUpdateOne) ClearDescription() *ChannelMon
 // SetExtraHeaders sets the "extra_headers" field.
 func (_u *ChannelMonitorRequestTemplateUpdateOne) SetExtraHeaders(v map[string]string) *ChannelMonitorRequestTemplateUpdateOne {
 	_u.mutation.SetExtraHeaders(v)
+	return _u
+}
+
+// SetStreamProbe sets the "stream_probe" field.
+func (_u *ChannelMonitorRequestTemplateUpdateOne) SetStreamProbe(v bool) *ChannelMonitorRequestTemplateUpdateOne {
+	_u.mutation.SetStreamProbe(v)
+	return _u
+}
+
+// SetNillableStreamProbe sets the "stream_probe" field if the given value is not nil.
+func (_u *ChannelMonitorRequestTemplateUpdateOne) SetNillableStreamProbe(v *bool) *ChannelMonitorRequestTemplateUpdateOne {
+	if v != nil {
+		_u.SetStreamProbe(*v)
+	}
 	return _u
 }
 
@@ -612,6 +643,9 @@ func (_u *ChannelMonitorRequestTemplateUpdateOne) sqlSave(ctx context.Context) (
 	}
 	if value, ok := _u.mutation.ExtraHeaders(); ok {
 		_spec.SetField(channelmonitorrequesttemplate.FieldExtraHeaders, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.StreamProbe(); ok {
+		_spec.SetField(channelmonitorrequesttemplate.FieldStreamProbe, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.BodyOverrideMode(); ok {
 		_spec.SetField(channelmonitorrequesttemplate.FieldBodyOverrideMode, field.TypeString, value)

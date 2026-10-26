@@ -31,7 +31,7 @@
       />
 
       <!-- Date Input -->
-      <input
+      <DateTimePicker :aria-label="attr.name"
         v-else-if="attr.type === 'date'"
         v-model="localValues[attr.id]"
         type="date"
@@ -73,7 +73,7 @@
             @change="toggleMultiSelectOption(attr.id, opt.value)"
             class="h-4 w-4 rounded border-gray-300 text-primary-600"
           />
-          <span class="text-sm text-gray-700 dark:text-gray-300">{{ opt.label }}</span>
+          <span class="text-sm surface-muted">{{ opt.label }}</span>
         </label>
       </div>
 
@@ -92,6 +92,7 @@
 </template>
 
 <script setup lang="ts">
+import DateTimePicker from '@/components/common/DateTimePicker.vue'
 import { ref, watch, onMounted } from 'vue'
 import { adminAPI } from '@/api/admin'
 import type { UserAttributeDefinition, UserAttributeValuesMap } from '@/types'

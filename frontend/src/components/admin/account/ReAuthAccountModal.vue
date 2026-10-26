@@ -5,10 +5,19 @@
     width="normal"
     @close="handleClose"
   >
-    <div v-if="account" class="space-y-4">
+    <div v-if="account && isCNOAuthPlatform(account.platform)" class="space-y-4">
+      <CNOAuthPanel
+        :key="reauthGeneration"
+        :platform="account.platform"
+        :account-id="account.id"
+        :initial-region="String(account.credentials?.oauth_region || 'cn')"
+        @completed="handleNativeReauthorized"
+      />
+    </div>
+    <div v-else-if="account && hasLegacyOAuthFlow" class="space-y-4">
       <!-- Account Info -->
       <div
-        class="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-dark-600 dark:bg-dark-700"
+        class="rounded-lg border border-gray-200 surface-inset p-4 dark:border-dark-600"
       >
         <div class="flex items-center gap-3">
           <div
@@ -31,7 +40,7 @@
             <span class="block font-semibold text-gray-900 dark:text-white">{{
               account.name
             }}</span>
-            <span class="text-sm text-gray-500 dark:text-gray-400">
+            <span class="text-sm surface-muted">
               {{
                 isOpenAI
                   ? t('admin.accounts.openaiAccount')
@@ -59,7 +68,7 @@
               value="oauth"
               class="mr-2 text-primary-600 focus:ring-primary-500"
             />
-            <span class="text-sm text-gray-700 dark:text-gray-300">{{
+            <span class="text-sm surface-muted">{{
               t('admin.accounts.types.oauth')
             }}</span>
           </label>
@@ -70,7 +79,7 @@
               value="setup-token"
               class="mr-2 text-primary-600 focus:ring-primary-500"
             />
-            <span class="text-sm text-gray-700 dark:text-gray-300">{{
+            <span class="text-sm surface-muted">{{
               t('admin.accounts.setupTokenLongLived')
             }}</span>
           </label>
@@ -78,8 +87,8 @@
       </fieldset>
 
       <!-- Gemini OAuth Type Display (read-only) -->
-      <div v-if="isGemini" class="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-dark-600 dark:bg-dark-700">
-        <div class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+      <div v-if="isGemini" class="rounded-lg border border-gray-200 surface-inset p-4 dark:border-dark-600">
+        <div class="mb-2 text-sm font-medium surface-muted">
           {{ t('admin.accounts.oauth.gemini.oauthTypeLabel') }}
         </div>
         <div class="flex items-center gap-3">
@@ -107,7 +116,7 @@
                     : t('admin.accounts.gemini.oauthType.customTitle')
               }}
             </span>
-            <span class="text-xs text-gray-500 dark:text-gray-400">
+            <span class="text-xs surface-muted">
               {{
                 geminiOAuthType === 'google_one'
                   ? t('admin.accounts.gemini.oauthType.googleOneDesc')
@@ -152,7 +161,7 @@
     </div>
 
     <template #footer>
-      <div v-if="account" class="flex justify-between gap-3">
+      <div v-if="account && hasLegacyOAuthFlow" class="flex justify-between gap-3">
         <button type="button" class="btn btn-secondary" @click="handleClose">
           {{ t('common.cancel') }}
         </button>
@@ -195,7 +204,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onScopeDispose } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { adminAPI } from '@/api/admin'
@@ -212,6 +221,9 @@ import type { Account } from '@/types'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Icon from '@/components/icons/Icon.vue'
 import OAuthAuthorizationFlow from '@/components/account/OAuthAuthorizationFlow.vue'
+import CNOAuthPanel from '@/components/account/CNOAuthPanel.vue'
+import { isCNOAuthPlatform } from '@/api/admin/cnOAuth'
+import { accountOAuthOwnerSnapshot } from '@/utils/accountOAuthOwnerSnapshot'
 
 // Type for exposed OAuthAuthorizationFlow component
 // Note: defineExpose automatically unwraps refs, so we use the unwrapped types
@@ -255,6 +267,11 @@ const openaiDeviceCode = ref<{
 } | null>(null)
 const openaiDeviceCodePolling = ref(false)
 let openaiDeviceCodeGeneration = 0
+const reauthGeneration = ref(0)
+const hasLegacyOAuthFlow = computed(() => ['openai', 'grok', 'anthropic', 'gemini', 'antigravity'].includes(props.account?.platform || ''))
+const captureOwner = () => ({ generation: reauthGeneration.value, account: props.account, expectedOwner: props.account?.oauth_credential_owner || '' })
+type ReauthOwner = ReturnType<typeof captureOwner>
+const ownsFlow = (owner: ReauthOwner) => props.show && owner.account !== null && owner.generation === reauthGeneration.value
 
 // State
 const addMethod = ref<AddMethod>('oauth')
@@ -277,6 +294,7 @@ const grokInitialInputMethod = computed<AuthInputMethod>(() => {
   if (!isGrok.value) return 'manual'
   const creds = (props.account?.credentials || {}) as Record<string, unknown>
   const hasRT =
+    props.account?.credentials_status?.has_refresh_token === true ||
     (typeof creds.refresh_token === 'string' && creds.refresh_token.trim() !== '') ||
     (typeof creds.has_refresh_token === 'boolean' && creds.has_refresh_token)
   if (hasRT) return 'refresh_token'
@@ -365,8 +383,10 @@ watch(
 
 // Methods
 const resetState = () => {
-  addMethod.value = 'oauth'
-  geminiOAuthType.value = 'code_assist'
+  reauthGeneration.value += 1
+  addMethod.value = isAnthropic.value && props.account?.type === 'setup-token' ? 'setup-token' : 'oauth'
+  const oauthType = props.account?.credentials?.oauth_type
+  geminiOAuthType.value = isGemini.value && (oauthType === 'google_one' || oauthType === 'ai_studio') ? oauthType : 'code_assist'
   openaiDeviceCodeGeneration += 1
   openaiDeviceCode.value = null
   openaiDeviceCodePolling.value = false
@@ -378,27 +398,49 @@ const resetState = () => {
   oauthFlowRef.value?.reset()
 }
 
+watch(
+  [() => props.show, () => accountOAuthOwnerSnapshot(props.account)],
+  resetState,
+  { flush: 'sync' },
+)
+onScopeDispose(resetState)
+
 const handleClose = () => {
-  openaiDeviceCodeGeneration += 1
-  openaiDeviceCode.value = null
-  openaiDeviceCodePolling.value = false
+  resetState()
   emit('close')
+}
+
+const handleNativeReauthorized = async (id: number) => {
+  const owner = captureOwner()
+  if (!ownsFlow(owner) || owner.account?.id !== id) return
+  try {
+    const updated = await adminAPI.accounts.getById(id)
+    if (!ownsFlow(owner)) return
+    appStore.showSuccess(t('admin.accounts.reAuthorizedSuccess'))
+    emit('reauthorized', updated)
+    handleClose()
+  } catch {
+    if (!ownsFlow(owner)) return
+    appStore.showError(t('admin.accounts.oauth.domestic.reload'))
+  }
 }
 
 const handleStartOpenAIDeviceCode = async () => {
   if (!props.account) return
+  const owner = captureOwner()
+  const accountID = props.account.id
   const generation = ++openaiDeviceCodeGeneration
   openaiDeviceCodePolling.value = false
   const started = await openaiOAuth.startDeviceCode(props.account.proxy_id)
-  if (!started || generation !== openaiDeviceCodeGeneration) return
+  if (!started || generation !== openaiDeviceCodeGeneration || !ownsFlow(owner)) return
   openaiDeviceCode.value = started
   openaiDeviceCodePolling.value = true
   const intervalMs = Math.max(1, started.interval_seconds || 5) * 1000
   const startedAt = Date.now()
   const timeoutMs = 15 * 60 * 1000
-  while (generation === openaiDeviceCodeGeneration) {
+  while (generation === openaiDeviceCodeGeneration && ownsFlow(owner)) {
     const result = await openaiOAuth.pollDeviceCode(started.session_id)
-    if (generation !== openaiDeviceCodeGeneration) return
+    if (generation !== openaiDeviceCodeGeneration || !ownsFlow(owner)) return
     if (!result) {
       openaiDeviceCodePolling.value = false
       return
@@ -417,15 +459,18 @@ const handleStartOpenAIDeviceCode = async () => {
     const credentials = openaiOAuth.buildCredentials(tokenInfo)
     const extra = openaiOAuth.buildExtraInfo(tokenInfo)
     try {
-      const updatedAccount = await adminAPI.accounts.applyOAuthCredentials(props.account.id, {
+      const updatedAccount = await adminAPI.accounts.applyOAuthCredentials(accountID, {
+        expected_owner: owner.expectedOwner,
         type: 'oauth',
         credentials,
         extra
       })
+      if (!ownsFlow(owner)) return
       appStore.showSuccess(t('admin.accounts.reAuthorizedSuccess'))
       emit('reauthorized', updatedAccount)
       handleClose()
     } catch (error: any) {
+      if (!ownsFlow(owner)) return
       openaiOAuth.error.value = error.response?.data?.detail || t('admin.accounts.oauth.authFailed')
       appStore.showError(openaiOAuth.error.value)
     }
@@ -454,6 +499,8 @@ const handleGenerateUrl = async () => {
 
 const handleExchangeCode = async () => {
   if (!props.account) return
+  const owner = captureOwner()
+  const accountID = props.account.id
 
   const authCode = oauthFlowRef.value?.authCode || ''
   if (!authCode.trim()) return
@@ -476,23 +523,26 @@ const handleExchangeCode = async () => {
       stateToUse,
       props.account.proxy_id
     )
-    if (!tokenInfo) return
+    if (!tokenInfo || !ownsFlow(owner)) return
 
     // Build credentials and extra info
     const credentials = oauthClient.buildCredentials(tokenInfo)
     const extra = oauthClient.buildExtraInfo(tokenInfo)
 
     try {
-      const updatedAccount = await adminAPI.accounts.applyOAuthCredentials(props.account.id, {
+      const updatedAccount = await adminAPI.accounts.applyOAuthCredentials(accountID, {
+        expected_owner: owner.expectedOwner,
         type: 'oauth',
         credentials,
         extra
       })
+      if (!ownsFlow(owner)) return
 
       appStore.showSuccess(t('admin.accounts.reAuthorizedSuccess'))
       emit('reauthorized', updatedAccount)
       handleClose()
     } catch (error: any) {
+      if (!ownsFlow(owner)) return
       oauthClient.error.value = error.response?.data?.detail || t('admin.accounts.oauth.authFailed')
       appStore.showError(oauthClient.error.value)
     }
@@ -575,22 +625,25 @@ const handleExchangeCode = async () => {
       state: stateToUse,
       proxyId: props.account.proxy_id
     })
-    if (!tokenInfo) return
+    if (!tokenInfo || !ownsFlow(owner)) return
 
     const credentials = grokOAuth.buildCredentials(tokenInfo)
     const extra = grokOAuth.buildExtraInfo(tokenInfo)
 
     try {
-      const updatedAccount = await adminAPI.accounts.applyOAuthCredentials(props.account.id, {
+      const updatedAccount = await adminAPI.accounts.applyOAuthCredentials(accountID, {
+        expected_owner: owner.expectedOwner,
         type: 'oauth',
         credentials,
         extra
       })
+      if (!ownsFlow(owner)) return
 
       appStore.showSuccess(t('admin.accounts.reAuthorizedSuccess'))
       emit('reauthorized', updatedAccount)
       handleClose()
     } catch (error: any) {
+      if (!ownsFlow(owner)) return
       grokOAuth.error.value = error.response?.data?.detail || t('admin.accounts.oauth.authFailed')
       appStore.showError(grokOAuth.error.value)
     }
@@ -618,6 +671,7 @@ const handleExchangeCode = async () => {
       const extra = claudeOAuth.buildExtraInfo(tokenInfo)
 
       const updatedAccount = await adminAPI.accounts.applyOAuthCredentials(props.account.id, {
+        expected_owner: owner.expectedOwner,
         type: addMethod.value as 'oauth' | 'setup-token',
         credentials: tokenInfo as unknown as Record<string, unknown>,
         extra
@@ -636,6 +690,7 @@ const handleExchangeCode = async () => {
 }
 
 const handleCookieAuth = async (sessionKey: string) => {
+  const owner = captureOwner()
   if (!props.account || isOpenAILike.value) return
 
   claudeOAuth.loading.value = true
@@ -657,6 +712,7 @@ const handleCookieAuth = async (sessionKey: string) => {
     const extra = claudeOAuth.buildExtraInfo(tokenInfo)
 
     const updatedAccount = await adminAPI.accounts.applyOAuthCredentials(props.account.id, {
+      expected_owner: owner.expectedOwner,
       type: addMethod.value as 'oauth' | 'setup-token',
       credentials: tokenInfo as unknown as Record<string, unknown>,
       extra
@@ -679,15 +735,17 @@ const applyGrokReauthTokenInfo = async (tokenInfo: {
   refresh_token?: string
   email?: string
   [key: string]: unknown
-}) => {
-  if (!props.account) return
+}, owner: ReauthOwner) => {
+  if (!ownsFlow(owner) || !owner.account) return
   const credentials = grokOAuth.buildCredentials(tokenInfo as any)
   const extra = grokOAuth.buildExtraInfo(tokenInfo as any)
-  const updatedAccount = await adminAPI.accounts.applyOAuthCredentials(props.account.id, {
+  const updatedAccount = await adminAPI.accounts.applyOAuthCredentials(owner.account.id, {
+    expected_owner: owner.expectedOwner,
     type: 'oauth',
     credentials,
     extra
   })
+  if (!ownsFlow(owner)) return
   appStore.showSuccess(t('admin.accounts.reAuthorizedSuccess'))
   emit('reauthorized', updatedAccount)
   handleClose()
@@ -696,6 +754,8 @@ const applyGrokReauthTokenInfo = async (tokenInfo: {
 /** Re-auth the existing account with one refresh token. */
 const handleValidateRefreshToken = async (refreshTokenInput: string) => {
   if (!props.account) return
+  const owner = captureOwner()
+  const accountID = props.account.id
   if (isGrok.value) {
     await handleGrokValidateRefreshToken(refreshTokenInput)
     return
@@ -712,17 +772,20 @@ const handleValidateRefreshToken = async (refreshTokenInput: string) => {
     openaiOAuth.error.value = ''
     try {
       const tokenInfo = await openaiOAuth.validateRefreshToken(refreshToken, props.account.proxy_id)
-      if (!tokenInfo) return
+      if (!tokenInfo || !ownsFlow(owner)) return
 
-      const updatedAccount = await adminAPI.accounts.applyOAuthCredentials(props.account.id, {
+      const updatedAccount = await adminAPI.accounts.applyOAuthCredentials(accountID, {
+        expected_owner: owner.expectedOwner,
         type: 'oauth',
         credentials: openaiOAuth.buildCredentials(tokenInfo),
         extra: openaiOAuth.buildExtraInfo(tokenInfo)
       })
+      if (!ownsFlow(owner)) return
       appStore.showSuccess(t('admin.accounts.reAuthorizedSuccess'))
       emit('reauthorized', updatedAccount)
       handleClose()
     } catch (error: any) {
+      if (!ownsFlow(owner)) return
       openaiOAuth.error.value =
         error.response?.data?.detail ||
         error.response?.data?.message ||
@@ -730,7 +793,7 @@ const handleValidateRefreshToken = async (refreshTokenInput: string) => {
         t('admin.accounts.oauth.authFailed')
       appStore.showError(openaiOAuth.error.value)
     } finally {
-      openaiOAuth.loading.value = false
+      if (ownsFlow(owner)) openaiOAuth.loading.value = false
     }
     return
   }
@@ -743,6 +806,7 @@ const handleValidateRefreshToken = async (refreshTokenInput: string) => {
     if (!tokenInfo) return
 
     const updatedAccount = await adminAPI.accounts.applyOAuthCredentials(props.account.id, {
+      expected_owner: owner.expectedOwner,
       type: 'oauth',
       credentials: antigravityOAuth.buildCredentials(tokenInfo, refreshToken)
     })
@@ -764,6 +828,7 @@ const handleValidateRefreshToken = async (refreshTokenInput: string) => {
 /** Re-auth with a single SSO cookie → Build OAuth (not batch create). */
 const handleGrokImportSSO = async (ssoInput: string) => {
   if (!props.account || !isGrok.value) return
+  const owner = captureOwner()
   const ssoToken = ssoInput
     .split('\n')
     .map((line) => line.trim())
@@ -774,22 +839,24 @@ const handleGrokImportSSO = async (ssoInput: string) => {
   grokOAuth.error.value = ''
   try {
     const tokenInfo = await grokOAuth.validateSSOToken(ssoToken, props.account.proxy_id)
-    if (!tokenInfo) return
-    await applyGrokReauthTokenInfo(tokenInfo)
+    if (!tokenInfo || !ownsFlow(owner)) return
+    await applyGrokReauthTokenInfo(tokenInfo, owner)
   } catch (error: any) {
+    if (!ownsFlow(owner)) return
     grokOAuth.error.value =
       error.response?.data?.detail ||
       error.message ||
       t('admin.accounts.oauth.grok.failedToValidateSSO', 'Failed to validate Grok SSO')
     appStore.showError(grokOAuth.error.value)
   } finally {
-    grokOAuth.loading.value = false
+    if (ownsFlow(owner)) grokOAuth.loading.value = false
   }
 }
 
 /** Re-auth with a single refresh token. */
 const handleGrokValidateRefreshToken = async (refreshTokenInput: string) => {
   if (!props.account || !isGrok.value) return
+  const owner = captureOwner()
   const refreshToken = refreshTokenInput
     .split('\n')
     .map((line) => line.trim())
@@ -803,16 +870,17 @@ const handleGrokValidateRefreshToken = async (refreshTokenInput: string) => {
   grokOAuth.error.value = ''
   try {
     const tokenInfo = await grokOAuth.validateRefreshToken(refreshToken, props.account.proxy_id)
-    if (!tokenInfo) return
-    await applyGrokReauthTokenInfo(tokenInfo)
+    if (!tokenInfo || !ownsFlow(owner)) return
+    await applyGrokReauthTokenInfo(tokenInfo, owner)
   } catch (error: any) {
+    if (!ownsFlow(owner)) return
     grokOAuth.error.value =
       error.response?.data?.detail ||
       error.message ||
       t('admin.accounts.oauth.grok.failedToValidateRT')
     appStore.showError(grokOAuth.error.value)
   } finally {
-    grokOAuth.loading.value = false
+    if (ownsFlow(owner)) grokOAuth.loading.value = false
   }
 }
 </script>

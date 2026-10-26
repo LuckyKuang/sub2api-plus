@@ -1,5 +1,5 @@
 <template>
-  <BaseDialog :show="show" :title="t('usage.errors.detail.title')" width="wide" @close="emit('update:show', false)">
+  <DetailContentHost :embedded="embedded" :show="show" :title="t('usage.errors.detail.title')" placement="right" @close="emit('update:show', false)">
     <!-- Loading -->
     <div v-if="loading" class="flex justify-center py-10">
       <svg class="h-7 w-7 animate-spin text-primary-500" fill="none" viewBox="0 0 24 24">
@@ -18,72 +18,74 @@
       <div class="grid grid-cols-2 gap-x-6 gap-y-3">
         <!-- Time -->
         <div>
-          <span class="font-medium text-gray-500 dark:text-dark-400">{{ t('usage.errors.time') }}</span>
+          <span class="font-medium surface-muted">{{ t('usage.errors.time') }}</span>
           <p class="mt-0.5 text-gray-900 dark:text-dark-100">{{ formatDateTime(detail.created_at) }}</p>
         </div>
         <!-- Model -->
         <div>
-          <span class="font-medium text-gray-500 dark:text-dark-400">{{ t('usage.errors.model') }}</span>
+          <span class="font-medium surface-muted">{{ t('usage.errors.model') }}</span>
           <p class="mt-0.5 text-gray-900 dark:text-dark-100">{{ detail.model || '-' }}</p>
         </div>
         <!-- Endpoint -->
         <div>
-          <span class="font-medium text-gray-500 dark:text-dark-400">{{ t('usage.errors.endpoint') }}</span>
+          <span class="font-medium surface-muted">{{ t('usage.errors.endpoint') }}</span>
           <p class="mt-0.5 text-gray-900 dark:text-dark-100">{{ detail.inbound_endpoint || '-' }}</p>
         </div>
         <!-- Status Code -->
         <div>
-          <span class="font-medium text-gray-500 dark:text-dark-400">{{ t('usage.errors.status') }}</span>
+          <span class="font-medium surface-muted">{{ t('usage.errors.status') }}</span>
           <p class="mt-0.5">
             <span class="badge" :class="statusClass(detail.status_code)">{{ detail.status_code || '-' }}</span>
           </p>
         </div>
         <!-- Category -->
         <div>
-          <span class="font-medium text-gray-500 dark:text-dark-400">{{ t('usage.errors.category') }}</span>
+          <span class="font-medium surface-muted">{{ t('usage.errors.category') }}</span>
           <p class="mt-0.5 text-gray-900 dark:text-dark-100">{{ t('usage.errors.categories.' + detail.category) }}</p>
         </div>
         <!-- Platform -->
         <div>
-          <span class="font-medium text-gray-500 dark:text-dark-400">{{ t('usage.errors.platform') }}</span>
+          <span class="font-medium surface-muted">{{ t('usage.errors.platform') }}</span>
           <p class="mt-0.5 text-gray-900 dark:text-dark-100">{{ detail.platform || '-' }}</p>
         </div>
         <!-- Async task correlation is safe because this detail is already owner-scoped. -->
         <div v-if="detail.async_task_id">
-          <span class="font-medium text-gray-500 dark:text-dark-400">{{ t('usage.errors.detail.asyncTaskId') }}</span>
+          <span class="font-medium surface-muted">{{ t('usage.errors.detail.asyncTaskId') }}</span>
           <p class="mt-0.5 break-all font-mono text-gray-900 dark:text-dark-100">{{ detail.async_task_id }}</p>
         </div>
         <!-- Upstream status code -->
         <div v-if="detail.upstream_status_code != null">
-          <span class="font-medium text-gray-500 dark:text-dark-400">{{ t('usage.errors.detail.upstreamStatus') }}</span>
+          <span class="font-medium surface-muted">{{ t('usage.errors.detail.upstreamStatus') }}</span>
           <p class="mt-0.5 text-gray-900 dark:text-dark-100">{{ detail.upstream_status_code }}</p>
         </div>
       </div>
 
       <!-- Message -->
       <div v-if="detail.message">
-        <span class="font-medium text-gray-500 dark:text-dark-400">{{ t('usage.errors.message') }}</span>
+        <span class="font-medium surface-muted">{{ t('usage.errors.message') }}</span>
         <p class="mt-0.5 text-gray-900 dark:text-dark-100 break-all">{{ detail.message }}</p>
       </div>
 
       <!-- Error Body -->
       <div v-if="detail.error_body">
-        <span class="font-medium text-gray-500 dark:text-dark-400">{{ t('usage.errors.detail.responseBody') }}</span>
-        <pre class="mt-1 overflow-auto max-h-[40vh] whitespace-pre-wrap break-all rounded-lg bg-gray-50 dark:bg-dark-900 border border-gray-200 dark:border-dark-700 p-3 text-xs text-gray-800 dark:text-dark-200">{{ detail.error_body }}</pre>
+        <span class="font-medium surface-muted">{{ t('usage.errors.detail.responseBody') }}</span>
+        <pre class="mt-1 overflow-auto max-h-[40vh] whitespace-pre-wrap break-all rounded-lg surface-inset border border-gray-200 dark:border-dark-700 p-3 text-xs text-gray-800 dark:text-dark-200">{{ detail.error_body }}</pre>
       </div>
     </div>
-  </BaseDialog>
+  </DetailContentHost>
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
-import BaseDialog from '@/components/common/BaseDialog.vue'
+import DetailContentHost from '@/components/common/DetailContentHost.vue'
+import { adminSupportContext } from '@/utils/adminSupportContext'
 import { getMyErrorDetail } from '@/api/usage'
 import { formatDateTime } from '@/utils/format'
 import type { UserErrorRequestDetail } from '@/types'
 
 const props = defineProps<{
+  embedded?: boolean
   show: boolean
   errorId: number | null
 }>()
@@ -97,30 +99,35 @@ const { t } = useI18n()
 const loading = ref(false)
 const loadError = ref(false)
 const detail = ref<UserErrorRequestDetail | null>(null)
+let generation = 0
+onBeforeUnmount(() => { generation++ })
 
 watch(
-  () => [props.show, props.errorId] as const,
+  () => [props.show, props.errorId, adminSupportContext.value?.userId] as const,
   ([show, id]) => {
+    generation++
     if (show && id != null) {
       fetchDetail(id)
     } else if (!show) {
       detail.value = null
       loadError.value = false
     }
-  }
+  }, { immediate: true }
 )
 
 async function fetchDetail(id: number) {
+  const seq = generation
   loading.value = true
   loadError.value = false
   detail.value = null
   try {
-    detail.value = await getMyErrorDetail(id)
+    const result = await getMyErrorDetail(id)
+    if (seq === generation) detail.value = result
   } catch (e) {
     console.error('[UserErrorDetailModal] Failed to load error detail:', e)
-    loadError.value = true
+    if (seq === generation) loadError.value = true
   } finally {
-    loading.value = false
+    if (seq === generation) loading.value = false
   }
 }
 

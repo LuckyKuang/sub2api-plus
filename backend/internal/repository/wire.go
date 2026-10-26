@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"time"
 
 	entsql "entgo.io/ent/dialect/sql"
 	"github.com/LuckyKuang/sub2api-plus/ent"
@@ -65,6 +66,8 @@ func ProvideSchedulerCache(rdb *redis.Client, cfg *config.Config) service.Schedu
 
 // ProviderSet is the Wire provider set for all repositories
 var ProviderSet = wire.NewSet(
+	NewZhipuOffPeakRepository,
+	NewProviderFilesRepository,
 	NewUserRepository,
 	NewClientDisconnectRiskRepository,
 	NewAPIKeyRepository,
@@ -182,7 +185,20 @@ var ProviderSet = wire.NewSet(
 	ProvideEnt,
 	ProvideSQLDB,
 	ProvideRedis,
+	ProvideOpenAISessionRouteStore,
 )
+
+// openAISessionRouteCacheTTL bounds how long a cached route may be served
+// without a PostgreSQL confirmation. PostgreSQL stays authoritative, so the TTL
+// is only an acceleration bound.
+const openAISessionRouteCacheTTL = time.Hour
+
+// ProvideOpenAISessionRouteStore creates the authoritative logical-session route
+// store: PostgreSQL holds the canonical owner and the CAS state, Redis serves
+// reads and carries the same generation.
+func ProvideOpenAISessionRouteStore(db *sql.DB, rdb *redis.Client) service.OpenAISessionRouteStore {
+	return NewOpenAISessionRouteRepository(db, rdb, openAISessionRouteCacheTTL)
+}
 
 // ProvideEnt 为依赖注入提供 Ent 客户端。
 //

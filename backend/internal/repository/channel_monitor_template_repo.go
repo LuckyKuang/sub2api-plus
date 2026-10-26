@@ -35,6 +35,7 @@ func (r *channelMonitorRequestTemplateRepository) Create(ctx context.Context, t 
 		SetAPIMode(defaultAPIModeRepo(t.APIMode)).
 		SetDescription(t.Description).
 		SetExtraHeaders(emptyHeadersIfNilRepo(t.ExtraHeaders)).
+		SetStreamProbe(t.StreamProbe).
 		SetBodyOverrideMode(defaultBodyModeRepo(t.BodyOverrideMode))
 	if t.BodyOverride != nil {
 		builder = builder.SetBodyOverride(t.BodyOverride)
@@ -67,6 +68,7 @@ func (r *channelMonitorRequestTemplateRepository) Update(ctx context.Context, t 
 		SetAPIMode(defaultAPIModeRepo(t.APIMode)).
 		SetDescription(t.Description).
 		SetExtraHeaders(emptyHeadersIfNilRepo(t.ExtraHeaders)).
+		SetStreamProbe(t.StreamProbe).
 		SetBodyOverrideMode(defaultBodyModeRepo(t.BodyOverrideMode))
 	if t.BodyOverride != nil {
 		updater = updater.SetBodyOverride(t.BodyOverride)
@@ -159,7 +161,11 @@ func (r *channelMonitorRequestTemplateRepository) applyToMonitorsWithClient(
 			channelmonitor.APIModeEQ(defaultAPIModeRepo(tpl.APIMode)),
 		).
 		SetAPIMode(defaultAPIModeRepo(tpl.APIMode)).
+		SetStreamProbe(tpl.StreamProbe).
 		SetBodyOverrideMode(defaultBodyModeRepo(tpl.BodyOverrideMode))
+	if tpl.StreamProbe {
+		updater = updater.Where(channelmonitor.CheckModeNEQ(service.MonitorCheckModeQuota))
+	}
 	if tpl.BodyOverride != nil {
 		updater = updater.SetBodyOverride(tpl.BodyOverride)
 	} else {
@@ -192,8 +198,9 @@ func (r *channelMonitorRequestTemplateRepository) applyToMonitorsWithClient(
 		  AND id = ANY($4)
 		  AND provider = $5
 		  AND api_mode = $6
+		  AND ($7 = false OR check_mode <> 'quota')
 	`, string(templateHeadersJSON), service.ChannelMonitorDuplicateOperationIDMetadataKey,
-		id, pq.Array(monitorIDs), string(tpl.Provider), defaultAPIModeRepo(tpl.APIMode))
+		id, pq.Array(monitorIDs), string(tpl.Provider), defaultAPIModeRepo(tpl.APIMode), tpl.StreamProbe)
 	if err != nil {
 		return 0, fmt.Errorf("apply template headers to monitors: %w", err)
 	}
@@ -259,6 +266,7 @@ func entToServiceTemplate(row *dbent.ChannelMonitorRequestTemplate) *service.Cha
 		Description:      row.Description,
 		ExtraHeaders:     headers,
 		BodyOverrideMode: row.BodyOverrideMode,
+		StreamProbe:      row.StreamProbe,
 		BodyOverride:     row.BodyOverride,
 		CreatedAt:        row.CreatedAt,
 		UpdatedAt:        row.UpdatedAt,

@@ -170,6 +170,9 @@ security:
       - "api.deepseek.com"
       - "agent.minimax.cn"
       - "agent.minimax.io"
+      - "agent.minimaxi.com"
+      - "www.minimaxi.com"
+      - "platform.minimax.io"
       - "api.moonshot.ai"
       - "api.moonshot.cn"
       - "open.bigmodel.cn"
@@ -353,6 +356,9 @@ gateway:
   live:
     max_session_duration_seconds: 3600
   # OpenAI Responses WebSocket 配置（默认开启，可按需回滚到 HTTP）
+  # 出站设置中的 openai_codex_ws_enabled（默认 true）仅在这些启动限制内授权 WS。
+  # openai_codex_http_ws_enabled（默认 false）独立控制 HTTP 流式 Responses 优先走 WS。
+  # 两者存储于数据库设置，无新增环境变量；详见 docs/protocols/OPENAI_RESPONSES.md。
   openai_ws:
     # 新版 WS mode 路由（默认关闭）。关闭时忽略账号级 WS mode（包括 http_bridge），保持 legacy ctx_pool 行为。
     # 环境变量：GATEWAY_OPENAI_WS_MODE_ROUTER_V2_ENABLED=true
@@ -1318,6 +1324,17 @@ update:
   # Leave empty for direct connection (recommended for overseas servers)
   # 留空表示直连（适用于海外服务器）
   proxy_url: ""
+
+# =============================================================================
+# ZCode off-peak durable ticket recovery
+# =============================================================================
+zhipu_offpeak:
+  # Without this opt-in, tickets remain process-local and are not restart-safe.
+  persistence_enabled: false
+  active_key_id: ""
+  # JSON mapping external key IDs to base64-encoded 32-byte keys. No keys here.
+  snapshot_keys: ""
+  snapshot_retention_hours: 168
 
 # =============================================================================
 # Image Storage (异步图片任务结果对象存储)

@@ -127,7 +127,8 @@ func (s *AccountTestService) ProbeOpenAIAPIKeyResponsesSupport(ctx context.Conte
 		logger.LegacyPrintf("service.openai_probe", "probe_load_account_failed: account_id=%d err=%v", accountID, err)
 		return
 	}
-	if account.Type != AccountTypeAPIKey {
+	account = snapshotRequestCredentialAccount(account)
+	if account == nil || account.Type != AccountTypeAPIKey {
 		return
 	}
 	if account.RoutesProtocolByInbound() {
@@ -137,13 +138,13 @@ func (s *AccountTestService) ProbeOpenAIAPIKeyResponsesSupport(ctx context.Conte
 		// Responses 端点，落标 force_responses；其余协议显式重置为 auto，避免
 		// 切换后残留强制模式。
 		if account.UsesNativeCNResponses() {
-			_ = s.accountRepo.UpdateExtra(ctx, account.ID, map[string]any{
+			s.persistResponsesProbeExtra(ctx, account, map[string]any{
 				openai_compat.ExtraKeyResponsesMode:      string(openai_compat.ResponsesSupportModeForceResponses),
 				openai_compat.ExtraKeyResponsesSupported: true,
 			})
 			return
 		}
-		_ = s.accountRepo.UpdateExtra(ctx, account.ID, map[string]any{
+		s.persistResponsesProbeExtra(ctx, account, map[string]any{
 			openai_compat.ExtraKeyResponsesMode:      string(openai_compat.ResponsesSupportModeAuto),
 			openai_compat.ExtraKeyResponsesSupported: false,
 		})
@@ -172,8 +173,10 @@ func (s *AccountTestService) ProbeOpenAIAPIKeyResponsesSupport(ctx context.Conte
 	probeURL := buildOpenAIResponsesURL(normalizedBaseURL)
 	probeModel := selectResponsesProbeModel(account)
 
-	probeCtx, cancel := context.WithTimeout(ctx, openaiResponsesProbeTimeout)
+	probeCtx, cancel := context.WithTimeout(WithOutboundIdentityScope(ctx, nil), openaiResponsesProbeTimeout)
 	defer cancel()
+	recordRequestCredentialOwner(probeCtx, account, apiKey)
+	probeCtx = withRequestCredentialOwner(probeCtx, account, apiKey)
 
 	req, err := http.NewRequestWithContext(probeCtx, http.MethodPost, probeURL, bytes.NewReader(openaiResponsesProbePayload(probeModel)))
 	if err != nil {
@@ -185,14 +188,20 @@ func (s *AccountTestService) ProbeOpenAIAPIKeyResponsesSupport(ctx context.Conte
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Accept", "application/json")
 	account.applyOpenAIHeaderOverrides(req.Header)
-	s.applyOpenAIOutboundIdentity(probeCtx, account, req.Header, false)
+	s.applyOpenAIOutboundIdentity(probeCtx, account, req.Header, true)
 
-	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
+	proxyURL, err := requestCredentialOwnerProxyURL(probeCtx, account)
+	if err != nil {
+		logger.LegacyPrintf("service.openai_probe", "probe_invalid_proxy: account_id=%d err=%v", accountID, err)
+		return
 	}
 
-	resp, err := s.httpUpstream.DoWithTLS(prepareAccountOutboundRequest(req, account), proxyURL, account.ID, account.Concurrency, s.tlsFPProfileService.ResolveTLSProfile(account))
+	req = prepareAccountOutboundRequest(req, account)
+	if err := OutboundPreparationError(req.Context()); err != nil {
+		logger.LegacyPrintf("service.openai_probe", "probe_prepare_request_failed: account_id=%d err=%v", accountID, err)
+		return
+	}
+	resp, err := s.httpUpstream.DoWithTLS(req, proxyURL, account.ID, account.Concurrency, s.tlsFPProfileService.ResolveTLSProfile(account))
 	if err != nil {
 		// 网络层失败：不写标记，保持 unknown，下次重试或由网关 fallback 处理
 		logger.LegacyPrintf("service.openai_probe", "probe_request_failed: account_id=%d url=%s err=%v", accountID, probeURL, err)
@@ -225,10 +234,9 @@ func (s *AccountTestService) ProbeOpenAIAPIKeyResponsesSupport(ctx context.Conte
 
 	supported := decideResponsesProbeSupport(resp.StatusCode, bodyBytes)
 
-	if err := s.accountRepo.UpdateExtra(ctx, accountID, map[string]any{
+	if !s.persistResponsesProbeExtra(ctx, account, map[string]any{
 		openai_compat.ExtraKeyResponsesSupported: supported,
-	}); err != nil {
-		logger.LegacyPrintf("service.openai_probe", "probe_persist_failed: account_id=%d supported=%v err=%v", accountID, supported, err)
+	}) {
 		return
 	}
 
@@ -249,6 +257,25 @@ func (s *AccountTestService) ProbeOpenAIAPIKeyResponsesSupport(ctx context.Conte
 		"probe_done: account_id=%d base_url=%s probe_model=%s status=%d supported=%v",
 		accountID, normalizedBaseURL, probeModel, resp.StatusCode, supported,
 	)
+}
+
+// Probe results describe the grant that supplied the request. A late response
+// must not change routing after credentials, protocol, or proxy are replaced.
+func (s *AccountTestService) persistResponsesProbeExtra(ctx context.Context, account *Account, extra map[string]any) bool {
+	repository, ok := s.accountRepo.(CredentialStateMutationRepository)
+	if !ok {
+		logger.LegacyPrintf("service.openai_probe", "probe_persist_unavailable: account_id=%d", account.ID)
+		return false
+	}
+	matched, err := repository.ApplyCredentialStateMutation(ctx, account, CredentialStateMutation{Extra: extra})
+	if err != nil {
+		logger.LegacyPrintf("service.openai_probe", "probe_persist_failed: account_id=%d err=%v", account.ID, err)
+		return false
+	}
+	if !matched {
+		logger.LegacyPrintf("service.openai_probe", "probe_persist_grant_changed: account_id=%d", account.ID)
+	}
+	return matched
 }
 
 // responsesProbeVerdictIsConclusive 判断本次探测响应是否足以对「上游是否支持带工具的

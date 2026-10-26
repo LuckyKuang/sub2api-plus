@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -37,6 +38,45 @@ type grokCredentialHandlerRepo struct {
 	setErrorErr    error
 	setTempErr     error
 	missingOnGet   map[int64]bool
+}
+
+func (r *grokCredentialHandlerRepo) ApplyCredentialStateMutation(_ context.Context, owner *service.Account, mutation service.CredentialStateMutation) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i := range r.accounts {
+		account := &r.accounts[i]
+		if owner == nil || account.ID != owner.ID || account.Platform != owner.Platform || account.Type != owner.Type ||
+			!reflect.DeepEqual(account.Credentials, owner.Credentials) || !reflect.DeepEqual(account.ProxyID, owner.ProxyID) {
+			continue
+		}
+		if mutation.TempUnschedulableUntil != nil {
+			r.setTempIDs = append(r.setTempIDs, owner.ID)
+			if r.setTempErr != nil {
+				return false, r.setTempErr
+			}
+			value := *mutation.TempUnschedulableUntil
+			account.TempUnschedulableUntil = &value
+			account.TempUnschedulableReason = mutation.TempUnschedulableReason
+		}
+		if mutation.RateLimitUntil != nil {
+			r.rateLimitIDs = append(r.rateLimitIDs, owner.ID)
+			if !mutation.ExtendRateLimitOnly || account.RateLimitResetAt == nil || mutation.RateLimitUntil.After(*account.RateLimitResetAt) {
+				now, until := time.Now(), *mutation.RateLimitUntil
+				account.RateLimitedAt, account.RateLimitResetAt = &now, &until
+			}
+		}
+		if len(mutation.Extra) > 0 {
+			r.updateExtraIDs = append(r.updateExtraIDs, owner.ID)
+			if account.Extra == nil {
+				account.Extra = map[string]any{}
+			}
+			for key, value := range mutation.Extra {
+				account.Extra[key] = value
+			}
+		}
+		return true, nil
+	}
+	return false, nil
 }
 
 func (r *grokCredentialHandlerRepo) ListSchedulableByPlatform(_ context.Context, platform string) ([]service.Account, error) {
@@ -928,7 +968,7 @@ func newGrokCredentialFailoverHandler(t *testing.T, mode string) (*OpenAIGateway
 		repo, nil, nil, nil, nil, nil, nil, cfg, nil, nil,
 		service.NewBillingService(cfg, nil), nil, billingCache, upstream,
 		&service.DeferredService{}, nil, provider, nil, nil, nil, nil, nil,
-	)
+		nil)
 	cache := &concurrencyCacheMock{
 		acquireUserSlotFn:    func(context.Context, int64, int, string) (bool, error) { return true, nil },
 		acquireAccountSlotFn: func(context.Context, int64, int, string) (bool, error) { return true, nil },

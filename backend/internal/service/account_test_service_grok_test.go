@@ -26,8 +26,27 @@ import (
 
 type grokAccountTestRateLimitRepo struct {
 	*mockAccountRepoForGemini
-	rateLimitedCalls int
-	resetAt          time.Time
+	rateLimitedCalls       int
+	atomicOutcomeCalls     int
+	legacyRateLimitedCalls int
+	resetAt                time.Time
+}
+
+func (r *grokAccountTestRateLimitRepo) ApplyCredentialStateMutation(ctx context.Context, owner *Account, mutation CredentialStateMutation) (bool, error) {
+	if owner == nil || !sameRequestCredentialGrant(owner, r.accountsByID[owner.ID]) {
+		return false, nil
+	}
+	if mutation.Extra != nil {
+		if err := r.UpdateExtra(ctx, owner.ID, mutation.Extra); err != nil {
+			return false, err
+		}
+	}
+	if mutation.RateLimitUntil != nil {
+		if err := r.SetRateLimited(ctx, owner.ID, *mutation.RateLimitUntil); err != nil {
+			return false, err
+		}
+	}
+	return true, nil
 }
 
 func TestObserveGrokTestResponseClassifiesBodyOnlyQuotaErrors(t *testing.T) {
@@ -84,10 +103,20 @@ func TestObserveGrokTestResponseKeepsEntitlement403Cooldown(t *testing.T) {
 	require.Greater(t, repo.lastTempUnschedUntil, before.Add(29*time.Minute))
 }
 
-func (r *grokAccountTestRateLimitRepo) SetRateLimited(_ context.Context, _ int64, resetAt time.Time) error {
-	r.rateLimitedCalls++
-	r.resetAt = resetAt
+func (r *grokAccountTestRateLimitRepo) SetRateLimited(_ context.Context, _ int64, _ time.Time) error {
+	r.legacyRateLimitedCalls++
 	return nil
+}
+
+func (r *grokAccountTestRateLimitRepo) ApplyGrokRequestOutcomeIfUnchanged(ctx context.Context, owner *Account, outcome GrokRequestOutcome) (GrokRequestOutcomeResult, error) {
+	r.atomicOutcomeCalls++
+	writer := &grokOutcomeOwnerRepo{current: r.accountsByID[owner.ID]}
+	result, err := writer.ApplyGrokRequestOutcomeIfUnchanged(ctx, owner, outcome)
+	if err == nil && result.Applied && outcome.RateLimitResetAt != nil {
+		r.rateLimitedCalls++
+		r.resetAt = *outcome.RateLimitResetAt
+	}
+	return result, err
 }
 
 func TestAccountTestService_TestAccountConnection_GrokUsesXAIResponses(t *testing.T) {
@@ -227,6 +256,11 @@ func TestAccountTestService_Grok429PersistsRateLimitReset(t *testing.T) {
 
 	require.Error(t, err)
 	require.Equal(t, 1, repo.rateLimitedCalls)
+	require.Equal(t, 1, repo.atomicOutcomeCalls, "one diagnostic response must persist its quota and reset in one owner-conditional operation")
+	require.Zero(t, repo.legacyRateLimitedCalls, "diagnostics cannot bypass the credential-owner CAS through an ID-only rate-limit write")
+	require.NotNil(t, account.RateLimitedAt)
+	require.NotNil(t, account.RateLimitResetAt)
+	require.Equal(t, repo.resetAt, *account.RateLimitResetAt, "the observed reset must actually be saved on the credential-owning account")
 	require.WithinDuration(t, time.Now().Add(45*time.Second), repo.resetAt, time.Second)
 }
 
@@ -259,6 +293,11 @@ func TestAccountTestService_Grok429WithoutQuotaHeadersUsesFallback(t *testing.T)
 
 	require.Error(t, err)
 	require.Equal(t, 1, repo.rateLimitedCalls)
+	require.Equal(t, 1, repo.atomicOutcomeCalls, "one diagnostic response must persist its quota and reset in one owner-conditional operation")
+	require.Zero(t, repo.legacyRateLimitedCalls, "diagnostics cannot bypass the credential-owner CAS through an ID-only rate-limit write")
+	require.NotNil(t, account.RateLimitedAt)
+	require.NotNil(t, account.RateLimitResetAt)
+	require.Equal(t, repo.resetAt, *account.RateLimitResetAt, "the observed reset must actually be saved on the credential-owning account")
 	require.WithinDuration(t, before.Add(grokRateLimitFallbackCooldown), repo.resetAt, time.Second)
 }
 
@@ -599,6 +638,9 @@ func TestOutboundIdentityGrokRealtimeProbeAndForward(t *testing.T) {
 			dialer := &grokRealtimeTestDialer{}
 			svc := &OpenAIGatewayService{cfg: &config.Config{}, openaiWSPassthroughDialer: dialer}
 			account := &Account{ID: 42, Platform: PlatformGrok, Type: accountType, Credentials: map[string]any{
+				// Direct realtime calls still require evidence that the supplied
+				// bearer belongs to this account's captured credential grant.
+				"access_token": "test-token", "api_key": "test-token",
 				outboundIdentityCredential:   OutboundIdentitySelection{Preset: "grok", Version: "3.9.1"},
 				credKeyHeaderOverrideEnabled: true, credKeyHeaderOverrides: map[string]any{"user-agent": "untrusted-override", "x-grok-client-version": "9.9.9"},
 			}}
@@ -611,6 +653,8 @@ func TestOutboundIdentityGrokRealtimeProbeAndForward(t *testing.T) {
 			require.Equal(t, xai.CLIUserAgent("3.9.1"), dialer.lastHeaders.Get("User-Agent"))
 			require.Equal(t, "3.9.1", dialer.lastHeaders.Get("X-Grok-Client-Version"))
 			require.Equal(t, "Bearer test-token", dialer.lastHeaders.Get("Authorization"))
+			require.Empty(t, dialer.lastHeaders.Get("X-Grok-Client-Mode"), "public realtime never receives the CLI proxy mode")
+			require.Empty(t, dialer.lastHeaders.Get("X-Grok-Token-Auth"))
 		})
 	}
 }

@@ -10,15 +10,25 @@ import (
 )
 
 const (
-	ChannelMonitorV2OtherModel      = "__other__"
-	ChannelMonitorV2TaxonomyVersion = 1
+	ChannelMonitorV2OtherModel           = "__other__"
+	ChannelMonitorV2TaxonomyVersion      = 1
+	ChannelMonitorV2DisplayAll           = "all"
+	ChannelMonitorV2DisplaySelected      = "selected"
+	ChannelMonitorV2ModelCatalogLimit    = 10000
+	channelMonitorV2MaxPlatforms         = 128
+	channelMonitorV2MaxModelsPerList     = 4096
+	channelMonitorV2MaxModelBytes        = 1024
+	channelMonitorV2MaxPlatformBytes     = 64
+	channelMonitorV2MaxModelDeclarations = 32768
 )
 
 var (
-	ErrChannelMonitorV2InvalidRange   = errors.New("invalid channel monitor v2 range")
-	ErrChannelMonitorV2InvalidGroupBy = errors.New("invalid channel monitor v2 group_by")
-	ErrChannelMonitorV2InvalidConfig  = errors.New("invalid channel monitor v2 config")
-	ErrChannelMonitorV2ConfigConflict = errors.New("channel monitor v2 config was modified")
+	ErrChannelMonitorV2InvalidRange    = errors.New("invalid channel monitor v2 range")
+	ErrChannelMonitorV2InvalidGroupBy  = errors.New("invalid channel monitor v2 group_by")
+	ErrChannelMonitorV2InvalidConfig   = errors.New("invalid channel monitor v2 config")
+	ErrChannelMonitorV2ConfigConflict  = errors.New("channel monitor v2 config was modified")
+	ErrChannelMonitorV2InvalidFilter   = errors.New("invalid channel monitor v2 filter")
+	ErrChannelMonitorV2CatalogTooLarge = errors.New("channel monitor v2 model catalog exceeds 10000 candidates; narrow the platform, group or range")
 )
 
 type ChannelMonitorV2GroupBy string
@@ -31,9 +41,39 @@ const (
 )
 
 type ChannelMonitorV2PlatformConfig struct {
-	Platform string   `json:"platform"`
-	Enabled  bool     `json:"enabled"`
-	Models   []string `json:"models"`
+	Platform         string   `json:"platform"`
+	Enabled          bool     `json:"enabled"`
+	Models           []string `json:"models"`
+	ModelDisplayMode string   `json:"model_display_mode"`
+	ExcludedModels   []string `json:"excluded_models"`
+}
+
+// EffectiveModelDisplayMode preserves configurations written before an explicit
+// display mode existed. Selected mode may have no named models (all go to Other).
+func (p ChannelMonitorV2PlatformConfig) EffectiveModelDisplayMode() string {
+	if p.ModelDisplayMode != "" {
+		return p.ModelDisplayMode
+	}
+	if len(p.Models) > 0 {
+		return ChannelMonitorV2DisplaySelected
+	}
+	return ChannelMonitorV2DisplayAll
+}
+
+type ChannelMonitorV2ModelCatalogItem struct {
+	Platform        string   `json:"platform"`
+	Model           string   `json:"model"`
+	SuccessRequests int64    `json:"success_requests"`
+	ErrorRequests   int64    `json:"error_requests"`
+	Sources         []string `json:"sources"`
+}
+
+type ChannelMonitorV2ModelCatalog struct {
+	ConfigVersion int                                `json:"config_version"`
+	Range         string                             `json:"range"`
+	Start         time.Time                          `json:"start"`
+	End           time.Time                          `json:"end"`
+	Items         []ChannelMonitorV2ModelCatalogItem `json:"items"`
 }
 
 type ChannelMonitorV2Config struct {
@@ -298,6 +338,9 @@ type ChannelMonitorV2List[T any] struct {
 type ChannelMonitorV2Repository interface {
 	GetConfig(ctx context.Context) (*ChannelMonitorV2Config, error)
 	UpdateConfig(ctx context.Context, config ChannelMonitorV2Config, expectedVersion int) (*ChannelMonitorV2Config, error)
+	// GetModelCatalog returns real requested-model names, including excluded models,
+	// independently of display folding and platform/config enablement.
+	GetModelCatalog(ctx context.Context, filter ChannelMonitorV2Filter, config ChannelMonitorV2Config) (*ChannelMonitorV2ModelCatalog, error)
 	GetDimensions(ctx context.Context, filter ChannelMonitorV2Filter, config ChannelMonitorV2Config) (*ChannelMonitorV2Dimensions, error)
 	GetSnapshot(ctx context.Context, filter ChannelMonitorV2Filter, config ChannelMonitorV2Config, includeAdmin bool) (*ChannelMonitorV2Snapshot, error)
 	GetModels(ctx context.Context, filter ChannelMonitorV2Filter, config ChannelMonitorV2Config, includeAdmin bool) (*ChannelMonitorV2List[ChannelMonitorV2ModelRow], error)
@@ -421,6 +464,14 @@ func (s *ChannelMonitorV2Service) GetConfig(ctx context.Context) (*ChannelMonito
 	return s.repo.GetConfig(ctx)
 }
 
+func (s *ChannelMonitorV2Service) ModelCatalog(ctx context.Context, filter ChannelMonitorV2Filter) (*ChannelMonitorV2ModelCatalog, error) {
+	cfg, err := s.repo.GetConfig(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return s.repo.GetModelCatalog(ctx, filter, *cfg)
+}
+
 func (s *ChannelMonitorV2Service) getEnabledConfig(ctx context.Context) (*ChannelMonitorV2Config, error) {
 	cfg, err := s.repo.GetConfig(ctx)
 	if err != nil {
@@ -441,6 +492,19 @@ func (s *ChannelMonitorV2Service) UpdateConfig(ctx context.Context, cfg ChannelM
 }
 
 func (s *ChannelMonitorV2Service) ParseFilter(rangeValue string, platforms, models []string, groupIDs []int64) (ChannelMonitorV2Filter, error) {
+	if len(platforms) > channelMonitorV2MaxPlatforms || len(models) > channelMonitorV2MaxModelsPerList || len(groupIDs) > channelMonitorV2MaxModelsPerList {
+		return ChannelMonitorV2Filter{}, fmt.Errorf("%w: too many dimensions", ErrChannelMonitorV2InvalidFilter)
+	}
+	for _, dimension := range []struct {
+		values   []string
+		maxBytes int
+	}{{platforms, channelMonitorV2MaxPlatformBytes}, {models, channelMonitorV2MaxModelBytes}} {
+		for _, value := range dimension.values {
+			if len(strings.TrimSpace(value)) > dimension.maxBytes {
+				return ChannelMonitorV2Filter{}, fmt.Errorf("%w: dimension name too long", ErrChannelMonitorV2InvalidFilter)
+			}
+		}
+	}
 	now := s.now().UTC()
 	var window, bucket time.Duration
 	switch strings.TrimSpace(rangeValue) {
@@ -627,6 +691,8 @@ func redactChannelMonitorV2PublicConfig(cfg *ChannelMonitorV2Config) {
 	cfg.UpdatedBy = nil
 	for i := range cfg.Platforms {
 		cfg.Platforms[i].Models = nil
+		cfg.Platforms[i].ExcludedModels = nil
+		cfg.Platforms[i].ModelDisplayMode = ""
 	}
 }
 
@@ -748,6 +814,9 @@ func channelMonitorV2TopUsersWithSelf(items []ChannelMonitorV2UserRow, selfIndex
 }
 
 func normalizeChannelMonitorV2Config(cfg *ChannelMonitorV2Config) error {
+	if len(cfg.Platforms) > channelMonitorV2MaxPlatforms || len(cfg.GroupIDs) > channelMonitorV2MaxModelsPerList {
+		return fmt.Errorf("%w: too many platforms or groups", ErrChannelMonitorV2InvalidConfig)
+	}
 	if cfg.RefreshIntervalSeconds == 0 {
 		cfg.RefreshIntervalSeconds = 300
 	}
@@ -762,17 +831,37 @@ func normalizeChannelMonitorV2Config(cfg *ChannelMonitorV2Config) error {
 	cfg.IgnoredErrorCategories = normalizeChannelMonitorV2IgnoredCategories(cfg.IgnoredErrorCategories)
 	cfg.HealthThresholds = NormalizeChannelMonitorV2HealthThresholds(cfg.HealthThresholds)
 	seen := make(map[string]struct{}, len(cfg.Platforms))
+	declarations := 0
 	for i := range cfg.Platforms {
 		p := &cfg.Platforms[i]
 		p.Platform = strings.ToLower(strings.TrimSpace(p.Platform))
 		if p.Platform == "" {
 			return fmt.Errorf("%w: empty platform", ErrChannelMonitorV2InvalidConfig)
 		}
+		if len(p.Platform) > channelMonitorV2MaxPlatformBytes {
+			return fmt.Errorf("%w: platform name exceeds 64 bytes", ErrChannelMonitorV2InvalidConfig)
+		}
 		if _, ok := seen[p.Platform]; ok {
 			return fmt.Errorf("%w: duplicate platform %s", ErrChannelMonitorV2InvalidConfig, p.Platform)
 		}
 		seen[p.Platform] = struct{}{}
+		declarations += len(p.Models) + len(p.ExcludedModels)
+		if len(p.Models) > channelMonitorV2MaxModelsPerList || len(p.ExcludedModels) > channelMonitorV2MaxModelsPerList || declarations > channelMonitorV2MaxModelDeclarations {
+			return fmt.Errorf("%w: model declaration limit exceeded", ErrChannelMonitorV2InvalidConfig)
+		}
+		for _, models := range [][]string{p.Models, p.ExcludedModels} {
+			for _, model := range models {
+				if len(strings.TrimSpace(model)) > channelMonitorV2MaxModelBytes {
+					return fmt.Errorf("%w: model name exceeds 1024 bytes", ErrChannelMonitorV2InvalidConfig)
+				}
+			}
+		}
 		p.Models = normalizeStringSet(p.Models)
+		p.ExcludedModels = normalizeStringSet(p.ExcludedModels)
+		p.ModelDisplayMode = p.EffectiveModelDisplayMode()
+		if p.ModelDisplayMode != ChannelMonitorV2DisplayAll && p.ModelDisplayMode != ChannelMonitorV2DisplaySelected {
+			return fmt.Errorf("%w: model_display_mode must be all or selected", ErrChannelMonitorV2InvalidConfig)
+		}
 	}
 	sort.Slice(cfg.Platforms, func(i, j int) bool { return cfg.Platforms[i].Platform < cfg.Platforms[j].Platform })
 	return nil

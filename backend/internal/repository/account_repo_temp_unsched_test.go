@@ -42,9 +42,20 @@ func TestAccountRepository_ResetQuotaUsedAndClearRateLimitCooldown_NoRowsAffecte
 
 func TestAccountRepository_GrokCredentialConditionalMutationsAreEligibleAndAtomicallyPropagated(t *testing.T) {
 	proxyID := int64(77)
+	owner, err := service.CaptureOAuthCredentialOwner(&service.Account{
+		ID: 42, Platform: service.PlatformGrok, Type: service.AccountTypeOAuth,
+		Status: service.StatusActive, Schedulable: true,
+		Credentials: map[string]any{"access_token": "access", "refresh_token": "refresh", "_token_version": 123},
+		ProxyID:     &proxyID,
+		Proxy: &service.Proxy{ID: proxyID, Protocol: "http", Host: "captured.example", Port: 8080,
+			Username: "captured-user", Password: "captured-secret", Status: service.StatusActive},
+	})
+	require.NoError(t, err)
 	snapshot := service.GrokCredentialMutationSnapshot{
+		Owner:           owner,
 		CredentialsJSON: `{"access_token":"access","refresh_token":"refresh","_token_version":123}`,
 		ProxyID:         &proxyID,
+		Proxy:           &service.Proxy{ID: proxyID, Protocol: "http", Host: "route.invalid", Port: 8080, Status: service.StatusActive},
 	}
 
 	t.Run("permanent", func(t *testing.T) {
@@ -57,20 +68,29 @@ func TestAccountRepository_GrokCredentialConditionalMutationsAreEligibleAndAtomi
 		require.False(t, updated)
 		require.Len(t, exec.execQueries, 1)
 		normalized := normalizeSQLWhitespace(exec.execQueries[0])
-		require.Contains(t, normalized, "WITH updated AS ( UPDATE accounts AS a")
+		require.Contains(t, normalized, "WITH updated AS")
+		require.Contains(t, normalized, "UPDATE accounts AS a")
 		require.Contains(t, normalized, "a.schedulable IS TRUE")
 		require.Contains(t, normalized, "a.temp_unschedulable_until IS NULL OR a.temp_unschedulable_until <= NOW()")
 		require.Contains(t, normalized, "a.rate_limit_reset_at IS NULL OR a.rate_limit_reset_at <= NOW()")
 		require.Contains(t, normalized, "a.overload_until IS NULL OR a.overload_until <= NOW()")
-		require.Contains(t, normalized, "a.credentials = $7::jsonb")
-		require.Contains(t, normalized, "a.proxy_id IS NOT DISTINCT FROM $8")
-		require.Contains(t, normalized, "NOT EXISTS ( SELECT 1 FROM proxies p")
+		require.Contains(t, normalized, "a.credentials = $2::jsonb")
+		require.Contains(t, normalized, "a.proxy_id IS NOT DISTINCT FROM $3")
+		require.Contains(t, normalized, "p.protocol = $7 AND p.host = $8 AND p.port = $9")
+		require.Contains(t, normalized, "COALESCE(p.username, '') = $10 AND COALESCE(p.password, '') = $11")
+		require.Contains(t, normalized, "p.status = $12 AND p.expires_at IS NOT DISTINCT FROM $13")
+		require.Contains(t, normalized, "FOR SHARE")
 		require.Contains(t, normalized, "INSERT INTO scheduler_outbox")
-		require.Len(t, exec.execArgs[0], 10)
-		require.Equal(t, snapshot.CredentialsJSON, exec.execArgs[0][6])
-		require.Equal(t, &proxyID, exec.execArgs[0][7])
-		require.Equal(t, string(service.GrokCredentialReasonProxyInvalid), exec.execArgs[0][8])
-		require.Equal(t, service.SchedulerOutboxEventAccountChanged, exec.execArgs[0][9])
+		require.Len(t, exec.execArgs[0], 14)
+		credentialsJSON, ok := exec.execArgs[0][1].(string)
+		require.True(t, ok)
+		require.JSONEq(t, snapshot.CredentialsJSON, credentialsJSON)
+		require.Equal(t, &proxyID, exec.execArgs[0][2])
+		permanent, ok := exec.execArgs[0][5].(bool)
+		require.True(t, ok)
+		require.True(t, permanent)
+		require.Equal(t, []any{"http", "captured.example", 8080, "captured-user", "captured-secret", service.StatusActive, (*time.Time)(nil)}, exec.execArgs[0][6:13])
+		require.Equal(t, service.SchedulerOutboxEventAccountChanged, exec.execArgs[0][13])
 	})
 
 	t.Run("transient", func(t *testing.T) {
@@ -85,23 +105,40 @@ func TestAccountRepository_GrokCredentialConditionalMutationsAreEligibleAndAtomi
 		require.False(t, updated)
 		require.Len(t, exec.execQueries, 1)
 		normalized := normalizeSQLWhitespace(exec.execQueries[0])
-		require.Contains(t, normalized, "WITH updated AS ( UPDATE accounts AS a")
+		require.Contains(t, normalized, "WITH updated AS")
+		require.Contains(t, normalized, "UPDATE accounts AS a")
 		require.Contains(t, normalized, "a.schedulable IS TRUE")
 		require.Contains(t, normalized, "a.temp_unschedulable_until IS NULL OR a.temp_unschedulable_until <= NOW()")
 		require.Contains(t, normalized, "a.rate_limit_reset_at IS NULL OR a.rate_limit_reset_at <= NOW()")
 		require.Contains(t, normalized, "a.overload_until IS NULL OR a.overload_until <= NOW()")
-		require.Contains(t, normalized, "a.credentials = $7::jsonb")
-		require.Contains(t, normalized, "a.proxy_id IS NOT DISTINCT FROM $8")
+		require.Contains(t, normalized, "a.credentials = $2::jsonb")
+		require.Contains(t, normalized, "a.proxy_id IS NOT DISTINCT FROM $3")
+		require.Contains(t, normalized, "p.protocol = $7 AND p.host = $8 AND p.port = $9")
+		require.Contains(t, normalized, "COALESCE(p.username, '') = $10 AND COALESCE(p.password, '') = $11")
+		require.Contains(t, normalized, "p.status = $12 AND p.expires_at IS NOT DISTINCT FROM $13")
+		require.Contains(t, normalized, "FOR SHARE")
 		require.Contains(t, normalized, "INSERT INTO scheduler_outbox")
-		require.Len(t, exec.execArgs[0], 9)
-		require.Equal(t, snapshot.CredentialsJSON, exec.execArgs[0][6])
-		require.Equal(t, &proxyID, exec.execArgs[0][7])
-		require.Equal(t, service.SchedulerOutboxEventAccountChanged, exec.execArgs[0][8])
+		require.Len(t, exec.execArgs[0], 14)
+		credentialsJSON, ok := exec.execArgs[0][1].(string)
+		require.True(t, ok)
+		require.JSONEq(t, snapshot.CredentialsJSON, credentialsJSON)
+		require.Equal(t, &proxyID, exec.execArgs[0][2])
+		permanent, ok := exec.execArgs[0][5].(bool)
+		require.True(t, ok)
+		require.False(t, permanent)
+		require.Equal(t, []any{"http", "captured.example", 8080, "captured-user", "captured-secret", service.StatusActive, (*time.Time)(nil)}, exec.execArgs[0][6:13])
+		require.Equal(t, service.SchedulerOutboxEventAccountChanged, exec.execArgs[0][13])
 	})
 }
 
 func TestAccountRepository_GrokCredentialCommitCarriesOutboxAcrossCallerCancellation(t *testing.T) {
-	snapshot := service.GrokCredentialMutationSnapshot{CredentialsJSON: `{"access_token":"access","refresh_token":"refresh"}`}
+	owner, err := service.CaptureOAuthCredentialOwner(&service.Account{
+		ID: 42, Platform: service.PlatformGrok, Type: service.AccountTypeOAuth,
+		Status: service.StatusActive, Schedulable: true,
+		Credentials: map[string]any{"access_token": "access", "refresh_token": "refresh"},
+	})
+	require.NoError(t, err)
+	snapshot := service.GrokCredentialMutationSnapshot{Owner: owner, CredentialsJSON: `{"access_token":"access","refresh_token":"refresh"}`}
 	tests := []struct {
 		name   string
 		mutate func(context.Context, *accountRepository) (bool, error)
@@ -141,12 +178,7 @@ func TestAccountRepository_SetGrokOAuthErrorIfCredentialsUnchanged_RequiresActiv
 	exec := &recordingSQLExecutor{result: rowsAffectedResult(0)}
 	repo := newAccountRepositoryWithSQL(nil, exec, nil)
 
-	applied, err := repo.SetGrokOAuthErrorIfCredentialsUnchanged(
-		context.Background(),
-		42,
-		map[string]any{"access_token": "observed", "_token_version": int64(7)},
-		"missing refresh token",
-	)
+	applied, err := repo.SetGrokOAuthErrorIfCredentialsUnchanged(context.Background(), &service.Account{ID: 42, Credentials: map[string]any{"access_token": "observed", "_token_version": int64(7)}, Platform: service.PlatformGrok, Type: service.AccountTypeOAuth, Status: service.StatusActive}, "missing refresh token")
 
 	require.NoError(t, err)
 	require.False(t, applied)
@@ -169,12 +201,7 @@ func TestAccountRepository_SetGrokOAuthErrorIfCredentialsUnchanged_AppliedWrites
 	exec := &recordingSQLExecutor{result: rowsAffectedResult(1)}
 	repo := newAccountRepositoryWithSQL(nil, exec, nil)
 
-	applied, err := repo.SetGrokOAuthErrorIfCredentialsUnchanged(
-		context.Background(),
-		42,
-		map[string]any{"access_token": "observed"},
-		"missing refresh token",
-	)
+	applied, err := repo.SetGrokOAuthErrorIfCredentialsUnchanged(context.Background(), &service.Account{ID: 42, Credentials: map[string]any{"access_token": "observed"}, Platform: service.PlatformGrok, Type: service.AccountTypeOAuth, Status: service.StatusActive}, "missing refresh token")
 
 	require.NoError(t, err)
 	require.True(t, applied)
@@ -190,13 +217,7 @@ func TestAccountRepository_SetGrokOAuthRefreshErrorIfCredentialsUnchanged_UsesAt
 	repo := newAccountRepositoryWithSQL(nil, exec, nil)
 	proxyID := int64(17)
 
-	applied, err := repo.SetGrokOAuthRefreshErrorIfCredentialsUnchanged(
-		context.Background(),
-		42,
-		map[string]any{"refresh_token": "attempted", "_token_version": int64(7)},
-		&proxyID,
-		"revoked",
-	)
+	applied, err := repo.SetGrokOAuthRefreshErrorIfCredentialsUnchanged(context.Background(), &service.Account{ID: 42, Credentials: map[string]any{"refresh_token": "attempted", "_token_version": int64(7)}, ProxyID: &proxyID, Platform: service.PlatformGrok, Type: service.AccountTypeOAuth, Proxy: &service.Proxy{ID: proxyID, Status: service.StatusActive}, Status: service.StatusActive}, "revoked")
 
 	require.NoError(t, err)
 	require.False(t, applied)
@@ -208,7 +229,7 @@ func TestAccountRepository_SetGrokOAuthRefreshErrorIfCredentialsUnchanged_UsesAt
 		"background invalid_grant CAS must accept the attempted refresh token; only reconciliation requires it missing")
 	require.Equal(t, &proxyID, exec.execArgs[0][7])
 	require.Contains(t, normalized, "INSERT INTO scheduler_outbox")
-	require.Len(t, exec.execArgs[0], 9)
+	require.Len(t, exec.execArgs[0], 16)
 }
 
 func TestAccountRepository_SetGrokOAuthRefreshTempUnschedulableIfCredentialsUnchanged_UsesAttemptCredentialsAndProxy(t *testing.T) {
@@ -216,14 +237,7 @@ func TestAccountRepository_SetGrokOAuthRefreshTempUnschedulableIfCredentialsUnch
 	repo := newAccountRepositoryWithSQL(nil, exec, nil)
 	proxyID := int64(19)
 
-	applied, err := repo.SetGrokOAuthRefreshTempUnschedulableIfCredentialsUnchanged(
-		context.Background(),
-		42,
-		map[string]any{"refresh_token": "attempted", "_token_version": int64(8)},
-		&proxyID,
-		time.Now().Add(10*time.Minute),
-		"retry exhausted",
-	)
+	applied, err := repo.SetGrokOAuthRefreshTempUnschedulableIfCredentialsUnchanged(context.Background(), &service.Account{ID: 42, Credentials: map[string]any{"refresh_token": "attempted", "_token_version": int64(8)}, ProxyID: &proxyID, Platform: service.PlatformGrok, Type: service.AccountTypeOAuth, Proxy: &service.Proxy{ID: proxyID, Status: service.StatusActive}, Status: service.StatusActive}, time.Now().Add(10*time.Minute), "retry exhausted")
 
 	require.NoError(t, err)
 	require.False(t, applied)
@@ -232,7 +246,7 @@ func TestAccountRepository_SetGrokOAuthRefreshTempUnschedulableIfCredentialsUnch
 	require.Contains(t, normalized, "credentials = $7::jsonb")
 	require.Contains(t, normalized, "proxy_id IS NOT DISTINCT FROM $8")
 	require.Contains(t, normalized, "a.temp_unschedulable_until IS NULL OR a.temp_unschedulable_until < $1")
-	require.Len(t, exec.execArgs[0], 9)
+	require.Len(t, exec.execArgs[0], 16)
 	require.Equal(t, &proxyID, exec.execArgs[0][7])
 	require.Contains(t, normalized, "INSERT INTO scheduler_outbox")
 }
@@ -242,13 +256,7 @@ func TestAccountRepository_UpdateGrokOAuthCredentialsIfUnchanged_UsesExactAttemp
 	repo := newAccountRepositoryWithSQL(nil, exec, nil)
 	proxyID := int64(29)
 
-	applied, err := repo.UpdateGrokOAuthCredentialsIfUnchanged(
-		context.Background(),
-		42,
-		map[string]any{"refresh_token": "attempted", "_token_version": int64(9)},
-		&proxyID,
-		map[string]any{"refresh_token": "rotated", "_token_version": int64(10)},
-	)
+	applied, err := repo.UpdateGrokOAuthCredentialsIfUnchanged(context.Background(), &service.Account{ID: 42, Credentials: map[string]any{"refresh_token": "attempted", "_token_version": int64(9)}, ProxyID: &proxyID, Platform: service.PlatformGrok, Type: service.AccountTypeOAuth, Proxy: &service.Proxy{ID: proxyID, Status: service.StatusActive}, Status: service.StatusActive}, map[string]any{"refresh_token": "rotated", "_token_version": int64(10)})
 
 	require.NoError(t, err)
 	require.True(t, applied)
@@ -259,7 +267,7 @@ func TestAccountRepository_UpdateGrokOAuthCredentialsIfUnchanged_UsesExactAttemp
 	require.Contains(t, normalized, "credentials = $5::jsonb")
 	require.Contains(t, normalized, "proxy_id IS NOT DISTINCT FROM $6")
 	require.Contains(t, normalized, "INSERT INTO scheduler_outbox")
-	require.Len(t, exec.execArgs[0], 7)
+	require.Len(t, exec.execArgs[0], 15)
 	require.Equal(t, &proxyID, exec.execArgs[0][5])
 }
 

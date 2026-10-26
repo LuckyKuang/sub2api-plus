@@ -102,7 +102,7 @@ func TestResponsesStreamingFromNativeAnthropic_ClientDisconnectDrainsUsage(t *te
 	defer func() { _ = pr.Close() }()
 
 	res, err := svc.handleResponsesStreamingFromNativeAnthropic(
-		resp, c, "glm-4.7", "glm-4.7", "glm-4.7", nil, time.Now(), apicompat.ResponsesClientToolMapping{})
+		context.Background(), nativeAnthropicTestAccount(), resp, c, "glm-4.7", "glm-4.7", "glm-4.7", nil, time.Now(), apicompat.ResponsesClientToolMapping{})
 
 	require.NoError(t, err, "断开排水至上游自然结束应返回 nil error（usage 走成功路径落账）")
 	require.NotNil(t, res)
@@ -155,25 +155,43 @@ func TestResponsesStreamingFromNativeAnthropic_NormalizesTerminalUsage(t *testin
 				resp := &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(strings.Join(lines, "\n")))}
 
 				result, err := (&OpenAIGatewayService{}).handleResponsesStreamingFromNativeAnthropic(
-					resp, c, "k3", "k3", "k3", nil, time.Now(), apicompat.ResponsesClientToolMapping{})
-				require.NoError(t, err)
+					context.Background(), nativeAnthropicTestAccount(), resp, c, "k3", "k3", "k3", nil, time.Now(), apicompat.ResponsesClientToolMapping{})
+				require.NotNil(t, result)
+				terminalType := "response.completed"
+				if terminal == "eof" {
+					require.Error(t, err)
+					require.True(t, result.UsageIncomplete)
+					require.NotContains(t, rec.Body.String(), "response.completed")
+					terminalType = "response.failed"
+				} else {
+					require.NoError(t, err)
+					require.False(t, result.UsageIncomplete)
+				}
 				require.Equal(t, tt.wantInput+tt.wantCached+tt.wantCacheCreation, result.Usage.InputTokens)
 				require.Equal(t, tt.wantOutput, result.Usage.OutputTokens)
 				require.Equal(t, tt.wantCached, result.Usage.CacheReadInputTokens)
 				require.Equal(t, tt.wantCacheCreation, result.Usage.CacheCreationInputTokens)
 
 				var completed apicompat.ResponsesStreamEvent
+				terminalCount := 0
 				for _, line := range strings.Split(rec.Body.String(), "\n") {
 					if !strings.HasPrefix(line, "data: ") {
 						continue
 					}
 					var event apicompat.ResponsesStreamEvent
 					require.NoError(t, json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &event))
-					if event.Type == "response.completed" {
+					if event.Type == terminalType {
 						completed = event
+						terminalCount++
 					}
 				}
+				require.Equal(t, 1, terminalCount)
 				require.NotNil(t, completed.Response)
+				if terminal == "eof" {
+					require.Equal(t, "failed", completed.Response.Status)
+					require.NotNil(t, completed.Response.Error)
+					require.Equal(t, "upstream_error", completed.Response.Error.Code)
+				}
 				require.NotNil(t, completed.Response.Usage)
 				require.Equal(t, tt.wantInput+tt.wantCached+tt.wantCacheCreation, completed.Response.Usage.InputTokens)
 				require.Equal(t, tt.wantOutput, completed.Response.Usage.OutputTokens)
@@ -186,6 +204,101 @@ func TestResponsesStreamingFromNativeAnthropic_NormalizesTerminalUsage(t *testin
 				}
 			})
 		}
+	}
+}
+
+func TestNativeAnthropicResponsesErrorDrainRetainsUsageWithoutSuccess(t *testing.T) {
+	// Usage arriving after a provider error remains billable. The terminal must
+	// expose the independently expected amounts without claiming completion.
+	prefix := strings.Split(miniAnthropicSSEStream(), "event: message_delta")[0]
+	payload := prefix + nativeErrorSSE("authentication_error") + "event: message_delta\ndata: {\"type\":\"message_delta\",\"usage\":{\"input_tokens\":0,\"output_tokens\":19,\"cache_read_input_tokens\":4}}\n\n"
+	for _, ending := range []string{"eof", "stop", "idle", "read_error"} {
+		t.Run(ending, func(t *testing.T) {
+			var result *OpenAIForwardResult
+			var err error
+			var recorder *httptest.ResponseRecorder
+			switch ending {
+			case "idle":
+				outcome, rec := forwardNativePipeTest(t, "/v1/responses", true, 1, payload)
+				result, err, recorder = outcome.result, outcome.err, rec
+			case "read_error":
+				recorder = httptest.NewRecorder()
+				c, _ := gin.CreateTestContext(recorder)
+				c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+				resp := nativeSSETestResponse("")
+				resp.Body = &streamReadCloser{payload: []byte(payload), err: io.ErrUnexpectedEOF}
+				result, err = (&OpenAIGatewayService{}).handleResponsesStreamingFromNativeAnthropic(context.Background(), nativeAnthropicTestAccount(), resp, c, "k3", "k3", "k3", nil, time.Now(), apicompat.ResponsesClientToolMapping{})
+			default:
+				body := payload
+				if ending == "stop" {
+					body += "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+				}
+				result, err, recorder = forwardNativeSSETest(t, "/v1/responses", true, body)
+			}
+			require.Error(t, err)
+			var failover *UpstreamFailoverError
+			require.NotErrorAs(t, err, &failover)
+			require.NotNil(t, result)
+			require.True(t, result.UsageIncomplete)
+			require.Equal(t, 14, result.Usage.InputTokens)
+			require.Equal(t, 19, result.Usage.OutputTokens)
+			require.Equal(t, 4, result.Usage.CacheReadInputTokens)
+			require.NotContains(t, recorder.Body.String(), "response.completed")
+			require.NotContains(t, recorder.Body.String(), "[DONE]")
+			failed := 0
+			lastSequence := -1
+			for _, line := range strings.Split(recorder.Body.String(), "\n") {
+				if !strings.HasPrefix(line, "data: ") {
+					continue
+				}
+				require.Zero(t, failed, "no events follow the failed terminal")
+				var event apicompat.ResponsesStreamEvent
+				require.NoError(t, json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &event))
+				require.Greater(t, event.SequenceNumber, lastSequence)
+				lastSequence = event.SequenceNumber
+				if event.Type != "response.failed" {
+					continue
+				}
+				failed++
+				require.NotNil(t, event.Response)
+				require.Equal(t, "failed", event.Response.Status)
+				require.NotNil(t, event.Response.Error)
+				require.Equal(t, "upstream_error", event.Response.Error.Code)
+				require.NotNil(t, event.Response.Usage)
+				require.Equal(t, 14, event.Response.Usage.InputTokens)
+				require.Equal(t, 19, event.Response.Usage.OutputTokens)
+				require.Equal(t, 33, event.Response.Usage.TotalTokens)
+				require.NotNil(t, event.Response.Usage.InputTokensDetails)
+				require.Equal(t, 4, event.Response.Usage.InputTokensDetails.CachedTokens)
+			}
+			require.Equal(t, 1, failed)
+		})
+	}
+}
+
+func TestNativeAnthropicResponsesIncompleteDoesNotInventUsage(t *testing.T) {
+	for _, usage := range []string{"", `,"usage":null`, `,"usage":{"input_tokens":0,"output_tokens":0}`} {
+		t.Run(usage, func(t *testing.T) {
+			payload := "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_1\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"k3\",\"content\":[]" + usage + "}}\n\n"
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+			result, err := (&OpenAIGatewayService{}).handleResponsesStreamingFromNativeAnthropic(context.Background(), nativeAnthropicTestAccount(), nativeSSETestResponse(payload), c, "k3", "k3", "k3", nil, time.Now(), apicompat.ResponsesClientToolMapping{})
+			require.Error(t, err)
+			require.True(t, result.UsageIncomplete)
+			terminalType, terminalPayload, ok := extractOpenAISSETerminalEvent(recorder.Body.String())
+			require.True(t, ok)
+			require.Equal(t, "response.failed", terminalType)
+			var terminal apicompat.ResponsesStreamEvent
+			require.NoError(t, json.Unmarshal(terminalPayload, &terminal))
+			require.NotNil(t, terminal.Response)
+			if strings.Contains(usage, "input_tokens") {
+				require.NotNil(t, terminal.Response.Usage)
+				require.Zero(t, terminal.Response.Usage.TotalTokens)
+			} else {
+				require.Nil(t, terminal.Response.Usage)
+			}
+		})
 	}
 }
 
@@ -298,7 +411,7 @@ func TestHandle403_CNProviderConcurrencyLimitAlwaysUsesTemporaryCooldown(t *test
 	require.True(t, blocker.until[0].After(time.Now()))
 }
 
-func TestHandle403_KimiConcurrencyLimitRepositoryFailureKeepsRuntimeBlock(t *testing.T) {
+func TestHandle403_KimiConcurrencyLimitRepositoryFailureDoesNotBlockUnprovenGeneration(t *testing.T) {
 	repo := &rateLimitAccountRepoStub{tempErr: errors.New("repository unavailable")}
 	counter := &openAI403CounterCacheStub{counts: []int64{openAI403DisableThreshold}}
 	blocker := &runtimeBlockRecorder{}
@@ -316,10 +429,7 @@ func TestHandle403_KimiConcurrencyLimitRepositoryFailureKeepsRuntimeBlock(t *tes
 	require.Equal(t, 1, repo.tempCalls, "the temporary cooldown should still be persisted when possible")
 	require.Equal(t, 0, repo.setErrorCalls, "persistence failure must not fall back to permanent account error")
 	require.Equal(t, []int64{openAI403DisableThreshold}, counter.counts, "persistence failure must not enter the permanent-error counter path")
-	require.Len(t, blocker.accounts, 1, "the in-memory runtime block must survive repository failure")
-	require.Same(t, account, blocker.accounts[0])
-	require.Equal(t, cnConcurrencyLimitReasonPrefix, blocker.reasons[0])
-	require.True(t, blocker.until[0].After(time.Now()))
+	require.Empty(t, blocker.accounts, "a failed CAS cannot authorize a runtime block for the current credential generation")
 }
 
 func TestHandle403_CNProviderNearMatchRetainsNormalPermanentErrorPolicy(t *testing.T) {

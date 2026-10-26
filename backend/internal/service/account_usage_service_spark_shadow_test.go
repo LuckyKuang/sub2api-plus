@@ -41,6 +41,17 @@ func (r *sparkShadowUsageTestRepo) UpdateExtra(_ context.Context, _ int64, updat
 	return nil
 }
 
+func (r *sparkShadowUsageTestRepo) UpdateOpenAICodexUsageIfUnchanged(ctx context.Context, id int64, owner *Account, updates map[string]any) (bool, error) {
+	current, target := r.accounts[owner.ID], r.accounts[id]
+	if current == nil || target == nil || credentialStateGeneration(current) != credentialStateGeneration(owner) {
+		return false, nil
+	}
+	if target.ID != owner.ID && (target.ParentAccountID == nil || *target.ParentAccountID != owner.ID) {
+		return false, nil
+	}
+	return true, r.UpdateExtra(ctx, id, updates)
+}
+
 // TestGetOpenAIUsage_SparkShadow_WritesExtraAndReturnsNonEmptyWindows covers
 // two assertions required by Task 3.2:
 //
@@ -71,6 +82,7 @@ func TestGetOpenAIUsage_SparkShadow_WritesExtraAndReturnsNonEmptyWindows(t *test
 		Status:   StatusActive,
 		Credentials: map[string]any{
 			"chatgpt_account_id": "org-spark-parent",
+			"access_token":       "fake-access-token",
 		},
 	}
 

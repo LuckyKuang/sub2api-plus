@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -149,13 +150,6 @@ func (s *RateLimitService) notifyAccountSchedulingBlocked(account *Account, unti
 		return
 	}
 	s.runtimeBlocker.BlockAccountScheduling(account, until, reason)
-}
-
-func (s *RateLimitService) notifyAccountSchedulingBlockCleared(accountID int64) {
-	if s == nil || s.runtimeBlocker == nil || accountID <= 0 {
-		return
-	}
-	s.runtimeBlocker.ClearAccountSchedulingBlock(accountID)
 }
 
 // ApplyAccountSchedulingThreshold evaluates admin-configured per-platform
@@ -364,7 +358,8 @@ func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Acc
 		return false
 	}
 
-	if len(requestedModel) > 0 && s.HandleUpstreamModelNotFound(ctx, account, requestedModel[0], statusCode, responseBody) {
+	if (len(requestedModel) > 0 || account.Platform == PlatformOpenAI && isOpenAIModelNotFoundError(statusCode, responseBody)) &&
+		s.HandleUpstreamModelNotFound(ctx, account, firstRequestedModel(requestedModel), statusCode, responseBody) {
 		return true
 	}
 
@@ -399,6 +394,10 @@ func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Acc
 	upstreamMsg = sanitizeUpstreamErrorMessage(upstreamMsg)
 	if upstreamMsg != "" {
 		upstreamMsg = truncateForLog([]byte(upstreamMsg), 512)
+	}
+
+	if s.handleMiniMaxUsageError(ctx, account, statusCode, responseBody, upstreamMsg) {
+		return true
 	}
 
 	// Command Code 用量超限按文案区分、与状态码无关（见 ratelimit_command_code.go）；
@@ -449,17 +448,22 @@ func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Acc
 		// 问题变成影子永久死亡。母账号被标记 temp-unschedulable 后由 parentHealthyForShadow 级联排除影子。
 		// 非影子时 resolveCredentialAccount 返回自身;母账号缺失/损坏(orphan 影子,罕见)时回退到原 account。
 		authAccount := account
-		if resolved, rerr := resolveCredentialAccount(ctx, s.accountRepo, account); rerr == nil && resolved != nil {
+		if frozen, ok := requestCredentialOwner(ctx, account); ok {
+			authAccount = frozen
+		} else if resolved, rerr := resolveCredentialAccount(ctx, s.accountRepo, account); rerr == nil && resolved != nil {
 			authAccount = resolved
 		}
 		// OpenAI: token_invalidated / token_revoked 表示 token 被永久作废（非过期），直接标记 error
 		openai401Code := extractUpstreamErrorCode(responseBody)
+		if openai401Code == "" {
+			openai401Code = strings.TrimSpace(gjson.GetBytes(responseBody, "response.error.code").String())
+		}
 		if authAccount.Platform == PlatformOpenAI && (openai401Code == "token_invalidated" || openai401Code == "token_revoked") {
 			msg := "Token revoked (401): account authentication permanently revoked"
 			if upstreamMsg != "" {
 				msg = "Token revoked (401): " + upstreamMsg
 			}
-			s.handleAuthError(ctx, authAccount, msg)
+			s.handleHTTP401CredentialError(ctx, account, authAccount, msg)
 			shouldDisable = true
 			break
 		}
@@ -469,14 +473,14 @@ func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Acc
 			if upstreamMsg != "" {
 				msg = "Unauthorized (401): " + upstreamMsg
 			}
-			s.handleAuthError(ctx, authAccount, msg)
+			s.handleHTTP401CredentialError(ctx, account, authAccount, msg)
 			shouldDisable = true
 			break
 		}
 		// OAuth 账号在 401 错误时临时不可调度（给 token 刷新窗口）；非 OAuth 账号保持原有 SetError 行为。
 		if authAccount.Type == AccountTypeOAuth {
 			// 1. 失效缓存
-			if s.tokenCacheInvalidator != nil {
+			if !usesHTTP401CredentialFence(authAccount) && s.tokenCacheInvalidator != nil {
 				if err := s.tokenCacheInvalidator.InvalidateToken(ctx, authAccount); err != nil {
 					slog.Warn("oauth_401_invalidate_cache_failed", "account_id", authAccount.ID, "error", err)
 				}
@@ -488,7 +492,7 @@ func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Acc
 				if upstreamMsg != "" {
 					msg = "OAuth 401 (no refresh_token): " + upstreamMsg
 				}
-				s.handleAuthError(ctx, authAccount, msg)
+				s.handleHTTP401CredentialError(ctx, account, authAccount, msg)
 				shouldDisable = true
 				break
 			}
@@ -524,6 +528,11 @@ func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Acc
 				cooldownMinutes = 10
 			}
 			until := time.Now().Add(time.Duration(cooldownMinutes) * time.Minute)
+			if usesHTTP401CredentialFence(authAccount) {
+				s.handleHTTP401CredentialCooldown(ctx, account, authAccount, until, msg)
+				shouldDisable = true
+				break
+			}
 			s.notifyAccountSchedulingBlocked(authAccount, until, "oauth_401")
 			if err := s.accountRepo.SetTempUnschedulable(ctx, authAccount.ID, until, msg); err != nil {
 				slog.Warn("oauth_401_set_temp_unschedulable_failed", "account_id", authAccount.ID, "error", err)
@@ -535,7 +544,7 @@ func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Acc
 			if upstreamMsg != "" {
 				msg = "Authentication failed (401): " + upstreamMsg
 			}
-			s.handleAuthError(ctx, authAccount, msg)
+			s.handleHTTP401CredentialError(ctx, account, authAccount, msg)
 			shouldDisable = true
 		}
 	case 402:
@@ -1255,7 +1264,7 @@ func (s *RateLimitService) handle429(ctx context.Context, account *Account, head
 	// QueryUsage→persistOpenAICodexProbeSnapshot 维护,枯竭由调度守卫处理。
 	if account.IsShadow() {
 		if account.ParentAccountID != nil {
-			notifyOpenAIAutoReset(*account.ParentAccountID)
+			notifyOpenAIAutoResetForOwner(capturedCodexUsageOwner(ctx, account))
 		}
 		return
 	}
@@ -1276,13 +1285,10 @@ func (s *RateLimitService) handle429(ctx context.Context, account *Account, head
 	}
 	// 1. OpenAI 平台：优先尝试解析 x-codex-* 响应头（用于 rate_limit_exceeded）
 	if account.Platform == PlatformOpenAI {
-		persistOpenAI429PlanType(ctx, s.accountRepo, account, responseBody)
+		defer persistOpenAI429PlanType(ctx, s.accountRepo, account, responseBody)
 		s.persistOpenAICodexSnapshot(ctx, account, headers)
-		notifyOpenAIAutoReset(account.ID)
 		if resetAt := s.calculateOpenAI429ResetTime(headers); resetAt != nil {
-			s.notifyAccountSchedulingBlocked(account, *resetAt, "429")
-			if err := s.accountRepo.SetRateLimited(ctx, account.ID, *resetAt); err != nil {
-				slog.Warn("rate_limit_set_failed", "account_id", account.ID, "error", err)
+			if !s.set429RateLimit(ctx, account, *resetAt, "429") {
 				return
 			}
 			slog.Info("openai_account_rate_limited", "account_id", account.ID, "reset_at", *resetAt)
@@ -1292,9 +1298,7 @@ func (s *RateLimitService) handle429(ctx context.Context, account *Account, head
 
 	// 2. Anthropic 平台：尝试解析 per-window 头（5h / 7d），选择实际触发的窗口
 	if result := calculateAnthropic429ResetTime(headers); result != nil {
-		s.notifyAccountSchedulingBlocked(account, result.resetAt, "429")
-		if err := s.accountRepo.SetRateLimited(ctx, account.ID, result.resetAt); err != nil {
-			slog.Warn("rate_limit_set_failed", "account_id", account.ID, "error", err)
+		if !s.set429RateLimit(ctx, account, result.resetAt, "429") {
 			return
 		}
 
@@ -1304,8 +1308,10 @@ func (s *RateLimitService) handle429(ctx context.Context, account *Account, head
 			windowEnd = *result.fiveHourReset
 		}
 		windowStart := windowEnd.Add(-5 * time.Hour)
-		if err := s.accountRepo.UpdateSessionWindow(ctx, account.ID, &windowStart, &windowEnd, "rejected"); err != nil {
-			slog.Warn("rate_limit_update_session_window_failed", "account_id", account.ID, "error", err)
+		if account.Platform != PlatformOpenAI {
+			if err := s.accountRepo.UpdateSessionWindow(ctx, account.ID, &windowStart, &windowEnd, "rejected"); err != nil {
+				slog.Warn("rate_limit_update_session_window_failed", "account_id", account.ID, "error", err)
+			}
 		}
 
 		slog.Info("anthropic_account_rate_limited", "account_id", account.ID, "reset_at", result.resetAt, "reset_in", time.Until(result.resetAt).Truncate(time.Second))
@@ -1322,9 +1328,7 @@ func (s *RateLimitService) handle429(ctx context.Context, account *Account, head
 			// 尝试解析 OpenAI 的 usage_limit_reached 错误
 			if resetAt := parseOpenAIRateLimitResetTime(responseBody); resetAt != nil {
 				resetTime := time.Unix(*resetAt, 0)
-				s.notifyAccountSchedulingBlocked(account, resetTime, "429")
-				if err := s.accountRepo.SetRateLimited(ctx, account.ID, resetTime); err != nil {
-					slog.Warn("rate_limit_set_failed", "account_id", account.ID, "error", err)
+				if !s.set429RateLimit(ctx, account, resetTime, "429") {
 					return
 				}
 				slog.Info("account_rate_limited", "account_id", account.ID, "platform", account.Platform, "reset_at", resetTime, "reset_in", time.Until(resetTime).Truncate(time.Second))
@@ -1334,9 +1338,7 @@ func (s *RateLimitService) handle429(ctx context.Context, account *Account, head
 			// 尝试解析 Gemini 格式（用于其他平台）
 			if resetAt := ParseGeminiRateLimitResetTime(responseBody); resetAt != nil {
 				resetTime := time.Unix(*resetAt, 0)
-				s.notifyAccountSchedulingBlocked(account, resetTime, "429")
-				if err := s.accountRepo.SetRateLimited(ctx, account.ID, resetTime); err != nil {
-					slog.Warn("rate_limit_set_failed", "account_id", account.ID, "error", err)
+				if !s.set429RateLimit(ctx, account, resetTime, "429") {
 					return
 				}
 				slog.Info("account_rate_limited", "account_id", account.ID, "platform", account.Platform, "reset_at", resetTime, "reset_in", time.Until(resetTime).Truncate(time.Second))
@@ -1373,17 +1375,17 @@ func (s *RateLimitService) handle429(ctx context.Context, account *Account, head
 	resetAt := time.Unix(ts, 0)
 
 	// 标记限流状态
-	s.notifyAccountSchedulingBlocked(account, resetAt, "429")
-	if err := s.accountRepo.SetRateLimited(ctx, account.ID, resetAt); err != nil {
-		slog.Warn("rate_limit_set_failed", "account_id", account.ID, "error", err)
+	if !s.set429RateLimit(ctx, account, resetAt, "429") {
 		return
 	}
 
 	// 根据重置时间反推5h窗口
 	windowEnd := resetAt
 	windowStart := resetAt.Add(-5 * time.Hour)
-	if err := s.accountRepo.UpdateSessionWindow(ctx, account.ID, &windowStart, &windowEnd, "rejected"); err != nil {
-		slog.Warn("rate_limit_update_session_window_failed", "account_id", account.ID, "error", err)
+	if account.Platform != PlatformOpenAI {
+		if err := s.accountRepo.UpdateSessionWindow(ctx, account.ID, &windowStart, &windowEnd, "rejected"); err != nil {
+			slog.Warn("rate_limit_update_session_window_failed", "account_id", account.ID, "error", err)
+		}
 	}
 
 	slog.Info("account_rate_limited", "account_id", account.ID, "reset_at", resetAt)
@@ -1398,10 +1400,11 @@ func (s *RateLimitService) apply429FallbackRateLimit(ctx context.Context, accoun
 
 	resetAt := time.Now().Add(cooldown)
 	slog.Warn("rate_limit_429_fallback_used", "account_id", account.ID, "platform", account.Platform, "reason", reason, "using_default", cooldown.String())
-	s.notifyAccountSchedulingBlocked(account, resetAt, "429_fallback")
-	if err := s.accountRepo.SetRateLimited(ctx, account.ID, resetAt); err != nil {
-		slog.Warn("rate_limit_set_failed", "account_id", account.ID, "error", err)
+	if account.IsCNProvider() {
+		s.applyCNProviderCredentialState(ctx, account, CredentialStateMutation{RateLimitUntil: &resetAt, ExtendRateLimitOnly: true}, resetAt, "429_fallback")
+		return
 	}
+	s.set429RateLimit(ctx, account, resetAt, "429_fallback")
 }
 
 func (s *RateLimitService) get429FallbackCooldown(ctx context.Context, account *Account) (time.Duration, bool) {
@@ -1832,16 +1835,18 @@ func (s *RateLimitService) persistOpenAICodexSnapshot(ctx context.Context, accou
 	if snapshot == nil {
 		return
 	}
-	observeOpenAIWeeklyUsageSnapshot(ctx, account.ID, snapshot, true)
+	owner, ok := credentialStateMutationOwner(ctx, account)
+	if !ok {
+		return
+	}
 	updates := buildCodexUsageExtraUpdates(snapshot, time.Now())
 	if len(updates) == 0 {
 		return
 	}
-	if err := s.accountRepo.UpdateExtra(ctx, account.ID, updates); err != nil {
+	if _, err := persistOpenAICodexUsageObservation(ctx, s.accountRepo, account.ID, owner, updates, snapshot, true); err != nil {
 		slog.Warn("openai_codex_snapshot_persist_failed", "account_id", account.ID, "error", err)
 		return
 	}
-	notifyOpenAIAutoReset(account.ID)
 }
 
 // parseOpenAIRateLimitResetTime 解析 OpenAI 兼容格式的 429 响应，返回重置时间的 Unix 时间戳
@@ -2035,7 +2040,7 @@ func parseOpenAIRateLimitPlanType(body []byte) string {
 }
 
 func persistOpenAI429PlanType(ctx context.Context, repo AccountRepository, account *Account, body []byte) {
-	if repo == nil || account == nil || account.Platform != PlatformOpenAI {
+	if repo == nil || account == nil || account.Platform != PlatformOpenAI || account.Type != AccountTypeOAuth {
 		return
 	}
 	// spark 影子账号恒不持凭据:即便收到带 plan_type 的 429,也不能把 plan_type 写进影子 credentials
@@ -2050,22 +2055,34 @@ func persistOpenAI429PlanType(ctx context.Context, repo AccountRepository, accou
 		return
 	}
 
-	current := strings.TrimSpace(account.GetCredential("plan_type"))
+	owner, known := credentialStateMutationOwner(ctx, account)
+	if !known || owner.Type != AccountTypeOAuth {
+		return
+	}
+	current := strings.TrimSpace(owner.GetCredential("plan_type"))
 	if strings.EqualFold(current, planType) {
 		return
 	}
 
-	if _, err := repo.BulkUpdate(ctx, []int64{account.ID}, AccountBulkUpdate{
-		Credentials: map[string]any{"plan_type": planType},
-	}); err != nil {
+	guarded, ok := repo.(CredentialStateMutationRepository)
+	if !ok {
+		return
+	}
+	accepted, err := guarded.ApplyCredentialStateMutation(ctx, owner, CredentialStateMutation{OpenAIPlanType: planType})
+	if err != nil {
 		slog.Warn("openai_429_plan_type_sync_failed", "account_id", account.ID, "plan_type", planType, "error", err)
 		return
 	}
-
-	if account.Credentials == nil {
-		account.Credentials = make(map[string]any, 1)
+	if !accepted || credentialStateGeneration(account) != credentialStateGeneration(owner) {
+		return
 	}
-	account.Credentials["plan_type"] = planType
+
+	// Scheduler copies share the cached master's maps. Keep this request's
+	// observed plan without mutating credentials read by other requests.
+	credentials := make(map[string]any, len(account.Credentials)+1)
+	maps.Copy(credentials, account.Credentials)
+	credentials["plan_type"] = planType
+	account.Credentials = credentials
 	slog.Info("openai_429_plan_type_synced", "account_id", account.ID, "previous_plan_type", current, "plan_type", planType)
 }
 
@@ -2235,27 +2252,7 @@ func (s *RateLimitService) samplePassiveUsageFromHeaders(ctx context.Context, ac
 
 // ClearRateLimit 清除账号的限流状态
 func (s *RateLimitService) ClearRateLimit(ctx context.Context, accountID int64) error {
-	if err := s.accountRepo.ClearRateLimit(ctx, accountID); err != nil {
-		return err
-	}
-	if err := s.accountRepo.ClearAntigravityQuotaScopes(ctx, accountID); err != nil {
-		return err
-	}
-	if err := s.accountRepo.ClearModelRateLimits(ctx, accountID); err != nil {
-		return err
-	}
-	// 清除限流时一并清理临时不可调度状态，避免周限/窗口重置后仍被本地临时状态阻断。
-	if err := s.accountRepo.ClearTempUnschedulable(ctx, accountID); err != nil {
-		return err
-	}
-	if s.tempUnschedCache != nil {
-		if err := s.tempUnschedCache.DeleteTempUnsched(ctx, accountID); err != nil {
-			slog.Warn("temp_unsched_cache_delete_failed", "account_id", accountID, "error", err)
-		}
-	}
-	s.ResetOpenAI403Counter(ctx, accountID)
-	s.notifyAccountSchedulingBlockCleared(accountID)
-	return nil
+	return s.clearAccountSchedulingRecovery(ctx, accountID, SchedulingRecoveryRates)
 }
 
 func (s *RateLimitService) ResetOpenAI403Counter(ctx context.Context, accountID int64) {
@@ -2269,38 +2266,7 @@ func (s *RateLimitService) ResetOpenAI403Counter(ctx context.Context, accountID 
 
 // RecoverAccountState 按需恢复账号的可恢复运行时状态。
 func (s *RateLimitService) RecoverAccountState(ctx context.Context, accountID int64, options AccountRecoveryOptions) (*SuccessfulTestRecoveryResult, error) {
-	account, err := s.accountRepo.GetByID(ctx, accountID)
-	if err != nil {
-		return nil, err
-	}
-
-	result := &SuccessfulTestRecoveryResult{}
-	if account.Status == StatusError {
-		if err := s.accountRepo.ClearError(ctx, accountID); err != nil {
-			return nil, err
-		}
-		result.ClearedError = true
-		if options.InvalidateToken && s.tokenCacheInvalidator != nil && account.IsOAuth() {
-			if invalidateErr := s.tokenCacheInvalidator.InvalidateToken(ctx, account); invalidateErr != nil {
-				slog.Warn("recover_account_state_invalidate_token_failed", "account_id", accountID, "error", invalidateErr)
-			}
-		}
-	}
-
-	if hasRecoverableRuntimeState(account) {
-		if err := s.ClearRateLimit(ctx, accountID); err != nil {
-			return nil, err
-		}
-		result.ClearedRateLimit = true
-	}
-	if result.ClearedError || result.ClearedRateLimit {
-		s.ResetOpenAI403Counter(ctx, accountID)
-		if result.ClearedError && !result.ClearedRateLimit {
-			s.notifyAccountSchedulingBlockCleared(accountID)
-		}
-	}
-
-	return result, nil
+	return s.recoverAccountStateAtomically(ctx, accountID, options)
 }
 
 // RecoverAccountAfterSuccessfulTest 将一次成功测试视为正常请求，
@@ -2310,20 +2276,7 @@ func (s *RateLimitService) RecoverAccountAfterSuccessfulTest(ctx context.Context
 }
 
 func (s *RateLimitService) ClearTempUnschedulable(ctx context.Context, accountID int64) error {
-	if err := s.accountRepo.ClearTempUnschedulable(ctx, accountID); err != nil {
-		return err
-	}
-	if s.tempUnschedCache != nil {
-		if err := s.tempUnschedCache.DeleteTempUnsched(ctx, accountID); err != nil {
-			slog.Warn("temp_unsched_cache_delete_failed", "account_id", accountID, "error", err)
-		}
-	}
-	// 同时清除模型级别限流
-	if err := s.accountRepo.ClearModelRateLimits(ctx, accountID); err != nil {
-		slog.Warn("clear_model_rate_limits_on_temp_unsched_reset_failed", "account_id", accountID, "error", err)
-	}
-	s.notifyAccountSchedulingBlockCleared(accountID)
-	return nil
+	return s.clearAccountSchedulingRecovery(ctx, accountID, SchedulingRecoveryTemporary)
 }
 
 func hasRecoverableRuntimeState(account *Account) bool {
@@ -2359,21 +2312,13 @@ func hasNonEmptyMapValue(extra map[string]any, key string) bool {
 
 func (s *RateLimitService) GetTempUnschedStatus(ctx context.Context, accountID int64) (*TempUnschedState, error) {
 	now := time.Now().Unix()
-	if s.tempUnschedCache != nil {
-		state, err := s.tempUnschedCache.GetTempUnsched(ctx, accountID)
-		if err != nil {
-			return nil, err
-		}
-		if state != nil && state.UntilUnix > now {
-			return state, nil
-		}
-	}
-
+	// The saved row owns activity and its reason. A delayed cache publication
+	// cannot restore status after recovery or replace a newer observation.
 	account, err := s.accountRepo.GetByID(ctx, accountID)
 	if err != nil {
 		return nil, err
 	}
-	if account.TempUnschedulableUntil == nil {
+	if account == nil || account.TempUnschedulableUntil == nil {
 		return nil, nil
 	}
 	if account.TempUnschedulableUntil.Unix() <= now {
@@ -2396,9 +2341,16 @@ func (s *RateLimitService) GetTempUnschedStatus(ctx context.Context, accountID i
 		}
 	}
 
-	if s.tempUnschedCache != nil {
+	if s.tempUnschedCache != nil && !usesHTTP401CredentialFence(account) {
+		cached, cacheErr := s.tempUnschedCache.GetTempUnsched(ctx, accountID)
+		if cacheErr == nil && cached != nil && *cached == *state {
+			return cached, nil
+		}
+		if cacheErr != nil {
+			slog.Warn("temp_unsched_cache_get_failed", "account_id", accountID, "reason", "cache_read_failed")
+		}
 		if err := s.tempUnschedCache.SetTempUnsched(ctx, accountID, state); err != nil {
-			slog.Warn("temp_unsched_cache_set_failed", "account_id", accountID, "error", err)
+			slog.Warn("temp_unsched_cache_set_failed", "account_id", accountID, "reason", "cache_write_failed")
 		}
 	}
 
@@ -2623,6 +2575,8 @@ func (s *RateLimitService) HandleUpstreamModelNotFound(ctx context.Context, acco
 	var cooldown time.Duration
 	var reason string
 	switch {
+	case account.Platform == PlatformOpenAI && isOpenAIModelNotFoundError(statusCode, responseBody):
+		cooldown, reason = upstreamModelNotFoundCooldown, upstreamModelNotFoundReason
 	case isUpstreamModelNotFoundError(statusCode, responseBody):
 		cooldown, reason = upstreamModelNotFoundCooldown, upstreamModelNotFoundReason
 	case statusCode == http.StatusUnauthorized && account.Type == AccountTypeAPIKey && account.IsOpenAICompatible() && isOpenAICompatibleModelNotFoundBody(responseBody):
@@ -2634,10 +2588,27 @@ func (s *RateLimitService) HandleUpstreamModelNotFound(ctx context.Context, acco
 	}
 	modelKey := modelRateLimitKeyForUpstreamModelNotFound(ctx, account, requestedModel)
 	if modelKey == "" {
+		// Missing model attribution cannot turn a model rejection into a
+		// whole-account credential/403 penalty.
+		if account.Platform == PlatformOpenAI && isOpenAIModelNotFoundError(statusCode, responseBody) {
+			return true
+		}
 		return false
 	}
 	if shouldSkipCodexPlanGatedImageModelCooldown(ctx, reason, requestedModel, modelKey) {
 		return true
+	}
+	if account.Platform == PlatformOpenAI && isOpenAIModelNotFoundError(statusCode, responseBody) {
+		owner, ok := credentialStateMutationOwner(ctx, account)
+		if !ok {
+			return true
+		}
+		// The OpenAI account error path supplies the canonical upstream model;
+		// mapping it again can cool down a different model in chained mappings.
+		modelKey = openAIModelNotFoundRateLimitKey(owner, strings.TrimSpace(requestedModel))
+		if modelKey == "" {
+			return true
+		}
 	}
 	resetAt := time.Now().Add(cooldown)
 	if err := s.accountRepo.SetModelRateLimit(ctx, account.ID, modelKey, resetAt, reason); err != nil {
@@ -2914,6 +2885,28 @@ func (s *RateLimitService) triggerTempUnschedulable(ctx context.Context, account
 	if reason == "" {
 		reason = strings.TrimSpace(state.ErrorMessage)
 	}
+	if _, collecting := ctx.Value(grokRequestOutcomeKey{}).(*grokRequestOutcomeCollector); collecting && account.IsGrok() {
+		if modelScoped {
+			payload := map[string]any{
+				"rate_limited_at":     now.UTC().Format(time.RFC3339),
+				"rate_limit_reset_at": until.UTC().Format(time.RFC3339),
+				"reason":              reason,
+			}
+			collectGrokRequestOutcome(ctx, s.accountRepo, account, GrokRequestOutcome{ModelRateLimits: map[string]any{modelKey: payload}}, nil)
+		} else {
+			collectGrokRequestOutcome(ctx, s.accountRepo, account, GrokRequestOutcome{TempUnschedulableUntil: &until, TempUnschedulableReason: reason}, func(account *Account) {
+				s.notifyAccountSchedulingBlocked(account, until, "temp_unschedulable")
+				if s.tempUnschedCache != nil {
+					cacheCtx, cancel := openAIAccountStateContext(ctx)
+					defer cancel()
+					if err := s.tempUnschedCache.SetTempUnsched(cacheCtx, account.ID, state); err != nil {
+						slog.Warn("temp_unsched_cache_set_failed", "account_id", account.ID, "reason", "cache_write_failed")
+					}
+				}
+			})
+		}
+		return true
+	}
 
 	// Persist model-scoped hits under the model key so the scheduler excludes
 	// only this (account, model) pair; every other hit pauses the whole account below.
@@ -3074,5 +3067,33 @@ func (s *RateLimitService) triggerStreamTimeoutError(ctx context.Context, accoun
 	}
 
 	slog.Warn("stream_timeout_account_error", "account_id", account.ID, "model", model)
+	return true
+}
+
+// Runtime scheduling state follows the same successful owner CAS as the durable
+// cooldown. An obsolete header or error body must have no scheduling side effects.
+func (s *RateLimitService) set429RateLimit(ctx context.Context, account *Account, resetAt time.Time, reason string) bool {
+	if account.Platform == PlatformOpenAI {
+		owner, known := credentialStateMutationOwner(ctx, account)
+		guarded, ok := s.accountRepo.(CredentialStateMutationRepository)
+		if !known || !ok {
+			return false
+		}
+		accepted, err := guarded.ApplyCredentialStateMutation(ctx, owner, CredentialStateMutation{RateLimitUntil: &resetAt, ExtendRateLimitOnly: true})
+		if err != nil {
+			slog.Warn("rate_limit_set_failed", "account_id", account.ID, "error", err)
+			return false
+		}
+		if !accepted {
+			return false
+		}
+		s.notifyAccountSchedulingBlocked(owner, resetAt, reason)
+		return true
+	}
+	s.notifyAccountSchedulingBlocked(account, resetAt, reason)
+	if err := s.accountRepo.SetRateLimited(ctx, account.ID, resetAt); err != nil {
+		slog.Warn("rate_limit_set_failed", "account_id", account.ID, "error", err)
+		return false
+	}
 	return true
 }

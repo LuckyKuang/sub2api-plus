@@ -6,16 +6,16 @@
         <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
           {{ t('auth.forgotPasswordTitle') }}
         </h2>
-        <p class="mt-2 text-sm text-gray-500 dark:text-dark-400">
+        <p class="mt-2 text-sm surface-muted">
           {{ t('auth.forgotPasswordHint') }}
         </p>
       </div>
 
       <!-- Success State -->
       <div v-if="isSubmitted" class="space-y-6">
-        <div class="rounded-xl border border-green-200 bg-green-50 p-6 dark:border-green-800/50 dark:bg-green-900/20">
+        <div class="rounded-xl border border-green-200 bg-green-50/[0.15] p-6 dark:border-green-800/50 dark:bg-green-900/20">
           <div class="flex flex-col items-center gap-4 text-center">
-            <div class="flex h-12 w-12 items-center justify-center rounded-full bg-green-100 dark:bg-green-800/50">
+            <div class="flex h-12 w-12 items-center justify-center rounded-full bg-green-100/[0.15] dark:bg-green-800/50">
               <Icon name="checkCircle" size="lg" class="text-green-600 dark:text-green-400" />
             </div>
             <div>
@@ -49,7 +49,7 @@
           </label>
           <div class="relative">
             <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5">
-              <Icon name="mail" size="md" class="text-gray-400 dark:text-dark-500" />
+              <Icon name="mail" size="md" class="surface-muted" />
             </div>
             <input
               id="email"
@@ -119,7 +119,7 @@
 
     <!-- Footer -->
     <template #footer>
-      <p class="text-gray-500 dark:text-dark-400">
+      <p class="surface-muted">
         {{ t('auth.rememberedPassword') }}
         <router-link
           to="/login"

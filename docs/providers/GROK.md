@@ -11,8 +11,8 @@ $12. At 200,000 prompt tokens (inclusive), standard rates double and Fast rates
 multiply by 1.5. Configured channel/model prices retain their existing priority.
 
 Manage the UA and paired client declarations in **System Settings → Outbound
-identity**. Native OAuth retains the Grok family; API-key accounts can choose
-another preset. Forwarding, quota probes and Realtime handshakes consume the
+identity**. Native OAuth and API-key accounts retain the Grok family; only compatible
+upstream accounts can choose another permitted preset. Forwarding, quota probes and Realtime handshakes consume the
 same trusted account identity. See [outbound identity](../OUTBOUND_IDENTITY.md).
 
 The HTTP/TLS transport adds the subscription proxy's `X-XAI-Token-Auth` hint
@@ -35,9 +35,20 @@ valid credential-owning account, configured global preset or environment pin
 still outranks the compiled default.
 
 Inference requests also carry the official request-owned
-sampler declarations: a new request ID, a process-stable random agent ID, the
-final model, and (when authoritative tenant-isolated association exists)
-independent conversation/session IDs plus the official UUIDv5 root-group ID. OAuth
+sampler declarations: a UUIDv4 request ID retained for the logical prompt and
+its retries, a persistent UUIDv5 agent ID, the final model, and (when an
+authoritative tenant-isolated association exists) independent conversation/session
+IDs plus the official UUIDv5 root-group ID. New gateway session mappings use
+UUIDv7; resumed UUIDv4 sessions and official UUIDv4 auxiliary labels preserve
+their type. Stored mappings include the UUID version in their scope so the same
+raw value in a resumed session and a new cache-seeded session cannot conflict.
+The corrected mapping namespace creates a new mapping on its first use after
+upgrade; drain older workers so sessions do not alternate between namespaces.
+Mappings are persisted atomically, scoped by tenant and credential
+owner, and fail closed when durable mapping is unavailable. The installation
+uses a persisted virtual-device seed for the UUIDv5 agent identity, avoiding raw
+host machine information. This agent identity survives restarts and is distinct
+from the official process-scoped UUIDv4 agent-instance identity. OAuth
 requests include the credential owner's `sub` as `x-grok-user-id`. The gateway
 does not fabricate a turn index, retry count, deployment ID, or tracing lineage
 it does not own, and generic account header overrides cannot replace any of
@@ -64,6 +75,11 @@ proxy. It is enabled by `gateway.grok.grok_request_compression_enabled`
 `false` is the operator kill switch and always sends plain JSON. Enabled only
 permits negotiation; it never authorizes compression by itself.
 
+URL construction and ordinary relay headers use the same acquired credential
+snapshot as Authorization, including Chat fallbacks, media, voice and realtime.
+Resource accounting stays attached to the selected account. A configured proxy
+without its captured relation stops preparation before an upstream send.
+
 Before compressing, the gateway reads `GET {base_url}/settings` from the exact
 normalized target (scheme, host, effective port and base path) — the same
 `cli-chat-proxy.grok.com/v1` route the sampler uses — with the credential
@@ -75,7 +91,9 @@ lookups, a withdrawn advertisement, another origin, another credential owner or
 another proxy all keep plain JSON; a lookup failure never fails the inference
 and never creates an audit decision. One probe is bounded by a five-second
 timeout. The capability is cached in-process for five minutes, refreshed through
-a single-flight guard bound to target, owner and proxy configuration; there is
+a single-flight guard bound to target, owner, credential generation and proxy
+configuration (including proxy status); positive and negative entries cannot
+cross a relink or credential rotation. There is
 no persistent table or background service.
 
 The final JSON is encoded after model, tool and session adaptation, at zstd
@@ -131,6 +149,7 @@ headers or fabricated values:
 - Responses: `/v1/responses`, `/responses`, `/backend-api/codex/responses`
 - Chat Completions: `/v1/chat/completions`, `/chat/completions`
 - Claude-compatible Messages: `/v1/messages`
+- Claude-compatible local token counting: `/v1/messages/count_tokens`
 - Standalone search (Grok groups only): `/x_search` (native `x_search`) and
   `/web_search`
 - Voice (Grok groups only): `/tts`, `/stt`, custom voices, and `/realtime`
@@ -139,9 +158,27 @@ headers or fabricated values:
 - Client-facing Responses WebSocket ingress bridged to the xAI HTTP/SSE
   upstream
 
+Local token counting enters the same Messages Content Moderation and Prompt
+Audit gates after authentication and basic validation, before estimation. It
+does not select a provider account. Unknown valid blocks pass through while
+recognized sibling content remains auditable under the shared
+[content coverage contract](../SECURITY_AUDIT_CONTENT_COVERAGE.md).
+
+When an API-key account is marked as not supporting Responses, the Messages
+adapter sends Chat Completions with that account's Grok API key and validated
+Grok base URL. An empty result from another provider's key getter must never
+quarantine a valid Grok grant.
+
 The optional SSO import converts an operator-supplied Grok Web SSO cookie into
 Build OAuth credentials through the trusted xAI device flow. The raw cookie is
 used only for that conversion and is not persisted in account credentials.
+Polling preserves `authorization_pending`, increases the interval by five
+seconds after every `slow_down`, and stops on denial or expiry. Verification
+and consent consume the original device grant lifetime. Cancellation or an
+expired grant prevents further polls and discards late successful responses;
+an upstream error description cannot expose cookies, device codes or proxy
+passwords. These rules follow [RFC 8628, sections 3.2 and
+3.5](https://www.rfc-editor.org/rfc/rfc8628.html#section-3.5).
 General browser automation and web scraping remain outside this provider
 integration.
 
@@ -152,6 +189,11 @@ otherwise the conversation ID is the official fallback. Compatibility-client
 session signals and anchored prefix derivation are gateway fallbacks only.
 The gateway namespaces cache values by tenant API key and model. Conversation,
 session and root-group associations are resolved independently and tenant-isolated.
+An explicit cache seed can establish a conversation fallback; a content-derived
+cache key cannot. Without an explicit conversation/session/cache declaration,
+the execution session is a fresh UUIDv7 retained only for that logical request,
+its retries and auxiliary prompts. Independent identical prompts and subsequent
+unlabelled WS turns receive different sessions while retaining cache reuse.
 An auxiliary request can therefore use a new conversation ID while sharing the
 parent's session, cache key and root group; descendants sharing an explicit
 conversation-group declaration retain that grouping.
@@ -177,8 +219,8 @@ The selected Grok snapshot declares both official client families: sampler and
 control operations use `grok-shell/<version> (linux; x86_64)`; Imagine image/video
 operations use `xai-grok-build/<version>` with the same selected version and
 `grok-shell` client identifier. The system settings show the media declaration
-separately. Compatible accounts that explicitly select another permitted preset
-retain that preset. Inbound headers and the shared transport cannot select a family.
+separately. Native OAuth and API-key accounts both retain grok-build. Only Grok
+`upstream` accounts may select another permitted preset. Inbound headers and the shared transport cannot select a family.
 Media start/poll requests carry an isolated `x-grok-session-id` when available;
 they do not acquire sampler request/model/agent fields.
 
@@ -202,7 +244,56 @@ API.
 
 ## OAuth Configuration
 
-The OAuth flow uses PKCE. Default public client values can be overridden:
+Existing-account reauthorization is independent of account creation. Code,
+refresh-token and SSO reauthorization capture the initiating account and modal
+generation. Replacing the account, credentials or saved proxy, closing/reopening
+the modal or disposing it invalidates outstanding results. Already-issued
+credential writes may finish on the server, but their late success/failure
+cannot close, notify or clear loading in a replacement flow. Raw SSO cookies
+and passwords are never included in the persisted reauthorization payload.
+
+The OAuth authorization-code flow uses PKCE and fresh UUIDv7 state/nonce. The
+server retains the nonce, issuer, client ID and outbound identity snapshot with
+the single-use authorization session. Before returning a user identity it
+validates the ID token signature, permitted asymmetric algorithm, issuer,
+audience, expiry, subject and nonce against the official discovery/JWKS origin.
+The official team-principal exception uses only the access token returned by
+the trusted token exchange. Token exchange and refresh redirects must retain
+the configured endpoint's scheme, host and port, with the standard ten-hop
+limit. Cross-origin redirects and HTTPS downgrades stop before sending the
+code, verifier or refresh token to the next destination. Explicit operator URL
+overrides remain the initial trusted endpoint; they cannot delegate trust by
+redirect. Permitted redirects retain the operation's identity snapshot.
+Refresh grants do not require a new login nonce.
+Authorization sessions started before nonce binding was installed must restart.
+Default public client values remain configurable as listed below.
+
+Personal browser login verifies the returned ID token before returning account
+credentials. The authorization nonce is stored with the single-use session,
+including Redis sessions served by another instance. Discovery uses the pinned
+issuer `https://auth.x.ai`; the JWKS URI must stay on that issuer's origin, and
+metadata requests do not follow redirects. Verification checks the asymmetric
+signature, advertised algorithm, signing-key ID, issuer, audience, expiry,
+issued-at time, subject, nonce, and authorized party when applicable. Missing ID
+tokens, missing verifiers and failed verification reject the login. The explicit
+`principal_type: Team` plus nonempty `principal_id` in a parseable JWT matches official
+team consent, which omits user-only OIDC scopes; it never imports an unverified
+personal email or subject.
+
+The proxy URL selected at login start is retained for token exchange, discovery
+and JWKS. A callback cannot bind or switch proxies; restart login to select
+another route. A missing or invalid configured proxy, refusal, timeout or 407
+never authorizes direct networking. Metadata requests use the same trusted
+Grok identity without authorization codes, ID/access/refresh tokens or cookies.
+
+Protocol source: [`xai-org/grok-build` at `2bdd1d6a`,
+`xai-grok-login/src/oidc/protocol.rs`](https://github.com/xai-org/grok-build/blob/2bdd1d6a/crates/codegen/xai-grok-login/src/oidc/protocol.rs)
+(`peek_access_token_principal`, `extract_user_info`,
+`validate_and_extract_user_info`), plus [OIDC Core 1.0 ID-token
+validation](https://openid.net/specs/openid-connect-core-1_0.html#IDTokenValidation).
+Regressions: `grok_oidc_contract_test.go`, `xai/oidc_contract_test.go` and
+`grok_oidc_proxy_contract_test.go`, including real proxy failures after preceding
+browser-login stages through the production client.
 
 The built-in authorization request identifies `grok-build` as its referrer and
 requests the current Grok Build scopes for API proxy, conversation, and
@@ -245,10 +336,82 @@ before replacing it.
 
 ## Quotas and Media Eligibility
 
-xAI quota display is passive: Sub2API Plus records supported upstream
-rate-limit headers but does not invent subscription quota values. Before a
-usable upstream observation, quota remains unknown while local usage is still
-shown.
+xAI usage combines the official billing summary with supported upstream
+rate-limit observations. A manual quota probe can collect fresh headers from
+the sampler; billing refresh uses the official billing endpoint. Neither path
+invents subscription quota values. Before a usable upstream observation, quota
+remains unknown while local usage is still shown.
+
+Active quota probes and billing requests deep-copy the loaded credential owner
+and strictly validate its captured proxy before token lookup or refresh. A
+missing, mismatched or malformed binding fails without provider requests or
+observation writes. The request never repairs that binding by reading a newer
+proxy row. An explicitly unbound account may connect directly and ignores a
+stale hydrated proxy edge. Scheduling pauses still allow diagnostics with valid
+credentials and a valid route; they do not bypass these integrity checks.
+
+The detached `/v1/models` discovery triggered by quota diagnostics captures a
+deep copy of credentials and the proxy before scheduling background work. It
+uses that route without rereading the proxy repository. Model observations are
+published through the shared atomic credential/proxy-owner comparison; a late
+response cannot update a relinked login or an edited proxy's model metadata.
+
+Inference and Realtime requests retain the credential and proxy owner captured
+before credential lookup. Quota observations, account cooldowns and configured
+403 rules commit through one conditional owner-and-scheduler transaction with
+the scheduler outbox. A relink, proxy edit, manual pause, newer cooldown or failed
+transaction prevents publication of that request's state. Account and model
+runtime blocks also retain their credential/proxy owner, including when an old
+publisher resumes after reauthorization. Team limits still apply to accounts
+sharing the observed team. Request observation writers reject caller-owned
+transactions because they cannot publish runtime effects before the caller's
+commit. Successful responses can clear only the rate limit observed by that
+same owner.
+
+The OAuth Chat-to-Responses bridge is a separate sender and captures the same
+owner before token lookup. Token acquisition compares the complete route,
+credential identity and client declarations at version adoption, refresh reread,
+lock wait and refresh completion. A rotation issued for that captured grant
+commits through the full credential/scheduler/proxy CAS before the request's
+snapshot advances. A background access-token rotation may be adopted only with
+the same refresh grant and identity; a replacement login is retried through
+account selection. Manual diagnostics preserve their existing scheduling bypass.
+
+Issuer failures use the same captured credential and proxy ownership. Permanent
+and temporary quarantine compare the proxy endpoint, authentication and lifecycle,
+including edits that retain its row ID. A still-missing proxy binding can be
+quarantined, while a restored binding wins over that old failure. Quarantine and
+its scheduler outbox event share the caller's transaction; scheduler cache
+publication waits for commit. A failed quarantine CAS may recover only an
+access-token or expiry repair with the same refresh grant and identity. A new
+refresh grant, subject, team, client, base URL, identity or route requires account
+selection again and cannot lend its token to the old request.
+
+Credential recovery clears only runtime and model failure generations captured
+before its successful commit. A later failure remains blocked even when it has
+the same deadline. Manual reset advances a persisted recovery generation with
+its outbox event; refreshed scheduler snapshots ignore older local model blocks
+on every instance. Each observation binds its effects to the generation returned
+by its own atomic commit. A failure committed after reset remains valid even if
+its request started earlier, or the reset's local cleanup has not completed.
+Local cleanup compares the captured failure sequences instead of clearing later
+observations. The in-process publication epoch remains the fallback for accounts
+without a saved recovery generation. True shared team limits remain separate.
+
+Active quota probes, billing probes and account-connection diagnostics use the
+same owner transaction. A stale owner or storage failure leaves the current
+account's quota, billing and scheduling state intact. A received diagnostic
+response can still be shown, with `persisted=false` on quota/billing results;
+an upstream billing failure still returns its normal failure. A Voice HTTP 200
+now observes quota headers and can recover the exact earlier rate limit in the
+same transaction as its quota snapshot.
+
+Changing the proxy or restarting an account-creation flow invalidates its old
+browser generation. Late SSO, password-import and account-creation completions
+cannot close, notify or start model synchronization for the replacement flow.
+An account POST already sent to the server may still complete there. The
+password-import control is currently hidden; its event handler retains the same
+generation boundary.
 
 Authentication, entitlement, and rate-limit failures temporarily affect account
 scheduling according to their status. Shared model-capacity / high-demand
@@ -273,3 +436,31 @@ OAuth refresh can replace a stale subscription snapshot with the JWT `tier`
 when that value is more recent. Cross-client model mapping
 (`grok_cross_client_model_map_enabled`) stays opt-in. Password authorization
 remains disabled.
+
+The [official grok-build baseline](../OFFICIAL_AGENT_BASELINES.md) remains
+`1.0.45`. Public `api.x.ai` HTTP and realtime WebSocket forwarding/probes omit
+`x-grok-client-mode` and CLI-proxy authentication declarations; CLI proxy/control
+calls retain their official destination-specific declarations. Migration 291
+removes obsolete Grok API-key compatible-family selections/defaults atomically.
+
+### Credential-owned observations
+
+Billing and response quota snapshots carry an opaque credential/proxy generation.
+Probe coalescing uses that generation; conditional persistence, cooldowns and
+recovery compare the exact sent credentials before changing account state.
+Their owner evidence includes the hydrated proxy endpoint, credentials and
+status, compared under a proxy-row share lock in the same atomic mutation.
+Missing hydration never bypasses the comparison. A proxy-invalid failure must
+explicitly identify the missing configured proxy; quarantine locks its deleted
+row and rejects a concurrent restoration. A same-row route or status repair
+also invalidates old generation-bound observations and runtime blocks.
+Manual connection tests and derived auto-pause thresholds use the same fence.
+Slim scheduler records retain only the grant digest needed to check these
+observations; they cannot act as credential snapshots for state mutations.
+A late response cannot authorize media or install scheduling state for a new
+login. Reads ignore legacy unbound or mismatched observations until a fresh
+probe succeeds. Explicit administrator media overrides retain precedence.
+Normal refresh preserves session mapping while invalidating obsolete credential
+observations; a fresh token does not inherit an older token’s late error.
+Replacing an API key changes its session mapping; OAuth session ownership is
+bound to the authenticated subject/team so ordinary token rotation preserves it.

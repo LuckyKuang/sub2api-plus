@@ -1,12 +1,12 @@
 <template>
-  <div class="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
+  <div class="monitor-filters-bar flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
     <!-- Left: Search + Filters -->
-    <div class="flex flex-1 flex-wrap items-center gap-3">
-      <div class="relative w-full sm:w-64">
+    <div class="monitor-filter-fields flex flex-1 flex-wrap items-center gap-3">
+      <div class="monitor-search relative w-full sm:w-64">
         <Icon
           name="search"
           size="md"
-          class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500"
+          class="absolute left-3 top-1/2 -translate-y-1/2 surface-muted"
         />
         <input
           v-model="search"
@@ -21,7 +21,7 @@
         v-model="provider"
         :options="providerFilterOptions"
         :placeholder="t('admin.channelMonitor.allProviders')"
-        class="w-44"
+        class="monitor-filter-select w-44"
         @change="$emit('reload')"
       />
 
@@ -29,13 +29,13 @@
         v-model="enabled"
         :options="enabledFilterOptions"
         :placeholder="t('admin.channelMonitor.enabledFilter')"
-        class="w-40"
+        class="monitor-filter-select w-40"
         @change="$emit('reload')"
       />
     </div>
 
     <!-- Right: Actions -->
-    <div class="flex w-full flex-shrink-0 flex-wrap items-center justify-end gap-3 lg:w-auto">
+    <div class="monitor-filter-actions flex w-full flex-shrink-0 flex-wrap items-center justify-end gap-3 lg:w-auto">
       <button
         @click="$emit('reload')"
         :disabled="loading"
@@ -118,3 +118,20 @@ const enabledFilterOptions = computed(() => [
   { value: 'false', label: t('admin.channelMonitor.onlyDisabled') },
 ])
 </script>
+
+<style scoped>
+@media (min-width: 1024px) {
+  .monitor-filters-bar { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: center; gap: 8px; }
+  .monitor-filter-fields { display: contents; }
+  .monitor-search, .monitor-filter-select { min-width: 0; width: auto; }
+  .monitor-filter-actions { grid-column: 1 / -1; width: auto; gap: 8px; }
+  .monitor-filters-bar :deep(.input), .monitor-filters-bar :deep(.select-trigger) { height: 32px; min-height: 32px; padding: 6px 10px; font-size: 12px; line-height: 18px; }
+  .monitor-search .input { padding-left: 34px; }
+  .monitor-filter-actions .btn { min-height: 32px; padding: 6px 10px; font-size: 12px; line-height: 18px; }
+  .monitor-filter-actions .btn > :deep(svg) { margin-right: 0; }
+}
+@media (min-width: 1280px) {
+  .monitor-filters-bar { grid-template-columns: minmax(0, 1fr) minmax(100px, .65fr) minmax(100px, .6fr) auto; }
+  .monitor-filter-actions { grid-column: auto; }
+}
+</style>

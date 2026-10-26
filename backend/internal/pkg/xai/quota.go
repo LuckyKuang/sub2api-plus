@@ -31,18 +31,19 @@ type QuotaWindow struct {
 }
 
 type QuotaSnapshot struct {
-	Requests          *QuotaWindow      `json:"requests,omitempty"`
-	Tokens            *QuotaWindow      `json:"tokens,omitempty"`
-	RetryAfterSeconds *int              `json:"retry_after_seconds,omitempty"`
-	SubscriptionTier  string            `json:"subscription_tier,omitempty"`
-	EntitlementStatus string            `json:"entitlement_status,omitempty"`
-	StatusCode        int               `json:"status_code,omitempty"`
-	Headers           map[string]string `json:"headers,omitempty"`
-	HeadersObserved   bool              `json:"headers_observed"`
-	ObservationSource string            `json:"observation_source,omitempty"`
-	LastProbeAt       string            `json:"last_probe_at,omitempty"`
-	LastHeadersSeenAt string            `json:"last_headers_seen_at,omitempty"`
-	UpdatedAt         string            `json:"updated_at"`
+	CredentialGeneration string            `json:"credential_generation,omitempty"`
+	Requests             *QuotaWindow      `json:"requests,omitempty"`
+	Tokens               *QuotaWindow      `json:"tokens,omitempty"`
+	RetryAfterSeconds    *int              `json:"retry_after_seconds,omitempty"`
+	SubscriptionTier     string            `json:"subscription_tier,omitempty"`
+	EntitlementStatus    string            `json:"entitlement_status,omitempty"`
+	StatusCode           int               `json:"status_code,omitempty"`
+	Headers              map[string]string `json:"headers,omitempty"`
+	HeadersObserved      bool              `json:"headers_observed"`
+	ObservationSource    string            `json:"observation_source,omitempty"`
+	LastProbeAt          string            `json:"last_probe_at,omitempty"`
+	LastHeadersSeenAt    string            `json:"last_headers_seen_at,omitempty"`
+	UpdatedAt            string            `json:"updated_at"`
 	// Model is the upstream id that produced these rate-limit headers.
 	Model string `json:"model,omitempty"`
 	// PlanFrom45Responses is inferred from a grok-4.5 Responses window

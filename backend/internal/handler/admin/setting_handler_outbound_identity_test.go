@@ -72,13 +72,17 @@ func TestOutboundIdentitySettingsAPI(t *testing.T) {
 			advanced = append(advanced, policy.Get("key").String())
 		}
 	}
-	require.ElementsMatch(t, []string{"openai:apikey", "openai:upstream", "anthropic:apikey", "anthropic:upstream", "gemini:apikey", "gemini:upstream", "grok:apikey", "grok:upstream", "antigravity:upstream", "typesafe:apikey", "opencode_go:apikey", "cline:apikey", "command_code:apikey"}, advanced)
-	for _, key := range []string{"deepseek:apikey", "kimi:apikey", "minimax:apikey", "zhipu:apikey", "stepfun:apikey", "anthropic:bedrock", "anthropic:service_account", "gemini:service_account"} {
+	require.ElementsMatch(t, []string{"openai:upstream", "anthropic:apikey", "anthropic:upstream", "gemini:apikey", "gemini:upstream", "grok:upstream", "antigravity:upstream", "typesafe:apikey", "opencode_go:apikey", "cline:apikey", "command_code:apikey"}, advanced)
+	for _, key := range []string{"grok:apikey", "openai:apikey", "deepseek:apikey", "kimi:apikey", "minimax:apikey", "zhipu:apikey", "stepfun:apikey", "anthropic:bedrock", "anthropic:service_account", "gemini:service_account"} {
 		body, err := json.Marshal(map[string]any{"defaults": map[string]string{key: "grok"}})
 		require.NoError(t, err)
 		require.Equal(t, http.StatusBadRequest, request(http.MethodPut, "/identity", string(body)).Code, key)
 		platform, kind, _ := strings.Cut(key, ":")
-		body, err = json.Marshal(map[string]any{"platform": platform, "type": kind, "selection": map[string]string{"preset": "grok"}})
+		preset := "grok"
+		if platform == "grok" {
+			preset = "claude"
+		}
+		body, err = json.Marshal(map[string]any{"platform": platform, "type": kind, "selection": map[string]string{"preset": preset}})
 		require.NoError(t, err)
 		require.Equal(t, http.StatusBadRequest, request(http.MethodPost, "/preview", string(body)).Code, key)
 	}
@@ -122,21 +126,21 @@ func TestOutboundIdentitySettingsAPI(t *testing.T) {
 	zcodePreview := request(http.MethodPost, "/preview", `{"platform":"zhipu","type":"apikey","selection":{"preset":"zcode"}}`)
 	require.Equal(t, http.StatusOK, zcodePreview.Code)
 	require.Equal(t, "zcode", gjson.Get(zcodePreview.Body.String(), "data.preset").String())
-	require.Equal(t, "ZCode/3.14.3", gjson.Get(zcodePreview.Body.String(), "data.user_agent").String())
+	require.Equal(t, "ZCode/3.16.2", gjson.Get(zcodePreview.Body.String(), "data.user_agent").String())
 	require.Equal(t, "ZCode", gjson.Get(zcodePreview.Body.String(), "data.originator").String())
-	require.Equal(t, "3.14.3", gjson.Get(zcodePreview.Body.String(), "data.version").String())
-	require.Equal(t, "ZCode/3.14.3", gjson.Get(zcodePreview.Body.String(), `data.headers.User-Agent`).String())
+	require.Equal(t, "3.16.2", gjson.Get(zcodePreview.Body.String(), "data.version").String())
+	require.Equal(t, "ZCode/3.16.2", gjson.Get(zcodePreview.Body.String(), `data.headers.User-Agent`).String())
 	require.False(t, gjson.Get(zcodePreview.Body.String(), `data.headers.Originator`).Exists(), "ZCode declares no Originator header")
 	require.False(t, gjson.Get(zcodePreview.Body.String(), `data.headers.Version`).Exists(), "ZCode declares no standalone version header")
 	zhipuOAuthPreview := request(http.MethodPost, "/preview", `{"platform":"zhipu","type":"oauth","selection":{"preset":"codex"}}`)
 	require.Equal(t, http.StatusBadRequest, zhipuOAuthPreview.Code, "OAuth accounts must retain their native client family")
-	require.Equal(t, http.StatusBadRequest, request(http.MethodPost, "/preview", `{"platform":"zhipu","type":"apikey","selection":{"preset":"zcode","user_agent":"codex_cli_rs/0.158.0"}}`).Code)
+	require.Equal(t, http.StatusBadRequest, request(http.MethodPost, "/preview", `{"platform":"zhipu","type":"apikey","selection":{"preset":"zcode","user_agent":"codex_cli_rs/0.163.0"}}`).Code)
 	zcodeSaved := request(http.MethodPut, "/identity", `{"profiles":{"grok":{"version":"3.9.1"},"zcode":{"preset":"zcode","version":"0.16.9"}},"defaults":{"gemini:apikey":"grok"}}`)
 	require.Equal(t, http.StatusOK, zcodeSaved.Code)
 	require.Equal(t, "zcode", gjson.Get(zcodeSaved.Body.String(), `data.settings.profiles.zcode.preset`).String())
 	require.Equal(t, "ZCode/0.16.9", gjson.Get(zcodeSaved.Body.String(), `data.effective.#(preset=="zcode").user_agent`).String())
 	require.NotContains(t, zcodeSaved.Body.String(), `"zhipu:apikey":"zcode"`)
-	require.Equal(t, http.StatusBadRequest, request(http.MethodPut, "/identity", `{"profiles":{"zcode":{"preset":"zcode","user_agent":"codex_cli_rs/0.158.0"}}}`).Code)
+	require.Equal(t, http.StatusBadRequest, request(http.MethodPut, "/identity", `{"profiles":{"zcode":{"preset":"zcode","user_agent":"codex_cli_rs/0.163.0"}}}`).Code)
 	// Kimi Code declares one product token plus a device description set. The
 	// preview reports the complete declaration block, the settings view reports
 	// which declarations accept a configured value, and no configuration tier
@@ -144,10 +148,10 @@ func TestOutboundIdentitySettingsAPI(t *testing.T) {
 	kimiPreview := request(http.MethodPost, "/preview", `{"platform":"kimi","type":"apikey","selection":{"preset":"kimi"}}`)
 	require.Equal(t, http.StatusOK, kimiPreview.Code)
 	require.Equal(t, "kimi", gjson.Get(kimiPreview.Body.String(), "data.preset").String())
-	require.Equal(t, "kimi-code-cli/2.1.1", gjson.Get(kimiPreview.Body.String(), "data.user_agent").String())
-	require.Equal(t, "2.1.1", gjson.Get(kimiPreview.Body.String(), "data.version").String())
+	require.Equal(t, "kimi-code-cli/2.3.1", gjson.Get(kimiPreview.Body.String(), "data.user_agent").String())
+	require.Equal(t, "2.3.1", gjson.Get(kimiPreview.Body.String(), "data.version").String())
 	require.Equal(t, "kimi_code_cli", gjson.Get(kimiPreview.Body.String(), `data.headers.X-Msh-Platform`).String())
-	require.Equal(t, "2.1.1", gjson.Get(kimiPreview.Body.String(), `data.headers.X-Msh-Version`).String())
+	require.Equal(t, "2.3.1", gjson.Get(kimiPreview.Body.String(), `data.headers.X-Msh-Version`).String())
 	require.False(t, gjson.Get(kimiPreview.Body.String(), `data.headers.Originator`).Exists(), "Kimi Code declares no Originator header")
 	require.False(t, gjson.Get(kimiPreview.Body.String(), `data.headers.Version`).Exists(), "Kimi Code declares no standalone version header")
 	for _, name := range []string{"X-Msh-Device-Name", "X-Msh-Device-Model", "X-Msh-Os-Version", "X-Msh-Device-Id"} {

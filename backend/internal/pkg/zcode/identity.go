@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
+	"github.com/google/uuid"
 )
 
 const (
@@ -23,14 +24,14 @@ const (
 	// Preset is the outbound identity preset key owned by this family.
 	Preset = "zcode"
 
-	// DefaultVersion is the pinned ZCode release version.
+	// DefaultVersion is the reviewed ZCode source version.
 	//
 	// Two official version lines exist upstream: the desktop / server product
-	// version (repository root package.json, 3.14.3) and the standalone CLI
-	// package version (apps/zcode-cli/package.json, 0.16.9). The desktop product
+	// version (repository root package.json, 3.16.2) and the standalone CLI
+	// package version (apps/zcode-cli/package.json, 0.17.0). The desktop product
 	// version is pinned because the User-Agent product token names that product
 	// and the desktop application is what spawns the agent runtime.
-	DefaultVersion = "3.14.3"
+	DefaultVersion = "3.16.2"
 
 	// VersionEnv is the optional operator override for DefaultVersion. It
 	// follows the existing SUB2API_CLAUDE_CLI_VERSION /
@@ -150,20 +151,43 @@ func withIdentity(ctx context.Context) context.Context {
 	return outboundidentity.WithIdentity(ctx, identity)
 }
 
-func prepareRequest(req *http.Request) {
+func prepareRequest(req *http.Request) error {
 	*req = *req.WithContext(withIdentity(req.Context()))
 	identity, _ := outboundidentity.FromContext(req.Context())
+	identity, err := EnsureDeviceIdentity(req.Context(), identity)
+	if err != nil {
+		return err
+	}
 	*req = *req.WithContext(outboundidentity.WithIdentity(req.Context(), ControlIdentity(identity)))
 	outboundidentity.ApplyContext(req)
+	// Control requests use a new correlation ID for every physical send,
+	// including PAT rejection retries. It is never ticket or grant state.
+	for name := range req.Header {
+		if strings.EqualFold(name, "x-request-id") {
+			delete(req.Header, name)
+		}
+	}
+	req.Header.Set("x-request-id", uuid.NewString())
+	return nil
 }
 
 // ControlIdentity follows services/sourceHeaders.ts, not model-config.ts.
-// X-ZCode-Agent belongs only to inference; a missing telemetry device ID is
-// omitted rather than invented. Keep all chosen product/runtime declarations.
+// X-ZCode-Agent belongs only to inference; device identity is captured by
+// EnsureDeviceIdentity before this projection. Keep chosen host declarations.
 func ControlIdentity(identity outboundidentity.Identity) outboundidentity.Identity {
 	identity.Headers = maps.Clone(identity.Headers)
 	delete(identity.Headers, "X-ZCode-Agent")
 	maps.Copy(identity.Headers, identity.ControlHeaders)
+	return identity
+}
+
+// ModelIdentity restores model-only declarations when a trusted snapshot has
+// also been used for a control operation. DeviceMid stays a metadata carrier.
+func ModelIdentity(identity outboundidentity.Identity) outboundidentity.Identity {
+	identity.Headers = maps.Clone(identity.Headers)
+	delete(identity.Headers, HeaderDeviceMid)
+	identity.Headers["X-ZCode-Agent"] = "glm"
+	identity.Headers["X-Os-Version"] = outboundidentity.DefaultKernelRelease
 	return identity
 }
 

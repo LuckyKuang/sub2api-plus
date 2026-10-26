@@ -150,3 +150,12 @@ func TestHandle429_FallbackUsesDefaultSecondsWhenSettingServiceMissing(t *testin
 	require.Equal(t, int64(44), accountRepo.lastRateLimitID)
 	require.True(t, !accountRepo.lastRateLimitReset.Before(before.Add(5*time.Second)) && !accountRepo.lastRateLimitReset.After(after.Add(5*time.Second)))
 }
+
+func (r *rateLimit429AccountRepoStub) ApplyCredentialStateMutation(ctx context.Context, owner *Account, mutation CredentialStateMutation) (bool, error) {
+	if mutation.RateLimitUntil != nil {
+		if err := r.SetRateLimited(ctx, owner.ID, *mutation.RateLimitUntil); err != nil {
+			return false, err
+		}
+	}
+	return true, nil
+}

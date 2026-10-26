@@ -42,6 +42,34 @@ func (h *ChannelMonitorV2Handler) GetConfig(c *gin.Context) {
 	response.Success(c, cfg)
 }
 
+func (h *ChannelMonitorV2Handler) ModelCatalog(c *gin.Context) {
+	groups, err := parseChannelMonitorV2GroupIDs(queryList(c, "group_id"))
+	if err != nil {
+		response.BadRequest(c, "invalid group_id")
+		return
+	}
+	rangeValue := c.DefaultQuery("range", "30d")
+	filter, err := h.service.ParseFilter(rangeValue, queryList(c, "platform"), nil, groups)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	result, err := h.service.ModelCatalog(c.Request.Context(), filter)
+	if err != nil {
+		if errors.Is(err, service.ErrChannelMonitorV2CatalogTooLarge) {
+			response.Error(c, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			response.Error(c, http.StatusGatewayTimeout, "model catalog timed out; narrow the platform, group or range")
+			return
+		}
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, result)
+}
+
 func (h *ChannelMonitorV2Handler) UpdateConfig(c *gin.Context) {
 	var input service.ChannelMonitorV2Config
 	if err := c.ShouldBindJSON(&input); err != nil {

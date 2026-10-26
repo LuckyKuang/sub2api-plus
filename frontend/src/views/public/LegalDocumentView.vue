@@ -1,10 +1,10 @@
 <template>
-  <div class="min-h-screen bg-gray-50 text-gray-900 dark:bg-dark-950 dark:text-white">
-    <header class="border-b border-gray-200 bg-white/95 dark:border-dark-800 dark:bg-dark-900/95">
+  <div class="flex min-h-screen flex-col gap-[var(--shell-gap)] bg-canvas p-[var(--shell-gutter)] text-gray-900 dark:surface-inset dark:text-white">
+    <header class="shell-surface">
       <div class="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
         <RouterLink to="/home" class="flex min-w-0 items-center gap-3">
           <template v-if="settings">
-            <span class="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-200 dark:bg-dark-800 dark:ring-dark-700">
+            <span class="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl surface-inset shadow-sm ring-1 ring-gray-200 dark:ring-dark-700">
               <img :src="siteLogo || '/logo.svg'" alt="Logo" class="h-full w-full object-contain" />
             </span>
             <span class="truncate text-base font-semibold text-gray-950 dark:text-white">
@@ -25,14 +25,14 @@
       </div>
     </header>
 
-    <main class="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:py-10">
-      <div v-if="loading" class="flex min-h-[320px] items-center justify-center">
+    <main class="mx-auto w-full min-w-0 max-w-4xl">
+      <div v-if="loading" class="card flex min-h-[320px] items-center justify-center">
         <div class="h-8 w-8 animate-spin rounded-full border-b-2 border-primary-600"></div>
       </div>
 
       <section
         v-else-if="loadError"
-        class="rounded-lg border border-red-200 bg-red-50 p-6 text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200"
+        class="card border-red-200 p-6 text-red-700 dark:border-red-500/30 dark:text-red-200"
       >
         <h1 class="text-lg font-semibold">{{ t('legal.loadFailed') }}</h1>
         <p class="mt-2 text-sm">{{ t('legal.retryLater') }}</p>
@@ -40,25 +40,25 @@
 
       <section
         v-else-if="!currentDocument"
-        class="rounded-lg border border-gray-200 bg-white p-6 dark:border-dark-700 dark:bg-dark-900"
+        class="card p-6"
       >
         <div class="flex items-start gap-3">
-          <span class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md bg-gray-100 text-gray-600 dark:bg-dark-800 dark:text-dark-300">
+          <span class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md surface-inset surface-muted">
             <Icon name="document" size="sm" />
           </span>
           <div>
             <h1 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('legal.notFound') }}</h1>
-            <p class="mt-2 text-sm leading-6 text-gray-600 dark:text-dark-300">
+            <p class="mt-2 text-sm leading-6 surface-muted">
               {{ t('legal.notFoundDescription') }}
             </p>
           </div>
         </div>
       </section>
 
-      <article v-else>
+      <article v-else class="card p-5 sm:p-8">
         <div class="mb-8 border-b border-gray-200 pb-6 dark:border-dark-700">
           <div class="flex items-start gap-4">
-            <span class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-md bg-primary-50 text-primary-700 dark:bg-primary-500/10 dark:text-primary-300">
+            <span class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-md bg-primary-50/[0.15] text-primary-700 dark:bg-primary-500/10 dark:text-primary-300">
               <Icon :name="documentIcon" size="md" />
             </span>
             <div class="min-w-0">
@@ -66,7 +66,7 @@
               <h1 class="mt-2 break-words text-2xl font-bold tracking-normal text-gray-950 dark:text-white sm:text-3xl">
                 {{ currentDocument.title }}
               </h1>
-              <p v-if="updatedAt" class="mt-3 text-sm text-gray-500 dark:text-dark-400">
+              <p v-if="updatedAt" class="mt-3 text-sm surface-muted">
                 {{ t('legal.updatedAt', { date: updatedAt }) }}
               </p>
             </div>
@@ -80,7 +80,7 @@
         ></div>
         <div
           v-else
-          class="rounded-lg border border-dashed border-gray-300 bg-white px-6 py-14 text-center text-sm text-gray-500 dark:border-dark-700 dark:bg-dark-900 dark:text-dark-400"
+          class="rounded-lg border border-dashed border-gray-300 surface-inset px-6 py-14 text-center text-sm dark:border-dark-700 surface-muted"
         >
           {{ t('legal.empty') }}
         </div>
@@ -206,7 +206,7 @@ onMounted(async () => {
 }
 
 .legal-document-content :deep(p) {
-  @apply mb-4 text-gray-700 dark:text-dark-200;
+  @apply mb-4; color: var(--surface-muted);
 }
 
 .legal-document-content :deep(a) {
@@ -222,7 +222,7 @@ onMounted(async () => {
 }
 
 .legal-document-content :deep(li) {
-  @apply mb-1 text-gray-700 dark:text-dark-200;
+  @apply mb-1; color: var(--surface-muted);
 }
 
 .legal-document-content :deep(blockquote) {
@@ -230,11 +230,13 @@ onMounted(async () => {
 }
 
 .legal-document-content :deep(code) {
-  @apply rounded bg-gray-100 px-1.5 py-0.5 font-mono text-sm dark:bg-dark-800;
+  @apply rounded px-1.5 py-0.5 font-mono text-sm;
+  background-color: var(--surface-soft);
 }
 
 .legal-document-content :deep(pre) {
-  @apply my-5 overflow-x-auto rounded-lg bg-gray-950 p-4 text-gray-100;
+  @apply my-5 overflow-x-auto rounded-lg p-4 ;
+  background-color: var(--surface-soft); color: var(--surface-text);
 }
 
 .legal-document-content :deep(pre code) {
@@ -246,7 +248,8 @@ onMounted(async () => {
 }
 
 .legal-document-content :deep(th) {
-  @apply border border-gray-300 bg-gray-50 px-3 py-2 text-left font-semibold dark:border-dark-600 dark:bg-dark-800;
+  @apply border border-gray-300 px-3 py-2 text-left font-semibold dark:border-dark-600;
+  background-color: var(--surface-soft);
 }
 
 .legal-document-content :deep(td) {

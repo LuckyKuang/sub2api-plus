@@ -154,16 +154,16 @@ func officialDomesticAnthropicHeaders(platform, kind string) map[string]string {
 	headers := map[string]string{}
 	switch platform {
 	case PlatformDeepseek:
-		headers["User-Agent"] = "deepseek-harness/0.2.0-rc.2 (+https://github.com/deepseek-ai/deepseek-harness)"
+		headers["User-Agent"] = "deepseek-harness/0.2.1-rc.3 (+https://github.com/deepseek-ai/deepseek-harness)"
 	case PlatformKimi:
-		headers = map[string]string{"User-Agent": "kimi-code-cli/2.1.1", "X-Msh-Platform": "kimi_code_cli", "X-Msh-Version": "2.1.1", "X-Msh-Device-Name": "ubuntu", "X-Msh-Device-Model": "Linux 6.8.0-31-generic x64", "X-Msh-Os-Version": "6.8.0-31-generic"}
+		headers = map[string]string{"User-Agent": "kimi-code-cli/2.3.1", "X-Msh-Platform": "kimi_code_cli", "X-Msh-Version": "2.3.1", "X-Msh-Device-Name": "ubuntu", "X-Msh-Device-Model": "Linux 6.8.0-31-generic x64", "X-Msh-Os-Version": "6.8.0-31-generic"}
 	case PlatformMiniMax:
 		headers["User-Agent"] = "MiniMaxAgent"
 		if kind == AccountTypeAPIKey {
 			headers["User-Agent"] = "Anthropic/JS 0.91.1"
 		}
 	case PlatformZhipu:
-		headers = map[string]string{"User-Agent": "ZCode/3.14.3 ai/6.0.193 ai-sdk/provider-utils/4.0.27 runtime/node.js/22", "X-ZCode-App-Version": "3.14.3", "X-ZCode-Agent": "glm", "HTTP-Referer": "https://zcode.z.ai", "X-Title": "Z Code@electron", "X-Release-Channel": "production", "X-Platform": "linux-x64", "X-Os-Category": "linux", "X-Os-Version": "6.8.0-31-generic", "X-Client-Language": "en-US", "X-Client-Timezone": "UTC"}
+		headers = map[string]string{"User-Agent": "ZCode/3.16.2 ai/6.0.193 ai-sdk/provider-utils/4.0.27 runtime/node.js/22", "X-ZCode-App-Version": "3.16.2", "X-ZCode-Agent": "glm", "HTTP-Referer": "https://zcode.z.ai", "X-Title": "Z Code@electron", "X-Release-Channel": "production", "X-Platform": "linux-x64", "X-Os-Category": "linux", "X-Os-Version": "6.8.0-31-generic", "X-Client-Language": "en-US", "X-Client-Timezone": "UTC"}
 	}
 	if platform == PlatformMiniMax || platform == PlatformKimi {
 		for key, value := range map[string]string{"X-Stainless-Lang": "js", "X-Stainless-OS": "Linux", "X-Stainless-Arch": "x64", "X-Stainless-Runtime": "node", "X-Stainless-Runtime-Version": "v22.19.0"} {

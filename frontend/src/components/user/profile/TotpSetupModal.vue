@@ -1,15 +1,15 @@
 <template>
   <div class="fixed inset-0 z-50 overflow-y-auto" @click.self="$emit('close')">
     <div class="flex min-h-full items-center justify-center p-4">
-      <div class="fixed inset-0 bg-black/50 transition-opacity" @click="$emit('close')"></div>
+      <div class="fixed inset-0 transition-opacity surface-overlay" @click="$emit('close')"></div>
 
-      <div class="relative w-full max-w-md transform rounded-xl bg-white p-6 shadow-xl transition-all dark:bg-dark-800">
+      <div class="relative w-full max-w-md transform rounded-xl p-6 shadow-xl transition-all surface-panel">
         <!-- Header -->
         <div class="mb-6 text-center">
           <h3 class="text-xl font-semibold text-gray-900 dark:text-white">
             {{ t('profile.totp.setupTitle') }}
           </h3>
-          <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
+          <p class="mt-2 text-sm surface-muted">
             {{ stepDescription }}
           </p>
         </div>
@@ -82,22 +82,22 @@
           <!-- QR Code and Secret -->
           <template v-if="setupData">
             <div class="flex justify-center">
-              <div class="rounded-lg border border-gray-200 p-4 bg-white dark:border-dark-600 dark:bg-white">
+              <div class="rounded-lg border border-gray-200 p-4 surface-opaque dark:border-dark-600">
                 <img :src="qrCodeDataUrl" alt="QR Code" class="h-48 w-48" />
               </div>
             </div>
 
             <div class="text-center">
-              <p class="text-sm text-gray-500 dark:text-gray-400 mb-2">
+              <p class="text-sm mb-2 surface-muted">
                 {{ t('profile.totp.manualEntry') }}
               </p>
               <div class="flex items-center justify-center gap-2">
-                <code class="rounded bg-gray-100 px-3 py-2 font-mono text-sm dark:bg-dark-700">
+                <code class="rounded surface-inset px-3 py-2 font-mono text-sm">
                   {{ setupData.secret }}
                 </code>
                 <button
                   type="button"
-                  class="rounded p-1.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-dark-700"
+                  class="rounded p-1.5 hover:surface-hover surface-control surface-muted"
                   @click="copySecret"
                 >
                   <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
@@ -140,7 +140,7 @@
                   maxlength="1"
                   inputmode="numeric"
                   pattern="[0-9]"
-                  class="h-12 w-10 rounded-lg border border-gray-300 text-center text-lg font-semibold focus:border-primary-500 focus:ring-primary-500 dark:border-dark-600 dark:bg-dark-700"
+                  class="h-12 w-10 rounded-lg border border-gray-300 text-center text-lg font-semibold focus:border-primary-500 focus:ring-primary-500 dark:border-dark-600 dark:surface-inset"
                   @input="handleCodeInput($event, index)"
                   @keydown="handleKeydown($event, index)"
                   @paste="handlePaste"

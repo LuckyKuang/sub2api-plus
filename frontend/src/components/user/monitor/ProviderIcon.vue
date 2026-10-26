@@ -17,7 +17,7 @@
   </svg>
   <span
     v-else
-    class="inline-flex items-center justify-center font-bold text-gray-500"
+    class="inline-flex items-center justify-center font-bold surface-muted"
     :style="{ width: `${size}px`, height: `${size}px`, fontSize: `${Math.round(size * 0.5)}px` }"
   >
     {{ fallbackText }}

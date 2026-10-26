@@ -219,6 +219,20 @@ func (_c *ChannelMonitorCreate) SetExtraHeaders(v map[string]string) *ChannelMon
 	return _c
 }
 
+// SetStreamProbe sets the "stream_probe" field.
+func (_c *ChannelMonitorCreate) SetStreamProbe(v bool) *ChannelMonitorCreate {
+	_c.mutation.SetStreamProbe(v)
+	return _c
+}
+
+// SetNillableStreamProbe sets the "stream_probe" field if the given value is not nil.
+func (_c *ChannelMonitorCreate) SetNillableStreamProbe(v *bool) *ChannelMonitorCreate {
+	if v != nil {
+		_c.SetStreamProbe(*v)
+	}
+	return _c
+}
+
 // SetBodyOverrideMode sets the "body_override_mode" field.
 func (_c *ChannelMonitorCreate) SetBodyOverrideMode(v string) *ChannelMonitorCreate {
 	_c.mutation.SetBodyOverrideMode(v)
@@ -359,6 +373,10 @@ func (_c *ChannelMonitorCreate) defaults() {
 		v := channelmonitor.DefaultExtraHeaders
 		_c.mutation.SetExtraHeaders(v)
 	}
+	if _, ok := _c.mutation.StreamProbe(); !ok {
+		v := channelmonitor.DefaultStreamProbe
+		_c.mutation.SetStreamProbe(v)
+	}
 	if _, ok := _c.mutation.BodyOverrideMode(); !ok {
 		v := channelmonitor.DefaultBodyOverrideMode
 		_c.mutation.SetBodyOverrideMode(v)
@@ -461,6 +479,9 @@ func (_c *ChannelMonitorCreate) check() error {
 	}
 	if _, ok := _c.mutation.ExtraHeaders(); !ok {
 		return &ValidationError{Name: "extra_headers", err: errors.New(`ent: missing required field "ChannelMonitor.extra_headers"`)}
+	}
+	if _, ok := _c.mutation.StreamProbe(); !ok {
+		return &ValidationError{Name: "stream_probe", err: errors.New(`ent: missing required field "ChannelMonitor.stream_probe"`)}
 	}
 	if _, ok := _c.mutation.BodyOverrideMode(); !ok {
 		return &ValidationError{Name: "body_override_mode", err: errors.New(`ent: missing required field "ChannelMonitor.body_override_mode"`)}
@@ -568,6 +589,10 @@ func (_c *ChannelMonitorCreate) createSpec() (*ChannelMonitor, *sqlgraph.CreateS
 	if value, ok := _c.mutation.ExtraHeaders(); ok {
 		_spec.SetField(channelmonitor.FieldExtraHeaders, field.TypeJSON, value)
 		_node.ExtraHeaders = value
+	}
+	if value, ok := _c.mutation.StreamProbe(); ok {
+		_spec.SetField(channelmonitor.FieldStreamProbe, field.TypeBool, value)
+		_node.StreamProbe = value
 	}
 	if value, ok := _c.mutation.BodyOverrideMode(); ok {
 		_spec.SetField(channelmonitor.FieldBodyOverrideMode, field.TypeString, value)
@@ -939,6 +964,18 @@ func (u *ChannelMonitorUpsert) SetExtraHeaders(v map[string]string) *ChannelMoni
 // UpdateExtraHeaders sets the "extra_headers" field to the value that was provided on create.
 func (u *ChannelMonitorUpsert) UpdateExtraHeaders() *ChannelMonitorUpsert {
 	u.SetExcluded(channelmonitor.FieldExtraHeaders)
+	return u
+}
+
+// SetStreamProbe sets the "stream_probe" field.
+func (u *ChannelMonitorUpsert) SetStreamProbe(v bool) *ChannelMonitorUpsert {
+	u.Set(channelmonitor.FieldStreamProbe, v)
+	return u
+}
+
+// UpdateStreamProbe sets the "stream_probe" field to the value that was provided on create.
+func (u *ChannelMonitorUpsert) UpdateStreamProbe() *ChannelMonitorUpsert {
+	u.SetExcluded(channelmonitor.FieldStreamProbe)
 	return u
 }
 
@@ -1322,6 +1359,20 @@ func (u *ChannelMonitorUpsertOne) SetExtraHeaders(v map[string]string) *ChannelM
 func (u *ChannelMonitorUpsertOne) UpdateExtraHeaders() *ChannelMonitorUpsertOne {
 	return u.Update(func(s *ChannelMonitorUpsert) {
 		s.UpdateExtraHeaders()
+	})
+}
+
+// SetStreamProbe sets the "stream_probe" field.
+func (u *ChannelMonitorUpsertOne) SetStreamProbe(v bool) *ChannelMonitorUpsertOne {
+	return u.Update(func(s *ChannelMonitorUpsert) {
+		s.SetStreamProbe(v)
+	})
+}
+
+// UpdateStreamProbe sets the "stream_probe" field to the value that was provided on create.
+func (u *ChannelMonitorUpsertOne) UpdateStreamProbe() *ChannelMonitorUpsertOne {
+	return u.Update(func(s *ChannelMonitorUpsert) {
+		s.UpdateStreamProbe()
 	})
 }
 
@@ -1876,6 +1927,20 @@ func (u *ChannelMonitorUpsertBulk) SetExtraHeaders(v map[string]string) *Channel
 func (u *ChannelMonitorUpsertBulk) UpdateExtraHeaders() *ChannelMonitorUpsertBulk {
 	return u.Update(func(s *ChannelMonitorUpsert) {
 		s.UpdateExtraHeaders()
+	})
+}
+
+// SetStreamProbe sets the "stream_probe" field.
+func (u *ChannelMonitorUpsertBulk) SetStreamProbe(v bool) *ChannelMonitorUpsertBulk {
+	return u.Update(func(s *ChannelMonitorUpsert) {
+		s.SetStreamProbe(v)
+	})
+}
+
+// UpdateStreamProbe sets the "stream_probe" field to the value that was provided on create.
+func (u *ChannelMonitorUpsertBulk) UpdateStreamProbe() *ChannelMonitorUpsertBulk {
+	return u.Update(func(s *ChannelMonitorUpsert) {
+		s.UpdateStreamProbe()
 	})
 }
 

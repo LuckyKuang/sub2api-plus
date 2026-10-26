@@ -265,7 +265,7 @@ func (s *adminServiceImpl) TestProxy(ctx context.Context, id int64) (*ProxyTestR
 	proxyURL := proxy.URL()
 	exitInfo, latencyMs, err := s.proxyProber.ProbeProxy(ctx, proxyURL)
 	if err != nil {
-		s.saveProxyLatency(ctx, id, &ProxyLatencyInfo{
+		s.saveProxyLatency(ctx, proxy, &ProxyLatencyInfo{
 			Success:   false,
 			Message:   err.Error(),
 			UpdatedAt: time.Now(),
@@ -277,7 +277,7 @@ func (s *adminServiceImpl) TestProxy(ctx context.Context, id int64) (*ProxyTestR
 	}
 
 	latency := latencyMs
-	s.saveProxyLatency(ctx, id, &ProxyLatencyInfo{
+	s.saveProxyLatency(ctx, proxy, &ProxyLatencyInfo{
 		Success:     true,
 		LatencyMs:   &latency,
 		Message:     "Proxy is accessible",
@@ -323,7 +323,7 @@ func (s *adminServiceImpl) CheckProxyQuality(ctx context.Context, id int64) (*Pr
 		})
 		result.FailedCount++
 		finalizeProxyQualityResult(result)
-		s.saveProxyQualitySnapshot(ctx, id, result, nil)
+		s.saveProxyQualitySnapshot(ctx, proxy, result, nil)
 		return result, nil
 	}
 
@@ -337,7 +337,7 @@ func (s *adminServiceImpl) CheckProxyQuality(ctx context.Context, id int64) (*Pr
 		})
 		result.FailedCount++
 		finalizeProxyQualityResult(result)
-		s.saveProxyQualitySnapshot(ctx, id, result, nil)
+		s.saveProxyQualitySnapshot(ctx, proxy, result, nil)
 		return result, nil
 	}
 
@@ -366,7 +366,7 @@ func (s *adminServiceImpl) CheckProxyQuality(ctx context.Context, id int64) (*Pr
 		})
 		result.FailedCount++
 		finalizeProxyQualityResult(result)
-		s.saveProxyQualitySnapshot(ctx, id, result, exitInfo)
+		s.saveProxyQualitySnapshot(ctx, proxy, result, exitInfo)
 		return result, nil
 	}
 
@@ -386,7 +386,7 @@ func (s *adminServiceImpl) CheckProxyQuality(ctx context.Context, id int64) (*Pr
 	}
 
 	finalizeProxyQualityResult(result)
-	s.saveProxyQualitySnapshot(ctx, id, result, exitInfo)
+	s.saveProxyQualitySnapshot(ctx, proxy, result, exitInfo)
 	return result, nil
 }
 
@@ -534,7 +534,7 @@ func proxyQualityBaseConnectivityPass(result *ProxyQualityCheckResult) bool {
 	return false
 }
 
-func (s *adminServiceImpl) saveProxyQualitySnapshot(ctx context.Context, proxyID int64, result *ProxyQualityCheckResult, exitInfo *ProxyExitInfo) {
+func (s *adminServiceImpl) saveProxyQualitySnapshot(ctx context.Context, proxy *Proxy, result *ProxyQualityCheckResult, exitInfo *ProxyExitInfo) {
 	if result == nil {
 		return
 	}
@@ -562,7 +562,7 @@ func (s *adminServiceImpl) saveProxyQualitySnapshot(ctx context.Context, proxyID
 		info.Region = exitInfo.Region
 		info.City = exitInfo.City
 	}
-	s.saveProxyLatency(ctx, proxyID, info)
+	s.saveProxyLatency(ctx, proxy, info)
 }
 
 func (s *adminServiceImpl) probeProxyLatency(ctx context.Context, proxy *Proxy) {
@@ -571,7 +571,7 @@ func (s *adminServiceImpl) probeProxyLatency(ctx context.Context, proxy *Proxy) 
 	}
 	exitInfo, latencyMs, err := s.proxyProber.ProbeProxy(ctx, proxy.URL())
 	if err != nil {
-		s.saveProxyLatency(ctx, proxy.ID, &ProxyLatencyInfo{
+		s.saveProxyLatency(ctx, proxy, &ProxyLatencyInfo{
 			Success:   false,
 			Message:   err.Error(),
 			UpdatedAt: time.Now(),
@@ -580,7 +580,7 @@ func (s *adminServiceImpl) probeProxyLatency(ctx context.Context, proxy *Proxy) 
 	}
 
 	latency := latencyMs
-	s.saveProxyLatency(ctx, proxy.ID, &ProxyLatencyInfo{
+	s.saveProxyLatency(ctx, proxy, &ProxyLatencyInfo{
 		Success:     true,
 		LatencyMs:   &latency,
 		Message:     "Proxy is accessible",
@@ -598,12 +598,12 @@ func (s *adminServiceImpl) attachProxyLatency(ctx context.Context, proxies []Pro
 		return
 	}
 
-	ids := make([]int64, 0, len(proxies))
+	snapshots := make([]Proxy, 0, len(proxies))
 	for i := range proxies {
-		ids = append(ids, proxies[i].ID)
+		snapshots = append(snapshots, proxies[i].Proxy)
 	}
 
-	latencies, err := s.proxyLatencyCache.GetProxyLatencies(ctx, ids)
+	latencies, err := s.proxyLatencyCache.GetProxyLatencies(ctx, snapshots)
 	if err != nil {
 		logger.LegacyPrintf("service.admin", "Warning: load proxy latency cache failed: %v", err)
 		return
@@ -634,14 +634,14 @@ func (s *adminServiceImpl) attachProxyLatency(ctx context.Context, proxies []Pro
 	}
 }
 
-func (s *adminServiceImpl) saveProxyLatency(ctx context.Context, proxyID int64, info *ProxyLatencyInfo) {
-	if s.proxyLatencyCache == nil || info == nil {
+func (s *adminServiceImpl) saveProxyLatency(ctx context.Context, proxy *Proxy, info *ProxyLatencyInfo) {
+	if s.proxyLatencyCache == nil || proxy == nil || info == nil {
 		return
 	}
 
 	merged := *info
-	if latencies, err := s.proxyLatencyCache.GetProxyLatencies(ctx, []int64{proxyID}); err == nil {
-		if existing := latencies[proxyID]; existing != nil {
+	if latencies, err := s.proxyLatencyCache.GetProxyLatencies(ctx, []Proxy{*proxy}); err == nil {
+		if existing := latencies[proxy.ID]; existing != nil {
 			if merged.QualityCheckedAt == nil &&
 				merged.QualityScore == nil &&
 				merged.QualityGrade == "" &&
@@ -658,7 +658,7 @@ func (s *adminServiceImpl) saveProxyLatency(ctx context.Context, proxyID int64, 
 		}
 	}
 
-	if err := s.proxyLatencyCache.SetProxyLatency(ctx, proxyID, &merged); err != nil {
+	if err := s.proxyLatencyCache.SetProxyLatency(ctx, proxy, &merged); err != nil {
 		logger.LegacyPrintf("service.admin", "Warning: store proxy latency cache failed: %v", err)
 	}
 }

@@ -3,8 +3,10 @@ import { dirname, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { DOMWrapper, enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { defineComponent, ref } from 'vue'
+
+vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ user: { id: 1 } }) }))
 
 import UsageView from '../UsageView.vue'
 
@@ -133,6 +135,7 @@ vi.mock('vue-i18n', async () => {
 })
 
 vi.mock('vue-router', () => ({
+  useRouter: () => ({ replace: vi.fn() }),
   useRoute: () => ({
     query: routeQuery
   })
@@ -186,7 +189,10 @@ const GroupDistributionChartStub = {
   `,
 }
 
-const mountRouteFilteredUsageView = () => mount(UsageView, {
+enableAutoUnmount(afterEach)
+
+const mountRouteFilteredUsageView = (stubs: Record<string, { template: string }> = {}) => mount(UsageView, {
+  attachTo: document.body,
   global: { stubs: {
     AppLayout: AppLayoutStub, UsageStatsCards: true, UsageFilters: UsageFiltersStub,
     UsageTable: true, UsageExportProgress: true, UsageCleanupDialog: true,
@@ -194,6 +200,8 @@ const mountRouteFilteredUsageView = () => mount(UsageView, {
     DateRangePicker: true, Icon: true, TokenUsageTrend: true,
     ModelDistributionChart: true, GroupDistributionChart: true,
     EndpointDistributionChart: true, UserTokenRanking: true,
+    OpsErrorLogTable: true, OpsErrorDetailModal: true,
+    ...stubs,
   } },
 })
 
@@ -232,6 +240,94 @@ describe('admin UsageView route filters', () => {
     expect(getById).toHaveBeenCalledWith(42, true)
     expect(list).toHaveBeenCalledWith(expect.objectContaining({ user_id: 42 }), expect.anything())
     expect(wrapper.find('[data-test="user-filter-label"]').text()).toBe('route-user@test.com')
+    expect(wrapper.get('[data-testid="usage-records-panel"]').isVisible()).toBe(true)
+    expect(wrapper.get('[data-testid="usage-charts-panel"]').isVisible()).toBe(false)
+  })
+
+  it('retains historical filters, dates and pagination when changing the workspace tab', async () => {
+    const wrapper = mountRouteFilteredUsageView()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.filters.model = 'selected-model'
+    vm.pagination.page = 3
+    vm.startDate = '2026-10-01'
+    vm.endDate = '2026-10-10'
+    const dates = wrapper.findComponent({ name: 'DateRangePicker' }).vm
+    list.mockClear()
+
+    await wrapper.get('[role="tablist"] button:nth-child(2)').trigger('click')
+    expect(wrapper.get('[data-testid="usage-records-panel"]').isVisible()).toBe(true)
+    await wrapper.get('[role="tablist"] button:first-child').trigger('click')
+    expect(wrapper.get('[data-testid="usage-charts-panel"]').isVisible()).toBe(true)
+    expect(vm.filters.model).toBe('selected-model')
+    expect(vm.pagination.page).toBe(3)
+    expect(vm.startDate).toBe('2026-10-01')
+    expect(vm.endDate).toBe('2026-10-10')
+    expect(wrapper.findComponent({ name: 'DateRangePicker' }).vm).toBe(dates)
+    expect(list).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('unmounts real-time requests and restores the previous historical tab on returning to charts', async () => {
+    const live = { template: '<div data-testid="live-panel" />' }
+    const wrapper = mountRouteFilteredUsageView({ LiveRequestsPanel: live })
+    await flushPromises()
+    await wrapper.get('[data-tab="ranking"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-tab="live"]').trigger('click')
+    expect(wrapper.find('[data-testid="live-panel"]').exists()).toBe(true)
+    expect(wrapper.get('.usage-date').isVisible()).toBe(false)
+
+    await wrapper.get('[role="tablist"] button:first-child').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="live-panel"]').exists()).toBe(false)
+    expect((wrapper.vm as any).activeTab).toBe('ranking')
+    expect(wrapper.get('.usage-date').element.isConnected).toBe(true)
+    expect((wrapper.get('.usage-date').element as HTMLElement).style.display).not.toBe('none')
+    expect(wrapper.get('.usage-date').isVisible()).toBe(true)
+    expect(wrapper.get('[data-testid="usage-charts-panel"]').isVisible()).toBe(true)
+    await wrapper.get('[role="tablist"] button:nth-child(2)').trigger('click')
+    expect(wrapper.findAllComponents({ name: 'UserTokenRanking' })).toHaveLength(1)
+    wrapper.unmount()
+  })
+
+  it('holds new records while the independent table is scrolled for reading', async () => {
+    routeQuery.record = '10'
+    list.mockResolvedValue({ items: [{ id: 10 }], total: 1, pages: 1 })
+    adminUsageList.mockResolvedValue({ items: [{ id: 11 }, { id: 10 }], total: 2, pages: 1 })
+    const wrapper = mountRouteFilteredUsageView({ UsageTable: { template: '<div class="workspace-table-viewport" />' } })
+    await flushPromises()
+    wrapper.get('.workspace-table-viewport').element.scrollTop = 200
+    await (wrapper.vm as any).historyRefresh.refresh()
+    await flushPromises()
+    expect((wrapper.vm as any).usageLogs.map((row: { id: number }) => row.id)).toEqual([10])
+    expect((wrapper.vm as any).newRecordsAvailable).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('keeps column settings above the clipped workspace and open for multiple choices', async () => {
+    routeQuery.record = '10'
+    const wrapper = mountRouteFilteredUsageView({ UsageTable: UsageTableStub })
+    await flushPromises()
+    await wrapper.get('[data-testid="usage-column-settings"]').trigger('click')
+    await flushPromises()
+    const menu = document.body.querySelector<HTMLElement>('[data-testid="usage-column-menu"]')!
+    expect(menu).not.toBeNull()
+    expect(wrapper.element.contains(menu)).toBe(false)
+    expect(menu.style.position).toBe('fixed')
+    await new DOMWrapper(menu.querySelector<HTMLElement>('[data-testid="usage-column-toggle-api_key"]')!).trigger('click')
+    await new DOMWrapper(menu.querySelector<HTMLElement>('[data-testid="usage-column-toggle-billing_mode"]')!).trigger('click')
+    await flushPromises()
+    expect(document.body.querySelector('[data-testid="usage-column-menu"]')).toBe(menu)
+    expect(wrapper.findComponent(UsageTableStub).props('columns').map((column: { key: string }) => column.key)).toEqual(expect.arrayContaining(['api_key', 'billing_mode']))
+    await new DOMWrapper(menu).trigger('keydown', { key: 'Escape' })
+    await flushPromises()
+    expect(document.body.querySelector('[data-testid="usage-column-menu"]')).toBeNull()
+    await wrapper.get('[data-testid="usage-column-settings"]').trigger('click')
+    document.body.click()
+    await flushPromises()
+    expect(document.body.querySelector('[data-testid="usage-column-menu"]')).toBeNull()
+    wrapper.unmount()
   })
 
   it('does not apply a stale routed user label after user_id changes', async () => {
@@ -483,7 +579,14 @@ describe('admin UsageView distribution metric toggles', () => {
   })
 })
 
-describe('admin UsageView request ID column visibility', () => {
+describe('admin UsageView column preferences', () => {
+  // Product requirement: exactly these 13 columns start visible; personal settings override defaults.
+  const defaultColumns = [
+    'user', 'account', 'model', 'reasoning_effort', 'service_tier', 'endpoint', 'group',
+    'stream', 'tokens', 'cost', 'latency', 'created_at', 'user_agent',
+  ]
+  const preferenceKey = 'admin-usage-restored-v2-hidden-columns:1:self'
+
   beforeEach(() => {
     vi.useFakeTimers()
     vi.mocked(localStorage.getItem).mockReset().mockReturnValue(null)
@@ -499,52 +602,108 @@ describe('admin UsageView request ID column visibility', () => {
 
   afterEach(() => {
     vi.useRealTimers()
+    vi.mocked(localStorage.getItem).mockReset().mockReturnValue(null)
+    vi.mocked(localStorage.setItem).mockReset()
   })
 
-  it('shows the service tier column by default and persists hiding it', async () => {
-    const wrapper = mount(UsageView, {
-      global: {
-        stubs: {
-          AppLayout: AppLayoutStub,
-          UsageStatsCards: true,
-          UsageFilters: UsageFiltersStub,
-          UsageTable: UsageTableStub,
-          UsageExportProgress: true,
-          UsageCleanupDialog: true,
-          UserBalanceHistoryModal: true,
-          AuditLogModal: true,
-          Pagination: true,
-          Select: true,
-          DateRangePicker: true,
-          Icon: true,
-          TokenUsageTrend: true,
-          ModelDistributionChart: true,
-          GroupDistributionChart: true,
-          EndpointDistributionChart: true,
-          UserTokenRanking: true,
-        },
+  const mountView = () => mount(UsageView, {
+    global: {
+      stubs: {
+        Teleport: true,
+        AppLayout: AppLayoutStub,
+        UsageStatsCards: true,
+        UsageFilters: UsageFiltersStub,
+        UsageTable: UsageTableStub,
+        UsageExportProgress: true,
+        UsageCleanupDialog: true,
+        UserBalanceHistoryModal: true,
+        AuditLogModal: true,
+        Pagination: true,
+        Select: true,
+        DateRangePicker: true,
+        Icon: true,
+        TokenUsageTrend: true,
+        ModelDistributionChart: true,
+        GroupDistributionChart: true,
+        EndpointDistributionChart: true,
+        UserTokenRanking: true,
       },
-    })
+    },
+  })
+
+  it('shows only the requested default columns in order', async () => {
+    const wrapper = mountView()
     await wrapper.vm.$nextTick()
 
     const usageTable = wrapper.findComponent(UsageTableStub)
-    expect(usageTable.props('columns')).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ key: 'request_id', label: 'Request ID' }),
-        expect.objectContaining({ key: 'session_id', label: 'Session ID' }),
-        expect.objectContaining({ key: 'service_tier', label: 'Service tier' }),
-      ]),
-    )
-    expect(usageTable.props('columns')).not.toEqual(
-      expect.arrayContaining([expect.objectContaining({ key: 'upstream_request_id' })]),
-    )
+    expect(usageTable.props('columns').map((column: { key: string }) => column.key)).toEqual(defaultColumns)
     expect(usageTable.props('showServiceTier')).toBe(true)
+    expect(localStorage.setItem).not.toHaveBeenCalledWith(preferenceKey, expect.anything())
+    wrapper.unmount()
+  })
+
+  it('keeps user through account pinned when the optional API Key column is shown or hidden', async () => {
+    const wrapper = mountView()
+    await wrapper.vm.$nextTick()
+    const pinnedKeys = () => wrapper.findComponent(UsageTableStub).props('columns')
+      .filter((column: { sticky?: string }) => column.sticky === 'left')
+      .map((column: { key: string }) => column.key)
+    expect(pinnedKeys()).toEqual(['user', 'account'])
     await wrapper.get('[data-testid="usage-column-settings"]').trigger('click')
-    await wrapper.get('[data-testid="usage-column-toggle-service_tier"]').trigger('click')
-    expect(usageTable.props('columns').map((column: { key: string }) => column.key)).not.toContain('service_tier')
-    expect(localStorage.setItem).toHaveBeenCalledWith('usage-hidden-columns', expect.stringContaining('"service_tier"'))
-    await wrapper.get('[data-testid="usage-column-toggle-service_tier"]').trigger('click')
-    expect(usageTable.props('columns').map((column: { key: string }) => column.key)).toContain('service_tier')
+    await wrapper.get('[data-testid="usage-column-toggle-api_key"]').trigger('click')
+    expect(pinnedKeys()).toEqual(['user', 'api_key', 'account'])
+    await wrapper.get('[data-testid="usage-column-toggle-api_key"]').trigger('click')
+    expect(pinnedKeys()).toEqual(['user', 'account'])
+    wrapper.unmount()
+  })
+
+  it('allows every hidden column to be enabled and persists personal choices across mounts', async () => {
+    let saved: string | null = null
+    vi.mocked(localStorage.getItem).mockImplementation(key => key === preferenceKey ? saved : null)
+    vi.mocked(localStorage.setItem).mockImplementation((key, value) => {
+      if (key === preferenceKey) saved = value
+    })
+    const wrapper = mountView()
+    await wrapper.vm.$nextTick()
+    await wrapper.get('[data-testid="usage-column-settings"]').trigger('click')
+    for (const key of ['api_key', 'billing_mode', 'request_id', 'session_id', 'ip_address']) {
+      await wrapper.get(`[data-testid="usage-column-toggle-${key}"]`).trigger('click')
+      expect(wrapper.findComponent(UsageTableStub).props('columns').map((column: { key: string }) => column.key)).toContain(key)
+    }
+    await wrapper.get('[data-testid="usage-column-toggle-user_agent"]').trigger('click')
+    expect(saved).toBe('["user_agent"]')
+    wrapper.unmount()
+
+    const restored = mountView()
+    await restored.vm.$nextTick()
+    expect(restored.findComponent(UsageTableStub).props('columns').map((column: { key: string }) => column.key)).toEqual([
+      'user', 'api_key', 'account', 'model', 'reasoning_effort', 'service_tier', 'endpoint',
+      'group', 'stream', 'billing_mode', 'tokens', 'cost', 'latency', 'created_at', 'request_id', 'session_id', 'ip_address',
+    ])
+    restored.unmount()
+  })
+
+  it('preserves an existing show-all preference and restores the new defaults on reset', async () => {
+    vi.mocked(localStorage.getItem).mockImplementation(key => key === preferenceKey ? '[]' : null)
+    const wrapper = mountView()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.findComponent(UsageTableStub).props('columns')).toHaveLength(18)
+    await wrapper.get('[data-testid="usage-column-settings"]').trigger('click')
+    await wrapper.findAll('button').find(button => button.text() === 'inspection.resetColumns')!.trigger('click')
+    expect(wrapper.findComponent(UsageTableStub).props('columns').map((column: { key: string }) => column.key)).toEqual(defaultColumns)
+    expect(localStorage.setItem).toHaveBeenCalledWith(preferenceKey, '["api_key","billing_mode","request_id","session_id","ip_address"]')
+    wrapper.unmount()
+  })
+
+  it.each(['invalid JSON', 'unavailable storage'])('uses the requested defaults with %s', async failure => {
+    vi.mocked(localStorage.getItem).mockImplementation(key => {
+      if (key !== preferenceKey) return null
+      if (failure === 'unavailable storage') throw new Error('Storage unavailable')
+      return '{invalid'
+    })
+    const wrapper = mountView()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.findComponent(UsageTableStub).props('columns').map((column: { key: string }) => column.key)).toEqual(defaultColumns)
     wrapper.unmount()
   })
 })
@@ -651,8 +810,7 @@ describe('admin UsageView errors tab filter forwarding', () => {
     await flushPromises()
 
     // 切换到「错误请求」标签（第二个 tab 按钮）触发 loadAdminErrors
-    const tabs = wrapper.findAll('[data-testid="usage-detail-tab"]')
-    await tabs[1].trigger('click')
+    await wrapper.get('[data-tab="errors"]').trigger('click')
     await flushPromises()
 
     expect(listErrorLogs).toHaveBeenCalledWith(expect.objectContaining({
@@ -683,8 +841,7 @@ describe('admin UsageView errors tab filter forwarding', () => {
     const vm = wrapper.vm as any
     vm.onDateRangeChange({ startDate: '2026-08-01', endDate: '2026-08-02', preset: 'custom' })
     await flushPromises()
-    const tabs = wrapper.findAll('[data-testid="usage-detail-tab"]')
-    await tabs[1].trigger('click')
+    await wrapper.get('[data-tab="errors"]').trigger('click')
     await flushPromises()
     vm.onErrorViewChange('all')
     await flushPromises()
@@ -737,10 +894,18 @@ describe('admin UsageView ranking tab', () => {
     expect(wrapper.find('[data-test="ranking"]').exists()).toBe(false)
 
     const tabs = wrapper.findAll('[data-testid="usage-detail-tab"]')
-    expect(tabs).toHaveLength(4)
-    await tabs[2].trigger('click')
+    expect(tabs).toHaveLength(5)
+    // Audited navigation contract: one selected card, no underline or baseline.
+    expect(wrapper.get('.usage-detail-tabs').classes()).not.toContain('border-b')
+    for (const tab of tabs) {
+      expect(tab.classes()).not.toContain('border-b-2')
+      expect(tab.classes()).not.toContain('-mb-px')
+      expect(tab.attributes('role')).toBe('tab')
+    }
+    await wrapper.get('[data-tab="ranking"]').trigger('click')
     await flushPromises()
     expect(wrapper.find('[data-test="ranking"]').exists()).toBe(true)
+    expect(wrapper.findAll('.usage-detail-tabs [aria-selected="true"]').map(tab => tab.attributes('data-tab'))).toEqual(['ranking'])
 
     // 下钻:设置 user_id、切回用量明细 tab 并按新筛选重新拉取列表
     list.mockClear()
@@ -748,6 +913,7 @@ describe('admin UsageView ranking tab', () => {
     await flushPromises()
 
     expect((wrapper.vm as any).activeTab).toBe('usage')
+    expect(wrapper.findAll('.usage-detail-tabs [aria-selected="true"]').map(tab => tab.attributes('data-tab'))).toEqual(['usage'])
     expect((wrapper.vm as any).filters.user_id).toBe(5)
     expect(list).toHaveBeenCalledWith(expect.objectContaining({ user_id: 5 }), expect.anything())
   })

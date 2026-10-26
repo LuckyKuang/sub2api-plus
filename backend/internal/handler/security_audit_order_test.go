@@ -22,7 +22,9 @@ type promptAuditOrderCase struct {
 
 func TestPromptAuditGatePrecedesAccountBillingAndUpstreamSideEffects(t *testing.T) {
 	tests := []promptAuditOrderCase{
+		{file: "provider_files_handler.go", function: "ProviderFiles", auditToken: "checkSecurityAudit"},
 		{file: "gateway_handler.go", function: "Messages", auditToken: "checkSecurityAudit"},
+		{file: "gateway_handler.go", function: "CountTokens", auditToken: "checkSecurityAudit"},
 		{file: "gateway_handler_chat_completions.go", function: "ChatCompletions", auditToken: "checkSecurityAudit"},
 		{file: "gateway_handler_responses.go", function: "Responses", auditToken: "checkSecurityAudit"},
 		{file: "gemini_v1beta_handler.go", function: "GeminiV1BetaModels", auditToken: "checkSecurityAudit"},
@@ -34,6 +36,9 @@ func TestPromptAuditGatePrecedesAccountBillingAndUpstreamSideEffects(t *testing.
 		{file: "openai_gateway_handler.go", function: "Responses", auditToken: "checkSecurityAudit"},
 		{file: "openai_gateway_handler.go", function: "Messages", auditToken: "checkSecurityAudit"},
 		{file: "openai_gateway_handler.go", function: "ResponsesWebSocket", auditToken: "checkSecurityAuditStage"},
+		{file: "openai_gateway_count_tokens.go", function: "CountTokens", auditToken: "checkSecurityAudit"},
+		{file: "openai_gateway_count_tokens.go", function: "GrokCountTokens", auditToken: "checkSecurityAudit"},
+		{file: "openai_gateway_count_tokens.go", function: "ResponsesInputTokens", auditToken: "checkSecurityAudit"},
 		{file: "openai_chat_completions.go", function: "ChatCompletions", auditToken: "checkSecurityAudit"},
 		{file: "openai_images.go", function: "Images", auditToken: "checkSecurityAudit"},
 		{file: "grok_media.go", function: "handleGrokMedia", auditToken: "checkSecurityAudit"},
@@ -53,6 +58,9 @@ func TestPromptAuditGatePrecedesAccountBillingAndUpstreamSideEffects(t *testing.
 		"AcquireOpenAIWSIngressLease(",
 		"reserveInflightBalance(", "reserveInflightBalanceCtx(",
 		"resolveGeminiCachedContentOrWrite(", "geminiCachedContentService.List(",
+		"EstimateGrokCountTokens(", "GetRequestCredential(",
+		"providerFilesService.ResolveUploadRetry(", "providerFilesService.SelectUploadAccount(",
+		"providerFilesService.Upload(", "providerFilesService.Get(", "providerFilesService.List(", "providerFilesService.Delete(",
 	}
 	for _, tt := range tests {
 		t.Run(tt.file+"/"+tt.function, func(t *testing.T) {
@@ -70,6 +78,37 @@ func TestPromptAuditGatePrecedesAccountBillingAndUpstreamSideEffects(t *testing.
 			}
 			require.True(t, foundSideEffect, "coverage case must contain a downstream side effect")
 		})
+	}
+}
+
+func TestProviderFilesAuditGatePrecedesEveryACLAndWriteBoundary(t *testing.T) {
+	source := stripGoComments(goFunctionSource(t, "provider_files_handler.go", "ProviderFiles"))
+	auditIndex := strings.Index(source, "checkSecurityAudit(")
+	require.NotEqual(t, -1, auditIndex)
+	for _, boundary := range []struct{ name, call string }{
+		{"upload-retry", "providerFilesService.ResolveUploadRetry("},
+		{"scheduler", "providerFilesService.SelectUploadAccount("},
+		{"user-slot", "acquireResponsesUserSlot("},
+		{"account-slot", "acquireResponsesAccountSlot("},
+		{"upload", "providerFilesService.Upload("},
+		{"metadata", "providerFilesService.Get("},
+		{"list", "providerFilesService.List("},
+		{"delete", "providerFilesService.Delete("},
+	} {
+		t.Run(boundary.name, func(t *testing.T) {
+			index := strings.Index(source, boundary.call)
+			require.NotEqual(t, -1, index, "each independent Files boundary must remain represented by the ordering regression")
+			require.Less(t, auditIndex, index, "security audit precedes every Files ACL read, slot, selection and write")
+		})
+	}
+}
+
+func TestCountTokensClassificationFollowsOriginalContentAudit(t *testing.T) {
+	source := stripGoComments(goFunctionSource(t, "gateway_handler.go", "CountTokens"))
+	auditIndex := strings.Index(source, "checkSecurityAudit(")
+	require.NotEqual(t, -1, auditIndex)
+	for _, operation := range []string{"SetClaudeCodeClientContext(", "service.WithThinkingEnabled("} {
+		require.Greater(t, strings.Index(source, operation), auditIndex, operation+" must follow ingress audit")
 	}
 }
 

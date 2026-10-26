@@ -4,7 +4,7 @@
       <label class="input-label mb-0">{{ t('admin.accounts.opencodeGo.protocolRules.title') }}</label>
       <button
         type="button"
-        class="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400"
+        class="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400 surface-control"
         @click="restoreDefaults"
       >
         {{ t('admin.accounts.opencodeGo.protocolRules.restoreDefaults') }}
@@ -21,19 +21,17 @@
             :placeholder="t('admin.accounts.opencodeGo.protocolRules.patternPlaceholder')"
             :data-testid="`opencode-go-protocol-pattern-${index}`"
           />
-          <select
-            :value="row.protocol"
-            class="input w-44 shrink-0"
+          <Select
+            :model-value="row.protocol"
+            class="w-44 shrink-0"
             :data-testid="`opencode-go-protocol-select-${index}`"
-            @change="setPrimaryProtocol(row, ($event.target as HTMLSelectElement).value as CnNativeApiProtocol)"
-          >
-            <option v-for="option in protocolOptions" :key="option.value" :value="option.value">
-              {{ t(`admin.accounts.cnProviders.apiProtocol.${option.labelKey}`) }}
-            </option>
-          </select>
+            @update:model-value="setPrimaryProtocol(row, $event as CnNativeApiProtocol)"
+            :searchable="false"
+            :options="protocolOptions.map(option => ({ value: option.value, label: t(`admin.accounts.cnProviders.apiProtocol.${option.labelKey}`) }))"
+          />
           <button
             type="button"
-            class="rounded-lg p-2 text-red-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"
+            class="rounded-lg p-2 text-red-500 transition-colors hover:bg-red-50/25 hover:text-red-600 dark:hover:bg-red-900/20 surface-control"
             :aria-label="t('admin.accounts.opencodeGo.protocolRules.remove')"
             @click="removeRow(index)"
           >
@@ -42,7 +40,7 @@
         </div>
         <div
           v-if="protocolOptions.length > 1"
-          class="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400"
+          class="mt-1 flex flex-wrap items-center gap-1.5 text-xs surface-muted"
           :title="t('admin.accounts.opencodeGo.protocolRules.alsoSupportsHint')"
         >
           <span>{{ t('admin.accounts.opencodeGo.protocolRules.alsoSupports') }}</span>
@@ -50,9 +48,9 @@
             v-for="option in protocolOptions.filter(item => item.value !== row.protocol)"
             :key="option.value"
             type="button"
-            class="rounded-full border px-2 py-0.5 transition-colors"
+            class="rounded-full border px-2 py-0.5 transition-colors surface-control"
             :class="hasExtraProtocol(row, option.value)
-              ? 'border-primary-300 bg-primary-50 text-primary-700 dark:border-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
+              ? 'border-primary-300 bg-primary-50/[0.15] text-primary-700 dark:border-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
               : 'border-gray-200 text-gray-500 hover:border-gray-300 dark:border-dark-600 dark:text-gray-400 dark:hover:border-dark-500'"
             :aria-pressed="hasExtraProtocol(row, option.value)"
             :data-testid="`opencode-go-protocol-extra-${index}-${option.value}`"
@@ -64,7 +62,7 @@
       </div>
     </div>
     <div
-      class="mb-2 flex items-center gap-2 rounded-lg border border-dashed border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-500 dark:border-dark-600 dark:bg-dark-800/60 dark:text-gray-400"
+      class="mb-2 flex items-center gap-2 rounded-lg border border-dashed border-gray-200 surface-inset px-3 py-2 text-xs dark:border-dark-600 surface-muted"
       data-testid="opencode-go-protocol-fallback"
     >
       <span class="flex-1 font-mono">*</span>
@@ -72,7 +70,7 @@
     </div>
     <button
       type="button"
-      class="w-full rounded-lg border-2 border-dashed border-gray-300 px-4 py-2 text-gray-600 transition-colors hover:border-gray-400 hover:text-gray-700 dark:border-dark-500 dark:text-gray-400 dark:hover:border-dark-400 dark:hover:text-gray-300"
+      class="w-full rounded-lg border-2 border-dashed border-gray-300 px-4 py-2 transition-colors hover:border-gray-400 hover:text-gray-700 dark:border-dark-500 dark:hover:border-dark-400 dark:hover:text-gray-300 surface-control surface-muted"
       data-testid="opencode-go-protocol-add-rule"
       @click="addRow"
     >
@@ -82,6 +80,7 @@
 </template>
 
 <script setup lang="ts">
+import Select from '@/components/common/Select.vue'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'

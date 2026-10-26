@@ -7,6 +7,29 @@ Moderation and Prompt Audit. The shared implementation is
 `backend/internal/auditcontent`; protocol handlers and account paths must not
 maintain alternate text extractors.
 
+Provider Files ingress uses the same boundary for authenticated
+`POST /v1/files`, `POST /v1/files/upload`, `GET /v1/files`, and
+`GET/DELETE /v1/files/:file_id`. Basic multipart/ID validation precedes audit;
+account selection, user/account concurrency, ACL/mapping reads and writes, and
+provider traffic follow it. The canonical `provider_files` upload envelope
+contains only an operation and sanitized binary byte count. File bytes are
+unextractable content: both engines permit the request without inventing prompt
+text, and their existing structured extraction diagnostics contain request ID,
+endpoint, protocol, stage, stable reason and available byte counts. Filename,
+purpose, credentials and binary data are never copied into prompt text or logs.
+List/metadata/delete have a known empty prompt body. Local file references in
+inference are resolved only after the original Chat/Responses/Messages audit;
+rewriting and owner pinning do not replace or bypass that audit. Unknown valid
+content still passes while recognized sibling user text remains auditable.
+Reference detection uses decoded protocol fields, so JSON escaping cannot bypass
+the Files scope or owner checks. A local namespace mentioned only in text, tool
+arguments or unknown siblings does not request Files resolution or trigger an
+unsupported-bridge rejection; its ordinary extracted text remains auditable.
+Model allowlisting leaves the two exact Files upload routes' binary bodies
+unread so the owning handler can enforce bounded private spooling after basic
+validation. This exemption does not bypass authentication, audit, or inference
+model admission.
+
 Usage timing observers are separate from this ingress extraction contract.
 Classifying upstream `compaction`/`compaction_summary` output for timing does not
 add an ingress extraction rule, policy decision, or audit bypass. Encrypted
@@ -21,6 +44,17 @@ actual model requests still enter both audit engines through the existing
 HTTP/WS handlers before their side effects.
 
 ## Boundary And Ordering
+
+Codex account-affinity recovery retains the original audited current turn.
+Cross-owner tool-history validation runs after this audit boundary. Tool outputs
+and opaque item references remain historical protocol data; both engines still
+extract a recognized current user sibling and pass unknown valid structures.
+Credential-owner projection and removal of an obsolete response reference do
+not create an alternative extraction path. An opaque reference with an input
+delta is insufficient evidence for cross-account replay; only history retained
+from a complete turn may seed that replay. A new WS turn still enters both audit
+engines before selection, billing, concurrency or provider writes. Unknown valid
+structures and recognized sibling content retain the shared extraction policy.
 
 The automatic hosted `image_generation` bridge is limited to OpenAI platform
 accounts. Native Responses suppliers do not receive this OpenAI-only injected
@@ -52,14 +86,21 @@ OAuth, API-key, Bedrock, Vertex and compatible adapters retain the same ordering
 Token-count forwarding captures its identity only after ingress audit and
 account selection, before token acquisition or request construction. Signature
 retries reuse that snapshot; they do not re-extract or change the audited input.
+All Anthropic-shaped `POST /v1/messages/count_tokens` handlers, including the
+OpenAI bridge and Grok's local estimator, enter the same Anthropic Messages
+audit contract after authentication and basic validation. They retain the raw
+inbound document before `[1m]` model normalization; client classification,
+thinking context, billing, account selection, credential bootstrap, forwarding,
+and local estimation follow the gate. Unknown valid blocks pass through while
+recognized sibling text remains auditable for both engines and account types.
 Responses WS allocates its outbound identity scope after the first-turn audit
 and before credential refresh or the upstream handshake. The scope only retains
 resolver results; it does not evaluate content, select an account or perform I/O.
 Reusing a scope on retry or reconnection never skips subsequent-turn audit.
 Prompt Audit inference/model probes and Content Moderation calls use their own
 configured supplier credentials and a separate trusted outbound identity under
-[Outbound Identity](OUTBOUND_IDENTITY.md). They resolve the `openai:apikey`
-type default without selecting or inheriting a forwarding account. Prompt
+[Outbound Identity](OUTBOUND_IDENTITY.md). They resolve the native Codex
+global/default identity without selecting or inheriting a forwarding account. Prompt
 chunks and same-credential retries retain a supplier snapshot; failover resolves
 the new owner. These headers do not change canonical extraction, scan payloads,
 audit decisions or exception/pass-through semantics. Forwarding still waits for
@@ -181,7 +222,7 @@ classifications.
 | Protocol family | Canonical text sources | Current-content rule | Explicit no-text or control cases |
 | --- | --- | --- | --- |
 | OpenAI Chat Completions | `instructions`; `tools` and `functions`; `messages[].content`; `messages[].reasoning_content`; `tool_calls[].function.arguments`; `function_call.arguments`; tool/function-role results, including structured content | Last message is current; if the tail contains tool/function results, every consecutive trailing result is current; system/developer context is current audit context. Assistant reasoning is classified as reasoning, while user-role reasoning retains direct-user attribution. | Recognized image/video content blocks |
-| Anthropic Messages | `system`; `tools`; message text and thinking text; client/server tool-use input; tool-result content, including structured content | Last message is current; system and tool definitions remain current audit context | Recognized image blocks and encrypted `redacted_thinking` blocks |
+| Anthropic Messages | `system`; `tools`; message text and thinking text; client/server tool-use input; tool-result content, including structured content. `POST /v1/messages/count_tokens` uses the same original document for native forwarding, the OpenAI bridge, and Grok local estimation. | Last message is current; system and tool definitions remain current audit context | Recognized image blocks and encrypted `redacted_thinking` blocks; unknown valid blocks do not hide recognized sibling content |
 | OpenAI Responses HTTP and WebSocket | Top-level, `response`-nested, or session-update `instructions`, `tools`, native `input`, legacy Chat-shaped `messages`, legacy string `prompt`, and reusable `prompt.variables`; message/reasoning/refusal text; visible `compaction`, `compaction_summary`, and `compaction_trigger` fields; function/custom/tool-search outputs; local/hosted shell, apply-patch, computer, MCP, code-interpreter, program/program-output, additional-tools, and accepted search call payloads. `POST /v1/responses/input_tokens` uses the same Responses document before any token-count account selection. Fast `service_tier` is a routing/billing field and does not bypass the audit hook. | A present non-null native `input` takes precedence over legacy `messages` and string `prompt`; otherwise `messages` precedes `prompt`. Last input item is current; every consecutive trailing recognized output is current; `tool_search_output.tools` and other dynamic definitions are current context; a claimed system/developer role remains context and all other current roles remain client-controlled. | Encrypted compaction content, IDs, status, fingerprints, recognized media/opaque items, and control envelopes produce no text; unknown frames, item types, sibling fields, and valid-JSON unrecognized structures pass through without an audit-derived block |
 | OpenAI Live | Initial session instructions, tools, input, legacy `input_audio_transcription.prompt`/`keywords`, current `audio.input.transcription.prompt`/`keywords`; `session.update`; `transcription_session.update`; `conversation.item.create`; Live-shaped `response.create` | Every initial HTTP session and accepted Sideband client frame enters the audit hook before its downstream side effect or upstream write | Known control events and unknown frames, session/config fields, item types, or valid-JSON structures may produce no audit input and pass through without an audit-derived close |
 | Alpha Search | Deterministically serialized, media-sanitized `commands`, `settings`, and top-level `input`, including `commands.search_query[].q` and Responses-shaped input items | Every extracted value is current; Responses-shaped input retains its item attribution. Successfully extracted siblings remain auditable when another field is incomplete. | Empty collections and media-only values; URLs, base64 payloads, and opaque media fields are omitted from structured text |
@@ -461,12 +502,46 @@ WebSocket ingress or direct WebSocket upstream capability. The account-type
 pass-through regression matrix includes all three native providers, alongside
 the existing HTTP/WS stage-order and canonical real-payload suites.
 
-The domestic identity source review also permits linked GLM OAuth accounts to
-use their already-derived plan API key on the OpenAI-compatible forwarding path.
-This changes credential retrieval only: canonical extraction and the accepted
-request's audit-before-selection boundary remain the existing CN adapter path.
-No new ingress endpoint, payload shape, audit exemption, or raw-content logging
-is introduced by protocol-specific outbound identity rendering.
+The official DeepSeek harness at `22ddee3792402c3e70ec5f86a63c3e3e895a2f60`
+serializes file images as `{"type":"image","source":{"type":"file","file_id":"..."}}`
+and tool activation/removal as `tool_addition` / `tool_removal` blocks with a
+`tool_reference` in system-role Messages. Its declared tools may carry
+`defer_loading: true`. Native Messages forwarding preserves those fields and
+the official `files-api-2025-04-14` and
+`mid-conversation-tool-changes-2026-07-01` beta tokens. File IDs, tool references
+and system tool updates are opaque to direct-user audit. A final system update
+does not make an earlier user message current; a later current user text block
+remains auditable by both engines, including alongside a file image.
+
+MiniMax Code at `da22f11c55d4748155d7162c1030414228a00565` accepts inline
+image/video sources and replaces uploaded media sources with
+`{"type":"url","url":"mm_file://..."}` while retaining the original image or
+video block. Its legacy image block with a `video/*` MIME type uses the same
+pass-through contract. Provider file references and video bytes are not prompt
+text or fetchable audit images. Inline `image/*` data retains the existing
+Content Moderation image extraction; recognized sibling user text enters both
+engines. Opaque-only payloads remain allowed in blocking mode and cannot become
+audit dependency errors or WebSocket closes.
+
+`domestic_provider_audit_contract_test.go` fixes these independently derived
+semantic expectations for both engines and exercises the shared HTTP/WS audit
+stages. `domestic_provider_audit_order_test.go` exercises the actual Messages
+handler and proves that a policy block precedes account selection and user
+concurrency. `domestic_provider_native_payload_test.go` verifies the original
+Messages payload and beta tokens at upstream dispatch for API Key/native OAuth
+and streaming/buffered responses, alongside provider-owned authentication and
+trusted identity. These tests cover existing Messages forwarding only; they do
+not add or claim Files upload, download, listing or deletion routes.
+
+Linked GLM OAuth accounts acquire a short-lived project access token (PAT) using
+the credential-owning login and public project Key ID. The public Key ID is
+metadata, never an authentication fallback. PAT acquisition for an accepted
+inference request occurs after canonical extraction, policy evaluation and
+account selection, preserving the existing CN adapter's audit-before-selection
+boundary. Credential operations reuse the selected owner's trusted identity;
+old off-peak ticket refresh and settlement retain their original owner after a
+relink. These changes introduce no ingress endpoint, payload shape, audit
+exemption or raw-content logging.
 
 ## StepFun transport
 
@@ -515,3 +590,135 @@ ingress audit, account ownership, billing or concurrency ordering. Existing
 Responses/Chat/Messages/WS/media pass-through and side-effect-order regressions
 remain mandatory; unknown and unextractable content keeps the established
 pass-through contract.
+
+
+V1 optional `stream_probe` changes only outbound probe transport and response
+parsing. The generated challenge / replace snapshot and existing probe execution
+boundary are unchanged; it introduces no public HTTP/WS ingress or audit bypass.
+Client request extraction and side-effect ordering remain identical for streaming
+and non-streaming traffic. Unknown incoming content still passes through under
+the canonical extraction contract.
+
+
+### Codex outbound transport preference
+
+`openai_codex_ws_enabled` and `openai_codex_http_ws_enabled` select outbound
+transport only. HTTP ingress completes the existing authentication/basic
+validation/security audit before account selection and the HTTP-to-WS helper.
+WS ingress retains its first-frame audit and per-frame/per-turn `BeforeRequest`
+audit before billing, concurrency and upstream writes. Disabling WS cannot
+create an unaudited bridge. A fresh HTTP bridge with an opaque continuation
+returns a reconnect/full-history error without generation; incomplete content
+extraction still passes through under the canonical extraction contract.
+Live sideband also checks the outbound permission after each client-frame audit
+and before upstream writes. Transport selection does not add extraction rules
+or change moderation policy.
+
+The Codex `1b6e0d8145` compatibility repair keeps that boundary: Responses Lite
+transport metadata, `stream_options.reasoning_summary_delivery`, Guardian role
+headers and non-root cache/session hints are protocol context, not user text or
+authorization. Both engines still extract successfully recognized user content
+from the original HTTP request or WS turn before these outbound adaptations.
+Unknown metadata/options/items remain pass-through; recognized sibling content
+remains auditable. OAuth Zstd encoding happens at the final HTTP/plugin send
+boundary, after ingress decoding and audit, with no new endpoint or ingress path.
+Models residency adds an outbound declaration only. Real-payload regressions
+cover plain/Lite HTTP and WS shapes, canonical content in both engines, and the
+existing blocked/allowed stage-order gates for both credential types.
+
+## Codex outbound identity maintenance
+
+The official-source parity update at Codex `770ed6dcea40` changes outbound
+thread/request/parent identity projections and retires the administrative version
+sync endpoint. It adds no inference ingress or audited content field. Flat and
+embedded parent-thread metadata remain protocol context, never user prompt text.
+`TestCodexProtocolOptionsPreserveCanonicalAuditContent` exercises real HTTP and
+WS response.create envelopes with this metadata for both engines, preserving
+recognized sibling text and unknown-item pass-through. Existing HTTP/WS
+account-type and side-effect-order suites remain required.
+
+Codex Responses/compact/WS outbound capability negotiation also ensures
+`x-codex-beta-features` includes `remote_compaction_v2` for native OAuth,
+setup-token and API-key credentials, as official Codex `770ed6dcea40` does.
+This header is protocol context, not audited user text or authorization. The
+capability is completed in outbound request builders after the existing ingress
+audit boundary. Both engines continue to audit the original canonical HTTP/WS
+payload; unknown content and successfully extracted siblings keep their existing
+pass-through and evaluation behavior. Capability negotiation adds no endpoint,
+body field, account-selection exception or side effect before audit.
+Real-payload regressions retain the documented current-item distinction: a
+trailing bare `compaction_trigger` contributes no user text and does not make
+preceding history current; a trigger before a new user tail cannot hide that
+current user content from either engine.
+
+
+The official-agent baseline update keeps all seven providers' OAuth/API Key
+requests behind the existing HTTP/WS audit boundaries. Step-Code's outbound
+`developer`→`system` Chat adaptation occurs only after ingress audit and account
+selection, preserves instruction content/unknown siblings, and leaves the
+original retry body unchanged. DeepSeek attribution/catalog filtering, Kimi
+reasoning metadata, Step cloud-login polling and ZCode PAT issuance do not change
+canonical content extraction. Both engines still audit recognized sibling user
+text and pass through unknown structures. See `official_agent_update_test.go`,
+`openai_chat_roles_test.go`, `security_audit_content_contract_test.go` and the
+existing account-type/order/WS audit suites.
+Linked ZCode personal/team model discovery remains an authenticated
+administrative catalog operation with no user prompt payload. PAT rejection,
+team-scope rendering and redirect prohibition run at the final outbound boundary;
+they add no inference ingress, canonical content field, account-type audit
+exception or side effect before the existing audit decision.
+
+## Non-blocking console request observation
+
+`LiveRequestContext` attaches local metadata without publishing before audit.
+`runSecurityAudit` publishes observation only after the coordinator returns; an
+audit denial is terminal and is never published as processing. The observer does
+not modify extraction, decisions or downstream ordering. Redis failures cannot
+become audit violations or forwarding errors. Responses WS retry observations
+use a separate turn offset without modifying the security-audit turn/dedupe keys.
+The existing semantic first-output timing signal may advance an already-audited
+observation to transmitting; it cannot create an observation before audit or
+revive a terminal turn. Billing task context carries only the observation's
+owner-scoped binding; final billing keys link persisted usage in a bounded read.
+Neither binding nor enrichment changes settlement, routing, outbound identity,
+payload extraction, protocol parsing or audit decisions. Multiple money events
+remain unassociated rather than assigning a session bill to individual turns.
+Regressions: `handler/live_requests_test.go` covers audit-before-observation,
+rejection, interleaved turns and failover identity; the existing audit ordering
+and pass-through tests remain applicable. See [UI_INTERACTION](UI_INTERACTION.md).
+
+## Official agent typed IDs and outbound ownership
+
+The 2026-10-22 alignment maps Codex v7 thread/turn/parent/window relationships,
+adds ZCode request attribution and persists device/conversation IDs. These are
+outbound protocol context, not canonical prompt fields. Preparation and its
+mapping-table writes run after the existing HTTP/WS ingress audit gate, as do
+account selection, refresh and forwarding. Both engines still consume the
+original canonical request, including recognized text next to unknown valid
+items. Identity storage failures are infrastructure errors after audit; they
+must not be reported as audit violations or extraction failures.
+
+`TestOfficialAgentRequestStatePreservesCanonicalAuditContent` covers real
+Responses HTTP/WS metadata and ZCode Messages metadata for both engines. It
+asserts that IDs/user metadata cannot hide successfully extracted sibling text.
+The existing HTTP/WS/account-type allow, block, pass-through and side-effect-order
+suites remain required. See [OFFICIAL_AGENT_REQUEST_STATE.md](OFFICIAL_AGENT_REQUEST_STATE.md).
+
+Responses WebSocket `ctx_pool` and HTTP bridge follow-up frames run their
+canonical audit hook immediately after basic validation, before typed metadata,
+fingerprint or handshake preparation can access persistent ID mappings. The
+hook receives the original frame and runs once per client turn, independent of
+upstream retries. `TestCodexWSFollowupAuditPrecedesPersistentIdentityMapping`
+captures real second-turn rejection in both modes and asserts zero ID-store
+access, turn-resource acquisition and upstream writes after the accepted first
+turn. Legacy IDs and unknown valid siblings cannot move preparation ahead of
+the audit boundary; the canonical extraction/pass-through rules are unchanged.
+
+
+The 2026-10-24 official-agent alignment changes only outbound credential
+snapshots, catalog authentication/filtering, provider error classification and
+ticket resource lifetimes. Canonical ingress extraction and audit ordering are
+unchanged: every accepted HTTP/WS turn is audited before account selection or
+provider side effects. A terminal upstream `model_not_found` is a provider
+response, never an audit violation. Settings/catalog/ticket control probes do
+not manufacture inference content or audit decisions.

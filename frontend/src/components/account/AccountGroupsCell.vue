@@ -16,7 +16,7 @@
         v-if="hiddenCount > 0"
         ref="moreButtonRef"
         type="button"
-        class="inline-flex cursor-pointer items-center whitespace-nowrap rounded-md bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-200 dark:bg-dark-600 dark:text-gray-300 dark:hover:bg-dark-500"
+        class="inline-flex cursor-pointer items-center whitespace-nowrap rounded-md px-1.5 py-0.5 text-xs font-medium transition-colors hover:surface-hover dark:hover:bg-dark-500 surface-control surface-muted"
         :aria-expanded="showPopover"
         :aria-label="t('admin.accounts.groupCountTotal', { count: groups.length })"
         @click.stop="showPopover = !showPopover"
@@ -37,17 +37,17 @@
         <div
           v-if="showPopover"
           ref="popoverRef"
-          class="fixed z-50 min-w-48 max-w-96 rounded-lg border border-gray-200 bg-white p-3 shadow-lg dark:border-dark-600 dark:bg-dark-800"
+          class="fixed z-50 min-w-48 max-w-96 rounded-lg border border-gray-200 p-3 shadow-lg dark:border-dark-600 surface-panel"
           :style="popoverStyle"
           role="dialog"
         >
           <div class="mb-2 flex items-center justify-between gap-3">
-            <span class="text-xs font-medium text-gray-500 dark:text-gray-400">
+            <span class="text-xs font-medium surface-muted">
               {{ t('admin.accounts.groupCountTotal', { count: groups.length }) }}
             </span>
             <button
               type="button"
-              class="rounded p-0.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-dark-700 dark:hover:text-gray-300"
+              class="rounded p-0.5 hover:surface-hover hover:text-gray-600 dark:hover:text-gray-300 surface-control surface-muted"
               :aria-label="t('common.close')"
               @click="showPopover = false"
             >
@@ -74,7 +74,7 @@
 
     <div v-if="showPopover" class="fixed inset-0 z-40" @click="showPopover = false" />
   </div>
-  <span v-else class="text-sm text-gray-400 dark:text-dark-500">-</span>
+  <span v-else class="text-sm surface-muted">-</span>
 </template>
 
 <script setup lang="ts">

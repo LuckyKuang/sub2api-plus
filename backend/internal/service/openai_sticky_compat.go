@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strings"
 	"sync/atomic"
@@ -46,6 +47,48 @@ func deriveOpenAISessionHashes(sessionID string) (currentHash string, legacyHash
 	sum := sha256.Sum256([]byte(normalized))
 	legacyHash = hex.EncodeToString(sum[:])
 	return currentHash, legacyHash
+}
+
+// openAIAuthorizationDomain returns the authenticated tenant domain for routing
+// affinity. It is derived only from the authenticated API key, never from
+// client-supplied session values.
+func openAIAuthorizationDomain(c *gin.Context) string {
+	if c == nil {
+		return ""
+	}
+	apiKeyID := getAPIKeyIDFromContext(c)
+	if apiKeyID <= 0 {
+		return ""
+	}
+	if value, exists := c.Get("api_key"); exists {
+		if key, ok := value.(*APIKey); ok && key != nil && key.UserID > 0 {
+			return fmt.Sprintf("user:%d:key:%d", key.UserID, apiKeyID)
+		}
+	}
+	return fmt.Sprintf("key:%d", apiKeyID)
+}
+
+// scopeOpenAISchedulingSeed mixes the authorization domain into a sticky
+// scheduling seed so two tenants that submit the same raw session value cannot
+// share one route binding (A02). Tenant-less callers keep the previous seed.
+func scopeOpenAISchedulingSeed(c *gin.Context, seed string) string {
+	seed = strings.TrimSpace(seed)
+	if seed == "" {
+		return seed
+	}
+	domain := openAIAuthorizationDomain(c)
+	if domain == "" {
+		return seed
+	}
+	return "openai-sched-v1:" + domain + "\x00" + seed
+}
+
+// ScopeOpenAISchedulingSeed exposes the tenant scoping to callers outside this
+// package. They must scope the raw seed before hashing it, never hash twice.
+func ScopeOpenAISchedulingSeed(c *gin.Context, seed string) string {
+	scoped := scopeOpenAISchedulingSeed(c, seed)
+	attachOpenAIOAuthSharedAffinity(c, seed, DeriveSessionHashFromSeed(scoped))
+	return scoped
 }
 
 func withOpenAILegacySessionHash(ctx context.Context, legacyHash string) context.Context {
@@ -120,7 +163,28 @@ func (s *OpenAIGatewayService) openAIStickyLegacyTTL(ttl time.Duration) time.Dur
 }
 
 func (s *OpenAIGatewayService) getStickySessionAccountID(ctx context.Context, groupID *int64, sessionHash string) (int64, error) {
-	if s == nil || s.cache == nil {
+	if s == nil {
+		return 0, nil
+	}
+
+	// The authoritative store wins over the cache: a committed owner must
+	// survive TTL expiry, restart and a stale cache entry.
+	if store := s.openAISessionRouteStoreForRequest(ctx); store != nil {
+		digest := OpenAISessionRouteDigest(sessionHash)
+		if digest != "" {
+			route, routeErr := store.Get(ctx, openAISessionRouteDomain(derefGroupID(groupID)), digest)
+			switch {
+			case routeErr == nil && route.OwnerAccountID > 0:
+				return route.OwnerAccountID, nil
+			case errors.Is(routeErr, ErrOpenAISessionRouteNotFound):
+				// No authoritative route yet: fall back to the legacy cache.
+			default:
+				return 0, fmt.Errorf("%w: %v", ErrOpenAISessionRouteStoreUnavailable, routeErr)
+			}
+		}
+	}
+
+	if s.cache == nil {
 		return 0, nil
 	}
 
@@ -158,7 +222,22 @@ func (s *OpenAIGatewayService) getStickySessionAccountID(ctx context.Context, gr
 }
 
 func (s *OpenAIGatewayService) setStickySessionAccountID(ctx context.Context, groupID *int64, sessionHash string, accountID int64, ttl time.Duration) error {
-	if s == nil || s.cache == nil || accountID <= 0 {
+	if openAISessionRouteSelectionDeferred(ctx) {
+		return nil
+	}
+	if s == nil || accountID <= 0 {
+		return nil
+	}
+
+	// Keep the authoritative route in step with the cache write. A store failure
+	// fails the bind instead of leaving a binding that only lasts one TTL.
+	if store := s.openAISessionRouteStoreForRequest(ctx); store != nil {
+		if err := s.upsertOpenAISessionRoute(ctx, store, derefGroupID(groupID), sessionHash, accountID); err != nil {
+			return err
+		}
+	}
+
+	if s.cache == nil {
 		return nil
 	}
 	primaryKey := s.openAISessionCacheKey(sessionHash)

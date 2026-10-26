@@ -2,12 +2,12 @@
   <BaseDialog :show="show" :title="t('admin.users.replaceGroupTitle')" width="narrow" @close="$emit('close')">
     <div v-if="oldGroup" class="space-y-4">
       <!-- 提示信息 -->
-      <p class="text-sm text-gray-600 dark:text-gray-400">
+      <p class="text-sm surface-muted">
         {{ t('admin.users.replaceGroupHint', { old: oldGroup.name }) }}
       </p>
 
       <!-- 当前分组 -->
-      <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-dark-600 dark:bg-dark-800">
+      <div class="rounded-lg border border-gray-200 surface-inset p-3 dark:border-dark-600">
         <div class="flex items-center gap-2">
           <Icon name="shield" size="sm" class="text-purple-500" />
           <span class="font-medium text-gray-900 dark:text-white">{{ oldGroup.name }}</span>
@@ -15,7 +15,7 @@
           <span v-if="selectedGroupId" class="font-medium text-primary-600 dark:text-primary-400">
             {{ availableGroups.find(g => g.id === selectedGroupId)?.name }}
           </span>
-          <span v-else class="text-sm text-gray-400">?</span>
+          <span v-else class="text-sm surface-muted">?</span>
         </div>
       </div>
 
@@ -41,17 +41,17 @@
               ? 'border-primary-500 bg-primary-500'
               : 'border-gray-300 dark:border-dark-500'"
           >
-            <div v-if="selectedGroupId === group.id" class="h-2 w-2 rounded-full bg-white"></div>
+            <div v-if="selectedGroupId === group.id" class="console-data-mark h-2 w-2 rounded-full bg-white"></div>
           </div>
           <div class="flex-1">
             <span class="font-medium text-gray-900 dark:text-white">{{ group.name }}</span>
-            <span class="ml-2 text-xs text-gray-400">{{ group.platform }}</span>
+            <span class="ml-2 text-xs surface-muted">{{ group.platform }}</span>
           </div>
         </label>
       </div>
 
       <!-- 无可选分组 -->
-      <div v-else class="py-6 text-center text-sm text-gray-400">
+      <div v-else class="py-6 text-center text-sm surface-muted">
         {{ t('admin.users.noOtherGroups') }}
       </div>
     </div>

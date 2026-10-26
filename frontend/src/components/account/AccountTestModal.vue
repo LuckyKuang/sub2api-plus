@@ -19,9 +19,9 @@
           </div>
           <div>
             <div class="font-semibold text-gray-900 dark:text-gray-100">{{ account.name }}</div>
-            <div class="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+            <div class="flex items-center gap-1.5 text-xs surface-muted">
               <span
-                class="rounded bg-gray-200 px-1.5 py-0.5 text-[10px] font-medium uppercase dark:bg-dark-500"
+                class="rounded surface-inset px-1.5 py-0.5 text-[10px] font-medium uppercase dark:bg-dark-500"
               >
                 {{ account.type }}
               </span>
@@ -33,8 +33,8 @@
           :class="[
             'rounded-full px-2.5 py-1 text-xs font-semibold',
             account.status === 'active'
-              ? 'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400'
-              : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
+              ? 'bg-green-100/[0.15] text-green-700 dark:bg-green-500/20 dark:text-green-400'
+              : 'surface-inset text-gray-600 dark:surface-inset dark:text-gray-400'
           ]"
         >
           {{ account.status }}
@@ -42,7 +42,7 @@
       </div>
 
       <div class="space-y-1.5">
-        <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+        <label class="text-sm font-medium surface-muted">
           {{ t('admin.accounts.selectTestModel') }}
         </label>
         <Select
@@ -56,7 +56,7 @@
       </div>
 
       <div v-if="isOpenAIAccount" class="space-y-1.5">
-        <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+        <label class="text-sm font-medium surface-muted">
           {{ t('admin.accounts.openai.testMode') }}
         </label>
         <Select
@@ -81,10 +81,10 @@
       <div class="group relative">
         <div
           ref="terminalRef"
-          class="max-h-[240px] min-h-[120px] overflow-y-auto rounded-xl border border-gray-700 bg-gray-900 p-4 font-mono text-sm dark:border-gray-800 dark:bg-black"
+          class="max-h-[240px] min-h-[120px] overflow-y-auto rounded-xl border border-gray-700 surface-inset p-4 font-mono text-sm dark:border-gray-800 dark:bg-black"
         >
           <!-- Status Line -->
-          <div v-if="status === 'idle'" class="flex items-center gap-2 text-gray-500">
+          <div v-if="status === 'idle'" class="flex items-center gap-2 surface-muted">
             <Icon name="play" size="sm" :stroke-width="2" />
             <span>{{ t('admin.accounts.readyToTest') }}</span>
           </div>
@@ -124,7 +124,7 @@
         <button
           v-if="outputLines.length > 0"
           @click="copyOutput"
-          class="absolute right-2 top-2 rounded-lg bg-gray-800/80 p-1.5 text-gray-400 opacity-0 transition-all hover:bg-gray-700 hover:text-white group-hover:opacity-100"
+          class="absolute right-2 top-2 rounded-lg p-1.5 opacity-0 transition-all hover:text-white group-hover:opacity-100 surface-control surface-muted"
           :title="t('admin.accounts.copyOutput')"
         >
           <Icon name="link" size="sm" :stroke-width="2" />
@@ -132,21 +132,21 @@
       </div>
 
       <div v-if="generatedImages.length > 0" class="space-y-2">
-        <div class="text-xs font-medium text-gray-600 dark:text-gray-300">
+        <div class="text-xs font-medium surface-muted">
           {{ t('admin.accounts.imagePreview') }}
         </div>
         <div class="flex flex-wrap justify-center gap-3">
           <div
             v-for="(image, index) in generatedImages"
             :key="`${image.url}-${index}`"
-            class="group/img relative cursor-pointer overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm transition hover:border-primary-300 hover:shadow-md dark:border-dark-500 dark:bg-dark-700"
+            class="group/img relative cursor-pointer overflow-hidden rounded-xl border border-gray-200 surface-inset shadow-sm transition hover:border-primary-300 hover:shadow-md dark:border-dark-500"
             @click="previewImageUrl = image.url"
           >
             <img :src="image.url" :alt="`test-image-${index + 1}`" class="max-h-[360px] w-full object-contain" />
             <div class="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover/img:bg-black/20">
               <Icon name="eye" size="lg" class="text-white opacity-0 drop-shadow-lg transition-opacity group-hover/img:opacity-100" :stroke-width="2" />
             </div>
-            <div class="border-t border-gray-100 px-3 py-1.5 text-xs text-gray-500 dark:border-dark-500 dark:text-gray-300">
+            <div class="border-t border-gray-100 px-3 py-1.5 text-xs dark:border-dark-500 surface-muted">
               {{ image.mimeType || 'image/*' }}
             </div>
           </div>
@@ -158,11 +158,11 @@
         <Transition name="fade">
           <div
             v-if="previewImageUrl"
-            class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4"
+            class="fixed inset-0 z-[100] flex items-center justify-center p-4 surface-overlay"
             @click.self="previewImageUrl = ''"
           >
             <button
-              class="absolute right-4 top-4 rounded-full bg-black/50 p-2 text-white transition-colors hover:bg-black/70"
+              class="absolute right-4 top-4 rounded-full bg-black/50 p-2 text-white transition-colors hover:bg-black/70 surface-control"
               @click="previewImageUrl = ''"
             >
               <Icon name="x" size="lg" :stroke-width="2" />
@@ -177,7 +177,7 @@
       </Teleport>
 
       <!-- Test Info -->
-      <div class="flex items-center justify-between px-1 text-xs text-gray-500 dark:text-gray-400">
+      <div class="flex items-center justify-between px-1 text-xs surface-muted">
         <div class="flex items-center gap-3">
           <span class="flex items-center gap-1">
             <Icon name="grid" size="sm" :stroke-width="2" />
@@ -199,7 +199,7 @@
       <div class="flex justify-end gap-3">
         <button
           @click="handleClose"
-          class="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 dark:bg-dark-600 dark:text-gray-300 dark:hover:bg-dark-500"
+          class="rounded-lg px-4 py-2 text-sm font-medium transition-colors hover:surface-hover dark:hover:bg-dark-500 surface-control surface-muted"
         >
           {{ t('common.close') }}
         </button>

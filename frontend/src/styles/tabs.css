@@ -1,0 +1,57 @@
+/* Card navigation shares one outline in every theme and transparency setting. */
+:where(.card-tabs) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.card-tab {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 1px solid var(--surface-edge);
+  border-radius: var(--surface-radius-control);
+  background-color: var(--surface-field);
+  color: var(--surface-muted);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 22px;
+  white-space: nowrap;
+  transition: background-color 120ms, border-color 120ms, color 120ms;
+}
+
+.card-tab:hover:not(:disabled) {
+  border-color: rgb(var(--console-accent-500, 20 184 166) / 80%);
+  background-color: var(--surface-hover);
+  color: var(--surface-text);
+}
+
+.card-tab[aria-selected="true"] {
+  border-color: rgb(var(--console-accent-500, 20 184 166) / 65%);
+  background-color: rgb(var(--console-accent-500, 20 184 166) / calc(.24 * var(--console-card-alpha, 1)));
+  color: var(--console-accent-readable, var(--surface-text));
+}
+
+.card-tab[aria-selected="true"]:is(:hover, :active, :focus, :focus-visible) {
+  border-color: rgb(var(--console-accent-500, 20 184 166) / 80%);
+  background-color: rgb(var(--console-accent-500, 20 184 166) / calc(.30 * var(--console-card-alpha, 1)));
+  color: var(--console-accent-readable, var(--surface-text));
+}
+
+.card-tab:focus-visible {
+  outline: 2px solid rgb(var(--console-accent-500, 20 184 166) / 75%);
+  outline-offset: 2px;
+}
+
+.card-tab:disabled { opacity: .5; cursor: not-allowed; }
+
+.usage-detail-tabs.card-tabs {
+  min-height: 60px;
+  padding: 8px 12px;
+}

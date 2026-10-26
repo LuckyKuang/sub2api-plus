@@ -68,11 +68,23 @@ func (s *OpenAIGatewayService) ForwardResponsesInputTokens(
 		return nil
 	}
 
+	account, err = snapshotCNControlAccount(account)
+	if err != nil {
+		writeOpenAIResponsesInputTokensError(c, http.StatusBadGateway, "upstream_error", "Account snapshot unavailable")
+		return fmt.Errorf("responses input_tokens: capture account: %w", err)
+	}
+	proxyURL, err := account.StrictProxyURL()
+	if err != nil {
+		writeOpenAIResponsesInputTokensError(c, http.StatusBadGateway, "upstream_error", "Configured proxy unavailable")
+		return fmt.Errorf("responses input_tokens: validate proxy: %w", err)
+	}
+	ctx = WithAccountOutboundIdentity(ctx, account)
 	token, _, err := s.GetAccessToken(ctx, account)
 	if err != nil {
 		writeOpenAIResponsesInputTokensError(c, http.StatusBadGateway, "upstream_error", "Failed to get access token")
 		return fmt.Errorf("responses input_tokens: get access token: %w", err)
 	}
+	ctx = withRequestCredentialOwner(ctx, account, token)
 	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
 	defer releaseUpstreamCtx()
 
@@ -83,10 +95,6 @@ func (s *OpenAIGatewayService) ForwardResponsesInputTokens(
 		return fmt.Errorf("responses input_tokens: build upstream request: %w", err)
 	}
 
-	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
-	}
 	resp, err := s.doOpenAIUpstream(upstreamReq, proxyURL, account)
 	if err != nil {
 		safeErr := sanitizeUpstreamErrorMessage(err.Error())
@@ -322,11 +330,23 @@ func (s *OpenAIGatewayService) ForwardCountTokensAsAnthropic(
 		zap.String("upstream_model", prepared.UpstreamModel),
 	)
 
+	account, err = snapshotCNControlAccount(account)
+	if err != nil {
+		writeAnthropicCountTokensError(c, http.StatusBadGateway, "upstream_error", "Account snapshot unavailable")
+		return fmt.Errorf("count_tokens: capture account: %w", err)
+	}
+	proxyURL, err := account.StrictProxyURL()
+	if err != nil {
+		writeAnthropicCountTokensError(c, http.StatusBadGateway, "upstream_error", "Configured proxy unavailable")
+		return fmt.Errorf("count_tokens: validate proxy: %w", err)
+	}
+	ctx = WithAccountOutboundIdentity(ctx, account)
 	token, _, err := s.GetAccessToken(ctx, account)
 	if err != nil {
 		writeAnthropicCountTokensError(c, http.StatusBadGateway, "upstream_error", "Failed to get access token")
 		return fmt.Errorf("get access token: %w", err)
 	}
+	ctx = withRequestCredentialOwner(ctx, account, token)
 	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
 	defer releaseUpstreamCtx()
 
@@ -336,10 +356,6 @@ func (s *OpenAIGatewayService) ForwardCountTokensAsAnthropic(
 		return fmt.Errorf("build input_tokens request: %w", err)
 	}
 
-	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
-	}
 	resp, err := s.doOpenAIUpstream(upstreamReq, proxyURL, account)
 	if err != nil {
 		safeErr := sanitizeUpstreamErrorMessage(err.Error())
@@ -454,9 +470,13 @@ func (s *OpenAIGatewayService) buildInputTokensUpstreamRequest(
 	body []byte,
 	token string,
 ) (*http.Request, error) {
+	credentialAccount, err := requestCredentialAccount(ctx, account)
+	if err != nil {
+		return nil, err
+	}
 	targetURL := openaiPlatformAPIInputTokensURL
-	if account.Type == AccountTypeAPIKey {
-		if baseURL := account.GetOpenAIBaseURL(); strings.TrimSpace(baseURL) != "" {
+	if credentialAccount.Type == AccountTypeAPIKey {
+		if baseURL := credentialAccount.GetOpenAIBaseURL(); strings.TrimSpace(baseURL) != "" {
 			validatedURL, err := s.validateUpstreamBaseURL(baseURL)
 			if err != nil {
 				return nil, err
@@ -494,8 +514,8 @@ func (s *OpenAIGatewayService) buildInputTokensUpstreamRequest(
 		}
 	}
 
-	account.applyOpenAIHeaderOverrides(req.Header)
-	identity := s.applyOpenAIOutboundIdentity(ctx, account, req.Header, account.Type == AccountTypeOAuth)
+	credentialAccount.applyOpenAIHeaderOverrides(req.Header)
+	identity := s.applyOpenAIOutboundIdentity(ctx, account, req.Header, true)
 	SetOpsRoutingDiagnostics(c, &OpsRoutingDiagnostics{OutboundIdentitySource: identity.Source})
 
 	return req, nil

@@ -10,7 +10,7 @@
       <Line v-else-if="chartData" :data="chartData" :options="chartOptions" />
       <div
         v-else
-        class="flex h-full items-center justify-center text-sm text-gray-500 dark:text-gray-400"
+        class="flex h-full items-center justify-center text-sm surface-muted"
       >
         {{ t('payment.admin.noData') }}
       </div>
@@ -19,6 +19,8 @@
 </template>
 
 <script setup lang="ts">
+import { useDocumentDarkMode } from '@/composables/useDocumentDarkMode'
+import { chartTooltipStyle } from '@/utils/chartTooltip'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
@@ -38,6 +40,7 @@ import type { DailyPaymentStats } from '@/types/payment'
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, Filler)
 
 const { t } = useI18n()
+const isDarkMode = useDocumentDarkMode()
 
 const props = defineProps<{
   data: DailyPaymentStats[]
@@ -85,7 +88,7 @@ const chartData = computed(() => {
   }
 })
 
-const chartOptions = {
+const chartOptions = computed(() => ({
   responsive: true,
   maintainAspectRatio: false,
   interaction: { mode: 'index' as const, intersect: false },
@@ -106,6 +109,7 @@ const chartOptions = {
   },
   plugins: {
     legend: { position: 'top' as const },
+    tooltip: chartTooltipStyle(isDarkMode.value),
   }
-}
+}))
 </script>

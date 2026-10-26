@@ -355,9 +355,10 @@ func (s *SettingService) GetOpenAICodexOutboundProfile(ctx context.Context) (str
 		if legacyErr != nil && !errors.Is(legacyErr, ErrSettingNotFound) {
 			slog.Warn("failed to get codex legacy client profile compatibility setting", "error", legacyErr)
 		}
-		ua := strings.TrimSpace(value)
 		cached := &cachedOpenAICodexUserAgent{
-			value:                      ua,
+			// Keep the raw candidate so identity validation can reject control
+			// bytes before trimming, including on subsequent cached reads.
+			value:                      value,
 			legacyCompatibilityEnabled: strings.TrimSpace(legacyValue) == "true",
 			expiresAt:                  time.Now().Add(openAICodexUserAgentCacheTTL).UnixNano(),
 		}
@@ -566,10 +567,10 @@ func (s *SettingService) IsOpenAICodexLocalGroupQuotaEnabled(ctx context.Context
 }
 
 // GetOpenAICodexClientVersion 返回出站声明的 Codex 客户端版本号。
-// 优先级：管理员在面板覆写的版本 → 自动同步到的官方最新稳定版 → 内置常量。
-// 自动同步值不得低于内置版本基线；管理员显式覆写仍可按既有合同固定其他有效版本。
+// 优先级：管理员在面板覆写的版本 → 代码维护的内置发布版本。
+// 管理员显式覆写仍可按既有合同固定其他有效版本。
 // 上游在容量紧张时按客户端身份分优先级降载，陈旧版本会被优先丢弃，故该值需保持跟随官方发布；
-// 自动同步让运维不必为了跟版本而发新版本。
+// 官方版本升级通过代码评审维护，不从远端获取版本。
 func (s *SettingService) GetOpenAICodexClientVersion(ctx context.Context) string {
 	fallback := codexCLIVersion
 	if s == nil || s.settingRepo == nil {
@@ -594,7 +595,6 @@ func (s *SettingService) GetOpenAICodexClientVersion(ctx context.Context) string
 		defer cancel()
 		values, err := s.settingRepo.GetMultiple(dbCtx, []string{
 			SettingKeyOpenAICodexClientVersion,
-			SettingKeyOpenAICodexClientVersionSynced,
 		})
 		if err != nil {
 			slog.Warn("failed to get openai codex client version setting", "error", err)
@@ -606,7 +606,6 @@ func (s *SettingService) GetOpenAICodexClientVersion(ctx context.Context) string
 		}
 		version, _ := resolveOpenAICodexClientVersion(
 			values[SettingKeyOpenAICodexClientVersion],
-			values[SettingKeyOpenAICodexClientVersionSynced],
 		)
 		s.openAICodexVersionCache.Store(&cachedOpenAICodexClientVersion{
 			version:   version,
@@ -621,7 +620,7 @@ func (s *SettingService) GetOpenAICodexClientVersion(ctx context.Context) string
 }
 
 // InvalidateOpenAICodexClientVersionCache 丢弃版本号缓存，下次读取回源。
-// 面板保存与自动同步写入后调用。
+// 面板保存后调用。
 func (s *SettingService) InvalidateOpenAICodexClientVersionCache() {
 	if s == nil {
 		return

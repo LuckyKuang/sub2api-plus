@@ -1,3 +1,4 @@
+import { chooseSelect } from '@/__tests__/helpers/select'
 import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import OpenCodeGoProtocolRulesEditor from '../OpenCodeGoProtocolRulesEditor.vue'
@@ -44,13 +45,13 @@ describe('OpenCodeGoProtocolRulesEditor protocol sets', () => {
     ]
     const wrapper = mountEditor(rows)
 
-    await wrapper.get('[data-testid="opencode-go-protocol-select-0"]').setValue('chat_completions')
+    await chooseSelect(wrapper.get('[data-testid="opencode-go-protocol-select-0"]'), 'admin.accounts.cnProviders.apiProtocol.chatCompletions')
     expect(rows[0]).toEqual({ pattern: 'gpt-*', protocol: 'chat_completions', extraProtocols: ['responses'] })
 
-    await wrapper.get('[data-testid="opencode-go-protocol-select-0"]').setValue('anthropic')
+    await chooseSelect(wrapper.get('[data-testid="opencode-go-protocol-select-0"]'), 'admin.accounts.cnProviders.apiProtocol.anthropic')
     expect(rows[0]).toEqual({ pattern: 'gpt-*', protocol: 'anthropic', extraProtocols: ['responses'] })
 
-    await wrapper.get('[data-testid="opencode-go-protocol-select-1"]').setValue('responses')
+    await chooseSelect(wrapper.get('[data-testid="opencode-go-protocol-select-1"]'), 'admin.accounts.cnProviders.apiProtocol.responses')
     expect(rows[1]).toEqual({ pattern: 'grok-*', protocol: 'responses' })
   })
 

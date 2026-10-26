@@ -40,6 +40,12 @@ func (r *upstreamModelMetadataRepoStub) UpdateExtra(_ context.Context, id int64,
 	return r.err
 }
 
+func (r *upstreamModelMetadataRepoStub) UpdateCNControlExtraIfUnchanged(_ context.Context, expected *Account, updates map[string]any) (bool, error) {
+	r.accountID = expected.ID
+	r.updates = updates
+	return r.err == nil, r.err
+}
+
 func upstreamModelSyncTestConfig() *config.Config {
 	return &config.Config{
 		Security: config.SecurityConfig{

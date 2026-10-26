@@ -1,9 +1,9 @@
 <template>
-  <div class="card p-4">
+  <div class="card p-4" :class="{ 'chart-workspace': workspace }">
     <h3 class="mb-4 text-sm font-semibold text-gray-900 dark:text-white">
       {{ t('admin.dashboard.tokenUsageTrend') }}
     </h3>
-    <div v-if="loading" class="flex h-48 items-center justify-center">
+    <div v-if="loading && !trendData.length" class="flex h-48 items-center justify-center">
       <LoadingSpinner />
     </div>
     <div v-else-if="trendData.length > 0 && chartData" class="h-48">
@@ -11,7 +11,7 @@
     </div>
     <div
       v-else
-      class="flex h-48 items-center justify-center text-sm text-gray-500 dark:text-gray-400"
+      class="flex h-48 items-center justify-center text-sm surface-muted"
     >
       {{ t('admin.dashboard.noDataAvailable') }}
     </div>
@@ -19,6 +19,7 @@
 </template>
 
 <script setup lang="ts">
+import { chartTooltipStyle } from '@/utils/chartTooltip'
 import { useDocumentDarkMode } from '@/composables/useDocumentDarkMode'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -52,6 +53,7 @@ ChartJS.register(
 const { t } = useI18n()
 
 const props = defineProps<{
+  workspace?: boolean
   trendData: TrendDataPoint[]
   loading?: boolean
 }>()
@@ -110,6 +112,7 @@ const chartData = computed(() => {
 })
 
 const lineOptions = computed(() => ({
+  animation: false as const,
   responsive: true,
   maintainAspectRatio: false,
   interaction: {
@@ -130,6 +133,7 @@ const lineOptions = computed(() => ({
       }
     },
     tooltip: {
+      ...chartTooltipStyle(isDarkMode.value),
       callbacks: {
         label: (context: any) => {
           const point = props.trendData[context.dataIndex]
@@ -198,3 +202,11 @@ const formatCost = (value: number): string => {
   return value.toFixed(4)
 }
 </script>
+
+<style scoped>
+@media (min-width: 1024px) {
+  .chart-workspace { display: flex; min-height: 0; flex-direction: column; overflow: hidden; padding: 14px; }
+  .chart-workspace > h3 { flex: none; margin-bottom: 10px; }
+  .chart-workspace > div { position: relative; min-height: 0; height: auto; flex: 1; }
+}
+</style>

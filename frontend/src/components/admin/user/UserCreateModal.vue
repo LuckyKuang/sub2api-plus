@@ -27,10 +27,11 @@
       </div>
       <div>
         <label class="input-label">{{ t('admin.users.form.roleLabel') }}</label>
-        <select v-model="form.role" class="input">
-          <option value="user">{{ t('admin.users.roles.user') }}</option>
-          <option value="admin">{{ t('admin.users.roles.admin') }}</option>
-        </select>
+        <Select
+          v-model="form.role"
+          :searchable="false"
+          :options="[{ value: 'user', label: t('admin.users.roles.user') }, { value: 'admin', label: t('admin.users.roles.admin') }]"
+        />
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
@@ -70,6 +71,7 @@
 </template>
 
 <script setup lang="ts">
+import Select from '@/components/common/Select.vue'
 import { reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'; import { adminAPI } from '@/api/admin'
 import { useAppStore } from '@/stores/app'

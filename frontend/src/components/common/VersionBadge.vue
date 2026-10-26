@@ -2,11 +2,11 @@
   <div v-if="isAdmin" class="relative">
       <button
         @click="toggleDropdown"
-        class="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs transition-colors"
+        class="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs transition-colors surface-control"
         :class="[
           hasUpdate
-            ? 'bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:hover:bg-amber-900/50'
-            : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-dark-800 dark:text-dark-400 dark:hover:bg-dark-700'
+            ? 'bg-amber-100/[0.15] text-amber-700 hover:bg-amber-200/25 dark:bg-amber-900/30 dark:text-amber-400 dark:hover:bg-amber-900/50'
+            : 'surface-field text-gray-600 hover:surface-hover dark:surface-field dark:text-dark-400 dark:hover:surface-hover'
         ]"
         :title="hasUpdate ? t('version.updateAvailable') : t('version.upToDate')"
       >
@@ -18,9 +18,9 @@
         <!-- Update indicator -->
         <span v-if="hasUpdate" class="relative flex h-2 w-2">
           <span
-            class="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75"
+            class="console-data-mark absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75"
           ></span>
-          <span class="relative inline-flex h-2 w-2 rounded-full bg-amber-500"></span>
+          <span class="console-data-mark relative inline-flex h-2 w-2 rounded-full bg-amber-500"></span>
         </span>
       </button>
 
@@ -29,18 +29,18 @@
         <div
           v-if="dropdownOpen"
           ref="dropdownRef"
-          class="absolute left-0 z-50 mt-2 w-80 overflow-hidden whitespace-normal rounded-xl border border-gray-200 bg-white shadow-lg transition-all duration-200 dark:border-dark-700 dark:bg-dark-800"
+          class="version-dropdown glass-surface absolute left-0 z-50 mt-2 w-80 whitespace-normal transition-all duration-200"
         >
           <!-- Header with refresh button -->
           <div
             class="flex items-center justify-between border-b border-gray-100 px-4 py-3 dark:border-dark-700"
           >
-            <span class="text-sm font-medium text-gray-700 dark:text-dark-300">{{
+            <span class="text-sm font-medium surface-muted">{{
               t('version.currentVersion')
             }}</span>
             <button
               @click="refreshVersion(true)"
-              class="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-dark-700 dark:hover:text-dark-200"
+              class="rounded-lg p-1.5 transition-colors hover:surface-hover hover:text-gray-600 dark:hover:text-dark-200 surface-control surface-muted"
               :disabled="loading"
               :title="t('version.refresh')"
             >
@@ -83,11 +83,11 @@
                     class="text-2xl font-bold text-gray-900 dark:text-white"
                     >v{{ currentVersion }}</span
                   >
-                  <span v-else class="text-2xl font-bold text-gray-400 dark:text-dark-500">--</span>
+                  <span v-else class="text-2xl font-bold surface-muted">--</span>
                   <!-- Show check mark when up to date -->
                   <span
                     v-if="!hasUpdate"
-                    class="flex h-5 w-5 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30"
+                    class="flex h-5 w-5 items-center justify-center rounded-full bg-green-100/[0.15] dark:bg-green-900/30"
                   >
                     <svg
                       class="h-3 w-3 text-green-600 dark:text-green-400"
@@ -102,7 +102,7 @@
                     </svg>
                   </span>
                 </div>
-                <p class="mt-1 text-xs text-gray-500 dark:text-dark-400">
+                <p class="mt-1 text-xs surface-muted">
                   {{
                     hasUpdate
                       ? t('version.latestVersion') + ': v' + latestVersion
@@ -114,10 +114,10 @@
               <!-- Priority 1: Update error (must check before hasUpdate) -->
               <div v-if="updateError" class="space-y-2">
                 <div
-                  class="flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800/50 dark:bg-red-900/20"
+                  class="flex items-center gap-3 rounded-lg border border-red-200 bg-red-50/[0.15] p-3 dark:border-red-800/50 dark:bg-red-900/20"
                 >
                   <div
-                    class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/50"
+                    class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-red-100/[0.15] dark:bg-red-900/50"
                   >
                     <Icon
                       name="x"
@@ -149,10 +149,10 @@
               <!-- Priority 2: Update success - need restart -->
               <div v-else-if="updateSuccess && needRestart" class="space-y-2">
                 <div
-                  class="flex items-center gap-3 rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800/50 dark:bg-green-900/20"
+                  class="flex items-center gap-3 rounded-lg border border-green-200 bg-green-50/[0.15] p-3 dark:border-green-800/50 dark:bg-green-900/20"
                 >
                   <div
-                    class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/50"
+                    class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-green-100/[0.15] dark:bg-green-900/50"
                   >
                     <svg
                       class="h-4 w-4 text-green-600 dark:text-green-400"
@@ -182,7 +182,7 @@
                 <button
                   @click="handleRestart"
                   :disabled="restarting"
-                  class="flex w-full items-center justify-center gap-2 rounded-lg bg-green-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-50"
+                  class="flex w-full items-center justify-center gap-2 rounded-lg bg-primary-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <svg
                     v-if="restarting"
@@ -235,10 +235,10 @@
                   :href="releaseInfo.html_url"
                   target="_blank"
                   rel="noopener noreferrer"
-                  class="group flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 transition-colors hover:bg-amber-100 dark:border-amber-800/50 dark:bg-amber-900/20 dark:hover:bg-amber-900/30"
+                  class="group flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50/[0.15] p-3 transition-colors hover:bg-amber-100/25 dark:border-amber-800/50 dark:bg-amber-900/20 dark:hover:bg-amber-900/30"
                 >
                   <div
-                    class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/50"
+                    class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-amber-100/[0.15] dark:bg-amber-900/50"
                   >
                     <Icon
                       name="download"
@@ -267,7 +267,7 @@
                 </a>
                 <!-- Source build hint -->
                 <div
-                  class="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 p-2 dark:border-blue-800/50 dark:bg-blue-900/20"
+                  class="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50/[0.15] p-2 dark:border-blue-800/50 dark:bg-blue-900/20"
                 >
                   <svg
                     class="h-3.5 w-3.5 flex-shrink-0 text-blue-500 dark:text-blue-400"
@@ -292,10 +292,10 @@
               <div v-else-if="hasUpdate && isReleaseBuild" class="space-y-2">
                 <!-- Update info card -->
                 <div
-                  class="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800/50 dark:bg-amber-900/20"
+                  class="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50/[0.15] p-3 dark:border-amber-800/50 dark:bg-amber-900/20"
                 >
                 <div
-                  class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/50"
+                  class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-amber-100/[0.15] dark:bg-amber-900/50"
                 >
                   <Icon
                     name="download"
@@ -345,7 +345,7 @@
                   :href="releaseInfo.html_url"
                   target="_blank"
                   rel="noopener noreferrer"
-                  class="flex items-center justify-center gap-1 text-xs text-gray-500 transition-colors hover:text-gray-700 dark:text-dark-400 dark:hover:text-dark-200"
+                  class="flex items-center justify-center gap-1 text-xs transition-colors hover:text-gray-700 dark:hover:text-dark-200 surface-muted"
                 >
                   {{ t('version.viewChangelog') }}
                   <Icon name="externalLink" size="xs" :stroke-width="2" />
@@ -359,7 +359,7 @@
                   :href="releaseInfo.html_url"
                   target="_blank"
                   rel="noopener noreferrer"
-                  class="flex items-center justify-center gap-2 py-2 text-sm text-gray-500 transition-colors hover:text-gray-700 dark:text-dark-400 dark:hover:text-dark-200"
+                  class="flex items-center justify-center gap-2 py-2 text-sm transition-colors hover:text-gray-700 dark:hover:text-dark-200 surface-muted"
                 >
                   <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
                     <path
@@ -375,7 +375,7 @@
                 <div class="border-t border-gray-100 pt-2 dark:border-dark-700">
                   <button
                     @click="toggleRollbackPanel"
-                    class="group flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-xs text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-600 dark:text-dark-500 dark:hover:bg-dark-700/50 dark:hover:text-dark-300"
+                    class="group flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-xs transition-colors hover:surface-hover hover:text-gray-600 dark:hover:text-dark-300 surface-control surface-muted"
                   >
                     <span class="flex items-center gap-1.5">
                       <Icon name="clock" size="xs" :stroke-width="2" />
@@ -395,7 +395,7 @@
                       <!-- Source build: online rollback unavailable, use git instead -->
                       <div
                         v-if="!isReleaseBuild"
-                        class="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 p-2 dark:border-blue-800/50 dark:bg-blue-900/20"
+                        class="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50/[0.15] p-2 dark:border-blue-800/50 dark:bg-blue-900/20"
                       >
                         <svg
                           class="h-3.5 w-3.5 flex-shrink-0 text-blue-500 dark:text-blue-400"
@@ -444,13 +444,13 @@
                       <!-- Load error + retry -->
                       <div v-else-if="rollbackVersionsError" class="space-y-2">
                         <p
-                          class="rounded-lg border border-red-200 bg-red-50 p-2.5 text-xs text-red-600 dark:border-red-800/50 dark:bg-red-900/20 dark:text-red-400"
+                          class="rounded-lg border border-red-200 bg-red-50/[0.15] p-2.5 text-xs text-red-600 dark:border-red-800/50 dark:bg-red-900/20 dark:text-red-400"
                         >
                           {{ rollbackVersionsError }}
                         </p>
                         <button
                           @click="loadRollbackVersions"
-                          class="w-full rounded-lg border border-gray-200 py-1.5 text-xs text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700 dark:border-dark-700 dark:text-dark-400 dark:hover:bg-dark-700/50 dark:hover:text-dark-200"
+                          class="w-full rounded-lg border border-gray-200 py-1.5 text-xs transition-colors hover:surface-hover hover:text-gray-700 dark:border-dark-700 dark:hover:text-dark-200 surface-control surface-muted"
                         >
                           {{ t('version.retry') }}
                         </button>
@@ -459,14 +459,14 @@
                       <!-- No versions available -->
                       <p
                         v-else-if="rollbackVersions.length === 0"
-                        class="py-3 text-center text-xs text-gray-400 dark:text-dark-500"
+                        class="py-3 text-center text-xs surface-muted"
                       >
                         {{ t('version.noRollbackVersions') }}
                       </p>
 
                       <!-- Version list -->
                       <template v-else>
-                        <p class="px-0.5 text-[11px] text-gray-400 dark:text-dark-500">
+                        <p class="px-0.5 text-[11px] surface-muted">
                           {{ t('version.rollbackSelectVersion') }}
                         </p>
 
@@ -475,11 +475,11 @@
                           :key="item.version"
                           @click="selectRollbackVersion(item.version)"
                           :disabled="rollingBack"
-                          class="flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left transition-all disabled:cursor-not-allowed disabled:opacity-60"
+                          class="flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left transition-all disabled:cursor-not-allowed disabled:opacity-60 surface-control"
                           :class="
                             selectedRollbackVersion === item.version
-                              ? 'border-amber-300 bg-amber-50 shadow-sm dark:border-amber-700 dark:bg-amber-900/20'
-                              : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50 dark:border-dark-700 dark:hover:border-dark-600 dark:hover:bg-dark-700/40'
+                              ? 'border-amber-300 bg-amber-50/[0.15] shadow-sm dark:border-amber-700 dark:bg-amber-900/20'
+                              : 'border-gray-200 hover:border-gray-300 hover:surface-hover dark:border-dark-700 dark:hover:border-dark-600 dark:hover:surface-hover'
                           "
                         >
                           <span class="flex items-center gap-2">
@@ -493,7 +493,7 @@
                             >
                               <span
                                 v-if="selectedRollbackVersion === item.version"
-                                class="h-1.5 w-1.5 rounded-full bg-amber-500"
+                                class="console-data-mark h-1.5 w-1.5 rounded-full bg-amber-500"
                               ></span>
                             </span>
                             <span
@@ -501,12 +501,12 @@
                               :class="
                                 selectedRollbackVersion === item.version
                                   ? 'text-amber-700 dark:text-amber-300'
-                                  : 'text-gray-700 dark:text-dark-200'
+                                  : 'surface-muted'
                               "
                               >v{{ item.version }}</span
                             >
                           </span>
-                          <span class="text-[11px] tabular-nums text-gray-400 dark:text-dark-500">
+                          <span class="text-[11px] tabular-nums surface-muted">
                             {{ formatPublishedAt(item.published_at) }}
                           </span>
                         </button>
@@ -514,7 +514,7 @@
                         <!-- Selected version: manual command (per deploy method) + confirm -->
                         <transition name="rollback">
                           <div v-if="selectedRollbackVersion" class="space-y-2">
-                            <p class="px-0.5 text-[11px] text-gray-400 dark:text-dark-500">
+                            <p class="px-0.5 text-[11px] surface-muted">
                               {{ t('version.manualRollbackCommand') }}
                             </p>
 
@@ -523,19 +523,19 @@
                               class="overflow-hidden rounded-lg border border-gray-200 dark:border-dark-600"
                             >
                               <div
-                                class="flex items-center justify-between border-b border-gray-200 bg-gray-100 px-2 py-1.5 dark:border-dark-600 dark:bg-dark-700"
+                                class="flex items-center justify-between border-b border-gray-200 surface-inset px-2 py-1.5 dark:border-dark-600"
                               >
                                 <div
-                                  class="flex items-center gap-0.5 rounded-md bg-gray-200/70 p-0.5 dark:bg-dark-600/70"
+                                  class="flex items-center gap-0.5 rounded-md surface-inset p-0.5"
                                 >
                                   <button
                                     v-for="tab in manualTabs"
                                     :key="tab.key"
                                     @click="manualTab = tab.key"
-                                    class="rounded px-2 py-0.5 text-[11px] font-medium transition-colors"
+                                    class="rounded px-2 py-0.5 text-[11px] font-medium transition-colors surface-control"
                                     :class="
                                       manualTab === tab.key
-                                        ? 'bg-white text-gray-700 shadow-sm dark:bg-dark-800 dark:text-dark-100'
+                                        ? 'surface-field text-gray-700 shadow-sm dark:surface-field dark:text-dark-100'
                                         : 'text-gray-400 hover:text-gray-600 dark:text-dark-400 dark:hover:text-dark-200'
                                     "
                                   >
@@ -544,7 +544,7 @@
                                 </div>
                                 <button
                                   @click="copyToClipboard(activeManualCommand)"
-                                  class="flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-gray-400 transition-colors hover:bg-gray-200 hover:text-gray-600 dark:text-dark-400 dark:hover:bg-dark-600 dark:hover:text-dark-200"
+                                  class="flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] transition-colors hover:surface-hover hover:text-gray-600 dark:hover:text-dark-200 surface-control surface-muted"
                                 >
                                   <Icon
                                     :name="copied ? 'check' : 'copy'"
@@ -556,7 +556,7 @@
                                 </button>
                               </div>
                               <code
-                                class="block select-all whitespace-pre-wrap break-all bg-gray-50 p-2.5 font-mono text-[10px] leading-relaxed text-gray-600 dark:bg-dark-900 dark:text-dark-300"
+                                class="block select-all whitespace-pre-wrap break-all surface-inset p-2.5 font-mono text-[10px] leading-relaxed surface-muted"
                                 >{{ activeManualCommand }}</code
                               >
                             </div>
@@ -575,7 +575,7 @@
 
                             <p
                               v-if="rollbackError"
-                              class="rounded-lg border border-red-200 bg-red-50 p-2 text-xs text-red-600 dark:border-red-800/50 dark:bg-red-900/20 dark:text-red-400"
+                              class="rounded-lg border border-red-200 bg-red-50/[0.15] p-2 text-xs text-red-600 dark:border-red-800/50 dark:bg-red-900/20 dark:text-red-400"
                             >
                               {{ rollbackError }}
                             </p>

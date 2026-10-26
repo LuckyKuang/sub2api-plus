@@ -20,7 +20,7 @@ func TestGatewayCacheCodexTurnStateOriginIsSharedHashedAndExpiring(t *testing.T)
 
 	const (
 		seed      = "42\x00client-session-secret"
-		accountID = int64(73)
+		accountID = "owner-v2:principal-digest"
 		ttl       = 5 * time.Minute
 	)
 	require.NoError(t, cache.SetOpenAICodexTurnStateOrigin(context.Background(), seed, accountID, ttl))

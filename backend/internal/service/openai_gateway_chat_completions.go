@@ -60,9 +60,20 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 	body []byte,
 	promptCacheKey string,
 	defaultMappedModel string,
-) (*OpenAIForwardResult, error) {
+) (forwardResult *OpenAIForwardResult, forwardErr error) {
+	if err := validateOpenAISessionContinuation(ctx, body); err != nil {
+		return nil, err
+	}
+	ctx, finishRoute, routeErr := beginOpenAISessionRouteForward(ctx, account, s.openAIFirstOutputTimeout("high"))
+	if routeErr != nil {
+		return nil, routeErr
+	}
+	defer finishRoute()
+	defer func() { forwardErr = openAISessionRouteForwardError(ctx, forwardErr) }()
 	ctx = WithOutboundIdentityScope(ctx, c)
+	captureNativeConversationScope(ctx, c, account, body)
 	ctx = WithAccountOutboundIdentity(ctx, account)
+	defer bindOpenAISessionRouteRequestContext(ctx, c)()
 	return s.forwardAsChatCompletions(ctx, c, account, body, promptCacheKey, defaultMappedModel)
 }
 
@@ -309,18 +320,6 @@ func (s *OpenAIGatewayService) forwardAsChatCompletions(
 		} else if promptCacheKey != "" {
 			reqBody["prompt_cache_key"] = promptCacheKey
 		}
-		// This path aligns prompt_cache_key below with the shared body/header
-		// identity helper. Keep account identity rewriting limited to metadata so
-		// recovery retries cannot scope an already aligned key a second time.
-		promptCacheValue, hasPromptCacheValue := reqBody["prompt_cache_key"]
-		delete(reqBody, "prompt_cache_key")
-		applyCodexAccountIdentityClientMetadataMap(reqBody, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c))
-		if hasPromptCacheValue {
-			reqBody["prompt_cache_key"] = promptCacheValue
-		}
-		if _, fingerprintErr := s.prepareCodexFingerprintMap(ctx, c, account, reqBody); fingerprintErr != nil {
-			return nil, fingerprintErr
-		}
 		responsesBody, err = json.Marshal(reqBody)
 		if err != nil {
 			return nil, fmt.Errorf("remarshal after codex transform: %w", err)
@@ -385,6 +384,20 @@ func (s *OpenAIGatewayService) forwardAsChatCompletions(
 	if err != nil {
 		return nil, fmt.Errorf("get access token: %w", err)
 	}
+	ctx = withRequestCredentialOwner(ctx, account, token)
+	defer bindRequestCredentialOwnerContext(ctx, c)()
+	if account.UsesOpenAICodexProtocol() {
+		// Metadata and fingerprints must use the owner of the acquired token.
+		// Prompt-cache identity was aligned independently above and is preserved.
+		responsesBody, _, err = applyCodexAccountIdentityClientMetadataRaw(responsesBody, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c), ctx)
+		if err != nil {
+			return nil, err
+		}
+		responsesBody, _, err = s.prepareCodexFingerprintRaw(ctx, c, account, responsesBody)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	// 6. Build upstream request
 	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
@@ -400,9 +413,9 @@ func (s *OpenAIGatewayService) forwardAsChatCompletions(
 	}
 
 	// 7. Send request
-	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
+	proxyURL, err := requestCredentialOwnerProxyURL(ctx, account)
+	if err != nil {
+		return nil, err
 	}
 	resp, err := s.doOpenAIUpstream(upstreamReq, proxyURL, account)
 	if err != nil {
@@ -418,10 +431,12 @@ func (s *OpenAIGatewayService) forwardAsChatCompletions(
 		respBody, upstreamMsg, completeErrorBody := s.readOpenAIUpstreamErrorWithCompleteness(resp)
 		if !agentIdentityTaskRecoveryWasTried(ctx) && s.isAgentIdentityAccount(ctx, account) && isAgentIdentityTaskInvalidHTTPResponse(resp.StatusCode, respBody) {
 			expectedTaskID := account.GetCredential("task_id")
-			if err := s.recoverAgentIdentityTask(ctx, account, expectedTaskID); err != nil {
+			recoveredCtx, err := s.recoverAgentIdentityTask(ctx, account, expectedTaskID)
+			if err != nil {
 				return nil, fmt.Errorf("agent identity task recovery failed: %w", err)
 			}
-			return s.ForwardAsChatCompletions(markAgentIdentityTaskRecoveryTried(ctx), c, account, body, promptCacheKey, defaultMappedModel)
+			defer bindRequestCredentialOwnerContext(recoveredCtx, c)()
+			return s.ForwardAsChatCompletions(markAgentIdentityTaskRecoveryTried(recoveredCtx), c, account, body, promptCacheKey, defaultMappedModel)
 		}
 		if account.Type == AccountTypeAPIKey &&
 			!account.routesByModel() &&
@@ -494,10 +509,10 @@ func (s *OpenAIGatewayService) forwardAsChatCompletions(
 	// 排除 spark 影子:其 codex_* 仅由 QueryUsage(/wham/usage bengalfox)更新(外审第7轮 P1)。
 	if handleErr == nil && account.Type == AccountTypeOAuth && !account.IsShadow() {
 		if snapshot := ParseCodexRateLimitHeaders(resp.Header); snapshot != nil {
-			s.updateCodexUsageSnapshot(ctx, account.ID, snapshot)
+			s.updateCodexUsageSnapshot(ctx, account, snapshot)
 		}
 	} else if handleErr == nil && account.IsShadow() && account.ParentAccountID != nil {
-		notifyOpenAIAutoReset(*account.ParentAccountID)
+		notifyOpenAIAutoResetForOwner(capturedCodexUsageOwner(ctx, account))
 	}
 
 	return result, handleErr
@@ -799,6 +814,13 @@ func (s *OpenAIGatewayService) handleChatBufferedStreamingResponse(
 	// writeContentType 仅在头不存在时才设置，无法覆盖。这里显式 Set 强制改回 JSON，
 	// 否则下游"看头判流式"的中间层（如 new-api）会把本应聚合的 JSON 当成 SSE 处理。
 	c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
+	acceptedBody, marshalErr := json.Marshal(finalResponse)
+	if marshalErr != nil {
+		return nil, marshalErr
+	}
+	if err := commitOpenAISessionTakeoverJSON(c.Request.Context(), acceptedBody); err != nil {
+		return &OpenAIForwardResult{RequestID: requestID, Usage: usage, Model: originalModel, BillingModel: billingModel, UpstreamModel: upstreamModel, Duration: time.Since(startTime)}, err
+	}
 	c.JSON(http.StatusOK, chatResp)
 
 	result := &OpenAIForwardResult{
@@ -889,7 +911,7 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 	state.IncludeUsage = true
 
 	var usage OpenAIUsage
-	var timing streamOutputTiming
+	timing := requestStreamOutputTiming(c)
 	clientDisconnected := false
 	clientOutputStarted := false
 	pendingSSE := make([]string, 0, 4)
@@ -1056,6 +1078,10 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 			return true
 		}
 
+		if err := commitOpenAISessionTakeoverEvent(c.Request.Context(), []byte(payload)); err != nil {
+			streamNonFailoverErr = err
+			return true
+		}
 		chunks := apicompat.ResponsesEventToChatChunks(&event, state)
 		if !clientDisconnected {
 			for _, chunk := range chunks {
@@ -1068,7 +1094,7 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 					)
 					continue
 				}
-				if !clientOutputStarted && !refusalDetector.ShouldReleaseClientOutput() {
+				if !clientOutputStarted && (!refusalDetector.ShouldReleaseClientOutput() || openAISessionTakeoverPending(c.Request.Context())) {
 					pendingSSE = append(pendingSSE, sse)
 					continue
 				}
@@ -1113,6 +1139,9 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 		}
 		if streamNonFailoverErr != nil {
 			return resultWithUsage(), streamNonFailoverErr
+		}
+		if openAISessionTakeoverPending(c.Request.Context()) {
+			return resultWithUsage(), ErrOpenAISessionRouteNotAccepted
 		}
 		if finalChunks := apicompat.FinalizeResponsesChatStream(state); len(finalChunks) > 0 && !clientDisconnected {
 			for _, chunk := range finalChunks {

@@ -22,29 +22,23 @@
 .driver-active-element {
   position: relative !important;
   z-index: 99999999 !important;
-  outline: 4px solid rgba(20, 184, 166, 0.2) !important;
-  border-radius: 4px !important;
+  outline: 1px solid rgb(var(--console-accent-500, 20 184 166) / 35%) !important;
+  border-radius: var(--surface-radius-control) !important;
 }
 
 /* 2. Popover Container */
 .driver-popover.theme-tour-popover {
   position: fixed !important;
   z-index: 100000000 !important;
-  background-color: #ffffff !important;
-  border: 1px solid #e5e5e5 !important;
+  background-color: var(--surface-panel) !important;
+  border: 1px solid var(--surface-edge) !important;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
-  border-radius: 12px !important;
+  border-radius: var(--surface-radius-panel) !important;
   padding: 0 !important;
   max-width: min(440px, 90vw) !important; /* Responsive on small screens */
-  color: #262626 !important;
+  color: var(--surface-text) !important;
   font-family: ui-sans-serif, system-ui, sans-serif !important;
   overflow: hidden !important;
-}
-
-.dark .driver-popover.theme-tour-popover {
-  background-color: #282828 !important;
-  border-color: #404040 !important;
-  color: #f5f5f5 !important;
 }
 
 /* 3. Header Area */
@@ -78,7 +72,7 @@
   background-color: transparent !important;
   border: none !important;
   z-index: 20 !important;
-  border-radius: 4px !important;
+  border-radius: var(--surface-radius-item) !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -99,21 +93,30 @@
 }
 .dark .theme-tour-popover .driver-popover-description { color: #d4d4d4 !important; }
 
+/* Localized tour help includes inline HTML. Its nested help cards follow the
+   shared fill and complete outline instead of keeping legacy opaque stripes. */
+.theme-tour-popover .driver-popover-description :is(div, p)[style*="background"] {
+  background: var(--surface-soft) !important;
+  border: 1px solid var(--surface-edge) !important;
+  border-radius: var(--surface-radius-item) !important;
+}
+.theme-tour-popover .driver-popover-description [style*="color: #10b981"] {
+  color: rgb(var(--console-accent-600, 13 148 136)) !important;
+}
+.dark .theme-tour-popover .driver-popover-description [style*="color: #10b981"] {
+  color: rgb(var(--console-accent-400, 45 212 191)) !important;
+}
+
 /* 5. Footer Area - Flex Row with Left/Right Containers */
 .theme-tour-popover .driver-popover-footer {
   display: flex !important;
   align-items: center !important;
   justify-content: space-between !important; /* Push Left and Right apart */
   padding: 16px 24px !important;
-  background-color: #fafafa !important;
-  border-top: 1px solid #f5f5f5 !important;
+  background-color: var(--surface-soft) !important;
+  border-top: 1px solid var(--surface-edge) !important;
   margin: 0 !important;
 }
-.dark .theme-tour-popover .driver-popover-footer {
-  background-color: #202020 !important;
-  border-top-color: #282828 !important;
-}
-
 /* Left Container: Progress + Shortcuts */
 .footer-left {
   display: flex !important;
@@ -163,7 +166,7 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace !important;
   background-color: #ffffff !important;
   border: 1px solid #e5e5e5 !important;
-  border-radius: 4px !important;
+  border-radius: var(--surface-radius-item) !important;
   padding: 1px 6px !important;
   font-size: 11px !important;
   font-weight: 600 !important;
@@ -188,7 +191,7 @@
   font-size: 13px !important;
   font-weight: 500 !important;
   text-shadow: none !important;
-  border-radius: 6px !important;
+  border-radius: var(--surface-radius-control) !important;
   cursor: pointer !important;
   transition: all 0.2s !important;
   border: 1px solid transparent !important;
@@ -197,11 +200,12 @@
 }
 
 .theme-tour-popover .driver-popover-next-btn {
-  background-color: #14b8a6 !important;
-  color: #042f2e !important;
+  background-color: rgb(var(--console-accent-500, 20 184 166)) !important;
+  color: var(--surface-text) !important;
+  border-color: rgb(var(--console-accent-500, 20 184 166) / 65%) !important;
   box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
 }
-.theme-tour-popover .driver-popover-next-btn:hover { background-color: #2dd4bf !important; }
+.theme-tour-popover .driver-popover-next-btn:hover { background-color: rgb(var(--console-accent-400, 45 212 191)) !important; }
 
 .theme-tour-popover .driver-popover-prev-btn {
   background-color: white !important;
@@ -216,14 +220,5 @@
   color: #a3a3a3 !important;
 }
 
-/* Arrows */
-.driver-popover-arrow { z-index: 100000001 !important; }
-.driver-popover-arrow-side-left.driver-popover-arrow { border-left-color: #ffffff !important; }
-.driver-popover-arrow-side-right.driver-popover-arrow { border-right-color: #ffffff !important; }
-.driver-popover-arrow-side-top.driver-popover-arrow { border-top-color: #ffffff !important; }
-.driver-popover-arrow-side-bottom.driver-popover-arrow { border-bottom-color: #ffffff !important; }
-
-.dark .driver-popover-arrow-side-left.driver-popover-arrow { border-left-color: #282828 !important; }
-.dark .driver-popover-arrow-side-right.driver-popover-arrow { border-right-color: #282828 !important; }
-.dark .driver-popover-arrow-side-top.driver-popover-arrow { border-top-color: #282828 !important; }
-.dark .driver-popover-arrow-side-bottom.driver-popover-arrow { border-bottom-color: #282828 !important; }
+/* Tour help uses the same arrowless floating-card shape as other overlays. */
+.theme-tour-popover .driver-popover-arrow { display: none !important; }

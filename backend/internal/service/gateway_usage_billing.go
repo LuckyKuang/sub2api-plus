@@ -567,23 +567,25 @@ func detachedBillingContext(ctx context.Context) (context.Context, context.Cance
 
 func detachStreamUpstreamContext(ctx context.Context, stream bool) (context.Context, context.CancelFunc) {
 	base := context.Background()
+	release := func() {}
 	if ctx != nil {
-		base = context.WithoutCancel(ctx)
+		base, release = openAISessionRouteDetachedContext(ctx)
 	}
 	if stream {
-		return base, func() {}
+		return base, release
 	}
 	// Non-stream requests must survive a downstream disconnect long enough to
 	// collect the upstream result and usage, but must not occupy an account slot
 	// forever. Response body size remains bounded by ReadUpstreamResponseBody.
-	return context.WithTimeout(base, 15*time.Minute)
+	bounded, cancel := context.WithTimeout(base, 15*time.Minute)
+	return bounded, func() { cancel(); release() }
 }
 
 func detachUpstreamContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	if ctx == nil {
 		return context.Background(), func() {}
 	}
-	return context.WithoutCancel(ctx), func() {}
+	return openAISessionRouteDetachedContext(ctx)
 }
 
 // billingDeps 扣费逻辑依赖的服务（由各 gateway service 提供）
@@ -837,6 +839,7 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 		requestedModel, multiplier, imageMultiplier, accountRateMultiplier, billingType, cacheTTLOverridden, cost)
 	usageLog.RequestedServiceTier = &requestedServiceTier
 	usageLog.ResponseServiceTier = &responseServiceTier
+	bindLiveUsage(ctx, usageLog)
 
 	// 计算账号统计定价费用（使用最终上游模型匹配自定义规则）。纯存储费不是一次模型请求，
 	// 账号统计成本回落 total_cost（官方存储价）。

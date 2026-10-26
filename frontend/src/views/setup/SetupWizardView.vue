@@ -1,21 +1,21 @@
 <template>
   <div
-    class="flex min-h-screen items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 p-4 dark:from-dark-900 dark:to-dark-800"
+    class="flex min-h-screen items-center justify-center bg-canvas p-[var(--shell-gutter)] dark:surface-inset"
   >
-    <div class="w-full max-w-2xl">
+    <div class="flex w-full min-w-0 max-w-2xl flex-col gap-[var(--shell-gap)]">
       <!-- Logo & Title -->
-      <div class="mb-8 text-center">
+      <div class="shell-surface px-5 py-6 text-center">
         <div
           class="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-primary-500 to-primary-600 shadow-lg"
         >
           <Icon name="cog" size="xl" class="text-white" />
         </div>
         <h1 class="text-3xl font-bold text-gray-900 dark:text-white">{{ t('setup.title') }}</h1>
-        <p class="mt-2 text-gray-500 dark:text-dark-400">{{ t('setup.description') }}</p>
+        <p class="mt-2 surface-muted">{{ t('setup.description') }}</p>
       </div>
 
       <!-- Progress Steps -->
-      <div class="mb-8">
+      <div class="card px-3 py-5 sm:px-6">
         <div class="flex items-center justify-center">
           <template v-for="(step, index) in steps" :key="step.id">
             <div class="flex items-center">
@@ -26,7 +26,7 @@
                     ? 'bg-primary-500 text-white'
                     : currentStep === index
                       ? 'bg-primary-500 text-white ring-4 ring-primary-100 dark:ring-primary-900'
-                      : 'bg-gray-200 text-gray-500 dark:bg-dark-700 dark:text-dark-400'
+                      : 'surface-inset text-gray-500 dark:surface-inset dark:text-dark-400'
                 ]"
               >
                 <Icon
@@ -42,7 +42,7 @@
                 :class="
                   currentStep >= index
                     ? 'text-gray-900 dark:text-white'
-                    : 'text-gray-400 dark:text-dark-500'
+                    : 'surface-muted'
                 "
               >
                 {{ step.title }}
@@ -58,14 +58,14 @@
       </div>
 
       <!-- Step Content -->
-      <div class="rounded-2xl bg-white p-8 shadow-xl dark:bg-dark-800">
+      <div class="card p-5 sm:p-8">
         <!-- Step 1: Database -->
         <div v-if="currentStep === 0" class="space-y-6">
           <div class="mb-6 text-center">
             <h2 class="text-xl font-semibold text-gray-900 dark:text-white">
               {{ t('setup.database.title') }}
             </h2>
-            <p class="mt-1 text-sm text-gray-500 dark:text-dark-400">
+            <p class="mt-1 text-sm surface-muted">
               {{ t('setup.database.description') }}
             </p>
           </div>
@@ -96,7 +96,7 @@
               <p class="text-sm font-medium text-gray-900 dark:text-white">
                 {{ t("setup.redis.enableTls") }}
               </p>
-              <p class="text-xs text-gray-500 dark:text-dark-400">
+              <p class="text-xs surface-muted">
                 {{ t("setup.redis.enableTlsHint") }}
               </p>
             </div>
@@ -190,7 +190,7 @@
             <h2 class="text-xl font-semibold text-gray-900 dark:text-white">
               {{ t('setup.redis.title') }}
             </h2>
-            <p class="mt-1 text-sm text-gray-500 dark:text-dark-400">
+            <p class="mt-1 text-sm surface-muted">
               {{ t('setup.redis.description') }}
             </p>
           </div>
@@ -251,7 +251,7 @@
               <p class="text-sm font-medium text-gray-900 dark:text-white">
                 {{ t("setup.redis.enableTls") }}
               </p>
-              <p class="text-xs text-gray-500 dark:text-dark-400">
+              <p class="text-xs surface-muted">
                 {{ t("setup.redis.enableTlsHint") }}
               </p>
             </div>
@@ -306,7 +306,7 @@
             <h2 class="text-xl font-semibold text-gray-900 dark:text-white">
               {{ t('setup.admin.title') }}
             </h2>
-            <p class="mt-1 text-sm text-gray-500 dark:text-dark-400">
+            <p class="mt-1 text-sm surface-muted">
               {{ t('setup.admin.description') }}
             </p>
           </div>
@@ -367,14 +367,14 @@
             <h2 class="text-xl font-semibold text-gray-900 dark:text-white">
               {{ t('setup.ready.title') }}
             </h2>
-            <p class="mt-1 text-sm text-gray-500 dark:text-dark-400">
+            <p class="mt-1 text-sm surface-muted">
               {{ t('setup.ready.description') }}
             </p>
           </div>
 
           <div class="space-y-4">
-            <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-700">
-              <h3 class="mb-2 text-sm font-medium text-gray-500 dark:text-dark-400">
+            <div class="rounded-xl surface-inset p-4">
+              <h3 class="mb-2 text-sm font-medium surface-muted">
                 {{ t('setup.ready.database') }}
               </h3>
               <p class="text-gray-900 dark:text-white">
@@ -384,8 +384,8 @@
               </p>
             </div>
 
-            <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-700">
-              <h3 class="mb-2 text-sm font-medium text-gray-500 dark:text-dark-400">
+            <div class="rounded-xl surface-inset p-4">
+              <h3 class="mb-2 text-sm font-medium surface-muted">
                 {{ t('setup.ready.redis') }}
               </h3>
               <p class="text-gray-900 dark:text-white">
@@ -393,8 +393,8 @@
               </p>
             </div>
 
-            <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-700">
-              <h3 class="mb-2 text-sm font-medium text-gray-500 dark:text-dark-400">
+            <div class="rounded-xl surface-inset p-4">
+              <h3 class="mb-2 text-sm font-medium surface-muted">
                 {{ t('setup.ready.adminEmail') }}
               </h3>
               <p class="text-gray-900 dark:text-white">{{ formData.admin.email }}</p>
@@ -405,7 +405,7 @@
         <!-- Error Message -->
         <div
           v-if="errorMessage"
-          class="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-800/50 dark:bg-red-900/20"
+          class="mt-6 rounded-xl border border-red-200 bg-red-50/[0.15] p-4 dark:border-red-800/50 dark:bg-red-900/20"
         >
           <div class="flex items-start gap-3">
             <Icon name="exclamationCircle" size="md" class="flex-shrink-0 text-red-500" />
@@ -416,7 +416,7 @@
         <!-- Success Message -->
         <div
           v-if="installSuccess"
-          class="mt-6 rounded-xl border border-green-200 bg-green-50 p-4 dark:border-green-800/50 dark:bg-green-900/20"
+          class="mt-6 rounded-xl border border-green-200 bg-green-50/[0.15] p-4 dark:border-green-800/50 dark:bg-green-900/20"
         >
           <div class="flex items-start gap-3">
             <svg

@@ -34,10 +34,10 @@ func runResponsesProbe(t *testing.T, status int, body string) map[string]any {
 	account := newResponsesProbeAccount(4200)
 	// 带缓冲且不阻塞：探测决定不落标时通道应保持为空。
 	updateCalls := make(chan map[string]any, 1)
-	repo := &snapshotUpdateAccountRepo{
+	repo := &responsesProbeAccountRepo{snapshotUpdateAccountRepo: snapshotUpdateAccountRepo{
 		stubOpenAIAccountRepo: stubOpenAIAccountRepo{accounts: []Account{account}},
 		updateExtraCalls:      updateCalls,
-	}
+	}}
 	svc := &AccountTestService{
 		accountRepo: repo,
 		httpUpstream: &httpUpstreamRecorder{resp: &http.Response{

@@ -8,7 +8,7 @@
     <div class="space-y-4">
       <!-- Header -->
       <div class="flex items-center justify-between">
-        <p class="text-sm text-gray-500 dark:text-gray-400">
+        <p class="text-sm surface-muted">
           {{ t('admin.tlsFingerprintProfiles.description') }}
         </p>
         <button @click="showCreateModal = true" class="btn btn-primary btn-sm">
@@ -23,48 +23,48 @@
       </div>
 
       <div v-else-if="profiles.length === 0" class="py-8 text-center">
-        <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 dark:bg-dark-700">
+        <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full surface-inset">
           <Icon name="shield" size="lg" class="text-gray-400" />
         </div>
         <h4 class="mb-1 text-sm font-medium text-gray-900 dark:text-white">
           {{ t('admin.tlsFingerprintProfiles.noProfiles') }}
         </h4>
-        <p class="text-sm text-gray-500 dark:text-gray-400">
+        <p class="text-sm surface-muted">
           {{ t('admin.tlsFingerprintProfiles.createFirstProfile') }}
         </p>
       </div>
 
-      <div v-else class="max-h-96 overflow-auto rounded-lg border border-gray-200 dark:border-dark-600">
-        <table class="min-w-full divide-y divide-gray-200 dark:divide-dark-700">
-          <thead class="sticky top-0 bg-gray-50 dark:bg-dark-700">
+      <div v-else class="record-table-scroll max-h-96 overflow-auto rounded-lg border border-gray-200 dark:border-dark-600">
+        <table class="record-table min-w-full divide-y divide-gray-200 dark:divide-dark-700">
+          <thead class="sticky top-0 surface-inset">
             <tr>
-              <th class="px-3 py-2 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400">
+              <th class="px-3 py-2 text-left text-xs font-medium uppercase surface-muted">
                 {{ t('admin.tlsFingerprintProfiles.columns.name') }}
               </th>
-              <th class="px-3 py-2 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400">
+              <th class="px-3 py-2 text-left text-xs font-medium uppercase surface-muted">
                 {{ t('admin.tlsFingerprintProfiles.columns.description') }}
               </th>
-              <th class="px-3 py-2 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400">
+              <th class="px-3 py-2 text-left text-xs font-medium uppercase surface-muted">
                 {{ t('admin.tlsFingerprintProfiles.columns.grease') }}
               </th>
-              <th class="px-3 py-2 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400">
+              <th class="px-3 py-2 text-left text-xs font-medium uppercase surface-muted">
                 {{ t('admin.tlsFingerprintProfiles.columns.alpn') }}
               </th>
-              <th class="px-3 py-2 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400">
+              <th class="px-3 py-2 text-left text-xs font-medium uppercase surface-muted">
                 {{ t('admin.tlsFingerprintProfiles.columns.actions') }}
               </th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-gray-200 bg-white dark:divide-dark-700 dark:bg-dark-800">
-            <tr v-for="profile in profiles" :key="profile.id" class="hover:bg-gray-50 dark:hover:bg-dark-700">
+          <tbody class="divide-y divide-gray-200 surface-inset dark:divide-dark-700">
+            <tr v-for="profile in profiles" :key="profile.id" class="hover:surface-hover">
               <td class="px-3 py-2">
                 <div class="font-medium text-gray-900 dark:text-white text-sm">{{ profile.name }}</div>
               </td>
               <td class="px-3 py-2">
-                <div v-if="profile.description" class="text-sm text-gray-500 dark:text-gray-400 max-w-xs truncate">
+                <div v-if="profile.description" class="text-sm max-w-xs truncate surface-muted">
                   {{ profile.description }}
                 </div>
-                <div v-else class="text-xs text-gray-400 dark:text-gray-600">—</div>
+                <div v-else class="text-xs surface-muted">—</div>
               </td>
               <td class="px-3 py-2">
                 <Icon
@@ -82,24 +82,24 @@
                   >
                     {{ proto }}
                   </span>
-                  <span v-if="profile.alpn_protocols.length > 3" class="text-xs text-gray-500">
+                  <span v-if="profile.alpn_protocols.length > 3" class="text-xs surface-muted">
                     +{{ profile.alpn_protocols.length - 3 }}
                   </span>
                 </div>
-                <div v-else class="text-xs text-gray-400 dark:text-gray-600">—</div>
+                <div v-else class="text-xs surface-muted">—</div>
               </td>
               <td class="px-3 py-2">
                 <div class="flex items-center gap-1">
                   <button
                     @click="handleEdit(profile)"
-                    class="p-1 text-gray-500 hover:text-primary-600 dark:hover:text-primary-400"
+                    class="p-1 hover:text-primary-600 dark:hover:text-primary-400 surface-control surface-muted"
                     :title="t('common.edit')"
                   >
                     <Icon name="edit" size="sm" />
                   </button>
                   <button
                     @click="handleDelete(profile)"
-                    class="p-1 text-gray-500 hover:text-red-600 dark:hover:text-red-400"
+                    class="p-1 hover:text-red-600 dark:hover:text-red-400 surface-control surface-muted"
                     :title="t('common.delete')"
                   >
                     <Icon name="trash" size="sm" />
@@ -143,7 +143,7 @@
             <button type="button" @click="parseYamlInput" class="btn btn-secondary btn-sm">
               {{ t('admin.tlsFingerprintProfiles.form.parseYaml') }}
             </button>
-            <p class="text-xs text-gray-500 dark:text-gray-400">
+            <p class="text-xs surface-muted">
               {{ t('admin.tlsFingerprintProfiles.form.pasteYamlHint') }}
             </p>
           </div>
@@ -180,10 +180,10 @@
             v-model="form.enable_grease"
           />
           <div>
-            <span class="text-sm font-medium text-gray-700 dark:text-gray-300">
+            <span class="text-sm font-medium surface-muted">
               {{ t('admin.tlsFingerprintProfiles.form.enableGrease') }}
             </span>
-            <p class="text-xs text-gray-500 dark:text-gray-400">
+            <p class="text-xs surface-muted">
               {{ t('admin.tlsFingerprintProfiles.form.enableGreaseHint') }}
             </p>
           </div>

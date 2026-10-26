@@ -489,6 +489,9 @@ func TestPassthroughIngressServiceTierDiagnosticsPerTurn(t *testing.T) {
 			cfg.Gateway.OpenAIWS.OAuthEnabled = true
 			account := passthroughLifecycleAccount()
 			account.Type = accountType
+			if accountType == AccountTypeOAuth {
+				account.Credentials = map[string]any{"access_token": "sk-test", "chatgpt_account_id": "tier-diagnostics-owner", "chatgpt_user_id": "tier-diagnostics-user"}
+			}
 			account.Extra["openai_oauth_responses_websockets_v2_mode"] = OpenAIWSIngressModePassthrough
 			results := make(chan *OpenAIForwardResult, 2)
 			hooks := &OpenAIWSIngressHooks{AfterTurn: func(_ int, result *OpenAIForwardResult, _ error) { results <- result }}

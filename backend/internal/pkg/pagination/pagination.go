@@ -18,10 +18,12 @@ type PaginationParams struct {
 
 // PaginationResult 分页结果
 type PaginationResult struct {
-	Total    int64
-	Page     int
-	PageSize int
-	Pages    int
+	// SnapshotMaxID is an optional insertion boundary used by usage inspection.
+	SnapshotMaxID *int64
+	Total         int64
+	Page          int
+	PageSize      int
+	Pages         int
 }
 
 // DefaultPagination 默认分页参数

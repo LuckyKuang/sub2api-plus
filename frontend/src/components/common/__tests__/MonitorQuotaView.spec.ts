@@ -126,4 +126,17 @@ describe('MonitorQuotaView', () => {
     })
     expect(wrapper.text()).not.toContain('10%')
   })
+  it('renders unlimited plan windows as unlimited without a zero utilization bar', () => {
+    const wrapper = mount(MonitorQuotaView, { props: {
+      snapshot: makeSnapshot({ source: 'cn_quota', tiers: [
+        { window: '5h', unlimited: true, used_percent: 0 },
+        { window: 'weekly', used_percent: 20 }
+      ] })
+    } })
+    expect(wrapper.get('[data-testid="monitor-quota-unlimited"]').text()).toContain('admin.accounts.cnProviders.unlimited')
+    expect(wrapper.findAll('[data-testid="monitor-quota-tier"]')).toHaveLength(1)
+    expect(wrapper.text()).toContain('20%')
+    expect(wrapper.text()).not.toMatch(/(?<![0-9])0%/)
+  })
+
 })

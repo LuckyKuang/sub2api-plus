@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/LuckyKuang/sub2api-plus/internal/auditcontent"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -17,6 +16,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/auditcontent"
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
 	coderws "github.com/coder/websocket"
 	"github.com/gin-gonic/gin"
@@ -372,9 +372,10 @@ func TestPassthroughLifecycle_NonCyberFailureKeepsAccountSideEffects(t *testing.
 	defer cancelControl(context.Canceled)
 	upstream := newStagedPassthroughConn()
 	upstream.Send(`{"type":"response.failed","response":{"id":"resp_non_cyber","error":{"type":"authentication_error","code":"invalid_api_key","status_code":401,"message":"credential rejected"},"usage":{"input_tokens":3,"output_tokens":1}}}`)
-	repo := &openAIStream403AccountRepo{}
+	repo := &passthroughLifecycleCredentialRepo{}
 	svc := newPassthroughLifecycleService(passthroughLifecycleConfig(), upstream)
 	svc.rateLimitService = NewRateLimitService(repo, nil, svc.cfg, nil, nil)
+	svc.rateLimitService.SetAccountRuntimeBlocker(svc)
 	account := passthroughLifecycleAccount()
 
 	markSeen := make(chan *CyberPolicyMark, 1)
@@ -403,6 +404,8 @@ func TestPassthroughLifecycle_NonCyberFailureKeepsAccountSideEffects(t *testing.
 		t.Fatal("non-cyber terminal event did not complete its turn")
 	}
 	require.Equal(t, 1, repo.setErrorCalls, "non-cyber credential failure must retain account failure side effects")
+	require.Equal(t, 1, repo.credentialErrorCalls)
+	require.Equal(t, account.Credentials, repo.credentialSnapshot)
 	require.True(t, svc.isOpenAIAccountRuntimeBlocked(account))
 	require.NoError(t, clientConn.Close(coderws.StatusNormalClosure, "done"))
 	select {
@@ -410,6 +413,20 @@ func TestPassthroughLifecycle_NonCyberFailureKeepsAccountSideEffects(t *testing.
 	case <-time.After(3 * time.Second):
 		t.Fatal("non-cyber passthrough test did not exit")
 	}
+}
+
+type passthroughLifecycleCredentialRepo struct {
+	openAIStream403AccountRepo
+	credentialErrorCalls int
+	credentialSnapshot   map[string]any
+}
+
+func (r *passthroughLifecycleCredentialRepo) SetCredentialErrorIfUnchanged(_ context.Context, expectedOwner *Account, _ string) (bool, error) {
+	credentials := expectedOwner.Credentials
+	r.credentialErrorCalls++
+	r.credentialSnapshot = credentials
+	r.setErrorCalls++
+	return true, nil
 }
 
 func TestPassthroughLifecycle_CyberSkipsFailureAccountSideEffects(t *testing.T) {

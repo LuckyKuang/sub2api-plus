@@ -1,22 +1,56 @@
 <template>
-  <AppLayout>
-    <div class="space-y-6">
+  <AppLayout workspace>
+    <div class="workspace-page admin-dashboard">
+      <div class="card workspace-fixed dashboard-toolbar p-4">
+            <div class="flex flex-wrap items-center gap-4">
+              <div class="flex items-center gap-2">
+                <span class="text-sm font-medium surface-muted"
+                  >{{ t('admin.dashboard.timeRange') }}:</span
+                >
+                <DateRangePicker
+                  v-model:start-date="startDate"
+                  v-model:end-date="endDate"
+                  @change="onDateRangeChange"
+                />
+              </div>
+              <button @click="refreshAll" :disabled="chartsLoading || overviewRefresh.fetching.value" class="btn btn-secondary">
+                {{ t('common.refresh') }}
+              </button>
+              <div class="ml-auto flex items-center gap-2">
+                <span class="text-sm font-medium surface-muted"
+                  >{{ t('admin.dashboard.granularity') }}:</span
+                >
+                <div class="w-28">
+                  <Select
+                    v-model="granularity"
+                    :options="granularityOptions"
+                    @change="loadChartData"
+                  />
+                </div>
+              </div>
+      <div class="dashboard-refresh flex flex-wrap items-center gap-3">
+        <RefreshControl :state="overviewRefresh" />
+        <button v-if="!stats && overviewRefresh.error.value" class="btn btn-secondary" @click="refreshAll">{{ t('inspection.retry') }}</button>
+      </div>
+            </div>
+          </div>
+
       <!-- Loading State -->
-      <div v-if="loading" class="flex items-center justify-center py-12">
+      <div v-if="loading && !stats" class="flex items-center justify-center py-12">
         <LoadingSpinner />
       </div>
 
       <template v-else-if="stats">
         <!-- Row 1: Core Stats -->
-        <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div class="dashboard-kpis workspace-fixed grid grid-cols-2 gap-4 lg:grid-cols-4">
           <!-- Total API Keys -->
           <div class="card p-4">
             <div class="flex items-center gap-3">
-              <div class="rounded-lg bg-blue-100 p-2 dark:bg-blue-900/30">
+              <div class="rounded-lg bg-blue-100/[0.15] p-2 dark:bg-blue-900/30">
                 <Icon name="key" size="md" class="text-blue-600 dark:text-blue-400" :stroke-width="2" />
               </div>
               <div>
-                <p class="text-xs font-medium text-gray-500 dark:text-gray-400">
+                <p class="text-xs font-medium surface-muted">
                   {{ t('admin.dashboard.apiKeys') }}
                 </p>
                 <p class="text-xl font-bold text-gray-900 dark:text-white">
@@ -32,11 +66,11 @@
           <!-- Service Accounts -->
           <div class="card p-4">
             <div class="flex items-center gap-3">
-              <div class="rounded-lg bg-purple-100 p-2 dark:bg-purple-900/30">
+              <div class="rounded-lg bg-purple-100/[0.15] p-2 dark:bg-purple-900/30">
                 <Icon name="server" size="md" class="text-purple-600 dark:text-purple-400" :stroke-width="2" />
               </div>
               <div>
-                <p class="text-xs font-medium text-gray-500 dark:text-gray-400">
+                <p class="text-xs font-medium surface-muted">
                   {{ t('admin.dashboard.accounts') }}
                 </p>
                 <p class="text-xl font-bold text-gray-900 dark:text-white">
@@ -57,17 +91,17 @@
           <!-- Today Requests -->
           <div class="card p-4">
             <div class="flex items-center gap-3">
-              <div class="rounded-lg bg-green-100 p-2 dark:bg-green-900/30">
+              <div class="rounded-lg bg-green-100/[0.15] p-2 dark:bg-green-900/30">
                 <Icon name="chart" size="md" class="text-green-600 dark:text-green-400" :stroke-width="2" />
               </div>
               <div>
-                <p class="text-xs font-medium text-gray-500 dark:text-gray-400">
+                <p class="text-xs font-medium surface-muted">
                   {{ t('admin.dashboard.todayRequests') }}
                 </p>
                 <p class="text-xl font-bold text-gray-900 dark:text-white">
                   {{ stats.today_requests }}
                 </p>
-                <p class="text-xs text-gray-500 dark:text-gray-400">
+                <p class="text-xs surface-muted">
                   {{ t('common.total') }}: {{ formatNumber(stats.total_requests) }}
                 </p>
               </div>
@@ -77,40 +111,38 @@
           <!-- New Users Today -->
           <div class="card p-4">
             <div class="flex items-center gap-3">
-              <div class="rounded-lg bg-emerald-100 p-2 dark:bg-emerald-900/30">
+              <div class="rounded-lg bg-emerald-100/[0.15] p-2 dark:bg-emerald-900/30">
                 <Icon name="userPlus" size="md" class="text-emerald-600 dark:text-emerald-400" :stroke-width="2" />
               </div>
               <div>
-                <p class="text-xs font-medium text-gray-500 dark:text-gray-400">
+                <p class="text-xs font-medium surface-muted">
                   {{ t('admin.dashboard.users') }}
                 </p>
                 <p class="text-xl font-bold text-emerald-600 dark:text-emerald-400">
                   +{{ stats.today_new_users }}
                 </p>
-                <p class="text-xs text-gray-500 dark:text-gray-400">
+                <p class="text-xs surface-muted">
                   {{ t('common.total') }}: {{ formatNumber(stats.total_users) }}
                 </p>
               </div>
             </div>
           </div>
-        </div>
 
-        <!-- Row 2: Token Stats -->
-        <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <!-- Token and performance stats -->
           <!-- Today Tokens -->
           <div class="card p-4">
             <div class="flex items-center gap-3">
-              <div class="rounded-lg bg-amber-100 p-2 dark:bg-amber-900/30">
+              <div class="rounded-lg bg-amber-100/[0.15] p-2 dark:bg-amber-900/30">
                 <Icon name="cube" size="md" class="text-amber-600 dark:text-amber-400" :stroke-width="2" />
               </div>
               <div>
-                <p class="text-xs font-medium text-gray-500 dark:text-gray-400">
+                <p class="text-xs font-medium surface-muted">
                   {{ t('admin.dashboard.todayTokens') }}
                 </p>
                 <p class="text-xl font-bold text-gray-900 dark:text-white">
                   {{ formatTokens(stats.today_tokens) }}
                 </p>
-                <p class="flex flex-wrap gap-x-1 text-xs text-gray-500 dark:text-gray-400">
+                <p class="flex flex-wrap gap-x-1 text-xs surface-muted">
                   <span>{{ t('dashboard.input') }} {{ todayTokenShare(stats.today_input_tokens) }}</span>
                   <span>&middot;</span>
                   <span>{{ t('dashboard.output') }} {{ todayTokenShare(stats.today_output_tokens) }}</span>
@@ -122,15 +154,15 @@
                     :title="t('admin.dashboard.actual')"
                     >${{ formatCost(stats.today_actual_cost) }}</span
                   >
-                  <span class="text-gray-400 dark:text-gray-500"> / </span>
+                  <span class="surface-muted"> / </span>
                   <span
                     class="text-orange-500 dark:text-orange-400"
                     :title="t('admin.dashboard.accountCost')"
                     >${{ formatCost(stats.today_account_cost) }}</span
                   >
-                  <span class="text-gray-400 dark:text-gray-500"> / </span>
+                  <span class="surface-muted"> / </span>
                   <span
-                    class="text-gray-400 dark:text-gray-500"
+                    class="surface-muted"
                     :title="t('admin.dashboard.standard')"
                     >${{ formatCost(stats.today_cost) }}</span
                   >
@@ -142,17 +174,17 @@
           <!-- Total Tokens -->
           <div class="card p-4">
             <div class="flex items-center gap-3">
-              <div class="rounded-lg bg-indigo-100 p-2 dark:bg-indigo-900/30">
+              <div class="rounded-lg bg-indigo-100/[0.15] p-2 dark:bg-indigo-900/30">
                 <Icon name="database" size="md" class="text-indigo-600 dark:text-indigo-400" :stroke-width="2" />
               </div>
               <div>
-                <p class="text-xs font-medium text-gray-500 dark:text-gray-400">
+                <p class="text-xs font-medium surface-muted">
                   {{ t('admin.dashboard.totalTokens') }}
                 </p>
                 <p class="text-xl font-bold text-gray-900 dark:text-white">
                   {{ formatTokens(stats.total_tokens) }}
                 </p>
-                <p class="flex flex-wrap gap-x-1 text-xs text-gray-500 dark:text-gray-400">
+                <p class="flex flex-wrap gap-x-1 text-xs surface-muted">
                   <span>{{ t('dashboard.input') }} {{ totalTokenShare(stats.total_input_tokens) }}</span>
                   <span>&middot;</span>
                   <span>{{ t('dashboard.output') }} {{ totalTokenShare(stats.total_output_tokens) }}</span>
@@ -164,15 +196,15 @@
                     :title="t('admin.dashboard.actual')"
                     >${{ formatCost(stats.total_actual_cost) }}</span
                   >
-                  <span class="text-gray-400 dark:text-gray-500"> / </span>
+                  <span class="surface-muted"> / </span>
                   <span
                     class="text-orange-500 dark:text-orange-400"
                     :title="t('admin.dashboard.accountCost')"
                     >${{ formatCost(stats.total_account_cost) }}</span
                   >
-                  <span class="text-gray-400 dark:text-gray-500"> / </span>
+                  <span class="surface-muted"> / </span>
                   <span
-                    class="text-gray-400 dark:text-gray-500"
+                    class="surface-muted"
                     :title="t('admin.dashboard.standard')"
                     >${{ formatCost(stats.total_cost) }}</span
                   >
@@ -184,24 +216,24 @@
           <!-- Performance (RPM/TPM) -->
           <div class="card p-4">
             <div class="flex items-center gap-3">
-              <div class="rounded-lg bg-violet-100 p-2 dark:bg-violet-900/30">
+              <div class="rounded-lg bg-violet-100/[0.15] p-2 dark:bg-violet-900/30">
                 <Icon name="bolt" size="md" class="text-violet-600 dark:text-violet-400" :stroke-width="2" />
               </div>
               <div class="flex-1">
-                <p class="text-xs font-medium text-gray-500 dark:text-gray-400">
+                <p class="text-xs font-medium surface-muted">
                   {{ t('admin.dashboard.performance') }}
                 </p>
                 <div class="flex items-baseline gap-2">
                   <p class="text-xl font-bold text-gray-900 dark:text-white">
                     {{ formatTokens(stats.rpm) }}
                   </p>
-                  <span class="text-xs text-gray-500 dark:text-gray-400">RPM</span>
+                  <span class="text-xs surface-muted">RPM</span>
                 </div>
                 <div class="flex items-baseline gap-2">
                   <p class="text-sm font-semibold text-violet-600 dark:text-violet-400">
                     {{ formatTokens(stats.tpm) }}
                   </p>
-                  <span class="text-xs text-gray-500 dark:text-gray-400">TPM</span>
+                  <span class="text-xs surface-muted">TPM</span>
                 </div>
               </div>
             </div>
@@ -210,17 +242,17 @@
           <!-- Avg Response Time -->
           <div class="card p-4">
             <div class="flex items-center gap-3">
-              <div class="rounded-lg bg-rose-100 p-2 dark:bg-rose-900/30">
+              <div class="rounded-lg bg-rose-100/[0.15] p-2 dark:bg-rose-900/30">
                 <Icon name="clock" size="md" class="text-rose-600 dark:text-rose-400" :stroke-width="2" />
               </div>
               <div>
-                <p class="text-xs font-medium text-gray-500 dark:text-gray-400">
+                <p class="text-xs font-medium surface-muted">
                   {{ t('admin.dashboard.avgResponse') }}
                 </p>
                 <p class="text-xl font-bold text-gray-900 dark:text-white">
                   {{ formatDuration(stats.average_duration_ms) }}
                 </p>
-                <p class="text-xs text-gray-500 dark:text-gray-400">
+                <p class="text-xs surface-muted">
                   {{ stats.active_users }} {{ t('admin.dashboard.activeUsers') }}
                 </p>
               </div>
@@ -228,90 +260,13 @@
           </div>
         </div>
 
-        <!-- Quick Actions -->
-        <div class="card p-4">
-          <div class="mb-3 flex items-center justify-between">
-            <h2 class="text-sm font-semibold text-gray-900 dark:text-white">
-              {{ t('admin.dashboard.quickActions') }}
-            </h2>
-          </div>
-          <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <button
-              v-if="canUseBatchImage"
-              type="button"
-              class="group flex items-center gap-3 rounded-lg bg-gray-50 p-3 text-left transition-colors hover:bg-sky-50 dark:bg-dark-800/50 dark:hover:bg-sky-900/20"
-              @click="router.push('/batch-image')"
-            >
-              <span class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-sky-100 text-sky-600 dark:bg-sky-900/30 dark:text-sky-400">
-                <Icon name="sparkles" size="md" :stroke-width="2" />
-              </span>
-              <span class="min-w-0 flex-1">
-                <span class="block text-sm font-medium text-gray-900 dark:text-white">
-                  {{ t('admin.dashboard.batchImage') }}
-                </span>
-                <span class="block text-xs text-gray-500 dark:text-gray-400">
-                  {{ t('admin.dashboard.batchImageDesc') }}
-                </span>
-              </span>
-              <Icon name="chevronRight" size="sm" class="text-gray-400 group-hover:text-sky-500" />
-            </button>
-            <button
-              type="button"
-              class="group flex items-center gap-3 rounded-lg bg-gray-50 p-3 text-left transition-colors hover:bg-emerald-50 dark:bg-dark-800/50 dark:hover:bg-emerald-900/20"
-              @click="router.push('/admin/groups')"
-            >
-              <span class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400">
-                <Icon name="grid" size="md" :stroke-width="2" />
-              </span>
-              <span class="min-w-0 flex-1">
-                <span class="block text-sm font-medium text-gray-900 dark:text-white">
-                  {{ t('admin.dashboard.groupPricing') }}
-                </span>
-                <span class="block text-xs text-gray-500 dark:text-gray-400">
-                  {{ t('admin.dashboard.groupPricingDesc') }}
-                </span>
-              </span>
-              <Icon name="chevronRight" size="sm" class="text-gray-400 group-hover:text-emerald-500" />
-            </button>
-          </div>
-        </div>
-
         <!-- Charts Section -->
-        <div class="space-y-6">
-          <!-- Date Range Filter -->
-          <div class="card p-4">
-            <div class="flex flex-wrap items-center gap-4">
-              <div class="flex items-center gap-2">
-                <span class="text-sm font-medium text-gray-700 dark:text-gray-300"
-                  >{{ t('admin.dashboard.timeRange') }}:</span
-                >
-                <DateRangePicker
-                  v-model:start-date="startDate"
-                  v-model:end-date="endDate"
-                  @change="onDateRangeChange"
-                />
-              </div>
-              <button @click="loadDashboardStats" :disabled="chartsLoading" class="btn btn-secondary">
-                {{ t('common.refresh') }}
-              </button>
-              <div class="ml-auto flex items-center gap-2">
-                <span class="text-sm font-medium text-gray-700 dark:text-gray-300"
-                  >{{ t('admin.dashboard.granularity') }}:</span
-                >
-                <div class="w-28">
-                  <Select
-                    v-model="granularity"
-                    :options="granularityOptions"
-                    @change="loadChartData"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
+        <WorkspaceTabs v-if="compactCharts" v-model="chartTab" class="workspace-fixed" :tabs="dashboardTabs" :label="t('workspace.charts')" />
+        <div class="workspace-body dashboard-charts" :class="{ 'dashboard-charts-compact': compactCharts }">
           <!-- Charts Grid -->
-          <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div v-show="!compactCharts || chartTab === 'models'" class="dashboard-chart-grid grid grid-cols-1 gap-6 lg:grid-cols-2">
             <ModelDistributionChart
+              workspace
               :model-stats="modelStats"
               :enable-ranking-view="true"
               :ranking-items="rankingItems"
@@ -325,29 +280,29 @@
               :end-date="endDate"
               @ranking-click="goToUserUsage"
             />
-            <TokenUsageTrend :trend-data="trendData" :loading="chartsLoading" />
+            <TokenUsageTrend workspace :trend-data="trendData" :loading="chartsLoading" />
           </div>
 
           <!-- User Usage Trend (Full Width) -->
-          <div class="card p-4">
-            <div class="mb-4 flex items-center justify-between gap-3">
+          <div v-show="!compactCharts || chartTab === 'users'" class="card dashboard-user-trend p-4">
+            <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
               <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.dashboard.recentUsage') }} (Top 12)</h3>
               <div class="flex gap-1" role="group" :aria-label="t('admin.dashboard.recentUsage')">
                 <button v-for="metric in (['tokens', 'actual_cost'] as const)" :key="metric" type="button"
-                  class="rounded px-2 py-1 text-xs" :class="userTrendMetric === metric ? 'bg-blue-600 text-white' : 'text-gray-600 dark:text-gray-300'"
+                  class="rounded px-2 py-1 text-xs surface-control" :class="userTrendMetric === metric ? 'bg-blue-600 text-white' : 'surface-muted'"
                   :aria-pressed="userTrendMetric === metric" @click="setUserTrendMetric(metric)">
                   {{ t(metric === 'tokens' ? 'admin.dashboard.tokens' : 'admin.dashboard.actualSpending') }}
                 </button>
               </div>
             </div>
-            <div class="h-64">
-              <div v-if="userTrendLoading" class="flex h-full items-center justify-center">
+            <div class="dashboard-line-canvas h-64">
+              <div v-if="userTrendLoading && !userTrendChartData" class="flex h-full items-center justify-center">
                 <LoadingSpinner size="md" />
               </div>
               <Line v-else-if="userTrendChartData" :data="userTrendChartData" :options="lineOptions" />
               <div
                 v-else
-                class="flex h-full items-center justify-center text-sm text-gray-500 dark:text-gray-400"
+                class="flex h-full items-center justify-center text-sm surface-muted"
               >
                 {{ t('admin.dashboard.noDataAvailable') }}
               </div>
@@ -360,8 +315,14 @@
 </template>
 
 <script setup lang="ts">
+import { chartTooltipStyle } from '@/utils/chartTooltip'
 import { useDocumentDarkMode } from '@/composables/useDocumentDarkMode'
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, nextTick, onMounted, onBeforeUnmount, watch } from 'vue'
+import { useMediaQuery } from '@vueuse/core'
+import WorkspaceTabs from '@/components/common/WorkspaceTabs.vue'
+import { useAutoRefresh } from '@/composables/useAutoRefresh'
+import { useColumnPreferenceKey } from '@/composables/useColumnPreferenceKey'
+import RefreshControl from '@/components/common/RefreshControl.vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
@@ -382,7 +343,6 @@ import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import Select from '@/components/common/Select.vue'
 import ModelDistributionChart from '@/components/charts/ModelDistributionChart.vue'
 import TokenUsageTrend from '@/components/charts/TokenUsageTrend.vue'
-import { useBatchImageAccess } from '@/composables/useBatchImageAccess'
 import { formatTokenShare, sumTokenBuckets } from '@/utils/tokenShare'
 
 import {
@@ -410,7 +370,13 @@ ChartJS.register(
 
 const appStore = useAppStore()
 const router = useRouter()
-const { canUseBatchImage, refreshBatchImageAccess } = useBatchImageAccess()
+const compactCharts = useMediaQuery('(min-width: 1024px) and (max-height: 959px)')
+const chartTab = ref('models')
+const dashboardTabs = computed(() => [
+  { value: 'models', label: t('workspace.modelsTrend') },
+  { value: 'users', label: t('workspace.userTrend') },
+])
+watch(chartTab, async () => { await nextTick(); window.dispatchEvent(new Event('resize')) })
 const stats = ref<DashboardStats | null>(null)
 const loading = ref(false)
 const chartsLoading = ref(false)
@@ -485,6 +451,7 @@ const chartColors = computed(() => ({
 
 // Line chart options (for user trend chart)
 const lineOptions = computed(() => ({
+  animation: false as const,
   responsive: true,
   maintainAspectRatio: false,
   interaction: {
@@ -505,6 +472,7 @@ const lineOptions = computed(() => ({
       }
     },
     tooltip: {
+      ...chartTooltipStyle(isDarkMode.value),
       itemSort: (a: any, b: any) => {
         const aValue = typeof a?.raw === 'number' ? a.raw : Number(a?.parsed?.y ?? 0)
         const bValue = typeof b?.raw === 'number' ? b.raw : Number(b?.parsed?.y ?? 0)
@@ -683,20 +651,20 @@ const onDateRangeChange = (range: {
 }
 
 // Load data
-const loadDashboardSnapshot = async (includeStats: boolean) => {
+const loadDashboardSnapshot = async (includeStats: boolean, includeCharts = true, quiet = false) => {
   const currentSeq = ++chartLoadSeq
   if (includeStats && !stats.value) {
     loading.value = true
   }
-  chartsLoading.value = true
+  chartsLoading.value = includeCharts
   try {
     const response = await adminAPI.dashboard.getSnapshotV2({
       start_date: startDate.value,
       end_date: endDate.value,
       granularity: granularity.value,
       include_stats: includeStats,
-      include_trend: true,
-      include_model_stats: true,
+      include_trend: includeCharts,
+      include_model_stats: includeCharts,
       include_group_stats: false,
       include_users_trend: false
     })
@@ -704,10 +672,13 @@ const loadDashboardSnapshot = async (includeStats: boolean) => {
     if (includeStats && response.stats) {
       stats.value = response.stats
     }
-    trendData.value = response.trend || []
-    modelStats.value = response.models || []
+    if (includeCharts) {
+      trendData.value = response.trend || []
+      modelStats.value = response.models || []
+    }
   } catch (error) {
     if (currentSeq !== chartLoadSeq) return
+    if (quiet) throw error
     appStore.showError(t('admin.dashboard.failedToLoad'))
     console.error('Error loading dashboard snapshot:', error)
   } finally {
@@ -725,7 +696,7 @@ const setUserTrendMetric = (metric: 'tokens' | 'actual_cost') => {
   loadUsersTrend()
 }
 
-const loadUsersTrend = async () => {
+const loadUsersTrend = async (quiet = false) => {
   const currentSeq = ++usersTrendLoadSeq
   userTrendLoading.value = true
   try {
@@ -741,7 +712,7 @@ const loadUsersTrend = async () => {
   } catch (error) {
     if (currentSeq !== usersTrendLoadSeq) return
     console.error('Error loading users trend:', error)
-    userTrend.value = []
+    if (quiet) throw error
   } finally {
     if (currentSeq === usersTrendLoadSeq) {
       userTrendLoading.value = false
@@ -749,7 +720,7 @@ const loadUsersTrend = async () => {
   }
 }
 
-const loadUserSpendingRanking = async () => {
+const loadUserSpendingRanking = async (quiet = false) => {
   const currentSeq = ++rankingLoadSeq
   rankingLoading.value = true
   rankingError.value = false
@@ -767,24 +738,13 @@ const loadUserSpendingRanking = async () => {
   } catch (error) {
     if (currentSeq !== rankingLoadSeq) return
     console.error('Error loading user spending ranking:', error)
-    rankingItems.value = []
-    rankingTotalActualCost.value = 0
-    rankingTotalRequests.value = 0
-    rankingTotalTokens.value = 0
     rankingError.value = true
+    if (quiet) throw error
   } finally {
     if (currentSeq === rankingLoadSeq) {
       rankingLoading.value = false
     }
   }
-}
-
-const loadDashboardStats = async () => {
-  await Promise.all([
-    loadDashboardSnapshot(true),
-    loadUsersTrend(),
-    loadUserSpendingRanking()
-  ])
 }
 
 const loadChartData = async () => {
@@ -795,11 +755,54 @@ const loadChartData = async () => {
   ])
 }
 
+let chartUpdatedAt = 0
+let forceCharts = false
+const overviewRefresh = useAutoRefresh({
+  storageKey: useColumnPreferenceKey('admin-overview-refresh'), intervals: [30, 60, 120], defaultInterval: 30, defaultEnabled: true,
+  shouldPause: () => chartsLoading.value,
+  onRefresh: async () => {
+    const includeCharts = forceCharts || Date.now() - chartUpdatedAt >= 60000
+    forceCharts = false
+    const results = await Promise.allSettled([
+      loadDashboardSnapshot(true, includeCharts, true),
+      ...(includeCharts ? [loadUsersTrend(true), loadUserSpendingRanking(true)] : []),
+    ])
+    const failure = results.find(result => result.status === 'rejected')
+    if (failure?.status === 'rejected') throw failure.reason
+    if (includeCharts) chartUpdatedAt = Date.now()
+  },
+})
+const refreshAll = () => { forceCharts = true; return overviewRefresh.refresh() }
+onBeforeUnmount(() => { chartLoadSeq++; usersTrendLoadSeq++; rankingLoadSeq++ })
 onMounted(() => {
-  void refreshBatchImageAccess()
-  loadDashboardStats()
+  void refreshAll()
 })
 </script>
 
 <style scoped>
+.dashboard-refresh { margin-left: auto; }
+@media (min-width: 1024px) {
+  .dashboard-toolbar { padding: 12px 16px; }
+  .dashboard-toolbar > div { gap: 12px; }
+  .dashboard-kpis { gap: 10px; }
+  .dashboard-kpis > .card { min-width: 0; padding: 12px; }
+  .dashboard-kpis > .card > div { gap: 10px; }
+  .dashboard-charts { display: grid; grid-template-rows: minmax(0, 1fr) minmax(0, 1.02fr); gap: 12px; }
+  .dashboard-charts-compact { grid-template-rows: minmax(0, 1fr); }
+  .dashboard-chart-grid { min-height: 0; gap: 12px; }
+  .dashboard-user-trend { display: flex; min-height: 0; flex-direction: column; overflow: hidden; padding: 14px; }
+  .dashboard-user-trend > div:first-child { flex: none; margin-bottom: 10px; }
+  .dashboard-line-canvas { position: relative; height: auto; min-height: 0; flex: 1; }
+}
+@media (min-width: 1800px) and (min-height: 960px) {
+  .dashboard-kpis { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+}
+@media (min-width: 1024px) and (max-height: 959px) {
+  .dashboard-kpis > .card { padding: 10px; }
+}
+@media (min-width: 1024px) and (max-height: 799px) {
+  .dashboard-toolbar { padding-top: 8px; padding-bottom: 8px; }
+  .dashboard-kpis { display: flex; overflow-x: auto; scrollbar-width: thin; padding-bottom: 4px; }
+  .dashboard-kpis > .card { flex: 0 0 300px; }
+}
 </style>

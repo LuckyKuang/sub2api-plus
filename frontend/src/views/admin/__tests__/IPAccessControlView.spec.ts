@@ -104,13 +104,13 @@ const defaultProxyStatus = {
 
 const emptyPage = () => ({ items: [], total: 0, page: 1, page_size: 20, pages: 1 })
 
-function mountView() {
+function mountView(realPagination = false) {
   return mount(IPAccessControlView, {
     global: {
       stubs: {
         AppLayout: AppLayoutStub,
         DataTable: DataTableStub,
-        Pagination: true,
+        Pagination: !realPagination,
         Toggle: true,
         Select: true,
         Icon: true,
@@ -154,6 +154,95 @@ describe('IPAccessControlView', () => {
       suppressed_by_allow_rule: false,
       as_of: '2026-08-17T00:00:00Z',
     })
+  })
+
+  it('opens automatic protection first and preserves unsaved values and independent searches across tabs', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    const tabs = wrapper.findAll('[role="tab"]')
+    expect(tabs.map((tab) => tab.text())).toEqual([
+      'workspace.automaticProtection', 'workspace.trustedProxies', 'workspace.loginFailures', 'workspace.rules',
+    ])
+    const protection = wrapper.get('[data-testid="ip-panel-protection"]')
+    expect(protection.isVisible()).toBe(true)
+    expect(wrapper.get('[data-testid="ip-panel-failures"]').isVisible()).toBe(false)
+    await protection.get('input[type="number"][min="2"]').setValue('12')
+    listFailureStates.mockClear()
+    listRules.mockClear()
+
+    await tabs[2].trigger('click')
+    const failures = wrapper.get('[data-testid="ip-panel-failures"]')
+    await failures.get('input').setValue('203.0.113.8')
+    await tabs[3].trigger('click')
+    const rules = wrapper.get('[data-testid="ip-panel-rules"]')
+    await rules.get('input').setValue('198.51.100.0/24')
+    await tabs[2].trigger('click')
+    expect((failures.get('input').element as HTMLInputElement).value).toBe('203.0.113.8')
+    await tabs[3].trigger('click')
+    expect((rules.get('input').element as HTMLInputElement).value).toBe('198.51.100.0/24')
+    await tabs[0].trigger('click')
+    expect((protection.get('input[type="number"][min="2"]').element as HTMLInputElement).value).toBe('12')
+    expect(listFailureStates).not.toHaveBeenCalled()
+    expect(listRules).not.toHaveBeenCalled()
+    expect(updateSettings).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it.each([
+    { action: 'viewRule', state: { active_block_rule: true, block_rule_ip_or_cidr: '203.0.113.0/24' }, query: '203.0.113.0/24' },
+    { action: 'handleAllow', state: { suppressed_by_allow_rule: true }, query: undefined },
+  ])('opens the rules tab and keeps the $action query behavior', async ({ action, state, query }) => {
+    listFailureStates.mockResolvedValue({
+      ...emptyPage(),
+      total: 1,
+      items: [{
+        normalized_ip: '203.0.113.8', failure_count: 2, failure_threshold: 2,
+        runtime_enforcement_enabled: true, ...state,
+      }],
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.findAll('[role="tab"]')[2].trigger('click')
+    listRules.mockClear()
+    const actionButton = wrapper.get('[data-testid="ip-panel-failures"]').findAll('button')
+      .find((button) => button.text() === `admin.ipAccessControl.failureStates.${action}`)
+    expect(actionButton).toBeDefined()
+    await actionButton!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="ip-panel-rules"]').isVisible()).toBe(true)
+    expect(wrapper.get('[data-testid="ip-panel-failures"]').isVisible()).toBe(false)
+    expect(listRules).toHaveBeenCalledOnce()
+    expect(listRules).toHaveBeenCalledWith({ page: 1, page_size: 20, status: 'active', query })
+    expect(createRule).not.toHaveBeenCalled()
+    expect(blockFailureState).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('keeps rule paging and page-size controls outside the table scroll area after the compact layout', async () => {
+    listRules.mockImplementation(async (query) => ({ ...emptyPage(), total: 200, page: query.page, page_size: query.page_size }))
+    const wrapper = mountView(true)
+    await flushPromises()
+    await wrapper.findAll('[role="tab"]')[3].trigger('click')
+    const panel = wrapper.get('[data-testid="ip-panel-rules"]')
+    const pagination = panel.get('[data-testid="ip-rules-pagination"]')
+    expect(pagination.element.parentElement).toBe(panel.element)
+    expect(panel.get('.workspace-table-viewport').find('[data-testid="ip-rules-pagination"]').exists()).toBe(false)
+    expect(panel.get('.ip-table-heading').text()).toContain('admin.ipAccessControl.rules.description')
+    expect(panel.get('.ip-table-note').text()).toBe('admin.ipAccessControl.rules.hitCountHint')
+    listRules.mockClear()
+
+    await pagination.get('button[aria-label="pagination.next"]').trigger('click')
+    await flushPromises()
+    expect(listRules).toHaveBeenCalledWith({ page: 2, page_size: 20, query: undefined, status: 'active' })
+    expect(pagination.get('[aria-current="page"]').text()).toBe('2')
+
+    pagination.getComponent({ name: 'Select' }).vm.$emit('update:modelValue', 50)
+    await flushPromises()
+    expect(listRules).toHaveBeenLastCalledWith({ page: 1, page_size: 50, query: undefined, status: 'active' })
+    expect(pagination.get('[aria-current="page"]').text()).toBe('1')
+    expect(updateSettings).not.toHaveBeenCalled()
+    wrapper.unmount()
   })
 
   it('uses the one-year maximum for both failure window and block duration', async () => {

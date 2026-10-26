@@ -123,6 +123,20 @@ export default {
         typesafe: 'TypeSafe / Jev',
       },
       cnProviders: {
+        startPlan: {
+          title: 'Start Plan',
+          available: 'Available',
+          unavailable: 'Unavailable',
+          pending: 'Pending activation',
+          unknown: 'Unknown',
+          modelsUnknown: 'Model permissions unknown',
+          modelsEmpty: 'No models authorized',
+          reauthorize: 'Sign in again to authorize this account',
+          effectiveAt: 'Effective: {time}',
+          expiresAt: 'Expires: {time}',
+          queryFailed: 'Could not refresh Start Plan permissions',
+        },
+        unlimited: 'Unlimited',
         accountMode: {
           title: 'Account Type',
           payg: 'Pay-as-you-go',
@@ -160,9 +174,13 @@ export default {
           },
         },
         balance: 'Balance --',
+        normalBalance: 'Recharge balance',
+        bonusBalance: 'Bonus balance',
         window5h: '5h',
         windowWeekly: '7d',
         windowMonthly: '30d',
+        windowMonthlyTotal: 'Monthly total',
+        windowMonthlyCode: 'Monthly code',
         probe: 'Query',
         probeTooltip: 'Query the provider quota endpoint for 5-hour / weekly rolling window usage',
         balanceProbeTooltip: 'Query the provider balance endpoint for the account balance',
@@ -1102,8 +1120,7 @@ export default {
       // OAuth flow
       oauth: {
         domestic: {
-          stepfunCallbackHint: 'After sign-in, copy the entire http://127.0.0.1:53683/callback address, including state and the credential, even if the page cannot load. Paste it only into this login form.',
-          stepfunDescription: 'Step Plan browser login returns a request credential. Paste the complete loopback callback URL after login. This credential has no automatic refresh; sign in again if it expires or is revoked.',
+          stepfunDescription: 'Step Plan uses browser login with automatic server polling. The model key and optional account session are stored separately.',
           title: "{platform} OAuth login",
           description: "Authorize with the official client login. Login credentials stay on the server.",
           region: "Account region",

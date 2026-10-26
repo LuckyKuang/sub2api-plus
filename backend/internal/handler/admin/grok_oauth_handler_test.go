@@ -4,10 +4,12 @@ package admin
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -23,10 +25,14 @@ import (
 
 type grokQuotaHandlerAccountRepo struct {
 	service.AccountRepository
-	mu      sync.Mutex
-	account *service.Account
-	updates map[int64]map[string]any
+	mu                   sync.Mutex
+	account              *service.Account
+	updates              map[int64]map[string]any
+	unconditionalUpdates int
+	observedModelUpdates int
 }
+
+var _ service.CNControlSnapshotRepository = (*grokQuotaHandlerAccountRepo)(nil)
 
 func (r *grokQuotaHandlerAccountRepo) GetByID(_ context.Context, id int64) (*service.Account, error) {
 	if r.account != nil && r.account.ID == id {
@@ -38,11 +44,92 @@ func (r *grokQuotaHandlerAccountRepo) GetByID(_ context.Context, id int64) (*ser
 func (r *grokQuotaHandlerAccountRepo) UpdateExtra(_ context.Context, id int64, updates map[string]any) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.unconditionalUpdates++
+	r.recordExtraUpdateLocked(id, updates)
+	return nil
+}
+
+func (r *grokQuotaHandlerAccountRepo) UpdateCNControlExtraIfUnchanged(_ context.Context, expected *service.Account, updates map[string]any) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	current := r.account
+	if current == nil || expected == nil || current.ID != expected.ID || current.Platform != expected.Platform || current.Type != expected.Type || !reflect.DeepEqual(current.ProxyID, expected.ProxyID) {
+		return false, nil
+	}
+	currentCredentials, err := json.Marshal(current.Credentials)
+	if err != nil {
+		return false, err
+	}
+	expectedCredentials, err := json.Marshal(expected.Credentials)
+	if err != nil {
+		return false, err
+	}
+	if string(currentCredentials) != string(expectedCredentials) {
+		return false, nil
+	}
+	currentRoute, currentRouteErr := current.StrictProxyURL()
+	expectedRoute, expectedRouteErr := expected.StrictProxyURL()
+	if currentRouteErr != nil || expectedRouteErr != nil || currentRoute != expectedRoute {
+		return false, nil
+	}
+	if current.ProxyID != nil {
+		currentProxy, expectedProxy := current.Proxy, expected.Proxy
+		if currentProxy == nil || expectedProxy == nil || currentProxy.ID != expectedProxy.ID || currentProxy.Protocol != expectedProxy.Protocol || currentProxy.Host != expectedProxy.Host || currentProxy.Port != expectedProxy.Port || currentProxy.Username != expectedProxy.Username || currentProxy.Password != expectedProxy.Password || currentProxy.Status != expectedProxy.Status || !reflect.DeepEqual(currentProxy.ExpiresAt, expectedProxy.ExpiresAt) {
+			return false, nil
+		}
+	}
+	r.recordExtraUpdateLocked(expected.ID, updates)
+	return true, nil
+}
+
+func (r *grokQuotaHandlerAccountRepo) recordExtraUpdateLocked(id int64, updates map[string]any) {
 	if r.updates == nil {
 		r.updates = make(map[int64]map[string]any)
 	}
-	r.updates[id] = updates
-	return nil
+	if r.updates[id] == nil {
+		r.updates[id] = make(map[string]any)
+	}
+	// PostgreSQL merges Extra keys, so billing and detached model discovery
+	// must both remain recorded regardless of which update finishes first.
+	for key, value := range updates {
+		r.updates[id][key] = value
+	}
+	if updates["grok_observed_models"] != nil {
+		r.observedModelUpdates++
+	}
+}
+
+func (r *grokQuotaHandlerAccountRepo) ApplyCredentialStateMutation(_ context.Context, owner *service.Account, mutation service.CredentialStateMutation) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if owner == nil || r.account == nil || owner.ID != r.account.ID || owner.Platform != r.account.Platform || owner.Type != r.account.Type || owner.Status != r.account.Status || !reflect.DeepEqual(owner.ProxyID, r.account.ProxyID) || !reflect.DeepEqual(owner.Proxy, r.account.Proxy) {
+		return false, nil
+	}
+	// Account snapshots cross the same JSON boundary as stored credentials.
+	currentCredentials, err := json.Marshal(r.account.Credentials)
+	if err != nil {
+		return false, err
+	}
+	ownerCredentials, err := json.Marshal(owner.Credentials)
+	if err != nil {
+		return false, err
+	}
+	if string(currentCredentials) != string(ownerCredentials) {
+		return false, nil
+	}
+	if r.updates == nil {
+		r.updates = make(map[int64]map[string]any)
+	}
+	if r.updates[owner.ID] == nil {
+		r.updates[owner.ID] = make(map[string]any)
+	}
+	for key, value := range mutation.Extra {
+		r.updates[owner.ID][key] = value
+	}
+	if mutation.Extra["grok_observed_models"] != nil {
+		r.observedModelUpdates++
+	}
+	return true, nil
 }
 
 type grokQuotaHandlerUpstream struct {
@@ -175,6 +262,10 @@ func TestGrokOAuthHandlerQueryQuotaProbesUpstream(t *testing.T) {
 		defer repo.mu.Unlock()
 		return repo.updates[42]["grok_observed_models"] != nil
 	}, time.Second, 10*time.Millisecond)
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+	require.Equal(t, 1, repo.observedModelUpdates)
+	require.Zero(t, repo.unconditionalUpdates, "quota observations must retain the captured credential owner")
 }
 
 func TestGrokOAuthHandlerResetQuotaReturnsUnsupported(t *testing.T) {
@@ -220,6 +311,10 @@ func TestGrokOAuthHandlerRuntimeSanityDoesNotExposeSecrets(t *testing.T) {
 }
 
 type grokOAuthHandlerClient struct{}
+
+func (c *grokOAuthHandlerClient) ValidateAuthorizationTokens(context.Context, *xai.TokenResponse, xai.OIDCLoginContext, string) (*xai.OIDCIdentity, error) {
+	return nil, errors.New("unexpected authorization validation")
+}
 
 func (c *grokOAuthHandlerClient) ExchangeCode(context.Context, string, string, string, string, string) (*xai.TokenResponse, error) {
 	return nil, errors.New("unexpected exchange")

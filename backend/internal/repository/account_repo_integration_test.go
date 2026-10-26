@@ -25,10 +25,13 @@ type AccountRepoSuite struct {
 }
 
 type schedulerCacheRecorder struct {
-	setAccounts []*service.Account
-	deleteIDs   []int64
-	accounts    map[int64]*service.Account
-	setCtxErr   error
+	setAccounts       []*service.Account
+	deleteIDs         []int64
+	accounts          map[int64]*service.Account
+	setCtxErr         error
+	deleteCtxErr      error
+	deleteDeadline    time.Time
+	deleteHasDeadline bool
 }
 
 func (s *schedulerCacheRecorder) GetSnapshot(ctx context.Context, bucket service.SchedulerBucket) ([]*service.Account, bool, error) {
@@ -85,9 +88,22 @@ type failAtomicSchedulerOutboxSQLExecutor struct {
 func (e *failAtomicSchedulerOutboxSQLExecutor) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
 	if strings.Contains(query, "WITH updated AS") && strings.Contains(query, "INSERT INTO scheduler_outbox") && len(args) > 0 {
 		args = append([]any(nil), args...)
-		args[len(args)-1] = nil // event_type is NOT NULL; the whole statement must roll back.
+		for index, value := range args {
+			if event, ok := value.(string); ok && event == service.SchedulerOutboxEventAccountChanged {
+				args[index] = nil // event_type is NOT NULL; the whole statement must roll back.
+				break
+			}
+		}
 	}
 	return e.sqlExecutor.ExecContext(ctx, query, args...)
+}
+
+func (e *failAtomicSchedulerOutboxSQLExecutor) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	if strings.Contains(query, "WITH updated AS") && strings.Contains(query, "INSERT INTO scheduler_outbox") && len(args) > 0 {
+		args = append([]any(nil), args...)
+		args[len(args)-1] = nil
+	}
+	return e.sqlExecutor.QueryContext(ctx, query, args...)
 }
 
 type cancelAfterAtomicMutationSQLExecutor struct {
@@ -105,6 +121,8 @@ func (e *cancelAfterAtomicMutationSQLExecutor) ExecContext(ctx context.Context, 
 
 func (s *schedulerCacheRecorder) DeleteAccount(ctx context.Context, accountID int64) error {
 	s.deleteIDs = append(s.deleteIDs, accountID)
+	s.deleteCtxErr = ctx.Err()
+	s.deleteDeadline, s.deleteHasDeadline = ctx.Deadline()
 	if s.accounts != nil {
 		delete(s.accounts, accountID)
 	}
@@ -274,7 +292,10 @@ func (s *AccountRepoSuite) TestDelete() {
 }
 
 func (s *AccountRepoSuite) TestDelete_RemovesSchedulerAccountSnapshot() {
-	account := mustCreateAccount(s.T(), s.client, &service.Account{Name: "to-delete-cache"})
+	// This assertion observes a committed deletion. The suite's default client
+	// belongs to a rollback-only fixture transaction and cannot publish cache
+	// changes before that transaction's owner commits.
+	account := mustCreateAccount(s.T(), integrationEntClient, &service.Account{Name: "to-delete-cache"})
 	cacheRecorder := &schedulerCacheRecorder{
 		accounts: map[int64]*service.Account{
 			account.ID: {
@@ -285,13 +306,36 @@ func (s *AccountRepoSuite) TestDelete_RemovesSchedulerAccountSnapshot() {
 			},
 		},
 	}
-	s.repo.schedulerCache = cacheRecorder
+	repo := newAccountRepositoryWithSQL(integrationEntClient, integrationDB, cacheRecorder)
 
-	err := s.repo.Delete(s.ctx, account.ID)
+	err := repo.Delete(s.ctx, account.ID)
 	s.Require().NoError(err, "Delete")
 
 	s.Require().Equal([]int64{account.ID}, cacheRecorder.deleteIDs)
 	s.Require().NotContains(cacheRecorder.accounts, account.ID)
+}
+
+func (s *AccountRepoSuite) TestDelete_TransactionOwnerPublishesSnapshotOnlyAfterCommit() {
+	account := mustCreateAccount(s.T(), integrationEntClient, &service.Account{Name: "to-delete-cache-on-commit"})
+	cacheRecorder := &schedulerCacheRecorder{
+		accounts: map[int64]*service.Account{account.ID: account},
+	}
+	repo := newAccountRepositoryWithSQL(integrationEntClient, integrationDB, cacheRecorder)
+	err := repo.RunOpenAIOAuthPolicyTransaction(s.ctx, func(ctx context.Context, txRepo service.AccountRepository) error {
+		if err := txRepo.Delete(ctx, account.ID); err != nil {
+			return err
+		}
+		s.Require().Empty(cacheRecorder.deleteIDs, "uncommitted delete must preserve the shared cache")
+		s.Require().Contains(cacheRecorder.accounts, account.ID)
+		_, err := repo.GetByID(s.ctx, account.ID)
+		s.Require().NoError(err, "other readers must retain the account before commit")
+		return nil
+	})
+	s.Require().NoError(err)
+	s.Require().Equal([]int64{account.ID}, cacheRecorder.deleteIDs)
+	s.Require().NotContains(cacheRecorder.accounts, account.ID)
+	_, err = repo.GetByID(s.ctx, account.ID)
+	s.Require().ErrorIs(err, service.ErrAccountNotFound)
 }
 
 func (s *AccountRepoSuite) TestDelete_WithGroupBindings() {
@@ -1169,7 +1213,7 @@ func (s *AccountRepoSuite) TestSetError() {
 	s.Require().Equal(1, outboxCount)
 }
 
-func (s *AccountRepoSuite) TestSetGrokOAuthErrorIfCredentialsUnchanged_AppliesAndSyncsSchedulerState() {
+func (s *AccountRepoSuite) TestSetGrokOAuthErrorIfCredentialsUnchanged_AppliesAndEvictsSchedulerState() {
 	account := mustCreateAccount(s.T(), s.client, &service.Account{
 		Name:        "grok-conditional-error-applied",
 		Platform:    service.PlatformGrok,
@@ -1185,12 +1229,7 @@ func (s *AccountRepoSuite) TestSetGrokOAuthErrorIfCredentialsUnchanged_AppliesAn
 	_, err = s.repo.sql.ExecContext(s.ctx, "TRUNCATE scheduler_outbox")
 	s.Require().NoError(err)
 
-	applied, err := s.repo.SetGrokOAuthErrorIfCredentialsUnchanged(
-		s.ctx,
-		account.ID,
-		observed.Credentials,
-		"missing refresh token",
-	)
+	applied, err := s.repo.SetGrokOAuthErrorIfCredentialsUnchanged(s.ctx, &service.Account{ID: account.ID, Credentials: observed.Credentials, Platform: service.PlatformGrok, Type: service.AccountTypeOAuth, Status: service.StatusActive}, "missing refresh token")
 
 	s.Require().NoError(err)
 	s.Require().True(applied)
@@ -1199,8 +1238,8 @@ func (s *AccountRepoSuite) TestSetGrokOAuthErrorIfCredentialsUnchanged_AppliesAn
 	s.Require().Equal(service.StatusError, got.Status)
 	s.Require().False(got.Schedulable)
 	s.Require().Equal("missing refresh token", got.ErrorMessage)
-	s.Require().Len(cacheRecorder.setAccounts, 1)
-	s.Require().Equal(service.StatusError, cacheRecorder.setAccounts[0].Status)
+	s.Require().Empty(cacheRecorder.setAccounts)
+	s.Require().Equal([]int64{account.ID}, cacheRecorder.deleteIDs)
 
 	var outboxCount int
 	err = scanSingleRow(
@@ -1236,12 +1275,7 @@ func (s *AccountRepoSuite) TestSetGrokOAuthErrorIfCredentialsUnchanged_SkipsConc
 	_, err = s.repo.sql.ExecContext(s.ctx, "TRUNCATE scheduler_outbox")
 	s.Require().NoError(err)
 
-	applied, err := s.repo.SetGrokOAuthErrorIfCredentialsUnchanged(
-		s.ctx,
-		account.ID,
-		observed.Credentials,
-		"stale reconciliation",
-	)
+	applied, err := s.repo.SetGrokOAuthErrorIfCredentialsUnchanged(s.ctx, &service.Account{ID: account.ID, Credentials: observed.Credentials, Platform: service.PlatformGrok, Type: service.AccountTypeOAuth, Status: service.StatusActive}, "stale reconciliation")
 
 	s.Require().NoError(err)
 	s.Require().False(applied)
@@ -1251,6 +1285,7 @@ func (s *AccountRepoSuite) TestSetGrokOAuthErrorIfCredentialsUnchanged_SkipsConc
 	s.Require().True(got.Schedulable)
 	s.Require().Equal("fresh-refresh", got.GetGrokRefreshToken())
 	s.Require().Empty(cacheRecorder.setAccounts, "a lost compare-and-set race must not rewrite the scheduler snapshot")
+	s.Require().Empty(cacheRecorder.deleteIDs, "a lost compare-and-set race must not evict a newer owner's scheduler state")
 
 	var outboxCount int
 	err = scanSingleRow(
@@ -1264,7 +1299,7 @@ func (s *AccountRepoSuite) TestSetGrokOAuthErrorIfCredentialsUnchanged_SkipsConc
 	s.Require().Zero(outboxCount, "a lost compare-and-set race must not enqueue a stale account change")
 }
 
-func (s *AccountRepoSuite) TestUpdateGrokOAuthCredentialsIfUnchanged_AppliesAndPublishesSchedulerState() {
+func (s *AccountRepoSuite) TestUpdateGrokOAuthCredentialsIfUnchanged_AppliesAndEvictsSchedulerState() {
 	account := mustCreateAccount(s.T(), s.client, &service.Account{
 		Name:        "grok-refresh-success-cas-applied",
 		Platform:    service.PlatformGrok,
@@ -1284,26 +1319,20 @@ func (s *AccountRepoSuite) TestUpdateGrokOAuthCredentialsIfUnchanged_AppliesAndP
 	_, err = s.repo.sql.ExecContext(s.ctx, "TRUNCATE scheduler_outbox")
 	s.Require().NoError(err)
 
-	applied, err := s.repo.UpdateGrokOAuthCredentialsIfUnchanged(
-		s.ctx,
-		account.ID,
-		observed.Credentials,
-		observed.ProxyID,
-		map[string]any{
-			"access_token":   "rotated-access",
-			"refresh_token":  "rotated-refresh",
-			"_token_version": int64(11),
-		},
-	)
+	applied, err := s.repo.UpdateGrokOAuthCredentialsIfUnchanged(s.ctx, &service.Account{ID: account.ID, Credentials: observed.Credentials, ProxyID: observed.ProxyID, Platform: service.PlatformGrok, Type: service.AccountTypeOAuth, Proxy: observed.Proxy, Status: service.StatusActive}, map[string]any{
+		"access_token":   "rotated-access",
+		"refresh_token":  "rotated-refresh",
+		"_token_version": int64(11),
+	})
 
 	s.Require().NoError(err)
 	s.Require().True(applied)
 	got, err := s.repo.GetByID(s.ctx, account.ID)
 	s.Require().NoError(err)
 	s.Require().Equal("rotated-refresh", got.GetGrokRefreshToken())
-	s.Require().Len(cacheRecorder.setAccounts, 1)
-	s.Require().Equal("rotated-refresh", cacheRecorder.setAccounts[0].GetGrokRefreshToken())
-	s.Require().NoError(cacheRecorder.setCtxErr)
+	s.Require().Empty(cacheRecorder.setAccounts)
+	s.Require().Equal([]int64{account.ID}, cacheRecorder.deleteIDs)
+	s.Require().NoError(cacheRecorder.deleteCtxErr)
 
 	var outboxCount int
 	err = scanSingleRow(
@@ -1342,17 +1371,11 @@ func (s *AccountRepoSuite) TestUpdateGrokOAuthCredentialsIfUnchanged_SkipsConcur
 	_, err = s.repo.sql.ExecContext(s.ctx, "TRUNCATE scheduler_outbox")
 	s.Require().NoError(err)
 
-	applied, err := s.repo.UpdateGrokOAuthCredentialsIfUnchanged(
-		s.ctx,
-		account.ID,
-		observed.Credentials,
-		observed.ProxyID,
-		map[string]any{
-			"access_token":   "provider-access",
-			"refresh_token":  "provider-refresh",
-			"_token_version": int64(22),
-		},
-	)
+	applied, err := s.repo.UpdateGrokOAuthCredentialsIfUnchanged(s.ctx, &service.Account{ID: account.ID, Credentials: observed.Credentials, ProxyID: observed.ProxyID, Platform: service.PlatformGrok, Type: service.AccountTypeOAuth, Proxy: observed.Proxy, Status: service.StatusActive}, map[string]any{
+		"access_token":   "provider-access",
+		"refresh_token":  "provider-refresh",
+		"_token_version": int64(22),
+	})
 
 	s.Require().NoError(err)
 	s.Require().False(applied)
@@ -1360,6 +1383,7 @@ func (s *AccountRepoSuite) TestUpdateGrokOAuthCredentialsIfUnchanged_SkipsConcur
 	s.Require().NoError(err)
 	s.Require().Equal("reauthorized-refresh", got.GetGrokRefreshToken())
 	s.Require().Empty(cacheRecorder.setAccounts)
+	s.Require().Empty(cacheRecorder.deleteIDs)
 
 	var outboxCount int
 	err = scanSingleRow(
@@ -1373,7 +1397,7 @@ func (s *AccountRepoSuite) TestUpdateGrokOAuthCredentialsIfUnchanged_SkipsConcur
 	s.Require().Zero(outboxCount)
 }
 
-func (s *AccountRepoSuite) TestGrokOAuthConditionalMutation_DetachesBoundedSnapshotSync() {
+func (s *AccountRepoSuite) TestGrokOAuthConditionalMutation_DetachesBoundedSnapshotEviction() {
 	account := mustCreateAccount(s.T(), s.client, &service.Account{
 		Name:        "grok-conditional-detached-sync",
 		Platform:    service.PlatformGrok,
@@ -1391,18 +1415,91 @@ func (s *AccountRepoSuite) TestGrokOAuthConditionalMutation_DetachesBoundedSnaps
 		cancel:      cancel,
 	}, cacheRecorder)
 
-	applied, err := repo.SetGrokOAuthErrorIfCredentialsUnchanged(
-		ctx,
-		account.ID,
-		observed.Credentials,
-		"missing refresh token",
-	)
+	applied, err := repo.SetGrokOAuthErrorIfCredentialsUnchanged(ctx, &service.Account{ID: account.ID, Credentials: observed.Credentials, Platform: service.PlatformGrok, Type: service.AccountTypeOAuth, Status: service.StatusActive}, "missing refresh token")
 
 	s.Require().NoError(err)
 	s.Require().True(applied)
 	s.Require().ErrorIs(ctx.Err(), context.Canceled)
-	s.Require().Len(cacheRecorder.setAccounts, 1)
-	s.Require().NoError(cacheRecorder.setCtxErr, "immediate scheduler propagation must use a bounded detached context")
+	s.Require().Empty(cacheRecorder.setAccounts)
+	s.Require().Equal([]int64{account.ID}, cacheRecorder.deleteIDs)
+	s.Require().NoError(cacheRecorder.deleteCtxErr, "immediate scheduler eviction must survive caller cancellation")
+	s.Require().True(cacheRecorder.deleteHasDeadline)
+	s.Require().Positive(time.Until(cacheRecorder.deleteDeadline))
+	s.Require().LessOrEqual(time.Until(cacheRecorder.deleteDeadline), 2*time.Second)
+}
+
+type interleavingCredentialSchedulerCache struct {
+	schedulerCacheRecorder
+	beforeNotification func()
+}
+
+func (s *interleavingCredentialSchedulerCache) SetAccount(ctx context.Context, account *service.Account) error {
+	s.beforeNotification()
+	return s.schedulerCacheRecorder.SetAccount(ctx, account)
+}
+
+func (s *interleavingCredentialSchedulerCache) DeleteAccount(ctx context.Context, accountID int64) error {
+	s.beforeNotification()
+	return s.schedulerCacheRecorder.DeleteAccount(ctx, accountID)
+}
+
+func (s *AccountRepoSuite) TestCredentialConditionalMutationCannotRepublishAcrossLoginDuringNotification() {
+	for _, operation := range []string{"failure", "refresh-success"} {
+		s.Run(operation, func() {
+			// This race requires committed rows visible to independent login
+			// writes, rather than the suite's usual uncommitted transaction.
+			client := testEntClient(s.T())
+			account := mustCreateAccount(s.T(), client, &service.Account{
+				Name:     "credential-cas-notification-login-" + operation,
+				Platform: service.PlatformGrok, Type: service.AccountTypeOAuth,
+				Status: service.StatusActive, Schedulable: true,
+				Credentials: map[string]any{"access_token": "attempted", "refresh_token": "attempted-refresh"},
+			})
+			s.T().Cleanup(func() {
+				_, _ = integrationDB.ExecContext(context.Background(), "DELETE FROM scheduler_outbox WHERE account_id = $1", account.ID)
+				_ = client.Account.DeleteOneID(account.ID).Exec(context.Background())
+			})
+			repo := newAccountRepositoryWithSQL(client, integrationDB, nil)
+			observed, err := repo.GetByID(s.ctx, account.ID)
+			s.Require().NoError(err)
+			cache := &interleavingCredentialSchedulerCache{}
+			notifications := 0
+			cache.beforeNotification = func() {
+				// This login commits after the old operation's possible GetByID,
+				// immediately before its cache write. A read/SetAccount sequence
+				// would overwrite the new owner's cache with the old snapshot.
+				notifications++
+				result, err := integrationDB.ExecContext(s.ctx, `UPDATE accounts SET credentials = '{"access_token":"new-login","refresh_token":"new-login-refresh"}'::jsonb, status = 'active', schedulable = TRUE, error_message = '' WHERE id = $1`, account.ID)
+				s.Require().NoError(err)
+				changed, err := result.RowsAffected()
+				s.Require().NoError(err)
+				s.Require().Equal(int64(1), changed, "the independent login must replace the exact row before cache propagation")
+				cache.accounts = map[int64]*service.Account{account.ID: {
+					ID: account.ID, Platform: service.PlatformGrok, Type: service.AccountTypeOAuth,
+					Status: service.StatusActive, Schedulable: true,
+					Credentials: map[string]any{"access_token": "new-login", "refresh_token": "new-login-refresh"},
+				}}
+			}
+			repo.schedulerCache = cache
+			var applied bool
+			if operation == "failure" {
+				applied, err = repo.SetCredentialErrorIfUnchanged(s.ctx, &service.Account{ID: account.ID, Platform: account.Platform, Type: account.Type, Credentials: observed.Credentials, ProxyID: observed.ProxyID, Proxy: observed.Proxy, Status: service.StatusActive}, "revoked")
+			} else {
+				applied, err = repo.UpdateGrokOAuthCredentialsIfUnchanged(s.ctx, &service.Account{ID: account.ID, Credentials: observed.Credentials, ProxyID: observed.ProxyID, Platform: service.PlatformGrok, Type: service.AccountTypeOAuth, Proxy: observed.Proxy, Status: service.StatusActive}, map[string]any{"access_token": "rotated", "refresh_token": "rotated-refresh"})
+			}
+
+			s.Require().NoError(err)
+			s.Require().True(applied)
+			s.Require().Equal(1, notifications, "the login interleaving must execute at the notification boundary")
+			current, err := repo.GetByID(s.ctx, account.ID)
+			s.Require().NoError(err)
+			s.Require().Equal("new-login", current.GetCredential("access_token"))
+			s.Require().Equal(service.StatusActive, current.Status)
+			s.Require().Empty(cache.setAccounts)
+			s.Require().Equal([]int64{account.ID}, cache.deleteIDs)
+			s.Require().NotContains(cache.accounts, account.ID, "the next scheduler read must reload the durable new login")
+		})
+	}
 }
 
 func TestGrokOAuthConditionalMutationRollsBackWhenOutboxInsertFails(t *testing.T) {
@@ -1425,12 +1522,7 @@ func TestGrokOAuthConditionalMutationRollsBackWhenOutboxInsertFails(t *testing.T
 	require.NoError(t, err)
 	repo := newAccountRepositoryWithSQL(client, &failAtomicSchedulerOutboxSQLExecutor{sqlExecutor: integrationDB}, nil)
 
-	applied, err := repo.SetGrokOAuthErrorIfCredentialsUnchanged(
-		context.Background(),
-		account.ID,
-		account.Credentials,
-		"missing refresh token",
-	)
+	applied, err := repo.SetGrokOAuthErrorIfCredentialsUnchanged(context.Background(), account, "missing refresh token")
 
 	require.Error(t, err)
 	require.False(t, applied)

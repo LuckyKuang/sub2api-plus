@@ -14,6 +14,7 @@ import {
   buildPlanTypeOptions,
   cloneOpenCodeGoProtocolRules,
   cnQuotaCellVisible,
+  cnBalanceCellVisible,
   defaultCNBaseUrl,
   defaultOpenCodeProtocolRules,
   isCustomGrokBaseUrl,
@@ -472,6 +473,10 @@ describe('validateHeaderOverrideRows value/entry limits', () => {
 
 describe('validateHeaderOverrideRows session isolation headers', () => {
   it('rejects per-request session headers', () => {
+    for (const name of ['session-id', 'thread-id', 'x-codex-parent-thread-id']) {
+      expect(validateHeaderOverrideRows([{ name, value: 'static-thread' }])).toBe('blockedName')
+      expect(validateHeaderOverrideRows([{ name: name.toUpperCase(), value: '' }])).toBe('blockedName')
+    }
     expect(validateHeaderOverrideRows([{ name: 'session_id', value: '' }])).toBe('blockedName')
     expect(validateHeaderOverrideRows([{ name: 'Conversation_ID', value: '' }])).toBe('blockedName')
     expect(validateHeaderOverrideRows([{ name: 'x-codex-turn-state', value: '' }])).toBe(
@@ -594,5 +599,59 @@ describe('Codex subscription analytics labels', () => {
     ['unknown', 'Account'], ['promax', 'Pro 500']
   ])('groups %s without changing its status label', (sku, label) => {
     expect(openAIPlanTypeLabel(sku, 'analytics')).toBe(label)
+  })
+})
+
+describe('native OAuth quota capabilities', () => {
+  it('offers quota for Kimi, Step, MiniMax managed usage and ZCode personal/team plans', () => {
+    expect(cnQuotaCellVisible({ platform: 'stepfun', type: 'oauth', credentials: { oauth_provider: 'stepfun', account_mode: 'coding' } })).toBe(true)
+    expect(cnQuotaCellVisible({ platform: 'kimi', type: 'oauth', credentials: { oauth_provider: 'kimi', account_mode: 'coding' } })).toBe(true)
+    for (const oauth_region of ['cn', 'global']) {
+      expect(cnQuotaCellVisible({ platform: 'minimax', type: 'oauth', credentials: { oauth_provider: 'minimax', account_mode: 'coding', oauth_region } })).toBe(true)
+    }
+    for (const oauth_provider of ['bigmodel', 'zai']) {
+      for (const plan_kind of ['individual-coding-plan', 'team-coding-plan']) {
+        expect(cnQuotaCellVisible({ platform: 'zhipu', type: 'oauth', credentials: { oauth_provider, account_mode: 'coding', plan_kind } })).toBe(true)
+      }
+    }
+    for (const plan_kind of ['start-plan', 'off-peak']) {
+      expect(cnQuotaCellVisible({ platform: 'zhipu', type: 'oauth', credentials: { oauth_provider: 'zai', account_mode: 'coding', plan_kind } })).toBe(false)
+    }
+    expect(cnQuotaCellVisible({ platform: 'deepseek', type: 'oauth', credentials: { oauth_provider: 'deepseek', account_mode: 'payg' } })).toBe(false)
+  })
+
+  it('requires native MiniMax coding credentials and keeps Credits separate from quota', () => {
+    for (const credentials of [
+      { oauth_provider: 'minimax', account_mode: 'payg' },
+      { oauth_provider: 'minimax' },
+      { oauth_provider: 'kimi', account_mode: 'coding' },
+      { account_mode: 'coding' }
+    ]) {
+      expect(cnQuotaCellVisible({ platform: 'minimax', type: 'oauth', credentials })).toBe(false)
+    }
+    expect(cnBalanceCellVisible({ platform: 'minimax', type: 'oauth', credentials: { oauth_provider: 'minimax', account_mode: 'coding' } })).toBe(false)
+  })
+
+  it.each(['kimi', 'stepfun'])('requires the matching native %s coding owner before showing quota', platform => {
+    for (const credentials of [
+      { oauth_provider: platform, account_mode: 'payg' },
+      { oauth_provider: platform },
+      { oauth_provider: 'deepseek', account_mode: 'coding' },
+      { account_mode: 'coding' }
+    ]) {
+      expect(cnQuotaCellVisible({ platform, type: 'oauth', credentials })).toBe(false)
+    }
+  })
+
+  it('exposes the native DeepSeek payg wallet independently of coding quota', () => {
+    expect(cnBalanceCellVisible({ platform: 'deepseek', type: 'oauth', credentials: { oauth_provider: 'deepseek', account_mode: 'payg' } })).toBe(true)
+    for (const credentials of [
+      { oauth_provider: 'deepseek', account_mode: 'coding' },
+      { oauth_provider: 'kimi', account_mode: 'payg' },
+      { account_mode: 'payg' }
+    ]) {
+      expect(cnBalanceCellVisible({ platform: 'deepseek', type: 'oauth', credentials })).toBe(false)
+    }
+    expect(cnBalanceCellVisible({ platform: 'kimi', type: 'oauth', credentials: { oauth_provider: 'kimi', account_mode: 'coding' } })).toBe(false)
   })
 })

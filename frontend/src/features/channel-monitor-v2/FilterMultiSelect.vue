@@ -23,7 +23,7 @@
       >
         {{ t('channelMonitorV2.filters.labelValue', { label, value: selectionLabel }) }}
       </span>
-      <span class="select-icon shrink-0 text-gray-400 transition-transform" :class="isOpen ? 'rotate-180' : ''">
+      <span class="select-icon shrink-0 transition-transform surface-muted" :class="isOpen ? 'rotate-180' : ''">
         <Icon name="chevronDown" size="sm" />
       </span>
     </button>
@@ -33,7 +33,7 @@
         <div
           v-if="isOpen"
           ref="dropdownRef"
-          class="select-dropdown-portal dropdown filter-dropdown"
+          class="select-dropdown-portal dropdown filter-dropdown surface-panel"
           :class="[instanceId]"
           :style="dropdownStyle"
           role="listbox"
@@ -43,7 +43,7 @@
         >
           <button
             type="button"
-            class="dropdown-item select-option select-option-group flex w-full items-center justify-between border-b border-gray-100 px-4 py-2 text-left text-sm font-semibold text-gray-700 hover:bg-gray-100 dark:border-dark-700 dark:text-gray-300 dark:hover:bg-dark-700"
+            class="dropdown-item select-option select-option-group flex w-full items-center justify-between border-b border-gray-100 px-4 py-2 text-left text-sm font-semibold hover:surface-hover dark:border-dark-700 surface-control surface-muted"
             @click="clear"
           >
             <span>{{ allLabel }}</span>
@@ -55,7 +55,7 @@
             :key="option.value"
             type="button"
             role="option"
-            class="dropdown-item select-option flex w-full items-center justify-between gap-3 px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-700"
+            class="dropdown-item select-option flex w-full items-center justify-between gap-3 px-4 py-2 text-left text-sm hover:surface-hover surface-control surface-muted"
             :class="modelValue.includes(option.value) ? 'select-option-selected' : ''"
             :aria-selected="modelValue.includes(option.value)"
             @click="toggle(option.value)"
@@ -63,15 +63,15 @@
             <span class="flex min-w-0 flex-1 items-center gap-2">
               <span
                 class="checkbox flex h-4 w-4 items-center justify-center rounded border border-gray-300 bg-white text-primary-500 dark:border-dark-600 dark:bg-dark-900"
-                :class="modelValue.includes(option.value) ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/30' : ''"
+                :class="modelValue.includes(option.value) ? 'border-primary-500 bg-primary-50/[0.15] dark:bg-primary-900/30' : ''"
               >
                 <Icon v-if="modelValue.includes(option.value)" name="check" size="sm" class="text-primary-500" />
               </span>
               <span class="min-w-0 flex-1 truncate">{{ option.label }}</span>
             </span>
-            <small v-if="option.count != null" class="text-xs text-gray-400">{{ formatCount(option.count) }}</small>
+            <small v-if="option.count != null" class="text-xs surface-muted">{{ formatCount(option.count) }}</small>
           </button>
-          <p v-if="options.length === 0" class="px-4 py-3 text-center text-xs text-gray-400">{{ t('channelMonitorV2.filters.empty') }}</p>
+          <p v-if="options.length === 0" class="px-4 py-3 text-center text-xs surface-muted">{{ t('channelMonitorV2.filters.empty') }}</p>
         </div>
       </Transition>
     </Teleport>
@@ -233,18 +233,6 @@ onBeforeUnmount(() => {
 <style scoped>
 .select-trigger {
   @apply flex w-full items-center justify-between gap-2;
-  @apply rounded-xl px-4 py-2.5 text-sm;
-  @apply bg-white dark:bg-dark-800;
-  @apply border border-gray-200 dark:border-dark-600;
-  @apply text-gray-900 dark:text-gray-100;
-  @apply transition-all duration-200;
-  @apply focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30;
-  @apply hover:border-gray-300 dark:hover:border-dark-500;
-  @apply cursor-pointer;
-}
-
-.select-trigger-open {
-  @apply border-primary-500 ring-2 ring-primary-500/30;
 }
 
 .filter-menu summary::-webkit-details-marker {
@@ -252,7 +240,8 @@ onBeforeUnmount(() => {
 }
 
 .filter-dropdown {
-  @apply w-max min-w-[200px] max-h-[min(50vh,360px)] overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-lg dark:border-dark-600 dark:bg-dark-800;
+  @apply w-max min-w-[200px] max-h-[min(50vh,360px)] overflow-y-auto rounded-xl border border-gray-200 shadow-lg dark:border-dark-600;
+  background-color: var(--surface-panel);
 }
 
 .dropdown-item {

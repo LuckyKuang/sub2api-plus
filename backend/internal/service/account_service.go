@@ -154,6 +154,33 @@ type OpenAIOAuthPolicyTransactionRepository interface {
 	) error
 }
 
+// AccountRecoveryRepository clears the complete administrator-recoverable
+// state and records scheduler invalidation in the same database statement.
+type AccountRecoveryRepository interface {
+	ClearAccountRecoveryState(ctx context.Context, accountID int64) error
+}
+
+// SchedulingRecoveryMode limits a public scheduling reset to its promised
+// fields. Rates includes overload, quota scopes and temporary/model cooldowns;
+// Temporary keeps account rate/overload/quota state intact.
+type SchedulingRecoveryMode string
+
+const (
+	SchedulingRecoveryRates     SchedulingRecoveryMode = "rates"
+	SchedulingRecoveryTemporary SchedulingRecoveryMode = "temp"
+)
+
+type AtomicSchedulingRecoveryRepository interface {
+	ClearAccountSchedulingRecoveryState(context.Context, int64, SchedulingRecoveryMode) error
+}
+
+// AccountCredentialFamilyLocker serializes family enumeration and deletion
+// with new credential-dependent children. The lock must be held by the same
+// transaction that enumerates and mutates the family.
+type AccountCredentialFamilyLocker interface {
+	LockAccountCredentialFamily(ctx context.Context, accountID int64) error
+}
+
 // AdminAccountRepository makes the account-duplication write capability an explicit
 // construction dependency without forcing read-only gateway test doubles to implement it.
 type AdminAccountRepository interface {

@@ -183,7 +183,7 @@ func TestOpenAIResponsesInputNeverRequestsPreemptiveTruncation(t *testing.T) {
 	require.False(t, openAIResponsesInputMayNeedTruncation(largeOutput))
 }
 
-func TestOpenAIGatewayService_OAuthDropsOrphanAfterDroppingPreviousResponse(t *testing.T) {
+func TestOpenAIGatewayService_OAuthPreservesHTTPContinuationAndToolOutput(t *testing.T) {
 	body := []byte(`{"model":"gpt-5.5","stream":false,"previous_response_id":"resp_missing","input":[{"type":"function_call_output","call_id":"call_missing","output":"keep this result"}]}`)
 	upstream := &httpUpstreamRecorder{responses: []*http.Response{
 		newOpenAIRejectedFieldTestResponse(http.StatusOK, `{"id":"resp_ok","output":[],"usage":{"input_tokens":1,"output_tokens":1,"input_tokens_details":{"cached_tokens":0}}}`),
@@ -199,8 +199,8 @@ func TestOpenAIGatewayService_OAuthDropsOrphanAfterDroppingPreviousResponse(t *t
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Len(t, upstream.bodies, 1)
-	require.False(t, gjson.GetBytes(upstream.bodies[0], "previous_response_id").Exists())
-	require.Empty(t, gjson.GetBytes(upstream.bodies[0], "input").Array())
+	require.Equal(t, "resp_missing", gjson.GetBytes(upstream.bodies[0], "previous_response_id").String())
+	require.Equal(t, "keep this result", gjson.GetBytes(upstream.bodies[0], "input.0.output").String())
 }
 
 func TestOpenAIGatewayService_PreservesOversizedToolOutputForUpstream(t *testing.T) {

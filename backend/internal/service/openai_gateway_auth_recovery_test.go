@@ -40,11 +40,11 @@ func TestForceRefreshOpenAIToken_DeletesCacheAndRefreshes(t *testing.T) {
 	}
 	provider, cache := newAuthRecoveryTestProvider(t, account, executor)
 
-	token, err := provider.ForceRefreshToken(context.Background(), account)
+	token, err := provider.ForceRefreshToken(context.Background(), account, "old-token")
 	require.NoError(t, err)
 	require.Equal(t, "new-token", token)
 	require.Equal(t, 1, executor.refreshCalls)
-	require.Equal(t, 1, cache.deleteCalls, "the rejected cached token must be dropped before refreshing")
+	require.Equal(t, 2, cache.deleteCalls, "drop the rejected cache before refresh and invalidate again at the durable rotation boundary")
 	require.Equal(t, OpenAITokenCacheKey(account), cache.deleteKey)
 }
 
@@ -62,7 +62,7 @@ func TestForceRefreshOpenAIToken_FailsWhenNothingWasRefreshed(t *testing.T) {
 	executor := &refreshAPIExecutorStub{needsRefresh: false, credentials: map[string]any{"access_token": "stale-token"}}
 	provider, _ := newAuthRecoveryTestProvider(t, account, executor)
 
-	token, err := provider.ForceRefreshToken(context.Background(), account)
+	token, err := provider.ForceRefreshToken(context.Background(), account, "stale-token")
 	require.Error(t, err)
 	require.Empty(t, token)
 	require.Contains(t, err.Error(), "was not refreshed")
@@ -75,19 +75,19 @@ func TestForceRefreshOpenAIToken_RejectsUnrefreshableAccounts(t *testing.T) {
 
 	pat := &Account{ID: 6, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive,
 		Credentials: map[string]any{"access_token": "pat", "auth_mode": OpenAIAuthModePersonalAccessToken}}
-	if _, err := provider.ForceRefreshToken(context.Background(), pat); err == nil {
+	if _, err := provider.ForceRefreshToken(context.Background(), pat, "pat"); err == nil {
 		t.Fatal("personal access tokens must be rejected")
 	}
 
 	noRefresh := &Account{ID: 7, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive,
 		Credentials: map[string]any{"access_token": "at"}}
-	if _, err := provider.ForceRefreshToken(context.Background(), noRefresh); err == nil {
+	if _, err := provider.ForceRefreshToken(context.Background(), noRefresh, "at"); err == nil {
 		t.Fatal("accounts without a refresh token must be rejected")
 	}
 
 	apiKey := &Account{ID: 8, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive,
 		Credentials: map[string]any{"api_key": "sk"}}
-	if _, err := provider.ForceRefreshToken(context.Background(), apiKey); err == nil {
+	if _, err := provider.ForceRefreshToken(context.Background(), apiKey, "sk"); err == nil {
 		t.Fatal("api-key accounts must be rejected")
 	}
 	require.Zero(t, executor.refreshCalls, "rejected accounts must not reach the refresh executor")

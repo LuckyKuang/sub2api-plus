@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -66,6 +67,8 @@ type openAIAccountTestRepo struct {
 	updatedExtra       map[string]any
 	bulkUpdatedIDs     []int64
 	bulkUpdatedPayload AccountBulkUpdate
+	planOwnerID        int64
+	planType           string
 	rateLimitedID      int64
 	rateLimitedAt      *time.Time
 	clearedErrorID     int64
@@ -101,6 +104,43 @@ func (r *openAIAccountTestRepo) SetError(_ context.Context, id int64, errorMsg s
 	return nil
 }
 
+func (r *openAIAccountTestRepo) SetCredentialErrorIfUnchanged(ctx context.Context, expectedOwner *Account, message string) (bool, error) {
+	id := expectedOwner.ID
+	platform := expectedOwner.Platform
+	kind := expectedOwner.Type
+	credentials := expectedOwner.Credentials
+	proxyID := expectedOwner.ProxyID
+	current, err := r.GetByID(ctx, id)
+	if err != nil {
+		return false, err
+	}
+	if current == nil || current.Platform != platform || current.Type != kind || !reflect.DeepEqual(current.Credentials, credentials) || !reflect.DeepEqual(current.ProxyID, proxyID) {
+		return false, nil
+	}
+	return true, r.SetError(ctx, id, message)
+}
+
+func TestAccountTestService_OpenAIResponsesProbeAdvertisesSessionCapability(t *testing.T) {
+	// Official 770ed6dcea40 advertises v2 on every Responses request, including
+	// synthesized probes using either native credential type.
+	for _, kind := range []string{AccountTypeOAuth, AccountTypeAPIKey} {
+		t.Run(kind, func(t *testing.T) {
+			c, _ := newTestContext()
+			response := newJSONResponse(http.StatusOK, "data: {\"type\":\"response.completed\"}\n\n")
+			upstream := &queuedHTTPUpstream{responses: []*http.Response{response}}
+			svc := &AccountTestService{httpUpstream: upstream, cfg: codexTransportTestConfig()}
+			account := &Account{ID: 71, Platform: PlatformOpenAI, Type: kind,
+				Credentials: map[string]any{"api_key": "fixture", "access_token": "fixture"},
+				Extra:       map[string]any{openai_compat.ExtraKeyResponsesSupported: true},
+			}
+			require.NoError(t, svc.testOpenAIAccountConnection(c, account, "gpt-6.1-sol", "", ""))
+			require.Len(t, upstream.requests, 1)
+			require.True(t, strings.HasSuffix(upstream.requests[0].URL.Path, "/responses"))
+			require.Equal(t, "remote_compaction_v2", upstream.requests[0].Header.Get("x-codex-beta-features"))
+		})
+	}
+}
+
 func TestAccountTestService_OpenAISuccessPersistsSnapshotFromHeaders(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx, recorder := newTestContext()
@@ -131,6 +171,7 @@ func TestAccountTestService_OpenAISuccessPersistsSnapshotFromHeaders(t *testing.
 	require.NoError(t, err)
 	require.Len(t, upstream.requests, 1)
 	require.Equal(t, HTTPUpstreamProfileOpenAI, HTTPUpstreamProfileFromContext(upstream.requests[0].Context()))
+	require.Equal(t, "remote_compaction_v2", upstream.requests[0].Header.Get("x-codex-beta-features"))
 	require.NotEmpty(t, repo.updatedExtra)
 	require.Equal(t, 42.0, repo.updatedExtra["codex_5h_used_percent"])
 	require.Equal(t, 88.0, repo.updatedExtra["codex_7d_used_percent"])
@@ -280,6 +321,7 @@ func TestAccountTestService_DeepSeekCustomBaseURLUsesV1ResponsesPath(t *testing.
 	require.NoError(t, err)
 	require.Len(t, upstream.requests, 1)
 	require.Equal(t, "https://relay.example.com/v1/responses", upstream.requests[0].URL.String())
+	require.Empty(t, upstream.requests[0].Header.Get("x-codex-beta-features"), "a DeepSeek probe retains its native protocol declarations")
 }
 
 func TestAccountTestService_DeepSeekResponsesRoutesToOpenAIProbe(t *testing.T) {
@@ -441,8 +483,8 @@ func TestAccountTestService_OpenAI429SyncsObservedPlanType(t *testing.T) {
 
 	err := svc.testOpenAIAccountConnection(ctx, account, "gpt-5.4", "", "")
 	require.Error(t, err)
-	require.Equal(t, []int64{account.ID}, repo.bulkUpdatedIDs)
-	require.Equal(t, "free", repo.bulkUpdatedPayload.Credentials["plan_type"])
+	require.Equal(t, account.ID, repo.planOwnerID)
+	require.Equal(t, "free", repo.planType)
 	require.Equal(t, "free", account.Credentials["plan_type"])
 	require.Equal(t, account.ID, repo.rateLimitedID)
 	require.NotNil(t, account.RateLimitResetAt)
@@ -521,6 +563,8 @@ func TestAccountTestService_OpenAI401SetsPermanentErrorOnly(t *testing.T) {
 		Concurrency: 1,
 		Credentials: map[string]any{"access_token": "test-token"},
 	}
+
+	repo.accountsByID = map[int64]*Account{account.ID: account}
 
 	err := svc.testOpenAIAccountConnection(ctx, account, "gpt-5.4", "", "")
 	require.Error(t, err)
@@ -703,4 +747,24 @@ func TestAccountTestService_OpenAIChatCompletionsPathRejectsNonJSONStream(t *tes
 	require.Contains(t, err.Error(), "Invalid Chat Completions response from /v1/chat/completions")
 	require.Contains(t, recorder.Body.String(), "/v1/chat/completions")
 	require.NotContains(t, recorder.Body.String(), `"success":true`)
+}
+
+func (r *openAIAccountTestRepo) UpdateOpenAICodexUsageIfUnchanged(ctx context.Context, id int64, owner *Account, updates map[string]any) (bool, error) {
+	if owner == nil {
+		return false, nil
+	}
+	return true, r.UpdateExtra(ctx, id, updates)
+}
+
+func (r *openAIAccountTestRepo) ApplyCredentialStateMutation(ctx context.Context, owner *Account, mutation CredentialStateMutation) (bool, error) {
+	if mutation.RateLimitUntil != nil {
+		if err := r.SetRateLimited(ctx, owner.ID, *mutation.RateLimitUntil); err != nil {
+			return false, err
+		}
+	}
+	if mutation.OpenAIPlanType != "" {
+		r.planOwnerID = owner.ID
+		r.planType = mutation.OpenAIPlanType
+	}
+	return true, nil
 }

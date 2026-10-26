@@ -98,11 +98,37 @@ export interface MonitorCoverage {
   bootstrap?: MonitorBootstrap | null
 }
 
+export interface MonitorPlatformConfig {
+  platform: string
+  enabled: boolean
+  models: string[]
+  /** Omitted by older servers; infer from models.length when reading. */
+  model_display_mode?: 'all' | 'selected'
+  /** Exact, case-sensitive IDs excluded from display and every aggregate. */
+  excluded_models?: string[]
+}
+
+export interface MonitorModelCatalogItem {
+  platform: string
+  model: string
+  success_requests: number
+  error_requests: number
+  sources: Array<'success' | 'error' | 'configured' | 'excluded'>
+}
+
+export interface MonitorModelCatalog {
+  config_version: number
+  range: MonitorRange
+  start: string
+  end: string
+  items: MonitorModelCatalogItem[]
+}
+
 export interface MonitorConfig {
   version: number
   enabled: boolean
   refresh_interval_seconds: 60 | 300
-  platforms: Array<{ platform: string; enabled: boolean; models: string[] }>
+  platforms: MonitorPlatformConfig[]
   group_ids: number[]
   health_thresholds: {
     minimum_sample: number
@@ -263,6 +289,14 @@ export async function getUsers(filter: MonitorFilter, admin = false, signal?: Ab
 }
 export async function getConfig() {
   const { data } = await apiClient.get<MonitorConfig>('/admin/channel-monitor-v2/config')
+  return data
+}
+export async function getModelCatalog(platform: string, groupIds: number[] = [], signal?: AbortSignal) {
+  const { data } = await apiClient.get<MonitorModelCatalog>('/admin/channel-monitor-v2/model-catalog', {
+    params: { range: '30d', platform: [platform], group_id: groupIds.length ? groupIds : undefined },
+    paramsSerializer: { serialize: repeatedArrayParamsSerializer },
+    signal,
+  })
   return data
 }
 export async function updateConfig(config: MonitorConfig) {

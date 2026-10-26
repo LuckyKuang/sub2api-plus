@@ -31,7 +31,8 @@ import "time"
 type MonitorQuotaTier struct {
 	Window      string  `json:"window"`
 	Label       string  `json:"label,omitempty"`
-	UsedPercent float64 `json:"used_percent"` // 0-100+；仅有绝对值时按 used/limit 计算
+	Unlimited   bool    `json:"unlimited,omitempty"` // No finite utilization when true.
+	UsedPercent float64 `json:"used_percent"`        // 0-100+；仅有绝对值时按 used/limit 计算
 	Used        float64 `json:"used,omitempty"`
 	Limit       float64 `json:"limit,omitempty"`
 	ResetAt     string  `json:"reset_at,omitempty"` // RFC3339；未知时留空

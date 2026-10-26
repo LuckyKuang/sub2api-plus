@@ -1,7 +1,7 @@
 <template>
   <div class="mt-4 pt-3 border-t border-gray-100 dark:border-dark-700/60">
     <div
-      class="flex justify-between text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-2"
+      class="flex justify-between text-[10px] font-semibold uppercase tracking-widest mb-2 surface-muted"
     >
       <span>{{ t('monitorCommon.history60pts', { n: length }) }}</span>
       <span class="tabular-nums">{{ t('monitorCommon.nextUpdateIn', { n: countdownSeconds }) }}</span>
@@ -9,7 +9,7 @@
 
     <div
       v-if="maintenance"
-      class="flex h-5 w-full items-center justify-center rounded border border-dashed border-gray-300 dark:border-dark-600 text-[10px] uppercase tracking-widest text-gray-400"
+      class="flex h-5 w-full items-center justify-center rounded border border-dashed border-gray-300 dark:border-dark-600 text-[10px] uppercase tracking-widest surface-muted"
     >
       {{ t('monitorCommon.maintenancePaused') }}
     </div>
@@ -25,7 +25,7 @@
     </div>
 
     <div
-      class="mt-1 flex justify-between text-[9px] uppercase tracking-widest text-gray-400"
+      class="mt-1 flex justify-between text-[9px] uppercase tracking-widest surface-muted"
     >
       <span>{{ t('monitorCommon.past') }}</span>
       <span>{{ t('monitorCommon.now') }}</span>
@@ -74,7 +74,7 @@ const STATUS_COLOR: Record<string, string> = {
   degraded: 'bg-amber-500',
   failed: 'bg-red-500',
   error: 'bg-red-500',
-  empty: 'bg-gray-300 dark:bg-dark-600',
+  empty: 'bg-gray-300 dark:surface-inset',
 }
 
 const displayBars = computed<Bar[]>(() => {
@@ -106,7 +106,7 @@ const displayBars = computed<Bar[]>(() => {
     bars.push({
       colorClass,
       heightPct,
-      title: `${relative} · ${label} · ${t('usage.latencyFirstByte')} ${formatLatency(point.first_byte_ms)}ms · ${t('usage.latencyDuration')} ${latency}ms`,
+      title: `${relative} · ${label} · ${t('monitorCommon.firstText')} ${formatLatency(point.first_text_ms)}ms · ${t('monitorCommon.firstByte')} ${formatLatency(point.first_byte_ms)}ms · ${t('usage.latencyDuration')} ${latency}ms`,
     })
   }
 

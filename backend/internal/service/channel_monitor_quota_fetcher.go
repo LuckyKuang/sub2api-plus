@@ -65,9 +65,10 @@ type ChannelMonitorQuotaFetcher struct {
 	// balanceThreshold cn_balance 余额告警阈值（与账号停调共用配置，见 monitorBalanceThreshold）。
 	balanceThreshold float64
 
-	mu     sync.Mutex
-	cache  map[int64]monitorQuotaCacheEntry
-	flight singleflight.Group
+	mu                sync.Mutex
+	cache             map[int64]monitorQuotaCacheEntry
+	cnGenerationCache map[string]monitorQuotaCacheEntry
+	flight            singleflight.Group
 }
 
 type monitorQuotaCacheEntry struct {
@@ -132,6 +133,15 @@ func (f *ChannelMonitorQuotaFetcher) Fetch(ctx context.Context, accountID int64)
 	}
 
 	now := time.Now()
+	// Reload the linked owner before looking up a native CN quota cache. An
+	// account ID survives reauthorization and cannot identify a credential grant.
+	account, loadErr := f.LoadAccount(ctx, accountID)
+	if loadErr != nil || account == nil {
+		return quotaErrorSnapshot("usage", "linked account not found", now)
+	}
+	if cnQuotaRequiresGeneration(account) && account.IsCodingPlan() {
+		return f.fetchCNQuotaGeneration(ctx, account, now)
+	}
 
 	if cached, ok := f.cachedSnapshot(accountID, now); ok {
 		return cached
@@ -141,7 +151,7 @@ func (f *ChannelMonitorQuotaFetcher) Fetch(ctx context.Context, accountID int64)
 	// 避免某个监控的取消波及共享同一账号的其他监控。
 	key := "monitor-quota:" + strconv.FormatInt(accountID, 10)
 	ch := f.flight.DoChan(key, func() (any, error) {
-		return f.fetchShared(accountID), nil
+		return f.fetchShared(accountID, account), nil
 	})
 	select {
 	case <-ctx.Done():
@@ -155,13 +165,18 @@ func (f *ChannelMonitorQuotaFetcher) Fetch(ctx context.Context, accountID int64)
 	}
 }
 
-func (f *ChannelMonitorQuotaFetcher) fetchShared(accountID int64) *domain.MonitorQuotaSnapshot {
+func (f *ChannelMonitorQuotaFetcher) fetchShared(accountID int64, loaded ...*Account) *domain.MonitorQuotaSnapshot {
 	if cached, ok := f.cachedSnapshot(accountID, time.Now()); ok {
 		return cached
 	}
 	fetchCtx, cancel := context.WithTimeout(context.Background(), monitorQuotaFetchTimeout)
 	defer cancel()
-	snapshot := f.fetchUncached(fetchCtx, accountID, time.Now())
+	var snapshot *domain.MonitorQuotaSnapshot
+	if len(loaded) > 0 && loaded[0] != nil {
+		snapshot = f.fetchLoadedAccount(fetchCtx, loaded[0], time.Now())
+	} else {
+		snapshot = f.fetchUncached(fetchCtx, accountID, time.Now())
+	}
 	ttl := monitorQuotaFetchCacheTTL
 	if !snapshot.Success {
 		ttl = monitorQuotaErrorCacheTTL
@@ -200,6 +215,10 @@ func (f *ChannelMonitorQuotaFetcher) fetchUncached(ctx context.Context, accountI
 		return quotaErrorSnapshot("usage", "linked account not found", now)
 	}
 
+	return f.fetchLoadedAccount(ctx, account, now)
+}
+
+func (f *ChannelMonitorQuotaFetcher) fetchLoadedAccount(ctx context.Context, account *Account, now time.Time) *domain.MonitorQuotaSnapshot {
 	// 账号只在路由前加载这一次；已加载的 account 直接传给数据源
 	// （GetUsageForAccount / QueryUsageForAccount / QueryBalanceForAccount），
 	// 下游服务不再各自 GetByID（每次含 proxies/groups 联查）。
@@ -384,6 +403,7 @@ func (f *ChannelMonitorQuotaFetcher) fetchCNQuota(ctx context.Context, account *
 		for _, t := range result.Tiers {
 			snapshot.Tiers = append(snapshot.Tiers, domain.MonitorQuotaTier{
 				Window:      t.Window,
+				Unlimited:   t.Unlimited,
 				UsedPercent: t.UsedPercent,
 				ResetAt:     t.ResetAt,
 			})
@@ -530,7 +550,7 @@ func deriveQuotaCheckResult(snapshot *domain.MonitorQuotaSnapshot, model string,
 // 空串表示无告警。
 func quotaDegradedHint(snapshot *domain.MonitorQuotaSnapshot) string {
 	for _, tier := range snapshot.Tiers {
-		if tier.UsedPercent >= monitorQuotaDegradedUsedPercent {
+		if !tier.Unlimited && tier.UsedPercent >= monitorQuotaDegradedUsedPercent {
 			name := tier.Window
 			if tier.Label != "" {
 				name = tier.Label + "/" + tier.Window

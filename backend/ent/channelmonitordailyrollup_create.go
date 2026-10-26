@@ -139,6 +139,34 @@ func (_c *ChannelMonitorDailyRollupCreate) SetNillableSumFirstByteMs(v *int64) *
 	return _c
 }
 
+// SetSumFirstTextMs sets the "sum_first_text_ms" field.
+func (_c *ChannelMonitorDailyRollupCreate) SetSumFirstTextMs(v int64) *ChannelMonitorDailyRollupCreate {
+	_c.mutation.SetSumFirstTextMs(v)
+	return _c
+}
+
+// SetNillableSumFirstTextMs sets the "sum_first_text_ms" field if the given value is not nil.
+func (_c *ChannelMonitorDailyRollupCreate) SetNillableSumFirstTextMs(v *int64) *ChannelMonitorDailyRollupCreate {
+	if v != nil {
+		_c.SetSumFirstTextMs(*v)
+	}
+	return _c
+}
+
+// SetCountFirstText sets the "count_first_text" field.
+func (_c *ChannelMonitorDailyRollupCreate) SetCountFirstText(v int) *ChannelMonitorDailyRollupCreate {
+	_c.mutation.SetCountFirstText(v)
+	return _c
+}
+
+// SetNillableCountFirstText sets the "count_first_text" field if the given value is not nil.
+func (_c *ChannelMonitorDailyRollupCreate) SetNillableCountFirstText(v *int) *ChannelMonitorDailyRollupCreate {
+	if v != nil {
+		_c.SetCountFirstText(*v)
+	}
+	return _c
+}
+
 // SetCountFirstByte sets the "count_first_byte" field.
 func (_c *ChannelMonitorDailyRollupCreate) SetCountFirstByte(v int) *ChannelMonitorDailyRollupCreate {
 	_c.mutation.SetCountFirstByte(v)
@@ -291,6 +319,14 @@ func (_c *ChannelMonitorDailyRollupCreate) defaults() {
 		v := channelmonitordailyrollup.DefaultSumFirstByteMs
 		_c.mutation.SetSumFirstByteMs(v)
 	}
+	if _, ok := _c.mutation.SumFirstTextMs(); !ok {
+		v := channelmonitordailyrollup.DefaultSumFirstTextMs
+		_c.mutation.SetSumFirstTextMs(v)
+	}
+	if _, ok := _c.mutation.CountFirstText(); !ok {
+		v := channelmonitordailyrollup.DefaultCountFirstText
+		_c.mutation.SetCountFirstText(v)
+	}
 	if _, ok := _c.mutation.CountFirstByte(); !ok {
 		v := channelmonitordailyrollup.DefaultCountFirstByte
 		_c.mutation.SetCountFirstByte(v)
@@ -357,6 +393,22 @@ func (_c *ChannelMonitorDailyRollupCreate) check() error {
 	if v, ok := _c.mutation.SumFirstByteMs(); ok {
 		if err := channelmonitordailyrollup.SumFirstByteMsValidator(v); err != nil {
 			return &ValidationError{Name: "sum_first_byte_ms", err: fmt.Errorf(`ent: validator failed for field "ChannelMonitorDailyRollup.sum_first_byte_ms": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.SumFirstTextMs(); !ok {
+		return &ValidationError{Name: "sum_first_text_ms", err: errors.New(`ent: missing required field "ChannelMonitorDailyRollup.sum_first_text_ms"`)}
+	}
+	if v, ok := _c.mutation.SumFirstTextMs(); ok {
+		if err := channelmonitordailyrollup.SumFirstTextMsValidator(v); err != nil {
+			return &ValidationError{Name: "sum_first_text_ms", err: fmt.Errorf(`ent: validator failed for field "ChannelMonitorDailyRollup.sum_first_text_ms": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.CountFirstText(); !ok {
+		return &ValidationError{Name: "count_first_text", err: errors.New(`ent: missing required field "ChannelMonitorDailyRollup.count_first_text"`)}
+	}
+	if v, ok := _c.mutation.CountFirstText(); ok {
+		if err := channelmonitordailyrollup.CountFirstTextValidator(v); err != nil {
+			return &ValidationError{Name: "count_first_text", err: fmt.Errorf(`ent: validator failed for field "ChannelMonitorDailyRollup.count_first_text": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.CountFirstByte(); !ok {
@@ -447,6 +499,14 @@ func (_c *ChannelMonitorDailyRollupCreate) createSpec() (*ChannelMonitorDailyRol
 	if value, ok := _c.mutation.SumFirstByteMs(); ok {
 		_spec.SetField(channelmonitordailyrollup.FieldSumFirstByteMs, field.TypeInt64, value)
 		_node.SumFirstByteMs = value
+	}
+	if value, ok := _c.mutation.SumFirstTextMs(); ok {
+		_spec.SetField(channelmonitordailyrollup.FieldSumFirstTextMs, field.TypeInt64, value)
+		_node.SumFirstTextMs = value
+	}
+	if value, ok := _c.mutation.CountFirstText(); ok {
+		_spec.SetField(channelmonitordailyrollup.FieldCountFirstText, field.TypeInt, value)
+		_node.CountFirstText = value
 	}
 	if value, ok := _c.mutation.CountFirstByte(); ok {
 		_spec.SetField(channelmonitordailyrollup.FieldCountFirstByte, field.TypeInt, value)
@@ -700,6 +760,42 @@ func (u *ChannelMonitorDailyRollupUpsert) UpdateSumFirstByteMs() *ChannelMonitor
 // AddSumFirstByteMs adds v to the "sum_first_byte_ms" field.
 func (u *ChannelMonitorDailyRollupUpsert) AddSumFirstByteMs(v int64) *ChannelMonitorDailyRollupUpsert {
 	u.Add(channelmonitordailyrollup.FieldSumFirstByteMs, v)
+	return u
+}
+
+// SetSumFirstTextMs sets the "sum_first_text_ms" field.
+func (u *ChannelMonitorDailyRollupUpsert) SetSumFirstTextMs(v int64) *ChannelMonitorDailyRollupUpsert {
+	u.Set(channelmonitordailyrollup.FieldSumFirstTextMs, v)
+	return u
+}
+
+// UpdateSumFirstTextMs sets the "sum_first_text_ms" field to the value that was provided on create.
+func (u *ChannelMonitorDailyRollupUpsert) UpdateSumFirstTextMs() *ChannelMonitorDailyRollupUpsert {
+	u.SetExcluded(channelmonitordailyrollup.FieldSumFirstTextMs)
+	return u
+}
+
+// AddSumFirstTextMs adds v to the "sum_first_text_ms" field.
+func (u *ChannelMonitorDailyRollupUpsert) AddSumFirstTextMs(v int64) *ChannelMonitorDailyRollupUpsert {
+	u.Add(channelmonitordailyrollup.FieldSumFirstTextMs, v)
+	return u
+}
+
+// SetCountFirstText sets the "count_first_text" field.
+func (u *ChannelMonitorDailyRollupUpsert) SetCountFirstText(v int) *ChannelMonitorDailyRollupUpsert {
+	u.Set(channelmonitordailyrollup.FieldCountFirstText, v)
+	return u
+}
+
+// UpdateCountFirstText sets the "count_first_text" field to the value that was provided on create.
+func (u *ChannelMonitorDailyRollupUpsert) UpdateCountFirstText() *ChannelMonitorDailyRollupUpsert {
+	u.SetExcluded(channelmonitordailyrollup.FieldCountFirstText)
+	return u
+}
+
+// AddCountFirstText adds v to the "count_first_text" field.
+func (u *ChannelMonitorDailyRollupUpsert) AddCountFirstText(v int) *ChannelMonitorDailyRollupUpsert {
+	u.Add(channelmonitordailyrollup.FieldCountFirstText, v)
 	return u
 }
 
@@ -1031,6 +1127,48 @@ func (u *ChannelMonitorDailyRollupUpsertOne) AddSumFirstByteMs(v int64) *Channel
 func (u *ChannelMonitorDailyRollupUpsertOne) UpdateSumFirstByteMs() *ChannelMonitorDailyRollupUpsertOne {
 	return u.Update(func(s *ChannelMonitorDailyRollupUpsert) {
 		s.UpdateSumFirstByteMs()
+	})
+}
+
+// SetSumFirstTextMs sets the "sum_first_text_ms" field.
+func (u *ChannelMonitorDailyRollupUpsertOne) SetSumFirstTextMs(v int64) *ChannelMonitorDailyRollupUpsertOne {
+	return u.Update(func(s *ChannelMonitorDailyRollupUpsert) {
+		s.SetSumFirstTextMs(v)
+	})
+}
+
+// AddSumFirstTextMs adds v to the "sum_first_text_ms" field.
+func (u *ChannelMonitorDailyRollupUpsertOne) AddSumFirstTextMs(v int64) *ChannelMonitorDailyRollupUpsertOne {
+	return u.Update(func(s *ChannelMonitorDailyRollupUpsert) {
+		s.AddSumFirstTextMs(v)
+	})
+}
+
+// UpdateSumFirstTextMs sets the "sum_first_text_ms" field to the value that was provided on create.
+func (u *ChannelMonitorDailyRollupUpsertOne) UpdateSumFirstTextMs() *ChannelMonitorDailyRollupUpsertOne {
+	return u.Update(func(s *ChannelMonitorDailyRollupUpsert) {
+		s.UpdateSumFirstTextMs()
+	})
+}
+
+// SetCountFirstText sets the "count_first_text" field.
+func (u *ChannelMonitorDailyRollupUpsertOne) SetCountFirstText(v int) *ChannelMonitorDailyRollupUpsertOne {
+	return u.Update(func(s *ChannelMonitorDailyRollupUpsert) {
+		s.SetCountFirstText(v)
+	})
+}
+
+// AddCountFirstText adds v to the "count_first_text" field.
+func (u *ChannelMonitorDailyRollupUpsertOne) AddCountFirstText(v int) *ChannelMonitorDailyRollupUpsertOne {
+	return u.Update(func(s *ChannelMonitorDailyRollupUpsert) {
+		s.AddCountFirstText(v)
+	})
+}
+
+// UpdateCountFirstText sets the "count_first_text" field to the value that was provided on create.
+func (u *ChannelMonitorDailyRollupUpsertOne) UpdateCountFirstText() *ChannelMonitorDailyRollupUpsertOne {
+	return u.Update(func(s *ChannelMonitorDailyRollupUpsert) {
+		s.UpdateCountFirstText()
 	})
 }
 
@@ -1543,6 +1681,48 @@ func (u *ChannelMonitorDailyRollupUpsertBulk) AddSumFirstByteMs(v int64) *Channe
 func (u *ChannelMonitorDailyRollupUpsertBulk) UpdateSumFirstByteMs() *ChannelMonitorDailyRollupUpsertBulk {
 	return u.Update(func(s *ChannelMonitorDailyRollupUpsert) {
 		s.UpdateSumFirstByteMs()
+	})
+}
+
+// SetSumFirstTextMs sets the "sum_first_text_ms" field.
+func (u *ChannelMonitorDailyRollupUpsertBulk) SetSumFirstTextMs(v int64) *ChannelMonitorDailyRollupUpsertBulk {
+	return u.Update(func(s *ChannelMonitorDailyRollupUpsert) {
+		s.SetSumFirstTextMs(v)
+	})
+}
+
+// AddSumFirstTextMs adds v to the "sum_first_text_ms" field.
+func (u *ChannelMonitorDailyRollupUpsertBulk) AddSumFirstTextMs(v int64) *ChannelMonitorDailyRollupUpsertBulk {
+	return u.Update(func(s *ChannelMonitorDailyRollupUpsert) {
+		s.AddSumFirstTextMs(v)
+	})
+}
+
+// UpdateSumFirstTextMs sets the "sum_first_text_ms" field to the value that was provided on create.
+func (u *ChannelMonitorDailyRollupUpsertBulk) UpdateSumFirstTextMs() *ChannelMonitorDailyRollupUpsertBulk {
+	return u.Update(func(s *ChannelMonitorDailyRollupUpsert) {
+		s.UpdateSumFirstTextMs()
+	})
+}
+
+// SetCountFirstText sets the "count_first_text" field.
+func (u *ChannelMonitorDailyRollupUpsertBulk) SetCountFirstText(v int) *ChannelMonitorDailyRollupUpsertBulk {
+	return u.Update(func(s *ChannelMonitorDailyRollupUpsert) {
+		s.SetCountFirstText(v)
+	})
+}
+
+// AddCountFirstText adds v to the "count_first_text" field.
+func (u *ChannelMonitorDailyRollupUpsertBulk) AddCountFirstText(v int) *ChannelMonitorDailyRollupUpsertBulk {
+	return u.Update(func(s *ChannelMonitorDailyRollupUpsert) {
+		s.AddCountFirstText(v)
+	})
+}
+
+// UpdateCountFirstText sets the "count_first_text" field to the value that was provided on create.
+func (u *ChannelMonitorDailyRollupUpsertBulk) UpdateCountFirstText() *ChannelMonitorDailyRollupUpsertBulk {
+	return u.Update(func(s *ChannelMonitorDailyRollupUpsert) {
+		s.UpdateCountFirstText()
 	})
 }
 

@@ -24,13 +24,34 @@ const rows = (first: number, count = 10) => Array.from({ length: count }, (_, i)
   id: first + i, severity: 'P1', status: 'firing', created_at: '2026-10-03T00:00:00Z',
 }))
 type View = { events: ReturnType<typeof rows>; loading: boolean; loadingMore: boolean; hasMore: boolean; loadMore: () => Promise<void> }
-function mountCard() {
-  const wrapper = shallowMount(OpsAlertEventsCard)
+function mountCard(workspace = false) {
+  const wrapper = shallowMount(OpsAlertEventsCard, { props: { workspace } })
   return { wrapper, vm: wrapper.vm as unknown as View }
 }
 
 describe('alert events filtered pagination', () => {
   beforeEach(() => { vi.resetAllMocks() })
+
+  it('loads the next cursor page from the workspace table viewport near its bottom', async () => {
+    listAlertEvents.mockResolvedValueOnce(rows(1)).mockResolvedValueOnce(rows(11, 1))
+    const { wrapper, vm } = mountCard(true)
+    await flushPromises()
+    const viewport = wrapper.get('.workspace-table-viewport')
+    Object.defineProperties(viewport.element, {
+      clientHeight: { configurable: true, value: 400 },
+      scrollHeight: { configurable: true, value: 1000 },
+      scrollTop: { configurable: true, value: 500 },
+    })
+    await viewport.trigger('scroll')
+    await flushPromises()
+
+    expect(listAlertEvents).toHaveBeenCalledTimes(2)
+    expect(listAlertEvents).toHaveBeenLastCalledWith(expect.objectContaining({
+      before_id: 10, before_fired_at: '2026-10-03T00:00:00Z',
+    }))
+    expect(vm.events.map((event) => event.id)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
+    expect(vm.hasMore).toBe(false)
+  })
 
   it.each(['resolve', 'reject'] as const)('ignores a superseded first page that %ss', async outcome => {
     const old = deferred<ReturnType<typeof rows>>()

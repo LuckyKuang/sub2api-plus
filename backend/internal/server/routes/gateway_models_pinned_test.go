@@ -64,7 +64,7 @@ func TestGatewayRoutesPinnedModelsDispatchesOrdinaryAndCodexRequests(t *testing.
 	upstream := &pinnedModelsRoutesUpstream{}
 	cfg := &config.Config{RunMode: config.RunModeSimple}
 	s := service.NewOpenAIGatewayService(repo, nil, nil, nil, nil, nil, nil, cfg,
-		nil, nil, nil, nil, nil, upstream, nil, nil, nil, nil, nil, nil, nil, nil)
+		nil, nil, nil, nil, nil, upstream, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	h := &handler.Handlers{
 		Gateway:       handler.NewGatewayHandler(nil, s, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, cfg, nil),
 		OpenAIGateway: handler.NewOpenAIGatewayHandler(s, nil, nil, nil, nil, nil, nil, nil, cfg),
@@ -113,7 +113,7 @@ func TestGatewayRoutesRetrievePinnedModel(t *testing.T) {
 	upstream := &pinnedModelsRoutesUpstream{}
 	cfg := &config.Config{RunMode: config.RunModeSimple}
 	s := service.NewOpenAIGatewayService(repo, nil, nil, nil, nil, nil, nil, cfg,
-		nil, nil, nil, nil, nil, upstream, nil, nil, nil, nil, nil, nil, nil, nil)
+		nil, nil, nil, nil, nil, upstream, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	h := &handler.Handlers{
 		Gateway:       handler.NewGatewayHandler(nil, s, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, cfg, nil),
 		OpenAIGateway: handler.NewOpenAIGatewayHandler(s, nil, nil, nil, nil, nil, nil, nil, cfg),

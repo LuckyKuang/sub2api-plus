@@ -216,16 +216,15 @@ type SystemSettings struct {
 	OpenAICodexUserAgent                         string `json:"openai_codex_user_agent"`
 	OpenAICodexEnvironmentTimezone               string `json:"openai_codex_environment_timezone"`
 	OpenAICodexEgressCountry                     string `json:"openai_codex_egress_country"`
+	OpenAICodexWSEnabled                         bool   `json:"openai_codex_ws_enabled"`
+	OpenAICodexHTTPWSEnabled                     bool   `json:"openai_codex_http_ws_enabled"`
+	OpenAICodexWSDeploymentAllowed               bool   `json:"openai_codex_ws_deployment_allowed"`
 	OpenAICodexResidency                         string `json:"codex_residency"`
 	CodexLegacyClientProfileCompatibilityEnabled bool   `json:"codex_legacy_client_profile_compatibility_enabled"`
 	OpenAICodexLocalGroupQuotaEnabled            bool   `json:"openai_codex_local_group_quota_enabled"`
 	OpenAICodexClientVersion                     string `json:"openai_codex_client_version"`
-	OpenAICodexClientVersionSynced               string `json:"openai_codex_client_version_synced"`
-	OpenAICodexClientVersionSyncedCheckedAt      string `json:"openai_codex_client_version_synced_checked_at"`
-	OpenAICodexClientVersionSyncError            string `json:"openai_codex_client_version_sync_error"`
 	OpenAICodexClientVersionEffective            string `json:"openai_codex_client_version_effective"`
 	OpenAICodexClientVersionSource               string `json:"openai_codex_client_version_source"`
-	OpenAICodexVersionAutoSyncEnabled            bool   `json:"openai_codex_version_auto_sync_enabled"`
 	ClaudeCodeClientVersion                      string `json:"claude_code_client_version"`
 	ClaudeCodeClientVersionSynced                string `json:"claude_code_client_version_synced"`
 	ClaudeCodeVersionAutoSyncEnabled             bool   `json:"claude_code_version_auto_sync_enabled"`
@@ -383,6 +382,8 @@ type DefaultSubscriptionSetting struct {
 }
 
 type PublicSettings struct {
+	ConsoleAppearance service.ConsoleAppearance `json:"console_appearance"`
+
 	RegistrationEnabled                 bool                     `json:"registration_enabled"`
 	EmailVerifyEnabled                  bool                     `json:"email_verify_enabled"`
 	ForceEmailOnThirdPartySignup        bool                     `json:"force_email_on_third_party_signup"`
@@ -590,16 +591,6 @@ type EmailTemplateDetail struct {
 	IsCustom     bool     `json:"is_custom,omitempty"`
 	UpdatedAt    string   `json:"updated_at,omitempty"`
 	Placeholders []string `json:"placeholders,omitempty"`
-}
-
-// OpenAICodexVersionSyncResponse is returned by the admin "sync now" action.
-type OpenAICodexVersionSyncResponse struct {
-	SyncedVersion    string `json:"openai_codex_client_version_synced"`
-	CheckedAt        string `json:"openai_codex_client_version_synced_checked_at"`
-	Error            string `json:"openai_codex_client_version_sync_error"`
-	Updated          bool   `json:"updated"`
-	EffectiveVersion string `json:"openai_codex_client_version_effective"`
-	Source           string `json:"openai_codex_client_version_source"`
 }
 
 // UpdateEmailTemplateRequest updates a template override.

@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"errors"
-	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"net/http"
 	"net/url"
 	"strings"
@@ -11,6 +10,7 @@ import (
 
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	sharedhttp "github.com/LuckyKuang/sub2api-plus/internal/pkg/httpclient"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/xai"
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
 	"github.com/LuckyKuang/sub2api-plus/internal/util/logredact"
@@ -18,7 +18,8 @@ import (
 )
 
 type grokOAuthClient struct {
-	tokenURL string
+	tokenURL   string
+	oidcIssuer string
 }
 
 func NewGrokOAuthClient() service.GrokOAuthClient {
@@ -29,10 +30,30 @@ func NewGrokOAuthClient() service.GrokOAuthClient {
 		// Official allowlisted endpoint only — never EffectiveTokenURL() (raw env).
 		tokenURL = xai.DefaultTokenURL
 	}
-	return &grokOAuthClient{tokenURL: tokenURL}
+	return &grokOAuthClient{tokenURL: tokenURL, oidcIssuer: xai.OAuthIssuer}
 }
 
+// VerifyIDToken uses the same selected proxy and identity as the code exchange.
+// The existing Wire provider constructs this client, so browser verification
+// cannot be omitted while refresh-only/SSO test doubles keep their narrow port.
+func (c *grokOAuthClient) VerifyIDToken(ctx context.Context, token, clientID, nonce, proxyURL string) (map[string]any, error) {
+	client, err := sharedhttp.GetClient(sharedhttp.Options{ProxyURL: proxyURL, Timeout: 30 * time.Second, ResponseHeaderTimeout: 10 * time.Second})
+	if err != nil {
+		return nil, infraerrors.New(http.StatusBadGateway, "GROK_OIDC_CLIENT_INIT_FAILED", "OAuth identity client could not be initialized")
+	}
+	clone := *client
+	clone.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	issuer := c.oidcIssuer
+	if issuer == "" {
+		issuer = xai.OAuthIssuer
+	}
+	return xai.VerifyOIDCIDToken(ctx, &clone, issuer, token, clientID, nonce)
+}
+
+var _ service.GrokOIDCVerifier = (*grokOAuthClient)(nil)
+
 func (c *grokOAuthClient) ExchangeCode(ctx context.Context, code, codeVerifier, redirectURI, proxyURL, clientID string) (*xai.TokenResponse, error) {
+	ctx = grokOAuthIdentityContext(ctx)
 	client, err := createGrokReqClient(proxyURL)
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "GROK_OAUTH_CLIENT_INIT_FAILED", "create HTTP client: %v", err)
@@ -67,6 +88,7 @@ func (c *grokOAuthClient) ExchangeCode(ctx context.Context, code, codeVerifier, 
 }
 
 func (c *grokOAuthClient) RefreshToken(ctx context.Context, refreshToken, proxyURL, clientID string) (*xai.TokenResponse, error) {
+	ctx = grokOAuthIdentityContext(ctx)
 	client, err := createGrokReqClient(proxyURL)
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "GROK_OAUTH_CLIENT_INIT_FAILED", "create HTTP client: %v", err)
@@ -101,7 +123,7 @@ func (c *grokOAuthClient) RefreshToken(ctx context.Context, refreshToken, proxyU
 func (c *grokOAuthClient) ConvertSSOToBuild(ctx context.Context, ssoToken, proxyURL string) (*xai.TokenResponse, error) {
 	client, err := createGrokSSOHTTPClient(proxyURL)
 	if err != nil {
-		return nil, infraerrors.Newf(http.StatusBadGateway, "GROK_SSO_CLIENT_INIT_FAILED", "create HTTP client: %v", err)
+		return nil, infraerrors.New(http.StatusBadGateway, "GROK_SSO_CLIENT_INIT_FAILED", "could not initialize the configured OAuth client")
 	}
 
 	requestCtx, cancel := context.WithTimeout(ctx, xai.SSOConversionTimeout)
@@ -115,9 +137,51 @@ func (c *grokOAuthClient) ConvertSSOToBuild(ctx context.Context, ssoToken, proxy
 
 func createGrokReqClient(proxyURL string) (*req.Client, error) {
 	return getSharedReqClient(reqClientOptions{
-		ProxyURL: proxyURL,
-		Timeout:  60 * time.Second,
+		ProxyURL:            proxyURL,
+		Timeout:             60 * time.Second,
+		GrokControlIdentity: true,
 	})
+}
+
+// Token responses can authorize the official team-principal exception without
+// an ID token. Preserve the configured endpoint's trust boundary before a
+// redirect can dispatch an authorization code, verifier or refresh token.
+// The client also installs req.DefaultRedirectPolicy for the ten-hop limit.
+func grokOAuthSameOriginRedirectPolicy(request *http.Request, via []*http.Request) error {
+	if request == nil || request.URL == nil || len(via) == 0 || via[0] == nil || via[0].URL == nil {
+		return errors.New("invalid Grok OAuth redirect")
+	}
+	origin, destination := via[0].URL, request.URL
+	port := func(u *url.URL) string {
+		if value := u.Port(); value != "" {
+			return value
+		}
+		switch strings.ToLower(u.Scheme) {
+		case "https":
+			return "443"
+		case "http":
+			return "80"
+		default:
+			return ""
+		}
+	}
+	if destination.User != nil || !strings.EqualFold(origin.Scheme, destination.Scheme) ||
+		!strings.EqualFold(origin.Hostname(), destination.Hostname()) || port(origin) != port(destination) {
+		return errors.New("grok OAuth redirect changes token endpoint origin")
+	}
+	return nil
+}
+
+// A control operation resolves once. Its per-attempt renderer may omit a
+// destination-specific declaration, but cannot reselect a source or fingerprint.
+func grokOAuthIdentityContext(ctx context.Context) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if identity, ok := outboundidentity.Default(ctx, "grok"); ok {
+		return outboundidentity.WithIdentity(ctx, identity)
+	}
+	return ctx
 }
 
 func createGrokSSOHTTPClient(proxyURL string) (*http.Client, error) {

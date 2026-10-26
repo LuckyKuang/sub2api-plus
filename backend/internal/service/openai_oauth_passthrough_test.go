@@ -269,10 +269,10 @@ func TestOpenAIGatewayService_OAuthMessagesBridgeDoesNotInjectDefaultInstruction
 	alignedIdentity, ok := getOpenAIAlignedPromptCacheIdentity(c)
 	require.True(t, ok)
 	require.Equal(t, cacheIdentity, alignedIdentity.Identity)
-	require.Equal(t, cacheIdentity, upstream.lastReq.Header.Get(codexSessionIDHeader))
+	require.Empty(t, upstream.lastReq.Header.Get(codexSessionIDHeader), "cache cannot manufacture an absent native session")
 	require.Empty(t, upstream.lastReq.Header.Get("session_id"))
-	require.NotEmpty(t, upstream.lastReq.Header.Get("x-codex-installation-id"))
-	require.NotEmpty(t, upstream.lastReq.Header.Get("thread-id"))
+	require.Empty(t, upstream.lastReq.Header.Get("x-codex-installation-id"))
+	require.Empty(t, upstream.lastReq.Header.Get("thread-id"))
 	require.Equal(t, upstream.lastReq.Header.Get("thread-id"), upstream.lastReq.Header.Get("x-client-request-id"))
 	require.Empty(t, upstream.lastReq.Header.Get("Conversation_Id"))
 	require.Empty(t, upstream.lastReq.Header.Get("OpenAI-Beta"))
@@ -283,13 +283,34 @@ func TestOpenAIGatewayService_OAuthMessagesBridgeDoesNotInjectDefaultInstruction
 
 type openAIPassthroughFailoverRepo struct {
 	stubOpenAIAccountRepo
-	rateLimitCalls []time.Time
-	overloadCalls  []time.Time
+	rateLimitCalls          []time.Time
+	overloadCalls           []time.Time
+	unguardedRateLimitCalls int
 }
 
-func (r *openAIPassthroughFailoverRepo) SetRateLimited(_ context.Context, _ int64, resetAt time.Time) error {
-	r.rateLimitCalls = append(r.rateLimitCalls, resetAt)
-	return nil
+func (r *openAIPassthroughFailoverRepo) SetRateLimited(_ context.Context, _ int64, _ time.Time) error {
+	r.unguardedRateLimitCalls++
+	return errors.New("unconditional OpenAI cooldown is forbidden")
+}
+
+func (r *openAIPassthroughFailoverRepo) ApplyCredentialStateMutation(ctx context.Context, owner *Account, mutation CredentialStateMutation) (bool, error) {
+	if owner == nil || mutation.RateLimitUntil == nil {
+		return false, errors.New("passthrough failover fixture requires an owner-bound cooldown")
+	}
+	current, err := r.GetByID(ctx, owner.ID)
+	if err != nil {
+		return false, err
+	}
+	if current.Status != StatusActive || current.Status != owner.Status || credentialStateGeneration(current) != credentialStateGeneration(owner) {
+		return false, nil
+	}
+	if mutation.ExtendRateLimitOnly && current.RateLimitResetAt != nil && !mutation.RateLimitUntil.After(*current.RateLimitResetAt) {
+		return true, nil
+	}
+	reset := *mutation.RateLimitUntil
+	current.RateLimitResetAt = &reset
+	r.rateLimitCalls = append(r.rateLimitCalls, reset)
+	return true, nil
 }
 
 func (r *openAIPassthroughFailoverRepo) SetOverloaded(_ context.Context, _ int64, until time.Time) error {
@@ -859,7 +880,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_CompactUsesJSONAndKeepsNonStreami
 	require.Equal(t, codexCLIVersion, upstream.lastReq.Header.Get("Version"))
 	require.NotEmpty(t, upstream.lastReq.Header.Get("Session-Id"))
 	require.Empty(t, upstream.lastReq.Header.Get("Session_Id"))
-	require.Equal(t, "owner-installation", upstream.lastReq.Header.Get("x-codex-installation-id"))
+	require.Empty(t, upstream.lastReq.Header.Get("x-codex-installation-id"))
 	require.Equal(t, "owner-installation", gjson.GetBytes(upstream.lastBody, "client_metadata.x-codex-installation-id").String())
 	require.False(t, gjson.GetBytes(upstream.lastBody, "client_metadata.session_id").Exists())
 	require.False(t, gjson.GetBytes(upstream.lastBody, "client_metadata.thread_id").Exists())
@@ -917,12 +938,12 @@ func TestOpenAIGatewayService_OAuthPassthrough_NativeCompactUsesFullModeAndPlusC
 	cacheIdentity := strings.TrimSpace(gjson.GetBytes(upstream.lastBody, "prompt_cache_key").String())
 	require.NotEmpty(t, cacheIdentity)
 	require.NotEqual(t, "native-client-cache", cacheIdentity)
-	require.Equal(t, cacheIdentity, upstream.lastReq.Header.Get("session-id"))
+	require.NotEqual(t, cacheIdentity, upstream.lastReq.Header.Get("session-id"))
 	require.Empty(t, upstream.lastReq.Header.Get("session_id"))
-	require.Equal(t, "native-owner-installation", upstream.lastReq.Header.Get("x-codex-installation-id"))
+	require.Empty(t, upstream.lastReq.Header.Get("x-codex-installation-id"))
 	require.Equal(t, "native-owner-installation", gjson.GetBytes(upstream.lastBody, "client_metadata.x-codex-installation-id").String())
-	require.Equal(t, resolveConvergedSessionID(account), gjson.GetBytes(upstream.lastBody, "client_metadata.session_id").String())
-	require.NotEmpty(t, gjson.GetBytes(upstream.lastBody, "client_metadata.thread_id").String())
+	require.False(t, gjson.GetBytes(upstream.lastBody, "client_metadata.session_id").Exists())
+	require.False(t, gjson.GetBytes(upstream.lastBody, "client_metadata.thread_id").Exists())
 	require.Equal(t, upstream.lastReq.Header.Get("thread-id"), upstream.lastReq.Header.Get("x-client-request-id"))
 	require.NotEqual(t, "native-client-thread", upstream.lastReq.Header.Get("thread-id"))
 }
@@ -1399,14 +1420,6 @@ func TestOpenAIGatewayService_APIKeyPassthrough_RebuildsUpstreamErrors(t *testin
 			wantMessage:    "Upstream access denied",
 			wantRetryAfter: "17",
 		},
-		{
-			name:         "upstream unauthorized is reported as gateway failure",
-			statusCode:   http.StatusUnauthorized,
-			contentType:  "application/json",
-			responseBody: `{"error":{"message":"invalid secret-upstream.example token","type":"authentication_error","code":"invalid_api_key","param":"api_key"},"rate_limit":{"remaining":0}}`,
-			wantStatus:   http.StatusBadGateway,
-			wantMessage:  "Upstream authentication failed",
-		},
 		// 瞬时 5xx（500/502/503/504/520-524）对 API-key 账号已改走多账号
 		// failover（见 APIKeyPassthrough_Transient5xxTriggersFailover），此处
 		// 改用非瞬时 5xx 状态码，继续覆盖净化重建路径。
@@ -1780,6 +1793,7 @@ func TestOpenAIGatewayService_OpenAIPassthrough_RetryableStatusesTriggerFailover
 			}
 
 			account := newAccount(tc.accountType)
+			repo.accounts = []Account{*snapshotRequestCredentialAccount(account)}
 			start := time.Now()
 			_, err := svc.Forward(context.Background(), c, account, originalBody)
 			require.Error(t, err)
@@ -1816,6 +1830,7 @@ func TestOpenAIGatewayService_OpenAIPassthrough_RetryableStatusesTriggerFailover
 			require.Equal(t, tc.statusCode, arr[len(arr)-1].UpstreamStatusCode)
 
 			tc.assertRepo(t, repo, start)
+			require.Zero(t, repo.unguardedRateLimitCalls, "OpenAI cooldown writes require the captured credential owner")
 		})
 	}
 }
@@ -1876,7 +1891,7 @@ func TestOpenAIGatewayService_APIKeyPassthrough_Transient5xxTriggersFailover(t *
 			require.Equal(t, "rid-api-key-5xx", failoverErr.ResponseHeaders.Get("x-request-id"))
 			require.False(t, c.Writer.Written(), "failover must happen before downstream output is committed")
 			require.True(t, body.closed, "the failed upstream response body must be closed")
-			requireOpenAIAutoCacheIdentityPreservesBody(t, requestBody, upstream.lastBody, upstream.lastReq.Header)
+			requireNativeOpenAICacheOmissionPreservesBody(t, requestBody, upstream.lastBody, upstream.lastReq.Header)
 
 			value, ok := c.Get(OpsUpstreamErrorsKey)
 			require.True(t, ok)
@@ -2539,15 +2554,17 @@ func TestOpenAIGatewayService_APIKeyPassthrough_PreservesBodyAndUsesResponsesEnd
 	require.NotNil(t, result.ServiceTier)
 	require.Equal(t, "flex", *result.ServiceTier)
 	require.NotNil(t, upstream.lastReq)
-	requireOpenAIAutoCacheIdentityPreservesBody(t, originalBody, upstream.lastBody, upstream.lastReq.Header)
+	requireNativeOpenAICacheOmissionPreservesBody(t, originalBody, upstream.lastBody, upstream.lastReq.Header)
 	require.False(t, gjson.GetBytes(upstream.lastBody, "instructions").Exists())
 	require.Equal(t, "https://api.openai.com/v1/responses", upstream.lastReq.URL.String())
 	require.Equal(t, "Bearer sk-api-key", upstream.lastReq.Header.Get("Authorization"))
 	require.Equal(t, DefaultOpenAICodexUserAgent, upstream.lastReq.Header.Get("User-Agent"))
-	require.Empty(t, upstream.lastReq.Header.Get("originator"))
+	require.Equal(t, "codex_cli_rs", upstream.lastReq.Header.Get("originator"))
 	require.Equal(t, "remote_compaction_v2", upstream.lastReq.Header.Get("x-codex-beta-features"))
-	require.Equal(t, "window-passthrough", upstream.lastReq.Header.Get("X-Codex-Window-ID"))
-	require.Equal(t, "installation-passthrough", upstream.lastReq.Header.Get("X-Codex-Installation-ID"))
+	// Native API keys now have the same credential-owner isolation contract.
+	require.NotEmpty(t, upstream.lastReq.Header.Get("X-Codex-Window-ID"))
+	require.NotEqual(t, "window-passthrough", upstream.lastReq.Header.Get("X-Codex-Window-ID"))
+	require.Empty(t, upstream.lastReq.Header.Get("X-Codex-Installation-ID"))
 	require.Empty(t, upstream.lastReq.Header.Get("X-Test"))
 }
 

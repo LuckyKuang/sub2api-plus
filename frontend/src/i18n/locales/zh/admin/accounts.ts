@@ -288,6 +288,20 @@ export default {
         typesafe: 'TypeSafe / Jev',
       },
       cnProviders: {
+        startPlan: {
+          title: 'Start Plan',
+          available: '可用',
+          unavailable: '不可用',
+          pending: '待生效',
+          unknown: '未知',
+          modelsUnknown: '模型权限未知',
+          modelsEmpty: '未授权任何模型',
+          reauthorize: '请重新登录授权该账号',
+          effectiveAt: '生效时间：{time}',
+          expiresAt: '到期时间：{time}',
+          queryFailed: '无法刷新 Start Plan 权益',
+        },
+        unlimited: '不限量',
         accountMode: {
           title: '账号类型',
           payg: '按量付费',
@@ -325,9 +339,13 @@ export default {
           },
         },
         balance: '余额 --',
+        normalBalance: '充值余额',
+        bonusBalance: '赠送余额',
         window5h: '5h',
         windowWeekly: '7d',
         windowMonthly: '月',
+        windowMonthlyTotal: '月度总量',
+        windowMonthlyCode: '月度代码',
         probe: '查询',
         probeTooltip: '请求供应商额度端点，查询 5 小时 / 每周滚动窗口用量',
         balanceProbeTooltip: '请求供应商余额端点，查询账户余额',
@@ -1174,8 +1192,7 @@ export default {
       // OAuth flow
       oauth: {
         domestic: {
-          stepfunCallbackHint: '登录后请复制地址栏中的完整 http://127.0.0.1:53683/callback 地址（包含 state 和凭证），即使页面无法打开也可以复制。仅将它粘贴到本次登录表单中。',
-          stepfunDescription: 'Step Plan 浏览器登录后获得请求凭证。请粘贴登录后的完整本机回调地址。该凭证不自动刷新，失效后需要重新授权。',
+          stepfunDescription: 'Step Plan 通过浏览器登录并由服务器自动轮询。模型密钥与可选账户会话分别保存。',
           title: "{platform} OAuth 登录",
           description: "使用官方客户端授权登录，登录凭据仅保存在服务端。",
           region: "账号地区",

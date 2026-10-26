@@ -2228,6 +2228,7 @@ func TestOpenAIResponsesWebSocket_RechecksBillingBeforePassthroughFollowUpTurn(t
 		accountRepo, nil, nil, nil, nil, nil, nil, cfg, nil, nil,
 		service.NewBillingService(cfg, nil), rateLimitSvc, billingCacheSvc, nil,
 		&service.DeferredService{}, nil, nil, nil, nil, nil, nil, nil,
+		nil, // sessionRouteStore
 	)
 	concurrencyCache := &concurrencyCacheMock{
 		acquireUserSlotFn:    func(context.Context, int64, int, string) (bool, error) { return true, nil },
@@ -2341,6 +2342,23 @@ func (s *openAIWSFailoverHandlerAccountRepoStub) GetByID(ctx context.Context, id
 		}
 	}
 	return nil, nil
+}
+
+func (s *openAIWSFailoverHandlerAccountRepoStub) ApplyCredentialStateMutation(ctx context.Context, owner *service.Account, mutation service.CredentialStateMutation) (bool, error) {
+	if owner == nil || mutation.RateLimitUntil == nil {
+		return false, errors.New("WebSocket failover fixture requires an owner-bound cooldown")
+	}
+	current, err := s.GetByID(ctx, owner.ID)
+	if err != nil || current == nil {
+		return false, err
+	}
+	if current.Status != service.StatusActive || current.Status != owner.Status || service.CredentialStateGeneration(current) != service.CredentialStateGeneration(owner) {
+		return false, nil
+	}
+	if mutation.ExtendRateLimitOnly && current.RateLimitResetAt != nil && !mutation.RateLimitUntil.After(*current.RateLimitResetAt) {
+		return true, nil
+	}
+	return true, s.SetRateLimited(ctx, owner.ID, *mutation.RateLimitUntil)
 }
 
 func (s *openAIWSFailoverHandlerAccountRepoStub) SetRateLimited(ctx context.Context, id int64, resetAt time.Time) error {
@@ -2483,6 +2501,7 @@ func TestOpenAIResponses_APIKeyPassthroughPool5xxRetriesThenExhaustsMaxSwitches(
 		nil,
 		nil,
 		nil,
+		nil, // sessionRouteStore
 	)
 	h := NewOpenAIGatewayHandler(
 		gatewaySvc,
@@ -2584,6 +2603,7 @@ func TestOpenAIResponses_APIKeyPassthroughPoolAuthFailureRetriesThenSwitchesToHe
 				nil,
 				nil,
 				nil,
+				nil, // sessionRouteStore
 			)
 			h := NewOpenAIGatewayHandler(
 				gatewaySvc,
@@ -2666,6 +2686,7 @@ func TestOpenAIResponses_APIKeyPassthroughSSERateLimitUsesConfiguredPoolRetry(t 
 		nil,
 		nil,
 		nil,
+		nil, // sessionRouteStore
 	)
 	h := NewOpenAIGatewayHandler(
 		gatewaySvc,
@@ -2826,6 +2847,7 @@ func TestOpenAIResponsesWebSocket_FailoverOnUpstreamUsageLimitEvent(t *testing.T
 		nil,
 		nil,
 		nil,
+		nil, // sessionRouteStore
 	)
 
 	cache := &concurrencyCacheMock{
@@ -2894,9 +2916,33 @@ func TestOpenAIResponsesWebSocket_FailoverOnUpstreamUsageLimitEvent(t *testing.T
 		t.Fatal("等待第二个上游收到重放首帧超时")
 	}
 	require.Equal(t, []int64{int64(9902)}, accountRepo.rateLimitedIDs)
+	limited, err := accountRepo.GetByID(context.Background(), 9902)
+	require.NoError(t, err)
+	require.NotNil(t, limited.RateLimitResetAt)
+	require.True(t, limited.RateLimitResetAt.After(time.Now()), "upstream usage-limit failover must persist the transmitted owner's cooldown")
+	healthy, err := accountRepo.GetByID(context.Background(), 9903)
+	require.NoError(t, err)
+	require.Nil(t, healthy.RateLimitResetAt, "the failover destination must not inherit the first account's cooldown")
 }
 
 func TestOpenAIResponsesWebSocket_SkipsClientProfileIneligibleAccountAndUsesEligibleCandidate(t *testing.T) {
+	t.Run("cache-only", func(t *testing.T) {
+		testOpenAIWebSocketClientProfileFallback(t, nil)
+	})
+	t.Run("durable", func(t *testing.T) {
+		store := &handlerClientPolicyRouteStore{}
+		testOpenAIWebSocketClientProfileFallback(t, store)
+		store.mu.Lock()
+		defer store.mu.Unlock()
+		require.Equal(t, []int64{9905}, store.createdOwners, "rejected candidates must never become durable owners")
+		require.EqualValues(t, 9905, store.route.OwnerAccountID)
+		require.EqualValues(t, 1, store.route.Generation)
+		require.Zero(t, store.migrations)
+	})
+}
+
+func testOpenAIWebSocketClientProfileFallback(t *testing.T, sessionRouteStore service.OpenAISessionRouteStore) *handlerWSAffinityRecordingCache {
+	t.Helper()
 	gin.SetMode(gin.TestMode)
 
 	upstreamHitCh := make(chan []byte, 1)
@@ -2937,6 +2983,9 @@ func TestOpenAIResponsesWebSocket_SkipsClientProfileIneligibleAccountAndUsesElig
 				"chatgpt_account_id": "chatgpt-account",
 			},
 			Extra: map[string]any{
+				service.OpenAIOAuthSessionPolicyExtraKey: map[string]any{
+					"enabled": true, "allowed_group_ids": []int64{groupID, groupID + 1}, "scope_version": "ws-admission-scope",
+				},
 				"codex_cli_only": true,
 				"openai_oauth_responses_websockets_v2_enabled": true,
 				"openai_oauth_responses_websockets_v2_mode":    service.OpenAIWSIngressModePassthrough,
@@ -2978,8 +3027,10 @@ func TestOpenAIResponsesWebSocket_SkipsClientProfileIneligibleAccountAndUsesElig
 	cfg.Gateway.MaxAccountSwitches = 3
 
 	accountRepo := &openAIWSFailoverHandlerAccountRepoStub{accounts: accounts}
+	stickyCache := &handlerWSAffinityRecordingCache{values: make(map[string]int64)}
 	rateLimitSvc := service.NewRateLimitService(accountRepo, nil, cfg, nil, nil)
 	billingCacheSvc := service.NewBillingCacheService(nil, nil, nil, nil, nil, nil, cfg, nil)
+	t.Cleanup(billingCacheSvc.Stop)
 	gatewaySvc := service.NewOpenAIGatewayService(
 		accountRepo,
 		nil,
@@ -2987,7 +3038,7 @@ func TestOpenAIResponsesWebSocket_SkipsClientProfileIneligibleAccountAndUsesElig
 		nil,
 		nil,
 		nil,
-		nil,
+		stickyCache,
 		cfg,
 		nil,
 		nil,
@@ -3003,6 +3054,7 @@ func TestOpenAIResponsesWebSocket_SkipsClientProfileIneligibleAccountAndUsesElig
 		nil,
 		nil,
 		nil,
+		sessionRouteStore,
 	)
 
 	cache := &concurrencyCacheMock{
@@ -3045,7 +3097,7 @@ func TestOpenAIResponsesWebSocket_SkipsClientProfileIneligibleAccountAndUsesElig
 	clientConn, _, err := coderws.Dial(
 		dialCtx,
 		"ws"+strings.TrimPrefix(handlerServer.URL, "http")+"/openai/v1/responses",
-		&coderws.DialOptions{CompressionMode: coderws.CompressionContextTakeover},
+		&coderws.DialOptions{CompressionMode: coderws.CompressionContextTakeover, HTTPHeader: http.Header{"Session-Id": []string{"cache-only-profile-session"}}},
 	)
 	cancelDial()
 	require.NoError(t, err)
@@ -3069,6 +3121,7 @@ func TestOpenAIResponsesWebSocket_SkipsClientProfileIneligibleAccountAndUsesElig
 		t.Fatal("等待策略可用的第二个账号收到首帧超时")
 	}
 	require.Empty(t, accountRepo.rateLimitedIDs, "客户端策略拒绝不得标记账号为限流或健康失败")
+	return stickyCache
 }
 
 func TestOpenAIResponsesWebSocket_FirstOutputTimeoutWithoutDownstreamReusesClientForOneFailover(t *testing.T) {
@@ -3191,6 +3244,7 @@ func TestOpenAIResponsesWebSocket_FirstOutputTimeoutWithoutDownstreamReusesClien
 		accountRepo, nil, nil, nil, nil, nil, nil, cfg, nil, nil,
 		service.NewBillingService(cfg, nil), rateLimitSvc, billingCacheSvc,
 		nil, &service.DeferredService{}, nil, nil, nil, nil, nil, nil, nil,
+		nil, // sessionRouteStore
 	)
 	cache := &concurrencyCacheMock{
 		acquireUserSlotFn: func(context.Context, int64, int, string) (bool, error) { return true, nil },
@@ -3444,6 +3498,7 @@ func runOpenAIResponsesWebSocketUsageLogCase(t *testing.T, tc openAIResponsesWSU
 		nil,
 		nil,
 		nil, // userPlatformQuotaRepo
+		nil, // sessionRouteStore
 	)
 
 	cache := &concurrencyCacheMock{

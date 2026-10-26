@@ -116,7 +116,7 @@ func TestApplyResolvedOpenAIOutboundIdentity(t *testing.T) {
 		require.Equal(t, "0.144.1", headers.Get("Version"))
 	})
 
-	t.Run("API Key 请求不携带 OAuth identity", func(t *testing.T) {
+	t.Run("辅助用量接口仅声明 UA", func(t *testing.T) {
 		headers := http.Header{
 			"User-Agent": {"Mozilla/5.0"},
 			"Originator": {"client-controlled"},
@@ -127,7 +127,7 @@ func TestApplyResolvedOpenAIOutboundIdentity(t *testing.T) {
 		require.Empty(t, headers.Get("Version"))
 	})
 
-	t.Run("API Key compact 不因已有头启用 Codex 协议身份", func(t *testing.T) {
+	t.Run("辅助用量接口清除陈旧声明", func(t *testing.T) {
 		headers := http.Header{"Version": {"0.1.0"}, "Accept": {"application/json"}}
 		applyResolvedOpenAIOutboundIdentity(headers, identity, false)
 		require.Equal(t, testCodexCLIUserAgent, headers.Get("User-Agent"))
@@ -155,5 +155,6 @@ func TestOpenAIProtectedHeaderOverrides(t *testing.T) {
 func requireOpenAIAPIKeyProbeHeaders(t *testing.T, headers http.Header) {
 	t.Helper()
 	require.Equal(t, DefaultOpenAICodexUserAgent, headers.Get("User-Agent"))
-	require.Empty(t, headers.Get("Originator"))
+	require.Equal(t, "codex_cli_rs", headers.Get("Originator"))
+	require.Equal(t, "0.164.0", headers.Get("Version"))
 }

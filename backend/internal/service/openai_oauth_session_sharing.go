@@ -73,21 +73,29 @@ func (s *OpenAIGatewayService) resolveOpenAIUpstreamSessionID(c *gin.Context, ac
 	if account == nil || !account.IsOpenAIOAuthSessionSharingEnabled() {
 		return isolateOpenAISessionID(getAPIKeyIDFromContext(c), raw), nil
 	}
-	if !account.IsOpenAIOAuthSessionGroupAllowed(getAPIKeyGroupIDFromContext(c)) {
-		return "", ErrOpenAIOAuthSessionAccessDenied
+	if err := validateOpenAIOAuthSessionAccess(c, account); err != nil {
+		return "", err
 	}
-	policy, _, valid := account.OpenAIOAuthSessionPolicy()
-	if !valid || !policy.Enabled || account.OpenAIOAuthSessionScopeAccountID() <= 0 {
-		return "", ErrOpenAIOAuthSessionAccessDenied
-	}
+	policy, _, _ := account.OpenAIOAuthSessionPolicy()
 	userID := getAPIKeyUserIDFromContext(c)
-	if userID <= 0 {
-		return "", ErrOpenAIOAuthSessionAccessDenied
-	}
 	h := xxhash.New()
 	_, _ = fmt.Fprintf(h, "openai-oauth-session:v2:account:%d:scope:%s:user:%d:raw:", account.OpenAIOAuthSessionScopeAccountID(), policy.ScopeVersion, userID)
 	_, _ = h.WriteString(raw)
 	return fmt.Sprintf("%016x", h.Sum64()), nil
+}
+
+// Sharing is an authorization boundary even when a native request omits both
+// session and cache IDs. Absence of optional protocol state cannot bypass it.
+func validateOpenAIOAuthSessionAccess(c *gin.Context, account *Account) error {
+	if account == nil || !account.IsOpenAIOAuthSessionSharingEnabled() {
+		return nil
+	}
+	policy, _, valid := account.OpenAIOAuthSessionPolicy()
+	if !valid || !policy.Enabled || account.OpenAIOAuthSessionScopeAccountID() <= 0 ||
+		!account.IsOpenAIOAuthSessionGroupAllowed(getAPIKeyGroupIDFromContext(c)) || getAPIKeyUserIDFromContext(c) <= 0 {
+		return ErrOpenAIOAuthSessionAccessDenied
+	}
+	return nil
 }
 
 func (s *OpenAIGatewayService) openAIOAuthSharedSessionCacheKey(userID int64, sessionHash string) string {
@@ -95,7 +103,17 @@ func (s *OpenAIGatewayService) openAIOAuthSharedSessionCacheKey(userID int64, se
 	if userID <= 0 || normalized == "" {
 		return ""
 	}
-	return fmt.Sprintf("openai:oauth-share:v2:user:%d:%s", userID, normalized)
+	return fmt.Sprintf("openai:oauth-share:v3:user:%d:%s", userID, normalized)
+}
+
+func (s *OpenAIGatewayService) openAIOAuthSharedSessionAccount(ctx context.Context, accountID int64) (*Account, error) {
+	// Policy revocation must take effect even while an outbox event is waiting
+	// to refresh a scheduler snapshot. Never validate a scope proof using an
+	// older cached policy when a durable account repository is available.
+	if s.accountRepo != nil {
+		return s.accountRepo.GetByID(ctx, accountID)
+	}
+	return s.getSchedulableAccount(ctx, accountID)
 }
 
 func (s *OpenAIGatewayService) getOpenAIOAuthSharedSessionAccountID(ctx context.Context, sessionHash string) (int64, error) {
@@ -106,11 +124,28 @@ func (s *OpenAIGatewayService) getOpenAIOAuthSharedSessionAccountID(ctx context.
 	if userID <= 0 {
 		return 0, ErrOpenAIOAuthSessionAccessDenied
 	}
-	key := s.openAIOAuthSharedSessionCacheKey(userID, sessionHash)
+	digest := openAIOAuthSharedAffinityDigest(ctx, sessionHash)
+	key := s.openAIOAuthSharedSessionCacheKey(userID, digest)
 	if key == "" {
 		return 0, nil
 	}
-	return s.cache.GetSessionAccountID(ctx, openAIOAuthSharedSessionCacheGroupID, key)
+	accountID, err := s.cache.GetSessionAccountID(ctx, openAIOAuthSharedSessionCacheGroupID, key)
+	if err != nil || accountID <= 0 {
+		return 0, err
+	}
+	account, err := s.openAIOAuthSharedSessionAccount(ctx, accountID)
+	if err != nil || account == nil || !account.IsOpenAIOAuthSessionSharingEnabled() {
+		return 0, err
+	}
+	scopeKey := openAIOAuthSharedSessionScopeCacheKey(account, userID, digest)
+	if scopeKey == "" {
+		return 0, nil
+	}
+	provedID, err := s.cache.GetSessionAccountID(ctx, openAIOAuthSharedSessionCacheGroupID, scopeKey)
+	if err != nil || provedID != accountID {
+		return 0, err
+	}
+	return accountID, nil
 }
 
 func (s *OpenAIGatewayService) bindOpenAIOAuthSharedSession(
@@ -130,9 +165,19 @@ func (s *OpenAIGatewayService) bindOpenAIOAuthSharedSession(
 	if userID <= 0 {
 		return ErrOpenAIOAuthSessionAccessDenied
 	}
-	key := s.openAIOAuthSharedSessionCacheKey(userID, sessionHash)
+	digest := openAIOAuthSharedAffinityDigest(ctx, sessionHash)
+	key := s.openAIOAuthSharedSessionCacheKey(userID, digest)
 	if key == "" {
 		return nil
+	}
+	scopeKey := openAIOAuthSharedSessionScopeCacheKey(account, userID, digest)
+	if scopeKey == "" {
+		return ErrOpenAIOAuthSessionAccessDenied
+	}
+	// Publish the lookup only after its current-policy proof exists. A changed
+	// policy can never revive an old binding by finding only the user index.
+	if err := s.cache.SetSessionAccountID(ctx, openAIOAuthSharedSessionCacheGroupID, scopeKey, account.ID, ttl); err != nil {
+		return err
 	}
 	return s.cache.SetSessionAccountID(ctx, openAIOAuthSharedSessionCacheGroupID, key, account.ID, ttl)
 }
@@ -145,9 +190,25 @@ func (s *OpenAIGatewayService) refreshOpenAIOAuthSharedSession(ctx context.Conte
 	if userID <= 0 {
 		return ErrOpenAIOAuthSessionAccessDenied
 	}
-	key := s.openAIOAuthSharedSessionCacheKey(userID, sessionHash)
+	digest := openAIOAuthSharedAffinityDigest(ctx, sessionHash)
+	key := s.openAIOAuthSharedSessionCacheKey(userID, digest)
 	if key == "" {
 		return nil
+	}
+	accountID, err := s.getOpenAIOAuthSharedSessionAccountID(ctx, sessionHash)
+	if err != nil || accountID <= 0 {
+		return err
+	}
+	account, err := s.openAIOAuthSharedSessionAccount(ctx, accountID)
+	if err != nil {
+		return err
+	}
+	scopeKey := openAIOAuthSharedSessionScopeCacheKey(account, userID, digest)
+	if scopeKey == "" {
+		return nil
+	}
+	if err := s.cache.RefreshSessionTTL(ctx, openAIOAuthSharedSessionCacheGroupID, scopeKey, ttl); err != nil {
+		return err
 	}
 	return s.cache.RefreshSessionTTL(ctx, openAIOAuthSharedSessionCacheGroupID, key, ttl)
 }
@@ -160,7 +221,7 @@ func (s *OpenAIGatewayService) deleteOpenAIOAuthSharedSession(ctx context.Contex
 	if userID <= 0 {
 		return ErrOpenAIOAuthSessionAccessDenied
 	}
-	key := s.openAIOAuthSharedSessionCacheKey(userID, sessionHash)
+	key := s.openAIOAuthSharedSessionCacheKey(userID, openAIOAuthSharedAffinityDigest(ctx, sessionHash))
 	if key == "" {
 		return nil
 	}

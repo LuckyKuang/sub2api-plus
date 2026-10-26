@@ -277,6 +277,9 @@ func attachSelectionProfitGate(ctx context.Context, sel *AccountSelectionResult)
 	if sel == nil {
 		return nil
 	}
+	if openAISessionRouteDisabled(ctx) {
+		sel.sessionRouteDisabled = true
+	}
 	if gate, ok := ctx.Value(openAIProfitControlGateCtxKey{}).(*openAIProfitControlGate); ok && gate != nil {
 		sel.profitGate = gate
 	}
@@ -288,6 +291,12 @@ func attachSelectionProfitGate(ctx context.Context, sel *AccountSelectionResult)
 // （ProfitControlVetoLatest / GatewayProfitControlVetoLatest）与准入后粘性
 // 绑定，否则这两步会因为看不到调度栈内安装的门而退化为空操作。
 func ContextWithSelectionProfitGate(ctx context.Context, sel *AccountSelectionResult) context.Context {
+	if sel != nil && sel.sessionRouteDisabled {
+		ctx = WithoutOpenAISessionRoute(ctx)
+	}
+	if sel != nil && sel.routeAttempt != nil {
+		ctx = context.WithValue(ctx, openAISessionRouteAttemptKey{}, sel.routeAttempt)
+	}
 	if sel == nil || sel.profitGate == nil {
 		return ctx
 	}
@@ -342,6 +351,9 @@ func (s *OpenAIGatewayService) ProfitControlVetoLatest(ctx context.Context, sele
 // only after the terminal post-slot check, so an account rejected after a rate
 // refresh cannot become the new sticky target.
 func (s *OpenAIGatewayService) bindOpenAIStickySessionDuringSelection(ctx context.Context, groupID *int64, sessionHash string, accountID int64) error {
+	if openAISessionRouteSelectionDeferred(ctx) {
+		return nil
+	}
 	if gatewayProfitControlGateActive(ctx) || preserveOpenAIGuardianParentBinding(ctx, sessionHash) {
 		return nil
 	}
@@ -355,6 +367,9 @@ func (s *OpenAIGatewayService) bindOpenAIStickySessionDuringSelection(ctx contex
 // remains sticky and becomes eligible again automatically after its rate
 // recovers.
 func (s *OpenAIGatewayService) BindStickySessionAfterProfitAdmission(ctx context.Context, groupID *int64, sessionHash string, accountID int64) error {
+	if a := openAIRouteAttempt(ctx); a != nil {
+		return a.admit(ctx, accountID)
+	}
 	if sessionHash == "" || accountID <= 0 {
 		return nil
 	}
@@ -367,7 +382,7 @@ func (s *OpenAIGatewayService) BindStickySessionAfterProfitAdmission(ctx context
 	existingAccountID, err := s.getStickySessionAccountID(ctx, groupID, sessionHash)
 	if err != nil && !errors.Is(err, ErrStickySessionNotFound) {
 		slog.Warn("profit_control_sticky_binding_read_failed", "group_id", derefGroupID(groupID), "account_id", accountID, "error", err)
-		return nil
+		return err
 	}
 	if existingAccountID > 0 && existingAccountID != accountID {
 		return nil

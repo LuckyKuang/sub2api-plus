@@ -1,0 +1,106 @@
+/* Shared console surfaces. Layout, sizing, focus rings and portal
+   z-index belong to the component. */
+:where(.surface-card, .surface-panel, .surface-control, .select-trigger, .btn) { position: relative; }
+
+.surface-card { background-color: var(--surface-fill); }
+.surface-control { background-color: var(--surface-field); color: var(--surface-text); }
+:where(.surface-control) { border-radius: var(--surface-radius-control); }
+/* Surface roles keep their shape even when older callers carry rounded utilities. */
+:root :is(.surface-card, .settings-tabs-shell) { border-radius: var(--surface-radius); }
+:root .surface-panel { border-radius: var(--surface-radius-panel); }
+:root :is(.card, .glass, .glass-card, .card-glass, .glass-surface, .shell-surface,
+  .surface-card, .surface-panel, .stat-card, .settings-tabs-shell,
+  .subscription-plan-card, .modal-content, .dialog-container, .dropdown) {
+  border: 1px solid var(--surface-edge);
+}
+/* Page chrome has no frame of its own. Roles describe the layout owner, so
+   business cards inside grids, record outlines and controls keep their edges. */
+:root .workspace-shell,
+:root .app-main :is(.workspace-tabs, .settings-tabs-shell, .pagination-card),
+:root .app-main .workspace-fixed:is(.card, .glass-surface, .surface-card),
+:root .app-main :is(.workspace-page, .workspace-body, .workspace-stack, .workspace-scroll) > :is(.card, .glass-surface, .surface-card),
+:root .app-main .layout-section-fixed,
+:root .app-main .layout-section-fixed > :is(.card, .glass-surface, .surface-card) {
+  border: 0 !important;
+  box-shadow: none !important;
+  --tw-ring-shadow: 0 0 #0000 !important;
+  /* A transition from a previous shadow must not leave a temporary outline. */
+  transition-property: background-color, color !important;
+}
+/* A borderless page panel cannot retain a full-width header/footer seam. */
+:root .app-main .workspace-shell > :is(.card-header, header, [class~="border-b"], [class~="border-t"]):not(.card, .glass-surface, .surface-card, button, input, select, textarea),
+:root .app-main .workspace-fixed:is(.card, .glass-surface, .surface-card) > :is(.card-header, header, [class~="border-b"], [class~="border-t"]):not(.card, .glass-surface, .surface-card, button, input, select, textarea),
+:root .app-main :is(.workspace-page, .workspace-body, .workspace-stack, .workspace-scroll) > :is(.card, .glass-surface, .surface-card) > :is(.card-header, header, [class~="border-b"], [class~="border-t"]):not(.card, .glass-surface, .surface-card, button, input, select, textarea) {
+  border-top: 0 !important;
+  border-bottom: 0 !important;
+}
+@layer utilities {
+  .surface-inset { background-color: var(--surface-soft); }
+  .surface-field { background-color: var(--surface-field); }
+  .surface-muted { color: var(--surface-muted); }
+  .surface-hover { background-color: var(--surface-hover); }
+}
+
+:is(.surface-card, .surface-inset, .surface-control, .surface-panel) {
+  background-image: linear-gradient(135deg, var(--surface-glint), transparent 65%);
+  border-color: var(--surface-edge);
+}
+.card, .glass-surface, .shell-surface, .stat-card, .settings-tabs-shell, .input, .select-trigger, .btn-secondary {
+  background-image: linear-gradient(135deg, var(--surface-glint), transparent 65%);
+}
+.surface-control {
+  box-shadow: inset 0 1px 0 var(--surface-glint), 0 2px 7px rgb(0 0 0 / calc(.05 * var(--console-card-alpha, 1)));
+}
+.surface-control:where(:hover:not(:disabled):not([aria-disabled=true])) {
+  background-color: var(--surface-hover);
+}
+
+.select-dropdown-portal .select-option:where(:hover, .select-option-focused),
+.date-picker-preset:hover { background-color: var(--surface-hover); }
+.surface-panel {
+  background-color: var(--surface-panel);
+  color: var(--surface-text);
+  box-shadow: 0 14px 42px -12px rgb(0 0 0 / calc(.25 * var(--console-card-alpha, 1))), inset 0 1px 0 var(--surface-glint);
+}
+.surface-overlay {
+  background: var(--surface-overlay);
+}
+
+.modal-overlay, .dialog-overlay {
+  background: var(--surface-overlay);
+}
+.modal-content, .dialog-container {
+  z-index: 0;
+  background-color: var(--surface-panel);
+  background-image: linear-gradient(135deg, var(--surface-glint), transparent 65%);
+}
+.modal-header, .modal-footer, .dialog-header, .dialog-footer {
+  background-color: var(--surface-soft);
+  border-color: var(--surface-edge);
+}
+.modal-header, .dialog-header, .card-header {
+  border-top-left-radius: inherit;
+  border-top-right-radius: inherit;
+}
+.modal-footer, .dialog-footer, .card-footer,
+.modal-body:last-child, .dialog-body:last-child, .card-body:last-child {
+  border-bottom-left-radius: inherit;
+  border-bottom-right-radius: inherit;
+}
+.modal-body, .dialog-body { background-color: transparent; }
+
+.surface-decoration {
+  box-shadow: inset 0 1px 0 var(--surface-glint);
+}
+
+/* Explicit opaque surfaces: QR quiet zones and other machine-readable media. */
+:root .surface-opaque { background-color: white; background-image: none; }
+
+/* The matrix's scrollport owns the fill; no second layer over its header. */
+.matrix-header {
+  background-color: transparent;
+  background-image: none;
+}
+.matrix-header::before {
+  content: none;
+}

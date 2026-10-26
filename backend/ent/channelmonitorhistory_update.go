@@ -99,6 +99,53 @@ func (_u *ChannelMonitorHistoryUpdate) ClearFirstByteMs() *ChannelMonitorHistory
 	return _u
 }
 
+// SetFirstTextMs sets the "first_text_ms" field.
+func (_u *ChannelMonitorHistoryUpdate) SetFirstTextMs(v int) *ChannelMonitorHistoryUpdate {
+	_u.mutation.ResetFirstTextMs()
+	_u.mutation.SetFirstTextMs(v)
+	return _u
+}
+
+// SetNillableFirstTextMs sets the "first_text_ms" field if the given value is not nil.
+func (_u *ChannelMonitorHistoryUpdate) SetNillableFirstTextMs(v *int) *ChannelMonitorHistoryUpdate {
+	if v != nil {
+		_u.SetFirstTextMs(*v)
+	}
+	return _u
+}
+
+// AddFirstTextMs adds value to the "first_text_ms" field.
+func (_u *ChannelMonitorHistoryUpdate) AddFirstTextMs(v int) *ChannelMonitorHistoryUpdate {
+	_u.mutation.AddFirstTextMs(v)
+	return _u
+}
+
+// ClearFirstTextMs clears the value of the "first_text_ms" field.
+func (_u *ChannelMonitorHistoryUpdate) ClearFirstTextMs() *ChannelMonitorHistoryUpdate {
+	_u.mutation.ClearFirstTextMs()
+	return _u
+}
+
+// SetStreamProbe sets the "stream_probe" field.
+func (_u *ChannelMonitorHistoryUpdate) SetStreamProbe(v bool) *ChannelMonitorHistoryUpdate {
+	_u.mutation.SetStreamProbe(v)
+	return _u
+}
+
+// SetNillableStreamProbe sets the "stream_probe" field if the given value is not nil.
+func (_u *ChannelMonitorHistoryUpdate) SetNillableStreamProbe(v *bool) *ChannelMonitorHistoryUpdate {
+	if v != nil {
+		_u.SetStreamProbe(*v)
+	}
+	return _u
+}
+
+// ClearStreamProbe clears the value of the "stream_probe" field.
+func (_u *ChannelMonitorHistoryUpdate) ClearStreamProbe() *ChannelMonitorHistoryUpdate {
+	_u.mutation.ClearStreamProbe()
+	return _u
+}
+
 // SetLatencyMs sets the "latency_ms" field.
 func (_u *ChannelMonitorHistoryUpdate) SetLatencyMs(v int) *ChannelMonitorHistoryUpdate {
 	_u.mutation.ResetLatencyMs()
@@ -259,6 +306,11 @@ func (_u *ChannelMonitorHistoryUpdate) check() error {
 			return &ValidationError{Name: "first_byte_ms", err: fmt.Errorf(`ent: validator failed for field "ChannelMonitorHistory.first_byte_ms": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.FirstTextMs(); ok {
+		if err := channelmonitorhistory.FirstTextMsValidator(v); err != nil {
+			return &ValidationError{Name: "first_text_ms", err: fmt.Errorf(`ent: validator failed for field "ChannelMonitorHistory.first_text_ms": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Message(); ok {
 		if err := channelmonitorhistory.MessageValidator(v); err != nil {
 			return &ValidationError{Name: "message", err: fmt.Errorf(`ent: validator failed for field "ChannelMonitorHistory.message": %w`, err)}
@@ -296,6 +348,21 @@ func (_u *ChannelMonitorHistoryUpdate) sqlSave(ctx context.Context) (_node int, 
 	}
 	if _u.mutation.FirstByteMsCleared() {
 		_spec.ClearField(channelmonitorhistory.FieldFirstByteMs, field.TypeInt)
+	}
+	if value, ok := _u.mutation.FirstTextMs(); ok {
+		_spec.SetField(channelmonitorhistory.FieldFirstTextMs, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedFirstTextMs(); ok {
+		_spec.AddField(channelmonitorhistory.FieldFirstTextMs, field.TypeInt, value)
+	}
+	if _u.mutation.FirstTextMsCleared() {
+		_spec.ClearField(channelmonitorhistory.FieldFirstTextMs, field.TypeInt)
+	}
+	if value, ok := _u.mutation.StreamProbe(); ok {
+		_spec.SetField(channelmonitorhistory.FieldStreamProbe, field.TypeBool, value)
+	}
+	if _u.mutation.StreamProbeCleared() {
+		_spec.ClearField(channelmonitorhistory.FieldStreamProbe, field.TypeBool)
 	}
 	if value, ok := _u.mutation.LatencyMs(); ok {
 		_spec.SetField(channelmonitorhistory.FieldLatencyMs, field.TypeInt, value)
@@ -445,6 +512,53 @@ func (_u *ChannelMonitorHistoryUpdateOne) AddFirstByteMs(v int) *ChannelMonitorH
 // ClearFirstByteMs clears the value of the "first_byte_ms" field.
 func (_u *ChannelMonitorHistoryUpdateOne) ClearFirstByteMs() *ChannelMonitorHistoryUpdateOne {
 	_u.mutation.ClearFirstByteMs()
+	return _u
+}
+
+// SetFirstTextMs sets the "first_text_ms" field.
+func (_u *ChannelMonitorHistoryUpdateOne) SetFirstTextMs(v int) *ChannelMonitorHistoryUpdateOne {
+	_u.mutation.ResetFirstTextMs()
+	_u.mutation.SetFirstTextMs(v)
+	return _u
+}
+
+// SetNillableFirstTextMs sets the "first_text_ms" field if the given value is not nil.
+func (_u *ChannelMonitorHistoryUpdateOne) SetNillableFirstTextMs(v *int) *ChannelMonitorHistoryUpdateOne {
+	if v != nil {
+		_u.SetFirstTextMs(*v)
+	}
+	return _u
+}
+
+// AddFirstTextMs adds value to the "first_text_ms" field.
+func (_u *ChannelMonitorHistoryUpdateOne) AddFirstTextMs(v int) *ChannelMonitorHistoryUpdateOne {
+	_u.mutation.AddFirstTextMs(v)
+	return _u
+}
+
+// ClearFirstTextMs clears the value of the "first_text_ms" field.
+func (_u *ChannelMonitorHistoryUpdateOne) ClearFirstTextMs() *ChannelMonitorHistoryUpdateOne {
+	_u.mutation.ClearFirstTextMs()
+	return _u
+}
+
+// SetStreamProbe sets the "stream_probe" field.
+func (_u *ChannelMonitorHistoryUpdateOne) SetStreamProbe(v bool) *ChannelMonitorHistoryUpdateOne {
+	_u.mutation.SetStreamProbe(v)
+	return _u
+}
+
+// SetNillableStreamProbe sets the "stream_probe" field if the given value is not nil.
+func (_u *ChannelMonitorHistoryUpdateOne) SetNillableStreamProbe(v *bool) *ChannelMonitorHistoryUpdateOne {
+	if v != nil {
+		_u.SetStreamProbe(*v)
+	}
+	return _u
+}
+
+// ClearStreamProbe clears the value of the "stream_probe" field.
+func (_u *ChannelMonitorHistoryUpdateOne) ClearStreamProbe() *ChannelMonitorHistoryUpdateOne {
+	_u.mutation.ClearStreamProbe()
 	return _u
 }
 
@@ -621,6 +735,11 @@ func (_u *ChannelMonitorHistoryUpdateOne) check() error {
 			return &ValidationError{Name: "first_byte_ms", err: fmt.Errorf(`ent: validator failed for field "ChannelMonitorHistory.first_byte_ms": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.FirstTextMs(); ok {
+		if err := channelmonitorhistory.FirstTextMsValidator(v); err != nil {
+			return &ValidationError{Name: "first_text_ms", err: fmt.Errorf(`ent: validator failed for field "ChannelMonitorHistory.first_text_ms": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Message(); ok {
 		if err := channelmonitorhistory.MessageValidator(v); err != nil {
 			return &ValidationError{Name: "message", err: fmt.Errorf(`ent: validator failed for field "ChannelMonitorHistory.message": %w`, err)}
@@ -675,6 +794,21 @@ func (_u *ChannelMonitorHistoryUpdateOne) sqlSave(ctx context.Context) (_node *C
 	}
 	if _u.mutation.FirstByteMsCleared() {
 		_spec.ClearField(channelmonitorhistory.FieldFirstByteMs, field.TypeInt)
+	}
+	if value, ok := _u.mutation.FirstTextMs(); ok {
+		_spec.SetField(channelmonitorhistory.FieldFirstTextMs, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedFirstTextMs(); ok {
+		_spec.AddField(channelmonitorhistory.FieldFirstTextMs, field.TypeInt, value)
+	}
+	if _u.mutation.FirstTextMsCleared() {
+		_spec.ClearField(channelmonitorhistory.FieldFirstTextMs, field.TypeInt)
+	}
+	if value, ok := _u.mutation.StreamProbe(); ok {
+		_spec.SetField(channelmonitorhistory.FieldStreamProbe, field.TypeBool, value)
+	}
+	if _u.mutation.StreamProbeCleared() {
+		_spec.ClearField(channelmonitorhistory.FieldStreamProbe, field.TypeBool)
 	}
 	if value, ok := _u.mutation.LatencyMs(); ok {
 		_spec.SetField(channelmonitorhistory.FieldLatencyMs, field.TypeInt, value)

@@ -7,13 +7,13 @@
       <div class="flex flex-wrap items-center justify-end gap-2">
         <div
           v-if="showSourceToggle"
-          class="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 dark:border-dark-700 dark:bg-dark-800"
+          class="inline-flex rounded-lg border border-gray-200 surface-inset p-0.5 dark:border-dark-700"
         >
           <button
             type="button"
-            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors"
+            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors surface-control"
             :class="source === 'inbound'
-              ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-700 dark:text-white'
+              ? 'surface-field text-gray-900 shadow-sm dark:surface-field dark:text-white'
               : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
             @click="emit('update:source', 'inbound')"
           >
@@ -21,9 +21,9 @@
           </button>
           <button
             type="button"
-            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors"
+            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors surface-control"
             :class="source === 'upstream'
-              ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-700 dark:text-white'
+              ? 'surface-field text-gray-900 shadow-sm dark:surface-field dark:text-white'
               : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
             @click="emit('update:source', 'upstream')"
           >
@@ -31,9 +31,9 @@
           </button>
           <button
             type="button"
-            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors"
+            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors surface-control"
             :class="source === 'path'
-              ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-700 dark:text-white'
+              ? 'surface-field text-gray-900 shadow-sm dark:surface-field dark:text-white'
               : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
             @click="emit('update:source', 'path')"
           >
@@ -43,13 +43,13 @@
 
         <div
           v-if="showMetricToggle"
-          class="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 dark:border-dark-700 dark:bg-dark-800"
+          class="inline-flex rounded-lg border border-gray-200 surface-inset p-0.5 dark:border-dark-700"
         >
           <button
             type="button"
-            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors"
+            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors surface-control"
             :class="metric === 'tokens'
-              ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-700 dark:text-white'
+              ? 'surface-field text-gray-900 shadow-sm dark:surface-field dark:text-white'
               : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
             @click="emit('update:metric', 'tokens')"
           >
@@ -57,9 +57,9 @@
           </button>
           <button
             type="button"
-            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors"
+            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors surface-control"
             :class="metric === 'actual_cost'
-              ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-700 dark:text-white'
+              ? 'surface-field text-gray-900 shadow-sm dark:surface-field dark:text-white'
               : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
             @click="emit('update:metric', 'actual_cost')"
           >
@@ -75,10 +75,10 @@
       <div class="h-48 w-48 shrink-0">
         <Doughnut :data="chartData" :options="doughnutOptions" />
       </div>
-      <div class="max-h-48 w-full min-w-0 flex-1 overflow-auto">
-        <table class="w-full text-xs">
+      <div class="record-table-scroll max-h-48 w-full min-w-0 flex-1 overflow-auto">
+        <table class="record-table record-table-compact w-full text-xs">
           <thead>
-            <tr class="text-gray-500 dark:text-gray-400">
+            <tr class="surface-muted">
               <th class="pb-2 text-left">{{ t('usage.endpoint') }}</th>
               <th class="pb-2 text-right">{{ t('admin.dashboard.requests') }}</th>
               <th class="pb-2 text-right">{{ t('admin.dashboard.tokens') }}</th>
@@ -86,52 +86,52 @@
               <th class="pb-2 text-right">{{ t('admin.dashboard.standard') }}</th>
             </tr>
           </thead>
-          <tbody>
-            <template v-for="item in displayEndpointStats" :key="item.endpoint">
-              <tr
-                class="border-t border-gray-100 transition-colors dark:border-dark-700"
-                :class="enableBreakdown ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-dark-700/40' : ''"
-                @click="enableBreakdown && toggleBreakdown(item.endpoint)"
-              >
-                <td class="max-w-[180px] truncate py-1.5 font-medium" :class="enableBreakdown ? 'text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300' : 'text-gray-900 dark:text-white'" :title="item.endpoint">
-                  <span class="inline-flex items-center gap-1">
-                    <svg v-if="enableBreakdown && expandedKey === item.endpoint" class="h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-                    <svg v-else-if="enableBreakdown" class="h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-                    {{ item.endpoint }}
-                  </span>
-                </td>
-                <td class="py-1.5 text-right text-gray-600 dark:text-gray-400">
-                  {{ formatNumber(item.requests) }}
-                </td>
-                <td class="py-1.5 text-right text-gray-600 dark:text-gray-400">
-                  {{ formatTokens(item.total_tokens) }} <span v-if="endpointTokenShare(item.total_tokens)" class="text-gray-400">({{ endpointTokenShare(item.total_tokens) }})</span>
-                </td>
-                <td class="py-1.5 text-right text-green-600 dark:text-green-400">
-                  ${{ formatCost(item.actual_cost) }}
-                </td>
-                <td class="py-1.5 text-right text-gray-400 dark:text-gray-500">
-                  ${{ formatCost(item.cost) }}
-                </td>
-              </tr>
-              <UserBreakdownRows
-                v-if="expandedKey === item.endpoint"
-                :items="breakdownItems"
-                :loading="breakdownLoading"
-                :show-account-cost="false"
-                :total-tokens="item.total_tokens"
-              />
-            </template>
+          <tbody v-for="item in displayEndpointStats" :key="item.endpoint" class="record-group">
+            <tr
+              class="transition-colors"
+              :class="enableBreakdown ? 'cursor-pointer hover:surface-hover dark:hover:surface-hover' : ''"
+              @click="enableBreakdown && toggleBreakdown(item.endpoint)"
+            >
+              <td :data-record-edges="expandedKey === item.endpoint ? 't l tl' : 't b l tl bl'" class="max-w-[180px] truncate py-1.5 font-medium" :class="enableBreakdown ? 'text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300' : 'text-gray-900 dark:text-white'" :title="item.endpoint">
+                <span class="inline-flex items-center gap-1">
+                  <svg v-if="enableBreakdown && expandedKey === item.endpoint" class="h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                  <svg v-else-if="enableBreakdown" class="h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                  {{ item.endpoint }}
+                </span>
+              </td>
+              <td :data-record-edges="expandedKey === item.endpoint ? 't' : 't b'" class="py-1.5 text-right surface-muted">
+                {{ formatNumber(item.requests) }}
+              </td>
+              <td :data-record-edges="expandedKey === item.endpoint ? 't' : 't b'" class="py-1.5 text-right surface-muted">
+                {{ formatTokens(item.total_tokens) }} <span v-if="endpointTokenShare(item.total_tokens)" class="surface-muted">({{ endpointTokenShare(item.total_tokens) }})</span>
+              </td>
+              <td :data-record-edges="expandedKey === item.endpoint ? 't' : 't b'" class="py-1.5 text-right text-green-600 dark:text-green-400">
+                ${{ formatCost(item.actual_cost) }}
+              </td>
+              <td :data-record-edges="expandedKey === item.endpoint ? 't r tr' : 't b r tr br'" class="py-1.5 text-right surface-muted">
+                ${{ formatCost(item.cost) }}
+              </td>
+            </tr>
+            <UserBreakdownRows
+              v-if="expandedKey === item.endpoint"
+              :items="breakdownItems"
+              :loading="breakdownLoading"
+              :show-account-cost="false"
+              :total-tokens="item.total_tokens"
+            />
           </tbody>
         </table>
       </div>
     </div>
-    <div v-else class="flex h-48 items-center justify-center text-sm text-gray-500 dark:text-gray-400">
+    <div v-else class="flex h-48 items-center justify-center text-sm surface-muted">
       {{ t('admin.dashboard.noDataAvailable') }}
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { useDocumentDarkMode } from '@/composables/useDocumentDarkMode'
+import { chartTooltipStyle } from '@/utils/chartTooltip'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js'
@@ -145,6 +145,7 @@ import { formatTokenShare } from '@/utils/tokenShare'
 ChartJS.register(ArcElement, Tooltip, Legend)
 
 const { t } = useI18n()
+const isDarkMode = useDocumentDarkMode()
 
 type DistributionMetric = 'tokens' | 'actual_cost'
 type EndpointSource = 'inbound' | 'upstream' | 'path'
@@ -270,6 +271,7 @@ const doughnutOptions = computed(() => ({
       display: false
     },
     tooltip: {
+      ...chartTooltipStyle(isDarkMode.value),
       callbacks: {
         label: (context: any) => {
           const value = context.raw as number

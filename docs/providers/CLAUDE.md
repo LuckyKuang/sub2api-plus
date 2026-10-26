@@ -11,6 +11,13 @@ reject temperature or forced tool use supported by that destination. The
 gateway forces upstream streaming after this single conversion and retains
 the original client model for downstream protocol behavior and accounting.
 
+`POST /v1/messages/count_tokens` audits the original Messages document after
+authentication and basic validation, before client classification, billing
+eligibility, account selection or forwarding. OAuth and API-key accounts use
+the same Content Moderation and Prompt Audit gates. Unknown valid blocks pass
+through, and recognized sibling content remains auditable under the shared
+[content coverage contract](../SECURITY_AUDIT_CONTENT_COVERAGE.md).
+
 ## Interrupted compatibility streams
 
 Anthropic-backed Chat Completions and Responses streams stop writing after

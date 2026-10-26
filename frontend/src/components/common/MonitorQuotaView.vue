@@ -2,24 +2,29 @@
   <div v-if="snapshot" class="space-y-1" data-testid="monitor-quota-view">
     <!-- 套餐等级徽章（如智谱 plan level / Claude 订阅档） -->
     <div v-if="snapshot.plan_level" class="flex flex-wrap items-center gap-1.5">
-      <span class="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600 dark:bg-dark-600 dark:text-gray-300">
+      <span class="rounded surface-inset px-1.5 py-0.5 text-[10px] font-medium surface-muted">
         {{ snapshot.plan_level }}
       </span>
     </div>
 
     <!-- 用量窗口条形图（复用账号页 UsageProgressBar：同阈值配色、同倒计时格式） -->
     <div v-if="snapshot.success && tierRows.length" class="space-y-1">
-      <UsageProgressBar
-        v-for="row in tierRows"
-        :key="row.key"
-        data-testid="monitor-quota-tier"
-        :label="row.label"
-        :title="row.title"
-        label-width="auto"
-        :color="row.color"
-        :utilization="row.tier.used_percent"
-        :resets-at="row.tier.reset_at ?? null"
-      />
+      <template v-for="row in tierRows" :key="row.key">
+        <div v-if="row.tier.unlimited" data-testid="monitor-quota-unlimited" class="flex gap-2 text-xs surface-muted">
+          <span>{{ row.label }}</span>
+          <span>{{ t('admin.accounts.cnProviders.unlimited') }}</span>
+        </div>
+        <UsageProgressBar
+          v-else
+          data-testid="monitor-quota-tier"
+          :label="row.label"
+          :title="row.title"
+          label-width="auto"
+          :color="row.color"
+          :utilization="row.tier.used_percent"
+          :resets-at="row.tier.reset_at ?? null"
+        />
+      </template>
     </div>
 
     <!-- 余额（国产 payg；支持多币种） -->
@@ -27,7 +32,7 @@
       <span
         v-for="b in balanceRows"
         :key="b.currency"
-        :class="['font-medium', b.balance <= 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-600 dark:text-gray-300']"
+        :class="['font-medium', b.balance <= 0 ? 'text-red-600 dark:text-red-400' : 'surface-muted']"
       >
         {{ b.balance.toFixed(2) }} {{ b.currency }}
       </span>

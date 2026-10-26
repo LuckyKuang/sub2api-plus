@@ -41,6 +41,12 @@ func GroupModelAllowlist() gin.HandlerFunc {
 			c.Next()
 			return
 		}
+		// Files uploads have no model field. Preserve their bounded streaming
+		// parser instead of buffering the binary multipart body for extraction.
+		if c.Request.Method == http.MethodPost && (c.FullPath() == "/v1/files" || c.FullPath() == "/v1/files/upload") {
+			c.Next()
+			return
+		}
 
 		if isResponsesWebSocketRoute(c) {
 			// Responses WS 长连接由 ResponsesWebSocket 校验首帧与每个 response.create。

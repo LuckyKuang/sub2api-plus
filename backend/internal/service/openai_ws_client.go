@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"io"
 	"net/http"
 	"net/url"
@@ -13,6 +12,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	openaiwsv2 "github.com/LuckyKuang/sub2api-plus/internal/service/openai_ws_v2"
 	coderws "github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
@@ -142,6 +143,11 @@ func (d *coderOpenAIWSClientDialer) Dial(
 	}
 
 	opts.HTTPClient = brandidentity.WrapClient(opts.HTTPClient)
+	if identity, ok := outboundidentity.FromContext(ctx); ok && identity.Preset == "grok" {
+		// The WS header builder has no destination. Render its trusted Grok
+		// snapshot on every actual handshake attempt, including redirects.
+		opts.HTTPClient.Transport = &openAIWSGrokIdentityTransport{base: opts.HTTPClient.Transport, identity: identity}
+	}
 	conn, resp, err := coderws.Dial(ctx, targetURL, opts)
 	if err != nil {
 		status := 0
@@ -166,6 +172,17 @@ func (d *coderOpenAIWSClientDialer) Dial(
 	}
 	wrapped.conn = conn
 	return wrapped, 0, respHeaders, nil
+}
+
+type openAIWSGrokIdentityTransport struct {
+	base     http.RoundTripper
+	identity outboundidentity.Identity
+}
+
+func (t *openAIWSGrokIdentityTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	request := req.Clone(req.Context())
+	t.identity.ForRequest(request).Apply(request.Header)
+	return t.base.RoundTrip(request)
 }
 
 func (d *coderOpenAIWSClientDialer) proxyHTTPClient(proxy string) (*http.Client, error) {

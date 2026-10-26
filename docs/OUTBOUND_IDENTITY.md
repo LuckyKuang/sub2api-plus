@@ -35,6 +35,23 @@ dependency upgrade.
 
 ## Default client environment and privacy
 
+Native OpenAI API-key records own separate installation and execution
+projections. Installation/device identity uses the credential-owning account
+record and remains stable when its API key is replaced. Execution session,
+thread, turn, parent and window mappings also include an irreversible digest of
+the actual API key, so replacement on the same record cannot inherit the old
+key's execution state. Unverified organization/project values never select
+either namespace. Different records remain isolated, and credential shadows
+use their actual credential-owning parent. HTTP and WS share these projections and align
+`x-client-request-id` with the final `thread-id`. This does not enable OAuth
+fingerprint convergence modes for API keys. Ordinary logical cache keys use
+the same tenant derivation across OAuth and API keys, independently of the
+credential-owner metadata. Existing API-key explicit keys may see one cache
+miss when upgrading to this shared derivation; subsequent owner changes keep
+the key stable. Explicit OAuth sharing retains its authorized scope.
+The Codex source-priority matrix below is unchanged. Its manually reviewed
+compiled version is `0.164.0`; the client family and environment stay fixed.
+
 All built-in OS declarations describe one fixed **Ubuntu 24.04 x86_64** client,
 independent of the gateway/container host. Device name is `ubuntu`. The baseline
 is Ubuntu Noble GA `linux 6.8.0-31.31` (amd64): `os.release()` is
@@ -46,7 +63,7 @@ SDK versions do not update this baseline.
 
 | Preset | Exact default OS/architecture declarations |
 | --- | --- |
-| Codex | Existing `codex_cli_rs/0.158.0 (Ubuntu 24.04; x86_64) xterm-256color`, unchanged |
+| Codex | `codex_cli_rs/0.164.0 (Ubuntu 24.04; x86_64) xterm-256color` |
 | Claude | `X-Stainless-OS: Linux`, `X-Stainless-Arch: x64` |
 | Gemini | `GeminiCLI/0.1.5 (Linux; x64)` |
 | Grok | `grok-shell/1.0.45 (linux; x86_64)` |
@@ -109,9 +126,9 @@ combining their UA values would violate the official managed/BYOK behavior.
 | Codex | OpenAI OAuth/setup-token, OpenAI-compatible API keys, TypeSafe API keys | Existing Codex UA/Originator/Version rules, including endpoint-specific omissions |
 | Claude Code | Anthropic OAuth/setup-token/API key, Claude on Bedrock or Vertex | `claude-cli` UA, `X-App: cli`, project-owned `X-Stainless-*` SDK/runtime declarations |
 | Gemini CLI | Gemini OAuth/API key, Gemini on Vertex | `GeminiCLI` UA |
-| Grok | Grok OAuth/API key | `grok-shell` UA, `x-grok-client-identifier`, `x-grok-client-version`, `x-grok-client-mode: headless` |
+| Grok | Grok OAuth/API key | `grok-shell` UA, `x-grok-client-identifier`, `x-grok-client-version`, `x-grok-client-mode: headless` only on CLI proxy/control destinations |
 | Antigravity | Antigravity OAuth/upstream | `antigravity` UA; the two privacy endpoints also declare the pinned `X-Goog-Api-Client` SDK |
-| DeepSeek / DSH Desktop | DeepSeek OAuth/API-key accounts | `deepseek-harness/<version> (+https://github.com/deepseek-ai/deepseek-harness)` UA; identifier and version are encoded in the UA, so no `Originator`/`Version` headers |
+| DeepSeek / Harness | DeepSeek OAuth/API-key accounts | `deepseek-harness/<version> (+https://github.com/deepseek-ai/deepseek-harness)` UA; identifier and version are encoded in the UA, so no `Originator`/`Version` headers |
 | MiniMax Code | MiniMax OAuth accounts | `MiniMaxAgent` plus pinned Anthropic SDK declarations; no product version or `Originator`/`Version` headers |
 | MiniMax Code API Key | MiniMax API-key accounts | `Anthropic/JS 0.91.1` plus matching pinned SDK declarations; version is mandatory |
 | Kimi Code | Kimi / Moonshot OAuth/API-key accounts | `kimi-code-cli/<version>` UA, `X-Msh-Platform: kimi_code_cli`, `X-Msh-Version: <version>` and four device declarations (two runtime, two pinned); the official client declares no `Originator` and no standalone `Version` header |
@@ -134,22 +151,117 @@ headers; rotation starts a new cache entry. Generic headers and incoming client
 declarations cannot replace the trusted identity. No new native client family or
 versionless exception is introduced.
 
-Only these thirteen keys permit another client family, through a global default
+Kimi/Zhipu/MiniMax quota probes and monitor caches separate credential/proxy
+generations. One-time Kimi 401 recovery preserves the trusted identity snapshot
+while recording the refreshed credential owner that actually answered the query.
+Quota windows persist with atomic exact-owner/proxy comparison and scheduler
+invalidation; threshold/reset decisions reject old or unbound generations. The
+stored generation is a digest of ownership inputs, not another outbound identity
+declaration. See [quota ownership and legacy data](providers/DOMESTIC_OAUTH.md).
+
+Credential quarantine, cooldowns, OAuth rotation and quota/billing persistence
+carry the acquired full owner snapshot into their conditional repository ports.
+A configured proxy requires its observed protocol, host, port, username,
+password and status; an ID without its hydrated proxy cannot authorize a write.
+The mutation locks the matching live proxy row with `FOR SHARE` until the account
+update and scheduler outbox commit. Editing that same proxy row therefore either
+follows the mutation or causes its stale comparison to fail, including when the
+mutation waits on a separate account update. Runtime generation digests include
+proxy status so repairing status alone also isolates previous local blocks.
+
+Every proxy edit or deletion commits scheduler invalidation for all undeleted
+accounts bound to that proxy in the same transaction, including accounts without
+quota observations and accounts paused by an administrator. Outbox replay
+refreshes both full account payloads and scheduler metadata. Edits to egress
+timezone, country and fallback settings also refresh the embedded proxy; only
+probe-identity changes clear the existing quota bindings. Expiration without
+fallback refreshes the bound accounts' proxy status as well. Soft deletion keeps
+the configured proxy ID, so a missing proxy cannot silently become direct egress.
+
+An account's saved proxy binding is mandatory on every physical send, including
+inference, HTTP/SSE/WS, retries, OAuth recovery, discovery, connection tests,
+usage, quota and balance queries. Missing, mismatched or invalid loaded proxy
+configuration stops the operation before sending. A proxy timeout, refused
+connection, authentication failure or other transport failure returns the
+failure; it never retries through the machine's direct network, `NO_PROXY`, an
+environment proxy or a different proxy on the same account. An acquired attempt
+retains its complete credential/identity/proxy snapshot. A new operation uses
+the committed binding, and recovery revalidates it before replay. Explicit
+administrator unbinding and the separately saved expiry policy can change the
+binding; a network error cannot invoke those mutations. Tests must count actual
+destination connections as well as configured-proxy requests so a failed TLS
+handshake cannot conceal unauthorized local egress.
+
+The same binding applies to credential refresh/revocation, PAT validation,
+AgentIdentity task registration, manual ChatGPT privacy changes, Grok observed
+models/compression discovery, and detached adaptive protocol-catalog refreshes.
+These operations acquire the complete owner before reading a token, route or
+warm cache; a second proxy lookup cannot pair old credentials with a new route.
+Account metadata produced by a response uses the captured-owner conditional
+write, with no unconditional fallback. URL-only asynchronous image results
+also carry their final inference owner's route into CDN downloads; object
+storage uploads retain their independently configured administrative route.
+
+Kimi and DeepSeek PAYG balance probes freeze the complete credential owner before
+HTTP preparation and isolate concurrent probes by credential/proxy generation.
+Balance snapshots and threshold decisions use that same owner in conditional
+state writes; a late balance response cannot change a replaced grant's extra or
+scheduling. Balance metadata, pause and recovery additionally compare the exact
+cooldown deadline and reason observed before the probe, including an absent
+deadline, so a late healthy response cannot clear a newer reactive balance marker
+or replace a newer failure from the same grant. Missing conditional storage
+does not fall back to row-ID writes. Owner evidence remains internal to the
+result and is never included in its admin JSON response.
+
+Provider Files upload/delete use the same trusted credential-owner identity
+resolver and strict proxy as inference. The selected account is frozen before
+multipart forwarding; no inbound SDK/auth header or generic override selects its
+client family, credential or route. Mapping publication compares that complete
+account/proxy snapshot under database locks. Local references resolve after the
+common security audit and constrain every selection/retry to their persistent
+owner. Send preparation rechecks the final acquired owner; it cannot attach a
+different owner's credential to an already rewritten remote file ID. Background
+cleanup dispatches only known remote IDs whose recorded request snapshot still
+matches, with no direct fallback or substitute account. File operations do not
+create inference-token billing records.
+
+DeepSeek first-batch Files use the reviewed Harness Anthropic family: default
+`/anthropic/v1/files`, `anthropic-beta: files-api-2025-04-14`, raw account
+`X-Dsh-Auth-Token` or API-key `X-Api-Key`. OAuth and API keys retain `deepseek`
+identity precedence and the complete versioned Harness triple. The default
+endpoint follows `config.ts` → `adapter.ts` → `messages-api.ts`/`files-api.ts`,
+as linked in [the baseline index](OFFICIAL_AGENT_BASELINES.md). MiniMax first-batch
+Files support only global API-key Chat `video_understanding` at
+`https://api.minimax.io/v1/files/upload`, Bearer API-key auth and the existing
+trusted `minimax_apikey` triple. No new identity preset or versionless exception
+is introduced. The managed agent's separate upload gateway does not authorize
+direct OAuth, CN or BYOK Anthropic Files. Limits, scope epochs, unsupported
+bridges/lifecycle operations and native-reference compatibility are defined in
+[FILES.md](providers/FILES.md).
+
+MiniMax OAuth quota resolves the personal workspace group and calls the fixed
+regional account/quota origins with the same grant, proxy and trusted `minimax`
+snapshot. Its recognized five-hour/weekly windows feed existing scheduling
+thresholds and the native OAuth finite-exhaustion gate until reset (including
+when early-pause thresholds are disabled); unknown query failures do not
+quarantine a grant. Credits remain independent of token-plan windows.
+
+Only these eleven keys permit another client family, through a global default
 or account selection:
 
 | Platform | Configurable account types | Automatic preset |
 | --- | --- | --- |
-| OpenAI-compatible | `apikey`, `upstream` | `codex` |
+| OpenAI compatible upstream | `upstream` | `codex` |
 | Anthropic | `apikey`, `upstream` | `claude` |
 | Gemini | `apikey`, `upstream` | `gemini` |
-| Grok | `apikey`, `upstream` | `grok` |
+| Grok | `upstream` | `grok` |
 | Antigravity | `upstream` | `antigravity` |
 | TypeSafe / Jev | `apikey` | `codex` |
 | OpenCode Go | `apikey` | `codex` |
 | Cline | `apikey` | `codex` |
 | Command Code | `apikey` | `codex` |
 
-Anthropic/Gemini/Grok API-key entries also serve compatible endpoints, so they
+Anthropic/Gemini API-key entries also serve compatible endpoints, so they
 retain advanced overrides without guessing endpoint type from its hostname.
 System Settings presents these mappings in a collapsed advanced section.
 The API's `account_policies` declares the native preset, allowed presets and
@@ -173,18 +285,24 @@ Built-in declarations reuse existing pins in `internal/pkg/claude`,
 `internal/pkg/deepseek`, `internal/pkg/minimax`, `internal/pkg/kimi`,
 `internal/pkg/zcode` and
 `internal/service/openai_codex_identity.go`. This
-feature does not upgrade those pins. The settings page displays the exact
+baseline upgrades follow [the official agent source index](OFFICIAL_AGENT_BASELINES.md). The settings page displays the exact
 current effective identity.
 
 The exact compiled DeepSeek identity is
-`deepseek-harness/0.2.0-rc.2 (+https://github.com/deepseek-ai/deepseek-harness)`,
-with identifier `deepseek-harness` and client version `0.2.0-rc.2`. The
+`deepseek-harness/0.2.1-rc.3 (+https://github.com/deepseek-ai/deepseek-harness)`,
+with identifier `deepseek-harness` and client version `0.2.1-rc.3`. The
 parenthesized product comment belongs to the same User-Agent value the
 published harness renders from its own package manifest; it is not a second
 declaration. Only the User-Agent reaches the wire, so the preset adds no
 `Originator`, `Version` or harness request-state header; per-request
 `x-deepseek-harness-user-id`, `-session-id` and `-compact` values stay owned by
-the protocol layer. `SUB2API_DEEPSEEK_HARNESS_VERSION` may select a supported
+the protocol layer. The official inbound Harness session header is a routing
+signal within DeepSeek groups. Its outbound session is `session-<UUIDv4>`, randomly allocated and persisted for
+the authenticated tenant, logical conversation and credential owner. Subsequent
+turns and same-owner retries retain it; failover or reauthorization changes the
+owner namespace.
+Caller session values never become trusted client declarations.
+`SUB2API_DEEPSEEK_HARNESS_VERSION` may select a supported
 version (`0.2.0-rc.2` remains the accepted floor) while the product token, the
 `(+url)` comment and the identifier stay fixed. DeepSeek API-key accounts
 resolve this preset by default through `nativeOutboundPreset`, so the
@@ -192,15 +310,15 @@ resolve this preset by default through `nativeOutboundPreset`, so the
 and valid same-family account overrides remain available; a foreign persisted
 candidate falls through atomically to the native profile/default.
 
-The exact compiled ZCode identity is `ZCode/3.14.3`, with identifier `ZCode`
-and client version `3.14.3`. The desktop host's declaration block comes from
+The exact compiled ZCode identity is `ZCode/3.16.2`, with identifier `ZCode`
+and client version `3.16.2`. The desktop host's declaration block comes from
 `apps/zcode-cli/packages/bootstrap/src/model-config.ts` and
 `runtime-platform-headers.ts`:
 
 | Declaration | Default | Class |
 | --- | --- | --- |
-| `User-Agent` | `ZCode/3.14.3` | Derived |
-| `X-ZCode-App-Version` | `3.14.3`, always paired with UA | Derived |
+| `User-Agent` | `ZCode/3.16.2` | Derived |
+| `X-ZCode-App-Version` | `3.16.2`, always paired with UA | Derived |
 | `HTTP-Referer` | `https://zcode.z.ai` | Pinned |
 | `X-Title` | `Z Code@electron` | Pinned |
 | `X-Release-Channel` | `production` | Pinned |
@@ -221,17 +339,42 @@ both upstream version lines remain accepted. The bootstrap declarations above
 are supplemented by the pinned per-protocol SDK wire profiles below. Product
 version changes preserve those profiles.
 
-Account-link, business-key derivation and off-peak ticket clients derive their
+Account-link, project-token issuance and off-peak ticket clients derive their
 control-plane headers from the same snapshot, including standalone clients.
 Following `packages/services/src/providers/sourceHeaders.ts`, control calls omit
 `X-ZCode-Agent` and inference SDK suffixes; their `X-Os-Version` is the pinned
 Ubuntu Node `os.version()` equivalent, not inference's `os.release()`. It is a read-only baseline declaration carried
-in `control_headers` and serialized with login sessions. An absent telemetry
-`X-Device-Mid` is omitted, never fabricated. Start, poll, code exchange and key
-derivation retain one identity even across Redis instances/settings changes;
+in `control_headers` and serialized with login sessions. An absent configured telemetry
+`X-Device-Mid` resolves to a persisted random UUIDv4 before the first request.
+The control header and corresponding body declaration share that device ID;
+inference requests retain their own protocol declarations. Start, poll, code exchange and token
+issuance retain one identity even across Redis instances/settings changes;
 account creation pins its product and configurable runtime declarations. Deferred off-peak settlement retains the acquiring credential
 owner's identity alongside its authentication, even after settings change. Gateway transports reapply the trusted declarations at send
 time; stale SDK/inbound/generic overrides cannot rewrite them. Both API-key and OAuth accounts retain the ZCode family.
+
+Linked Start entitlement uses an independent
+`GET https://zcode.z.ai/api/v1/zcode-plan/billing/balance?app_version=<trusted-version>`.
+The query version, UA and `X-ZCode-App-Version` come from one trusted ZCode
+snapshot; authentication is the linked `zcode_jwt_token` as Bearer. It uses
+control-plane declarations, disables redirects and follows the same frozen
+owner's strict proxy. Inference URL/auth overrides cannot change its target or
+replace its JWT with a manual API key, project PAT or another account's token.
+Start observations remain separate from personal/team project model discovery
+and off-peak quota/tickets. The reviewed
+`services/src/model-provider/{zaiStartPlanBilling,codingPlanProviderAvailability}.ts`
+and `shared/src/{zcodeEndpoint,official-glm-model-id}.ts` paths are linked at
+[the fixed baseline](OFFICIAL_AGENT_BASELINES.md); business-login failure needs
+reauthorization rather than project-PAT renewal.
+
+Linked personal/team model discovery uses the fixed estate's coding `/models`
+endpoint and the final owner-scoped PAT resolver. Linked inference, probes and
+discovery disable redirects before credentials are attached. Every explicit 401
+invalidates only its attempted PAT, including final/unreplayable attempts; a
+transient concurrent refresh cannot return material invalidated by that 401.
+Linked team model and ticket requests derive organization/project declarations
+from that PAT's resolved scope; personal plans omit team headers. Generic header
+override eligibility cannot remove or replace these protocol-owned declarations.
 
 MiniMax has two distinct defaults:
 
@@ -256,15 +399,36 @@ can switch families. Valid account parameter overrides retain precedence.
 Messages requests for both native presets carry protocol-owned
 `X-Mavis-Session-Id` (gateway-generated), `X-Mavis-Agent-Id: main` (the official
 default agent) and `X-Mavis-Timezone-Offset` (selected timezone UTC offset in seconds). A
-request scope retains these across retries; failover resolves the new owner.
+request scope retains these across retries. The inbound MiniMax session header
+is a routing signal within MiniMax groups. Its outbound value is `mvs_<32 lowercase UUIDv4 hex digits>`, randomly allocated
+and persisted for the authenticated tenant, conversation and credential owner.
+Failover or reauthorization resolves a different owner namespace.
 They are not configurable identity declarations. Official OAuth uses fetch
 without a product UA. The gateway deliberately keeps its trusted `MiniMaxAgent`
 UA on authorization/refresh, without the inference SDK block, because every
 provider-bound call requires a trusted client declaration. This intentional
 policy difference is displayed under OAuth/account-service headers.
 
-The exact compiled Kimi Code identity is `kimi-code-cli/2.1.1`, with identifier
-`kimi-code-cli`, client version `2.1.1` and platform declaration
+The official
+[`matrix-account-client.ts`](https://github.com/MiniMax-AI/minimax-code/blob/da22f11c55d4748155d7162c1030414228a00565/packages/tui/src/account/matrix-account-client.ts)
+uses `MiniMaxCode` for Matrix identity/workspace/membership requests, including
+`/v1/api/user/info`. The gateway renders this exact operation-specific profile
+without the inference SDK block. Token-plan remains uses the trusted managed
+profile because the official fetch has no explicit product UA; this is an
+explicit identity-policy extension, not a selectable client family. OAuth quota selects the personal workspace's
+`op_group_id` for `X-Group-Id`; its fixed quota origins are
+`https://www.minimaxi.com` (China) and `https://platform.minimax.io` (global).
+Identity/account lookup uses the corresponding `https://agent.minimaxi.com` or
+`https://agent.minimax.io` origin. Matrix query declarations retain the official
+`app_id=3001`, `biz_id=3`, `version_code=22201` (a Matrix application code,
+independent of the versionless product UA), and the pinned Linux fingerprint.
+Timezone comes from the same trusted account snapshot. Attribution is calculated
+over the validated URL and actual body before dispatch; send-time identity
+rendering preserves it. Generic headers cannot select the workspace,
+change these destinations, supply authentication or overwrite identity.
+
+The exact compiled Kimi Code identity is `kimi-code-cli/2.3.1`, with identifier
+`kimi-code-cli`, client version `2.3.1` and platform declaration
 `kimi_code_cli`. The official client renders one product token with dashes and
 one platform token with underscores; the two are not interchangeable. Its engine
 attaches the complete block — the User-Agent plus `X-Msh-Platform`,
@@ -305,31 +469,30 @@ rendered by this preset nor blocked from account header overrides. The
 identity-header allowlist is extended by the six declarations above; an inbound
 caller or a generic header override can never select one.
 
-### Domestic-provider source evidence and source priority
+### Official-agent source evidence and source priority
 
-The local client snapshots inspected for this implementation are:
+All seven platforms and both credential types are owned by their corresponding
+[official agent](OFFICIAL_AGENT_BASELINES.md). That index records public GitHub
+URLs, reviewed commits/versions and code entrypoints. DeepSeek follows
+**deepseek-harness** directly. OAuth (`x-dsh-auth-token`) and API Key
+(`x-api-key`) share its Messages adapter and attribution. Kimi shares its
+first-party host declarations. MiniMax retains its official managed/BYOK wire
+difference. Grok OAuth and API Key are both native grok-build families; only
+Grok `upstream` accounts can select a compatible family.
 
-| Client | Commit | Declaration source |
-| --- | --- | --- |
-| dsh-desktop | `1030515b4358b39633c80d5857cab6114b9e3ba8` | Vendored `0.2.0-rc.2` `dsh-llm/lib/types/attribution.js`, `dsh-llm-deepseek`, `dsh-llm-deepseek-account`, `dsh-llm-deepseek-api-key` |
-| kimi-code | `21406fb4c805cc8c715e6d1f16ad3fb5f25f4fe3` | `packages/oauth/src/identity.ts`, `packages/agent-core-v2/src/llm-adapter/provider/provider-definition.ts` |
-| minimax-code | `564e9166d81f87b0b767b005e4779d4697b512be` | `packages/local-runtime-v2/src/service/model-system/resolution/{model-resolver-helpers,local-model-resolver,model-resolver-byok}.ts`, `third_party/pi-mono/packages/ai/src/providers/anthropic.ts`, `pnpm-lock.yaml` |
-| ZCode | `29628c9acdb81b703bbd4080c207a0e7ce5e276e` | `apps/zcode-cli/packages/bootstrap/src/model-config.ts`, `runtime-platform-headers.ts`, `packages/shared/src/zcodeEndpoint.ts`, `packages/services/src/providers/sourceHeaders.ts`, adapter `model-execution.ts` / `runner-options.ts`, `pnpm-lock.yaml` |
-
-DSH Desktop delegates inference to its vendored Harness adapter, so its shell
-package version is not the UA version. Both account (`x-dsh-auth-token`) and API
-key (`x-api-key`) providers share that adapter's attribution. Kimi uses the same
-host declarations for its first-party OAuth and API-key calls. MiniMax's managed
-client declares `MiniMaxAgent`; `MiniMaxCode` in its OpenCode-Go adapter and
-`MiniMax-Code` in its GitHub downloader identify other destinations and are not
-MiniMax inference presets. Session IDs, authentication and per-request metadata
-remain owned by the protocol.
+The 2026-10-25 protocol review also inspected the same current official source
+revisions for native OAuth control operations, Step-Code Passport sessions and
+ZCode Project Access Token authentication. The reviewed revisions, selected
+agent versions and any explicitly versionless inference families are recorded
+in the baseline index. A protocol review never changes identity defaults or
+SDK pins implicitly; selected updates require their own source and wire evidence.
+Session IDs, authentication and per-request metadata remain owned by the protocol.
 
 | Operation / candidate | Resolution |
 | --- | --- |
 | OAuth or API-key credential owner | Valid account candidate → global preset/type default → valid environment / compiled default |
 | Empty or invalid candidate, including invalid companion/runtime headers | Fall through atomically to the next tier |
-| Native client family | Domestic OAuth/API Key and cloud accounts retain their native family; only the thirteen compatible keys above can select another family |
+| Native client family | Domestic OAuth/API Key and cloud accounts retain their native family; only the eleven compatible keys above can select another family |
 | Pre-account native authorization | Global native preset → valid environment / compiled default; ignore inherited owners and API-key mappings |
 | Retry or nested same-owner request | Reuse the selected snapshot, including all runtime values |
 | Failover to another credential owner | Resolve that owner's candidate and current defaults |
@@ -352,6 +515,23 @@ during version updates. See the [official endpoint contract](providers/GROK.md#e
 The exact compiled Grok sampler identity is `grok-shell/1.0.45 (linux; x86_64)`, with
 identifier `grok-shell`, client version `1.0.45`, and CLI/control mode `headless`. Official public API
 requests omit the CLI mode declaration.
+The mode is rendered only for the exact native proxy/control hosts
+`cli-chat-proxy.grok.com`, `auth.x.ai` and `accounts.x.ai`. Custom suppliers,
+public/regional API hosts and cross-host redirects omit it while retaining the
+same selected User-Agent, identifier and version. Rendering for a destination
+never mutates the owner's snapshot. Token exchange and refresh freeze the
+snapshot once per operation and use a dedicated Grok control transport pool to
+render every permitted HTTP attempt, including explicitly overridden token
+destinations. Token redirects retain the initial endpoint's scheme, host and
+port and the standard ten-hop bound; a redirect cannot delegate trust to
+another origin or downgrade HTTPS before the grant is sent. Same-origin
+redirects retain the frozen snapshot. Other providers and signed transports
+retain their preparation and signing order.
+Compatible Responses WebSocket handshakes use a dedicated Grok-only transport
+to render the same owner snapshot for every destination and redirect. Delayed
+pool prewarming retains the selected snapshot after the request context ends;
+it does not resolve a newer account or global identity. Other WebSocket presets
+retain their prepared headers, including signed User-Agent declarations.
 OS and architecture use the fixed Ubuntu baseline, in the official Linux/x86_64
 spellings, independently of Go's runtime platform.
 `XAI_GROK_CLI_VERSION` may select a supported version while retaining that
@@ -495,14 +675,35 @@ blank/null values explicitly clear it and omitted values are preserved.
 
 Codex continues to use its established source chain: valid credential-owner
 `credentials.user_agent` → valid `openai_codex_user_agent` → compiled default.
+Both write validation and runtime resolution check each raw candidate before
+trimming ordinary surrounding spaces. Leading/trailing CR/LF and other invalid
+header bytes reject management writes; persisted invalid candidates fall through
+atomically to the next source. The global cache retains the raw value so a
+cached read cannot repair an invalid candidate into a higher-priority identity.
 The settings cache retains an absent global candidate as empty, including on
 read failure. The shared resolver supplies the compiled identity and reports
 `compiled_default`; only an explicitly configured valid global UA reports
 `global`, even when that configured fingerprint equals the default.
-Its existing version selection and automatic synchronization remain in place.
+Codex version selection is explicit administrator override → compiled release. Automatic
+release fetching and persisted synchronization results are retired; migration 290
+removes their settings. OpenAI API-key accounts retain the native Codex family,
+including stale stored foreign candidates; upstream supplier accounts retain
+their explicit compatible-family mapping.
 The existing Codex account editor is retained. The new global `profiles` map
 cannot replace Codex configuration. See the exact default and source matrix in
 [Codex client profiles](protocols/CODEX_CLIENT_PROFILES.md).
+
+The plugin account directory resolves each bearer export in an independent
+credential scope; caller forwarding evidence cannot supply its owner. After
+token acquisition or refresh, the exported token, ChatGPT/FedRAMP headers,
+Codex identity triple and proxy all use the acquired immutable account snapshot.
+The Codex account/global/default precedence above applies to this export, with
+the same owner's fallback settings retained across acquisition. The acquired
+owner must still satisfy the plugin's capability scope and supported account
+type. Missing proxy details or ambiguous acquisition evidence prevent credential
+export. AgentIdentity accounts remain readable in directory metadata but have
+no bearer export; resolving one returns no identity and performs no task
+registration or credential write.
 
 Generic `header_overrides` cannot select or modify a client identity. Saves reject
 managed identity names with `INVALID_HEADER_OVERRIDE` (HTTP 400), including empty
@@ -539,7 +740,7 @@ administrator re-saves it as `antigravity/hub/<version> …` or clears it.
 ```json
 {
   "profiles": { "claude": { "preset": "claude", "version": "2.9.1" } },
-  "defaults": { "gemini:service_account": "gemini", "openai:apikey": "codex" },
+  "defaults": { "gemini:apikey": "gemini", "openai:upstream": "codex" },
   "runtime": { "kimi": { "X-Msh-Device-Name": "kimi-gateway-1" } }
 }
 ```
@@ -590,12 +791,23 @@ The OpenAI **HTTP passthrough** switch changes HTTP forwarding behavior only.
 Both states retain gateway-owned authentication and the same identity source
 chain, with required protocol handling, safety filtering, audit, billing and
 concurrency controls. It does not select a WebSocket mode. Native Codex OAuth /
-ChatGPT protocol requests emit the coherent UA, Originator and Version. Native
-Codex Platform API-key requests emit UA and omit Originator and Version, including
-`responses/compact`; old overrides or inbound Version headers cannot enable
-those declarations. Explicit compatible presets render their own header mapping.
+ChatGPT and native Codex Platform API-key provider requests emit the coherent
+UA, Originator and Version, including `responses/compact`, models discovery and
+HTTP/WS probes. This matches official Codex `1b6e0d8145` default client headers
+and the built-in OpenAI provider, independently of credential type. Inbound
+thread originators and generic overrides cannot replace any of the triple. Explicit compatible presets render their own header mapping.
 The native Codex finalizer removes foreign SDK identity headers as well as stale
 or duplicate core declarations before rendering the selected identity.
+
+Codex Responses, compact and WS handshakes also advertise the official
+`remote_compaction_v2` capability for OAuth, setup-token and API-key credentials.
+The capability uses the same trusted account snapshot as the client identity;
+other declared feature tokens remain intact, and v2 is appended only if absent.
+Compatible suppliers using a non-Codex preset do not receive session-level
+synthesis, while an explicitly native v2 compaction request still declares its
+required capability. This does not add the header to direct search, discovery,
+OAuth credential operations or usage requests. See the
+[Codex protocol boundary](protocols/CODEX_CLIENT_PROFILES.md#codex-source-compatibility-boundaries).
 
 The request scope retains each credential owner's first selected identity, even
 when a handler re-enters forwarding for a retry. This includes the choice to use
@@ -604,6 +816,27 @@ request between Codex and another preset. Failover uses the other credential
 owner's snapshot; a fresh request observes new settings. OAuth exchange/refresh
 and its account/subscription enrich requests retain one identity as well.
 Authorization-code exchange and device-code start/poll omit identity headers.
+
+Their configured proxy binding is validated before any login request. Missing
+or mismatched proxy rows cannot become direct egress. Account-owned token
+refresh and revocation retain the hydrated credential owner's proxy snapshot
+and reject an unavailable or invalid bound route before provider IO.
+Browser and device sessions retain their initial proxy ID and URL; a callback
+may acknowledge the same ID but cannot re-resolve an edited row or choose a
+different binding. A different route requires a new login.
+
+WHAM usage, reset-credit details and credit consumption validate and capture
+the credential owner's proxy before token lookup or refresh. Shadow usage uses
+the parent's captured binding; Agent Identity has the same routing requirement.
+A missing or malformed binding cannot trigger a mutable proxy lookup, direct
+request or credential refresh. Explicitly unbound owners ignore stale hydrated
+proxy edges. These checks do not enable credit resets through shadow accounts.
+Usage, reset-credit details, consumption and their retries also retain the same
+captured authentication mode, account ID and selected identity. Token/cache
+lookups cannot pair a replacement login's credential with that earlier call's
+headers or route. Agent task recovery permits a newer task for the same owner;
+it rejects a relink before registering or replaying with another owner.
+
 Refresh and revoke send User-Agent and Originator only. The chatgpt.com
 backend-api auxiliary surface (login enrich `/backend-api/wham/accounts/check`,
 Plus-only subscription enrich, the settings PATCH behind `set-privacy`, WHAM
@@ -653,11 +886,22 @@ backend-client header surface.
 is the global setting `codex_residency` (`off` default, `us` sends the value
 `us`). Account credentials, inbound headers, and generic header overrides
 cannot select it. When the setting is `us`, Codex-protocol inference HTTP/WS,
-refresh, revoke, and chatgpt.com backend-api auxiliary calls send the header.
+Codex models discovery (OAuth and API Key using the Codex preset), refresh,
+revoke, and chatgpt.com backend-api auxiliary calls send the header.
 Authorization-code exchange and device-code start/poll do not. A configured
 Codex User-Agent may also carry the official trailing ` ({suffix})` group.
-That group is preserved through pairing and version synchronization and is
+That group is preserved through pairing and manual version updates and is
 never generated by the gateway.
+
+Codex source compatibility fixes preserve the source matrix and exact compiled
+triple above. Guardian role context, non-root session/cache separation, Lite
+transport metadata and request encoding cannot select or overwrite identity.
+OAuth HTTP Responses compression runs after JSON adaptation at the transport
+boundary; it excludes signed Agent Identity requests and preserves the selected
+headers. Non-root sessions retain independent tenant/credential-scoped seeds;
+this does not remove isolation or enable an inbound identity override. See
+[Codex compatibility boundaries](protocols/CODEX_CLIENT_PROFILES.md#codex-source-compatibility-boundaries)
+for supported contexts and explicit differences from the official client.
 
 Pre-account Antigravity code exchange / refresh-token validation and Gemini
 code exchange start an independent native OAuth scope before the first provider
@@ -709,13 +953,13 @@ nil-account Codex cache:
 | Credential owner / path | Source and snapshot lifetime |
 | --- | --- |
 | Channel-monitor endpoint API key | `<provider>:apikey` type default, configured global preset, then existing environment/compiled fallback; one snapshot for the origin HEAD and all concurrent model POSTs in one check |
-| Prompt Audit endpoint token | `openai:apikey` type default and its global/default chain; one snapshot per endpoint credential across an evaluation/job's chunks and failover returns; a `/models` probe and its inference fallback share a snapshot |
-| Content Moderation endpoint API key | `openai:apikey` type default and its global/default chain; same-key retries share a snapshot, key rotation or endpoint failover resolves the new owner; administrative key tests start independent operations |
+| Prompt Audit endpoint token | native Codex global/default chain; one snapshot per endpoint credential across an evaluation/job's chunks and failover returns; a `/models` probe and its inference fallback share a snapshot |
+| Content Moderation endpoint API key | native Codex global/default chain; same-key retries share a snapshot, key rotation or endpoint failover resolves the new owner; administrative key tests start independent operations |
 
 These credentials have no account-level identity field. Only permitted compatible
 API-key type defaults can select another preset; native domestic monitors use
-their own platform profile, including MiniMax's API-key SDK identity. Native OpenAI API-key Codex requests preserve
-the existing Originator/Version header omissions; other presets render their
+their own platform profile, including MiniMax's API-key SDK identity. Native OpenAI API-key Codex requests send
+the selected UA/Originator/Version triple; other presets render their
 defined companions. Fresh monitor checks, audit evaluations/jobs, probes and
 key tests observe current settings. Supplier identity resolution does not select
 a forwarding account or move inference ahead of the ingress audit boundary.
@@ -728,10 +972,10 @@ replace its managed declarations. Enabling the V3 probe source changes status
 aggregation and viewer visibility, without selecting another outbound identity.
 
 Model discovery includes both standard model lists and the Codex-style manifest
-requested from a compatible API-key upstream. Explicit account or type-default
-preset selections govern the manifest's final headers and `client_version`
-query together. A versionless family declares no client version, so the manifest
-omits the `client_version` query instead of sending an empty declaration; the
+requested from an OpenAI API-key account's configured upstream. Native Codex
+identity governs that manifest's final headers and required `client_version`
+query together, including custom base URLs. Historical foreign-family candidates
+cannot remove its version, residency or native catalog-cache identity; the
 selected identity still owns the headers. Its cache key includes the final URL
 and headers, and detached cache refreshes carry the same resolved identity
 snapshot. Native Codex source precedence and endpoint-specific header omissions
@@ -748,9 +992,9 @@ The security-audit extractor and its pass-through semantics are unchanged.
 
 Version-only updates replace the selected client version declaration and its
 paired version header. They preserve client family, Originator, OS,
-architecture, terminal and SDK fingerprint. Other presets currently expose
-manual version settings; automatic release synchronization remains the
-existing Codex feature. A versionless family has no version-only update: it
+architecture, terminal and SDK fingerprint. Codex release upgrades are reviewed
+and maintained in code; no background or immediate Codex version synchronization
+exists. Explicit manual version settings remain available. A versionless family has no version-only update: it
 rejects a client-version candidate and can only be changed through its preset
 selection.
 
@@ -849,8 +1093,10 @@ transport profile at the shared final preparation boundary unless the owning
 operation explicitly selected a more specialized profile.
 
 Grok inference builders own the sampler declarations
-separately from the identity triple. They issue a fresh `x-grok-req-id`, retain
-one random process-level `x-grok-agent-id`, declare the final model, attach the
+separately from the identity triple. They retain one random UUIDv4 `x-grok-req-id` across retries of a logical prompt
+and allocate another for the next prompt. `x-grok-agent-id` is the official
+UUIDv5 derivation from a persisted random UUIDv4 device seed. They declare the
+final model, attach the
 OAuth credential owner's `sub` when available, and reuse the tenant-isolated
 conversation snapshot for conversation/session headers and the official UUIDv5
 conversation-group derivation. Generic overrides cannot set these fields. The
@@ -859,7 +1105,8 @@ billing and media-status lookups, and omits optional turn, retry, deployment,
 and tracing declarations when it does not possess the corresponding
 authoritative value. One constructed sampler request keeps its request
 association snapshot across transport retries and redirects; a newly constructed
-logical sampler call or resubmit renders a new association. Imagine start/poll
+logical prompt renders a new association; a retry/resubmit of the same prompt
+retains it. Synthetic conversation/session IDs are UUIDv7. Imagine start/poll
 operations carry their isolated session association without sampler fields.
 
 Grok sampler `Accept` is a request-owned operation declaration rather than an
@@ -919,7 +1166,7 @@ Snapshots deep-copy the protocol maps, survive OAuth session serialization, and
 are reapplied at final transport send, including retries. Arbitrary header
 maps cannot supply SDK, device or control-plane declarations.
 
-Kimi's OAuth and API-key inference use the same `kimi-code-cli/2.1.1` UA and
+Kimi's OAuth and API-key inference use the same `kimi-code-cli/2.3.1` UA and
 `X-Msh-*` declarations. Anthropic uses `X-Stainless-Package-Version: 0.95.2`;
 Chat Completions/Responses use `6.34.0` (the reviewed Anthropic/OpenAI JS lockfile
 versions). Both explicitly pin `X-Stainless-Lang: js`, `X-Stainless-OS: Linux`,
@@ -932,9 +1179,9 @@ ZCode's exact default inference UAs (both account types) are:
 
 | Protocol | User-Agent |
 | --- | --- |
-| Anthropic | `ZCode/3.14.3 ai/6.0.193 ai-sdk/provider-utils/4.0.27 runtime/node.js/22` |
-| Chat Completions | `ZCode/3.14.3 ai/6.0.193 ai-sdk/provider-utils/4.0.39 runtime/node.js/22` |
-| Responses | `ZCode/3.14.3 ai/6.0.193 ai-sdk/provider-utils/4.0.27 runtime/node.js/22` |
+| Anthropic | `ZCode/3.16.2 ai/6.0.193 ai-sdk/provider-utils/4.0.27 runtime/node.js/22` |
+| Chat Completions | `ZCode/3.16.2 ai/6.0.193 ai-sdk/provider-utils/4.0.39 runtime/node.js/22` |
+| Responses | `ZCode/3.16.2 ai/6.0.193 ai-sdk/provider-utils/4.0.27 runtime/node.js/22` |
 
 `runner-options.ts` supplies the bootstrap headers to `ai`, so its `ai/6.0.193`
 suffix replaces the provider factory's suffix; provider-utils appends its own
@@ -945,13 +1192,27 @@ these strings, plus both MiniMax UAs and their six Stainless declarations.
 The fixture uses no live provider credentials or requests. SDK pins are owned by
 these presets and cannot be changed by inbound headers or generic overrides.
 
+ZCode Project Access Token issuance is also an account-service operation. Its
+`clientType:"zcode"` and selected `clientVersion` body declarations accompany the
+same trusted control identity. PAT rotation changes authentication, not the
+stable owner, identity source, client family, runtime facts or inference SDK
+suffix. No copied key or cached token fingerprint selects an identity. See
+[Zhipu / GLM](providers/ZHIPU.md) for token lifetime and project scope.
+
+ZCode monitor quota calls project that same owner's control identity, including
+the paired app version and control runtime facts, and omit `X-ZCode-Agent`.
+Their raw PAT authorization is independent of identity selection. Live personal
+and team model discovery stays on the linked estate's coding `/models` endpoint
+and authenticates with its current PAT; a public Key ID, earlier copied secret
+or generic URL/header override cannot become an authentication fallback.
+
 The gateway applies trusted ZCode product declarations to all account-service
 calls, including external business origins where official NodeApiClient only
 attaches the source block to its configured ZCode origin. This is an intentional
 extension required by the provider-bound identity contract. Optional telemetry
-IDs are not copied from another installation. DeepSeek uses the official web
-login branch (`platformClientHeaders(null, client)`); its UI bundle pins
-`DSH_CLIENT_VERSION` to `0.2.0-rc.2`, not the Electron shell version.
+IDs are not copied from another installation. DeepSeek uses the official Harness web login branch
+(`platformClientHeaders(null, client)`); its selected client version is
+`0.2.1-rc.3`, independent of any desktop shell.
 
 Regression evidence: `domestic_identity_review_test.go`,
 `domestic_outbound_identity_test.go`, the complete Codex identity regressions,
@@ -973,7 +1234,10 @@ are scoped to platform requests. No Codex source, family or default changes are 
 Native OAuth destinations and authentication are fixed by provider/region before
 sending. Refresh and inference reuse the same owner snapshot, and failover
 resolves the next owner. DeepSeek's `x-dsh-auth-token` is reserved against generic
-header overrides. The native paths disable redirects. Tests are in
+header overrides. The native paths disable redirects. Native Kimi model/usage
+queries and DeepSeek model/account-wallet queries reuse that same snapshot and
+fixed endpoint authentication; generic API-key defaults cannot select their
+credentials. New endpoints add no identity-family exception. Tests are in
 `internal/pkg/cnoauth`, `cn_oauth_service_test.go`, existing native Anthropic
 adapter/identity suites and frontend `useCNOAuth`/`CNOAuthPanel` suites. See
 [domestic OAuth](providers/DOMESTIC_OAUTH.md) for official source evidence,
@@ -991,12 +1255,22 @@ are insufficient for the final outbound privacy boundary.
 
 | Requirement | Regression evidence |
 | --- | --- |
-| Four providers, both account types, official default UA/SDK/environment, probes | `service/domestic_identity_review_test.go` literal fixtures; `repository/outbound_identity_test.go` HTTP captures |
+| Native providers, both account types, official default UA/SDK/environment, probes | `service/domestic_identity_review_test.go` literal fixtures; `repository/outbound_identity_test.go` HTTP captures |
 | Account/global/environment precedence, invalid candidates, version updates, retry/failover snapshots | `service/outbound_identity_test.go`, `outbound_environment_test.go`, `domestic_outbound_identity_test.go`, complete Codex identity suites |
 | No branded names/values; multi-value headers, redirects, cookies, rejected auth, signed requests | `pkg/brandidentity/brandidentity_test.go`, `service/bedrock_signer_test.go`, `openai_ws_client_test.go`, `plugin_security_regression_test.go` |
 | OAuth/account-service versus inference declarations; locale, timezone, DST and kernel build/release | `pkg/cnoauth/client_test.go`, `pkg/deepseek/identity_test.go`, `pkg/zcode/identity_test.go`, settings UI tests |
+| ZCode personal/team PAT quota and model discovery, fixed estate endpoints, source/companion coherence, login relinking and manual-key isolation | `service/zhipu_project_quota_test.go`, `service/zhipu_project_models_test.go` |
 | Cancellation/expiry and delayed responses, single consumption across replicas, unavailable/changed proxies | `useCNOAuth.spec.ts`, `useZhipuOAuth.spec.ts`, both login panel suites, `pkg/zcode/session_replica_test.go`, `service/zhipu_oauth_service_test.go`, admin handler tests |
 | Off-peak official task IDs, repeat retirement, original owner identity/auth, concurrent settlement, expired admission, rejection before forward/probe and bounded waits | `service/zhipu_offpeak_ticket_test.go` |
+| Active ticket leases through send/EOF/Close/cancel/error, overlapping streams and old-owner draining on rotation | `service/zhipu_offpeak_lease_test.go` |
+| Ticket bare/envelope/empty settlement responses, business reset/retry hints and distinct physical request IDs | `pkg/zcode/offpeak_wire_test.go` |
+| Exact model_not_found over HTTP/SSE/WS, preserved terminal code and no whole-account auth/quota punishment | `service/openai_model_not_found_contract_test.go`, `handler/openai_gateway_credential_failover_test.go` |
+| Grok acquired-owner destination/ordinary headers/egress and generation-isolated capability probes | `service/grok_acquired_owner_request_test.go`, `grok_auxiliary_owner_test.go` |
+| DeepSeek native OAuth/API-key catalog auth, version/capability gates and conditional metadata writes | `service/deepseek_models_test.go` |
+| ZCode linked discovery reaches final PAT auth on both estates; every model/ticket 401 invalidates its PAT; concurrent transient refresh cannot resurrect rejected material | `service/zhipu_project_tokens_test.go` |
+| Linked ZCode forwarding/probes set redirect prohibition; both HTTP transport methods prevent redirected credential dispatch | `service/zhipu_project_tokens_test.go`, `repository/http_upstream_test.go` |
+| Kimi reasoning survives optional effort errors; Coding absent/null/disabled reasoning clears stale efforts without changing public/PAYG metadata defaults | `service/official_agent_update_test.go` |
+| Codex turn-state provenance retains string principal evidence across Redis replicas, hashes private session seeds, expires and rejects legacy numeric owners; Live snapshots survive Redis persistence and controller changes | `repository/gateway_cache_codex_identity_integration_test.go` against real Redis; existing turn-state and Live service suites |
 
 All paths above run without live provider credentials. Database-dependent
 migration and Channel Monitor V3 behavior is additionally exercised against
@@ -1007,7 +1281,7 @@ does not demonstrate these requirements.
 ## StepFun / Step-Code
 
 StepFun OAuth (Step Plan) and API Key accounts are pinned to the same `stepfun`
-preset. Exact identity: `step (linux 6.8.0-31-generic; x64)`, identifier `step`,
+preset. Exact identity: `stepcode (linux 6.8.0-31-generic; x64)`, identifier `stepcode`,
 empty product version. Step-Code's actual OpenAI adapter imports
 `packages/providers/src/utils/pi-user-agent.ts`; the coding-agent helper that
 accepts a version is not its inference UA. `step/environment.ts` defaults
@@ -1021,7 +1295,13 @@ Ubuntu Noble kernel are fixed independent of the server host. Discovery uses
 fetch upstream; this gateway adds the same trusted product UA as an explicit
 identity-policy difference, without inference attribution or SDK headers.
 Browser navigation uses the browser's own headers; the server does not claim
-it can override them. There is no default token exchange/refresh request.
+it can override them. Cloud login initialization/polling and optional Passport
+account-session refresh use the same trusted product UA without inference SDK
+headers. The init body separately declares client `stepcode`, version `0.84.4`,
+platform `linux-x64`; that provider-defined login audit metadata does not add a
+version segment to the product UA. Passport app/device headers are account-session
+protocol state and cannot select the identity source. No model-key refresh
+endpoint is inferred from the account-session refresh operation.
 No synthetic Originator, Version, device-name, locale or timezone header is
 sent. Optional high-sensitivity `x-step-*` trace fields are not generated.
 
@@ -1030,8 +1310,12 @@ read-only. Product-version updates cannot change it; SDK upgrades require new
 source and wire evidence. Other presets still require a complete version.
 Account > global native profile > compiled default applies atomically.
 Both OAuth and API Key retain Step-Code; foreign client-family selections are rejected.
-Retries, probes and discovery retain the credential owner's snapshot; failover
-resolves the new owner. Final header privacy remains mandatory for every path.
+Retries, probes, discovery and native Plan usage retain the credential owner's
+snapshot; failover resolves the new owner. Final header privacy remains mandatory
+for every path. Cloud login is based on Step-Code commit
+`81e79bc4b699148d6823fedde9b5e70d9a80255f` (`login-client.ts`,
+`login-refresh.ts`, `pi-user-agent.ts`); the product-token migration from `step`
+to `stepcode` is an explicit source-backed identity change, not a version-only sync.
 Settings preview exposes the shared profile and the Chat Completions wire block.
 
 Pre-account OAuth catalog discovery validates the ready session's owner,
@@ -1041,6 +1325,21 @@ does not consume the grant. `stepfun_model_restrictions_test.go` covers its
 literal discovery headers, both regions, proxy, and rejected session states.
 
 Independent StepFun tests cover exact literal wire declarations, four
-region/auth combinations, actual forwarding and probes/discovery, static-grant
-lifecycle, invalid/missing/duplicate state, single consumption, region pinning,
+region/auth combinations, actual forwarding and probes/discovery, cloud-login
+polling and static model-key lifecycle, bounded flow IDs, invalid/missing state,
+secret/public flow separation, cancellation, optional account-session refresh,
+single consumption, region pinning,
 versionless validation and source priority. See [StepFun](providers/STEPFUN.md).
+
+
+V1 streaming probes use the same `postMonitorRequest` identity/SSRF path and
+same-operation snapshot as JSON probes and HEAD Ping. `stream_probe` controls only
+the request body stream flag and Accept header; custom headers cannot replace
+managed identity. The monitor stream and identity regressions cover this path.
+
+## Official request-state contract
+
+[OFFICIAL_AGENT_REQUEST_STATE.md](OFFICIAL_AGENT_REQUEST_STATE.md) defines UUID
+versions, relationship preservation, request/conversation/device lifetimes,
+credential ownership, persisted random mappings and failure behavior. These
+fields supplement the trusted identity triple; they never select its source.

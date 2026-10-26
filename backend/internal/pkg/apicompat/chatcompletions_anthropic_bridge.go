@@ -422,6 +422,17 @@ func ChatCompletionsResponseToAnthropic(resp *ChatCompletionsResponse, model str
 		if len(resp.Choices) > 0 {
 			choice := resp.Choices[0]
 			out.Content = chatMessageToAnthropicBlocks(choice.Message)
+			if choice.FinishReason == "length" {
+				// A token-limit stop may truncate a tool input. Buffered Messages
+				// still requires valid JSON, while max_tokens tells the client to
+				// retry with more budget instead of executing this placeholder.
+				for i := range out.Content {
+					block := &out.Content[i]
+					if block.Type == "tool_use" && validateCCAnthropicToolInput(string(block.Input)) != nil {
+						block.Input = json.RawMessage("{}")
+					}
+				}
+			}
 			out.StopReason = AnthropicStopReasonPtr(chatFinishReasonToAnthropicStopReason(choice.FinishReason, out.Content))
 			// "length" → "max_tokens" is handled by chatFinishReasonToAnthropicStopReason;
 			// Anthropic conveys max-tokens via stop_reason only, no incomplete_details field.
@@ -447,6 +458,34 @@ func ChatCompletionsResponseToAnthropic(resp *ChatCompletionsResponse, model str
 	}
 
 	return out
+}
+
+// ValidateChatCompletionsAnthropicToolInputs checks the selected Chat response
+// before rendering tool_use.input as a Messages JSON object. Empty arguments
+// retain the established empty-object normalization. A length stop may contain
+// an incomplete input, which the buffered converter safely represents as {}.
+func ValidateChatCompletionsAnthropicToolInputs(resp *ChatCompletionsResponse) error {
+	if resp == nil || len(resp.Choices) == 0 || resp.Choices[0].FinishReason == "length" {
+		return nil
+	}
+	for _, call := range resp.Choices[0].Message.ToolCalls {
+		if err := validateCCAnthropicToolInput(call.Function.Arguments); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateCCAnthropicToolInput(arguments string) error {
+	if strings.TrimSpace(arguments) == "" {
+		return nil
+	}
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(arguments), &object); err != nil || object == nil {
+		// Never include provider-controlled arguments in client errors or logs.
+		return fmt.Errorf("upstream tool arguments must be a JSON object")
+	}
+	return nil
 }
 
 // chatMessageToAnthropicBlocks converts a Chat Completions message into
@@ -578,6 +617,11 @@ type ChatCompletionsToAnthropicStreamState struct {
 	toolName          map[int]string
 	pendingToolCallID map[int]string
 	pendingToolArgs   map[int]string
+	toolArguments     map[int]string
+	// Once a tool block starts, keep it open until all of its arguments are
+	// available. Chat can interleave text/reasoning with those fragments;
+	// preserve that content until the sequential Messages tool blocks finish.
+	deferredContent []ccAnthropicContentDelta
 
 	// Reasoning (DeepSeek-style): reasoning_content streamed before content.
 	// No separate reasoning block index — it uses ContentBlockIndex like the
@@ -596,6 +640,12 @@ type ChatCompletionsToAnthropicStreamState struct {
 	Created    int64
 }
 
+type ccAnthropicContentDelta struct {
+	reasoning string
+	text      string
+	refusal   string
+}
+
 // NewChatCompletionsToAnthropicStreamState returns an initialized stream state.
 func NewChatCompletionsToAnthropicStreamState(model string) *ChatCompletionsToAnthropicStreamState {
 	return &ChatCompletionsToAnthropicStreamState{
@@ -607,7 +657,23 @@ func NewChatCompletionsToAnthropicStreamState(model string) *ChatCompletionsToAn
 		toolName:          make(map[int]string),
 		pendingToolCallID: make(map[int]string),
 		pendingToolArgs:   make(map[int]string),
+		toolArguments:     make(map[int]string),
 	}
+}
+
+// ValidateToolCallArguments checks the complete input of every streamed tool
+// before a completed Messages terminal event is synthesized. A length stop
+// preserves the provider's partial input and is finalized as max_tokens.
+func (state *ChatCompletionsToAnthropicStreamState) ValidateToolCallArguments() error {
+	if state == nil || state.FinishReason == "length" {
+		return nil
+	}
+	for _, arguments := range state.toolArguments {
+		if err := validateCCAnthropicToolInput(arguments); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ChatCompletionsChunkToAnthropicEvents converts one Chat Completions stream
@@ -640,28 +706,22 @@ func ChatCompletionsChunkToAnthropicEvents(
 	events = append(events, ensureCCAnthropicMessageStart(state)...)
 
 	for _, choice := range chunk.Choices {
-		// Reasoning content → thinking block.
-		reasoning := choice.Delta.reasoningText()
-		if reasoning != nil && *reasoning != "" {
-			events = append(events, ensureCCAnthropicThinkingBlock(state)...)
-			events = append(events, ccAnthropicDelta(state, &AnthropicDelta{
-				Type:     "thinking_delta",
-				Thinking: *reasoning,
-			})...)
+		content := ccAnthropicContentDelta{}
+		if reasoning := choice.Delta.reasoningText(); reasoning != nil {
+			content.reasoning = *reasoning
 		}
-
-		// Visible content/refusal → text block (closes any open thinking block first).
-		visibleTextDeltas := []*string{choice.Delta.Content, choice.Delta.Refusal}
-		for _, visibleText := range visibleTextDeltas {
-			if visibleText == nil || *visibleText == "" {
-				continue
+		if choice.Delta.Content != nil {
+			content.text = *choice.Delta.Content
+		}
+		if choice.Delta.Refusal != nil {
+			content.refusal = *choice.Delta.Refusal
+		}
+		if state.ContentBlockOpen && state.CurrentBlockType == "tool_use" {
+			if content.reasoning != "" || content.text != "" || content.refusal != "" {
+				state.deferredContent = append(state.deferredContent, content)
 			}
-			events = append(events, closeCCAnthropicBlockIfOpen(state, "thinking")...)
-			events = append(events, ensureCCAnthropicTextBlock(state)...)
-			events = append(events, ccAnthropicDelta(state, &AnthropicDelta{
-				Type: "text_delta",
-				Text: *visibleText,
-			})...)
+		} else {
+			events = append(events, ccAnthropicContentEvents(state, content)...)
 		}
 
 		// Tool calls → tool_use blocks.
@@ -678,6 +738,29 @@ func ChatCompletionsChunkToAnthropicEvents(
 	return events
 }
 
+func ccAnthropicContentEvents(state *ChatCompletionsToAnthropicStreamState, content ccAnthropicContentDelta) []AnthropicStreamEvent {
+	var events []AnthropicStreamEvent
+	if content.reasoning != "" {
+		events = append(events, ensureCCAnthropicThinkingBlock(state)...)
+		events = append(events, ccAnthropicDelta(state, &AnthropicDelta{
+			Type:     "thinking_delta",
+			Thinking: content.reasoning,
+		})...)
+	}
+	for _, text := range []string{content.text, content.refusal} {
+		if text == "" {
+			continue
+		}
+		events = append(events, closeCCAnthropicBlockIfOpen(state, "thinking")...)
+		events = append(events, ensureCCAnthropicTextBlock(state)...)
+		events = append(events, ccAnthropicDelta(state, &AnthropicDelta{
+			Type: "text_delta",
+			Text: text,
+		})...)
+	}
+	return events
+}
+
 // FinalizeChatCompletionsAnthropicStream emits terminal Anthropic events
 // (close open blocks + message_delta + message_stop) when the stream ends.
 func FinalizeChatCompletionsAnthropicStream(state *ChatCompletionsToAnthropicStreamState) []AnthropicStreamEvent {
@@ -690,10 +773,9 @@ func FinalizeChatCompletionsAnthropicStream(state *ChatCompletionsToAnthropicStr
 		events = append(events, ensureCCAnthropicMessageStart(state)...)
 	}
 
-	// Announce tools whose name never arrived so their buffered arguments are
-	// not silently dropped. The double-conversion path announced these
-	// immediately with an empty name; the deferred announcement keeps that data
-	// preservation while still delivering correct names when they do arrive.
+	// Finish queued parallel tools sequentially. Chat deltas may interleave
+	// indexes, but an Anthropic block must never receive arguments after its
+	// content_block_stop. Tools without a name still retain their arguments.
 	if len(state.pendingToolCallID) > 0 {
 		idxs := make([]int, 0, len(state.pendingToolCallID))
 		for idx := range state.pendingToolCallID {
@@ -703,10 +785,15 @@ func FinalizeChatCompletionsAnthropicStream(state *ChatCompletionsToAnthropicStr
 		for _, idx := range idxs {
 			callID := state.pendingToolCallID[idx]
 			events = append(events, closeCCAnthropicBlock(state)...)
-			events = append(events, announceCCAnthropicToolBlock(state, idx, callID, "")...)
+			events = append(events, announceCCAnthropicToolBlock(state, idx, callID, state.toolName[idx])...)
 		}
 	}
 
+	events = append(events, closeCCAnthropicBlock(state)...)
+	for _, content := range state.deferredContent {
+		events = append(events, ccAnthropicContentEvents(state, content)...)
+	}
+	state.deferredContent = nil
 	events = append(events, closeCCAnthropicBlock(state)...)
 
 	stopReason := ccFinishReasonToAnthropicStopReason(state.FinishReason, state.HasToolCall)
@@ -791,41 +878,37 @@ func ensureCCAnthropicTextBlock(state *ChatCompletionsToAnthropicStreamState) []
 }
 
 // handleCCAnthropicToolCall processes one upstream tool_call delta. The
-// content_block_start for a tool is deferred until its name has arrived (some
-// upstreams stream id/arguments before the name); argument fragments seen
-// before the announcement are buffered and flushed with it, later fragments
-// stream as input_json_delta on the tool's block.
+// content_block_start is deferred until the name arrives and no other tool
+// block is active. Parallel argument fragments are buffered per upstream index
+// until that tool can be emitted as a complete sequential Anthropic block.
 func handleCCAnthropicToolCall(state *ChatCompletionsToAnthropicStreamState, toolCall *ChatToolCall) []AnthropicStreamEvent {
 	idx := 0
 	if toolCall.Index != nil {
 		idx = *toolCall.Index
 	}
+	state.toolArguments[idx] += toolCall.Function.Arguments
 
 	var events []AnthropicStreamEvent
 
 	if _, seen := state.toolAnnounced[idx]; !seen {
-		// New tool call: it ends whatever block is currently streaming.
-		events = append(events, closeCCAnthropicBlock(state)...)
 		state.HasToolCall = true
-
 		callID := toolCall.ID
 		if callID == "" {
 			callID = generateItemID()
 		}
-		if name := toolCall.Function.Name; name != "" {
-			events = append(events, announceCCAnthropicToolBlock(state, idx, callID, name)...)
-		} else {
-			state.toolAnnounced[idx] = false
-			state.pendingToolCallID[idx] = callID
-		}
-	} else if !state.toolAnnounced[idx] && toolCall.Function.Name != "" {
-		// Deferred announcement: the name has arrived.
+		state.toolAnnounced[idx] = false
+		state.pendingToolCallID[idx] = callID
+	}
+	if toolCall.Function.Name != "" {
+		state.toolName[idx] = toolCall.Function.Name
+	}
+	if !state.toolAnnounced[idx] && toolCall.ID != "" {
+		state.pendingToolCallID[idx] = toolCall.ID
+	}
+	if !state.toolAnnounced[idx] && state.toolName[idx] != "" && (!state.ContentBlockOpen || state.CurrentBlockType != "tool_use") {
 		callID := state.pendingToolCallID[idx]
-		if toolCall.ID != "" {
-			callID = toolCall.ID
-		}
 		events = append(events, closeCCAnthropicBlock(state)...)
-		events = append(events, announceCCAnthropicToolBlock(state, idx, callID, toolCall.Function.Name)...)
+		events = append(events, announceCCAnthropicToolBlock(state, idx, callID, state.toolName[idx])...)
 	}
 
 	// Argument fragment → input_json_delta on the tool's block once announced,
@@ -833,7 +916,7 @@ func handleCCAnthropicToolCall(state *ChatCompletionsToAnthropicStreamState, too
 	if toolCall.Function.Arguments != "" {
 		if state.toolAnnounced[idx] {
 			blockIdx := state.toolBlockIndex[idx]
-			if state.ContentBlockOpen && blockIdx == state.ContentBlockIndex {
+			if state.ContentBlockOpen && blockIdx == state.ContentBlockIndex && strings.TrimSpace(toolCall.Function.Arguments) != "" {
 				state.CurrentToolHadDelta = true
 			}
 			events = append(events, AnthropicStreamEvent{
@@ -878,7 +961,7 @@ func announceCCAnthropicToolBlock(state *ChatCompletionsToAnthropicStreamState, 
 	}}
 	if pending := state.pendingToolArgs[idx]; pending != "" {
 		delete(state.pendingToolArgs, idx)
-		state.CurrentToolHadDelta = true
+		state.CurrentToolHadDelta = strings.TrimSpace(pending) != ""
 		events = append(events, AnthropicStreamEvent{
 			Type:  "content_block_delta",
 			Index: &blockIdx,

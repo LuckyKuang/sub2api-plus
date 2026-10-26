@@ -11,6 +11,7 @@ import (
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/zcode"
+	"github.com/google/uuid"
 )
 
 // Credential keys and ZCode platform endpoints owned by this flow.
@@ -49,7 +50,7 @@ var zhipuPlanKinds = []string{
 
 // ZhipuPlanKindSupported reports whether the plan kind can be mapped onto an
 // account. Off-peak is supported: its account material mirrors start-plan
-// (the ZCode token as bearer) plus the derived coding-plan key, and the
+// (the ZCode token as bearer) plus a renewable coding-plan PAT, and the
 // per-request admission ticket is supplied separately by the ticket manager.
 func ZhipuPlanKindSupported(planKind string) bool {
 	switch strings.TrimSpace(planKind) {
@@ -64,6 +65,7 @@ func ZhipuPlanKindSupported(planKind string) bool {
 // business credential derivation. Failover, retries and identity resolution stay
 // with the transport implementation.
 type ZhipuOAuthClient interface {
+	IssueProjectAccessToken(ctx context.Context, provider, login, organization, project, keyID, proxy string) (*zcode.ProjectAccessToken, error)
 	StartFlow(ctx context.Context, provider, pollToken, proxyURL string) (*zcode.FlowInit, error)
 	PollFlow(ctx context.Context, provider, flowID, pollToken, proxyURL string) (*zcode.FlowPoll, error)
 	ExchangeCode(ctx context.Context, provider, code, redirectURI, state, proxyURL string) (*zcode.FlowReady, error)
@@ -180,6 +182,12 @@ func (s *ZhipuOAuthService) StartLink(ctx context.Context, input StartZhipuLinkI
 	// The handshake is a pre-account authorization operation, so it advertises the
 	// platform's native preset rather than any account snapshot.
 	flowCtx := withNativeOAuthOutboundIdentity(ctx, PlatformZhipu)
+	identity, _ := outboundidentity.FromContext(flowCtx)
+	identity, err = zcode.EnsureDeviceIdentity(flowCtx, identity)
+	if err != nil {
+		return nil, err
+	}
+	flowCtx = outboundidentity.WithIdentity(flowCtx, identity)
 	init, err := s.client.StartFlow(flowCtx, provider, pollToken, proxyURL)
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "ZHIPU_OAUTH_START_FAILED", "failed to start zhipu oauth flow: %v", err)
@@ -188,7 +196,6 @@ func (s *ZhipuOAuthService) StartLink(ctx context.Context, input StartZhipuLinkI
 	if expiresAt.IsZero() || time.Until(expiresAt) > zcode.SessionTTL {
 		expiresAt = time.Now().Add(zcode.SessionTTL)
 	}
-	identity, _ := outboundidentity.FromContext(flowCtx)
 	session := &zcode.OAuthSession{
 		Identity:        identity,
 		State:           zcode.AuthorizeState(init.AuthorizeURL),
@@ -333,10 +340,9 @@ type ZhipuAccountMaterial struct {
 	PlanKind    string
 }
 
-// BuildAccountMaterial maps a linked plan onto the credential and endpoint shape
-// the existing GLM data plane already understands. No gateway code changes are
-// required for the supported plans: each one resolves to an API key, a base URL
-// and (where the plan requires it) an authentication scheme or scope header.
+// BuildAccountMaterial persists the linked plan's issuer, public project-key
+// metadata and protocol endpoints. Project PATs are acquired at send time;
+// Start Plan and off-peak retain their independently owned plan JWT.
 func (s *ZhipuOAuthService) BuildAccountMaterial(ctx context.Context, input ZhipuAccountMaterialInput) (*ZhipuAccountMaterial, error) {
 	if s == nil || s.client == nil {
 		return nil, infraerrors.New(http.StatusServiceUnavailable, "ZHIPU_OAUTH_UNAVAILABLE", "zhipu oauth client is not configured")
@@ -373,12 +379,18 @@ func (s *ZhipuOAuthService) BuildAccountMaterial(ctx context.Context, input Zhip
 		flowCtx = withNativeOAuthOutboundIdentity(ctx, PlatformZhipu)
 	}
 	identity, _ := outboundidentity.FromContext(flowCtx)
+	identity, err := zcode.EnsureDeviceIdentity(flowCtx, identity)
+	if err != nil {
+		return nil, err
+	}
+	flowCtx = outboundidentity.WithIdentity(flowCtx, identity)
 
 	credentials := map[string]any{
-		outboundIdentityCredential: selectionFromIdentity(identity),
-		"account_mode":             AccountModeCoding,
-		"plan_kind":                planKind,
-		"oauth_provider":           provider,
+		domesticOAuthLoginIDCredential: uuid.NewString(),
+		outboundIdentityCredential:     selectionFromIdentity(identity),
+		"account_mode":                 AccountModeCoding,
+		"plan_kind":                    planKind,
+		"oauth_provider":               provider,
 		// Every linked plan is served through explicit per-protocol endpoints, so
 		// the account is adaptive and never falls back to a platform default.
 		"api_protocol": APIProtocolAdaptive,
@@ -418,10 +430,15 @@ func (s *ZhipuOAuthService) BuildAccountMaterial(ctx context.Context, input Zhip
 		if err != nil {
 			return nil, infraerrors.Newf(http.StatusBadGateway, "ZHIPU_OAUTH_KEY_RESOLUTION_FAILED", "failed to resolve the coding-plan api key: %v", err)
 		}
-		if credential == nil || strings.TrimSpace(credential.APIKey) == "" {
+		if credential == nil || strings.TrimSpace(credential.KeyID) == "" {
 			return nil, infraerrors.New(http.StatusBadGateway, "ZHIPU_OAUTH_KEY_RESOLUTION_FAILED", "the coding-plan api key could not be derived for this account")
 		}
-		credentials["api_key"] = credential.APIKey
+		credentials["oauth_access_token"] = accessToken
+		credentials["zhipu_project_key_id"] = credential.KeyID
+		credentials["zhipu_project_kind"] = "personal"
+		if planKind == ZhipuPlanTeamCodingPlan {
+			credentials["zhipu_project_kind"] = "team"
+		}
 		credentials["access_token"] = businessToken
 		if credential.OrganizationID != "" {
 			credentials["zhipu_organization"] = credential.OrganizationID
@@ -434,9 +451,9 @@ func (s *ZhipuOAuthService) BuildAccountMaterial(ctx context.Context, input Zhip
 			APIProtocolAnthropic:       zhipuAnthropicBaseURL(provider),
 		}
 		if planKind == ZhipuPlanTeamCodingPlan {
-			// Team-plan traffic authenticates with the project key but is scoped by
-			// the organization/project headers, which is exactly what the account
-			// header-override map owns.
+			// Retain the public team scope in the linked material. Final linked
+			// requests render the resolved PAT's scope independently of generic
+			// header overrides, which are unavailable to these OAuth accounts.
 			credentials[credKeyHeaderOverrides] = mergeTeamScopeOverrides(input.HeaderOverrides, credential)
 			credentials[credKeyHeaderOverrideEnabled] = true
 		}
@@ -459,10 +476,8 @@ func (s *ZhipuOAuthService) BuildAccountMaterial(ctx context.Context, input Zhip
 		credentials["api_key"] = jwt
 		credentials["zcode_jwt_token"] = jwt
 		credentials[credentialAPIBaseURLs] = map[string]any{APIProtocolAnthropic: zhipuPlanAnthropicBaseURL()}
-		// The plan gateway authenticates with `Authorization: Bearer <zcode
-		// token>`; the account-level scheme switches the Anthropic adapter away
-		// from the default x-api-key header.
-		credentials[anthropicAPIKeyAuthSchemeExtraKey] = AnthropicAPIKeyAuthSchemeAuthorizationBearer
+		// Authentication is fixed by the native linked-plan type. The manual
+		// API-key scheme setting does not select this OAuth bearer channel.
 		return &ZhipuAccountMaterial{
 			Credentials: credentials,
 			BaseURL:     zhipuPlanAnthropicBaseURL(),
@@ -494,13 +509,20 @@ func (s *ZhipuOAuthService) BuildAccountMaterial(ctx context.Context, input Zhip
 		if err != nil {
 			return nil, infraerrors.Newf(http.StatusBadGateway, "ZHIPU_OAUTH_KEY_RESOLUTION_FAILED", "failed to resolve the coding-plan api key: %v", err)
 		}
-		if credential == nil || strings.TrimSpace(credential.APIKey) == "" {
+		if credential == nil || strings.TrimSpace(credential.KeyID) == "" {
 			return nil, infraerrors.New(http.StatusBadGateway, "ZHIPU_OAUTH_KEY_RESOLUTION_FAILED", "the coding-plan api key could not be derived for this account")
 		}
 		credentials["api_key"] = jwt
 		credentials["zcode_jwt_token"] = jwt
 		credentials["access_token"] = businessToken
-		credentials["off_peak_plan_key"] = credential.APIKey
+		credentials["oauth_access_token"] = accessToken
+		credentials["zhipu_project_key_id"] = credential.KeyID
+		credentials["zhipu_project_key_name"] = zcode.PersonalAPIKeyName
+		credentials["zhipu_project_kind"] = "personal"
+		if teamPlan {
+			credentials["zhipu_project_key_name"] = zcode.TeamAPIKeyName
+			credentials["zhipu_project_kind"] = "team"
+		}
 		if credential.OrganizationID != "" {
 			credentials["zhipu_organization"] = credential.OrganizationID
 		}
@@ -508,16 +530,15 @@ func (s *ZhipuOAuthService) BuildAccountMaterial(ctx context.Context, input Zhip
 			credentials["zhipu_project"] = credential.ProjectID
 		}
 		credentials[credentialAPIBaseURLs] = map[string]any{APIProtocolAnthropic: zcodeOffPeakAnthropicBaseURL}
-		credentials[anthropicAPIKeyAuthSchemeExtraKey] = AnthropicAPIKeyAuthSchemeAuthorizationBearer
-		// The plan key and the team scope are static request declarations, so they
-		// live in the account header overrides; only the admission ticket id is
-		// request-scoped and is injected by the ticket manager.
-		offPeakHeaders := map[string]string{"x-coding-plan-api-key": credential.APIKey}
+		// The team scope is stable; the project-token manager supplies a fresh
+		// coding credential at each physical send. Never save a derived PAT or
+		// a superseded copied secret in generic header overrides.
+		offPeakHeaders := map[string]string{}
 		if teamPlan {
 			offPeakHeaders["bigmodel-organization"] = credential.OrganizationID
 			offPeakHeaders["bigmodel-project"] = credential.ProjectID
 		}
-		credentials[credKeyHeaderOverrides] = mergeHeaderOverrides(input.HeaderOverrides, offPeakHeaders)
+		credentials[credKeyHeaderOverrides] = mergeHeaderOverrides(withoutZhipuManagedAuth(input.HeaderOverrides), offPeakHeaders)
 		credentials[credKeyHeaderOverrideEnabled] = true
 		return &ZhipuAccountMaterial{
 			Credentials: credentials,
@@ -570,7 +591,11 @@ func (s *ZhipuOAuthService) resolveProxyURL(ctx context.Context, proxyID *int64)
 	if err != nil || proxy == nil {
 		return "", infraerrors.BadRequest("ZHIPU_OAUTH_PROXY_NOT_FOUND", "selected proxy is unavailable")
 	}
-	return proxy.URL(), nil
+	proxyURL, err := requestCredentialOwnerProxyURL(context.Background(), &Account{ProxyID: proxyID, Proxy: proxy})
+	if err != nil {
+		return "", infraerrors.BadRequest("ZHIPU_OAUTH_PROXY_INVALID", "selected proxy configuration is invalid")
+	}
+	return proxyURL, nil
 }
 
 func linkTokenFromReady(provider string, ready *zcode.FlowReady) *ZhipuLinkToken {
@@ -648,4 +673,16 @@ func mergeHeaderOverrides(existing map[string]any, additions map[string]string) 
 		merged[strings.ToLower(name)] = value
 	}
 	return merged
+}
+
+func withoutZhipuManagedAuth(overrides map[string]any) map[string]any {
+	cleaned := make(map[string]any, len(overrides))
+	for name, value := range overrides {
+		switch strings.ToLower(name) {
+		case "authorization", "x-api-key", "x-coding-plan-api-key":
+			continue
+		}
+		cleaned[name] = value
+	}
+	return cleaned
 }

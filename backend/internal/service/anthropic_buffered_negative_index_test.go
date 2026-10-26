@@ -3,6 +3,7 @@
 package service
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -66,14 +67,14 @@ func TestAnthropicBufferedAggregators_IgnoreNegativeBlockIndex(t *testing.T) {
 		{
 			name: "openai native anthropic chat completions",
 			run: func(resp *http.Response, c *gin.Context) error {
-				_, err := newNativeAnthropicHangTestService(5).handleCCBufferedFromNativeAnthropic(resp, c, "glm-4.7", "glm-4.7", "glm-4.7", nil, time.Now())
+				_, err := newNativeAnthropicHangTestService(5).handleCCBufferedFromNativeAnthropic(context.Background(), nativeAnthropicTestAccount(), resp, c, "glm-4.7", "glm-4.7", "glm-4.7", nil, time.Now())
 				return err
 			},
 		},
 		{
 			name: "openai native anthropic responses",
 			run: func(resp *http.Response, c *gin.Context) error {
-				_, err := newNativeAnthropicHangTestService(5).handleResponsesBufferedFromNativeAnthropic(resp, c, "glm-4.7", "glm-4.7", "glm-4.7", nil, time.Now(), apicompat.ResponsesClientToolMapping{})
+				_, err := newNativeAnthropicHangTestService(5).handleResponsesBufferedFromNativeAnthropic(context.Background(), nativeAnthropicTestAccount(), resp, c, "glm-4.7", "glm-4.7", "glm-4.7", nil, time.Now(), apicompat.ResponsesClientToolMapping{})
 				return err
 			},
 		},

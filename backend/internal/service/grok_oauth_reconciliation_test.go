@@ -109,6 +109,29 @@ func (r *grokReconcileRepo) UpdateCredentials(_ context.Context, id int64, crede
 	return nil
 }
 
+func (r *grokReconcileRepo) UpdateOAuthRefreshCredentialsIfUnchanged(_ context.Context, expectedOwner *Account, replacement map[string]any) (bool, error) {
+	id := expectedOwner.ID
+	platform := expectedOwner.Platform
+	expected := expectedOwner.Credentials
+	proxy := expectedOwner.ProxyID
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i := range r.accounts {
+		account := &r.accounts[i]
+		if account.ID != id {
+			continue
+		}
+		if account.Platform != platform || account.Type != AccountTypeOAuth || account.Status != StatusActive ||
+			!reflect.DeepEqual(account.Credentials, expected) || (!reflect.DeepEqual(account.ProxyID, proxy) || !reflect.DeepEqual(account.Proxy, expectedOwner.Proxy)) {
+			return false, nil
+		}
+		account.Credentials = cloneRequestCredentialMap(replacement)
+		r.updatedCredIDs = append(r.updatedCredIDs, id)
+		return true, nil
+	}
+	return false, nil
+}
+
 func (r *grokReconcileRepo) UpdateExtra(_ context.Context, id int64, updates map[string]any) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -142,12 +165,9 @@ func (r *grokReconcileRepo) SetError(_ context.Context, id int64, message string
 	return nil
 }
 
-func (r *grokReconcileRepo) SetGrokOAuthErrorIfCredentialsUnchanged(
-	_ context.Context,
-	id int64,
-	expectedCredentials map[string]any,
-	message string,
-) (bool, error) {
+func (r *grokReconcileRepo) SetGrokOAuthErrorIfCredentialsUnchanged(_ context.Context, expectedOwner *Account, message string) (bool, error) {
+	id := expectedOwner.ID
+	expectedCredentials := expectedOwner.Credentials
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.conditionalCalls++
@@ -179,13 +199,10 @@ func (r *grokReconcileRepo) SetGrokOAuthErrorIfCredentialsUnchanged(
 	return false, nil
 }
 
-func (r *grokReconcileRepo) SetGrokOAuthRefreshErrorIfCredentialsUnchanged(
-	_ context.Context,
-	id int64,
-	expectedCredentials map[string]any,
-	expectedProxyID *int64,
-	message string,
-) (bool, error) {
+func (r *grokReconcileRepo) SetGrokOAuthRefreshErrorIfCredentialsUnchanged(_ context.Context, expectedOwner *Account, message string) (bool, error) {
+	id := expectedOwner.ID
+	expectedCredentials := expectedOwner.Credentials
+	expectedProxyID := expectedOwner.ProxyID
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for i := range r.accounts {
@@ -203,7 +220,7 @@ func (r *grokReconcileRepo) SetGrokOAuthRefreshErrorIfCredentialsUnchanged(
 			}
 		}
 		if account.Platform != PlatformGrok || account.Type != AccountTypeOAuth || account.Status != StatusActive ||
-			!reflect.DeepEqual(account.ProxyID, expectedProxyID) ||
+			(!reflect.DeepEqual(account.ProxyID, expectedProxyID) || !reflect.DeepEqual(account.Proxy, expectedOwner.Proxy)) ||
 			!reflect.DeepEqual(account.Credentials, expectedCredentials) {
 			return false, nil
 		}
@@ -217,14 +234,10 @@ func (r *grokReconcileRepo) SetGrokOAuthRefreshErrorIfCredentialsUnchanged(
 	return false, nil
 }
 
-func (r *grokReconcileRepo) SetGrokOAuthRefreshTempUnschedulableIfCredentialsUnchanged(
-	_ context.Context,
-	id int64,
-	expectedCredentials map[string]any,
-	expectedProxyID *int64,
-	until time.Time,
-	reason string,
-) (bool, error) {
+func (r *grokReconcileRepo) SetGrokOAuthRefreshTempUnschedulableIfCredentialsUnchanged(_ context.Context, expectedOwner *Account, until time.Time, reason string) (bool, error) {
+	id := expectedOwner.ID
+	expectedCredentials := expectedOwner.Credentials
+	expectedProxyID := expectedOwner.ProxyID
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for i := range r.accounts {
@@ -233,7 +246,7 @@ func (r *grokReconcileRepo) SetGrokOAuthRefreshTempUnschedulableIfCredentialsUnc
 			continue
 		}
 		if account.Platform != PlatformGrok || account.Type != AccountTypeOAuth || account.Status != StatusActive ||
-			!reflect.DeepEqual(account.ProxyID, expectedProxyID) ||
+			(!reflect.DeepEqual(account.ProxyID, expectedProxyID) || !reflect.DeepEqual(account.Proxy, expectedOwner.Proxy)) ||
 			!reflect.DeepEqual(account.Credentials, expectedCredentials) {
 			return false, nil
 		}
@@ -254,6 +267,32 @@ type reconcileInvalidator struct {
 	mu  sync.Mutex
 	ids []int64
 	err error
+}
+
+type grokReconcileSchedulerCache struct {
+	SchedulerCache
+	mu                sync.Mutex
+	setIDs, deleteIDs []int64
+}
+
+func (s *grokReconcileSchedulerCache) SetAccount(_ context.Context, account *Account) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.setIDs = append(s.setIDs, account.ID)
+	return nil
+}
+
+func (s *grokReconcileSchedulerCache) DeleteAccount(_ context.Context, id int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.deleteIDs = append(s.deleteIDs, id)
+	return nil
+}
+
+func (s *grokReconcileSchedulerCache) snapshot() (setIDs, deleteIDs []int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]int64(nil), s.setIDs...), append([]int64(nil), s.deleteIDs...)
 }
 
 type reconcileRuntimeBlocker struct {
@@ -410,6 +449,8 @@ func TestTokenRefreshService_ReconcileGrokOAuthApplyIsIdempotent(t *testing.T) {
 		"expires_at":    time.Now().UTC().Add(4 * time.Hour).Format(time.RFC3339),
 	}}
 	svc := newGrokReconcileService(repo, refresher, invalidator)
+	scheduler := &grokReconcileSchedulerCache{}
+	svc.schedulerCache = scheduler
 
 	first, err := svc.ReconcileGrokOAuth(context.Background(), GrokOAuthReconcileInput{Apply: true, Limit: 50})
 	require.NoError(t, err)
@@ -426,6 +467,9 @@ func TestTokenRefreshService_ReconcileGrokOAuthApplyIsIdempotent(t *testing.T) {
 	require.False(t, requests[0].RequireRefreshToken, "structurally invalid rows must remain discoverable")
 	require.False(t, requests[0].IncludeSetupToken)
 	require.Equal(t, 3, invalidator.count(), "block and refresh actions must invalidate token cache state")
+	setIDs, deleteIDs := scheduler.snapshot()
+	require.Empty(t, setIDs, "refresh must not publish a snapshot over a newer login")
+	require.ElementsMatch(t, []int64{2, 3}, deleteIDs, "successful refresh evicts each account for authoritative reload")
 
 	second, err := svc.ReconcileGrokOAuth(context.Background(), GrokOAuthReconcileInput{Apply: true, Limit: 50})
 	require.NoError(t, err)
@@ -434,6 +478,10 @@ func TestTokenRefreshService_ReconcileGrokOAuthApplyIsIdempotent(t *testing.T) {
 	_, setErrorIDs, updatedIDs, _ = repo.snapshot()
 	require.Equal(t, []int64{1}, setErrorIDs, "already blocked invalid rows must not transition twice")
 	require.Len(t, updatedIDs, 2)
+	require.Equal(t, 3, invalidator.count(), "a settled reconciliation must not invalidate credentials again")
+	setIDs, deleteIDs = scheduler.snapshot()
+	require.Empty(t, setIDs)
+	require.ElementsMatch(t, []int64{2, 3}, deleteIDs, "idempotent reconciliation must not evict settled accounts again")
 }
 
 func TestTokenRefreshService_ReconcileGrokOAuthCursorResumesWithoutDuplicates(t *testing.T) {

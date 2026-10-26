@@ -33,8 +33,19 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	promptCacheKey string,
 	defaultMappedModel string,
 ) (forwardResult *OpenAIForwardResult, firstByteResultErr error) {
+	if err := validateOpenAISessionContinuation(ctx, body); err != nil {
+		return nil, err
+	}
+	ctx, finishRoute, routeErr := beginOpenAISessionRouteForward(ctx, account, s.openAIFirstOutputTimeout("high"))
+	if routeErr != nil {
+		return nil, routeErr
+	}
+	defer finishRoute()
+	defer func() { firstByteResultErr = openAISessionRouteForwardError(ctx, firstByteResultErr) }()
 	ctx = WithOutboundIdentityScope(ctx, c)
+	captureNativeConversationScope(ctx, c, account, body)
 	ctx = WithAccountOutboundIdentity(ctx, account)
+	defer bindOpenAISessionRouteRequestContext(ctx, c)()
 	rememberOpenCodeInboundBody(c, body)
 	beginUpstreamResponseModelObservation(c)
 	ClearActualOpenAIUpstreamEndpoint(c)
@@ -146,9 +157,21 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 		}
 		compatPromptCacheInjected = promptCacheKey != ""
 	}
+	// Continuation and opaque-state replay must be decided for the grant that
+	// will actually be transmitted, including a refreshed shadow parent.
+	token, _, err := s.getRequestCredential(ctx, c, account)
+	if err != nil {
+		return nil, fmt.Errorf("get access token: %w", err)
+	}
+	ctx = withRequestCredentialOwner(ctx, account, token)
+	defer bindRequestCredentialOwnerContext(ctx, c)()
+	credentialAccount, credentialErr := requestCredentialAccount(ctx, account)
+	if credentialErr != nil {
+		return nil, credentialErr
+	}
 	compatReplayTrimmed := false
 	compatReplayGuardEnabled := shouldAutoInjectPromptCacheKeyForCompat(upstreamModel)
-	compatContinuationEnabled := openAICompatContinuationEnabled(account, upstreamModel)
+	compatContinuationEnabled := openAICompatContinuationEnabled(credentialAccount, upstreamModel)
 	previousResponseID := ""
 	if compatContinuationEnabled {
 		previousResponseID = s.getOpenAICompatSessionResponseID(ctx, c, account, promptCacheKey)
@@ -159,7 +182,7 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	// ChatGPT/Codex credentials rely on session_id + x-codex-turn-state; trimming to a
 	// sliding 12-message window makes the cached prefix stall at system/tools.
 	// Keep full replay there so upstream prompt caching can grow turn by turn.
-	if compatReplayGuardEnabled && !account.UsesOpenAICodexProtocol() && previousResponseID == "" && !compatContinuationDisabled {
+	if compatReplayGuardEnabled && !credentialAccount.UsesOpenAICodexProtocol() && previousResponseID == "" && !compatContinuationDisabled {
 		compatReplayTrimmed = applyAnthropicCompatFullReplayGuard(&anthropicReq)
 	}
 
@@ -190,7 +213,7 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 		responsesReq.PreviousResponseID = previousResponseID
 		trimAnthropicCompatResponsesInputToLatestTurn(responsesReq)
 	}
-	if compatReplayGuardEnabled && !account.UsesOpenAICodexProtocol() {
+	if compatReplayGuardEnabled && !credentialAccount.UsesOpenAICodexProtocol() {
 		appendOpenAICompatClaudeCodeTodoGuard(responsesReq)
 	}
 
@@ -231,7 +254,7 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 		return nil, fmt.Errorf("marshal responses request: %w", err)
 	}
 
-	if account.UsesOpenAICodexProtocol() && account.Platform != PlatformGrok {
+	if credentialAccount.UsesOpenAICodexProtocol() && credentialAccount.Platform != PlatformGrok {
 		var reqBody map[string]any
 		if err := json.Unmarshal(responsesBody, &reqBody); err != nil {
 			return nil, fmt.Errorf("unmarshal for codex transform: %w", err)
@@ -276,7 +299,6 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 		if codexResult.PromptCacheKey != "" {
 			promptCacheKey = codexResult.PromptCacheKey
 		}
-		applyCodexAccountIdentityClientMetadataMap(reqBody, codexAccountIdentitySource(c, account), apiKeyID)
 		delete(reqBody, "prompt_cache_key")
 		if shouldAutoInjectPromptCacheKeyForCompat(upstreamModel) {
 			compatTurnState = s.getOpenAICompatSessionTurnState(ctx, c, account, promptCacheKey)
@@ -284,9 +306,6 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 		// OAuth codex transform forces stream=true upstream, so always use
 		// the streaming response handler regardless of what the client asked.
 		isStream = true
-		if _, fingerprintErr := s.prepareCodexFingerprintMap(ctx, c, account, reqBody); fingerprintErr != nil {
-			return nil, fingerprintErr
-		}
 		responsesBody, err = json.Marshal(reqBody)
 		if err != nil {
 			return nil, fmt.Errorf("remarshal after codex transform: %w", err)
@@ -298,7 +317,7 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	// upstreams using the Responses API can derive a stable session identifier
 	// from prompt_cache_key. This makes our Anthropic /v1/messages compatibility
 	// path behave more like a native Responses client.
-	if account.Type == AccountTypeAPIKey {
+	if credentialAccount.Type == AccountTypeAPIKey {
 		if trimmedKey := strings.TrimSpace(promptCacheKey); trimmedKey != "" {
 			var reqBody map[string]any
 			if err := json.Unmarshal(responsesBody, &reqBody); err != nil {
@@ -314,7 +333,7 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 			}
 		}
 	}
-	if account.Platform == PlatformOpenAI {
+	if credentialAccount.Platform == PlatformOpenAI {
 		policyBody, changed, policyErr := ApplyOpenAIReasoningEffortPolicyFromContext(ctx, responsesBody)
 		if policyErr != nil {
 			if IsReasoningEffortPolicyDenied(policyErr) {
@@ -334,7 +353,7 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	// 4c. Apply OpenAI fast policy (may filter service_tier or block the request).
 	// Mirrors the Claude anthropic-beta "fast-mode-2026-02-01" filter, but keyed
 	// on the body-level service_tier field (priority/flex).
-	updatedBody, policyErr := s.applyOpenAIFastPolicyToBody(ctx, account, upstreamModel, responsesBody)
+	updatedBody, policyErr := s.applyOpenAIFastPolicyToBody(ctx, credentialAccount, upstreamModel, responsesBody)
 	if policyErr != nil {
 		var blocked *OpenAIFastBlockedError
 		if errors.As(policyErr, &blocked) {
@@ -346,7 +365,7 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	responsesBody = updatedBody
 	responsesReq.ServiceTier = normalizedOpenAIServiceTierValue(gjson.GetBytes(responsesBody, "service_tier").String())
 	grokCacheIdentity := ""
-	if account.Platform == PlatformGrok {
+	if credentialAccount.Platform == PlatformGrok {
 		grokIntentBody := responsesBody
 		grokCacheIdentity = resolveGrokCacheIdentity(c, grokIntentBody, promptCacheKey, upstreamModel)
 		patchedBody, patchErr := patchGrokResponsesBody(grokIntentBody, upstreamModel)
@@ -359,14 +378,19 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 		}
 	}
 
-	// 5. Get access token
-	token, _, err := s.getRequestCredential(ctx, c, account)
-	if err != nil {
-		return nil, fmt.Errorf("get access token: %w", err)
+	if credentialAccount.UsesOpenAICodexProtocol() && credentialAccount.Platform != PlatformGrok {
+		responsesBody, _, err = applyCodexAccountIdentityClientMetadataRaw(responsesBody, codexAccountIdentitySource(c, account), apiKeyID, ctx)
+		if err != nil {
+			return nil, err
+		}
+		responsesBody, _, err = s.prepareCodexFingerprintRaw(ctx, c, account, responsesBody)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// 6. Build upstream request
-	if account.UsesOpenAICodexProtocol() && account.Platform != PlatformGrok {
+	if credentialAccount.UsesOpenAICodexProtocol() && credentialAccount.Platform != PlatformGrok {
 		// Messages 兼容桥即使 body 未带 todo-guard/prompt_cache_key 标记（如映射到非
 		// gpt-5/codex 模型），也必须让 buildUpstreamRequest 走 bridge 分支，以保留
 		// 既有 body/session/conversation 行为。身份头在 post-build 阶段统一恢复。
@@ -374,8 +398,8 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	}
 	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
 	var upstreamReq *http.Request
-	if account.Platform == PlatformGrok {
-		upstreamReq, err = s.buildGrokResponsesRequest(upstreamCtx, c, account, responsesBody, token, grokCacheIdentity, s.cfg, s.settingService)
+	if credentialAccount.Platform == PlatformGrok {
+		upstreamReq, err = s.buildGrokResponsesRequest(upstreamCtx, c, credentialAccount, responsesBody, token, grokCacheIdentity, s.cfg, s.settingService)
 	} else {
 		upstreamReq, err = s.buildUpstreamRequest(upstreamCtx, c, account, responsesBody, token, isStream, promptCacheKey, false)
 	}
@@ -387,26 +411,25 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	// Restore the Plus cache identity after fingerprinting. Both session header
 	// spellings must remain coherent, and the account-aware resolver preserves
 	// either API-key isolation or the configured OAuth sharing scope.
-	if account.Platform != PlatformGrok && promptCacheKey != "" {
-		cacheSessionIdentity, identityErr := s.resolveOpenAIUpstreamPromptCacheHeaderIdentity(c, account, promptCacheKey)
+	if credentialAccount.Platform != PlatformGrok && promptCacheKey != "" {
+		cacheSessionIdentity, identityErr := s.resolveOpenAIUpstreamPromptCacheHeaderIdentity(c, credentialAccount, promptCacheKey)
 		if identityErr != nil {
 			return nil, fmt.Errorf("resolve messages cache session identity: %w", identityErr)
 		}
-		setOpenAIUpstreamSessionIdentityForAccount(upstreamReq.Header, account, cacheSessionIdentity)
+		setOpenAIUpstreamSessionIdentityForAccount(upstreamReq.Header, credentialAccount, cacheSessionIdentity)
 		// conversation_id 不是官方 Codex 头：Codex 账号由下方别名清理统一剥离，
 		// 仅非 Codex（API-key）账号保留既有改写行为。
-		if !account.UsesOpenAICodexProtocol() && upstreamReq.Header.Get("conversation_id") != "" {
+		if !credentialAccount.UsesOpenAICodexProtocol() && upstreamReq.Header.Get("conversation_id") != "" {
 			upstreamReq.Header.Set("conversation_id", cacheSessionIdentity)
 		}
 	}
-	if account.UsesOpenAICodexProtocol() && account.Platform != PlatformGrok {
+	if credentialAccount.UsesOpenAICodexProtocol() && credentialAccount.Platform != PlatformGrok {
 		// buildUpstreamRequest 保留 Messages bridge 的 body/session 兼容行为，并会先
 		// 清除身份头。真正发送前恢复完整 Codex 身份，避免 ChatGPT Codex 上游因缺失
 		// originator/OpenAI-Beta 返回 404（issue #3901）。
 		ensureCodexIdentityHeaders(upstreamReq.Header)
 		identity := s.applyOpenAIOutboundIdentity(ctx, account, upstreamReq.Header, true)
-		preserveOpenAIThreadOriginator(c, upstreamReq.Header)
-		clearOpenAICodexLegacySessionAliases(upstreamReq.Header, account)
+		clearOpenAICodexLegacySessionAliases(upstreamReq.Header, credentialAccount)
 		SetOpsRoutingDiagnostics(c, &OpsRoutingDiagnostics{OutboundIdentitySource: identity.Source})
 		logger.L().Debug("openai messages: upstream identity restored",
 			zap.Int64("account_id", account.ID),
@@ -415,13 +438,15 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 		)
 	}
 	if compatTurnState != "" && upstreamReq.Header.Get("x-codex-turn-state") == "" {
+		// This cache entry is scoped to the acquired principal, unlike an
+		// untrusted client echo which the request builder already guarded.
 		upstreamReq.Header.Set("x-codex-turn-state", compatTurnState)
 	}
 
 	// 7. Send request
-	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
+	proxyURL, err := requestCredentialOwnerProxyURL(ctx, account)
+	if err != nil {
+		return nil, err
 	}
 	// Grok may reject encrypted reasoning replayed under a different OAuth
 	// account/cache identity. Match forwardGrokResponses: one strip+retry before
@@ -429,11 +454,11 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	var resp *http.Response
 	for attempt := 0; ; attempt++ {
 		if attempt > 0 {
-			if account.Platform != PlatformGrok {
+			if credentialAccount.Platform != PlatformGrok {
 				break
 			}
 			upstreamCtxRetry, releaseRetry := detachUpstreamContext(ctx)
-			upstreamReq, err = s.buildGrokResponsesRequest(upstreamCtxRetry, c, account, responsesBody, token, grokCacheIdentity, s.cfg, s.settingService)
+			upstreamReq, err = s.buildGrokResponsesRequest(upstreamCtxRetry, c, credentialAccount, responsesBody, token, grokCacheIdentity, s.cfg, s.settingService)
 			releaseRetry()
 			if err != nil {
 				return nil, fmt.Errorf("build grok retry request: %w", err)
@@ -443,7 +468,7 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 		if err != nil {
 			return nil, s.handleOpenAIUpstreamTransportError(ctx, c, account, err, false)
 		}
-		if account.Platform != PlatformGrok || attempt > 0 || resp.StatusCode != http.StatusBadRequest {
+		if credentialAccount.Platform != PlatformGrok || attempt > 0 || resp.StatusCode != http.StatusBadRequest {
 			break
 		}
 		respBody := s.readUpstreamErrorBody(resp)
@@ -480,11 +505,13 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	if resp.StatusCode >= 400 {
 		respBody, upstreamMsg := s.readOpenAIUpstreamError(resp)
 		if !agentIdentityTaskRecoveryWasTried(ctx) && s.isAgentIdentityAccount(ctx, account) && isAgentIdentityTaskInvalidHTTPResponse(resp.StatusCode, respBody) {
-			expectedTaskID := account.GetCredential("task_id")
-			if err := s.recoverAgentIdentityTask(ctx, account, expectedTaskID); err != nil {
+			expectedTaskID := credentialAccount.GetCredential("task_id")
+			recoveredCtx, err := s.recoverAgentIdentityTask(ctx, account, expectedTaskID)
+			if err != nil {
 				return nil, fmt.Errorf("agent identity task recovery failed: %w", err)
 			}
-			return s.ForwardAsAnthropic(markAgentIdentityTaskRecoveryTried(ctx), c, account, body, promptCacheKey, defaultMappedModel)
+			defer bindRequestCredentialOwnerContext(recoveredCtx, c)()
+			return s.ForwardAsAnthropic(markAgentIdentityTaskRecoveryTried(recoveredCtx), c, account, body, promptCacheKey, defaultMappedModel)
 		}
 		if previousResponseID != "" && (isOpenAICompatPreviousResponseNotFound(resp.StatusCode, upstreamMsg, respBody) || isOpenAICompatPreviousResponseUnsupported(resp.StatusCode, upstreamMsg, respBody)) {
 			if isOpenAICompatPreviousResponseUnsupported(resp.StatusCode, upstreamMsg, respBody) {
@@ -502,7 +529,7 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 		// Grok account-switched history often fails decrypt; strip encrypted
 		// reasoning once at the client-body level so failover accounts can accept
 		// the multi-turn tool continuation instead of cascading 400s.
-		if account.Platform == PlatformGrok &&
+		if credentialAccount.Platform == PlatformGrok &&
 			isGrokInvalidEncryptedContentResponse(resp.StatusCode, respBody) &&
 			!grokEncryptedContentStripRetried(ctx) {
 			if strippedBody, ok := stripAnthropicThinkingSignatures(body); ok {
@@ -518,11 +545,11 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 		// Non-failover error: return Anthropic-formatted error to client
 		return s.handleAnthropicErrorResponse(resp, c, account, billingModel)
 	}
-	if account.Platform == PlatformGrok && account.Type == AccountTypeOAuth && !account.IsShadow() {
+	if credentialAccount.Platform == PlatformGrok && credentialAccount.Type == AccountTypeOAuth && !account.IsShadow() {
 		s.updateGrokUsageFromResponse(withGrokTeamRateLimitModel(ctx, upstreamModel), account, resp.Header, resp.StatusCode)
 	}
 
-	if account.UsesOpenAICodexProtocol() && promptCacheKey != "" {
+	if credentialAccount.UsesOpenAICodexProtocol() && promptCacheKey != "" {
 		if turnState := strings.TrimSpace(resp.Header.Get("x-codex-turn-state")); turnState != "" {
 			s.bindOpenAICompatSessionTurnState(ctx, c, account, promptCacheKey, turnState)
 		}
@@ -569,12 +596,12 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 
 	// Extract and save Codex usage snapshot from response headers (for OAuth accounts).
 	// 排除 spark 影子:其 codex_* 仅由 QueryUsage(/wham/usage bengalfox)更新(外审第7轮 P1)。
-	if handleErr == nil && account.Type == AccountTypeOAuth && !account.IsShadow() && account.Platform != PlatformGrok {
+	if handleErr == nil && credentialAccount.Type == AccountTypeOAuth && !account.IsShadow() && credentialAccount.Platform != PlatformGrok {
 		if snapshot := ParseCodexRateLimitHeaders(resp.Header); snapshot != nil {
-			s.updateCodexUsageSnapshot(ctx, account.ID, snapshot)
+			s.updateCodexUsageSnapshot(ctx, account, snapshot)
 		}
 	} else if handleErr == nil && account.IsShadow() && account.ParentAccountID != nil {
-		notifyOpenAIAutoReset(*account.ParentAccountID)
+		notifyOpenAIAutoResetForOwner(capturedCodexUsageOwner(ctx, account))
 	}
 
 	stampOpenAIResponsesUpstreamEndpoint(c, result)
@@ -696,6 +723,13 @@ func (s *OpenAIGatewayService) handleAnthropicBufferedStreamingResponse(
 	}
 	s.finalizeCodexClientQuotaHeaders(c.Writer.Header(), c, account)
 	c.Header("Content-Type", "application/json; charset=utf-8")
+	acceptedBody, marshalErr := json.Marshal(finalResponse)
+	if marshalErr != nil {
+		return nil, marshalErr
+	}
+	if err := commitOpenAISessionTakeoverJSON(c.Request.Context(), acceptedBody); err != nil {
+		return &OpenAIForwardResult{RequestID: requestID, Usage: usage, Model: originalModel, BillingModel: billingModel, UpstreamModel: upstreamModel, Duration: time.Since(startTime)}, err
+	}
 	c.JSON(http.StatusOK, anthropicResp)
 
 	result := &OpenAIForwardResult{
@@ -973,11 +1007,12 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 	state.Model = originalModel
 	var usage OpenAIUsage
 	responseID := ""
-	var timing streamOutputTiming
+	timing := requestStreamOutputTiming(c)
 	clientDisconnected := false
 	clientOutputStarted := false
 	var streamFailoverErr error
 	var streamNonFailoverErr error
+	var pendingRouteEvents []string
 	terminalEventType := ""
 	searchCount := 0
 	streamSearchSeen := make(map[string]struct{})
@@ -1134,6 +1169,10 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 		}
 
 		// Convert to Anthropic events
+		if err := commitOpenAISessionTakeoverEvent(c.Request.Context(), []byte(payload)); err != nil {
+			streamNonFailoverErr = err
+			return true
+		}
 		events := apicompat.ResponsesEventToAnthropicEvents(&event, state)
 		if !clientDisconnected {
 			for _, evt := range events {
@@ -1145,7 +1184,21 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 					)
 					continue
 				}
+				if openAISessionTakeoverPending(c.Request.Context()) {
+					pendingRouteEvents = append(pendingRouteEvents, sse)
+					continue
+				}
 				writeStreamHeaders()
+				for _, pending := range pendingRouteEvents {
+					if _, err := fmt.Fprint(c.Writer, pending); err != nil {
+						clientDisconnected = true
+						break
+					}
+				}
+				pendingRouteEvents = nil
+				if clientDisconnected {
+					break
+				}
 				if _, err := fmt.Fprint(c.Writer, sse); err != nil {
 					clientDisconnected = true
 					logger.L().Info("openai messages stream: client disconnected, continuing to drain upstream for billing",
@@ -1156,7 +1209,7 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 				clientOutputStarted = true
 			}
 		}
-		if len(events) > 0 && !clientDisconnected {
+		if len(events) > 0 && !clientDisconnected && clientOutputStarted {
 			c.Writer.Flush()
 		}
 		return isTerminalEvent
@@ -1169,6 +1222,9 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 		}
 		if streamNonFailoverErr != nil {
 			return resultWithUsage(), streamNonFailoverErr
+		}
+		if openAISessionTakeoverPending(c.Request.Context()) {
+			return resultWithUsage(), ErrOpenAISessionRouteNotAccepted
 		}
 		if finalEvents := apicompat.FinalizeResponsesAnthropicStream(state); len(finalEvents) > 0 && !clientDisconnected {
 			for _, evt := range finalEvents {

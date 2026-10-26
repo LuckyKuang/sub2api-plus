@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import BulkEditKeysModal from '../BulkEditKeysModal.vue'
+import DateTimePicker from '@/components/common/DateTimePicker.vue'
 import type { Group } from '@/types'
 
 const { bulkUpdate, showSuccess, showError } = vi.hoisted(() => ({
@@ -103,7 +104,7 @@ describe('BulkEditKeysModal', () => {
     await wrapper.get('[data-test="enable-ip_blacklist"]').setValue(true)
     await wrapper.get('[data-test="ip_blacklist-input"]').setValue(' 192.0.2.1 \n\n 198.51.100.0/24\n')
     await wrapper.get('[data-test="enable-expiration"]').setValue(true)
-    await wrapper.get('[data-test="expiration-input"]').setValue('2030-01-02T03:04')
+    await wrapper.getComponent(DateTimePicker).setValue('2030-01-02T03:04')
     await wrapper.get('form').trigger('submit')
     expect(bulkUpdate).toHaveBeenCalledWith([1, 2], {
       ip_blacklist: ['192.0.2.1', '198.51.100.0/24'],

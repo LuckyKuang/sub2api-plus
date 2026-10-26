@@ -23,12 +23,16 @@ import (
 )
 
 type Account struct {
-	ID                      int64
-	Name                    string
-	Notes                   *string
-	Platform                string
-	Type                    string
-	Credentials             map[string]any
+	ID          int64
+	Name        string
+	Notes       *string
+	Platform    string
+	Type        string
+	Credentials map[string]any
+	// CredentialGeneration is a non-secret digest carried only by slim scheduler
+	// projections. Hydrated accounts compute it from their complete grant.
+	CredentialGeneration    string `json:"credential_generation,omitempty"`
+	CNQuotaGeneration       string `json:"cn_quota_generation,omitempty"`
 	Extra                   map[string]any
 	ProxyID                 *int64
 	ProxyFallbackOriginID   *int64
@@ -67,6 +71,10 @@ type Account struct {
 	AccountGroups []AccountGroup
 	GroupIDs      []int64
 	Groups        []*Group
+
+	// Unsaved credential owners retain their original private identity across
+	// request snapshots. It is never persisted or exposed through JSON.
+	unsavedCredentialOwner *Account
 
 	// model_mapping 热路径缓存（非持久化字段）
 	modelMappingCache               map[string]string
@@ -207,6 +215,9 @@ func (a *Account) IsSchedulable() bool {
 		return false
 	}
 	if a.TempUnschedulableUntil != nil && now.Before(*a.TempUnschedulableUntil) {
+		return false
+	}
+	if a.miniMaxOAuthPlanExhausted(now) {
 		return false
 	}
 	if a.SupportsAccountQuota() && a.IsQuotaExceeded() {
@@ -1700,10 +1711,19 @@ func (a *Account) GetCNAPIKey() string {
 // 用于路由到对应的额度查询端点。非 coding 模式或无法识别时返回空串。
 // 只认官方域名：自定义中转不得把第三方 Key 发往厂商官方额度端点。
 func (a *Account) GetCodingPlanProvider() string {
-	if a.IsDomesticOAuth() {
+	if a == nil {
 		return ""
 	}
-	if a == nil {
+	if a.IsDomesticOAuth() {
+		if a.Platform == PlatformKimi || a.Platform == PlatformMiniMax || a.Platform == PlatformStepFun {
+			return a.Platform
+		}
+		return ""
+	}
+	if a.Platform == PlatformZhipu && a.Type == AccountTypeOAuth {
+		if a.GetCredential("plan_kind") == ZhipuPlanIndividualCodingPlan || a.GetCredential("plan_kind") == ZhipuPlanTeamCodingPlan {
+			return PlatformZhipu
+		}
 		return ""
 	}
 	if a.IsOpenCodeGoPlan() {
@@ -1728,7 +1748,7 @@ func (a *Account) GetCodingPlanProvider() string {
 	switch {
 	case isKimiCodingBaseURL(a.GetOpenAIBaseURL()):
 		return PlatformKimi
-	case strings.Contains(baseURL, "bigmodel.cn"), strings.Contains(baseURL, "api.z.ai"):
+	case zhipuQuotaHost(baseURL) != "":
 		return PlatformZhipu
 	case miniMaxQuotaHost(baseURL) != "":
 		return PlatformMiniMax
@@ -1872,6 +1892,10 @@ func (a *Account) GetOpenAIApiKey() string {
 // 注意 IsOpenAIApiKey 语义上仅指 openai 平台账号，调度倍率/WS 能力门控
 // 继续以其为准，不受本方法影响。
 func (a *Account) GetOpenAIProtocolAPIKey() string {
+	if usesZhipuProjectToken(a) && a.GetCredential("plan_kind") != ZhipuPlanOffPeak {
+		return a.GetCredential("access_token")
+	}
+
 	if a.IsDomesticOAuth() {
 		return a.GetCredential("access_token")
 	}
@@ -2035,7 +2059,7 @@ func (a *Account) GrokMediaGenerationEligibility() (bool, string) {
 		return true, "non_oauth"
 	}
 
-	billing, err := grokBillingSnapshotFromExtra(a.Extra)
+	billing, err := grokAccountBillingSnapshot(a)
 	if err != nil || billing == nil {
 		return false, "billing_unobserved"
 	}

@@ -31,8 +31,8 @@ func (f *GrokQuotaFetcher) BuildUsageInfo(account *Account) *UsageInfo {
 		return usage
 	}
 
-	billing, _ := grokBillingSnapshotFromExtra(account.Extra)
-	snapshot, err := grokQuotaSnapshotFromExtra(account.Extra)
+	billing, _ := grokAccountBillingSnapshot(account)
+	snapshot, err := grokAccountQuotaSnapshot(account)
 	activeProbeClearsForbidden := newerSuccessfulGrokActiveProbeClearsBillingForbidden(billing, snapshot)
 	if billing != nil {
 		usage.GrokBilling = billing
@@ -261,7 +261,7 @@ func stampGrokQuotaSnapshotForPlan(account *Account, snapshot *xai.QuotaSnapshot
 	}
 	var prev *xai.QuotaSnapshot
 	if account != nil {
-		prev, _ = grokQuotaSnapshotFromExtra(account.Extra)
+		prev, _ = grokAccountQuotaSnapshot(account)
 	}
 	snapshot.ApplyGrok45ResponsesPlanSignal(prev)
 }

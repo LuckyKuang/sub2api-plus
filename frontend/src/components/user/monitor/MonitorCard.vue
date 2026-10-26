@@ -1,7 +1,7 @@
 <template>
   <button
     type="button"
-    class="group text-left p-5 rounded-2xl min-h-[280px] w-full bg-white backdrop-blur-xl border border-gray-200/80 shadow-card dark:bg-dark-800 dark:border-dark-700/70 hover:-translate-y-1 hover:shadow-card-hover dark:hover:border-primary-500/30 hover:border-gray-300 transition-all duration-300 ease-out flex flex-col"
+    class="glass-surface group text-left p-5 min-h-[280px] w-full border border-gray-200/80 shadow-card dark:border-dark-700/70 hover:-translate-y-1 hover:shadow-card-hover dark:hover:border-primary-500/30 hover:border-gray-300 transition-all duration-300 ease-out flex flex-col"
     @click="emit('click')"
   >
     <!-- Header: icon + name/model + status chip -->
@@ -24,12 +24,12 @@
             {{ providerLabel(item.provider) }}
           </span>
           <!-- 纯配额模式主模型是占位符 "quota"，展示层替换为本地化「配额」标签 -->
-          <span class="font-mono text-xs truncate text-gray-500 dark:text-gray-400">
+          <span class="font-mono text-xs truncate surface-muted">
             {{ formatMonitorModel(item.primary_model) }}
           </span>
           <span
             v-if="item.group_name"
-            class="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium bg-gray-100 text-gray-600 dark:bg-dark-700 dark:text-gray-300 flex-shrink-0"
+            class="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium surface-inset flex-shrink-0 surface-muted"
           >
             {{ item.group_name }}
           </span>
@@ -43,7 +43,7 @@
       </span>
     </div>
 
-    <p class="mt-3 text-xs text-gray-500 dark:text-gray-400" :title="t('usage.probeTimingHint')">{{ t('usage.latencyFirstByte') }} {{ formatLatency(item.primary_first_byte_ms) }} ms</p>
+    <p class="mt-3 text-xs surface-muted" :title="t('monitorCommon.timingHint')">{{ t('monitorCommon.firstText') }} {{ formatLatency(item.primary_first_text_ms) }} ms · {{ t('monitorCommon.firstByte') }} {{ formatLatency(item.primary_first_byte_ms) }} ms</p>
     <!-- Metrics -->
     <MonitorMetricPair
       primary-icon="bolt"
@@ -127,7 +127,7 @@ const {
 } = useChannelMonitorFormat()
 
 const providerTintClass = computed(() =>
-  PROVIDER_TINT[props.item.provider] ?? 'text-gray-500 dark:text-gray-300'
+  PROVIDER_TINT[props.item.provider] ?? 'surface-muted'
 )
 
 const quotaVisible = computed(

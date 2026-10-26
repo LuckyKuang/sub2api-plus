@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	dbent "github.com/LuckyKuang/sub2api-plus/ent"
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/logger"
@@ -113,6 +114,7 @@ var duplicateAccountDiscardedExtraKeys = map[string]struct{}{
 	"quota_daily_reset_at":  {},
 	"quota_weekly_reset_at": {},
 	// Provider observations, capability probes, and transient scheduling state.
+	RuntimeRecoveryGenerationExtraKey:        {},
 	"model_rate_limits":                      {},
 	"session_window_utilization":             {},
 	"passive_usage_7d_utilization":           {},
@@ -421,6 +423,7 @@ func buildAccountForCreate(input *CreateAccountInput, accountExtra map[string]an
 		return nil, errors.New("typesafe accounts only support apikey credentials")
 	}
 	// Probe/session state is system-managed. New accounts always start with automatic refresh disabled.
+	delete(accountExtra, RuntimeRecoveryGenerationExtraKey)
 	delete(accountExtra, "upstream_billing_probe_enabled")
 	delete(accountExtra, "upstream_billing_rate_sync_enabled")
 	delete(accountExtra, "upstream_billing_probe")
@@ -712,6 +715,7 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 	// Extra 使用 map：需要区分“未提供(nil)”与“显式清空({})”。
 	// 关闭配额限制时前端会删除 quota_* 键并提交 extra:{}，此时也必须落库。
 	if input.Extra != nil {
+		delete(normalizedExtra, RuntimeRecoveryGenerationExtraKey)
 		delete(normalizedExtra, "upstream_billing_probe_enabled")
 		delete(normalizedExtra, "upstream_billing_rate_sync_enabled")
 		delete(normalizedExtra, "upstream_billing_probe")
@@ -730,6 +734,7 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 			OllamaCloudUsageAutoRefreshExtraKey,
 			OllamaCloudUsageSnapshotExtraKey,
 			OpenAIAutoResetCreditStateExtraKey,
+			RuntimeRecoveryGenerationExtraKey,
 		} {
 			if v, ok := account.Extra[key]; ok {
 				normalizedExtra[key] = v
@@ -928,6 +933,7 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 // normalizeOpenAIAccountUserAgent makes account validation observe the same
 // global policy snapshot used later by outbound identity resolution.
 func (s *adminServiceImpl) normalizeOpenAIAccountUserAgent(ctx context.Context, platform, accountType string, credentials map[string]any) error {
+	normalizeDeepSeekAnonymousUser(platform, credentials)
 	if err := validateStepFunCredentials(platform, accountType, credentials); err != nil {
 		return err
 	}
@@ -949,6 +955,7 @@ func (s *adminServiceImpl) UpdateAccountExtra(ctx context.Context, id int64, upd
 	}
 	updates = sanitizedCodexFingerprintExtraUpdates(updates)
 	updates = stripOpenAIAutoResetCreditManagedExtra(updates, true)
+	delete(updates, RuntimeRecoveryGenerationExtraKey)
 	delete(updates, "upstream_billing_probe_enabled")
 	delete(updates, "upstream_billing_rate_sync_enabled")
 	delete(updates, "upstream_billing_probe")
@@ -985,6 +992,7 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 	// Managed session state may only enter through dedicated typed endpoints.
 	input.Extra = sanitizedCodexFingerprintExtraUpdates(input.Extra)
 	input.Extra = stripOpenAIAutoResetCreditManagedExtra(input.Extra, true)
+	delete(input.Extra, RuntimeRecoveryGenerationExtraKey)
 	delete(input.Extra, "upstream_billing_probe_enabled")
 	delete(input.Extra, "upstream_billing_rate_sync_enabled")
 	delete(input.Extra, "upstream_billing_probe")
@@ -1288,20 +1296,29 @@ func (s *adminServiceImpl) resolveBulkUpdateTargetIDs(ctx context.Context, filte
 }
 
 func (s *adminServiceImpl) DeleteAccount(ctx context.Context, id int64) error {
-	// 级联删除 spark 影子账号（先删影子，再删母账号）
-	shadows, err := s.accountRepo.ListShadowsByParent(ctx, id)
-	if err != nil {
-		return fmt.Errorf("list spark shadows for cascade delete: %w", err)
+	writer, ok := s.accountRepo.(OpenAIOAuthPolicyTransactionRepository)
+	if !ok {
+		return errors.New("account deletion requires atomic repository support")
 	}
-	for _, shadow := range shadows {
-		if err := s.accountRepo.Delete(ctx, shadow.ID); err != nil {
-			return fmt.Errorf("cascade delete spark shadow %d: %w", shadow.ID, err)
+	return writer.RunOpenAIOAuthPolicyTransaction(ctx, func(writeCtx context.Context, repo AccountRepository) error {
+		locker, ok := repo.(AccountCredentialFamilyLocker)
+		if !ok {
+			return errors.New("account deletion requires credential family locking")
 		}
-	}
-	if err := s.accountRepo.Delete(ctx, id); err != nil {
-		return err
-	}
-	return nil
+		if err := locker.LockAccountCredentialFamily(writeCtx, id); err != nil {
+			return err
+		}
+		shadows, err := repo.ListShadowsByParent(writeCtx, id)
+		if err != nil {
+			return fmt.Errorf("list spark shadows for cascade delete: %w", err)
+		}
+		for _, shadow := range shadows {
+			if err := repo.Delete(writeCtx, shadow.ID); err != nil {
+				return fmt.Errorf("cascade delete spark shadow %d: %w", shadow.ID, err)
+			}
+		}
+		return repo.Delete(writeCtx, id)
+	})
 }
 
 func (s *adminServiceImpl) RefreshAccountCredentials(ctx context.Context, id int64) (*Account, error) {
@@ -1314,25 +1331,52 @@ func (s *adminServiceImpl) RefreshAccountCredentials(ctx context.Context, id int
 }
 
 func (s *adminServiceImpl) ClearAccountError(ctx context.Context, id int64) (*Account, error) {
-	if err := s.accountRepo.ClearError(ctx, id); err != nil {
-		return nil, err
+	writer, ok := s.accountRepo.(OpenAIOAuthPolicyTransactionRepository)
+	if !ok {
+		return nil, errors.New("account recovery requires atomic repository support")
 	}
-	if err := s.accountRepo.ClearRateLimit(ctx, id); err != nil {
-		return nil, err
+	var updated *Account
+	var cleanupRuntime func(*Account)
+	if clearer, ok := s.runtimeBlocker.(RuntimeRecoveryGenerationClearer); ok {
+		cleanupRuntime = clearer.PrepareRuntimeRecoveryGenerationClear(id)
 	}
-	if err := s.accountRepo.ClearAntigravityQuotaScopes(ctx, id); err != nil {
-		return nil, err
-	}
-	if err := s.accountRepo.ClearModelRateLimits(ctx, id); err != nil {
-		return nil, err
-	}
-	if err := s.accountRepo.ClearTempUnschedulable(ctx, id); err != nil {
+	if err := writer.RunOpenAIOAuthPolicyTransaction(ctx, func(writeCtx context.Context, repo AccountRepository) error {
+		recovery, ok := repo.(AccountRecoveryRepository)
+		if !ok {
+			return errors.New("account recovery state writer is unavailable")
+		}
+		if err := recovery.ClearAccountRecoveryState(writeCtx, id); err != nil {
+			return err
+		}
+		var err error
+		updated, err = repo.GetByID(writeCtx, id)
+		return err
+	}); err != nil {
 		return nil, err
 	}
 	if s.runtimeBlocker != nil {
-		s.runtimeBlocker.ClearAccountSchedulingBlock(id)
+		clearRuntime := func() {
+			if cleanupRuntime != nil {
+				cleanupRuntime(updated)
+			} else {
+				s.runtimeBlocker.ClearAccountSchedulingBlock(id)
+			}
+		}
+		if tx := dbent.TxFromContext(ctx); tx != nil {
+			tx.OnCommit(func(next dbent.Committer) dbent.Committer {
+				return dbent.CommitFunc(func(commitCtx context.Context, tx *dbent.Tx) error {
+					if err := next.Commit(commitCtx, tx); err != nil {
+						return err
+					}
+					clearRuntime()
+					return nil
+				})
+			})
+		} else {
+			clearRuntime()
+		}
 	}
-	return s.accountRepo.GetByID(ctx, id)
+	return updated, nil
 }
 
 func (s *adminServiceImpl) SetAccountError(ctx context.Context, id int64, errorMsg string) error {
@@ -1351,15 +1395,20 @@ func (s *adminServiceImpl) SetAccountSchedulable(ctx context.Context, id int64, 
 }
 
 func (s *adminServiceImpl) RevertAccountProxyFallback(ctx context.Context, id int64) error {
-	if err := s.accountRepo.RevertProxyFallback(ctx, id); err != nil {
-		return err
+	writer, ok := s.accountRepo.(OpenAIOAuthPolicyTransactionRepository)
+	if !ok {
+		return errors.New("account proxy restoration requires atomic repository support")
 	}
-	// 加载回退后的账号以获取实际 ProxyID，再传播到影子账号
-	account, err := s.accountRepo.GetByID(ctx, id)
-	if err != nil {
-		return fmt.Errorf("get account after proxy revert: %w", err)
-	}
-	return s.propagateProxyToShadows(ctx, id, account.ProxyID)
+	return writer.RunOpenAIOAuthPolicyTransaction(ctx, func(writeCtx context.Context, repo AccountRepository) error {
+		if err := repo.RevertProxyFallback(writeCtx, id); err != nil {
+			return err
+		}
+		account, err := repo.GetByID(writeCtx, id)
+		if err != nil {
+			return fmt.Errorf("get account after proxy revert: %w", err)
+		}
+		return propagateAccountProxyToShadows(writeCtx, repo, id, account.ProxyID)
+	})
 }
 
 // CreateShadow 为指定 OpenAI OAuth 母账号创建 spark 维度影子账号（一母一影）。
@@ -1781,6 +1830,9 @@ func (s *adminServiceImpl) resolveOpenAIOutboundIdentity(ctx context.Context, ac
 // ForceOpenAIPrivacy 强制重新设置 OpenAI OAuth 账号隐私，无论当前状态。
 // 这是管理员手动入口；官方 Codex 不会在登录/刷新时 PATCH 训练开关。
 func (s *adminServiceImpl) ForceOpenAIPrivacy(ctx context.Context, account *Account) string {
+	if s == nil || account == nil {
+		return ""
+	}
 	if account.IsCredentialShadow() {
 		return ""
 	}
@@ -1790,33 +1842,49 @@ func (s *adminServiceImpl) ForceOpenAIPrivacy(ctx context.Context, account *Acco
 	if s.privacyClientFactory == nil {
 		return ""
 	}
+	guarded, ok := s.accountRepo.(CredentialStateMutationRepository)
+	if !ok {
+		return ""
+	}
+	// A freshly created account is not yet hydrated. Acquire the complete owner
+	// once, before reading its token or route; an already acquired request keeps
+	// its immutable owner instead of combining it with a second proxy lookup.
+	owner, err := requestCredentialAccount(ctx, account)
+	if !requestCredentialOwnerBound(ctx, account) {
+		owner, err = s.accountRepo.GetByID(ctx, account.ID)
+	}
+	if err != nil || owner == nil || owner.IsCredentialShadow() || owner.Platform != PlatformOpenAI || owner.Type != AccountTypeOAuth {
+		return ""
+	}
+	owner = snapshotRequestCredentialAccount(owner)
+	proxyURL, err := requestCredentialOwnerProxyURL(context.Background(), owner)
+	if err != nil {
+		return ""
+	}
 
-	token, _ := account.Credentials["access_token"].(string)
+	token, _ := owner.Credentials["access_token"].(string)
 	if token == "" {
 		return ""
 	}
 
-	var proxyURL string
-	if account.ProxyID != nil {
-		if p, err := s.proxyRepo.GetByID(ctx, *account.ProxyID); err == nil && p != nil {
-			proxyURL = p.URL()
-		}
-	}
-
-	chatGPTAccountID, _ := account.Credentials["chatgpt_account_id"].(string)
+	chatGPTAccountID, _ := owner.Credentials["chatgpt_account_id"].(string)
 	var settings *SettingService
 	if s != nil {
 		settings = s.settingService
 	}
 	ctx = withManagedOpenAICodexResidency(ctx, settings)
-	mode := disableOpenAITraining(ctx, s.privacyClientFactory, token, proxyURL, chatGPTAccountID, s.resolveOpenAIOutboundIdentity(ctx, account))
+	mode := disableOpenAITraining(ctx, s.privacyClientFactory, token, proxyURL, chatGPTAccountID, s.resolveOpenAIOutboundIdentity(ctx, owner))
 	if mode == "" {
 		return ""
 	}
 
-	if err := s.accountRepo.UpdateExtra(ctx, account.ID, map[string]any{"privacy_mode": mode}); err != nil {
+	accepted, err := guarded.ApplyCredentialStateMutation(ctx, owner, CredentialStateMutation{Extra: map[string]any{"privacy_mode": mode}})
+	if err != nil {
 		logger.LegacyPrintf("service.admin", "force_update_openai_privacy_mode_failed: account_id=%d err=%v", account.ID, err)
 		return mode
+	}
+	if !accepted {
+		return ""
 	}
 	if account.Extra == nil {
 		account.Extra = make(map[string]any)

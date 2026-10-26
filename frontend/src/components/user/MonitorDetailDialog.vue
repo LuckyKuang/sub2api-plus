@@ -5,24 +5,26 @@
     width="wide"
     @close="$emit('close')"
   >
-    <div v-if="loading" class="py-8 text-center text-sm text-gray-500">
+    <div v-if="loading" class="py-8 text-center text-sm surface-muted">
       {{ t('common.loading') }}
     </div>
-    <div v-else-if="!detail" class="py-8 text-center text-sm text-gray-500">
+    <div v-else-if="!detail" class="py-8 text-center text-sm surface-muted">
       {{ t('channelStatus.detailLoadError') }}
     </div>
-    <div v-else class="table-container overflow-x-auto">
-      <table class="table">
+    <div v-else class="record-table-scroll record-table-dialog-scroll table-container overflow-x-auto">
+      <table class="record-table table">
         <thead class="border-b border-gray-200 dark:border-dark-700">
-          <tr class="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">
+          <tr class="text-xs uppercase tracking-wider surface-muted">
             <th>{{ t('channelStatus.detailColumns.model') }}</th>
             <th>{{ t('channelStatus.detailColumns.latestStatus') }}</th>
-            <th>{{ t('usage.latestFirstByte') }}</th>
+            <th>{{ t('monitorCommon.latestFirstText') }}</th>
+            <th>{{ t('monitorCommon.latestFirstByte') }}</th>
             <th>{{ t('usage.latestTotalDuration') }}</th>
             <th>{{ t('channelStatus.detailColumns.availability7d') }}</th>
             <th>{{ t('channelStatus.detailColumns.availability15d') }}</th>
             <th>{{ t('channelStatus.detailColumns.availability30d') }}</th>
-            <th>{{ t('usage.avgFirstByte7d') }}</th>
+            <th>{{ t('monitorCommon.avgFirstText7d') }}</th>
+            <th>{{ t('monitorCommon.avgFirstByte7d') }}</th>
             <th>{{ t('usage.avgTotalDuration7d') }}</th>
           </tr>
         </thead>
@@ -41,12 +43,14 @@
                 {{ statusLabel(m.latest_status) }}
               </span>
             </td>
+            <td>{{ formatLatency(m.latest_first_text_ms) }}</td>
             <td>{{ formatLatency(m.latest_first_byte_ms) }}</td>
             <td>{{ formatLatency(m.latest_latency_ms) }}</td>
             <td>{{ formatPercent(m.availability_7d) }}</td>
             <td>{{ formatPercent(m.availability_15d) }}</td>
             <td>{{ formatPercent(m.availability_30d) }}</td>
-            <td :title="t('usage.probeTimingHint')">{{ formatLatency(m.avg_first_byte_7d_ms) }}<span class="block text-xs text-gray-400">{{ t('usage.firstByteSamples', { n: m.first_byte_samples_7d ?? 0 }) }}</span></td>
+            <td :title="t('monitorCommon.timingHint')">{{ formatLatency(m.avg_first_text_7d_ms) }}<span class="block text-xs surface-muted">{{ t('monitorCommon.textSamples', { n: m.first_text_samples_7d ?? 0 }) }}</span></td>
+            <td :title="t('monitorCommon.timingHint')">{{ formatLatency(m.avg_first_byte_7d_ms) }}<span class="block text-xs surface-muted">{{ t('usage.firstByteSamples', { n: m.first_byte_samples_7d ?? 0 }) }}</span></td>
             <td>{{ formatLatency(m.avg_latency_7d_ms) }}</td>
           </tr>
         </tbody>

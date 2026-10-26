@@ -90,7 +90,7 @@ func (r *usageBatchLogRepoStub) GetBatchUserUsageStats(context.Context, []int64,
 func (r *usageBatchLogRepoStub) GetBatchAPIKeyUsageStats(context.Context, []int64, time.Time, time.Time) (map[int64]*usagestats.BatchAPIKeyUsageStats, error) {
 	return nil, nil
 }
-func (r *usageBatchLogRepoStub) GetUserDashboardStats(context.Context, int64) (*usagestats.UserDashboardStats, error) {
+func (r *usageBatchLogRepoStub) GetUserDashboardStats(context.Context, int64, string) (*usagestats.UserDashboardStats, error) {
 	return nil, nil
 }
 func (r *usageBatchLogRepoStub) GetAPIKeyDashboardStats(context.Context, int64) (*usagestats.UserDashboardStats, error) {

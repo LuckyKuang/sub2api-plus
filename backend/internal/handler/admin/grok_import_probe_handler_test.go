@@ -4,6 +4,7 @@ package admin
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -53,6 +54,10 @@ func (s *grokImportAdminService) CreateAccount(_ context.Context, input *service
 }
 
 type grokImportOAuthClientStub struct{}
+
+func (grokImportOAuthClientStub) ValidateAuthorizationTokens(context.Context, *xai.TokenResponse, xai.OIDCLoginContext, string) (*xai.OIDCIdentity, error) {
+	return nil, errors.New("unexpected authorization validation")
+}
 
 func (grokImportOAuthClientStub) ExchangeCode(context.Context, string, string, string, string, string) (*xai.TokenResponse, error) {
 	return &xai.TokenResponse{AccessToken: "access-token", RefreshToken: "refresh-token", ExpiresIn: 3600}, nil

@@ -38,12 +38,13 @@ const (
 	// HomeURL is rendered as the User-Agent product comment (`+url`).
 	HomeURL = "https://github.com/deepseek-ai/deepseek-harness"
 
-	// DefaultVersion is the pinned published harness version. The parenthesized
-	// comment is part of the same User-Agent value, not a second declaration.
-	DefaultVersion = "0.2.0-rc.2"
+	// DefaultVersion is the manually reviewed published prerelease harness
+	// version. The parenthesized comment is part of the same User-Agent value,
+	// not a second declaration.
+	DefaultVersion = "0.2.1-rc.3"
 
 	// StableVersion is the oldest client version this build advertises.
-	StableVersion = DefaultVersion
+	StableVersion = "0.2.0-rc.2"
 
 	// VersionEnv is the optional operator override for DefaultVersion. It
 	// follows the existing SUB2API_CLAUDE_CLI_VERSION / XAI_GROK_CLI_VERSION

@@ -1,40 +1,44 @@
 <template>
-  <div class="space-y-5">
+  <div class="flex min-w-0 flex-col gap-[var(--shell-gap)]">
     <!-- 页头(独立形态下展示标题;后台形态 AppHeader 已有页面标题) -->
-    <div v-if="!embedded">
+    <div v-if="!embedded" class="card px-5 py-5 sm:px-6">
       <h1 class="text-2xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-3xl">{{ t('modelPlaza.title') }}</h1>
-      <p class="mt-1.5 text-sm text-gray-500 dark:text-dark-400">{{ t('modelPlaza.description') }}</p>
+      <p class="mt-1.5 text-sm surface-muted">{{ t('modelPlaza.description') }}</p>
     </div>
 
     <!-- 全局价格说明(管理员配置,Markdown) -->
     <div
       v-if="descriptionHtml"
-      class="plaza-description rounded-2xl border border-gray-100 bg-white px-5 py-4 text-sm shadow-card dark:border-dark-700/50 dark:bg-dark-800"
+      class="glass-surface plaza-description border px-5 py-4 text-sm shadow-card dark:border-dark-700/50"
+      :class="{ 'workspace-shell': embedded }"
       v-html="descriptionHtml"
     ></div>
 
     <!-- 未登录提示 -->
     <p
       v-if="!isAuthenticated"
-      class="flex items-center gap-1.5 text-xs text-gray-400 dark:text-dark-500"
+      class="card flex items-center gap-1.5 px-5 py-3 text-xs surface-muted"
+      :class="{ 'workspace-shell': embedded }"
     >
       <Icon name="infoCircle" size="xs" class="h-3.5 w-3.5" />
       {{ t('modelPlaza.anonymousHint') }}
     </p>
 
     <!-- 加载/错误/空 -->
-    <div v-if="loading" class="flex min-h-[240px] items-center justify-center">
+    <div v-if="loading" class="card flex min-h-[240px] items-center justify-center" :class="{ 'workspace-shell': embedded }">
       <div class="h-8 w-8 animate-spin rounded-full border-2 border-primary-600/25 border-t-primary-600 dark:border-primary-400/25 dark:border-t-primary-400"></div>
     </div>
     <div
       v-else-if="error"
-      class="rounded-2xl border border-red-200 bg-red-50 px-5 py-8 text-center text-sm text-red-600 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300"
+      class="card border-red-200 px-5 py-8 text-center text-sm text-red-600 dark:border-red-500/30 dark:text-red-300"
+      :class="{ 'workspace-shell': embedded }"
     >
       {{ t('modelPlaza.loadFailed') }}
     </div>
     <template v-else>
       <!-- 筛选区:平台 → 分组 → 倍率 -->
       <PlazaFilterBar
+        :class="{ 'workspace-shell': embedded }"
         :platforms="platforms"
         :groups="groupOptions"
         :rates="rates"
@@ -49,12 +53,13 @@
       />
 
       <!-- 分组分节的模型清单(默认按生效倍率升序) -->
-      <div v-if="filteredGroups.length > 0" class="space-y-5">
+      <div v-if="filteredGroups.length > 0" class="flex flex-col gap-[var(--shell-gap)]">
         <PlazaGroupSection v-for="g in filteredGroups" :key="g.id" :group="g" />
       </div>
       <div
         v-else
-        class="rounded-2xl border border-dashed border-gray-300 px-5 py-12 text-center text-sm text-gray-500 dark:border-dark-600 dark:text-dark-400"
+        class="card border-dashed border-gray-300 px-5 py-12 text-center text-sm dark:border-dark-600 surface-muted"
+        :class="{ 'workspace-shell': embedded }"
       >
         {{ searchActive ? t('modelPlaza.noSearchResult') : t('modelPlaza.empty') }}
       </div>
@@ -182,11 +187,12 @@ const filteredGroups = computed(() => {
 }
 
 .plaza-description :deep(li) {
-  @apply mb-0.5 text-gray-700 dark:text-dark-200;
+  @apply mb-0.5; color: var(--surface-muted);
 }
 
 .plaza-description :deep(code) {
-  @apply rounded bg-gray-100 px-1.5 py-0.5 font-mono text-xs dark:bg-dark-800;
+  @apply rounded px-1.5 py-0.5 font-mono text-xs;
+  background-color: var(--surface-soft);
 }
 
 .plaza-description :deep(blockquote) {

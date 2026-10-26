@@ -22,6 +22,7 @@ type poolHealthAccountRepo struct {
 
 	mu                   sync.Mutex
 	pages                map[int64][]Account
+	accounts             map[int64]*Account
 	requests             []OAuthRefreshPageOptions
 	updatedCredentialIDs []int64
 	setErrorCalls        int
@@ -29,11 +30,27 @@ type poolHealthAccountRepo struct {
 	getByIDErr           error
 }
 
-func (r *poolHealthAccountRepo) GetByID(_ context.Context, _ int64) (*Account, error) {
+func (r *poolHealthAccountRepo) GetByID(_ context.Context, id int64) (*Account, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if r.getByIDErr != nil {
 		return nil, r.getByIDErr
 	}
+	if account := r.accounts[id]; account != nil {
+		return snapshotRequestCredentialAccount(account), nil
+	}
 	return nil, ErrAccountNotFound
+}
+
+func (r *poolHealthAccountRepo) addAccounts(accounts ...Account) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.accounts == nil {
+		r.accounts = make(map[int64]*Account)
+	}
+	for i := range accounts {
+		r.accounts[accounts[i].ID] = snapshotRequestCredentialAccount(&accounts[i])
+	}
 }
 
 func (r *poolHealthAccountRepo) ListOAuthRefreshCandidatePage(_ context.Context, options OAuthRefreshPageOptions) (*OAuthRefreshCandidatePage, error) {
@@ -55,17 +72,25 @@ func (r *poolHealthAccountRepo) UpdateCredentials(_ context.Context, id int64, _
 	return nil
 }
 
-func (r *poolHealthAccountRepo) UpdateGrokOAuthCredentialsIfUnchanged(
-	_ context.Context,
-	id int64,
-	_ map[string]any,
-	_ *int64,
-	_ map[string]any,
-) (bool, error) {
+func (r *poolHealthAccountRepo) UpdateOAuthRefreshCredentialsIfUnchanged(_ context.Context, expectedOwner *Account, replacement map[string]any) (bool, error) {
+	id := expectedOwner.ID
+	platform := expectedOwner.Platform
+	expected := expectedOwner.Credentials
+	proxy := expectedOwner.ProxyID
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	account := r.accounts[id]
+	if account == nil || account.Platform != platform || account.Type != AccountTypeOAuth || account.Status != StatusActive ||
+		!reflect.DeepEqual(account.Credentials, expected) || (!reflect.DeepEqual(account.ProxyID, proxy) || !reflect.DeepEqual(account.Proxy, expectedOwner.Proxy)) {
+		return false, nil
+	}
+	account.Credentials = cloneRequestCredentialMap(replacement)
 	r.updatedCredentialIDs = append(r.updatedCredentialIDs, id)
 	return true, nil
+}
+
+func (r *poolHealthAccountRepo) UpdateGrokOAuthCredentialsIfUnchanged(ctx context.Context, expectedOwner *Account, replacement map[string]any) (bool, error) {
+	return r.UpdateOAuthRefreshCredentialsIfUnchanged(ctx, expectedOwner, replacement)
 }
 
 func (r *poolHealthAccountRepo) SetError(context.Context, int64, string) error {
@@ -75,18 +100,18 @@ func (r *poolHealthAccountRepo) SetError(context.Context, int64, string) error {
 	return nil
 }
 
-func (r *poolHealthAccountRepo) SetGrokOAuthErrorIfCredentialsUnchanged(context.Context, int64, map[string]any, string) (bool, error) {
+func (r *poolHealthAccountRepo) SetGrokOAuthErrorIfCredentialsUnchanged(context.Context, *Account, string) (bool, error) {
 	return false, nil
 }
 
-func (r *poolHealthAccountRepo) SetGrokOAuthRefreshErrorIfCredentialsUnchanged(context.Context, int64, map[string]any, *int64, string) (bool, error) {
+func (r *poolHealthAccountRepo) SetGrokOAuthRefreshErrorIfCredentialsUnchanged(context.Context, *Account, string) (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.setErrorCalls++
 	return true, nil
 }
 
-func (r *poolHealthAccountRepo) SetGrokOAuthRefreshTempUnschedulableIfCredentialsUnchanged(context.Context, int64, map[string]any, *int64, time.Time, string) (bool, error) {
+func (r *poolHealthAccountRepo) SetGrokOAuthRefreshTempUnschedulableIfCredentialsUnchanged(context.Context, *Account, time.Time, string) (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.setTempUnschedCalls++
@@ -157,12 +182,12 @@ type breakerTripAccountRepo struct {
 	setTempCalls  atomic.Int64
 }
 
-func (r *breakerTripAccountRepo) SetGrokOAuthRefreshErrorIfCredentialsUnchanged(context.Context, int64, map[string]any, *int64, string) (bool, error) {
+func (r *breakerTripAccountRepo) SetGrokOAuthRefreshErrorIfCredentialsUnchanged(context.Context, *Account, string) (bool, error) {
 	r.setErrorCalls.Add(1)
 	return true, nil
 }
 
-func (r *breakerTripAccountRepo) SetGrokOAuthRefreshTempUnschedulableIfCredentialsUnchanged(context.Context, int64, map[string]any, *int64, time.Time, string) (bool, error) {
+func (r *breakerTripAccountRepo) SetGrokOAuthRefreshTempUnschedulableIfCredentialsUnchanged(context.Context, *Account, time.Time, string) (bool, error) {
 	r.setTempCalls.Add(1)
 	return true, nil
 }
@@ -199,18 +224,15 @@ func (r *productionPathRateRepo) UpdateCredentials(_ context.Context, id int64, 
 	return nil
 }
 
-func (r *productionPathRateRepo) UpdateGrokOAuthCredentialsIfUnchanged(
-	_ context.Context,
-	id int64,
-	expectedCredentials map[string]any,
-	expectedProxyID *int64,
-	credentials map[string]any,
-) (bool, error) {
+func (r *productionPathRateRepo) UpdateGrokOAuthCredentialsIfUnchanged(_ context.Context, expectedOwner *Account, credentials map[string]any) (bool, error) {
+	id := expectedOwner.ID
+	expectedCredentials := expectedOwner.Credentials
+	expectedProxyID := expectedOwner.ProxyID
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	account := r.accounts[id]
 	if account == nil || !reflect.DeepEqual(account.Credentials, expectedCredentials) ||
-		!reflect.DeepEqual(account.ProxyID, expectedProxyID) {
+		(!reflect.DeepEqual(account.ProxyID, expectedProxyID) || !reflect.DeepEqual(account.Proxy, expectedOwner.Proxy)) {
 		return false, nil
 	}
 	account.Credentials = shallowCopyMap(credentials)
@@ -354,6 +376,9 @@ func grokPoolAccount(id int64) Account {
 }
 
 func newPoolHealthService(repo *poolHealthAccountRepo, refresher *poolHealthRefresher, cfg config.TokenRefreshConfig) *TokenRefreshService {
+	for _, page := range repo.pages {
+		repo.addAccounts(page...)
+	}
 	return &TokenRefreshService{
 		accountRepo:    repo,
 		candidatePager: repo,
@@ -608,6 +633,7 @@ func TestTokenRefreshService_SaturatedProviderPreservesConcurrencyAndActualQPSSt
 	var wg sync.WaitGroup
 	for i := 0; i < attemptCount; i++ {
 		account := grokPoolAccount(int64(i + 1))
+		repo.addAccounts(account)
 		state := &tokenRefreshProviderState{
 			service:      svc,
 			registration: registration,

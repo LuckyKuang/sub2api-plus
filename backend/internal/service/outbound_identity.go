@@ -248,6 +248,7 @@ type outboundDeclaredHeader struct {
 var outboundPresetHeaderClasses = map[string]map[string]string{
 	"zcode": {
 		zcode.HeaderAppVersion: outboundHeaderDerived,
+		zcode.HeaderDeviceMid:  outboundHeaderRuntime,
 		"X-Client-Language":    outboundHeaderRuntime,
 		"X-Client-Timezone":    outboundHeaderRuntime,
 		"X-Platform":           outboundHeaderPinned,
@@ -276,6 +277,12 @@ var outboundPresetHeaderClasses = map[string]map[string]string{
 
 var outboundPresetHeaderValidators = map[string]map[string]func(string) error{
 	"zcode": {
+		zcode.HeaderDeviceMid: func(value string) error {
+			if strings.TrimSpace(value) == "" {
+				return nil
+			}
+			return validateOutboundIdentityDeviceID(value)
+		},
 		"X-Client-Language": outboundidentity.ValidateLanguage,
 		"X-Client-Timezone": outboundidentity.ValidateTimezone,
 	},
@@ -317,13 +324,17 @@ func outboundHeaderClassName(preset, name string) string {
 // one it does.
 func declaredOutboundHeaders(preset string) []outboundDeclaredHeader {
 	builtin := builtInOutboundIdentity(preset)
+	declarations := maps.Clone(builtin.Headers)
+	if preset == zcode.Preset {
+		declarations[zcode.HeaderDeviceMid] = builtin.ControlHeaders[zcode.HeaderDeviceMid]
+	}
 	headers := make([]outboundDeclaredHeader, 0, len(builtin.Headers))
 	seen := make(map[string]bool, len(builtin.Headers))
 	appendName := func(name string) {
 		if seen[name] {
 			return
 		}
-		if _, ok := builtin.Headers[name]; !ok {
+		if _, ok := declarations[name]; !ok {
 			return
 		}
 		seen[name] = true
@@ -338,7 +349,7 @@ func declaredOutboundHeaders(preset string) []outboundDeclaredHeader {
 		appendName(name)
 	}
 	rest := make([]string, 0, len(builtin.Headers))
-	for name := range builtin.Headers {
+	for name := range declarations {
 		if !seen[name] {
 			rest = append(rest, name)
 		}
@@ -444,6 +455,9 @@ func normalizeOutboundHeaderValues(preset string, values map[string]string) (map
 			return nil, fmt.Errorf("identity header %q is %s and cannot be configured", header.Name, header.Class)
 		}
 		trimmed := strings.TrimSpace(value)
+		if preset == zcode.Preset && header.Name == zcode.HeaderDeviceMid && trimmed == "" {
+			continue
+		}
 		if header.Validate != nil {
 			if err := header.Validate(trimmed); err != nil {
 				return nil, fmt.Errorf("invalid %s: %w", header.Name, err)
@@ -473,7 +487,17 @@ func applyOutboundHeaderValues(identity outboundidentity.Identity, preset string
 		return identity, false
 	}
 	headers := maps.Clone(identity.Headers)
-	maps.Copy(headers, normalized)
+	identity.ControlHeaders = maps.Clone(identity.ControlHeaders)
+	for name, value := range normalized {
+		if preset == zcode.Preset && name == zcode.HeaderDeviceMid {
+			if identity.ControlHeaders == nil {
+				identity.ControlHeaders = map[string]string{}
+			}
+			identity.ControlHeaders[name] = value
+		} else {
+			headers[name] = value
+		}
+	}
 	identity.Headers = headers
 	return identity, true
 }
@@ -495,11 +519,19 @@ func mergeOutboundRuntimeHeaders(identity, resolved outboundidentity.Identity) o
 		if header.Class != outboundHeaderRuntime {
 			continue
 		}
-		value := resolved.Headers[header.Name]
+		value := outboundIdentityDeclarationValue(resolved, header.Name)
 		if value == "" {
 			continue
 		}
-		headers[header.Name] = value
+		if identity.Preset == zcode.Preset && header.Name == zcode.HeaderDeviceMid {
+			identity.ControlHeaders = maps.Clone(identity.ControlHeaders)
+			if identity.ControlHeaders == nil {
+				identity.ControlHeaders = map[string]string{}
+			}
+			identity.ControlHeaders[header.Name] = value
+		} else {
+			headers[header.Name] = value
+		}
 		merged = true
 	}
 	if !merged {
@@ -768,6 +800,14 @@ func (s *SettingService) materializeRuntimeOutboundHeaders(ctx context.Context) 
 			if settings.Runtime[preset][header.Name] != "" {
 				continue
 			}
+			if preset == zcode.Preset && header.Name == zcode.HeaderDeviceMid {
+				device, err := resolveOutboundMappedID(dbCtx, "zcode-device", "installation-default", 4)
+				if err != nil {
+					return err
+				}
+				missing[header.Name] = device
+				continue
+			}
 			if builtin := builtInOutboundIdentity(preset).Headers[header.Name]; builtin != "" {
 				missing[header.Name] = builtin
 			}
@@ -801,7 +841,7 @@ func (s *SettingService) resolveDefaultOutboundIdentity(ctx context.Context, pre
 		identity := resolveOpenAIOutboundIdentityFromSettings(ctx, nil, s)
 		return outboundidentity.Identity{Preset: preset, UserAgent: identity.UserAgent, Originator: identity.Originator, Version: identity.Version, Source: identity.Source, Headers: map[string]string{"User-Agent": identity.UserAgent, "Originator": identity.Originator, "Version": identity.Version}}
 	}
-	settings := s.GetOutboundIdentitySettings(ctx)
+	settings := s.requestOutboundIdentitySettings(ctx)
 	if selection, ok := settings.Profiles[preset]; ok {
 		selection.Preset = preset
 		if i, err := buildOutboundIdentity(selection); err == nil {
@@ -820,21 +860,42 @@ func (s *SettingService) resolveDefaultOutboundIdentity(ctx context.Context, pre
 	return i
 }
 
+func (s *SettingService) requestOutboundIdentitySettings(ctx context.Context) OutboundIdentitySettings {
+	if snapshot := requestIdentitySettingsSnapshot(ctx); snapshot != nil {
+		snapshot.presetSettingsOnce.Do(func() { snapshot.presetSettings = s.GetOutboundIdentitySettings(ctx) })
+		return cloneOutboundIdentitySettings(snapshot.presetSettings)
+	}
+	return s.GetOutboundIdentitySettings(ctx)
+}
+
 // WithAccountOutboundIdentity resolves after authentication/audit/account
 // selection. Existing OpenAI/Codex paths deliberately keep their own resolver.
 func WithAccountOutboundIdentity(ctx context.Context, account *Account) context.Context {
+	owner, err := requestCredentialAccount(ctx, account)
+	if err != nil {
+		return outboundidentity.WithIdentity(WithOutboundPreparationError(ctx, err), outboundidentity.Identity{})
+	}
+	account = owner
 	if account == nil {
 		return ctx
 	}
 	ctx = WithOutboundIdentityScope(ctx, nil)
+	ctx = withOutboundIdentitySettingsOwner(ctx, account)
 	scope := outboundIdentityScopeFromContext(ctx)
-	key := outboundIdentityOwnerKey(account)
+	candidate, _ := json.Marshal(account.Credentials[outboundIdentityCredential])
+	key := requestCredentialIdentityCacheKey(ctx, account, account.Platform+":"+account.Type+":"+string(candidate))
 	if cached, ok := scope.presets.Load(key); ok {
 		if identity, valid := cached.(outboundidentity.Identity); valid {
 			return outboundidentity.WithIdentity(ctx, identity)
 		}
 	}
-	resolved := resolveAccountOutboundIdentityContext(ctx, account)
+	identityCtx := ctx
+	if _, acquired := key.(acquiredIdentityCacheKey); acquired {
+		// A pre-acquisition identity for this row is not evidence about a
+		// refreshed or relinked grant returned by the token provider.
+		identityCtx = outboundidentity.WithIdentity(ctx, outboundidentity.Identity{})
+	}
+	resolved := resolveAccountOutboundIdentityContext(identityCtx, account)
 	identity, _ := outboundidentity.FromContext(resolved)
 	// An empty identity records the deliberate choice of the existing Codex
 	// resolver. A later mapping update cannot switch families during this request.
@@ -877,7 +938,7 @@ func resolveAccountOutboundIdentityContext(ctx context.Context, account *Account
 	// Default mappings are resolved by the runtime callback with a typed account
 	// key, without passing credentials into the package or transport layer.
 	// Hide a previous account snapshot while resolving a failover account.
-	if i, ok := outboundidentity.Default(cleanCtx, outboundDefaultKey(account)); ok {
+	if i, ok := requestDefaultOutboundIdentity(cleanCtx, outboundDefaultKey(account)); ok {
 		if account.Platform == PlatformOpenAI && i.Preset == "codex" {
 			return cleanCtx
 		}
@@ -913,22 +974,14 @@ func ApplyAccountOutboundHeaders(ctx context.Context, account *Account, headers 
 func WithStandaloneOutboundIdentity(ctx context.Context, platform string) context.Context {
 	// A nil-account Codex cache in the forwarding scope is a different owner.
 	ctx = context.WithValue(ctx, outboundIdentityScopeKey{}, &outboundIdentityScope{})
+	ctx = context.WithValue(ctx, outboundIdentitySettingsOwnerKey{}, outboundIdentityOwner{})
 	ctx = outboundidentity.WithIdentity(ctx, outboundidentity.Identity{})
 	key := platform + ":" + AccountTypeAPIKey
 	identity, ok := outboundidentity.Default(ctx, key)
 	if !ok {
 		identity = (*SettingService)(nil).resolveOutboundIdentityKey(ctx, key)
 	}
-	if platform == PlatformOpenAI && identity.Preset == "codex" {
-		// Match native Platform API-key requests: the UA carries the triple,
-		// while OAuth-only Originator/Version declarations remain omitted.
-		identity.Headers = maps.Clone(identity.Headers)
-		for name := range identity.Headers {
-			if strings.EqualFold(name, "Originator") || strings.EqualFold(name, "Version") {
-				delete(identity.Headers, name)
-			}
-		}
-	}
+
 	return outboundidentity.WithIdentity(ctx, identity)
 }
 
@@ -937,15 +990,52 @@ func WithStandaloneOutboundIdentity(ctx context.Context, platform string) contex
 // a caller's account snapshot, compatible API-key default, or cached scope.
 func withNativeOAuthOutboundIdentity(ctx context.Context, platform string) context.Context {
 	ctx = context.WithValue(ctx, outboundIdentityScopeKey{}, &outboundIdentityScope{})
+	ctx = context.WithValue(ctx, outboundIdentitySettingsOwnerKey{}, outboundIdentityOwner{})
 	ctx = outboundidentity.WithIdentity(ctx, outboundidentity.Identity{})
 	return outboundidentity.WithIdentity(ctx, outboundDefaultIdentity(ctx, nativeOutboundPreset(platform)))
 }
 
 func outboundDefaultIdentity(ctx context.Context, preset string) outboundidentity.Identity {
-	if i, ok := outboundidentity.Default(ctx, preset); ok {
+	if i, ok := requestDefaultOutboundIdentity(ctx, preset); ok {
 		return i
 	}
 	return builtInOutboundIdentity(preset)
+}
+
+type outboundDefaultSnapshot struct {
+	identity outboundidentity.Identity
+	valid    bool
+}
+
+// Account candidates may change at credential acquisition, but their fallback
+// cannot reread global settings already used by this owner's refresh or probe.
+func requestDefaultOutboundIdentity(ctx context.Context, key string) (outboundidentity.Identity, bool) {
+	resolve := func() (outboundidentity.Identity, bool) {
+		identity, valid := outboundidentity.Default(ctx, key)
+		if !valid {
+			preset := key
+			if platform, accountType, typed := strings.Cut(key, ":"); typed {
+				preset = nativeAccountOutboundPreset(platform, accountType)
+			}
+			identity = builtInOutboundIdentity(preset)
+			valid = identity.UserAgent != ""
+		}
+		return identity, valid
+	}
+	if settings := requestIdentitySettingsSnapshot(ctx); settings != nil {
+		if stored, ok := settings.defaults.Load(key); ok {
+			if snapshot, valid := stored.(outboundDefaultSnapshot); valid {
+				return snapshot.identity, snapshot.valid
+			}
+		}
+		identity, valid := resolve()
+		stored, _ := settings.defaults.LoadOrStore(key, outboundDefaultSnapshot{identity: identity, valid: valid})
+		if snapshot, valid := stored.(outboundDefaultSnapshot); valid {
+			return snapshot.identity, snapshot.valid
+		}
+		return identity, valid
+	}
+	return resolve()
 }
 
 func validateAccountIdentityPreset(account *Account, preset string) error {
@@ -1006,11 +1096,35 @@ func resolveAccountIdentitySelection(ctx context.Context, account *Account, sele
 
 func prepareAccountOutboundRequest(req *http.Request, account *Account) *http.Request {
 	if req != nil {
+		owner, err := requestCredentialAccount(req.Context(), account)
+		if err != nil {
+			*req = *req.WithContext(WithOutboundPreparationError(req.Context(), err))
+			return req
+		}
+		account = owner
+		if !providerFilesAccountAllowed(req.Context(), account) {
+			*req = *req.WithContext(WithOutboundPreparationError(req.Context(), ErrProviderFileOwnerChanged))
+			return req
+		}
+		if hasDomesticRequestHeaderContract(account) && domesticCredentialOwnerAccount(req.Context(), account) == nil {
+			*req = *req.WithContext(WithOutboundPreparationError(req.Context(), errors.New("domestic outbound credential owner is unavailable")))
+			return req
+		}
+		if hasDomesticRequestHeaderContract(account) && outboundIdentityScopeFromContext(req.Context()) == nil {
+			*req = *req.WithContext(WithOutboundIdentityScope(req.Context(), nil))
+		}
 		if account != nil && account.Platform == PlatformGrok && HTTPUpstreamProfileFromContext(req.Context()) == HTTPUpstreamProfileDefault {
 			*req = *req.WithContext(WithHTTPUpstreamProfile(req.Context(), HTTPUpstreamProfileGrok))
 		}
 		ApplyAccountOutboundIdentity(req.Context(), account, req)
-		prepareMiniMaxRequestState(req, account)
+		prepareDomesticRequestHeaders(req, account)
+		for _, prepare := range []func(*http.Request, *Account) error{prepareMiniMaxRequestState, prepareDeepSeekRequestState, prepareZCodeRequestState} {
+			if err := prepare(req, account); err != nil {
+				*req = *req.WithContext(WithOutboundPreparationError(req.Context(), err))
+				return req
+			}
+		}
+		PrepareCodexRequestCompression(req, account)
 	}
 	return req
 }
@@ -1051,7 +1165,7 @@ func (s *SettingService) PreviewOutboundIdentity(ctx context.Context, account *A
 	if account.Platform == PlatformOpenAI && (selection != nil && selection.Preset == "codex" || account.Type != AccountTypeAPIKey && account.Type != AccountTypeUpstream || s.resolveOutboundIdentityKey(ctx, outboundDefaultKey(account)).Preset == "codex") {
 		i := resolveOpenAIOutboundIdentityFromSettings(ctx, account, s)
 		headers := http.Header{}
-		applyResolvedOpenAIOutboundIdentity(headers, i, account.UsesOpenAICodexProtocol())
+		applyResolvedOpenAIOutboundIdentity(headers, i, true)
 		result := outboundidentity.Identity{Preset: "codex", UserAgent: i.UserAgent, Originator: i.Originator, Version: i.Version, Source: i.Source, Headers: map[string]string{}}
 		for k := range headers {
 			result.Headers[k] = headers.Get(k)
@@ -1065,7 +1179,7 @@ func (s *SettingService) resolveOutboundIdentityKey(ctx context.Context, key str
 	preset := key
 	if platform, accountType, ok := strings.Cut(key, ":"); ok {
 		preset = nativeAccountOutboundPreset(platform, accountType)
-		if configured := s.GetOutboundIdentitySettings(ctx).Defaults[key]; allowsOutboundDefaultMapping(key) && validateAccountIdentityPreset(&Account{Platform: platform, Type: accountType}, configured) == nil {
+		if configured := s.requestOutboundIdentitySettings(ctx).Defaults[key]; allowsOutboundDefaultMapping(key) && validateAccountIdentityPreset(&Account{Platform: platform, Type: accountType}, configured) == nil {
 			preset = configured
 		}
 	}
@@ -1262,14 +1376,24 @@ func outboundPresetDeclarations(preset string, builtin, effective outboundidenti
 			Name:     header.Name,
 			Class:    header.Class,
 			Editable: header.Class == outboundHeaderRuntime,
-			Builtin:  builtin.Headers[header.Name],
-			Value:    effective.Headers[header.Name],
+			Builtin:  outboundIdentityDeclarationValue(builtin, header.Name),
+			Value:    outboundIdentityDeclarationValue(effective, header.Name),
 		})
 	}
 	return declarations
 }
 
+func outboundIdentityDeclarationValue(identity outboundidentity.Identity, name string) string {
+	if identity.Preset == zcode.Preset && name == zcode.HeaderDeviceMid {
+		return identity.ControlHeaders[name]
+	}
+	return identity.Headers[name]
+}
+
 func (s *SettingService) installOutboundIdentityResolver() {
+	zcode.SetDeviceIDResolver(func(ctx context.Context) (string, error) {
+		return resolveOutboundMappedID(ctx, "zcode-device", "installation-default", 4)
+	})
 	outboundidentity.SetDefaultResolver(s.resolveOutboundIdentityKey)
 }
 
@@ -1277,7 +1401,7 @@ func selectionFromIdentity(identity outboundidentity.Identity) OutboundIdentityS
 	headers := map[string]string{}
 	for _, h := range declaredOutboundHeaders(identity.Preset) {
 		if h.Class == outboundHeaderRuntime {
-			headers[h.Name] = identity.Headers[h.Name]
+			headers[h.Name] = outboundIdentityDeclarationValue(identity, h.Name)
 		}
 	}
 	return OutboundIdentitySelection{Preset: identity.Preset, UserAgent: identity.UserAgent, Version: identity.Version, Headers: headers, Timezone: identity.Timezone, Language: identity.Language}

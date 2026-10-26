@@ -59,7 +59,7 @@ type UsageLogRepository interface {
 	GetBatchAPIKeyUsageStats(ctx context.Context, apiKeyIDs []int64, startTime, endTime time.Time) (map[int64]*usagestats.BatchAPIKeyUsageStats, error)
 
 	// User dashboard stats
-	GetUserDashboardStats(ctx context.Context, userID int64) (*usagestats.UserDashboardStats, error)
+	GetUserDashboardStats(ctx context.Context, userID int64, userTimezone string) (*usagestats.UserDashboardStats, error)
 	GetAPIKeyDashboardStats(ctx context.Context, apiKeyID int64) (*usagestats.UserDashboardStats, error)
 	GetUserUsageTrendByUserID(ctx context.Context, userID int64, startTime, endTime time.Time, granularity string) ([]usagestats.TrendDataPoint, error)
 	GetUserModelStats(ctx context.Context, userID int64, startTime, endTime time.Time) ([]usagestats.ModelStat, error)
@@ -733,8 +733,15 @@ func (s *AccountUsageService) getOpenAIUsage(ctx context.Context, account *Accou
 	}
 
 	applyExtraToUsage(usage, account.Extra, now)
+	if account.IsShadow() {
+		if owner, err := resolveCredentialAccount(ctx, s.accountRepo, account); err == nil && owner != nil {
+			if generation, _ := account.Extra[OpenAICodexUsageOwnerGenerationExtraKey].(string); generation != "" && generation != credentialStateGeneration(owner) {
+				force = true
+			}
+		}
+	}
 
-	if (force || shouldRefreshOpenAICodexSnapshot(account, usage, now)) && s.shouldProbeOpenAICodexSnapshot(account.ID, now, force) {
+	if (force || shouldRefreshOpenAICodexSnapshot(account, usage, now)) && s.shouldProbeOpenAICodexSnapshot(ctx, account, now, force) {
 		if account.IsShadow() {
 			// Spark shadow accounts fetch usage from /wham/usage (bengalfox channel)
 			// via the shared OpenAIQuotaService, which resolves credentials from the
@@ -743,11 +750,11 @@ func (s *AccountUsageService) getOpenAIUsage(ctx context.Context, account *Accou
 			if s.openAIQuotaService != nil {
 				if quotaUsage, err := s.openAIQuotaService.QueryUsage(ctx, account.ID); err == nil {
 					if updates := buildCodexSparkWindowExtraUpdates(quotaUsage, now); len(updates) > 0 {
-						mergeAccountExtra(account, updates)
-						s.persistOpenAICodexProbeSnapshot(account.ID, updates)
-						if account.ParentAccountID != nil {
-							notifyOpenAIAutoReset(*account.ParentAccountID)
+						accepted, persistErr := persistOpenAICodexUsageObservation(ctx, s.accountRepo, account.ID, quotaUsage.credentialOwner, updates, nil, false)
+						if persistErr != nil || !accepted {
+							return usage, persistErr
 						}
+						mergeAccountExtra(account, updates)
 						if usage.UpdatedAt == nil {
 							usage.UpdatedAt = &now
 						}
@@ -807,6 +814,11 @@ func isOpenAICodexSnapshotStale(account *Account, now time.Time) bool {
 	if account == nil || !account.IsOpenAIOAuth() {
 		return false
 	}
+	if !account.IsShadow() {
+		if generation, _ := account.Extra[OpenAICodexUsageOwnerGenerationExtraKey].(string); generation != "" && generation != credentialStateGeneration(account) {
+			return true
+		}
+	}
 	// 普通账号的 codex 刷新走 probe(/responses 头),要求 WSv2;但 spark 影子走 QueryUsage
 	// (/wham/usage body 的 codex_bengalfox),与 WSv2 无关——不能用 WSv2 门控其 staleness,否则首刷后
 	// codex_5h/7d 已存在→staleness 恒 false→spark 窗口永久冻结(外审第9轮 P1)。影子改按
@@ -828,19 +840,28 @@ func isOpenAICodexSnapshotStale(account *Account, now time.Time) bool {
 	return now.Sub(ts) >= openAIProbeCacheTTL
 }
 
-func (s *AccountUsageService) shouldProbeOpenAICodexSnapshot(accountID int64, now time.Time, force ...bool) bool {
-	if s == nil || s.cache == nil || accountID <= 0 {
+func (s *AccountUsageService) shouldProbeOpenAICodexSnapshot(ctx context.Context, account *Account, now time.Time, force ...bool) bool {
+	if s == nil || s.cache == nil || account == nil || account.ID <= 0 {
 		return true
 	}
+	owner := account
+	if account.IsShadow() {
+		var err error
+		owner, err = resolveCredentialAccount(ctx, s.accountRepo, account)
+		if err != nil || owner == nil {
+			return false
+		}
+	}
+	key := fmt.Sprintf("%d:%s", account.ID, credentialStateGeneration(owner))
 	forceProbe := len(force) > 0 && force[0]
 	if !forceProbe {
-		if cached, ok := s.cache.openAIProbeCache.Load(accountID); ok {
+		if cached, ok := s.cache.openAIProbeCache.Load(key); ok {
 			if ts, ok := cached.(time.Time); ok && now.Sub(ts) < openAIProbeCacheTTL {
 				return false
 			}
 		}
 	}
-	s.cache.openAIProbeCache.Store(accountID, now)
+	s.cache.openAIProbeCache.Store(key, now)
 	return true
 }
 
@@ -849,13 +870,43 @@ func (s *AccountUsageService) probeOpenAICodexSnapshot(ctx context.Context, acco
 	if account == nil || !account.IsOAuth() {
 		return nil, nil
 	}
+	account = snapshotRequestCredentialAccount(account)
+	if _, err := requestCredentialOwnerProxyURL(context.Background(), account); err != nil {
+		return nil, err
+	}
 	accessToken := ""
-	if !account.IsOpenAIAgentIdentity() {
-		accessToken = account.GetOpenAIAccessToken()
+	if account.IsOpenAIAgentIdentity() {
+		// Task creation binds its own immutable route before any upstream write.
+		if _, err := s.buildOpenAIAgentIdentityAuthenticationHeaders(ctx, account); err != nil {
+			return nil, err
+		}
+		recordRequestCredentialOwner(ctx, account, "")
+	} else {
+		if s.openAIQuotaService != nil && s.openAIQuotaService.tokenProvider != nil {
+			var err error
+			accessToken, err = s.openAIQuotaService.tokenProvider.GetAccessToken(ctx, account)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			accessToken = account.GetOpenAIAccessToken()
+			recordRequestCredentialOwner(ctx, account, accessToken)
+		}
+		if strings.TrimSpace(accessToken) == "" {
+			return nil, fmt.Errorf("no access token available")
+		}
 	}
-	if accessToken == "" && !account.IsOpenAIAgentIdentity() {
-		return nil, fmt.Errorf("no access token available")
+	ctx = withRequestCredentialOwner(ctx, account, accessToken)
+	var ownerErr error
+	account, ownerErr = requestCredentialAccount(ctx, account)
+	if ownerErr != nil || account == nil {
+		return nil, fmt.Errorf("probe credential owner is unavailable: %w", ownerErr)
 	}
+	proxyURL, err := requestCredentialOwnerProxyURL(ctx, account)
+	if err != nil {
+		return nil, err
+	}
+
 	modelID := openaipkg.CodexUsageProbeModel
 	payload := createOpenAITestPayload(modelID, true)
 	payloadBytes, err := json.Marshal(payload)
@@ -890,10 +941,6 @@ func (s *AccountUsageService) probeOpenAICodexSnapshot(ctx context.Context, acco
 	setOpenAIChatGPTAccountHeaders(req.Header, account)
 	s.applyOpenAIOutboundIdentity(reqCtx, account, req.Header, true)
 
-	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
-	}
 	client, err := httppool.GetClient(httppool.Options{
 		ProxyURL:              proxyURL,
 		Timeout:               15 * time.Second,
@@ -918,28 +965,13 @@ func (s *AccountUsageService) recordOpenAICodexProbeResponse(ctx context.Context
 		return nil, err
 	}
 	if len(updates) > 0 {
-		observeOpenAIWeeklyUsageSnapshot(ctx, account.ID, parseCodexRateLimitHeadersAt(resp.Header, probeStartedAt), false)
-		s.persistOpenAICodexProbeSnapshot(account.ID, updates)
+		accepted, err := persistOpenAICodexUsageObservation(ctx, s.accountRepo, account.ID, account, updates, parseCodexRateLimitHeadersAt(resp.Header, probeStartedAt), false)
+		if err != nil || !accepted {
+			return nil, err
+		}
 		return updates, nil
 	}
 	return nil, nil
-}
-
-func (s *AccountUsageService) persistOpenAICodexProbeSnapshot(accountID int64, updates map[string]any) {
-	if s == nil || s.accountRepo == nil || accountID <= 0 {
-		return
-	}
-	if len(updates) == 0 {
-		return
-	}
-
-	go func() {
-		updateCtx, updateCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer updateCancel()
-		if err := s.accountRepo.UpdateExtra(updateCtx, accountID, updates); err == nil {
-			notifyOpenAIAutoReset(accountID)
-		}
-	}()
 }
 
 func extractOpenAICodexProbeUpdates(resp *http.Response) (map[string]any, error) {
@@ -959,6 +991,7 @@ func mergeAccountExtra(account *Account, updates map[string]any) {
 	if account == nil || len(updates) == 0 {
 		return
 	}
+	clearStaleCodexObservationExtra(account, updates)
 	if account.Extra == nil {
 		account.Extra = make(map[string]any, len(updates))
 	}
@@ -1242,7 +1275,7 @@ func grokBillingSnapshotNeedsRefresh(account *Account, now time.Time) bool {
 	if account == nil {
 		return false
 	}
-	billing, err := grokBillingSnapshotFromExtra(account.Extra)
+	billing, err := grokAccountBillingSnapshot(account)
 	if err != nil || billing == nil || billing.Partial || len(billing.FailedWindows) > 0 {
 		return true
 	}

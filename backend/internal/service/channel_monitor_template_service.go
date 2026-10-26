@@ -86,6 +86,7 @@ func (s *ChannelMonitorRequestTemplateService) Create(ctx context.Context, p Cha
 		Description:      strings.TrimSpace(p.Description),
 		ExtraHeaders:     emptyHeadersIfNil(p.ExtraHeaders),
 		BodyOverrideMode: defaultBodyMode(p.BodyOverrideMode),
+		StreamProbe:      p.StreamProbe,
 		BodyOverride:     p.BodyOverride,
 	}
 	if err := s.repo.Create(ctx, t); err != nil {
@@ -152,6 +153,9 @@ func (s *ChannelMonitorRequestTemplateService) ListAssociatedMonitors(ctx contex
 
 // validateTemplateCreateParams 聚合 create 入参校验，避免函数超过 30 行。
 func validateTemplateCreateParams(p ChannelMonitorRequestTemplateCreateParams) error {
+	if err := validateMonitorStream(p.Provider, MonitorCheckModeProbe, p.StreamProbe, p.BodyOverrideMode, p.BodyOverride); err != nil {
+		return err
+	}
 	if strings.TrimSpace(p.Name) == "" {
 		return ErrChannelMonitorTemplateMissingName
 	}
@@ -205,6 +209,12 @@ func applyTemplateUpdate(existing *ChannelMonitorRequestTemplate, p ChannelMonit
 		newBody = *p.BodyOverride
 	}
 	if err := validateBodyModeForProtocol(existing.Provider, newAPIMode, newMode, newBody); err != nil {
+		return err
+	}
+	if p.StreamProbe != nil {
+		existing.StreamProbe = *p.StreamProbe
+	}
+	if err := validateMonitorStream(existing.Provider, MonitorCheckModeProbe, existing.StreamProbe, newMode, newBody); err != nil {
 		return err
 	}
 	existing.APIMode = newAPIMode

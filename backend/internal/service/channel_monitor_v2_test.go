@@ -5,6 +5,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,13 +13,14 @@ import (
 )
 
 type channelMonitorV2RepoStub struct {
-	config serviceChannelMonitorV2ConfigAlias
-	users  *ChannelMonitorV2List[ChannelMonitorV2UserRow]
-	matrix *ChannelMonitorV2Matrix
-	errors *ChannelMonitorV2List[ChannelMonitorV2ErrorRow]
-	snap   *ChannelMonitorV2Snapshot
-	group  ChannelMonitorV2GroupBy
-	admin  bool
+	config  serviceChannelMonitorV2ConfigAlias
+	users   *ChannelMonitorV2List[ChannelMonitorV2UserRow]
+	matrix  *ChannelMonitorV2Matrix
+	errors  *ChannelMonitorV2List[ChannelMonitorV2ErrorRow]
+	snap    *ChannelMonitorV2Snapshot
+	group   ChannelMonitorV2GroupBy
+	admin   bool
+	catalog *ChannelMonitorV2ModelCatalog
 }
 
 // Alias keeps composite literals readable without introducing another package.
@@ -34,6 +36,9 @@ func (s *channelMonitorV2RepoStub) UpdateConfig(context.Context, ChannelMonitorV
 func (s *channelMonitorV2RepoStub) GetDimensions(context.Context, ChannelMonitorV2Filter, ChannelMonitorV2Config) (*ChannelMonitorV2Dimensions, error) {
 	return nil, nil
 }
+func (s *channelMonitorV2RepoStub) GetModelCatalog(context.Context, ChannelMonitorV2Filter, ChannelMonitorV2Config) (*ChannelMonitorV2ModelCatalog, error) {
+	return s.catalog, nil
+}
 func (s *channelMonitorV2RepoStub) GetSnapshot(_ context.Context, _ ChannelMonitorV2Filter, _ ChannelMonitorV2Config, admin bool) (*ChannelMonitorV2Snapshot, error) {
 	s.admin = admin
 	if s.snap == nil {
@@ -44,6 +49,7 @@ func (s *channelMonitorV2RepoStub) GetSnapshot(_ context.Context, _ ChannelMonit
 	cfg.Platforms = append([]ChannelMonitorV2PlatformConfig(nil), s.snap.Config.Platforms...)
 	for i := range cfg.Platforms {
 		cfg.Platforms[i].Models = append([]string(nil), s.snap.Config.Platforms[i].Models...)
+		cfg.Platforms[i].ExcludedModels = append([]string(nil), s.snap.Config.Platforms[i].ExcludedModels...)
 	}
 	cfg.GroupIDs = append([]int64(nil), s.snap.Config.GroupIDs...)
 	cfg.IgnoredErrorCategories = append([]string(nil), s.snap.Config.IgnoredErrorCategories...)
@@ -520,7 +526,7 @@ func TestSnapshotRedactsPublicConfigPolicyFields(t *testing.T) {
 				Enabled:                true,
 				RefreshIntervalSeconds: 300,
 				Platforms: []ChannelMonitorV2PlatformConfig{
-					{Platform: "openai", Enabled: true, Models: []string{"gpt-5"}},
+					{Platform: "openai", Enabled: true, Models: []string{"gpt-5"}, ModelDisplayMode: ChannelMonitorV2DisplaySelected, ExcludedModels: []string{"private-model"}},
 				},
 				GroupIDs:               []int64{1, 2},
 				IgnoredErrorCategories: []string{"timeout"},
@@ -539,6 +545,8 @@ func TestSnapshotRedactsPublicConfigPolicyFields(t *testing.T) {
 	require.Empty(t, snap.Config.IgnoredErrorCategories)
 	require.Nil(t, snap.Config.UpdatedBy)
 	require.Empty(t, snap.Config.Platforms[0].Models)
+	require.Empty(t, snap.Config.Platforms[0].ExcludedModels)
+	require.Empty(t, snap.Config.Platforms[0].ModelDisplayMode)
 	require.Equal(t, 300, snap.Config.RefreshIntervalSeconds)
 	require.Zero(t, snap.Metrics.RequestCount)
 	require.Equal(t, wantHealth, snap.Health)
@@ -587,4 +595,44 @@ func TestChannelMonitorV2HealthTTFTAtTargetIsHealthy(t *testing.T) {
 	require.Equal(t, "healthy", h.TTFT)
 	require.NotNil(t, h.TTFTScore)
 	require.InDelta(t, 100.0, *h.TTFTScore, 0.01)
+}
+
+func TestChannelMonitorV2VisibilityConfigNormalizesExactNamesAndExplicitEmptySelection(t *testing.T) {
+	cfg := ChannelMonitorV2Config{Platforms: []ChannelMonitorV2PlatformConfig{
+		{Platform: "openai", Models: []string{" named ", "named"}, ExcludedModels: []string{" hidden ", "Hidden", "hidden", ""}},
+		{Platform: "custom", ModelDisplayMode: ChannelMonitorV2DisplaySelected},
+	}}
+	require.NoError(t, normalizeChannelMonitorV2Config(&cfg))
+	require.Equal(t, ChannelMonitorV2DisplaySelected, cfg.Platforms[0].ModelDisplayMode)
+	require.Equal(t, []string{}, cfg.Platforms[0].Models)
+	require.Equal(t, []string{}, cfg.Platforms[0].ExcludedModels)
+	require.Equal(t, []string{"Hidden", "hidden"}, cfg.Platforms[1].ExcludedModels)
+	require.Equal(t, []string{"named"}, cfg.Platforms[1].Models)
+	cfg.Platforms[0].ModelDisplayMode = "typo"
+	require.ErrorIs(t, normalizeChannelMonitorV2Config(&cfg), ErrChannelMonitorV2InvalidConfig)
+}
+
+func TestChannelMonitorV2CatalogIsAvailableWhileConfigDisabled(t *testing.T) {
+	want := &ChannelMonitorV2ModelCatalog{ConfigVersion: 4, Items: []ChannelMonitorV2ModelCatalogItem{{Platform: "custom", Model: "Real-Name"}}}
+	repo := &channelMonitorV2RepoStub{config: ChannelMonitorV2Config{Enabled: false}, catalog: want}
+	got, err := NewChannelMonitorV2Service(repo).ModelCatalog(context.Background(), ChannelMonitorV2Filter{})
+	require.NoError(t, err)
+	require.Equal(t, want, got)
+}
+
+func TestChannelMonitorV2VisibilityConfigAndFilterRejectExcessiveDimensions(t *testing.T) {
+	for _, platform := range []ChannelMonitorV2PlatformConfig{
+		{Platform: "openai", Models: make([]string, 4097)},
+		{Platform: "openai", ExcludedModels: make([]string, 4097)},
+		{Platform: "openai", ExcludedModels: []string{strings.Repeat("x", 1025)}},
+		{Platform: strings.Repeat("x", 65)},
+	} {
+		cfg := ChannelMonitorV2Config{Platforms: []ChannelMonitorV2PlatformConfig{platform}}
+		require.ErrorIs(t, normalizeChannelMonitorV2Config(&cfg), ErrChannelMonitorV2InvalidConfig)
+	}
+	svc := NewChannelMonitorV2Service(nil)
+	_, err := svc.ParseFilter("30d", make([]string, 129), nil, nil)
+	require.ErrorIs(t, err, ErrChannelMonitorV2InvalidFilter)
+	_, err = svc.ParseFilter("30d", nil, []string{strings.Repeat("x", 1025)}, nil)
+	require.ErrorIs(t, err, ErrChannelMonitorV2InvalidFilter)
 }

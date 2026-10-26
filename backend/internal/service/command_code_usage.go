@@ -442,7 +442,11 @@ func commandCodeFetchFailure(err error) (status int, message string, ok bool) {
 // queryCommandCodeUsage 查询 Command Code 积分与窗口，落窗口与余额快照。
 func (s *CNProviderQuotaService) queryCommandCodeUsage(ctx context.Context, account *Account) (*CNProviderQuotaProbeResult, error) {
 	ctx = WithAccountOutboundIdentity(ctx, account)
-	client := newCommandCodeUsageClient(s.cfg, s.httpUpstream, account, s.resolveProxyURL(ctx, account))
+	proxyURL, err := account.StrictProxyURL()
+	if err != nil {
+		return nil, err
+	}
+	client := newCommandCodeUsageClient(s.cfg, s.httpUpstream, account, proxyURL)
 	if client.apiKey == "" {
 		return nil, infraerrors.New(http.StatusBadRequest, "CN_QUOTA_NO_APIKEY", "account api_key is empty")
 	}
@@ -489,7 +493,11 @@ func (s *CNProviderQuotaService) queryCommandCodeUsage(ctx context.Context, acco
 // queryCommandCodeBalance 只查积分余额（whoami + credits），落余额快照。
 func (s *CNProviderBalanceService) queryCommandCodeBalance(ctx context.Context, account *Account) (*CNProviderBalanceResult, error) {
 	ctx = WithAccountOutboundIdentity(ctx, account)
-	client := newCommandCodeUsageClient(s.cfg, s.httpUpstream, account, s.resolveProxyURL(ctx, account))
+	proxyURL, err := account.StrictProxyURL()
+	if err != nil {
+		return nil, err
+	}
+	client := newCommandCodeUsageClient(s.cfg, s.httpUpstream, account, proxyURL)
 	if client.apiKey == "" {
 		return nil, infraerrors.New(http.StatusBadRequest, "CN_BALANCE_NO_APIKEY", "account api_key is empty")
 	}

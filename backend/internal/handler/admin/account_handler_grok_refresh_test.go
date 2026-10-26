@@ -47,6 +47,10 @@ func (s *grokRefreshAdminService) UpdateAccount(_ context.Context, id int64, inp
 	}, nil
 }
 
+func (s *grokRefreshAdminService) CommitOAuthCredentials(ctx context.Context, expected *service.Account, accountType string, credentials, extra map[string]any, recover bool) (*service.Account, error) {
+	return s.UpdateAccount(ctx, expected.ID, &service.UpdateAccountInput{Type: accountType, Credentials: credentials})
+}
+
 func TestRefreshSingleAccountRoutesGrokThroughGrokOAuthService(t *testing.T) {
 	t.Parallel()
 
@@ -89,7 +93,8 @@ func TestRefreshSingleAccountRoutesGrokThroughGrokOAuthService(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, warning)
 	require.Equal(t, 1, grokOAuth.calls)
-	require.Same(t, account, grokOAuth.account)
+	require.NotSame(t, account, grokOAuth.account, "the issuer receives an isolated credential-owner snapshot")
+	require.Equal(t, account, grokOAuth.account)
 	require.Equal(t, "new-access", adminSvc.updatedCredentials["access_token"])
 	require.Equal(t, "new-refresh", adminSvc.updatedCredentials["refresh_token"])
 	require.Equal(t, "https://example.invalid/v1", adminSvc.updatedCredentials["base_url"])

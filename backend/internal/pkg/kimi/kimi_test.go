@@ -87,8 +87,8 @@ func TestResolveVersionHonorsTheOverrideAndTheFloor(t *testing.T) {
 		require.False(t, IsSupportedVersion(version), version)
 		require.Equal(t, DefaultVersion, ResolveVersion(), version)
 	}
-	t.Setenv(VersionEnv, "2.1.1")
-	require.True(t, IsSupportedVersion("2.1.1"))
+	t.Setenv(VersionEnv, "2.2.0")
+	require.True(t, IsSupportedVersion("2.2.0"))
 	require.Equal(t, "environment", DefaultIdentity().Source)
 }
 

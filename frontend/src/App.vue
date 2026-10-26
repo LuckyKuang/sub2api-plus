@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { RouterView, useRouter, useRoute } from 'vue-router'
-import { computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import Toast from '@/components/common/Toast.vue'
+import TitleTooltip from '@/components/common/TitleTooltip.vue'
 import NavigationProgress from '@/components/common/NavigationProgress.vue'
 import AdminComplianceDialog from '@/components/admin/AdminComplianceDialog.vue'
 import { resolveRouteDocumentTitle } from '@/router/title'
@@ -11,10 +12,19 @@ import { getSetupStatus } from '@/api/setup'
 import { updateFavicon } from '@/utils/branding'
 import { FeatureFlags, isFeatureFlagEnabled } from '@/utils/featureFlags'
 import { resolveSiteBillingMode } from '@/utils/siteBillingMode'
+import { useConsoleAppearance } from '@/composables/useConsoleAppearance'
+import { useStaticTableHeaders } from '@/composables/useStaticTableHeaders'
+import { useTransparentTableClipping } from '@/composables/useTransparentTableClipping'
+
+// One document-wide owner also covers standalone routes and teleported dialogs.
+const tableRoot = ref<HTMLElement | null>(null)
+useStaticTableHeaders(tableRoot)
+useTransparentTableClipping(tableRoot, () => true)
 
 const router = useRouter()
 const route = useRoute()
 const appStore = useAppStore()
+useConsoleAppearance(() => appStore.consoleAppearancePreview ?? appStore.consoleAppearance)
 const authStore = useAuthStore()
 const subscriptionStore = useSubscriptionStore()
 const announcementStore = useAnnouncementStore()
@@ -140,6 +150,7 @@ onBeforeUnmount(() => {
 })
 
 onMounted(async () => {
+  tableRoot.value = document.body
   window.addEventListener('admin-compliance-required', onAdminComplianceRequired)
 
   // Check if setup is needed
@@ -163,8 +174,9 @@ onMounted(async () => {
 
 <template>
   <NavigationProgress />
-  <RouterView />
+  <RouterView :key="`${authStore.user?.id ?? 'anonymous'}:${authStore.user?.role ?? ''}`" />
   <Toast />
+  <TitleTooltip :key="route.fullPath" />
   <AnnouncementPopup />
   <AdminComplianceDialog />
 </template>

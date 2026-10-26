@@ -93,7 +93,6 @@ const messages: Record<string, string> = {
 		'usage.timingUnavailableLive': 'Live session summary has no token-generation timing',
 		'usage.timingUnavailableCompaction': 'Compaction result has no observable token deltas',
 		'usage.timingUnavailableNoTokens': 'No billed text tokens or generation timing observed',
-		'usage.latencyTpsHint': 'Request-average output tokens per second includes first-token waiting and may include billed reasoning tokens.',
 		'usage.averageTpsIncomplete': 'Incomplete request; average uses the recorded partial output and duration',
 		'usage.timingUnavailableNoTextTokens': 'No applicable non-media output tokens',
 		'usage.incomplete': 'Incomplete',
@@ -730,9 +729,9 @@ describe('admin UsageTable tooltip', () => {
       '375 tok/s',
       '750 tok/s',
     ])
-    expect(tpsNodes.every((node) => node.attributes('title')?.startsWith(messages['usage.latencyTpsHint']))).toBe(true)
-    expect(tpsNodes[4].attributes('title')).toContain(messages['usage.averageTpsIncomplete'])
-    expect(tpsNodes[9].attributes('title')).toContain(messages['usage.timingUnavailableNoTextTokens'])
+    // Approved UI contract: TPS has no formula/native tooltip obscuring latency details.
+    expect(tpsNodes.every(node => node.attributes('title') == null)).toBe(true)
+    expect(wrapper.find('[title*="tokens per second"]').exists()).toBe(false)
     expect(wrapper.text()).toContain('First Byte -Total10.86sTPS34.5 tok/s')
     expect(wrapper.text()).toContain('First Byte -Total1.10sTPS90.9 tok/s')
     expect(wrapper.text()).not.toContain('First Image Data')
@@ -764,9 +763,10 @@ describe('admin UsageTable tooltip', () => {
     })
 
     expect(wrapper.get('[data-testid="first-latency-value"]').text()).toBe('-')
-    expect(wrapper.get('[data-testid="first-latency-value"]').classes()).toContain('text-gray-400')
+    // docs/UI_INTERACTION.md: missing timing remains neutral with readable glass-surface text.
+    expect(wrapper.get('[data-testid="first-latency-value"]').classes()).toContain('surface-muted')
     expect(wrapper.get('[data-testid="latency-bar"]').classes()).toContain('bg-gray-300')
-    expect(wrapper.get('[data-testid="latency-duration"]').classes()).toContain('text-gray-400')
+    expect(wrapper.get('[data-testid="latency-duration"]').classes()).toContain('surface-muted')
     expect(wrapper.get('[data-testid="latency-duration"]').text()).toBe('-')
     expect(wrapper.find('[data-testid="latency-details-trigger"]').exists()).toBe(true)
   })

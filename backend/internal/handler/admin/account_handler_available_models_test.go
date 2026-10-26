@@ -115,6 +115,76 @@ func TestAccountHandlerGetAvailableModels_GrokUsesXAIModels(t *testing.T) {
 	require.Equal(t, "grok-4.3", resp.Data[0].ID)
 }
 
+func TestAccountHandlerGetAvailableModels_Domestic(t *testing.T) {
+	providers := []struct {
+		platform string
+		model    string
+	}{
+		{service.PlatformDeepseek, "deepseek-v4-pro"},
+		{service.PlatformKimi, "kimi-for-coding"},
+		{service.PlatformMiniMax, "MiniMax-M3"},
+		{service.PlatformStepFun, "step-5-preview"},
+		{service.PlatformZhipu, "glm-5.3"},
+	}
+	for _, provider := range providers {
+		for _, accountType := range []string{service.AccountTypeOAuth, service.AccountTypeAPIKey} {
+			for _, scenario := range []struct {
+				name        string
+				mapping     any
+				wantIDs     []string
+				wantDefault bool
+			}{
+				{name: "provider catalog", wantDefault: true},
+				{name: "empty whitelist uses provider catalog", mapping: map[string]any{}, wantDefault: true},
+				{name: "exact whitelist", mapping: map[string]any{"custom-model": provider.model}, wantIDs: []string{"custom-model"}},
+				{name: "intentional Claude alias", mapping: map[string]any{"claude-sonnet-custom": provider.model}, wantIDs: []string{"claude-sonnet-custom"}},
+				{name: "concrete aliases sorted, patterns omitted", mapping: map[string]any{"z-alias": provider.model, "a-alias": provider.model, "provider-*": provider.model, "": provider.model}, wantIDs: []string{"a-alias", "z-alias"}},
+				{name: "typed mapping", mapping: map[string]string{"typed-model": provider.model}, wantIDs: []string{"typed-model"}},
+				{name: "wildcard only has no concrete test model", mapping: map[string]any{"*": provider.model}, wantIDs: []string{}},
+				{name: "invalid targets never reveal provider defaults", mapping: map[string]any{"bad-model": 42, "empty-target": ""}, wantIDs: []string{}},
+			} {
+				t.Run(provider.platform+"/"+accountType+"/"+scenario.name, func(t *testing.T) {
+					credentials := map[string]any{}
+					if scenario.mapping != nil {
+						credentials["model_mapping"] = scenario.mapping
+					}
+					svc := &availableModelsAdminService{
+						stubAdminService: newStubAdminService(),
+						account:          service.Account{ID: 51, Name: "provider test", Platform: provider.platform, Type: accountType, Credentials: credentials},
+					}
+					router := setupAvailableModelsRouter(svc)
+					rec := httptest.NewRecorder()
+					router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/admin/accounts/51/models", nil))
+					require.Equal(t, http.StatusOK, rec.Code)
+					var payload struct {
+						Data []struct {
+							ID          string `json:"id"`
+							Type        string `json:"type"`
+							DisplayName string `json:"display_name"`
+						} `json:"data"`
+					}
+					require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &payload))
+					require.NotNil(t, payload.Data, "empty candidates must be an array rather than null")
+					ids := make([]string, 0, len(payload.Data))
+					for _, model := range payload.Data {
+						ids = append(ids, model.ID)
+						require.Equal(t, model.ID, model.DisplayName)
+						require.Equal(t, "model", model.Type)
+					}
+					if scenario.wantDefault {
+						require.Contains(t, ids, provider.model)
+						for _, id := range ids {
+							require.NotContains(t, id, "claude", "provider defaults cannot fall through to Claude")
+						}
+					} else {
+						require.Equal(t, scenario.wantIDs, ids)
+					}
+				})
+			}
+		}
+	}
+}
+
 func TestAccountHandlerGetAvailableModels_GrokDefaultsToXAIModelsWithoutMapping(t *testing.T) {
 	svc := &availableModelsAdminService{
 		stubAdminService: newStubAdminService(),

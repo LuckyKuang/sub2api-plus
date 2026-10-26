@@ -5,7 +5,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -39,6 +41,7 @@ func (r *channelMonitorV2Repository) GetConfig(ctx context.Context) (*service.Ch
 	if err := json.Unmarshal(platforms, &cfg.Platforms); err != nil {
 		return nil, fmt.Errorf("decode channel monitor v2 platforms: %w", err)
 	}
+	channelMonitorV2PlatformDefaults(cfg.Platforms)
 	if cfg.IgnoredErrorCategories == nil {
 		cfg.IgnoredErrorCategories = []string{}
 	}
@@ -51,6 +54,7 @@ func (r *channelMonitorV2Repository) GetConfig(ctx context.Context) (*service.Ch
 }
 
 func (r *channelMonitorV2Repository) UpdateConfig(ctx context.Context, cfg service.ChannelMonitorV2Config, expectedVersion int) (*service.ChannelMonitorV2Config, error) {
+	channelMonitorV2PlatformDefaults(cfg.Platforms)
 	platforms, err := json.Marshal(cfg.Platforms)
 	if err != nil {
 		return nil, err
@@ -90,6 +94,7 @@ func (r *channelMonitorV2Repository) UpdateConfig(ctx context.Context, cfg servi
 	if err := json.Unmarshal(raw, &updated.Platforms); err != nil {
 		return nil, err
 	}
+	channelMonitorV2PlatformDefaults(updated.Platforms)
 	if updated.IgnoredErrorCategories == nil {
 		updated.IgnoredErrorCategories = []string{}
 	}
@@ -97,6 +102,19 @@ func (r *channelMonitorV2Repository) UpdateConfig(ctx context.Context, cfg servi
 	_ = json.Unmarshal(rawThresholds, &updated.HealthThresholds)
 	updated.HealthThresholds = service.NormalizeChannelMonitorV2HealthThresholds(updated.HealthThresholds)
 	return &updated, nil
+}
+
+func channelMonitorV2PlatformDefaults(platforms []service.ChannelMonitorV2PlatformConfig) {
+	for i := range platforms {
+		p := &platforms[i]
+		if p.Models == nil {
+			p.Models = []string{}
+		}
+		if p.ExcludedModels == nil {
+			p.ExcludedModels = []string{}
+		}
+		p.ModelDisplayMode = p.EffectiveModelDisplayMode()
+	}
 }
 
 type channelMonitorV2Fact struct {
@@ -158,13 +176,8 @@ func (r *channelMonitorV2Repository) GetDimensions(ctx context.Context, filter s
 	groupCounts := map[int64]groupValue{}
 	for _, platform := range channelMonitorV2EnabledPlatforms(cfg) {
 		platformCounts[platform] += 0
-		for _, p := range cfg.Platforms {
-			if p.Platform != platform || len(p.Models) == 0 {
-				continue
-			}
-			for _, model := range p.Models {
-				modelCounts[platform+"\x00"+model] = modelValue{platform: platform, count: 0}
-			}
+		for _, model := range configuredChannelMonitorV2Models(cfg, platform, catalogFilter) {
+			modelCounts[platform+"\x00"+model] = modelValue{platform: platform, count: 0}
 		}
 	}
 	groupInfo, err := r.loadChannelMonitorV2GroupInfo(ctx, configuredChannelMonitorV2GroupIDs(catalogFilter, cfg))
@@ -179,6 +192,9 @@ func (r *channelMonitorV2Repository) GetDimensions(ctx context.Context, filter s
 		var groupID, count int64
 		if err := rows.Scan(&platform, &groupName, &groupPlatform, &groupID, &model, &count); err != nil {
 			return nil, err
+		}
+		if channelMonitorV2ModelExcluded(cfg, platform, model) {
+			continue
 		}
 		platformCounts[platform] += count
 		displayModel := channelMonitorV2DisplayModel(cfg, platform, model)
@@ -582,7 +598,13 @@ func configuredChannelMonitorV2Models(cfg service.ChannelMonitorV2Config, platfo
 			models = intersectStrings(models, filter.Models)
 		}
 	}
-	return models
+	visible := make([]string, 0, len(models))
+	for _, model := range models {
+		if !channelMonitorV2ModelExcluded(cfg, platform, model) && channelMonitorV2ModelSelected(filter, cfg, platform, model) {
+			visible = append(visible, channelMonitorV2DisplayModel(cfg, platform, model))
+		}
+	}
+	return visible
 }
 
 // channelMonitorV2CatalogFilter clears multi-select dimensions so catalog endpoints
@@ -764,7 +786,7 @@ func (r *channelMonitorV2Repository) loadErrorDetails(ctx context.Context, filte
 	}
 	if len(platforms) > 0 {
 		args = append(args, pq.Array(platforms))
-		conditions = append(conditions, fmt.Sprintf("lower(COALESCE(NULLIF(TRIM(current_error.platform), ''), 'unknown')) = ANY($%d)", len(args)))
+		conditions = append(conditions, fmt.Sprintf("%s = ANY($%d)", channelMonitorV2ErrorPlatformSQL, len(args)))
 	} else {
 		conditions = append(conditions, "FALSE")
 	}
@@ -775,10 +797,11 @@ func (r *channelMonitorV2Repository) loadErrorDetails(ctx context.Context, filte
 		args = append(args, pq.Array(groups))
 		conditions = append(conditions, fmt.Sprintf("COALESCE(current_error.group_id, 0) = ANY($%d)", len(args)))
 	}
+	conditions, args = channelMonitorV2ExcludeModels(conditions, args, cfg, channelMonitorV2ErrorPlatformSQL, channelMonitorV2ErrorModelSQL)
 	query := `SELECT
-			lower(COALESCE(NULLIF(TRIM(current_error.platform), ''), 'unknown')) AS platform,
+			` + channelMonitorV2ErrorPlatformSQL + ` AS platform,
 			COALESCE(current_error.group_id, 0) AS group_id,
-			COALESCE(NULLIF(TRIM(current_error.requested_model), ''), NULLIF(TRIM(current_error.model), ''), 'unknown') AS model,
+			` + channelMonitorV2ErrorModelSQL + ` AS model,
 			COALESCE(current_error.error_type, '') AS error_type,
 			COALESCE(current_error.error_owner, '') AS error_owner,
 			COALESCE(current_error.error_source, '') AS error_source,
@@ -787,6 +810,8 @@ func (r *channelMonitorV2Repository) loadErrorDetails(ctx context.Context, filte
 			LEFT(COALESCE(NULLIF(current_error.upstream_error_message, ''), NULLIF(current_error.error_message, ''), NULLIF(current_error.upstream_error_detail, ''), NULLIF(current_error.error_body, ''), current_error.error_type, ''), 600) AS message,
 			COUNT(*) AS count
 		FROM ops_error_logs current_error
+		LEFT JOIN groups g ON g.id = current_error.group_id
+		LEFT JOIN accounts a ON a.id = current_error.account_id
 		WHERE ` + strings.Join(conditions, " AND ") + `
 		GROUP BY 1,2,3,4,5,6,7,8,9
 		ORDER BY count DESC
@@ -1179,7 +1204,36 @@ func channelMonitorV2Where(filter service.ChannelMonitorV2Filter, cfg service.Ch
 		args = append(args, pq.Array(groups))
 		conditions = append(conditions, fmt.Sprintf("%s.group_id = ANY($%d)", alias, len(args)))
 	}
+	conditions, args = channelMonitorV2ExcludeModels(conditions, args, cfg, alias+".platform", alias+".model")
 	return "WHERE " + strings.Join(conditions, " AND "), args
+}
+
+// Apply exclusions before every SQL SUM/GROUP BY, including fixed historical
+// rollups, histograms and user/error facts. Retain raw facts so removing a policy
+// immediately restores history without backfill or stale config generations.
+func channelMonitorV2ExcludeModels(conditions []string, args []any, cfg service.ChannelMonitorV2Config, platformSQL, modelSQL string) ([]string, []any) {
+	for _, platform := range cfg.Platforms {
+		if len(platform.ExcludedModels) == 0 {
+			continue
+		}
+		args = append(args, platform.Platform, pq.Array(platform.ExcludedModels))
+		conditions = append(conditions, fmt.Sprintf("NOT (%s = $%d AND %s = ANY($%d))", platformSQL, len(args)-1, modelSQL, len(args)))
+	}
+	return conditions, args
+}
+
+func channelMonitorV2ModelExcluded(cfg service.ChannelMonitorV2Config, platform, model string) bool {
+	model = strings.TrimSpace(model)
+	for _, p := range cfg.Platforms {
+		if p.Platform == platform {
+			for _, excluded := range p.ExcludedModels {
+				if excluded == model {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 func channelMonitorV2EnabledPlatforms(cfg service.ChannelMonitorV2Config) []string {
@@ -1193,10 +1247,9 @@ func channelMonitorV2EnabledPlatforms(cfg service.ChannelMonitorV2Config) []stri
 }
 
 // channelMonitorV2DisplayModel maps a raw model name for presentation.
-// Semantics (parallel to empty group_ids = all groups):
-//   - platform not in config / disabled → keep raw model (still collected)
-//   - models list empty → show the real model name (no collapsing)
-//   - models list non-empty → selected keep identity; everything else → __other__
+// All mode shows real model names; selected mode keeps named models and folds
+// others into __other__, including when the named list is empty. Exclusions are
+// applied before this presentation mapping.
 func channelMonitorV2DisplayModel(cfg service.ChannelMonitorV2Config, platform, model string) string {
 	model = strings.TrimSpace(model)
 	if model == "" {
@@ -1206,9 +1259,7 @@ func channelMonitorV2DisplayModel(cfg service.ChannelMonitorV2Config, platform, 
 		if p.Platform != platform {
 			continue
 		}
-		// Empty allow-list: surface every real model instead of dumping into __other__.
-		// Operators opt into the named + __other__ split only by listing models.
-		if len(p.Models) == 0 {
+		if p.EffectiveModelDisplayMode() == service.ChannelMonitorV2DisplayAll {
 			return model
 		}
 		for _, selected := range p.Models {
@@ -1222,6 +1273,9 @@ func channelMonitorV2DisplayModel(cfg service.ChannelMonitorV2Config, platform, 
 	return model
 }
 func channelMonitorV2ModelSelected(filter service.ChannelMonitorV2Filter, cfg service.ChannelMonitorV2Config, platform, model string) bool {
+	if channelMonitorV2ModelExcluded(cfg, platform, model) {
+		return false
+	}
 	if len(filter.Models) == 0 {
 		return true
 	}
@@ -1305,11 +1359,13 @@ func intersectInt64(a, b []int64) []int64 {
 }
 
 // shiftSQLPlaceholders shifts existing positional placeholders by offset.
+var channelMonitorV2SQLPlaceholder = regexp.MustCompile(`\$(\d+)`)
+
 func shiftSQLPlaceholders(query string, offset int) string {
-	for i := 64; i >= 1; i-- {
-		query = strings.ReplaceAll(query, fmt.Sprintf("$%d", i), fmt.Sprintf("$%d", i+offset))
-	}
-	return query
+	return channelMonitorV2SQLPlaceholder.ReplaceAllStringFunc(query, func(placeholder string) string {
+		position, _ := strconv.Atoi(placeholder[1:])
+		return "$" + strconv.Itoa(position+offset)
+	})
 }
 
 type metricAccumulator struct {

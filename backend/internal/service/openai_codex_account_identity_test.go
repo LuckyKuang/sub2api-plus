@@ -41,7 +41,6 @@ func TestCodexRequestBodyIdentityNamespaceIsStablePerOAuthAccount(t *testing.T) 
 	require.JSONEq(t, string(first), string(firstAgain))
 
 	paths := []string{
-		"prompt_cache_key",
 		"client_metadata.x-codex-installation-id",
 		"client_metadata.session_id",
 		"client_metadata.thread_id",
@@ -51,7 +50,11 @@ func TestCodexRequestBodyIdentityNamespaceIsStablePerOAuthAccount(t *testing.T) 
 		require.NotEqual(t, gjson.GetBytes(body, path).String(), gjson.GetBytes(first, path).String(), path)
 		require.NotEqual(t, gjson.GetBytes(first, path).String(), gjson.GetBytes(second, path).String(), path)
 	}
-	require.Equal(t, gjson.GetBytes(first, "prompt_cache_key").String(), gjson.GetBytes(first, "client_metadata.session_id").String())
+	// A01: the logical cache key keeps tenant isolation but is no longer scoped to
+	// the credential owner, so it must survive an account failover unchanged.
+	require.Equal(t, "client-session", gjson.GetBytes(first, "prompt_cache_key").String(), "the typed metadata mapper must leave cache policy to its dedicated resolver")
+	require.Equal(t, gjson.GetBytes(first, "prompt_cache_key").String(), gjson.GetBytes(second, "prompt_cache_key").String(), "logical cache key must survive credential-owner migration")
+	require.NotEqual(t, gjson.GetBytes(first, "prompt_cache_key").String(), gjson.GetBytes(first, "client_metadata.session_id").String(), "cache key and per-owner session identity are separate scopes")
 
 	var embeddedFirst map[string]any
 	var embeddedSecond map[string]any
@@ -113,7 +116,7 @@ func TestCodexAccountIdentitySourceResolvesShadowAndOverwritesFailoverContext(t 
 		"token", true, "client-session", true,
 	)
 	require.NoError(t, err)
-	require.Equal(t, generateSessionUUID(isolateOpenAIUpstreamSessionID(0, parent, "client-session")), req.Header.Get("session-id"))
+	require.Empty(t, req.Header.Get("session-id"), "a native cache key cannot manufacture a missing session header")
 	require.Empty(t, req.Header.Get("session_id"))
 
 	next := &Account{ID: 19, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Credentials: map[string]any{
@@ -132,6 +135,7 @@ func TestBuildOpenAIWSHeadersNamespacesCodexIdentityByOAuthAccount(t *testing.T)
 	c, _ := gin.CreateTestContext(recorder)
 	c.Request = httptest.NewRequest(http.MethodGet, "/v1/responses", nil)
 	c.Set("api_key_id", int64(77))
+	c.Request.Header.Set("session-id", "client-session")
 	c.Request.Header.Set("x-codex-installation-id", "client-installation")
 	c.Request.Header.Set("thread-id", "client-thread")
 	c.Request.Header.Set("x-codex-window-id", "client-window")
@@ -153,11 +157,16 @@ func TestBuildOpenAIWSHeadersNamespacesCodexIdentityByOAuthAccount(t *testing.T)
 	first := build(account11)
 	firstAgain := build(account11)
 	second := build(account19)
-	for _, header := range []string{"session-id", "x-codex-installation-id", "thread-id", "x-codex-window-id", "x-client-request-id"} {
+	for _, header := range []string{"thread-id", "x-codex-window-id", "x-client-request-id"} {
 		require.NotEmpty(t, first.Get(header), header)
 		require.Equal(t, first.Get(header), firstAgain.Get(header), header)
 		require.NotEqual(t, first.Get(header), second.Get(header), header)
 	}
+	// Execution session identity remains stable for the same owner and rotates
+	// on failover independently of the tenant logical cache key.
+	require.NotEmpty(t, first.Get("session-id"))
+	require.Equal(t, first.Get("session-id"), firstAgain.Get("session-id"))
+	require.NotEqual(t, first.Get("session-id"), second.Get("session-id"), "execution session must be separated by credential owner")
 	require.Empty(t, first.Get("session_id"))
 	require.Empty(t, second.Get("session_id"))
 
@@ -209,10 +218,11 @@ func TestBuildUpstreamRequestNamespacesCodexIdentityByOAuthAccount(t *testing.T)
 	firstAgain := build(11, "chatgpt-account-11")
 	second := build(19, "chatgpt-account-19")
 
+	require.Empty(t, first.Get("x-codex-installation-id"))
+	require.Empty(t, second.Get("x-codex-installation-id"))
 	identityHeaders := []string{
-		"x-codex-installation-id",
-		"x-codex-window-id",
 		"session-id",
+		"x-codex-window-id",
 		"session_id",
 		"conversation_id",
 		"thread-id",
@@ -230,4 +240,16 @@ func TestBuildUpstreamRequestNamespacesCodexIdentityByOAuthAccount(t *testing.T)
 		require.NotEqual(t, first.Get(header), second.Get(header), "account failover must rotate upstream identity: %s", header)
 	}
 	require.GreaterOrEqual(t, checked, 5, "test must exercise the real outbound identity surface")
+	// Execution session identity has the same owner boundary as the IDs above.
+	require.NotEmpty(t, first.Get("session-id"))
+	require.NotEqual(t, first.Get("session-id"), second.Get("session-id"), "execution session must be separated by credential owner")
+}
+
+// Test convenience only; production callers propagate storage errors.
+func scopeCodexAccountIdentityValue(account *Account, tenant int64, kind, raw string) string {
+	value, err := resolveCodexAccountIdentityValue(context.Background(), account, tenant, kind, raw)
+	if err != nil {
+		panic(err)
+	}
+	return value
 }

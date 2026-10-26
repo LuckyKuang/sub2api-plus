@@ -183,11 +183,34 @@ func (s *OpenAIGatewayService) openAIChatCompletionsTargetURL(account *Account) 
 }
 
 // resolveCCFallbackTarget 解析两条 CC 回退路径共用的账号凭证与上游端点
-// （回退路径仅面向 APIKey 账号，凭证恒为 openai api_key）。
-func (s *OpenAIGatewayService) resolveCCFallbackTarget(account *Account) (apiKey string, targetURL string, err error) {
-	apiKey = strings.TrimSpace(account.GetOpenAIProtocolAPIKey())
-	if apiKey == "" {
-		return "", "", fmt.Errorf("account %d missing api_key", account.ID)
+// （APIKey 账号，以及保留各自官方凭据/地址语义的 Grok 和 ZCode linked 账号）。
+func (s *OpenAIGatewayService) resolveCCFallbackTarget(ctx context.Context, c *gin.Context, account *Account) (apiKey string, targetURL string, err error) {
+	ctx = WithOutboundIdentityScope(ctx, c)
+	if account.IsGrok() {
+		apiKey, _, err = s.GetRequestCredential(ctx, c, account)
+		if err != nil {
+			return "", "", err
+		}
+		account, err = requestCredentialAccount(withRequestCredentialOwner(ctx, account, apiKey), account)
+		if err != nil {
+			return "", "", err
+		}
+		targetURL, err = buildGrokChatCompletionsURL(account, s.cfg, s.settingService)
+		return apiKey, targetURL, err
+	}
+	if account.Platform == PlatformZhipu && account.Type == AccountTypeOAuth {
+		apiKey, _, err = s.GetRequestCredential(ctx, c, account)
+		if err != nil {
+			return "", "", err
+		}
+	} else {
+		apiKey = strings.TrimSpace(account.GetOpenAIProtocolAPIKey())
+		if apiKey == "" {
+			if account.Type == AccountTypeAPIKey {
+				return "", "", s.accountCredentialFailure(ctx, c, account, NewAccountCredentialFailure("account_credential_missing", nil))
+			}
+			return "", "", fmt.Errorf("account %d missing api_key", account.ID)
+		}
 	}
 	targetURL, err = s.openAIChatCompletionsTargetURL(account)
 	if err != nil {
@@ -213,6 +236,23 @@ func (s *OpenAIGatewayService) sendCCUpstreamRequest(
 	userAgent string,
 	grokCacheIdentity string,
 ) (*http.Response, error) {
+	selectedAccount := account
+	if account.IsGrok() {
+		ctx = WithOutboundIdentityScope(ctx, c)
+		ctx = withRequestCredentialOwner(ctx, account, bearerToken)
+		owner, err := requestCredentialAccount(ctx, account)
+		if err != nil {
+			return nil, err
+		}
+		account = owner
+		// Both converted fallbacks and raw Chat calls may have resolved their
+		// target before a refresh. Build it again from the acquired grant.
+		targetURL, err = buildGrokChatCompletionsURL(account, s.cfg, s.settingService)
+		if err != nil {
+			return nil, err
+		}
+		userAgent = account.GetOpenAIUserAgent()
+	}
 	// DeepSeek thinking mode 要求历史 assistant 回传 reasoning_content。
 	// Responses→CC 回退在加密-only / 缺 reasoning item 且缓存未命中时会漏掉该
 	// 字段，上游 400 "The `reasoning_content` in the thinking mode must be
@@ -254,13 +294,15 @@ func (s *OpenAIGatewayService) sendCCUpstreamRequest(
 		if account.IsGrokOAuth() {
 			applyGrokCLIHeaders(upstreamReq.Header)
 		}
-		applyGrokRequestMetadata(upstreamReq.Header, body, resolveGrokRequestConversation(c, body, grokCacheIdentity), account.GetCredential("sub"))
+		if err := applyGrokRequestMetadataForRequest(upstreamReq, c, account, body, grokCacheIdentity); err != nil {
+			return nil, err
+		}
 	}
 	// OpenAI identity is always the final stage. Other providers retain their
 	// existing generic override behavior.
 	if account.Platform == PlatformOpenAI {
 		account.applyOpenAIHeaderOverrides(upstreamReq.Header)
-		identity := s.applyOpenAIOutboundIdentity(ctx, account, upstreamReq.Header, false)
+		identity := s.applyOpenAIOutboundIdentity(ctx, account, upstreamReq.Header, true)
 		SetOpsRoutingDiagnostics(c, &OpsRoutingDiagnostics{OutboundIdentitySource: identity.Source})
 	} else {
 		account.ApplyHeaderOverrides(upstreamReq.Header)
@@ -280,9 +322,9 @@ func (s *OpenAIGatewayService) sendCCUpstreamRequest(
 	if account.ProxyID != nil && account.Proxy != nil {
 		proxyURL = account.Proxy.URL()
 	}
-	resp, err := s.doOpenAIUpstream(upstreamReq, proxyURL, account)
+	resp, err := s.doOpenAIUpstream(upstreamReq, proxyURL, selectedAccount)
 	if err != nil {
-		return nil, s.handleOpenAIUpstreamTransportError(ctx, c, account, err, false)
+		return nil, s.handleOpenAIUpstreamTransportError(ctx, c, selectedAccount, err, false)
 	}
 	return resp, nil
 }
@@ -291,19 +333,59 @@ func (s *OpenAIGatewayService) sendCCUpstreamRequest(
 type ccStreamScanState struct {
 	// Usage 为 include_usage chunk 中最近一次出现的用量（上游可能重复发送，
 	// 总是保留最新值）；终态事件中的用量由调用方在 finalize 阶段自行覆盖。
-	Usage OpenAIUsage
+	Usage    OpenAIUsage
+	SawUsage bool
 	// SawDone 表示上游发出了 [DONE] 哨兵。
 	SawDone  bool
 	SawError bool
 	// Err 为 scanner 读错误（客户端 context 取消不属于此类，会原样带出）。
 	// 非 nil 时调用方必须跳过 finalize 并返回 usage-incomplete 错误，避免
 	// 把上游截断伪装成正常收尾。
-	Err          error
+	Err error
+	// ProtocolErr records an explicit upstream error independently of read I/O.
+	ProtocolErr  error
 	FirstTokenMs *int
+}
+
+// An explicit provider error is a protocol failure even when its HTTP status
+// is 200. Keep the upstream body for the established failover/error renderer;
+// never decode it as an empty successful completion or fabricate usage.
+func ccExplicitUpstreamError(body []byte) error {
+	if !gjson.GetBytes(body, "error").IsObject() {
+		return nil
+	}
+	return &UpstreamFailoverError{StatusCode: http.StatusBadGateway, ResponseBody: body}
 }
 
 func (s ccStreamScanState) usageIncomplete() bool {
 	return s.Err != nil || s.SawError || !s.SawDone
+}
+
+func ccObservedUsageSource(sawUsage, incomplete bool) string {
+	if !sawUsage {
+		return UsageSourceUnknown
+	}
+	if incomplete {
+		return UsageSourcePartial
+	}
+	return UsageSourceUpstreamExact
+}
+
+func (s ccStreamScanState) usageSource(clientDisconnected bool) string {
+	return ccObservedUsageSource(s.SawUsage, s.usageIncomplete() || clientDisconnected)
+}
+
+func (s ccStreamScanState) completionError() error {
+	if s.Err != nil {
+		return s.Err
+	}
+	if s.ProtocolErr != nil {
+		return s.ProtocolErr
+	}
+	if !s.SawDone {
+		return errors.New("missing [DONE]")
+	}
+	return nil
 }
 
 // scanCCStream 驱动两条 CC 回退路径共享的 SSE 读循环：提取 data 行、在 [DONE]
@@ -319,6 +401,9 @@ func (s *OpenAIGatewayService) scanCCStream(
 	emit func(*apicompat.ChatCompletionsChunk),
 ) ccStreamScanState {
 	var st ccStreamScanState
+	var acceptance openAIChatTakeoverAcceptance
+	var pending []*apicompat.ChatCompletionsChunk
+	var pendingBytes int64
 
 	scanner := s.newUpstreamSSEScanner(resp.Body)
 	for scanner.Scan() {
@@ -333,10 +418,15 @@ func (s *OpenAIGatewayService) scanCCStream(
 		}
 		if payload == "[DONE]" {
 			st.SawDone = true
+			if openAISessionTakeoverPending(c.Request.Context()) {
+				st.Err = ErrOpenAISessionRouteNotAccepted
+			}
 			break
 		}
 		if gjson.Get(payload, "error").IsObject() {
 			st.SawError = true
+			st.ProtocolErr = ccExplicitUpstreamError([]byte(payload))
+			break
 		}
 		// 观察上游 CC chunk 回显的 model / service_tier（计费以回显为准）。
 		// CC chunk 无 type 字段，按 untyped payload 观察（上游约束：只有终止
@@ -347,6 +437,7 @@ func (s *OpenAIGatewayService) scanCCStream(
 
 		if u := extractCCStreamUsage(payload); u != nil {
 			st.Usage = *u
+			st.SawUsage = true
 		}
 
 		var chunk apicompat.ChatCompletionsChunk
@@ -357,10 +448,32 @@ func (s *OpenAIGatewayService) scanCCStream(
 			)
 			continue
 		}
+		if !st.SawError && acceptance.observe(&chunk, st.Usage) {
+			if err := commitOpenAISessionTakeover(c.Request.Context()); err != nil {
+				st.Err = err
+				break
+			}
+		}
+		// Preserve structural/finish chunks for conversion while withholding
+		// candidate output until persistent acceptance succeeds.
+		if openAISessionTakeoverPending(c.Request.Context()) {
+			pendingBytes += int64(len(payload))
+			if pendingBytes > openAIFirstOutputStageMaxBytes {
+				st.Err = ErrOpenAISessionRouteNotAccepted
+				break
+			}
+			pending = append(pending, &chunk)
+			continue
+		}
+		for _, staged := range pending {
+			emit(staged)
+		}
+		pending = nil
+		pendingBytes = 0
 		emit(&chunk)
 	}
 
-	if err := scanner.Err(); err != nil {
+	if err := scanner.Err(); err != nil && st.Err == nil {
 		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 			logger.L().Warn(logPrefix+": stream read error",
 				zap.Error(err),
@@ -369,14 +482,11 @@ func (s *OpenAIGatewayService) scanCCStream(
 		}
 		st.Err = err
 	}
-	return st
-}
+	if st.Err == nil && openAISessionTakeoverPending(c.Request.Context()) {
+		st.Err = ErrOpenAISessionRouteNotAccepted
+	}
 
-// logCCStreamMissingDoneSentinel 记录"上游未发 [DONE] 哨兵即结束"的 debug 日志。
-func logCCStreamMissingDoneSentinel(logPrefix, requestID string) {
-	logger.L().Debug(logPrefix+": upstream stream ended without done sentinel",
-		zap.String("request_id", requestID),
-	)
+	return st
 }
 
 // readCCUpstreamJSONResponse 读取并解析 CC 非流式 JSON 响应，失败时以调用方
@@ -385,19 +495,22 @@ func (s *OpenAIGatewayService) readCCUpstreamJSONResponse(
 	c *gin.Context,
 	resp *http.Response,
 	writeError compatErrorWriter,
-) (*apicompat.ChatCompletionsResponse, OpenAIUsage, error) {
+) (*apicompat.ChatCompletionsResponse, OpenAIUsage, string, error) {
 	respBody, err := ReadUpstreamResponseBody(resp.Body, s.cfg, c, openAITooLargeError)
 	if err != nil {
 		if !errors.Is(err, ErrUpstreamResponseBodyTooLarge) {
 			writeError(c, http.StatusBadGateway, "api_error", "Failed to read upstream response")
 		}
-		return nil, OpenAIUsage{}, fmt.Errorf("read upstream body: %w", err)
+		return nil, OpenAIUsage{}, UsageSourceUnknown, fmt.Errorf("read upstream body: %w", err)
+	}
+	if err := ccExplicitUpstreamError(respBody); err != nil {
+		return nil, OpenAIUsage{}, UsageSourceUnknown, err
 	}
 
 	var ccResp apicompat.ChatCompletionsResponse
 	if err := json.Unmarshal(respBody, &ccResp); err != nil {
 		writeError(c, http.StatusBadGateway, "api_error", "Failed to parse upstream response")
-		return nil, OpenAIUsage{}, fmt.Errorf("parse chat completions response: %w", err)
+		return nil, OpenAIUsage{}, UsageSourceUnknown, fmt.Errorf("parse chat completions response: %w", err)
 	}
 	// 观察上游 CC JSON 回显的 model / service_tier（计费以回显为准）。
 	// CC JSON 无 type 字段，按 untyped payload 观察（上游约束）。
@@ -405,11 +518,11 @@ func (s *OpenAIGatewayService) readCCUpstreamJSONResponse(
 		observer.ObserveOpenAI(respBody, "")
 	}
 
-	usage := OpenAIUsage{}
-	if parsed, ok := extractOpenAIUsageFromJSONBytes(respBody); ok {
-		usage = parsed
+	usage, sawUsage := extractOpenAIUsageFromJSONBytes(respBody)
+	if err := commitOpenAISessionTakeoverJSON(c.Request.Context(), respBody); err != nil {
+		return nil, usage, ccObservedUsageSource(sawUsage, true), err
 	}
-	return &ccResp, usage, nil
+	return &ccResp, usage, ccObservedUsageSource(sawUsage, false), nil
 }
 
 // writeOpenAIResponsesFallbackError 以 /v1/responses 回退路径的既有错误格式回写

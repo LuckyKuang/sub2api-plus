@@ -394,7 +394,9 @@ func (c *HandshakeClient) do(ctx context.Context, method, target string, headers
 		req.Header.Set(name, value)
 	}
 	req.Header.Set("Accept", "application/json")
-	prepareRequest(req)
+	if err := prepareRequest(req); err != nil {
+		return nil, err
+	}
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return nil, err

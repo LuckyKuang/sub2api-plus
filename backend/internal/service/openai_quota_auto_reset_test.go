@@ -63,6 +63,7 @@ func TestShouldAutoPauseOpenAIAccountByQuota_AutoResetCreditStates(t *testing.T)
 
 	t.Run("卡状态未知时暂停并触发异步查询", func(t *testing.T) {
 		account := &Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Extra: cloneOpenAIAutoResetExtra(baseExtra)}
+		verifiedCodexUsageForTest(account)
 		paused, decision := shouldAutoPauseOpenAIAccountByQuota(context.Background(), account)
 		require.True(t, paused)
 		require.Equal(t, "quota_auto_reset_credit_check_5h", decision.reason)
@@ -74,6 +75,7 @@ func TestShouldAutoPauseOpenAIAccountByQuota_AutoResetCreditStates(t *testing.T)
 			Status: OpenAIAutoResetStatusAvailable, AvailableCount: 1, CheckedAt: now.Format(time.RFC3339),
 		}
 		account := &Account{ID: 2, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Extra: extra}
+		verifiedCodexUsageForTest(account)
 		paused, _ := shouldAutoPauseOpenAIAccountByQuota(context.Background(), account)
 		require.False(t, paused)
 	})
@@ -85,6 +87,7 @@ func TestShouldAutoPauseOpenAIAccountByQuota_AutoResetCreditStates(t *testing.T)
 			Status: OpenAIAutoResetStatusAvailable, AvailableCount: 1, CheckedAt: now.Format(time.RFC3339),
 		}
 		account := &Account{ID: 3, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Extra: extra}
+		verifiedCodexUsageForTest(account)
 		paused, decision := shouldAutoPauseOpenAIAccountByQuota(context.Background(), account)
 		require.True(t, paused)
 		require.Equal(t, "quota_auto_reset_pending_5h", decision.reason)
@@ -98,13 +101,14 @@ func TestShouldAutoPauseOpenAIAccountByQuota_AutoResetCreditStates(t *testing.T)
 			Status: OpenAIAutoResetStatusFailed, TriggerWindow: "5h", ErrorCode: "RESET_FAILED",
 		}
 		account := &Account{ID: 4, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Extra: extra}
+		verifiedCodexUsageForTest(account)
 		paused, _ := shouldAutoPauseOpenAIAccountByQuota(context.Background(), account)
 		require.False(t, paused)
 	})
 }
 
 func TestNotifyOpenAIAutoResetFromScheduler_CoolsDownPerAccount(t *testing.T) {
-	svc := &OpenAIQuotaAutoResetService{ctx: context.Background(), queue: make(chan int64, 8)}
+	svc := &OpenAIQuotaAutoResetService{ctx: context.Background(), queue: make(chan openAIAutoResetWorkItem, 8)}
 	setOpenAIAutoResetNotifier(svc)
 	t.Cleanup(func() { clearOpenAIAutoResetNotifier(svc) })
 
@@ -117,9 +121,9 @@ func TestNotifyOpenAIAutoResetFromScheduler_CoolsDownPerAccount(t *testing.T) {
 		var got []int64
 		for {
 			select {
-			case id := <-svc.queue:
-				svc.pending.Delete(id)
-				got = append(got, id)
+			case item := <-svc.queue:
+				svc.pending.Delete(item.key)
+				got = append(got, item.key.accountID)
 			default:
 				return got
 			}
@@ -225,12 +229,13 @@ type autoResetTestQuota struct {
 	queryErr     error
 }
 
-func (q *autoResetTestQuota) QueryUsage(context.Context, int64) (*OpenAIQuotaUsage, error) {
+func (q *autoResetTestQuota) QueryUsage(ctx context.Context, id int64) (*OpenAIQuotaUsage, error) {
 	q.queryCalls.Add(1)
 	if q.queryErr != nil {
 		return nil, q.queryErr
 	}
 	copy := *q.usage
+	copy.credentialOwner = codexObservationOwner(ctx, id)
 	return &copy, nil
 }
 
@@ -284,6 +289,7 @@ func TestOpenAIQuotaAutoResetService_ConcurrentInstancesConsumeOnce(t *testing.T
 			"codex_7d_reset_at":                      now.Add(24 * time.Hour).Format(time.RFC3339),
 		},
 	}
+	verifiedCodexUsageForTest(account)
 	repo := &autoResetTestAccountRepo{account: account}
 	usage := &OpenAIQuotaUsage{
 		FetchedAt: now.Unix(),
@@ -345,6 +351,7 @@ func TestOpenAIQuotaAutoResetService_TimeoutRetryReusesRequestBody(t *testing.T)
 			"codex_5h_reset_at":                      now.Add(time.Hour).Format(time.RFC3339),
 		},
 	}
+	verifiedCodexUsageForTest(account)
 	repo := &autoResetTestAccountRepo{account: account}
 	expiresAt := now.Add(48 * time.Hour).Format(time.RFC3339)
 	quota := &autoResetTestQuota{
@@ -397,6 +404,7 @@ func newResetThresholdTestFixture(t *testing.T, state *OpenAIAutoResetCreditStat
 		extra[OpenAIAutoResetCreditStateExtraKey] = state
 	}
 	account := &Account{ID: 501, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive, Schedulable: true, Extra: extra}
+	verifiedCodexUsageForTest(account)
 	repo := &autoResetTestAccountRepo{account: account}
 	quota := &autoResetTestQuota{usage: &OpenAIQuotaUsage{
 		FetchedAt: now.Unix(),
@@ -476,4 +484,15 @@ func TestOpenAIQuotaAutoResetService_QueryFailureBacksOffBeforeRetry(t *testing.
 	require.NoError(t, service.evaluateAccount(context.Background(), 501))
 	require.Equal(t, int32(2), quota.queryCalls.Load(), "重试间隔过后应恢复查询")
 	require.Equal(t, OpenAIAutoResetStatusNoCredit, repo.stateForTest().Status)
+}
+
+func (r *autoResetTestAccountRepo) UpdateOpenAICodexUsageIfUnchanged(ctx context.Context, id int64, owner *Account, updates map[string]any) (bool, error) {
+	current, err := r.GetByID(ctx, id)
+	if err != nil {
+		return false, err
+	}
+	if owner == nil || credentialStateGeneration(current) != credentialStateGeneration(owner) {
+		return false, nil
+	}
+	return true, r.UpdateExtra(ctx, id, updates)
 }

@@ -1,26 +1,26 @@
 <template>
   <AppLayout>
-    <div class="mx-auto max-w-2xl space-y-6">
+    <div class="space-y-6">
       <!-- Current Balance Card -->
-      <div class="card overflow-hidden">
-        <div class="bg-gradient-to-br from-primary-500 to-primary-600 px-6 py-8 text-center">
+      <div class="card workspace-shell overflow-hidden">
+        <div class="redeem-balance px-6 py-8 text-center">
           <div
-            class="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm"
+            class="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl surface-inset"
           >
-            <Icon name="creditCard" size="xl" class="text-white" />
+            <Icon name="creditCard" size="xl" class="text-primary-600 dark:text-primary-400" />
           </div>
-          <p class="text-sm font-medium text-primary-100">{{ t('redeem.currentBalance') }}</p>
-          <p class="mt-2 text-4xl font-bold text-white">
+          <p class="text-sm font-medium surface-muted">{{ t('redeem.currentBalance') }}</p>
+          <p class="mt-2 text-4xl font-bold">
             ${{ user?.balance?.toFixed(2) || '0.00' }}
           </p>
-          <p class="mt-2 text-sm text-primary-100">
+          <p class="mt-2 text-sm surface-muted">
             {{ t('redeem.concurrency') }}: {{ user?.concurrency || 0 }} {{ t('redeem.requests') }}
           </p>
         </div>
       </div>
 
       <!-- Redeem Form -->
-      <div class="card">
+      <div class="card workspace-shell">
         <div class="p-6">
           <form v-support-readonly @submit.prevent="handleRedeem" class="space-y-5">
             <div>
@@ -29,7 +29,7 @@
               </label>
               <div class="relative mt-1">
                 <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
-                  <Icon name="gift" size="md" class="text-gray-400 dark:text-dark-500" />
+                  <Icon name="gift" size="md" class="surface-muted" />
                 </div>
                 <input
                   id="code"
@@ -82,12 +82,12 @@
       <transition name="fade">
         <div
           v-if="redeemResult"
-          class="card border-emerald-200 bg-emerald-50 dark:border-emerald-800/50 dark:bg-emerald-900/20"
+          class="card workspace-shell border-emerald-200 bg-emerald-50/[0.15] dark:border-emerald-800/50 dark:bg-emerald-900/20"
         >
           <div class="p-6">
             <div class="flex items-start gap-4">
               <div
-                class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-900/30"
+                class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-emerald-100/[0.15] dark:bg-emerald-900/30"
               >
                 <Icon name="checkCircle" size="md" class="text-emerald-600 dark:text-emerald-400" />
               </div>
@@ -136,12 +136,12 @@
       <transition name="fade">
         <div
           v-if="errorMessage"
-          class="card border-red-200 bg-red-50 dark:border-red-800/50 dark:bg-red-900/20"
+          class="card workspace-shell border-red-200 bg-red-50/[0.15] dark:border-red-800/50 dark:bg-red-900/20"
         >
           <div class="p-6">
             <div class="flex items-start gap-4">
               <div
-                class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-red-100 dark:bg-red-900/30"
+                class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-red-100/[0.15] dark:bg-red-900/30"
               >
                 <Icon
                   name="exclamationCircle"
@@ -164,12 +164,12 @@
 
       <!-- Information Card -->
       <div
-        class="card border-primary-200 bg-primary-50 dark:border-primary-800/50 dark:bg-primary-900/20"
+        class="card workspace-shell border-primary-200 bg-primary-50/[0.15] dark:border-primary-800/50 dark:bg-primary-900/20"
       >
         <div class="p-6">
           <div class="flex items-start gap-4">
             <div
-              class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-primary-100 dark:bg-primary-900/30"
+              class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-primary-100/[0.15] dark:bg-primary-900/30"
             >
               <Icon name="infoCircle" size="md" class="text-primary-600 dark:text-primary-400" />
             </div>
@@ -199,13 +199,13 @@
       </div>
 
       <!-- Recent Activity -->
-      <div class="card">
+      <div class="card workspace-shell">
         <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
           <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
             {{ t('redeem.recentActivity') }}
           </h2>
         </div>
-        <div class="p-6">
+        <div class="redeem-history p-6">
           <!-- Loading State -->
           <div v-if="loadingHistory" class="flex items-center justify-center py-8">
             <svg class="h-6 w-6 animate-spin text-primary-500" fill="none" viewBox="0 0 24 24">
@@ -230,7 +230,7 @@
             <div
               v-for="item in history"
               :key="item.id"
-              class="flex items-center justify-between rounded-xl bg-gray-50 p-4 dark:bg-dark-800"
+              class="flex items-center justify-between rounded-xl surface-inset p-4"
             >
               <div class="flex items-center gap-4">
                 <div
@@ -238,13 +238,13 @@
                     'flex h-10 w-10 items-center justify-center rounded-xl',
                     isBalanceType(item.type)
                       ? item.value >= 0
-                        ? 'bg-emerald-100 dark:bg-emerald-900/30'
-                        : 'bg-red-100 dark:bg-red-900/30'
+                        ? 'bg-emerald-100/[0.15] dark:bg-emerald-900/30'
+                        : 'bg-red-100/[0.15] dark:bg-red-900/30'
                       : isSubscriptionType(item.type)
-                        ? 'bg-purple-100 dark:bg-purple-900/30'
+                        ? 'bg-purple-100/[0.15] dark:bg-purple-900/30'
                         : item.value >= 0
-                          ? 'bg-blue-100 dark:bg-blue-900/30'
-                          : 'bg-orange-100 dark:bg-orange-900/30'
+                          ? 'bg-blue-100/[0.15] dark:bg-blue-900/30'
+                          : 'bg-orange-100/[0.15] dark:bg-orange-900/30'
                   ]"
                 >
                   <!-- 余额类型图标 -->
@@ -281,7 +281,7 @@
                   <p class="text-sm font-medium text-gray-900 dark:text-white">
                     {{ getHistoryItemTitle(item) }}
                   </p>
-                  <p class="text-xs text-gray-500 dark:text-dark-400">
+                  <p class="text-xs surface-muted">
                     {{ formatDateTime(item.used_at) }}
                   </p>
                 </div>
@@ -305,17 +305,17 @@
                 </p>
                 <p
                   v-if="!isAdminAdjustment(item.type)"
-                  class="font-mono text-xs text-gray-400 dark:text-dark-500"
+                  class="font-mono text-xs surface-muted"
                 >
                   {{ item.code.slice(0, 8) }}...
                 </p>
-                <p v-else class="text-xs text-gray-400 dark:text-dark-500">
+                <p v-else class="text-xs surface-muted">
                   {{ t('redeem.adminAdjustment') }}
                 </p>
                 <!-- Display notes for admin adjustments -->
                 <p
                   v-if="item.notes"
-                  class="mt-1 text-xs text-gray-500 dark:text-dark-400 italic max-w-[200px] truncate"
+                  class="mt-1 text-xs italic max-w-[200px] truncate surface-muted"
                   :title="item.notes"
                 >
                   {{ item.notes }}
@@ -327,26 +327,26 @@
           <!-- Empty State -->
           <div v-else class="empty-state py-8">
             <div
-              class="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gray-100 dark:bg-dark-800"
+              class="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl surface-inset"
             >
-              <Icon name="clock" size="xl" class="text-gray-400 dark:text-dark-500" />
+              <Icon name="clock" size="xl" class="surface-muted" />
             </div>
-            <p class="text-sm text-gray-500 dark:text-dark-400">
+            <p class="text-sm surface-muted">
               {{ t('redeem.historyWillAppear') }}
             </p>
           </div>
-          <div class="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm">
+          <div class="redeem-history-pagination mt-4 text-sm">
             <span>{{ t('common.total') }}: {{ historyTotal }} {{ t('pagination.results') }}</span>
             <label>
               {{ t('pagination.perPage') }}
-              <select
+              <Select
                 v-model="historyPageSize"
-                class="input w-20"
+                class="w-24"
                 :disabled="loadingHistory || submitting"
                 @change="fetchHistory(1)"
-              >
-                <option v-for="size in [20, 50, 100]" :key="size" :value="size">{{ size }}</option>
-              </select>
+                :searchable="false"
+                :options="[20, 50, 100].map(size => ({ value: size, label: String(size) }))"
+              />
             </label>
             <button
               class="btn btn-secondary"
@@ -366,6 +366,7 @@
 </template>
 
 <script setup lang="ts">
+import Select from '@/components/common/Select.vue'
 import { useLocaleRefresh } from '@/utils/localeRefresh'
 import { supportReadonly as vSupportReadonly } from '@/directives/supportReadonly'
 import { ref, computed, onMounted } from 'vue'
@@ -536,6 +537,22 @@ useLocaleRefresh(() => fetchHistory(historyPage.value))
 </script>
 
 <style scoped>
+.redeem-balance { color: var(--surface-text); background-color: var(--surface-fill); background-image: linear-gradient(135deg, var(--surface-glint), transparent 65%); }
+.redeem-history { container-name: redeem-history; container-type: inline-size; }
+.redeem-history-pagination {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 12px;
+}
+.redeem-history-pagination > label { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.redeem-history-pagination > button { min-width: 80px; white-space: nowrap; }
+@container redeem-history (max-width: 540px) {
+  .redeem-history-pagination { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .redeem-history-pagination > label { justify-self: end; }
+  .redeem-history-pagination > button { width: 100%; }
+}
+
 .fade-enter-active,
 .fade-leave-active {
   transition: all 0.3s ease;

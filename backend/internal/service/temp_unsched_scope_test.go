@@ -21,8 +21,9 @@ import (
 
 type tempUnschedScopeRepoStub struct {
 	modelNotFoundAccountRepoStub
-	tempReasons []string
-	errorCalls  int
+	tempReasons          []string
+	errorCalls           int
+	credentialErrorCalls int
 }
 
 func (r *tempUnschedScopeRepoStub) SetError(context.Context, int64, string) error {
@@ -30,10 +31,22 @@ func (r *tempUnschedScopeRepoStub) SetError(context.Context, int64, string) erro
 	return nil
 }
 
+func (r *tempUnschedScopeRepoStub) SetCredentialErrorIfUnchanged(context.Context, *Account, string) (bool, error) {
+	r.credentialErrorCalls++
+	r.errorCalls++
+	return true, nil
+}
+
 func (r *tempUnschedScopeRepoStub) SetTempUnschedulable(_ context.Context, _ int64, _ time.Time, reason string) error {
 	r.tempCalls++
 	r.tempReasons = append(r.tempReasons, reason)
 	return nil
+}
+
+func (r *tempUnschedScopeRepoStub) SetCredentialTempUnschedulableIfUnchanged(ctx context.Context, expectedOwner *Account, until time.Time, message string) (bool, error) {
+	id := expectedOwner.ID
+	err := r.SetTempUnschedulable(ctx, id, until, message)
+	return err == nil, err
 }
 
 func newTempUnschedScopeAccount(scope string, extra map[string]any) *Account {
@@ -225,6 +238,7 @@ func TestOpenAIFailoverSideEffects_401FollowsTempUnschedScope(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := &tempUnschedScopeRepoStub{}
 			gateway := &OpenAIGatewayService{rateLimitService: &RateLimitService{accountRepo: repo, cfg: &config.Config{}}}
+			gateway.rateLimitService.SetAccountRuntimeBlocker(gateway)
 			account := newTempUnschedScope401Account(PlatformOpenAI, tc.scopes...)
 			if tc.poolMode {
 				account.Credentials["pool_mode"] = true
@@ -246,6 +260,7 @@ func TestOpenAIFailoverSideEffects_401FollowsTempUnschedScope(t *testing.T) {
 
 			require.Equal(t, tc.wantTemp, repo.tempCalls == 1, "SetTempUnschedulable=%d", repo.tempCalls)
 			require.Equal(t, tc.wantSetError, repo.errorCalls == 1, "SetError=%d", repo.errorCalls)
+			require.Equal(t, tc.wantSetError, repo.credentialErrorCalls == 1, "permanent 401 policy must use conditional quarantine")
 			require.Equal(t, tc.wantBlocked, gateway.isOpenAIAccountRuntimeBlocked(account))
 			if tc.wantModel {
 				require.Len(t, repo.modelRateLimitCalls, 1)

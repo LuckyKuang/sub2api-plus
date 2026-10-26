@@ -17,7 +17,7 @@
             <div class="break-all text-gray-900 dark:text-gray-100">
               {{ subscription.email || `#${subscription.id}` }}
             </div>
-            <div class="break-words text-xs text-gray-500 dark:text-gray-400">
+            <div class="break-words text-xs surface-muted">
               {{ subscription.group || t('admin.subscriptions.bulk.groupFallback', { id: subscription.groupId }) }}
               <span v-if="subscription.email" class="ml-2">#{{ subscription.id }}</span>
             </div>
@@ -42,17 +42,17 @@
             :placeholder="t('admin.subscriptions.adjustDaysPlaceholder')"
             aria-describedby="bulk-subscription-days-hint"
           />
-          <p id="bulk-subscription-days-hint" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          <p id="bulk-subscription-days-hint" class="mt-1 text-xs surface-muted">
             {{ t('admin.subscriptions.bulk.extendHint') }}
           </p>
         </div>
 
         <template v-else-if="currentAction === 'reset_quota'">
-          <legend class="text-sm font-medium text-gray-700 dark:text-gray-200">
+          <legend class="text-sm font-medium surface-muted">
             {{ t('admin.subscriptions.bulk.resetWindows') }}
           </legend>
           <div class="flex flex-wrap gap-5">
-            <label v-for="window in quotaWindows" :key="window" class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+            <label v-for="window in quotaWindows" :key="window" class="flex items-center gap-2 text-sm surface-muted">
               <input
                 v-model="windows[window]"
                 :name="window"
@@ -63,12 +63,12 @@
               {{ t(`admin.subscriptions.${window}`) }}
             </label>
           </div>
-          <p class="text-xs text-gray-500 dark:text-gray-400">
+          <p class="text-xs surface-muted">
             {{ t('admin.subscriptions.bulk.resetHint') }}
           </p>
         </template>
 
-        <p v-else class="rounded-lg bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
+        <p v-else class="rounded-lg bg-amber-50/[0.15] p-3 text-sm text-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
           {{ t(`admin.subscriptions.bulk.${currentAction}Hint`) }}
         </p>
       </fieldset>
@@ -77,17 +77,17 @@
         {{ validationError }}
       </p>
 
-      <div v-if="requestError" role="alert" class="space-y-2 rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-300">
+      <div v-if="requestError" role="alert" class="space-y-2 rounded-lg bg-red-50/[0.15] p-3 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-300">
         <p>{{ requestError }}</p>
         <p v-if="pendingOperation">{{ t('admin.subscriptions.bulk.retryHint') }}</p>
       </div>
 
       <div v-if="result" aria-live="polite" class="space-y-3">
-        <p class="rounded-lg bg-gray-50 p-3 text-sm font-medium text-gray-900 dark:bg-dark-700 dark:text-gray-100">
+        <p class="rounded-lg surface-inset p-3 text-sm font-medium text-gray-900 dark:text-gray-100">
           {{ t('admin.subscriptions.bulk.result', { success: result.success_count, failed: result.failed_count }) }}
         </p>
         <ul v-if="failedResults.length" class="max-h-48 space-y-2 overflow-y-auto">
-          <li v-for="item in failedResults" :key="item.subscription_id" class="rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-300">
+          <li v-for="item in failedResults" :key="item.subscription_id" class="rounded-lg bg-red-50/[0.15] p-3 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-300">
             <p class="break-all font-medium">{{ failedTargetLabel(item.subscription_id) }}</p>
             <p class="mt-1 break-words">{{ item.error || t('admin.subscriptions.bulk.itemFailed') }}</p>
           </li>

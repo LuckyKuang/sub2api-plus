@@ -129,8 +129,8 @@ are conditions of a quote, not extra cards.
 
 ## Navigation and lifecycle
 
-Cards fill the content width using container queries: 1/2/3/4/5/6 columns at
-0/452/684/916/1148/1380 px, with 12 px gaps. Both themes, sidebar width changes,
+Cards fill the content width using container queries: 1/2/3/4 columns at
+0/460/700/940 px, with 20 px gaps. Both themes, sidebar width changes,
 long IDs and mobile details are supported; only price tables scroll sideways.
 
 Search is capped at 384 px (and fits narrower screens); sorting and reset follow
@@ -152,16 +152,23 @@ base prices are excluded from ranges, with an incomplete-price
 notice; explicit zero remains zero. Failed personal-rate lookup labels ranges as
 default-rate references. Minimum displayed price does not select a routing group.
 
-The catalog adapts from one to at most five columns, with 20px gaps and 20px card
+The catalog adapts from one to at most four columns, with 20px gaps and 20px card
 corners, including loading placeholders.
 
-Details start with a group comparison table, followed by each group's complete
-quote. Each resolved service tier (Fast/priority, Flex and Ultrafast) is independently
-collapsed by default and expands through its keyboard-focusable summary. Multiple
-tiers can stay open; reopening details or switching models resets disclosures.
+Details immediately show every authorized quote in the group comparison table.
+Each group's complete pricing and billing conditions are available through its
+keyboard-focusable disclosure. Quote details and each resolved service tier
+(Fast/priority, Flex and Ultrafast) start collapsed; their price tables are mounted
+only while expanded. Multiple quotes and tiers can stay open; reopening details
+or switching models resets disclosures. Opening details performs no extra API
+request and never truncates the authorized quote list.
 Collapsed price regions are excluded from the dialog's Tab loop; their summaries
 remain reachable, and expanded price regions rejoin that loop.
-Official reference prices remain expanded. Exclusive membership is purple, an effective personal rate green, an
+Official reference prices remain expanded inside an opened quote. Small price
+tables keep their native header; only actual vertical overflow separates the
+interactive header from its body scrollport. Transparent tables without frozen
+columns use native overflow without per-cell layout measurements.
+Exclusive membership is purple, an effective personal rate green, an
 ordinary group rate blue, and an independent media rate cyan. Personal rates show
 the default group rate as secondary text, including personal zero. Media rates
 supersede personal rates; an overridden personal rate is explicitly marked. The

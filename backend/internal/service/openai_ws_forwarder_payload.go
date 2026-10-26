@@ -28,7 +28,12 @@ func validateOpenAIWSBearerToken(account *Account, token string) error {
 	return nil
 }
 
-func (s *OpenAIGatewayService) buildOpenAIResponsesWSURL(account *Account) (string, error) {
+func (s *OpenAIGatewayService) buildOpenAIResponsesWSURL(ctx context.Context, account *Account) (string, error) {
+	var credentialErr error
+	account, credentialErr = requestCredentialAccount(ctx, account)
+	if credentialErr != nil {
+		return "", credentialErr
+	}
 	if account == nil {
 		return "", errors.New("account is nil")
 	}
@@ -90,14 +95,31 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	routingModel string,
 	routingServiceTier string,
 ) (http.Header, openAIWSSessionHeaderResolution, error) {
+	if account != nil && account.IsShadow() {
+		if err := validateOpenAIOAuthSessionAccess(c, account); err != nil {
+			return nil, openAIWSSessionHeaderResolution{}, err
+		}
+	}
 	ctx = WithOutboundIdentityScope(ctx, c)
 	ctx = WithAccountOutboundIdentity(ctx, account)
+	var credentialErr error
+	account, credentialErr = requestCredentialAccount(ctx, account)
+	if credentialErr != nil {
+		return nil, openAIWSSessionHeaderResolution{}, credentialErr
+	}
+	if err := validateOpenAIOAuthSessionAccess(c, account); err != nil {
+		return nil, openAIWSSessionHeaderResolution{}, err
+	}
 	headers := make(http.Header)
 	if account == nil || !account.IsOpenAIAgentIdentity() {
 		headers.Set("authorization", "Bearer "+token)
 	}
 
 	sessionResolution := resolveOpenAIWSSessionHeaders(c, promptCacheKey)
+	if isNativeOpenAIResponsesRequest(c, account) {
+		sessionResolution.SessionID = explicitOpenAIHeaderSessionID(c)
+		sessionResolution.SessionSource = "header_session_id"
+	}
 	if c != nil && c.Request != nil {
 		if v := strings.TrimSpace(c.Request.Header.Get("accept-language")); v != "" {
 			headers.Set("accept-language", v)
@@ -134,12 +156,6 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 			alignOpenAICodexThreadHeaders(headers)
 		}
 	}
-	// 真实 Codex 的 WS 握手同样携带会话级 x-codex-beta-features
-	// （client.rs build_websocket_headers 复用 build_responses_headers），
-	// 客户端未声明时补成默认形态，与 HTTP 出站保持一致。放在客户端头拷贝
-	// 之外：该头是账号/会话级属性，不依赖入站请求是否存在，也避免预热与
-	// 实际请求因头差异落进不同的连接池兼容分桶。
-	applyOpenAICodexBetaFeatures(c, account, headers)
 	// Codex credential accounts apply either API-key isolation or the explicit
 	// account sharing policy. Setup tokens use the same ChatGPT protocol surface.
 	if account != nil && account.UsesOpenAICodexProtocol() {
@@ -164,9 +180,8 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 			headers.Set("conversation_id", sessionResolution.ConversationID)
 		}
 	}
-	// Preserve the Plus cache/session identity before account namespace and
-	// fingerprint projection rewrite the wider Codex identity surface. The
-	// cache identity is the final authority for both session spellings.
+	// Compatible adapters retain their explicit cache/session policy. Native
+	// Responses resolves its independent original session after this projection.
 	cacheSessionIdentity := strings.TrimSpace(headers.Get(codexSessionIDHeader))
 	if state := strings.TrimSpace(turnState); state != "" {
 		headers.Set(openAIWSTurnStateHeader, state)
@@ -174,7 +189,9 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	if metadata := strings.TrimSpace(turnMetadata); metadata != "" {
 		headers.Set(openAIWSTurnMetadataHeader, metadata)
 	}
-	applyCodexAccountIdentityHeaders(headers, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c))
+	if err := applyCodexAccountIdentityHeaders(ctx, headers, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c)); err != nil {
+		return nil, sessionResolution, err
+	}
 	if err := s.applyStagedCodexFingerprintHeadersForAccount(ctx, c, account, headers); err != nil {
 		return nil, sessionResolution, err
 	}
@@ -195,24 +212,40 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	// 账号级请求头覆写（仅 openai api_key 账号启用时生效；OAuth 路径 no-op）。
 	// 覆盖所有 WS 模式（ctx_pool/dedicated/passthrough）的握手头。
 	account.ApplyHeaderOverrides(headers)
+	// Transport declarations are owned by the handshake, not generic overrides.
+	headers.Set("OpenAI-Beta", betaValue)
 	// The request/body stage owns installation and thread metadata. Preserve the
 	// already isolated cache session and restore it after fingerprint mutation.
-	if cacheSessionIdentity != "" {
+	if isNativeOpenAIResponsesRequest(c, account) {
+		raw := explicitOpenAIHeaderSessionID(c)
+		if raw == "" {
+			headers.Del(codexSessionIDHeader)
+		} else {
+			mapped, err := s.resolveOpenAICodexSessionIdentity(c, account, raw)
+			if err != nil {
+				return nil, sessionResolution, err
+			}
+			setOpenAIUpstreamSessionIdentityForAccount(headers, account, mapped)
+		}
+	} else if cacheSessionIdentity != "" {
 		setOpenAIUpstreamSessionIdentityForAccount(headers, account, cacheSessionIdentity)
 	}
-	if strings.TrimSpace(headers.Get("x-client-request-id")) == "" {
-		alignOpenAICodexThreadHeaders(headers)
-	}
-	identity := s.applyOpenAIOutboundIdentity(ctx, account, headers, account != nil && account.UsesOpenAICodexProtocol())
-	if account != nil && account.UsesOpenAICodexProtocol() {
-		preserveOpenAIThreadOriginator(c, headers)
-	}
-	clearOpenAICodexLegacySessionAliases(headers, account)
+	alignOpenAICodexThreadHeaders(headers)
+	// Official WS uses the same session capability header as HTTP. Complete it
+	// after generic overrides for both prewarm and turn-time handshakes, using
+	// the trusted account snapshot, even when the client declared other features.
+	applyOpenAICodexBetaFeatures(ctx, c, account, headers)
+	identity := s.applyOpenAIOutboundIdentity(ctx, account, headers, true)
 	if selected, ok := outboundidentity.FromContext(WithAccountOutboundIdentity(ctx, account)); ok {
 		selected.ForProtocol(APIProtocolResponses).Apply(headers)
 	}
+	clearOpenAICodexLegacySessionAliases(headers, account)
+	stripCodexDirectInstallationHeader(headers, account)
+	applyOpenAICodexGuardianHeader(c, account, headers, routingModel)
 	SetOpsRoutingDiagnostics(c, &OpsRoutingDiagnostics{OutboundIdentitySource: identity.Source})
 	setOpenAICodexRoutingHint(headers, account, routingModel, routingServiceTier)
+	// Apply after generic overrides, for client echoes and cache backfills alike.
+	s.guardOpenAICodexTurnStateEcho(c, account, headers)
 	brandidentity.StripOutboundHeaders(headers)
 	logOpenAIRoutingDiagnostics(
 		ctx,
@@ -783,8 +816,13 @@ func buildOpenAIWSReplayInputSequenceFromItems(
 	currentExists bool,
 	hasPreviousResponseID bool,
 ) ([]json.RawMessage, bool) {
-	if !hasPreviousResponseID || !previousFullInputExists {
+	if !hasPreviousResponseID {
 		return currentItems, currentExists
+	}
+	// Input accompanying an opaque response reference may be only a delta.
+	// Only history actually retained from a complete turn proves replayability.
+	if !previousFullInputExists {
+		return nil, false
 	}
 	previousFullInput = sanitizeOpenAIWSHistoricalReplayToolCalls(previousFullInput, currentItems)
 	if !currentExists || len(currentItems) == 0 {

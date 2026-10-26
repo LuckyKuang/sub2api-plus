@@ -25,6 +25,14 @@ func (s *OpenAIGatewayService) FetchOpenAIModelsList(ctx context.Context, accoun
 	if err != nil {
 		return nil, fmt.Errorf("resolve model list credentials: %w", err)
 	}
+	credentialAccount, err = snapshotCNControlAccount(credentialAccount)
+	if err != nil {
+		return nil, fmt.Errorf("capture model list credential owner: %w", err)
+	}
+	proxyURL, err := credentialAccount.StrictProxyURL()
+	if err != nil {
+		return nil, err
+	}
 	if credentialAccount.IsOpenAIOAuth() {
 		clientVersion := CodexCanonicalClientVersion()
 		if s.settingService != nil {
@@ -44,12 +52,12 @@ func (s *OpenAIGatewayService) FetchOpenAIModelsList(ctx context.Context, accoun
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_MODELS_REQUEST_INVALID", "cannot build upstream model list request: %v", err)
 	}
-	s.applyOpenAIOutboundIdentity(ctx, credentialAccount, req.Header, false)
+	s.applyOpenAIOutboundIdentity(ctx, credentialAccount, req.Header, true)
 	ApplyAccountOutboundIdentity(ctx, credentialAccount, req)
 	ctx = req.Context()
 	request := openAIModelsRequest{
 		url: req.URL.String(), headers: req.Header,
-		proxyURL: upstreamModelsProxyURL(account), accountID: account.ID,
+		proxyURL: proxyURL, accountID: account.ID,
 		credentialAccountID: credentialAccount.ID, credentialAccount: credentialAccount,
 		accountConcurrency: account.Concurrency, useAPIKeyUpstream: true,
 		standardModelsList: true,
@@ -62,7 +70,11 @@ func (s *OpenAIGatewayService) FetchOpenAIModelsList(ctx context.Context, accoun
 		if err != nil || response.NotModified {
 			return response, err
 		}
-		body, err := standardOpenAIModelsBody(response.Body, false)
+		body, err := filterDeepSeekNativeModelList(fetchCtx, credentialAccount, response.Body)
+		if err != nil {
+			return nil, invalidOpenAIModelsList(err)
+		}
+		body, err = standardOpenAIModelsBody(body, false)
 		if err != nil {
 			return nil, invalidOpenAIModelsList(err)
 		}

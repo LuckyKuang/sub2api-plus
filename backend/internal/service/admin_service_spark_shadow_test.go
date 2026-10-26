@@ -71,6 +71,11 @@ func (s *sparkShadowRepoStub) ListShadowsByParent(_ context.Context, parentID in
 	return result, nil
 }
 
+func (s *sparkShadowRepoStub) LockAccountCredentialFamily(ctx context.Context, id int64) error {
+	_, err := s.GetByID(ctx, id)
+	return err
+}
+
 func (s *sparkShadowRepoStub) BindGroups(_ context.Context, accountID int64, groupIDs []int64) error {
 	if err := s.bindGroupsErr[accountID]; err != nil {
 		return err
@@ -421,7 +426,7 @@ func TestPersistOpenAI429PlanType_SkipsShadow(t *testing.T) {
 
 	t.Run("normal_account_writes", func(t *testing.T) {
 		repo := newSparkShadowRepoStub()
-		normal := &Account{ID: 9, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Credentials: map[string]any{}}
+		normal := &Account{ID: 9, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive, Credentials: map[string]any{}}
 		persistOpenAI429PlanType(ctx, repo, normal, body)
 		require.Equal(t, "pro", normal.Credentials["plan_type"], "普通账号应写入 plan_type(反向对照,证明 body 有效、写路径通)")
 	})
@@ -1320,4 +1325,15 @@ func TestForceOpenAIPrivacy_SkipsShadow(t *testing.T) {
 	pid := int64(1)
 	shadow := &Account{ID: 2, Platform: PlatformOpenAI, Type: AccountTypeOAuth, ParentAccountID: &pid}
 	require.Equal(t, "", svc.ForceOpenAIPrivacy(context.Background(), shadow), "影子隐私设置应跳过")
+}
+
+func (r *updateExtraSpyRepo) UpdateOpenAICodexUsageIfUnchanged(ctx context.Context, id int64, owner *Account, updates map[string]any) (bool, error) {
+	if owner == nil {
+		return false, nil
+	}
+	return true, r.UpdateExtra(ctx, id, updates)
+}
+
+func (s *sparkShadowRepoStub) ApplyCredentialStateMutation(_ context.Context, owner *Account, mutation CredentialStateMutation) (bool, error) {
+	return owner != nil, nil
 }

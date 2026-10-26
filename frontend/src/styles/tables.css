@@ -1,0 +1,192 @@
+/* Native table layout and zero border-spacing keep virtual row measurements
+   accurate. The enclosing card owns the static fill; cells paint only states
+   and outlines inside their padding boxes, including pinned cells. */
+.record-table-scroll {
+  border: 0 !important;
+  border-inline: 12px solid transparent !important;
+  padding: 8px 0 !important;
+  overflow-x: auto;
+  background-color: transparent !important;
+  background-image: none !important;
+}
+
+table.record-table {
+  --record-row-edge: var(--surface-edge);
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+  border: 0 !important;
+  padding: 0 !important;
+}
+
+:root table.record-table,
+:root table.record-table > :is(thead, tbody, tfoot),
+:root table.record-table > :is(thead, tbody, tfoot) > tr {
+  background-color: transparent !important;
+  background-image: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+:root table.record-table > thead,
+:root table.record-table > thead > tr,
+:root table.record-table > thead > tr > :is(th, td) {
+  /* The enclosing card owns the fill. Repainting it on the row group and
+     cells compounds alpha and gives transparent headers a different color. */
+  background-color: transparent !important;
+  background-image: none !important;
+  border: 0 solid transparent !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  color: var(--surface-muted);
+}
+
+/* Eight pixels below the complete header plus the first record's four pixels. */
+:root table.record-table > thead > tr:last-child > :is(th, td),
+:root table.record-table > thead > tr > [data-header-edge-bottom] {
+  border-bottom-width: 8px !important;
+}
+
+:root table.record-table > :is(tbody, tfoot) > tr:not([aria-hidden="true"]) > :is(td, th) {
+  --record-edge-top: inset 0 1px 0 var(--record-row-edge);
+  --record-edge-bottom: inset 0 -1px 0 var(--record-row-edge);
+  --record-edge-left: inset 0 0 0 transparent;
+  --record-edge-right: inset 0 0 0 transparent;
+  border: 0 solid transparent !important;
+  border-block-width: 4px !important;
+  border-radius: 0 !important;
+  background-color: transparent !important;
+  background-image: linear-gradient(var(--record-row-tint, transparent), var(--record-row-tint, transparent)) !important;
+  background-clip: padding-box !important;
+  box-shadow: var(--record-edge-top), var(--record-edge-bottom), var(--record-edge-left), var(--record-edge-right) !important;
+  transition: background-color 150ms, background-image 150ms;
+}
+
+:root table.record-table > :is(tbody, tfoot):not(.record-group) > tr > :first-child {
+  --record-edge-left: inset 1px 0 0 var(--record-row-edge);
+  /* The 4px transparent border leaves a visible 16px inner curve. */
+  border-top-left-radius: 16px 20px !important;
+  border-bottom-left-radius: 16px 20px !important;
+}
+
+:root table.record-table > :is(tbody, tfoot):not(.record-group) > tr > :last-child {
+  --record-edge-right: inset -1px 0 0 var(--record-row-edge);
+  border-top-right-radius: 16px 20px !important;
+  border-bottom-right-radius: 16px 20px !important;
+}
+
+/* Each logical record starts its own edge state, including nested tables. */
+table.record-table > :is(tbody, tfoot):not(.record-group) > tr,
+table.record-table > .record-group {
+  --record-row-edge: var(--surface-edge);
+}
+
+table.record-table > :is(tbody, tfoot):not(.record-group) > tr:hover,
+table.record-table > .record-group:hover {
+  --record-row-tint: var(--surface-hover);
+  --record-row-edge: rgb(var(--console-accent-500, 20 184 166) / 80%);
+}
+
+table.record-table > :is(tbody, tfoot):not(.record-group) > tr:focus-within,
+table.record-table > .record-group:focus-within {
+  --record-row-edge: rgb(var(--console-accent-500, 20 184 166) / 80%);
+}
+
+table.record-table > :is(tbody, tfoot) > tr:is(.table-row-selected, [aria-selected="true"]),
+table.record-table > .record-group:is(.table-row-selected, [aria-selected="true"]) {
+  --record-row-tint: var(--surface-selected);
+  --record-row-edge: rgb(var(--console-accent-500, 20 184 166) / 95%);
+}
+
+/* Rowspans and expanded details belong to one business record, not one tr. */
+:root table.record-table > .record-group > tr > :is(td, th) {
+  border-block-width: 0 !important;
+}
+:root table.record-table > .record-group > tr:not([aria-hidden="true"]) > :is(td, th) {
+  --record-edge-top: inset 0 0 0 transparent;
+  --record-edge-bottom: inset 0 0 0 transparent;
+}
+:root table.record-table > .record-group > tr:not([aria-hidden="true"]) > [data-record-edges~="t"] { --record-edge-top: inset 0 1px 0 var(--record-row-edge); }
+:root table.record-table > .record-group > tr:not([aria-hidden="true"]) > [data-record-edges~="b"] { --record-edge-bottom: inset 0 -1px 0 var(--record-row-edge); }
+:root table.record-table > .record-group > tr:not([aria-hidden="true"]) > [data-record-edges~="l"] { --record-edge-left: inset 1px 0 0 var(--record-row-edge); }
+:root table.record-table > .record-group > tr:not([aria-hidden="true"]) > [data-record-edges~="r"] { --record-edge-right: inset -1px 0 0 var(--record-row-edge); }
+:root table.record-table > .record-group > tr > [data-record-edges~="t"] { border-top-width: 4px !important; }
+:root table.record-table > .record-group > tr > [data-record-edges~="b"] { border-bottom-width: 4px !important; }
+:root table.record-table > .record-group > tr > [data-record-edges~="tl"] { border-top-left-radius: 16px 20px !important; }
+:root table.record-table > .record-group > tr > [data-record-edges~="tr"] { border-top-right-radius: 16px 20px !important; }
+:root table.record-table > .record-group > tr > [data-record-edges~="bl"] { border-bottom-left-radius: 16px 20px !important; }
+:root table.record-table > .record-group > tr > [data-record-edges~="br"] { border-bottom-right-radius: 16px 20px !important; }
+
+/* Short data rows use 10px visible corners in every state. Expanded details
+   keep only the business record's outside corners, just like full-size rows. */
+table.record-table-compact { --record-compact-radius: 10px; }
+table.record-table-compact.record-table-dense { --record-compact-radius: 6px; }
+
+:root table.record-table.record-table-compact > :is(tbody, tfoot):not(.record-group) > tr:not([aria-hidden="true"]) > :first-child,
+:root table.record-table.record-table-compact > .record-group > tr > [data-record-edges~="tl"] { border-top-left-radius: var(--record-compact-radius) calc(var(--record-compact-radius) + 4px) !important; }
+:root table.record-table.record-table-compact > :is(tbody, tfoot):not(.record-group) > tr:not([aria-hidden="true"]) > :last-child,
+:root table.record-table.record-table-compact > .record-group > tr > [data-record-edges~="tr"] { border-top-right-radius: var(--record-compact-radius) calc(var(--record-compact-radius) + 4px) !important; }
+:root table.record-table.record-table-compact > :is(tbody, tfoot):not(.record-group) > tr:not([aria-hidden="true"]) > :first-child,
+:root table.record-table.record-table-compact > .record-group > tr > [data-record-edges~="bl"] { border-bottom-left-radius: var(--record-compact-radius) calc(var(--record-compact-radius) + 4px) !important; }
+:root table.record-table.record-table-compact > :is(tbody, tfoot):not(.record-group) > tr:not([aria-hidden="true"]) > :last-child,
+:root table.record-table.record-table-compact > .record-group > tr > [data-record-edges~="br"] { border-bottom-right-radius: var(--record-compact-radius) calc(var(--record-compact-radius) + 4px) !important; }
+
+/* Spacer heights belong entirely to the virtualizer. Never add card gaps. */
+:root table.record-table > tbody > tr[aria-hidden="true"] > :is(td, th) {
+  border: 0 !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  background: none !important;
+}
+
+/* Cells paint their own states directly; no vertical edge shadow or fill
+   layer may cover the transparent card gaps. Preserve component positioning. */
+table.record-table > thead::before,
+table.record-table .sticky-col::before,
+table.record-table .sticky-col::after {
+  content: none !important;
+}
+
+/* Transparent pinned columns use the table clipping contract to keep scrolling
+   text out of their cutouts. Paint the outside curve inside its sticky context. */
+:root table.record-table > :is(tbody, tfoot):not(.record-group) > tr:not([aria-hidden="true"]) > .sticky-col:is(:first-child, :last-child) {
+  border-radius: 0 !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  background-clip: border-box !important;
+  box-shadow: none !important;
+}
+
+:root table.record-table > :is(tbody, tfoot):not(.record-group) > tr:not([aria-hidden="true"]) > .sticky-col:is(:first-child, :last-child)::before {
+  content: '' !important;
+  position: absolute;
+  /* The containing padding box already excludes the transparent 4px borders. */
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-color: transparent;
+  background-image: linear-gradient(var(--record-row-tint, transparent), var(--record-row-tint, transparent));
+  box-shadow: var(--record-edge-top), var(--record-edge-bottom), var(--record-edge-left), var(--record-edge-right);
+}
+
+:root table.record-table > :is(tbody, tfoot):not(.record-group) > tr:not([aria-hidden="true"]) > .sticky-col:first-child::before {
+  border-top-left-radius: 16px;
+  border-bottom-left-radius: 16px;
+}
+
+:root table.record-table > :is(tbody, tfoot):not(.record-group) > tr:not([aria-hidden="true"]) > .sticky-col:last-child::before {
+  border-top-right-radius: 16px;
+  border-bottom-right-radius: 16px;
+}
+
+:root table.record-table.record-table-compact > :is(tbody, tfoot):not(.record-group) > tr:not([aria-hidden="true"]) > .sticky-col:first-child::before {
+  border-top-left-radius: var(--record-compact-radius);
+  border-bottom-left-radius: var(--record-compact-radius);
+}
+:root table.record-table.record-table-compact > :is(tbody, tfoot):not(.record-group) > tr:not([aria-hidden="true"]) > .sticky-col:last-child::before {
+  border-top-right-radius: var(--record-compact-radius);
+  border-bottom-right-radius: var(--record-compact-radius);
+}
+
+/* A nested record table starts its own state rather than inheriting the
+   enclosing record's hover tint. */
+.record-table-scroll { --record-row-tint: transparent; }

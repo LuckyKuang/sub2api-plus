@@ -119,6 +119,9 @@ func TestAccountTestService_AdaptiveDeepSeekAlsoTestsResponsesEndpoint(t *testin
 	require.NoError(t, err)
 	require.Len(t, upstream.requests, 3)
 	require.Equal(t, "http://responses.example/responses", upstream.requests[2].URL.String())
+	for _, req := range upstream.requests {
+		require.Empty(t, req.Header.Get("x-codex-beta-features"), "native DeepSeek probes must not synthesize Codex capabilities")
+	}
 	require.Equal(t, HTTPUpstreamProfileOpenAI, HTTPUpstreamProfileFromContext(upstream.requests[2].Context()))
 	require.Equal(t, "Bearer sk-adaptive-test", upstream.requests[2].Header.Get("Authorization"))
 	require.True(t, gjson.GetBytes(upstream.bodies[2], "stream").Bool())

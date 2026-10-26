@@ -14,7 +14,6 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -147,6 +146,11 @@ func (f *ssoDeviceFlow) convert(ctx context.Context) (*TokenResponse, error) {
 	if device.ExpiresIn <= 0 {
 		device.ExpiresIn = 1800
 	}
+	// Consent and verification consume the same device grant lifetime. They
+	// cannot restart expires_in when polling begins.
+	grantDeadline := time.Now().Add(time.Duration(device.ExpiresIn) * time.Second)
+	ctx, cancelGrant := context.WithDeadline(ctx, grantDeadline)
+	defer cancelGrant()
 
 	status, _, _, err = f.do(ctx, http.MethodGet, device.VerificationURIComplete, nil)
 	if err != nil {
@@ -191,7 +195,7 @@ func (f *ssoDeviceFlow) convert(ctx context.Context) (*TokenResponse, error) {
 		return nil, errors.New("xAI device approval did not reach done page")
 	}
 
-	return f.pollToken(ctx, device.DeviceCode, time.Duration(device.Interval)*time.Second, time.Duration(device.ExpiresIn)*time.Second)
+	return f.pollToken(ctx, device.DeviceCode, time.Duration(device.Interval)*time.Second, time.Until(grantDeadline))
 }
 
 // xAI binds device approval to a hidden token on the consent page. Keep it in
@@ -231,8 +235,17 @@ func (f *ssoDeviceFlow) pollToken(ctx context.Context, deviceCode string, interv
 	}
 	deadline := time.Now().Add(minDuration(expiresIn, 75*time.Second))
 	for time.Now().Before(deadline) {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if err := f.sleep(ctx, interval); err != nil {
 			return nil, err
+		}
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if !time.Now().Before(deadline) {
+			break
 		}
 		status, _, body, err := f.do(ctx, http.MethodPost, SSOTokenURL, url.Values{
 			"grant_type":  {"urn:ietf:params:oauth:grant-type:device_code"},
@@ -241,6 +254,12 @@ func (f *ssoDeviceFlow) pollToken(ctx context.Context, deviceCode string, interv
 		})
 		if err != nil {
 			return nil, err
+		}
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if !time.Now().Before(deadline) {
+			break
 		}
 		var payload struct {
 			AccessToken      string `json:"access_token"`
@@ -281,9 +300,9 @@ func (f *ssoDeviceFlow) pollToken(ctx context.Context, deviceCode string, interv
 			return nil, ErrSSOAuthorizationDenied
 		default:
 			if status >= 400 {
-				return nil, fmt.Errorf("xAI token polling failed (%s): %w", firstNonEmpty(payload.ErrorDescription, payload.Error), SSOHTTPError{Status: status})
+				return nil, fmt.Errorf("xAI token polling failed: %w", SSOHTTPError{Status: status})
 			}
-			return nil, fmt.Errorf("xAI token polling failed: %s", firstNonEmpty(payload.ErrorDescription, payload.Error, strconv.Itoa(status)))
+			return nil, fmt.Errorf("xAI token polling failed: status %d", status)
 		}
 	}
 	return nil, errors.New("xAI device flow token polling timed out")
@@ -297,6 +316,9 @@ func (f *ssoDeviceFlow) do(ctx context.Context, method, endpoint string, form ur
 	currentMethod := method
 	currentForm := form
 	for redirects := 0; redirects <= 8; redirects++ {
+		if err := ctx.Err(); err != nil {
+			return 0, currentURL, nil, err
+		}
 		var body io.Reader
 		if currentForm != nil {
 			body = strings.NewReader(currentForm.Encode())
@@ -330,6 +352,12 @@ func (f *ssoDeviceFlow) do(ctx context.Context, method, endpoint string, form ur
 		}
 		response, err := f.client.Do(request)
 		if err != nil {
+			return 0, currentURL, nil, err
+		}
+		if err := ctx.Err(); err != nil {
+			if response != nil && response.Body != nil {
+				_ = response.Body.Close()
+			}
 			return 0, currentURL, nil, err
 		}
 		f.captureCookies(request.URL, response)
@@ -497,13 +525,4 @@ func minDuration(a, b time.Duration) time.Duration {
 		return a
 	}
 	return b
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return strings.TrimSpace(value)
-		}
-	}
-	return ""
 }

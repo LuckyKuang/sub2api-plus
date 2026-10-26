@@ -230,6 +230,7 @@ func (s *OpenAIGatewayService) CreateLiveCall(
 			IPAddress:             identity.IPAddress,
 			InboundEndpoint:       identity.InboundEndpoint,
 			AttestationCiphertext: attestationCiphertext,
+			OutboundSnapshot:      created.OutboundSnapshot,
 		}
 		mappingTTL := s.liveMaxSessionDuration() + 5*time.Minute
 		if saveErr := store.SaveLiveCall(ctx, record, mappingTTL); saveErr != nil {
@@ -271,6 +272,12 @@ func (s *OpenAIGatewayService) createUpstreamLiveCall(
 		logLiveCreateStageFailure(ctx, account.ID, "access_token", err)
 		return nil, err
 	}
+	ctx = withRequestCredentialOwner(ctx, account, token)
+	credentialOwner, known := requestCredentialOwner(ctx, account)
+	owner := openAICodexStateOwner(ctx, account)
+	if !known || credentialOwner == nil || owner == "" {
+		return nil, fmt.Errorf("live create: credential owner cannot be established: %w", ErrLiveIdentityMismatch)
+	}
 	body, err := json.Marshal(struct {
 		SDP     string          `json:"sdp"`
 		Session json.RawMessage `json:"session"`
@@ -304,9 +311,19 @@ func (s *OpenAIGatewayService) createUpstreamLiveCall(
 	upstreamReq.Header.Set("Content-Type", "application/json")
 	upstreamReq.Header.Set("Accept", "application/sdp")
 	upstreamReq.Header.Set(liveAttestationHeader, attestation)
-	s.applyLiveUpstreamIdentityHeaders(ctx, account, upstreamReq.Header)
+	if err := s.applyLiveUpstreamIdentityHeaders(ctx, credentialOwner, upstreamReq.Header); err != nil {
+		return nil, err
+	}
+	snapshot := &LiveOutboundSnapshot{
+		Owner:     owner,
+		SessionID: upstreamReq.Header.Get("session-id"), ThreadID: upstreamReq.Header.Get("thread-id"),
+		UserAgent: upstreamReq.Header.Get("User-Agent"), Originator: upstreamReq.Header.Get("Originator"),
+		Version: upstreamReq.Header.Get("Version"), Residency: upstreamReq.Header.Get("x-openai-internal-codex-residency"),
+	}
 
-	resp, err := s.doOpenAIUpstream(upstreamReq, resolveAccountProxyURL(account), account)
+	// Resource accounting and routing retain the selected row. The acquired
+	// grant owns its identity and proxy, including refreshed shadow parents.
+	resp, err := s.doOpenAIUpstream(upstreamReq, resolveAccountProxyURL(credentialOwner), account)
 	if err != nil {
 		logLiveCreateStageFailure(ctx, account.ID, "upstream_transport", err)
 		return nil, err
@@ -332,9 +349,10 @@ func (s *OpenAIGatewayService) createUpstreamLiveCall(
 		return nil, err
 	}
 	return &LiveCallCreated{
-		SDP:      responseBody,
-		CallID:   callID,
-		Location: resp.Header.Get("Location"),
+		SDP:              responseBody,
+		CallID:           callID,
+		Location:         resp.Header.Get("Location"),
+		OutboundSnapshot: snapshot,
 	}, nil
 }
 
@@ -401,45 +419,94 @@ func liveCallIDFromLocation(location string) (string, error) {
 	return callID, nil
 }
 
-func (s *OpenAIGatewayService) applyLiveUpstreamIdentityHeaders(ctx context.Context, account *Account, headers http.Header) {
+func (s *OpenAIGatewayService) applyLiveUpstreamIdentityHeaders(ctx context.Context, account *Account, headers http.Header) error {
 	headers.Set("OpenAI-Alpha", "quicksilver=v2")
 	// Live is an OAuth-only ChatGPT endpoint, so it must use the same trusted
 	// Codex identity resolution as every other OAuth upstream request.
 	s.applyOpenAIOutboundIdentity(ctx, account, headers, true)
 	if strings.TrimSpace(headers.Get("session-id")) == "" {
-		headers.Set("session-id", uuid.NewString())
+		id, err := uuid.NewV7()
+		if err != nil {
+			return fmt.Errorf("create live session id: %w", err)
+		}
+		headers.Set("session-id", id.String())
 	}
 	if strings.TrimSpace(headers.Get("thread-id")) == "" {
-		headers.Set("thread-id", uuid.NewString())
+		id, err := uuid.NewV7()
+		if err != nil {
+			return fmt.Errorf("create live thread id: %w", err)
+		}
+		headers.Set("thread-id", id.String())
 	}
 	// Realtime/Live 不使用 Responses 的实验头。
 	headers.Del("OpenAI-Beta")
+	return nil
+}
+
+func validLiveOutboundSnapshot(snapshot *LiveOutboundSnapshot) bool {
+	if snapshot == nil || snapshot.Owner == "" {
+		return false
+	}
+	identity, ok := validOpenAIOutboundIdentityWithCompatibility(snapshot.UserAgent, true)
+	if !ok || identity.Originator != snapshot.Originator || identity.Version != snapshot.Version {
+		return false
+	}
+	for _, raw := range []string{snapshot.SessionID, snapshot.ThreadID} {
+		id, err := uuid.Parse(raw)
+		if err != nil || id.Version() != 7 || id.Variant() != uuid.RFC4122 {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *OpenAIGatewayService) liveSidebandHeaders(
 	ctx context.Context,
 	account *Account,
 	record *LiveCallRecord,
-) (http.Header, error) {
+) (http.Header, string, error) {
+	if record == nil {
+		return nil, "", ErrLiveIdentityMismatch
+	}
 	ctx = WithOutboundIdentityScope(ctx, nil)
 	token, _, err := s.GetAccessToken(ctx, account)
 	if err != nil {
-		return nil, err
+		return nil, "", err
+	}
+	ctx = withRequestCredentialOwner(ctx, account, token)
+	credentialOwner, known := requestCredentialOwner(ctx, account)
+	// Old records cannot reconstruct the identity used at creation. Do not attach
+	// a newly minted identity to an existing call after upgrade or relink.
+	snapshot := record.OutboundSnapshot
+	if !known || credentialOwner == nil || !validLiveOutboundSnapshot(snapshot) || snapshot.Owner != openAICodexStateOwner(ctx, account) {
+		return nil, "", fmt.Errorf("live sideband: missing or changed call owner: %w", ErrLiveIdentityMismatch)
 	}
 	headers, err := s.buildOpenAIAuthenticationHeaders(ctx, account, token)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if err := resolveAndSetOpenAIChatGPTAccountHeaders(ctx, s.accountRepo, headers, account); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	attestation, err := s.decryptLiveAttestation(record)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	headers.Set(liveAttestationHeader, attestation)
-	s.applyLiveUpstreamIdentityHeaders(ctx, account, headers)
-	return headers, nil
+	applyResolvedOpenAIOutboundIdentity(headers, openAIOutboundIdentity{UserAgent: snapshot.UserAgent, Originator: snapshot.Originator, Version: snapshot.Version}, true)
+	headers.Set("session-id", snapshot.SessionID)
+	headers.Set("thread-id", snapshot.ThreadID)
+	headers.Set("OpenAI-Alpha", "quicksilver=v2")
+	headers.Del("OpenAI-Beta")
+	headers.Del("x-openai-internal-codex-residency")
+	if snapshot.Residency != "" {
+		headers.Set("x-openai-internal-codex-residency", snapshot.Residency)
+	}
+	proxyURL, err := requestCredentialOwnerProxyURL(ctx, credentialOwner)
+	if err != nil {
+		return nil, "", err
+	}
+	return headers, proxyURL, nil
 }
 
 func (s *OpenAIGatewayService) dialLiveSideband(ctx context.Context, record *LiveCallRecord) (liveFrameConn, error) {
@@ -450,12 +517,15 @@ func (s *OpenAIGatewayService) dialLiveSideband(ctx context.Context, record *Liv
 	if account == nil || !account.SupportsOpenAIEndpointCapability(OpenAIEndpointCapabilityLive) {
 		return nil, ErrLiveUnavailable
 	}
-	headers, err := s.liveSidebandHeaders(ctx, account, record)
+	headers, proxyURL, err := s.liveSidebandHeaders(ctx, account, record)
 	if err != nil {
 		return nil, err
 	}
 	target := strings.TrimRight(chatGPTLiveSidebandBaseURL, "/") + "/" + url.PathEscape(record.CallID)
-	conn, status, _, err := s.getOpenAIWSPassthroughDialer().Dial(ctx, target, headers, resolveAccountProxyURL(account))
+	if err := s.requireCodexUpstreamWS(ctx, account); err != nil {
+		return nil, err
+	}
+	conn, status, _, err := s.getOpenAIWSPassthroughDialer().Dial(ctx, target, headers, proxyURL)
 	if err != nil {
 		return nil, fmt.Errorf("dial live sideband (status %d): %w", status, err)
 	}
@@ -584,6 +654,10 @@ func (s *OpenAIGatewayService) ProxyLiveSidebandWithHooks(
 					reportError(auditErr)
 					return
 				}
+			}
+			if transportErr := s.requireCodexUpstreamWS(proxyCtx, nil); transportErr != nil {
+				reportError(transportErr)
+				return
 			}
 			if writeErr := upstream.WriteFrame(proxyCtx, messageType, payload); writeErr != nil {
 				reportError(writeErr)

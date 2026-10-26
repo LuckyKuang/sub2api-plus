@@ -3,7 +3,7 @@
     <div class="flex items-center justify-end gap-3 flex-wrap">
       <div
         role="tablist"
-        class="inline-flex p-0.5 rounded-xl bg-gray-100 dark:bg-dark-800 border border-gray-200/60 dark:border-dark-700/60 text-xs"
+        class="inline-flex p-0.5 rounded-xl surface-inset border border-gray-200/60 dark:border-dark-700/60 text-xs"
       >
         <button
           v-for="opt in windowOptions"
@@ -11,9 +11,9 @@
           type="button"
           role="tab"
           :aria-selected="window === opt.value"
-          class="px-3 py-1 rounded-lg transition-colors"
+          class="px-3 py-1 rounded-lg transition-colors surface-control"
           :class="window === opt.value
-            ? 'bg-white dark:bg-dark-700 shadow-sm text-gray-900 dark:text-white font-semibold'
+            ? 'surface-field dark:surface-field shadow-sm text-gray-900 dark:text-white font-semibold'
             : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
           @click="emit('update:window', opt.value)"
         >
@@ -26,7 +26,7 @@
         :class="overallChipClass"
       >
         <span
-          class="w-1.5 h-1.5 rounded-full mr-1.5"
+          class="console-data-mark w-1.5 h-1.5 rounded-full mr-1.5"
           :class="overallDotClass"
         ></span>
         {{ overallLabel }}
@@ -34,7 +34,7 @@
 
       <button
         type="button"
-        class="h-8 w-8 rounded-lg flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-dark-700 transition-colors disabled:opacity-50"
+        class="h-8 w-8 rounded-lg flex items-center justify-center hover:text-gray-700 hover:surface-hover dark:hover:text-gray-200 transition-colors disabled:opacity-50 surface-control surface-muted"
         :disabled="loading"
         :title="t('common.refresh')"
         @click="emit('refresh')"
@@ -96,10 +96,10 @@ const overallLabel = computed(() => t(`channelStatus.overall.${props.overallStat
 const overallChipClass = computed(() => {
   switch (props.overallStatus) {
     case 'operational':
-      return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
+      return 'bg-emerald-100/[0.15] text-emerald-700 dark:bg-emerald-500/[0.15] dark:text-emerald-300'
     case 'degraded':
     default:
-      return 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'
+      return 'bg-amber-100/[0.15] text-amber-700 dark:bg-amber-500/[0.15] dark:text-amber-300'
   }
 })
 

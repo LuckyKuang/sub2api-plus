@@ -1842,6 +1842,9 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesOAuth(
 	if err != nil {
 		return nil, err
 	}
+	ctx = withRequestCredentialOwner(ctx, account, token)
+	defer bindRequestCredentialOwnerContext(ctx, c)()
+	upstreamCtx = withRequestCredentialOwner(upstreamCtx, account, token)
 
 	var responsesBody []byte
 	var targetURL string
@@ -1877,9 +1880,9 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesOAuth(
 		}
 	}
 
-	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
+	proxyURL, err := requestCredentialOwnerProxyURL(upstreamCtx, account)
+	if err != nil {
+		return nil, err
 	}
 	upstreamStart := time.Now()
 	resp, err := s.doOpenAIUpstream(upstreamReq, proxyURL, account)
@@ -1909,10 +1912,12 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesOAuth(
 		}
 		if !agentIdentityTaskRecoveryWasTried(ctx) && s.isAgentIdentityAccount(ctx, account) && isAgentIdentityTaskInvalidHTTPResponse(resp.StatusCode, respBody) {
 			expectedTaskID := account.GetCredential("task_id")
-			if err := s.recoverAgentIdentityTask(ctx, account, expectedTaskID); err != nil {
+			recoveredCtx, err := s.recoverAgentIdentityTask(ctx, account, expectedTaskID)
+			if err != nil {
 				return nil, fmt.Errorf("agent identity task recovery failed: %w", err)
 			}
-			return s.forwardOpenAIImagesOAuth(markAgentIdentityTaskRecoveryTried(ctx), c, account, parsed, channelMappedModel)
+			defer bindRequestCredentialOwnerContext(recoveredCtx, c)()
+			return s.forwardOpenAIImagesOAuth(markAgentIdentityTaskRecoveryTried(recoveredCtx), c, account, parsed, channelMappedModel)
 		}
 		resp.Body = io.NopCloser(bytes.NewReader(respBody))
 		if !direct && isOpenAIImagesMainModelError(resp.StatusCode, respBody) {
@@ -1967,6 +1972,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesOAuth(
 		if err != nil {
 			if imageCount > 0 {
 				result := &OpenAIForwardResult{
+					codexUsageOwner:               capturedCodexUsageOwner(ctx, account),
 					RequestID:                     resp.Header.Get("x-request-id"),
 					UpstreamHeaders:               resp.Header,
 					Usage:                         usage,
@@ -2027,6 +2033,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesOAuth(
 		imageCount = parsed.N
 	}
 	result := &OpenAIForwardResult{
+		codexUsageOwner:               capturedCodexUsageOwner(ctx, account),
 		RequestID:                     resp.Header.Get("x-request-id"),
 		UpstreamHeaders:               resp.Header,
 		Usage:                         usage,

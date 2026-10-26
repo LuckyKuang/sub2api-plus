@@ -17,7 +17,8 @@ func prepareStepFunOAuthRequest(req *http.Request, account *Account) error {
 	}
 	chat := req.Method == http.MethodPost && req.URL.Path == expected.Path+"/chat/completions"
 	models := req.Method == http.MethodGet && req.URL.Path == expected.Path+"/models"
-	if !chat && !models {
+	usage := req.Method == http.MethodGet && req.URL.Path == expected.Path+"/usage"
+	if !chat && !models && !usage {
 		return errors.New("step OAuth operation is not supported")
 	}
 	if expiry := account.GetCredentialAsTime("expires_at"); expiry != nil && !time.Now().Before(*expiry) {

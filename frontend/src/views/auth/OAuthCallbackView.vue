@@ -1,12 +1,12 @@
 <template>
-  <div class="min-h-screen bg-gray-50 px-4 py-10 dark:bg-dark-900">
+  <div class="min-h-screen surface-inset px-4 py-10">
     <div class="mx-auto max-w-2xl">
       <div v-if="isProcessing" class="card p-6 text-center">
         <div class="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-primary-500 border-t-transparent"></div>
         <h1 class="mt-4 text-lg font-semibold text-gray-900 dark:text-white">
           {{ t('auth.oauth.callbackTitle') }}
         </h1>
-        <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
+        <p class="mt-2 text-sm surface-muted">
           {{ t('auth.oauth.callbackHint') }}
         </p>
       </div>
@@ -15,7 +15,7 @@
         <h1 class="text-lg font-semibold text-gray-900 dark:text-white">
           {{ t('auth.oidc.callbackTitle', { providerName }) }}
         </h1>
-        <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
+        <p class="mt-2 text-sm surface-muted">
           {{ registrationHint }}
         </p>
 
@@ -83,7 +83,7 @@
         <h1 class="text-lg font-semibold text-gray-900 dark:text-white">
           {{ t('auth.oauth.invalidCallbackTitle') }}
         </h1>
-        <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
+        <p class="mt-2 text-sm surface-muted">
           {{ t('auth.oauth.invalidCallbackHint') }}
         </p>
         <button class="btn btn-primary mt-6" type="button" @click="router.replace('/login')">
@@ -95,7 +95,7 @@
         <h1 class="text-lg font-semibold text-gray-900 dark:text-white">
           {{ t('auth.oauth.callbackTitle') }}
         </h1>
-        <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
+        <p class="mt-2 text-sm surface-muted">
           {{ t('auth.oauth.callbackHint') }}
         </p>
 

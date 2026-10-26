@@ -205,6 +205,7 @@ type routingObservation struct {
 	ClientErrorType    string                   `json:"client_error_type,omitempty"`
 	ClientErrorCode    string                   `json:"client_error_code,omitempty"`
 	ClientErrorMessage string                   `json:"client_error_message,omitempty"`
+	credentialFailure  *UpstreamFailoverError
 }
 
 func (o routingObservation) String() string {
@@ -246,6 +247,10 @@ func observeRouting(tc routingMatrixCase) (obs routingObservation) {
 	err := tc.ingress.forward(svc, c, tc.account(), body)
 	if err != nil {
 		obs.Error = err.Error()
+		var failure *UpstreamFailoverError
+		if errors.As(err, &failure) && failure.Stage == GatewayFailureStageAccountAuth {
+			obs.credentialFailure = failure
+		}
 	}
 	return obs
 }
@@ -289,25 +294,118 @@ func captureRoutingMatrixGolden() routingMatrixGolden {
 }
 
 // Zhipu has no Responses endpoint. The refactor routes adaptive /responses to
-// Chat Completions even for unsupported upstream/oauth account types. Both
-// versions reject these accounts before transport, with these exact errors.
+// Chat Completions even for unsupported upstream account types. Both versions
+// reject these accounts before transport, with these exact errors.
 // Only this complete before/after observation is permitted; other no-upstream
 // results and new panics still fail the golden comparison.
 func matchesKnownZhipuNonAPIKeyDifference(tc routingMatrixCase, want, got routingObservation) bool {
 	if tc.platform != PlatformZhipu || tc.apiProtocol != APIProtocolAdaptive || tc.ingress.name != "responses" {
 		return false
 	}
-	var oldError string
-	switch tc.accountType {
-	case AccountTypeUpstream:
-		oldError = "unsupported account type: upstream"
-	case AccountTypeOAuth:
-		oldError = "access_token not found in credentials"
+	if tc.accountType != AccountTypeUpstream {
+		return false
+	}
+	return reflect.DeepEqual(want, routingObservation{Error: "unsupported account type: upstream", Status: http.StatusOK}) &&
+		reflect.DeepEqual(got, routingObservation{Error: "account 801 missing api_key", Status: http.StatusOK})
+}
+
+// The pinned driver deliberately gives OAuth accounts an API key but no OAuth
+// access token. Missing grants now enter account recovery before any transport;
+// that is an independently specified change to credential acquisition, while
+// every URL/body/auth observation and downstream response remains pinned.
+func matchesMissingOAuthCredentialRecovery(tc routingMatrixCase, want, got routingObservation) bool {
+	if tc.accountType != AccountTypeOAuth {
+		return false
+	}
+	switch tc.platform {
+	case PlatformOpenAI, PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax:
 	default:
 		return false
 	}
-	return reflect.DeepEqual(want, routingObservation{Error: oldError, Status: http.StatusOK}) &&
-		reflect.DeepEqual(got, routingObservation{Error: "account 801 missing api_key", Status: http.StatusOK})
+	reason := GatewayFailureReason("account_credential_invalid")
+	if tc.platform == PlatformZhipu {
+		// ZCode's linked protocol grant has its own acquisition branch;
+		// this driver has neither a linked login nor its required material.
+		reason = "account_credential_missing"
+	}
+	credentialError := fmt.Sprintf("credential failure: %s (failover)", reason)
+	var currentError string
+	switch want.Error {
+	case "access_token not found in credentials", "account 801 missing api_key":
+		currentError = credentialError
+	case "get access token: access_token not found in credentials":
+		currentError = "get access token: " + credentialError
+	default:
+		return false
+	}
+	contract := &UpstreamFailoverError{StatusCode: http.StatusServiceUnavailable, Stage: GatewayFailureStageAccountAuth, Scope: GatewayFailureScopeAccount, Reason: reason, NextAccountAction: NextAccountRetry, ClientStatusCode: http.StatusServiceUnavailable, ClientMessage: "No healthy upstream account credential is currently available"}
+	if got.Error != currentError || !reflect.DeepEqual(got.credentialFailure, contract) {
+		return false
+	}
+	got.Error, got.credentialFailure = want.Error, nil
+	return reflect.DeepEqual(want, got)
+}
+
+// Native Anthropic never accepted upstream-type accounts. Its credential
+// lookup now rejects the unsupported type explicitly instead of reporting an
+// empty API key. Both observations must still contain no transport or output.
+func matchesUnsupportedNativeAccountRejection(tc routingMatrixCase, want, got routingObservation) bool {
+	if tc.accountType != AccountTypeUpstream {
+		return false
+	}
+	switch tc.platform {
+	case PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax:
+		if tc.apiProtocol != APIProtocolAnthropic && !(tc.apiProtocol == APIProtocolAdaptive && tc.ingress.name == "messages") {
+			return false
+		}
+	case PlatformOpenCodeGo:
+		if tc.apiProtocol != "" && tc.apiProtocol != APIProtocolAdaptive && tc.apiProtocol != APIProtocolAnthropic && tc.apiProtocol != "invalid" {
+			return false
+		}
+	default:
+		return false
+	}
+	return reflect.DeepEqual(want, routingObservation{Error: "account 801 missing api_key", Status: http.StatusOK}) &&
+		reflect.DeepEqual(got, routingObservation{Error: "unsupported account type: upstream", Status: http.StatusOK})
+}
+
+// The baseline lost valid Grok keys in the Messages-to-Chat fallback because
+// its generic OpenAI key getter excludes Grok. This defect must now produce
+// exactly one correctly authenticated Chat request, stopped by the recorder.
+func matchesGrokChatFallbackCredentialRepair(tc routingMatrixCase, want, got routingObservation) bool {
+	if tc.platform != PlatformGrok || tc.accountType != AccountTypeAPIKey || tc.ingress.name != "messages" || tc.probe != "no" {
+		return false
+	}
+	target := "https://api.x.ai/v1/chat/completions"
+	if tc.addresses == "base" || tc.addresses == "both" {
+		target = "http://base.example/v1/chat/completions"
+	}
+	return reflect.DeepEqual(want, routingObservation{Error: "account 801 missing api_key", Status: http.StatusOK}) &&
+		reflect.DeepEqual(got, routingObservation{
+			Requests: []routingUpstreamRequest{{URL: target, Authorization: "Bearer sk-test", BodyKind: "messages", Model: strings.TrimSpace(tc.model)}},
+			Error:    "upstream error: 502 (failover)", Status: http.StatusOK,
+		})
+}
+
+// The official Anthropic SDK/adapters declare this protocol version on native
+// requests (docs/OUTBOUND_IDENTITY.md). Preserve the historical golden and
+// accept only this exact added declaration; URL/auth/body/model/error routing
+// must still match the historical observations byte for byte.
+func matchesOfficialAnthropicVersionDeclaration(tc routingMatrixCase, want, got routingObservation) bool {
+	if tc.accountType != AccountTypeAPIKey || len(want.Requests) != 1 || len(got.Requests) != 1 {
+		return false
+	}
+	switch tc.platform {
+	case PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax:
+	default:
+		return false
+	}
+	if want.Requests[0].AnthropicVersion != "" || got.Requests[0].AnthropicVersion != "2023-06-01" || got.Requests[0].BodyKind != "messages" {
+		return false
+	}
+	got.Requests = append([]routingUpstreamRequest(nil), got.Requests...)
+	got.Requests[0].AnthropicVersion = ""
+	return reflect.DeepEqual(want, got)
 }
 
 func TestUpstreamProtocolRoutingMatrixMatchesMainGolden(t *testing.T) {
@@ -325,17 +423,39 @@ func TestUpstreamProtocolRoutingMatrixMatchesMainGolden(t *testing.T) {
 	var differences []string
 	mismatched := 0
 	knownDifferences := 0
+	credentialDifferences := 0
+	unsupportedDifferences := 0
+	grokFallbackRepairs := 0
+	protocolDeclarations := 0
 	for i, tc := range cases {
 		index := golden.Results[i]
 		require.GreaterOrEqual(t, index, 0)
 		require.Less(t, index, len(golden.Observations))
 		want := golden.Observations[index]
 		got := observeRouting(tc)
-		if reflect.DeepEqual(want, got) {
+		observable := got
+		observable.credentialFailure = nil
+		if reflect.DeepEqual(want, observable) {
 			continue
 		}
 		if matchesKnownZhipuNonAPIKeyDifference(tc, want, got) {
 			knownDifferences++
+			continue
+		}
+		if matchesMissingOAuthCredentialRecovery(tc, want, got) {
+			credentialDifferences++
+			continue
+		}
+		if matchesUnsupportedNativeAccountRejection(tc, want, got) {
+			unsupportedDifferences++
+			continue
+		}
+		if matchesGrokChatFallbackCredentialRepair(tc, want, got) {
+			grokFallbackRepairs++
+			continue
+		}
+		if matchesOfficialAnthropicVersionDeclaration(tc, want, got) {
+			protocolDeclarations++
 			continue
 		}
 		mismatched++
@@ -344,7 +464,16 @@ func TestUpstreamProtocolRoutingMatrixMatchesMainGolden(t *testing.T) {
 		}
 	}
 	require.Zero(t, mismatched, "routing differs from main %s in %d cases:\n%s", golden.SourceRevision, mismatched, strings.Join(differences, "\n"))
-	// 2 account types × 4 modes × 3 probe states × 4 address configurations ×
+	// 1 account type × 4 modes × 3 probe states × 4 address configurations ×
 	// 2 model spellings. A disappeared or expanded exception requires review.
-	require.Equal(t, 192, knownDifferences, "unexpected change to the declared Zhipu non-API-Key difference")
+	require.Equal(t, 96, knownDifferences, "unexpected change to the declared Zhipu non-API-Key difference")
+	// All 9,792 OAuth cases lack a grant, including adaptive Zhipu Responses.
+	require.Equal(t, 9792, credentialDifferences, "missing OAuth grants must enter the exact account-recovery contract")
+	// Four CN providers each have 480 native unsupported-type cases; the
+	// pinned OpenCode model/rule matrix contributes another 3,488.
+	require.Equal(t, 4*480+3488, unsupportedDifferences, "unsupported native account types must remain rejected before transport")
+	// Six protocol settings × four addresses × two spellings, with the
+	// Responses probe explicitly false, must all recover the valid Grok key.
+	require.Equal(t, 6*4*2, grokFallbackRepairs, "valid Grok API keys must reach Chat Completions")
+	require.Equal(t, 4*480, protocolDeclarations, "all four native Anthropic adapters require the official protocol declaration")
 }

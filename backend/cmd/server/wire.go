@@ -99,12 +99,12 @@ func provideCleanup(
 	tokenRefresh *service.TokenRefreshService,
 	accountExpiry *service.AccountExpiryService,
 	cnProviderBalanceCheck *service.CNProviderBalanceCheckService,
-	codexVersionSync *service.OpenAICodexVersionSyncService,
 	proxyExpiry *service.ProxyExpiryService,
 	subscriptionExpiry *service.SubscriptionExpiryService,
 	usageCleanup *service.UsageCleanupService,
 	idempotencyCleanup *service.IdempotencyCleanupService,
 	geminiCachedContent *service.GeminiCachedContentService,
+	providerFiles *service.ProviderFilesService,
 	batchImageCleanup *service.BatchImageCleanupService,
 	batchImageWorker *service.BatchImageWorkerRuntime,
 	pricing *service.PricingService,
@@ -153,6 +153,12 @@ func provideCleanup(
 			{"ZhipuOffPeakTicketManager", func() error {
 				if zhipuOffPeakTickets != nil {
 					zhipuOffPeakTickets.Stop()
+				}
+				return nil
+			}},
+			{"ProviderFilesService", func() error {
+				if providerFiles != nil {
+					providerFiles.Stop()
 				}
 				return nil
 			}},
@@ -294,10 +300,6 @@ func provideCleanup(
 				if cnProviderBalanceCheck != nil {
 					cnProviderBalanceCheck.Stop()
 				}
-				return nil
-			}},
-			{"OpenAICodexVersionSyncService", func() error {
-				codexVersionSync.Stop()
 				return nil
 			}},
 			{"ProxyExpiryService", func() error {

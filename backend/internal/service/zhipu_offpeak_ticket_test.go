@@ -28,15 +28,17 @@ type zhipuOffPeakStub struct {
 	statusEr error
 	settleEr error
 
-	lastTicket   *zcode.OffPeakTicket
-	taskIDs      []string
-	settleAuths  []zcode.OffPeakAuth
-	identities   []outboundidentity.Identity
-	takeCalls    int
-	statusCalls  int
-	settled      []string
-	lastAuth     zcode.OffPeakAuth
-	availability *zcode.OffPeakAvailability
+	lastTicket     *zcode.OffPeakTicket
+	taskIDs        []string
+	settleAuths    []zcode.OffPeakAuth
+	settleProxies  []string
+	settleAttempts []string
+	identities     []outboundidentity.Identity
+	takeCalls      int
+	statusCalls    int
+	settled        []string
+	lastAuth       zcode.OffPeakAuth
+	availability   *zcode.OffPeakAvailability
 }
 
 func (s *zhipuOffPeakStub) Availability(context.Context, zcode.OffPeakAuth, string) (*zcode.OffPeakAvailability, error) {
@@ -85,9 +87,10 @@ func (s *zhipuOffPeakStub) TicketStatus(_ context.Context, _ []string, _ zcode.O
 	return result, s.delay, nil
 }
 
-func (s *zhipuOffPeakStub) SettleTicket(ctx context.Context, ticketID string, auth zcode.OffPeakAuth, _ string) error {
+func (s *zhipuOffPeakStub) SettleTicket(ctx context.Context, ticketID string, auth zcode.OffPeakAuth, proxy string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.settleAttempts = append(s.settleAttempts, ticketID)
 	if s.settleEr != nil {
 		return s.settleEr
 	}
@@ -95,6 +98,7 @@ func (s *zhipuOffPeakStub) SettleTicket(ctx context.Context, ticketID string, au
 	s.identities = append(s.identities, identity)
 	s.settled = append(s.settled, ticketID)
 	s.settleAuths = append(s.settleAuths, auth)
+	s.settleProxies = append(s.settleProxies, proxy)
 	return nil
 }
 
@@ -106,11 +110,28 @@ func (s *zhipuOffPeakStub) settledTickets() []string {
 
 func zhipuOffPeakIntPtr(value int) *int { return &value }
 
-func newZhipuOffPeakTestManager(t *testing.T, client *zhipuOffPeakStub) *ZhipuOffPeakTicketManager {
+func newZhipuOffPeakTestManager(t *testing.T, client ZhipuOffPeakClient) *ZhipuOffPeakTicketManager {
 	t.Helper()
 	manager := NewZhipuOffPeakTicketManager(client)
+	manager.projectTokens = NewZhipuProjectTokenManager(&projectIssuerStub{issue: func(context.Context, string) (*zcode.ProjectAccessToken, error) {
+		return &zcode.ProjectAccessToken{Token: "ak.sk", ExpiresAt: time.Now().Add(time.Hour)}, nil
+	}}, nil)
 	t.Cleanup(manager.Stop)
 	return manager
+}
+
+func installZhipuOffPeakTestProvider(t *testing.T, manager *ZhipuOffPeakTicketManager) {
+	t.Helper()
+	previous := zhipuOffPeakProvider.Load()
+	SetZhipuOffPeakTicketProvider(manager)
+	t.Cleanup(func() {
+		if previous != nil {
+			zhipuOffPeakProvider.Store(previous)
+		} else {
+			// Keep the atomic's concrete type stable while restoring unavailable.
+			SetZhipuOffPeakTicketProvider((*ZhipuOffPeakTicketManager)(nil))
+		}
+	})
 }
 
 func zhipuOffPeakTestAccount() *Account {
@@ -119,7 +140,9 @@ func zhipuOffPeakTestAccount() *Account {
 		Platform: PlatformZhipu,
 		Type:     AccountTypeOAuth,
 		Credentials: map[string]any{
-			"plan_kind":         ZhipuPlanOffPeak,
+			"plan_kind":      ZhipuPlanOffPeak,
+			"oauth_provider": "bigmodel", "access_token": "login",
+			"zhipu_project_kind": "personal", "zhipu_project_key_id": "location", "zhipu_organization": "org", "zhipu_project": "project",
 			"api_key":           "zcode-jwt",
 			"zcode_jwt_token":   "zcode-jwt",
 			"off_peak_plan_key": "ak.sk",
@@ -137,6 +160,7 @@ func TestZhipuOffPeakAcquireReturnsAnImmediatelyReadyTicket(t *testing.T) {
 
 	ticket, err := manager.Acquire(context.Background(), zhipuOffPeakTestAccount(), zhipuOffPeakTestAuth(), "")
 	require.NoError(t, err)
+	ticket.Release()
 	require.Equal(t, "t-1", ticket.TicketID)
 	require.Equal(t, zcode.TicketReady, ticket.State)
 	require.Equal(t, 1, client.takeCalls)
@@ -148,6 +172,7 @@ func TestZhipuOffPeakAcquireReturnsAnImmediatelyReadyTicket(t *testing.T) {
 	// take-number quota.
 	again, err := manager.Acquire(context.Background(), zhipuOffPeakTestAccount(), zhipuOffPeakTestAuth(), "")
 	require.NoError(t, err)
+	again.Release()
 	require.Equal(t, "t-1", again.TicketID)
 	require.Equal(t, 1, client.takeCalls)
 }
@@ -164,6 +189,7 @@ func TestZhipuOffPeakAcquirePollsUntilAdmitted(t *testing.T) {
 
 	ticket, err := manager.Acquire(context.Background(), zhipuOffPeakTestAccount(), zhipuOffPeakTestAuth(), "")
 	require.NoError(t, err)
+	ticket.Release()
 	require.Equal(t, "t-1", ticket.TicketID)
 	require.GreaterOrEqual(t, client.statusCalls, 2)
 }
@@ -242,8 +268,9 @@ func TestZhipuOffPeakSweepSettlesIdleTickets(t *testing.T) {
 		return now
 	}
 
-	_, err := manager.Acquire(context.Background(), zhipuOffPeakTestAccount(), zhipuOffPeakTestAuth(), "")
+	ticket, err := manager.Acquire(context.Background(), zhipuOffPeakTestAccount(), zhipuOffPeakTestAuth(), "")
 	require.NoError(t, err)
+	ticket.Release()
 
 	// Still inside the idle window: the ticket is kept.
 	manager.sweepOnce()
@@ -260,8 +287,9 @@ func TestZhipuOffPeakSweepSettlesIdleTickets(t *testing.T) {
 	client.mu.Lock()
 	client.takes = []*zcode.OffPeakTicket{{TicketID: "t-2", State: zcode.TicketReady}}
 	client.mu.Unlock()
-	ticket, err := manager.Acquire(context.Background(), zhipuOffPeakTestAccount(), zhipuOffPeakTestAuth(), "")
+	ticket, err = manager.Acquire(context.Background(), zhipuOffPeakTestAccount(), zhipuOffPeakTestAuth(), "")
 	require.NoError(t, err)
+	ticket.Release()
 	require.Equal(t, "t-2", ticket.TicketID)
 	clockMu.Lock()
 	now = now.Add(2 * time.Second)
@@ -275,15 +303,60 @@ func TestZhipuOffPeakSweepRetriesFailedSettles(t *testing.T) {
 		takes:    []*zcode.OffPeakTicket{{TicketID: "t-1", State: zcode.TicketReady}},
 		settleEr: errors.New("off-peak endpoint returned status 503"),
 	}
-	manager := newZhipuOffPeakTestManager(t, client).WithSettleIdle(time.Nanosecond)
-	_, err := manager.Acquire(context.Background(), zhipuOffPeakTestAccount(), zhipuOffPeakTestAuth(), "")
+	manager := newZhipuOffPeakTestManager(t, client).WithSettleIdle(time.Second)
+	manager.Stop()
+	now := time.Now()
+	manager.now = func() time.Time { return now }
+	ticket, err := manager.Acquire(context.Background(), zhipuOffPeakTestAccount(), zhipuOffPeakTestAuth(), "")
 	require.NoError(t, err)
+	ticket.Release()
+	now = now.Add(2 * time.Second)
 
 	// A failed settle is not fatal: the platform reclaims the ticket by timeout
 	// and the next cycle retries.
 	manager.sweepOnce()
 	require.Empty(t, client.settledTickets())
+	require.Equal(t, []string{"t-1"}, client.settleAttempts, "the failed settlement must actually have been sent")
+	holder := manager.holderFor(zhipuOffPeakTestAccount().ID)
+	require.Equal(t, "t-1", holder.ticketID, "a failed settlement cannot discard its outstanding ticket")
+	require.NotEmpty(t, holder.taskID)
+	client.mu.Lock()
+	client.settleEr = nil
+	client.mu.Unlock()
 	manager.sweepOnce()
+	require.Equal(t, []string{"t-1", "t-1"}, client.settleAttempts, "recovery must retry the same outstanding generation")
+	require.Equal(t, []string{"t-1"}, client.settledTickets())
+	require.Empty(t, holder.ticketID, "successful acknowledgement retires the ticket")
+	require.Empty(t, holder.taskID)
+	require.Equal(t, zcode.TicketSettled, holder.state)
+	manager.sweepOnce()
+	require.Equal(t, []string{"t-1", "t-1"}, client.settleAttempts, "a retired ticket must not be settled again")
+}
+
+func TestZhipuOffPeakSettlementDoesNotRestoreTakeEligibility(t *testing.T) {
+	client := &zhipuOffPeakStub{
+		takes:        []*zcode.OffPeakTicket{{TicketID: "last-window-ticket", State: zcode.TicketReady}},
+		availability: &zcode.OffPeakAvailability{CanTakeNumber: false},
+	}
+	manager := newZhipuOffPeakTestManager(t, client).WithSettleIdle(time.Second)
+	manager.Stop()
+	now := time.Now()
+	manager.now = func() time.Time { return now }
+	ticket, err := manager.Acquire(context.Background(), zhipuOffPeakTestAccount(), zhipuOffPeakTestAuth(), "")
+	require.NoError(t, err)
+	ticket.Release()
+	now = now.Add(2 * time.Second)
+	manager.sweepOnce()
+	require.Equal(t, []string{"last-window-ticket"}, client.settledTickets())
+	nextTake := now.Add(time.Hour).UTC().Truncate(time.Second)
+	client.takeErr = &zcode.OffPeakError{HTTPStatus: http.StatusTooManyRequests, Code: zcode.OffPeakCodeQuotaExhausted, NextTakeAt: nextTake}
+	ticket, err = manager.Acquire(context.Background(), zhipuOffPeakTestAccount(), zhipuOffPeakTestAuth(), "")
+	require.Error(t, err)
+	require.Nil(t, ticket, "a settlement acknowledgement grants no model admission")
+	require.Contains(t, err.Error(), "off-peak take-number quota exhausted")
+	require.Contains(t, err.Error(), nextTake.Format(time.RFC3339))
+	require.Equal(t, 2, client.takeCalls, "the gateway must respect the authoritative denial without repeated Take")
+	require.Equal(t, []string{"last-window-ticket"}, client.settleAttempts)
 }
 
 // The request-path hook must be a no-op for every account that is not an
@@ -294,19 +367,21 @@ func TestZhipuOffPeakTicketHeaderAppliesOnlyToOffPeakZhipu(t *testing.T) {
 		account *Account
 		want    string
 	}{
-		{"off-peak zhipu", zhipuOffPeakTestAccount(), "t-hook"},
+		{"off-peak zhipu", zhipuProjectOffPeakTestAccount(), "t-hook"},
 		{"coding-plan zhipu", &Account{ID: 78, Platform: PlatformZhipu, Type: AccountTypeOAuth, Credentials: map[string]any{"plan_kind": ZhipuPlanIndividualCodingPlan}}, ""},
 		{"other platform", &Account{ID: 79, Platform: PlatformMiniMax, Type: AccountTypeAPIKey, Credentials: map[string]any{"plan_kind": ZhipuPlanOffPeak}}, ""},
 	}
 	manager := newZhipuOffPeakTestManager(t, &zhipuOffPeakStub{
 		takes: []*zcode.OffPeakTicket{{TicketID: "t-hook", State: zcode.TicketReady}},
 	})
-	SetZhipuOffPeakTicketProvider(manager)
+	installZhipuOffPeakTestProvider(t, manager)
 
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
 			headers := http.Header{}
-			require.NoError(t, applyZhipuOffPeakTicketHeader(context.Background(), test.account, headers))
+			ticket, err := applyZhipuOffPeakTicketHeader(context.Background(), test.account, headers)
+			require.NoError(t, err)
+			ticket.Release()
 			require.Equal(t, test.want, headers.Get("X-Off-Peak-Ticket-ID"))
 		})
 	}
@@ -315,20 +390,18 @@ func TestZhipuOffPeakTicketHeaderAppliesOnlyToOffPeakZhipu(t *testing.T) {
 	// so a caller-supplied header can never select one.
 	headers := http.Header{}
 	headers.Set("X-Off-Peak-Ticket-ID", "caller-supplied")
-	require.NoError(t, applyZhipuOffPeakTicketHeader(context.Background(), zhipuOffPeakTestAccount(), headers))
+	ticket, err := applyZhipuOffPeakTicketHeader(context.Background(), zhipuOffPeakTestAccount(), headers)
+	require.NoError(t, err)
+	ticket.Release()
 	require.Equal(t, "t-hook", headers.Get("X-Off-Peak-Ticket-ID"))
 }
 
 func TestZhipuOffPeakUnavailableProviderRejectsAdmission(t *testing.T) {
-	previous := zhipuOffPeakProvider.Load()
-	SetZhipuOffPeakTicketProvider((*ZhipuOffPeakTicketManager)(nil))
-	t.Cleanup(func() {
-		if previous != nil {
-			zhipuOffPeakProvider.Store(previous)
-		}
-	})
+	installZhipuOffPeakTestProvider(t, nil)
 	headers := http.Header{"X-Off-Peak-Ticket-Id": {"caller-ticket"}}
-	require.Error(t, applyZhipuOffPeakTicketHeader(context.Background(), zhipuOffPeakTestAccount(), headers))
+	ticket, err := applyZhipuOffPeakTicketHeader(context.Background(), zhipuOffPeakTestAccount(), headers)
+	require.Error(t, err)
+	require.Nil(t, ticket)
 	require.Empty(t, headers.Get("X-Off-Peak-Ticket-ID"))
 }
 
@@ -338,25 +411,32 @@ func TestZhipuOffPeakSettlementRetainsCredentialOwnerIdentity(t *testing.T) {
 	svc, ctx := outboundIdentityTestSettings(t, config)
 	account := zhipuOffPeakTestAccount()
 	account.Credentials[outboundIdentityCredential] = OutboundIdentitySelection{Preset: "zcode", Version: "4.2.0", Headers: map[string]string{"X-Client-Timezone": "Asia/Shanghai"}}
-	client := &zhipuOffPeakStub{takes: []*zcode.OffPeakTicket{{TicketID: "identity-ticket", State: zcode.TicketReady}}}
+	client := &zhipuOffPeakStub{takes: []*zcode.OffPeakTicket{{TicketID: "identity-ticket", State: zcode.TicketReady}, {TicketID: "replacement-identity-ticket", State: zcode.TicketReady}}}
 	manager := newZhipuOffPeakTestManager(t, client)
 	now := time.Now()
 	manager.now = func() time.Time { return now }
-	_, err := manager.Acquire(ctx, account, zhipuOffPeakTestAuth(), "")
+	ticket, err := manager.Acquire(ctx, account, zhipuOffPeakTestAuth(), "")
 	require.NoError(t, err)
+	ticket.Release()
 	config.Profiles["zcode"] = OutboundIdentitySelection{Preset: "zcode", Version: "4.3.0"}
 	require.NoError(t, svc.SetOutboundIdentitySettings(ctx, config))
 	account.Credentials[outboundIdentityCredential] = OutboundIdentitySelection{Preset: "zcode", Version: "4.4.0"}
-	_, err = manager.Acquire(ctx, account, zhipuOffPeakTestAuth(), "")
+	ticket, err = manager.Acquire(ctx, account, zhipuOffPeakTestAuth(), "")
 	require.NoError(t, err)
-	now = now.Add(DefaultOffPeakSettleIdle + time.Second)
-	manager.sweepOnce()
-	require.Equal(t, []string{"identity-ticket"}, client.settledTickets())
-	require.Len(t, client.identities, 2)
-	require.Equal(t, client.identities[0], client.identities[1])
+	require.Equal(t, "replacement-identity-ticket", ticket.TicketID, "an account identity edit starts a new ticket generation")
+	ticket.Release()
+	require.Equal(t, []string{"identity-ticket"}, client.settledTickets(), "the idle old generation settles before the replacement is admitted")
+	require.Len(t, client.identities, 3)
+	require.Equal(t, client.identities[0], client.identities[1], "settlement keeps the original generation's complete identity")
 	require.Equal(t, account.ID, client.identities[1].AccountID)
 	require.Equal(t, "4.2.0", client.identities[1].Version)
 	require.Equal(t, "Asia/Shanghai", client.identities[1].Headers["X-Client-Timezone"])
+	require.Equal(t, "4.4.0", client.identities[2].Version, "the replacement uses the edited account identity ahead of global settings")
+	now = now.Add(DefaultOffPeakSettleIdle + time.Second)
+	manager.sweepOnce()
+	require.Equal(t, []string{"identity-ticket", "replacement-identity-ticket"}, client.settledTickets())
+	require.Len(t, client.identities, 4)
+	require.Equal(t, client.identities[2], client.identities[3])
 }
 
 func TestZhipuOffPeakCredentialChangeSettlesWithOriginalOwner(t *testing.T) {
@@ -364,12 +444,14 @@ func TestZhipuOffPeakCredentialChangeSettlesWithOriginalOwner(t *testing.T) {
 	manager := newZhipuOffPeakTestManager(t, client)
 	account := zhipuOffPeakTestAccount()
 	auth := zhipuOffPeakTestAuth()
-	_, err := manager.Acquire(context.Background(), account, auth, "")
+	ticket, err := manager.Acquire(context.Background(), account, auth, "")
 	require.NoError(t, err)
+	ticket.Release()
 	changed := auth
 	changed.JWT = "new-grant"
-	ticket, err := manager.Acquire(context.Background(), account, changed, "")
+	ticket, err = manager.Acquire(context.Background(), account, changed, "")
 	require.NoError(t, err)
+	ticket.Release()
 	require.Equal(t, "new", ticket.TicketID)
 	require.Equal(t, []string{"old"}, client.settled)
 	require.Equal(t, []zcode.OffPeakAuth{auth}, client.settleAuths)
@@ -401,7 +483,7 @@ func (c *blockingOffPeakClient) SettleTicket(ctx context.Context, ticket string,
 }
 func TestZhipuOffPeakBudgetIncludesBlockedUpstream(t *testing.T) {
 	client := &blockingOffPeakClient{zhipuOffPeakStub: &zhipuOffPeakStub{}, take: func(ctx context.Context) error { <-ctx.Done(); return ctx.Err() }}
-	manager := NewZhipuOffPeakTicketManager(client).WithAcquireTimeout(30 * time.Millisecond)
+	manager := newZhipuOffPeakTestManager(t, client).WithAcquireTimeout(30 * time.Millisecond)
 	defer manager.Stop()
 	done := make(chan error, 1)
 	go func() {
@@ -426,20 +508,22 @@ func TestZhipuOffPeakCannotReuseTicketDuringSettlement(t *testing.T) {
 			return ctx.Err()
 		}
 	}}
-	manager := NewZhipuOffPeakTicketManager(client).WithAcquireTimeout(30 * time.Millisecond).WithSettleIdle(time.Nanosecond)
+	manager := newZhipuOffPeakTestManager(t, client).WithAcquireTimeout(30 * time.Millisecond).WithSettleIdle(time.Nanosecond)
 	defer manager.Stop()
-	_, err := manager.Acquire(context.Background(), zhipuOffPeakTestAccount(), zhipuOffPeakTestAuth(), "")
+	ticket, err := manager.Acquire(context.Background(), zhipuOffPeakTestAccount(), zhipuOffPeakTestAuth(), "")
 	require.NoError(t, err)
+	ticket.Release()
 	swept := make(chan struct{})
 	go func() { manager.sweepOnce(); close(swept) }()
 	<-entered
-	ticket, err := manager.Acquire(context.Background(), zhipuOffPeakTestAccount(), zhipuOffPeakTestAuth(), "")
+	ticket, err = manager.Acquire(context.Background(), zhipuOffPeakTestAccount(), zhipuOffPeakTestAuth(), "")
 	close(release)
 	<-swept
 	require.Error(t, err, "waiting for settlement is also bounded by the request budget")
 	require.Nil(t, ticket, "must not return a ticket being retired")
 	ticket, err = manager.Acquire(context.Background(), zhipuOffPeakTestAccount(), zhipuOffPeakTestAuth(), "")
 	require.NoError(t, err)
+	ticket.Release()
 	require.Equal(t, "new", ticket.TicketID)
 	require.NotEqual(t, client.taskIDs[0], client.taskIDs[1])
 }
@@ -449,9 +533,11 @@ func TestZhipuOffPeakCachedAdmissionIsRecheckedAndExpiredTicketReplaced(t *testi
 	manager := newZhipuOffPeakTestManager(t, client)
 	first, err := manager.Acquire(context.Background(), zhipuOffPeakTestAccount(), zhipuOffPeakTestAuth(), "")
 	require.NoError(t, err)
+	first.Release()
 	require.Equal(t, "expired", first.TicketID)
 	second, err := manager.Acquire(context.Background(), zhipuOffPeakTestAccount(), zhipuOffPeakTestAuth(), "")
 	require.NoError(t, err)
+	second.Release()
 	require.Equal(t, "fresh", second.TicketID, "local activity cannot keep expired platform admission alive")
 	require.Equal(t, 2, client.takeCalls)
 	require.Equal(t, 1, client.statusCalls)
@@ -461,13 +547,7 @@ func TestZhipuOffPeakForwardAndProbeRequireAdmissionBeforeAnySend(t *testing.T) 
 	for _, probe := range []bool{false, true} {
 		client := &zhipuOffPeakStub{takeErr: errors.New("ticket denied")}
 		manager := newZhipuOffPeakTestManager(t, client)
-		previous := zhipuOffPeakProvider.Load()
-		SetZhipuOffPeakTicketProvider(manager)
-		t.Cleanup(func() {
-			if previous != nil {
-				zhipuOffPeakProvider.Store(previous)
-			}
-		})
+		installZhipuOffPeakTestProvider(t, manager)
 		account := zhipuOffPeakTestAccount()
 		req, err := http.NewRequest(http.MethodPost, "https://zcode.z.ai/api/v1/off-peak/anthropic/v1/messages", nil)
 		require.NoError(t, err)
@@ -475,11 +555,22 @@ func TestZhipuOffPeakForwardAndProbeRequireAdmissionBeforeAnySend(t *testing.T) 
 		// A nil transport intentionally makes any accidental model dispatch fail:
 		// the admission error must be returned before that side effect.
 		if probe {
-			_, err = (&AccountTestService{}).doOpenAIAccountTestUpstream(req, "", account, false)
+			_, err = (&AccountTestService{projectTokens: manager.projectTokens}).doOpenAIAccountTestUpstream(req, "", account, false)
 		} else {
-			_, err = (&OpenAIGatewayService{}).doOpenAIUpstream(req, "", account)
+			_, err = (&OpenAIGatewayService{projectTokens: manager.projectTokens}).doOpenAIUpstream(req, "", account)
 		}
 		require.ErrorContains(t, err, "ticket denied")
 		require.Empty(t, req.Header.Get("X-Off-Peak-Ticket-ID"))
 	}
+}
+
+func zhipuProjectOffPeakTestAccount() *Account {
+	a := zhipuOffPeakTestAccount()
+	a.Credentials["access_token"] = "owner-login"
+	a.Credentials["oauth_provider"] = "bigmodel"
+	a.Credentials["zhipu_project_kind"] = "personal"
+	a.Credentials["zhipu_project_key_id"] = "key-id"
+	a.Credentials["zhipu_organization"] = "org"
+	a.Credentials["zhipu_project"] = "project"
+	return a
 }

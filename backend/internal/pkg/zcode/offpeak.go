@@ -17,7 +17,7 @@ import (
 
 // Off-peak ticket server. The ZCode idle plan is gated by a ticket issued by the
 // platform: a model request is only admitted while the ticket is ready or active,
-// and a settled ticket frees the take-number quota.
+// and settlement ends its admission without restoring rolling take quota.
 const (
 	// DefaultOffPeakBaseURL is the ZCode platform API root that serves the
 	// off-peak ticket routes.
@@ -159,11 +159,10 @@ func ResolveOffPeakBaseURL() string {
 // issued to a specific plan, so the same snapshot must be used for take, status,
 // settle and the model request that consumes the ticket.
 type OffPeakAuth struct {
-	JWT       string
-	PlanKey   string
-	TeamOrg   string
-	TeamProj  string
-	RequestID string
+	JWT      string
+	PlanKey  string
+	TeamOrg  string
+	TeamProj string
 }
 
 // Headers renders the ticket-call headers.
@@ -176,9 +175,6 @@ func (a OffPeakAuth) Headers() map[string]string {
 	if org, project := strings.TrimSpace(a.TeamOrg), strings.TrimSpace(a.TeamProj); org != "" && project != "" {
 		headers["bigmodel-organization"] = org
 		headers["bigmodel-project"] = project
-	}
-	if requestID := strings.TrimSpace(a.RequestID); requestID != "" {
-		headers["x-request-id"] = requestID
 	}
 	return headers
 }
@@ -213,6 +209,8 @@ func (c *OffPeakClient) Availability(ctx context.Context, auth OffPeakAuth) (*Of
 
 // TakeTicket requests a ticket for taskID. It never blocks: the platform answers
 // with the current admission state.
+// An incomplete state with a known ticket ID returns both evidence and an error;
+// callers must preserve the ID for Status without treating it as admission.
 func (c *OffPeakClient) TakeTicket(ctx context.Context, taskID string, auth OffPeakAuth) (*OffPeakTicket, error) {
 	taskID = strings.TrimSpace(taskID)
 	if taskID == "" {
@@ -231,8 +229,14 @@ func (c *OffPeakClient) TakeTicket(ctx context.Context, taskID string, auth OffP
 		return nil, fmt.Errorf("decode off-peak ticket: %w", err)
 	}
 	ticket := payload.normalize()
-	if ticket.TicketID == "" || ticket.State == "" {
+	if ticket.TicketID == "" {
 		return nil, fmt.Errorf("invalid off-peak ticket response")
+	}
+	if ticket.State == "" {
+		// Preserve evidence of a remote ticket without treating an incomplete
+		// response as successful admission. The owner can revalidate it through
+		// Status instead of issuing another potentially counted Take.
+		return ticket, fmt.Errorf("invalid off-peak ticket response")
 	}
 	return ticket, nil
 }
@@ -364,7 +368,9 @@ func (c *OffPeakClient) do(ctx context.Context, method, path string, auth OffPea
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	prepareRequest(req)
+	if err := prepareRequest(req); err != nil {
+		return nil, err
+	}
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return nil, err
@@ -377,27 +383,32 @@ func (c *OffPeakClient) do(ctx context.Context, method, path string, auth OffPea
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, classifyOffPeakFailure(resp, raw)
 	}
+	// Official settle acknowledgements may have no body. Admission and quota
+	// consumers still validate their own required fields on the empty object.
+	if len(bytes.TrimSpace(raw)) == 0 {
+		return json.RawMessage("{}"), nil
+	}
 	var envelope struct {
 		Code json.RawMessage `json:"code"`
-		Msg  string          `json:"msg"`
 		Data json.RawMessage `json:"data"`
 	}
 	if err := json.Unmarshal(raw, &envelope); err != nil {
 		return nil, fmt.Errorf("decode off-peak envelope: %w", err)
 	}
-	// The platform unwraps only a zero code with a data payload; anything else is
-	// a business rejection even on HTTP 200.
+	// Preserve business rejections and their retry hints on HTTP 200 as well.
 	if code := parseOffPeakCode(envelope.Code); code != 0 {
-		return nil, &OffPeakError{HTTPStatus: resp.StatusCode, Code: code, Message: envelope.Msg}
+		return nil, classifyOffPeakFailure(resp, raw)
 	}
-	if len(envelope.Data) == 0 {
-		return json.RawMessage("{}"), nil
+	// The official client accepts bare objects and {code:0,data}. A sibling
+	// named data alone is not an authorization to discard the outer payload.
+	if strings.Trim(strings.TrimSpace(string(envelope.Code)), `"`) == "0" && len(envelope.Data) != 0 {
+		return envelope.Data, nil
 	}
-	return envelope.Data, nil
+	return raw, nil
 }
 
-// classifyOffPeakFailure turns a non-2xx response into a typed error, carrying
-// the queue valve's Retry-After and the quota reset time.
+// classifyOffPeakFailure preserves rejection details for both HTTP failures and
+// successful HTTP responses carrying a nonzero business code.
 func classifyOffPeakFailure(resp *http.Response, raw []byte) error {
 	var payload struct {
 		Code       json.RawMessage `json:"code"`

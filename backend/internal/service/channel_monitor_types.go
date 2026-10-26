@@ -58,7 +58,8 @@ type ChannelMonitor struct {
 	TemplateID       *int64            // 仅用于 UI 分组 + 一键应用，运行时不用
 	ExtraHeaders     map[string]string // 普通 headers 与 adapter 默认值合并；托管身份字段禁止覆盖
 	BodyOverrideMode string            // off / merge / replace
-	BodyOverride     map[string]any    // 仅 mode != off 时使用
+	StreamProbe      bool
+	BodyOverride     map[string]any // 仅 mode != off 时使用
 
 	// DuplicateOperationID is internal persistence metadata used to recover an
 	// already committed duplicate after an ambiguous idempotency-store failure.
@@ -97,6 +98,7 @@ type ChannelMonitorCreateParams struct {
 	TemplateID       *int64
 	ExtraHeaders     map[string]string
 	BodyOverrideMode string
+	StreamProbe      bool
 	BodyOverride     map[string]any
 
 	// 配额模式：CheckMode 空串默认 probe；quota/quota_probe 必须关联账号。
@@ -124,6 +126,7 @@ type ChannelMonitorUpdateParams struct {
 	ClearTemplate    bool // true 时无视 TemplateID，把监控的 template_id 置空
 	ExtraHeaders     *map[string]string
 	BodyOverrideMode *string
+	StreamProbe      *bool
 	BodyOverride     *map[string]any
 
 	// 配额模式：CheckMode nil = 不更新；AccountID nil = 不更新，
@@ -134,9 +137,11 @@ type ChannelMonitorUpdateParams struct {
 
 // CheckResult 单个模型一次检测的结果。
 type CheckResult struct {
+	StreamProbe   *bool `json:"stream_probe"`
 	Model         string
 	Status        string // operational / degraded / failed / error
 	FirstByteMs   *int
+	FirstTextMs   *int
 	LatencyMs     *int
 	PingLatencyMs *int
 	Message       string
@@ -154,6 +159,7 @@ type UserMonitorView struct {
 	PrimaryModel         string
 	PrimaryStatus        string
 	PrimaryFirstByteMs   *int
+	PrimaryFirstTextMs   *int
 	PrimaryLatencyMs     *int
 	PrimaryPingLatencyMs *int    // 主模型最近一次 ping 延迟
 	Availability7d       float64 // 0-100
@@ -166,8 +172,10 @@ type UserMonitorView struct {
 
 // UserMonitorTimelinePoint 用户视图 timeline 单点数据（去除 message 以减小响应体）。
 type UserMonitorTimelinePoint struct {
+	StreamProbe   *bool     `json:"stream_probe"`
 	Status        string    `json:"status"`
 	FirstByteMs   *int      `json:"first_byte_ms"`
+	FirstTextMs   *int      `json:"first_text_ms"`
 	LatencyMs     *int      `json:"latency_ms"`
 	PingLatencyMs *int      `json:"ping_latency_ms"`
 	CheckedAt     time.Time `json:"checked_at"`
@@ -178,6 +186,7 @@ type ExtraModelStatus struct {
 	Model       string
 	Status      string
 	FirstByteMs *int
+	FirstTextMs *int
 	LatencyMs   *int
 }
 
@@ -195,21 +204,26 @@ type ModelDetail struct {
 	Model              string
 	LatestStatus       string
 	LatestFirstByteMs  *int
+	LatestFirstTextMs  *int
 	LatestLatencyMs    *int
 	Availability7d     float64 // 0-100
 	Availability15d    float64
 	Availability30d    float64
 	AvgFirstByte7dMs   *int
+	AvgFirstText7dMs   *int
 	FirstByteSamples7d int
+	FirstTextSamples7d int
 	AvgLatency7dMs     *int
 }
 
 // ChannelMonitorHistoryRow 历史记录入库行（service 层向 repository 提交的数据）。
 type ChannelMonitorHistoryRow struct {
+	StreamProbe   *bool `json:"stream_probe"`
 	MonitorID     int64
 	Model         string
 	Status        string
 	FirstByteMs   *int
+	FirstTextMs   *int
 	LatencyMs     *int
 	PingLatencyMs *int
 	Message       string
@@ -219,10 +233,12 @@ type ChannelMonitorHistoryRow struct {
 
 // ChannelMonitorHistoryEntry 历史记录查询返回行（含 ent 主键 ID）。
 type ChannelMonitorHistoryEntry struct {
+	StreamProbe   *bool `json:"stream_probe"`
 	ID            int64
 	Model         string
 	Status        string
 	FirstByteMs   *int
+	FirstTextMs   *int
 	LatencyMs     *int
 	PingLatencyMs *int
 	Message       string
@@ -232,9 +248,11 @@ type ChannelMonitorHistoryEntry struct {
 
 // ChannelMonitorLatest 最近一次检测的简明信息（用于 UserMonitorView 聚合）。
 type ChannelMonitorLatest struct {
+	StreamProbe   *bool `json:"stream_probe"`
 	Model         string
 	Status        string
 	FirstByteMs   *int
+	FirstTextMs   *int
 	LatencyMs     *int
 	PingLatencyMs *int
 	CheckedAt     time.Time
@@ -249,7 +267,9 @@ type ChannelMonitorAvailability struct {
 	OperationalChecks int // operational + degraded 视为可用
 	AvailabilityPct   float64
 	AvgFirstByteMs    *int
+	AvgFirstTextMs    *int
 	FirstByteSamples  int
+	FirstTextSamples  int
 	AvgLatencyMs      *int
 }
 
@@ -259,6 +279,7 @@ type ChannelMonitorAvailability struct {
 type MonitorStatusSummary struct {
 	PrimaryStatus      string // 空字符串表示无历史
 	PrimaryFirstByteMs *int
+	PrimaryFirstTextMs *int
 	PrimaryLatencyMs   *int
 	Availability7d     float64 // 0-100，无历史时为 0
 	ExtraModels        []ExtraModelStatus

@@ -5,19 +5,19 @@
       v-if="windowStats && (windowStats.requests > 0 || windowStats.tokens > 0)"
       class="mb-0.5 flex items-center"
     >
-      <div class="flex items-center gap-1.5 text-[9px] text-gray-500 dark:text-gray-400">
-        <span class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800">
+      <div class="flex items-center gap-1.5 text-[9px] surface-muted">
+        <span class="rounded surface-inset px-1.5 py-0.5">
           {{ formatRequests }} req
         </span>
-        <span class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800">
+        <span class="rounded surface-inset px-1.5 py-0.5">
           {{ formatTokens }}
         </span>
-        <span class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800" :title="t('usage.accountBilled')">
+        <span class="rounded surface-inset px-1.5 py-0.5" :title="t('usage.accountBilled')">
           A ${{ formatAccountCost }}
         </span>
         <span
           v-if="windowStats?.user_cost != null"
-          class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800"
+          class="rounded surface-inset px-1.5 py-0.5"
           :title="t('usage.userBilled')"
         >
           U ${{ formatUserCost }}
@@ -25,7 +25,7 @@
         <span
           v-if="estimatedTotalCost != null"
           data-test="estimated-total-cost"
-          class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800"
+          class="rounded surface-inset px-1.5 py-0.5"
           :title="t('admin.accounts.usageWindow.estimatedTotalCostTooltip')"
         >
           {{ t('admin.accounts.usageWindow.estimatedTotalCost', { cost: estimatedTotalCost.toFixed(2) }) }}
@@ -43,7 +43,7 @@
       <!-- Progress bar container -->
       <div class="h-1.5 w-8 shrink-0 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
         <div
-          :class="['h-full transition-all duration-300', barClass]"
+          :class="['console-data-mark', 'h-full transition-all duration-300', barClass]"
           :style="{ width: barWidth }"
         ></div>
       </div>
@@ -54,7 +54,7 @@
       </span>
 
       <!-- Reset time -->
-      <span v-if="shouldShowResetTime" class="shrink-0 text-[10px] text-gray-400">
+      <span v-if="shouldShowResetTime" class="shrink-0 text-[10px] surface-muted">
         {{ formatResetTime }}
       </span>
     </div>
@@ -117,10 +117,10 @@ watch(
 // Label background colors
 const labelClass = computed(() => {
   const colors = {
-    indigo: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300',
-    emerald: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
-    purple: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
-    amber: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+    indigo: 'bg-indigo-100/[0.15] text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300',
+    emerald: 'bg-emerald-100/[0.15] text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+    purple: 'bg-purple-100/[0.15] text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
+    amber: 'bg-amber-100/[0.15] text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
   }
   return colors[props.color]
 })
@@ -160,14 +160,14 @@ const textClass = computed(() => {
     } else if (props.utilization <= 50) {
       return 'text-amber-600 dark:text-amber-400'
     }
-    return 'text-gray-600 dark:text-gray-400'
+    return 'surface-muted'
   }
   if (props.utilization >= 90) {
     return 'text-red-600 dark:text-red-400'
   } else if (props.utilization >= 75) {
     return 'text-amber-600 dark:text-amber-400'
   } else {
-    return 'text-gray-600 dark:text-gray-400'
+    return 'surface-muted'
   }
 })
 

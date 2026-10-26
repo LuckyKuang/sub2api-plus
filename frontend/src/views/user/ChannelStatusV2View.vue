@@ -1,22 +1,22 @@
 <template>
-  <AppLayout>
-    <div class="space-y-6 pb-12">
+  <AppLayout workspace>
+    <div class="workspace-page">
       <!-- Ops-style elevated shell: title toolbar + filters (mirrors OpsDashboardHeader) -->
       <section
-        class="card sticky top-0 z-20 !rounded-3xl !border-0 p-0 shadow-sm ring-1 ring-gray-900/5 backdrop-blur-sm dark:!bg-dark-800 dark:ring-dark-700 supports-[backdrop-filter]:bg-white dark:supports-[backdrop-filter]:bg-dark-800"
+        class="channel-monitor-toolbar card workspace-shell workspace-fixed p-0"
       >
-        <header class="page-header mb-0 flex flex-wrap items-start justify-between gap-4 border-b border-gray-100 px-5 py-4 dark:border-dark-700 sm:px-6">
+        <header class="page-header mb-0 flex flex-wrap items-start justify-between gap-4 px-5 py-4 sm:px-6">
           <div class="min-w-0">
             <h1 class="page-title flex items-center gap-2 text-xl font-black text-gray-900 dark:text-white">
-              <span class="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-blue-50 text-blue-500 dark:bg-blue-900/30 dark:text-blue-400">
+              <span class="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-blue-50/[0.15] text-blue-500 dark:bg-blue-900/30 dark:text-blue-400">
                 <Icon name="chart" size="sm" />
               </span>
               {{ t('channelMonitorV2.title') }}
             </h1>
-            <div class="page-description mt-1.5 flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+            <div class="page-description mt-1.5 flex flex-wrap items-center gap-2 text-xs surface-muted">
               <span class="relative flex h-2 w-2 shrink-0">
                 <span
-                  class="relative inline-flex h-2 w-2 rounded-full"
+                  class="console-data-mark relative inline-flex h-2 w-2 rounded-full"
                   :class="loading || refreshing ? 'bg-gray-400' : 'bg-green-500'"
                 ></span>
               </span>
@@ -27,7 +27,7 @@
               <span v-else-if="snapshot?.coverage.data_through">
                 {{ t('channelMonitorV2.updatedTo', { time: formatTime(snapshot.coverage.data_through) }) }}
               </span>
-              <span v-else class="text-gray-400">{{ t('common.loading') }}</span>
+              <span v-else class="surface-muted">{{ t('common.loading') }}</span>
               <span
                 v-if="snapshot && !snapshot.coverage.coverage_complete && !bootstrapActive"
                 class="badge badge-warning"
@@ -44,7 +44,7 @@
             </div>
           </div>
           <button
-            class="btn btn-secondary btn-icon flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-dark-700 dark:text-gray-400 dark:hover:bg-dark-600"
+            class="btn btn-secondary btn-icon flex h-8 w-8 items-center justify-center rounded-lg surface-inset hover:surface-hover surface-muted"
             type="button"
             :title="t('common.refresh')"
             :disabled="loading"
@@ -57,7 +57,7 @@
         <!-- First-upgrade silent backfill: show until 30d product window is covered -->
         <div
           v-if="bootstrapActive"
-          class="border-b border-blue-100 bg-blue-50/90 px-5 py-3 dark:border-blue-900/40 dark:bg-blue-950/40 sm:px-6"
+          class="bg-blue-50/90 px-5 py-3 dark:bg-blue-950/40 sm:px-6"
           role="status"
           aria-live="polite"
         >
@@ -83,7 +83,7 @@
             :aria-label="t('channelMonitorV2.bootstrap.working')"
           >
             <div
-              class="h-full rounded-full bg-blue-500 transition-[width] duration-500 ease-out dark:bg-blue-400"
+              class="console-data-mark h-full rounded-full bg-blue-500 transition-[width] duration-500 ease-out dark:bg-blue-400"
               :style="{ width: `${bootstrapPercent}%` }"
             />
           </div>
@@ -108,7 +108,7 @@
             </button>
           </div>
 
-          <span class="mx-0.5 hidden h-5 w-px shrink-0 bg-gray-200 dark:bg-dark-700 sm:block" aria-hidden="true"></span>
+          <span class="mx-0.5 hidden h-5 w-px shrink-0 surface-inset sm:block" aria-hidden="true"></span>
 
           <FilterMultiSelect
             v-model="filter.platforms"
@@ -141,7 +141,7 @@
             {{ t('channelMonitorV2.clearFilters') }}
           </button>
 
-          <span class="mx-0.5 hidden h-5 w-px shrink-0 bg-gray-200 dark:bg-dark-700 md:block" aria-hidden="true"></span>
+          <span class="mx-0.5 hidden h-5 w-px shrink-0 surface-inset md:block" aria-hidden="true"></span>
 
           <Select
             v-model="matrixGroupBy"
@@ -193,6 +193,7 @@
         </div>
       </section>
 
+      <div class="workspace-shell workspace-scroll" data-testid="channel-status-activity">
       <!-- Overview KPI: success · TTFT · tokens/s(optional) · cache · (+ RPM when throughput visible) -->
       <section
         v-if="snapshot"
@@ -250,12 +251,15 @@
       <div class="relative min-h-[320px]">
         <MonitorTrendChart
           v-if="trendView === 'line'"
+          class="workspace-shell"
           :trend="snapshot?.trend || []"
           :coverage="snapshot?.coverage || null"
           :loading="loading && !snapshot"
         />
         <RelayPulseMatrix
           v-else-if="matrix"
+          v-model:view-state="matrixViewState"
+          :dimension-key="matrixDimensionKey"
           :rows="matrixRows"
           :coverage="matrix.coverage"
           :health-mode="healthMode"
@@ -263,32 +267,31 @@
         />
         <div
           v-else-if="loading"
-          class="card flex min-h-[320px] items-center justify-center !rounded-3xl !border-0 text-sm text-gray-400 shadow-sm ring-1 ring-gray-900/5 dark:ring-dark-700"
+          class="card workspace-shell flex min-h-[320px] items-center justify-center text-sm surface-muted"
         >
           <span class="animate-pulse">{{ t('common.loading') }}</span>
         </div>
       </div>
 
-      <section class="card flex min-h-0 flex-col overflow-hidden !rounded-3xl !border-0 shadow-sm ring-1 ring-gray-900/5 dark:!bg-dark-800 dark:ring-dark-700">
-        <div class="border-b border-gray-100 px-5 pt-4 dark:border-dark-700 sm:px-6">
-          <nav class="tabs w-full max-w-md sm:w-auto" role="tablist" :aria-label="t('channelMonitorV2.tabs.aria')">
+      <section class="card workspace-shell flex min-h-0 flex-col overflow-hidden">
+        <div class="px-5 pt-4 sm:px-6">
+          <nav class="card-tabs w-full max-w-md sm:w-auto" role="tablist" :aria-label="t('channelMonitorV2.tabs.aria')">
             <button
               v-for="item in tabs"
               :key="item.value"
               type="button"
               role="tab"
-              class="tab flex-1 sm:flex-none"
+              class="card-tab flex-1 sm:flex-none"
               :aria-selected="activeTab === item.value"
-              :class="activeTab === item.value ? 'tab-active' : ''"
               @click="activeTab = item.value"
             >
               {{ item.label }}
             </button>
           </nav>
         </div>
-        <div class="min-h-0 max-h-[min(52vh,520px)] overflow-auto p-4 sm:p-5">
-          <div v-if="activeTab === 'models'" class="table-container border-0">
-            <table class="table monitor-table min-w-[720px]">
+        <div class="min-h-0 p-4 sm:p-5">
+          <div v-if="activeTab === 'models'" class="monitor-tab-viewport record-table-scroll table-container min-h-0 overflow-auto border-0">
+            <table class="record-table table monitor-table min-w-[720px]">
               <thead>
                 <tr>
                   <th>{{ t('channelMonitorV2.table.platformModel') }}</th>
@@ -310,7 +313,7 @@
                     <div class="flex items-center gap-2">
                       <span :class="statusDot(row.health)" aria-hidden="true"></span>
                       <div>
-                        <span class="block text-xs text-gray-500 dark:text-dark-400">{{ row.platform }}</span>
+                        <span class="block text-xs surface-muted">{{ row.platform }}</span>
                         <strong class="font-semibold text-gray-900 dark:text-white">
                           {{ row.model === '__other__' ? t('channelMonitorV2.otherModels') : row.model }}
                         </strong>
@@ -319,11 +322,11 @@
                   </td>
                   <td>
                     <span class="block">{{ formatPercent(1 - row.metrics.error_rate) }}</span>
-                    <small class="text-xs text-gray-400">{{ t('channelMonitorV2.metrics.errorRateValue', { value: formatPercent(row.metrics.error_rate) }) }}</small>
+                    <small class="text-xs surface-muted">{{ t('channelMonitorV2.metrics.errorRateValue', { value: formatPercent(row.metrics.error_rate) }) }}</small>
                   </td>
                   <td>
                     <span class="block">{{ formatMs(row.metrics.ttft.p50_ms) }}</span>
-                    <small class="text-xs text-gray-400">{{ latencyDetail(row.metrics.ttft) }}</small>
+                    <small class="text-xs surface-muted">{{ latencyDetail(row.metrics.ttft) }}</small>
                   </td>
                   <td v-if="showThroughput" :title="exactTps(row.metrics.tpm)">{{ formatTps(row.metrics.tpm) }}</td>
                   <td>{{ formatPercent(row.metrics.cache_rate) }}</td>
@@ -333,25 +336,25 @@
             </table>
           </div>
 
-          <div v-else-if="activeTab === 'errors'" class="space-y-3">
+          <div v-else-if="activeTab === 'errors'" class="monitor-tab-viewport min-h-0 space-y-3 overflow-auto">
             <div
               v-for="row in errorRows"
               :key="row.category"
-              class="rounded-2xl bg-gray-50 p-4 text-sm dark:bg-dark-900/30"
+              class="rounded-2xl surface-inset p-4 text-sm"
               :class="row.ignored ? 'opacity-60' : ''"
             >
               <button
                 type="button"
-                class="grid w-full grid-cols-[minmax(100px,200px)_1fr_auto_auto] items-center gap-3 text-left"
+                class="grid w-full grid-cols-[minmax(100px,200px)_1fr_auto_auto] items-center gap-3 text-left surface-control"
                 @click="toggleError(row.category)"
               >
-                <span class="flex min-w-0 items-center gap-1.5 truncate text-gray-700 dark:text-gray-200">
+                <span class="flex min-w-0 items-center gap-1.5 truncate surface-muted">
                   <span class="truncate">{{ errorLabel(row.category) }}</span>
                   <span v-if="row.ignored" class="badge badge-gray shrink-0 !px-1.5 !py-0 text-[10px]">{{ t('channelMonitorV2.ignored') }}</span>
                 </span>
                 <span class="h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-dark-700">
                   <i
-                    class="block h-full rounded-full"
+                    class="console-data-mark block h-full rounded-full"
                     :class="row.ignored ? 'bg-gray-400 dark:bg-gray-500' : 'bg-gradient-to-r from-red-400 to-red-500'"
                     :style="{ width: `${Math.max(2, row.rate * 100)}%` }"
                   ></i>
@@ -367,25 +370,25 @@
                   <div
                     v-for="(detail, index) in row.details || []"
                     :key="`${row.category}:${index}:${detail.message}`"
-                    class="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600 dark:bg-dark-800 dark:text-dark-300"
+                    class="rounded-lg surface-inset px-3 py-2 text-xs surface-muted"
                   >
                     <div class="mb-1 flex flex-wrap items-center gap-2">
                       <span class="badge badge-gray !px-1.5 !py-0 text-[10px]">{{ detail.platform || '-' }}</span>
                       <span class="truncate font-medium">{{ detail.model || '-' }}</span>
-                      <span v-if="detail.status_code" class="text-gray-400">{{ t('channelMonitorV2.errorDetail.http', { code: detail.status_code }) }}</span>
-                      <span v-if="detail.upstream_status_code" class="text-gray-400">{{ t('channelMonitorV2.errorDetail.upstream', { code: detail.upstream_status_code }) }}</span>
-                      <span class="ml-auto text-gray-400">×{{ detail.count }}</span>
+                      <span v-if="detail.status_code" class="surface-muted">{{ t('channelMonitorV2.errorDetail.http', { code: detail.status_code }) }}</span>
+                      <span v-if="detail.upstream_status_code" class="surface-muted">{{ t('channelMonitorV2.errorDetail.upstream', { code: detail.upstream_status_code }) }}</span>
+                      <span class="ml-auto surface-muted">×{{ detail.count }}</span>
                     </div>
                     <p class="break-words leading-relaxed">{{ detail.message || detail.error_type || t('channelMonitorV2.errorDetail.noMessage') }}</p>
                   </div>
                 </template>
-                <p v-else class="text-xs text-gray-400">{{ t('channelMonitorV2.errorDetail.empty') }}</p>
+                <p v-else class="text-xs surface-muted">{{ t('channelMonitorV2.errorDetail.empty') }}</p>
               </div>
             </div>
           </div>
 
-          <div v-else class="table-container border-0">
-            <table class="table monitor-table min-w-[640px]">
+          <div v-else class="monitor-tab-viewport record-table-scroll table-container min-h-0 overflow-auto border-0">
+            <table class="record-table table monitor-table min-w-[640px]">
               <thead>
                 <tr>
                   <th class="w-16">{{ t('channelMonitorV2.table.rank') }}</th>
@@ -402,7 +405,7 @@
                   v-for="row in userRows"
                   :key="row.user_id || row.display_label"
                   :class="row.is_self
-                    ? 'bg-primary-50 ring-1 ring-inset ring-primary-200/80 dark:bg-primary-900/25 dark:ring-primary-700/50'
+                    ? 'bg-primary-50/[0.15] ring-1 ring-inset ring-primary-200/80 dark:bg-primary-900/25 dark:ring-primary-700/50'
                     : ''"
                 >
                   <td><MonitorRankBadge :rank="row.rank" /></td>
@@ -420,11 +423,11 @@
                   </td>
                   <td>
                     <span class="block">{{ formatPercent(1 - row.metrics.error_rate) }}</span>
-                    <small class="text-xs text-gray-400">{{ t('channelMonitorV2.metrics.errorRateValue', { value: formatPercent(row.metrics.error_rate) }) }}</small>
+                    <small class="text-xs surface-muted">{{ t('channelMonitorV2.metrics.errorRateValue', { value: formatPercent(row.metrics.error_rate) }) }}</small>
                   </td>
                   <td>
                     <span class="block">{{ formatMs(row.metrics.ttft.p50_ms) }}</span>
-                    <small class="text-xs text-gray-400">{{ latencyDetail(row.metrics.ttft) }}</small>
+                    <small class="text-xs surface-muted">{{ latencyDetail(row.metrics.ttft) }}</small>
                   </td>
                   <td v-if="showThroughput" :title="exactTps(row.metrics.tpm)">{{ formatTps(row.metrics.tpm) }}</td>
                   <td>{{ formatPercent(row.metrics.cache_rate) }}</td>
@@ -434,7 +437,7 @@
             </table>
           </div>
 
-          <div v-if="tabLoading" class="empty-state py-10 text-sm text-gray-400">{{ t('common.loading') }}</div>
+          <div v-if="tabLoading" class="empty-state py-10 text-sm surface-muted">{{ t('common.loading') }}</div>
           <div v-else-if="activeRowsEmpty" class="empty-state py-10">
             <p class="empty-state-title text-base">
               {{
@@ -453,6 +456,7 @@
           </div>
         </div>
       </section>
+      </div>
     </div>
   </AppLayout>
 </template>
@@ -470,6 +474,7 @@ import MetricCell from '@/features/channel-monitor-v2/MetricCell.vue'
 import MonitorRankBadge from '@/features/channel-monitor-v2/MonitorRankBadge.vue'
 import MonitorTrendChart from '@/features/channel-monitor-v2/MonitorTrendChart.vue'
 import RelayPulseMatrix from '@/features/channel-monitor-v2/RelayPulseMatrix.vue'
+import type { MatrixViewState } from '@/features/channel-monitor-v2/monitorZoom'
 import { useUserView as useAuthStore } from '@/composables/useUserView'
 import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
@@ -558,6 +563,8 @@ const trendView = ref<TrendView>(parseTrendView(route.query.trend_view))
 const dimensions = ref<MonitorDimensions>({ platforms: [], groups: [], models: [] })
 const snapshot = ref<MonitorSnapshot | null>(null)
 const matrix = ref<MonitorMatrixResponse | null>(null)
+const matrixViewState = ref<MatrixViewState>()
+const matrixDimensionKey = ref('')
 const modelRows = ref<MonitorModelRow[]>([])
 const errorRows = ref<MonitorErrorRow[]>([])
 const userRows = ref<MonitorUserRow[]>([])
@@ -655,7 +662,7 @@ const bootstrapPercent = computed(() => {
 const matrixRows = computed(() => {
   const items = matrix.value?.items || []
   // platform_group views should only show real groups, never bare platform placeholders.
-  if (matrixGroupBy.value === 'platform_group' || matrixGroupBy.value === 'platform_group_model') {
+  if (matrix.value?.group_by === 'platform_group' || matrix.value?.group_by === 'platform_group_model') {
     return items.filter((row) => row.group_id != null && Number(row.group_id) > 0)
   }
   return items
@@ -717,6 +724,14 @@ async function loadDimensions(signal?: AbortSignal, id = sequence) {
 }
 
 async function loadMetrics(signal?: AbortSignal, id = sequence) {
+  // Keep the visible payload and its dimension identity together while a new request is pending.
+  const dimensionKey = JSON.stringify([
+    filter.value.range,
+    [...filter.value.platforms].sort(),
+    [...filter.value.groupIds].sort((a, b) => a - b),
+    [...filter.value.models].sort(),
+    matrixGroupBy.value,
+  ])
   const [nextSnapshot, nextMatrix] = await Promise.all([
     api.getSnapshot(filter.value, isAdmin.value, signal),
     api.getMatrix(filter.value, matrixGroupBy.value, isAdmin.value, signal),
@@ -724,6 +739,7 @@ async function loadMetrics(signal?: AbortSignal, id = sequence) {
   if (id !== sequence) return
   snapshot.value = nextSnapshot
   matrix.value = nextMatrix
+  matrixDimensionKey.value = dimensionKey
   scheduleAutoRefresh()
   await loadTab(signal, id)
 }
@@ -932,6 +948,13 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.monitor-tab-viewport {
+  --record-table-max-height: max(0px, calc(min(52vh, 520px) - 2rem));
+  max-height: var(--record-table-max-height);
+}
+@media (min-width: 640px) {
+  .monitor-tab-viewport { --record-table-max-height: max(0px, calc(min(52vh, 520px) - 2.5rem)); }
+}
 .status-dot {
   display: inline-block;
   height: 0.5rem;

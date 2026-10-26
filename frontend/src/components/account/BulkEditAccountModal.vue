@@ -7,7 +7,7 @@
   >
     <form id="bulk-edit-account-form" class="space-y-5" @submit.prevent="() => handleSubmit()">
       <!-- Info -->
-      <div class="rounded-lg bg-blue-50 p-4 dark:bg-blue-900/20">
+      <div class="rounded-lg bg-blue-50/[0.15] p-4 dark:bg-blue-900/20">
         <p class="text-sm text-blue-700 dark:text-blue-400">
           <svg class="mr-1.5 inline h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path
@@ -22,7 +22,7 @@
       </div>
 
       <!-- Mixed platform warning -->
-      <div v-if="isMixedPlatform" class="rounded-lg bg-amber-50 p-4 dark:bg-amber-900/20">
+      <div v-if="isMixedPlatform" class="rounded-lg bg-amber-50/[0.15] p-4 dark:bg-amber-900/20">
         <p class="text-sm text-amber-700 dark:text-amber-400">
           <svg class="mr-1.5 inline h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -45,7 +45,7 @@
             >
               {{ t('admin.accounts.openai.oauthPassthrough') }}
             </label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 text-xs surface-muted">
               {{ t('admin.accounts.openai.oauthPassthroughDesc') }}
             </p>
           </div>
@@ -84,7 +84,7 @@
             >
               {{ t('admin.accounts.openai.flattenNamespaces') }}
             </label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 text-xs surface-muted">
               {{ t('admin.accounts.openai.flattenNamespacesDesc') }}
             </p>
           </div>
@@ -123,7 +123,7 @@
             >
               {{ t('admin.accounts.openai.longContextBilling') }}
             </label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 text-xs surface-muted">
               {{ t('admin.accounts.openai.longContextBillingDesc') }}
             </p>
           </div>
@@ -148,7 +148,7 @@
           />
         </div>
         <p
-          class="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
+          class="mt-3 rounded-lg bg-amber-50/[0.15] px-3 py-2 text-xs text-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
           data-testid="bulk-edit-openai-long-context-shadow-hint"
         >
           {{ t('admin.accounts.bulkEdit.longContextShadowHint') }}
@@ -220,7 +220,7 @@
         >
           <div
             v-if="isOpenAIModelRestrictionDisabled"
-            class="rounded-lg bg-amber-50 p-3 dark:bg-amber-900/20"
+            class="rounded-lg bg-amber-50/[0.15] p-3 dark:bg-amber-900/20"
           >
             <p class="text-xs text-amber-700 dark:text-amber-400">
               {{ t('admin.accounts.openai.modelRestrictionDisabledByPassthrough') }}
@@ -235,8 +235,8 @@
                 :class="[
                   'flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-all',
                   modelRestrictionMode === 'whitelist'
-                    ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-dark-600 dark:text-gray-400 dark:hover:bg-dark-500'
+                    ? 'bg-primary-100/[0.15] text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
+                    : 'surface-inset text-gray-600 hover:surface-hover dark:surface-inset dark:text-gray-400 dark:hover:bg-dark-500'
                 ]"
                 @click="modelRestrictionMode = 'whitelist'"
               >
@@ -260,8 +260,8 @@
                 :class="[
                   'flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-all',
                   modelRestrictionMode === 'mapping'
-                    ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-dark-600 dark:text-gray-400 dark:hover:bg-dark-500'
+                    ? 'bg-purple-100/[0.15] text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                    : 'surface-inset text-gray-600 hover:surface-hover dark:surface-inset dark:text-gray-400 dark:hover:bg-dark-500'
                 ]"
                 @click="modelRestrictionMode = 'mapping'"
               >
@@ -284,7 +284,7 @@
 
             <!-- Whitelist Mode -->
             <div v-if="modelRestrictionMode === 'whitelist'">
-              <div class="mb-3 rounded-lg bg-blue-50 p-3 dark:bg-blue-900/20">
+              <div class="mb-3 rounded-lg bg-blue-50/[0.15] p-3 dark:bg-blue-900/20">
                 <p class="text-xs text-blue-700 dark:text-blue-400">
                   <svg
                     class="mr-1 inline h-4 w-4"
@@ -309,7 +309,7 @@
                 :platforms="targetSelectedPlatforms"
               />
 
-              <p class="text-xs text-gray-500 dark:text-gray-400">
+              <p class="text-xs surface-muted">
                 {{ t('admin.accounts.selectedModels', { count: allowedModels.length }) }}
                 <span v-if="allowedModels.length === 0">{{
                   t('admin.accounts.supportsAllModels')
@@ -319,7 +319,7 @@
 
             <!-- Mapping Mode -->
             <div v-else>
-              <div class="mb-3 rounded-lg bg-purple-50 p-3 dark:bg-purple-900/20">
+              <div class="mb-3 rounded-lg bg-purple-50/[0.15] p-3 dark:bg-purple-900/20">
                 <p class="text-xs text-purple-700 dark:text-purple-400">
                   <svg
                     class="mr-1 inline h-4 w-4"
@@ -372,7 +372,7 @@
                   />
                   <button
                     type="button"
-                    class="rounded-lg p-2 text-red-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"
+                    class="rounded-lg p-2 text-red-500 transition-colors hover:bg-red-50/25 hover:text-red-600 dark:hover:bg-red-900/20 surface-control"
                     @click="removeModelMapping(index)"
                   >
                     <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -389,7 +389,7 @@
 
               <button
                 type="button"
-                class="mb-3 w-full rounded-lg border-2 border-dashed border-gray-300 px-4 py-2 text-gray-600 transition-colors hover:border-gray-400 hover:text-gray-700 dark:border-dark-500 dark:text-gray-400 dark:hover:border-dark-400 dark:hover:text-gray-300"
+                class="mb-3 w-full rounded-lg border-2 border-dashed border-gray-300 px-4 py-2 transition-colors hover:border-gray-400 hover:text-gray-700 dark:border-dark-500 dark:hover:border-dark-400 dark:hover:text-gray-300 surface-control surface-muted"
                 @click="addModelMapping"
               >
                 <svg
@@ -436,7 +436,7 @@
             >
               {{ t('admin.accounts.customErrorCodes') }}
             </label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 text-xs surface-muted">
               {{ t('admin.accounts.customErrorCodesHint') }}
             </p>
           </div>
@@ -450,7 +450,7 @@
         </div>
 
         <div v-if="enableCustomErrorCodes" id="bulk-edit-custom-error-codes-body" class="space-y-3">
-          <div class="rounded-lg bg-amber-50 p-3 dark:bg-amber-900/20">
+          <div class="rounded-lg bg-amber-50/[0.15] p-3 dark:bg-amber-900/20">
             <p class="text-xs text-amber-700 dark:text-amber-400">
               <Icon name="exclamationTriangle" size="sm" class="mr-1 inline" :stroke-width="2" />
               {{ t('admin.accounts.customErrorCodesWarning') }}
@@ -466,8 +466,8 @@
               :class="[
                 'rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
                 selectedErrorCodes.includes(code.value)
-                  ? 'bg-red-100 text-red-700 ring-1 ring-red-500 dark:bg-red-900/30 dark:text-red-400'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-dark-600 dark:text-gray-400 dark:hover:bg-dark-500'
+                  ? 'bg-red-100/[0.15] text-red-700 ring-1 ring-red-500 dark:bg-red-900/30 dark:text-red-400'
+                  : 'surface-inset text-gray-600 hover:surface-hover dark:surface-inset dark:text-gray-400 dark:hover:bg-dark-500'
               ]"
               @click="toggleErrorCode(code.value)"
             >
@@ -505,18 +505,18 @@
             <span
               v-for="code in selectedErrorCodes.sort((a, b) => a - b)"
               :key="code"
-              class="inline-flex items-center gap-1 rounded-full bg-red-100 px-2.5 py-0.5 text-sm font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400"
+              class="inline-flex items-center gap-1 rounded-full bg-red-100/[0.15] px-2.5 py-0.5 text-sm font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400"
             >
               {{ code }}
               <button
                 type="button"
-                class="hover:text-red-900 dark:hover:text-red-300"
+                class="hover:text-red-900 dark:hover:text-red-300 surface-control"
                 @click="removeErrorCode(code)"
               >
                 <Icon name="x" size="xs" class="h-3.5 w-3.5" :stroke-width="2" />
               </button>
             </span>
-            <span v-if="selectedErrorCodes.length === 0" class="text-xs text-gray-400">
+            <span v-if="selectedErrorCodes.length === 0" class="text-xs surface-muted">
               {{ t('admin.accounts.noneSelectedUsesDefault') }}
             </span>
           </div>
@@ -534,7 +534,7 @@
             >
               {{ t('admin.accounts.interceptWarmupRequests') }}
             </label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 text-xs surface-muted">
               {{ t('admin.accounts.interceptWarmupRequestsDesc') }}
             </p>
           </div>
@@ -564,7 +564,7 @@
             >
               {{ t('admin.accounts.headerOverride.title') }}
             </label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 text-xs surface-muted">
               {{ t('admin.accounts.headerOverride.hint') }}
             </p>
           </div>
@@ -582,7 +582,7 @@
           />
 
           <div v-if="headerOverrideEnabled" class="space-y-3">
-            <div class="rounded-lg bg-blue-50 p-3 dark:bg-blue-900/20">
+            <div class="rounded-lg bg-blue-50/[0.15] p-3 dark:bg-blue-900/20">
               <p class="text-xs text-blue-700 dark:text-blue-400">
                 <Icon name="exclamationCircle" size="sm" class="mr-1 inline" :stroke-width="2" />
                 {{ t('admin.accounts.headerOverride.info') }}
@@ -598,7 +598,7 @@
               @update:rows="headerOverrideRows = $event"
             />
           </div>
-          <p v-else class="text-xs text-gray-500 dark:text-gray-400">
+          <p v-else class="text-xs surface-muted">
             {{ t('admin.accounts.headerOverride.bulkDisableHint') }}
           </p>
         </div>
@@ -801,10 +801,10 @@
           id="bulk-edit-openai-ws-mode"
           :class="!enableOpenAIWSMode && 'pointer-events-none opacity-50'"
         >
-          <p class="mb-3 text-xs text-gray-500 dark:text-gray-400">
+          <p class="mb-3 text-xs surface-muted">
             {{ t('admin.accounts.openai.wsModeDesc') }}
           </p>
-          <p v-if="openAIWSModeHintKey" class="mb-3 text-xs text-gray-500 dark:text-gray-400">
+          <p v-if="openAIWSModeHintKey" class="mb-3 text-xs surface-muted">
             {{ t(openAIWSModeHintKey) }}
           </p>
           <Select
@@ -838,7 +838,7 @@
           id="bulk-edit-openai-codex-cli-only"
           :class="!enableCodexCLIOnly && 'pointer-events-none opacity-50'"
         >
-          <p class="mb-3 text-xs text-gray-500 dark:text-gray-400">
+          <p class="mb-3 text-xs surface-muted">
             {{ t('admin.accounts.openai.codexCLIOnlyDesc') }}
           </p>
           <Toggle
@@ -861,7 +861,7 @@
           />
         </div>
         <div :class="!enableCodexFingerprintMode && 'pointer-events-none opacity-50'">
-          <p class="mb-2 text-xs text-gray-500 dark:text-gray-400">
+          <p class="mb-2 text-xs surface-muted">
             {{ t('admin.accounts.openai.codexFingerprintModeDesc') }}
           </p>
           <Select v-model="codexFingerprintMode" data-testid="bulk-codex-fingerprint-mode-select" :options="codexFingerprintModeOptions" />
@@ -879,7 +879,7 @@
             >
               {{ t('admin.accounts.openai.endpointCapabilities') }}
             </label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 text-xs surface-muted">
               {{ t('admin.accounts.openai.endpointCapabilitiesDesc') }}
             </p>
           </div>
@@ -911,7 +911,7 @@
                 :checked="openAIEndpointCapabilities.includes(option.value)"
                 @change="toggleOpenAIEndpointCapability(option.value, $event)"
               />
-              <span class="text-gray-700 dark:text-gray-200">{{ option.label }}</span>
+              <span class="surface-muted">{{ option.label }}</span>
             </label>
           </div>
         </div>
@@ -928,7 +928,7 @@
             >
               {{ t('admin.accounts.openai.responsesMode') }}
             </label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 text-xs surface-muted">
               {{ t('admin.accounts.openai.responsesModeDesc') }}
             </p>
           </div>
@@ -955,7 +955,7 @@
           />
           <p
             v-if="enableOpenAIEndpointCapabilities && !openAITextGenerationCapabilityEnabled"
-            class="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
+            class="mt-2 rounded-lg bg-amber-50/[0.15] px-3 py-2 text-xs text-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
             data-testid="bulk-edit-openai-responses-mode-not-applicable"
           >
             {{ t('admin.accounts.openai.responsesModeTextDisabledHint') }}
@@ -985,10 +985,10 @@
           id="bulk-edit-openai-apikey-ws-mode"
           :class="!enableOpenAIAPIKeyWSMode && 'pointer-events-none opacity-50'"
         >
-          <p class="mb-3 text-xs text-gray-500 dark:text-gray-400">
+          <p class="mb-3 text-xs surface-muted">
             {{ t('admin.accounts.openai.wsModeDesc') }}
           </p>
-          <p v-if="openAIAPIKeyWSModeHintKey" class="mb-3 text-xs text-gray-500 dark:text-gray-400">
+          <p v-if="openAIAPIKeyWSModeHintKey" class="mb-3 text-xs surface-muted">
             {{ t(openAIAPIKeyWSModeHintKey) }}
           </p>
           <Select
@@ -1011,7 +1011,7 @@
             >
               {{ t('admin.accounts.openai.compactMode') }}
             </label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 text-xs surface-muted">
               {{ t('admin.accounts.openai.compactModeDesc') }}
             </p>
           </div>
@@ -1047,7 +1047,7 @@
             >
               {{ t('admin.accounts.openai.compactModelMapping') }}
             </label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 text-xs surface-muted">
               {{ t('admin.accounts.openai.compactModelMappingDesc') }}
             </p>
           </div>
@@ -1076,7 +1076,7 @@
                 :placeholder="t('admin.accounts.fromModel')"
                 data-testid="bulk-edit-openai-compact-model-mapping-input"
               />
-              <span class="text-gray-400">→</span>
+              <span class="surface-muted">→</span>
               <input
                 v-model="mapping.to"
                 type="text"
@@ -1086,7 +1086,7 @@
               />
               <button
                 type="button"
-                class="rounded-lg p-2 text-red-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"
+                class="rounded-lg p-2 text-red-500 transition-colors hover:bg-red-50/25 hover:text-red-600 dark:hover:bg-red-900/20 surface-control"
                 @click="removeOpenAICompactModelMapping(index)"
               >
                 <Icon name="trash" size="sm" />
@@ -1095,7 +1095,7 @@
           </div>
           <button
             type="button"
-            class="mb-3 w-full rounded-lg border-2 border-dashed border-gray-300 px-4 py-2 text-gray-600 transition-colors hover:border-gray-400 hover:text-gray-700 dark:border-dark-500 dark:text-gray-400 dark:hover:border-dark-400 dark:hover:text-gray-300"
+            class="mb-3 w-full rounded-lg border-2 border-dashed border-gray-300 px-4 py-2 transition-colors hover:border-gray-400 hover:text-gray-700 dark:border-dark-500 dark:hover:border-dark-400 dark:hover:text-gray-300 surface-control surface-muted"
             data-testid="bulk-edit-openai-compact-model-mapping-add"
             @click="addOpenAICompactModelMapping"
           >
@@ -1130,7 +1130,7 @@
           aria-labelledby="bulk-edit-rpm-limit-label"
         >
           <div class="mb-3 flex items-center justify-between">
-            <span class="text-sm text-gray-700 dark:text-gray-300">{{ t('admin.accounts.quotaControl.rpmLimit.hint') }}</span>
+            <span class="text-sm surface-muted">{{ t('admin.accounts.quotaControl.rpmLimit.hint') }}</span>
             <Toggle
               v-model="rpmLimitEnabled"
             />
@@ -1160,8 +1160,8 @@
                   :class="[
                     'flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-all',
                     bulkRpmStrategy === 'tiered'
-                      ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-dark-600 dark:text-gray-400 dark:hover:bg-dark-500'
+                      ? 'bg-primary-100/[0.15] text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
+                      : 'surface-inset text-gray-600 hover:surface-hover dark:surface-inset dark:text-gray-400 dark:hover:bg-dark-500'
                   ]"
                 >
                   {{ t('admin.accounts.quotaControl.rpmLimit.strategyTiered') }}
@@ -1172,8 +1172,8 @@
                   :class="[
                     'flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-all',
                     bulkRpmStrategy === 'sticky_exempt'
-                      ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-dark-600 dark:text-gray-400 dark:hover:bg-dark-500'
+                      ? 'bg-primary-100/[0.15] text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
+                      : 'surface-inset text-gray-600 hover:surface-hover dark:surface-inset dark:text-gray-400 dark:hover:bg-dark-500'
                   ]"
                 >
                   {{ t('admin.accounts.quotaControl.rpmLimit.strategyStickyExempt') }}
@@ -1200,7 +1200,7 @@
         <!-- 用户消息限速模式（独立于 RPM 开关，始终可见） -->
         <div class="mt-4">
           <label class="input-label">{{ t('admin.accounts.quotaControl.rpmLimit.userMsgQueue') }}</label>
-          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400 mb-2">
+          <p class="mt-1 text-xs mb-2 surface-muted">
             {{ t('admin.accounts.quotaControl.rpmLimit.userMsgQueueHint') }}
           </p>
           <div class="flex space-x-2">
@@ -1210,7 +1210,7 @@
                 'px-3 py-1.5 text-sm rounded-md border transition-colors',
                 userMsgQueueMode === opt.value
                   ? 'bg-primary-600 text-white border-primary-600'
-                  : 'bg-white dark:bg-dark-700 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-dark-500 hover:bg-gray-50 dark:hover:bg-dark-600'
+                  : 'surface-inset dark:surface-inset surface-muted border-gray-300 dark:border-dark-500 hover:surface-hover dark:hover:surface-hover'
               ]">
               {{ opt.label }}
             </button>

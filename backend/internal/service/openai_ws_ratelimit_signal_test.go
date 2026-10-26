@@ -272,6 +272,7 @@ func TestOpenAIGatewayService_Forward_WSv2Handshake502RecordsModelTransient(t *t
 		openaiWSResolver: NewOpenAIWSProtocolResolver(cfg),
 		toolCorrector:    NewCodexToolCorrector(),
 	}
+	svc.accountRepo = transientCooldownAccountRepo{current: &account}
 	body := []byte(`{"model":"gpt-5.5","stream":false,"input":"hello"}`)
 
 	for range 2 {
@@ -410,7 +411,7 @@ func TestOpenAIGatewayService_UpdateCodexUsageSnapshot_ExhaustedSnapshotDoesNotS
 		SecondaryResetAfterSeconds: ptrIntWS(1200),
 		SecondaryWindowMinutes:     ptrIntWS(300),
 	}
-	svc.updateCodexUsageSnapshot(context.Background(), 601, snapshot)
+	svc.updateCodexUsageSnapshot(context.Background(), &Account{ID: 601, Platform: PlatformOpenAI, Type: AccountTypeOAuth}, snapshot)
 
 	select {
 	case updates := <-repo.updateExtraCh:
@@ -440,7 +441,7 @@ func TestOpenAIGatewayService_UpdateCodexUsageSnapshot_NonExhaustedSnapshotDoesN
 		SecondaryResetAfterSeconds: ptrIntWS(1200),
 		SecondaryWindowMinutes:     ptrIntWS(300),
 	}
-	svc.updateCodexUsageSnapshot(context.Background(), 602, snapshot)
+	svc.updateCodexUsageSnapshot(context.Background(), &Account{ID: 602, Platform: PlatformOpenAI, Type: AccountTypeOAuth}, snapshot)
 
 	select {
 	case <-repo.updateExtraCh:
@@ -472,8 +473,8 @@ func TestOpenAIGatewayService_UpdateCodexUsageSnapshot_ThrottlesExtraWrites(t *t
 		SecondaryWindowMinutes:     ptrIntWS(300),
 	}
 
-	svc.updateCodexUsageSnapshot(context.Background(), 777, snapshot)
-	svc.updateCodexUsageSnapshot(context.Background(), 777, snapshot)
+	svc.updateCodexUsageSnapshot(context.Background(), &Account{ID: 777, Platform: PlatformOpenAI, Type: AccountTypeOAuth}, snapshot)
+	svc.updateCodexUsageSnapshot(context.Background(), &Account{ID: 777, Platform: PlatformOpenAI, Type: AccountTypeOAuth}, snapshot)
 
 	select {
 	case <-repo.updateExtraCh:
@@ -580,4 +581,27 @@ func TestOpenAIWSRateLimitFailoverError_OAuthKeepsSameAccountDeadline(t *testing
 	require.False(t, apiKeyErr.RetryableOnSameAccount)
 	require.True(t, apiKeyErr.SameAccountRetryDeadline.IsZero())
 	require.Zero(t, apiKeyErr.SameAccountRetryDelay)
+}
+
+func (r *openAICodexSnapshotAsyncRepo) UpdateOpenAICodexUsageIfUnchanged(ctx context.Context, id int64, owner *Account, updates map[string]any) (bool, error) {
+	if owner == nil {
+		return false, nil
+	}
+	return true, r.UpdateExtra(ctx, id, updates)
+}
+
+func (r *openAIWSRateLimitSignalRepo) UpdateOpenAICodexUsageIfUnchanged(ctx context.Context, id int64, owner *Account, updates map[string]any) (bool, error) {
+	if owner == nil {
+		return false, nil
+	}
+	return true, r.UpdateExtra(ctx, id, updates)
+}
+
+func (r *openAIWSRateLimitSignalRepo) ApplyCredentialStateMutation(ctx context.Context, owner *Account, mutation CredentialStateMutation) (bool, error) {
+	if mutation.RateLimitUntil != nil {
+		if err := r.SetRateLimited(ctx, owner.ID, *mutation.RateLimitUntil); err != nil {
+			return false, err
+		}
+	}
+	return true, nil
 }

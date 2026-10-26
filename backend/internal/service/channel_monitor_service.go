@@ -179,6 +179,7 @@ func (s *ChannelMonitorService) Create(ctx context.Context, p ChannelMonitorCrea
 		TemplateID:       p.TemplateID,
 		ExtraHeaders:     emptyHeadersIfNil(p.ExtraHeaders),
 		BodyOverrideMode: defaultBodyMode(p.BodyOverrideMode),
+		StreamProbe:      p.StreamProbe,
 		BodyOverride:     p.BodyOverride,
 		CheckMode:        checkMode,
 		AccountID:        cloneInt64Pointer(p.AccountID),
@@ -246,6 +247,7 @@ func (s *ChannelMonitorService) Duplicate(
 		TemplateID:           cloneInt64Pointer(source.TemplateID),
 		ExtraHeaders:         cloneChannelMonitorHeaders(source.ExtraHeaders),
 		BodyOverrideMode:     source.BodyOverrideMode,
+		StreamProbe:          source.StreamProbe,
 		BodyOverride:         bodyOverride,
 		CheckMode:            defaultCheckMode(source.CheckMode),
 		AccountID:            cloneInt64Pointer(source.AccountID),
@@ -374,6 +376,9 @@ func validateCreateParams(p ChannelMonitorCreateParams) error {
 		return err
 	}
 	checkMode := defaultCheckMode(p.CheckMode)
+	if err := validateMonitorStream(p.Provider, checkMode, p.StreamProbe, p.BodyOverrideMode, p.BodyOverride); err != nil {
+		return err
+	}
 	if err := validateCheckMode(p.Provider, checkMode); err != nil {
 		return err
 	}
@@ -683,6 +688,8 @@ func (s *ChannelMonitorService) persistCheckResults(ctx context.Context, m *Chan
 			Model:         r.Model,
 			Status:        r.Status,
 			FirstByteMs:   r.FirstByteMs,
+			FirstTextMs:   r.FirstTextMs,
+			StreamProbe:   r.StreamProbe,
 			LatencyMs:     r.LatencyMs,
 			PingLatencyMs: r.PingLatencyMs,
 			Message:       r.Message,
@@ -715,6 +722,7 @@ func (s *ChannelMonitorService) runChecksConcurrent(ctx context.Context, m *Chan
 		APIMode:          m.APIMode,
 		ExtraHeaders:     m.ExtraHeaders,
 		BodyOverrideMode: m.BodyOverrideMode,
+		StreamProbe:      m.StreamProbe,
 		BodyOverride:     m.BodyOverride,
 	}
 
@@ -1010,6 +1018,12 @@ func applyMonitorAdvancedUpdate(existing *ChannelMonitor, p ChannelMonitorUpdate
 		}
 		existing.BodyOverrideMode = defaultBodyMode(newMode)
 		existing.BodyOverride = newBody
+	}
+	if p.StreamProbe != nil {
+		existing.StreamProbe = *p.StreamProbe
+	}
+	if err := validateMonitorStream(existing.Provider, defaultCheckMode(existing.CheckMode), existing.StreamProbe, newMode, newBody); err != nil {
+		return err
 	}
 	existing.APIMode = newAPIMode
 	return nil

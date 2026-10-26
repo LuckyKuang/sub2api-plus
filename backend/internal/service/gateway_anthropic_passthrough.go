@@ -423,7 +423,7 @@ func (s *GatewayService) handleStreamingResponseAnthropicAPIKeyPassthrough(
 	}
 
 	usage := &ClaudeUsage{}
-	var timing streamOutputTiming
+	timing := requestStreamOutputTiming(c)
 	clientDisconnected := false
 	sawTerminalEvent := false
 	resultWithUsage := func(disconnected bool) *streamingResult {

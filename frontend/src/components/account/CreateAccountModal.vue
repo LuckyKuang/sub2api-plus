@@ -12,12 +12,12 @@
           <div
             :class="[
               'flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold',
-              step >= 1 ? 'bg-primary-500 text-white' : 'bg-gray-200 text-gray-500 dark:bg-dark-600'
+              step >= 1 ? 'bg-primary-500 text-white' : 'surface-inset text-gray-500 dark:surface-inset'
             ]"
           >
             1
           </div>
-          <span class="ml-2 text-sm font-medium text-gray-700 dark:text-gray-300">{{
+          <span class="ml-2 text-sm font-medium surface-muted">{{
             t('admin.accounts.oauth.authMethod')
           }}</span>
         </div>
@@ -26,12 +26,12 @@
           <div
             :class="[
               'flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold',
-              step >= 2 ? 'bg-primary-500 text-white' : 'bg-gray-200 text-gray-500 dark:bg-dark-600'
+              step >= 2 ? 'bg-primary-500 text-white' : 'surface-inset text-gray-500 dark:surface-inset'
             ]"
           >
             2
           </div>
-          <span class="ml-2 text-sm font-medium text-gray-700 dark:text-gray-300">{{
+          <span class="ml-2 text-sm font-medium surface-muted">{{
             oauthStepTitle
           }}</span>
         </div>
@@ -71,14 +71,14 @@
       <!-- Platform Selection - Segmented Control Style -->
       <div>
         <label class="input-label">{{ t('admin.accounts.platform') }}</label>
-        <div class="mt-2 flex flex-wrap rounded-lg bg-gray-100 p-1 dark:bg-dark-700" data-tour="account-form-platform">
+        <div class="mt-2 flex flex-wrap rounded-lg surface-inset p-1" data-tour="account-form-platform">
           <button
             type="button"
             @click="form.platform = 'anthropic'"
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
               form.platform === 'anthropic'
-                ? 'bg-white text-orange-600 shadow-sm dark:bg-dark-600 dark:text-orange-400'
+                ? 'surface-inset text-orange-600 shadow-sm dark:surface-inset dark:text-orange-400'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
             ]"
           >
@@ -91,7 +91,7 @@
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
               form.platform === 'openai'
-                ? 'bg-white text-green-600 shadow-sm dark:bg-dark-600 dark:text-green-400'
+                ? 'surface-inset text-green-600 shadow-sm dark:surface-inset dark:text-green-400'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
             ]"
           >
@@ -116,7 +116,7 @@
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
               form.platform === 'gemini'
-                ? 'bg-white text-blue-600 shadow-sm dark:bg-dark-600 dark:text-blue-400'
+                ? 'surface-inset text-blue-600 shadow-sm dark:surface-inset dark:text-blue-400'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
             ]"
           >
@@ -141,7 +141,7 @@
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
               form.platform === 'antigravity'
-                ? 'bg-white text-purple-600 shadow-sm dark:bg-dark-600 dark:text-purple-400'
+                ? 'surface-inset text-purple-600 shadow-sm dark:surface-inset dark:text-purple-400'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
             ]"
           >
@@ -154,7 +154,7 @@
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
               form.platform === 'grok'
-                ? 'bg-white text-zinc-900 shadow-sm dark:bg-dark-600 dark:text-zinc-100'
+                ? 'surface-inset text-zinc-900 shadow-sm dark:surface-inset dark:text-zinc-100'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
             ]"
           >
@@ -167,7 +167,7 @@
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
               form.platform === 'typesafe'
-                ? 'bg-white text-sky-700 shadow-sm dark:bg-dark-600 dark:text-sky-300'
+                ? 'surface-inset text-sky-700 shadow-sm dark:surface-inset dark:text-sky-300'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
             ]"
           >
@@ -176,14 +176,14 @@
           </button>
         </div>
         <!-- 国产厂商：Kimi / Zhipu GLM / DeepSeek / MiniMax / StepFun -->
-        <div class="mt-2 flex flex-wrap rounded-lg bg-gray-100 p-1 dark:bg-dark-700" data-testid="platform-row-cn">
+        <div class="mt-2 flex flex-wrap rounded-lg surface-inset p-1" data-testid="platform-row-cn">
           <button
             type="button"
             @click="selectCNPlatform('kimi')"
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2.5 text-sm font-medium transition-all',
               form.platform === 'kimi'
-                ? 'bg-white text-pink-600 shadow-sm dark:bg-dark-600 dark:text-pink-400'
+                ? 'surface-inset text-pink-600 shadow-sm dark:surface-inset dark:text-pink-400'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
             ]"
           >
@@ -196,7 +196,7 @@
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2.5 text-sm font-medium transition-all',
               form.platform === 'zhipu'
-                ? 'bg-white text-indigo-600 shadow-sm dark:bg-dark-600 dark:text-indigo-400'
+                ? 'surface-inset text-indigo-600 shadow-sm dark:surface-inset dark:text-indigo-400'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
             ]"
           >
@@ -209,7 +209,7 @@
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2.5 text-sm font-medium transition-all',
               form.platform === 'deepseek'
-                ? 'bg-white text-teal-600 shadow-sm dark:bg-dark-600 dark:text-teal-400'
+                ? 'surface-inset text-teal-600 shadow-sm dark:surface-inset dark:text-teal-400'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
             ]"
           >
@@ -222,7 +222,7 @@
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2.5 text-sm font-medium transition-all',
               form.platform === 'minimax'
-                ? 'bg-white text-rose-600 shadow-sm dark:bg-dark-600 dark:text-rose-400'
+                ? 'surface-inset text-rose-600 shadow-sm dark:surface-inset dark:text-rose-400'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
             ]"
           >
@@ -235,7 +235,7 @@
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2.5 text-sm font-medium transition-all',
               form.platform === 'stepfun'
-                ? 'bg-white text-cyan-600 shadow-sm dark:bg-dark-600 dark:text-cyan-400'
+                ? 'surface-inset text-cyan-600 shadow-sm dark:surface-inset dark:text-cyan-400'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
             ]"
           >
@@ -245,7 +245,7 @@
         </div>
 
         <!-- 多模型聚合平台：OpenCode 与平台清单中登记的其他多协议供应商 -->
-        <div class="mt-2 flex flex-wrap rounded-lg bg-gray-100 p-1 dark:bg-dark-700" data-testid="platform-row-aggregators">
+        <div class="mt-2 flex flex-wrap rounded-lg surface-inset p-1" data-testid="platform-row-aggregators">
           <button
             type="button"
             data-testid="platform-button-opencode_go"
@@ -253,7 +253,7 @@
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2.5 text-sm font-medium transition-all',
               form.platform === 'opencode_go'
-                ? 'bg-white text-amber-700 shadow-sm dark:bg-dark-600 dark:text-amber-300'
+                ? 'surface-inset text-amber-700 shadow-sm dark:surface-inset dark:text-amber-300'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
             ]"
           >
@@ -270,7 +270,7 @@
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2.5 text-sm font-medium transition-all',
               form.platform === spec.id
-                ? 'bg-white text-primary-600 shadow-sm dark:bg-dark-600 dark:text-primary-400'
+                ? 'surface-inset text-primary-600 shadow-sm dark:surface-inset dark:text-primary-400'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
             ]"
           >
@@ -290,7 +290,7 @@
             :class="[
               'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
               accountCategory === 'oauth-based'
-                ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20'
+                ? 'border-orange-500 bg-orange-50/[0.15] dark:bg-orange-900/20'
                 : 'border-gray-200 hover:border-orange-300 dark:border-dark-600 dark:hover:border-orange-700'
             ]"
           >
@@ -299,7 +299,7 @@
                 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
                 accountCategory === 'oauth-based'
                   ? 'bg-orange-500 text-white'
-                  : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
+                  : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
               ]"
             >
               <Icon name="sparkles" size="sm" />
@@ -308,7 +308,7 @@
               <span class="block text-sm font-medium text-gray-900 dark:text-white">{{
                 t('admin.accounts.claudeCode')
               }}</span>
-              <span class="text-xs text-gray-500 dark:text-gray-400">{{
+              <span class="text-xs surface-muted">{{
                 t('admin.accounts.oauthSetupToken')
               }}</span>
             </div>
@@ -320,7 +320,7 @@
             :class="[
               'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
               accountCategory === 'apikey'
-                ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
+                ? 'border-purple-500 bg-purple-50/[0.15] dark:bg-purple-900/20'
                 : 'border-gray-200 hover:border-purple-300 dark:border-dark-600 dark:hover:border-purple-700'
             ]"
           >
@@ -329,7 +329,7 @@
                 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
                 accountCategory === 'apikey'
                   ? 'bg-purple-500 text-white'
-                  : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
+                  : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
               ]"
             >
               <Icon name="key" size="sm" />
@@ -338,7 +338,7 @@
               <span class="block text-sm font-medium text-gray-900 dark:text-white">{{
                 t('admin.accounts.claudeConsole')
               }}</span>
-              <span class="text-xs text-gray-500 dark:text-gray-400">{{
+              <span class="text-xs surface-muted">{{
                 t('admin.accounts.apiKey')
               }}</span>
             </div>
@@ -350,7 +350,7 @@
             :class="[
               'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
               accountCategory === 'bedrock'
-                ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20'
+                ? 'border-amber-500 bg-amber-50/[0.15] dark:bg-amber-900/20'
                 : 'border-gray-200 hover:border-amber-300 dark:border-dark-600 dark:hover:border-amber-700'
             ]"
           >
@@ -359,7 +359,7 @@
                 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
                 accountCategory === 'bedrock'
                   ? 'bg-amber-500 text-white'
-                  : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
+                  : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
               ]"
             >
               <Icon name="cloud" size="sm" />
@@ -368,7 +368,7 @@
               <span class="block text-sm font-medium text-gray-900 dark:text-white">{{
                 t('admin.accounts.bedrockLabel')
               }}</span>
-              <span class="text-xs text-gray-500 dark:text-gray-400">{{
+              <span class="text-xs surface-muted">{{
                 t('admin.accounts.bedrockDesc')
               }}</span>
             </div>
@@ -380,7 +380,7 @@
             :class="[
               'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
               accountCategory === 'service_account'
-                ? 'border-sky-500 bg-sky-50 dark:bg-sky-900/20'
+                ? 'border-sky-500 bg-sky-50/[0.15] dark:bg-sky-900/20'
                 : 'border-gray-200 hover:border-sky-300 dark:border-dark-600 dark:hover:border-sky-700'
             ]"
           >
@@ -389,14 +389,14 @@
                 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
                 accountCategory === 'service_account'
                   ? 'bg-sky-500 text-white'
-                  : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
+                  : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
               ]"
             >
               <Icon name="cloud" size="sm" />
             </div>
             <div>
               <span class="block text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.accounts.vertexLabel') }}</span>
-              <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.vertexDesc') }}</span>
+              <span class="text-xs surface-muted">{{ t('admin.accounts.vertexDesc') }}</span>
             </div>
           </button>
 
@@ -404,7 +404,7 @@
 
         <div
           v-if="accountCategory === 'service_account'"
-          class="mt-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800 dark:border-sky-800/40 dark:bg-sky-900/20 dark:text-sky-200"
+          class="mt-3 rounded-lg border border-sky-200 bg-sky-50/[0.15] px-3 py-2 text-xs text-sky-800 dark:border-sky-800/40 dark:bg-sky-900/20 dark:text-sky-200"
         >
           <p>{{ t('admin.accounts.vertexAnthropicHint') }}</p>
         </div>
@@ -420,7 +420,7 @@
             :class="[
               'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
               accountCategory === 'oauth-based'
-                ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
+                ? 'border-green-500 bg-green-50/[0.15] dark:bg-green-900/20'
                 : 'border-gray-200 hover:border-green-300 dark:border-dark-600 dark:hover:border-green-700'
             ]"
           >
@@ -429,14 +429,14 @@
                 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
                 accountCategory === 'oauth-based'
                   ? 'bg-green-500 text-white'
-                  : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
+                  : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
               ]"
             >
               <Icon name="key" size="sm" />
             </div>
             <div>
               <span class="block text-sm font-medium text-gray-900 dark:text-white">OAuth</span>
-              <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.types.chatgptOauth') }}</span>
+              <span class="text-xs surface-muted">{{ t('admin.accounts.types.chatgptOauth') }}</span>
             </div>
           </button>
 
@@ -446,7 +446,7 @@
             :class="[
               'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
               accountCategory === 'apikey'
-                ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
+                ? 'border-purple-500 bg-purple-50/[0.15] dark:bg-purple-900/20'
                 : 'border-gray-200 hover:border-purple-300 dark:border-dark-600 dark:hover:border-purple-700'
             ]"
           >
@@ -455,14 +455,14 @@
                 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
                 accountCategory === 'apikey'
                   ? 'bg-purple-500 text-white'
-                  : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
+                  : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
               ]"
             >
               <Icon name="key" size="sm" />
             </div>
             <div>
               <span class="block text-sm font-medium text-gray-900 dark:text-white">API Key</span>
-              <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.types.responsesApi') }}</span>
+              <span class="text-xs surface-muted">{{ t('admin.accounts.types.responsesApi') }}</span>
             </div>
           </button>
 
@@ -488,14 +488,14 @@
                 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
                 accountCategory === 'oauth-based'
                   ? 'bg-zinc-900 text-white'
-                  : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
+                  : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
               ]"
             >
               <PlatformIcon platform="grok" size="sm" />
             </div>
             <div>
               <span class="block text-sm font-medium text-gray-900 dark:text-white">OAuth</span>
-              <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.types.grokOauth') }}</span>
+              <span class="text-xs surface-muted">{{ t('admin.accounts.types.grokOauth') }}</span>
             </div>
           </button>
 
@@ -506,7 +506,7 @@
             :class="[
               'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
               accountCategory === 'apikey'
-                ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
+                ? 'border-purple-500 bg-purple-50/[0.15] dark:bg-purple-900/20'
                 : 'border-gray-200 hover:border-purple-300 dark:border-dark-600 dark:hover:border-purple-700'
             ]"
           >
@@ -515,14 +515,14 @@
                 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
                 accountCategory === 'apikey'
                   ? 'bg-purple-500 text-white'
-                  : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
+                  : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
               ]"
             >
               <Icon name="key" size="sm" />
             </div>
             <div>
               <span class="block text-sm font-medium text-gray-900 dark:text-white">API Key</span>
-              <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.types.responsesApi') }}</span>
+              <span class="text-xs surface-muted">{{ t('admin.accounts.types.responsesApi') }}</span>
             </div>
           </button>
         </div>
@@ -545,14 +545,14 @@
             <div
               :class="[
                 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
-                openCodeAccountMode === 'zen' ? cnAccentIconClass : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
+                openCodeAccountMode === 'zen' ? cnAccentIconClass : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
               ]"
             >
               <Icon name="creditCard" size="sm" />
             </div>
             <div>
               <span class="block text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.accounts.opencodeGo.accountMode.zen') }}</span>
-              <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.opencodeGo.accountMode.zenDesc') }}</span>
+              <span class="text-xs surface-muted">{{ t('admin.accounts.opencodeGo.accountMode.zenDesc') }}</span>
             </div>
           </button>
           <button
@@ -568,14 +568,14 @@
             <div
               :class="[
                 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
-                openCodeAccountMode === 'go' ? cnAccentIconClass : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
+                openCodeAccountMode === 'go' ? cnAccentIconClass : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
               ]"
             >
               <Icon name="bolt" size="sm" />
             </div>
             <div>
               <span class="block text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.accounts.opencodeGo.accountMode.go') }}</span>
-              <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.opencodeGo.accountMode.goDesc') }}</span>
+              <span class="text-xs surface-muted">{{ t('admin.accounts.opencodeGo.accountMode.goDesc') }}</span>
             </div>
           </button>
         </div>
@@ -600,7 +600,7 @@
             <div
               :class="[
                 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
-                accountMode === mode ? cnAccentIconClass : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
+                accountMode === mode ? cnAccentIconClass : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
               ]"
             >
               <Icon name="creditCard" size="sm" />
@@ -630,14 +630,14 @@
                 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
                 accountMode === 'payg'
                   ? cnAccentIconClass
-                  : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
+                  : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
               ]"
             >
               <Icon name="creditCard" size="sm" />
             </div>
             <div>
               <span class="block text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.accounts.cnProviders.accountMode.payg') }}</span>
-              <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.cnProviders.accountMode.paygDesc') }}</span>
+              <span class="text-xs surface-muted">{{ t('admin.accounts.cnProviders.accountMode.paygDesc') }}</span>
             </div>
           </button>
           <!-- Coding Plan (kimi / zhipu only — DeepSeek has no coding plan) -->
@@ -657,14 +657,14 @@
                 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
                 accountMode === 'coding'
                   ? cnAccentIconClass
-                  : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
+                  : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
               ]"
             >
               <Icon name="bolt" size="sm" />
             </div>
             <div>
               <span class="block text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.accounts.cnProviders.accountMode.coding') }}</span>
-              <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.cnProviders.accountMode.codingDesc') }}</span>
+              <span class="text-xs surface-muted">{{ t('admin.accounts.cnProviders.accountMode.codingDesc') }}</span>
             </div>
           </button>
         </div>
@@ -691,14 +691,14 @@
                 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
                 apiProtocol === opt.value
                   ? cnAccentIconClass
-                  : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
+                  : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
               ]"
             >
               <Icon :name="opt.value === 'adaptive' ? 'swap' : opt.value === 'anthropic' ? 'sparkles' : opt.value === 'responses' ? 'terminal' : 'chat'" size="sm" />
             </div>
             <div>
               <span class="block text-sm font-medium text-gray-900 dark:text-white">{{ t(`admin.accounts.cnProviders.apiProtocol.${opt.labelKey}`) }}</span>
-              <span class="text-xs text-gray-500 dark:text-gray-400">{{ t(`admin.accounts.cnProviders.apiProtocol.${opt.labelKey}Desc`) }}</span>
+              <span class="text-xs surface-muted">{{ t(`admin.accounts.cnProviders.apiProtocol.${opt.labelKey}Desc`) }}</span>
             </div>
           </button>
         </div>
@@ -756,7 +756,7 @@
           <button
             type="button"
             @click="showGeminiHelpDialog = true"
-            class="flex items-center gap-1 rounded px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20"
+            class="flex items-center gap-1 rounded px-2 py-1 text-xs text-blue-600 hover:bg-blue-50/25 dark:text-blue-400 dark:hover:bg-blue-900/20 surface-control"
           >
             <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />
@@ -771,7 +771,7 @@
             :class="[
               'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
               accountCategory === 'oauth-based'
-                ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                ? 'border-blue-500 bg-blue-50/[0.15] dark:bg-blue-900/20'
                 : 'border-gray-200 hover:border-blue-300 dark:border-dark-600 dark:hover:border-blue-700'
             ]"
           >
@@ -780,7 +780,7 @@
                 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
                 accountCategory === 'oauth-based'
                   ? 'bg-blue-500 text-white'
-                  : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
+                  : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
               ]"
             >
               <Icon name="key" size="sm" />
@@ -789,7 +789,7 @@
               <span class="block text-sm font-medium text-gray-900 dark:text-white">
                 {{ t('admin.accounts.gemini.accountType.oauthTitle') }}
               </span>
-              <span class="text-xs text-gray-500 dark:text-gray-400">
+              <span class="text-xs surface-muted">
                 {{ t('admin.accounts.gemini.accountType.oauthDesc') }}
               </span>
             </div>
@@ -801,7 +801,7 @@
             :class="[
               'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
               accountCategory === 'apikey'
-                ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
+                ? 'border-purple-500 bg-purple-50/[0.15] dark:bg-purple-900/20'
                 : 'border-gray-200 hover:border-purple-300 dark:border-dark-600 dark:hover:border-purple-700'
             ]"
           >
@@ -810,7 +810,7 @@
                 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
                 accountCategory === 'apikey'
                   ? 'bg-purple-500 text-white'
-                  : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
+                  : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
               ]"
             >
               <svg
@@ -831,7 +831,7 @@
               <span class="block text-sm font-medium text-gray-900 dark:text-white">
                 {{ t('admin.accounts.gemini.accountType.apiKeyTitle') }}
               </span>
-              <span class="text-xs text-gray-500 dark:text-gray-400">
+              <span class="text-xs surface-muted">
                 {{ t('admin.accounts.gemini.accountType.apiKeyDesc') }}
               </span>
             </div>
@@ -843,7 +843,7 @@
             :class="[
               'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
               accountCategory === 'service_account'
-                ? 'border-sky-500 bg-sky-50 dark:bg-sky-900/20'
+                ? 'border-sky-500 bg-sky-50/[0.15] dark:bg-sky-900/20'
                 : 'border-gray-200 hover:border-sky-300 dark:border-dark-600 dark:hover:border-sky-700'
             ]"
           >
@@ -852,7 +852,7 @@
                 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
                 accountCategory === 'service_account'
                   ? 'bg-sky-500 text-white'
-                  : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
+                  : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
               ]"
             >
               <Icon name="cloud" size="sm" />
@@ -861,7 +861,7 @@
               <span class="block text-sm font-medium text-gray-900 dark:text-white">
                 {{ t('admin.accounts.vertexLabel') }}
               </span>
-              <span class="text-xs text-gray-500 dark:text-gray-400">
+              <span class="text-xs surface-muted">
                 {{ t('admin.accounts.vertexGeminiDesc') }}
               </span>
             </div>
@@ -871,7 +871,7 @@
         <div
           v-if="accountCategory === 'apikey' && isOfficialGeminiBaseUrl(apiKeyBaseUrl)"
           data-testid="gemini-apikey-note"
-          class="mt-3 rounded-lg border border-purple-200 bg-purple-50 px-3 py-2 text-xs text-purple-800 dark:border-purple-800/40 dark:bg-purple-900/20 dark:text-purple-200"
+          class="mt-3 rounded-lg border border-purple-200 bg-purple-50/[0.15] px-3 py-2 text-xs text-purple-800 dark:border-purple-800/40 dark:bg-purple-900/20 dark:text-purple-200"
         >
           <p>{{ t('admin.accounts.gemini.accountType.apiKeyNote') }}</p>
           <div class="mt-2 flex flex-wrap gap-2">
@@ -888,7 +888,7 @@
 
         <div
           v-if="accountCategory === 'service_account'"
-          class="mt-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800 dark:border-sky-800/40 dark:bg-sky-900/20 dark:text-sky-200"
+          class="mt-3 rounded-lg border border-sky-200 bg-sky-50/[0.15] px-3 py-2 text-xs text-sky-800 dark:border-sky-800/40 dark:bg-sky-900/20 dark:text-sky-200"
         >
           <p>{{ t('admin.accounts.vertexGeminiHint') }}</p>
         </div>
@@ -904,7 +904,7 @@
               :class="[
                 'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
                 geminiOAuthType === 'google_one'
-                  ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
+                  ? 'border-purple-500 bg-purple-50/[0.15] dark:bg-purple-900/20'
                   : 'border-gray-200 hover:border-purple-300 dark:border-dark-600 dark:hover:border-purple-700'
               ]"
             >
@@ -913,7 +913,7 @@
                   'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
                   geminiOAuthType === 'google_one'
                     ? 'bg-purple-500 text-white'
-                    : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
+                    : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
                 ]"
               >
                 <Icon name="user" size="sm" />
@@ -922,17 +922,17 @@
                 <span class="block text-sm font-medium text-gray-900 dark:text-white">
                   Google One
                 </span>
-                <span class="text-xs text-gray-500 dark:text-gray-400">
+                <span class="text-xs surface-muted">
                   {{ t('admin.accounts.gemini.oauthType.googleOneDesc') }}
                 </span>
                 <div class="mt-2 flex flex-wrap gap-1">
                   <span
-                    class="rounded bg-purple-100 px-2 py-0.5 text-[10px] font-semibold text-purple-700 dark:bg-purple-900/40 dark:text-purple-300"
+                    class="rounded bg-purple-100/[0.15] px-2 py-0.5 text-[10px] font-semibold text-purple-700 dark:bg-purple-900/40 dark:text-purple-300"
                   >
                     {{ t('admin.accounts.gemini.oauthType.badges.individuals') }}
                   </span>
                   <span
-                    class="rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                    class="rounded bg-emerald-100/[0.15] px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
                   >
                     {{ t('admin.accounts.gemini.oauthType.badges.noGcp') }}
                   </span>
@@ -947,7 +947,7 @@
               :class="[
                 'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
                 geminiOAuthType === 'code_assist'
-                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                  ? 'border-blue-500 bg-blue-50/[0.15] dark:bg-blue-900/20'
                   : 'border-gray-200 hover:border-blue-300 dark:border-dark-600 dark:hover:border-blue-700'
               ]"
             >
@@ -956,7 +956,7 @@
                   'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
                   geminiOAuthType === 'code_assist'
                     ? 'bg-blue-500 text-white'
-                    : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
+                    : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
                 ]"
               >
                 <Icon name="cloud" size="sm" />
@@ -965,10 +965,10 @@
                 <span class="block text-sm font-medium text-gray-900 dark:text-white">
                   GCP Code Assist
                 </span>
-                <span class="text-xs text-gray-500 dark:text-gray-400">
+                <span class="text-xs surface-muted">
                   {{ t('admin.accounts.gemini.oauthType.codeAssistDesc') }}
                 </span>
-                <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                <div class="mt-1 text-xs surface-muted">
                   {{ t('admin.accounts.gemini.oauthType.codeAssistRequirement') }}
                   <a
                     :href="geminiHelpLinks.gcpProject"
@@ -981,12 +981,12 @@
                 </div>
                 <div class="mt-2 flex flex-wrap gap-1">
                   <span
-                    class="rounded bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
+                    class="rounded bg-blue-100/[0.15] px-2 py-0.5 text-[10px] font-semibold text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
                   >
                     {{ t('admin.accounts.gemini.oauthType.badges.enterprise') }}
                   </span>
                   <span
-                    class="rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                    class="rounded bg-emerald-100/[0.15] px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
                   >
                     {{ t('admin.accounts.gemini.oauthType.badges.highConcurrency') }}
                   </span>
@@ -1000,7 +1000,7 @@
             <button
               type="button"
               @click="showAdvancedOAuth = !showAdvancedOAuth"
-              class="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
+              class="flex items-center gap-2 text-sm hover:text-gray-900 dark:hover:text-gray-200 surface-control surface-muted"
             >
               <svg
                 :class="['h-4 w-4 transition-transform', showAdvancedOAuth ? 'rotate-90' : '']"
@@ -1031,7 +1031,7 @@
                 'flex w-full items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
                 !geminiAIStudioOAuthEnabled ? 'cursor-not-allowed opacity-60' : '',
                 geminiOAuthType === 'ai_studio'
-                  ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20'
+                  ? 'border-amber-500 bg-amber-50/[0.15] dark:bg-amber-900/20'
                   : 'border-gray-200 hover:border-amber-300 dark:border-dark-600 dark:hover:border-amber-700'
               ]"
             >
@@ -1040,7 +1040,7 @@
                   'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
                   geminiOAuthType === 'ai_studio'
                     ? 'bg-amber-500 text-white'
-                    : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
+                    : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
                 ]"
               >
                 <svg
@@ -1061,20 +1061,20 @@
                 <span class="block text-sm font-medium text-gray-900 dark:text-white">
                   {{ t('admin.accounts.gemini.oauthType.customTitle') }}
                 </span>
-                <span class="text-xs text-gray-500 dark:text-gray-400">
+                <span class="text-xs surface-muted">
                   {{ t('admin.accounts.gemini.oauthType.customDesc') }}
                 </span>
-                <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                <div class="mt-1 text-xs surface-muted">
                   {{ t('admin.accounts.gemini.oauthType.customRequirement') }}
                 </div>
                 <div class="mt-2 flex flex-wrap gap-1">
                   <span
-                    class="rounded bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+                    class="rounded bg-amber-100/[0.15] px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
                   >
                     {{ t('admin.accounts.gemini.oauthType.badges.orgManaged') }}
                   </span>
                   <span
-                    class="rounded bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+                    class="rounded bg-amber-100/[0.15] px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
                   >
                     {{ t('admin.accounts.gemini.oauthType.badges.adminRequired') }}
                   </span>
@@ -1082,7 +1082,7 @@
               </div>
               <span
                 v-if="!geminiAIStudioOAuthEnabled"
-                class="ml-auto shrink-0 rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
+                class="ml-auto shrink-0 rounded bg-amber-100/[0.15] px-2 py-0.5 text-xs text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
               >
                 {{ t('admin.accounts.oauth.gemini.aiStudioNotConfiguredShort') }}
               </span>
@@ -1090,7 +1090,7 @@
 
             <div
               v-if="!geminiAIStudioOAuthEnabled"
-              class="pointer-events-none absolute right-0 top-full z-50 mt-2 w-80 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-200"
+              class="pointer-events-none absolute right-0 top-full z-50 mt-2 w-80 rounded-[var(--surface-radius-panel)] border border-amber-200 bg-amber-50/[0.15] px-3 py-2 text-xs text-amber-800 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-200"
             >
               {{ t('admin.accounts.oauth.gemini.aiStudioNotConfiguredTip') }}
             </div>
@@ -1101,33 +1101,26 @@
         <div v-if="accountCategory === 'oauth-based'" class="mt-4" data-testid="gemini-oauth-tier">
           <label class="input-label">{{ t('admin.accounts.gemini.tier.label') }}</label>
           <div class="mt-2">
-            <select
+            <Select
               v-if="geminiOAuthType === 'google_one'"
               v-model="geminiTierGoogleOne"
-              class="input"
-            >
-              <option value="google_one_free">{{ t('admin.accounts.gemini.tier.googleOne.free') }}</option>
-              <option value="google_ai_pro">{{ t('admin.accounts.gemini.tier.googleOne.pro') }}</option>
-              <option value="google_ai_ultra">{{ t('admin.accounts.gemini.tier.googleOne.ultra') }}</option>
-            </select>
+              :searchable="false"
+              :options="[{ value: 'google_one_free', label: t('admin.accounts.gemini.tier.googleOne.free') }, { value: 'google_ai_pro', label: t('admin.accounts.gemini.tier.googleOne.pro') }, { value: 'google_ai_ultra', label: t('admin.accounts.gemini.tier.googleOne.ultra') }]"
+            />
 
-            <select
+            <Select
               v-else-if="geminiOAuthType === 'code_assist'"
               v-model="geminiTierGcp"
-              class="input"
-            >
-              <option value="gcp_standard">{{ t('admin.accounts.gemini.tier.gcp.standard') }}</option>
-              <option value="gcp_enterprise">{{ t('admin.accounts.gemini.tier.gcp.enterprise') }}</option>
-            </select>
+              :searchable="false"
+              :options="[{ value: 'gcp_standard', label: t('admin.accounts.gemini.tier.gcp.standard') }, { value: 'gcp_enterprise', label: t('admin.accounts.gemini.tier.gcp.enterprise') }]"
+            />
 
-            <select
+            <Select
               v-else
               v-model="geminiTierAIStudio"
-              class="input"
-            >
-              <option value="aistudio_free">{{ t('admin.accounts.gemini.tier.aiStudio.free') }}</option>
-              <option value="aistudio_paid">{{ t('admin.accounts.gemini.tier.aiStudio.paid') }}</option>
-            </select>
+              :searchable="false"
+              :options="[{ value: 'aistudio_free', label: t('admin.accounts.gemini.tier.aiStudio.free') }, { value: 'aistudio_paid', label: t('admin.accounts.gemini.tier.aiStudio.paid') }]"
+            />
           </div>
           <p class="input-hint">{{ t('admin.accounts.gemini.tier.hint') }}</p>
         </div>
@@ -1143,7 +1136,7 @@
             :class="[
               'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
               antigravityAccountType === 'oauth'
-                ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
+                ? 'border-purple-500 bg-purple-50/[0.15] dark:bg-purple-900/20'
                 : 'border-gray-200 hover:border-purple-300 dark:border-dark-600 dark:hover:border-purple-700'
             ]"
           >
@@ -1152,14 +1145,14 @@
                 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
                 antigravityAccountType === 'oauth'
                   ? 'bg-purple-500 text-white'
-                  : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
+                  : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
               ]"
             >
               <Icon name="key" size="sm" />
             </div>
             <div>
               <span class="block text-sm font-medium text-gray-900 dark:text-white">OAuth</span>
-              <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.types.antigravityOauth') }}</span>
+              <span class="text-xs surface-muted">{{ t('admin.accounts.types.antigravityOauth') }}</span>
             </div>
           </button>
 
@@ -1169,7 +1162,7 @@
             :class="[
               'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
               antigravityAccountType === 'upstream'
-                ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
+                ? 'border-purple-500 bg-purple-50/[0.15] dark:bg-purple-900/20'
                 : 'border-gray-200 hover:border-purple-300 dark:border-dark-600 dark:hover:border-purple-700'
             ]"
           >
@@ -1178,14 +1171,14 @@
                 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
                 antigravityAccountType === 'upstream'
                   ? 'bg-purple-500 text-white'
-                  : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
+                  : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
               ]"
             >
               <Icon name="cloud" size="sm" />
             </div>
             <div>
               <span class="block text-sm font-medium text-gray-900 dark:text-white">API Key</span>
-              <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.types.antigravityApikey') }}</span>
+              <span class="text-xs surface-muted">{{ t('admin.accounts.types.antigravityApikey') }}</span>
             </div>
           </button>
         </div>
@@ -1241,7 +1234,7 @@
                 value="service_account"
                 class="mr-2 text-primary-600 focus:ring-primary-500"
               />
-              <span class="text-sm text-gray-700 dark:text-gray-300">{{ t('admin.accounts.vertexAuthModeServiceAccount') }}</span>
+              <span class="text-sm surface-muted">{{ t('admin.accounts.vertexAuthModeServiceAccount') }}</span>
             </label>
             <label class="flex cursor-pointer items-center">
               <input
@@ -1251,7 +1244,7 @@
                 data-testid="vertex-auth-mode-apikey"
                 class="mr-2 text-primary-600 focus:ring-primary-500"
               />
-              <span class="text-sm text-gray-700 dark:text-gray-300">{{ t('admin.accounts.vertexAuthModeApiKey') }}</span>
+              <span class="text-sm surface-muted">{{ t('admin.accounts.vertexAuthModeApiKey') }}</span>
             </label>
           </div>
         </div>
@@ -1282,25 +1275,13 @@
             </div>
             <div v-if="vertexProjectId.trim()">
               <label class="input-label">Location</label>
-              <select
+              <Select
                 v-model="vertexLocation"
-                required
-                class="input font-mono"
-              >
-                <optgroup
-                  v-for="group in VERTEX_LOCATION_OPTIONS"
-                  :key="group.label"
-                  :label="group.label"
-                >
-                  <option
-                    v-for="option in group.options"
-                    :key="option.value"
-                    :value="option.value"
-                  >
-                    {{ option.label }}
-                  </option>
-                </optgroup>
-              </select>
+                aria-required="true"
+                trigger-class="font-mono"
+                :searchable="false"
+                :options="VERTEX_LOCATION_OPTIONS.flatMap(group => [{ value: 'group:' + group.label, label: group.label, kind: 'group', disabled: true }, ...group.options.map(option => ({ value: option.value, label: option.label }))])"
+              />
               <p class="input-hint">{{ t('admin.accounts.vertexLocationHint') }}</p>
             </div>
           </div>
@@ -1320,8 +1301,8 @@
               :class="[
                 'rounded-lg border-2 border-dashed px-4 py-5 transition-colors',
                 vertexServiceAccountDragActive
-                  ? 'border-sky-500 bg-sky-50 dark:border-sky-500 dark:bg-sky-900/20'
-                  : 'border-gray-300 bg-gray-50 hover:border-sky-400 hover:bg-sky-50/60 dark:border-dark-500 dark:bg-dark-700/40 dark:hover:border-sky-600 dark:hover:bg-sky-900/10'
+                  ? 'border-sky-500 bg-sky-50/[0.15] dark:border-sky-500 dark:bg-sky-900/20'
+                  : 'border-gray-300 surface-inset hover:border-sky-400 hover:bg-sky-50/60 dark:border-dark-500 dark:surface-inset dark:hover:border-sky-600 dark:hover:bg-sky-900/10'
               ]"
               @dragenter.prevent="vertexServiceAccountDragActive = true"
               @dragover.prevent="vertexServiceAccountDragActive = true"
@@ -1334,7 +1315,7 @@
                     <Icon name="upload" size="sm" />
                     <span>{{ vertexClientEmail ? t('admin.accounts.vertexSaJsonLoaded') : t('admin.accounts.vertexSaJsonDrop') }}</span>
                   </div>
-                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  <p class="mt-1 text-xs surface-muted">
                     {{ vertexClientEmail ? t('admin.accounts.vertexSaJsonKeyHidden') : t('admin.accounts.vertexSaJsonDropHint') }}
                   </p>
                 </div>
@@ -1349,7 +1330,7 @@
               </div>
               <div
                 v-if="vertexClientEmail"
-                class="mt-3 rounded-md border border-sky-200 bg-white px-3 py-2 text-xs text-sky-900 dark:border-sky-800/50 dark:bg-dark-800 dark:text-sky-200"
+                class="mt-3 rounded-md border border-sky-200 surface-inset px-3 py-2 text-xs text-sky-900 dark:border-sky-800/50 dark:text-sky-200"
               >
                 <div class="truncate">Project ID: <span class="font-mono">{{ vertexProjectId }}</span></div>
                 <div class="truncate">Client Email: <span class="font-mono">{{ vertexClientEmail }}</span></div>
@@ -1371,25 +1352,13 @@
             </div>
             <div>
               <label class="input-label">Location</label>
-              <select
+              <Select
                 v-model="vertexLocation"
-                required
-                class="input font-mono"
-              >
-                <optgroup
-                  v-for="group in VERTEX_LOCATION_OPTIONS"
-                  :key="group.label"
-                  :label="group.label"
-                >
-                  <option
-                    v-for="option in group.options"
-                    :key="option.value"
-                    :value="option.value"
-                  >
-                    {{ option.label }}
-                  </option>
-                </optgroup>
-              </select>
+                aria-required="true"
+                trigger-class="font-mono"
+                :searchable="false"
+                :options="VERTEX_LOCATION_OPTIONS.flatMap(group => [{ value: 'group:' + group.label, label: group.label, kind: 'group', disabled: true }, ...group.options.map(option => ({ value: option.value, label: option.label }))])"
+              />
               <p class="input-hint">{{ t('admin.accounts.vertexLocationHint') }}</p>
             </div>
           </div>
@@ -1403,7 +1372,7 @@
 
         <!-- Mapping Mode Only (no toggle for Antigravity) -->
         <div>
-          <div class="mb-3 rounded-lg bg-purple-50 p-3 dark:bg-purple-900/20">
+          <div class="mb-3 rounded-lg bg-purple-50/[0.15] p-3 dark:bg-purple-900/20">
             <p class="text-xs text-purple-700 dark:text-purple-400">
               {{ t('admin.accounts.mapRequestModels') }}
             </p>
@@ -1440,7 +1409,7 @@
                 <button
                   type="button"
                   @click="removeAntigravityModelMapping(index)"
-                  class="rounded-lg p-2 text-red-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"
+                  class="rounded-lg p-2 text-red-500 transition-colors hover:bg-red-50/25 hover:text-red-600 dark:hover:bg-red-900/20 surface-control"
                 >
                   <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path
@@ -1465,7 +1434,7 @@
           <button
             type="button"
             @click="addAntigravityModelMapping"
-            class="mb-3 w-full rounded-lg border-2 border-dashed border-gray-300 px-4 py-2 text-gray-600 transition-colors hover:border-gray-400 hover:text-gray-700 dark:border-dark-500 dark:text-gray-400 dark:hover:border-dark-400 dark:hover:text-gray-300"
+            class="mb-3 w-full rounded-lg border-2 border-dashed border-gray-300 px-4 py-2 transition-colors hover:border-gray-400 hover:text-gray-700 dark:border-dark-500 dark:hover:border-dark-400 dark:hover:text-gray-300 surface-control surface-muted"
           >
             <svg class="mr-1 inline h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
@@ -1498,7 +1467,7 @@
               value="oauth"
               class="mr-2 text-primary-600 focus:ring-primary-500"
             />
-            <span class="text-sm text-gray-700 dark:text-gray-300">{{ t('admin.accounts.types.oauth') }}</span>
+            <span class="text-sm surface-muted">{{ t('admin.accounts.types.oauth') }}</span>
           </label>
           <label class="flex cursor-pointer items-center">
             <input
@@ -1507,7 +1476,7 @@
               value="setup-token"
               class="mr-2 text-primary-600 focus:ring-primary-500"
             />
-            <span class="text-sm text-gray-700 dark:text-gray-300">{{
+            <span class="text-sm surface-muted">{{
               t('admin.accounts.setupTokenLongLived')
             }}</span>
           </label>
@@ -1544,7 +1513,7 @@
           <label class="input-label">{{ t('admin.accounts.cnProviders.apiProtocol.endpoints') }}</label>
           <div class="mt-2 space-y-3">
             <div v-for="item in cnAdaptiveProtocolOptions" :key="item.value">
-              <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
+              <label class="mb-1 block text-xs font-medium surface-muted">
                 {{ t(`admin.accounts.cnProviders.apiProtocol.${item.labelKey}`) }}
               </label>
               <input
@@ -1580,10 +1549,12 @@
         <!-- Gemini API Key tier selection -->
         <div v-if="form.platform === 'gemini' && isOfficialGeminiBaseUrl(apiKeyBaseUrl)">
           <label class="input-label">{{ t('admin.accounts.gemini.tier.label') }}</label>
-          <select v-model="geminiTierAIStudio" class="input" data-testid="gemini-apikey-tier">
-            <option value="aistudio_free">{{ t('admin.accounts.gemini.tier.aiStudio.free') }}</option>
-            <option value="aistudio_paid">{{ t('admin.accounts.gemini.tier.aiStudio.paid') }}</option>
-          </select>
+          <Select
+            v-model="geminiTierAIStudio"
+            data-testid="gemini-apikey-tier"
+            :searchable="false"
+            :options="[{ value: 'aistudio_free', label: t('admin.accounts.gemini.tier.aiStudio.free') }, { value: 'aistudio_paid', label: t('admin.accounts.gemini.tier.aiStudio.paid') }]"
+          />
           <p class="input-hint">{{ t('admin.accounts.gemini.tier.aiStudioHint') }}</p>
         </div>
 
@@ -1593,7 +1564,7 @@
 
           <div
             v-if="isOpenAIModelRestrictionDisabled"
-            class="mb-3 rounded-lg bg-amber-50 p-3 dark:bg-amber-900/20"
+            class="mb-3 rounded-lg bg-amber-50/[0.15] p-3 dark:bg-amber-900/20"
           >
             <p class="text-xs text-amber-700 dark:text-amber-400">
               {{ t('admin.accounts.openai.modelRestrictionDisabledByPassthrough') }}
@@ -1609,8 +1580,8 @@
                 :class="[
                   'flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-all',
                   modelRestrictionMode === 'whitelist'
-                    ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-dark-600 dark:text-gray-400 dark:hover:bg-dark-500'
+                    ? 'bg-primary-100/[0.15] text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
+                    : 'surface-inset text-gray-600 hover:surface-hover dark:surface-inset dark:text-gray-400 dark:hover:bg-dark-500'
                 ]"
               >
                 <svg
@@ -1634,8 +1605,8 @@
                 :class="[
                   'flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-all',
                   modelRestrictionMode === 'mapping'
-                    ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-dark-600 dark:text-gray-400 dark:hover:bg-dark-500'
+                    ? 'bg-purple-100/[0.15] text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                    : 'surface-inset text-gray-600 hover:surface-hover dark:surface-inset dark:text-gray-400 dark:hover:bg-dark-500'
                 ]"
               >
                 <svg
@@ -1665,7 +1636,7 @@
                 :oauth-session-id="stepFunOAuthSession"
                 @upstream-synced="upstreamModelsPreviewed = true"
               />
-              <p class="text-xs text-gray-500 dark:text-gray-400">
+              <p class="text-xs surface-muted">
                 {{ t('admin.accounts.selectedModels', { count: allowedModels.length }) }}
                 <span v-if="allowedModels.length === 0">{{
                   t('admin.accounts.supportsAllModels')
@@ -1675,7 +1646,7 @@
 
             <!-- Mapping Mode -->
             <div v-else>
-              <div class="mb-3 rounded-lg bg-purple-50 p-3 dark:bg-purple-900/20">
+              <div class="mb-3 rounded-lg bg-purple-50/[0.15] p-3 dark:bg-purple-900/20">
                 <p class="text-xs text-purple-700 dark:text-purple-400">
                   <svg
                     class="mr-1 inline h-4 w-4"
@@ -1729,7 +1700,7 @@
                 <button
                   type="button"
                   @click="removeModelMapping(index)"
-                  class="rounded-lg p-2 text-red-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"
+                  class="rounded-lg p-2 text-red-500 transition-colors hover:bg-red-50/25 hover:text-red-600 dark:hover:bg-red-900/20 surface-control"
                 >
                   <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path
@@ -1746,7 +1717,7 @@
             <button
               type="button"
               @click="addModelMapping"
-              class="mb-3 w-full rounded-lg border-2 border-dashed border-gray-300 px-4 py-2 text-gray-600 transition-colors hover:border-gray-400 hover:text-gray-700 dark:border-dark-500 dark:text-gray-400 dark:hover:border-dark-400 dark:hover:text-gray-300"
+              class="mb-3 w-full rounded-lg border-2 border-dashed border-gray-300 px-4 py-2 transition-colors hover:border-gray-400 hover:text-gray-700 dark:border-dark-500 dark:hover:border-dark-400 dark:hover:text-gray-300 surface-control surface-muted"
             >
               <svg
                 class="mr-1 inline h-4 w-4"
@@ -1785,7 +1756,7 @@
           <div class="mb-3 flex items-center justify-between">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.poolMode') }}</label>
-              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              <p class="mt-1 text-xs surface-muted">
                 {{ t('admin.accounts.poolModeHint') }}
               </p>
             </div>
@@ -1793,7 +1764,7 @@
               v-model="poolModeEnabled"
             />
           </div>
-          <div v-if="poolModeEnabled" class="rounded-lg bg-blue-50 p-3 dark:bg-blue-900/20">
+          <div v-if="poolModeEnabled" class="rounded-lg bg-blue-50/[0.15] p-3 dark:bg-blue-900/20">
             <p class="text-xs text-blue-700 dark:text-blue-400">
               <Icon name="exclamationCircle" size="sm" class="mr-1 inline" :stroke-width="2" />
               {{ t('admin.accounts.poolModeInfo') }}
@@ -1809,7 +1780,7 @@
               step="1"
               class="input"
             />
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 text-xs surface-muted">
               {{
                 t('admin.accounts.poolModeRetryCountHint', {
                   default: DEFAULT_POOL_MODE_RETRY_COUNT,
@@ -1826,7 +1797,7 @@
               class="input"
               :placeholder="DEFAULT_POOL_MODE_RETRY_STATUS_CODES.join(', ')"
             />
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 text-xs surface-muted">
               {{ t('admin.accounts.poolModeRetryStatusCodesHint', { default: DEFAULT_POOL_MODE_RETRY_STATUS_CODES.join(', ') }) }}
             </p>
           </div>
@@ -1841,7 +1812,7 @@
           <div class="flex items-center justify-between gap-4">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.explicitCacheUpstream') }}</label>
-              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              <p class="mt-1 text-xs surface-muted">
                 {{ t('admin.accounts.explicitCacheUpstreamHint') }}
               </p>
             </div>
@@ -1851,7 +1822,7 @@
               :aria-label="t('admin.accounts.explicitCacheUpstream')"
             />
           </div>
-          <div v-if="explicitCacheUpstreamEnabled" class="mt-3 rounded-lg bg-blue-50 p-3 dark:bg-blue-900/20">
+          <div v-if="explicitCacheUpstreamEnabled" class="mt-3 rounded-lg bg-blue-50/[0.15] p-3 dark:bg-blue-900/20">
             <p class="text-xs text-blue-700 dark:text-blue-400">
               <Icon name="exclamationCircle" size="sm" class="mr-1 inline" :stroke-width="2" />
               {{ t('admin.accounts.explicitCacheUpstreamInfo') }}
@@ -1868,7 +1839,7 @@
               class="input"
               placeholder="86400"
             />
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 text-xs surface-muted">
               {{ t('admin.accounts.explicitCacheUpstreamMaxTTLHint') }}
             </p>
           </div>
@@ -1879,7 +1850,7 @@
           <div class="mb-3 flex items-center justify-between">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.customErrorCodes') }}</label>
-              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              <p class="mt-1 text-xs surface-muted">
                 {{ t('admin.accounts.customErrorCodesHint') }}
               </p>
             </div>
@@ -1889,7 +1860,7 @@
           </div>
 
           <div v-if="customErrorCodesEnabled" class="space-y-3">
-            <div class="rounded-lg bg-amber-50 p-3 dark:bg-amber-900/20">
+            <div class="rounded-lg bg-amber-50/[0.15] p-3 dark:bg-amber-900/20">
               <p class="text-xs text-amber-700 dark:text-amber-400">
                 <Icon name="exclamationTriangle" size="sm" class="mr-1 inline" :stroke-width="2" />
                 {{ t('admin.accounts.customErrorCodesWarning') }}
@@ -1906,8 +1877,8 @@
                 :class="[
                   'rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
                   selectedErrorCodes.includes(code.value)
-                    ? 'bg-red-100 text-red-700 ring-1 ring-red-500 dark:bg-red-900/30 dark:text-red-400'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-dark-600 dark:text-gray-400 dark:hover:bg-dark-500'
+                    ? 'bg-red-100/[0.15] text-red-700 ring-1 ring-red-500 dark:bg-red-900/30 dark:text-red-400'
+                    : 'surface-inset text-gray-600 hover:surface-hover dark:surface-inset dark:text-gray-400 dark:hover:bg-dark-500'
                 ]"
               >
                 {{ code.value }} {{ code.label }}
@@ -1942,18 +1913,18 @@
               <span
                 v-for="code in selectedErrorCodes.sort((a, b) => a - b)"
                 :key="code"
-                class="inline-flex items-center gap-1 rounded-full bg-red-100 px-2.5 py-0.5 text-sm font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                class="inline-flex items-center gap-1 rounded-full bg-red-100/[0.15] px-2.5 py-0.5 text-sm font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400"
               >
                 {{ code }}
                 <button
                   type="button"
                   @click="removeErrorCode(code)"
-                  class="hover:text-red-900 dark:hover:text-red-300"
+                  class="hover:text-red-900 dark:hover:text-red-300 surface-control"
                 >
                   <Icon name="x" size="sm" :stroke-width="2" />
                 </button>
               </span>
-              <span v-if="selectedErrorCodes.length === 0" class="text-xs text-gray-400">
+              <span v-if="selectedErrorCodes.length === 0" class="text-xs surface-muted">
                 {{ t('admin.accounts.noneSelectedUsesDefault') }}
               </span>
             </div>
@@ -1968,7 +1939,7 @@
           <div class="mb-3 flex items-center justify-between">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.headerOverride.title') }}</label>
-              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              <p class="mt-1 text-xs surface-muted">
                 {{ t('admin.accounts.headerOverride.hint') }}
               </p>
             </div>
@@ -1978,7 +1949,7 @@
           </div>
 
           <div v-if="headerOverrideEnabled" class="space-y-3">
-            <div class="rounded-lg bg-blue-50 p-3 dark:bg-blue-900/20">
+            <div class="rounded-lg bg-blue-50/[0.15] p-3 dark:bg-blue-900/20">
               <p class="text-xs text-blue-700 dark:text-blue-400">
                 <Icon name="exclamationCircle" size="sm" class="mr-1 inline" :stroke-width="2" />
                 {{ t('admin.accounts.headerOverride.info') }}
@@ -2007,7 +1978,7 @@
                 value="sigv4"
                 class="mr-2 text-primary-600 focus:ring-primary-500"
               />
-              <span class="text-sm text-gray-700 dark:text-gray-300">{{ t('admin.accounts.bedrockAuthModeSigv4') }}</span>
+              <span class="text-sm surface-muted">{{ t('admin.accounts.bedrockAuthModeSigv4') }}</span>
             </label>
             <label class="flex cursor-pointer items-center">
               <input
@@ -2016,7 +1987,7 @@
                 value="apikey"
                 class="mr-2 text-primary-600 focus:ring-primary-500"
               />
-              <span class="text-sm text-gray-700 dark:text-gray-300">{{ t('admin.accounts.bedrockAuthModeApikey') }}</span>
+              <span class="text-sm surface-muted">{{ t('admin.accounts.bedrockAuthModeApikey') }}</span>
             </label>
           </div>
         </div>
@@ -2067,41 +2038,11 @@
         <!-- Shared: Region -->
         <div>
           <label class="input-label">{{ t('admin.accounts.bedrockRegion') }}</label>
-          <select v-model="bedrockRegion" class="input">
-            <optgroup label="US">
-              <option value="us-east-1">us-east-1 (N. Virginia)</option>
-              <option value="us-east-2">us-east-2 (Ohio)</option>
-              <option value="us-west-1">us-west-1 (N. California)</option>
-              <option value="us-west-2">us-west-2 (Oregon)</option>
-              <option value="us-gov-east-1">us-gov-east-1 (GovCloud US-East)</option>
-              <option value="us-gov-west-1">us-gov-west-1 (GovCloud US-West)</option>
-            </optgroup>
-            <optgroup label="Europe">
-              <option value="eu-west-1">eu-west-1 (Ireland)</option>
-              <option value="eu-west-2">eu-west-2 (London)</option>
-              <option value="eu-west-3">eu-west-3 (Paris)</option>
-              <option value="eu-central-1">eu-central-1 (Frankfurt)</option>
-              <option value="eu-central-2">eu-central-2 (Zurich)</option>
-              <option value="eu-south-1">eu-south-1 (Milan)</option>
-              <option value="eu-south-2">eu-south-2 (Spain)</option>
-              <option value="eu-north-1">eu-north-1 (Stockholm)</option>
-            </optgroup>
-            <optgroup label="Asia Pacific">
-              <option value="ap-northeast-1">ap-northeast-1 (Tokyo)</option>
-              <option value="ap-northeast-2">ap-northeast-2 (Seoul)</option>
-              <option value="ap-northeast-3">ap-northeast-3 (Osaka)</option>
-              <option value="ap-south-1">ap-south-1 (Mumbai)</option>
-              <option value="ap-south-2">ap-south-2 (Hyderabad)</option>
-              <option value="ap-southeast-1">ap-southeast-1 (Singapore)</option>
-              <option value="ap-southeast-2">ap-southeast-2 (Sydney)</option>
-            </optgroup>
-            <optgroup label="Canada">
-              <option value="ca-central-1">ca-central-1 (Canada)</option>
-            </optgroup>
-            <optgroup label="South America">
-              <option value="sa-east-1">sa-east-1 (São Paulo)</option>
-            </optgroup>
-          </select>
+          <Select
+            v-model="bedrockRegion"
+            :searchable="false"
+            :options="bedrockRegionOptions"
+          />
           <p class="input-hint">{{ t('admin.accounts.bedrockRegionHint') }}</p>
         </div>
 
@@ -2113,7 +2054,7 @@
               type="checkbox"
               class="rounded border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-dark-500"
             />
-            <span class="text-sm text-gray-700 dark:text-gray-300">{{ t('admin.accounts.bedrockForceGlobal') }}</span>
+            <span class="text-sm surface-muted">{{ t('admin.accounts.bedrockForceGlobal') }}</span>
           </label>
           <p class="input-hint mt-1">{{ t('admin.accounts.bedrockForceGlobalHint') }}</p>
         </div>
@@ -2130,8 +2071,8 @@
               :class="[
                 'flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-all',
                 modelRestrictionMode === 'whitelist'
-                  ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-dark-600 dark:text-gray-400 dark:hover:bg-dark-500'
+                  ? 'bg-primary-100/[0.15] text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
+                  : 'surface-inset text-gray-600 hover:surface-hover dark:surface-inset dark:text-gray-400 dark:hover:bg-dark-500'
               ]"
             >
               {{ t('admin.accounts.modelWhitelist') }}
@@ -2142,8 +2083,8 @@
               :class="[
                 'flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-all',
                 modelRestrictionMode === 'mapping'
-                  ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-dark-600 dark:text-gray-400 dark:hover:bg-dark-500'
+                  ? 'bg-purple-100/[0.15] text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                  : 'surface-inset text-gray-600 hover:surface-hover dark:surface-inset dark:text-gray-400 dark:hover:bg-dark-500'
               ]"
             >
               {{ t('admin.accounts.modelMapping') }}
@@ -2159,7 +2100,7 @@
               :sync-credentials="syncPreviewCredentials"
               @upstream-synced="upstreamModelsPreviewed = true"
             />
-            <p class="text-xs text-gray-500 dark:text-gray-400">
+            <p class="text-xs surface-muted">
               {{ t('admin.accounts.selectedModels', { count: allowedModels.length }) }}
               <span v-if="allowedModels.length === 0">{{ t('admin.accounts.supportsAllModels') }}</span>
             </p>
@@ -2169,9 +2110,9 @@
           <div v-else class="space-y-3">
             <div v-for="(mapping, index) in modelMappings" :key="index" class="flex items-center gap-2">
               <input v-model="mapping.from" type="text" class="input flex-1" :placeholder="t('admin.accounts.fromModel')" />
-              <span class="text-gray-400">→</span>
+              <span class="surface-muted">→</span>
               <input v-model="mapping.to" type="text" class="input flex-1" :placeholder="t('admin.accounts.toModel')" />
-              <button type="button" @click="modelMappings.splice(index, 1)" class="text-red-500 hover:text-red-700">
+              <button type="button" @click="modelMappings.splice(index, 1)" class="text-red-500 hover:text-red-700 surface-control">
                 <Icon name="trash" size="sm" />
               </button>
             </div>
@@ -2198,7 +2139,7 @@
           <div class="mb-3 flex items-center justify-between">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.poolMode') }}</label>
-              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              <p class="mt-1 text-xs surface-muted">
                 {{ t('admin.accounts.poolModeHint') }}
               </p>
             </div>
@@ -2206,7 +2147,7 @@
               v-model="poolModeEnabled"
             />
           </div>
-          <div v-if="poolModeEnabled" class="rounded-lg bg-blue-50 p-3 dark:bg-blue-900/20">
+          <div v-if="poolModeEnabled" class="rounded-lg bg-blue-50/[0.15] p-3 dark:bg-blue-900/20">
             <p class="text-xs text-blue-700 dark:text-blue-400">
               <Icon name="exclamationCircle" size="sm" class="mr-1 inline" :stroke-width="2" />
               {{ t('admin.accounts.poolModeInfo') }}
@@ -2222,7 +2163,7 @@
               step="1"
               class="input"
             />
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 text-xs surface-muted">
               {{
                 t('admin.accounts.poolModeRetryCountHint', {
                   default: DEFAULT_POOL_MODE_RETRY_COUNT,
@@ -2239,7 +2180,7 @@
               class="input"
               :placeholder="DEFAULT_POOL_MODE_RETRY_STATUS_CODES.join(', ')"
             />
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 text-xs surface-muted">
               {{ t('admin.accounts.poolModeRetryStatusCodesHint', { default: DEFAULT_POOL_MODE_RETRY_STATUS_CODES.join(', ') }) }}
             </p>
           </div>
@@ -2253,7 +2194,7 @@
       >
         <div class="mb-3">
           <h3 class="input-label mb-0 text-base font-semibold">{{ t('admin.accounts.quotaControl.title') }}</h3>
-          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          <p class="mt-1 text-xs surface-muted">
             {{ t('admin.accounts.quotaControl.hint') }}
           </p>
         </div>
@@ -2305,7 +2246,7 @@
       >
         <div class="mb-3">
           <h3 class="input-label mb-0 text-base font-semibold">{{ t('admin.accounts.quotaControl.title') }}</h3>
-          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          <p class="mt-1 text-xs surface-muted">
             {{ t('admin.accounts.quotaLimitHint') }}
           </p>
         </div>
@@ -2358,7 +2299,7 @@
         <div class="mb-3 flex items-center justify-between">
           <div>
             <label class="input-label mb-0">{{ t('admin.accounts.grokCustomBaseUrl.title') }}</label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 text-xs surface-muted">
               {{ t('admin.accounts.grokCustomBaseUrl.hint') }}
             </p>
           </div>
@@ -2387,7 +2328,7 @@
         <div class="mb-3 flex items-center justify-between">
           <div>
             <label class="input-label mb-0">{{ t('admin.accounts.headerOverride.title') }}</label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 text-xs surface-muted">
               {{ t('admin.accounts.headerOverride.hint') }}
             </p>
           </div>
@@ -2397,7 +2338,7 @@
         </div>
 
         <div v-if="headerOverrideEnabled" class="space-y-3">
-          <div class="rounded-lg bg-blue-50 p-3 dark:bg-blue-900/20">
+          <div class="rounded-lg bg-blue-50/[0.15] p-3 dark:bg-blue-900/20">
             <p class="text-xs text-blue-700 dark:text-blue-400">
               <Icon name="exclamationCircle" size="sm" class="mr-1 inline" :stroke-width="2" />
               {{ t('admin.accounts.headerOverride.info') }}
@@ -2420,7 +2361,7 @@
 
         <div
           v-if="isOpenAIModelRestrictionDisabled"
-          class="mb-3 rounded-lg bg-amber-50 p-3 dark:bg-amber-900/20"
+          class="mb-3 rounded-lg bg-amber-50/[0.15] p-3 dark:bg-amber-900/20"
         >
           <p class="text-xs text-amber-700 dark:text-amber-400">
             {{ t('admin.accounts.openai.modelRestrictionDisabledByPassthrough') }}
@@ -2436,8 +2377,8 @@
               :class="[
                 'flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-all',
                 modelRestrictionMode === 'whitelist'
-                  ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-dark-600 dark:text-gray-400 dark:hover:bg-dark-500'
+                  ? 'bg-primary-100/[0.15] text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
+                  : 'surface-inset text-gray-600 hover:surface-hover dark:surface-inset dark:text-gray-400 dark:hover:bg-dark-500'
               ]"
             >
               {{ t('admin.accounts.modelWhitelist') }}
@@ -2448,8 +2389,8 @@
               :class="[
                 'flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-all',
                 modelRestrictionMode === 'mapping'
-                  ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-dark-600 dark:text-gray-400 dark:hover:bg-dark-500'
+                  ? 'bg-purple-100/[0.15] text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                  : 'surface-inset text-gray-600 hover:surface-hover dark:surface-inset dark:text-gray-400 dark:hover:bg-dark-500'
               ]"
             >
               {{ t('admin.accounts.modelMapping') }}
@@ -2465,7 +2406,7 @@
               :sync-credentials="syncPreviewCredentials"
               @upstream-synced="upstreamModelsPreviewed = true"
             />
-            <p class="text-xs text-gray-500 dark:text-gray-400">
+            <p class="text-xs surface-muted">
               {{ t('admin.accounts.selectedModels', { count: allowedModels.length }) }}
               <span v-if="allowedModels.length === 0">{{
                 t('admin.accounts.supportsAllModels')
@@ -2475,7 +2416,7 @@
 
           <!-- Mapping Mode -->
           <div v-else>
-            <div class="mb-3 rounded-lg bg-purple-50 p-3 dark:bg-purple-900/20">
+            <div class="mb-3 rounded-lg bg-purple-50/[0.15] p-3 dark:bg-purple-900/20">
               <p class="text-xs text-purple-700 dark:text-purple-400">
                 {{ t('admin.accounts.mapRequestModels') }}
               </p>
@@ -2515,7 +2456,7 @@
                 <button
                   type="button"
                   @click="removeModelMapping(index)"
-                  class="rounded-lg p-2 text-red-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"
+                  class="rounded-lg p-2 text-red-500 transition-colors hover:bg-red-50/25 hover:text-red-600 dark:hover:bg-red-900/20 surface-control"
                 >
                   <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path
@@ -2532,7 +2473,7 @@
             <button
               type="button"
               @click="addModelMapping"
-              class="mb-3 w-full rounded-lg border-2 border-dashed border-gray-300 px-4 py-2 text-gray-600 transition-colors hover:border-gray-400 hover:text-gray-700 dark:border-dark-500 dark:text-gray-400 dark:hover:border-dark-400 dark:hover:text-gray-300"
+              class="mb-3 w-full rounded-lg border-2 border-dashed border-gray-300 px-4 py-2 transition-colors hover:border-gray-400 hover:text-gray-700 dark:border-dark-500 dark:hover:border-dark-400 dark:hover:text-gray-300 surface-control surface-muted"
             >
               + {{ t('admin.accounts.addMapping') }}
             </button>
@@ -2558,7 +2499,7 @@
         <div class="mb-3 flex items-center justify-between">
           <div>
             <label class="input-label mb-0">{{ t('admin.accounts.tempUnschedulable.title') }}</label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 text-xs surface-muted">
               {{ t('admin.accounts.tempUnschedulable.hint') }}
             </p>
           </div>
@@ -2568,7 +2509,7 @@
         </div>
 
         <div v-if="tempUnschedEnabled" class="space-y-3">
-          <div class="rounded-lg bg-blue-50 p-3 dark:bg-blue-900/20">
+          <div class="rounded-lg bg-blue-50/[0.15] p-3 dark:bg-blue-900/20">
               <p class="text-xs text-blue-700 dark:text-blue-400">
                 <Icon name="exclamationTriangle" size="sm" class="mr-1 inline" :stroke-width="2" />
                 {{ t('admin.accounts.tempUnschedulable.notice') }}
@@ -2581,7 +2522,7 @@
               :key="preset.label"
               type="button"
               @click="addTempUnschedRule(preset.rule)"
-              class="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-200 dark:bg-dark-600 dark:text-gray-300 dark:hover:bg-dark-500"
+              class="rounded-lg px-3 py-1.5 text-xs font-medium transition-colors hover:surface-hover dark:hover:bg-dark-500 surface-control surface-muted"
             >
               + {{ preset.label }}
             </button>
@@ -2594,7 +2535,7 @@
               class="rounded-lg border border-gray-200 p-3 dark:border-dark-600"
             >
               <div class="mb-2 flex items-center justify-between">
-                <span class="text-xs font-medium text-gray-500 dark:text-gray-400">
+                <span class="text-xs font-medium surface-muted">
                   {{ t('admin.accounts.tempUnschedulable.ruleIndex', { index: index + 1 }) }}
                 </span>
                 <div class="flex items-center gap-2">
@@ -2602,7 +2543,7 @@
                     type="button"
                     :disabled="index === 0"
                     @click="moveTempUnschedRule(index, -1)"
-                    class="rounded p-1 text-gray-400 transition-colors hover:text-gray-600 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:text-gray-200"
+                    class="rounded p-1 transition-colors hover:text-gray-600 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:text-gray-200 surface-control surface-muted"
                   >
                     <Icon name="chevronUp" size="sm" :stroke-width="2" />
                   </button>
@@ -2610,7 +2551,7 @@
                     type="button"
                     :disabled="index === tempUnschedRules.length - 1"
                     @click="moveTempUnschedRule(index, 1)"
-                    class="rounded p-1 text-gray-400 transition-colors hover:text-gray-600 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:text-gray-200"
+                    class="rounded p-1 transition-colors hover:text-gray-600 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:text-gray-200 surface-control surface-muted"
                   >
                     <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
@@ -2619,7 +2560,7 @@
                   <button
                     type="button"
                     @click="removeTempUnschedRule(index)"
-                    class="rounded p-1 text-red-500 transition-colors hover:text-red-600"
+                    class="rounded p-1 text-red-500 transition-colors hover:text-red-600 surface-control"
                   >
                     <Icon name="x" size="sm" :stroke-width="2" />
                   </button>
@@ -2666,7 +2607,7 @@
                       :class="[
                         'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
                         rule.scope === option.value
-                          ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                          ? 'border-primary-500 bg-primary-50/[0.15] dark:bg-primary-900/20'
                           : 'border-gray-200 hover:border-gray-400 dark:border-dark-600 dark:hover:border-gray-600'
                       ]"
                     >
@@ -2676,11 +2617,11 @@
                           rule.scope === option.value ? 'border-primary-500' : 'border-gray-300 dark:border-dark-500'
                         ]"
                       >
-                        <span v-if="rule.scope === option.value" class="h-1.5 w-1.5 rounded-full bg-primary-500" />
+                        <span v-if="rule.scope === option.value" class="console-data-mark h-1.5 w-1.5 rounded-full bg-primary-500" />
                       </span>
                       <span>
                         <span class="block text-sm font-medium text-gray-900 dark:text-white">{{ option.label }}</span>
-                        <span class="text-xs text-gray-500 dark:text-gray-400">{{ option.description }}</span>
+                        <span class="text-xs surface-muted">{{ option.description }}</span>
                       </span>
                     </button>
                   </div>
@@ -2712,7 +2653,7 @@
           <button
             type="button"
             @click="addTempUnschedRule()"
-            class="w-full rounded-lg border-2 border-dashed border-gray-300 px-4 py-2 text-sm text-gray-600 transition-colors hover:border-gray-400 hover:text-gray-700 dark:border-dark-500 dark:text-gray-400 dark:hover:border-dark-400 dark:hover:text-gray-300"
+            class="w-full rounded-lg border-2 border-dashed border-gray-300 px-4 py-2 text-sm transition-colors hover:border-gray-400 hover:text-gray-700 dark:border-dark-500 dark:hover:border-dark-400 dark:hover:text-gray-300 surface-control surface-muted"
           >
             <svg
               class="mr-1 inline h-4 w-4"
@@ -2737,7 +2678,7 @@
             <label class="input-label mb-0">{{
               t('admin.accounts.interceptWarmupRequests')
             }}</label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 text-xs surface-muted">
               {{ t('admin.accounts.interceptWarmupRequestsDesc') }}
             </p>
           </div>
@@ -2754,7 +2695,7 @@
       >
         <div class="mb-3">
           <h3 class="input-label mb-0 text-base font-semibold">{{ t('admin.accounts.quotaControl.title') }}</h3>
-          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          <p class="mt-1 text-xs surface-muted">
             {{ t('admin.accounts.quotaControl.hint') }}
           </p>
         </div>
@@ -2764,7 +2705,7 @@
           <div class="mb-3 flex items-center justify-between">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.quotaControl.windowCost.label') }}</label>
-              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              <p class="mt-1 text-xs surface-muted">
                 {{ t('admin.accounts.quotaControl.windowCost.hint') }}
               </p>
             </div>
@@ -2777,7 +2718,7 @@
             <div>
               <label class="input-label">{{ t('admin.accounts.quotaControl.windowCost.limit') }}</label>
               <div class="relative">
-                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400">$</span>
+                <span class="absolute left-3 top-1/2 -translate-y-1/2 surface-muted">$</span>
                 <input
                   v-model.number="windowCostLimit"
                   type="number"
@@ -2792,7 +2733,7 @@
             <div>
               <label class="input-label">{{ t('admin.accounts.quotaControl.windowCost.stickyReserve') }}</label>
               <div class="relative">
-                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400">$</span>
+                <span class="absolute left-3 top-1/2 -translate-y-1/2 surface-muted">$</span>
                 <input
                   v-model.number="windowCostStickyReserve"
                   type="number"
@@ -2812,7 +2753,7 @@
           <div class="mb-3 flex items-center justify-between">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.quotaControl.sessionLimit.label') }}</label>
-              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              <p class="mt-1 text-xs surface-muted">
                 {{ t('admin.accounts.quotaControl.sessionLimit.hint') }}
               </p>
             </div>
@@ -2845,7 +2786,7 @@
                   class="input pr-12"
                   :placeholder="t('admin.accounts.quotaControl.sessionLimit.idleTimeoutPlaceholder')"
                 />
-                <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400">{{ t('common.minutes') }}</span>
+                <span class="absolute right-3 top-1/2 -translate-y-1/2 surface-muted">{{ t('common.minutes') }}</span>
               </div>
               <p class="input-hint">{{ t('admin.accounts.quotaControl.sessionLimit.idleTimeoutHint') }}</p>
             </div>
@@ -2857,7 +2798,7 @@
           <div class="mb-3 flex items-center justify-between">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.quotaControl.rpmLimit.label') }}</label>
-              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              <p class="mt-1 text-xs surface-muted">
                 {{ t('admin.accounts.quotaControl.rpmLimit.hint') }}
               </p>
             </div>
@@ -2890,8 +2831,8 @@
                   :class="[
                     'flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-all',
                     rpmStrategy === 'tiered'
-                      ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-dark-600 dark:text-gray-400 dark:hover:bg-dark-500'
+                      ? 'bg-primary-100/[0.15] text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
+                      : 'surface-inset text-gray-600 hover:surface-hover dark:surface-inset dark:text-gray-400 dark:hover:bg-dark-500'
                   ]"
                 >
                   <div class="text-center">
@@ -2905,8 +2846,8 @@
                   :class="[
                     'flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-all',
                     rpmStrategy === 'sticky_exempt'
-                      ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-dark-600 dark:text-gray-400 dark:hover:bg-dark-500'
+                      ? 'bg-primary-100/[0.15] text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
+                      : 'surface-inset text-gray-600 hover:surface-hover dark:surface-inset dark:text-gray-400 dark:hover:bg-dark-500'
                   ]"
                 >
                   <div class="text-center">
@@ -2935,7 +2876,7 @@
           <!-- 用户消息限速模式（独立于 RPM 开关，始终可见） -->
           <div class="mt-4">
             <label class="input-label">{{ t('admin.accounts.quotaControl.rpmLimit.userMsgQueue') }}</label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400 mb-2">
+            <p class="mt-1 text-xs mb-2 surface-muted">
               {{ t('admin.accounts.quotaControl.rpmLimit.userMsgQueueHint') }}
             </p>
             <div class="flex space-x-2">
@@ -2945,7 +2886,7 @@
                   'px-3 py-1.5 text-sm rounded-md border transition-colors',
                   userMsgQueueMode === opt.value
                     ? 'bg-primary-600 text-white border-primary-600'
-                    : 'bg-white dark:bg-dark-700 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-dark-500 hover:bg-gray-50 dark:hover:bg-dark-600'
+                    : 'surface-inset dark:surface-inset surface-muted border-gray-300 dark:border-dark-500 hover:surface-hover dark:hover:surface-hover'
                 ]">
                 {{ opt.label }}
               </button>
@@ -2958,7 +2899,7 @@
           <div class="flex items-center justify-between">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.quotaControl.tlsFingerprint.label') }}</label>
-              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              <p class="mt-1 text-xs surface-muted">
                 {{ t('admin.accounts.quotaControl.tlsFingerprint.hint') }}
               </p>
             </div>
@@ -2968,11 +2909,11 @@
           </div>
           <!-- Profile selector -->
           <div v-if="tlsFingerprintEnabled" class="mt-3">
-            <select v-model="tlsFingerprintProfileId" class="input">
-              <option :value="null">{{ t('admin.accounts.quotaControl.tlsFingerprint.defaultProfile') }}</option>
-              <option v-if="tlsFingerprintProfiles.length > 0" :value="-1">{{ t('admin.accounts.quotaControl.tlsFingerprint.randomProfile') }}</option>
-              <option v-for="p in tlsFingerprintProfiles" :key="p.id" :value="p.id">{{ p.name }}</option>
-            </select>
+            <Select
+              v-model="tlsFingerprintProfileId"
+              :searchable="false"
+              :options="[{ value: null, label: t('admin.accounts.quotaControl.tlsFingerprint.defaultProfile') }, ...(tlsFingerprintProfiles.length > 0 ? [{ value: -1, label: t('admin.accounts.quotaControl.tlsFingerprint.randomProfile') }] : []), ...tlsFingerprintProfiles.map(p => ({ value: p.id, label: p.name }))]"
+            />
           </div>
         </div>
 
@@ -2981,7 +2922,7 @@
           <div class="flex items-center justify-between">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.quotaControl.sessionIdMasking.label') }}</label>
-              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              <p class="mt-1 text-xs surface-muted">
                 {{ t('admin.accounts.quotaControl.sessionIdMasking.hint') }}
               </p>
             </div>
@@ -2996,7 +2937,7 @@
           <div class="flex items-center justify-between">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.quotaControl.cacheTTLOverride.label') }}</label>
-              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              <p class="mt-1 text-xs surface-muted">
                 {{ t('admin.accounts.quotaControl.cacheTTLOverride.hint') }}
               </p>
             </div>
@@ -3006,14 +2947,13 @@
           </div>
           <div v-if="cacheTTLOverrideEnabled" class="mt-3">
             <label class="input-label text-xs">{{ t('admin.accounts.quotaControl.cacheTTLOverride.target') }}</label>
-            <select
+            <Select
               v-model="cacheTTLOverrideTarget"
-              class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-dark-500 dark:bg-dark-700 dark:text-white"
-            >
-              <option value="5m">5m</option>
-              <option value="1h">1h</option>
-            </select>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              class="mt-1"
+              :searchable="false"
+              :options="[{ value: '5m', label: '5m' }, { value: '1h', label: '1h' }]"
+            />
+            <p class="mt-1 text-xs surface-muted">
               {{ t('admin.accounts.quotaControl.cacheTTLOverride.targetHint') }}
             </p>
           </div>
@@ -3024,7 +2964,7 @@
           <div class="flex items-center justify-between">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.quotaControl.customBaseUrl.label') }}</label>
-              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              <p class="mt-1 text-xs surface-muted">
                 {{ t('admin.accounts.quotaControl.customBaseUrl.hint') }}
               </p>
             </div>
@@ -3086,7 +3026,7 @@
       </div>
       <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
         <label class="input-label">{{ t('admin.accounts.expiresAt') }}</label>
-        <input v-model="expiresAtInput" type="datetime-local" class="input" />
+        <DateTimePicker :aria-label="t('admin.accounts.expiresAt')" v-model="expiresAtInput" type="datetime-local" class="input" />
         <div class="mt-2 flex gap-2">
           <button type="button" class="btn btn-secondary btn-sm" @click="form.expires_at = getAccountExpiryTimestamp(1)">
             {{ t('payment.oneMonth') }}
@@ -3109,7 +3049,7 @@
         <div class="flex items-center justify-between">
           <div>
             <label class="input-label mb-0">{{ t('admin.accounts.openai.oauthPassthrough') }}</label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 text-xs surface-muted">
               {{ t('admin.accounts.openai.oauthPassthroughDesc') }}
             </p>
           </div>
@@ -3145,7 +3085,7 @@
         <div class="flex items-center justify-between gap-4">
           <div>
             <label class="input-label mb-0">{{ t('admin.accounts.openai.oauthSessionSharing') }}</label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 text-xs surface-muted">
               {{ t('admin.accounts.openai.oauthSessionSharingDesc') }}
             </p>
           </div>
@@ -3166,7 +3106,7 @@
         <div class="flex items-center justify-between">
           <div>
             <label class="input-label mb-0">{{ t('admin.accounts.openai.flattenNamespaces') }}</label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 text-xs surface-muted">
               {{ t('admin.accounts.openai.flattenNamespacesDesc') }}
             </p>
           </div>
@@ -3186,10 +3126,10 @@
         <div class="flex items-center justify-between">
           <div>
             <label class="input-label mb-0">{{ t('admin.accounts.openai.wsMode') }}</label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 text-xs surface-muted">
               {{ t('admin.accounts.openai.wsModeDesc') }}
             </p>
-            <p v-if="openAIWSModeHintKey" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p v-if="openAIWSModeHintKey" class="mt-1 text-xs surface-muted">
               {{ t(openAIWSModeHintKey) }}
             </p>
           </div>
@@ -3207,7 +3147,7 @@
         <div class="flex items-center justify-between">
           <div>
             <label class="input-label mb-0">{{ t('admin.accounts.anthropic.apiKeyPassthrough') }}</label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 text-xs surface-muted">
               {{ t('admin.accounts.anthropic.apiKeyPassthroughDesc') }}
             </p>
           </div>
@@ -3224,14 +3164,17 @@
         <div class="flex items-center justify-between gap-4">
           <div>
             <label class="input-label mb-0">{{ t('admin.accounts.anthropic.apiKeyAuthScheme') }}</label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 text-xs surface-muted">
               {{ t('admin.accounts.anthropic.apiKeyAuthSchemeDesc') }}
             </p>
           </div>
-          <select v-model="anthropicAPIKeyAuthScheme" class="input w-52 text-sm">
-            <option value="x_api_key">{{ t('admin.accounts.anthropic.apiKeyAuthSchemeXApiKey') }}</option>
-            <option value="authorization_bearer">{{ t('admin.accounts.anthropic.apiKeyAuthSchemeBearer') }}</option>
-          </select>
+          <Select
+            v-model="anthropicAPIKeyAuthScheme"
+            class="w-52"
+            trigger-class="text-sm"
+            :searchable="false"
+            :options="[{ value: 'x_api_key', label: t('admin.accounts.anthropic.apiKeyAuthSchemeXApiKey') }, { value: 'authorization_bearer', label: t('admin.accounts.anthropic.apiKeyAuthSchemeBearer') }]"
+          />
         </div>
       </div>
 
@@ -3243,15 +3186,17 @@
         <div class="flex items-center justify-between">
           <div>
             <label class="input-label mb-0">{{ t('admin.accounts.anthropic.webSearchEmulation') }}</label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 text-xs surface-muted">
               {{ t('admin.accounts.anthropic.webSearchEmulationDesc') }}
             </p>
           </div>
-          <select v-model="webSearchEmulationMode" class="input w-24 text-sm">
-            <option value="default">{{ t('admin.accounts.anthropic.webSearchDefault') }}</option>
-            <option value="enabled">{{ t('admin.accounts.anthropic.webSearchEnabled') }}</option>
-            <option value="disabled">{{ t('admin.accounts.anthropic.webSearchDisabled') }}</option>
-          </select>
+          <Select
+            v-model="webSearchEmulationMode"
+            class="w-32 shrink-0"
+            trigger-class="text-sm"
+            :searchable="false"
+            :options="[{ value: 'default', label: t('admin.accounts.anthropic.webSearchDefault') }, { value: 'enabled', label: t('admin.accounts.anthropic.webSearchEnabled') }, { value: 'disabled', label: t('admin.accounts.anthropic.webSearchDisabled') }]"
+          />
         </div>
       </div>
 
@@ -3263,7 +3208,7 @@
         <div class="flex items-center justify-between gap-4">
           <div>
             <label class="input-label mb-0">{{ t('admin.accounts.openai.longContextBilling') }}</label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 text-xs surface-muted">
               {{ t('admin.accounts.openai.longContextBillingDesc') }}
             </p>
           </div>
@@ -3281,7 +3226,7 @@
         <div class="flex items-center justify-between">
           <div>
             <label class="input-label mb-0">{{ t('admin.accounts.openai.codexCLIOnly') }}</label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 text-xs surface-muted">
               {{ t('admin.accounts.openai.codexCLIOnlyDesc') }}
             </p>
           </div>
@@ -3299,7 +3244,7 @@
         <div class="flex items-center justify-between gap-4">
           <div class="min-w-0">
             <label class="input-label mb-0">{{ t('admin.accounts.openai.codexFingerprintMode') }}</label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 text-xs surface-muted">
               {{ t('admin.accounts.openai.codexFingerprintModeDesc') }}
             </p>
           </div>
@@ -3310,7 +3255,7 @@
         <div class="mt-4 space-y-2">
           <div>
             <label class="input-label mb-0">{{ t('admin.accounts.openai.codexEnvironmentTimezone') }}</label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 text-xs surface-muted">
               {{ t('admin.accounts.openai.codexEnvironmentTimezoneDesc') }}
             </p>
           </div>
@@ -3322,7 +3267,7 @@
           />
           <div>
             <label class="input-label mb-0">{{ t('admin.accounts.openai.codexEgressCountry') }}</label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 text-xs surface-muted">
               {{ t('admin.accounts.openai.codexEgressCountryDesc') }}
             </p>
           </div>
@@ -3343,7 +3288,7 @@
         <div class="flex items-center justify-between">
           <div>
             <label class="input-label mb-0">{{ t('admin.accounts.openai.compactMode') }}</label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 text-xs surface-muted">
               {{ t('admin.accounts.openai.compactModeDesc') }}
             </p>
           </div>
@@ -3361,9 +3306,9 @@
               class="flex items-center gap-2"
             >
               <input v-model="mapping.from" type="text" class="input flex-1" :placeholder="t('admin.accounts.fromModel')" />
-              <span class="text-gray-400">→</span>
+              <span class="surface-muted">→</span>
               <input v-model="mapping.to" type="text" class="input flex-1" :placeholder="t('admin.accounts.toModel')" />
-              <button type="button" @click="removeOpenAICompactModelMapping(index)" class="text-red-500 hover:text-red-700">
+              <button type="button" @click="removeOpenAICompactModelMapping(index)" class="text-red-500 hover:text-red-700 surface-control">
                 <Icon name="trash" size="sm" />
               </button>
             </div>
@@ -3382,7 +3327,7 @@
         <div class="flex items-center justify-between gap-4">
           <div>
             <label class="input-label mb-0">{{ t('admin.accounts.openai.responsesMode') }}</label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 text-xs surface-muted">
               {{ t('admin.accounts.openai.responsesModeDesc') }}
             </p>
           </div>
@@ -3397,7 +3342,7 @@
         </div>
         <p
           v-if="!openAITextGenerationCapabilityEnabled"
-          class="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
+          class="rounded-lg bg-amber-50/[0.15] px-3 py-2 text-xs text-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
           data-testid="openai-responses-mode-not-applicable"
         >
           {{ t('admin.accounts.openai.responsesModeTextDisabledHint') }}
@@ -3405,7 +3350,7 @@
         <div class="flex items-center justify-between gap-4">
           <div>
             <label class="input-label mb-0">{{ t('admin.accounts.openai.imagesUrlToB64Json') }}</label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 text-xs surface-muted">
               {{ t('admin.accounts.openai.imagesUrlToB64JsonDesc') }}
             </p>
           </div>
@@ -3429,7 +3374,7 @@
                 :checked="openAIEndpointCapabilities.includes(option.value)"
                 @change="toggleOpenAIEndpointCapability(option.value, $event)"
               />
-              <span class="text-gray-700 dark:text-gray-200">{{ option.label }}</span>
+              <span class="surface-muted">{{ option.label }}</span>
             </label>
           </div>
           <p class="input-hint">{{ t('admin.accounts.openai.endpointCapabilitiesDesc') }}</p>
@@ -3442,7 +3387,7 @@
             <label class="input-label mb-0">{{
               t('admin.accounts.autoPauseOnExpired')
             }}</label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 text-xs surface-muted">
               {{ t('admin.accounts.autoPauseOnExpiredDesc') }}
             </p>
           </div>
@@ -3461,26 +3406,11 @@
               v-model="mixedScheduling"
               class="h-4 w-4 rounded border-gray-300 text-primary-500 focus:ring-primary-500 dark:border-dark-500"
             />
-            <span class="text-sm font-medium text-gray-700 dark:text-gray-300">
+            <span class="text-sm font-medium surface-muted">
               {{ t('admin.accounts.mixedScheduling') }}
             </span>
           </label>
-          <div class="group relative">
-            <span
-              class="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-gray-200 text-xs text-gray-500 hover:bg-gray-300 dark:bg-dark-600 dark:text-gray-400 dark:hover:bg-dark-500"
-            >
-              ?
-            </span>
-            <!-- Tooltip（向下显示避免被弹窗裁剪） -->
-            <div
-              class="pointer-events-none absolute left-0 top-full z-[100] mt-1.5 w-72 rounded bg-gray-900 px-3 py-2 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100 dark:bg-gray-700"
-            >
-              {{ t('admin.accounts.mixedSchedulingTooltip') }}
-              <div
-                class="absolute bottom-full left-3 border-4 border-transparent border-b-gray-900 dark:border-b-gray-700"
-              ></div>
-            </div>
-          </div>
+          <HelpTooltip :content="t('admin.accounts.mixedSchedulingTooltip')" width-class="w-72" />
         </div>
         <div v-if="form.platform === 'antigravity'" class="mt-3 flex items-center gap-2">
           <label class="flex cursor-pointer items-center gap-2">
@@ -3489,25 +3419,11 @@
               v-model="allowOverages"
               class="h-4 w-4 rounded border-gray-300 text-primary-500 focus:ring-primary-500 dark:border-dark-500"
             />
-            <span class="text-sm font-medium text-gray-700 dark:text-gray-300">
+            <span class="text-sm font-medium surface-muted">
               {{ t('admin.accounts.allowOverages') }}
             </span>
           </label>
-          <div class="group relative">
-            <span
-              class="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-gray-200 text-xs text-gray-500 hover:bg-gray-300 dark:bg-dark-600 dark:text-gray-400 dark:hover:bg-dark-500"
-            >
-              ?
-            </span>
-            <div
-              class="pointer-events-none absolute left-0 top-full z-[100] mt-1.5 w-72 rounded bg-gray-900 px-3 py-2 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100 dark:bg-gray-700"
-            >
-              {{ t('admin.accounts.allowOveragesTooltip') }}
-              <div
-                class="absolute bottom-full left-3 border-4 border-transparent border-b-gray-900 dark:border-b-gray-700"
-              ></div>
-            </div>
-          </div>
+          <HelpTooltip :content="t('admin.accounts.allowOveragesTooltip')" width-class="w-72" />
         </div>
 
         <!-- Group Selection - 仅标准模式显示 -->
@@ -3663,19 +3579,19 @@
         </h3>
         <div class="space-y-4">
           <div>
-            <p class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+            <p class="mb-2 text-sm font-medium surface-muted">
               {{ t('admin.accounts.gemini.setupGuide.checklistTitle') }}
             </p>
-            <ul class="list-inside list-disc space-y-1 text-sm text-gray-600 dark:text-gray-400">
+            <ul class="list-inside list-disc space-y-1 text-sm surface-muted">
               <li>{{ t('admin.accounts.gemini.setupGuide.checklistItems.usIp') }}</li>
               <li>{{ t('admin.accounts.gemini.setupGuide.checklistItems.age') }}</li>
             </ul>
           </div>
           <div>
-            <p class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+            <p class="mb-2 text-sm font-medium surface-muted">
               {{ t('admin.accounts.gemini.setupGuide.activationTitle') }}
             </p>
-            <ul class="list-inside list-disc space-y-1 text-sm text-gray-600 dark:text-gray-400">
+            <ul class="list-inside list-disc space-y-1 text-sm surface-muted">
               <li>{{ t('admin.accounts.gemini.setupGuide.activationItems.geminiWeb') }}</li>
               <li>{{ t('admin.accounts.gemini.setupGuide.activationItems.gcpProject') }}</li>
             </ul>
@@ -3688,7 +3604,7 @@
               >
                 {{ t('admin.accounts.gemini.setupGuide.links.countryCheck') }}
               </a>
-              <span class="text-gray-400">·</span>
+              <span class="surface-muted">·</span>
               <a
                 href="https://policies.google.com/country-association-form"
                 target="_blank"
@@ -3697,7 +3613,7 @@
               >
                 {{ t('admin.accounts.gemini.setupGuide.links.countryChange') }}
               </a>
-              <span class="text-gray-400">·</span>
+              <span class="surface-muted">·</span>
               <a
                 href="https://gemini.google.com/gems/create?hl=en-US&pli=1"
                 target="_blank"
@@ -3706,7 +3622,7 @@
               >
                 {{ t('admin.accounts.gemini.setupGuide.links.geminiWebActivation') }}
               </a>
-              <span class="text-gray-400">·</span>
+              <span class="surface-muted">·</span>
               <a
                 href="https://console.cloud.google.com"
                 target="_blank"
@@ -3728,17 +3644,17 @@
         <p class="mb-4 text-xs text-amber-600 dark:text-amber-400">
           {{ t('admin.accounts.gemini.quotaPolicy.note') }}
         </p>
-        <div class="table-container overflow-x-auto">
-          <table class="w-full text-xs">
-            <thead class="bg-gray-50 dark:bg-dark-600">
+        <div class="record-table-scroll record-table-dialog-scroll table-container overflow-x-auto">
+          <table class="record-table w-full text-xs">
+            <thead class="surface-inset">
               <tr>
-                <th class="px-3 py-2 text-left font-medium text-gray-700 dark:text-gray-300">
+                <th class="px-3 py-2 text-left font-medium surface-muted">
                   {{ t('admin.accounts.gemini.quotaPolicy.columns.channel') }}
                 </th>
-                <th class="px-3 py-2 text-left font-medium text-gray-700 dark:text-gray-300">
+                <th class="px-3 py-2 text-left font-medium surface-muted">
                   {{ t('admin.accounts.gemini.quotaPolicy.columns.account') }}
                 </th>
-                <th class="px-3 py-2 text-left font-medium text-gray-700 dark:text-gray-300">
+                <th class="px-3 py-2 text-left font-medium surface-muted">
                   {{ t('admin.accounts.gemini.quotaPolicy.columns.limits') }}
                 </th>
               </tr>
@@ -3748,22 +3664,22 @@
                 <td class="px-3 py-2 text-gray-900 dark:text-white">
                   {{ t('admin.accounts.gemini.quotaPolicy.rows.googleOne.channel') }}
                 </td>
-                <td class="px-3 py-2 text-gray-600 dark:text-gray-400">Free</td>
-                <td class="px-3 py-2 text-gray-600 dark:text-gray-400">
+                <td class="px-3 py-2 surface-muted">Free</td>
+                <td class="px-3 py-2 surface-muted">
                   {{ t('admin.accounts.gemini.quotaPolicy.rows.googleOne.limitsFree') }}
                 </td>
               </tr>
               <tr>
                 <td class="px-3 py-2 text-gray-900 dark:text-white"></td>
-                <td class="px-3 py-2 text-gray-600 dark:text-gray-400">Pro</td>
-                <td class="px-3 py-2 text-gray-600 dark:text-gray-400">
+                <td class="px-3 py-2 surface-muted">Pro</td>
+                <td class="px-3 py-2 surface-muted">
                   {{ t('admin.accounts.gemini.quotaPolicy.rows.googleOne.limitsPro') }}
                 </td>
               </tr>
               <tr>
                 <td class="px-3 py-2 text-gray-900 dark:text-white"></td>
-                <td class="px-3 py-2 text-gray-600 dark:text-gray-400">Ultra</td>
-                <td class="px-3 py-2 text-gray-600 dark:text-gray-400">
+                <td class="px-3 py-2 surface-muted">Ultra</td>
+                <td class="px-3 py-2 surface-muted">
                   {{ t('admin.accounts.gemini.quotaPolicy.rows.googleOne.limitsUltra') }}
                 </td>
               </tr>
@@ -3771,15 +3687,15 @@
                 <td class="px-3 py-2 text-gray-900 dark:text-white">
                   {{ t('admin.accounts.gemini.quotaPolicy.rows.gcp.channel') }}
                 </td>
-                <td class="px-3 py-2 text-gray-600 dark:text-gray-400">Standard</td>
-                <td class="px-3 py-2 text-gray-600 dark:text-gray-400">
+                <td class="px-3 py-2 surface-muted">Standard</td>
+                <td class="px-3 py-2 surface-muted">
                   {{ t('admin.accounts.gemini.quotaPolicy.rows.gcp.limitsStandard') }}
                 </td>
               </tr>
               <tr>
                 <td class="px-3 py-2 text-gray-900 dark:text-white"></td>
-                <td class="px-3 py-2 text-gray-600 dark:text-gray-400">Enterprise</td>
-                <td class="px-3 py-2 text-gray-600 dark:text-gray-400">
+                <td class="px-3 py-2 surface-muted">Enterprise</td>
+                <td class="px-3 py-2 surface-muted">
                   {{ t('admin.accounts.gemini.quotaPolicy.rows.gcp.limitsEnterprise') }}
                 </td>
               </tr>
@@ -3787,15 +3703,15 @@
                 <td class="px-3 py-2 text-gray-900 dark:text-white">
                   {{ t('admin.accounts.gemini.quotaPolicy.rows.aiStudio.channel') }}
                 </td>
-                <td class="px-3 py-2 text-gray-600 dark:text-gray-400">Free</td>
-                <td class="px-3 py-2 text-gray-600 dark:text-gray-400">
+                <td class="px-3 py-2 surface-muted">Free</td>
+                <td class="px-3 py-2 surface-muted">
                   {{ t('admin.accounts.gemini.quotaPolicy.rows.aiStudio.limitsFree') }}
                 </td>
               </tr>
               <tr>
                 <td class="px-3 py-2 text-gray-900 dark:text-white"></td>
-                <td class="px-3 py-2 text-gray-600 dark:text-gray-400">Paid</td>
-                <td class="px-3 py-2 text-gray-600 dark:text-gray-400">
+                <td class="px-3 py-2 surface-muted">Paid</td>
+                <td class="px-3 py-2 surface-muted">
                   {{ t('admin.accounts.gemini.quotaPolicy.rows.aiStudio.limitsPaid') }}
                 </td>
               </tr>
@@ -3879,10 +3795,11 @@
 </template>
 
 <script setup lang="ts">
+import DateTimePicker from '@/components/common/DateTimePicker.vue'
 import OutboundIdentityEditor from './OutboundIdentityEditor.vue'
 import type { IdentitySelection } from '@/api/admin/outboundIdentity'
 import Toggle from '@/components/common/Toggle.vue'
-import { ref, reactive, computed, watch } from 'vue'
+import { ref, reactive, computed, onScopeDispose, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 
@@ -4146,6 +4063,11 @@ const openaiDeviceCode = ref<{
 } | null>(null)
 const openaiDeviceCodePolling = ref(false)
 let openaiDeviceCodeGeneration = 0
+let oauthFlowGeneration = 0
+onScopeDispose(() => {
+  oauthFlowGeneration += 1
+  openaiDeviceCodeGeneration += 1
+})
 
 // Model mapping type
 interface ModelMapping {
@@ -4165,6 +4087,7 @@ interface TempUnschedRuleForm {
 // State
 const step = ref(1)
 const submitting = ref(false)
+let createSubmissionOwner: symbol | undefined
 const accountCategory = ref<'oauth-based' | 'apikey' | 'bedrock' | 'service_account'>('oauth-based') // UI selection for account category
 const addMethod = ref<AddMethod>('oauth') // For oauth-based: 'oauth' or 'setup-token'
 const apiKeyBaseUrl = ref('https://api.anthropic.com')
@@ -4245,18 +4168,18 @@ function resetAdaptiveBaseUrls(platform: string, mode: string) {
 const cnAccentActiveClass = computed(() => {
   switch (form.platform) {
     case 'kimi':
-      return 'border-pink-500 bg-pink-50 dark:bg-pink-900/20'
+      return 'border-pink-500 bg-pink-50/[0.15] dark:bg-pink-900/20'
     case 'zhipu':
-      return 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20'
+      return 'border-indigo-500 bg-indigo-50/[0.15] dark:bg-indigo-900/20'
     case 'deepseek':
-      return 'border-teal-500 bg-teal-50 dark:bg-teal-900/20'
+      return 'border-teal-500 bg-teal-50/[0.15] dark:bg-teal-900/20'
     case 'stepfun':
     case 'minimax':
-      return 'border-rose-500 bg-rose-50 dark:bg-rose-900/20'
+      return 'border-rose-500 bg-rose-50/[0.15] dark:bg-rose-900/20'
     case 'opencode_go':
-      return 'border-amber-500 bg-amber-50 dark:bg-amber-900/20'
+      return 'border-amber-500 bg-amber-50/[0.15] dark:bg-amber-900/20'
     default:
-      return 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+      return 'border-primary-500 bg-primary-50/[0.15] dark:bg-primary-900/20'
   }
 })
 const cnAccentIconClass = computed(() => {
@@ -4553,6 +4476,36 @@ const bedrockAccessKeyId = ref('')
 const bedrockSecretAccessKey = ref('')
 const bedrockSessionToken = ref('')
 const bedrockRegion = ref('us-east-1')
+const bedrockRegionOptions = [
+  { value: 'group:US', label: 'US', kind: 'group', disabled: true },
+  { value: 'us-east-1', label: 'us-east-1 (N. Virginia)' },
+  { value: 'us-east-2', label: 'us-east-2 (Ohio)' },
+  { value: 'us-west-1', label: 'us-west-1 (N. California)' },
+  { value: 'us-west-2', label: 'us-west-2 (Oregon)' },
+  { value: 'us-gov-east-1', label: 'us-gov-east-1 (GovCloud US-East)' },
+  { value: 'us-gov-west-1', label: 'us-gov-west-1 (GovCloud US-West)' },
+  { value: 'group:Europe', label: 'Europe', kind: 'group', disabled: true },
+  { value: 'eu-west-1', label: 'eu-west-1 (Ireland)' },
+  { value: 'eu-west-2', label: 'eu-west-2 (London)' },
+  { value: 'eu-west-3', label: 'eu-west-3 (Paris)' },
+  { value: 'eu-central-1', label: 'eu-central-1 (Frankfurt)' },
+  { value: 'eu-central-2', label: 'eu-central-2 (Zurich)' },
+  { value: 'eu-south-1', label: 'eu-south-1 (Milan)' },
+  { value: 'eu-south-2', label: 'eu-south-2 (Spain)' },
+  { value: 'eu-north-1', label: 'eu-north-1 (Stockholm)' },
+  { value: 'group:Asia Pacific', label: 'Asia Pacific', kind: 'group', disabled: true },
+  { value: 'ap-northeast-1', label: 'ap-northeast-1 (Tokyo)' },
+  { value: 'ap-northeast-2', label: 'ap-northeast-2 (Seoul)' },
+  { value: 'ap-northeast-3', label: 'ap-northeast-3 (Osaka)' },
+  { value: 'ap-south-1', label: 'ap-south-1 (Mumbai)' },
+  { value: 'ap-south-2', label: 'ap-south-2 (Hyderabad)' },
+  { value: 'ap-southeast-1', label: 'ap-southeast-1 (Singapore)' },
+  { value: 'ap-southeast-2', label: 'ap-southeast-2 (Sydney)' },
+  { value: 'group:Canada', label: 'Canada', kind: 'group', disabled: true },
+  { value: 'ca-central-1', label: 'ca-central-1 (Canada)' },
+  { value: 'group:South America', label: 'South America', kind: 'group', disabled: true },
+  { value: 'sa-east-1', label: 'sa-east-1 (São Paulo)' }
+]
 const bedrockForceGlobal = ref(false)
 const bedrockApiKeyValue = ref('')
 const vertexServiceAccountFileInput = ref<HTMLInputElement | null>(null)
@@ -4925,6 +4878,10 @@ watch(
 watch(
   () => form.platform,
   (newPlatform) => {
+    oauthFlowGeneration += 1
+    openaiDeviceCodeGeneration += 1
+    openaiDeviceCode.value = null
+    openaiDeviceCodePolling.value = false
     // Reset base URL based on platform
     if (isMultiProtocolApiKeyPlatform(newPlatform)) {
       const mode = newPlatform === 'opencode_go' ? openCodeAccountMode.value : accountMode.value
@@ -5027,6 +4984,15 @@ watch(
     grokOAuth.resetState()
   }
 )
+
+watch(() => form.proxy_id, () => {
+  oauthFlowGeneration += 1
+  openaiOAuth.resetState()
+  grokOAuth.resetState()
+  openaiDeviceCodeGeneration += 1
+  openaiDeviceCode.value = null
+  openaiDeviceCodePolling.value = false
+}, { flush: 'sync' })
 
 // Gemini AI Studio OAuth availability (requires operator-configured OAuth client)
 watch(
@@ -5350,10 +5316,15 @@ const createAccountWithOutboundIdentity = (payload: CreateAccountRequest) => adm
   credentials: { ...payload.credentials, ...(outboundIdentitySelection.value ? { outbound_identity: outboundIdentitySelection.value } : {}) }
 })
 
-const submitCreateAccount = async (payload: CreateAccountRequest) => {
+const submitCreateAccount = async (payload: CreateAccountRequest, run = oauthFlowGeneration) => {
+  if (run !== oauthFlowGeneration) return
+  const owner = Symbol('account-create')
+  createSubmissionOwner = owner
+  const isCurrent = () => run === oauthFlowGeneration && createSubmissionOwner === owner
   submitting.value = true
   try {
     const account = await createAccountWithOutboundIdentity(withAntigravityConfirmFlag(payload))
+    if (!isCurrent()) return
     const modelMapping = payload.credentials.model_mapping
     const hasConcreteMappedTarget = payload.type === 'apikey' &&
       typeof modelMapping === 'object' &&
@@ -5364,6 +5335,7 @@ const submitCreateAccount = async (payload: CreateAccountRequest) => {
     if (upstreamModelsPreviewed.value || hasConcreteMappedTarget) {
       try {
         const result = await adminAPI.accounts.syncUpstreamModels(account.id)
+        if (!isCurrent()) return
         const warnings = result.warnings ?? []
         if (warnings.some(warning => warning.code === 'upstream_model_metadata_incomplete')) {
           appStore.showWarning(t('admin.accounts.syncUpstreamModelsMetadataIncomplete'))
@@ -5371,6 +5343,7 @@ const submitCreateAccount = async (payload: CreateAccountRequest) => {
           appStore.showWarning(t('admin.accounts.syncUpstreamModelsMetadataPartial'))
         }
       } catch {
+        if (!isCurrent()) return
         appStore.showWarning(t('admin.accounts.syncUpstreamModelsFailed'))
       }
     }
@@ -5378,24 +5351,31 @@ const submitCreateAccount = async (payload: CreateAccountRequest) => {
     emit('created')
     handleClose()
   } catch (error: any) {
+    if (!isCurrent()) return
     if (error.response?.status === 409 && error.response?.data?.error === 'mixed_channel_warning' && needsMixedChannelCheck(form.platform)) {
       openMixedChannelDialog({
         message: error.response?.data?.message,
         onConfirm: async () => {
           antigravityMixedChannelConfirmed.value = true
-          await submitCreateAccount(payload)
+          await submitCreateAccount(payload, run)
         }
       })
       return
     }
     appStore.showError(error.response?.data?.message || error.response?.data?.detail || t('admin.accounts.failedToCreate'))
   } finally {
-    submitting.value = false
+    if (createSubmissionOwner === owner) {
+      createSubmissionOwner = undefined
+      submitting.value = false
+    }
   }
 }
 
 // Methods
 const resetForm = () => {
+  oauthFlowGeneration += 1
+  createSubmissionOwner = undefined
+  submitting.value = false
   step.value = 1
   form.name = ''
   form.notes = ''
@@ -5521,6 +5501,11 @@ const resetForm = () => {
 }
 
 const handleClose = () => {
+  oauthFlowGeneration += 1
+  createSubmissionOwner = undefined
+  submitting.value = false
+  openaiOAuth.resetState()
+  grokOAuth.resetState()
   openaiDeviceCodeGeneration += 1
   openaiDeviceCode.value = null
   openaiDeviceCodePolling.value = false
@@ -5669,13 +5654,14 @@ const buildAnthropicExtra = (base?: Record<string, unknown>): Record<string, unk
 
 // Helper function to create account with mixed channel warning handling
 const doCreateAccount = async (payload: CreateAccountRequest) => {
+  const run = oauthFlowGeneration
   const canContinue = await ensureAntigravityMixedChannelConfirmed(async () => {
-    await submitCreateAccount(payload)
+    await submitCreateAccount(payload, run)
   })
-  if (!canContinue) {
+  if (!canContinue || run !== oauthFlowGeneration) {
     return
   }
-  await submitCreateAccount(payload)
+  await submitCreateAccount(payload, run)
 }
 
 // Handle mixed channel warning confirmation
@@ -6048,6 +6034,12 @@ const handleSubmit = async () => {
 }
 
 const goBackToBasicInfo = () => {
+  oauthFlowGeneration += 1
+  createSubmissionOwner = undefined
+  submitting.value = false
+  openaiDeviceCodeGeneration += 1
+  openaiDeviceCode.value = null
+  openaiDeviceCodePolling.value = false
   step.value = 1
   oauth.resetState()
   openaiOAuth.resetState()
@@ -6058,6 +6050,7 @@ const goBackToBasicInfo = () => {
 }
 
 const handleGenerateUrl = async () => {
+  oauthFlowGeneration += 1
   if (form.platform === 'openai') {
     await openaiOAuth.generateAuthUrl(form.proxy_id)
   } else if (form.platform === 'gemini') {
@@ -6189,6 +6182,7 @@ const applyOpenAIAccountUserAgent = (credentials: Record<string, unknown>) => {
 
 // Grok 手动 RT 批量验证和创建
 const handleGrokValidateRT = async (refreshTokenInput: string) => {
+  const run = ++oauthFlowGeneration
   if (!refreshTokenInput.trim()) return
 
   const refreshTokens = refreshTokenInput
@@ -6213,6 +6207,7 @@ const handleGrokValidateRT = async (refreshTokenInput: string) => {
     for (let i = 0; i < refreshTokens.length; i++) {
       try {
         const tokenInfo = await grokOAuth.validateRefreshToken(refreshTokens[i], form.proxy_id)
+        if (run !== oauthFlowGeneration) return
         if (!tokenInfo) {
           failedCount++
           errors.push(`#${i + 1}: ${grokOAuth.error.value || 'Validation failed'}`)
@@ -6249,8 +6244,10 @@ const handleGrokValidateRT = async (refreshTokenInput: string) => {
           expires_at: form.expires_at,
           auto_pause_on_expired: autoPauseOnExpired.value
         })
+        if (run !== oauthFlowGeneration) return
         successCount++
       } catch (error: any) {
+        if (run !== oauthFlowGeneration) return
         failedCount++
         const errMsg = error.response?.data?.detail || error.message || 'Unknown error'
         errors.push(`#${i + 1}: ${errMsg}`)
@@ -6274,11 +6271,12 @@ const handleGrokValidateRT = async (refreshTokenInput: string) => {
       appStore.showError(t('admin.accounts.oauth.batchFailed'))
     }
   } finally {
-    grokOAuth.loading.value = false
+    if (run === oauthFlowGeneration) grokOAuth.loading.value = false
   }
 }
 
 const handleGrokImportSSO = async (ssoInput: string) => {
+  const run = ++oauthFlowGeneration
   // Align with OpenAI/Grok RT batch import: one token per line, no client-side dedupe.
   const ssoTokens = ssoInput
     .split('\n')
@@ -6316,6 +6314,7 @@ const handleGrokImportSSO = async (ssoInput: string) => {
       expires_at: form.expires_at,
       auto_pause_on_expired: autoPauseOnExpired.value
     })
+    if (run !== oauthFlowGeneration) return
 
     const successCount = result.created?.length || 0
     const failedCount = result.failed?.length || 0
@@ -6343,10 +6342,11 @@ const handleGrokImportSSO = async (ssoInput: string) => {
       appStore.showError(t('admin.accounts.oauth.batchFailed'))
     }
   } catch (error: any) {
+    if (run !== oauthFlowGeneration) return
     grokOAuth.error.value = error.response?.data?.detail || error.message || t('admin.accounts.oauth.grok.failedToConvertSSO')
     appStore.showError(grokOAuth.error.value)
   } finally {
-    grokOAuth.loading.value = false
+    if (run === oauthFlowGeneration) grokOAuth.loading.value = false
   }
 }
 
@@ -6355,6 +6355,7 @@ const handleGrokImportSSO = async (ssoInput: string) => {
  * Password is only used for the authorize API call; buildCredentials never stores it.
  */
 const handleGrokAuthorizePassword = async (emailPasswordInput: string) => {
+  const run = ++oauthFlowGeneration
   if (!emailPasswordInput.trim()) return
   if (!validateGrokOAuthUpstreamConfig()) return
 
@@ -6383,6 +6384,7 @@ const handleGrokAuthorizePassword = async (emailPasswordInput: string) => {
     for (let i = 0; i < lines.length; i++) {
       try {
         const tokenInfo = await grokOAuth.authorizePassword(lines[i], form.proxy_id)
+        if (run !== oauthFlowGeneration) return
         if (!tokenInfo) {
           failedCount++
           errors.push(`#${i + 1}: ${grokOAuth.error.value || 'Authorization failed'}`)
@@ -6426,8 +6428,10 @@ const handleGrokAuthorizePassword = async (emailPasswordInput: string) => {
           expires_at: form.expires_at,
           auto_pause_on_expired: autoPauseOnExpired.value
         })
+        if (run !== oauthFlowGeneration) return
         successCount++
       } catch (error: any) {
+        if (run !== oauthFlowGeneration) return
         failedCount++
         const errMsg = error.response?.data?.detail || error.message || 'Unknown error'
         errors.push(`#${i + 1}: ${errMsg}`)
@@ -6456,12 +6460,13 @@ const handleGrokAuthorizePassword = async (emailPasswordInput: string) => {
       appStore.showError(t('admin.accounts.oauth.batchFailed'))
     }
   } finally {
-    grokOAuth.loading.value = false
+    if (run === oauthFlowGeneration) grokOAuth.loading.value = false
   }
 }
 
 // OpenAI OAuth 授权码兑换
 const createOpenAIAccountFromTokenInfo = async (tokenInfo: OpenAITokenInfo) => {
+  const run = oauthFlowGeneration
   const oauthClient = openaiOAuth
   oauthClient.loading.value = true
   oauthClient.error.value = ''
@@ -6508,16 +6513,19 @@ const createOpenAIAccountFromTokenInfo = async (tokenInfo: OpenAITokenInfo) => {
         expires_at: form.expires_at,
         auto_pause_on_expired: autoPauseOnExpired.value
       })
+      if (run !== oauthFlowGeneration) return
       appStore.showSuccess(t('admin.accounts.accountCreated'))
     }
 
+    if (run !== oauthFlowGeneration) return
     emit('created')
     handleClose()
   } catch (error: any) {
+    if (run !== oauthFlowGeneration) return
     oauthClient.error.value = error.response?.data?.detail || t('admin.accounts.oauth.authFailed')
     appStore.showError(oauthClient.error.value)
   } finally {
-    oauthClient.loading.value = false
+    if (run === oauthFlowGeneration) oauthClient.loading.value = false
   }
 }
 
@@ -6771,6 +6779,7 @@ const handleOpenAIImportCodexPAT = async (accessToken: string) => {
 
 // OpenAI RT 批量验证和创建（共享逻辑）
 const handleOpenAIBatchRT = async (refreshTokenInput: string, clientId?: string) => {
+  const run = ++oauthFlowGeneration
   const oauthClient = openaiOAuth
   if (!refreshTokenInput.trim()) return
 
@@ -6800,6 +6809,7 @@ const handleOpenAIBatchRT = async (refreshTokenInput: string, clientId?: string)
           form.proxy_id,
           clientId
         )
+        if (run !== oauthFlowGeneration) return
         if (!tokenInfo) {
           failedCount++
           errors.push(`#${i + 1}: ${oauthClient.error.value || 'Validation failed'}`)
@@ -6852,8 +6862,10 @@ const handleOpenAIBatchRT = async (refreshTokenInput: string, clientId?: string)
           })
         }
 
+        if (run !== oauthFlowGeneration) return
         successCount++
       } catch (error: any) {
+        if (run !== oauthFlowGeneration) return
         failedCount++
         const errMsg = error.response?.data?.detail || error.message || 'Unknown error'
         errors.push(`#${i + 1}: ${errMsg}`)
@@ -6880,7 +6892,7 @@ const handleOpenAIBatchRT = async (refreshTokenInput: string, clientId?: string)
       appStore.showError(t('admin.accounts.oauth.batchFailed'))
     }
   } finally {
-    oauthClient.loading.value = false
+    if (run === oauthFlowGeneration) oauthClient.loading.value = false
   }
 }
 
@@ -6928,7 +6940,7 @@ const handleAntigravityValidateRT = async (refreshTokenInput: string) => {
 
         const credentials = antigravityOAuth.buildCredentials(tokenInfo, refreshTokens[i])
         applyAntigravityProjectID(credentials, antigravityProjectId.value, 'create')
-        
+
         // Generate account name with index for batch
         const accountName = refreshTokens.length > 1 ? `${form.name} #${i + 1}` : form.name
 
@@ -7067,6 +7079,7 @@ const handleAntigravityExchange = async (authCode: string) => {
 
 // Grok OAuth 授权码兑换
 const handleGrokExchange = async (authCode: string) => {
+  const run = ++oauthFlowGeneration
   if (!authCode.trim() || !grokOAuth.sessionId.value) return
   if (!validateGrokOAuthUpstreamConfig()) return
 
@@ -7088,17 +7101,18 @@ const handleGrokExchange = async (authCode: string) => {
       state: stateToUse,
       proxyId: form.proxy_id
     })
-    if (!tokenInfo) return
+    if (!tokenInfo || run !== oauthFlowGeneration) return
 
     const credentials = grokOAuth.buildCredentials(tokenInfo)
     applyGrokOAuthUpstreamConfig(credentials)
     const extra = grokOAuth.buildExtraInfo(tokenInfo)
     await createAccountAndFinish('grok', 'oauth', credentials, extra)
   } catch (error: any) {
+    if (run !== oauthFlowGeneration) return
     grokOAuth.error.value = error.response?.data?.detail || t('admin.accounts.oauth.authFailed')
     appStore.showError(grokOAuth.error.value)
   } finally {
-    grokOAuth.loading.value = false
+    if (run === oauthFlowGeneration) grokOAuth.loading.value = false
   }
 }
 

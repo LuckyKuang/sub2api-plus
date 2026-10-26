@@ -359,6 +359,7 @@ func TestHandleUpstreamError_PoolModePolicies(t *testing.T) {
 
 		require.True(t, shouldDisable)
 		require.Equal(t, 1, repo.setErrCalls)
+		require.Equal(t, 1, repo.credentialErrorCalls, "a custom 401 policy must quarantine the unchanged grant conditionally")
 		require.Equal(t, 0, repo.tempCalls)
 	})
 
@@ -621,10 +622,11 @@ func TestApplyErrorPolicy_GeminiRateLimitBypassesCustomSkip(t *testing.T) {
 
 type errorPolicyRepoStub struct {
 	mockAccountRepoForGemini
-	tempCalls           int
-	setErrCalls         int
-	lastErrorMsg        string
-	modelRateLimitCalls []modelNotFoundRateLimitCall
+	tempCalls            int
+	setErrCalls          int
+	credentialErrorCalls int
+	lastErrorMsg         string
+	modelRateLimitCalls  []modelNotFoundRateLimitCall
 }
 
 func (r *errorPolicyRepoStub) SetTempUnschedulable(ctx context.Context, id int64, until time.Time, reason string) error {
@@ -636,6 +638,15 @@ func (r *errorPolicyRepoStub) SetError(ctx context.Context, id int64, errorMsg s
 	r.setErrCalls++
 	r.lastErrorMsg = errorMsg
 	return nil
+}
+
+// Policy fixtures hold an unchanged grant; the durable conditional transition
+// succeeds. Concurrency and CAS misses are covered by the credential-fence tests.
+func (r *errorPolicyRepoStub) SetCredentialErrorIfUnchanged(_ context.Context, expectedOwner *Account, message string) (bool, error) {
+	r.credentialErrorCalls++
+	r.setErrCalls++
+	r.lastErrorMsg = message
+	return true, nil
 }
 
 func (r *errorPolicyRepoStub) SetModelRateLimit(_ context.Context, id int64, scope string, resetAt time.Time, reason ...string) error {

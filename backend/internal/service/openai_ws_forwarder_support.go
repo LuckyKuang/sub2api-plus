@@ -130,6 +130,10 @@ func (s *OpenAIGatewayService) performOpenAIWSGeneratePrewarm(
 		}
 
 		if eventType == "error" {
+			if status, ok := openAIModelNotFoundEventStatus(message); ok {
+				lease.MarkBroken()
+				return &UpstreamFailoverError{StatusCode: status, ResponseBody: message, Scope: GatewayFailureScopeRequest, NextAccountAction: NextAccountStop}
+			}
 			errCodeRaw, errTypeRaw, errMsgRaw := parseOpenAIWSErrorEventFields(message)
 			prewarmModel, _ := reqBody["model"].(string)
 			s.persistOpenAIWSRateLimitSignal(ctx, account, lease.HandshakeHeaders(), message, errCodeRaw, errTypeRaw, errMsgRaw, prewarmModel)
@@ -137,7 +141,7 @@ func (s *OpenAIGatewayService) performOpenAIWSGeneratePrewarm(
 			if errMsg == "" {
 				errMsg = "OpenAI websocket prewarm error"
 			}
-			fallbackReason, canFallback := classifyOpenAIWSErrorEventFromRaw(errCodeRaw, errTypeRaw, errMsgRaw)
+			fallbackReason, canFallback := classifyOpenAIWSErrorEvent(message)
 			errCode, errType, errMessage := summarizeOpenAIWSErrorEventFieldsFromRaw(errCodeRaw, errTypeRaw, errMsgRaw)
 			logOpenAIWSModeInfo(
 				"prewarm_error_event account_id=%d conn_id=%s idx=%d fallback_reason=%s can_fallback=%v err_code=%s err_type=%s err_message=%s",
@@ -158,6 +162,10 @@ func (s *OpenAIGatewayService) performOpenAIWSGeneratePrewarm(
 		}
 
 		if isOpenAIWSTerminalEvent(eventType) {
+			if status, ok := openAIModelNotFoundEventStatus(message); ok {
+				lease.MarkBroken()
+				return &UpstreamFailoverError{StatusCode: status, ResponseBody: message, Scope: GatewayFailureScopeRequest, NextAccountAction: NextAccountStop}
+			}
 			prewarmTerminalCount++
 			break
 		}
@@ -167,7 +175,7 @@ func (s *OpenAIGatewayService) performOpenAIWSGeneratePrewarm(
 	if prewarmResponseID != "" && stateStore != nil {
 		ttl := s.openAIWSResponseStickyTTL()
 		logOpenAIWSBindResponseAccountWarn(groupID, account.ID, prewarmResponseID, s.bindOpenAIResponseAccount(ctx, stateStore, groupID, account, prewarmResponseID, ttl))
-		stateStore.BindResponseConn(prewarmResponseID, lease.ConnID(), ttl)
+		stateStore.BindResponseConn(openAICodexCredentialOwnerID(account), prewarmResponseID, lease.ConnID(), ttl)
 	}
 	logOpenAIWSModeInfo(
 		"prewarm_done account_id=%d conn_id=%s response_id=%s events=%d terminal_events=%d duration_ms=%d",
@@ -266,6 +274,9 @@ func markOpenAIWSClientVisibleFailure(c *gin.Context, eventType string, payload 
 }
 
 func openAIWSPayloadTransientStatus(payload []byte) int {
+	if _, ok := openAIModelNotFoundEventStatus(payload); ok {
+		return 0
+	}
 	if len(payload) == 0 {
 		return 0
 	}
@@ -338,15 +349,19 @@ func (s *OpenAIGatewayService) handleOpenAIWSErrorEventTransientFailure(ctx cont
 func (s *OpenAIGatewayService) handleOpenAIWSFailureAccountSideEffects(ctx context.Context, account *Account, canonicalModel string, headers http.Header, payload []byte) bool {
 	message := extractOpenAISSEErrorMessage(payload)
 	status := openAIStreamFailureStatus(payload, message)
+	if status == http.StatusTooManyRequests && account != nil && account.IsOpenAIApiKey() && openAIRouteAttempt(ctx) != nil {
+		s.handleOpenAIAccountUpstreamError(ctx, account, status, openAIWSSemantic429Headers(account, canonicalModel, headers), payload, canonicalModel)
+		return true
+	}
 	switch status {
 	case http.StatusUnauthorized, http.StatusTooManyRequests, 529:
-		s.handleOpenAIStreamTerminalAccountSideEffects(nil, account, payload, message, headers, canonicalModel)
+		s.handleOpenAIStreamTerminalAccountSideEffectsContext(ctx, account, payload, message, headers, canonicalModel)
 		return true
 	case http.StatusForbidden:
 		if !openAIStream403AccountFailure(payload, message) {
 			return false
 		}
-		s.handleOpenAIStreamTerminalAccountSideEffects(nil, account, payload, message, headers, canonicalModel)
+		s.handleOpenAIStreamTerminalAccountSideEffectsContext(ctx, account, payload, message, headers, canonicalModel)
 		return true
 	}
 
@@ -596,7 +611,11 @@ func (s *OpenAIGatewayService) resolveAccountByPreviousResponseIDForCapability(
 		_ = store.DeleteResponseAccount(ctx, derefGroupID(groupID), responseID)
 		return 0, nil, "", nil, nil
 	}
-	if !parentHealthyForShadow(account, s.parentAccountLookup(ctx)) {
+	quotaOwner := account
+	if !parentHealthyForShadow(account, func(id int64) *Account {
+		quotaOwner = s.parentAccountLookup(ctx)(id)
+		return quotaOwner
+	}) {
 		_ = store.DeleteResponseAccount(ctx, derefGroupID(groupID), responseID)
 		return 0, nil, "", nil, nil
 	}
@@ -610,7 +629,7 @@ func (s *OpenAIGatewayService) resolveAccountByPreviousResponseIDForCapability(
 	// account over its 5h/7d threshold keeps serving the same response chain even though
 	// normal scheduling skips it. Pause is transient, so fall through to normal scheduling
 	// without deleting the binding (the window may reset before the next turn).
-	if paused, _ := shouldAutoPauseOpenAIAccountByQuota(ctx, account); paused {
+	if paused, _ := shouldAutoPauseOpenAIAccountByQuota(ctx, account, quotaOwner); paused {
 		return 0, nil, "", nil, nil
 	}
 	// 分组利润控制：与 quota auto-pause 同语义——利润不合格是暂时
@@ -635,7 +654,11 @@ func (s *OpenAIGatewayService) resolveAccountByPreviousResponseIDForCapability(
 		if s.openAIGroupRequiresPrivacySet(ctx, groupID) && !latest.IsPrivacySet() {
 			return 0, nil, "", nil, nil
 		}
-		if !parentHealthyForShadow(latest, s.parentAccountLookup(ctx)) {
+		quotaOwner = latest
+		if !parentHealthyForShadow(latest, func(id int64) *Account {
+			quotaOwner = s.parentAccountLookup(ctx)(id)
+			return quotaOwner
+		}) {
 			_ = store.DeleteResponseAccount(ctx, derefGroupID(groupID), responseID)
 			return 0, nil, "", nil, nil
 		}
@@ -645,7 +668,7 @@ func (s *OpenAIGatewayService) resolveAccountByPreviousResponseIDForCapability(
 		if !latest.SupportsOpenAIEndpointCapability(requiredCapability) {
 			return 0, nil, "", nil, nil
 		}
-		if paused, _ := shouldAutoPauseOpenAIAccountByQuota(ctx, latest); paused {
+		if paused, _ := shouldAutoPauseOpenAIAccountByQuota(ctx, latest, quotaOwner); paused {
 			return 0, nil, "", nil, nil
 		}
 		// 利润门对最新账号状态复检一次，语义同上：跳过复用、不删绑定。
@@ -722,8 +745,18 @@ func isOpenAIWSRateLimitError(codeRaw, errTypeRaw, msgRaw string) bool {
 	return false
 }
 
+func isOpenAIWSRateLimitEvent(payload []byte, code, errType, message string) bool {
+	if _, ok := openAIModelNotFoundEventStatus(payload); ok {
+		return false
+	}
+	return isOpenAIWSRateLimitError(code, errType, message)
+}
+
 func (s *OpenAIGatewayService) persistOpenAIWSRateLimitSignal(ctx context.Context, account *Account, headers http.Header, responseBody []byte, codeRaw, errTypeRaw, msgRaw string, canonicalModel ...string) {
 	if s == nil || s.rateLimitService == nil || account == nil || account.Platform != PlatformOpenAI {
+		return
+	}
+	if _, ok := openAIModelNotFoundEventStatus(responseBody); ok {
 		return
 	}
 	if !isOpenAIWSRateLimitError(codeRaw, errTypeRaw, msgRaw) {
@@ -762,6 +795,9 @@ func (s *OpenAIGatewayService) newOpenAIWSRateLimitFailoverError(account *Accoun
 }
 
 func classifyOpenAIWSErrorEventFromRaw(codeRaw, errTypeRaw, msgRaw string) (string, bool) {
+	if codeRaw == "model_not_found" {
+		return "model_not_found", false
+	}
 	code := strings.ToLower(strings.TrimSpace(codeRaw))
 	errType := strings.ToLower(strings.TrimSpace(errTypeRaw))
 	msg := strings.ToLower(strings.TrimSpace(msgRaw))
@@ -811,10 +847,19 @@ func classifyOpenAIWSErrorEvent(message []byte) (string, bool) {
 	if len(message) == 0 {
 		return "event_error", false
 	}
-	return classifyOpenAIWSErrorEventFromRaw(parseOpenAIWSErrorEventFields(message))
+	code, errType, msg := parseOpenAIWSErrorEventFields(message)
+	if code == "model_not_found" {
+		if _, ok := openAIModelNotFoundEventStatus(message); !ok {
+			code = ""
+		}
+	}
+	return classifyOpenAIWSErrorEventFromRaw(code, errType, msg)
 }
 
 func openAIWSErrorHTTPStatusFromRaw(codeRaw, errTypeRaw string) int {
+	if codeRaw == "model_not_found" {
+		return http.StatusBadRequest
+	}
 	code := strings.ToLower(strings.TrimSpace(codeRaw))
 	errType := strings.ToLower(strings.TrimSpace(errTypeRaw))
 	switch {
@@ -842,7 +887,13 @@ func openAIWSErrorHTTPStatus(message []byte) int {
 	if len(message) == 0 {
 		return http.StatusBadGateway
 	}
+	if status, ok := openAIModelNotFoundEventStatus(message); ok {
+		return status
+	}
 	codeRaw, errTypeRaw, _ := parseOpenAIWSErrorEventFields(message)
+	if codeRaw == "model_not_found" {
+		codeRaw = ""
+	}
 	return openAIWSErrorHTTPStatusFromRaw(codeRaw, errTypeRaw)
 }
 

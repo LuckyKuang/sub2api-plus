@@ -26,6 +26,13 @@ func (r *accountUsageCodexProbeRepo) UpdateExtra(_ context.Context, _ int64, upd
 	return nil
 }
 
+func (r *accountUsageCodexProbeRepo) UpdateOpenAICodexUsageIfUnchanged(ctx context.Context, targetID int64, owner *Account, updates map[string]any) (bool, error) {
+	if owner == nil || owner.ID != targetID {
+		return false, nil
+	}
+	return true, r.UpdateExtra(ctx, targetID, updates)
+}
+
 func (r *accountUsageCodexProbeRepo) SetRateLimited(_ context.Context, _ int64, resetAt time.Time) error {
 	if r.rateLimitCh != nil {
 		r.rateLimitCh <- resetAt
@@ -150,11 +157,14 @@ func TestAccountUsageService_PersistOpenAICodexProbeSnapshotOnlyUpdatesExtra(t *
 		updateExtraCh: make(chan map[string]any, 1),
 		rateLimitCh:   make(chan time.Time, 1),
 	}
-	svc := &AccountUsageService{accountRepo: repo}
-	svc.persistOpenAICodexProbeSnapshot(321, map[string]any{
+	owner := &Account{ID: 321, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
+	_, err := persistOpenAICodexUsageObservation(context.Background(), repo, 321, owner, map[string]any{
 		"codex_7d_used_percent": 100.0,
 		"codex_7d_reset_at":     time.Now().Add(2 * time.Hour).UTC().Truncate(time.Second).Format(time.RFC3339),
-	})
+	}, nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	select {
 	case updates := <-repo.updateExtraCh:

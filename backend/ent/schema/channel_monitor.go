@@ -101,6 +101,7 @@ func (ChannelMonitor) Fields() []ent.Field {
 		field.JSON("extra_headers", map[string]string{}).
 			Default(map[string]string{}),
 		// body_override_mode: 同 ChannelMonitorRequestTemplate.body_override_mode
+		field.Bool("stream_probe").Default(false),
 		field.String("body_override_mode").
 			Default("off").
 			MaxLen(10),

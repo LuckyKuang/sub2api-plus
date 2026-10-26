@@ -6,22 +6,21 @@
     @close="$emit('close')"
   >
     <!-- provider tabs -->
-    <div class="mb-4 border-b border-gray-200 dark:border-dark-700">
-      <div role="tablist" class="flex flex-wrap gap-1">
+    <div class="mb-4">
+      <div role="tablist" class="card-tabs">
         <button
           v-for="tab in providerTabs"
           :key="tab.value"
           type="button"
           role="tab"
           :aria-selected="activeProvider === tab.value"
-          class="px-4 py-2 text-sm font-medium transition-colors"
-          :class="tabClass(tab.value)"
+          class="card-tab"
           @click="activeProvider = tab.value"
         >
           {{ tab.label }}
           <span
             v-if="countByProvider[tab.value] > 0"
-            class="ml-1.5 rounded-full bg-gray-100 px-2 py-0.5 text-xs dark:bg-dark-700"
+            class="ml-1.5 rounded-full surface-inset px-2 py-0.5 text-xs"
           >
             {{ countByProvider[tab.value] }}
           </span>
@@ -38,13 +37,13 @@
         </button>
       </div>
 
-      <div v-if="loading" class="py-8 text-center text-sm text-gray-400">
+      <div v-if="loading" class="py-8 text-center text-sm surface-muted">
         {{ t('common.loading') }}
       </div>
 
       <div
         v-else-if="templatesForActiveProvider.length === 0"
-        class="py-8 text-center text-sm text-gray-400"
+        class="py-8 text-center text-sm surface-muted"
       >
         {{ t('admin.channelMonitor.template.emptyState') }}
       </div>
@@ -53,7 +52,7 @@
         v-for="tpl in templatesForActiveProvider"
         v-else
         :key="tpl.id"
-        class="rounded-lg border border-gray-200 bg-white p-4 dark:border-dark-700 dark:bg-dark-800"
+        class="rounded-lg border border-gray-200 surface-inset p-4 dark:border-dark-700"
       >
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0 flex-1">
@@ -74,15 +73,15 @@
               </span>
               <span
                 v-if="tpl.associated_monitors > 0"
-                class="text-xs text-gray-500 dark:text-gray-400"
+                class="text-xs surface-muted"
               >
                 {{ t('admin.channelMonitor.template.associatedCount', { n: tpl.associated_monitors }) }}
               </span>
             </div>
-            <p v-if="tpl.description" class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+            <p v-if="tpl.description" class="mt-0.5 text-xs surface-muted">
               {{ tpl.description }}
             </p>
-            <p class="mt-1 text-xs text-gray-400">
+            <p class="mt-1 text-xs surface-muted">
               {{ t('admin.channelMonitor.template.headersSummary', {
                 n: Object.keys(tpl.extra_headers || {}).length,
               }) }}
@@ -135,7 +134,7 @@
             v-for="opt in providerTabs"
             :key="opt.value"
             type="button"
-            class="rounded-lg border-2 px-3 py-2 text-sm font-medium transition-colors"
+            class="rounded-lg border-2 px-3 py-2 text-sm font-medium transition-colors surface-control"
             :class="providerPickerClass(opt.value, form.provider === opt.value)"
             @click="form.provider = opt.value"
           >
@@ -151,7 +150,7 @@
             v-for="opt in apiModeOptions"
             :key="opt.value"
             type="button"
-            class="rounded-lg border-2 px-3 py-2 text-left transition-colors"
+            class="rounded-lg border-2 px-3 py-2 text-left transition-colors surface-control"
             :class="apiModeButtonClass(opt.value)"
             @click="form.api_mode = opt.value"
           >
@@ -177,7 +176,8 @@
         :provider="form.provider"
         :api-mode="form.api_mode"
         :extra-headers="form.extra_headers"
-        :body-override-mode="form.body_override_mode"
+        v-model:stream-probe="form.stream_probe"
+            :body-override-mode="form.body_override_mode"
         :body-override="form.body_override"
         @update:extra-headers="form.extra_headers = $event"
         @update:body-override-mode="form.body_override_mode = $event"
@@ -227,6 +227,7 @@
 </template>
 
 <script setup lang="ts">
+import { supportsStreamProbe } from '@/constants/channelMonitor'
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
@@ -310,6 +311,7 @@ interface TemplateForm {
   api_mode: APIMode
   description: string
   extra_headers: Record<string, string>
+  stream_probe: boolean
   body_override_mode: BodyOverrideMode
   body_override: Record<string, unknown> | null
 }
@@ -326,6 +328,7 @@ function emptyForm(provider: Provider): TemplateForm {
     api_mode: API_MODE_CHAT_COMPLETIONS,
     description: '',
     extra_headers: {},
+    stream_probe: false,
     body_override_mode: 'off',
     body_override: null,
   }
@@ -338,6 +341,7 @@ function loadForm(tpl: ChannelMonitorTemplate) {
   form.api_mode = normalizeAPIMode(tpl.api_mode)
   form.description = tpl.description
   form.extra_headers = { ...(tpl.extra_headers || {}) }
+  form.stream_probe = tpl.stream_probe ?? false
   form.body_override_mode = tpl.body_override_mode
   form.body_override = tpl.body_override ? { ...tpl.body_override } : null
 }
@@ -402,6 +406,7 @@ async function handleSubmit() {
         api_mode: form.provider === PROVIDER_OPENAI ? form.api_mode : API_MODE_CHAT_COMPLETIONS,
         description: form.description.trim(),
         extra_headers: form.extra_headers,
+        stream_probe: form.stream_probe && supportsStreamProbe(form.provider),
         body_override_mode: form.body_override_mode,
         body_override: form.body_override,
       })
@@ -412,6 +417,7 @@ async function handleSubmit() {
         api_mode: form.provider === PROVIDER_OPENAI ? form.api_mode : API_MODE_CHAT_COMPLETIONS,
         description: form.description.trim(),
         extra_headers: form.extra_headers,
+        stream_probe: form.stream_probe && supportsStreamProbe(form.provider),
         body_override_mode: form.body_override_mode,
         body_override: form.body_override,
       })
@@ -479,20 +485,14 @@ async function doDelete() {
 }
 
 // --- misc ---
-function tabClass(value: Provider): string {
-  return activeProvider.value === value
-    ? 'border-b-2 border-primary-500 text-primary-600 dark:text-primary-400'
-    : 'border-b-2 border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
-}
-
 function modeBadgeClass(mode: BodyOverrideMode): string {
   switch (mode) {
     case 'merge':
-      return 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'
+      return 'bg-amber-100/[0.15] text-amber-700 dark:bg-amber-500/[0.15] dark:text-amber-300'
     case 'replace':
-      return 'bg-purple-100 text-purple-700 dark:bg-purple-500/15 dark:text-purple-300'
+      return 'bg-purple-100/[0.15] text-purple-700 dark:bg-purple-500/[0.15] dark:text-purple-300'
     default:
-      return 'bg-gray-100 text-gray-600 dark:bg-dark-700 dark:text-gray-300'
+      return 'surface-inset surface-muted dark:surface-inset'
   }
 }
 
@@ -514,6 +514,7 @@ const apiModeOptions = computed<{ value: APIMode; label: string; hint: string }[
 ])
 
 watch(() => form.provider, (provider) => {
+  if (!supportsStreamProbe(provider)) form.stream_probe = false
   if (provider !== PROVIDER_OPENAI) {
     form.api_mode = API_MODE_CHAT_COMPLETIONS
   }
@@ -526,9 +527,9 @@ function normalizeAPIMode(mode: APIMode | undefined | null): APIMode {
 function apiModeButtonClass(mode: APIMode): string {
   const active = form.api_mode === mode
   if (active) {
-    return 'border-primary-500 bg-white text-primary-700 shadow-sm dark:border-primary-400 dark:bg-primary-500/15 dark:text-primary-300'
+    return 'border-primary-500 surface-inset text-primary-700 shadow-sm dark:border-primary-400 dark:bg-primary-500/[0.15] dark:text-primary-300'
   }
-  return 'border-blue-100 bg-white/70 text-gray-600 hover:border-primary-300 dark:border-dark-700 dark:bg-dark-800 dark:text-gray-400'
+  return 'border-blue-100 surface-inset surface-muted hover:border-primary-300 dark:border-dark-700 dark:surface-inset'
 }
 
 function apiModeLabel(mode: APIMode): string {
@@ -539,8 +540,8 @@ function apiModeLabel(mode: APIMode): string {
 
 function apiModeBadgeClass(mode: APIMode): string {
   if (normalizeAPIMode(mode) === API_MODE_RESPONSES) {
-    return 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300'
+    return 'bg-blue-100/[0.15] text-blue-700 dark:bg-blue-500/[0.15] dark:text-blue-300'
   }
-  return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
+  return 'bg-emerald-100/[0.15] text-emerald-700 dark:bg-emerald-500/[0.15] dark:text-emerald-300'
 }
 </script>

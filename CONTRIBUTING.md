@@ -69,24 +69,34 @@ Provider identity tests additionally follow the
 
 ## Development Checks
 
-Plain selection dropdowns use native HTML `select` controls and shared styles in
-`frontend/src/style.css`. Reuse `frontend/src/components/common/Select.vue` for
-typed values, disabled options, and option groups. Its default `searchable: 'auto'`
-preserves local search when there are more than five options; explicit
-`searchable: false` keeps a plain dropdown native. Searchable, clearable, and
-custom `selected`/`option` slot controls use the existing popover in
-`SearchableSelect.vue`, preserving integrated selected content and rich options.
+Selection dropdowns use `frontend/src/components/common/Select.vue` and the shared
+panel in `SearchableSelect.vue` for both closed and expanded appearance. Do not
+introduce native HTML `select` controls or use `.input` for dropdowns: native
+expanded menus cannot reliably share the system's theme and option styling.
+Use typed option values, disabled options, and `kind: 'group'` headers. The default
+`searchable: 'auto'` preserves local search above five options; explicit
+`searchable: false` hides only the search input. Clearable and custom
+`selected`/`option` slot controls preserve integrated selected content and rich options.
 Keep existing search-result popovers and their styling for user, account, model,
 and proxy selectors. Search remains inside the dropdown; do not expose a
 separate search input above or alongside a second selection field.
 Checkbox/multi-selection and other composite controls retain their existing
 dropdown layouts and interactions. Keep checkboxes inside the dropdown and
 allow repeated selection without reopening it. Keep combined auto-refresh
-enable/interval actions in their original menu. Do not replace composite
-controls with plain native selects or split them into separate visible fields.
-Native controls own keyboard navigation and focus for plain dropdowns.
-Keep horizontal padding and arrow placement in the shared styles; individual
-pages may adjust control width and height.
+enable/interval actions in their original menu. Usage history and live requests
+are the explicit exception: show a temporary auto-refresh switch directly, with
+the interval choices retained in the integrated refresh menu. Do not replace composite
+controls with plain selectors or split them into separate visible fields.
+The shared dropdown owns keyboard navigation and focus, including disabled/group
+skipping, selection, Escape, and Tab. Keep trigger styles in `frontend/src/style.css`
+and expanded-menu styles in `SearchableSelect.vue`, including light/dark surfaces,
+borders, typography, hover, focus, selected, error and disabled states. Keep spacing
+shared, and do not add local appearance replacements. Use `triggerClass` only for
+compact height, text sizing or font; layout classes belong on the wrapper.
+Individual pages may adjust layout and compact width, height or text size, leaving
+enough space for the longest supported translation and the dropdown arrow.
+Verify the expanded panel itself in both themes and narrow viewports, including
+menus inside dialogs and scrollable cards; checking only the closed trigger is insufficient.
 
 All validation, including focused checks while iterating, must run in the
 platform validation container: Apple Containers on macOS, Docker inside WSL2
@@ -125,14 +135,20 @@ make test
 The available check commands are listed below. The `./...` Go commands and
 frontend `test:run` cover their full suites; select the affected packages or
 components while iterating, and use `submit-pr` for the complete final matrix.
+Integration tests always use `-count=1` so the current run actually sets up its
+services and executes the business scenarios. Go's test-result cache does not
+prove the current PostgreSQL/Redis state or track environment reads made before
+`TestMain` calls `m.Run`. Compilation and dependency caches remain reusable.
 
 ```bash
 # Backend
 cd backend
 go mod tidy -diff
 go test -tags=unit ./...
-go test -tags=integration ./...
+go test -count=1 -tags=integration ./...
 golangci-lint run ./...
+# Alternative for a memory-constrained validation container; same full scope
+GOGC=35 GOMEMLIMIT=4GiB golangci-lint run --concurrency=1 --timeout=10m ./...
 
 # Frontend, from the repository root
 pnpm --dir frontend run lint:check
@@ -143,10 +159,65 @@ pnpm --dir frontend run test:run
 python3 skills/compress-cli/scripts/compress_cli.py check AGENTS.md
 python3 skills/compress-cli/tests/test_compress_cli.py
 python3 tools/check_test_build_tags.py
+
+# Seven-provider critical business regressions (run inside the same container)
+python3 tools/check_seven_provider_coverage.py --profile unit
+python3 tools/check_seven_provider_coverage.py --profile integration
+python3 tools/check_seven_provider_frontend.py
+
+# Focused owner/transport race checks; the pinned image includes CGO tools
+CGO_ENABLED=1 go test -C backend -race -tags=unit ./internal/service -run 'Test(CNAPIKey|KimiAPIKey|OpenAIQuota.*Owner|LiveSidebandProduction)' -count=1
+CGO_ENABLED=1 go test -C backend -race -tags=integration ./internal/repository -run 'Test(CNAPIKey|CNControlSnapshot|CNBalanceSchedule|CNProxyOwner|OpenAIQuotaOwner)' -count=1
 ```
 
 Run the focused tests for the changed package or component inside the same
 platform validation container while iterating.
+
+The [seven-provider matrix](docs/SEVEN_PROVIDER_TEST_MATRIX.md) maps the critical
+provider scenarios to their observable assertions. The full validation profile
+also runs its unit, integration and frontend gates. These execute the required tests and
+reject missing, skipped, failed or unfinished cases, including all fourteen
+seven-provider failover scenarios and forty-two Chat proxy-binding scenarios;
+they do not replace the complete suites.
+The integration gate uses the same disposable PostgreSQL/Redis environment as
+the repository integration suite. Keep the matrix and gate manifest synchronized
+when adding sending entrypoints or changing the owning business contracts.
+
+The separate S3 storage gate requires disposable PostgreSQL, Redis and MinIO
+reachable from the validation container. Set `SUB2API_TEST_POSTGRES_DSN`,
+`SUB2API_TEST_REDIS_ADDR`, an explicit nonzero `SUB2API_TEST_REDIS_DB`, and
+`SUB2API_ASYNC_TEST_S3_ENDPOINT` for those temporary services. MinIO must use the
+fixture credentials `minio` / `minio-test-secret`. Inside the validation container,
+use the same database for the migration smoke and the storage workflow:
+
+```bash
+export SUB2API_ASYNC_TEST_DATABASE_URL="$SUB2API_TEST_POSTGRES_DSN"
+python3 tools/check_seven_provider_coverage.py --profile storage
+```
+
+This gate runs the existing migration/idempotency smoke before the real
+asynchronous-image MinIO workflow, with the integration build tag and uncached
+execution. Missing configuration, missing tests and skipped/failed tests reject
+the gate; migration failure stops the workflow. Ordinary `unit`/`integration`
+coverage profiles and the shared full/CI profile do not provision MinIO or run
+this separate storage gate. Set the two `SUB2API_ASYNC_TEST_*` variables inside
+the validation container; the launcher does not forward them. Remove all
+temporary service containers and their writable state after validation.
+
+The separate [real Chromium management suite](frontend/e2e/README.md) runs
+`python3 tools/run_seven_provider_browser.py` as root inside a disposable
+validation container with explicit disposable PostgreSQL/Redis settings and
+`SUB2API_E2E_ISOLATED=1`. Its runner requires all fourteen browser scenarios to
+execute successfully; missing/skipped cases fail. The ordinary frontend gate
+checks Vue/API lifecycle regressions and does not claim browser execution.
+Authorization regressions must use redacted account DTOs and the initiating
+`oauth_credential_owner`, include both owner-replacement isolation and unchanged
+owner success controls, and retain pending grants across unrelated observation
+updates. A late HTTP response test proves UI isolation; an already-issued OAuth
+apply needs separate server owner/CAS and persistence assertions. Keep these
+layers explicit in the [supported business inventory](docs/SEVEN_PROVIDER_SUPPORTED_BUSINESS.md)
+and matrix rather than inferring provider authorization or billing from browser
+proxy-management cases.
 
 Provider/account changes, outbound paths, client versions, dependency upgrades
 and upstream merges must preserve the trusted identity triple. Follow the

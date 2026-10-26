@@ -342,7 +342,7 @@ func TestGrokRequestCompressionWithdrawalIsObservedAfterCacheExpiry(t *testing.T
 	require.NoError(t, err)
 	require.Equal(t, "zstd", req.Header.Get("Content-Encoding"), "cached advertisement lasts until TTL")
 
-	key := grokRequestCompressionCacheKey{target: "https://cli-chat-proxy.grok.com:443/v1", owner: account.ID}
+	key := grokRequestCompressionCacheKey{target: "https://cli-chat-proxy.grok.com:443/v1", owner: account.ID, generation: credentialStateGeneration(account)}
 	grokRequestCompressionCacheStore(key, true, time.Now().Add(-2*grokRequestCompressionCapabilityTTL))
 
 	req, err = svc.buildGrokResponsesRequest(context.Background(), nil, account, body, "access-token", "", svc.cfg)

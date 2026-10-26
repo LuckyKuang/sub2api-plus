@@ -98,13 +98,12 @@ func TestParseKimiUsageTiers(t *testing.T) {
 	require.Equal(t, "2026-08-18T00:00:00Z", tiers[1].ResetAt)
 }
 
-// TestParseKimiUsageTiers_LimitZero 不应除零：limit=0 → utilization=0。
+// A zero denominator cannot establish utilization, including when remaining=0.
 func TestParseKimiUsageTiers_LimitZero(t *testing.T) {
 	t.Parallel()
 	body := []byte(`{"limits":[{"detail":{"limit":0,"remaining":0,"resetTime":"2026-08-14T15:00:00Z"}}]}`)
 	tiers := parseKimiUsageTiers(body)
-	require.Len(t, tiers, 1)
-	require.InDelta(t, 0.0, tiers[0].UsedPercent, 1e-9)
+	require.Empty(t, tiers)
 }
 
 // TestParseZhipuTokenTiers_UnitClassification 显式 unit（3=5h / 6=weekly）优先分类，
@@ -297,7 +296,7 @@ func TestZhipuQuotaHost(t *testing.T) {
 	t.Parallel()
 	require.Equal(t, "https://open.bigmodel.cn", zhipuQuotaHost("https://open.bigmodel.cn/api/paas/v4"))
 	require.Equal(t, "https://api.z.ai", zhipuQuotaHost("https://api.z.ai/api/paas/v4"))
-	require.Equal(t, "https://open.bigmodel.cn", zhipuQuotaHost("https://custom.example.com")) // 默认国内站
+	require.Empty(t, zhipuQuotaHost("https://custom.example.com")) // 未知主机不得发送凭据到官方站
 	require.Equal(t, "https://open.bigmodel.cn/api/monitor/usage/quota/limit", zhipuQuotaURL("https://open.bigmodel.cn/api/paas/v4"))
 }
 
@@ -426,6 +425,7 @@ func TestCNProviderThresholdCandidates(t *testing.T) {
 			"kimi_weekly_reset_at":     "2026-08-18T00:00:00Z",
 		},
 	}
+	bindCNQuotaTestSnapshot(account)
 	cands := cnProviderThresholdCandidates(account, PlatformKimi)
 	// 仅返回非 nil 候选（两窗口均存在 → 2 条）。
 	var present []*accountSchedulingThresholdCandidate
@@ -441,6 +441,7 @@ func TestCNProviderThresholdCandidates(t *testing.T) {
 		Platform: PlatformKimi,
 		Extra:    map[string]any{"kimi_5h_reset_at": "2026-08-14T15:00:00Z"}, // 无 used_percent
 	}
+	bindCNQuotaTestSnapshot(partial)
 	require.Empty(t, filterNil(cnProviderThresholdCandidates(partial, PlatformKimi)))
 
 	// 空 Extra / nil account 安全返回。
@@ -472,6 +473,7 @@ func TestEvaluateAccountSchedulingThreshold_KimiCodingPlan(t *testing.T) {
 			"kimi_weekly_reset_at":     now.Add(7 * 24 * time.Hour).Format(time.RFC3339),
 		},
 	}
+	bindCNQuotaTestSnapshot(account)
 	decision := EvaluateAccountSchedulingThreshold(account, map[string]int{PlatformKimi: 80}, now)
 	require.True(t, decision.ShouldPause)
 	require.Equal(t, PlatformKimi, decision.Platform)
@@ -494,6 +496,7 @@ func TestEvaluateAccountSchedulingThreshold_MiniMaxCodingPlan(t *testing.T) {
 			"minimax_weekly_reset_at":     now.Add(7 * 24 * time.Hour).Format(time.RFC3339),
 		},
 	}
+	bindCNQuotaTestSnapshot(account)
 	decision := EvaluateAccountSchedulingThreshold(account, map[string]int{PlatformMiniMax: 80}, now)
 	require.True(t, decision.ShouldPause)
 	require.Equal(t, PlatformMiniMax, decision.Platform)
@@ -516,6 +519,7 @@ func TestEvaluateAccountSchedulingThreshold_CNWindowResetSkipped(t *testing.T) {
 			"zhipu_5h_reset_at":     now.Add(-1 * time.Hour).Format(time.RFC3339),
 		},
 	}
+	bindCNQuotaTestSnapshot(expired)
 	require.False(t, EvaluateAccountSchedulingThreshold(expired, map[string]int{PlatformZhipu: 80}, now).ShouldPause)
 
 	// 用量低于阈值。
@@ -526,6 +530,7 @@ func TestEvaluateAccountSchedulingThreshold_CNWindowResetSkipped(t *testing.T) {
 			"zhipu_5h_reset_at":     now.Add(3 * time.Hour).Format(time.RFC3339),
 		},
 	}
+	bindCNQuotaTestSnapshot(low)
 	require.False(t, EvaluateAccountSchedulingThreshold(low, map[string]int{PlatformZhipu: 80}, now).ShouldPause)
 }
 
@@ -546,6 +551,7 @@ func TestCNProviderQuotaSnapshotReset(t *testing.T) {
 			"kimi_weekly_reset_at": pastWeekly.Format(time.RFC3339),
 		},
 	}
+	bindCNQuotaTestSnapshot(account)
 	got := cnProviderQuotaSnapshotReset(account, now)
 	require.NotNil(t, got)
 	require.True(t, future5h.Equal(*got))
@@ -559,6 +565,7 @@ func TestCNProviderQuotaSnapshotReset(t *testing.T) {
 			"kimi_weekly_reset_at": futureWeekly.Format(time.RFC3339),
 		},
 	}
+	bindCNQuotaTestSnapshot(both)
 	gotBoth := cnProviderQuotaSnapshotReset(both, now)
 	require.NotNil(t, gotBoth)
 	require.True(t, future5h.Equal(*gotBoth))
@@ -572,6 +579,7 @@ func TestCNProviderQuotaSnapshotReset(t *testing.T) {
 			"kimi_weekly_reset_at": pastWeekly.Format(time.RFC3339),
 		},
 	}
+	bindCNQuotaTestSnapshot(expired)
 	require.Nil(t, cnProviderQuotaSnapshotReset(expired, now))
 
 	// payg 账号（非 coding）→ nil（余额型走余额检测）。
@@ -580,6 +588,7 @@ func TestCNProviderQuotaSnapshotReset(t *testing.T) {
 		Credentials: map[string]any{"account_mode": AccountModePayG},
 		Extra:       map[string]any{"kimi_5h_reset_at": future5h.Format(time.RFC3339)},
 	}
+	bindCNQuotaTestSnapshot(payg)
 	require.Nil(t, cnProviderQuotaSnapshotReset(payg, now))
 }
 
@@ -960,27 +969,5 @@ func TestMiniMaxQuotaRejectsUntrustedCredentialOrigins(t *testing.T) {
 				Credentials: map[string]any{"base_url": origin, "account_mode": AccountModeCoding}}
 			require.Empty(t, account.GetCodingPlanProvider())
 		})
-	}
-}
-
-// DeepSeek Responses documents a single string image_url, never a sibling url:
-// https://api-docs.deepseek.com/api/create-response/ . Plus accepts legacy input
-// aliases but the explicit canonical field wins, and unrelated parts survive.
-func TestDeepSeekResponsesImageCanonicalFieldAndLegacyPrecedence(t *testing.T) {
-	account := &Account{Platform: PlatformDeepseek, Type: AccountTypeAPIKey,
-		Credentials: map[string]any{"api_protocol": APIProtocolResponses}}
-	for _, fixture := range []struct{ input, want string }{
-		{`{"type":"input_image","image_url":"https://example.com/canonical.png","url":"https://example.com/legacy.png","detail":"high"}`, "https://example.com/canonical.png"},
-		{`{"type":"input_image","url":"https://example.com/legacy.png","detail":"high"}`, "https://example.com/legacy.png"},
-		{`{"type":"input_image","image_url":{"url":"https://example.com/object.png"},"detail":"high"}`, "https://example.com/object.png"},
-	} {
-		body := []byte(`{"model":"deepseek-flash","input":[{"role":"user","content":[` + fixture.input + `,{"type":"input_text","text":"describe"}]}]}`)
-		normalized := normalizeDeepSeekResponsesRequestBody(account, body)
-		part := gjson.GetBytes(normalized, "input.0.content.0")
-		require.Equal(t, fixture.want, part.Get("image_url").String())
-		require.Equal(t, gjson.String, part.Get("image_url").Type)
-		require.False(t, part.Get("url").Exists())
-		require.Equal(t, "high", part.Get("detail").String())
-		require.Equal(t, "describe", gjson.GetBytes(normalized, "input.0.content.1.text").String())
 	}
 }

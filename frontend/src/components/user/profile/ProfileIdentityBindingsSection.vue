@@ -7,7 +7,7 @@
       <h2 class="text-lg font-medium text-gray-900 dark:text-white">
         {{ t('profile.authBindings.title') }}
       </h2>
-      <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+      <p class="mt-1 text-sm surface-muted">
         {{ t('profile.authBindings.description') }}
       </p>
     </div>
@@ -17,7 +17,7 @@
         <p class="text-sm font-semibold text-gray-900 dark:text-white">
           {{ t('profile.authBindings.title') }}
         </p>
-        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+        <p class="mt-1 text-sm surface-muted">
           {{ t('profile.authBindings.description') }}
         </p>
       </div>
@@ -61,18 +61,18 @@
 
               <p
                 v-if="providerSummary(item.provider)"
-                class="text-sm text-gray-600 dark:text-gray-300"
+                class="text-sm surface-muted"
               >
                 {{ providerSummary(item.provider) }}
               </p>
 
               <div
                 v-if="hasBindingDetails(item.provider, item.details)"
-                class="grid gap-1 text-sm text-gray-500 dark:text-gray-400"
+                class="grid gap-1 text-sm surface-muted"
               >
                 <p
                   v-if="item.provider !== 'email' && item.details?.display_name"
-                  class="font-medium text-gray-700 dark:text-gray-200"
+                  class="font-medium surface-muted"
                 >
                   {{ item.details.display_name }}
                 </p>
@@ -296,8 +296,8 @@ const compact = computed(() => props.compact)
 const rowClass = computed(() =>
   props.embedded
     ? compact.value
-      ? 'rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-dark-700 dark:bg-dark-900/40'
-      : 'rounded-2xl border border-gray-100 bg-gray-50/70 p-4 dark:border-dark-700 dark:bg-dark-900/30'
+      ? 'rounded-2xl border border-gray-100 surface-inset p-4 shadow-sm dark:border-dark-700 dark:surface-inset'
+      : 'rounded-2xl border border-gray-100 surface-inset p-4 dark:border-dark-700 dark:surface-inset'
     : 'px-6 py-5'
 )
 const emailBound = computed(() => getBindingStatus('email'))
@@ -502,18 +502,18 @@ function providerInitial(provider: UserAuthProvider): string {
 
 function providerIconClass(provider: UserAuthProvider): string {
   if (provider === 'linuxdo') {
-    return 'bg-orange-100 text-orange-600 dark:bg-orange-900/20 dark:text-orange-300'
+    return 'bg-orange-100/[0.15] text-orange-600 dark:bg-orange-900/20 dark:text-orange-300'
   }
   if (provider === 'dingtalk') {
-    return 'bg-blue-100 text-blue-600 dark:bg-blue-900/20 dark:text-blue-300'
+    return 'bg-blue-100/[0.15] text-blue-600 dark:bg-blue-900/20 dark:text-blue-300'
   }
   if (provider === 'wechat') {
-    return 'bg-green-100 text-green-600 dark:bg-green-900/20 dark:text-green-300'
+    return 'bg-green-100/[0.15] text-green-600 dark:bg-green-900/20 dark:text-green-300'
   }
   if (provider === 'oidc') {
-    return 'bg-sky-100 text-sky-600 dark:bg-sky-900/20 dark:text-sky-300'
+    return 'bg-sky-100/[0.15] text-sky-600 dark:bg-sky-900/20 dark:text-sky-300'
   }
-  return 'bg-primary-100 text-primary-600 dark:bg-primary-900/20 dark:text-primary-300'
+  return 'bg-primary-100/[0.15] text-primary-600 dark:bg-primary-900/20 dark:text-primary-300'
 }
 
 function providerSummary(provider: UserAuthProvider): string {

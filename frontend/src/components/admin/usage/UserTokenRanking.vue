@@ -1,11 +1,11 @@
 <template>
   <!-- 用量页"用户排行"tab 内容：无卡片外观，依赖父级统一卡片；筛选/时间范围复用页面级筛选栏 -->
-  <div>
+  <div :class="{ 'workspace-body !gap-0': workspace }">
     <!-- Toolbar -->
-    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-4 py-3 dark:border-dark-700/50 sm:px-6">
-      <p class="text-xs text-gray-400 dark:text-gray-500">{{ t('admin.usage.tokenRanking.subtitle') }}</p>
+    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-4 py-3 dark:border-dark-700/50 sm:px-6" :class="{ 'workspace-fixed': workspace }">
+      <p class="text-xs surface-muted">{{ t('admin.usage.tokenRanking.subtitle') }}</p>
       <div class="flex items-center gap-3">
-        <span v-if="!loading && items.length > 0" class="text-xs text-gray-400 dark:text-gray-500">
+        <span v-if="!loading && items.length > 0" class="text-xs surface-muted">
           {{ t('admin.usage.tokenRanking.userCount', { count: items.length }) }}
         </span>
         <div class="w-28">
@@ -15,19 +15,19 @@
     </div>
 
     <!-- Table -->
-    <div class="overflow-x-auto">
-      <table class="w-full min-w-max divide-y divide-gray-200 dark:divide-dark-700">
-        <thead class="bg-gray-50 dark:bg-dark-800">
+    <div class="record-table-scroll overflow-x-auto" :class="{ 'workspace-table-viewport': workspace }">
+      <table class="record-table w-full min-w-max divide-y divide-gray-200 dark:divide-dark-700">
+        <thead class="surface-inset">
           <tr>
-            <th class="w-16 px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-dark-400 sm:px-6">#</th>
-            <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-dark-400">
+            <th class="w-16 px-4 py-3 text-left text-xs font-medium uppercase tracking-wider sm:px-6 surface-muted">#</th>
+            <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider surface-muted">
               {{ t('admin.usage.tokenRanking.columns.user') }}
             </th>
             <th
               v-for="col in sortableColumns"
               :key="col.key"
-              class="cursor-pointer select-none whitespace-nowrap px-4 py-3 text-right text-xs font-medium uppercase tracking-wider transition-colors hover:bg-gray-100 dark:hover:bg-dark-700"
-              :class="sortBy === col.key ? 'text-primary-600 dark:text-primary-400' : 'text-gray-500 dark:text-dark-400'"
+              class="cursor-pointer select-none whitespace-nowrap px-4 py-3 text-right text-xs font-medium uppercase tracking-wider transition-colors hover:surface-hover"
+              :class="sortBy === col.key ? 'text-primary-600 dark:text-primary-400' : 'surface-muted'"
               @click="setSort(col.key)"
             >
               {{ t(col.label) }}
@@ -35,14 +35,14 @@
             </th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-gray-200 bg-white dark:divide-dark-700 dark:bg-dark-900">
+        <tbody class="divide-y divide-gray-200 surface-inset dark:divide-dark-700">
           <tr v-if="loading">
             <td :colspan="sortableColumns.length + 2" class="py-12 text-center">
               <LoadingSpinner />
             </td>
           </tr>
           <tr v-else-if="items.length === 0">
-            <td :colspan="sortableColumns.length + 2" class="py-12 text-center text-sm text-gray-400">
+            <td :colspan="sortableColumns.length + 2" class="py-12 text-center text-sm surface-muted">
               {{ t('admin.dashboard.noDataAvailable') }}
             </td>
           </tr>
@@ -50,7 +50,7 @@
             v-for="(item, index) in items"
             v-else
             :key="item.user_id"
-            class="cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-dark-700/40"
+            class="cursor-pointer transition-colors hover:surface-hover"
             :title="t('admin.usage.tokenRanking.rowHint')"
             @click="$emit('select-user', item.user_id, item.email)"
           >
@@ -60,17 +60,17 @@
                 class="inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold"
                 :class="RANK_BADGE_CLASSES[index]"
               >{{ index + 1 }}</span>
-              <span v-else class="inline-block w-6 text-center text-sm tabular-nums text-gray-400">{{ index + 1 }}</span>
+              <span v-else class="inline-block w-6 text-center text-sm tabular-nums surface-muted">{{ index + 1 }}</span>
             </td>
-            <td class="max-w-[260px] truncate px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-200" :title="item.email">
+            <td class="max-w-[260px] truncate px-4 py-3 text-sm font-medium surface-muted" :title="item.email">
               {{ item.email || `User #${item.user_id}` }}
-              <span class="ml-1 font-normal text-gray-400 dark:text-gray-500">#{{ item.user_id }}</span>
+              <span class="ml-1 font-normal surface-muted">#{{ item.user_id }}</span>
             </td>
-            <td class="whitespace-nowrap px-4 py-3 text-right text-sm tabular-nums text-gray-500 dark:text-gray-400">{{ item.requests.toLocaleString() }}</td>
-            <td class="whitespace-nowrap px-4 py-3 text-right text-sm tabular-nums text-gray-500 dark:text-gray-400">{{ fmtTokens(item.input_tokens) }}</td>
-            <td class="whitespace-nowrap px-4 py-3 text-right text-sm tabular-nums text-gray-500 dark:text-gray-400">{{ fmtTokens(item.output_tokens) }}</td>
-            <td class="whitespace-nowrap px-4 py-3 text-right text-sm tabular-nums text-gray-500 dark:text-gray-400">{{ fmtTokens(item.cache_tokens) }}</td>
-            <td class="whitespace-nowrap px-4 py-3 text-right text-sm font-medium tabular-nums text-gray-900 dark:text-gray-100">{{ fmtTokens(item.total_tokens) }} <span v-if="tokenShare(item.total_tokens)" class="text-xs font-normal text-gray-400">({{ tokenShare(item.total_tokens) }})</span></td>
+            <td class="whitespace-nowrap px-4 py-3 text-right text-sm tabular-nums surface-muted">{{ item.requests.toLocaleString() }}</td>
+            <td class="whitespace-nowrap px-4 py-3 text-right text-sm tabular-nums surface-muted">{{ fmtTokens(item.input_tokens) }}</td>
+            <td class="whitespace-nowrap px-4 py-3 text-right text-sm tabular-nums surface-muted">{{ fmtTokens(item.output_tokens) }}</td>
+            <td class="whitespace-nowrap px-4 py-3 text-right text-sm tabular-nums surface-muted">{{ fmtTokens(item.cache_tokens) }}</td>
+            <td class="whitespace-nowrap px-4 py-3 text-right text-sm font-medium tabular-nums text-gray-900 dark:text-gray-100">{{ fmtTokens(item.total_tokens) }} <span v-if="tokenShare(item.total_tokens)" class="text-xs font-normal surface-muted">({{ tokenShare(item.total_tokens) }})</span></td>
             <td class="whitespace-nowrap px-4 py-3 text-right text-sm font-medium tabular-nums text-green-600 dark:text-green-400">${{ fmtCost(item.actual_cost) }}</td>
           </tr>
         </tbody>
@@ -95,6 +95,7 @@ const props = defineProps<{
   filters: Record<string, unknown>
   model?: string
   totalTokens?: number
+  workspace?: boolean
 }>()
 
 defineEmits<{ (e: 'select-user', userId: number, email: string): void }>()
@@ -120,9 +121,9 @@ const limitOptions = [
 
 // 前三名金/银/铜徽章
 const RANK_BADGE_CLASSES = [
-  'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400',
-  'bg-gray-200 text-gray-600 dark:bg-gray-500/20 dark:text-gray-300',
-  'bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-400',
+  'bg-amber-100/[0.15] text-amber-700 dark:bg-amber-500/20 dark:text-amber-400',
+  'surface-inset surface-muted dark:bg-gray-500/20',
+  'bg-orange-100/[0.15] text-orange-700 dark:bg-orange-500/20 dark:text-orange-400',
 ]
 
 const items = ref<UserBreakdownItem[]>([])

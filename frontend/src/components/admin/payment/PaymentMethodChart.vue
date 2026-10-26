@@ -5,7 +5,7 @@
     </h3>
     <div
       v-if="!methods?.length"
-      class="flex h-32 items-center justify-center text-sm text-gray-500 dark:text-gray-400"
+      class="flex h-32 items-center justify-center text-sm surface-muted"
     >
       {{ t('payment.admin.noData') }}
     </div>
@@ -13,8 +13,8 @@
       <div v-for="method in methods" :key="method.type" class="space-y-1">
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2">
-            <span :class="['inline-block h-3 w-3 rounded-full', colorMap[method.type] || 'bg-gray-400']"></span>
-            <span class="text-sm text-gray-700 dark:text-gray-300">
+            <span :class="['console-data-mark inline-block h-3 w-3 rounded-full', colorMap[method.type] || 'bg-gray-400']"></span>
+            <span class="text-sm surface-muted">
               {{ t('payment.methods.' + method.type, method.type) }}
             </span>
           </div>
@@ -22,16 +22,16 @@
             <span v-for="[currency, amount] in sortedAmounts(method.amount)" :key="currency" class="block text-sm font-medium text-gray-900 dark:text-white">
               {{ formatMoney(currency, amount) }}
             </span>
-            <span class="ml-2 text-xs text-gray-500 dark:text-gray-400">
+            <span class="ml-2 text-xs surface-muted">
               ({{ method.count }})
             </span>
           </div>
         </div>
         <div v-for="[currency, amount] in sortedAmounts(method.amount)" :key="currency" class="flex items-center gap-2">
-          <span class="w-10 text-xs text-gray-500 dark:text-gray-400">{{ currency }}</span>
+          <span class="w-10 text-xs surface-muted">{{ currency }}</span>
           <div class="h-2 flex-1 overflow-hidden rounded-full bg-gray-100 dark:bg-dark-700">
             <div
-              :class="['h-full rounded-full transition-all', barColorMap[method.type] || 'bg-gray-400']"
+              :class="['console-data-mark', 'h-full rounded-full transition-all', barColorMap[method.type] || 'bg-gray-400']"
               :style="{ width: barWidth(currency, amount) + '%' }"
             ></div>
           </div>

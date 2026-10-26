@@ -8,7 +8,6 @@ import (
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
-	"github.com/gin-gonic/gin"
 )
 
 const maxOpenAIAccountUserAgentLength = 512
@@ -31,6 +30,10 @@ type openAIOutboundIdentity struct {
 	Source string
 }
 
+type codexDefaultIdentityCacheKey struct {
+	owner outboundIdentityOwner
+}
+
 // resolveOpenAIOutboundIdentityFromSettings is the single authority for
 // selecting a trusted OpenAI Codex outbound identity. A valid account-level
 // identity wins over a valid system identity; an empty or invalid candidate
@@ -42,8 +45,24 @@ type openAIOutboundIdentity struct {
 // request-classification switch, not an administrator override for an account's
 // configured outbound client identity.
 func resolveOpenAIOutboundIdentityFromSettings(ctx context.Context, account *Account, settingService *SettingService) openAIOutboundIdentity {
+	owner, err := requestCredentialAccount(ctx, account)
+	if err != nil {
+		return openAIOutboundIdentity{}
+	}
+	account = owner
+	ctx = withOutboundIdentitySettingsOwner(ctx, account)
 	if scope := outboundIdentityScopeFromContext(ctx); scope != nil {
-		key := outboundIdentityOwnerKey(account)
+		candidate := ""
+		if account != nil {
+			candidate = account.GetOpenAIUserAgent()
+		}
+		key := requestCredentialIdentityCacheKey(ctx, account, candidate)
+		if account == nil {
+			// Compatible presets resolve Codex defaults without an account
+			// candidate, but still belong to the invoking credential owner.
+			settingsOwner, _ := ctx.Value(outboundIdentitySettingsOwnerKey{}).(outboundIdentityOwner)
+			key = codexDefaultIdentityCacheKey{owner: settingsOwner}
+		}
 		if cached, ok := scope.codex.Load(key); ok {
 			if identity, valid := cached.(openAIOutboundIdentity); valid {
 				return identity
@@ -59,25 +78,44 @@ func resolveOpenAIOutboundIdentityFromSettings(ctx context.Context, account *Acc
 	return resolveOpenAIOutboundIdentityFromCurrentSettings(ctx, account, settingService)
 }
 
+type codexOutboundSettingsSnapshot struct {
+	userAgent                string
+	version                  string
+	allowLegacyCompatibility bool
+}
+
 func resolveOpenAIOutboundIdentityFromCurrentSettings(ctx context.Context, account *Account, settingService *SettingService) openAIOutboundIdentity {
+	read := func() codexOutboundSettingsSnapshot {
+		settings := codexOutboundSettingsSnapshot{version: codexCLIVersion}
+		if settingService != nil {
+			settings.userAgent, settings.allowLegacyCompatibility = settingService.GetOpenAICodexOutboundProfile(ctx)
+			settings.version = settingService.GetOpenAICodexClientVersion(ctx)
+		}
+		return settings
+	}
+	var settings codexOutboundSettingsSnapshot
+	if snapshot := requestIdentitySettingsSnapshot(ctx); snapshot != nil {
+		snapshot.codexSettingsOnce.Do(func() { snapshot.codexSettings = read() })
+		settings = snapshot.codexSettings
+	} else {
+		settings = read()
+	}
 	accountUA := ""
 	if account != nil {
 		accountUA = account.GetOpenAIUserAgent()
 	}
-	systemUA := ""
-	allowLegacyCompatibility := false
-	version := codexCLIVersion
-	if settingService != nil {
-		systemUA, allowLegacyCompatibility = settingService.GetOpenAICodexOutboundProfile(ctx)
-		version = settingService.GetOpenAICodexClientVersion(ctx)
-	}
-	return resolveOpenAIOutboundIdentityWithVersionAndCompatibility(accountUA, systemUA, version, allowLegacyCompatibility)
+	return resolveOpenAIOutboundIdentityWithVersionAndCompatibility(accountUA, settings.userAgent, settings.version, settings.allowLegacyCompatibility)
 }
 
 // resolveOpenAIOutboundIdentity uses the account-specific Codex UA when it is
 // valid, then the system setting, and finally the compiled-in default. A value
 // is only valid when it can be paired with an official Codex originator.
 func (s *OpenAIGatewayService) resolveOpenAIOutboundIdentity(ctx context.Context, account *Account) openAIOutboundIdentity {
+	owner, err := requestCredentialAccount(ctx, account)
+	if err != nil {
+		return openAIOutboundIdentity{}
+	}
+	account = owner
 	// Spark shadows never own credentials or an outbound identity. All normal
 	// forwarding paths build authentication first and therefore fail closed when
 	// this lookup fails; resolving here makes the final header stage agree with
@@ -143,16 +181,18 @@ func NormalizeOpenAICodexUserAgent(userAgent string) (string, error) {
 // configured identity. Legacy aliases are accepted only through the closed
 // migration set when the global compatibility mode is enabled.
 func NormalizeOpenAICodexUserAgentWithCompatibility(userAgent string, allowLegacyCompatibility bool) (string, error) {
-	userAgent = strings.TrimSpace(userAgent)
-	if userAgent == "" {
+	if strings.Trim(userAgent, " \t") == "" {
 		return "", nil
 	}
-	if len(userAgent) > maxOpenAIAccountUserAgentLength {
-		return "", infraerrors.Newf(http.StatusBadRequest, "OPENAI_CODEX_USER_AGENT_INVALID", "OpenAI Codex user_agent must be at most %d characters", maxOpenAIAccountUserAgentLength)
-	}
+	// Validate the raw candidate before canonicalizing surrounding whitespace.
+	// Trimming first would turn a CR/LF-wrapped invalid account/global value
+	// into an accepted identity instead of rejecting it or falling through.
 	_, pairedUserAgent, ok := openai.PairConfiguredCodexClientIdentity(userAgent, allowLegacyCompatibility)
 	if !ok {
 		return "", infraerrors.New(http.StatusBadRequest, "OPENAI_CODEX_USER_AGENT_INVALID", "OpenAI Codex user_agent must be a supported Codex User-Agent")
+	}
+	if len(pairedUserAgent) > maxOpenAIAccountUserAgentLength {
+		return "", infraerrors.Newf(http.StatusBadRequest, "OPENAI_CODEX_USER_AGENT_INVALID", "OpenAI Codex user_agent must be at most %d characters", maxOpenAIAccountUserAgentLength)
 	}
 	return pairedUserAgent, nil
 }
@@ -197,7 +237,7 @@ func resolveOpenAIOutboundIdentityWithVersion(accountUA, systemUA, configuredVer
 
 func resolveOpenAIOutboundIdentityWithVersionAndCompatibility(accountUA, systemUA, configuredVersion string, allowLegacyCompatibility bool) openAIOutboundIdentity {
 	identity := resolveOpenAIOutboundIdentityCandidatesWithCompatibility(accountUA, systemUA, allowLegacyCompatibility)
-	version, _ := resolveOpenAICodexClientVersion(configuredVersion, "")
+	version, _ := resolveOpenAICodexClientVersion(configuredVersion)
 	if userAgent := openai.SetCodexUserAgentVersion(identity.UserAgent, version); userAgent != "" {
 		identity.UserAgent = userAgent
 		identity.Version = version
@@ -206,12 +246,8 @@ func resolveOpenAIOutboundIdentityWithVersionAndCompatibility(accountUA, systemU
 }
 
 func validOpenAIOutboundIdentityWithCompatibility(userAgent string, allowLegacyCompatibility bool) (openAIOutboundIdentity, bool) {
-	userAgent = strings.TrimSpace(userAgent)
-	if len(userAgent) > maxOpenAIAccountUserAgentLength {
-		return openAIOutboundIdentity{}, false
-	}
 	profile, pairedUA, ok := openai.PairConfiguredCodexClientIdentity(userAgent, allowLegacyCompatibility)
-	if !ok {
+	if !ok || len(pairedUA) > maxOpenAIAccountUserAgentLength {
 		return openAIOutboundIdentity{}, false
 	}
 	version := openAIOutboundIdentityVersion(pairedUA)
@@ -237,8 +273,9 @@ func openAIOutboundIdentityVersion(userAgent string) string {
 
 // applyOpenAIOutboundIdentity is the final identity stage for an OpenAI
 // request. Account Header Override and all inbound headers must run before it.
-// OAuth/ChatGPT internal requests additionally receive the originator derived
-// from the final UA. Platform API requests never receive OAuth-only identity.
+// Inference and provider discovery declare UA, Originator and Version for both
+// OAuth and API keys, matching the official built-in OpenAI provider. Auxiliary
+// ChatGPT usage endpoints deliberately request UA only.
 func (s *OpenAIGatewayService) applyOpenAIOutboundIdentity(ctx context.Context, account *Account, headers http.Header, useCodexIdentity bool) openAIOutboundIdentity {
 	identity := s.resolveOpenAIOutboundIdentity(ctx, account)
 	applyResolvedOpenAIOutboundIdentity(headers, identity, useCodexIdentity)
@@ -260,21 +297,11 @@ func applyResolvedOpenAIOutboundIdentity(headers http.Header, identity openAIOut
 		}
 	}
 	headers.Set("User-Agent", identity.UserAgent)
-	// The endpoint protocol owns header presence. Neither inbound headers nor
-	// generic overrides can opt a Platform API request into Codex declarations.
+	// The endpoint owns header presence, independently of its authentication.
+	// Auxiliary endpoints omit provider declarations; inference includes them.
 	if useCodexIdentity {
 		headers.Set("Version", identity.Version)
 		headers.Set("Originator", identity.Originator)
-	}
-}
-
-func preserveOpenAIThreadOriginator(c *gin.Context, headers http.Header) {
-	if c == nil || c.Request == nil || headers == nil {
-		return
-	}
-	inbound := strings.TrimSpace(c.GetHeader("originator"))
-	if openai.IsOfficialCodexThreadOriginator(inbound) {
-		headers.Set("Originator", inbound)
 	}
 }
 

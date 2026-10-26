@@ -4,7 +4,7 @@
       <h2 class="text-lg font-medium text-gray-900 dark:text-white">
         {{ t('profile.totp.title') }}
       </h2>
-      <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+      <p class="mt-1 text-sm surface-muted">
         {{ t('profile.totp.description') }}
       </p>
     </div>
@@ -16,16 +16,16 @@
 
       <!-- Feature disabled globally -->
       <div v-else-if="status && !status.feature_enabled" class="flex items-center gap-4 py-4">
-        <div class="flex-shrink-0 rounded-full bg-gray-100 p-3 dark:bg-dark-700">
+        <div class="flex-shrink-0 rounded-full surface-inset p-3">
           <svg class="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
             <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
           </svg>
         </div>
         <div>
-          <p class="font-medium text-gray-700 dark:text-gray-300">
+          <p class="font-medium surface-muted">
             {{ t('profile.totp.featureDisabled') }}
           </p>
-          <p class="text-sm text-gray-500 dark:text-gray-400">
+          <p class="text-sm surface-muted">
             {{ t('profile.totp.featureDisabledHint') }}
           </p>
         </div>
@@ -34,7 +34,7 @@
       <!-- 2FA Enabled -->
       <div v-else-if="status?.enabled" class="flex items-center justify-between">
         <div class="flex items-center gap-4">
-          <div class="flex-shrink-0 rounded-full bg-green-100 p-3 dark:bg-green-900/30">
+          <div class="flex-shrink-0 rounded-full bg-green-100/[0.15] p-3 dark:bg-green-900/30">
             <svg class="h-6 w-6 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
               <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
             </svg>
@@ -43,7 +43,7 @@
             <p class="font-medium text-gray-900 dark:text-white">
               {{ t('profile.totp.enabled') }}
             </p>
-            <p v-if="status.enabled_at" class="text-sm text-gray-500 dark:text-gray-400">
+            <p v-if="status.enabled_at" class="text-sm surface-muted">
               {{ t('profile.totp.enabledAt') }}: {{ formatDate(status.enabled_at) }}
             </p>
           </div>
@@ -60,16 +60,16 @@
       <!-- 2FA Not Enabled -->
       <div v-else class="flex items-center justify-between">
         <div class="flex items-center gap-4">
-          <div class="flex-shrink-0 rounded-full bg-gray-100 p-3 dark:bg-dark-700">
+          <div class="flex-shrink-0 rounded-full surface-inset p-3">
             <svg class="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
               <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
             </svg>
           </div>
           <div>
-            <p class="font-medium text-gray-700 dark:text-gray-300">
+            <p class="font-medium surface-muted">
               {{ t('profile.totp.notEnabled') }}
             </p>
-            <p class="text-sm text-gray-500 dark:text-gray-400">
+            <p class="text-sm surface-muted">
               {{ t('profile.totp.notEnabledHint') }}
             </p>
           </div>

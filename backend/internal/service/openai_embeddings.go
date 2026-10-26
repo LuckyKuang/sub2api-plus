@@ -56,13 +56,21 @@ func (s *OpenAIGatewayService) ForwardEmbeddings(
 		zap.String("upstream_model", upstreamModel),
 	)
 
-	apiKey := strings.TrimSpace(account.GetOpenAIProtocolAPIKey())
+	credentialAccount, err := requestCredentialAccount(ctx, account)
+	if err != nil {
+		return nil, err
+	}
+	credentialAccount = snapshotRequestCredentialAccount(credentialAccount)
+	apiKey := strings.TrimSpace(credentialAccount.GetOpenAIProtocolAPIKey())
 	if apiKey == "" {
 		return nil, fmt.Errorf("account %d missing api_key", account.ID)
 	}
+	recordRequestCredentialOwner(ctx, credentialAccount, apiKey)
+	ctx = withRequestCredentialOwner(ctx, account, apiKey)
+	defer bindRequestCredentialOwnerContext(ctx, c)()
 	// 协议感知：Anthropic 协议账号的凭证 base_url 指向 /anthropic 端点，
 	// embeddings 需使用 OpenAI 格式 base。
-	baseURL := account.GetOpenAIFormatBaseURL()
+	baseURL := credentialAccount.GetOpenAIFormatBaseURL()
 	if baseURL == "" {
 		baseURL = "https://api.openai.com"
 	}
@@ -90,12 +98,12 @@ func (s *OpenAIGatewayService) ForwardEmbeddings(
 			}
 		}
 	}
-	account.applyOpenAIHeaderOverrides(upstreamReq.Header)
-	s.applyOpenAIOutboundIdentity(ctx, account, upstreamReq.Header, false)
+	credentialAccount.applyOpenAIHeaderOverrides(upstreamReq.Header)
+	s.applyOpenAIOutboundIdentity(ctx, account, upstreamReq.Header, true)
 
-	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
+	proxyURL, err := requestCredentialOwnerProxyURL(upstreamCtx, account)
+	if err != nil {
+		return nil, err
 	}
 	resp, err := s.doOpenAIUpstream(upstreamReq, proxyURL, account)
 	if err != nil {

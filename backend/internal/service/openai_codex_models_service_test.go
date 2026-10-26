@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1708,6 +1709,149 @@ func newCodexModelsTestAccount() *Account {
 	}
 }
 
+type modelsManifestCredentialAccountRepo struct {
+	AccountRepository
+	owner *Account
+	reads int
+}
+
+func (r *modelsManifestCredentialAccountRepo) GetByID(_ context.Context, id int64) (*Account, error) {
+	r.reads++
+	if r.owner != nil && r.owner.ID == id {
+		return r.owner, nil
+	}
+	return nil, errors.New("credential account not found")
+}
+
+type modelsManifestSnapshotSettingsRepo struct {
+	outboundIdentityTestRepo
+	onRead func()
+	once   sync.Once
+}
+
+func (r *modelsManifestSnapshotSettingsRepo) GetValue(ctx context.Context, key string) (string, error) {
+	r.once.Do(r.onRead)
+	return r.outboundIdentityTestRepo.GetValue(ctx, key)
+}
+
+func TestFetchCodexModelsManifestShadowFreezesCredentialProxyAcrossRelink(t *testing.T) {
+	var directCalls, foreignProxyCalls atomic.Int32
+	direct := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		directCalls.Add(1)
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	t.Cleanup(direct.Close)
+	foreignProxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		foreignProxyCalls.Add(1)
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	t.Cleanup(foreignProxy.Close)
+	requests := make(chan *http.Request, 1)
+	ownerProxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		requests <- req.Clone(context.Background())
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"models":[]}`)
+	}))
+	t.Cleanup(ownerProxy.Close)
+	proxyAccount := func(id int64, rawURL string) *Proxy {
+		parsed, err := url.Parse(rawURL)
+		require.NoError(t, err)
+		port, err := strconv.Atoi(parsed.Port())
+		require.NoError(t, err)
+		return &Proxy{ID: id, Protocol: parsed.Scheme, Host: parsed.Hostname(), Port: port, Status: StatusActive}
+	}
+	owner := newCodexModelsTestAccount()
+	owner.Proxy = proxyAccount(901, ownerProxy.URL)
+	owner.ProxyID = &owner.Proxy.ID
+	owner.Credentials["user_agent"] = "codex_vscode/0.164.0 (Ubuntu 24.04; aarch64) vscode"
+	parentID := owner.ID
+	selected := &Account{ID: 902, Platform: PlatformOpenAI, Type: AccountTypeOAuth, ParentAccountID: &parentID, Proxy: proxyAccount(903, foreignProxy.URL)}
+	selected.ProxyID = &selected.Proxy.ID
+	repo := &modelsManifestCredentialAccountRepo{owner: owner}
+	settingsRepo := &modelsManifestSnapshotSettingsRepo{onRead: func() {
+		// The acquisition is complete before settings are read. A concurrent
+		// relink must not redirect its bearer token through another proxy.
+		newParentID := int64(999)
+		selected.ParentAccountID = &newParentID
+		owner.Credentials["access_token"] = "replacement-access-token"
+		owner.Credentials["chatgpt_account_id"] = "replacement-account"
+		owner.Credentials["user_agent"] = DefaultOpenAICodexUserAgent
+		owner.Proxy = selected.Proxy
+		owner.ProxyID = selected.ProxyID
+	}}
+	service := &OpenAIGatewayService{accountRepo: repo, settingService: NewSettingService(settingsRepo, nil)}
+	original := chatgptCodexModelsURL
+	chatgptCodexModelsURL = direct.URL + "/backend-api/codex/models"
+	t.Cleanup(func() { chatgptCodexModelsURL = original })
+
+	manifest, err := service.FetchCodexModelsManifest(context.Background(), selected, "", "")
+	require.NoError(t, err)
+	require.JSONEq(t, `{"models":[]}`, string(manifest.Body))
+	require.Equal(t, int32(0), directCalls.Load())
+	require.Equal(t, int32(0), foreignProxyCalls.Load())
+	require.Equal(t, 1, repo.reads, "send must not resolve the relinked parent")
+	select {
+	case request := <-requests:
+		require.Equal(t, "Bearer test-access-token", request.Header.Get("Authorization"))
+		require.Equal(t, "acc-123", request.Header.Get("ChatGPT-Account-ID"))
+		require.Equal(t, "codex_vscode/0.164.0 (Ubuntu 24.04; aarch64) vscode", request.UserAgent())
+		require.Equal(t, "codex_vscode", request.Header.Get("Originator"))
+		require.Equal(t, "0.164.0", request.Header.Get("Version"))
+		require.Equal(t, "0.164.0", request.URL.Query().Get("client_version"))
+		require.Equal(t, "/backend-api/codex/models", request.URL.Path)
+	default:
+		t.Fatal("credential owner proxy received no models request")
+	}
+}
+
+func TestFetchCodexModelsManifestMissingCredentialProxyNeverSends(t *testing.T) {
+	var sends atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		sends.Add(1)
+		_, _ = io.WriteString(w, `{"models":[]}`)
+	}))
+	t.Cleanup(server.Close)
+	original := chatgptCodexModelsURL
+	chatgptCodexModelsURL = server.URL
+	t.Cleanup(func() { chatgptCodexModelsURL = original })
+	for _, accountType := range []string{AccountTypeOAuth, AccountTypeAPIKey} {
+		t.Run(accountType, func(t *testing.T) {
+			account := newCodexModelsTestAccount()
+			if accountType == AccountTypeAPIKey {
+				account = newCodexModelsAPIKeyTestAccount("https://models-upstream.example/v1")
+			}
+			proxyID := int64(44)
+			account.ProxyID = &proxyID
+			service := newCodexModelsAPIKeyTestService(&codexModelsHTTPUpstreamStub{do: func(_ *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
+				sends.Add(1)
+				return nil, errors.New("unexpected send")
+			}})
+			_, err := service.FetchCodexModelsManifest(context.Background(), account, "", "")
+			var applicationError *infraerrors.ApplicationError
+			require.ErrorAs(t, err, &applicationError)
+			require.Equal(t, "OPENAI_CODEX_MODELS_PROXY_INVALID", applicationError.Reason)
+		})
+	}
+	require.Equal(t, int32(0), sends.Load())
+}
+
+func TestFetchCodexModelsManifestAmbiguousCredentialOwnerNeverSends(t *testing.T) {
+	account := newCodexModelsAPIKeyTestAccount("https://old-upstream.example/v1")
+	ctx := WithOutboundIdentityScope(context.Background(), nil)
+	recordRequestCredentialOwner(ctx, account, "sk-upstream")
+	account.Credentials["base_url"] = "https://replacement-upstream.example/v1"
+	sends := 0
+	service := newCodexModelsAPIKeyTestService(&codexModelsHTTPUpstreamStub{do: func(_ *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
+		sends++
+		return nil, errors.New("unexpected send")
+	}})
+	_, err := service.FetchCodexModelsManifest(ctx, account, "", "")
+	var applicationError *infraerrors.ApplicationError
+	require.ErrorAs(t, err, &applicationError)
+	require.Equal(t, "OPENAI_CODEX_MODELS_CREDENTIALS_FAILED", applicationError.Reason)
+	require.Zero(t, sends)
+}
+
 func TestFetchCodexModelsManifestPassthrough(t *testing.T) {
 	manifestBody := `{"models":[{"slug":"gpt-5.5","display_name":"GPT-5.5"}]}`
 
@@ -1882,6 +2026,54 @@ func TestFetchCodexModelsManifestAgentIdentityRecoversInvalidTaskOnce(t *testing
 	require.Equal(t, []string{"0.200.1", "0.200.1"}, queryVersions)
 }
 
+func TestFetchCodexModelsManifestAgentIdentityBootstrapsBeforeInvalidTaskRecovery(t *testing.T) {
+	key, privateKey := newTestAgentIdentityKey(t)
+	account := &Account{ID: 46, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Credentials: map[string]any{
+		"auth_mode": OpenAIAuthModeAgentIdentity, "agent_runtime_id": key.runtimeID, "agent_private_key": privateKey,
+		"chatgpt_account_id": "account-models-bootstrap-retry",
+	}}
+	repo := &stubQuotaAccountRepo{accounts: map[int64]*Account{account.ID: account}}
+	registerCalls := 0
+	var assertions []string
+	var events []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(r.URL.Path, "/task/register") {
+			events = append(events, "register")
+			registerCalls++
+			task := "task-models-bootstrap"
+			if registerCalls > 1 {
+				task = "task-models-recovered"
+			}
+			_, _ = io.WriteString(w, `{"task_id":"`+task+`"}`)
+			return
+		}
+		events = append(events, "models")
+		assertions = append(assertions, r.Header.Get("Authorization"))
+		if len(assertions) == 1 {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = io.WriteString(w, `{"error":{"code":"invalid_task_id"}}`)
+			return
+		}
+		_, _ = io.WriteString(w, `{"models":[]}`)
+	}))
+	defer server.Close()
+	originalModelsURL, originalAuthBase := chatgptCodexModelsURL, openAIAgentIdentityAuthAPIBaseURL
+	chatgptCodexModelsURL, openAIAgentIdentityAuthAPIBaseURL = server.URL, server.URL
+	t.Cleanup(func() {
+		chatgptCodexModelsURL, openAIAgentIdentityAuthAPIBaseURL = originalModelsURL, originalAuthBase
+	})
+	svc := &OpenAIGatewayService{accountRepo: repo}
+	manifest, err := svc.FetchCodexModelsManifest(context.Background(), account, "", "")
+	require.NoError(t, err)
+	require.JSONEq(t, `{"models":[]}`, string(manifest.Body))
+	require.Equal(t, 2, registerCalls)
+	require.Equal(t, []string{"register", "models", "register", "models"}, events)
+	require.Len(t, assertions, 2)
+	require.Equal(t, "task-models-bootstrap", decodeAgentAssertionTask(t, assertions[0]))
+	require.Equal(t, "task-models-recovered", decodeAgentAssertionTask(t, assertions[1]))
+}
+
 func TestFetchCodexModelsManifestAgentIdentityRedactsUpstreamErrors(t *testing.T) {
 	key, privateKey := newTestAgentIdentityKey(t)
 	account := &Account{
@@ -2006,127 +2198,111 @@ func TestFetchCodexModelsManifestMissingToken(t *testing.T) {
 	}
 }
 
+// Native Codex API keys keep account > global > compiled selection even when
+// historical settings and credentials still contain a foreign client family.
 func TestFetchCodexModelsManifestAPIKeySelectedIdentity(t *testing.T) {
 	for _, source := range []string{"account", "global"} {
-		for _, preset := range []string{"claude", "gemini", "grok", "antigravity"} {
-			t.Run(source+"/"+preset, func(t *testing.T) {
-				settings := emptyOutboundIdentitySettings()
-				settings.Profiles[preset] = OutboundIdentitySelection{Preset: preset, Version: "3.9.1"}
-				settings.Defaults["openai:apikey"] = preset
-				settingService, ctx := outboundIdentityTestSettings(t, settings)
+		for _, foreign := range []string{"claude", "gemini", "grok", "minimax"} {
+			t.Run(source+"/"+foreign, func(t *testing.T) {
+				repo := &outboundIdentityTestRepo{values: map[string]string{
+					SettingKeyOutboundIdentity:         `{"defaults":{"openai:apikey":"` + foreign + `"}}`,
+					SettingKeyOpenAICodexUserAgent:     "codex_cli_rs/0.164.0 (Ubuntu 22.4.0; x86_64) xterm-256color",
+					SettingKeyOpenAICodexClientVersion: "0.200.1",
+				}}
+				settings := NewSettingService(repo, nil)
+				ctx := outboundidentity.WithResolver(context.Background(), settings.resolveOutboundIdentityKey)
 				account := newCodexModelsAPIKeyTestAccount("https://upstream.example/v1")
+				account.Credentials[outboundIdentityCredential] = OutboundIdentitySelection{Preset: foreign}
+				wantUA := "codex_cli_rs/0.200.1 (Ubuntu 22.4.0; x86_64) xterm-256color"
+				if source == "account" {
+					account.Credentials["user_agent"] = "codex_cli_rs/0.164.0 (Ubuntu 20.4.0; x86_64) xterm-256color"
+					wantUA = "codex_cli_rs/0.200.1 (Ubuntu 20.4.0; x86_64) xterm-256color"
+				}
 				account.Credentials[credKeyHeaderOverrideEnabled] = true
 				account.Credentials[credKeyHeaderOverrides] = map[string]any{"User-Agent": "caller/9.9.9", "Originator": "caller", "Version": "9.9.9", "X-Grok-Client-Version": "9.9.9"}
-				var selection *OutboundIdentitySelection
-				if source == "account" {
-					selection = &OutboundIdentitySelection{Preset: preset, Version: "3.9.2"}
-					account.Credentials[outboundIdentityCredential] = *selection
-				}
-				want, err := settingService.PreviewOutboundIdentity(ctx, account, selection)
-				require.NoError(t, err)
 				var requests []*http.Request
 				upstream := &codexModelsHTTPUpstreamStub{do: func(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
 					requests = append(requests, req)
 					return &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"models":[{"slug":"custom-model"}]}`))}, nil
 				}}
 				svc := newCodexModelsAPIKeyTestService(upstream)
+				svc.settingService = settings
 				for range 2 {
-					_, err = svc.FetchCodexModelsManifest(ctx, account, "9.9.9", "")
+					_, err := svc.FetchCodexModelsManifest(ctx, account, "9.9.9", "")
 					require.NoError(t, err)
 				}
-				require.Len(t, requests, 1, "identical effective identities reuse the catalog cache")
+				require.Len(t, requests, 1, "same identity reuses the catalog cache")
 				req := requests[0]
-				require.Equal(t, want.UserAgent, req.Header.Get("User-Agent"))
-				require.Equal(t, want.Version, req.URL.Query().Get("client_version"))
-				for name, value := range want.Headers {
-					require.Equal(t, value, req.Header.Get(name), name)
-				}
-				require.Empty(t, req.Header.Get("Originator"))
-				require.Empty(t, req.Header.Get("Version"))
+				require.Equal(t, wantUA, req.UserAgent())
+				require.Equal(t, "0.200.1", req.URL.Query().Get("client_version"))
+				require.Equal(t, "codex_cli_rs", req.Header.Get("Originator"))
+				require.Equal(t, "0.200.1", req.Header.Get("Version"))
+				require.Empty(t, req.Header.Get("X-Grok-Client-Version"))
 				require.Equal(t, "Bearer sk-upstream", req.Header.Get("Authorization"))
-				captured, ok := outboundidentity.FromContext(req.Context())
-				require.True(t, ok, "background refresh must carry the selected snapshot")
-				require.Equal(t, want.UserAgent, captured.UserAgent)
-				if source == "account" {
-					account.Credentials[outboundIdentityCredential] = OutboundIdentitySelection{Preset: preset, Version: "3.9.3"}
-				} else {
-					settings.Profiles[preset] = OutboundIdentitySelection{Preset: preset, Version: "3.9.3"}
-					require.NoError(t, settingService.SetOutboundIdentitySettings(ctx, settings))
-				}
-				_, err = svc.FetchCodexModelsManifest(ctx, account, "9.9.9", "")
+				repo.values[SettingKeyOpenAICodexClientVersion] = "0.200.2"
+				settings.InvalidateOpenAICodexClientVersionCache()
+				_, err := svc.FetchCodexModelsManifest(ctx, account, "9.9.9", "")
 				require.NoError(t, err)
-				require.Len(t, requests, 2, "a different identity must not reuse the earlier cache entry")
-				require.Equal(t, "3.9.3", requests[1].URL.Query().Get("client_version"))
-				require.Contains(t, requests[1].Header.Get("User-Agent"), "/3.9.3")
+				require.Len(t, requests, 2, "a manual version change owns a separate catalog entry")
+				require.Equal(t, "0.200.2", requests[1].URL.Query().Get("client_version"))
+				require.Equal(t, strings.Replace(wantUA, "/0.200.1", "/0.200.2", 1), requests[1].UserAgent())
+				require.Equal(t, "0.200.2", requests[1].Header.Get("Version"))
 			})
 		}
 	}
 }
 
-// A versionless client family declares no client version, so the Codex manifest
-// must not carry an empty `client_version` declaration either: the query and the
-// headers stay coherent. The selected identity still owns the headers.
-func TestFetchCodexModelsManifestVersionlessIdentityOmitsClientVersion(t *testing.T) {
-	settings := emptyOutboundIdentitySettings()
-	settings.Profiles["minimax"] = OutboundIdentitySelection{Preset: "minimax"}
-	settings.Defaults["openai:apikey"] = "minimax"
-	settingService, ctx := outboundIdentityTestSettings(t, settings)
+// Codex is a versioned native client. A versionless foreign preset cannot
+// remove the model catalog's version declaration, including on stale data.
+func TestFetchCodexModelsManifestNativeAPIKeyRequiresClientVersion(t *testing.T) {
+	repo := &outboundIdentityTestRepo{values: map[string]string{SettingKeyOutboundIdentity: `{"defaults":{"openai:apikey":"minimax"}}`}}
+	settings := NewSettingService(repo, nil)
+	validationErr := settings.SetOutboundIdentitySettings(context.Background(), OutboundIdentitySettings{Defaults: map[string]string{"openai:apikey": "minimax"}})
+	var appErr *infraerrors.ApplicationError
+	require.ErrorAs(t, validationErr, &appErr)
+	require.Equal(t, "OUTBOUND_IDENTITY_INVALID", appErr.Reason)
 	account := newCodexModelsAPIKeyTestAccount("https://upstream.example/v1")
-	account.Credentials[credKeyHeaderOverrideEnabled] = true
-	account.Credentials[credKeyHeaderOverrides] = map[string]any{"User-Agent": "caller/9.9.9", "Originator": "caller", "Version": "9.9.9"}
-	want, err := settingService.PreviewOutboundIdentity(ctx, account, nil)
-	require.NoError(t, err)
-	require.Equal(t, "minimax", want.Preset)
-	require.Empty(t, want.Version)
-	require.Equal(t, builtInOutboundIdentity("minimax").Headers, want.Headers)
-
-	var requests []*http.Request
-	upstream := &codexModelsHTTPUpstreamStub{do: func(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
-		requests = append(requests, req)
+	account.Credentials[outboundIdentityCredential] = OutboundIdentitySelection{Preset: "minimax"}
+	var captured *http.Request
+	svc := newCodexModelsAPIKeyTestService(&codexModelsHTTPUpstreamStub{do: func(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
+		captured = req
 		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"models":[{"slug":"custom-model"}]}`))}, nil
-	}}
-	svc := newCodexModelsAPIKeyTestService(upstream)
-	_, err = svc.FetchCodexModelsManifest(ctx, account, "9.9.9", "")
+	}})
+	svc.settingService = settings
+	ctx := outboundidentity.WithResolver(context.Background(), settings.resolveOutboundIdentityKey)
+	_, err := svc.FetchCodexModelsManifest(ctx, account, "9.9.9", "")
 	require.NoError(t, err)
-	require.Len(t, requests, 1)
-	req := requests[0]
-	require.Equal(t, "MiniMaxAgent", req.Header.Get("User-Agent"))
-	require.Empty(t, req.Header.Get("Originator"))
-	require.Empty(t, req.Header.Get("Version"))
-	require.False(t, req.URL.Query().Has("client_version"), "a versionless family must not declare an empty client version")
-	require.Equal(t, "Bearer sk-upstream", req.Header.Get("Authorization"))
+	require.Equal(t, "codex_cli_rs/0.164.0 (Ubuntu 24.04; x86_64) xterm-256color", captured.UserAgent())
+	require.Equal(t, "codex_cli_rs", captured.Header.Get("Originator"))
+	require.Equal(t, "0.164.0", captured.Header.Get("Version"))
+	require.Equal(t, "0.164.0", captured.URL.Query().Get("client_version"))
 }
 
 func TestFetchCodexModelsManifestRefreshRetainsIdentitySnapshot(t *testing.T) {
-	settings := emptyOutboundIdentitySettings()
-	settings.Profiles["grok"] = OutboundIdentitySelection{Preset: "grok", Version: "3.9.1"}
-	settings.Defaults["openai:apikey"] = "grok"
-	settingService, ctx := outboundIdentityTestSettings(t, settings)
+	repo := &outboundIdentityTestRepo{values: map[string]string{SettingKeyOpenAICodexClientVersion: "0.200.1"}}
+	settings := NewSettingService(repo, nil)
 	account := newCodexModelsAPIKeyTestAccount("https://upstream.example/v1")
-	ctx = WithAccountOutboundIdentity(ctx, account)
-	identity, ok := outboundidentity.FromContext(ctx)
-	require.True(t, ok)
-	headers := http.Header{"Authorization": {"Bearer sk-upstream"}}
-	identity.Apply(headers)
+	ctx := WithOutboundIdentityScope(context.Background(), nil)
 	var captured *http.Request
-	upstream := &codexModelsHTTPUpstreamStub{do: func(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
+	svc := newCodexModelsAPIKeyTestService(&codexModelsHTTPUpstreamStub{do: func(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
 		captured = req
 		return &http.Response{StatusCode: http.StatusNotModified, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(""))}, nil
-	}}
-	svc := newCodexModelsAPIKeyTestService(upstream)
-	request := openAIModelsRequest{url: "https://upstream.example/v1/models?client_version=3.9.1", headers: headers, credentialAccount: account, useAPIKeyUpstream: true}
+	}})
+	svc.settingService = settings
+	identity := svc.resolveOpenAIOutboundIdentity(ctx, account)
+	require.Equal(t, "0.200.1", identity.Version)
+	headers := http.Header{"Authorization": {"Bearer sk-upstream"}, "User-Agent": {"codex_cli_rs/0.200.1 (Ubuntu 24.04; x86_64) xterm-256color"}, "Originator": {"codex_cli_rs"}, "Version": {"0.200.1"}}
+	request := openAIModelsRequest{url: "https://upstream.example/v1/models?client_version=0.200.1", headers: headers, credentialAccount: account, useAPIKeyUpstream: true}
 	fetch := svc.fetchCodexModelsManifestUpstreamForRequest(ctx, request)
-	settings.Profiles["grok"] = OutboundIdentitySelection{Preset: "grok", Version: "3.9.2"}
-	require.NoError(t, settingService.SetOutboundIdentitySettings(ctx, settings))
+	repo.values[SettingKeyOpenAICodexClientVersion] = "0.200.2"
+	settings.InvalidateOpenAICodexClientVersionCache()
 	_, err := fetch(context.Background(), "catalog-etag")
 	require.NoError(t, err)
-	selected, ok := outboundidentity.FromContext(captured.Context())
-	require.True(t, ok)
-	require.Equal(t, identity.UserAgent, selected.UserAgent)
-	require.Equal(t, identity.UserAgent, captured.Header.Get("User-Agent"))
-	require.Equal(t, identity.Version, captured.Header.Get("X-Grok-Client-Version"))
-	require.Equal(t, identity.Version, captured.URL.Query().Get("client_version"))
+	require.Equal(t, "codex_cli_rs/0.200.1 (Ubuntu 24.04; x86_64) xterm-256color", captured.UserAgent())
+	require.Equal(t, "0.200.1", captured.Header.Get("Version"))
+	require.Equal(t, "0.200.1", captured.URL.Query().Get("client_version"))
 	require.Equal(t, "catalog-etag", captured.Header.Get("If-None-Match"))
+	require.Equal(t, "0.200.1", svc.resolveOpenAIOutboundIdentity(captured.Context(), account).Version)
 }
 
 func TestFetchCodexModelsManifestAPIKeyCustomUpstream(t *testing.T) {
@@ -2169,10 +2345,10 @@ func TestFetchCodexModelsManifestAPIKeyCustomUpstream(t *testing.T) {
 	if gotRequest.Header.Get("Authorization") != "Bearer sk-upstream" {
 		t.Errorf("authorization header: got %q", gotRequest.Header.Get("Authorization"))
 	}
-	if gotRequest.Header.Get("Originator") != "" {
+	if gotRequest.Header.Get("Originator") != "codex-tui" {
 		t.Errorf("originator header: got %q", gotRequest.Header.Get("Originator"))
 	}
-	if gotRequest.Header.Get("Version") != "" {
+	if gotRequest.Header.Get("Version") != "0.164.0" {
 		t.Errorf("version header: got %q", gotRequest.Header.Get("Version"))
 	}
 	if gotRequest.Header.Get("User-Agent") != codexModelsCustomAccountCurrentUserAgent {
@@ -3046,7 +3222,7 @@ func TestFetchCodexModelsManifestAPIKeyCacheKeyIsolatesRequestIdentity(t *testin
 	proxyID := int64(9)
 	differentProxy := newCodexModelsAPIKeyTestAccount("https://upstream.example")
 	differentProxy.ProxyID = &proxyID
-	differentProxy.Proxy = &Proxy{Protocol: "http", Host: "127.0.0.1", Port: 8080}
+	differentProxy.Proxy = &Proxy{ID: proxyID, Protocol: "http", Host: "127.0.0.1", Port: 8080}
 	fetch(differentProxy, "0.144.0")
 	fetch(differentProxy, "0.144.0")
 
@@ -3398,11 +3574,13 @@ func TestFetchCodexModelsManifestAPIKeyRejectsBaseURLFragment(t *testing.T) {
 // manifest upstream errors (#4544).
 type codexModelsAccountStateRepo struct {
 	AccountRepository
-	mu                  sync.Mutex
-	setErrorCalls       int
-	lastErrorMsg        string
-	setTempUnschedCalls int
-	lastTempReason      string
+	mu                   sync.Mutex
+	setErrorCalls        int
+	credentialErrorCalls int
+	credentialSnapshot   map[string]any
+	lastErrorMsg         string
+	setTempUnschedCalls  int
+	lastTempReason       string
 }
 
 func (r *codexModelsAccountStateRepo) SetError(_ context.Context, _ int64, errorMsg string) error {
@@ -3413,12 +3591,29 @@ func (r *codexModelsAccountStateRepo) SetError(_ context.Context, _ int64, error
 	return nil
 }
 
+func (r *codexModelsAccountStateRepo) SetCredentialErrorIfUnchanged(_ context.Context, expectedOwner *Account, message string) (bool, error) {
+	credentials := expectedOwner.Credentials
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.credentialErrorCalls++
+	r.credentialSnapshot = credentials
+	r.setErrorCalls++
+	r.lastErrorMsg = message
+	return true, nil
+}
+
 func (r *codexModelsAccountStateRepo) SetTempUnschedulable(_ context.Context, _ int64, _ time.Time, reason string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.setTempUnschedCalls++
 	r.lastTempReason = reason
 	return nil
+}
+
+func (r *codexModelsAccountStateRepo) SetCredentialTempUnschedulableIfUnchanged(ctx context.Context, expectedOwner *Account, until time.Time, message string) (bool, error) {
+	id := expectedOwner.ID
+	err := r.SetTempUnschedulable(ctx, id, until, message)
+	return err == nil, err
 }
 
 func newCodexModels401TestService(repo AccountRepository) *OpenAIGatewayService {
@@ -3472,6 +3667,8 @@ func TestFetchCodexModelsManifestOAuth401TokenRevokedDisablesAccount(t *testing.
 	require.Error(t, err)
 	require.True(t, IsRetryableCodexModelsManifestError(err))
 	require.Equal(t, 1, repo.setErrorCalls, "revoked token should permanently disable the account")
+	require.Equal(t, 1, repo.credentialErrorCalls, "the manifest must quarantine the exact rejected grant")
+	require.Equal(t, account.Credentials, repo.credentialSnapshot)
 	require.Contains(t, repo.lastErrorMsg, "Token revoked")
 	require.Equal(t, 0, repo.setTempUnschedCalls)
 }

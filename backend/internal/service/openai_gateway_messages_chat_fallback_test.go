@@ -26,6 +26,37 @@ func forceChatMessagesFallbackAccount() *Account {
 	return account
 }
 
+// A valid Grok API key must reach its official Chat Completions route when
+// Responses is unavailable. The generic OpenAI-family getter excludes Grok;
+// treating that empty value as a missing grant would quarantine a valid key.
+func TestForwardAsAnthropicGrokChatFallbackUsesOwnCredentialAndEndpoint(t *testing.T) {
+	for _, tc := range []struct{ name, base, endpoint string }{
+		{"official", "", "https://api.x.ai/v1/chat/completions"},
+		{"regional", "https://eu-west-1.api.x.ai/v1", "https://eu-west-1.api.x.ai/v1/chat/completions"},
+		{"compatible", "http://grok-relay.example/v1", "http://grok-relay.example/v1/chat/completions"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &credentialFenceRepo{applied: true}
+			upstream := &httpUpstreamRecorder{resp: &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"id":"chat-1","object":"chat.completion","model":"grok-4","choices":[{"index":0,"message":{"role":"assistant","content":"hello"},"finish_reason":"stop"}],"usage":{"prompt_tokens":3,"completion_tokens":1,"total_tokens":4}}`))}}
+			svc := &OpenAIGatewayService{cfg: rawChatCompletionsTestConfig(), accountRepo: repo, httpUpstream: upstream}
+			account := &Account{ID: 901, Platform: PlatformGrok, Type: AccountTypeAPIKey, Status: StatusActive, Credentials: map[string]any{"api_key": "valid-grok-key", "base_url": tc.base}, Extra: map[string]any{openai_compat.ExtraKeyResponsesSupported: false}}
+			body := []byte(`{"model":"grok-4","messages":[{"role":"user","content":"hello"}],"max_tokens":32,"stream":false}`)
+			c := newOpenAIRejectedFieldTestContext(body)
+			result, err := svc.ForwardAsAnthropic(context.Background(), c, account, body, "", "")
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			require.Len(t, upstream.requests, 1)
+			require.Equal(t, tc.endpoint, upstream.lastReq.URL.String())
+			require.Equal(t, "Bearer valid-grok-key", upstream.lastReq.Header.Get("Authorization"))
+			require.True(t, gjson.GetBytes(upstream.lastBody, "messages").IsArray())
+			require.False(t, gjson.GetBytes(upstream.lastBody, "input").Exists())
+			require.Zero(t, repo.calls, "a valid Grok key must not enter credential quarantine")
+			require.Equal(t, StatusActive, account.Status)
+			require.Equal(t, http.StatusOK, c.Writer.Status())
+		})
+	}
+}
+
 // errTailReader yields the given data, then returns err instead of io.EOF,
 // simulating an upstream connection that breaks mid-stream.
 type errTailReader struct {
@@ -483,8 +514,8 @@ func TestForwardAsAnthropic_ResponsesSupportedAccountStillUsesResponsesEndpoint(
 	require.Equal(t, "medium", *result.ReasoningEffort)
 	require.False(t, gjson.GetBytes(upstream.lastBody, "messages").Exists())
 	require.Equal(t, DefaultOpenAICodexUserAgent, upstream.lastReq.Header.Get("User-Agent"))
-	require.Empty(t, upstream.lastReq.Header.Get("originator"))
-	require.Empty(t, upstream.lastReq.Header.Get("version"))
+	require.Equal(t, "codex_cli_rs", upstream.lastReq.Header.Get("originator"))
+	require.Equal(t, "0.164.0", upstream.lastReq.Header.Get("version"))
 	require.Empty(t, upstream.lastReq.Header.Get("OpenAI-Beta"))
 	require.Equal(t, "ok", gjson.Get(rec.Body.String(), "content.0.text").String())
 }

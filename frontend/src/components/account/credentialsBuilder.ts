@@ -122,12 +122,15 @@ const HEADER_OVERRIDE_BLOCKED_NAMES = new Set([
   'sec-websocket-protocol',
   'sec-websocket-accept',
   'session_id',
+  'session-id',
+  'thread-id',
   'conversation_id',
   'x-codex-turn-state',
   'x-codex-turn-metadata',
   'chatgpt-account-id',
   'x-claude-code-session-id',
   'x-client-request-id',
+  'x-codex-parent-thread-id',
   'x-grok-conv-id'
 ])
 
@@ -641,6 +644,16 @@ function officialAccountAPISupported(account: CNUsageCellAccount, mode: string):
 export function cnQuotaCellVisible(account: CNUsageCellAccount): boolean {
   const { platform } = account
   const mode = cnUsageCellAccountMode(account)
+  if (account.type === 'oauth') {
+    if (platform === 'kimi' || platform === 'minimax' || platform === 'stepfun') {
+      return account.credentials?.oauth_provider === platform && mode === 'coding'
+    }
+    if (platform === 'zhipu') {
+      return (account.credentials?.oauth_provider === 'bigmodel' || account.credentials?.oauth_provider === 'zai') &&
+        (account.credentials?.plan_kind === 'individual-coding-plan' || account.credentials?.plan_kind === 'team-coding-plan') && mode === 'coding'
+    }
+    return false
+  }
   if (platform === 'opencode_go') return mode !== 'zen'
   // Command Code、Cline：订阅窗口与积分由一次探测同时刷新。
   if (OFFICIAL_ACCOUNT_API_PLATFORMS.includes(platform)) return officialAccountAPISupported(account, mode)
@@ -650,6 +663,9 @@ export function cnQuotaCellVisible(account: CNUsageCellAccount): boolean {
 export function cnBalanceCellVisible(account: CNUsageCellAccount): boolean {
   const { platform } = account
   const mode = cnUsageCellAccountMode(account)
+  if (account.type === 'oauth') {
+    return platform === 'deepseek' && account.credentials?.oauth_provider === 'deepseek' && mode !== 'coding'
+  }
   if (OFFICIAL_ACCOUNT_API_PLATFORMS.includes(platform)) return officialAccountAPISupported(account, mode)
   return (platform === 'kimi' || platform === 'deepseek') && mode !== 'coding'
 }

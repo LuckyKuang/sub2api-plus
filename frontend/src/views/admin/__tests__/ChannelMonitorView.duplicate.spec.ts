@@ -152,6 +152,28 @@ describe('ChannelMonitorView duplicate action', () => {
     duplicateMonitor.mockResolvedValue(makeMonitor({ id: 43, name: 'primary (Copy)', enabled: false }))
   })
 
+  it('keeps mode tabs above the scroll area and mounts only the selected settings mode', async () => {
+    runtime.mode = 'v3'
+    const wrapper = mountView()
+    await flushPromises()
+    const scroll = wrapper.get('[data-test="monitor-settings-scroll"]')
+    expect(scroll.find('[role="tablist"]').exists()).toBe(false)
+    expect(scroll.find('[data-testid="v3-settings"]').exists()).toBe(true)
+    expect(scroll.find('[data-testid="v2-settings"]').exists()).toBe(false)
+    expect(listMonitors).not.toHaveBeenCalled()
+    await wrapper.get('[role="tablist"] button:nth-child(2)').trigger('click')
+    await flushPromises()
+    expect(scroll.find('[data-testid="v2-settings"]').exists()).toBe(true)
+    expect(scroll.find('[data-testid="v3-settings"]').exists()).toBe(false)
+    expect(listMonitors).not.toHaveBeenCalled()
+    await wrapper.get('[role="tablist"] button:last-child').trigger('click')
+    await flushPromises()
+    expect(scroll.classes()).toContain('workspace-body')
+    expect(scroll.classes()).not.toContain('workspace-scroll')
+    expect(listMonitors).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
   it('allows manual V1 probes alongside V3 and labels the active tab', async () => {
     runtime.mode = 'v3'
     const wrapper = mountView()

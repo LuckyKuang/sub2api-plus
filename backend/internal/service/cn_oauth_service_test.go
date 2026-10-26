@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -54,9 +55,75 @@ func (f cnOAuthDoer) Do(r *http.Request) (*http.Response, error) { return f(r) }
 func cnOAuthReady(t *testing.T, s *CNOAuthService, platform string, accountID int64) string {
 	t.Helper()
 	identity := builtInOutboundIdentity(platform)
-	id, err := s.store.Create(context.Background(), &cnoauth.Session{OwnerID: 7, AccountID: accountID, Identity: identity, Flow: &cnoauth.Flow{Platform: platform, Region: "cn", Interval: 2, ExpiresAt: time.Now().Add(time.Minute)}, Grant: &cnoauth.Grant{AccessToken: "private-grant", RefreshToken: "private-refresh", ExpiresAt: time.Now().Add(time.Hour)}})
+	session := &cnoauth.Session{OwnerID: 7, AccountID: accountID, Identity: identity, Flow: &cnoauth.Flow{Platform: platform, Region: "cn", Interval: 2, ExpiresAt: time.Now().Add(time.Minute)}, Grant: &cnoauth.Grant{AccessToken: "private-grant", RefreshToken: "private-refresh", ExpiresAt: time.Now().Add(time.Hour)}}
+	if accountID > 0 {
+		account, err := s.accountRepo.GetByID(context.Background(), accountID)
+		require.NoError(t, err)
+		session.LoginOwner = cnOAuthTestLoginOwner(t, account)
+		session.ProxyID = account.ProxyID
+		if account.Proxy != nil {
+			session.ProxyURL = account.Proxy.URL()
+		}
+	}
+	id, err := s.store.Create(context.Background(), session)
 	require.NoError(t, err)
 	return id
+}
+
+// This fixture encodes the persistence contract independently of the production
+// login-owner serializer, so omitted owner fields cannot make both agree.
+func cnOAuthTestLoginOwner(t *testing.T, a *Account) json.RawMessage {
+	t.Helper()
+	raw, err := json.Marshal(map[string]any{"id": a.ID, "platform": a.Platform, "type": a.Type, "credentials": a.Credentials, "proxy_id": a.ProxyID, "proxy": a.Proxy,
+		"status": a.Status, "error_message": a.ErrorMessage, "schedulable": a.Schedulable, "rate_limited_at": a.RateLimitedAt, "rate_limit_reset_at": a.RateLimitResetAt, "overload_until": a.OverloadUntil,
+		"temp_unschedulable_until": a.TempUnschedulableUntil, "temp_unschedulable_reason": a.TempUnschedulableReason, "extra": a.Extra})
+	require.NoError(t, err)
+	return raw
+}
+
+func (r *refreshAPIAccountRepo) CompleteCNOAuthLoginIfUnchanged(_ context.Context, expected *Account, credentials map[string]any) (bool, error) {
+	current := activeRefreshAPITestAccount(r.account)
+	if current == nil || expected == nil || current.ID != expected.ID || current.Platform != expected.Platform || current.Type != expected.Type || !reflect.DeepEqual(current.ProxyID, expected.ProxyID) || current.proxyURLOrEmpty() != expected.proxyURLOrEmpty() {
+		return false, nil
+	}
+	currentJSON, currentErr := json.Marshal(current.Credentials)
+	expectedJSON, expectedErr := json.Marshal(expected.Credentials)
+	if currentErr != nil || expectedErr != nil || string(currentJSON) != string(expectedJSON) {
+		return false, nil
+	}
+	sameTime := func(a, b *time.Time) bool {
+		if a == nil || b == nil {
+			return a == nil && b == nil
+		}
+		return a.Equal(*b)
+	}
+	if current.Status != expected.Status || current.ErrorMessage != expected.ErrorMessage || current.Schedulable != expected.Schedulable || !sameTime(current.RateLimitedAt, expected.RateLimitedAt) || !sameTime(current.RateLimitResetAt, expected.RateLimitResetAt) || !sameTime(current.OverloadUntil, expected.OverloadUntil) || !sameTime(current.TempUnschedulableUntil, expected.TempUnschedulableUntil) || current.TempUnschedulableReason != expected.TempUnschedulableReason {
+		return false, nil
+	}
+	for _, key := range []string{"model_rate_limits", "antigravity_quota_scopes"} {
+		if !reflect.DeepEqual(current.Extra[key], expected.Extra[key]) {
+			return false, nil
+		}
+	}
+	if r.updateErr != nil {
+		return false, r.updateErr
+	}
+	copy := *current
+	copy.Credentials = shallowCopyMap(credentials)
+	copy.Status = StatusActive
+	copy.ErrorMessage = ""
+	copy.RateLimitedAt = nil
+	copy.RateLimitResetAt = nil
+	copy.OverloadUntil = nil
+	copy.TempUnschedulableUntil = nil
+	copy.TempUnschedulableReason = ""
+	copy.Extra = shallowCopyMap(current.Extra)
+	delete(copy.Extra, "model_rate_limits")
+	delete(copy.Extra, "antigravity_quota_scopes")
+	r.account = &copy
+	r.updateCalls++
+	r.updateCredentialsCalls++
+	return true, nil
 }
 func TestCNOAuthCompletionOwnerSingleUseAndNoTokenEcho(t *testing.T) {
 	for _, platform := range []string{PlatformDeepseek, PlatformKimi, PlatformMiniMax} {
@@ -117,15 +184,16 @@ func TestCNOAuthCancelAndRelink(t *testing.T) {
 	view, err := svc.Complete(context.Background(), 7, PlatformKimi, id, CNOAuthCompleteInput{})
 	require.NoError(t, err)
 	require.EqualValues(t, 42, view.AccountID)
-	require.NotContains(t, admin.update.Credentials, "api_key")
-	require.Contains(t, admin.update.Credentials, "model_mapping")
+	require.NotContains(t, repo.account.Credentials, "api_key")
+	require.Contains(t, repo.account.Credentials, "model_mapping")
 	id = cnOAuthReady(t, svc, PlatformKimi, 0)
 	view, err = svc.Advance(context.Background(), 7, PlatformKimi, id, "", true)
 	require.NoError(t, err)
 	require.Equal(t, "cancelled", view.Status)
 	_, err = svc.Complete(context.Background(), 7, PlatformKimi, id, CNOAuthCompleteInput{})
 	require.Error(t, err)
-	require.Equal(t, 1, admin.writes)
+	require.Equal(t, 1, repo.updateCredentialsCalls)
+	require.Zero(t, admin.writes, "relink uses the atomic repository port")
 }
 func TestCNOAuthNativeSendAndRefresh(t *testing.T) {
 	for _, platform := range []string{PlatformDeepseek, PlatformKimi, PlatformMiniMax} {
@@ -135,12 +203,20 @@ func TestCNOAuthNativeSendAndRefresh(t *testing.T) {
 				region = "cn"
 			}
 			a := &Account{ID: 42, Platform: platform, Type: AccountTypeOAuth, Status: StatusActive, Credentials: cnOAuthCredentials(&cnoauth.Flow{Platform: platform, Region: region}, &cnoauth.Grant{AccessToken: "old", RefreshToken: "refresh", ExpiresAt: time.Now().Add(-time.Minute)})}
+			loginID := a.GetCredential(domesticOAuthLoginIDCredential)
+			require.NotEmpty(t, loginID)
 			// Generic endpoint/protocol/header edits cannot reroute native grants.
 			a.Credentials["base_url"] = "https://evil.test"
 			a.Credentials["api_protocol"] = APIProtocolResponses
 			require.Equal(t, APIProtocolAnthropic, a.GetAPIProtocol())
 			require.NotContains(t, a.GetAnthropicProtocolBaseURL(), "evil")
-			require.Empty(t, a.GetCodingPlanProvider())
+			// Official managed usage clients exist for Kimi and MiniMax Code
+			// (matrix-account-client.ts at reviewed commit 5821f7c9).
+			if platform == PlatformKimi || platform == PlatformMiniMax {
+				require.Equal(t, platform, a.GetCodingPlanProvider())
+			} else {
+				require.Empty(t, a.GetCodingPlanProvider())
+			}
 			require.Empty(t, a.GetCNAPIKey())
 			repo := &refreshAPIAccountRepo{account: a}
 			svc := NewCNOAuthService(nil, repo, nil)
@@ -174,6 +250,7 @@ func TestCNOAuthNativeSendAndRefresh(t *testing.T) {
 				require.Empty(t, req.Header.Get("x-dsh-auth-token"))
 				require.Equal(t, 1, refreshes)
 				require.Equal(t, "rotated", repo.account.GetCredential("refresh_token"))
+				require.Equal(t, loginID, repo.account.GetCredential(domesticOAuthLoginIDCredential), "normal refresh retains the authorization lifetime")
 				require.Equal(t, 1, repo.updateCredentialsCalls)
 				require.NoError(t, svc.prepareRequest(req, a))
 				require.Equal(t, 1, refreshes)
@@ -344,4 +421,126 @@ func TestDeepSeekOAuthPersistsSelectedEnvironmentAcrossSettingsChange(t *testing
 	require.True(t, ok)
 	require.Equal(t, "en-US", selection.Language)
 	require.Equal(t, "Asia/Shanghai", selection.Timezone)
+}
+
+func TestStepAccountSessionRefreshCannotRotateModelKey(t *testing.T) {
+	a := &Account{ID: 42, Platform: PlatformStepFun, Type: AccountTypeOAuth, Status: StatusActive, Credentials: cnOAuthCredentials(&cnoauth.Flow{Platform: PlatformStepFun, Region: "global"}, &cnoauth.Grant{AccessToken: "static-model-key"})}
+	for key, value := range map[string]any{"step_account_access_token": "account-access", "step_account_refresh_token": "account-refresh", "step_account_device_id": "device", "step_account_app_id": "app", "step_account_expires_at": time.Now().Add(-time.Minute).Format(time.RFC3339)} {
+		a.Credentials[key] = value
+	}
+	repo := &refreshAPIAccountRepo{account: a}
+	svc := NewCNOAuthService(nil, repo, nil)
+	svc.refreshAPI = NewOAuthRefreshAPI(repo, nil)
+	svc.client = &cnoauth.Client{HTTP: cnOAuthDoer(func(r *http.Request) (*http.Response, error) {
+		require.Equal(t, "https://platform.stepfun.ai/passport/proto.api.passport.v1.PassportService/RefreshToken", r.URL.String())
+		require.Equal(t, "Oasis-Token=account-access...account-refresh", r.Header.Get("Cookie"))
+		require.Equal(t, "app", r.Header.Get("Oasis-appID"))
+		require.Equal(t, "device", r.Header.Get("Oasis-Webid"))
+		require.Equal(t, "web", r.Header.Get("Oasis-Platform"))
+		require.Equal(t, "1", r.Header.Get("Connect-Protocol-Version"))
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"accessToken":{"raw":"renewed-account","mode":2,"duration":1800}}`))}, nil
+	})}
+	fresh, err := svc.RefreshAccount(context.Background(), a, true)
+	require.NoError(t, err)
+	require.Equal(t, "static-model-key", fresh.GetCredential("access_token"))
+	require.Equal(t, "renewed-account", fresh.GetCredential("step_account_access_token"))
+	require.Equal(t, "account-refresh", fresh.GetCredential("step_account_refresh_token"))
+	require.Empty(t, fresh.GetCredential("refresh_token"))
+	require.Empty(t, fresh.GetCredential("expires_at"))
+}
+
+func TestStepAccountSessionRefreshRejectsIncompleteOrInactiveSession(t *testing.T) {
+	for _, phase := range []string{"selected", "reread"} {
+		for _, missing := range []string{"step_account_access_token", "step_account_refresh_token", "step_account_device_id", "step_account_app_id"} {
+			t.Run(phase+"/"+missing, func(t *testing.T) {
+				selected := &Account{ID: 42, Platform: PlatformStepFun, Type: AccountTypeOAuth, Status: StatusActive, Credentials: map[string]any{
+					"oauth_provider": PlatformStepFun, "oauth_region": "global", "access_token": "static-model-key",
+					"step_account_access_token": "account-access", "step_account_refresh_token": "account-refresh", "step_account_device_id": "device", "step_account_app_id": "app",
+				}}
+				current := snapshotOAuthRefreshAccount(selected)
+				delete(current.Credentials, missing)
+				if phase == "selected" {
+					selected = current
+				}
+				assertStepAccountSessionRefreshRejectedWithoutSideEffects(t, selected, current)
+			})
+		}
+	}
+	t.Run("inactive", func(t *testing.T) {
+		selected := &Account{ID: 42, Platform: PlatformStepFun, Type: AccountTypeOAuth, Status: StatusActive, Credentials: map[string]any{
+			"oauth_provider": PlatformStepFun, "oauth_region": "global", "access_token": "static-model-key",
+			"step_account_access_token": "account-access", "step_account_refresh_token": "account-refresh", "step_account_device_id": "device", "step_account_app_id": "app",
+		}}
+		current := snapshotOAuthRefreshAccount(selected)
+		current.Status = StatusDisabled
+		assertStepAccountSessionRefreshRejectedWithoutSideEffects(t, selected, current)
+	})
+}
+
+func assertStepAccountSessionRefreshRejectedWithoutSideEffects(t *testing.T, selected, current *Account) {
+	t.Helper()
+	before := snapshotOAuthRefreshAccount(current)
+	repo := &refreshAPIAccountRepo{account: current}
+	svc := NewCNOAuthService(nil, repo, nil)
+	svc.refreshAPI = NewOAuthRefreshAPI(repo, nil)
+	calls := 0
+	svc.client = &cnoauth.Client{HTTP: cnOAuthDoer(func(*http.Request) (*http.Response, error) {
+		calls++
+		return nil, errors.New("unexpected Passport refresh")
+	})}
+	fresh, err := svc.RefreshAccount(context.Background(), selected, true)
+	require.Error(t, err, "Passport refresh requires a complete session on an active account")
+	require.Nil(t, fresh)
+	require.Zero(t, calls, "invalid account sessions must not reach the issuer")
+	require.Zero(t, repo.updateCalls, "rejection must not persist credentials")
+	require.Equal(t, before.Credentials, repo.account.Credentials, "the model key and existing session material must remain unchanged")
+	require.Equal(t, before.Status, repo.account.Status)
+}
+
+func TestStepRelinkWithoutOptionalAccountSessionClearsPreviousOwnerSession(t *testing.T) {
+	old := &Account{ID: 42, Platform: PlatformStepFun, Type: AccountTypeOAuth, Status: StatusActive, Credentials: cnOAuthCredentials(&cnoauth.Flow{Platform: PlatformStepFun, Region: "cn"}, &cnoauth.Grant{AccessToken: "old-model-key", StepLogin: &cnoauth.StepLogin{AccessToken: "old-account-access", RefreshToken: "old-account-refresh", DeviceID: "old-device", AppID: "old-app", ExpiresAt: time.Now().Add(time.Hour)}})}
+	old.Credentials["model_mapping"] = map[string]any{"selected": "step-3.5-flash"}
+	repo := &refreshAPIAccountRepo{account: old}
+	admin := &cnOAuthAdminStub{}
+	svc := NewCNOAuthService(nil, repo, admin)
+	svc.refreshAPI = NewOAuthRefreshAPI(repo, nil)
+	id, err := svc.store.Create(context.Background(), &cnoauth.Session{OwnerID: 7, AccountID: old.ID, LoginOwner: cnOAuthTestLoginOwner(t, old), Identity: builtInOutboundIdentity(PlatformStepFun), Flow: &cnoauth.Flow{Platform: PlatformStepFun, Region: "cn", ExpiresAt: time.Now().Add(time.Minute)}, Grant: &cnoauth.Grant{AccessToken: "new-model-key"}})
+	require.NoError(t, err)
+	_, err = svc.Complete(context.Background(), 7, PlatformStepFun, id, CNOAuthCompleteInput{})
+	require.NoError(t, err)
+	require.Equal(t, 1, repo.updateCredentialsCalls)
+	for _, key := range []string{"step_account_access_token", "step_account_refresh_token", "step_account_device_id", "step_account_app_id", "step_account_expires_at"} {
+		require.NotContains(t, repo.account.Credentials, key, "relink cannot retain another login's optional account session")
+	}
+	require.Equal(t, "new-model-key", repo.account.Credentials["access_token"])
+	require.Equal(t, old.Credentials["model_mapping"], repo.account.Credentials["model_mapping"])
+	current := repo.account
+	repo.account = current
+	require.False(t, NewCNTokenRefresher(PlatformStepFun).CanRefresh(current))
+	_, err = svc.RefreshAccount(context.Background(), current, true)
+	require.Error(t, err, "account-session refresh requires a fresh account login")
+	for _, tc := range []struct{ method, path string }{{http.MethodPost, "/chat/completions"}, {http.MethodGet, "/usage"}} {
+		req, err := http.NewRequest(tc.method, "https://api.stepfun.com/step_plan/v1"+tc.path, nil)
+		require.NoError(t, err)
+		require.NoError(t, svc.prepareRequest(req, current))
+		require.Equal(t, "Bearer new-model-key", req.Header.Get("Authorization"), "model inference and Plan usage use the independent new model credential")
+	}
+}
+
+func TestStepRelinkWithAccountSessionReplacesAllPreviousOwnerSessionFields(t *testing.T) {
+	old := &Account{ID: 42, Platform: PlatformStepFun, Type: AccountTypeOAuth, Status: StatusActive, Credentials: cnOAuthCredentials(&cnoauth.Flow{Platform: PlatformStepFun, Region: "cn"}, &cnoauth.Grant{AccessToken: "old-model-key", StepLogin: &cnoauth.StepLogin{AccessToken: "old-account-access", RefreshToken: "old-account-refresh", DeviceID: "old-device", AppID: "old-app", ExpiresAt: time.Now().Add(time.Minute)}})}
+	repo := &refreshAPIAccountRepo{account: old}
+	admin := &cnOAuthAdminStub{}
+	svc := NewCNOAuthService(nil, repo, admin)
+	freshSession := &cnoauth.StepLogin{AccessToken: "new-account-access", RefreshToken: "new-account-refresh", DeviceID: "new-device", AppID: "new-app", ExpiresAt: time.Now().Add(time.Hour)}
+	id, err := svc.store.Create(context.Background(), &cnoauth.Session{OwnerID: 7, AccountID: old.ID, LoginOwner: cnOAuthTestLoginOwner(t, old), Identity: builtInOutboundIdentity(PlatformStepFun), Flow: &cnoauth.Flow{Platform: PlatformStepFun, Region: "cn", ExpiresAt: time.Now().Add(time.Minute)}, Grant: &cnoauth.Grant{AccessToken: "new-model-key", StepLogin: freshSession}})
+	require.NoError(t, err)
+	_, err = svc.Complete(context.Background(), 7, PlatformStepFun, id, CNOAuthCompleteInput{})
+	require.NoError(t, err)
+	require.Equal(t, 1, repo.updateCredentialsCalls)
+	for key, expected := range map[string]any{"step_account_access_token": "new-account-access", "step_account_refresh_token": "new-account-refresh", "step_account_device_id": "new-device", "step_account_app_id": "new-app", "step_account_expires_at": freshSession.ExpiresAt.UTC().Format(time.RFC3339)} {
+		require.Equal(t, expected, repo.account.Credentials[key], "every account-session field must come from the new grant")
+		require.NotEqual(t, old.Credentials[key], repo.account.Credentials[key])
+	}
+	require.Equal(t, "new-model-key", repo.account.Credentials["access_token"])
 }

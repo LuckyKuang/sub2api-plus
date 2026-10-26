@@ -1,20 +1,19 @@
 <template>
-  <div class="min-h-screen bg-canvas dark:bg-dark-950">
+  <div class="app-layout" :class="{ 'sidebar-is-collapsed': sidebarCollapsed, 'app-layout-workspace': workspace }">
     <!-- Sidebar -->
     <AppSidebar />
 
     <!-- Main Content Area -->
-    <div
-      class="relative min-h-screen transition-all duration-300"
-      :class="[sidebarCollapsed ? 'lg:ml-[72px]' : 'lg:ml-64']"
-    >
+    <div class="app-content" :inert="appStore.mobileOpen || undefined">
       <!-- Header -->
       <AppHeader />
 
       <!-- Main Content -->
-      <main class="p-4 md:p-6 lg:p-8">
-        <AdminSupportBanner v-if="supportUser" :target="supportUser" class="mb-5" />
-        <slot />
+      <main class="app-main">
+        <div class="app-page">
+          <AdminSupportBanner v-if="supportUser" :target="supportUser" class="support-banner-spacing" />
+          <slot />
+        </div>
       </main>
     </div>
   </div>
@@ -32,6 +31,8 @@ import { useUserView } from '@/composables/useUserView'
 import { adminSupportContext } from '@/utils/adminSupportContext'
 import AppSidebar from './AppSidebar.vue'
 import AppHeader from './AppHeader.vue'
+
+withDefaults(defineProps<{ workspace?: boolean }>(), { workspace: false })
 
 const appStore = useAppStore()
 const authStore = useAuthStore()

@@ -3,6 +3,11 @@
 Native OAuth login is available in account creation and editing. See
 [login, refresh, endpoints and operational details](DOMESTIC_OAUTH.md).
 
+New OAuth authorizations persist an internal `oauth_login_id`; routine token
+rotation preserves it. An old attempt cannot refresh or adopt a new login on
+the same account row. Legacy grants retain their account-row scope until
+reauthorization. This internal ID is never sent upstream.
+
 Sub2API Plus accepts Kimi and Moonshot-compatible account endpoints through the
 normal OpenAI-compatible account and channel configuration. This release adds
 Kimi/Moonshot model, billing, and gateway compatibility updates from upstream
@@ -33,8 +38,8 @@ surface.
 
 Kimi and Moonshot OAuth/API-key accounts retain the Kimi Code client family.
 Account parameters may override its global profile; cross-family selections and
-the retired `kimi:apikey` mapping are rejected. The compiled identity is: `User-Agent: kimi-code-cli/2.1.1` plus the official companion
-declarations `X-Msh-Platform: kimi_code_cli`, `X-Msh-Version: 2.1.1` and the four
+the retired `kimi:apikey` mapping are rejected. The compiled identity is: `User-Agent: kimi-code-cli/2.3.1` plus the official companion
+declarations `X-Msh-Platform: kimi_code_cli`, `X-Msh-Version: 2.3.1` and the four
 device headers `X-Msh-Device-Name`, `X-Msh-Device-Model`, `X-Msh-Os-Version` and
 `X-Msh-Device-Id`. The official client declares no `Originator` and no standalone
 `Version` header, so neither is sent. `SUB2API_KIMI_CODE_VERSION` may select a
@@ -88,3 +93,43 @@ SDK `0.95.2`, OpenAI SDK `6.34.0`, with a pinned supported Linux/arm64 Node
 v22.19.0 fingerprint. OAuth/token calls retain the same UA/device identity without
 those inference SDK headers. Settings show the resolved protocol variants; see
 [SDK wire profiles](../OUTBOUND_IDENTITY.md#domestic-sdk-wire-profiles).
+
+Model discovery follows the [reviewed Kimi Code source](../OFFICIAL_AGENT_BASELINES.md).
+OAuth calls the regional `/coding/v1/models` with its account Bearer token and
+trusted device snapshot. Catalog reasoning accepts `type: only|both|none` and
+`effort.valid/default`; defaults outside the advertised efforts are discarded.
+Optional malformed effort fields do not discard a recognized reasoning type;
+unknown values inside an effort array are ignored. On Coding endpoints, absent
+or null reasoning means thinking is disabled, so stale effort declarations and
+registry metadata cannot re-enable it. Explicit `none`/`false` likewise clears
+efforts and their default. Existing public/PAYG boolean reasoning catalogs remain
+readable; missing reasoning on those endpoints remains unspecified.
+
+## Managed usage and account recovery
+
+Native Kimi OAuth usage queries use the fixed regional `/coding/v1/usages`
+endpoint with Bearer access-token authentication and the same trusted device
+identity as inference. A 401 refreshes the selected account once before retry;
+concurrent token rotation is reused, and an invalid refresh grant allows account
+failover. Shared refresh dependencies do not quarantine an otherwise valid grant.
+
+Managed `usages.limit_5h`, `limit_7d`, `limit_month_total` and `limit_month_code`
+map to independent five-hour, weekly, monthly-total and monthly-code windows.
+Finite numeric or numeric-string `used_ratio` values become percentages; each
+window retains its own reset time. Both monthly windows participate in scheduling
+thresholds. The API-key `limits[].detail` / `usage` response remains supported.
+Malformed responses and responses with no recognized valid window report a
+failed probe without replacing the last valid quota snapshot.
+
+Concurrent probes and monitor caches are isolated by credential/proxy generation.
+After 401 recovery, conditional persistence binds usage to the refreshed grant
+that actually supplied it. Reauthorization cannot inherit the old grant's quota
+pause; legacy unbound windows become authoritative after the next successful
+probe. See [quota snapshot ownership](DOMESTIC_OAUTH.md).
+
+Moonshot PAYG balance probes likewise freeze the full API-key/proxy owner and
+isolate concurrent work by its generation. Their balance metadata and threshold
+pause/recovery writes are conditional on that owner. All three also compare the
+cooldown deadline and reason seen before the probe, including a previously absent
+cooldown, preserving newer reactive balance markers and failures. `success` describes the
+provider response; `persisted` is true only after its conditional local write.

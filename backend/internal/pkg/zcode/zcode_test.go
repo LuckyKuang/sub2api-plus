@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -16,18 +17,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"github.com/stretchr/testify/require"
 )
 
 func TestIdentityPinsProductVersionAndAcceptsBothOfficialLines(t *testing.T) {
 	t.Setenv(VersionEnv, "")
-	require.Equal(t, "3.14.3", DefaultVersion)
-	require.Equal(t, "ZCode/3.14.3", UserAgent(DefaultVersion))
+	require.Equal(t, "3.16.2", DefaultVersion)
+	require.Equal(t, "ZCode/3.16.2", UserAgent(DefaultVersion))
 	require.Equal(t, "zcode", Preset)
 
 	identity := DefaultIdentity()
 	require.Equal(t, Preset, identity.Preset)
-	require.Equal(t, "ZCode/3.14.3", identity.UserAgent)
+	require.Equal(t, "ZCode/3.16.2", identity.UserAgent)
 	require.Equal(t, ProductToken, identity.Originator)
 	require.Equal(t, DefaultVersion, identity.Version)
 	require.Equal(t, "compiled_default", identity.Source)
@@ -37,7 +39,7 @@ func TestIdentityPinsProductVersionAndAcceptsBothOfficialLines(t *testing.T) {
 	require.Len(t, identity.Headers, 11)
 
 	// Both official version lines are selectable; the preset declares no floor.
-	for _, version := range []string{"3.14.3", "0.16.9"} {
+	for _, version := range []string{"3.16.2", "0.16.9"} {
 		t.Setenv(VersionEnv, version)
 		configured := DefaultIdentity()
 		require.Equal(t, "environment", configured.Source, version)
@@ -50,7 +52,7 @@ func TestIdentityPinsProductVersionAndAcceptsBothOfficialLines(t *testing.T) {
 	}
 	// The override is trimmed before validation, so surrounding whitespace is not
 	// a rejection.
-	for _, valid := range []string{"3.14.3", "0.16.9", "3.15.0-rc.1", "10.0.0", " 3.14.3 "} {
+	for _, valid := range []string{"3.16.2", "0.16.9", "3.15.0-rc.1", "10.0.0", " 3.14.3 "} {
 		require.True(t, IsSupportedVersion(valid), valid)
 	}
 }
@@ -83,13 +85,13 @@ func TestParseCallbackAcceptsURLOrBareCode(t *testing.T) {
 }
 
 func TestDesktopRedirectURIUsesAppVersionAndDeepLink(t *testing.T) {
-	redirect := DesktopRedirectURI("https://zcode.z.ai", "3.14.3")
+	redirect := DesktopRedirectURI("https://zcode.z.ai", "3.16.2")
 	parsed, err := url.Parse(redirect)
 	require.NoError(t, err)
 	require.Equal(t, "https", parsed.Scheme)
 	require.Equal(t, "/app/oauth/login", parsed.Path)
 	require.Equal(t, "zcode://oauth/callback", parsed.Query().Get("redirect"))
-	require.Equal(t, "3.14.3", parsed.Query().Get("app_version"))
+	require.Equal(t, "3.16.2", parsed.Query().Get("app_version"))
 
 	// An unsupported version falls back to the compiled pin rather than being
 	// injected into the redirect.
@@ -359,7 +361,7 @@ func TestBizCodeAcceptedMirrorsUpstreamEnvelopeRule(t *testing.T) {
 	}
 }
 
-func TestPickPersonalScopePrefersDefaultsAndSkipsTeamProjects(t *testing.T) {
+func TestPickPersonalScopeUsesCLIDefaultSelection(t *testing.T) {
 	info := &CustomerInfo{Organizations: []OrganizationInfo{
 		{
 			OrganizationID:   "org-team",
@@ -384,14 +386,14 @@ func TestPickPersonalScopePrefersDefaultsAndSkipsTeamProjects(t *testing.T) {
 	require.Equal(t, "org-default", organizationID)
 	require.Equal(t, "p-default", projectID)
 
-	// Only team projects are visible: no personal scope exists.
+	// Current CLI default selection also accepts a visible team project.
 	teamOnly := &CustomerInfo{Organizations: []OrganizationInfo{{
 		OrganizationID: "org-team",
 		Projects:       []ProjectInfo{{ProjectID: "p", ProjectType: json.RawMessage(`2`)}},
 	}}}
 	organizationID, projectID = PickPersonalScope(teamOnly)
-	require.Empty(t, organizationID)
-	require.Empty(t, projectID)
+	require.Equal(t, "org-team", organizationID)
+	require.Equal(t, "p", projectID)
 	organizationID, projectID = PickPersonalScope(nil)
 	require.Empty(t, organizationID)
 	require.Empty(t, projectID)
@@ -415,69 +417,72 @@ func TestMatchAPIKeyHonoursNameAndKeyType(t *testing.T) {
 	require.Equal(t, "", matchAPIKey(keys, "absent", nil))
 }
 
-func TestCredentialClientDerivesPersonalKeyAndJoinsSecret(t *testing.T) {
-	var sawCustomerAuth, sawListAuth, sawCopyAuth string
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case strings.HasSuffix(r.URL.Path, "/api/biz/customer/getCustomerInfo"):
-			sawCustomerAuth = r.Header.Get("Authorization")
-			writeEnvelope(t, w, map[string]any{"organizations": []any{map[string]any{
-				"organizationId": "org-1", "organizationName": "默认机构",
-				"projects": []any{map[string]any{"projectId": "proj-1", "projectName": "默认项目"}},
-			}}})
-		case strings.HasSuffix(r.URL.Path, "/api_keys"):
-			sawListAuth = r.Header.Get("Authorization")
-			writeEnvelope(t, w, []any{map[string]any{"apiKey": "ak-1", "name": PersonalAPIKeyName}})
-		case strings.HasSuffix(r.URL.Path, "/copy/ak-1"):
-			sawCopyAuth = r.Header.Get("Authorization")
-			writeEnvelope(t, w, map[string]any{"secretKey": "sk-1"})
-		default:
-			t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	defer server.Close()
-
-	client := NewCredentialClient(server.Client(), server.URL, server.URL)
-	credential, err := client.ResolveIndividualCodingPlanKey(context.Background(), ProviderBigModel, "bm-token")
-	require.NoError(t, err)
-	require.Equal(t, "ak-1.sk-1", credential.APIKey)
-	require.Equal(t, "org-1", credential.OrganizationID)
-	require.Equal(t, "proj-1", credential.ProjectID)
-
-	// BigModel business calls carry the bare token.
-	require.Equal(t, "bm-token", sawCustomerAuth)
-	require.Equal(t, "bm-token", sawListAuth)
-	require.Equal(t, "bm-token", sawCopyAuth)
+// Independent protocol fixtures from shared/project-access-token-client.ts.
+func TestCredentialClientIssuesProjectTokenForBothEstates(t *testing.T) {
+	for _, provider := range []string{ProviderBigModel, ProviderZai} {
+		t.Run(provider, func(t *testing.T) {
+			var paths []string
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				paths = append(paths, r.URL.Path)
+				require.Equal(t, "ZCode/3.16.2", r.UserAgent())
+				switch {
+				case strings.HasSuffix(r.URL.Path, "/getCustomerInfo"):
+					require.Equal(t, "login", r.Header.Get("Authorization"))
+					writeEnvelope(t, w, map[string]any{"organizations": []any{map[string]any{"organizationId": "org", "organizationName": "默认机构", "projects": []any{map[string]any{"projectId": "project", "projectName": "默认项目"}}}}})
+				case strings.HasSuffix(r.URL.Path, "/api_keys"):
+					auth := "login"
+					if provider == ProviderZai {
+						auth = "Bearer login"
+					}
+					require.Equal(t, auth, r.Header.Get("Authorization"))
+					writeEnvelope(t, w, []any{map[string]any{"apiKey": "location-id", "name": "zcode-api-key"}})
+				case strings.HasSuffix(r.URL.Path, "/location-id/access_tokens"):
+					require.Equal(t, http.MethodPost, r.Method)
+					require.Equal(t, "Bearer login", r.Header.Get("Authorization"))
+					var body map[string]string
+					require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+					require.Equal(t, map[string]string{"clientType": "zcode", "clientVersion": "3.16.2"}, body)
+					writeEnvelope(t, w, map[string]any{"accessToken": "short-pat", "tokenType": "Bearer", "expiresIn": 3600, "expiresAt": time.Now().Add(30 * time.Minute).Unix()})
+				default:
+					t.Errorf("unexpected request %s", r.URL.Path)
+					w.WriteHeader(404)
+				}
+			}))
+			defer server.Close()
+			client := NewCredentialClient(server.Client(), server.URL, server.URL)
+			value, err := client.ResolveIndividualCodingPlanKey(context.Background(), provider, "login")
+			require.NoError(t, err)
+			require.Equal(t, "short-pat", value.APIKey)
+			require.Equal(t, "location-id", value.KeyID)
+			require.Equal(t, "org", value.OrganizationID)
+			require.Equal(t, "project", value.ProjectID)
+			require.WithinDuration(t, time.Now().Add(30*time.Minute), value.ExpiresAt, 2*time.Second)
+			require.Len(t, paths, 3)
+			for _, path := range paths {
+				require.NotContains(t, path, "/copy/")
+			}
+		})
+	}
 }
 
-func TestCredentialClientCreatesMissingKeyAndRejectsMissingScope(t *testing.T) {
+func TestCredentialClientRejectsMissingScopeBeforeCreatingKey(t *testing.T) {
 	var created atomic.Bool
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case strings.HasSuffix(r.URL.Path, "/api/biz/customer/getCustomerInfo"):
+		if strings.HasSuffix(r.URL.Path, "/getCustomerInfo") {
 			writeEnvelope(t, w, map[string]any{"organizations": []any{}})
-		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/api_keys"):
-			created.Store(true)
-			writeEnvelope(t, w, map[string]any{"apiKey": "ak-new", "name": PersonalAPIKeyName})
-		case strings.HasSuffix(r.URL.Path, "/copy/ak-new"):
-			writeEnvelope(t, w, map[string]any{"secretKey": "sk-new"})
-		default:
-			w.WriteHeader(http.StatusNotFound)
+			return
 		}
+		created.Store(true)
+		w.WriteHeader(500)
 	}))
 	defer server.Close()
-
 	client := NewCredentialClient(server.Client(), server.URL, server.URL)
-	// No personal organization is visible, so the flow must fail before creating
-	// anything.
-	_, err := client.ResolveIndividualCodingPlanKey(context.Background(), ProviderBigModel, "bm")
-	require.ErrorContains(t, err, "no personal organization")
-	require.False(t, created.Load())
-
-	_, err = client.ResolveIndividualCodingPlanKey(context.Background(), "unknown", "bm")
+	_, err := client.ResolveIndividualCodingPlanKey(context.Background(), ProviderBigModel, "login")
 	require.Error(t, err)
-	_, err = client.ResolveIndividualCodingPlanKey(context.Background(), ProviderBigModel, "  ")
+	require.False(t, created.Load())
+	_, err = client.ResolveIndividualCodingPlanKey(context.Background(), "unknown", "login")
+	require.Error(t, err)
+	_, err = client.ResolveIndividualCodingPlanKey(context.Background(), ProviderBigModel, "")
 	require.Error(t, err)
 }
 
@@ -500,100 +505,123 @@ func TestCredentialClientExchangesZaiBusinessToken(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestCredentialClientZaiUsesBearerOnDerivation(t *testing.T) {
-	var seen []string
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		seen = append(seen, r.Header.Get("Authorization"))
-		switch {
-		case strings.HasSuffix(r.URL.Path, "/api/biz/customer/getCustomerInfo"):
-			writeEnvelope(t, w, map[string]any{"organizations": []any{map[string]any{
-				"organizationId": "org-1",
-				"projects":       []any{map[string]any{"projectId": "proj-1"}},
-			}}})
-		case strings.HasSuffix(r.URL.Path, "/api_keys"):
-			writeEnvelope(t, w, []any{map[string]any{"apiKey": "ak", "name": PersonalAPIKeyName}})
-		case strings.HasSuffix(r.URL.Path, "/copy/ak"):
-			writeEnvelope(t, w, map[string]any{"secretKey": "sk"})
-		}
-	}))
-	defer server.Close()
-
-	client := NewCredentialClient(server.Client(), server.URL, server.URL)
-	credential, err := client.ResolveIndividualCodingPlanKey(context.Background(), ProviderZai, "zai-token")
-	require.NoError(t, err)
-	require.Equal(t, "ak.sk", credential.APIKey)
-	for _, header := range seen {
-		require.Equal(t, "Bearer zai-token", header, "Z.ai derivation sends a Bearer-prefixed token")
+func TestCredentialClientProjectTokenRejectsDisabledAndMalformed(t *testing.T) {
+	for _, data := range []map[string]any{
+		{"enable": false, "accessToken": "pat", "tokenType": "Bearer", "expiresIn": 3600, "expiresAt": time.Now().Add(time.Hour).Unix()},
+		{"accessToken": "pat", "tokenType": "Basic", "expiresIn": 3600, "expiresAt": time.Now().Add(time.Hour).Unix()},
+		{"accessToken": "pat", "tokenType": "Bearer", "expiresIn": 0, "expiresAt": time.Now().Add(time.Hour).Unix()},
+		{"accessToken": "pat", "tokenType": "Bearer", "expiresIn": 3600, "expiresAt": 1},
+		{},
+	} {
+		t.Run(fmt.Sprint(data), func(t *testing.T) {
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				require.NotContains(t, r.URL.Path, "/copy/")
+				writeEnvelope(t, w, data)
+			}))
+			defer server.Close()
+			client := NewCredentialClient(server.Client(), server.URL, server.URL)
+			_, err := client.IssueProjectAccessToken(context.Background(), ProviderBigModel, "login", "org", "project", "id")
+			require.Error(t, err)
+		})
 	}
 }
 
-func TestCredentialClientRejectsZaiKeyWithoutSecret(t *testing.T) {
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case strings.HasSuffix(r.URL.Path, "/api/biz/customer/getCustomerInfo"):
-			writeEnvelope(t, w, map[string]any{"organizations": []any{map[string]any{
-				"organizationId": "org-1",
-				"projects":       []any{map[string]any{"projectId": "proj-1"}},
-			}}})
-		case strings.HasSuffix(r.URL.Path, "/api_keys"):
-			writeEnvelope(t, w, []any{map[string]any{"apiKey": "ak", "name": PersonalAPIKeyName}})
-		default:
-			writeEnvelope(t, w, map[string]any{})
-		}
-	}))
-	defer server.Close()
-
-	client := NewCredentialClient(server.Client(), server.URL, server.URL)
-	_, err := client.ResolveIndividualCodingPlanKey(context.Background(), ProviderZai, "t")
-	require.ErrorContains(t, err, "secret key")
-
-	// BigModel tolerates the missing secret and returns the bare key.
-	credential, err := client.ResolveIndividualCodingPlanKey(context.Background(), ProviderBigModel, "t")
-	require.NoError(t, err)
-	require.Equal(t, "ak", credential.APIKey)
+func TestCredentialClientProjectTokenEnvelopeAndPinnedVersion(t *testing.T) {
+	// shared/project-access-token-response.ts requires an explicit success code;
+	// project-access-token-client.ts carries the selected product version.
+	for _, tc := range []struct {
+		code   string
+		valid  bool
+		status int
+	}{
+		{`0`, true, 0}, {`200`, true, 0}, {`"0"`, true, 0}, {`"200"`, true, 0},
+		{``, false, 0}, {`null`, false, 0}, {`404`, false, 404}, {`"404"`, false, 404},
+	} {
+		t.Run("code="+tc.code, func(t *testing.T) {
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, "/api/biz/v1/organization/org/projects/project/api_keys/saved-id/access_tokens", r.URL.Path)
+				require.Equal(t, "Bearer login", r.Header.Get("Authorization"))
+				var body map[string]string
+				require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+				require.Equal(t, map[string]string{"clientType": "zcode", "clientVersion": "4.2.0"}, body)
+				payload := map[string]any{"data": map[string]any{"accessToken": "short-pat", "tokenType": "Bearer", "expiresIn": 3600, "expiresAt": time.Now().Add(time.Hour).Unix()}}
+				if tc.code != "" {
+					payload["code"] = json.RawMessage(tc.code)
+				}
+				require.NoError(t, json.NewEncoder(w).Encode(payload))
+			}))
+			defer server.Close()
+			client := NewCredentialClient(server.Client(), server.URL, server.URL)
+			identity := DefaultIdentity()
+			identity.Version, identity.UserAgent = "4.2.0", "ZCode/4.2.0"
+			identity.Headers["User-Agent"], identity.Headers[HeaderAppVersion] = "ZCode/4.2.0", "4.2.0"
+			value, err := client.IssueProjectAccessToken(outboundidentity.WithIdentity(context.Background(), identity), ProviderBigModel, "login", "org", "project", "saved-id")
+			if tc.valid {
+				require.NoError(t, err)
+				require.Equal(t, "short-pat", value.Token)
+			} else {
+				require.Error(t, err)
+				if tc.status != 0 {
+					var status *BusinessHTTPError
+					require.ErrorAs(t, err, &status)
+					require.Equal(t, tc.status, status.Status)
+				}
+			}
+		})
+	}
 }
 
-func TestCredentialClientResolvesTeamPlanKeyWithScopeHeaders(t *testing.T) {
-	var teamHeaders []string
+func TestCredentialClientCreatesTeamLocationWithCodingPlanUsage(t *testing.T) {
+	var created bool
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		recordTeam := func() {
-			teamHeaders = append(teamHeaders, r.Header.Get("bigmodel-organization")+"/"+r.Header.Get("bigmodel-project"))
-		}
 		switch {
-		case strings.HasSuffix(r.URL.Path, "/api/biz/customer/getCustomerInfo"):
-			writeEnvelope(t, w, map[string]any{"organizations": []any{map[string]any{
-				"organizationId": "org-team",
-				"projects":       []any{map[string]any{"projectId": "proj-team", "projectType": 2}},
-			}}})
-		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/api_keys"):
-			recordTeam()
-			writeEnvelope(t, w, map[string]any{"apiKey": "ak-team"})
+		case strings.HasSuffix(r.URL.Path, "/getCustomerInfo"):
+			require.Equal(t, "login", r.Header.Get("Authorization"))
+			writeEnvelope(t, w, map[string]any{"organizations": []any{map[string]any{"organizationId": "org", "projects": []any{map[string]any{"projectId": "project", "projectType": 2}}}}})
 		case strings.HasSuffix(r.URL.Path, "/api_keys"):
-			recordTeam()
-			writeEnvelope(t, w, []any{})
-		case strings.HasSuffix(r.URL.Path, "/copy/ak-team"):
-			recordTeam()
-			writeEnvelope(t, w, map[string]any{"secretKey": "sk-team"})
+			require.Equal(t, "login", r.Header.Get("Authorization"))
+			require.Equal(t, "org", r.Header.Get("bigmodel-organization"))
+			require.Equal(t, "project", r.Header.Get("bigmodel-project"))
+			if r.Method == http.MethodGet {
+				writeEnvelope(t, w, []any{})
+				return
+			}
+			var body map[string]any
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+			require.Equal(t, map[string]any{"name": "zcode-team-api-key", "keyType": float64(2), "usageScene": float64(1)}, body)
+			created = true
+			writeEnvelope(t, w, map[string]any{"apiKey": "id", "name": "zcode-team-api-key", "keyType": 2})
+		case strings.HasSuffix(r.URL.Path, "/id/access_tokens"):
+			require.Equal(t, "Bearer login", r.Header.Get("Authorization"))
+			writeEnvelope(t, w, map[string]any{"accessToken": "pat", "tokenType": "Bearer", "expiresIn": 3600, "expiresAt": time.Now().Add(time.Hour).Unix()})
 		default:
-			w.WriteHeader(http.StatusNotFound)
+			t.Errorf("unexpected request %s", r.URL.Path)
+			w.WriteHeader(404)
 		}
 	}))
 	defer server.Close()
-
 	client := NewCredentialClient(server.Client(), server.URL, server.URL)
-	credential, err := client.ResolveTeamPlanKey(context.Background(), ProviderBigModel, "bm", "org-team", "proj-team")
+	value, err := client.ResolveTeamPlanKey(context.Background(), ProviderBigModel, "login", "org", "project")
 	require.NoError(t, err)
-	require.Equal(t, "ak-team.sk-team", credential.APIKey)
-	require.Len(t, teamHeaders, 3, "list, create and copy all carry the team scope")
-	for _, header := range teamHeaders {
-		require.Equal(t, "org-team/proj-team", header)
-	}
-
-	// A project the account cannot see is rejected before any key is created.
-	_, err = client.ResolveTeamPlanKey(context.Background(), ProviderBigModel, "bm", "org-team", "other")
-	require.ErrorContains(t, err, "not visible")
-	_, err = client.ResolveTeamPlanKey(context.Background(), ProviderBigModel, "bm", "", "proj-team")
+	require.True(t, created)
+	require.Equal(t, "pat", value.APIKey)
+	_, err = client.ResolveTeamPlanKey(context.Background(), ProviderBigModel, "login", "org", "other")
 	require.Error(t, err)
+}
+
+func TestCredentialClientDoesNotCreateDuplicateMalformedPersonalLocation(t *testing.T) {
+	var writes atomic.Int32
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writes.Add(1)
+		}
+		writeEnvelope(t, w, []any{map[string]any{"name": "zcode-api-key"}})
+	}))
+	defer server.Close()
+	client := NewCredentialClient(server.Client(), server.URL, server.URL)
+	_, err := client.findOrCreateAPIKey(context.Background(), server.URL, "login", nil, PersonalAPIKeyName, nil)
+	require.Error(t, err)
+	require.Zero(t, writes.Load())
 }
 
 func TestResolveOriginsFallsBackOnInvalidOverrides(t *testing.T) {
@@ -632,13 +660,13 @@ func offPeakServer(t *testing.T, handler http.HandlerFunc) (*httptest.Server, *O
 }
 
 func TestOffPeakTicketAuthHeadersCarryThePlanSnapshot(t *testing.T) {
-	auth := OffPeakAuth{JWT: "jwt", PlanKey: "ak.sk", TeamOrg: "org", TeamProj: "proj", RequestID: "req-1"}
+	auth := OffPeakAuth{JWT: "jwt", PlanKey: "ak.sk", TeamOrg: "org", TeamProj: "proj"}
 	headers := auth.Headers()
 	require.Equal(t, "Bearer jwt", headers["Authorization"])
 	require.Equal(t, "ak.sk", headers["X-Coding-Plan-Api-Key"])
 	require.Equal(t, "org", headers["bigmodel-organization"])
 	require.Equal(t, "proj", headers["bigmodel-project"])
-	require.Equal(t, "req-1", headers["x-request-id"])
+	require.NotContains(t, headers, "x-request-id", "correlation IDs belong to physical sends, not credentials")
 
 	// A half-specified team scope is omitted rather than sent incomplete.
 	partial := OffPeakAuth{JWT: "jwt", TeamOrg: "org"}.Headers()

@@ -628,6 +628,7 @@ func TestNewOpenAIGatewayService_InitializesOpenAIWSResolver(t *testing.T) {
 		nil,
 		nil,
 		nil, // userPlatformQuotaRepo
+		nil, // sessionRouteStore
 	)
 
 	decision := svc.getOpenAIWSProtocolResolver().Resolve(nil)

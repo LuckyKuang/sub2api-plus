@@ -205,3 +205,22 @@ Historical unobserved timing stays null. Upstream attempt diagnostics separately
 record whether semantic output was committed and why replay was suppressed;
 media/compaction commitment can prohibit replay without starting a token clock.
 This does not change the request-average TPS definition or partial-usage status.
+
+
+## V1 active streaming probes
+
+V1 `first_text_ms` is separate from usage `first_byte_ms` and strict `first_token_ms`.
+It measures the first non-whitespace assistant text delta, excluding reasoning,
+tools, metadata and keepalives. Probe total duration ends at normal SSE completion;
+a later error retains measured times but fails the probe. JSON probes and historical
+rows have no text timing. Successful text samples have their own average/count;
+zero is observed, NULL is absent. See [channel monitoring](CHANNEL_MONITOR.md#v1-流式探测).
+
+## Console observation and overview
+
+See [UI_INTERACTION](UI_INTERACTION.md) for the owner-scoped live observation API,
+user-timezone overview queries and historical insertion boundaries. Observed HTTP
+`finished` is not semantic success or settled billing. Elapsed observation time
+is distinct from forwarding `duration_ms`; unavailable TPS remains unavailable.
+The existing strict first-token, first-byte and equal-weight average TPS contracts
+are unchanged.

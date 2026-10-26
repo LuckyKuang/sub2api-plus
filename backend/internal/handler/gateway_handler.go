@@ -1178,16 +1178,17 @@ func (h *GatewayHandler) Models(c *gin.Context) {
 	}
 
 	if platform == service.PlatformComposite {
-		availableModels := h.compositeAvailableModels(c.Request.Context(), groupID, "", true)
+		availableModels, authoritative := h.compositeAvailableModels(c.Request.Context(), groupID, "", true)
+		authoritativeEmpty := len(availableModels) == 0 && authoritative
 		if apiKey != nil && apiKey.Group != nil && apiKey.Group.ModelAllowlistEnabled() {
 			source := availableModels
-			if len(source) == 0 {
+			if len(source) == 0 && !authoritativeEmpty {
 				source = defaultModelIDsForPlatform(service.PlatformComposite)
 			}
 			writeAllowlistedModelsList(c, service.PlatformComposite, apiKey.Group.ModelAllowlist.FilterForListing(source))
 			return
 		}
-		if len(availableModels) > 0 {
+		if len(availableModels) > 0 || authoritativeEmpty {
 			writeModelsList(c, service.PlatformComposite, availableModels)
 			return
 		}
@@ -1203,7 +1204,7 @@ func (h *GatewayHandler) Models(c *gin.Context) {
 		return
 	}
 
-	if len(availableModels) > 0 || (platform == service.PlatformOpenAI && availableModels != nil) {
+	if len(availableModels) > 0 || ((platform == service.PlatformOpenAI || platform == service.PlatformZhipu) && availableModels != nil) {
 		writeModelsList(c, platform, availableModels)
 		return
 	}
@@ -1281,10 +1282,10 @@ func (h *GatewayHandler) codexModelIDsForGroup(ctx context.Context, group *servi
 		platform = group.Platform
 	}
 	if platform == service.PlatformComposite {
-		availableModels := h.compositeAvailableModels(ctx, groupID, service.CompositeRouteEndpointResponses, false)
+		availableModels, authoritative := h.compositeAvailableModels(ctx, groupID, service.CompositeRouteEndpointResponses, false)
 		fallbackModels := defaultCodexModelIDsForPlatform(service.PlatformComposite)
 		models := availableModels
-		if len(models) == 0 {
+		if len(models) == 0 && !authoritative {
 			models = fallbackModels
 		}
 		if group.ModelAllowlistEnabled() {
@@ -1301,7 +1302,7 @@ func (h *GatewayHandler) codexModelIDsForGroup(ctx context.Context, group *servi
 	if group.ModelAllowlistEnabled() {
 		return group.ModelAllowlist.FilterForListing(modelListingSource(platform, availableModels, fallbackModels))
 	}
-	if len(availableModels) > 0 {
+	if len(availableModels) > 0 || ((platform == service.PlatformOpenAI || platform == service.PlatformZhipu) && availableModels != nil) {
 		return availableModels
 	}
 	return fallbackModels
@@ -1310,9 +1311,9 @@ func (h *GatewayHandler) codexModelIDsForGroup(ctx context.Context, group *servi
 // compositeAvailableModels lists the models the composite group can serve.
 // includeSystemOne adds TypeSafe models, which only work through /v1/systemone;
 // LLM client catalogs (Codex) must exclude them.
-func (h *GatewayHandler) compositeAvailableModels(ctx context.Context, groupID *int64, endpoint string, includeSystemOne bool) []string {
+func (h *GatewayHandler) compositeAvailableModels(ctx context.Context, groupID *int64, endpoint string, includeSystemOne bool) ([]string, bool) {
 	if h == nil || h.gatewayService == nil {
-		return nil
+		return nil, false
 	}
 	seen := make(map[string]struct{})
 	models := make([]string, 0)
@@ -1351,7 +1352,12 @@ func (h *GatewayHandler) compositeAvailableModels(ctx context.Context, groupID *
 			}
 		}
 	}
-	return models
+	filtered, authoritative, err := h.gatewayService.FilterCompositeStartPlanModels(ctx, groupID, models, endpoint)
+	if err != nil {
+		logger.L().Warn("gateway.composite_catalog_unavailable", zap.String("stage", "start_plan_permission"), zap.String("reason", "catalog_lookup_failed"))
+		return []string{}, true
+	}
+	return filtered, authoritative
 }
 
 func writeModelsList(c *gin.Context, platform string, modelIDs []string) {
@@ -1479,7 +1485,7 @@ func writeOpenAIModelsList(c *gin.Context, modelIDs []string) {
 // 与平台默认列表（fallbackModels）。账号映射为空时回落默认列表；Anthropic
 // 平台两者取并集，其余平台以账号映射键为准。
 func modelListingSource(platform string, availableModels, fallbackModels []string) []string {
-	if platform == service.PlatformOpenAI && availableModels != nil {
+	if (platform == service.PlatformOpenAI || platform == service.PlatformZhipu) && availableModels != nil {
 		return availableModels
 	}
 	if len(availableModels) == 0 {
@@ -2205,6 +2211,7 @@ func (h *GatewayHandler) CountTokens(c *gin.Context) {
 
 	setOpsRequestContext(c, "", false)
 
+	securityAuditBody := append([]byte(nil), body...)
 	bodyRef := service.NewRequestBodyRef(body)
 	parsedReq, err := service.ParseGatewayRequest(bodyRef, domain.PlatformAnthropic)
 	if err != nil {
@@ -2213,12 +2220,8 @@ func (h *GatewayHandler) CountTokens(c *gin.Context) {
 		return
 	}
 	body = parsedReq.Body.Bytes()
-	// count_tokens 走 messages 严格校验时，复用已解析请求，避免二次反序列化。
-	SetClaudeCodeClientContext(c, body, parsedReq)
 	ensureCompositeTargetPlatform(c, apiKey, parsedReq.Model)
 	reqLog = reqLog.With(zap.String("model", parsedReq.Model), zap.Bool("stream", parsedReq.Stream))
-	// 在请求上下文中记录 thinking 状态，供 Antigravity 最终模型 key 推导/模型维度限流使用
-	c.Request = c.Request.WithContext(service.WithThinkingEnabled(c.Request.Context(), parsedReq.ThinkingEnabled, h.metadataBridgeEnabled()))
 
 	// 验证 model 必填
 	if parsedReq.Model == "" {
@@ -2235,6 +2238,13 @@ func (h *GatewayHandler) CountTokens(c *gin.Context) {
 
 	setOpsRequestContext(c, parsedReq.Model, parsedReq.Stream)
 	setOpsEndpointContext(c, "", int16(service.RequestTypeFromLegacy(parsedReq.Stream, false)))
+	if decision := h.checkSecurityAudit(c, reqLog, apiKey, subject, service.ContentModerationProtocolAnthropicMessages, parsedReq.Model, securityAuditBody); decision != nil && !decision.AllowNextStage {
+		h.anthropicSecurityAuditError(c, decision)
+		return
+	}
+	// Classification and bridge context follow the original-content audit.
+	SetClaudeCodeClientContext(c, body, parsedReq)
+	c.Request = c.Request.WithContext(service.WithThinkingEnabled(c.Request.Context(), parsedReq.ThinkingEnabled, h.metadataBridgeEnabled()))
 
 	// 获取订阅信息（可能为nil）
 	subscription, _ := middleware2.GetSubscriptionFromContext(c)

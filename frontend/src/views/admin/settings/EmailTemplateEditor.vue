@@ -7,7 +7,7 @@
         <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
           {{ t("admin.settings.emailTemplates.title") }}
         </h2>
-        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+        <p class="mt-1 text-sm surface-muted">
           {{ t("admin.settings.emailTemplates.description") }}
         </p>
       </div>
@@ -42,7 +42,7 @@
     <div class="space-y-6 p-6">
       <div
         v-if="loadingList"
-        class="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400"
+        class="flex items-center gap-2 text-sm surface-muted"
       >
         <span
           class="h-4 w-4 animate-spin rounded-full border-b-2 border-primary-600"
@@ -56,39 +56,25 @@
             <label class="input-label" for="email-template-event">
               {{ t("admin.settings.emailTemplates.event") }}
             </label>
-            <select
+            <Select
               id="email-template-event"
               v-model="selectedEvent"
-              class="input"
               :disabled="loadingTemplate || eventOptions.length === 0"
-            >
-              <option
-                v-for="option in eventOptions"
-                :key="option.value"
-                :value="option.value"
-              >
-                {{ formatEventOptionLabel(option) }}
-              </option>
-            </select>
+              :searchable="false"
+              :options="eventOptions.map(option => ({ value: option.value, label: formatEventOptionLabel(option) }))"
+            />
           </div>
           <div>
             <label class="input-label" for="email-template-locale">
               {{ t("admin.settings.emailTemplates.locale") }}
             </label>
-            <select
+            <Select
               id="email-template-locale"
               v-model="selectedLocale"
-              class="input"
               :disabled="loadingTemplate || localeOptions.length === 0"
-            >
-              <option
-                v-for="localeOption in localeOptions"
-                :key="localeOption"
-                :value="localeOption"
-              >
-                {{ formatLocale(localeOption) }}
-              </option>
-            </select>
+              :searchable="false"
+              :options="localeOptions.map(localeOption => ({ value: localeOption, label: formatLocale(localeOption) }))"
+            />
           </div>
         </div>
 
@@ -101,7 +87,7 @@
               {{ selectedEventMeta.label }}
             </div>
             <span
-              class="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-gray-600 shadow-sm ring-1 ring-gray-200 dark:bg-dark-800 dark:text-gray-300 dark:ring-dark-600"
+              class="rounded-full surface-inset px-2.5 py-1 text-xs font-medium shadow-sm ring-1 ring-gray-200 dark:ring-dark-600 surface-muted"
             >
               {{ selectedEventMeta.categoryLabel }}
             </span>
@@ -109,19 +95,19 @@
               class="rounded-full px-2.5 py-1 text-xs font-medium"
               :class="
                 selectedEventMeta.optional
-                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'
-                  : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300'
+                  ? 'bg-amber-100/[0.15] text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'
+                  : 'bg-emerald-100/[0.15] text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300'
               "
             >
               {{ selectedEventMeta.optional ? localText("可退订通知", "Optional") : localText("事务邮件", "Transactional") }}
             </span>
           </div>
-          <p class="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">
+          <p class="mt-2 text-sm leading-6 surface-muted">
             {{ selectedEventMeta.timing }}
           </p>
           <p
             v-if="selectedEventDescription"
-            class="mt-1 text-xs text-gray-500 dark:text-gray-400"
+            class="mt-1 text-xs surface-muted"
           >
             {{ selectedEventDescription }}
           </p>
@@ -129,7 +115,7 @@
 
         <div
           v-if="!eventOptions.length || !localeOptions.length"
-          class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300"
+          class="rounded-lg border border-amber-200 bg-amber-50/[0.15] p-4 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300"
         >
           {{ t("admin.settings.emailTemplates.empty") }}
         </div>
@@ -165,12 +151,12 @@
             </div>
 
             <div
-              class="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-dark-700 dark:bg-dark-800/60"
+              class="rounded-lg border border-gray-200 surface-inset p-4 dark:border-dark-700"
             >
               <div class="text-sm font-medium text-gray-900 dark:text-white">
                 {{ t("admin.settings.emailTemplates.placeholders") }}
               </div>
-              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              <p class="mt-1 text-xs surface-muted">
                 {{ t("admin.settings.emailTemplates.placeholdersHelp") }}
               </p>
               <div class="mt-3 flex flex-wrap gap-2">
@@ -178,7 +164,7 @@
                   v-for="placeholder in placeholderList"
                   :key="placeholder"
                   type="button"
-                  class="rounded-full border border-gray-200 bg-white px-3 py-1 font-mono text-xs text-gray-700 transition-colors hover:border-primary-300 hover:text-primary-600 dark:border-dark-600 dark:bg-dark-700 dark:text-gray-200 dark:hover:border-primary-500 dark:hover:text-primary-300"
+                  class="rounded-full border border-gray-200 px-3 py-1 font-mono text-xs transition-colors hover:border-primary-300 hover:text-primary-600 dark:border-dark-600 dark:hover:border-primary-500 dark:hover:text-primary-300 surface-control surface-muted"
                   @click="copyPlaceholder(placeholder)"
                 >
                   {{ placeholder }}
@@ -189,7 +175,7 @@
 
           <div class="space-y-4">
             <div
-              class="rounded-lg border border-gray-200 bg-white dark:border-dark-700 dark:bg-dark-800"
+              class="rounded-lg border border-gray-200 surface-inset dark:border-dark-700"
             >
               <div
                 class="flex items-center justify-between border-b border-gray-100 px-4 py-3 dark:border-dark-700"
@@ -198,18 +184,18 @@
                   <div class="text-sm font-medium text-gray-900 dark:text-white">
                     {{ t("admin.settings.emailTemplates.livePreview") }}
                   </div>
-                  <div class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                  <div class="mt-0.5 text-xs surface-muted">
                     {{ previewSubject || t("admin.settings.emailTemplates.noPreview") }}
                   </div>
                 </div>
                 <span
                   v-if="isCustomTemplate"
-                  class="rounded-full bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary-700 dark:bg-primary-900/30 dark:text-primary-300"
+                  class="rounded-full bg-primary-50/[0.15] px-2.5 py-1 text-xs font-medium text-primary-700 dark:bg-primary-900/30 dark:text-primary-300"
                 >
                   {{ t("admin.settings.emailTemplates.customized") }}
                 </span>
               </div>
-              <div class="bg-gray-100 p-3 dark:bg-dark-900">
+              <div class="surface-inset p-3">
                 <iframe
                   class="h-[36rem] w-full rounded-md border border-gray-200 bg-white dark:border-dark-700"
                   sandbox=""
@@ -219,7 +205,7 @@
               </div>
             </div>
 
-            <p class="text-xs text-gray-500 dark:text-gray-400">
+            <p class="text-xs surface-muted">
               {{ t("admin.settings.emailTemplates.previewSecurityHint") }}
             </p>
           </div>
@@ -230,6 +216,7 @@
 </template>
 
 <script setup lang="ts">
+import Select from '@/components/common/Select.vue'
 import { computed, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { adminAPI } from "@/api";

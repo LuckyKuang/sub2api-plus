@@ -1,10 +1,18 @@
 <template>
-  <select :value="currentLocaleCode" :disabled="switching" class="input w-auto max-w-32 py-1.5 text-xs" :aria-label="currentLocale?.name" @change="selectLocale(($event.target as HTMLSelectElement).value)">
-    <option v-for="locale in availableLocales" :key="locale.code" :value="locale.code">{{ locale.flag }} {{ locale.name }}</option>
-  </select>
+  <Select
+    :model-value="currentLocaleCode"
+    :disabled="switching"
+    class="w-auto max-w-32"
+    trigger-class="py-1.5 text-xs"
+    :aria-label="currentLocale?.name"
+    @update:model-value="selectLocale(String($event))"
+    :searchable="false"
+    :options="availableLocales.map(locale => ({ value: locale.code, label: locale.flag + ' ' + locale.name }))"
+  />
 </template>
 
 <script setup lang="ts">
+import Select from '@/components/common/Select.vue'
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { setLocale, availableLocales } from '@/i18n'

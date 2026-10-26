@@ -27,6 +27,13 @@ type schedulerTestOpenAIAccountRepo struct {
 	accounts []Account
 }
 
+func accountRequestCompatibleForTest(t *testing.T, scheduler *defaultOpenAIAccountScheduler, ctx context.Context, account *Account, req OpenAIAccountScheduleRequest) bool {
+	t.Helper()
+	compatible, err := scheduler.isAccountRequestCompatible(ctx, account, req)
+	require.NoError(t, err)
+	return compatible
+}
+
 func (r schedulerTestOpenAIAccountRepo) GetByID(ctx context.Context, id int64) (*Account, error) {
 	for i := range r.accounts {
 		if r.accounts[i].ID == id {
@@ -197,12 +204,13 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_OAuthSessionPolicyDenia
 		svc := newService([]Account{protectedOAuth})
 		svc.cfg.RunMode = config.RunModeSimple
 		scheduler := &defaultOpenAIAccountScheduler{service: svc}
-		compatible, reason := scheduler.isAccountRequestCompatibleReason(ctx, &protectedOAuth, OpenAIAccountScheduleRequest{
+		compatible, reason, compatibilityErr := scheduler.isAccountRequestCompatibleReason(ctx, &protectedOAuth, OpenAIAccountScheduleRequest{
 			GroupID:            &blockedGroupID,
 			Platform:           PlatformOpenAI,
 			RequestedModel:     "gpt-5.6",
 			RequiredCapability: OpenAIEndpointCapabilityChatCompletions,
 		})
+		require.NoError(t, compatibilityErr)
 		require.False(t, compatible)
 		require.Equal(t, "oauth_session_group_denied", reason)
 	})
@@ -809,6 +817,7 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_DefaultDisabled_LoadBat
 			"codex_usage_updated_at": time.Now().Add(-time.Minute).Format(time.RFC3339),
 		},
 	}
+	verifiedCodexUsageForTest(&quotaPaused)
 	mappingMiss := Account{
 		ID:          36004,
 		Platform:    PlatformOpenAI,
@@ -1320,6 +1329,9 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_NoAvailableErrorReports
 			},
 		},
 	}
+	for index := range accounts {
+		verifiedCodexUsageForTest(&accounts[index])
+	}
 	cfg := &config.Config{}
 	svc := &OpenAIGatewayService{
 		accountRepo:        schedulerTestOpenAIAccountRepo{accounts: accounts},
@@ -1391,6 +1403,7 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_NoAvailableErrorAggrega
 			"codex_usage_updated_at": time.Now().Add(-time.Minute).Format(time.RFC3339),
 		},
 	}
+	verifiedCodexUsageForTest(&quotaPaused)
 	mappingMiss := Account{
 		ID:          38122,
 		Platform:    PlatformOpenAI,
@@ -2232,6 +2245,7 @@ func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_AutoPauseBy5hT
 			"auto_pause_5h_threshold": 0.95,
 		},
 	}
+	verifiedCodexUsageForTest(&primary)
 	secondary := Account{ID: 35002, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1, Priority: 5}
 	svc := &OpenAIGatewayService{accountRepo: schedulerTestOpenAIAccountRepo{accounts: []Account{primary, secondary}}, cfg: &config.Config{}}
 
@@ -2256,6 +2270,7 @@ func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_AllowsBelow5hT
 			"auto_pause_5h_threshold": 0.95,
 		},
 	}
+	verifiedCodexUsageForTest(&primary)
 	secondary := Account{ID: 35102, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1, Priority: 5}
 	svc := &OpenAIGatewayService{accountRepo: schedulerTestOpenAIAccountRepo{accounts: []Account{primary, secondary}}, cfg: &config.Config{}}
 
@@ -2280,6 +2295,7 @@ func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_AutoPauseBy7dT
 			"auto_pause_7d_threshold": 0.95,
 		},
 	}
+	verifiedCodexUsageForTest(&primary)
 	secondary := Account{ID: 35202, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1, Priority: 5}
 	svc := &OpenAIGatewayService{accountRepo: schedulerTestOpenAIAccountRepo{accounts: []Account{primary, secondary}}, cfg: &config.Config{}}
 
@@ -2292,6 +2308,7 @@ func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_AutoPauseBy7dT
 func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_UnconfiguredThresholdKeepsLegacyBehavior(t *testing.T) {
 	ctx := context.Background()
 	primary := Account{ID: 35301, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1, Priority: 0, Extra: map[string]any{"codex_5h_used_percent": 99.0, "codex_7d_used_percent": 99.0}}
+	verifiedCodexUsageForTest(&primary)
 	secondary := Account{ID: 35302, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1, Priority: 5}
 	svc := &OpenAIGatewayService{accountRepo: schedulerTestOpenAIAccountRepo{accounts: []Account{primary, secondary}}, cfg: &config.Config{}}
 
@@ -2315,6 +2332,7 @@ func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_UsesGlobalDefa
 			"codex_5h_used_percent": 95.0,
 		},
 	}
+	verifiedCodexUsageForTest(&primary)
 	secondary := Account{ID: 35402, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1, Priority: 5}
 	svc := &OpenAIGatewayService{accountRepo: schedulerTestOpenAIAccountRepo{accounts: []Account{primary, secondary}}, cfg: &config.Config{}}
 
@@ -2345,6 +2363,7 @@ func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_PerAccountDisa
 			"auto_pause_5h_disabled": true,
 		},
 	}
+	verifiedCodexUsageForTest(&primary)
 	secondary := Account{ID: 35702, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1, Priority: 5}
 	svc := &OpenAIGatewayService{accountRepo: schedulerTestOpenAIAccountRepo{accounts: []Account{primary, secondary}}, cfg: &config.Config{}}
 
@@ -2372,6 +2391,7 @@ func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_PerWindowDisab
 			"auto_pause_7d_threshold": 0.95,
 		},
 	}
+	verifiedCodexUsageForTest(&primary)
 	secondary := Account{ID: 35802, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1, Priority: 5}
 	svc := &OpenAIGatewayService{accountRepo: schedulerTestOpenAIAccountRepo{accounts: []Account{primary, secondary}}, cfg: &config.Config{}}
 
@@ -2400,6 +2420,7 @@ func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_StaleUsageWind
 			"codex_5h_reset_at":       time.Now().Add(-time.Minute).Format(time.RFC3339),
 		},
 	}
+	verifiedCodexUsageForTest(&primary)
 	secondary := Account{ID: 35502, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1, Priority: 5}
 	svc := &OpenAIGatewayService{accountRepo: schedulerTestOpenAIAccountRepo{accounts: []Account{primary, secondary}}, cfg: &config.Config{}}
 
@@ -2426,6 +2447,7 @@ func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_FreshUsageWind
 			"codex_5h_reset_at":       time.Now().Add(time.Hour).Format(time.RFC3339),
 		},
 	}
+	verifiedCodexUsageForTest(&primary)
 	secondary := Account{ID: 35602, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1, Priority: 5}
 	svc := &OpenAIGatewayService{accountRepo: schedulerTestOpenAIAccountRepo{accounts: []Account{primary, secondary}}, cfg: &config.Config{}}
 
@@ -2458,6 +2480,7 @@ func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_StaleUsageSnap
 			"codex_usage_updated_at": time.Now().Add(-3 * time.Hour).Format(time.RFC3339),
 		},
 	}
+	verifiedCodexUsageForTest(&primary)
 	secondary := Account{ID: 35702, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1, Priority: 5}
 	svc := &OpenAIGatewayService{accountRepo: schedulerTestOpenAIAccountRepo{accounts: []Account{primary, secondary}}, cfg: &config.Config{}}
 
@@ -2488,6 +2511,7 @@ func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_FreshExhausted
 			"codex_usage_updated_at": time.Now().Add(-time.Minute).Format(time.RFC3339),
 		},
 	}
+	verifiedCodexUsageForTest(&primary)
 	secondary := Account{ID: 35802, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1, Priority: 5}
 	svc := &OpenAIGatewayService{accountRepo: schedulerTestOpenAIAccountRepo{accounts: []Account{primary, secondary}}, cfg: &config.Config{}}
 
@@ -3671,24 +3695,24 @@ func TestOpenAIAccountScheduler_SkipsAccountBlockedForRequestedModel(t *testing.
 	now := time.Now()
 	account := &Account{ID: 21633, Platform: PlatformOpenAI, Type: AccountTypeAPIKey}
 	svc := &OpenAIGatewayService{openaiModelTransient: newOpenAIAccountModelTransientState(128)}
-	svc.openaiModelTransient.recordFailure(account.ID, "gpt-5.5", now)
-	svc.openaiModelTransient.recordFailure(account.ID, "gpt-5.5", now.Add(time.Millisecond))
+	svc.openaiModelTransient.recordFailure(account.ID, "gpt-5.5", "", now)
+	svc.openaiModelTransient.recordFailure(account.ID, "gpt-5.5", "", now.Add(time.Millisecond))
 	scheduler := &defaultOpenAIAccountScheduler{service: svc}
 
-	require.False(t, scheduler.isAccountRequestCompatible(context.Background(), account, OpenAIAccountScheduleRequest{RequestedModel: "gpt-5.5"}))
-	require.True(t, scheduler.isAccountRequestCompatible(context.Background(), account, OpenAIAccountScheduleRequest{RequestedModel: "gpt-5.6-sol"}))
+	require.False(t, accountRequestCompatibleForTest(t, scheduler, context.Background(), account, OpenAIAccountScheduleRequest{RequestedModel: "gpt-5.5"}))
+	require.True(t, accountRequestCompatibleForTest(t, scheduler, context.Background(), account, OpenAIAccountScheduleRequest{RequestedModel: "gpt-5.6-sol"}))
 }
 
 func TestReportOpenAIAccountScheduleResult_SuccessClearsModelTransientState(t *testing.T) {
 	svc := &OpenAIGatewayService{openaiModelTransient: newOpenAIAccountModelTransientState(128)}
 	now := time.Now()
-	svc.openaiModelTransient.recordFailure(21636, "gpt-5.5", now)
-	svc.openaiModelTransient.recordFailure(21636, "gpt-5.5", now.Add(time.Millisecond))
-	require.True(t, svc.openaiModelTransient.isBlocked(21636, "gpt-5.5", now.Add(2*time.Millisecond)))
+	svc.openaiModelTransient.recordFailure(21636, "gpt-5.5", "", now)
+	svc.openaiModelTransient.recordFailure(21636, "gpt-5.5", "", now.Add(time.Millisecond))
+	require.True(t, svc.openaiModelTransient.isBlocked(21636, "gpt-5.5", "", now.Add(2*time.Millisecond)))
 
 	svc.ReportOpenAIAccountScheduleResult(&Account{ID: 21636}, "gpt-5.5", true, nil)
 
-	require.False(t, svc.openaiModelTransient.isBlocked(21636, "gpt-5.5", now.Add(2*time.Millisecond)))
+	require.False(t, svc.openaiModelTransient.isBlocked(21636, "gpt-5.5", "", now.Add(2*time.Millisecond)))
 }
 
 func TestDefaultOpenAIAccountScheduler_ShouldEscapeStickyAccount_ThresholdBoundary(t *testing.T) {
@@ -4069,6 +4093,9 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_LoadBalanceTopKExcludes
 			Concurrency: 1,
 			Priority:    5,
 		},
+	}
+	for index := range accounts {
+		verifiedCodexUsageForTest(&accounts[index])
 	}
 
 	cfg := &config.Config{}

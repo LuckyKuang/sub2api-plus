@@ -275,9 +275,9 @@ class CompressCliTest(unittest.TestCase):
                     "category 'Outbound Identity' is missing protected content",
                 )
 
-    def test_codex_version_sync_cannot_change_identity_fingerprint(self) -> None:
+    def test_codex_manual_version_update_cannot_change_identity_fingerprint(self) -> None:
         changed = self.valid_document.replace(
-            "Version sync may update only selected identity version declarations and must not change source, client family, Originator, OS, architecture, or terminal fingerprint",
+            "Manual version updates may update only selected identity version declarations and must not change source, client family, Originator, OS, architecture, or terminal fingerprint; automatic Codex version synchronization is prohibited",
             "Version sync may replace the selected identity",
         )
         errors = self.validate_text(changed)

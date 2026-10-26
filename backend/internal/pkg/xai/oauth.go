@@ -15,9 +15,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/redissession"
 	"github.com/LuckyKuang/sub2api-plus/internal/util/logredact"
 	"github.com/LuckyKuang/sub2api-plus/internal/util/urlvalidator"
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -55,14 +57,18 @@ var (
 
 // OAuthSession stores one PKCE OAuth flow.
 type OAuthSession struct {
-	State         string    `json:"state"`
-	CodeVerifier  string    `json:"code_verifier"`
-	CodeChallenge string    `json:"code_challenge"`
-	ClientID      string    `json:"client_id,omitempty"`
-	Scope         string    `json:"scope,omitempty"`
-	ProxyURL      string    `json:"proxy_url,omitempty"`
-	RedirectURI   string    `json:"redirect_uri"`
-	CreatedAt     time.Time `json:"created_at"`
+	State         string                    `json:"state"`
+	Nonce         string                    `json:"nonce"`
+	Issuer        string                    `json:"issuer"`
+	Identity      outboundidentity.Identity `json:"identity"`
+	CodeVerifier  string                    `json:"code_verifier"`
+	CodeChallenge string                    `json:"code_challenge"`
+	ClientID      string                    `json:"client_id,omitempty"`
+	Scope         string                    `json:"scope,omitempty"`
+	ProxyURL      string                    `json:"proxy_url,omitempty"`
+	ProxyID       *int64                    `json:"proxy_id,omitempty"`
+	RedirectURI   string                    `json:"redirect_uri"`
+	CreatedAt     time.Time                 `json:"created_at"`
 
 	mu       sync.Mutex
 	consumed bool
@@ -92,14 +98,18 @@ type SessionStore struct {
 }
 
 type oauthSessionDTO struct {
-	State         string    `json:"state"`
-	CodeVerifier  string    `json:"code_verifier"`
-	CodeChallenge string    `json:"code_challenge"`
-	ClientID      string    `json:"client_id,omitempty"`
-	Scope         string    `json:"scope,omitempty"`
-	ProxyURL      string    `json:"proxy_url,omitempty"`
-	RedirectURI   string    `json:"redirect_uri"`
-	CreatedAt     time.Time `json:"created_at"`
+	State         string                    `json:"state"`
+	Nonce         string                    `json:"nonce"`
+	Issuer        string                    `json:"issuer"`
+	Identity      outboundidentity.Identity `json:"identity"`
+	CodeVerifier  string                    `json:"code_verifier"`
+	CodeChallenge string                    `json:"code_challenge"`
+	ClientID      string                    `json:"client_id,omitempty"`
+	Scope         string                    `json:"scope,omitempty"`
+	ProxyURL      string                    `json:"proxy_url,omitempty"`
+	ProxyID       *int64                    `json:"proxy_id,omitempty"`
+	RedirectURI   string                    `json:"redirect_uri"`
+	CreatedAt     time.Time                 `json:"created_at"`
 }
 
 func NewSessionStore() *SessionStore {
@@ -127,9 +137,10 @@ func (s *SessionStore) Set(sessionID string, session *OAuthSession) {
 	var remoteErr error
 	if s != nil && s.remote != nil {
 		remoteErr = s.remote.Set(context.Background(), sessionID, oauthSessionDTO{
+			Nonce: session.Nonce, Issuer: session.Issuer, Identity: session.Identity,
 			State: session.State, CodeVerifier: session.CodeVerifier, CodeChallenge: session.CodeChallenge,
 			ClientID: session.ClientID, Scope: session.Scope, ProxyURL: session.ProxyURL,
-			RedirectURI: session.RedirectURI, CreatedAt: session.CreatedAt,
+			ProxyID: session.ProxyID, RedirectURI: session.RedirectURI, CreatedAt: session.CreatedAt,
 		})
 	}
 	s.mu.Lock()
@@ -154,9 +165,10 @@ func (s *SessionStore) Get(sessionID string) (*OAuthSession, bool) {
 			return nil, false
 		}
 		session := &OAuthSession{
+			Nonce: dto.Nonce, Issuer: dto.Issuer, Identity: dto.Identity,
 			State: dto.State, CodeVerifier: dto.CodeVerifier, CodeChallenge: dto.CodeChallenge,
 			ClientID: dto.ClientID, Scope: dto.Scope, ProxyURL: dto.ProxyURL,
-			RedirectURI: dto.RedirectURI, CreatedAt: dto.CreatedAt,
+			ProxyID: dto.ProxyID, RedirectURI: dto.RedirectURI, CreatedAt: dto.CreatedAt,
 		}
 		s.mu.Lock()
 		s.sessions[sessionID] = session
@@ -527,19 +539,13 @@ func GenerateRandomBytes(n int) ([]byte, error) {
 }
 
 func GenerateState() (string, error) {
-	bytes, err := GenerateRandomBytes(32)
-	if err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(bytes), nil
+	id, err := uuid.NewV7()
+	return id.String(), err
 }
 
 func GenerateNonce() (string, error) {
-	bytes, err := GenerateRandomBytes(16)
-	if err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(bytes), nil
+	id, err := uuid.NewV7()
+	return id.String(), err
 }
 
 func GenerateSessionID() (string, error) {

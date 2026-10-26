@@ -156,7 +156,6 @@ var openAIChatGPTInternalUnsupportedFields = []string{
 	"prompt_cache_options",
 	"prompt_cache_retention",
 	"safety_identifier",
-	"stream_options",
 	"truncation",
 	"stop_sequences",
 }
@@ -1462,9 +1461,60 @@ func applyInstructions(reqBody map[string]any, isCodexCLI bool) bool {
 	if !isInstructionsEmpty(reqBody) {
 		return false
 	}
+	if inputItemsCarryInstructionContent(reqBody) {
+		return false
+	}
 	model, _ := reqBody["model"].(string)
 	reqBody["instructions"] = defaultCodexSynthInstructions(model)
 	return true
+}
+
+// inputItemsCarryInstructionContent reports whether the Responses input already
+// carries developer/system instruction content. Official Codex puts its base
+// prompt into input items and sends no top-level instructions field, so the
+// gateway must not add a second, gateway-owned base prompt for that shape (A07).
+func inputItemsCarryInstructionContent(reqBody map[string]any) bool {
+	items, ok := reqBody["input"].([]any)
+	if !ok {
+		return false
+	}
+	for _, item := range items {
+		entry, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		role, _ := entry["role"].(string)
+		switch strings.ToLower(strings.TrimSpace(role)) {
+		case "developer", "system":
+		default:
+			continue
+		}
+		if messageContentCarriesText(entry["content"]) {
+			return true
+		}
+	}
+	return false
+}
+
+func messageContentCarriesText(content any) bool {
+	switch value := content.(type) {
+	case string:
+		return strings.TrimSpace(value) != ""
+	case []any:
+		for _, part := range value {
+			if messageContentCarriesText(part) {
+				return true
+			}
+		}
+		return false
+	case map[string]any:
+		if text, ok := value["text"].(string); ok && strings.TrimSpace(text) != "" {
+			return true
+		}
+		return messageContentCarriesText(value["content"])
+	default:
+		return false
+	}
 }
 
 // isInstructionsEmpty 检查 instructions 字段是否为空

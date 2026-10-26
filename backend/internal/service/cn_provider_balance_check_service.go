@@ -122,6 +122,12 @@ func (s *CNProviderBalanceCheckService) runOnce() {
 			if IsOllamaCloudUsageAccount(account) {
 				continue
 			}
+			if account.IsDomesticOAuth() && account.Platform != PlatformKimi && account.Platform != PlatformStepFun && account.Platform != PlatformDeepseek {
+				continue
+			}
+			if account.Platform == PlatformStepFun && !account.IsDomesticOAuth() {
+				continue
+			}
 			// coding 账号：探测滚动窗口并落快照（不要求 Schedulable——已被
 			// 阈值停调的账号也需要新鲜快照决定是否续停）。
 			if account.IsCodingPlan() {
@@ -130,7 +136,7 @@ func (s *CNProviderBalanceCheckService) runOnce() {
 			}
 			// payg 余额探测仅 kimi/deepseek（智谱 / MiniMax 无公开余额端点，
 			// payg 账号依赖响应式 402/429 处理）。
-			if platform != PlatformZhipu && platform != PlatformMiniMax && account.Schedulable {
+			if (platform == PlatformKimi || platform == PlatformDeepseek) && account.Schedulable {
 				paygTargets = append(paygTargets, account)
 			}
 		}
@@ -143,9 +149,9 @@ func (s *CNProviderBalanceCheckService) runOnce() {
 		}
 		collect(platform, accounts)
 	}
-	// 智谱 / MiniMax 无余额端点，仅进额度探测。
+	// 智谱 / MiniMax / Step Plan 仅进额度探测。
 	if s.quotaService != nil {
-		for _, platform := range []string{PlatformZhipu, PlatformMiniMax} {
+		for _, platform := range []string{PlatformZhipu, PlatformMiniMax, PlatformStepFun} {
 			accounts, err := s.accountRepo.ListByPlatform(context.Background(), platform)
 			if err != nil {
 				log.Printf("[CNBalance] list %s accounts failed: %v", platform, err)
@@ -315,6 +321,12 @@ const (
 	cnBalanceCleared
 )
 
+// CNBalanceScheduleRepository keeps a wallet's scheduler consequences on
+// the same owner and previous cooldown that produced its observation.
+type CNBalanceScheduleRepository interface {
+	UpdateCNBalanceScheduleIfUnchanged(ctx context.Context, expected *Account, until *time.Time, reason string) (bool, error)
+}
+
 // checkOne 探测单账号余额并决定停调/恢复。探测失败时不动现状（避免瞬时网络抖动
 // 误解除或误停调）。
 func (s *CNProviderBalanceCheckService) checkOne(ctx context.Context, account *Account, threshold float64) cnBalanceCheckOutcome {
@@ -327,6 +339,9 @@ func (s *CNProviderBalanceCheckService) checkOne(ctx context.Context, account *A
 
 // applyBalanceResult 按余额探测结果停调或恢复账号。
 func (s *CNProviderBalanceCheckService) applyBalanceResult(ctx context.Context, account *Account, result *CNProviderBalanceResult, threshold float64) cnBalanceCheckOutcome {
+	if result != nil && result.owner != nil || cnBalanceRequiresOwner(account) {
+		return s.applyOwnedBalanceResult(ctx, account, result, threshold)
+	}
 	// 双币种（deepseek CNY+USD）任一币种余额达标即可继续调度；仅当全部低于
 	// 阈值（或不可用）才停调。
 	low := !result.Available || allCNBalancesBelowThreshold(result, threshold)
@@ -336,6 +351,10 @@ func (s *CNProviderBalanceCheckService) applyBalanceResult(ctx context.Context, 
 			return cnBalanceNoChange
 		}
 		reason := cnBalanceLowReason(fmt.Sprintf("余额 %.4g %s 低于阈值 %.2f", result.Balance, result.Currency, threshold))
+		if account.IsDomesticOAuth() || result.owner != nil {
+			until := time.Now().Add(s.cooldown())
+			return s.applyObservedBalanceSchedule(ctx, result.owner, &until, reason, cnBalancePaused)
+		}
 		if err := s.accountRepo.SetTempUnschedulable(ctx, account.ID, time.Now().Add(s.cooldown()), reason); err != nil {
 			log.Printf("[CNBalance] pause account %d failed: %v", account.ID, err)
 			return cnBalanceNoChange
@@ -346,6 +365,9 @@ func (s *CNProviderBalanceCheckService) applyBalanceResult(ctx context.Context, 
 
 	// 余额健康：仅清除「本服务写入」的临时停调（reason 前缀匹配），不触碰其他子系统。
 	if account.TempUnschedulableUntil != nil && strings.HasPrefix(account.TempUnschedulableReason, cnBalanceLowReasonPrefix) {
+		if account.IsDomesticOAuth() || result.owner != nil {
+			return s.applyObservedBalanceSchedule(ctx, result.owner, nil, "", cnBalanceCleared)
+		}
 		if err := s.accountRepo.ClearTempUnschedulable(ctx, account.ID); err != nil {
 			log.Printf("[CNBalance] clear account %d failed: %v", account.ID, err)
 			return cnBalanceNoChange
@@ -356,6 +378,42 @@ func (s *CNProviderBalanceCheckService) applyBalanceResult(ctx context.Context, 
 	return cnBalanceNoChange
 }
 
+// A native wallet result may only change the captured owner's unchanged
+// scheduler state. Missing evidence never falls back to account-ID writes.
+func (s *CNProviderBalanceCheckService) applyOwnedBalanceResult(ctx context.Context, selected *Account, result *CNProviderBalanceResult, threshold float64) cnBalanceCheckOutcome {
+	if selected == nil || result == nil || !result.Success || result.owner == nil || result.owner.ID != selected.ID || result.Provider != result.owner.Platform || !cnBalanceRequiresOwner(result.owner) {
+		return cnBalanceNoChange
+	}
+	owner := result.owner
+	if !result.Available || allCNBalancesBelowThreshold(result, threshold) {
+		if !owner.IsSchedulable() {
+			return cnBalanceNoChange
+		}
+		until := time.Now().Add(s.cooldown())
+		reason := cnBalanceLowReason(fmt.Sprintf("余额 %.4g %s 低于阈值 %.2f", result.Balance, result.Currency, threshold))
+		return s.applyObservedBalanceSchedule(ctx, owner, &until, reason, cnBalancePaused)
+	}
+	if owner.TempUnschedulableUntil != nil && strings.HasPrefix(owner.TempUnschedulableReason, cnBalanceLowReasonPrefix) {
+		return s.applyObservedBalanceSchedule(ctx, owner, nil, "", cnBalanceCleared)
+	}
+	return cnBalanceNoChange
+}
+
+func (s *CNProviderBalanceCheckService) applyObservedBalanceSchedule(ctx context.Context, owner *Account, until *time.Time, reason string, outcome cnBalanceCheckOutcome) cnBalanceCheckOutcome {
+	writer, ok := s.accountRepo.(CNBalanceScheduleRepository)
+	if !ok || owner == nil {
+		return cnBalanceNoChange
+	}
+	applied, err := writer.UpdateCNBalanceScheduleIfUnchanged(ctx, owner, until, reason)
+	if err != nil {
+		log.Printf("[CNBalance] observation scheduling account %d failed: %v", owner.ID, err)
+	}
+	if err != nil || !applied {
+		return cnBalanceNoChange
+	}
+	return outcome
+}
+
 func (s *CNProviderBalanceCheckService) platforms() []string {
 	return []string{PlatformKimi, PlatformDeepseek}
 }
@@ -363,11 +421,21 @@ func (s *CNProviderBalanceCheckService) platforms() []string {
 // allCNBalancesBelowThreshold 判断全部币种余额是否均低于阈值。
 // 无明细时退回主币种判定（与旧行为一致）。
 func allCNBalancesBelowThreshold(result *CNProviderBalanceResult, threshold float64) bool {
-	if len(result.Balances) == 0 {
+	if len(result.Balances) == 0 && len(result.BonusBalances) == 0 {
 		return result.Balance < threshold
 	}
+	totals := make(map[string]float64, len(result.Balances)+len(result.BonusBalances))
+	if len(result.Balances) == 0 {
+		totals[result.Currency] = result.Balance
+	}
 	for _, entry := range result.Balances {
-		if entry.Balance >= threshold {
+		totals[entry.Currency] += entry.Balance
+	}
+	for _, entry := range result.BonusBalances {
+		totals[entry.Currency] += entry.Balance
+	}
+	for _, balance := range totals {
+		if balance >= threshold {
 			return false
 		}
 	}

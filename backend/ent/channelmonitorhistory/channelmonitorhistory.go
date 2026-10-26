@@ -23,6 +23,10 @@ const (
 	FieldStatus = "status"
 	// FieldFirstByteMs holds the string denoting the first_byte_ms field in the database.
 	FieldFirstByteMs = "first_byte_ms"
+	// FieldFirstTextMs holds the string denoting the first_text_ms field in the database.
+	FieldFirstTextMs = "first_text_ms"
+	// FieldStreamProbe holds the string denoting the stream_probe field in the database.
+	FieldStreamProbe = "stream_probe"
 	// FieldLatencyMs holds the string denoting the latency_ms field in the database.
 	FieldLatencyMs = "latency_ms"
 	// FieldPingLatencyMs holds the string denoting the ping_latency_ms field in the database.
@@ -53,6 +57,8 @@ var Columns = []string{
 	FieldModel,
 	FieldStatus,
 	FieldFirstByteMs,
+	FieldFirstTextMs,
+	FieldStreamProbe,
 	FieldLatencyMs,
 	FieldPingLatencyMs,
 	FieldMessage,
@@ -75,6 +81,8 @@ var (
 	ModelValidator func(string) error
 	// FirstByteMsValidator is a validator for the "first_byte_ms" field. It is called by the builders before save.
 	FirstByteMsValidator func(int) error
+	// FirstTextMsValidator is a validator for the "first_text_ms" field. It is called by the builders before save.
+	FirstTextMsValidator func(int) error
 	// DefaultMessage holds the default value on creation for the "message" field.
 	DefaultMessage string
 	// MessageValidator is a validator for the "message" field. It is called by the builders before save.
@@ -134,6 +142,16 @@ func ByStatus(opts ...sql.OrderTermOption) OrderOption {
 // ByFirstByteMs orders the results by the first_byte_ms field.
 func ByFirstByteMs(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldFirstByteMs, opts...).ToFunc()
+}
+
+// ByFirstTextMs orders the results by the first_text_ms field.
+func ByFirstTextMs(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldFirstTextMs, opts...).ToFunc()
+}
+
+// ByStreamProbe orders the results by the stream_probe field.
+func ByStreamProbe(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldStreamProbe, opts...).ToFunc()
 }
 
 // ByLatencyMs orders the results by the latency_ms field.

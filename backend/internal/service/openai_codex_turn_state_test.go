@@ -45,244 +45,82 @@ func TestOpenAICodexTurnStateSeed(t *testing.T) {
 	require.Empty(t, openAICodexTurnStateSeed(nil))
 }
 
-func TestRelayOpenAICodexTurnState_RecordsOnlyAfterCommit(t *testing.T) {
-	svc := &OpenAIGatewayService{}
-	account := &Account{ID: 42}
-	c, _ := newTurnStateTestContext(t, 7, "sess-relay")
-
-	upstream := http.Header{}
-	upstream.Set("x-codex-turn-state", "blob-A")
-	svc.relayOpenAICodexTurnState(c, account, upstream)
-
-	require.Equal(t, "blob-A", c.Writer.Header().Get("X-Codex-Turn-State"))
-	_, notedBeforeCommit := svc.openaiCodexTurnStateOrigins.Load("7\x00sess-relay")
-	require.False(t, notedBeforeCommit)
-
-	svc.noteStagedOpenAICodexTurnStateCommitted(c, account, upstream)
-
-	raw, ok := svc.openaiCodexTurnStateOrigins.Load("7\x00sess-relay")
-	require.True(t, ok)
-	origin, ok := raw.(openAICodexTurnStateOrigin)
-	require.True(t, ok)
-	require.Equal(t, int64(42), origin.accountID)
-	require.True(t, origin.expiresAt.After(time.Now()))
+func turnStateAccount(id int64, owner string) *Account {
+	return &Account{ID: id, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Credentials: map[string]any{"chatgpt_account_id": owner, "chatgpt_user_id": "user", "access_token": "initial"}}
 }
 
-func TestRelayOpenAICodexTurnState_ClearsStaleValueWhenUpstreamAbsent(t *testing.T) {
+func TestCodexTurnStateOwnerAndBlobLifecycle(t *testing.T) {
 	svc := &OpenAIGatewayService{}
-	c, _ := newTurnStateTestContext(t, 7, "sess-stale")
-	// 模拟上一 failover attempt 残留的值
-	c.Writer.Header().Set("X-Codex-Turn-State", "blob-old")
-
-	svc.relayOpenAICodexTurnState(c, &Account{ID: 43}, http.Header{})
-
-	require.Empty(t, c.Writer.Header().Get("X-Codex-Turn-State"))
-	_, ok := svc.openaiCodexTurnStateOrigins.Load("7\x00sess-stale")
-	require.False(t, ok)
-}
-
-func TestStageOpenAICodexTurnState_StagedHeaders(t *testing.T) {
-	svc := &OpenAIGatewayService{}
-	c, _ := newTurnStateTestContext(t, 9, "sess-staged")
-
-	// nil 集合 + 上游有值 → 创建集合并写入，但此刻还不记录溯源
-	var staged http.Header
-	upstream := http.Header{}
-	upstream.Set("x-codex-turn-state", "blob-B")
-	stageOpenAICodexTurnState(&staged, upstream)
-	require.NotNil(t, staged)
-	require.Equal(t, "blob-B", staged.Get("X-Codex-Turn-State"))
-	_, noted := svc.openaiCodexTurnStateOrigins.Load("9\x00sess-staged")
-	require.False(t, noted, "暂存阶段不得记录溯源：该 attempt 仍可能 failover 丢弃")
-
-	// 真正提交时才记录
-	svc.noteStagedOpenAICodexTurnStateCommitted(c, &Account{ID: 44}, staged)
-	raw, ok := svc.openaiCodexTurnStateOrigins.Load("9\x00sess-staged")
-	require.True(t, ok)
-	origin, ok := raw.(openAICodexTurnStateOrigin)
-	require.True(t, ok)
-	require.Equal(t, int64(44), origin.accountID)
-
-	// 上游无值 → 清除已暂存的值；nil 集合保持 nil
-	stageOpenAICodexTurnState(&staged, http.Header{})
-	require.Empty(t, staged.Get("X-Codex-Turn-State"))
-	var nilStaged http.Header
-	stageOpenAICodexTurnState(&nilStaged, http.Header{})
-	require.Nil(t, nilStaged)
-}
-
-// 首输出超时导致 attempt 被丢弃时，溯源不得被该 attempt 污染——否则后续
-// 请求会把客户端持有的合法 blob 误判成跨账号回带而剥离。
-func TestStagedTurnState_AbandonedAttemptDoesNotPoisonProvenance(t *testing.T) {
-	svc := &OpenAIGatewayService{}
-	c, _ := newTurnStateTestContext(t, 11, "sess-abandoned")
-
-	// 账号 A 的 attempt 暂存了 blob，但从未提交（首输出超时 → failover）
-	var staged http.Header
-	upstreamA := http.Header{}
-	upstreamA.Set("x-codex-turn-state", "blob-A")
-	stageOpenAICodexTurnState(&staged, upstreamA)
-
-	// 账号 B 接手并真正提交
-	svc.relayOpenAICodexTurnState(c, &Account{ID: 52}, upstreamA)
-	svc.noteStagedOpenAICodexTurnStateCommitted(c, &Account{ID: 52}, upstreamA)
-
-	// 客户端回带的 blob 来自 B，出站到 B 时不得被剥离
-	h := http.Header{}
-	h.Set("x-codex-turn-state", "blob-A")
-	svc.guardOpenAICodexTurnStateEcho(c, &Account{ID: 52}, h)
-	require.Equal(t, "blob-A", h.Get("x-codex-turn-state"))
-
-	raw, ok := svc.openaiCodexTurnStateOrigins.Load("11\x00sess-abandoned")
-	require.True(t, ok)
-	origin, ok := raw.(openAICodexTurnStateOrigin)
-	require.True(t, ok)
-	require.Equal(t, int64(52), origin.accountID)
-}
-
-func TestNoteStagedOpenAICodexTurnStateCommitted_NoopWithoutState(t *testing.T) {
-	svc := &OpenAIGatewayService{}
-	c, _ := newTurnStateTestContext(t, 12, "sess-nostate")
-
-	svc.noteStagedOpenAICodexTurnStateCommitted(c, &Account{ID: 60}, nil)
-	svc.noteStagedOpenAICodexTurnStateCommitted(c, &Account{ID: 60}, http.Header{"X-Request-Id": []string{"rid"}})
-
-	_, ok := svc.openaiCodexTurnStateOrigins.Load("12\x00sess-nostate")
-	require.False(t, ok)
-}
-
-func TestGuardOpenAICodexTurnStateEcho(t *testing.T) {
-	newOutbound := func(state string) http.Header {
-		h := http.Header{}
-		if state != "" {
-			h.Set("x-codex-turn-state", state)
-		}
-		return h
+	c, _ := newTurnStateTestContext(t, 7, "session")
+	a := turnStateAccount(42, "owner-a")
+	b := turnStateAccount(43, "owner-b")
+	echo := func(account *Account, state string) string {
+		h := http.Header{"X-Codex-Turn-State": []string{state}}
+		svc.guardOpenAICodexTurnStateEcho(c, account, h)
+		return h.Get(openAICodexTurnStateHeader)
 	}
-
-	t.Run("same_account_keeps_echo", func(t *testing.T) {
-		svc := &OpenAIGatewayService{}
-		c, _ := newTurnStateTestContext(t, 7, "sess-g1")
-		upstream := http.Header{}
-		upstream.Set("x-codex-turn-state", "blob-A")
-		svc.relayOpenAICodexTurnState(c, &Account{ID: 42}, upstream)
-		svc.noteStagedOpenAICodexTurnStateCommitted(c, &Account{ID: 42}, upstream)
-
-		h := newOutbound("blob-A")
-		svc.guardOpenAICodexTurnStateEcho(c, &Account{ID: 42}, h)
-		require.Equal(t, "blob-A", h.Get("x-codex-turn-state"))
-	})
-
-	t.Run("foreign_account_strips_echo", func(t *testing.T) {
-		svc := &OpenAIGatewayService{}
-		c, _ := newTurnStateTestContext(t, 7, "sess-g2")
-		upstream := http.Header{}
-		upstream.Set("x-codex-turn-state", "blob-A")
-		svc.relayOpenAICodexTurnState(c, &Account{ID: 42}, upstream)
-		svc.noteStagedOpenAICodexTurnStateCommitted(c, &Account{ID: 42}, upstream)
-
-		// failover 换到账号 43：blob 由 42 铸造，必须剥离
-		h := newOutbound("blob-A")
-		svc.guardOpenAICodexTurnStateEcho(c, &Account{ID: 43}, h)
-		require.Empty(t, h.Get("x-codex-turn-state"))
-	})
-
-	t.Run("no_provenance_passthrough", func(t *testing.T) {
-		svc := &OpenAIGatewayService{}
-		c, _ := newTurnStateTestContext(t, 7, "sess-g3")
-		h := newOutbound("blob-unknown")
-		svc.guardOpenAICodexTurnStateEcho(c, &Account{ID: 43}, h)
-		require.Equal(t, "blob-unknown", h.Get("x-codex-turn-state"))
-	})
-
-	t.Run("expired_provenance_passthrough_and_pruned", func(t *testing.T) {
-		svc := &OpenAIGatewayService{}
-		c, _ := newTurnStateTestContext(t, 7, "sess-g4")
-		svc.openaiCodexTurnStateOrigins.Store("7\x00sess-g4", openAICodexTurnStateOrigin{
-			accountID: 42,
-			expiresAt: time.Now().Add(-time.Minute),
-		})
-		h := newOutbound("blob-A")
-		svc.guardOpenAICodexTurnStateEcho(c, &Account{ID: 43}, h)
-		require.Equal(t, "blob-A", h.Get("x-codex-turn-state"))
-		_, ok := svc.openaiCodexTurnStateOrigins.Load("7\x00sess-g4")
-		require.False(t, ok)
-	})
-
-	t.Run("no_session_seed_noop", func(t *testing.T) {
-		svc := &OpenAIGatewayService{}
-		c, _ := newTurnStateTestContext(t, 7, "")
-		h := newOutbound("blob-A")
-		svc.guardOpenAICodexTurnStateEcho(c, &Account{ID: 43}, h)
-		require.Equal(t, "blob-A", h.Get("x-codex-turn-state"))
-	})
-
-	t.Run("no_echo_noop", func(t *testing.T) {
-		svc := &OpenAIGatewayService{}
-		c, _ := newTurnStateTestContext(t, 7, "sess-g5")
-		h := newOutbound("")
-		svc.guardOpenAICodexTurnStateEcho(c, &Account{ID: 43}, h)
-		require.Empty(t, h.Get("x-codex-turn-state"))
-	})
+	staged := http.Header{"X-Codex-Turn-State": []string{"blob-a"}}
+	svc.relayOpenAICodexTurnState(c, a, staged)
+	require.Equal(t, "blob-a", c.Writer.Header().Get(openAICodexTurnStateHeader))
+	require.Empty(t, echo(a, "blob-a"), "uncommitted response cannot authorize an echo")
+	svc.noteStagedOpenAICodexTurnStateCommitted(c, a, staged)
+	require.Equal(t, "blob-a", echo(a, "blob-a"))
+	refreshed := turnStateAccount(42, "owner-a")
+	refreshed.Credentials["access_token"] = "refreshed"
+	refreshed.Credentials["refresh_token"] = "rotated"
+	require.Equal(t, "blob-a", echo(refreshed, "blob-a"), "refresh preserves principal")
+	require.Empty(t, echo(turnStateAccount(42, "owner-c"), "blob-a"), "same row relink changes principal")
+	svc.noteStagedOpenAICodexTurnStateCommitted(c, b, http.Header{"X-Codex-Turn-State": []string{"blob-b"}})
+	require.Equal(t, "blob-b", echo(b, "blob-b"))
+	require.Empty(t, echo(b, "blob-a"), "latest owner must not relabel a different old blob")
+	require.Equal(t, "blob-a", echo(a, "blob-a"), "records remain keyed by individual blob")
+	require.Empty(t, echo(a, "unknown"))
+	require.Empty(t, echo(&Account{ID: 42}, "blob-a"), "local ID alone is not principal evidence")
+	svc.relayOpenAICodexTurnState(c, a, http.Header{})
+	require.Empty(t, c.Writer.Header().Get(openAICodexTurnStateHeader))
 }
 
 type turnStateSharedStore struct {
 	*stubGatewayCache
-	origins map[string]int64
+	origins map[string]string
 }
 
-func (s *turnStateSharedStore) SetOpenAICodexTurnStateOrigin(_ context.Context, seed string, accountID int64, _ time.Duration) error {
+func (s *turnStateSharedStore) SetOpenAICodexTurnStateOrigin(_ context.Context, seed string, owner string, _ time.Duration) error {
 	if s.origins == nil {
-		s.origins = make(map[string]int64)
+		s.origins = map[string]string{}
 	}
-	s.origins[seed] = accountID
+	s.origins[seed] = owner
 	return nil
 }
-
-func (s *turnStateSharedStore) GetOpenAICodexTurnStateOrigin(_ context.Context, seed string) (int64, error) {
+func (s *turnStateSharedStore) GetOpenAICodexTurnStateOrigin(_ context.Context, seed string) (string, error) {
 	return s.origins[seed], nil
 }
 
-func TestOpenAICodexTurnState_CredentialOwnerAndCrossReplica(t *testing.T) {
+func TestCodexTurnStateCrossReplicaAndExpiredProvenance(t *testing.T) {
 	store := &turnStateSharedStore{stubGatewayCache: &stubGatewayCache{}}
 	writer := &OpenAIGatewayService{cache: store}
 	reader := &OpenAIGatewayService{cache: store}
-	c, _ := newTurnStateTestContext(t, 21, "sess-shared")
-	ownerID := int64(101)
-	shadow := &Account{ID: 202, ParentAccountID: &ownerID, QuotaDimension: QuotaDimensionSpark}
-	upstream := http.Header{http.CanonicalHeaderKey(openAICodexTurnStateHeader): []string{"blob-shared"}}
-
-	writer.noteStagedOpenAICodexTurnStateCommitted(c, shadow, upstream)
-	require.Equal(t, ownerID, store.origins[openAICodexTurnStateSeed(c)])
-
-	sameOwnerEcho := http.Header{http.CanonicalHeaderKey(openAICodexTurnStateHeader): []string{"blob-shared"}}
-	reader.guardOpenAICodexTurnStateEcho(c, &Account{ID: ownerID}, sameOwnerEcho)
-	require.Equal(t, "blob-shared", sameOwnerEcho.Get(openAICodexTurnStateHeader))
-
-	foreignEcho := http.Header{http.CanonicalHeaderKey(openAICodexTurnStateHeader): []string{"blob-shared"}}
-	reader.guardOpenAICodexTurnStateEcho(c, &Account{ID: 303}, foreignEcho)
-	require.Empty(t, foreignEcho.Get(openAICodexTurnStateHeader))
-}
-
-func TestSweepOpenAICodexTurnStateOrigins_PrunesExpiredEntries(t *testing.T) {
-	svc := &OpenAIGatewayService{}
-	svc.openaiCodexTurnStateOrigins.Store("expired", openAICodexTurnStateOrigin{
-		accountID: 1,
-		expiresAt: time.Now().Add(-time.Minute),
-	})
-	svc.openaiCodexTurnStateOrigins.Store("alive", openAICodexTurnStateOrigin{
-		accountID: 2,
-		expiresAt: time.Now().Add(time.Hour),
-	})
-
-	// 计数器推进到触发清扫的边界
-	svc.openaiCodexTurnStateWrites.Store(255)
-	svc.sweepOpenAICodexTurnStateOrigins()
-
-	_, expiredOK := svc.openaiCodexTurnStateOrigins.Load("expired")
-	require.False(t, expiredOK)
-	_, aliveOK := svc.openaiCodexTurnStateOrigins.Load("alive")
-	require.True(t, aliveOK)
+	c, _ := newTurnStateTestContext(t, 21, "session")
+	owner := turnStateAccount(101, "principal")
+	writer.noteStagedOpenAICodexTurnStateCommitted(c, owner, http.Header{"X-Codex-Turn-State": []string{"shared"}})
+	h := http.Header{"X-Codex-Turn-State": []string{"shared"}}
+	reader.guardOpenAICodexTurnStateEcho(c, owner, h)
+	require.Equal(t, "shared", h.Get(openAICodexTurnStateHeader))
+	reader.guardOpenAICodexTurnStateEcho(c, turnStateAccount(101, "relinked"), h)
+	require.Empty(t, h.Get(openAICodexTurnStateHeader))
+	local := &OpenAIGatewayService{}
+	key := openAICodexTurnStateProvenanceKey(c, "old")
+	local.openaiCodexTurnStateOrigins.Store(key, openAICodexTurnStateOrigin{accountID: 101, owner: openAICodexStateOwner(context.Background(), owner), expiresAt: time.Now().Add(-time.Second)})
+	h.Set(openAICodexTurnStateHeader, "old")
+	local.guardOpenAICodexTurnStateEcho(c, owner, h)
+	require.Empty(t, h.Get(openAICodexTurnStateHeader))
+	_, ok := local.openaiCodexTurnStateOrigins.Load(key)
+	require.False(t, ok)
+	// Pre-upgrade records contain neither a blob binding nor principal evidence.
+	local.openaiCodexTurnStateOrigins.Store(openAICodexTurnStateSeed(c), openAICodexTurnStateOrigin{accountID: 101, expiresAt: time.Now().Add(time.Hour)})
+	h.Set(openAICodexTurnStateHeader, "old")
+	local.guardOpenAICodexTurnStateEcho(c, owner, h)
+	require.Empty(t, h.Get(openAICodexTurnStateHeader))
 }
 
 func TestWriteOpenAIPassthroughResponseHeaders_RelaysAndClearsTurnState(t *testing.T) {
@@ -341,8 +179,7 @@ func TestEnsureOpenAIRemoteCompactionV2BetaFeature(t *testing.T) {
 	})
 }
 
-// 对齐真实 Codex：该头是会话级常量，挂在 OAuth 的每个请求上，而不是只在
-// 压缩回合出现（codex-rs build_model_client_beta_features_header）。
+// Official 770ed6dcea40 session/mod.rs advertises v2 independently of auth.
 func TestApplyOpenAICodexBetaFeatures(t *testing.T) {
 	oauthAccount := &Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
 	apiKeyAccount := &Account{ID: 2, Platform: PlatformOpenAI, Type: AccountTypeAPIKey}
@@ -350,18 +187,18 @@ func TestApplyOpenAICodexBetaFeatures(t *testing.T) {
 	t.Run("oauth_plain_request_gets_default_codex_shape", func(t *testing.T) {
 		c, _ := newTurnStateTestContext(t, 7, "sess-beta")
 		h := http.Header{}
-		applyOpenAICodexBetaFeatures(c, oauthAccount, h)
+		applyOpenAICodexBetaFeatures(context.Background(), c, oauthAccount, h)
 		require.Equal(t, "remote_compaction_v2", h.Get("x-codex-beta-features"),
 			"OAuth 的普通请求也必须带会话级 beta 头")
 	})
 
-	t.Run("client_declared_header_preserved", func(t *testing.T) {
+	t.Run("client_declared_features_keep_other_tokens_and_add_v2", func(t *testing.T) {
 		c, _ := newTurnStateTestContext(t, 7, "sess-beta")
 		h := http.Header{}
 		h.Set("x-codex-beta-features", "some_other_feature")
-		applyOpenAICodexBetaFeatures(c, oauthAccount, h)
-		require.Equal(t, "some_other_feature", h.Get("x-codex-beta-features"),
-			"客户端显式声明的能力集不得被网关改写（非空即视为用户已关闭 v2）")
+		applyOpenAICodexBetaFeatures(context.Background(), c, oauthAccount, h)
+		require.Equal(t, "some_other_feature,remote_compaction_v2", h.Get("x-codex-beta-features"),
+			"a partial declaration cannot disable the official unconditional capability")
 	})
 
 	t.Run("native_v2_forces_feature_even_when_client_trimmed_it", func(t *testing.T) {
@@ -369,7 +206,7 @@ func TestApplyOpenAICodexBetaFeatures(t *testing.T) {
 		MarkOpenAINativeCompactionV2(c)
 		h := http.Header{}
 		h.Set("x-codex-beta-features", "some_other_feature")
-		applyOpenAICodexBetaFeatures(c, oauthAccount, h)
+		applyOpenAICodexBetaFeatures(context.Background(), c, oauthAccount, h)
 		require.Contains(t, h.Get("x-codex-beta-features"), "remote_compaction_v2",
 			"body 带 compaction_trigger 是实锤，必须确保 v2 在列")
 		require.Contains(t, h.Get("x-codex-beta-features"), "some_other_feature")
@@ -379,22 +216,34 @@ func TestApplyOpenAICodexBetaFeatures(t *testing.T) {
 		c, _ := newTurnStateTestContext(t, 7, "sess-beta")
 		MarkOpenAINativeCompactionV2(c)
 		h := http.Header{}
-		applyOpenAICodexBetaFeatures(c, apiKeyAccount, h)
+		applyOpenAICodexBetaFeatures(context.Background(), c, apiKeyAccount, h)
 		require.Equal(t, "remote_compaction_v2", h.Get("x-codex-beta-features"))
 	})
 
-	t.Run("non_oauth_plain_request_untouched", func(t *testing.T) {
+	t.Run("native_api_key_plain_request_advertises_v2", func(t *testing.T) {
 		c, _ := newTurnStateTestContext(t, 7, "sess-beta")
 		h := http.Header{}
-		applyOpenAICodexBetaFeatures(c, apiKeyAccount, h)
-		require.Empty(t, h.Get("x-codex-beta-features"),
-			"非 Codex 后端不做会话级注入")
+		applyOpenAICodexBetaFeatures(context.Background(), c, apiKeyAccount, h)
+		require.Equal(t, "remote_compaction_v2", h.Get("x-codex-beta-features"))
+	})
+
+	t.Run("other_preset_keeps_its_session_policy", func(t *testing.T) {
+		c, _ := newTurnStateTestContext(t, 7, "sess-beta")
+		account := &Account{Platform: PlatformOpenCodeGo, Type: AccountTypeAPIKey, Credentials: map[string]any{
+			outboundIdentityCredential: OutboundIdentitySelection{Preset: "grok"},
+		}}
+		h := http.Header{}
+		applyOpenAICodexBetaFeatures(context.Background(), c, account, h)
+		require.Empty(t, h.Get("x-codex-beta-features"))
+		MarkOpenAINativeCompactionV2(c)
+		applyOpenAICodexBetaFeatures(context.Background(), c, account, h)
+		require.Equal(t, "remote_compaction_v2", h.Get("x-codex-beta-features"), "explicit native-v2 requests still require the token")
 	})
 
 	t.Run("nil_account_plain_request_untouched", func(t *testing.T) {
 		c, _ := newTurnStateTestContext(t, 7, "sess-beta")
 		h := http.Header{}
-		applyOpenAICodexBetaFeatures(c, nil, h)
+		applyOpenAICodexBetaFeatures(context.Background(), c, nil, h)
 		require.Empty(t, h.Get("x-codex-beta-features"))
 	})
 }
@@ -434,10 +283,53 @@ func TestBuildOpenAIWSHeaders_CarriesSessionBetaFeatures(t *testing.T) {
 		"WS 握手也必须带会话级 beta 头")
 
 	declared := build(t, oauthAccount, "some_other_feature")
-	require.Equal(t, []string{"some_other_feature"}, declared.Values("x-codex-beta-features"),
-		"客户端已声明时原样保留")
+	require.Equal(t, []string{"some_other_feature,remote_compaction_v2"}, declared.Values("x-codex-beta-features"))
 
 	apiKeyHeaders := build(t, &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}, "")
-	require.Empty(t, apiKeyHeaders.Get("x-codex-beta-features"),
-		"非 Codex 后端不注入")
+	require.Equal(t, "remote_compaction_v2", apiKeyHeaders.Get("x-codex-beta-features"))
+	for _, kind := range []string{AccountTypeOAuth, AccountTypeSetupToken, AccountTypeAPIKey} {
+		prewarm, _, err := svc.buildOpenAIWSHeaders(context.Background(), nil,
+			&Account{Platform: PlatformOpenAI, Type: kind}, "fixture", decision,
+			true, "", "", "", "gpt-6.1-sol", "")
+		require.NoError(t, err)
+		require.Equal(t, "remote_compaction_v2", prewarm.Get("x-codex-beta-features"), "prewarm must not depend on inbound headers")
+	}
+}
+
+func TestCodexTurnStateProvenanceUsesImmutableShadowSendOwner(t *testing.T) {
+	svc := &OpenAIGatewayService{}
+	c, _ := newTurnStateTestContext(t, 7, "session")
+	parent := turnStateAccount(100, "sent-owner")
+	parentID := parent.ID
+	shadow := turnStateAccount(200, "unused-shadow-claims")
+	shadow.ParentAccountID = &parentID
+	ctx := WithOutboundIdentityScope(t.Context(), c)
+	// The acquisition evidence must point at the real parent, not shadow fields.
+	recordRequestCredentialOwner(ctx, parent, parent.GetOpenAIAccessToken())
+	ctx = withRequestCredentialOwner(ctx, shadow, parent.GetOpenAIAccessToken())
+	defer bindRequestCredentialOwnerContext(ctx, c)()
+	c.Set(codexAccountIdentitySourceContextKey, parent)
+	parent.Credentials["chatgpt_account_id"] = "relinked-owner"
+	svc.noteStagedOpenAICodexTurnStateCommitted(c, shadow, http.Header{"X-Codex-Turn-State": []string{"sent-blob"}})
+	next, _ := newTurnStateTestContext(t, 7, "session")
+	headers := http.Header{"X-Codex-Turn-State": []string{"sent-blob"}}
+	svc.guardOpenAICodexTurnStateEcho(next, turnStateAccount(100, "sent-owner"), headers)
+	require.Equal(t, "sent-blob", headers.Get(openAICodexTurnStateHeader))
+	headers.Set(openAICodexTurnStateHeader, "sent-blob")
+	svc.guardOpenAICodexTurnStateEcho(next, parent, headers)
+	require.Empty(t, headers.Get(openAICodexTurnStateHeader))
+}
+
+func TestCodexAgentStateOwnerTracksSigningIdentityNotTask(t *testing.T) {
+	key, privateKey := newTestAgentIdentityKey(t)
+	account := &Account{ID: 481, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Credentials: map[string]any{"auth_mode": OpenAIAuthModeAgentIdentity, "agent_runtime_id": key.runtimeID, "agent_private_key": privateKey, "task_id": key.taskID}}
+	owner := openAICodexStateOwner(t.Context(), account)
+	require.NotEmpty(t, owner)
+	namespace := codexAccountIdentityNamespace(account)
+	account.Credentials["task_id"] = "next-task"
+	require.Equal(t, owner, openAICodexStateOwner(t.Context(), account))
+	require.Equal(t, namespace, codexAccountIdentityNamespace(account))
+	account.Credentials["agent_runtime_id"] = "different-runtime"
+	require.NotEqual(t, owner, openAICodexStateOwner(t.Context(), account))
+	require.NotEqual(t, namespace, codexAccountIdentityNamespace(account))
 }

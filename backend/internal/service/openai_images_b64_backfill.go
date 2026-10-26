@@ -119,11 +119,16 @@ func (s *OpenAIGatewayService) fetchOpenAIImageURLBase64(ctx context.Context, ac
 		return "", fmt.Errorf("build image download request: %w", err)
 	}
 	req.Header.Set("Accept", "image/*,*/*;q=0.8")
-	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
+	s.applyOpenAIImageUserAgent(ctx, account, req.Header)
+	proxyURL, err := requestCredentialOwnerProxyURL(ctx, account)
+	if err != nil {
+		return "", fmt.Errorf("prepare image download proxy: %w", err)
 	}
-	resp, err := s.httpUpstream.Do(prepareAccountOutboundRequest(req, account), proxyURL, account.ID, account.Concurrency)
+	req = prepareAccountOutboundRequest(req, account)
+	if err := OutboundPreparationError(req.Context()); err != nil {
+		return "", fmt.Errorf("prepare image download: %w", err)
+	}
+	resp, err := s.httpUpstream.Do(req, proxyURL, account.ID, account.Concurrency)
 	if err != nil {
 		return "", fmt.Errorf("download image: %w", err)
 	}

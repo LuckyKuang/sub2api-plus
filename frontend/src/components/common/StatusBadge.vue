@@ -2,11 +2,11 @@
   <div class="flex items-center gap-1.5">
     <span
       :class="[
-        'inline-block h-2 w-2 rounded-full',
+        'console-data-mark inline-block h-2 w-2 rounded-full',
         variantClass
       ]"
     ></span>
-    <span class="text-sm text-gray-700 dark:text-gray-300">
+    <span class="text-sm surface-muted">
       {{ label }}
     </span>
   </div>

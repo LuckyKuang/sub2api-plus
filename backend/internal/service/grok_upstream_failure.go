@@ -543,6 +543,7 @@ func (s *OpenAIGatewayService) applyGrokUpstreamFailureDecision(
 	account *Account,
 	decision GrokUpstreamFailureDecision,
 ) bool {
+	account = grokResponseOwner(ctx, account)
 	if s == nil || account == nil || !decision.ShouldCooldown || decision.Cooldown <= 0 {
 		return false
 	}
@@ -556,7 +557,9 @@ func (s *OpenAIGatewayService) applyGrokUpstreamFailureDecision(
 		low := strings.ToLower(decision.Reason)
 		if decision.Model != "" && isGrokModelSpecificFreeUsage(low, decision.Model) {
 			until := time.Now().Add(decision.Cooldown)
-			markGrokModelQuotaBlock(account.ID, decision.Model, until)
+			collectGrokRequestOutcome(ctx, s.accountRepo, account, GrokRequestOutcome{}, func(account *Account) {
+				markGrokModelQuotaBlock(account, decision.Model, until)
+			})
 			// The upstream explicitly scoped exhaustion to this model, so an
 			// account-wide cool would incorrectly take healthy sibling models out
 			// of rotation.
@@ -577,7 +580,9 @@ func (s *OpenAIGatewayService) applyGrokUpstreamFailureDecision(
 	case GrokFailureModelCapacity:
 		// Capacity is shared request pressure. Cool the model snapshot only;
 		// do not unschedulable the account or retry this request.
-		_ = persistGrokTransientModelCooldown(account, decision)
+		collectGrokRequestOutcome(ctx, s.accountRepo, account, GrokRequestOutcome{}, func(account *Account) {
+			_ = persistGrokTransientModelCooldown(account, decision)
+		})
 		return true
 	case GrokFailureRateLimit:
 		// Pure 429 without free-usage language keeps the existing rate-limit

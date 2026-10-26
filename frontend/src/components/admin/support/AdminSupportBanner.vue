@@ -2,7 +2,7 @@
   <section class="rounded-xl border border-amber-200 bg-amber-50/90 p-4 shadow-sm dark:border-amber-800/70 dark:bg-amber-950/30" role="status">
     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div class="flex min-w-0 items-start gap-3">
-        <span class="mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300">
+        <span class="mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-amber-100/[0.15] text-amber-700 dark:bg-amber-900/50 dark:text-amber-300">
           <Icon name="eye" size="md" />
         </span>
         <div class="min-w-0">
@@ -12,7 +12,7 @@
           </p>
         </div>
       </div>
-      <span class="inline-flex flex-shrink-0 items-center rounded-full border border-amber-300 bg-white/70 px-3 py-1 text-xs font-semibold text-amber-800 dark:border-amber-700 dark:bg-dark-900/50 dark:text-amber-200">
+      <span class="inline-flex flex-shrink-0 items-center rounded-full border border-amber-300 surface-inset px-3 py-1 text-xs font-semibold text-amber-800 dark:border-amber-700 dark:text-amber-200">
         {{ t('admin.support.readOnly') }}
       </span>
       <button type="button" class="btn btn-secondary btn-sm" @click="exitSupport">{{ t('admin.support.exit') }}</button>

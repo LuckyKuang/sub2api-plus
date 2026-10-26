@@ -3,6 +3,7 @@
 package handler
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -13,6 +14,8 @@ import (
 
 func TestUpstreamProtocolAdditionsKeepCanonicalCurrentUserContent(t *testing.T) {
 	for _, tc := range []struct{ name, protocol, body string }{
+		{"Step-Code native developer instructions and unknown siblings", service.ContentModerationProtocolOpenAIChat,
+			`{"model":"step-3.7-flash","messages":[{"role":"developer","content":"application instruction"},{"role":"user","content":"audit current request"}],"stream":true,"future_options":{"opaque":true}}`},
 		// Official v0.2.18 tool-schema const/annotation compatibility is an
 		// outbound transform; both engines must audit the original user text.
 		{"Gemini tool constants and future siblings", service.ContentModerationProtocolGemini,
@@ -25,6 +28,73 @@ func TestUpstreamProtocolAdditionsKeepCanonicalCurrentUserContent(t *testing.T) 
 			`{"model":"gpt-5.5","input":[{"type":"web_search_call","id":"ws_1","status":"completed","action":{"type":"search","query":"old query"}},{"type":"message","role":"user","content":[{"type":"input_text","text":"audit current request"},{"type":"future_media","opaque":true}]}],"tool_choice":"none"}`},
 		{"inline tool change", service.ContentModerationProtocolAnthropicMessages,
 			`{"model":"claude-sonnet-4-6","max_tokens":256,"tools":[{"name":"lookup","input_schema":{"type":"object"}}],"messages":[{"role":"assistant","content":[{"type":"thinking","thinking":"old reasoning","signature":""}]},{"role":"user","content":[{"type":"text","text":"audit current request"},{"type":"tool_change","tools":[{"name":"future_tool"}]}]}]}`},
+		{"chat tool-history recovery", service.ContentModerationProtocolOpenAIChat,
+			`{"model":"gpt-5.1","messages":[{"role":"tool","tool_call_id":"call_1","content":"historical result"},{"role":"user","content":"audit current request"}],"future_options":{"opaque":true}}`},
+		{"messages tool-history recovery", service.ContentModerationProtocolAnthropicMessages,
+			`{"model":"gpt-5.1","max_tokens":256,"messages":[{"role":"user","content":[{"type":"tool_result","tool_use_id":"call_1","content":"historical result"},{"type":"text","text":"audit current request"},{"type":"future_media","opaque":true}]}]}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			moderation := service.ExtractContentModerationInput(tc.protocol, []byte(tc.body))
+			require.Equal(t, "audit current request", moderation.Text)
+			prompt, err := securityaudit.ExtractPromptSnapshot(securityaudit.Request{Protocol: tc.protocol, Body: []byte(tc.body)})
+			require.NoError(t, err)
+			require.Equal(t, "audit current request", prompt.ScanText)
+		})
+	}
+}
+
+// Official client.rs sends these options/metadata on Responses HTTP/WS. They
+// must not hide recognized user content or turn unknown siblings into blocks.
+func TestCodexProtocolOptionsPreserveCanonicalAuditContent(t *testing.T) {
+	for _, frame := range []string{"http", "websocket", "websocket_nested"} {
+		for _, input := range []struct{ body, want string }{
+			{`[{"type":"additional_tools","tools":[{"type":"namespace","name":"shell","tools":[]}]},{"type":"message","role":"user","content":[{"type":"input_text","text":"audit current request"},{"type":"future_media","opaque":true}]}]`, "audit current request"},
+			{`[{"type":"future_item","opaque":{"value":1}}]`, ""},
+			// SECURITY_AUDIT_CONTENT_COVERAGE.md: the final input item is current.
+			// A bare trigger has no user text; preceding conversation is history.
+			{`[{"type":"message","role":"user","content":[{"type":"input_text","text":"historical user request"}]},{"type":"compaction_trigger"}]`, ""},
+			// A control item earlier in the input cannot hide the current user tail.
+			{`[{"type":"compaction_trigger"},{"type":"message","role":"user","content":[{"type":"input_text","text":"audit current request"}]}]`, "audit current request"},
+			// Routing may reject cross-owner opaque history only after audit.
+			// Tool/reference history cannot hide the recognized current sibling.
+			{`[{"type":"item_reference","id":"call_1"},{"type":"function_call_output","call_id":"call_1","output":"historical result"},{"type":"message","role":"user","content":[{"type":"input_text","text":"audit current request"},{"type":"future_media","opaque":true}]}]`, "audit current request"},
+		} {
+			t.Run(frame+"/"+input.want, func(t *testing.T) {
+				body := `{"model":"gpt-6.1-sol","input":` + input.body + `,"stream_options":{"reasoning_summary_delivery":"sequential_cutoff","future_option":true},"client_metadata":{"ws_request_header_x_openai_internal_codex_responses_lite":"true","x-codex-turn-metadata":"{\"subagent_kind\":\"guardian\",\"thread_id\":\"child-thread\",\"parent_thread_id\":\"parent-thread\"}"}}`
+				if frame == "websocket" {
+					body = `{"type":"response.create",` + body[1:]
+				}
+				if frame == "websocket_nested" {
+					body = `{"type":"response.create","response":` + body + `}`
+				}
+				moderation := service.ExtractContentModerationInput(service.ContentModerationProtocolOpenAIResponses, []byte(body))
+				require.Equal(t, input.want, moderation.Text)
+				request := securityaudit.Request{Protocol: service.ContentModerationProtocolOpenAIResponses, Body: []byte(body), Stage: frame}
+				prompt, err := securityaudit.ExtractPromptSnapshot(request)
+				if input.want == "" {
+					require.ErrorIs(t, err, securityaudit.ErrNoPromptText)
+					engine := securityaudit.NewPromptService(blockingCompatibilityConfigStore{cfg: securityaudit.ActiveConfig{
+						RiskControlEnabled: true, Enabled: true, BlockingEnabled: true, AllGroups: true,
+						Scanners: []string{"pii"}, Endpoints: []securityaudit.ActiveEndpoint{{ID: "guard", Enabled: true, TimeoutMS: 1000, InputLimit: 4096}},
+					}}, nil, nil, nil, securityaudit.NewAtomicMetrics())
+					decision := securityaudit.NewCoordinator(nil, engine).Check(context.Background(), request)
+					require.Equal(t, securityaudit.DecisionAllow, decision.Kind)
+					require.True(t, decision.AllowNextStage, "unknown content must pass through the audit gate")
+				} else {
+					require.NoError(t, err)
+				}
+				require.Equal(t, input.want, prompt.ScanText)
+			})
+		}
+	}
+}
+
+func TestOfficialAgentRequestStatePreservesCanonicalAuditContent(t *testing.T) {
+	const responses = `{"model":"gpt-5","input":[{"type":"future_state","opaque":true},{"type":"message","role":"user","content":[{"type":"input_text","text":"audit current request"}]}],"client_metadata":{"x-codex-installation-id":"6f1a136d-e931-4d31-8b2e-674616ed6317","x-codex-turn-metadata":"{\"thread_id\":\"019a0a42-6000-7001-8000-000000000001\",\"parent_thread_id\":\"019a0a42-5000-7001-8000-000000000002\",\"turn_id\":\"019a0a42-7000-7001-8000-000000000003\",\"context_window_id\":\"019a0a42-6000-7001-8000-000000000001:4\"}"}}`
+	for _, tc := range []struct{ name, protocol, body string }{
+		{"codex_http", service.ContentModerationProtocolOpenAIResponses, responses},
+		{"codex_ws", service.ContentModerationProtocolOpenAIResponses, `{"type":"response.create","response":` + responses + `}`},
+		{"zcode_messages", service.ContentModerationProtocolAnthropicMessages, `{"model":"glm-4.7","max_tokens":128,"metadata":{"user_id":"{\"session_id\":\"6f1a136d-e931-4d31-8b2e-674616ed6317\",\"query_id\":\"3c4bd6f6-b8d0-4e67-b297-3a2682becff3\"}"},"messages":[{"role":"user","content":[{"type":"text","text":"audit current request"},{"type":"future_state","opaque":true}]}]}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			moderation := service.ExtractContentModerationInput(tc.protocol, []byte(tc.body))

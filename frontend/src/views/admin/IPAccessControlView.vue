@@ -1,45 +1,52 @@
 <template>
-  <AppLayout>
-    <div class="mx-auto w-full max-w-7xl space-y-6 p-4 sm:p-6">
-      <section class="flex flex-wrap items-start justify-between gap-4">
+  <AppLayout workspace>
+    <div class="workspace-page ip-access-workspace">
+      <section class="workspace-fixed card ip-page-heading flex flex-wrap items-start justify-between gap-4 p-5">
         <div>
           <h1 class="text-xl font-semibold text-gray-900 dark:text-white">{{ t('admin.ipAccessControl.title') }}</h1>
-          <p class="mt-1 max-w-3xl text-sm text-gray-500 dark:text-gray-400">{{ t('admin.ipAccessControl.description') }}</p>
+          <p class="mt-1 max-w-3xl text-sm surface-muted">{{ t('admin.ipAccessControl.description') }}</p>
         </div>
         <RouterLink class="btn btn-secondary" to="/admin/settings">{{ t('admin.ipAccessControl.backToSettings') }}</RouterLink>
       </section>
 
-      <section class="card">
-        <div class="flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 px-5 py-4 dark:border-dark-700">
-          <div>
-            <h2 class="font-semibold text-gray-900 dark:text-white">{{ t('admin.ipAccessControl.failureStates.title') }}</h2>
-            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.ipAccessControl.failureStates.description') }}</p>
-          </div>
-          <div class="flex items-center gap-3">
-            <span v-if="failureStatesUnavailable" class="rounded bg-rose-100 px-2 py-1 text-xs font-medium text-rose-700 dark:bg-rose-950/50 dark:text-rose-300">
+      <WorkspaceTabs v-model="activeTab" :tabs="workspaceTabs" :label="t('admin.ipAccessControl.title')" />
+
+      <section
+        v-show="activeTab === 'failures'"
+        id="ip-panel-failures"
+        data-testid="ip-panel-failures"
+        role="tabpanel"
+        :aria-label="t('workspace.loginFailures')"
+        class="card workspace-table-card workspace-shell ip-data-panel"
+      >
+        <div class="workspace-fixed ip-table-heading border-b border-gray-100 px-5 py-4 dark:border-dark-700">
+          <h2 class="font-semibold text-gray-900 dark:text-white">{{ t('admin.ipAccessControl.failureStates.title') }}</h2>
+          <div class="ip-failure-meta flex flex-wrap items-center gap-3">
+            <span v-if="failureStatesUnavailable" class="rounded bg-rose-100/[0.15] px-2 py-1 text-xs font-medium text-rose-700 dark:bg-rose-950/50 dark:text-rose-300">
               {{ t('admin.ipAccessControl.failureStates.unavailable') }}
             </span>
-            <span v-if="failureStatesUpdatedAt" class="text-xs text-gray-500 dark:text-gray-400">
+            <span v-if="failureStatesUpdatedAt" class="text-xs surface-muted">
               {{ t('admin.ipAccessControl.failureStates.lastUpdated', { time: failureStatesUpdatedAt.toLocaleString() }) }}
             </span>
             <button type="button" class="btn btn-secondary btn-sm" :disabled="failureStatesLoading" @click="refreshFailureStates">
               {{ t('admin.ipAccessControl.failureStates.refresh') }}
             </button>
           </div>
+          <p class="ip-table-description text-sm surface-muted">{{ t('admin.ipAccessControl.failureStates.description') }}</p>
         </div>
-        <div class="flex flex-wrap items-end gap-3 border-b border-gray-100 p-4 dark:border-dark-700">
-          <label class="min-w-52 flex-1">
+        <div class="workspace-fixed ip-table-filters ip-failure-filters flex flex-wrap items-end gap-3 border-b border-gray-100 p-4 dark:border-dark-700">
+          <label class="ip-filter-field min-w-52 flex-1">
             <span class="input-label">{{ t('common.search') }}</span>
             <input v-model.trim="failureFilters.query" class="input" :placeholder="t('admin.ipAccessControl.failureStates.searchPlaceholder')" @keyup.enter="searchFailureStates" />
           </label>
           <button type="button" class="btn btn-secondary" :disabled="failureStatesLoading" @click="searchFailureStates">{{ t('common.search') }}</button>
         </div>
-        <DataTable :columns="failureStateColumns" :data="failureStates" :loading="failureStatesLoading" row-key="normalized_ip">
+        <DataTable class="workspace-table-viewport" :columns="failureStateColumns" :data="failureStates" :loading="failureStatesLoading" row-key="normalized_ip">
           <template #cell-normalized_ip="{ value }"><span class="font-mono text-sm">{{ value }}</span></template>
           <template #cell-failure_count="{ row }"><span class="font-medium text-gray-900 dark:text-white">{{ row.failure_count }} / {{ row.failure_threshold }}</span></template>
-          <template #cell-window_started_at="{ value }"><span class="whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{{ formatTimestamp(value) }}</span></template>
-          <template #cell-last_failed_at="{ value }"><span class="whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{{ formatTimestamp(value) }}</span></template>
-          <template #cell-window_expires_at="{ value }"><span class="whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{{ formatTimestamp(value) }}</span></template>
+          <template #cell-window_started_at="{ value }"><span class="whitespace-nowrap text-sm surface-muted">{{ formatTimestamp(value) }}</span></template>
+          <template #cell-last_failed_at="{ value }"><span class="whitespace-nowrap text-sm surface-muted">{{ formatTimestamp(value) }}</span></template>
+          <template #cell-window_expires_at="{ value }"><span class="whitespace-nowrap text-sm surface-muted">{{ formatTimestamp(value) }}</span></template>
           <template #cell-effectively_blocked="{ row }">
             <span :class="failureBlockStatusClass(row)">
               {{ failureBlockStatusLabel(row) }}
@@ -87,12 +94,12 @@
               </button>
             </div>
           </template>
-          <template #empty><div class="py-10 text-center text-sm text-gray-500">{{ t('admin.ipAccessControl.failureStates.empty') }}</div></template>
+          <template #empty><div class="py-10 text-center text-sm surface-muted">{{ t('admin.ipAccessControl.failureStates.empty') }}</div></template>
         </DataTable>
-        <p class="border-t border-gray-100 px-5 py-3 text-xs text-gray-500 dark:border-dark-700 dark:text-gray-400">
+        <p class="workspace-fixed ip-table-note border-t border-gray-100 px-5 py-3 text-xs dark:border-dark-700 surface-muted">
           {{ t('admin.ipAccessControl.failureStates.operationHint') }}
         </p>
-        <div class="border-t border-gray-100 p-4 dark:border-dark-700">
+        <div class="workspace-fixed ip-pagination border-t border-gray-100 dark:border-dark-700" data-testid="ip-failures-pagination">
           <Pagination
             v-if="failureTotal > 0"
             :total="failureTotal"
@@ -104,7 +111,14 @@
         </div>
       </section>
 
-      <section class="card">
+      <section
+        v-show="activeTab === 'proxies'"
+        id="ip-panel-proxies"
+        data-testid="ip-panel-proxies"
+        role="tabpanel"
+        :aria-label="t('workspace.trustedProxies')"
+        class="card workspace-shell workspace-body workspace-scroll"
+      >
         <div class="flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 px-5 py-4 dark:border-dark-700">
           <div>
             <div class="flex flex-wrap items-center">
@@ -112,70 +126,77 @@
               <HelpTooltip width-class="w-80">
                 <p>{{ t('admin.ipAccessControl.trustedProxy.guideHelp') }}</p>
               </HelpTooltip>
-              <button type="button" class="ml-2 text-sm text-primary-600 underline hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300" @click="showDeployGuide = true">
+              <button type="button" class="ml-2 text-sm text-primary-600 underline hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 surface-control" @click="showDeployGuide = true">
                 {{ t('admin.ipAccessControl.trustedProxy.guideLink') }}
               </button>
             </div>
-            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.ipAccessControl.trustedProxy.description') }}</p>
+            <p class="mt-1 text-sm surface-muted">{{ t('admin.ipAccessControl.trustedProxy.description') }}</p>
           </div>
           <span v-if="proxyStatus" :class="proxyStateClass">{{ proxyStateLabel }}</span>
         </div>
-        <div v-if="proxyStatusLoading" class="p-6 text-sm text-gray-500">{{ t('common.loading') }}</div>
+        <div v-if="proxyStatusLoading" class="p-6 text-sm surface-muted">{{ t('common.loading') }}</div>
         <div v-else-if="proxyStatus">
           <div class="grid grid-cols-1 divide-y divide-gray-100 sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4 dark:divide-dark-700">
             <div class="min-w-0 px-5 py-4">
-              <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('admin.ipAccessControl.trustedProxy.clientIp') }}</p>
+              <p class="text-xs font-medium surface-muted">{{ t('admin.ipAccessControl.trustedProxy.clientIp') }}</p>
               <p class="mt-1 break-all font-mono text-sm font-medium text-gray-900 dark:text-white">{{ proxyStatus.client_ip || '—' }}</p>
             </div>
             <div class="min-w-0 px-5 py-4">
-              <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('admin.ipAccessControl.trustedProxy.directPeerIp') }}</p>
+              <p class="text-xs font-medium surface-muted">{{ t('admin.ipAccessControl.trustedProxy.directPeerIp') }}</p>
               <p class="mt-1 break-all font-mono text-sm font-medium text-gray-900 dark:text-white">{{ proxyStatus.direct_peer_ip || '—' }}</p>
             </div>
             <div class="min-w-0 px-5 py-4">
-              <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('admin.ipAccessControl.trustedProxy.directPeerTrust') }}</p>
+              <p class="text-xs font-medium surface-muted">{{ t('admin.ipAccessControl.trustedProxy.directPeerTrust') }}</p>
               <p class="mt-1 text-sm font-medium text-gray-900 dark:text-white">{{ proxyStatus.direct_peer_trusted ? t('common.yes') : t('common.no') }}</p>
             </div>
             <div class="min-w-0 px-5 py-4">
-              <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('admin.ipAccessControl.trustedProxy.forwardedHeaders') }}</p>
+              <p class="text-xs font-medium surface-muted">{{ t('admin.ipAccessControl.trustedProxy.forwardedHeaders') }}</p>
               <p class="mt-1 break-words font-mono text-sm font-medium text-gray-900 dark:text-white">{{ forwardedHeaders.length ? forwardedHeaders.join(', ') : t('admin.ipAccessControl.trustedProxy.none') }}</p>
             </div>
           </div>
           <div class="border-t border-gray-100 px-5 py-4 dark:border-dark-700">
-            <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('admin.ipAccessControl.trustedProxy.loadedCidrs') }}</p>
+            <p class="text-xs font-medium surface-muted">{{ t('admin.ipAccessControl.trustedProxy.loadedCidrs') }}</p>
             <div v-if="trustedProxies.length" class="mt-2 flex flex-wrap gap-2">
-              <span v-for="proxy in trustedProxies" :key="proxy" class="rounded bg-gray-100 px-2 py-1 font-mono text-xs text-gray-700 dark:bg-dark-700 dark:text-gray-200">{{ proxy }}</span>
+              <span v-for="proxy in trustedProxies" :key="proxy" class="rounded surface-inset px-2 py-1 font-mono text-xs surface-muted">{{ proxy }}</span>
             </div>
-            <p v-else class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.ipAccessControl.trustedProxy.noneConfigured') }}</p>
+            <p v-else class="mt-1 text-sm surface-muted">{{ t('admin.ipAccessControl.trustedProxy.noneConfigured') }}</p>
             <p :class="proxyStatusMessageClass" class="mt-4 rounded-md border px-3 py-2 text-xs leading-5">{{ proxyStatusMessage }}</p>
             <div class="mt-4 grid grid-cols-1 gap-3 text-xs sm:grid-cols-3 xl:grid-cols-5">
-              <p class="rounded border border-gray-200 px-3 py-2 text-gray-700 dark:border-dark-700 dark:text-gray-200"><span class="font-medium">{{ t('admin.ipAccessControl.trustedProxy.identitySafety') }}</span><br>{{ proxyStatus.safe_for_enforcement ? t('admin.ipAccessControl.trustedProxy.safe') : t('admin.ipAccessControl.trustedProxy.unsafe') }}</p>
-              <p class="rounded border border-gray-200 px-3 py-2 text-gray-700 dark:border-dark-700 dark:text-gray-200"><span class="font-medium">{{ t('admin.ipAccessControl.trustedProxy.legacyMode') }}</span><br>{{ proxyStatus.legacy_forwarded_mode ? t('admin.ipAccessControl.trustedProxy.enabled') : t('admin.ipAccessControl.trustedProxy.disabled') }}</p>
-              <p class="rounded border border-gray-200 px-3 py-2 text-gray-700 dark:border-dark-700 dark:text-gray-200"><span class="font-medium">{{ t('admin.ipAccessControl.trustedProxy.emergencyAllowlist') }}</span><br>{{ proxyStatus.emergency_allowlist_configured ? t('admin.ipAccessControl.trustedProxy.emergencyConfigured', { count: proxyStatus.emergency_allowlist_count }) : t('admin.ipAccessControl.trustedProxy.none') }}</p>
-              <p class="rounded border border-gray-200 px-3 py-2 text-gray-700 dark:border-dark-700 dark:text-gray-200"><span class="font-medium">{{ t('admin.ipAccessControl.trustedProxy.globalEnforcement') }}</span><br>{{ automaticBlockingReady ? t('admin.ipAccessControl.trustedProxy.ready') : t('admin.ipAccessControl.trustedProxy.notReady') }}</p>
-              <p class="rounded border border-gray-200 px-3 py-2 text-gray-700 dark:border-dark-700 dark:text-gray-200"><span class="font-medium">{{ t('admin.ipAccessControl.trustedProxy.manualBlocking') }}</span><br>{{ manualBlockingReady ? t('admin.ipAccessControl.trustedProxy.ready') : t('admin.ipAccessControl.trustedProxy.notReady') }}</p>
+              <p class="rounded border border-gray-200 px-3 py-2 dark:border-dark-700 surface-muted"><span class="font-medium">{{ t('admin.ipAccessControl.trustedProxy.identitySafety') }}</span><br>{{ proxyStatus.safe_for_enforcement ? t('admin.ipAccessControl.trustedProxy.safe') : t('admin.ipAccessControl.trustedProxy.unsafe') }}</p>
+              <p class="rounded border border-gray-200 px-3 py-2 dark:border-dark-700 surface-muted"><span class="font-medium">{{ t('admin.ipAccessControl.trustedProxy.legacyMode') }}</span><br>{{ proxyStatus.legacy_forwarded_mode ? t('admin.ipAccessControl.trustedProxy.enabled') : t('admin.ipAccessControl.trustedProxy.disabled') }}</p>
+              <p class="rounded border border-gray-200 px-3 py-2 dark:border-dark-700 surface-muted"><span class="font-medium">{{ t('admin.ipAccessControl.trustedProxy.emergencyAllowlist') }}</span><br>{{ proxyStatus.emergency_allowlist_configured ? t('admin.ipAccessControl.trustedProxy.emergencyConfigured', { count: proxyStatus.emergency_allowlist_count }) : t('admin.ipAccessControl.trustedProxy.none') }}</p>
+              <p class="rounded border border-gray-200 px-3 py-2 dark:border-dark-700 surface-muted"><span class="font-medium">{{ t('admin.ipAccessControl.trustedProxy.globalEnforcement') }}</span><br>{{ automaticBlockingReady ? t('admin.ipAccessControl.trustedProxy.ready') : t('admin.ipAccessControl.trustedProxy.notReady') }}</p>
+              <p class="rounded border border-gray-200 px-3 py-2 dark:border-dark-700 surface-muted"><span class="font-medium">{{ t('admin.ipAccessControl.trustedProxy.manualBlocking') }}</span><br>{{ manualBlockingReady ? t('admin.ipAccessControl.trustedProxy.ready') : t('admin.ipAccessControl.trustedProxy.notReady') }}</p>
             </div>
           </div>
         </div>
       </section>
 
-      <section class="card">
+      <section
+        v-show="activeTab === 'protection'"
+        id="ip-panel-protection"
+        data-testid="ip-panel-protection"
+        role="tabpanel"
+        :aria-label="t('workspace.automaticProtection')"
+        class="card workspace-shell workspace-body workspace-scroll"
+      >
         <div class="border-b border-gray-100 px-5 py-4 dark:border-dark-700">
           <h2 class="font-semibold text-gray-900 dark:text-white">{{ t('admin.ipAccessControl.protection.title') }}</h2>
-          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.ipAccessControl.protection.description') }}</p>
+          <p class="mt-1 text-sm surface-muted">{{ t('admin.ipAccessControl.protection.description') }}</p>
         </div>
-        <div v-if="settingsLoading" class="p-6 text-sm text-gray-500">{{ t('common.loading') }}</div>
+        <div v-if="settingsLoading" class="p-6 text-sm surface-muted">{{ t('common.loading') }}</div>
         <div v-else class="space-y-5 p-5">
           <div class="flex items-center justify-between gap-5">
             <div>
               <label class="font-medium text-gray-900 dark:text-white">{{ t('admin.ipAccessControl.protection.enforcement') }}</label>
-              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.ipAccessControl.protection.enforcementHint') }}</p>
+              <p class="mt-1 text-sm surface-muted">{{ t('admin.ipAccessControl.protection.enforcementHint') }}</p>
             </div>
             <Toggle v-model="settings.enforcement_enabled" :disabled="proxyStatusLoading || (!settings.enforcement_enabled && !automaticBlockingReady)" />
           </div>
           <div class="flex items-center justify-between gap-5 border-t border-gray-100 pt-5 dark:border-dark-700">
             <div>
               <label class="font-medium text-gray-900 dark:text-white">{{ t('admin.ipAccessControl.protection.autoBlock') }}</label>
-              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.ipAccessControl.protection.autoBlockHint') }}</p>
+              <p class="mt-1 text-sm surface-muted">{{ t('admin.ipAccessControl.protection.autoBlockHint') }}</p>
             </div>
             <Toggle v-model="settings.login_failure_auto_block_enabled" :disabled="!settings.enforcement_enabled || (!settings.login_failure_auto_block_enabled && !automaticBlockingReady)" />
           </div>
@@ -184,39 +205,48 @@
             <label v-if="settings.login_failure_auto_block_enabled" class="block"><span class="input-label">{{ t('admin.ipAccessControl.protection.window') }}</span><input v-model.number="settings.login_failure_window_minutes" min="1" max="525600" type="number" class="input" /></label>
             <label class="block"><span class="input-label">{{ t('admin.ipAccessControl.protection.duration') }}</span><input v-model.number="settings.login_failure_block_minutes" min="1" max="525600" type="number" class="input" /></label>
           </div>
-          <p v-if="!featureEnabled" class="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800 dark:border-amber-800/70 dark:bg-amber-950/30 dark:text-amber-200">{{ t('admin.ipAccessControl.protection.masterSwitchOff') }}</p>
-          <p class="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800 dark:border-amber-800/70 dark:bg-amber-950/30 dark:text-amber-200">{{ t('admin.ipAccessControl.protection.proxyHint') }}</p>
-          <p v-if="!proxyStatusLoading && !automaticBlockingReady" class="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs leading-5 text-rose-800 dark:border-rose-800/70 dark:bg-rose-950/30 dark:text-rose-200">
+          <p v-if="!featureEnabled" class="rounded-md border border-amber-200 bg-amber-50/[0.15] px-3 py-2 text-xs leading-5 text-amber-800 dark:border-amber-800/70 dark:bg-amber-950/30 dark:text-amber-200">{{ t('admin.ipAccessControl.protection.masterSwitchOff') }}</p>
+          <p class="rounded-md border border-amber-200 bg-amber-50/[0.15] px-3 py-2 text-xs leading-5 text-amber-800 dark:border-amber-800/70 dark:bg-amber-950/30 dark:text-amber-200">{{ t('admin.ipAccessControl.protection.proxyHint') }}</p>
+          <p v-if="!proxyStatusLoading && !automaticBlockingReady" class="rounded-md border border-rose-200 bg-rose-50/[0.15] px-3 py-2 text-xs leading-5 text-rose-800 dark:border-rose-800/70 dark:bg-rose-950/30 dark:text-rose-200">
             {{ t('admin.ipAccessControl.protection.proxyNotReady') }}
-            <button type="button" class="ml-1 underline" @click="showDeployGuide = true">{{ t('admin.ipAccessControl.trustedProxy.guideLink') }}</button>
+            <button type="button" class="ml-1 underline surface-control" @click="showDeployGuide = true">{{ t('admin.ipAccessControl.trustedProxy.guideLink') }}</button>
           </p>
           <div class="flex justify-end border-t border-gray-100 pt-4 dark:border-dark-700"><button type="button" class="btn btn-primary" :disabled="settingsSaving" @click="saveSettings">{{ settingsSaving ? t('common.saving') : t('common.save') }}</button></div>
         </div>
       </section>
 
-      <section ref="rulesSection" class="card">
-        <div class="flex flex-wrap items-center justify-between gap-4 border-b border-gray-100 px-5 py-4 dark:border-dark-700">
-          <div><h2 class="font-semibold text-gray-900 dark:text-white">{{ t('admin.ipAccessControl.rules.title') }}</h2><p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.ipAccessControl.rules.description') }}</p></div>
+      <section
+        v-show="activeTab === 'rules'"
+        ref="rulesSection"
+        id="ip-panel-rules"
+        data-testid="ip-panel-rules"
+        role="tabpanel"
+        :aria-label="t('workspace.rules')"
+        class="card workspace-table-card workspace-shell ip-data-panel"
+      >
+        <div class="workspace-fixed ip-table-heading border-b border-gray-100 px-5 py-4 dark:border-dark-700">
+          <h2 class="font-semibold text-gray-900 dark:text-white">{{ t('admin.ipAccessControl.rules.title') }}</h2>
           <button type="button" class="btn btn-primary" @click="openCreateDialog"><Icon name="plus" size="sm" class="mr-1.5" />{{ t('admin.ipAccessControl.rules.add') }}</button>
+          <p class="ip-table-description text-sm surface-muted">{{ t('admin.ipAccessControl.rules.description') }}</p>
         </div>
-        <div class="flex flex-wrap items-end gap-3 border-b border-gray-100 p-4 dark:border-dark-700">
-          <label class="min-w-52 flex-1"><span class="input-label">{{ t('common.search') }}</span><input v-model.trim="filters.query" class="input" :placeholder="t('admin.ipAccessControl.rules.searchPlaceholder')" @keyup.enter="search" /></label>
-          <label class="w-full sm:w-44"><span class="input-label">{{ t('common.status') }}</span><Select v-model="filters.status" :options="statusOptions" @change="search" /></label>
+        <div class="workspace-fixed ip-table-filters flex flex-wrap items-end gap-3 border-b border-gray-100 p-4 dark:border-dark-700">
+          <label class="ip-filter-field min-w-52 flex-1"><span class="input-label">{{ t('common.search') }}</span><input v-model.trim="filters.query" class="input" :placeholder="t('admin.ipAccessControl.rules.searchPlaceholder')" @keyup.enter="search" /></label>
+          <label class="ip-filter-field w-full sm:w-44"><span class="input-label">{{ t('common.status') }}</span><Select v-model="filters.status" :options="statusOptions" @change="search" /></label>
           <button type="button" class="btn btn-secondary" :disabled="rulesLoading" @click="search">{{ t('common.search') }}</button>
         </div>
-        <DataTable :columns="columns" :data="rules" :loading="rulesLoading" row-key="id">
+        <DataTable class="workspace-table-viewport" :columns="columns" :data="rules" :loading="rulesLoading" row-key="id">
           <template #cell-ip_or_cidr="{ value }"><span class="font-mono text-sm">{{ value }}</span></template>
           <template #cell-rule_kind="{ value }"><span :class="kindClass(value)">{{ kindLabel(value) }}</span></template>
           <template #cell-status="{ row }"><span :class="statusClass(row.status)">{{ statusLabel(row) }}</span></template>
           <template #cell-failure_count="{ row }"><span>{{ row.failure_count || '—' }}</span></template>
           <template #cell-hit_count="{ row }"><span>{{ row.hit_count ?? 0 }}</span></template>
-          <template #cell-last_seen_at="{ value }"><span class="whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{{ formatLastSeenTime(value) }}</span></template>
-          <template #cell-expires_at="{ value }"><span class="whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{{ formatExpiryTime(value) }}</span></template>
-          <template #cell-actions="{ row }"><div class="flex flex-wrap items-center gap-2"><button v-if="row.status === 'active' && !row.ip_or_cidr.includes('/') && row.rule_kind !== 'allow'" type="button" class="btn btn-secondary btn-sm" @click="confirmResetCounter(row.ip_or_cidr)">{{ t('admin.ipAccessControl.rules.resetCounter') }}</button><button v-if="row.status === 'active'" type="button" class="btn btn-danger btn-sm" @click="confirmRelease(row)">{{ row.rule_kind === 'allow' ? t('admin.ipAccessControl.rules.removeAllow') : t('admin.ipAccessControl.rules.releaseReset') }}</button><span v-else class="text-xs text-gray-400">—</span></div></template>
-          <template #empty><div class="py-10 text-center text-sm text-gray-500">{{ t('admin.ipAccessControl.rules.empty') }}</div></template>
+          <template #cell-last_seen_at="{ value }"><span class="whitespace-nowrap text-sm surface-muted">{{ formatLastSeenTime(value) }}</span></template>
+          <template #cell-expires_at="{ value }"><span class="whitespace-nowrap text-sm surface-muted">{{ formatExpiryTime(value) }}</span></template>
+          <template #cell-actions="{ row }"><div class="flex flex-wrap items-center gap-2"><button v-if="row.status === 'active' && !row.ip_or_cidr.includes('/') && row.rule_kind !== 'allow'" type="button" class="btn btn-secondary btn-sm" @click="confirmResetCounter(row.ip_or_cidr)">{{ t('admin.ipAccessControl.rules.resetCounter') }}</button><button v-if="row.status === 'active'" type="button" class="btn btn-danger btn-sm" @click="confirmRelease(row)">{{ row.rule_kind === 'allow' ? t('admin.ipAccessControl.rules.removeAllow') : t('admin.ipAccessControl.rules.releaseReset') }}</button><span v-else class="text-xs surface-muted">—</span></div></template>
+          <template #empty><div class="py-10 text-center text-sm surface-muted">{{ t('admin.ipAccessControl.rules.empty') }}</div></template>
         </DataTable>
-		<p class="border-t border-gray-100 px-5 py-3 text-xs text-gray-500 dark:border-dark-700 dark:text-gray-400">{{ t('admin.ipAccessControl.rules.hitCountHint') }}</p>
-        <div class="border-t border-gray-100 p-4 dark:border-dark-700"><Pagination v-if="total > 0" :total="total" :page="page" :page-size="pageSize" @update:page="changePage" @update:pageSize="changePageSize" /></div>
+		<p class="workspace-fixed ip-table-note border-t border-gray-100 px-5 py-3 text-xs dark:border-dark-700 surface-muted">{{ t('admin.ipAccessControl.rules.hitCountHint') }}</p>
+        <div class="workspace-fixed ip-pagination border-t border-gray-100 dark:border-dark-700" data-testid="ip-rules-pagination"><Pagination v-if="total > 0" :total="total" :page="page" :page-size="pageSize" @update:page="changePage" @update:pageSize="changePageSize" /></div>
       </section>
     </div>
 
@@ -224,9 +254,9 @@
       <div class="space-y-4 py-2">
         <label class="block"><span class="input-label">{{ t('admin.ipAccessControl.rules.ip') }}</span><input v-model.trim="createForm.ip_or_cidr" class="input font-mono" placeholder="203.0.113.8 or 2001:db8::/32" /></label>
         <label class="block"><span class="input-label">{{ t('admin.ipAccessControl.rules.type') }}</span><Select v-model="createForm.rule_kind" :options="createKindOptions" /></label>
-        <p v-if="!manualBlockingReady" class="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800 dark:border-amber-800/70 dark:bg-amber-950/30 dark:text-amber-200">{{ t('admin.ipAccessControl.rules.manualBlockUnavailable') }}</p>
+        <p v-if="!manualBlockingReady" class="rounded-md border border-amber-200 bg-amber-50/[0.15] px-3 py-2 text-xs leading-5 text-amber-800 dark:border-amber-800/70 dark:bg-amber-950/30 dark:text-amber-200">{{ t('admin.ipAccessControl.rules.manualBlockUnavailable') }}</p>
         <label class="block"><span class="input-label">{{ t('admin.ipAccessControl.rules.reason') }}</span><textarea v-model.trim="createForm.reason" rows="3" class="input resize-y" /></label>
-        <label class="block"><span class="input-label">{{ t('admin.ipAccessControl.rules.expiresAt') }}</span><input v-model="createForm.expires_at" type="datetime-local" class="input" /></label>
+        <label class="block"><span class="input-label">{{ t('admin.ipAccessControl.rules.expiresAt') }}</span><DateTimePicker :aria-label="t('admin.ipAccessControl.rules.expiresAt')" v-model="createForm.expires_at" type="datetime-local" class="input" /></label>
       </div>
       <template #footer><button type="button" class="btn btn-secondary" @click="createVisible = false">{{ t('common.cancel') }}</button><button type="button" class="btn btn-primary" :disabled="creating || !createForm.ip_or_cidr || (createForm.rule_kind === 'manual_block' && !manualBlockingReady)" @click="createRule">{{ creating ? t('common.saving') : t('common.create') }}</button></template>
     </BaseDialog>
@@ -246,30 +276,30 @@
     <teleport to="body">
       <transition name="modal">
         <div v-if="showDeployGuide" class="fixed inset-0 z-50 flex items-center justify-center p-4" @mousedown.self="showDeployGuide = false">
-          <div class="fixed inset-0 bg-black/50" @click="showDeployGuide = false"></div>
-          <div class="relative max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white p-6 shadow-2xl dark:bg-dark-800">
-            <button type="button" class="absolute right-4 top-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200" :aria-label="t('common.close')" @click="showDeployGuide = false">
+          <div class="fixed inset-0 surface-overlay" @click="showDeployGuide = false"></div>
+          <div class="relative max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-xl p-6 shadow-2xl surface-panel">
+            <button type="button" class="absolute right-4 top-4 hover:text-gray-600 dark:hover:text-gray-200 surface-control surface-muted" :aria-label="t('common.close')" @click="showDeployGuide = false">
               <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
             <h2 class="mb-3 text-lg font-bold text-gray-900 dark:text-white">{{ t('admin.ipAccessControl.deployGuide.title') }}</h2>
-            <p class="mb-2 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.ipAccessControl.deployGuide.intro') }}</p>
-            <p class="mb-4 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.ipAccessControl.deployGuide.whenNeeded') }}</p>
+            <p class="mb-2 text-sm surface-muted">{{ t('admin.ipAccessControl.deployGuide.intro') }}</p>
+            <p class="mb-4 text-sm surface-muted">{{ t('admin.ipAccessControl.deployGuide.whenNeeded') }}</p>
 
-            <p class="mb-3 text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('admin.ipAccessControl.deployGuide.pickDeploy') }}</p>
+            <p class="mb-3 text-sm font-medium surface-muted">{{ t('admin.ipAccessControl.deployGuide.pickDeploy') }}</p>
             <div class="mb-5 flex flex-wrap gap-2">
               <button
                 v-for="mode in deployGuideModes"
                 :key="mode"
                 type="button"
-                class="rounded-lg px-3 py-1.5 text-sm"
-                :class="deployGuideMode === mode ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 dark:bg-dark-700 dark:text-gray-300'"
+                class="rounded-lg px-3 py-1.5 text-sm surface-control"
+                :class="deployGuideMode === mode ? 'bg-primary-600 text-white' : 'surface-field text-gray-700 dark:surface-field dark:text-gray-300'"
                 @click="deployGuideMode = mode"
               >
                 {{ t(`admin.ipAccessControl.deployGuide.${mode}`) }}
               </button>
             </div>
 
-            <div v-if="deployGuideMode === 'binary'" class="space-y-3 text-sm text-gray-600 dark:text-gray-300">
+            <div v-if="deployGuideMode === 'binary'" class="space-y-3 text-sm surface-muted">
               <h3 class="font-semibold text-gray-900 dark:text-white">{{ t('admin.ipAccessControl.deployGuide.binaryTitle') }}</h3>
               <p>{{ t('admin.ipAccessControl.deployGuide.binaryWhere') }}</p>
               <ol class="ml-5 list-decimal space-y-1">
@@ -279,15 +309,15 @@
                 <li>{{ t('admin.ipAccessControl.deployGuide.binaryStep4') }}</li>
               </ol>
               <p>{{ t('admin.ipAccessControl.deployGuide.binaryYamlHint') }}</p>
-              <pre class="overflow-x-auto rounded bg-gray-100 px-3 py-2 text-xs text-gray-800 dark:bg-dark-700 dark:text-gray-200">{{ t('admin.ipAccessControl.deployGuide.binaryYaml') }}</pre>
+              <pre class="overflow-x-auto rounded surface-inset px-3 py-2 text-xs text-gray-800 dark:text-gray-200">{{ t('admin.ipAccessControl.deployGuide.binaryYaml') }}</pre>
               <p>{{ t('admin.ipAccessControl.deployGuide.binaryStep5') }}</p>
-              <code class="block rounded bg-gray-100 px-3 py-2 text-xs dark:bg-dark-700">{{ t('admin.ipAccessControl.deployGuide.binaryRestart') }}</code>
-              <code class="block rounded bg-gray-100 px-3 py-2 text-xs dark:bg-dark-700">{{ t('admin.ipAccessControl.deployGuide.binaryStatus') }}</code>
+              <code class="block rounded surface-inset px-3 py-2 text-xs">{{ t('admin.ipAccessControl.deployGuide.binaryRestart') }}</code>
+              <code class="block rounded surface-inset px-3 py-2 text-xs">{{ t('admin.ipAccessControl.deployGuide.binaryStatus') }}</code>
               <p>{{ t('admin.ipAccessControl.deployGuide.binaryCustomFile') }}</p>
               <p>{{ t('admin.ipAccessControl.deployGuide.binaryEnvOverride') }}</p>
             </div>
 
-            <div v-else-if="deployGuideMode === 'docker'" class="space-y-3 text-sm text-gray-600 dark:text-gray-300">
+            <div v-else-if="deployGuideMode === 'docker'" class="space-y-3 text-sm surface-muted">
               <h3 class="font-semibold text-gray-900 dark:text-white">{{ t('admin.ipAccessControl.deployGuide.dockerTitle') }}</h3>
               <p>{{ t('admin.ipAccessControl.deployGuide.dockerWhere') }}</p>
               <ol class="ml-5 list-decimal space-y-1">
@@ -298,12 +328,12 @@
                 <li>{{ t('admin.ipAccessControl.deployGuide.dockerStep5') }}</li>
                 <li>{{ t('admin.ipAccessControl.deployGuide.dockerStep6') }}</li>
               </ol>
-              <code class="block rounded bg-gray-100 px-3 py-2 text-xs dark:bg-dark-700">{{ t('admin.ipAccessControl.deployGuide.dockerRestart') }}</code>
-              <code class="block rounded bg-gray-100 px-3 py-2 text-xs dark:bg-dark-700">{{ t('admin.ipAccessControl.deployGuide.dockerLogs') }}</code>
+              <code class="block rounded surface-inset px-3 py-2 text-xs">{{ t('admin.ipAccessControl.deployGuide.dockerRestart') }}</code>
+              <code class="block rounded surface-inset px-3 py-2 text-xs">{{ t('admin.ipAccessControl.deployGuide.dockerLogs') }}</code>
               <p>{{ t('admin.ipAccessControl.deployGuide.dockerFileHint') }}</p>
             </div>
 
-            <div v-else class="space-y-3 text-sm text-gray-600 dark:text-gray-300">
+            <div v-else class="space-y-3 text-sm surface-muted">
               <h3 class="font-semibold text-gray-900 dark:text-white">{{ t('admin.ipAccessControl.deployGuide.standaloneTitle') }}</h3>
               <p>{{ t('admin.ipAccessControl.deployGuide.standaloneWhere') }}</p>
               <ol class="ml-5 list-decimal space-y-1">
@@ -312,21 +342,21 @@
               </ol>
             </div>
 
-            <div class="mt-5 space-y-2 text-sm text-gray-600 dark:text-gray-300">
+            <div class="mt-5 space-y-2 text-sm surface-muted">
               <h3 class="font-semibold text-gray-900 dark:text-white">{{ t('admin.ipAccessControl.deployGuide.proxyTitle') }}</h3>
               <p>{{ t('admin.ipAccessControl.deployGuide.proxyHint') }}</p>
               <p>{{ t('admin.ipAccessControl.deployGuide.proxyCloudflareHint') }}</p>
-              <pre class="overflow-x-auto rounded bg-gray-100 px-3 py-2 text-xs text-gray-800 dark:bg-dark-700 dark:text-gray-200">{{ t('admin.ipAccessControl.deployGuide.proxyCloudflareHttp') }}</pre>
+              <pre class="overflow-x-auto rounded surface-inset px-3 py-2 text-xs text-gray-800 dark:text-gray-200">{{ t('admin.ipAccessControl.deployGuide.proxyCloudflareHttp') }}</pre>
               <p>{{ t('admin.ipAccessControl.deployGuide.proxyHeaderHint') }}</p>
-              <pre class="overflow-x-auto rounded bg-gray-100 px-3 py-2 text-xs text-gray-800 dark:bg-dark-700 dark:text-gray-200">{{ t('admin.ipAccessControl.deployGuide.proxyNginx') }}</pre>
+              <pre class="overflow-x-auto rounded surface-inset px-3 py-2 text-xs text-gray-800 dark:text-gray-200">{{ t('admin.ipAccessControl.deployGuide.proxyNginx') }}</pre>
               <p>{{ t('admin.ipAccessControl.deployGuide.proxyVerify') }}</p>
               <p>{{ t('admin.ipAccessControl.deployGuide.proxyTunnelHint') }}</p>
             </div>
-            <div class="mt-5 rounded-lg bg-gray-50 p-3 text-sm text-gray-700 dark:bg-dark-700 dark:text-gray-300">
+            <div class="mt-5 rounded-lg surface-inset p-3 text-sm surface-muted">
               <p class="font-medium">{{ t('admin.ipAccessControl.deployGuide.afterTitle') }}</p>
               <p class="mt-1">{{ t('admin.ipAccessControl.deployGuide.afterHint') }}</p>
             </div>
-            <div class="mt-4 rounded-lg bg-amber-50 p-3 text-xs text-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+            <div class="mt-4 rounded-lg bg-amber-50/[0.15] p-3 text-xs text-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
               <p class="font-medium">{{ t('admin.ipAccessControl.deployGuide.warningsTitle') }}</p>
               <ul class="mt-2 list-disc space-y-1 pl-4">
                 <li>{{ t('admin.ipAccessControl.deployGuide.warningCloudflare') }}</li>
@@ -347,6 +377,7 @@
 </template>
 
 <script setup lang="ts">
+import DateTimePicker from '@/components/common/DateTimePicker.vue'
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminAPI, type IPAccessControlSettings, type IPLoginFailureState, type IPAccessRule, type IPAccessRuleKind, type IPAccessRuleStatus, type TrustedProxyStatus } from '@/api/admin'
@@ -356,6 +387,7 @@ import type { Column } from '@/components/common/types'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
+import WorkspaceTabs from '@/components/common/WorkspaceTabs.vue'
 import Toggle from '@/components/common/Toggle.vue'
 import Select from '@/components/common/Select.vue'
 import Icon from '@/components/icons/Icon.vue'
@@ -366,6 +398,13 @@ import HelpTooltip from '@/components/common/HelpTooltip.vue'
 import { isStepUpBlocked, isStepUpCancelled, stepUpBlockReason, useStepUp } from '@/composables/useStepUp'
 
 const { t } = useI18n()
+const activeTab = ref('protection')
+const workspaceTabs = computed(() => [
+  { value: 'protection', label: t('workspace.automaticProtection'), panelId: 'ip-panel-protection' },
+  { value: 'proxies', label: t('workspace.trustedProxies'), panelId: 'ip-panel-proxies' },
+  { value: 'failures', label: t('workspace.loginFailures'), panelId: 'ip-panel-failures' },
+  { value: 'rules', label: t('workspace.rules'), panelId: 'ip-panel-rules' },
+])
 const appStore = useAppStore()
 const stepUp = useStepUp()
 const showDeployGuide = ref(false)
@@ -433,9 +472,9 @@ const columns = computed<Column[]>(() => [{ key: 'ip_or_cidr', label: t('admin.i
 const proxyStateLabel = computed(() => t(`admin.ipAccessControl.trustedProxy.states.${proxyStatus.value?.configuration_state || 'not_configured'}`))
 const proxyStateClass = computed(() => {
   const state = proxyStatus.value?.configuration_state
-  if (state === 'configured') return 'rounded bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300'
-  if (state === 'invalid') return 'rounded bg-rose-100 px-2 py-1 text-xs font-medium text-rose-700 dark:bg-rose-950/50 dark:text-rose-300'
-  return 'rounded bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700 dark:bg-amber-950/50 dark:text-amber-300'
+  if (state === 'configured') return 'rounded bg-emerald-100/[0.15] px-2 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300'
+  if (state === 'invalid') return 'rounded bg-rose-100/[0.15] px-2 py-1 text-xs font-medium text-rose-700 dark:bg-rose-950/50 dark:text-rose-300'
+  return 'rounded bg-amber-100/[0.15] px-2 py-1 text-xs font-medium text-amber-700 dark:bg-amber-950/50 dark:text-amber-300'
 })
 const proxyStatusMessage = computed(() => {
   const status = proxyStatus.value
@@ -448,9 +487,9 @@ const proxyStatusMessage = computed(() => {
 })
 const proxyStatusMessageClass = computed(() => {
   const status = proxyStatus.value
-  if (status?.configuration_state === 'configured' && status.trusted_proxy_applied) return 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/70 dark:bg-emerald-950/30 dark:text-emerald-200'
-  if (status?.configuration_state === 'invalid') return 'border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-800/70 dark:bg-rose-950/30 dark:text-rose-200'
-  return 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800/70 dark:bg-amber-950/30 dark:text-amber-200'
+  if (status?.configuration_state === 'configured' && status.trusted_proxy_applied) return 'border-emerald-200 bg-emerald-50/[0.15] text-emerald-800 dark:border-emerald-800/70 dark:bg-emerald-950/30 dark:text-emerald-200'
+  if (status?.configuration_state === 'invalid') return 'border-rose-200 bg-rose-50/[0.15] text-rose-800 dark:border-rose-800/70 dark:bg-rose-950/30 dark:text-rose-200'
+  return 'border-amber-200 bg-amber-50/[0.15] text-amber-800 dark:border-amber-800/70 dark:bg-amber-950/30 dark:text-amber-200'
 })
 function formatTimestamp(value?: string): string { return value ? new Date(value).toLocaleString() : '—' }
 function formatExpiryTime(value?: string): string { return value ? new Date(value).toLocaleString() : t('admin.ipAccessControl.rules.never') }
@@ -461,8 +500,8 @@ function statusLabel(rule: IPAccessRule): string {
   return t('admin.ipAccessControl.rules.statusExpired')
 }
 function kindLabel(value: IPAccessRuleKind): string { return value === 'allow' ? t('admin.ipAccessControl.rules.allow') : value === 'auto_block' ? t('admin.ipAccessControl.rules.autoBlock') : t('admin.ipAccessControl.rules.manualBlock') }
-function statusClass(value: IPAccessRuleStatus): string { return value === 'active' ? 'rounded bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300' : 'rounded bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600 dark:bg-dark-700 dark:text-gray-300' }
-function kindClass(value: IPAccessRuleKind): string { return value === 'allow' ? 'rounded bg-sky-100 px-2 py-1 text-xs font-medium text-sky-700 dark:bg-sky-950/50 dark:text-sky-300' : value === 'auto_block' ? 'rounded bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700 dark:bg-amber-950/50 dark:text-amber-300' : 'rounded bg-rose-100 px-2 py-1 text-xs font-medium text-rose-700 dark:bg-rose-950/50 dark:text-rose-300' }
+function statusClass(value: IPAccessRuleStatus): string { return value === 'active' ? 'rounded bg-emerald-100/[0.15] px-2 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300' : 'rounded surface-inset px-2 py-1 text-xs font-medium surface-muted dark:surface-inset' }
+function kindClass(value: IPAccessRuleKind): string { return value === 'allow' ? 'rounded bg-sky-100/[0.15] px-2 py-1 text-xs font-medium text-sky-700 dark:bg-sky-950/50 dark:text-sky-300' : value === 'auto_block' ? 'rounded bg-amber-100/[0.15] px-2 py-1 text-xs font-medium text-amber-700 dark:bg-amber-950/50 dark:text-amber-300' : 'rounded bg-rose-100/[0.15] px-2 py-1 text-xs font-medium text-rose-700 dark:bg-rose-950/50 dark:text-rose-300' }
 function failureBlockStatusLabel(state: IPLoginFailureState): string {
   if (state.effectively_blocked) return t('admin.ipAccessControl.failureStates.blocked')
   if (state.emergency_allowlisted) return t('admin.ipAccessControl.failureStates.emergencyAllowlisted')
@@ -472,11 +511,11 @@ function failureBlockStatusLabel(state: IPLoginFailureState): string {
   return t('admin.ipAccessControl.failureStates.observing', { count: state.failure_count, threshold: state.failure_threshold })
 }
 function failureBlockStatusClass(state: IPLoginFailureState): string {
-  if (state.effectively_blocked) return 'rounded bg-rose-100 px-2 py-1 text-xs font-medium text-rose-700 dark:bg-rose-950/50 dark:text-rose-300'
-  if (state.emergency_allowlisted) return 'rounded bg-violet-100 px-2 py-1 text-xs font-medium text-violet-700 dark:bg-violet-950/50 dark:text-violet-300'
-  if (state.suppressed_by_allow_rule) return 'rounded bg-sky-100 px-2 py-1 text-xs font-medium text-sky-700 dark:bg-sky-950/50 dark:text-sky-300'
-  if (state.active_block_rule) return 'rounded bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700 dark:bg-amber-950/50 dark:text-amber-300'
-  return 'rounded bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600 dark:bg-dark-700 dark:text-gray-300'
+  if (state.effectively_blocked) return 'rounded bg-rose-100/[0.15] px-2 py-1 text-xs font-medium text-rose-700 dark:bg-rose-950/50 dark:text-rose-300'
+  if (state.emergency_allowlisted) return 'rounded bg-violet-100/[0.15] px-2 py-1 text-xs font-medium text-violet-700 dark:bg-violet-950/50 dark:text-violet-300'
+  if (state.suppressed_by_allow_rule) return 'rounded bg-sky-100/[0.15] px-2 py-1 text-xs font-medium text-sky-700 dark:bg-sky-950/50 dark:text-sky-300'
+  if (state.active_block_rule) return 'rounded bg-amber-100/[0.15] px-2 py-1 text-xs font-medium text-amber-700 dark:bg-amber-950/50 dark:text-amber-300'
+  return 'rounded surface-inset px-2 py-1 text-xs font-medium surface-muted dark:surface-inset'
 }
 function manualBlockDisabledReason(state: IPLoginFailureState): string {
   if (failureStatesUnavailable.value) return t('admin.ipAccessControl.failureStates.manualBlockDisabledStale')
@@ -668,6 +707,7 @@ async function manualBlockFailureState() {
   }
 }
 async function focusRulesForFailureState(state: IPLoginFailureState, showAllActive = false) {
+  activeTab.value = 'rules'
   filters.status = 'active'
   filters.query = showAllActive ? '' : (state.block_rule_ip_or_cidr || state.normalized_ip)
   page.value = 1
@@ -684,6 +724,46 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.ip-table-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 12px;
+}
+.ip-table-description { grid-column: 1 / -1; }
+.ip-failure-meta { justify-content: flex-end; }
+.ip-pagination :deep(.pagination-card) { border: 0; box-shadow: none; }
+
+@media (min-width: 1024px) and (max-width: 1279px), (min-width: 1024px) and (max-height: 800px) {
+  .ip-page-heading { padding: 12px 16px; gap: 8px 12px; }
+  .ip-page-heading > div { flex: 1; min-width: 0; }
+  .ip-page-heading > .btn { flex: none; }
+  .ip-table-heading { padding: 10px 16px; gap: 4px 12px; }
+  .ip-table-heading > .btn, .ip-table-filters > .btn { min-height: 36px; padding-block: 7px; font-size: 13px; line-height: 20px; }
+  .ip-table-filters {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(150px, .55fr) auto;
+    gap: 8px;
+    padding: 10px 16px;
+  }
+  .ip-failure-filters { grid-template-columns: minmax(0, 1fr) auto; }
+  .ip-filter-field { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px; width: auto; min-width: 0; }
+  .ip-filter-field .input-label { margin: 0; white-space: nowrap; font-size: 13px; }
+  .ip-filter-field .input, .ip-filter-field :deep(.select-trigger) { min-height: 36px; padding-block: 7px; }
+  .ip-table-note { padding: 8px 16px; }
+  .ip-pagination :deep(.pagination-card) { padding: 8px 12px; }
+  .ip-pagination :deep(.pagination-desktop) { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+  .ip-pagination :deep(.pagination-info) { gap: 8px; }
+  .ip-pagination :deep(.pagination-desktop > nav) { align-self: center; gap: 4px; }
+  .ip-pagination :deep(.pagination-desktop .pagination-button) { padding-inline: 8px; }
+}
+
+@media (max-width: 639px) {
+  .ip-table-heading { grid-template-columns: minmax(0, 1fr); }
+  .ip-table-description { grid-row: 2; }
+  .ip-failure-meta { justify-content: flex-start; }
+}
+
 .modal-enter-active,
 .modal-leave-active {
   transition: opacity 0.2s ease;

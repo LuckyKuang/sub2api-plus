@@ -1,16 +1,16 @@
 <template>
-  <AppLayout>
-    <div class="w-full min-w-0 space-y-6 pb-8">
+  <AppLayout workspace>
+    <div class="workspace-page">
       <header
-        class="page-header mb-0 rounded-3xl bg-white p-5 shadow-sm ring-1 ring-gray-900/5 dark:bg-dark-800 dark:ring-dark-700 sm:p-6"
+        class="workspace-fixed glass-surface page-header mb-0 p-5 ring-1 ring-gray-900/5 dark:ring-dark-700 sm:p-6"
       >
         <h1 class="page-title flex items-center gap-2 text-xl font-black text-gray-900 dark:text-white">
-          <span class="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-blue-50 text-blue-500 dark:bg-blue-900/30 dark:text-blue-400">
+          <span class="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-blue-50/[0.15] text-blue-500 dark:bg-blue-900/30 dark:text-blue-400">
             <Icon name="chart" size="sm" />
           </span>
           {{ t('admin.channelMonitor.title') }}
         </h1>
-        <p class="page-description mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+        <p class="page-description mt-1.5 text-xs surface-muted">
           {{
             getChannelMonitorMode() === 'v3'
               ? t('channelMonitorV3.modeV3Hint')
@@ -18,43 +18,17 @@
               : t('channelMonitorV2.admin.descriptionV2')
           }}
         </p>
-        <div class="mt-4 border-t border-gray-100 pt-4 dark:border-dark-700">
-          <div
-            class="tabs inline-flex w-full max-w-xl flex-wrap sm:w-auto"
-            role="tablist"
-            :aria-label="t('channelMonitorV2.admin.tabAria')"
-          >
-            <button type="button" role="tab" class="tab flex-1 sm:flex-none" :class="adminMonitorTab === 'v3' ? 'tab-active' : ''" :aria-selected="adminMonitorTab === 'v3'" @click="adminMonitorTab = 'v3'">{{ t('channelMonitorV3.modeV3') }}</button>
-            <button
-              type="button"
-              role="tab"
-              class="tab flex-1 sm:flex-none"
-              :class="adminMonitorTab === 'v2' ? 'tab-active' : ''"
-              :aria-selected="adminMonitorTab === 'v2'"
-              @click="adminMonitorTab = 'v2'"
-            >
-              {{ t('channelMonitorV2.admin.tabV2') }}
-            </button>
-            <button
-              type="button"
-              role="tab"
-              class="tab flex-1 sm:flex-none"
-              :class="adminMonitorTab === 'legacy' ? 'tab-active' : ''"
-              :aria-selected="adminMonitorTab === 'legacy'"
-              @click="adminMonitorTab = 'legacy'"
-            >
-              {{ activeProbesEnabled ? t('channelMonitorV2.admin.tabV1Active') : t('channelMonitorV2.admin.tabV1History') }}
-            </button>
-          </div>
-        </div>
       </header>
 
-      <StatusSettingsPanel v-if="adminMonitorTab === 'v3'" />
+      <WorkspaceTabs v-model="adminMonitorTab" :tabs="monitorTabs" :label="t('channelMonitorV2.admin.tabAria')" />
+
+      <div class="workspace-shell" :class="adminMonitorTab === 'legacy' ? 'workspace-body' : 'workspace-scroll'" data-test="monitor-settings-scroll">
+      <StatusSettingsPanel v-if="adminMonitorTab === 'v3'" class="workspace-shell" />
       <MonitorSettingsPanel v-else-if="adminMonitorTab === 'v2'" />
 
       <TablePageLayout v-else>
       <template #filters>
-        <p v-if="!activeProbesEnabled" class="mb-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-200" role="status">
+        <p v-if="!activeProbesEnabled" class="monitor-legacy-notice mb-3 rounded-lg bg-amber-50/[0.15] p-3 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-200" role="status">
           {{ t('admin.channelMonitor.probesDisabledHint') }}
         </p>
         <MonitorFiltersBar
@@ -99,8 +73,9 @@
           </template>
 
           <template #cell-latency="{ row }">
-            <div class="text-xs text-gray-900 dark:text-gray-100" :title="t('usage.probeTimingHint')">
-              <div>{{ t('usage.latencyFirstByte') }} {{ formatLatency(row.primary_first_byte_ms) }} ms</div>
+            <div class="text-xs text-gray-900 dark:text-gray-100" :title="t('monitorCommon.timingHint')">
+              <div>{{ t('monitorCommon.firstText') }} {{ formatLatency(row.primary_first_text_ms) }} ms</div>
+              <div>{{ t('monitorCommon.firstByte') }} {{ formatLatency(row.primary_first_byte_ms) }} ms</div>
               <div>{{ t('usage.latencyDuration') }} {{ formatLatency(row.primary_latency_ms) }} ms</div>
             </div>
           </template>
@@ -136,6 +111,7 @@
       <template #pagination>
         <Pagination
           v-if="pagination.total > 0"
+          class="monitor-legacy-pagination"
           :page="pagination.page"
           :total="pagination.total"
           :page-size="pagination.page_size"
@@ -144,6 +120,7 @@
         />
       </template>
       </TablePageLayout>
+      </div>
     </div>
 
     <MonitorFormDialog
@@ -192,6 +169,7 @@ import type {
 } from '@/api/admin/channelMonitor'
 import type { Column } from '@/components/common/types'
 import AppLayout from '@/components/layout/AppLayout.vue'
+import WorkspaceTabs from '@/components/common/WorkspaceTabs.vue'
 import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
@@ -217,7 +195,12 @@ const appStore = useAppStore()
 const isV1Mode = computed(() => isChannelMonitorV1Mode())
 const activeProbesEnabled = computed(() => isChannelMonitorActiveProbeEnabled())
 const initialMode = getChannelMonitorMode()
-const adminMonitorTab = ref<'v2' | 'v3' | 'legacy'>(initialMode === 'v1' ? 'legacy' : initialMode)
+const adminMonitorTab = ref<string>(initialMode === 'v1' ? 'legacy' : initialMode)
+const monitorTabs = computed(() => [
+  { value: 'v3', label: t('channelMonitorV3.modeV3') },
+  { value: 'v2', label: t('channelMonitorV2.admin.tabV2') },
+  { value: 'legacy', label: activeProbesEnabled.value ? t('channelMonitorV2.admin.tabV1Active') : t('channelMonitorV2.admin.tabV1History') },
+])
 const {
   providerLabel,
   providerBadgeClass,
@@ -406,3 +389,13 @@ onUnmounted(() => {
   abortController?.abort()
 })
 </script>
+
+<style scoped>
+@media (min-width: 1024px) {
+  .monitor-legacy-notice { margin-bottom: 8px; padding: 8px 12px; font-size: 12px; line-height: 18px; }
+  .monitor-legacy-pagination { padding: 8px 12px; }
+  .monitor-legacy-pagination :deep(.pagination-desktop) { gap: 8px; }
+  .monitor-legacy-pagination :deep(.pagination-button) { min-height: 32px; min-width: 32px; padding: 5px 8px; }
+  .monitor-legacy-pagination :deep(.select-trigger), .monitor-legacy-pagination :deep(.input) { min-height: 32px; height: 32px; padding: 5px 8px; }
+}
+</style>

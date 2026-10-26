@@ -53,6 +53,8 @@ const (
 	FieldTemplateID = "template_id"
 	// FieldExtraHeaders holds the string denoting the extra_headers field in the database.
 	FieldExtraHeaders = "extra_headers"
+	// FieldStreamProbe holds the string denoting the stream_probe field in the database.
+	FieldStreamProbe = "stream_probe"
 	// FieldBodyOverrideMode holds the string denoting the body_override_mode field in the database.
 	FieldBodyOverrideMode = "body_override_mode"
 	// FieldBodyOverride holds the string denoting the body_override field in the database.
@@ -110,6 +112,7 @@ var Columns = []string{
 	FieldCreatedBy,
 	FieldTemplateID,
 	FieldExtraHeaders,
+	FieldStreamProbe,
 	FieldBodyOverrideMode,
 	FieldBodyOverride,
 }
@@ -163,6 +166,8 @@ var (
 	JitterSecondsValidator func(int) error
 	// DefaultExtraHeaders holds the default value on creation for the "extra_headers" field.
 	DefaultExtraHeaders map[string]string
+	// DefaultStreamProbe holds the default value on creation for the "stream_probe" field.
+	DefaultStreamProbe bool
 	// DefaultBodyOverrideMode holds the default value on creation for the "body_override_mode" field.
 	DefaultBodyOverrideMode string
 	// BodyOverrideModeValidator is a validator for the "body_override_mode" field. It is called by the builders before save.
@@ -292,6 +297,11 @@ func ByCreatedBy(opts ...sql.OrderTermOption) OrderOption {
 // ByTemplateID orders the results by the template_id field.
 func ByTemplateID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldTemplateID, opts...).ToFunc()
+}
+
+// ByStreamProbe orders the results by the stream_probe field.
+func ByStreamProbe(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldStreamProbe, opts...).ToFunc()
 }
 
 // ByBodyOverrideMode orders the results by the body_override_mode field.

@@ -5,7 +5,7 @@
         <h2 class="text-lg font-medium text-gray-900 dark:text-white">
           {{ t('profile.passkey.title') }}
         </h2>
-        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+        <p class="mt-1 text-sm surface-muted">
           {{ t('profile.passkey.description') }}
         </p>
       </div>
@@ -21,7 +21,7 @@
     </div>
 
     <div class="px-6 py-6">
-      <div v-if="!enabled" class="mb-5 text-sm text-gray-500 dark:text-gray-400">
+      <div v-if="!enabled" class="mb-5 text-sm surface-muted">
         {{ t('profile.passkey.featureDisabled') }}
       </div>
       <div v-if="enabled && !supported" class="mb-5 text-sm text-amber-600 dark:text-amber-400">
@@ -75,7 +75,7 @@
 
         <div
           v-else-if="credentials.length === 0"
-          class="rounded-lg border border-dashed border-gray-200 px-4 py-8 text-center text-sm text-gray-500 dark:border-dark-700 dark:text-gray-400"
+          class="rounded-lg border border-dashed border-gray-200 px-4 py-8 text-center text-sm dark:border-dark-700 surface-muted"
         >
           {{ t('profile.passkey.empty') }}
         </div>
@@ -94,12 +94,12 @@
                 </p>
                 <span
                   v-if="credential.backup"
-                  class="rounded-full bg-green-50 px-2 py-0.5 text-xs text-green-700 dark:bg-green-900/30 dark:text-green-300"
+                  class="rounded-full bg-green-50/[0.15] px-2 py-0.5 text-xs text-green-700 dark:bg-green-900/30 dark:text-green-300"
                 >
                   {{ t('profile.passkey.synced') }}
                 </span>
               </div>
-              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              <p class="mt-1 text-xs surface-muted">
                 {{ t('profile.passkey.createdAt', { date: formatDate(credential.created_at) }) }}
                 <template v-if="credential.last_used_at">
                   · {{ t('profile.passkey.lastUsed', { date: formatDate(credential.last_used_at) }) }}
@@ -117,7 +117,7 @@
               </button>
               <button v-support-readonly
                 type="button"
-                class="btn btn-ghost btn-sm text-red-600 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-950/30"
+                class="btn btn-ghost btn-sm text-red-600 hover:bg-red-50/25 dark:text-red-300 dark:hover:bg-red-950/30"
                 :disabled="busy"
                 @click="deletePasskey(credential)"
               >
@@ -132,14 +132,14 @@
     <!-- 删除确认：吊销凭据需验证当前密码，防止被窃会话静默移除 Passkey -->
     <div v-if="deleteTarget" class="fixed inset-0 z-50 overflow-y-auto">
       <div class="flex min-h-full items-center justify-center p-4">
-        <div class="fixed inset-0 bg-black/50 transition-opacity" @click="closeDeleteDialog"></div>
+        <div class="fixed inset-0 transition-opacity surface-overlay" @click="closeDeleteDialog"></div>
         <div
-          class="relative w-full max-w-md transform rounded-xl bg-white p-6 shadow-xl transition-all dark:bg-dark-800"
+          class="relative w-full max-w-md transform rounded-xl p-6 shadow-xl transition-all surface-panel"
         >
           <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
             {{ t('profile.passkey.deleteTitle') }}
           </h3>
-          <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
+          <p class="mt-2 text-sm surface-muted">
             {{ t('profile.passkey.deleteConfirm', { name: deleteTarget.name }) }}
           </p>
           <form v-support-readonly class="mt-4 space-y-4" @submit.prevent="confirmDelete">

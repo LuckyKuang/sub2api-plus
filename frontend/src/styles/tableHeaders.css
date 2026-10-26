@@ -1,0 +1,78 @@
+/* The header and native body scrollport occupy separate layout boxes. Body
+   pixels cannot enter the header, even during compositor-driven fast scrolling. */
+.record-table-dialog-scroll {
+  --record-table-max-height: min(42vh, 420px);
+  max-height: var(--record-table-max-height);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.static-table-frame {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: var(--surface-radius-panel);
+}
+.static-table-frame[hidden] { display: none; }
+.static-table-header-rail {
+  flex: 0 0 auto;
+  min-width: 0;
+  overflow: hidden;
+  background: transparent;
+}
+:root .static-table-body-viewport {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0 !important;
+  max-height: none !important;
+  padding-top: 0 !important;
+  border-top-left-radius: 0 !important;
+  border-top-right-radius: 0 !important;
+}
+:root table.static-table-source {
+  margin-top: calc(-1 * var(--static-table-head-height, 0px)) !important;
+}
+:root table.record-table > thead.static-table-measure-head {
+  position: static !important;
+  pointer-events: none;
+}
+:root table.record-table > thead.static-table-measure-head > tr > :is(th, td) {
+  top: auto !important;
+  color: transparent !important;
+}
+:root table.record-table > thead.static-table-measure-head > tr > :is(th, td) * { visibility: hidden !important; }
+:root table.record-table > thead.static-table-measure-head > tr > :is(th, td):not(.sticky-col) {
+  position: relative !important;
+}
+:root table.static-table-header-table {
+  min-width: 0 !important;
+  max-width: none !important;
+  table-layout: fixed !important;
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+  border: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+}
+:root table.static-table-header-table > thead,
+:root table.static-table-header-table > thead > tr,
+:root table.static-table-header-table > thead > tr > :is(th, td) {
+  position: static !important;
+  top: auto !important;
+  background: transparent !important;
+  border: 0 solid transparent !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  color: var(--surface-muted);
+}
+:root table.static-table-header-table > thead > tr > .sticky-col {
+  position: sticky !important;
+  z-index: 2;
+}
+:root table.static-table-header-table > thead::before { content: none !important; }
+:root table.static-table-header-table > thead > tr:last-child > :is(th, td),
+:root table.static-table-header-table > thead > tr > [data-header-edge-bottom] {
+  border-bottom-width: 8px !important;
+}

@@ -178,7 +178,16 @@ func parseModelProtocolCatalog(body []byte) (map[string][]string, error) {
 // modelCatalogProtocols 返回上游模型目录中 model 支持的协议；平台不提供目录、账号固定了
 // 上游协议或目录尚未就绪时返回 nil。
 func (s *OpenAIGatewayService) modelCatalogProtocols(ctx context.Context, account *Account, model string) []string {
-	if s == nil || s.httpUpstream == nil || strings.TrimSpace(model) == "" || !account.routesByModel() {
+	if s == nil || s.httpUpstream == nil || account == nil || strings.TrimSpace(model) == "" {
+		return nil
+	}
+	owner, err := requestCredentialAccount(ctx, account)
+	if err != nil || owner == nil {
+		return nil
+	}
+	account = snapshotRequestCredentialAccount(owner)
+	proxyURL, err := requestCredentialOwnerProxyURL(context.Background(), account)
+	if err != nil || !account.routesByModel() {
 		return nil
 	}
 	if profile := account.providerProfile(); profile == nil || !profile.ModelCatalog {
@@ -194,10 +203,6 @@ func (s *OpenAIGatewayService) modelCatalogProtocols(ctx context.Context, accoun
 	url := buildOpenAIModelsURL(base)
 	ctx = WithAccountOutboundIdentity(ctx, account)
 	headers := modelProtocolCatalogHeaders(ctx, account)
-	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
-	}
 	key := modelProtocolCatalogKey(account, url, headers, proxyURL)
 	accountID, concurrency := account.ID, account.Concurrency
 	refreshCtx := context.WithoutCancel(ctx)
@@ -219,7 +224,7 @@ func (s *OpenAIGatewayService) modelCatalogProtocols(ctx context.Context, accoun
 func modelProtocolCatalogKey(account *Account, url string, headers http.Header, proxyURL string) string {
 	// Hash the captured request, including credentials, identity and tenant headers.
 	// Rotating any of them must not inherit an earlier catalog or auth backoff.
-	data, _ := json.Marshal([]any{account.ID, account.Platform, account.Type, url, headers, proxyURL})
+	data, _ := json.Marshal([]any{account.ID, account.Platform, account.Type, credentialStateGeneration(account), url, headers, proxyURL})
 	return fmt.Sprintf("%x", sha256.Sum256(data))
 }
 

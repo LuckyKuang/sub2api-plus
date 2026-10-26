@@ -1,5 +1,5 @@
 <template>
-  <AppLayout>
+  <AppLayout workspace>
     <TablePageLayout>
       <template #filters>
         <div class="flex flex-wrap items-center gap-3">
@@ -7,8 +7,8 @@
             <Icon name="search" size="md" class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input v-model="filters.search" type="text" class="input pl-10" :placeholder="t('admin.affiliates.records.searchPlaceholder')" @input="debounceLoad" />
           </div>
-          <input v-model="filters.start_at" type="date" class="input w-full sm:w-44" :title="t('admin.affiliates.records.startAt')" @change="reloadFromFirstPage" />
-          <input v-model="filters.end_at" type="date" class="input w-full sm:w-44" :title="t('admin.affiliates.records.endAt')" @change="reloadFromFirstPage" />
+          <DateTimePicker :aria-label="t('admin.affiliates.records.startAt')" v-model="filters.start_at" type="date" class="input w-full sm:w-44" :title="t('admin.affiliates.records.startAt')" @change="reloadFromFirstPage" />
+          <DateTimePicker :aria-label="t('admin.affiliates.records.endAt')" v-model="filters.end_at" type="date" class="input w-full sm:w-44" :title="t('admin.affiliates.records.endAt')" @change="reloadFromFirstPage" />
           <button class="btn btn-secondary px-2 md:px-3" :disabled="loading" :title="t('common.refresh')" @click="loadRecords">
             <Icon name="refresh" size="md" :class="loading ? 'animate-spin' : ''" />
           </button>
@@ -54,12 +54,12 @@
             />
           </template>
           <template #cell-aff_code="{ row }">
-            <span class="font-mono text-sm text-gray-700 dark:text-gray-300">{{ row.aff_code || '-' }}</span>
+            <span class="font-mono text-sm surface-muted">{{ row.aff_code || '-' }}</span>
           </template>
           <template #cell-order="{ row }">
             <div class="space-y-0.5">
               <div class="font-mono text-sm text-gray-900 dark:text-white">#{{ row.order_id }}</div>
-              <div class="max-w-56 truncate text-sm text-gray-500 dark:text-dark-400">{{ row.out_trade_no }}</div>
+              <div class="max-w-56 truncate text-sm surface-muted">{{ row.out_trade_no }}</div>
             </div>
           </template>
           <template #cell-payment_type="{ row }">
@@ -96,7 +96,7 @@
             <NullableAmountText :value="row.history_quota_after" />
           </template>
           <template #cell-created_at="{ row }">
-            <span class="text-sm text-gray-700 dark:text-gray-300">{{ formatDateTime(row.created_at) }}</span>
+            <span class="text-sm surface-muted">{{ formatDateTime(row.created_at) }}</span>
           </template>
         </DataTable>
       </template>
@@ -123,10 +123,10 @@
         <div class="h-6 w-6 animate-spin rounded-full border-2 border-primary-500 border-t-transparent"></div>
       </div>
       <div v-else-if="selectedOverview" class="space-y-4">
-        <div class="rounded-lg border border-gray-100 bg-gray-50 p-4 dark:border-dark-700 dark:bg-dark-800">
+        <div class="rounded-lg border border-gray-100 surface-inset p-4 dark:border-dark-700">
           <div class="font-mono text-sm text-gray-900 dark:text-white">#{{ selectedOverview.user_id }}</div>
           <div class="mt-1 text-sm font-medium text-gray-900 dark:text-white">{{ selectedOverview.email || '-' }}</div>
-          <div class="mt-0.5 text-sm text-gray-500 dark:text-dark-400">{{ selectedOverview.username || '-' }}</div>
+          <div class="mt-0.5 text-sm surface-muted">{{ selectedOverview.username || '-' }}</div>
         </div>
         <div class="grid gap-3 sm:grid-cols-2">
           <OverviewStat :label="t('admin.affiliates.overview.affCode')" :value="selectedOverview.aff_code || '-'" mono />
@@ -142,6 +142,7 @@
 </template>
 
 <script setup lang="ts">
+import DateTimePicker from '@/components/common/DateTimePicker.vue'
 import { computed, defineComponent, h, onMounted, reactive, ref, type PropType } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
@@ -345,11 +346,11 @@ const UserCell = defineComponent({
       h(cellProps.clickable ? 'button' : 'div', {
         class: cellProps.clickable
           ? 'max-w-56 truncate text-left text-sm font-medium text-primary-600 hover:text-primary-700 hover:underline dark:text-primary-400 dark:hover:text-primary-300'
-          : 'max-w-56 truncate text-sm text-gray-700 dark:text-gray-300',
+          : 'max-w-56 truncate text-sm surface-muted',
         type: cellProps.clickable ? 'button' : undefined,
         onClick: cellProps.clickable ? () => emit('open', cellProps.id) : undefined,
       }, cellProps.email || '-'),
-      h('div', { class: 'max-w-56 truncate text-sm text-gray-500 dark:text-dark-400' }, cellProps.username || '-'),
+      h('div', { class: 'max-w-56 truncate text-sm surface-muted' }, cellProps.username || '-'),
     ])
   },
 })
@@ -376,7 +377,7 @@ const NullableAmountText = defineComponent({
     return () => {
       const value = amountProps.value
       if (value === null || value === undefined) {
-        return h('span', { class: 'text-sm text-gray-400 dark:text-dark-500' }, '-')
+        return h('span', { class: 'text-sm surface-muted' }, '-')
       }
       return h(AmountText, { value })
     }
@@ -390,8 +391,8 @@ const OverviewStat = defineComponent({
     mono: { type: Boolean, default: false },
   },
   setup(statProps) {
-    return () => h('div', { class: 'rounded-lg border border-gray-100 bg-white p-3 dark:border-dark-700 dark:bg-dark-900' }, [
-      h('div', { class: 'text-sm text-gray-500 dark:text-dark-400' }, statProps.label),
+    return () => h('div', { class: 'rounded-lg border border-gray-100 surface-inset p-3 dark:border-dark-700 dark:surface-inset' }, [
+      h('div', { class: 'text-sm surface-muted' }, statProps.label),
       h('div', {
         class: statProps.mono
           ? 'mt-1 font-mono text-base font-semibold text-gray-900 dark:text-white'

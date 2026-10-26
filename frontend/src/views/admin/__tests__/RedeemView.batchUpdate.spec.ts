@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { enableAutoUnmount, flushPromises, mount, type DOMWrapper } from '@vue/test-utils'
+import { enableAutoUnmount, flushPromises, mount, type VueWrapper } from '@vue/test-utils'
+import Select from '@/components/common/Select.vue'
+import { chooseSelect, openSelect } from '@/__tests__/helpers/select'
 
 import RedeemView from '../RedeemView.vue'
 
@@ -114,9 +116,15 @@ function renderView() {
   } } })
 }
 
-async function choose(select: DOMWrapper<Element>, label: string) {
-  const option = select.findAll('option').find(o => o.text().includes(label))!
-  await select.setValue((option.element as HTMLOptionElement).value)
+const formSelects = (wrapper: VueWrapper<any>) => wrapper.findAllComponents(Select)
+  .filter(select => wrapper.get('form').element.contains(select.element))
+const withOption = (wrapper: VueWrapper<any>, label: string) => formSelects(wrapper)
+  .find(select => select.props('options').some(option => String(option.label).includes(label)))!
+
+async function choose(select: VueWrapper<any>, label: string) {
+  const panel = await openSelect(select)
+  const option = panel.findAll('[role="option"]').find(o => o.text().includes(label))!
+  await chooseSelect(select, option.text())
   await flushPromises()
 }
 
@@ -176,11 +184,11 @@ describe('admin RedeemView', () => {
     await wrapper.findAll('button').find(b => b.text() === 'admin.redeem.generateCodes')!.trigger('click')
     await flushPromises()
     const form = () => wrapper.get('form')
-    const orderSelect = () => form().findAll('select').find(s => s.text().includes('featureExtensions.noOrder'))!
-    expect(orderSelect().get('option:checked').text()).toBe('featureExtensions.noOrder')
+    const orderSelect = () => withOption(wrapper, 'featureExtensions.noOrder')
+    expect(orderSelect().get('.select-value').text()).toBe('featureExtensions.noOrder')
     await choose(orderSelect(), 'featureExtensions.withOrder')
-    const currency = form().findAll('select').find(s => s.text().includes('CNY'))!
-    expect(currency.get('option:checked').text()).toBe('CNY')
+    const currency = withOption(wrapper, 'CNY')
+    expect(currency.get('.select-value').text()).toBe('CNY')
     await choose(currency, 'USD')
     await form().trigger('submit')
     await flushPromises()
@@ -194,9 +202,9 @@ describe('admin RedeemView', () => {
     await wrapper.findAll('button').find(b => b.text() === 'admin.redeem.generateCodes')!.trigger('click')
     await flushPromises()
     const form = () => wrapper.get('form')
-    await choose(form().findAll('select')[0], 'admin.redeem.subscription')
-    await choose(form().findAll('select').find(s => s.text().includes('featureExtensions.noOrder'))!, 'featureExtensions.withOrder')
-    await choose(form().findAll('select').find(s => s.text().includes('Frozen plan'))!, 'Frozen plan')
+    await choose(formSelects(wrapper)[0], 'admin.redeem.subscription')
+    await choose(withOption(wrapper, 'featureExtensions.noOrder'), 'featureExtensions.withOrder')
+    await choose(withOption(wrapper, 'Frozen plan'), 'Frozen plan')
     expect(form().text()).toContain('featureExtensions.planSnapshot')
     expect(form().text()).not.toContain('admin.redeem.validityDays')
     await form().trigger('submit')
@@ -211,8 +219,8 @@ describe('admin RedeemView', () => {
     await wrapper.findAll('button').find(b => b.text() === 'admin.redeem.generateCodes')!.trigger('click')
     await flushPromises()
     const form = () => wrapper.get('form')
-    await choose(form().findAll('select').find(s => s.text().includes('featureExtensions.noOrder'))!, 'featureExtensions.withOrder')
-    await choose(form().findAll('select')[0], 'admin.redeem.concurrency')
+    await choose(withOption(wrapper, 'featureExtensions.noOrder'), 'featureExtensions.withOrder')
+    await choose(formSelects(wrapper)[0], 'admin.redeem.concurrency')
     expect(form().text()).not.toContain('featureExtensions.generateOrder')
     await form().trigger('submit')
     await flushPromises()

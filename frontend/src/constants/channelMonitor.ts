@@ -80,3 +80,8 @@ export const MONITOR_STATUSES: readonly MonitorStatus[] = [
 
 /** Default polling interval (seconds) for new monitors. */
 export const DEFAULT_INTERVAL_SECONDS = 60
+
+/** Protocols with an incremental text probe reader. */
+export function supportsStreamProbe(provider?: Provider): boolean {
+  return provider != null && [PROVIDER_OPENAI, PROVIDER_GROK, PROVIDER_KIMI, PROVIDER_ZHIPU, PROVIDER_DEEPSEEK, PROVIDER_MINIMAX, PROVIDER_STEPFUN, PROVIDER_OPENCODE_GO].includes(provider)
+}

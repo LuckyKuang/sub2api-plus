@@ -99,12 +99,15 @@ type grokRequestCompressionCacheKey struct {
 	target string
 	// owner is the credential-owning account id.
 	owner int64
+	// generation isolates positive and negative observations after relinking,
+	// token rotation or proxy-status changes on the same account row.
+	generation string
 	// proxy identifies the egress configuration; capability never crosses it.
 	proxy string
 }
 
 func (k grokRequestCompressionCacheKey) flightKey() string {
-	return fmt.Sprintf("%s|%d|%s", k.target, k.owner, k.proxy)
+	return fmt.Sprintf("%s|%d|%s|%s", k.target, k.owner, k.generation, k.proxy)
 }
 
 type grokRequestCompressionCacheEntry struct {
@@ -255,6 +258,14 @@ func (s *OpenAIGatewayService) grokRequestCompressionCapabilityAdvertised(ctx co
 	if s == nil || account == nil {
 		return false
 	}
+	account, err := requestCredentialAccount(ctx, account)
+	if err != nil || account == nil {
+		return false
+	}
+	account = snapshotRequestCredentialAccount(account)
+	if _, err := requestCredentialOwnerProxyURL(context.Background(), account); err != nil {
+		return false
+	}
 	baseURL, err := grokValidatedSamplerBaseURL(account, s.cfg, settings...)
 	if err != nil {
 		return false
@@ -268,7 +279,11 @@ func (s *OpenAIGatewayService) grokRequestCompressionCapabilityAdvertised(ctx co
 	if !isGrokCLIProxyTarget(origin) {
 		return false
 	}
-	key := grokRequestCompressionCacheKey{target: origin, owner: account.ID, proxy: grokRequestCompressionProxyKey(account)}
+	generation := credentialStateGeneration(account)
+	if generation == "" {
+		return false
+	}
+	key := grokRequestCompressionCacheKey{target: origin, owner: account.ID, generation: generation, proxy: grokRequestCompressionProxyKey(account)}
 	now := time.Now()
 	if advertised, cached := grokRequestCompressionCacheLookup(key, now); cached {
 		return advertised
@@ -301,6 +316,15 @@ func grokRequestCompressionProxyKey(account *Account) string {
 // same-owner identity snapshot. It never creates an independent client with a
 // default User-Agent, and it never touches sampler declarations.
 func (s *OpenAIGatewayService) fetchGrokRequestCompressionCapability(ctx context.Context, account *Account, settingsURL string) bool {
+	account, ownerErr := requestCredentialAccount(ctx, account)
+	if ownerErr != nil || account == nil {
+		return false
+	}
+	account = snapshotRequestCredentialAccount(account)
+	proxyURL, proxyErr := requestCredentialOwnerProxyURL(context.Background(), account)
+	if proxyErr != nil {
+		return false
+	}
 	if s == nil || s.httpUpstream == nil || account == nil {
 		return false
 	}
@@ -332,11 +356,10 @@ func (s *OpenAIGatewayService) fetchGrokRequestCompressionCapability(ctx context
 	// Same-owner identity snapshot and the Grok transport profile, applied by
 	// the shared account preparation boundary.
 	req = prepareAccountOutboundRequest(req, account)
-
-	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
+	if OutboundPreparationError(req.Context()) != nil {
+		return false
 	}
+
 	resp, err := s.httpUpstream.Do(req, proxyURL, account.ID, maxInt(account.Concurrency, 1))
 	if err != nil {
 		slog.Warn("grok_request_compression_capability_unavailable",

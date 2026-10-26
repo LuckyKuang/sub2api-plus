@@ -111,6 +111,12 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 		h.openAISecurityAuditError(c, decision)
 		return
 	}
+	if resolved, err := h.resolveProviderFilesForInference(c, apiKey, body, service.APIProtocolChatCompletions); err != nil {
+		h.providerFilesError(c, err)
+		return
+	} else {
+		body = resolved
+	}
 	if h.rejectIfCyberSessionBlocked(c, apiKey, body, reqModel, cyberBlockFormatChat) {
 		return
 	}
@@ -171,6 +177,9 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 
 	// 分组利润控制：chat completions 文本入口请求级装门并固定 pricingAt。
 	ccPricingCtx, pricingAt := h.gatewayService.WithOpenAIRequestPricingContext(c.Request.Context(), apiKey.GroupID)
+	if requestPlatform == service.PlatformOpenAI {
+		ccPricingCtx = service.WithOpenAIClientRestriction(ccPricingCtx, c, body)
+	}
 	c.Request = c.Request.WithContext(ccPricingCtx)
 
 	for {
@@ -193,6 +202,15 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 			requestPlatform,
 		)
 		if err != nil {
+			if h.handleOpenAISessionRouteError(c, err, streamStarted) {
+				return
+			}
+			var clientPolicyErr *service.CodexClientRestrictionError
+			if errors.As(err, &clientPolicyErr) {
+				service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalPolicyDenied)
+				h.handleStreamingAwareError(c, http.StatusForbidden, "forbidden_error", clientPolicyErr.Error(), streamStarted)
+				return
+			}
 			if errors.Is(err, service.ErrOpenAIOAuthSessionAccessDenied) {
 				h.handleStreamingAwareError(c, http.StatusForbidden, "permission_error", "This OpenAI OAuth account is restricted to authorized API key groups.", streamStarted)
 				return
@@ -327,6 +345,10 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 			})
 		}
 		if err != nil {
+			if h.handleOpenAISessionRouteError(c, err, streamStarted) {
+				submitChatUsage(result)
+				return
+			}
 			if result != nil && result.ImageCount > 0 {
 				reqLog.Warn("openai_chat_completions.forward_partial_error_with_image_result",
 					zap.Int64("account_id", account.ID),
@@ -351,7 +373,7 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 					if failoverErr.ShouldReportAccountScheduleFailure() {
 						h.gatewayService.ReportOpenAIAccountScheduleResult(account, openAIAccountScheduleModel(c, account, reqModel, false, nil), false, nil, err)
 					}
-					if !failoverErr.ShouldRetryNextAccount() {
+					if !failoverErr.ShouldRetryNextAccount() || (account.Platform == service.PlatformOpenAI && !failoverErr.AllowsOpenAIAccountSwitch()) {
 						h.handleFailoverExhausted(c, failoverErr, streamStarted)
 						return
 					}
@@ -360,6 +382,7 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 						retryLimit := effectiveSameAccountRetryLimit(failoverErr, account)
 						if sameAccountRetryAllowed(failoverErr, sameAccountRetryCount[account.ID], retryLimit) {
 							sameAccountRetryCount[account.ID]++
+							c.Request = c.Request.WithContext(service.WithOpenAISessionRecovery(c.Request.Context(), account.ID, true))
 							retryDelay := sameAccountRetryDelayFor(failoverErr, sameAccountRetryCount[account.ID])
 							reqLog.Warn("openai_chat_completions.pool_mode_same_account_retry",
 								zap.Int64("account_id", account.ID),
@@ -377,6 +400,7 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 						}
 					}
 					h.gatewayService.RecordOpenAIAccountSwitch()
+					c.Request = c.Request.WithContext(service.WithOpenAISessionRecovery(c.Request.Context(), account.ID, false))
 					failedAccountIDs[account.ID] = struct{}{}
 					lastFailoverErr = failoverErr
 					if switchCount >= maxAccountSwitches {
@@ -396,7 +420,6 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 					)
 					continue
 				}
-				h.gatewayService.ReportOpenAIAccountScheduleResult(account, openAIAccountScheduleModel(c, account, reqModel, false, nil), false, nil, err)
 				upstreamErrorAlreadyCommunicated := openAIForwardErrorAlreadyCommunicated(c, writerSizeBeforeForward, err)
 				wroteFallback := false
 				if !upstreamErrorAlreadyCommunicated {
@@ -414,14 +437,15 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 				// The forwarding service may return usage gathered before a stream
 				// failure. Preserve it for billing below as an incomplete record.
 				if result == nil || service.GetOpsCyberPolicy(c) != nil {
+					h.gatewayService.ReportOpenAIAccountScheduleResult(account, openAIAccountScheduleModel(c, account, reqModel, false, result), false, nil, err)
 					return
 				}
 			}
 		}
 		if result != nil {
-			h.gatewayService.ReportOpenAIAccountScheduleResult(account, openAIAccountScheduleModel(c, account, reqModel, false, result), openAIForwardSucceededForScheduling(err, result), result.FirstTokenMs)
+			h.gatewayService.ReportOpenAIAccountScheduleResult(account, openAIAccountScheduleModel(c, account, reqModel, false, result), openAIForwardSucceededForScheduling(err, result), result.FirstTokenMs, err)
 		} else {
-			h.gatewayService.ReportOpenAIAccountScheduleResult(account, openAIAccountScheduleModel(c, account, reqModel, false, result), openAIForwardSucceededForScheduling(err, result), nil)
+			h.gatewayService.ReportOpenAIAccountScheduleResult(account, openAIAccountScheduleModel(c, account, reqModel, false, result), openAIForwardSucceededForScheduling(err, result), nil, err)
 		}
 
 		submitChatUsage(result)

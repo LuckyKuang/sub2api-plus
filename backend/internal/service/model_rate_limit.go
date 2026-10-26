@@ -10,10 +10,13 @@ import (
 )
 
 const (
-	modelRateLimitsKey                 = "model_rate_limits"
-	antigravityGeminiModelRateLimitKey = "antigravity:gemini"
-	openAIImageGenerationRateLimitKey  = "openai:image_generation"
-	openAICodexSparkRateLimitReason    = "openai_codex_spark_rate_limit"
+	// OpenAIModelNotFoundRateLimitScopePrefix is reserved for expiring
+	// generation-bound entitlement observations, including repository cleanup.
+	OpenAIModelNotFoundRateLimitScopePrefix = "openai:model_not_found:"
+	modelRateLimitsKey                      = "model_rate_limits"
+	antigravityGeminiModelRateLimitKey      = "antigravity:gemini"
+	openAIImageGenerationRateLimitKey       = "openai:image_generation"
+	openAICodexSparkRateLimitReason         = "openai_codex_spark_rate_limit"
 	// anthropicFableRateLimitKey 是 Anthropic 7d_oi（Fable 专属 7d 窗口）限流的
 	// 家族级 scope：命中后所有 Fable 变体（含 [1m] 等后缀）都不再调度到该账号。
 	anthropicFableRateLimitKey = "claude-fable-5"
@@ -84,6 +87,9 @@ func (a *Account) modelRateLimitKeysForRequest(ctx context.Context, requestedMod
 			keys = append(keys, antigravityGeminiModelRateLimitKey)
 		}
 	case PlatformOpenAI:
+		if key := openAIModelNotFoundRateLimitKey(a, modelKey); key != "" {
+			keys = append(keys, key)
+		}
 		if openAIImageGenerationRateLimitApplies(ctx, requestedModel, modelKey) && modelKey != openAIImageGenerationRateLimitKey {
 			keys = append(keys, openAIImageGenerationRateLimitKey)
 		}
@@ -97,6 +103,19 @@ func (a *Account) modelRateLimitKeysForRequest(ctx context.Context, requestedMod
 		}
 	}
 	return keys
+}
+
+// Missing-model entitlement belongs to the transmitted grant. Only its digest
+// is persisted, and scheduler projections carry the same CredentialGeneration.
+func openAIModelNotFoundRateLimitKey(owner *Account, model string) string {
+	if owner == nil || owner.Platform != PlatformOpenAI || strings.TrimSpace(model) == "" {
+		return ""
+	}
+	generation := credentialStateGeneration(owner)
+	if generation == "" {
+		return ""
+	}
+	return OpenAIModelNotFoundRateLimitScopePrefix + generation + ":" + model
 }
 
 // isAnthropicFableModel 判断是否为 Fable 模型家族（claude-fable-5、claude-fable-5[1m] 等变体）

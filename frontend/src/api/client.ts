@@ -302,6 +302,7 @@ apiClient.interceptors.response.use(
       return Promise.reject({
         status,
         code: apiData.code,
+        retryAfter: error.response.headers?.['retry-after'],
         reason: apiData.reason,
         error: apiData.error,
         message: apiData.message || apiData.detail || error.message,

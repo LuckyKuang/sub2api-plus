@@ -3,12 +3,30 @@
 package service
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/apicompat"
 	"github.com/stretchr/testify/require"
 )
+
+// Only the existing semantic output observer can advance the live phase;
+// headers, lifecycle frames and keepalives must not imply model output.
+func TestLiveOutputUsesMeaningfulSignalOncePerTurn(t *testing.T) {
+	start := time.Unix(1700000000, 0)
+	var observed []int
+	ctx := WithLiveOutputObserver(context.Background(), func(turn, ms int, kind string) {
+		require.Equal(t, 2, turn)
+		observed = append(observed, ms)
+	})
+	timing := newStreamOutputTiming(ctx, 2)
+	timing.ObserveAt(start, start.Add(time.Millisecond), apicompat.StreamOutputObservation{})
+	require.Empty(t, observed)
+	timing.ObserveAt(start, start.Add(250*time.Millisecond), apicompat.StreamOutputObservation{MeaningfulOutput: true, TokenLikeDelta: true})
+	timing.ObserveAt(start, start.Add(500*time.Millisecond), apicompat.StreamOutputObservation{MeaningfulOutput: true, TokenLikeDelta: true})
+	require.Equal(t, []int{250}, observed)
+}
 
 func TestStreamOutputTimingObserveAt(t *testing.T) {
 	t.Parallel()

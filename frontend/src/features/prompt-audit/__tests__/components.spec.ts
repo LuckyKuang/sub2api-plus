@@ -1,6 +1,9 @@
+import { chooseSelect } from '@/__tests__/helpers/select'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
 import { mount } from '@vue/test-utils'
+import DateTimePicker from '@/components/common/DateTimePicker.vue'
+import Select from '@/components/common/Select.vue'
 import EndpointPool from '../components/EndpointPool.vue'
 import PolicyPanel from '../components/PolicyPanel.vue'
 import EventWorkspace from '../components/EventWorkspace.vue'
@@ -153,12 +156,62 @@ describe('Prompt Audit components', () => {
     expect(wrapper.text()).toContain('203.0.113.42')
     expect(wrapper.text()).toContain('2.50 s')
     expect(wrapper.get('[data-test="filter-delete"]').attributes()).not.toHaveProperty('disabled')
+    const scroll = wrapper.get('[data-test="event-table-scroll"]')
+    expect(scroll.find('table').exists()).toBe(true)
+    expect(scroll.find('form').exists()).toBe(false)
+    expect(scroll.find('[data-test="pagination"]').exists()).toBe(false)
+    expect(wrapper.get('[data-test="pagination"]').element.parentElement).toBe(wrapper.element)
+    expect(wrapper.get('form').element.parentElement).toBe(wrapper.element)
     await wrapper.get('[data-test="filter-delete"]').trigger('click')
     expect(wrapper.emitted('preview-delete')).toHaveLength(1)
     await wrapper.get('[aria-label="admin.promptAudit.events.selectEvent"]').setValue(true)
     expect(wrapper.emitted('selection')?.at(-1)?.[0]).toEqual([1])
     await wrapper.get('[aria-label="admin.promptAudit.events.filterByIp"]').trigger('click')
     expect((wrapper.emitted('search')?.at(-1)?.[0] as PromptEventFilters).client_ip).toBe('203.0.113.42')
+  })
+
+  it('submits every filter from the fixed toolbar, resets them, and preserves pagination controls', async () => {
+    const wrapper = mount(EventWorkspace, {
+      attachTo: document.body,
+      props: { events: [], total: 80, page: 2, pageSize: 20, filters: emptyEventFilters(), selectedIds: [], loading: false, error: '' },
+      global: { stubs: { Pagination: PaginationStub } },
+    })
+    try {
+      const form = wrapper.get<HTMLFormElement>('form')
+      const search = wrapper.get<HTMLButtonElement>('[data-test="event-search"]')
+      expect(search.element.form).toBe(form.element)
+      expect(form.findAll('label')).toHaveLength(12)
+      expect(form.find('[data-test="event-search"]').exists()).toBe(false)
+      const filters: PromptEventFilters = {
+        decision: 'flag', risk_level: 'high', endpoint: '/v1/responses', client_ip: '203.0.113.9',
+        group_id: '3', user_id: '7', api_key_id: '11', request_id: 'request-42',
+        prompt_hash: 'b'.repeat(64), keyword: 'retained phrase', start_at: '2026-07-01T08:30', end_at: '2026-07-02T18:45',
+      }
+      await chooseSelect(wrapper.findAllComponents(Select)[0], 'admin.promptAudit.decisions.flag')
+      await chooseSelect(wrapper.findAllComponents(Select)[1], 'admin.promptAudit.riskLevels.high')
+      for (const [key, label] of [
+        ['endpoint', 'endpoint'], ['client_ip', 'clientIp'], ['group_id', 'groupId'], ['user_id', 'userId'],
+        ['api_key_id', 'apiKeyId'], ['request_id', 'requestId'], ['prompt_hash', 'promptHash'], ['keyword', 'keyword'],
+      ] as const) {
+        await form.get(`input[aria-label="admin.promptAudit.events.${label}"]`).setValue(filters[key])
+      }
+      await wrapper.findAllComponents(DateTimePicker)[0].setValue(filters.start_at)
+      await wrapper.findAllComponents(DateTimePicker)[1].setValue(filters.end_at)
+      await search.trigger('click')
+      expect(wrapper.emitted('search')).toEqual([[filters]])
+      await form.trigger('submit')
+      expect(wrapper.emitted('search')?.at(-1)).toEqual([filters])
+      await wrapper.get('[data-test="event-reset"]').trigger('click')
+      expect(wrapper.emitted('search')?.at(-1)).toEqual([emptyEventFilters()])
+      const pagination = wrapper.getComponent(PaginationStub)
+      expect(pagination.props()).toEqual({ total: 80, page: 2, pageSize: 20 })
+      pagination.vm.$emit('update:page', 3)
+      pagination.vm.$emit('update:pageSize', 50)
+      expect(wrapper.emitted('page')).toEqual([[3]])
+      expect(wrapper.emitted('page-size')).toEqual([[50]])
+    } finally {
+      wrapper.unmount()
+    }
   })
 
   it('resolves delete range presets to an epoch start and a cutoff end', () => {
@@ -192,7 +245,7 @@ describe('Prompt Audit components', () => {
 
     await wrapper.get('[data-test="range-preset-30d"]').setValue()
     expect(wrapper.emitted('criteria-change')?.length).toBeGreaterThan(0)
-    await wrapper.get('[data-test="delete-risk"]').setValue('high')
+    await chooseSelect(wrapper.get('[data-test="delete-risk"]'), 'admin.promptAudit.riskLevels.high')
     await wrapper.get('[data-test="run-delete-preview"]').trigger('click')
     const presetPreview = wrapper.emitted('preview')?.at(-1)?.[0] as PromptEventFilters
     expect(presetPreview.risk_level).toBe('high')
@@ -205,8 +258,9 @@ describe('Prompt Audit components', () => {
     expect(wrapper.get('[data-test="confirm-filter-delete"]').attributes()).toHaveProperty('disabled')
     expect(wrapper.get('[data-test="confirm-disabled-reason"]').text()).toBe('admin.promptAudit.events.filterDeleteConfirmInvalidRange')
     expect(wrapper.get('[data-test="confirm-filter-delete"]').attributes('title')).toBe('admin.promptAudit.events.filterDeleteConfirmInvalidRange')
-    await wrapper.get('[data-test="custom-range"] [aria-label="admin.promptAudit.events.startAt"]').setValue('2026-07-01T00:00')
-    await wrapper.get('[data-test="custom-range"] [aria-label="admin.promptAudit.events.endAt"]').setValue('2026-07-02T00:00')
+    const dateFields = wrapper.findAllComponents(DateTimePicker)
+    await dateFields[0].setValue('2026-07-01T00:00')
+    await dateFields[1].setValue('2026-07-02T00:00')
     expect(wrapper.get('[data-test="run-delete-preview"]').attributes()).not.toHaveProperty('disabled')
     expect(wrapper.get('[data-test="confirm-filter-delete"]').attributes()).not.toHaveProperty('disabled')
     expect(wrapper.find('[data-test="confirm-disabled-reason"]').exists()).toBe(false)
@@ -252,8 +306,8 @@ describe('Prompt Audit components', () => {
       global: { stubs: { BaseDialog: DialogStub } },
     })
     expect(wrapper.get<HTMLInputElement>('[data-test="range-preset-custom"]').element.checked).toBe(true)
-    expect(wrapper.get<HTMLInputElement>('[data-test="custom-range"] [aria-label="admin.promptAudit.events.startAt"]').element.value).toBe('2026-07-01T00:00')
-    expect(wrapper.get<HTMLSelectElement>('[data-test="delete-decision"]').element.value).toBe('critical')
+    expect(wrapper.findAllComponents(DateTimePicker)[0].props('modelValue')).toBe('2026-07-01T00:00')
+    expect(wrapper.get('[data-test="delete-decision"]').text()).toBe('admin.promptAudit.decisions.critical')
     expect(wrapper.get('[data-test="run-delete-preview"]').attributes()).not.toHaveProperty('disabled')
   })
 

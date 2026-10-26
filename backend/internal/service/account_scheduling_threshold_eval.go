@@ -343,6 +343,9 @@ func grokThresholdCandidates(account *Account) []*accountSchedulingThresholdCand
 	if account == nil {
 		return nil
 	}
+	if generation, _ := account.Extra["grok_sched_credential_generation"].(string); generation == "" || generation != grokCredentialGeneration(account) {
+		return nil
+	}
 	return []*accountSchedulingThresholdCandidate{
 		{
 			window:      "quota",
@@ -362,6 +365,9 @@ func cnProviderThresholdCandidates(account *Account, provider string) []*account
 	if account == nil || len(account.Extra) == 0 {
 		return nil
 	}
+	if !cnQuotaSnapshotMatches(account) {
+		return nil
+	}
 	if provider == PlatformCommandCode && !commandCodeWindowsBinding(account.Extra) {
 		return nil
 	}
@@ -372,15 +378,21 @@ func cnProviderThresholdCandidates(account *Account, provider string) []*account
 	if cnQuotaHasMonthlyWindow(provider) {
 		candidates = append(candidates, cnThresholdCandidate(account.Extra, provider, "monthly"))
 	}
+	if provider == PlatformKimi {
+		candidates = append(candidates, cnThresholdCandidate(account.Extra, provider, "monthly_code"))
+	}
 	return candidates
 }
 
-// cnQuotaHasMonthlyWindow 报告供应商的额度快照是否含月度窗口（OpenCode Go、Command Code）。
+// cnQuotaHasMonthlyWindow 报告供应商的额度快照是否含月度窗口（Kimi、OpenCode Go、Command Code）。
 func cnQuotaHasMonthlyWindow(provider string) bool {
-	return provider == PlatformOpenCodeGo || provider == PlatformCommandCode
+	return provider == PlatformKimi || provider == PlatformOpenCodeGo || provider == PlatformCommandCode
 }
 
 func cnThresholdCandidate(extra map[string]any, provider, window string) *accountSchedulingThresholdCandidate {
+	if unlimited, _ := extra[cnExtraKey(provider, window+"_unlimited")].(bool); unlimited {
+		return nil
+	}
 	var usedKey, resetKey string
 	switch window {
 	case "5h":
@@ -392,6 +404,9 @@ func cnThresholdCandidate(extra map[string]any, provider, window string) *accoun
 	case "monthly":
 		usedKey = cnExtraKey(provider, cnExtraSuffixMonthlyUsed)
 		resetKey = cnExtraKey(provider, cnExtraSuffixMonthlyReset)
+	case "monthly_code":
+		usedKey = cnExtraKey(provider, cnExtraSuffixMonthlyCodeUsed)
+		resetKey = cnExtraKey(provider, cnExtraSuffixMonthlyCodeReset)
 	default:
 		return nil
 	}

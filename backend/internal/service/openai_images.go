@@ -712,14 +712,17 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 	if err != nil {
 		return nil, err
 	}
+	ctx = withRequestCredentialOwner(ctx, account, token)
+	defer bindRequestCredentialOwnerContext(ctx, c)()
+	upstreamCtx = withRequestCredentialOwner(upstreamCtx, account, token)
 	upstreamReq, err := s.buildOpenAIImagesRequest(upstreamCtx, c, account, forwardBody, forwardContentType, token, parsed.Endpoint)
 	if err != nil {
 		return nil, err
 	}
 
-	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
+	proxyURL, err := requestCredentialOwnerProxyURL(upstreamCtx, account)
+	if err != nil {
+		return nil, err
 	}
 	upstreamStart := time.Now()
 	resp, err := s.doOpenAIUpstream(upstreamReq, proxyURL, account)
@@ -799,6 +802,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 		if err != nil {
 			if streamCount > 0 {
 				result := &OpenAIForwardResult{
+					codexUsageOwner:  capturedCodexUsageOwner(ctx, account),
 					RequestID:        resp.Header.Get("x-request-id"),
 					UpstreamHeaders:  resp.Header,
 					Usage:            streamUsage,
@@ -825,6 +829,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 		imageOutputSizes := streamSizes
 		firstOutputMs = firstOutput
 		result := &OpenAIForwardResult{
+			codexUsageOwner:  capturedCodexUsageOwner(ctx, account),
 			RequestID:        resp.Header.Get("x-request-id"),
 			UpstreamHeaders:  resp.Header,
 			Usage:            usage,
@@ -858,6 +863,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 			firstOutputKind = string(apicompat.StreamOutputImage)
 		}
 		return &OpenAIForwardResult{
+			codexUsageOwner:  capturedCodexUsageOwner(ctx, account),
 			RequestID:        resp.Header.Get("x-request-id"),
 			UpstreamHeaders:  resp.Header,
 			Usage:            usage,
@@ -885,11 +891,15 @@ func (s *OpenAIGatewayService) buildOpenAIImagesRequest(
 	token string,
 	endpoint string,
 ) (*http.Request, error) {
+	credentialAccount, err := requestCredentialAccount(ctx, account)
+	if err != nil {
+		return nil, err
+	}
 	targetURL := openAIImagesGenerationsURL
 	if endpoint == openAIImagesEditsEndpoint {
 		targetURL = openAIImagesEditsURL
 	}
-	baseURL := account.GetOpenAIBaseURL()
+	baseURL := credentialAccount.GetOpenAIBaseURL()
 	if baseURL != "" {
 		validatedURL, err := s.validateUpstreamBaseURL(baseURL)
 		if err != nil {
@@ -923,7 +933,7 @@ func (s *OpenAIGatewayService) buildOpenAIImagesRequest(
 	if strings.TrimSpace(contentType) != "" {
 		req.Header.Set("Content-Type", contentType)
 	}
-	account.applyOpenAIHeaderOverrides(req.Header)
+	credentialAccount.applyOpenAIHeaderOverrides(req.Header)
 	stripOpenAILegacyResponsesBeta(req.Header)
 	s.applyOpenAIImageUserAgent(ctx, account, req.Header)
 	return req, nil
@@ -933,7 +943,7 @@ func (s *OpenAIGatewayService) buildOpenAIImagesRequest(
 // traffic. A valid account Codex UA wins, followed by the system UA and the
 // compiled-in default; inbound headers and generic overrides never participate.
 func (s *OpenAIGatewayService) applyOpenAIImageUserAgent(ctx context.Context, account *Account, headers http.Header) {
-	s.applyOpenAIOutboundIdentity(ctx, account, headers, account != nil && account.UsesOpenAICodexProtocol())
+	s.applyOpenAIOutboundIdentity(ctx, account, headers, true)
 }
 
 func buildOpenAIImagesURL(base string, endpoint string) string {
@@ -1075,7 +1085,7 @@ func (s *OpenAIGatewayService) handleOpenAIImagesStreamingResponse(
 
 	usage := OpenAIUsage{}
 	imageCounter := newOpenAIImageOutputCounter()
-	var timing streamOutputTiming
+	timing := requestStreamOutputTiming(c)
 	var firstTokenMs *int
 	clientDisconnected := false
 	lastDownstreamWriteAt := time.Now()

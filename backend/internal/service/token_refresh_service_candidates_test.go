@@ -5,6 +5,7 @@ package service
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -78,6 +79,24 @@ func (r *tokenRefreshCandidateRepo) UpdateCredentials(_ context.Context, id int6
 	return nil
 }
 
+func (r *tokenRefreshCandidateRepo) UpdateOAuthRefreshCredentialsIfUnchanged(_ context.Context, expectedOwner *Account, replacement map[string]any) (bool, error) {
+	id := expectedOwner.ID
+	platform := expectedOwner.Platform
+	expected := expectedOwner.Credentials
+	proxy := expectedOwner.ProxyID
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i := range r.accounts {
+		current := &r.accounts[i]
+		if current.ID == id && current.Status == StatusActive && current.Platform == platform && current.Type == AccountTypeOAuth && reflect.DeepEqual(current.Credentials, expected) && (reflect.DeepEqual(current.ProxyID, proxy) && reflect.DeepEqual(current.Proxy, expectedOwner.Proxy)) {
+			current.Credentials = cloneRequestCredentialMap(replacement)
+			r.updatedCredentialIDs = append(r.updatedCredentialIDs, id)
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (r *tokenRefreshCandidateRepo) SetError(context.Context, int64, string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -91,6 +110,45 @@ func (r *tokenRefreshCandidateRepo) SetTempUnschedulable(_ context.Context, _ in
 	r.setTempUnschedCalls++
 	r.lastTempUnschedReason = reason
 	return nil
+}
+
+func (r *tokenRefreshCandidateRepo) SetCredentialErrorIfUnchanged(_ context.Context, expectedOwner *Account, reason string) (bool, error) {
+	id := expectedOwner.ID
+	platform := expectedOwner.Platform
+	kind := expectedOwner.Type
+	expected := expectedOwner.Credentials
+	proxy := expectedOwner.ProxyID
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i := range r.accounts {
+		current := &r.accounts[i]
+		if current.ID == id && current.Status == StatusActive && current.Platform == platform && current.Type == kind && reflect.DeepEqual(current.Credentials, expected) && (reflect.DeepEqual(current.ProxyID, proxy) && reflect.DeepEqual(current.Proxy, expectedOwner.Proxy)) {
+			current.Status, current.Schedulable, current.ErrorMessage = StatusError, false, reason
+			r.setErrorCalls++
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (r *tokenRefreshCandidateRepo) SetCredentialTempUnschedulableIfUnchanged(_ context.Context, expectedOwner *Account, until time.Time, reason string) (bool, error) {
+	id := expectedOwner.ID
+	platform := expectedOwner.Platform
+	kind := expectedOwner.Type
+	expected := expectedOwner.Credentials
+	proxy := expectedOwner.ProxyID
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i := range r.accounts {
+		current := &r.accounts[i]
+		if current.ID == id && current.Status == StatusActive && current.Platform == platform && current.Type == kind && reflect.DeepEqual(current.Credentials, expected) && (reflect.DeepEqual(current.ProxyID, proxy) && reflect.DeepEqual(current.Proxy, expectedOwner.Proxy)) && (current.TempUnschedulableUntil == nil || current.TempUnschedulableUntil.Before(until)) {
+			current.TempUnschedulableUntil, current.TempUnschedulableReason = &until, reason
+			r.setTempUnschedCalls++
+			r.lastTempUnschedReason = reason
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (r *tokenRefreshCandidateRepo) ClearTempUnschedulable(context.Context, int64) error {
@@ -227,11 +285,13 @@ func TestTokenRefreshService_RefreshFailureDoesNotCallPrivacy(t *testing.T) {
 				ID:       11,
 				Platform: PlatformOpenAI,
 				Type:     AccountTypeOAuth,
+				Status:   StatusActive,
 				Credentials: map[string]any{
 					"access_token":  "old-access-token",
 					"refresh_token": "refresh-token",
 				},
 			}
+			repo.accounts = []Account{*account}
 
 			err := svc.refreshWithRetry(context.Background(), account, &tokenRefreshTestRefresher{err: tt.err}, nil, time.Hour)
 

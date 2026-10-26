@@ -1,42 +1,42 @@
 <template>
-  <BaseDialog :show="show" :title="title" width="full" :close-on-click-outside="true" @close="close">
+  <DetailContentHost :embedded="embedded" :show="show" :title="title" width="full" :placement="placement" :close-on-click-outside="true" @close="close">
     <div v-if="loading" class="flex items-center justify-center py-16">
       <div class="flex flex-col items-center gap-3">
         <div class="h-8 w-8 animate-spin rounded-full border-b-2 border-primary-600"></div>
-        <div class="text-sm font-medium text-gray-500 dark:text-gray-400">{{ t('admin.ops.errorDetail.loading') }}</div>
+        <div class="text-sm font-medium surface-muted">{{ t('admin.ops.errorDetail.loading') }}</div>
       </div>
     </div>
 
-    <div v-else-if="!detail" class="py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+    <div v-else-if="!detail" class="py-10 text-center text-sm surface-muted">
       {{ emptyText }}
     </div>
 
-    <div v-else class="space-y-6 p-6">
+    <div v-else class="space-y-6" :class="placement !== 'right' ? 'p-6' : ''">
       <!-- Summary -->
-      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
-          <div class="text-xs font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.requestId') }}</div>
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2" :class="placement !== 'right' ? 'lg:grid-cols-4' : ''">
+        <div class="rounded-xl surface-inset p-4">
+          <div class="text-xs font-bold uppercase tracking-wider surface-muted">{{ t('admin.ops.errorDetail.requestId') }}</div>
           <div class="mt-1 break-all font-mono text-sm font-medium text-gray-900 dark:text-white">
             {{ requestId || '—' }}
           </div>
         </div>
 
-        <div v-if="detail.async_task_id" class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
-          <div class="text-xs font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.asyncTaskId') }}</div>
+        <div v-if="detail.async_task_id" class="rounded-xl surface-inset p-4">
+          <div class="text-xs font-bold uppercase tracking-wider surface-muted">{{ t('admin.ops.errorDetail.asyncTaskId') }}</div>
           <div class="mt-1 break-all font-mono text-sm font-medium text-gray-900 dark:text-white">
             {{ detail.async_task_id }}
           </div>
         </div>
 
-        <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
-          <div class="text-xs font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.time') }}</div>
+        <div class="rounded-xl surface-inset p-4">
+          <div class="text-xs font-bold uppercase tracking-wider surface-muted">{{ t('admin.ops.errorDetail.time') }}</div>
           <div class="mt-1 text-sm font-medium text-gray-900 dark:text-white">
             {{ formatDateTime(detail.created_at) }}
           </div>
         </div>
 
-        <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
-          <div class="text-xs font-bold uppercase tracking-wider text-gray-400">
+        <div class="rounded-xl surface-inset p-4">
+          <div class="text-xs font-bold uppercase tracking-wider surface-muted">
             {{ isUpstreamError(detail) ? t('admin.ops.errorDetail.account') : t('admin.ops.errorDetail.user') }}
           </div>
           <div class="mt-1 text-sm font-medium text-gray-900 dark:text-white">
@@ -49,26 +49,26 @@
           </div>
         </div>
 
-        <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
-          <div class="text-xs font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.platform') }}</div>
+        <div class="rounded-xl surface-inset p-4">
+          <div class="text-xs font-bold uppercase tracking-wider surface-muted">{{ t('admin.ops.errorDetail.platform') }}</div>
           <div class="mt-1 text-sm font-medium text-gray-900 dark:text-white">
             {{ detail.platform || '—' }}
           </div>
         </div>
 
-        <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
-          <div class="text-xs font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.group') }}</div>
+        <div class="rounded-xl surface-inset p-4">
+          <div class="text-xs font-bold uppercase tracking-wider surface-muted">{{ t('admin.ops.errorDetail.group') }}</div>
           <div class="mt-1 text-sm font-medium text-gray-900 dark:text-white">
             {{ detail.group_name || (detail.group_id != null ? String(detail.group_id) : '—') }}
           </div>
         </div>
 
-        <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
-          <div class="text-xs font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.model') }}</div>
+        <div class="rounded-xl surface-inset p-4">
+          <div class="text-xs font-bold uppercase tracking-wider surface-muted">{{ t('admin.ops.errorDetail.model') }}</div>
           <div class="mt-1 text-sm font-medium text-gray-900 dark:text-white">
             <template v-if="hasModelMapping(detail)">
               <span class="font-mono">{{ detail.requested_model }}</span>
-              <span class="mx-1 text-gray-400">→</span>
+              <span class="mx-1 surface-muted">→</span>
               <span class="font-mono text-primary-600 dark:text-primary-400">{{ detail.upstream_model }}</span>
             </template>
             <template v-else>
@@ -77,22 +77,22 @@
           </div>
         </div>
 
-        <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
-          <div class="text-xs font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.inboundEndpoint') }}</div>
+        <div class="rounded-xl surface-inset p-4">
+          <div class="text-xs font-bold uppercase tracking-wider surface-muted">{{ t('admin.ops.errorDetail.inboundEndpoint') }}</div>
           <div class="mt-1 break-all font-mono text-sm font-medium text-gray-900 dark:text-white">
             {{ detail.inbound_endpoint || '—' }}
           </div>
         </div>
 
-        <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
-          <div class="text-xs font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.upstreamEndpoint') }}</div>
+        <div class="rounded-xl surface-inset p-4">
+          <div class="text-xs font-bold uppercase tracking-wider surface-muted">{{ t('admin.ops.errorDetail.upstreamEndpoint') }}</div>
           <div class="mt-1 break-all font-mono text-sm font-medium text-gray-900 dark:text-white">
             {{ detail.upstream_endpoint || '—' }}
           </div>
         </div>
 
-        <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
-          <div class="text-xs font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.status') }}</div>
+        <div class="rounded-xl surface-inset p-4">
+          <div class="text-xs font-bold uppercase tracking-wider surface-muted">{{ t('admin.ops.errorDetail.status') }}</div>
           <div class="mt-1">
             <span :class="['inline-flex items-center rounded-lg px-2 py-1 text-xs font-black ring-1 ring-inset shadow-sm', statusClass]">
               {{ detail.status_code }}
@@ -100,8 +100,8 @@
           </div>
         </div>
 
-        <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
-          <div class="text-xs font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.upstreamStatus') }}</div>
+        <div class="rounded-xl surface-inset p-4">
+          <div class="text-xs font-bold uppercase tracking-wider surface-muted">{{ t('admin.ops.errorDetail.upstreamStatus') }}</div>
           <div class="mt-1">
             <span :class="['inline-flex items-center rounded-lg px-2 py-1 text-xs font-black ring-1 ring-inset shadow-sm', upstreamStatusClass]">
               {{ detail.upstream_status_code ?? '—' }}
@@ -109,22 +109,22 @@
           </div>
         </div>
 
-        <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
-          <div class="text-xs font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.requestType') }}</div>
+        <div class="rounded-xl surface-inset p-4">
+          <div class="text-xs font-bold uppercase tracking-wider surface-muted">{{ t('admin.ops.errorDetail.requestType') }}</div>
           <div class="mt-1 text-sm font-medium text-gray-900 dark:text-white">
             {{ formatRequestTypeLabel(detail.request_type) }}
           </div>
         </div>
 
-        <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
-          <div class="text-xs font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.message') }}</div>
+        <div class="rounded-xl surface-inset p-4">
+          <div class="text-xs font-bold uppercase tracking-wider surface-muted">{{ t('admin.ops.errorDetail.message') }}</div>
           <div class="mt-1 break-words text-sm font-medium text-gray-900 dark:text-white" :title="rootCauseMessage">
             {{ rootCauseMessage || '—' }}
           </div>
         </div>
 
-        <div v-if="detail.api_key_prefix" class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
-          <div class="text-xs font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.apiKeyPrefix') }}</div>
+        <div v-if="detail.api_key_prefix" class="rounded-xl surface-inset p-4">
+          <div class="text-xs font-bold uppercase tracking-wider surface-muted">{{ t('admin.ops.errorDetail.apiKeyPrefix') }}</div>
           <div class="mt-1 font-mono text-sm font-medium text-gray-900 dark:text-white">
             {{ detail.api_key_prefix }}
           </div>
@@ -132,25 +132,25 @@
 
       </div>
 
-      <div v-if="rootCauseMessage" class="rounded-xl bg-amber-50 p-6 dark:bg-amber-900/10">
+      <div v-if="rootCauseMessage" class="rounded-xl bg-amber-50/[0.15] p-6 dark:bg-amber-900/10">
         <h3 class="text-sm font-black uppercase tracking-wider text-amber-900 dark:text-amber-200">{{ t('admin.ops.errorDetail.rootCause') }}</h3>
         <div class="mt-3 break-words text-sm font-medium text-amber-900 dark:text-amber-100">{{ rootCauseMessage }}</div>
       </div>
 
-      <div class="rounded-xl bg-gray-50 p-6 dark:bg-dark-900">
+      <div class="rounded-xl surface-inset p-6">
         <h3 class="text-sm font-black uppercase tracking-wider text-gray-900 dark:text-white">{{ t('admin.ops.errorDetail.diagnosticPayloads') }}</h3>
-        <div v-if="!diagnosticPayloadSections.length" class="mt-4 text-sm text-gray-500 dark:text-gray-400">{{ t('common.noData') }}</div>
+        <div v-if="!diagnosticPayloadSections.length" class="mt-4 text-sm surface-muted">{{ t('common.noData') }}</div>
         <div v-else class="mt-4 space-y-4">
           <div v-for="section in diagnosticPayloadSections" :key="section.key">
-            <div class="mb-2 text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ diagnosticPayloadLabel(section.key) }}</div>
-            <pre class="max-h-[520px] overflow-auto rounded-xl border border-gray-200 bg-white p-4 text-xs text-gray-800 dark:border-dark-700 dark:bg-dark-800 dark:text-gray-100"><code>{{ prettyJSON(section.value) }}</code></pre>
+            <div class="mb-2 text-xs font-bold uppercase tracking-wider surface-muted">{{ diagnosticPayloadLabel(section.key) }}</div>
+            <pre class="max-h-[520px] overflow-auto rounded-xl border border-gray-200 surface-inset p-4 text-xs text-gray-800 dark:border-dark-700 dark:text-gray-100"><code>{{ prettyJSON(section.value) }}</code></pre>
           </div>
         </div>
       </div>
 
       <!-- Structured diagnostic vocabulary only; the backend rejects raw URLs,
            request headers, credentials, and arbitrary user-provided strings. -->
-      <div v-if="detail.routing_diagnostics" class="rounded-xl bg-gray-50 p-6 dark:bg-dark-900">
+      <div v-if="detail.routing_diagnostics" class="rounded-xl surface-inset p-6">
         <h3 class="text-sm font-black uppercase tracking-wider text-gray-900 dark:text-white">{{ t('admin.ops.errorDetail.routingDiagnostics') }}</h3>
         <dl v-if="detail.routing_diagnostics.selection_decision" class="mt-4 grid grid-cols-2 gap-2 text-sm">
           <dt class="text-gray-500">{{ t('admin.ops.errorDetail.candidatePool') }}</dt>
@@ -158,17 +158,17 @@
           <dt class="text-gray-500">{{ t('admin.ops.errorDetail.selectionReason') }}</dt>
           <dd data-testid="selection-reason">{{ detail.routing_diagnostics.selection_reason || t('admin.ops.errorDetail.unknownDiagnostic') }}</dd>
         </dl>
-        <pre class="mt-4 max-h-[360px] overflow-auto rounded-xl border border-gray-200 bg-white p-4 text-xs text-gray-800 dark:border-dark-700 dark:bg-dark-800 dark:text-gray-100"><code>{{ prettyObject(detail.routing_diagnostics) }}</code></pre>
+        <pre class="mt-4 max-h-[360px] overflow-auto rounded-xl border border-gray-200 surface-inset p-4 text-xs text-gray-800 dark:border-dark-700 dark:text-gray-100"><code>{{ prettyObject(detail.routing_diagnostics) }}</code></pre>
       </div>
 
       <!-- Upstream errors list (only for request errors) -->
-      <div v-if="showUpstreamList" class="rounded-xl bg-gray-50 p-6 dark:bg-dark-900">
+      <div v-if="showUpstreamList" class="rounded-xl surface-inset p-6">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <h3 class="text-sm font-black uppercase tracking-wider text-gray-900 dark:text-white">{{ t('admin.ops.errorDetails.upstreamErrors') }}</h3>
-          <div class="text-xs text-gray-500 dark:text-gray-400" v-if="correlatedUpstreamLoading">{{ t('common.loading') }}</div>
+          <div class="text-xs surface-muted" v-if="correlatedUpstreamLoading">{{ t('common.loading') }}</div>
         </div>
 
-        <div v-if="!correlatedUpstreamLoading && !correlatedUpstreamErrors.length" class="mt-3 text-sm text-gray-500 dark:text-gray-400">
+        <div v-if="!correlatedUpstreamLoading && !correlatedUpstreamErrors.length" class="mt-3 text-sm surface-muted">
           {{ t('common.noData') }}
         </div>
 
@@ -176,20 +176,20 @@
           <div
             v-for="(ev, idx) in correlatedUpstreamErrors"
             :key="ev.id"
-            class="rounded-xl border border-gray-200 bg-white p-4 dark:border-dark-700 dark:bg-dark-800"
+            class="rounded-xl border border-gray-200 surface-inset p-4 dark:border-dark-700"
           >
             <div class="flex flex-wrap items-center justify-between gap-2">
               <div class="text-xs font-black text-gray-900 dark:text-white">
                 #{{ idx + 1 }}
-                <span v-if="ev.type" class="ml-2 rounded-md bg-gray-100 px-2 py-0.5 font-mono text-[10px] font-bold text-gray-700 dark:bg-dark-700 dark:text-gray-200">{{ ev.type }}</span>
+                <span v-if="ev.type" class="ml-2 rounded-md surface-inset px-2 py-0.5 font-mono text-[10px] font-bold surface-muted">{{ ev.type }}</span>
               </div>
               <div class="flex items-center gap-2">
-                <div class="font-mono text-xs text-gray-500 dark:text-gray-400">
+                <div class="font-mono text-xs surface-muted">
                   {{ ev.status_code ?? '—' }}
                 </div>
                 <button
                   type="button"
-                  class="inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[10px] font-bold text-primary-700 hover:bg-primary-50 disabled:cursor-not-allowed disabled:opacity-60 dark:text-primary-200 dark:hover:bg-dark-700"
+                  class="inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[10px] font-bold text-primary-700 hover:bg-primary-50/25 disabled:cursor-not-allowed disabled:opacity-60 dark:text-primary-200 dark:hover:surface-hover surface-control"
                   :disabled="!getUpstreamResponsePreview(ev)"
                   :title="getUpstreamResponsePreview(ev) ? '' : t('common.noData')"
                   @click="toggleUpstreamDetail(ev.id)"
@@ -210,13 +210,13 @@
               </div>
             </div>
 
-            <div class="mt-3 grid grid-cols-1 gap-2 text-xs text-gray-600 dark:text-gray-300 sm:grid-cols-2">
+            <div class="mt-3 grid grid-cols-1 gap-2 text-xs sm:grid-cols-2 surface-muted">
               <div>
-                <span class="text-gray-400">{{ t('admin.ops.errorDetail.upstreamEvent.status') }}:</span>
+                <span class="surface-muted">{{ t('admin.ops.errorDetail.upstreamEvent.status') }}:</span>
                 <span class="ml-1 font-mono">{{ ev.status_code ?? '—' }}</span>
               </div>
               <div>
-                <span class="text-gray-400">{{ t('admin.ops.errorDetail.upstreamEvent.requestId') }}:</span>
+                <span class="surface-muted">{{ t('admin.ops.errorDetail.upstreamEvent.requestId') }}:</span>
                 <span class="ml-1 font-mono">{{ ev.request_id || ev.client_request_id || '—' }}</span>
               </div>
             </div>
@@ -225,7 +225,7 @@
 
             <pre
               v-if="expandedUpstreamDetailIds.has(ev.id)"
-              class="mt-3 max-h-[240px] overflow-auto rounded-xl border border-gray-200 bg-gray-50 p-3 text-xs text-gray-800 dark:border-dark-700 dark:bg-dark-900 dark:text-gray-100"
+              class="mt-3 max-h-[240px] overflow-auto rounded-xl border border-gray-200 surface-inset p-3 text-xs text-gray-800 dark:border-dark-700 dark:text-gray-100"
             ><code>{{ prettyJSON(getUpstreamResponsePreview(ev)) }}</code></pre>
           </div>
         </div>
@@ -241,13 +241,13 @@
         {{ t('admin.ops.errorDetail.backToList') }}
       </button>
     </template>
-  </BaseDialog>
+  </DetailContentHost>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
-import BaseDialog from '@/components/common/BaseDialog.vue'
+import DetailContentHost from '@/components/common/DetailContentHost.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { useAppStore } from '@/stores'
 import { opsAPI, type OpsErrorDetail } from '@/api/admin/ops'
@@ -255,6 +255,8 @@ import { formatDateTime } from '@/utils/format'
 import { resolveUpstreamPayload } from '../utils/errorDetailResponse'
 
 interface Props {
+  embedded?: boolean
+  placement?: 'center' | 'right'
   show: boolean
   errorId: number | null
   errorType?: 'request' | 'upstream'
@@ -374,7 +376,10 @@ function toggleUpstreamDetail(id: number) {
   expandedUpstreamDetailIds.value = next
 }
 
+let detailGeneration = 0
+onBeforeUnmount(() => { detailGeneration++ })
 async function fetchCorrelatedUpstreamErrors(requestErrorId: number) {
+  const seq = detailGeneration
   correlatedUpstreamLoading.value = true
   try {
     const res = await opsAPI.listRequestErrorUpstreamErrors(
@@ -382,12 +387,12 @@ async function fetchCorrelatedUpstreamErrors(requestErrorId: number) {
       { page: 1, page_size: 100, view: 'all' },
       { include_detail: true }
     )
-    correlatedUpstream.value = res.items || []
+    if (seq === detailGeneration) correlatedUpstream.value = res.items || []
   } catch (err) {
     console.error('[OpsErrorDetailModal] Failed to load correlated upstream errors', err)
-    correlatedUpstream.value = []
+    if (seq === detailGeneration) correlatedUpstream.value = []
   } finally {
-    correlatedUpstreamLoading.value = false
+    if (seq === detailGeneration) correlatedUpstreamLoading.value = false
   }
 }
 
@@ -414,22 +419,28 @@ function prettyObject(value: unknown): string {
 }
 
 async function fetchDetail(id: number) {
+  const seq = detailGeneration
   loading.value = true
   try {
     const kind = props.errorType || (detail.value?.phase === 'upstream' ? 'upstream' : 'request')
     const d = kind === 'upstream' ? await opsAPI.getUpstreamErrorDetail(id) : await opsAPI.getRequestErrorDetail(id)
-    detail.value = d
+    if (seq === detailGeneration) detail.value = d
   } catch (err: any) {
-    detail.value = null
-    appStore.showError(err?.message || t('admin.ops.failedToLoadErrorDetail'))
+    if (seq === detailGeneration) {
+      detail.value = null
+      appStore.showError(err?.message || t('admin.ops.failedToLoadErrorDetail'))
+    }
   } finally {
-    loading.value = false
+    if (seq === detailGeneration) loading.value = false
   }
 }
 
 watch(
-  () => [props.show, props.errorId] as const,
+  () => [props.show, props.errorId, props.errorType] as const,
   ([show, id]) => {
+    detailGeneration++
+    detail.value = null
+    correlatedUpstream.value = []
     if (!show) {
       detail.value = null
       return
@@ -448,10 +459,10 @@ watch(
 )
 
 function statusBadgeClass(code: number): string {
-  if (code >= 500) return 'bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-900/30 dark:text-red-400 dark:ring-red-500/30'
-  if (code === 429) return 'bg-purple-50 text-purple-700 ring-purple-600/20 dark:bg-purple-900/30 dark:text-purple-400 dark:ring-purple-500/30'
-  if (code >= 400) return 'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-400 dark:ring-amber-500/30'
-  return 'bg-gray-50 text-gray-700 ring-gray-600/20 dark:bg-gray-900/30 dark:text-gray-400 dark:ring-gray-500/30'
+  if (code >= 500) return 'bg-red-50/[0.15] text-red-700 ring-red-600/20 dark:bg-red-900/30 dark:text-red-400 dark:ring-red-500/30'
+  if (code === 429) return 'bg-purple-50/[0.15] text-purple-700 ring-purple-600/20 dark:bg-purple-900/30 dark:text-purple-400 dark:ring-purple-500/30'
+  if (code >= 400) return 'bg-amber-50/[0.15] text-amber-700 ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-400 dark:ring-amber-500/30'
+  return 'surface-inset surface-muted ring-gray-600/20 dark:surface-inset dark:ring-gray-500/30'
 }
 
 const statusClass = computed(() => statusBadgeClass(detail.value?.status_code ?? 0))

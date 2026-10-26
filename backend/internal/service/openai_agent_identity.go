@@ -47,7 +47,9 @@ type agentIdentityTaskRegistrationResponse struct {
 	EncryptedTaskIDCamel string `json:"encryptedTaskId"`
 }
 
-type agentIdentityTaskRecoveredError struct{}
+type agentIdentityTaskRecoveredError struct {
+	ctx context.Context
+}
 
 func (e *agentIdentityTaskRecoveredError) Error() string {
 	return "agent identity task recovered"
@@ -172,6 +174,10 @@ func decryptAgentTaskID(key agentIdentityKey, encoded string) (string, error) {
 }
 
 func registerAgentIdentityTaskWithIdentity(ctx context.Context, account *Account, identity openAIOutboundIdentity) (string, error) {
+	account, err := requestCredentialAccount(ctx, account)
+	if err != nil {
+		return "", err
+	}
 	key, err := agentIdentityKeyFromAccount(account)
 	if err != nil {
 		return "", err
@@ -180,9 +186,9 @@ func registerAgentIdentityTaskWithIdentity(ctx context.Context, account *Account
 	if err != nil {
 		return "", err
 	}
-	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
+	proxyURL, err := requestCredentialOwnerProxyURL(ctx, account)
+	if err != nil {
+		return "", err
 	}
 	// agent task 注册是官方 auth 面请求：默认头只有 originator / User-Agent /
 	// residency，没有独立的 version 头；同时应用 Codex 自定义 CA。
@@ -309,7 +315,12 @@ func isRetryableAgentIdentityTaskRegistrationError(err error) bool {
 	return false
 }
 
-func ensureAgentIdentityTaskForAccountWithIdentity(ctx context.Context, repo AccountRepository, wsInvalidator agentIdentityWSConnectionInvalidator, taskMu *sync.Mutex, account *Account, expectedTaskID string, identity openAIOutboundIdentity) error {
+type agentIdentityTaskOwnerGuard struct {
+	validate func(*Account) error
+	persist  func(context.Context, *Account, map[string]any) (bool, error)
+}
+
+func ensureAgentIdentityTaskForAccountWithIdentity(ctx context.Context, repo AccountRepository, wsInvalidator agentIdentityWSConnectionInvalidator, taskMu *sync.Mutex, account *Account, expectedTaskID string, identity openAIOutboundIdentity, ownerGuards ...agentIdentityTaskOwnerGuard) error {
 	if account == nil || !account.IsOpenAIAgentIdentity() {
 		return nil
 	}
@@ -324,6 +335,13 @@ func ensureAgentIdentityTaskForAccountWithIdentity(ctx context.Context, repo Acc
 	if credAccount == nil || !credAccount.IsOpenAIAgentIdentity() {
 		return errors.New("agent identity credentials are unavailable")
 	}
+	if requestCredentialOwnerBound(ctx, account) {
+		owner, known := requestCredentialOwner(ctx, account)
+		if !known || !sameAgentIdentitySigningOwner(owner, credAccount) {
+			return errors.New("agent identity signing owner changed")
+		}
+	}
+	observed := snapshotRequestCredentialAccount(credAccount)
 	currentTaskID := strings.TrimSpace(credAccount.GetCredential("task_id"))
 	if currentTaskID != "" && (expectedTaskID == "" || currentTaskID != expectedTaskID) {
 		return nil
@@ -343,48 +361,141 @@ func ensureAgentIdentityTaskForAccountWithIdentity(ctx context.Context, repo Acc
 	}
 	sharedTaskMu.Lock()
 	defer sharedTaskMu.Unlock()
+	validateOwner := func(candidate *Account) error {
+		for _, guard := range ownerGuards {
+			if guard.validate != nil {
+				if err := guard.validate(candidate); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+	guarded := len(ownerGuards) > 0
+	if guarded && (len(ownerGuards) != 1 || ownerGuards[0].validate == nil || ownerGuards[0].persist == nil) {
+		return errors.New("agent identity credential owner guard is invalid")
+	}
+	if guarded && (repo == nil || credAccount.ID <= 0) {
+		return errors.New("agent identity credential owner cannot be verified")
+	}
 	// Re-read inside the shared lock. Different request paths often receive
 	// independent repository snapshots; checking only the caller's snapshot
 	// would allow sequential duplicate registrations after the first writer
 	// has already persisted a new task.
 	if repo != nil && credAccount.ID > 0 {
-		if refreshed, refreshErr := repo.GetByID(ctx, credAccount.ID); refreshErr == nil && refreshed != nil {
-			if refreshed.IsShadow() {
-				if resolved, resolveErr := resolveCredentialAccount(ctx, repo, refreshed); resolveErr == nil && resolved != nil {
-					refreshed = resolved
-				}
-			}
-			if refreshed.IsOpenAIAgentIdentity() {
-				credAccount = refreshed
-				if !account.IsShadow() {
-					account.Credentials = shallowCopyMap(credAccount.Credentials)
-				}
-			}
+		refreshed, err := repo.GetByID(ctx, credAccount.ID)
+		if err != nil {
+			return fmt.Errorf("read agent identity task owner: %w", err)
 		}
+		if !sameAgentIdentityTaskGrant(observed, refreshed) {
+			return errors.New("agent identity signing owner changed")
+		}
+		if err := validateOwner(refreshed); err != nil {
+			return err
+		}
+		credAccount = snapshotRequestCredentialAccount(refreshed)
 	}
 	currentTaskID = strings.TrimSpace(credAccount.GetCredential("task_id"))
 	if currentTaskID != "" && (expectedTaskID == "" || currentTaskID != expectedTaskID) {
+		if !account.IsShadow() {
+			account.Credentials = cloneRequestCredentialMap(observed.Credentials)
+			account.Credentials["task_id"] = currentTaskID
+		}
 		return nil
+	}
+	if err := validateOwner(credAccount); err != nil {
+		return err
+	}
+	conditional, conditionalOK := repo.(OAuthRefreshSuccessRepository)
+	if !guarded && !conditionalOK {
+		return errors.New("agent identity conditional task persistence is unavailable")
 	}
 	newTaskID, err := registerAgentIdentityTaskWithIdentity(ctx, credAccount, identity)
 	if err != nil {
 		return err
+	}
+	if guarded {
+		// A relink while registration was in flight must not publish its task
+		// into a replacement login. A same-owner concurrent task may be reused.
+		refreshed, refreshErr := repo.GetByID(ctx, credAccount.ID)
+		if refreshErr != nil || refreshed == nil {
+			return errors.New("agent identity credential owner is unavailable")
+		}
+		if err := validateOwner(refreshed); err != nil {
+			return err
+		}
+		if taskID := strings.TrimSpace(refreshed.GetCredential("task_id")); taskID != "" && taskID != currentTaskID {
+			account.Credentials = shallowCopyMap(refreshed.Credentials)
+			return nil
+		}
 	}
 	credentials := make(map[string]any, len(credAccount.Credentials)+1)
 	for key, value := range credAccount.Credentials {
 		credentials[key] = value
 	}
 	credentials["task_id"] = newTaskID
-	if err := persistAccountCredentials(ctx, repo, credAccount, credentials); err != nil {
+	var applied bool
+	if guarded {
+		applied, err = ownerGuards[0].persist(ctx, credAccount, credentials)
+	} else {
+		applied, err = conditional.UpdateOAuthRefreshCredentialsIfUnchanged(ctx, credAccount, credentials)
+	}
+	if err != nil {
 		return err
 	}
-	if !account.IsShadow() && account != credAccount {
-		account.Credentials = shallowCopyMap(credAccount.Credentials)
+	if !applied {
+		if guarded {
+			// Another replica may have won the task-only CAS. Reuse its task
+			// only while the signing grant and the quota owner's full guard match.
+			refreshed, refreshErr := repo.GetByID(ctx, credAccount.ID)
+			if refreshErr != nil || refreshed == nil {
+				return errors.New("agent identity credential owner is unavailable")
+			}
+			if !sameAgentIdentityTaskGrant(observed, refreshed) {
+				return errors.New("agent identity signing owner changed")
+			}
+			if err := validateOwner(refreshed); err != nil {
+				return err
+			}
+			if taskID := strings.TrimSpace(refreshed.GetCredential("task_id")); taskID != "" && taskID != currentTaskID {
+				if !account.IsShadow() {
+					account.Credentials = cloneRequestCredentialMap(observed.Credentials)
+					account.Credentials["task_id"] = taskID
+				}
+				return nil
+			}
+		}
+		return errors.New("agent identity task owner changed during registration")
+	}
+	if !account.IsShadow() {
+		account.Credentials = cloneRequestCredentialMap(observed.Credentials)
+		account.Credentials["task_id"] = newTaskID
 	}
 	if wsInvalidator != nil {
 		wsInvalidator.InvalidateAgentIdentityWSConnections(credAccount.ID)
 	}
 	return nil
+}
+
+// Task recovery may adopt another task for the same signing key. It must never
+// combine a previously resolved identity/ID namespace with a relinked key or
+// proxy. A task ID is deliberately absent from this principal comparison.
+func sameAgentIdentitySigningOwner(left, right *Account) bool {
+	return left != nil && right != nil && left.ID == right.ID && left.Platform == right.Platform &&
+		left.Type == right.Type && left.IsOpenAIAgentIdentity() && right.IsOpenAIAgentIdentity() &&
+		oauthRefreshProxyIDsEqual(left.ProxyID, right.ProxyID) && left.proxyURLOrEmpty() == right.proxyURLOrEmpty() &&
+		openAICodexStateOwner(context.Background(), left) != "" &&
+		openAICodexStateOwner(context.Background(), left) == openAICodexStateOwner(context.Background(), right)
+}
+
+func sameAgentIdentityTaskGrant(left, right *Account) bool {
+	if !sameAgentIdentitySigningOwner(left, right) {
+		return false
+	}
+	before, after := snapshotRequestCredentialAccount(left), snapshotRequestCredentialAccount(right)
+	delete(before.Credentials, "task_id")
+	delete(after.Credentials, "task_id")
+	return sameRequestCredentialGrant(before, after)
 }
 
 func (s *OpenAIGatewayService) ensureAgentIdentityTask(ctx context.Context, account *Account, expectedTaskID string) error {
@@ -454,6 +565,13 @@ func (s *OpenAIGatewayService) buildOpenAIAuthenticationHeaders(ctx context.Cont
 		}
 		credAccount = resolved
 	}
+	if err := validateAgentIdentitySigningSnapshot(ctx, account, credAccount); err != nil {
+		return nil, err
+	}
+	credAccount, err := requestCredentialAccount(ctx, credAccount)
+	if err != nil {
+		return nil, err
+	}
 	headers := make(http.Header)
 	if credAccount != nil && credAccount.IsOpenAIAgentIdentity() {
 		agentHeaders, err := buildAgentIdentityAuthenticationHeadersWithIdentity(ctx, s.accountRepo, s, &s.agentIdentityTaskMu, credAccount, s.resolveOpenAIOutboundIdentity(ctx, credAccount))
@@ -486,6 +604,19 @@ func buildAgentIdentityAuthenticationHeadersWithIdentity(ctx context.Context, re
 	return headers, nil
 }
 
+func validateAgentIdentitySigningSnapshot(ctx context.Context, selected, signer *Account) error {
+	if !requestCredentialOwnerBound(ctx, selected) {
+		return nil
+	}
+	owner, known := requestCredentialOwner(ctx, selected)
+	if signer.IsOpenAIAgentIdentity() || owner.IsOpenAIAgentIdentity() {
+		if !known || !sameAgentIdentitySigningOwner(owner, signer) {
+			return errors.New("agent identity signing owner changed")
+		}
+	}
+	return nil
+}
+
 func (s *OpenAIGatewayService) refreshOpenAIAgentIdentityHeaders(ctx context.Context, account *Account, headers http.Header) (http.Header, error) {
 	if account == nil {
 		return cloneHeader(headers), nil
@@ -497,6 +628,13 @@ func (s *OpenAIGatewayService) refreshOpenAIAgentIdentityHeaders(ctx context.Con
 			return nil, err
 		}
 		credAccount = resolved
+	}
+	if err := validateAgentIdentitySigningSnapshot(ctx, account, credAccount); err != nil {
+		return nil, err
+	}
+	credAccount, err := requestCredentialAccount(ctx, credAccount)
+	if err != nil {
+		return nil, err
 	}
 	if !credAccount.IsOpenAIAgentIdentity() {
 		return cloneHeader(headers), nil
@@ -521,13 +659,53 @@ func (s *OpenAIGatewayService) refreshOpenAIAgentIdentityHeaders(ctx context.Con
 	return refreshed, nil
 }
 
-func (s *OpenAIGatewayService) recoverAgentIdentityTask(ctx context.Context, account *Account, expectedTaskID string) error {
-	if account != nil && account.IsShadow() {
-		if resolved, err := resolveCredentialAccount(ctx, s.accountRepo, account); err == nil && resolved != nil && strings.TrimSpace(expectedTaskID) == "" {
-			expectedTaskID = strings.TrimSpace(resolved.GetCredential("task_id"))
+func (s *OpenAIGatewayService) recoverAgentIdentityTask(ctx context.Context, account *Account, expectedTaskID string) (context.Context, error) {
+	if s == nil {
+		return ctx, errors.New("openai gateway service is nil")
+	}
+	ctx = WithOutboundIdentityScope(ctx, nil)
+	owner, err := requestCredentialAccount(ctx, account)
+	if err != nil {
+		return ctx, err
+	}
+	if owner != nil && owner.IsShadow() {
+		owner, err = resolveCredentialAccount(ctx, s.accountRepo, owner)
+		if err != nil {
+			return ctx, err
 		}
 	}
-	return s.ensureAgentIdentityTask(ctx, account, expectedTaskID)
+	if owner == nil || !owner.IsOpenAIAgentIdentity() {
+		return ctx, errors.New("agent identity credentials are unavailable")
+	}
+	// The rejected task belongs to this attempt, even if the selected row has
+	// since changed. Only an unbound caller may supply its own rejected task.
+	if owner != account || strings.TrimSpace(expectedTaskID) == "" {
+		expectedTaskID = strings.TrimSpace(owner.GetCredential("task_id"))
+	}
+	before := snapshotRequestCredentialAccount(owner)
+	if !account.IsShadow() && !sameAgentIdentityTaskGrant(before, account) {
+		return ctx, errors.New("agent identity signing owner changed")
+	}
+	recovered := snapshotRequestCredentialAccount(owner)
+	if err := s.ensureAgentIdentityTask(ctx, recovered, expectedTaskID); err != nil {
+		return ctx, err
+	}
+	if !sameAgentIdentityTaskGrant(before, recovered) {
+		return ctx, errors.New("agent identity task recovery changed credential owner")
+	}
+	// Explicitly acquire the task-only update for the next physical attempt.
+	// The context of the rejected attempt must retain its original task.
+	recordRequestCredentialOwner(ctx, recovered, "")
+	next := withRequestCredentialOwner(ctx, account, "")
+	acquired, err := requestCredentialAccount(next, account)
+	if err != nil || !sameRequestCredentialGrant(acquired, recovered) {
+		return ctx, errors.New("agent identity recovered credential owner is unavailable")
+	}
+	if !account.IsShadow() && sameAgentIdentityTaskGrant(before, account) {
+		account.Credentials = cloneRequestCredentialMap(account.Credentials)
+		account.Credentials["task_id"] = recovered.GetCredential("task_id")
+	}
+	return next, nil
 }
 
 func (s *OpenAIGatewayService) isAgentIdentityAccount(ctx context.Context, account *Account) bool {

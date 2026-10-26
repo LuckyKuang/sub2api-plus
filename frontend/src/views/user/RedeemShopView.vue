@@ -8,7 +8,7 @@
       </div>
       <p v-if="error" role="alert" class="text-red-600">{{ t('featureExtensions.purchaseUnavailable') }}</p>
       <p v-else-if="!url">{{ t('common.loading') }}</p>
-      <iframe v-else :src="url" :title="t('featureExtensions.purchaseTitle')" referrerpolicy="no-referrer" sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-popups-to-escape-sandbox" class="h-[75vh] w-full rounded-xl border border-gray-200 dark:border-dark-700" />
+      <iframe v-else :src="url" :title="t('featureExtensions.purchaseTitle')" referrerpolicy="no-referrer" sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-popups-to-escape-sandbox" class="workspace-shell h-[75vh] w-full rounded-xl" />
     </div>
   </AppLayout>
 </template>

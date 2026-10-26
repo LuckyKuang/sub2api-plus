@@ -128,8 +128,8 @@ func (s *OpenAIGatewayService) BeginOpenAIWSIngressSessionPreemptionWithClient(
 	}
 	if preemptedPrevious {
 		if stateStore := s.getOpenAIWSStateStore(); stateStore != nil {
-			stateStore.DeleteSessionTurnState(preemptGroupID, preemptScope)
-			stateStore.DeleteSessionConn(preemptGroupID, preemptScope)
+			stateStore.DeleteSessionTurnState(openAICodexCredentialOwnerID(account), preemptGroupID, preemptScope)
+			stateStore.DeleteSessionConn(openAICodexCredentialOwnerID(account), preemptGroupID, preemptScope)
 		}
 		lane := resolveOpenAIWSExecutionLane(c, firstClientMessage)
 		if lane == "" {
@@ -224,8 +224,8 @@ func (s *OpenAIGatewayService) beginOpenAIWSSessionPreemptContext(
 		preemptOnce.Do(func() {
 			state.preempted.Store(true)
 			if stateStore := s.getOpenAIWSStateStore(); stateStore != nil {
-				stateStore.DeleteSessionTurnState(key.groupID, key.sessionHash)
-				stateStore.DeleteSessionConn(key.groupID, key.sessionHash)
+				stateStore.DeleteSessionTurnState(openAICodexCredentialOwnerID(account), key.groupID, key.sessionHash)
+				stateStore.DeleteSessionConn(openAICodexCredentialOwnerID(account), key.groupID, key.sessionHash)
 			}
 			if notifyPreempted == nil {
 				cancel(errOpenAIWSSessionPreempted)

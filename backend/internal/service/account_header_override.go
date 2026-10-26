@@ -66,6 +66,7 @@ var headerOverrideBlockedNames = map[string]struct{}{
 	"session-id":                            {},
 	"session_id":                            {},
 	"thread-id":                             {},
+	"x-codex-parent-thread-id":              {},
 	"conversation_id":                       {},
 	"x-codex-turn-state":                    {},
 	"x-codex-turn-metadata":                 {},

@@ -112,10 +112,12 @@ func (s *OpenAIGatewayService) forwardResponsesViaNativeAnthropic(
 	anthropicBody = FilterWebSearchHistoryBlocks(anthropicBody, upstreamModel)
 	anthropicBody = enforceCacheControlLimit(anthropicBody)
 
-	apiKey := strings.TrimSpace(account.GetOpenAIProtocolAPIKey())
-	if apiKey == "" {
-		return nil, fmt.Errorf("account %d missing api_key", account.ID)
+	apiKey, _, err := s.GetRequestCredential(ctx, c, account)
+	if err != nil {
+		return nil, err
 	}
+	ctx = withRequestCredentialOwner(ctx, account, apiKey)
+	defer bindRequestCredentialOwnerContext(ctx, c)()
 	targetURL, err := s.nativeAnthropicTargetURL(account)
 	if err != nil {
 		return nil, err
@@ -128,6 +130,7 @@ func (s *OpenAIGatewayService) forwardResponsesViaNativeAnthropic(
 
 	upstreamCtx, releaseUpstreamCtx := detachStreamUpstreamContext(ctx, reqStream)
 	defer releaseUpstreamCtx()
+	upstreamCtx = withNativeAnthropicPreflight(upstreamCtx)
 	upstreamReq, forwardedBody, err := s.buildNativeAnthropicUpstreamRequest(upstreamCtx, c, account, anthropicBody, apiKey, targetURL, body)
 	if err != nil {
 		return nil, fmt.Errorf("build upstream request: %w", err)
@@ -154,14 +157,16 @@ func (s *OpenAIGatewayService) forwardResponsesViaNativeAnthropic(
 	reasoningEffort = ApplyThinkingEnabledFallback(reasoningEffort, forwardedBody, billingModel)
 
 	if clientStream {
-		return s.handleResponsesStreamingFromNativeAnthropic(resp, c, originalModel, billingModel, upstreamModel, reasoningEffort, startTime, clientToolMapping)
+		return s.handleResponsesStreamingFromNativeAnthropic(ctx, account, resp, c, originalModel, billingModel, upstreamModel, reasoningEffort, startTime, clientToolMapping)
 	}
-	return s.handleResponsesBufferedFromNativeAnthropic(resp, c, originalModel, billingModel, upstreamModel, reasoningEffort, startTime, clientToolMapping)
+	return s.handleResponsesBufferedFromNativeAnthropic(ctx, account, resp, c, originalModel, billingModel, upstreamModel, reasoningEffort, startTime, clientToolMapping)
 }
 
 // handleResponsesBufferedFromNativeAnthropic reads Anthropic SSE events, assembles
 // the full response, then converts Anthropic → Responses.
 func (s *OpenAIGatewayService) handleResponsesBufferedFromNativeAnthropic(
+	ctx context.Context,
+	account *Account,
 	resp *http.Response,
 	c *gin.Context,
 	originalModel string,
@@ -182,6 +187,19 @@ func (s *OpenAIGatewayService) handleResponsesBufferedFromNativeAnthropic(
 
 	var finalResp *apicompat.AnthropicResponse
 	var usage ClaudeUsage
+	sawMessageStop, sawStreamError := false, false
+	partialResult := func() *OpenAIForwardResult {
+		if finalResp == nil {
+			return nil
+		}
+		return &OpenAIForwardResult{
+			RequestID: requestID, UpstreamHeaders: resp.Header,
+			Usage: claudeUsageToOpenAIUsage(&usage), UsageIncomplete: true,
+			Model: originalModel, BillingModel: billingModel, UpstreamModel: upstreamModel,
+			UpstreamEndpoint: "/v1/messages", ReasoningEffort: reasoningEffort,
+			Duration: time.Since(startTime),
+		}
+	}
 
 	// 读间隔上限：上游挂住 SSE 时中止组装（缓冲路径尚未提交响应头，可回 502）。
 	streamInterval := anthropicNativeStreamInterval(s.cfg)
@@ -203,7 +221,7 @@ func (s *OpenAIGatewayService) handleResponsesBufferedFromNativeAnthropic(
 			zap.Duration("interval", streamInterval),
 		)
 		writeResponsesError(c, http.StatusBadGateway, "server_error", "Upstream stream data interval timeout")
-		return nil, fmt.Errorf("stream data interval timeout")
+		return partialResult(), fmt.Errorf("stream data interval timeout")
 	}
 
 	for {
@@ -236,6 +254,17 @@ func (s *OpenAIGatewayService) handleResponsesBufferedFromNativeAnthropic(
 		var event apicompat.AnthropicStreamEvent
 		if err := json.Unmarshal([]byte(payload), &event); err != nil {
 			continue
+		}
+		if event.Type == "error" {
+			if nativeAnthropicErrorStatus(gjson.Get(payload, "error.type").String()) != 0 {
+				s.handleOpenAIStreamTerminalAccountSideEffectsContext(ctx, account, []byte(payload), gjson.Get(payload, "error.message").String(), resp.Header, upstreamModel)
+			}
+			sawStreamError = true
+			break
+		}
+		sawMessageStop = sawMessageStop || event.Type == "message_stop"
+		if sawMessageStop {
+			break
 		}
 
 		if event.Type == "message_start" && event.Message != nil {
@@ -272,6 +301,10 @@ func (s *OpenAIGatewayService) handleResponsesBufferedFromNativeAnthropic(
 		}
 	}
 
+	if finalResp != nil && (!sawMessageStop || sawStreamError) {
+		writeResponsesError(c, http.StatusBadGateway, "server_error", "Upstream stream ended without a complete response")
+		return partialResult(), fmt.Errorf("upstream anthropic stream incomplete")
+	}
 	if finalResp == nil {
 		writeResponsesError(c, http.StatusBadGateway, "server_error", "Upstream stream ended without a response")
 		return nil, fmt.Errorf("upstream stream ended without response")
@@ -327,6 +360,8 @@ func (s *OpenAIGatewayService) handleResponsesBufferedFromNativeAnthropic(
 // handleResponsesStreamingFromNativeAnthropic reads Anthropic SSE events, converts
 // each to Responses SSE events, and writes them to the client.
 func (s *OpenAIGatewayService) handleResponsesStreamingFromNativeAnthropic(
+	ctx context.Context,
+	account *Account,
 	resp *http.Response,
 	c *gin.Context,
 	originalModel string,
@@ -355,9 +390,11 @@ func (s *OpenAIGatewayService) handleResponsesStreamingFromNativeAnthropic(
 	clientToolRestorer := apicompat.NewResponsesClientToolStreamRestorer(clientToolMapping)
 
 	var usage ClaudeUsage
-	var timing streamOutputTiming
+	timing := requestStreamOutputTiming(c)
 	clientDisconnected := false
 	sawMessageStop, sawUpstreamError := false, false
+	accountSideEffectsApplied := false
+	sawUsage := false
 
 	scanner := bufio.NewScanner(resp.Body)
 	maxLineSize := defaultMaxLineSize
@@ -402,12 +439,51 @@ func (s *OpenAIGatewayService) handleResponsesStreamingFromNativeAnthropic(
 			)
 		}
 	}
+	writeIncomplete := func(message string) {
+		if clientDisconnected {
+			return
+		}
+		var partialUsage *apicompat.ResponsesUsage
+		if sawUsage {
+			normalized := claudeUsageToOpenAIUsage(&usage)
+			partialUsage = &apicompat.ResponsesUsage{
+				InputTokens: normalized.InputTokens, OutputTokens: normalized.OutputTokens,
+				TotalTokens:              normalized.InputTokens + normalized.OutputTokens,
+				CacheCreationInputTokens: normalized.CacheCreationInputTokens,
+			}
+			if normalized.CacheReadInputTokens > 0 {
+				partialUsage.InputTokensDetails = &apicompat.ResponsesInputTokensDetails{CachedTokens: normalized.CacheReadInputTokens}
+			}
+		}
+		responseID := state.ResponseID
+		if responseID == "" {
+			responseID = fmt.Sprintf("resp_native_%d", startTime.UnixNano())
+		}
+		event := apicompat.ResponsesStreamEvent{
+			Type: "response.failed", SequenceNumber: state.SequenceNumber,
+			Response: &apicompat.ResponsesResponse{
+				ID: responseID, Object: "response", CreatedAt: state.Created, Model: originalModel,
+				Status: "failed", Output: []apicompat.ResponsesOutput{}, Usage: partialUsage,
+				Error: &apicompat.ResponsesError{Code: "upstream_error", Message: message},
+			},
+		}
+		payload, err := json.Marshal(event)
+		if err != nil {
+			return
+		}
+		_, err = fmt.Fprintf(c.Writer, "event: response.failed\ndata: %s\n\n", payload)
+		clientDisconnected = err != nil
+		if !clientDisconnected {
+			c.Writer.Flush()
+		}
+	}
 	onIdle := func() (*OpenAIForwardResult, error) {
 		_ = resp.Body.Close()
 		logger.L().Warn("openai responses via native anthropic stream: data interval timeout",
 			zap.String("request_id", requestID),
 			zap.Duration("interval", streamInterval),
 		)
+		writeIncomplete("Upstream stream data interval timeout")
 		return resultWithUsage(), fmt.Errorf("stream data interval timeout")
 	}
 
@@ -425,6 +501,11 @@ func (s *OpenAIGatewayService) handleResponsesStreamingFromNativeAnthropic(
 		}
 		if event.Type == "message_start" && event.Message != nil {
 			mergeAnthropicUsage(&usage, event.Message.Usage)
+		}
+		if sawUpstreamError {
+			// Keep draining authoritative usage; emit one failed terminal after
+			// the provider stops or the existing read interval expires.
+			return
 		}
 
 		// Keep terminal Responses usage aligned with the normalized billing
@@ -491,9 +572,25 @@ func (s *OpenAIGatewayService) handleResponsesStreamingFromNativeAnthropic(
 			continue
 		}
 
+		if event.Type == "error" && !accountSideEffectsApplied && nativeAnthropicErrorStatus(gjson.Get(payload, "error.type").String()) != 0 {
+			status, disabled := s.handleOpenAIStreamTerminalAccountSideEffectsContext(ctx, account, []byte(payload), gjson.Get(payload, "error.message").String(), resp.Header, upstreamModel)
+			accountSideEffectsApplied = disabled || status == http.StatusUnauthorized || status == http.StatusTooManyRequests || status == 529
+		}
+		sawUsage = sawUsage || anthropicChatStreamHasUsage(&event, payload)
 		processAnthropicEvent(&event)
+		if sawMessageStop {
+			break
+		}
 	}
 
+	if sawUpstreamError || !sawMessageStop {
+		message := "Upstream stream ended without a complete response"
+		if sawUpstreamError {
+			message = "Upstream stream error"
+		}
+		writeIncomplete(message)
+		return resultWithUsage(), fmt.Errorf("upstream anthropic stream error: incomplete response")
+	}
 	// Finalize state machine（客户端已断开时仍推进，保证 usage 汇总完整；仅在
 	// 客户端仍连接时写出）。终态帧与逐事件路径一致过工具名反转与客户端工具还原，
 	// 避免流截断时终态帧携带改写后的工具名。

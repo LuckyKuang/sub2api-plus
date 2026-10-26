@@ -135,6 +135,11 @@ func TemplateID(v int64) predicate.ChannelMonitor {
 	return predicate.ChannelMonitor(sql.FieldEQ(FieldTemplateID, v))
 }
 
+// StreamProbe applies equality check predicate on the "stream_probe" field. It's identical to StreamProbeEQ.
+func StreamProbe(v bool) predicate.ChannelMonitor {
+	return predicate.ChannelMonitor(sql.FieldEQ(FieldStreamProbe, v))
+}
+
 // BodyOverrideMode applies equality check predicate on the "body_override_mode" field. It's identical to BodyOverrideModeEQ.
 func BodyOverrideMode(v string) predicate.ChannelMonitor {
 	return predicate.ChannelMonitor(sql.FieldEQ(FieldBodyOverrideMode, v))
@@ -963,6 +968,16 @@ func TemplateIDIsNil() predicate.ChannelMonitor {
 // TemplateIDNotNil applies the NotNil predicate on the "template_id" field.
 func TemplateIDNotNil() predicate.ChannelMonitor {
 	return predicate.ChannelMonitor(sql.FieldNotNull(FieldTemplateID))
+}
+
+// StreamProbeEQ applies the EQ predicate on the "stream_probe" field.
+func StreamProbeEQ(v bool) predicate.ChannelMonitor {
+	return predicate.ChannelMonitor(sql.FieldEQ(FieldStreamProbe, v))
+}
+
+// StreamProbeNEQ applies the NEQ predicate on the "stream_probe" field.
+func StreamProbeNEQ(v bool) predicate.ChannelMonitor {
+	return predicate.ChannelMonitor(sql.FieldNEQ(FieldStreamProbe, v))
 }
 
 // BodyOverrideModeEQ applies the EQ predicate on the "body_override_mode" field.

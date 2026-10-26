@@ -12,7 +12,7 @@
         <p class="font-medium text-gray-900 dark:text-white">
           {{ t('keys.bulkEdit.selectedCount', { count: pendingKeys.length }) }}
         </p>
-        <p class="text-gray-500 dark:text-gray-400">{{ t('keys.bulkEdit.hint') }}</p>
+        <p class="surface-muted">{{ t('keys.bulkEdit.hint') }}</p>
       </div>
 
       <fieldset :disabled="submitting" class="space-y-5">
@@ -83,7 +83,7 @@
               <input v-model="neverExpires" type="checkbox" class="checkbox" data-test="never-expires" />
               {{ t('keys.noExpiration') }}
             </label>
-            <input
+            <DateTimePicker
               v-if="!neverExpires"
               v-model="expirationDate"
               type="datetime-local"
@@ -149,6 +149,7 @@
 </template>
 
 <script setup lang="ts">
+import DateTimePicker from '@/components/common/DateTimePicker.vue'
 import { supportReadonly as vSupportReadonly } from '@/directives/supportReadonly'
 import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'

@@ -17,6 +17,12 @@ The policy applies before upstream credential use on these ingress paths:
 - OpenAI Alpha Search (`/alpha/search`)
 - OpenAI Responses WebSocket
 
+The Messages Count Tokens bridge audits the original inbound Messages body
+before routing, billing eligibility, account selection or AgentIdentity task
+registration. Both audit engines follow the shared
+[content coverage contract](../SECURITY_AUDIT_CONTENT_COVERAGE.md), including
+unknown-content pass-through and auditing recognized siblings.
+
 ## Built-in official profiles
 
 The built-in registry is a closed, source-controlled list of the underlying
@@ -69,7 +75,7 @@ Codex version bounds apply to built-in profiles. Policy versions use strict
 SemVer 2.0: they require a complete `MAJOR.MINOR.PATCH` core without a `v`
 prefix or leading zeroes.
 Valid prerelease and build metadata are accepted, with normal SemVer
-precedence (`0.158.0-alpha.4` is lower than `0.158.0`, and build metadata does
+precedence (`0.164.0-alpha.4` is lower than `0.164.0`, and build metadata does
 not change precedence). Historical outbound version normalization remains a
 separate compatibility concern and does not relax these policy bounds.
 
@@ -133,6 +139,113 @@ with static values: they must reflect the live client turn state.
 
 ## Outbound fingerprint convergence
 
+### Session ownership and credential state
+
+Native OpenAI sessions with a stable client session signal use a durable route
+inside the authenticated API key and routing group. A healthy owner takes
+precedence over weighted scoring, price, latency and concurrency escape settings.
+Local concurrency pressure waits on that account's existing bounded wait plan;
+queue exhaustion or a temporary profit veto does not move the conversation.
+Before creating a durable route, HTTP and WebSocket selection skip candidates
+whose inbound client-profile policy denies the request. Rejected candidates
+release their slots without becoming owners or receiving a credential-health
+penalty. If all candidates deny the request, HTTP returns a policy 403 and WS
+closes with a policy violation without creating a route. A denied existing
+owner, including a concurrent first-route winner, remains authoritative: the
+request is rejected rather than using that denial to authorize migration.
+The canonical-owner path still enforces public-model channel restrictions and
+the OAuth shared-response user/group/policy authorization boundary. A denied
+continuation cannot use affinity as permission to send to another account.
+Clients without a stable session signal retain the existing content fallback;
+it cannot guarantee affinity across changing requests or WS reconnects.
+
+Durable ownership is limited to native OpenAI text generation (Responses,
+Chat Completions and Messages adapters) and Responses WebSocket turns. Other
+OpenAI-compatible platforms, including Composite routes resolved to those
+platforms, retain their existing Redis TTL affinity and failover semantics.
+Images, embeddings, alpha search, Live, token counting and legacy
+`/responses/compact` do not read or write the durable route, acquire migration
+leases, or change a text/WS owner. Their selection and post-slot binding use
+ordinary affinity even when the durable store is configured or unavailable.
+Native remote compaction inside a Responses generation retains that
+generation's ownership lifecycle.
+
+Recoverable failures retain the selected owner during existing bounded retry
+budgets. OAuth keeps its credential-refresh and transient-429 window. Native
+API keys use the existing same-account count for short transient 429s before
+migration, without parking that credential before its retry. A provider
+`Retry-After` beyond the existing short retry delay bound returns a retryable
+response to the client instead of scanning other owners. Explicit quota,
+administrative, authorization and model restrictions retain their own gates.
+Request/provider failures do not scan the account pool.
+
+Migration uses the generation observed at selection and a candidate lease.
+Admission and HTTP/WS handshakes leave the previous owner in place. Valid
+semantic output or a verified successful terminal commits the candidate before
+that result is delivered. Chat Completions without text require a successful
+finish and positive usage; structural chunks stay buffered until acceptance.
+Responses output arrays containing only empty message containers are structural
+too; without semantic output, a successful terminal needs positive usage.
+Failed candidates and lost leases retain the old
+owner. Once committed, recovery of the old account does not reclaim the session.
+During WS passthrough migration, classify upstream failures before testing
+candidate acceptance. A `cyber_policy` rejection retains its risk-control mark,
+usage evidence and client event, with no retryable routing error, credential
+penalty or owner commit. Ordinary credential failures retain their account
+health effects; pre-output rate limits retain bounded same-account recovery.
+An unavailable shadow credential owner can make the shadow ineligible, but a
+failed parent query cannot establish unavailability. Query failures stop
+selection, including candidate filtering, post-acquisition rechecks and wait
+fallbacks, without sending to or committing a replacement account.
+PostgreSQL is read directly for ownership: stale Redis fills cannot authorize a
+send. Route-store failures stop admission or result delivery. An ordinary sticky
+bind cannot change a committed owner.
+
+The migration lease lasts one minute and renews every twenty seconds until
+acceptance, bounded by the existing first-output timeout (one minute when no
+timeout is configured). Cancellation, expiry and failed renewal fence detached
+usage-draining requests too. Route errors return a retryable
+`session_route_unavailable` HTTP 503 or a WS reconnect result; they do not count
+as account health failures. Measured upstream usage on a rejected commit stays
+attributed to that candidate as incomplete usage, without automatically
+replaying the request. This does not promise exactly-once upstream execution.
+
+OAuth and API-key candidates retain their own endpoints, authentication and
+trusted identity snapshots. Logical cache identity is separate from upstream
+execution state. A previous response reference is private to its credential
+owner; a text delta, or matching tool IDs alone, does not prove full history.
+Cross-owner continuation requires complete replayable history. Otherwise the
+client must resend full history without the old reference or wait for its owner.
+An `item_reference` cannot supply the referenced history on a different owner.
+Responses, Chat and Messages adapters all require actual matching tool-call
+history for tool outputs before attempting cross-owner forwarding.
+WS replay history is complete only when it originates in an observed complete
+turn and all required tool dependencies remain available.
+
+Opaque turn-state provenance binds the execution scope, the exact blob's
+irreversible digest, and the actual upstream principal. A reused local account
+row is not owner evidence. A normal access-token refresh for the same principal
+preserves state; relinking that row or changing owner strips it. Late responses
+cannot relabel another blob. Unknown, expired and legacy provenance cannot
+authorize replay. HTTP, WS and shared-cache replicas enforce the same rule;
+credential-shadow requests use their immutable transmitted parent snapshot.
+Messages compatibility continuations and cached turn-state use that same
+acquired principal in addition to their tenant/sharing scope. Acquisition
+precedes replay lookup and history trimming; API-key replacement and OAuth
+relink start with full history and no previous owner's opaque state. OAuth
+claims supplied on API-key or setup-token rows cannot override their actual
+bearer identity.
+Session/response connection references also retain their credential owner and
+execution scope. All replicas must be upgraded together before relying on the
+new mapping and provenance format; old processes do not enforce it.
+
+API-key replacement on the same account record retains its installation/device
+identity but changes execution session, thread, turn, parent and window mappings.
+The execution namespace includes the actual key's irreversible digest; a stable
+account ID alone cannot authorize old turn-state or response references. This
+is independent of the logical cache namespace, which ordinarily survives
+credential-owner failover within its authorized tenant scope.
+
 Every credential-owning OpenAI OAuth account stores an explicit
 `extra.codex_fingerprint_mode`. New accounts default to `device`; missing,
 empty, null, or malformed legacy values are normalized to `device`. API-key,
@@ -140,9 +253,9 @@ setup-token, and credential-shadow accounts do not own this setting.
 
 | Mode | Upstream-visible identity behavior |
 | --- | --- |
-| `off` | Do not mutate fingerprint-owned body or header carriers. Plus cache, security, session-sharing, and compact policy still apply. |
+| `off` | Disable optional convergence. Typed owner isolation, official carriers, cache, security, sharing and compact policy still apply. |
 | `device` (default) | Converge only the installation identifier to an account-level stable value; preserve each client's session and thread boundaries. |
-| `session` | Converge installation and session identifiers; derive a stable thread from the client-original session. |
+| `session` | Converge installation and metadata session identifiers; retain distinct mappings for actual threads and their parent/fork relationships. |
 | `full` | Converge installation, session, and thread identifiers to account-level values. |
 
 Administration create, edit, bulk edit, Codex import, PAT creation, and CRS
@@ -159,10 +272,10 @@ endpoint is unavailable.
 
 | Request path | Fingerprint policy | Final session/cache authority |
 | --- | --- | --- |
-| Ordinary Responses create turns and Chat/Messages Responses bridges | Configured mode | Plus prompt-cache/session identity |
-| Native remote Compact v2 (`/responses` with `compaction_trigger`) | Configured mode | Plus prompt-cache/session identity |
+| Ordinary Responses create turns and Chat/Messages Responses bridges | Configured mode | Independent execution-session and cache policy |
+| Native remote Compact v2 (`/responses` with `compaction_trigger`) | Configured mode | Independent execution-session and cache policy |
 | ChatGPT Codex OAuth legacy compact compatibility path | `off`, or installation-only for every other mode | Legacy compact session/cache/thread namespace |
-| HTTP-to-WebSocket and direct Responses WebSocket `response.create` turns | Configured mode per turn | Plus WebSocket session/cache identity |
+| HTTP-to-WebSocket and direct Responses WebSocket `response.create` turns | Configured mode per turn | Independent execution-session and cache policy |
 | Count-tokens, alpha-search, response retrieve/cancel subpaths, and other non-session endpoints | No fingerprint mutation | Endpoint policy |
 
 Personal access token and Agent Identity accounts are OpenAI OAuth credential
@@ -171,20 +284,47 @@ excluded. Credential shadows read the mode and stable installation source from
 their credential-owning parent; the shadow never creates an independent
 fingerprint identity.
 
-Fingerprint body/header staging happens before the final cache and outbound
-identity stages. The finalized Plus cache key owns the official `session-id`
-header, and every Codex-protocol outbound path drops the legacy `session_id`
-alias; fingerprinting owns installation and thread/turn carriers. Malformed,
-null, array, or scalar embedded `x-codex-turn-metadata` values are rebuilt as
-JSON objects when that carrier is present, while valid unrelated fields are
-kept. Missing carriers are not synthesized solely for embedded metadata.
-WebSocket pool reuse compares every final stable handshake carrier in all four
-modes, including client-owned values preserved by `off` and `device`.
+Responses HTTP, passthrough, Chat Completions and Messages freeze the owner of
+the acquired credential before mapping client metadata or staging fingerprints.
+The upstream destination, proxy, configured headers, trusted client identity,
+header/body IDs and installation projection share that immutable owner,
+including resolved shadow parents and refresh results. Later selected-row
+changes cannot alter its namespace; ambiguous acquired-owner evidence stops
+preparation. A replacement account acquires its own credential snapshot and
+maps the original logical IDs for that owner.
+
+Each subsequent native or HTTP bridge Responses WS turn completes basic
+validation and canonical ingress audit before metadata/fingerprint preparation
+or persistent ID-store access. Audit receives the original frame and runs once
+per accepted client turn; retries retain that audited turn. Unknown valid
+siblings preserve the shared extraction/pass-through rules.
+
+Native Responses HTTP/WS requests keep explicit execution session and custom cache
+keys separate; omitted cache keys remain omitted for both roots and subagents.
+Gateway-created compatibility adapters and legacy compact retain their own
+explicit fallback policies. Native OAuth and API-key requests use only
+`session-id`, removing legacy aliases and direct installation headers.
+Installation appears in `client_metadata` and existing canonical turn metadata.
+
+Session/thread/turn/context-window IDs use UUIDv7, preserving the timestamp of
+valid incoming v7 values. Legacy values use the durable atomic mapping store;
+installation defaults use persistent random v4 values, and valid device pins
+remain stable. Window IDs retain `<mapped thread>:<actual counter>`. Parent,
+root and fork references use the target object's mapping. Original turn start
+time is preserved, repeated generations of the same turn retain its ID, and
+missing turns/prewarm do not acquire fabricated IDs. Metadata session/full
+convergence never changes the routing session's authorization domain.
+
+Malformed embedded metadata that already has a carrier is rebuilt with only
+known installation information; it does not invent logical session, thread,
+turn or window state. Unknown valid fields stay intact. Missing canonical
+carriers are not fabricated. WebSocket reuse compares final stable handshake
+carriers in all four modes.
 
 Outbound User-Agent identity has one immutable source order: a valid
 credential-owner `credentials.user_agent`, then a valid global
 `openai_codex_user_agent`, then the compiled default. Originator and Version
-are derived coherently from that selected client family. Version synchronization
+are derived coherently from that selected client family. Manual version updates
 may update only its version declaration and cannot replace the selected source,
 OS, architecture, terminal fingerprint, client family, or Originator.
 The account-aware resolver is the final identity authority for Messages,
@@ -195,6 +335,12 @@ different source or split the three declarations.
 Agent Identity task registration and its immediately retried upstream request
 reuse one resolved snapshot; a concurrent settings update takes effect only on
 the next independently resolved request.
+The Agent Identity principal binds the runtime and signing public-key
+fingerprint, including when no bearer token exists. A task-ID update for that
+same principal may be adopted while preserving the frozen identity, execution
+IDs and state owner. A concurrent runtime, signing-key or proxy change fails
+before signing or sending; registration uses a credential compare-and-swap so
+its result cannot overwrite a newer account binding.
 
 ### Mandatory source-priority matrix and exact default
 
@@ -203,15 +349,21 @@ the next independently resolved request.
 | Valid | Any | `account`; retain that account's client family and fingerprint |
 | Empty or invalid | Valid | `global`; retain the configured global family and fingerprint |
 | Empty or invalid | Empty or invalid | `compiled_default` |
+| Raw candidate containing CR/LF or other invalid header bytes, including leading/trailing bytes | Any | Treat that candidate as invalid before whitespace normalization and proceed to the next source; cached global reads preserve this behavior |
 | Empty or invalid | Missing, blank, or unavailable persisted setting, including a cached read | `compiled_default`; the settings reader must not synthesize a global candidate |
 | Credential shadow | Any | Resolve the credential-owning parent and apply the same matrix; a shadow does not supply a UA |
 | Legacy candidate with compatibility disabled | Any | Treat that candidate as invalid and proceed to the next source |
 | Independent monitor/audit supplier token, with no account UA candidate | Valid, otherwise empty/invalid | `global`, otherwise `compiled_default`; never inherit a forwarding account or its cached identity |
 
-The independent-supplier row applies when its API-key type default selects
-Codex. OpenAI monitor checks, Prompt Audit scans/model probes and Content
-Moderation requests retain the native Platform API-key Originator/Version
-omissions below. Other selected presets follow [Outbound Identity](../OUTBOUND_IDENTITY.md).
+This source matrix applies identically to OAuth and API-key HTTP/WS provider
+requests, including retries, discovery and probes. Transport preference and
+inbound client classification never change the selected source.
+
+OpenAI monitor checks, Prompt Audit scans/model probes and Content Moderation
+requests resolve the native Codex global/default identity and emit the same
+UA/Originator/Version triple as API-key inference. Monitors for other providers
+follow their native or permitted compatible API-key policy under
+[Outbound Identity](../OUTBOUND_IDENTITY.md).
 Each independent operation resolves its own supplier snapshot; discovery and
 inference within one probe, chunks and same-credential retries reuse it.
 
@@ -224,14 +376,16 @@ string clears it through an explicit null in the JSONB update.
 The exact compiled identity is:
 
 ```text
-User-Agent: codex_cli_rs/0.158.0 (Ubuntu 24.04; x86_64) xterm-256color
+User-Agent: codex_cli_rs/0.164.0 (Ubuntu 24.04; x86_64) xterm-256color
 Originator: codex_cli_rs
-Version: 0.158.0
+Version: 0.164.0
 ```
 
 The version resolver runs after source selection: a valid administrator version
-override, then an eligible synchronized stable version, then the compiled
-version. This may change only the selected version declarations. The configured
+override, then the compiled release version. Historical synchronization values
+are ignored even before cleanup migration 290; the sync service, admin endpoint
+and UI have been removed. Official release upgrades are reviewed in code, never
+read from the development Cargo placeholder `0.0.0`. This may change only the selected version declarations. The configured
 UA parser follows the client-profile policy; the outbound version field retains
 its historical normalization and minimum-version checks, including accepted
 two-part versions. Four-part versions still fall back under the existing version
@@ -251,21 +405,30 @@ Pooled WS reuse and prewarm targets compare all three identity declarations;
 an updated triple cannot reuse an idle connection with the old handshake.
 Background prewarm retains the originating request scope during Agent Identity
 header renewal.
-One Live observer retains its scope across connection retries; a newly started
-controller or observer resolves a fresh scope.
+Live creation persists a call-owned snapshot containing the selected
+UA/Originator/Version, UUIDv7 session/thread, residency and a digest of the real
+principal. Controllers, observers and reconnects load that same shared snapshot,
+including across replicas. Changes to account/global UA affect new calls only.
+Authentication tokens may refresh for the same principal and are not stored in
+the snapshot; relinked accounts cannot attach to an existing call. A legacy call
+record without a complete snapshot cannot reconstruct its creation identity
+and fails with `ErrLiveIdentityMismatch`; start a new call after upgrade. The
+snapshot is validated before any sideband dial.
 
 Final header application removes every case variant and duplicate of managed
 identity headers, including foreign SDK declarations, before rendering the
-selected identity. Native Codex OAuth/ChatGPT inference requests send Originator
-and Version with the selected UA, including the default `codex_cli_rs`
-Originator. WHAM usage/credits and backend auxiliary requests keep that UA but
+selected identity. Native Codex OAuth/ChatGPT and API-key inference/discovery requests send
+Originator and Version with the selected UA, including the default `codex_cli_rs`
+Originator. Official Codex source `1b6e0d8145` sets UA/originator in
+`login/src/auth/default_client.rs` and Version in the built-in OpenAI provider
+in `model-provider-info/src/lib.rs`, independently of authentication type. WHAM usage/credits and backend auxiliary requests keep that UA but
 omit Originator and Version, as specified below. Native Codex Platform API-key
-requests omit both Originator and Version, including `responses/compact`. Header presence is
+requests include both Originator and Version, including `responses/compact`. Header presence is
 determined by the endpoint protocol, never by an inbound or generic override
 value. Explicit compatible presets retain their own protocol header mappings.
-When proxying an official Codex client, a reviewed inbound thread originator
-(`chatgpt_cca` and `codex_work_*`) may replace only the Originator header.
-User-Agent and Version stay on the credential-owning snapshot.
+Inbound thread originators (`chatgpt_cca` and `codex_work_*`) remain valid
+classification evidence but cannot replace the selected outbound Originator.
+All three declarations stay on the credential-owning snapshot.
 The OAuth credential endpoint follows official Codex auth clients:
 authorization-code exchange uses the raw client and sends no User-Agent,
 Originator, or Version; refresh uses the default client and sends the
@@ -333,7 +496,7 @@ Official Codex never sends a `conversation_id` header, so Codex-protocol
 outbound requests never carry one. The official wire format spells the
 session header `session-id` only: every Codex-protocol outbound path drops
 the legacy `session_id` alias regardless of fingerprint mode, while non-Codex
-compatible-supplier paths (OpenAI API-key accounts) keep the Plus
+compatible-supplier paths with an explicitly non-Codex preset keep the Plus
 `session-id` + `session_id` dual spelling and inbound `session_id` remains
 accepted for sticky routing. The chatgpt.com backend-api auxiliary surface
 (accounts check, subscription enrich, settings PATCH, WHAM usage and credit
@@ -374,17 +537,78 @@ Grok CLI rejection responses are returned without an automatic public API replay
 `x-openai-internal-codex-residency` follows the official managed-residency
 header. The only source is the global setting `codex_residency` (`off` by
 default, or `us`). There is no account-level value. When the setting is `us`,
-Codex-protocol inference (HTTP and WebSocket), token refresh, token revoke,
+Codex-protocol inference (HTTP and WebSocket), Codex models discovery (OAuth and
+API Key with the Codex preset), token refresh, token revoke,
 and the chatgpt.com backend-api auxiliary surface (accounts check, WHAM usage
 and credits, and the settings call) send `us`. Authorization-code exchange and
 device-code start/poll stay on the raw client and do not send it. Inbound
 headers and generic account header overrides cannot set or clear it.
 
+Models cache keys include the final residency declaration; changing `off`/`us`
+cannot reuse a catalog fetched under the other policy. Other API-key identity
+presets do not acquire Codex residency through the models adapter.
+
+## Codex source compatibility boundaries
+
+The current protocol review baseline is the pinned Codex commit in
+[Official agent outbound baselines](../OFFICIAL_AGENT_BASELINES.md). Earlier
+commit links in this document record evidence for individual features rather
+than a different current baseline. Identity-shape alignment does not mean every
+client feature, body, OS fingerprint or transport is identical.
+
+- HTTP-to-WS converts the Responses Lite header into the per-generation
+  `client_metadata.ws_request_header_x_openai_internal_codex_responses_lite`
+  string `"true"`, preserving other metadata. A non-object metadata shape that
+  cannot be augmented remains on HTTP. Existing native WS metadata is retained.
+- OAuth Responses retains `stream_options.reasoning_summary_delivery`, including
+  official `sequential_cutoff`. Only the incompatible Chat `include_usage` option
+  is removed (and its object when otherwise empty); unknown sibling options are
+  preserved. The gateway does not enable concurrent reasoning summaries itself.
+- Streaming API-key Responses explicitly sends `Accept: text/event-stream` in
+  normal and passthrough paths; compact remains unary `application/json`.
+- Guardian roles are bounded: `reviewer` is forwarded only to `codex-auto-review`
+  with Codex backend OAuth-like credentials; `classifier` requires the Guardian
+  subagent declaration and those credentials. API-key failover, compact, unknown
+  roles, duplicate values and unrelated reviewer models do not inherit the role.
+  These context headers neither authorize requests nor bypass either audit engine.
+- Native root and subagent requests retain their explicit session separately
+  from `prompt_cache_key`. Omitted cache fields remain omitted. Execution IDs
+  follow owner and tenant/sharing scope; ordinary logical cache keys retain
+  their separate tenant scope across failover. HTTP and WS follow the same rule.
+- OAuth-like HTTP Responses uses Zstd level 3 at the final HTTP/plugin transport
+  boundary, after JSON adaptation. The encoded body has a replayable `GetBody`
+  and matching length/encoding declarations. This covers probes and HTTP bridges
+  that use the shared outbound preparation. API keys, WS frames, unary endpoints
+  and signed Agent Identity requests are not compressed by this policy. A
+  conflicting pre-existing Content-Encoding fails before transmission.
+
+Official source `770ed6dcea40` advertises `remote_compaction_v2` unconditionally
+from `core/src/session/mod.rs::build_model_client_beta_features_header`,
+independently of authentication. Native Codex OAuth, setup-token and API-key
+Responses, compact and WebSocket handshakes therefore always include that token
+in `x-codex-beta-features`. Existing other feature tokens are preserved, and an
+already present v2 token is not appended again. A partial client declaration is
+not an opt-out. The trusted credential-owner identity snapshot determines this
+policy across retries and failover; a compatible supplier using another preset
+does not receive a synthesized session capability header. An explicitly native
+v2 compaction request retains its required v2 declaration for any supplier.
+The same rule covers Responses account/adaptive probes, image-tool Responses
+bridges, and JSON/SSE channel-monitor Responses probes. This policy applies to
+Responses-family builders only; direct images, standalone search, models,
+Chat Completions, token exchange/refresh and WHAM requests do not acquire it.
+
+Intentional Plus differences remain: credential-owner identity precedence,
+tenant namespaces and fingerprint settings, account-scoped WS pooling/cooldown,
+API-key catalog Lite restrictions, and configured body adapters. Ordinary
+Responses platform attestation is not implemented; Live requires a real platform
+provider. The auxiliary `/memories/trace_summarize` endpoint is not exposed.
+Neither capability is implied by matching UA/Originator/Version.
+
 ## User-Agent suffix
 
 An administrator User-Agent may end with the official ` ({suffix})` group, for
-example `codex_cli_rs/0.158.0 (Ubuntu 24.04; x86_64) xterm-256color (mcp: server-a)`.
-Pairing, validation, and version synchronization accept that form and keep the
+example `codex_cli_rs/0.164.0 (Ubuntu 24.04; x86_64) xterm-256color (mcp: server-a)`.
+Pairing, validation, and manual version updates accept that form and keep the
 suffix unchanged. The gateway does not generate a suffix.
 
 ## Standalone search
@@ -405,7 +629,7 @@ headers; the search tool's extra headers must be reviewed with those layers.
 | Account/protocol | Upstream path | Identity declarations |
 | --- | --- | --- |
 | Normal OAuth | ChatGPT `/backend-api/codex/alpha/search` | Selected UA, Originator and Version |
-| Native Codex API key | Configured base URL + `/alpha/search` | Selected UA; Originator and Version omitted under the Platform API-key contract |
+| Native Codex API key | Configured base URL + `/alpha/search` | Selected UA, Originator and Version |
 | API key with a compatible preset | Configured base URL + `/alpha/search` | Selected preset's own protocol header mapping |
 | OAuth using PAT | Existing Plus adapter to ChatGPT `/backend-api/codex/responses` with `web_search` | Selected UA, Originator and Version; Responses transport headers |
 
@@ -428,7 +652,7 @@ The Codex identity controls now live in **System Settings → Outbound identity*
 The default identity and source-priority matrix above are unchanged. Explicit
 non-Codex identity selections for compatible API-key/upstream accounts use the
 separate [outbound identity](../OUTBOUND_IDENTITY.md) preset mechanism. This does
-not change native Codex account selection, client classification or version sync.
+not change native Codex account selection, client classification or manual version updates.
 
 Do not add a profile based only on a UI/product name or a community report.
 For every registry addition or change:
@@ -458,13 +682,52 @@ Public API-key model discovery and administrator discovery apply the credential
 owner’s final outbound identity. Supported OAuth shadows resolve to their parent;
 API-key discovery uses the selected account’s own credentials.
 Generic account header overrides run before this final identity step and cannot
-replace its source. With the Codex preset, API-key `/v1/models` omits OAuth-only
-Originator; Codex/OAuth manifest Version and client_version follow the selected
-identity. A compatible API-key account explicitly selecting another preset uses
-that preset's wire headers and version for the Codex-style manifest's
-client_version query. Shared raw catalog cache keys include the resolved URL,
+replace its source. With the Codex preset, API-key `/v1/models` sends the selected UA, Originator
+and Version; Codex/OAuth manifest Version and client_version follow the selected
+identity. An OpenAI API-key account's custom base URL retains this native Codex
+contract. Shared raw catalog cache keys include the resolved URL,
 request headers and credentials, so an identity/credential change cannot reuse
 a different identity's cached response. Detached manifest cache refreshes retain
 the identity snapshot used to build their request and cache key.
 The compiled default identity and source-priority matrix above remain the
 normative declarations for every discovery and forwarding path.
+
+### Official source parity and thread references
+
+Reviewed against openai/codex `770ed6dcea40fedb83bb831f6d5e3760a933cc9a`
+(`login/src/auth/default_client.rs`, `model-provider-info/src/lib.rs`,
+`core/src/client.rs`, `core/src/responses_metadata.rs`, and
+`codex-api/src/endpoint/responses.rs`). The exact compiled identity and
+source-priority matrix above stay unchanged. OpenAI OAuth/setup-token/API-key
+accounts retain the Codex client family. Migration 290 removes the retired
+`openai:apikey` mapping and whole foreign account candidates while preserving
+credential-owner `user_agent`, valid native selections, explicit version pins,
+and compatible supplier/upstream settings. Runtime rejects foreign selections
+independently of migration completion.
+
+The retired administrator action
+`POST /api/v1/admin/settings/openai-codex-version/sync` is no longer registered.
+Settings responses and updates no longer expose the automatic-sync toggle,
+synced version, check timestamp or synchronization error. The manual version,
+effective version and `override` / `compiled` source fields remain available.
+The local full profile and CI repository-policy lane run the identity guard and
+its regression tests. They reject OAuth-only inference finalization and any
+restoration of the retired automatic-version service or storage keys.
+
+HTTP and WS both finish thread projection after credential-owner isolation and
+fingerprint handling: `x-client-request-id` equals the final `thread-id`.
+Account isolation uses the same thread namespace for request IDs and parent
+references (`x-codex-parent-thread-id` and canonical/flat `parent_thread_id`),
+so parent references preserve their relationship to an isolated parent thread.
+Generic account overrides cannot replace the live parent-thread header.
+Existing explicit session/full convergence policies retain their thread
+convergence behavior. Protocol metadata does not change either audit engine's
+canonical user-content extraction or side-effect ordering.
+
+
+Exact provider `model_not_found` errors are terminal for the selected
+credential/model, including HTTP 400/403/404 and statusless SSE/WS events.
+They preserve their structured code after bounded cross-owner failover and do
+not count as authentication, account health or quota failures. A generation-
+scoped negative model cache prevents a late old-grant response from blocking
+a replacement grant. Other models on that account remain schedulable.

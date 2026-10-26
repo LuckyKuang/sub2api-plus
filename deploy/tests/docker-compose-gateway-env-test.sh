@@ -11,7 +11,7 @@ cleanup() {
 trap cleanup EXIT HUP INT TERM
 
 awk '
-  /^(GATEWAY_[A-Z0-9_]+|SUB2API_IMAGES_MAIN_MODEL)=/ {
+  /^(GATEWAY_[A-Z0-9_]+|SUB2API_IMAGES_MAIN_MODEL|ZHIPU_OFFPEAK_(PERSISTENCE_ENABLED|ACTIVE_KEY_ID|SNAPSHOT_KEYS|SNAPSHOT_RETENTION_HOURS))=/ {
     separator = index($0, "=")
     print substr($0, 1, separator - 1) "\t" substr($0, separator + 1)
   }

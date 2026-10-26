@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -89,10 +90,10 @@ func TestCallProvider_BasePath(t *testing.T) {
 		{"zhipu relay version", MonitorProviderZhipu, "", "/relay/v1", "/relay/v1/chat/completions"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, _, status, err := callProvider(context.Background(), tc.provider,
-				server.URL+tc.basePath, "test-key", "test-model", "hello", &CheckOptions{APIMode: tc.apiMode})
+			result, err := callProvider(context.Background(), tc.provider,
+				server.URL+tc.basePath, "test-key", "test-model", "hello", &CheckOptions{APIMode: tc.apiMode}, time.Now())
 			require.NoError(t, err)
-			require.Equal(t, http.StatusOK, status)
+			require.Equal(t, http.StatusOK, result.StatusCode)
 			require.Equal(t, tc.wantPath, <-requests)
 		})
 	}

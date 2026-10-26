@@ -1119,6 +1119,9 @@ func newSchedulerAccountMetaRevision() string {
 }
 
 func marshalSchedulerCacheAccount(account service.Account) ([]byte, []byte, error) {
+	if account.CredentialGeneration != "" || account.CNQuotaGeneration != "" {
+		return nil, nil, fmt.Errorf("cannot hydrate scheduler cache from a metadata projection")
+	}
 	fullPayload, err := json.Marshal(account)
 	if err != nil {
 		return nil, nil, fmt.Errorf("marshal account: %w", err)
@@ -1182,6 +1185,8 @@ func buildSchedulerMetadataAccount(account service.Account) service.Account {
 		AccountGroups:           filterSchedulerAccountGroups(account.AccountGroups),
 		GroupIDs:                filterSchedulerGroupIDs(account.GroupIDs, account.AccountGroups),
 		Credentials:             filterSchedulerCredentials(account.Credentials),
+		CredentialGeneration:    service.CredentialStateGeneration(&account),
+		CNQuotaGeneration:       service.CNQuotaGeneration(&account),
 		Extra:                   filterSchedulerExtra(account.Extra),
 	}
 }
@@ -1249,12 +1254,18 @@ func filterSchedulerCredentials(credentials map[string]any) map[string]any {
 	// Candidate-list admission evaluates the account override before hydrating
 	// the full account. Dropping it silently falls back to the platform threshold.
 	keys := []string{"model_mapping", "compact_model_mapping", "api_key", "project_id", "oauth_type", "plan_type", "account_scheduling_threshold",
+		"account_mode", "oauth_provider", "oauth_region", "plan_kind",
 		// Gemini 显式缓存的候选过滤（GeminiExplicitCacheExclusions）读本投影判定账号是否支持显式缓存：
 		// 官方地址、Vertex 认证方式与上游网关的显式缓存声明。缺这几个键时只能按类型粗筛，
 		// 不支持的账号要逐个选中后才被剔除。
 		"base_url", "auth_mode", service.GeminiExplicitCacheUpstreamCredentialKey, service.GeminiExplicitCacheUpstreamMaxTTLCredentialKey}
 	filtered := make(map[string]any)
 	for _, key := range keys {
+		if key == "api_key" && credentials["plan_kind"] == service.ZhipuPlanStartPlan && (credentials["oauth_provider"] == "bigmodel" || credentials["oauth_provider"] == "zai") {
+			// Start's legacy api_key field duplicates its business JWT. The
+			// candidate projection needs only the digest and entitlement.
+			continue
+		}
 		if value, ok := credentials[key]; ok && value != nil {
 			filtered[key] = value
 		}
@@ -1325,6 +1336,7 @@ func filterSchedulerExtra(extra map[string]any) map[string]any {
 		"codex_5h_reset_after_seconds",
 		"codex_7d_reset_after_seconds",
 		"codex_usage_updated_at",
+		service.OpenAICodexUsageOwnerGenerationExtraKey,
 		"auto_pause_5h_threshold",
 		"auto_pause_7d_threshold",
 		"auto_pause_5h_disabled",
@@ -1339,6 +1351,18 @@ func filterSchedulerExtra(extra map[string]any) map[string]any {
 		"model_rate_limits",
 		service.GrokMediaEligibleExtraKey,
 		"grok_billing_snapshot",
+		"grok_sched_utilization",
+		"grok_sched_reset_at",
+		"grok_sched_credential_generation",
+		"zhipu_start_plan_entitlement",
+	}
+	for _, provider := range []string{service.PlatformKimi, service.PlatformZhipu, service.PlatformMiniMax} {
+		keys = append(keys, provider+"_quota_generation")
+		for _, window := range []string{"5h", "weekly", "monthly", "monthly_code"} {
+			for _, suffix := range []string{"_used_percent", "_reset_at", "_unlimited"} {
+				keys = append(keys, provider+"_"+window+suffix)
+			}
+		}
 	}
 	filtered := make(map[string]any)
 	for _, key := range keys {

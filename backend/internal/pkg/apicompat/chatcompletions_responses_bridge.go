@@ -1408,6 +1408,35 @@ func chatServiceTier(resp *ChatCompletionsResponse) string {
 	return resp.ServiceTier
 }
 
+// ValidateChatCompletionsResponsesToolInputs rejects invalid completed ordinary
+// function calls before the response is rendered. A length stop may preserve
+// truncated arguments as an incomplete item; custom/search tools retain their
+// existing protocol-specific argument handling.
+func ValidateChatCompletionsResponsesToolInputs(resp *ChatCompletionsResponse, customTools, functionTools map[string]bool, toolSearch bool, namespaceTools map[string]NamespacedToolName) error {
+	if resp == nil || len(resp.Choices) == 0 || resp.Choices[0].FinishReason == "length" {
+		return nil
+	}
+	for _, call := range resp.Choices[0].Message.ToolCalls {
+		if _, custom := customToolCallName(call.Function.Name, customTools, functionTools, namespaceTools); custom {
+			continue
+		}
+		if toolSearch && call.Function.Name == toolSearchProxyName {
+			continue
+		}
+		if chatFunctionCallStatus(call.Function.Arguments) == "incomplete" {
+			return fmt.Errorf("upstream tool arguments are invalid JSON")
+		}
+	}
+	return nil
+}
+
+func chatFunctionCallStatus(arguments string) string {
+	if strings.TrimSpace(arguments) != "" && !json.Valid([]byte(arguments)) {
+		return "incomplete"
+	}
+	return "completed"
+}
+
 func chatMessageToResponsesOutput(message ChatMessage, customTools, functionTools map[string]bool, toolSearch bool, namespaceTools map[string]NamespacedToolName) []ResponsesOutput {
 	var outputs []ResponsesOutput
 	reasoning := message.reasoningText()
@@ -1465,13 +1494,9 @@ func chatMessageToResponsesOutput(message ChatMessage, customTools, functionTool
 			})
 			continue
 		}
-		// Ordinary Responses function_call arguments must contain valid JSON.
-		// Do not mark a truncated non-streaming Chat tool call as completed;
-		// Codex would persist it and poison the next request in the same way as
-		// the streaming variant guarded by ValidateToolCallArguments.
-		if !json.Valid([]byte(arguments)) {
-			continue
-		}
+		// Responses arguments are strings, so incomplete calls can retain their
+		// original bytes. They must never be presented as completed tools.
+		status := chatFunctionCallStatus(arguments)
 		if ns, ok := namespaceTools[toolCall.Function.Name]; ok {
 			outputs = append(outputs, ResponsesOutput{
 				Type:      "function_call",
@@ -1480,7 +1505,7 @@ func chatMessageToResponsesOutput(message ChatMessage, customTools, functionTool
 				Name:      ns.Name,
 				Namespace: ns.Namespace,
 				Arguments: arguments,
-				Status:    "completed",
+				Status:    status,
 			})
 			continue
 		}
@@ -1490,7 +1515,7 @@ func chatMessageToResponsesOutput(message ChatMessage, customTools, functionTool
 			CallID:    toolCall.ID,
 			Name:      toolCall.Function.Name,
 			Arguments: arguments,
-			Status:    "completed",
+			Status:    status,
 		})
 	}
 
@@ -1665,12 +1690,10 @@ func NewChatCompletionsToResponsesStreamState(model string) *ChatCompletionsToRe
 }
 
 // ValidateToolCallArguments checks the accumulated function-call arguments
-// before the stream is finalized. A tool call whose argument stream was
-// truncated must not be emitted as a completed Responses item: Codex will
-// persist it and replay it on the next turn, where a Chat Completions provider
-// rejects the whole request.
+// before the stream is finalized. A normal length stop preserves partial
+// arguments as incomplete items; other completed turns require valid JSON.
 func (state *ChatCompletionsToResponsesStreamState) ValidateToolCallArguments() error {
-	if state == nil {
+	if state == nil || state.FinishReason == "length" {
 		return nil
 	}
 	for idx, toolCall := range state.ToolCalls {
@@ -1680,12 +1703,8 @@ func (state *ChatCompletionsToResponsesStreamState) ValidateToolCallArguments() 
 		if state.toolIsCustom[idx] || state.toolIsToolSearch[idx] {
 			continue
 		}
-		arguments := strings.TrimSpace(toolCall.Function.Arguments)
-		if arguments == "" {
-			continue
-		}
-		if !json.Valid([]byte(arguments)) {
-			return fmt.Errorf("tool call %q (%s) arguments are invalid JSON", toolCall.ID, toolCall.Function.Name)
+		if chatFunctionCallStatus(toolCall.Function.Arguments) == "incomplete" {
+			return fmt.Errorf("upstream tool arguments are invalid JSON")
 		}
 	}
 	return nil
@@ -1872,14 +1891,16 @@ func FinalizeChatCompletionsResponsesStream(state *ChatCompletionsToResponsesStr
 	events = append(events, closeChatToolItems(state)...)
 
 	status := "completed"
+	terminalEvent := "response.completed"
 	var incompleteDetails *ResponsesIncompleteDetails
 	if state.FinishReason == "length" {
 		status = "incomplete"
+		terminalEvent = "response.incomplete"
 		incompleteDetails = &ResponsesIncompleteDetails{Reason: "max_output_tokens"}
 	}
 
 	state.CompletedSent = true
-	events = append(events, chatToResponsesEvent(state, "response.completed", &ResponsesStreamEvent{
+	events = append(events, chatToResponsesEvent(state, terminalEvent, &ResponsesStreamEvent{
 		Response: &ResponsesResponse{
 			ID:                state.ResponseID,
 			Object:            "response",
@@ -2185,7 +2206,7 @@ func closeChatToolItems(state *ChatCompletionsToResponsesStreamState) []Response
 					Name:      name,
 					Namespace: namespace,
 					Arguments: arguments,
-					Status:    "completed",
+					Status:    chatFunctionCallStatus(arguments),
 				},
 			}),
 		)
@@ -2258,7 +2279,7 @@ func (state *ChatCompletionsToResponsesStreamState) chatOutput() []ResponsesOutp
 			Name:      name,
 			Namespace: namespace,
 			Arguments: arguments,
-			Status:    "completed",
+			Status:    chatFunctionCallStatus(arguments),
 		})
 	}
 	return outputs

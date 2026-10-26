@@ -149,8 +149,9 @@ func (s *FrontendServer) serveIndexHTML(c *gin.Context) {
 	// Check cache first
 	cached := s.cache.Get()
 	if cached != nil {
+		etag := cached.etagForNonce(nonce)
 		// Check If-None-Match for 304 response
-		if match := c.GetHeader("If-None-Match"); match == cached.ETag {
+		if match := c.GetHeader("If-None-Match"); match == etag {
 			c.Status(http.StatusNotModified)
 			c.Abort()
 			return
@@ -159,7 +160,7 @@ func (s *FrontendServer) serveIndexHTML(c *gin.Context) {
 		// Replace nonce placeholder with actual nonce before serving
 		content := replaceNoncePlaceholder(cached.Content, nonce)
 
-		c.Header("ETag", cached.ETag)
+		c.Header("ETag", etag)
 		c.Header("Cache-Control", "no-cache") // Must revalidate
 		c.Data(http.StatusOK, "text/html; charset=utf-8", content)
 		c.Abort()
@@ -194,7 +195,7 @@ func (s *FrontendServer) serveIndexHTML(c *gin.Context) {
 
 	cached = s.cache.Get()
 	if cached != nil {
-		c.Header("ETag", cached.ETag)
+		c.Header("ETag", cached.etagForNonce(nonce))
 	}
 	c.Header("Cache-Control", "no-cache")
 	c.Data(http.StatusOK, "text/html; charset=utf-8", content)

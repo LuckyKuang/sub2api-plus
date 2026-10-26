@@ -18,6 +18,16 @@ type openAIAlignedPromptCacheIdentity struct {
 	Scope    string
 }
 
+// Native Responses carries the caller's cache policy on the wire. A missing
+// field is meaningful (Codex PromptCacheKey::Omit); only compatibility adapters
+// may synthesize a cache key from their own conversation policy.
+func isNativeOpenAIResponsesRequest(c *gin.Context, account *Account) bool {
+	if account == nil || account.Platform != PlatformOpenAI || c == nil || c.Request == nil || c.Request.URL == nil {
+		return false
+	}
+	return strings.HasSuffix(strings.TrimSuffix(c.Request.URL.Path, "/"), "/responses")
+}
+
 // ensureOpenAIResponsesPromptCacheIdentity resolves a single opaque identity
 // for the Responses body and upstream session headers. Explicit client values
 // win; content fallback is limited to requests with a meaningful user anchor.
@@ -33,6 +43,10 @@ func (s *OpenAIGatewayService) ensureOpenAIResponsesPromptCacheIdentity(
 	}
 
 	rawIdentity := strings.TrimSpace(gjson.GetBytes(body, "prompt_cache_key").String())
+	if isNativeOpenAIResponsesRequest(c, account) && rawIdentity == "" &&
+		!isOpenAICompatMessagesBridgeContext(c) && !isOpenAICompatMessagesBridgeBody(body) {
+		return body, "", false, nil
+	}
 	if rawIdentity == "" {
 		rawIdentity = strings.TrimSpace(seed)
 	}
@@ -104,11 +118,10 @@ func (s *OpenAIGatewayService) resolveOpenAIPromptCacheIdentity(c *gin.Context, 
 	if account != nil && account.IsOpenAIOAuthSessionSharingEnabled() {
 		namespaced, err = s.resolveOpenAIUpstreamSessionID(c, account, raw)
 	} else {
-		namespaced = isolateOpenAIUpstreamSessionID(
-			getAPIKeyIDFromContext(c),
-			codexAccountIdentitySource(c, account),
-			raw,
-		)
+		// Logical cache identity is tenant-scoped, never credential-owner scoped:
+		// an A→B failover must keep the same prompt_cache_key for one logical
+		// conversation while other tenants stay isolated.
+		namespaced = isolateOpenAISessionID(getAPIKeyIDFromContext(c), raw)
 	}
 	if err != nil || namespaced == "" {
 		return "", err
@@ -216,23 +229,98 @@ func setOpenAIUpstreamSessionIdentityForAccount(headers http.Header, account *Ac
 // and the legacy `session_id` alias is not part of the official wire format,
 // so both are removed for every Codex account regardless of fingerprint mode.
 func clearOpenAICodexLegacySessionAliases(headers http.Header, account *Account) {
-	if headers == nil || account == nil || !account.UsesOpenAICodexProtocol() {
+	if headers == nil || account == nil {
 		return
+	}
+	// API-key Codex uses the same official session header spelling as OAuth.
+	// Inspect only the already finalized trusted identity, never inbound headers.
+	identity, native := validOpenAIOutboundIdentityWithCompatibility(headers.Get("User-Agent"), true)
+	nativeAPIIdentity := account.IsOpenAI() && native && headers.Get("Originator") == identity.Originator
+	if !account.UsesOpenAICodexProtocol() && !nativeAPIIdentity {
+		return
+	}
+	if headers.Get(codexSessionIDHeader) == "" && headers.Get("session_id") != "" {
+		headers.Set(codexSessionIDHeader, headers.Get("session_id"))
 	}
 	headers.Del("conversation_id")
 	headers.Del("session_id")
 }
 
-// alignOpenAIUpstreamSessionIdentityFromBody makes the finalized Responses
-// prompt_cache_key authoritative after fingerprinting and account-level header
-// overrides have run. This preserves Codex's body/header cache identity even
-// when an earlier stage supplied a different session identity.
+// openAICodexNonRootSessionID preserves the official distinction between an
+// agent's session and its shared prompt cache. These are routing seeds only;
+// both still pass through the selected account's tenant namespace.
+func openAICodexNonRootSessionID(c *gin.Context) string {
+	if c == nil || c.Request == nil {
+		return ""
+	}
+	if strings.TrimSpace(c.GetHeader(openAISubagentHeader)) == "" &&
+		codexSubagentKindFromMetadata(c.GetHeader(codexTurnMetadataHeader)) == "" {
+		return ""
+	}
+	return explicitOpenAIHeaderSessionID(c)
+}
+
+// Session routing keeps the existing tenant or explicitly authorized sharing
+// boundary. Fingerprint convergence controls metadata, not this authorization
+// domain; a full-device profile must never merge unrelated callers' routing.
+func (s *OpenAIGatewayService) resolveOpenAICodexSessionIdentity(c *gin.Context, account *Account, raw string) (string, error) {
+	tenant := getAPIKeyIDFromContext(c)
+	if account != nil && account.IsOpenAIOAuthSessionSharingEnabled() {
+		var err error
+		raw, err = s.resolveOpenAIUpstreamSessionID(c, account, raw)
+		if err != nil {
+			return "", err
+		}
+		tenant = 0
+	}
+	owner := codexAccountIdentitySource(c, account)
+	owner, err := codexRequestIdentityOwner(openAICodexTurnStateContext(c), owner)
+	if err != nil {
+		return "", err
+	}
+	if owner == nil {
+		return raw, nil
+	}
+	routingOwner := *owner
+	routingOwner.Extra = map[string]any{CodexFingerprintModeExtraKey: "off"}
+	return resolveCodexAccountIdentityValueForOwner(openAICodexTurnStateContext(c), &routingOwner, tenant, "session", raw)
+}
+
+// Native sessions remain independent of prompt cache. Gateway-owned adapters
+// and legacy compact keep their explicitly selected cache alignment policy.
 func (s *OpenAIGatewayService) alignOpenAIUpstreamSessionIdentityFromBody( //nolint:unused // compact/session identity alignment helper
 	c *gin.Context,
 	account *Account,
 	headers http.Header,
 	body []byte,
 ) error {
+	if isNativeOpenAIResponsesRequest(c, account) {
+		// Session affinity is independent from a custom cache key or its omission.
+		// Resolve the original session once, rather than rehashing an already
+		// projected header or borrowing the body cache's namespace.
+		raw := explicitOpenAIHeaderSessionID(c)
+		if raw == "" {
+			headers.Del(codexSessionIDHeader)
+			headers.Del("session_id")
+			return nil
+		}
+		identity, err := s.resolveOpenAICodexSessionIdentity(c, account, raw)
+		if err != nil {
+			return err
+		}
+		setOpenAIUpstreamSessionIdentityForAccount(headers, account, identity)
+		return nil
+	}
+	if account != nil && account.IsOpenAI() && !isOpenAIResponsesCompactPath(c) {
+		if raw := openAICodexNonRootSessionID(c); raw != "" {
+			identity, err := s.resolveOpenAIPromptCacheIdentity(c, account, raw)
+			if err != nil {
+				return err
+			}
+			setOpenAIUpstreamSessionIdentityForAccount(headers, account, identity)
+			return nil
+		}
+	}
 	promptCacheKey := strings.TrimSpace(gjson.GetBytes(body, "prompt_cache_key").String())
 	if promptCacheKey == "" {
 		return nil

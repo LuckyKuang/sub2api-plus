@@ -238,7 +238,7 @@ func TestGatewayCodexModels_NonOpenAIGroupsUseMappedModels(t *testing.T) {
 
 			rec := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(rec)
-			c.Request = httptest.NewRequest(http.MethodGet, "/models?client_version=0.158.0", nil)
+			c.Request = httptest.NewRequest(http.MethodGet, "/models?client_version=0.163.0", nil)
 			c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{
 				Group: &service.Group{ID: groupID, Platform: tt.platform},
 			})
@@ -294,7 +294,7 @@ func TestGatewayCodexModels_CompositeUsesCompleteEffectiveModelList(t *testing.T
 
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
-	c.Request = httptest.NewRequest(http.MethodGet, "/models?client_version=0.158.0", nil)
+	c.Request = httptest.NewRequest(http.MethodGet, "/models?client_version=0.163.0", nil)
 	c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{
 		Group: &service.Group{ID: groupID, Platform: service.PlatformComposite},
 	})
@@ -441,7 +441,7 @@ func TestGatewayCodexModels_GeneratedManifestUsesFinalBodyETag(t *testing.T) {
 
 	first := httptest.NewRecorder()
 	firstContext, _ := gin.CreateTestContext(first)
-	firstContext.Request = httptest.NewRequest(http.MethodGet, "/models?client_version=0.158.0", nil)
+	firstContext.Request = httptest.NewRequest(http.MethodGet, "/models?client_version=0.163.0", nil)
 	firstContext.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{Group: group})
 	h.CodexModels(firstContext)
 
@@ -452,7 +452,7 @@ func TestGatewayCodexModels_GeneratedManifestUsesFinalBodyETag(t *testing.T) {
 
 	second := httptest.NewRecorder()
 	secondContext, _ := gin.CreateTestContext(second)
-	secondContext.Request = httptest.NewRequest(http.MethodGet, "/models?client_version=0.158.0", nil)
+	secondContext.Request = httptest.NewRequest(http.MethodGet, "/models?client_version=0.163.0", nil)
 	secondContext.Request.Header.Set("If-None-Match", "W/"+etag)
 	secondContext.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{Group: group})
 	h.CodexModels(secondContext)
@@ -489,7 +489,7 @@ func TestGatewayCodexModels_CustomModelsListFiltersCompositeManifest(t *testing.
 
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
-	c.Request = httptest.NewRequest(http.MethodGet, "/models?client_version=0.158.0", nil)
+	c.Request = httptest.NewRequest(http.MethodGet, "/models?client_version=0.163.0", nil)
 	c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{
 		Group: &service.Group{
 			ID:       groupID,
@@ -694,7 +694,7 @@ func TestGatewayCodexModels_CompositeAnthropicDoesNotAdvertiseAntigravityDefault
 
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
-	c.Request = httptest.NewRequest(http.MethodGet, "/models?client_version=0.158.0", nil)
+	c.Request = httptest.NewRequest(http.MethodGet, "/models?client_version=0.163.0", nil)
 	c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{
 		Group: &service.Group{ID: groupID, Platform: service.PlatformComposite},
 	})
@@ -1011,7 +1011,7 @@ func TestDefaultModelIDsForPlatform_CNProvidersKeepClaudeDefaults(t *testing.T) 
 
 func TestDefaultCodexModelIDsForPlatform_DeepSeekUsesDeepSeekModels(t *testing.T) {
 	require.Equal(t, []string{"deepseek-flash", "deepseek-v4.1-flash", "deepseek-v4-flash-vision-exp", "deepseek-v4-flash", "deepseek-v4-flash-0731", "deepseek-v4-pro", "deepseek-v4-pro-0813"}, defaultCodexModelIDsForPlatform(service.PlatformDeepseek))
-	require.Contains(t, defaultCodexModelIDsForPlatform(service.PlatformMiniMax), "MiniMax-M3.1-Flash-Preview")
+	require.Contains(t, defaultCodexModelIDsForPlatform(service.PlatformMiniMax), "MiniMax-M3.1-Flash")
 	require.Contains(t, defaultCodexModelIDsForPlatform(service.PlatformMiniMax), "MiniMax-M2.7-highspeed")
 	require.NotContains(t, defaultCodexModelIDsForPlatform(service.PlatformMiniMax), "abab6.5-chat")
 	require.Equal(t, defaultModelIDsForPlatform(service.PlatformAnthropic), defaultCodexModelIDsForPlatform(service.PlatformAnthropic))
@@ -1620,7 +1620,7 @@ func TestGatewayModels_CodexGeminiGroupListsAntigravityGeminiMappings(t *testing
 
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
-	c.Request = httptest.NewRequest(http.MethodGet, "/models?client_version=0.158.0", nil)
+	c.Request = httptest.NewRequest(http.MethodGet, "/models?client_version=0.163.0", nil)
 	c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{
 		Group: &service.Group{ID: groupID, Platform: service.PlatformGemini},
 	})

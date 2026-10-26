@@ -33,7 +33,7 @@ import {
   CHECK_MODE_QUOTA_PROBE,
 } from '@/constants/channelMonitor'
 
-const NEUTRAL_BADGE = 'bg-gray-100 text-gray-800 dark:bg-dark-700 dark:text-gray-300'
+const NEUTRAL_BADGE = 'surface-inset text-gray-800 dark:surface-inset dark:text-gray-300'
 
 /** Availability HSL hue multiplier: 0%=red(0) / 50%=yellow(60) / 100%=green(120). */
 const HSL_HUE_PER_PERCENT = 1.2
@@ -56,11 +56,11 @@ export function useChannelMonitorFormat() {
   function statusBadgeClass(s: MonitorStatus | ''): string {
     switch (s) {
       case STATUS_OPERATIONAL:
-        return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
+        return 'bg-emerald-100/[0.15] text-emerald-700 dark:bg-emerald-500/[0.15] dark:text-emerald-300'
       case STATUS_DEGRADED:
-        return 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'
+        return 'bg-amber-100/[0.15] text-amber-700 dark:bg-amber-500/[0.15] dark:text-amber-300'
       case STATUS_FAILED:
-        return 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300'
+        return 'bg-red-100/[0.15] text-red-700 dark:bg-red-500/[0.15] dark:text-red-300'
       case STATUS_ERROR:
       default:
         return NEUTRAL_BADGE
@@ -99,27 +99,27 @@ export function useChannelMonitorFormat() {
   function providerBadgeClass(p: Provider | string): string {
     switch (p) {
       case PROVIDER_OPENAI:
-        return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
+        return 'bg-emerald-100/[0.15] text-emerald-700 dark:bg-emerald-500/[0.15] dark:text-emerald-300'
       case PROVIDER_ANTHROPIC:
-        return 'bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300'
+        return 'bg-orange-100/[0.15] text-orange-700 dark:bg-orange-500/[0.15] dark:text-orange-300'
       case PROVIDER_GEMINI:
-        return 'bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300'
+        return 'bg-sky-100/[0.15] text-sky-700 dark:bg-sky-500/[0.15] dark:text-sky-300'
       case PROVIDER_GROK:
-        return 'bg-zinc-100 text-zinc-700 dark:bg-zinc-500/15 dark:text-zinc-300'
+        return 'bg-zinc-100/[0.15] text-zinc-700 dark:bg-zinc-500/[0.15] dark:text-zinc-300'
       // 配色与 utils/platformColors.ts 的平台色对齐：antigravity=purple /
       // kimi=pink / zhipu=indigo / deepseek=teal。
       case PROVIDER_ANTIGRAVITY:
-        return 'bg-purple-100 text-purple-700 dark:bg-purple-500/15 dark:text-purple-300'
+        return 'bg-purple-100/[0.15] text-purple-700 dark:bg-purple-500/[0.15] dark:text-purple-300'
       case PROVIDER_KIMI:
-        return 'bg-pink-100 text-pink-700 dark:bg-pink-500/15 dark:text-pink-300'
+        return 'bg-pink-100/[0.15] text-pink-700 dark:bg-pink-500/[0.15] dark:text-pink-300'
       case PROVIDER_ZHIPU:
-        return 'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300'
+        return 'bg-indigo-100/[0.15] text-indigo-700 dark:bg-indigo-500/[0.15] dark:text-indigo-300'
       case PROVIDER_DEEPSEEK:
-        return 'bg-teal-100 text-teal-700 dark:bg-teal-500/15 dark:text-teal-300'
+        return 'bg-teal-100/[0.15] text-teal-700 dark:bg-teal-500/[0.15] dark:text-teal-300'
       case PROVIDER_MINIMAX:
-        return 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300'
+        return 'bg-rose-100/[0.15] text-rose-700 dark:bg-rose-500/[0.15] dark:text-rose-300'
       case PROVIDER_OPENCODE_GO:
-        return 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300'
+        return 'bg-amber-100/[0.15] text-amber-800 dark:bg-amber-500/[0.15] dark:text-amber-300'
       default:
         return NEUTRAL_BADGE
     }
@@ -134,7 +134,7 @@ export function useChannelMonitorFormat() {
     switch (m) {
       case CHECK_MODE_QUOTA:
       case CHECK_MODE_QUOTA_PROBE:
-        return 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300'
+        return 'bg-blue-100/[0.15] text-blue-700 dark:bg-blue-500/[0.15] dark:text-blue-300'
       case CHECK_MODE_PROBE:
       default:
         return NEUTRAL_BADGE
@@ -150,48 +150,48 @@ export function useChannelMonitorFormat() {
     switch (p) {
       case PROVIDER_OPENAI:
         return active
-          ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-400'
-          : 'border-gray-200 bg-white text-gray-600 hover:border-emerald-300 hover:text-emerald-700 dark:border-dark-700 dark:bg-dark-800 dark:text-gray-400 dark:hover:border-emerald-500/50'
+          ? 'border-emerald-500 bg-emerald-50/[0.15] text-emerald-700 dark:bg-emerald-500/[0.15] dark:text-emerald-300 dark:border-emerald-400'
+          : 'border-gray-200 surface-inset text-gray-600 hover:border-emerald-300 hover:text-emerald-700 dark:border-dark-700 dark:surface-inset dark:text-gray-400 dark:hover:border-emerald-500/50'
       case PROVIDER_ANTHROPIC:
         return active
-          ? 'border-orange-500 bg-orange-50 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300 dark:border-orange-400'
-          : 'border-gray-200 bg-white text-gray-600 hover:border-orange-300 hover:text-orange-700 dark:border-dark-700 dark:bg-dark-800 dark:text-gray-400 dark:hover:border-orange-500/50'
+          ? 'border-orange-500 bg-orange-50/[0.15] text-orange-700 dark:bg-orange-500/[0.15] dark:text-orange-300 dark:border-orange-400'
+          : 'border-gray-200 surface-inset text-gray-600 hover:border-orange-300 hover:text-orange-700 dark:border-dark-700 dark:surface-inset dark:text-gray-400 dark:hover:border-orange-500/50'
       case PROVIDER_GEMINI:
         return active
-          ? 'border-sky-500 bg-sky-50 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300 dark:border-sky-400'
-          : 'border-gray-200 bg-white text-gray-600 hover:border-sky-300 hover:text-sky-700 dark:border-dark-700 dark:bg-dark-800 dark:text-gray-400 dark:hover:border-sky-500/50'
+          ? 'border-sky-500 bg-sky-50/[0.15] text-sky-700 dark:bg-sky-500/[0.15] dark:text-sky-300 dark:border-sky-400'
+          : 'border-gray-200 surface-inset text-gray-600 hover:border-sky-300 hover:text-sky-700 dark:border-dark-700 dark:surface-inset dark:text-gray-400 dark:hover:border-sky-500/50'
       case PROVIDER_GROK:
         return active
-          ? 'border-zinc-500 bg-zinc-50 text-zinc-800 dark:bg-zinc-500/15 dark:text-zinc-200 dark:border-zinc-400'
-          : 'border-gray-200 bg-white text-gray-600 hover:border-zinc-400 hover:text-zinc-800 dark:border-dark-700 dark:bg-dark-800 dark:text-gray-400 dark:hover:border-zinc-500/50'
+          ? 'border-zinc-500 bg-zinc-50/[0.15] text-zinc-800 dark:bg-zinc-500/[0.15] dark:text-zinc-200 dark:border-zinc-400'
+          : 'border-gray-200 surface-inset text-gray-600 hover:border-zinc-400 hover:text-zinc-800 dark:border-dark-700 dark:surface-inset dark:text-gray-400 dark:hover:border-zinc-500/50'
       case PROVIDER_ANTIGRAVITY:
         return active
-          ? 'border-purple-500 bg-purple-50 text-purple-700 dark:bg-purple-500/15 dark:text-purple-300 dark:border-purple-400'
-          : 'border-gray-200 bg-white text-gray-600 hover:border-purple-300 hover:text-purple-700 dark:border-dark-700 dark:bg-dark-800 dark:text-gray-400 dark:hover:border-purple-500/50'
+          ? 'border-purple-500 bg-purple-50/[0.15] text-purple-700 dark:bg-purple-500/[0.15] dark:text-purple-300 dark:border-purple-400'
+          : 'border-gray-200 surface-inset text-gray-600 hover:border-purple-300 hover:text-purple-700 dark:border-dark-700 dark:surface-inset dark:text-gray-400 dark:hover:border-purple-500/50'
       case PROVIDER_KIMI:
         return active
-          ? 'border-pink-500 bg-pink-50 text-pink-700 dark:bg-pink-500/15 dark:text-pink-300 dark:border-pink-400'
-          : 'border-gray-200 bg-white text-gray-600 hover:border-pink-300 hover:text-pink-700 dark:border-dark-700 dark:bg-dark-800 dark:text-gray-400 dark:hover:border-pink-500/50'
+          ? 'border-pink-500 bg-pink-50/[0.15] text-pink-700 dark:bg-pink-500/[0.15] dark:text-pink-300 dark:border-pink-400'
+          : 'border-gray-200 surface-inset text-gray-600 hover:border-pink-300 hover:text-pink-700 dark:border-dark-700 dark:surface-inset dark:text-gray-400 dark:hover:border-pink-500/50'
       case PROVIDER_ZHIPU:
         return active
-          ? 'border-indigo-500 bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300 dark:border-indigo-400'
-          : 'border-gray-200 bg-white text-gray-600 hover:border-indigo-300 hover:text-indigo-700 dark:border-dark-700 dark:bg-dark-800 dark:text-gray-400 dark:hover:border-indigo-500/50'
+          ? 'border-indigo-500 bg-indigo-50/[0.15] text-indigo-700 dark:bg-indigo-500/[0.15] dark:text-indigo-300 dark:border-indigo-400'
+          : 'border-gray-200 surface-inset text-gray-600 hover:border-indigo-300 hover:text-indigo-700 dark:border-dark-700 dark:surface-inset dark:text-gray-400 dark:hover:border-indigo-500/50'
       case PROVIDER_DEEPSEEK:
         return active
-          ? 'border-teal-500 bg-teal-50 text-teal-700 dark:bg-teal-500/15 dark:text-teal-300 dark:border-teal-400'
-          : 'border-gray-200 bg-white text-gray-600 hover:border-teal-300 hover:text-teal-700 dark:border-dark-700 dark:bg-dark-800 dark:text-gray-400 dark:hover:border-teal-500/50'
+          ? 'border-teal-500 bg-teal-50/[0.15] text-teal-700 dark:bg-teal-500/[0.15] dark:text-teal-300 dark:border-teal-400'
+          : 'border-gray-200 surface-inset text-gray-600 hover:border-teal-300 hover:text-teal-700 dark:border-dark-700 dark:surface-inset dark:text-gray-400 dark:hover:border-teal-500/50'
       case PROVIDER_MINIMAX:
         return active
-          ? 'border-rose-500 bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300 dark:border-rose-400'
-          : 'border-gray-200 bg-white text-gray-600 hover:border-rose-300 hover:text-rose-700 dark:border-dark-700 dark:bg-dark-800 dark:text-gray-400 dark:hover:border-rose-500/50'
+          ? 'border-rose-500 bg-rose-50/[0.15] text-rose-700 dark:bg-rose-500/[0.15] dark:text-rose-300 dark:border-rose-400'
+          : 'border-gray-200 surface-inset text-gray-600 hover:border-rose-300 hover:text-rose-700 dark:border-dark-700 dark:surface-inset dark:text-gray-400 dark:hover:border-rose-500/50'
       case PROVIDER_OPENCODE_GO:
         return active
-          ? 'border-amber-500 bg-amber-50 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-400'
-          : 'border-gray-200 bg-white text-gray-600 hover:border-amber-300 hover:text-amber-700 dark:border-dark-700 dark:bg-dark-800 dark:text-gray-400 dark:hover:border-amber-500/50'
+          ? 'border-amber-500 bg-amber-50/[0.15] text-amber-800 dark:bg-amber-500/[0.15] dark:text-amber-300 dark:border-amber-400'
+          : 'border-gray-200 surface-inset text-gray-600 hover:border-amber-300 hover:text-amber-700 dark:border-dark-700 dark:surface-inset dark:text-gray-400 dark:hover:border-amber-500/50'
       default:
         return active
-          ? 'border-gray-400 bg-gray-50 text-gray-700 dark:border-dark-500 dark:bg-dark-700 dark:text-gray-200'
-          : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 dark:border-dark-700 dark:bg-dark-800 dark:text-gray-400'
+          ? 'border-gray-400 surface-inset text-gray-700 dark:border-dark-500 dark:surface-inset dark:text-gray-200'
+          : 'border-gray-200 surface-inset text-gray-600 hover:border-gray-300 dark:border-dark-700 dark:surface-inset dark:text-gray-400'
     }
   }
 

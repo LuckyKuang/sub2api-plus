@@ -398,7 +398,7 @@ func (s *GatewayService) handleCCStreamingFromAnthropic(
 	ccState.Model = originalModel
 
 	var usage ClaudeUsage
-	var timing streamOutputTiming
+	timing := requestStreamOutputTiming(c)
 	writerSizeBeforeStream := c.Writer.Size()
 
 	stream := newAnthropicCompatStream(s.cfg, c, resp, "forward_as_cc", requestID)

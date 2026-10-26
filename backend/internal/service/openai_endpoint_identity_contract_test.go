@@ -9,8 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
-
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
@@ -122,29 +120,21 @@ func TestOpenAIIdentityContractEndpointMatrix(t *testing.T) {
 								version = "0.200.2"
 							}
 							want := http.Header{"User-Agent": {family + "/" + version + fingerprint}}
-							if accountType != AccountTypeAPIKey {
-								originator := family
-								if endpoint != "/v1/alpha/search" && endpoint != "/v1/images/generations" {
-									originator = "chatgpt_cca"
-								}
-								want.Set("Originator", originator)
-								want.Set("Version", version)
-							}
-							if compatible {
-								want = http.Header{}
-								builtInOutboundIdentity(source).ForProtocol(outboundidentity.RequestProtocol(req)).Apply(want)
-							}
+							want.Set("Originator", family)
+							want.Set("Version", version)
+							// Native API keys ignore stale foreign selections on every endpoint,
+							// including retries and a fresh operation after the version changes.
 							requireOpenAIIdentityContractHeaders(t, req.Header, want, wantAuth)
 							if endpoint == "/v1/alpha/search" {
 								metadata := req.Header.Get("X-Codex-Turn-Metadata")
 								require.True(t, gjson.Valid(metadata), "search metadata must survive every auth/preset path")
 								require.Equal(t, gjson.Get(searchMetadata, "mcp_request_meta").String(), gjson.Get(metadata, "mcp_request_meta").String())
 								require.Equal(t, "keep", gjson.Get(metadata, "future_field").String())
-								wantTurn := "turn-1"
-								if accountType != AccountTypeAPIKey {
-									wantTurn = scopeCodexAccountIdentityValue(account, 99, "turn", "turn-1")
-								}
-								require.Equal(t, wantTurn, gjson.Get(metadata, "turn_id").String())
+								// Both auth types project stable credential-owner metadata.
+								turn := gjson.Get(metadata, "turn_id").String()
+								require.NotEmpty(t, turn)
+								require.NotEqual(t, "turn-1", turn)
+								require.Equal(t, gjson.Get(requests[0].Header.Get("X-Codex-Turn-Metadata"), "turn_id").String(), turn, "retry/version reload preserves execution identity")
 								require.Empty(t, req.Header.Get("X-OpenAI-Actor-Authorization"))
 								if accountType == "pat" {
 									require.Equal(t, chatgptCodexURL, req.URL.String())
@@ -194,7 +184,7 @@ func TestOpenAIIdentityContractChatResponsesFallbackSnapshot(t *testing.T) {
 			require.Equal(t, "/v1/responses", requests[0].URL.Path)
 			require.Equal(t, "/v1/chat/completions", requests[1].URL.Path)
 			for _, req := range requests {
-				requireOpenAIIdentityContractHeaders(t, req.Header, http.Header{"User-Agent": {"codex_cli_rs/0.200.1 (Ubuntu 22.4.0; x86_64) terminal"}}, "Bearer sk-test")
+				requireOpenAIIdentityContractHeaders(t, req.Header, http.Header{"User-Agent": {"codex_cli_rs/0.200.1 (Ubuntu 22.4.0; x86_64) terminal"}, "Originator": {"codex_cli_rs"}, "Version": {"0.200.1"}}, "Bearer sk-test")
 			}
 		})
 	}

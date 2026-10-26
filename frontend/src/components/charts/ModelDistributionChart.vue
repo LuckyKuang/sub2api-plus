@@ -1,5 +1,5 @@
 <template>
-  <div class="card p-4">
+  <div class="card p-4" :class="{ 'chart-workspace': workspace }">
     <div class="mb-4 flex items-center justify-between gap-3">
       <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
         {{ !enableRankingView || activeView === 'model_distribution'
@@ -9,13 +9,13 @@
       <div class="flex flex-wrap items-center justify-end gap-2">
         <div
           v-if="showSourceToggle"
-          class="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 dark:border-dark-700 dark:bg-dark-800"
+          class="inline-flex rounded-lg border border-gray-200 surface-inset p-0.5 dark:border-dark-700"
         >
           <button
             type="button"
-            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors"
+            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors surface-control"
             :class="source === 'requested'
-              ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-700 dark:text-white'
+              ? 'surface-field text-gray-900 shadow-sm dark:surface-field dark:text-white'
               : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
             @click="emit('update:source', 'requested')"
           >
@@ -23,9 +23,9 @@
           </button>
           <button
             type="button"
-            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors"
+            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors surface-control"
             :class="source === 'upstream'
-              ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-700 dark:text-white'
+              ? 'surface-field text-gray-900 shadow-sm dark:surface-field dark:text-white'
               : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
             @click="emit('update:source', 'upstream')"
           >
@@ -33,9 +33,9 @@
           </button>
           <button
             type="button"
-            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors"
+            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors surface-control"
             :class="source === 'mapping'
-              ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-700 dark:text-white'
+              ? 'surface-field text-gray-900 shadow-sm dark:surface-field dark:text-white'
               : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
             @click="emit('update:source', 'mapping')"
           >
@@ -44,13 +44,13 @@
         </div>
         <div
           v-if="showMetricToggle"
-          class="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 dark:border-dark-700 dark:bg-dark-800"
+          class="inline-flex rounded-lg border border-gray-200 surface-inset p-0.5 dark:border-dark-700"
         >
           <button
             type="button"
-            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors"
+            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors surface-control"
             :class="metric === 'tokens'
-              ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-700 dark:text-white'
+              ? 'surface-field text-gray-900 shadow-sm dark:surface-field dark:text-white'
               : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
             @click="emit('update:metric', 'tokens')"
           >
@@ -58,22 +58,22 @@
           </button>
           <button
             type="button"
-            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors"
+            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors surface-control"
             :class="metric === 'actual_cost'
-              ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-700 dark:text-white'
+              ? 'surface-field text-gray-900 shadow-sm dark:surface-field dark:text-white'
               : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
             @click="emit('update:metric', 'actual_cost')"
           >
             {{ t('admin.dashboard.metricActualCost') }}
           </button>
         </div>
-        <div v-if="enableRankingView" class="inline-flex rounded-lg bg-gray-100 p-1 dark:bg-dark-800">
+        <div v-if="enableRankingView" class="inline-flex rounded-lg surface-inset p-1">
           <button
             type="button"
-            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors"
+            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors surface-control"
             :class="
               activeView === 'model_distribution'
-                ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-700 dark:text-white'
+                ? 'surface-field text-gray-900 shadow-sm dark:surface-field dark:text-white'
                 : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
             "
             @click="activeView = 'model_distribution'"
@@ -82,10 +82,10 @@
           </button>
           <button
             type="button"
-            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors"
+            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors surface-control"
             :class="
               activeView === 'spending_ranking'
-                ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-700 dark:text-white'
+                ? 'surface-field text-gray-900 shadow-sm dark:surface-field dark:text-white'
                 : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
             "
             @click="activeView = 'spending_ranking'"
@@ -96,7 +96,7 @@
       </div>
     </div>
 
-    <div v-if="activeView === 'model_distribution' && loading" class="flex h-48 items-center justify-center">
+    <div v-if="activeView === 'model_distribution' && loading && !displayModelStats.length" class="flex h-48 items-center justify-center">
       <LoadingSpinner />
     </div>
     <div
@@ -106,10 +106,10 @@
       <div class="h-48 w-48 shrink-0">
         <Doughnut :data="chartData" :options="doughnutOptions" />
       </div>
-      <div class="max-h-48 w-full min-w-0 flex-1 overflow-auto">
-        <table class="w-full text-xs">
+      <div class="record-table-scroll max-h-48 w-full min-w-0 flex-1 overflow-auto">
+        <table class="record-table record-table-compact w-full text-xs">
           <thead>
-            <tr class="text-gray-500 dark:text-gray-400">
+            <tr class="surface-muted">
               <th class="pb-2 text-left">{{ t('admin.dashboard.model') }}</th>
               <th class="pb-2 text-right">{{ t('admin.dashboard.requests') }}</th>
               <th class="pb-2 text-right">{{ t('admin.dashboard.tokens') }}</th>
@@ -118,65 +118,63 @@
               <th class="pb-2 text-right">{{ t('admin.dashboard.standard') }}</th>
             </tr>
           </thead>
-          <tbody>
-            <template v-for="model in displayModelStats" :key="model.model">
-              <tr
-                class="border-t border-gray-100 transition-colors dark:border-dark-700"
-                :class="enableBreakdown ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-dark-700/40' : ''"
-                @click="enableBreakdown && toggleBreakdown('model', model.model)"
+          <tbody v-for="model in displayModelStats" :key="model.model" class="record-group">
+            <tr
+              class="transition-colors"
+              :class="enableBreakdown ? 'cursor-pointer hover:surface-hover dark:hover:surface-hover' : ''"
+              @click="enableBreakdown && toggleBreakdown('model', model.model)"
+            >
+              <td :data-record-edges="expandedKey === `model-${model.model}` ? 't l tl' : 't b l tl bl'"
+                class="max-w-[100px] truncate py-1.5 font-medium"
+                :class="enableBreakdown ? 'text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300' : 'text-gray-900 dark:text-white'"
+                :title="model.model"
               >
-                <td
-                  class="max-w-[100px] truncate py-1.5 font-medium"
-                  :class="enableBreakdown ? 'text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300' : 'text-gray-900 dark:text-white'"
-                  :title="model.model"
-                >
-                  <span class="inline-flex items-center gap-1">
-                    <svg v-if="enableBreakdown && expandedKey === `model-${model.model}`" class="h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-                    <svg v-else-if="enableBreakdown" class="h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-                    {{ model.model }}
-                  </span>
-                </td>
-                <td class="py-1.5 text-right text-gray-600 dark:text-gray-400">
-                  {{ formatNumber(model.requests) }}
-                </td>
-                <td class="py-1.5 text-right text-gray-600 dark:text-gray-400">
-                  {{ formatTokens(model.total_tokens) }} <span v-if="modelTokenShare(model.total_tokens)" class="text-gray-400">({{ modelTokenShare(model.total_tokens) }})</span>
-                </td>
-                <td class="py-1.5 text-right text-green-600 dark:text-green-400">
-                  ${{ formatCost(model.actual_cost) }}
-                </td>
-                <td v-if="showAccountCost" class="py-1.5 text-right text-orange-500 dark:text-orange-400">
-                  ${{ formatCost(model.account_cost) }}
-                </td>
-                <td class="py-1.5 text-right text-gray-400 dark:text-gray-500">
-                  ${{ formatCost(model.cost) }}
-                </td>
-              </tr>
-              <UserBreakdownRows
-                v-if="expandedKey === `model-${model.model}`"
-                :items="breakdownItems"
-                :loading="breakdownLoading"
-                :show-account-cost="showAccountCost"
-                :total-tokens="model.total_tokens"
-              />
-            </template>
+                <span class="inline-flex items-center gap-1">
+                  <svg v-if="enableBreakdown && expandedKey === `model-${model.model}`" class="h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                  <svg v-else-if="enableBreakdown" class="h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                  {{ model.model }}
+                </span>
+              </td>
+              <td :data-record-edges="expandedKey === `model-${model.model}` ? 't' : 't b'" class="py-1.5 text-right surface-muted">
+                {{ formatNumber(model.requests) }}
+              </td>
+              <td :data-record-edges="expandedKey === `model-${model.model}` ? 't' : 't b'" class="py-1.5 text-right surface-muted">
+                {{ formatTokens(model.total_tokens) }} <span v-if="modelTokenShare(model.total_tokens)" class="surface-muted">({{ modelTokenShare(model.total_tokens) }})</span>
+              </td>
+              <td :data-record-edges="expandedKey === `model-${model.model}` ? 't' : 't b'" class="py-1.5 text-right text-green-600 dark:text-green-400">
+                ${{ formatCost(model.actual_cost) }}
+              </td>
+              <td :data-record-edges="expandedKey === `model-${model.model}` ? 't' : 't b'" v-if="showAccountCost" class="py-1.5 text-right text-orange-500 dark:text-orange-400">
+                ${{ formatCost(model.account_cost) }}
+              </td>
+              <td :data-record-edges="expandedKey === `model-${model.model}` ? 't r tr' : 't b r tr br'" class="py-1.5 text-right surface-muted">
+                ${{ formatCost(model.cost) }}
+              </td>
+            </tr>
+            <UserBreakdownRows
+              v-if="expandedKey === `model-${model.model}`"
+              :items="breakdownItems"
+              :loading="breakdownLoading"
+              :show-account-cost="showAccountCost"
+              :total-tokens="model.total_tokens"
+            />
           </tbody>
         </table>
       </div>
     </div>
     <div
       v-else-if="activeView === 'model_distribution'"
-      class="flex h-48 items-center justify-center text-sm text-gray-500 dark:text-gray-400"
+      class="flex h-48 items-center justify-center text-sm surface-muted"
     >
       {{ t('admin.dashboard.noDataAvailable') }}
     </div>
 
-    <div v-else-if="rankingLoading" class="flex h-48 items-center justify-center">
+    <div v-else-if="rankingLoading && !rankingDisplayItems.length" class="flex h-48 items-center justify-center">
       <LoadingSpinner />
     </div>
     <div
-      v-else-if="rankingError"
-      class="flex h-48 items-center justify-center text-sm text-gray-500 dark:text-gray-400"
+      v-else-if="rankingError && !rankingDisplayItems.length"
+      class="flex h-48 items-center justify-center text-sm surface-muted"
     >
       {{ t('admin.dashboard.failedToLoad') }}
     </div>
@@ -184,10 +182,10 @@
       <div class="h-48 w-48 shrink-0">
         <Doughnut :data="rankingChartData" :options="rankingDoughnutOptions" />
       </div>
-      <div class="max-h-48 w-full min-w-0 flex-1 overflow-auto">
-        <table class="w-full text-xs">
+      <div class="record-table-scroll max-h-48 w-full min-w-0 flex-1 overflow-auto">
+        <table class="record-table record-table-compact w-full text-xs">
           <thead>
-            <tr class="text-gray-500 dark:text-gray-400">
+            <tr class="surface-muted">
               <th class="pb-2 text-left">{{ t('admin.dashboard.spendingRankingUser') }}</th>
               <th class="pb-2 text-right">{{ t('admin.dashboard.spendingRankingRequests') }}</th>
               <th class="pb-2 text-right">{{ t('admin.dashboard.spendingRankingTokens') }}</th>
@@ -200,13 +198,13 @@
               :key="item.isOther ? 'others' : `${item.user_id}-${index}`"
               class="border-t border-gray-100 transition-colors dark:border-dark-700"
               :class="item.isOther
-                ? 'bg-gray-50/70 dark:bg-dark-700/20'
-                : 'cursor-pointer hover:bg-gray-50 dark:hover:bg-dark-700/40'"
+                ? 'surface-inset dark:surface-inset'
+                : 'cursor-pointer hover:surface-hover dark:hover:surface-hover'"
               @click="item.isOther ? undefined : emit('ranking-click', item)"
             >
               <td class="py-1.5">
                 <div class="flex min-w-0 items-center gap-2">
-                  <span class="shrink-0 text-[11px] font-semibold text-gray-500 dark:text-gray-400">
+                  <span class="shrink-0 text-[11px] font-semibold surface-muted">
                     {{ item.isOther ? 'Σ' : `#${index + 1}` }}
                   </span>
                   <span
@@ -217,11 +215,11 @@
                   </span>
                 </div>
               </td>
-              <td class="py-1.5 text-right text-gray-600 dark:text-gray-400">
+              <td class="py-1.5 text-right surface-muted">
                 {{ formatNumber(item.requests) }}
               </td>
-              <td class="py-1.5 text-right text-gray-600 dark:text-gray-400">
-                {{ formatTokens(item.tokens) }} <span v-if="rankingTokenShare(item.tokens)" class="text-gray-400">({{ rankingTokenShare(item.tokens) }})</span>
+              <td class="py-1.5 text-right surface-muted">
+                {{ formatTokens(item.tokens) }} <span v-if="rankingTokenShare(item.tokens)" class="surface-muted">({{ rankingTokenShare(item.tokens) }})</span>
               </td>
               <td class="py-1.5 text-right text-green-600 dark:text-green-400">
                 ${{ formatCost(item.actual_cost) }}
@@ -233,7 +231,7 @@
     </div>
     <div
       v-else
-      class="flex h-48 items-center justify-center text-sm text-gray-500 dark:text-gray-400"
+      class="flex h-48 items-center justify-center text-sm surface-muted"
     >
       {{ t('admin.dashboard.noDataAvailable') }}
     </div>
@@ -241,6 +239,8 @@
 </template>
 
 <script setup lang="ts">
+import { useDocumentDarkMode } from '@/composables/useDocumentDarkMode'
+import { chartTooltipStyle } from '@/utils/chartTooltip'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js'
@@ -254,11 +254,13 @@ import { formatTokenShare } from '@/utils/tokenShare'
 ChartJS.register(ArcElement, Tooltip, Legend)
 
 const { t } = useI18n()
+const isDarkMode = useDocumentDarkMode()
 
 type DistributionMetric = 'tokens' | 'actual_cost'
 type ModelSource = 'requested' | 'upstream' | 'mapping'
 type RankingDisplayItem = UserSpendingRankingItem & { isOther?: boolean }
 const props = withDefaults(defineProps<{
+  workspace?: boolean
   modelStats: ModelStat[]
   upstreamModelStats?: ModelStat[]
   mappingModelStats?: ModelStat[]
@@ -446,6 +448,7 @@ const rankingDisplayItems = computed<RankingDisplayItem[]>(() => {
 })
 
 const doughnutOptions = computed(() => ({
+  animation: false as const,
   responsive: true,
   maintainAspectRatio: false,
   plugins: {
@@ -453,6 +456,7 @@ const doughnutOptions = computed(() => ({
       display: false
     },
     tooltip: {
+      ...chartTooltipStyle(isDarkMode.value),
       callbacks: {
         label: (context: any) => {
           const value = context.raw as number
@@ -469,6 +473,7 @@ const doughnutOptions = computed(() => ({
 }))
 
 const rankingDoughnutOptions = computed(() => ({
+  animation: false as const,
   responsive: true,
   maintainAspectRatio: false,
   plugins: {
@@ -476,6 +481,7 @@ const rankingDoughnutOptions = computed(() => ({
       display: false
     },
     tooltip: {
+      ...chartTooltipStyle(isDarkMode.value),
       callbacks: {
         label: (context: any) => {
           const value = context.raw as number
@@ -531,3 +537,15 @@ const formatCost = (value: number | null | undefined): string => {
   return safeValue.toFixed(4)
 }
 </script>
+
+<style scoped>
+.record-table-scroll { --record-table-max-height: 12rem; max-height: var(--record-table-max-height); }
+@media (min-width: 1024px) {
+  .chart-workspace { display: flex; min-height: 0; flex-direction: column; overflow: hidden; padding: 14px; }
+  .chart-workspace > div:first-child { flex: none; margin-bottom: 10px; }
+  .chart-workspace > div:not(:first-child) { min-height: 0; height: auto; flex: 1; }
+  .chart-workspace > div.flex { flex-direction: row; align-items: center; gap: 10px; }
+  .chart-workspace .h-48.w-48 { width: clamp(110px, 9vw, 178px); height: clamp(110px, 9vw, 178px); flex: none; }
+  .chart-workspace .record-table-scroll { --record-table-max-height: 100%; min-height: 0; align-self: stretch; }
+}
+</style>

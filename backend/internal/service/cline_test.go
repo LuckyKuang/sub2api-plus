@@ -338,6 +338,31 @@ func (r *clineAccountRepo) SetModelRateLimit(_ context.Context, id int64, scope 
 	if len(reason) > 0 {
 		r.reasons[id][scope] = reason[0]
 	}
+	// Model the repository's persisted JSONB row as well as its call record.
+	// Subsequent probes read that row; they must not rely on mutations of a
+	// previous request's account pointer to observe the stored cooldown.
+	for i := range r.accounts {
+		if r.accounts[i].ID != id {
+			continue
+		}
+		account := &r.accounts[i]
+		if account.Extra == nil {
+			account.Extra = map[string]any{}
+		}
+		limits, _ := account.Extra["model_rate_limits"].(map[string]any)
+		if limits == nil {
+			limits = map[string]any{}
+			account.Extra["model_rate_limits"] = limits
+		}
+		entry := map[string]any{
+			"rate_limited_at":     time.Now().UTC().Format(time.RFC3339),
+			"rate_limit_reset_at": resetAt.UTC().Format(time.RFC3339),
+		}
+		if len(reason) > 0 && strings.TrimSpace(reason[0]) != "" {
+			entry["reason"] = strings.TrimSpace(reason[0])
+		}
+		limits[scope] = entry
+	}
 	return nil
 }
 

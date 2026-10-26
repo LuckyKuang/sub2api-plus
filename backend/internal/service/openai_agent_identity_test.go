@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -140,13 +141,13 @@ func TestEnsureAgentIdentityTaskPersistsAndRedactsCredentials(t *testing.T) {
 	openAIAgentIdentityAuthAPIBaseURL = server.URL
 	t.Cleanup(func() { openAIAgentIdentityAuthAPIBaseURL = oldBase })
 
-	repo := &agentIdentityCredentialsRepo{}
 	account := &Account{ID: 7, Type: AccountTypeOAuth, Platform: PlatformOpenAI, Credentials: map[string]any{
 		"auth_mode":          OpenAIAuthModeAgentIdentity,
 		"agent_runtime_id":   key.runtimeID,
 		"agent_private_key":  privateKey,
 		"chatgpt_account_id": "account-test",
 	}}
+	repo := &agentIdentityCredentialsRepo{account: cloneAgentIdentityTestAccount(account)}
 	service := &OpenAIGatewayService{accountRepo: repo}
 	require.NoError(t, service.ensureAgentIdentityTask(context.Background(), account, ""))
 	require.Equal(t, "task-persisted", account.GetCredential("task_id"))
@@ -308,7 +309,27 @@ func (s *agentIdentitySettingRepoStub) setValue(key, value string) {
 }
 
 func (r *agentIdentityCredentialsRepo) GetByID(_ context.Context, _ int64) (*Account, error) {
-	return r.account, nil
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.account == nil {
+		return nil, nil
+	}
+	return cloneAgentIdentityTestAccount(r.account), nil
+}
+
+func (r *agentIdentityCredentialsRepo) UpdateOAuthRefreshCredentialsIfUnchanged(_ context.Context, expectedOwner *Account, credentials map[string]any) (bool, error) {
+	id := expectedOwner.ID
+	platform := expectedOwner.Platform
+	expected := expectedOwner.Credentials
+	proxy := expectedOwner.ProxyID
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.account == nil || r.account.ID != id || r.account.Platform != platform || !reflect.DeepEqual(expected, r.account.Credentials) || !oauthRefreshProxyIDsEqual(proxy, r.account.ProxyID) || !reflect.DeepEqual(expectedOwner.Proxy, r.account.Proxy) {
+		return false, nil
+	}
+	r.credentials = cloneRequestCredentialMap(credentials)
+	r.account.Credentials = cloneRequestCredentialMap(credentials)
+	return true, nil
 }
 
 func (r *agentIdentityCredentialsRepo) UpdateCredentials(_ context.Context, _ int64, credentials map[string]any) error {
@@ -316,6 +337,11 @@ func (r *agentIdentityCredentialsRepo) UpdateCredentials(_ context.Context, _ in
 	defer r.mu.Unlock()
 	r.credentials = credentials
 	return nil
+}
+
+func agentTaskTestCredentialsMatch(account, expectedOwner *Account) bool {
+	return account != nil && expectedOwner != nil && account.ID == expectedOwner.ID && account.Platform == expectedOwner.Platform && account.Type == AccountTypeOAuth &&
+		reflect.DeepEqual(account.Credentials, expectedOwner.Credentials) && oauthRefreshProxyIDsEqual(account.ProxyID, expectedOwner.ProxyID) && reflect.DeepEqual(account.Proxy, expectedOwner.Proxy)
 }
 
 func mustAgentIdentityJSON(t *testing.T, value any) []byte {

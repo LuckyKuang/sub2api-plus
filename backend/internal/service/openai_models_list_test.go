@@ -34,7 +34,7 @@ func TestPublicModelsDiscoveryUsesAccountIdentityAfterOverrides(t *testing.T) {
 	svc := newCodexModelsAPIKeyTestService(&codexModelsHTTPUpstreamStub{do: func(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
 		calls++
 		require.Equal(t, codexModelsCustomAccountCurrentUserAgent, req.Header.Get("User-Agent"))
-		require.Empty(t, req.Header.Get("Originator"))
+		assert.Equal(t, "codex-tui", req.Header.Get("Originator"))
 		require.NotEqual(t, "1", req.Header.Get("Version"))
 		require.Equal(t, "Bearer sk-upstream", req.Header.Get("Authorization"))
 		return ordinaryModelsUpstreamResponse(`{"data":[{"id":"model"}]}`), nil
@@ -55,8 +55,8 @@ func TestFetchOpenAIModelsListUsesStandardRequestAndIsolatesCodexCache(t *testin
 		if req.URL.Query().Has("client_version") {
 			return ordinaryModelsUpstreamResponse(`{"models":[{"slug":"codex-only"}]}`), nil
 		}
-		assert.Empty(t, req.Header.Get("Originator"))
-		assert.Empty(t, req.Header.Get("Version"))
+		assert.Equal(t, "codex_cli_rs", req.Header.Get("Originator"))
+		assert.Equal(t, "0.164.0", req.Header.Get("Version"))
 		return ordinaryModelsUpstreamResponse(`{"object":"list","data":[{"id":"special-upstream-model","owned_by":"provider","created":1234,"custom":true},{"id":"gpt-image-1"},{"id":"text-embedding-3-large"}]}`), nil
 	}})
 	account := newCodexModelsAPIKeyTestAccount("https://models.example/v1")

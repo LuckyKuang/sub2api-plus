@@ -3,7 +3,7 @@
     <!-- Mini Progress Display -->
     <button
       @click="toggleTooltip"
-      class="flex cursor-pointer items-center gap-2 rounded-xl bg-purple-50 px-3 py-1.5 transition-colors hover:bg-purple-100 dark:bg-purple-900/20 dark:hover:bg-purple-900/30"
+      class="flex cursor-pointer items-center gap-2 rounded-xl bg-purple-50/[0.15] px-3 py-1.5 transition-colors hover:bg-purple-100/25 dark:bg-purple-900/20 dark:hover:bg-purple-900/30"
       :title="t('subscriptionProgress.viewDetails')"
     >
       <Icon name="creditCard" size="sm" class="text-purple-600 dark:text-purple-400" />
@@ -13,7 +13,7 @@
           <div
             v-for="(sub, index) in displaySubscriptions.slice(0, 3)"
             :key="index"
-            class="h-2 w-2 rounded-full"
+            class="console-data-mark h-2 w-2 rounded-full"
             :class="getProgressDotClass(sub)"
           ></div>
         </div>
@@ -27,13 +27,14 @@
     <transition name="dropdown">
       <div
         v-if="tooltipOpen"
-        class="absolute right-0 z-50 mt-2 w-[340px] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl dark:border-dark-700 dark:bg-dark-800"
+        class="glass-surface z-50 mt-2 overflow-hidden"
+        :class="inline ? 'w-full' : 'absolute right-0 w-[340px] max-w-[calc(100vw-24px)]'"
       >
         <div class="border-b border-gray-100 p-3 dark:border-dark-700">
           <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
             {{ t('subscriptionProgress.title') }}
           </h3>
-          <p class="mt-0.5 text-xs text-gray-500 dark:text-dark-400">
+          <p class="mt-0.5 text-xs surface-muted">
             {{ t('subscriptionProgress.activeCount', { count: activeSubscriptions.length }) }}
           </p>
         </div>
@@ -73,28 +74,28 @@
               <!-- Progress bars for limited subscriptions -->
               <template v-else>
                 <div v-if="subscription.group?.five_hour_limit_usd" class="flex items-center gap-2">
-                  <span class="w-8 flex-shrink-0 text-[10px] text-gray-500">{{
+                  <span class="w-8 flex-shrink-0 text-[10px] surface-muted">{{
                     t('subscriptionProgress.fiveHour')
                   }}</span>
                   <div class="h-1.5 min-w-0 flex-1 rounded-full bg-gray-200 dark:bg-dark-600">
                     <div
-                      class="h-1.5 rounded-full transition-all"
+                      class="console-data-mark h-1.5 rounded-full transition-all"
                       :class="getProgressBarClass(subscription.five_hour_usage_usd, subscription.group?.five_hour_limit_usd)"
                       :style="{ width: getProgressWidth(subscription.five_hour_usage_usd, subscription.group?.five_hour_limit_usd) }"
                     ></div>
                   </div>
-                  <span class="w-24 flex-shrink-0 text-right text-[10px] text-gray-500">
+                  <span class="w-24 flex-shrink-0 text-right text-[10px] surface-muted">
                     {{ formatUsage(subscription.five_hour_usage_usd, subscription.group?.five_hour_limit_usd) }}
                   </span>
                 </div>
 
                 <div v-if="subscription.group?.daily_limit_usd" class="flex items-center gap-2">
-                  <span class="w-8 flex-shrink-0 text-[10px] text-gray-500">{{
+                  <span class="w-8 flex-shrink-0 text-[10px] surface-muted">{{
                     t('subscriptionProgress.daily')
                   }}</span>
                   <div class="h-1.5 min-w-0 flex-1 rounded-full bg-gray-200 dark:bg-dark-600">
                     <div
-                      class="h-1.5 rounded-full transition-all"
+                      class="console-data-mark h-1.5 rounded-full transition-all"
                       :class="
                         getProgressBarClass(
                           subscription.daily_usage_usd,
@@ -109,7 +110,7 @@
                       }"
                     ></div>
                   </div>
-                  <span class="w-24 flex-shrink-0 text-right text-[10px] text-gray-500">
+                  <span class="w-24 flex-shrink-0 text-right text-[10px] surface-muted">
                     {{
                       formatUsage(subscription.daily_usage_usd, subscription.group?.daily_limit_usd)
                     }}
@@ -117,12 +118,12 @@
                 </div>
 
                 <div v-if="subscription.group?.weekly_limit_usd" class="flex items-center gap-2">
-                  <span class="w-8 flex-shrink-0 text-[10px] text-gray-500">{{
+                  <span class="w-8 flex-shrink-0 text-[10px] surface-muted">{{
                     t('subscriptionProgress.weekly')
                   }}</span>
                   <div class="h-1.5 min-w-0 flex-1 rounded-full bg-gray-200 dark:bg-dark-600">
                     <div
-                      class="h-1.5 rounded-full transition-all"
+                      class="console-data-mark h-1.5 rounded-full transition-all"
                       :class="
                         getProgressBarClass(
                           subscription.weekly_usage_usd,
@@ -137,7 +138,7 @@
                       }"
                     ></div>
                   </div>
-                  <span class="w-24 flex-shrink-0 text-right text-[10px] text-gray-500">
+                  <span class="w-24 flex-shrink-0 text-right text-[10px] surface-muted">
                     {{
                       formatUsage(subscription.weekly_usage_usd, subscription.group?.weekly_limit_usd)
                     }}
@@ -145,12 +146,12 @@
                 </div>
 
                 <div v-if="subscription.group?.monthly_limit_usd" class="flex items-center gap-2">
-                  <span class="w-8 flex-shrink-0 text-[10px] text-gray-500">{{
+                  <span class="w-8 flex-shrink-0 text-[10px] surface-muted">{{
                     t('subscriptionProgress.monthly')
                   }}</span>
                   <div class="h-1.5 min-w-0 flex-1 rounded-full bg-gray-200 dark:bg-dark-600">
                     <div
-                      class="h-1.5 rounded-full transition-all"
+                      class="console-data-mark h-1.5 rounded-full transition-all"
                       :class="
                         getProgressBarClass(
                           subscription.monthly_usage_usd,
@@ -165,7 +166,7 @@
                       }"
                     ></div>
                   </div>
-                  <span class="w-24 flex-shrink-0 text-right text-[10px] text-gray-500">
+                  <span class="w-24 flex-shrink-0 text-right text-[10px] surface-muted">
                     {{
                       formatUsage(
                         subscription.monthly_usage_usd,
@@ -194,6 +195,7 @@
 </template>
 
 <script setup lang="ts">
+withDefaults(defineProps<{ inline?: boolean }>(), { inline: false })
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
@@ -298,7 +300,7 @@ function getDaysRemainingClass(expiresAt: string): string {
   const days = Math.ceil(diff / (1000 * 60 * 60 * 24))
   if (days <= 3) return 'text-red-600 dark:text-red-400'
   if (days <= 7) return 'text-orange-600 dark:text-orange-400'
-  return 'text-gray-500 dark:text-dark-400'
+  return 'surface-muted'
 }
 
 function toggleTooltip() {

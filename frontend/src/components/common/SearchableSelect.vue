@@ -1,23 +1,28 @@
 <template>
-  <div class="relative" ref="containerRef">
+  <div class="relative" :class="$attrs.class" :style="$attrs.style" ref="containerRef">
     <button
+      v-bind="{ ...$attrs, class: undefined, style: undefined }"
       ref="triggerRef"
       type="button"
+      :role="isSearchable ? undefined : 'combobox'"
       @click="toggle"
       :disabled="disabled"
       :aria-expanded="isOpen"
-      :aria-haspopup="true"
+      aria-haspopup="listbox"
+      :aria-controls="isOpen ? instanceId : undefined"
+      :aria-activedescendant="isOpen && focusedIndex >= 0 ? `${instanceId}-option-${focusedIndex}` : undefined"
       :id="id"
-      :aria-label="ariaLabel ?? 'Select option'"
+      :aria-label="ariaLabel ?? placeholderText"
       :aria-describedby="ariaDescribedby"
+      :aria-invalid="error || undefined"
       :class="[
         'select-trigger',
+        triggerClass,
         isOpen && 'select-trigger-open',
         error && 'select-trigger-error',
         disabled && 'select-trigger-disabled'
       ]"
-      @keydown.down.prevent="onTriggerKeyDown"
-      @keydown.up.prevent="onTriggerKeyDown"
+      @keydown="onTriggerKeyDown"
     >
       <span class="select-value">
         <slot name="selected" :option="selectedOption">
@@ -51,7 +56,8 @@
         <div
           v-if="isOpen"
           ref="dropdownRef"
-          class="select-dropdown-portal"
+          class="select-dropdown-portal surface-panel"
+          :id="instanceId"
           :class="[instanceId]"
           :style="dropdownStyle"
           role="listbox"
@@ -78,7 +84,8 @@
             <div
               v-for="(option, index) in filteredOptions"
               :key="`${typeof getOptionValue(option)}:${String(getOptionValue(option) ?? '')}`"
-              role="option"
+              :id="`${instanceId}-option-${index}`"
+              :role="isGroupHeaderOption(option) ? 'presentation' : 'option'"
               :aria-selected="isSelected(option)"
               :aria-disabled="isOptionDisabled(option)"
               @click.stop="!isOptionDisabled(option) && selectOption(option)"
@@ -98,7 +105,7 @@
                   size="sm"
                   class="flex-shrink-0 text-gray-400"
                 />
-                <span class="select-option-label" :class="option._creatable && 'italic text-gray-500 dark:text-dark-300'">{{ getOptionLabel(option) }}</span>
+                <span class="select-option-label" :class="option._creatable && 'italic surface-muted'">{{ getOptionLabel(option) }}</span>
                 <Icon
                   v-if="isSelected(option)"
                   name="check"
@@ -124,6 +131,8 @@
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
+
+defineOptions({ inheritAttrs: false })
 
 const { t } = useI18n()
 
@@ -158,6 +167,7 @@ interface Props {
   remote?: boolean
   /** 远程搜索模式下的加载态：options 为空时下拉显示 loading 文案 */
   loading?: boolean
+  triggerClass?: string
 }
 
 interface Emits {
@@ -194,6 +204,19 @@ const triggerRect = ref<DOMRect | null>(null)
 const dropdownViewportPadding = 8
 const dropdownMinimumWidth = 200
 
+const dropdownVerticalBounds = computed(() => {
+  if (!triggerRect.value) return null
+  const viewportBottom = Math.max(dropdownViewportPadding, window.innerHeight - dropdownViewportPadding)
+  const top = Math.min(viewportBottom, Math.max(dropdownViewportPadding, triggerRect.value.bottom + 4))
+  const bottom = Math.min(viewportBottom, Math.max(dropdownViewportPadding, triggerRect.value.top - 4))
+  return {
+    top,
+    bottom,
+    spaceBelow: viewportBottom - top,
+    spaceAbove: bottom - dropdownViewportPadding,
+  }
+})
+
 // i18n placeholders
 const placeholderText = computed(() => props.placeholder ?? t('common.selectOption'))
 const searchPlaceholderText = computed(() => props.searchPlaceholder ?? t('common.searchPlaceholder'))
@@ -212,17 +235,18 @@ const isSearchable = computed(() => {
 
 // Computed style for teleported dropdown
 const dropdownStyle = computed(() => {
-  if (!triggerRect.value) return {}
+  if (!triggerRect.value || !dropdownVerticalBounds.value) return {}
 
   const rect = triggerRect.value
+  const bounds = dropdownVerticalBounds.value
   const viewportRight = Math.max(dropdownViewportPadding, window.innerWidth - dropdownViewportPadding)
+  const preferredMinWidth = Math.max(dropdownMinimumWidth, rect.width)
+  const minWidth = Math.min(preferredMinWidth, Math.max(0, viewportRight - dropdownViewportPadding))
   const left = Math.min(
     Math.max(dropdownViewportPadding, rect.left),
-    viewportRight
+    Math.max(dropdownViewportPadding, viewportRight - minWidth)
   )
   const availableWidth = Math.max(0, viewportRight - left)
-  const preferredMinWidth = Math.max(dropdownMinimumWidth, rect.width)
-  const minWidth = Math.min(preferredMinWidth, availableWidth)
   const style: Record<string, string> = {
     position: 'fixed',
     left: `${left}px`,
@@ -232,9 +256,11 @@ const dropdownStyle = computed(() => {
   }
 
   if (dropdownPosition.value === 'top') {
-    style.bottom = `${window.innerHeight - rect.top + 4}px`
+    style.bottom = `${window.innerHeight - bounds.bottom}px`
+    style.maxHeight = `${bounds.spaceAbove}px`
   } else {
-    style.top = `${rect.bottom + 4}px`
+    style.top = `${bounds.top}px`
+    style.maxHeight = `${bounds.spaceBelow}px`
   }
 
   return style
@@ -256,7 +282,7 @@ const getOptionLabel = (option: any): string => {
 
 const isOptionDisabled = (option: any): boolean => {
   if (typeof option === 'object' && option !== null) {
-    return !!option.disabled
+    return !!option.disabled || option.kind === 'group'
   }
   return false
 }
@@ -269,7 +295,7 @@ const isGroupHeaderOption = (option: any): boolean => {
 }
 
 const selectedOption = computed(() => {
-  return props.options.find((opt) => getOptionValue(opt) === props.modelValue) || null
+  return props.options.find((opt) => !isGroupHeaderOption(opt) && getOptionValue(opt) === props.modelValue) || null
 })
 
 const selectedLabel = computed(() => {
@@ -310,7 +336,7 @@ const filteredOptions = computed(() => {
 })
 
 const isSelected = (option: any): boolean => {
-  return getOptionValue(option) === props.modelValue
+  return !isGroupHeaderOption(option) && getOptionValue(option) === props.modelValue
 }
 
 const findNextEnabledIndex = (startIndex: number): number => {
@@ -350,12 +376,18 @@ const calculateDropdownPosition = () => {
   updateTriggerRect()
 
   nextTick(() => {
-    if (!dropdownRef.value || !triggerRect.value) return
-    const dropdownHeight = dropdownRef.value.offsetHeight || 240
-    const spaceBelow = window.innerHeight - triggerRect.value.bottom
-    const spaceAbove = triggerRect.value.top
+    const dropdown = dropdownRef.value
+    const options = optionsListRef.value
+    if (!dropdown || !options || !dropdownVerticalBounds.value) return
+    const optionsMaxHeight = Number.parseFloat(window.getComputedStyle(options).maxHeight)
+    const optionsHeight = Math.min(options.scrollHeight, Number.isFinite(optionsMaxHeight) ? optionsMaxHeight : Infinity)
+    // Measure the full options area, since the current side may already constrain the panel.
+    const dropdownHeight = optionsHeight > 0
+      ? dropdown.offsetHeight - options.offsetHeight + optionsHeight
+      : dropdown.offsetHeight || 240
+    const { spaceBelow, spaceAbove } = dropdownVerticalBounds.value
 
-    if (spaceBelow < dropdownHeight && spaceAbove > dropdownHeight) {
+    if (spaceBelow < dropdownHeight && spaceAbove > spaceBelow) {
       dropdownPosition.value = 'top'
     } else {
       dropdownPosition.value = 'bottom'
@@ -389,8 +421,9 @@ watch(isOpen, (open) => {
     if (isSearchable.value) {
       nextTick(() => searchInputRef.value?.focus())
     }
+    scrollToFocused()
     // Add scroll listener to update position
-    window.addEventListener('scroll', updateTriggerRect, { capture: true, passive: true })
+    window.addEventListener('scroll', calculateDropdownPosition, { capture: true, passive: true })
     window.addEventListener('resize', calculateDropdownPosition)
   } else {
     searchQuery.value = ''
@@ -400,7 +433,7 @@ watch(isOpen, (open) => {
       clearTimeout(remoteSearchTimer)
       remoteSearchTimer = null
     }
-    window.removeEventListener('scroll', updateTriggerRect, { capture: true })
+    window.removeEventListener('scroll', calculateDropdownPosition, { capture: true })
     window.removeEventListener('resize', calculateDropdownPosition)
   }
 })
@@ -416,6 +449,7 @@ watch(searchQuery, (query) => {
 })
 
 const selectOption = (option: any) => {
+  if (props.disabled || isOptionDisabled(option)) return
   const value = getOptionValue(option) ?? null
   emit('update:modelValue', value)
   emit('change', value, option)
@@ -430,8 +464,18 @@ const clearSelection = () => {
 }
 
 // Keyboards
-const onTriggerKeyDown = () => {
-  if (!isOpen.value) {
+const onTriggerKeyDown = (event: KeyboardEvent) => {
+  if (props.disabled || event.isComposing) return
+  if (isOpen.value) {
+    if (event.key === ' ') {
+      event.preventDefault()
+      const option = filteredOptions.value[focusedIndex.value]
+      if (option) selectOption(option)
+    } else {
+      onDropdownKeyDown(event)
+    }
+  } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault()
     isOpen.value = true
   }
 }
@@ -455,6 +499,13 @@ const onDropdownKeyDown = (e: KeyboardEvent) => {
         const opt = filteredOptions.value[focusedIndex.value]
         if (!isOptionDisabled(opt)) selectOption(opt)
       }
+      break
+    case 'Home':
+    case 'End':
+      if (e.target === searchInputRef.value) return
+      e.preventDefault()
+      focusedIndex.value = e.key === 'Home' ? findNextEnabledIndex(0) : findPrevEnabledIndex(filteredOptions.value.length - 1)
+      scrollToFocused()
       break
     case 'Escape':
       e.preventDefault()
@@ -500,7 +551,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside)
-  window.removeEventListener('scroll', updateTriggerRect, { capture: true })
+  window.removeEventListener('scroll', calculateDropdownPosition, { capture: true })
   window.removeEventListener('resize', calculateDropdownPosition)
   if (remoteSearchTimer) {
     clearTimeout(remoteSearchTimer)
@@ -512,26 +563,6 @@ onUnmounted(() => {
 <style scoped>
 .select-trigger {
   @apply flex w-full items-center justify-between gap-2;
-  @apply rounded-xl px-4 py-2.5 text-sm;
-  @apply bg-white dark:bg-dark-800;
-  @apply border border-gray-200 dark:border-dark-600;
-  @apply text-gray-900 dark:text-gray-100;
-  @apply transition-all duration-200;
-  @apply focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30;
-  @apply hover:border-gray-300 dark:hover:border-dark-500;
-  @apply cursor-pointer;
-}
-
-.select-trigger-open {
-  @apply border-primary-500 ring-2 ring-primary-500/30;
-}
-
-.select-trigger-error {
-  @apply border-red-500 focus:border-red-500 focus:ring-red-500/30;
-}
-
-.select-trigger-disabled {
-  @apply cursor-not-allowed bg-gray-100 opacity-60 dark:bg-dark-900;
 }
 
 .select-value {
@@ -539,21 +570,22 @@ onUnmounted(() => {
 }
 
 .select-icon {
-  @apply flex-shrink-0 text-gray-400 dark:text-dark-400;
+  @apply flex-shrink-0; color: var(--surface-muted);
 }
 
 .select-clear {
   @apply flex flex-shrink-0 cursor-pointer items-center justify-center;
-  @apply rounded text-gray-400 transition-colors;
+  @apply text-gray-400 transition-colors;
+  border-radius: var(--surface-radius-item);
   @apply hover:text-gray-600 dark:hover:text-gray-200;
 }
 </style>
 
 <style>
 .select-dropdown-portal {
-  @apply w-max min-w-[200px];
-  @apply bg-white dark:bg-dark-800;
-  @apply rounded-xl;
+  @apply flex w-max min-w-[200px] flex-col;
+  background-color: var(--surface-panel);
+  border-radius: var(--surface-radius-panel);
   @apply border border-gray-200 dark:border-dark-700;
   @apply shadow-lg shadow-black/10 dark:shadow-black/30;
   @apply overflow-hidden;
@@ -561,7 +593,7 @@ onUnmounted(() => {
 }
 
 .select-dropdown-portal .select-search {
-  @apply flex items-center gap-2 px-3 py-2;
+  @apply flex shrink-0 items-center gap-2 px-3 py-2;
   @apply border-b border-gray-100 dark:border-dark-700;
 }
 
@@ -573,25 +605,26 @@ onUnmounted(() => {
 }
 
 .select-dropdown-portal .select-options {
-  @apply max-h-80 overflow-y-auto py-1 outline-none;
+  @apply min-h-0 shrink max-h-80 space-y-0.5 overflow-y-auto p-1.5 outline-none;
 }
 
 .select-dropdown-portal .select-option {
   @apply flex items-center justify-between gap-2;
-  @apply px-4 py-2.5 text-sm;
-  @apply text-gray-700 dark:text-gray-300;
+  @apply px-3 py-2.5 text-sm;
+  border-radius: var(--surface-radius-item);
+  color: var(--surface-muted);
   @apply cursor-pointer transition-colors duration-150;
-  @apply hover:bg-gray-50 dark:hover:bg-dark-700;
+
   pointer-events: auto !important;
 }
 
 .select-dropdown-portal .select-option-selected {
-  @apply bg-primary-50 dark:bg-primary-900/20;
+  background-color: var(--surface-selected);
   @apply text-primary-700 dark:text-primary-300;
 }
 
 .select-dropdown-portal .select-option-focused {
-  @apply bg-gray-100 dark:bg-dark-700;
+  background-color: var(--surface-hover);
 }
 
 .select-dropdown-portal .select-option-disabled {
@@ -600,13 +633,13 @@ onUnmounted(() => {
 
 .select-dropdown-portal .select-option-group {
   @apply cursor-default select-none;
-  @apply bg-gray-50 dark:bg-dark-900;
+  background-color: var(--surface-soft);
   @apply text-[11px] font-bold uppercase tracking-wider;
-  @apply text-gray-500 dark:text-gray-400;
+  color: var(--surface-muted);
 }
 
 .select-dropdown-portal .select-option-group:hover {
-  @apply bg-gray-50 dark:bg-dark-900;
+  background-color: var(--surface-soft);
 }
 
 .select-dropdown-portal .select-option-label {
@@ -615,7 +648,7 @@ onUnmounted(() => {
 
 .select-dropdown-portal .select-empty {
   @apply px-4 py-8 text-center text-sm;
-  @apply text-gray-500 dark:text-dark-400;
+  color: var(--surface-muted);
 }
 
 .select-dropdown-enter-active,

@@ -348,128 +348,140 @@ func TestGetLiveCallForIdentityRejectsMismatchedCaller(t *testing.T) {
 }
 
 func TestProxyLiveSidebandForwardsTextAndBinary(t *testing.T) {
-	account := &Account{
-		ID:          11,
-		Platform:    PlatformOpenAI,
-		Type:        AccountTypeOAuth,
-		Concurrency: 2,
-		Credentials: map[string]any{
-			"access_token":       "test-access-token",
-			"chatgpt_account_id": "acct_test",
-		},
-	}
-	record := &LiveCallRecord{
-		CallID:     "call_proxy",
-		CallHash:   hashLiveCallID("call_proxy"),
-		AccountID:  account.ID,
-		APIKeyID:   22,
-		UserID:     33,
-		LeaseID:    "lease-1",
-		CreatedAt:  time.Now(),
-		ExpiresAt:  time.Now().Add(time.Minute),
-		Controller: LiveControllerPending,
-	}
-	attestationCipher := newLiveAttestationCipher(&config.Config{
-		JWT: config.JWTConfig{Secret: "live-sideband-test-secret"},
-	})
-	var err error
-	record.AttestationCiphertext, err = attestationCipher.Encrypt(`{"v":1,"s":0,"t":"v1.sideband"}`)
-	require.NoError(t, err)
-	store := &liveTestStore{}
-	require.NoError(t, store.SaveLiveCall(context.Background(), record, time.Hour))
-	upstream := newLiveTestFrameConn()
-	dialer := &liveTestDialer{conn: upstream}
-	service := &OpenAIGatewayService{
-		accountRepo:               &liveTestAccountRepo{account: account},
-		cache:                     store,
-		openaiWSPassthroughDialer: dialer,
-		liveAttestationCipher:     attestationCipher,
-	}
-	proxyResult := make(chan error, 1)
-	var policyChecks atomic.Int32
-	var auditedClientFrames atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		downstream, err := coderws.Accept(writer, request, nil)
-		if err != nil {
-			proxyResult <- err
-			return
-		}
-		defer func() { _ = downstream.CloseNow() }()
-		proxyResult <- service.ProxyLiveSidebandWithHooks(request.Context(), record, downstream, &LiveSidebandHooks{
-			BeforeFrame: func(context.Context) error {
-				policyChecks.Add(1)
-				return nil
-			},
-			BeforeClientFrame: func(_ context.Context, _ coderws.MessageType, payload []byte) error {
-				document, extractErr := auditcontent.Extract(ContentModerationProtocolOpenAILive, payload)
-				if extractErr == nil && !document.Incomplete {
-					return errors.New("expected unknown or binary Live frame to fail extraction")
+	for _, stopByTransport := range []bool{false, true} {
+		t.Run(map[bool]string{false: "audit", true: "outbound switch"}[stopByTransport], func(t *testing.T) {
+			account := &Account{
+				ID:          11,
+				Platform:    PlatformOpenAI,
+				Type:        AccountTypeOAuth,
+				Concurrency: 2,
+				Credentials: map[string]any{
+					"access_token":       "test-access-token",
+					"chatgpt_account_id": "acct_test",
+				},
+			}
+			record := &LiveCallRecord{
+				OutboundSnapshot: &LiveOutboundSnapshot{Owner: openAICodexStateOwner(context.Background(), account), SessionID: "01912345-6789-7abc-8def-0123456789ab", ThreadID: "01912345-7000-7fed-9234-123456789abc", UserAgent: "codex_cli_rs/0.163.0 (Ubuntu 24.04; x86_64) xterm-256color", Originator: "codex_cli_rs", Version: "0.163.0"},
+				CallID:           "call_proxy",
+				CallHash:         hashLiveCallID("call_proxy"),
+				AccountID:        account.ID,
+				APIKeyID:         22,
+				UserID:           33,
+				LeaseID:          "lease-1",
+				CreatedAt:        time.Now(),
+				ExpiresAt:        time.Now().Add(time.Minute),
+				Controller:       LiveControllerPending,
+			}
+			attestationCipher := newLiveAttestationCipher(&config.Config{
+				JWT: config.JWTConfig{Secret: "live-sideband-test-secret"},
+			})
+			var err error
+			record.AttestationCiphertext, err = attestationCipher.Encrypt(`{"v":1,"s":0,"t":"v1.sideband"}`)
+			require.NoError(t, err)
+			store := &liveTestStore{}
+			require.NoError(t, store.SaveLiveCall(context.Background(), record, time.Hour))
+			upstream := newLiveTestFrameConn()
+			dialer := &liveTestDialer{conn: upstream}
+			settings := &SettingService{settingRepo: &gatewayTTLSettingRepo{data: map[string]string{}}}
+			service := &OpenAIGatewayService{
+				settingService:            settings,
+				accountRepo:               &liveTestAccountRepo{account: account},
+				cache:                     store,
+				openaiWSPassthroughDialer: dialer,
+				liveAttestationCipher:     attestationCipher,
+			}
+			proxyResult := make(chan error, 1)
+			var policyChecks atomic.Int32
+			var auditedClientFrames atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				downstream, err := coderws.Accept(writer, request, nil)
+				if err != nil {
+					proxyResult <- err
+					return
 				}
-				auditedClientFrames.Add(1)
-				if strings.Contains(string(payload), `"type":"future.audit_block"`) {
-					return NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "audit_blocked", nil)
-				}
-				return nil
-			},
-			RecheckEvery: time.Hour,
+				defer func() { _ = downstream.CloseNow() }()
+				proxyResult <- service.ProxyLiveSidebandWithHooks(request.Context(), record, downstream, &LiveSidebandHooks{
+					BeforeFrame: func(context.Context) error {
+						policyChecks.Add(1)
+						return nil
+					},
+					BeforeClientFrame: func(_ context.Context, _ coderws.MessageType, payload []byte) error {
+						document, extractErr := auditcontent.Extract(ContentModerationProtocolOpenAILive, payload)
+						if extractErr == nil && !document.Incomplete {
+							return errors.New("expected unknown or binary Live frame to fail extraction")
+						}
+						auditedClientFrames.Add(1)
+						if strings.Contains(string(payload), `"type":"future.audit_block"`) {
+							if stopByTransport {
+								settings.storeCodexTransportSettings(CodexTransportSettings{})
+								return nil
+							}
+							return NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "audit_blocked", nil)
+						}
+						return nil
+					},
+					RecheckEvery: time.Hour,
+				})
+			}))
+			defer server.Close()
+
+			client, _, err := coderws.Dial(
+				context.Background(),
+				"ws"+strings.TrimPrefix(server.URL, "http"),
+				nil,
+			)
+			require.NoError(t, err)
+			defer func() { _ = client.CloseNow() }()
+
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			require.NoError(t, client.Write(ctx, coderws.MessageText, []byte(`{"type":"client.text"}`)))
+			clientText := <-upstream.writes
+			require.Equal(t, coderws.MessageText, clientText.messageType)
+			require.JSONEq(t, `{"type":"client.text"}`, string(clientText.payload))
+
+			require.NoError(t, client.Write(ctx, coderws.MessageBinary, []byte{1, 2, 3}))
+			clientBinary := <-upstream.writes
+			require.Equal(t, coderws.MessageBinary, clientBinary.messageType)
+			require.Equal(t, []byte{1, 2, 3}, clientBinary.payload)
+
+			upstream.reads <- liveTestFrame{messageType: coderws.MessageText, payload: []byte(`{"type":"server.text"}`)}
+			messageType, payload, err := client.Read(ctx)
+			require.NoError(t, err)
+			require.Equal(t, coderws.MessageText, messageType)
+			require.JSONEq(t, `{"type":"server.text"}`, string(payload))
+
+			upstream.reads <- liveTestFrame{messageType: coderws.MessageBinary, payload: []byte{4, 5, 6}}
+			messageType, payload, err = client.Read(ctx)
+			require.NoError(t, err)
+			require.Equal(t, coderws.MessageBinary, messageType)
+			require.Equal(t, []byte{4, 5, 6}, payload)
+
+			require.NoError(t, client.Write(ctx, coderws.MessageText, []byte(`{"type":"future.audit_block","payload":"blocked"}`)))
+			select {
+			case frame := <-upstream.writes:
+				t.Fatalf("audit-rejected Live frame reached upstream: %s", frame.payload)
+			case <-time.After(100 * time.Millisecond):
+			}
+			proxyErr := <-proxyResult
+			var auditClose *OpenAIWSClientCloseError
+			require.ErrorAs(t, proxyErr, &auditClose)
+			if stopByTransport {
+				require.Equal(t, coderws.StatusServiceRestart, auditClose.StatusCode())
+			} else {
+				require.Equal(t, coderws.StatusPolicyViolation, auditClose.StatusCode())
+			}
+
+			require.Equal(t, "wss://chatgpt.com/backend-api/codex/call_proxy", dialer.url)
+			require.Equal(t, "Bearer test-access-token", dialer.headers.Get("Authorization"))
+			require.Equal(t, "acct_test", dialer.headers.Get("Chatgpt-Account-Id"))
+			require.Equal(t, `{"v":1,"s":0,"t":"v1.sideband"}`, dialer.headers.Get(liveAttestationHeader))
+			require.GreaterOrEqual(t, policyChecks.Load(), int32(5), "policy must run before dialing and around both transfer directions")
+			require.Equal(t, int32(3), auditedClientFrames.Load(), "every client sideband frame must pass the pre-forward audit hook")
 		})
-	}))
-	defer server.Close()
-
-	client, _, err := coderws.Dial(
-		context.Background(),
-		"ws"+strings.TrimPrefix(server.URL, "http"),
-		nil,
-	)
-	require.NoError(t, err)
-	defer func() { _ = client.CloseNow() }()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	require.NoError(t, client.Write(ctx, coderws.MessageText, []byte(`{"type":"client.text"}`)))
-	clientText := <-upstream.writes
-	require.Equal(t, coderws.MessageText, clientText.messageType)
-	require.JSONEq(t, `{"type":"client.text"}`, string(clientText.payload))
-
-	require.NoError(t, client.Write(ctx, coderws.MessageBinary, []byte{1, 2, 3}))
-	clientBinary := <-upstream.writes
-	require.Equal(t, coderws.MessageBinary, clientBinary.messageType)
-	require.Equal(t, []byte{1, 2, 3}, clientBinary.payload)
-
-	upstream.reads <- liveTestFrame{messageType: coderws.MessageText, payload: []byte(`{"type":"server.text"}`)}
-	messageType, payload, err := client.Read(ctx)
-	require.NoError(t, err)
-	require.Equal(t, coderws.MessageText, messageType)
-	require.JSONEq(t, `{"type":"server.text"}`, string(payload))
-
-	upstream.reads <- liveTestFrame{messageType: coderws.MessageBinary, payload: []byte{4, 5, 6}}
-	messageType, payload, err = client.Read(ctx)
-	require.NoError(t, err)
-	require.Equal(t, coderws.MessageBinary, messageType)
-	require.Equal(t, []byte{4, 5, 6}, payload)
-
-	require.NoError(t, client.Write(ctx, coderws.MessageText, []byte(`{"type":"future.audit_block","payload":"blocked"}`)))
-	select {
-	case frame := <-upstream.writes:
-		t.Fatalf("audit-rejected Live frame reached upstream: %s", frame.payload)
-	case <-time.After(100 * time.Millisecond):
 	}
-	proxyErr := <-proxyResult
-	var auditClose *OpenAIWSClientCloseError
-	require.ErrorAs(t, proxyErr, &auditClose)
-	require.Equal(t, coderws.StatusPolicyViolation, auditClose.StatusCode())
-
-	require.Equal(t, "wss://chatgpt.com/backend-api/codex/call_proxy", dialer.url)
-	require.Equal(t, "Bearer test-access-token", dialer.headers.Get("Authorization"))
-	require.Equal(t, "acct_test", dialer.headers.Get("Chatgpt-Account-Id"))
-	require.Equal(t, `{"v":1,"s":0,"t":"v1.sideband"}`, dialer.headers.Get(liveAttestationHeader))
-	require.GreaterOrEqual(t, policyChecks.Load(), int32(5), "policy must run before dialing and around both transfer directions")
-	require.Equal(t, int32(3), auditedClientFrames.Load(), "every client sideband frame must pass the pre-forward audit hook")
 }
 
-// TestLiveSessionEndedTreatsLeaseLossAsTerminal 锁定：租约续租失败（ErrLiveUnavailable）
-// 必须判为会话终结。RefreshLiveLease 的 Lua 在 leaseID 被 GC 后不会重新写入，若把它
-// 当临时错误交给 observer 重连，会话会空转到 ExpiresAt 且不计入任何并发限制。
 func TestLiveSessionEndedTreatsLeaseLossAsTerminal(t *testing.T) {
 	cases := []struct {
 		name string

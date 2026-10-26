@@ -7,15 +7,20 @@
     <!-- Tier rows: 5h + weekly utilization bars (snapshot renders on mount).
          复用账号页 UsageProgressBar：同阈值配色、同倒计时格式。 -->
     <div v-if="data?.success && data.tiers?.length" class="space-y-1">
-      <UsageProgressBar
-        v-for="tier in data.tiers"
-        :key="tier.window"
-        data-test="cn-provider-quota-tier"
-        :label="windowLabel(tier.window)"
-        :color="tier.window === 'weekly' ? 'emerald' : 'indigo'"
-        :utilization="tier.used_percent"
-        :resets-at="tier.reset_at"
-      />
+      <template v-for="tier in data.tiers" :key="tier.window">
+        <div v-if="tier.unlimited" data-test="cn-provider-quota-unlimited" class="flex gap-2 text-xs surface-muted">
+          <span>{{ windowLabel(tier.window) }}</span>
+          <span>{{ t('admin.accounts.cnProviders.unlimited') }}</span>
+        </div>
+        <UsageProgressBar
+          v-else
+          data-test="cn-provider-quota-tier"
+          :label="windowLabel(tier.window)"
+          :color="tier.window === 'weekly' ? 'emerald' : 'indigo'"
+          :utilization="tier.used_percent"
+          :resets-at="tier.reset_at"
+        />
+      </template>
     </div>
 
     <!-- Explicit refresh action (aligned with the OpenAI "Query" / Grok "Probe"
@@ -26,7 +31,7 @@
       <button
         type="button"
         data-test="cn-provider-quota-probe"
-        class="inline-flex items-center gap-0.5 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-medium leading-4 text-blue-600 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-blue-400 dark:hover:bg-blue-900/30"
+        class="inline-flex items-center gap-0.5 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-medium leading-4 text-blue-600 transition-colors hover:bg-blue-50/25 disabled:cursor-not-allowed disabled:opacity-50 dark:text-blue-400 dark:hover:bg-blue-900/30 surface-control"
         :disabled="loading"
         :title="t('admin.accounts.cnProviders.probeTooltip')"
         @click="handleProbe()"
@@ -101,20 +106,17 @@ const readExtraString = (key: string): string => {
 // 从持久化快照构造展示数据（缺少 5h/weekly 两档键时返回 null）。
 const snapshotData = computed<CNProviderQuotaProbeResult | null>(() => {
   const platform = props.account.platform
-  const used5h = readExtraNumber(`${platform}_5h_used_percent`)
-  const usedWeekly = readExtraNumber(`${platform}_weekly_used_percent`)
-  const usedMonthly = readExtraNumber(`${platform}_monthly_used_percent`)
-  if (used5h == null && usedWeekly == null && usedMonthly == null) return null
-  const tiers: CNProviderQuotaProbeResult['tiers'] = []
-  if (used5h != null) {
-    tiers.push({ window: '5h', used_percent: used5h, reset_at: readExtraString(`${platform}_5h_reset_at`) || undefined })
+  const tiers: NonNullable<CNProviderQuotaProbeResult['tiers']> = []
+  for (const window of ['5h', 'weekly', 'monthly', 'monthly_code'] as const) {
+    const unlimited = props.account.extra?.[`${platform}_${window}_unlimited`] === true
+    const used = readExtraNumber(`${platform}_${window}_used_percent`)
+    if (unlimited) {
+      tiers.push({ window, unlimited: true, used_percent: 0 })
+    } else if (used != null) {
+      tiers.push({ window, used_percent: used, reset_at: readExtraString(`${platform}_${window}_reset_at`) || undefined })
+    }
   }
-  if (usedWeekly != null) {
-    tiers.push({ window: 'weekly', used_percent: usedWeekly, reset_at: readExtraString(`${platform}_weekly_reset_at`) || undefined })
-  }
-  if (usedMonthly != null) {
-    tiers.push({ window: 'monthly', used_percent: usedMonthly, reset_at: readExtraString(`${platform}_monthly_reset_at`) || undefined })
-  }
+  if (!tiers.length) return null
   return { success: true, tiers } as CNProviderQuotaProbeResult
 })
 
@@ -162,6 +164,8 @@ const truncatedError = computed(() => {
 
 const windowLabel = (window: string) => {
   if (window === 'weekly') return t('admin.accounts.cnProviders.windowWeekly')
+  if (window === 'monthly_code') return t('admin.accounts.cnProviders.windowMonthlyCode')
+  if (window === 'monthly' && props.account.platform === 'kimi') return t('admin.accounts.cnProviders.windowMonthlyTotal')
   if (window === 'monthly') return t('admin.accounts.cnProviders.windowMonthly')
   return t('admin.accounts.cnProviders.window5h')
 }

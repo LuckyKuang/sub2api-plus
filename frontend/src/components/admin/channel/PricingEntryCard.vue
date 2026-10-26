@@ -1,5 +1,5 @@
 <template>
-  <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-dark-600 dark:bg-dark-800">
+  <div class="rounded-lg border border-gray-200 surface-inset p-3 dark:border-dark-600">
     <!-- Collapsed summary header (clickable) -->
     <div
       class="flex cursor-pointer select-none items-center gap-2"
@@ -26,13 +26,13 @@
           </span>
           <span
             v-if="entry.models.length > 3"
-            class="whitespace-nowrap text-xs text-gray-400"
+            class="whitespace-nowrap text-xs surface-muted"
           >
             +{{ entry.models.length - 3 }}
           </span>
           <span
             v-if="entry.models.length === 0"
-            class="text-xs italic text-gray-400"
+            class="text-xs italic surface-muted"
           >
             {{ t('admin.channels.form.noModels') }}
           </span>
@@ -40,14 +40,14 @@
 
         <!-- Billing mode badge -->
         <span
-          class="flex-shrink-0 rounded-full bg-primary-100 px-2 py-0.5 text-xs font-medium text-primary-700 dark:bg-primary-900/30 dark:text-primary-300"
+          class="flex-shrink-0 rounded-full bg-primary-100/[0.15] px-2 py-0.5 text-xs font-medium text-primary-700 dark:bg-primary-900/30 dark:text-primary-300"
         >
           {{ billingModeLabel }}
         </span>
       </div>
 
       <!-- Expanded: show the label "Pricing Entry" or similar -->
-      <div v-else class="flex-1 text-xs font-medium text-gray-500 dark:text-gray-400">
+      <div v-else class="flex-1 text-xs font-medium surface-muted">
         {{ t('admin.channels.form.pricingEntry') }}
       </div>
 
@@ -55,7 +55,7 @@
       <button
         type="button"
         @click.stop="emit('remove')"
-        class="flex-shrink-0 rounded p-1 text-gray-400 hover:text-red-500"
+        class="flex-shrink-0 rounded p-1 hover:text-red-500 surface-control surface-muted"
       >
         <Icon name="trash" size="sm" />
       </button>
@@ -70,7 +70,7 @@
         <!-- Header: Models + Billing Mode -->
         <div class="mt-3 flex items-start gap-2">
           <div class="flex-1">
-            <label class="text-xs font-medium text-gray-500 dark:text-gray-400">
+            <label class="text-xs font-medium surface-muted">
               {{ t('admin.channels.form.models') }} <span class="text-red-500">*</span>
             </label>
             <ModelTagInput
@@ -82,7 +82,7 @@
             />
           </div>
           <div class="w-40">
-            <label class="text-xs font-medium text-gray-500 dark:text-gray-400">
+            <label class="text-xs font-medium surface-muted">
               {{ t('admin.channels.form.billingMode') }}
             </label>
             <Select
@@ -111,7 +111,7 @@
           <span>{{ lookupMessage }}</span>
           <button
             type="button"
-            class="text-primary-600 underline hover:text-primary-700"
+            class="text-primary-600 underline hover:text-primary-700 surface-control"
             data-testid="pricing-lookup-retry"
             @click="completeEmptyFields()"
           >
@@ -123,7 +123,7 @@
              「非供应商公开价」，避免运营者把代理价当成官方价背书。 -->
         <div
           v-if="lookupSourceMessage"
-          class="mt-1 text-xs text-gray-500 dark:text-gray-400"
+          class="mt-1 text-xs surface-muted"
           data-testid="pricing-lookup-source"
         >
           {{ lookupSourceMessage }}
@@ -132,43 +132,43 @@
         <!-- Token mode -->
         <div v-if="entry.billing_mode === 'token'">
           <!-- Default prices (fallback when no interval matches) -->
-          <label class="mt-3 block text-xs font-medium text-gray-500 dark:text-gray-400">
+          <label class="mt-3 block text-xs font-medium surface-muted">
             {{ t('admin.channels.form.defaultPrices') }}
-            <span class="ml-1 font-normal text-gray-400">$/MTok</span>
+            <span class="ml-1 font-normal surface-muted">$/MTok</span>
           </label>
           <div class="pricing-default-grid mt-1 grid gap-2">
             <div>
-              <label class="text-xs text-gray-400">{{ t('admin.channels.form.inputPrice') }}</label>
+              <label class="text-xs surface-muted">{{ t('admin.channels.form.inputPrice') }}</label>
               <input :value="entry.input_price" @input="emitField('input_price', ($event.target as HTMLInputElement).value)"
                 type="number" step="any" min="0" class="input mt-0.5 text-sm" :placeholder="t('admin.channels.form.pricePlaceholder')" />
             </div>
             <div>
-              <label class="text-xs text-gray-400">{{ t('admin.channels.form.outputPrice') }}</label>
+              <label class="text-xs surface-muted">{{ t('admin.channels.form.outputPrice') }}</label>
               <input :value="entry.output_price" @input="emitField('output_price', ($event.target as HTMLInputElement).value)"
                 type="number" step="any" min="0" class="input mt-0.5 text-sm" :placeholder="t('admin.channels.form.pricePlaceholder')" />
             </div>
             <div>
-              <label class="text-xs text-gray-400">{{ t('admin.channels.form.cacheWrite5mPrice') }}</label>
+              <label class="text-xs surface-muted">{{ t('admin.channels.form.cacheWrite5mPrice') }}</label>
               <input :value="entry.cache_write_price" @input="emitField('cache_write_price', ($event.target as HTMLInputElement).value)"
                 type="number" step="any" min="0" class="input mt-0.5 text-sm" :placeholder="t('admin.channels.form.pricePlaceholder')" />
             </div>
             <div>
-              <label class="text-xs text-gray-400">{{ t('admin.channels.form.cacheWrite1hPrice') }}</label>
+              <label class="text-xs surface-muted">{{ t('admin.channels.form.cacheWrite1hPrice') }}</label>
               <input :value="entry.cache_write_1h_price" @input="emitField('cache_write_1h_price', ($event.target as HTMLInputElement).value)"
                 type="number" step="any" min="0" class="input mt-0.5 text-sm" :placeholder="t('admin.channels.form.pricePlaceholder')" />
             </div>
             <div>
-              <label class="text-xs text-gray-400">{{ t('admin.channels.form.cacheReadPrice') }}</label>
+              <label class="text-xs surface-muted">{{ t('admin.channels.form.cacheReadPrice') }}</label>
               <input :value="entry.cache_read_price" @input="emitField('cache_read_price', ($event.target as HTMLInputElement).value)"
                 type="number" step="any" min="0" class="input mt-0.5 text-sm" :placeholder="t('admin.channels.form.pricePlaceholder')" />
             </div>
             <div>
-              <label class="text-xs text-gray-400">{{ t('admin.channels.form.imageInputPrice') }}</label>
+              <label class="text-xs surface-muted">{{ t('admin.channels.form.imageInputPrice') }}</label>
               <input :value="entry.image_input_price" @input="emitField('image_input_price', ($event.target as HTMLInputElement).value)"
                 type="number" step="any" min="0" class="input mt-0.5 text-sm" :placeholder="t('admin.channels.form.pricePlaceholder')" />
             </div>
             <div>
-              <label class="text-xs text-gray-400">{{ t('admin.channels.form.imageTokenPrice') }}</label>
+              <label class="text-xs surface-muted">{{ t('admin.channels.form.imageTokenPrice') }}</label>
               <input :value="entry.image_output_price" @input="emitField('image_output_price', ($event.target as HTMLInputElement).value)"
                 type="number" step="any" min="0" class="input mt-0.5 text-sm" :placeholder="t('admin.channels.form.pricePlaceholder')" />
             </div>
@@ -176,12 +176,12 @@
 
           <div v-if="enableTierMultipliers" class="mt-3 grid max-w-md grid-cols-1 gap-2 sm:grid-cols-2">
             <div>
-              <label class="text-xs text-gray-400">{{ t('admin.channels.form.fastMultiplier') }}</label>
+              <label class="text-xs surface-muted">{{ t('admin.channels.form.fastMultiplier') }}</label>
               <input :value="entry.fast_multiplier" @input="emitField('fast_multiplier', ($event.target as HTMLInputElement).value)"
                 type="number" step="any" min="0.000001" class="input mt-0.5 text-sm" :placeholder="t('admin.channels.form.multiplierPlaceholder')" />
             </div>
             <div>
-              <label class="text-xs text-gray-400">{{ t('admin.channels.form.flexMultiplier') }}</label>
+              <label class="text-xs surface-muted">{{ t('admin.channels.form.flexMultiplier') }}</label>
               <input :value="entry.flex_multiplier" @input="emitField('flex_multiplier', ($event.target as HTMLInputElement).value)"
                 type="number" step="any" min="0.000001" class="input mt-0.5 text-sm" :placeholder="t('admin.channels.form.multiplierPlaceholder')" />
             </div>
@@ -190,11 +190,11 @@
           <!-- Channel token intervals; the group long-context toggle controls whether tiers apply. -->
           <div v-if="!hideTokenIntervals" class="mt-3">
             <div class="flex items-center justify-between">
-              <label class="text-xs font-medium text-gray-500 dark:text-gray-400">
+              <label class="text-xs font-medium surface-muted">
                 {{ t('admin.channels.form.intervals') }}
-                <span class="ml-1 font-normal text-gray-400">(min, max]</span>
+                <span class="ml-1 font-normal surface-muted">(min, max]</span>
               </label>
-              <button type="button" @click="addInterval" class="text-xs text-primary-600 hover:text-primary-700">
+              <button type="button" @click="addInterval" class="text-xs text-primary-600 hover:text-primary-700 surface-control">
                 + {{ t('admin.channels.form.addInterval') }}
               </button>
             </div>
@@ -221,9 +221,9 @@
         <!-- Per-request mode -->
         <div v-else-if="entry.billing_mode === 'per_request'">
           <!-- Default per-request price -->
-          <label class="mt-3 block text-xs font-medium text-gray-500 dark:text-gray-400">
+          <label class="mt-3 block text-xs font-medium surface-muted">
             {{ t('admin.channels.form.defaultPerRequestPrice') }}
-            <span class="ml-1 font-normal text-gray-400">$</span>
+            <span class="ml-1 font-normal surface-muted">$</span>
           </label>
           <div class="mt-1 w-48">
             <input :value="entry.per_request_price" @input="emitField('per_request_price', ($event.target as HTMLInputElement).value)"
@@ -232,10 +232,10 @@
 
           <!-- Tiers -->
           <div class="mt-3 flex items-center justify-between">
-            <label class="text-xs font-medium text-gray-500 dark:text-gray-400">
+            <label class="text-xs font-medium surface-muted">
               {{ t('admin.channels.form.requestTiers') }}
             </label>
-            <button type="button" @click="addInterval" class="text-xs text-primary-600 hover:text-primary-700">
+            <button type="button" @click="addInterval" class="text-xs text-primary-600 hover:text-primary-700 surface-control">
               + {{ t('admin.channels.form.addTier') }}
             </button>
           </div>
@@ -249,7 +249,7 @@
               @remove="removeInterval(idx)"
             />
           </div>
-          <div v-else class="mt-2 rounded border border-dashed border-gray-300 p-3 text-center text-xs text-gray-400 dark:border-dark-500">
+          <div v-else class="mt-2 rounded border border-dashed border-gray-300 p-3 text-center text-xs dark:border-dark-500 surface-muted">
             {{ t('admin.channels.form.noTiersYet') }}
           </div>
         </div>
@@ -257,9 +257,9 @@
         <!-- Image/video mode -->
         <div v-else-if="entry.billing_mode === 'image' || entry.billing_mode === 'video'">
           <!-- Default image price (per-request, same as per_request mode) -->
-          <label class="mt-3 block text-xs font-medium text-gray-500 dark:text-gray-400">
+          <label class="mt-3 block text-xs font-medium surface-muted">
             {{ entry.billing_mode === 'video' ? t('admin.channels.form.defaultVideoPrice') : t('admin.channels.form.defaultImagePrice') }}
-            <span class="ml-1 font-normal text-gray-400">$</span>
+            <span class="ml-1 font-normal surface-muted">$</span>
           </label>
           <div class="mt-1 w-48">
             <input :value="entry.per_request_price" @input="emitField('per_request_price', ($event.target as HTMLInputElement).value)"
@@ -268,10 +268,10 @@
 
           <!-- Image tiers -->
           <div class="mt-3 flex items-center justify-between">
-            <label class="text-xs font-medium text-gray-500 dark:text-gray-400">
+            <label class="text-xs font-medium surface-muted">
               {{ entry.billing_mode === 'video' ? t('admin.channels.form.videoTiers') : t('admin.channels.form.imageTiers') }}
             </label>
-            <button type="button" @click="addMediaTier" class="text-xs text-primary-600 hover:text-primary-700">
+            <button type="button" @click="addMediaTier" class="text-xs text-primary-600 hover:text-primary-700 surface-control">
               + {{ t('admin.channels.form.addTier') }}
             </button>
           </div>
@@ -289,21 +289,21 @@
 
         <div class="mt-3 border-t border-gray-200 pt-3 dark:border-dark-600" data-testid="reasoning-effort-multipliers">
           <div class="flex items-center justify-between gap-2">
-            <label class="text-xs font-medium text-gray-500 dark:text-gray-400">
+            <label class="text-xs font-medium surface-muted">
               {{ t('admin.channels.form.reasoningEffortMultipliers') }}
             </label>
             <button
               v-if="Object.keys(entry.reasoning_effort_multipliers || {}).length"
               type="button"
-              class="text-xs text-gray-500 hover:text-red-500"
+              class="text-xs hover:text-red-500 surface-control surface-muted"
               @click="emit('update', { ...entry, reasoning_effort_multipliers: null })"
             >
               {{ t('admin.channels.form.clearReasoningEffortMultipliers') }}
             </button>
           </div>
-          <p class="mt-1 text-xs text-gray-400">{{ t('admin.channels.form.reasoningEffortMultipliersHint') }}</p>
+          <p class="mt-1 text-xs surface-muted">{{ t('admin.channels.form.reasoningEffortMultipliersHint') }}</p>
           <div class="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
-            <label v-for="effort in REASONING_EFFORT_LEVELS" :key="effort" class="text-xs text-gray-500 dark:text-gray-400">
+            <label v-for="effort in REASONING_EFFORT_LEVELS" :key="effort" class="text-xs surface-muted">
               {{ effort }}
               <input
                 :value="entry.reasoning_effort_multipliers?.[effort]"

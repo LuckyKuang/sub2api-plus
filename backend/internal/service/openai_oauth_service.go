@@ -74,10 +74,10 @@ func (s *OpenAIOAuthService) GenerateAuthURLForAccount(ctx context.Context, acco
 	if !isOpenAIOAuthCredentialOwner(account) {
 		return nil, infraerrors.New(http.StatusBadRequest, "OPENAI_OAUTH_REAUTH_ACCOUNT_INVALID", "re-authorization requires a non-shadow OpenAI OAuth account")
 	}
-	return s.generateAuthURL(ctx, &account.ID, proxyID, redirectURI, platform)
+	return s.generateAuthURL(ctx, account, proxyID, redirectURI, platform)
 }
 
-func (s *OpenAIOAuthService) generateAuthURL(ctx context.Context, accountID *int64, proxyID *int64, redirectURI, platform string) (*OpenAIAuthURLResult, error) {
+func (s *OpenAIOAuthService) generateAuthURL(ctx context.Context, account *Account, proxyID *int64, redirectURI, platform string) (*OpenAIAuthURLResult, error) {
 	// Generate PKCE values
 	state, err := openai.GenerateState()
 	if err != nil {
@@ -97,16 +97,16 @@ func (s *OpenAIOAuthService) generateAuthURL(ctx context.Context, accountID *int
 		return nil, infraerrors.Newf(http.StatusInternalServerError, "OPENAI_OAUTH_SESSION_FAILED", "failed to generate session ID: %v", err)
 	}
 
-	// Get proxy URL if specified
 	var proxyURL string
-	if proxyID != nil {
-		proxy, err := s.proxyRepo.GetByID(ctx, *proxyID)
-		if err != nil {
-			return nil, infraerrors.Newf(http.StatusBadRequest, "OPENAI_OAUTH_PROXY_NOT_FOUND", "proxy not found: %v", err)
-		}
-		if proxy != nil {
-			proxyURL = proxy.URL()
-		}
+	if proxyID == nil && account != nil {
+		// Re-authorization without a new proxy selection keeps the existing
+		// credential owner's route rather than silently opting into direct.
+		proxyURL, err = requestCredentialOwnerProxyURL(ctx, account)
+	} else {
+		proxyURL, err = s.resolveSelectedProxyURL(ctx, proxyID)
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	// Use default redirect URI if not specified
@@ -115,6 +115,11 @@ func (s *OpenAIOAuthService) generateAuthURL(ctx context.Context, accountID *int
 	}
 	normalizedPlatform := normalizeOpenAIOAuthPlatform(platform)
 	clientID, _ := openai.OAuthClientConfigByPlatform(normalizedPlatform)
+	var accountID *int64
+	if account != nil {
+		id := account.ID
+		accountID = &id
+	}
 
 	// Store session
 	session := &openai.OAuthSession{
@@ -126,15 +131,16 @@ func (s *OpenAIOAuthService) generateAuthURL(ctx context.Context, accountID *int
 		ProxyURL:     proxyURL,
 		CreatedAt:    time.Now(),
 	}
+	if proxyID != nil {
+		id := *proxyID
+		session.ProxyID = &id
+	} else if account != nil && account.ProxyID != nil {
+		id := *account.ProxyID
+		session.ProxyID = &id
+	}
 	s.sessionStore.Set(sessionID, session)
 
-	var identityAccount *Account
-	if accountID != nil && s.accountRepo != nil {
-		if acc, err := s.accountRepo.GetByID(ctx, *accountID); err == nil {
-			identityAccount = acc
-		}
-	}
-	originator := s.resolveOpenAIOutboundIdentity(ctx, identityAccount).Originator
+	originator := s.resolveOpenAIOutboundIdentity(ctx, account).Originator
 	authURL := openai.BuildAuthorizationURLWithOriginator(state, codeChallenge, redirectURI, normalizedPlatform, originator)
 
 	return &OpenAIAuthURLResult{
@@ -190,15 +196,11 @@ func (s *OpenAIOAuthService) ExchangeCode(ctx context.Context, input *OpenAIExch
 		return nil, err
 	}
 
-	// Get proxy URL: prefer input.ProxyID, fallback to session.ProxyURL
+	// A callback retains the route captured before authorization began.
 	proxyURL := session.ProxyURL
 	if input.ProxyID != nil {
-		proxy, err := s.proxyRepo.GetByID(ctx, *input.ProxyID)
-		if err != nil {
-			return nil, infraerrors.Newf(http.StatusBadRequest, "OPENAI_OAUTH_PROXY_NOT_FOUND", "proxy not found: %v", err)
-		}
-		if proxy != nil {
-			proxyURL = proxy.URL()
+		if session.ProxyID == nil || *input.ProxyID != *session.ProxyID {
+			return nil, infraerrors.New(http.StatusBadRequest, "OPENAI_OAUTH_PROXY_MISMATCH", "proxy does not match the OAuth session")
 		}
 	}
 
@@ -398,6 +400,13 @@ func resolveChatGPTSubscriptionAccountID(tokenInfo *OpenAITokenInfo, orgID strin
 
 // RefreshAccountToken refreshes token for an OpenAI OAuth account
 func (s *OpenAIOAuthService) RefreshAccountToken(ctx context.Context, account *Account) (*OpenAITokenInfo, error) {
+	account, err := requestCredentialAccount(ctx, account)
+	if err != nil {
+		return nil, err
+	}
+	if account == nil {
+		return nil, infraerrors.New(http.StatusBadRequest, "OPENAI_OAUTH_INVALID_ACCOUNT", "account is unavailable")
+	}
 	if account.Platform != PlatformOpenAI {
 		return nil, infraerrors.New(http.StatusBadRequest, "OPENAI_OAUTH_INVALID_ACCOUNT", "account is not an OpenAI account")
 	}
@@ -405,12 +414,9 @@ func (s *OpenAIOAuthService) RefreshAccountToken(ctx context.Context, account *A
 		return nil, infraerrors.New(http.StatusBadRequest, "OPENAI_OAUTH_INVALID_ACCOUNT_TYPE", "account is not an OAuth account")
 	}
 
-	var proxyURL string
-	if account.ProxyID != nil && s.proxyRepo != nil {
-		proxy, err := s.proxyRepo.GetByID(ctx, *account.ProxyID)
-		if err == nil && proxy != nil {
-			proxyURL = proxy.URL()
-		}
+	proxyURL, err := requestCredentialOwnerProxyURL(ctx, account)
+	if err != nil {
+		return nil, err
 	}
 
 	accessToken := account.GetCredential("access_token")
@@ -538,15 +544,9 @@ func (s *OpenAIOAuthService) StartDeviceCode(ctx context.Context, proxyID *int64
 	if s == nil || s.oauthClient == nil {
 		return nil, infraerrors.New(http.StatusInternalServerError, "OPENAI_OAUTH_CLIENT_UNAVAILABLE", "openai oauth client is not configured")
 	}
-	var proxyURL string
-	if proxyID != nil && s.proxyRepo != nil {
-		proxy, err := s.proxyRepo.GetByID(ctx, *proxyID)
-		if err != nil {
-			return nil, infraerrors.Newf(http.StatusBadRequest, "OPENAI_OAUTH_PROXY_NOT_FOUND", "proxy not found: %v", err)
-		}
-		if proxy != nil {
-			proxyURL = proxy.URL()
-		}
+	proxyURL, err := s.resolveSelectedProxyURL(ctx, proxyID)
+	if err != nil {
+		return nil, err
 	}
 	normalizedPlatform := normalizeOpenAIOAuthPlatform(platform)
 	clientID, _ := openai.OAuthClientConfigByPlatform(normalizedPlatform)
@@ -562,7 +562,7 @@ func (s *OpenAIOAuthService) StartDeviceCode(ctx context.Context, proxyID *int64
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusInternalServerError, "OPENAI_OAUTH_STATE_FAILED", "failed to generate state: %v", err)
 	}
-	s.sessionStore.Set(sessionID, &openai.OAuthSession{
+	session := &openai.OAuthSession{
 		State:          state,
 		ClientID:       clientID,
 		ProxyURL:       proxyURL,
@@ -570,7 +570,12 @@ func (s *OpenAIOAuthService) StartDeviceCode(ctx context.Context, proxyID *int64
 		CreatedAt:      time.Now(),
 		DeviceAuthID:   started.DeviceAuthID,
 		DeviceUserCode: started.UserCode,
-	})
+	}
+	if proxyID != nil {
+		id := *proxyID
+		session.ProxyID = &id
+	}
+	s.sessionStore.Set(sessionID, session)
 	return &OpenAIDeviceCodeResult{
 		SessionID:       sessionID,
 		UserCode:        started.UserCode,
@@ -615,6 +620,13 @@ func (s *OpenAIOAuthService) RevokeAccountTokens(ctx context.Context, account *A
 	if s == nil || s.oauthClient == nil || account == nil || !account.IsOpenAIOAuth() || account.IsCredentialShadow() {
 		return nil
 	}
+	account, err := requestCredentialAccount(ctx, account)
+	if err != nil {
+		return err
+	}
+	if account == nil || !account.IsOpenAIOAuth() || account.IsCredentialShadow() {
+		return nil
+	}
 	refresh := strings.TrimSpace(account.GetOpenAIRefreshToken())
 	access := strings.TrimSpace(account.GetOpenAIAccessToken())
 	token, hint := refresh, "refresh_token"
@@ -624,13 +636,9 @@ func (s *OpenAIOAuthService) RevokeAccountTokens(ctx context.Context, account *A
 	if token == "" {
 		return nil
 	}
-	var proxyURL string
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
-	} else if account.ProxyID != nil && s.proxyRepo != nil {
-		if proxy, err := s.proxyRepo.GetByID(ctx, *account.ProxyID); err == nil && proxy != nil {
-			proxyURL = proxy.URL()
-		}
+	proxyURL, err := requestCredentialOwnerProxyURL(ctx, account)
+	if err != nil {
+		return err
 	}
 	identity := s.resolveOpenAIOutboundIdentity(ctx, account)
 	var settings *SettingService
@@ -640,6 +648,27 @@ func (s *OpenAIOAuthService) RevokeAccountTokens(ctx context.Context, account *A
 	ctx = withManagedOpenAICodexResidency(ctx, settings)
 	clientID := strings.TrimSpace(account.GetCredential("client_id"))
 	return s.oauthClient.RevokeToken(ctx, token, hint, clientID, proxyURL, identity.UserAgent, identity.Originator)
+}
+
+// A selected proxy is a route requirement, including before an account exists.
+// Missing/deleted records and invalid configurations must never become an empty
+// URL, because credential transports interpret an empty URL as direct egress.
+func (s *OpenAIOAuthService) resolveSelectedProxyURL(ctx context.Context, proxyID *int64) (string, error) {
+	if proxyID == nil {
+		return "", nil
+	}
+	if *proxyID <= 0 || s == nil || s.proxyRepo == nil {
+		return "", infraerrors.New(http.StatusBadRequest, "OPENAI_OAUTH_PROXY_NOT_FOUND", "selected proxy is unavailable")
+	}
+	proxy, err := s.proxyRepo.GetByID(ctx, *proxyID)
+	if err != nil || proxy == nil {
+		return "", infraerrors.New(http.StatusBadRequest, "OPENAI_OAUTH_PROXY_NOT_FOUND", "selected proxy is unavailable")
+	}
+	proxyURL, err := requestCredentialOwnerProxyURL(context.Background(), &Account{ProxyID: proxyID, Proxy: proxy})
+	if err != nil {
+		return "", infraerrors.New(http.StatusBadRequest, "OPENAI_OAUTH_PROXY_INVALID", "selected proxy configuration is invalid")
+	}
+	return proxyURL, nil
 }
 
 // Stop stops the session store cleanup goroutine

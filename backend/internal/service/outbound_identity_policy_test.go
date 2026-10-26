@@ -17,6 +17,8 @@ import (
 
 // These are product requirements, not expectations generated from the policy.
 var fixedIdentityCases = []struct{ platform, kind, preset string }{
+	{"grok", "oauth", "grok"}, {"grok", "apikey", "grok"},
+	{"openai", "oauth", "codex"}, {"openai", "apikey", "codex"},
 	{"deepseek", "oauth", "deepseek"}, {"deepseek", "apikey", "deepseek"},
 	{"kimi", "oauth", "kimi"}, {"kimi", "apikey", "kimi"},
 	{"minimax", "oauth", "minimax"}, {"minimax", "apikey", "minimax_apikey"},
@@ -54,8 +56,8 @@ func TestNativeIdentityPolicyRejectsEveryForeignFamilyAndDefaultMapping(t *testi
 	}
 }
 
-func TestCompatibleIdentityPolicyHasExactlyThirteenAdvancedMappings(t *testing.T) {
-	expected := []string{"openai:apikey", "openai:upstream", "anthropic:apikey", "anthropic:upstream", "gemini:apikey", "gemini:upstream", "grok:apikey", "grok:upstream", "antigravity:upstream", "typesafe:apikey", "opencode_go:apikey", "cline:apikey", "command_code:apikey"}
+func TestCompatibleIdentityPolicyHasExactlyElevenAdvancedMappings(t *testing.T) {
+	expected := []string{"openai:upstream", "anthropic:apikey", "anthropic:upstream", "gemini:apikey", "gemini:upstream", "grok:upstream", "antigravity:upstream", "typesafe:apikey", "opencode_go:apikey", "cline:apikey", "command_code:apikey"}
 	svc, ctx := outboundIdentityTestSettings(t, emptyOutboundIdentitySettings())
 	var actual []string
 	for _, policy := range svc.GetOutboundIdentityView(ctx).AccountPolicies {
@@ -85,21 +87,27 @@ func TestCompatibleIdentityPolicyHasExactlyThirteenAdvancedMappings(t *testing.T
 
 func TestNativeIdentityStoredForeignCandidatesNeverReachWire(t *testing.T) {
 	expectedUA := map[string]string{
-		"deepseek": "deepseek-harness/0.2.0-rc.2 (+https://github.com/deepseek-ai/deepseek-harness)",
-		"kimi":     "kimi-code-cli/2.1.1", "minimax": "MiniMaxAgent",
-		"minimax_apikey": "Anthropic/JS 0.91.1", "zcode": "ZCode/3.14.3",
-		"stepfun": "step (linux 6.8.0-31-generic; x64)",
+		"deepseek": "deepseek-harness/0.2.1-rc.3 (+https://github.com/deepseek-ai/deepseek-harness)",
+		"kimi":     "kimi-code-cli/2.3.1", "minimax": "MiniMaxAgent",
+		"minimax_apikey": "Anthropic/JS 0.91.1", "zcode": "ZCode/3.16.2",
+		"stepfun": "stepcode (linux 6.8.0-31-generic; x64)",
+		"grok":    "grok-shell/1.0.45 (linux; x86_64)",
+		"codex":   "codex_cli_rs/0.164.0 (Ubuntu 24.04; x86_64) xterm-256color",
 	}
-	for _, tc := range fixedIdentityCases[:10] {
+	for _, tc := range fixedIdentityCases[:14] {
 		t.Run(tc.platform+":"+tc.kind, func(t *testing.T) {
 			// Simulate a stale database before cleanup. The global and account
 			// candidates both try to select another product with extra fields.
-			raw, err := json.Marshal(OutboundIdentitySettings{Defaults: map[string]string{tc.platform + ":" + tc.kind: "grok"}})
+			foreign := "grok"
+			if tc.preset == "grok" {
+				foreign = "claude"
+			}
+			raw, err := json.Marshal(OutboundIdentitySettings{Defaults: map[string]string{tc.platform + ":" + tc.kind: foreign}})
 			require.NoError(t, err)
 			svc := NewSettingService(&outboundIdentityTestRepo{values: map[string]string{SettingKeyOutboundIdentity: string(raw)}}, nil)
 			ctx := outboundidentity.WithResolver(context.Background(), svc.resolveOutboundIdentityKey)
 			account := &Account{ID: 71, Platform: tc.platform, Type: tc.kind, Credentials: map[string]any{
-				outboundIdentityCredential: OutboundIdentitySelection{Preset: "grok", Version: "3.9.1"},
+				outboundIdentityCredential: OutboundIdentitySelection{Preset: foreign, Version: "3.9.1"},
 			}}
 			captured := make(chan http.Header, 1)
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -113,13 +121,20 @@ func TestNativeIdentityStoredForeignCandidatesNeverReachWire(t *testing.T) {
 			request.Header.Set("User-Agent", "Sub2API-caller")
 			request.Header.Set("X-Grok-Client-Version", "99.0.0")
 			request.Header.Set("Authorization", "Bearer test-credential")
+			if tc.preset == "codex" {
+				applyResolvedOpenAIOutboundIdentity(request.Header, resolveOpenAIOutboundIdentityFromSettings(ctx, account, svc), true)
+			}
 			prepareAccountOutboundRequest(request, account)
 			response, err := client.Do(request)
 			require.NoError(t, err)
 			require.NoError(t, response.Body.Close())
 			headers := <-captured
 			require.Equal(t, expectedUA[tc.preset], headers.Get("User-Agent"))
-			require.Empty(t, headers.Get("X-Grok-Client-Version"))
+			if tc.preset == "grok" {
+				require.Equal(t, "1.0.45", headers.Get("X-Grok-Client-Version"))
+			} else {
+				require.Empty(t, headers.Get("X-Grok-Client-Version"))
+			}
 			require.Equal(t, "Bearer test-credential", headers.Get("Authorization"))
 			for name, values := range headers {
 				require.NotContains(t, strings.ToLower(name), "sub2api")
@@ -175,7 +190,11 @@ func TestNativeIdentityCreateAndUpdateRejectBeforePersistence(t *testing.T) {
 				if tc.platform == "stepfun" {
 					credentials = stepFunTestAccount(tc.kind, "cn").Credentials
 				}
-				credentials[outboundIdentityCredential] = OutboundIdentitySelection{Preset: "grok"}
+				foreign := "grok"
+				if tc.preset == "grok" {
+					foreign = "claude"
+				}
+				credentials[outboundIdentityCredential] = OutboundIdentitySelection{Preset: foreign}
 				repo := &nativeIdentityWriteRepo{account: &Account{ID: 1, Platform: tc.platform, Type: tc.kind, Credentials: map[string]any{}}}
 				svc := &adminServiceImpl{accountRepo: repo}
 				var err error

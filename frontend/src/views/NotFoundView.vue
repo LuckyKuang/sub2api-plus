@@ -1,6 +1,6 @@
 <template>
   <div
-    class="relative flex min-h-screen items-center justify-center overflow-hidden bg-gray-50 px-4 dark:bg-dark-950"
+    class="relative flex min-h-screen items-center justify-center overflow-hidden bg-canvas p-[var(--shell-gutter)] dark:surface-inset"
   >
     <!-- Background Decoration -->
     <div class="pointer-events-none absolute inset-0 overflow-hidden">
@@ -12,11 +12,11 @@
       ></div>
     </div>
 
-    <div class="relative z-10 w-full max-w-md text-center">
+    <div class="card relative z-10 w-full max-w-md p-5 text-center sm:p-8">
       <!-- 404 Display -->
       <div class="mb-8">
         <div class="relative inline-block">
-          <span class="text-[12rem] font-bold leading-none text-gray-100 dark:text-dark-800"
+          <span class="text-[9rem] font-bold leading-none text-gray-100 dark:text-dark-800 sm:text-[12rem]"
             >404</span
           >
           <div class="absolute inset-0 flex items-center justify-center">
@@ -46,7 +46,7 @@
         <h1 class="mb-3 text-2xl font-bold text-gray-900 dark:text-white">
           {{ t('errors.pageNotFound') }}
         </h1>
-        <p class="text-gray-500 dark:text-dark-400">
+        <p class="surface-muted">
           The page you are looking for doesn't exist or has been moved.
         </p>
       </div>
@@ -64,7 +64,7 @@
       </div>
 
       <!-- Help Link -->
-      <p class="mt-8 text-sm text-gray-400 dark:text-dark-500">
+      <p class="mt-8 text-sm surface-muted">
         Need help?
         <a
           href="#"

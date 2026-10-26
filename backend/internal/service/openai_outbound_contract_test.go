@@ -17,6 +17,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 )
@@ -41,7 +42,7 @@ func TestCodexConfiguredProfilePreservesFallbackSource(t *testing.T) {
 		{name: "blank", global: "   ", source: "compiled_default"},
 		{name: "invalid", global: "untrusted/1", source: "compiled_default"},
 		{name: "read failure", unavailable: true, source: "compiled_default"},
-		{name: "explicit default fingerprint", global: "codex_cli_rs/0.158.0 (Ubuntu 24.04; x86_64) xterm-256color", source: "global"},
+		{name: "explicit default fingerprint", global: "codex_cli_rs/0.164.0 (Ubuntu 24.04; x86_64) xterm-256color", source: "global"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			values := map[string]string{}
@@ -57,14 +58,14 @@ func TestCodexConfiguredProfilePreservesFallbackSource(t *testing.T) {
 			for range 2 {
 				identity := resolveOpenAIOutboundIdentityFromSettings(context.Background(), nil, settings)
 				require.Equal(t, tc.source, identity.Source)
-				require.Equal(t, "codex_cli_rs/0.158.0 (Ubuntu 24.04; x86_64) xterm-256color", identity.UserAgent)
+				require.Equal(t, "codex_cli_rs/0.164.0 (Ubuntu 24.04; x86_64) xterm-256color", identity.UserAgent)
 				require.Equal(t, "codex_cli_rs", identity.Originator)
-				require.Equal(t, "0.158.0", identity.Version)
+				require.Equal(t, "0.164.0", identity.Version)
 			}
 			account := &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth, Credentials: map[string]any{"user_agent": testOpenAIAccountUserAgent}}
 			identity := resolveOpenAIOutboundIdentityFromSettings(context.Background(), account, settings)
 			require.Equal(t, "account", identity.Source)
-			require.Equal(t, "codex_cli_rs/0.158.0 (Ubuntu 22.4.0; x86_64) xterm-256color", identity.UserAgent)
+			require.Equal(t, "codex_cli_rs/0.164.0 (Ubuntu 22.4.0; x86_64) xterm-256color", identity.UserAgent)
 		})
 	}
 }
@@ -144,7 +145,7 @@ func TestOpenAIIdentityContractPrivacyPreservesSelectedIdentity(t *testing.T) {
 }
 
 func TestOpenAIIdentityContractPrivacyPreservesSynchronizedVersionForms(t *testing.T) {
-	base := "codex_cli_rs/0.158.0 "
+	base := "codex_cli_rs/0.164.0 "
 	maximumUA := base + strings.Repeat("x", maxOpenAIAccountUserAgentLength-len(base))
 	for _, version := range []string{"0.200", "0.2000.1"} {
 		t.Run(version, func(t *testing.T) {
@@ -254,10 +255,10 @@ func TestOpenAIIdentityContractHTTPRetrySnapshot(t *testing.T) {
 						}
 						wantUA := candidate.originator + "/0.200.1" + suffix
 						want := http.Header{"User-Agent": {wantUA}}
-						if accountType == AccountTypeOAuth {
-							want.Set("Originator", candidate.originator)
-							want.Set("Version", "0.200.1")
-						}
+						// Official Codex 1b6e0d8145: default_headers + create_openai_provider,
+						// independently of OAuth versus API-key authentication.
+						want.Set("Originator", candidate.originator)
+						want.Set("Version", "0.200.1")
 						for _, header := range headers {
 							requireOpenAIIdentityContractHeaders(t, header, want, wantAuth)
 							if accountType == AccountTypeAPIKey {
@@ -276,9 +277,7 @@ func TestOpenAIIdentityContractHTTPRetrySnapshot(t *testing.T) {
 						require.NoError(t, err)
 						require.Len(t, headers, 3)
 						want.Set("User-Agent", strings.Replace(wantUA, "/0.200.1", "/0.200.2", 1))
-						if accountType == AccountTypeOAuth {
-							want.Set("Version", "0.200.2")
-						}
+						want.Set("Version", "0.200.2")
 						requireOpenAIIdentityContractHeaders(t, headers[2], want, wantAuth)
 					})
 				}
@@ -320,6 +319,7 @@ func TestOpenAIIdentityContractHTTPPassthroughCompatiblePresets(t *testing.T) {
 		for _, preset := range []string{"claude", "gemini", "grok", "antigravity", "deepseek", "minimax", "minimax_apikey", "kimi", "zcode"} {
 			t.Run(fmt.Sprintf("%s/passthrough=%t", preset, passthrough), func(t *testing.T) {
 				account := newOpenAIRejectedFieldTestAccount()
+				account.Platform = PlatformOpenCodeGo
 				account.Extra["openai_passthrough"] = passthrough
 				account.Credentials[outboundIdentityCredential] = map[string]any{"preset": preset}
 				account.Credentials[credKeyHeaderOverrideEnabled] = true
@@ -340,9 +340,22 @@ func TestOpenAIIdentityContractHTTPPassthroughCompatiblePresets(t *testing.T) {
 				require.NoError(t, err)
 				want := http.Header{}
 				builtInOutboundIdentity(preset).ForProtocol("responses").Apply(want)
-				requireOpenAIIdentityContractHeaders(t, headers, want, "Bearer sk-test")
+				httpWant := want.Clone()
+				if preset == "grok" {
+					// compat.example is a compatible supplier. Native CLI mode
+					// stays in the snapshot and is omitted on its HTTP wire.
+					require.Equal(t, "headless", want.Get("X-Grok-Client-Mode"))
+					httpWant.Del("X-Grok-Client-Mode")
+					require.Empty(t, headers.Get("X-Grok-Client-Mode"))
+					require.Equal(t, "grok-shell/1.0.45 (linux; x86_64)", headers.Get("User-Agent"))
+					require.Equal(t, "grok-shell", headers.Get("X-Grok-Client-Identifier"))
+					require.Equal(t, "1.0.45", headers.Get("X-Grok-Client-Version"))
+				}
+				requireOpenAIIdentityContractHeaders(t, headers, httpWant, "Bearer sk-test")
 				wsHeaders, _, err := svc.buildOpenAIWSHeaders(context.Background(), c, account, "sk-test", OpenAIWSProtocolDecision{Transport: OpenAIUpstreamTransportResponsesWebsocketV2}, false, "", "", "", "gpt-5.5", "")
 				require.NoError(t, err)
+				// This assertion covers the protocol header builder. It has no
+				// destination request, so it still returns the selected snapshot.
 				requireOpenAIIdentityContractHeaders(t, wsHeaders, want, "Bearer sk-test")
 			})
 		}
@@ -411,8 +424,8 @@ func TestOpenAIIdentityContractOfficialClientTurnContextHeaders(t *testing.T) {
 
 // Official Codex clients embed per-turn context in the request body's
 // client_metadata (turn lineage and MCP attribution). Proxying must preserve
-// every client-owned key verbatim through account namespacing and fingerprint
-// convergence; only the gateway-converged identity carriers may be rewritten.
+// unknown client-owned keys through account namespacing and fingerprint
+// convergence; turn references must follow the same typed identity mapping.
 // mcp_attribution is the official client's own responsibility: the gateway
 // passes it through without generating, parsing, or trimming it.
 func TestOpenAIIdentityContractClientMetadataClientKeysSurviveProxy(t *testing.T) {
@@ -432,9 +445,9 @@ func TestOpenAIIdentityContractClientMetadataClientKeysSurviveProxy(t *testing.T
 			require.NoError(t, err)
 			require.NotNil(t, upstream.lastBody)
 
-			// Client-owned turn lineage and MCP attribution pass through verbatim.
-			require.Equal(t, "client-parent-turn", gjson.GetBytes(upstream.lastBody, "client_metadata.parent_turn_id").String())
-			require.Equal(t, "client-root-turn", gjson.GetBytes(upstream.lastBody, "client_metadata.root_turn_id").String())
+			// Turn lineage is namespaced as v7; unrelated attribution is unchanged.
+			require.Equal(t, uuid.Version(7), uuid.MustParse(gjson.GetBytes(upstream.lastBody, "client_metadata.parent_turn_id").String()).Version())
+			require.Equal(t, uuid.Version(7), uuid.MustParse(gjson.GetBytes(upstream.lastBody, "client_metadata.root_turn_id").String()).Version())
 			require.Equal(t, "keep", gjson.GetBytes(upstream.lastBody, "client_metadata.future_client_field").String())
 			require.JSONEq(t, mcpAttribution, gjson.GetBytes(upstream.lastBody, "client_metadata.mcp_attribution").Raw)
 			// The gateway namespaces identity carriers; the turn id stays present.
@@ -482,12 +495,11 @@ func TestOpenAIIdentityContractPresetSelectionSurvivesMappingChanges(t *testing.
 	ctx := WithAccountOutboundIdentity(original, account)
 	_, selectedPreset := outboundidentity.FromContext(ctx)
 	require.False(t, selectedPreset, "native Codex uses its existing resolver")
-	require.NoError(t, settings.SetOutboundIdentitySettings(original, OutboundIdentitySettings{Defaults: map[string]string{"openai:apikey": "grok"}}))
+	requireApplicationErrorReason(t, settings.SetOutboundIdentitySettings(original, OutboundIdentitySettings{Defaults: map[string]string{"openai:apikey": "grok"}}), "OUTBOUND_IDENTITY_INVALID")
 	_, selectedPreset = outboundidentity.FromContext(WithAccountOutboundIdentity(ctx, account))
 	require.False(t, selectedPreset, "a retry cannot switch from Codex to another preset")
-	identity, selectedPreset := outboundidentity.FromContext(WithAccountOutboundIdentity(original, account))
-	require.True(t, selectedPreset)
-	require.Equal(t, "grok", identity.Preset)
+	_, selectedPreset = outboundidentity.FromContext(WithAccountOutboundIdentity(original, account))
+	require.False(t, selectedPreset, "a new request also retains the native Codex family")
 }
 
 type identityContractOAuthClient struct {
@@ -613,7 +625,9 @@ func TestOpenAIIdentityContractLiveRegistrationSnapshot(t *testing.T) {
 			} else {
 				encrypted, err := cipher.Encrypt("test-attestation")
 				require.NoError(t, err)
-				headers, err = svc.liveSidebandHeaders(context.Background(), account, &LiveCallRecord{AttestationCiphertext: encrypted})
+				identity := resolveOpenAIOutboundIdentityWithVersion(testOpenAIAccountUserAgent, "", "0.200.1")
+				snapshot := &LiveOutboundSnapshot{Owner: openAICodexStateOwner(context.Background(), account), SessionID: "01912345-6789-7abc-8def-0123456789ab", ThreadID: "01912345-7000-7fed-9234-123456789abc", UserAgent: identity.UserAgent, Originator: identity.Originator, Version: identity.Version}
+				headers, _, err = svc.liveSidebandHeaders(context.Background(), account, &LiveCallRecord{AttestationCiphertext: encrypted, OutboundSnapshot: snapshot})
 				require.NoError(t, err)
 			}
 			require.Len(t, registered, 1)

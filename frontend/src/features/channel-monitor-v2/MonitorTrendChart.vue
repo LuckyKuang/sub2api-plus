@@ -1,6 +1,6 @@
 <template>
   <section
-    class="card flex min-h-[360px] flex-col overflow-hidden !rounded-3xl !border-0 !p-6 shadow-sm ring-1 ring-gray-900/5 dark:!bg-dark-800 dark:ring-dark-700"
+    class="card flex min-h-[360px] flex-col overflow-hidden !p-6"
   >
     <div class="card-header mb-4 flex shrink-0 flex-wrap items-start justify-between gap-3 !border-0 !p-0">
       <div class="min-w-0">
@@ -10,24 +10,24 @@
           </span>
           {{ t('channelMonitorV2.chart.title') }}
         </h2>
-        <p class="mt-0.5 text-xs text-gray-500 dark:text-dark-400">
+        <p class="mt-0.5 text-xs surface-muted">
           {{ t('channelMonitorV2.chart.description') }}
         </p>
       </div>
-      <div class="flex w-full min-w-0 flex-wrap items-center justify-end gap-2 text-xs text-gray-500 dark:text-gray-400 sm:w-auto">
+      <div class="flex w-full min-w-0 flex-wrap items-center justify-end gap-2 text-xs sm:w-auto surface-muted">
         <span class="flex shrink-0 items-center gap-1">
-          <span class="h-2 w-2 rounded-full bg-red-500"></span>{{ t('channelMonitorV2.chart.errorLegend') }}
+          <span class="console-data-mark h-2 w-2 rounded-full bg-red-500"></span>{{ t('channelMonitorV2.chart.errorLegend') }}
         </span>
         <span class="flex shrink-0 items-center gap-1">
-          <span class="h-2 w-2 rounded-full bg-emerald-500"></span>{{ t('channelMonitorV2.chart.cacheLegend') }}
+          <span class="console-data-mark h-2 w-2 rounded-full bg-emerald-500"></span>{{ t('channelMonitorV2.chart.cacheLegend') }}
         </span>
         <span class="flex shrink-0 items-center gap-1">
-          <span class="h-2 w-2 rounded-full bg-sky-500"></span>{{ t('channelMonitorV2.chart.ttftLegend') }}
+          <span class="console-data-mark h-2 w-2 rounded-full bg-sky-500"></span>{{ t('channelMonitorV2.chart.ttftLegend') }}
         </span>
         <span class="badge badge-gray shrink-0">{{ bucketLabel }}</span>
         <button
           type="button"
-          class="inline-flex shrink-0 items-center rounded-lg border border-gray-200 bg-white px-2 py-1 text-[11px] font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-dark-700 dark:bg-dark-900 dark:text-gray-300 dark:hover:bg-dark-800"
+          class="inline-flex shrink-0 items-center rounded-lg border border-gray-200 px-2 py-1 text-[11px] font-semibold hover:surface-hover disabled:opacity-50 dark:border-dark-700 surface-control surface-muted"
           :disabled="!zoomed"
           @click="resetChartZoom"
         >
@@ -58,6 +58,7 @@
 </template>
 
 <script setup lang="ts">
+import { chartTooltipStyle } from '@/utils/chartTooltip'
 import { useDocumentDarkMode } from '@/composables/useDocumentDarkMode'
 import { useI18n } from 'vue-i18n'
 import { computed, ref, watch } from 'vue'
@@ -206,9 +207,6 @@ function smoothTrend(values: Array<number | null>): Array<number | null> {
 const chartOptions = computed(() => {
   const text = isDark.value ? '#9ca3af' : '#6b7280'
   const grid = isDark.value ? '#374151' : '#f3f4f6'
-  const tooltipBg = isDark.value ? '#1f2937' : '#ffffff'
-  const tooltipTitle = isDark.value ? '#f3f4f6' : '#111827'
-  const tooltipBody = isDark.value ? '#d1d5db' : '#4b5563'
   return {
     responsive: true,
     maintainAspectRatio: false,
@@ -216,12 +214,7 @@ const chartOptions = computed(() => {
     plugins: {
       legend: { display: false },
       tooltip: {
-        backgroundColor: tooltipBg,
-        titleColor: tooltipTitle,
-        bodyColor: tooltipBody,
-        borderColor: grid,
-        borderWidth: 1,
-        padding: 10,
+        ...chartTooltipStyle(isDark.value),
         displayColors: true,
         callbacks: {
           label(ctx: { dataset: { label?: string }; parsed: { y: number | null } }) {

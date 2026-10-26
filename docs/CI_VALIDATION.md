@@ -13,11 +13,18 @@ launches them through [validation_runtime.py](../tools/validation_runtime.py).
 Host launchers inspect metadata, manage images/caches and launch containers;
 application, policy and deterministic-tree checks execute inside containers.
 
+The full integration command uses `go test -count=1 -tags=integration ./...` in
+both local submission and CI. PostgreSQL/Redis availability and fixture state
+must be exercised in the current run. Setup and environment reads before
+`TestMain` calls `m.Run` are outside Go's test-input logging, and remote service
+state cannot be established by a cached test result. This disables only test
+result reuse; the pinned compilation and dependency caches remain available.
+
 | Context / lane | Coverage | Relationship to local full |
 | --- | --- | --- |
 | `deployment-config` | Installer syntax, Apple lifecycle fixture, real Redis authentication/readiness regressions, Docker security/gateway/resources, Caddy policy | Union of local and CI deployment checks |
 | `test` | Full unit suites on Linux amd64 and arm64; Docker-backed integration on amd64 | Same Go commands, additional architecture coverage |
-| `frontend` | Frozen install, lint, typecheck, full Vitest, production build and its locale checks | Complete local frontend coverage; critical-only tests cannot substitute |
+| `frontend` | Frozen install, lint, typecheck, full Vitest, required seven-provider Vue/API cases, production build and its locale checks | Complete local frontend coverage; critical-only tests cannot substitute |
 | `golangci-lint` | Complete backend lint | Same command |
 | `repository-policy` | CLI/release/CI regressions, test-tag rules, identity, README, metadata and migrations | Shared full definition including local-only checks |
 | `goreleaser-config` | Pinned configuration check with embedded Plus version | Additional CI check |
@@ -37,6 +44,12 @@ generation additionally includes Go and pnpm lock inputs. Remote caches are
 separated by architecture and lane; fallback preserves the exact generation.
 GitHub ref visibility still applies: prefixes do not guarantee cross-tag reuse
 or warm compilation. No validation image is pushed to a registry.
+The image includes GCC and libc development headers so focused Go race tests
+can execute with `CGO_ENABLED=1` under the same pinned container toolchain.
+Running an ordinary unit suite does not imply that its race profile was run.
+The exact Playwright pin also determines the image's Chromium revision. Real
+browser management tests use a separate root-owned disposable-service runner;
+the full frontend lane's critical Vue/API tests do not imply browser execution.
 Release frontend builds share the `frontend` cache lane with default-branch CI
 under the same exact OS, architecture, toolchain and lock generation. They still
 run frozen installation and the complete production build; other release lanes

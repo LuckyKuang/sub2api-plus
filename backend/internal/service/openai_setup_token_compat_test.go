@@ -57,7 +57,11 @@ func TestOpenAIGatewayServiceGetAccessTokenSetupToken(t *testing.T) {
 
 	delete(account.Credentials, "access_token")
 	_, _, err = svc.GetAccessToken(context.Background(), account)
-	require.EqualError(t, err, "access_token not found in credentials")
+	var failure *UpstreamFailoverError
+	require.ErrorAs(t, err, &failure)
+	require.True(t, failure.IsCredentialFailure())
+	require.True(t, failure.AllowsOpenAIAccountSwitch(), "a missing inference credential must try the next account")
+	require.Equal(t, CredentialUnavailableClientMessage, failure.ClientMessage)
 
 	for _, platform := range []string{PlatformAnthropic, PlatformGrok} {
 		foreign := &Account{
@@ -123,10 +127,10 @@ func TestOpenAISetupTokenWSCompatibility(t *testing.T) {
 	}
 	svc := &OpenAIGatewayService{cfg: &config.Config{}}
 
-	wsURL, err := svc.buildOpenAIResponsesWSURL(account)
+	wsURL, err := svc.buildOpenAIResponsesWSURL(context.Background(), account)
 	require.NoError(t, err)
 	require.Equal(t, "wss://chatgpt.com/backend-api/codex/responses", wsURL)
-	foreignURL, err := svc.buildOpenAIResponsesWSURL(&Account{Platform: PlatformGrok, Type: AccountTypeSetupToken})
+	foreignURL, err := svc.buildOpenAIResponsesWSURL(context.Background(), &Account{Platform: PlatformGrok, Type: AccountTypeSetupToken})
 	require.NoError(t, err)
 	require.Equal(t, "wss://api.openai.com/v1/responses", foreignURL)
 
@@ -230,7 +234,7 @@ func TestOpenAISetupTokenMessagesUsesCodexBridgeAndTurnState(t *testing.T) {
 	require.NotNil(t, secondResult)
 	require.True(t, isOpenAICompatMessagesBridgeContext(secondCtx))
 	require.Equal(t, "turn_state_setup", upstream.requests[1].Header.Get("x-codex-turn-state"))
-	require.Equal(t, generateSessionUUID(isolateOpenAIUpstreamSessionID(0, account, "stable-cache-key")), upstream.requests[1].Header.Get("session-id"))
+	require.Equal(t, generateSessionUUID(isolateOpenAISessionID(0, "stable-cache-key")), upstream.requests[1].Header.Get("session-id"))
 	require.Empty(t, upstream.requests[1].Header.Get("session_id"))
 	require.Empty(t, upstream.requests[1].Header.Get("conversation_id"))
 	requireOpenAIMessagesCodexIdentity(t, upstream.requests[1], codexCLIUserAgent, openai.CodexDefaultOriginator)

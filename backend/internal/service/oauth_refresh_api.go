@@ -25,13 +25,7 @@ type OAuthRefreshExecutor interface {
 // complete credential document and proxy used by the upstream attempt, and
 // atomically publish scheduler invalidation with a successful update.
 type GrokOAuthRefreshSuccessRepository interface {
-	UpdateGrokOAuthCredentialsIfUnchanged(
-		ctx context.Context,
-		id int64,
-		expectedCredentials map[string]any,
-		expectedProxyID *int64,
-		credentials map[string]any,
-	) (bool, error)
+	UpdateGrokOAuthCredentialsIfUnchanged(ctx context.Context, owner *Account, credentials map[string]any) (bool, error)
 }
 
 const (
@@ -103,10 +97,11 @@ func (m *contextMutex) Unlock() {
 
 // OAuthRefreshResult 统一刷新结果
 type OAuthRefreshResult struct {
-	Refreshed      bool           // 实际执行了刷新
-	NewCredentials map[string]any // 刷新后的 credentials（nil 表示未刷新）
-	Account        *Account       // 成功时为最新 account；刷新错误时为实际尝试的凭据快照
-	LockHeld       bool           // 锁被其他 worker 持有（未执行刷新）
+	Refreshed        bool           // 实际执行了刷新
+	NewCredentials   map[string]any // 刷新后的 credentials（nil 表示未刷新）
+	Account          *Account       // 成功时为最新 account；刷新错误时为实际尝试的凭据快照
+	AttemptedAccount *Account       // upstream 前的完整快照，用于成功后的条件清理
+	LockHeld         bool           // 锁被其他 worker 持有（未执行刷新）
 }
 
 func snapshotOAuthRefreshAccount(account *Account) *Account {
@@ -114,10 +109,22 @@ func snapshotOAuthRefreshAccount(account *Account) *Account {
 		return nil
 	}
 	snapshot := *account
-	snapshot.Credentials = shallowCopyMap(account.Credentials)
+	if account.ID <= 0 && snapshot.unsavedCredentialOwner == nil {
+		snapshot.unsavedCredentialOwner = account
+	}
+	snapshot.Credentials = cloneRequestCredentialMap(account.Credentials)
+	snapshot.Extra = cloneRequestCredentialMap(account.Extra)
+	if account.TempUnschedulableUntil != nil {
+		until := *account.TempUnschedulableUntil
+		snapshot.TempUnschedulableUntil = &until
+	}
 	if account.ProxyID != nil {
 		proxyID := *account.ProxyID
 		snapshot.ProxyID = &proxyID
+	}
+	if account.Proxy != nil {
+		proxy := *account.Proxy
+		snapshot.Proxy = &proxy
 	}
 	return &snapshot
 }
@@ -181,6 +188,8 @@ func (api *OAuthRefreshAPI) RefreshIfNeeded(
 		return nil, errors.New("oauth refresh executor is nil")
 	}
 	requestPath := isOAuthRefreshRequestPath(ctx)
+	quotaOwner := openAIQuotaTokenOwnerFromContext(ctx)
+	grokOwner := grokTokenOwnerFromContext(ctx)
 	cacheKey := executor.CacheKey(account)
 
 	// 0. 获取进程内互斥锁（防止同一进程内的并发刷新竞争）
@@ -194,6 +203,9 @@ func (api *OAuthRefreshAPI) RefreshIfNeeded(
 	if api.tokenCache != nil {
 		acquired, lockErr := api.tokenCache.AcquireRefreshLock(ctx, cacheKey, api.lockTTL)
 		if lockErr != nil {
+			if account.IsDomesticOAuth() {
+				return nil, NewProviderCredentialFailure("native_oauth_refresh_lock_unavailable", lockErr)
+			}
 			// Redis 错误，降级为无锁刷新（进程内互斥锁仍生效）
 			slog.Warn("oauth_refresh_lock_failed_degraded",
 				"account_id", account.ID,
@@ -225,6 +237,27 @@ func (api *OAuthRefreshAPI) RefreshIfNeeded(
 	if freshAccount.ID != account.ID {
 		return nil, fmt.Errorf("%w: account identity mismatch", errOAuthRefreshAccountRereadFailed)
 	}
+	if account.Platform == PlatformOpenAI && !sameOpenAIRefreshOwner(account, freshAccount) {
+		return nil, oauthRefreshPersistenceFailure("openai_oauth_owner_changed", nil)
+	}
+	if grokOwner != nil {
+		if err := grokOwner.validate(freshAccount); err != nil {
+			return nil, err
+		}
+		freshAccount, err = CaptureOAuthCredentialOwner(freshAccount)
+		if err != nil {
+			return nil, errOAuthRefreshAccountStateChanged
+		}
+	}
+	if quotaOwner != nil {
+		if err := quotaOwner.validate(freshAccount); err != nil {
+			return nil, err
+		}
+		freshAccount, err = snapshotCNControlAccount(freshAccount)
+		if err != nil {
+			return nil, errOpenAIQuotaTokenOwnerChanged
+		}
+	}
 	if !freshAccount.IsActive() {
 		if requestPath {
 			return nil, fmt.Errorf("%w: account is not active", errOAuthRefreshAccountStateChanged)
@@ -255,7 +288,28 @@ func (api *OAuthRefreshAPI) RefreshIfNeeded(
 
 	// 4. 执行平台特定刷新逻辑
 	attemptedAccount := snapshotOAuthRefreshAccount(freshAccount)
-	newCredentials, refreshErr := executor.Refresh(ctx, freshAccount)
+	if quotaOwner != nil {
+		attemptedAccount, err = snapshotCNControlAccount(freshAccount)
+		if err != nil {
+			return nil, errOpenAIQuotaTokenOwnerChanged
+		}
+	}
+	var cnCredentialRepo CNOAuthCredentialSnapshotRepository
+	if freshAccount.IsDomesticOAuth() {
+		var configured bool
+		cnCredentialRepo, configured = api.accountRepo.(CNOAuthCredentialSnapshotRepository)
+		if !configured {
+			return nil, fmt.Errorf("%w: native OAuth credential CAS repository is unavailable", errOAuthRefreshCredentialPersist)
+		}
+		attemptedAccount, err = snapshotCNControlAccount(freshAccount)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if _, proxyErr := requestCredentialOwnerProxyURL(context.Background(), attemptedAccount); proxyErr != nil {
+		return &OAuthRefreshResult{Account: attemptedAccount, AttemptedAccount: attemptedAccount}, NewProviderCredentialFailure("oauth_refresh_proxy_unavailable", proxyErr)
+	}
+	newCredentials, refreshErr := executor.Refresh(ctx, snapshotOAuthRefreshAccount(attemptedAccount))
 	if ctxErr := oauthRefreshContextError(ctx); ctxErr != nil {
 		// A provider implementation may ignore cancellation and return late
 		// credentials. Never persist them after the attempt/cycle boundary.
@@ -264,8 +318,21 @@ func (api *OAuthRefreshAPI) RefreshIfNeeded(
 	if refreshErr != nil {
 		// 竞争恢复：invalid_grant 可能是另一个 worker 已消费了旧 refresh_token
 		// 重新读取 DB，如果 refresh_token 已更新则说明是竞争，返回成功
-		if isInvalidGrantError(refreshErr) {
+		if isInvalidGrantError(refreshErr) && !attemptedAccount.IsDomesticOAuth() {
 			if recoveredAccount, recovered := api.tryRecoverFromRefreshRace(ctx, freshAccount); recovered {
+				if account.Platform == PlatformOpenAI && !sameOpenAIRefreshOwner(account, recoveredAccount) {
+					return nil, oauthRefreshPersistenceFailure("openai_oauth_owner_changed", nil)
+				}
+				if grokOwner != nil {
+					if err := grokOwner.adopt(recoveredAccount, false); err != nil {
+						return nil, err
+					}
+				}
+				if quotaOwner != nil {
+					if err := quotaOwner.validate(recoveredAccount); err != nil {
+						return nil, err
+					}
+				}
 				if requestPath && recoveredAccount.Platform == PlatformGrok {
 					if eligibilityErr := grokOAuthRequestAccountEligibilityError(recoveredAccount); eligibilityErr != nil {
 						return nil, withGrokCredentialFailureSnapshot(eligibilityErr, recoveredAccount)
@@ -293,20 +360,109 @@ func (api *OAuthRefreshAPI) RefreshIfNeeded(
 	// 5. 设置版本号 + 更新 DB
 	if newCredentials != nil {
 		newCredentials["_token_version"] = time.Now().UnixMilli()
-		if freshAccount.IsGrokOAuth() {
+		if grokOwner != nil {
+			candidate, snapshotErr := CaptureOAuthCredentialOwner(attemptedAccount)
+			if snapshotErr != nil {
+				return nil, errOAuthRefreshAccountStateChanged
+			}
+			candidate.Credentials = newCredentials
+			if err := grokOwner.validateRotation(candidate, true); err != nil {
+				return nil, err
+			}
+		}
+		if quotaOwner != nil {
+			if err := quotaOwner.validateRepository(ctx, api.accountRepo, freshAccount.ID); err != nil {
+				return nil, err
+			}
+			candidate := snapshotOAuthRefreshAccount(freshAccount)
+			candidate.Credentials = newCredentials
+			if err := quotaOwner.validateRotation(candidate); err != nil {
+				return nil, err
+			}
+		}
+		if grokOwner != nil {
+			writer, ok := api.accountRepo.(OAuthCredentialOwnerRepository)
+			if !ok {
+				return nil, &providerConfigurationRefreshError{err: errors.New("atomic Grok OAuth credential persistence is unavailable")}
+			}
+			applied, updateErr := writer.UpdateOAuthCredentialsIfUnchanged(ctx, attemptedAccount, attemptedAccount.Type, newCredentials, nil, false)
+			if updateErr != nil {
+				return nil, &providerCycleContainmentRefreshError{err: fmt.Errorf("grok OAuth credential persistence failed: %w", updateErr)}
+			}
+			if !applied {
+				return nil, errOAuthRefreshAccountStateChanged
+			}
+			durableAccount, readErr := api.loadGrokDurableAccountAfterPersist(ctx, cacheKey, attemptedAccount.ID)
+			if readErr != nil || durableAccount == nil {
+				return nil, &providerCycleContainmentRefreshError{err: errors.New("grok OAuth committed credential state is unavailable")}
+			}
+			committed, snapshotErr := CaptureOAuthCredentialOwner(attemptedAccount)
+			if snapshotErr != nil {
+				return nil, errOAuthRefreshAccountStateChanged
+			}
+			committed.Credentials = newCredentials
+			expectedFingerprint, expectedErr := grokRequestOwnerFingerprint(committed)
+			actualFingerprint, actualErr := grokRequestOwnerFingerprint(durableAccount)
+			if expectedErr != nil || actualErr != nil || expectedFingerprint != actualFingerprint {
+				return nil, errOAuthRefreshAccountStateChanged
+			}
+			if err := grokOwner.adopt(durableAccount, true); err != nil {
+				return nil, err
+			}
+			freshAccount = grokOwner.account
+		} else if quotaOwner != nil {
+			applied, updateErr := persistOpenAIQuotaCredentials(ctx, api.accountRepo, attemptedAccount, newCredentials)
+			if updateErr != nil {
+				return nil, fmt.Errorf("%w: quota credential persistence failed: %v", errOpenAIQuotaTokenOwnerChanged, updateErr)
+			}
+			if !applied {
+				return nil, errOpenAIQuotaTokenOwnerChanged
+			}
+			// A successful SQL mutation authorizes exactly its committed token
+			// document, never a newer login returned by a later repository read.
+			durableAccount, readErr := api.accountRepo.GetByID(ctx, attemptedAccount.ID)
+			if readErr != nil || durableAccount == nil {
+				return nil, errOpenAIQuotaTokenOwnerChanged
+			}
+			rotated := snapshotOAuthRefreshAccount(attemptedAccount)
+			rotated.Credentials = newCredentials
+			expectedOwner, expectedErr := cnControlOwnerFingerprint(rotated)
+			actualOwner, actualErr := cnControlOwnerFingerprint(durableAccount)
+			if expectedErr != nil || actualErr != nil || expectedOwner != actualOwner {
+				return nil, errOpenAIQuotaTokenOwnerChanged
+			}
+			freshAccount = durableAccount
+		} else if attemptedAccount.IsDomesticOAuth() {
+			applied, updateErr := cnCredentialRepo.UpdateCNOAuthCredentialsIfUnchanged(ctx, attemptedAccount, newCredentials)
+			if updateErr != nil {
+				return nil, fmt.Errorf("%w: native OAuth credential CAS failed", errOAuthRefreshCredentialPersist)
+			}
+			if !applied {
+				return nil, fmt.Errorf("%w: native OAuth credential owner changed during refresh", errOAuthRefreshAccountStateChanged)
+			}
+			durableAccount, readErr := api.accountRepo.GetByID(ctx, attemptedAccount.ID)
+			if readErr != nil || durableAccount == nil {
+				return nil, fmt.Errorf("%w: native OAuth durable account is unavailable", errOAuthRefreshAccountRereadFailed)
+			}
+			expectedRotatedAccount, snapshotErr := snapshotCNControlAccount(attemptedAccount)
+			if snapshotErr != nil {
+				return nil, snapshotErr
+			}
+			expectedRotatedAccount.Credentials = newCredentials
+			expectedOwner, expectedErr := cnControlOwnerFingerprint(expectedRotatedAccount)
+			actualOwner, actualErr := cnControlOwnerFingerprint(durableAccount)
+			if expectedErr != nil || actualErr != nil || actualOwner != expectedOwner {
+				return nil, fmt.Errorf("%w: native OAuth credential owner changed after refresh", errOAuthRefreshAccountStateChanged)
+			}
+			freshAccount = durableAccount
+		} else if freshAccount.IsGrokOAuth() {
 			conditionalRepo, ok := api.accountRepo.(GrokOAuthRefreshSuccessRepository)
 			if !ok {
 				return nil, &providerConfigurationRefreshError{
 					err: fmt.Errorf("grok OAuth refresh success CAS repository is not configured"),
 				}
 			}
-			applied, updateErr := conditionalRepo.UpdateGrokOAuthCredentialsIfUnchanged(
-				ctx,
-				freshAccount.ID,
-				attemptedAccount.Credentials,
-				attemptedAccount.ProxyID,
-				newCredentials,
-			)
+			applied, updateErr := conditionalRepo.UpdateGrokOAuthCredentialsIfUnchanged(ctx, attemptedAccount, newCredentials)
 			if updateErr != nil {
 				slog.Error("oauth_refresh_update_failed",
 					"account_id", freshAccount.ID,
@@ -350,12 +506,20 @@ func (api *OAuthRefreshAPI) RefreshIfNeeded(
 			// while the provider call was in flight. Return the durable row so
 			// post-refresh cache publication cannot restore that stale snapshot.
 			freshAccount = durableAccount
+		} else if freshAccount.Platform == PlatformOpenAI && freshAccount.Type == AccountTypeOAuth ||
+			freshAccount.IsDomesticOAuth() && (freshAccount.Platform == PlatformKimi || freshAccount.Platform == PlatformMiniMax) {
+			return api.persistOAuthRefresh(ctx, cacheKey, attemptedAccount, newCredentials)
 		} else if updateErr := persistAccountCredentials(ctx, api.accountRepo, freshAccount, newCredentials); updateErr != nil {
 			slog.Error("oauth_refresh_update_failed",
 				"account_id", freshAccount.ID,
 				"error", updateErr,
 			)
 			return nil, fmt.Errorf("%w: %v", errOAuthRefreshCredentialPersist, updateErr)
+		}
+	}
+	if quotaOwner != nil {
+		if err := quotaOwner.acceptRotation(freshAccount); err != nil {
+			return nil, err
 		}
 	}
 
@@ -366,9 +530,10 @@ func (api *OAuthRefreshAPI) RefreshIfNeeded(
 	}
 
 	return &OAuthRefreshResult{
-		Refreshed:      true,
-		NewCredentials: newCredentials,
-		Account:        freshAccount,
+		Refreshed:        true,
+		NewCredentials:   newCredentials,
+		Account:          freshAccount,
+		AttemptedAccount: attemptedAccount,
 	}, nil
 }
 

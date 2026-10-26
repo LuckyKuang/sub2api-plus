@@ -3,13 +3,15 @@ import { identityPresets, type IdentityAccountPolicy, type IdentityPreset } from
 // An API response fixture, deliberately independent of any frontend selector.
 export function identityPolicyFixture(): IdentityAccountPolicy[] {
   const compatible: [string, IdentityPreset][] = [
-    ['openai:apikey', 'codex'], ['openai:upstream', 'codex'],
+    ['openai:upstream', 'codex'],
     ['anthropic:apikey', 'claude'], ['anthropic:upstream', 'claude'],
     ['gemini:apikey', 'gemini'], ['gemini:upstream', 'gemini'],
-    ['grok:apikey', 'grok'], ['grok:upstream', 'grok'],
+    ['grok:upstream', 'grok'],
     ['antigravity:upstream', 'antigravity'], ['typesafe:apikey', 'codex'], ['opencode_go:apikey', 'codex'], ['cline:apikey', 'codex'], ['command_code:apikey', 'codex']
   ]
   const fixed: [string, IdentityPreset][] = [
+    ['grok:oauth', 'grok'], ['grok:apikey', 'grok'],
+    ['openai:apikey', 'codex'], ['openai:oauth', 'codex'], ['openai:setup-token', 'codex'],
     ['deepseek:oauth', 'deepseek'], ['deepseek:apikey', 'deepseek'],
     ['kimi:oauth', 'kimi'], ['kimi:apikey', 'kimi'],
     ['minimax:oauth', 'minimax'], ['minimax:apikey', 'minimax_apikey'],

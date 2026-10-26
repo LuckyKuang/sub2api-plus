@@ -1,11 +1,11 @@
 <template>
   <div v-if="controller.visible.value" class="fixed inset-0 z-[60] overflow-y-auto">
     <div class="flex min-h-full items-center justify-center p-4">
-      <div class="fixed inset-0 bg-black/50 transition-opacity" @click="handleCancel"></div>
+      <div class="fixed inset-0 transition-opacity surface-overlay" @click="handleCancel"></div>
 
-      <div class="relative w-full max-w-md transform rounded-xl bg-white p-6 shadow-xl transition-all dark:bg-dark-800">
+      <div class="relative w-full max-w-md transform rounded-xl p-6 shadow-xl transition-all surface-panel">
         <div class="mb-6 text-center">
-          <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary-100 dark:bg-primary-900/30">
+          <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary-100/[0.15] dark:bg-primary-900/30">
             <svg class="h-6 w-6 text-primary-600 dark:text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
               <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
             </svg>
@@ -13,7 +13,7 @@
           <h3 class="mt-4 text-xl font-semibold text-gray-900 dark:text-white">
             {{ t('stepUp.title') }}
           </h3>
-          <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
+          <p class="mt-2 text-sm surface-muted">
             {{ t('stepUp.hint') }}
           </p>
         </div>
@@ -40,14 +40,14 @@
               inputmode="numeric"
               pattern="[0-9]"
               autocomplete="off"
-              class="h-12 w-10 rounded-lg border border-gray-300 text-center text-lg font-semibold focus:border-primary-500 focus:ring-primary-500 dark:border-dark-600 dark:bg-dark-700"
+              class="h-12 w-10 rounded-lg border border-gray-300 text-center text-lg font-semibold focus:border-primary-500 focus:ring-primary-500 dark:border-dark-600 dark:surface-inset"
               :disabled="verifying"
               @input="handleCodeInput($event, index)"
               @keydown="handleKeydown($event, index)"
               @paste="handlePaste"
             />
           </div>
-          <div v-if="verifying" class="mt-3 flex items-center justify-center gap-2 text-sm text-gray-500">
+          <div v-if="verifying" class="mt-3 flex items-center justify-center gap-2 text-sm surface-muted">
             <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-500"></div>
             {{ t('common.verifying') }}
           </div>

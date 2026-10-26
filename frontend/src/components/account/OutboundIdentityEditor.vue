@@ -1,7 +1,7 @@
 <template>
   <section v-if="visible" class="space-y-3 rounded-xl border border-gray-200 p-4 dark:border-dark-700">
     <h3 class="text-sm font-semibold">{{ t('admin.settings.outboundIdentity.title') }}</h3>
-    <p v-if="!policy && !policyError" class="text-xs text-gray-500">{{ t('common.loading') }}</p>
+    <p v-if="!policy && !policyError" class="text-xs surface-muted">{{ t('common.loading') }}</p>
     <p v-if="policyError" role="alert" class="text-xs text-red-600">{{ t('admin.settings.outboundIdentity.loadFailed') }}</p>
     <template v-if="policy">
     <Select v-if="policy.allow_default_mapping"
@@ -12,11 +12,11 @@
       @update:model-value="selectPreset(String($event || ''))"
     />
     <p v-else class="text-sm" data-testid="fixed-identity-family">{{ t('admin.settings.outboundIdentity.fixedClient', { client: identityNames[policy.native_preset] }) }}</p>
-    <button v-if="modelValue" type="button" class="text-xs text-primary-600" @click="selectPreset('')">{{ t('admin.settings.outboundIdentity.inherit') }}</button>
+    <button v-if="modelValue" type="button" class="text-xs text-primary-600 surface-control" @click="selectPreset('')">{{ t('admin.settings.outboundIdentity.inherit') }}</button>
     <template v-if="isVersionlessSelection">
-      <p class="text-xs text-gray-500">{{ t('admin.settings.outboundIdentity.versionlessHint') }}</p>
+      <p class="text-xs surface-muted">{{ t('admin.settings.outboundIdentity.versionlessHint') }}</p>
     </template>
-    <p v-else-if="effectivePreset === 'minimax_apikey'" class="text-xs text-gray-500">{{ t('admin.settings.outboundIdentity.pinnedSdkHint') }}</p>
+    <p v-else-if="effectivePreset === 'minimax_apikey'" class="text-xs surface-muted">{{ t('admin.settings.outboundIdentity.pinnedSdkHint') }}</p>
     <template v-else-if="!(platform === 'openai' && effectivePreset === 'codex')">
       <input :value="modelValue?.version" class="input font-mono" :aria-label="t('admin.settings.outboundIdentity.version')" :placeholder="t('admin.settings.outboundIdentity.version')" @input="update('version', ($event.target as HTMLInputElement).value)" />
       <details>
@@ -35,11 +35,11 @@
     <IdentityEnvironmentSummary :declarations="presetDeclarations" />
     <div v-if="runtimeHeaders.length" class="space-y-2" data-testid="outbound-identity-account-runtime-headers">
       <div>
-        <p class="text-xs text-gray-500">{{ t('admin.settings.outboundIdentity.runtimeHeaders') }}</p>
-        <p class="text-xs text-gray-500">{{ t('admin.settings.outboundIdentity.runtimeHeadersAccountHint') }}</p>
+        <p class="text-xs surface-muted">{{ t('admin.settings.outboundIdentity.runtimeHeaders') }}</p>
+        <p class="text-xs surface-muted">{{ t('admin.settings.outboundIdentity.runtimeHeadersAccountHint') }}</p>
       </div>
       <label v-for="header in runtimeHeaders" :key="header.name" class="block text-xs">
-        <span class="font-mono text-gray-500">{{ header.name }}</span>
+        <span class="font-mono surface-muted">{{ header.name }}</span>
         <IdentityRuntimeField
           :model-value="modelValue?.headers?.[header.name]"
           class="mt-1"
@@ -51,7 +51,7 @@
     </div>
     </template>
     <p v-if="error" role="alert" class="text-xs text-red-600">{{ error }}</p>
-    <div v-else-if="preview" class="space-y-1 text-xs text-gray-500">
+    <div v-else-if="preview" class="space-y-1 text-xs surface-muted">
       <p>{{ t('admin.settings.outboundIdentity.effectiveAccount') }} · {{ identityNames[preview.preset] }} · {{ t(`admin.settings.outboundIdentity.sources.${preview.source}`) }}</p>
       <dl class="grid gap-1 sm:grid-cols-[auto_1fr]" data-testid="outbound-identity-account-headers">
         <template v-for="(value, name) in preview.headers" :key="name">

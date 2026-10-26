@@ -36,6 +36,8 @@ func (ChannelMonitorHistory) Fields() []ent.Field {
 		field.Enum("status").
 			Values("operational", "degraded", "failed", "error"),
 		field.Int("first_byte_ms").NonNegative().Optional().Nillable(),
+		field.Int("first_text_ms").NonNegative().Optional().Nillable(),
+		field.Bool("stream_probe").Optional().Nillable(),
 		field.Int("latency_ms").
 			Optional().
 			Nillable(),

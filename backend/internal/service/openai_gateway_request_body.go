@@ -133,8 +133,9 @@ func deleteOpenAIResponsesNoneReasoningEffortFromObject(account *Account, body m
 // 强制 store=false 并清除 previous_response_id（DeepSeek / Kimi 官方
 // Responses 均不支持服务端状态存储，携带这些字段会被拒绝）。
 //
-// DeepSeek 另需把兼容格式的图片输入归一化为官方 image_url 字段；openai
-// 平台但 base_url 指向 api.deepseek.com 的映射账号同样走这条出站改写。
+// DeepSeek 另需把 Codex/OpenAI 的 input_image.image_url 写成线上 serde
+// 要求的 url 字段；openai 平台但 base_url 指向 api.deepseek.com 的映射
+// 账号同样走这条出站改写（Codex 贴图会 422 missing field url）。
 // 非 CN / 非 DeepSeek 上游原样返回。
 func normalizeDeepSeekResponsesRequestBody(account *Account, body []byte) []byte {
 	if account == nil {
@@ -193,9 +194,10 @@ func shouldAliasDeepSeekResponsesInputImages(account *Account) bool {
 	return targetsDeepSeekAPIHost(account)
 }
 
-// aliasDeepSeekResponsesInputImages 把图片 part 改写成 DeepSeek 官方形状：
-// type=input_image，同时只保留字符串字段 image_url。仅有 file_id、没有可用
-// URL 的 part 原样保留。
+// aliasDeepSeekResponsesInputImages 把图片 part 改写成 DeepSeek 能反序列化
+// 的形状：type=input_image，同时带字符串字段 image_url 与 url。
+// 文档与部分 400 提 image_url；线上 serde 要求 url。只发其中一个都会踩坑。
+// 仅有 file_id、没有可用 URL 的 part 原样保留。
 func aliasDeepSeekResponsesInputImages(input any) (any, bool) {
 	items, ok := asDeepSeekResponsesSlice(input)
 	if !ok {
@@ -277,18 +279,18 @@ func aliasDeepSeekResponsesImagePart(part map[string]any) bool {
 		part["image_url"] = imageURL
 		changed = true
 	}
-	if _, exists := part["url"]; exists {
-		delete(part, "url")
+	if current, ok := part["url"].(string); !ok || strings.TrimSpace(current) != imageURL {
+		part["url"] = imageURL
 		changed = true
 	}
 	return changed
 }
 
 func extractDeepSeekResponsesImageURL(part map[string]any) string {
-	if imageURL := deepSeekResponsesURLValue(part["image_url"]); imageURL != "" {
+	if imageURL := deepSeekResponsesURLValue(part["url"]); imageURL != "" {
 		return imageURL
 	}
-	if imageURL := deepSeekResponsesURLValue(part["url"]); imageURL != "" {
+	if imageURL := deepSeekResponsesURLValue(part["image_url"]); imageURL != "" {
 		return imageURL
 	}
 	if imageURL := deepSeekResponsesURLValue(part["image"]); imageURL != "" {
@@ -1265,6 +1267,17 @@ func normalizeOpenAIOAuthResponsesCompatibilityFields(reqBody map[string]any) bo
 		return false
 	}
 	changed := false
+	// Responses has its own stream_options (including Codex's
+	// reasoning_summary_delivery). Only include_usage belongs to Chat.
+	if options, ok := reqBody["stream_options"].(map[string]any); ok {
+		if _, exists := options["include_usage"]; exists {
+			delete(options, "include_usage")
+			if len(options) == 0 {
+				delete(reqBody, "stream_options")
+			}
+			changed = true
+		}
+	}
 	if prompt, exists := reqBody["prompt"]; exists {
 		if input, hasInput := reqBody["input"]; !hasInput || input == nil {
 			if prompt != nil {
@@ -1300,6 +1313,18 @@ func normalizeOpenAIOAuthResponsesCompatibilityBody(body []byte) ([]byte, bool, 
 	}
 	normalized := body
 	changed := false
+	if options := gjson.GetBytes(normalized, "stream_options"); options.IsObject() && options.Get("include_usage").Exists() {
+		path := "stream_options.include_usage"
+		if len(options.Map()) == 1 {
+			path = "stream_options"
+		}
+		next, err := sjson.DeleteBytes(normalized, path)
+		if err != nil {
+			return body, false, fmt.Errorf("normalize oauth chat stream usage option: %w", err)
+		}
+		normalized = next
+		changed = true
+	}
 	prompt := gjson.GetBytes(normalized, "prompt")
 	if prompt.Exists() {
 		input := gjson.GetBytes(normalized, "input")
@@ -1753,6 +1778,41 @@ func normalizeOpenAIPassthroughOAuthBody(body []byte, compact bool) ([]byte, boo
 	}
 
 	return normalized, changed, nil
+}
+
+// openAIRequestBodyCarriesInstructionContent is the byte-level form of
+// inputItemsCarryInstructionContent for paths that must not decode the whole
+// body. Official Codex carries its base prompt as a developer input item and
+// sends no top-level instructions, so listed paths must not synthesize one.
+func openAIRequestBodyCarriesInstructionContent(body []byte) bool {
+	if len(body) == 0 {
+		return false
+	}
+	carries := false
+	gjson.GetBytes(body, "input").ForEach(func(_, item gjson.Result) bool {
+		role := strings.ToLower(strings.TrimSpace(item.Get("role").String()))
+		if role != "developer" && role != "system" {
+			return true
+		}
+		content := item.Get("content")
+		if content.Type == gjson.String && strings.TrimSpace(content.String()) != "" {
+			carries = true
+			return false
+		}
+		content.ForEach(func(_, part gjson.Result) bool {
+			if part.Type == gjson.String && strings.TrimSpace(part.String()) != "" {
+				carries = true
+				return false
+			}
+			if text := strings.TrimSpace(part.Get("text").String()); text != "" {
+				carries = true
+				return false
+			}
+			return true
+		})
+		return !carries
+	})
+	return carries
 }
 
 func detectOpenAIPassthroughInstructionsRejectReason(reqModel string, body []byte) string {

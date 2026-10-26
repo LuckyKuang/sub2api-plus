@@ -3,7 +3,7 @@
     <button
       :id="buttonId"
       type="button"
-      class="aliyun-captcha-button"
+      class="aliyun-captcha-button surface-control"
       :class="state === 'verified' ? 'aliyun-captcha-button--verified' : ''"
       :disabled="state === 'verified'"
     >

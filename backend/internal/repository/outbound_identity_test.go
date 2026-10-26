@@ -53,6 +53,11 @@ func TestHTTPUpstreamTrustedIdentityPreservedWithoutCrossHost403Replay(t *testin
 					"base_url": "https://cli-chat-proxy.grok.com/v1", "api_key": "test-key",
 				}}
 				if preset != "" {
+					if preset != "codex" {
+						// Compatible upstream accounts can select another client family;
+						// native OpenAI API keys now retain Codex on every request.
+						account.Type = service.AccountTypeUpstream
+					}
 					account.Credentials["outbound_identity"] = map[string]any{"preset": preset}
 				}
 				ctx := service.WithAccountOutboundIdentity(context.Background(), account)
@@ -128,12 +133,12 @@ func TestEveryDomesticAccountTransportRemovesBrandedCustomHeaders(t *testing.T) 
 	// Real HTTP capture covers the repository transport and redirect machinery;
 	// the expected UAs below are independent official-client wire fixtures.
 	for _, test := range []struct{ platform, kind, ua string }{
-		{"deepseek", "oauth", "deepseek-harness/0.2.0-rc.2 (+https://github.com/deepseek-ai/deepseek-harness)"},
-		{"deepseek", "apikey", "deepseek-harness/0.2.0-rc.2 (+https://github.com/deepseek-ai/deepseek-harness)"},
-		{"kimi", "oauth", "kimi-code-cli/2.1.1"}, {"kimi", "apikey", "kimi-code-cli/2.1.1"},
+		{"deepseek", "oauth", "deepseek-harness/0.2.1-rc.3 (+https://github.com/deepseek-ai/deepseek-harness)"},
+		{"deepseek", "apikey", "deepseek-harness/0.2.1-rc.3 (+https://github.com/deepseek-ai/deepseek-harness)"},
+		{"kimi", "oauth", "kimi-code-cli/2.3.1"}, {"kimi", "apikey", "kimi-code-cli/2.3.1"},
 		{"minimax", "oauth", "MiniMaxAgent"}, {"minimax", "apikey", "Anthropic/JS 0.91.1"},
-		{"zhipu", "oauth", "ZCode/3.14.3 ai/6.0.193 ai-sdk/provider-utils/4.0.27 runtime/node.js/22"},
-		{"zhipu", "apikey", "ZCode/3.14.3 ai/6.0.193 ai-sdk/provider-utils/4.0.27 runtime/node.js/22"},
+		{"zhipu", "oauth", "ZCode/3.16.2 ai/6.0.193 ai-sdk/provider-utils/4.0.27 runtime/node.js/22"},
+		{"zhipu", "apikey", "ZCode/3.16.2 ai/6.0.193 ai-sdk/provider-utils/4.0.27 runtime/node.js/22"},
 	} {
 		t.Run(test.platform+"/"+test.kind, func(t *testing.T) {
 			seen := make(chan http.Header, 2)

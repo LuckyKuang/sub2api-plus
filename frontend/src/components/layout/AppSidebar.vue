@@ -1,13 +1,18 @@
 <template>
   <aside
+    id="app-navigation"
+    ref="sidebarRef"
     class="sidebar"
-    :class="[
-      sidebarCollapsed ? 'w-[72px]' : 'w-64',
-      { '-translate-x-full lg:translate-x-0': !mobileOpen }
-    ]"
+    :class="{ 'sidebar-collapsed': sidebarCollapsed, 'sidebar-mobile-open': mobileVisible }"
+    :inert="!isDesktop && !mobileVisible || undefined"
+    :aria-hidden="!isDesktop && !mobileVisible || undefined"
+    :role="mobileVisible ? 'dialog' : 'complementary'"
+    :aria-modal="mobileVisible || undefined"
+    :aria-label="t('common.toggleMenu')"
+    tabindex="-1"
   >
     <!-- Logo/Brand -->
-    <div class="sidebar-header" :class="{ 'sidebar-header-collapsed': sidebarCollapsed }">
+    <div class="sidebar-header shell-surface" :class="{ 'sidebar-header-collapsed': sidebarCollapsed }">
       <!-- Custom Logo or Default Logo -->
       <router-link
         :to="homePath"
@@ -16,7 +21,7 @@
       >
         <img v-if="settingsLoaded" :src="siteLogo || '/logo.svg'" alt="Logo" class="h-full w-full object-contain" />
       </router-link>
-      <div class="sidebar-brand" :class="{ 'sidebar-brand-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">
+      <div class="sidebar-brand" :class="{ 'sidebar-brand-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'" :inert="sidebarCollapsed || undefined">
         <router-link
           :to="homePath"
           class="sidebar-brand-title text-lg font-bold text-gray-900 transition-colors hover:text-primary-600 dark:text-white dark:hover:text-primary-400"
@@ -26,8 +31,10 @@
         </router-link>
         <VersionBadge v-if="isAdmin" />
       </div>
+    <button v-if="mobileVisible" type="button" class="sidebar-mobile-close btn-ghost btn-icon surface-control" :aria-label="t('common.close')" @click="closeMobile"><Icon name="x" size="md" /></button>
     </div>
 
+    <div class="sidebar-panel shell-surface">
     <!-- Navigation -->
     <nav ref="sidebarNavRef" class="sidebar-nav scrollbar-hide">
       <!-- Admin View: Admin menu first, then personal menu -->
@@ -39,7 +46,7 @@
             <template v-if="item.children?.length">
               <button
                 type="button"
-                class="sidebar-link mb-1 w-full"
+                class="sidebar-link mb-1 w-full surface-control"
                 :class="{
                   'sidebar-link-active': isGroupActive(item) && !isGroupExpanded(item),
                   'sidebar-link-collapsed': sidebarCollapsed
@@ -148,11 +155,11 @@
     </nav>
 
     <!-- Bottom Section -->
-    <div class="mt-auto border-t border-gray-100 p-3 dark:border-dark-800">
+    <div class="sidebar-footer mt-auto border-t border-gray-100 p-3 dark:border-dark-800">
       <!-- Theme Toggle -->
       <button
         @click="toggleTheme"
-        class="sidebar-link theme-toggle mb-2 w-full"
+        class="sidebar-link theme-toggle mb-2 w-full surface-control"
         :class="{ 'sidebar-link-collapsed': sidebarCollapsed }"
         :title="sidebarCollapsed ? (isDark ? t('nav.lightMode') : t('nav.darkMode')) : undefined"
       >
@@ -164,9 +171,9 @@
       </button>
 
       <!-- Collapse Button -->
-      <button
+      <button v-if="isDesktop"
         @click="toggleSidebar"
-        class="sidebar-link w-full"
+        class="sidebar-link w-full surface-control"
         :class="{ 'sidebar-link-collapsed': sidebarCollapsed }"
         :title="sidebarCollapsed ? t('nav.expand') : t('nav.collapse')"
       >
@@ -175,13 +182,15 @@
         <span class="sidebar-label" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">{{ t('nav.collapse') }}</span>
       </button>
     </div>
+    </div>
   </aside>
 
   <!-- Mobile Overlay -->
   <transition name="fade">
     <div
-      v-if="mobileOpen"
-      class="fixed inset-0 z-30 bg-black/50 lg:hidden"
+      v-if="mobileVisible"
+      class="sidebar-backdrop fixed inset-0 z-[35] lg:hidden surface-overlay"
+      aria-hidden="true"
       @click="closeMobile"
     ></div>
   </transition>
@@ -190,6 +199,8 @@
 <script setup lang="ts">
 import { computed, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useMediaQuery } from '@vueuse/core'
+import { useDialogFocus } from '@/composables/useDialogFocus'
 import { useI18n } from 'vue-i18n'
 import { useAdminSettingsStore, useAppStore, useAuthStore, useOnboardingStore } from '@/stores'
 import VersionBadge from '@/components/common/VersionBadge.vue'
@@ -255,8 +266,14 @@ const adminSettingsStore = useAdminSettingsStore()
 const { canUseBatchImage, refreshBatchImageAccess } = useBatchImageAccess()
 const { canUseAsyncImage, refreshAsyncImageAccess } = useAsyncImageAccess()
 
-const sidebarCollapsed = computed(() => appStore.sidebarCollapsed)
+const isDesktop = useMediaQuery('(min-width: 1024px)')
+const sidebarCollapsed = computed(() => isDesktop.value && appStore.sidebarCollapsed)
 const mobileOpen = computed(() => appStore.mobileOpen)
+const mobileVisible = computed(() => !isDesktop.value && mobileOpen.value)
+const sidebarRef = ref<HTMLElement | null>(null)
+useDialogFocus(() => mobileVisible.value, sidebarRef, closeMobile)
+watch(isDesktop, desktop => { if (desktop) closeMobile() })
+watch(() => route.fullPath, closeMobile)
 const isAdmin = computed(() => authStore.isAdmin && !adminSupportContext.value)
 const sidebarNavRef = ref<HTMLElement | null>(null)
 const isDark = ref(document.documentElement.classList.contains('dark'))
@@ -895,9 +912,7 @@ function closeMobile() {
 
 function handleMenuItemClick(itemPath: string) {
   if (mobileOpen.value) {
-    setTimeout(() => {
-      appStore.setMobileOpen(false)
-    }, 150)
+    closeMobile()
   }
 
   // Map paths to tour selectors

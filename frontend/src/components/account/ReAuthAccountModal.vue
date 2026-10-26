@@ -8,7 +8,7 @@
     <div v-if="account" class="space-y-4">
       <!-- Account Info -->
       <div
-        class="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-dark-600 dark:bg-dark-700"
+        class="rounded-lg border border-gray-200 surface-inset p-4 dark:border-dark-600"
       >
         <div class="flex items-center gap-3">
           <div
@@ -29,7 +29,7 @@
             <span class="block font-semibold text-gray-900 dark:text-white">{{
               account.name
             }}</span>
-            <span class="text-sm text-gray-500 dark:text-gray-400">
+            <span class="text-sm surface-muted">
               {{
                 isOpenAI
                   ? t('admin.accounts.openaiAccount')
@@ -55,7 +55,7 @@
               value="oauth"
               class="mr-2 text-primary-600 focus:ring-primary-500"
             />
-            <span class="text-sm text-gray-700 dark:text-gray-300">{{
+            <span class="text-sm surface-muted">{{
               t('admin.accounts.types.oauth')
             }}</span>
           </label>
@@ -66,7 +66,7 @@
               value="setup-token"
               class="mr-2 text-primary-600 focus:ring-primary-500"
             />
-            <span class="text-sm text-gray-700 dark:text-gray-300">{{
+            <span class="text-sm surface-muted">{{
               t('admin.accounts.setupTokenLongLived')
             }}</span>
           </label>
@@ -74,8 +74,8 @@
       </fieldset>
 
       <!-- Gemini OAuth Type Display (read-only) -->
-      <div v-if="isGemini" class="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-dark-600 dark:bg-dark-700">
-        <div class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+      <div v-if="isGemini" class="rounded-lg border border-gray-200 surface-inset p-4 dark:border-dark-600">
+        <div class="mb-2 text-sm font-medium surface-muted">
           {{ t('admin.accounts.oauth.gemini.oauthTypeLabel') }}
         </div>
         <div class="flex items-center gap-3">
@@ -103,7 +103,7 @@
                     : t('admin.accounts.gemini.oauthType.customTitle')
               }}
             </span>
-            <span class="text-xs text-gray-500 dark:text-gray-400">
+            <span class="text-xs surface-muted">
               {{
                 geminiOAuthType === 'google_one'
                   ? t('admin.accounts.gemini.oauthType.googleOneDesc')
@@ -342,6 +342,7 @@ const handleGenerateUrl = async () => {
 
 const handleExchangeCode = async () => {
   if (!props.account) return
+  const expectedOwner = props.account.oauth_credential_owner || ''
 
   const authCode = oauthFlowRef.value?.authCode || ''
   if (!authCode.trim()) return
@@ -373,6 +374,7 @@ const handleExchangeCode = async () => {
     try {
       // Update account with new credentials
       await adminAPI.accounts.applyOAuthCredentials(props.account.id, {
+        expected_owner: expectedOwner,
         type: 'oauth', // OpenAI OAuth is always 'oauth' type
         credentials,
         extra

@@ -69,6 +69,17 @@ the next turn's price. Every refresh follows that turn's ingress audit, before
 concurrency acquisition and upstream writes. WS image-input usage is propagated
 through relay and adapter without adding it twice to total input tokens.
 
+OpenAI API-key capability probes freeze the acquired account's credentials,
+base URL, model mapping, header overrides, identity, TLS profile and proxy for
+the probe. A missing configured proxy or outbound preparation failure prevents
+the request. Probe capability flags are written only if that credential and
+proxy snapshot still matches; late responses after account relinking are
+discarded. The local capability flags for native domestic-provider protocols
+use the same conditional write, with no unconditional fallback when persistence
+is unavailable. Codex models discovery also uses the acquired credential
+owner's frozen proxy, including shadow accounts, and fails before sending when
+that proxy cannot be proven.
+
 ## GPT-6 Astra
 
 The gateway uses OpenAI's canonical `gpt-6-astra` model ID. Bare `gpt-6`
@@ -155,6 +166,29 @@ Explicit administrator context intervals remain billable. The exemption follows
 response-model repricing, Free Fast settlement and account-cost statistics,
 without bypassing Plus automatic-review model mismatch protection.
 
+## Alpha Search and Live preflight routes
+
+`/v1/alpha/search` validates the credential owner's captured proxy binding before
+token lookup or PAT metadata completion. A configured binding with a missing,
+mismatched, malformed or incompletely authenticated hydrated proxy fails before
+`whoami`, account-metadata mutation or inference. Validation after the metadata
+request would already expose the PAT to an unauthorized route. A valid bound
+request uses that route for both metadata completion and inference; an explicitly
+unbound account uses direct egress even if a stale proxy association remains.
+
+Live sideband dialing first copies the loaded credential owner, including its
+credentials and proxy snapshot, and validates the binding before constructing
+authentication headers or obtaining a token. The WebSocket dial uses the frozen
+route. A broken binding cannot initiate a dial or alter the supplied call record,
+including its lease and encrypted attestation fields. Explicit unbinding ignores
+a residual hydrated proxy association here as well.
+
+These checks preserve the Codex identity order: valid credential-owning account
+`credentials.user_agent`, then valid global `openai_codex_user_agent`, then the
+compiled default. PAT `whoami` remains an auth-plane request with the selected
+User-Agent and Originator and without a `Version` header. Live sideband retains
+the selected coherent User-Agent, Originator and Version declarations.
+
 ## Prompt Cache Identity and Usage
 
 Current Codex clients can supply the canonical `session-id`, `thread-id`, and
@@ -171,21 +205,42 @@ details and are not persisted as client session IDs.
 Thread and client-request identifiers remain paired request context and never
 replace the session-scoped cache identity.
 
-For OpenAI Responses and Compact requests, the gateway resolves one opaque,
-tenant-isolated cache identity from an explicit `prompt_cache_key`, a supported
-session header, or a stable content prefix with a meaningful user/input anchor.
-It writes the finalized UUID to both the upstream `prompt_cache_key` and the
-canonical `session-id` header. Official Codex never sends a `conversation_id`
-header, so Codex-protocol outbound requests never carry one, and the official
-wire format spells the session header `session-id` only: every Codex-protocol
-outbound path (HTTP forward, passthrough, Messages bridge, WebSocket
-handshake, compact probe, alpha search) drops the legacy `session_id` alias
-regardless of fingerprint mode, matching the official `build_session_headers`.
-Non-Codex compatible-supplier paths (OpenAI API-key accounts) keep the Plus
-`session-id` + `session_id` dual spelling, and inbound `session_id` remains
-accepted for sticky routing. A model-only request does not receive a content-derived key. API-key
-Chat Completions requests converted to Responses use the same behavior, while
-raw Chat Completions forwarding does not receive Responses-only cache fields.
+Native OpenAI `/responses` requests preserve omission of `prompt_cache_key`.
+An explicit custom cache key is tenant-scoped independently of the execution
+session; it does not replace the `session-id` header, and a missing session
+header is not manufactured from the cache key. HTTP forwarding, passthrough
+and Responses WebSocket handshakes use this same rule for root and subagent
+requests. Gateway-owned Chat/Messages adapters and legacy compact conversion
+retain their explicit cache-generation policies; a model-only request receives
+no content-derived key. Raw Chat Completions forwarding receives no
+Responses-only cache fields.
+
+The ordinary logical cache identity belongs to the authenticated tenant and
+logical cache seed, so it remains stable when the scheduler changes credential
+owner. Existing opt-in OAuth session-sharing policy retains its separate
+account/user/policy authorization domain. Neither policy allows one tenant's
+raw session string to acquire another tenant's routing binding. Legacy
+tenant-less route bindings are not a fallback source.
+
+Execution session, thread and turn identities have a different scope: they are
+mapped for the selected credential owner, and therefore change on owner
+failover while remaining stable for repeated sends to the same owner. Native
+sessions and threads use UUIDv7. Valid incoming UUIDv7 timestamps are retained;
+legacy IDs use an atomic durable UUIDv7 mapping. Installation uses a preserved
+configured device pin or a persistent UUIDv4 mapping. It is carried in body
+`client_metadata` and canonical turn metadata, never a direct
+`x-codex-installation-id` Responses/WS header. Both OAuth and API-key native
+requests emit the official `session-id` spelling and remove `session_id` and
+`conversation_id`; compatible supplier protocols retain their defined aliases.
+Inbound legacy aliases remain accepted for sticky routing.
+
+Native official Codex bodies carry their base prompt as a `developer`/`system`
+input item and send no top-level `instructions` field. The gateway therefore
+does not synthesize a default `instructions` value when the input already
+carries that instruction content; Chat Completions/Messages conversion still
+synthesizes instructions at its own conversion boundary, and callers that send
+no instruction content at all keep the previous default. The passthrough
+Codex-model fallback follows the same rule.
 
 Codex-protocol outbound request bodies always carry
 `include: ["reasoning.encrypted_content"]`, matching the official client's
@@ -195,11 +250,15 @@ items. HTTP passthrough and WebSocket compatibility bodies receive the same
 merge. The only exception is the HTTP `/responses/compact` endpoint, whose
 request shape differs and is handled separately. Remote Compact v2
 (`compaction_trigger` on `/responses`) still carries the include declaration,
-matching the official Responses client. Client-owned
-`client_metadata` keys — `turn_id`, `parent_turn_id`,
-`root_turn_id`, `mcp_attribution`, and unknown future keys — pass through the
-proxy verbatim; `mcp_attribution` is the official client's own responsibility
-and the gateway never generates, parses, or trims it.
+matching the official Responses client. `turn_id`, `parent_turn_id` and
+`root_turn_id` use the same typed mapping so references still target the
+corresponding turn. A turn remains stable through its tool loop and retries;
+no turn is invented for prewarm or an absent declaration. Original
+`turn_started_at_unix_ms` and window counters remain unchanged.
+`window_id` stays `<mapped thread>:<counter>`, and `context_window_id` changes
+only when the client's compaction context changes. Unknown metadata keys and
+`mcp_attribution` remain untouched; the gateway does not generate or trim the
+client's MCP attribution.
 
 The declaration never depends on the transport or the attempt number: WebSocket
 reconnects replay the request payload unchanged, so a retried turn still carries
@@ -210,10 +269,15 @@ HTTP forward, HTTP passthrough, Messages bridge, and WebSocket compatibility
 paths: `max_output_tokens`, `max_completion_tokens`, `temperature`, `top_p`,
 `frequency_penalty`, `presence_penalty`, `chat_template_kwargs`, `user`,
 `metadata`, `prompt_cache_options`, `prompt_cache_retention`,
-`safety_identifier`, `stream_options`, `truncation`, and `stop_sequences` are
+`safety_identifier`, `truncation`, and `stop_sequences` are
 removed before the upstream request. A passthrough account therefore produces
 the same body as a non-passthrough account instead of relying on a rejected-field
 retry to recover from a first-request 400.
+
+Responses `stream_options` is preserved, including official Codex
+`reasoning_summary_delivery` and unknown sibling options. Only Chat's
+`stream_options.include_usage` is removed, along with its parent when that
+object would otherwise be empty.
 
 Under the default hard-affinity mode, account priority changes do not replace a
 valid active session route. The optional sticky-weighted scheduler mode remains
@@ -286,6 +350,68 @@ follow the same no-retry rule for the current request.
 Transport failures, account-scoped 401/403/429, and OAuth 429 windows keep
 their existing retry and failover behavior.
 
+Account health scoring and permission to try another account are independent.
+A connection failure or gateway timeout explicitly permits a bounded attempt
+through another account/egress without blaming the selected credential for a
+shared transport failure. Before the first semantic output, an unusable grant
+(including an expired token without a refresh token or a missing API key) also
+enters the same request's account failover loop. Permanent quarantine compares
+the failed platform, account type, complete credential document and proxy in one
+atomic write; a concurrently reauthorized grant is preserved. Shared credential
+dependencies and configuration failures stop without scanning or disabling the
+account pool. Exhaustion returns a fixed credential-unavailable message without
+provider error details.
+
+Successful OpenAI OAuth rotations use the same exact-grant conditional write and
+atomic scheduler notification. A concurrent authorization wins over an older
+refresh response; the durable account is reread and its replacement token can
+recover the same request. Credential caches are invalidated at that boundary.
+Owner or proxy changes, ambiguous persistence, and unchanged-token conflicts stop
+without replaying a rejected token or penalizing the account.
+
+Permanent HTTP 401 quarantine for the seven official provider mappings also
+uses the exact credential snapshot that produced the bearer sent on that
+attempt, including a token refreshed after selection. Durable quarantine must commit
+before any process-local scheduling block; a late response from an older grant
+cannot disable a concurrent login or API-key replacement. Spark shadow requests
+retain the parent snapshot acquired before transport. HTTP refresh retries and
+WS attempts bind independent immutable evidence while their outbound identity
+stays frozen. A token reused across different credential snapshots marks future
+attempt evidence ambiguous and skips quarantine. Without
+evidence for the actual bearer, a late 401 can fail over but cannot permanently
+quarantine a newly reread parent grant.
+
+Recoverable OAuth 401 cooldowns use the same exact-grant conditional write.
+Token-cache invalidation and runtime blocking follow a successful cooldown
+write; stale, ambiguous or unavailable evidence cannot pause a newer login.
+Native OAuth transports publish their final transmitted grant once to their
+own outer attempt, so pre-expiry refresh and internal retries retain correct
+evidence for HTTP and streaming authentication responses.
+The native Messages, Chat and Responses readers apply existing account-side
+authentication and quota handling once for a recognized stream error, including
+after output. They continue collecting usage and preserve the no-replay boundary;
+unknown errors and shared overload do not acquire account penalties.
+Native non-streaming Messages also classify recognized JSON error envelopes
+received with HTTP 200 before recording success or writing client output; their
+semantic status follows the existing HTTP error and account-failover policy.
+
+WS pool compatibility also includes a private digest of the actual credential
+generation, Authorization, destination and proxy. Ordinary, preferred, pinned
+and prewarmed connections follow the same rule: changed credentials cannot reuse
+an older authenticated socket. A forced preferred connection from another
+generation is unavailable. Agent Identity retains its per-dial signing contract;
+the compatibility digest does not include signature bytes.
+
+For these mappings, passthrough HTTP 401 also permits account failover before
+client output, after the existing same-account OpenAI OAuth refresh attempt.
+Explicit custom-status exclusions retain their existing meaning. Other
+passthrough statuses continue to use their documented classifications.
+
+The replacement becomes the session owner only after accepted semantic output
+or a successful metered result. Later turns retain that owner. Capacity shedding,
+unsafe continuations that cannot be reconstructed, and failures after actual
+output retain their existing no-replay boundaries on HTTP and WebSocket paths.
+
 ## Responses Stream Sequence Numbers
 
 Gateway-synthesized and re-emitted Responses SSE frames always write
@@ -354,6 +480,10 @@ supplementary declarations on every successful response:
   display-only declarations and are relayed to the downstream client verbatim
   after generic response-header filtering; the gateway never derives quota or
   billing decisions from them.
+
+Observed `plan_type` values from OpenAI `429` responses are persisted and
+applied to the current request's account with copy-on-write credentials. Cached
+scheduler masters and sibling requests retain their original credential maps.
 
 On an upstream `429`, the gateway classifies the condition before deciding how
 to schedule:
@@ -444,6 +574,44 @@ prevent fresh snapshots from being stored. No zero-percent observation is requir
 post-reset usage may already be 7% or higher. A first-ever same-deadline reset
 cannot be inferred without a prior utilization sample.
 
+Quota, capability-probe and reset-credit observations carry the immutable
+credential-owning account and hydrated proxy that actually transmitted the
+request. HTTP, native WebSocket, HTTP-to-WebSocket bridges, account connection
+tests and compact probes use the same conditional repository port. The merge
+locks the live owner and proxy and compares the complete credentials, account
+type/status, proxy binding and proxy protocol/host/port/authentication/status.
+A missing, changed or deleted owner/proxy discards the response without an
+unconditional write, cache merge or reset notification. OpenAI 429 cooldowns and their runtime scheduling notifications use the same
+captured-owner conditional mutation; stale headers/bodies cannot block the
+successor. ChatGPT `plan_type` learning is restricted to active OpenAI OAuth
+owners and conditionally patches only that metadata field after quota/cooldown
+observations, without replacing authentication or identity fields.
+Snapshot throttles are
+isolated by that credential/proxy generation, so an old response cannot suppress
+a newly authorized account's first snapshot. The persisted owner-generation
+marker resets the snapshot time domain when the grant changes: old future
+timestamps, windows, credits and probe runtime state cannot block or leak into
+its successor; operator configuration is retained. Observation-only samples refresh
+the scheduler snapshot without producing an account-change outbox event.
+
+Migration `296_codex_observation_owner_generation.sql` separates the weekly
+baseline of a verified ChatGPT principal and proxy from exact-grant pending
+corroboration. Queued confirmed events retain the verified principal/proxy
+generation, allowing ordinary token refresh to preserve both a legitimate reset
+and a known principal's baseline. Pending samples cannot confirm across token
+rotation. A known ChatGPT principal requires both the account/team ID and user
+ID; a team ID without a user ID is isolated by the exact credential grant.
+Unknown principals use the complete credential generation; a new principal or
+proxy establishes a fresh baseline and never clears subscriptions on that first
+sample. Empty legacy event generations cannot authorize replay. Both the event
+worker and the billing path recheck the current verified principal/proxy (or exact grant for an unknown
+principal) and active source before applying a queued reset. They lock the account, then its proxy, then the
+group and subscription rows. A source-binding change observed during billing
+returns an error and rolls the charge transaction back for retry, without
+recording a successful charge or consuming its idempotency key. Deploy the
+migration with the updated backend; mixed old/new observation writers are not
+supported. No raw credential or proxy secret is stored in the generation columns.
+
 Confirmed resets have a durable monotonic sequence, so two real resets with
 the same announced deadline remain distinguishable while refreshes are idempotent.
 Each event resets the active subscriptions' 5-hour, daily, and weekly usage;
@@ -508,6 +676,7 @@ outside this gateway's request path.
 The global setting `codex_residency` is `off` or `us`. `us` adds
 `x-openai-internal-codex-residency: us` to Codex-protocol Responses forwarding,
 including HTTP passthrough and the Responses WebSocket handshake, and to
+Codex models discovery for OAuth and API Key using the Codex preset,
 refresh, revoke, and chatgpt.com backend-api calls. `off` sends nothing and
 strips a client-supplied copy. Authorization-code exchange and device-code do
 not send the header. See `docs/OUTBOUND_IDENTITY.md` for the source rule.
@@ -531,15 +700,16 @@ endpoint remains a distinct supported OpenAI API surface. Response retrieve,
 cancel, and other non-create subpaths are not session turns and receive no
 fingerprint mutation.
 
-Fingerprint preparation runs before final request construction. Plus
-prompt-cache/session isolation is authoritative for the final `session-id`
-header on Codex-protocol outbound (the legacy `session_id` alias is removed
-for every Codex account), while fingerprint convergence remains authoritative
-for installation and thread/turn metadata. `off` disables only fingerprint-owned
-header and body mutation; it does not disable Plus cache isolation, security,
-session sharing, or compact policy. WebSocket connection reuse compares final
-stable handshake carriers even when `off` or `device` leaves those values
-client-owned. Usage-log `session_id` stays the sanitized client-original value.
+Fingerprint preparation runs before final request construction. The typed
+mapper applies metadata convergence without creating new turns or resetting
+compaction windows on each generation. `session` mode keeps separate actual
+threads and their parent/fork references; `full` mode converges the metadata
+thread scope. Routing `session-id` still uses the tenant/session-sharing
+execution domain, independently of custom or omitted cache keys. `off`
+disables optional convergence, while owner isolation, official carrier
+selection, security and sharing policy still apply. WebSocket reuse compares
+final stable handshake carriers in every mode. Usage-log `session_id` stays
+the sanitized client-original value.
 
 Only credential-owning OpenAI OAuth accounts participate. Personal access
 token and Agent Identity accounts follow the same endpoint semantics because
@@ -735,3 +905,90 @@ providers with their own reporting behavior.
 Usage tier fields are administrator-only API data. User usage responses omit
 `service_tier`, `requested_service_tier` and `response_service_tier`; user usage
 tables, column settings, cost tooltips and exports do not show service tiers.
+
+
+## Codex transport and active probe timing
+
+The ordinary Codex configuration explicitly sets `supports_websockets = false`
+and still streams over HTTP/SSE. The WebSocket configuration explicitly enables
+it. A custom provider in official Codex defaults this setting to false; HTTP
+streaming does not buffer the whole response. Client WebSocket and upstream
+WebSocket are separate decisions; account/global routing may bridge to HTTP/SSE.
+Connection reuse can improve continuation overhead, but does not remove audit,
+scheduling, retry or model reasoning time. Compare the same model, effort, tier,
+credential owner and network exit before attributing slow first text to transport.
+
+V1 probes optionally set `stream_probe=true`, consume `response.output_text.delta`
+and require `response.completed` with completed status. `response.incomplete`,
+`response.failed`, `error` or disconnect cannot pass based on partial text.
+The standalone probe `first_text_ms` clock excludes metadata/reasoning/tool events
+and does not change real-request first-byte/token billing observations.
+
+
+## Runtime Codex upstream WebSocket controls
+
+The outbound settings page persists two independent controls in the settings
+store (no new deployment environment variable):
+
+| Admin settings field | Default | Effect |
+| --- | --- | --- |
+| `openai_codex_ws_enabled` | `true` | Permit new upstream WS work within existing deployment/account restrictions |
+| `openai_codex_http_ws_enabled` | `false` | Prefer upstream Responses WS for eligible HTTP streaming requests |
+| `openai_codex_ws_deployment_allowed` | Read-only | Whether startup flags permit Responses WS for any account type |
+
+The first switch controls **gateway-to-upstream** connections. It does not
+turn off client-facing WS ingress, HTTP streaming or HTTP/2. Startup `enabled`,
+`force_http`, account-type gates, Responses WS v2 enablement, account mode/off
+and account force-HTTP remain authoritative. Missing persisted fields preserve
+the defaults above; malformed values and database read failures disable new WS
+work. Saving updates the local settings cache immediately; other instances
+observe it within five seconds.
+
+With the preference enabled, a streaming HTTP `/responses` request can use the
+existing WS pool and stream its events back as SSE. Compact, non-streaming,
+background, opaque `previous_response_id` continuations and stream-ID requests
+remain HTTP. Passthrough on/off does not change this selection or identity
+priority. Native HTTP continuations retain their ID; the gateway must not drop it to
+make an upgrade eligible. An explicit account opt-out is never overridden.
+
+Only a handshake/dial failure before generation submission can fall back to
+HTTP. Existing `fallback_cooldown_seconds` (default 30) suppresses subsequent
+upgrade attempts for that account; zero explicitly disables cooling. A write
+attempt followed by disconnect or missing output is ambiguous and is not
+replayed through HTTP. Upstream WS support is therefore optional; enabling this
+preference does not establish a first-text latency improvement.
+
+Disabling upstream WS prevents new dials, acquisition/reuse and prewarm. Active
+turns finish; Live sideband checks each audited client data frame and blocks
+new frames when disabled. Later native Responses WS turns close with 1012 and ask the client to
+reconnect with full history. Idle pooled sockets drain on the existing
+30-second sweep (plus cross-instance settings propagation). A new admitted
+client WS may use the HTTP bridge; an opaque continuation without retained
+history, or pointing outside its last retained response, is rejected with 1012 before billing/concurrency hooks or upstream
+writes. Audit still precedes account selection and each subsequent turn's
+billing/concurrency/upstream side effects. Existing account ingress opt-outs
+remain in force.
+
+OAuth/API-key provider HTTP and WS handshakes use the same trusted identity.
+WS handshakes add `OpenAI-Beta: responses_websockets=2026-02-06`; HTTP removes
+legacy Responses and WS-only beta declarations. Native Codex uses `session-id` and drops
+`session_id`/`conversation_id` aliases after Plus session isolation. OAuth
+ChatGPT account headers remain credential-specific. See
+[Codex client profiles](CODEX_CLIENT_PROFILES.md) for auxiliary/auth omissions.
+
+### Same-user shared OpenAI affinity
+
+Ordinary routing hashes remain scoped to the API key. Opt-in sharing derives a
+separate same-user digest from explicit session headers, `prompt_cache_key`, or
+Messages metadata. It can reuse a binding across keys only for the same
+authorized user and account and the groups allowed by that account's current
+`ScopeVersion`. Content-only hashes and random WebSocket fallback seeds never
+share. The shared v3 index requires current-policy proof; editing the sharing
+policy makes prior bindings unusable and cannot revive them later. Normal token
+refresh does not rotate `ScopeVersion`. Cache-only WebSocket selection also
+defers ordinary and shared affinity publication until the selected account
+passes client-policy checks and terminal concurrency admission; rejecting a
+candidate cannot expose it to another key through the shared index.
+
+
+Quota read-side provenance is mandatory as well as write-side CAS. Automatic quota pause, credit-reset decisions, and quota-based scheduling scores may use only observations whose `codex_usage_owner_generation` matches the current credential owner and proxy. Unmarked legacy or mismatched observations may be displayed and trigger a new probe, but cannot pause an account, consume a credit, inherit probe-failure backoff, or reset subscription usage. Operator thresholds, explicit disable flags and manual session windows remain intact. Spark shadows validate their own quota against the current parent grant using the existing parent-health lookup; the parent's global quota does not block Spark.

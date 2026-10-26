@@ -1,38 +1,41 @@
 <template>
-  <header class="glass sticky top-0 z-30 border-b border-gray-200/50 dark:border-dark-700/50">
-    <div class="flex h-16 items-center justify-between gap-2 px-2 sm:px-4 md:px-6">
+  <header ref="headerRef" class="app-header shell-surface">
+    <div class="app-header-inner flex items-center justify-between gap-2">
       <!-- Left: Mobile Menu Toggle + Page Title -->
-      <div class="flex shrink-0 items-center gap-2 sm:gap-4">
+      <div class="flex min-w-0 flex-1 items-center gap-2 sm:gap-4">
         <button
           @click="toggleMobileSidebar"
-          class="btn-ghost btn-icon lg:hidden"
+          class="btn-ghost btn-icon lg:hidden surface-control"
           :aria-label="t('common.toggleMenu')"
+          :aria-expanded="appStore.mobileOpen"
+          aria-controls="app-navigation"
         >
           <Icon name="menu" size="md" />
         </button>
 
-        <div class="hidden lg:block">
-          <h1 class="text-lg font-semibold text-gray-900 dark:text-white">
+        <img v-if="appStore.publicSettingsLoaded" :src="siteLogo || '/logo.svg'" alt="" class="header-mobile-logo h-7 w-7 shrink-0 rounded-lg object-contain lg:hidden" />
+        <div class="min-w-0">
+          <h1 class="truncate text-sm font-semibold text-gray-900 dark:text-white sm:text-lg" :title="pageTitle">
             {{ pageTitle }}
           </h1>
-          <p v-if="pageDescription" class="text-xs text-gray-500 dark:text-dark-400">
+          <p v-if="pageDescription && !compactHeader" class="truncate text-xs surface-muted" :title="pageDescription">
             {{ pageDescription }}
           </p>
         </div>
       </div>
 
       <!-- Right: Announcements + Docs + Language + Subscriptions + Balance + User Dropdown -->
-      <div class="flex min-w-0 items-center gap-1 sm:gap-3">
+      <div class="flex shrink-0 items-center gap-1 sm:gap-3">
         <!-- Announcement Bell -->
         <AnnouncementBell v-if="user" />
 
         <!-- Docs Link -->
         <a
-          v-if="docUrl"
+          v-if="docUrl && !compactHeader"
           :href="docUrl"
           target="_blank"
           rel="noopener noreferrer"
-          class="hidden items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-dark-400 dark:hover:bg-dark-800 dark:hover:text-white sm:flex"
+          class="hidden items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors hover:surface-hover hover:text-gray-900 dark:hover:text-white sm:flex surface-muted"
         >
           <Icon name="book" size="sm" />
           <span class="hidden sm:inline">{{ t('nav.docs') }}</span>
@@ -40,7 +43,7 @@
 
         <!-- Model Plaza Entry (icon only below sm) -->
         <router-link
-          v-if="user && modelPlazaEnabled"
+          v-if="user && modelPlazaEnabled && !compactHeader"
           :to="{ path: '/model-plaza', query: { embedded: '1' } }"
           :title="t('nav.modelPlaza')"
           :aria-label="t('nav.modelPlaza')"
@@ -51,15 +54,15 @@
         </router-link>
 
         <!-- Language Switcher -->
-        <LocaleSwitcher />
+        <LocaleSwitcher v-if="!compactHeader" />
 
         <!-- Subscription Progress (for users with active subscriptions; not mounted at all when the feature is off) -->
-        <SubscriptionProgressMini v-if="user && subscriptionFeatureEnabled" />
+        <SubscriptionProgressMini v-if="user && subscriptionFeatureEnabled && !compactHeader" />
 
         <!-- Balance Display -->
         <div
-          v-if="user"
-          class="group relative hidden items-center gap-2 rounded-xl bg-primary-50 px-3 py-1.5 dark:bg-primary-900/20 sm:flex"
+          v-if="user && !compactHeader"
+          class="group relative hidden items-center gap-2 rounded-xl bg-primary-50/[0.15] px-3 py-1.5 dark:bg-primary-900/20 sm:flex"
         >
           <svg
             class="h-4 w-4 text-primary-600 dark:text-primary-400"
@@ -79,24 +82,24 @@
           </span>
           <span
             v-if="frozenBalance > 0"
-            class="rounded-full bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/40 dark:text-amber-200"
+            class="rounded-full bg-amber-100/[0.15] px-1.5 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/40 dark:text-amber-200"
           >
             {{ balanceFrozenLabel }}
           </span>
           <div
-            class="pointer-events-none absolute right-0 top-full mt-2 hidden w-56 rounded-lg border border-gray-200 bg-white p-3 text-xs shadow-lg group-hover:block dark:border-dark-700 dark:bg-dark-800"
+            class="pointer-events-none absolute right-0 top-full mt-2 hidden w-56 rounded-lg border border-gray-200 p-3 text-xs shadow-lg group-hover:block dark:border-dark-700 surface-panel"
           >
             <div class="flex items-center justify-between">
-              <span class="text-gray-500 dark:text-dark-400">{{ balanceAvailableText }}</span>
+              <span class="surface-muted">{{ balanceAvailableText }}</span>
               <span class="font-medium text-gray-900 dark:text-white">{{ formatHeaderMoney(availableBalance) }}</span>
             </div>
             <div class="mt-2 flex items-center justify-between">
-              <span class="text-gray-500 dark:text-dark-400">{{ balanceFrozenText }}</span>
+              <span class="surface-muted">{{ balanceFrozenText }}</span>
               <span class="font-medium text-amber-700 dark:text-amber-200">{{ formatHeaderMoney(frozenBalance) }}</span>
             </div>
             <div class="mt-2 border-t border-gray-100 pt-2 dark:border-dark-700">
               <div class="flex items-center justify-between">
-                <span class="text-gray-500 dark:text-dark-400">{{ balanceTotalText }}</span>
+                <span class="surface-muted">{{ balanceTotalText }}</span>
                 <span class="font-semibold text-gray-900 dark:text-white">{{ formatHeaderMoney(totalBalance) }}</span>
               </div>
             </div>
@@ -106,9 +109,12 @@
         <!-- User Dropdown -->
         <div v-if="user" class="relative" ref="dropdownRef">
           <button
+            ref="userMenuButton"
             @click="toggleDropdown"
-            class="flex items-center gap-2 rounded-xl p-1.5 transition-colors hover:bg-gray-100 dark:hover:bg-dark-800"
+            class="flex items-center gap-2 rounded-xl p-1.5 transition-colors hover:surface-hover surface-control"
             :aria-label="t('common.userMenu')"
+            :aria-expanded="dropdownOpen"
+            aria-haspopup="true"
           >
             <div class="flex h-8 w-8 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 text-sm font-medium text-white shadow-sm">
               <img
@@ -119,31 +125,31 @@
               >
               <span v-else>{{ userInitials }}</span>
             </div>
-            <div class="hidden text-left md:block">
-              <div class="text-sm font-medium text-gray-900 dark:text-white">
+            <div v-if="!compactHeader" class="max-w-32 text-left">
+              <div class="truncate text-sm font-medium text-gray-900 dark:text-white">
                 {{ displayName }}
               </div>
-              <div class="text-xs text-gray-500 dark:text-dark-400">
+              <div class="text-xs surface-muted">
                 {{ t('admin.users.roles.' + user.role) }}
               </div>
             </div>
-            <Icon name="chevronDown" size="sm" class="hidden text-gray-400 md:block" />
+            <Icon v-if="!compactHeader" name="chevronDown" size="sm" class="text-gray-400" />
           </button>
 
           <!-- Dropdown Menu -->
           <transition name="dropdown">
-            <div v-if="dropdownOpen" class="dropdown right-0 mt-2 w-56">
+            <div v-if="dropdownOpen" class="dropdown header-user-dropdown right-0 mt-2" @keydown.esc.stop="closeDropdownAndFocus">
               <!-- User Info -->
               <div class="border-b border-gray-100 px-4 py-3 dark:border-dark-700">
                 <div class="text-sm font-medium text-gray-900 dark:text-white">
                   {{ displayName }}
                 </div>
-                <div class="text-xs text-gray-500 dark:text-dark-400">{{ user.email }}</div>
+                <div class="text-xs surface-muted">{{ user.email }}</div>
               </div>
 
               <!-- Balance (mobile only) -->
-              <div class="border-b border-gray-100 px-4 py-2 dark:border-dark-700 sm:hidden">
-                <div class="text-xs text-gray-500 dark:text-dark-400">
+              <div v-if="compactHeader" class="border-b border-gray-100 px-4 py-2 dark:border-dark-700">
+                <div class="text-xs surface-muted">
                   {{ t('common.balance') }}
                 </div>
                 <div class="text-sm font-semibold text-primary-600 dark:text-primary-400">
@@ -155,6 +161,14 @@
               </div>
 
               <div class="py-1">
+                <template v-if="compactHeader">
+                  <a v-if="docUrl" :href="docUrl" target="_blank" rel="noopener noreferrer" class="dropdown-item" @click="closeDropdown"><Icon name="book" size="sm" />{{ t('nav.docs') }}</a>
+                  <router-link v-if="modelPlazaEnabled" :to="{ path: '/model-plaza', query: { embedded: '1' } }" class="dropdown-item" @click="closeDropdown"><Icon name="grid" size="sm" />{{ t('nav.modelPlaza') }}</router-link>
+                  <div class="flex flex-col items-start gap-3 px-4 py-2">
+                    <LocaleSwitcher />
+                    <SubscriptionProgressMini v-if="subscriptionFeatureEnabled" inline class="w-full" />
+                  </div>
+                </template>
                 <router-link to="/profile" @click="closeDropdown" class="dropdown-item">
                   <Icon name="user" size="sm" />
                   {{ t('nav.profile') }}
@@ -190,7 +204,7 @@
                 v-if="contactInfo"
                 class="border-t border-gray-100 px-4 py-2.5 dark:border-dark-700"
               >
-                <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                <div class="flex items-center gap-2 text-xs surface-muted">
                   <svg
                     class="h-3.5 w-3.5 flex-shrink-0"
                     fill="none"
@@ -205,14 +219,14 @@
                     />
                   </svg>
                   <span>{{ t('common.contactSupport') }}:</span>
-                  <span class="font-medium text-gray-700 dark:text-gray-300">{{
+                  <span class="font-medium surface-muted">{{
                     contactInfo
                   }}</span>
                 </div>
               </div>
 
               <div v-if="showOnboardingButton" class="border-t border-gray-100 py-1 dark:border-dark-700">
-                <button @click="handleReplayGuide" class="dropdown-item w-full">
+                <button @click="handleReplayGuide" class="dropdown-item w-full surface-control">
                   <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
                     <path
                       d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 14a1 1 0 110 2 1 1 0 010-2zm1.07-7.75c0-.6-.49-1.25-1.32-1.25-.7 0-1.22.4-1.43 1.02a1 1 0 11-1.9-.62A3.41 3.41 0 0111.8 5c2.02 0 3.25 1.4 3.25 2.9 0 2-1.83 2.55-2.43 3.12-.43.4-.47.75-.47 1.23a1 1 0 01-2 0c0-1 .16-1.82 1.1-2.7.69-.64 1.82-1.05 1.82-2.06z"
@@ -225,7 +239,7 @@
               <div class="border-t border-gray-100 py-1 dark:border-dark-700">
                 <button
                   @click="handleLogout"
-                  class="dropdown-item w-full text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
+                  class="dropdown-item w-full text-red-600 hover:bg-red-50/25 dark:text-red-400 dark:hover:bg-red-900/20 surface-control"
                 >
                   <svg
                     class="h-4 w-4"
@@ -255,6 +269,7 @@
 import { adminSupportContext } from '@/utils/adminSupportContext'
 import { useUserView } from '@/composables/useUserView'
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { useElementSize } from '@vueuse/core'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAppStore, useAuthStore, useOnboardingStore } from '@/stores'
@@ -272,6 +287,10 @@ const router = useRouter()
 const route = useRoute()
 const { t } = useI18n()
 const appStore = useAppStore()
+const headerRef = ref<HTMLElement | null>(null)
+const { width: headerWidth } = useElementSize(headerRef)
+const compactHeader = computed(() => headerWidth.value < 1000)
+const siteLogo = computed(() => sanitizeUrl(appStore.siteLogo || '', { allowRelative: true, allowDataUrl: true }))
 const authStore = useAuthStore()
 const adminSettingsStore = useAdminSettingsStore()
 const onboardingStore = useOnboardingStore()
@@ -280,6 +299,7 @@ const view = useUserView()
 const user = computed(() => view.user)
 const dropdownOpen = ref(false)
 const dropdownRef = ref<HTMLElement | null>(null)
+const userMenuButton = ref<HTMLButtonElement | null>(null)
 const contactInfo = computed(() => appStore.contactInfo)
 const docUrl = computed(() => sanitizeUrl(appStore.docUrl))
 const modelPlazaEnabled = computed(() => isFeatureFlagEnabled(FeatureFlags.modelPlaza))
@@ -358,6 +378,11 @@ function toggleDropdown() {
 
 function closeDropdown() {
   dropdownOpen.value = false
+}
+
+function closeDropdownAndFocus() {
+  closeDropdown()
+  userMenuButton.value?.focus()
 }
 
 async function handleLogout() {

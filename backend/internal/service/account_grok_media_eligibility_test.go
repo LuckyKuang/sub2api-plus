@@ -59,6 +59,7 @@ func TestGrokMediaGenerationEligibility(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			bindGrokSnapshotFixture(tt.account)
 			got, reason := tt.account.GrokMediaGenerationEligibility()
 			require.Equal(t, tt.want, got)
 			require.Equal(t, tt.wantReason, reason)
@@ -81,6 +82,7 @@ func TestGrokMediaCapabilityProbesUnobservedButRejectsInconclusiveOAuth(t *testi
 			Partial:    true,
 		}},
 	}
+	bindGrokSnapshotFixture(inconclusive)
 	eligible, reason = inconclusive.GrokMediaGenerationEligibility()
 	require.False(t, eligible)
 	require.Equal(t, "billing_inconclusive", reason)

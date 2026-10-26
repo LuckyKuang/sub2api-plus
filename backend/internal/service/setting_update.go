@@ -579,15 +579,15 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeyOpenAICodexUserAgent] = strings.TrimSpace(settings.OpenAICodexUserAgent)
 	updates[SettingKeyOpenAICodexEnvironmentTimezone] = strings.TrimSpace(settings.OpenAICodexEnvironmentTimezone)
 	updates[SettingKeyOpenAICodexEgressCountry] = strings.TrimSpace(settings.OpenAICodexEgressCountry)
+	updates[SettingKeyOpenAICodexWSEnabled] = strconv.FormatBool(settings.OpenAICodexWSEnabled)
+	updates[SettingKeyOpenAICodexHTTPWSEnabled] = strconv.FormatBool(settings.OpenAICodexHTTPWSEnabled)
 	updates[SettingKeyOpenAICodexResidency] = settings.OpenAICodexResidency
 	updates[SettingKeyCodexLegacyClientProfileCompatibilityEnabled] = strconv.FormatBool(settings.CodexLegacyClientProfileCompatibilityEnabled)
 	updates[SettingKeyOpenAICodexLocalGroupQuotaEnabled] = strconv.FormatBool(settings.OpenAICodexLocalGroupQuotaEnabled)
 	updates[SettingKeyOpenAICodexClientVersion] = NormalizeCodexClientVersion(settings.OpenAICodexClientVersion)
-	updates[SettingKeyOpenAICodexVersionAutoSyncEnabled] = strconv.FormatBool(settings.OpenAICodexVersionAutoSyncEnabled)
 	updates[SettingKeyClaudeCodeClientVersion] = NormalizeClaudeCodeClientVersion(settings.ClaudeCodeClientVersion)
 	updates[SettingKeyClaudeCodeVersionAutoSyncEnabled] = strconv.FormatBool(settings.ClaudeCodeVersionAutoSyncEnabled)
 	// SettingKeyClaudeCodeClientVersionSynced 由同步任务独占写入。
-	// SettingKeyOpenAICodexClientVersionSynced、CheckedAt、SyncError 由同步任务独占写入，
 	// 此处不得覆盖，否则面板保存会把同步结果和时间清空。
 	// codex_cli_only profile policy
 	updates[SettingKeyMinCodexVersion] = strings.TrimSpace(settings.MinCodexVersion)
@@ -829,12 +829,8 @@ func (s *SettingService) refreshCachedSettings(settings *SystemSettings) {
 		expiresAt: time.Now().Add(antigravityUserAgentVersionCacheTTL).UnixNano(),
 	})
 	s.openAICodexUASF.Forget("openai_codex_user_agent")
-	codexUA := strings.TrimSpace(settings.OpenAICodexUserAgent)
-	if codexUA == "" {
-		codexUA = DefaultOpenAICodexUserAgent
-	}
 	s.openAICodexUACache.Store(&cachedOpenAICodexUserAgent{
-		value:                      codexUA,
+		value:                      settings.OpenAICodexUserAgent,
 		legacyCompatibilityEnabled: settings.CodexLegacyClientProfileCompatibilityEnabled,
 		expiresAt:                  time.Now().Add(openAICodexUserAgentCacheTTL).UnixNano(),
 	})
@@ -848,6 +844,7 @@ func (s *SettingService) refreshCachedSettings(settings *SystemSettings) {
 		value:     strings.TrimSpace(settings.OpenAICodexEgressCountry),
 		expiresAt: time.Now().Add(openAICodexEgressCountryCacheTTL).UnixNano(),
 	})
+	s.storeCodexTransportSettings(CodexTransportSettings{WSEnabled: settings.OpenAICodexWSEnabled, HTTPWSEnabled: settings.OpenAICodexHTTPWSEnabled})
 	s.openAICodexResidencySF.Forget("codex_residency")
 	s.openAICodexResidencyCache.Store(&cachedOpenAICodexResidency{
 		value:     settings.OpenAICodexResidency,
@@ -859,7 +856,7 @@ func (s *SettingService) refreshCachedSettings(settings *SystemSettings) {
 		hasKnownValue: true,
 		expiresAt:     time.Now().Add(openAICodexLocalGroupQuotaCacheTTL).UnixNano(),
 	})
-	// 版本号缓存只做失效，不在此重算：生效值还取决于自动同步写入的 synced 键，
+	// 版本号缓存只做失效；Claude 生效值还取决于独立同步服务写入的 synced 键，
 	// 这里没有它的最新值，重算会把同步结果覆盖成陈旧值。
 	s.InvalidateOpenAICodexClientVersionCache()
 	s.InvalidateClaudeCodeClientVersionCache()

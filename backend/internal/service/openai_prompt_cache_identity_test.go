@@ -15,7 +15,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
-	"github.com/tidwall/sjson"
 )
 
 func newOpenAIPromptCacheIdentityTestContext(t *testing.T, apiKeyID int64) *gin.Context {
@@ -27,22 +26,18 @@ func newOpenAIPromptCacheIdentityTestContext(t *testing.T, apiKeyID int64) *gin.
 	return c
 }
 
-func requireOpenAIAutoCacheIdentityPreservesBody(
-	t *testing.T,
-	originalBody []byte,
-	upstreamBody []byte,
-	headers http.Header,
-) string {
-	t.Helper()
-	identity := strings.TrimSpace(gjson.GetBytes(upstreamBody, "prompt_cache_key").String())
-	require.NotEmpty(t, identity)
-	require.Equal(t, identity, headers.Get(codexSessionIDHeader))
-	require.Equal(t, identity, headers.Get("session_id"))
+func newOpenAIAdapterCacheIdentityTestContext(t *testing.T, apiKeyID int64) *gin.Context {
+	c := newOpenAIPromptCacheIdentityTestContext(t, apiKeyID)
+	c.Request.URL.Path = "/v1/chat/completions"
+	return c
+}
 
-	withoutIdentity, err := sjson.DeleteBytes(upstreamBody, "prompt_cache_key")
-	require.NoError(t, err)
-	require.JSONEq(t, string(originalBody), string(withoutIdentity))
-	return identity
+func requireNativeOpenAICacheOmissionPreservesBody(t *testing.T, originalBody, upstreamBody []byte, headers http.Header) {
+	t.Helper()
+	require.False(t, gjson.GetBytes(originalBody, "prompt_cache_key").Exists())
+	require.False(t, gjson.GetBytes(upstreamBody, "prompt_cache_key").Exists())
+	require.JSONEq(t, string(originalBody), string(upstreamBody))
+	require.Empty(t, headers.Get("session_id"))
 }
 
 func TestEnsureOpenAIResponsesPromptCacheIdentityAlignsExplicitBodyKey(t *testing.T) {
@@ -88,7 +83,7 @@ func TestSetOpenAIUpstreamSessionIdentityUsesOfficialHeaderForCodexAccounts(t *t
 	headers = http.Header{}
 	setOpenAIUpstreamSessionIdentityForAccount(headers, apiKey, "id-apikey")
 	require.Equal(t, "id-apikey", headers.Get(codexSessionIDHeader))
-	require.Equal(t, "id-apikey", headers.Get("session_id"))
+	require.Equal(t, "id-apikey", headers.Get("session_id"), "non-Codex compatible suppliers keep the legacy session_id dual-write")
 }
 
 // conversation_id is never an official Codex header and the legacy session_id
@@ -145,7 +140,7 @@ func TestEnsureOpenAIResponsesPromptCacheIdentityIsIdempotent(t *testing.T) {
 
 func TestEnsureOpenAIResponsesPromptCacheIdentityIsIdempotentWhenFinalIdentityIsSeedOnly(t *testing.T) {
 	svc := &OpenAIGatewayService{}
-	c := newOpenAIPromptCacheIdentityTestContext(t, 302)
+	c := newOpenAIAdapterCacheIdentityTestContext(t, 302)
 	account := &Account{ID: 92, Platform: PlatformOpenAI, Type: AccountTypeAPIKey}
 	originalBody := []byte(`{"model":"gpt-5.6","input":"hello"}`)
 
@@ -167,6 +162,7 @@ func TestEnsureOpenAIResponsesPromptCacheIdentityIsIdempotentWhenFinalIdentityIs
 func TestEnsureOpenAIResponsesPromptCacheIdentityReScopesFinalIdentitySeed(t *testing.T) {
 	svc := &OpenAIGatewayService{}
 	c := newOAuthSessionPolicyGinContext(702, 9001, 11)
+	c.Request.URL.Path = "/v1/chat/completions"
 	firstAccount := newOpenAIOAuthSessionPolicyAccount(103, 11)
 	secondAccount := newOpenAIOAuthSessionPolicyAccount(204, 11)
 	originalBody := []byte(`{"model":"gpt-5.6","input":"hello"}`)
@@ -224,7 +220,7 @@ func TestEnsureOpenAIResponsesPromptCacheIdentityReScopesFinalizedRetryBody(t *t
 	require.Equal(t, secondBody, thirdBody)
 }
 
-func TestEnsureOpenAIResponsesPromptCacheIdentityRecognizesCanonicalCodexSessionHeader(t *testing.T) {
+func TestNativeOpenAIResponsesOmittedCacheDoesNotUseSessionHeader(t *testing.T) {
 	c := newOpenAIPromptCacheIdentityTestContext(t, 7)
 	c.Request.Header.Set(codexSessionIDHeader, "official-session")
 	svc := &OpenAIGatewayService{}
@@ -232,9 +228,9 @@ func TestEnsureOpenAIResponsesPromptCacheIdentityRecognizesCanonicalCodexSession
 	normalized, identity, changed, err := svc.ensureOpenAIResponsesPromptCacheIdentity(c, &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}, []byte(`{"model":"gpt-5.6-sol","input":"hello"}`), "", "gpt-5.6-sol")
 
 	require.NoError(t, err)
-	require.True(t, changed)
-	require.Equal(t, generateSessionUUID(isolateOpenAISessionID(7, "official-session")), identity)
-	require.Equal(t, identity, gjson.GetBytes(normalized, "prompt_cache_key").String())
+	require.False(t, changed)
+	require.Empty(t, identity)
+	require.False(t, gjson.GetBytes(normalized, "prompt_cache_key").Exists())
 	require.Equal(t, "official-session", explicitOpenAIHeaderSessionID(c))
 }
 
@@ -244,9 +240,9 @@ func TestEnsureOpenAIResponsesPromptCacheIdentityContentFallbackStableAcrossTurn
 	first := []byte(`{"model":"gpt-5.6-sol","instructions":"be helpful","input":[{"type":"message","role":"user","content":"hello"}]}`)
 	later := []byte(`{"model":"gpt-5.6-sol","instructions":"be helpful","input":[{"type":"message","role":"user","content":"hello"},{"type":"message","role":"assistant","content":"hi"},{"type":"message","role":"user","content":"next"}]}`)
 
-	_, firstIdentity, _, err := svc.ensureOpenAIResponsesPromptCacheIdentity(newOpenAIPromptCacheIdentityTestContext(t, 9), account, first, "", "gpt-5.6-sol")
+	_, firstIdentity, _, err := svc.ensureOpenAIResponsesPromptCacheIdentity(newOpenAIAdapterCacheIdentityTestContext(t, 9), account, first, "", "gpt-5.6-sol")
 	require.NoError(t, err)
-	_, laterIdentity, _, err := svc.ensureOpenAIResponsesPromptCacheIdentity(newOpenAIPromptCacheIdentityTestContext(t, 9), account, later, "", "gpt-5.6-sol")
+	_, laterIdentity, _, err := svc.ensureOpenAIResponsesPromptCacheIdentity(newOpenAIAdapterCacheIdentityTestContext(t, 9), account, later, "", "gpt-5.6-sol")
 	require.NoError(t, err)
 	require.NotEmpty(t, firstIdentity)
 	require.Equal(t, firstIdentity, laterIdentity)
@@ -382,17 +378,16 @@ func TestOpenAIResponsesCompactPromptCacheFinalization(t *testing.T) {
 			identity := gjson.GetBytes(upstream.lastBody, "prompt_cache_key").String()
 			require.NotEmpty(t, identity)
 			require.Equal(t, identity, upstream.lastReq.Header.Get(codexSessionIDHeader))
-			if tt.account.UsesOpenAICodexProtocol() {
-				require.Empty(t, upstream.lastReq.Header.Get("session_id"))
-			} else {
-				require.Equal(t, identity, upstream.lastReq.Header.Get("session_id"))
-			}
-			expectedThreadID := "thread-compact-1"
-			if tt.account.UsesOpenAICodexProtocol() {
-				expectedThreadID = scopeCodexAccountIdentityValue(&tt.account, 77, "thread", expectedThreadID)
-			}
-			require.Equal(t, expectedThreadID, upstream.lastReq.Header.Get("thread-id"))
-			require.Equal(t, expectedThreadID, upstream.lastReq.Header.Get("x-client-request-id"))
+			// Compact always normalizes to the official `session-id` spelling. Codex-protocol and
+			// native API-key accounts drop the legacy alias; non-Codex compatible suppliers keep
+			// the dual-write, which stays asserted by
+			// TestSetOpenAIUpstreamSessionIdentityUsesOfficialHeaderForCodexAccounts and the
+			// Anthropic/compat path in openai_compat_model_test.go.
+			require.Empty(t, upstream.lastReq.Header.Get("session_id"), "compact emits only the official session-id spelling")
+			threadID := upstream.lastReq.Header.Get("thread-id")
+			require.NotEmpty(t, threadID)
+			require.NotEqual(t, "thread-compact-1", threadID, "both native auth types scope execution identity")
+			require.Equal(t, threadID, upstream.lastReq.Header.Get("x-client-request-id"))
 			require.Equal(t, tt.wantOptions, gjson.GetBytes(upstream.lastBody, "prompt_cache_options").Exists())
 		})
 	}

@@ -188,10 +188,15 @@ func updateProxyAndInvalidateProbeSnapshots(ctx context.Context, client *dbent.C
 	if err != nil {
 		return nil, err
 	}
-	if currentIdentity == proxyProbeIdentityFromService(proxyIn) {
-		return updated, nil
+	if currentIdentity != proxyProbeIdentityFromService(proxyIn) {
+		if _, err := invalidateProxyProbeSnapshots(ctx, client, proxyIn.ID); err != nil {
+			return nil, err
+		}
 	}
-	accountIDs, err := invalidateProxyProbeSnapshots(ctx, client, proxyIn.ID)
+	// Every account snapshot embeds its proxy, including route credentials,
+	// expiry and egress metadata. Invalidate all bound accounts atomically with
+	// the edit; having an Ollama probe snapshot is not a prerequisite.
+	accountIDs, err := listProxyBoundAccountIDs(ctx, client, proxyIn.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -243,18 +248,40 @@ func invalidateProxyProbeSnapshots(ctx context.Context, exec sqlExecutor, proxyI
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
-	accountIDs := make([]int64, 0)
 	for rows.Next() {
 		var accountID int64
 		if err := rows.Scan(&accountID); err != nil {
 			return nil, err
 		}
-		accountIDs = append(accountIDs, accountID)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	return accountIDs, nil
+	if _, err := invalidateProxyCNQuotaSnapshots(ctx, exec, proxyID); err != nil {
+		return nil, err
+	}
+	// Probe cleanup only touches accounts with stored observations. Every
+	// binding must refresh its embedded proxy, including accounts without quota.
+	return listProxyBoundAccountIDs(ctx, exec, proxyID)
+}
+
+func listProxyBoundAccountIDs(ctx context.Context, exec sqlExecutor, proxyID int64) ([]int64, error) {
+	rows, err := exec.QueryContext(ctx, `
+		SELECT id FROM accounts WHERE proxy_id=$1 AND deleted_at IS NULL ORDER BY id
+	`, proxyID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
 
 func enqueueProxyProbeAccountChanges(ctx context.Context, exec sqlExecutor, accountIDs []int64) error {
@@ -273,8 +300,52 @@ func enqueueProxyProbeAccountChanges(ctx context.Context, exec sqlExecutor, acco
 }
 
 func (r *proxyRepository) Delete(ctx context.Context, id int64) error {
-	_, err := r.client.Proxy.Delete().Where(proxy.IDEQ(id)).Exec(ctx)
-	return err
+	client := r.client
+	var tx *dbent.Tx
+	if existing := dbent.TxFromContext(ctx); existing != nil {
+		client = existing.Client()
+	} else {
+		var err error
+		tx, err = r.client.Tx(ctx)
+		if err != nil && err != dbent.ErrTxStarted {
+			return err
+		}
+		if tx != nil {
+			defer func() { _ = tx.Rollback() }()
+			client = tx.Client()
+			ctx = dbent.NewTxContext(ctx, tx)
+		}
+	}
+	_, err := client.Proxy.Query().Where(proxy.IDEQ(id)).ForUpdate().Only(ctx)
+	if dbent.IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	// The service's earlier count is advisory. A binding committed while that
+	// count was in flight must be checked again under the deletion row lock.
+	var count int64
+	if err := scanSingleRow(ctx, client, "SELECT COUNT(*) FROM accounts WHERE proxy_id=$1 AND deleted_at IS NULL", []any{id}, &count); err != nil {
+		return err
+	}
+	if count != 0 {
+		return service.ErrProxyInUse
+	}
+	if _, err := client.Proxy.Delete().Where(proxy.IDEQ(id)).Exec(ctx); err != nil {
+		return err
+	}
+	accountIDs, err := invalidateProxyProbeSnapshots(ctx, client, id)
+	if err != nil {
+		return err
+	}
+	if err := enqueueProxyProbeAccountChanges(ctx, client, accountIDs); err != nil {
+		return err
+	}
+	if tx != nil {
+		return tx.Commit()
+	}
+	return nil
 }
 
 func (r *proxyRepository) List(ctx context.Context, params pagination.PaginationParams) ([]service.Proxy, *pagination.PaginationResult, error) {
@@ -629,26 +700,42 @@ func (r *proxyRepository) ListAllForFallback(ctx context.Context) ([]service.Pro
 	return out, nil
 }
 
-// SweepExpiredProxies 扫描到期 active 代理，标记 expired 并按 fallback 策略改写绑定账号的 proxy_id，
-// 最终触发 scheduler outbox 使 Redis 快照缓存失效。返回受影响的账号行数。
-// 原子性边界：每个过期代理的「标记 expired + 改投账号」在各自子事务内原子执行（见 sweepOneExpiredProxy）；
-// 全部代理处理完后若有账号被改投，再统一 enqueue 一次 account_bulk_changed 事件——该 enqueue 在子事务之外
-// （走 r.sql、失败仅记日志、由调度器周期性 full rebuild 兜底），故「改投 → 失效」整体并非原子。
+// SweepExpiredProxies commits proxy expiry, saved binding changes and their
+// scheduler invalidation together. Lock the current source and backup rows in
+// ID order before deciding: a concurrent renewal must be rechecked after its
+// lock is released, and a backup cannot change while accounts move to it.
+// The return count includes binding changes, not status-only cache refreshes.
 func (r *proxyRepository) SweepExpiredProxies(ctx context.Context, now time.Time) (int64, error) {
-	// 快照读（事务前）：允许脏读不影响正确性，事务内已加锁写。
-	all, err := r.ListAllForFallback(ctx)
+	client := r.client
+	var tx *dbent.Tx
+	if existing := dbent.TxFromContext(ctx); existing != nil {
+		client = existing.Client()
+	} else {
+		var err error
+		tx, err = r.client.Tx(ctx)
+		if err != nil && err != dbent.ErrTxStarted {
+			return 0, err
+		}
+		if tx != nil {
+			defer func() { _ = tx.Rollback() }()
+			client = tx.Client()
+			ctx = dbent.NewTxContext(ctx, tx)
+		}
+	}
+	all, err := client.Proxy.Query().Order(dbent.Asc(proxy.FieldID)).ForUpdate().All(ctx)
 	if err != nil {
 		return 0, err
 	}
 	byID := make(map[int64]service.Proxy, len(all))
 	for _, p := range all {
-		byID[p.ID] = p
+		byID[p.ID] = *proxyEntityToService(p)
 	}
 
 	var totalChanged int64
 	allChangedAccountIDs := make([]int64, 0)
 
-	for _, p := range all {
+	for _, row := range all {
+		p := byID[row.ID]
 		if p.Status != service.StatusActive || !p.IsExpired(now) {
 			continue
 		}
@@ -659,21 +746,22 @@ func (r *proxyRepository) SweepExpiredProxies(ctx context.Context, now time.Time
 			logger.LegacyPrintf("repository.proxy", "[ProxyExpiry] proxy %d expired but fallback chain unresolved (cycle/all-expired); accounts kept", p.ID)
 		}
 
-		changedAccountIDs, sweepErr := r.sweepOneExpiredProxy(ctx, p.ID, target, change)
+		changedAccountIDs, sweepErr := r.sweepOneExpiredProxyOnExec(ctx, client, p.ID, target, change)
 		if sweepErr != nil {
-			return totalChanged, sweepErr
+			return 0, sweepErr
 		}
-		totalChanged += int64(len(changedAccountIDs))
+		if change {
+			totalChanged += int64(len(changedAccountIDs))
+		}
 		allChangedAccountIDs = append(allChangedAccountIDs, changedAccountIDs...)
 	}
 
-	changedAccountIDs := sortedUniqueAccountIDs(allChangedAccountIDs)
-	if len(changedAccountIDs) > 0 {
-		// 各代理的改投事务已经提交；这里仅汇总真实被 UPDATE 命中的账号，
-		// 避免代理到期时用全量重建刷新所有调度分桶。
-		payload := map[string]any{"account_ids": changedAccountIDs}
-		if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventAccountBulkChanged, nil, nil, payload); err != nil {
-			logger.LegacyPrintf("repository.proxy", "[SchedulerOutbox] enqueue proxy expiry account changes failed: err=%v", err)
+	if err := enqueueProxyProbeAccountChanges(ctx, client, allChangedAccountIDs); err != nil {
+		return 0, err
+	}
+	if tx != nil {
+		if err := tx.Commit(); err != nil {
+			return 0, err
 		}
 	}
 	return totalChanged, nil
@@ -695,33 +783,6 @@ func sortedUniqueAccountIDs(accountIDs []int64) []int64 {
 	return accountIDs[:write]
 }
 
-// sweepOneExpiredProxy 在单事务内原子执行：标记代理 expired + 改投绑定账号。
-// 若 r.client 已绑定事务（测试注入场景），直接在 r.sql 上执行，由外层事务保证原子性。
-func (r *proxyRepository) sweepOneExpiredProxy(ctx context.Context, proxyID int64, target *int64, change bool) ([]int64, error) {
-	// 尝试开启子事务；若 r.client 已是事务 client，则返回 ErrTxStarted，退回使用 r.sql。
-	tx, txErr := r.client.Tx(ctx)
-	if txErr != nil {
-		if txErr != dbent.ErrTxStarted {
-			return nil, txErr
-		}
-		// 已在外层事务中（集成测试场景），直接用 r.sql 执行
-		return r.sweepOneExpiredProxyOnExec(ctx, r.sql, proxyID, target, change)
-	}
-
-	// 使用新事务执行
-	var accountIDs []int64
-	var err error
-	accountIDs, err = r.sweepOneExpiredProxyOnExec(ctx, tx, proxyID, target, change)
-	if err != nil {
-		_ = tx.Rollback()
-		return nil, err
-	}
-	if commitErr := tx.Commit(); commitErr != nil {
-		return nil, commitErr
-	}
-	return accountIDs, nil
-}
-
 // sweepOneExpiredProxyOnExec 在给定的 sqlExecutor 上执行：标记 expired + 改投账号。
 func (r *proxyRepository) sweepOneExpiredProxyOnExec(ctx context.Context, exec sqlExecutor, proxyID int64, target *int64, change bool) ([]int64, error) {
 	if _, err := exec.ExecContext(ctx,
@@ -730,14 +791,10 @@ func (r *proxyRepository) sweepOneExpiredProxyOnExec(ctx context.Context, exec s
 		return nil, err
 	}
 	if !change {
-		accountIDs, err := invalidateProxyProbeSnapshots(ctx, exec, proxyID)
-		if err != nil {
+		if _, err := invalidateProxyProbeSnapshots(ctx, exec, proxyID); err != nil {
 			return nil, err
 		}
-		if err := enqueueProxyProbeAccountChanges(ctx, exec, accountIDs); err != nil {
-			return nil, err
-		}
-		return nil, nil
+		return listProxyBoundAccountIDs(ctx, exec, proxyID)
 	}
 	var (
 		rows *sql.Rows
@@ -762,7 +819,7 @@ func (r *proxyRepository) sweepOneExpiredProxyOnExec(ctx context.Context, exec s
 		return nil, err
 	}
 
-	// 必须在提交子事务前读完并关闭 RETURNING 结果集，否则连接仍可能处于 busy 状态。
+	// Read and close RETURNING before the transaction issues its outbox write.
 	accountIDs := make([]int64, 0)
 	for rows.Next() {
 		var accountID int64

@@ -71,7 +71,7 @@ async function enablePlatform(wrapper: ReturnType<typeof mountView>, platform: s
   const label = wrapper.findAll('label').find(label => label.text() === `admin.groups.platforms.${platform}`)
   expect(label).toBeDefined()
   await label!.get('input[type="checkbox"]').setValue(true)
-  await wrapper.findAll('button.channel-tab').find(button => button.text() === `admin.groups.platforms.${platform}`)!.trigger('click')
+  await wrapper.findAll('button[role="tab"]').find(button => button.text() === `admin.groups.platforms.${platform}`)!.trigger('click')
 }
 
 function visibleSyncButtons(wrapper: ReturnType<typeof mountView>) {

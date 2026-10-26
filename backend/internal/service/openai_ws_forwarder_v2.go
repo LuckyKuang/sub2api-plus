@@ -35,13 +35,20 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 	attempt int,
 	lastFailureReason string,
 	agentTaskRecoveryTried *bool,
-) (*OpenAIForwardResult, error) {
+) (result *OpenAIForwardResult, returnErr error) {
 	if s == nil || account == nil {
 		return nil, wrapOpenAIWSFallback("invalid_state", errors.New("service or account is nil"))
 	}
+	requestSubmitted := false
+	defer func() {
+		var failure *openAIWSFallbackError
+		if requestSubmitted && errors.As(returnErr, &failure) {
+			failure.RequestSubmitted = true
+		}
+	}()
 	responseModelObserver := &upstreamResponseModelObserver{}
 
-	wsURL, err := s.buildOpenAIResponsesWSURL(account)
+	wsURL, err := s.buildOpenAIResponsesWSURL(ctx, account)
 	if err != nil {
 		return nil, wrapOpenAIWSFallback("build_ws_url", err)
 	}
@@ -119,7 +126,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 	sessionHash := s.GenerateSessionHash(c, nil)
 	if sessionHash == "" {
 		var legacySessionHash string
-		sessionHash, legacySessionHash = openAIWSSessionHashesFromID(promptCacheKey)
+		sessionHash, legacySessionHash = openAIWSSessionHashesFromID(scopeOpenAISchedulingSeed(c, promptCacheKey))
 		attachOpenAILegacySessionHashToGin(c, legacySessionHash)
 	}
 	// 与 WS 接入路径共用执行作用域：codex 多智能体共用 session-id，turn state 与
@@ -129,19 +136,19 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		sessionHash = executionScope
 	}
 	if turnState == "" && stateStore != nil && sessionHash != "" {
-		if savedTurnState, ok := stateStore.GetSessionTurnState(groupID, sessionHash); ok {
+		if savedTurnState, ok := stateStore.GetSessionTurnState(openAICodexCredentialOwnerID(account), groupID, sessionHash); ok {
 			turnState = savedTurnState
 		}
 	}
 	preferredConnID := ""
 	if stateStore != nil && previousResponseID != "" {
-		if connID, ok := stateStore.GetResponseConn(previousResponseID); ok {
+		if connID, ok := stateStore.GetResponseConn(openAICodexCredentialOwnerID(account), previousResponseID); ok {
 			preferredConnID = connID
 		}
 	}
 	storeDisabled := s.isOpenAIWSStoreDisabledInRequest(reqBody, account)
 	if stateStore != nil && storeDisabled && previousResponseID == "" && sessionHash != "" {
-		if connID, ok := stateStore.GetSessionConn(groupID, sessionHash); ok {
+		if connID, ok := stateStore.GetSessionConn(openAICodexCredentialOwnerID(account), groupID, sessionHash); ok {
 			preferredConnID = connID
 		}
 	}
@@ -198,6 +205,10 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 
 	acquireCtx, acquireCancel := context.WithTimeout(ctx, s.openAIWSAcquireTimeout())
 	defer acquireCancel()
+	proxyURL, proxyErr := requestCredentialOwnerProxyURL(ctx, account)
+	if proxyErr != nil {
+		return nil, wrapOpenAIWSFallback("credential_owner_proxy", proxyErr)
+	}
 
 	lease, err := s.getOpenAIWSConnPool().Acquire(acquireCtx, openAIWSAcquireRequest{
 		Account: account,
@@ -209,21 +220,17 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		},
 		PreferredConnID: preferredConnID,
 		ForceNewConn:    forceNewConn,
-		ProxyURL: func() string {
-			if account.ProxyID != nil && account.Proxy != nil {
-				return account.Proxy.URL()
-			}
-			return ""
-		}(),
+		ProxyURL:        proxyURL,
 	})
 	if err != nil {
 		var agentDialErr *openAIWSDialError
 		if s.isAgentIdentityAccount(ctx, account) && errors.As(err, &agentDialErr) && isAgentIdentityTaskInvalidWSDialError(agentDialErr) && agentTaskRecoveryTried != nil && !*agentTaskRecoveryTried {
 			*agentTaskRecoveryTried = true
-			if recoveryErr := s.recoverAgentIdentityTask(ctx, account, account.GetCredential("task_id")); recoveryErr != nil {
+			recoveredCtx, recoveryErr := s.recoverAgentIdentityTask(ctx, account, account.GetCredential("task_id"))
+			if recoveryErr != nil {
 				return nil, fmt.Errorf("agent identity task recovery failed: %w", recoveryErr)
 			}
-			return nil, &agentIdentityTaskRecoveredError{}
+			return nil, &agentIdentityTaskRecoveredError{ctx: recoveredCtx}
 		}
 		s.handleOpenAIWSDialTransientFailure(ctx, account, mappedModel, err)
 		dialStatus, dialClass, dialCloseStatus, dialCloseReason, dialRespServer, dialRespVia, dialRespCFRay, dialRespReqID := summarizeOpenAIWSDialError(err)
@@ -318,14 +325,18 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		len(handshakeTurnState),
 	)
 	if handshakeTurnState != "" {
+		s.noteOpenAICodexTurnStateProvenance(c, account, handshakeTurnState)
 		if stateStore != nil && sessionHash != "" {
-			stateStore.BindSessionTurnState(groupID, sessionHash, handshakeTurnState, s.openAIWSSessionStickyTTL())
+			stateStore.BindSessionTurnState(openAICodexCredentialOwnerID(account), groupID, sessionHash, handshakeTurnState, s.openAIWSSessionStickyTTL())
 		}
 		if c != nil {
 			c.Header(http.CanonicalHeaderKey(openAIWSTurnStateHeader), handshakeTurnState)
 		}
 	}
 
+	if err := s.requireCodexUpstreamWS(ctx, account); err != nil {
+		return nil, wrapOpenAIWSFallback("outbound_ws_disabled", err)
+	}
 	if err := s.performOpenAIWSGeneratePrewarm(
 		ctx,
 		lease,
@@ -340,6 +351,10 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		return nil, err
 	}
 
+	if err := s.requireCodexUpstreamWS(ctx, account); err != nil {
+		return nil, wrapOpenAIWSFallback("outbound_ws_disabled", err)
+	}
+	requestSubmitted = true
 	if err := lease.WriteJSONWithContextTimeout(ctx, payload, s.openAIWSWriteTimeout()); err != nil {
 		lease.MarkBroken()
 		logOpenAIWSModeInfo(
@@ -364,7 +379,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 
 	usage := &OpenAIUsage{}
 	imageCounter := newOpenAIImageOutputCounter()
-	var timing streamOutputTiming
+	timing := requestStreamOutputTiming(c)
 	responseID := ""
 	var finalResponse []byte
 	wroteDownstream := false
@@ -417,6 +432,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 	}
 	resultWithUsage := func() *OpenAIForwardResult {
 		result := &OpenAIForwardResult{
+			codexUsageOwner:               capturedCodexUsageOwner(ctx, account),
 			RequestID:                     responseID,
 			ResponseID:                    responseID,
 			ImageCount:                    imageCounter.Count(),
@@ -697,7 +713,7 @@ readLoop:
 			if errMsg == "" {
 				errMsg = "Upstream websocket error"
 			}
-			fallbackReason, canFallback := classifyOpenAIWSErrorEventFromRaw(errCodeRaw, errTypeRaw, errMsgRaw)
+			fallbackReason, canFallback := classifyOpenAIWSErrorEvent(message)
 			errCode, errType, errMessage := summarizeOpenAIWSErrorEventFieldsFromRaw(errCodeRaw, errTypeRaw, errMsgRaw)
 			logOpenAIWSModeInfo(
 				"error_event account_id=%d conn_id=%s idx=%d fallback_reason=%s can_fallback=%v err_code=%s err_type=%s err_message=%s",
@@ -741,7 +757,7 @@ readLoop:
 			if !wroteDownstream && canFallback {
 				return nil, wrapOpenAIWSFallback(fallbackReason, errors.New(errMsg))
 			}
-			statusCode := openAIWSErrorHTTPStatusFromRaw(errCodeRaw, errTypeRaw)
+			statusCode := openAIWSErrorHTTPStatus(message)
 			setOpsUpstreamError(c, statusCode, errMsg, "")
 			if reqStream && !clientDisconnected {
 				flushBufferedStreamEvents("error_event")
@@ -749,14 +765,22 @@ readLoop:
 			}
 			if !reqStream {
 				s.finalizeCodexClientQuotaHeaders(c.Writer.Header(), c, account)
-				c.JSON(statusCode, gin.H{
-					"error": gin.H{
-						"type":    "upstream_error",
-						"message": errMsg,
-					},
-				})
+				if modelStatus, ok := openAIModelNotFoundEventStatus(message); ok {
+					writeOpenAIUpstreamClientError(c, modelStatus, message, sanitizeUpstreamErrorMessage(errMsg))
+				} else {
+					c.JSON(statusCode, gin.H{
+						"error": gin.H{
+							"type":    "upstream_error",
+							"message": errMsg,
+						},
+					})
+				}
 			}
-			return nil, fmt.Errorf("openai ws error event: %s", errMsg)
+			terminalErr := fmt.Errorf("openai ws error event: %s", errMsg)
+			if _, ok := openAIModelNotFoundEventStatus(message); ok {
+				return nil, &openAIModelNotFoundTerminalError{cause: terminalErr}
+			}
+			return nil, terminalErr
 		}
 
 		if reqStream {
@@ -780,6 +804,14 @@ readLoop:
 					)
 				}
 			} else {
+				if err := commitOpenAISessionTakeoverEvent(ctx, message); err != nil {
+					lease.MarkBroken()
+					return resultWithUsage(), err
+				}
+				if isTerminalEvent && openAISessionTakeoverPending(ctx) {
+					lease.MarkBroken()
+					return resultWithUsage(), ErrOpenAISessionRouteNotAccepted
+				}
 				if outputObservation.MeaningfulOutput || isTerminalEvent {
 					responseCommitted = true
 				}
@@ -797,6 +829,21 @@ readLoop:
 				markOpenAIWSClientVisibleFailure(c, eventType, message)
 			}
 			upstreamTerminalEvent = s.handleOpenAIWSTerminalTransientFailure(ctx, account, mappedModel, lease.HandshakeHeaders(), message)
+			if eventType == "response.failed" {
+				if status, ok := openAIModelNotFoundEventStatus(message); ok {
+					errMsg := sanitizeUpstreamErrorMessage(extractOpenAISSEErrorMessage(message))
+					if errMsg == "" {
+						errMsg = "model_not_found"
+					}
+					setOpsUpstreamError(c, status, errMsg, "")
+					if !reqStream {
+						s.finalizeCodexClientQuotaHeaders(c.Writer.Header(), c, account)
+						writeOpenAIUpstreamClientError(c, status, message, errMsg)
+					}
+					cleanExit = len(pendingJSONDocuments) == 0
+					return resultWithUsage(), &openAIModelNotFoundTerminalError{cause: fmt.Errorf("openai ws response failed: %s", errMsg)}
+				}
+			}
 			// A terminal event must be the final JSON document in its WS message.
 			// Ignore any tail for the completed client turn, but never reuse the
 			// ambiguous upstream connection for another request.
@@ -838,6 +885,10 @@ readLoop:
 		}
 
 		s.finalizeCodexClientQuotaHeaders(c.Writer.Header(), c, account)
+		if err := commitOpenAISessionTakeoverJSON(ctx, finalResponse); err != nil {
+			lease.MarkBroken()
+			return resultWithUsage(), err
+		}
 		c.Data(http.StatusOK, "application/json", finalResponse)
 	} else {
 		flushStreamWriter(true)
@@ -846,10 +897,10 @@ readLoop:
 	if responseID != "" && stateStore != nil {
 		ttl := s.openAIWSResponseStickyTTL()
 		logOpenAIWSBindResponseAccountWarn(groupID, account.ID, responseID, s.bindOpenAIResponseAccount(ctx, stateStore, groupID, account, responseID, ttl))
-		stateStore.BindResponseConn(responseID, lease.ConnID(), ttl)
+		stateStore.BindResponseConn(openAICodexCredentialOwnerID(account), responseID, lease.ConnID(), ttl)
 	}
 	if stateStore != nil && storeDisabled && sessionHash != "" {
-		stateStore.BindSessionConn(groupID, sessionHash, lease.ConnID(), s.openAIWSSessionStickyTTL())
+		stateStore.BindSessionConn(openAICodexCredentialOwnerID(account), groupID, sessionHash, lease.ConnID(), s.openAIWSSessionStickyTTL())
 	}
 	firstTokenMsValue := -1
 	if timing.firstTokenMs != nil {

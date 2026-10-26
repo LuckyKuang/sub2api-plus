@@ -110,10 +110,12 @@ func (s *OpenAIGatewayService) forwardChatCompletionsViaNativeAnthropic(
 	anthropicBody = FilterWebSearchHistoryBlocks(anthropicBody, upstreamModel)
 	anthropicBody = enforceCacheControlLimit(anthropicBody)
 
-	apiKey := strings.TrimSpace(account.GetOpenAIProtocolAPIKey())
-	if apiKey == "" {
-		return nil, fmt.Errorf("account %d missing api_key", account.ID)
+	apiKey, _, err := s.GetRequestCredential(ctx, c, account)
+	if err != nil {
+		return nil, err
 	}
+	ctx = withRequestCredentialOwner(ctx, account, apiKey)
+	defer bindRequestCredentialOwnerContext(ctx, c)()
 	targetURL, err := s.nativeAnthropicTargetURL(account)
 	if err != nil {
 		return nil, err
@@ -126,6 +128,7 @@ func (s *OpenAIGatewayService) forwardChatCompletionsViaNativeAnthropic(
 
 	upstreamCtx, releaseUpstreamCtx := detachStreamUpstreamContext(ctx, reqStream)
 	defer releaseUpstreamCtx()
+	upstreamCtx = withNativeAnthropicPreflight(upstreamCtx)
 	upstreamReq, forwardedBody, err := s.buildNativeAnthropicUpstreamRequest(upstreamCtx, c, account, anthropicBody, apiKey, targetURL, body)
 	if err != nil {
 		return nil, fmt.Errorf("build upstream request: %w", err)
@@ -152,14 +155,16 @@ func (s *OpenAIGatewayService) forwardChatCompletionsViaNativeAnthropic(
 	reasoningEffort = ApplyThinkingEnabledFallback(reasoningEffort, forwardedBody, billingModel)
 
 	if clientStream {
-		return s.handleCCStreamingFromNativeAnthropic(resp, c, originalModel, billingModel, upstreamModel, reasoningEffort, startTime)
+		return s.handleCCStreamingFromNativeAnthropic(ctx, account, resp, c, originalModel, billingModel, upstreamModel, reasoningEffort, startTime)
 	}
-	return s.handleCCBufferedFromNativeAnthropic(resp, c, originalModel, billingModel, upstreamModel, reasoningEffort, startTime)
+	return s.handleCCBufferedFromNativeAnthropic(ctx, account, resp, c, originalModel, billingModel, upstreamModel, reasoningEffort, startTime)
 }
 
 // handleCCBufferedFromNativeAnthropic reads Anthropic SSE events, assembles the
 // full response, then converts Anthropic → Responses → Chat Completions.
 func (s *OpenAIGatewayService) handleCCBufferedFromNativeAnthropic(
+	ctx context.Context,
+	account *Account,
 	resp *http.Response,
 	c *gin.Context,
 	originalModel string,
@@ -179,6 +184,19 @@ func (s *OpenAIGatewayService) handleCCBufferedFromNativeAnthropic(
 
 	var finalResp *apicompat.AnthropicResponse
 	var usage ClaudeUsage
+	sawMessageStop, sawStreamError := false, false
+	partialResult := func() *OpenAIForwardResult {
+		if finalResp == nil {
+			return nil
+		}
+		return &OpenAIForwardResult{
+			RequestID: requestID, UpstreamHeaders: resp.Header,
+			Usage: claudeUsageToOpenAIUsage(&usage), UsageIncomplete: true,
+			Model: originalModel, BillingModel: billingModel, UpstreamModel: upstreamModel,
+			UpstreamEndpoint: "/v1/messages", ReasoningEffort: reasoningEffort,
+			Duration: time.Since(startTime),
+		}
+	}
 
 	// 读间隔上限：上游挂住 SSE 时中止组装（缓冲路径尚未提交响应头，可回 502）。
 	streamInterval := anthropicNativeStreamInterval(s.cfg)
@@ -200,7 +218,7 @@ func (s *OpenAIGatewayService) handleCCBufferedFromNativeAnthropic(
 			zap.Duration("interval", streamInterval),
 		)
 		writeChatCompletionsError(c, http.StatusBadGateway, "server_error", "Upstream stream data interval timeout")
-		return nil, fmt.Errorf("stream data interval timeout")
+		return partialResult(), fmt.Errorf("stream data interval timeout")
 	}
 
 	for {
@@ -235,6 +253,17 @@ func (s *OpenAIGatewayService) handleCCBufferedFromNativeAnthropic(
 		if err := json.Unmarshal([]byte(payload), &event); err != nil {
 			continue
 		}
+		if event.Type == "error" {
+			if nativeAnthropicErrorStatus(gjson.Get(payload, "error.type").String()) != 0 {
+				s.handleOpenAIStreamTerminalAccountSideEffectsContext(ctx, account, []byte(payload), gjson.Get(payload, "error.message").String(), resp.Header, upstreamModel)
+			}
+			sawStreamError = true
+			break
+		}
+		sawMessageStop = sawMessageStop || event.Type == "message_stop"
+		if sawMessageStop {
+			break
+		}
 
 		if event.Type == "message_start" && event.Message != nil {
 			finalResp = event.Message
@@ -266,6 +295,10 @@ func (s *OpenAIGatewayService) handleCCBufferedFromNativeAnthropic(
 		}
 	}
 
+	if finalResp != nil && (!sawMessageStop || sawStreamError) {
+		writeChatCompletionsError(c, http.StatusBadGateway, "server_error", "Upstream stream ended without a complete response")
+		return partialResult(), fmt.Errorf("upstream anthropic stream incomplete")
+	}
 	if finalResp == nil {
 		writeChatCompletionsError(c, http.StatusBadGateway, "server_error", "Upstream stream ended without a response")
 		return nil, fmt.Errorf("upstream stream ended without response")
@@ -312,6 +345,8 @@ func (s *OpenAIGatewayService) handleCCBufferedFromNativeAnthropic(
 // handleCCStreamingFromNativeAnthropic reads Anthropic SSE events, converts each
 // to Responses events, then to Chat Completions chunks, and writes them.
 func (s *OpenAIGatewayService) handleCCStreamingFromNativeAnthropic(
+	ctx context.Context,
+	account *Account,
 	resp *http.Response,
 	c *gin.Context,
 	originalModel string,
@@ -337,9 +372,10 @@ func (s *OpenAIGatewayService) handleCCStreamingFromNativeAnthropic(
 	ccState.Model = originalModel
 
 	var usage ClaudeUsage
-	var timing streamOutputTiming
+	timing := requestStreamOutputTiming(c)
 	clientDisconnected := false
 	sawMessageStop, sawUpstreamError := false, false
+	accountSideEffectsApplied := false
 
 	scanner := bufio.NewScanner(resp.Body)
 	maxLineSize := defaultMaxLineSize
@@ -384,18 +420,6 @@ func (s *OpenAIGatewayService) handleCCStreamingFromNativeAnthropic(
 			)
 		}
 	}
-	// onIdle 关闭上游连接（解除阻塞的读、归还连接池位），并按已累计 usage
-	// 返回——与 messages 主路径 "stream usage incomplete after timeout" 同语义。
-	onIdle := func() (*OpenAIForwardResult, error) {
-		_ = resp.Body.Close()
-		if !clientDisconnected {
-			logger.L().Warn("openai cc via native anthropic stream: data interval timeout",
-				zap.String("request_id", requestID),
-				zap.Duration("interval", streamInterval),
-			)
-		}
-		return resultWithUsage(), fmt.Errorf("stream data interval timeout")
-	}
 
 	writeChunk := func(chunk apicompat.ChatCompletionsChunk) bool {
 		if clientDisconnected {
@@ -413,7 +437,44 @@ func (s *OpenAIGatewayService) handleCCStreamingFromNativeAnthropic(
 		return false
 	}
 
-	processAnthropicEvent := func(event *apicompat.AnthropicStreamEvent) bool {
+	writePartialUsage := func() {
+		if clientDisconnected || !ccState.IncludeUsage {
+			return
+		}
+		normalized := claudeUsageToOpenAIUsage(&usage)
+		partial := &apicompat.ChatUsage{PromptTokens: normalized.InputTokens, CompletionTokens: normalized.OutputTokens, TotalTokens: normalized.InputTokens + normalized.OutputTokens}
+		if normalized.CacheReadInputTokens > 0 || normalized.CacheCreationInputTokens > 0 {
+			partial.PromptTokensDetails = &apicompat.ChatTokenDetails{CachedTokens: normalized.CacheReadInputTokens, CacheCreationTokens: normalized.CacheCreationInputTokens}
+		}
+		writeChunk(apicompat.ChatCompletionsChunk{ID: ccState.ID, Object: "chat.completion.chunk", Created: ccState.Created, Model: originalModel, ServiceTier: ccState.ServiceTier, Choices: []apicompat.ChatChunkChoice{}, Usage: partial})
+	}
+	writeIncomplete := func(message string) {
+		writePartialUsage()
+		if !clientDisconnected {
+			payload, _ := json.Marshal(map[string]any{"error": map[string]string{"type": "upstream_error", "message": message}})
+			_, err := fmt.Fprintf(c.Writer, "data: %s\n\n", payload)
+			clientDisconnected = err != nil
+			if !clientDisconnected {
+				c.Writer.Flush()
+			}
+		}
+	}
+
+	// onIdle 关闭上游连接（解除阻塞的读、归还连接池位），并按已累计 usage
+	// 返回——与 messages 主路径 "stream usage incomplete after timeout" 同语义。
+	onIdle := func() (*OpenAIForwardResult, error) {
+		_ = resp.Body.Close()
+		if !clientDisconnected {
+			logger.L().Warn("openai cc via native anthropic stream: data interval timeout",
+				zap.String("request_id", requestID),
+				zap.Duration("interval", streamInterval),
+			)
+		}
+		writeIncomplete("Upstream stream data interval timeout")
+		return resultWithUsage(), fmt.Errorf("stream data interval timeout")
+	}
+
+	processAnthropicEvent := func(event *apicompat.AnthropicStreamEvent) {
 		sawMessageStop = sawMessageStop || event.Type == "message_stop"
 		sawUpstreamError = sawUpstreamError || event.Type == "error"
 		timing.Observe(startTime, apicompat.ObserveAnthropicOutput(event))
@@ -425,6 +486,11 @@ func (s *OpenAIGatewayService) handleCCStreamingFromNativeAnthropic(
 		if event.Type == "message_start" && event.Message != nil {
 			mergeAnthropicUsage(&usage, event.Message.Usage)
 		}
+		if sawUpstreamError {
+			// Drain later usage before emitting the partial usage and error
+			// terminal; neither conversion state machine may invent success.
+			return
+		}
 
 		// Keep the outward Responses/Chat usage on the same normalized buckets used
 		// for billing, including converter handlers that consume event usage.
@@ -434,7 +500,7 @@ func (s *OpenAIGatewayService) handleCCStreamingFromNativeAnthropic(
 		// 客户端已断开：跳过转换与写出，继续读上游直到流结束（usage 完整、
 		// 连接及时归还），不再提前 return。
 		if clientDisconnected {
-			return false
+			return
 		}
 
 		responsesEvents := apicompat.AnthropicEventToResponsesEvents(event, anthState)
@@ -447,7 +513,6 @@ func (s *OpenAIGatewayService) handleCCStreamingFromNativeAnthropic(
 		if len(responsesEvents) > 0 {
 			c.Writer.Flush()
 		}
-		return false
 	}
 
 	for {
@@ -482,15 +547,28 @@ func (s *OpenAIGatewayService) handleCCStreamingFromNativeAnthropic(
 			continue
 		}
 
+		if event.Type == "error" && !accountSideEffectsApplied && nativeAnthropicErrorStatus(gjson.Get(payload, "error.type").String()) != 0 {
+			status, disabled := s.handleOpenAIStreamTerminalAccountSideEffectsContext(ctx, account, []byte(payload), gjson.Get(payload, "error.message").String(), resp.Header, upstreamModel)
+			accountSideEffectsApplied = disabled || status == http.StatusUnauthorized || status == http.StatusTooManyRequests || status == 529
+		}
 		// Forward received usage regardless of the client stream_options.
 		// The intermediate Responses converter synthesizes usage even when absent.
 		ccState.IncludeUsage = ccState.IncludeUsage || anthropicChatStreamHasUsage(&event, payload)
 
-		if processAnthropicEvent(&event) {
-			return resultWithUsage(), nil
+		processAnthropicEvent(&event)
+		if sawMessageStop {
+			break
 		}
 	}
 
+	if sawUpstreamError || !sawMessageStop {
+		message := "Upstream stream ended without a complete response"
+		if sawUpstreamError {
+			message = "Upstream stream error"
+		}
+		writeIncomplete(message)
+		return resultWithUsage(), fmt.Errorf("upstream anthropic stream error: incomplete response")
+	}
 	// Finalize both state machines（客户端已断开时仍执行，保证 usage 汇总完整）。
 	finalResEvents := apicompat.FinalizeAnthropicResponsesStream(anthState)
 	for _, resEvt := range finalResEvents {

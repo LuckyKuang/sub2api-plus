@@ -176,7 +176,7 @@ function onNextPage() {
         <div class="w-36">
           <Select v-model="viewMode" :options="viewModeOptions" />
         </div>
-        <div v-if="viewMode === 'topn'" class="w-28">
+        <div v-if="viewMode === 'topn'" class="w-32">
           <Select v-model="topN" :options="topNOptions" />
         </div>
         <template v-else>
@@ -197,18 +197,18 @@ function onNextPage() {
           >
             {{ t('admin.ops.openaiTokenStats.nextPage') }}
           </button>
-          <span class="text-xs text-gray-500 dark:text-gray-400">
+          <span class="text-xs surface-muted">
             {{ t('admin.ops.openaiTokenStats.pageInfo', { page, total: totalPages }) }}
           </span>
         </template>
       </div>
     </div>
 
-    <div v-if="errorMessage" class="mb-4 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600 dark:bg-red-900/20 dark:text-red-400">
+    <div v-if="errorMessage" class="mb-4 rounded-lg bg-red-50/[0.15] px-3 py-2 text-xs text-red-600 dark:bg-red-900/20 dark:text-red-400">
       {{ errorMessage }}
     </div>
 
-    <div v-if="loading" class="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+    <div v-if="loading" class="py-8 text-center text-sm surface-muted">
       {{ t('admin.ops.loadingText') }}
     </div>
 
@@ -220,41 +220,41 @@ function onNextPage() {
 
     <div v-else class="space-y-3">
       <div class="overflow-hidden rounded-xl border border-gray-200 dark:border-dark-700">
-        <div class="max-h-[420px] overflow-auto">
+        <div class="record-table-scroll max-h-[420px] overflow-auto">
           <div v-if="!isDesktopViewport" class="divide-y divide-gray-100 dark:divide-dark-800">
             <div v-for="row in items" :key="row.model" class="space-y-2 p-3">
               <div class="break-all text-xs font-medium text-gray-900 dark:text-gray-100">{{ row.model }}</div>
               <div class="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
                 <div class="flex items-baseline justify-between gap-2">
-                  <span class="text-gray-500 dark:text-gray-400">{{ t('admin.ops.openaiTokenStats.table.requestCount') }}</span>
-                  <span class="text-gray-700 dark:text-gray-200">{{ formatInt(row.request_count) }}</span>
+                  <span class="surface-muted">{{ t('admin.ops.openaiTokenStats.table.requestCount') }}</span>
+                  <span class="surface-muted">{{ formatInt(row.request_count) }}</span>
                 </div>
                 <div class="flex items-baseline justify-between gap-2">
-                  <span class="text-gray-500 dark:text-gray-400">{{ t('admin.ops.openaiTokenStats.table.avgTokensPerSec') }}</span>
-                  <span class="text-gray-700 dark:text-gray-200">{{ formatRate(row.avg_tokens_per_sec) }}</span>
+                  <span class="surface-muted">{{ t('admin.ops.openaiTokenStats.table.avgTokensPerSec') }}</span>
+                  <span class="surface-muted">{{ formatRate(row.avg_tokens_per_sec) }}</span>
                 </div>
                 <div class="flex items-baseline justify-between gap-2">
-                  <span class="text-gray-500 dark:text-gray-400">{{ t('admin.ops.openaiTokenStats.table.avgFirstTokenMs') }}</span>
-                  <span class="text-gray-700 dark:text-gray-200">{{ formatRate(row.avg_first_token_ms) }}</span>
+                  <span class="surface-muted">{{ t('admin.ops.openaiTokenStats.table.avgFirstTokenMs') }}</span>
+                  <span class="surface-muted">{{ formatRate(row.avg_first_token_ms) }}</span>
                 </div>
                 <div class="flex items-baseline justify-between gap-2">
-                  <span class="text-gray-500 dark:text-gray-400">{{ t('admin.ops.openaiTokenStats.table.totalOutputTokens') }}</span>
-                  <span class="text-gray-700 dark:text-gray-200">{{ formatInt(row.total_output_tokens) }} <span v-if="outputTokenShare(row.total_output_tokens)" class="text-gray-400">({{ outputTokenShare(row.total_output_tokens) }})</span></span>
+                  <span class="surface-muted">{{ t('admin.ops.openaiTokenStats.table.totalOutputTokens') }}</span>
+                  <span class="surface-muted">{{ formatInt(row.total_output_tokens) }} <span v-if="outputTokenShare(row.total_output_tokens)" class="surface-muted">({{ outputTokenShare(row.total_output_tokens) }})</span></span>
                 </div>
                 <div class="flex items-baseline justify-between gap-2">
-                  <span class="text-gray-500 dark:text-gray-400">{{ t('admin.ops.openaiTokenStats.table.avgDurationMs') }}</span>
-                  <span class="text-gray-700 dark:text-gray-200">{{ formatInt(row.avg_duration_ms) }}</span>
+                  <span class="surface-muted">{{ t('admin.ops.openaiTokenStats.table.avgDurationMs') }}</span>
+                  <span class="surface-muted">{{ formatInt(row.avg_duration_ms) }}</span>
                 </div>
                 <div class="flex items-baseline justify-between gap-2">
-                  <span class="text-gray-500 dark:text-gray-400">{{ t('admin.ops.openaiTokenStats.table.requestsWithFirstToken') }}</span>
-                  <span class="text-gray-700 dark:text-gray-200">{{ formatInt(row.requests_with_first_token) }}</span>
+                  <span class="surface-muted">{{ t('admin.ops.openaiTokenStats.table.requestsWithFirstToken') }}</span>
+                  <span class="surface-muted">{{ formatInt(row.requests_with_first_token) }}</span>
                 </div>
               </div>
             </div>
           </div>
-          <table v-else class="min-w-full text-left text-xs md:text-sm">
-            <thead class="sticky top-0 z-10 bg-white dark:bg-dark-800">
-              <tr class="border-b border-gray-200 text-gray-500 dark:border-dark-700 dark:text-gray-400">
+          <table v-else class="record-table record-table-compact min-w-full text-left text-xs md:text-sm">
+            <thead class="sticky top-0 z-10 surface-inset">
+              <tr class="border-b border-gray-200 dark:border-dark-700 surface-muted">
                 <th class="px-2 py-2 font-semibold">{{ t('admin.ops.openaiTokenStats.table.model') }}</th>
                 <th class="px-2 py-2 font-semibold">{{ t('admin.ops.openaiTokenStats.table.requestCount') }}</th>
                 <th class="px-2 py-2 font-semibold">{{ t('admin.ops.openaiTokenStats.table.avgTokensPerSec') }}</th>
@@ -268,13 +268,13 @@ function onNextPage() {
               <tr
                 v-for="row in items"
                 :key="row.model"
-                class="border-b border-gray-100 text-gray-700 last:border-b-0 dark:border-dark-800 dark:text-gray-200"
+                class="border-b border-gray-100 last:border-b-0 dark:border-dark-800 surface-muted"
               >
                 <td class="px-2 py-2 font-medium">{{ row.model }}</td>
                 <td class="px-2 py-2">{{ formatInt(row.request_count) }}</td>
                 <td class="px-2 py-2">{{ formatRate(row.avg_tokens_per_sec) }}</td>
                 <td class="px-2 py-2">{{ formatRate(row.avg_first_token_ms) }}</td>
-                <td class="px-2 py-2">{{ formatInt(row.total_output_tokens) }} <span v-if="outputTokenShare(row.total_output_tokens)" class="text-xs text-gray-400">({{ outputTokenShare(row.total_output_tokens) }})</span></td>
+                <td class="px-2 py-2">{{ formatInt(row.total_output_tokens) }} <span v-if="outputTokenShare(row.total_output_tokens)" class="text-xs surface-muted">({{ outputTokenShare(row.total_output_tokens) }})</span></td>
                 <td class="px-2 py-2">{{ formatInt(row.avg_duration_ms) }}</td>
                 <td class="px-2 py-2">{{ formatInt(row.requests_with_first_token) }}</td>
               </tr>
@@ -282,7 +282,7 @@ function onNextPage() {
           </table>
         </div>
       </div>
-      <div v-if="viewMode === 'topn'" class="mt-3 text-xs text-gray-500 dark:text-gray-400">
+      <div v-if="viewMode === 'topn'" class="mt-3 text-xs surface-muted">
         {{ t('admin.ops.openaiTokenStats.totalModels', { total }) }}
       </div>
     </div>

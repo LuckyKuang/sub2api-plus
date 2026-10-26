@@ -1,7 +1,7 @@
 <template>
   <AppLayout>
     <div class="custom-page-layout">
-      <div class="card flex-1 min-h-0 overflow-hidden">
+      <div class="card workspace-shell flex-1 min-h-0 overflow-hidden">
         <div v-if="loading" class="flex h-full items-center justify-center py-12">
           <div
             class="h-8 w-8 animate-spin rounded-full border-2 border-primary-500 border-t-transparent"
@@ -14,14 +14,14 @@
         >
           <div class="max-w-md">
             <div
-              class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 dark:bg-dark-700"
+              class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full surface-inset"
             >
               <Icon name="link" size="lg" class="text-gray-400" />
             </div>
             <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
               {{ t('customPage.notFoundTitle') }}
             </h3>
-            <p class="mt-2 text-sm text-gray-500 dark:text-dark-400">
+            <p class="mt-2 text-sm surface-muted">
               {{ t('customPage.notFoundDesc') }}
             </p>
           </div>
@@ -36,7 +36,7 @@
           >
             <div class="toc-header">
               <span class="toc-title">{{ t('customPage.tableOfContents') }}</span>
-              <button class="toc-close-btn" @click="tocVisible = false">
+              <button class="toc-close-btn surface-control" @click="tocVisible = false">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
               </button>
             </div>
@@ -60,7 +60,7 @@
           <!-- TOC Toggle Button (when collapsed) -->
           <button
             v-show="!tocVisible && tocItems.length > 0"
-            class="toc-toggle-btn"
+            class="toc-toggle-btn surface-control"
             @click="tocVisible = true"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
@@ -80,14 +80,14 @@
         <div v-else-if="!isValidUrl" class="flex h-full items-center justify-center p-10 text-center">
           <div class="max-w-md">
             <div
-              class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 dark:bg-dark-700"
+              class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full surface-inset"
             >
               <Icon name="link" size="lg" class="text-gray-400" />
             </div>
             <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
               {{ t('customPage.notConfiguredTitle') }}
             </h3>
-            <p class="mt-2 text-sm text-gray-500 dark:text-dark-400">
+            <p class="mt-2 text-sm surface-muted">
               {{ t('customPage.notConfiguredDesc') }}
             </p>
           </div>
@@ -459,11 +459,12 @@ onUnmounted(() => {
 }
 
 .toc-sidebar {
-  @apply flex flex-col h-full border-r border-gray-200 dark:border-dark-600 bg-gray-50 dark:bg-dark-800;
+  @apply flex flex-col h-full border-r border-gray-200 dark:border-dark-600;
   width: min(240px, 30%);
   min-width: 160px;
   max-width: 280px;
   overflow: hidden;
+  background-color: var(--surface-soft);
 }
 
 @media (max-width: 640px) {
@@ -484,12 +485,13 @@ onUnmounted(() => {
 }
 
 .toc-title {
-  @apply text-sm font-semibold text-gray-700 dark:text-dark-200;
+  @apply text-sm font-semibold; color: var(--surface-muted);
 }
 
 .toc-close-btn {
-  @apply p-1 rounded text-gray-400 hover:text-gray-600 dark:hover:text-dark-200 hover:bg-gray-200 dark:hover:bg-dark-600 transition-colors;
+  @apply p-1 rounded text-gray-400 hover:text-gray-600 dark:hover:text-dark-200 transition-colors;
 }
+.toc-close-btn:hover { background-color: var(--surface-hover); }
 
 .toc-nav {
   @apply flex-1 overflow-y-auto py-2 px-2;
@@ -497,11 +499,12 @@ onUnmounted(() => {
 
 .toc-item {
   @apply block px-2 py-1.5 text-sm rounded transition-colors truncate;
-  @apply text-gray-600 dark:text-dark-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-dark-600;
+  @apply hover:text-gray-900 dark:hover:text-white; color: var(--surface-muted);
 }
+.toc-item:hover { background-color: var(--surface-hover); }
 
 .toc-item.toc-active {
-  @apply text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 font-medium;
+  @apply text-primary-600 dark:text-primary-400 bg-primary-50/[0.15] dark:bg-primary-900/20 font-medium;
 }
 
 .toc-level-1 { padding-left: 8px; }
@@ -511,10 +514,12 @@ onUnmounted(() => {
 
 .toc-toggle-btn {
   @apply absolute left-2 top-2 z-10 flex items-center px-2 py-1.5 rounded-md text-sm;
-  @apply bg-white dark:bg-dark-700 border border-gray-200 dark:border-dark-500;
-  @apply text-gray-600 dark:text-dark-300 hover:bg-gray-100 dark:hover:bg-dark-600;
+  @apply border border-gray-200 dark:border-dark-500;
+  color: var(--surface-muted);
   @apply shadow-sm transition-colors cursor-pointer;
+  background-color: var(--surface-soft);
 }
+.toc-toggle-btn:hover { background-color: var(--surface-hover); }
 
 .custom-embed-shell {
   @apply relative;
@@ -525,7 +530,8 @@ onUnmounted(() => {
 
 .custom-open-fab {
   @apply absolute right-3 top-3 z-10 w-max max-w-full touch-none select-none transition-colors;
-  @apply shadow-sm backdrop-blur supports-[backdrop-filter]:bg-white/80 dark:supports-[backdrop-filter]:bg-dark-800/80;
+  @apply shadow-sm;
+  background-color: var(--surface-soft);
 }
 
 .custom-embed-frame {
@@ -554,13 +560,13 @@ onUnmounted(() => {
 .markdown-page-content ol { @apply list-decimal pl-6 mb-4; }
 .markdown-page-content li { @apply mb-1; }
 .markdown-page-content a { @apply text-primary-500 hover:text-primary-600 underline; }
-.markdown-page-content blockquote { @apply border-l-4 border-gray-300 dark:border-dark-500 pl-4 italic text-gray-600 dark:text-dark-300 my-4; }
+.markdown-page-content blockquote { @apply border-l-4 border-gray-300 dark:border-dark-500 pl-4 italic my-4; color: var(--surface-muted); }
 .markdown-page-content img { @apply max-w-full h-auto rounded-lg my-4; }
 .markdown-page-content table { @apply w-full border-collapse my-4; }
-.markdown-page-content th { @apply border border-gray-300 dark:border-dark-500 px-3 py-2 bg-gray-50 dark:bg-dark-700 font-semibold text-left; }
+.markdown-page-content th { @apply border border-gray-300 dark:border-dark-500 px-3 py-2 font-semibold text-left;  background-color: var(--surface-soft);}
 .markdown-page-content td { @apply border border-gray-300 dark:border-dark-500 px-3 py-2; }
-.markdown-page-content code { @apply bg-gray-100 dark:bg-dark-700 px-1.5 py-0.5 rounded text-sm font-mono; }
-.markdown-page-content pre { @apply bg-gray-900 dark:bg-dark-900 text-gray-100 p-4 rounded-lg overflow-x-auto my-4 relative; }
+.markdown-page-content code { @apply px-1.5 py-0.5 rounded text-sm font-mono;  background-color: var(--surface-soft);}
+.markdown-page-content pre { @apply  p-4 rounded-lg overflow-x-auto my-4 relative;  background-color: var(--surface-soft); color: var(--surface-text);}
 .markdown-page-content pre code { @apply bg-transparent p-0 text-inherit; }
 .markdown-page-content hr { @apply my-6 border-gray-200 dark:border-dark-600; }
 

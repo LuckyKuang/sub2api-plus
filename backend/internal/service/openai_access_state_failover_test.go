@@ -28,13 +28,21 @@ func (r *openAIStream403AccountRepo) SetError(context.Context, int64, string) er
 
 type openAIAuthPolicyAccountRepo struct {
 	AccountRepository
-	tempCalls     int
-	setErrorCalls int
+	tempCalls               int
+	credentialCooldownCalls int
+	setErrorCalls           int
 }
 
 func (r *openAIAuthPolicyAccountRepo) SetTempUnschedulable(context.Context, int64, time.Time, string) error {
 	r.tempCalls++
 	return nil
+}
+
+func (r *openAIAuthPolicyAccountRepo) SetCredentialTempUnschedulableIfUnchanged(ctx context.Context, expectedOwner *Account, until time.Time, reason string) (bool, error) {
+	id := expectedOwner.ID
+	r.credentialCooldownCalls++
+	err := r.SetTempUnschedulable(ctx, id, until, reason)
+	return err == nil, err
 }
 
 func (r *openAIAuthPolicyAccountRepo) SetError(context.Context, int64, string) error {
@@ -169,6 +177,7 @@ func TestOpenAIHTTPAuthMessagesUseExistingStatusPolicies(t *testing.T) {
 		require.True(t, svc.handleOpenAIAccountUpstreamError(context.Background(), account, http.StatusUnauthorized, nil, body))
 		require.Zero(t, repo.setErrorCalls)
 		require.Equal(t, 1, repo.tempCalls)
+		require.Equal(t, 1, repo.credentialCooldownCalls, "recoverable 401 cooldown must use the exact-grant write")
 	})
 
 	t.Run("403 uses counter cooldown", func(t *testing.T) {

@@ -52,21 +52,34 @@ func (u *chatRoleContractUpstream) Do(req *http.Request, proxyURL string, accoun
 func TestForwardAsChatCompletions_StrictDeveloperRole(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	for _, stream := range []bool{false, true} {
-		for _, target := range []struct{ platform, model, base string }{
-			{PlatformDeepseek, "deepseek-flash", "https://api.deepseek.com"},
-			{PlatformKimi, "k3", "https://api.kimi.com/coding"},
-			{PlatformZhipu, "glm-5.3", "https://open.bigmodel.cn/api/paas/v4"},
-			{PlatformOpenAI, "deepseek-flash", "https://api.deepseek.com"},
-			{PlatformOpenAI, "k3", "https://api.kimi.com/coding"},
-			{PlatformOpenAI, "kimi-k3", "https://api.moonshot.ai"},
-			{PlatformOpenAI, "glm-5.3", "https://open.bigmodel.cn/api/paas/v4"},
+		for _, target := range []struct {
+			platform, model, base string
+			oauth                 bool
+		}{
+			{PlatformDeepseek, "deepseek-flash", "https://api.deepseek.com", false},
+			{PlatformKimi, "k3", "https://api.kimi.com/coding", false},
+			{PlatformZhipu, "glm-5.3", "https://open.bigmodel.cn/api/paas/v4", false},
+			{PlatformOpenAI, "deepseek-flash", "https://api.deepseek.com", false},
+			{PlatformOpenAI, "k3", "https://api.kimi.com/coding", false},
+			{PlatformOpenAI, "kimi-k3", "https://api.moonshot.ai", false},
+			{PlatformOpenAI, "glm-5.3", "https://open.bigmodel.cn/api/paas/v4", false},
+
+			{PlatformStepFun, "step-3.7-flash", "https://api.stepfun.com/v1", false},
+			{PlatformStepFun, "step-3.7-flash", "https://api.stepfun.com/step_plan/v1", true},
 		} {
-			t.Run(fmt.Sprintf("%s/%s/%s/stream=%t", target.platform, target.model, target.base, stream), func(t *testing.T) {
+			t.Run(fmt.Sprintf("%s/%s/%s/stream=%t", target.platform, target.model, target.base+fmt.Sprint(target.oauth), stream), func(t *testing.T) {
 				body := []byte(fmt.Sprintf(`{"model":"example-alias","messages":[{"role":"developer","content":"Keep these instructions."},{"role":"user","content":"ping"}],"stream":%t,"max_tokens":10}`, stream))
 				original := bytes.Clone(body)
 				upstream := &chatRoleContractUpstream{strict: true}
-				svc := &OpenAIGatewayService{cfg: rawChatCompletionsTestConfig(), httpUpstream: upstream}
+				svc := &OpenAIGatewayService{cfg: rawChatCompletionsTestConfig(), httpUpstream: upstream, cnOAuthService: NewCNOAuthService(nil, nil, nil)}
 				account := rawChatCompletionsTestAccount()
+				if target.platform == PlatformStepFun {
+					kind := AccountTypeAPIKey
+					if target.oauth {
+						kind = AccountTypeOAuth
+					}
+					account = stepFunTestAccount(kind, "cn")
+				}
 				account.Platform = target.platform
 				account.Credentials["base_url"] = target.base
 				account.Credentials["api_protocol"] = APIProtocolChatCompletions
@@ -94,6 +107,8 @@ func TestForwardAsChatCompletions_StrictDeveloperRole(t *testing.T) {
 				// A subsequent attempt with the same body on a compatible account
 				// must still see developer, not the previous account's system role.
 				upstream.strict = false
+				account.Credentials["api_key"] = "retry-key"
+				account.Type = AccountTypeAPIKey
 				account.Platform = PlatformOpenAI
 				account.Credentials["base_url"] = "https://compatible.example.test/v1"
 				recorder = httptest.NewRecorder()
@@ -129,7 +144,7 @@ func TestNormalizeStrictChatDeveloperRoles_PreservesConversation(t *testing.T) {
 func TestNormalizeStrictChatDeveloperRoles_ExactOfficialHosts(t *testing.T) {
 	body := []byte(`{"messages":[{"role":"developer","content":"rules"}]}`)
 	account := &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}
-	for _, host := range []string{"api.deepseek.com", "api.kimi.com", "api.moonshot.cn", "api.moonshot.ai", "open.bigmodel.cn", "api.z.ai", "API.DEEPSEEK.COM:443"} {
+	for _, host := range []string{"api.stepfun.com", "api.stepfun.ai", "api.deepseek.com", "api.kimi.com", "api.moonshot.cn", "api.moonshot.ai", "open.bigmodel.cn", "api.z.ai", "API.DEEPSEEK.COM:443"} {
 		t.Run(host, func(t *testing.T) {
 			got, err := normalizeStrictChatDeveloperRoles(account, "https://"+host+"/v1/chat/completions", body)
 			require.NoError(t, err)

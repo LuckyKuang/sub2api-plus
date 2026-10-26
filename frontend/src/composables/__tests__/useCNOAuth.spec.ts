@@ -5,7 +5,7 @@ import { cnOAuthRequest, type CNOAuthSession } from '@/api/admin/cnOAuth'
 import { useCNOAuth } from '../useCNOAuth'
 vi.mock('@/api/admin/cnOAuth', () => ({ cnOAuthRequest: vi.fn() }))
 const pending = (): CNOAuthSession => ({ session_id: 'session', authorize_url: 'https://auth.kimi.com/verify', user_code: 'CODE', expires_at: new Date(Date.now() + 60000).toISOString(), interval_seconds: 2, status: 'pending' })
-function setup(platform: 'kimi' | 'deepseek' | 'minimax' = 'kimi') {
+function setup(platform: 'kimi' | 'deepseek' | 'minimax' | 'stepfun' = 'kimi') {
   let api!: ReturnType<typeof useCNOAuth>
   const wrapper = mount(defineComponent({ setup() { api = useCNOAuth(platform); return () => h('div') } }))
   return { api, wrapper }
@@ -13,6 +13,18 @@ function setup(platform: 'kimi' | 'deepseek' | 'minimax' = 'kimi') {
 describe('native OAuth login lifecycle', () => {
   beforeEach(() => { vi.useFakeTimers(); vi.mocked(cnOAuthRequest).mockReset(); vi.mocked(cnOAuthRequest).mockResolvedValue(pending()) })
   afterEach(() => { vi.useRealTimers() })
+  it('polls Step cloud login and stops polling when the server-held grant is ready', async () => {
+    const { api, wrapper } = setup('stepfun')
+    await api.start({ region: 'global' })
+    vi.mocked(cnOAuthRequest).mockResolvedValueOnce({ ...pending(), status: 'ready' })
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(cnOAuthRequest).toHaveBeenLastCalledWith('stepfun', 'poll', { session_id: 'session' })
+    expect(api.session.value?.status).toBe('ready')
+    const calls = vi.mocked(cnOAuthRequest).mock.calls.length
+    await vi.advanceTimersByTimeAsync(10000)
+    expect(cnOAuthRequest).toHaveBeenCalledTimes(calls)
+    wrapper.unmount()
+  })
   it('uses server polling intervals including slow-down, then stops on ready and completes without secrets', async () => {
     const { api, wrapper } = setup()
     await api.start({ region: 'global', proxy_id: 3 })

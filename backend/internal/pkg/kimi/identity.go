@@ -64,13 +64,13 @@ const (
 	Preset = "kimi"
 
 	// DefaultVersion is the pinned published Kimi Code version.
-	DefaultVersion = "2.1.1"
+	DefaultVersion = "2.3.1"
 
 	// StableVersion is the oldest client version this build advertises. The CLI,
 	// the `kimi web` server and the native binaries share one released version
 	// line, so a monotonic floor is safe here; the VS Code extension is a
 	// different product token and is not a candidate for this preset.
-	StableVersion = DefaultVersion
+	StableVersion = "2.1.1"
 
 	// VersionEnv is the optional operator override for DefaultVersion. It
 	// follows the existing SUB2API_CLAUDE_CLI_VERSION / XAI_GROK_CLI_VERSION

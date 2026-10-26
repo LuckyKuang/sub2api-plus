@@ -19,6 +19,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/xai"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 )
@@ -670,7 +671,7 @@ func TestForwardGrokResponsesCodexAdditionalToolsUsesMixedCacheIntent(t *testing
 	require.False(t, gjson.GetBytes(upstream.lastBody, `tools.#(type=="namespace")`).Exists())
 	identity := gjson.GetBytes(upstream.lastBody, "prompt_cache_key").String()
 	require.NotEmpty(t, identity)
-	require.Equal(t, identity, upstream.lastReq.Header.Get(grokConversationIDHeader))
+	requireGrokIndependentConversation(t, upstream.lastReq, identity)
 	require.Empty(t, upstream.lastReq.Header.Get("X-Grok-Client-Tool-Cache"))
 }
 
@@ -838,7 +839,7 @@ func TestBuildGrokResponsesRequestUsesAccountBaseURLAndBearerToken(t *testing.T)
 	// application/json rather than SSE.
 	require.Equal(t, "application/json", req.Header.Get("Accept"))
 	require.Equal(t, grokCLIVersion, req.Header.Get("X-Grok-Client-Version"))
-	require.Equal(t, "isolated-cache-id", req.Header.Get(grokConversationIDHeader))
+	require.Empty(t, req.Header.Get(grokConversationIDHeader), "a probe without tenant context has no conversation attribution")
 
 	data, err := io.ReadAll(req.Body)
 	require.NoError(t, err)
@@ -1017,7 +1018,7 @@ func TestBuildGrokResponsesRequestAppliesOnlyOrdinaryHeaderOverrides(t *testing.
 	require.NotContains(t, req.Header, "x-grok-client-version")
 	require.Equal(t, []string{"relay-secret"}, req.Header["x-relay-token"])
 	// 会话路由头与认证头不受覆写影响。
-	require.Equal(t, "conv-1", req.Header.Get(grokConversationIDHeader))
+	require.Empty(t, req.Header.Get(grokConversationIDHeader), "a probe without tenant context has no conversation attribution")
 	require.Equal(t, "Bearer access-token", req.Header.Get("Authorization"))
 }
 
@@ -1039,7 +1040,7 @@ func TestBuildGrokResponsesRequestIgnoresBlockedHeaderOverrides(t *testing.T) {
 	req, err := (&OpenAIGatewayService{}).buildGrokResponsesRequest(context.Background(), nil, account, []byte(`{"model":"grok-4.3"}`), "api-key", "conv-2", nil)
 	require.NoError(t, err)
 	require.Equal(t, "Bearer api-key", req.Header.Get("Authorization"))
-	require.Equal(t, "conv-2", req.Header.Get(grokConversationIDHeader))
+	require.Empty(t, req.Header.Get(grokConversationIDHeader), "a probe without tenant context has no conversation attribution")
 }
 
 func TestGrokMediaGenerationGateCoversImagesAndVideo(t *testing.T) {
@@ -2076,7 +2077,7 @@ func TestForwardGrokResponsesStreamingDefaultsEmptyModelTo45AndSnapshots(t *test
 	require.Empty(t, upstream.lastReq.Header.Get("OpenAI-Beta"), "official Grok has no OpenAI beta declaration")
 	require.Equal(t, "grok-4.5", gjson.GetBytes(upstream.lastBody, "model").String())
 	require.NotEmpty(t, gjson.GetBytes(upstream.lastBody, "prompt_cache_key").String())
-	require.Equal(t, gjson.GetBytes(upstream.lastBody, "prompt_cache_key").String(), upstream.lastReq.Header.Get(grokConversationIDHeader))
+	requireGrokIndependentConversation(t, upstream.lastReq, gjson.GetBytes(upstream.lastBody, "prompt_cache_key").String())
 	require.False(t, gjson.GetBytes(upstream.lastBody, "tools").Exists(), "no implicit search authorization")
 	require.False(t, gjson.GetBytes(upstream.lastBody, "tool_choice").Exists())
 	require.Equal(t, "high", gjson.GetBytes(upstream.lastBody, "reasoning_effort").String())
@@ -2267,7 +2268,8 @@ func TestForwardGrokResponsesRetriesInvalidEncryptedContentOnce(t *testing.T) {
 	require.Equal(t, firstIdentity, secondIdentity)
 	for _, req := range upstream.requests {
 		require.Equal(t, "Bearer same-token", req.Header.Get("Authorization"))
-		require.Equal(t, firstIdentity, req.Header.Get(grokConversationIDHeader))
+		requireGrokIndependentConversation(t, req, firstIdentity)
+		require.Equal(t, upstream.requests[0].Header.Get(grokConversationIDHeader), req.Header.Get(grokConversationIDHeader))
 	}
 	require.Equal(t, StatusActive, account.Status)
 	_, hasUpstreamErrors := c.Get(OpsUpstreamErrorsKey)
@@ -2703,7 +2705,7 @@ func TestForwardGrokResponsesNonStreamingUsesCacheIdentityAndCachedUsage(t *test
 	require.Equal(t, "grok-4.6", gjson.GetBytes(upstream.lastBody, "model").String())
 	identity := gjson.GetBytes(upstream.lastBody, "prompt_cache_key").String()
 	require.NotEmpty(t, identity)
-	require.Equal(t, identity, upstream.lastReq.Header.Get(grokConversationIDHeader))
+	requireGrokIndependentConversation(t, upstream.lastReq, identity)
 	// The sanitizer drops this unsupported client tool, but its explicit intent
 	// must still prevent native cache-routing tools from being injected.
 	require.False(t, gjson.GetBytes(upstream.lastBody, "tools").Exists())
@@ -2766,8 +2768,9 @@ func TestForwardGrokResponsesFailoverKeepsCacheIdentityAcrossAccounts(t *testing
 	secondIdentity := gjson.GetBytes(upstream.bodies[1], "prompt_cache_key").String()
 	require.NotEmpty(t, firstIdentity)
 	require.Equal(t, firstIdentity, secondIdentity)
-	require.Equal(t, firstIdentity, upstream.requests[0].Header.Get(grokConversationIDHeader))
-	require.Equal(t, secondIdentity, upstream.requests[1].Header.Get(grokConversationIDHeader))
+	requireGrokIndependentConversation(t, upstream.requests[0], firstIdentity)
+	requireGrokIndependentConversation(t, upstream.requests[1], secondIdentity)
+	require.NotEqual(t, upstream.requests[0].Header.Get(grokConversationIDHeader), upstream.requests[1].Header.Get(grokConversationIDHeader), "failover changes the credential owner's session")
 	require.Equal(t, "Bearer access-token-a", upstream.requests[0].Header.Get("Authorization"))
 	require.Equal(t, "Bearer access-token-b", upstream.requests[1].Header.Get("Authorization"))
 }
@@ -2880,7 +2883,17 @@ func TestForwardAsChatCompletionsForGrokComposerBridgesImageInput(t *testing.T) 
 	require.NotNil(t, result)
 	require.Len(t, upstream.requests, 2)
 	require.Equal(t, xai.DefaultCLIBaseURL+"/responses", upstream.requests[0].URL.String())
-	require.Empty(t, upstream.requests[0].Header.Get(grokConversationIDHeader))
+	// Captioning and the final sampler call belong to this logical session.
+	require.NotEmpty(t, upstream.requests[0].Header.Get(grokConversationIDHeader))
+	require.Equal(t, upstream.requests[0].Header.Get(grokConversationIDHeader), upstream.requests[1].Header.Get(grokConversationIDHeader))
+	// A caption is a separate logical prompt, just as official auxiliary calls
+	// retain a parent session while using an independent request UUIDv4.
+	for _, req := range upstream.requests {
+		id, err := uuid.Parse(req.Header.Get("X-Grok-Req-Id"))
+		require.NoError(t, err)
+		require.Equal(t, uuid.Version(4), id.Version())
+	}
+	require.NotEqual(t, upstream.requests[0].Header.Get("X-Grok-Req-Id"), upstream.requests[1].Header.Get("X-Grok-Req-Id"))
 	require.Equal(t, "grok-build-0.1", gjson.GetBytes(upstream.bodies[0], "model").String())
 	require.Equal(t, "input_image", gjson.GetBytes(upstream.bodies[0], "input.0.content.1.type").String())
 	require.Equal(t, xai.DefaultCLIBaseURL+"/chat/completions", upstream.requests[1].URL.String())
@@ -2931,7 +2944,7 @@ func TestForwardAsAnthropicForGrokUsesXAIResponses(t *testing.T) {
 	require.Empty(t, upstream.lastReq.Header.Get("version"))
 	require.Equal(t, "grok-4.6", gjson.GetBytes(upstream.lastBody, "model").String())
 	require.NotEmpty(t, gjson.GetBytes(upstream.lastBody, "prompt_cache_key").String())
-	require.Equal(t, gjson.GetBytes(upstream.lastBody, "prompt_cache_key").String(), upstream.lastReq.Header.Get(grokConversationIDHeader))
+	requireGrokIndependentConversation(t, upstream.lastReq, gjson.GetBytes(upstream.lastBody, "prompt_cache_key").String())
 	require.False(t, gjson.GetBytes(upstream.lastBody, "tools").Exists(), "the client did not authorize tools")
 	require.False(t, gjson.GetBytes(upstream.lastBody, "tool_choice").Exists())
 	require.Empty(t, upstream.lastReq.Header.Get("session_id"))
@@ -3003,7 +3016,7 @@ func TestForwardAsAnthropicForGrokUsesConfiguredDefaultBaseURL(t *testing.T) {
 func TestForwardGrokResponses_StreamErrorPreservesPartialResult(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	recorder := httptest.NewRecorder()
+	recorder := newOpenAIResponseFlushRecorder()
 	c, _ := gin.CreateTestContext(recorder)
 	body := []byte(`{"model":"grok","stream":true,"input":"hi"}`)
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
@@ -3016,21 +3029,32 @@ func TestForwardGrokResponses_StreamErrorPreservesPartialResult(t *testing.T) {
 			accountsByID: map[int64]*Account{61: account},
 		},
 	}
-	upstreamSSE := strings.Join([]string{
-		`data: {"type":"response.output_text.delta","delta":"h"}`,
-		"",
+	firstEvent := "data: {\"type\":\"response.output_text.delta\",\"delta\":\"h\"}\n\n"
+	terminalEvents := strings.Join([]string{
 		`data: {"type":"response.completed","response":{"id":"resp_grok_partial","model":"grok-4.5","usage":{"input_tokens":9,"output_tokens":4,"input_tokens_details":{"cached_tokens":2}}}}`,
 		"",
 		"data: [DONE]",
 		"",
 	}, "\n")
+	allowTerminal := make(chan struct{})
+	defer func() {
+		select {
+		case <-allowTerminal:
+		default:
+			close(allowTerminal)
+		}
+	}()
+	upstreamBody := &stagedOpenAISSEReadCloser{
+		segments: [][]byte{[]byte(firstEvent), []byte(terminalEvents)},
+		gates:    []<-chan struct{}{nil, allowTerminal},
+	}
 	upstream := &httpUpstreamRecorder{resp: &http.Response{
 		StatusCode: http.StatusOK,
 		Header: http.Header{
 			"Content-Type":   []string{"text/event-stream"},
 			"Xai-Request-Id": []string{"xai-rid-partial"},
 		},
-		Body: io.NopCloser(strings.NewReader(upstreamSSE)),
+		Body: upstreamBody,
 	}}
 	svc := &OpenAIGatewayService{
 		httpUpstream:      upstream,
@@ -3038,7 +3062,18 @@ func TestForwardGrokResponses_StreamErrorPreservesPartialResult(t *testing.T) {
 		accountRepo:       repo,
 	}
 
-	result, err := svc.forwardGrokResponses(context.Background(), c, account, body, "grok", true, time.Now())
+	var result *OpenAIForwardResult
+	var err error
+	done := make(chan struct{})
+	go func() {
+		result, err = svc.forwardGrokResponses(context.Background(), c, account, body, "grok", true, time.Now())
+		close(done)
+	}()
+	// Deliver the terminal usage only after the first event reaches the client,
+	// so the injected second-write failure does not depend on scanner scheduling.
+	waitOpenAIResponseFlushCount(t, recorder, 1)
+	close(allowTerminal)
+	waitOpenAIResponseFlushSignal(t, done)
 
 	require.EqualError(t, err, "stream usage incomplete: client disconnected")
 	require.NotNil(t, result, "Grok stream errors after observable output must preserve the partial result")
@@ -3102,7 +3137,7 @@ func TestForwardAsAnthropicForGrokFunctionToolUsesCacheCapableMixedRoute(t *test
 	require.Equal(t, xai.DefaultCLIBaseURL+"/responses", upstream.lastReq.URL.String())
 	identity := gjson.GetBytes(upstream.lastBody, "prompt_cache_key").String()
 	require.NotEmpty(t, identity)
-	require.Equal(t, identity, upstream.lastReq.Header.Get(grokConversationIDHeader))
+	requireGrokIndependentConversation(t, upstream.lastReq, identity)
 	tools := gjson.GetBytes(upstream.lastBody, "tools").Array()
 	require.Len(t, tools, 2)
 	require.Equal(t, "function", tools[0].Get("type").String())
@@ -3152,7 +3187,7 @@ func TestForwardAsAnthropicForGrokStreamingPreservesCacheUsage(t *testing.T) {
 	require.Equal(t, 2, result.Usage.CacheReadInputTokens)
 	identity := gjson.GetBytes(upstream.lastBody, "prompt_cache_key").String()
 	require.NotEmpty(t, identity)
-	require.Equal(t, identity, upstream.lastReq.Header.Get(grokConversationIDHeader))
+	requireGrokIndependentConversation(t, upstream.lastReq, identity)
 	require.Contains(t, recorder.Header().Get("Content-Type"), "text/event-stream")
 	require.Contains(t, recorder.Body.String(), `"cache_read_input_tokens":2`)
 }
@@ -3351,7 +3386,7 @@ func TestHandleGrokAccountUpstreamError402RecoversAfterCooldownExpiry(t *testing
 
 	expired := time.Now().Add(-time.Second)
 	account.TempUnschedulableUntil = &expired
-	svc.openaiAccountRuntimeBlockUntil.Store(account.ID, expired)
+	svc.openaiAccountRuntimeBlockUntil.Store(openAIAccountRuntimeOwnerKey(account), expired)
 
 	require.False(t, svc.isOpenAIAccountRuntimeBlocked(account))
 	require.True(t, account.IsSchedulable())
@@ -3528,7 +3563,7 @@ func TestHandleGrokAccountUpstreamError429DoesNotShortenExistingPause(t *testing
 	require.Equal(t, 1, repo.rateLimitedCalls)
 	require.WithinDuration(t, time.Now().Add(45*time.Second), repo.lastRateLimitResetAt, time.Second)
 	require.Zero(t, repo.tempUnschedCalls)
-	value, ok := svc.openaiAccountRuntimeBlockUntil.Load(account.ID)
+	value, ok := svc.openaiAccountRuntimeBlockUntil.Load(openAIAccountRuntimeOwnerKey(account))
 	require.True(t, ok)
 	runtimeUntil, ok := value.(time.Time)
 	require.True(t, ok)
@@ -3932,9 +3967,11 @@ func TestIsGrokImageGenerationModel(t *testing.T) {
 func TestBuildGrokSchedulerExtraUpdates_FeedsThresholdEvaluator(t *testing.T) {
 	int64p := func(v int64) *int64 { return &v }
 	resetUnix := time.Now().Add(90 * time.Minute).Unix()
+	account := &Account{Platform: PlatformGrok}
 	snapshot := &xai.QuotaSnapshot{
-		Requests: &xai.QuotaWindow{Limit: int64p(100), Remaining: int64p(30)},                         // 70% used
-		Tokens:   &xai.QuotaWindow{Limit: int64p(1000), Remaining: int64p(50), ResetUnix: &resetUnix}, // 95% used (most constrained)
+		CredentialGeneration: grokCredentialGeneration(account),
+		Requests:             &xai.QuotaWindow{Limit: int64p(100), Remaining: int64p(30)},                         // 70% used
+		Tokens:               &xai.QuotaWindow{Limit: int64p(1000), Remaining: int64p(50), ResetUnix: &resetUnix}, // 95% used (most constrained)
 	}
 
 	updates := buildGrokSchedulerExtraUpdates(snapshot)
@@ -3944,7 +3981,7 @@ func TestBuildGrokSchedulerExtraUpdates_FeedsThresholdEvaluator(t *testing.T) {
 
 	// The written extras must actually drive EvaluateAccountSchedulingThreshold
 	// (proves the previously-dead read side is now fed).
-	account := &Account{Platform: PlatformGrok, Extra: updates}
+	account.Extra = updates
 	decision := EvaluateAccountSchedulingThreshold(account, map[string]int{PlatformGrok: 90}, time.Now())
 	require.True(t, decision.ShouldPause)
 	require.InDelta(t, 95.0, decision.UsedPercent, 0.001)

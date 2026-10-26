@@ -52,6 +52,14 @@ func (r *stubQuotaAccountRepo) UpdateCredentials(_ context.Context, id int64, cr
 	return nil
 }
 
+func (r *stubQuotaAccountRepo) UpdateOAuthRefreshCredentialsIfUnchanged(ctx context.Context, expectedOwner *Account, credentials map[string]any) (bool, error) {
+	id := expectedOwner.ID
+	if !agentTaskTestCredentialsMatch(r.accounts[id], expectedOwner) {
+		return false, nil
+	}
+	return true, r.UpdateCredentials(ctx, id, credentials)
+}
+
 func (r *stubQuotaAccountRepo) UpdateExtra(_ context.Context, id int64, updates map[string]any) error {
 	if r.extraUpdateErr != nil {
 		return r.extraUpdateErr
@@ -62,6 +70,22 @@ func (r *stubQuotaAccountRepo) UpdateExtra(_ context.Context, id int64, updates 
 	}
 	r.extraUpdates[id] = updates
 	return nil
+}
+
+func (r *stubQuotaAccountRepo) UpdateOpenAICodexUsageIfUnchanged(ctx context.Context, targetID int64, owner *Account, updates map[string]any) (bool, error) {
+	if owner == nil || !sameRequestCredentialGrant(r.accounts[owner.ID], owner) {
+		return false, nil
+	}
+	if targetID != owner.ID {
+		target := r.accounts[targetID]
+		if target == nil || target.ParentAccountID == nil || *target.ParentAccountID != owner.ID {
+			return false, nil
+		}
+	}
+	if err := r.UpdateExtra(ctx, targetID, updates); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // stubQuotaTokenCache 实现 OpenAITokenCache，返回预设静态 token。
@@ -195,8 +219,8 @@ func TestResetCreditShadowRejected(t *testing.T) {
 
 func TestResetCreditTargetedSendsStableCreditAndRedeemIDs(t *testing.T) {
 	account := &Account{
-		ID: 203, Platform: PlatformOpenAI, Type: AccountTypeOAuth,
-		Credentials: map[string]any{"chatgpt_account_id": "account-targeted"},
+		ID: 203, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive,
+		Credentials: map[string]any{"chatgpt_account_id": "account-targeted", "access_token": "fake-token"},
 	}
 	repo := &stubQuotaAccountRepo{accounts: map[int64]*Account{account.ID: account}}
 	tokenCache := &stubQuotaTokenCache{tokens: map[string]string{OpenAITokenCacheKey(account): "fake-token"}}
@@ -365,6 +389,7 @@ func TestPrepareUpstreamCallShadowResolve(t *testing.T) {
 		Status:   StatusActive,
 		Credentials: map[string]any{
 			"chatgpt_account_id": "org-parent123",
+			"access_token":       "fake-access-token",
 		},
 	}
 	repo := &stubQuotaAccountRepo{accounts: map[int64]*Account{200: shadow, 100: parent}}
@@ -380,9 +405,9 @@ func TestPrepareUpstreamCallShadowResolve(t *testing.T) {
 		return req.C(), nil
 	})
 
-	_, chatGPTAccountID, _, _, err := svc.prepareUpstreamCall(ctx, 200)
+	operation, err := svc.prepareUpstreamCall(ctx, 200)
 	require.NoError(t, err, "shadow resolve should succeed; got error: %v", err)
-	require.Equal(t, "org-parent123", chatGPTAccountID,
+	require.Equal(t, "org-parent123", operation.chatGPTAccountID,
 		"prepareUpstreamCall should use parent's chatgpt_account_id after shadow resolve")
 }
 
@@ -538,6 +563,7 @@ func TestQueryUsageIncludesResetCreditExpirations_EndToEnd(t *testing.T) {
 		Status:   StatusActive,
 		Credentials: map[string]any{
 			"chatgpt_account_id": "org-parent123",
+			"access_token":       "fake-token",
 		},
 	}
 	repo := &stubQuotaAccountRepo{accounts: map[int64]*Account{100: account}}
@@ -580,7 +606,8 @@ func TestQueryUsageIncludesResetCreditExpirations_EndToEnd(t *testing.T) {
 	}, usage.RateLimitResetCredits.Credits)
 	require.NoError(t, svc.CacheResetCreditsSnapshot(ctx, 100, usage.RateLimitResetCredits))
 	require.Equal(t, &OpenAIRateLimitResetCredits{
-		AvailableCount: 2,
+		credentialOwner: snapshotRequestCredentialAccount(account),
+		AvailableCount:  2,
 		Credits: []OpenAIRateLimitResetCreditDetail{
 			{ExpiresAt: "2026-07-03T04:05:06Z"},
 			{ExpiresAt: "2026-07-04T04:05:06Z"},
@@ -601,6 +628,7 @@ func TestQueryUsageResetCreditDetails401NonFatal(t *testing.T) {
 		Status:   StatusActive,
 		Credentials: map[string]any{
 			"chatgpt_account_id": "org-parent123",
+			"access_token":       "fake-token",
 		},
 	}
 	repo := &stubQuotaAccountRepo{accounts: map[int64]*Account{100: account}}
@@ -646,16 +674,20 @@ func TestCacheResetCreditsSnapshot(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("zero count allows an empty expiration list", func(t *testing.T) {
-		repo := &stubQuotaAccountRepo{}
+		owner := auxiliaryCodexAccount("fake-cache", auxiliaryOwnerUA, 0)
+		owner.ID = 100
+		repo := &stubQuotaAccountRepo{accounts: map[int64]*Account{100: owner}}
 		svc := &OpenAIQuotaService{accountRepo: repo}
-		credits := &OpenAIRateLimitResetCredits{AvailableCount: 0}
+		credits := &OpenAIRateLimitResetCredits{AvailableCount: 0, credentialOwner: owner}
 
 		require.NoError(t, svc.CacheResetCreditsSnapshot(ctx, 100, credits))
 		require.Equal(t, credits, repo.extraUpdates[100][openaiQuotaResetCreditsKey])
 	})
 
 	t.Run("missing expiration list preserves the cache", func(t *testing.T) {
-		repo := &stubQuotaAccountRepo{}
+		owner := auxiliaryCodexAccount("fake-cache", auxiliaryOwnerUA, 0)
+		owner.ID = 100
+		repo := &stubQuotaAccountRepo{accounts: map[int64]*Account{100: owner}}
 		svc := &OpenAIQuotaService{accountRepo: repo}
 
 		err := svc.CacheResetCreditsSnapshot(ctx, 100, &OpenAIRateLimitResetCredits{AvailableCount: 1})
@@ -665,7 +697,9 @@ func TestCacheResetCreditsSnapshot(t *testing.T) {
 	})
 
 	t.Run("empty expiration list with a positive count preserves the cache", func(t *testing.T) {
-		repo := &stubQuotaAccountRepo{}
+		owner := auxiliaryCodexAccount("fake-cache", auxiliaryOwnerUA, 0)
+		owner.ID = 100
+		repo := &stubQuotaAccountRepo{accounts: map[int64]*Account{100: owner}}
 		svc := &OpenAIQuotaService{accountRepo: repo}
 
 		err := svc.CacheResetCreditsSnapshot(ctx, 100, &OpenAIRateLimitResetCredits{
@@ -678,7 +712,9 @@ func TestCacheResetCreditsSnapshot(t *testing.T) {
 	})
 
 	t.Run("nil snapshot preserves the cache", func(t *testing.T) {
-		repo := &stubQuotaAccountRepo{}
+		owner := auxiliaryCodexAccount("fake-cache", auxiliaryOwnerUA, 0)
+		owner.ID = 100
+		repo := &stubQuotaAccountRepo{accounts: map[int64]*Account{100: owner}}
 		svc := &OpenAIQuotaService{accountRepo: repo}
 
 		require.Error(t, svc.CacheResetCreditsSnapshot(ctx, 100, nil))
@@ -686,12 +722,15 @@ func TestCacheResetCreditsSnapshot(t *testing.T) {
 	})
 
 	t.Run("repository errors are returned", func(t *testing.T) {
-		repo := &stubQuotaAccountRepo{extraUpdateErr: errors.New("database unavailable")}
+		owner := auxiliaryCodexAccount("fake-cache", auxiliaryOwnerUA, 0)
+		owner.ID = 100
+		repo := &stubQuotaAccountRepo{accounts: map[int64]*Account{100: owner}, extraUpdateErr: errors.New("database unavailable")}
 		svc := &OpenAIQuotaService{accountRepo: repo}
 
 		err := svc.CacheResetCreditsSnapshot(ctx, 100, &OpenAIRateLimitResetCredits{
-			AvailableCount: 1,
-			Credits:        []OpenAIRateLimitResetCreditDetail{{ExpiresAt: "2026-07-03T04:05:06Z"}},
+			AvailableCount:  1,
+			credentialOwner: owner,
+			Credits:         []OpenAIRateLimitResetCreditDetail{{ExpiresAt: "2026-07-03T04:05:06Z"}},
 		})
 
 		require.ErrorContains(t, err, "database unavailable")
@@ -731,7 +770,7 @@ func TestQueryUsageShadowResolve_EndToEnd(t *testing.T) {
 	}
 	parent := &Account{
 		ID: 100, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive,
-		Credentials: map[string]any{"chatgpt_account_id": "org-e2e-parent"},
+		Credentials: map[string]any{"chatgpt_account_id": "org-e2e-parent", "access_token": "fake-token-e2e"},
 	}
 	repo := &stubQuotaAccountRepo{accounts: map[int64]*Account{200: shadow, 100: parent}}
 
@@ -758,10 +797,12 @@ func TestQueryUsageShadowResolve_EndToEnd(t *testing.T) {
 }
 
 func TestCachePostResetSnapshot(t *testing.T) {
-	repo := &stubQuotaAccountRepo{}
+	owner := auxiliaryCodexAccount("fake-cache", auxiliaryOwnerUA, 0)
+	owner.ID = 100
+	repo := &stubQuotaAccountRepo{accounts: map[int64]*Account{100: owner}}
 	svc := &OpenAIQuotaService{accountRepo: repo}
-	credits := &OpenAIRateLimitResetCredits{AvailableCount: 0}
-	usage := &OpenAIQuotaUsage{
+	credits := &OpenAIRateLimitResetCredits{AvailableCount: 0, credentialOwner: owner}
+	usage := &OpenAIQuotaUsage{credentialOwner: owner,
 		RateLimitResetCredits: credits,
 		RateLimit: &OpenAIRateLimit{
 			PrimaryWindow: &OpenAIRateLimitWindow{

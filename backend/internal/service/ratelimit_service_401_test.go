@@ -38,6 +38,11 @@ func (r *rateLimitAccountRepoStub) SetError(ctx context.Context, id int64, error
 	return nil
 }
 
+func (r *rateLimitAccountRepoStub) SetCredentialErrorIfUnchanged(ctx context.Context, expectedOwner *Account, message string) (bool, error) {
+	id := expectedOwner.ID
+	return true, r.SetError(ctx, id, message)
+}
+
 func (r *rateLimitAccountRepoStub) SetTempUnschedulable(ctx context.Context, id int64, until time.Time, reason string) error {
 	r.tempCalls++
 	r.lastTempID = id
@@ -45,11 +50,40 @@ func (r *rateLimitAccountRepoStub) SetTempUnschedulable(ctx context.Context, id 
 	return r.tempErr
 }
 
+func (r *rateLimitAccountRepoStub) SetCredentialTempUnschedulableIfUnchanged(ctx context.Context, expectedOwner *Account, until time.Time, reason string) (bool, error) {
+	id := expectedOwner.ID
+	err := r.SetTempUnschedulable(ctx, id, until, reason)
+	return err == nil, err
+}
+
 func (r *rateLimitAccountRepoStub) SetRateLimited(ctx context.Context, id int64, resetAt time.Time) error {
 	r.rateLimitedCalls++
 	r.lastRateLimitedID = id
 	r.lastRateLimitedAt = resetAt
 	return nil
+}
+
+func (r *rateLimitAccountRepoStub) ApplyCredentialStateMutation(ctx context.Context, owner *Account, mutation CredentialStateMutation) (bool, error) {
+	if mutation.OpenAIPlanType != "" {
+		r.updateCredentialsCalls++
+		r.lastCredentials = map[string]any{"plan_type": mutation.OpenAIPlanType}
+	}
+	if mutation.TempUnschedulableUntil != nil {
+		if err := r.SetTempUnschedulable(ctx, owner.ID, *mutation.TempUnschedulableUntil, mutation.TempUnschedulableReason); err != nil {
+			return false, err
+		}
+	}
+	if mutation.RateLimitUntil != nil {
+		if err := r.SetRateLimited(ctx, owner.ID, *mutation.RateLimitUntil); err != nil {
+			return false, err
+		}
+	}
+	if len(mutation.Extra) > 0 {
+		if err := r.UpdateExtra(ctx, owner.ID, mutation.Extra); err != nil {
+			return false, err
+		}
+	}
+	return true, nil
 }
 
 func (r *rateLimitAccountRepoStub) UpdateCredentials(ctx context.Context, id int64, credentials map[string]any) error {
@@ -176,7 +210,8 @@ func TestRateLimitService_HandleUpstreamError_SparkShadow401RedirectsToParent(t 
 		ID:          parentID,
 		Platform:    PlatformOpenAI,
 		Type:        AccountTypeOAuth,
-		Credentials: map[string]any{"refresh_token": "rt-mother"},
+		Status:      StatusActive,
+		Credentials: map[string]any{"access_token": "mother-token", "refresh_token": "rt-mother"},
 	}
 	repo.accountsByID[parentID] = mother
 
@@ -190,7 +225,12 @@ func TestRateLimitService_HandleUpstreamError_SparkShadow401RedirectsToParent(t 
 		// 影子不持凭据:GetCredential("refresh_token") == ""
 	}
 
-	shouldDisable := service.HandleUpstreamError(context.Background(), shadow, 401, http.Header{}, []byte("unauthorized"))
+	ctx := WithOutboundIdentityScope(context.Background(), nil)
+	token, _, err := (&OpenAIGatewayService{accountRepo: repo}).GetAccessToken(ctx, shadow)
+	require.NoError(t, err)
+	ctx = withRequestCredentialOwner(ctx, shadow, token)
+	require.Equal(t, "mother-token", token)
+	shouldDisable := service.HandleUpstreamError(ctx, shadow, 401, http.Header{}, []byte("unauthorized"))
 
 	require.True(t, shouldDisable)
 	require.Equal(t, 0, repo.setErrorCalls, "spark shadow must not be permanently disabled on a parent-token 401")

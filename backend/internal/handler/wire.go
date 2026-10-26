@@ -131,6 +131,12 @@ func ProvideOpsHandler(opsService *service.OpsService, ipAccessControl *service.
 	return h
 }
 
+func ProvideZhipuOAuthHandler(oauth *service.ZhipuOAuthService, adminService service.AdminService, tickets *service.ZhipuOffPeakTicketManager) *admin.ZhipuOAuthHandler {
+	h := admin.NewZhipuOAuthHandler(oauth, adminService)
+	h.SetOffPeakTicketManager(tickets)
+	return h
+}
+
 func ProvideAdminUsageHandler(usageService *service.UsageService, apiKeyService *service.APIKeyService, adminService service.AdminService, cleanupService *service.UsageCleanupService, risk *service.ClientDisconnectRiskService) *admin.UsageHandler {
 	h := admin.NewUsageHandler(usageService, apiKeyService, adminService, cleanupService)
 	h.SetClientDisconnectRiskService(risk)
@@ -182,11 +188,13 @@ func ProvideOpenAIGatewayHandler(
 	cfg *config.Config,
 	coordinator *securityaudit.Coordinator,
 	compositeResolver *service.CompositeRouteResolver,
+	providerFilesService *service.ProviderFilesService,
 ) *OpenAIGatewayHandler {
 	gatewayService.SetPluginManager(pluginManager)
 	h := NewOpenAIGatewayHandler(gatewayService, concurrencyService, billingCacheService, apiKeyService,
 		usageRecordWorkerPool, errorPassthroughService, contentModerationService, opsService, cfg)
 	h.compositeResolver = compositeResolver
+	h.providerFilesService = providerFilesService
 	h.securityAuditCoordinator = coordinator
 	h.grokMediaEligibilityProber = grokQuotaService
 	h.SetIPAccessControlService(ipAccessControl)
@@ -227,12 +235,11 @@ func ProvideSettingHandler(settingService *service.SettingService, buildInfo Bui
 }
 
 // ProvideAdminSettingHandler creates admin.SettingHandler with notification template APIs.
-func ProvideAdminSettingHandler(settingService *service.SettingService, emailService *service.EmailService, turnstileService *service.TurnstileService, aliyunCaptchaService *service.AliyunCaptchaService, opsService *service.OpsService, paymentConfigService *service.PaymentConfigService, paymentService *service.PaymentService, userAttributeService *service.UserAttributeService, notificationEmailService *service.NotificationEmailService, totpService *service.TotpService, userService *service.UserService, codexVersionSync *service.OpenAICodexVersionSyncService) *admin.SettingHandler {
+func ProvideAdminSettingHandler(settingService *service.SettingService, emailService *service.EmailService, turnstileService *service.TurnstileService, aliyunCaptchaService *service.AliyunCaptchaService, opsService *service.OpsService, paymentConfigService *service.PaymentConfigService, paymentService *service.PaymentService, userAttributeService *service.UserAttributeService, notificationEmailService *service.NotificationEmailService, totpService *service.TotpService, userService *service.UserService) *admin.SettingHandler {
 	h := admin.NewSettingHandler(settingService, emailService, turnstileService, opsService, paymentConfigService, paymentService, userAttributeService)
 	h.SetNotificationEmailService(notificationEmailService)
 	h.SetAliyunCaptchaService(aliyunCaptchaService)
 	h.SetStepUpDeps(totpService, userService)
-	h.SetCodexVersionSync(codexVersionSync)
 	return h
 }
 
@@ -328,7 +335,7 @@ var ProviderSet = wire.NewSet(
 	admin.NewGeminiOAuthHandler,
 	admin.NewAntigravityOAuthHandler,
 	admin.NewGrokOAuthHandler,
-	admin.NewZhipuOAuthHandler,
+	ProvideZhipuOAuthHandler,
 	admin.NewCNOAuthHandler,
 	admin.NewCNProviderHandler,
 	admin.NewProxyHandler,

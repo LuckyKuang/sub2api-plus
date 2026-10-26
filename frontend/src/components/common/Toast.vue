@@ -1,7 +1,7 @@
 <template>
   <Teleport to="body">
     <div
-      class="pointer-events-none fixed right-4 top-4 z-[9999] space-y-3"
+      class="toast-stack pointer-events-none fixed z-[9999]"
       aria-live="polite"
       aria-atomic="true"
     >
@@ -16,57 +16,46 @@
         <div
           v-for="toast in toasts"
           :key="toast.id"
-          :class="[
-            'pointer-events-auto min-w-[320px] max-w-md overflow-hidden rounded-lg shadow-lg',
-            'bg-white dark:bg-dark-800',
-            'border-l-4',
-            getBorderColor(toast.type)
-          ]"
+          class="toast-card pointer-events-auto"
+          :class="{ 'toast-card-timed': toast.duration }"
+          :data-toast-id="toast.id"
+          :data-toast-type="toast.type"
         >
-          <div class="p-4">
-            <div class="flex items-start gap-3">
-              <!-- Icon -->
-              <div class="mt-0.5 flex-shrink-0">
-                <Icon
-                  :name="getToastIconName(toast.type)"
-                  size="md"
-                  :class="getIconColor(toast.type)"
-                  aria-hidden="true"
-                />
-              </div>
-
-              <!-- Content -->
-              <div class="min-w-0 flex-1">
-                <p v-if="toast.title" class="text-sm font-semibold text-gray-900 dark:text-white">
-                  {{ toast.title }}
-                </p>
-                <p
-                  :class="[
-                    'text-sm leading-relaxed',
-                    toast.title
-                      ? 'mt-1 text-gray-600 dark:text-gray-300'
-                      : 'text-gray-900 dark:text-white'
-                  ]"
-                >
-                  {{ toast.message }}
-                </p>
-              </div>
-
-              <!-- Close button -->
-              <button
-                @click="removeToast(toast.id)"
-                class="-m-1 flex-shrink-0 rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-dark-700 dark:hover:text-gray-300"
-                aria-label="Close notification"
-              >
-                <Icon name="x" size="sm" />
-              </button>
+          <div class="toast-body">
+            <!-- Icon -->
+            <div class="toast-icon" aria-hidden="true">
+              <Icon
+                :name="getToastIconName(toast.type)"
+                size="md"
+                aria-hidden="true"
+              />
             </div>
+
+            <!-- Content -->
+            <div class="toast-copy">
+              <p v-if="toast.title" class="toast-title">
+                {{ toast.title }}
+              </p>
+              <p class="toast-message">
+                {{ toast.message }}
+              </p>
+            </div>
+
+            <!-- Close button -->
+            <button
+              type="button"
+              @click="removeToast(toast.id)"
+              class="toast-close"
+              :aria-label="t('common.close')"
+            >
+              <Icon name="x" size="sm" aria-hidden="true" />
+            </button>
           </div>
 
           <!-- Progress bar -->
-          <div v-if="toast.duration" class="h-1 bg-gray-100 dark:bg-dark-700">
+          <div v-if="toast.duration" class="toast-progress-track" aria-hidden="true">
             <div
-              :class="['h-full toast-progress', getProgressBarColor(toast.type)]"
+              class="toast-progress"
               :style="{ animationDuration: `${toast.duration}ms` }"
             ></div>
           </div>
@@ -78,10 +67,12 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
 import { useAppStore } from '@/stores/app'
 
 const appStore = useAppStore()
+const { t } = useI18n()
 
 const toasts = computed(() => appStore.toasts)
 
@@ -99,47 +90,114 @@ const getToastIconName = (type: string): 'checkCircle' | 'xCircle' | 'exclamatio
   }
 }
 
-const getIconColor = (type: string): string => {
-  const colors: Record<string, string> = {
-    success: 'text-green-500',
-    error: 'text-red-500',
-    warning: 'text-yellow-500',
-    info: 'text-blue-500'
-  }
-  return colors[type] || colors.info
-}
-
-const getBorderColor = (type: string): string => {
-  const colors: Record<string, string> = {
-    success: 'border-green-500',
-    error: 'border-red-500',
-    warning: 'border-yellow-500',
-    info: 'border-blue-500'
-  }
-  return colors[type] || colors.info
-}
-
-const getProgressBarColor = (type: string): string => {
-  const colors: Record<string, string> = {
-    success: 'bg-green-500',
-    error: 'bg-red-500',
-    warning: 'bg-yellow-500',
-    info: 'bg-blue-500'
-  }
-  return colors[type] || colors.info
-}
-
 const removeToast = (id: string) => {
   appStore.hideToast(id)
 }
 </script>
 
 <style scoped>
-.toast-progress {
+.toast-stack {
+  top: var(--shell-inset-top, var(--shell-gutter, 12px));
+  right: max(var(--shell-gutter, 12px), env(safe-area-inset-right));
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(376px, calc(100vw - 24px));
+  max-width: calc(100vw - max(var(--shell-gutter, 12px), env(safe-area-inset-left)) - max(var(--shell-gutter, 12px), env(safe-area-inset-right)));
+  max-height: calc(100dvh - var(--shell-inset-top, 12px) - var(--shell-inset-bottom, 12px));
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.toast-card {
+  --toast-accent: 59 130 246;
+  position: relative;
+  flex-shrink: 0;
   width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--surface-edge);
+  border-radius: 20px;
+  background-color: var(--surface-panel);
+  background-image: linear-gradient(135deg, var(--surface-glint), transparent 65%);
+  color: var(--surface-text);
+  box-shadow: var(--surface-shadow);
+}
+.toast-card[data-toast-type='success'] { --toast-accent: 34 197 94; }
+.toast-card[data-toast-type='error'] { --toast-accent: 239 68 68; }
+.toast-card[data-toast-type='warning'] { --toast-accent: 245 158 11; }
+
+.toast-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+}
+.toast-card-timed .toast-body { padding-bottom: 28px; }
+.toast-icon {
+  display: grid;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 12px;
+  background-color: rgb(var(--toast-accent) / 14%);
+  color: rgb(var(--toast-accent));
+}
+.toast-copy { min-width: 0; flex: 1; }
+.toast-title, .toast-message {
+  margin: 0;
+  color: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+.toast-title { font-weight: 600; }
+.toast-title + .toast-message { margin-top: 4px; }
+.toast-close {
+  display: grid;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  margin: -4px -4px 0 0;
+  place-items: center;
+  border: 0;
+  border-radius: 10px;
+  background-color: transparent;
+  color: var(--surface-muted);
+  transition: background-color 150ms ease, color 150ms ease;
+}
+.toast-close:hover { background-color: var(--surface-hover); color: var(--surface-text); }
+.toast-close:focus-visible { outline: 2px solid rgb(var(--console-accent-500, 20 184 166) / 65%); outline-offset: 2px; }
+
+.toast-progress-track {
+  position: absolute;
+  right: 16px;
+  bottom: 12px;
+  left: 16px;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 9999px;
+  background-color: rgb(var(--toast-accent) / 14%);
+}
+.toast-progress {
+  height: 100%;
+  width: 100%;
+  border-radius: inherit;
+  background-color: rgb(var(--toast-accent));
   animation-name: toast-progress-shrink;
   animation-timing-function: linear;
   animation-fill-mode: forwards;
+}
+
+@media (max-width: 639px) {
+  .toast-progress-track { bottom: 9px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast-card, .toast-close { transition: none !important; }
+  .toast-progress { animation: none; }
 }
 
 @keyframes toast-progress-shrink {

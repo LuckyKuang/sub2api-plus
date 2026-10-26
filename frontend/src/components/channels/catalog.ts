@@ -99,12 +99,14 @@ export function visibleModels(models: CatalogModel[], filters: CatalogFilters): 
   })
 }
 
+const moneyFormatter = new Intl.NumberFormat('en-US', { maximumSignificantDigits: 6 })
+
 export function catalogMoney(price: number | null | undefined, rate = 1, perMillion = false): string {
   if (price == null || !Number.isFinite(price)) return '—'
   const value = price * rate * (perMillion ? 1_000_000 : 1)
   if (!Number.isFinite(value)) return '—'
   if (value === 0) return '$0'
-  return '$' + new Intl.NumberFormat('en-US', { maximumSignificantDigits: 6 }).format(value)
+  return '$' + moneyFormatter.format(value)
 }
 export function catalogRange(range: CatalogPriceRange | null, unit: CatalogBillingUnit): string {
   if (!range) return '—'

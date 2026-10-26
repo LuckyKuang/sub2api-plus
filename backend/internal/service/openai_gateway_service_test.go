@@ -451,7 +451,18 @@ func TestOpenAIGatewayService_ClientSessionHeaderPriority(t *testing.T) {
 	body := []byte(`{"prompt_cache_key":"body-session"}`)
 	for _, header := range headers {
 		require.Equal(t, header.value, svc.ExtractSessionID(c, body), header.name)
-		require.Equal(t, fmt.Sprintf("%016x", xxhash.Sum64String(header.value)), svc.GenerateExplicitSessionHash(c, body), header.name)
+		hash := svc.GenerateExplicitSessionHash(c, body)
+		require.NotEmpty(t, hash, header.name)
+
+		// A02: the routing seed is scoped by the authenticated tenant, so the same
+		// raw session value in another tenant must not produce the same binding.
+		otherTenantRecorder := httptest.NewRecorder()
+		otherTenant, _ := gin.CreateTestContext(otherTenantRecorder)
+		otherTenant.Request = httptest.NewRequest(http.MethodPost, "/openai/v1/responses", nil)
+		otherTenant.Set("api_key", &APIKey{ID: 902, Group: &Group{Platform: PlatformGrok}})
+		otherTenant.Request.Header.Set(header.name, header.value)
+		require.NotEqual(t, hash, svc.GenerateExplicitSessionHash(otherTenant, body), "same raw session in another tenant must not share a route binding: %s", header.name)
+
 		if header.name != grokConversationIDHeader {
 			require.Equal(t, header.value, explicitOpenAISessionID(c, body), header.name)
 		}
@@ -1825,7 +1836,8 @@ func TestOpenAIStreamingPostOutputDisconnectQuarantinesSharedProxyWithoutSameStr
 	}
 
 	scheduler := &defaultOpenAIAccountScheduler{service: svc}
-	compatible, reason := scheduler.isAccountRequestCompatibleReason(context.Background(), account, OpenAIAccountScheduleRequest{})
+	compatible, reason, compatibilityErr := scheduler.isAccountRequestCompatibleReason(context.Background(), account, OpenAIAccountScheduleRequest{})
+	require.NoError(t, compatibilityErr)
 	require.False(t, compatible, "the next request must exclude accounts sharing the quarantined proxy")
 	require.Equal(t, "proxy_stream_quarantined", reason)
 }
@@ -1873,7 +1885,8 @@ func TestOpenAIStreamingTerminalAndClientCancellationDoNotQuarantineProxy(t *tes
 	}
 
 	scheduler := &defaultOpenAIAccountScheduler{service: svc}
-	compatible, reason := scheduler.isAccountRequestCompatibleReason(context.Background(), account, OpenAIAccountScheduleRequest{})
+	compatible, reason, compatibilityErr := scheduler.isAccountRequestCompatibleReason(context.Background(), account, OpenAIAccountScheduleRequest{})
+	require.NoError(t, compatibilityErr)
 	require.True(t, compatible)
 	require.Empty(t, reason)
 }
@@ -3140,7 +3153,7 @@ func TestOpenAIUpdateCodexUsageSnapshotFromHeaders(t *testing.T) {
 	headers.Set("x-codex-primary-reset-after-seconds", "600")
 	headers.Set("x-codex-secondary-reset-after-seconds", "86400")
 
-	svc.UpdateCodexUsageSnapshotFromHeaders(context.Background(), 123, headers)
+	svc.UpdateCodexUsageSnapshotFromHeaders(context.Background(), &Account{ID: 123, Platform: PlatformOpenAI, Type: AccountTypeOAuth}, headers)
 
 	select {
 	case updates := <-repo.updateExtraCalls:
@@ -3168,7 +3181,7 @@ func TestOpenAIUpdateCodexUsageSnapshotFromResetAtOnlyHeaders(t *testing.T) {
 	headers.Set("x-codex-secondary-window-minutes", "300")
 	headers.Set("x-codex-secondary-reset-at", strconv.FormatInt(secondaryResetAt.Unix(), 10))
 
-	svc.UpdateCodexUsageSnapshotFromHeaders(context.Background(), 124, headers)
+	svc.UpdateCodexUsageSnapshotFromHeaders(context.Background(), &Account{ID: 124, Platform: PlatformOpenAI, Type: AccountTypeOAuth}, headers)
 
 	select {
 	case updates := <-repo.updateExtraCalls:
@@ -3370,11 +3383,11 @@ func TestOpenAIBuildUpstreamRequestOAuthResponsesPreservesCallerBeta(t *testing.
 		require.Empty(t, req.Header.Values("OpenAI-Beta"))
 	})
 
-	t.Run("api key remains caller controlled", func(t *testing.T) {
+	t.Run("api key removes legacy Responses beta", func(t *testing.T) {
 		c := makeRequest("responses=experimental, responses_multi_agent=v1")
 		req, err := svc.buildUpstreamRequest(c.Request.Context(), c, apiKey, []byte(`{"model":"gpt-5.5","input":"hello"}`), "token", true, "", false)
 		require.NoError(t, err)
-		require.Equal(t, []string{"responses=experimental, responses_multi_agent=v1"}, req.Header.Values("OpenAI-Beta"))
+		require.Equal(t, []string{"responses_multi_agent=v1"}, req.Header.Values("OpenAI-Beta"))
 	})
 
 	t.Run("compact OAuth removes legacy token and preserves independent beta", func(t *testing.T) {
@@ -3429,7 +3442,7 @@ func TestOpenAIBuildUpstreamRequestPreservesCodexIdentityHeaders(t *testing.T) {
 	req, err := svc.buildUpstreamRequest(c.Request.Context(), c, account, body, "token", false, "", true)
 	require.NoError(t, err)
 	require.Equal(t, "window-http", req.Header.Get("X-Codex-Window-ID"))
-	require.Equal(t, "installation-http", req.Header.Get("X-Codex-Installation-ID"))
+	require.Empty(t, req.Header.Get("X-Codex-Installation-ID"))
 	require.Empty(t, req.Header.Get("X-Test"))
 	require.True(t, openai.HasKnownCodexClientEvidence(req.Header))
 }
@@ -4201,4 +4214,11 @@ func TestHandleCompatErrorResponseCyberPolicyEarlyReturn(t *testing.T) {
 	require.Contains(t, gotMsg, "flagged for cyber policy")
 	require.NotContains(t, gotMsg, "Upstream request failed")
 	require.NotNil(t, GetOpsCyberPolicy(c))
+}
+
+func (r *snapshotUpdateAccountRepo) UpdateOpenAICodexUsageIfUnchanged(ctx context.Context, id int64, owner *Account, updates map[string]any) (bool, error) {
+	if owner == nil {
+		return false, nil
+	}
+	return true, r.UpdateExtra(ctx, id, updates)
 }

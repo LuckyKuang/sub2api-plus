@@ -187,7 +187,7 @@ const labelClass = computed(() => {
 })
 
 const peakRateClass = computed(() => {
-  return 'px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+  return 'px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100/[0.15] text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
 })
 
 // Badge color based on platform and subscription type
@@ -195,23 +195,23 @@ const badgeClass = computed(() => {
   if (props.platform === 'anthropic') {
     // Claude: orange theme
     return isSubscription.value
-      ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
-      : 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400'
+      ? 'bg-orange-100/[0.15] text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
+      : 'bg-amber-50/[0.15] text-amber-700 dark:bg-amber-900/20 dark:text-amber-400'
   } else if (props.platform === 'openai') {
     // OpenAI: green theme
     return isSubscription.value
-      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-      : 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400'
+      ? 'bg-emerald-100/[0.15] text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+      : 'bg-green-50/[0.15] text-green-700 dark:bg-green-900/20 dark:text-green-400'
   }
   if (props.platform === 'gemini') {
     return isSubscription.value
-      ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-      : 'bg-sky-50 text-sky-700 dark:bg-sky-900/20 dark:text-sky-400'
+      ? 'bg-blue-100/[0.15] text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+      : 'bg-sky-50/[0.15] text-sky-700 dark:bg-sky-900/20 dark:text-sky-400'
   }
   if (props.platform === 'antigravity') {
     return isSubscription.value
-      ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
-      : 'bg-fuchsia-50 text-fuchsia-700 dark:bg-fuchsia-900/20 dark:text-fuchsia-400'
+      ? 'bg-purple-100/[0.15] text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+      : 'bg-fuchsia-50/[0.15] text-fuchsia-700 dark:bg-fuchsia-900/20 dark:text-fuchsia-400'
   }
   if (props.platform === 'grok') {
     return isSubscription.value
@@ -220,37 +220,37 @@ const badgeClass = computed(() => {
   }
   if (props.platform === 'kimi') {
     return isSubscription.value
-      ? 'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400'
-      : 'bg-pink-50 text-pink-700 dark:bg-pink-900/20 dark:text-pink-400'
+      ? 'bg-pink-100/[0.15] text-pink-700 dark:bg-pink-900/30 dark:text-pink-400'
+      : 'bg-pink-50/[0.15] text-pink-700 dark:bg-pink-900/20 dark:text-pink-400'
   }
   if (props.platform === 'zhipu') {
     return isSubscription.value
-      ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400'
-      : 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-400'
+      ? 'bg-indigo-100/[0.15] text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400'
+      : 'bg-indigo-50/[0.15] text-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-400'
   }
   if (props.platform === 'deepseek') {
     return isSubscription.value
-      ? 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400'
-      : 'bg-teal-50 text-teal-700 dark:bg-teal-900/20 dark:text-teal-400'
+      ? 'bg-teal-100/[0.15] text-teal-700 dark:bg-teal-900/30 dark:text-teal-400'
+      : 'bg-teal-50/[0.15] text-teal-700 dark:bg-teal-900/20 dark:text-teal-400'
   }
   if (props.platform === 'stepfun') {
     return isSubscription.value
-      ? 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400'
-      : 'bg-cyan-50 text-cyan-700 dark:bg-cyan-900/20 dark:text-cyan-400'
+      ? 'bg-cyan-100/[0.15] text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400'
+      : 'bg-cyan-50/[0.15] text-cyan-700 dark:bg-cyan-900/20 dark:text-cyan-400'
   }
   if (props.platform === 'minimax') {
     return isSubscription.value
-      ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400'
-      : 'bg-rose-50 text-rose-700 dark:bg-rose-900/20 dark:text-rose-400'
+      ? 'bg-rose-100/[0.15] text-rose-700 dark:bg-rose-900/30 dark:text-rose-400'
+      : 'bg-rose-50/[0.15] text-rose-700 dark:bg-rose-900/20 dark:text-rose-400'
   }
   if (props.platform === 'composite') {
     return isSubscription.value
-      ? 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300'
-      : 'bg-cyan-50 text-cyan-800 dark:bg-cyan-900/20 dark:text-cyan-300'
+      ? 'bg-cyan-100/[0.15] text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300'
+      : 'bg-cyan-50/[0.15] text-cyan-800 dark:bg-cyan-900/20 dark:text-cyan-300'
   }
   // Fallback: original colors
   return isSubscription.value
-    ? 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400'
-    : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+    ? 'bg-violet-100/[0.15] text-violet-700 dark:bg-violet-900/30 dark:text-violet-400'
+    : 'bg-emerald-100/[0.15] text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
 })
 </script>

@@ -86,7 +86,7 @@ func newOpenAIClientProfileFallbackHandler(
 		nil,
 		nil,
 		nil,
-	)
+		nil)
 	return NewOpenAIGatewayHandler(
 		gateway,
 		service.NewConcurrencyService(cache),

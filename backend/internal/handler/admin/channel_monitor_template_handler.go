@@ -31,6 +31,7 @@ type channelMonitorTemplateCreateRequest struct {
 	Description      string            `json:"description" binding:"max=500"`
 	ExtraHeaders     map[string]string `json:"extra_headers"`
 	BodyOverrideMode string            `json:"body_override_mode" binding:"omitempty,oneof=off merge replace"`
+	StreamProbe      bool              `json:"stream_probe"`
 	BodyOverride     map[string]any    `json:"body_override"`
 }
 
@@ -40,6 +41,7 @@ type channelMonitorTemplateUpdateRequest struct {
 	Description      *string            `json:"description" binding:"omitempty,max=500"`
 	ExtraHeaders     *map[string]string `json:"extra_headers"`
 	BodyOverrideMode *string            `json:"body_override_mode" binding:"omitempty,oneof=off merge replace"`
+	StreamProbe      *bool              `json:"stream_probe"`
 	BodyOverride     *map[string]any    `json:"body_override"`
 }
 
@@ -51,6 +53,7 @@ type channelMonitorTemplateResponse struct {
 	Description        string            `json:"description"`
 	ExtraHeaders       map[string]string `json:"extra_headers"`
 	BodyOverrideMode   string            `json:"body_override_mode"`
+	StreamProbe        bool              `json:"stream_probe"`
 	BodyOverride       map[string]any    `json:"body_override"`
 	CreatedAt          string            `json:"created_at"`
 	UpdatedAt          string            `json:"updated_at"`
@@ -74,6 +77,7 @@ func (h *ChannelMonitorRequestTemplateHandler) toResponse(c *gin.Context, t *ser
 		Description:        t.Description,
 		ExtraHeaders:       headers,
 		BodyOverrideMode:   t.BodyOverrideMode,
+		StreamProbe:        t.StreamProbe,
 		BodyOverride:       t.BodyOverride,
 		CreatedAt:          t.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:          t.UpdatedAt.UTC().Format(time.RFC3339),
@@ -138,6 +142,7 @@ func (h *ChannelMonitorRequestTemplateHandler) Create(c *gin.Context) {
 		Description:      req.Description,
 		ExtraHeaders:     req.ExtraHeaders,
 		BodyOverrideMode: req.BodyOverrideMode,
+		StreamProbe:      req.StreamProbe,
 		BodyOverride:     req.BodyOverride,
 	})
 	if err != nil {
@@ -164,6 +169,7 @@ func (h *ChannelMonitorRequestTemplateHandler) Update(c *gin.Context) {
 		Description:      req.Description,
 		ExtraHeaders:     req.ExtraHeaders,
 		BodyOverrideMode: req.BodyOverrideMode,
+		StreamProbe:      req.StreamProbe,
 		BodyOverride:     req.BodyOverride,
 	})
 	if err != nil {

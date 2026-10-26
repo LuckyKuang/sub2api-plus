@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
@@ -243,8 +244,8 @@ func TestZhipuOAuthSessionIsSingleUse(t *testing.T) {
 func TestZhipuOAuthBuildAccountMaterialForEachPlan(t *testing.T) {
 	client := &zhipuOAuthStubClient{
 		businessToken: "zai-business",
-		individual:    &zcode.CodingPlanCredential{APIKey: "ak.sk", OrganizationID: "org-1", ProjectID: "proj-1"},
-		team:          &zcode.CodingPlanCredential{APIKey: "tak.tsk", OrganizationID: "org-team", ProjectID: "proj-team"},
+		individual:    &zcode.CodingPlanCredential{APIKey: "short-pat", KeyID: "ak", OrganizationID: "org-1", ProjectID: "proj-1"},
+		team:          &zcode.CodingPlanCredential{APIKey: "short-team-pat", KeyID: "tak", OrganizationID: "org-team", ProjectID: "proj-team"},
 	}
 	svc := newZhipuOAuthTestService(t, client)
 
@@ -256,7 +257,13 @@ func TestZhipuOAuthBuildAccountMaterialForEachPlan(t *testing.T) {
 			User:        ZhipuLinkUser{ID: "u-1"},
 		})
 		require.NoError(t, err)
-		require.Equal(t, "ak.sk", material.Credentials["api_key"])
+		loginIDValue, ok := material.Credentials[domesticOAuthLoginIDCredential].(string)
+		require.True(t, ok)
+		loginID, err := uuid.Parse(loginIDValue)
+		require.NoError(t, err)
+		require.Equal(t, uuid.Version(4), loginID.Version())
+		require.NotContains(t, material.Credentials, "api_key")
+		require.Equal(t, "bm-token", material.Credentials["oauth_access_token"])
 		require.Equal(t, "bm-token", material.Credentials["access_token"])
 		require.Equal(t, AccountModeCoding, material.Credentials["account_mode"])
 		require.Equal(t, APIProtocolAdaptive, material.Credentials["api_protocol"])
@@ -292,7 +299,7 @@ func TestZhipuOAuthBuildAccountMaterialForEachPlan(t *testing.T) {
 			AccessToken: "bm-token",
 		})
 		require.NoError(t, err)
-		require.Equal(t, "tak.tsk", material.Credentials["api_key"])
+		require.NotContains(t, material.Credentials, "api_key")
 		require.Equal(t, [2]string{"org-team", "proj-team"}, client.lastTeamScope)
 		require.Equal(t, true, material.Credentials[credKeyHeaderOverrideEnabled])
 		overrides, ok := material.Credentials[credKeyHeaderOverrides].(map[string]any)
@@ -315,7 +322,7 @@ func TestZhipuOAuthBuildAccountMaterialForEachPlan(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Equal(t, "zcode-jwt", material.Credentials["api_key"])
-		require.Equal(t, AnthropicAPIKeyAuthSchemeAuthorizationBearer, material.Credentials[anthropicAPIKeyAuthSchemeExtraKey])
+		require.NotContains(t, material.Credentials, anthropicAPIKeyAuthSchemeExtraKey, "native plan authentication requires no manual API-key setting")
 		require.Equal(t, map[string]any{APIProtocolAnthropic: zcodePlanAnthropicBaseURL}, material.Credentials[credentialAPIBaseURLs])
 		require.Equal(t, zcodePlanAnthropicBaseURL, material.BaseURL)
 
@@ -335,13 +342,14 @@ func TestZhipuOAuthBuildAccountMaterialForEachPlan(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "zcode-jwt", material.Credentials["api_key"])
 		require.Equal(t, "zcode-jwt", material.Credentials["zcode_jwt_token"])
-		require.Equal(t, "ak.sk", material.Credentials["off_peak_plan_key"])
-		require.Equal(t, AnthropicAPIKeyAuthSchemeAuthorizationBearer, material.Credentials[anthropicAPIKeyAuthSchemeExtraKey])
+		require.Equal(t, "ak", material.Credentials["zhipu_project_key_id"])
+		require.NotContains(t, material.Credentials, "off_peak_plan_key")
+		require.NotContains(t, material.Credentials, anthropicAPIKeyAuthSchemeExtraKey, "native plan authentication requires no manual API-key setting")
 		require.Equal(t, map[string]any{APIProtocolAnthropic: zcodeOffPeakAnthropicBaseURL}, material.Credentials[credentialAPIBaseURLs])
 		require.Equal(t, zcodeOffPeakAnthropicBaseURL, material.BaseURL)
 		overrides, ok := material.Credentials[credKeyHeaderOverrides].(map[string]any)
 		require.True(t, ok)
-		require.Equal(t, "ak.sk", overrides["x-coding-plan-api-key"])
+		require.NotContains(t, overrides, "x-coding-plan-api-key")
 		require.NotContains(t, overrides, "bigmodel-organization", "a personal off-peak plan carries no team scope")
 
 		// The team variant adds the scope headers.
@@ -373,8 +381,13 @@ func TestZhipuOAuthBuildAccountMaterialForEachPlan(t *testing.T) {
 			})
 			require.NoError(t, err, provider)
 			require.Equal(t, map[string]any{APIProtocolAnthropic: zcodeOffPeakAnthropicBaseURL}, idle.Credentials[credentialAPIBaseURLs])
-			require.Equal(t, "ak.sk", idle.Credentials["off_peak_plan_key"])
-			require.Equal(t, AnthropicAPIKeyAuthSchemeAuthorizationBearer, idle.Credentials[anthropicAPIKeyAuthSchemeExtraKey])
+			require.Equal(t, "ak", idle.Credentials["zhipu_project_key_id"])
+			require.NotContains(t, idle.Credentials, "off_peak_plan_key")
+			for _, material := range []*ZhipuAccountMaterial{start, idle} {
+				require.NotContains(t, material.Credentials, anthropicAPIKeyAuthSchemeExtraKey, "native plan authentication requires no manual API-key setting")
+				account := &Account{Platform: PlatformZhipu, Type: AccountTypeOAuth, Credentials: material.Credentials}
+				require.Equal(t, AnthropicAPIKeyAuthSchemeAuthorizationBearer, account.GetAnthropicAPIKeyAuthScheme(), "linked %s %s must select the official Bearer channel", provider, material.PlanKind)
+			}
 		}
 	})
 
@@ -454,9 +467,9 @@ func TestZhipuOAuthStartLinkPropagatesPlatformFailure(t *testing.T) {
 }
 
 func TestZhipuOAuthIdentitySurvivesSettingsChangeAndMaterialCreation(t *testing.T) {
-	client := &zhipuOAuthStubClient{initFlow: zhipuTestFlowInit(), exchange: zhipuTestReady(zcode.ProviderBigModel), individual: &zcode.CodingPlanCredential{APIKey: "derived-key"}}
+	client := &zhipuOAuthStubClient{initFlow: zhipuTestFlowInit(), exchange: zhipuTestReady(zcode.ProviderBigModel), individual: &zcode.CodingPlanCredential{APIKey: "short-pat", KeyID: "key-id"}}
 	svc := newZhipuOAuthTestService(t, client)
-	version := "3.14.3"
+	version := "3.16.2"
 	ctx := outboundidentity.WithResolver(context.Background(), func(context.Context, string) outboundidentity.Identity {
 		identity := zcode.DefaultIdentity()
 		identity.UserAgent, identity.Version = "ZCode/"+version, version
@@ -465,6 +478,10 @@ func TestZhipuOAuthIdentitySurvivesSettingsChangeAndMaterialCreation(t *testing.
 	})
 	link, err := svc.StartLink(ctx, StartZhipuLinkInput{Provider: zcode.ProviderBigModel})
 	require.NoError(t, err)
+	deviceID := client.identities[0].ControlHeaders[zcode.HeaderDeviceMid]
+	parsedDevice, err := uuid.Parse(deviceID)
+	require.NoError(t, err)
+	require.Equal(t, uuid.Version(4), parsedDevice.Version())
 	version = "9.9.9"
 	_, err = svc.PollLink(ctx, link.SessionID)
 	require.NoError(t, err)
@@ -479,8 +496,10 @@ func TestZhipuOAuthIdentitySurvivesSettingsChangeAndMaterialCreation(t *testing.
 	account := &Account{ID: 99, Platform: PlatformZhipu, Type: AccountTypeOAuth, Credentials: material.Credentials}
 	resolved, ok := outboundidentity.FromContext(WithAccountOutboundIdentity(ctx, account))
 	require.True(t, ok)
-	require.Equal(t, "ZCode/3.14.3", resolved.UserAgent)
-	require.Equal(t, "derived-key", account.GetOpenAIProtocolAPIKey())
+	require.Equal(t, "ZCode/3.16.2", resolved.UserAgent)
+	require.Equal(t, deviceID, resolved.ControlHeaders[zcode.HeaderDeviceMid])
+	require.Equal(t, "business-token", account.GetOpenAIProtocolAPIKey(), "request construction retains original owner; send-time resolver installs the PAT")
+	require.NotContains(t, material.Credentials, "api_key")
 }
 
 func TestZhipuOAuthSelectedProxyCannotFallBackToDirect(t *testing.T) {
@@ -498,13 +517,13 @@ func TestZhipuOAuthSelectedProxyCannotFallBackToDirect(t *testing.T) {
 }
 func TestZhipuOAuthProxySnapshotCannotChangeAtExchangeOrCreate(t *testing.T) {
 	client := &zhipuOAuthStubClient{initFlow: zhipuTestFlowInit(), exchange: zhipuTestReady(zcode.ProviderZai)}
-	repo := &zhipuOAuthProxyRepoStub{proxy: &Proxy{Protocol: "http", Host: "first.example", Port: 8080}}
+	repo := &zhipuOAuthProxyRepoStub{proxy: &Proxy{ID: 5, Protocol: "http", Host: "first.example", Port: 8080}}
 	svc := NewZhipuOAuthService(client, repo)
 	defer svc.Stop()
 	proxyID := int64(5)
 	session, err := svc.StartLink(context.Background(), StartZhipuLinkInput{Provider: zcode.ProviderZai, ProxyID: &proxyID})
 	require.NoError(t, err)
-	repo.proxy = &Proxy{Protocol: "http", Host: "second.example", Port: 8080}
+	repo.proxy = &Proxy{ID: 5, Protocol: "http", Host: "second.example", Port: 8080}
 	_, err = svc.ExchangeLink(context.Background(), session.SessionID, "code", &proxyID)
 	require.Error(t, err)
 	require.Empty(t, client.lastExchangeArgs)
@@ -523,4 +542,8 @@ type zhipuOAuthProxyRepoStub struct {
 
 func (r *zhipuOAuthProxyRepoStub) GetByID(context.Context, int64) (*Proxy, error) {
 	return r.proxy, r.err
+}
+
+func (s *zhipuOAuthStubClient) IssueProjectAccessToken(context.Context, string, string, string, string, string, string) (*zcode.ProjectAccessToken, error) {
+	return &zcode.ProjectAccessToken{Token: "short-pat", ExpiresAt: time.Now().Add(time.Hour)}, nil
 }

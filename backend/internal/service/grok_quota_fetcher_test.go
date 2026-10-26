@@ -47,6 +47,7 @@ func TestGrokQuotaFetcherDoesNotTreatGrok45ResponsesWindowAsHeavy(t *testing.T) 
 		},
 	}
 
+	bindGrokSnapshotFixture(account)
 	usage := NewGrokQuotaFetcher().BuildUsageInfo(account)
 	require.Equal(t, "supergrok", usage.SubscriptionTier)
 }
@@ -74,6 +75,7 @@ func TestGrokQuotaFetcherUsesGrok45ResponsesWindowAsHeavy(t *testing.T) {
 		},
 	}
 
+	bindGrokSnapshotFixture(account)
 	usage := NewGrokQuotaFetcher().BuildUsageInfo(account)
 	require.Equal(t, "supergrok_heavy", usage.SubscriptionTier)
 }
@@ -100,6 +102,7 @@ func TestGrokQuotaFetcherJWTBeatsAmbiguousSuperGrokProQuota(t *testing.T) {
 		},
 	}
 
+	bindGrokSnapshotFixture(account)
 	usage := NewGrokQuotaFetcher().BuildUsageInfo(account)
 	require.Equal(t, "supergrok", usage.SubscriptionTier)
 }
@@ -123,6 +126,7 @@ func TestGrokQuotaFetcherPrefersLiveJWTTierOverStaleBillingPlan(t *testing.T) {
 		},
 	}
 
+	bindGrokSnapshotFixture(account)
 	usage := NewGrokQuotaFetcher().BuildUsageInfo(account)
 	require.Equal(t, "free", usage.SubscriptionTier)
 	require.Equal(t, "free", usage.SubscriptionTierRaw)
@@ -147,6 +151,7 @@ func TestGrokQuotaFetcherUsesCredentialTierWhenBillingHasNoPlan(t *testing.T) {
 		},
 	}
 
+	bindGrokSnapshotFixture(account)
 	usage := NewGrokQuotaFetcher().BuildUsageInfo(account)
 
 	require.NotNil(t, usage.GrokBilling)
@@ -184,6 +189,7 @@ func TestGrokQuotaFetcherBuildUsageInfoFromSnapshot(t *testing.T) {
 		},
 	}
 
+	bindGrokSnapshotFixture(account)
 	usage := NewGrokQuotaFetcher().BuildUsageInfo(account)
 	require.Equal(t, "passive", usage.Source)
 	require.Equal(t, "rate_limited", usage.ErrorCode)
@@ -220,6 +226,7 @@ func TestGrokQuotaFetcherSnapshotErrorOverridesSuccessfulBillingStatus(t *testin
 		},
 	}
 
+	bindGrokSnapshotFixture(account)
 	usage := NewGrokQuotaFetcher().BuildUsageInfo(account)
 
 	require.Equal(t, "rate_limited", usage.ErrorCode)
@@ -251,6 +258,7 @@ func TestGrokQuotaFetcherNewerSuccessfulActiveProbeClearsBillingForbidden(t *tes
 		},
 	}
 
+	bindGrokSnapshotFixture(account)
 	usage := NewGrokQuotaFetcher().BuildUsageInfo(account)
 
 	require.False(t, usage.IsForbidden)
@@ -284,6 +292,7 @@ func TestGrokQuotaFetcherSameSecondSuccessfulActiveProbeClearsBillingForbidden(t
 		},
 	}
 
+	bindGrokSnapshotFixture(account)
 	usage := NewGrokQuotaFetcher().BuildUsageInfo(account)
 
 	require.False(t, usage.IsForbidden)
@@ -342,6 +351,7 @@ func TestGrokQuotaFetcherDoesNotClearBillingForbiddenWithoutNewerSuccessfulActiv
 				},
 			}
 
+			bindGrokSnapshotFixture(account)
 			usage := NewGrokQuotaFetcher().BuildUsageInfo(account)
 
 			require.True(t, usage.IsForbidden)
@@ -369,6 +379,7 @@ func TestGrokQuotaFetcherBuildUsageInfoFromNoHeadersProbe(t *testing.T) {
 		},
 	}
 
+	bindGrokSnapshotFixture(account)
 	usage := NewGrokQuotaFetcher().BuildUsageInfo(account)
 	require.Equal(t, "quota_unknown", usage.ErrorCode)
 	require.Equal(t, "no_headers", usage.GrokQuotaSnapshotState)
@@ -409,6 +420,7 @@ func TestGrokQuotaFetcherClassifiesForbiddenAndReauth(t *testing.T) {
 					},
 				},
 			}
+			bindGrokSnapshotFixture(account)
 			usage := NewGrokQuotaFetcher().BuildUsageInfo(account)
 			require.Equal(t, tt.wantReauth, usage.NeedsReauth)
 			require.Equal(t, tt.wantForbid, usage.IsForbidden)

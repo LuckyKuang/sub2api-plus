@@ -10,6 +10,7 @@ import (
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/openai"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/proxyurl"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/servertiming"
 
@@ -33,6 +34,10 @@ type reqClientOptions struct {
 	// 不应把 Gemini / Grok / GeminiCLI 等其他供应商也拖进同一份 bundle，
 	// 更不应因一份通用 SSL_CERT_FILE 配置错误而让全部供应商一起 fail early。
 	OpenAICodexClient bool
+	// Grok control grants retain the configured token endpoint's origin and use
+	// destination-aware identity rendering on every permitted attempt. Other
+	// providers and signed transports keep their existing preparation/signing.
+	GrokControlIdentity bool
 }
 
 // sharedReqClients 存储按配置参数缓存的 req 客户端实例
@@ -101,6 +106,16 @@ func getSharedReqClient(opts reqClientOptions) (*req.Client, error) {
 		client.SetCookieJar(jar)
 	}
 	client = instrumentReqClient(client)
+	if opts.GrokControlIdentity {
+		client.SetRedirectPolicy(req.DefaultRedirectPolicy(), grokOAuthSameOriginRedirectPolicy)
+		client.GetTransport().WrapRoundTripFunc(func(rt http.RoundTripper) req.HttpRoundTripFunc {
+			return func(request *http.Request) (*http.Response, error) {
+				request = request.Clone(request.Context())
+				outboundidentity.ApplyContext(request)
+				return rt.RoundTrip(request)
+			}
+		})
+	}
 
 	actual, _ := sharedReqClients.LoadOrStore(key, client)
 	if c, ok := actual.(*req.Client); ok {
@@ -129,7 +144,7 @@ func buildReqClientKey(opts reqClientOptions) string {
 			caSource, caPath, caIdentity = bundle.SourceEnv, bundle.Path, bundle.Identity
 		}
 	}
-	return fmt.Sprintf("%s|%s|%t|%t|%t|%s|%s|%s",
+	key := fmt.Sprintf("%s|%s|%t|%t|%t|%s|%s|%s",
 		strings.TrimSpace(opts.ProxyURL),
 		opts.Timeout.String(),
 		opts.ForceHTTP2,
@@ -139,6 +154,10 @@ func buildReqClientKey(opts reqClientOptions) string {
 		caPath,
 		caIdentity,
 	)
+	if opts.GrokControlIdentity {
+		key += "|grok-control-identity"
+	}
+	return key
 }
 
 // CreatePrivacyReqClient creates the shared HTTP client for ChatGPT

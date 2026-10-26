@@ -26,7 +26,7 @@ const personalReads = [
   /^\/keys(?:\/\d+)?$/,
   /^\/groups\/(available|rates)$/,
   /^\/channels\/available$/,
-  /^\/usage(?:\/(stats|errors(?:\/\d+)?|\d+|dashboard\/(stats|trend|models|snapshot-v2|api-keys-usage)))?$/,
+  /^\/usage(?:\/(live|stats|errors(?:\/\d+)?|\d+|dashboard\/(stats|trend|models|snapshot-v2|api-keys-usage)))?$/,
   /^\/subscriptions(?:\/(active|progress|summary))?$/,
   /^\/redeem\/history$/,
   /^\/announcements$/,

@@ -73,6 +73,13 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletionsWithStartTime(
 	defaultMappedModel string,
 	startTime time.Time,
 ) (forwardResult *OpenAIForwardResult, firstByteResultErr error) {
+	if account != nil && account.IsGrok() {
+		var captureErr error
+		ctx, account, _, captureErr = captureGrokRequestOwner(ctx, account)
+		if captureErr != nil {
+			return nil, captureErr
+		}
+	}
 	ctx, byteTiming := beginFirstByteTiming(ctx, startTime)
 	defer func() {
 		if forwardResult != nil && forwardResult.FirstByteMs == nil {
@@ -101,6 +108,7 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletionsWithStartTime(
 		// Resolve before image bridging or other body rewrites so the fallback is
 		// anchored to the client's stable conversation prefix.
 		grokCacheIdentity = resolveGrokCacheIdentity(c, body, "", upstreamModel)
+		ctx = withGrokConversationCacheIdentity(ctx, grokCacheIdentity)
 	}
 	reasoningEffort := extractOpenAIReasoningEffortFromBody(body, upstreamModel, billingModel, originalModel)
 	// 国产模型默认 effort 补充：需要 mappedModel 判定，推迟到 billingModel 算出之后。
@@ -153,6 +161,8 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletionsWithStartTime(
 	if err != nil {
 		return nil, err
 	}
+	ctx = withRequestCredentialOwner(ctx, account, token)
+	defer bindRequestCredentialOwnerContext(ctx, c)()
 	if strings.TrimSpace(token) == "" {
 		return nil, fmt.Errorf("account %d missing %s credential", account.ID, tokenKind)
 	}
@@ -206,7 +216,14 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletionsWithStartTime(
 	)
 
 	// 5. Build and send upstream request via the shared CC pipeline
-	targetURL, err := s.rawChatCompletionsURL(account)
+	targetAccount := account
+	if account.IsGrok() {
+		targetAccount, err = requestCredentialAccount(ctx, account)
+		if err != nil {
+			return nil, err
+		}
+	}
+	targetURL, err := s.rawChatCompletionsURL(targetAccount)
 	if err != nil {
 		return nil, err
 	}
@@ -325,10 +342,15 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 	scanner := s.newUpstreamSSEScanner(resp.Body)
 
 	var usage OpenAIUsage
-	var timing streamOutputTiming
+	sawUsage := false
+	timing := requestStreamOutputTiming(c)
 	clientDisconnected := false
 	clientOutputStarted := false
 	pendingLines := make([]string, 0, 8)
+	var pendingRouteBytes int64
+	var routeErr error
+	var providerErr error
+	usageIncomplete := false
 	refusalDetector := newOpenAIChatSilentRefusalDetector(requestBodyLen)
 	var terminal openAIRawStreamTerminalState
 
@@ -336,7 +358,14 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 		if clientDisconnected {
 			return
 		}
-		if !clientOutputStarted && !refusalDetector.ShouldReleaseClientOutput() {
+		if !clientOutputStarted && (!refusalDetector.ShouldReleaseClientOutput() || openAISessionTakeoverPending(c.Request.Context())) {
+			if openAISessionTakeoverPending(c.Request.Context()) {
+				pendingRouteBytes += int64(len(line))
+				if pendingRouteBytes > openAIFirstOutputStageMaxBytes {
+					routeErr = ErrOpenAISessionRouteNotAccepted
+					return
+				}
+			}
 			pendingLines = append(pendingLines, line)
 			return
 		}
@@ -364,20 +393,35 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 		}
 	}
 
+	var acceptance openAIChatTakeoverAcceptance
 	for scanner.Scan() {
 		line := scanner.Text()
 		refusalDetector.ObserveSSELine(line)
 		if payload, ok := extractOpenAISSEDataLine(line); ok {
 			trimmedPayload := strings.TrimSpace(payload)
+			if trimmedPayload != "[DONE]" {
+				if err := ccExplicitUpstreamError([]byte(trimmedPayload)); err != nil {
+					providerErr = err
+					break
+				}
+			}
 			terminal.ObserveDataLine(trimmedPayload)
 			if trimmedPayload != "[DONE]" {
 				observer.ObserveOpenAI([]byte(payload), strings.TrimSpace(gjson.Get(payload, "type").String()))
 				if u := extractCCStreamUsage(payload); u != nil {
 					usage = *u
+					sawUsage = true
 				}
 				var chunk apicompat.ChatCompletionsChunk
 				if json.Unmarshal([]byte(payload), &chunk) == nil {
-					timing.Observe(startTime, apicompat.ObserveChatChunkOutput(&chunk))
+					observation := apicompat.ObserveChatChunkOutput(&chunk)
+					timing.Observe(startTime, observation)
+					if !gjson.Get(payload, "error").Exists() && acceptance.observe(&chunk, usage) {
+						routeErr = commitOpenAISessionTakeover(c.Request.Context())
+						if routeErr != nil {
+							break
+						}
+					}
 				}
 			}
 		}
@@ -385,6 +429,9 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 		line = stripEmptyChatToolCallIdentityFromSSELine(line)
 
 		writeLine(line)
+		if routeErr != nil {
+			break
+		}
 		if line == "" {
 			if !clientDisconnected && clientOutputStarted {
 				c.Writer.Flush()
@@ -401,6 +448,7 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 			RequestID:                     requestID,
 			UpstreamHeaders:               resp.Header,
 			Usage:                         usage,
+			UsageSource:                   ccObservedUsageSource(sawUsage, usageIncomplete || clientDisconnected),
 			Model:                         originalModel,
 			BillingModel:                  billingModel,
 			UpstreamModel:                 upstreamModel,
@@ -411,6 +459,7 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 			ReasoningEffort:               reasoningEffort,
 			ServiceTier:                   resolvedOpenAIUpstreamServiceTier(c, serviceTier),
 			Stream:                        true,
+			UsageIncomplete:               usageIncomplete,
 			Duration:                      time.Since(startTime),
 			ClientDisconnect:              clientDisconnected,
 		}
@@ -418,6 +467,21 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 		return result
 	}
 
+	if routeErr != nil {
+		usageIncomplete = true
+		return resultWithUsage(), routeErr
+	}
+	if openAISessionTakeoverPending(c.Request.Context()) {
+		usageIncomplete = true
+		return resultWithUsage(), ErrOpenAISessionRouteNotAccepted
+	}
+	if providerErr != nil {
+		usageIncomplete = true
+		if !clientOutputStarted {
+			return nil, providerErr
+		}
+		return resultWithUsage(), errors.New("stream usage incomplete: upstream error envelope")
+	}
 	scanErr := scanner.Err()
 	if scanErr != nil && !errors.Is(scanErr, context.Canceled) && !errors.Is(scanErr, context.DeadlineExceeded) {
 		logger.L().Warn("openai chat_completions raw: stream read error",
@@ -436,6 +500,7 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 	// 两者都不能再记成功——此前统一返回 nil error，把上游截断伪装成
 	// `HTTP 200 + usage 0/0`，客户端收到半截回答且 Ops 侧完全无感。
 	if !clientAborted && terminal.IsTruncated(clientOutputStarted) {
+		usageIncomplete = true
 		cause := scanErr
 		if cause == nil {
 			cause = ErrOpenAIUpstreamStreamTruncated
@@ -481,6 +546,9 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 		}
 	}
 
+	if scanErr != nil || clientAborted && !terminal.Terminated() {
+		usageIncomplete = true
+	}
 	result := resultWithUsage()
 	if scanErr != nil && !clientAborted {
 		return result, fmt.Errorf("stream usage incomplete: %w", scanErr)
@@ -534,22 +602,25 @@ func (s *OpenAIGatewayService) bufferRawChatCompletions(
 		}
 		return nil, fmt.Errorf("read upstream body: %w", err)
 	}
+	if err := ccExplicitUpstreamError(respBody); err != nil {
+		return nil, err
+	}
 	observer := upstreamResponseModelObserverFromContext(c)
 	if observer == nil {
 		observer = beginUpstreamResponseModelObservation(c)
 	}
 	observer.ObserveOpenAI(respBody, strings.TrimSpace(gjson.GetBytes(respBody, "type").String()))
 
-	var usage OpenAIUsage
-	if parsedUsage, ok := extractOpenAIUsageFromJSONBytes(respBody); ok {
-		usage = parsedUsage
-	}
+	usage, sawUsage := extractOpenAIUsageFromJSONBytes(respBody)
 	responseModel := gjson.GetBytes(respBody, "model").String()
 	if requiresBillableGrokChatUsage(account, billingModel, upstreamModel, responseModel) && !hasBillableGrokChatUsage(usage) {
 		upstreamRequestID := firstNonEmpty(requestID, resp.Header.Get("xai-request-id"))
 		return nil, newGrokMissingUsageFailoverError(c, account, upstreamRequestID)
 	}
 	respBody = applyOllamaCloudRawChatCompletionsResponse(account, respBody)
+	if err := commitOpenAISessionTakeoverJSON(c.Request.Context(), respBody); err != nil {
+		return &OpenAIForwardResult{RequestID: requestID, Usage: usage, UsageSource: ccObservedUsageSource(sawUsage, true), Model: originalModel, BillingModel: billingModel, UpstreamModel: upstreamModel, Duration: time.Since(startTime)}, err
+	}
 
 	if s.responseHeaderFilter != nil {
 		responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
@@ -567,6 +638,7 @@ func (s *OpenAIGatewayService) bufferRawChatCompletions(
 		RequestID:                     requestID,
 		UpstreamHeaders:               resp.Header,
 		Usage:                         usage,
+		UsageSource:                   ccObservedUsageSource(sawUsage, false),
 		Model:                         originalModel,
 		BillingModel:                  billingModel,
 		UpstreamModel:                 upstreamModel,

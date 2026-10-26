@@ -54,6 +54,7 @@ func (r *channelMonitorRepository) Create(ctx context.Context, m *service.Channe
 		SetCreatedBy(m.CreatedBy).
 		SetExtraHeaders(channelMonitorHeadersForPersistence(m)).
 		SetBodyOverrideMode(defaultBodyModeRepo(m.BodyOverrideMode)).
+		SetStreamProbe(m.StreamProbe).
 		SetCheckMode(defaultCheckModeRepo(m.CheckMode))
 	if m.TemplateID != nil {
 		builder = builder.SetTemplateID(*m.TemplateID)
@@ -125,6 +126,7 @@ func (r *channelMonitorRepository) Update(ctx context.Context, m *service.Channe
 		SetJitterSeconds(m.JitterSeconds).
 		SetExtraHeaders(channelMonitorHeadersForPersistence(m)).
 		SetBodyOverrideMode(defaultBodyModeRepo(m.BodyOverrideMode)).
+		SetStreamProbe(m.StreamProbe).
 		SetCheckMode(defaultCheckModeRepo(m.CheckMode))
 	if m.TemplateID != nil {
 		updater = updater.SetTemplateID(*m.TemplateID)
@@ -243,6 +245,7 @@ func (r *channelMonitorRepository) InsertHistoryBatch(ctx context.Context, rows 
 			SetStatus(channelmonitorhistory.Status(row.Status)).
 			SetMessage(row.Message).
 			SetCheckedAt(row.CheckedAt)
+		c.SetNillableFirstTextMs(row.FirstTextMs).SetNillableStreamProbe(row.StreamProbe)
 		if row.FirstByteMs != nil {
 			c = c.SetFirstByteMs(*row.FirstByteMs)
 		}
@@ -291,6 +294,8 @@ func (r *channelMonitorRepository) ListHistory(ctx context.Context, monitorID in
 			Model:         row.Model,
 			Status:        string(row.Status),
 			FirstByteMs:   row.FirstByteMs,
+			FirstTextMs:   row.FirstTextMs,
+			StreamProbe:   row.StreamProbe,
 			LatencyMs:     row.LatencyMs,
 			PingLatencyMs: row.PingLatencyMs,
 			Message:       row.Message,
@@ -309,7 +314,7 @@ func (r *channelMonitorRepository) ListHistory(ctx context.Context, monitorID in
 func (r *channelMonitorRepository) ListLatestPerModel(ctx context.Context, monitorID int64) ([]*service.ChannelMonitorLatest, error) {
 	const q = `
 		SELECT DISTINCT ON (model)
-		    model, status, first_byte_ms, latency_ms, ping_latency_ms, checked_at
+		    model, status, first_byte_ms, first_text_ms, stream_probe, latency_ms, ping_latency_ms, checked_at
 		FROM channel_monitor_histories
 		WHERE monitor_id = $1
 		ORDER BY model, checked_at DESC, id DESC
@@ -323,11 +328,16 @@ func (r *channelMonitorRepository) ListLatestPerModel(ctx context.Context, monit
 	out := make([]*service.ChannelMonitorLatest, 0)
 	for rows.Next() {
 		l := &service.ChannelMonitorLatest{}
-		var firstByte, latency, ping sql.NullInt64
-		if err := rows.Scan(&l.Model, &l.Status, &firstByte, &latency, &ping, &l.CheckedAt); err != nil {
+		var firstByte, firstText, latency, ping sql.NullInt64
+		var streamProbe sql.NullBool
+		if err := rows.Scan(&l.Model, &l.Status, &firstByte, &firstText, &streamProbe, &latency, &ping, &l.CheckedAt); err != nil {
 			return nil, fmt.Errorf("scan latest row: %w", err)
 		}
 		assignNullInt(&l.FirstByteMs, firstByte)
+		assignNullInt(&l.FirstTextMs, firstText)
+		if streamProbe.Valid {
+			l.StreamProbe = &streamProbe.Bool
+		}
 		assignNullInt(&l.LatencyMs, latency)
 		assignNullInt(&l.PingLatencyMs, ping)
 		out = append(out, l)
@@ -376,7 +386,9 @@ func (r *channelMonitorRepository) ComputeAvailability(ctx context.Context, moni
 		            THEN SUM(latency_ms) FILTER (WHERE latency_ms IS NOT NULL)::float8 / COUNT(latency_ms)
 		            ELSE NULL END                                                   AS avg_latency_ms,
 		       AVG(first_byte_ms) FILTER (WHERE status IN ('operational','degraded')) AS avg_first_byte_ms,
-		       COUNT(first_byte_ms) FILTER (WHERE status IN ('operational','degraded')) AS first_byte_samples
+		       COUNT(first_byte_ms) FILTER (WHERE status IN ('operational','degraded')) AS first_byte_samples,
+		       AVG(first_text_ms) FILTER (WHERE status IN ('operational','degraded')) AS avg_first_text_ms,
+		       COUNT(first_text_ms) FILTER (WHERE status IN ('operational','degraded')) AS first_text_samples
 		FROM channel_monitor_histories
 		WHERE monitor_id = $1
 		  AND checked_at >= NOW() - ($2::int || ' days')::interval
@@ -403,9 +415,13 @@ func (r *channelMonitorRepository) ComputeAvailability(ctx context.Context, moni
 // 仅服务于 ComputeAvailability（4 列）；批量版本因为多一列 monitor_id 直接 inline 调 finalizeAvailabilityRow。
 func scanAvailabilityRow(rows interface{ Scan(...any) error }, windowDays int) (*service.ChannelMonitorAvailability, error) {
 	row := &service.ChannelMonitorAvailability{WindowDays: windowDays}
-	var avgLatency, avgFirstByte sql.NullFloat64
-	if err := rows.Scan(&row.Model, &row.TotalChecks, &row.OperationalChecks, &avgLatency, &avgFirstByte, &row.FirstByteSamples); err != nil {
+	var avgLatency, avgFirstByte, avgFirstText sql.NullFloat64
+	if err := rows.Scan(&row.Model, &row.TotalChecks, &row.OperationalChecks, &avgLatency, &avgFirstByte, &row.FirstByteSamples, &avgFirstText, &row.FirstTextSamples); err != nil {
 		return nil, fmt.Errorf("scan availability row: %w", err)
+	}
+	if avgFirstText.Valid {
+		v := int(avgFirstText.Float64)
+		row.AvgFirstTextMs = &v
 	}
 	finalizeAvailabilityRow(row, avgLatency)
 	if avgFirstByte.Valid {
@@ -436,7 +452,7 @@ func (r *channelMonitorRepository) ListLatestForMonitorIDs(ctx context.Context, 
 	}
 	const q = `
 		SELECT DISTINCT ON (monitor_id, model)
-		    monitor_id, model, status, first_byte_ms, latency_ms, ping_latency_ms, checked_at, quota
+		    monitor_id, model, status, first_byte_ms, first_text_ms, stream_probe, latency_ms, ping_latency_ms, checked_at, quota
 		FROM channel_monitor_histories
 		WHERE monitor_id = ANY($1)
 		ORDER BY monitor_id, model, checked_at DESC, id DESC
@@ -450,12 +466,17 @@ func (r *channelMonitorRepository) ListLatestForMonitorIDs(ctx context.Context, 
 	for rows.Next() {
 		var monitorID int64
 		l := &service.ChannelMonitorLatest{}
-		var firstByte, latency, ping sql.NullInt64
+		var firstByte, firstText, latency, ping sql.NullInt64
+		var streamProbe sql.NullBool
 		var quota []byte
-		if err := rows.Scan(&monitorID, &l.Model, &l.Status, &firstByte, &latency, &ping, &l.CheckedAt, &quota); err != nil {
+		if err := rows.Scan(&monitorID, &l.Model, &l.Status, &firstByte, &firstText, &streamProbe, &latency, &ping, &l.CheckedAt, &quota); err != nil {
 			return nil, fmt.Errorf("scan latest batch row: %w", err)
 		}
 		assignNullInt(&l.FirstByteMs, firstByte)
+		assignNullInt(&l.FirstTextMs, firstText)
+		if streamProbe.Valid {
+			l.StreamProbe = &streamProbe.Bool
+		}
 		assignNullInt(&l.LatencyMs, latency)
 		assignNullInt(&l.PingLatencyMs, ping)
 		l.Quota = scanMonitorQuota(quota)
@@ -496,6 +517,8 @@ func (r *channelMonitorRepository) ListRecentHistoryForMonitors(
 		    SELECT h.monitor_id,
 		           h.status,
 		           h.first_byte_ms,
+		           h.first_text_ms,
+		           h.stream_probe,
 		           h.latency_ms,
 		           h.ping_latency_ms,
 		           h.checked_at,
@@ -504,7 +527,7 @@ func (r *channelMonitorRepository) ListRecentHistoryForMonitors(
 		    JOIN targets t
 		      ON t.monitor_id = h.monitor_id AND t.model = h.model
 		)
-		SELECT monitor_id, status, first_byte_ms, latency_ms, ping_latency_ms, checked_at
+		SELECT monitor_id, status, first_byte_ms, first_text_ms, stream_probe, latency_ms, ping_latency_ms, checked_at
 		FROM ranked
 		WHERE rn <= $3
 		ORDER BY monitor_id, rn
@@ -518,11 +541,16 @@ func (r *channelMonitorRepository) ListRecentHistoryForMonitors(
 	for rows.Next() {
 		var monitorID int64
 		entry := &service.ChannelMonitorHistoryEntry{}
-		var firstByte, latency, ping sql.NullInt64
-		if err := rows.Scan(&monitorID, &entry.Status, &firstByte, &latency, &ping, &entry.CheckedAt); err != nil {
+		var firstByte, firstText, latency, ping sql.NullInt64
+		var streamProbe sql.NullBool
+		if err := rows.Scan(&monitorID, &entry.Status, &firstByte, &firstText, &streamProbe, &latency, &ping, &entry.CheckedAt); err != nil {
 			return nil, fmt.Errorf("scan recent history row: %w", err)
 		}
 		assignNullInt(&entry.FirstByteMs, firstByte)
+		assignNullInt(&entry.FirstTextMs, firstText)
+		if streamProbe.Valid {
+			entry.StreamProbe = &streamProbe.Bool
+		}
 		assignNullInt(&entry.LatencyMs, latency)
 		assignNullInt(&entry.PingLatencyMs, ping)
 		out[monitorID] = append(out[monitorID], entry)
@@ -589,7 +617,9 @@ func (r *channelMonitorRepository) ComputeAvailabilityForMonitors(ctx context.Co
 		            THEN SUM(latency_ms) FILTER (WHERE latency_ms IS NOT NULL)::float8 / COUNT(latency_ms)
 		            ELSE NULL END                                                   AS avg_latency_ms,
 		       AVG(first_byte_ms) FILTER (WHERE status IN ('operational','degraded')) AS avg_first_byte_ms,
-		       COUNT(first_byte_ms) FILTER (WHERE status IN ('operational','degraded')) AS first_byte_samples
+		       COUNT(first_byte_ms) FILTER (WHERE status IN ('operational','degraded')) AS first_byte_samples,
+		       AVG(first_text_ms) FILTER (WHERE status IN ('operational','degraded')) AS avg_first_text_ms,
+		       COUNT(first_text_ms) FILTER (WHERE status IN ('operational','degraded')) AS first_text_samples
 		FROM channel_monitor_histories
 		WHERE monitor_id = ANY($1)
 		  AND checked_at >= NOW() - ($2::int || ' days')::interval
@@ -604,12 +634,16 @@ func (r *channelMonitorRepository) ComputeAvailabilityForMonitors(ctx context.Co
 	for rows.Next() {
 		var monitorID int64
 		row := &service.ChannelMonitorAvailability{WindowDays: windowDays}
-		var avgLatency, avgFirstByte sql.NullFloat64
-		if err := rows.Scan(&monitorID, &row.Model, &row.TotalChecks, &row.OperationalChecks, &avgLatency, &avgFirstByte, &row.FirstByteSamples); err != nil {
+		var avgLatency, avgFirstByte, avgFirstText sql.NullFloat64
+		if err := rows.Scan(&monitorID, &row.Model, &row.TotalChecks, &row.OperationalChecks, &avgLatency, &avgFirstByte, &row.FirstByteSamples, &avgFirstText, &row.FirstTextSamples); err != nil {
 			return nil, fmt.Errorf("scan availability batch row: %w", err)
 		}
 		// 批量查询多了首列 monitor_id；其余字段的可用率/平均延迟换算与单 monitor 版本一致，
 		// 抽出 finalizeAvailabilityRow 复用，避免两处分别维护除法与 NullFloat 解包。
+		if avgFirstText.Valid {
+			v := int(avgFirstText.Float64)
+			row.AvgFirstTextMs = &v
+		}
 		finalizeAvailabilityRow(row, avgLatency)
 		if avgFirstByte.Valid {
 			v := int(avgFirstByte.Float64)
@@ -638,6 +672,7 @@ func (r *channelMonitorRepository) UpsertDailyRollupsFor(ctx context.Context, ta
 		    operational_count, degraded_count, failed_count, error_count,
 		    sum_latency_ms, count_latency,
 		    sum_first_byte_ms, count_first_byte,
+		    sum_first_text_ms, count_first_text,
 		    sum_ping_latency_ms, count_ping_latency,
 		    computed_at
 		)
@@ -655,6 +690,8 @@ func (r *channelMonitorRepository) UpsertDailyRollupsFor(ctx context.Context, ta
 		    COUNT(latency_ms)                                                AS count_latency,
 		    COALESCE(SUM(first_byte_ms) FILTER (WHERE status IN ('operational','degraded')),0) AS sum_first_byte_ms,
 		    COUNT(first_byte_ms) FILTER (WHERE status IN ('operational','degraded')) AS count_first_byte,
+		    COALESCE(SUM(first_text_ms) FILTER (WHERE status IN ('operational','degraded')),0) AS sum_first_text_ms,
+		    COUNT(first_text_ms) FILTER (WHERE status IN ('operational','degraded')) AS count_first_text,
 		    COALESCE(SUM(ping_latency_ms) FILTER (WHERE ping_latency_ms IS NOT NULL), 0)   AS sum_ping_latency_ms,
 		    COUNT(ping_latency_ms)                                           AS count_ping_latency,
 		    NOW()
@@ -671,6 +708,8 @@ func (r *channelMonitorRepository) UpsertDailyRollupsFor(ctx context.Context, ta
 		    error_count         = EXCLUDED.error_count,
 		    sum_first_byte_ms = EXCLUDED.sum_first_byte_ms,
 		    count_first_byte = EXCLUDED.count_first_byte,
+		    sum_first_text_ms = EXCLUDED.sum_first_text_ms,
+		    count_first_text = EXCLUDED.count_first_text,
 		    sum_latency_ms      = EXCLUDED.sum_latency_ms,
 		    count_latency       = EXCLUDED.count_latency,
 		    sum_ping_latency_ms = EXCLUDED.sum_ping_latency_ms,
@@ -812,6 +851,7 @@ func entToServiceMonitor(row *dbent.ChannelMonitor) *service.ChannelMonitor {
 		UpdatedAt:            row.UpdatedAt,
 		ExtraHeaders:         headers,
 		BodyOverrideMode:     row.BodyOverrideMode,
+		StreamProbe:          row.StreamProbe,
 		BodyOverride:         row.BodyOverride,
 		CheckMode:            defaultCheckModeRepo(row.CheckMode),
 		DuplicateOperationID: duplicateOperationID,

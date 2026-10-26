@@ -63,6 +63,18 @@ func TestDomesticOutboundIdentityWireSnapshotAndFailover(t *testing.T) {
 					require.NoError(t, resp.Body.Close())
 					got := <-captured
 					for name, value := range pinned.ForProtocol(outboundidentity.RequestProtocol(req)).Headers {
+						if preset == "zcode" && outboundidentity.RequestProtocol(req) == "" {
+							// sourceHeaders.ts control requests omit the model agent and
+							// use os.version(), whereas inference uses os.release().
+							if name == "X-ZCode-Agent" {
+								require.Empty(t, got.Get(name))
+								continue
+							}
+							if name == "X-Os-Version" {
+								require.Equal(t, "#31-Ubuntu SMP PREEMPT_DYNAMIC Sat Apr 20 00:40:06 UTC 2024", got.Get(name))
+								continue
+							}
+						}
 						require.Equal(t, value, got.Get(name), name)
 					}
 					require.Empty(t, got.Get("Originator"))
@@ -140,7 +152,7 @@ func TestZCodeIdentityRuntimeSettingsAndVersionCompanion(t *testing.T) {
 			headers = item.Headers
 		}
 	}
-	require.Len(t, headers, 11)
+	require.Len(t, headers, 12)
 	resolved := svc.resolveDefaultOutboundIdentity(ctx, "zcode")
 	require.Equal(t, "4.1.0", resolved.Headers[zcode.HeaderAppVersion])
 	require.Equal(t, "Europe/Amsterdam", resolved.Headers["X-Client-Timezone"])

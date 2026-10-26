@@ -145,6 +145,23 @@ vi.mock("@/stores/adminSettings", () => ({
   }),
 }));
 
+// Keep the real appearance card mounted; isolate its API/store boundaries just
+// as the other settings sections do. Its publication behavior has its own suite.
+vi.mock("@/stores/app", () => ({
+  useAppStore: () => ({
+    consoleAppearancePreview: null,
+    applyConsoleAppearance: vi.fn(),
+    showSuccess,
+  }),
+}));
+vi.mock("@/api/admin/appearance", async () => {
+  const { defaultConsoleAppearance } = await import("@/types/appearance");
+  return {
+    getConsoleAppearance: vi.fn().mockImplementation(async () => defaultConsoleAppearance()),
+    saveConsoleAppearance: vi.fn(),
+  };
+});
+
 vi.mock("@/composables/useClipboard", () => ({
   useClipboard: () => ({
     copyToClipboard: vi.fn(),
@@ -158,6 +175,7 @@ vi.mock("@/utils/apiError", () => ({
 vi.mock("vue-i18n", async () => {
   const actual = await vi.importActual<typeof import("vue-i18n")>("vue-i18n");
   const translations: Record<string, string> = {
+    "admin.settings.gatewayForwarding.openaiCodexVersionEffective": "Currently effective: {version} ({source})",
     "admin.settings.wechatConnect.title": "微信登录",
     "admin.settings.wechatConnect.description": "用于微信开放平台或公众号/小程序的第三方登录配置。",
     "admin.settings.wechatConnect.enabledLabel": "启用微信登录",
@@ -485,6 +503,9 @@ const baseSettingsResponse = {
   enable_client_dateline_normalization: true,
   antigravity_user_agent_version: "",
   openai_codex_user_agent: "",
+  openai_codex_ws_enabled: true,
+  openai_codex_http_ws_enabled: false,
+  openai_codex_ws_deployment_allowed: true,
   payment_enabled: true,
   payment_min_amount: 1,
   payment_max_amount: 10000,
@@ -556,8 +577,9 @@ const baseSettingsResponse = {
   },
 };
 
-function mountView() {
+function mountView(attachTo?: HTMLElement) {
   return mount(SettingsView, {
+    attachTo,
     global: {
       stubs: {
         AppLayout: AppLayoutStub,
@@ -747,6 +769,41 @@ describe("admin SettingsView payment visible method controls", () => {
     adminSettingsFetch.mockResolvedValue(undefined);
   });
 
+  it("keeps all security and gateway sections in the scroll area while tabs and saving remain outside", async () => {
+    const wrapper = mountView(document.body);
+    try {
+      await flushPromises();
+      const body = wrapper.get('[data-test="settings-body-scroll"]');
+      expect(body.find('.settings-tabs-shell').exists()).toBe(false);
+      expect(body.find('[data-test="settings-save-bar"]').exists()).toBe(false);
+      expect(body.element.closest('form')).toBe(wrapper.get('form').element);
+      const save = wrapper.get('[data-test="settings-save-bar"]');
+      expect(save.element.closest('form')).toBe(wrapper.get('form').element);
+      // jsdom's :scope selector includes descendants when they share the
+      // scroll area's workspace-shell class. Keep ownership explicit.
+      const visibleSections = () => body.findAll('div').filter(section =>
+        section.element.parentElement === body.element && section.isVisible());
+      await openSecurityTab(wrapper);
+      const securitySections = visibleSections();
+      expect(securitySections).toHaveLength(2);
+      expect(securitySections[0].text()).toContain('admin.settings.adminApiKey.title');
+      expect(securitySections[1].text()).toContain('admin.settings.registration.title');
+      body.element.scrollTop = 300;
+      await openGatewayTab(wrapper);
+      expect(body.element.scrollTop).toBe(0);
+      const gatewaySections = visibleSections();
+      expect(gatewaySections).toHaveLength(2);
+      expect(gatewaySections[0].text()).toContain('admin.settings.overloadCooldown.title');
+      expect(gatewaySections[1].text()).toContain('admin.settings.claudeCode.title');
+      await wrapper.get('#settings-tab-general').trigger('click');
+      await wrapper.get('#settings-tab-gateway').trigger('click');
+      expect(visibleSections()).toHaveLength(2);
+      expect(updateSettings).not.toHaveBeenCalled();
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
   it.each(["v1", "v2", "v3"])("saves monitor mode %s and invalidates old public settings before refreshing", async (savedMode) => {
     getSettings.mockResolvedValue({ ...baseSettingsResponse, channel_monitor_enabled: true, channel_monitor_mode: "v1" });
     const wrapper = mountView();
@@ -765,6 +822,46 @@ describe("admin SettingsView payment visible method controls", () => {
       expect(fetchPublicSettings).toHaveBeenCalledWith(true);
       expect(clearPublicSettingsCache.mock.invocationCallOrder[0]).toBeLessThan(fetchPublicSettings.mock.invocationCallOrder[0]);
     } finally { wrapper.unmount(); }
+  });
+
+  it("keeps manual Codex version controls without automatic synchronization or retired submitted fields", async () => {
+    getSettings.mockResolvedValue({ ...baseSettingsResponse,
+      openai_codex_client_version: "", openai_codex_client_version_effective: "0.164.0", openai_codex_client_version_source: "compiled",
+      openai_codex_client_version_synced: "9.9.9", openai_codex_version_auto_sync_enabled: true,
+    });
+    const wrapper = mountView();
+    try {
+      await flushPromises();
+      await openIdentityTab(wrapper);
+      expect(wrapper.text()).toContain("0.164.0");
+      expect(wrapper.text()).not.toContain("9.9.9");
+      expect(wrapper.text()).not.toContain("openaiCodexVersionAutoSync");
+      expect(wrapper.text()).not.toContain("openaiCodexVersionSyncNow");
+      await wrapper.find("form").trigger("submit.prevent");
+      await flushPromises();
+      const submitted = updateSettings.mock.calls[0][0];
+      expect(submitted.openai_codex_client_version).toBe("");
+      expect(submitted).not.toHaveProperty("openai_codex_client_version_synced");
+      expect(submitted).not.toHaveProperty("openai_codex_version_auto_sync_enabled");
+    } finally { wrapper.unmount(); }
+  });
+
+  it("saves Codex transport switches independently and disables HTTP preference while upstream WS is off", async () => {
+    const wrapper = mountView();
+    await flushPromises();
+    await openIdentityTab(wrapper);
+    const upstream = wrapper.get('[data-testid="codex-upstream-ws"]');
+    const http = wrapper.get('[data-testid="codex-http-ws"]');
+    await http.setValue(true);
+    await upstream.setValue(false);
+    expect(http.attributes("disabled")).toBeDefined();
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings).toHaveBeenCalledWith(expect.objectContaining({
+      openai_codex_ws_enabled: false,
+      openai_codex_http_ws_enabled: true,
+    }));
+    wrapper.unmount();
   });
 
   it("loads and saves V3 monitor mode without converting it to V1 or V2", async () => {

@@ -101,7 +101,7 @@ describe('PaymentProviderDialog payment guide', () => {
 
     expect(wrapper.text()).not.toContain(messages['admin.settings.payment.alipayGuideSummary'])
     expect(wrapper.text()).not.toContain(messages['admin.settings.payment.wxpayGuideSummary'])
-    expect(wrapper.find('button[title="View payment guide"]').exists()).toBe(false)
+    expect(wrapper.find('button[aria-label="View payment guide"]').exists()).toBe(false)
   })
 
   it.each([
@@ -115,7 +115,8 @@ describe('PaymentProviderDialog payment guide', () => {
     await nextTick()
 
     expect(wrapper.text()).toContain(messages[summaryKey])
-    expect(wrapper.find('button[title="View payment guide"]').exists()).toBe(true)
+    expect(wrapper.find('button[aria-label="View payment guide"]').exists()).toBe(true)
+    expect(wrapper.get('button[aria-label="View payment guide"]').attributes('title')).toBeUndefined()
   })
 
   it('shows Airwallex webhook event and API version guidance with the webhook URL', async () => {

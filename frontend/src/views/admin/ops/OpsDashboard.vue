@@ -1,9 +1,9 @@
 <template>
-  <component :is="isFullscreen ? 'div' : AppLayout" :class="isFullscreen ? 'flex min-h-screen flex-col justify-center bg-gray-50 dark:bg-dark-950' : ''">
-    <div :class="[isFullscreen ? 'p-4 md:p-6' : '', 'space-y-6 pb-12']">
+  <component :is="isFullscreen ? 'div' : AppLayout" :workspace="!isFullscreen || undefined" :class="isFullscreen ? 'flex min-h-screen flex-col justify-center bg-gray-50 dark:bg-dark-950' : ''">
+    <div :class="[isFullscreen ? 'space-y-6 p-4 md:p-6' : 'workspace-page']">
       <div
         v-if="errorMessage"
-        class="rounded-2xl bg-red-50 p-4 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400"
+        class="workspace-fixed rounded-2xl bg-red-50/[0.15] p-4 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400"
       >
         {{ errorMessage }}
       </div>
@@ -12,6 +12,8 @@
 
       <OpsDashboardHeader
         v-else-if="opsEnabled"
+        :workspace="!isFullscreen"
+        :show-overview="activeTab === 'overview'"
         :overview="overview"
         :platform="platform"
         :group-id="groupId"
@@ -37,71 +39,91 @@
         @open-alert-rules="showAlertRulesCard = true"
         @enter-fullscreen="enterFullscreen"
         @exit-fullscreen="exitFullscreen"
-      />
+      >
+        <template #navigation>
+          <WorkspaceTabs v-model="activeTab" :tabs="workspaceTabs" :label="t('admin.ops.title')" />
+        </template>
 
-      <!-- Row: Concurrency + Throughput -->
-      <div v-if="opsEnabled && !(loading && !hasLoadedOnce)" class="grid grid-cols-1 gap-6 lg:grid-cols-4">
-        <div class="lg:col-span-1 min-h-[360px]">
-          <OpsConcurrencyCard :platform-filter="platform" :group-id-filter="groupId" :refresh-token="dashboardRefreshToken" />
-        </div>
-        <div class="lg:col-span-1 h-[360px]">
-          <OpsSwitchRateTrendChart
-            :points="switchTrend?.points ?? []"
-            :loading="loadingSwitchTrend"
-            :time-range="switchTrendTimeRange"
-            :fullscreen="isFullscreen"
-          />
-        </div>
-        <div class="lg:col-span-2 h-[360px]">
-          <OpsThroughputTrendChart
-            :points="throughputTrend?.points ?? []"
-            :by-platform="throughputTrend?.by_platform ?? []"
-            :top-groups="throughputTrend?.top_groups ?? []"
-            :loading="loadingTrend"
-            :time-range="timeRange"
-            :fullscreen="isFullscreen"
-            @select-platform="handleThroughputSelectPlatform"
-            @select-group="handleThroughputSelectGroup"
-            @open-details="handleOpenRequestDetails"
-          />
-        </div>
-      </div>
+        <template #default>
+          <!-- Row: Concurrency + Throughput -->
+          <div v-if="opsEnabled && !(loading && !hasLoadedOnce)" class="grid grid-cols-1 gap-6 lg:grid-cols-4">
+            <div class="lg:col-span-1 min-h-[360px]">
+              <OpsConcurrencyCard :platform-filter="platform" :group-id-filter="groupId" :refresh-token="dashboardRefreshToken" />
+            </div>
+            <div class="lg:col-span-1 h-[360px]">
+              <OpsSwitchRateTrendChart
+                :points="switchTrend?.points ?? []"
+                :loading="loadingSwitchTrend"
+                :time-range="switchTrendTimeRange"
+                :fullscreen="isFullscreen"
+              />
+            </div>
+            <div class="lg:col-span-2 h-[360px]">
+              <OpsThroughputTrendChart
+                :points="throughputTrend?.points ?? []"
+                :by-platform="throughputTrend?.by_platform ?? []"
+                :top-groups="throughputTrend?.top_groups ?? []"
+                :loading="loadingTrend"
+                :time-range="timeRange"
+                :fullscreen="isFullscreen"
+                @select-platform="handleThroughputSelectPlatform"
+                @select-group="handleThroughputSelectGroup"
+                @open-details="handleOpenRequestDetails"
+              />
+            </div>
+          </div>
 
-      <!-- Row: Visual Analysis (baseline 3-up grid) -->
-      <div v-if="opsEnabled && !(loading && !hasLoadedOnce)" class="grid grid-cols-1 gap-6 md:grid-cols-3">
-        <OpsLatencyChart :latency-data="latencyHistogram" :loading="loadingLatency" />
-        <OpsErrorDistributionChart
-          :data="errorDistribution"
-          :loading="loadingErrorDistribution"
-          @open-details="openErrorDetails('request')"
-        />
-        <OpsErrorTrendChart
-          :points="errorTrend?.points ?? []"
-          :loading="loadingErrorTrend"
-          :time-range="timeRange"
-          @open-request-errors="openErrorDetails('request')"
-          @open-upstream-errors="openErrorDetails('upstream')"
-        />
-      </div>
+          <!-- Row: Visual Analysis (baseline 3-up grid) -->
+          <div v-if="opsEnabled && !(loading && !hasLoadedOnce)" class="grid grid-cols-1 gap-6 md:grid-cols-3">
+            <OpsLatencyChart :latency-data="latencyHistogram" :loading="loadingLatency" />
+            <OpsErrorDistributionChart
+              :data="errorDistribution"
+              :loading="loadingErrorDistribution"
+              @open-details="openErrorDetails('request')"
+            />
+            <OpsErrorTrendChart
+              :points="errorTrend?.points ?? []"
+              :loading="loadingErrorTrend"
+              :time-range="timeRange"
+              @open-request-errors="openErrorDetails('request')"
+              @open-upstream-errors="openErrorDetails('upstream')"
+            />
+          </div>
 
-      <!-- Row: Token Stats -->
-      <div v-if="opsEnabled && showOpenAITokenStats && !(loading && !hasLoadedOnce)" class="grid grid-cols-1 gap-6">
-        <OpsOpenAITokenStatsCard
-          :platform-filter="platform"
-          :group-id-filter="groupId"
-          :refresh-token="dashboardRefreshToken"
-        />
-      </div>
+          <!-- Row: Token Stats -->
+          <div v-if="opsEnabled && showOpenAITokenStats && !(loading && !hasLoadedOnce)" class="grid grid-cols-1 gap-6">
+            <OpsOpenAITokenStatsCard
+              :platform-filter="platform"
+              :group-id-filter="groupId"
+              :refresh-token="dashboardRefreshToken"
+            />
+          </div>
+        </template>
 
-      <!-- Alert Events -->
-      <OpsAlertEventsCard v-if="opsEnabled && showAlertEvents && !(loading && !hasLoadedOnce)" />
-
-      <!-- System Logs -->
-      <OpsSystemLogTable
-        v-if="opsEnabled && !(loading && !hasLoadedOnce)"
-        :platform-filter="platform"
-        :refresh-token="dashboardRefreshToken"
-      />
+        <template #panels>
+          <div
+            v-show="activeTab === 'alerts'"
+            id="ops-panel-alerts"
+            data-testid="ops-panel-alerts"
+            role="tabpanel"
+            :aria-label="t('workspace.alerts')"
+            :class="isFullscreen ? '' : 'workspace-body'"
+          >
+            <OpsAlertEventsCard v-if="showAlertEvents" :workspace="!isFullscreen" />
+            <p v-else class="card p-6 text-sm surface-muted">{{ t('workspace.alerts') }} · {{ t('common.disabled') }}</p>
+          </div>
+          <div
+            v-show="activeTab === 'logs'"
+            id="ops-panel-logs"
+            data-testid="ops-panel-logs"
+            role="tabpanel"
+            :aria-label="t('workspace.systemLogs')"
+            :class="isFullscreen ? '' : 'workspace-shell workspace-body workspace-scroll'"
+          >
+            <OpsSystemLogTable class="workspace-shell" :platform-filter="platform" :refresh-token="dashboardRefreshToken" />
+          </div>
+        </template>
+      </OpsDashboardHeader>
 
       <!-- Settings Dialog (hidden in fullscreen mode) -->
       <template v-if="!isFullscreen">
@@ -147,6 +169,7 @@ import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
+import WorkspaceTabs from '@/components/common/WorkspaceTabs.vue'
 import {
   opsAPI,
   type OpsDashboardOverview,
@@ -179,6 +202,12 @@ const router = useRouter()
 const appStore = useAppStore()
 const adminSettingsStore = useAdminSettingsStore()
 const { t } = useI18n()
+const activeTab = ref('overview')
+const workspaceTabs = computed(() => [
+  { value: 'overview', label: t('workspace.opsMonitoring'), panelId: 'ops-panel-overview' },
+  { value: 'alerts', label: t('workspace.alerts'), panelId: 'ops-panel-alerts' },
+  { value: 'logs', label: t('workspace.systemLogs'), panelId: 'ops-panel-logs' },
+])
 
 const opsEnabled = computed(() => adminSettingsStore.opsMonitoringEnabled)
 

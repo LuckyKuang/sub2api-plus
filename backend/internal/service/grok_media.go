@@ -667,13 +667,30 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 	if account.Platform != PlatformGrok {
 		return nil, fmt.Errorf("account platform %s is not supported for grok media", account.Platform)
 	}
+	// Token acquisition may advance the sender snapshot to a newer version of
+	// this grant. The concurrency reservation belongs to the selected resource.
+	selectedAccount := *account
+	ctx, account, _, err = captureGrokRequestOwner(ctx, account)
+	if err != nil {
+		return nil, err
+	}
 
+	ctx = WithOutboundIdentityScope(ctx, c)
 	token, _, err := s.getRequestCredential(ctx, c, account)
 	if err != nil {
 		return nil, err
 	}
+	ctx = withRequestCredentialOwner(ctx, account, token)
 	if endpoint == GrokMediaEndpointVideoContent {
-		return s.forwardGrokMediaVideoContent(ctx, c, account, token, requestID, startTime)
+		return s.forwardGrokMediaVideoContent(ctx, c, account, &selectedAccount, token, requestID, startTime)
+	}
+	account, err = requestCredentialAccount(ctx, account)
+	if err != nil {
+		return nil, err
+	}
+	proxyURL, err := requestCredentialOwnerProxyURL(ctx, account)
+	if err != nil {
+		return nil, err
 	}
 	targetURL, err := buildGrokMediaURL(account, s.cfg, endpoint, requestID)
 	if err != nil {
@@ -721,7 +738,9 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 	if account.IsGrokOAuth() && isGrokCLIProxyTarget(targetURL) {
 		applyGrokCLIHeaders(upstreamReq.Header)
 	}
-	applyGrokMediaSessionHeader(upstreamReq.Header, c)
+	if err := applyGrokMediaSessionHeader(upstreamReq, c, account); err != nil {
+		return nil, err
+	}
 	if endpoint.RequiresRequestBody() {
 		contentType = strings.TrimSpace(contentType)
 		if contentType == "" {
@@ -732,12 +751,10 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 	// 账号级请求头覆写最后应用，配置值优先于内置默认头。
 	account.ApplyHeaderOverrides(upstreamReq.Header)
 
-	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
-	}
 	upstreamStart := time.Now()
-	resp, err := s.httpUpstream.Do(prepareAccountOutboundRequest(upstreamReq, account), proxyURL, account.ID, account.Concurrency)
+	upstreamReq = prepareAccountOutboundRequest(upstreamReq, account)
+	captureImageResultDownloadOwner(upstreamReq, account)
+	resp, err := s.httpUpstream.Do(upstreamReq, proxyURL, selectedAccount.ID, selectedAccount.Concurrency)
 	SetOpsLatencyMs(c, OpsUpstreamLatencyMsKey, time.Since(upstreamStart).Milliseconds())
 	if err != nil {
 		return nil, s.handleOpenAIUpstreamTransportError(ctx, c, account, err, false)
@@ -810,9 +827,18 @@ func (s *OpenAIGatewayService) forwardGrokMediaVideoContent(
 	ctx context.Context,
 	c *gin.Context,
 	account *Account,
+	selectedAccount *Account,
 	token, requestID string,
 	startTime time.Time,
 ) (*OpenAIForwardResult, error) {
+	account, err := requestCredentialAccount(ctx, account)
+	if err != nil {
+		return nil, err
+	}
+	proxyURL, err := requestCredentialOwnerProxyURL(ctx, account)
+	if err != nil {
+		return nil, err
+	}
 	statusURL, err := buildGrokMediaURL(account, s.cfg, GrokMediaEndpointVideoStatus, requestID)
 	if err != nil {
 		return nil, err
@@ -834,15 +860,13 @@ func (s *OpenAIGatewayService) forwardGrokMediaVideoContent(
 	if account.IsGrokOAuth() && isGrokCLIProxyTarget(statusURL) {
 		applyGrokCLIHeaders(statusReq.Header)
 	}
-	applyGrokMediaSessionHeader(statusReq.Header, c)
+	if err := applyGrokMediaSessionHeader(statusReq, c, account); err != nil {
+		return nil, err
+	}
 	account.ApplyHeaderOverrides(statusReq.Header)
 
-	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
-	}
 	upstreamStart := time.Now()
-	statusResp, err := s.httpUpstream.Do(prepareAccountOutboundRequest(statusReq, account), proxyURL, account.ID, account.Concurrency)
+	statusResp, err := s.httpUpstream.Do(prepareAccountOutboundRequest(statusReq, account), proxyURL, selectedAccount.ID, selectedAccount.Concurrency)
 	if err != nil {
 		SetOpsLatencyMs(c, OpsUpstreamLatencyMsKey, time.Since(upstreamStart).Milliseconds())
 		return nil, s.handleOpenAIUpstreamTransportError(ctx, c, account, err, false)
@@ -901,7 +925,7 @@ func (s *OpenAIGatewayService) forwardGrokMediaVideoContent(
 		account.ApplyHeaderOverrides(contentReq.Header)
 	}
 
-	contentResp, err := s.httpUpstream.Do(prepareAccountOutboundRequest(contentReq, account), proxyURL, account.ID, account.Concurrency)
+	contentResp, err := s.httpUpstream.Do(prepareAccountOutboundRequest(contentReq, account), proxyURL, selectedAccount.ID, selectedAccount.Concurrency)
 	SetOpsLatencyMs(c, OpsUpstreamLatencyMsKey, time.Since(upstreamStart).Milliseconds())
 	if err != nil {
 		return nil, s.handleOpenAIUpstreamTransportError(ctx, c, account, err, false)
