@@ -1,10 +1,10 @@
 # Seven-provider business regression matrix
 
-Audit target: the semantic merge on `fix/seven-platforms-main-sync`, combining
+Audit target: code merge `85fb3c82c` on `fix/seven-platforms-main-sync`, combining
 `2dab72aac` with surgeonfish checkpoint `e2bbc80dc` (based on `1818c2993`).
 Both parents contribute implementation and regression requirements. Their prior
-validation records apply only to their respective source trees. The merged tree
-requires new container validation; no merged-tree passing result is recorded here.
+validation records apply only to their respective source trees. The current
+merged-source runs are recorded under [merge verification](#current-merge-verification).
 
 Acceptance scope: all gateway business capabilities currently implemented for
 these seven platforms. The [supported-business inventory](SEVEN_PROVIDER_SUPPORTED_BUSINESS.md)
@@ -316,14 +316,63 @@ the network fixtures; PostgreSQL/Redis cases require the integration environment
 Frontend changes require lint, typecheck, relevant Vitest and locale checks.
 Identity changes also retain the complete existing Codex identity regressions.
 
+### Current merge verification
+
+The following checks ran in Apple Containers on 2026-10-26. Backend unit,
+integration, critical, lint and selected race runs used the final backend/tools
+bytes committed in `85fb3c82c`. The validation image was
+`sub2api-validation:8449ffd7679a1e27`, with dependency cache generation
+`7b5b2a85be071953`. PostgreSQL/Redis and MinIO were disposable services.
+Seven-business integration fixtures use separate databases so another package's
+table truncation, outbox sequence reset or fault trigger cannot satisfy or
+invalidate their cross-instance assertions.
+
+| Validation | Recorded result |
+| --- | --- |
+| Complete backend unit suite | Passed with uncached execution; 6 existing conditional skips listed below |
+| Complete backend integration suite | Passed with uncached execution against PostgreSQL/Redis; 3 conditional skips listed below |
+| Critical unit gate | All 196 required top-level tests and 1,310 required children executed and passed |
+| Critical integration gate | All 91 required top-level tests and 403 required children executed and passed |
+| Complete backend lint | Zero issues |
+| Focused service/repository race checks | Both passed with `CGO_ENABLED=1`; exact selections below, not a full race suite |
+| Frontend | Frozen install, lint, typecheck, build, 435 Vitest files / 3,968 tests, 104 locale tests and all 311 required frontend cases passed |
+| Chromium management | All 14 required scenarios and the browser TypeScript check passed; synthetic accounts and real Vue/backend/PostgreSQL/Redis/proxy responders |
+| Independent storage gate | Migration/idempotency smoke and real MinIO workflow both executed and passed, without skips |
+| Scoped policy/tool checks | Codex identity and guard, README synchronization, Go build tags, CI/gate/browser/frontend parser tests, migration policy, module tidiness, AGENTS contract and validation launcher regressions passed; coverage parser suite contained 49 tests |
+
+The race selections were:
+
+```bash
+CGO_ENABLED=1 go test -C backend -race -tags=unit ./internal/service -run 'Test(CNAPIKey|KimiAPIKey|OpenAIQuota.*Owner|LiveSidebandProduction|ZhipuProject|ZhipuOffPeak|GrokRequestOutcome|GrokRecovery|NativeAuxiliary|NativeRefreshCoordinator|NativeBackgroundRefresh|UnsavedCredentialOwner|NativeAdapters)' -count=1 -timeout=600s
+CGO_ENABLED=1 go test -C backend -race -tags=integration ./internal/repository -run 'Test(CNAPIKey|CNControlSnapshot|CNBalanceSchedule|CNProxyOwner|OpenAIQuotaOwner|OAuthOwner|CredentialSnapshotCache|ControlCASCacheBoundary)' -count=1 -timeout=600s
+```
+
+The final source check compared all 3,959 backend/tools files against each of
+the five backend run manifests and found no byte differences. SHA-256 of the
+canonical sorted path-to-file-hash JSON was
+`c1e23ac5a5c67834aa9af9e1a7b682e2ccf420b7f46cbcaa59ece9253e3be3a2`.
+Frontend sources remained unchanged after their passing run. The browser
+management and storage executions preceded the final task-only CAS recovery,
+integration-fixture isolation and gate-name correction; those changes did not
+alter the exercised management or storage paths. Local detailed logs, source
+manifests and earlier failing attempts remain in the ignored OpenSpec plan.
+
+The six unit skips were the disabled DingTalk fixture, three manual/live TLS
+checks, the legacy null-session fixture and live OpenAI token-count comparison.
+Integration skipped manual TLS capture and an externally supplied signed plugin
+artifact; its default MinIO skip was covered by the independent storage gate.
+The real signed local plugin process still executed through the critical gate.
+No required critical case skipped. These scoped merge checks do not constitute
+the repository's complete `submit-pr` full profile, full-suite race execution,
+real provider authorization or live-account entitlement acceptance.
+
 ### Historical surgeonfish verification
 
 The following results were recorded in Apple Containers on 2026-10-25 for the
 pre-merge surgeonfish source tree, later captured by `e2bbc80dc` and based on
 `1818c2993`. They are retained as historical evidence for that source only.
 They do not validate the new merge, the retained target-only changes, or the
-combined test manifest. Re-run the applicable gates on the final merged tree
-before reporting a current passing result.
+combined test manifest. Current merged-source results are recorded above.
 
 | Validation | Recorded result |
 | --- | --- |
@@ -350,16 +399,16 @@ suites. Its later backend delta strengthened four type assertions in
 package and full lint; its closing race/policy checks used that resulting source.
 Those hash and unchanged-frontend statements describe only the pre-merge tree.
 Historical logs, red/green defect evidence and source manifests remain in the
-local ignored OpenSpec plan. The merge changes source and therefore needs a new
-source manifest and actual gate results. Seven-provider fixtures use synthetic
-credentials and isolated responders.
+local ignored OpenSpec plan. The current section records the new source manifest
+and gate results. Seven-provider fixtures use synthetic credentials and isolated
+responders.
 
 The historical complete-suite result included the repository's optional skips. Live
 TLS/fingerprint/OpenAI comparison tests and compatibility with a separately
 supplied official plugin artifact are not passing local fixture evidence.
 In that historical run, the S3 workflow skipped without storage settings in the
-ordinary suite and passed separately under the strict storage gate. The merged
-tree must re-establish the applicable storage result.
+ordinary suite and passed separately under the strict storage gate. The current
+merge's independent storage execution is recorded above.
 Required critical cases cannot use those optional skips.
 
 `tools/check_seven_provider_coverage.py --profile unit|integration|storage` executes the
