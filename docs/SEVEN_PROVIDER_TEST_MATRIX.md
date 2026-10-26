@@ -6,7 +6,9 @@ adds the capability work below. Its inherited merge `85fb3c82c` combined
 Both parents contribute implementation and regression requirements. Prior
 validation records apply only to their respective source trees. The
 [capability-completion evidence](#capability-completion-verification) is separate
-from the [historical merge verification](#current-merge-verification).
+from the [historical merge verification](#current-merge-verification). The latest
+[post-commit branch verification](#post-commit-branch-verification) records the
+subsequent review fixes and their complete local validation.
 
 Acceptance scope: all gateway business capabilities currently implemented for
 these seven platforms. The [supported-business inventory](SEVEN_PROVIDER_SUPPORTED_BUSINESS.md)
@@ -384,6 +386,57 @@ inside the pinned platform validation container. Full backend unit tests include
 the network fixtures; PostgreSQL/Redis cases require the integration environment.
 Frontend changes require lint, typecheck, relevant Vitest and locale checks.
 Identity changes also retain the complete existing Codex identity regressions.
+
+### Post-commit branch verification
+
+The reviewed capability checkpoint is `488ca736c`; production fixes and their
+independent regressions are committed as `50dbaa500`. The final code candidate
+is `804e31285`, whose only additional change uses a tagged switch in a test
+fixture to satisfy staticcheck. On 2026-10-26, the maintained
+`python3 skills/push-cli/scripts/push_cli.py check` full profile passed in
+Apple Containers in 577.2 seconds. The image was
+`sub2api-validation:8449ffd7679a1e27`, with dependency-cache generation
+`7b5b2a85be071953`; PostgreSQL, Redis and MinIO services were disposable.
+No push or PR submission was performed.
+
+| Validation | Recorded result |
+| --- | --- |
+| Complete backend unit and integration suites | Both passed. The first full attempt on `50dbaa500` cleared the Go test cache and passed both suites before stopping on the test-fixture lint issue. The final complete run on `804e31285` reused valid Go cache entries for unchanged unit packages; full PostgreSQL/Redis integration ran again and passed in 165.4s |
+| Critical unit gate | All 290 required top-level tests / 2,223 required children executed and passed, without missing, skipped or unfinished required cases |
+| Critical integration gate | All 127 required top-level tests / 507 required children executed and passed, without missing, skipped or unfinished required cases |
+| Complete backend lint | Zero issues after the test-fixture correction |
+| Frontend | Frozen install, lint, typecheck, 436 Vitest files / 3,979 tests, all 322 required frontend cases, production build and production dependency-audit exception checks passed |
+| Chromium management | Browser TypeScript check and all 14 required scenarios passed, with no retries or skipped cases; real Vue/backend/PostgreSQL/Redis/proxy flows used isolated provider responders |
+| Independent storage gate | Full migration/idempotency smoke and actual MinIO workflow both executed and passed, without skips |
+| Focused race | All four selected unit packages and the selected PostgreSQL repository integration tests passed with `CGO_ENABLED=1` and `-count=1`; this is not a full repository race run |
+| Policy and migrations | Every maintained full-profile CLI, identity, README, build-tag, lifecycle, health, deployment-policy, release-policy and packaging check passed. The maintained migration policy accepted both new SQL migrations |
+
+The branch review adds 21 top-level regressions and 126 required children,
+including the standalone uncertain-poll and concurrent-quota cases. Its
+requirement inventory is [above](#post-commit-branch-review). Completed tool
+validation and normal output-budget truncation have separate positive and
+negative controls; the latter cannot silently become a provider failure.
+Required critical gates execute their cases independently of full-suite cache
+reuse. Compilation, fixture setup and lint errors are not business-defect
+evidence.
+
+The focused race selections were:
+
+```bash
+go test -C backend -race -tags=unit ./internal/service ./internal/handler ./internal/pkg/apicompat ./internal/server/middleware -run '^Test(ProviderFiles|ZhipuStartPlan|ZhipuOffPeak|StepFunReview|PartialFailureReview|GroupModelAllowlist|StepFunCapabilityLate401|CNAPIKey|KimiAPIKey|OpenAIQuota.*Owner|LiveSidebandProduction)' -count=1 -timeout=5m
+go test -C backend -race -tags=integration ./internal/repository -run '^Test(ProviderFiles|ZhipuStartPlan|ZhipuOffPeak|CNAPIKey|CNControlSnapshot|CNBalanceSchedule|CNProxyOwner|OpenAIQuotaOwner)' -count=1 -timeout=5m
+```
+
+The frozen manifest contains 5,175 backend/frontend/tools/deploy inputs. Its
+canonical sorted path-to-file-hash JSON has SHA-256
+`c3a60599a8ab5ad9e8f654c349c8c0f170462f062e6cc8fcf2ea0142f34036c4`.
+The closing check compares those bytes after the full matrix and independent
+browser/storage/race runs; subsequent evidence updates change documentation
+only. Logs, manifests and red/green records remain in the ignored local
+OpenSpec plan. Optional live-service and external-plugin checks are not
+established by full-suite success. Real-account entitlements, official service
+availability and external browser/OS authorization remain separate acceptance
+requirements.
 
 ### Capability-completion verification
 
