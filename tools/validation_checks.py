@@ -175,6 +175,12 @@ def full_steps(
             "backend-lint-policy",
         ),
         ValidationStep(
+            "Binary installer resources",
+            ["bash", "deploy/tests/install-runtime-resources-test.sh"],
+            root,
+            "backend-lint-policy",
+        ),
+        ValidationStep(
             "Apple installer syntax",
             ["bash", "-n", "deploy/apple-container.sh"],
             root,
@@ -230,7 +236,7 @@ def full_steps(
 # CI adds security/workflow/config coverage; it does not remove any local step.
 CI_STEP_NAMES = {
     "deployment-config": (
-        "Apple Container lifecycle test", "Linux installer syntax",
+        "Apple Container lifecycle test", "Linux installer syntax", "Binary installer resources",
         "Apple installer syntax", "Docker Compose security",
         "Docker Compose gateway environment", "Docker runtime resources",
         "Caddy cache policy",

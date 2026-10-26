@@ -140,6 +140,12 @@ services and executes the business scenarios. Go's test-result cache does not
 prove the current PostgreSQL/Redis state or track environment reads made before
 `TestMain` calls `m.Run`. Compilation and dependency caches remain reusable.
 
+The full and CI deployment gates also run `bash deploy/tests/install-runtime-resources-test.sh`.
+It uses real archives and installation functions to cover fresh installs, upgrades,
+missing pricing resources and copy failures. Release packaging tests exercise the
+pinned GoReleaser and reject archives without the exact default pricing file and
+captured-source bytes before upload. Run these checks in the validation container.
+
 ```bash
 # Backend
 cd backend

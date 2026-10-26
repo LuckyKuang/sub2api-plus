@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import stat
 import subprocess
 import tarfile
 import tempfile
@@ -21,6 +22,50 @@ release = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(release)
 VERSION = '9.8.7+custom.009'
 DATE = '2026-10-09T01:02:03Z'
+PRICING_BODY = b'{"fixture":{"input_cost_per_token":1}}'
+
+
+def write_fixture_archive(path, target, scenario='regular'):
+    # Expected runtime layout is specified independently of the release helper.
+    name = 'resources/model-pricing/model_prices_and_context_window.json'
+    if scenario == 'wrong-path':
+        # Exact layout observed in the broken published archive: dst became a file.
+        name = 'resources/model-pricing'
+    body = b'{"fixture":{"input_cost_per_token":9}}' if scenario == 'wrong-bytes' else PRICING_BODY
+    if path.suffix == '.zip':
+        with zipfile.ZipFile(path, 'w') as archive:
+            archive.writestr('sub2api.exe', b'binary fixture')
+            if scenario == 'missing':
+                return
+            info = zipfile.ZipInfo(name)
+            info.create_system = 3
+            mode = {'directory': stat.S_IFDIR, 'symlink': stat.S_IFLNK}.get(scenario, stat.S_IFREG)
+            info.external_attr = (mode | 0o644) << 16
+            # No trailing slash: a regular-file check must inspect the ZIP type.
+            archive.writestr(info, b'other.json' if scenario == 'symlink' else body)
+            if scenario == 'duplicate':
+                archive.writestr('./' + name, body)
+        return
+    with tarfile.open(path, 'w:gz') as archive:
+        binary = tarfile.TarInfo('sub2api')
+        binary.size, binary.mode = 14, 0o755
+        archive.addfile(binary, io.BytesIO(b'binary fixture'))
+        if scenario == 'missing':
+            return
+        info = tarfile.TarInfo(name)
+        info.mode = 0o644
+        if scenario == 'directory':
+            info.type = tarfile.DIRTYPE
+        elif scenario in ('symlink', 'hardlink'):
+            info.type = tarfile.SYMTYPE if scenario == 'symlink' else tarfile.LNKTYPE
+            info.linkname = 'other.json'
+        else:
+            info.size = len(body)
+        archive.addfile(info, io.BytesIO(body) if info.isfile() else None)
+        if scenario == 'duplicate':
+            duplicate = tarfile.TarInfo('./' + name)
+            duplicate.mode, duplicate.size = 0o644, len(body)
+            archive.addfile(duplicate, io.BytesIO(body))
 
 
 class ReleaseMatrixTest(unittest.TestCase):
@@ -33,6 +78,9 @@ class ReleaseMatrixTest(unittest.TestCase):
         shutil.copyfile(ROOT / '.goreleaser.yaml', '.goreleaser.yaml')
         Path('backend/cmd/server').mkdir(parents=True)
         release.VERSION_FILE.write_text(VERSION + '\n')
+        pricing_source = Path('backend/resources/model-pricing/model_prices_and_context_window.json')
+        pricing_source.parent.mkdir(parents=True)
+        pricing_source.write_bytes(PRICING_BODY)
         self.git('init', '-q')
         self.git('config', 'user.name', 'Release Test')
         self.git('config', 'user.email', 'release@example.invalid')
@@ -51,14 +99,7 @@ class ReleaseMatrixTest(unittest.TestCase):
         directory.mkdir()
         for target in release.targets():
             archive = directory / release.archive_name(VERSION, target)
-            if target['goos'] == 'windows':
-                with zipfile.ZipFile(archive, 'w') as stream:
-                    stream.writestr('sub2api.exe', b'binary fixture')
-            else:
-                with tarfile.open(archive, 'w:gz') as stream:
-                    info = tarfile.TarInfo('sub2api')
-                    info.size, info.mode = 14, 0o755
-                    stream.addfile(info, io.BytesIO(b'binary fixture'))
+            write_fixture_archive(archive, target)
             manifest = dict(sha=self.sha, version=VERSION, date=DATE, target=target,
                             archive=archive.name, sha256=release.sha256(archive))
             (directory / f"manifest-{target['goos']}-{target['goarch']}.json").write_text(json.dumps(manifest))
@@ -110,6 +151,100 @@ class ReleaseMatrixTest(unittest.TestCase):
             release.generate_config(argparse.Namespace(mode=mode, goos='linux', goarch='arm64', output='check.yaml'))
             subprocess.run(['goreleaser', 'check', '--config', 'check.yaml'], env=env, check=True,
                            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    def test_pinned_goreleaser_packages_runtime_fallback_in_real_tar_and_zip(self):
+        # Build only a dependency-free fixture. The archive file mapping is the
+        # actual repository configuration, not a reconstructed expected mapping.
+        Path('backend/go.mod').write_text('module example.com/release-archive-fixture\n\ngo 1.27.0\n')
+        Path('backend/cmd/server/main.go').write_text(
+            'package main\nimport _ "embed"\n//go:embed VERSION\nvar version string\n'
+            'var Commit, Date, BuildType string\nfunc main() { println(version) }\n')
+        self.git('remote', 'add', 'origin', 'https://github.com/owner/repo.git')
+        release.generate_config(argparse.Namespace(mode='build', goos='linux', goarch='amd64', output='package.yaml'))
+        configuration = yaml.safe_load(Path('package.yaml').read_text())
+        configuration['builds'][0]['goos'] = ['linux', 'windows']
+        Path('package.yaml').write_text(yaml.safe_dump(configuration, sort_keys=False))
+        env = {key: value for key, value in os.environ.items() if key not in ('GH_TOKEN', 'GITHUB_TOKEN')}
+        env.update(RELEASE_VERSION=VERSION, RELEASE_DATE=DATE, GITHUB_REPO_OWNER='owner',
+                   GITHUB_REPO_NAME='repo', GITHUB_REPO_OWNER_LOWER='owner',
+                   DOCKER_TAG_VERSION='v9.8.7-custom.009', TAG_MESSAGE='Read-only fixture',
+                   GOWORK='off', GOPROXY='off')
+        subprocess.run(['goreleaser', 'release', '--snapshot', '--clean', '--config', 'package.yaml',
+                        '--skip=validate,before,publish,announce,docker'], env=env, check=True,
+                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=180)
+        expected = 'resources/model-pricing/model_prices_and_context_window.json'
+        tar_path = Path('dist/sub2api_9.8.7+custom.009_linux_amd64.tar.gz')
+        with tarfile.open(tar_path) as archive:
+            members = [member for member in archive.getmembers() if member.name == expected]
+            self.assertEqual(len(members), 1)
+            self.assertTrue(members[0].isfile())
+            self.assertEqual(archive.extractfile(members[0]).read(), PRICING_BODY)
+        zip_path = Path('dist/sub2api_9.8.7+custom.009_windows_amd64.zip')
+        with zipfile.ZipFile(zip_path) as archive:
+            members = [member for member in archive.infolist() if member.filename == expected]
+            self.assertEqual(len(members), 1)
+            self.assertEqual(stat.S_IFMT(members[0].external_attr >> 16), stat.S_IFREG)
+            self.assertEqual(archive.read(members[0]), PRICING_BODY)
+        release.verify_archive_pricing(tar_path, self.sha)
+        release.verify_archive_pricing(zip_path, self.sha)
+
+    def test_collect_checks_runtime_fallback_before_emitting_leaf_artifacts(self):
+        Path('dist').mkdir()
+        for target in ({'goos': 'linux', 'goarch': 'amd64'}, {'goos': 'windows', 'goarch': 'amd64'}):
+            name = release.archive_name(VERSION, target)
+            source = Path('dist') / name
+            scenarios = ['missing', 'wrong-path', 'directory', 'symlink', 'duplicate', 'wrong-bytes']
+            if target['goos'] == 'linux':
+                scenarios.append('hardlink')
+            for scenario in scenarios:
+                with self.subTest(target=target, scenario=scenario):
+                    write_fixture_archive(source, target, scenario)
+                    Path('dist/checksums.txt').write_text(release.sha256(source) + '  ' + name + '\n')
+                    output = 'leaf-' + target['goos'] + '-' + scenario
+                    args = argparse.Namespace(version=VERSION, sha=self.sha, date=DATE,
+                                              output=output, **target)
+                    with self.assertRaisesRegex(ValueError, 'fallback pricing'):
+                        release.collect(args)
+                    self.assertFalse(Path(output).exists(), 'invalid archive cannot become a leaf artifact')
+            write_fixture_archive(source, target)
+            Path('dist/checksums.txt').write_text(release.sha256(source) + '  ' + name + '\n')
+            output = 'leaf-' + target['goos'] + '-valid'
+            release.collect(argparse.Namespace(version=VERSION, sha=self.sha, date=DATE, output=output, **target))
+            self.assertEqual((Path(output) / name).read_bytes(), source.read_bytes())
+            self.assertTrue((Path(output) / f"manifest-{target['goos']}-{target['goarch']}.json").is_file())
+
+    def test_consumer_rechecks_real_archive_fallback_even_with_valid_provenance_and_hash(self):
+        args = self.fixture()
+        for target in ({'goos': 'linux', 'goarch': 'amd64'}, {'goos': 'windows', 'goarch': 'amd64'}):
+            name = release.archive_name(VERSION, target)
+            source = Path(args.input) / name
+            manifest_path = Path(args.input) / f"manifest-{target['goos']}-{target['goarch']}.json"
+            scenarios = ['missing', 'wrong-path', 'directory', 'symlink', 'duplicate', 'wrong-bytes']
+            if target['goos'] == 'linux':
+                scenarios.append('hardlink')
+            for scenario in scenarios:
+                with self.subTest(target=target, scenario=scenario):
+                    write_fixture_archive(source, target, scenario)
+                    manifest = json.loads(manifest_path.read_text())
+                    manifest['sha256'] = release.sha256(source)
+                    manifest_path.write_text(json.dumps(manifest))
+                    with self.assertRaisesRegex(ValueError, 'fallback pricing'):
+                        release.verify(args)
+            write_fixture_archive(source, target)
+            manifest = json.loads(manifest_path.read_text())
+            manifest['sha256'] = release.sha256(source)
+            manifest_path.write_text(json.dumps(manifest))
+        release.verify(args)
+
+    def test_archive_fallback_compares_captured_blob_instead_of_dirty_worktree(self):
+        wrong = b'{"fixture":{"input_cost_per_token":9}}'
+        Path('backend/resources/model-pricing/model_prices_and_context_window.json').write_bytes(wrong)
+        for target in ({'goos': 'linux', 'goarch': 'amd64'}, {'goos': 'windows', 'goarch': 'amd64'}):
+            with self.subTest(target=target):
+                archive = Path(release.archive_name(VERSION, target))
+                write_fixture_archive(archive, target, 'wrong-bytes')
+                with self.assertRaisesRegex(ValueError, 'fallback pricing differs from captured source bytes'):
+                    release.verify_archive_pricing(archive, self.sha)
 
     def test_branch_plan_records_captured_sha_version_and_real_newlines(self):
         plan = self.plan('feature/build')
@@ -179,9 +314,7 @@ class ReleaseMatrixTest(unittest.TestCase):
         shutil.copyfile(ROOT / 'Dockerfile.goreleaser', 'Dockerfile.goreleaser')
         Path('deploy').mkdir()
         Path('deploy/docker-entrypoint.sh').write_bytes(b'entrypoint fixture')
-        Path('backend/resources/model-pricing').mkdir(parents=True)
         pricing_path = Path('backend/resources/model-pricing/model_prices_and_context_window.json')
-        pricing_path.write_bytes(b'{"fixture":{"input_cost_per_token":1}}')
         release.contexts(args)
         for arch in ('amd64', 'arm64'):
             context = Path('contexts') / arch

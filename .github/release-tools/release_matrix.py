@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import stat
 import subprocess
 import tarfile
 import tempfile
@@ -25,6 +26,8 @@ VERSION_RE = re.compile(
 )
 PLUS_TAG_RE = re.compile(r'v\d+\.\d+\.\d+\+custom\.(?:00[1-9]|0[1-9]\d|[1-9]\d{2})')
 SHA_RE = re.compile(r'[0-9a-f]{40}')
+PRICING_SOURCE = 'backend/resources/model-pricing/model_prices_and_context_window.json'
+PRICING_ARCHIVE = 'resources/model-pricing/model_prices_and_context_window.json'
 
 
 def config():
@@ -158,6 +161,7 @@ def collect(args):
     digest = sha256(source)
     if checksums.get(name) != digest:
         raise ValueError('archive does not match the build checksum')
+    verify_archive_pricing(source, args.sha)
     verify_binary(source, target, args.version, args.sha, args.date)
     output = Path(args.output)
     output.mkdir(parents=True, exist_ok=True)
@@ -182,9 +186,40 @@ def verify(args):
         if manifest != {'sha': args.sha, 'version': args.version, 'date': args.date, 'target': target,
                         'archive': name, 'sha256': sha256(directory / name)}:
             raise ValueError(f'build provenance or checksum mismatch: {name}')
+        verify_archive_pricing(directory / name, args.sha)
         verify_binary(directory / name, target, args.version, args.sha, args.date)
     if {p.name for p in directory.iterdir()} != expected:
         raise ValueError('missing or unexpected release artifacts')
+
+
+def verify_archive_pricing(path, sha):
+    # Compare to the captured immutable source blob, not a potentially modified
+    # worktree file. Never extract archive paths onto the filesystem.
+    if SHA_RE.fullmatch(sha) is None:
+        raise ValueError('fallback pricing requires the captured source SHA')
+    expected = subprocess.check_output(['git', 'cat-file', 'blob', f'{sha}:{PRICING_SOURCE}'])
+    names = (PRICING_ARCHIVE, './' + PRICING_ARCHIVE)
+    if path.suffix == '.zip':
+        with zipfile.ZipFile(path) as archive:
+            matches = [member for member in archive.infolist() if member.filename in names]
+            if len(matches) != 1:
+                raise ValueError('archive fallback pricing must occur exactly once at the runtime path')
+            member = matches[0]
+            mode = stat.S_IFMT(member.external_attr >> 16)
+            if member.is_dir() or member.external_attr & 0x10 or mode not in (0, stat.S_IFREG):
+                raise ValueError('archive fallback pricing must be a regular file')
+            if member.file_size != len(expected) or archive.read(member) != expected:
+                raise ValueError('archive fallback pricing differs from captured source bytes')
+        return
+    with tarfile.open(path, 'r:gz') as archive:
+        matches = [member for member in archive.getmembers() if member.name in names]
+        if len(matches) != 1:
+            raise ValueError('archive fallback pricing must occur exactly once at the runtime path')
+        member = matches[0]
+        if not member.isfile():
+            raise ValueError('archive fallback pricing must be a regular file')
+        if member.size != len(expected) or archive.extractfile(member).read() != expected:
+            raise ValueError('archive fallback pricing differs from captured source bytes')
 
 
 def binary_bytes(path, target):

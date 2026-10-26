@@ -22,6 +22,13 @@ from the selected source's `.goreleaser.yaml`. Each archive has a manifest bound
 to the captured SHA, version, date, target, name and SHA256. Producers verify HEAD;
 collection also checks Go binary build metadata. The consumer requires exactly
 five archives and five manifests before any image build or publication.
+Both producer collection and consumer verification inspect each real tar/zip:
+`resources/model-pricing/model_prices_and_context_window.json` must occur once
+as a regular file and match the pricing blob at the captured application SHA
+byte for byte. Missing files, the former `resources/model-pricing` file layout,
+directories, links, duplicates and changed bytes reject the archive before a
+leaf artifact, image build or external upload can proceed. The GoReleaser file
+mapping uses `strip_parent: true` so its destination remains a directory.
 
 Plus-specific adaptations are intentional: build metadata such as
 `0.2.14+custom.002` stays in archive names; all three GoReleaser image sections
@@ -94,3 +101,10 @@ python3 tools/ci_validation.py exec -- python3 -m unittest discover \
   -s .github/release-tools -p 'test_release_*.py'
 python3 tools/ci_validation.py exec -- bash -n .github/release-tools/release-images.sh
 ```
+
+The helper regression suite also runs the pinned GoReleaser against a small,
+dependency-free fixture, producing actual Linux tar and Windows zip archives
+with the repository's file mapping. It independently checks the runtime pricing
+path, regular-file type and exact bytes. Synthetic negative archives exercise
+both producer and consumer gates, including valid checksum/provenance metadata
+that must not hide a broken runtime resource.

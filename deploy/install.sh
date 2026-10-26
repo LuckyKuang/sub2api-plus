@@ -665,8 +665,24 @@ download_and_extract() {
     print_info "$(msg 'extracting')"
     tar -xzf "$TEMP_DIR/$archive_name" -C "$TEMP_DIR"
 
+    # The default pricing path is relative to the service working directory.
+    # Reject incomplete release layouts before replacing an existing binary.
+    local pricing_file="resources/model-pricing/model_prices_and_context_window.json"
+    if [ ! -f "$TEMP_DIR/$pricing_file" ] || [ ! -s "$TEMP_DIR/$pricing_file" ] || [ -L "$TEMP_DIR/$pricing_file" ]; then
+        print_error "Release archive is missing its bundled pricing file: $pricing_file"
+        exit 1
+    fi
+
     # Create install directory
     mkdir -p "$INSTALL_DIR"
+
+    # Merge release resources without removing operator configuration or data.
+    # Upgrades run as root; make the fallback readable by the service user even
+    # when the invoking shell or archive uses restrictive permissions.
+    mkdir -p "$INSTALL_DIR/resources"
+    cp -R "$TEMP_DIR/resources/." "$INSTALL_DIR/resources/"
+    chmod 755 "$INSTALL_DIR/resources" "$INSTALL_DIR/resources/model-pricing"
+    chmod 644 "$INSTALL_DIR/$pricing_file"
 
     # Copy binary
     cp "$TEMP_DIR/sub2api" "$INSTALL_DIR/sub2api"
@@ -674,7 +690,7 @@ download_and_extract() {
 
     # Copy deploy files if they exist in the archive
     if [ -d "$TEMP_DIR/deploy" ]; then
-        cp -r "$TEMP_DIR/deploy/"* "$INSTALL_DIR/" 2>/dev/null || true
+        cp -R "$TEMP_DIR/deploy/." "$INSTALL_DIR/"
     fi
 
     print_success "$(msg 'binary_installed') $INSTALL_DIR/sub2api"
