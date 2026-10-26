@@ -255,6 +255,14 @@ func (s *OpenAIGatewayService) grokRequestCompressionCapabilityAdvertised(ctx co
 	if s == nil || account == nil {
 		return false
 	}
+	account, err := snapshotCNControlAccount(account)
+	if err != nil {
+		return false
+	}
+	proxyURL, err := account.StrictProxyURL()
+	if err != nil {
+		return false
+	}
 	baseURL, err := grokValidatedSamplerBaseURL(account, s.cfg, settings...)
 	if err != nil {
 		return false
@@ -268,7 +276,7 @@ func (s *OpenAIGatewayService) grokRequestCompressionCapabilityAdvertised(ctx co
 	if !isGrokCLIProxyTarget(origin) {
 		return false
 	}
-	key := grokRequestCompressionCacheKey{target: origin, owner: account.ID, proxy: grokRequestCompressionProxyKey(account)}
+	key := grokRequestCompressionCacheKey{target: origin, owner: account.ID, proxy: proxyURL}
 	now := time.Now()
 	if advertised, cached := grokRequestCompressionCacheLookup(key, now); cached {
 		return advertised
@@ -289,19 +297,16 @@ func (s *OpenAIGatewayService) grokRequestCompressionCapabilityAdvertised(ctx co
 	return advertised
 }
 
-func grokRequestCompressionProxyKey(account *Account) string {
-	if account == nil || account.ProxyID == nil || account.Proxy == nil {
-		return ""
-	}
-	return account.Proxy.URL()
-}
-
 // fetchGrokRequestCompressionCapability performs the capability probe on the
 // existing account HTTP path: same proxy, same TLS/transport policy and the
 // same-owner identity snapshot. It never creates an independent client with a
 // default User-Agent, and it never touches sampler declarations.
 func (s *OpenAIGatewayService) fetchGrokRequestCompressionCapability(ctx context.Context, account *Account, settingsURL string) bool {
 	if s == nil || s.httpUpstream == nil || account == nil {
+		return false
+	}
+	proxyURL, err := account.StrictProxyURL()
+	if err != nil {
 		return false
 	}
 	if ctx == nil {
@@ -333,10 +338,6 @@ func (s *OpenAIGatewayService) fetchGrokRequestCompressionCapability(ctx context
 	// the shared account preparation boundary.
 	req = prepareAccountOutboundRequest(req, account)
 
-	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
-	}
 	resp, err := s.httpUpstream.Do(req, proxyURL, account.ID, maxInt(account.Concurrency, 1))
 	if err != nil {
 		slog.Warn("grok_request_compression_capability_unavailable",

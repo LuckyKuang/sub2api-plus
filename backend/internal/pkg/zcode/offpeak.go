@@ -377,23 +377,28 @@ func (c *OffPeakClient) do(ctx context.Context, method, path string, auth OffPea
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, classifyOffPeakFailure(resp, raw)
 	}
+	// Official settle acknowledgements may have no body. Admission and quota
+	// consumers still validate their own required fields on the empty object.
+	if len(bytes.TrimSpace(raw)) == 0 {
+		return json.RawMessage("{}"), nil
+	}
 	var envelope struct {
 		Code json.RawMessage `json:"code"`
-		Msg  string          `json:"msg"`
 		Data json.RawMessage `json:"data"`
 	}
 	if err := json.Unmarshal(raw, &envelope); err != nil {
 		return nil, fmt.Errorf("decode off-peak envelope: %w", err)
 	}
-	// The platform unwraps only a zero code with a data payload; anything else is
-	// a business rejection even on HTTP 200.
+	// Preserve business rejections and their retry hints on HTTP 200 as well.
 	if code := parseOffPeakCode(envelope.Code); code != 0 {
-		return nil, &OffPeakError{HTTPStatus: resp.StatusCode, Code: code, Message: envelope.Msg}
+		return nil, classifyOffPeakFailure(resp, raw)
 	}
-	if len(envelope.Data) == 0 {
-		return json.RawMessage("{}"), nil
+	// The official client accepts bare objects and {code:0,data}. A sibling
+	// named data alone is not an authorization to discard the outer payload.
+	if strings.Trim(strings.TrimSpace(string(envelope.Code)), `"`) == "0" && len(envelope.Data) != 0 {
+		return envelope.Data, nil
 	}
-	return envelope.Data, nil
+	return raw, nil
 }
 
 // classifyOffPeakFailure turns a non-2xx response into a typed error, carrying

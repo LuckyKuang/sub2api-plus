@@ -4,10 +4,12 @@ package admin
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -28,6 +30,8 @@ type grokQuotaHandlerAccountRepo struct {
 	updates map[int64]map[string]any
 }
 
+var _ service.CNControlSnapshotRepository = (*grokQuotaHandlerAccountRepo)(nil)
+
 func (r *grokQuotaHandlerAccountRepo) GetByID(_ context.Context, id int64) (*service.Account, error) {
 	if r.account != nil && r.account.ID == id {
 		return r.account, nil
@@ -38,11 +42,55 @@ func (r *grokQuotaHandlerAccountRepo) GetByID(_ context.Context, id int64) (*ser
 func (r *grokQuotaHandlerAccountRepo) UpdateExtra(_ context.Context, id int64, updates map[string]any) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.recordExtraUpdateLocked(id, updates)
+	return nil
+}
+
+func (r *grokQuotaHandlerAccountRepo) UpdateCNControlExtraIfUnchanged(_ context.Context, expected *service.Account, updates map[string]any) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	current := r.account
+	if current == nil || expected == nil || current.ID != expected.ID || current.Platform != expected.Platform || current.Type != expected.Type || !reflect.DeepEqual(current.ProxyID, expected.ProxyID) {
+		return false, nil
+	}
+	currentCredentials, err := json.Marshal(current.Credentials)
+	if err != nil {
+		return false, err
+	}
+	expectedCredentials, err := json.Marshal(expected.Credentials)
+	if err != nil {
+		return false, err
+	}
+	if string(currentCredentials) != string(expectedCredentials) {
+		return false, nil
+	}
+	currentRoute, currentRouteErr := current.StrictProxyURL()
+	expectedRoute, expectedRouteErr := expected.StrictProxyURL()
+	if currentRouteErr != nil || expectedRouteErr != nil || currentRoute != expectedRoute {
+		return false, nil
+	}
+	if current.ProxyID != nil {
+		currentProxy, expectedProxy := current.Proxy, expected.Proxy
+		if currentProxy == nil || expectedProxy == nil || currentProxy.ID != expectedProxy.ID || currentProxy.Protocol != expectedProxy.Protocol || currentProxy.Host != expectedProxy.Host || currentProxy.Port != expectedProxy.Port || currentProxy.Username != expectedProxy.Username || currentProxy.Password != expectedProxy.Password || currentProxy.Status != expectedProxy.Status || !reflect.DeepEqual(currentProxy.ExpiresAt, expectedProxy.ExpiresAt) {
+			return false, nil
+		}
+	}
+	r.recordExtraUpdateLocked(expected.ID, updates)
+	return true, nil
+}
+
+func (r *grokQuotaHandlerAccountRepo) recordExtraUpdateLocked(id int64, updates map[string]any) {
 	if r.updates == nil {
 		r.updates = make(map[int64]map[string]any)
 	}
-	r.updates[id] = updates
-	return nil
+	if r.updates[id] == nil {
+		r.updates[id] = make(map[string]any)
+	}
+	// PostgreSQL merges Extra keys, so billing and detached model discovery
+	// must both remain recorded regardless of which update finishes first.
+	for key, value := range updates {
+		r.updates[id][key] = value
+	}
 }
 
 type grokQuotaHandlerUpstream struct {

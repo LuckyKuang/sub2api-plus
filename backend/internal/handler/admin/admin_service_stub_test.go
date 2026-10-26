@@ -544,6 +544,13 @@ func (s *stubAdminService) UpdateAccountExtra(ctx context.Context, id int64, upd
 	return nil
 }
 
+func (s *stubAdminService) CommitOAuthCredentials(ctx context.Context, expected *service.Account, accountType string, credentials, extra map[string]any, recover bool) (*service.Account, error) {
+	return s.UpdateAccount(ctx, expected.ID, &service.UpdateAccountInput{
+		Type:        accountType,
+		Credentials: service.SanitizeStoredCredentials(expected.Platform, service.MergeCredentials(expected.Credentials, credentials)),
+	})
+}
+
 func (s *stubAdminService) DeleteAccount(ctx context.Context, id int64) error {
 	return nil
 }

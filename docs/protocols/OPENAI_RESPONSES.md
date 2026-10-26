@@ -155,6 +155,29 @@ Explicit administrator context intervals remain billable. The exemption follows
 response-model repricing, Free Fast settlement and account-cost statistics,
 without bypassing Plus automatic-review model mismatch protection.
 
+## Alpha Search and Live preflight routes
+
+`/v1/alpha/search` validates the credential owner's captured proxy binding before
+token lookup or PAT metadata completion. A configured binding with a missing,
+mismatched, malformed or incompletely authenticated hydrated proxy fails before
+`whoami`, account-metadata mutation or inference. Validation after the metadata
+request would already expose the PAT to an unauthorized route. A valid bound
+request uses that route for both metadata completion and inference; an explicitly
+unbound account uses direct egress even if a stale proxy association remains.
+
+Live sideband dialing first copies the loaded credential owner, including its
+credentials and proxy snapshot, and validates the binding before constructing
+authentication headers or obtaining a token. The WebSocket dial uses the frozen
+route. A broken binding cannot initiate a dial or alter the supplied call record,
+including its lease and encrypted attestation fields. Explicit unbinding ignores
+a residual hydrated proxy association here as well.
+
+These checks preserve the Codex identity order: valid credential-owning account
+`credentials.user_agent`, then valid global `openai_codex_user_agent`, then the
+compiled default. PAT `whoami` remains an auth-plane request with the selected
+User-Agent and Originator and without a `Version` header. Live sideband retains
+the selected coherent User-Agent, Originator and Version declarations.
+
 ## Prompt Cache Identity and Usage
 
 Current Codex clients can supply the canonical `session-id`, `thread-id`, and

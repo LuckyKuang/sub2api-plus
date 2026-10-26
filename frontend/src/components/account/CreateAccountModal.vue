@@ -3882,7 +3882,7 @@
 import OutboundIdentityEditor from './OutboundIdentityEditor.vue'
 import type { IdentitySelection } from '@/api/admin/outboundIdentity'
 import Toggle from '@/components/common/Toggle.vue'
-import { ref, reactive, computed, watch } from 'vue'
+import { ref, reactive, computed, onScopeDispose, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 
@@ -4146,6 +4146,11 @@ const openaiDeviceCode = ref<{
 } | null>(null)
 const openaiDeviceCodePolling = ref(false)
 let openaiDeviceCodeGeneration = 0
+let oauthFlowGeneration = 0
+onScopeDispose(() => {
+  oauthFlowGeneration += 1
+  openaiDeviceCodeGeneration += 1
+})
 
 // Model mapping type
 interface ModelMapping {
@@ -4165,6 +4170,7 @@ interface TempUnschedRuleForm {
 // State
 const step = ref(1)
 const submitting = ref(false)
+let createSubmissionOwner: symbol | undefined
 const accountCategory = ref<'oauth-based' | 'apikey' | 'bedrock' | 'service_account'>('oauth-based') // UI selection for account category
 const addMethod = ref<AddMethod>('oauth') // For oauth-based: 'oauth' or 'setup-token'
 const apiKeyBaseUrl = ref('https://api.anthropic.com')
@@ -4925,6 +4931,10 @@ watch(
 watch(
   () => form.platform,
   (newPlatform) => {
+    oauthFlowGeneration += 1
+    openaiDeviceCodeGeneration += 1
+    openaiDeviceCode.value = null
+    openaiDeviceCodePolling.value = false
     // Reset base URL based on platform
     if (isMultiProtocolApiKeyPlatform(newPlatform)) {
       const mode = newPlatform === 'opencode_go' ? openCodeAccountMode.value : accountMode.value
@@ -5027,6 +5037,15 @@ watch(
     grokOAuth.resetState()
   }
 )
+
+watch(() => form.proxy_id, () => {
+  oauthFlowGeneration += 1
+  openaiOAuth.resetState()
+  grokOAuth.resetState()
+  openaiDeviceCodeGeneration += 1
+  openaiDeviceCode.value = null
+  openaiDeviceCodePolling.value = false
+}, { flush: 'sync' })
 
 // Gemini AI Studio OAuth availability (requires operator-configured OAuth client)
 watch(
@@ -5350,10 +5369,15 @@ const createAccountWithOutboundIdentity = (payload: CreateAccountRequest) => adm
   credentials: { ...payload.credentials, ...(outboundIdentitySelection.value ? { outbound_identity: outboundIdentitySelection.value } : {}) }
 })
 
-const submitCreateAccount = async (payload: CreateAccountRequest) => {
+const submitCreateAccount = async (payload: CreateAccountRequest, run = oauthFlowGeneration) => {
+  if (run !== oauthFlowGeneration) return
+  const owner = Symbol('account-create')
+  createSubmissionOwner = owner
+  const isCurrent = () => run === oauthFlowGeneration && createSubmissionOwner === owner
   submitting.value = true
   try {
     const account = await createAccountWithOutboundIdentity(withAntigravityConfirmFlag(payload))
+    if (!isCurrent()) return
     const modelMapping = payload.credentials.model_mapping
     const hasConcreteMappedTarget = payload.type === 'apikey' &&
       typeof modelMapping === 'object' &&
@@ -5364,6 +5388,7 @@ const submitCreateAccount = async (payload: CreateAccountRequest) => {
     if (upstreamModelsPreviewed.value || hasConcreteMappedTarget) {
       try {
         const result = await adminAPI.accounts.syncUpstreamModels(account.id)
+        if (!isCurrent()) return
         const warnings = result.warnings ?? []
         if (warnings.some(warning => warning.code === 'upstream_model_metadata_incomplete')) {
           appStore.showWarning(t('admin.accounts.syncUpstreamModelsMetadataIncomplete'))
@@ -5371,6 +5396,7 @@ const submitCreateAccount = async (payload: CreateAccountRequest) => {
           appStore.showWarning(t('admin.accounts.syncUpstreamModelsMetadataPartial'))
         }
       } catch {
+        if (!isCurrent()) return
         appStore.showWarning(t('admin.accounts.syncUpstreamModelsFailed'))
       }
     }
@@ -5378,24 +5404,31 @@ const submitCreateAccount = async (payload: CreateAccountRequest) => {
     emit('created')
     handleClose()
   } catch (error: any) {
+    if (!isCurrent()) return
     if (error.response?.status === 409 && error.response?.data?.error === 'mixed_channel_warning' && needsMixedChannelCheck(form.platform)) {
       openMixedChannelDialog({
         message: error.response?.data?.message,
         onConfirm: async () => {
           antigravityMixedChannelConfirmed.value = true
-          await submitCreateAccount(payload)
+          await submitCreateAccount(payload, run)
         }
       })
       return
     }
     appStore.showError(error.response?.data?.message || error.response?.data?.detail || t('admin.accounts.failedToCreate'))
   } finally {
-    submitting.value = false
+    if (createSubmissionOwner === owner) {
+      createSubmissionOwner = undefined
+      submitting.value = false
+    }
   }
 }
 
 // Methods
 const resetForm = () => {
+  oauthFlowGeneration += 1
+  createSubmissionOwner = undefined
+  submitting.value = false
   step.value = 1
   form.name = ''
   form.notes = ''
@@ -5521,6 +5554,11 @@ const resetForm = () => {
 }
 
 const handleClose = () => {
+  oauthFlowGeneration += 1
+  createSubmissionOwner = undefined
+  submitting.value = false
+  openaiOAuth.resetState()
+  grokOAuth.resetState()
   openaiDeviceCodeGeneration += 1
   openaiDeviceCode.value = null
   openaiDeviceCodePolling.value = false
@@ -5669,13 +5707,14 @@ const buildAnthropicExtra = (base?: Record<string, unknown>): Record<string, unk
 
 // Helper function to create account with mixed channel warning handling
 const doCreateAccount = async (payload: CreateAccountRequest) => {
+  const run = oauthFlowGeneration
   const canContinue = await ensureAntigravityMixedChannelConfirmed(async () => {
-    await submitCreateAccount(payload)
+    await submitCreateAccount(payload, run)
   })
-  if (!canContinue) {
+  if (!canContinue || run !== oauthFlowGeneration) {
     return
   }
-  await submitCreateAccount(payload)
+  await submitCreateAccount(payload, run)
 }
 
 // Handle mixed channel warning confirmation
@@ -6048,6 +6087,12 @@ const handleSubmit = async () => {
 }
 
 const goBackToBasicInfo = () => {
+  oauthFlowGeneration += 1
+  createSubmissionOwner = undefined
+  submitting.value = false
+  openaiDeviceCodeGeneration += 1
+  openaiDeviceCode.value = null
+  openaiDeviceCodePolling.value = false
   step.value = 1
   oauth.resetState()
   openaiOAuth.resetState()
@@ -6058,6 +6103,7 @@ const goBackToBasicInfo = () => {
 }
 
 const handleGenerateUrl = async () => {
+  oauthFlowGeneration += 1
   if (form.platform === 'openai') {
     await openaiOAuth.generateAuthUrl(form.proxy_id)
   } else if (form.platform === 'gemini') {
@@ -6189,6 +6235,7 @@ const applyOpenAIAccountUserAgent = (credentials: Record<string, unknown>) => {
 
 // Grok 手动 RT 批量验证和创建
 const handleGrokValidateRT = async (refreshTokenInput: string) => {
+  const run = ++oauthFlowGeneration
   if (!refreshTokenInput.trim()) return
 
   const refreshTokens = refreshTokenInput
@@ -6213,6 +6260,7 @@ const handleGrokValidateRT = async (refreshTokenInput: string) => {
     for (let i = 0; i < refreshTokens.length; i++) {
       try {
         const tokenInfo = await grokOAuth.validateRefreshToken(refreshTokens[i], form.proxy_id)
+        if (run !== oauthFlowGeneration) return
         if (!tokenInfo) {
           failedCount++
           errors.push(`#${i + 1}: ${grokOAuth.error.value || 'Validation failed'}`)
@@ -6249,8 +6297,10 @@ const handleGrokValidateRT = async (refreshTokenInput: string) => {
           expires_at: form.expires_at,
           auto_pause_on_expired: autoPauseOnExpired.value
         })
+        if (run !== oauthFlowGeneration) return
         successCount++
       } catch (error: any) {
+        if (run !== oauthFlowGeneration) return
         failedCount++
         const errMsg = error.response?.data?.detail || error.message || 'Unknown error'
         errors.push(`#${i + 1}: ${errMsg}`)
@@ -6274,11 +6324,12 @@ const handleGrokValidateRT = async (refreshTokenInput: string) => {
       appStore.showError(t('admin.accounts.oauth.batchFailed'))
     }
   } finally {
-    grokOAuth.loading.value = false
+    if (run === oauthFlowGeneration) grokOAuth.loading.value = false
   }
 }
 
 const handleGrokImportSSO = async (ssoInput: string) => {
+  const run = ++oauthFlowGeneration
   // Align with OpenAI/Grok RT batch import: one token per line, no client-side dedupe.
   const ssoTokens = ssoInput
     .split('\n')
@@ -6316,6 +6367,7 @@ const handleGrokImportSSO = async (ssoInput: string) => {
       expires_at: form.expires_at,
       auto_pause_on_expired: autoPauseOnExpired.value
     })
+    if (run !== oauthFlowGeneration) return
 
     const successCount = result.created?.length || 0
     const failedCount = result.failed?.length || 0
@@ -6343,10 +6395,11 @@ const handleGrokImportSSO = async (ssoInput: string) => {
       appStore.showError(t('admin.accounts.oauth.batchFailed'))
     }
   } catch (error: any) {
+    if (run !== oauthFlowGeneration) return
     grokOAuth.error.value = error.response?.data?.detail || error.message || t('admin.accounts.oauth.grok.failedToConvertSSO')
     appStore.showError(grokOAuth.error.value)
   } finally {
-    grokOAuth.loading.value = false
+    if (run === oauthFlowGeneration) grokOAuth.loading.value = false
   }
 }
 
@@ -6355,6 +6408,7 @@ const handleGrokImportSSO = async (ssoInput: string) => {
  * Password is only used for the authorize API call; buildCredentials never stores it.
  */
 const handleGrokAuthorizePassword = async (emailPasswordInput: string) => {
+  const run = ++oauthFlowGeneration
   if (!emailPasswordInput.trim()) return
   if (!validateGrokOAuthUpstreamConfig()) return
 
@@ -6383,6 +6437,7 @@ const handleGrokAuthorizePassword = async (emailPasswordInput: string) => {
     for (let i = 0; i < lines.length; i++) {
       try {
         const tokenInfo = await grokOAuth.authorizePassword(lines[i], form.proxy_id)
+        if (run !== oauthFlowGeneration) return
         if (!tokenInfo) {
           failedCount++
           errors.push(`#${i + 1}: ${grokOAuth.error.value || 'Authorization failed'}`)
@@ -6426,8 +6481,10 @@ const handleGrokAuthorizePassword = async (emailPasswordInput: string) => {
           expires_at: form.expires_at,
           auto_pause_on_expired: autoPauseOnExpired.value
         })
+        if (run !== oauthFlowGeneration) return
         successCount++
       } catch (error: any) {
+        if (run !== oauthFlowGeneration) return
         failedCount++
         const errMsg = error.response?.data?.detail || error.message || 'Unknown error'
         errors.push(`#${i + 1}: ${errMsg}`)
@@ -6456,12 +6513,13 @@ const handleGrokAuthorizePassword = async (emailPasswordInput: string) => {
       appStore.showError(t('admin.accounts.oauth.batchFailed'))
     }
   } finally {
-    grokOAuth.loading.value = false
+    if (run === oauthFlowGeneration) grokOAuth.loading.value = false
   }
 }
 
 // OpenAI OAuth 授权码兑换
 const createOpenAIAccountFromTokenInfo = async (tokenInfo: OpenAITokenInfo) => {
+  const run = oauthFlowGeneration
   const oauthClient = openaiOAuth
   oauthClient.loading.value = true
   oauthClient.error.value = ''
@@ -6508,16 +6566,19 @@ const createOpenAIAccountFromTokenInfo = async (tokenInfo: OpenAITokenInfo) => {
         expires_at: form.expires_at,
         auto_pause_on_expired: autoPauseOnExpired.value
       })
+      if (run !== oauthFlowGeneration) return
       appStore.showSuccess(t('admin.accounts.accountCreated'))
     }
 
+    if (run !== oauthFlowGeneration) return
     emit('created')
     handleClose()
   } catch (error: any) {
+    if (run !== oauthFlowGeneration) return
     oauthClient.error.value = error.response?.data?.detail || t('admin.accounts.oauth.authFailed')
     appStore.showError(oauthClient.error.value)
   } finally {
-    oauthClient.loading.value = false
+    if (run === oauthFlowGeneration) oauthClient.loading.value = false
   }
 }
 
@@ -6771,6 +6832,7 @@ const handleOpenAIImportCodexPAT = async (accessToken: string) => {
 
 // OpenAI RT 批量验证和创建（共享逻辑）
 const handleOpenAIBatchRT = async (refreshTokenInput: string, clientId?: string) => {
+  const run = ++oauthFlowGeneration
   const oauthClient = openaiOAuth
   if (!refreshTokenInput.trim()) return
 
@@ -6800,6 +6862,7 @@ const handleOpenAIBatchRT = async (refreshTokenInput: string, clientId?: string)
           form.proxy_id,
           clientId
         )
+        if (run !== oauthFlowGeneration) return
         if (!tokenInfo) {
           failedCount++
           errors.push(`#${i + 1}: ${oauthClient.error.value || 'Validation failed'}`)
@@ -6852,8 +6915,10 @@ const handleOpenAIBatchRT = async (refreshTokenInput: string, clientId?: string)
           })
         }
 
+        if (run !== oauthFlowGeneration) return
         successCount++
       } catch (error: any) {
+        if (run !== oauthFlowGeneration) return
         failedCount++
         const errMsg = error.response?.data?.detail || error.message || 'Unknown error'
         errors.push(`#${i + 1}: ${errMsg}`)
@@ -6880,7 +6945,7 @@ const handleOpenAIBatchRT = async (refreshTokenInput: string, clientId?: string)
       appStore.showError(t('admin.accounts.oauth.batchFailed'))
     }
   } finally {
-    oauthClient.loading.value = false
+    if (run === oauthFlowGeneration) oauthClient.loading.value = false
   }
 }
 
@@ -7067,6 +7132,7 @@ const handleAntigravityExchange = async (authCode: string) => {
 
 // Grok OAuth 授权码兑换
 const handleGrokExchange = async (authCode: string) => {
+  const run = ++oauthFlowGeneration
   if (!authCode.trim() || !grokOAuth.sessionId.value) return
   if (!validateGrokOAuthUpstreamConfig()) return
 
@@ -7088,17 +7154,18 @@ const handleGrokExchange = async (authCode: string) => {
       state: stateToUse,
       proxyId: form.proxy_id
     })
-    if (!tokenInfo) return
+    if (!tokenInfo || run !== oauthFlowGeneration) return
 
     const credentials = grokOAuth.buildCredentials(tokenInfo)
     applyGrokOAuthUpstreamConfig(credentials)
     const extra = grokOAuth.buildExtraInfo(tokenInfo)
     await createAccountAndFinish('grok', 'oauth', credentials, extra)
   } catch (error: any) {
+    if (run !== oauthFlowGeneration) return
     grokOAuth.error.value = error.response?.data?.detail || t('admin.accounts.oauth.authFailed')
     appStore.showError(grokOAuth.error.value)
   } finally {
-    grokOAuth.loading.value = false
+    if (run === oauthFlowGeneration) grokOAuth.loading.value = false
   }
 }
 

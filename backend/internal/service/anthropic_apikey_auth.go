@@ -18,7 +18,17 @@ const (
 // (api_protocol=anthropic) share the same override knob — Kimi/DeepSeek default
 // to x-api-key, Zhipu can opt into Authorization: Bearer.
 func (a *Account) GetAnthropicAPIKeyAuthScheme() string {
-	if a == nil || a.Type != AccountTypeAPIKey {
+	if a == nil {
+		return AnthropicAPIKeyAuthSchemeXAPIKey
+	}
+	// Linked ZCode plan gateways authenticate the plan JWT as Bearer. This
+	// belongs to the native plan contract, not the API-key manual setting.
+	if a.Platform == PlatformZhipu && a.Type == AccountTypeOAuth &&
+		(a.GetCredential("oauth_provider") == "bigmodel" || a.GetCredential("oauth_provider") == "zai") &&
+		(a.GetCredential("plan_kind") == ZhipuPlanStartPlan || a.GetCredential("plan_kind") == ZhipuPlanOffPeak) {
+		return AnthropicAPIKeyAuthSchemeAuthorizationBearer
+	}
+	if a.Type != AccountTypeAPIKey {
 		return AnthropicAPIKeyAuthSchemeXAPIKey
 	}
 	if a.Platform != PlatformAnthropic && !a.RoutesProtocolByInbound() {

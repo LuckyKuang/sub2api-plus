@@ -502,6 +502,10 @@ func (s *OpenAIGatewayService) forwardGrokChatCompletionsViaResponses(
 	promptCacheKey string,
 	defaultMappedModel string,
 ) (forwardResult *OpenAIForwardResult, firstByteResultErr error) {
+	ctx, account, proxyURL, err := captureGrokRequestOwner(ctx, account)
+	if err != nil {
+		return nil, err
+	}
 	startTime := time.Now()
 	ctx, byteTiming := beginFirstByteTiming(ctx, startTime)
 	defer func() {
@@ -580,10 +584,6 @@ func (s *OpenAIGatewayService) forwardGrokChatCompletionsViaResponses(
 	}
 	SetActualOpenAIUpstreamEndpoint(c, grokChatResponsesEndpoint)
 
-	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
-	}
 	resp, err := s.doOpenAIUpstream(upstreamReq, proxyURL, account)
 	if err != nil {
 		return nil, s.handleOpenAIUpstreamTransportError(ctx, c, account, err, false)

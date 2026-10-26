@@ -28,15 +28,16 @@ type zhipuOffPeakStub struct {
 	statusEr error
 	settleEr error
 
-	lastTicket   *zcode.OffPeakTicket
-	taskIDs      []string
-	settleAuths  []zcode.OffPeakAuth
-	identities   []outboundidentity.Identity
-	takeCalls    int
-	statusCalls  int
-	settled      []string
-	lastAuth     zcode.OffPeakAuth
-	availability *zcode.OffPeakAvailability
+	lastTicket     *zcode.OffPeakTicket
+	taskIDs        []string
+	settleAuths    []zcode.OffPeakAuth
+	identities     []outboundidentity.Identity
+	takeCalls      int
+	statusCalls    int
+	settled        []string
+	settleAttempts []string
+	lastAuth       zcode.OffPeakAuth
+	availability   *zcode.OffPeakAvailability
 }
 
 func (s *zhipuOffPeakStub) Availability(context.Context, zcode.OffPeakAuth, string) (*zcode.OffPeakAvailability, error) {
@@ -88,6 +89,7 @@ func (s *zhipuOffPeakStub) TicketStatus(_ context.Context, _ []string, _ zcode.O
 func (s *zhipuOffPeakStub) SettleTicket(ctx context.Context, ticketID string, auth zcode.OffPeakAuth, _ string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.settleAttempts = append(s.settleAttempts, ticketID)
 	if s.settleEr != nil {
 		return s.settleEr
 	}
@@ -109,6 +111,9 @@ func zhipuOffPeakIntPtr(value int) *int { return &value }
 func newZhipuOffPeakTestManager(t *testing.T, client *zhipuOffPeakStub) *ZhipuOffPeakTicketManager {
 	t.Helper()
 	manager := NewZhipuOffPeakTicketManager(client)
+	manager.projectTokens = NewZhipuProjectTokenManager(&projectIssuerStub{issue: func(context.Context, string) (*zcode.ProjectAccessToken, error) {
+		return &zcode.ProjectAccessToken{Token: "ak.sk", ExpiresAt: time.Now().Add(time.Hour)}, nil
+	}}, nil)
 	t.Cleanup(manager.Stop)
 	return manager
 }
@@ -275,15 +280,33 @@ func TestZhipuOffPeakSweepRetriesFailedSettles(t *testing.T) {
 		takes:    []*zcode.OffPeakTicket{{TicketID: "t-1", State: zcode.TicketReady}},
 		settleEr: errors.New("off-peak endpoint returned status 503"),
 	}
-	manager := newZhipuOffPeakTestManager(t, client).WithSettleIdle(time.Nanosecond)
+	manager := newZhipuOffPeakTestManager(t, client).WithSettleIdle(time.Second)
+	manager.Stop()
+	now := time.Now()
+	manager.now = func() time.Time { return now }
 	_, err := manager.Acquire(context.Background(), zhipuOffPeakTestAccount(), zhipuOffPeakTestAuth(), "")
 	require.NoError(t, err)
+	now = now.Add(2 * time.Second)
 
 	// A failed settle is not fatal: the platform reclaims the ticket by timeout
 	// and the next cycle retries.
 	manager.sweepOnce()
 	require.Empty(t, client.settledTickets())
+	require.Equal(t, []string{"t-1"}, client.settleAttempts, "the failed settlement must actually have been sent")
+	holder := manager.holderFor(zhipuOffPeakTestAccount().ID)
+	require.Equal(t, "t-1", holder.ticketID, "a failed settlement cannot discard its outstanding ticket")
+	require.NotEmpty(t, holder.taskID)
+	client.mu.Lock()
+	client.settleEr = nil
+	client.mu.Unlock()
 	manager.sweepOnce()
+	require.Equal(t, []string{"t-1", "t-1"}, client.settleAttempts, "recovery must retry the same outstanding generation")
+	require.Equal(t, []string{"t-1"}, client.settledTickets())
+	require.Empty(t, holder.ticketID, "successful acknowledgement retires the ticket")
+	require.Empty(t, holder.taskID)
+	require.Equal(t, zcode.TicketSettled, holder.state)
+	manager.sweepOnce()
+	require.Equal(t, []string{"t-1", "t-1"}, client.settleAttempts, "a retired ticket must not be settled again")
 }
 
 // The request-path hook must be a no-op for every account that is not an
@@ -294,7 +317,7 @@ func TestZhipuOffPeakTicketHeaderAppliesOnlyToOffPeakZhipu(t *testing.T) {
 		account *Account
 		want    string
 	}{
-		{"off-peak zhipu", zhipuOffPeakTestAccount(), "t-hook"},
+		{"off-peak zhipu", zhipuProjectOffPeakTestAccount(), "t-hook"},
 		{"coding-plan zhipu", &Account{ID: 78, Platform: PlatformZhipu, Type: AccountTypeOAuth, Credentials: map[string]any{"plan_kind": ZhipuPlanIndividualCodingPlan}}, ""},
 		{"other platform", &Account{ID: 79, Platform: PlatformMiniMax, Type: AccountTypeAPIKey, Credentials: map[string]any{"plan_kind": ZhipuPlanOffPeak}}, ""},
 	}
@@ -315,7 +338,7 @@ func TestZhipuOffPeakTicketHeaderAppliesOnlyToOffPeakZhipu(t *testing.T) {
 	// so a caller-supplied header can never select one.
 	headers := http.Header{}
 	headers.Set("X-Off-Peak-Ticket-ID", "caller-supplied")
-	require.NoError(t, applyZhipuOffPeakTicketHeader(context.Background(), zhipuOffPeakTestAccount(), headers))
+	require.NoError(t, applyZhipuOffPeakTicketHeader(context.Background(), zhipuProjectOffPeakTestAccount(), headers))
 	require.Equal(t, "t-hook", headers.Get("X-Off-Peak-Ticket-ID"))
 }
 
@@ -468,18 +491,29 @@ func TestZhipuOffPeakForwardAndProbeRequireAdmissionBeforeAnySend(t *testing.T) 
 				zhipuOffPeakProvider.Store(previous)
 			}
 		})
-		account := zhipuOffPeakTestAccount()
+		account := zhipuProjectOffPeakTestAccount()
 		req, err := http.NewRequest(http.MethodPost, "https://zcode.z.ai/api/v1/off-peak/anthropic/v1/messages", nil)
 		require.NoError(t, err)
 		req.Header.Set("X-Off-Peak-Ticket-ID", "caller-ticket")
 		// A nil transport intentionally makes any accidental model dispatch fail:
 		// the admission error must be returned before that side effect.
 		if probe {
-			_, err = (&AccountTestService{}).doOpenAIAccountTestUpstream(req, "", account, false)
+			_, err = (&AccountTestService{projectTokens: manager.projectTokens}).doOpenAIAccountTestUpstream(req, "", account, false)
 		} else {
-			_, err = (&OpenAIGatewayService{}).doOpenAIUpstream(req, "", account)
+			_, err = (&OpenAIGatewayService{projectTokens: manager.projectTokens}).doOpenAIUpstream(req, "", account)
 		}
 		require.ErrorContains(t, err, "ticket denied")
 		require.Empty(t, req.Header.Get("X-Off-Peak-Ticket-ID"))
 	}
+}
+
+func zhipuProjectOffPeakTestAccount() *Account {
+	a := zhipuOffPeakTestAccount()
+	a.Credentials["access_token"] = "owner-login"
+	a.Credentials["oauth_provider"] = "bigmodel"
+	a.Credentials["zhipu_project_kind"] = "personal"
+	a.Credentials["zhipu_project_key_id"] = "key-id"
+	a.Credentials["zhipu_organization"] = "org"
+	a.Credentials["zhipu_project"] = "project"
+	return a
 }

@@ -193,7 +193,11 @@ const showFallback = ref(false)
 const needsTeamScope = computed(() => zhipuPlanNeedsTeamScope(planKind.value))
 
 onMounted(loadCapabilities)
-watch(() => props.proxyId, cancelLink)
+watch(() => props.proxyId, () => {
+  cancelLink()
+  callback.value = ''
+  showFallback.value = false
+})
 
 async function start() {
   // startLink schedules the poll loop from the platform's own interval.

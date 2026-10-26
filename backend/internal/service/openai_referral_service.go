@@ -96,15 +96,15 @@ func (s *OpenAIQuotaService) referralCall(ctx context.Context, id int64, program
 	if s.referralClient == nil {
 		return OpenAIReferralCall{}, infraerrors.New(http.StatusServiceUnavailable, "OPENAI_REFERRAL_NOT_CONFIGURED", "referral service is unavailable")
 	}
-	token, accountID, proxy, fedRAMP, err := s.prepareUpstreamCall(ctx, id)
+	call, err := s.prepareUpstreamCall(ctx, id)
 	if err != nil {
 		return OpenAIReferralCall{}, err
 	}
-	headers, _, err := s.buildCodexQuotaHeaders(ctx, id, token, accountID, fedRAMP)
+	headers, _, err := s.buildCodexQuotaHeaders(ctx, call)
 	if err != nil {
 		return OpenAIReferralCall{}, infraerrors.New(http.StatusBadGateway, "OPENAI_REFERRAL_AUTH_ERROR", "failed to authenticate referral request")
 	}
-	return OpenAIReferralCall{ProxyURL: proxy, Headers: headers, ProgramID: program}, nil
+	return OpenAIReferralCall{ProxyURL: call.proxyURL, Headers: headers, ProgramID: program}, nil
 }
 
 func (s *OpenAIQuotaService) QueryReferralEligibility(ctx context.Context, id int64) (*OpenAIReferralEligibility, error) {

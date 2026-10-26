@@ -60,14 +60,20 @@ func (p *GrokTokenProvider) SetTempUnschedCache(cache TempUnschedCache) {
 }
 
 func (p *GrokTokenProvider) GetAccessToken(ctx context.Context, account *Account) (string, error) {
-	ctx = WithAccountOutboundIdentity(ctx, account)
 	if account == nil {
 		return "", errors.New("account is nil")
 	}
 	if account.Platform != PlatformGrok || account.Type != AccountTypeOAuth {
 		return "", errors.New("not a grok oauth account")
 	}
-	selectedProxyID := cloneGrokProxyID(account.ProxyID)
+	if account.ProxyID != nil && account.Proxy == nil {
+		return "", withGrokCredentialFailureSnapshot(errGrokOAuthConfiguredProxyMiss, account)
+	}
+	ctx, account, owner, ownerErr := captureGrokTokenOwner(ctx, account)
+	if ownerErr != nil {
+		return "", ownerErr
+	}
+	ctx = WithAccountOutboundIdentity(ctx, account)
 	if eligibilityErr := grokOAuthRequestAccountEligibilityError(account); eligibilityErr != nil {
 		return "", withGrokCredentialFailureSnapshot(eligibilityErr, account)
 	}
@@ -115,10 +121,10 @@ func (p *GrokTokenProvider) GetAccessToken(ctx context.Context, account *Account
 			if eligibilityErr := grokOAuthRequestAccountEligibilityError(result.Account); eligibilityErr != nil {
 				return "", withGrokCredentialFailureSnapshot(eligibilityErr, result.Account)
 			}
-			if !grokCredentialProxyIDsEqual(result.Account.ProxyID, selectedProxyID) {
-				return "", withGrokCredentialFailureSnapshot(errOAuthRefreshAccountStateChanged, result.Account)
+			if err := owner.adopt(result.Account, false); err != nil {
+				return "", withGrokCredentialFailureSnapshot(err, account)
 			}
-			account = result.Account
+			account = owner.account
 			expiresAt = account.GetCredentialAsTime("expires_at")
 		}
 	}
@@ -137,10 +143,11 @@ func (p *GrokTokenProvider) GetAccessToken(ctx context.Context, account *Account
 			if eligibilityErr := grokOAuthRequestAccountEligibilityError(latestAccount); eligibilityErr != nil {
 				return "", withGrokCredentialFailureSnapshot(eligibilityErr, latestAccount)
 			}
-			if !grokCredentialProxyIDsEqual(latestAccount.ProxyID, selectedProxyID) {
-				return "", withGrokCredentialFailureSnapshot(errOAuthRefreshAccountStateChanged, latestAccount)
+			if err := owner.adopt(latestAccount, false); err != nil {
+				return "", withGrokCredentialFailureSnapshot(err, account)
 			}
-			accessToken = latestAccount.GetGrokAccessToken()
+			account = owner.account
+			accessToken = account.GetGrokAccessToken()
 			if strings.TrimSpace(accessToken) == "" {
 				return "", withGrokCredentialFailureSnapshot(errGrokOAuthAccessTokenMissing, latestAccount)
 			}
@@ -180,7 +187,6 @@ func (p *GrokTokenProvider) GetAccessToken(ctx context.Context, account *Account
 // Credential rotation for non-active (disabled/error) accounts remains
 // blocked inside RefreshIfNeeded; their still-valid tokens are probed as-is.
 func (p *GrokTokenProvider) GetAccessTokenForManualTest(ctx context.Context, account *Account) (string, error) {
-	ctx = WithAccountOutboundIdentity(ctx, account)
 	if account == nil {
 		return "", errors.New("account is nil")
 	}
@@ -190,6 +196,11 @@ func (p *GrokTokenProvider) GetAccessTokenForManualTest(ctx context.Context, acc
 	if account.ProxyID != nil && account.Proxy == nil {
 		return "", errGrokOAuthConfiguredProxyMiss
 	}
+	ctx, account, owner, ownerErr := captureGrokTokenOwner(ctx, account)
+	if ownerErr != nil {
+		return "", ownerErr
+	}
+	ctx = WithAccountOutboundIdentity(ctx, account)
 	if strings.TrimSpace(account.GetGrokRefreshToken()) == "" {
 		return "", errGrokOAuthRefreshTokenMissing
 	}
@@ -227,7 +238,10 @@ func (p *GrokTokenProvider) GetAccessTokenForManualTest(ctx context.Context, acc
 		return "", errors.New("token refresh is already in progress on another worker; retry in a few seconds")
 	}
 	if result != nil && result.Account != nil {
-		account = result.Account
+		if err := owner.adopt(result.Account, false); err != nil {
+			return "", err
+		}
+		account = owner.account
 	}
 
 	accessToken = strings.TrimSpace(account.GetGrokAccessToken())
@@ -246,7 +260,7 @@ func (p *GrokTokenProvider) waitForRefreshedToken(ctx context.Context, account *
 
 	initialToken := strings.TrimSpace(account.GetGrokAccessToken())
 	initialVersion := account.GetCredentialAsInt64("_token_version")
-	selectedProxyID := cloneGrokProxyID(account.ProxyID)
+	owner := grokTokenOwnerFromContext(ctx)
 	sawAuthoritativeState := false
 	var lastAccountReadErr error
 	ticker := time.NewTicker(grokRefreshLockPollInterval)
@@ -271,15 +285,18 @@ func (p *GrokTokenProvider) waitForRefreshedToken(ctx context.Context, account *
 				if eligibilityErr := grokOAuthRequestAccountEligibilityError(latest); eligibilityErr != nil {
 					return "", withGrokCredentialFailureSnapshot(eligibilityErr, latest)
 				}
-				if !grokCredentialProxyIDsEqual(latest.ProxyID, selectedProxyID) {
-					return "", withGrokCredentialFailureSnapshot(errOAuthRefreshAccountStateChanged, latest)
-				}
 				token := strings.TrimSpace(latest.GetGrokAccessToken())
 				version := latest.GetCredentialAsInt64("_token_version")
 				expiresAt := latest.GetCredentialAsTime("expires_at")
 				changed := token != initialToken || (version > 0 && version > initialVersion)
 				valid := expiresAt != nil && time.Now().Before(*expiresAt)
 				if token != "" && changed && valid {
+					if owner == nil {
+						return "", errOAuthRefreshAccountStateChanged
+					}
+					if err := owner.adopt(latest, false); err != nil {
+						return "", withGrokCredentialFailureSnapshot(err, account)
+					}
 					// The versioned DB credential is authoritative. A stale cache must
 					// not hold the request on the old expired token; repair it best-effort.
 					if cachedToken != "" && cachedToken != token {
@@ -322,14 +339,6 @@ func grokOAuthRequestAccountEligibilityError(account *Account) error {
 		return errGrokOAuthConfiguredProxyMiss
 	}
 	return nil
-}
-
-func cloneGrokProxyID(proxyID *int64) *int64 {
-	if proxyID == nil {
-		return nil
-	}
-	value := *proxyID
-	return &value
 }
 
 func (p *GrokTokenProvider) InvalidateToken(ctx context.Context, account *Account) error {

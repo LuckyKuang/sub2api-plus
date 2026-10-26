@@ -287,15 +287,21 @@ export async function refreshCredentials(id: number): Promise<RefreshCredentials
  *   so persistent settings like `base_rpm`, `window_cost_limit`, `max_sessions`,
  *   `quota_*` and `privacy_mode` are preserved
  * - clears the account error and invalidates the token cache server-side
+ * - requires the opaque owner captured when authorization started; a conflict
+ *   must be retried by starting a new authorization, never by replacing the owner
  */
 export async function applyOAuthCredentials(
   id: number,
   payload: {
+    expected_owner: string
     type: 'oauth' | 'setup-token'
     credentials: Record<string, unknown>
     extra?: Record<string, unknown>
   }
 ): Promise<Account> {
+  if (!/^[a-f0-9]{64}$/.test(payload.expected_owner)) {
+    throw new Error('Account authorization changed or is unavailable; reopen the account and retry')
+  }
   const { data } = await apiClient.post<Account>(
     `/admin/accounts/${id}/apply-oauth-credentials`,
     payload

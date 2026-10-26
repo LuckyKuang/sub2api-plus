@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -44,24 +45,28 @@ type CNProviderBalanceEntry struct {
 
 // CNProviderBalanceResult 是余额探测的返回结构（管理端 + UI 消费）。
 type CNProviderBalanceResult struct {
+	// owner is the immutable native credential/scheduler snapshot that produced
+	// this result. It is never serialized to administrator responses.
+	owner *Account
+
 	Provider string `json:"provider"`
 	Success  bool   `json:"success"`
 	// Balance/Currency 为主币种（balance_infos 首条，兼容单币种消费方）；
 	// 完整明细见 Balances（deepseek 双币种账号含 CNY + USD 两条）。
-	Balance    float64                  `json:"balance"`
-	Currency   string                   `json:"currency,omitempty"`
-	Balances   []CNProviderBalanceEntry `json:"balances,omitempty"`
-	Available  bool                     `json:"available"` // 健康标记（deepseek is_available；kimi 无此概念恒 true）
-	StatusCode int                      `json:"status_code,omitempty"`
-	FetchedAt  int64                    `json:"fetched_at"`
-	Persisted  bool                     `json:"persisted"`
-	Error      string                   `json:"error,omitempty"`
+	Balance       float64                  `json:"balance"`
+	Currency      string                   `json:"currency,omitempty"`
+	Balances      []CNProviderBalanceEntry `json:"balances,omitempty"`
+	BonusBalances []CNProviderBalanceEntry `json:"bonus_balances,omitempty"`
+	Available     bool                     `json:"available"` // 健康标记（deepseek is_available；kimi 无此概念恒 true）
+	StatusCode    int                      `json:"status_code,omitempty"`
+	FetchedAt     int64                    `json:"fetched_at"`
+	Persisted     bool                     `json:"persisted"`
+	Error         string                   `json:"error,omitempty"`
 }
 
 // CNProviderBalanceService 探测 Kimi / DeepSeek payg 账号的账户余额。
 type CNProviderBalanceService struct {
 	accountRepo  AccountRepository
-	proxyRepo    ProxyRepository
 	httpUpstream HTTPUpstream
 	cfg          *config.Config
 	flight       singleflight.Group
@@ -70,13 +75,12 @@ type CNProviderBalanceService struct {
 // NewCNProviderBalanceService 构造余额探测服务。
 func NewCNProviderBalanceService(
 	accountRepo AccountRepository,
-	proxyRepo ProxyRepository,
+	_ ProxyRepository,
 	httpUpstream HTTPUpstream,
 	cfg *config.Config,
 ) *CNProviderBalanceService {
 	return &CNProviderBalanceService{
 		accountRepo:  accountRepo,
-		proxyRepo:    proxyRepo,
 		httpUpstream: httpUpstream,
 		cfg:          cfg,
 	}
@@ -100,7 +104,15 @@ func (s *CNProviderBalanceService) QueryBalanceForAccount(ctx context.Context, a
 	if err := validatePayGAccount(account); err != nil {
 		return nil, err
 	}
-	key := "cn_balance:" + strconv.FormatInt(account.ID, 10)
+	account, err := snapshotCNControlAccount(account)
+	if err != nil {
+		return nil, err
+	}
+	owner, err := cnControlOwnerFingerprint(account)
+	if err != nil {
+		return nil, err
+	}
+	key := "cn_balance:" + strconv.FormatInt(account.ID, 10) + ":" + owner
 	probeIdentityCtx := context.WithoutCancel(WithAccountOutboundIdentity(ctx, account))
 	resultCh := s.flight.DoChan(key, func() (any, error) {
 		probeCtx, cancel := context.WithTimeout(probeIdentityCtx, cnBalanceUpstreamTimeout+5*time.Second)
@@ -130,6 +142,9 @@ func (s *CNProviderBalanceService) queryBalanceForAccount(ctx context.Context, a
 	if account.IsCline() {
 		return s.queryClineBalance(ctx, account)
 	}
+	if account.IsDomesticOAuth() && account.Platform == PlatformDeepseek {
+		return s.queryDeepSeekOAuthWallet(ctx, account)
+	}
 	provider := account.Platform
 	if provider != PlatformKimi && provider != PlatformDeepseek {
 		return nil, infraerrors.New(http.StatusBadRequest, "CN_BALANCE_NO_ENDPOINT", "account provider has no balance endpoint")
@@ -148,8 +163,11 @@ func (s *CNProviderBalanceService) queryBalanceForAccount(ctx context.Context, a
 		return nil, infraerrors.New(http.StatusForbidden, "CN_BALANCE_URL_REJECTED", err.Error())
 	}
 	targetURL = validatedURL
-	proxyURL := s.resolveProxyURL(ctx, account)
-	callCtx, cancel := context.WithTimeout(ctx, cnBalanceUpstreamTimeout)
+	proxyURL, err := account.StrictProxyURL()
+	if err != nil {
+		return nil, err
+	}
+	callCtx, cancel := context.WithTimeout(WithHTTPUpstreamRedirectsDisabled(ctx), cnBalanceUpstreamTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(callCtx, http.MethodGet, targetURL, nil)
 	if err != nil {
@@ -164,7 +182,7 @@ func (s *CNProviderBalanceService) queryBalanceForAccount(ctx context.Context, a
 		return nil, infraerrors.Newf(http.StatusBadGateway, "CN_BALANCE_REQUEST_FAILED", "upstream request failed: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, cnBalanceMaxBodyBytes))
+	bodyBytes, readErr := io.ReadAll(io.LimitReader(resp.Body, cnBalanceMaxBodyBytes+1))
 
 	now := time.Now().UTC()
 	result := &CNProviderBalanceResult{
@@ -172,6 +190,10 @@ func (s *CNProviderBalanceService) queryBalanceForAccount(ctx context.Context, a
 		FetchedAt:  now.Unix(),
 		StatusCode: resp.StatusCode,
 		Available:  true,
+	}
+	if readErr != nil || len(bodyBytes) > cnBalanceMaxBodyBytes {
+		result.Error = "Balance response unavailable: incomplete or oversized body"
+		return result, nil
 	}
 
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
@@ -182,17 +204,31 @@ func (s *CNProviderBalanceService) queryBalanceForAccount(ctx context.Context, a
 		result.Error = fmt.Sprintf("API error (HTTP %d): %s", resp.StatusCode, truncate(strings.TrimSpace(string(bodyBytes)), 240))
 		return result, nil
 	}
+	if !json.Valid(bodyBytes) {
+		result.Error = "Invalid balance response: malformed JSON"
+		return result, nil
+	}
 
 	var entries []CNProviderBalanceEntry
 	available := true
 	switch provider {
 	case PlatformKimi:
 		// Moonshot：code==0 成功；data.available_balance（number），单币种 CNY。
-		balance, _ := cnParseF64(gjson.GetBytes(bodyBytes, "data.available_balance").Value())
+		code := gjson.GetBytes(bodyBytes, "code")
+		status := gjson.GetBytes(bodyBytes, "status")
+		balance, validBalance := cnParseF64(gjson.GetBytes(bodyBytes, "data.available_balance").Value())
+		if code.Type != gjson.Number || code.Num != 0 || status.Type != gjson.True || !validBalance {
+			result.Error = "Invalid balance response: missing successful finite balance observation"
+			return result, nil
+		}
 		entries = append(entries, CNProviderBalanceEntry{Currency: "CNY", Balance: balance})
 	case PlatformDeepseek:
 		// is_available 缺省视为 true（健康）；显式存在时取其值。
 		if v := gjson.GetBytes(bodyBytes, "is_available"); v.Exists() {
+			if v.Type != gjson.True && v.Type != gjson.False {
+				result.Error = "Invalid balance response: invalid availability observation"
+				return result, nil
+			}
 			available = v.Bool()
 		}
 		// balance_infos 逐条解析：双币种账号同时返回 CNY + USD（数组顺序即
@@ -202,20 +238,20 @@ func (s *CNProviderBalanceService) queryBalanceForAccount(ctx context.Context, a
 			result.Error = "Invalid balance response: missing balance_infos"
 			return result, nil
 		}
+		invalidEntry := false
 		balanceInfos.ForEach(func(_, info gjson.Result) bool {
-			currency := strings.ToUpper(strings.TrimSpace(info.Get("currency").String()))
+			currencyNode := info.Get("currency")
+			currency := currencyNode.String()
 			totalBalance := info.Get("total_balance")
 			balance, ok := cnParseF64(totalBalance.Value())
-			if !totalBalance.Exists() || !ok {
-				return true
-			}
-			if currency == "" {
-				currency = "CNY"
+			if !info.IsObject() || currencyNode.Type != gjson.String || (currency != "CNY" && currency != "USD") || !totalBalance.Exists() || !ok {
+				invalidEntry = true
+				return false
 			}
 			entries = append(entries, CNProviderBalanceEntry{Currency: currency, Balance: balance})
 			return true
 		})
-		if len(entries) == 0 {
+		if invalidEntry || len(entries) == 0 {
 			result.Error = "Invalid balance response: no valid balance entries"
 			return result, nil
 		}
@@ -224,14 +260,15 @@ func (s *CNProviderBalanceService) queryBalanceForAccount(ctx context.Context, a
 	result.Balance = entries[0].Balance
 	result.Currency = entries[0].Currency
 	result.Available = available
-	result.Success = true
-
 	updates := cnBalanceExtraUpdates(provider, result, now)
-	if err := s.accountRepo.UpdateExtra(ctx, account.ID, updates); err != nil {
+	result.Persisted, err = persistCNControlExtra(ctx, s.accountRepo, account, updates)
+	if err != nil || !result.Persisted {
 		slog.Warn("cn_balance_persist_failed", "account_id", account.ID, "provider", provider, "error", err)
-	} else {
-		result.Persisted = true
+		result.Error = "Account wallet owner changed or snapshot persistence unavailable"
+		return result, nil
 	}
+	result.Success = true
+	result.owner = account
 	return result, nil
 }
 
@@ -295,22 +332,6 @@ func validatePayGAccount(account *Account) error {
 		return infraerrors.New(http.StatusBadRequest, "CN_BALANCE_CODING_PLAN", "coding plan account has no balance endpoint; use quota probe")
 	}
 	return nil
-}
-
-func (s *CNProviderBalanceService) resolveProxyURL(ctx context.Context, account *Account) string {
-	if account == nil || account.ProxyID == nil {
-		return ""
-	}
-	if account.Proxy != nil {
-		return account.Proxy.URL()
-	}
-	if s != nil && s.proxyRepo != nil {
-		if proxy, err := s.proxyRepo.GetByID(ctx, *account.ProxyID); err == nil && proxy != nil {
-			account.Proxy = proxy
-			return proxy.URL()
-		}
-	}
-	return ""
 }
 
 // cnBalanceURL 解析账号的余额端点。

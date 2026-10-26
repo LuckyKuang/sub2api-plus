@@ -667,13 +667,17 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 	if account.Platform != PlatformGrok {
 		return nil, fmt.Errorf("account platform %s is not supported for grok media", account.Platform)
 	}
+	ctx, account, proxyURL, err := captureGrokRequestOwner(ctx, account)
+	if err != nil {
+		return nil, err
+	}
 
 	token, _, err := s.getRequestCredential(ctx, c, account)
 	if err != nil {
 		return nil, err
 	}
 	if endpoint == GrokMediaEndpointVideoContent {
-		return s.forwardGrokMediaVideoContent(ctx, c, account, token, requestID, startTime)
+		return s.forwardGrokMediaVideoContent(ctx, c, account, token, proxyURL, requestID, startTime)
 	}
 	targetURL, err := buildGrokMediaURL(account, s.cfg, endpoint, requestID)
 	if err != nil {
@@ -732,10 +736,6 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 	// 账号级请求头覆写最后应用，配置值优先于内置默认头。
 	account.ApplyHeaderOverrides(upstreamReq.Header)
 
-	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
-	}
 	upstreamStart := time.Now()
 	resp, err := s.httpUpstream.Do(prepareAccountOutboundRequest(upstreamReq, account), proxyURL, account.ID, account.Concurrency)
 	SetOpsLatencyMs(c, OpsUpstreamLatencyMsKey, time.Since(upstreamStart).Milliseconds())
@@ -810,7 +810,7 @@ func (s *OpenAIGatewayService) forwardGrokMediaVideoContent(
 	ctx context.Context,
 	c *gin.Context,
 	account *Account,
-	token, requestID string,
+	token, proxyURL, requestID string,
 	startTime time.Time,
 ) (*OpenAIForwardResult, error) {
 	statusURL, err := buildGrokMediaURL(account, s.cfg, GrokMediaEndpointVideoStatus, requestID)
@@ -837,10 +837,6 @@ func (s *OpenAIGatewayService) forwardGrokMediaVideoContent(
 	applyGrokMediaSessionHeader(statusReq.Header, c)
 	account.ApplyHeaderOverrides(statusReq.Header)
 
-	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
-	}
 	upstreamStart := time.Now()
 	statusResp, err := s.httpUpstream.Do(prepareAccountOutboundRequest(statusReq, account), proxyURL, account.ID, account.Concurrency)
 	if err != nil {

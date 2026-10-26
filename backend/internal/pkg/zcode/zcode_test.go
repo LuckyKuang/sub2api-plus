@@ -428,9 +428,9 @@ func TestCredentialClientDerivesPersonalKeyAndJoinsSecret(t *testing.T) {
 		case strings.HasSuffix(r.URL.Path, "/api_keys"):
 			sawListAuth = r.Header.Get("Authorization")
 			writeEnvelope(t, w, []any{map[string]any{"apiKey": "ak-1", "name": PersonalAPIKeyName}})
-		case strings.HasSuffix(r.URL.Path, "/copy/ak-1"):
+		case strings.HasSuffix(r.URL.Path, "/ak-1/access_tokens"):
 			sawCopyAuth = r.Header.Get("Authorization")
-			writeEnvelope(t, w, map[string]any{"secretKey": "sk-1"})
+			writeEnvelope(t, w, map[string]any{"accessToken": "pat-1", "tokenType": "Bearer", "expiresIn": 3600, "expiresAt": time.Now().Add(time.Hour).Unix()})
 		default:
 			t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
 			w.WriteHeader(http.StatusNotFound)
@@ -441,14 +441,14 @@ func TestCredentialClientDerivesPersonalKeyAndJoinsSecret(t *testing.T) {
 	client := NewCredentialClient(server.Client(), server.URL, server.URL)
 	credential, err := client.ResolveIndividualCodingPlanKey(context.Background(), ProviderBigModel, "bm-token")
 	require.NoError(t, err)
-	require.Equal(t, "ak-1.sk-1", credential.APIKey)
+	require.Equal(t, "pat-1", credential.APIKey)
 	require.Equal(t, "org-1", credential.OrganizationID)
 	require.Equal(t, "proj-1", credential.ProjectID)
 
 	// BigModel business calls carry the bare token.
 	require.Equal(t, "bm-token", sawCustomerAuth)
 	require.Equal(t, "bm-token", sawListAuth)
-	require.Equal(t, "bm-token", sawCopyAuth)
+	require.Equal(t, "Bearer bm-token", sawCopyAuth)
 }
 
 func TestCredentialClientCreatesMissingKeyAndRejectsMissingScope(t *testing.T) {
@@ -460,8 +460,8 @@ func TestCredentialClientCreatesMissingKeyAndRejectsMissingScope(t *testing.T) {
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/api_keys"):
 			created.Store(true)
 			writeEnvelope(t, w, map[string]any{"apiKey": "ak-new", "name": PersonalAPIKeyName})
-		case strings.HasSuffix(r.URL.Path, "/copy/ak-new"):
-			writeEnvelope(t, w, map[string]any{"secretKey": "sk-new"})
+		case strings.HasSuffix(r.URL.Path, "/ak-new/access_tokens"):
+			writeEnvelope(t, w, map[string]any{"accessToken": "pat-new", "tokenType": "Bearer", "expiresIn": 3600, "expiresAt": time.Now().Add(time.Hour).Unix()})
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -512,8 +512,8 @@ func TestCredentialClientZaiUsesBearerOnDerivation(t *testing.T) {
 			}}})
 		case strings.HasSuffix(r.URL.Path, "/api_keys"):
 			writeEnvelope(t, w, []any{map[string]any{"apiKey": "ak", "name": PersonalAPIKeyName}})
-		case strings.HasSuffix(r.URL.Path, "/copy/ak"):
-			writeEnvelope(t, w, map[string]any{"secretKey": "sk"})
+		case strings.HasSuffix(r.URL.Path, "/ak/access_tokens"):
+			writeEnvelope(t, w, map[string]any{"accessToken": "pat", "tokenType": "Bearer", "expiresIn": 3600, "expiresAt": time.Now().Add(time.Hour).Unix()})
 		}
 	}))
 	defer server.Close()
@@ -521,13 +521,11 @@ func TestCredentialClientZaiUsesBearerOnDerivation(t *testing.T) {
 	client := NewCredentialClient(server.Client(), server.URL, server.URL)
 	credential, err := client.ResolveIndividualCodingPlanKey(context.Background(), ProviderZai, "zai-token")
 	require.NoError(t, err)
-	require.Equal(t, "ak.sk", credential.APIKey)
-	for _, header := range seen {
-		require.Equal(t, "Bearer zai-token", header, "Z.ai derivation sends a Bearer-prefixed token")
-	}
+	require.Equal(t, "pat", credential.APIKey)
+	require.Equal(t, []string{"zai-token", "Bearer zai-token", "Bearer zai-token"}, seen)
 }
 
-func TestCredentialClientRejectsZaiKeyWithoutSecret(t *testing.T) {
+func TestCredentialClientRejectsMissingProjectTokenInBothFamilies(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/api/biz/customer/getCustomerInfo"):
@@ -545,12 +543,11 @@ func TestCredentialClientRejectsZaiKeyWithoutSecret(t *testing.T) {
 
 	client := NewCredentialClient(server.Client(), server.URL, server.URL)
 	_, err := client.ResolveIndividualCodingPlanKey(context.Background(), ProviderZai, "t")
-	require.ErrorContains(t, err, "secret key")
+	require.Error(t, err)
 
-	// BigModel tolerates the missing secret and returns the bare key.
-	credential, err := client.ResolveIndividualCodingPlanKey(context.Background(), ProviderBigModel, "t")
-	require.NoError(t, err)
-	require.Equal(t, "ak", credential.APIKey)
+	// Neither family may fall back to a public Key ID or a copied secret.
+	_, err = client.ResolveIndividualCodingPlanKey(context.Background(), ProviderBigModel, "t")
+	require.Error(t, err)
 }
 
 func TestCredentialClientResolvesTeamPlanKeyWithScopeHeaders(t *testing.T) {
@@ -571,9 +568,9 @@ func TestCredentialClientResolvesTeamPlanKeyWithScopeHeaders(t *testing.T) {
 		case strings.HasSuffix(r.URL.Path, "/api_keys"):
 			recordTeam()
 			writeEnvelope(t, w, []any{})
-		case strings.HasSuffix(r.URL.Path, "/copy/ak-team"):
-			recordTeam()
-			writeEnvelope(t, w, map[string]any{"secretKey": "sk-team"})
+		case strings.HasSuffix(r.URL.Path, "/ak-team/access_tokens"):
+			require.Equal(t, "Bearer bm", r.Header.Get("Authorization"))
+			writeEnvelope(t, w, map[string]any{"accessToken": "pat-team", "tokenType": "Bearer", "expiresIn": 3600, "expiresAt": time.Now().Add(time.Hour).Unix()})
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -583,8 +580,8 @@ func TestCredentialClientResolvesTeamPlanKeyWithScopeHeaders(t *testing.T) {
 	client := NewCredentialClient(server.Client(), server.URL, server.URL)
 	credential, err := client.ResolveTeamPlanKey(context.Background(), ProviderBigModel, "bm", "org-team", "proj-team")
 	require.NoError(t, err)
-	require.Equal(t, "ak-team.sk-team", credential.APIKey)
-	require.Len(t, teamHeaders, 3, "list, create and copy all carry the team scope")
+	require.Equal(t, "pat-team", credential.APIKey)
+	require.Len(t, teamHeaders, 2, "list and create carry the team scope; PAT issuance uses the scoped path")
 	for _, header := range teamHeaders {
 		require.Equal(t, "org-team/proj-team", header)
 	}

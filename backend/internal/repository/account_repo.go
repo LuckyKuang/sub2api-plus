@@ -157,14 +157,64 @@ func (r *accountRepository) markTransactionAccountChanged(accountID int64) {
 }
 
 func (r *accountRepository) Create(ctx context.Context, account *service.Account) error {
-	if err := createAccountRecord(ctx, r.client, account); err != nil {
+	if account == nil {
+		return service.ErrAccountNilInput
+	}
+	if err := account.NormalizeCodexFingerprintMode(); err != nil {
 		return err
 	}
-	if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventAccountChanged, &account.ID, nil, buildSchedulerGroupPayload(account.GroupIDs)); err != nil {
-		logger.LegacyPrintf("repository.account", "[SchedulerOutbox] enqueue account create failed: account=%d err=%v", account.ID, err)
+	client := r.client
+	var tx *dbent.Tx
+	if existing := dbent.TxFromContext(ctx); existing != nil {
+		client = existing.Client()
+	} else {
+		var err error
+		tx, err = r.client.Tx(ctx)
+		if err != nil && !errors.Is(err, dbent.ErrTxStarted) {
+			return err
+		}
+		if tx != nil {
+			defer func() { _ = tx.Rollback() }()
+			client = tx.Client()
+			ctx = dbent.NewTxContext(ctx, tx)
+		}
+	}
+	if err := createAccountRecord(ctx, client, account); err != nil {
+		return err
+	}
+	if err := enqueueSchedulerOutbox(ctx, client, service.SchedulerOutboxEventAccountChanged, &account.ID, nil, buildSchedulerGroupPayload(account.GroupIDs)); err != nil {
+		return err
 	}
 	r.markTransactionAccountChanged(account.ID)
+	if tx != nil {
+		return tx.Commit()
+	}
 	return nil
+}
+
+// A soft-deleted row still satisfies the foreign key. Hold its live row until
+// the account write commits, serializing every binding writer with deletion.
+// Acquire this before account row locks, matching proxy edit/expiry ordering.
+func lockLiveAccountProxy(ctx context.Context, exec sqlExecutor, proxyID *int64) error {
+	if proxyID == nil {
+		return nil
+	}
+	rows, err := exec.QueryContext(ctx, `SELECT id FROM proxies WHERE id=$1 AND deleted_at IS NULL FOR SHARE`, *proxyID)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = rows.Close() }()
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		return service.ErrProxyNotFound
+	}
+	var id int64
+	if err := rows.Scan(&id); err != nil {
+		return err
+	}
+	return rows.Err()
 }
 
 func createAccountRecord(ctx context.Context, client *dbent.Client, account *service.Account) error {
@@ -174,6 +224,14 @@ func createAccountRecord(ctx context.Context, client *dbent.Client, account *ser
 	if err := account.NormalizeCodexFingerprintMode(); err != nil {
 		return err
 	}
+	if err := lockLiveAccountProxy(ctx, client, account.ProxyID); err != nil {
+		return err
+	}
+	if account.ParentAccountID != nil {
+		if err := lockLiveSparkCredentialParent(ctx, client, *account.ParentAccountID); err != nil {
+			return err
+		}
+	}
 
 	builder := client.Account.Create().
 		SetName(account.Name).
@@ -181,7 +239,7 @@ func createAccountRecord(ctx context.Context, client *dbent.Client, account *ser
 		SetPlatform(account.Platform).
 		SetType(account.Type).
 		SetCredentials(normalizeJSONMap(account.Credentials)).
-		SetExtra(normalizeJSONMap(account.Extra)).
+		SetExtra(withoutRuntimeRecoveryGeneration(account.Extra)).
 		SetConcurrency(account.Concurrency).
 		SetPriority(account.Priority).
 		SetStatus(account.Status).
@@ -235,6 +293,7 @@ func createAccountRecord(ctx context.Context, client *dbent.Client, account *ser
 	}
 
 	account.ID = created.ID
+	account.Extra = created.Extra
 	account.CreatedAt = created.CreatedAt
 	account.UpdatedAt = created.UpdatedAt
 	return nil
@@ -262,6 +321,9 @@ func (r *accountRepository) CreateWithAccountGroups(ctx context.Context, account
 	groupIDs := make([]int64, 0, len(groups))
 	for i := range groups {
 		groupIDs = append(groupIDs, groups[i].GroupID)
+	}
+	if err := lockLiveAccountProxy(ctx, txClient, account.ProxyID); err != nil {
+		return err
 	}
 	// A newly inserted shadow is invisible to observers, but its parent FK
 	// locks an existing credential owner. Acquire that lock before group locks.
@@ -551,6 +613,9 @@ func (r *accountRepository) updateLockedAccount(
 	account *service.Account,
 	explicitRateMultiplier *float64,
 ) (*dbent.Account, error) {
+	if err := lockLiveAccountProxy(ctx, client, account.ProxyID); err != nil {
+		return nil, err
+	}
 	extra, err := lockAndMergeAccountExtra(ctx, client, account)
 	if err != nil {
 		return nil, err
@@ -668,7 +733,8 @@ func lockAndMergeAccountExtra(
 			proxy_id IS NOT DISTINCT FROM $5,
 			extra -> 'ollama_cloud_usage_session',
 			extra -> 'ollama_cloud_usage_auto_refresh',
-			extra -> 'ollama_cloud_usage_snapshot'
+			extra -> 'ollama_cloud_usage_snapshot',
+			extra -> 'runtime_recovery_generation'
 		FROM accounts
 		WHERE id = $1 AND deleted_at IS NULL
 		FOR NO KEY UPDATE
@@ -685,11 +751,12 @@ func lockAndMergeAccountExtra(
 	}
 
 	var (
-		ollamaGroupIdentityUnchanged bool
-		ollamaProxyIdentityUnchanged bool
-		currentOllamaSession         []byte
-		currentOllamaAutoRefresh     []byte
-		currentOllamaSnapshot        []byte
+		ollamaGroupIdentityUnchanged     bool
+		ollamaProxyIdentityUnchanged     bool
+		currentOllamaSession             []byte
+		currentOllamaAutoRefresh         []byte
+		currentOllamaSnapshot            []byte
+		currentRuntimeRecoveryGeneration []byte
 	)
 	if err := rows.Scan(
 		&ollamaGroupIdentityUnchanged,
@@ -697,6 +764,7 @@ func lockAndMergeAccountExtra(
 		&currentOllamaSession,
 		&currentOllamaAutoRefresh,
 		&currentOllamaSnapshot,
+		&currentRuntimeRecoveryGeneration,
 	); err != nil {
 		return nil, err
 	}
@@ -704,7 +772,12 @@ func lockAndMergeAccountExtra(
 		return nil, err
 	}
 
-	extra := copyJSONMap(normalizeJSONMap(account.Extra))
+	extra := withoutRuntimeRecoveryGeneration(account.Extra)
+	if value, ok, err := decodeAccountExtraJSON(currentRuntimeRecoveryGeneration); err != nil {
+		return nil, err
+	} else if ok {
+		extra[service.RuntimeRecoveryGenerationExtraKey] = value
+	}
 	for _, key := range []string{
 		"upstream_billing_probe_enabled",
 		"upstream_billing_rate_sync_enabled",
@@ -823,23 +896,34 @@ func (r *accountRepository) UpdateCredentials(ctx context.Context, id int64, cre
 }
 
 func (r *accountRepository) Delete(ctx context.Context, id int64) error {
-	groupIDs, err := r.loadAccountGroupIDs(ctx, id)
+	baseCtx := ctx
+	contextTx := dbent.TxFromContext(ctx)
+	txClient := r.client
+	var tx *dbent.Tx
+	if contextTx != nil {
+		txClient = contextTx.Client()
+	} else {
+		var err error
+		tx, err = r.client.Tx(ctx)
+		if err != nil && !errors.Is(err, dbent.ErrTxStarted) {
+			return err
+		}
+		if tx != nil {
+			defer func() { _ = tx.Rollback() }()
+			txClient = tx.Client()
+			ctx = dbent.NewTxContext(ctx, tx)
+		}
+	}
+	if err := lockMembershipAccounts(ctx, txClient, []int64{id}); err != nil {
+		return err
+	}
+	entries, err := txClient.AccountGroup.Query().Where(dbaccountgroup.AccountIDEQ(id)).All(ctx)
 	if err != nil {
 		return err
 	}
-	// 使用事务保证账号与关联分组的删除原子性
-	tx, err := r.client.Tx(ctx)
-	if err != nil && !errors.Is(err, dbent.ErrTxStarted) {
-		return err
-	}
-
-	var txClient *dbent.Client
-	if err == nil {
-		defer func() { _ = tx.Rollback() }()
-		txClient = tx.Client()
-	} else {
-		// 已处于外部事务中（ErrTxStarted），复用当前 client
-		txClient = r.client
+	groupIDs := make([]int64, 0, len(entries))
+	for _, entry := range entries {
+		groupIDs = append(groupIDs, entry.GroupID)
 	}
 
 	if _, err := txClient.AccountGroup.Delete().Where(dbaccountgroup.AccountIDEQ(id)).Exec(ctx); err != nil {
@@ -851,15 +935,16 @@ func (r *accountRepository) Delete(ctx context.Context, id int64) error {
 	if _, err := txClient.Account.Delete().Where(dbaccount.IDEQ(id)).Exec(ctx); err != nil {
 		return err
 	}
+	if err := enqueueSchedulerOutbox(ctx, txClient, service.SchedulerOutboxEventAccountChanged, &id, nil, buildSchedulerGroupPayload(groupIDs)); err != nil {
+		return err
+	}
+	r.markTransactionAccountChanged(id)
 
 	if tx != nil {
 		if err := tx.Commit(); err != nil {
 			return err
 		}
-	}
-	r.deleteSchedulerAccountSnapshot(ctx, id)
-	if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventAccountChanged, &id, nil, buildSchedulerGroupPayload(groupIDs)); err != nil {
-		logger.LegacyPrintf("repository.account", "[SchedulerOutbox] enqueue account delete failed: account=%d err=%v", id, err)
+		r.deleteSchedulerAccountSnapshot(baseCtx, id)
 	}
 	return nil
 }
@@ -1313,46 +1398,7 @@ func (r *accountRepository) SetGrokCredentialErrorIfMatch(
 	snapshot service.GrokCredentialMutationSnapshot,
 	errorMsg string,
 ) (bool, error) {
-	result, err := r.sql.ExecContext(ctx, `
-		WITH updated AS (
-		UPDATE accounts AS a
-		SET status = $1,
-			error_message = $2,
-			schedulable = false,
-			updated_at = NOW()
-		WHERE a.id = $3
-			AND a.deleted_at IS NULL
-			AND a.status = $4
-			AND a.platform = $5
-			AND a.type = $6
-			AND a.schedulable IS TRUE
-			AND (a.temp_unschedulable_until IS NULL OR a.temp_unschedulable_until <= NOW())
-			AND (a.rate_limit_reset_at IS NULL OR a.rate_limit_reset_at <= NOW())
-			AND (a.overload_until IS NULL OR a.overload_until <= NOW())
-			AND (a.auto_pause_on_expired IS NOT TRUE OR a.expires_at IS NULL OR a.expires_at > NOW())
-			AND a.credentials = $7::jsonb
-			AND a.proxy_id IS NOT DISTINCT FROM $8
-			AND ($2 <> $9 OR (
-				a.proxy_id IS NOT NULL AND NOT EXISTS (
-					SELECT 1 FROM proxies p WHERE p.id = a.proxy_id AND p.deleted_at IS NULL
-				)
-			))
-		RETURNING a.id
-		)
-		INSERT INTO scheduler_outbox (event_type, account_id, group_id, payload)
-		SELECT $10, updated.id, NULL, NULL FROM updated
-	`, service.StatusError, errorMsg, id, service.StatusActive, service.PlatformGrok, service.AccountTypeOAuth,
-		snapshot.CredentialsJSON, snapshot.ProxyID, string(service.GrokCredentialReasonProxyInvalid),
-		service.SchedulerOutboxEventAccountChanged)
-	if err != nil {
-		return false, err
-	}
-	affected, err := result.RowsAffected()
-	if err != nil || affected == 0 {
-		return false, err
-	}
-	r.syncSchedulerAccountSnapshotDetached(ctx, id)
-	return true, nil
+	return r.setGrokCredentialFailureIfMatch(ctx, id, snapshot, errorMsg, nil)
 }
 
 // SetGrokOAuthErrorIfCredentialsUnchanged atomically quarantines a structurally
@@ -1611,6 +1657,10 @@ func (r *accountRepository) syncSchedulerAccountSnapshot(ctx context.Context, ac
 		return
 	}
 	account, err := r.GetByID(ctx, accountID)
+	if errors.Is(err, service.ErrAccountNotFound) {
+		r.deleteSchedulerAccountSnapshot(ctx, accountID)
+		return
+	}
 	if err != nil {
 		logger.LegacyPrintf("repository.account", "[Scheduler] sync account snapshot read failed: id=%d err=%v", accountID, err)
 		return
@@ -2351,42 +2401,7 @@ func (r *accountRepository) SetGrokCredentialTempUnschedulableIfMatch(
 	until time.Time,
 	reason string,
 ) (bool, error) {
-	result, err := r.sql.ExecContext(ctx, `
-		WITH updated AS (
-		UPDATE accounts AS a
-		SET temp_unschedulable_until = CASE
-				WHEN a.temp_unschedulable_until IS NULL OR a.temp_unschedulable_until < $1 THEN $1
-				ELSE a.temp_unschedulable_until
-			END,
-			temp_unschedulable_reason = $2,
-			updated_at = NOW()
-		WHERE a.id = $3
-			AND a.deleted_at IS NULL
-			AND a.status = $4
-			AND a.platform = $5
-			AND a.type = $6
-			AND a.schedulable IS TRUE
-			AND (a.temp_unschedulable_until IS NULL OR a.temp_unschedulable_until <= NOW())
-			AND (a.rate_limit_reset_at IS NULL OR a.rate_limit_reset_at <= NOW())
-			AND (a.overload_until IS NULL OR a.overload_until <= NOW())
-			AND (a.auto_pause_on_expired IS NOT TRUE OR a.expires_at IS NULL OR a.expires_at > NOW())
-			AND a.credentials = $7::jsonb
-			AND a.proxy_id IS NOT DISTINCT FROM $8
-		RETURNING a.id
-		)
-		INSERT INTO scheduler_outbox (event_type, account_id, group_id, payload)
-		SELECT $9, updated.id, NULL, NULL FROM updated
-	`, until, reason, id, service.StatusActive, service.PlatformGrok, service.AccountTypeOAuth,
-		snapshot.CredentialsJSON, snapshot.ProxyID, service.SchedulerOutboxEventAccountChanged)
-	if err != nil {
-		return false, err
-	}
-	affected, err := result.RowsAffected()
-	if err != nil || affected == 0 {
-		return false, err
-	}
-	r.syncSchedulerAccountSnapshotDetached(ctx, id)
-	return true, nil
+	return r.setGrokCredentialFailureIfMatch(ctx, id, snapshot, reason, &until)
 }
 
 func (r *accountRepository) ClearTempUnschedulable(ctx context.Context, id int64) error {
@@ -2570,6 +2585,7 @@ func (r *accountRepository) AutoPauseExpiredAccounts(ctx context.Context, now ti
 }
 
 func (r *accountRepository) UpdateExtra(ctx context.Context, id int64, updates map[string]any) error {
+	updates = withoutRuntimeRecoveryGeneration(updates)
 	if len(updates) == 0 {
 		return nil
 	}
@@ -2730,6 +2746,7 @@ func ollamaCloudUsageSnapshotClearRequested(extra map[string]any) bool {
 }
 
 func (r *accountRepository) BulkUpdate(ctx context.Context, ids []int64, updates service.AccountBulkUpdate) (int64, error) {
+	updates.Extra = withoutRuntimeRecoveryGeneration(updates.Extra)
 	if len(ids) == 0 {
 		return 0, nil
 	}
@@ -2882,6 +2899,11 @@ func (r *accountRepository) BulkUpdate(ctx context.Context, ids []int64, updates
 		}
 	}
 
+	if updates.ProxyID != nil && *updates.ProxyID != 0 {
+		if err := lockLiveAccountProxy(ctx, exec, updates.ProxyID); err != nil {
+			return 0, err
+		}
+	}
 	result, err := exec.ExecContext(ctx, query, args...)
 	if err != nil {
 		return 0, err
@@ -3557,18 +3579,61 @@ func (r *accountRepository) ResetQuotaUsedAndClearRateLimitCooldown(ctx context.
 // 仅当 proxy_fallback_origin_id IS NOT NULL 时执行更新；
 // 若影响行数为 0，则返回 ErrAccountNotInFallback（账号存在但不在 fallback 状态）。
 func (r *accountRepository) RevertProxyFallback(ctx context.Context, accountID int64) error {
-	res, err := r.sql.ExecContext(ctx, `
+	baseCtx := ctx
+	client := r.client
+	contextTx := dbent.TxFromContext(ctx)
+	var tx *dbent.Tx
+	if contextTx != nil {
+		client = contextTx.Client()
+	} else {
+		var err error
+		tx, err = r.client.Tx(ctx)
+		if err != nil && !errors.Is(err, dbent.ErrTxStarted) {
+			return err
+		}
+		if tx != nil {
+			defer func() { _ = tx.Rollback() }()
+			client = tx.Client()
+			ctx = dbent.NewTxContext(ctx, tx)
+		}
+	}
+	var origin sql.NullInt64
+	if err := scanSingleRow(ctx, client, `SELECT proxy_fallback_origin_id FROM accounts WHERE id=$1 AND deleted_at IS NULL`, []any{accountID}, &origin); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return service.ErrAccountNotInFallback
+		}
+		return err
+	}
+	if !origin.Valid {
+		return service.ErrAccountNotInFallback
+	}
+	if err := lockLiveAccountProxy(ctx, client, &origin.Int64); err != nil {
+		return err
+	}
+	res, err := client.ExecContext(ctx, `
 		UPDATE accounts SET proxy_id=proxy_fallback_origin_id, proxy_fallback_origin_id=NULL, updated_at=NOW()
-		WHERE id=$1 AND proxy_fallback_origin_id IS NOT NULL AND deleted_at IS NULL`, accountID)
+		WHERE id=$1 AND proxy_fallback_origin_id=$2 AND deleted_at IS NULL`, accountID, origin.Int64)
 	if err != nil {
 		return err
 	}
-	n, _ := res.RowsAffected()
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
 	if n == 0 {
 		return service.ErrAccountNotInFallback
 	}
-	if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventAccountChanged, &accountID, nil, nil); err != nil {
-		logger.LegacyPrintf("repository.account", "[SchedulerOutbox] revert fallback enqueue failed: account=%d err=%v", accountID, err)
+	if err := enqueueSchedulerOutbox(ctx, client, service.SchedulerOutboxEventAccountChanged, &accountID, nil, nil); err != nil {
+		return err
+	}
+	r.markTransactionAccountChanged(accountID)
+	if tx != nil {
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+		// Caller-owned transactions publish through their transaction owner or
+		// the committed outbox, never before a possible caller rollback.
+		r.syncSchedulerAccountSnapshot(baseCtx, accountID)
 	}
 	return nil
 }

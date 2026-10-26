@@ -596,3 +596,12 @@ describe('Codex subscription analytics labels', () => {
     expect(openAIPlanTypeLabel(sku, 'analytics')).toBe(label)
   })
 })
+
+
+describe('native OAuth usage eligibility', () => {
+  it('shows Kimi and Step quota while keeping other native grants separate', () => {
+    expect(cnQuotaCellVisible({ platform: 'kimi', type: 'oauth', credentials: { oauth_provider: 'kimi', account_mode: 'coding' } })).toBe(true)
+    expect(cnQuotaCellVisible({ platform: 'stepfun', type: 'oauth', credentials: { oauth_provider: 'stepfun', account_mode: 'coding' } })).toBe(true)
+    expect(cnQuotaCellVisible({ platform: 'minimax', type: 'oauth', credentials: { oauth_provider: 'minimax', account_mode: 'coding' } })).toBe(false)
+  })
+})

@@ -88,7 +88,7 @@ func TestNativeIdentityStoredForeignCandidatesNeverReachWire(t *testing.T) {
 		"deepseek": "deepseek-harness/0.2.0-rc.2 (+https://github.com/deepseek-ai/deepseek-harness)",
 		"kimi":     "kimi-code-cli/2.1.1", "minimax": "MiniMaxAgent",
 		"minimax_apikey": "Anthropic/JS 0.91.1", "zcode": "ZCode/3.14.3",
-		"stepfun": "step (linux 6.8.0-31-generic; x64)",
+		"stepfun": "stepcode (linux 6.8.0-31-generic; x64)",
 	}
 	for _, tc := range fixedIdentityCases[:10] {
 		t.Run(tc.platform+":"+tc.kind, func(t *testing.T) {

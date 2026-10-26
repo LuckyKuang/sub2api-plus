@@ -151,13 +151,6 @@ func (s *RateLimitService) notifyAccountSchedulingBlocked(account *Account, unti
 	s.runtimeBlocker.BlockAccountScheduling(account, until, reason)
 }
 
-func (s *RateLimitService) notifyAccountSchedulingBlockCleared(accountID int64) {
-	if s == nil || s.runtimeBlocker == nil || accountID <= 0 {
-		return
-	}
-	s.runtimeBlocker.ClearAccountSchedulingBlock(accountID)
-}
-
 // ApplyAccountSchedulingThreshold evaluates admin-configured per-platform
 // utilization thresholds and, when breached, parks the account as temp-
 // unschedulable until the winning window resets. Returns true when the account
@@ -2235,27 +2228,7 @@ func (s *RateLimitService) samplePassiveUsageFromHeaders(ctx context.Context, ac
 
 // ClearRateLimit 清除账号的限流状态
 func (s *RateLimitService) ClearRateLimit(ctx context.Context, accountID int64) error {
-	if err := s.accountRepo.ClearRateLimit(ctx, accountID); err != nil {
-		return err
-	}
-	if err := s.accountRepo.ClearAntigravityQuotaScopes(ctx, accountID); err != nil {
-		return err
-	}
-	if err := s.accountRepo.ClearModelRateLimits(ctx, accountID); err != nil {
-		return err
-	}
-	// 清除限流时一并清理临时不可调度状态，避免周限/窗口重置后仍被本地临时状态阻断。
-	if err := s.accountRepo.ClearTempUnschedulable(ctx, accountID); err != nil {
-		return err
-	}
-	if s.tempUnschedCache != nil {
-		if err := s.tempUnschedCache.DeleteTempUnsched(ctx, accountID); err != nil {
-			slog.Warn("temp_unsched_cache_delete_failed", "account_id", accountID, "error", err)
-		}
-	}
-	s.ResetOpenAI403Counter(ctx, accountID)
-	s.notifyAccountSchedulingBlockCleared(accountID)
-	return nil
+	return s.clearAccountSchedulingRecovery(ctx, accountID, SchedulingRecoveryRates)
 }
 
 func (s *RateLimitService) ResetOpenAI403Counter(ctx context.Context, accountID int64) {
@@ -2269,38 +2242,7 @@ func (s *RateLimitService) ResetOpenAI403Counter(ctx context.Context, accountID 
 
 // RecoverAccountState 按需恢复账号的可恢复运行时状态。
 func (s *RateLimitService) RecoverAccountState(ctx context.Context, accountID int64, options AccountRecoveryOptions) (*SuccessfulTestRecoveryResult, error) {
-	account, err := s.accountRepo.GetByID(ctx, accountID)
-	if err != nil {
-		return nil, err
-	}
-
-	result := &SuccessfulTestRecoveryResult{}
-	if account.Status == StatusError {
-		if err := s.accountRepo.ClearError(ctx, accountID); err != nil {
-			return nil, err
-		}
-		result.ClearedError = true
-		if options.InvalidateToken && s.tokenCacheInvalidator != nil && account.IsOAuth() {
-			if invalidateErr := s.tokenCacheInvalidator.InvalidateToken(ctx, account); invalidateErr != nil {
-				slog.Warn("recover_account_state_invalidate_token_failed", "account_id", accountID, "error", invalidateErr)
-			}
-		}
-	}
-
-	if hasRecoverableRuntimeState(account) {
-		if err := s.ClearRateLimit(ctx, accountID); err != nil {
-			return nil, err
-		}
-		result.ClearedRateLimit = true
-	}
-	if result.ClearedError || result.ClearedRateLimit {
-		s.ResetOpenAI403Counter(ctx, accountID)
-		if result.ClearedError && !result.ClearedRateLimit {
-			s.notifyAccountSchedulingBlockCleared(accountID)
-		}
-	}
-
-	return result, nil
+	return s.recoverAccountStateAtomically(ctx, accountID, options)
 }
 
 // RecoverAccountAfterSuccessfulTest 将一次成功测试视为正常请求，
@@ -2310,20 +2252,7 @@ func (s *RateLimitService) RecoverAccountAfterSuccessfulTest(ctx context.Context
 }
 
 func (s *RateLimitService) ClearTempUnschedulable(ctx context.Context, accountID int64) error {
-	if err := s.accountRepo.ClearTempUnschedulable(ctx, accountID); err != nil {
-		return err
-	}
-	if s.tempUnschedCache != nil {
-		if err := s.tempUnschedCache.DeleteTempUnsched(ctx, accountID); err != nil {
-			slog.Warn("temp_unsched_cache_delete_failed", "account_id", accountID, "error", err)
-		}
-	}
-	// 同时清除模型级别限流
-	if err := s.accountRepo.ClearModelRateLimits(ctx, accountID); err != nil {
-		slog.Warn("clear_model_rate_limits_on_temp_unsched_reset_failed", "account_id", accountID, "error", err)
-	}
-	s.notifyAccountSchedulingBlockCleared(accountID)
-	return nil
+	return s.clearAccountSchedulingRecovery(ctx, accountID, SchedulingRecoveryTemporary)
 }
 
 func hasRecoverableRuntimeState(account *Account) bool {
@@ -2359,16 +2288,8 @@ func hasNonEmptyMapValue(extra map[string]any, key string) bool {
 
 func (s *RateLimitService) GetTempUnschedStatus(ctx context.Context, accountID int64) (*TempUnschedState, error) {
 	now := time.Now().Unix()
-	if s.tempUnschedCache != nil {
-		state, err := s.tempUnschedCache.GetTempUnsched(ctx, accountID)
-		if err != nil {
-			return nil, err
-		}
-		if state != nil && state.UntilUnix > now {
-			return state, nil
-		}
-	}
-
+	// The saved row owns activity and its reason. A delayed cache publication
+	// cannot restore status after recovery or replace a newer observation.
 	account, err := s.accountRepo.GetByID(ctx, accountID)
 	if err != nil {
 		return nil, err
@@ -2397,8 +2318,15 @@ func (s *RateLimitService) GetTempUnschedStatus(ctx context.Context, accountID i
 	}
 
 	if s.tempUnschedCache != nil {
+		cached, cacheErr := s.tempUnschedCache.GetTempUnsched(ctx, accountID)
+		if cacheErr == nil && cached != nil && *cached == *state {
+			return cached, nil
+		}
+		if cacheErr != nil {
+			slog.Warn("temp_unsched_cache_get_failed", "account_id", accountID, "reason", "cache_read_failed")
+		}
 		if err := s.tempUnschedCache.SetTempUnsched(ctx, accountID, state); err != nil {
-			slog.Warn("temp_unsched_cache_set_failed", "account_id", accountID, "error", err)
+			slog.Warn("temp_unsched_cache_set_failed", "account_id", accountID, "reason", "cache_write_failed")
 		}
 	}
 
@@ -2913,6 +2841,28 @@ func (s *RateLimitService) triggerTempUnschedulable(ctx context.Context, account
 	}
 	if reason == "" {
 		reason = strings.TrimSpace(state.ErrorMessage)
+	}
+	if _, collecting := ctx.Value(grokRequestOutcomeKey{}).(*grokRequestOutcomeCollector); collecting && account.IsGrok() {
+		if modelScoped {
+			payload := map[string]any{
+				"rate_limited_at":     now.UTC().Format(time.RFC3339),
+				"rate_limit_reset_at": until.UTC().Format(time.RFC3339),
+				"reason":              reason,
+			}
+			collectGrokRequestOutcome(ctx, s.accountRepo, account, GrokRequestOutcome{ModelRateLimits: map[string]any{modelKey: payload}}, nil)
+		} else {
+			collectGrokRequestOutcome(ctx, s.accountRepo, account, GrokRequestOutcome{TempUnschedulableUntil: &until, TempUnschedulableReason: reason}, func(account *Account) {
+				s.notifyAccountSchedulingBlocked(account, until, "temp_unschedulable")
+				if s.tempUnschedCache != nil {
+					cacheCtx, cancel := openAIAccountStateContext(ctx)
+					defer cancel()
+					if err := s.tempUnschedCache.SetTempUnsched(cacheCtx, account.ID, state); err != nil {
+						slog.Warn("temp_unsched_cache_set_failed", "account_id", account.ID, "reason", "cache_write_failed")
+					}
+				}
+			})
+		}
+		return true
 	}
 
 	// Persist model-scoped hits under the model key so the scheduler excludes

@@ -582,7 +582,7 @@ func (s *defaultOpenAIAccountScheduler) selectBySessionHash(
 		clearBinding()
 		return nil, false, nil
 	}
-	if account != nil && isGrokModelQuotaBlocked(account.ID, upstreamModel, now) {
+	if account != nil && isGrokModelQuotaBlocked(account, upstreamModel, now) {
 		clearBinding()
 		return nil, false, nil
 	}
@@ -1350,7 +1350,7 @@ func (s *defaultOpenAIAccountScheduler) tryFallbackToWeightedSticky(
 		upstreamModel := canonicalOpenAIAccountSchedulingModel(account, req.RequestedModel)
 		now := time.Now()
 		if isGrokTeamModelRateLimited(account, upstreamModel, now) ||
-			isGrokModelQuotaBlocked(account.ID, upstreamModel, now) {
+			isGrokModelQuotaBlocked(account, upstreamModel, now) {
 			continue
 		}
 		result, acquireErr := s.service.tryAcquireAccountSlot(ctx, account.ID, account.Concurrency)
@@ -2735,7 +2735,7 @@ func (s *OpenAIGatewayService) ReportOpenAIAccountScheduleResult(account *Accoun
 	}
 	if success {
 		s.openaiOAuth429RetryStartedAt.Delete(accountID)
-		s.clearOpenAIAccountModelTransientState(accountID, normalizeOpenAIAccountModelTransientModel(model))
+		s.clearOpenAIAccountModelTransientState(account, normalizeOpenAIAccountModelTransientModel(model))
 	}
 	scheduler := s.getOpenAIAccountScheduler(context.Background())
 	if scheduler == nil {

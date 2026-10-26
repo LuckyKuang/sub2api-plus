@@ -639,6 +639,9 @@ function officialAccountAPISupported(account: CNUsageCellAccount, mode: string):
 }
 
 export function cnQuotaCellVisible(account: CNUsageCellAccount): boolean {
+  if (account.type === 'oauth' && ['kimi', 'minimax', 'deepseek', 'stepfun'].includes(account.platform)) {
+    return account.platform === 'kimi' || account.platform === 'stepfun'
+  }
   const { platform } = account
   const mode = cnUsageCellAccountMode(account)
   if (platform === 'opencode_go') return mode !== 'zen'

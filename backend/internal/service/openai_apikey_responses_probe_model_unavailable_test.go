@@ -26,7 +26,7 @@ func TestResponsesProbeModelUnavailableIsInconclusive(t *testing.T) {
 		require.True(t, decideResponsesProbeSupport(404, []byte(body)))
 		updates := make(chan map[string]any, 1)
 		account := Account{ID: 96, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Credentials: map[string]any{"api_key": "test", "base_url": "https://upstream.example"}}
-		repo := &snapshotUpdateAccountRepo{stubOpenAIAccountRepo: stubOpenAIAccountRepo{accounts: []Account{account}}, updateExtraCalls: updates}
+		repo := &responsesProbeTestRepo{stubOpenAIAccountRepo: stubOpenAIAccountRepo{accounts: []Account{account}}, updateExtraCalls: updates}
 		svc := &AccountTestService{accountRepo: repo, cfg: &config.Config{}, httpUpstream: &httpUpstreamRecorder{resp: &http.Response{
 			StatusCode: 404, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(body)),
 		}}}

@@ -17,6 +17,15 @@ distinct from the inference origin.
 
 ## Account link
 
+The account-link UI creates a new linked account. It currently has no operation
+to replace the login on an existing account in place. The existing-account menu
+therefore does not offer **Reauthorize account** for Zhipu; it must not send that
+account to another provider's login. Start a new account link when a replacement
+business login is needed. Short project-token renewal remains a separate
+internal operation and does not establish business-login refresh support.
+The menu also omits **Refresh token**, since the gateway has no published
+business-login refresh operation for this account type.
+
 The link is a **server-side polling handshake**. ZCode's own client authorizes in
 a browser and the provider hands control back to the client through a `zcode://`
 deep link; a server-hosted deployment can never receive that hand-off, so Plus
@@ -63,32 +72,104 @@ exchange must retain the session's proxy.
 
 ## Plan kinds
 
-A linked subscription is not a single credential. The official client derives a
-different one per plan, and the account material below mirrors it exactly. The
-plan kind is chosen by the operator because it cannot be inferred from the
-authorization alone.
+A linked subscription owns distinct login, project and inference material. The
+operator selects its plan kind because authorization alone does not identify the
+subscription to use.
 
 | Plan kind | Inference credential | Protocol | Endpoint |
 | --- | --- | --- | --- |
-| `individual-coding-plan` | derived project API key (`<apiKey>.<secretKey>`) | Chat Completions / Anthropic | estate coding + Anthropic origins |
-| `team-coding-plan` | derived team project key (`keyType=2`) plus `bigmodel-organization` / `bigmodel-project` | Chat Completions / Anthropic | estate coding + Anthropic origins |
+| `individual-coding-plan` | short-lived Project Access Token (PAT) | Chat Completions / Anthropic | estate coding + Anthropic origins |
+| `team-coding-plan` | short-lived PAT for the team Key ID (`keyType=2`), with organization/project scope | Chat Completions / Anthropic | estate coding + Anthropic origins |
 | `start-plan` | the ZCode token as a bearer credential | Anthropic | `https://zcode.z.ai/api/v1/zcode-plan/anthropic` |
-| `off-peak` | the ZCode token as a bearer credential plus the derived project key | Anthropic | `https://zcode.z.ai/api/v1/off-peak/anthropic` |
+| `off-peak` | the ZCode token plus a current coding-plan PAT and admission ticket | Anthropic | `https://zcode.z.ai/api/v1/off-peak/anthropic` |
 
-Deriving a project key follows the published sequence: read the customer profile,
-select a non-team organization/project (the default-named pair is preferred, and
-`projectType == "2"` team projects are skipped for personal keys), find or create
-the published key name, then copy its secret. Z.ai requires the copied secret;
-BigModel historically accepted the bare key.
+Project resolution reads the customer profile, selects a non-team
+organization/project for personal plans (preferring the default-named pair),
+and finds or creates the dedicated Key ID: `zcode-api-key` for personal plans or
+`zcode-team-api-key` with `keyType=2` for teams. Creation declares `usageScene=1`.
+The returned `apiKey` is a public resource ID. OAuth resolution does not call
+Copy Secret, reconstruct a long-lived key, or fall back to an earlier copied key.
 
-On the Z.ai estate the handshake returns an **OAuth** token that must first be
-exchanged through `POST /api/auth/z/login` for a business token; every business
-and key-derivation call uses the business token. BigModel already returns a
-business token and needs no exchange.
+PAT issuance uses
+`POST /api/biz/v1/organization/{org}/projects/{project}/api_keys/{id}/access_tokens`
+on the estate's business origin. It sends the business login token as Bearer
+and declares `clientType:"zcode"` plus the selected trusted client version.
+The customer lookup uses the bare login token in both estates. Personal key
+list/create keeps BigModel's bare token and Z.ai's Bearer token; team list/create
+uses the bare token with organization/project headers in both estates.
 
-Accounts created by the link use `api_protocol=adaptive` with explicit
-per-protocol base URLs, so neither estate ever falls back to another estate's
-compiled default.
+New linked account credentials retain the business login material, public Key ID
+and organization/project. The compatibility `api_key` field for personal/team
+plans contains the public Key ID; it is not a model authentication fallback.
+The runtime PAT owner resolves the current token before every physical model,
+probe and discovery send. PATs are held in memory, separate from stable account
+identity and persisted metadata. Existing linked accounts can reconstruct public
+metadata from their login rather than depend on an old copied secret.
+
+The PAT cache is scoped to the credential owner, login generation, estate,
+project, Key ID and proxy. Concurrent refreshes for that scope are merged in the
+process. Issuance must include a finite future `expiresAt`; a relative TTL cannot
+replace a missing absolute deadline. When a TTL is also returned, the earlier
+effective deadline applies, with a refresh margin of 120 seconds plus 0–60
+seconds jitter. A transient transport error, HTTP 429 or 5xx may retain an unexpired,
+unrejected PAT for five seconds before another refresh attempt. It never extends
+the original expiry. Authentication rejection, cancellation, disabled issuance,
+malformed material and expired or explicitly rejected PATs cannot fall back to
+a long-lived key. An account or login change rejects a late issuance result.
+
+On Z.ai, the handshake's OAuth token first goes through
+`POST /api/auth/z/login` to obtain the business token. BigModel already returns
+a business token. PAT renewal is distinct from refreshing that login credential.
+Explicitly entered API-key accounts retain their manual-key semantics; Start
+Plan retains its JWT channel.
+
+Linked accounts use `api_protocol=adaptive` with explicit per-protocol base URLs.
+Native OAuth-derived project authentication stays on its allowed estate and
+plan endpoints; generic URL/header configuration cannot choose another issuer.
+Start Plan sends `Authorization: Bearer <ZCode token>` automatically from its
+linked plan type, without an API-key authentication-scheme setting. Existing
+redundant scheme declarations do not change this native channel. Off-peak uses
+the same JWT bearer plus its separately acquired project PAT and ticket.
+
+Live model discovery for linked personal and team plans uses the estate's
+coding `GET /models` endpoint with the current PAT, even when inference uses the
+Anthropic protocol. It captures the selected identity and project owner before
+building the request; a login, plan, project or proxy change before send requires
+a retry. This path does not send a public Key ID or copied secret. Start Plan and
+off-peak do not expose this model-discovery path. Manual API-key accounts keep
+their configured model endpoint and manually entered credential.
+The public model cache includes the captured credential owner, keeping relinked
+logins separate while allowing PAT rotation within the same owner.
+Admin capability synchronization atomically compares the full request owner
+captured by PAT preparation before saving metadata, so a concurrent relink
+cannot inherit the previous project's model capabilities.
+
+## Coding-plan quota
+
+Linked personal and team accounts query
+`GET /api/monitor/usage/quota/limit` on `https://open.bigmodel.cn` or
+`https://api.z.ai`, according to the linked estate. The request uses the current
+PAT as the raw `Authorization` value, without `Bearer`, and the same account's
+proxy and trusted control-plane identity. Redirects and generic URL/header
+overrides cannot redirect the credential. Only team plans send `?type=2` and
+`bigmodel-organization`/`bigmodel-project`; personal project metadata does not
+imply team membership. Off-peak accounts retain an explicit parent-project kind
+(`zhipu_project_kind=personal|team`). Older off-peak accounts without that marker
+must relink before quota probing rather than infer a parent from project IDs.
+
+Only successful monitor envelopes and explicit finite, nonnegative percentages
+for units `3` (5h) and `6` (weekly) are scheduling observations. Token windows
+take precedence over credit windows. Missing, malformed, duplicate or unknown
+windows do not become zero or get classified from reset-time ordering. An
+unrecognized response preserves the previous snapshot; a recognized partial
+snapshot clears omitted windows and stale reset timestamps. HTTP 401/403 rejects
+the cached PAT and cannot retry with a Key ID or copied secret.
+
+Quota persistence atomically compares the captured credential owner against the
+stored account's full credentials, platform/type, proxy and active row before
+merging the observation. A concurrent relink, deletion or persistence failure
+produces no usable successful observation. A failed compare changes no snapshot,
+cache or outbox; an outbox failure rolls the observation back.
 
 ## Off-peak idle plan
 
@@ -100,7 +181,7 @@ issued by the platform, and the official client's queue is unbounded.
 | Availability | `GET /api/v1/off-peak/ticket/availability` | Take-number quota snapshot; gates new work only |
 | Take | `POST /api/v1/off-peak/ticket` | Returns `ticket_id`, `state`, queue `position`, `next_poll_after` |
 | Status | `POST /api/v1/off-peak/ticket/status` | Batch, up to 100 tickets |
-| Settle | `POST /api/v1/off-peak/ticket/{id}/settle` | Idempotent; 4xx is treated as an acknowledgement |
+| Settle | `POST /api/v1/off-peak/ticket/{id}/settle` | Idempotent; an empty successful 200/204 is an acknowledgement; errors retain the ticket for retry |
 
 States are `queued`, `ready`, `active`, `expired`, `settled` and `not_found`.
 A model request is admitted only while the ticket is `ready` or `active`; a
@@ -116,6 +197,24 @@ while queued is re-taken once. Tickets idle for longer than the settle window ar
 settled in the background, which returns the take-number quota; a failed settle
 is retried on the next cycle because the platform reclaims un-settled tickets by
 timeout anyway.
+
+The ticket protocol accepts the official bare JSON responses and zero-code
+envelopes. Empty successful settlement responses retire the ticket exactly once;
+they cannot create admission on a take request. A failed proxy connection,
+timeout, proxy HTTP 407 or upstream rejection leaves the outstanding generation
+available for retry. Recovery uses the original credential owner's captured
+proxy and identity. A missing, mismatched or malformed bound proxy is rejected
+before PAT issuance or ticket traffic; it never authorizes direct egress or a
+replacement route supplied by a caller. Invalid proxy errors omit credentials.
+The response contract follows official ZCode commit
+`3c5b227649371507ddc4eb46ac5133afe6db1cab`,
+`packages/services/src/session/offPeakServerClient.ts`.
+
+Ticket take, status and settle HTTP 401/403 invalidate only the PAT used for that
+physical call, so the next call must issue a fresh token. A delayed rejection
+cannot invalidate a PAT already rotated in the same scope. HTTP 429/5xx can retain
+a still-valid, unrejected token. Settlement always uses the original login,
+ZCode JWT, identity and project owner, including after relinking.
 
 | Business code | Meaning | Gateway behaviour |
 | --- | --- | --- |
@@ -134,10 +233,11 @@ gateway slot indefinitely.
 
 **Not supported:** the off-peak `task_id` continuation semantics. Plus issues its
 own `offpeak-<UUID>` task id per ticket lifetime and never resumes a previous
-run's queue position. Ticket settlement retains the acquiring credentials,
-identity and proxy even if settings change. A rotated grant/plan/proxy retires
-the old ticket before acquiring a new one. Every ticket generation is eligible
-for idle settlement. Forwarding and account probes require successful admission
+run's queue position. Ticket settlement retains the acquiring account scope,
+identity and proxy even if settings change. A new login/plan/proxy retires the
+old ticket before acquiring a new one. PAT renewal within the original scope
+does not turn the ticket into a different account's admission. Every ticket
+generation is eligible for idle settlement. Forwarding and account probes require successful admission
 before any model dispatch; a missing provider or failed acquisition cannot send
 a caller-supplied ticket or a request without one. A request cannot reuse a ticket while it is being
 settled. The acquisition budget covers lock contention and upstream calls.
@@ -167,8 +267,11 @@ for exact defaults, source evidence and the source-priority matrix.
 The account-link handshake and the credential-derivation calls are pre-account
 authorization operations. The session retains one native identity across start,
 poll, exchange and credential derivation, including Redis round trips. The
-created account pins that identity, and both OpenAI-compatible and Anthropic
-forwarding use the derived plan credential.
+created account pins that identity. Runtime PAT requests reuse the same
+credential-owner identity, and their body client version stays coherent with
+its trusted declarations. Short-lived authentication rotation does not select
+an identity source or alter the SDK fingerprint. Both OpenAI-compatible and
+Anthropic forwarding apply the current plan credential before sending.
 
 ## Known limitations
 
@@ -176,19 +279,36 @@ forwarding use the derived plan credential.
   only under the ZCode plan gateway, so a Chat Completions request routed to such
   an account falls back to the estate's default Chat Completions origin and will
   not be admitted. The official client also uses `anthropic-messages` for both.
-- **No refresh.** ZCode ships no refresh-token exchange, so an expired link must
-  be re-authorized. Plus stores the refresh token when the platform supplies one
-  but never rotates it, and registers no token refresher for these accounts.
-- **Resolution is per request.** A coding-plan key is derived at link time. If the
-  provider rotates the project key, re-link the account.
+- **Login renewal remains separate.** The short-lived PAT is renewed at request
+  time; the stored provider refresh token is not exchanged by a ZCode background
+  refresher. An invalid business login requires reauthorization.
+- **Public metadata is scoped.** Persisted project/Key IDs are not secrets or a
+  substitute for a valid login. A removed or inaccessible project cannot use an
+  old copied key to recover access.
 - **Team plans need their scope.** A team subscription can own several projects,
   so the organization and project must be supplied when linking.
 
 ## Unaffected areas
 
-Endpoint selection for API-key accounts, the Chat Completions / Responses /
-Anthropic adapters, `x-api-key` or bearer authentication, `anthropic-version`,
-beta handling, model discovery, coding-plan quota and pay-as-you-go balance
-probes, billing, scheduling, proxying and the ingress security-audit boundary all
-keep their existing behavior. Count-token requests for GLM remain a local
-estimate and send no upstream request.
+Manual API-key endpoint/authentication choices, the Chat Completions / Responses /
+Anthropic adapters, `anthropic-version`, beta handling, billing, scheduling,
+proxying and the ingress security-audit boundary retain their existing contracts.
+PAT resolution does not move model dispatch ahead of ingress audit. Count-token
+requests for GLM remain a local estimate and send no upstream request.
+
+## Protocol source evidence
+
+The PAT migration was checked against supplied ZCode commit
+`3c5b227649371507ddc4eb46ac5133afe6db1cab` on 2026-10-25:
+`packages/shared/src/project-access-token-client.ts`,
+`project-access-token.ts`, `project-access-token-response.ts`, and
+`docs/model-provider-project-access-token.md`. Compiled identity/SDK defaults
+remain the separately pinned declarations in
+[Outbound identity](../OUTBOUND_IDENTITY.md); this protocol migration does not
+implicitly update their versions.
+
+Requirement-based tests cover the actual issuance path and headers, absence of
+Copy Secret, personal/team estates, expiry and rejection, concurrent refresh,
+owner changes, cancellation and unchanged manual-key behavior. These use mock
+transports; real-account PAT issuance, long off-peak queues and provider
+acceptance require separate authorized upstream evidence.

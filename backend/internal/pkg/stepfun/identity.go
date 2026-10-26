@@ -4,7 +4,7 @@ package stepfun
 import "github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 
 const Preset = "stepfun"
-const UserAgent = "step (linux 6.8.0-31-generic; x64)"
+const UserAgent = "stepcode (linux 6.8.0-31-generic; x64)"
 const SDKVersion = "6.40.0"
 
 // DefaultIdentity follows Step-Code's providers/src/utils/pi-user-agent.ts and
@@ -12,7 +12,7 @@ const SDKVersion = "6.40.0"
 // SDK metadata belongs only to Chat Completions, not fetch-based discovery.
 func DefaultIdentity() outboundidentity.Identity {
 	return outboundidentity.Identity{
-		Preset: Preset, UserAgent: UserAgent, Originator: "step", Source: "compiled_default",
+		Preset: Preset, UserAgent: UserAgent, Originator: "stepcode", Source: "compiled_default",
 		Headers: map[string]string{"User-Agent": UserAgent},
 		Inference: map[string]outboundidentity.WireProfile{"chat_completions": {Headers: map[string]string{
 			"X-Step-Client":    "stepcode",

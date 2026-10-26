@@ -171,7 +171,9 @@ func (r *tokenRefreshAccountRepo) SetGrokCredentialTempUnschedulableIfMatch(
 }
 
 func grokCredentialSnapshotMatchesAccount(account *Account, snapshot GrokCredentialMutationSnapshot) bool {
-	return account != nil && account.IsGrokOAuth() && account.IsSchedulable() &&
+	expected := snapshot.Owner
+	return account != nil && expected != nil && account.ID == expected.ID && account.Platform == expected.Platform && account.Type == expected.Type &&
+		sameTestCNProxySnapshot(account.Proxy, expected.Proxy) && account.IsGrokOAuth() && account.IsSchedulable() &&
 		grokCredentialMutationSnapshot(account).CredentialsJSON == snapshot.CredentialsJSON &&
 		grokCredentialProxyIDsEqual(account.ProxyID, snapshot.ProxyID)
 }

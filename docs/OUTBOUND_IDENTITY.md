@@ -307,6 +307,15 @@ caller or a generic header override can never select one.
 
 ### Domestic-provider source evidence and source priority
 
+The declaration snapshots below establish the compiled identity and SDK pins.
+The 2026-10-25 protocol review additionally inspected DeepSeek Harness
+`22ddee3792402c3e70ec5f86a63c3e3e895a2f60`, Kimi Code
+`7ccac2b45b8a3481c76f771bb99c043b562de2c5`, MiniMax Code
+`da22f11c55d4748155d7162c1030414228a00565` and ZCode
+`3c5b227649371507ddc4eb46ac5133afe6db1cab`. That review adds OAuth control
+operations and Project Access Token authentication. It does not automatically
+adopt newer source-package versions as the selected wire defaults.
+
 The local client snapshots inspected for this implementation are:
 
 | Client | Commit | Declaration source |
@@ -604,6 +613,27 @@ request between Codex and another preset. Failover uses the other credential
 owner's snapshot; a fresh request observes new settings. OAuth exchange/refresh
 and its account/subscription enrich requests retain one identity as well.
 Authorization-code exchange and device-code start/poll omit identity headers.
+
+Their configured proxy binding is validated before any login request. Missing
+or mismatched proxy rows cannot become direct egress. Account-owned token
+refresh and revocation retain the hydrated credential owner's proxy snapshot
+and reject an unavailable or invalid bound route before provider IO.
+Browser and device sessions retain their initial proxy ID and URL; a callback
+may acknowledge the same ID but cannot re-resolve an edited row or choose a
+different binding. A different route requires a new login.
+
+WHAM usage, reset-credit details and credit consumption validate and capture
+the credential owner's proxy before token lookup or refresh. Shadow usage uses
+the parent's captured binding; Agent Identity has the same routing requirement.
+A missing or malformed binding cannot trigger a mutable proxy lookup, direct
+request or credential refresh. Explicitly unbound owners ignore stale hydrated
+proxy edges. These checks do not enable credit resets through shadow accounts.
+Usage, reset-credit details, consumption and their retries also retain the same
+captured authentication mode, account ID and selected identity. Token/cache
+lookups cannot pair a replacement login's credential with that earlier call's
+headers or route. Agent task recovery permits a newer task for the same owner;
+it rejects a relink before registering or replaying with another owner.
+
 Refresh and revoke send User-Agent and Originator only. The chatgpt.com
 backend-api auxiliary surface (login enrich `/backend-api/wham/accounts/check`,
 Plus-only subscription enrich, the settings PATCH behind `set-privacy`, WHAM
@@ -945,6 +975,20 @@ these strings, plus both MiniMax UAs and their six Stainless declarations.
 The fixture uses no live provider credentials or requests. SDK pins are owned by
 these presets and cannot be changed by inbound headers or generic overrides.
 
+ZCode Project Access Token issuance is also an account-service operation. Its
+`clientType:"zcode"` and selected `clientVersion` body declarations accompany the
+same trusted control identity. PAT rotation changes authentication, not the
+stable owner, identity source, client family, runtime facts or inference SDK
+suffix. No copied key or cached token fingerprint selects an identity. See
+[Zhipu / GLM](providers/ZHIPU.md) for token lifetime and project scope.
+
+ZCode monitor quota calls project that same owner's control identity, including
+the paired app version and control runtime facts, and omit `X-ZCode-Agent`.
+Their raw PAT authorization is independent of identity selection. Live personal
+and team model discovery stays on the linked estate's coding `/models` endpoint
+and authenticates with its current PAT; a public Key ID, earlier copied secret
+or generic URL/header override cannot become an authentication fallback.
+
 The gateway applies trusted ZCode product declarations to all account-service
 calls, including external business origins where official NodeApiClient only
 attaches the source block to its configured ZCode origin. This is an intentional
@@ -973,7 +1017,10 @@ are scoped to platform requests. No Codex source, family or default changes are 
 Native OAuth destinations and authentication are fixed by provider/region before
 sending. Refresh and inference reuse the same owner snapshot, and failover
 resolves the next owner. DeepSeek's `x-dsh-auth-token` is reserved against generic
-header overrides. The native paths disable redirects. Tests are in
+header overrides. The native paths disable redirects. Native Kimi model/usage
+queries and DeepSeek model/account-wallet queries reuse that same snapshot and
+fixed endpoint authentication; generic API-key defaults cannot select their
+credentials. New endpoints add no identity-family exception. Tests are in
 `internal/pkg/cnoauth`, `cn_oauth_service_test.go`, existing native Anthropic
 adapter/identity suites and frontend `useCNOAuth`/`CNOAuthPanel` suites. See
 [domestic OAuth](providers/DOMESTIC_OAUTH.md) for official source evidence,
@@ -995,6 +1042,7 @@ are insufficient for the final outbound privacy boundary.
 | Account/global/environment precedence, invalid candidates, version updates, retry/failover snapshots | `service/outbound_identity_test.go`, `outbound_environment_test.go`, `domestic_outbound_identity_test.go`, complete Codex identity suites |
 | No branded names/values; multi-value headers, redirects, cookies, rejected auth, signed requests | `pkg/brandidentity/brandidentity_test.go`, `service/bedrock_signer_test.go`, `openai_ws_client_test.go`, `plugin_security_regression_test.go` |
 | OAuth/account-service versus inference declarations; locale, timezone, DST and kernel build/release | `pkg/cnoauth/client_test.go`, `pkg/deepseek/identity_test.go`, `pkg/zcode/identity_test.go`, settings UI tests |
+| ZCode personal/team PAT quota and model discovery, fixed estate endpoints, source/companion coherence, login relinking and manual-key isolation | `service/zhipu_project_quota_test.go`, `service/zhipu_project_models_test.go` |
 | Cancellation/expiry and delayed responses, single consumption across replicas, unavailable/changed proxies | `useCNOAuth.spec.ts`, `useZhipuOAuth.spec.ts`, both login panel suites, `pkg/zcode/session_replica_test.go`, `service/zhipu_oauth_service_test.go`, admin handler tests |
 | Off-peak official task IDs, repeat retirement, original owner identity/auth, concurrent settlement, expired admission, rejection before forward/probe and bounded waits | `service/zhipu_offpeak_ticket_test.go` |
 
@@ -1007,7 +1055,7 @@ does not demonstrate these requirements.
 ## StepFun / Step-Code
 
 StepFun OAuth (Step Plan) and API Key accounts are pinned to the same `stepfun`
-preset. Exact identity: `step (linux 6.8.0-31-generic; x64)`, identifier `step`,
+preset. Exact identity: `stepcode (linux 6.8.0-31-generic; x64)`, identifier `stepcode`,
 empty product version. Step-Code's actual OpenAI adapter imports
 `packages/providers/src/utils/pi-user-agent.ts`; the coding-agent helper that
 accepts a version is not its inference UA. `step/environment.ts` defaults
@@ -1021,7 +1069,13 @@ Ubuntu Noble kernel are fixed independent of the server host. Discovery uses
 fetch upstream; this gateway adds the same trusted product UA as an explicit
 identity-policy difference, without inference attribution or SDK headers.
 Browser navigation uses the browser's own headers; the server does not claim
-it can override them. There is no default token exchange/refresh request.
+it can override them. Cloud login initialization/polling and optional Passport
+account-session refresh use the same trusted product UA without inference SDK
+headers. The init body separately declares client `stepcode`, version `0.84.4`,
+platform `linux-x64`; that provider-defined login audit metadata does not add a
+version segment to the product UA. Passport app/device headers are account-session
+protocol state and cannot select the identity source. No model-key refresh
+endpoint is inferred from the account-session refresh operation.
 No synthetic Originator, Version, device-name, locale or timezone header is
 sent. Optional high-sensitivity `x-step-*` trace fields are not generated.
 
@@ -1030,8 +1084,12 @@ read-only. Product-version updates cannot change it; SDK upgrades require new
 source and wire evidence. Other presets still require a complete version.
 Account > global native profile > compiled default applies atomically.
 Both OAuth and API Key retain Step-Code; foreign client-family selections are rejected.
-Retries, probes and discovery retain the credential owner's snapshot; failover
-resolves the new owner. Final header privacy remains mandatory for every path.
+Retries, probes, discovery and native Plan usage retain the credential owner's
+snapshot; failover resolves the new owner. Final header privacy remains mandatory
+for every path. Cloud login is based on Step-Code commit
+`81e79bc4b699148d6823fedde9b5e70d9a80255f` (`login-client.ts`,
+`login-refresh.ts`, `pi-user-agent.ts`); the product-token migration from `step`
+to `stepcode` is an explicit source-backed identity change, not a version-only sync.
 Settings preview exposes the shared profile and the Chat Completions wire block.
 
 Pre-account OAuth catalog discovery validates the ready session's owner,
@@ -1042,5 +1100,6 @@ literal discovery headers, both regions, proxy, and rejected session states.
 
 Independent StepFun tests cover exact literal wire declarations, four
 region/auth combinations, actual forwarding and probes/discovery, static-grant
-lifecycle, invalid/missing/duplicate state, single consumption, region pinning,
+lifecycle, bounded flow IDs, secret/public flow separation, cancellation,
+optional account-session refresh, single consumption, region pinning,
 versionless validation and source priority. See [StepFun](providers/STEPFUN.md).

@@ -63,7 +63,6 @@ func (h *OpenAIGatewayHandler) GrokRealtime(c *gin.Context) {
 	failed := map[int64]struct{}{}
 	var selection *service.AccountSelectionResult
 	var release func()
-	var token string
 	var upstream *service.GrokRealtimeUpstream
 	var candidateSeen bool
 	for attempts := 0; attempts < 4; attempts++ {
@@ -93,25 +92,19 @@ func (h *OpenAIGatewayHandler) GrokRealtime(c *gin.Context) {
 			failed[account.ID] = struct{}{}
 			continue
 		}
-		var credErr error
-		token, _, credErr = h.gatewayService.GetRequestCredential(c.Request.Context(), c, account)
-		if credErr != nil {
-			release()
-			release = nil
-			failed[account.ID] = struct{}{}
-			continue
-		}
 		probeCtx, cancelProbe := context.WithTimeout(c.Request.Context(), service.DefaultGrokRealtimeDialTimeout)
-		candidateUpstream, openErr := h.gatewayService.OpenGrokRealtime(probeCtx, account, token, model)
+		candidateUpstream, openErr := h.gatewayService.OpenGrokRealtimeForRequest(probeCtx, c, account, model)
 		cancelProbe()
 		if openErr != nil {
-			reqLog.Warn("grok_realtime.pre_accept_failed", zap.Int64("account_id", account.ID), zap.Error(openErr))
-			statusCode := http.StatusBadGateway
-			var dialErr *service.GrokRealtimeDialError
-			if errors.As(openErr, &dialErr) && dialErr.StatusCode > 0 {
-				statusCode = dialErr.StatusCode
+			var preparationErr *service.GrokRealtimePreparationError
+			if errors.As(openErr, &preparationErr) {
+				release()
+				release = nil
+				failed[account.ID] = struct{}{}
+				continue
 			}
-			h.gatewayService.HandleGrokRealtimeUpstreamError(c.Request.Context(), account, statusCode, []byte(openErr.Error()))
+			reqLog.Warn("grok_realtime.pre_accept_failed", zap.Int64("account_id", account.ID), zap.Error(openErr))
+			h.gatewayService.HandleGrokRealtimeUpstreamError(c.Request.Context(), openErr)
 			release()
 			release = nil
 			failed[account.ID] = struct{}{}

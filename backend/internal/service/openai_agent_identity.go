@@ -172,6 +172,14 @@ func decryptAgentTaskID(key agentIdentityKey, encoded string) (string, error) {
 }
 
 func registerAgentIdentityTaskWithIdentity(ctx context.Context, account *Account, identity openAIOutboundIdentity) (string, error) {
+	account, err := snapshotCNControlAccount(account)
+	if err != nil {
+		return "", err
+	}
+	proxyURL, err := account.StrictProxyURL()
+	if err != nil {
+		return "", err
+	}
 	key, err := agentIdentityKeyFromAccount(account)
 	if err != nil {
 		return "", err
@@ -179,10 +187,6 @@ func registerAgentIdentityTaskWithIdentity(ctx context.Context, account *Account
 	timestamp, signature, err := signAgentTaskRegistration(key, time.Now())
 	if err != nil {
 		return "", err
-	}
-	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
 	}
 	// agent task 注册是官方 auth 面请求：默认头只有 originator / User-Agent /
 	// residency，没有独立的 version 头；同时应用 Codex 自定义 CA。
@@ -309,7 +313,12 @@ func isRetryableAgentIdentityTaskRegistrationError(err error) bool {
 	return false
 }
 
-func ensureAgentIdentityTaskForAccountWithIdentity(ctx context.Context, repo AccountRepository, wsInvalidator agentIdentityWSConnectionInvalidator, taskMu *sync.Mutex, account *Account, expectedTaskID string, identity openAIOutboundIdentity) error {
+type agentIdentityTaskOwnerGuard struct {
+	validate func(*Account) error
+	persist  func(context.Context, *Account, map[string]any) (bool, error)
+}
+
+func ensureAgentIdentityTaskForAccountWithIdentity(ctx context.Context, repo AccountRepository, wsInvalidator agentIdentityWSConnectionInvalidator, taskMu *sync.Mutex, account *Account, expectedTaskID string, identity openAIOutboundIdentity, ownerGuards ...agentIdentityTaskOwnerGuard) error {
 	if account == nil || !account.IsOpenAIAgentIdentity() {
 		return nil
 	}
@@ -343,15 +352,49 @@ func ensureAgentIdentityTaskForAccountWithIdentity(ctx context.Context, repo Acc
 	}
 	sharedTaskMu.Lock()
 	defer sharedTaskMu.Unlock()
+	validateOwner := func(candidate *Account) error {
+		for _, guard := range ownerGuards {
+			if guard.validate != nil {
+				if err := guard.validate(candidate); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+	guarded := len(ownerGuards) > 0
+	if guarded && (len(ownerGuards) != 1 || ownerGuards[0].validate == nil || ownerGuards[0].persist == nil) {
+		return errors.New("agent identity credential owner guard is invalid")
+	}
+	if guarded && (repo == nil || credAccount.ID <= 0) {
+		return errors.New("agent identity credential owner cannot be verified")
+	}
 	// Re-read inside the shared lock. Different request paths often receive
 	// independent repository snapshots; checking only the caller's snapshot
 	// would allow sequential duplicate registrations after the first writer
 	// has already persisted a new task.
 	if repo != nil && credAccount.ID > 0 {
-		if refreshed, refreshErr := repo.GetByID(ctx, credAccount.ID); refreshErr == nil && refreshed != nil {
+		refreshed, refreshErr := repo.GetByID(ctx, credAccount.ID)
+		if guarded && (refreshErr != nil || refreshed == nil) {
+			return errors.New("agent identity credential owner is unavailable")
+		}
+		if refreshErr == nil && refreshed != nil {
 			if refreshed.IsShadow() {
-				if resolved, resolveErr := resolveCredentialAccount(ctx, repo, refreshed); resolveErr == nil && resolved != nil {
+				resolved, resolveErr := resolveCredentialAccount(ctx, repo, refreshed)
+				if guarded && (resolveErr != nil || resolved == nil) {
+					return errors.New("agent identity credential owner is unavailable")
+				}
+				if resolveErr == nil && resolved != nil {
 					refreshed = resolved
+				}
+			}
+			if err := validateOwner(refreshed); err != nil {
+				return err
+			}
+			if guarded {
+				refreshed, refreshErr = snapshotCNControlAccount(refreshed)
+				if refreshErr != nil {
+					return refreshErr
 				}
 			}
 			if refreshed.IsOpenAIAgentIdentity() {
@@ -366,16 +409,54 @@ func ensureAgentIdentityTaskForAccountWithIdentity(ctx context.Context, repo Acc
 	if currentTaskID != "" && (expectedTaskID == "" || currentTaskID != expectedTaskID) {
 		return nil
 	}
+	if err := validateOwner(credAccount); err != nil {
+		return err
+	}
 	newTaskID, err := registerAgentIdentityTaskWithIdentity(ctx, credAccount, identity)
 	if err != nil {
 		return err
+	}
+	if guarded {
+		// A relink while registration was in flight must not publish its task
+		// into a replacement login. A same-owner concurrent task may be reused.
+		refreshed, refreshErr := repo.GetByID(ctx, credAccount.ID)
+		if refreshErr != nil || refreshed == nil {
+			return errors.New("agent identity credential owner is unavailable")
+		}
+		if err := validateOwner(refreshed); err != nil {
+			return err
+		}
+		if taskID := strings.TrimSpace(refreshed.GetCredential("task_id")); taskID != "" && taskID != currentTaskID {
+			account.Credentials = shallowCopyMap(refreshed.Credentials)
+			return nil
+		}
 	}
 	credentials := make(map[string]any, len(credAccount.Credentials)+1)
 	for key, value := range credAccount.Credentials {
 		credentials[key] = value
 	}
 	credentials["task_id"] = newTaskID
-	if err := persistAccountCredentials(ctx, repo, credAccount, credentials); err != nil {
+	if guarded {
+		applied, err := ownerGuards[0].persist(ctx, credAccount, credentials)
+		if err != nil {
+			return err
+		}
+		if !applied {
+			refreshed, refreshErr := repo.GetByID(ctx, credAccount.ID)
+			if refreshErr != nil || refreshed == nil {
+				return errors.New("agent identity credential owner is unavailable")
+			}
+			if err := validateOwner(refreshed); err != nil {
+				return err
+			}
+			if taskID := strings.TrimSpace(refreshed.GetCredential("task_id")); taskID != "" && taskID != currentTaskID {
+				account.Credentials = shallowCopyMap(refreshed.Credentials)
+				return nil
+			}
+			return errors.New("agent identity credential owner changed during task persistence")
+		}
+		credAccount.Credentials = shallowCopyMap(credentials)
+	} else if err := persistAccountCredentials(ctx, repo, credAccount, credentials); err != nil {
 		return err
 	}
 	if !account.IsShadow() && account != credAccount {

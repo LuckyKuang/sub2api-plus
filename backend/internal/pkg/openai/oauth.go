@@ -60,6 +60,7 @@ type OAuthSession struct {
 	// different account by a browser request.
 	AccountID      *int64    `json:"account_id,omitempty"`
 	ProxyURL       string    `json:"proxy_url,omitempty"`
+	ProxyID        *int64    `json:"proxy_id,omitempty"`
 	RedirectURI    string    `json:"redirect_uri"`
 	CreatedAt      time.Time `json:"created_at"`
 	DeviceAuthID   string    `json:"device_auth_id,omitempty"`

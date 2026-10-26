@@ -14,6 +14,7 @@ import (
 
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/proxyurl"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/zcode"
 )
 
@@ -55,19 +56,21 @@ type ZhipuOffPeakTicket struct {
 // which is the closest a stateless gateway can get to the official client's
 // run-segment ticket.
 type zhipuOffPeakHolder struct {
-	gate     *semaphore.Weighted
-	taskID   string
-	ticketID string
-	state    string
-	position *int
-	lastUsed time.Time
-	auth     zcode.OffPeakAuth
-	identity outboundidentity.Identity
-	proxyURL string
+	gate           *semaphore.Weighted
+	taskID         string
+	ticketID       string
+	state          string
+	position       *int
+	lastUsed       time.Time
+	auth           zcode.OffPeakAuth
+	identity       outboundidentity.Identity
+	proxyURL       string
+	projectAccount *Account
 }
 
 // ZhipuOffPeakTicketManager acquires and retires off-peak tickets per account.
 type ZhipuOffPeakTicketManager struct {
+	projectTokens  *ZhipuProjectTokenManager
 	client         ZhipuOffPeakClient
 	acquireTimeout time.Duration
 	settleIdle     time.Duration
@@ -129,6 +132,17 @@ func (m *ZhipuOffPeakTicketManager) Acquire(ctx context.Context, account *Accoun
 	if account == nil || account.ID <= 0 {
 		return nil, infraerrors.New(http.StatusBadRequest, "ZHIPU_OFFPEAK_ACCOUNT_INVALID", "off-peak ticket acquisition requires a persisted account")
 	}
+	snapshot, snapshotErr := snapshotCNControlAccount(account)
+	if snapshotErr != nil {
+		return nil, snapshotErr
+	}
+	account = snapshot
+	ownerProxy, routeErr := account.StrictProxyURL()
+	providedProxy, _, parseErr := proxyurl.Parse(proxyURL)
+	if routeErr != nil || parseErr != nil || providedProxy != ownerProxy {
+		return nil, infraerrors.New(http.StatusBadGateway, "ZHIPU_OFFPEAK_PROXY_INVALID", "off-peak credential proxy is unavailable")
+	}
+	proxyURL = ownerProxy
 	if strings.TrimSpace(auth.JWT) == "" {
 		return nil, infraerrors.New(http.StatusBadRequest, "ZHIPU_OFFPEAK_CREDENTIAL_MISSING", "off-peak ticket acquisition requires the zcode token")
 	}
@@ -153,24 +167,43 @@ func (m *ZhipuOffPeakTicketManager) Acquire(ctx context.Context, account *Accoun
 	// snapshot before accepting a changed plan, grant or proxy.
 	previous, next := holder.auth, auth
 	previous.RequestID, next.RequestID = "", ""
-	if holder.ticketID != "" && (previous != next || holder.proxyURL != proxyURL) {
+	sameProjectOwner := holder.projectAccount != nil && projectTokenScope(holder.projectAccount) == projectTokenScope(account)
+	if sameProjectOwner {
+		previous.PlanKey, next.PlanKey = "", ""
+	}
+	if holder.ticketID != "" && (previous != next || holder.proxyURL != proxyURL || (holder.projectAccount != nil && !sameProjectOwner)) {
 		settleCtx := outboundidentity.WithIdentity(ctx, holder.identity)
-		if err := m.client.SettleTicket(settleCtx, holder.ticketID, holder.auth, holder.proxyURL); err != nil {
+		if err := m.refreshHolderAuth(settleCtx, holder); err != nil {
+			return nil, err
+		}
+		usedAuth := holder.auth
+		if err := m.client.SettleTicket(settleCtx, holder.ticketID, usedAuth, holder.proxyURL); err != nil {
+			m.projectTokens.observeTicketRejection(holder.projectAccount, usedAuth.PlanKey, err)
 			return nil, offPeakAcquireError(err)
 		}
+		m.projectTokens.forgetTicket(holder.projectAccount)
 		holder.ticketID, holder.taskID = "", ""
 	}
 	if holder.ticketID == "" {
 		holder.auth = auth
 		holder.identity, _ = outboundidentity.FromContext(ctx)
 		holder.proxyURL = proxyURL
+		holder.projectAccount = nil
+		if usesZhipuProjectToken(account) && account.GetCredential("access_token") != "" {
+			holder.projectAccount = snapshotOAuthRefreshAccount(account)
+		}
 	}
 	// Admission can expire while requests keep the local idle clock alive.
 	// Recheck a reused ready/active ticket before handing it to another request.
 	if holder.ticketID != "" && (holder.state == zcode.TicketReady || holder.state == zcode.TicketActive) {
 		statusCtx := outboundidentity.WithIdentity(ctx, holder.identity)
-		tickets, _, err := m.client.TicketStatus(statusCtx, []string{holder.ticketID}, holder.auth, holder.proxyURL)
+		if err := m.refreshHolderAuth(statusCtx, holder); err != nil {
+			return nil, err
+		}
+		usedAuth := holder.auth
+		tickets, _, err := m.client.TicketStatus(statusCtx, []string{holder.ticketID}, usedAuth, holder.proxyURL)
 		if err != nil {
+			m.projectTokens.observeTicketRejection(holder.projectAccount, usedAuth.PlanKey, err)
 			return nil, offPeakAcquireError(err)
 		}
 		holder.state = zcode.TicketNotFound
@@ -207,8 +240,13 @@ func (m *ZhipuOffPeakTicketManager) acquireLocked(ctx context.Context, holder *z
 				return nil, infraerrors.New(http.StatusTooManyRequests, "ZHIPU_OFFPEAK_QUEUE_TIMEOUT", "off-peak tickets keep expiring before admission; retry later")
 			}
 			takes++
-			ticket, err := m.client.TakeTicket(ctx, holder.taskID, holder.auth, holder.proxyURL)
+			if err := m.refreshHolderAuth(ctx, holder); err != nil {
+				return nil, err
+			}
+			usedAuth := holder.auth
+			ticket, err := m.client.TakeTicket(ctx, holder.taskID, usedAuth, holder.proxyURL)
 			if err != nil {
+				m.projectTokens.observeTicketRejection(holder.projectAccount, usedAuth.PlanKey, err)
 				return nil, offPeakAcquireError(err)
 			}
 			holder.lastUsed = m.now()
@@ -275,8 +313,13 @@ func (m *ZhipuOffPeakTicketManager) admittedLocked(holder *zhipuOffPeakHolder) *
 
 // nextPollDelay polls the platform once and returns the next delay.
 func (m *ZhipuOffPeakTicketManager) nextPollDelay(ctx context.Context, holder *zhipuOffPeakHolder, deadline time.Time) time.Duration {
-	tickets, platformDelay, err := m.client.TicketStatus(ctx, []string{holder.ticketID}, holder.auth, holder.proxyURL)
+	if err := m.refreshHolderAuth(ctx, holder); err != nil {
+		return offPeakPollFloor
+	}
+	usedAuth := holder.auth
+	tickets, platformDelay, err := m.client.TicketStatus(ctx, []string{holder.ticketID}, usedAuth, holder.proxyURL)
 	if err != nil {
+		m.projectTokens.observeTicketRejection(holder.projectAccount, usedAuth.PlanKey, err)
 		// A failed status poll is transient: keep the ticket and retry at the
 		// floor rather than discarding admission state.
 		return offPeakPollFloor
@@ -349,9 +392,15 @@ func (m *ZhipuOffPeakTicketManager) sweepOnce() {
 		settleCtx, cancel := context.WithTimeout(outboundidentity.WithIdentity(context.Background(), holder.identity), 30*time.Second)
 		// Keep the holder locked until settlement finishes: a concurrent request
 		// must not be handed the ticket while the platform is retiring it.
-		err := m.client.SettleTicket(settleCtx, ticketID, auth, proxyURL)
+		err := m.refreshHolderAuth(settleCtx, holder)
+		if err == nil {
+			auth = holder.auth
+			err = m.client.SettleTicket(settleCtx, ticketID, auth, proxyURL)
+			m.projectTokens.observeTicketRejection(holder.projectAccount, auth.PlanKey, err)
+		}
 		cancel()
 		if err == nil {
+			m.projectTokens.forgetTicket(holder.projectAccount)
 			holder.ticketID = ""
 			holder.state = zcode.TicketSettled
 			holder.taskID = ""
@@ -429,9 +478,8 @@ func SetZhipuOffPeakTicketProvider(provider zhipuOffPeakTicketProvider) {
 }
 
 // applyZhipuOffPeakTicketHeader injects the per-request off-peak declarations.
-// The static declarations (bearer plan token, coding-plan key, team scope) stay
-// owned by the account credential and header-override layers; only the ticket id
-// is request-scoped.
+// The plan JWT and scope belong to the captured account. The project-token
+// manager refreshes the coding credential for each physical model/ticket send.
 func applyZhipuOffPeakTicketHeader(ctx context.Context, account *Account, headers http.Header) error {
 	if account == nil || !account.IsZhipu() || strings.TrimSpace(account.GetCredential("plan_kind")) != ZhipuPlanOffPeak {
 		return nil
@@ -461,6 +509,15 @@ func (m *ZhipuOffPeakTicketManager) TicketForRequest(ctx context.Context, accoun
 	if m == nil || account == nil {
 		return "", infraerrors.New(http.StatusServiceUnavailable, "ZHIPU_OFFPEAK_UNAVAILABLE", "off-peak ticket manager is unavailable")
 	}
+	snapshot, snapshotErr := snapshotCNControlAccount(account)
+	if snapshotErr != nil {
+		return "", snapshotErr
+	}
+	account = snapshot
+	proxyURL, routeErr := account.StrictProxyURL()
+	if routeErr != nil {
+		return "", infraerrors.New(http.StatusBadGateway, "ZHIPU_OFFPEAK_PROXY_INVALID", "off-peak credential proxy is unavailable")
+	}
 	jwt := strings.TrimSpace(account.GetCredential("zcode_jwt_token"))
 	if jwt == "" {
 		jwt = strings.TrimSpace(account.GetOpenAIProtocolAPIKey())
@@ -469,13 +526,22 @@ func (m *ZhipuOffPeakTicketManager) TicketForRequest(ctx context.Context, accoun
 	if planKey == "" {
 		planKey = strings.TrimSpace(account.GetCredential("api_key"))
 	}
-	auth := zcode.OffPeakAuth{
-		JWT:      jwt,
-		PlanKey:  planKey,
-		TeamOrg:  strings.TrimSpace(account.GetCredential("zhipu_organization")),
-		TeamProj: strings.TrimSpace(account.GetCredential("zhipu_project")),
+	if usesZhipuProjectToken(account) {
+		var err error
+		planKey, err = m.projectTokens.Token(ctx, account)
+		if err != nil {
+			return "", err
+		}
 	}
-	ticket, err := m.Acquire(ctx, account, auth, account.proxyURLOrEmpty())
+	auth := zcode.OffPeakAuth{
+		JWT:     jwt,
+		PlanKey: planKey,
+	}
+	if account.GetCredential("zhipu_project_kind") == "team" {
+		auth.TeamOrg = strings.TrimSpace(account.GetCredential("zhipu_organization"))
+		auth.TeamProj = strings.TrimSpace(account.GetCredential("zhipu_project"))
+	}
+	ticket, err := m.Acquire(ctx, account, auth, proxyURL)
 	if err != nil {
 		return "", err
 	}
@@ -488,4 +554,16 @@ func (a *Account) proxyURLOrEmpty() string {
 		return ""
 	}
 	return a.Proxy.URL()
+}
+
+func (m *ZhipuOffPeakTicketManager) refreshHolderAuth(ctx context.Context, holder *zhipuOffPeakHolder) error {
+	if holder.projectAccount == nil {
+		return nil
+	}
+	token, err := m.projectTokens.tokenForTicket(ctx, holder.projectAccount)
+	if err != nil {
+		return err
+	}
+	holder.auth.PlanKey = token
+	return nil
 }

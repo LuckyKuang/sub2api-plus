@@ -272,6 +272,7 @@ func TestOpenAIGatewayService_Forward_WSv2Handshake502RecordsModelTransient(t *t
 		openaiWSResolver: NewOpenAIWSProtocolResolver(cfg),
 		toolCorrector:    NewCodexToolCorrector(),
 	}
+	svc.accountRepo = transientCooldownAccountRepo{current: &account}
 	body := []byte(`{"model":"gpt-5.5","stream":false,"input":"hello"}`)
 
 	for range 2 {

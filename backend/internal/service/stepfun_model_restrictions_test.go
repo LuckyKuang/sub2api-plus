@@ -21,7 +21,9 @@ func TestStepFunOAuthCatalogBeforeCreation(t *testing.T) {
 		t.Run(region, func(t *testing.T) {
 			admin := &cnOAuthAdminStub{}
 			proxyID := int64(9)
+			proxyLookups := 0
 			proxyRepo := &mockProxyRepoForOAuth{getByIDFunc: func(_ context.Context, id int64) (*Proxy, error) {
+				proxyLookups++
 				require.Equal(t, proxyID, id)
 				return &Proxy{Protocol: "http", Host: "proxy.example", Port: 8080}, nil
 			}}
@@ -33,6 +35,7 @@ func TestStepFunOAuthCatalogBeforeCreation(t *testing.T) {
 			require.NoError(t, svc.store.Update(ctx, id, func(_ context.Context, session *cnoauth.Session) error {
 				session.Flow.Region = region
 				session.ProxyID = &proxyID
+				session.ProxyURL = "http://proxy.example:8080"
 				return nil
 			}))
 			models, err := svc.PreviewModels(ctx, 7, "stepfun", id)
@@ -53,6 +56,7 @@ func TestStepFunOAuthCatalogBeforeCreation(t *testing.T) {
 			_, err = svc.PreviewModels(ctx, 7, "stepfun", id)
 			require.Error(t, err, "consumed grants cannot fetch models")
 			require.Len(t, upstream.requests, 1)
+			require.Zero(t, proxyLookups, "ready grants retain their captured route through preview and creation")
 		})
 	}
 }

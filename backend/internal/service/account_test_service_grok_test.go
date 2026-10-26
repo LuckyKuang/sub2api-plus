@@ -26,8 +26,10 @@ import (
 
 type grokAccountTestRateLimitRepo struct {
 	*mockAccountRepoForGemini
-	rateLimitedCalls int
-	resetAt          time.Time
+	rateLimitedCalls       int
+	atomicOutcomeCalls     int
+	legacyRateLimitedCalls int
+	resetAt                time.Time
 }
 
 func TestObserveGrokTestResponseClassifiesBodyOnlyQuotaErrors(t *testing.T) {
@@ -84,10 +86,20 @@ func TestObserveGrokTestResponseKeepsEntitlement403Cooldown(t *testing.T) {
 	require.Greater(t, repo.lastTempUnschedUntil, before.Add(29*time.Minute))
 }
 
-func (r *grokAccountTestRateLimitRepo) SetRateLimited(_ context.Context, _ int64, resetAt time.Time) error {
-	r.rateLimitedCalls++
-	r.resetAt = resetAt
+func (r *grokAccountTestRateLimitRepo) SetRateLimited(_ context.Context, _ int64, _ time.Time) error {
+	r.legacyRateLimitedCalls++
 	return nil
+}
+
+func (r *grokAccountTestRateLimitRepo) ApplyGrokRequestOutcomeIfUnchanged(ctx context.Context, owner *Account, outcome GrokRequestOutcome) (GrokRequestOutcomeResult, error) {
+	r.atomicOutcomeCalls++
+	writer := &grokOutcomeOwnerRepo{current: r.accountsByID[owner.ID]}
+	result, err := writer.ApplyGrokRequestOutcomeIfUnchanged(ctx, owner, outcome)
+	if err == nil && result.Applied && outcome.RateLimitResetAt != nil {
+		r.rateLimitedCalls++
+		r.resetAt = *outcome.RateLimitResetAt
+	}
+	return result, err
 }
 
 func TestAccountTestService_TestAccountConnection_GrokUsesXAIResponses(t *testing.T) {
@@ -227,6 +239,11 @@ func TestAccountTestService_Grok429PersistsRateLimitReset(t *testing.T) {
 
 	require.Error(t, err)
 	require.Equal(t, 1, repo.rateLimitedCalls)
+	require.Equal(t, 1, repo.atomicOutcomeCalls, "one diagnostic response must persist its quota and reset in one owner-conditional operation")
+	require.Zero(t, repo.legacyRateLimitedCalls, "diagnostics cannot bypass the credential-owner CAS through an ID-only rate-limit write")
+	require.NotNil(t, account.RateLimitedAt)
+	require.NotNil(t, account.RateLimitResetAt)
+	require.Equal(t, repo.resetAt, *account.RateLimitResetAt, "the observed reset must actually be saved on the credential-owning account")
 	require.WithinDuration(t, time.Now().Add(45*time.Second), repo.resetAt, time.Second)
 }
 
@@ -259,6 +276,11 @@ func TestAccountTestService_Grok429WithoutQuotaHeadersUsesFallback(t *testing.T)
 
 	require.Error(t, err)
 	require.Equal(t, 1, repo.rateLimitedCalls)
+	require.Equal(t, 1, repo.atomicOutcomeCalls, "one diagnostic response must persist its quota and reset in one owner-conditional operation")
+	require.Zero(t, repo.legacyRateLimitedCalls, "diagnostics cannot bypass the credential-owner CAS through an ID-only rate-limit write")
+	require.NotNil(t, account.RateLimitedAt)
+	require.NotNil(t, account.RateLimitResetAt)
+	require.Equal(t, repo.resetAt, *account.RateLimitResetAt, "the observed reset must actually be saved on the credential-owning account")
 	require.WithinDuration(t, before.Add(grokRateLimitFallbackCooldown), repo.resetAt, time.Second)
 }
 

@@ -1028,6 +1028,7 @@ import { useTableSelection } from '@/composables/useTableSelection'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import { formatDateTime } from '@/utils/format'
 import { proxyExpiryBadgeClass, proxyExpiryLabelKey } from '@/utils/proxyExpiry'
+import { proxyTestSnapshot } from '@/utils/proxyTestSnapshot'
 
 const { t, locale } = useI18n()
 
@@ -1121,6 +1122,10 @@ const submitting = ref(false)
 const exportingData = ref(false)
 const testingProxyIds = ref<Set<number>>(new Set())
 const qualityCheckingProxyIds = ref<Set<number>>(new Set())
+type ProbeRun<T> = { snapshot?: string; promise: Promise<T | null> }
+const connectionRuns = new Map<number, ProbeRun<Awaited<ReturnType<typeof adminAPI.proxies.testProxy>>>>()
+const qualityRuns = new Map<number, ProbeRun<ProxyQualityCheckResult>>()
+let disposed = false
 const batchTesting = ref(false)
 const batchQualityChecking = ref(false)
 const proxyTableRef = ref<HTMLElement | null>(null)
@@ -1242,6 +1247,7 @@ const buildProxyQueryFilters = () => ({
 })
 
 const loadProxies = async () => {
+  if (disposed) return
   if (abortController) {
     abortController.abort()
   }
@@ -1628,73 +1634,120 @@ const stopQualityCheckingProxy = (proxyId: number) => {
   qualityCheckingProxyIds.value = next
 }
 
-const runProxyTest = async (proxyId: number, notify: boolean) => {
+const runProxyTest = async (proxyId: number, notify: boolean, captured?: Proxy) => {
+  if (disposed) return null
+  const owner = proxies.value.find(proxy => proxy.id === proxyId) || captured
+  const snapshot = owner ? proxyTestSnapshot(owner) : undefined
+  const pending = connectionRuns.get(proxyId)
+  if (pending && pending.snapshot === snapshot) return pending.promise
+  const run: ProbeRun<Awaited<ReturnType<typeof adminAPI.proxies.testProxy>>> = { snapshot, promise: Promise.resolve(null) }
+  connectionRuns.set(proxyId, run)
+  const isCurrent = () => connectionRuns.get(proxyId) === run && snapshot !== undefined && proxies.value.some(proxy => proxy.id === proxyId && proxyTestSnapshot(proxy) === snapshot)
   startTestingProxy(proxyId)
-  try {
-    const result = await adminAPI.proxies.testProxy(proxyId)
-    applyLatencyResult(proxyId, result)
-    if (notify) {
-      if (result.success) {
-        const message = result.latency_ms
-          ? t('admin.proxies.proxyWorkingWithLatency', { latency: result.latency_ms })
-          : t('admin.proxies.proxyWorking')
-        appStore.showSuccess(message)
-      } else {
-        appStore.showError(result.message || t('admin.proxies.proxyTestFailed'))
+  run.promise = (async () => {
+    try {
+      const result = await adminAPI.proxies.testProxy(proxyId)
+      if (!isCurrent()) return null
+      applyLatencyResult(proxyId, result)
+      if (notify) {
+        if (result.success) {
+          const message = result.latency_ms
+            ? t('admin.proxies.proxyWorkingWithLatency', { latency: result.latency_ms })
+            : t('admin.proxies.proxyWorking')
+          appStore.showSuccess(message)
+        } else {
+          appStore.showError(result.message || t('admin.proxies.proxyTestFailed'))
+        }
+      }
+      return result
+    } catch (error: any) {
+      if (!isCurrent()) return null
+      const message = error.response?.data?.detail || t('admin.proxies.failedToTest')
+      applyLatencyResult(proxyId, { success: false, message })
+      if (notify) {
+        appStore.showError(message)
+      }
+      console.error('Error testing proxy:', error)
+      return null
+    } finally {
+      if (connectionRuns.get(proxyId) === run) {
+        connectionRuns.delete(proxyId)
+        stopTestingProxy(proxyId)
       }
     }
-    return result
-  } catch (error: any) {
-    const message = error.response?.data?.detail || t('admin.proxies.failedToTest')
-    applyLatencyResult(proxyId, { success: false, message })
-    if (notify) {
-      appStore.showError(message)
-    }
-    console.error('Error testing proxy:', error)
-    return null
-  } finally {
-    stopTestingProxy(proxyId)
-  }
+  })()
+  return run.promise
 }
 
 const handleTestConnection = async (proxy: Proxy) => {
   await runProxyTest(proxy.id, true)
 }
 
-const handleQualityCheck = async (proxy: Proxy) => {
-  startQualityCheckingProxy(proxy.id)
-  try {
-    const result = await adminAPI.proxies.checkProxyQuality(proxy.id)
-    qualityReportProxy.value = proxy
-    qualityReport.value = result
-    showQualityReportDialog.value = true
-
-    const baseStep = result.items.find((item) => item.target === 'base_connectivity')
-    if (baseStep && baseStep.status === 'pass') {
-      applyLatencyResult(proxy.id, {
-        success: true,
-        latency_ms: result.base_latency_ms,
-        message: result.summary,
-        ip_address: result.exit_ip,
-        country: result.country,
-        country_code: result.country_code
-      })
+const runProxyQualityCheck = async (proxyId: number, notify: boolean, captured?: Proxy) => {
+  if (disposed) return null
+  const owner = proxies.value.find(proxy => proxy.id === proxyId) || captured
+  const snapshot = owner ? proxyTestSnapshot(owner) : undefined
+  const pending = qualityRuns.get(proxyId)
+  if (pending && pending.snapshot === snapshot) return pending.promise
+  const visibleAtStart = proxies.value.some(proxy => proxy.id === proxyId)
+  const run: ProbeRun<ProxyQualityCheckResult> = { snapshot, promise: Promise.resolve(null) }
+  qualityRuns.set(proxyId, run)
+  const isCurrent = () => {
+    if (qualityRuns.get(proxyId) !== run) return false
+    const target = proxies.value.find(proxy => proxy.id === proxyId)
+    return target ? snapshot !== undefined && proxyTestSnapshot(target) === snapshot : !visibleAtStart
+  }
+  startQualityCheckingProxy(proxyId)
+  run.promise = (async () => {
+    try {
+      const result = await adminAPI.proxies.checkProxyQuality(proxyId)
+      if (!isCurrent()) return null
+      if (notify && owner) {
+        qualityReportProxy.value = owner
+        qualityReport.value = result
+        showQualityReportDialog.value = true
+      }
+      const baseStep = result.items.find((item) => item.target === 'base_connectivity')
+      if (baseStep && baseStep.status === 'pass') {
+        applyLatencyResult(proxyId, {
+          success: true,
+          latency_ms: result.base_latency_ms,
+          message: result.summary,
+          ip_address: result.exit_ip,
+          country: result.country,
+          country_code: result.country_code
+        })
+      }
+      applyQualityResult(proxyId, result)
+      if (notify) appStore.showSuccess(t('admin.proxies.qualityCheckDone', { score: result.score, grade: result.grade }))
+      return result
+    } catch (error: any) {
+      if (!isCurrent()) return null
+      if (notify) {
+        appStore.showError(error.response?.data?.detail || t('admin.proxies.qualityCheckFailed'))
+        console.error('Error checking proxy quality:', error)
+      }
+      throw error
+    } finally {
+      if (qualityRuns.get(proxyId) === run) {
+        qualityRuns.delete(proxyId)
+        stopQualityCheckingProxy(proxyId)
+      }
     }
-    applyQualityResult(proxy.id, result)
+  })()
+  return run.promise
+}
 
-    appStore.showSuccess(
-      t('admin.proxies.qualityCheckDone', { score: result.score, grade: result.grade })
-    )
-  } catch (error: any) {
-    const message = error.response?.data?.detail || t('admin.proxies.qualityCheckFailed')
-    appStore.showError(message)
-    console.error('Error checking proxy quality:', error)
-  } finally {
-    stopQualityCheckingProxy(proxy.id)
+const handleQualityCheck = async (proxy: Proxy) => {
+  try {
+    await runProxyQualityCheck(proxy.id, true)
+  } catch {
+    // The current single probe already presents its error; batch callers count
+    // the same shared failure independently in their completion summary.
   }
 }
 
-const runBatchProxyQualityChecks = async (ids: number[]) => {
+const runBatchProxyQualityChecks = async (ids: number[], snapshots: Proxy[]) => {
   if (ids.length === 0) return { total: 0, healthy: 0, warn: 0, challenge: 0, failed: 0 }
 
   const concurrency = 3
@@ -1705,27 +1758,12 @@ const runBatchProxyQualityChecks = async (ids: number[]) => {
   let failed = 0
 
   const worker = async () => {
-    while (index < ids.length) {
+    while (!disposed && index < ids.length) {
       const current = ids[index]
       index++
-      startQualityCheckingProxy(current)
       try {
-        const result = await adminAPI.proxies.checkProxyQuality(current)
-        const target = proxies.value.find((proxy) => proxy.id === current)
-        if (target) {
-          const baseStep = result.items.find((item) => item.target === 'base_connectivity')
-          if (baseStep && baseStep.status === 'pass') {
-            applyLatencyResult(current, {
-              success: true,
-              latency_ms: result.base_latency_ms,
-              message: result.summary,
-              ip_address: result.exit_ip,
-              country: result.country,
-              country_code: result.country_code
-            })
-          }
-        }
-        applyQualityResult(current, result)
+        const result = await runProxyQualityCheck(current, false, snapshots.find(proxy => proxy.id === current))
+        if (!result) continue
         if (result.challenge_count > 0) {
           challenge++
         } else if (result.failed_count > 0) {
@@ -1737,8 +1775,6 @@ const runBatchProxyQualityChecks = async (ids: number[]) => {
         }
       } catch {
         failed++
-      } finally {
-        stopQualityCheckingProxy(current)
       }
     }
   }
@@ -1872,7 +1908,7 @@ const fetchAllProxiesForBatch = async (): Promise<Proxy[]> => {
   let page = 1
   let totalPages = 1
 
-  while (page <= totalPages) {
+  while (!disposed && page <= totalPages) {
     const response = await adminAPI.proxies.list(
       page,
       pageSize,
@@ -1884,6 +1920,7 @@ const fetchAllProxiesForBatch = async (): Promise<Proxy[]> => {
         sort_order: sortState.sort_order
       }
     )
+    if (disposed) return []
     result.push(...response.items)
     totalPages = response.pages || 1
     page++
@@ -1892,16 +1929,16 @@ const fetchAllProxiesForBatch = async (): Promise<Proxy[]> => {
   return result
 }
 
-const runBatchProxyTests = async (ids: number[]) => {
+const runBatchProxyTests = async (ids: number[], snapshots: Proxy[]) => {
   if (ids.length === 0) return
   const concurrency = 5
   let index = 0
 
   const worker = async () => {
-    while (index < ids.length) {
+    while (!disposed && index < ids.length) {
       const current = ids[index]
       index++
-      await runProxyTest(current, false)
+      await runProxyTest(current, false, snapshots.find(proxy => proxy.id === current))
     }
   }
 
@@ -1910,27 +1947,32 @@ const runBatchProxyTests = async (ids: number[]) => {
 }
 
 const handleBatchTest = async () => {
-  if (batchTesting.value) return
+  if (disposed || batchTesting.value) return
 
   batchTesting.value = true
   try {
     let ids: number[] = []
+    let snapshots: Proxy[] = []
     if (selectedCount.value > 0) {
       ids = Array.from(selectedProxyIds.value)
     } else {
       const allProxies = await fetchAllProxiesForBatch()
+      snapshots = allProxies
       ids = allProxies.map((proxy) => proxy.id)
     }
+    if (disposed) return
 
     if (ids.length === 0) {
       appStore.showInfo(t('admin.proxies.batchTestEmpty'))
       return
     }
 
-    await runBatchProxyTests(ids)
+    await runBatchProxyTests(ids, snapshots)
+    if (disposed) return
     appStore.showSuccess(t('admin.proxies.batchTestDone', { count: ids.length }))
     loadProxies()
   } catch (error: any) {
+    if (disposed) return
     appStore.showError(error.response?.data?.detail || t('admin.proxies.batchTestFailed'))
     console.error('Error batch testing proxies:', error)
   } finally {
@@ -1939,24 +1981,28 @@ const handleBatchTest = async () => {
 }
 
 const handleBatchQualityCheck = async () => {
-  if (batchQualityChecking.value) return
+  if (disposed || batchQualityChecking.value) return
 
   batchQualityChecking.value = true
   try {
     let ids: number[] = []
+    let snapshots: Proxy[] = []
     if (selectedCount.value > 0) {
       ids = Array.from(selectedProxyIds.value)
     } else {
       const allProxies = await fetchAllProxiesForBatch()
+      snapshots = allProxies
       ids = allProxies.map((proxy) => proxy.id)
     }
+    if (disposed) return
 
     if (ids.length === 0) {
       appStore.showInfo(t('admin.proxies.batchQualityEmpty'))
       return
     }
 
-    const summary = await runBatchProxyQualityChecks(ids)
+    const summary = await runBatchProxyQualityChecks(ids, snapshots)
+    if (disposed) return
     appStore.showSuccess(
       t('admin.proxies.batchQualityDone', {
         count: summary.total,
@@ -1968,6 +2014,7 @@ const handleBatchQualityCheck = async () => {
     )
     loadProxies()
   } catch (error: any) {
+    if (disposed) return
     appStore.showError(error.response?.data?.detail || t('admin.proxies.batchQualityFailed'))
     console.error('Error batch checking quality:', error)
   } finally {
@@ -2144,6 +2191,9 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  disposed = true
+  connectionRuns.clear()
+  qualityRuns.clear()
   clearTimeout(searchTimeout)
   abortController?.abort()
   document.removeEventListener('click', closeCopyMenu)

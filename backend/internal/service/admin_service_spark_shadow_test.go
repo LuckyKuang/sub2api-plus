@@ -71,6 +71,11 @@ func (s *sparkShadowRepoStub) ListShadowsByParent(_ context.Context, parentID in
 	return result, nil
 }
 
+func (s *sparkShadowRepoStub) LockAccountCredentialFamily(ctx context.Context, id int64) error {
+	_, err := s.GetByID(ctx, id)
+	return err
+}
+
 func (s *sparkShadowRepoStub) BindGroups(_ context.Context, accountID int64, groupIDs []int64) error {
 	if err := s.bindGroupsErr[accountID]; err != nil {
 		return err

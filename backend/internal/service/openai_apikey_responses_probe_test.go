@@ -27,7 +27,7 @@ func TestProbeOpenAIAPIKeyResponsesSupportUsesFinalOpenAIIdentity(t *testing.T) 
 			"base_url": "https://compat-upstream.example/v1",
 		},
 	}
-	repo := &snapshotUpdateAccountRepo{
+	repo := &responsesProbeTestRepo{
 		stubOpenAIAccountRepo: stubOpenAIAccountRepo{accounts: []Account{account}},
 		updateExtraCalls:      updateCalls,
 	}
@@ -77,7 +77,7 @@ func TestProbeOpenAIAPIKeyResponsesSupportCNProviders(t *testing.T) {
 					openai_compat.ExtraKeyResponsesMode: string(openai_compat.ResponsesSupportModeForceResponses),
 				},
 			}
-			repo := &snapshotUpdateAccountRepo{
+			repo := &responsesProbeTestRepo{
 				stubOpenAIAccountRepo: stubOpenAIAccountRepo{accounts: []Account{account}},
 				updateExtraCalls:      updateCalls,
 			}

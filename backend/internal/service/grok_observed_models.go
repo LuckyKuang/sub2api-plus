@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -35,18 +36,20 @@ func (s *GrokQuotaService) scheduleGrokObservedModelsSync(ctx context.Context, a
 	if s == nil || account == nil || !account.IsGrokOAuth() || s.accountRepo == nil {
 		return
 	}
+	account, err := snapshotCNControlAccount(account)
+	if err != nil {
+		return
+	}
 	id := account.ID
 	if _, loaded := grokObservedModelsFlight.LoadOrStore(id, struct{}{}); loaded {
 		return
 	}
-	// Copy credentials for background use.
-	acc := *account
-	snapshotCtx := WithAccountOutboundIdentity(WithOutboundIdentityScope(ctx, nil), &acc)
+	snapshotCtx := WithAccountOutboundIdentity(WithOutboundIdentityScope(ctx, nil), account)
 	go func() {
 		defer grokObservedModelsFlight.Delete(id)
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(snapshotCtx), grokObservedModelsTimeout)
 		defer cancel()
-		if err := s.syncGrokObservedModels(ctx, &acc); err != nil {
+		if err := s.syncGrokObservedModels(ctx, account); err != nil {
 			slog.Debug("grok_observed_models_sync_failed", "account_id", id, "error", err)
 		}
 	}()
@@ -55,6 +58,14 @@ func (s *GrokQuotaService) scheduleGrokObservedModelsSync(ctx context.Context, a
 func (s *GrokQuotaService) syncGrokObservedModels(ctx context.Context, account *Account) error {
 	if s == nil || account == nil {
 		return nil
+	}
+	account, err := snapshotCNControlAccount(account)
+	if err != nil {
+		return err
+	}
+	proxyURL, err := account.StrictProxyURL()
+	if err != nil {
+		return err
 	}
 	// Skip if snapshot is still fresh.
 	if snap := parseGrokObservedModels(account.Extra); snap != nil {
@@ -107,12 +118,6 @@ func (s *GrokQuotaService) syncGrokObservedModels(ctx context.Context, account *
 	}
 	account.ApplyHeaderOverrides(req.Header)
 
-	proxyURL := ""
-	if s.proxyRepo != nil && account.ProxyID != nil {
-		if p, err := s.proxyRepo.GetByID(ctx, *account.ProxyID); err == nil && p != nil {
-			proxyURL = p.URL()
-		}
-	}
 	if s.httpUpstream == nil {
 		return nil
 	}
@@ -145,9 +150,16 @@ func (s *GrokQuotaService) syncGrokObservedModels(ctx context.Context, account *
 	if err := json.Unmarshal(raw, &asMap); err != nil {
 		return err
 	}
-	return s.accountRepo.UpdateExtra(ctx, account.ID, map[string]any{
+	applied, err := persistCNControlExtra(ctx, s.accountRepo, account, map[string]any{
 		grokObservedModelsExtraKey: asMap,
 	})
+	if err != nil {
+		return err
+	}
+	if !applied {
+		return errors.New("model discovery credential owner changed")
+	}
+	return nil
 }
 
 func extractGrokModelIDsFromModelsBody(body []byte) []string {

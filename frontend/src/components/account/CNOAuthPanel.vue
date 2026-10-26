@@ -16,8 +16,8 @@
       <a v-if="session.status === 'pending' && !expired" :href="session.authorize_url" target="_blank" rel="noopener noreferrer" class="btn btn-secondary">
         {{ t('admin.accounts.oauth.domestic.open') }}
       </a>
-      <template v-if="(platform === 'deepseek' || platform === 'stepfun') && session.status === 'pending' && !expired">
-        <p class="input-hint">{{ t(platform === 'stepfun' ? 'admin.accounts.oauth.domestic.stepfunCallbackHint' : 'admin.accounts.oauth.domestic.callbackHint') }}</p>
+      <template v-if="platform === 'deepseek' && session.status === 'pending' && !expired">
+        <p class="input-hint">{{ t('admin.accounts.oauth.domestic.callbackHint') }}</p>
         <textarea v-model="callback" class="input" rows="3" :aria-label="t('admin.accounts.oauth.domestic.callback')" :placeholder="t('admin.accounts.oauth.domestic.callback')" />
         <button type="button" class="btn btn-secondary" :disabled="busy || !callback.trim()" @click="advance(callback.trim())">{{ t('admin.accounts.oauth.domestic.exchange') }}</button>
       </template>

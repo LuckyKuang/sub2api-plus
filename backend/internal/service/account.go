@@ -1701,6 +1701,9 @@ func (a *Account) GetCNAPIKey() string {
 // 只认官方域名：自定义中转不得把第三方 Key 发往厂商官方额度端点。
 func (a *Account) GetCodingPlanProvider() string {
 	if a.IsDomesticOAuth() {
+		if a.Platform == PlatformKimi || a.Platform == PlatformStepFun {
+			return a.Platform
+		}
 		return ""
 	}
 	if a == nil {

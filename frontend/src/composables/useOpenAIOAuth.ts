@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { getCurrentScope, onScopeDispose, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { adminAPI } from '@/api/admin'
@@ -39,8 +39,11 @@ export function useOpenAIOAuth() {
   const loading = ref(false)
   const error = ref('')
 
-  // Reset state
+  let generation = 0
+
+  // A reset revokes pending results as well as clearing visible state.
   const resetState = () => {
+    generation += 1
     authUrl.value = ''
     sessionId.value = ''
     oauthState.value = ''
@@ -54,6 +57,7 @@ export function useOpenAIOAuth() {
     redirectUri?: string,
     accountId?: number
   ): Promise<boolean> => {
+    const run = ++generation
     loading.value = true
     authUrl.value = ''
     sessionId.value = ''
@@ -76,6 +80,7 @@ export function useOpenAIOAuth() {
         `${endpointPrefix}/generate-auth-url`,
         payload
       )
+      if (run !== generation) return false
       authUrl.value = response.auth_url
       sessionId.value = response.session_id
       try {
@@ -86,17 +91,19 @@ export function useOpenAIOAuth() {
       }
       return true
     } catch (err: any) {
+      if (run !== generation) return false
       error.value = extractApiErrorMessage(err, t('admin.accounts.oauth.openai.failedToGenerateUrl'))
       appStore.showError(error.value)
       return false
     } finally {
-      loading.value = false
+      if (run === generation) loading.value = false
     }
   }
 
   const startDeviceCode = async (
     proxyId?: number | null
   ): Promise<{ session_id: string; user_code: string; verification_url: string; interval_seconds: number } | null> => {
+    const run = ++generation
     loading.value = true
     error.value = ''
     try {
@@ -108,29 +115,34 @@ export function useOpenAIOAuth() {
         `${endpointPrefix}/device-code/start`,
         payload
       )
+      if (run !== generation) return null
       sessionId.value = result.session_id
       return result
     } catch (err: any) {
+      if (run !== generation) return null
       error.value = extractApiErrorMessage(err, t('admin.accounts.oauth.openai.failedToStartDeviceCode'))
       appStore.showError(error.value)
       return null
     } finally {
-      loading.value = false
+      if (run === generation) loading.value = false
     }
   }
 
   const pollDeviceCode = async (currentSessionId: string): Promise<OpenAITokenInfo | { pending: true } | null> => {
+    const run = generation
     error.value = ''
     try {
       const result = await adminAPI.accounts.pollOpenAIDeviceCode(
         `${endpointPrefix}/device-code/poll`,
         currentSessionId
       )
+      if (run !== generation) return null
       if (result && result.pending === true) {
         return { pending: true }
       }
       return result as OpenAITokenInfo
     } catch (err: any) {
+      if (run !== generation) return null
       error.value = extractI18nErrorMessage(
         err,
         t,
@@ -154,6 +166,7 @@ export function useOpenAIOAuth() {
       return null
     }
 
+    const run = ++generation
     loading.value = true
     error.value = ''
 
@@ -168,8 +181,9 @@ export function useOpenAIOAuth() {
       }
 
       const tokenInfo = await adminAPI.accounts.exchangeCode(`${endpointPrefix}/exchange-code`, payload)
-      return tokenInfo as OpenAITokenInfo
+      return run === generation ? tokenInfo as OpenAITokenInfo : null
     } catch (err: any) {
+      if (run !== generation) return null
       error.value = extractI18nErrorMessage(
         err,
         t,
@@ -179,7 +193,7 @@ export function useOpenAIOAuth() {
       appStore.showError(error.value)
       return null
     } finally {
-      loading.value = false
+      if (run === generation) loading.value = false
     }
   }
 
@@ -195,6 +209,7 @@ export function useOpenAIOAuth() {
       return null
     }
 
+    const run = ++generation
     loading.value = true
     error.value = ''
 
@@ -206,8 +221,9 @@ export function useOpenAIOAuth() {
         `${endpointPrefix}/refresh-token`,
         clientId
       )
-      return tokenInfo as OpenAITokenInfo
+      return run === generation ? tokenInfo as OpenAITokenInfo : null
     } catch (err: any) {
+      if (run !== generation) return null
       error.value = extractI18nErrorMessage(
         err,
         t,
@@ -217,7 +233,7 @@ export function useOpenAIOAuth() {
       appStore.showError(error.value)
       return null
     } finally {
-      loading.value = false
+      if (run === generation) loading.value = false
     }
   }
 
@@ -274,6 +290,8 @@ export function useOpenAIOAuth() {
     }
     return Object.keys(extra).length > 0 ? extra : undefined
   }
+
+  if (getCurrentScope()) onScopeDispose(resetState)
 
   return {
     // State

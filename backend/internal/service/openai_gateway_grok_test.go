@@ -3351,7 +3351,7 @@ func TestHandleGrokAccountUpstreamError402RecoversAfterCooldownExpiry(t *testing
 
 	expired := time.Now().Add(-time.Second)
 	account.TempUnschedulableUntil = &expired
-	svc.openaiAccountRuntimeBlockUntil.Store(account.ID, expired)
+	svc.openaiAccountRuntimeBlockUntil.Store(openAIAccountRuntimeOwnerKey(account), expired)
 
 	require.False(t, svc.isOpenAIAccountRuntimeBlocked(account))
 	require.True(t, account.IsSchedulable())
@@ -3528,7 +3528,7 @@ func TestHandleGrokAccountUpstreamError429DoesNotShortenExistingPause(t *testing
 	require.Equal(t, 1, repo.rateLimitedCalls)
 	require.WithinDuration(t, time.Now().Add(45*time.Second), repo.lastRateLimitResetAt, time.Second)
 	require.Zero(t, repo.tempUnschedCalls)
-	value, ok := svc.openaiAccountRuntimeBlockUntil.Load(account.ID)
+	value, ok := svc.openaiAccountRuntimeBlockUntil.Load(openAIAccountRuntimeOwnerKey(account))
 	require.True(t, ok)
 	runtimeUntil, ok := value.(time.Time)
 	require.True(t, ok)

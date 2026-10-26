@@ -166,7 +166,7 @@ func TestApplyOAuthCredentialsPreservesExistingNonAuthCredentials(t *testing.T) 
 	router.POST("/accounts/:id/apply-oauth-credentials", handler.ApplyOAuthCredentials)
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/accounts/1/apply-oauth-credentials", bytes.NewBufferString(
-		`{"type":"oauth","credentials":{"access_token":"new-token","refresh_token":"new-refresh-token"}}`,
+		`{"type":"oauth","credentials":{"access_token":"new-token","refresh_token":"new-refresh-token"},"expected_owner":"`+service.OAuthCredentialOwner(stub.getAccountResult)+`"}`,
 	))
 	request.Header.Set("Content-Type", "application/json")
 

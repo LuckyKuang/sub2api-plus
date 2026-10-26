@@ -224,6 +224,7 @@ type Account struct {
 	// 的存在性通过 CredentialsStatus（has_<key>）暴露，原始值不返回前端。
 	Credentials             map[string]any                 `json:"credentials"`
 	CredentialsStatus       map[string]bool                `json:"credentials_status,omitempty"`
+	OAuthCredentialOwner    string                         `json:"oauth_credential_owner,omitempty"`
 	Extra                   map[string]any                 `json:"extra"`
 	OllamaCloudUsage        *service.OllamaCloudUsageState `json:"ollama_cloud_usage,omitempty"`
 	OpenCodeGoUsage         *service.OpenCodeGoUsageState  `json:"opencode_go_usage,omitempty"`
@@ -347,11 +348,12 @@ type AccountListItem struct {
 	Platform string  `json:"platform"`
 	Type     string  `json:"type"`
 
-	Credentials       map[string]any                 `json:"credentials,omitempty"`
-	CredentialsStatus map[string]bool                `json:"credentials_status,omitempty"`
-	Extra             map[string]any                 `json:"extra,omitempty"`
-	OllamaCloudUsage  *service.OllamaCloudUsageState `json:"ollama_cloud_usage,omitempty"`
-	OpenCodeGoUsage   *service.OpenCodeGoUsageState  `json:"opencode_go_usage,omitempty"`
+	Credentials          map[string]any                 `json:"credentials,omitempty"`
+	CredentialsStatus    map[string]bool                `json:"credentials_status,omitempty"`
+	OAuthCredentialOwner string                         `json:"oauth_credential_owner,omitempty"`
+	Extra                map[string]any                 `json:"extra,omitempty"`
+	OllamaCloudUsage     *service.OllamaCloudUsageState `json:"ollama_cloud_usage,omitempty"`
+	OpenCodeGoUsage      *service.OpenCodeGoUsageState  `json:"opencode_go_usage,omitempty"`
 
 	ProxyID                 *int64     `json:"proxy_id"`
 	ProxyFallbackOriginID   *int64     `json:"proxy_fallback_origin_id"`

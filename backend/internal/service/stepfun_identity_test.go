@@ -17,9 +17,9 @@ func TestStepFunIdentitySourcePriorityAndImmutableSDK(t *testing.T) {
 		identity, ok := outboundidentity.FromContext(WithAccountOutboundIdentity(ctx, a))
 		require.True(t, ok)
 		require.Equal(t, "stepfun", identity.Preset)
-		require.Equal(t, "step", identity.Originator)
+		require.Equal(t, "stepcode", identity.Originator)
 		require.Empty(t, identity.Version)
-		require.Equal(t, "step (linux 6.8.0-31-generic; x64)", identity.UserAgent)
+		require.Equal(t, "stepcode (linux 6.8.0-31-generic; x64)", identity.UserAgent)
 	}
 	for _, candidate := range []OutboundIdentitySelection{
 		{Preset: "stepfun", Version: "0.84.4"},

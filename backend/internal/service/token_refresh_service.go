@@ -841,6 +841,10 @@ func (s *TokenRefreshService) refreshWithRetryWithRateGate(
 	refreshWindow time.Duration,
 	gate refreshAttemptGate,
 ) error {
+	nativeOAuth := account.IsDomesticOAuth()
+	if nativeOAuth && (s.refreshAPI == nil || executor == nil) {
+		return &providerConfigurationRefreshError{err: errors.New("native OAuth refresh coordinator is unavailable")}
+	}
 	ctx = WithAccountOutboundIdentity(ctx, account)
 	var lastErr error
 	maxRetries := s.maxRetries()
@@ -921,6 +925,11 @@ func (s *TokenRefreshService) refreshWithRetryWithRateGate(
 					credentialsPersisted = true
 				}
 			}
+		}
+		if nativeOAuth && err != nil && !errors.Is(err, errRefreshSkipped) && !isProviderScopedTerminalRefreshError(err) {
+			// A failed old grant is not evidence about a concurrently relinked
+			// account. Native providers have no unconditional status/cache writes.
+			err = &providerCycleContainmentRefreshError{err: err}
 		}
 		attemptTimedOut := errors.Is(oauthRefreshContextError(attemptCtx), context.DeadlineExceeded) && oauthRefreshContextError(ctx) == nil
 		cancelAttempt()

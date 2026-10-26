@@ -47,6 +47,8 @@ const CredentialRequestTimeout = 15 * time.Second
 // headers, so the scope is returned rather than only the key.
 type CodingPlanCredential struct {
 	APIKey         string
+	KeyID          string
+	ExpiresAt      time.Time
 	OrganizationID string
 	ProjectID      string
 }
@@ -185,7 +187,7 @@ func (c *CredentialClient) ExchangeZaiBusinessToken(ctx context.Context, oauthAc
 // ResolveIndividualCodingPlanKey derives the personal coding-plan API key for a
 // linked account. It mirrors the official client: read the customer profile,
 // select a non-team organization/project, find or create the published personal
-// key, then copy its secret and join both halves.
+// key ID, then issue a short-lived project access token.
 func (c *CredentialClient) ResolveIndividualCodingPlanKey(ctx context.Context, provider, accessToken string) (*CodingPlanCredential, error) {
 	ctx = withIdentity(ctx)
 	provider = NormalizeProvider(provider)
@@ -199,7 +201,7 @@ func (c *CredentialClient) ResolveIndividualCodingPlanKey(ctx context.Context, p
 	origin := c.origin(provider)
 	authorization := bizAuthorization(provider, accessToken, true)
 
-	customer, err := c.fetchCustomerInfo(ctx, origin, authorization, nil)
+	customer, err := c.fetchCustomerInfo(ctx, origin, accessToken, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -213,23 +215,11 @@ func (c *CredentialClient) ResolveIndividualCodingPlanKey(ctx context.Context, p
 	if err != nil {
 		return nil, err
 	}
-	secret, err := c.copyAPIKeySecret(ctx, listURL, authorization, nil, apiKey)
+	token, err := c.IssueProjectAccessToken(ctx, provider, accessToken, organizationID, projectID, apiKey)
 	if err != nil {
 		return nil, err
 	}
-	if secret == "" {
-		// Z.ai requires the copied secret; BigModel historically accepted the bare
-		// key, so the two estates differ in how hard the failure is.
-		if provider == ProviderZai {
-			return nil, fmt.Errorf("zai copy endpoint returned no secret key")
-		}
-		return &CodingPlanCredential{APIKey: apiKey, OrganizationID: organizationID, ProjectID: projectID}, nil
-	}
-	return &CodingPlanCredential{
-		APIKey:         apiKey + "." + secret,
-		OrganizationID: organizationID,
-		ProjectID:      projectID,
-	}, nil
+	return &CodingPlanCredential{APIKey: token.Token, KeyID: apiKey, ExpiresAt: token.ExpiresAt, OrganizationID: organizationID, ProjectID: projectID}, nil
 }
 
 // ResolveTeamPlanKey derives the team-plan project key for a linked account. The
@@ -268,15 +258,11 @@ func (c *CredentialClient) ResolveTeamPlanKey(ctx context.Context, provider, acc
 	if err != nil {
 		return nil, err
 	}
-	secret, err := c.copyAPIKeySecret(ctx, listURL, authorization, teamHeaders, apiKey)
+	token, err := c.IssueProjectAccessToken(ctx, provider, accessToken, organizationID, projectID, apiKey)
 	if err != nil {
 		return nil, err
 	}
-	key := apiKey
-	if secret != "" {
-		key = apiKey + "." + secret
-	}
-	return &CodingPlanCredential{APIKey: key, OrganizationID: organizationID, ProjectID: projectID}, nil
+	return &CodingPlanCredential{APIKey: token.Token, KeyID: apiKey, ExpiresAt: token.ExpiresAt, OrganizationID: organizationID, ProjectID: projectID}, nil
 }
 
 // ProjectAPIKeysURL builds the project API-key collection URL.
@@ -310,7 +296,7 @@ func (c *CredentialClient) findOrCreateAPIKey(ctx context.Context, listURL, auth
 	if key := matchAPIKey(keys, name, keyType); key != "" {
 		return key, nil
 	}
-	createBody := map[string]any{"name": name}
+	createBody := map[string]any{"name": name, "usageScene": 1}
 	if keyType != nil {
 		createBody["keyType"] = *keyType
 	}
@@ -353,26 +339,6 @@ func (c *CredentialClient) listAPIKeys(ctx context.Context, listURL string, head
 	return payload.Data, nil
 }
 
-func (c *CredentialClient) copyAPIKeySecret(ctx context.Context, listURL, authorization string, extra map[string]string, apiKey string) (string, error) {
-	target := listURL + "/copy/" + url.PathEscape(apiKey)
-	var payload struct {
-		Code    json.RawMessage `json:"code"`
-		Success *bool           `json:"success"`
-		Data    *struct {
-			SecretKey string `json:"secretKey"`
-		} `json:"data"`
-	}
-	if err := c.doJSON(ctx, http.MethodGet, target, mergeHeaders(map[string]string{
-		"Authorization": authorization,
-	}, extra), nil, &payload); err != nil {
-		return "", err
-	}
-	if !bizCodeAccepted(payload.Code, payload.Success, payload.Data != nil) || payload.Data == nil {
-		return "", nil
-	}
-	return strings.TrimSpace(payload.Data.SecretKey), nil
-}
-
 // doJSON performs one business call and decodes the JSON body into dest. A nil
 // dest discards the body.
 func (c *CredentialClient) doJSON(ctx context.Context, method, target string, headers map[string]string, body []byte, dest any) error {
@@ -403,12 +369,18 @@ func (c *CredentialClient) doJSON(ctx context.Context, method, target string, he
 		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, (1<<20)+1))
 	if err != nil {
 		return err
 	}
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if len(raw) > 1<<20 {
+		return fmt.Errorf("business response exceeds limit")
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("business endpoint returned status %d", resp.StatusCode)
+		return &ProjectTokenHTTPError{Status: resp.StatusCode}
 	}
 	if dest == nil {
 		return nil

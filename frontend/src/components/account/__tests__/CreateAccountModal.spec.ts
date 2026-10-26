@@ -268,6 +268,7 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
   })
 
   it.each(['apikey', 'oauth'] as const)('saves the actual StepFun %s checkbox selection during creation', async kind => {
+    if (kind === 'oauth') vi.useFakeTimers()
     const wrapper = mountModal([], true)
     await selectButtonByText(wrapper, 'StepFun')
     await wrapper.get('form#create-account-form input[type="text"]').setValue('Restricted StepFun')
@@ -278,17 +279,17 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
       previewModelsMock.mockResolvedValue(catalog)
       await wrapper.get('form#create-account-form input[type="password"]').setValue('step-key')
     } else {
-      const pending = { session_id: 'ready-step', status: 'pending', authorize_url: 'https://platform.stepfun.com/cli-login', expires_at: new Date(Date.now() + 60000).toISOString(), interval_seconds: 5 }
+      // Official Step-Code login-client.ts authorizes a cloud flow and polls it;
+      // model restriction persistence must be exercised after that same handshake.
+      const pending = { session_id: 'ready-step', status: 'pending', authorize_url: 'https://platform.stepfun.com/cli-login-remote?flow_id=public-flow', expires_at: new Date(Date.now() + 60000).toISOString(), interval_seconds: 5 }
       cnOAuthRequestMock.mockResolvedValueOnce(pending)
       await selectButtonByText(wrapper, 'admin.accounts.oauth.domestic.start')
       await flushPromises()
-      await wrapper.get('[data-testid="cn-oauth-panel"] textarea').setValue('http://127.0.0.1:53683/callback?state=s&api_key=private-key')
+      expect(wrapper.find('[data-testid="cn-oauth-panel"] textarea').exists()).toBe(false)
       cnOAuthRequestMock.mockResolvedValueOnce({ ...pending, status: 'ready' })
-      await selectButtonByText(wrapper, 'admin.accounts.oauth.domestic.exchange')
+      await vi.advanceTimersByTimeAsync(5000)
       await flushPromises()
-      expect(cnOAuthRequestMock).toHaveBeenLastCalledWith('stepfun', 'exchange', {
-        session_id: 'ready-step', callback: 'http://127.0.0.1:53683/callback?state=s&api_key=private-key'
-      })
+      expect(cnOAuthRequestMock).toHaveBeenLastCalledWith('stepfun', 'poll', { session_id: 'ready-step' })
       expect(wrapper.findComponent({ name: 'CNOAuthPanel' }).emitted('ready-session')?.at(-1)).toEqual(['ready-step'])
       expect(wrapper.findComponent({ name: 'ModelWhitelistSelector' }).props('oauthSessionId')).toBe('ready-step')
       cnOAuthModelsMock.mockResolvedValue(catalog)

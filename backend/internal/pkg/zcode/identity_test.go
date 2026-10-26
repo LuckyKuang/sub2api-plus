@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"github.com/stretchr/testify/require"
@@ -100,8 +101,8 @@ func TestCredentialIdentityIsCapturedOnceAcrossBusinessCalls(t *testing.T) {
 			writeEnvelope(t, w, map[string]any{"organizations": []any{map[string]any{"organizationId": "org-1", "organizationName": "默认机构", "projects": []any{map[string]any{"projectId": "proj-1", "projectName": "默认项目"}}}}})
 		case strings.HasSuffix(r.URL.Path, "/api_keys"):
 			writeEnvelope(t, w, []any{map[string]any{"apiKey": "ak-1", "name": PersonalAPIKeyName}})
-		case strings.HasSuffix(r.URL.Path, "/copy/ak-1"):
-			writeEnvelope(t, w, map[string]any{"secretKey": "sk-1"})
+		case strings.HasSuffix(r.URL.Path, "/ak-1/access_tokens"):
+			writeEnvelope(t, w, map[string]any{"accessToken": "pat-1", "tokenType": "Bearer", "expiresIn": 3600, "expiresAt": time.Now().Add(time.Hour).Unix()})
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -109,7 +110,7 @@ func TestCredentialIdentityIsCapturedOnceAcrossBusinessCalls(t *testing.T) {
 	defer server.Close()
 	got, err := NewCredentialClient(server.Client(), server.URL, server.URL).ResolveIndividualCodingPlanKey(ctx, ProviderBigModel, "test-token")
 	require.NoError(t, err)
-	require.Equal(t, "ak-1.sk-1", got.APIKey)
+	require.Equal(t, "pat-1", got.APIKey)
 	require.Equal(t, 3, seen)
 	require.Equal(t, 1, resolutions)
 }

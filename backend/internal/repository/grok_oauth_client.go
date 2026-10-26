@@ -18,7 +18,8 @@ import (
 )
 
 type grokOAuthClient struct {
-	tokenURL string
+	tokenURL   string
+	oidcIssuer string
 }
 
 func NewGrokOAuthClient() service.GrokOAuthClient {
@@ -29,8 +30,27 @@ func NewGrokOAuthClient() service.GrokOAuthClient {
 		// Official allowlisted endpoint only — never EffectiveTokenURL() (raw env).
 		tokenURL = xai.DefaultTokenURL
 	}
-	return &grokOAuthClient{tokenURL: tokenURL}
+	return &grokOAuthClient{tokenURL: tokenURL, oidcIssuer: xai.OAuthIssuer}
 }
+
+// VerifyIDToken uses the same selected proxy and identity as the code exchange.
+// The existing Wire provider constructs this client, so browser verification
+// cannot be omitted while refresh-only/SSO test doubles keep their narrow port.
+func (c *grokOAuthClient) VerifyIDToken(ctx context.Context, token, clientID, nonce, proxyURL string) (map[string]any, error) {
+	client, err := sharedhttp.GetClient(sharedhttp.Options{ProxyURL: proxyURL, Timeout: 30 * time.Second, ResponseHeaderTimeout: 10 * time.Second})
+	if err != nil {
+		return nil, infraerrors.New(http.StatusBadGateway, "GROK_OIDC_CLIENT_INIT_FAILED", "OAuth identity client could not be initialized")
+	}
+	clone := *client
+	clone.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	issuer := c.oidcIssuer
+	if issuer == "" {
+		issuer = xai.OAuthIssuer
+	}
+	return xai.VerifyOIDCIDToken(ctx, &clone, issuer, token, clientID, nonce)
+}
+
+var _ service.GrokOIDCVerifier = (*grokOAuthClient)(nil)
 
 func (c *grokOAuthClient) ExchangeCode(ctx context.Context, code, codeVerifier, redirectURI, proxyURL, clientID string) (*xai.TokenResponse, error) {
 	client, err := createGrokReqClient(proxyURL)
@@ -101,7 +121,7 @@ func (c *grokOAuthClient) RefreshToken(ctx context.Context, refreshToken, proxyU
 func (c *grokOAuthClient) ConvertSSOToBuild(ctx context.Context, ssoToken, proxyURL string) (*xai.TokenResponse, error) {
 	client, err := createGrokSSOHTTPClient(proxyURL)
 	if err != nil {
-		return nil, infraerrors.Newf(http.StatusBadGateway, "GROK_SSO_CLIENT_INIT_FAILED", "create HTTP client: %v", err)
+		return nil, infraerrors.New(http.StatusBadGateway, "GROK_SSO_CLIENT_INIT_FAILED", "could not initialize the configured OAuth client")
 	}
 
 	requestCtx, cancel := context.WithTimeout(ctx, xai.SSOConversionTimeout)

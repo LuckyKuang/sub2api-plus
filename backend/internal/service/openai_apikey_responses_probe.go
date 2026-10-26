@@ -127,7 +127,17 @@ func (s *AccountTestService) ProbeOpenAIAPIKeyResponsesSupport(ctx context.Conte
 		logger.LegacyPrintf("service.openai_probe", "probe_load_account_failed: account_id=%d err=%v", accountID, err)
 		return
 	}
-	if account.Type != AccountTypeAPIKey {
+	if account == nil || account.Type != AccountTypeAPIKey {
+		return
+	}
+	account, err = snapshotCNControlAccount(account)
+	if err != nil {
+		logger.LegacyPrintf("service.openai_probe", "probe_owner_invalid: account_id=%d", accountID)
+		return
+	}
+	proxyURL, err := account.StrictProxyURL()
+	if err != nil {
+		logger.LegacyPrintf("service.openai_probe", "probe_proxy_invalid: account_id=%d", accountID)
 		return
 	}
 	if account.RoutesProtocolByInbound() {
@@ -137,13 +147,13 @@ func (s *AccountTestService) ProbeOpenAIAPIKeyResponsesSupport(ctx context.Conte
 		// Responses 端点，落标 force_responses；其余协议显式重置为 auto，避免
 		// 切换后残留强制模式。
 		if account.UsesNativeCNResponses() {
-			_ = s.accountRepo.UpdateExtra(ctx, account.ID, map[string]any{
+			_, _ = persistCNControlExtra(ctx, s.accountRepo, account, map[string]any{
 				openai_compat.ExtraKeyResponsesMode:      string(openai_compat.ResponsesSupportModeForceResponses),
 				openai_compat.ExtraKeyResponsesSupported: true,
 			})
 			return
 		}
-		_ = s.accountRepo.UpdateExtra(ctx, account.ID, map[string]any{
+		_, _ = persistCNControlExtra(ctx, s.accountRepo, account, map[string]any{
 			openai_compat.ExtraKeyResponsesMode:      string(openai_compat.ResponsesSupportModeAuto),
 			openai_compat.ExtraKeyResponsesSupported: false,
 		})
@@ -187,11 +197,6 @@ func (s *AccountTestService) ProbeOpenAIAPIKeyResponsesSupport(ctx context.Conte
 	account.applyOpenAIHeaderOverrides(req.Header)
 	s.applyOpenAIOutboundIdentity(probeCtx, account, req.Header, false)
 
-	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
-	}
-
 	resp, err := s.httpUpstream.DoWithTLS(prepareAccountOutboundRequest(req, account), proxyURL, account.ID, account.Concurrency, s.tlsFPProfileService.ResolveTLSProfile(account))
 	if err != nil {
 		// 网络层失败：不写标记，保持 unknown，下次重试或由网关 fallback 处理
@@ -225,9 +230,9 @@ func (s *AccountTestService) ProbeOpenAIAPIKeyResponsesSupport(ctx context.Conte
 
 	supported := decideResponsesProbeSupport(resp.StatusCode, bodyBytes)
 
-	if err := s.accountRepo.UpdateExtra(ctx, accountID, map[string]any{
+	if written, err := persistCNControlExtra(ctx, s.accountRepo, account, map[string]any{
 		openai_compat.ExtraKeyResponsesSupported: supported,
-	}); err != nil {
+	}); err != nil || !written {
 		logger.LegacyPrintf("service.openai_probe", "probe_persist_failed: account_id=%d supported=%v err=%v", accountID, supported, err)
 		return
 	}

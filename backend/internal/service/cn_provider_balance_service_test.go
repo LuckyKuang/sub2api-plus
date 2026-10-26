@@ -4,8 +4,10 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -54,6 +56,19 @@ func (r *cnBalanceProbeRepo) GetByID(_ context.Context, _ int64) (*Account, erro
 func (r *cnBalanceProbeRepo) UpdateExtra(_ context.Context, _ int64, updates map[string]any) error {
 	r.extraWrites = append(r.extraWrites, updates)
 	return nil
+}
+
+func (r *cnBalanceProbeRepo) UpdateCNControlExtraIfUnchanged(ctx context.Context, expected *Account, updates map[string]any) (bool, error) {
+	current := r.account
+	if current == nil || expected == nil || current.ID != expected.ID || current.Platform != expected.Platform || current.Type != expected.Type || !reflect.DeepEqual(current.ProxyID, expected.ProxyID) || !reflect.DeepEqual(current.Proxy, expected.Proxy) {
+		return false, nil
+	}
+	actual, actualErr := json.Marshal(current.Credentials)
+	captured, capturedErr := json.Marshal(expected.Credentials)
+	if actualErr != nil || capturedErr != nil || string(actual) != string(captured) {
+		return false, nil
+	}
+	return true, r.UpdateExtra(ctx, expected.ID, updates)
 }
 
 func newDeepSeekBalanceProbeAccount() *Account {

@@ -342,6 +342,7 @@ const handleGenerateUrl = async () => {
 
 const handleExchangeCode = async () => {
   if (!props.account) return
+  const expectedOwner = props.account.oauth_credential_owner || ''
 
   const authCode = oauthFlowRef.value?.authCode || ''
   if (!authCode.trim()) return
@@ -373,6 +374,7 @@ const handleExchangeCode = async () => {
     try {
       // Update account with new credentials
       await adminAPI.accounts.applyOAuthCredentials(props.account.id, {
+        expected_owner: expectedOwner,
         type: 'oauth', // OpenAI OAuth is always 'oauth' type
         credentials,
         extra

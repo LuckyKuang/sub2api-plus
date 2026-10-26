@@ -73,6 +73,13 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletionsWithStartTime(
 	defaultMappedModel string,
 	startTime time.Time,
 ) (forwardResult *OpenAIForwardResult, firstByteResultErr error) {
+	if account != nil && account.IsGrok() {
+		var captureErr error
+		ctx, account, _, captureErr = captureGrokRequestOwner(ctx, account)
+		if captureErr != nil {
+			return nil, captureErr
+		}
+	}
 	ctx, byteTiming := beginFirstByteTiming(ctx, startTime)
 	defer func() {
 		if forwardResult != nil && forwardResult.FirstByteMs == nil {

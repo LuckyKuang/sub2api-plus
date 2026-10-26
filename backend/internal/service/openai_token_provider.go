@@ -145,10 +145,16 @@ func (p *OpenAITokenProvider) GetAccessToken(ctx context.Context, account *Accou
 	}
 
 	cacheKey := OpenAITokenCacheKey(account)
+	quotaOwner := openAIQuotaTokenOwnerFromContext(ctx)
+	acceptCachedToken := func(token string) bool {
+		// The cache key identifies a row, so a quota snapshot may only use a
+		// cached token already proven to belong to its captured grant.
+		return strings.TrimSpace(token) != "" && (quotaOwner == nil || token == account.GetOpenAIAccessToken())
+	}
 
 	// 1) Try cache first.
 	if p.tokenCache != nil {
-		if token, err := p.tokenCache.GetAccessToken(ctx, cacheKey); err == nil && strings.TrimSpace(token) != "" {
+		if token, err := p.tokenCache.GetAccessToken(ctx, cacheKey); err == nil && acceptCachedToken(token) {
 			slog.Debug("openai_token_cache_hit", "account_id", account.ID)
 			return token, nil
 		} else if err != nil {
@@ -179,7 +185,7 @@ func (p *OpenAITokenProvider) GetAccessToken(ctx context.Context, account *Accou
 
 		result, err := p.refreshAPI.RefreshIfNeeded(ctx, account, p.executor, openAITokenRefreshSkew)
 		if err != nil {
-			if p.refreshPolicy.OnRefreshError == ProviderRefreshErrorReturn {
+			if errors.Is(err, errOpenAIQuotaTokenOwnerChanged) || p.refreshPolicy.OnRefreshError == ProviderRefreshErrorReturn {
 				return "", err
 			}
 			slog.Warn("openai_token_refresh_failed", "account_id", account.ID, "error", err)
@@ -193,16 +199,31 @@ func (p *OpenAITokenProvider) GetAccessToken(ctx context.Context, account *Accou
 				if waitErr != nil {
 					return "", waitErr
 				}
-				if strings.TrimSpace(token) != "" {
+				if acceptCachedToken(token) {
+					if quotaOwner != nil {
+						if err := quotaOwner.validateRepository(ctx, p.accountRepo, account.ID); err != nil {
+							return "", err
+						}
+					}
 					slog.Debug("openai_token_cache_hit_after_wait", "account_id", account.ID)
 					return token, nil
 				}
 			}
 		} else if result.Refreshed {
+			if quotaOwner != nil {
+				if err := quotaOwner.validate(result.Account); err != nil {
+					return "", err
+				}
+			}
 			p.metrics.refreshSuccess.Add(1)
 			account = result.Account
 			expiresAt = account.GetCredentialAsTime("expires_at")
 		} else {
+			if quotaOwner != nil {
+				if err := quotaOwner.validate(result.Account); err != nil {
+					return "", err
+				}
+			}
 			account = result.Account
 			expiresAt = account.GetCredentialAsTime("expires_at")
 		}
@@ -224,7 +245,12 @@ func (p *OpenAITokenProvider) GetAccessToken(ctx context.Context, account *Accou
 			if waitErr != nil {
 				return "", waitErr
 			}
-			if strings.TrimSpace(token) != "" {
+			if acceptCachedToken(token) {
+				if quotaOwner != nil {
+					if err := quotaOwner.validateRepository(ctx, p.accountRepo, account.ID); err != nil {
+						return "", err
+					}
+				}
 				slog.Debug("openai_token_cache_hit_after_wait", "account_id", account.ID)
 				return token, nil
 			}
@@ -239,6 +265,11 @@ func (p *OpenAITokenProvider) GetAccessToken(ctx context.Context, account *Accou
 	// 3) Populate cache with TTL.
 	if p.tokenCache != nil {
 		latestAccount, isStale := CheckTokenVersion(ctx, account, p.accountRepo)
+		if quotaOwner != nil {
+			if err := quotaOwner.validate(latestAccount); err != nil {
+				return "", err
+			}
+		}
 		if isStale && latestAccount != nil {
 			slog.Debug("openai_token_version_stale_use_latest", "account_id", account.ID)
 			accessToken = latestAccount.GetOpenAIAccessToken()

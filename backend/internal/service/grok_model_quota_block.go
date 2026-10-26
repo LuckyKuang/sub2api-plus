@@ -1,7 +1,6 @@
 package service
 
 import (
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -12,12 +11,15 @@ import (
 // same account stay schedulable. Multi-instance: each process learns from its
 // own upstream errors.
 type grokModelQuotaBlock struct {
-	Until time.Time
+	AccountID  int64
+	Until      time.Time
+	Generation uint64
 }
 
 type grokModelQuotaBlockStore struct {
-	mu    sync.Mutex
-	items map[string]grokModelQuotaBlock // key: accountID|model
+	mu       sync.Mutex
+	items    map[string]grokModelQuotaBlock // key: model|credential-and-proxy owner|recovery generation
+	sequence uint64
 }
 
 var globalGrokModelQuotaBlocks = &grokModelQuotaBlockStore{
@@ -30,14 +32,25 @@ const (
 	grokModelQuotaBlockMinTTL     = 20 * time.Minute
 )
 
-func grokModelQuotaBlockKey(accountID int64, model string) string {
-	return strings.TrimSpace(strings.ToLower(model)) + "|" + strconv.FormatInt(accountID, 10)
+func grokModelQuotaBlockKey(account *Account, model string) string {
+	if account == nil || account.ID <= 0 || account.Platform != PlatformGrok {
+		return ""
+	}
+	owner, err := grokRequestOwnerFingerprint(account)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(strings.ToLower(model)) + grokModelRecoveryOwnerSuffix(account, owner)
 }
 
-// markGrokModelQuotaBlock soft-blocks accountID for model until the given time.
-func markGrokModelQuotaBlock(accountID int64, model string, until time.Time) {
+func grokModelRecoveryOwnerSuffix(account *Account, owner string) string {
+	return "|" + owner + "|" + runtimeRecoveryGeneration(account)
+}
+
+// markGrokModelQuotaBlock soft-blocks the captured owner for one model.
+func markGrokModelQuotaBlock(account *Account, model string, until time.Time) {
 	model = strings.TrimSpace(model)
-	if accountID <= 0 || model == "" || until.IsZero() {
+	if model == "" || until.IsZero() {
 		return
 	}
 	now := time.Now()
@@ -47,7 +60,7 @@ func markGrokModelQuotaBlock(accountID int64, model string, until time.Time) {
 	if max := now.Add(grokModelQuotaBlockMaxTTL); until.After(max) {
 		until = max
 	}
-	storeGrokModelQuotaBlock(accountID, model, until, now)
+	storeGrokModelQuotaBlock(account, model, until, now)
 }
 
 const (
@@ -57,9 +70,9 @@ const (
 
 // markGrokModelTransientBlock soft-blocks a single model for a short capacity
 // burst without the free-usage 20m floor (and without unscheduling the account).
-func markGrokModelTransientBlock(accountID int64, model string, until time.Time) {
+func markGrokModelTransientBlock(account *Account, model string, until time.Time) {
 	model = strings.TrimSpace(model)
-	if accountID <= 0 || model == "" || until.IsZero() {
+	if model == "" || until.IsZero() {
 		return
 	}
 	now := time.Now()
@@ -69,17 +82,21 @@ func markGrokModelTransientBlock(accountID int64, model string, until time.Time)
 	if max := now.Add(grokModelTransientBlockMaxTTL); until.After(max) {
 		until = max
 	}
-	storeGrokModelQuotaBlock(accountID, model, until, now)
+	storeGrokModelQuotaBlock(account, model, until, now)
 }
 
-func storeGrokModelQuotaBlock(accountID int64, model string, until, now time.Time) {
-	key := grokModelQuotaBlockKey(accountID, model)
+func storeGrokModelQuotaBlock(account *Account, model string, until, now time.Time) {
+	key := grokModelQuotaBlockKey(account, model)
+	if key == "" {
+		return
+	}
 	globalGrokModelQuotaBlocks.mu.Lock()
 	defer globalGrokModelQuotaBlocks.mu.Unlock()
 	if cur, ok := globalGrokModelQuotaBlocks.items[key]; ok && cur.Until.After(until) {
-		return
+		until = cur.Until
 	}
-	globalGrokModelQuotaBlocks.items[key] = grokModelQuotaBlock{Until: until}
+	globalGrokModelQuotaBlocks.sequence++
+	globalGrokModelQuotaBlocks.items[key] = grokModelQuotaBlock{AccountID: account.ID, Until: until, Generation: globalGrokModelQuotaBlocks.sequence}
 	for k, v := range globalGrokModelQuotaBlocks.items {
 		if !v.Until.After(now) {
 			delete(globalGrokModelQuotaBlocks.items, k)
@@ -87,15 +104,35 @@ func storeGrokModelQuotaBlock(accountID int64, model string, until, now time.Tim
 	}
 }
 
-// isGrokModelQuotaBlocked reports whether this account cannot serve model now.
-func isGrokModelQuotaBlocked(accountID int64, model string, now time.Time) bool {
-	model = strings.TrimSpace(model)
-	if accountID <= 0 || model == "" {
-		return false
-	}
-	key := grokModelQuotaBlockKey(accountID, model)
+// An administrator resets one account's recoverable local state, including
+// historical credential owners. Team-level quota belongs to a different store.
+func clearGrokModelQuotaBlocks(accountID int64) {
 	globalGrokModelQuotaBlocks.mu.Lock()
 	defer globalGrokModelQuotaBlocks.mu.Unlock()
+	for key, block := range globalGrokModelQuotaBlocks.items {
+		if block.AccountID == accountID {
+			delete(globalGrokModelQuotaBlocks.items, key)
+		}
+	}
+}
+
+// isGrokModelQuotaBlocked reports whether this account cannot serve model now.
+func isGrokModelQuotaBlocked(account *Account, model string, now time.Time) bool {
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return false
+	}
+	key := grokModelQuotaBlockKey(account, model)
+	if key == "" {
+		return false
+	}
+	globalGrokModelQuotaBlocks.mu.Lock()
+	defer globalGrokModelQuotaBlocks.mu.Unlock()
+	for historyKey, block := range globalGrokModelQuotaBlocks.items {
+		if !block.Until.After(now) {
+			delete(globalGrokModelQuotaBlocks.items, historyKey)
+		}
+	}
 	cur, ok := globalGrokModelQuotaBlocks.items[key]
 	if !ok {
 		return false
@@ -114,7 +151,7 @@ func filterGrokModelQuotaBlockedAccounts(accounts []Account, model string, now t
 	out := make([]Account, 0, len(accounts))
 	for i := range accounts {
 		upstreamModel := canonicalOpenAIAccountSchedulingModel(&accounts[i], model)
-		if isGrokModelQuotaBlocked(accounts[i].ID, upstreamModel, now) {
+		if isGrokModelQuotaBlocked(&accounts[i], upstreamModel, now) {
 			continue
 		}
 		out = append(out, accounts[i])
