@@ -61,9 +61,9 @@ of a new release.
 ## Current Version
 
 ```text
-Git/GitHub: v0.2.18+custom.001
-Application: 0.2.18+custom.001
-GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.18-custom.001
+Git/GitHub: v0.2.18+custom.002
+Application: 0.2.18+custom.002
+GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.18-custom.002
 ```
 
 ## Release Mapping
@@ -142,6 +142,7 @@ GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.18-custom.001
 | `v0.2.15+custom.003` | `v0.2.15` | `ab80abc6d1f929a6864c8804fd077b509d21fda2` | published |
 | `v0.2.17+custom.001` | `v0.2.17` | `060d0160417782cd962a0c7f460f6cd4565d4916` | published |
 | `v0.2.18+custom.001` | `v0.2.18` | `ac1b8f1271be0d674fa6f074403c1410f30a3a81` | published |
+| `v0.2.18+custom.002` | `v0.2.18` | `ac1b8f1271be0d674fa6f074403c1410f30a3a81` | planned |
 
 `v0.2.15+custom.003` records the integrated official main snapshot in the
 Official Commit column. Its tagged official baseline remains
@@ -154,6 +155,10 @@ Plus writes `0.2.17+custom.001`.
 `v0.2.18+custom.001` records official tag `v0.2.18` / peeled
 `ac1b8f1271be0d674fa6f074403c1410f30a3a81`. Official tag VERSION is `0.2.17`;
 Plus writes `0.2.18+custom.001`. Its mapping is finalized after publication.
+
+`v0.2.18+custom.002` retains the same official baseline and adds the seven-provider
+gateway capability and regression-completion work. Its mapping status is finalized
+through a separate PR after verification of the immutable release artifacts.
 
 `v0.2.4+custom.006` is marked withdrawn because official `v0.2.5` was imported before that snapshot overlay was published. Do not reuse or retag `.006`.
 
