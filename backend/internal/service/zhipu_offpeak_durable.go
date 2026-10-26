@@ -85,6 +85,9 @@ func (m *ZhipuOffPeakTicketManager) acquireDurable(parent context.Context, accou
 			}
 			claimed, claimErr := d.store.Claim(ctx, current.ID, false, 0, offPeakOperationLease)
 			if errors.Is(claimErr, ErrOffPeakLeaseBusy) {
+				if claimed.ID == current.ID && claimed.State == "new" && claimed.LastError == "quota_exhausted" && claimed.NextAttempt.After(m.now()) {
+					return nil, offPeakAcquireError(&zcode.OffPeakError{HTTPStatus: http.StatusTooManyRequests, Code: zcode.OffPeakCodeQuotaExhausted, NextTakeAt: claimed.NextAttempt})
+				}
 				if err = offPeakWait(ctx, m.stopCh, 100*time.Millisecond); err != nil {
 					return nil, offPeakQueueTimeout(nil, err)
 				}
@@ -119,7 +122,7 @@ func (m *ZhipuOffPeakTicketManager) acquireDurable(parent context.Context, accou
 					ticket, e = m.client.TakeTicket(ctx, current.TaskID, a, proxyURL)
 					return e
 				})
-				if err != nil {
+				if err != nil && (ticket == nil || ticket.TicketID == "") {
 					var rejection *zcode.OffPeakError
 					if errors.As(err, &rejection) && (rejection.Code == zcode.OffPeakCodeQuotaExhausted || rejection.Code == zcode.OffPeakCodeNoEligibility) {
 						current.State = "new"
@@ -140,11 +143,21 @@ func (m *ZhipuOffPeakTicketManager) acquireDurable(parent context.Context, accou
 					}
 					return nil, offPeakAcquireErrorSanitized(err)
 				}
-				if ticket == nil || ticket.TicketID == "" || !validOffPeakState(ticket.State) {
+				if ticket == nil || ticket.TicketID == "" {
 					m.preserveOffPeakControl(d, current)
 					return nil, offPeakStoreFailure()
 				}
-				current.TicketID, current.State, current.Position = ticket.TicketID, ticket.State, ticket.Position
+				current.TicketID = ticket.TicketID
+				validState := err == nil && validOffPeakState(ticket.State)
+				if validState {
+					current.State, current.Position = ticket.State, ticket.Position
+				} else {
+					// An unknown admission state cannot authorize a model send, but
+					// its known remote ID must survive for original-owner Status and
+					// cleanup. Keep the durable state within the uncertain contract.
+					current.State = "uncertain"
+					current.LastError = "take_state_invalid"
+				}
 				if err = m.saveOffPeakControl(d, current); err != nil {
 					// Retain a late result only as retirement evidence. Do not hand
 					// an uncommitted ticket to a model request.
@@ -154,6 +167,9 @@ func (m *ZhipuOffPeakTicketManager) acquireDurable(parent context.Context, accou
 					if lateErr != nil {
 						slog.Error("zhipu_offpeak.late_ticket_persistence_failed", "account_id", current.AccountID, "stage", "take", "reason", "store_unavailable")
 					}
+					return nil, offPeakStoreFailure()
+				}
+				if !validState {
 					return nil, offPeakStoreFailure()
 				}
 				continue

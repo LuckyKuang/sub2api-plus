@@ -269,11 +269,20 @@ func (m *ZhipuOffPeakTicketManager) acquireLocked(ctx context.Context, holder *z
 				ticket, err = m.client.TakeTicket(ctx, holder.taskID, auth, holder.proxyURL)
 				return err
 			})
+			if ticket != nil && ticket.TicketID != "" {
+				// Preserve a known remote ticket even when the response is partial
+				// or its state cannot authorize this acquisition. A later request
+				// revalidates it through Status instead of spending another Take.
+				m.touchHolder(holder)
+				holder.ticketID = ticket.TicketID
+				holder.state, holder.position = "uncertain", nil
+			}
 			if err != nil {
 				return nil, offPeakAcquireError(err)
 			}
-			m.touchHolder(holder)
-			holder.ticketID = ticket.TicketID
+			if ticket == nil || ticket.TicketID == "" || !validOffPeakState(ticket.State) {
+				return nil, infraerrors.New(http.StatusBadGateway, "ZHIPU_OFFPEAK_TICKET_FAILED", "off-peak take did not return a valid admission state")
+			}
 			holder.state = ticket.State
 			holder.position = ticket.Position
 		}
@@ -294,7 +303,7 @@ func (m *ZhipuOffPeakTicketManager) acquireLocked(ctx context.Context, holder *z
 		if admitted := m.admittedLocked(holder); admitted != nil {
 			return admitted, nil
 		}
-		if holder.state != zcode.TicketQueued {
+		if holder.state != zcode.TicketQueued && holder.state != "uncertain" {
 			continue
 		}
 		if delay <= 0 {

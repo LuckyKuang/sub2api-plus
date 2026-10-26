@@ -21,6 +21,14 @@ List/metadata/delete have a known empty prompt body. Local file references in
 inference are resolved only after the original Chat/Responses/Messages audit;
 rewriting and owner pinning do not replace or bypass that audit. Unknown valid
 content still passes while recognized sibling user text remains auditable.
+Reference detection uses decoded protocol fields, so JSON escaping cannot bypass
+the Files scope or owner checks. A local namespace mentioned only in text, tool
+arguments or unknown siblings does not request Files resolution or trigger an
+unsupported-bridge rejection; its ordinary extracted text remains auditable.
+Model allowlisting leaves the two exact Files upload routes' binary bodies
+unread so the owning handler can enforce bounded private spooling after basic
+validation. This exemption does not bypass authentication, audit, or inference
+model admission.
 
 Usage timing observers are separate from this ingress extraction contract.
 Classifying upstream `compaction`/`compaction_summary` output for timing does not

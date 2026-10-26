@@ -212,7 +212,7 @@ func TestForwardResponses_ForceChatCompletionsRoutesStreamingToChatCompletions(t
 	require.NotNil(t, result.FirstTokenMs)
 }
 
-func TestForwardResponses_ChatFallbackRejectsInvalidToolArgumentsAtOutputLimit(t *testing.T) {
+func TestForwardResponses_ChatFallbackPreservesIncompleteToolArgumentsAtOutputLimit(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	body := []byte(`{"model":"deepseek-v4-flash","input":"run the command","stream":true}`)
@@ -240,16 +240,33 @@ func TestForwardResponses_ChatFallbackRejectsInvalidToolArgumentsAtOutputLimit(t
 	}
 
 	result, err := svc.Forward(context.Background(), c, forceChatResponsesFallbackAccount(), body)
-	require.ErrorContains(t, err, "invalid JSON")
+	require.NoError(t, err, "a token-limit stop preserves its incomplete output instead of becoming a provider failure")
 	require.NotNil(t, result)
 	require.Equal(t, 4, result.Usage.InputTokens)
 	require.Equal(t, 6492, result.Usage.OutputTokens)
+	require.Equal(t, UsageSourceUpstreamExact, result.UsageSource)
+	require.False(t, result.UsageIncomplete)
 	require.NotNil(t, result.FirstTokenMs)
 	require.NotNil(t, result.LastTokenMs)
 	require.Equal(t, "tool", result.FirstOutputKind)
-	require.NotContains(t, rec.Body.String(), "response.function_call_arguments.done")
-	require.NotContains(t, rec.Body.String(), "response.output_item.done")
-	require.NotContains(t, rec.Body.String(), "data: [DONE]")
+	require.Contains(t, rec.Body.String(), "event: response.incomplete")
+	require.NotContains(t, rec.Body.String(), "event: response.completed")
+	require.Contains(t, rec.Body.String(), "data: [DONE]")
+	terminals := 0
+	for _, line := range strings.Split(rec.Body.String(), "\n") {
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		event := gjson.Parse(strings.TrimPrefix(line, "data: "))
+		if event.Get("type").String() == "response.incomplete" {
+			terminals++
+			require.Equal(t, "incomplete", event.Get("response.status").String())
+			require.Equal(t, "max_output_tokens", event.Get("response.incomplete_details.reason").String())
+			require.Equal(t, `{"cmd":"ssh root@HOST`, event.Get("response.output.0.arguments").String())
+			require.Equal(t, "incomplete", event.Get("response.output.0.status").String())
+		}
+	}
+	require.Equal(t, 1, terminals)
 }
 
 func TestForwardResponses_DeepSeekReasoningOnlyStreamProducesVisibleText(t *testing.T) {

@@ -338,6 +338,100 @@ class GoEventCoverageTests(unittest.TestCase):
                 with self.subTest(profile=profile, package=package, test=test):
                     self.assertIn(test, group.tests)
 
+    def test_capability_review_requires_every_declared_business_boundary(self) -> None:
+        # These are independently declared acceptance cases. Do not discover
+        # them from Go tables or reuse the manifest's generated collections:
+        # removing a Go row or a manifest child must make the gate fail.
+        contracts = {
+            ("unit", "./internal/pkg/apicompat", "TestStepFunReviewToolStreamKeepsClosedBlocksImmutable"): {
+                "ordinary_text_before_tool", "ordinary_parallel_tools", "text_between_argument_fragments",
+                "refusal_between_argument_fragments", "reasoning_between_argument_fragments",
+            },
+            ("unit", "./internal/service", "TestStepFunReviewMessagesRejectsInvalidCompletedToolInput"): {
+                f"stream={stream}/{case}" for stream in ("false", "true")
+                for case in ("object", "empty_arguments", "whitespace_arguments", "truncated_json",
+                             "trailing_json", "array_input", "scalar_input", "null_input")
+            },
+            ("unit", "./internal/handler", "TestPartialFailureReviewKeepsSingleSchedulingOutcomeAndBill"): {
+                "chat", "responses", "messages",
+            },
+            ("unit", "./internal/service", "TestProviderFilesReviewEscapedIDsPreserveACLRewriteAndOwner"): {
+                f"{provider}/{encoding}/{access}"
+                for provider in ("deepseek", "minimax") for encoding in ("hyphens", "first-letter")
+                for access in ("authorized", "other-key", "unknown")
+            },
+            ("unit", "./internal/service", "TestProviderFilesReviewMiniMaxRejectsNonVideoISOBrands"): {
+                "mp4-isom", "mp4-v1", "mp4-v2", "mov-quicktime", "avif-image",
+                "avif-image-sequence", "heic-image", "heix-image",
+                "generic-major-avif-compatibility", "generic-major-heif-compatibility",
+            },
+            ("unit", "./internal/handler", "TestProviderFilesReviewHandlerLocalIDsRespectProtocolMatrix"): {
+                f"{protocol}/{encoding}/known={known}"
+                for protocol in ("chat_completions", "anthropic", "responses")
+                for encoding in ("literal", "hyphens", "first-letter") for known in ("true", "false")
+            },
+            ("unit", "./internal/handler", "TestProviderFilesReviewMiniMaxBridgesIgnoreNonReferenceMentions"): {
+                f"{protocol}/{case}" for protocol in ("anthropic", "responses")
+                for case in ("plain-text", "text-block", "tool-input", "unknown-sibling",
+                             "native-reference-with-unknown-sibling")
+            },
+            ("unit", "./internal/handler", "TestProviderFilesReviewMiniMaxBridgesRejectActualLocalReferences"): {
+                f"{protocol}/{encoding}" for protocol in ("anthropic", "responses")
+                for encoding in ("literal", "escaped")
+            },
+            ("unit", "./internal/handler", "TestProviderFilesReviewDeepSeekBridgesNeverDiscardLocalImages"): {
+                "native-image", "chat-file", "chat-image-url", "responses-file", "responses-image",
+            },
+            ("unit", "./internal/handler", "TestProviderFilesReviewDeepSeekBridgesKeepNativeAndInlineCompatibility"): {
+                f"{protocol}/{shape}" for protocol in ("chat_completions", "responses")
+                for shape in ("native-reference", "inline-image")
+            },
+            ("unit", "./internal/server/middleware", "TestProviderFilesReviewAllowlistLeavesUploadBodyUnread"): {
+                "/v1/files", "/v1/files/upload",
+            },
+            ("unit", "./internal/server/middleware", "TestProviderFilesReviewUploadExemptionPreservesModelAllowlist"): {
+                "chat-allowed", "chat-denied", "live-session-allowed", "live-session-denied",
+            },
+            ("unit", "./internal/service", "TestZhipuOffPeakMemoryPartialTakeRetainsKnownIDWithoutAdmissionOrRetake"): {
+                "unknown-state", "missing-or-empty-state", "partial-error-with-ready-state",
+            },
+            ("unit", "./internal/service", "TestZhipuOffPeakMemoryTakeWithoutTicketEvidenceCannotAdmit"): {
+                "nil-ticket", "missing-ticket-id",
+            },
+            ("unit", "./internal/service", "TestZhipuOffPeakMemoryUncertainStatusFailureKeepsBoundedPollWait"): set(),
+            ("integration", "./internal/repository", "TestZhipuOffPeakManagerPostgresConcurrentQuotaRejectionPreservesResetTime"): set(),
+            ("integration", "./internal/repository", "TestZhipuOffPeakManagerPostgresUnknownTakeStateRetainsKnownTicketForRestart"): {
+                "unknown-state", "missing-state", "empty-state",
+            },
+            ("unit", "./internal/service", "TestStepFunReviewMessagesPreservesMaxTokenToolTruncation"): {
+                f"stream={stream}/{case}" for stream in ("false", "true")
+                for case in ("length_complete_object", "length_truncated_object",
+                             "tool_calls_truncated_control", "stop_truncated_control")
+            },
+            ("unit", "./internal/service", "TestZhipuOffPeakDurablePartialTakeRetainsEvidenceBeforeRestartAdmission"): {
+                "ready-with-error", "queued-with-error", "unknown-with-error",
+            },
+            ("unit", "./internal/service", "TestProviderFilesReviewInferenceAuditKeepsTextAndOpaqueReferencesSeparate"): {
+                f"{protocol}/{encoding}" for protocol in ("chat", "responses", "messages")
+                for encoding in ("literal", "escaped")
+            },
+            ("unit", "./internal/service", "TestStepFunReviewResponsesPreservesMaxTokenToolTruncation"): {
+                f"stream={stream}/{case}" for stream in ("false", "true")
+                for case in ("length_complete_object", "length_truncated_object",
+                             "tool_calls_truncated_control", "stop_truncated_control")
+            },
+        }
+        self.assertEqual(len(contracts), 21)
+        self.assertEqual(sum(len(children) for children in contracts.values()), 126)
+        for (profile, package, test), children in contracts.items():
+            with self.subTest(profile=profile, package=package, test=test):
+                group = next(group for group in coverage.PROFILES[profile] if group.package == package)
+                self.assertIn(test, group.tests)
+                self.assertEqual(
+                    {child for child in group.required_subtests if child.startswith(test + "/")},
+                    {f"{test}/{child}" for child in children},
+                )
+
     def test_bridge_token_and_reset_manifests_pin_independent_sender_boundaries(self) -> None:
         group = next(group for group in coverage.PROFILES["unit"]
                      if group.package == "./internal/service")

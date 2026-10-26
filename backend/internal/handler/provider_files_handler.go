@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
@@ -321,15 +320,18 @@ func (r *providerFileContextReader) Read(buffer []byte) (int, error) {
 }
 
 func (h *OpenAIGatewayHandler) resolveProviderFilesForInference(c *gin.Context, key *service.APIKey, body []byte, protocol string) ([]byte, error) {
-	if !bytes.Contains(body, []byte(service.ProviderFileIDPrefix)) {
+	if !service.ProviderFileReferencesPresent(body) {
 		return body, nil
-	}
-	if h.providerFilesService == nil {
-		return nil, service.ErrProviderFileStore
 	}
 	platform := openAICompatibleRequestPlatform(c.Request.Context(), key)
 	if platform == service.PlatformMiniMax && protocol != service.APIProtocolChatCompletions {
 		return nil, service.ErrProviderFilesUnsupported
+	}
+	if platform == service.PlatformDeepseek && protocol != service.APIProtocolAnthropic {
+		return nil, service.ErrProviderFilesUnsupported
+	}
+	if h.providerFilesService == nil {
+		return nil, service.ErrProviderFileStore
 	}
 	ctx, resolved, err := h.providerFilesService.ResolveReferences(c.Request.Context(), key, platform, body)
 	if err != nil {

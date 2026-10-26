@@ -143,6 +143,16 @@ CAPABILITY_SERVICE_TESTS = (
     "TestZhipuOffPeakAdminSegmentRejectsUnsupportedModeAndProfile",
     "TestZhipuOffPeakAdminSegmentMapsErrorsWithoutSecretDisclosure",
     "TestZhipuOffPeakAdminTerminateDrainsAndRetriesOriginalSnapshot",
+    "TestStepFunReviewMessagesRejectsInvalidCompletedToolInput",
+    "TestProviderFilesReviewEscapedIDsPreserveACLRewriteAndOwner",
+    "TestProviderFilesReviewMiniMaxRejectsNonVideoISOBrands",
+    "TestZhipuOffPeakMemoryPartialTakeRetainsKnownIDWithoutAdmissionOrRetake",
+    "TestZhipuOffPeakMemoryTakeWithoutTicketEvidenceCannotAdmit",
+    "TestZhipuOffPeakMemoryUncertainStatusFailureKeepsBoundedPollWait",
+    "TestStepFunReviewMessagesPreservesMaxTokenToolTruncation",
+    "TestStepFunReviewResponsesPreservesMaxTokenToolTruncation",
+    "TestZhipuOffPeakDurablePartialTakeRetainsEvidenceBeforeRestartAdmission",
+    "TestProviderFilesReviewInferenceAuditKeepsTextAndOpaqueReferencesSeparate",
 )
 CAPABILITY_SERVICE_SUBTESTS = tuple(
     f"{test}/{profile}/{protocol}/stream={stream}"
@@ -209,6 +219,42 @@ CAPABILITY_SERVICE_SUBTESTS = tuple(
     f"TestZhipuOffPeakMissingStatusPreservesExistingTicket/{initial}/{scenario}"
     for initial in ("ready", "queued")
     for scenario in ("empty", "unmatched", "unknown-state", "conflicting-duplicate", "duplicate-ready")
+) + tuple(
+    f"TestStepFunReviewMessagesRejectsInvalidCompletedToolInput/stream={stream}/{scenario}"
+    for stream in ("false", "true")
+    for scenario in ("object", "empty_arguments", "whitespace_arguments", "truncated_json",
+                     "trailing_json", "array_input", "scalar_input", "null_input")
+) + tuple(
+    f"TestProviderFilesReviewEscapedIDsPreserveACLRewriteAndOwner/{platform}/{encoding}/{access}"
+    for platform in ("deepseek", "minimax") for encoding in ("hyphens", "first-letter")
+    for access in ("authorized", "other-key", "unknown")
+) + tuple(
+    f"{test}/{scenario}"
+    for test, scenarios in (
+        ("TestProviderFilesReviewMiniMaxRejectsNonVideoISOBrands", (
+            "mp4-isom", "mp4-v1", "mp4-v2", "mov-quicktime", "avif-image",
+            "avif-image-sequence", "heic-image", "heix-image",
+            "generic-major-avif-compatibility", "generic-major-heif-compatibility")),
+        ("TestZhipuOffPeakMemoryPartialTakeRetainsKnownIDWithoutAdmissionOrRetake", (
+            "unknown-state", "missing-or-empty-state", "partial-error-with-ready-state")),
+        ("TestZhipuOffPeakMemoryTakeWithoutTicketEvidenceCannotAdmit", (
+            "nil-ticket", "missing-ticket-id")),
+        ("TestZhipuOffPeakDurablePartialTakeRetainsEvidenceBeforeRestartAdmission", (
+            "ready-with-error", "queued-with-error", "unknown-with-error")),
+    ) for scenario in scenarios
+) + tuple(
+    f"TestStepFunReviewMessagesPreservesMaxTokenToolTruncation/stream={stream}/{scenario}"
+    for stream in ("false", "true")
+    for scenario in ("length_complete_object", "length_truncated_object",
+                     "tool_calls_truncated_control", "stop_truncated_control")
+) + tuple(
+    f"TestProviderFilesReviewInferenceAuditKeepsTextAndOpaqueReferencesSeparate/{protocol}/{encoding}"
+    for protocol in ("chat", "responses", "messages") for encoding in ("literal", "escaped")
+) + tuple(
+    f"TestStepFunReviewResponsesPreservesMaxTokenToolTruncation/stream={stream}/{scenario}"
+    for stream in ("false", "true")
+    for scenario in ("length_complete_object", "length_truncated_object",
+                     "tool_calls_truncated_control", "stop_truncated_control")
 )
 CAPABILITY_REPOSITORY_TESTS = (
     "TestProviderFilesPersistentUploadReferenceAndRestartCleanup",
@@ -244,6 +290,39 @@ CAPABILITY_REPOSITORY_TESTS = (
     "TestZhipuOffPeakManagerPostgresTerminateCannotRetakeFromOldAcquire",
     "TestZhipuOffPeakManagerPostgresKnownStatusFailureRecoversSameTicketAfterRestart",
     "TestZhipuOffPeakManagerPostgresAdmissionFailureRecoversSameTicketAfterRestart",
+    "TestZhipuOffPeakManagerPostgresConcurrentQuotaRejectionPreservesResetTime",
+    "TestZhipuOffPeakManagerPostgresUnknownTakeStateRetainsKnownTicketForRestart",
+)
+
+REVIEW_HANDLER_TESTS = (
+    "TestPartialFailureReviewKeepsSingleSchedulingOutcomeAndBill",
+    "TestProviderFilesReviewHandlerLocalIDsRespectProtocolMatrix",
+    "TestProviderFilesReviewMiniMaxBridgesIgnoreNonReferenceMentions",
+    "TestProviderFilesReviewMiniMaxBridgesRejectActualLocalReferences",
+    "TestProviderFilesReviewDeepSeekBridgesNeverDiscardLocalImages",
+    "TestProviderFilesReviewDeepSeekBridgesKeepNativeAndInlineCompatibility",
+)
+REVIEW_HANDLER_SUBTESTS = tuple(
+    f"TestPartialFailureReviewKeepsSingleSchedulingOutcomeAndBill/{protocol}"
+    for protocol in ("chat", "responses", "messages")
+) + tuple(
+    f"TestProviderFilesReviewHandlerLocalIDsRespectProtocolMatrix/{protocol}/{encoding}/known={known}"
+    for protocol in ("chat_completions", "anthropic", "responses")
+    for encoding in ("literal", "hyphens", "first-letter") for known in ("true", "false")
+) + tuple(
+    f"TestProviderFilesReviewMiniMaxBridgesIgnoreNonReferenceMentions/{protocol}/{scenario}"
+    for protocol in ("anthropic", "responses")
+    for scenario in ("plain-text", "text-block", "tool-input", "unknown-sibling",
+                     "native-reference-with-unknown-sibling")
+) + tuple(
+    f"TestProviderFilesReviewMiniMaxBridgesRejectActualLocalReferences/{protocol}/{encoding}"
+    for protocol in ("anthropic", "responses") for encoding in ("literal", "escaped")
+) + tuple(
+    f"TestProviderFilesReviewDeepSeekBridgesNeverDiscardLocalImages/{shape}"
+    for shape in ("native-image", "chat-file", "chat-image-url", "responses-file", "responses-image")
+) + tuple(
+    f"TestProviderFilesReviewDeepSeekBridgesKeepNativeAndInlineCompatibility/{protocol}/{shape}"
+    for protocol in ("chat_completions", "responses") for shape in ("native-reference", "inline-image")
 )
 
 # These names deliberately pin the business cases rather than discovering cases
@@ -297,6 +376,11 @@ PROFILES = {
         )),
         RegressionGroup("./internal/pkg/apicompat", (
             "TestStepFunParallelChatToolsKeepIndependentAnthropicBlockLifecycles",
+            "TestStepFunReviewToolStreamKeepsClosedBlocksImmutable",
+        ), tuple(
+            f"TestStepFunReviewToolStreamKeepsClosedBlocksImmutable/{scenario}"
+            for scenario in ("ordinary_text_before_tool", "ordinary_parallel_tools", "text_between_argument_fragments",
+                             "refusal_between_argument_fragments", "reasoning_between_argument_fragments")
         )),
         RegressionGroup("./internal/pkg/xai", (
             "TestOIDCIDTokenCryptographicAndClaimBoundaries",
@@ -782,7 +866,7 @@ PROFILES = {
             "TestZhipuStartPlanCompositeCatalogUsesWinningRouteAndActualTarget",
             "TestZhipuStartPlanCompositeCatalogPreservesTypedAndPersistedIdentityOwner",
             "TestProviderFilesAuditGatePrecedesEveryACLAndWriteBoundary",
-        ), tuple(
+        ) + REVIEW_HANDLER_TESTS, tuple(
             f"{FAILOVER_TEST}/{platform}/{status}"
             for platform in PROVIDERS
             for status in (503, 429)
@@ -820,6 +904,16 @@ PROFILES = {
         ) + tuple(
             f"TestProviderFilesAuditGatePrecedesEveryACLAndWriteBoundary/{boundary}"
             for boundary in ("upload-retry", "scheduler", "user-slot", "account-slot", "upload", "metadata", "list", "delete")
+        ) + REVIEW_HANDLER_SUBTESTS),
+        RegressionGroup("./internal/server/middleware", (
+            "TestProviderFilesReviewAllowlistLeavesUploadBodyUnread",
+            "TestProviderFilesReviewUploadExemptionPreservesModelAllowlist",
+        ), tuple(
+            f"TestProviderFilesReviewAllowlistLeavesUploadBodyUnread/{path}"
+            for path in ("/v1/files", "/v1/files/upload")
+        ) + tuple(
+            f"TestProviderFilesReviewUploadExemptionPreservesModelAllowlist/{scenario}"
+            for scenario in ("chat-allowed", "chat-denied", "live-session-allowed", "live-session-denied")
         )),
         RegressionGroup("./internal/handler/admin", (NATIVE_UNSUPPORTED_REFRESH,
             "TestZhipuOffPeakSegmentHandlerOpaqueReadAndExactTermination",
@@ -934,6 +1028,7 @@ PROFILES = {
                 ("TestZhipuOffPeakStoreTerminateRejectsUnmatchedOwnerAndGeneration", ("other-account", "unknown-record", "wrong-generation")),
                 ("TestZhipuOffPeakManagerPostgresTerminateCannotRetakeFromOldAcquire", ("waiting-operation-lease", "already-claimed-operation")),
                 ("TestZhipuOffPeakManagerPostgresAdmissionFailureRecoversSameTicketAfterRestart", ("request-lease-insert-failure", "operation-lease-expired")),
+                ("TestZhipuOffPeakManagerPostgresUnknownTakeStateRetainsKnownTicketForRestart", ("unknown-state", "missing-state", "empty-state")),
                 ("TestProviderFilesRepositoryOwnerCASLocksProxyBeforeAccount", ("reserve", "publish")),
                 ("TestZhipuStartPlanPostgresOwnerAndOutboxFailuresPreserveObservation", ("relink", "estate", "plan", "outbox")),
                 (CONTROL_CAS_CACHE_BOUNDARY, ("managed=false", "managed=true")),

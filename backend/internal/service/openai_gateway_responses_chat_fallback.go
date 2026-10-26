@@ -172,16 +172,7 @@ func (s *OpenAIGatewayService) bufferChatCompletionsAsResponses(
 		}
 		return &OpenAIForwardResult{RequestID: requestID, Usage: usage, UsageSource: usageSource, Model: originalModel, BillingModel: billingModel, UpstreamModel: upstreamModel, Duration: time.Since(startTime)}, err
 	}
-	responsesResp := apicompat.ChatCompletionsResponseToResponses(ccResp, originalModel, customTools, functionTools, toolSearch, namespaceTools)
-	s.cacheReasoningItemsFromOutput(responsesResp.Output)
-
-	if s.responseHeaderFilter != nil {
-		responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
-	}
-	s.finalizeCodexClientQuotaHeaders(c.Writer.Header(), c, account)
-	c.JSON(http.StatusOK, responsesResp)
-
-	return &OpenAIForwardResult{
+	result := &OpenAIForwardResult{
 		RequestID:                   requestID,
 		UpstreamHeaders:             resp.Header,
 		Usage:                       usage,
@@ -195,7 +186,22 @@ func (s *OpenAIGatewayService) bufferChatCompletionsAsResponses(
 		ServiceTier:                 resolvedOpenAIUpstreamServiceTier(c, serviceTier),
 		Stream:                      false,
 		Duration:                    time.Since(startTime),
-	}, nil
+	}
+	if err := apicompat.ValidateChatCompletionsResponsesToolInputs(ccResp, customTools, functionTools, toolSearch, namespaceTools); err != nil {
+		result.UsageIncomplete = true
+		result.UsageSource = ccObservedUsageSource(usageSource != UsageSourceUnknown, true)
+		writeOpenAIResponsesFallbackError(c, http.StatusBadGateway, "api_error", "Upstream returned invalid tool input")
+		return result, err
+	}
+	responsesResp := apicompat.ChatCompletionsResponseToResponses(ccResp, originalModel, customTools, functionTools, toolSearch, namespaceTools)
+	s.cacheReasoningItemsFromOutput(responsesResp.Output)
+
+	if s.responseHeaderFilter != nil {
+		responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
+	}
+	s.finalizeCodexClientQuotaHeaders(c.Writer.Header(), c, account)
+	c.JSON(http.StatusOK, responsesResp)
+	return result, nil
 }
 
 func (s *OpenAIGatewayService) streamChatCompletionsAsResponses(
@@ -258,6 +264,13 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsResponses(
 		s.cacheReasoningItemsFromEvents(events)
 		writeEvents(events)
 	})
+	if scan.completionError() == nil {
+		if err := state.ValidateToolCallArguments(); err != nil {
+			// Invalid completed tool input is a protocol failure with partial
+			// observed usage. Normal length stops retain their incomplete output.
+			scan.ProtocolErr, scan.SawError = err, true
+		}
+	}
 
 	if streamErr := scan.completionError(); streamErr != nil {
 		var rejected *UpstreamFailoverError
@@ -288,27 +301,6 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsResponses(
 		}
 		return result, fmt.Errorf("stream usage incomplete: %w", streamErr)
 	}
-	if err := state.ValidateToolCallArguments(); err != nil {
-		result := &OpenAIForwardResult{
-			RequestID:                   requestID,
-			UpstreamHeaders:             resp.Header,
-			Usage:                       scan.Usage,
-			UsageSource:                 scan.usageSource(clientDisconnected),
-			Model:                       originalModel,
-			BillingModel:                billingModel,
-			UpstreamModel:               upstreamModel,
-			ReasoningEffort:             reasoningEffort,
-			UpstreamResponseServiceTier: observedUpstreamResponseServiceTier(c),
-			ResponseServiceTier:         observedDeclaredServiceTier(c),
-			ServiceTier:                 resolvedOpenAIUpstreamServiceTier(c, serviceTier),
-			Stream:                      true,
-			UsageIncomplete:             scan.usageIncomplete(),
-			Duration:                    time.Since(startTime),
-		}
-		timing.ApplyOpenAIResult(result)
-		return result, fmt.Errorf("invalid tool call arguments from upstream: %w", err)
-	}
-
 	finalEvents := apicompat.FinalizeChatCompletionsResponsesStream(state)
 	s.cacheReasoningItemsFromEvents(finalEvents)
 	writeEvents(finalEvents)

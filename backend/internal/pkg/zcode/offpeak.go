@@ -209,6 +209,8 @@ func (c *OffPeakClient) Availability(ctx context.Context, auth OffPeakAuth) (*Of
 
 // TakeTicket requests a ticket for taskID. It never blocks: the platform answers
 // with the current admission state.
+// An incomplete state with a known ticket ID returns both evidence and an error;
+// callers must preserve the ID for Status without treating it as admission.
 func (c *OffPeakClient) TakeTicket(ctx context.Context, taskID string, auth OffPeakAuth) (*OffPeakTicket, error) {
 	taskID = strings.TrimSpace(taskID)
 	if taskID == "" {
@@ -227,8 +229,14 @@ func (c *OffPeakClient) TakeTicket(ctx context.Context, taskID string, auth OffP
 		return nil, fmt.Errorf("decode off-peak ticket: %w", err)
 	}
 	ticket := payload.normalize()
-	if ticket.TicketID == "" || ticket.State == "" {
+	if ticket.TicketID == "" {
 		return nil, fmt.Errorf("invalid off-peak ticket response")
+	}
+	if ticket.State == "" {
+		// Preserve evidence of a remote ticket without treating an incomplete
+		// response as successful admission. The owner can revalidate it through
+		// Status instead of issuing another potentially counted Take.
+		return ticket, fmt.Errorf("invalid off-peak ticket response")
 	}
 	return ticket, nil
 }

@@ -37,6 +37,30 @@ the first announced tool keeps streaming; other concurrent tools accumulate
 their own fragments until their blocks can open. Each block closes after its
 arguments, and no later delta targets a closed block. Subsequent client turns
 retain both assistant calls and their corresponding tool results.
+Text, refusal and reasoning deltas interleaved with an open tool's arguments
+wait until the sequential tool blocks finish. Tool input must be a complete
+JSON object before the Messages bridge emits a completed tool-use terminal event;
+empty or whitespace-only arguments retain the empty-object convention. A
+damaged, scalar, array or null tool input returns a safe upstream error with
+observed partial usage, rather than a successful empty body or terminal event.
+The normal `length` stop instead retains Messages `stop_reason=max_tokens` and
+the actual reported usage; it does not count as a provider failure. A streaming
+response preserves the original partial tool-argument deltas. A buffered
+response retains each tool ID/name and complete object input, but represents
+incomplete or non-object input as `{}` so the response remains valid JSON.
+Clients should retry with more output budget after `max_tokens` rather than
+execute that placeholder. This is the gateway's Chat-to-Messages adaptation
+contract, consistent with the upstream Messages distinction between
+[token-limit stops and errors](https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons#max_tokens).
+The Responses conversion preserves `length` as `status=incomplete` with
+`incomplete_details.reason=max_output_tokens`; its streaming terminal event is
+`response.incomplete`, as specified by the
+[Responses streaming contract](https://developers.openai.com/api/reference/resources/responses/streaming-events).
+Function-call arguments remain their original strings, including truncated
+input, and truncated calls have `status=incomplete`. Completed turns with
+invalid ordinary function arguments return a safe error with observed partial
+usage, instead of silently dropping the tool or reporting exact completed usage.
+Custom and search tools retain their separate argument contracts.
 
 An explicit upstream JSON/SSE `error` object remains an inference failure even
 under HTTP 200. An error before client output may use the established account
@@ -44,6 +68,9 @@ failover path; an error after committed output returns an incomplete result
 without replaying that turn. HTTP 401/403/429/5xx retain the gateway's existing
 status policies. A late failure cannot quarantine a replacement key, profile or
 proxy binding; the unchanged failed owner remains eligible for error handling.
+Each physical attempt contributes one scheduling outcome. A partial failed
+response may retain one usage record, but cannot count twice toward account
+health or evict the conversation owner merely because billing continues.
 
 The raw Chat stream accepts `[DONE]`, a finish reason, or an explicit usage
 frame as its existing completion evidence. The Responses and Messages bridges

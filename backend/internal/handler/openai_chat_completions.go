@@ -420,7 +420,6 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 					)
 					continue
 				}
-				h.gatewayService.ReportOpenAIAccountScheduleResult(account, openAIAccountScheduleModel(c, account, reqModel, false, nil), false, nil, err)
 				upstreamErrorAlreadyCommunicated := openAIForwardErrorAlreadyCommunicated(c, writerSizeBeforeForward, err)
 				wroteFallback := false
 				if !upstreamErrorAlreadyCommunicated {
@@ -438,6 +437,7 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 				// The forwarding service may return usage gathered before a stream
 				// failure. Preserve it for billing below as an incomplete record.
 				if result == nil || service.GetOpsCyberPolicy(c) != nil {
+					h.gatewayService.ReportOpenAIAccountScheduleResult(account, openAIAccountScheduleModel(c, account, reqModel, false, result), false, nil, err)
 					return
 				}
 			}

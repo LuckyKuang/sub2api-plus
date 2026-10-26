@@ -284,7 +284,7 @@ an arbitrary timeout is not completion.
 
 ## Capability-completion implementation inventory
 
-The current batch adds the following requirement-derived cases to the existing
+The capability batch adds the following requirement-derived cases to the existing
 seven-provider regressions. These are implemented test contracts; their presence
 does not establish a passing final-tree run. The current execution status is
 recorded under [capability-completion verification](#capability-completion-verification).
@@ -319,6 +319,27 @@ pins each listed top-level case and the independently specified table children.
 The parser regressions remove required execution events and reject missing,
 skipped, failed and unfinished cases. Full suite and targeted race execution are
 separate evidence, as are real-account authorization and entitlements.
+
+### Post-commit branch review
+
+The review starts from `488ca736c`, which committed the capability batch above.
+It adds the following independent regressions. Execution results for this
+review must be recorded separately from the earlier capability run.
+
+| Business requirement | Independent oracle and cases | Test entrypoints |
+| --- | --- | --- |
+| Messages tool blocks remain immutable once stopped | Text before tools and ordinary parallel tools remain valid; text, refusal and reasoning interleaved with argument fragments cannot close an incomplete tool block or write to a stopped index | `pkg/apicompat/TestStepFunReviewToolStreamKeepsClosedBlocksImmutable` |
+| Completed tool input must be an object | Buffered/streamed object, empty and whitespace controls succeed; truncated/trailing JSON, array, scalar and null cannot become a successful completed tool call. Preserve measured usage and forbid account replay | `service/TestStepFunReviewMessagesRejectsInvalidCompletedToolInput` |
+| Token-limit truncation retains its successful stop reason | Streaming/buffered `length` retains `max_tokens`, exact observed usage and one terminal sequence even with incomplete tool arguments; buffered incomplete input has a safe empty-object representation and streaming keeps its original fragments. `tool_calls`/`stop` controls still reject damaged completed input | `service/TestStepFunReviewMessagesPreservesMaxTokenToolTruncation` |
+| Responses incomplete output is distinct from completed output | Streaming/buffered `length` retains original argument strings and usage, marks truncated tools incomplete, and declares `status=incomplete` with `max_output_tokens`; streaming uses `response.incomplete`. Invalid completed arguments cannot be silently omitted or retain a complete-usage classification | `service/TestStepFunReviewResponsesPreservesMaxTokenToolTruncation` |
+| A physical partial failure has one scheduling outcome and one bill | Real Chat/Responses/Messages handlers retain partial usage, release slots and report the one physical attempt once; the next same-session request is not prematurely moved to another account | `handler/TestPartialFailureReviewKeepsSingleSchedulingOutcomeAndBill` |
+| Decoded local file references retain ACL and owner semantics | Literal/escaped local IDs share the protocol matrix, lookup, rewrite and hard owner constraint; another key or unknown local ID cannot fall through to native references | `service/TestProviderFilesReviewEscapedIDsPreserveACLRewriteAndOwner`; `handler/TestProviderFilesReviewHandlerLocalIDsRespectProtocolMatrix` |
+| File mentions are distinct from file references | MiniMax bridge text, tool input, unknown siblings and native references retain existing handling; actual local references are explicitly unsupported. DeepSeek local files are native Messages-only and cannot silently disappear in Chat/Responses conversion | `handler/TestProviderFilesReviewMiniMaxBridgesIgnoreNonReferenceMentions`, `TestProviderFilesReviewMiniMaxBridgesRejectActualLocalReferences`, `TestProviderFilesReviewDeepSeekBridgesNeverDiscardLocalImages`, `TestProviderFilesReviewDeepSeekBridgesKeepNativeAndInlineCompatibility` |
+| Both audit engines keep opaque references separate from sibling text | Chat/Responses/Messages literal and escaped local references plus unknown siblings preserve independently auditable user text; removing that text leaves no invented prompt or policy violation | `service/TestProviderFilesReviewInferenceAuditKeepsTextAndOpaqueReferencesSeparate` |
+| Files uploads remain bounded through the full middleware chain | Only registered POST upload routes skip model extraction and leave the body unread for private spooling; ordinary Chat/Live requests still enforce their allowlist | `server/middleware/TestProviderFilesReviewAllowlistLeavesUploadBodyUnread`, `TestProviderFilesReviewUploadExemptionPreservesModelAllowlist` |
+| MiniMax image containers cannot masquerade as video | Four explicit MP4/QuickTime signature controls succeed; AVIF/HEIF major brands and image-compatible generic ISO brands fail. This is bounded signature validation, not video-track or codec verification | `service/TestProviderFilesReviewMiniMaxRejectsNonVideoISOBrands` |
+| Concurrent quota rejection preserves the actual reset | Two managers on real PostgreSQL observe one Take and the same quota/reset result; no waiter acquires a model lease or creates a replacement segment | `repository/TestZhipuOffPeakManagerPostgresConcurrentQuotaRejectionPreservesResetTime` |
+| A partial Take preserves known ticket evidence without admitting | Unknown/missing/empty state survives restart as uncertain; the next manager uses Status on the same ticket. Durable ready/queued/unknown states accompanied by an error cannot admit until the restarted manager obtains a valid original-ticket Status. Memory mode also retains known IDs from partial errors, rejects nil/missing-ID results and bounds uncertain Status polling | `repository/TestZhipuOffPeakManagerPostgresUnknownTakeStateRetainsKnownTicketForRestart`; `service/TestZhipuOffPeakDurablePartialTakeRetainsEvidenceBeforeRestartAdmission`, `TestZhipuOffPeakMemoryPartialTakeRetainsKnownIDWithoutAdmissionOrRetake`, `TestZhipuOffPeakMemoryTakeWithoutTicketEvidenceCannotAdmit`, `TestZhipuOffPeakMemoryUncertainStatusFailureKeepsBoundedPollWait` |
 
 The four durable off-peak environment settings are forwarded by every maintained
 Compose variant, including the development build, with the documented opt-in
@@ -370,7 +391,9 @@ The capability batch starts from `27c5e62f4` on
 `fix/seven-platforms-main-sync`. The following checks ran on 2026-10-26 in Apple
 Containers using image `sub2api-validation:8449ffd7679a1e27` and dependency-cache
 generation `7b5b2a85be071953`. PostgreSQL and Redis services were disposable.
-These are results for this capability worktree; the merge results below retain
+These are historical results for the capability worktree committed as
+`488ca736c`; they do not establish passing results for subsequent review fixes.
+The merge results below retain
 their separate historical commit attribution.
 
 | Validation | Recorded result |

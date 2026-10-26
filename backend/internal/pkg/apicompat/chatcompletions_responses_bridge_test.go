@@ -52,7 +52,7 @@ func TestResponsesInputToChatMessages_SkipsInvalidEmptyCallIDOutput(t *testing.T
 	require.Equal(t, "user", messages[0].Role)
 }
 
-func TestChatCompletionsResponseToResponses_SkipsInvalidFunctionArguments(t *testing.T) {
+func TestChatCompletionsResponseToResponses_PreservesIncompleteFunctionArgumentsAtOutputLimit(t *testing.T) {
 	resp := &ChatCompletionsResponse{
 		Model: "deepseek-v4-flash",
 		Choices: []ChatChoice{{
@@ -69,10 +69,16 @@ func TestChatCompletionsResponseToResponses_SkipsInvalidFunctionArguments(t *tes
 
 	out := ChatCompletionsResponseToResponses(resp, "deepseek-v4-flash", nil, nil, false, nil)
 	require.Equal(t, "incomplete", out.Status)
-	require.Len(t, out.Output, 1)
+	require.NotNil(t, out.IncompleteDetails)
+	require.Equal(t, "max_output_tokens", out.IncompleteDetails.Reason)
+	require.Len(t, out.Output, 2)
 	require.Equal(t, "function_call", out.Output[0].Type)
-	require.Equal(t, "call_ok", out.Output[0].CallID)
-	require.Equal(t, `{}`, out.Output[0].Arguments)
+	require.Equal(t, "call_bad", out.Output[0].CallID)
+	require.Equal(t, `{"cmd": "ssh root@HOST`, out.Output[0].Arguments)
+	require.Equal(t, "incomplete", out.Output[0].Status)
+	require.Equal(t, "call_ok", out.Output[1].CallID)
+	require.Equal(t, `{}`, out.Output[1].Arguments)
+	require.Equal(t, "completed", out.Output[1].Status)
 }
 
 func TestResponsesInputToChatMessages_KeepsChatCompletionRoles(t *testing.T) {

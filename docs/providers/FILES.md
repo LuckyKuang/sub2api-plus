@@ -32,12 +32,28 @@ constant. Expiry is omitted for permanent storage, or1hour–30days; both nested
 expiry form fields must be supplied together. The gateway does not implement the
 public OpenAI Files family in this batch.
 
+DeepSeek local gateway references are supported only at the native Anthropic
+Messages entrypoint, using an image `source` with `type: "file"` and `file_id`.
+The Chat Completions and Responses conversion entries explicitly reject local
+Files references before ACL reads, scheduling or inference. Their existing
+converters cannot preserve these file-backed images; accepting the request as a
+text-only inference would discard media and could charge for the wrong request.
+This keeps the first batch within its reviewed native Anthropic scope. External
+native references and inline media retain their existing compatibility paths.
+
 MiniMax's public understanding-upload contract documents video and a maximum
 retention of7days. The gateway conservatively accepts verified MP4/MOV, up to64MiB,
 and expires its local references after6days; this is a gateway reuse limit, not a
 promise about upstream retention. `base_resp.status_code` must be numeric zero;
 HTTP200 alone never means success. Returned IDs remain strings, including safe
 numeric provider IDs converted to strings. References are `mm_file://<id>`.
+The bounded signature check requires a complete `ftyp` box within the first512
+bytes and a reviewed major brand: `qt  ` for QuickTime, or `isom`, `iso2`–`iso9`,
+`isoa`–`isod`, `mp41`, `mp42`, `avc1`, `av01`, or `M4V ` for MP4. Known AVIF/HEIF
+image compatibility brands are rejected even under a generic ISO major brand;
+unknown major brands are unsupported. The [MP4 registration authority](https://mp4ra.org/registered-types/brands)
+distinguishes these image and container brands. This gate does not parse media
+tracks or establish codec support, video duration, or decodability.
 The public retrieve/delete contracts do not establish those operations for
 understanding uploads. A MiniMax delete revokes the local reference but returns
 an explicit unsupported remote-delete error.
@@ -76,6 +92,11 @@ which does not acquire the gateway's ownership guarantee. The reserved namespace
 must not be used for manually supplied native IDs. Inline media and unknown JSON
 content keep their existing behavior.
 
+Reference detection uses decoded protocol fields, so equivalent JSON escapes
+have the same ACL, rewrite and owner requirements. Mentioning `file-s2a-` in text,
+tool arguments or an unknown sibling object does not request a Files operation
+and does not enable or reject an otherwise supported protocol conversion.
+
 Long-lived ownership is a digest of platform, account type, account row creation,
 endpoint namespace and a credential epoch. Imported API keys have no authoritative
 provider account principal, so their key digest is the epoch: unproved key changes
@@ -103,7 +124,8 @@ trigger automatic upload or migration to another account.
 
 Multipart fields and actual file signatures are checked before account selection.
 The bounded input is spooled to a private, immediately unlinked temporary file to
-compute a server-side digest and permit verified idempotency; memory does not grow
+compute a server-side digest and permit verified idempotency; model allowlist
+middleware does not preload these two Files upload routes. Memory does not grow
 with file size. The operating system reclaims the spool when its descriptor closes,
 including process exit. No original bytes, credentials,
 or prompts enter the Files table. Per-user outstanding reservations and active

@@ -174,15 +174,7 @@ func (s *OpenAIGatewayService) bufferChatCompletionsAsAnthropic(
 		}
 		return &OpenAIForwardResult{RequestID: requestID, Usage: usage, UsageSource: usageSource, Model: originalModel, BillingModel: billingModel, UpstreamModel: upstreamModel, Duration: time.Since(startTime)}, err
 	}
-	anthropicResp := apicompat.ChatCompletionsResponseToAnthropic(ccResp, originalModel)
-
-	if s.responseHeaderFilter != nil {
-		responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
-	}
-	s.finalizeCodexClientQuotaHeaders(c.Writer.Header(), c, account)
-	c.JSON(http.StatusOK, anthropicResp)
-
-	return &OpenAIForwardResult{
+	result := &OpenAIForwardResult{
 		RequestID:                   requestID,
 		UpstreamHeaders:             resp.Header,
 		Usage:                       usage,
@@ -196,7 +188,21 @@ func (s *OpenAIGatewayService) bufferChatCompletionsAsAnthropic(
 		ServiceTier:                 resolvedOpenAIUpstreamServiceTier(c, serviceTier),
 		Stream:                      false,
 		Duration:                    time.Since(startTime),
-	}, nil
+	}
+	if err := apicompat.ValidateChatCompletionsAnthropicToolInputs(ccResp); err != nil {
+		result.UsageIncomplete = true
+		result.UsageSource = ccObservedUsageSource(usageSource != UsageSourceUnknown, true)
+		writeAnthropicError(c, http.StatusBadGateway, "api_error", "Upstream returned invalid tool input")
+		return result, err
+	}
+	anthropicResp := apicompat.ChatCompletionsResponseToAnthropic(ccResp, originalModel)
+
+	if s.responseHeaderFilter != nil {
+		responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
+	}
+	s.finalizeCodexClientQuotaHeaders(c.Writer.Header(), c, account)
+	c.JSON(http.StatusOK, anthropicResp)
+	return result, nil
 }
 
 func (s *OpenAIGatewayService) streamChatCompletionsAsAnthropic(
@@ -246,6 +252,15 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsAnthropic(
 
 	scan := s.scanCCStream(c, resp, "openai messages chat fallback", requestID, startTime, emitChunk)
 	usage := scan.Usage
+	if scan.completionError() == nil {
+		if err := anthropicState.ValidateToolCallArguments(); err != nil {
+			// A completed turn cannot have invalid tool_use input. A normal
+			// length stop is allowed by the validator and retains max_tokens.
+			// Preserve the provider's meter without finalizing or replaying
+			// an actual protocol failure.
+			scan.ProtocolErr, scan.SawError = err, true
+		}
+	}
 
 	if streamErr := scan.completionError(); streamErr != nil {
 		var rejected *UpstreamFailoverError

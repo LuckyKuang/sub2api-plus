@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -175,11 +176,8 @@ func ValidateProviderFileUpload(platform, name, declaredMIME, purpose string, ex
 		case len(head) >= 12 && string(head[:4]) == "RIFF" && string(head[8:12]) == "WEBP":
 			mimeType = "image/webp"
 		}
-	} else if len(head) >= 12 && string(head[4:8]) == "ftyp" {
-		mimeType = "video/mp4"
-		if string(head[8:12]) == "qt  " {
-			mimeType = "video/quicktime"
-		}
+	} else {
+		mimeType = providerFileMiniMaxVideoMIME(head)
 	}
 	if mimeType == "" || declaredMIME != "" && declaredMIME != "application/octet-stream" && declaredMIME != mimeType {
 		return nil, errors.New("file content does not match a supported media type")
@@ -199,6 +197,35 @@ func ValidateProviderFileUpload(platform, name, declaredMIME, purpose string, ex
 		return nil, err
 	}
 	return &ProviderFileUpload{Filename: name, MIMEType: mimeType, Purpose: purpose, ContentDigest: hex.EncodeToString(digest.Sum(nil)), Bytes: size, ExpirySeconds: expiry, Data: input}, nil
+}
+
+// This checks a bounded container signature and declared brands, not tracks or
+// media decodability. Image formats also use ftyp and cannot imply video support.
+func providerFileMiniMaxVideoMIME(head []byte) string {
+	if len(head) < 16 || string(head[4:8]) != "ftyp" {
+		return ""
+	}
+	size := int(binary.BigEndian.Uint32(head[:4]))
+	if size < 16 || size > len(head) || (size-16)%4 != 0 {
+		return ""
+	}
+	mimeType := ""
+	switch string(head[8:12]) {
+	case "qt  ":
+		mimeType = "video/quicktime"
+	case "isom", "iso2", "iso3", "iso4", "iso5", "iso6", "iso7", "iso8", "iso9", "isoa", "isob", "isoc", "isod", "mp41", "mp42", "avc1", "av01", "M4V ":
+		mimeType = "video/mp4"
+	default:
+		return ""
+	}
+	// Generic ISO major brands do not override an image compatibility brand.
+	for offset := 16; offset < size; offset += 4 {
+		switch string(head[offset : offset+4]) {
+		case "avif", "avis", "avio", "avci", "avcs", "heic", "heix", "heim", "heis", "hevc", "hevx", "hevs", "mif1", "mif2", "msf1", "miaf", "MA1A", "MA1B":
+			return ""
+		}
+	}
+	return mimeType
 }
 
 // There is no authoritative provider principal for imported API keys. A key
@@ -699,41 +726,28 @@ func providerFilesAccountCandidateAllowed(ctx context.Context, account *Account)
 	return providerFilesAccountAllowed(ctx, account)
 }
 
-// ResolveReferences visits protocol content only. Tool arguments, unknown
-// sibling objects and native references never become mapping lookup fallbacks.
-func (s *ProviderFilesService) ResolveReferences(ctx context.Context, key *APIKey, platform string, body []byte) (context.Context, []byte, error) {
-	if !bytes.Contains(body, []byte(ProviderFileIDPrefix)) {
-		return ctx, body, nil
-	}
+// ProviderFileReferencesPresent inspects decoded protocol fields, so equivalent
+// JSON escapes have identical ownership semantics. Text and unknown fields do
+// not acquire Files semantics merely by mentioning its namespace.
+func ProviderFileReferencesPresent(body []byte) bool {
 	var root map[string]any
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	decoder.UseNumber()
 	if err := decoder.Decode(&root); err != nil {
-		return ctx, nil, err
+		return false
 	}
-	changed := false
-	var constraint providerFilesOwnerConstraint
-	resolve := func(raw string) (string, error) {
-		prefix := ""
-		id := raw
-		if strings.HasPrefix(id, "mm_file://") {
-			prefix = "mm_file://"
-			id = strings.TrimPrefix(id, prefix)
+	found := false
+	_ = visitProviderFileReferenceFields(root, func(_ string, target map[string]any, field string) error {
+		raw, _ := target[field].(string)
+		if strings.HasPrefix(strings.TrimPrefix(raw, "mm_file://"), ProviderFileIDPrefix) {
+			found = true
 		}
-		if !strings.HasPrefix(id, ProviderFileIDPrefix) {
-			return raw, nil
-		}
-		file, err := s.Get(ctx, key, platform, id)
-		if err != nil {
-			return "", err
-		}
-		if constraint.AccountID != 0 && (constraint.AccountID != file.AccountID || constraint.Principal != file.Principal) {
-			return "", ErrProviderFileOwnerChanged
-		}
-		constraint = providerFilesOwnerConstraint{file.AccountID, file.Principal}
-		changed = true
-		return prefix + file.RemoteID, nil
-	}
+		return nil
+	})
+	return found
+}
+
+func visitProviderFileReferenceFields(root map[string]any, visit func(string, map[string]any, string) error) error {
 	var content func(any) error
 	content = func(value any) error {
 		items, ok := value.([]any)
@@ -780,33 +794,72 @@ func (s *ProviderFilesService) ResolveReferences(ctx context.Context, key *APIKe
 				}
 			}
 			if target != nil {
-				if raw, ok := target[field].(string); ok {
-					if platform == PlatformMiniMax && kind != "video_url" && (strings.HasPrefix(raw, ProviderFileIDPrefix) || strings.HasPrefix(raw, "mm_file://"+ProviderFileIDPrefix)) {
-						return ErrProviderFilesUnsupported
-					}
-					resolved, err := resolve(raw)
-					if err != nil {
-						return err
-					}
-					target[field] = resolved
+				if err := visit(kind, target, field); err != nil {
+					return err
 				}
 			}
 		}
 		return nil
 	}
 	if err := content(root["input"]); err != nil {
-		return ctx, nil, err
+		return err
 	}
 	for _, field := range []string{"messages", "input"} {
 		if messages, ok := root[field].([]any); ok {
 			for _, message := range messages {
 				if object, ok := message.(map[string]any); ok {
 					if err := content(object["content"]); err != nil {
-						return ctx, nil, err
+						return err
 					}
 				}
 			}
 		}
+	}
+	return nil
+}
+
+// ResolveReferences visits protocol content only. Tool arguments, unknown
+// sibling objects and native references never become mapping lookup fallbacks.
+func (s *ProviderFilesService) ResolveReferences(ctx context.Context, key *APIKey, platform string, body []byte) (context.Context, []byte, error) {
+	var root map[string]any
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.UseNumber()
+	if err := decoder.Decode(&root); err != nil {
+		return ctx, nil, err
+	}
+	changed := false
+	var constraint providerFilesOwnerConstraint
+	err := visitProviderFileReferenceFields(root, func(kind string, target map[string]any, field string) error {
+		raw, ok := target[field].(string)
+		if !ok {
+			return nil
+		}
+		prefix := ""
+		id := raw
+		if strings.HasPrefix(id, "mm_file://") {
+			prefix = "mm_file://"
+			id = strings.TrimPrefix(id, prefix)
+		}
+		if !strings.HasPrefix(id, ProviderFileIDPrefix) {
+			return nil
+		}
+		if platform == PlatformMiniMax && kind != "video_url" {
+			return ErrProviderFilesUnsupported
+		}
+		file, err := s.Get(ctx, key, platform, id)
+		if err != nil {
+			return err
+		}
+		if constraint.AccountID != 0 && (constraint.AccountID != file.AccountID || constraint.Principal != file.Principal) {
+			return ErrProviderFileOwnerChanged
+		}
+		constraint = providerFilesOwnerConstraint{file.AccountID, file.Principal}
+		changed = true
+		target[field] = prefix + file.RemoteID
+		return nil
+	})
+	if err != nil {
+		return ctx, nil, err
 	}
 	if !changed {
 		return ctx, body, nil

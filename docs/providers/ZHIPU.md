@@ -439,6 +439,17 @@ Missing or malformed status entries preserve the outstanding ticket.
 Quota-exhaustion retry times remain authoritative; settlement never returns an
 allowance. This recovery does not restore an official agent's original queue
 task or replay a model request that might already have been accepted.
+Concurrent requests already waiting for the same in-flight Take receive its
+persisted quota rejection and reset time, rather than a fabricated queue timeout.
+They inspect only that original segment and cannot create a new one after an
+administrator terminates it.
+
+A Take response that reveals a ticket ID but lacks a recognized state retains
+that ID and the original owner evidence while refusing the current admission.
+A later request revalidates the same ID with Status, without a second Take.
+The process-local mode also preserves known partial ticket evidence; its failed
+Status polls retain bounded waits. An absent ticket ID never authorizes model
+traffic. These rules do not grant process-local mode restart recovery.
 
 Each physical model request renews its own durable lease. Cancellation releases
 only that request; other requests still protect the shared ticket. Lost renewal

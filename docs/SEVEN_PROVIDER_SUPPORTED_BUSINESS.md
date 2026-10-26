@@ -154,6 +154,9 @@ Grok 创建弹窗目前没有显示密码登录选项。保留的密码事件处
   家族及 MiniMax 的其他地区、managed OAuth、purpose，另有未列入首批的远程管理
   操作和跨账号重传保持明确不支持。已有原生引用
   和内联媒体继续独立验收，不因此获得网关文件 ACL 或生命周期保证。
+  DeepSeek 网关本地文件仅支持原生 Messages 推理，MiniMax 仅支持原生 Chat；其他
+  转换入口明确拒绝本地引用，不能静默丢弃媒体后继续推理、计费。合法 JSON 转义
+  与字面 ID 遵循相同入口和权限规则，普通文本提及文件 ID 不请求 Files 能力。
 - StepFun 不宣称上游原生 Responses、Messages、Responses WS；现有转换入口仍需
   独立验收。远程搜索 MCP 本批完成契约审计，尚未开发搜索网关；专项语音/图像接口、
   WS 桥和额外计费不由 Chat 的默认 token 定价推断。

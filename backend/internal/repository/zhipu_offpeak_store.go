@@ -154,8 +154,8 @@ func (r *ZhipuOffPeakRepository) Claim(ctx context.Context, id string, settlemen
 	defer func() { _ = tx.Rollback() }()
 	// Every admission/renewal/settlement locks this parent row first. The
 	// subsequent statement gets a fresh READ COMMITTED snapshot of leases.
-	var retired, closed bool
-	if err = tx.QueryRowContext(ctx, `SELECT retired,closed FROM zhipu_offpeak_tickets WHERE id=$1 FOR UPDATE`, id).Scan(&retired, &closed); err != nil {
+	current, err := scanOffPeak(tx.QueryRowContext(ctx, `SELECT `+offPeakColumns+` FROM zhipu_offpeak_tickets WHERE id=$1 FOR UPDATE`, id))
+	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			if !settlement {
 				return service.ZhipuOffPeakRecord{}, service.ErrOffPeakFenceLost
@@ -164,7 +164,7 @@ func (r *ZhipuOffPeakRepository) Claim(ctx context.Context, id string, settlemen
 		}
 		return service.ZhipuOffPeakRecord{}, err
 	}
-	if !settlement && (retired || closed) {
+	if !settlement && (current.Retired || current.Closed) {
 		return service.ZhipuOffPeakRecord{}, service.ErrOffPeakFenceLost
 	}
 	criteria := ` AND NOT retired AND NOT settlement_pending AND retain_until>clock_timestamp() AND (state<>'new' OR next_attempt_at<=clock_timestamp())`
@@ -183,7 +183,10 @@ func (r *ZhipuOffPeakRepository) Claim(ctx context.Context, id string, settlemen
 	}
 	value, err := scanOffPeak(tx.QueryRowContext(ctx, query, args...))
 	if errors.Is(err, sql.ErrNoRows) {
-		return value, service.ErrOffPeakLeaseBusy
+		// Preserve the locked segment's observation for concurrent waiters. A
+		// quota rejection committed by another instance is not a queued ticket,
+		// and observing it must not reopen or acquire a replacement segment.
+		return current, service.ErrOffPeakLeaseBusy
 	}
 	if err != nil {
 		return value, err

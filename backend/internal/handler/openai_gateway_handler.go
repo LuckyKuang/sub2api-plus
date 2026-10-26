@@ -1109,7 +1109,6 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 					reqLog.Warn("openai.upstream_failover_switching", failoverSwitchFields...)
 					continue
 				}
-				h.gatewayService.ReportOpenAIAccountScheduleResult(account, openAIAccountScheduleModel(c, account, forwardModel, requireCompact, result), false, nil, err)
 				upstreamErrorAlreadyCommunicated := openAIForwardErrorAlreadyCommunicated(c, writerSizeBeforeForward, err)
 				wroteFallback := false
 				if !upstreamErrorAlreadyCommunicated {
@@ -1130,6 +1129,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 				// non-cyber partial result falls through to the single normal
 				// RecordUsage submission below with IsComplete=false.
 				if result == nil || service.GetOpsCyberPolicy(c) != nil {
+					h.gatewayService.ReportOpenAIAccountScheduleResult(account, openAIAccountScheduleModel(c, account, forwardModel, requireCompact, result), false, nil, err)
 					return
 				}
 			}
@@ -1705,7 +1705,6 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 						zap.Error(err),
 					)
 				} else {
-					h.gatewayService.ReportOpenAIAccountScheduleResult(account, account.GetMappedModel(currentRoutingModel), false, nil)
 					wroteFallback := h.ensureAnthropicErrorResponse(c, streamStarted)
 					reqLog.Warn("openai_messages.forward_failed",
 						zap.Int64("account_id", account.ID),
@@ -1715,6 +1714,9 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 				}
 				// Record partial non-cyber usage below with is_complete=false.
 				if result == nil || service.GetOpsCyberPolicy(c) != nil {
+					if result == nil || !result.ClientDisconnect {
+						h.gatewayService.ReportOpenAIAccountScheduleResult(account, openAIAccountScheduleModel(c, account, currentRoutingModel, false, result), false, nil, err)
+					}
 					return
 				}
 			}
