@@ -57,6 +57,12 @@ class FullCoverageTests(unittest.TestCase):
                           ("python3", "tools/check_seven_provider_coverage.py", "--profile", "integration")])
         self.assertEqual(self.commands("golangci-lint"), [("golangci-lint", "run", "./...")])
 
+    def test_binary_install_resource_behavior_is_required_before_promotion(self) -> None:
+        expected = ("bash", "deploy/tests/install-runtime-resources-test.sh")
+        local = {tuple(step.command) for step in validation_checks.full_steps(ROOT, python="python3")}
+        self.assertIn(expected, local)
+        self.assertIn(expected, self.commands("deployment-config"))
+
     def test_integration_entrypoints_execute_fresh_service_setup_and_business_tests(self) -> None:
         # TestMain setup and external PostgreSQL/Redis state are not a reusable
         # test-result proof. Require fresh execution in both promotion gates and

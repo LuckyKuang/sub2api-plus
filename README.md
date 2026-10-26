@@ -72,7 +72,7 @@ usable; replace its immutable tag with another value returned by
 `list-versions` when needed:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- install --version 'v0.2.18+custom.002'
+curl -sSL https://raw.githubusercontent.com/LuckyKuang/sub2api-plus/main/deploy/install.sh | sudo bash -s -- install --version 'v0.2.18+custom.003'
 ```
 
 Roll back an existing binary installation to an earlier published version:

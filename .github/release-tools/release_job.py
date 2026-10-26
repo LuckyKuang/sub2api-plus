@@ -70,11 +70,19 @@ def verify(plan, strict):
             os.environ['GITHUB_REPOSITORY'], '--tag', plan['tag'])
 
 
+def require_clean_build_source(sha):
+    matrix.require_head(sha)
+    if matrix.git('status', '--porcelain=v1', '--untracked-files=all'):
+        raise ValueError('release build requires a clean captured source checkout')
+
+
 def build_binary(plan, args):
     matrix.generate_config(argparse.Namespace(mode='build', goos=args.goos,
                            goarch=args.goarch, output='.release-build.yaml'))
+    require_clean_build_source(plan['sha'])
     run('goreleaser', 'release', '--snapshot', '--clean', '--config', '.release-build.yaml',
         '--skip=validate,before,publish,announce,docker')
+    require_clean_build_source(plan['sha'])
     matrix.collect(argparse.Namespace(version=plan['version'], sha=plan['sha'],
                    date=plan['date'], goos=args.goos, goarch=args.goarch, output='release-leaf'))
 

@@ -47,6 +47,7 @@ archives:
       # binary archive runs without a remote pricing catalog.
       - src: backend/resources/model-pricing/model_prices_and_context_window.json
         dst: resources/model-pricing
+        strip_parent: true
 
 checksum:
   name_template: 'checksums.txt'

@@ -22,7 +22,7 @@ result reuse; the pinned compilation and dependency caches remain available.
 
 | Context / lane | Coverage | Relationship to local full |
 | --- | --- | --- |
-| `deployment-config` | Installer syntax, Apple lifecycle fixture, real Redis authentication/readiness regressions, Docker security/gateway/resources, Caddy policy | Union of local and CI deployment checks |
+| `deployment-config` | Installer syntax and real archive/resource installation regressions, Apple lifecycle fixture, real Redis authentication/readiness regressions, Docker security/gateway/resources, Caddy policy | Union of local and CI deployment checks |
 | `test` | Full unit suites on Linux amd64 and arm64; Docker-backed integration on amd64 | Same Go commands, additional architecture coverage |
 | `frontend` | Frozen install, lint, typecheck, full Vitest, required seven-provider Vue/API cases, production build and its locale checks | Complete local frontend coverage; critical-only tests cannot substitute |
 | `golangci-lint` | Complete backend lint | Same command |
