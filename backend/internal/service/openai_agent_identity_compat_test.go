@@ -610,7 +610,7 @@ func (r *accountTestAgentIdentityRepo) UpdateCredentials(_ context.Context, _ in
 	return nil
 }
 
-func (r *accountTestAgentIdentityRepo) UpdateOAuthCredentialsIfUnchanged(ctx context.Context, expectedOwner *Account, credentials map[string]any) (bool, error) {
+func (r *accountTestAgentIdentityRepo) UpdateOAuthRefreshCredentialsIfUnchanged(ctx context.Context, expectedOwner *Account, credentials map[string]any) (bool, error) {
 	id := expectedOwner.ID
 	if !agentTaskTestCredentialsMatch(r.account, expectedOwner) {
 		return false, nil
@@ -618,7 +618,7 @@ func (r *accountTestAgentIdentityRepo) UpdateOAuthCredentialsIfUnchanged(ctx con
 	return true, r.UpdateCredentials(ctx, id, credentials)
 }
 
-func (r *agentIdentityForwardRepo) UpdateOAuthCredentialsIfUnchanged(ctx context.Context, expectedOwner *Account, credentials map[string]any) (bool, error) {
+func (r *agentIdentityForwardRepo) UpdateOAuthRefreshCredentialsIfUnchanged(ctx context.Context, expectedOwner *Account, credentials map[string]any) (bool, error) {
 	id := expectedOwner.ID
 	if !agentTaskTestCredentialsMatch(r.account, expectedOwner) {
 		return false, nil

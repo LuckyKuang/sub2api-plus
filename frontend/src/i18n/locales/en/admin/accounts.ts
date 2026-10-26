@@ -161,6 +161,8 @@ export default {
           },
         },
         balance: 'Balance --',
+        normalBalance: 'Recharge balance',
+        bonusBalance: 'Bonus balance',
         window5h: '5h',
         windowWeekly: '7d',
         windowMonthly: '30d',
@@ -1105,7 +1107,7 @@ export default {
       // OAuth flow
       oauth: {
         domestic: {
-          stepfunDescription: 'Step Plan opens browser authorization and checks its status automatically. The resulting API key is used for model requests; sign in again if it is revoked.',
+          stepfunDescription: 'Step Plan uses browser login with automatic server polling. The model key and optional account session are stored separately.',
           title: "{platform} OAuth login",
           description: "Authorize with the official client login. Login credentials stay on the server.",
           region: "Account region",

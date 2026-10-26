@@ -150,7 +150,7 @@ func TestCNQuotaProbeReauthorizationSeparatesFlightsAndRejectsLateExhaustion(t *
 	releaseOnce.Do(func() { close(release) })
 	late := <-oldDone
 	require.NoError(t, late.err)
-	require.True(t, late.result.Success)
+	require.False(t, late.result.Success, "a stale quota owner cannot publish a successful current observation")
 	require.False(t, late.result.Persisted)
 	require.Equal(t, 100.0, late.result.Tiers[0].UsedPercent)
 	saved, err := repo.GetByID(context.Background(), old.ID)
@@ -236,7 +236,7 @@ func TestCNQuotaMissingCASDoesNotWriteUnconditionally(t *testing.T) {
 	}}
 	result, err := NewCNProviderQuotaService(repo, nil, upstream, cnProbeAllowlistConfig("api.kimi.com")).QueryUsageForAccount(context.Background(), a)
 	require.NoError(t, err)
-	require.True(t, result.Success)
+	require.False(t, result.Success, "an unavailable CAS cannot produce a successful monitor observation")
 	require.False(t, result.Persisted)
 	require.Empty(t, a.Extra)
 	encoded, err := json.Marshal(result)
@@ -301,4 +301,8 @@ func TestCNQuotaMonitorSeparatesConcurrentGrantsAndCachesTheHealthyOwner(t *test
 	require.True(t, healthy.Success)
 	require.Equal(t, 10.0, healthy.Tiers[0].UsedPercent)
 	require.Equal(t, int32(1), newQueries.Load(), "late old completion cannot evict the new generation's healthy cache")
+}
+
+func (r *cnQuotaGenerationRepo) UpdateCNControlExtraIfUnchanged(ctx context.Context, expected *Account, updates map[string]any) (bool, error) {
+	return r.UpdateCNProviderQuotaIfUnchanged(ctx, expected, updates)
 }

@@ -384,7 +384,7 @@ func TestMiniMaxOAuthQuotaLateResponseCannotOverwriteReplacementGrant(t *testing
 			svc.cnOAuthService = NewCNOAuthService(nil, repo, nil)
 			result, err := svc.QueryUsageForAccount(context.Background(), a)
 			require.NoError(t, err)
-			require.True(t, result.Success)
+			require.False(t, result.Success, "a stale quota observation cannot certify the replacement owner")
 			require.False(t, result.Persisted)
 			require.Zero(t, repo.writes)
 			current, err := repo.GetByID(context.Background(), a.ID)

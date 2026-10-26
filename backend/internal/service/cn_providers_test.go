@@ -98,13 +98,12 @@ func TestParseKimiUsageTiers(t *testing.T) {
 	require.Equal(t, "2026-08-18T00:00:00Z", tiers[1].ResetAt)
 }
 
-// TestParseKimiUsageTiers_LimitZero 不应除零：limit=0 → utilization=0。
+// A zero denominator cannot establish utilization, including when remaining=0.
 func TestParseKimiUsageTiers_LimitZero(t *testing.T) {
 	t.Parallel()
 	body := []byte(`{"limits":[{"detail":{"limit":0,"remaining":0,"resetTime":"2026-08-14T15:00:00Z"}}]}`)
 	tiers := parseKimiUsageTiers(body)
-	require.Len(t, tiers, 1)
-	require.InDelta(t, 0.0, tiers[0].UsedPercent, 1e-9)
+	require.Empty(t, tiers)
 }
 
 // TestParseZhipuTokenTiers_UnitClassification 显式 unit（3=5h / 6=weekly）优先分类，

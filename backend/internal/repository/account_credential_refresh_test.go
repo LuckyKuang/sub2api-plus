@@ -20,7 +20,7 @@ func TestCNOAuthRefreshCASUsesCompleteGrantAndAtomicOutbox(t *testing.T) {
 			cache := &oauthRefreshSchedulerCacheRecorder{}
 			repo.schedulerCache = cache
 			proxy := int64(7)
-			applied, err := repo.UpdateOAuthCredentialsIfUnchanged(context.Background(), &service.Account{ID: 42, Platform: service.PlatformKimi, Credentials: map[string]any{"access_token": "attempted", "refresh_token": "old"}, ProxyID: &proxy, Type: service.AccountTypeOAuth, Proxy: &service.Proxy{ID: proxy, Status: service.StatusActive}, Status: service.StatusActive}, map[string]any{"access_token": "new", "refresh_token": "rotated"})
+			applied, err := repo.UpdateOAuthRefreshCredentialsIfUnchanged(context.Background(), &service.Account{ID: 42, Platform: service.PlatformKimi, Credentials: map[string]any{"access_token": "attempted", "refresh_token": "old"}, ProxyID: &proxy, Type: service.AccountTypeOAuth, Proxy: &service.Proxy{ID: proxy, Status: service.StatusActive}, Status: service.StatusActive}, map[string]any{"access_token": "new", "refresh_token": "rotated"})
 			require.NoError(t, err)
 			require.Equal(t, changed == 1, applied)
 			require.Len(t, exec.execQueries, 1)
@@ -56,7 +56,7 @@ func TestOAuthRefreshCASEvictsSchedulerSnapshotWithBoundedDetachedContext(t *tes
 			repo := newAccountRepositoryWithSQL(nil, exec, nil)
 			repo.schedulerCache = cache
 
-			applied, err := repo.UpdateOAuthCredentialsIfUnchanged(ctx, &service.Account{ID: 42, Platform: platform, Credentials: map[string]any{"access_token": "observed"}, ProxyID: nil, Type: service.AccountTypeOAuth, Status: service.StatusActive}, map[string]any{"access_token": "rotated"})
+			applied, err := repo.UpdateOAuthRefreshCredentialsIfUnchanged(ctx, &service.Account{ID: 42, Platform: platform, Credentials: map[string]any{"access_token": "observed"}, ProxyID: nil, Type: service.AccountTypeOAuth, Status: service.StatusActive}, map[string]any{"access_token": "rotated"})
 			require.NoError(t, err)
 			require.True(t, applied)
 			require.ErrorIs(t, ctx.Err(), context.Canceled)
@@ -86,7 +86,7 @@ func TestOAuthRefreshCASFailureDoesNotMutateSchedulerCache(t *testing.T) {
 			cache := &oauthRefreshSchedulerCacheRecorder{}
 			repo := newAccountRepositoryWithSQL(nil, tc.exec, nil)
 			repo.schedulerCache = cache
-			applied, err := repo.UpdateOAuthCredentialsIfUnchanged(context.Background(), &service.Account{ID: 42, Platform: service.PlatformOpenAI, Credentials: map[string]any{"access_token": "observed"}, ProxyID: nil, Type: service.AccountTypeOAuth, Status: service.StatusActive}, map[string]any{"access_token": "obsolete"})
+			applied, err := repo.UpdateOAuthRefreshCredentialsIfUnchanged(context.Background(), &service.Account{ID: 42, Platform: service.PlatformOpenAI, Credentials: map[string]any{"access_token": "observed"}, ProxyID: nil, Type: service.AccountTypeOAuth, Status: service.StatusActive}, map[string]any{"access_token": "obsolete"})
 			require.ErrorIs(t, err, tc.wantErr)
 			require.False(t, applied)
 			require.Empty(t, cache.deleteIDs)

@@ -19,15 +19,17 @@ const (
 // to x-api-key, Zhipu can opt into Authorization: Bearer. Linked ZCode JWT
 // plans always use their provider-owned Bearer scheme, independently of extras.
 func (a *Account) GetAnthropicAPIKeyAuthScheme() string {
-	if a != nil && a.Platform == PlatformZhipu && a.Type == AccountTypeOAuth {
-		switch a.GetCredential("plan_kind") {
-		case ZhipuPlanStartPlan, ZhipuPlanOffPeak:
-			// Linked ZCode JWT plans use provider-owned Bearer authentication;
-			// their credential material is not an API-key extra override.
-			return AnthropicAPIKeyAuthSchemeAuthorizationBearer
-		}
+	if a == nil {
+		return AnthropicAPIKeyAuthSchemeXAPIKey
 	}
-	if a == nil || a.Type != AccountTypeAPIKey {
+	// Linked ZCode plan gateways authenticate the plan JWT as Bearer. This
+	// belongs to the native plan contract, not the API-key manual setting.
+	if a.Platform == PlatformZhipu && a.Type == AccountTypeOAuth &&
+		(a.GetCredential("oauth_provider") == "bigmodel" || a.GetCredential("oauth_provider") == "zai") &&
+		(a.GetCredential("plan_kind") == ZhipuPlanStartPlan || a.GetCredential("plan_kind") == ZhipuPlanOffPeak) {
+		return AnthropicAPIKeyAuthSchemeAuthorizationBearer
+	}
+	if a.Type != AccountTypeAPIKey {
 		return AnthropicAPIKeyAuthSchemeXAPIKey
 	}
 	if a.Platform != PlatformAnthropic && !a.RoutesProtocolByInbound() {

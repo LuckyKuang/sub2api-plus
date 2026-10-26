@@ -65,6 +65,9 @@ func (s *OpenAIGatewayService) ForwardAlphaSearch(ctx context.Context, c *gin.Co
 	}
 	body = sanitizedBody
 
+	if _, err := account.StrictProxyURL(); err != nil {
+		return nil, err
+	}
 	token, _, err := s.GetAccessToken(ctx, account)
 	if err != nil {
 		return nil, err
@@ -531,7 +534,7 @@ func (s *OpenAIGatewayService) ensureOpenAIAlphaSearchAuthMetadata(ctx context.C
 		if !ok {
 			return nil, NewProviderCredentialFailure("openai_alpha_search_metadata_persistence_unavailable", nil)
 		}
-		applied, err := repo.UpdateOAuthCredentialsIfUnchanged(ctx, account, credentials)
+		applied, err := repo.UpdateOAuthRefreshCredentialsIfUnchanged(ctx, account, credentials)
 		if err != nil {
 			return nil, NewProviderCredentialFailure("openai_alpha_search_metadata_persistence_failed", err)
 		}

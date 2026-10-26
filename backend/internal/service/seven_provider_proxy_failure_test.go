@@ -130,11 +130,12 @@ func TestSevenProviderGatewayProxyFailureNeverDialsDirect(t *testing.T) {
 					}}
 					repo := &grokQuotaAccountRepo{mockAccountRepoForPlatform: &mockAccountRepoForPlatform{accountsByID: map[int64]*Account{account.ID: account}}}
 					oauth := NewCNOAuthService(nil, nil, nil)
+					var tokens *ZhipuProjectTokenManager
 					if tc.platform == PlatformZhipu && kind == AccountTypeOAuth {
-						oauth.zhipu = newProjectTokenTestService(t, &projectTokenTestClient{})
+						tokens = newProjectTokenTestService(t, &projectTokenTestClient{})
 					}
 					svc := &OpenAIGatewayService{cfg: rawChatCompletionsTestConfig(), httpUpstream: upstream, accountRepo: repo,
-						cnOAuthService: oauth, grokTokenProvider: NewGrokTokenProvider(repo, nil)}
+						cnOAuthService: oauth, projectTokens: tokens, grokTokenProvider: NewGrokTokenProvider(repo, nil)}
 					if tc.platform == PlatformOpenAI && kind == AccountTypeOAuth {
 						svc.openAITokenProvider = NewOpenAITokenProvider(nil, &codexMetadataOwnerTokenCache{acquire: func(ctx context.Context) string {
 							recordRequestCredentialOwner(ctx, account, "old-token")

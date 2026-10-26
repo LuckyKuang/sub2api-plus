@@ -86,7 +86,7 @@ func TestStepFunOAuthAndAPIKeyActualForwardAndProbe(t *testing.T) {
 						tester := &AccountTestService{cfg: &config.Config{}, httpUpstream: upstream}
 						req, err := tester.buildUpstreamModelsRequest(ctx, a)
 						require.NoError(t, err)
-						_, err = tester.doUpstreamModelsRequest(req, "", a)
+						_, err = tester.doUpstreamModelsRequest(req, a)
 						require.NoError(t, err)
 						require.Equal(t, expectedBase+"/models", upstream.lastReq.URL.String())
 					} else {
@@ -208,7 +208,7 @@ func TestStepFunSyncPersistsIDOnlyModelsWithoutInventingCapabilities(t *testing.
 			account := stepFunTestAccount(kind, "global")
 			account.SetUpstreamModelMetadataSnapshot(UpstreamModelMetadataSnapshot{Models: map[string]UpstreamModelMetadata{"removed": {ID: "removed"}}})
 			upstream := &httpUpstreamRecorder{resp: &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"data":[{"id":"step-future","model_type":"大语言模型"},{"id":"step-known","model_type":"大语言模型","max_input_tokens":256000,"enable_vision_input":true,"enable_reason":true,"reasoning_effort_support_list":["low","high"]},{"id":"step-image","model_type":"文生图"}]}`))}}
-			repo := &upstreamModelMetadataRepoStub{}
+			repo := &nativeModelMetadataRepo{owner: account}
 			svc := &AccountTestService{accountRepo: repo, httpUpstream: upstream, cfg: upstreamModelSyncTestConfig()}
 			catalog, err := svc.SyncUpstreamModelCatalog(t.Context(), account)
 			require.NoError(t, err)
@@ -365,6 +365,16 @@ func TestStepFunCompletionReceiptSurvivesConcurrentSessionRead(t *testing.T) {
 	require.Equal(t, 1, admin.writes)
 }
 
+type stepFunReauthorizationRepo struct {
+	refreshAPIAccountRepo
+	loginCASCalls int
+}
+
+func (r *stepFunReauthorizationRepo) CompleteCNOAuthLoginIfUnchanged(ctx context.Context, expected *Account, credentials map[string]any) (bool, error) {
+	r.loginCASCalls++
+	return r.refreshAPIAccountRepo.CompleteCNOAuthLoginIfUnchanged(ctx, expected, credentials)
+}
+
 func TestStepFunReauthorizationPreservesRegionAndAccountMetadata(t *testing.T) {
 	for _, lifetime := range []string{"static"} {
 		t.Run(lifetime, func(t *testing.T) {
@@ -373,8 +383,9 @@ func TestStepFunReauthorizationPreservesRegionAndAccountMetadata(t *testing.T) {
 			a.Credentials["refresh_token"] = "obsolete"
 			a.Credentials["model_mapping"] = map[string]any{"public": "step-3.7-flash"}
 			admin := &cnOAuthAdminStub{}
-			svc := NewCNOAuthService(nil, &refreshAPIAccountRepo{account: a}, admin)
-			stepFunCloudLogin(t, svc, "new-key")
+			repo := &stepFunReauthorizationRepo{refreshAPIAccountRepo: refreshAPIAccountRepo{account: a}}
+			svc := NewCNOAuthService(nil, repo, admin)
+			stepFunMockCloudLogin(svc, "new-key")
 			ctx := context.Background()
 			view, err := svc.Start(ctx, 7, "stepfun", "cn", nil, a.ID)
 			require.NoError(t, err)
@@ -386,7 +397,13 @@ func TestStepFunReauthorizationPreservesRegionAndAccountMetadata(t *testing.T) {
 			require.NoError(t, err)
 			_, err = svc.Complete(ctx, 7, "stepfun", view.SessionID, CNOAuthCompleteInput{ModelMapping: map[string]string{"unexpected": "unexpected"}})
 			require.NoError(t, err)
-			creds := admin.update.Credentials
+			require.Equal(t, 1, repo.loginCASCalls, "reauthorization must use the atomic login write")
+			require.Equal(t, 1, repo.updateCalls)
+			require.Equal(t, 1, repo.updateCredentialsCalls)
+			require.Zero(t, admin.writes, "reauthorization must not use the old admin write path")
+			require.Nil(t, admin.update)
+			require.NotNil(t, repo.account)
+			creds := repo.account.Credentials
 			require.Equal(t, "global", creds["oauth_region"])
 			require.Equal(t, "new-key", creds["access_token"])
 			require.Equal(t, a.Credentials["model_mapping"], creds["model_mapping"])
@@ -395,4 +412,20 @@ func TestStepFunReauthorizationPreservesRegionAndAccountMetadata(t *testing.T) {
 			require.NoError(t, validateStepFunCredentials("stepfun", "oauth", creds))
 		})
 	}
+}
+
+// Deterministic transport: service lifecycle tests must never contact a real login server.
+func stepFunMockCloudLogin(s *CNOAuthService, key string) {
+	s.client = &cnoauth.Client{HTTP: cnOAuthDoer(func(req *http.Request) (*http.Response, error) {
+		payload := map[string]any{"state": "ready", "credential": map[string]any{"api_key": key}}
+		if req.Method == http.MethodPost {
+			payload = map[string]any{"flow_id": "public-flow", "poll_interval_sec": 1, "expires_at": time.Now().Add(time.Minute).Unix()}
+		}
+		body, _ := json.Marshal(payload)
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(string(body)))}, nil
+	})}
+}
+func stepFunAllowPoll(t *testing.T, s *CNOAuthService, id string) {
+	t.Helper()
+	require.NoError(t, s.store.Update(context.Background(), id, func(_ context.Context, session *cnoauth.Session) error { session.NextPoll = time.Time{}; return nil }))
 }

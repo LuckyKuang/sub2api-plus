@@ -41,7 +41,12 @@ func (s *grokOAuthClientStub) ExchangeCode(ctx context.Context, _, _, redirectUR
 	s.captureIdentity(ctx)
 	s.exchangeCalls++
 	s.exchangeRedirectURI = redirectURI
-	return &xai.TokenResponse{AccessToken: "access-token"}, nil
+	return &xai.TokenResponse{AccessToken: "access-token", IDToken: "verified-id-token"}, nil
+}
+
+func (s *grokOAuthClientStub) VerifyIDToken(_ context.Context, _ string, clientID, nonce, _ string) (map[string]any, error) {
+	s.validatedLogin = xai.OIDCLoginContext{Issuer: xai.OAuthIssuer, ClientID: clientID, Nonce: nonce}
+	return map[string]any{"sub": "verified-user"}, s.validationError
 }
 
 func (s *grokOAuthClientStub) RefreshToken(ctx context.Context, _ string, _ string, _ string) (*xai.TokenResponse, error) {

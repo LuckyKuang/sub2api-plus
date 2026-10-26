@@ -111,7 +111,10 @@ func credentialConditionalMutationCases() []struct {
 } {
 	credentials := map[string]any{"access_token": "attempted", "refresh_token": "attempted-refresh"}
 	until := time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC)
-	snapshot := service.GrokCredentialMutationSnapshot{CredentialsJSON: `{"access_token":"attempted","refresh_token":"attempted-refresh"}`}
+	snapshot := service.GrokCredentialMutationSnapshot{
+		CredentialsJSON: `{"access_token":"attempted","refresh_token":"attempted-refresh"}`,
+		Owner:           &service.Account{ID: 42, Platform: service.PlatformGrok, Type: service.AccountTypeOAuth, Status: service.StatusActive, Schedulable: true, Credentials: credentials},
+	}
 	return []struct {
 		name  string
 		apply func(context.Context, *accountRepository) (bool, error)

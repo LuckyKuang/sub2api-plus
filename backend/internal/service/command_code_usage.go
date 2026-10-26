@@ -442,7 +442,7 @@ func commandCodeFetchFailure(err error) (status int, message string, ok bool) {
 // queryCommandCodeUsage 查询 Command Code 积分与窗口，落窗口与余额快照。
 func (s *CNProviderQuotaService) queryCommandCodeUsage(ctx context.Context, account *Account) (*CNProviderQuotaProbeResult, error) {
 	ctx = WithAccountOutboundIdentity(ctx, account)
-	proxyURL, err := s.resolveProxyURL(ctx, account)
+	proxyURL, err := account.StrictProxyURL()
 	if err != nil {
 		return nil, err
 	}
@@ -493,7 +493,7 @@ func (s *CNProviderQuotaService) queryCommandCodeUsage(ctx context.Context, acco
 // queryCommandCodeBalance 只查积分余额（whoami + credits），落余额快照。
 func (s *CNProviderBalanceService) queryCommandCodeBalance(ctx context.Context, account *Account) (*CNProviderBalanceResult, error) {
 	ctx = WithAccountOutboundIdentity(ctx, account)
-	proxyURL, err := s.resolveProxyURL(ctx, account)
+	proxyURL, err := account.StrictProxyURL()
 	if err != nil {
 		return nil, err
 	}

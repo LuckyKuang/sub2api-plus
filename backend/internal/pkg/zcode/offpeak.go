@@ -375,8 +375,8 @@ func (c *OffPeakClient) do(ctx context.Context, method, path string, auth OffPea
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, classifyOffPeakFailure(resp, raw)
 	}
-	// The official settle client also accepts an empty 200/204 response.
-	// Other endpoints still validate their required fields after decoding {}.
+	// Official settle acknowledgements may have no body. Admission and quota
+	// consumers still validate their own required fields on the empty object.
 	if len(bytes.TrimSpace(raw)) == 0 {
 		return json.RawMessage("{}"), nil
 	}
@@ -387,11 +387,12 @@ func (c *OffPeakClient) do(ctx context.Context, method, path string, auth OffPea
 	if err := json.Unmarshal(raw, &envelope); err != nil {
 		return nil, fmt.Errorf("decode off-peak envelope: %w", err)
 	}
-	// Official ticket endpoints accept both bare objects and {code:0,data}.
-	// Preserve nonzero business failures even when the HTTP status is successful.
+	// Preserve business rejections and their retry hints on HTTP 200 as well.
 	if code := parseOffPeakCode(envelope.Code); code != 0 {
 		return nil, classifyOffPeakFailure(resp, raw)
 	}
+	// The official client accepts bare objects and {code:0,data}. A sibling
+	// named data alone is not an authorization to discard the outer payload.
 	if strings.Trim(strings.TrimSpace(string(envelope.Code)), `"`) == "0" && len(envelope.Data) != 0 {
 		return envelope.Data, nil
 	}

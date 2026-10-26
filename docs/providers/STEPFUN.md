@@ -19,28 +19,59 @@ Explicit deployment upstream allowlists must include the selected API hostname.
 ## Browser login
 
 Accounts → StepFun offers Step Plan browser login and manual API Key entry.
-Cloud login follows Step-Code `step-provider/login-client.ts`. The server creates
-32 random bytes as a 64-character hex poll token and sends it only as a Bearer
-credential to `POST https://platform.stepfun.com/api/stdhttp/v1/cli-login/init`
-(global: `platform.stepfun.ai`). The JSON profile is `step_plan` or
-`step_plan_oversea`, with the selected platform origin and client
-`{name:"stepcode", version:"0.84.4", platform:"linux-x64"}`.
+The server starts `POST /api/stdhttp/v1/cli-login/init` on
+`https://platform.stepfun.com` (international: `https://platform.stepfun.ai`).
+The browser opens `/cli-login-remote?flow_id=…`; the panel automatically polls
+the server, which sends `GET /api/stdhttp/v1/cli-login/poll/{flow_id}`.
+The public flow ID appears in that browser URL. The separate polling credential
+is 32 random bytes encoded as 64 hexadecimal characters. It stays server-side and appears only in the upstream Authorization
+header. The retired loopback callback is not an alternate credential source.
 
-The browser opens `/cli-login-remote?flow_id=…`; this public URL contains no
-credential. The panel polls the server, which calls `GET .../poll/{flow_id}`
-with the same server-held poll token. Pending, ready and failed are terminally
-validated, with provider interval/expiry bounded by the local ten-minute session.
-No callback URL or pasted model credential is used. Administrator, provider,
-region, proxy and trusted identity stay bound to the session. Redis deployments
-fail closed; completion claims the ready grant once before the account write.
+Initialization declares the regional profile (`step_plan` or
+`step_plan_oversea`), matching origin and client metadata
+`{name:"stepcode", version:"0.84.4", platform:"linux-x64"}`. That version is
+login audit metadata; the Step-Code product User-Agent remains explicitly
+versionless. Both control calls use the trusted Step-Code identity and selected
+proxy, disable redirects and bound response size. Browser navigation keeps the
+browser's own headers.
 
-A ready `credential.api_key` is the model credential. It is static unless the
-provider separately revokes it; no model expiry or refresh token is invented.
-Optional `credential.login` account-session material is retained separately as
-`step_login` and never used as model authentication or model expiry. Browser
-reauthorization replaces revoked model credentials while retaining account
-settings, region and proxy. The gateway does not currently use the optional
-account-session refresh API.
+Sessions bind the initiating administrator, platform, region, proxy and identity.
+
+The selected proxy must be a complete, valid captured binding before login,
+Passport refresh, inference, model discovery or Plan usage can run. A missing or
+mismatched hydrated proxy cannot fall back to direct egress. Model preview keeps
+the session's original proxy URL even if that proxy row is edited during login.
+Reauthorization completion compares the captured account, proxy route and
+recoverable state atomically with the credential write and cooldown reset; a
+later proxy edit or manual scheduling change requires a new login.
+Sessions expire after at most ten minutes or the provider's earlier deadline. Polling
+honors the supplied interval, bounded to 1–60 seconds. Cancellation, rejection
+and expiry stop authorization. Sessions use the shared Redis store when
+configured and are claimed once before account creation; Redis failure never
+falls back to a local session. Public responses and errors do not echo tokens.
+
+A ready response contains the static model API key and may include a separate
+account access/refresh session. Only the model key authenticates inference,
+model discovery and Plan usage. The account session has its own fields and
+expiry; its TTL never becomes the model key's expiry. An unusable optional
+session does not discard an otherwise valid model key.
+Relinking replaces the complete optional account session. If the new grant has
+no session, all previous `step_account_*` credentials are removed; the new model
+key still supports inference, discovery and Plan usage, while account-session
+refresh requires a new account login.
+
+The account refresh action can renew the optional Passport session through
+`POST /passport/proto.api.passport.v1.PassportService/RefreshToken` on the stored
+region's platform origin. It uses the `Oasis-Token` cookie and the session's
+app/device declarations. An incomplete session or a disabled account is rejected
+without an issuer request or credential write; a coordinator skip does not make
+an unavailable session a successful refresh. Only signed-in `mode:2` is accepted. A missing returned
+refresh token retains the previous one; transport, HTTP and unexpected-response
+failures retain stored session material for a later attempt. The session is not
+registered with the background model-token refresh pool. Refresh failure or an
+expired account session does not replace, expire or revoke the static model key.
+A revoked model key requires browser reauthorization. Relinking retains the
+account's region, proxy, metadata and identity and replaces obsolete grant fields.
 
 ## Models, billing and monitoring
 
@@ -134,17 +165,37 @@ completion accepts `model_mapping` for new accounts; reauthorization preserves
 the existing restriction. Credentials stay on the server throughout discovery.
 
 StepFun participates in groups, composite routing (`stepfun/…`, `step/…`,
-`step-…`), quotas, statistics and probes. No upstream balance/subscription
-usage endpoint is invented. Local usage remains available; upstream quota
-monitoring is unsupported. Migration 277 extends platform/probe constraints.
+`step-…`), quotas, statistics and probes. OAuth Plan usage queries
+`GET https://api.stepfun.{com|ai}/step_plan/v1/usage` with the model key and
+same-owner identity. The quota projection reads schema version 1,
+`personal_account`, Coding Plan windows: `five_hour` and `weekly` map to the
+existing 5h/weekly snapshot. Only explicit limited-window percentages are
+observations. Missing, unlimited, malformed or unknown windows do not become
+zero usage; an unrecognized response preserves the previous snapshot.
+The response must satisfy the complete supported schema. A valid partial or
+unlimited snapshot, including both windows being unlimited, clears old
+percentages/reset timestamps for unobserved windows while advancing freshness;
+unlimited never means an invented zero-percent observation. Persistence atomically
+compares the captured full credential owner,
+platform/type, proxy and active account row; relinking or deletion cannot save
+the previous owner's quota. A failed comparison changes no snapshot, cache or
+outbox, and an outbox failure rolls the observation back. Such a result is not
+reported as a usable successful observation. Periodic collection includes Step
+Plan OAuth accounts; manual API-key accounts have no Plan quota query.
+Token-plan credit buckets and a monetary balance are not projected onto these
+percentage windows. Local request usage remains available independently.
+Migration 277 extends platform/probe constraints.
 
 ## Source and regression evidence
 
 The [official Step-Code source](../OFFICIAL_AGENT_BASELINES.md) at commit
-`be88ee77071188975475bcb5ef4e1edd0913d8ad` uses:
+`81e79bc4b699148d6823fedde9b5e70d9a80255f` (2026-10-25 review) uses:
 
-- `packages/providers/src/step-provider/index.ts` and `login-client.ts`:
-  auth, static credentials, catalog and native protocol.
+- `packages/providers/src/step-provider/login-client.ts` and `login-refresh.ts`:
+  cloud polling, static model key, optional account session and Passport refresh.
+- `packages/providers/src/step-provider/index.ts`: catalog and native protocol.
+- `packages/coding-agent/src/step/usage/account.ts` and `types.ts`:
+  Plan usage endpoint, schema and supported window semantics.
 - `packages/coding-agent/src/step/onboarding.ts`: regional endpoint profiles.
 - `packages/coding-agent/src/step/defaults.ts`: recognized native model IDs used
   as management candidates; the provider's live catalog remains authoritative.
@@ -159,8 +210,10 @@ container with the pinned Linux/x64/Node runtime fixture; its captured request
 matched all eight documented inference identity headers. No live credential
 was used for that SDK wire check.
 
-Requirement-based tests use literal official URLs/headers and adversarial
-cloud-login responses; transport tests exercise model forwarding, probes and discovery
+Requirement-based tests use literal official URLs/headers, adversarial
+cloud-login responses, polling state changes, secret isolation, cancellation
+and account-session separation. Transport tests exercise model forwarding,
+probes and discovery
 for both account types and regions. Real-provider authorization still requires
 an operator's account; mock wire tests do not assert live authorization success.
 

@@ -100,7 +100,7 @@ func TestZhipuPublicCredentialManagedPlansKeepProtocolAndAuthentication(t *testi
 					}
 					repo := &credentialFenceRepo{applied: true}
 					svc := &OpenAIGatewayService{cfg: rawChatCompletionsTestConfig(), accountRepo: repo,
-						httpUpstream: upstream, cnOAuthService: &CNOAuthService{zhipu: linked},
+						httpUpstream: upstream, projectTokens: linked,
 						openAITokenProvider: NewOpenAITokenProvider(nil, nil, nil)}
 					if scenario.plan == ZhipuPlanOffPeak {
 						installZhipuNativeAdmission(t, linked)
@@ -167,7 +167,7 @@ func TestZhipuPublicCredentialMissingGrantAllowsTypedFailoverBeforeSideEffects(t
 					upstream := &httpUpstreamRecorder{}
 					repo := &credentialFenceRepo{applied: true}
 					svc := &OpenAIGatewayService{cfg: rawChatCompletionsTestConfig(), accountRepo: repo,
-						httpUpstream: upstream, cnOAuthService: &CNOAuthService{zhipu: linked},
+						httpUpstream: upstream, projectTokens: linked,
 						openAITokenProvider: NewOpenAITokenProvider(nil, nil, nil)}
 					result, err, recorder := forwardZhipuPublicCredential(t, svc, account, ingress)
 					require.Nil(t, result)

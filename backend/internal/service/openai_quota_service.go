@@ -163,7 +163,6 @@ type OpenAIQuotaResetResult struct {
 // fingerprint is applied.
 type OpenAIQuotaService struct {
 	accountRepo            AccountRepository
-	proxyRepo              ProxyRepository
 	tokenProvider          *OpenAITokenProvider
 	privacyClientFactory   PrivacyClientFactory
 	referralClient         OpenAIReferralClient
@@ -172,9 +171,9 @@ type OpenAIQuotaService struct {
 	openAIIdentityResolver *OpenAIGatewayService
 }
 
-func (s *OpenAIQuotaService) applyOpenAIOutboundIdentity(ctx context.Context, account *Account, headers map[string]string) {
+func (s *OpenAIQuotaService) applyOpenAIOutboundIdentity(ctx context.Context, account *Account, headers map[string]string) openAIOutboundIdentity {
 	if len(headers) == 0 {
-		return
+		return openAIOutboundIdentity{}
 	}
 	h := make(http.Header, len(headers))
 	for key, value := range headers {
@@ -183,11 +182,13 @@ func (s *OpenAIQuotaService) applyOpenAIOutboundIdentity(ctx context.Context, ac
 	// Official backend-client WHAM headers are User-Agent + auth + account id.
 	// Originator/Version belong on inference, not /wham/usage or credit APIs.
 	var settings *SettingService
+	var identity openAIOutboundIdentity
 	if s != nil && s.openAIIdentityResolver != nil {
-		s.openAIIdentityResolver.applyOpenAIOutboundIdentity(ctx, account, h, false)
+		identity = s.openAIIdentityResolver.applyOpenAIOutboundIdentity(ctx, account, h, false)
 		settings = s.openAIIdentityResolver.settingService
 	} else {
-		applyResolvedOpenAIOutboundIdentity(h, resolveOpenAIOutboundIdentityFromSettings(ctx, account, nil), false)
+		identity = resolveOpenAIOutboundIdentityFromSettings(ctx, account, nil)
+		applyResolvedOpenAIOutboundIdentity(h, identity, false)
 	}
 	// WHAM omits Originator/Version. Residency is still a managed Codex header.
 	applyOpenAICodexResidencyFromSettings(ctx, settings, h, true)
@@ -205,16 +206,38 @@ func (s *OpenAIQuotaService) applyOpenAIOutboundIdentity(ctx context.Context, ac
 			delete(headers, key)
 		}
 	}
+	return identity
+}
+
+func openAIQuotaOwnerFingerprint(account *Account) (string, error) {
+	owner, err := snapshotCNControlAccount(account)
+	if err != nil {
+		return "", err
+	}
+	delete(owner.Credentials, "task_id")
+	return cnControlOwnerFingerprint(owner)
 }
 
 func (s *OpenAIQuotaService) ensureOpenAIAgentIdentityTask(ctx context.Context, account *Account, expectedTaskID string) error {
-	identity := resolveOpenAIOutboundIdentityFromSettings(ctx, nil, nil)
+	expectedFingerprint, err := openAIQuotaOwnerFingerprint(account)
+	if err != nil {
+		return err
+	}
+	identity := resolveOpenAIOutboundIdentityFromSettings(ctx, account, nil)
 	if s != nil && s.openAIIdentityResolver != nil {
 		identity = s.openAIIdentityResolver.resolveOpenAIOutboundIdentity(ctx, account)
-	} else if account != nil {
-		identity = resolveOpenAIOutboundIdentityFromSettings(ctx, account, nil)
 	}
-	return ensureAgentIdentityTaskForAccountWithIdentity(ctx, s.accountRepo, s.agentIdentityWS, &s.agentIdentityTaskMu, account, expectedTaskID, identity)
+	validateOwner := func(candidate *Account) error {
+		fingerprint, err := openAIQuotaOwnerFingerprint(candidate)
+		if err != nil || fingerprint != expectedFingerprint {
+			return fmt.Errorf("quota credential owner changed during agent task recovery")
+		}
+		return nil
+	}
+	guard := agentIdentityTaskOwnerGuard{validate: validateOwner, persist: func(ctx context.Context, expected *Account, credentials map[string]any) (bool, error) {
+		return persistOpenAIQuotaCredentials(ctx, s.accountRepo, expected, credentials)
+	}}
+	return ensureAgentIdentityTaskForAccountWithIdentity(ctx, s.accountRepo, s.agentIdentityWS, &s.agentIdentityTaskMu, account, expectedTaskID, identity, guard)
 }
 
 // NewOpenAIQuotaService constructs a quota service. token provider is required —
@@ -222,13 +245,12 @@ func (s *OpenAIQuotaService) ensureOpenAIAgentIdentityTask(ctx context.Context, 
 // access_token, sharing the same refresh/locking machinery used by the gateway.
 func NewOpenAIQuotaService(
 	accountRepo AccountRepository,
-	proxyRepo ProxyRepository,
+	_ ProxyRepository,
 	tokenProvider *OpenAITokenProvider,
 	privacyClientFactory PrivacyClientFactory,
 ) *OpenAIQuotaService {
 	return &OpenAIQuotaService{
 		accountRepo:          accountRepo,
-		proxyRepo:            proxyRepo,
 		tokenProvider:        tokenProvider,
 		privacyClientFactory: privacyClientFactory,
 	}
@@ -566,16 +588,9 @@ func (s *OpenAIQuotaService) prepareUpstreamAccountCall(ctx context.Context, sel
 		}
 	}
 	account = snapshotRequestCredentialAccount(account)
-	// Resolve the configured proxy once before acquisition; never replace a
-	// bound operation's route from a later mutable row or proxy lookup.
-	if account.ProxyID != nil && account.Proxy == nil && s.proxyRepo != nil {
-		proxy, err := s.proxyRepo.GetByID(ctx, *account.ProxyID)
-		if err != nil {
-			return nil, infraerrors.New(http.StatusBadGateway, "OPENAI_QUOTA_PROXY_UNAVAILABLE", "configured account proxy is unavailable").WithCause(err)
-		}
-		account.Proxy = proxy
-	}
-	// Reject missing/deleted proxies before token refresh can perform egress.
+	// A bound operation requires the proxy snapshot captured with its owner.
+	// A later lookup cannot repair a missing snapshot or authorize a new route.
+	// Validate before token refresh can perform egress.
 	if _, err := requestCredentialOwnerProxyURL(context.Background(), account); err != nil {
 		return nil, infraerrors.New(http.StatusBadGateway, "OPENAI_QUOTA_PROXY_UNAVAILABLE", "configured account proxy is unavailable").WithCause(err)
 	}
@@ -591,6 +606,10 @@ func (s *OpenAIQuotaService) prepareUpstreamAccountCall(ctx context.Context, sel
 			return nil, infraerrors.New(http.StatusInternalServerError, "OPENAI_QUOTA_NOT_CONFIGURED", "openai quota token provider is not configured")
 		}
 		var err error
+		ctx, err = withOpenAIQuotaTokenOwner(ctx, account)
+		if err != nil {
+			return nil, infraerrors.New(http.StatusBadGateway, "OPENAI_QUOTA_ACCOUNT_INVALID", "cannot capture quota token owner").WithCause(err)
+		}
 		token, err = s.tokenProvider.GetAccessToken(ctx, account)
 		if err != nil || strings.TrimSpace(token) == "" {
 			return nil, infraerrors.New(http.StatusBadGateway, "OPENAI_QUOTA_TOKEN_UNAVAILABLE", "failed to acquire access token").WithCause(err)

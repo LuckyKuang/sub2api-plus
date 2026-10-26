@@ -73,4 +73,65 @@ describe('CNProviderBalanceCell', () => {
     expect(wrapper.text()).toContain('CNY 12.50')
     expect(wrapper.text()).toContain('HTTP 401')
   })
+
+  const nativeWalletAccount = {
+    id: 42,
+    platform: 'deepseek',
+    type: 'oauth',
+    credentials: { account_mode: 'payg', oauth_provider: 'deepseek', oauth_region: 'cn' },
+    extra: {
+      deepseek_balances: [{ currency: 'CNY', balance: 3 }, { currency: 'USD', balance: 4 }],
+      deepseek_bonus_balances: [{ currency: 'CNY', balance: 2 }]
+    }
+  } as Account
+
+  it('shows persisted native recharge and bonus wallets separately without merging currencies or wallet kinds', () => {
+    const wrapper = mount(CNProviderBalanceCell, { props: { account: nativeWalletAccount } })
+
+    const normal = wrapper.get('[data-test="cn-provider-balance-value"]').text()
+    const bonus = wrapper.get('[data-test="cn-provider-bonus-balance-value"]').text()
+    expect(normal).toContain('admin.accounts.cnProviders.normalBalance')
+    expect(normal).toContain('CNY 3.00 · USD 4.00')
+    expect(normal).not.toContain('5.00')
+    expect(bonus).toContain('admin.accounts.cnProviders.bonusBalance')
+    expect(bonus).toContain('CNY 2.00')
+    expect(bonus).not.toContain('USD')
+    expect(queryBalance).not.toHaveBeenCalled()
+  })
+
+  it('refreshes both native wallet kinds independently from the successful probe', async () => {
+    queryBalance.mockResolvedValue({
+      success: true, balance: 10, currency: 'USD',
+      balances: [{ currency: 'USD', balance: 10 }],
+      bonus_balances: [{ currency: 'CNY', balance: 6 }, { currency: 'USD', balance: 1 }]
+    })
+    const wrapper = mount(CNProviderBalanceCell, { props: { account: nativeWalletAccount } })
+    await wrapper.get('[data-test="cn-provider-balance-probe"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="cn-provider-balance-value"]').text()).toContain('USD 10.00')
+    expect(wrapper.get('[data-test="cn-provider-bonus-balance-value"]').text()).toContain('CNY 6.00 · USD 1.00')
+    expect(wrapper.get('[data-test="cn-provider-balance-value"]').text()).not.toContain('11.00')
+  })
+
+  it('keeps both valid wallet snapshots when the native probe is unknown', async () => {
+    queryBalance.mockResolvedValue({ success: false, error: 'Account wallet unavailable' })
+    const wrapper = mount(CNProviderBalanceCell, { props: { account: nativeWalletAccount } })
+    await wrapper.get('[data-test="cn-provider-balance-probe"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="cn-provider-balance-value"]').text()).toContain('CNY 3.00 · USD 4.00')
+    expect(wrapper.get('[data-test="cn-provider-bonus-balance-value"]').text()).toContain('CNY 2.00')
+    expect(wrapper.text()).toContain('Account wallet unavailable')
+  })
+
+  it('clears a previous bonus observation after a successful explicitly empty bonus response', async () => {
+    queryBalance.mockResolvedValue({ success: true, balance: 9, currency: 'CNY', balances: [{ currency: 'CNY', balance: 9 }], bonus_balances: [] })
+    const wrapper = mount(CNProviderBalanceCell, { props: { account: nativeWalletAccount } })
+    await wrapper.get('[data-test="cn-provider-balance-probe"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="cn-provider-balance-value"]').text()).toContain('CNY 9.00')
+    expect(wrapper.find('[data-test="cn-provider-bonus-balance-value"]').exists()).toBe(false)
+  })
 })

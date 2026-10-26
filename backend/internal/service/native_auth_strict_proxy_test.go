@@ -77,13 +77,13 @@ func TestZhipuProjectTokenRejectsMissingProxyIncludingWarmCache(t *testing.T) {
 			account.ProxyID = &id
 			if warm {
 				account.Proxy = &Proxy{ID: 7, Protocol: "http", Host: "proxy.invalid", Port: 8080, Status: StatusActive}
-				credential, err := service.projectToken(context.Background(), account, "")
+				credential, err := service.credential(context.Background(), account, false)
 				require.NoError(t, err)
 				require.NotEmpty(t, credential.APIKey)
 				account.Proxy = nil
 			}
 			before := client.calls
-			credential, err := service.projectToken(context.Background(), account, "")
+			credential, err := service.credential(context.Background(), account, false)
 			require.Error(t, err)
 			require.Nil(t, credential, "a cached PAT cannot authorize traffic whose configured route disappeared")
 			require.Equal(t, before, client.calls, "missing route must stop before any Z.ai exchange or project-token issuance")

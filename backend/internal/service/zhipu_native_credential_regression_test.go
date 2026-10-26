@@ -92,7 +92,7 @@ func forwardZhipuNativeCredential(t *testing.T, svc *OpenAIGatewayService, accou
 	return result, err, recorder
 }
 
-func installZhipuNativeAdmission(t *testing.T, linked *ZhipuOAuthService) *zhipuOffPeakStub {
+func installZhipuNativeAdmission(t *testing.T, linked *ZhipuProjectTokenManager) *zhipuOffPeakStub {
 	t.Helper()
 	client := &zhipuOffPeakStub{takes: []*zcode.OffPeakTicket{{TicketID: "native-ticket", State: zcode.TicketReady}}}
 	manager := NewZhipuOffPeakTicketManager(client)
@@ -126,7 +126,7 @@ func TestZhipuNativeCredentialAcquisitionPreservesManagedPlans(t *testing.T) {
 					}
 					repo := &credentialFenceRepo{applied: true}
 					svc := &OpenAIGatewayService{cfg: rawChatCompletionsTestConfig(), accountRepo: repo,
-						httpUpstream: upstream, cnOAuthService: &CNOAuthService{zhipu: linked},
+						httpUpstream: upstream, projectTokens: linked,
 						openAITokenProvider: NewOpenAITokenProvider(nil, nil, nil)}
 					var admission *zhipuOffPeakStub
 					if scenario.plan == ZhipuPlanOffPeak {
@@ -201,7 +201,7 @@ func TestZhipuNativeCredentialMissingMaterialAllowsTypedFailover(t *testing.T) {
 					upstream := &httpUpstreamRecorder{}
 					repo := &credentialFenceRepo{applied: true}
 					svc := &OpenAIGatewayService{cfg: rawChatCompletionsTestConfig(), accountRepo: repo,
-						httpUpstream: upstream, cnOAuthService: &CNOAuthService{zhipu: linked},
+						httpUpstream: upstream, projectTokens: linked,
 						openAITokenProvider: NewOpenAITokenProvider(nil, nil, nil)}
 					result, err, recorder := forwardZhipuNativeCredential(t, svc, account, endpoint)
 					require.Nil(t, result)

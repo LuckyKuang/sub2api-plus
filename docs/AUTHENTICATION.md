@@ -88,3 +88,56 @@ validate and are rejected as invalid or expired; this is intentional fail-closed
 behavior and there is no plaintext compatibility path. Affected users request a new
 link from the sign-in page. Token TTL (30 minutes) and the reset-email cooldown
 (30 seconds) are unchanged.
+
+## Provider Account OAuth Reauthorization
+
+Provider account detail and compact-list responses expose
+`oauth_credential_owner`, an opaque SHA-256 fingerprint of the saved OAuth
+credential owner, proxy route and recovery state. It contains no credential
+material. Clients must capture it when starting reauthorization and send it as
+`expected_owner` to
+`POST /api/v1/admin/accounts/:id/apply-oauth-credentials` alongside the new
+`type`, `credentials` and optional `extra`. A missing or malformed fingerprint
+returns `400 OAUTH_OWNER_REQUIRED`; a changed owner returns
+`409 OAUTH_OWNER_CHANGED`. Restart authorization after a conflict; adopting the
+latest fingerprint and retrying an old result would authorize the wrong flow.
+
+The final write compares the complete captured owner under database locks.
+Credentials, supported Extra updates, recovery state and the scheduler outbox
+commit atomically. A failed comparison or storage failure publishes no partial
+credential update or recovery. Token-cache invalidation and local runtime
+recovery occur only after successful commit. Recovery clears the captured
+failure state while preserving manual scheduling pauses, expiration settings
+and newer failures. Single and batch OpenAI/Grok refresh use the same owner
+comparison, but retain their existing behavior of not clearing error/cooldown
+state merely because token refresh succeeded.
+
+Grok recovery and OpenAI API Key reset also advance the repository-owned
+`extra.runtime_recovery_generation` in that same transaction. Scheduler
+snapshots carry it through the existing outbox, so a process retaining an older
+local model cooldown admits the recovered account. Imports and ordinary account
+or Extra edits cannot supply, replace or erase this value. Grok observations
+bind their local effects to the generation returned by their atomic database
+commit: a failure committed before reset cannot restore the old cooldown, while
+a valid new failure committed afterward still blocks normally. This field does
+not select provider identity or alter Codex credential precedence.
+
+The separate clear-rate-limit and clear-temp-unschedulable actions retain their
+own clearing scopes and preserve account status/error, manual pauses and
+expiration configuration. Each commits its scheduling changes and outbox
+together. Successful-test recovery clears the applicable saved error/runtime
+state and does no write when none exists; it does not enable a disabled
+account. Cache/token/runtime effects wait for commit. Temporary-status reads
+validate the saved account state before using a matching cached value, so a
+late cache write cannot show a recovered or deleted account as active.
+
+Browser flows also discard late results after account/owner changes, proxy
+changes, closing or unmounting the authorization panel. This guards UI state;
+the server-side owner comparison is the persistence boundary. A previously
+submitted request may commit if it still owns the saved account.
+
+Native refresh and reauthorization availability follows the implemented
+provider contract: DeepSeek and Zhipu have no business refresh action, and
+Zhipu has no existing-account UI relink action. See the
+[supported business inventory](SEVEN_PROVIDER_SUPPORTED_BUSINESS.md) and
+[native authentication contracts](providers/DOMESTIC_OAUTH.md).

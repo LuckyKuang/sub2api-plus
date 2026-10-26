@@ -13,7 +13,7 @@
     >
       <CNOAuthPanel
         v-if="account.type === 'oauth' && isCNOAuthPlatform(account.platform)"
-        :key="account.id"
+        :key="cnOAuthGeneration"
         :platform="account.platform"
         :account-id="account.id"
         :initial-region="String(account.credentials?.oauth_region || 'cn')"
@@ -2797,7 +2797,8 @@ import CNOAuthPanel from './CNOAuthPanel.vue'
 import { isCNOAuthPlatform } from '@/api/admin/cnOAuth'
 import OutboundIdentityEditor from './OutboundIdentityEditor.vue'
 import type { IdentitySelection } from '@/api/admin/outboundIdentity'
-import { ref, reactive, computed, watch, nextTick } from 'vue'
+import { ref, reactive, computed, watch, nextTick, onScopeDispose } from 'vue'
+import { accountOAuthOwnerSnapshot } from '@/utils/accountOAuthOwnerSnapshot'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 
@@ -2915,6 +2916,13 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+const cnOAuthGeneration = ref(0)
+watch(
+  [() => props.show, () => accountOAuthOwnerSnapshot(props.account)],
+  () => { cnOAuthGeneration.value += 1 },
+  { flush: 'sync' },
+)
+onScopeDispose(() => { cnOAuthGeneration.value += 1 })
 const emit = defineEmits<{
   close: []
   updated: [account: Account]
@@ -4734,6 +4742,7 @@ const parseDateTimeLocal = parseDateTimeLocalInput
 
 // Methods
 const handleClose = () => {
+  cnOAuthGeneration.value += 1
   antigravityMixedChannelConfirmed.value = false
   clearMixedChannelDialog()
   emit('close')
@@ -4777,12 +4786,17 @@ const persistGrokMediaEligibility = async (accountID: number, updatedAccount: Ac
 }
 
 const handleCNOAuthCompleted = async (id: number) => {
+  const generation = cnOAuthGeneration.value
+  const isCurrent = () => props.show && props.account?.id === id && generation === cnOAuthGeneration.value
+  if (!isCurrent()) return
   try {
     const updated = await adminAPI.accounts.getById(id)
+    if (!isCurrent()) return
     emit('updated', updated)
     appStore.showSuccess(t('admin.accounts.accountUpdated'))
     handleClose()
   } catch {
+    if (!isCurrent()) return
     appStore.showError(t('admin.accounts.oauth.domestic.reload'))
     handleClose()
   }

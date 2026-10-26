@@ -40,7 +40,7 @@ func sameAuxiliaryRefreshStoredOwner(current, expected *Account) bool {
 		reflect.DeepEqual(current.ProxyID, expected.ProxyID) && reflect.DeepEqual(current.Proxy, expected.Proxy)
 }
 
-func (r *auxiliaryRefreshTransitionRepo) UpdateOAuthCredentialsIfUnchanged(_ context.Context, expected *Account, credentials map[string]any) (bool, error) {
+func (r *auxiliaryRefreshTransitionRepo) UpdateOAuthRefreshCredentialsIfUnchanged(_ context.Context, expected *Account, credentials map[string]any) (bool, error) {
 	r.refreshCASAttempts++
 	if r.persistFailure {
 		return false, errors.New("independent storage failure")
@@ -160,7 +160,7 @@ func TestNativeAuxiliaryRefreshContainsConcurrentOwnerChanges(t *testing.T) {
 					if operation == "kimi-models" {
 						req, buildErr := http.NewRequestWithContext(ctx, http.MethodGet, selected.GetAnthropicProtocolBaseURL()+"/v1/models", nil)
 						require.NoError(t, buildErr)
-						response, sendErr := (&AccountTestService{httpUpstream: upstream, cnOAuthService: oauth}).doUpstreamModelsRequest(req, proxyServer.URL, selected)
+						response, sendErr := (&AccountTestService{httpUpstream: upstream, cnOAuthService: oauth}).doUpstreamModelsRequest(req, selected)
 						err = sendErr
 						if response != nil {
 							_ = response.Body.Close()
@@ -234,4 +234,12 @@ func TestNativeAuxiliaryRefreshContainsConcurrentOwnerChanges(t *testing.T) {
 			}
 		}
 	}
+}
+
+func (r *auxiliaryRefreshTransitionRepo) UpdateCNControlExtraIfUnchanged(ctx context.Context, expected *Account, updates map[string]any) (bool, error) {
+	return r.UpdateCNProviderQuotaIfUnchanged(ctx, expected, updates)
+}
+
+func (r *auxiliaryRefreshTransitionRepo) UpdateCNOAuthCredentialsIfUnchanged(ctx context.Context, expected *Account, credentials map[string]any) (bool, error) {
+	return r.UpdateOAuthRefreshCredentialsIfUnchanged(ctx, expected, credentials)
 }

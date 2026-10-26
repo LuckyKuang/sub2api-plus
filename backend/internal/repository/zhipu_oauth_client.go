@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
@@ -62,7 +63,8 @@ func zhipuOAuthHTTPClient(proxyURL string) (*http.Client, error) {
 		Timeout:  zcode.CredentialRequestTimeout,
 	})
 	if err != nil {
-		return nil, err
+		// Parser errors can include a malformed URL containing proxy credentials.
+		return nil, errors.New("zhipu proxy configuration is invalid")
 	}
 	clone := *client
 	clone.CheckRedirect = func(*http.Request, []*http.Request) error {
@@ -128,15 +130,6 @@ func (c *ZhipuOAuthClient) ResolveTeamPlanKey(ctx context.Context, provider, acc
 	return zcode.NewCredentialClient(client, c.bigModel, c.zai).ResolveTeamPlanKey(ctx, provider, accessToken, organizationID, projectID)
 }
 
-// IssueProjectToken renews a saved project location without copying its secret.
-func (c *ZhipuOAuthClient) IssueProjectToken(ctx context.Context, provider, accessToken, organizationID, projectID, keyID, proxyURL string) (*zcode.CodingPlanCredential, error) {
-	client, err := zhipuOAuthHTTPClient(proxyURL)
-	if err != nil {
-		return nil, err
-	}
-	return zcode.NewCredentialClient(client, c.bigModel, c.zai).IssueProjectToken(ctx, provider, accessToken, organizationID, projectID, keyID)
-}
-
 // Off-peak ticket protocol. The ticket client shares the same proxy-aware
 // transport and origin guard as the handshake, because a ticket is issued by the
 // same platform deployment.
@@ -182,4 +175,12 @@ func (c *ZhipuOAuthClient) SettleTicket(ctx context.Context, ticketID string, au
 		return err
 	}
 	return client.SettleTicket(ctx, ticketID, auth)
+}
+
+func (c *ZhipuOAuthClient) IssueProjectAccessToken(ctx context.Context, provider, login, organization, project, keyID, proxy string) (*zcode.ProjectAccessToken, error) {
+	client, err := zhipuOAuthHTTPClient(proxy)
+	if err != nil {
+		return nil, err
+	}
+	return zcode.NewCredentialClient(client, c.bigModel, c.zai).IssueProjectAccessToken(ctx, provider, login, organization, project, keyID)
 }

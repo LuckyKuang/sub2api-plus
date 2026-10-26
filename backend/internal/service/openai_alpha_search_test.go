@@ -49,7 +49,7 @@ type alphaSearchMetadataRepo struct {
 	whoamiDone   <-chan struct{}
 }
 
-func (r *alphaSearchMetadataRepo) UpdateOAuthCredentialsIfUnchanged(_ context.Context, expectedOwner *Account, replacement map[string]any) (bool, error) {
+func (r *alphaSearchMetadataRepo) UpdateOAuthRefreshCredentialsIfUnchanged(_ context.Context, expectedOwner *Account, replacement map[string]any) (bool, error) {
 	id := expectedOwner.ID
 	platform := expectedOwner.Platform
 	expected := expectedOwner.Credentials

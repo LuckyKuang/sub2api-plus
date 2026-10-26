@@ -20,7 +20,7 @@ type grokOAuthSelectedProxyClient struct {
 func (c *grokOAuthSelectedProxyClient) ExchangeCode(_ context.Context, _, _, _, proxy, _ string) (*xai.TokenResponse, error) {
 	c.sends++
 	c.routes = append(c.routes, proxy)
-	return &xai.TokenResponse{AccessToken: "fake-exchange-token"}, nil
+	return &xai.TokenResponse{AccessToken: "fake-exchange-token", IDToken: "verified-id-token"}, nil
 }
 
 func (c *grokOAuthSelectedProxyClient) RefreshToken(_ context.Context, _, proxy, _ string) (*xai.TokenResponse, error) {
@@ -73,12 +73,12 @@ func TestGrokOAuthExplicitProxyMustResolveBeforeAnyCredentialSend(t *testing.T) 
 			require.ErrorContains(t, err, errorCode)
 			_, err = svc.ValidateRefreshToken(context.Background(), "fake-refresh-token", &id)
 			require.ErrorContains(t, err, errorCode)
-			// A genuine, unconsumed OAuth session must reach proxy validation;
-			// otherwise a session/state failure would give false coverage.
+			// A callback cannot add a proxy to a genuine session that began
+			// without one. Route ownership is pinned before the browser opens.
 			auth, err := svc.GenerateAuthURL(context.Background(), nil, "")
 			require.NoError(t, err)
 			_, err = svc.ExchangeCode(context.Background(), &GrokExchangeCodeInput{SessionID: auth.SessionID, State: auth.State, Code: "fake-code", ProxyID: &id})
-			require.ErrorContains(t, err, errorCode)
+			require.ErrorContains(t, err, "GROK_OAUTH_PROXY_MISMATCH")
 			_, exists := svc.sessionStore.Get(auth.SessionID)
 			require.True(t, exists, "invalid proxy preparation must not consume the usable OAuth session")
 			require.Zero(t, client.sends)

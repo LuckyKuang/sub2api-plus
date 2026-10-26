@@ -317,7 +317,7 @@ func (r *agentIdentityCredentialsRepo) GetByID(_ context.Context, _ int64) (*Acc
 	return cloneAgentIdentityTestAccount(r.account), nil
 }
 
-func (r *agentIdentityCredentialsRepo) UpdateOAuthCredentialsIfUnchanged(_ context.Context, expectedOwner *Account, credentials map[string]any) (bool, error) {
+func (r *agentIdentityCredentialsRepo) UpdateOAuthRefreshCredentialsIfUnchanged(_ context.Context, expectedOwner *Account, credentials map[string]any) (bool, error) {
 	id := expectedOwner.ID
 	platform := expectedOwner.Platform
 	expected := expectedOwner.Credentials

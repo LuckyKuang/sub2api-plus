@@ -185,7 +185,10 @@ func isGrokOAuthAccount(account *Account) bool {
 // handleOpenAIAccountUpstreamError expects canonicalModel to be the model used
 // for scheduling after applying account mapping exactly once.
 func (s *OpenAIGatewayService) handleOpenAIAccountUpstreamError(ctx context.Context, account *Account, statusCode int, headers http.Header, responseBody []byte, canonicalModel ...string) bool {
-	if account != nil && account.Platform == PlatformGrok && isGrokContentPolicyRejection(statusCode, responseBody) {
+	// Every Grok sender reconciles its response through the owner-bound Grok
+	// policy before reaching a generic formatter. Formatting must not apply a
+	// second, ID-only OpenAI account policy to that same response.
+	if account != nil && account.Platform == PlatformGrok {
 		return false
 	}
 	// Any non-2xx upstream HTTP response means the model request was actually sent.
@@ -302,7 +305,8 @@ func (s *OpenAIGatewayService) handleOpenAIAccountUpstreamError(ctx context.Cont
 		if len(canonicalModel) > 0 {
 			model = canonicalModel[0]
 		}
-		decision := s.recordOpenAIAccountModelTransientFailure(account, model, time.Now())
+		observation := s.openAIAPIKeyTransientObservationOwner(stateCtx, account)
+		decision := s.recordOpenAIAccountModelTransientFailure(observation, model, time.Now())
 		if decision.FailureStreak > 0 {
 			slog.Warn("openai_model_transient_state",
 				"account_id", account.ID,
@@ -455,6 +459,12 @@ type credentialRuntimeBlockKey struct {
 }
 
 func openAIAccountRuntimeBlockKey(account *Account) any {
+	if account == nil {
+		return int64(0)
+	}
+	if account.IsGrok() {
+		return openAIAccountRuntimeOwnerKey(account)
+	}
 	if usesHTTP401CredentialFence(account) && (len(account.Credentials) > 0 || account.CredentialGeneration != "") {
 		return credentialRuntimeBlockKey{account.ID, credentialStateGeneration(account)}
 	}
@@ -482,8 +492,12 @@ func (s *OpenAIGatewayService) openAIAccountRuntimeBlockLock(accountID int64) *s
 }
 
 func (s *OpenAIGatewayService) blockAccountSchedulingLocked(account *Account, until time.Time, _ string) (uint64, bool) {
+	if account.IsGrok() {
+		s.cleanupGrokRuntimeOwnersLocked(account.ID, time.Now())
+	}
+	key := openAIAccountRuntimeOwnerKey(account)
 	generation := s.openaiAccountRuntimeBlockSequence.Add(1)
-	s.openaiAccountRuntimeBlockGeneration.Store(openAIAccountRuntimeBlockKey(account), generation)
+	s.openaiAccountRuntimeBlockGeneration.Store(key, generation)
 	now := time.Now()
 	blockUntil := until
 	if blockUntil.IsZero() || !blockUntil.After(now) {
@@ -491,9 +505,9 @@ func (s *OpenAIGatewayService) blockAccountSchedulingLocked(account *Account, un
 	}
 
 	for {
-		current, loaded := s.openaiAccountRuntimeBlockUntil.Load(openAIAccountRuntimeBlockKey(account))
+		current, loaded := s.openaiAccountRuntimeBlockUntil.Load(key)
 		if !loaded {
-			actual, stored := s.openaiAccountRuntimeBlockUntil.LoadOrStore(openAIAccountRuntimeBlockKey(account), blockUntil)
+			actual, stored := s.openaiAccountRuntimeBlockUntil.LoadOrStore(key, blockUntil)
 			if !stored {
 				return generation, true
 			}
@@ -502,7 +516,7 @@ func (s *OpenAIGatewayService) blockAccountSchedulingLocked(account *Account, un
 
 		currentUntil, ok := current.(time.Time)
 		if !ok || currentUntil.IsZero() {
-			if s.openaiAccountRuntimeBlockUntil.CompareAndSwap(openAIAccountRuntimeBlockKey(account), current, blockUntil) {
+			if s.openaiAccountRuntimeBlockUntil.CompareAndSwap(key, current, blockUntil) {
 				return generation, true
 			}
 			continue
@@ -510,7 +524,7 @@ func (s *OpenAIGatewayService) blockAccountSchedulingLocked(account *Account, un
 		if !blockUntil.After(currentUntil) {
 			return generation, false
 		}
-		if s.openaiAccountRuntimeBlockUntil.CompareAndSwap(openAIAccountRuntimeBlockKey(account), current, blockUntil) {
+		if s.openaiAccountRuntimeBlockUntil.CompareAndSwap(key, current, blockUntil) {
 			return generation, true
 		}
 	}
@@ -520,6 +534,11 @@ func (s *OpenAIGatewayService) ClearAccountSchedulingBlock(accountID int64) {
 	if s == nil || accountID <= 0 {
 		return
 	}
+	publication, releasePublication := acquireGrokRuntimePublication(accountID)
+	defer releasePublication()
+	publication.mu.Lock()
+	defer publication.mu.Unlock()
+	publication.epoch++
 	mu := s.openAIAccountRuntimeBlockLock(accountID)
 	mu.Lock()
 	defer mu.Unlock()
@@ -533,6 +552,45 @@ func (s *OpenAIGatewayService) ClearAccountSchedulingBlock(accountID int64) {
 	})
 	s.openaiOAuth429RetryStartedAt.Delete(accountID)
 	s.openaiAccountRuntimeBlockGeneration.Store(accountID, s.openaiAccountRuntimeBlockSequence.Add(1))
+	s.openaiAccountRuntimeBlockUntil.Range(func(key, _ any) bool {
+		if grokKey, ok := key.(grokRuntimeOwnerKey); ok && grokKey.accountID == accountID {
+			s.openaiAccountRuntimeBlockUntil.Delete(key)
+			s.openaiAccountRuntimeBlockGeneration.Delete(key)
+		}
+		return true
+	})
+	s.openaiAccountRuntimeBlockGeneration.Range(func(key, _ any) bool {
+		if grokKey, ok := key.(grokRuntimeOwnerKey); ok && grokKey.accountID == accountID {
+			s.openaiAccountRuntimeBlockGeneration.Delete(key)
+		}
+		return true
+	})
+	clearGrokModelQuotaBlocks(accountID)
+}
+
+// Current-owner reads and writes also reclaim expired historical owner keys.
+// Callers hold the account lock, so cleanup cannot race an in-flight rollback.
+func (s *OpenAIGatewayService) cleanupGrokRuntimeOwnersLocked(accountID int64, now time.Time) {
+	s.openaiAccountRuntimeBlockUntil.Range(func(key, value any) bool {
+		owner, ok := key.(grokRuntimeOwnerKey)
+		if !ok || owner.accountID != accountID {
+			return true
+		}
+		until, valid := value.(time.Time)
+		if !valid || !until.After(now) {
+			s.openaiAccountRuntimeBlockUntil.Delete(key)
+			s.openaiAccountRuntimeBlockGeneration.Delete(key)
+		}
+		return true
+	})
+	s.openaiAccountRuntimeBlockGeneration.Range(func(key, _ any) bool {
+		if owner, ok := key.(grokRuntimeOwnerKey); ok && owner.accountID == accountID {
+			if _, exists := s.openaiAccountRuntimeBlockUntil.Load(key); !exists {
+				s.openaiAccountRuntimeBlockGeneration.Delete(key)
+			}
+		}
+		return true
+	})
 }
 
 func (s *OpenAIGatewayService) isOpenAIAccountRuntimeBlocked(account *Account) bool {
@@ -542,21 +600,25 @@ func (s *OpenAIGatewayService) isOpenAIAccountRuntimeBlocked(account *Account) b
 	mu := s.openAIAccountRuntimeBlockLock(account.ID)
 	mu.Lock()
 	defer mu.Unlock()
-	value, ok := s.openaiAccountRuntimeBlockUntil.Load(openAIAccountRuntimeBlockKey(account))
+	if account.IsGrok() {
+		s.cleanupGrokRuntimeOwnersLocked(account.ID, time.Now())
+	}
+	key := openAIAccountRuntimeOwnerKey(account)
+	value, ok := s.openaiAccountRuntimeBlockUntil.Load(key)
 	if !ok {
 		return false
 	}
 	cooldownUntil, ok := value.(time.Time)
 	if !ok || cooldownUntil.IsZero() {
-		s.openaiAccountRuntimeBlockUntil.Delete(openAIAccountRuntimeBlockKey(account))
-		s.openaiAccountRuntimeBlockGeneration.Store(openAIAccountRuntimeBlockKey(account), s.openaiAccountRuntimeBlockSequence.Add(1))
+		s.openaiAccountRuntimeBlockUntil.Delete(key)
+		s.openaiAccountRuntimeBlockGeneration.Store(key, s.openaiAccountRuntimeBlockSequence.Add(1))
 		return false
 	}
 	if time.Now().Before(cooldownUntil) {
 		return true
 	}
-	s.openaiAccountRuntimeBlockUntil.Delete(openAIAccountRuntimeBlockKey(account))
-	s.openaiAccountRuntimeBlockGeneration.Store(openAIAccountRuntimeBlockKey(account), s.openaiAccountRuntimeBlockSequence.Add(1))
+	s.openaiAccountRuntimeBlockUntil.Delete(key)
+	s.openaiAccountRuntimeBlockGeneration.Store(key, s.openaiAccountRuntimeBlockSequence.Add(1))
 	return false
 }
 
@@ -598,15 +660,15 @@ func (s *OpenAIGatewayService) recordOpenAIAccountModelTransientFailure(account 
 	if state == nil {
 		return openAIAccountModelTransientDecision{}
 	}
-	return state.recordFailure(account.ID, openAIAccountModelTransientModel(canonicalModel), now)
+	return state.recordFailure(account.ID, openAIAccountModelTransientModel(canonicalModel), runtimeRecoveryGeneration(account), now)
 }
 
-func (s *OpenAIGatewayService) clearOpenAIAccountModelTransientState(accountID int64, model string) {
+func (s *OpenAIGatewayService) clearOpenAIAccountModelTransientState(account *Account, model string) {
 	state := s.getOpenAIAccountModelTransientState()
-	if state == nil {
+	if state == nil || account == nil {
 		return
 	}
-	state.recordSuccess(accountID, model)
+	state.recordSuccess(account.ID, model, runtimeRecoveryGeneration(account))
 }
 
 func (s *OpenAIGatewayService) isOpenAIAccountModelRuntimeBlocked(account *Account, requestedModel string) bool {
@@ -618,7 +680,7 @@ func (s *OpenAIGatewayService) isOpenAIAccountModelRuntimeBlocked(account *Accou
 		return false
 	}
 	canonicalModel := canonicalOpenAIAccountSchedulingModel(account, requestedModel)
-	return state.isBlocked(account.ID, openAIAccountModelTransientModel(canonicalModel), time.Now())
+	return state.isBlocked(account.ID, openAIAccountModelTransientModel(canonicalModel), runtimeRecoveryGeneration(account), time.Now())
 }
 
 func accountPersistedSchedulingCooldownActive(account *Account) bool {
@@ -652,20 +714,24 @@ func (s *OpenAIGatewayService) peekOpenAIAccountRuntimeBlock(account *Account) o
 	mu := s.openAIAccountRuntimeBlockLock(account.ID)
 	mu.Lock()
 	defer mu.Unlock()
-	value, ok := s.openaiAccountRuntimeBlockUntil.Load(openAIAccountRuntimeBlockKey(account))
+	if account.IsGrok() {
+		s.cleanupGrokRuntimeOwnersLocked(account.ID, time.Now())
+	}
+	key := openAIAccountRuntimeOwnerKey(account)
+	value, ok := s.openaiAccountRuntimeBlockUntil.Load(key)
 	if !ok {
 		return openAIAccountRuntimeBlockSnapshot{}
 	}
 	until, isTime := value.(time.Time)
 	if !isTime || until.IsZero() || !time.Now().Before(until) {
-		s.openaiAccountRuntimeBlockUntil.Delete(openAIAccountRuntimeBlockKey(account))
+		s.openaiAccountRuntimeBlockUntil.Delete(key)
 		s.openaiOAuth429RetryStartedAt.Delete(account.ID)
-		s.openaiAccountRuntimeBlockGeneration.Store(openAIAccountRuntimeBlockKey(account), s.openaiAccountRuntimeBlockSequence.Add(1))
+		s.openaiAccountRuntimeBlockGeneration.Store(key, s.openaiAccountRuntimeBlockSequence.Add(1))
 		return openAIAccountRuntimeBlockSnapshot{}
 	}
-	generation, _ := s.openaiAccountRuntimeBlockGeneration.Load(openAIAccountRuntimeBlockKey(account))
+	generation, _ := s.openaiAccountRuntimeBlockGeneration.Load(key)
 	gen, _ := generation.(uint64)
-	return openAIAccountRuntimeBlockSnapshot{key: openAIAccountRuntimeBlockKey(account), until: until, generation: gen, blocked: true}
+	return openAIAccountRuntimeBlockSnapshot{key: key, until: until, generation: gen, blocked: true}
 }
 
 // clearOpenAIAccountRuntimeBlockIfUnchanged deletes the in-process account block
@@ -705,6 +771,13 @@ func (s *OpenAIGatewayService) clearOpenAIAccountRuntimeBlockIfUnchanged(account
 func (s *OpenAIGatewayService) isOpenAIAccountRequestRuntimeBlocked(account *Account, requestedModel string) bool {
 	if s == nil {
 		return false
+	}
+	if account != nil && account.IsGrok() {
+		model := canonicalOpenAIAccountSchedulingModel(account, requestedModel)
+		now := time.Now()
+		if isGrokModelQuotaBlocked(account, model, now) || isGrokTeamModelRateLimited(account, model, now) {
+			return true
+		}
 	}
 	snapshot := s.peekOpenAIAccountRuntimeBlock(account)
 	if snapshot.blocked {

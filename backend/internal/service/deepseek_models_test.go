@@ -4,13 +4,16 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 )
 
 func deepSeekNativeModelsAccount(kind, key, version string) *Account {
@@ -49,8 +52,11 @@ func TestDeepSeekHarnessNativeDiscoveryCredentialsAndGates(t *testing.T) {
 				account := deepSeekNativeModelsAccount(kind, "owner-key", version)
 				upstream := &httpUpstreamRecorder{resp: deepSeekModelsResponse(listing)}
 				svc := &AccountTestService{httpUpstream: upstream, cfg: upstreamModelSyncTestConfig()}
-				models, body, err := svc.fetchUpstreamModelList(context.Background(), account)
+				models, body, observedOwner, err := svc.fetchUpstreamModelList(context.Background(), account)
 				require.NoError(t, err)
+				require.NotNil(t, observedOwner)
+				require.Equal(t, account.ID, observedOwner.ID)
+				require.Equal(t, "owner-key", observedOwner.GetOpenAIProtocolAPIKey())
 				want := []string{"deepseek-flash"}
 				if version == "0.2.1-rc.3" {
 					want = append(want, "rc3-model")
@@ -139,7 +145,7 @@ func TestDeepSeekHarnessDiscoveryFreezesCredentialOwnerOnRotation(t *testing.T) 
 				request             *http.Request
 				key, version, proxy string
 			}{{oldRequest, "old-key", "0.2.1-rc.2", oldProxy.URL()}, {newRequest, "new-key", "0.2.1-rc.3", newProxy.URL()}} {
-				response, err := svc.doUpstreamModelsRequest(tc.request, newProxy.URL(), account)
+				response, err := svc.doUpstreamModelsRequest(tc.request, account)
 				require.NoError(t, err)
 				require.NoError(t, response.Body.Close())
 				require.NoError(t, OutboundPreparationError(upstream.lastReq.Context()))
@@ -160,16 +166,23 @@ func TestDeepSeekHarnessDiscoveryFreezesCredentialOwnerOnRotation(t *testing.T) 
 
 type deepSeekCatalogFenceRepo struct {
 	upstreamModelMetadataRepoStub
-	current          *Account
-	owner            *Account
-	mutation         CredentialStateMutation
-	conditionalCalls int
+	current            *Account
+	owner              *Account
+	conditionalUpdates map[string]any
+	conditionalCalls   int
 }
 
-func (r *deepSeekCatalogFenceRepo) ApplyCredentialStateMutation(_ context.Context, owner *Account, mutation CredentialStateMutation) (bool, error) {
+func (r *deepSeekCatalogFenceRepo) UpdateCNControlExtraIfUnchanged(_ context.Context, owner *Account, updates map[string]any) (bool, error) {
 	r.conditionalCalls++
-	r.owner, r.mutation = snapshotRequestCredentialAccount(owner), mutation
-	return sameRequestCredentialGrant(owner, r.current), nil
+	r.owner, r.conditionalUpdates = snapshotRequestCredentialAccount(owner), updates
+	current := r.current
+	if owner == nil || current == nil || owner.ID != current.ID || owner.Platform != current.Platform || owner.Type != current.Type ||
+		!reflect.DeepEqual(owner.ProxyID, current.ProxyID) || !reflect.DeepEqual(owner.Proxy, current.Proxy) {
+		return false, nil
+	}
+	expectedJSON, expectedErr := json.Marshal(owner.Credentials)
+	currentJSON, currentErr := json.Marshal(current.Credentials)
+	return expectedErr == nil && currentErr == nil && string(expectedJSON) == string(currentJSON), nil
 }
 
 // An old discovery response cannot publish metadata after the credential owner
@@ -202,14 +215,19 @@ func TestDeepSeekHarnessCatalogPersistenceIsCredentialConditional(t *testing.T) 
 				catalog, err := svc.SyncUpstreamModelCatalog(context.Background(), account)
 				require.Equal(t, 1, repo.conditionalCalls)
 				require.Nil(t, repo.updates, "never issue an unconditional metadata write for a native owner")
-				require.Equal(t, "0.2.1-rc.2", repo.owner.Credentials[outboundIdentityCredential].(OutboundIdentitySelection).Version)
+				require.Contains(t, repo.conditionalUpdates, UpstreamModelMetadataExtraKey)
+				ownerCredentials, marshalErr := json.Marshal(repo.owner.Credentials)
+				require.NoError(t, marshalErr)
+				require.Equal(t, "0.2.1-rc.2", gjson.GetBytes(ownerCredentials, "outbound_identity.version").String())
 				if kind == AccountTypeOAuth {
 					require.Equal(t, "old-key", repo.owner.GetCredential("access_token"))
 				} else {
 					require.Equal(t, "old-key", repo.owner.GetCredential("api_key"))
 				}
 				if rotate {
-					require.ErrorContains(t, err, "account changed")
+					var syncErr *UpstreamModelSyncError
+					require.ErrorAs(t, err, &syncErr)
+					require.Equal(t, UpstreamModelSyncErrorInternal, syncErr.Kind, "a lost owner CAS must report failure instead of publishing stale metadata")
 					require.Nil(t, catalog)
 					require.Nil(t, account.GetUpstreamModelMetadataSnapshot())
 				} else {

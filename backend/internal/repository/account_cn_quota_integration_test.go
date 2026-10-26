@@ -89,9 +89,9 @@ func (s *AccountRepoSuite) TestCNQuotaCASRejectsEveryChangedOwnerField() {
 type failCNQuotaOutboxExecutor struct{ sqlExecutor }
 
 func (e *failCNQuotaOutboxExecutor) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
-	if strings.Contains(query, "proxy_guard AS") && strings.Contains(query, "INSERT INTO scheduler_outbox") {
+	if strings.Contains(query, "cn_control_snapshot_cas") && strings.Contains(query, "INSERT INTO scheduler_outbox") {
 		args = append([]any(nil), args...)
-		args[7] = nil // event_type's NOT NULL failure must roll back the quota merge.
+		args[len(args)-1] = nil // event_type's NOT NULL failure must roll back the quota merge.
 	}
 	return e.sqlExecutor.ExecContext(ctx, query, args...)
 }

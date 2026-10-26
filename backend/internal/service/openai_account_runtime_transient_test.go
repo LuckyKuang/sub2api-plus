@@ -14,6 +14,11 @@ import (
 
 type transientCooldownAccountRepo struct {
 	AccountRepository
+	current *Account
+}
+
+func (r transientCooldownAccountRepo) GetByID(context.Context, int64) (*Account, error) {
+	return CaptureOAuthCredentialOwner(r.current)
 }
 
 func (transientCooldownAccountRepo) SetOverloaded(context.Context, int64, time.Time) error {
@@ -29,6 +34,7 @@ func TestHandleOpenAITransientError_BlocksOnlyRequestedModel(t *testing.T) {
 		Type:     AccountTypeAPIKey,
 	}
 
+	svc.accountRepo = transientCooldownAccountRepo{current: account}
 	firstShouldDisable := svc.handleOpenAIAccountUpstreamError(context.Background(), account, http.StatusBadGateway, http.Header{}, []byte(`{"error":{"message":"Upstream request failed","type":"upstream_error"}}`), "gpt-5.5")
 	secondShouldDisable := svc.handleOpenAIAccountUpstreamError(context.Background(), account, http.StatusBadGateway, http.Header{}, []byte(`{"error":{"message":"Upstream request failed","type":"upstream_error"}}`), "gpt-5.5")
 
@@ -50,6 +56,7 @@ func TestHandleOpenAITransientError_TransientStatusesUseModelScope(t *testing.T)
 				Type:     AccountTypeAPIKey,
 			}
 
+			svc.accountRepo = transientCooldownAccountRepo{current: account}
 			firstShouldDisable := svc.handleOpenAIAccountUpstreamError(context.Background(), account, statusCode, http.Header{}, []byte(`{"error":{"message":"temporary upstream failure"}}`), "gpt-5.5")
 			secondShouldDisable := svc.handleOpenAIAccountUpstreamError(context.Background(), account, statusCode, http.Header{}, []byte(`{"error":{"message":"temporary upstream failure"}}`), "gpt-5.5")
 
@@ -79,6 +86,7 @@ func TestHandleOpenAITransientError_CanonicalModelIsNotMappedTwice(t *testing.T)
 			},
 		},
 	}
+	svc.accountRepo = transientCooldownAccountRepo{current: account}
 	canonicalModel := account.GetMappedModel("public-alias")
 	require.Equal(t, "upstream-a", canonicalModel)
 
@@ -100,6 +108,7 @@ func TestHandleOpenAITransientError_DoesNotBlockParameter400(t *testing.T) {
 		Type:     AccountTypeAPIKey,
 	}
 
+	svc.accountRepo = transientCooldownAccountRepo{current: account}
 	shouldDisable := svc.handleOpenAIAccountUpstreamError(context.Background(), account, http.StatusBadRequest, http.Header{}, []byte(`{"error":{"message":"Invalid type for input[0].arguments"}}`), "gpt-5.5")
 
 	require.False(t, shouldDisable)

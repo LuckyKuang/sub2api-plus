@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -70,7 +71,7 @@ func (s *OpenAIGatewayService) ForwardGrokVoice(ctx context.Context, c *gin.Cont
 	if err != nil {
 		return nil, err
 	}
-	proxyURL, err := requestCredentialOwnerProxyURL(ctx, account)
+	ctx, account, proxyURL, err := captureGrokRequestOwner(ctx, account)
 	if err != nil {
 		return nil, err
 	}
@@ -118,6 +119,7 @@ func (s *OpenAIGatewayService) ForwardGrokVoice(ctx context.Context, c *gin.Cont
 	if resp.StatusCode >= 400 {
 		return s.handleGrokMediaErrorResponse(ctx, resp, c, account, resp.Header.Get("x-request-id"), endpoint)
 	}
+	s.updateGrokUsageFromResponse(ctx, account, resp.Header, resp.StatusCode)
 	MarkClientDisconnectUpstreamAccepted(ctx)
 	data, err := ReadUpstreamResponseBody(resp.Body, s.cfg, c, openAITooLargeError)
 	if err != nil {
@@ -168,16 +170,42 @@ type GrokRealtimeTurnObserver struct {
 type GrokRealtimeDialError struct {
 	StatusCode int
 	Err        error
+	owner      *Account
 }
 
 func (e *GrokRealtimeDialError) Error() string { return e.Err.Error() }
 func (e *GrokRealtimeDialError) Unwrap() error { return e.Err }
+
+// GrokRealtimePreparationError identifies local admission or credential failures.
+// These failures must not be handled as an upstream account rejection.
+type GrokRealtimePreparationError struct{ Err error }
+
+func (e *GrokRealtimePreparationError) Error() string { return e.Err.Error() }
+func (e *GrokRealtimePreparationError) Unwrap() error { return e.Err }
 
 func (u *GrokRealtimeUpstream) Close() error {
 	if u == nil || u.conn == nil {
 		return nil
 	}
 	return u.conn.Close()
+}
+
+// OpenGrokRealtimeForRequest captures the credential owner and its route before
+// token lookup so a concurrent account edit cannot retarget this handshake.
+func (s *OpenAIGatewayService) OpenGrokRealtimeForRequest(ctx context.Context, c *gin.Context, account *Account, model string) (*GrokRealtimeUpstream, error) {
+	if s == nil || account == nil || account.Platform != PlatformGrok {
+		return nil, &GrokRealtimePreparationError{Err: fmt.Errorf("grok realtime account is required")}
+	}
+	ctx, owner, _, err := captureGrokRequestOwner(ctx, account)
+	if err != nil {
+		return nil, &GrokRealtimePreparationError{Err: err}
+	}
+	ctx = WithAccountOutboundIdentity(ctx, owner)
+	token, _, err := s.getRequestCredential(ctx, c, owner)
+	if err != nil {
+		return nil, &GrokRealtimePreparationError{Err: err}
+	}
+	return s.OpenGrokRealtime(ctx, owner, token, model)
 }
 
 func (s *OpenAIGatewayService) OpenGrokRealtime(ctx context.Context, account *Account, token, model string) (*GrokRealtimeUpstream, error) {
@@ -190,7 +218,10 @@ func (s *OpenAIGatewayService) OpenGrokRealtime(ctx context.Context, account *Ac
 	if err != nil {
 		return nil, err
 	}
-	proxyURL, err := requestCredentialOwnerProxyURL(ctx, account)
+	if _, err := requestCredentialOwnerProxyURL(ctx, account); err != nil {
+		return nil, err
+	}
+	ctx, account, proxyURL, err := captureGrokRequestOwner(ctx, account)
 	if err != nil {
 		return nil, err
 	}
@@ -214,18 +245,23 @@ func (s *OpenAIGatewayService) OpenGrokRealtime(ctx context.Context, account *Ac
 	ApplyAccountOutboundIdentity(ctx, account, &http.Request{URL: u, Header: headers})
 	conn, status, _, err := s.getOpenAIWSPassthroughDialer().Dial(ctx, u.String(), headers, proxyURL)
 	if err != nil {
-		return nil, &GrokRealtimeDialError{StatusCode: status, Err: err}
+		return nil, &GrokRealtimeDialError{StatusCode: status, Err: err, owner: account}
 	}
 	return &GrokRealtimeUpstream{conn: conn}, nil
 }
 
 // HandleGrokRealtimeUpstreamError applies the shared Grok account policy to a
 // failed pre-accept WebSocket handshake.
-func (s *OpenAIGatewayService) HandleGrokRealtimeUpstreamError(ctx context.Context, account *Account, statusCode int, body []byte) {
+func (s *OpenAIGatewayService) HandleGrokRealtimeUpstreamError(ctx context.Context, failure error) {
+	var dialError *GrokRealtimeDialError
+	if !errors.As(failure, &dialError) || dialError.owner == nil {
+		return
+	}
+	statusCode := dialError.StatusCode
 	if statusCode <= 0 {
 		statusCode = http.StatusBadGateway
 	}
-	s.handleGrokAccountUpstreamError(ctx, account, statusCode, nil, body)
+	s.handleGrokAccountUpstreamError(ctx, dialError.owner, statusCode, nil, []byte(failure.Error()))
 }
 
 func (s *OpenAIGatewayService) ProxyGrokRealtimeConn(ctx context.Context, c *gin.Context, client *coderws.Conn, upstream *GrokRealtimeUpstream) (bool, error) {
@@ -341,7 +377,10 @@ func (s *OpenAIGatewayService) ProbeGrokRealtime(ctx context.Context, account *A
 	if err != nil {
 		return err
 	}
-	proxyURL, err := requestCredentialOwnerProxyURL(ctx, account)
+	if _, err := requestCredentialOwnerProxyURL(ctx, account); err != nil {
+		return err
+	}
+	ctx, account, proxyURL, err := captureGrokRequestOwner(ctx, account)
 	if err != nil {
 		return err
 	}

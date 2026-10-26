@@ -108,10 +108,6 @@ func (s *zhipuOAuthStubClient) ResolveTeamPlanKey(_ context.Context, _, _, organ
 	return s.team, nil
 }
 
-func (s *zhipuOAuthStubClient) IssueProjectToken(ctx context.Context, provider, token, org, project, key, proxy string) (*zcode.CodingPlanCredential, error) {
-	return s.ResolveIndividualCodingPlanKey(ctx, provider, token, proxy)
-}
-
 func newZhipuOAuthTestService(t *testing.T, client *zhipuOAuthStubClient) *ZhipuOAuthService {
 	t.Helper()
 	svc := NewZhipuOAuthService(client, nil)
@@ -248,8 +244,8 @@ func TestZhipuOAuthSessionIsSingleUse(t *testing.T) {
 func TestZhipuOAuthBuildAccountMaterialForEachPlan(t *testing.T) {
 	client := &zhipuOAuthStubClient{
 		businessToken: "zai-business",
-		individual:    &zcode.CodingPlanCredential{APIKey: "ak.sk", OrganizationID: "org-1", ProjectID: "proj-1"},
-		team:          &zcode.CodingPlanCredential{APIKey: "tak.tsk", OrganizationID: "org-team", ProjectID: "proj-team"},
+		individual:    &zcode.CodingPlanCredential{APIKey: "short-pat", KeyID: "ak", OrganizationID: "org-1", ProjectID: "proj-1"},
+		team:          &zcode.CodingPlanCredential{APIKey: "short-team-pat", KeyID: "tak", OrganizationID: "org-team", ProjectID: "proj-team"},
 	}
 	svc := newZhipuOAuthTestService(t, client)
 
@@ -326,7 +322,7 @@ func TestZhipuOAuthBuildAccountMaterialForEachPlan(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Equal(t, "zcode-jwt", material.Credentials["api_key"])
-		require.Equal(t, AnthropicAPIKeyAuthSchemeAuthorizationBearer, material.Credentials[anthropicAPIKeyAuthSchemeExtraKey])
+		require.NotContains(t, material.Credentials, anthropicAPIKeyAuthSchemeExtraKey, "native plan authentication requires no manual API-key setting")
 		require.Equal(t, map[string]any{APIProtocolAnthropic: zcodePlanAnthropicBaseURL}, material.Credentials[credentialAPIBaseURLs])
 		require.Equal(t, zcodePlanAnthropicBaseURL, material.BaseURL)
 
@@ -346,8 +342,9 @@ func TestZhipuOAuthBuildAccountMaterialForEachPlan(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "zcode-jwt", material.Credentials["api_key"])
 		require.Equal(t, "zcode-jwt", material.Credentials["zcode_jwt_token"])
+		require.Equal(t, "ak", material.Credentials["zhipu_project_key_id"])
 		require.NotContains(t, material.Credentials, "off_peak_plan_key")
-		require.Equal(t, AnthropicAPIKeyAuthSchemeAuthorizationBearer, material.Credentials[anthropicAPIKeyAuthSchemeExtraKey])
+		require.NotContains(t, material.Credentials, anthropicAPIKeyAuthSchemeExtraKey, "native plan authentication requires no manual API-key setting")
 		require.Equal(t, map[string]any{APIProtocolAnthropic: zcodeOffPeakAnthropicBaseURL}, material.Credentials[credentialAPIBaseURLs])
 		require.Equal(t, zcodeOffPeakAnthropicBaseURL, material.BaseURL)
 		overrides, ok := material.Credentials[credKeyHeaderOverrides].(map[string]any)
@@ -384,8 +381,13 @@ func TestZhipuOAuthBuildAccountMaterialForEachPlan(t *testing.T) {
 			})
 			require.NoError(t, err, provider)
 			require.Equal(t, map[string]any{APIProtocolAnthropic: zcodeOffPeakAnthropicBaseURL}, idle.Credentials[credentialAPIBaseURLs])
+			require.Equal(t, "ak", idle.Credentials["zhipu_project_key_id"])
 			require.NotContains(t, idle.Credentials, "off_peak_plan_key")
-			require.Equal(t, AnthropicAPIKeyAuthSchemeAuthorizationBearer, idle.Credentials[anthropicAPIKeyAuthSchemeExtraKey])
+			for _, material := range []*ZhipuAccountMaterial{start, idle} {
+				require.NotContains(t, material.Credentials, anthropicAPIKeyAuthSchemeExtraKey, "native plan authentication requires no manual API-key setting")
+				account := &Account{Platform: PlatformZhipu, Type: AccountTypeOAuth, Credentials: material.Credentials}
+				require.Equal(t, AnthropicAPIKeyAuthSchemeAuthorizationBearer, account.GetAnthropicAPIKeyAuthScheme(), "linked %s %s must select the official Bearer channel", provider, material.PlanKind)
+			}
 		}
 	})
 
@@ -465,7 +467,7 @@ func TestZhipuOAuthStartLinkPropagatesPlatformFailure(t *testing.T) {
 }
 
 func TestZhipuOAuthIdentitySurvivesSettingsChangeAndMaterialCreation(t *testing.T) {
-	client := &zhipuOAuthStubClient{initFlow: zhipuTestFlowInit(), exchange: zhipuTestReady(zcode.ProviderBigModel), individual: &zcode.CodingPlanCredential{APIKey: "derived-key"}}
+	client := &zhipuOAuthStubClient{initFlow: zhipuTestFlowInit(), exchange: zhipuTestReady(zcode.ProviderBigModel), individual: &zcode.CodingPlanCredential{APIKey: "short-pat", KeyID: "key-id"}}
 	svc := newZhipuOAuthTestService(t, client)
 	version := "3.16.2"
 	ctx := outboundidentity.WithResolver(context.Background(), func(context.Context, string) outboundidentity.Identity {
@@ -540,4 +542,8 @@ type zhipuOAuthProxyRepoStub struct {
 
 func (r *zhipuOAuthProxyRepoStub) GetByID(context.Context, int64) (*Proxy, error) {
 	return r.proxy, r.err
+}
+
+func (s *zhipuOAuthStubClient) IssueProjectAccessToken(context.Context, string, string, string, string, string, string) (*zcode.ProjectAccessToken, error) {
+	return &zcode.ProjectAccessToken{Token: "short-pat", ExpiresAt: time.Now().Add(time.Hour)}, nil
 }

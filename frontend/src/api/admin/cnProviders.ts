@@ -44,6 +44,8 @@ export interface CNProviderBalanceResult {
   currency?: string
   /** 多币种明细；缺省时按主币种展示。 */
   balances?: CNProviderBalanceEntry[]
+  /** Native DeepSeek bonus wallets, displayed separately from recharge wallets. */
+  bonus_balances?: CNProviderBalanceEntry[]
   available: boolean
   status_code?: number
   fetched_at: number

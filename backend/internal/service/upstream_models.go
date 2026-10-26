@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/cnoauth"
 	"io"
 	"log/slog"
 	"net/http"
@@ -18,6 +19,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/claude"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/geminicli"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/zcode"
 )
 
 const (
@@ -200,7 +202,7 @@ func newUpstreamModelSyncInternalError(message string, err error) error {
 // FetchUpstreamSupportedModels fetches only live model IDs. The admin sync path
 // uses SyncUpstreamModelCatalog so capability metadata can also be persisted.
 func (s *AccountTestService) FetchUpstreamSupportedModels(ctx context.Context, account *Account) ([]string, error) {
-	models, _, err := s.fetchUpstreamModelList(ctx, account)
+	models, _, _, err := s.fetchUpstreamModelList(ctx, account)
 	return models, err
 }
 
@@ -214,14 +216,30 @@ func (s *AccountTestService) FetchUpstreamSupportedModels(ctx context.Context, a
 // snapshot. When no model is complete, the existing account snapshot is left
 // untouched.
 func (s *AccountTestService) SyncUpstreamModelCatalog(ctx context.Context, account *Account) (*UpstreamModelCatalog, error) {
-	selectedAccount := account
+	if s == nil {
+		return nil, newUpstreamModelSyncConfigError("Account test service is not configured", nil)
+	}
 	owner, ownerErr := requestCredentialAccount(ctx, account)
 	if ownerErr != nil {
 		return nil, ownerErr
 	}
-	deepSeekHarnessCatalog := usesDeepSeekHarnessModels(owner)
+	if owner == nil {
+		return nil, newUpstreamModelSyncConfigError("Account is required", nil)
+	}
+	if owner.IsShadow() {
+		owner, ownerErr = resolveCredentialAccount(ctx, s.accountRepo, owner)
+		if ownerErr != nil {
+			return nil, newUpstreamModelSyncConfigError("Model discovery credential owner is unavailable", ownerErr)
+		}
+	}
+	// Publish only on the acquired credential owner, never its shadow row.
+	originalAccount := owner
+	account, err := snapshotCNControlAccount(owner)
+	if err != nil {
+		return nil, newUpstreamModelSyncConfigError("Invalid model discovery credential owner", err)
+	}
+	deepSeekHarnessCatalog := usesDeepSeekHarnessModels(account)
 	if deepSeekHarnessCatalog {
-		account = snapshotRequestCredentialAccount(owner)
 		token := account.GetOpenAIProtocolAPIKey()
 		if account.Type == AccountTypeOAuth {
 			token = account.GetCredential("access_token")
@@ -229,7 +247,7 @@ func (s *AccountTestService) SyncUpstreamModelCatalog(ctx context.Context, accou
 		ctx = withRequestCredentialOwner(WithOutboundIdentityScope(ctx, nil), account, token)
 	}
 	ctx = WithAccountOutboundIdentity(ctx, account)
-	models, body, err := s.fetchUpstreamModelList(ctx, account)
+	models, body, observedOwner, err := s.fetchUpstreamModelList(ctx, account)
 	liveListAvailable := err == nil
 	if err != nil {
 		configuredModels := configuredUpstreamModelsForCapabilitySync(account)
@@ -336,24 +354,17 @@ func (s *AccountTestService) SyncUpstreamModelCatalog(ctx context.Context, accou
 			Models:   completeMetadata,
 		}
 		updates := map[string]any{UpstreamModelMetadataExtraKey: snapshot}
-		if deepSeekHarnessCatalog {
-			repo, ok := s.accountRepo.(CredentialStateMutationRepository)
-			if !ok {
-				return nil, newUpstreamModelSyncInternalError("Conditional DeepSeek model metadata persistence is unavailable", nil)
-			}
-			applied, err := repo.ApplyCredentialStateMutation(ctx, account, CredentialStateMutation{Extra: updates})
-			if err != nil {
-				return nil, newUpstreamModelSyncInternalError("Failed to save upstream model metadata", err)
-			}
-			if !applied {
-				return nil, newUpstreamModelSyncUpstreamError("DeepSeek account changed; retry model discovery", nil)
-			}
-		} else if err := s.accountRepo.UpdateExtra(ctx, account.ID, updates); err != nil {
-			return nil, newUpstreamModelSyncInternalError("Failed to save upstream model metadata", err)
+		if observedOwner == nil {
+			observedOwner = account
+		}
+		persisted, err := persistCNControlExtra(ctx, s.accountRepo, observedOwner, updates)
+		if err != nil || !persisted {
+			return nil, newUpstreamModelSyncInternalError("Model metadata credential owner changed or could not be saved", err)
 		}
 		account.SetUpstreamModelMetadataSnapshot(snapshot)
-		if deepSeekHarnessCatalog && sameRequestCredentialGrant(selectedAccount, account) {
-			selectedAccount.SetUpstreamModelMetadataSnapshot(snapshot)
+		originalSnapshot, snapshotErr := snapshotCNControlAccount(originalAccount)
+		if snapshotErr == nil && sameRequestCredentialGrant(originalSnapshot, observedOwner) {
+			originalAccount.SetUpstreamModelMetadataSnapshot(snapshot)
 		}
 		persistedCapabilities = true
 	}
@@ -605,7 +616,7 @@ func (s *AccountTestService) fetchModelsDevRegistry(ctx context.Context, account
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/json")
-	resp, err := s.doUpstreamModelsRequest(req, upstreamModelsProxyURL(account), account)
+	resp, err := s.doUpstreamModelsRequest(req, account)
 	if err != nil {
 		return nil, err
 	}
@@ -787,35 +798,61 @@ func normalizeModelRegistryBaseURL(raw string) string {
 	return strings.ToLower(parsed.Scheme) + "://" + strings.ToLower(parsed.Host) + path
 }
 
-func (s *AccountTestService) fetchUpstreamModelList(ctx context.Context, account *Account) ([]string, []byte, error) {
+func (s *AccountTestService) fetchUpstreamModelList(ctx context.Context, account *Account) ([]string, []byte, *Account, error) {
 	if s == nil {
-		return nil, nil, newUpstreamModelSyncConfigError("Account test service is not configured", nil)
+		return nil, nil, nil, newUpstreamModelSyncConfigError("Account test service is not configured", nil)
 	}
 	if account == nil {
-		return nil, nil, newUpstreamModelSyncConfigError("Account is required", nil)
+		return nil, nil, nil, newUpstreamModelSyncConfigError("Account is required", nil)
+	}
+	if account.IsShadow() {
+		var err error
+		account, err = resolveCredentialAccount(ctx, s.accountRepo, account)
+		if err != nil {
+			return nil, nil, nil, newUpstreamModelSyncConfigError("Model discovery credential owner is unavailable", err)
+		}
+	}
+	account, err := snapshotCNControlAccount(account)
+	if err != nil {
+		return nil, nil, nil, newUpstreamModelSyncConfigError("Model discovery credential owner is invalid", err)
+	}
+	if _, err := account.StrictProxyURL(); err != nil {
+		return nil, nil, nil, newUpstreamModelSyncConfigError("Model discovery configured proxy is invalid", err)
 	}
 
 	if account.Platform == PlatformAntigravity && account.Type != AccountTypeAPIKey {
-		return s.fetchAntigravityOAuthUpstreamModels(ctx, account)
+		models, body, err := s.fetchAntigravityOAuthUpstreamModels(ctx, account)
+		return models, body, account, err
 	}
 
 	if s.httpUpstream == nil {
-		return nil, nil, newUpstreamModelSyncConfigError("Upstream HTTP client is not configured", nil)
+		return nil, nil, nil, newUpstreamModelSyncConfigError("Upstream HTTP client is not configured", nil)
 	}
 
 	if account.IsGemini() && account.IsVertexServiceAccount() {
 		models, err := s.fetchVertexGeminiUpstreamModels(ctx, account)
-		return models, nil, err
+		return models, nil, account, err
 	}
 
 	req, err := s.buildUpstreamModelsRequest(ctx, account)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, account, err
 	}
 
 	body, err := s.readUpstreamModelsResponse(req, account)
+	observedOwner := cnControlRequestOwner(req.Context(), account)
+	if transmittedOwner, ownerErr := requestCredentialAccount(req.Context(), account); ownerErr == nil && transmittedOwner != nil {
+		observedOwner = transmittedOwner
+	}
+	if projectOwner, ok := req.Context().Value(projectTokenRequestOwnerKey{}).(*Account); ok {
+		observedOwner = projectOwner
+	}
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, observedOwner, err
+	}
+	body, err = filterDeepSeekNativeModelList(req.Context(), observedOwner, body)
+	if err != nil {
+		return nil, nil, observedOwner, newUpstreamModelSyncUpstreamError("Upstream model list response was not valid JSON", err)
 	}
 
 	extractModels := extractUpstreamModelIDs
@@ -827,30 +864,30 @@ func (s *AccountTestService) fetchUpstreamModelList(ctx context.Context, account
 	}
 	credentialAccount, ownerErr := requestCredentialAccount(req.Context(), account)
 	if ownerErr != nil {
-		return nil, nil, ownerErr
+		return nil, nil, observedOwner, ownerErr
 	}
 	if usesDeepSeekHarnessModels(credentialAccount) {
 		identity, _ := outboundidentity.FromContext(req.Context())
 		filtered, _, filterErr := extractDeepSeekHarnessCatalog(body, identity.Version)
 		if filterErr != nil {
-			return nil, nil, filterErr
+			return nil, nil, observedOwner, filterErr
 		}
 		body = filtered
 	}
 	models, err := extractModels(body)
 	if err != nil {
-		return nil, nil, newUpstreamModelSyncUpstreamError("Upstream model list response was not valid JSON", err)
+		return nil, nil, observedOwner, newUpstreamModelSyncUpstreamError("Upstream model list response was not valid JSON", err)
 	}
 	if len(models) == 0 {
-		return nil, nil, newUpstreamModelSyncUpstreamError("Upstream returned no supported models", nil)
+		return nil, nil, observedOwner, newUpstreamModelSyncUpstreamError("Upstream returned no supported models", nil)
 	}
 
-	return models, body, nil
+	return models, body, observedOwner, nil
 }
 
 // readUpstreamModelsResponse 发送模型列表请求并读取受限大小的响应体；非 2xx 返回带状态码的同步错误。
 func (s *AccountTestService) readUpstreamModelsResponse(req *http.Request, account *Account) ([]byte, error) {
-	resp, err := s.doUpstreamModelsRequest(req, upstreamModelsProxyURL(account), account)
+	resp, err := s.doUpstreamModelsRequest(req, account)
 	if err != nil {
 		return nil, newUpstreamModelSyncUpstreamError("Failed to request upstream model list", err)
 	}
@@ -1013,6 +1050,13 @@ func (s *AccountTestService) buildUpstreamModelsRequest(ctx context.Context, acc
 			recordRequestCredentialOwner(ctx, account, token)
 			ctx = withRequestCredentialOwner(ctx, selected, token)
 		}
+	}
+	if usesZhipuProjectToken(account) {
+		ctx, err = withCNControlRequestOwner(ctx, account)
+		if err != nil {
+			return nil, newUpstreamModelSyncConfigError("Invalid project model discovery owner", err)
+		}
+		account = cnControlRequestOwner(ctx, account)
 	}
 	ctx = WithAccountOutboundIdentity(ctx, account)
 	defer func() {
@@ -1263,6 +1307,40 @@ func (s *AccountTestService) buildOpenAIUpstreamModelsRequest(ctx context.Contex
 // buildOpenAIAPIKeyModelsRequest is shared by admin discovery and public model
 // listing. Codex content negotiation is intentionally absent from this request.
 func buildOpenAIAPIKeyModelsRequest(ctx context.Context, account *Account, validateBaseURL func(string) (string, error)) (*http.Request, error) {
+	if account.Platform == PlatformZhipu && account.Type == AccountTypeOAuth {
+		if account.GetCredential("plan_kind") != ZhipuPlanIndividualCodingPlan && account.GetCredential("plan_kind") != ZhipuPlanTeamCodingPlan {
+			return nil, newUpstreamModelSyncUnsupportedError("Live project model discovery requires a personal or team coding plan", nil)
+		}
+		provider := zcode.NormalizeProvider(account.GetCredential("oauth_provider"))
+		if provider == "" {
+			return nil, newUpstreamModelSyncConfigError("Invalid project model discovery provider", nil)
+		}
+		target := strings.TrimRight(zhipuCodingBaseURL(provider), "/") + "/models"
+		if _, err := validateBaseURL(target); err != nil {
+			return nil, newUpstreamModelSyncConfigError("Invalid project model list URL", err)
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+		if err != nil {
+			return nil, newUpstreamModelSyncConfigError("Invalid project model list URL", err)
+		}
+		req.Header.Set("Accept", "application/json")
+		return req, nil
+	}
+	if account.IsDomesticOAuth() && (account.Platform == PlatformKimi || account.Platform == PlatformDeepseek) {
+		target := cnoauth.ModelBase(account.Platform, account.GetCredential("oauth_region")) + "/v1/models"
+		if account.Platform == PlatformDeepseek {
+			target = "https://api.deepseek.com/models"
+		}
+		if _, err := validateBaseURL(target); err != nil {
+			return nil, newUpstreamModelSyncConfigError("Invalid native model list URL", err)
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Accept", "application/json")
+		return req, nil
+	}
 	if account.Type != AccountTypeAPIKey && (!account.IsDomesticOAuth() || account.Platform != PlatformStepFun) {
 		return nil, newUpstreamModelSyncUnsupportedError(
 			fmt.Sprintf("Unsupported OpenAI account type for upstream model sync: %s", account.Type), nil,
@@ -1451,34 +1529,55 @@ func (s *AccountTestService) fetchAntigravityOAuthUpstreamModels(ctx context.Con
 	return dedupeAndSortModelIDs(models), body, nil
 }
 
-func (s *AccountTestService) doUpstreamModelsRequest(req *http.Request, proxyURL string, account *Account) (*http.Response, error) {
+func (s *AccountTestService) doUpstreamModelsRequest(req *http.Request, account *Account) (*http.Response, error) {
 	if req.URL.String() == modelsDevRegistryURL {
-		return s.doUpstreamModelsRequestPrepared(req, proxyURL, account)
+		return s.doUpstreamModelsRequestPrepared(req, account)
+	}
+	if expected := cnControlRequestOwner(req.Context(), nil); usesZhipuProjectToken(expected) {
+		expectedOwner, expectedErr := cnControlOwnerFingerprint(expected)
+		currentOwner, currentErr := cnControlOwnerFingerprint(account)
+		if expectedErr != nil || currentErr != nil || expectedOwner != currentOwner {
+			return nil, errors.New("project model discovery owner changed; retry request")
+		}
+		account = expected
+	} else if usesZhipuProjectToken(account) {
+		return nil, errors.New("project model discovery owner snapshot is missing")
 	}
 	attemptCtx := req.Context()
 	credentialAccount, err := requestCredentialAccount(attemptCtx, account)
 	if err != nil {
 		return nil, err
 	}
-	proxyURL, err = requestCredentialOwnerProxyURL(attemptCtx, credentialAccount)
-	if err != nil {
+	if _, err := requestCredentialOwnerProxyURL(attemptCtx, credentialAccount); err != nil {
 		return nil, err
 	}
 	send := func(next *http.Request) (*http.Response, error) {
-		response, err := s.doUpstreamModelsRequestPrepared(next, proxyURL, account)
+		response, err := s.doUpstreamModelsRequestPrepared(next, account)
 		if response != nil {
 			response.Request = next
 		}
 		return response, err
 	}
 	var response *http.Response
-	if credentialAccount.IsDomesticOAuth() && credentialAccount.Platform == PlatformKimi {
+	switch {
+	case credentialAccount.IsDomesticOAuth() && credentialAccount.Platform == PlatformKimi:
 		if s.cnOAuthService == nil {
 			return nil, NewProviderCredentialFailure("native_oauth_service_unavailable", nil)
 		}
 		response, err = s.cnOAuthService.roundTripNativeOAuthWithPrepare(req, account, s.cnOAuthService.prepareKimiModelsRequest, send)
-	} else {
-		response, err = s.cnOAuthService.roundTripZhipuLinked(req, account, send)
+	case usesZhipuProjectToken(credentialAccount):
+		response, err = s.projectTokens.RoundTrip(req, account, send)
+	default:
+		if credentialAccount.IsDomesticOAuth() {
+			oauth := s.cnOAuthService
+			if oauth == nil {
+				oauth = NewCNOAuthService(nil, nil, nil)
+			}
+			if err := oauth.prepareRequest(req, credentialAccount); err != nil {
+				return nil, err
+			}
+		}
+		response, err = send(req)
 	}
 	if response != nil {
 		finalizeTransmittedRequestCredentialOwner(attemptCtx, response.Request)
@@ -1486,14 +1585,13 @@ func (s *AccountTestService) doUpstreamModelsRequest(req *http.Request, proxyURL
 	return response, err
 }
 
-func (s *AccountTestService) doUpstreamModelsRequestPrepared(req *http.Request, proxyURL string, account *Account) (*http.Response, error) {
+func (s *AccountTestService) doUpstreamModelsRequestPrepared(req *http.Request, account *Account) (*http.Response, error) {
 	credentialAccount, err := requestCredentialAccount(req.Context(), account)
 	if err != nil {
 		return nil, err
 	}
 	credentialAccount = snapshotRequestCredentialAccount(credentialAccount)
-	// models.dev is a public credential-free registry, separate from the
-	// account-owned provider request boundary.
+	proxyURL := ""
 	if req.URL.String() != modelsDevRegistryURL {
 		proxyURL, err = requestCredentialOwnerProxyURL(req.Context(), credentialAccount)
 		if err != nil {

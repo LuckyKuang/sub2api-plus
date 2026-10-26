@@ -115,13 +115,17 @@ type credentialProxyRefreshRepo struct {
 	attempted *Account
 }
 
-func (r *credentialProxyRefreshRepo) UpdateOAuthCredentialsIfUnchanged(ctx context.Context, owner *Account, credentials map[string]any) (bool, error) {
+func (r *credentialProxyRefreshRepo) UpdateOAuthRefreshCredentialsIfUnchanged(ctx context.Context, owner *Account, credentials map[string]any) (bool, error) {
 	r.attempted = snapshotRequestCredentialAccount(owner)
-	return r.refreshCleanupRepo.UpdateOAuthCredentialsIfUnchanged(ctx, owner, credentials)
+	return r.refreshCleanupRepo.UpdateOAuthRefreshCredentialsIfUnchanged(ctx, owner, credentials)
 }
 
 func (r *credentialProxyRefreshRepo) UpdateGrokOAuthCredentialsIfUnchanged(ctx context.Context, owner *Account, credentials map[string]any) (bool, error) {
-	return r.UpdateOAuthCredentialsIfUnchanged(ctx, owner, credentials)
+	return r.UpdateOAuthRefreshCredentialsIfUnchanged(ctx, owner, credentials)
+}
+
+func (r *credentialProxyRefreshRepo) UpdateCNOAuthCredentialsIfUnchanged(ctx context.Context, owner *Account, credentials map[string]any) (bool, error) {
+	return r.UpdateOAuthRefreshCredentialsIfUnchanged(ctx, owner, credentials)
 }
 
 func TestRefreshCredentialMutationCarriesAttemptedProxyEvidence(t *testing.T) {

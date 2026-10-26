@@ -269,6 +269,7 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
   })
 
   it.each(['apikey', 'oauth'] as const)('saves the actual StepFun %s checkbox selection during creation', async kind => {
+    if (kind === 'oauth') vi.useFakeTimers()
     const wrapper = mountModal([], true)
     await selectButtonByText(wrapper, 'StepFun')
     await wrapper.get('form#create-account-form input[type="text"]').setValue('Restricted StepFun')
@@ -282,7 +283,7 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
       // docs/providers/STEPFUN.md: Step Plan login polls the server-held flow;
       // the browser never exchanges a loopback callback or a private API key.
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-      const pending = { session_id: 'ready-step', status: 'pending', authorize_url: 'https://platform.stepfun.com/cli-login', expires_at: new Date(Date.now() + 60000).toISOString(), interval_seconds: 5 }
+      const pending = { session_id: 'ready-step', status: 'pending', authorize_url: 'https://platform.stepfun.com/cli-login-remote?flow_id=public-flow', expires_at: new Date(Date.now() + 60000).toISOString(), interval_seconds: 5 }
       cnOAuthRequestMock.mockResolvedValueOnce(pending)
       await selectButtonByText(wrapper, 'admin.accounts.oauth.domestic.start')
       await flushPromises()

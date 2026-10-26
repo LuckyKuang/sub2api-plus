@@ -106,6 +106,12 @@ func (n *auxiliaryWireNetwork) handler(route string) http.HandlerFunc {
 		if r.URL.Path == "/backend-api/wham/usage" {
 			body = strings.Replace(body, `"credits":[]`, `"credits":{"has_credits":false,"unlimited":false,"balance":null}`, 1)
 		}
+		if r.URL.Path == "/v1/users/me/balance" {
+			body = `{"code":0,"status":true,"data":{"available_balance":12}}`
+		}
+		if r.URL.Path == "/api/monitor/usage/quota/limit" {
+			body = `{"code":200,"success":true,"data":{"limits":[{"type":"TOKENS_LIMIT","unit":3,"percentage":12,"nextResetTime":4070908800000}]}}`
+		}
 		if strings.HasSuffix(r.URL.Path, "/models") || r.URL.Path == "/models" {
 			body = `{"data":[{"id":"deepseek-flash","slug":"deepseek-flash","supported_endpoints":["/responses"],"api_capabilities":{"anthropic_messages":{}},"input_modalities":["text"],"output_modalities":["text"]}],"models":[{"id":"deepseek-flash","slug":"deepseek-flash"}]}`
 		}
@@ -228,8 +234,9 @@ type auxiliaryWireOperation struct {
 	execute func(context.Context, *auxiliaryOwnerRepo, *auxiliaryWireNetwork) error
 	// Independent MiniMax control endpoints share a signer but each must retain
 	// the operation's proxy even after earlier control calls have succeeded.
-	failurePaths    []string
-	successfulPaths []string
+	failurePaths           []string
+	successfulPaths        []string
+	rejectStaleObservation bool
 }
 
 // The service adapter keeps protocol handling in the real ZCode client. Its
@@ -266,12 +273,12 @@ func (c auxiliaryZhipuWireClient) ResolveTeamPlanKey(ctx context.Context, provid
 	}
 	return client.ResolveTeamPlanKey(ctx, provider, token, org, project)
 }
-func (c auxiliaryZhipuWireClient) IssueProjectToken(ctx context.Context, provider, token, org, project, key, proxy string) (*zcode.CodingPlanCredential, error) {
+func (c auxiliaryZhipuWireClient) IssueProjectAccessToken(ctx context.Context, provider, token, org, project, key, proxy string) (*zcode.ProjectAccessToken, error) {
 	client, err := c.credentials(proxy)
 	if err != nil {
 		return nil, err
 	}
-	return client.IssueProjectToken(ctx, provider, token, org, project, key)
+	return client.IssueProjectAccessToken(ctx, provider, token, org, project, key)
 }
 
 func auxiliaryWireOperations() []auxiliaryWireOperation {
@@ -311,7 +318,7 @@ func auxiliaryWireOperations() []auxiliaryWireOperation {
 	for _, platform := range []string{PlatformKimi, PlatformMiniMax, PlatformZhipu} {
 		for _, auth := range []string{"api_key", "oauth"} {
 			p, kind := platform, auth
-			operation := auxiliaryWireOperation{name: p + "-quota-" + kind, account: func() *Account {
+			operation := auxiliaryWireOperation{name: p + "-quota-" + kind, rejectStaleObservation: true, account: func() *Account {
 				if kind == "oauth" {
 					if p == PlatformZhipu {
 						a, _ := zhipuNativeCredentialAccount("bigmodel", zhipuNativeCredentialCase{plan: ZhipuPlanIndividualCodingPlan})
@@ -329,13 +336,14 @@ func auxiliaryWireOperations() []auxiliaryWireOperation {
 				svc := NewCNProviderQuotaService(r, nil, n, cnProbeAllowlistConfig("api.kimi.com", "api.kimi.com.cn", "api.minimaxi.com", "api.minimax.io", "agent.minimaxi.com", "www.minimaxi.com", "open.bigmodel.cn"))
 				svc.cnOAuthService = NewCNOAuthService(nil, r, nil)
 				if p == PlatformZhipu && kind == "oauth" {
-					manager := NewZhipuOAuthService(&projectTokenTestClient{}, nil)
-					defer manager.Stop()
-					svc.cnOAuthService.zhipu = manager
+					svc.projectTokens = NewZhipuProjectTokenManager(&projectTokenTestClient{}, nil)
 				}
 				result, err := svc.QueryUsageForAccount(ctx, a)
-				if err == nil && (result == nil || !result.Success) {
-					return fmt.Errorf("quota response failed")
+				if err == nil && result == nil {
+					return fmt.Errorf("quota response missing")
+				}
+				if err == nil && !result.Success {
+					return fmt.Errorf("quota response failed: %s", result.Error)
 				}
 				return err
 			}
@@ -344,7 +352,7 @@ func auxiliaryWireOperations() []auxiliaryWireOperation {
 	}
 	for _, platform := range []string{PlatformKimi, PlatformDeepseek} {
 		p := platform
-		operations = append(operations, auxiliaryWireOperation{name: p + "-balance", account: func() *Account { return paygAccount(p) }, execute: func(ctx context.Context, r *auxiliaryOwnerRepo, n *auxiliaryWireNetwork) error {
+		operations = append(operations, auxiliaryWireOperation{name: p + "-balance", rejectStaleObservation: true, account: func() *Account { return paygAccount(p) }, execute: func(ctx context.Context, r *auxiliaryOwnerRepo, n *auxiliaryWireNetwork) error {
 			a, _ := r.GetByID(ctx, 0)
 			result, err := NewCNProviderBalanceService(r, nil, n, nil).QueryBalanceForAccount(ctx, a)
 			if err == nil && (result == nil || !result.Success) {
@@ -404,12 +412,11 @@ func auxiliaryWireOperations() []auxiliaryWireOperation {
 			operation.execute = func(ctx context.Context, r *auxiliaryOwnerRepo, n *auxiliaryWireNetwork) error {
 				account, _ := r.GetByID(ctx, 0)
 				oauth := NewCNOAuthService(nil, r, nil)
+				var tokens *ZhipuProjectTokenManager
 				if p == PlatformZhipu && kind == AccountTypeOAuth {
-					manager := NewZhipuOAuthService(&projectTokenTestClient{}, nil)
-					defer manager.Stop()
-					oauth.zhipu = manager
+					tokens = NewZhipuProjectTokenManager(&projectTokenTestClient{}, nil)
 				}
-				svc := &AccountTestService{accountRepo: r, httpUpstream: n, cnOAuthService: oauth, grokTokenProvider: NewGrokTokenProvider(r, nil), cfg: upstreamModelSyncTestConfig()}
+				svc := &AccountTestService{projectTokens: tokens, accountRepo: r, httpUpstream: n, cnOAuthService: oauth, grokTokenProvider: NewGrokTokenProvider(r, nil), cfg: upstreamModelSyncTestConfig()}
 				models, err := svc.FetchUpstreamSupportedModels(ctx, account)
 				if err == nil && (len(models) != 1 || models[0] != "deepseek-flash") {
 					return fmt.Errorf("live model response did not retain the advertised model")
@@ -491,9 +498,8 @@ func auxiliaryWireOperations() []auxiliaryWireOperation {
 				},
 				execute: func(ctx context.Context, repo *auxiliaryOwnerRepo, _ *auxiliaryWireNetwork) error {
 					account, _ := repo.GetByID(ctx, 0)
-					service := NewZhipuOAuthService(&auxiliaryZhipuWireClient{}, nil)
-					defer service.Stop()
-					credential, err := service.projectToken(ctx, account, "")
+					tokens := NewZhipuProjectTokenManager(&auxiliaryZhipuWireClient{}, nil)
+					credential, err := tokens.credential(ctx, account, false)
 					if err == nil && (credential == nil || credential.APIKey != "fake-project-token") {
 						return fmt.Errorf("project token did not use actual provider issuance")
 					}
@@ -585,6 +591,9 @@ func TestAuxiliarySendersProxyLifecycleUsesCommittedRouteForFreshOperation(t *te
 			account.Proxy = oldProxy
 			repo.replace(account)
 			network.reset()
+			repo.mu.Lock()
+			writesBefore := len(repo.writes)
+			repo.mu.Unlock()
 			gate := &auxiliaryWireGate{reached: make(chan struct{}), release: make(chan struct{})}
 			network.mu.Lock()
 			network.gate = gate
@@ -602,7 +611,16 @@ func TestAuxiliarySendersProxyLifecycleUsesCommittedRouteForFreshOperation(t *te
 			account.Proxy = newProxy
 			repo.replace(account)
 			close(gate.release)
-			require.NoError(t, <-done)
+			completedErr := <-done
+			if operation.rejectStaleObservation {
+				require.Error(t, completedErr, "a completed physical probe cannot certify a replaced route's observation")
+				repo.mu.Lock()
+				writesAfter := len(repo.writes)
+				repo.mu.Unlock()
+				require.Equal(t, writesBefore, writesAfter, "the old route's late observation cannot persist onto the replacement route")
+			} else {
+				require.NoError(t, completedErr)
+			}
 			for _, capture := range network.captures() {
 				require.Equal(t, "old", capture.route, "in-flight edits cannot split a logical operation's route")
 			}

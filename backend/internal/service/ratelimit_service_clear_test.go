@@ -27,6 +27,8 @@ type rateLimitClearRepoStub struct {
 	clearAntigravityErr       error
 	clearModelRateLimitErr    error
 	clearTempUnschedulableErr error
+	atomicModes               []SchedulingRecoveryMode
+	fullRecoveryCalls         int
 }
 
 func (r *rateLimitClearRepoStub) GetByID(ctx context.Context, id int64) (*Account, error) {
@@ -34,7 +36,63 @@ func (r *rateLimitClearRepoStub) GetByID(ctx context.Context, id int64) (*Accoun
 	if r.getByIDErr != nil {
 		return nil, r.getByIDErr
 	}
+	if r.getByIDAccount == nil {
+		r.getByIDAccount = &Account{ID: id, Status: StatusActive, Extra: map[string]any{}}
+	}
 	return r.getByIDAccount, nil
+}
+
+func (r *rateLimitClearRepoStub) RunOpenAIOAuthPolicyTransaction(ctx context.Context, fn func(context.Context, AccountRepository) error) error {
+	return fn(ctx, r)
+}
+
+func (r *rateLimitClearRepoStub) LockAccountCredentialFamily(context.Context, int64) error {
+	return r.getByIDErr
+}
+
+func (r *rateLimitClearRepoStub) applyAtomicSchedulingRecovery(id int64, mode SchedulingRecoveryMode) error {
+	for _, err := range []error{r.clearRateLimitErr, r.clearAntigravityErr, r.clearModelRateLimitErr, r.clearTempUnschedulableErr} {
+		if err != nil {
+			return err
+		}
+	}
+	account, err := r.GetByID(context.Background(), id)
+	if err != nil {
+		return err
+	}
+	account.TempUnschedulableUntil, account.TempUnschedulableReason = nil, ""
+	delete(account.Extra, "model_rate_limits")
+	if mode == SchedulingRecoveryRates {
+		account.RateLimitedAt, account.RateLimitResetAt, account.OverloadUntil = nil, nil, nil
+		delete(account.Extra, "antigravity_quota_scopes")
+	}
+	return nil
+}
+
+func (r *rateLimitClearRepoStub) ClearAccountSchedulingRecoveryState(_ context.Context, id int64, mode SchedulingRecoveryMode) error {
+	r.atomicModes = append(r.atomicModes, mode)
+	return r.applyAtomicSchedulingRecovery(id, mode)
+}
+
+func (r *rateLimitClearRepoStub) ClearAccountRecoveryState(_ context.Context, id int64) error {
+	r.fullRecoveryCalls++
+	if r.clearErrorErr != nil {
+		return r.clearErrorErr
+	}
+	if err := r.applyAtomicSchedulingRecovery(id, SchedulingRecoveryRates); err != nil {
+		return err
+	}
+	r.getByIDAccount.Status, r.getByIDAccount.ErrorMessage = StatusActive, ""
+	return nil
+}
+
+func assertNoLegacyRecoveryWrites(t *testing.T, r *rateLimitClearRepoStub) {
+	t.Helper()
+	require.Zero(t, r.clearErrorCalls)
+	require.Zero(t, r.clearRateLimitCalls)
+	require.Zero(t, r.clearAntigravityCalls)
+	require.Zero(t, r.clearModelRateLimitCalls)
+	require.Zero(t, r.clearTempUnschedCalls)
 }
 
 func (r *rateLimitClearRepoStub) ClearError(ctx context.Context, id int64) error {
@@ -98,11 +156,9 @@ func TestRateLimitService_ClearRateLimit_AlsoClearsTempUnschedulable(t *testing.
 	err := svc.ClearRateLimit(context.Background(), 42)
 	require.NoError(t, err)
 
-	require.Equal(t, 1, repo.clearRateLimitCalls)
-	require.Equal(t, 1, repo.clearAntigravityCalls)
-	require.Equal(t, 1, repo.clearModelRateLimitCalls)
-	require.Equal(t, 1, repo.clearTempUnschedCalls)
 	require.Equal(t, []int64{42}, cache.deletedIDs)
+	require.Equal(t, []SchedulingRecoveryMode{SchedulingRecoveryRates}, repo.atomicModes)
+	assertNoLegacyRecoveryWrites(t, repo)
 }
 
 func TestRateLimitService_ClearRateLimit_ClearTempUnschedulableFailed(t *testing.T) {
@@ -115,8 +171,9 @@ func TestRateLimitService_ClearRateLimit_ClearTempUnschedulableFailed(t *testing
 	err := svc.ClearRateLimit(context.Background(), 7)
 	require.Error(t, err)
 
-	require.Equal(t, 1, repo.clearTempUnschedCalls)
 	require.Empty(t, cache.deletedIDs)
+	require.Equal(t, []SchedulingRecoveryMode{SchedulingRecoveryRates}, repo.atomicModes)
+	assertNoLegacyRecoveryWrites(t, repo)
 }
 
 func TestRateLimitService_ClearRateLimit_ClearRateLimitFailed(t *testing.T) {
@@ -129,11 +186,9 @@ func TestRateLimitService_ClearRateLimit_ClearRateLimitFailed(t *testing.T) {
 	err := svc.ClearRateLimit(context.Background(), 11)
 	require.Error(t, err)
 
-	require.Equal(t, 1, repo.clearRateLimitCalls)
-	require.Equal(t, 0, repo.clearAntigravityCalls)
-	require.Equal(t, 0, repo.clearModelRateLimitCalls)
-	require.Equal(t, 0, repo.clearTempUnschedCalls)
 	require.Empty(t, cache.deletedIDs)
+	require.Equal(t, []SchedulingRecoveryMode{SchedulingRecoveryRates}, repo.atomicModes)
+	assertNoLegacyRecoveryWrites(t, repo)
 }
 
 func TestRateLimitService_ClearRateLimit_ClearAntigravityFailed(t *testing.T) {
@@ -146,11 +201,9 @@ func TestRateLimitService_ClearRateLimit_ClearAntigravityFailed(t *testing.T) {
 	err := svc.ClearRateLimit(context.Background(), 12)
 	require.Error(t, err)
 
-	require.Equal(t, 1, repo.clearRateLimitCalls)
-	require.Equal(t, 1, repo.clearAntigravityCalls)
-	require.Equal(t, 0, repo.clearModelRateLimitCalls)
-	require.Equal(t, 0, repo.clearTempUnschedCalls)
 	require.Empty(t, cache.deletedIDs)
+	require.Equal(t, []SchedulingRecoveryMode{SchedulingRecoveryRates}, repo.atomicModes)
+	assertNoLegacyRecoveryWrites(t, repo)
 }
 
 func TestRateLimitService_ClearRateLimit_ClearModelRateLimitsFailed(t *testing.T) {
@@ -163,11 +216,9 @@ func TestRateLimitService_ClearRateLimit_ClearModelRateLimitsFailed(t *testing.T
 	err := svc.ClearRateLimit(context.Background(), 13)
 	require.Error(t, err)
 
-	require.Equal(t, 1, repo.clearRateLimitCalls)
-	require.Equal(t, 1, repo.clearAntigravityCalls)
-	require.Equal(t, 1, repo.clearModelRateLimitCalls)
-	require.Equal(t, 0, repo.clearTempUnschedCalls)
 	require.Empty(t, cache.deletedIDs)
+	require.Equal(t, []SchedulingRecoveryMode{SchedulingRecoveryRates}, repo.atomicModes)
+	assertNoLegacyRecoveryWrites(t, repo)
 }
 
 func TestRateLimitService_ClearRateLimit_CacheDeleteFailedShouldNotFail(t *testing.T) {
@@ -180,11 +231,9 @@ func TestRateLimitService_ClearRateLimit_CacheDeleteFailedShouldNotFail(t *testi
 	err := svc.ClearRateLimit(context.Background(), 14)
 	require.NoError(t, err)
 
-	require.Equal(t, 1, repo.clearRateLimitCalls)
-	require.Equal(t, 1, repo.clearAntigravityCalls)
-	require.Equal(t, 1, repo.clearModelRateLimitCalls)
-	require.Equal(t, 1, repo.clearTempUnschedCalls)
 	require.Equal(t, []int64{14}, cache.deletedIDs)
+	require.Equal(t, []SchedulingRecoveryMode{SchedulingRecoveryRates}, repo.atomicModes)
+	assertNoLegacyRecoveryWrites(t, repo)
 }
 
 func TestRateLimitService_ClearRateLimit_WithoutTempUnschedCache(t *testing.T) {
@@ -194,10 +243,8 @@ func TestRateLimitService_ClearRateLimit_WithoutTempUnschedCache(t *testing.T) {
 	err := svc.ClearRateLimit(context.Background(), 15)
 	require.NoError(t, err)
 
-	require.Equal(t, 1, repo.clearRateLimitCalls)
-	require.Equal(t, 1, repo.clearAntigravityCalls)
-	require.Equal(t, 1, repo.clearModelRateLimitCalls)
-	require.Equal(t, 1, repo.clearTempUnschedCalls)
+	require.Equal(t, []SchedulingRecoveryMode{SchedulingRecoveryRates}, repo.atomicModes)
+	assertNoLegacyRecoveryWrites(t, repo)
 }
 
 func TestRateLimitService_RecoverAccountAfterSuccessfulTest_ClearsErrorAndRateLimitRelatedState(t *testing.T) {
@@ -229,14 +276,11 @@ func TestRateLimitService_RecoverAccountAfterSuccessfulTest_ClearsErrorAndRateLi
 	require.True(t, result.ClearedError)
 	require.True(t, result.ClearedRateLimit)
 
-	require.Equal(t, 1, repo.getByIDCalls)
-	require.Equal(t, 1, repo.clearErrorCalls)
-	require.Equal(t, 1, repo.clearRateLimitCalls)
-	require.Equal(t, 1, repo.clearAntigravityCalls)
-	require.Equal(t, 1, repo.clearModelRateLimitCalls)
-	require.Equal(t, 1, repo.clearTempUnschedCalls)
 	require.Equal(t, []int64{42}, cache.deletedIDs)
 	require.Equal(t, []int64{42}, blocker.clearedIDs)
+	require.Equal(t, 1, repo.fullRecoveryCalls)
+	require.Empty(t, repo.atomicModes)
+	assertNoLegacyRecoveryWrites(t, repo)
 }
 
 func TestRateLimitService_RecoverAccountAfterSuccessfulTest_NoRecoverableStateIsNoop(t *testing.T) {
@@ -257,13 +301,10 @@ func TestRateLimitService_RecoverAccountAfterSuccessfulTest_NoRecoverableStateIs
 	require.False(t, result.ClearedError)
 	require.False(t, result.ClearedRateLimit)
 
-	require.Equal(t, 1, repo.getByIDCalls)
-	require.Equal(t, 0, repo.clearErrorCalls)
-	require.Equal(t, 0, repo.clearRateLimitCalls)
-	require.Equal(t, 0, repo.clearAntigravityCalls)
-	require.Equal(t, 0, repo.clearModelRateLimitCalls)
-	require.Equal(t, 0, repo.clearTempUnschedCalls)
 	require.Empty(t, cache.deletedIDs)
+	require.Empty(t, repo.atomicModes)
+	require.Zero(t, repo.fullRecoveryCalls)
+	assertNoLegacyRecoveryWrites(t, repo)
 }
 
 func TestRateLimitService_RecoverAccountAfterSuccessfulTest_ClearErrorFailed(t *testing.T) {
@@ -279,9 +320,9 @@ func TestRateLimitService_RecoverAccountAfterSuccessfulTest_ClearErrorFailed(t *
 	result, err := svc.RecoverAccountAfterSuccessfulTest(context.Background(), 9)
 	require.Error(t, err)
 	require.Nil(t, result)
-	require.Equal(t, 1, repo.getByIDCalls)
-	require.Equal(t, 1, repo.clearErrorCalls)
-	require.Equal(t, 0, repo.clearRateLimitCalls)
+	require.Equal(t, 1, repo.fullRecoveryCalls)
+	require.Empty(t, repo.atomicModes)
+	assertNoLegacyRecoveryWrites(t, repo)
 }
 
 func TestRateLimitService_RecoverAccountState_InvalidatesOAuthTokenOnErrorRecovery(t *testing.T) {
@@ -303,7 +344,9 @@ func TestRateLimitService_RecoverAccountState_InvalidatesOAuthTokenOnErrorRecove
 	require.NotNil(t, result)
 	require.True(t, result.ClearedError)
 	require.False(t, result.ClearedRateLimit)
-	require.Equal(t, 1, repo.clearErrorCalls)
 	require.Len(t, invalidator.accounts, 1)
 	require.Equal(t, int64(21), invalidator.accounts[0].ID)
+	require.Equal(t, 1, repo.fullRecoveryCalls)
+	require.Empty(t, repo.atomicModes)
+	assertNoLegacyRecoveryWrites(t, repo)
 }

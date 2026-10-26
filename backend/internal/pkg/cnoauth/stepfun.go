@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -22,15 +23,17 @@ const stepLoginPath = "/api/stdhttp/v1/cli-login"
 
 var stepFlowID = regexp.MustCompile(`^[A-Za-z0-9._-]{1,128}$`)
 
+// StepLogin authenticates account operations, never model inference. Its lifetime
+// and refresh credential are independent of the static Step Plan model key.
 type StepLogin struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-	DeviceID     string `json:"device_id"`
-	AppID        string `json:"app_id"`
-	ExpiresIn    int64  `json:"expires_in,omitempty"`
+	AccessToken  string    `json:"access_token"`
+	RefreshToken string    `json:"refresh_token"`
+	DeviceID     string    `json:"device_id"`
+	AppID        string    `json:"app_id"`
+	ExpiresAt    time.Time `json:"expires_at"`
 }
 
-func stepAuthOrigin(region string) string {
+func stepOrigin(region string) string {
 	if region == "global" {
 		return "https://platform.stepfun.ai"
 	}
@@ -47,14 +50,14 @@ func (c *Client) stepLoginRequest(ctx context.Context, f *Flow, proxy, method, p
 		reader = strings.NewReader(string(raw))
 		contentType = "application/json"
 	}
-	v, status, err := c.requestWithMethod(ctx, proxy, method, stepAuthOrigin(f.Region)+stepLoginPath+path, reader, contentType, map[string]string{"Authorization": "Bearer " + f.DeviceCode})
+	value, status, err := c.requestHeaders(ctx, proxy, method, stepOrigin(f.Region)+stepLoginPath+path, reader, contentType, map[string]string{"Authorization": "Bearer " + f.DeviceCode})
 	if err != nil {
 		return nil, err
 	}
-	if status < 200 || status >= 300 || (v["status"] != nil && v["status"] != float64(0)) {
+	if status < 200 || status >= 300 || (value["status"] != nil && value["status"] != float64(0)) {
 		return nil, errors.New("step login request rejected")
 	}
-	return v, nil
+	return value, nil
 }
 
 func (c *Client) startStepFun(ctx context.Context, f *Flow, proxy string) (*Flow, error) {
@@ -67,60 +70,65 @@ func (c *Client) startStepFun(ctx context.Context, f *Flow, proxy string) (*Flow
 	if f.Region == "global" {
 		profile = "step_plan_oversea"
 	}
-	v, err := c.stepLoginRequest(ctx, f, proxy, http.MethodPost, "/init", map[string]any{
-		"profile": profile, "origin": stepAuthOrigin(f.Region),
+	value, err := c.stepLoginRequest(ctx, f, proxy, http.MethodPost, "/init", map[string]any{
+		"profile": profile, "origin": stepOrigin(f.Region),
 		"client": map[string]string{"name": "stepcode", "version": stepfun.AgentVersion, "platform": "linux-x64"},
 	})
 	if err != nil {
 		return nil, err
 	}
-	f.State = str(v, "flow_id")
-	interval, ok := v["poll_interval_sec"].(float64)
-	expires, expiryOK := v["expires_at"].(float64)
-	if !stepFlowID.MatchString(f.State) || !ok || interval < 1 || !expiryOK || expires <= float64(time.Now().Unix()) {
-		return nil, errors.New("invalid Step login initialization")
+	id := str(value, "flow_id")
+	interval, validInterval := value["poll_interval_sec"].(float64)
+	expires, validExpiry := value["expires_at"].(float64)
+	if !stepFlowID.MatchString(id) || !validInterval || math.IsNaN(interval) || math.IsInf(interval, 0) || interval < 1 || !validExpiry || math.IsNaN(expires) || math.IsInf(expires, 0) || expires <= float64(time.Now().Unix()) {
+		return nil, errors.New("invalid step login initialization")
 	}
-	f.Interval = int(min(interval, 60))
+	f.FlowID = id
+	f.Interval = int(math.Ceil(min(interval, 60)))
 	if expiry := time.Unix(int64(expires), 0); expiry.Before(f.ExpiresAt) {
 		f.ExpiresAt = expiry
 	}
-	f.AuthorizeURL = stepAuthOrigin(f.Region) + "/cli-login-remote?" + url.Values{"flow_id": {f.State}}.Encode()
+	f.AuthorizeURL = stepOrigin(f.Region) + "/cli-login-remote?" + url.Values{"flow_id": {id}}.Encode()
 	return f, nil
 }
 
 func (c *Client) pollStepFun(ctx context.Context, f *Flow, proxy string) (*Grant, error) {
-	if !stepFlowID.MatchString(f.State) || !validToken(f.DeviceCode) {
-		return nil, errors.New("invalid Step login session")
+	if !stepFlowID.MatchString(f.FlowID) || !validToken(f.DeviceCode) {
+		return nil, errors.New("invalid step login flow")
 	}
-	v, err := c.stepLoginRequest(ctx, f, proxy, http.MethodGet, "/poll/"+url.PathEscape(f.State), nil)
+	value, err := c.stepLoginRequest(ctx, f, proxy, http.MethodGet, "/poll/"+url.PathEscape(f.FlowID), nil)
 	if err != nil {
 		return nil, err
 	}
-	switch str(v, "state") {
+	switch str(value, "state") {
 	case "pending":
 		return nil, ErrPending
 	case "failed":
 		return nil, ErrDenied
 	case "ready":
-		credential, _ := v["credential"].(map[string]any)
-		key := str(credential, "api_key")
-		if !validToken(key) {
-			return nil, errors.New("invalid Step model credential")
-		}
-		grant := &Grant{AccessToken: key}
-		// Optional account sessions must never become a model token or determine
-		// its expiry. Invalid optional session data does not discard a valid key.
-		if login, ok := credential["login"].(map[string]any); ok {
-			state := &StepLogin{AccessToken: str(login, "access_token"), RefreshToken: str(login, "refresh_token"), DeviceID: str(login, "device_id"), AppID: str(login, "app_id")}
-			if validToken(state.AccessToken) && validToken(state.RefreshToken) && validToken(state.DeviceID) && validToken(state.AppID) {
-				if expiry, ok := login["expires_in"].(float64); ok && expiry > 0 && expiry <= 365*24*3600 {
-					state.ExpiresIn = int64(expiry)
-				}
-				grant.StepLogin = state
-			}
-		}
-		return grant, nil
 	default:
-		return nil, errors.New("invalid Step login state")
+		return nil, errors.New("invalid step login state")
 	}
+	credential, _ := value["credential"].(map[string]any)
+	token := str(credential, "api_key")
+	if !validToken(token) {
+		return nil, errors.New("invalid step model credential")
+	}
+	grant := &Grant{AccessToken: token}
+	// Invalid optional Passport data must not discard a usable model key.
+	if login, ok := credential["login"].(map[string]any); ok {
+		session := &StepLogin{AccessToken: str(login, "access_token"), RefreshToken: str(login, "refresh_token"), DeviceID: str(login, "device_id"), AppID: str(login, "app_id")}
+		if validToken(session.AccessToken) && validToken(session.RefreshToken) && validToken(session.DeviceID) && validToken(session.AppID) {
+			ttl := number(login, "expires_in")
+			if ttl <= 0 || ttl > 365*24*3600 {
+				ttl = 1800
+			}
+			session.ExpiresAt = time.Now().Add(time.Duration(ttl * float64(time.Second)))
+			grant.StepLogin = session
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return grant, nil
 }

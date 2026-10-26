@@ -190,10 +190,23 @@ unzip -t dist/*.s2plugin
 回到 Sub2API 仓库根目录后，再使用真实构建包运行宿主集成测试：
 
 ```bash
-cd ../..
-SUB2API_TEST_PLUGIN_PACKAGE=plugins/my-openai-plugin/dist/my-openai-plugin.s2plugin \
-  go test ./backend/internal/service -run '^TestPluginRuntimeIntegration$' -count=1
+SUB2API_TEST_PLUGIN_PACKAGE=/absolute/path/to/my-openai-plugin.s2plugin \
+  go test -C backend -tags=integration ./internal/service \
+    -run '^TestPluginRuntimeIntegration$' -count=1
 ```
+
+`SUB2API_TEST_PLUGIN_PACKAGE` 必须是容器内可读的绝对路径；`go test -C backend` 会切换模块目录，测试进程还会使用包目录作为工作目录。以上命令需要兼容当前容器操作系统和架构的正式签名插件包，缺包时该外部兼容测试会明确跳过。
+
+宿主自身的进程协议另有不依赖外部插件包的本地集成测试，在同一验证容器、仓库根目录执行：
+
+```bash
+go test -C backend -tags=integration ./internal/service \
+  -run '^TestLocalSignedPluginRuntimeIntegration$' -count=1 -timeout=180s -v
+```
+
+该测试临时生成 Ed25519 发布者，仅在测试配置中明确信任其公钥；生产安装器仍要求签名，未受信任的同一个包会被拒绝。测试把当前测试可执行文件作为包内运行时，通过 SDK 的 magic cookie 进入独立插件子进程，验证签名安装、进程身份、健康/配置 RPC、实际本地 HTTP 转发、取消、请求是否已发送的分类、禁止重放及进程清理。普通集成测试仍运行完整测试集。测试不使用平台账号、不访问公网，也不覆盖内置官方发布者公钥。
+
+这些结果证明宿主已实现的安装、进程和 RPC 行为，不能替代正式外部插件包的兼容测试。官方包缺失时，外部包测试的跳过状态仍须单独记录。
 
 最低测试集应覆盖配置默认值和边界值、插件身份、请求和响应分块、流式响应、上下文取消、插件退出、代理开关、包哈希、签名、路径安全、目标平台运行时以及 UI Bridge 的加载、保存、测试、错误和超时。
 

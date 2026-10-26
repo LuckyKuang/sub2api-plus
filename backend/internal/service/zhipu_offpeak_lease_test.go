@@ -57,7 +57,7 @@ func TestZhipuOffPeakLeaseProtectsBlockedSendUntilCancellationReturns(t *testing
 	require.NoError(t, err)
 	done := make(chan error, 1)
 	go func() {
-		_, err := (&OpenAIGatewayService{httpUpstream: upstream, cnOAuthService: &CNOAuthService{zhipu: manager.projectTokens}}).doOpenAIUpstream(req, "", zhipuOffPeakTestAccount())
+		_, err := (&OpenAIGatewayService{httpUpstream: upstream, projectTokens: manager.projectTokens}).doOpenAIUpstream(req, "", zhipuOffPeakTestAccount())
 		done <- err
 	}()
 	select {
@@ -96,15 +96,15 @@ func TestZhipuOffPeakForwardAndProbeLeaseLastsThroughEveryLiveResponse(t *testin
 				writers = append(writers, w)
 				return &http.Response{StatusCode: 200, Header: make(http.Header), Body: r}, nil
 			}}
-			oauth := &CNOAuthService{zhipu: manager.projectTokens}
+			oauth := manager.projectTokens
 			forward := func() *http.Response {
 				req, err := http.NewRequest(http.MethodPost, "https://zcode.z.ai/api/v1/off-peak/anthropic/v1/messages", strings.NewReader(`{"model":"glm-5.3","messages":[],"stream":true}`))
 				require.NoError(t, err)
 				var response *http.Response
 				if probe {
-					response, err = (&AccountTestService{httpUpstream: upstream, cnOAuthService: oauth}).doOpenAIAccountTestUpstream(req, "", zhipuOffPeakTestAccount(), true)
+					response, err = (&AccountTestService{httpUpstream: upstream, projectTokens: oauth}).doOpenAIAccountTestUpstream(req, "", zhipuOffPeakTestAccount(), true)
 				} else {
-					response, err = (&OpenAIGatewayService{httpUpstream: upstream, cnOAuthService: oauth}).doOpenAIUpstream(req, "", zhipuOffPeakTestAccount())
+					response, err = (&OpenAIGatewayService{httpUpstream: upstream, projectTokens: oauth}).doOpenAIUpstream(req, "", zhipuOffPeakTestAccount())
 				}
 				require.NoError(t, err)
 				t.Cleanup(func() { _ = response.Body.Close() })
@@ -197,15 +197,20 @@ func TestZhipuOffPeakCredentialRotationDrainsOnlyItsOriginalOwner(t *testing.T) 
 	manager.projectTokens = nil
 	advance := offPeakLeaseClock(manager)
 	oldAccount := zhipuOffPeakTestAccount()
+	oldAccount.Type = AccountTypeAPIKey
+	oldProxyID := int64(11)
+	oldAccount.ProxyID = &oldProxyID
+	oldAccount.Proxy = &Proxy{ID: oldProxyID, Protocol: "https", Host: "old-proxy.test", Port: 443}
 	oldAccount.Credentials[outboundIdentityCredential] = OutboundIdentitySelection{Preset: "zcode", Version: "4.2.0"}
 	oldAuth := zhipuOffPeakTestAuth()
-	old, err := manager.Acquire(context.Background(), oldAccount, oldAuth, "https://old-proxy.test")
+	old, err := manager.Acquire(context.Background(), oldAccount, oldAuth, "https://old-proxy.test:443")
 	require.NoError(t, err)
 	newAccount := snapshotRequestCredentialAccount(oldAccount)
 	newAccount.Credentials["access_token"] = "new-login"
+	newAccount.Proxy.Host = "new-proxy.test"
 	newAccount.Credentials[outboundIdentityCredential] = OutboundIdentitySelection{Preset: "zcode", Version: "4.4.0"}
 	newAuth := zcode.OffPeakAuth{JWT: "new-plan-jwt", PlanKey: "new-pat"}
-	current, err := manager.Acquire(context.Background(), newAccount, newAuth, "https://new-proxy.test")
+	current, err := manager.Acquire(context.Background(), newAccount, newAuth, "https://new-proxy.test:443")
 	require.NoError(t, err)
 	require.Equal(t, "new", current.TicketID)
 	advance(3 * DefaultOffPeakSettleIdle)
@@ -215,7 +220,7 @@ func TestZhipuOffPeakCredentialRotationDrainsOnlyItsOriginalOwner(t *testing.T) 
 	manager.sweepOnce()
 	require.Equal(t, []string{"old"}, client.settledTickets())
 	require.Equal(t, []zcode.OffPeakAuth{oldAuth}, client.settleAuths)
-	require.Equal(t, []string{"https://old-proxy.test"}, client.settleProxies)
+	require.Equal(t, []string{"https://old-proxy.test:443"}, client.settleProxies)
 	require.Equal(t, "4.2.0", client.identities[2].Version)
 	old.Release()
 	advance(3 * DefaultOffPeakSettleIdle)
@@ -226,7 +231,7 @@ func TestZhipuOffPeakCredentialRotationDrainsOnlyItsOriginalOwner(t *testing.T) 
 	manager.sweepOnce()
 	require.Equal(t, []string{"old", "new"}, client.settledTickets())
 	require.Equal(t, newAuth, client.settleAuths[1])
-	require.Equal(t, []string{"https://old-proxy.test", "https://new-proxy.test"}, client.settleProxies)
+	require.Equal(t, []string{"https://old-proxy.test:443", "https://new-proxy.test:443"}, client.settleProxies)
 	require.Equal(t, "4.4.0", client.identities[3].Version)
 }
 

@@ -177,8 +177,6 @@ func TestZhipuLinkedQuotaUsesMemoryPATRawAuthAndTeamScope(t *testing.T) {
 				client := &projectTokenTestClient{}
 				client.businessToken = "zai-business"
 				manager := newProjectTokenTestService(t, client)
-				oauth := NewCNOAuthService(nil, nil, nil)
-				oauth.zhipu = manager
 				repo := &cnQuotaRecoveryRepo{refreshAPIAccountRepo: refreshAPIAccountRepo{account: a}}
 				calls := 0
 				var rejected string
@@ -211,7 +209,7 @@ func TestZhipuLinkedQuotaUsesMemoryPATRawAuthAndTeamScope(t *testing.T) {
 					return cnRecoveryResponse(200, `{"success":true,"data":{"limits":[{"type":"TOKENS_LIMIT","unit":3,"percentage":30,"nextResetTime":1793491200000}]}}`), nil
 				}}
 				svc := NewCNProviderQuotaService(repo, nil, upstream, cnProbeAllowlistConfig("open.bigmodel.cn", "api.z.ai"))
-				svc.cnOAuthService = oauth
+				svc.projectTokens = manager
 				result, err := svc.QueryUsageForAccount(context.Background(), a)
 				require.NoError(t, err)
 				require.True(t, result.Success)
@@ -269,4 +267,12 @@ func TestKimiObservedWindowWithoutResetClearsOldReset(t *testing.T) {
 	reset, exists := updates["kimi_monthly_code_reset_at"]
 	require.True(t, exists)
 	require.Equal(t, "", reset)
+}
+
+func (r *cnQuotaRecoveryRepo) UpdateCNControlExtraIfUnchanged(ctx context.Context, expected *Account, updates map[string]any) (bool, error) {
+	return r.UpdateCNProviderQuotaIfUnchanged(ctx, expected, updates)
+}
+
+func (r *cnQuotaRecoveryRepo) UpdateCNOAuthCredentialsIfUnchanged(ctx context.Context, expected *Account, credentials map[string]any) (bool, error) {
+	return r.UpdateOAuthRefreshCredentialsIfUnchanged(ctx, expected, credentials)
 }

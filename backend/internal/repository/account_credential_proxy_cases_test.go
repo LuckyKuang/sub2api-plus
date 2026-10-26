@@ -19,7 +19,7 @@ func credentialProxyMutationCases() []credentialProxyMutationCase {
 	until := time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC)
 	snapshot := func(owner *service.Account) service.GrokCredentialMutationSnapshot {
 		credentials, _ := json.Marshal(owner.Credentials)
-		return service.GrokCredentialMutationSnapshot{CredentialsJSON: string(credentials), ProxyID: owner.ProxyID, Proxy: owner.Proxy}
+		return service.GrokCredentialMutationSnapshot{Owner: owner, CredentialsJSON: string(credentials), ProxyID: owner.ProxyID, Proxy: owner.Proxy}
 	}
 	return []credentialProxyMutationCase{
 		{name: "generic-error", apply: func(ctx context.Context, repo *accountRepository, owner *service.Account) (bool, error) {
@@ -29,7 +29,7 @@ func credentialProxyMutationCases() []credentialProxyMutationCase {
 			return repo.SetCredentialTempUnschedulableIfUnchanged(ctx, owner, until, "rejected")
 		}},
 		{name: "generic-refresh", apply: func(ctx context.Context, repo *accountRepository, owner *service.Account) (bool, error) {
-			return repo.UpdateOAuthCredentialsIfUnchanged(ctx, owner, map[string]any{"access_token": "rotated"})
+			return repo.UpdateOAuthRefreshCredentialsIfUnchanged(ctx, owner, map[string]any{"access_token": "rotated"})
 		}},
 		{name: "grok-request-error", apply: func(ctx context.Context, repo *accountRepository, owner *service.Account) (bool, error) {
 			return repo.SetGrokCredentialErrorIfMatch(ctx, owner.ID, snapshot(owner), "revoked")

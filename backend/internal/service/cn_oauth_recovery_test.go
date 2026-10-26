@@ -4,6 +4,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -19,7 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func (r *refreshAPIAccountRepo) UpdateOAuthCredentialsIfUnchanged(ctx context.Context, expectedOwner *Account, credentials map[string]any) (bool, error) {
+func (r *refreshAPIAccountRepo) UpdateOAuthRefreshCredentialsIfUnchanged(ctx context.Context, expectedOwner *Account, credentials map[string]any) (bool, error) {
 	id := expectedOwner.ID
 	platform := expectedOwner.Platform
 	expected := expectedOwner.Credentials
@@ -38,7 +39,12 @@ func (r *refreshAPIAccountRepo) UpdateOAuthCredentialsIfUnchanged(ctx context.Co
 	if r.updateErr != nil {
 		return false, r.updateErr
 	}
-	if r.account == nil || r.account.ID != id || r.account.Platform != platform || r.account.Type != AccountTypeOAuth || !reflect.DeepEqual(r.account.Credentials, expected) || (!reflect.DeepEqual(r.account.ProxyID, proxy) || !reflect.DeepEqual(r.account.Proxy, expectedOwner.Proxy)) {
+	if r.account == nil || r.account.ID != id || r.account.Platform != platform || r.account.Type != AccountTypeOAuth || (!reflect.DeepEqual(r.account.ProxyID, proxy) || !reflect.DeepEqual(r.account.Proxy, expectedOwner.Proxy)) {
+		return false, nil
+	}
+	currentJSON, currentErr := json.Marshal(r.account.Credentials)
+	expectedJSON, expectedErr := json.Marshal(expected)
+	if currentErr != nil || expectedErr != nil || string(currentJSON) != string(expectedJSON) {
 		return false, nil
 	}
 	return true, r.UpdateCredentials(ctx, id, credentials)
@@ -229,6 +235,73 @@ func TestCNOAuth401RecoveryCASMissNeverReplaysRejectedToken(t *testing.T) {
 	require.Equal(t, "old", repo.account.GetCredential("access_token"))
 }
 
+func TestCNOAuth401RecoveryNeverAdoptsChangedAuthorizationContext(t *testing.T) {
+	for _, platform := range []string{PlatformKimi, PlatformMiniMax} {
+		for _, stage := range []string{"before-refresh", "during-refresh"} {
+			for _, change := range []string{"new-login", "identity", "proxy", "metadata", "disabled", "legacy-login"} {
+				t.Run(platform+"/"+stage+"/"+change, func(t *testing.T) {
+					a := cnRecoveryAccount(platform)
+					if change == "legacy-login" {
+						delete(a.Credentials, domesticOAuthLoginIDCredential)
+					}
+					repo := &refreshAPIAccountRepo{account: snapshotOAuthRefreshAccount(a)}
+					oauth := NewCNOAuthService(nil, repo, nil)
+					oauth.refreshAPI = NewOAuthRefreshAPI(repo, nil)
+					changeOwner := func() {
+						current := snapshotOAuthRefreshAccount(repo.account)
+						current.Credentials["access_token"] = "different-access"
+						current.Credentials["refresh_token"] = "different-refresh"
+						switch change {
+						case "new-login":
+							current.Credentials[domesticOAuthLoginIDCredential] = "another-authorization"
+						case "identity":
+							current.Credentials[outboundIdentityCredential] = map[string]any{"preset": platform, "version": "9.9.9"}
+						case "proxy":
+							id := int64(71)
+							current.ProxyID, current.Proxy = &id, &Proxy{ID: id, Protocol: "http", Host: "another.example", Port: 8080}
+						case "metadata":
+							current.Credentials["model_mapping"] = map[string]any{"old": "new"}
+						case "disabled":
+							current.Status = StatusDisabled
+						}
+						repo.account = current
+					}
+					refreshes := 0
+					oauth.client = &cnoauth.Client{HTTP: cnOAuthDoer(func(*http.Request) (*http.Response, error) {
+						refreshes++
+						changeOwner()
+						return cnRecoveryResponse(200, `{"access_token":"obsolete","refresh_token":"obsolete","expires_in":3600}`), nil
+					})}
+					req, err := http.NewRequest(http.MethodPost, a.GetAnthropicProtocolBaseURL()+"/v1/messages", strings.NewReader(`{}`))
+					require.NoError(t, err)
+					sends := 0
+					resp, err := oauth.roundTripNativeOAuth(req, a, func(req *http.Request) (*http.Response, error) {
+						sends++
+						require.Equal(t, "Bearer old", req.Header.Get("Authorization"))
+						if stage == "before-refresh" {
+							changeOwner()
+						}
+						return cnRecoveryResponse(401, `{}`), nil
+					})
+					var failure *CredentialFailureError
+					require.ErrorAs(t, err, &failure)
+					require.Equal(t, GatewayFailureScopeProvider, failure.Scope)
+					require.Nil(t, resp)
+					require.Equal(t, 1, sends, "a changed authorization context cannot supply replay credentials")
+					if stage == "before-refresh" {
+						require.Zero(t, refreshes)
+					} else {
+						require.Equal(t, 1, refreshes)
+					}
+					require.Zero(t, repo.updateCredentialsCalls)
+					require.Equal(t, "different-access", repo.account.GetCredential("access_token"))
+					require.Equal(t, "different-refresh", repo.account.GetCredential("refresh_token"))
+				})
+			}
+		}
+	}
+}
+
 func TestKimiModelDiscoveryRecovers401WithSameIdentity(t *testing.T) {
 	a := cnRecoveryAccount(PlatformKimi)
 	repo := &refreshAPIAccountRepo{account: a}
@@ -257,7 +330,7 @@ func TestKimiModelDiscoveryRecovers401WithSameIdentity(t *testing.T) {
 	svc := &AccountTestService{cnOAuthService: oauth, httpUpstream: upstream, cfg: cnProbeAllowlistConfig("api.kimi.com")}
 	req, err := svc.buildUpstreamModelsRequest(context.Background(), a)
 	require.NoError(t, err)
-	resp, err := svc.doUpstreamModelsRequest(req, "", a)
+	resp, err := svc.doUpstreamModelsRequest(req, a)
 	require.NoError(t, err)
 	require.Equal(t, 200, resp.StatusCode)
 	require.Equal(t, 1, refreshes)

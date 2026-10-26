@@ -4,15 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"time"
+
+	dbent "github.com/LuckyKuang/sub2api-plus/ent"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
 )
 
-// UpdateOAuthCredentialsIfUnchanged commits an OAuth token rotation only for
+// UpdateOAuthRefreshCredentialsIfUnchanged commits an OAuth token rotation only for
 // the exact active grant and proxy sent to the provider. Scheduler invalidation
 // is atomic with the update, so reauthorization cannot be overwritten.
-func (r *accountRepository) UpdateOAuthCredentialsIfUnchanged(ctx context.Context, expectedOwner *service.Account, credentials map[string]any) (bool, error) {
+func (r *accountRepository) UpdateOAuthRefreshCredentialsIfUnchanged(ctx context.Context, expectedOwner *service.Account, credentials map[string]any) (bool, error) {
 	if err := validateCredentialMutationOwner(expectedOwner); err != nil {
 		return false, err
 	}
@@ -40,7 +41,12 @@ func (r *accountRepository) UpdateOAuthCredentialsIfUnchanged(ctx context.Contex
 	if err != nil {
 		return false, err
 	}
-	result, err := r.sql.ExecContext(ctx, `
+	executor := r.sql
+	contextTx := dbent.TxFromContext(ctx)
+	if contextTx != nil {
+		executor = contextTx.Client()
+	}
+	result, err := executor.ExecContext(ctx, `
 		WITH updated AS (
 		UPDATE accounts AS a
 		SET credentials = $1::jsonb, updated_at = NOW()
@@ -60,10 +66,10 @@ func (r *accountRepository) UpdateOAuthCredentialsIfUnchanged(ctx context.Contex
 	if err != nil || changed == 0 {
 		return false, err
 	}
-	// A snapshot read followed by publication can overwrite a concurrent login.
-	// Evict instead; the atomic outbox drives the authoritative scheduler reload.
-	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
-	defer cancel()
-	r.deleteSchedulerAccountSnapshot(cleanupCtx, id)
+	if contextTx != nil || r.transactionAccountIDs != nil {
+		r.markTransactionAccountChanged(id)
+	} else {
+		r.deleteSchedulerAccountSnapshotDetached(ctx, id)
+	}
 	return true, nil
 }

@@ -520,7 +520,7 @@ func TestCredentialClientProjectTokenRejectsDisabledAndMalformed(t *testing.T) {
 			}))
 			defer server.Close()
 			client := NewCredentialClient(server.Client(), server.URL, server.URL)
-			_, err := client.issueProjectToken(context.Background(), ProviderBigModel, "login", "org", "project", "id")
+			_, err := client.IssueProjectAccessToken(context.Background(), ProviderBigModel, "login", "org", "project", "id")
 			require.Error(t, err)
 		})
 	}
@@ -555,10 +555,10 @@ func TestCredentialClientProjectTokenEnvelopeAndPinnedVersion(t *testing.T) {
 			identity := DefaultIdentity()
 			identity.Version, identity.UserAgent = "4.2.0", "ZCode/4.2.0"
 			identity.Headers["User-Agent"], identity.Headers[HeaderAppVersion] = "ZCode/4.2.0", "4.2.0"
-			value, err := client.IssueProjectToken(outboundidentity.WithIdentity(context.Background(), identity), ProviderBigModel, "login", "org", "project", "saved-id")
+			value, err := client.IssueProjectAccessToken(outboundidentity.WithIdentity(context.Background(), identity), ProviderBigModel, "login", "org", "project", "saved-id")
 			if tc.valid {
 				require.NoError(t, err)
-				require.Equal(t, "short-pat", value.APIKey)
+				require.Equal(t, "short-pat", value.Token)
 			} else {
 				require.Error(t, err)
 				if tc.status != 0 {

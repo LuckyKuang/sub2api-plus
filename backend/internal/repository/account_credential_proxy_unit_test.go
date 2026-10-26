@@ -78,7 +78,7 @@ func TestCredentialProxyCASLocksCompleteObservedRoute(t *testing.T) {
 			require.False(t, applied)
 			require.Len(t, exec.execQueries, 1)
 			query := normalizeSQLWhitespace(exec.execQueries[0])
-			for _, predicate := range []string{"p.deleted_at IS NULL", "p.protocol =", "p.host =", "p.port =", "COALESCE(p.username, '') =", "COALESCE(p.password, '') =", "p.status =", "FOR SHARE", "INSERT INTO scheduler_outbox"} {
+			for _, predicate := range []string{"p.deleted_at IS NULL", "p.protocol =", "p.host =", "p.port =", "COALESCE(p.username, '') =", "COALESCE(p.password, '') =", "p.status =", "p.expires_at IS NOT DISTINCT FROM", "FOR SHARE", "INSERT INTO scheduler_outbox"} {
 				require.Contains(t, query, predicate)
 			}
 			for _, expected := range []any{"route.invalid", 8080, "observed-user", "observed-password", service.StatusActive} {
@@ -104,6 +104,7 @@ func TestGrokMissingProxyCASRequiresExplicitInvalidStateProof(t *testing.T) {
 			case "no-binding":
 				snapshot.ProxyID = nil
 			}
+			snapshot.Owner = &service.Account{ID: 42, Platform: service.PlatformGrok, Type: service.AccountTypeOAuth, Status: service.StatusActive, Credentials: map[string]any{"access_token": "sent"}, ProxyID: snapshot.ProxyID, Proxy: snapshot.Proxy}
 			exec := &recordingSQLExecutor{result: rowsAffectedResult(0)}
 			repo := newAccountRepositoryWithSQL(nil, exec, nil)
 
@@ -113,7 +114,9 @@ func TestGrokMissingProxyCASRequiresExplicitInvalidStateProof(t *testing.T) {
 			if proof == "confirmed-missing" {
 				require.NoError(t, err)
 				require.Len(t, exec.execQueries, 1)
-				require.Contains(t, exec.execQueries[0], "p.deleted_at IS NOT NULL FOR SHARE")
+				require.Contains(t, exec.execQueries[0], "WITH captured_proxy AS MATERIALIZED")
+				require.Contains(t, exec.execQueries[0], "FOR SHARE")
+				require.Contains(t, exec.execQueries[0], "captured_proxy.deleted_at IS NULL")
 			} else {
 				require.Error(t, err)
 				require.Empty(t, exec.execQueries)

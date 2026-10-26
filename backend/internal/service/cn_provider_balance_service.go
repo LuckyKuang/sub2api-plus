@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -44,25 +45,28 @@ type CNProviderBalanceEntry struct {
 
 // CNProviderBalanceResult 是余额探测的返回结构（管理端 + UI 消费）。
 type CNProviderBalanceResult struct {
+	// owner is the immutable native credential/scheduler snapshot that produced
+	// this result. It is never serialized to administrator responses.
+	owner *Account
+
 	Provider string `json:"provider"`
 	Success  bool   `json:"success"`
 	// Balance/Currency 为主币种（balance_infos 首条，兼容单币种消费方）；
 	// 完整明细见 Balances（deepseek 双币种账号含 CNY + USD 两条）。
-	Balance    float64                  `json:"balance"`
-	Currency   string                   `json:"currency,omitempty"`
-	Balances   []CNProviderBalanceEntry `json:"balances,omitempty"`
-	Available  bool                     `json:"available"` // 健康标记（deepseek is_available；kimi 无此概念恒 true）
-	StatusCode int                      `json:"status_code,omitempty"`
-	FetchedAt  int64                    `json:"fetched_at"`
-	Persisted  bool                     `json:"persisted"`
-	Error      string                   `json:"error,omitempty"`
-	owner      *Account
+	Balance       float64                  `json:"balance"`
+	Currency      string                   `json:"currency,omitempty"`
+	Balances      []CNProviderBalanceEntry `json:"balances,omitempty"`
+	BonusBalances []CNProviderBalanceEntry `json:"bonus_balances,omitempty"`
+	Available     bool                     `json:"available"` // 健康标记（deepseek is_available；kimi 无此概念恒 true）
+	StatusCode    int                      `json:"status_code,omitempty"`
+	FetchedAt     int64                    `json:"fetched_at"`
+	Persisted     bool                     `json:"persisted"`
+	Error         string                   `json:"error,omitempty"`
 }
 
 // CNProviderBalanceService 探测 Kimi / DeepSeek payg 账号的账户余额。
 type CNProviderBalanceService struct {
 	accountRepo  AccountRepository
-	proxyRepo    ProxyRepository
 	httpUpstream HTTPUpstream
 	cfg          *config.Config
 	flight       singleflight.Group
@@ -71,13 +75,12 @@ type CNProviderBalanceService struct {
 // NewCNProviderBalanceService 构造余额探测服务。
 func NewCNProviderBalanceService(
 	accountRepo AccountRepository,
-	proxyRepo ProxyRepository,
+	_ ProxyRepository,
 	httpUpstream HTTPUpstream,
 	cfg *config.Config,
 ) *CNProviderBalanceService {
 	return &CNProviderBalanceService{
 		accountRepo:  accountRepo,
-		proxyRepo:    proxyRepo,
 		httpUpstream: httpUpstream,
 		cfg:          cfg,
 	}
@@ -101,25 +104,20 @@ func (s *CNProviderBalanceService) QueryBalanceForAccount(ctx context.Context, a
 	if err := validatePayGAccount(account); err != nil {
 		return nil, err
 	}
-	key := "cn_balance:" + strconv.FormatInt(account.ID, 10)
-	if cnBalanceRequiresOwner(account) {
-		var err error
-		account, err = snapshotCNQuotaAccount(account)
-		if err != nil {
-			return nil, err
-		}
-		if account.IsShadow() || account.ID <= 0 {
-			return nil, infraerrors.New(http.StatusBadRequest, "CN_BALANCE_OWNER_INVALID", "balance probe requires a credential-owning account")
-		}
-		if _, err := s.resolveProxyURL(ctx, account); err != nil {
-			return nil, err
-		}
-		if account.ProxyID != nil && (account.Proxy == nil || account.Proxy.ID != *account.ProxyID) || account.ProxyID == nil && account.Proxy != nil {
-			return nil, infraerrors.New(http.StatusBadRequest, "CN_BALANCE_PROXY_UNAVAILABLE", "balance probe requires its hydrated proxy")
-		}
-		account = snapshotRequestCredentialAccount(account)
-		key += ":" + credentialStateGeneration(account) + ":" + account.Status
+	account, err := snapshotCNControlAccount(account)
+	if err != nil {
+		return nil, err
 	}
+	if cnBalanceRequiresOwner(account) {
+		if account.IsShadow() || account.ID <= 0 || account.CredentialGeneration != "" || account.CNQuotaGeneration != "" {
+			return nil, infraerrors.New(http.StatusBadRequest, "CN_BALANCE_OWNER_INVALID", "balance probe requires a hydrated credential-owning account")
+		}
+	}
+	owner, err := grokRequestOwnerFingerprint(account)
+	if err != nil {
+		return nil, err
+	}
+	key := "cn_balance:" + strconv.FormatInt(account.ID, 10) + ":" + owner + ":" + account.Status
 	probeIdentityCtx := ctx
 	if cnBalanceRequiresOwner(account) {
 		probeIdentityCtx = WithOutboundIdentityScope(probeIdentityCtx, nil)
@@ -145,6 +143,7 @@ func (s *CNProviderBalanceService) QueryBalanceForAccount(ctx context.Context, a
 		}
 		cloned := *result
 		cloned.Balances = append([]CNProviderBalanceEntry(nil), result.Balances...)
+		cloned.BonusBalances = append([]CNProviderBalanceEntry(nil), result.BonusBalances...)
 		cloned.owner = snapshotRequestCredentialAccount(result.owner)
 		return &cloned, nil
 	}
@@ -156,6 +155,9 @@ func (s *CNProviderBalanceService) queryBalanceForAccount(ctx context.Context, a
 	}
 	if account.IsCline() {
 		return s.queryClineBalance(ctx, account)
+	}
+	if account.IsDomesticOAuth() && account.Platform == PlatformDeepseek {
+		return s.queryDeepSeekOAuthWallet(ctx, account)
 	}
 	provider := account.Platform
 	if provider != PlatformKimi && provider != PlatformDeepseek {
@@ -175,11 +177,11 @@ func (s *CNProviderBalanceService) queryBalanceForAccount(ctx context.Context, a
 		return nil, infraerrors.New(http.StatusForbidden, "CN_BALANCE_URL_REJECTED", err.Error())
 	}
 	targetURL = validatedURL
-	proxyURL, err := s.resolveProxyURL(ctx, account)
+	proxyURL, err := account.StrictProxyURL()
 	if err != nil {
 		return nil, err
 	}
-	callCtx, cancel := context.WithTimeout(ctx, cnBalanceUpstreamTimeout)
+	callCtx, cancel := context.WithTimeout(WithHTTPUpstreamRedirectsDisabled(ctx), cnBalanceUpstreamTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(callCtx, http.MethodGet, targetURL, nil)
 	if err != nil {
@@ -198,7 +200,7 @@ func (s *CNProviderBalanceService) queryBalanceForAccount(ctx context.Context, a
 		return nil, infraerrors.Newf(http.StatusBadGateway, "CN_BALANCE_REQUEST_FAILED", "upstream request failed: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, cnBalanceMaxBodyBytes))
+	bodyBytes, readErr := io.ReadAll(io.LimitReader(resp.Body, cnBalanceMaxBodyBytes+1))
 
 	now := time.Now().UTC()
 	result := &CNProviderBalanceResult{
@@ -207,6 +209,10 @@ func (s *CNProviderBalanceService) queryBalanceForAccount(ctx context.Context, a
 		StatusCode: resp.StatusCode,
 		Available:  true,
 		owner:      snapshotRequestCredentialAccount(account),
+	}
+	if readErr != nil || len(bodyBytes) > cnBalanceMaxBodyBytes {
+		result.Error = "Balance response unavailable: incomplete or oversized body"
+		return result, nil
 	}
 
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
@@ -217,17 +223,31 @@ func (s *CNProviderBalanceService) queryBalanceForAccount(ctx context.Context, a
 		result.Error = fmt.Sprintf("API error (HTTP %d): %s", resp.StatusCode, truncate(strings.TrimSpace(string(bodyBytes)), 240))
 		return result, nil
 	}
+	if !json.Valid(bodyBytes) {
+		result.Error = "Invalid balance response: malformed JSON"
+		return result, nil
+	}
 
 	var entries []CNProviderBalanceEntry
 	available := true
 	switch provider {
 	case PlatformKimi:
 		// Moonshot：code==0 成功；data.available_balance（number），单币种 CNY。
-		balance, _ := cnParseF64(gjson.GetBytes(bodyBytes, "data.available_balance").Value())
+		code := gjson.GetBytes(bodyBytes, "code")
+		status := gjson.GetBytes(bodyBytes, "status")
+		balance, validBalance := cnParseF64(gjson.GetBytes(bodyBytes, "data.available_balance").Value())
+		if code.Type != gjson.Number || code.Num != 0 || status.Type != gjson.True || !validBalance {
+			result.Error = "Invalid balance response: missing successful finite balance observation"
+			return result, nil
+		}
 		entries = append(entries, CNProviderBalanceEntry{Currency: "CNY", Balance: balance})
 	case PlatformDeepseek:
 		// is_available 缺省视为 true（健康）；显式存在时取其值。
 		if v := gjson.GetBytes(bodyBytes, "is_available"); v.Exists() {
+			if v.Type != gjson.True && v.Type != gjson.False {
+				result.Error = "Invalid balance response: invalid availability observation"
+				return result, nil
+			}
 			available = v.Bool()
 		}
 		// balance_infos 逐条解析：双币种账号同时返回 CNY + USD（数组顺序即
@@ -237,20 +257,20 @@ func (s *CNProviderBalanceService) queryBalanceForAccount(ctx context.Context, a
 			result.Error = "Invalid balance response: missing balance_infos"
 			return result, nil
 		}
+		invalidEntry := false
 		balanceInfos.ForEach(func(_, info gjson.Result) bool {
-			currency := strings.ToUpper(strings.TrimSpace(info.Get("currency").String()))
+			currencyNode := info.Get("currency")
+			currency := currencyNode.String()
 			totalBalance := info.Get("total_balance")
 			balance, ok := cnParseF64(totalBalance.Value())
-			if !totalBalance.Exists() || !ok {
-				return true
-			}
-			if currency == "" {
-				currency = "CNY"
+			if !info.IsObject() || currencyNode.Type != gjson.String || (currency != "CNY" && currency != "USD") || !totalBalance.Exists() || !ok {
+				invalidEntry = true
+				return false
 			}
 			entries = append(entries, CNProviderBalanceEntry{Currency: currency, Balance: balance})
 			return true
 		})
-		if len(entries) == 0 {
+		if invalidEntry || len(entries) == 0 {
 			result.Error = "Invalid balance response: no valid balance entries"
 			return result, nil
 		}
@@ -259,22 +279,20 @@ func (s *CNProviderBalanceService) queryBalanceForAccount(ctx context.Context, a
 	result.Balance = entries[0].Balance
 	result.Currency = entries[0].Currency
 	result.Available = available
-	result.Success = true
-
 	updates := cnBalanceExtraUpdates(provider, result, now)
-	repo, ok := s.accountRepo.(CredentialStateMutationRepository)
-	if !ok {
-		slog.Warn("cn_balance_conditional_persistence_unavailable", "account_id", account.ID, "provider", provider)
+	result.Persisted, err = persistCNControlExtra(ctx, s.accountRepo, account, updates)
+	if err != nil || !result.Persisted {
+		slog.Warn("cn_balance_persist_failed", "account_id", account.ID, "provider", provider, "error", err)
+		result.Error = "Account wallet owner changed or snapshot persistence unavailable"
+		// A valid response remains useful only for the same complete owner. A
+		// newer cooldown may fence persistence without invalidating that owner's
+		// observation; a replaced or unreadable grant cannot report success.
+		result.Success = err == nil && s.balanceObservationStillOwned(ctx, account)
+		result.owner = account
 		return result, nil
 	}
-	if applied, err := repo.ApplyCredentialStateMutation(ctx, result.owner, CredentialStateMutation{
-		Extra: updates, RequireTempUnschedulableUnchanged: true,
-		ObservedTempUntil: result.owner.TempUnschedulableUntil, ObservedTempReason: result.owner.TempUnschedulableReason,
-	}); err != nil {
-		slog.Warn("cn_balance_persist_failed", "account_id", account.ID, "provider", provider, "error", err)
-	} else {
-		result.Persisted = applied
-	}
+	result.Success = true
+	result.owner = account
 	return result, nil
 }
 
@@ -344,19 +362,6 @@ func validatePayGAccount(account *Account) error {
 	return nil
 }
 
-func (s *CNProviderBalanceService) resolveProxyURL(ctx context.Context, account *Account) (string, error) {
-	// Hydrate the explicitly selected proxy before capturing a credential
-	// operation. Failure never changes the route into a direct connection.
-	if account != nil && account.ProxyID != nil && account.Proxy == nil && s.proxyRepo != nil {
-		proxy, err := s.proxyRepo.GetByID(ctx, *account.ProxyID)
-		if err != nil {
-			return "", err
-		}
-		account.Proxy = proxy
-	}
-	return requestCredentialOwnerProxyURL(ctx, account)
-}
-
 // cnBalanceURL 解析账号的余额端点。
 //
 //   - Kimi：固定 https://api.moonshot.cn/v1/users/me/balance（与 base_url 无关，Moonshot 仅此一处）
@@ -377,4 +382,22 @@ func cnBalanceURL(account *Account) string {
 	default:
 		return ""
 	}
+}
+
+// Recheck only observation ownership after a rejected write. This read never
+// authorizes a scheduling mutation; that remains a separate atomic CAS.
+func (s *CNProviderBalanceService) balanceObservationStillOwned(ctx context.Context, expected *Account) bool {
+	if expected == nil || s == nil || s.accountRepo == nil {
+		return false
+	}
+	current, err := s.accountRepo.GetByID(ctx, expected.ID)
+	if err != nil || current == nil || current.ID != expected.ID || current.Platform != expected.Platform || current.Type != expected.Type || current.Status != expected.Status || current.Schedulable != expected.Schedulable || current.CredentialGeneration != "" || current.CNQuotaGeneration != "" {
+		return false
+	}
+	currentOwner, err := grokRequestOwnerFingerprint(current)
+	if err != nil {
+		return false
+	}
+	expectedOwner, err := grokRequestOwnerFingerprint(expected)
+	return err == nil && currentOwner == expectedOwner
 }

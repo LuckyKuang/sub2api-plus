@@ -51,6 +51,7 @@ type grokCredentialFailureClass struct {
 // request selected an account. Repository mutations compare all fields before
 // quarantining that account so a concurrent refresh cannot be overwritten.
 type GrokCredentialMutationSnapshot struct {
+	Owner           *Account
 	CredentialsJSON string
 	AccessToken     string
 	RefreshToken    string
@@ -485,12 +486,13 @@ func (s *OpenAIGatewayService) validateCurrentGrokCredentialFailure(
 		}
 		return "", fmt.Errorf("%w: %v", errOAuthRefreshAccountRereadFailed, err)
 	}
+	latestSnapshot := grokCredentialMutationSnapshot(latest)
+	latest = latestSnapshot.Owner
 	if latest == nil || !latest.IsGrokOAuth() || !latest.IsSchedulable() || s.isOpenAIAccountRuntimeBlocked(latest) {
 		return "", errOAuthRefreshAccountStateChanged
 	}
-	latestSnapshot := grokCredentialMutationSnapshot(latest)
 	if latestSnapshot.CredentialsJSON != snapshot.CredentialsJSON ||
-		!grokCredentialProxyIDsEqual(latestSnapshot.ProxyID, snapshot.ProxyID) {
+		!grokCredentialMutationOwnerMatches(latest, snapshot) {
 		if token, ok := s.grokCredentialConcurrentlyRefreshedToken(ctx, accountID, snapshot); ok {
 			return token, nil
 		}
@@ -501,7 +503,7 @@ func (s *OpenAIGatewayService) validateCurrentGrokCredentialFailure(
 	// the hydrated proxy object so restoring a deleted row under the same ID
 	// wins over a stale proxy-invalid failure.
 	if class.reason == GrokCredentialReasonProxyInvalid {
-		if latest.ProxyID == nil || latest.Proxy != nil {
+		if _, routeErr := latest.StrictProxyURL(); routeErr == nil {
 			return "", errOAuthRefreshAccountStateChanged
 		}
 	} else if latest.ProxyID != nil && latest.Proxy == nil {
@@ -517,6 +519,22 @@ func (s *OpenAIGatewayService) validateCurrentGrokCredentialFailure(
 		}
 	}
 	return "", nil
+}
+
+// A missing proxy is a meaningful captured binding for its structural-failure
+// path. All usable routes compare endpoint, authentication and lifecycle too.
+func grokCredentialMutationOwnerMatches(account *Account, snapshot GrokCredentialMutationSnapshot) bool {
+	expected := snapshot.Owner
+	if account == nil || expected == nil || account.ID != expected.ID || account.Platform != expected.Platform || account.Type != expected.Type ||
+		!grokCredentialProxyIDsEqual(account.ProxyID, expected.ProxyID) {
+		return false
+	}
+	if expected.ProxyID != nil && expected.Proxy == nil {
+		return account.Proxy == nil
+	}
+	want, wantErr := grokRequestOwnerFingerprint(expected)
+	got, gotErr := grokRequestOwnerFingerprint(account)
+	return wantErr == nil && gotErr == nil && want == got
 }
 
 func (s *OpenAIGatewayService) grokCredentialMutationLock(accountID int64) *oauthRefreshLocalLock {
@@ -553,18 +571,23 @@ func grokCredentialMutationSnapshot(account *Account) GrokCredentialMutationSnap
 	if account == nil {
 		return GrokCredentialMutationSnapshot{}
 	}
+	owner, err := CaptureOAuthCredentialOwner(account)
+	if err != nil {
+		return GrokCredentialMutationSnapshot{}
+	}
 	credentialsJSON := "null"
-	if encoded, err := json.Marshal(account.Credentials); err == nil {
+	if encoded, err := json.Marshal(owner.Credentials); err == nil {
 		credentialsJSON = string(encoded)
 	}
 	snapshot := GrokCredentialMutationSnapshot{
+		Owner:           owner,
 		CredentialsJSON: credentialsJSON,
-		AccessToken:     strings.TrimSpace(account.GetGrokAccessToken()),
-		RefreshToken:    strings.TrimSpace(account.GetGrokRefreshToken()),
-		TokenVersion:    account.GetCredentialAsInt64("_token_version"),
+		AccessToken:     strings.TrimSpace(owner.GetGrokAccessToken()),
+		RefreshToken:    strings.TrimSpace(owner.GetGrokRefreshToken()),
+		TokenVersion:    owner.GetCredentialAsInt64("_token_version"),
 	}
-	if account.ProxyID != nil {
-		proxyID := *account.ProxyID
+	if owner.ProxyID != nil {
+		proxyID := *owner.ProxyID
 		snapshot.ProxyID = &proxyID
 	}
 	if account.Proxy != nil {
@@ -637,7 +660,11 @@ func (s *OpenAIGatewayService) grokCredentialConcurrentlyRefreshedToken(ctx cont
 		return "", false
 	}
 	latestSnapshot := grokCredentialMutationSnapshot(latest)
-	if !grokCredentialProxyIDsEqual(latestSnapshot.ProxyID, baseline.ProxyID) ||
+	latest = latestSnapshot.Owner
+	if latest == nil {
+		return "", false
+	}
+	if baseline.Owner == nil || !latest.IsGrokOAuth() || !grokCredentialProxyIDsEqual(latestSnapshot.ProxyID, baseline.ProxyID) ||
 		latestSnapshot.CredentialsJSON == baseline.CredentialsJSON || !latest.IsSchedulable() ||
 		(latest.ProxyID != nil && latest.Proxy == nil) || s.isOpenAIAccountRuntimeBlocked(latest) {
 		return "", false
@@ -649,6 +676,20 @@ func (s *OpenAIGatewayService) grokCredentialConcurrentlyRefreshedToken(ctx cont
 	expiresAt := latest.GetCredentialAsTime("expires_at")
 	if expiresAt == nil || !time.Now().Before(*expiresAt) {
 		return "", false
+	}
+	// Failure recovery did not issue a refresh rotation. It may adopt only an
+	// access-token/expiry repair of the same refresh grant and identity.
+	owner := &grokTokenOwner{account: baseline.Owner}
+	if owner.validateRotation(latest, false) != nil ||
+		(latestToken != baseline.AccessToken && latest.GetCredentialAsInt64("_token_version") <= baseline.TokenVersion) {
+		return "", false
+	}
+	if sender := cnControlRequestOwner(ctx, nil); sender != nil {
+		captured, captureErr := CaptureOAuthCredentialOwner(latest)
+		if captureErr != nil {
+			return "", false
+		}
+		*sender = *captured
 	}
 	return latestToken, true
 }

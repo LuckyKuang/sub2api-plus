@@ -330,6 +330,9 @@ func TestHTTP401SameTokenLockWinnerKeepsAcquiredGeneration(t *testing.T) {
 			selected.Credentials["expires_at"] = time.Now().Add(-time.Minute).UTC().Format(time.RFC3339)
 			current := snapshotRequestCredentialAccount(selected)
 			current.Credentials["refresh_token"] = "winner-refresh"
+			if platform == PlatformGrok {
+				current.Credentials["refresh_token"] = selected.Credentials["refresh_token"] // A request can adopt only an access-token rotation of its captured grant.
+			}
 			current.Credentials["_token_version"] = int64(2)
 			current.Credentials["expires_at"] = time.Now().Add(time.Hour).UTC().Format(time.RFC3339)
 			repo := &http401CredentialFenceRepo{current: current}

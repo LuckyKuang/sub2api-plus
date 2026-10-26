@@ -552,6 +552,7 @@ func TestOpenAIPoolModeNonRetryable5xx_StillCreatesModelTransientBlock(t *testin
 		},
 	}
 
+	gateway.accountRepo = transientCooldownAccountRepo{current: account}
 	for i := 0; i < 2; i++ {
 		shouldDisable := gateway.handleOpenAIAccountUpstreamError(
 			context.Background(),
@@ -577,6 +578,7 @@ func TestOpenAINonPoolAPIKey5xx_StillCreatesModelTransientBlock(t *testing.T) {
 		Type:     AccountTypeAPIKey,
 	}
 
+	gateway.accountRepo = transientCooldownAccountRepo{current: account}
 	for i := 0; i < 2; i++ {
 		shouldDisable := gateway.handleOpenAIAccountUpstreamError(
 			context.Background(),

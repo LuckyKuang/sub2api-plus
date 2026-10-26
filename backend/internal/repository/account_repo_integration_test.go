@@ -98,6 +98,14 @@ func (e *failAtomicSchedulerOutboxSQLExecutor) ExecContext(ctx context.Context, 
 	return e.sqlExecutor.ExecContext(ctx, query, args...)
 }
 
+func (e *failAtomicSchedulerOutboxSQLExecutor) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	if strings.Contains(query, "WITH updated AS") && strings.Contains(query, "INSERT INTO scheduler_outbox") && len(args) > 0 {
+		args = append([]any(nil), args...)
+		args[len(args)-1] = nil
+	}
+	return e.sqlExecutor.QueryContext(ctx, query, args...)
+}
+
 type cancelAfterAtomicMutationSQLExecutor struct {
 	sqlExecutor
 	cancel context.CancelFunc
@@ -284,7 +292,10 @@ func (s *AccountRepoSuite) TestDelete() {
 }
 
 func (s *AccountRepoSuite) TestDelete_RemovesSchedulerAccountSnapshot() {
-	account := mustCreateAccount(s.T(), s.client, &service.Account{Name: "to-delete-cache"})
+	// This assertion observes a committed deletion. The suite's default client
+	// belongs to a rollback-only fixture transaction and cannot publish cache
+	// changes before that transaction's owner commits.
+	account := mustCreateAccount(s.T(), integrationEntClient, &service.Account{Name: "to-delete-cache"})
 	cacheRecorder := &schedulerCacheRecorder{
 		accounts: map[int64]*service.Account{
 			account.ID: {
@@ -295,13 +306,36 @@ func (s *AccountRepoSuite) TestDelete_RemovesSchedulerAccountSnapshot() {
 			},
 		},
 	}
-	s.repo.schedulerCache = cacheRecorder
+	repo := newAccountRepositoryWithSQL(integrationEntClient, integrationDB, cacheRecorder)
 
-	err := s.repo.Delete(s.ctx, account.ID)
+	err := repo.Delete(s.ctx, account.ID)
 	s.Require().NoError(err, "Delete")
 
 	s.Require().Equal([]int64{account.ID}, cacheRecorder.deleteIDs)
 	s.Require().NotContains(cacheRecorder.accounts, account.ID)
+}
+
+func (s *AccountRepoSuite) TestDelete_TransactionOwnerPublishesSnapshotOnlyAfterCommit() {
+	account := mustCreateAccount(s.T(), integrationEntClient, &service.Account{Name: "to-delete-cache-on-commit"})
+	cacheRecorder := &schedulerCacheRecorder{
+		accounts: map[int64]*service.Account{account.ID: account},
+	}
+	repo := newAccountRepositoryWithSQL(integrationEntClient, integrationDB, cacheRecorder)
+	err := repo.RunOpenAIOAuthPolicyTransaction(s.ctx, func(ctx context.Context, txRepo service.AccountRepository) error {
+		if err := txRepo.Delete(ctx, account.ID); err != nil {
+			return err
+		}
+		s.Require().Empty(cacheRecorder.deleteIDs, "uncommitted delete must preserve the shared cache")
+		s.Require().Contains(cacheRecorder.accounts, account.ID)
+		_, err := repo.GetByID(s.ctx, account.ID)
+		s.Require().NoError(err, "other readers must retain the account before commit")
+		return nil
+	})
+	s.Require().NoError(err)
+	s.Require().Equal([]int64{account.ID}, cacheRecorder.deleteIDs)
+	s.Require().NotContains(cacheRecorder.accounts, account.ID)
+	_, err = repo.GetByID(s.ctx, account.ID)
+	s.Require().ErrorIs(err, service.ErrAccountNotFound)
 }
 
 func (s *AccountRepoSuite) TestDelete_WithGroupBindings() {

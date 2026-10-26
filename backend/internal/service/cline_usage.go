@@ -207,7 +207,7 @@ func clineBalanceResult(usd float64, now time.Time) *CNProviderBalanceResult {
 // queryClineBalance 只查积分余额（美元）并落余额快照。
 func (s *CNProviderBalanceService) queryClineBalance(ctx context.Context, account *Account) (*CNProviderBalanceResult, error) {
 	ctx = WithAccountOutboundIdentity(ctx, account)
-	proxyURL, err := s.resolveProxyURL(ctx, account)
+	proxyURL, err := account.StrictProxyURL()
 	if err != nil {
 		return nil, err
 	}
@@ -238,7 +238,7 @@ func (s *CNProviderBalanceService) queryClineBalance(ctx context.Context, accoun
 // 冷却（见 applyClineWallets）。余额查询失败不影响窗口结果。
 func (s *CNProviderQuotaService) queryClineUsage(ctx context.Context, account *Account) (*CNProviderQuotaProbeResult, error) {
 	ctx = WithAccountOutboundIdentity(ctx, account)
-	proxyURL, err := s.resolveProxyURL(ctx, account)
+	proxyURL, err := account.StrictProxyURL()
 	if err != nil {
 		return nil, err
 	}

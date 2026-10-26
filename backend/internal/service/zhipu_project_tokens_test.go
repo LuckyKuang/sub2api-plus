@@ -49,18 +49,24 @@ func (c *projectTokenTestClient) ResolveIndividualCodingPlanKey(ctx context.Cont
 	}
 	return &zcode.CodingPlanCredential{APIKey: fmt.Sprintf("pat-%s-%d", login, n), KeyID: "location", OrganizationID: "org", ProjectID: "project", ExpiresAt: time.Now().Add(time.Hour)}, nil
 }
-func (c *projectTokenTestClient) IssueProjectToken(ctx context.Context, provider, login, org, project, key, proxy string) (*zcode.CodingPlanCredential, error) {
-	return c.ResolveIndividualCodingPlanKey(ctx, provider, login, proxy)
+func (c *projectTokenTestClient) IssueProjectAccessToken(ctx context.Context, provider, login, org, project, key, proxy string) (*zcode.ProjectAccessToken, error) {
+	value, err := c.ResolveIndividualCodingPlanKey(ctx, provider, login, proxy)
+	if err != nil {
+		return nil, err
+	}
+	return &zcode.ProjectAccessToken{Token: value.APIKey, ExpiresAt: value.ExpiresAt}, nil
 }
 
 func projectTokenTestAccount(id int64) *Account {
-	return &Account{ID: id, Platform: PlatformZhipu, Type: AccountTypeOAuth, Credentials: map[string]any{"oauth_provider": "bigmodel", "oauth_access_token": "login", "access_token": "business", "plan_kind": ZhipuPlanIndividualCodingPlan, "api_key": "forbidden-long-key"}}
+	return &Account{ID: id, Platform: PlatformZhipu, Type: AccountTypeOAuth, Credentials: map[string]any{"oauth_provider": "bigmodel", "oauth_access_token": "login", "access_token": "business", "plan_kind": ZhipuPlanIndividualCodingPlan, "zhipu_project_kind": "personal", "api_key": "forbidden-long-key"}}
 }
-func newProjectTokenTestService(t *testing.T, c *projectTokenTestClient) *ZhipuOAuthService {
+func newProjectTokenTestService(t *testing.T, c *projectTokenTestClient) *ZhipuProjectTokenManager {
 	t.Helper()
-	s := NewZhipuOAuthService(c, nil)
-	t.Cleanup(s.Stop)
-	return s
+	return NewZhipuProjectTokenManager(c, nil)
+}
+func projectTokenTestResolve(m *ZhipuProjectTokenManager, ctx context.Context, a *Account, rejected string) (*zcode.CodingPlanCredential, error) {
+	m.reject(ctx, a, rejected)
+	return m.credential(ctx, a, false)
 }
 
 // ZCode project-access-token.ts: owner single flight, memory-only material,
@@ -74,7 +80,7 @@ func TestZhipuProjectTokenCacheOwnersRefreshAndRejection(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			v, err := s.projectToken(context.Background(), a, "")
+			v, err := projectTokenTestResolve(s, context.Background(), a, "")
 			require.NoError(t, err)
 			if v != nil {
 				require.Equal(t, "pat-login-1", v.APIKey)
@@ -84,38 +90,38 @@ func TestZhipuProjectTokenCacheOwnersRefreshAndRejection(t *testing.T) {
 	wg.Wait()
 	require.Equal(t, 1, c.calls)
 	require.Equal(t, "forbidden-long-key", a.GetCredential("api_key"), "cache must never persist a PAT")
-	_, err := s.projectToken(context.Background(), projectTokenTestAccount(2), "")
+	_, err := projectTokenTestResolve(s, context.Background(), projectTokenTestAccount(2), "")
 	require.NoError(t, err)
 	require.Equal(t, 2, c.calls)
 	// A rejected old token rotates only its owner; a late 401 cannot discard a
 	// newer PAT already issued by another subscriber.
-	v, err := s.projectToken(context.Background(), a, "pat-login-1")
+	v, err := projectTokenTestResolve(s, context.Background(), a, "pat-login-1")
 	require.NoError(t, err)
 	require.Equal(t, "pat-login-3", v.APIKey)
-	v, err = s.projectToken(context.Background(), a, "pat-login-1")
+	v, err = projectTokenTestResolve(s, context.Background(), a, "pat-login-1")
 	require.NoError(t, err)
 	require.Equal(t, "pat-login-3", v.APIKey)
 	require.Equal(t, 3, c.calls)
-	entry := s.projectTokens[outboundIdentityOwnerKey(a)]
+	entry := s.state(context.Background(), a, false)
 	entry.mu.Lock()
 	entry.refreshAt = time.Now().Add(-time.Second)
 	entry.mu.Unlock()
 	c.err = &zcode.BusinessHTTPError{Status: 503}
-	v, err = s.projectToken(context.Background(), a, "")
+	v, err = projectTokenTestResolve(s, context.Background(), a, "")
 	require.NoError(t, err)
 	require.Equal(t, "pat-login-3", v.APIKey)
 	entry.mu.Lock()
 	entry.refreshAt = time.Now().Add(-time.Second)
 	entry.mu.Unlock()
 	c.err = &zcode.BusinessHTTPError{Status: 403}
-	_, err = s.projectToken(context.Background(), a, "")
+	_, err = projectTokenTestResolve(s, context.Background(), a, "")
 	require.Error(t, err, "authorization errors cannot reuse the cached PAT or long key")
 	entry.mu.Lock()
 	require.Nil(t, entry.value, "a rejected refresh discards old material")
 	entry.value = &zcode.CodingPlanCredential{APIKey: "expired", ExpiresAt: time.Now().Add(-time.Second)}
 	entry.mu.Unlock()
 	c.err = &zcode.BusinessHTTPError{Status: 503}
-	_, err = s.projectToken(context.Background(), a, "")
+	_, err = projectTokenTestResolve(s, context.Background(), a, "")
 	require.Error(t, err, "expired material cannot be reused")
 }
 
@@ -125,7 +131,7 @@ func TestZhipuProjectTokenCancellationAndLoginGeneration(t *testing.T) {
 	a := projectTokenTestAccount(1)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { _, err := s.projectToken(ctx, a, ""); done <- err }()
+	go func() { _, err := projectTokenTestResolve(s, ctx, a, ""); done <- err }()
 	<-c.entered
 	cancel()
 	require.ErrorIs(t, <-done, context.Canceled)
@@ -134,7 +140,7 @@ func TestZhipuProjectTokenCancellationAndLoginGeneration(t *testing.T) {
 	replacement.Credentials["oauth_access_token"] = "new-login"
 	newer := make(chan error, 1)
 	go func() {
-		v, err := s.projectToken(context.Background(), replacement, "")
+		v, err := projectTokenTestResolve(s, context.Background(), replacement, "")
 		if err == nil && v.APIKey != "pat-new-login-2" {
 			err = errors.New("wrong owner token")
 		}
@@ -143,7 +149,7 @@ func TestZhipuProjectTokenCancellationAndLoginGeneration(t *testing.T) {
 	<-c.entered
 	close(c.release)
 	require.NoError(t, <-newer)
-	v, err := s.projectToken(context.Background(), replacement, "")
+	v, err := projectTokenTestResolve(s, context.Background(), replacement, "")
 	require.NoError(t, err)
 	require.Equal(t, "pat-new-login-2", v.APIKey)
 	c.mu.Lock()
@@ -158,9 +164,9 @@ func TestZhipuProjectTokenRejectedDuringTransientRefresh(t *testing.T) {
 	c := &projectTokenTestClient{}
 	s := newProjectTokenTestService(t, c)
 	a := projectTokenTestAccount(1)
-	first, err := s.projectToken(context.Background(), a, "")
+	first, err := projectTokenTestResolve(s, context.Background(), a, "")
 	require.NoError(t, err)
-	entry := s.projectTokens[outboundIdentityOwnerKey(a)]
+	entry := s.state(context.Background(), a, false)
 	entry.mu.Lock()
 	entry.refreshAt = time.Now().Add(-time.Second)
 	entry.mu.Unlock()
@@ -176,7 +182,7 @@ func TestZhipuProjectTokenRejectedDuringTransientRefresh(t *testing.T) {
 	}
 	results := make(chan result, 2)
 	resolve := func(rejected string) {
-		value, err := s.projectToken(context.Background(), a, rejected)
+		value, err := projectTokenTestResolve(s, context.Background(), a, rejected)
 		results <- result{value, err}
 	}
 	go resolve("")
@@ -202,7 +208,7 @@ func TestZhipuProjectTokenEvery401InvalidatesAttempt(t *testing.T) {
 		t.Run(fmt.Sprintf("replayable=%t", replayable), func(t *testing.T) {
 			c := &projectTokenTestClient{}
 			linked := newProjectTokenTestService(t, c)
-			oauth := &CNOAuthService{zhipu: linked}
+			oauth := linked
 			a := projectTokenTestAccount(1)
 			req, err := http.NewRequest(http.MethodPost, "https://open.bigmodel.cn/api/anthropic/v1/messages", strings.NewReader(`{"messages":[]}`))
 			require.NoError(t, err)
@@ -210,7 +216,7 @@ func TestZhipuProjectTokenEvery401InvalidatesAttempt(t *testing.T) {
 				req.GetBody = nil
 			}
 			var auth []string
-			resp, err := oauth.roundTripZhipuLinked(req, a, func(r *http.Request) (*http.Response, error) {
+			resp, err := oauth.RoundTrip(req, a, func(r *http.Request) (*http.Response, error) {
 				auth = append(auth, r.Header.Get("Authorization"))
 				return &http.Response{StatusCode: 401, Body: http.NoBody}, nil
 			})
@@ -222,7 +228,7 @@ func TestZhipuProjectTokenEvery401InvalidatesAttempt(t *testing.T) {
 			}
 			require.Equal(t, want, auth)
 			require.Equal(t, len(want), c.calls)
-			value, err := linked.projectToken(req.Context(), a, "")
+			value, err := projectTokenTestResolve(linked, req.Context(), a, "")
 			require.NoError(t, err)
 			require.Equal(t, fmt.Sprintf("pat-login-%d", len(want)+1), value.APIKey, "the next request must not reuse the final rejected PAT")
 		})
@@ -250,7 +256,7 @@ func TestZhipuProjectTokenLinkedModelDiscovery(t *testing.T) {
 					account.Credentials[credKeyHeaderOverrides] = map[string]any{"bigmodel-organization": "org", "bigmodel-project": "project"}
 				}
 				upstream := &httpUpstreamRecorder{resp: &http.Response{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"data":[{"id":"glm-5.3"}]}`))}}
-				svc := &AccountTestService{httpUpstream: upstream, cnOAuthService: &CNOAuthService{zhipu: linked}, cfg: &config.Config{}}
+				svc := &AccountTestService{httpUpstream: upstream, projectTokens: linked, cfg: &config.Config{}}
 				ids, err := svc.FetchUpstreamSupportedModels(context.Background(), account)
 				require.NoError(t, err)
 				require.Equal(t, []string{"glm-5.3"}, ids)
@@ -289,7 +295,7 @@ func TestZhipuProjectTokenFinalTicket401InvalidatesAttempt(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, []string{"pat-login-1", "pat-login-2"}, keys)
 	require.Equal(t, 2, client.calls, "rejection cannot issue a third PAT within the failed operation")
-	value, err := linked.projectToken(ctx, account, "")
+	value, err := projectTokenTestResolve(linked, ctx, account, "")
 	require.NoError(t, err)
 	require.Equal(t, "pat-login-3", value.APIKey)
 }
@@ -302,23 +308,23 @@ func TestZhipuProjectTokenZaiBusinessRefreshFailure(t *testing.T) {
 	s := newProjectTokenTestService(t, c)
 	a := projectTokenTestAccount(1)
 	a.Credentials["oauth_provider"] = zcode.ProviderZai
-	value, err := s.projectToken(context.Background(), a, "")
+	value, err := projectTokenTestResolve(s, context.Background(), a, "")
 	require.NoError(t, err)
 	require.Equal(t, "pat-business-login-1", value.APIKey)
 	refresh := func() {
-		entry := s.projectTokens[outboundIdentityOwnerKey(a)]
+		entry := s.state(context.Background(), a, false)
 		entry.mu.Lock()
 		entry.refreshAt = time.Now().Add(-time.Second)
 		entry.mu.Unlock()
 	}
 	refresh()
 	c.businessTokenErr = &zcode.BusinessHTTPError{Status: 503}
-	value, err = s.projectToken(context.Background(), a, "")
+	value, err = projectTokenTestResolve(s, context.Background(), a, "")
 	require.NoError(t, err)
 	require.Equal(t, "pat-business-login-1", value.APIKey)
 	refresh()
 	c.businessTokenErr = &zcode.BusinessHTTPError{Status: 403}
-	_, err = s.projectToken(context.Background(), a, "")
+	_, err = projectTokenTestResolve(s, context.Background(), a, "")
 	require.Error(t, err)
 	require.Equal(t, 1, c.calls, "failed exchanges cannot initiate project issuance")
 	require.Equal(t, 3, c.businessCalls)
@@ -330,8 +336,7 @@ func TestZhipuProjectTokenInferenceProbeAnd401Replay(t *testing.T) {
 			t.Run(fmt.Sprintf("probe=%t/status=%d", probe, status), func(t *testing.T) {
 				c := &projectTokenTestClient{}
 				linked := newProjectTokenTestService(t, c)
-				oauth := NewCNOAuthService(nil, nil, nil)
-				oauth.zhipu = linked
+				oauth := linked
 				a := projectTokenTestAccount(1)
 				// The real sending wrapper must replace the long key, preserve the original
 				// body and retry only explicit 401. Final identity remains ZCode's snapshot.
@@ -341,10 +346,10 @@ func TestZhipuProjectTokenInferenceProbeAnd401Replay(t *testing.T) {
 				var resp *http.Response
 				var err error
 				if probe {
-					svc := &AccountTestService{httpUpstream: upstream, cnOAuthService: oauth}
+					svc := &AccountTestService{httpUpstream: upstream, projectTokens: oauth}
 					resp, err = svc.doOpenAIAccountTestUpstream(req, "", a, false)
 				} else {
-					svc := &OpenAIGatewayService{httpUpstream: upstream, cnOAuthService: oauth}
+					svc := &OpenAIGatewayService{httpUpstream: upstream, projectTokens: oauth}
 					resp, err = svc.doOpenAIUpstream(req, "", a)
 				}
 				require.NoError(t, err)
@@ -368,7 +373,7 @@ func TestZhipuProjectTokenInferenceProbeAnd401Replay(t *testing.T) {
 	a.Type = AccountTypeAPIKey
 	req, _ := http.NewRequest(http.MethodGet, "https://api.z.ai/v1/models", nil)
 	req.Header.Set("Authorization", "Bearer manual")
-	_, err := (*CNOAuthService)(nil).roundTripZhipuLinked(req, a, func(r *http.Request) (*http.Response, error) {
+	_, err := (*ZhipuProjectTokenManager)(nil).RoundTrip(req, a, func(r *http.Request) (*http.Response, error) {
 		require.Equal(t, "Bearer manual", r.Header.Get("Authorization"))
 		return &http.Response{StatusCode: 200}, nil
 	})
@@ -378,12 +383,11 @@ func TestZhipuProjectTokenInferenceProbeAnd401Replay(t *testing.T) {
 func TestZhipuProjectTokenDestinationAndOffPeakIsolation(t *testing.T) {
 	c := &projectTokenTestClient{}
 	linked := newProjectTokenTestService(t, c)
-	oauth := NewCNOAuthService(nil, nil, nil)
-	oauth.zhipu = linked
+	oauth := linked
 	a := projectTokenTestAccount(1)
 	for _, target := range []string{"https://attacker.test/api/anthropic/v1/messages", "https://api.z.ai/api/anthropic/v1/messages", "https://open.bigmodel.cn.evil.test/api/anthropic/v1/messages"} {
 		req, _ := http.NewRequest(http.MethodPost, target, nil)
-		_, err := oauth.roundTripZhipuLinked(req, a, func(*http.Request) (*http.Response, error) {
+		_, err := oauth.RoundTrip(req, a, func(*http.Request) (*http.Response, error) {
 			t.Fatal("untrusted destination must not be sent")
 			return nil, nil
 		})
@@ -391,9 +395,9 @@ func TestZhipuProjectTokenDestinationAndOffPeakIsolation(t *testing.T) {
 		require.Zero(t, c.calls)
 	}
 	upstream := &httpUpstreamRecorder{resp: &http.Response{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{}`))}}
-	svc := &AccountTestService{httpUpstream: upstream, cnOAuthService: oauth}
+	svc := &AccountTestService{httpUpstream: upstream, projectTokens: oauth}
 	req, _ := http.NewRequest(http.MethodGet, "https://models.dev/api.json", nil)
-	resp, err := svc.doUpstreamModelsRequest(req, "", a)
+	resp, err := svc.doUpstreamModelsRequest(req, a)
 	require.NoError(t, err)
 	_ = resp.Body.Close()
 	require.Empty(t, upstream.lastReq.Header.Get("Authorization"))
@@ -412,7 +416,7 @@ func TestZhipuProjectTokenDestinationAndOffPeakIsolation(t *testing.T) {
 	req.Header["authorization"] = []string{"Bearer raw-inbound"}
 	req.Header["x-api-key"] = []string{"raw-key"}
 	req.Header["X-CODING-PLAN-API-KEY"] = []string{"raw-plan"}
-	require.NoError(t, oauth.prepareZhipuLinkedRequest(req, a))
+	require.NoError(t, oauth.Prepare(req, a))
 	require.Equal(t, "Bearer zcode-jwt", req.Header.Get("Authorization"))
 	require.NotContains(t, req.Header, "authorization")
 	require.NotContains(t, req.Header, "x-api-key")
@@ -421,6 +425,7 @@ func TestZhipuProjectTokenDestinationAndOffPeakIsolation(t *testing.T) {
 	require.Equal(t, 1, c.calls)
 	require.False(t, zhipuTeamProject(a))
 	a.Credentials["zhipu_project_key_name"] = "zcode-team-api-key"
+	a.Credentials["zhipu_project_kind"] = "team"
 	require.True(t, zhipuTeamProject(a))
 }
 
@@ -440,6 +445,7 @@ func TestZhipuProjectTokenOffPeakTeamScope(t *testing.T) {
 			account.Credentials["zhipu_project_key_name"] = zcode.PersonalAPIKeyName
 			if team {
 				account.Credentials["zhipu_project_key_name"] = zcode.TeamAPIKeyName
+				account.Credentials["zhipu_project_kind"] = "team"
 			}
 			// Generic header overrides are unavailable to linked OAuth accounts;
 			// stale/inbound scope headers cannot replace the PAT owner's scope.
@@ -447,7 +453,7 @@ func TestZhipuProjectTokenOffPeakTeamScope(t *testing.T) {
 			require.NoError(t, err)
 			req.Header["BIGMODEL-ORGANIZATION"] = []string{"untrusted"}
 			req.Header["bigmodel-project"] = []string{"untrusted"}
-			require.NoError(t, (&CNOAuthService{zhipu: linked}).prepareZhipuLinkedRequest(req, account))
+			require.NoError(t, linked.Prepare(req, account))
 			org, project := "", ""
 			if team {
 				org, project = "org", "project"
@@ -512,7 +518,7 @@ func TestZhipuProjectTokenOffPeakStatusAndDetachedSettlementRenew(t *testing.T) 
 	require.Equal(t, zcode.OffPeakAuth{JWT: "plan-jwt", PlanKey: "pat-login-1"}, tickets.lastAuth)
 	refresh := func() {
 		t.Helper()
-		entry := service.projectTokens[outboundIdentityOwnerKey(a)]
+		entry := service.state(context.Background(), a, false)
 		entry.mu.Lock()
 		entry.refreshAt = time.Now().Add(-time.Second)
 		entry.mu.Unlock()
@@ -587,7 +593,7 @@ func TestZhipuProjectTokenFailuresSeparateGrantFromSharedDependency(t *testing.T
 			a := projectTokenTestAccount(42)
 			client := &projectTokenTestClient{err: tc.err}
 			manager := newProjectTokenTestService(t, client)
-			_, err := manager.projectToken(context.Background(), a, "")
+			_, err := projectTokenTestResolve(manager, context.Background(), a, "")
 			var failure *CredentialFailureError
 			require.ErrorAs(t, err, &failure)
 			require.Equal(t, tc.scope, failure.Scope)

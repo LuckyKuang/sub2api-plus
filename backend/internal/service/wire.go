@@ -43,9 +43,9 @@ func ProvideZhipuOAuthService(proxyRepo ProxyRepository, oauthClient ZhipuOAuthC
 // ProvideZhipuOffPeakTicketManager creates the off-peak ticket manager and
 // registers it as the request-path ticket provider. Registration happens here so
 // the protocol builder never depends on the settings or account services.
-func ProvideZhipuOffPeakTicketManager(oauthClient ZhipuOffPeakClient, linked *ZhipuOAuthService) *ZhipuOffPeakTicketManager {
+func ProvideZhipuOffPeakTicketManager(oauthClient ZhipuOffPeakClient, projectTokens *ZhipuProjectTokenManager) *ZhipuOffPeakTicketManager {
 	manager := NewZhipuOffPeakTicketManager(oauthClient)
-	manager.projectTokens = linked
+	manager.projectTokens = projectTokens
 	SetZhipuOffPeakTicketProvider(manager)
 	return manager
 }
@@ -925,6 +925,7 @@ var ProviderSet = wire.NewSet(
 	ProvideGrokOAuthService,
 	wire.Bind(new(GrokOAuthTokenService), new(*GrokOAuthService)),
 	ProvideZhipuOAuthService,
+	NewZhipuProjectTokenManager,
 	ProvideCNOAuthService,
 	ProvideZhipuOffPeakTicketManager,
 	NewGeminiOAuthService,
@@ -1131,14 +1132,16 @@ func ProvideClaudeResetCreditService(accounts AccountRepository, tokens *ClaudeT
 	return s
 }
 
-func ProvideCNOAuthService(proxyRepo ProxyRepository, accountRepo AccountRepository, admin AdminService, redisClient *redis.Client, refreshAPI *OAuthRefreshAPI, gateway *OpenAIGatewayService, tester *AccountTestService, linked *ZhipuOAuthService, quota *CNProviderQuotaService) *CNOAuthService {
+func ProvideCNOAuthService(proxyRepo ProxyRepository, accountRepo AccountRepository, admin AdminService, redisClient *redis.Client, refreshAPI *OAuthRefreshAPI, gateway *OpenAIGatewayService, tester *AccountTestService, quota *CNProviderQuotaService, projectTokens *ZhipuProjectTokenManager) *CNOAuthService {
 	svc := NewCNOAuthService(proxyRepo, accountRepo, admin)
 	svc.store = cnoauth.NewStore(redisClient)
 	svc.refreshAPI = refreshAPI
 	svc.modelTester = tester
-	svc.zhipu = linked
 	gateway.cnOAuthService = svc
 	tester.cnOAuthService = svc
 	quota.cnOAuthService = svc
+	quota.projectTokens = projectTokens
+	gateway.projectTokens = projectTokens
+	tester.projectTokens = projectTokens
 	return svc
 }

@@ -599,6 +599,7 @@ type OpenAIGatewayService struct {
 	userGroupRateResolver *userGroupRateResolver
 	httpUpstream          HTTPUpstream
 	cnOAuthService        *CNOAuthService
+	projectTokens         *ZhipuProjectTokenManager
 	pluginManager         *PluginManager
 	deferredService       *DeferredService
 	openAITokenProvider   *OpenAITokenProvider

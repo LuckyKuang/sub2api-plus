@@ -19,6 +19,18 @@ type http401CredentialCooldownRepo struct {
 	cooldownCalls, unconditionalCooldowns int
 }
 
+type http401GrokCooldownRepo struct {
+	grokOutcomeOwnerRepo
+	attempts int
+	expected *Account
+}
+
+func (r *http401GrokCooldownRepo) ApplyGrokRequestOutcomeIfUnchanged(ctx context.Context, expected *Account, outcome GrokRequestOutcome) (GrokRequestOutcomeResult, error) {
+	r.attempts++
+	r.expected = snapshotRequestCredentialAccount(expected)
+	return r.grokOutcomeOwnerRepo.ApplyGrokRequestOutcomeIfUnchanged(ctx, expected, outcome)
+}
+
 func (r *http401CredentialCooldownRepo) SetTempUnschedulable(context.Context, int64, time.Time, string) error {
 	r.unconditionalCooldowns++
 	return errors.New("unconditional credential cooldown is forbidden")
@@ -95,6 +107,39 @@ func TestHTTP401OAuthCooldownUsesExactSentGrant(t *testing.T) {
 					rl.SetTokenCacheInvalidator(invalidator)
 					gateway := &OpenAIGatewayService{accountRepo: repo, rateLimitService: rl}
 					start := time.Now()
+					if platform == PlatformGrok {
+						// Exercise the production response handler used by Grok
+						// senders. Grok owns its 10-minute outcome transaction and
+						// runtime publication; it does not use the shared OAuth cache.
+						grokRepo := &http401GrokCooldownRepo{grokOutcomeOwnerRepo: grokOutcomeOwnerRepo{current: repo.current, failStorage: scenario == "write-failure"}}
+						gateway.accountRepo = grokRepo
+						gateway.handleGrokAccountUpstreamError(ctx, selected, http.StatusUnauthorized, nil, []byte(`{"error":{"message":"invalid token"}}`))
+						attempts := grokRepo.attempts
+						require.False(t, gateway.handleOpenAIAccountUpstreamError(ctx, selected, http.StatusUnauthorized, nil, []byte(`{"error":{"message":"invalid token"}}`)))
+						require.Equal(t, attempts, grokRepo.attempts, "generic formatting cannot apply a second Grok response policy")
+						if scenario == "ambiguous" || scenario == "unknown-bearer" {
+							require.Zero(t, attempts)
+						} else {
+							require.Equal(t, 1, attempts)
+							require.Equal(t, owner.ID, grokRepo.expected.ID)
+							require.Equal(t, owner.Credentials, grokRepo.expected.Credentials)
+						}
+						require.Zero(t, grokRepo.legacyWrites+repo.cooldownCalls+repo.unconditionalCooldowns+repo.casCalls+repo.unconditionalCalls)
+						require.Empty(t, invalidator.accounts, "Grok's response policy does not invalidate the shared OAuth token cache")
+						require.Empty(t, blocker.accounts, "Grok publishes its own owner-scoped runtime block after the outcome CAS")
+						require.Equal(t, StatusActive, grokRepo.current.Status)
+						if scenario == "unchanged" {
+							require.Equal(t, 1, grokRepo.atomicWrites)
+							require.NotNil(t, grokRepo.current.TempUnschedulableUntil)
+							require.WithinDuration(t, start.Add(10*time.Minute), *grokRepo.current.TempUnschedulableUntil, time.Second)
+							require.True(t, gateway.isOpenAIAccountRuntimeBlocked(grokRepo.current))
+						} else {
+							require.Zero(t, grokRepo.atomicWrites)
+							require.Nil(t, grokRepo.current.TempUnschedulableUntil)
+							require.False(t, gateway.isOpenAIAccountRuntimeBlocked(grokRepo.current), "a stale or uncommitted response cannot publish runtime quarantine")
+						}
+						return
+					}
 					require.True(t, gateway.handleOpenAIAccountUpstreamError(ctx, selected, http.StatusUnauthorized, nil, []byte(`{"error":{"message":"invalid token"}}`)))
 					require.Zero(t, repo.unconditionalCooldowns)
 					require.Zero(t, repo.casCalls, "recoverable OAuth grants retain active status")

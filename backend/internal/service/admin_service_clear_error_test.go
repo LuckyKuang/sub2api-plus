@@ -18,6 +18,21 @@ type accountRepoStubForClearAccountError struct {
 	clearAntigravityCalls    int
 	clearModelRateLimitCalls int
 	clearTempUnschedCalls    int
+	recoveryCalls            int
+}
+
+func (r *accountRepoStubForClearAccountError) RunOpenAIOAuthPolicyTransaction(ctx context.Context, fn func(context.Context, AccountRepository) error) error {
+	return fn(ctx, r)
+}
+
+func (r *accountRepoStubForClearAccountError) ClearAccountRecoveryState(context.Context, int64) error {
+	r.recoveryCalls++
+	r.account.Status, r.account.ErrorMessage = StatusActive, ""
+	r.account.RateLimitedAt, r.account.RateLimitResetAt, r.account.OverloadUntil = nil, nil, nil
+	r.account.TempUnschedulableUntil, r.account.TempUnschedulableReason = nil, ""
+	delete(r.account.Extra, "model_rate_limits")
+	delete(r.account.Extra, "antigravity_quota_scopes")
+	return nil
 }
 
 func (r *accountRepoStubForClearAccountError) GetByID(ctx context.Context, id int64) (*Account, error) {
@@ -66,8 +81,10 @@ func TestAdminService_ClearAccountError_AlsoClearsRecoverableRuntimeState(t *tes
 			Status:                  StatusError,
 			ErrorMessage:            "refresh failed",
 			RateLimitResetAt:        &resetAt,
+			OverloadUntil:           &until,
 			TempUnschedulableUntil:  &until,
 			TempUnschedulableReason: "missing refresh token",
+			Extra:                   map[string]any{"retained": true, "model_rate_limits": map[string]any{"old": true}, "antigravity_quota_scopes": map[string]any{"old": true}},
 		},
 	}
 	blocker := &runtimeBlockRecorder{}
@@ -76,13 +93,16 @@ func TestAdminService_ClearAccountError_AlsoClearsRecoverableRuntimeState(t *tes
 	updated, err := svc.ClearAccountError(context.Background(), 31)
 	require.NoError(t, err)
 	require.NotNil(t, updated)
-	require.Equal(t, 1, repo.clearErrorCalls)
-	require.Equal(t, 1, repo.clearRateLimitCalls)
-	require.Equal(t, 1, repo.clearAntigravityCalls)
-	require.Equal(t, 1, repo.clearModelRateLimitCalls)
-	require.Equal(t, 1, repo.clearTempUnschedCalls)
+	require.Equal(t, 1, repo.recoveryCalls)
+	require.Zero(t, repo.clearErrorCalls+repo.clearRateLimitCalls+repo.clearAntigravityCalls+repo.clearModelRateLimitCalls+repo.clearTempUnschedCalls, "recovery must use the atomic state writer")
+	require.Equal(t, StatusActive, updated.Status)
+	require.Empty(t, updated.ErrorMessage)
 	require.Nil(t, updated.RateLimitResetAt)
+	require.Nil(t, updated.OverloadUntil)
 	require.Nil(t, updated.TempUnschedulableUntil)
 	require.Empty(t, updated.TempUnschedulableReason)
+	require.Equal(t, true, updated.Extra["retained"])
+	require.NotContains(t, updated.Extra, "model_rate_limits")
+	require.NotContains(t, updated.Extra, "antigravity_quota_scopes")
 	require.Equal(t, []int64{31}, blocker.clearedIDs)
 }

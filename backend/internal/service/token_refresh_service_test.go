@@ -79,7 +79,7 @@ func (r *tokenRefreshAccountRepo) UpdateCredentials(ctx context.Context, id int6
 	return nil
 }
 
-func (r *tokenRefreshAccountRepo) UpdateOAuthCredentialsIfUnchanged(ctx context.Context, expectedOwner *Account, credentials map[string]any) (bool, error) {
+func (r *tokenRefreshAccountRepo) UpdateOAuthRefreshCredentialsIfUnchanged(ctx context.Context, expectedOwner *Account, credentials map[string]any) (bool, error) {
 	id := expectedOwner.ID
 	platform := expectedOwner.Platform
 	expected := expectedOwner.Credentials
@@ -232,7 +232,9 @@ func (r *tokenRefreshAccountRepo) SetGrokCredentialTempUnschedulableIfMatch(
 }
 
 func grokCredentialSnapshotMatchesAccount(account *Account, snapshot GrokCredentialMutationSnapshot) bool {
-	return account != nil && account.IsGrokOAuth() && account.IsSchedulable() &&
+	expected := snapshot.Owner
+	return account != nil && expected != nil && account.ID == expected.ID && account.Platform == expected.Platform && account.Type == expected.Type &&
+		sameTestCNProxySnapshot(account.Proxy, expected.Proxy) && account.IsGrokOAuth() && account.IsSchedulable() &&
 		grokCredentialMutationSnapshot(account).CredentialsJSON == snapshot.CredentialsJSON &&
 		grokCredentialProxyIDsEqual(account.ProxyID, snapshot.ProxyID)
 }
@@ -462,7 +464,9 @@ func (r *tokenRefresherStub) Refresh(ctx context.Context, account *Account) (map
 type refreshFailureUnavailableRepo struct{ AccountRepository }
 
 func TestRefreshFailureFencesActualAttemptAcrossOfficialPlatforms(t *testing.T) {
-	for _, platform := range []string{PlatformOpenAI, PlatformGrok, PlatformDeepseek, PlatformKimi, PlatformMiniMax, PlatformStepFun, PlatformZhipu} {
+	// Native failures are contained by their coordinator below; DeepSeek and
+	// linked ZCode business logins require reauthorization rather than refresh.
+	for _, platform := range []string{PlatformOpenAI, PlatformGrok} {
 		for _, path := range []string{"direct", "unified"} {
 			for _, failure := range []string{"permanent", "temporary"} {
 				for _, state := range []string{"unchanged", "relinked", "proxy_changed", "store_error", "missing_contract"} {

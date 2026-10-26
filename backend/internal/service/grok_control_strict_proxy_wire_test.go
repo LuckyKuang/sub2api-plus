@@ -36,6 +36,16 @@ func (r *grokControlStrictRepo) ApplyCredentialStateMutation(_ context.Context, 
 	return true, nil
 }
 
+func (r *grokControlStrictRepo) UpdateCNControlExtraIfUnchanged(_ context.Context, owner *Account, _ map[string]any) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if !auxiliaryProbeOwnersMatch(r.account, owner) {
+		return false, nil
+	}
+	r.writes++
+	return true, nil
+}
+
 func (*grokControlStrictRepo) UpdateExtra(context.Context, int64, map[string]any) error {
 	panic("observed model results require the captured grant CAS")
 }
@@ -64,7 +74,7 @@ func grokControlStrictUpstream(sends *atomic.Int32) *codexModelsHTTPUpstreamStub
 
 func executeGrokControlStrict(ctx context.Context, operation string, account *Account, repo AccountRepository, proxyRepo ProxyRepository, upstream HTTPUpstream, destination string) bool {
 	if operation == "observed_models" {
-		svc := &GrokQuotaService{cfg: grokControlStrictConfig(), accountRepo: repo, proxyRepo: proxyRepo, httpUpstream: upstream}
+		svc := NewGrokQuotaService(repo, proxyRepo, nil, upstream, grokControlStrictConfig())
 		return svc.syncGrokObservedModels(ctx, account) == nil
 	}
 	svc := &OpenAIGatewayService{cfg: grokControlStrictConfig(), httpUpstream: upstream}
@@ -210,7 +220,7 @@ func TestGrokIndependentControlRetainsCapturedRouteDuringProxyEdit(t *testing.T)
 			unblock()
 			select {
 			case accepted := <-result:
-				require.True(t, accepted)
+				require.Equal(t, operation != "observed_models", accepted, "a late model observation cannot certify the replacement owner")
 			case <-ctx.Done():
 				t.Fatal("captured control operation did not finish after its proxy replied")
 			}

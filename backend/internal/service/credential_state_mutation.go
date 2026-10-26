@@ -39,6 +39,13 @@ func credentialStateGeneration(account *Account) string {
 	if account.CredentialGeneration != "" {
 		return account.CredentialGeneration
 	}
+	if account.IsGrok() {
+		generation, err := grokRequestOwnerFingerprint(account)
+		if err != nil {
+			return ""
+		}
+		return generation
+	}
 	raw, err := json.Marshal(struct {
 		ID             int64
 		Platform, Type string

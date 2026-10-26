@@ -68,97 +68,114 @@ func grokAuxiliaryProxy(t *testing.T, raw string) *Proxy {
 	return &Proxy{ID: 72, Protocol: "http", Host: u.Hostname(), Port: port, Status: StatusActive}
 }
 
-// Exercise actual HTTP proxy requests after token acquisition observes a newer
-// grant. The request may not use the selected row's old target or proxy, while
-// concurrency accounting continues to use that selected resource reservation.
+// An access-token rotation can advance the captured grant without changing its
+// route or client declarations. Replacing those declarations requires account
+// selection again and must not send through either old or replacement routes.
 func TestGrokAuxiliaryHTTPUsesAcquiredOwner(t *testing.T) {
 	for _, operation := range []string{"images", "voice", "video-content"} {
-		t.Run(operation, func(t *testing.T) {
-			var obsoleteProxyCalls atomic.Int64
-			obsoleteProxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				obsoleteProxyCalls.Add(1)
-				w.WriteHeader(http.StatusBadGateway)
-			}))
-			defer obsoleteProxy.Close()
-			captures := make(chan grokAuxiliaryDialCapture, 3)
-			currentProxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
-				captures <- grokAuxiliaryDialCapture{target: request.URL.String(), headers: request.Header.Clone()}
-				switch request.URL.Path {
-				case "/v1/images/generations":
-					w.Header().Set("Content-Type", "application/json")
-					_, _ = io.WriteString(w, `{"data":[{"b64_json":"aGVsbG8="}]}`)
-				case "/v1/tts":
-					w.Header().Set("Content-Type", "audio/mpeg")
-					_, _ = io.WriteString(w, "audio-payload")
-				case "/v1/videos/task-owner":
-					w.Header().Set("Content-Type", "application/json")
-					_, _ = io.WriteString(w, `{"status":"completed"}`)
-				case "/v1/videos/task-owner/content":
-					w.Header().Set("Content-Type", "video/mp4")
-					_, _ = io.WriteString(w, "video-payload")
-				default:
-					w.WriteHeader(http.StatusNotFound)
+		for _, change := range []string{"access-token-rotation", "base-url-replaced", "proxy-replaced", "headers-replaced"} {
+			t.Run(operation+"/"+change, func(t *testing.T) {
+				var replacementProxyCalls atomic.Int64
+				replacementProxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+					replacementProxyCalls.Add(1)
+					w.WriteHeader(http.StatusBadGateway)
+				}))
+				defer replacementProxy.Close()
+				captures := make(chan grokAuxiliaryDialCapture, 3)
+				capturedProxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+					captures <- grokAuxiliaryDialCapture{target: request.URL.String(), headers: request.Header.Clone()}
+					switch request.URL.Path {
+					case "/v1/images/generations":
+						w.Header().Set("Content-Type", "application/json")
+						_, _ = io.WriteString(w, `{"data":[{"b64_json":"aGVsbG8="}]}`)
+					case "/v1/tts":
+						w.Header().Set("Content-Type", "audio/mpeg")
+						_, _ = io.WriteString(w, "audio-payload")
+					case "/v1/videos/task-owner":
+						w.Header().Set("Content-Type", "application/json")
+						_, _ = io.WriteString(w, `{"status":"completed"}`)
+					case "/v1/videos/task-owner/content":
+						w.Header().Set("Content-Type", "video/mp4")
+						_, _ = io.WriteString(w, "video-payload")
+					default:
+						w.WriteHeader(http.StatusNotFound)
+					}
+				}))
+				defer capturedProxy.Close()
+				selected := grokAuxiliaryAccount(AccountTypeOAuth, "http://captured-target.example/v1", "old-token", grokAuxiliaryProxy(t, capturedProxy.URL))
+				selected.Credentials["header_overrides"] = map[string]any{"X-Relay-Snapshot": "captured"}
+				owner := snapshotRequestCredentialAccount(selected)
+				owner.Concurrency = 2
+				owner.Credentials["access_token"] = "rotated-token"
+				owner.Credentials["_token_version"] = int64(2)
+				switch change {
+				case "base-url-replaced":
+					owner.Credentials["base_url"] = "http://replacement-target.example/v1"
+				case "proxy-replaced":
+					owner.Proxy = grokAuxiliaryProxy(t, replacementProxy.URL)
+				case "headers-replaced":
+					owner.Credentials["header_overrides"] = map[string]any{"X-Relay-Snapshot": "replacement"}
 				}
-			}))
-			defer currentProxy.Close()
-			selected := grokAuxiliaryAccount(AccountTypeOAuth, "http://obsolete-target.example/v1", "old-token", grokAuxiliaryProxy(t, obsoleteProxy.URL))
-			owner := snapshotRequestCredentialAccount(selected)
-			owner.Concurrency = 2
-			owner.Proxy = grokAuxiliaryProxy(t, currentProxy.URL)
-			owner.Credentials["base_url"], owner.Credentials["access_token"] = "http://acquired-target.example/v1", "new-token"
-			owner.Credentials["_token_version"] = int64(2)
-			owner.Credentials["header_overrides"] = map[string]any{"X-Relay-Snapshot": "acquired"}
-			repo := &tokenRefreshAccountRepo{}
-			repo.accountsByID = map[int64]*Account{selected.ID: owner}
-			var sends int
-			upstream := &codexModelsHTTPUpstreamStub{do: func(request *http.Request, proxy string, accountID int64, concurrency int) (*http.Response, error) {
-				sends++
-				require.Equal(t, selected.ID, accountID)
-				require.Equal(t, 7, concurrency, "selected resource accounting survives owner refresh")
-				require.Equal(t, owner.Proxy.URL(), proxy)
-				u, err := url.Parse(proxy)
-				if err != nil {
-					return nil, err
+				repo := &tokenRefreshAccountRepo{}
+				repo.accountsByID = map[int64]*Account{selected.ID: owner}
+				var sends int
+				upstream := &codexModelsHTTPUpstreamStub{do: func(request *http.Request, proxy string, accountID int64, concurrency int) (*http.Response, error) {
+					sends++
+					require.Equal(t, selected.ID, accountID)
+					require.Equal(t, 7, concurrency, "selected resource accounting survives token rotation")
+					require.Equal(t, selected.Proxy.URL(), proxy)
+					u, err := url.Parse(proxy)
+					if err != nil {
+						return nil, err
+					}
+					transport := &http.Transport{Proxy: http.ProxyURL(u)}
+					defer transport.CloseIdleConnections()
+					return (&http.Client{Transport: transport}).Do(request)
+				}}
+				cfg := &config.Config{Security: config.SecurityConfig{URLAllowlist: config.URLAllowlistConfig{AllowInsecureHTTP: true}}}
+				svc := &OpenAIGatewayService{cfg: cfg, httpUpstream: upstream,
+					grokTokenProvider: NewGrokTokenProvider(repo, &grokTokenCacheForProviderTest{}),
 				}
-				transport := &http.Transport{Proxy: http.ProxyURL(u)}
-				defer transport.CloseIdleConnections()
-				return (&http.Client{Transport: transport}).Do(request)
-			}}
-			cfg := &config.Config{Security: config.SecurityConfig{URLAllowlist: config.URLAllowlistConfig{AllowInsecureHTTP: true}}}
-			svc := &OpenAIGatewayService{cfg: cfg, httpUpstream: upstream,
-				grokTokenProvider: NewGrokTokenProvider(repo, &grokTokenCacheForProviderTest{}),
-			}
-			method := http.MethodPost
-			if operation == "video-content" {
-				method = http.MethodGet
-			}
-			c, recorder := grokMediaContentTestContext(method, "https://gateway.example/v1/auxiliary", nil)
-			var result *OpenAIForwardResult
-			var err error
-			wantPaths := []string{"/v1/images/generations"}
-			switch operation {
-			case "images":
-				result, err = svc.ForwardGrokMedia(context.Background(), c, selected, GrokMediaEndpointImagesGenerations, "", []byte(`{"model":"grok-imagine-image","prompt":"hello"}`), "application/json")
-			case "voice":
-				result, err = svc.ForwardGrokVoice(context.Background(), c, selected, "tts", []byte(`{"text":"hello","voice_id":"eve"}`), "application/json")
-				wantPaths = []string{"/v1/tts"}
-			case "video-content":
-				result, err = svc.ForwardGrokMedia(context.Background(), c, selected, GrokMediaEndpointVideoContent, "task-owner", nil, "")
-				wantPaths = []string{"/v1/videos/task-owner", "/v1/videos/task-owner/content"}
-			}
-			require.NoError(t, err)
-			require.NotNil(t, result)
-			require.Equal(t, http.StatusOK, recorder.Code)
-			require.Equal(t, len(wantPaths), sends)
-			require.Len(t, captures, len(wantPaths))
-			for _, path := range wantPaths {
-				capture := <-captures
-				require.Equal(t, "http://acquired-target.example"+path, capture.target)
-				require.Equal(t, "Bearer new-token", capture.headers.Get("Authorization"))
-				require.Equal(t, []string{"acquired"}, headerValuesEqualFold(capture.headers, "X-Relay-Snapshot"))
-			}
-			require.Zero(t, obsoleteProxyCalls.Load(), "the obsolete proxy and target receive no request")
-		})
+				method := http.MethodPost
+				if operation == "video-content" {
+					method = http.MethodGet
+				}
+				c, recorder := grokMediaContentTestContext(method, "https://gateway.example/v1/auxiliary", nil)
+				var result *OpenAIForwardResult
+				var err error
+				wantPaths := []string{"/v1/images/generations"}
+				switch operation {
+				case "images":
+					result, err = svc.ForwardGrokMedia(context.Background(), c, selected, GrokMediaEndpointImagesGenerations, "", []byte(`{"model":"grok-imagine-image","prompt":"hello"}`), "application/json")
+				case "voice":
+					result, err = svc.ForwardGrokVoice(context.Background(), c, selected, "tts", []byte(`{"text":"hello","voice_id":"eve"}`), "application/json")
+					wantPaths = []string{"/v1/tts"}
+				case "video-content":
+					result, err = svc.ForwardGrokMedia(context.Background(), c, selected, GrokMediaEndpointVideoContent, "task-owner", nil, "")
+					wantPaths = []string{"/v1/videos/task-owner", "/v1/videos/task-owner/content"}
+				}
+				if change != "access-token-rotation" {
+					grokAuxiliaryAssertSafeError(t, err)
+					require.Nil(t, result)
+					require.Zero(t, sends, "a replacement owner must return to account selection before sending")
+					require.Empty(t, captures)
+					require.Zero(t, replacementProxyCalls.Load())
+					return
+				}
+				require.NoError(t, err)
+				require.NotNil(t, result)
+				require.Equal(t, http.StatusOK, recorder.Code)
+				require.Equal(t, len(wantPaths), sends)
+				require.Len(t, captures, len(wantPaths))
+				for _, path := range wantPaths {
+					capture := <-captures
+					require.Equal(t, "http://captured-target.example"+path, capture.target)
+					require.Equal(t, "Bearer rotated-token", capture.headers.Get("Authorization"))
+					require.Equal(t, []string{"captured"}, headerValuesEqualFold(capture.headers, "X-Relay-Snapshot"))
+				}
+				require.Zero(t, replacementProxyCalls.Load(), "token rotation cannot change the captured route")
+			})
+		}
 	}
 }
 

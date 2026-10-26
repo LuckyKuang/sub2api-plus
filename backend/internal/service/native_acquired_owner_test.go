@@ -116,8 +116,9 @@ func TestNativeAdaptersUseAcquiredOwnerAfterSelectedRelink(t *testing.T) {
 					}
 					*selected = *replacement
 					oauth := NewCNOAuthService(nil, nil, nil)
+					var tokens *ZhipuProjectTokenManager
 					if platform == PlatformZhipu {
-						oauth.zhipu = newProjectTokenTestService(t, &projectTokenTestClient{})
+						tokens = newProjectTokenTestService(t, &projectTokenTestClient{})
 					}
 					upstream := nativeAcquiredOwnerUpstream(t, selected.ID, 3)
 					req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, strings.NewReader(`{"model":"native-model","messages":[]}`))
@@ -127,9 +128,9 @@ func TestNativeAdaptersUseAcquiredOwnerAfterSelectedRelink(t *testing.T) {
 					req.Header.Set("X-Grok-Session-Id", "untrusted")
 					var response *http.Response
 					if entry == "gateway" {
-						response, err = (&OpenAIGatewayService{httpUpstream: upstream, cnOAuthService: oauth}).doOpenAIUpstream(req, newProxy.URL(), selected)
+						response, err = (&OpenAIGatewayService{httpUpstream: upstream, cnOAuthService: oauth, projectTokens: tokens}).doOpenAIUpstream(req, newProxy.URL(), selected)
 					} else {
-						response, err = (&AccountTestService{httpUpstream: upstream, cnOAuthService: oauth}).doOpenAIAccountTestUpstream(req, newProxy.URL(), selected, false)
+						response, err = (&AccountTestService{httpUpstream: upstream, cnOAuthService: oauth, projectTokens: tokens}).doOpenAIAccountTestUpstream(req, newProxy.URL(), selected, false)
 					}
 					require.NoError(t, err)
 					require.NotNil(t, response)
@@ -192,6 +193,8 @@ func TestNativeRefreshUsesFinalOwnerIdentityAndProxy(t *testing.T) {
 				refreshes++
 				require.NoError(t, req.ParseForm())
 				require.Equal(t, "old-refresh", req.Form.Get("refresh_token"))
+				require.Equal(t, "kimi-code-cli/2.3.1", req.UserAgent(), "the issuer call must use the owner reread under the coordinator")
+				require.Equal(t, "2.3.1", req.Header.Get("X-Msh-Version"))
 				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"access_token":"refreshed-token","refresh_token":"rotated-refresh","expires_in":3600,"token_type":"Bearer"}`))}, nil
 			})}
 			replacement := nativeAcquiredOwnerAccount(PlatformKimi, newProxy, "new-token", "2.3.2")
@@ -216,7 +219,7 @@ func TestNativeRefreshUsesFinalOwnerIdentityAndProxy(t *testing.T) {
 			require.NoError(t, err)
 			var response *http.Response
 			if mode == "models" || mode == "models-rebound-type" {
-				response, err = (&AccountTestService{httpUpstream: upstream, cnOAuthService: oauth}).doUpstreamModelsRequest(req, newProxy.URL(), selected)
+				response, err = (&AccountTestService{httpUpstream: upstream, cnOAuthService: oauth}).doUpstreamModelsRequest(req, selected)
 			} else if mode == "quota" {
 				response, err = oauth.roundTripNativeOAuthWithPrepare(req, selected, oauth.prepareKimiQuotaRequest, func(attempt *http.Request) (*http.Response, error) {
 					return (&AccountTestService{httpUpstream: upstream, cnOAuthService: oauth}).doOpenAIAccountTestUpstreamPrepared(attempt, newProxy.URL(), selected, false)
@@ -228,6 +231,9 @@ func TestNativeRefreshUsesFinalOwnerIdentityAndProxy(t *testing.T) {
 			require.NotNil(t, response)
 			_ = response.Body.Close()
 			require.Equal(t, 1, refreshes)
+			require.Equal(t, 1, repo.successCASCalls)
+			require.Equal(t, "refreshed-token", repo.account.GetCredential("access_token"))
+			require.Equal(t, "rotated-refresh", repo.account.GetCredential("refresh_token"))
 			if mode == "401-recovery" {
 				first := <-captures
 				require.Equal(t, "old", first.proxy)

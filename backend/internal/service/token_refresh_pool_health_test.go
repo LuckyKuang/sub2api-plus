@@ -72,7 +72,7 @@ func (r *poolHealthAccountRepo) UpdateCredentials(_ context.Context, id int64, _
 	return nil
 }
 
-func (r *poolHealthAccountRepo) UpdateOAuthCredentialsIfUnchanged(_ context.Context, expectedOwner *Account, replacement map[string]any) (bool, error) {
+func (r *poolHealthAccountRepo) UpdateOAuthRefreshCredentialsIfUnchanged(_ context.Context, expectedOwner *Account, replacement map[string]any) (bool, error) {
 	id := expectedOwner.ID
 	platform := expectedOwner.Platform
 	expected := expectedOwner.Credentials
@@ -90,7 +90,7 @@ func (r *poolHealthAccountRepo) UpdateOAuthCredentialsIfUnchanged(_ context.Cont
 }
 
 func (r *poolHealthAccountRepo) UpdateGrokOAuthCredentialsIfUnchanged(ctx context.Context, expectedOwner *Account, replacement map[string]any) (bool, error) {
-	return r.UpdateOAuthCredentialsIfUnchanged(ctx, expectedOwner, replacement)
+	return r.UpdateOAuthRefreshCredentialsIfUnchanged(ctx, expectedOwner, replacement)
 }
 
 func (r *poolHealthAccountRepo) SetError(context.Context, int64, string) error {

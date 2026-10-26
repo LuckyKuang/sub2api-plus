@@ -841,6 +841,10 @@ func (s *TokenRefreshService) refreshWithRetryWithRateGate(
 	refreshWindow time.Duration,
 	gate refreshAttemptGate,
 ) error {
+	nativeOAuth := account.IsDomesticOAuth()
+	if nativeOAuth && (s.refreshAPI == nil || executor == nil) {
+		return &providerConfigurationRefreshError{err: errors.New("native OAuth refresh coordinator is unavailable")}
+	}
 	ctx = WithAccountOutboundIdentity(ctx, account)
 	var lastErr error
 	maxRetries := s.maxRetries()
@@ -926,7 +930,7 @@ func (s *TokenRefreshService) refreshWithRetryWithRateGate(
 					if !ok {
 						err = &providerConfigurationRefreshError{err: errors.New("credential refresh success CAS repository is not configured")}
 					} else {
-						applied, saveErr := conditionalRepo.UpdateOAuthCredentialsIfUnchanged(attemptCtx, observedBeforeRefresh, newCredentials)
+						applied, saveErr := conditionalRepo.UpdateOAuthRefreshCredentialsIfUnchanged(attemptCtx, observedBeforeRefresh, newCredentials)
 						if saveErr != nil {
 							err = &providerCycleContainmentRefreshError{err: fmt.Errorf("failed to conditionally persist refreshed credentials: %w", saveErr)}
 						} else if !applied {
@@ -957,6 +961,11 @@ func (s *TokenRefreshService) refreshWithRetryWithRateGate(
 			// A shared preparation dependency has not rejected this account's
 			// grant. Contain the provider cycle without retrying or cooling down
 			// the account, including when an internal attempt budget expires.
+			err = &providerCycleContainmentRefreshError{err: err}
+		}
+		if nativeOAuth && err != nil && !errors.Is(err, errRefreshSkipped) && !isProviderScopedTerminalRefreshError(err) {
+			// A failed old grant is not evidence about a concurrently relinked
+			// account. Native providers have no unconditional status/cache writes.
 			err = &providerCycleContainmentRefreshError{err: err}
 		}
 		attemptTimedOut := errors.Is(oauthRefreshContextError(attemptCtx), context.DeadlineExceeded) && oauthRefreshContextError(ctx) == nil

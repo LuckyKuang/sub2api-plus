@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
-	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 )
 
 // Business origins. The ZCode client keeps the login/business origin and the
@@ -223,7 +222,11 @@ func (c *CredentialClient) ResolveIndividualCodingPlanKey(ctx context.Context, p
 	if err != nil {
 		return nil, err
 	}
-	return c.issueProjectToken(ctx, provider, accessToken, organizationID, projectID, apiKey)
+	token, err := c.IssueProjectAccessToken(ctx, provider, accessToken, organizationID, projectID, apiKey)
+	if err != nil {
+		return nil, err
+	}
+	return &CodingPlanCredential{APIKey: token.Token, KeyID: apiKey, ExpiresAt: token.ExpiresAt, OrganizationID: organizationID, ProjectID: projectID}, nil
 }
 
 // ResolveTeamPlanKey issues the team-plan project PAT for a linked account. The
@@ -262,7 +265,11 @@ func (c *CredentialClient) ResolveTeamPlanKey(ctx context.Context, provider, acc
 	if err != nil {
 		return nil, err
 	}
-	return c.issueProjectToken(ctx, provider, accessToken, organizationID, projectID, apiKey)
+	token, err := c.IssueProjectAccessToken(ctx, provider, accessToken, organizationID, projectID, apiKey)
+	if err != nil {
+		return nil, err
+	}
+	return &CodingPlanCredential{APIKey: token.Token, KeyID: apiKey, ExpiresAt: token.ExpiresAt, OrganizationID: organizationID, ProjectID: projectID}, nil
 }
 
 // ProjectAPIKeysURL builds the project API-key collection URL.
@@ -346,66 +353,6 @@ func (c *CredentialClient) listAPIKeys(ctx context.Context, listURL string, head
 	return payload.Data, nil
 }
 
-// IssueProjectToken renews the stored location under its original login owner.
-func (c *CredentialClient) IssueProjectToken(ctx context.Context, provider, token, organizationID, projectID, keyID string) (*CodingPlanCredential, error) {
-	if NormalizeProvider(provider) == "" || strings.TrimSpace(token) == "" || organizationID == "" || projectID == "" || keyID == "" {
-		return nil, fmt.Errorf("project_token_location_invalid")
-	}
-	return c.issueProjectToken(withIdentity(ctx), provider, token, organizationID, projectID, keyID)
-}
-
-// issueProjectToken follows ZCode shared/project-access-token-client.ts. A
-// disabled switch or malformed response cannot fall back to copying a secret.
-func (c *CredentialClient) issueProjectToken(ctx context.Context, provider, token, organizationID, projectID, keyID string) (*CodingPlanCredential, error) {
-	identity, _ := outboundidentity.FromContext(ctx)
-	version := identity.Version
-	if version == "" {
-		version = ResolveVersion()
-	}
-	body, _ := json.Marshal(map[string]string{"clientType": "zcode", "clientVersion": version})
-	started := time.Now()
-	var payload struct {
-		Code    json.RawMessage `json:"code"`
-		Success *bool           `json:"success"`
-		Data    *struct {
-			Enable      *bool   `json:"enable"`
-			AccessToken string  `json:"accessToken"`
-			TokenType   string  `json:"tokenType"`
-			ExpiresIn   float64 `json:"expiresIn"`
-			ExpiresAt   float64 `json:"expiresAt"`
-		} `json:"data"`
-	}
-	target := ProjectAPIKeysURL(c.origin(provider), organizationID, projectID) + "/" + url.PathEscape(keyID) + "/access_tokens"
-	if err := c.doJSON(ctx, http.MethodPost, target, map[string]string{"Authorization": "Bearer " + strings.TrimPrefix(token, "Bearer "), "Content-Type": "application/json"}, body, &payload); err != nil {
-		return nil, err
-	}
-	// PAT responses use projectTokenSuccessCodeSchema, which requires an
-	// explicit 0/200 code. A missing location may be reported inside HTTP 200.
-	code := strings.TrimSpace(string(payload.Code))
-	if code == "404" || code == `"404"` {
-		return nil, &BusinessHTTPError{Status: http.StatusNotFound}
-	}
-	if (code != "0" && code != "200" && code != `"0"` && code != `"200"`) || (payload.Success != nil && !*payload.Success) || payload.Data == nil {
-		return nil, fmt.Errorf("project_token_invalid_response")
-	}
-	data := payload.Data
-	if data.Enable != nil && !*data.Enable {
-		return nil, fmt.Errorf("project_token_disabled")
-	}
-	expires := time.Unix(int64(data.ExpiresAt), 0)
-	if data.ExpiresIn <= 0 || data.ExpiresIn > 365*24*3600 || data.ExpiresAt <= 0 {
-		return nil, fmt.Errorf("project_token_invalid_response")
-	}
-	if relative := started.Add(time.Duration(data.ExpiresIn * float64(time.Second))); relative.Before(expires) {
-		expires = relative
-	}
-	token = strings.TrimSpace(data.AccessToken)
-	if token == "" || strings.ContainsAny(token, "\r\n") || data.TokenType != "Bearer" || !expires.After(time.Now()) {
-		return nil, fmt.Errorf("project_token_invalid_response")
-	}
-	return &CodingPlanCredential{APIKey: token, KeyID: keyID, ExpiresAt: expires, OrganizationID: organizationID, ProjectID: projectID}, nil
-}
-
 // doJSON performs one business call and decodes the JSON body into dest. A nil
 // dest discards the body.
 func (c *CredentialClient) doJSON(ctx context.Context, method, target string, headers map[string]string, body []byte, dest any) error {
@@ -438,9 +385,15 @@ func (c *CredentialClient) doJSON(ctx context.Context, method, target string, he
 		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, (1<<20)+1))
 	if err != nil {
 		return err
+	}
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if len(raw) > 1<<20 {
+		return fmt.Errorf("business response exceeds limit")
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return &BusinessHTTPError{Status: resp.StatusCode}

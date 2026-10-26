@@ -109,7 +109,7 @@ func (r *grokReconcileRepo) UpdateCredentials(_ context.Context, id int64, crede
 	return nil
 }
 
-func (r *grokReconcileRepo) UpdateOAuthCredentialsIfUnchanged(_ context.Context, expectedOwner *Account, replacement map[string]any) (bool, error) {
+func (r *grokReconcileRepo) UpdateOAuthRefreshCredentialsIfUnchanged(_ context.Context, expectedOwner *Account, replacement map[string]any) (bool, error) {
 	id := expectedOwner.ID
 	platform := expectedOwner.Platform
 	expected := expectedOwner.Credentials

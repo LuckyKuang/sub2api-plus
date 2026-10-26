@@ -110,6 +110,50 @@ func (r *grokQuotaAccountRepo) UpdateExtra(_ context.Context, id int64, updates 
 	return nil
 }
 
+func (r *grokQuotaAccountRepo) UpdateCNControlExtraIfUnchanged(ctx context.Context, expected *Account, updates map[string]any) (bool, error) {
+	if r.mockAccountRepoForPlatform == nil || expected == nil {
+		return false, nil
+	}
+	current := r.accountsByID[expected.ID]
+	if current == nil || current.Platform != expected.Platform || current.Type != expected.Type || !reflect.DeepEqual(current.Credentials, expected.Credentials) || !reflect.DeepEqual(current.ProxyID, expected.ProxyID) || !sameTestCNProxySnapshot(current.Proxy, expected.Proxy) {
+		return false, nil
+	}
+	return true, r.UpdateExtra(ctx, expected.ID, updates)
+}
+
+func (r *grokQuotaAccountRepo) ApplyGrokRequestOutcomeIfUnchanged(ctx context.Context, expected *Account, outcome GrokRequestOutcome) (GrokRequestOutcomeResult, error) {
+	if expected == nil {
+		return GrokRequestOutcomeResult{}, nil
+	}
+	if r.mockAccountRepoForPlatform != nil {
+		current := r.accountsByID[expected.ID]
+		if current == nil || !testGrokOutcomeOwnersEqual(current, expected) {
+			return GrokRequestOutcomeResult{}, nil
+		}
+	}
+	if len(outcome.Extra) > 0 {
+		if err := r.UpdateExtra(ctx, expected.ID, outcome.Extra); err != nil {
+			return GrokRequestOutcomeResult{}, err
+		}
+	}
+	if outcome.TempUnschedulableUntil != nil {
+		if err := r.SetTempUnschedulable(ctx, expected.ID, *outcome.TempUnschedulableUntil, outcome.TempUnschedulableReason); err != nil {
+			return GrokRequestOutcomeResult{}, err
+		}
+	}
+	if outcome.RateLimitResetAt != nil {
+		if err := r.SetRateLimited(ctx, expected.ID, *outcome.RateLimitResetAt); err != nil {
+			return GrokRequestOutcomeResult{}, err
+		}
+	}
+	if outcome.ClearRateLimit && expected.RateLimitedAt != nil && expected.RateLimitResetAt != nil {
+		r.recoveryClearCalls++
+		r.recoveryObservedAt, r.recoveryObservedReset = *expected.RateLimitedAt, *expected.RateLimitResetAt
+		return GrokRequestOutcomeResult{Applied: r.recoveryClearResult}, nil
+	}
+	return GrokRequestOutcomeResult{Applied: true}, nil
+}
+
 func (r *grokQuotaAccountRepo) SetRateLimited(_ context.Context, id int64, resetAt time.Time) error {
 	r.rateLimitedCalls++
 	r.lastRateLimitedID = id
@@ -661,7 +705,7 @@ func TestGrokQuotaServiceProbeUsageRedactsUpstreamErrorBodyFromErrorAndLogs(t *t
 	require.Equal(t, xai.DefaultCLIBaseURL+"/responses", upstream.lastReq.URL.String())
 }
 
-func TestGrokQuotaServiceProbeUsageLoadsProxyWhenAccountEdgeMissing(t *testing.T) {
+func TestGrokQuotaServiceProbeUsageRejectsMissingCapturedProxy(t *testing.T) {
 	t.Parallel()
 
 	proxyID := int64(7)
@@ -690,9 +734,10 @@ func TestGrokQuotaServiceProbeUsageLoadsProxyWhenAccountEdgeMissing(t *testing.T
 	svc := NewGrokQuotaService(repo, proxyRepo, NewGrokTokenProvider(repo, nil), upstream, nil)
 
 	_, err := svc.ProbeUsage(context.Background(), 46)
-	require.NoError(t, err)
-	require.Equal(t, 1, proxyRepo.calls)
-	require.Equal(t, "http://proxy.test:3128", upstream.lastProxyURL)
+	require.ErrorContains(t, err, "GROK_QUOTA_PROXY_INVALID")
+	require.Zero(t, proxyRepo.calls, "a quota operation cannot replace its captured route from a mutable lookup")
+	require.Nil(t, upstream.lastReq)
+	require.Nil(t, account.Proxy)
 }
 
 func TestGrokQuotaServiceProbeUsageStoresNoHeadersState(t *testing.T) {

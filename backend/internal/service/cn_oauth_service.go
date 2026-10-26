@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
@@ -13,7 +14,6 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/deepseek"
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
-	"github.com/LuckyKuang/sub2api-plus/internal/pkg/proxyurl"
 	"github.com/google/uuid"
 )
 
@@ -26,7 +26,6 @@ type CNOAuthService struct {
 	refreshAPI  *OAuthRefreshAPI
 	admin       AdminService
 	modelTester *AccountTestService
-	zhipu       *ZhipuOAuthService
 }
 
 func NewCNOAuthService(proxyRepo ProxyRepository, accountRepo AccountRepository, admin AdminService) *CNOAuthService {
@@ -73,7 +72,10 @@ func (s *CNOAuthService) Start(ctx context.Context, owner int64, platform, regio
 		if account == nil || account.Platform != platform || account.Type != AccountTypeOAuth {
 			return nil, infraerrors.BadRequest("CN_OAUTH_ACCOUNT_INVALID", "account platform or authentication type does not match")
 		}
-		account = snapshotRequestCredentialAccount(account)
+		account, err = snapshotCNControlAccount(account)
+		if err != nil {
+			return nil, cnOAuthError(err)
+		}
 		proxyID = account.ProxyID
 		if platform == PlatformStepFun {
 			region = account.GetCredential("oauth_region")
@@ -98,6 +100,16 @@ func (s *CNOAuthService) Start(ctx context.Context, owner int64, platform, regio
 		if err != nil {
 			return nil, infraerrors.BadRequest("CN_OAUTH_PROXY_INVALID", "selected proxy configuration is invalid")
 		}
+		selectedID := *proxyID
+		proxyID = &selectedID
+	}
+	var loginOwner json.RawMessage
+	if account != nil {
+		var err error
+		loginOwner, err = json.Marshal(cnOAuthLoginOwnerFromAccount(account))
+		if err != nil {
+			return nil, cnOAuthError(err)
+		}
 	}
 	flowCtx := withNativeOAuthOutboundIdentity(ctx, platform)
 	if account != nil {
@@ -117,7 +129,7 @@ func (s *CNOAuthService) Start(ctx context.Context, owner int64, platform, regio
 		}
 	}
 	identity, _ := outboundidentity.FromContext(flowCtx)
-	session := &cnoauth.Session{Flow: flow, OwnerID: owner, AccountID: accountID, ProxyID: proxyID, ProxyURL: proxyURL, Identity: identity, NextPoll: time.Now().Add(time.Duration(flow.Interval) * time.Second)}
+	session := &cnoauth.Session{Flow: flow, OwnerID: owner, AccountID: accountID, ProxyID: proxyID, ProxyURL: proxyURL, LoginOwner: loginOwner, Identity: identity, NextPoll: time.Now().Add(time.Duration(flow.Interval) * time.Second)}
 	id, err := s.store.Create(ctx, session)
 	if err != nil {
 		return nil, cnOAuthError(err)
@@ -136,6 +148,7 @@ func (s *CNOAuthService) Advance(ctx context.Context, owner int64, platform, id,
 		if cancel {
 			session.Cancelled = true
 			session.Grant = nil
+			session.LoginOwner = nil
 			session.Flow.Verifier = ""
 			session.Flow.DeviceCode = ""
 		}
@@ -161,6 +174,7 @@ func (s *CNOAuthService) Advance(ctx context.Context, owner int64, platform, id,
 			session.Flow.Interval = min(60, session.Flow.Interval+5)
 		case errors.Is(err, cnoauth.ErrDenied), errors.Is(err, cnoauth.ErrExpired), errors.Is(err, cnoauth.ErrInvalidGrant):
 			session.Cancelled = true
+			session.LoginOwner = nil
 		case err != nil:
 			return err
 		default:
@@ -200,25 +214,11 @@ func (s *CNOAuthService) PreviewModels(ctx context.Context, owner int64, platfor
 		}
 		credentials := cnOAuthCredentials(session.Flow, session.Grant)
 		credentials[outboundIdentityCredential] = selectionFromIdentity(session.Identity)
-		account = &Account{Platform: platform, Type: AccountTypeOAuth, Credentials: credentials, ProxyID: session.ProxyID}
-		if account.ProxyID != nil {
-			_, proxy, err := proxyurl.Parse(session.ProxyURL)
-			if err != nil || proxy == nil {
-				return infraerrors.BadRequest("CN_OAUTH_PROXY_UNAVAILABLE", "authorization proxy snapshot is unavailable")
-			}
-			port, err := strconv.Atoi(proxy.Port())
-			if err != nil {
-				return infraerrors.BadRequest("CN_OAUTH_PROXY_UNAVAILABLE", "authorization proxy snapshot is unavailable")
-			}
-			account.Proxy = &Proxy{ID: *account.ProxyID, Protocol: proxy.Scheme, Host: proxy.Hostname(), Port: port, Status: StatusActive}
-			if proxy.User != nil {
-				account.Proxy.Username = proxy.User.Username()
-				account.Proxy.Password, _ = proxy.User.Password()
-			}
-			if _, err := requestCredentialOwnerProxyURL(context.Background(), account); err != nil {
-				return infraerrors.BadRequest("CN_OAUTH_PROXY_UNAVAILABLE", "authorization proxy snapshot is unavailable")
-			}
+		proxy, err := cnOAuthSessionProxy(session.ProxyID, session.ProxyURL)
+		if err != nil {
+			return err
 		}
+		account = &Account{Platform: platform, Type: AccountTypeOAuth, Credentials: credentials, ProxyID: session.ProxyID, Proxy: proxy}
 		return nil
 	}
 	if err := s.store.Update(ctx, id, validate); err != nil {
@@ -274,14 +274,37 @@ func (s *CNOAuthService) Complete(ctx context.Context, owner int64, platform, id
 	credentials[outboundIdentityCredential] = selectionFromIdentity(session.Identity)
 	var account *Account
 	if session.AccountID > 0 {
+		var savedOwner cnOAuthLoginOwner
+		if len(session.LoginOwner) == 0 || json.Unmarshal(session.LoginOwner, &savedOwner) != nil {
+			return nil, cnOAuthError(cnoauth.ErrSession)
+		}
+		expected := savedOwner.account()
+		if expected.ID != session.AccountID || expected.Platform != platform || expected.Type != AccountTypeOAuth {
+			return nil, cnOAuthError(cnoauth.ErrSession)
+		}
+		writer, ok := s.accountRepo.(CNOAuthLoginSnapshotRepository)
+		if !ok {
+			return nil, cnOAuthError(errors.New("atomic native OAuth login persistence is unavailable"))
+		}
 		existing, e := s.accountRepo.GetByID(ctx, session.AccountID)
 		if e != nil {
 			return nil, cnOAuthError(e)
 		}
-		if existing.Platform != platform || existing.Type != AccountTypeOAuth {
+		expectedOwner, expectedErr := cnControlOwnerFingerprint(expected)
+		currentOwner, currentErr := cnControlOwnerFingerprint(existing)
+		if expectedErr != nil || currentErr != nil || expectedOwner != currentOwner {
 			return nil, cnOAuthError(cnoauth.ErrSession)
 		}
-		credentials = MergeCredentials(existing.Credentials, credentials)
+		previousCredentials := existing.Credentials
+		if platform == PlatformStepFun {
+			previousCredentials = shallowCopyMap(previousCredentials)
+			for key := range previousCredentials {
+				if strings.HasPrefix(key, "step_account_") {
+					delete(previousCredentials, key)
+				}
+			}
+		}
+		credentials = MergeCredentials(previousCredentials, credentials)
 		delete(credentials, "api_key")
 		if platform == PlatformDeepseek || platform == PlatformStepFun {
 			delete(credentials, "refresh_token")
@@ -291,9 +314,21 @@ func (s *CNOAuthService) Complete(ctx context.Context, owner int64, platform, id
 				credentials["expires_at"] = session.Grant.ExpiresAt.UTC().Format(time.RFC3339)
 			}
 		}
-		account, err = s.admin.UpdateAccount(ctx, session.AccountID, &UpdateAccountInput{Credentials: credentials})
+		applied, persistErr := writer.CompleteCNOAuthLoginIfUnchanged(ctx, expected, credentials)
+		if persistErr != nil {
+			return nil, cnOAuthError(persistErr)
+		}
+		if !applied {
+			return nil, cnOAuthError(cnoauth.ErrSession)
+		}
+		account, err = s.accountRepo.GetByID(ctx, session.AccountID)
 		if err == nil {
-			account, err = s.admin.ClearAccountError(ctx, session.AccountID)
+			expected.Credentials = credentials
+			expectedOwner, expectedErr = cnControlOwnerFingerprint(expected)
+			currentOwner, currentErr = cnControlOwnerFingerprint(account)
+			if expectedErr != nil || currentErr != nil || expectedOwner != currentOwner {
+				return nil, cnOAuthError(cnoauth.ErrSession)
+			}
 		}
 	} else {
 		if len(input.ModelMapping) > 0 {
@@ -325,6 +360,7 @@ func (s *CNOAuthService) Complete(ctx context.Context, owner int64, platform, id
 			current.CompletedID = account.ID
 			current.Committing = false
 			current.Grant = nil
+			current.LoginOwner = nil
 			current.Flow.Verifier = ""
 			current.Flow.DeviceCode = ""
 			view = cnOAuthView(id, current)
@@ -360,7 +396,12 @@ func cnOAuthCredentials(flow *cnoauth.Flow, grant *cnoauth.Grant) map[string]any
 		return creds
 	}
 	if flow.Platform == PlatformStepFun && grant.StepLogin != nil {
-		creds["step_login"] = grant.StepLogin
+		session := grant.StepLogin
+		creds["step_account_access_token"] = session.AccessToken
+		creds["step_account_refresh_token"] = session.RefreshToken
+		creds["step_account_device_id"] = session.DeviceID
+		creds["step_account_app_id"] = session.AppID
+		creds["step_account_expires_at"] = session.ExpiresAt.UTC().Format(time.RFC3339)
 	}
 	if grant.RefreshToken != "" && flow.Platform != PlatformStepFun {
 		creds["refresh_token"] = grant.RefreshToken
@@ -388,6 +429,7 @@ type CNTokenRefresher struct {
 	owner               *Account
 	force               bool
 	rejectedAccessToken string
+	expectedOwner       string
 }
 
 func NewCNTokenRefresher(platform string) *CNTokenRefresher {
@@ -397,7 +439,24 @@ func (r *CNTokenRefresher) CacheKey(a *Account) string {
 	return "cn-oauth:" + a.Platform + ":" + strconv.FormatInt(a.ID, 10)
 }
 func (r *CNTokenRefresher) CanRefresh(a *Account) bool {
-	return a != nil && a.Platform == r.platform && a.IsDomesticOAuth() && (a.Platform == PlatformKimi || a.Platform == PlatformMiniMax) && strings.TrimSpace(a.GetCredential("refresh_token")) != "" && (r.owner == nil || sameCNOAuthOwner(r.owner, a))
+	if a == nil || a.Platform != r.platform || !a.IsDomesticOAuth() || (r.owner != nil && !sameCNOAuthOwner(r.owner, a)) {
+		return false
+	}
+	if r.expectedOwner != "" {
+		owner, err := cnControlOwnerFingerprint(a)
+		if err != nil || owner != r.expectedOwner {
+			return false
+		}
+	}
+	if a.Platform == PlatformStepFun {
+		for _, key := range []string{"step_account_access_token", "step_account_refresh_token", "step_account_device_id", "step_account_app_id"} {
+			if strings.TrimSpace(a.GetCredential(key)) == "" {
+				return false
+			}
+		}
+		return true
+	}
+	return (a.Platform == PlatformKimi || a.Platform == PlatformMiniMax) && strings.TrimSpace(a.GetCredential("refresh_token")) != ""
 }
 func (r *CNTokenRefresher) NeedsRefresh(a *Account, window time.Duration) bool {
 	if !r.CanRefresh(a) {
@@ -410,18 +469,38 @@ func (r *CNTokenRefresher) NeedsRefresh(a *Account, window time.Duration) bool {
 		return true
 	}
 	expiry := a.GetCredentialAsTime("expires_at")
+	if a.Platform == PlatformStepFun {
+		expiry = a.GetCredentialAsTime("step_account_expires_at")
+	}
 	return expiry == nil || time.Until(*expiry) < window
 }
 func (r *CNTokenRefresher) Refresh(ctx context.Context, a *Account) (map[string]any, error) {
 	if !r.CanRefresh(a) {
 		return nil, errors.New("reauthorization required")
 	}
-	a = snapshotRequestCredentialAccount(a)
+	a, err := snapshotCNControlAccount(a)
+	if err != nil {
+		return nil, NewProviderCredentialFailure("native_oauth_owner_invalid", err)
+	}
 	proxyURL, err := requestCredentialOwnerProxyURL(context.Background(), a)
 	if err != nil {
 		return nil, NewProviderCredentialFailure("native_oauth_proxy_unavailable", err)
 	}
+	// The coordinator acquired this exact refresh owner under its locks.
+	// Keep the inference attempt's older access-token evidence unchanged;
+	// the issuer call resolves identity from its own authoritative snapshot.
+	ctx = context.WithValue(ctx, requestCredentialOwnerContextKey{}, requestCredentialOwnerEvidence{
+		selected: outboundIdentityOwnerKey(a), credentialOwner: credentialOwnerKey(a), owner: a,
+	})
+	ctx = context.WithValue(ctx, requestCredentialTransportKey{}, false)
 	ctx = WithAccountOutboundIdentity(ctx, a)
+	if a.Platform == PlatformStepFun {
+		session, err := r.client.RefreshStepLogin(ctx, a.GetCredential("oauth_region"), proxyURL, &cnoauth.StepLogin{AccessToken: a.GetCredential("step_account_access_token"), RefreshToken: a.GetCredential("step_account_refresh_token"), DeviceID: a.GetCredential("step_account_device_id"), AppID: a.GetCredential("step_account_app_id")})
+		if err != nil {
+			return nil, err
+		}
+		return MergeCredentials(a.Credentials, map[string]any{"step_account_access_token": session.AccessToken, "step_account_refresh_token": session.RefreshToken, "step_account_expires_at": session.ExpiresAt.UTC().Format(time.RFC3339)}), nil
+	}
 	grant, err := r.client.Refresh(ctx, a.Platform, a.GetCredential("oauth_region"), a.GetCredential("refresh_token"), proxyURL)
 	if err != nil {
 		return nil, err
@@ -455,14 +534,34 @@ func cnOAuthSameProxyID(selected, current *int64) bool {
 }
 
 func (s *CNOAuthService) refreshAccount(ctx context.Context, a *Account, force bool, rejected string) (*Account, error) {
-	if a == nil || !a.IsDomesticOAuth() || (a.Platform != PlatformKimi && a.Platform != PlatformMiniMax) {
+	if a == nil || !a.IsDomesticOAuth() || (a.Platform != PlatformKimi && a.Platform != PlatformMiniMax && a.Platform != PlatformStepFun) {
 		return nil, NewAccountCredentialFailure("native_oauth_reauthorization_required", nil)
 	}
 	if s == nil || s.refreshAPI == nil || s.client == nil {
 		return nil, NewProviderCredentialFailure("native_oauth_refresh_unavailable", nil)
 	}
 	executor := &CNTokenRefresher{client: s.client, platform: a.Platform, owner: snapshotOAuthRefreshAccount(a), force: force, rejectedAccessToken: rejected}
+	if a.Platform == PlatformStepFun && !executor.CanRefresh(a) {
+		return nil, NewAccountCredentialFailure("native_oauth_reauthorization_required", nil)
+	}
 	result, err := s.refreshAPI.RefreshIfNeeded(ctx, a, executor, 2*time.Minute)
+	if err != nil && rejected != "" && oauthRefreshContextError(ctx) == nil && errors.Is(err, errOAuthRefreshAccountStateChanged) && s.accountRepo != nil {
+		// A concurrent refresh may win the full-grant CAS after this attempt
+		// received its response. Only an explicit 401 retry can reuse that
+		// rotation, and only within the same known authorization lifetime.
+		current, readErr := s.accountRepo.GetByID(ctx, a.ID)
+		if ctxErr := oauthRefreshContextError(ctx); ctxErr != nil {
+			return nil, ctxErr
+		}
+		if readErr == nil && current != nil && current.IsActive() && sameCNOAuthOwner(a, current) && strings.TrimSpace(a.GetCredential(domesticOAuthLoginIDCredential)) != "" {
+			if current.GetCredential("access_token") == rejected {
+				return nil, NewProviderCredentialFailure("native_oauth_rejected_token_unchanged", nil)
+			}
+			if sameCNOAuthRotationContext(a, current) && executor.CanRefresh(current) {
+				result, err = &OAuthRefreshResult{Account: current}, nil
+			}
+		}
+	}
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
@@ -490,13 +589,34 @@ func (s *CNOAuthService) refreshAccount(ctx context.Context, a *Account, force b
 	if !sameCNOAuthOwner(a, fresh) || !fresh.IsActive() {
 		return nil, NewProviderCredentialFailure("native_oauth_owner_changed", nil)
 	}
+	if a.Platform == PlatformStepFun && !executor.CanRefresh(fresh) {
+		return nil, WithCredentialFailureAccount(NewAccountCredentialFailure("native_oauth_reauthorization_required", nil), fresh)
+	}
 	if strings.TrimSpace(fresh.GetCredential("access_token")) == "" {
 		return nil, WithCredentialFailureAccount(NewAccountCredentialFailure("native_oauth_access_token_missing", nil), fresh)
 	}
 	if rejected != "" && fresh.GetCredential("access_token") == rejected {
 		return nil, NewProviderCredentialFailure("native_oauth_rejected_token_unchanged", nil)
 	}
+	if rejected != "" && !result.Refreshed && strings.TrimSpace(a.GetCredential(domesticOAuthLoginIDCredential)) == "" {
+		return nil, NewProviderCredentialFailure("native_oauth_owner_changed", nil)
+	}
+	if rejected != "" && !result.Refreshed && !sameCNOAuthRotationContext(a, fresh) {
+		return nil, NewProviderCredentialFailure("native_oauth_owner_changed", nil)
+	}
 	return fresh, nil
+}
+
+func sameCNOAuthRotationContext(previous, current *Account) bool {
+	previous = snapshotOAuthRefreshAccount(previous)
+	current = snapshotOAuthRefreshAccount(current)
+	for _, key := range []string{"access_token", "refresh_token", "expires_at", "expires_in", "_token_version"} {
+		delete(previous.Credentials, key)
+		delete(current.Credentials, key)
+	}
+	previousOwner, previousErr := cnControlOwnerFingerprint(previous)
+	currentOwner, currentErr := cnControlOwnerFingerprint(current)
+	return previousErr == nil && currentErr == nil && previousOwner == currentOwner
 }
 
 // One explicit HTTP 401 can recover the selected account before failover. The
@@ -559,6 +679,9 @@ func (s *CNOAuthService) prepareRequest(req *http.Request, a *Account) error {
 	if !a.IsDomesticOAuth() {
 		return nil
 	}
+	if _, err := a.StrictProxyURL(); err != nil {
+		return err
+	}
 	if _, err := cnoauth.NormalizeRegion(a.Platform, a.GetCredential("oauth_region")); err != nil {
 		return NewAccountCredentialFailure("native_oauth_region_invalid", err)
 	}
@@ -574,6 +697,9 @@ func (s *CNOAuthService) prepareRequest(req *http.Request, a *Account) error {
 		}
 		recordTransmittedRequestCredentialOwner(req, a, a.GetCredential("access_token"))
 		return nil
+	}
+	if req.Method == http.MethodGet {
+		return s.prepareControlRequest(req, a)
 	}
 	expected, _ := url.Parse(cnoauth.ModelBase(a.Platform, a.GetCredential("oauth_region")))
 	if req.URL.User != nil || req.URL.Fragment != "" || req.URL.Scheme != expected.Scheme || req.URL.Host != expected.Host || req.URL.Path != strings.TrimRight(expected.Path, "/")+"/v1/messages" {

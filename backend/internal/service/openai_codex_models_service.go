@@ -1925,6 +1925,13 @@ func (s *OpenAIGatewayService) fetchCodexModelsManifestUpstreamForRequest(source
 }
 
 func (s *OpenAIGatewayService) fetchOpenAIModelsUpstream(ctx context.Context, request openAIModelsRequest, ifNoneMatch string) (*OpenAIModelsResponse, error) {
+	if request.credentialAccount != nil {
+		proxyURL, err := request.credentialAccount.StrictProxyURL()
+		if err != nil {
+			return nil, infraerrors.New(http.StatusBadGateway, "OPENAI_CODEX_MODELS_PROXY_INVALID", "Models configured proxy is invalid")
+		}
+		request.proxyURL = proxyURL
+	}
 	reqCtx, cancel := context.WithTimeout(ctx, codexModelsManifestRequestTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, request.url, nil)
@@ -1942,7 +1949,23 @@ func (s *OpenAIGatewayService) fetchOpenAIModelsUpstream(ctx context.Context, re
 			return nil, infraerrors.New(http.StatusInternalServerError, "OPENAI_CODEX_MODELS_UPSTREAM_NOT_CONFIGURED", "Codex models upstream HTTP client is not configured")
 		}
 		req = req.WithContext(WithHTTPUpstreamProfile(req.Context(), HTTPUpstreamProfileOpenAI))
-		resp, err = s.httpUpstream.Do(req, request.proxyURL, request.accountID, request.accountConcurrency)
+		if usesZhipuProjectToken(request.credentialAccount) {
+			resp, err = s.projectTokens.RoundTrip(req, request.credentialAccount, func(attempt *http.Request) (*http.Response, error) {
+				return s.httpUpstream.Do(attempt, request.proxyURL, request.accountID, request.accountConcurrency)
+			})
+		} else {
+			if request.credentialAccount != nil && request.credentialAccount.IsDomesticOAuth() {
+				oauth := s.cnOAuthService
+				if oauth == nil {
+					oauth = NewCNOAuthService(nil, nil, nil)
+				}
+				if err = oauth.prepareRequest(req, request.credentialAccount); err != nil {
+					return nil, err
+				}
+				prepareAccountOutboundRequest(req, cnControlRequestOwner(req.Context(), request.credentialAccount))
+			}
+			resp, err = s.httpUpstream.Do(req, request.proxyURL, request.accountID, request.accountConcurrency)
+		}
 	} else {
 		handled := false
 		if s.pluginManager != nil {
@@ -2560,6 +2583,11 @@ func validateCodexModelsManifestEnvelope(body []byte) error {
 func buildOpenAIModelsCacheKey(request openAIModelsRequest) string {
 	hasher := sha256.New()
 	_, _ = fmt.Fprintf(hasher, "%d\n%d\n%t\n%s\n%s\n", request.accountID, request.credentialAccountID, request.standardModelsList, request.proxyURL, request.url)
+	if usesZhipuProjectToken(request.credentialAccount) || (request.credentialAccount != nil && request.credentialAccount.IsDomesticOAuth()) {
+		if owner, err := cnControlOwnerFingerprint(request.credentialAccount); err == nil {
+			_, _ = fmt.Fprintf(hasher, "owner:%s\n", owner)
+		}
+	}
 	headerNames := make([]string, 0, len(request.headers))
 	for name := range request.headers {
 		headerNames = append(headerNames, name)

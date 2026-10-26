@@ -1,6 +1,6 @@
 # DeepSeek、Kimi、Zhipu、MiniMax、StepFun 模型目录
 
-前四个平台官方文档核对日期：**2026-10-02**；StepFun 客户端源码核对日期：**2026-10-08**。当前对话及视觉理解模型维护在
+前四个平台官方文档核对日期：**2026-10-02**；MiniMax、StepFun 客户端源码复核日期：**2026-10-25**。当前对话及视觉理解模型维护在
 [`models.json`](../backend/internal/pkg/cnmodels/models.json)，后端通过 Go embed、
 前端通过静态导入共用该文件。更新目录时同时核对下列官方来源，不再分别维护两份列表。
 
@@ -11,7 +11,7 @@
 | DeepSeek | [模型与价格](https://api-docs.deepseek.com/quick_start/pricing) | 展示 `deepseek-flash`、`deepseek-v4.1-flash`、`deepseek-v4-flash-vision-exp`、`deepseek-v4-flash`、`deepseek-v4-flash-0731`、`deepseek-v4-pro`、`deepseek-v4-pro-0813`。`deepseek-flash` 当前指向 V4.1 Flash；官方接受两个 V4 Flash 旧名并由上游路由到新版 Flash。上述名称在项目中分别保留，不自动相互映射。开源权重、蒸馏模型和旧 R1/V3 名称不作为官方 API 当前预设。 |
 | Kimi | [模型列表](https://platform.kimi.ai/docs/models)、[Kimi Code 接入说明](https://www.kimi.com/code/docs/en/benefits.html) | K3、K2.7 Code／highspeed、K2.6；Coding 端点另有 `kimi-for-coding`、`kimi-for-coding-highspeed`，需要对应会员权限。旧 moonshot-v1、K2、K2.5、kimi-latest 已下线，不加入新预设。 |
 | Zhipu | [模型概览](https://docs.bigmodel.cn/cn/guide/start/model-overview)、[价格](https://docs.bigmodel.cn/cn/guide/start/pricing)、[GLM-5.3 Flash／FlashX](https://docs.bigmodel.cn/cn/guide/models/vlm/glm-5.3-flash) | 采用上述文档及对话补全接口仍列出的文本／视觉模型，最新系列为 `glm-5.3`、`glm-5.3-flash`、`glm-5.3-flashx`。仍在官方文档中的历史、免费型号继续提供；旧 chatglm 预设及独立图像生成、音频、视频生成、向量接口模型不加入本目录。 |
-| MiniMax | [模型概览](https://platform.minimaxi.com/docs/guides/models-intro)、[Chat Completions](https://platform.minimaxi.com/docs/api-reference/text-chat-openai)、[M Plan](https://platform.minimaxi.com/docs/m-plan/intro) | 按官方接口枚举维护 9 个模型 ID，保留 `MiniMax-` 大小写及 `highspeed` 后缀。最新 `MiniMax-M3.1-Flash-Preview` 暂时仅通过 M Plan 和 MiniMax Code 提供；M3、M2.7 及官方仍列出的 M2 历史型号继续提供。旧 abab 系列不加入新预设。 |
+| MiniMax | [模型概览](https://platform.minimaxi.com/docs/guides/models-intro)、[Chat Completions](https://platform.minimaxi.com/docs/api-reference/text-chat-openai)、[M Plan](https://platform.minimaxi.com/docs/m-plan/intro) | 按官方接口枚举维护 9 个模型 ID，保留 `MiniMax-` 大小写及 `highspeed` 后缀。当前官方客户端候选使用正式 ID `MiniMax-M3.1-Flash`；M3、M2.7 及官方仍列出的 M2 历史型号继续提供。旧 abab 系列不加入新预设。 |
 
 候选列表是平台的维护目录，不代表当前账号、套餐或地区必然可以调用全部条目。
 账号选择器的上游同步仍用于取得该账号实际可用的模型；管理员也可以手工添加模型、映射与通配符。
@@ -25,8 +25,15 @@ API Key 账号使用相同的候选规则：有显式 `model_mapping` 时只列�
 “同步上游模型”继续沿用各账号类型的现有能力：例如 MiniMax 托管 OAuth 使用配置目录，
 不提供自定义供应商的实时模型发现操作。
 
+MiniMax Code 复核基线为 `da22f11c55d4748155d7162c1030414228a00565` 的
+`packages/config/src/minimax-model-catalog.ts`。默认候选以 `MiniMax-M3.1-Flash`
+替换 Preview 名称；已有手工映射、白名单和独立价格条目不据此自动改写。
+正式 ID 不自动继承 `MiniMax-M3.1-Flash-Preview` 的价格。官方 M3/M3.1 客户端
+声明图片、视频和 Files 上传能力，不能据此认定网关每种转换或套餐都支持这些能力。
+本目录不新增 Files 上传/查询/删除路由；原生请求保留文件引用不等于完成文件生命周期。
+
 StepFun 候选来自提供的 Step-Code 源码提交
-`519e4de4ed2162d3667be1821cb92ada6b884e5a` 的
+`81e79bc4b699148d6823fedde9b5e70d9a80255f` 的
 `packages/coding-agent/src/step/defaults.ts`：
 `step-5-preview`、`step-3.7-flash`、`step-3.5-flash-2603`、
 `step-3.5-flash`、`step-router-v1`。其中 `step-5-preview` 为客户端默认模型。

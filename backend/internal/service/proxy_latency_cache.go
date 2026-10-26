@@ -24,6 +24,8 @@ type ProxyLatencyInfo struct {
 }
 
 type ProxyLatencyCache interface {
-	GetProxyLatencies(ctx context.Context, proxyIDs []int64) (map[int64]*ProxyLatencyInfo, error)
-	SetProxyLatency(ctx context.Context, proxyID int64, info *ProxyLatencyInfo) error
+	// Observations belong to a captured saved proxy generation. An operation
+	// finishing after an edit must not publish into the replacement's cache.
+	GetProxyLatencies(ctx context.Context, proxies []Proxy) (map[int64]*ProxyLatencyInfo, error)
+	SetProxyLatency(ctx context.Context, proxy *Proxy, info *ProxyLatencyInfo) error
 }

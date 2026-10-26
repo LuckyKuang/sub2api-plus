@@ -7,7 +7,7 @@ import (
 )
 
 type OAuthRefreshSuccessRepository interface {
-	UpdateOAuthCredentialsIfUnchanged(context.Context, *Account, map[string]any) (bool, error)
+	UpdateOAuthRefreshCredentialsIfUnchanged(context.Context, *Account, map[string]any) (bool, error)
 }
 
 // Keep only a refresh of the exact attempted grant. A concurrently reauthorized
@@ -21,7 +21,7 @@ func (api *OAuthRefreshAPI) persistOAuthRefresh(ctx context.Context, cacheKey st
 	if !ok {
 		return nil, oauthRefreshPersistenceFailure(prefix+"_persistence_unavailable", nil)
 	}
-	applied, err := repo.UpdateOAuthCredentialsIfUnchanged(ctx, attempted, credentials)
+	applied, err := repo.UpdateOAuthRefreshCredentialsIfUnchanged(ctx, attempted, credentials)
 	if err != nil {
 		return nil, oauthRefreshPersistenceFailure(prefix+"_persistence_failed", err)
 	}

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -35,6 +36,10 @@ func (s *GrokQuotaService) scheduleGrokObservedModelsSync(ctx context.Context, a
 	if s == nil || account == nil || !account.IsGrokOAuth() || s.accountRepo == nil {
 		return
 	}
+	account, err := snapshotCNControlAccount(account)
+	if err != nil {
+		return
+	}
 	id := account.ID
 	if _, loaded := grokObservedModelsFlight.LoadOrStore(id, struct{}{}); loaded {
 		return
@@ -60,12 +65,11 @@ func (s *GrokQuotaService) syncGrokObservedModels(ctx context.Context, account *
 	if s == nil || account == nil {
 		return nil
 	}
-	owner, err := requestCredentialAccount(ctx, account)
+	account, err := snapshotCNControlAccount(account)
 	if err != nil {
 		return err
 	}
-	account = snapshotRequestCredentialAccount(owner)
-	if _, err := requestCredentialOwnerProxyURL(context.Background(), account); err != nil {
+	if _, err := account.StrictProxyURL(); err != nil {
 		return err
 	}
 	// Skip if snapshot is still fresh.
@@ -163,14 +167,16 @@ func (s *GrokQuotaService) syncGrokObservedModels(ctx context.Context, account *
 	if err := json.Unmarshal(raw, &asMap); err != nil {
 		return err
 	}
-	conditional, ok := s.accountRepo.(CredentialStateMutationRepository)
-	if !ok {
-		return nil
-	}
-	_, err = conditional.ApplyCredentialStateMutation(ctx, account, CredentialStateMutation{Extra: map[string]any{
+	applied, err := persistCNControlExtra(ctx, s.accountRepo, account, map[string]any{
 		grokObservedModelsExtraKey: asMap,
-	}})
-	return err
+	})
+	if err != nil {
+		return err
+	}
+	if !applied {
+		return errors.New("model discovery credential owner changed")
+	}
+	return nil
 }
 
 func extractGrokModelIDsFromModelsBody(body []byte) []string {

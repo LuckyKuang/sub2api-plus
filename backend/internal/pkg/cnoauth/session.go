@@ -20,6 +20,7 @@ type Session struct {
 	AccountID   int64                     `json:"account_id,omitempty"`
 	ProxyID     *int64                    `json:"proxy_id,omitempty"`
 	ProxyURL    string                    `json:"proxy_url,omitempty"`
+	LoginOwner  json.RawMessage           `json:"login_owner,omitempty"`
 	Identity    outboundidentity.Identity `json:"identity"`
 	Grant       *Grant                    `json:"grant,omitempty"`
 	NextPoll    time.Time                 `json:"next_poll"`

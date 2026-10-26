@@ -479,12 +479,46 @@ WebSocket ingress or direct WebSocket upstream capability. The account-type
 pass-through regression matrix includes all three native providers, alongside
 the existing HTTP/WS stage-order and canonical real-payload suites.
 
-The domestic identity source review also permits linked GLM OAuth accounts to
-use their already-derived plan API key on the OpenAI-compatible forwarding path.
-This changes credential retrieval only: canonical extraction and the accepted
-request's audit-before-selection boundary remain the existing CN adapter path.
-No new ingress endpoint, payload shape, audit exemption, or raw-content logging
-is introduced by protocol-specific outbound identity rendering.
+The official DeepSeek harness at `22ddee3792402c3e70ec5f86a63c3e3e895a2f60`
+serializes file images as `{"type":"image","source":{"type":"file","file_id":"..."}}`
+and tool activation/removal as `tool_addition` / `tool_removal` blocks with a
+`tool_reference` in system-role Messages. Its declared tools may carry
+`defer_loading: true`. Native Messages forwarding preserves those fields and
+the official `files-api-2025-04-14` and
+`mid-conversation-tool-changes-2026-07-01` beta tokens. File IDs, tool references
+and system tool updates are opaque to direct-user audit. A final system update
+does not make an earlier user message current; a later current user text block
+remains auditable by both engines, including alongside a file image.
+
+MiniMax Code at `da22f11c55d4748155d7162c1030414228a00565` accepts inline
+image/video sources and replaces uploaded media sources with
+`{"type":"url","url":"mm_file://..."}` while retaining the original image or
+video block. Its legacy image block with a `video/*` MIME type uses the same
+pass-through contract. Provider file references and video bytes are not prompt
+text or fetchable audit images. Inline `image/*` data retains the existing
+Content Moderation image extraction; recognized sibling user text enters both
+engines. Opaque-only payloads remain allowed in blocking mode and cannot become
+audit dependency errors or WebSocket closes.
+
+`domestic_provider_audit_contract_test.go` fixes these independently derived
+semantic expectations for both engines and exercises the shared HTTP/WS audit
+stages. `domestic_provider_audit_order_test.go` exercises the actual Messages
+handler and proves that a policy block precedes account selection and user
+concurrency. `domestic_provider_native_payload_test.go` verifies the original
+Messages payload and beta tokens at upstream dispatch for API Key/native OAuth
+and streaming/buffered responses, alongside provider-owned authentication and
+trusted identity. These tests cover existing Messages forwarding only; they do
+not add or claim Files upload, download, listing or deletion routes.
+
+Linked GLM OAuth accounts acquire a short-lived project access token (PAT) using
+the credential-owning login and public project Key ID. The public Key ID is
+metadata, never an authentication fallback. PAT acquisition for an accepted
+inference request occurs after canonical extraction, policy evaluation and
+account selection, preserving the existing CN adapter's audit-before-selection
+boundary. Credential operations reuse the selected owner's trusted identity;
+old off-peak ticket refresh and settlement retain their original owner after a
+relink. These changes introduce no ingress endpoint, payload shape, audit
+exemption or raw-content logging.
 
 ## StepFun transport
 

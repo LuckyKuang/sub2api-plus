@@ -52,7 +52,7 @@ func TestCredentialProxyCASRejectsSameRowReplacement(t *testing.T) {
 	changes := []struct{ name, sql string }{
 		{"protocol", "protocol='socks5'"}, {"host", "host='new.invalid'"}, {"port", "port=9090"},
 		{"username", "username='new-user'"}, {"password", "password='new-password'"},
-		{"status", "status='inactive'"}, {"deleted", "deleted_at=NOW()"},
+		{"status", "status='inactive'"}, {"expiry", "expires_at=NOW()+INTERVAL '1 day'"}, {"deleted", "deleted_at=NOW()"},
 	}
 	for _, operation := range credentialProxyMutationCases() {
 		for _, change := range changes {
@@ -255,7 +255,9 @@ func TestGrokMissingProxyCASCannotQuarantineRestoredRow(t *testing.T) {
 	label := "credential_missing_proxy_restore"
 	repo.sql = &credentialProxyMarkedSQLExecutor{sqlExecutor: integrationDB, label: label}
 	completed := make(chan credentialProxyMutationResult, 1)
-	snapshot := service.GrokCredentialMutationSnapshot{CredentialsJSON: `{"access_token":"sent"}`, ProxyID: owner.ProxyID, ProxyMissing: true}
+	missingOwner := *owner
+	missingOwner.Proxy = nil
+	snapshot := service.GrokCredentialMutationSnapshot{Owner: &missingOwner, CredentialsJSON: `{"access_token":"sent"}`, ProxyID: owner.ProxyID, ProxyMissing: true}
 	go func() {
 		applied, err := repo.SetGrokCredentialErrorIfMatch(ctx, owner.ID, snapshot, string(service.GrokCredentialReasonProxyInvalid))
 		completed <- credentialProxyMutationResult{applied: applied, err: err}

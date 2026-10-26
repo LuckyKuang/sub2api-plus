@@ -124,6 +124,11 @@ func (r *cnBalanceProbeRepo) ApplyCredentialStateMutation(_ context.Context, own
 	return true, nil
 }
 
+func (r *cnBalanceProbeRepo) UpdateCNControlExtraIfUnchanged(ctx context.Context, expected *Account, updates map[string]any) (bool, error) {
+	return r.ApplyCredentialStateMutation(ctx, expected, CredentialStateMutation{Extra: updates,
+		RequireTempUnschedulableUnchanged: true, ObservedTempUntil: expected.TempUnschedulableUntil, ObservedTempReason: expected.TempUnschedulableReason})
+}
+
 func newDeepSeekBalanceProbeAccount() *Account {
 	return &Account{
 		ID:       42,
@@ -197,4 +202,16 @@ func TestCNProviderBalanceService_DeepSeekValidZeroBalanceRemainsSuccessful(t *t
 	require.Zero(t, result.Balance)
 	require.Len(t, result.Balances, 1)
 	require.Len(t, repo.extraWrites, 1, "a valid upstream zero balance must still be persisted")
+}
+
+func (r *cnBalanceProbeRepo) UpdateCNBalanceScheduleIfUnchanged(ctx context.Context, owner *Account, until *time.Time, reason string) (bool, error) {
+	r.mu.Lock()
+	unchanged := r.account != nil && owner != nil && r.account.Schedulable == owner.Schedulable
+	r.mu.Unlock()
+	if !unchanged {
+		return false, nil
+	}
+	mutation := CredentialStateMutation{RequireTempUnschedulableUnchanged: true, ObservedTempUntil: owner.TempUnschedulableUntil, ObservedTempReason: owner.TempUnschedulableReason,
+		TempUnschedulableUntil: until, TempUnschedulableReason: reason, ClearTempUnschedulable: until == nil}
+	return r.ApplyCredentialStateMutation(ctx, owner, mutation)
 }

@@ -48,6 +48,7 @@ type Flow struct {
 	Platform      string    `json:"platform"`
 	Region        string    `json:"region"`
 	DeviceCode    string    `json:"device_code,omitempty"`
+	FlowID        string    `json:"flow_id,omitempty"`
 	UserCode      string    `json:"user_code,omitempty"`
 	PollParameter string    `json:"poll_parameter,omitempty"`
 	Verifier      string    `json:"verifier,omitempty"`
@@ -143,10 +144,10 @@ func snapshot(ctx context.Context, platform string) context.Context {
 	return outboundidentity.WithIdentity(ctx, identity)
 }
 func (c *Client) request(ctx context.Context, proxy, target string, body io.Reader, contentType string) (map[string]any, int, error) {
-	return c.requestWithMethod(ctx, proxy, http.MethodPost, target, body, contentType, nil)
+	return c.requestHeaders(ctx, proxy, http.MethodPost, target, body, contentType, nil)
 }
 
-func (c *Client) requestWithMethod(ctx context.Context, proxy, method, target string, body io.Reader, contentType string, headers map[string]string) (map[string]any, int, error) {
+func (c *Client) requestHeaders(ctx context.Context, proxy, method, target string, body io.Reader, contentType string, headers map[string]string) (map[string]any, int, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, method, target, body)
@@ -161,11 +162,11 @@ func (c *Client) requestWithMethod(ctx context.Context, proxy, method, target st
 		identity = minimax.ControlIdentity(identity)
 	}
 	*req = *req.WithContext(outboundidentity.WithIdentity(ctx, identity))
+	for key, value := range headers {
+		req.Header.Set(key, value)
+	}
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
-	}
-	for k, v := range headers {
-		req.Header.Set(k, v)
 	}
 	req.Header.Set("Accept", "application/json")
 	outboundidentity.ApplyContext(req)
@@ -187,6 +188,9 @@ func (c *Client) requestWithMethod(ctx context.Context, proxy, method, target st
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 65537))
 	if err != nil || len(data) > 65536 {
 		return nil, resp.StatusCode, errors.New("invalid oauth response size")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, resp.StatusCode, err
 	}
 	var value map[string]any
 	if json.Unmarshal(data, &value) != nil || value == nil {

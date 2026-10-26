@@ -38,20 +38,7 @@ func credentialMutationProxyPredicate(proxyID *int64, proxy *service.Proxy, prox
 		return "", nil, errors.New("credential mutation requires the observed hydrated proxy")
 	}
 	first := len(args) + 1
-	args = append(args, proxy.Protocol, proxy.Host, proxy.Port, proxy.Username, proxy.Password, proxy.Status)
-	predicate := fmt.Sprintf("EXISTS (SELECT p.id FROM proxies p WHERE p.id = $%d AND p.deleted_at IS NULL AND p.protocol = $%d AND p.host = $%d AND p.port = $%d AND COALESCE(p.username, '') = $%d AND COALESCE(p.password, '') = $%d AND p.status = $%d FOR SHARE)", proxyParameter, first, first+1, first+2, first+3, first+4, first+5)
+	args = append(args, proxy.Protocol, proxy.Host, proxy.Port, proxy.Username, proxy.Password, proxy.Status, proxy.ExpiresAt)
+	predicate := fmt.Sprintf("EXISTS (SELECT p.id FROM proxies p WHERE p.id = $%d AND p.deleted_at IS NULL AND p.protocol = $%d AND p.host = $%d AND p.port = $%d AND COALESCE(p.username, '') = $%d AND COALESCE(p.password, '') = $%d AND p.status = $%d AND p.expires_at IS NOT DISTINCT FROM $%d FOR SHARE)", proxyParameter, first, first+1, first+2, first+3, first+4, first+5, first+6)
 	return predicate, args, nil
-}
-
-func grokCredentialMutationProxyPredicate(snapshot service.GrokCredentialMutationSnapshot, proxyParameter int, args []any, missingProxyFailure bool) (string, []any, error) {
-	if snapshot.ProxyMissing {
-		if !missingProxyFailure || snapshot.ProxyID == nil || snapshot.Proxy != nil {
-			return "", nil, errors.New("credential mutation requires explicit missing-proxy failure evidence")
-		}
-		// A configured missing proxy is a soft-deleted row (the account FK
-		// clears bindings on physical deletion). Lock that invalid state so a
-		// simultaneous restoration cannot be overwritten by stale quarantine.
-		return fmt.Sprintf("EXISTS (SELECT p.id FROM proxies p WHERE p.id = $%d AND p.deleted_at IS NOT NULL FOR SHARE)", proxyParameter), args, nil
-	}
-	return credentialMutationProxyPredicate(snapshot.ProxyID, snapshot.Proxy, proxyParameter, args)
 }

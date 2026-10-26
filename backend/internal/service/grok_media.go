@@ -667,6 +667,13 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 	if account.Platform != PlatformGrok {
 		return nil, fmt.Errorf("account platform %s is not supported for grok media", account.Platform)
 	}
+	// Token acquisition may advance the sender snapshot to a newer version of
+	// this grant. The concurrency reservation belongs to the selected resource.
+	selectedAccount := *account
+	ctx, account, _, err = captureGrokRequestOwner(ctx, account)
+	if err != nil {
+		return nil, err
+	}
 
 	ctx = WithOutboundIdentityScope(ctx, c)
 	token, _, err := s.getRequestCredential(ctx, c, account)
@@ -675,9 +682,8 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 	}
 	ctx = withRequestCredentialOwner(ctx, account, token)
 	if endpoint == GrokMediaEndpointVideoContent {
-		return s.forwardGrokMediaVideoContent(ctx, c, account, token, requestID, startTime)
+		return s.forwardGrokMediaVideoContent(ctx, c, account, &selectedAccount, token, requestID, startTime)
 	}
-	selectedAccount := account
 	account, err = requestCredentialAccount(ctx, account)
 	if err != nil {
 		return nil, err
@@ -821,10 +827,10 @@ func (s *OpenAIGatewayService) forwardGrokMediaVideoContent(
 	ctx context.Context,
 	c *gin.Context,
 	account *Account,
+	selectedAccount *Account,
 	token, requestID string,
 	startTime time.Time,
 ) (*OpenAIForwardResult, error) {
-	selectedAccount := account
 	account, err := requestCredentialAccount(ctx, account)
 	if err != nil {
 		return nil, err

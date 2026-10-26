@@ -82,7 +82,7 @@ func (s *ProxyRepoSuite) TestUpdatesPublishEveryBoundAccountWithoutQuotaSnapshot
 	}
 }
 
-func (s *ProxyRepoSuite) TestDeletePublishesBoundAccountsAndPreservesMissingProxyBinding() {
+func (s *ProxyRepoSuite) TestDeleteRejectsLiveBindingsAndPreservesDanglingBinding() {
 	proxy := s.mustCreateProxy(&service.Proxy{Name: "deleted-proxy", Protocol: "http", Host: "old.invalid", Port: 8080, Status: service.StatusActive})
 	accountRepo := newAccountRepositoryWithSQL(s.tx.Client(), s.tx, nil)
 	var wantIDs []int64
@@ -113,38 +113,66 @@ func (s *ProxyRepoSuite) TestDeletePublishesBoundAccountsAndPreservesMissingProx
 	_, err := s.tx.ExecContext(s.ctx, "TRUNCATE scheduler_outbox")
 	s.Require().NoError(err)
 
-	s.Require().NoError(s.repo.Delete(s.ctx, proxy.ID))
-	s.Require().Equal(wantIDs, s.proxyOutboxAccountIDs())
+	// Live bindings prevent deletion even when the repository is called without
+	// the admin service's advisory count. Rejection must not invalidate snapshots
+	// or publish a scheduler change for an operation that never committed.
+	s.Require().ErrorIs(s.repo.Delete(s.ctx, proxy.ID), service.ErrProxyInUse)
+	s.Require().Empty(s.proxyOutboxAccountIDs())
+	savedProxy, err := s.repo.GetByID(s.ctx, proxy.ID)
+	s.Require().NoError(err)
+	s.Require().Equal("old.invalid", savedProxy.Host)
+	for _, id := range wantIDs {
+		account, err := accountRepo.GetByID(s.ctx, id)
+		s.Require().NoError(err)
+		s.Require().Equal(&proxy.ID, account.ProxyID)
+		s.Require().NotNil(account.Proxy)
+		route, err := account.StrictProxyURL()
+		s.Require().NoError(err)
+		s.Require().Equal("http://old.invalid:8080", route)
+		s.Require().Equal("unchanged", account.Extra["keep"])
+		if account.Platform == service.PlatformKimi {
+			s.Require().Equal("old-route", account.Extra["kimi_quota_generation"])
+		}
+		if account.ID == ollama.ID {
+			s.Require().Equal(map[string]any{"status": service.OllamaCloudUsageStatusOK}, account.Extra[service.OllamaCloudUsageSnapshotExtraKey])
+			s.Require().Equal("cipher:fixture", account.Extra[service.OllamaCloudUsageSessionExtraKey])
+		}
+	}
+
+	// Simulate a historical or out-of-band soft deletion. Normal deletion cannot
+	// produce this state, but hydration must retain the configured binding so a
+	// corrupt route is never interpreted as permission for direct egress.
+	_, err = s.tx.ExecContext(s.ctx, "UPDATE proxies SET deleted_at=NOW() WHERE id=$1", proxy.ID)
+	s.Require().NoError(err)
 	_, err = s.repo.GetByID(s.ctx, proxy.ID)
 	s.Require().ErrorIs(err, service.ErrProxyNotFound)
 	for _, id := range wantIDs {
 		account, err := accountRepo.GetByID(s.ctx, id)
 		s.Require().NoError(err)
-		s.Require().Equal(&proxy.ID, account.ProxyID, "soft-deleting a configured proxy must not silently switch the account to direct egress")
+		s.Require().Equal(&proxy.ID, account.ProxyID)
 		s.Require().Nil(account.Proxy)
-		s.Require().Equal("unchanged", account.Extra["keep"])
-		if account.Platform == service.PlatformKimi {
-			s.Require().NotContains(account.Extra, "kimi_quota_generation")
-		}
-		if account.ID == ollama.ID {
-			s.Require().NotContains(account.Extra, service.OllamaCloudUsageSnapshotExtraKey)
-			s.Require().Equal("cipher:fixture", account.Extra[service.OllamaCloudUsageSessionExtraKey])
-		}
+		route, err := account.StrictProxyURL()
+		s.Require().ErrorContains(err, "configured proxy snapshot is unavailable")
+		s.Require().Empty(route)
 	}
-	_, err = s.tx.ExecContext(s.ctx, "TRUNCATE scheduler_outbox")
-	s.Require().NoError(err)
 	s.Require().NoError(s.repo.Delete(s.ctx, proxy.ID), "deleting a missing proxy remains idempotent")
 	s.Require().Empty(s.proxyOutboxAccountIDs())
 }
 
-func TestProxyWriteRollsBackWhenSchedulerOutboxFails(t *testing.T) {
-	for _, operation := range []string{"update", "delete"} {
-		t.Run(operation, func(t *testing.T) {
+func TestProxyWriteFailurePreservesBoundAccountState(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		operation string
+	}{
+		{name: "update_outbox_failure", operation: "update"},
+		{name: "delete_rejects_binding_before_outbox", operation: "delete"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
 			client := testEntClient(t)
 			repo := newProxyRepositoryWithSQL(client, integrationDB)
-			proxy := mustCreateProxy(t, client, &service.Proxy{Name: "proxy-write-atomic-" + operation, Protocol: "http", Host: "old.invalid", Port: 8080, Status: service.StatusActive})
-			account := mustCreateAccount(t, client, &service.Account{Name: "proxy-write-atomic-" + operation, Platform: service.PlatformKimi, Type: service.AccountTypeOAuth, ProxyID: &proxy.ID, Extra: map[string]any{"kimi_quota_generation": "old-route", "keep": "unchanged"}})
+			proxy := mustCreateProxy(t, client, &service.Proxy{Name: "proxy-write-atomic-" + tc.operation, Protocol: "http", Host: "old.invalid", Port: 8080, Status: service.StatusActive})
+			account := mustCreateAccount(t, client, &service.Account{Name: "proxy-write-atomic-" + tc.operation, Platform: service.PlatformKimi, Type: service.AccountTypeOAuth, ProxyID: &proxy.ID, Extra: map[string]any{"kimi_quota_generation": "old-route", "keep": "unchanged"}})
 			functionName := fmt.Sprintf("fail_proxy_outbox_%d", account.ID)
 			triggerName := functionName + "_trigger"
 			t.Cleanup(func() {
@@ -166,19 +194,27 @@ func TestProxyWriteRollsBackWhenSchedulerOutboxFails(t *testing.T) {
 			require.NoError(t, err)
 			_, err = integrationDB.ExecContext(ctx, "CREATE TRIGGER "+triggerName+" BEFORE INSERT ON scheduler_outbox FOR EACH ROW EXECUTE FUNCTION "+functionName+"()")
 			require.NoError(t, err)
-			if operation == "update" {
+			if tc.operation == "update" {
 				proxy.Host = "new.invalid"
 				err = repo.Update(ctx, proxy)
+				require.ErrorContains(t, err, "forced proxy outbox failure")
 			} else {
 				err = repo.Delete(ctx, proxy.ID)
+				// A live binding must reject deletion before any snapshot or
+				// outbox mutation, even with a failing outbox installed.
+				require.ErrorIs(t, err, service.ErrProxyInUse)
 			}
-			require.ErrorContains(t, err, "forced proxy outbox failure")
 			saved, err := repo.GetByID(ctx, proxy.ID)
-			require.NoError(t, err, "proxy deletion must roll back with the failed outbox")
+			require.NoError(t, err, "a failed update or rejected deletion must preserve the proxy")
 			require.Equal(t, "old.invalid", saved.Host)
 			accountRepo := newAccountRepositoryWithSQL(client, integrationDB, nil)
 			savedAccount, err := accountRepo.GetByID(ctx, account.ID)
 			require.NoError(t, err)
+			require.Equal(t, &proxy.ID, savedAccount.ProxyID)
+			require.NotNil(t, savedAccount.Proxy)
+			route, err := savedAccount.StrictProxyURL()
+			require.NoError(t, err)
+			require.Equal(t, "http://old.invalid:8080", route)
 			require.Equal(t, map[string]any{"kimi_quota_generation": "old-route", "keep": "unchanged"}, savedAccount.Extra)
 			var count int
 			require.NoError(t, integrationDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM scheduler_outbox WHERE payload->'account_ids' @> jsonb_build_array($1::bigint)", account.ID).Scan(&count))

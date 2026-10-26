@@ -131,6 +131,13 @@ func (s *OpenAIOAuthService) generateAuthURL(ctx context.Context, account *Accou
 		ProxyURL:     proxyURL,
 		CreatedAt:    time.Now(),
 	}
+	if proxyID != nil {
+		id := *proxyID
+		session.ProxyID = &id
+	} else if account != nil && account.ProxyID != nil {
+		id := *account.ProxyID
+		session.ProxyID = &id
+	}
 	s.sessionStore.Set(sessionID, session)
 
 	originator := s.resolveOpenAIOutboundIdentity(ctx, account).Originator
@@ -189,12 +196,11 @@ func (s *OpenAIOAuthService) ExchangeCode(ctx context.Context, input *OpenAIExch
 		return nil, err
 	}
 
-	// Get proxy URL: prefer input.ProxyID, fallback to session.ProxyURL
+	// A callback retains the route captured before authorization began.
 	proxyURL := session.ProxyURL
 	if input.ProxyID != nil {
-		proxyURL, err = s.resolveSelectedProxyURL(ctx, input.ProxyID)
-		if err != nil {
-			return nil, err
+		if session.ProxyID == nil || *input.ProxyID != *session.ProxyID {
+			return nil, infraerrors.New(http.StatusBadRequest, "OPENAI_OAUTH_PROXY_MISMATCH", "proxy does not match the OAuth session")
 		}
 	}
 
@@ -556,7 +562,7 @@ func (s *OpenAIOAuthService) StartDeviceCode(ctx context.Context, proxyID *int64
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusInternalServerError, "OPENAI_OAUTH_STATE_FAILED", "failed to generate state: %v", err)
 	}
-	s.sessionStore.Set(sessionID, &openai.OAuthSession{
+	session := &openai.OAuthSession{
 		State:          state,
 		ClientID:       clientID,
 		ProxyURL:       proxyURL,
@@ -564,7 +570,12 @@ func (s *OpenAIOAuthService) StartDeviceCode(ctx context.Context, proxyID *int64
 		CreatedAt:      time.Now(),
 		DeviceAuthID:   started.DeviceAuthID,
 		DeviceUserCode: started.UserCode,
-	})
+	}
+	if proxyID != nil {
+		id := *proxyID
+		session.ProxyID = &id
+	}
+	s.sessionStore.Set(sessionID, session)
 	return &OpenAIDeviceCodeResult{
 		SessionID:       sessionID,
 		UserCode:        started.UserCode,

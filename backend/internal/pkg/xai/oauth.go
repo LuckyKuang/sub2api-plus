@@ -66,6 +66,7 @@ type OAuthSession struct {
 	ClientID      string                    `json:"client_id,omitempty"`
 	Scope         string                    `json:"scope,omitempty"`
 	ProxyURL      string                    `json:"proxy_url,omitempty"`
+	ProxyID       *int64                    `json:"proxy_id,omitempty"`
 	RedirectURI   string                    `json:"redirect_uri"`
 	CreatedAt     time.Time                 `json:"created_at"`
 
@@ -106,6 +107,7 @@ type oauthSessionDTO struct {
 	ClientID      string                    `json:"client_id,omitempty"`
 	Scope         string                    `json:"scope,omitempty"`
 	ProxyURL      string                    `json:"proxy_url,omitempty"`
+	ProxyID       *int64                    `json:"proxy_id,omitempty"`
 	RedirectURI   string                    `json:"redirect_uri"`
 	CreatedAt     time.Time                 `json:"created_at"`
 }
@@ -138,7 +140,7 @@ func (s *SessionStore) Set(sessionID string, session *OAuthSession) {
 			Nonce: session.Nonce, Issuer: session.Issuer, Identity: session.Identity,
 			State: session.State, CodeVerifier: session.CodeVerifier, CodeChallenge: session.CodeChallenge,
 			ClientID: session.ClientID, Scope: session.Scope, ProxyURL: session.ProxyURL,
-			RedirectURI: session.RedirectURI, CreatedAt: session.CreatedAt,
+			ProxyID: session.ProxyID, RedirectURI: session.RedirectURI, CreatedAt: session.CreatedAt,
 		})
 	}
 	s.mu.Lock()
@@ -166,7 +168,7 @@ func (s *SessionStore) Get(sessionID string) (*OAuthSession, bool) {
 			Nonce: dto.Nonce, Issuer: dto.Issuer, Identity: dto.Identity,
 			State: dto.State, CodeVerifier: dto.CodeVerifier, CodeChallenge: dto.CodeChallenge,
 			ClientID: dto.ClientID, Scope: dto.Scope, ProxyURL: dto.ProxyURL,
-			RedirectURI: dto.RedirectURI, CreatedAt: dto.CreatedAt,
+			ProxyID: dto.ProxyID, RedirectURI: dto.RedirectURI, CreatedAt: dto.CreatedAt,
 		}
 		s.mu.Lock()
 		s.sessions[sessionID] = session

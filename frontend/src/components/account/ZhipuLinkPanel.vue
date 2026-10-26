@@ -203,7 +203,11 @@ const planOptions = computed(() => {
 })
 
 onMounted(loadCapabilities)
-watch(() => props.proxyId, cancelLink)
+watch(() => props.proxyId, () => {
+  cancelLink()
+  callback.value = ''
+  showFallback.value = false
+})
 
 async function start() {
   // startLink schedules the poll loop from the platform's own interval.

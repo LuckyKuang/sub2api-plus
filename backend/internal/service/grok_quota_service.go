@@ -51,7 +51,6 @@ type GrokQuotaResetResult struct {
 
 type GrokQuotaService struct {
 	accountRepo    AccountRepository
-	proxyRepo      ProxyRepository
 	tokenProvider  *GrokTokenProvider
 	httpUpstream   HTTPUpstream
 	usageLogRepo   UsageLogRepository
@@ -62,7 +61,7 @@ type GrokQuotaService struct {
 
 func NewGrokQuotaService(
 	accountRepo AccountRepository,
-	proxyRepo ProxyRepository,
+	_ ProxyRepository,
 	tokenProvider *GrokTokenProvider,
 	httpUpstream HTTPUpstream,
 	cfg *config.Config,
@@ -74,7 +73,6 @@ func NewGrokQuotaService(
 	}
 	return &GrokQuotaService{
 		accountRepo:   accountRepo,
-		proxyRepo:     proxyRepo,
 		tokenProvider: tokenProvider,
 		httpUpstream:  httpUpstream,
 		usageLogRepo:  usageLogRepo,
@@ -200,21 +198,19 @@ func (s *GrokQuotaService) probeUsage(ctx context.Context, account *Account, tok
 	// persist.  A successful 200 with no headers is still persisted as an
 	// explicit "no headers" observation so the UI can distinguish it from never
 	// probed.
-	persistErr := error(nil)
 	persisted := false
+	outcome := GrokRequestOutcome{}
 	shouldPersist := resp.StatusCode < 400 || resp.StatusCode == http.StatusTooManyRequests
 	if shouldPersist && (snapshot.HeadersObserved || resp.StatusCode == http.StatusOK) {
-		persisted, persistErr = applyGrokCredentialMutation(ctx, s.accountRepo, account, CredentialStateMutation{Extra: map[string]any{
-			grokQuotaSnapshotExtraKey: snapshot,
-		}})
-	}
-	if persistErr != nil {
-		slog.Warn("grok_quota_snapshot_write_failed", "account_id", account.ID, "error", persistErr)
+		outcome.Extra = map[string]any{grokQuotaSnapshotExtraKey: snapshot}
 	}
 	if limited {
-		persistGrokRateLimit(ctx, s.accountRepo, account, resetAt)
+		outcome.RateLimitResetAt = &resetAt
 	} else if isSuccessfulGrokRateLimitRecovery(account, snapshot) {
-		clearGrokRateLimitAfterRecovery(ctx, s.accountRepo, account)
+		outcome.ClearRateLimit = true
+	}
+	if len(outcome.Extra) > 0 || outcome.RateLimitResetAt != nil || outcome.ClearRateLimit {
+		persisted = collectGrokRequestOutcome(ctx, s.accountRepo, account, outcome, nil)
 	}
 
 	result := &GrokQuotaProbeResult{
@@ -317,9 +313,7 @@ func (s *GrokQuotaService) probeBilling(ctx context.Context, account *Account, t
 		billing.MonthlyStatusCode = monthly.status
 		billing = xai.StampBillingSummary(billing, preferBillingObservationStatus(weekly.status, monthly.status), "billing_probe")
 		billing.CredentialGeneration = grokCredentialGeneration(account)
-		if _, persistErr := applyGrokCredentialMutation(ctx, s.accountRepo, account, CredentialStateMutation{Extra: map[string]any{grokBillingExtraKey: billing}}); persistErr != nil {
-			slog.Warn("grok_billing_failure_persist_failed", "account_id", account.ID, "error", persistErr)
-		}
+		collectGrokRequestOutcome(ctx, s.accountRepo, account, GrokRequestOutcome{Extra: map[string]any{grokBillingExtraKey: billing}}, nil)
 		return nil, probeErr
 	}
 	statusCode := preferSuccessfulBillingStatus(weekly.status, monthly.status, weeklyOK, monthlyOK)
@@ -328,12 +322,7 @@ func (s *GrokQuotaService) probeBilling(ctx context.Context, account *Account, t
 	billing.MonthlyStatusCode = monthly.status
 	billing = xai.StampBillingSummary(billing, statusCode, "billing_probe")
 	billing.CredentialGeneration = grokCredentialGeneration(account)
-	persisted, persistErr := applyGrokCredentialMutation(ctx, s.accountRepo, account, CredentialStateMutation{Extra: map[string]any{
-		grokBillingExtraKey: billing,
-	}})
-	if persistErr != nil {
-		slog.Warn("grok_billing_persist_failed", "account_id", account.ID, "error", persistErr)
-	}
+	persisted := collectGrokRequestOutcome(ctx, s.accountRepo, account, GrokRequestOutcome{Extra: map[string]any{grokBillingExtraKey: billing}}, nil)
 	now := time.Now().UTC()
 	localUsage24h, localUsage7d, localUsageMonthly := grokLocalUsageForQuota(ctx, s.usageLogRepo, account.ID, billing, now)
 	return &GrokQuotaProbeResult{
@@ -518,20 +507,18 @@ func (s *GrokQuotaService) prepareProbe(ctx context.Context, accountID int64) (*
 	if err != nil {
 		return nil, "", "", err
 	}
-	if account.ProxyID != nil && account.Proxy == nil && s.proxyRepo != nil {
-		proxy, err := s.proxyRepo.GetByID(ctx, *account.ProxyID)
-		if err != nil {
-			return nil, "", "", infraerrors.New(http.StatusBadGateway, "GROK_QUOTA_TOKEN_UNAVAILABLE", "configured account proxy is unavailable").WithCause(err)
-		}
-		account.Proxy = proxy
+	account, err = snapshotCNControlAccount(account)
+	if err != nil {
+		return nil, "", "", infraerrors.New(http.StatusBadGateway, "GROK_QUOTA_ACCOUNT_INVALID", "cannot capture quota credential owner").WithCause(err)
 	}
-	if _, err := requestCredentialOwnerProxyURL(context.Background(), account); err != nil {
-		return nil, "", "", infraerrors.New(http.StatusBadGateway, "GROK_QUOTA_TOKEN_UNAVAILABLE", "configured account proxy is unavailable").WithCause(err)
+	if _, err := account.StrictProxyURL(); err != nil {
+		return nil, "", "", infraerrors.New(http.StatusBadGateway, "GROK_QUOTA_PROXY_INVALID", "configured quota proxy is unavailable or invalid").WithCause(err)
 	}
 
 	// Quota diagnostics must remain available while scheduling is paused (for
 	// example after a 402). Use the same credential checks and refresh protocol
 	// as an admin connection test, without the model-request scheduling gate.
+	ctx = context.WithValue(ctx, cnControlRequestOwnerKey{}, account)
 	token, err := s.tokenProvider.GetAccessTokenForManualTest(ctx, account)
 	if err != nil {
 		return nil, "", "", infraerrors.Newf(http.StatusBadGateway, "GROK_QUOTA_TOKEN_UNAVAILABLE", "failed to acquire access token: %v", err)

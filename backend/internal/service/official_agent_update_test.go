@@ -250,7 +250,7 @@ func TestDomesticOAuthNativeModelDiscovery(t *testing.T) {
 			svc := &AccountTestService{httpUpstream: upstream, cfg: &config.Config{}, cnOAuthService: NewCNOAuthService(nil, nil, nil)}
 			req, err := svc.buildUpstreamModelsRequest(ctx, a)
 			require.NoError(t, err)
-			_, err = svc.doUpstreamModelsRequest(req, "", a)
+			_, err = svc.doUpstreamModelsRequest(req, a)
 			require.NoError(t, err)
 			require.Equal(t, tc.target, upstream.lastReq.URL.String())
 			require.Equal(t, tc.auth, upstream.lastReq.Header.Get(tc.header))

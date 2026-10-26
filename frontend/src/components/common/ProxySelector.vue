@@ -173,6 +173,7 @@ import { useI18n } from 'vue-i18n'
 import { adminAPI } from '@/api/admin'
 import Icon from '@/components/icons/Icon.vue'
 import type { Proxy } from '@/types'
+import { proxyTestSnapshot } from '@/utils/proxyTestSnapshot'
 
 const { t } = useI18n()
 
@@ -209,6 +210,21 @@ const searchInputRef = ref<HTMLInputElement | null>(null)
 const testResults = reactive<Record<number, ProxyTestResult>>({})
 const testingProxyIds = reactive(new Set<number>())
 const batchTesting = ref(false)
+const probeOwners = new Map<number, object>()
+
+watch(() => props.proxies.map(proxyTestSnapshot), (current, previous) => {
+  for (const id of Object.keys(testResults).map(Number)) {
+    const index = props.proxies.findIndex(proxy => proxy.id === id)
+    if (index < 0 || !previous.includes(current[index])) delete testResults[id]
+  }
+  for (const [id] of probeOwners) {
+    const index = props.proxies.findIndex(proxy => proxy.id === id)
+    if (index < 0 || !previous.includes(current[index])) {
+      probeOwners.delete(id)
+      testingProxyIds.delete(id)
+    }
+  }
+})
 
 const selectedProxy = computed(() => {
   if (props.modelValue === null) return null
@@ -261,17 +277,26 @@ const selectOption = (value: number | null) => {
 const handleTestProxy = async (proxy: Proxy) => {
   if (testingProxyIds.has(proxy.id)) return
 
+  const snapshot = proxyTestSnapshot(proxy)
+  const owner = {}
+  probeOwners.set(proxy.id, owner)
+  const isCurrent = () => probeOwners.get(proxy.id) === owner && props.proxies.some(current => current.id === proxy.id && proxyTestSnapshot(current) === snapshot)
   testingProxyIds.add(proxy.id)
   try {
     const result = await adminAPI.proxies.testProxy(proxy.id)
+    if (!isCurrent()) return
     testResults[proxy.id] = result
   } catch (error: any) {
+    if (!isCurrent()) return
     testResults[proxy.id] = {
       success: false,
       message: error.response?.data?.detail || 'Test failed'
     }
   } finally {
-    testingProxyIds.delete(proxy.id)
+    if (probeOwners.get(proxy.id) === owner) {
+      probeOwners.delete(proxy.id)
+      testingProxyIds.delete(proxy.id)
+    }
   }
 }
 

@@ -336,6 +336,8 @@ def declared_validation_pins(root: Path) -> dict[str, str]:
         "GORELEASER_VERSION": declared_tool_version(root, "goreleaser"),
         "GOVULNCHECK_VERSION": declared_tool_version(root, "govulncheck"),
         "PYYAML_VERSION": yaml_match.group(1),
+        **({"PLAYWRIGHT_VERSION": package["devDependencies"]["@playwright/test"]}
+           if "@playwright/test" in package.get("devDependencies", {}) else {}),
     }
 
 

@@ -223,11 +223,7 @@ func TestOpenAIOAuthExplicitProxyMustResolveBeforeStartingOrExchanging(t *testin
 			svc.sessionStore.Set("test-session", &openai.OAuthSession{State: "test-state", CreatedAt: time.Now()})
 			_, err = svc.ExchangeCode(context.Background(), &OpenAIExchangeCodeInput{SessionID: "test-session", State: "test-state", Code: "code", ProxyID: &proxyID})
 			require.Error(t, err)
-			if invalid == "mismatched" || invalid == "invalid" {
-				require.ErrorContains(t, err, "OPENAI_OAUTH_PROXY_INVALID")
-			} else {
-				require.ErrorContains(t, err, "OPENAI_OAUTH_PROXY_NOT_FOUND")
-			}
+			require.ErrorContains(t, err, "OPENAI_OAUTH_PROXY_MISMATCH", "a callback cannot replace the route captured in its authorization session")
 			require.Zero(t, client.calls, "selected-proxy failures must stop before any credential client call")
 		})
 	}

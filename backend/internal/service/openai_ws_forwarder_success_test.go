@@ -786,6 +786,7 @@ func TestOpenAIGatewayService_Forward_WSv2_ResponseFailedIsNotSchedulingSuccess(
 		Credentials: map[string]any{"api_key": "sk-test"},
 		Extra:       map[string]any{"responses_websockets_v2_enabled": true},
 	}
+	svc.accountRepo = transientCooldownAccountRepo{current: account}
 	svc.recordOpenAIAccountModelTransientFailure(account, "gpt-5.5", time.Now())
 
 	result, err := svc.Forward(context.Background(), c, account, []byte(`{"model":"gpt-5.5","stream":false,"input":"hello"}`))

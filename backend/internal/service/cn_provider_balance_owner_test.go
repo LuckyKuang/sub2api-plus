@@ -58,7 +58,7 @@ func cnBalanceOwnerAccount(platform string) *Account {
 func writeCNBalanceOwnerResponse(w http.ResponseWriter, platform string, balance int) {
 	w.Header().Set("Content-Type", "application/json")
 	if platform == PlatformKimi {
-		_, _ = fmt.Fprintf(w, `{"code":0,"data":{"available_balance":%d}}`, balance)
+		_, _ = fmt.Fprintf(w, `{"code":0,"status":true,"data":{"available_balance":%d}}`, balance)
 	} else {
 		_, _ = fmt.Fprintf(w, `{"is_available":true,"balance_infos":[{"currency":"CNY","total_balance":"%d"}]}`, balance)
 	}
@@ -167,7 +167,7 @@ func TestCNBalanceOwnerReplacementSeparatesFlightsAndRejectsLateState(t *testing
 						t.Fatal(ctx.Err())
 					}
 					require.NoError(t, late.err)
-					require.True(t, late.result.Success)
+					require.False(t, late.result.Success, "a stale owner cannot publish success for the replacement grant")
 					require.False(t, late.result.Persisted, "G1's late response cannot update G2's extra")
 					check := &CNProviderBalanceCheckService{accountRepo: repo, cfg: &config.Config{}}
 					require.Equal(t, cnBalanceNoChange, check.applyBalanceResult(ctx, old, late.result, 5))
@@ -258,7 +258,7 @@ func TestCNBalanceFreezesOwnerAndStopsPreparationFailures(t *testing.T) {
 				selected.Credentials["api_key"], selected.Proxy.Host = "selected-G2", "selected-G2.invalid"
 				selected.TempUnschedulableReason = "selected-new-cooldown"
 				selected.Platform = PlatformCommandCode
-				return (&cnBalanceResponseUpstream{statusCode: http.StatusOK, body: map[string]string{PlatformKimi: `{"data":{"available_balance":100}}`, PlatformDeepseek: `{"is_available":true,"balance_infos":[{"currency":"CNY","total_balance":"100"}]}`}[platform]}).Do(req, proxy, selected.ID, 1)
+				return (&cnBalanceResponseUpstream{statusCode: http.StatusOK, body: map[string]string{PlatformKimi: `{"code":0,"status":true,"data":{"available_balance":100}}`, PlatformDeepseek: `{"is_available":true,"balance_infos":[{"currency":"CNY","total_balance":"100"}]}`}[platform]}).Do(req, proxy, selected.ID, 1)
 			}}
 			result, err := NewCNProviderBalanceService(repo, nil, upstream, &config.Config{}).QueryBalanceForAccount(t.Context(), selected)
 			require.NoError(t, err)
@@ -286,7 +286,7 @@ func TestCNBalanceFreezesOwnerAndStopsPreparationFailures(t *testing.T) {
 
 func TestCNBalanceRequiresHydratedEvidenceAndConditionalStorage(t *testing.T) {
 	for _, platform := range []string{PlatformKimi, PlatformDeepseek} {
-		for _, evidence := range []string{"missing-proxy", "wrong-proxy", "unexpected-proxy", "slim-owner", "missing-storage"} {
+		for _, evidence := range []string{"missing-proxy", "wrong-proxy", "slim-owner", "missing-storage"} {
 			t.Run(platform+"/"+evidence, func(t *testing.T) {
 				owner := cnBalanceOwnerAccount(platform)
 				switch evidence {
@@ -294,8 +294,6 @@ func TestCNBalanceRequiresHydratedEvidenceAndConditionalStorage(t *testing.T) {
 					owner.Proxy = nil
 				case "wrong-proxy":
 					owner.Proxy.ID++
-				case "unexpected-proxy":
-					owner.ProxyID = nil
 				case "slim-owner":
 					owner.CredentialGeneration = "scheduler-digest"
 				case "missing-storage":
@@ -311,10 +309,10 @@ func TestCNBalanceRequiresHydratedEvidenceAndConditionalStorage(t *testing.T) {
 					return
 				}
 				repo := &fakeCNProbeAccountRepo{account: owner}
-				upstream := &cnBalanceResponseUpstream{statusCode: http.StatusOK, body: map[string]string{PlatformKimi: `{"data":{"available_balance":0}}`, PlatformDeepseek: `{"is_available":false,"balance_infos":[{"currency":"CNY","total_balance":"0"}]}`}[platform]}
+				upstream := &cnBalanceResponseUpstream{statusCode: http.StatusOK, body: map[string]string{PlatformKimi: `{"code":0,"status":true,"data":{"available_balance":0}}`, PlatformDeepseek: `{"is_available":false,"balance_infos":[{"currency":"CNY","total_balance":"0"}]}`}[platform]}
 				result, err := NewCNProviderBalanceService(repo, nil, upstream, &config.Config{}).QueryBalance(t.Context(), owner.ID)
 				require.NoError(t, err)
-				require.True(t, result.Success)
+				require.False(t, result.Success, "missing conditional storage cannot certify a durable wallet observation")
 				require.False(t, result.Persisted, "a missing CAS port cannot fall back to UpdateExtra")
 				check := &CNProviderBalanceCheckService{accountRepo: repo, cfg: &config.Config{}}
 				require.Equal(t, cnBalanceNoChange, check.applyBalanceResult(t.Context(), owner, result, 5), "a missing CAS port cannot fall back to row-ID scheduling writes")

@@ -6,10 +6,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"testing"
 	"time"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/cnoauth"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,7 +32,7 @@ func (r *refreshCleanupRepo) GetByID(context.Context, int64) (*Account, error) {
 	return snapshotRequestCredentialAccount(r.current), nil
 }
 
-func (r *refreshCleanupRepo) UpdateOAuthCredentialsIfUnchanged(ctx context.Context, expectedOwner *Account, replacement map[string]any) (bool, error) {
+func (r *refreshCleanupRepo) UpdateOAuthRefreshCredentialsIfUnchanged(ctx context.Context, expectedOwner *Account, replacement map[string]any) (bool, error) {
 	r.persistCalls++
 	if r.persistErr != nil {
 		return false, r.persistErr
@@ -49,7 +51,11 @@ func (r *refreshCleanupRepo) UpdateOAuthCredentialsIfUnchanged(ctx context.Conte
 }
 
 func (r *refreshCleanupRepo) UpdateGrokOAuthCredentialsIfUnchanged(ctx context.Context, expectedOwner *Account, replacement map[string]any) (bool, error) {
-	return r.UpdateOAuthCredentialsIfUnchanged(ctx, expectedOwner, replacement)
+	return r.UpdateOAuthRefreshCredentialsIfUnchanged(ctx, expectedOwner, replacement)
+}
+
+func (r *refreshCleanupRepo) UpdateCNOAuthCredentialsIfUnchanged(ctx context.Context, expectedOwner *Account, replacement map[string]any) (bool, error) {
+	return r.UpdateOAuthRefreshCredentialsIfUnchanged(ctx, expectedOwner, replacement)
 }
 
 func TestDirectRefreshSuccessCASMissAtAttemptDeadlineDoesNotRetry(t *testing.T) {
@@ -98,7 +104,9 @@ func (r *refreshCleanupRepo) ApplyCredentialStateMutation(_ context.Context, own
 }
 
 func TestDirectRefreshSuccessFencesOriginalGrantBeforeCleanup(t *testing.T) {
-	for _, platform := range []string{PlatformOpenAI, PlatformGrok, PlatformDeepseek, PlatformKimi, PlatformMiniMax, PlatformStepFun, PlatformZhipu} {
+	// Native OAuth requires the coordinator. Linked ZCode login is renewed by
+	// reauthorization; its project PAT has a separate manager and lifecycle.
+	for _, platform := range []string{PlatformOpenAI, PlatformGrok} {
 		for _, change := range []string{"unchanged", "relinked", "nested_metadata", "proxy_changed", "new_cooldown", "store_error", "missing_contract", "nil_credentials"} {
 			t.Run(platform+"/"+change, func(t *testing.T) {
 				until := time.Now().UTC().Add(time.Hour).Truncate(time.Second)
@@ -267,10 +275,10 @@ func TestRefreshCleanupUsesActualPreRefreshRead(t *testing.T) {
 
 func TestRefreshCleanupCannotClearRuntimeFailureInstalledAfterTokenPersistence(t *testing.T) {
 	for _, unified := range []bool{false, true} {
-		platforms := []string{PlatformOpenAI, PlatformGrok, PlatformDeepseek, PlatformKimi, PlatformMiniMax, PlatformStepFun, PlatformZhipu}
+		platforms := []string{PlatformOpenAI, PlatformGrok}
 		if unified {
-			// OAuthRefreshAPI rotates these four official grant families.
-			// DeepSeek, StepFun and linked ZCode do not use this refresh flow.
+			// Native grant rotations use their coordinator. Step Passport keeps
+			// the inference model key and has a dedicated native regression below.
 			platforms = []string{PlatformOpenAI, PlatformGrok, PlatformKimi, PlatformMiniMax}
 		}
 		for _, platform := range platforms {
@@ -337,13 +345,188 @@ func TestRefreshCleanupKeepsStateInstalledDuringRefresh(t *testing.T) {
 						repo.current.TempUnschedulableReason = "new-login-cooldown"
 					}
 				}
-				require.NoError(t, svc.refreshWithRetry(context.Background(), selected, refresher, refresher, time.Hour))
+				err := svc.refreshWithRetry(context.Background(), selected, refresher, refresher, time.Hour)
+				if change == "relinked_after_persist" && current.IsDomesticOAuth() {
+					require.Error(t, err, "a replacement login after persistence cannot authorize refresh cleanup")
+				} else {
+					require.NoError(t, err)
+				}
 				require.False(t, repo.applied, "refresh may clear only its pre-call cooldown on its own resulting grant")
 				require.NotNil(t, repo.current.TempUnschedulableUntil)
 				if change == "relinked_after_persist" {
 					require.Equal(t, "new-login", repo.current.GetCredential("access_token"))
 				} else {
 					require.Equal(t, "rotated", repo.current.GetCredential("access_token"))
+				}
+			})
+		}
+	}
+}
+
+func refreshCleanupNativeAccount(platform string) *Account {
+	account := cnRecoveryAccount(platform)
+	account.Credentials["metadata"] = map[string]any{"grant": "original"}
+	if platform == PlatformStepFun {
+		// Passport renews its own account session, preserving the model key.
+		delete(account.Credentials, "refresh_token")
+		delete(account.Credentials, "expires_at")
+		for key, value := range map[string]any{"step_account_access_token": "passport-access", "step_account_refresh_token": "passport-refresh", "step_account_device_id": "passport-device", "step_account_app_id": "passport-app"} {
+			account.Credentials[key] = value
+		}
+	}
+	return account
+}
+
+func TestNativeBackgroundRefreshRequiresCoordinator(t *testing.T) {
+	for _, platform := range []string{PlatformDeepseek, PlatformKimi, PlatformMiniMax, PlatformStepFun} {
+		t.Run(platform, func(t *testing.T) {
+			account := refreshCleanupNativeAccount(platform)
+			repo := &refreshCleanupRepo{current: snapshotRequestCredentialAccount(account)}
+			cache, runtime := &tokenCacheInvalidatorStub{}, &tokenRefreshRuntimeBlocker{}
+			svc := &TokenRefreshService{accountRepo: repo, cacheInvalidator: cache, runtimeBlocker: runtime, cfg: &config.TokenRefreshConfig{MaxRetries: 2}}
+			refresher := &tokenRefresherStub{credentials: map[string]any{"access_token": "forbidden-direct-result"}}
+			err := svc.refreshWithRetry(t.Context(), account, refresher, refresher, time.Hour)
+			var configuration *providerConfigurationRefreshError
+			require.ErrorAs(t, err, &configuration)
+			require.Zero(t, refresher.calls, "native grants cannot fall through to a legacy direct refresh")
+			require.Zero(t, repo.persistCalls+repo.cleanupCalls+cache.calls+runtime.blockCalls+runtime.clearCalls)
+			require.Equal(t, account.Credentials, repo.current.Credentials)
+		})
+	}
+}
+
+func TestNativeRefreshCoordinatorFencesSuccessBeforeCleanup(t *testing.T) {
+	for _, platform := range []string{PlatformKimi, PlatformMiniMax, PlatformStepFun} {
+		for _, change := range []string{"unchanged", "relinked", "nested-metadata", "proxy-changed", "new-cooldown", "store-error", "new-runtime"} {
+			t.Run(platform+"/"+change, func(t *testing.T) {
+				account := refreshCleanupNativeAccount(platform)
+				until := time.Now().Add(time.Hour).Truncate(time.Second)
+				account.TempUnschedulableUntil, account.TempUnschedulableReason = &until, "observed-before-call"
+				repo := &refreshCleanupRepo{current: account}
+				if change == "store-error" {
+					repo.persistErr = errors.New("independent outbox storage failure")
+				}
+				cache, scheduler, runtime := &tokenCacheInvalidatorStub{}, &tokenRefreshSchedulerCache{}, &OpenAIGatewayService{}
+				runtime.BlockAccountScheduling(account, until, "observed-before-call")
+				var newFailureOwner *Account
+				if change == "new-runtime" {
+					repo.afterPersist = func() {
+						newFailureOwner = snapshotRequestCredentialAccount(repo.current)
+						runtime.BlockAccountScheduling(newFailureOwner, until, "new-session-failure")
+					}
+				}
+				svc := &TokenRefreshService{accountRepo: repo, refreshAPI: NewOAuthRefreshAPI(repo, nil), cacheInvalidator: cache, schedulerCache: scheduler, runtimeBlocker: runtime, cfg: &config.TokenRefreshConfig{MaxRetries: 2}}
+				refresher := NewCNTokenRefresher(platform)
+				refresher.force = true
+				calls := 0
+				refresher.client = &cnoauth.Client{HTTP: cnOAuthDoer(func(request *http.Request) (*http.Response, error) {
+					calls++
+					if platform == PlatformStepFun {
+						require.Equal(t, "Oasis-Token=passport-access...passport-refresh", request.Header.Get("Cookie"))
+					} else {
+						require.NoError(t, request.ParseForm())
+						require.Equal(t, "refresh", request.Form.Get("refresh_token"))
+					}
+					switch change {
+					case "relinked":
+						repo.current.Credentials["access_token"] = "replacement-login"
+					case "nested-metadata":
+						repo.current.Credentials["metadata"].(map[string]any)["grant"] = "replacement-login"
+					case "proxy-changed":
+						id := int64(92)
+						repo.current.ProxyID = &id
+					case "new-cooldown":
+						later := until.Add(time.Hour)
+						repo.current.TempUnschedulableUntil, repo.current.TempUnschedulableReason = &later, "installed-during-call"
+					}
+					if platform == PlatformStepFun {
+						return cnRecoveryResponse(http.StatusOK, `{"accessToken":{"raw":"renewed-passport-access","mode":2,"duration":1800}}`), nil
+					}
+					return cnRecoveryResponse(http.StatusOK, `{"access_token":"renewed-inference-access","refresh_token":"rotated-refresh","expires_in":3600,"scope":"agent.default","token_type":"Bearer"}`), nil
+				})}
+				err := svc.refreshWithRetry(t.Context(), account, refresher, refresher, time.Hour)
+				require.Equal(t, 1, calls, "the issuer may consume a refresh token before persistence fails")
+				require.Equal(t, 1, repo.persistCalls)
+				require.Zero(t, scheduler.setAccountCalls)
+				success := change == "unchanged" || change == "new-cooldown" || change == "new-runtime"
+				if !success {
+					require.Error(t, err)
+					require.Zero(t, repo.cleanupCalls+cache.calls+scheduler.deleteAccountCalls)
+					require.NotNil(t, repo.current.TempUnschedulableUntil)
+					if platform == PlatformStepFun {
+						require.Equal(t, "passport-access", repo.current.GetCredential("step_account_access_token"))
+					} else {
+						require.NotEqual(t, "renewed-inference-access", repo.current.GetCredential("access_token"))
+					}
+					return
+				}
+				require.NoError(t, err)
+				require.Equal(t, 1, cache.calls)
+				require.Equal(t, 1, scheduler.deleteAccountCalls)
+				if platform == PlatformStepFun {
+					require.Equal(t, "old", repo.current.GetCredential("access_token"), "Passport cannot replace the inference model key")
+					require.Equal(t, "renewed-passport-access", repo.current.GetCredential("step_account_access_token"))
+					require.Equal(t, "passport-refresh", repo.current.GetCredential("step_account_refresh_token"))
+				} else {
+					require.Equal(t, "renewed-inference-access", repo.current.GetCredential("access_token"))
+				}
+				if change == "new-cooldown" {
+					require.False(t, repo.applied)
+					require.Equal(t, "installed-during-call", repo.current.TempUnschedulableReason)
+				} else {
+					require.True(t, repo.applied)
+					require.Nil(t, repo.current.TempUnschedulableUntil)
+				}
+				if change == "new-runtime" {
+					require.NotNil(t, newFailureOwner)
+					require.True(t, runtime.peekOpenAIAccountRuntimeBlock(newFailureOwner).blocked, "an earlier refresh cannot clear a later failure of its renewed session")
+				}
+			})
+		}
+	}
+}
+
+func TestNativeBackgroundRefreshFailureCannotMutateGrantOrScheduling(t *testing.T) {
+	for _, platform := range []string{PlatformKimi, PlatformMiniMax, PlatformStepFun} {
+		for _, failure := range []string{"invalid-grant", "provider-unavailable", "late-old-login", "missing-contract"} {
+			t.Run(platform+"/"+failure, func(t *testing.T) {
+				account := refreshCleanupNativeAccount(platform)
+				until := time.Now().Add(time.Hour).Truncate(time.Second)
+				account.TempUnschedulableUntil, account.TempUnschedulableReason = &until, "retained-cooldown"
+				repo := &refreshCleanupRepo{current: account}
+				var accountRepo AccountRepository = repo
+				if failure == "missing-contract" {
+					accountRepo = &refreshFailureUnavailableRepo{AccountRepository: repo}
+				}
+				cache, scheduler, runtime := &tokenCacheInvalidatorStub{}, &tokenRefreshSchedulerCache{}, &tokenRefreshRuntimeBlocker{}
+				svc := &TokenRefreshService{accountRepo: accountRepo, refreshAPI: NewOAuthRefreshAPI(accountRepo, nil), cacheInvalidator: cache, schedulerCache: scheduler, runtimeBlocker: runtime, cfg: &config.TokenRefreshConfig{MaxRetries: 2}}
+				calls := 0
+				refresher := NewCNTokenRefresher(platform)
+				refresher.force = true
+				refresher.client = &cnoauth.Client{HTTP: cnOAuthDoer(func(*http.Request) (*http.Response, error) {
+					calls++
+					if failure == "late-old-login" {
+						repo.current.Credentials["access_token"] = "replacement-login"
+					}
+					if failure == "provider-unavailable" {
+						return nil, errors.New("independent provider network failure")
+					}
+					return cnRecoveryResponse(http.StatusBadRequest, `{"error":"invalid_grant"}`), nil
+				})}
+				err := svc.refreshWithRetry(t.Context(), account, refresher, refresher, time.Hour)
+				var contained *providerCycleContainmentRefreshError
+				require.ErrorAs(t, err, &contained)
+				if failure == "missing-contract" {
+					require.Zero(t, calls, "a missing owner CAS must be rejected before consuming the issuer grant")
+				} else {
+					require.Equal(t, 1, calls, "native issuer failure is contained without a generic retry")
+				}
+				require.Zero(t, repo.persistCalls+repo.cleanupCalls+cache.calls+runtime.blockCalls+runtime.clearCalls+scheduler.deleteAccountCalls+scheduler.setAccountCalls)
+				require.Equal(t, StatusActive, repo.current.Status)
+				require.Equal(t, &until, repo.current.TempUnschedulableUntil)
+				require.Equal(t, "retained-cooldown", repo.current.TempUnschedulableReason)
+				if failure == "late-old-login" {
+					require.Equal(t, "replacement-login", repo.current.GetCredential("access_token"))
 				}
 			})
 		}

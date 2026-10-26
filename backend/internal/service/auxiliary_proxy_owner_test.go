@@ -4,12 +4,14 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -53,6 +55,41 @@ func (r *auxiliaryOwnerRepo) UpdateOpenAICodexUsageIfUnchanged(_ context.Context
 	}
 	r.writes = append(r.writes, cloneRequestCredentialMap(updates))
 	return true, nil
+}
+
+func (r *auxiliaryOwnerRepo) UpdateCNControlExtraIfUnchanged(_ context.Context, owner *Account, updates map[string]any) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if !auxiliaryProbeOwnersMatch(r.account, owner) {
+		return false, nil
+	}
+	if updates[owner.Platform+"_balance_low"] != nil && (r.account.Schedulable != owner.Schedulable ||
+		!reflect.DeepEqual(r.account.TempUnschedulableUntil, owner.TempUnschedulableUntil) || r.account.TempUnschedulableReason != owner.TempUnschedulableReason) {
+		return false, nil
+	}
+	r.writes = append(r.writes, cloneRequestCredentialMap(updates))
+	return true, nil
+}
+
+func auxiliaryProbeOwnersMatch(current, owner *Account) bool {
+	if current == nil || owner == nil || current.ID != owner.ID || current.Platform != owner.Platform || current.Type != owner.Type || current.Status != owner.Status || !reflect.DeepEqual(current.ProxyID, owner.ProxyID) {
+		return false
+	}
+	currentCredentials, currentErr := json.Marshal(current.Credentials)
+	ownerCredentials, ownerErr := json.Marshal(owner.Credentials)
+	return currentErr == nil && ownerErr == nil && string(currentCredentials) == string(ownerCredentials) && (current.ProxyID == nil || reflect.DeepEqual(current.Proxy, owner.Proxy))
+}
+
+func (r *auxiliaryOwnerRepo) ApplyGrokRequestOutcomeIfUnchanged(_ context.Context, owner *Account, outcome GrokRequestOutcome) (GrokRequestOutcomeResult, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if !auxiliaryProbeOwnersMatch(r.account, owner) || r.account.Schedulable != owner.Schedulable ||
+		!reflect.DeepEqual(r.account.TempUnschedulableUntil, owner.TempUnschedulableUntil) || r.account.TempUnschedulableReason != owner.TempUnschedulableReason ||
+		!reflect.DeepEqual(r.account.RateLimitResetAt, owner.RateLimitResetAt) || !reflect.DeepEqual(r.account.OverloadUntil, owner.OverloadUntil) {
+		return GrokRequestOutcomeResult{}, nil
+	}
+	r.writes = append(r.writes, cloneRequestCredentialMap(outcome.Extra))
+	return GrokRequestOutcomeResult{Applied: true, RecoveryGeneration: runtimeRecoveryGeneration(owner)}, nil
 }
 
 const auxiliaryOwnerUA = "codex_cli_rs/0.164.0 (Ubuntu 24.04; x86_64) xterm-256color"
@@ -408,7 +445,7 @@ func TestModelsPublicRegistryAndUnsupportedMiniMaxOAuthBoundaries(t *testing.T) 
 			upstream := &auxiliaryQuotaUpstream{}
 			request, err := http.NewRequest(http.MethodGet, "https://provider.invalid/v1/models", nil)
 			require.NoError(t, err)
-			_, err = (&AccountTestService{httpUpstream: upstream}).doUpstreamModelsRequestPrepared(request, "", account)
+			_, err = (&AccountTestService{httpUpstream: upstream}).doUpstreamModelsRequestPrepared(request, account)
 			require.Error(t, err)
 			require.Zero(t, upstream.calls)
 		})
@@ -425,7 +462,7 @@ func TestModelsPublicRegistryAndUnsupportedMiniMaxOAuthBoundaries(t *testing.T) 
 		}}
 		request, err := http.NewRequest(http.MethodGet, modelsDevRegistryURL, nil)
 		require.NoError(t, err)
-		response, err := (&AccountTestService{httpUpstream: upstream}).doUpstreamModelsRequest(request, "", account)
+		response, err := (&AccountTestService{httpUpstream: upstream}).doUpstreamModelsRequest(request, account)
 		require.NoError(t, err)
 		require.NoError(t, response.Body.Close())
 	})

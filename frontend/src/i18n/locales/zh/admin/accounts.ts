@@ -326,6 +326,8 @@ export default {
           },
         },
         balance: '余额 --',
+        normalBalance: '充值余额',
+        bonusBalance: '赠送余额',
         window5h: '5h',
         windowWeekly: '7d',
         windowMonthly: '月',
@@ -1177,7 +1179,7 @@ export default {
       // OAuth flow
       oauth: {
         domestic: {
-          stepfunDescription: 'Step Plan 打开浏览器授权并自动检查授权状态。模型请求使用登录返回的 API Key；凭证被撤销后请重新授权。',
+          stepfunDescription: 'Step Plan 通过浏览器登录并由服务器自动轮询。模型密钥与可选账户会话分别保存。',
           title: "{platform} OAuth 登录",
           description: "使用官方客户端授权登录，登录凭据仅保存在服务端。",
           region: "账号地区",

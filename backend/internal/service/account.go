@@ -72,6 +72,10 @@ type Account struct {
 	GroupIDs      []int64
 	Groups        []*Group
 
+	// Unsaved credential owners retain their original private identity across
+	// request snapshots. It is never persisted or exposed through JSON.
+	unsavedCredentialOwner *Account
+
 	// model_mapping 热路径缓存（非持久化字段）
 	modelMappingCache               map[string]string
 	modelMappingCacheReady          bool
@@ -1711,7 +1715,7 @@ func (a *Account) GetCodingPlanProvider() string {
 		return ""
 	}
 	if a.IsDomesticOAuth() {
-		if a.Platform == PlatformKimi || a.Platform == PlatformMiniMax {
+		if a.Platform == PlatformKimi || a.Platform == PlatformMiniMax || a.Platform == PlatformStepFun {
 			return a.Platform
 		}
 		return ""

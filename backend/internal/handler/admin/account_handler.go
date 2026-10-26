@@ -1407,12 +1407,21 @@ func (h *AccountHandler) PreviewFromCRS(c *gin.Context) {
 // refreshSingleAccount refreshes credentials for a single OAuth account.
 // Returns (updatedAccount, warning, error) where warning is used for Antigravity ProjectIDMissing scenario.
 func (h *AccountHandler) refreshSingleAccount(ctx context.Context, account *service.Account) (*service.Account, string, error) {
+	if account == nil {
+		return nil, "", infraerrors.BadRequest("NOT_OAUTH", "OAuth account is required")
+	}
+	if account.Platform == service.PlatformDeepseek || account.Platform == service.PlatformZhipu {
+		return nil, "", infraerrors.BadRequest("OAUTH_REAUTHORIZE_REQUIRED", "this provider requires business-login reauthorization instead of token refresh")
+	}
 	if account.IsDomesticOAuth() {
 		if h.cnOAuthService == nil {
 			return nil, "", infraerrors.BadRequest("CN_OAUTH_UNAVAILABLE", "native OAuth unavailable")
 		}
 		updated, err := h.cnOAuthService.RefreshAccount(ctx, account, true)
 		return updated, "", err
+	}
+	if account.Platform == service.PlatformKimi || account.Platform == service.PlatformMiniMax || account.Platform == service.PlatformStepFun {
+		return nil, "", infraerrors.BadRequest("CN_OAUTH_REAUTHORIZE", "native OAuth credentials are incomplete; reauthorize the account")
 	}
 	if !account.IsOAuth() {
 		return nil, "", infraerrors.BadRequest("NOT_OAUTH", "cannot refresh non-OAuth account")
@@ -1424,6 +1433,15 @@ func (h *AccountHandler) refreshSingleAccount(ctx context.Context, account *serv
 			"cannot refresh spark shadow account; its credentials are managed by the parent account")
 	}
 
+	var expected *service.Account
+	if account.IsOpenAI() || account.IsGrok() {
+		var err error
+		expected, err = service.CaptureOAuthCredentialOwner(account)
+		if err != nil {
+			return nil, "", err
+		}
+		account = expected
+	}
 	var newCredentials map[string]any
 
 	if account.IsOpenAI() {
@@ -1529,9 +1547,17 @@ func (h *AccountHandler) refreshSingleAccount(ctx context.Context, account *serv
 		}
 	}
 
-	updatedAccount, err := h.adminService.UpdateAccount(ctx, account.ID, &service.UpdateAccountInput{
-		Credentials: newCredentials,
-	})
+	var updatedAccount *service.Account
+	var err error
+	if expected != nil {
+		committer, ok := h.adminService.(service.OAuthCredentialCommitter)
+		if !ok {
+			return nil, "", errors.New("atomic OAuth credential persistence is unavailable")
+		}
+		updatedAccount, err = committer.CommitOAuthCredentials(ctx, expected, expected.Type, newCredentials, nil, false)
+	} else {
+		updatedAccount, err = h.adminService.UpdateAccount(ctx, account.ID, &service.UpdateAccountInput{Credentials: newCredentials})
+	}
 	if err != nil {
 		return nil, "", err
 	}
@@ -1585,20 +1611,22 @@ func (h *AccountHandler) Refresh(c *gin.Context) {
 
 // ApplyOAuthCredentialsRequest is the payload for persisting re-authorized OAuth credentials.
 type ApplyOAuthCredentialsRequest struct {
-	Type        string         `json:"type" binding:"required,oneof=oauth setup-token"`
-	Credentials map[string]any `json:"credentials" binding:"required"`
-	Extra       map[string]any `json:"extra"`
+	Type          string         `json:"type" binding:"required,oneof=oauth setup-token"`
+	Credentials   map[string]any `json:"credentials" binding:"required"`
+	Extra         map[string]any `json:"extra"`
+	ExpectedOwner string         `json:"expected_owner"`
 }
 
 // ApplyOAuthCredentials 将"重新授权"得到的新凭据原子落库。
 // POST /api/v1/admin/accounts/:id/apply-oauth-credentials
 //
 // 与通用 PUT /:id (Update) 接口的关键区别：
-//   - 仅接收 type / credentials / extra 三个字段（不接受 concurrency / rpm / quota_* 等可能误传的字段）
-//   - Extra 走 UpdateAccountExtra(JSONB key 级合并)，**绝不**全量覆盖；
+//   - 仅接收 type / credentials / extra / expected_owner（不接受 concurrency / rpm / quota_* 等可能误传的字段）
+//   - expected_owner 来自启动授权时的脱敏账号 DTO；缺失/格式错误拒绝，变更返回 409。
+//   - 凭据、Extra key 级合并、错误恢复与调度 outbox 在同一 owner CAS 中提交；
 //     避免 base_rpm / window_cost_limit / max_sessions / quota_* / privacy_mode
 //     等持久化配置在重新授权后丢失
-//   - 内置 ClearError + InvalidateToken，避免前端额外两次调用，
+//   - 仅成功提交后恢复捕获的 runtime generation 并 InvalidateToken，避免前端额外两次调用，
 //     并修复旧路径未失效 token 缓存导致重新授权后立即 401 的隐性 bug
 //
 // 与 /refresh 的区别：/refresh 用现有 refresh_token 换 access_token（无用户交互），
@@ -1651,61 +1679,29 @@ func (h *AccountHandler) ApplyOAuthCredentials(c *gin.Context) {
 		return
 	}
 
-	// Re-auth only returns authentication fields. Preserve account configuration
-	// stored alongside them (for example model_mapping), while allowing the new
-	// OAuth values to replace their existing counterparts.
-	req.Credentials = service.MergeCredentials(existing.Credentials, req.Credentials)
-	// Drop SSO/password residue; re-auth must leave only OAuth tokens on disk.
-	req.Credentials = service.SanitizeStoredCredentials(existing.Platform, req.Credentials)
-
-	updatedAccount, err := h.adminService.UpdateAccount(ctx, accountID, &service.UpdateAccountInput{
-		Type:        req.Type,
-		Credentials: req.Credentials,
-	})
+	ownerBytes, ownerErr := hex.DecodeString(req.ExpectedOwner)
+	if ownerErr != nil || len(ownerBytes) != sha256.Size || strings.ToLower(req.ExpectedOwner) != req.ExpectedOwner {
+		response.ErrorFrom(c, infraerrors.BadRequest("OAUTH_OWNER_REQUIRED", "expected_owner from the initiating account is required"))
+		return
+	}
+	if req.ExpectedOwner != service.OAuthCredentialOwner(existing) {
+		response.ErrorFrom(c, infraerrors.New(http.StatusConflict, "OAUTH_OWNER_CHANGED", "account credentials or proxy changed; restart authorization"))
+		return
+	}
+	expected, err := service.CaptureOAuthCredentialOwner(existing)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
-
-	// 增量合并 Extra（JSONB key 级 merge，绝不覆盖 base_rpm / window_cost_limit /
-	// max_sessions / quota_* / privacy_mode 等持久化键）。
-	// best-effort：失败仅记日志；下方 ClearAccountError 会从 DB 重新读取最新 account，
-	// 因此响应里的 extra 始终以 DB 为准——这里不需要手动维护内存快照。
-	if len(req.Extra) > 0 {
-		if extraErr := h.adminService.UpdateAccountExtra(ctx, accountID, req.Extra); extraErr != nil {
-			extraKeys := make([]string, 0, len(req.Extra))
-			for k := range req.Extra {
-				extraKeys = append(extraKeys, k)
-			}
-			slog.Error("apply_oauth_credentials.update_extra_failed",
-				"account_id", accountID,
-				"extra_keys", extraKeys,
-				"err", extraErr,
-			)
-		}
+	committer, ok := h.adminService.(service.OAuthCredentialCommitter)
+	if !ok {
+		response.ErrorFrom(c, infraerrors.ServiceUnavailable("OAUTH_PERSISTENCE_UNAVAILABLE", "atomic OAuth credential persistence is unavailable"))
+		return
 	}
-
-	// Successful re-auth clears the soft spending-limit reauth flag for Grok.
-	if existing.Platform == service.PlatformGrok {
-		if clearErr := h.adminService.UpdateAccountExtra(ctx, accountID, map[string]any{
-			"grok_needs_reauth":        false,
-			"grok_needs_reauth_reason": "",
-			"grok_needs_reauth_at":     "",
-		}); clearErr != nil {
-			slog.Warn("apply_oauth_credentials.clear_grok_reauth_failed",
-				"account_id", accountID,
-				"err", clearErr,
-			)
-		}
-	}
-
-	if cleared, clearErr := h.adminService.ClearAccountError(ctx, accountID); clearErr != nil {
-		slog.Warn("apply_oauth_credentials.clear_error_failed",
-			"account_id", accountID,
-			"err", clearErr,
-		)
-	} else if cleared != nil {
-		updatedAccount = cleared
+	updatedAccount, err := committer.CommitOAuthCredentials(ctx, expected, req.Type, req.Credentials, req.Extra, true)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
 	}
 
 	if h.tokenCacheInvalidator != nil && updatedAccount.IsOAuth() {
