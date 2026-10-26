@@ -65,10 +65,11 @@ func TestProviderFilesReviewHandlerLocalIDsRespectProtocolMatrix(t *testing.T) {
 					}
 					body := []byte(fmt.Sprintf(`{"messages":[{"role":"user","content":[{"type":"image","source":{"type":"file","file_id":"%s"}}]}]}`, escaped))
 					path := "messages.0.content.0.source.file_id"
-					if protocol == service.APIProtocolChatCompletions {
+					switch protocol {
+					case service.APIProtocolChatCompletions:
 						body = []byte(fmt.Sprintf(`{"messages":[{"role":"user","content":[{"type":"image_url","image_url":{"url":"%s"}}]}]}`, escaped))
 						path = "messages.0.content.0.image_url.url"
-					} else if protocol == service.APIProtocolResponses {
+					case service.APIProtocolResponses:
 						body = []byte(fmt.Sprintf(`{"input":[{"role":"user","content":[{"type":"input_image","image_url":"%s"}]}]}`, escaped))
 						path = "input.0.content.0.image_url"
 					}
