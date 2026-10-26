@@ -135,13 +135,17 @@ make test
 The available check commands are listed below. The `./...` Go commands and
 frontend `test:run` cover their full suites; select the affected packages or
 components while iterating, and use `submit-pr` for the complete final matrix.
+Integration tests always use `-count=1` so the current run actually sets up its
+services and executes the business scenarios. Go's test-result cache does not
+prove the current PostgreSQL/Redis state or track environment reads made before
+`TestMain` calls `m.Run`. Compilation and dependency caches remain reusable.
 
 ```bash
 # Backend
 cd backend
 go mod tidy -diff
 go test -tags=unit ./...
-go test -tags=integration ./...
+go test -count=1 -tags=integration ./...
 golangci-lint run ./...
 # Alternative for a memory-constrained validation container; same full scope
 GOGC=35 GOMEMLIMIT=4GiB golangci-lint run --concurrency=1 --timeout=10m ./...

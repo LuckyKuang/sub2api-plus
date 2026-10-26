@@ -13,6 +13,13 @@ launches them through [validation_runtime.py](../tools/validation_runtime.py).
 Host launchers inspect metadata, manage images/caches and launch containers;
 application, policy and deterministic-tree checks execute inside containers.
 
+The full integration command uses `go test -count=1 -tags=integration ./...` in
+both local submission and CI. PostgreSQL/Redis availability and fixture state
+must be exercised in the current run. Setup and environment reads before
+`TestMain` calls `m.Run` are outside Go's test-input logging, and remote service
+state cannot be established by a cached test result. This disables only test
+result reuse; the pinned compilation and dependency caches remain available.
+
 | Context / lane | Coverage | Relationship to local full |
 | --- | --- | --- |
 | `deployment-config` | Installer syntax, Apple lifecycle fixture, real Redis authentication/readiness regressions, Docker security/gateway/resources, Caddy policy | Union of local and CI deployment checks |

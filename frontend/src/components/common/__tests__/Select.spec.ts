@@ -31,6 +31,23 @@ describe('Select selection controls', () => {
     }
   })
 
+  it('selects and reopens when the wall clock moves backwards between interactions', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_760_000_000_000)
+    const wrapper = mount(Select, { props: { modelValue: '', options, searchable: false } })
+    await openSelect(wrapper)
+
+    now.mockReturnValue(1_759_999_999_995)
+    await chooseSelect(wrapper, 'Numeric one')
+    expect(wrapper.emitted('update:modelValue')).toEqual([[1]])
+    expect(wrapper.emitted('change')).toEqual([[1, options[2]]])
+    expect(wrapper.get('.select-trigger').attributes('aria-expanded')).toBe('false')
+
+    await chooseSelect(wrapper, 'Text one')
+    expect(wrapper.emitted('update:modelValue')).toEqual([[1], ['1']])
+    expect(wrapper.emitted('change')).toEqual([[1, options[2]], ['1', options[3]]])
+    expect(wrapper.get('.select-trigger').attributes('aria-expanded')).toBe('false')
+  })
+
   it('supports custom value and label keys', async () => {
     const wrapper = mount(Select, { props: { modelValue: null, options: [{ id: 7, display_name: 'Account seven' }], valueKey: 'id', labelKey: 'display_name' } })
     const panel = await openSelect(wrapper)

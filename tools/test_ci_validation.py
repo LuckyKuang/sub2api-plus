@@ -53,9 +53,22 @@ class FullCoverageTests(unittest.TestCase):
                          [("go", "mod", "tidy", "-diff"), ("go", "test", "-tags=unit", "./..."),
                           ("python3", "tools/check_seven_provider_coverage.py", "--profile", "unit")])
         self.assertEqual(self.commands("test-integration"),
-                         [("go", "test", "-tags=integration", "./..."),
+                         [("go", "test", "-count=1", "-tags=integration", "./..."),
                           ("python3", "tools/check_seven_provider_coverage.py", "--profile", "integration")])
         self.assertEqual(self.commands("golangci-lint"), [("golangci-lint", "run", "./...")])
+
+    def test_integration_entrypoints_execute_fresh_service_setup_and_business_tests(self) -> None:
+        # TestMain setup and external PostgreSQL/Redis state are not a reusable
+        # test-result proof. Require fresh execution in both promotion gates and
+        # the maintained developer entrypoint; compilation caches may be reused.
+        expected = ("go", "test", "-count=1", "-tags=integration", "./...")
+        local = next(step for step in validation_checks.full_steps(ROOT, python="python3")
+                     if step.name == "Backend integration tests")
+        self.assertEqual(tuple(local.command), expected)
+        self.assertIn(expected, self.commands("test-integration"))
+        makefile = (ROOT / "backend/Makefile").read_text()
+        self.assertIn("test-integration:\n\tgo test -count=1 -tags=integration ./...\n", makefile)
+        self.assertIn("\ngo test -count=1 -tags=integration ./...\n", (ROOT / "CONTRIBUTING.md").read_text())
 
     def test_seven_provider_gate_parser_is_a_required_policy_check(self) -> None:
         self.assertIn(("python3", "tools/test_seven_provider_coverage.py"),

@@ -67,7 +67,7 @@ def full_steps(
         ),
         ValidationStep(
             "Backend integration tests",
-            ["go", "test", "-tags=integration", "./..."],
+            ["go", "test", "-count=1", "-tags=integration", "./..."],
             backend,
             "backend-tests",
         ),
