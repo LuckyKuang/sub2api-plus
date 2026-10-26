@@ -97,6 +97,19 @@ dist/
 build/
 release/
 
+# Exact runtime staging paths used by the distributed Release workflow. Keep
+# other untracked files visible to Git and Go's VCS build stamping.
+/.release-tooling/
+/.release-plan/
+/.release-output/
+/.release-build.yaml
+/.release-publish.yaml
+/.release-context/
+/.release-pricing/
+/.release-docker-config/
+/release-input/
+/release-leaf/
+
 # 后端嵌入的前端构建产物
 # Keep a placeholder file so `//go:embed all:dist` always has a match in CI/lint,
 # while still ignoring generated frontend build outputs.

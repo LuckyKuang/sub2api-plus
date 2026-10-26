@@ -8,6 +8,7 @@ from pathlib import Path
 import shutil
 import stat
 import subprocess
+import sys
 import tarfile
 import tempfile
 import unittest
@@ -20,12 +21,14 @@ HERE = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location('release_matrix', HERE / 'release_matrix.py')
 release = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(release)
+sys.path.insert(0, str(HERE))
+import release_job as worker
 VERSION = '9.8.7+custom.009'
 DATE = '2026-10-09T01:02:03Z'
 PRICING_BODY = b'{"fixture":{"input_cost_per_token":1}}'
 
 
-def write_fixture_archive(path, target, scenario='regular'):
+def write_fixture_archive(path, target, scenario='regular', binary_body=b'binary fixture'):
     # Expected runtime layout is specified independently of the release helper.
     name = 'resources/model-pricing/model_prices_and_context_window.json'
     if scenario == 'wrong-path':
@@ -34,7 +37,7 @@ def write_fixture_archive(path, target, scenario='regular'):
     body = b'{"fixture":{"input_cost_per_token":9}}' if scenario == 'wrong-bytes' else PRICING_BODY
     if path.suffix == '.zip':
         with zipfile.ZipFile(path, 'w') as archive:
-            archive.writestr('sub2api.exe', b'binary fixture')
+            archive.writestr('sub2api.exe', binary_body)
             if scenario == 'missing':
                 return
             info = zipfile.ZipInfo(name)
@@ -48,8 +51,8 @@ def write_fixture_archive(path, target, scenario='regular'):
         return
     with tarfile.open(path, 'w:gz') as archive:
         binary = tarfile.TarInfo('sub2api')
-        binary.size, binary.mode = 14, 0o755
-        archive.addfile(binary, io.BytesIO(b'binary fixture'))
+        binary.size, binary.mode = len(binary_body), 0o755
+        archive.addfile(binary, io.BytesIO(binary_body))
         if scenario == 'missing':
             return
         info = tarfile.TarInfo(name)
@@ -68,6 +71,32 @@ def write_fixture_archive(path, target, scenario='regular'):
             archive.addfile(duplicate, io.BytesIO(body))
 
 
+def stage_release_runtime():
+    # Literal inventory from the workflow's business contract, independent of
+    # ignore parsing and the production worker's implementation.
+    directories = (
+        '.release-tooling', '.release-plan', '.release-output', '.release-context',
+        '.release-pricing', '.release-docker-config', 'release-input', 'release-leaf',
+        'dist', 'frontend/node_modules', 'backend/internal/web/dist',
+    )
+    for directory in directories:
+        path = Path(directory) / 'fixture'
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b'generated runtime staging')
+    for name in ('.release-build.yaml', '.release-publish.yaml'):
+        Path(name).write_text('# generated runtime configuration\n')
+
+
+def go_build_settings(binary):
+    # Inspect actual compiler output without executing a target-platform binary.
+    with tempfile.TemporaryDirectory() as temporary:
+        path = Path(temporary) / 'sub2api'
+        path.write_bytes(binary)
+        metadata = subprocess.check_output(['go', 'version', '-m', str(path)], text=True)
+    return dict(line.removeprefix('\tbuild\t').split('=', 1)
+                for line in metadata.splitlines() if line.startswith('\tbuild\t') and '=' in line)
+
+
 class ReleaseMatrixTest(unittest.TestCase):
     def setUp(self):
         self.previous = Path.cwd()
@@ -76,6 +105,7 @@ class ReleaseMatrixTest(unittest.TestCase):
         os.chdir(temporary.name)
         self.addCleanup(os.chdir, self.previous)
         shutil.copyfile(ROOT / '.goreleaser.yaml', '.goreleaser.yaml')
+        shutil.copyfile(ROOT / '.gitignore', '.gitignore')
         Path('backend/cmd/server').mkdir(parents=True)
         release.VERSION_FILE.write_text(VERSION + '\n')
         pricing_source = Path('backend/resources/model-pricing/model_prices_and_context_window.json')
@@ -93,6 +123,24 @@ class ReleaseMatrixTest(unittest.TestCase):
 
     def git(self, *args):
         return subprocess.check_output(['git', *args], text=True).strip()
+
+    def prepare_go_fixture(self):
+        Path('backend/go.mod').write_text('module example.com/release-archive-fixture\n\ngo 1.27.0\n')
+        Path('backend/cmd/server/main.go').write_text(
+            'package main\nimport _ "embed"\n//go:embed VERSION\nvar version string\n'
+            'var Commit, Date, BuildType string\n'
+            'func main() { println(version, Commit, Date, BuildType) }\n')
+        self.git('add', 'backend/go.mod', 'backend/cmd/server/main.go')
+        self.git('commit', '-qm', 'dependency-free Go build fixture')
+        self.sha = self.git('rev-parse', 'HEAD')
+
+    def build_environment(self):
+        env = {key: value for key, value in os.environ.items() if key not in ('GH_TOKEN', 'GITHUB_TOKEN')}
+        env.update(RELEASE_VERSION=VERSION, RELEASE_DATE=DATE, GITHUB_REPO_OWNER='owner',
+                   GITHUB_REPO_NAME='repo', GITHUB_REPO_OWNER_LOWER='owner',
+                   DOCKER_TAG_VERSION='v9.8.7-custom.009', TAG_MESSAGE='Read-only fixture',
+                   CGO_ENABLED='0', GOWORK='off', GOPROXY='off')
+        return env
 
     def fixture(self):
         directory = Path('release-input')
@@ -155,22 +203,17 @@ class ReleaseMatrixTest(unittest.TestCase):
     def test_pinned_goreleaser_packages_runtime_fallback_in_real_tar_and_zip(self):
         # Build only a dependency-free fixture. The archive file mapping is the
         # actual repository configuration, not a reconstructed expected mapping.
-        Path('backend/go.mod').write_text('module example.com/release-archive-fixture\n\ngo 1.27.0\n')
-        Path('backend/cmd/server/main.go').write_text(
-            'package main\nimport _ "embed"\n//go:embed VERSION\nvar version string\n'
-            'var Commit, Date, BuildType string\nfunc main() { println(version) }\n')
+        self.binary_check.stop()
+        self.prepare_go_fixture()
+        stage_release_runtime()
+        self.assertEqual(self.git('status', '--porcelain=v1', '--untracked-files=all'), '')
         self.git('remote', 'add', 'origin', 'https://github.com/owner/repo.git')
-        release.generate_config(argparse.Namespace(mode='build', goos='linux', goarch='amd64', output='package.yaml'))
-        configuration = yaml.safe_load(Path('package.yaml').read_text())
+        release.generate_config(argparse.Namespace(mode='build', goos='linux', goarch='amd64', output='.release-build.yaml'))
+        configuration = yaml.safe_load(Path('.release-build.yaml').read_text())
         configuration['builds'][0]['goos'] = ['linux', 'windows']
-        Path('package.yaml').write_text(yaml.safe_dump(configuration, sort_keys=False))
-        env = {key: value for key, value in os.environ.items() if key not in ('GH_TOKEN', 'GITHUB_TOKEN')}
-        env.update(RELEASE_VERSION=VERSION, RELEASE_DATE=DATE, GITHUB_REPO_OWNER='owner',
-                   GITHUB_REPO_NAME='repo', GITHUB_REPO_OWNER_LOWER='owner',
-                   DOCKER_TAG_VERSION='v9.8.7-custom.009', TAG_MESSAGE='Read-only fixture',
-                   GOWORK='off', GOPROXY='off')
-        subprocess.run(['goreleaser', 'release', '--snapshot', '--clean', '--config', 'package.yaml',
-                        '--skip=validate,before,publish,announce,docker'], env=env, check=True,
+        Path('.release-build.yaml').write_text(yaml.safe_dump(configuration, sort_keys=False))
+        subprocess.run(['goreleaser', 'release', '--snapshot', '--clean', '--config', '.release-build.yaml',
+                        '--skip=validate,before,publish,announce,docker'], env=self.build_environment(), check=True,
                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=180)
         expected = 'resources/model-pricing/model_prices_and_context_window.json'
         tar_path = Path('dist/sub2api_9.8.7+custom.009_linux_amd64.tar.gz')
@@ -179,14 +222,127 @@ class ReleaseMatrixTest(unittest.TestCase):
             self.assertEqual(len(members), 1)
             self.assertTrue(members[0].isfile())
             self.assertEqual(archive.extractfile(members[0]).read(), PRICING_BODY)
+            settings = go_build_settings(archive.extractfile('sub2api').read())
+            self.assertEqual(settings['vcs'], 'git')
+            self.assertEqual(settings['vcs.revision'], self.sha)
+            self.assertEqual(settings['vcs.modified'], 'false')
         zip_path = Path('dist/sub2api_9.8.7+custom.009_windows_amd64.zip')
         with zipfile.ZipFile(zip_path) as archive:
             members = [member for member in archive.infolist() if member.filename == expected]
             self.assertEqual(len(members), 1)
             self.assertEqual(stat.S_IFMT(members[0].external_attr >> 16), stat.S_IFREG)
             self.assertEqual(archive.read(members[0]), PRICING_BODY)
+            settings = go_build_settings(archive.read('sub2api.exe'))
+            self.assertEqual(settings['vcs'], 'git')
+            self.assertEqual(settings['vcs.revision'], self.sha)
+            self.assertEqual(settings['vcs.modified'], 'false')
         release.verify_archive_pricing(tar_path, self.sha)
         release.verify_archive_pricing(zip_path, self.sha)
+        release.verify_binary(tar_path, {'goos': 'linux', 'goarch': 'amd64'}, VERSION, self.sha, DATE)
+        release.verify_binary(zip_path, {'goos': 'windows', 'goarch': 'amd64'}, VERSION, self.sha, DATE)
+        self.assertEqual(self.git('status', '--porcelain=v1', '--untracked-files=all'), '')
+
+    def test_binary_worker_accepts_only_exact_runtime_staging(self):
+        stage_release_runtime()
+        plan = {'sha': self.sha, 'version': VERSION, 'date': DATE}
+        with patch.object(worker, 'run') as run, patch.object(worker.matrix, 'collect') as collect:
+            worker.build_binary(plan, argparse.Namespace(goos='linux', goarch='amd64'))
+        run.assert_called_once()
+        collect.assert_called_once()
+        self.assertEqual(self.git('status', '--porcelain=v1', '--untracked-files=all'), '')
+
+    def test_binary_worker_rejects_source_changes_before_compiling(self):
+        plan = {'sha': self.sha, 'version': VERSION, 'date': DATE}
+        for scenario in ('modified', 'staged', 'deleted', 'untracked', 'unknown-staging'):
+            with self.subTest(scenario=scenario):
+                tracked = Path('backend/cmd/server/VERSION')
+                if scenario in ('modified', 'staged'):
+                    tracked.write_text('changed version\n')
+                    if scenario == 'staged':
+                        self.git('add', str(tracked))
+                elif scenario == 'deleted':
+                    tracked.unlink()
+                elif scenario == 'untracked':
+                    Path('backend/new-source.go').write_text('package backend\n')
+                else:
+                    Path('.release-unclassified.yaml').write_text('unexpected: staging\n')
+                with patch.object(worker, 'run') as run, patch.object(worker.matrix, 'collect') as collect:
+                    with self.assertRaisesRegex(ValueError, 'clean captured source'):
+                        worker.build_binary(plan, argparse.Namespace(goos='linux', goarch='amd64'))
+                run.assert_not_called()
+                collect.assert_not_called()
+                self.git('reset', '--hard', self.sha)
+                Path('backend/new-source.go').unlink(missing_ok=True)
+                Path('.release-unclassified.yaml').unlink(missing_ok=True)
+        with patch.object(worker, 'run') as run, patch.object(worker.matrix, 'collect') as collect:
+            with self.assertRaisesRegex(ValueError, 'prepared application SHA'):
+                worker.build_binary({**plan, 'sha': 'b' * 40}, argparse.Namespace(goos='linux', goarch='amd64'))
+        run.assert_not_called()
+        collect.assert_not_called()
+
+    def test_binary_worker_rejects_changes_during_compilation_before_collection(self):
+        plan = {'sha': self.sha, 'version': VERSION, 'date': DATE}
+        for scenario in ('tracked', 'untracked'):
+            with self.subTest(scenario=scenario):
+                def change_during_build(*command):
+                    path = 'backend/cmd/server/VERSION' if scenario == 'tracked' else 'backend/new-source.go'
+                    Path(path).write_text('unexpected build side effect\n')
+                with patch.object(worker, 'run', side_effect=change_during_build) as run, \
+                     patch.object(worker.matrix, 'collect') as collect:
+                    with self.assertRaisesRegex(ValueError, 'clean captured source'):
+                        worker.build_binary(plan, argparse.Namespace(goos='linux', goarch='amd64'))
+                run.assert_called_once()
+                collect.assert_not_called()
+                self.git('reset', '--hard', self.sha)
+                Path('backend/new-source.go').unlink(missing_ok=True)
+
+    def test_real_dirty_and_disabled_vcs_builds_are_rejected_by_both_archive_gates(self):
+        self.binary_check.stop()
+        self.prepare_go_fixture()
+        stage_release_runtime()
+        target = {'goos': 'linux', 'goarch': 'amd64'}
+        name = 'sub2api_9.8.7+custom.009_linux_amd64.tar.gz'
+        binary = Path('.release-output/sub2api').resolve()
+        source = Path('backend/cmd/server/main.go')
+        original = source.read_text()
+        env = dict(self.build_environment(), GOOS='linux', GOARCH='amd64')
+        flags = f'-s -w -X main.Commit={self.sha} -X main.Date={DATE} -X main.BuildType=release'
+        for scenario in ('dirty', 'disabled'):
+            with self.subTest(scenario=scenario):
+                source.write_text(original + '// tracked source changed\n' if scenario == 'dirty' else original)
+                command = ['go', '-C', 'backend', 'build', '-tags=embed', '-ldflags', flags,
+                           '-o', str(binary)]
+                if scenario == 'disabled':
+                    command.append('-buildvcs=false')
+                command.append('./cmd/server')
+                subprocess.run(command, env=env, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                               timeout=120)
+                settings = go_build_settings(binary.read_bytes())
+                if scenario == 'dirty':
+                    self.assertEqual(settings['vcs.revision'], self.sha)
+                    self.assertEqual(settings['vcs.modified'], 'true')
+                else:
+                    self.assertNotIn('vcs', settings)
+                    self.assertNotIn('vcs.revision', settings)
+                    self.assertNotIn('vcs.modified', settings)
+                archive = Path('dist') / name
+                write_fixture_archive(archive, target, binary_body=binary.read_bytes())
+                Path('dist/checksums.txt').write_text(release.sha256(archive) + '  ' + name + '\n')
+                leaf = 'release-leaf/' + scenario
+                with self.subTest(gate='producer'):
+                    with self.assertRaisesRegex(ValueError, 'binary VCS build metadata'):
+                        release.collect(argparse.Namespace(version=VERSION, sha=self.sha, date=DATE,
+                                                          output=leaf, **target))
+                    self.assertFalse(Path(leaf).exists())
+                destination = Path('release-input') / name
+                shutil.copyfile(archive, destination)
+                manifest = {'sha': self.sha, 'version': VERSION, 'date': DATE, 'target': target,
+                            'archive': name, 'sha256': release.sha256(destination)}
+                Path('release-input/manifest-linux-amd64.json').write_text(json.dumps(manifest))
+                with self.subTest(gate='consumer'):
+                    with self.assertRaisesRegex(ValueError, 'binary VCS build metadata'):
+                        release.verify(argparse.Namespace(input='release-input', version=VERSION,
+                                                          sha=self.sha, date=DATE))
 
     def test_collect_checks_runtime_fallback_before_emitting_leaf_artifacts(self):
         Path('dist').mkdir()
@@ -329,6 +485,7 @@ class ReleaseMatrixTest(unittest.TestCase):
         # Independent wire fixture: metadata is the format emitted by Go, not generated by the checker.
         metadata = '\tbuild\tGOOS=linux\n\tbuild\tGOARCH=arm64\n\tbuild\tCGO_ENABLED=0\n'
         metadata += f'\tbuild\t-tags=embed\n\tbuild\t-ldflags="-X main.Commit={self.sha} -X main.Date={DATE} -X main.BuildType=release"\n'
+        metadata += f'\tbuild\tvcs=git\n\tbuild\tvcs.revision={self.sha}\n\tbuild\tvcs.modified=false\n'
         with patch.object(release, 'binary_bytes', return_value=VERSION.encode()), \
              patch.object(subprocess, 'check_output', return_value=metadata):
             release.verify_binary(Path('unused'), {'goos': 'linux', 'goarch': 'arm64'}, VERSION, self.sha, DATE)
@@ -340,6 +497,37 @@ class ReleaseMatrixTest(unittest.TestCase):
             ]:
                 with self.assertRaisesRegex(ValueError, 'build metadata'):
                     release.verify_binary(Path('unused'), target, version, sha, date)
+
+    def test_binary_vcs_metadata_is_exact_complete_unique_and_clean(self):
+        self.binary_check.stop()
+        target = {'goos': 'linux', 'goarch': 'arm64'}
+        metadata = '\tbuild\tGOOS=linux\n\tbuild\tGOARCH=arm64\n\tbuild\tCGO_ENABLED=0\n'
+        metadata += f'\tbuild\t-tags=embed\n\tbuild\t-ldflags="-X main.Commit={self.sha} -X main.Date={DATE} -X main.BuildType=release"\n'
+        vcs = f'\tbuild\tvcs=git\n\tbuild\tvcs.revision={self.sha}\n\tbuild\tvcs.modified=false\n'
+        cases = {
+            'missing-all': '',
+            'missing-vcs': vcs.replace('\tbuild\tvcs=git\n', ''),
+            'missing-revision': vcs.replace(f'\tbuild\tvcs.revision={self.sha}\n', ''),
+            'missing-modified': vcs.replace('\tbuild\tvcs.modified=false\n', ''),
+            'wrong-vcs': vcs.replace('vcs=git', 'vcs=hg'),
+            'wrong-revision': vcs.replace(self.sha, 'b' * 40),
+            'dirty': vcs.replace('vcs.modified=false', 'vcs.modified=true'),
+            'false-prefix': vcs.replace('vcs.modified=false', 'vcs.modified=false-unverified'),
+            'revision-prefix': vcs.replace(self.sha, self.sha + '0'),
+            'duplicate-vcs': vcs + '\tbuild\tvcs=git\n',
+            'duplicate-revision': vcs + f'\tbuild\tvcs.revision={self.sha}\n',
+            'duplicate-modified': vcs + '\tbuild\tvcs.modified=false\n',
+            'contradictory-modified': vcs + '\tbuild\tvcs.modified=true\n',
+            'bare-modified': vcs.replace('vcs.modified=false', 'vcs.modified'),
+        }
+        with patch.object(release, 'binary_bytes', return_value=VERSION.encode()):
+            with patch.object(subprocess, 'check_output', return_value=metadata + vcs):
+                release.verify_binary(Path('unused'), target, VERSION, self.sha, DATE)
+            for name, settings in cases.items():
+                with self.subTest(scenario=name), \
+                     patch.object(subprocess, 'check_output', return_value=metadata + settings):
+                    with self.assertRaisesRegex(ValueError, 'binary VCS build metadata'):
+                        release.verify_binary(Path('unused'), target, VERSION, self.sha, DATE)
 
     def test_image_commands_preserve_plus_tags_and_never_write_in_rehearsal(self):
         Path('bin').mkdir()

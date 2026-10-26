@@ -22,6 +22,14 @@ from the selected source's `.goreleaser.yaml`. Each archive has a manifest bound
 to the captured SHA, version, date, target, name and SHA256. Producers verify HEAD;
 collection also checks Go binary build metadata. The consumer requires exactly
 five archives and five manifests before any image build or publication.
+Each compilation checks the captured HEAD and a clean Git status both before
+and after GoReleaser runs. Only the workflow's exact runtime staging paths are
+ignored; tracked changes and other untracked files stop the build. Producer and
+consumer checks also require Go's own `vcs=git`, `vcs.revision` equal to the
+captured SHA, and `vcs.modified=false`, with no missing or duplicate settings.
+Matching linker declarations alone are insufficient, and `-buildvcs=false`
+cannot bypass this check. A dirty flag can result from untracked staging files;
+it does not by itself establish that application source was changed.
 Both producer collection and consumer verification inspect each real tar/zip:
 `resources/model-pricing/model_prices_and_context_window.json` must occur once
 as a regular file and match the pricing blob at the captured application SHA
@@ -68,6 +76,10 @@ Provenance queries use GitHub's REST SHA filter through the container's `gh api`
 then independently check workflow name, event, branch, SHA and success.
 Historical rehearsal also executes the published-release verifier used by
 finalization CI with the actual container GitHub CLI and read-only token.
+Historical sources and artifacts must satisfy the current tooling's clean-source,
+compiler VCS and archive contracts. Legacy staging rules, dirty VCS stamps or
+incorrect archive layouts fail closed; rehearsal never modifies a historical
+tag or relaxes these checks to retroactively accept its release.
 Real publication must run from the same eligible tag ref; a branch dispatch with
 a tag input cannot publish. Tag pushes always select real publication.
 
@@ -108,3 +120,8 @@ with the repository's file mapping. It independently checks the runtime pricing
 path, regular-file type and exact bytes. Synthetic negative archives exercise
 both producer and consumer gates, including valid checksum/provenance metadata
 that must not hide a broken runtime resource.
+The real fixture also checks clean Go VCS stamps with workflow staging present.
+Actual builds with a changed tracked source or disabled VCS stamping are rejected
+by both archive gates. Separate build-worker regressions reject staged and
+unstaged tracked changes, deleted tracked files, unexpected untracked files, and
+changes introduced during compilation before collecting any leaf artifact.

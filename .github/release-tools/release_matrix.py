@@ -248,6 +248,21 @@ def verify_binary(path, target, version, sha, date):
                 f'main.Date={date}', 'main.BuildType=release']
     if any(value not in metadata for value in required) or version.encode() not in binary:
         raise ValueError('binary build metadata does not match the release plan')
+    # Linker declarations alone do not attest which checkout Go compiled. The
+    # compiler's own VCS settings must be present, unique and clean; disabling
+    # VCS stamping must never turn a dirty build into an acceptable artifact.
+    vcs = {}
+    for line in metadata.splitlines():
+        if not line.startswith('\tbuild\t'):
+            continue
+        key, separator, value = line.removeprefix('\tbuild\t').partition('=')
+        if key not in ('vcs', 'vcs.revision', 'vcs.modified'):
+            continue
+        if not separator or key in vcs:
+            raise ValueError('binary VCS build metadata must be unique and complete')
+        vcs[key] = value
+    if vcs != {'vcs': 'git', 'vcs.revision': sha, 'vcs.modified': 'false'}:
+        raise ValueError('binary VCS build metadata does not match the clean captured source')
 
 
 def contexts(args):
