@@ -2177,6 +2177,18 @@ func (h *OpenAIGatewayHandler) acquireOpenAIAccountSlot(
 		}
 		account = latest
 		selection.Account = latest
+		if err := ensureAccountInflightReservation(c, account); err != nil {
+			if selection.ReleaseFunc != nil {
+				selection.ReleaseFunc()
+			}
+			status, code, message, retryAfter := billingErrorDetails(err)
+			if retryAfter > 0 {
+				c.Header("Retry-After", strconv.Itoa(retryAfter))
+			}
+			writeError(status, "billing_error", code, message)
+			return nil, openAISlotAcquireFailed
+		}
+		ctx = c.Request.Context()
 		// 调度器已抢槽路径无门时由选号内部完成 eager 绑定；门下选号内部
 		// 推迟绑定，这里在终检通过后补准入后绑定。
 		{
@@ -2225,6 +2237,18 @@ func (h *OpenAIGatewayHandler) acquireOpenAIAccountSlot(
 	}
 	account = latest
 	selection.Account = latest
+	if err := ensureAccountInflightReservation(c, account); err != nil {
+		if accountReleaseFunc != nil {
+			accountReleaseFunc()
+		}
+		status, code, message, retryAfter := billingErrorDetails(err)
+		if retryAfter > 0 {
+			c.Header("Retry-After", strconv.Itoa(retryAfter))
+		}
+		writeError(status, "billing_error", code, message)
+		return nil, openAISlotAcquireFailed
+	}
+	ctx = c.Request.Context()
 	if err := h.gatewayService.BindStickySessionAfterProfitAdmission(ctx, groupID, sessionHash, account.ID); err != nil {
 		reqLog.Warn("openai.bind_sticky_session_after_profit_admission_failed", zap.Int64("account_id", account.ID), zap.Error(err))
 		if accountReleaseFunc != nil {
@@ -2539,16 +2563,68 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		return
 	}
 
-	// 余额模式在途预留（会话级）：按首帧估算一次，会话期间续期；每轮计费任务接管引用，
-	// 会话结束且所有轮次扣减落地后释放。
-	inflightCtx, inflightDone, inflightErr := reserveInflightBalanceCtx(ctx, h.billingCacheService, h.gatewayService, apiKey, subscription, tokenInflightEstimate(service.ContentModerationProtocolOpenAIResponses, reqModel, firstMessage))
+	// Each accepted turn owns a separate hold. Only sanitized estimation metadata
+	// survives the frame; pending billing tasks retain their own turn's reference.
+	firstInflightEstimate := tokenInflightEstimate(service.ContentModerationProtocolOpenAIResponses, reqModel, firstMessage)
+	firstInflightEstimate.ResponsesWebSocket = true
+	inflightCtx, inflightDone, inflightErr := reserveInflightBalanceCtx(ctx, h.billingCacheService, h.gatewayService, apiKey, subscription, firstInflightEstimate)
 	if inflightErr != nil {
 		reqLog.Info("openai.websocket_inflight_reservation_rejected", zap.Error(inflightErr))
 		closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "billing check failed")
 		return
 	}
-	defer inflightDone()
 	ctx = inflightCtx
+	c.Request = c.Request.WithContext(ctx)
+	type wsTurnInflight struct {
+		ctx  context.Context
+		done func()
+	}
+	var turnInflightMu sync.Mutex
+	turnInflight := map[int]wsTurnInflight{1: {ctx: ctx, done: inflightDone}}
+	turnInflightEstimates := map[int]service.InflightEstimateRequest{1: firstInflightEstimate}
+	retryInflightEstimate, retryInflightCtx, retryInflightKey := firstInflightEstimate, ctx, apiKey
+	defer func() {
+		turnInflightMu.Lock()
+		remaining := turnInflight
+		turnInflight = nil
+		turnInflightEstimates = nil
+		turnInflightMu.Unlock()
+		for _, hold := range remaining {
+			hold.done()
+		}
+	}()
+	// Proxy attempts restart their local turn numbering. A failed turn's hold
+	// has already handed off billing and closed, so retries need a fresh owner.
+	prepareAttemptInflight := func(account *service.Account, payload []byte) error {
+		turnInflightMu.Lock()
+		hold, exists := turnInflight[1]
+		estimate, pricingCtx, key := retryInflightEstimate, retryInflightCtx, retryInflightKey
+		turnInflightMu.Unlock()
+		if !exists {
+			base := service.CopyBillingPricingSnapshot(pricingCtx, service.WithoutInflightReservation(ctx))
+			var err error
+			hold.ctx, hold.done, err = reserveInflightBalanceCtx(base, h.billingCacheService, h.gatewayService, key, subscription, estimate)
+			if err != nil {
+				return err
+			}
+			turnInflightMu.Lock()
+			turnInflight[1] = hold
+			turnInflightEstimates[1] = estimate
+			turnInflightMu.Unlock()
+			ctx = hold.ctx
+		}
+		ctx = h.gatewayService.WithResponsesWebSocketInflightTransport(ctx, account, payload)
+		c.Request = c.Request.WithContext(ctx)
+		if err := ensureAccountInflightReservation(c, account); err != nil {
+			return err
+		}
+		ctx = c.Request.Context()
+		hold.ctx = ctx
+		turnInflightMu.Lock()
+		turnInflight[1] = hold
+		turnInflightMu.Unlock()
+		return nil
+	}
 
 	sessionHash := h.gatewayService.GenerateSessionHashWithFallback(
 		c,
@@ -2800,6 +2876,24 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		// captured by the previous failover account before credential lookup.
 		setOpsSelectedAccount(c, account.ID, account.Platform)
 		currentAccountRelease = wrapReleaseOnDone(ctx, accountReleaseFunc)
+		wsFirstMessage := wsAttemptMessage
+		// 切组/会话失配防护：previous_response_id 未在当前分组命中粘连账号（StickyPreviousHit=false），
+		// 说明该会话链不属于本次调度到的账号，原样转发会触发上游会话链鉴权失败（“鉴权失败，请检查 API Key”）。
+		// 故剥离首包里的 previous_response_id，改用首包内 input 重建上下文；带 function_call_output 的
+		// 工具续链无法重建，保持原样。仅作用于首轮首包，后续 turn 的续链由 WS 转发层既有逻辑处理。
+		if previousResponseID != "" && !scheduleDecision.StickyPreviousHit && previousResponseCanMove {
+			wsFirstMessage = service.RemovePreviousResponseIDFromBody(wsFirstMessage)
+			reqLog.Debug("openai.websocket_previous_response_id_stripped_cross_group",
+				zap.Int64("account_id", account.ID),
+				zap.String("schedule_layer", scheduleDecision.Layer),
+			)
+		}
+
+		if err := prepareAttemptInflight(account, wsFirstMessage); err != nil {
+			reqLog.Info("openai.websocket_account_inflight_reservation_rejected", zap.Int64("account_id", account.ID), zap.Error(err))
+			closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "billing check failed")
+			return
+		}
 		if err := h.gatewayService.BindStickySessionAfterProfitAdmission(ctx, apiKey.GroupID, sessionHash, account.ID); err != nil {
 			reqLog.Warn("openai.websocket_bind_sticky_session_after_profit_admission_failed", zap.Int64("account_id", account.ID), zap.Error(err))
 			if currentAccountRelease != nil {
@@ -2957,6 +3051,13 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 					}
 				}
 				turnCapability.Store(&openAIWSTurnCapabilitySnapshot{turn: turn, capability: turnRequiredCapability})
+				if eventType := strings.TrimSpace(gjson.GetBytes(payload, "type").String()); eventType == "" || eventType == "response.create" {
+					estimate := tokenInflightEstimate(service.ContentModerationProtocolOpenAIResponses, model, payload)
+					estimate.ResponsesWebSocket = true
+					turnInflightMu.Lock()
+					turnInflightEstimates[turn] = estimate
+					turnInflightMu.Unlock()
+				}
 				return nil
 			},
 			MapRequestModel: func(turn int, originalModel string) (string, error) {
@@ -3058,7 +3159,18 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				// 每个 turn 按当前时刻重装利润门并复核当前账号，越线同样要求
 				// 重连重选（连接绑定单一上游账号，无法中途换号）。本 turn 的
 				// 准入与计费共用同一 pricingAt。
-				turnBillingCtx := turnBillingAPIKeys.begin(ctx, h.apiKeyService, turn, apiKey)
+				turnInflightMu.Lock()
+				estimate, hasEstimate := turnInflightEstimates[turn]
+				firstAttemptKey := retryInflightKey
+				turnInflightMu.Unlock()
+				if !hasEstimate {
+					return service.NewOpenAIWSClientCloseError(coderws.StatusInternalError, "billing estimate is unavailable; please reconnect", nil)
+				}
+				turnKey := apiKey
+				if turn == 1 {
+					turnKey = firstAttemptKey
+				}
+				turnBillingCtx := turnBillingAPIKeys.begin(ctx, h.apiKeyService, turn, turnKey)
 				turnBillingKey := turnBillingAPIKeys.forTurn(turn, apiKey)
 				if turn > 1 {
 					turnBillingCtx = service.WithoutBillingPricingSnapshot(turnBillingCtx)
@@ -3085,6 +3197,28 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				}
 				turnPricing.freeze(turn, turnAt)
 				turnPricing.freezeSnapshot(turn, service.BillingPricingSnapshotFromContext(turnCtx))
+				if turn > 1 {
+					var done func()
+					turnCtx, done, err = reserveInflightBalanceCtx(service.WithoutInflightReservation(turnCtx), h.billingCacheService, h.gatewayService, turnBillingKey, subscription, estimate)
+					if err != nil {
+						return service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "billing check failed", err)
+					}
+					turnInflightMu.Lock()
+					turnInflight[turn] = wsTurnInflight{ctx: turnCtx, done: done}
+					turnInflightMu.Unlock()
+				}
+				// The proxy forwards with this connection's credential/mapping
+				// snapshot. A refreshed account can revalidate eligibility and slot
+				// limits, but cannot reprice a wire model the proxy will not send.
+				turnCtx, err = ensureAccountInflightReservationCtx(turnCtx, account)
+				if err != nil {
+					return service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "billing check failed", err)
+				}
+				turnInflightMu.Lock()
+				hold := turnInflight[turn]
+				hold.ctx = turnCtx
+				turnInflight[turn] = hold
+				turnInflightMu.Unlock()
 				accountMaxConcurrency = latestAccount.Concurrency
 				if turn == 1 {
 					acceptTurnDisconnectRisk(turn)
@@ -3104,7 +3238,26 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				return nil
 			},
 			AfterTurn: func(turn int, result *service.OpenAIForwardResult, turnErr error) {
-				usageObservationCtx := liveTurnUsageContext(c, ctx, turn)
+				turnInflightMu.Lock()
+				hold, hasHold := turnInflight[turn]
+				delete(turnInflight, turn)
+				if estimate, ok := turnInflightEstimates[turn]; ok {
+					retryInflightEstimate = estimate
+					delete(turnInflightEstimates, turn)
+				}
+				if hasHold {
+					retryInflightCtx = hold.ctx
+				}
+				retryInflightKey = turnBillingAPIKeys.forTurn(turn, apiKey)
+				turnInflightMu.Unlock()
+				usageCtx := service.WithoutInflightReservation(ctx)
+				if hasHold {
+					usageCtx = hold.ctx
+					// submitOpenAIUsageRecordTask synchronously retains the billing
+					// reference before this handler owner is released.
+					defer hold.done()
+				}
+				usageObservationCtx := liveTurnUsageContext(c, usageCtx, turn)
 				finishLiveRequestTurn(c, turn, result, turnErr)
 				turnDisconnectRiskMu.Lock()
 				disconnectLifecycle := turnDisconnectRisks[turn]
@@ -3155,7 +3308,15 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				}
 				turnUsageFields := turnMapping.ToUsageFields(turnRequestedModel, turnUpstreamModel)
 				cyberMarked := service.GetOpsCyberPolicy(c) != nil
-				h.recordCyberPolicyIfMarked(c, turnBillingAPIKeys.forTurn(turn, apiKey), account, subscription, turnRequestedModel, turnErr != nil, cyberBlockBody, turnUsageFields, requestPayloadHash, turnPricing.snapshotForTurn(turn))
+				if cyberMarked {
+					cyberCtx := c.Copy()
+					cyberCtx.Writer = c.Writer
+					cyberCtx.Request = c.Request.WithContext(usageObservationCtx)
+					h.recordCyberPolicyIfMarked(cyberCtx, turnBillingAPIKeys.forTurn(turn, apiKey), account, subscription, turnRequestedModel, turnErr != nil, cyberBlockBody, turnUsageFields, requestPayloadHash, turnPricing.snapshotForTurn(turn))
+					if cyberCtx.GetBool(cyberPolicyRecordedKey) {
+						c.Set(cyberPolicyRecordedKey, true)
+					}
+				}
 				cyberBlockedThisConn, cyberBlockPendingAfterFailover = advanceOpenAIWSCyberBlockState(
 					cyberBlockedThisConn,
 					cyberBlockPendingAfterFailover,
@@ -3240,19 +3401,6 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			},
 		}
 
-		wsFirstMessage := wsAttemptMessage
-		// 切组/会话失配防护：previous_response_id 未在当前分组命中粘连账号（StickyPreviousHit=false），
-		// 说明该会话链不属于本次调度到的账号，原样转发会触发上游会话链鉴权失败（“鉴权失败，请检查 API Key”）。
-		// 故剥离首包里的 previous_response_id，改用首包内 input 重建上下文；带 function_call_output 的
-		// 工具续链无法重建，保持原样。仅作用于首轮首包，后续 turn 的续链由 WS 转发层既有逻辑处理。
-		if previousResponseID != "" && !scheduleDecision.StickyPreviousHit && previousResponseCanMove {
-			wsFirstMessage = service.RemovePreviousResponseIDFromBody(wsFirstMessage)
-			reqLog.Debug("openai.websocket_previous_response_id_stripped_cross_group",
-				zap.Int64("account_id", account.ID),
-				zap.String("schedule_layer", scheduleDecision.Layer),
-			)
-		}
-
 		// WebSocket 首包可能很大，hash 必须在 hooks 外算成字符串，避免 AfterTurn 闭包保活请求体。
 		requestPayloadHash = service.HashUsageRequestPayload(wsFirstMessage)
 		if preemptCtx, cleanupPreempt, armed := h.gatewayService.BeginOpenAIWSIngressSessionPreemptionWithClient(ctx, c, account, wsFirstMessage, wsConn); armed {
@@ -3261,6 +3409,15 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		}
 
 		for {
+			if err := prepareAttemptInflight(account, wsFirstMessage); err != nil {
+				reqLog.Info("openai.websocket_retry_inflight_reservation_rejected", zap.Int64("account_id", account.ID), zap.Error(err))
+				closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "billing check failed")
+				return
+			}
+			turnInflightMu.Lock()
+			attemptPublicModel := retryInflightEstimate.Model
+			turnInflightMu.Unlock()
+			hooks.InitialRequestModel = attemptPublicModel
 			beginLiveRequestAttempt(c, account.ID)
 			err := h.gatewayService.ProxyResponsesWebSocketFromClient(ctx, c, wsConn, account, token, wsFirstMessage, hooks)
 			if err == nil {
@@ -3288,6 +3445,13 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				wsAttemptMessage = nextAttemptMessage
 				if retryCurrentTurn {
 					previousResponseID = ""
+					turnInflightMu.Lock()
+					retryPublicModel := retryInflightEstimate.Model
+					retryPricingCtx, retryKey := retryInflightCtx, retryInflightKey
+					turnInflightMu.Unlock()
+					ctx = withOpenAIWSTurnBillingGroup(service.CopyBillingPricingSnapshot(retryPricingCtx, ctx), retryKey)
+					channelMappingWS, _ = h.gatewayService.ResolveChannelMappingAndRestrict(ctx, apiKey.GroupID, retryPublicModel)
+					wsForwardModel = openAIChannelForwardModel(channelMappingWS, retryPublicModel)
 					reqLog.Warn("openai.websocket_current_turn_failover_retry",
 						zap.Int64("account_id", account.ID),
 						zap.Int("upstream_status", failoverErr.StatusCode),

@@ -195,6 +195,16 @@ func (h *GatewayHandler) SystemOne(c *gin.Context) {
 			continue
 		}
 		account = latest
+		if err := ensureAccountInflightReservation(c, account); err != nil {
+			if accountRelease != nil {
+				accountRelease()
+			}
+			reqLog.Info("systemone.account_inflight_reservation_rejected", zap.Int64("account_id", account.ID), zap.Error(err))
+			status, code, message, retryAfter := billingErrorDetails(err)
+			applyBillingQuotaHeaders(c, err, retryAfter)
+			h.errorResponse(c, status, code, message)
+			return
+		}
 		accountRelease = wrapReleaseOnDone(c.Request.Context(), accountRelease)
 		setOpsSelectedAccount(c, account.ID, account.Platform)
 		service.SetOpsUpstreamModel(c, model)

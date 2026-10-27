@@ -700,6 +700,16 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 		}
 		account = latest
 		selection.Account = latest
+		if err := ensureAccountInflightReservation(c, account); err != nil {
+			if accountReleaseFunc != nil {
+				accountReleaseFunc()
+			}
+			reqLog.Info("gemini.account_inflight_reservation_rejected", zap.Int64("account_id", account.ID), zap.Error(err))
+			status, code, message, retryAfter := billingErrorDetails(err)
+			applyBillingQuotaHeaders(c, err, retryAfter)
+			googleErrorWithType(c, status, code, "", message)
+			return
+		}
 		// 等待路径保持既有 eager 绑定（无门时 helper 直接绑定）；调度器已抢槽
 		// 的直达路径无门时由选号内部绑定，这里只在门下补准入后绑定。
 		if selection.ProfitGateActive() || !selection.Acquired {

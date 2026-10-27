@@ -534,8 +534,38 @@ fields from another protocol cannot select a parser or replace the endpoint's
 output-token bound, effort or service tier. Configured reasoning factors
 also apply to per-request, image, video and audio per-request reservations; an
 omitted or unconfigured effort retains factor `1`. Explicit free cards remain
-free. Later account transformations and actual usage can still differ from an
+free. Actual usage and response-model declarations can still differ from an
 admission estimate.
+
+After selecting and revalidating the account, supported synchronous inference
+handlers reconcile the estimate before forwarding. The selected account's actual
+model mapping and protocol policy determine the concrete price candidate without
+reading other accounts. An explicit public group/channel card (including zero)
+and the configured billing-model source keep their settlement precedence. The
+public requested model still owns the platform/model selling multipliers.
+Increasing an existing balance hold is atomic, excludes that same owner from the
+balance sum, and never decreases the amount accepted for an earlier attempt.
+Insufficient balance returns the endpoint's billing error, releases this
+request's slots and hold, and does not fail over or send the request upstream.
+Expired or released owners cannot be recreated by an increase. A preliminary
+free or unpriced estimate can create a hold after selection if the selected
+contract becomes paid.
+
+Responses WebSocket requests hold a separate reservation for each accepted turn;
+each turn uses its own public model, pricing snapshot and output bound. A turn's
+billing task takes ownership before handler cleanup returns that turn's reference.
+Connection closure cleans up any remaining handler references. A retried turn
+creates a new owner while keeping its accepted public model and price snapshot.
+WS passthrough preserves its channel model; the pool mode applies account model
+mapping. Reservation reconciliation follows that actual transport behavior.
+Forced HTTP and large-first-frame bridging use the mapped HTTP model even when
+the account is configured for passthrough. Reservation and forwarding share the
+same attempt's captured transport decision. Later account edits can revalidate
+eligibility, but an existing connection reserves against the mapping snapshot
+actually used by its proxy; a new connection adopts the updated mapping.
+Reservation caps, the existing first-request allowance when there are no other
+owners, and dependency-error fail-open behavior remain in effect. These estimates
+do not guarantee that a balance can never become negative.
 
 For supported Chat, Responses and Messages conversions, the estimate also
 evaluates the reachable account's actual protocol effort scale on the same

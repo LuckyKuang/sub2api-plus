@@ -27,6 +27,13 @@ type InflightBalanceReservationCache interface {
 	ReleaseInflightBalance(ctx context.Context, userID int64, requestID string) error
 }
 
+// InflightBalanceReservationUpdater atomically increases an existing live
+// owner's reservation. Other owners count against balance; the current owner
+// never counts twice. A rejected update preserves its previous amount.
+type InflightBalanceReservationUpdater interface {
+	UpdateInflightBalance(ctx context.Context, userID int64, requestID string, amount, balance float64, ttl time.Duration) (bool, float64, error)
+}
+
 // InflightScopeReservationCache 订阅 / API Key 维度在途预留的缓存能力（可选），用于扣费前即可确定金额的费用；
 // 未实现时这两个维度不登记预留（fail-open），准入仍按库中用量校验。
 type InflightScopeReservationCache interface {
@@ -66,6 +73,9 @@ const (
 // 不再续期，所以最长持有时间受 TTL 约束（计费任务卡死时预留自动过期）。
 // 所有方法对 nil 接收者安全。
 type InflightReservation struct {
+	// mu serializes amount changes and ownership release. An update must never
+	// recreate capacity after its final billing reference has returned.
+	mu sync.Mutex
 	// cache 为 nil 表示未登记余额维度的预留。
 	cache     InflightBalanceReservationCache
 	userID    int64
@@ -89,6 +99,8 @@ func (r *InflightReservation) Amount() float64 {
 	if r == nil {
 		return 0
 	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return r.amount
 }
 
@@ -98,15 +110,13 @@ func (r *InflightReservation) Acquire() func() {
 	if r == nil {
 		return noopRelease
 	}
-	for {
-		cur := r.refs.Load()
-		if cur <= 0 {
-			return noopRelease
-		}
-		if r.refs.CompareAndSwap(cur, cur+1) {
-			break
-		}
+	r.mu.Lock()
+	if r.refs.Load() <= 0 {
+		r.mu.Unlock()
+		return noopRelease
 	}
+	r.refs.Add(1)
+	r.mu.Unlock()
 	var once sync.Once
 	return func() { once.Do(r.decRef) }
 }
@@ -129,6 +139,8 @@ func (r *InflightReservation) Release() {
 	}
 	r.stopRenewal()
 	r.releaseOnce.Do(func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
 		r.refs.Store(0)
 		relCtx, relCancel := context.WithTimeout(context.Background(), inflightReservationReleaseTimeout)
 		defer relCancel()
@@ -146,7 +158,13 @@ func (r *InflightReservation) Release() {
 }
 
 func (r *InflightReservation) decRef() {
-	if r.refs.Add(-1) <= 0 {
+	r.mu.Lock()
+	remaining := r.refs.Load()
+	if remaining > 0 {
+		remaining = r.refs.Add(-1)
+	}
+	r.mu.Unlock()
+	if remaining <= 0 {
 		r.Release()
 	}
 }
@@ -256,6 +274,56 @@ func (s *BillingCacheService) ReserveInflightBalance(ctx context.Context, user *
 // 仅当 Redis 明确判定 缓存余额 - 在途合计 < estimate（且已有在途请求）时返回 ErrInsufficientBalance。
 func (s *BillingCacheService) ReserveInflight(ctx context.Context, user *User, group *Group, subscription *UserSubscription, estimate float64) (*InflightReservation, error) {
 	return s.reserveInflight(ctx, user, group, subscription, estimate, true, true)
+}
+
+// IncreaseInflightReservation rechecks the selected upstream's estimate without
+// releasing the ingress reservation. A failure never reduces the amount held
+// for this request or removes another request's reservation.
+func (s *BillingCacheService) IncreaseInflightReservation(ctx context.Context, r *InflightReservation, estimate float64) error {
+	if r == nil {
+		return nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.refs.Load() <= 0 {
+		return ErrInsufficientBalance
+	}
+	cfg, enabled := s.inflightReservationConfig()
+	if !enabled || r.cache == nil {
+		return nil
+	}
+	if estimate < 0 || math.IsNaN(estimate) || math.IsInf(estimate, 0) {
+		return ErrBillingRateUnavailable
+	}
+	if cfg.MaxReservationUSD > 0 && estimate > cfg.MaxReservationUSD {
+		estimate = cfg.MaxReservationUSD
+	}
+	if estimate < r.amount {
+		estimate = r.amount
+	}
+	updater, ok := r.cache.(InflightBalanceReservationUpdater)
+	if !ok || updater == nil {
+		logger.LegacyPrintf("service.billing_cache", "Warning: inflight reservation increase unsupported for user %d (fail-open)", r.userID)
+		return nil
+	}
+	balance, err := s.GetUserBalance(ctx, r.userID)
+	if err != nil {
+		logger.LegacyPrintf("service.billing_cache", "Warning: inflight reservation increase balance read failed for user %d (fail-open): %v", r.userID, err)
+		return nil
+	}
+	updateCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), inflightReservationReserveTimeout)
+	allowed, otherInflight, err := updater.UpdateInflightBalance(updateCtx, r.userID, r.requestID, estimate, balance, r.ttl)
+	cancel()
+	if err != nil {
+		logger.LegacyPrintf("service.billing_cache", "Warning: inflight reservation increase failed for user %d (fail-open): %v", r.userID, err)
+		return nil
+	}
+	if !allowed {
+		logger.LegacyPrintf("service.billing_cache", "inflight reservation increase rejected: user=%d balance=%.6f other_inflight=%.6f estimate=%.6f", r.userID, balance, otherInflight, estimate)
+		return ErrInsufficientBalance
+	}
+	r.amount = estimate
+	return nil
 }
 
 // inflightSubscriptionScope / inflightAPIKeyScope 是订阅 / API Key 维度在途预留的 scope 名。
@@ -372,15 +440,17 @@ const (
 
 // InflightEstimateRequest 单请求估算输入。
 type InflightEstimateRequest struct {
-	Protocol        string
-	AnthropicFast   bool
-	Model           string
-	BodyBytes       int
-	MaxTokens       int
-	ServiceTier     string
-	ReasoningEffort string
-	effortMetadata  inflightEffortMetadata
-	Kind            InflightEstimateKind
+	Protocol           string
+	AnthropicFast      bool
+	RequireCompact     bool
+	ResponsesWebSocket bool
+	Model              string
+	BodyBytes          int
+	MaxTokens          int
+	ServiceTier        string
+	ReasoningEffort    string
+	effortMetadata     inflightEffortMetadata
+	Kind               InflightEstimateKind
 	// Units 按次/按张数量（<=0 视为 1）。
 	Units int
 	// SearchCalls 叠加的搜索次数（按分组 search_price_per_1k 计）。
@@ -395,11 +465,14 @@ type InflightEstimateRequest struct {
 
 // inflightEstimateDeps 两种网关 service 共用的估算依赖。
 type inflightEstimateDeps struct {
-	cfg            *config.Config
-	billing        *BillingService
-	resolver       *ModelPricingResolver
-	resolveMapping func(ctx context.Context, groupID int64, model string) ChannelMappingResult
-	userGroupRate  func(ctx context.Context, userID, groupID int64, groupDefault float64) float64
+	selectedAccount       *Account
+	selectedUpstreamModel func(string) string
+	selectedOpenAI        bool
+	cfg                   *config.Config
+	billing               *BillingService
+	resolver              *ModelPricingResolver
+	resolveMapping        func(ctx context.Context, groupID int64, model string) ChannelMappingResult
+	userGroupRate         func(ctx context.Context, userID, groupID int64, groupDefault float64) float64
 	// accountMappedModels 返回调度器可选账号对 model 的账号级映射结果（去重，不含 model 本身）。
 	// 准入时账号尚未选定，计费侧 billableModelWithFallback 会回退到实际转发模型（UpstreamModel，
 	// 即账号映射后的模型），因此这里取所有候选映射模型的最高估算。
@@ -759,6 +832,9 @@ func (d inflightEstimateDeps) estimate(ctx context.Context, apiKey *APIKey, req 
 		ctx = withBillingBaseUnit(ctx, "second")
 	}
 	primary, fallbacks, upstreamInput := inflightBillingModelCandidates(ctx, d, apiKey, req.Model)
+	if d.selectedAccount != nil {
+		primary, fallbacks, upstreamInput = d.selectedBillingModelCandidates(ctx, apiKey, req.Model)
+	}
 	efforts := d.inflightEffortCandidates(ctx, apiKey, req, append(append([]string{}, primary...), fallbacks...), upstreamInput)
 	estimateOne := func(model string) (float64, bool) {
 		best, priced := 0.0, false
@@ -788,6 +864,17 @@ func (d inflightEstimateDeps) estimate(ctx context.Context, apiKey *APIKey, req 
 			}
 		}
 		return best, priced
+	}
+	if d.selectedAccount != nil {
+		// Settlement tries its chosen retail source first, then concrete models.
+		// Do not let a cheaper selected owner inherit another account's quote.
+		for _, model := range append(primary, fallbacks...) {
+			if cost, ok := estimateOne(model); ok {
+				return cost, true
+			}
+		}
+		logInflightUnpriced(req.Model, apiKey.GroupID)
+		return 0, false
 	}
 	best, priced := bestOf(primary)
 	// composite 分组：计费侧除非别名有显式渠道价，否则按实际转发的具体模型计费；

@@ -209,6 +209,14 @@ func (h *GatewayHandler) GeminiCachedContentsCreate(c *gin.Context) {
 			continue
 		}
 		account = latest
+		if err := ensureAccountInflightReservation(c, account); err != nil {
+			accountReleaseFunc()
+			reqLog.Info("gemini.cached_content.account_inflight_reservation_rejected", zap.Int64("account_id", account.ID), zap.Error(err))
+			status, code, message, retryAfter := billingErrorDetails(err)
+			applyBillingQuotaHeaders(c, err, retryAfter)
+			googleErrorWithType(c, status, code, "", message)
+			return
+		}
 		attempts++
 		setOpsSelectedAccount(c, account.ID, account.Platform)
 

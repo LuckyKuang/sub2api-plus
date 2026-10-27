@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"math"
 	"strconv"
 	"time"
 
@@ -68,6 +69,50 @@ var (
 		redis.call('PEXPIRE', KEYS[1], ARGV[6])
 		redis.call('PEXPIRE', KEYS[2], ARGV[6])
 		return {1, tostring(sum), count}
+	`)
+
+	// Updates only a live owner, excluding it from the other-owner balance
+	// check. The entire check/write is atomic; rejection keeps its old amount.
+	// A lone request retains the original first-request grace semantics.
+	updateInflightBalanceScript = redis.NewScript(`
+		local now = tonumber(ARGV[1])
+		local expired = redis.call('ZRANGEBYSCORE', KEYS[1], '-inf', now)
+		if #expired > 0 then
+			redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', now)
+			redis.call('HDEL', KEYS[2], unpack(expired))
+		end
+		local owner = ARGV[3]
+		local previous = redis.call('HGET', KEYS[2], owner)
+		if not redis.call('ZSCORE', KEYS[1], owner) or not previous then
+			return {0, '0'}
+		end
+		local others = redis.call('ZRANGE', KEYS[1], 0, -1)
+		local sum = 0
+		local count = 0
+		for i = 1, #others do
+			if others[i] ~= owner then
+				sum = sum + (tonumber(redis.call('HGET', KEYS[2], others[i])) or 0)
+				count = count + 1
+			end
+		end
+		local amount = tonumber(ARGV[4])
+		if amount <= tonumber(previous) then
+			return {1, tostring(sum)}
+		end
+		if count > 0 and (tonumber(ARGV[5]) - sum) < amount then
+			return {0, tostring(sum)}
+		end
+		local expiry = math.max(tonumber(redis.call('ZSCORE', KEYS[1], owner)), tonumber(ARGV[2]))
+		redis.call('ZADD', KEYS[1], 'XX', expiry, owner)
+		redis.call('HSET', KEYS[2], owner, ARGV[4])
+		local ttl = tonumber(ARGV[6])
+		if redis.call('PTTL', KEYS[1]) < ttl then
+			redis.call('PEXPIRE', KEYS[1], ttl)
+		end
+		if redis.call('PTTL', KEYS[2]) < ttl then
+			redis.call('PEXPIRE', KEYS[2], ttl)
+		end
+		return {1, tostring(sum)}
 	`)
 
 	// KEYS: [1]=zset [2]=hash  ARGV: [1]=member [2]=expire_at_ms [3]=key_ttl_ms [4]=now_ms
@@ -153,6 +198,43 @@ func (c *billingCache) ReserveInflightBalance(ctx context.Context, userID int64,
 	return allowed == 1, sum, nil
 }
 
+// UpdateInflightBalance implements service.InflightBalanceReservationUpdater.
+func (c *billingCache) UpdateInflightBalance(ctx context.Context, userID int64, requestID string, amount, balance float64, ttl time.Duration) (bool, float64, error) {
+	if amount < 0 || math.IsNaN(amount) || math.IsInf(amount, 0) || math.IsNaN(balance) || math.IsInf(balance, 0) {
+		return false, 0, fmt.Errorf("invalid inflight reservation amount or balance")
+	}
+	zkey, hkey := billingInflightKeys(userID)
+	now := time.Now().UnixMilli()
+	ttlMs := ttl.Milliseconds()
+	if ttlMs <= 0 {
+		ttlMs = 1
+	}
+	res, err := updateInflightBalanceScript.Run(ctx, c.rdb, []string{zkey, hkey},
+		now, now+ttlMs, requestID,
+		strconv.FormatFloat(amount, 'f', -1, 64),
+		strconv.FormatFloat(balance, 'f', -1, 64), ttlMs,
+	).Slice()
+	if err != nil {
+		return false, 0, err
+	}
+	if len(res) != 2 {
+		return false, 0, fmt.Errorf("unexpected inflight reservation update reply: %v", res)
+	}
+	allowed, ok := res[0].(int64)
+	if !ok {
+		return false, 0, fmt.Errorf("unexpected inflight reservation update result: %v", res[0])
+	}
+	sumText, ok := res[1].(string)
+	if !ok {
+		return false, 0, fmt.Errorf("unexpected inflight reservation update sum: %v", res[1])
+	}
+	sum, err := strconv.ParseFloat(sumText, 64)
+	if err != nil {
+		return false, 0, fmt.Errorf("parse inflight reservation update sum: %w", err)
+	}
+	return allowed == 1, sum, nil
+}
+
 // ReleaseInflightBalance 实现 service.InflightBalanceReservationCache。
 func (c *billingCache) ReleaseInflightBalance(ctx context.Context, userID int64, requestID string) error {
 	zkey, hkey := billingInflightKeys(userID)
@@ -203,6 +285,7 @@ func (c *billingCache) ReleaseInflightScope(ctx context.Context, scope, requestI
 
 var (
 	_ service.InflightBalanceReservationCache   = (*billingCache)(nil)
+	_ service.InflightBalanceReservationUpdater = (*billingCache)(nil)
 	_ service.InflightBalanceReservationRenewer = (*billingCache)(nil)
 	_ service.InflightScopeReservationCache     = (*billingCache)(nil)
 )

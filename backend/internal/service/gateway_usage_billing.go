@@ -979,6 +979,15 @@ func (s *GatewayService) recordUsageMultipliers(ctx context.Context, apiKey *API
 func (s *GatewayService) recordUsageBillingModel(ctx context.Context, apiKey *APIKey, result *ForwardResult, fields ChannelUsageFields) string {
 	concreteBillingModel := forwardResultBillingModel(result.Model, result.UpstreamModel)
 	billingModel := concreteBillingModel
+	snapshot := BillingPricingSnapshotFromContext(ctx)
+	legacySelection := snapshot != nil && snapshot.legacyPriceSelection
+	if !legacySelection && fields.BillingModelSource == BillingModelSourceUpstream && strings.TrimSpace(result.UpstreamModel) != "" {
+		// Generic forwarding preserves the client/channel model in Model for
+		// diagnostics. An explicit upstream source must instead price the model
+		// actually sent by the selected credential owner.
+		billingModel = strings.TrimSpace(result.UpstreamModel)
+		concreteBillingModel = billingModel
+	}
 	if fields.BillingModelSource == BillingModelSourceChannelMapped && fields.ChannelMappedModel != "" {
 		billingModel = fields.ChannelMappedModel
 	}

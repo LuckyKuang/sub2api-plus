@@ -208,6 +208,16 @@ func (h *GatewayHandler) WebSearch(c *gin.Context) {
 		}
 		account = selected.Account
 		accountReleaseFunc = release
+		if err := ensureAccountInflightReservation(c, account); err != nil {
+			if accountReleaseFunc != nil {
+				accountReleaseFunc()
+				accountReleaseFunc = nil
+			}
+			status, code, message, retryAfter := billingErrorDetails(err)
+			applyBillingQuotaHeaders(c, err, retryAfter)
+			c.JSON(status, gin.H{"error": gin.H{"type": code, "message": message}})
+			return
+		}
 
 		if isXSearch {
 			nativeResp, providerName, err = h.doGrokNativeXSearch(c.Request.Context(), c, account, req, searchModel, maxResults)

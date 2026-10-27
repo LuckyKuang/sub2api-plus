@@ -173,7 +173,9 @@ func estimateInflightWithFastPolicy(ctx context.Context, key *APIKey, req Inflig
 		add(tier)
 	} else {
 		var accounts []Account
-		if scheduler != nil {
+		if deps.selectedAccount != nil {
+			accounts = []Account{*deps.selectedAccount}
+		} else if scheduler != nil {
 			var err error
 			groupID := key.GroupID
 			if executionGroup := openAIFastExecutionGroup(ctx); executionGroup != nil && executionGroup.ID > 0 {
@@ -191,6 +193,9 @@ func estimateInflightWithFastPolicy(ctx context.Context, key *APIKey, req Inflig
 			}
 			model, _ := account.ResolveMappedModel(upstreamModel)
 			model = normalizeOpenAIModelForUpstream(account, model)
+			if deps.selectedUpstreamModel != nil {
+				model = deps.selectedUpstreamModel(upstreamModel)
+			}
 			forAccount(account, model)
 		}
 		if len(accounts) == 0 {
