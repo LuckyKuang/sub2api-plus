@@ -43,8 +43,8 @@
               :searchable="false"
               :options="[{ value: '', label: t('channelMonitorV3.allPlatforms') }, ...snapshot.platforms.map(item => ({ value: item.platform, label: platformLabel(item.platform) }))]"
             />
-            <div class="flex rounded-lg border border-gray-200 p-1 dark:border-dark-700" role="group" :aria-label="t('channelMonitorV3.range')">
-              <button v-for="value in ranges" :key="value" class="rounded-md px-3 py-1.5 text-xs surface-control" :class="range === value ? 'surface-field font-medium text-gray-900 dark:surface-field dark:text-white' : 'surface-muted'" :aria-pressed="range === value" @click="range = value">{{ t(`channelMonitorV3.ranges.${value}`) }}</button>
+            <div class="segmented-control" role="group" :aria-label="t('channelMonitorV3.range')">
+              <button v-for="value in ranges" :key="value" type="button" class="segmented-option" :aria-pressed="range === value" @click="range = value">{{ t(`channelMonitorV3.ranges.${value}`) }}</button>
             </div>
           </div>
         </div>

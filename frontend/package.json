@@ -18,7 +18,8 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "test:e2e": "playwright test --config e2e/playwright.config.ts"
+    "test:e2e": "playwright test --config e2e/playwright.config.ts",
+    "test:layout": "vue-tsc --noEmit --project layout-tests/tsconfig.json && playwright test --config layout-tests/playwright.config.ts"
   },
   "dependencies": {
     "@airwallex/components-sdk": "^1.30.2",

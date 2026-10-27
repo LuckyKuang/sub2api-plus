@@ -5,8 +5,8 @@
       <RefreshControl :state="refresh" switch-visible manual />
     </div>
     <div class="flex flex-wrap items-end gap-2" :class="{ 'workspace-fixed': workspace }">
-      <div class="flex min-h-9 rounded-lg surface-inset p-1" role="group" :aria-label="t('requestList.result')">
-        <button v-for="item in ['all', 'success', 'abnormal']" :key="item" type="button" class="rounded-md px-3 py-1 text-xs surface-control" :class="resultFilter === item ? 'surface-field shadow-sm dark:surface-field' : 'text-gray-500'" :aria-pressed="resultFilter === item" @click="resultFilter = item">{{ t(`requestList.${item}`) }}</button>
+      <div class="segmented-control" role="group" :aria-label="t('requestList.result')">
+        <button v-for="item in ['all', 'success', 'abnormal']" :key="item" type="button" class="segmented-option" :aria-pressed="resultFilter === item" @click="resultFilter = item">{{ t(`requestList.${item}`) }}</button>
       </div>
       <Select v-model="modelFilter" class="min-w-0 w-44 max-w-full" :options="modelOptions" :aria-label="t('usage.model')" :searchable="false" />
       <Select v-model="groupFilter" class="min-w-0 w-40 max-w-full" :options="groupOptions" :aria-label="t('admin.usage.group')" :searchable="false" />

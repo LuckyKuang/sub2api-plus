@@ -3,6 +3,9 @@
     <button
       type="button"
       @click="toggle"
+      :aria-expanded="isOpen"
+      :aria-controls="isOpen ? panelId : undefined"
+      aria-haspopup="dialog"
       :class="['date-picker-trigger surface-control', isOpen && 'date-picker-trigger-open']"
     >
       <span class="date-picker-icon">
@@ -20,66 +23,70 @@
       </span>
     </button>
 
-    <Transition name="date-picker-dropdown">
-      <div v-if="isOpen" ref="dropdownRef" class="date-picker-dropdown surface-panel" :style="{ left: dropdownOffset + 'px' }">
-        <!-- Quick presets -->
-        <div class="date-picker-presets">
-          <button
-            v-for="preset in presets"
-            :key="preset.value"
-            @click="selectPreset(preset)"
-            :class="['date-picker-preset', isPresetActive(preset) && 'date-picker-preset-active']"
-          >
-            {{ t(preset.labelKey) }}
-          </button>
-        </div>
-
-        <div class="date-picker-divider"></div>
-
-        <!-- Custom date range inputs -->
-        <div class="date-picker-custom">
-          <div class="date-picker-field">
-            <label class="date-picker-label">{{ t('dates.startDate') }}</label>
-            <DateTimePicker :aria-label="t('dates.startDate')"
-              type="date"
-              v-model="localStartDate"
-              :max="localEndDate || tomorrow"
-              class="date-picker-input"
-              @change="onDateChange"
-            />
+    <Teleport to="body">
+      <Transition name="date-picker-dropdown">
+        <div v-if="isOpen" :id="panelId" ref="dropdownRef" class="date-picker-dropdown surface-panel" :style="dropdownStyle" role="dialog" :aria-label="t('dates.selectDateRange')" tabindex="-1" @click.stop @mousedown.stop>
+          <!-- Quick presets -->
+          <div class="date-picker-presets">
+            <button
+              v-for="preset in presets"
+              :key="preset.value"
+              type="button"
+              @click="selectPreset(preset)"
+              :class="['date-picker-preset', isPresetActive(preset) && 'date-picker-preset-active']"
+            >
+              {{ t(preset.labelKey) }}
+            </button>
           </div>
-          <div class="date-picker-separator">
-            <Icon name="arrowRight" size="sm" class="text-gray-400" />
-          </div>
-          <div class="date-picker-field">
-            <label class="date-picker-label">{{ t('dates.endDate') }}</label>
-            <DateTimePicker :aria-label="t('dates.endDate')"
-              type="date"
-              v-model="localEndDate"
-              :min="localStartDate"
-              :max="tomorrow"
-              class="date-picker-input"
-              @change="onDateChange"
-            />
-          </div>
-        </div>
 
-        <!-- Apply button -->
-        <div class="date-picker-actions">
-          <button @click="apply" class="date-picker-apply surface-control">
-            {{ t('dates.apply') }}
-          </button>
+          <div class="date-picker-divider"></div>
+
+          <!-- Custom date range inputs -->
+          <div class="date-picker-custom">
+            <div class="date-picker-field">
+              <label class="date-picker-label">{{ t('dates.startDate') }}</label>
+              <DateTimePicker :aria-label="t('dates.startDate')"
+                type="date"
+                v-model="localStartDate"
+                :max="localEndDate || tomorrow"
+                class="date-picker-input"
+                @change="onDateChange"
+              />
+            </div>
+            <div class="date-picker-separator">
+              <Icon name="arrowRight" size="sm" class="text-gray-400" />
+            </div>
+            <div class="date-picker-field">
+              <label class="date-picker-label">{{ t('dates.endDate') }}</label>
+              <DateTimePicker :aria-label="t('dates.endDate')"
+                type="date"
+                v-model="localEndDate"
+                :min="localStartDate"
+                :max="tomorrow"
+                class="date-picker-input"
+                @change="onDateChange"
+              />
+            </div>
+          </div>
+
+          <!-- Apply button -->
+          <div class="date-picker-actions">
+            <button type="button" @click="apply" class="date-picker-apply surface-control">
+              {{ t('dates.apply') }}
+            </button>
+          </div>
         </div>
-      </div>
-    </Transition>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
 import DateTimePicker from './DateTimePicker.vue'
-import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
+import { useDialogFocus } from '@/composables/useDialogFocus'
 
 interface DatePreset {
   labelKey: string
@@ -103,19 +110,25 @@ const emit = defineEmits<Emits>()
 
 const { t, locale } = useI18n()
 
+const panelId = `date-range-${useId()}`
 const isOpen = ref(false)
 const containerRef = ref<HTMLElement | null>(null)
 const dropdownRef = ref<HTMLElement | null>(null)
-const dropdownOffset = ref(0)
+const dropdownStyle = ref<Record<string, string>>({})
 const localStartDate = ref(props.startDate)
 const localEndDate = ref(props.endDate)
 const activePreset = ref<string | null>('last24Hours')
-let escapeTimer: ReturnType<typeof setTimeout> | undefined
+const restoreFocus = ref(true)
 
-function clearEscapeTimer() {
-  if (escapeTimer !== undefined) clearTimeout(escapeTimer)
-  escapeTimer = undefined
+function closeDropdown() {
+  restoreFocus.value = true
+  isOpen.value = false
 }
+
+useDialogFocus(() => isOpen.value, dropdownRef, closeDropdown, () => true, {
+  lockScroll: false,
+  restoreFocus: () => restoreFocus.value,
+})
 
 const today = computed(() => {
   // Use local timezone to avoid UTC timezone issues
@@ -273,19 +286,49 @@ const onDateChange = () => {
 }
 
 const toggle = () => {
+  restoreFocus.value = true
   isOpen.value = !isOpen.value
 }
 
 function positionDropdown() {
   if (!isOpen.value || !containerRef.value || !dropdownRef.value) return
   const anchor = containerRef.value.getBoundingClientRect()
-  const panel = dropdownRef.value.getBoundingClientRect()
-  const left = Math.max(12, Math.min(anchor.left, window.innerWidth - panel.width - 12))
-  dropdownOffset.value = left - anchor.left
+  const dropdown = dropdownRef.value
+  const viewport = window.visualViewport
+  const offsetLeft = viewport?.offsetLeft ?? 0
+  const offsetTop = viewport?.offsetTop ?? 0
+  const width = viewport?.width ?? window.innerWidth
+  const height = viewport?.height ?? window.innerHeight
+  const margin = 12
+  const gap = 8
+  const maxWidth = Math.max(0, width - margin * 2)
+  // Measure after updating the width constraint: a menu previously narrowed
+  // by the keyboard or zoom can grow again when the visible viewport expands.
+  dropdown.style.maxWidth = `${maxWidth}px`
+  const panel = dropdown.getBoundingClientRect()
+  const viewportTop = offsetTop + margin
+  const viewportBottom = Math.max(viewportTop, offsetTop + height - margin)
+  const below = Math.max(viewportTop, Math.min(anchor.bottom + gap, viewportBottom))
+  const above = Math.max(viewportTop, Math.min(anchor.top - gap, viewportBottom))
+  const spaceBelow = viewportBottom - below
+  const spaceAbove = above - viewportTop
+  // The scroll height retains the full menu size after a smaller viewport has
+  // constrained it, so scrolling/resizing can still choose the better side.
+  const fullHeight = Math.max(panel.height, dropdown.scrollHeight + dropdown.offsetHeight - dropdown.clientHeight)
+  const openAbove = fullHeight > spaceBelow && spaceAbove > spaceBelow
+  const maxHeight = openAbove ? spaceAbove : spaceBelow
+  const top = openAbove ? above - Math.min(fullHeight, maxHeight) : below
+  const left = Math.max(offsetLeft + margin, Math.min(anchor.left, offsetLeft + width - panel.width - margin))
+  dropdownStyle.value = {
+    left: `${left}px`,
+    top: `${top}px`,
+    maxWidth: `${maxWidth}px`,
+    maxHeight: `${maxHeight}px`,
+  }
 }
 
 watch(isOpen, async (open) => {
-  if (!open) { clearEscapeTimer(); return }
+  if (!open) return
   await nextTick()
   positionDropdown()
 })
@@ -298,25 +341,15 @@ const apply = () => {
     endDate: localEndDate.value,
     preset: activePreset.value
   })
-  isOpen.value = false
+  closeDropdown()
 }
 
 const handleClickOutside = (event: MouseEvent) => {
-  if (containerRef.value && !containerRef.value.contains(event.target as Node)) {
+  const target = event.target as Node | null
+  if (target && !containerRef.value?.contains(target) && !dropdownRef.value?.contains(target)) {
+    restoreFocus.value = false
     isOpen.value = false
   }
-}
-
-const handleEscape = (event: KeyboardEvent) => {
-  if (event.key !== 'Escape' || !isOpen.value) return
-  // A child calendar registers its document listener after this menu mounts.
-  // Browsers can run microtasks between native listeners, so wait until the
-  // next task before checking whether the calendar consumed this Escape.
-  clearEscapeTimer()
-  escapeTimer = setTimeout(() => {
-    escapeTimer = undefined
-    if (!event.defaultPrevented) isOpen.value = false
-  }, 0)
 }
 
 // Sync local state with props
@@ -338,26 +371,28 @@ watch(
 
 onMounted(() => {
   document.addEventListener('click', handleClickOutside)
-  document.addEventListener('keydown', handleEscape)
   window.addEventListener('resize', positionDropdown)
   window.addEventListener('scroll', positionDropdown, true)
+  window.visualViewport?.addEventListener('resize', positionDropdown)
+  window.visualViewport?.addEventListener('scroll', positionDropdown)
   // Initialize active preset detection
   onDateChange()
 })
 
 onUnmounted(() => {
-  clearEscapeTimer()
   document.removeEventListener('click', handleClickOutside)
-  document.removeEventListener('keydown', handleEscape)
   window.removeEventListener('resize', positionDropdown)
   window.removeEventListener('scroll', positionDropdown, true)
+  window.visualViewport?.removeEventListener('resize', positionDropdown)
+  window.visualViewport?.removeEventListener('scroll', positionDropdown)
 })
 </script>
 
 <style scoped>
 .date-picker-trigger {
   @apply flex items-center gap-2;
-  @apply px-3 py-2 text-sm;
+  @apply min-w-0 text-sm;
+  padding: 6.5px 12px;
   border-radius: var(--surface-radius-control);
   background-color: var(--surface-field);
   @apply border border-gray-200 dark:border-dark-600;
@@ -377,7 +412,8 @@ onUnmounted(() => {
 }
 
 .date-picker-value {
-  @apply font-medium;
+  @apply min-w-0 font-medium;
+  overflow-wrap: anywhere;
 }
 
 .date-picker-chevron {
@@ -385,12 +421,15 @@ onUnmounted(() => {
 }
 
 .date-picker-dropdown {
-  @apply absolute left-0 z-[100] mt-2;
+  position: fixed;
+  z-index: 100000020;
   background-color: var(--surface-panel);
   border-radius: var(--surface-radius-panel);
   @apply border border-gray-200 dark:border-dark-700;
   @apply shadow-lg shadow-black/10 dark:shadow-black/30;
-  @apply overflow-hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   width: 320px;
   max-width: calc(100vw - 24px);
 }
@@ -421,7 +460,7 @@ onUnmounted(() => {
 }
 
 .date-picker-field {
-  @apply flex-1;
+  @apply min-w-0 flex-1;
 }
 
 .date-picker-label {

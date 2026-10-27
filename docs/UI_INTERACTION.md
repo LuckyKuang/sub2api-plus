@@ -1,7 +1,8 @@
 # Console layout and request inspection
 
 The console retains its colors, typography, navigation and business permissions.
-The brand, navigation, toolbar and business panels are independent solid cards.
+The brand and toolbar retain the shell surface; business panels use compact cards.
+Navigation links and tab/pagination containers stay lightweight and transparent.
 User, admin, support and operations pages share the same fluid content boundaries;
 there are no route-specific maximum page widths. Individual forms and external
 content may retain a readable inner width.
@@ -83,8 +84,9 @@ no outline, inset edge or ring, including their header/footer seams. Standalone
 settings sections and composite workspaces follow the same rule. Nested business
 cards, grid cards, controls and record rows retain their own borders. This keeps
 partially filled grids and nested cards from exposing an extra frame.
-Secondary navigation uses rounded 1px control outlines and the shared accent for
-hover and selection; it has no underline or full-width bottom baseline.
+Secondary navigation has transparent inactive tabs and a soft accent fill with a
+1px outline only on selection. Tab and pagination containers have no separate
+card fill, frame or shadow; hover and keyboard focus remain visible.
 
 Cards, nested sections, inputs, buttons, Select triggers, menus and dialogs use
 solid theme fills with their existing edges, soft shadows, highlights and focus
@@ -103,8 +105,9 @@ reduced transparency is requested. Reduced-motion preferences disable transition
 ## Rounded surfaces and hover cards
 
 Shape belongs to the shared surface system, including transient UI. Shared radius
-defaults are `--surface-radius` (24px desktop, 20px below 1024px) for outer cards,
-16px for inset sections and popup panels, 12px for controls and 10px for menu items.
+defaults are `--surface-radius` (24px desktop, 20px below 1024px) for the shell and
+dialogs, `--surface-radius-card` (14px) for business cards, 16px for inset sections
+and popup panels, 9px for controls and 10px for menu items.
 Different control sizes and existing local styles may retain other rounded radii.
 Menus have inner padding so hover, focus and selection backgrounds remain
 independent rounded regions.
@@ -147,6 +150,30 @@ required, disabled and readonly semantics remain enforced. Any native input is
 only a hidden form/constraint proxy, never the visible expanded picker. Calendar
 panels escape scrollable cards through body portals, fit the viewport, and share
 the dialog focus/Escape stack without independently locking page scrolling.
+
+The shared date-range panel also uses a body portal and viewport positioning,
+including inside dialogs and scrolling workspaces. It opens above its trigger
+when needed, fits the visible viewport on all four sides, and scrolls internally
+when its calendars and actions exceed the available height. Opening, browsing
+or dismissing a range does not commit it; Apply retains the existing change
+contract. Select menus and date panels reposition after container scrolling,
+window resizing and visual-viewport resizing or panning, so a mobile keyboard
+or zoomed viewport cannot leave their options outside the visible area.
+
+Shared dialogs bound their height to the dynamic viewport. Long titles wrap
+without shrinking the close button; exceptionally long titles scroll within a
+bounded heading and enter the Tab sequence only when scrolling is needed.
+Footer actions, including existing inner flex groups, wrap within the panel.
+The body owns scrolling and can shrink between the header and footer, keeping
+the final form fields and footer actions reachable in narrow or short windows.
+Visual changes must preserve these layout boundaries and must not introduce
+global clipping or stacking contexts on shared cards. The independent
+`pnpm --dir frontend run test:layout` suite exercises real shared components and
+production CSS in container Chromium, checking viewport bounds and hit targets
+for menus, date panels and dialog actions without requiring backend credentials.
+It also covers translated tabs, segmented options, horizontal row actions,
+error/disabled selection triggers and long form actions at opaque, reference
+and fully transparent fills in both themes.
 
 Error, warning, success and information notifications share a 20px rounded solid
 card with a rounded semantic icon well, close button and inset progress track.
@@ -194,8 +221,31 @@ content column. Prompt Audit's save card occupies a fixed layout slot below
 configuration; wrapped actions reserve their actual height so the last setting
 remains reachable when navigation collapses or the viewport changes.
 
-Navigation hover and keyboard focus paint an inset rounded card. The active
-link has a stronger accent fill and outline, retained on hover, without a leading stripe.
+Sidebar links have no card frame or shadow. Hover has a subtle theme tint;
+the active link has a soft accent fill and readable accent text. Keyboard focus
+keeps its visible outline and the 44px navigation hit area remains intact.
+
+Shared buttons use 9px corners, 13px text and compact padding; small buttons use
+8px corners and 12px text. Primary actions use the configured accent gradient,
+with fill alpha following appearance settings and black/white foreground chosen
+for the configured accent. The gradient ends in a lighter shade for dark text
+and a darker shade for white text; hover retains this contrast. Secondary controls use theme
+surfaces and visible edges. Long labels wrap and buttons grow vertically rather
+than using a fixed height. Hover does not move controls or their containing cards.
+Public/auth forms and both consoles use the same button/input/Select styles.
+
+Workspace tabs use 9px corners and at least 38px height; overflowing tab lists
+scroll horizontally. Card tabs wrap, including long translated labels. Explicit
+single-choice groups use `segmented-control` and `segmented-option`: an 8px
+inset track with 3px spacing and 6px options of at least 26px height. Selection
+uses a subtle raised theme surface; long options can wrap and grow. Other
+pressed controls, color swatches and composite editors retain their own styles.
+
+Table actions use `table-actions` and `table-action` to place icons and labels
+horizontally in compact 6px pills. Action groups wrap within their column and
+long labels grow vertically. Disabled/busy controls, danger colors and existing
+action handlers retain their semantics. Shared surfaces and controls introduce
+no hover transforms, global clipping or additional stacking contexts.
 
 The V2 channel pulse matrix mounts only visible rows with a small overscan and
 measures actual row heights, including mobile wrapping. Its header remains sticky;
@@ -438,8 +488,8 @@ Text/icons, focus and 1px borders remain visible at every setting. QR quiet zone
 and accent picker swatches remain opaque. Table records retain compact rounded
 outlines with accent hover, fixed columns/headers clip content behind them, and
 scrolling viewports retain rounded corners. Main content shells have no outline;
-their nested cards and controls retain visible edges. Settings tabs share
-usage tab height (62px normally, 54px in short desktop windows).
+their nested cards and controls retain visible edges. Settings and usage navigation share the lightweight tab treatment; local
+scrolling layouts continue to reserve the space needed by their controls.
 
 Adjustments produce a local draft. Preview affects only that administrator and
 ends when leaving General or the settings page. **Save appearance** publishes

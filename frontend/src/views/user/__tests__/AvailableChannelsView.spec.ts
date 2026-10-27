@@ -45,7 +45,7 @@ describe('available channels user page', () => {
     const w = page(); await flushPromises()
     const filters = w.get('[data-testid="catalog-filters"]')
     const results = w.get('[data-testid="catalog-results"]')
-    await filters.findAll('.catalog-filter').find(button => button.text().startsWith('openai'))!.trigger('click')
+    await filters.findAll('[role="group"] button[aria-pressed]').find(button => button.text().startsWith('openai'))!.trigger('click')
     await filters.get('input[type="search"]').setValue('model-')
     await filters.get('[role="combobox"]').trigger('click'); await flushPromises()
     const dropdown = document.querySelector('[role="listbox"]')!
@@ -71,7 +71,7 @@ describe('available channels user page', () => {
     expect(w.findAll('.catalog-model-card')).toHaveLength(1)
     await w.get('.catalog-model-card button').trigger('click')
     expect(mocks.copy).toHaveBeenCalledWith('first')
-    expect(w.findAll('.catalog-filter')).toHaveLength(3)
+    expect(w.findAll('[role="group"] button[aria-pressed]')).toHaveLength(3)
   })
   it('shows rate degradation and keeps zero prices visible', async () => {
     mocks.getCatalog.mockResolvedValue({ groups: [group(1, [offer('model', { rate_quote: rateQuote(0) })], { user_rate_multiplier: 0 })], user_rate_status: 'unavailable' })
@@ -151,7 +151,7 @@ describe('available channels user page', () => {
   })
   it('reconciles filters and closes a removed offer after a successful refresh', async () => {
     const w = page(); await flushPromises()
-    await w.findAll('.catalog-filter').find(b => b.text().startsWith('anthropic'))!.trigger('click')
+    await w.findAll('[role="group"] button[aria-pressed]').find(b => b.text().startsWith('anthropic'))!.trigger('click')
     expect(w.findAll('.catalog-model-card')).toHaveLength(1)
     await w.findAll('.catalog-model-card button')[1]!.trigger('click')
     mocks.getCatalog.mockResolvedValueOnce({ groups: [group(1, [offer('replacement')])], user_rate_status: 'loaded' })

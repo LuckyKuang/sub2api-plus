@@ -1,7 +1,7 @@
 import { onScopeDispose, watch, watchEffect } from 'vue'
 import type { ConsoleAppearance } from '@/types/appearance'
 import { resolveConsoleBackgroundURL } from '@/utils/consoleAppearance'
-import { consoleAccentPalette } from '@/utils/consoleAccent'
+import { consoleAccentPalette, consolePrimaryColors } from '@/utils/consoleAccent'
 import { consoleCardAlpha } from '@/utils/consoleAppearanceState'
 
 export function useConsoleAppearance(source: () => ConsoleAppearance): void {
@@ -37,6 +37,9 @@ export function useConsoleAppearance(source: () => ConsoleAppearance): void {
     for (const [shade, channels] of Object.entries(consoleAccentPalette(appearance.accent_color))) {
       root.style.setProperty('--console-accent-' + shade, channels)
     }
+    const primary = consolePrimaryColors(appearance.accent_color)
+    root.style.setProperty('--console-primary-foreground', primary.foreground)
+    root.style.setProperty('--console-primary-end', primary.end)
   })
 
   onScopeDispose(() => {
@@ -44,6 +47,7 @@ export function useConsoleAppearance(source: () => ConsoleAppearance): void {
     root.removeAttribute('data-console-transparent-cards')
     clearBackground()
     for (const key of ['--console-light-mask-alpha', '--console-dark-mask-alpha', '--console-card-alpha',
+      '--console-primary-foreground', '--console-primary-end',
       ...Object.keys(consoleAccentPalette(null)).map(shade => '--console-accent-' + shade)]) root.style.removeProperty(key)
   })
 }

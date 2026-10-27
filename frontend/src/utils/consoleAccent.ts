@@ -21,3 +21,18 @@ export function consoleAccentPalette(value: unknown): Record<string, string> {
     )).join(' ')
   ]))
 }
+
+export function consolePrimaryColors(value: unknown): { foreground: string; end: string } {
+  const palette = consoleAccentPalette(value)
+  // WCAG relative luminance: select the higher-contrast black/white foreground
+  // at the original accent, then move the other stop away from that foreground.
+  const [red, green, blue] = palette[500]!.split(' ').map(channel => {
+    const srgb = Number(channel) / 255
+    return srgb <= .04045 ? srgb / 12.92 : ((srgb + .055) / 1.055) ** 2.4
+  })
+  const luminance = .2126 * red! + .7152 * green! + .0722 * blue!
+  const blackContrast = (luminance + .05) / .05
+  const whiteContrast = 1.05 / (luminance + .05)
+  const blackText = blackContrast >= whiteContrast
+  return { foreground: blackText ? '#000000' : '#ffffff', end: palette[blackText ? 400 : 600]! }
+}

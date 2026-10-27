@@ -102,10 +102,10 @@
       </template>
 
       <template #cell-actions="{ row }">
-        <div class="flex items-center gap-2">
+        <div class="table-actions">
           <button
             @click="emit('detail', row)"
-            class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors hover:surface-hover hover:text-gray-700 dark:hover:text-gray-300 surface-control surface-muted"
+            class="table-action table-action-neutral"
           >
             <Icon name="eye" size="sm" />
             <span class="text-xs">{{ t('common.view') }}</span>
@@ -113,7 +113,7 @@
           <button
             v-if="row.status === 'PENDING'"
             @click="emit('cancel', row)"
-            class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors hover:bg-yellow-50/25 hover:text-yellow-600 dark:hover:bg-yellow-900/20 dark:hover:text-yellow-400 surface-control surface-muted"
+            class="table-action table-action-warning"
           >
             <Icon name="x" size="sm" />
             <span class="text-xs">{{ t('payment.orders.cancel') }}</span>
@@ -121,7 +121,7 @@
           <button
             v-if="row.status === 'FAILED'"
             @click="emit('retry', row)"
-            class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors hover:bg-blue-50/25 hover:text-blue-600 dark:hover:bg-blue-900/20 dark:hover:text-blue-400 surface-control surface-muted"
+            class="table-action"
           >
             <Icon name="refresh" size="sm" />
             <span class="text-xs">{{ t('payment.admin.retry') }}</span>
@@ -129,7 +129,7 @@
           <button
             v-if="canRefundRow(row)"
             @click="emit('refund', row)"
-            class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors hover:bg-red-50/25 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400 surface-control surface-muted"
+            class="table-action table-action-danger"
           >
             <Icon name="dollar" size="sm" />
             <span class="text-xs">{{ t('payment.admin.refund') }}</span>

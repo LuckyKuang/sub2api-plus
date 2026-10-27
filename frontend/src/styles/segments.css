@@ -1,0 +1,67 @@
+/* Explicit single-choice groups share the reference's recessed track and
+   raised selection. Other pressed controls keep their own semantics/styles. */
+.segmented-control {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 3px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 3px;
+  border: 1px solid var(--surface-edge);
+  border-radius: 8px;
+  background-color: var(--surface-soft);
+}
+
+.segmented-option {
+  display: inline-flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 26px;
+  padding: 3px 12px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background-color: transparent;
+  color: var(--surface-muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: .01em;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.segmented-option[aria-pressed="false"] { border-color: transparent; }
+
+.segmented-option[aria-pressed="false"]:hover:not(:disabled) {
+  background-color: var(--surface-hover);
+  color: var(--surface-text);
+}
+
+.segmented-option[aria-pressed="true"] {
+  border-color: var(--surface-edge);
+  background-color: var(--surface-field);
+  color: var(--surface-text);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgb(0 0 0 / calc(.16 * var(--console-card-alpha, 1))), inset 0 1px 0 var(--surface-glint);
+}
+
+.segmented-option:focus-visible {
+  outline: 2px solid rgb(var(--console-accent-500, 20 184 166) / 70%);
+  outline-offset: 1px;
+}
+
+.segmented-option:disabled {
+  cursor: not-allowed;
+  opacity: .5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .segmented-option { transition: none; }
+}
