@@ -50,10 +50,21 @@ func BillingPricingSnapshotFromContext(ctx context.Context) *BillingPricingSnaps
 }
 
 func WithoutBillingPricingSnapshot(ctx context.Context) context.Context {
+	// A new pricing generation must also recapture global Fast rules. Leaving
+	// the inherited context policy would freeze the previous turn's settings.
+	ctx = context.WithValue(ctx, openAIFastPolicyCtxKey, (*OpenAIFastPolicySettings)(nil))
 	return context.WithValue(ctx, billingPricingSnapshotCtxKey{}, (*BillingPricingSnapshot)(nil))
 }
 
 func CopyBillingPricingSnapshot(parent, base context.Context) context.Context {
+	if base == nil {
+		base = context.Background()
+	}
+	// Ungrouped OpenAI requests have no retail snapshot. Their independently
+	// captured policy is still part of the accepted pricing generation.
+	if policy := openAIFastPolicySettingsFromContext(parent); policy != nil {
+		base = withOpenAIFastPolicyContext(base, policy)
+	}
 	snapshot := BillingPricingSnapshotFromContext(parent)
 	if routeModel, ok := ResolvedUpstreamModelFromContext(parent); snapshot != nil && snapshot.routingModel == "" && ok {
 		copy := *snapshot
@@ -147,6 +158,7 @@ func (s *OpenAIGatewayService) WithBillingPricingSnapshot(ctx context.Context, k
 	if s == nil {
 		return ctx
 	}
+	ctx = withOpenAIDefaultBillingPlatform(ctx, key)
 	resolver := s.userGroupRateResolver
 	if resolver == nil {
 		resolver = newUserGroupRateResolver(nil, nil, resolveUserGroupRateCacheTTL(s.cfg), nil, "service.openai_gateway")

@@ -243,6 +243,8 @@ time-zone change does not recompute that captured peak factor. New admissions
 persist `peak_scope: all_meters`; older accepted snapshots without this field
 restore as `token_only`, including historical `product_v2` snapshots. Re-export
 preserves that scope, so delayed settlement does not reprice accepted tasks.
+Re-export also retains the accepted numeric DeepSeek price-card peak factor
+instead of evaluating it again with the current compiled schedule.
 The private durable pricing format is version 2 for new admissions. It preserves
 explicit public-model price selection and freezes the routing model used as the
 input to channel mapping in `routing_model`. A detached task or restored task
@@ -438,7 +440,12 @@ are exercised by
   A stale revision or concurrent persisted group writer receives HTTP 409
   `GROUP_CONFIGURATION_CHANGED`; the editor keeps its draft for review and
   reload. The repository compares the revision atomically, including writes
-  that do not change selling rates.
+  that do not change selling rates. Batch sort changes and startup configuration
+  backfills also advance the revision, so an already open editor must reload.
+- Cancelling subscription confirmation or leaving checkout invalidates its
+  pending quote refresh. Selecting the same plan again requires a new
+  confirmation; an earlier response cannot create an order or report a stale
+  refresh error.
 - A new request whose effective rate or pricing dependency is unavailable
   receives HTTP 503 `BILLING_RATE_UNAVAILABLE` after ingress audit and before
   capacity/account admission. This is a billing failure, separate from content

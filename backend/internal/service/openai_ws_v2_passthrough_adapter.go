@@ -743,15 +743,6 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 	if initialRequestModel == "" {
 		initialRequestModel = openAIWSPassthroughRequestModelForFrame(firstClientMessage)
 	}
-	if hooks != nil && hooks.MapRequestModel != nil {
-		mappedModel, mapErr := hooks.MapRequestModel(1, initialRequestModel)
-		if mapErr != nil {
-			return mapErr
-		}
-		if mappedModel = strings.TrimSpace(mappedModel); mappedModel != "" {
-			firstClientMessage = s.ReplaceModelInBody(firstClientMessage, mappedModel)
-		}
-	}
 	if hooks != nil && hooks.BeforeTurn != nil {
 		if err := hooks.BeforeTurn(1); err != nil {
 			return err
@@ -764,6 +755,21 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 		}
 		hooks.AfterTurn(1, nil, wrapOpenAIWSIngressTurnError("write_upstream", errors.New("first websocket turn did not reach upstream"), false))
 	}()
+	firstTurnCtx := ctx
+	if hooks != nil && hooks.TurnContext != nil {
+		if prepared := hooks.TurnContext(1); prepared != nil {
+			firstTurnCtx = prepared
+		}
+	}
+	if hooks != nil && hooks.MapRequestModel != nil {
+		mappedModel, mapErr := hooks.MapRequestModel(1, initialRequestModel)
+		if mapErr != nil {
+			return mapErr
+		}
+		if mappedModel = strings.TrimSpace(mappedModel); mappedModel != "" {
+			firstClientMessage = s.ReplaceModelInBody(firstClientMessage, mappedModel)
+		}
+	}
 	capturedSessionModel := openAIWSPassthroughPolicyModelForFrame(account, firstClientMessage)
 	if capturedSessionModel != "" && capturedSessionModel != strings.TrimSpace(gjson.GetBytes(firstClientMessage, "model").String()) {
 		firstClientMessage = s.ReplaceModelInBody(firstClientMessage, capturedSessionModel)
@@ -795,7 +801,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 		firstClientMessage = accountScopedFirst
 	}
 	usageMeta := newOpenAIWSPassthroughUsageMeta(initialRequestModel, firstClientMessage)
-	updatedFirst, blocked, policyErr := s.applyOpenAIFastPolicyToWSResponseCreate(ctx, account, capturedSessionModel, firstClientMessage)
+	updatedFirst, blocked, policyErr := s.applyOpenAIFastPolicyToWSResponseCreate(firstTurnCtx, account, capturedSessionModel, firstClientMessage)
 	if policyErr != nil {
 		return fmt.Errorf("apply openai fast policy on first ws frame: %w", policyErr)
 	}
@@ -1079,6 +1085,22 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 					return payload, nil, err
 				}
 			}
+			frameCtx := ctx
+			if isResponseCreate {
+				if err := s.requireCodexUpstreamWS(ctx, account); err != nil {
+					return payload, nil, err
+				}
+				if hooks != nil && hooks.BeforeTurn != nil {
+					if err := hooks.BeforeTurn(turnNo); err != nil {
+						return payload, nil, err
+					}
+				}
+				if hooks != nil && hooks.TurnContext != nil {
+					if prepared := hooks.TurnContext(turnNo); prepared != nil {
+						frameCtx = prepared
+					}
+				}
+			}
 			responsesLite := isResponseCreate && isOpenAIResponsesLiteWebSocketPayload(payload)
 			if isResponseCreate {
 				if normalized, compatibilityChanged, normalizeErr := normalizeOpenAIResponsesWebSocketCompatibilityBodyWithConfig(s.cfg, payload, account, responsesLite); normalizeErr != nil {
@@ -1138,14 +1160,6 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 						payload = s.ReplaceModelInBody(payload, upstreamModel)
 					}
 				}
-				if err := s.requireCodexUpstreamWS(ctx, account); err != nil {
-					return payload, nil, err
-				}
-				if hooks != nil && hooks.BeforeTurn != nil {
-					if err := hooks.BeforeTurn(turnNo); err != nil {
-						return payload, nil, err
-					}
-				}
 			}
 			// 在评估策略前先刷新 capturedSessionModel：客户端可能通过
 			// session.update 修改 session-level model（Realtime /
@@ -1173,7 +1187,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 			if isResponseCreate && model != "" && model != strings.TrimSpace(gjson.GetBytes(payload, "model").String()) {
 				payload = s.ReplaceModelInBody(payload, model)
 			}
-			out, blocked, policyErr := s.applyOpenAIFastPolicyToWSResponseCreate(ctx, account, model, payload)
+			out, blocked, policyErr := s.applyOpenAIFastPolicyToWSResponseCreate(frameCtx, account, model, payload)
 			if policyErr == nil && blocked == nil && isResponseCreate && account.Platform != PlatformGrok {
 				cacheBody, _, normalizeErr := normalizeOpenAIPromptCacheControlsForAccount(out, account, model)
 				if normalizeErr != nil {

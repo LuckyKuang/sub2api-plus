@@ -68,6 +68,9 @@ func ExportBillingPricingSnapshot(ctx context.Context, models ...string) (json.R
 		MissingModels:          make(map[string]bool),
 		Models:                 make(map[string]*ModelPricing), Images: make(map[string]map[string]float64), Videos: make(map[string]map[string]float64), CacheStorage: make(map[string]float64)}
 	stored.RoutingModel = snapshot.routingModel
+	if snapshot.billing != nil && snapshot.billing.frozenDeepSeekPeakMultiplier != nil {
+		stored.DeepSeekPeakMultiplier = *snapshot.billing.frozenDeepSeekPeakMultiplier
+	}
 	if routeModel, ok := ResolvedUpstreamModelFromContext(ctx); stored.RoutingModel == "" && ok {
 		stored.RoutingModel = routeModel
 	}

@@ -67,11 +67,18 @@ refreshed even if the key moved groups or has no group. An incompatible group
 cannot supply its override to the connection's retained billing group; that
 group's own override is queried. Each external turn counts once under the
 [shared request-admission policy](../GATEWAY_ADMISSION.md).
-Each turn's profit admission and
-settlement share its frozen pricing time and billing-group snapshot. The current
+Each turn's model mapping, OpenAI Fast policy, reservation, profit admission and
+settlement share its frozen pricing generation and billing-group snapshot.
+Channel mappings and global/group Fast changes apply to the next audited turn;
+account credentials and account model mappings remain connection-scoped.
+Passthrough, pool and HTTP bridge execution use the accepted turn's model/tier,
+including global Fast rules for ungrouped keys without a retail snapshot.
+Retries reuse that turn's accepted generation. The current
 and previous turn retain separate snapshots so deferred settlement cannot use
-the next turn's price. Every refresh follows that turn's ingress audit, before
-concurrency acquisition and upstream writes. WS image-input usage is propagated
+the next turn's price. Every refresh follows that turn's ingress audit and
+immediate user-capacity admission, before account-slot acquisition or upstream
+writes. Rejection during subsequent payload preparation releases the turn's
+slots and reservation when the connection closes. WS image-input usage is propagated
 through relay and adapter without adding it twice to total input tokens.
 
 OpenAI API-key capability probes freeze the acquired account's credentials,

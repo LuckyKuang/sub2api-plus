@@ -1405,7 +1405,8 @@ func (r *groupRepository) UpdateSortOrders(ctx context.Context, updates []servic
 
 	query := fmt.Sprintf(`
 		UPDATE groups
-		SET sort_order = CASE id
+		SET billing_policy_version = billing_policy_version + 1,
+			sort_order = CASE id
 			%s
 			ELSE sort_order
 		END

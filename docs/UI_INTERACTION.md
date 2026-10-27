@@ -227,12 +227,16 @@ keeps its visible outline and the 44px navigation hit area remains intact.
 
 Shared buttons use 9px corners, 13px text and compact padding; small buttons use
 8px corners and 12px text. Primary actions use the configured accent gradient,
-with fill alpha following appearance settings and black/white foreground chosen
-for the configured accent. The gradient ends in a lighter shade for dark text
+with fill alpha following appearance settings and opaque black/white foreground
+chosen after compositing the configured accent over the active theme surface.
+Both theme choices update when transparency changes; switching themes selects
+the corresponding choice immediately. The gradient ends in a lighter shade for dark text
 and a darker shade for white text; hover retains this contrast. Secondary controls use theme
 surfaces and visible edges. Long labels wrap and buttons grow vertically rather
 than using a fixed height. Hover does not move controls or their containing cards.
 Public/auth forms and both consoles use the same button/input/Select styles.
+This contrast calculation uses the known theme surfaces; arbitrary custom
+background images beneath transparent fills can change the resulting contrast.
 
 Workspace tabs use 9px corners and at least 38px height; overflowing tab lists
 scroll horizontally. Card tabs wrap, including long translated labels. Explicit

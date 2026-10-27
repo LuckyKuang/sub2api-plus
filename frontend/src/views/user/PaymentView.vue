@@ -313,7 +313,7 @@
 import { useLocaleRefresh } from '@/utils/localeRefresh'
 import { adminSupportContext } from '@/utils/adminSupportContext'
 import { supportReadonly as vSupportReadonly } from '@/directives/supportReadonly'
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onScopeDispose, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
@@ -574,6 +574,10 @@ const checkout = ref<CheckoutInfoResponse>({
 })
 // Confirmation supersedes any background request already in flight.
 let saleQuoteRequest = 0
+// Cancellation, including cancel/reselect of the same plan, invalidates the
+// pending confirmation before its checkout response can create an order.
+watch(() => selectedPlan.value?.id, () => { ++saleQuoteRequest }, { flush: 'sync' })
+onScopeDispose(() => { ++saleQuoteRequest })
 
 const renderedHelpText = computed(() => DOMPurify.sanitize(
   marked.parse(checkout.value.help_text || '', { async: false, gfm: true, breaks: false }),
@@ -868,10 +872,10 @@ async function confirmSubscribe() {
   const previousCurrency = selectedCurrency.value
   submitting.value = true
   errorMessage.value = ''
-  ++saleQuoteRequest
+  const request = ++saleQuoteRequest
   try {
     const response = await paymentAPI.getCheckoutInfo()
-    if (selectedPlan.value?.id !== previous.id) return
+    if (request !== saleQuoteRequest || selectedPlan.value?.id !== previous.id) return
     const current = response.data.plans.find(plan => plan.id === previous.id)
     checkout.value = response.data
     if (!current) {
@@ -885,7 +889,7 @@ async function confirmSubscribe() {
       return
     }
   } catch {
-    errorMessage.value = t('billingRates.refreshFailed')
+    if (request === saleQuoteRequest) errorMessage.value = t('billingRates.refreshFailed')
     return
   } finally {
     submitting.value = false

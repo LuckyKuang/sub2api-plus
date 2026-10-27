@@ -65,6 +65,29 @@ describe('published console appearance', () => {
     scope.stop()
     expect(root.style.getPropertyValue('--console-primary-foreground')).toBe('')
     expect(root.style.getPropertyValue('--console-primary-end')).toBe('')
+    expect(root.style.getPropertyValue('--console-primary-dark-foreground')).toBe('')
+    expect(root.style.getPropertyValue('--console-primary-dark-end')).toBe('')
+  })
+
+  it('updates both theme foregrounds when transparency changes without fading the text', async () => {
+    const appearance = ref({ ...defaultConsoleAppearance(), accent_color: '#ffffff', card_transparency: 50 })
+    scope.run(() => useConsoleAppearance(() => appearance.value))
+    const root = document.documentElement
+    expect(root.style.getPropertyValue('--console-primary-foreground')).toBe('#000000')
+    expect(root.style.getPropertyValue('--console-primary-dark-foreground')).toBe('#000000')
+    appearance.value.accent_color = '#000000'
+    await nextTick()
+    expect(root.style.getPropertyValue('--console-primary-foreground')).toBe('#000000')
+    expect(root.style.getPropertyValue('--console-primary-dark-foreground')).toBe('#ffffff')
+    expect(root.style.getPropertyValue('--console-primary-end')).toBe('82 82 82')
+    expect(root.style.getPropertyValue('--console-primary-dark-end')).toBe('0 0 0')
+    appearance.value.card_transparency = 0
+    await nextTick()
+    expect(root.style.getPropertyValue('--console-primary-foreground')).toBe('#ffffff')
+    appearance.value.card_transparency = 100
+    await nextTick()
+    expect(root.style.getPropertyValue('--console-primary-foreground')).toBe('#000000')
+    expect(root.style.getPropertyValue('--console-primary-dark-foreground')).toBe('#ffffff')
   })
 
   it('preserves the exact default accent and updates the whole palette without reloading', async () => {

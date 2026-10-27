@@ -16,7 +16,8 @@ routes, build inputs, or the separate seven-provider business suite.
 The matrix covers 375×812, 768×900, 1000×600 and 1440×900 in both themes and
 languages (112 cases). It checks translated navigation, segmented choices, row
 actions, form controls and button labels at 0%, 20% and 100% transparency,
-configured accent extremes, date ranges and their nested calendars,
+configured accent extremes at 0%, 50% and 100% transparency (including immediate
+theme switching), date ranges and their nested calendars,
 plain/searchable selection menus, and dialogs with long titles, footer labels
 and body content.
 Assertions use actual viewport bounds, nested-container bounds and

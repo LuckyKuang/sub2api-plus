@@ -13,6 +13,22 @@ import (
 
 const inflightFastPolicyReadTimeout = 2 * time.Second
 
+// The OpenAI gateway routes ungrouped requests to OpenAI by default. Bind that
+// existing routing contract for pricing without changing another concrete
+// target, a force-platform override, or the generic gateway's default.
+func withOpenAIDefaultBillingPlatform(ctx context.Context, key *APIKey) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if key == nil || key.User == nil || key.Group != nil {
+		return ctx
+	}
+	if requestBillingPlatform(ctx, nil, "") != "" {
+		return ctx
+	}
+	return WithResolvedTargetPlatform(ctx, PlatformOpenAI)
+}
+
 func cloneInflightFastPolicy(settings *OpenAIFastPolicySettings) *OpenAIFastPolicySettings {
 	copy := &OpenAIFastPolicySettings{}
 	if settings == nil {
@@ -47,7 +63,16 @@ func captureInflightFastPolicy(ctx context.Context, service *SettingService) *Op
 
 func freezeInflightFastPolicy(ctx context.Context, service *SettingService) context.Context {
 	snapshot := BillingPricingSnapshotFromContext(ctx)
-	if snapshot == nil || snapshot.platform != PlatformOpenAI {
+	if snapshot == nil {
+		// Ungrouped keys have no retail group snapshot, but global Fast rules
+		// still rewrite their upstream tier. Pin those rules for admission and
+		// forwarding once the request's OpenAI target is known.
+		if requestBillingPlatform(ctx, nil, "") == PlatformOpenAI {
+			return withOpenAIFastPolicyContext(ctx, captureInflightFastPolicy(ctx, service))
+		}
+		return ctx
+	}
+	if snapshot.platform != PlatformOpenAI {
 		return ctx
 	}
 	if snapshot.fastPolicySettings != nil {
@@ -94,7 +119,7 @@ func estimateInflightWithFastPolicy(ctx context.Context, key *APIKey, req Inflig
 			deps.resolveMapping = snapshot.channels.ResolveChannelMapping
 		}
 	}
-	if platform != PlatformOpenAI || group == nil ||
+	if platform != PlatformOpenAI ||
 		(req.Protocol != "" && req.Protocol != ContentModerationProtocolOpenAIChat && req.Protocol != ContentModerationProtocolOpenAIResponses && req.Protocol != ContentModerationProtocolAnthropicMessages) {
 		return deps.estimate(ctx, key, req)
 	}
@@ -104,7 +129,7 @@ func estimateInflightWithFastPolicy(ctx context.Context, key *APIKey, req Inflig
 		req.ServiceTier = OpenAIFastTierPriority
 	}
 	force := openAIGroupForcesFast(ctx, &Account{Platform: PlatformOpenAI})
-	free := groupSupportsOpenAIFast(group.Platform) && group.FreeOpenAIFast
+	free := group != nil && groupSupportsOpenAIFast(group.Platform) && group.FreeOpenAIFast
 	tier := normalizedOpenAIServiceTierValue(req.ServiceTier)
 	if tier == "" && req.ServiceTier != "" && !force {
 		return deps.estimate(ctx, key, req) // Unknown explicit tiers are never "missing".

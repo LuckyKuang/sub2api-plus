@@ -422,6 +422,58 @@ describe('PaymentView recharge rate preview', () => {
 })
 
 describe('PaymentView subscription confirmation amounts', () => {
+  it('requires a fresh confirmation after cancelling and reselecting the same plan during quote refresh', async () => {
+    const wrapper = await mountSubscriptionConfirm()
+    let finishQuote!: (value: ReturnType<typeof checkoutInfoWithPlansFixture>) => void
+    getCheckoutInfo.mockReturnValueOnce(new Promise(resolve => { finishQuote = resolve }))
+    await wrapper.get('[data-testid="subscription-checkout-action"] button').trigger('click')
+    expect(getCheckoutInfo).toHaveBeenCalledTimes(2)
+    await wrapper.get('[data-testid="subscription-checkout-action"]').findAll('button')[1]!.trigger('click')
+    const card = wrapper.getComponent(SubscriptionPlanCard)
+    card.vm.$emit('select', card.props('plan'))
+    await flushPromises()
+
+    finishQuote(checkoutInfoWithPlansFixture())
+    await flushPromises()
+    expect(createOrder).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="subscription-checkout-action"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="subscription-checkout-action"] button').attributes('disabled')).toBeUndefined()
+
+    createOrder.mockRejectedValueOnce(new Error('test order stop'))
+    await wrapper.get('[data-testid="subscription-checkout-action"] button').trigger('click')
+    await flushPromises()
+    expect(createOrder).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ plan_id: 7 }))
+    wrapper.unmount()
+  })
+
+  it('does not create an order after leaving during subscription quote refresh', async () => {
+    const wrapper = await mountSubscriptionConfirm()
+    let finishQuote!: (value: ReturnType<typeof checkoutInfoWithPlansFixture>) => void
+    getCheckoutInfo.mockReturnValueOnce(new Promise(resolve => { finishQuote = resolve }))
+    await wrapper.get('[data-testid="subscription-checkout-action"] button').trigger('click')
+    expect(getCheckoutInfo).toHaveBeenCalledTimes(2)
+    wrapper.unmount()
+    finishQuote(checkoutInfoWithPlansFixture())
+    await flushPromises()
+    expect(createOrder).not.toHaveBeenCalled()
+  })
+
+  it('ignores a cancelled quote failure after the same plan is reselected', async () => {
+    const wrapper = await mountSubscriptionConfirm()
+    let rejectQuote!: (error: Error) => void
+    getCheckoutInfo.mockReturnValueOnce(new Promise((_resolve, reject) => { rejectQuote = reject }))
+    await wrapper.get('[data-testid="subscription-checkout-action"] button').trigger('click')
+    await wrapper.get('[data-testid="subscription-checkout-action"]').findAll('button')[1]!.trigger('click')
+    const card = wrapper.getComponent(SubscriptionPlanCard)
+    card.vm.$emit('select', card.props('plan'))
+    await flushPromises()
+    rejectQuote(new Error('stale quote request failed'))
+    await flushPromises()
+    expect(createOrder).not.toHaveBeenCalled()
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   it('requires reviewing changed payment conversion before creating the subscription order', async () => {
     const wrapper = await mountSubscriptionConfirm({ checkout: { subscription_usd_to_cny_rate: 7 }, method: { currency: 'CNY' }, plan: { price: 10 } })
     getCheckoutInfo.mockResolvedValue(checkoutInfoWithPlansFixture({ checkout: { subscription_usd_to_cny_rate: 8 }, method: { currency: 'CNY' }, plan: { price: 10 } }))

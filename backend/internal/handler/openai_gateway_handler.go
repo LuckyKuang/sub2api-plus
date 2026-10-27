@@ -2436,7 +2436,9 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		closeOpenAIClientWS(wsConn, securityAuditWSCloseStatus(decision), securityAuditWSCloseReason(decision))
 		return
 	}
-	ctx = service.CopyBillingPricingSnapshot(c.Request.Context(), ctx)
+	// Audit derives this request context from the IP-policy domain. Retain all
+	// admitted metadata, including Fast rules for keys without a group snapshot.
+	ctx = c.Request.Context()
 
 	ctx = service.WithOutboundIdentityScope(ctx, c)
 	// Connection capacity is a side effect too: only an authenticated, validated,
@@ -3060,35 +3062,16 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				}
 				return nil
 			},
+			TurnContext: func(turn int) context.Context {
+				turnInflightMu.Lock()
+				defer turnInflightMu.Unlock()
+				return turnInflight[turn].ctx
+			},
 			MapRequestModel: func(turn int, originalModel string) (string, error) {
-				model := strings.TrimSpace(originalModel)
-				if model == "" {
-					model = reqModel
+				if snapshot := turnChannelMapping.Load(); snapshot != nil && snapshot.turn == turn {
+					return snapshot.mapping.MappedModel, nil
 				}
-				setOpsRequestContext(c, model, true)
-				routeModel := model
-				if apiKey.Group != nil && apiKey.Group.Platform == service.PlatformComposite {
-					// The account, target platform and route context are connection-scoped.
-					// A different public model needs a new connection and fresh resolution.
-					if model != reqModel {
-						return "", newOpenAIWSUnsupportedModelSwitchError(model)
-					}
-					routeModel = wsRouteModel
-				}
-				mapping, _ := h.gatewayService.ResolveChannelMappingAndRestrict(ctx, apiKey.GroupID, routeModel)
-				mappedModelUnchanged := false
-				if previous := turnChannelMapping.Load(); previous != nil && previous.turn < turn {
-					mappedModelUnchanged = strings.TrimSpace(previous.mapping.MappedModel) == strings.TrimSpace(mapping.MappedModel)
-				}
-				if turn > 1 && !mappedModelUnchanged && !account.IsModelSupported(model) && !account.IsModelSupported(mapping.MappedModel) {
-					return "", newOpenAIWSUnsupportedModelSwitchError(mapping.MappedModel)
-				}
-				turnChannelMapping.Store(&openAIWSTurnChannelMappingSnapshot{
-					turn:           turn,
-					requestedModel: model,
-					mapping:        mapping,
-				})
-				return mapping.MappedModel, nil
+				return "", service.NewOpenAIWSClientCloseError(coderws.StatusInternalError, "turn model mapping is unavailable; please reconnect", nil)
 			},
 			BeforeTurn: func(turn int) error {
 				if err := service.ValidateOpenAISessionRouteOwner(ctx); err != nil {
@@ -3116,15 +3099,56 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 					}
 					currentUserRelease = wrapReleaseOnDone(ctx, userReleaseFunc)
 				}
-				turnModel := reqModel
-				turnPublicModel := reqModel
-				if snapshot := turnChannelMapping.Load(); snapshot != nil && snapshot.turn == turn {
-					if model := strings.TrimSpace(snapshot.requestedModel); model != "" {
-						turnPublicModel = model
+				// 每个 turn 按当前时刻重装利润门并复核当前账号，越线同样要求
+				// 重连重选（连接绑定单一上游账号，无法中途换号）。本 turn 的
+				// 准入与计费共用同一 pricingAt。
+				turnInflightMu.Lock()
+				estimate, hasEstimate := turnInflightEstimates[turn]
+				firstAttemptKey := retryInflightKey
+				turnInflightMu.Unlock()
+				if !hasEstimate {
+					return service.NewOpenAIWSClientCloseError(coderws.StatusInternalError, "billing estimate is unavailable; please reconnect", nil)
+				}
+				turnPublicModel := strings.TrimSpace(estimate.Model)
+				if turnPublicModel == "" {
+					turnPublicModel = reqModel
+				}
+				turnKey := apiKey
+				if turn == 1 {
+					turnKey = firstAttemptKey
+				}
+				turnBillingCtx := turnBillingAPIKeys.begin(ctx, h.apiKeyService, turn, turnKey)
+				turnBillingKey := turnBillingAPIKeys.forTurn(turn, apiKey)
+				if turn > 1 {
+					turnBillingCtx = service.WithoutBillingPricingSnapshot(turnBillingCtx)
+				}
+				turnBillingCtx = h.gatewayService.WithBillingPricingSnapshot(turnBillingCtx, turnBillingKey, time.Now(), turnPublicModel)
+				if err := service.ValidateBillingPricingSnapshot(turnBillingCtx); err != nil {
+					return service.NewOpenAIWSClientCloseError(coderws.StatusTryAgainLater, "billing rates are unavailable; please reconnect", err)
+				}
+				setOpsRequestContext(c, turnPublicModel, true)
+				routeModel := turnPublicModel
+				if apiKey.Group != nil && apiKey.Group.Platform == service.PlatformComposite {
+					// The resolved account/platform remain connection-scoped.
+					if turnPublicModel != reqModel {
+						return newOpenAIWSUnsupportedModelSwitchError(turnPublicModel)
 					}
-					if model := strings.TrimSpace(snapshot.mapping.MappedModel); model != "" {
-						turnModel = model
-					}
+					routeModel = wsRouteModel
+				}
+				mapping, _ := h.gatewayService.ResolveChannelMappingAndRestrict(turnBillingCtx, apiKey.GroupID, routeModel)
+				mappedModelUnchanged := false
+				if previous := turnChannelMapping.Load(); previous != nil && previous.turn < turn {
+					mappedModelUnchanged = strings.TrimSpace(previous.mapping.MappedModel) == strings.TrimSpace(mapping.MappedModel)
+				}
+				if turn > 1 && !mappedModelUnchanged && !account.IsModelSupported(turnPublicModel) && !account.IsModelSupported(mapping.MappedModel) {
+					return newOpenAIWSUnsupportedModelSwitchError(mapping.MappedModel)
+				}
+				turnChannelMapping.Store(&openAIWSTurnChannelMappingSnapshot{
+					turn: turn, requestedModel: turnPublicModel, mapping: mapping,
+				})
+				turnModel := strings.TrimSpace(mapping.MappedModel)
+				if turnModel == "" {
+					turnModel = turnPublicModel
 				}
 				turnRequiredCapability := requiredCapability
 				if snapshot := turnCapability.Load(); snapshot != nil && snapshot.turn == turn {
@@ -3134,7 +3158,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				// 重载账号并执行与新 HTTP 请求一致的硬资格检查，使切组、禁用/
 				// 暂停、配额、模型能力和传输模式变更都在写入上游前生效。
 				latestAccount, err := h.gatewayService.RevalidateOpenAIAccountForWebSocketTurn(
-					ctx,
+					turnBillingCtx,
 					account,
 					apiKey.GroupID,
 					requestPlatform,
@@ -3155,29 +3179,6 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 						zap.Int64("account_id", account.ID),
 						zap.String("model", turnModel))
 					return service.NewOpenAIWSClientCloseError(coderws.StatusTryAgainLater, "account is no longer eligible for this connection, please reconnect", nil)
-				}
-				// 每个 turn 按当前时刻重装利润门并复核当前账号，越线同样要求
-				// 重连重选（连接绑定单一上游账号，无法中途换号）。本 turn 的
-				// 准入与计费共用同一 pricingAt。
-				turnInflightMu.Lock()
-				estimate, hasEstimate := turnInflightEstimates[turn]
-				firstAttemptKey := retryInflightKey
-				turnInflightMu.Unlock()
-				if !hasEstimate {
-					return service.NewOpenAIWSClientCloseError(coderws.StatusInternalError, "billing estimate is unavailable; please reconnect", nil)
-				}
-				turnKey := apiKey
-				if turn == 1 {
-					turnKey = firstAttemptKey
-				}
-				turnBillingCtx := turnBillingAPIKeys.begin(ctx, h.apiKeyService, turn, turnKey)
-				turnBillingKey := turnBillingAPIKeys.forTurn(turn, apiKey)
-				if turn > 1 {
-					turnBillingCtx = service.WithoutBillingPricingSnapshot(turnBillingCtx)
-				}
-				turnBillingCtx = h.gatewayService.WithBillingPricingSnapshot(turnBillingCtx, turnBillingKey, time.Now(), turnPublicModel)
-				if err := service.ValidateBillingPricingSnapshot(turnBillingCtx); err != nil {
-					return service.NewOpenAIWSClientCloseError(coderws.StatusTryAgainLater, "billing rates are unavailable; please reconnect", err)
 				}
 				// Admitted later turns use their refreshed group and pricing generation
 				// for eligibility before taking an account slot or forwarding.

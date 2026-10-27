@@ -37,9 +37,12 @@ export function useConsoleAppearance(source: () => ConsoleAppearance): void {
     for (const [shade, channels] of Object.entries(consoleAccentPalette(appearance.accent_color))) {
       root.style.setProperty('--console-accent-' + shade, channels)
     }
-    const primary = consolePrimaryColors(appearance.accent_color)
+    const primary = consolePrimaryColors(appearance.accent_color, { alpha: consoleCardAlpha.value })
     root.style.setProperty('--console-primary-foreground', primary.foreground)
     root.style.setProperty('--console-primary-end', primary.end)
+    const darkPrimary = consolePrimaryColors(appearance.accent_color, { alpha: consoleCardAlpha.value, dark: true })
+    root.style.setProperty('--console-primary-dark-foreground', darkPrimary.foreground)
+    root.style.setProperty('--console-primary-dark-end', darkPrimary.end)
   })
 
   onScopeDispose(() => {
@@ -48,6 +51,7 @@ export function useConsoleAppearance(source: () => ConsoleAppearance): void {
     clearBackground()
     for (const key of ['--console-light-mask-alpha', '--console-dark-mask-alpha', '--console-card-alpha',
       '--console-primary-foreground', '--console-primary-end',
+      '--console-primary-dark-foreground', '--console-primary-dark-end',
       ...Object.keys(consoleAccentPalette(null)).map(shade => '--console-accent-' + shade)]) root.style.removeProperty(key)
   })
 }

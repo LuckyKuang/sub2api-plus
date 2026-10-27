@@ -375,6 +375,31 @@ func (s *BatchImagePublicService) Submit(ctx context.Context, owner BatchImageOw
 	if err := s.UnfinishedTasks.MarkUncertain(ctx, reservation, "provider_create_inflight"); err != nil {
 		hbCancel()
 		<-hbDone
+		// The provider has not been called. Restore the accepted hold even
+		// when persisting create intent failed because the request was cancelled.
+		cleanupCtx, cancelCleanup := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancelCleanup()
+		releaseErr := releaseBatchImageBalanceHold(cleanupCtx, s.BillingRepo, job, requestHash)
+		code, failure := "TASK_RESERVATION_FAILED", err
+		if releaseErr != nil {
+			code, failure = "BILLING_RELEASE_FAILED", releaseErr
+		}
+		// Cancel may already have committed a terminal state while the intent
+		// write was in flight. The repository's locked transition preserves it;
+		// the unconditional submit-failure recorder must not overwrite it.
+		if transitionErr := s.Repo.TransitionBatchImageJobStatus(cleanupCtx, job.BatchID, BatchImageJobStatusFailed, BatchImageTransitionOptions{
+			EventType:    "submit_failed",
+			EventPayload: map[string]any{"error_code": code},
+			ErrorCode:    batchImageStringPtr(code),
+			ErrorMessage: batchImageStringPtr(sanitizeBatchImagePublicMessage(failure.Error())),
+		}); transitionErr == nil && releaseErr == nil {
+			s.hidePreUpstreamSubmitFailure(cleanupCtx, owner, job)
+		}
+		if releaseErr != nil {
+			s.enqueueBillingRetry(cleanupCtx, job.BatchID)
+			return nil, ErrBatchImageBillingHoldFailed
+		}
+		s.invalidateAuthCache(cleanupCtx, job.UserID)
 		return nil, err
 	}
 	upstreamStarted = true

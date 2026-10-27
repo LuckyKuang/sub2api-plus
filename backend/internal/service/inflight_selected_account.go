@@ -95,9 +95,10 @@ func (s *GatewayService) EstimateInflightReservationForAccount(ctx context.Conte
 // EstimateInflightReservationForAccount uses the same frozen retail contract as
 // settlement and OpenAI's protocol-specific account mapping rules.
 func (s *OpenAIGatewayService) EstimateInflightReservationForAccount(ctx context.Context, key *APIKey, req InflightEstimateRequest, account *Account) (float64, bool) {
-	if s == nil || account == nil {
+	if s == nil || key == nil || key.User == nil || account == nil {
 		return 0, false
 	}
+	ctx = freezeInflightFastPolicy(withOpenAIDefaultBillingPlatform(ctx, key), s.settingService)
 	return estimateInflightWithFastPolicy(ctx, key, req, s.inflightEstimateDeps().forAccount(ctx, account, req, true), nil)
 }
 

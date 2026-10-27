@@ -265,26 +265,36 @@ test('shared navigation, segmented choices and horizontal row actions keep trans
 })
 
 
-test('primary labels remain legible for the brightest and darkest configured accents before and after hover', async ({ page }, info) => {
+test('primary labels stay opaque and legible at opaque, half-transparent and transparent accent fills before and after hover', async ({ page }, info) => {
   const locale = String(info.project.use.locale).startsWith('zh') ? 'zh' : 'en'
   const theme = info.project.use.colorScheme === 'dark' ? 'dark' : 'light'
-  for (const accent of ['ffffff', 'ffff00', '000000', '000080', '14b8a6']) {
-    await page.goto(`/layout-tests/index.html?locale=${locale}&theme=${theme}&view=controls&accent=%23${accent}`)
-    const button = page.getByTestId('style-gallery').locator('.btn-primary')
-    await button.scrollIntoViewIfNeeded()
-    await expectReachable(button)
-    const expected = ['000000', '000080'].includes(accent) ? 'rgb(255, 255, 255)' : 'rgb(0, 0, 0)'
-    const renderedColor = () => button.evaluate(element => {
-      const canvas = document.createElement('canvas')
-      canvas.width = canvas.height = 1
-      const context = canvas.getContext('2d')!
-      context.fillStyle = getComputedStyle(element).color
-      context.fillRect(0, 0, 1, 1)
-      return Array.from(context.getImageData(0, 0, 1, 1).data)
-    })
-    const expectedChannels = expected === 'rgb(255, 255, 255)' ? [255, 255, 255, 255] : [0, 0, 0, 255]
-    await expect.poll(renderedColor).toEqual(expectedChannels)
-    await button.hover()
-    await expect.poll(renderedColor).toEqual(expectedChannels)
+  for (const alpha of [1, .5, 0]) {
+    for (const accent of ['ffffff', 'ffff00', '000000', '000080', '14b8a6']) {
+      await page.goto(`/layout-tests/index.html?locale=${locale}&theme=${theme}&view=controls&accent=%23${accent}&alpha=${alpha}`)
+      const button = page.getByTestId('style-gallery').locator('.btn-primary')
+      await button.scrollIntoViewIfNeeded()
+      await expectReachable(button)
+      // Independent literal expectations for the known theme surfaces. No
+      // foreground interpolation is permitted at intermediate transparency.
+      const white = alpha === 1 ? ['000000', '000080'].includes(accent)
+        : theme === 'dark' && (alpha === 0 || ['000000', '000080', '14b8a6'].includes(accent))
+      const renderedColor = () => button.evaluate(element => {
+        const canvas = document.createElement('canvas')
+        canvas.width = canvas.height = 1
+        const context = canvas.getContext('2d')!
+        context.fillStyle = getComputedStyle(element).color
+        context.fillRect(0, 0, 1, 1)
+        return Array.from(context.getImageData(0, 0, 1, 1).data)
+      })
+      const expectedChannels = white ? [255, 255, 255, 255] : [0, 0, 0, 255]
+      await expect.poll(renderedColor).toEqual(expectedChannels)
+      await button.hover()
+      await expect.poll(renderedColor).toEqual(expectedChannels)
+      if (alpha === .5 && accent === '000000') {
+        await page.evaluate(() => document.documentElement.classList.toggle('dark'))
+        await expect.poll(renderedColor).toEqual(white ? [0, 0, 0, 255] : [255, 255, 255, 255])
+        await expectReachable(button)
+      }
+    }
   }
 })

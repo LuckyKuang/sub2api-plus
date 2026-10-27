@@ -986,9 +986,10 @@ func (s *OpenAIGatewayService) inflightEstimateDeps() inflightEstimateDeps {
 
 // EstimateInflightReservation 同 GatewayService.EstimateInflightReservation（OpenAI 网关倍率口径）。
 func (s *OpenAIGatewayService) EstimateInflightReservation(ctx context.Context, apiKey *APIKey, req InflightEstimateRequest) (float64, bool) {
-	if s == nil {
+	if s == nil || apiKey == nil || apiKey.User == nil {
 		return 0, false
 	}
+	ctx = freezeInflightFastPolicy(withOpenAIDefaultBillingPlatform(ctx, apiKey), s.settingService)
 	ctx, cancel := withInflightSnapshotLookup(ctx)
 	defer cancel()
 	return estimateInflightWithFastPolicy(ctx, apiKey, req, s.inflightEstimateDeps(), s.schedulerSnapshot)

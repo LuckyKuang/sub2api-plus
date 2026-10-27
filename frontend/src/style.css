@@ -181,8 +181,12 @@ input:is([type=range], [type=checkbox], [type=radio]) { accent-color: rgb(var(--
     background-color: transparent;
     background-image: linear-gradient(135deg, rgb(var(--console-accent-500, 20 184 166) / var(--console-card-alpha, 1)), rgb(var(--console-primary-end, var(--console-accent-400, 45 212 191)) / var(--console-card-alpha, 1)));
     border: 1px solid rgb(var(--control-accent) / 60%);
-    color: color-mix(in srgb, var(--console-primary-foreground, #000000) calc(100% * var(--console-card-alpha, 1)), var(--surface-text));
+    color: var(--console-primary-foreground, #000000);
     box-shadow: 0 2px 6px rgb(var(--control-accent) / calc(.25 * var(--console-card-alpha, 1))), inset 0 1px 0 var(--surface-glint);
+  }
+  .dark .btn-primary {
+    --console-primary-foreground: var(--console-primary-dark-foreground, #000000);
+    --console-primary-end: var(--console-primary-dark-end, var(--console-accent-400, 45 212 191));
   }
   .btn-primary:hover:not(:disabled) {
     box-shadow: 0 3px 9px rgb(var(--control-accent) / calc(.32 * var(--console-card-alpha, 1))), inset 0 1px 0 var(--surface-glint);

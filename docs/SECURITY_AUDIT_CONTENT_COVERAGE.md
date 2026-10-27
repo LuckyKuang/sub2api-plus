@@ -106,7 +106,12 @@ Customer pricing capture also follows the successful audit decision. Each HTTP
 inference request freezes its group policy, personal rate, price-card generation
 and pricing time before billing eligibility, reservations or provider access;
 retries and detached settlement retain that snapshot. A rejected audit does not
-capture pricing or start billing. Responses WS reuses the admitted first-turn
+capture pricing or start billing. Responses WS retains the complete context
+derived by first-turn audit, including an ungrouped key's default OpenAI target
+and frozen global Fast rules when no retail group snapshot exists. Reservation,
+selected-account reconciliation and forwarding must share those accepted rules
+even when administrators change them after audit. The IP-policy cancellation
+domain remains their parent. Responses WS reuses the admitted first-turn
 snapshot and captures a fresh authenticated group and public model for every
 later admitted turn. Deferred normal and cyber-policy usage retain their own
 turn's snapshot rather than the connection's first-turn configuration. Pricing

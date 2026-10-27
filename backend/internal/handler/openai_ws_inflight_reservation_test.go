@@ -131,6 +131,10 @@ type wsInflightHarness struct {
 }
 
 func newWSInflightHarness(t *testing.T, mode string, balance float64, pricing []service.ChannelModelPricing, failover bool, configure ...func(*config.Config)) *wsInflightHarness {
+	return newWSInflightHarnessWithSetup(t, mode, balance, pricing, failover, nil, nil, configure...)
+}
+
+func newWSInflightHarnessWithSetup(t *testing.T, mode string, balance float64, pricing []service.ChannelModelPricing, failover bool, settings *service.SettingService, setup func(*wsInflightHarness, *OpenAIGatewayHandler), configure ...func(*config.Config)) *wsInflightHarness {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	f := &wsInflightHarness{
@@ -254,7 +258,7 @@ func newWSInflightHarness(t *testing.T, mode string, balance float64, pricing []
 	concurrency := service.NewConcurrencyService(f.slots)
 	gateway := service.NewOpenAIGatewayService(accountRepo, logs, f.ledger, nil, nil, nil, nil, cfg, nil, concurrency,
 		service.NewBillingService(cfg, nil), service.NewRateLimitService(accountRepo, nil, cfg, nil, nil), f.billing,
-		&compositeWSHTTPUpstream{}, &service.DeferredService{}, nil, nil, nil, nil, nil, nil, nil, nil)
+		&compositeWSHTTPUpstream{}, &service.DeferredService{}, nil, nil, nil, nil, nil, settings, nil, nil)
 	pool := service.NewUsageRecordWorkerPoolWithOptions(service.UsageRecordWorkerPoolOptions{WorkerCount: 2, QueueSize: 8, TaskTimeout: 10 * time.Second})
 	t.Cleanup(pool.Stop)
 	t.Cleanup(func() { close(f.ledger.stop) })
@@ -262,6 +266,9 @@ func newWSInflightHarness(t *testing.T, mode string, balance float64, pricing []
 		apiKeyService: f.keyService, usageRecordWorkerPool: pool, maxAccountSwitches: 2,
 		concurrencyHelper: NewConcurrencyHelper(concurrency, SSEPingFormatNone, time.Second)}
 	attachDisabledIPAccessControlForWebSocketTest(h)
+	if setup != nil {
+		setup(f, h)
+	}
 	router := gin.New()
 	router.Use(func(c *gin.Context) {
 		c.Set(string(middleware2.ContextKeyAPIKey), f.key)

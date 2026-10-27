@@ -562,7 +562,12 @@ Forced HTTP and large-first-frame bridging use the mapped HTTP model even when
 the account is configured for passthrough. Reservation and forwarding share the
 same attempt's captured transport decision. Later account edits can revalidate
 eligibility, but an existing connection reserves against the mapping snapshot
-actually used by its proxy; a new connection adopts the updated mapping.
+actually used by its proxy; a new connection adopts the updated account mapping.
+Channel mapping and OpenAI Fast rules instead refresh after each external
+turn's audit. That turn's frozen generation drives its upstream model/tier,
+reservation, profitability admission and settlement in passthrough, pool and
+HTTP bridge modes. Same-turn retries retain the accepted generation. Ungrouped
+keys retain the full turn execution context even without a retail snapshot.
 Reservation caps, the existing first-request allowance when there are no other
 owners, and dependency-error fail-open behavior remain in effect. These estimates
 do not guarantee that a balance can never become negative.
@@ -592,7 +597,16 @@ and another group, platform or forced-routing pool obtain their own evidence.
 
 OpenAI token reservations also evaluate the frozen Fast policy and execution
 group's forced-priority setting. This covers Chat, Responses and Messages
-conversion to either OpenAI protocol. The exact Messages `anthropic-beta`
+conversion to either OpenAI protocol. Ungrouped keys also pin and evaluate global
+and user-scoped Fast rules before ingress and selected-account reservation;
+their absence of a retail group does not disable an upstream tier rewrite.
+The OpenAI gateway's ungrouped default is OpenAI, including when no target
+context was supplied. Explicit platform overrides and resolved targets retain
+precedence; the generic gateway does not acquire that default.
+Ungrouped catalog fallback also preserves the accepted `service_tier`:
+`priority`/`fast` use the catalog's Fast rates and `flex` uses its Flex rates in
+both reservation and settlement.
+The exact Messages `anthropic-beta`
 Fast token becomes priority only for an OpenAI conversion; a native Anthropic
 request or another target platform does not acquire an OpenAI tier. Scoped
 policy matching uses reachable accounts and their final normalized upstream

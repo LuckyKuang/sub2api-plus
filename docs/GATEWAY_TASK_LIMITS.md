@@ -21,6 +21,13 @@ binds the provider/local task ID when its result is known. A definite failure
 before create releases the reservation. A successful terminal observation or
 confirmed cancellation releases it idempotently. Billing retry and task
 capacity are independent; zero billable tokens do not imply a finished task.
+If persisting a Batch create intent fails, no provider call is made: the service
+immediately releases its balance hold with an independent cleanup budget and
+marks the local submission failed and hidden. A failed refund retains the
+existing billing-release retry path, while the provider-task reservation is
+returned because execution never started. A concurrent cancellation retains
+its committed terminal status and visibility; failure cleanup cannot overwrite
+it or hide the cancelled task.
 
 For Gemini/Vertex batches, observing provider success releases capacity before
 result download/indexing and settlement. Output retrieval failures and billing

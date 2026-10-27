@@ -99,6 +99,7 @@ func backfillSimpleModeGrokDefaultImageGeneration(ctx context.Context, client *d
 			group.AllowImageGenerationEQ(false),
 			group.DeletedAtIsNil(),
 		).
+		AddBillingPolicyVersion(1).
 		SetAllowImageGeneration(true).
 		Save(ctx)
 	if err != nil {

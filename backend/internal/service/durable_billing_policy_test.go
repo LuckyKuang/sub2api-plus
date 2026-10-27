@@ -198,3 +198,38 @@ func TestAsyncMediaPricingSnapshotPreservesActualSupplier(t *testing.T) {
 	require.Equal(t, PlatformOpenAI, snapshot.platform)
 	require.InDelta(t, 0.5, snapshot.quote(snapshot.platform, snapshot.publicModel, "token").EffectiveMultiplier, 1e-12)
 }
+
+func TestDurablePricingReexportPreservesAcceptedDeepSeekPeakFactor(t *testing.T) {
+	// Accepted evidence is authoritative even when today's compiled schedule
+	// would choose another factor for the recorded time.
+	const model = "deepseek-v4.1-flash"
+	stored := durableBillingPricingSnapshot{
+		Version: 2, RateCalculation: BillingRateCalculationProduct, PeakScope: BillingPeakScopeAllMeters,
+		Group: &Group{ID: 7, Platform: PlatformDeepseek, RateMultiplier: 1}, TokenPeak: billingFloat(1),
+		PricingAt: time.Date(2026, 10, 19, 0, 0, 0, 0, time.UTC), Platform: PlatformDeepseek, PublicModel: model,
+		Models:       map[string]*ModelPricing{model: {InputPricePerToken: 2e-6, OutputPricePerToken: 4e-6}},
+		Images:       map[string]map[string]float64{model: {ImageBillingSize1K: .04, ImageBillingSize2K: .08, ImageBillingSize4K: .16}},
+		Videos:       map[string]map[string]float64{model: {VideoBillingResolution480P: .05, VideoBillingResolution720P: .07, VideoBillingResolution1080P: .1}},
+		CacheStorage: map[string]float64{model: 0}, DeepSeekPeakMultiplier: 2,
+	}
+	encoded, err := json.Marshal(stored)
+	require.NoError(t, err)
+	ctx, err := RestoreBillingPricingSnapshot(context.Background(), encoded)
+	require.NoError(t, err)
+	for range 2 {
+		snapshot := BillingPricingSnapshotFromContext(ctx)
+		cost, err := snapshot.billing.CalculateTokenCostForRequest(TokenCostRequest{
+			Ctx: ctx, Model: model, Group: snapshot.group, Resolver: snapshot.resolver,
+			Tokens: UsageTokens{InputTokens: 1000, OutputTokens: 1000}, RateMultiplier: 1,
+		})
+		require.NoError(t, err)
+		require.InDelta(t, .012, cost.ActualCost, 1e-12, "($2 input + $4 output)/M × 1000 tokens × accepted peak 2")
+		encoded, err = ExportBillingPricingSnapshot(ctx)
+		require.NoError(t, err)
+		var reexported durableBillingPricingSnapshot
+		require.NoError(t, json.Unmarshal(encoded, &reexported))
+		require.Equal(t, 2.0, reexported.DeepSeekPeakMultiplier)
+		ctx, err = RestoreBillingPricingSnapshot(context.Background(), encoded)
+		require.NoError(t, err)
+	}
+}
