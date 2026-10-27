@@ -3,9 +3,11 @@
 package handler
 
 import (
+	"context"
 	"testing"
 	"time"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/service"
 	"github.com/stretchr/testify/require"
 )
 
@@ -23,6 +25,26 @@ func TestOpenAIWSTurnPricingForTurnOr(t *testing.T) {
 		var p openAIWSTurnPricing
 		require.Equal(t, fallback, p.forTurnOr(1, fallback))
 	})
+}
+
+func TestOpenAIWSTurnSnapshotsDoNotOverwriteDeferredSettlement(t *testing.T) {
+	var pricing openAIWSTurnPricing
+	gateway := &service.OpenAIGatewayService{}
+	key := &service.APIKey{Group: &service.Group{ID: 3, Platform: service.PlatformOpenAI, RateMultiplier: 1}}
+	firstCtx := gateway.WithBillingPricingSnapshot(context.Background(), key, time.Now().Add(-time.Minute), "first-model")
+	first := service.BillingPricingSnapshotFromContext(firstCtx)
+	pricing.freezeSnapshot(1, first)
+	key.Group.RateMultiplier = 2
+	secondCtx := gateway.WithBillingPricingSnapshot(service.WithoutBillingPricingSnapshot(firstCtx), key, time.Now(), "second-model")
+	second := service.BillingPricingSnapshotFromContext(secondCtx)
+	require.NotSame(t, first, second)
+	pricing.freezeSnapshot(2, second)
+	require.Same(t, first, pricing.snapshotForTurn(1), "the next turn must not change pending usage from the previous turn")
+	require.Same(t, second, pricing.snapshotForTurn(2), "later turns use their own generation")
+	pricing.freezeSnapshot(3, second)
+	require.Nil(t, pricing.snapshotForTurn(1))
+	require.Same(t, second, pricing.snapshotForTurn(2))
+	require.Len(t, pricing.snapshots, 2)
 }
 
 // 长连接跨峰谷时，每轮独立定价；下一轮开始不能覆盖上一轮待结算的时刻。

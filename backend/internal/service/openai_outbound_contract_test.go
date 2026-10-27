@@ -617,6 +617,7 @@ func TestOpenAIIdentityContractLiveRegistrationSnapshot(t *testing.T) {
 			svc := &OpenAIGatewayService{cfg: &config.Config{}, settingService: settings,
 				accountRepo:  &stubQuotaAccountRepo{accounts: map[int64]*Account{account.ID: account}},
 				httpUpstream: upstream, liveAttestationCipher: cipher}
+			svc.cfg.Gateway.OpenAIWS.Enabled, svc.cfg.Gateway.OpenAIWS.OAuthEnabled = true, true
 			var headers http.Header
 			if operation == "create" {
 				_, err := svc.createUpstreamLiveCall(context.Background(), account, &LiveCallRequest{SDP: "v=offer\r\n", Session: []byte(`{"model":"gpt-live-test"}`)}, "test-attestation")

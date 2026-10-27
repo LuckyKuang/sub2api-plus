@@ -177,6 +177,9 @@ func channelTimeResolvedForTest(base *ModelPricing, intervals []PricingInterval)
 		Source:      PricingSourceChannel,
 		channelPricing: &ChannelModelPricing{
 			BillingMode: BillingModeToken,
+			// The unknown model's resolved input price comes from this explicit
+			// card; a time condition alone cannot establish its unit price.
+			InputPrice: &base.InputPricePerToken,
 			TimePricing: &ChannelTimePricing{
 				Timezone: "Asia/Shanghai",
 				Periods: []ChannelTimePricingPeriod{{

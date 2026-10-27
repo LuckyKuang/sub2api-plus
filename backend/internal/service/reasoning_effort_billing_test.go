@@ -73,9 +73,16 @@ func TestReasoningEffortBillingStacksWithContextTierServiceTierAndTimePricing(t 
 					LongContextInputThreshold:  100, LongContextInputMultiplier: 2, LongContextOutputMultiplier: 3,
 				},
 				longContextPricingEnabled: true,
-				channelPricing: &ChannelModelPricing{TimePricing: &ChannelTimePricing{
-					Timezone: "UTC", Periods: []ChannelTimePricingPeriod{{StartTime: "08:00", EndTime: "16:00", Multiplier: 1.2}},
-				}},
+				channelPricing: &ChannelModelPricing{
+					// Keep the explicit source evidence alongside its resolved copy:
+					// custom-model has no same-name catalog card to supply these prices.
+					InputPrice: testPtrFloat64(1e-6), ImageInputPrice: testPtrFloat64(2e-6),
+					OutputPrice: testPtrFloat64(3e-6), ImageOutputPrice: testPtrFloat64(4e-6),
+					CacheWritePrice: testPtrFloat64(5e-6), CacheReadPrice: testPtrFloat64(6e-6),
+					TimePricing: &ChannelTimePricing{
+						Timezone: "UTC", Periods: []ChannelTimePricingPeriod{{StartTime: "08:00", EndTime: "16:00", Multiplier: 1.2}},
+					},
+				},
 			}
 			if interval {
 				resolved.Intervals = []PricingInterval{{MinTokens: 100, InputMultiplier: testPtrFloat64(2), OutputMultiplier: testPtrFloat64(3)}}

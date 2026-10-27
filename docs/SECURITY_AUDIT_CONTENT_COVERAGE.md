@@ -30,6 +30,17 @@ unread so the owning handler can enforce bounded private spooling after basic
 validation. This exemption does not bypass authentication, audit, or inference
 model admission.
 
+Gateway model discovery and usage metadata (`/v1/models`, model retrieval,
+Codex manifests and local quota, Antigravity models, Gemini native list/get,
+and `/v1/usage`, including route aliases) have known empty prompt bodies.
+After authentication and basic platform/path/query validation, they enter the
+canonical audit boundary and acquire the same global user request lease before
+account selection, upstream discovery or local metadata reads. They retain the
+lease until the response finishes and do not capture current billing prices.
+Audit rejection or unconfirmed Redis admission stops before those effects;
+missing concurrency wiring fails closed. These metadata calls do not treat
+model IDs, query filters or cached manifests as inference prompt text.
+
 Usage timing observers are separate from this ingress extraction contract.
 Classifying upstream `compaction`/`compaction_summary` output for timing does not
 add an ingress extraction rule, policy decision, or audit bypass. Encrypted
@@ -44,6 +55,19 @@ actual model requests still enter both audit engines through the existing
 HTTP/WS handlers before their side effects.
 
 ## Boundary And Ordering
+
+User and `(user, group)` RPM admission follows the same security boundary as
+execution concurrency and billing. Authentication and basic request validation
+precede canonical audit; RPM override lookup and Redis counter reads/increments
+follow a permitted audit decision. A rejected audit cannot consume RPM or start
+account selection, balance reservation, provider traffic, or a background task.
+This includes known-empty metadata/control requests and every Responses WS turn.
+Same-request retries and a cross-group fallback retain their trusted RPM scope;
+they do not create an alternative audit path. Independent agent requests and
+later WS turns still enter audit before their own admission. Live/Realtime frame
+audit does not turn each audio/control frame into another RPM request. See the
+[gateway admission contract](GATEWAY_ADMISSION.md) for counting and existing
+failure policies; an RPM error is not an audit-derived content violation.
 
 Codex account-affinity recovery retains the original audited current turn.
 Cross-owner tool-history validation runs after this audit boundary. Tool outputs
@@ -77,6 +101,41 @@ Unrecognized tool-change/search siblings pass through without an audit-derived
 block, and extracted sibling user text remains auditable. WS group-price refresh
 occurs after each turn's audit and keeps an immutable billing snapshot for that
 turn, including deferred usage settlement.
+
+Customer pricing capture also follows the successful audit decision. Each HTTP
+inference request freezes its group policy, personal rate, price-card generation
+and pricing time before billing eligibility, reservations or provider access;
+retries and detached settlement retain that snapshot. A rejected audit does not
+capture pricing or start billing. Responses WS reuses the admitted first-turn
+snapshot and captures a fresh authenticated group and public model for every
+later admitted turn. Deferred normal and cyber-policy usage retain their own
+turn's snapshot rather than the connection's first-turn configuration. Pricing
+validation failures are billing errors; they are not audit-derived violations.
+
+Grok Voice HTTP routes enter the gate before billing and account access. TTS
+normalizes spoken input to the existing Chat current-user envelope and uses the
+actual billed `tts` identity. STT bytes and custom-voice metadata carry no
+invented prompt. Grok Realtime audits connection admission before account
+selection, then audits every syntactically valid client JSON frame through the
+canonical Live extractor before upstream writes or audio-observed accounting.
+The HTTP audit cache never skips frame admission. Unknown events, binary audio
+and empty control frames pass through; recognized sibling user text remains
+auditable. Rejecting a later frame prevents that frame from reaching upstream
+without erasing already transmitted audio consumption. Existing Realtime billing
+remains based on connection audio time; frame audit does not introduce a new
+per-turn audio tariff.
+
+Image and batch submission also enter audit when their prompt is empty or
+unextractable, before task creation or execution. Grok video status/content
+lookups enter the metadata gate before ownership lookup, concurrency or provider
+traffic. Their deferred consumption restores the task's creation-time pricing
+snapshot before claiming settlement. Gemini cache extension binds the model
+learned from the authorized resource to the request's frozen generation before
+price validation, mutation or upstream writes.
+Composite asynchronous image submission accepts only an already resolved OpenAI
+or Grok target. Unsupported or unresolved targets fail capability validation;
+accepted tasks preserve the public-model audit identity and admitted pricing
+generation in their detached worker after the submit request finishes.
 
 Forwarding-account outbound identity presets are resolved after this boundary
 and account selection. UA/SDK declarations are never audit inputs or an audit bypass.
@@ -117,7 +176,7 @@ must cross the same security-audit boundary after authentication and basic
 request validation, but before:
 
 1. account selection or API-key/OAuth credential normalization;
-2. billing, quota reservation, or concurrency acquisition;
+2. RPM lookup/increment, billing, quota reservation, or concurrency acquisition;
 3. routing, retry, probe, fingerprint, or protocol transformations; and
 4. any upstream request or frame write.
 
@@ -224,10 +283,10 @@ classifications.
 | OpenAI Chat Completions | `instructions`; `tools` and `functions`; `messages[].content`; `messages[].reasoning_content`; `tool_calls[].function.arguments`; `function_call.arguments`; tool/function-role results, including structured content | Last message is current; if the tail contains tool/function results, every consecutive trailing result is current; system/developer context is current audit context. Assistant reasoning is classified as reasoning, while user-role reasoning retains direct-user attribution. | Recognized image/video content blocks |
 | Anthropic Messages | `system`; `tools`; message text and thinking text; client/server tool-use input; tool-result content, including structured content. `POST /v1/messages/count_tokens` uses the same original document for native forwarding, the OpenAI bridge, and Grok local estimation. | Last message is current; system and tool definitions remain current audit context | Recognized image blocks and encrypted `redacted_thinking` blocks; unknown valid blocks do not hide recognized sibling content |
 | OpenAI Responses HTTP and WebSocket | Top-level, `response`-nested, or session-update `instructions`, `tools`, native `input`, legacy Chat-shaped `messages`, legacy string `prompt`, and reusable `prompt.variables`; message/reasoning/refusal text; visible `compaction`, `compaction_summary`, and `compaction_trigger` fields; function/custom/tool-search outputs; local/hosted shell, apply-patch, computer, MCP, code-interpreter, program/program-output, additional-tools, and accepted search call payloads. `POST /v1/responses/input_tokens` uses the same Responses document before any token-count account selection. Fast `service_tier` is a routing/billing field and does not bypass the audit hook. | A present non-null native `input` takes precedence over legacy `messages` and string `prompt`; otherwise `messages` precedes `prompt`. Last input item is current; every consecutive trailing recognized output is current; `tool_search_output.tools` and other dynamic definitions are current context; a claimed system/developer role remains context and all other current roles remain client-controlled. | Encrypted compaction content, IDs, status, fingerprints, recognized media/opaque items, and control envelopes produce no text; unknown frames, item types, sibling fields, and valid-JSON unrecognized structures pass through without an audit-derived block |
-| OpenAI Live | Initial session instructions, tools, input, legacy `input_audio_transcription.prompt`/`keywords`, current `audio.input.transcription.prompt`/`keywords`; `session.update`; `transcription_session.update`; `conversation.item.create`; Live-shaped `response.create` | Every initial HTTP session and accepted Sideband client frame enters the audit hook before its downstream side effect or upstream write | Known control events and unknown frames, session/config fields, item types, or valid-JSON structures may produce no audit input and pass through without an audit-derived close |
+| OpenAI Live | Initial session instructions, tools, input, legacy `input_audio_transcription.prompt`/`keywords`, current `audio.input.transcription.prompt`/`keywords`; `session.update`; `transcription_session.update`; `conversation.item.create`; Live-shaped `response.create` | Every initial HTTP session, content-free Sideband connection admission, and accepted Sideband client frame enters the audit hook before its downstream side effect or upstream write | Known control events and unknown frames, session/config fields, item types, or valid-JSON structures may produce no audit input and pass through without an audit-derived close |
 | Alpha Search | Deterministically serialized, media-sanitized `commands`, `settings`, and top-level `input`, including `commands.search_query[].q` and Responses-shaped input items | Every extracted value is current; Responses-shaped input retains its item attribution. Successfully extracted siblings remain auditable when another field is incomplete. | Empty collections and media-only values; URLs, base64 payloads, and opaque media fields are omitted from structured text |
 | OpenAI Embeddings | String or string-array `input` | Every string input is current | Empty input and unsupported token-ID arrays produce no audit text and pass through |
-| Gemini | `systemInstruction`/`system_instruction`; tools; `contents`/`content`; batched `requests`; `instances[].prompt`; part text; `functionCall` arguments; `functionResponse.response`. `POST/GET/PATCH/DELETE /v1beta/cachedContents` uses the same Gemini extraction on the inbound body (empty for list/get/delete) after auth and before account, billing, concurrency, or upstream writes. | Last content item is current; system and tools remain current audit context | `inlineData`/`fileData` media-only parts |
+| Gemini | `systemInstruction`/`system_instruction`; tools; `contents`/`content`; batched `requests`; `instances[].prompt`; part text; `functionCall` arguments; `functionResponse.response`. `POST/GET/PATCH/DELETE /v1beta/cachedContents` uses the same Gemini extraction on the inbound body (empty for list/get/delete) after auth and before account, billing, concurrency, or upstream writes, including Composite requests resolved to the Gemini supplier. Public model aliases do not alter content extraction or resource ownership. | Last content item is current; system and tools remain current audit context | `inlineData`/`fileData` media-only parts |
 | TypeSafe System One | Question IDs; every question field name and value except the validated `type`, including `instructions` and `criteria` values; unknown question and top-level extension fields; the evaluated `state` | Every extracted leaf is current, client-controlled direct-user text; keys are visited in sorted order so the canonical document and Prompt Audit hash stay stable, and the `state` is the final canonical segment | `model`, `stream`, and validated `type` enum values produce no text; non-string scalars emit nothing and do not mark the document incomplete; a literal `<system-reminder>` or `<environment_context>` is ordinary audited evaluation text rather than CLI harness metadata |
 | Images and media | Deterministic prompt-like keys such as prompt, description, query, lyrics, negative prompt, and input | Every extracted prompt is current; duplicate text is emitted once | HTTP(S) URLs, `data:image`/`data:video` values, and large base64-like media payloads |
 
@@ -437,6 +496,13 @@ Deterministic structured serialization is part of extraction. Sanitization or
 JSON serialization failure may set `Incomplete` and omit that value, but does
 not discard successfully extracted siblings or block the request by itself.
 
+Live Sideband first audits its authenticated, content-free connection admission
+at `live_sideband_connection`, before RPM, call-mapping lookup, controller claim,
+WebSocket upgrade, or provider connection. Each reconnect has its own user and
+user-group RPM admission; it reuses the existing Live session's concurrency
+lease. Rejecting this gate cannot take over or dial the session. The empty
+connection audit does not replace content extraction for later client frames.
+
 Live Sideband and Responses passthrough are control connections: every client
 text or binary frame enters the audit hook before `upstream.WriteFrame`.
 Unsupported, binary, or otherwise unextractable content passes through unless
@@ -458,6 +524,12 @@ the same change and provide all of the following evidence:
   while confirmed policy blocks still produce zero account, billing,
   concurrency, or upstream side effects; and
 - Live lifecycle tests when Sideband classification or forwarding changes.
+- `handler/openai_live_sideband_admission_test.go` verifies connection audit and
+  RPM rejection before mapping/controller/provider access, single-count
+  connection admission without an extra execution lease, and independent
+  content-frame audit without another RPM count. Its allowed-connection fixture
+  declines controller ownership after upgrade; real provider transport and
+  lifecycle evidence remains in the service Live suites.
 
 Route-call presence or static source-order assertions alone do not prove
 content coverage.
@@ -722,3 +794,45 @@ unchanged: every accepted HTTP/WS turn is audited before account selection or
 provider side effects. A terminal upstream `model_not_found` is a provider
 response, never an audit violation. Settings/catalog/ticket control probes do
 not manufacture inference content or audit decisions.
+
+Composite native Grok admission uses the same canonical Voice, Realtime and
+standalone-search extraction as plain Grok groups at root and `/v1` endpoints.
+The fixed supplier is bound before audit; Composite membership is retained.
+A denied audit creates no pricing snapshot, reservation or upstream request.
+Standalone search names its actual billable public meter (`grok-web-search` or
+`grok-x-search`) rather than the internal text-model account selector.
+
+Responses WebSocket captures pricing for each accepted turn. Grok Voice Realtime
+retains its existing whole-connection minute meter and freezes pricing once at
+session admission; every client frame is still audited independently before
+relay. A later frame does not replace the admitted session's billing quote.
+
+Native Grok media and Ark/Seedance task endpoints bind their protocol-defined
+supplier before content audit and pricing capture. Composite task creation with
+an invalid effective supplier rate completes content audit, then rejects with
+`BILLING_RATE_UNAVAILABLE` before user/account slots or any upstream task write.
+Ark native model arguments bypass text Composite alias rewrites.
+
+Task status/content and Seedance deletion audit each ingress before resolving
+resource ownership or importing stored billing evidence. A new-admission price
+lookup is not part of these existing-task operations; valid captured prices
+survive later policy errors or personal-rate repository outages. Missing/corrupt
+price evidence permits an authorized lookup but cannot consume a settlement
+claim or create a charge. Wrong key/user/group remains 404 before price import.
+
+
+User-wide capacity admission follows successful canonical ingress audit for
+independent search, voice/realtime, token counters, provider file operations,
+explicit cache controls, model/quota metadata and async/batch task controls.
+Content-free metadata/control requests run the same audit boundary with no
+fabricated prompt and do not capture current billing prices for previously
+accepted tasks. They acquire a short user request lease before repository reads,
+account selection or storage/provider effects. Submit payloads retain their
+existing canonical prompt extraction; detached workers acquire a new execution
+lease and preserve the audited pricing evidence. Audit denial never acquires
+capacity. Redis admission failure is an infrastructure response after audit,
+without account selection or an audit-derived violation.
+
+Regressions include `user_request_admission_test.go`,
+`gateway_metadata_admission_test.go` and the existing media/cache/file ordering
+suites. Unknown valid fields retain the established pass-through behavior.

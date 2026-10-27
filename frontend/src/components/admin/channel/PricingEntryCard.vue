@@ -99,6 +99,7 @@
           </div>
         </div>
 
+        <slot name="selling-rates" />
         <!-- 参考价查价状态：manual / unsupported / 失败必须可见，不能静默吞掉 -->
         <div
           v-if="displayStatus.state !== 'idle' && displayStatus.state !== 'priced'"
@@ -355,10 +356,14 @@ const props = withDefaults(defineProps<{
   hideTokenIntervals?: boolean
   enableTimePricing?: boolean
   enableTierMultipliers?: boolean
+  autoFillPricing?: boolean
+  splitNewModels?: boolean
 }>(), {
   hideTokenIntervals: false,
   enableTimePricing: false,
   enableTierMultipliers: false,
+  autoFillPricing: true,
+  splitNewModels: true,
 })
 
 const emit = defineEmits<{
@@ -493,11 +498,11 @@ async function onModelsUpdate(newModels: string[]) {
   // 目标模型列表：有新增时保留第一个新增（其余按既有策略拆分为独立规则）；
   // 仅删除时直接采用新列表（删除不再被丢弃，×/退格可移除误加的模型）。
   let nextModels: string[]
-  if (addedModels.length > 0) {
+  if (addedModels.length > 0 && props.splitNewModels) {
     nextModels = [...oldModels, addedModels[0]]
     const splitModels = addedModels.slice(1)
     if (splitModels.length > 0) emit('split', splitModels)
-  } else if (newModels.length !== oldModels.length) {
+  } else if (newModels.length !== oldModels.length || addedModels.length > 0) {
     nextModels = newModels
   } else {
     return
@@ -511,7 +516,9 @@ async function onModelsUpdate(newModels: string[]) {
   const oldPrimary = (oldModels[0] ?? '').trim()
   const newPrimary = (nextModels[0] ?? '').trim()
   const primaryChanged = newPrimary !== oldPrimary
-  const clearingStaleReference = primaryChanged && oldModels.length > 0
+  // Group cards opt out of reference auto-fill: their explicitly shared prices
+  // remain valid for the remaining models when the first tag is removed.
+  const clearingStaleReference = props.autoFillPricing && primaryChanged && oldModels.length > 0
   let nextEntry: PricingFormEntry = { ...props.entry, models: nextModels }
   if (clearingStaleReference) {
     const target = nextEntry as unknown as Record<string, unknown>
@@ -529,7 +536,7 @@ async function onModelsUpdate(newModels: string[]) {
 
   // 仅在“新增模型”时触发参考价自动填充。
   const model = addedModels[0]?.trim()
-  if (!model || !props.platform) return
+  if (!model || !props.platform || !props.autoFillPricing) return
   // Appending to an existing rule must preserve explicitly empty prices.
   if (oldModels.length > 0 && !primaryChanged) return
 

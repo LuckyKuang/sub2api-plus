@@ -1802,7 +1802,7 @@ func newOpenAIImageStatusError(resp *req.Response, fallback string, errorBodyRea
 			if errorBodyReadLimit <= 0 {
 				errorBodyReadLimit = openAIUpstreamErrorBodyReadLimit
 			}
-			body, _ = io.ReadAll(io.LimitReader(resp.Body, errorBodyReadLimit))
+			body, _ = readUpstreamErrorResponseBody(resp.Response, errorBodyReadLimit, UpstreamErrorBodyReadTimeout)
 			_ = resp.Body.Close()
 		}
 	}

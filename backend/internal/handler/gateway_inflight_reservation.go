@@ -2,7 +2,9 @@ package handler
 
 import (
 	"context"
+	"strings"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/claude"
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
@@ -14,8 +16,19 @@ type inflightReservationEstimator interface {
 }
 
 // requestMaxOutputTokens 从请求体中提取输出 token 上限（兼容 Anthropic / OpenAI Chat / Responses / Gemini）。
-func requestMaxOutputTokens(body []byte) int {
-	for _, path := range []string{"max_tokens", "max_completion_tokens", "max_output_tokens", "generationConfig.maxOutputTokens", "generation_config.max_output_tokens"} {
+func requestMaxOutputTokens(protocol string, body []byte) int {
+	var paths []string
+	switch protocol {
+	case service.ContentModerationProtocolAnthropicMessages:
+		paths = []string{"max_tokens"}
+	case service.ContentModerationProtocolOpenAIChat:
+		paths = []string{"max_completion_tokens", "max_tokens"}
+	case service.ContentModerationProtocolOpenAIResponses:
+		paths = []string{"max_output_tokens"}
+	case service.ContentModerationProtocolGemini:
+		paths = []string{"generationConfig.maxOutputTokens", "generation_config.max_output_tokens"}
+	}
+	for _, path := range paths {
 		if v := gjson.GetBytes(body, path); v.Exists() && v.Type == gjson.Number && v.Int() > 0 {
 			return int(v.Int())
 		}
@@ -24,13 +37,14 @@ func requestMaxOutputTokens(body []byte) int {
 }
 
 // tokenInflightEstimate 文本类请求的估算输入。
-func tokenInflightEstimate(model string, body []byte) service.InflightEstimateRequest {
-	return service.InflightEstimateRequest{
+func tokenInflightEstimate(protocol, model string, body []byte) service.InflightEstimateRequest {
+	return (service.InflightEstimateRequest{
+		Protocol:  protocol,
 		Model:     model,
 		BodyBytes: len(body),
-		MaxTokens: requestMaxOutputTokens(body),
+		MaxTokens: requestMaxOutputTokens(protocol, body),
 		Kind:      service.InflightEstimateToken,
-	}
+	}).WithRequestPricingMetadata(body)
 }
 
 func inflightNoop() {}
@@ -52,6 +66,14 @@ func reserveInflightBalance(
 ) (func(), error) {
 	if c == nil || c.Request == nil {
 		return inflightNoop, nil
+	}
+	if req.Protocol == service.ContentModerationProtocolAnthropicMessages {
+		for _, token := range strings.Split(c.GetHeader("anthropic-beta"), ",") {
+			if strings.TrimSpace(token) == claude.BetaFastMode {
+				req.AnthropicFast = true
+				break
+			}
+		}
 	}
 	ctx, done, err := reserveInflightBalanceCtx(c.Request.Context(), billing, estimator, apiKey, subscription, req)
 	if err != nil {

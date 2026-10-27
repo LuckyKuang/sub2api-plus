@@ -23,6 +23,7 @@ func requestModelForTest(h *GatewayHandler, group *service.Group, modelID, etag 
 		c.Params = gin.Params{{Key: "model", Value: modelID}}
 	}
 	c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{GroupID: &group.ID, Group: group})
+	prepareGatewayMetadataTest(h, c)
 	h.Models(c)
 	return rec
 }

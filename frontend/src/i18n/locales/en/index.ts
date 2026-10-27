@@ -11,11 +11,13 @@ import asyncImage from './asyncImage'
 import admin from './admin'
 import misc from './misc'
 import inspection from './inspection'
+import billingRates from './billingRates'
 
 export default {
   ...workspace,
   ...requestList,
   ...inspection,
+  ...billingRates,
   ...featureExtensions,
   ...landing,
   ...common,

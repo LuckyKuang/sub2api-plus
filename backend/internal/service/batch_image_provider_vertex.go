@@ -985,7 +985,7 @@ func doVertexNoBody(client *http.Client, req *http.Request) error {
 }
 
 func readVertexAPIError(resp *http.Response) error {
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 8192))
+	body, _ := readUpstreamErrorResponseBody(resp, 8192, UpstreamErrorBodyReadTimeout)
 	message := string(body)
 	code := ""
 	var parsed struct {

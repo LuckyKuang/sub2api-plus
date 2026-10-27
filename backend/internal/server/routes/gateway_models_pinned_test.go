@@ -63,18 +63,20 @@ func TestGatewayRoutesPinnedModelsDispatchesOrdinaryAndCodexRequests(t *testing.
 	}}
 	upstream := &pinnedModelsRoutesUpstream{}
 	cfg := &config.Config{RunMode: config.RunModeSimple}
+	concurrency := service.NewConcurrencyService(pinnedModelsConcurrencyCache{})
 	s := service.NewOpenAIGatewayService(repo, nil, nil, nil, nil, nil, nil, cfg,
 		nil, nil, nil, nil, nil, upstream, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	h := &handler.Handlers{
-		Gateway:       handler.NewGatewayHandler(nil, s, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, cfg, nil),
-		OpenAIGateway: handler.NewOpenAIGatewayHandler(s, nil, nil, nil, nil, nil, nil, nil, cfg),
+		Gateway:       handler.NewGatewayHandler(nil, s, nil, nil, nil, concurrency, nil, nil, nil, nil, nil, nil, nil, cfg, nil),
+		OpenAIGateway: handler.NewOpenAIGatewayHandler(s, concurrency, nil, nil, nil, nil, nil, nil, cfg),
 		AsyncImage:    handler.NewAsyncImageHandler(nil, nil),
 	}
 	group := &service.Group{ID: 1, Platform: service.PlatformOpenAI,
 		CodexModelsManifestConfig: service.GroupCodexModelsManifestConfig{Enabled: true, AccountIDs: []int64{7}}}
 	router := gin.New()
 	RegisterGatewayRoutes(router, h, servermiddleware.APIKeyAuthMiddleware(func(c *gin.Context) {
-		c.Set(string(servermiddleware.ContextKeyAPIKey), &service.APIKey{GroupID: &group.ID, Group: group})
+		c.Set(string(servermiddleware.ContextKeyAPIKey), &service.APIKey{ID: 17, UserID: 7, GroupID: &group.ID, Group: group})
+		c.Set(string(servermiddleware.ContextKeyUser), servermiddleware.AuthSubject{UserID: 7, Concurrency: 3})
 		c.Next()
 	}), nil, nil, nil, nil, nil, cfg)
 	for _, path := range []string{"/v1/models", "/models", "/v1/models?client_version=", "/models?client_version="} {
@@ -112,11 +114,12 @@ func TestGatewayRoutesRetrievePinnedModel(t *testing.T) {
 	}}
 	upstream := &pinnedModelsRoutesUpstream{}
 	cfg := &config.Config{RunMode: config.RunModeSimple}
+	concurrency := service.NewConcurrencyService(pinnedModelsConcurrencyCache{})
 	s := service.NewOpenAIGatewayService(repo, nil, nil, nil, nil, nil, nil, cfg,
 		nil, nil, nil, nil, nil, upstream, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	h := &handler.Handlers{
-		Gateway:       handler.NewGatewayHandler(nil, s, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, cfg, nil),
-		OpenAIGateway: handler.NewOpenAIGatewayHandler(s, nil, nil, nil, nil, nil, nil, nil, cfg),
+		Gateway:       handler.NewGatewayHandler(nil, s, nil, nil, nil, concurrency, nil, nil, nil, nil, nil, nil, nil, cfg, nil),
+		OpenAIGateway: handler.NewOpenAIGatewayHandler(s, concurrency, nil, nil, nil, nil, nil, nil, cfg),
 		AsyncImage:    handler.NewAsyncImageHandler(nil, nil),
 	}
 	group := &service.Group{ID: 1, Platform: service.PlatformOpenAI,
@@ -127,7 +130,8 @@ func TestGatewayRoutesRetrievePinnedModel(t *testing.T) {
 			c.AbortWithStatus(http.StatusUnauthorized)
 			return
 		}
-		c.Set(string(servermiddleware.ContextKeyAPIKey), &service.APIKey{GroupID: &group.ID, Group: group})
+		c.Set(string(servermiddleware.ContextKeyAPIKey), &service.APIKey{ID: 17, UserID: 7, GroupID: &group.ID, Group: group})
+		c.Set(string(servermiddleware.ContextKeyUser), servermiddleware.AuthSubject{UserID: 7, Concurrency: 3})
 		c.Next()
 	}), nil, nil, nil, nil, nil, cfg)
 	request := func(path, key, etag string) *httptest.ResponseRecorder {
@@ -158,3 +162,12 @@ func TestGatewayRoutesRetrievePinnedModel(t *testing.T) {
 	}
 	require.Zero(t, upstream.codexCalls.Load(), "retrieve never dispatches a Codex manifest")
 }
+
+// Success admission is explicit in route fixtures; production nil dependencies
+// remain fail-closed. The interface embedding rejects unexpected new behavior.
+type pinnedModelsConcurrencyCache struct{ service.ConcurrencyCache }
+
+func (pinnedModelsConcurrencyCache) AcquireUserSlot(context.Context, int64, int, string) (bool, error) {
+	return true, nil
+}
+func (pinnedModelsConcurrencyCache) ReleaseUserSlot(context.Context, int64, string) error { return nil }

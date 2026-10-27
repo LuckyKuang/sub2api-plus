@@ -59,6 +59,7 @@ func (h *GatewayHandler) WebSearch(c *gin.Context) {
 	if isXSearch {
 		searchLabel = "x_search"
 	}
+	billingModel := "grok-" + strings.ReplaceAll(searchLabel, "_", "-")
 
 	apiKey, ok := middleware2.GetAPIKeyFromContext(c)
 	if !ok || apiKey == nil {
@@ -85,10 +86,10 @@ func (h *GatewayHandler) WebSearch(c *gin.Context) {
 		disconnectLifecycle.Neutral(c.Request.Context())
 	}()
 
-	if apiKey.Group == nil || apiKey.Group.Platform != "grok" {
+	if !bindGrokNativeProvider(c, apiKey) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{
 			"type":    "invalid_request_error",
-			"message": searchLabel + " is only supported for grok groups",
+			"message": searchLabel + " is only supported for grok or composite groups",
 		}})
 		return
 	}
@@ -100,7 +101,7 @@ func (h *GatewayHandler) WebSearch(c *gin.Context) {
 			"role": "user", "content": req.Query,
 		}},
 	})
-	if decision := h.checkSecurityAudit(c, reqLog, apiKey, subject, service.ContentModerationProtocolOpenAIChat, searchModel, auditBody); decision != nil && !decision.AllowNextStage {
+	if decision := h.checkSecurityAudit(c, reqLog, apiKey, subject, service.ContentModerationProtocolOpenAIChat, billingModel, auditBody); decision != nil && !decision.AllowNextStage {
 		status := decision.HTTPStatus
 		if status == 0 {
 			status = http.StatusForbidden
@@ -117,6 +118,11 @@ func (h *GatewayHandler) WebSearch(c *gin.Context) {
 		return
 	}
 
+	userRelease, admitted := acquireGatewayUserRequest(c, h.concurrencyHelper, h.errorResponse)
+	if !admitted {
+		return
+	}
+	defer userRelease()
 	// Billing eligibility (same as other requests)
 	subscription, _ := middleware2.GetSubscriptionFromContext(c)
 	if err := h.billingCacheService.CheckBillingEligibility(c.Request.Context(), apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(c.Request.Context(), apiKey)); err != nil {
@@ -129,7 +135,7 @@ func (h *GatewayHandler) WebSearch(c *gin.Context) {
 	}
 
 	// 余额模式在途预留（与计费同口径估算；计费任务扣减余额缓存后才释放）。
-	inflightDone, inflightErr := reserveInflightBalance(c, h.billingCacheService, h.gatewayService, apiKey, subscription, service.InflightEstimateRequest{Model: "grok-" + strings.ReplaceAll(searchLabel, "_", "-"), Kind: service.InflightEstimatePerRequest, SearchCalls: 1})
+	inflightDone, inflightErr := reserveInflightBalance(c, h.billingCacheService, h.gatewayService, apiKey, subscription, service.InflightEstimateRequest{Model: billingModel, Kind: service.InflightEstimatePerRequest, SearchCalls: 1})
 	if inflightErr != nil {
 		status, code, message, retryAfter := billingErrorDetails(inflightErr)
 		if retryAfter > 0 {
@@ -256,9 +262,10 @@ func (h *GatewayHandler) WebSearch(c *gin.Context) {
 	}
 	h.submitMandatoryUsageRecordTask(c.Request.Context(), func(ctx context.Context) {
 		if err := h.gatewayService.RecordUsage(ctx, &service.RecordUsageInput{
+			PricingSnapshot: service.BillingPricingSnapshotFromContext(ctx),
 			Result: &service.ForwardResult{
 				RequestID:   searchRequestID,
-				Model:       "grok-" + strings.ReplaceAll(searchLabel, "_", "-"),
+				Model:       billingModel,
 				SearchCount: 1,
 				Duration:    0,
 			},
@@ -314,36 +321,19 @@ func (h *GatewayHandler) acquireWebSearchAccountSlot(
 		return nil, false, nil
 	}
 	account := selected.Account
-	accountWaitCounted := false
-	canWait, waitErr := h.concurrencyHelper.IncrementAccountWaitCount(c.Request.Context(), account.ID, selected.WaitPlan.MaxWaiting)
-	if waitErr != nil {
-		logger.L().Warn("gateway.web_search.account_wait_counter_increment_failed",
-			zap.Int64("account_id", account.ID),
-			zap.Error(waitErr),
-		)
-		// Best-effort wait without counter (same as first-hop legacy path).
-	} else if !canWait {
-		return nil, false, nil
-	} else {
-		accountWaitCounted = true
-	}
-	releaseWait := func() {
-		if accountWaitCounted {
-			h.concurrencyHelper.DecrementAccountWaitCount(c.Request.Context(), account.ID)
-			accountWaitCounted = false
-		}
-	}
 	streamStarted := false
-	slotRelease, err := h.concurrencyHelper.AcquireAccountSlotWithWaitTimeout(
+	slotRelease, err := h.concurrencyHelper.AcquireAccountSlotForWaitPlan(
 		c,
 		account.ID,
-		selected.WaitPlan.MaxConcurrency,
-		selected.WaitPlan.Timeout,
+		selected.WaitPlan,
 		false,
 		&streamStarted,
 	)
-	releaseWait()
 	if err != nil {
+		var full *WaitQueueFullError
+		if errors.As(err, &full) {
+			return nil, false, nil
+		}
 		return nil, false, err
 	}
 	return slotRelease, true, nil

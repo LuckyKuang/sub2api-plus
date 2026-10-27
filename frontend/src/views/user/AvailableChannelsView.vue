@@ -61,6 +61,7 @@
 
 <script setup lang="ts">
 import Select from '@/components/common/Select.vue'
+import { useQuoteRefresh } from '@/composables/useQuoteRefresh'
 import { useLocaleRefresh } from '@/utils/localeRefresh'
 import { computed, nextTick, onUnmounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -136,6 +137,7 @@ watch(() => auth.user?.id, () => {
 }, { immediate: true })
 onUnmounted(() => { ++requestId; controller?.abort() })
 useLocaleRefresh(loadCatalog)
+useQuoteRefresh(async () => { if (!loading.value) await loadCatalog() })
 </script>
 
 <style scoped>

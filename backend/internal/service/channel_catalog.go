@@ -15,6 +15,7 @@ import (
 type CatalogGroup struct {
 	Group  Group
 	Models []CatalogOffer
+	AsOf   time.Time
 }
 
 type CatalogSource struct{ Name, Description string }
@@ -29,14 +30,24 @@ type CatalogServiceTier struct {
 }
 type CatalogOffer struct {
 	PlazaModel
-	OfferKey     string
-	BillingMode  BillingMode
-	BillingUnit  string
-	PriceStatus  string
-	PriceReason  string
-	Source       CatalogSource
-	MediaTiers   []CatalogMediaTier
-	ServiceTiers []CatalogServiceTier
+	OfferKey            string
+	BillingMode         BillingMode
+	BillingUnit         string
+	PriceStatus         string
+	PriceReason         string
+	Source              CatalogSource
+	MediaTiers          []CatalogMediaTier
+	ServiceTiers        []CatalogServiceTier
+	Endpoints           []string
+	PriceTimeMultiplier float64
+	// A media endpoint can keep an independent base even when its price card
+	// meters requests. This hint never changes the public billing unit.
+	billingBaseUnit string
+}
+
+func (o CatalogOffer) ResolveBillingRateQuote(group *Group, personalRate *float64, at time.Time) BillingRateQuote {
+	snapshot := &BillingPricingSnapshot{group: group, personalRate: personalRate, pricingAt: at}
+	return snapshot.quoteWithBase(billingRateIdentity{platform: o.Platform, model: o.Name, baseUnit: o.billingBaseUnit}, o.BillingUnit)
 }
 
 // ListAvailableCatalog never discovers models, selects accounts or writes usage.
@@ -47,6 +58,20 @@ func (s *ModelPlazaService) ListAvailableCatalog(ctx context.Context, groups []G
 	if len(groups) == 0 {
 		return out, nil
 	}
+	// Pin both reference and billed cards before any repository read. Catalog
+	// reloads publish immutable maps; one response must not join generations.
+	local := *s
+	local.billingService = snapshotBillingService(s.billingService)
+	if s.pricingService != nil {
+		if s.billingService != nil && s.billingService.pricingService == s.pricingService {
+			local.pricingService = local.billingService.pricingService
+		} else {
+			s.pricingService.mu.RLock()
+			local.pricingService = &PricingService{pricingData: s.pricingService.pricingData}
+			s.pricingService.mu.RUnlock()
+		}
+	}
+	s = &local
 	channels, err := s.channelRepo.ListAll(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list catalog channels: %w", err)
@@ -86,15 +111,45 @@ func (s *ModelPlazaService) ListAvailableCatalog(ctx context.Context, groups []G
 	localChannels.cache.Store(populateChannelCache(active, platforms))
 	resolver := NewModelPricingResolver(localChannels, s.billingService)
 	references := NewChannelPricingReferenceService(s.pricingService, s.billingService)
+	asOf := time.Now().UTC()
 	for _, g := range groups {
-		cg := CatalogGroup{Group: g, Models: []CatalogOffer{}}
-		if channel := bound[g.ID]; channel != nil {
-			for _, model := range channel.SupportedModels() {
-				if !isConcreteRequestPlatform(model.Platform) || (g.Platform != PlatformComposite && model.Platform != g.Platform) {
-					continue
-				}
-				cg.Models = append(cg.Models, s.catalogOffer(ctx, &g, channel, model, resolver, references))
+		cg := CatalogGroup{Group: g, Models: []CatalogOffer{}, AsOf: asOf}
+		channel := bound[g.ID]
+		candidates, err := s.commercialModelCandidates(ctx, &g, channel)
+		if err != nil {
+			return nil, err
+		}
+		if channel == nil {
+			channel = &Channel{Status: StatusActive, BillingModelSource: BillingModelSourceChannelMapped}
+		}
+		for _, candidate := range candidates {
+			model := candidate.SupportedModel
+			if candidate.UpstreamModel != "" {
+				model.Name = candidate.UpstreamModel
 			}
+			if channel.RestrictModels && localChannels.IsModelRestricted(WithResolvedTargetPlatform(ctx, model.Platform), g.ID, model.Name) {
+				continue
+			}
+			offer := s.catalogOffer(ctx, &g, channel, model, candidate.Name, resolver, references, asOf)
+			if offer.BillingMode == BillingModePerRequest && len(candidate.Endpoints) > 0 {
+				hasImages := false
+				for _, endpoint := range candidate.Endpoints {
+					hasImages = hasImages || endpoint == CompositeRouteEndpointImages
+				}
+				if hasImages && len(candidate.Endpoints) == 1 {
+					offer.billingBaseUnit = "image"
+				} else if hasImages && g.ImageRateIndependent {
+					// The same request card has different base rates depending on
+					// the endpoint. Do not advertise one as a universal quote.
+					candidate.RequestDependent = true
+				}
+			}
+			if candidate.RequestDependent {
+				offer.Pricing, offer.PriceStatus, offer.PriceReason = nil, "unknown", "request_dependent"
+				offer.BillingUnit, offer.OfficialPricing, offer.MediaTiers, offer.ServiceTiers = "unknown", nil, nil, nil
+			}
+			offer.Endpoints = candidate.Endpoints
+			cg.Models = append(cg.Models, offer)
 		}
 		out = append(out, cg)
 	}
@@ -108,13 +163,39 @@ func (s *ModelPlazaService) ListAvailableCatalog(ctx context.Context, groups []G
 	return out, nil
 }
 
-func (s *ModelPlazaService) catalogOffer(ctx context.Context, g *Group, ch *Channel, model SupportedModel, resolver *ModelPricingResolver, references *ChannelPricingReferenceService) CatalogOffer {
-	key := sha256.Sum256([]byte(fmt.Sprintf("%d\x00%d\x00%s\x00%s", g.ID, ch.ID, model.Platform, strings.ToLower(model.Name))))
+// ListSaleCatalog receives only group IDs referenced by for-sale plans. It is
+// intentionally separate from user-authorized catalog access: prospective
+// buyers need not own a subscription, and only active subscription groups are
+// projected. The same pure model/price assembly is shared by both readers.
+func (s *ModelPlazaService) ListSaleCatalog(ctx context.Context, groupIDs []int64) ([]CatalogGroup, error) {
+	if len(groupIDs) == 0 {
+		return []CatalogGroup{}, nil
+	}
+	wanted := make(map[int64]struct{}, len(groupIDs))
+	for _, id := range groupIDs {
+		wanted[id] = struct{}{}
+	}
+	groups, err := s.groupRepo.ListActive(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("sale catalog groups: %w", err)
+	}
+	selected := make([]Group, 0, len(groupIDs))
+	for _, group := range groups {
+		if _, ok := wanted[group.ID]; ok && group.IsActive() && group.IsSubscriptionType() {
+			selected = append(selected, group)
+		}
+	}
+	return s.ListAvailableCatalog(ctx, selected)
+}
+
+func (s *ModelPlazaService) catalogOffer(ctx context.Context, g *Group, ch *Channel, model SupportedModel, publicModel string, resolver *ModelPricingResolver, references *ChannelPricingReferenceService, asOf time.Time) CatalogOffer {
+	key := sha256.Sum256([]byte(fmt.Sprintf("%d\x00%d\x00%s\x00%s", g.ID, ch.ID, model.Platform, strings.ToLower(publicModel))))
 	o := CatalogOffer{
-		PlazaModel: PlazaModel{Name: model.Name, Platform: model.Platform},
+		PlazaModel: PlazaModel{Name: publicModel, Platform: model.Platform},
 		OfferKey:   fmt.Sprintf("%x", key[:16]), BillingUnit: "unknown",
 		PriceStatus: "unknown", PriceReason: "pricing_unavailable",
-		Source: CatalogSource{Name: ch.Name, Description: ch.Description},
+		Source:              CatalogSource{Name: ch.Name, Description: ch.Description},
+		PriceTimeMultiplier: 1,
 	}
 	if model.Pricing != nil {
 		o.BillingMode = model.Pricing.BillingMode
@@ -123,14 +204,24 @@ func (s *ModelPlazaService) catalogOffer(ctx context.Context, g *Group, ch *Chan
 		return o
 	}
 	ctx = WithResolvedTargetPlatform(ctx, model.Platform)
-	mapping := resolver.channelService.ResolveChannelMapping(ctx, g.ID, model.Name)
+	channelInput := publicModel
+	if g.Platform == PlatformComposite && model.Name != "" {
+		channelInput = model.Name
+	}
+	mapping := resolver.channelService.ResolveChannelMapping(ctx, g.ID, channelInput)
 	if mapping.BillingModelSource == BillingModelSourceUpstream || mapping.BillingModelSource == BillingModelSourceResponse {
 		o.PriceReason = "request_dependent"
 		return o
 	}
 	billingModel := model.Name
+	if mapping.BillingModelSource == BillingModelSourceRequested {
+		billingModel = publicModel
+	}
 	if mapping.BillingModelSource == BillingModelSourceChannelMapped && mapping.Mapped {
 		billingModel = mapping.MappedModel
+	}
+	if preferred := preferredConfiguredPublicPricingModel(ctx, resolver, g, publicModel, mapping.BillingModelSource, channelInput); preferred != "" {
+		billingModel = preferred
 	}
 	reference := references.resolve(model.Platform, billingModel)
 	if reference.Status == ChannelPricingStatusUnsupportedUnit {
@@ -167,6 +258,7 @@ func (s *ModelPlazaService) catalogOffer(ctx context.Context, g *Group, ch *Chan
 		o.OfficialPricing = &PlazaOfficialPricing{InputPrice: p.InputPrice, OutputPrice: p.OutputPrice, CacheWritePrice: p.CacheWritePrice, CacheWrite1hPrice: p.CacheWrite1hPrice, CacheReadPrice: p.CacheReadPrice, Intervals: p.Intervals}
 	}
 	if o.BillingMode == BillingModeToken {
+		o.PriceTimeMultiplier = catalogPriceTimeMultiplier(resolved, billingModel, asOf)
 		o.BillingUnit = "token"
 		input := ContextPricingScheduleInput{Model: billingModel, Group: g, Platform: model.Platform}
 		if resolved.Source == PricingSourceLiteLLM && isDeepSeekModel(billingModel) {
@@ -205,9 +297,24 @@ func (s *ModelPlazaService) catalogOffer(ctx context.Context, g *Group, ch *Chan
 		s.fillCatalogMedia(ctx, &o, g, billingModel, resolver, resolved)
 	}
 	if o.Pricing != nil {
+		if o.BillingMode == BillingModeToken && (o.Pricing.InputPrice == nil || o.Pricing.OutputPrice == nil) {
+			return o
+		}
 		o.PriceStatus, o.PriceReason = "resolved", ""
 	}
 	return o
+}
+
+// Base prices remain standard-period quotes. Return the current price-card
+// factor separately from customer rate policy so neither is applied twice.
+func catalogPriceTimeMultiplier(resolved *ResolvedPricing, model string, at time.Time) float64 {
+	if resolved == nil || (resolved.Mode != "" && resolved.Mode != BillingModeToken) {
+		return 1
+	}
+	if resolved.Source == PricingSourceLiteLLM && isDeepSeekModel(model) {
+		return deepseekPeakMultiplierAt(at)
+	}
+	return resolvedChannelTimeMultiplier(resolved, at)
 }
 
 // Token mode ignores per-request fields left on a configured card. Image-token
@@ -223,17 +330,30 @@ func (s *ModelPlazaService) catalogTokenPricing(ctx context.Context, resolver *M
 	raw := resolved.channelPricing
 	if base.ImageInputPricePerToken != 0 || (raw != nil && raw.ImageInputPrice != nil) ||
 		base.ImageOutputPricePerToken != 0 || base.ImageOutputPriceExplicit {
-		cost, err := s.billingService.CalculateTokenCostForRequest(TokenCostRequest{
+		inputCost, err := s.billingService.CalculateTokenCostForRequest(TokenCostRequest{
 			Ctx: ctx, Model: input.Model, Group: input.Group,
-			Tokens:         UsageTokens{InputTokens: 1, ImageInputTokens: 1, OutputTokens: 1, ImageOutputTokens: 1},
+			Tokens:         UsageTokens{InputTokens: 1, ImageInputTokens: 1},
 			RateMultiplier: 1, ServiceTier: input.ServiceTier, PricingAt: input.PricingAt,
 			Resolver: resolver, Resolved: resolved,
 		})
-		if err != nil {
+		if err != nil && !isMissingTokenPriceError(err) {
 			return nil, err
 		}
-		pricing.ImageInputPrice = &cost.ImageInputCost
-		pricing.ImageOutputPrice = &cost.ImageOutputCost
+		if err == nil {
+			pricing.ImageInputPrice = &inputCost.ImageInputCost
+		}
+		outputCost, err := s.billingService.CalculateTokenCostForRequest(TokenCostRequest{
+			Ctx: ctx, Model: input.Model, Group: input.Group,
+			Tokens:         UsageTokens{OutputTokens: 1, ImageOutputTokens: 1},
+			RateMultiplier: 1, ServiceTier: input.ServiceTier, PricingAt: input.PricingAt,
+			Resolver: resolver, Resolved: resolved,
+		})
+		if err != nil && !isMissingTokenPriceError(err) {
+			return nil, err
+		}
+		if err == nil {
+			pricing.ImageOutputPrice = &outputCost.ImageOutputCost
+		}
 	}
 	return pricing, nil
 }

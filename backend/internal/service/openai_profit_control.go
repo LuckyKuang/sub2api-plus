@@ -133,6 +133,9 @@ type openAIProfitControlGate struct {
 // 只固定 pricingAt、不装门。handler 各文本入口应在选号循环前调用一次。
 func (s *OpenAIGatewayService) WithOpenAIRequestPricingContext(ctx context.Context, groupID *int64) (context.Context, time.Time) {
 	pricingAt := timezone.Now()
+	if snapshot := BillingPricingSnapshotFromContext(ctx); snapshot != nil {
+		pricingAt = snapshot.PricingAt()
+	}
 	ctx = context.WithValue(ctx, openAIPricingAtCtxKey{}, pricingAt)
 	return s.withOpenAIProfitControlGate(ctx, groupID), pricingAt
 }
@@ -151,6 +154,9 @@ func WithOpenAIProfitControlSuppressed(ctx context.Context) context.Context {
 // 连接从未装门时才回退入口分组。抑制标记下只刷新 pricingAt。
 func (s *OpenAIGatewayService) WithOpenAITurnPricingContext(ctx context.Context, groupID *int64) (context.Context, time.Time) {
 	pricingAt := timezone.Now()
+	if snapshot := BillingPricingSnapshotFromContext(ctx); snapshot != nil {
+		pricingAt = snapshot.PricingAt()
+	}
 	ctx = context.WithValue(ctx, openAIPricingAtCtxKey{}, pricingAt)
 	if _, suppressed := ctx.Value(openAIProfitControlSuppressCtxKey{}).(struct{}); suppressed {
 		return ctx, pricingAt
@@ -258,6 +264,7 @@ func (s *OpenAIGatewayService) resolveOpenAIProfitControlGate(ctx context.Contex
 		downstream = s.ResolveUserGroupRateMultiplier(ctx, userID, billingGroup.ID, billingGroup.RateMultiplier)
 	}
 	downstream *= billingGroup.PeakMultiplierAt(pricingAt)
+	downstream = customerBillingRate(ctx, &APIKey{Group: billingGroup}, "token", downstream)
 
 	deduction := group.ProfitMinMargin + group.ProfitSafetyBuffer
 	threshold := clampProfitControlThreshold(downstream * (1 - deduction))

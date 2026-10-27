@@ -1,3 +1,4 @@
+import type { BillingRatePolicy } from './billingRate'
 /**
  * Core Type Definitions for Sub2API Frontend
  */
@@ -88,7 +89,7 @@ export interface User {
   balance: number // User balance for API usage
   frozen_balance?: number // Balance currently held by async batch jobs
   concurrency: number // Allowed concurrent requests
-  rpm_limit?: number // User-level RPM cap (0 = unlimited); effective as fallback when group has no rpm_limit
+  rpm_limit?: number // Global user RPM cap (0 = unlimited); applies alongside the user-group cap, across all keys
   status: 'active' | 'disabled' // Account status
   allowed_groups: number[] | null // Allowed group IDs (null = all non-exclusive groups)
   balance_notify_enabled: boolean
@@ -579,12 +580,14 @@ export type GroupI18n = Record<string, GroupLocaleText>
 
 // 用户侧接口返回的 name / description 已由后端按请求语言（Accept-Language）选好
 export interface Group {
+  billing_rate_policy?: BillingRatePolicy
+  billing_policy_version?: number
   id: number
   name: string
   description: string | null
   platform: GroupPlatform
   rate_multiplier: number
-  rpm_limit?: number // Group-level RPM cap (0 = unlimited); overrides user-level rpm_limit when set
+  rpm_limit?: number // Default RPM cap per (user, group), overridable for that pair; the global user cap still applies
   max_reasoning_effort?: string // Anthropic/OpenAI reasoning ceiling; empty means unlimited
   max_reasoning_effort_over_limit?: string // downgrade (default) or deny when over the ceiling
   reasoning_effort_mappings?: ReasoningEffortMapping[]
@@ -815,6 +818,7 @@ export interface UpdateApiKeyRequest {
 }
 
 export interface CreateGroupRequest {
+  billing_rate_policy?: BillingRatePolicy
   name: string
   description?: string | null
   i18n?: GroupI18n
@@ -884,6 +888,8 @@ export interface CreateGroupRequest {
 }
 
 export interface UpdateGroupRequest {
+  billing_rate_policy?: BillingRatePolicy
+  expected_billing_policy_version?: number
   name?: string
   description?: string | null
   i18n?: GroupI18n

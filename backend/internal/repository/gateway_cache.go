@@ -165,7 +165,9 @@ var _ service.OpenAIWSSessionPreemptionCache = (*gatewayCache)(nil)
 
 const (
 	grokVideoPendingBillingPrefix = "grok_video_pending:"
-	grokVideoBilledPrefix         = "grok_video_billed:"
+	// Legacy values were written before billing and cannot distinguish a
+	// crashed worker from success. Recheck them through durable SQL dedup.
+	grokVideoBilledPrefix = "grok_video_billed:v2:"
 )
 
 func (c *gatewayCache) SetGrokVideoPendingBilling(ctx context.Context, key string, payload []byte, ttl time.Duration) error {
@@ -200,29 +202,59 @@ func (c *gatewayCache) GetGrokVideoPendingBilling(ctx context.Context, key strin
 	return val, nil
 }
 
-func (c *gatewayCache) ClaimGrokVideoBilled(ctx context.Context, key string, ttl time.Duration) (bool, error) {
+func (c *gatewayCache) ClaimGrokVideoBilled(ctx context.Context, key, owner string, ttl time.Duration) (bool, error) {
 	if c == nil || c.rdb == nil {
 		return false, errors.New("gateway cache unavailable")
 	}
 	key = strings.TrimSpace(key)
-	if key == "" {
+	if key == "" || strings.TrimSpace(owner) == "" || owner == "done" {
 		return false, errors.New("invalid grok video billed key")
+	}
+	if ttl <= 0 {
+		ttl = 30 * time.Second
+	}
+	return c.rdb.SetNX(ctx, grokVideoBilledPrefix+key, owner, ttl).Result()
+}
+
+var completeGrokVideoBillingScript = redis.NewScript(`
+if redis.call('GET', KEYS[1]) ~= ARGV[1] then
+  return 0
+end
+redis.call('SET', KEYS[1], 'done', 'PX', ARGV[2])
+return 1
+`)
+
+var releaseGrokVideoBillingScript = redis.NewScript(`
+if redis.call('GET', KEYS[1]) ~= ARGV[1] then
+  return 0
+end
+return redis.call('DEL', KEYS[1])
+`)
+
+func (c *gatewayCache) CompleteGrokVideoBilled(ctx context.Context, key, owner string, ttl time.Duration) (bool, error) {
+	if c == nil || c.rdb == nil {
+		return false, errors.New("gateway cache unavailable")
+	}
+	key = strings.TrimSpace(key)
+	if key == "" || strings.TrimSpace(owner) == "" || owner == "done" {
+		return false, errors.New("invalid grok video billing owner")
 	}
 	if ttl <= 0 {
 		ttl = 48 * time.Hour
 	}
-	return c.rdb.SetNX(ctx, grokVideoBilledPrefix+key, "1", ttl).Result()
+	applied, err := completeGrokVideoBillingScript.Run(ctx, c.rdb, []string{grokVideoBilledPrefix + key}, owner, ttl.Milliseconds()).Int64()
+	return applied == 1, err
 }
 
-func (c *gatewayCache) ReleaseGrokVideoBilled(ctx context.Context, key string) error {
+func (c *gatewayCache) ReleaseGrokVideoBilled(ctx context.Context, key, owner string) error {
 	if c == nil || c.rdb == nil {
 		return errors.New("gateway cache unavailable")
 	}
 	key = strings.TrimSpace(key)
-	if key == "" {
+	if key == "" || strings.TrimSpace(owner) == "" || owner == "done" {
 		return errors.New("invalid grok video billed key")
 	}
-	return c.rdb.Del(ctx, grokVideoBilledPrefix+key).Err()
+	return releaseGrokVideoBillingScript.Run(ctx, c.rdb, []string{grokVideoBilledPrefix + key}, owner).Err()
 }
 
 // Compile-time assertion: gatewayCache must implement CyberSessionBlockStore.
@@ -455,6 +487,7 @@ func (c *gatewayCache) SaveLiveCall(ctx context.Context, record *service.LiveCal
 		"inbound_endpoint":  record.InboundEndpoint,
 		"attestation":       record.AttestationCiphertext,
 		"outbound_snapshot": string(snapshot),
+		"pricing_snapshot":  string(record.PricingSnapshot),
 	}
 	key := liveCallKey(record.CallHash)
 	pipe := c.rdb.TxPipeline()
@@ -479,6 +512,10 @@ func (c *gatewayCache) GetLiveCall(ctx context.Context, callHash string) (*servi
 	createdAt := time.UnixMilli(parseInt("created_at"))
 	expiresAt := time.UnixMilli(parseInt("expires_at"))
 	var snapshot *service.LiveOutboundSnapshot
+	var pricingSnapshot json.RawMessage
+	if raw := values["pricing_snapshot"]; raw != "" {
+		pricingSnapshot = json.RawMessage(raw)
+	}
 	if raw := values["outbound_snapshot"]; raw != "" {
 		if err := json.Unmarshal([]byte(raw), &snapshot); err != nil {
 			return nil, fmt.Errorf("decode live outbound snapshot: %w", err)
@@ -503,6 +540,7 @@ func (c *gatewayCache) GetLiveCall(ctx context.Context, callHash string) (*servi
 		InboundEndpoint:       values["inbound_endpoint"],
 		AttestationCiphertext: values["attestation"],
 		OutboundSnapshot:      snapshot,
+		PricingSnapshot:       pricingSnapshot,
 	}, nil
 }
 

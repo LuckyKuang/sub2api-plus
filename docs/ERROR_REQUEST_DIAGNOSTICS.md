@@ -81,6 +81,46 @@ size limit failures remain HTTP 413, including decompression limits.
 
 ## Partial stream failures
 
+An upstream can flush HTTP 429 headers and leave a short body open indefinitely.
+A byte limit does not bound that read, and a response-header timeout has already
+finished. A detached inference context can therefore retain a connection,
+execution slot and renewal work even after the client disconnects. Account
+queue limits must remain enforced across different users while that upstream
+is slow; user concurrency alone does not bound a shared account's waiters.
+The isolated regression responders reproduce this resource-retention mechanism;
+they do not establish the cause of an earlier outage without its runtime evidence.
+
+Unsuccessful upstream HTTP responses have a five-second diagnostic-body budget
+from response headers, in addition to their byte limit. The production transport
+covers compressed-body initialization and subsequent reads within that same
+budget. Service readers also enforce the bound for independent clients. This
+covers generic forwarding, OpenAI and Chat Completions adapters, native image
+download errors, Gemini Messages, Antigravity and Responses WebSocket HTTP bridging.
+Gemini/Vertex Batch API error readers apply the same bound to their independent
+HTTP clients while preserving typed provider status and diagnostics. Plugin
+transport responses with HTTP errors have their own five-second body budget:
+expiry cancels that RPC, closes its pipe and finishes its runtime request once,
+including consumers such as input-token counting and Live creation that read
+the returned body directly. EOF and caller Close stop the plugin timer; accepted
+plugin streams retain their existing streaming lifetime.
+Receiving an error status or a small diagnostic prefix without EOF cannot keep
+an account connection and execution lease occupied indefinitely. The budget
+closes the actual body and interrupts its active read before retry/failover;
+already received diagnostic bytes and the HTTP status remain available for
+the existing error classification. A client disconnect does not remove this
+budget from a detached upstream request. Successful inference streams retain
+their existing completion and usage-collection lifecycles.
+
+The shared upstream transport starts this budget when rejected response headers
+arrive. It includes gzip header decoding and zstd frame probing before the
+service receives the body, plus independent control and media readers. EOF or
+Close stops the timer. Expiry cancels that transport attempt, keeping its HTTP
+status available while allowing the account connection to be released. It does
+not cancel the caller or prevent another account attempt.
+This is a rejected-body deadline, not a five-second deadline for the complete
+request: connection/header waits, existing bounded retry/backoff policies and
+accepted inference streams retain their separate budgets.
+
 Observed text/reasoning/tool TTFT remains available on failed partial responses.
 Metadata, keepalive and media-only output do not fabricate a token timestamp.
 OpenAI upstream attempt JSON records `semantic_output_committed`, optional

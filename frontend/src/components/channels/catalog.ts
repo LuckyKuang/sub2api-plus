@@ -25,29 +25,30 @@ export interface CatalogModel {
 
 export const defaultCatalogFilters = (): CatalogFilters => ({ platform: '', search: '', sort: 'name' })
 export const modelIdentity = (offer: CatalogOffer) => `${offer.platform}\0${offer.name.toLowerCase()}`
-export function rateSource(group: CatalogGroup, offer: CatalogOffer): 'media' | 'personal' | 'group' {
-  if ((offer.billing_mode === 'image' && group.image_rate_independent) || (offer.billing_mode === 'video' && group.video_rate_independent)) return 'media'
-  return group.user_rate_multiplier != null ? 'personal' : 'group'
+export function rateSource(_group: CatalogGroup | undefined, offer: CatalogOffer): 'media' | 'personal' | 'group' {
+  return offer.rate_quote?.base_source ?? 'group'
 }
-export function effectiveRate(group: CatalogGroup, offer: CatalogOffer): number {
-  const rate = rateSource(group, offer) === 'media'
-    ? offer.billing_mode === 'image' ? group.image_rate_multiplier : group.video_rate_multiplier
-    : group.user_rate_multiplier ?? group.rate_multiplier
-  return Math.max(0, rate)
+export function effectiveRate(_group: CatalogGroup | undefined, offer: CatalogOffer): number {
+  return offer.rate_quote?.effective_multiplier ?? Number.NaN
 }
 export const hasTieredPricing = ({ group, offer }: CatalogQuote) => group.long_context_pricing_enabled && !!(offer.pricing?.intervals.length || offer.media_tiers?.length)
 export const hasDynamicPricing = ({ group, offer }: CatalogQuote) => group.peak_rate_enabled || !!offer.time_pricing
-const units: CatalogBillingUnit[] = ['token', 'image', 'request', 'video', 'second', 'unknown']
+const units: CatalogBillingUnit[] = ['token', 'image', 'request', 'video', 'second', 'minute', 'hour', 'million_characters', 'unknown']
 function coverage(quotes: CatalogQuote[], predicate: (quote: CatalogQuote) => boolean): CatalogModel['tiered'] {
   const count = quotes.filter(predicate).length
   return count === 0 ? 'none' : count === quotes.length ? 'all' : 'some'
 }
 export function quotePrice({ group, offer }: CatalogQuote, output: boolean): number | null {
-  if (offer.price_status !== 'resolved' || offer.billing_unit === 'unknown') return null
+  // An incomplete token card can still declare one known dimension. Other
+  // unknown reasons cannot advertise a request-independent unit price.
+  if (offer.billing_unit === 'unknown' || (offer.price_status !== 'resolved' && offer.price_reason !== 'pricing_unavailable')) return null
   const price = offer.billing_unit === 'token' ? (output ? offer.pricing?.output_price : offer.pricing?.input_price) : offer.pricing?.per_request_price
   if (price == null) return null
-  const value = price * effectiveRate(group, offer)
+  const value = price * effectivePriceRate(group, offer)
   return Number.isFinite(value) ? value : null
+}
+export function effectivePriceRate(group: CatalogGroup | undefined, offer: CatalogOffer): number {
+  return effectiveRate(group, offer) * (offer.price_time_multiplier ?? 1)
 }
 function priceRange(values: (number | null)[]): CatalogPriceRange | null {
   const known = values.filter((v): v is number => v !== null)

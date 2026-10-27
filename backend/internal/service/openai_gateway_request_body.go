@@ -2040,7 +2040,7 @@ func (e *OpenAIFastBlockedError) Error() string { return e.Message }
 //     发生重叠，admin 可通过规则顺序明确意图。因此采用 first-match 而
 //     非 BetaPolicy 那样的"block 覆盖 filter 覆盖 pass"语义。
 func (s *OpenAIGatewayService) evaluateOpenAIFastPolicy(ctx context.Context, account *Account, model, serviceTier string) (action, errMsg string) {
-	if s == nil || s.settingService == nil {
+	if s == nil {
 		return BetaPolicyActionPass, ""
 	}
 	tier := strings.ToLower(strings.TrimSpace(serviceTier))
@@ -2049,6 +2049,9 @@ func (s *OpenAIGatewayService) evaluateOpenAIFastPolicy(ctx context.Context, acc
 	}
 	settings := openAIFastPolicySettingsFromContext(ctx)
 	if settings == nil {
+		if s.settingService == nil {
+			return BetaPolicyActionPass, ""
+		}
 		fetched, err := s.settingService.GetOpenAIFastPolicySettings(ctx)
 		if err != nil || fetched == nil {
 			return BetaPolicyActionPass, ""
@@ -2169,7 +2172,7 @@ func openAIGroupForcesFast(ctx context.Context, account *Account) bool {
 	if ctx == nil || account == nil || account.Platform != PlatformOpenAI {
 		return false
 	}
-	group, _ := ctx.Value(ctxkey.Group).(*Group)
+	group := openAIFastExecutionGroup(ctx)
 	return IsGroupContextValid(group) && groupSupportsOpenAIFast(group.Platform) && group.ForceOpenAIFast
 }
 

@@ -77,7 +77,7 @@ func (s *GeminiMessagesCompatService) readUpstreamErrorBody(resp *http.Response)
 	if s != nil && s.cfg != nil && s.cfg.Gateway.LogUpstreamErrorBody && s.cfg.Gateway.LogUpstreamErrorBodyMaxBytes > int(limit) {
 		limit = int64(s.cfg.Gateway.LogUpstreamErrorBodyMaxBytes)
 	}
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, limit))
+	body, _ := readUpstreamErrorResponseBody(resp, limit, UpstreamErrorBodyReadTimeout)
 	return body
 }
 

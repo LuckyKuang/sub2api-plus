@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -40,8 +41,8 @@ func (r *BatchImageModelPricingResolver) BatchImageUnitPrice(ctx context.Context
 	}
 	switch resolved.Mode {
 	case BillingModeImage, BillingModePerRequest:
-		if resolved.DefaultPerRequestPrice > 0 {
-			return resolved.DefaultPerRequestPrice, nil
+		if price, priced := defaultRequestPrice(resolved); priced && validCost(price) {
+			return price, nil
 		}
 		if len(resolved.RequestTiers) == 1 && resolved.RequestTiers[0].PerRequestPrice != nil && *resolved.RequestTiers[0].PerRequestPrice >= 0 {
 			return *resolved.RequestTiers[0].PerRequestPrice, nil
@@ -55,11 +56,12 @@ func (r *BatchImageModelPricingResolver) BatchImageUnitPrice(ctx context.Context
 }
 
 type BatchImageSettlementService struct {
-	Repo        BatchImageRepository
-	BillingRepo UsageBillingRepository
-	Pricing     BatchImagePricingResolver
-	AuthCache   APIKeyAuthCacheInvalidator
-	Config      *config.Config
+	UnfinishedTasks *GatewayUnfinishedTaskService
+	Repo            BatchImageRepository
+	BillingRepo     UsageBillingRepository
+	Pricing         BatchImagePricingResolver
+	AuthCache       APIKeyAuthCacheInvalidator
+	Config          *config.Config
 }
 
 type BatchImageSettlementResult struct {
@@ -93,11 +95,19 @@ func (s *BatchImageSettlementService) Settle(ctx context.Context, batchID string
 		result.ActualCost = *job.ActualCost
 	}
 	if job.Status == BatchImageJobStatusCompleted {
+		if err := releaseBatchImageUnfinished(ctx, s.UnfinishedTasks, job, "task_completed"); err != nil {
+			return nil, err
+		}
 		result.AlreadySettled = true
 		return result, nil
 	}
 	if job.Status != BatchImageJobStatusSettling {
 		return nil, ErrBatchImageSettlementInvalidStatus
+	}
+	// Settling is durable evidence that provider execution already finished.
+	// Recover capacity independently of pricing, capture and their retries.
+	if err := releaseBatchImageUnfinished(ctx, s.UnfinishedTasks, job, "provider_terminal"); err != nil {
+		return nil, err
 	}
 	if job.APIKeyID == nil || *job.APIKeyID <= 0 {
 		return nil, ErrBatchImageSettlementMissingAPIKeyID
@@ -175,6 +185,9 @@ func (s *BatchImageSettlementService) Settle(ctx context.Context, batchID string
 			"manifest_hash": manifestHash,
 		},
 	}); err != nil {
+		return nil, err
+	}
+	if err := releaseBatchImageUnfinished(ctx, s.UnfinishedTasks, job, "task_completed"); err != nil {
 		return nil, err
 	}
 	return result, nil
@@ -257,7 +270,7 @@ func buildBatchImageSettlementUsageLog(job *BatchImageJob, actualCost float64, r
 	upstreamEndpoint := "vertex:batchPredictionJobs"
 	imageSize := "1K"
 	complete := true
-	return &UsageLog{
+	usage := &UsageLog{
 		UserID:                job.UserID,
 		APIKeyID:              *job.APIKeyID,
 		AccountID:             *job.AccountID,
@@ -283,6 +296,18 @@ func buildBatchImageSettlementUsageLog(job *BatchImageJob, actualCost float64, r
 		UsageSource:           UsageSourceUpstreamExact,
 		CreatedAt:             createdAt,
 	}
+	if len(job.BillingRateSnapshot) > 0 {
+		// The snapshot is internal, immutable pricing evidence from submission.
+		// A JSON round trip detaches it from the repository object and normalizes
+		// values consistently for in-process and recovered jobs.
+		if data, err := json.Marshal(job.BillingRateSnapshot); err == nil {
+			_ = json.Unmarshal(data, &usage.BillingRateSnapshot)
+		}
+		if version, ok := usage.BillingRateSnapshot["policy_version"].(float64); ok {
+			usage.BillingPolicyVersion = int64(version)
+		}
+	}
+	return usage
 }
 
 func (s *BatchImageSettlementService) invalidateAuthCache(ctx context.Context, userID int64) {

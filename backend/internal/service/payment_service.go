@@ -71,20 +71,21 @@ func generateRandomString(n int) string {
 }
 
 type CreateOrderRequest struct {
-	UserID          int64
-	Amount          float64
-	PaymentType     string
-	OpenID          string
-	ClientIP        string
-	IsMobile        bool
-	IsWeChatBrowser bool
-	SrcHost         string
-	SrcURL          string
-	ReturnURL       string
-	PaymentSource   string
-	OrderType       string
-	PlanID          int64
-	Locale          string
+	UserID                       int64
+	Amount                       float64
+	PaymentType                  string
+	OpenID                       string
+	ClientIP                     string
+	IsMobile                     bool
+	IsWeChatBrowser              bool
+	SrcHost                      string
+	SrcURL                       string
+	ReturnURL                    string
+	PaymentSource                string
+	OrderType                    string
+	PlanID                       int64
+	ExpectedBillingPolicyVersion *int64
+	Locale                       string
 }
 
 type CreateOrderResponse struct {
@@ -203,6 +204,7 @@ type PaymentService struct {
 	configService            *PaymentConfigService
 	userRepo                 UserRepository
 	groupRepo                GroupRepository
+	userGroupRateRepo        UserGroupRateRepository
 	resumeService            *PaymentResumeService
 	affiliateService         *AffiliateService
 	notificationEmailService *NotificationEmailService
@@ -216,6 +218,10 @@ func NewPaymentService(entClient *dbent.Client, registry *payment.Registry, load
 
 func (s *PaymentService) SetNotificationEmailService(notificationEmailService *NotificationEmailService) {
 	s.notificationEmailService = notificationEmailService
+}
+
+func (s *PaymentService) SetUserGroupRateRepository(repo UserGroupRateRepository) {
+	s.userGroupRateRepo = repo
 }
 
 // --- Provider Registry ---

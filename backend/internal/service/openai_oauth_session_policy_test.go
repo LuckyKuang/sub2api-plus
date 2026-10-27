@@ -316,11 +316,15 @@ func (c *oauthSessionPolicyCache) GetGrokVideoPendingBilling(_ context.Context, 
 	return nil, nil
 }
 
-func (c *oauthSessionPolicyCache) ClaimGrokVideoBilled(_ context.Context, _ string, _ time.Duration) (bool, error) {
+func (c *oauthSessionPolicyCache) ClaimGrokVideoBilled(_ context.Context, _ string, _ string, _ time.Duration) (bool, error) {
 	return true, nil
 }
 
-func (c *oauthSessionPolicyCache) ReleaseGrokVideoBilled(_ context.Context, _ string) error {
+func (c *oauthSessionPolicyCache) CompleteGrokVideoBilled(_ context.Context, _ string, _ string, _ time.Duration) (bool, error) {
+	return true, nil
+}
+
+func (c *oauthSessionPolicyCache) ReleaseGrokVideoBilled(_ context.Context, _ string, _ string) error {
 	return nil
 }
 

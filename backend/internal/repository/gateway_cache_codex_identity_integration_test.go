@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -99,6 +100,7 @@ func TestGatewayCacheLiveCallSnapshotRealRedis(t *testing.T) {
 		IPAddress:             "192.0.2.42",
 		InboundEndpoint:       "/v1/realtime/calls",
 		AttestationCiphertext: "encrypted-attestation",
+		PricingSnapshot:       json.RawMessage(`{"version":1,"public_model":"gpt-live-test","policy_version":7,"pricing_state":"non_billable_live"}`),
 		OutboundSnapshot: &service.LiveOutboundSnapshot{
 			Owner:      "owner-v2:original-upstream-principal",
 			SessionID:  "01912345-6789-7abc-8def-0123456789ab",
@@ -125,6 +127,8 @@ func TestGatewayCacheLiveCallSnapshotRealRedis(t *testing.T) {
 		require.Equal(t, controllerOwner, current.ControllerOwner)
 		require.Equal(t, record.OutboundSnapshot, current.OutboundSnapshot,
 			"controller ownership must not replace the credential owner's call snapshot")
+		require.Equal(t, record.PricingSnapshot, current.PricingSnapshot,
+			"another gateway's controller handoff must preserve admitted pricing evidence")
 	}
 
 	claimed, err := writer.ClaimLiveController(ctx, callHash, service.LiveControllerObserver, "observer-1")

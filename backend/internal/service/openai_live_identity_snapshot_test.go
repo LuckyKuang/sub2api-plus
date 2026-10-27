@@ -27,6 +27,7 @@ func TestLiveCreateSidebandAndReconnectReuseCallIdentity(t *testing.T) {
 	cfg.JWT.Secret = "unit-only-live-cipher-key"
 	upstream := &httpUpstreamRecorder{resp: &http.Response{StatusCode: 201, Header: http.Header{"Location": []string{"https://chatgpt.com/backend-api/codex/call_123"}}, Body: io.NopCloser(strings.NewReader("sdp-answer"))}}
 	svc := newOpenAIRejectedFieldTestService(upstream)
+	svc.cfg.Gateway.OpenAIWS.Enabled, svc.cfg.Gateway.OpenAIWS.OAuthEnabled = true, true
 	svc.liveAttestationCipher = newLiveAttestationCipher(cfg)
 	account := turnStateAccount(12, "principal-a")
 	account.Credentials["user_agent"] = "codex_cli_rs/0.164.0 (Ubuntu 24.04; x86_64) xterm-256color"

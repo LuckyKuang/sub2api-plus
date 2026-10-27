@@ -197,7 +197,7 @@ func TestBatchImageProviderProcessor_ValidationAndTerminalCases(t *testing.T) {
 		repo := newFakeBatchImageRepository()
 		repo.jobs["imgbatch_done"] = &BatchImageJob{BatchID: "imgbatch_done", Status: BatchImageJobStatusFailed}
 		provider := &fakeProcessorProvider{}
-		got, err := (&BatchImageProviderProcessor{
+		got, err := (&BatchImageProviderProcessor{Concurrency: NewConcurrencyService(&stubConcurrencyCacheForTest{acquireResult: true}),
 			Repo: repo, ProviderRegistry: NewBatchImageProviderRegistry(provider), AccountResolver: &fakeBatchImageAccountResolver{account: &Account{}},
 		}).Process(ctx, "imgbatch_done")
 		require.NoError(t, err)
@@ -208,21 +208,21 @@ func TestBatchImageProviderProcessor_ValidationAndTerminalCases(t *testing.T) {
 	t.Run("missing provider", func(t *testing.T) {
 		repo := newFakeBatchImageRepository()
 		repo.jobs["imgbatch_missing_provider"] = &BatchImageJob{BatchID: "imgbatch_missing_provider", Status: BatchImageJobStatusSubmitted, Provider: "missing", AccountID: &accountID, ProviderJobName: &providerJob}
-		_, err := (&BatchImageProviderProcessor{Repo: repo, ProviderRegistry: NewBatchImageProviderRegistry(), AccountResolver: &fakeBatchImageAccountResolver{account: &Account{}}}).Process(ctx, "imgbatch_missing_provider")
+		_, err := (&BatchImageProviderProcessor{Concurrency: NewConcurrencyService(&stubConcurrencyCacheForTest{acquireResult: true}), Repo: repo, ProviderRegistry: NewBatchImageProviderRegistry(), AccountResolver: &fakeBatchImageAccountResolver{account: &Account{}}}).Process(ctx, "imgbatch_missing_provider")
 		require.ErrorIs(t, err, ErrBatchImageUnsupportedProvider)
 	})
 
 	t.Run("missing account id", func(t *testing.T) {
 		repo := newFakeBatchImageRepository()
 		repo.jobs["imgbatch_missing_account"] = &BatchImageJob{BatchID: "imgbatch_missing_account", Status: BatchImageJobStatusSubmitted, Provider: "fake", ProviderJobName: &providerJob}
-		_, err := (&BatchImageProviderProcessor{Repo: repo, ProviderRegistry: NewBatchImageProviderRegistry(&fakeProcessorProvider{}), AccountResolver: &fakeBatchImageAccountResolver{account: &Account{}}}).Process(ctx, "imgbatch_missing_account")
+		_, err := (&BatchImageProviderProcessor{Concurrency: NewConcurrencyService(&stubConcurrencyCacheForTest{acquireResult: true}), Repo: repo, ProviderRegistry: NewBatchImageProviderRegistry(&fakeProcessorProvider{}), AccountResolver: &fakeBatchImageAccountResolver{account: &Account{}}}).Process(ctx, "imgbatch_missing_account")
 		require.ErrorIs(t, err, ErrBatchImageMissingAccountID)
 	})
 
 	t.Run("missing provider job name", func(t *testing.T) {
 		repo := newFakeBatchImageRepository()
 		repo.jobs["imgbatch_missing_name"] = &BatchImageJob{BatchID: "imgbatch_missing_name", Status: BatchImageJobStatusSubmitted, Provider: "fake", AccountID: &accountID}
-		_, err := (&BatchImageProviderProcessor{Repo: repo, ProviderRegistry: NewBatchImageProviderRegistry(&fakeProcessorProvider{}), AccountResolver: &fakeBatchImageAccountResolver{account: &Account{}}}).Process(ctx, "imgbatch_missing_name")
+		_, err := (&BatchImageProviderProcessor{Concurrency: NewConcurrencyService(&stubConcurrencyCacheForTest{acquireResult: true}), Repo: repo, ProviderRegistry: NewBatchImageProviderRegistry(&fakeProcessorProvider{}), AccountResolver: &fakeBatchImageAccountResolver{account: &Account{}}}).Process(ctx, "imgbatch_missing_name")
 		require.ErrorIs(t, err, ErrBatchImageMissingProviderJobName)
 	})
 }
@@ -324,7 +324,7 @@ func TestCanTransitionBatchImageJob_PR5DirectIndexing(t *testing.T) {
 }
 
 func newTestBatchImageProcessor(repo *fakeBatchImageRepository, provider *fakeProcessorProvider) *BatchImageProviderProcessor {
-	return &BatchImageProviderProcessor{
+	return &BatchImageProviderProcessor{Concurrency: NewConcurrencyService(&stubConcurrencyCacheForTest{acquireResult: true}),
 		Repo:             repo,
 		ProviderRegistry: NewBatchImageProviderRegistry(provider),
 		AccountResolver:  &fakeBatchImageAccountResolver{account: &Account{}},
@@ -333,11 +333,13 @@ func newTestBatchImageProcessor(repo *fakeBatchImageRepository, provider *fakePr
 }
 
 type fakeBatchImageAccountResolver struct {
+	calls   int
 	account *Account
 	err     error
 }
 
 func (r *fakeBatchImageAccountResolver) ResolveBatchImageAccount(context.Context, int64) (*Account, error) {
+	r.calls++
 	if r.err != nil {
 		return nil, r.err
 	}
@@ -345,9 +347,10 @@ func (r *fakeBatchImageAccountResolver) ResolveBatchImageAccount(context.Context
 }
 
 type fakeProcessorProvider struct {
-	status *BatchProviderStatus
-	getErr error
-	result string
+	getFunc func(context.Context, *BatchImageJob, *Account) (*BatchProviderStatus, error)
+	status  *BatchProviderStatus
+	getErr  error
+	result  string
 
 	getCalled        bool
 	openResultCalled bool
@@ -360,8 +363,11 @@ func (p *fakeProcessorProvider) SupportsAccount(*Account) bool {
 func (p *fakeProcessorProvider) Submit(context.Context, *BatchImageJob, *Account, BatchImageInput) (*BatchProviderJob, error) {
 	panic("Submit must not be called by PR5 processor")
 }
-func (p *fakeProcessorProvider) Get(context.Context, *BatchImageJob, *Account) (*BatchProviderStatus, error) {
+func (p *fakeProcessorProvider) Get(ctx context.Context, job *BatchImageJob, account *Account) (*BatchProviderStatus, error) {
 	p.getCalled = true
+	if p.getFunc != nil {
+		return p.getFunc(ctx, job, account)
+	}
 	if p.getErr != nil {
 		return nil, p.getErr
 	}
@@ -422,6 +428,7 @@ func (r *fakeBatchImageRepository) CreateBatchImageJob(_ context.Context, params
 		BillableUnitPrice:       params.BillableUnitPrice,
 		HoldUnitPrice:           params.HoldUnitPrice,
 		PricingSnapshotVersion:  params.PricingSnapshotVersion,
+		BillingRateSnapshot:     params.BillingRateSnapshot,
 		Currency:                params.Currency,
 		IdempotencyKey:          params.IdempotencyKey,
 		RequestHash:             params.RequestHash,
@@ -928,3 +935,103 @@ var _ BatchImageRepository = (*fakeBatchImageRepository)(nil)
 var _ BatchImageProvider = (*fakeProcessorProvider)(nil)
 var _ BatchImageAccountResolver = (*fakeBatchImageAccountResolver)(nil)
 var _ = infraerrors.Reason
+
+func TestBatchImageProviderProcessor_GlobalCapacityAdmission(t *testing.T) {
+	// Worker executions share the current global user cap with foreground and
+	// sub-agent requests. A full/unavailable pool must cause no account lookup,
+	// provider call, indexing or status/settlement mutation. The old processor
+	// ignored user capacity and would enter the fake running provider below.
+	for _, failure := range []string{"pool-full", "redis-error", "current-limit-error", "not-configured", "accepted"} {
+		t.Run(failure, func(t *testing.T) {
+			repo := newFakeBatchImageRepository()
+			accountID := int64(20)
+			repo.jobs["global-cap"] = &BatchImageJob{BatchID: "global-cap", UserID: 42, Provider: "fake", Status: BatchImageJobStatusSubmitted, AccountID: &accountID, ProviderJobName: batchImageStringPtr("provider/job")}
+			provider := &fakeProcessorProvider{status: &BatchProviderStatus{InternalState: BatchProviderStateRunning, RawState: "RUNNING"}}
+			resolver := &fakeBatchImageAccountResolver{account: &Account{ID: accountID}}
+			cache := &renewableConcurrencyCacheForTest{ttl: time.Minute, stubConcurrencyCacheForTest: stubConcurrencyCacheForTest{acquireResult: failure != "pool-full"}}
+			userRepo := &currentConcurrencyUserRepo{user: &User{ID: 42, Concurrency: 2}}
+			if failure == "redis-error" {
+				cache.acquireErr = errors.New("redis unavailable")
+			}
+			if failure == "current-limit-error" {
+				userRepo.err = errors.New("current user configuration unavailable")
+			}
+			concurrency := NewConcurrencyService(cache)
+			concurrency.SetUserRepository(userRepo)
+			if failure == "not-configured" {
+				concurrency = nil
+			}
+			processor := &BatchImageProviderProcessor{Concurrency: concurrency, Repo: repo, ProviderRegistry: NewBatchImageProviderRegistry(provider), AccountResolver: resolver}
+			got, err := processor.Process(context.Background(), "global-cap")
+			if failure == "accepted" {
+				require.NoError(t, err)
+				require.Positive(t, got.RequeueAfter)
+				require.True(t, provider.getCalled)
+				require.Equal(t, 1, resolver.calls)
+				require.Equal(t, BatchImageJobStatusRunning, repo.jobs["global-cap"].Status)
+				cache.mu.Lock()
+				defer cache.mu.Unlock()
+				require.Equal(t, []int{2}, cache.limits)
+				require.Equal(t, 1, cache.releaseUser)
+				return
+			}
+			if failure == "pool-full" {
+				require.NoError(t, err)
+				require.Positive(t, got.RequeueAfter)
+			} else {
+				require.Error(t, err)
+			}
+			require.False(t, provider.getCalled)
+			require.False(t, provider.openResultCalled)
+			require.Zero(t, resolver.calls)
+			require.Equal(t, BatchImageJobStatusSubmitted, repo.jobs["global-cap"].Status)
+			require.Empty(t, repo.transitions)
+			require.Empty(t, repo.events)
+			require.Empty(t, repo.items)
+			require.Zero(t, repo.replaceCalls)
+			cache.mu.Lock()
+			defer cache.mu.Unlock()
+			if failure == "redis-error" {
+				require.Equal(t, 1, cache.releaseUser, "a Redis error must reclaim the possibly committed attempted owner")
+				require.Len(t, cache.userAcquireOwners, 1)
+				require.NotEmpty(t, cache.userAcquireOwners[0])
+				require.Equal(t, cache.userAcquireOwners, cache.userReleaseOwners, "recovery cannot delete a peer's owner")
+				require.Equal(t, []int64{42}, cache.userReleaseIDs)
+			} else {
+				require.Zero(t, cache.releaseUser, "a confirmed capacity rejection has no owner to reclaim")
+			}
+		})
+	}
+}
+
+func TestBatchImageProviderProcessor_LeaseLossCancelsProviderExecution(t *testing.T) {
+	// A worker whose Redis capacity owner disappears must stop its actual provider
+	// call and release its record, without writing an observed success afterward.
+	repo := newFakeBatchImageRepository()
+	accountID := int64(20)
+	repo.jobs["lost-cap"] = &BatchImageJob{BatchID: "lost-cap", UserID: 42, Provider: "fake", Status: BatchImageJobStatusSubmitted, AccountID: &accountID, ProviderJobName: batchImageStringPtr("provider/job")}
+	cache := &renewableConcurrencyCacheForTest{ttl: 60 * time.Millisecond, lose: true, stubConcurrencyCacheForTest: stubConcurrencyCacheForTest{acquireResult: true}}
+	var providerContext context.Context
+	provider := &fakeProcessorProvider{getFunc: func(ctx context.Context, _ *BatchImageJob, _ *Account) (*BatchProviderStatus, error) {
+		providerContext = ctx
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(time.Second):
+			return nil, errors.New("provider was not cancelled after lost lease")
+		}
+	}}
+	processor := newTestBatchImageProcessor(repo, provider)
+	processor.Concurrency = NewConcurrencyService(cache)
+	got, err := processor.Process(context.Background(), "lost-cap")
+	require.NoError(t, err)
+	require.Positive(t, got.RequeueAfter)
+	require.NotNil(t, providerContext)
+	require.ErrorIs(t, context.Cause(providerContext), ErrConcurrencyLeaseLost)
+	require.Empty(t, repo.transitions)
+	require.Empty(t, repo.items)
+	require.Zero(t, repo.replaceCalls)
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+	require.Equal(t, 1, cache.releaseUser)
+}

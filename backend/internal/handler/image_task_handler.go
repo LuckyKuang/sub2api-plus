@@ -108,10 +108,7 @@ func (h *AsyncImageHandler) Submit(c *gin.Context) {
 		imageTaskError(c, service.ErrImageTaskForbidden)
 		return
 	}
-	platform := ""
-	if apiKey.Group != nil {
-		platform = apiKey.Group.Platform
-	}
+	platform := effectiveAPIKeyPlatform(c, apiKey)
 	if platform != service.PlatformOpenAI && platform != service.PlatformGrok {
 		imageTaskJSONError(c, http.StatusNotFound, "not_found_error", "Images API is not supported for this platform")
 		return
@@ -163,6 +160,24 @@ func (h *AsyncImageHandler) Submit(c *gin.Context) {
 	if !h.checkSecurityAuditBeforeSubmit(c, apiKey, platform, body) {
 		return
 	}
+
+	userRelease, admitted := acquireGatewayUserRequest(c, h.openAI.concurrencyHelper, imageTaskJSONError)
+	if !admitted {
+		return
+	}
+	defer userRelease()
+	taskOwner := service.GatewayTaskOwner{UserID: apiKey.UserID, APIKeyID: apiKey.ID}
+	unfinished, err := h.openAI.unfinishedTasks.Reserve(c.Request.Context(), taskOwner, service.GatewayTaskKindAsyncImage)
+	if err != nil {
+		imageTaskError(c, err)
+		return
+	}
+	workerStarted := false
+	defer func() {
+		if !workerStarted {
+			h.openAI.releaseUnfinishedTask(unfinished, "submit_failed")
+		}
+	}()
 	requestedImages := h.requestedImages(c, platform, body)
 	reservation, err := h.reserveImages(c.Request.Context(), apiKey.UserID, requestedImages)
 	if err != nil {
@@ -184,6 +199,17 @@ func (h *AsyncImageHandler) Submit(c *gin.Context) {
 		return
 	}
 
+	if err := h.openAI.unfinishedTasks.Bind(c.Request.Context(), unfinished, task.ID); err != nil {
+		cancel()
+		_ = h.tasks.Fail(context.Background(), task.ID, http.StatusServiceUnavailable, imageTaskErrorPayload("api_error", "Task capacity binding failed"))
+		if reservation != nil {
+			_ = reservation.Release(context.Background())
+		}
+		imageTaskError(c, err)
+		return
+	}
+	taskCtx.Set("gateway.unfinished_task_reservation", unfinished)
+	workerStarted = true
 	pollURL := imageTaskPollURL(c.Request.URL.Path, task.ID)
 	c.Header("Cache-Control", "no-store")
 	c.Header("Location", pollURL)
@@ -216,6 +242,12 @@ func (h *AsyncImageHandler) Download(c *gin.Context) {
 		imageTaskError(c, service.ErrImageTaskForbidden)
 		return
 	}
+	userRelease, admitted := h.openAI.admitControl(c)
+	if !admitted {
+		return
+	}
+	defer userRelease()
+
 	taskID := strings.TrimSpace(c.Param("task_id"))
 	// Build the archive before committing an HTTP response. Object storage can
 	// fail partway through a read; writing directly to c.Writer would otherwise
@@ -262,6 +294,12 @@ func (h *AsyncImageHandler) List(c *gin.Context) {
 		imageTaskError(c, service.ErrImageTaskForbidden)
 		return
 	}
+	userRelease, admitted := h.openAI.admitControl(c)
+	if !admitted {
+		return
+	}
+	defer userRelease()
+
 	limit, _ := strconv.Atoi(c.Query("limit"))
 	offset, _ := strconv.Atoi(c.Query("offset"))
 	tasks, err := h.tasks.List(c.Request.Context(), service.ImageTaskOwner{UserID: apiKey.UserID, APIKeyID: apiKey.ID}, service.ImageTaskHistoryFilter{
@@ -290,6 +328,12 @@ func (h *AsyncImageHandler) Delete(c *gin.Context) {
 		imageTaskError(c, service.ErrImageTaskForbidden)
 		return
 	}
+	userRelease, admitted := h.openAI.admitControl(c)
+	if !admitted {
+		return
+	}
+	defer userRelease()
+
 	if err := h.tasks.Delete(c.Request.Context(), service.ImageTaskOwner{UserID: apiKey.UserID, APIKeyID: apiKey.ID}, c.Param("task_id")); err != nil {
 		imageTaskError(c, err)
 		return
@@ -300,7 +344,8 @@ func (h *AsyncImageHandler) Delete(c *gin.Context) {
 
 func (h *AsyncImageHandler) checkSecurityAuditBeforeSubmit(c *gin.Context, apiKey *service.APIKey, platform string, body []byte) bool {
 	if h == nil || h.openAI == nil {
-		return true
+		imageTaskJSONError(c, http.StatusServiceUnavailable, "api_error", "Gateway admission is unavailable")
+		return false
 	}
 	subject, ok := middleware2.GetAuthSubjectFromContext(c)
 	if !ok {
@@ -319,10 +364,6 @@ func (h *AsyncImageHandler) checkSecurityAuditBeforeSubmit(c *gin.Context, apiKe
 			return false
 		}
 		model, moderationBody = parsed.Model, parsed.ModerationBody()
-	}
-	if len(moderationBody) == 0 {
-		c.Set(securityAuditCompletedContextKey, true)
-		return true
 	}
 	reqLog := requestLogger(c, "handler.async_image.security_audit",
 		zap.Int64("user_id", subject.UserID), zap.Int64("api_key_id", apiKey.ID), zap.String("model", model))
@@ -348,11 +389,18 @@ func (h *AsyncImageHandler) Get(c *gin.Context) {
 		imageTaskError(c, service.ErrImageTaskForbidden)
 		return
 	}
+	userRelease, admitted := h.openAI.admitControl(c)
+	if !admitted {
+		return
+	}
+	defer userRelease()
+
 	task, err := h.tasks.Get(c.Request.Context(), service.ImageTaskOwner{UserID: apiKey.UserID, APIKeyID: apiKey.ID}, c.Param("task_id"))
 	if err != nil {
 		imageTaskError(c, err)
 		return
 	}
+	h.releaseFinishedTask(task.ID, c)
 	c.Header("Cache-Control", "no-store")
 	if task.Status == service.ImageTaskStatusProcessing {
 		c.Header("Retry-After", "3")
@@ -565,14 +613,52 @@ func (h *AsyncImageHandler) executeWithGateway(platform string, c *gin.Context) 
 
 func (h *AsyncImageHandler) run(taskID, platform string, taskCtx *gin.Context, recorder *httptest.ResponseRecorder, cancel context.CancelFunc, snapshot asyncImageOpsSnapshot) {
 	defer cancel()
+	var unfinished *service.GatewayTaskReservation
+	if value, exists := taskCtx.Get("gateway.unfinished_task_reservation"); exists {
+		unfinished, _ = value.(*service.GatewayTaskReservation)
+	}
+	executionStarted := false
 	defer func() {
+		// A worker rejected before execute cannot have created provider work.
+		// Once execution starts, local failure no longer proves termination.
+		if !executionStarted && unfinished != nil && h.openAI != nil {
+			h.openAI.releaseUnfinishedTask(unfinished, "worker_not_started")
+		}
+	}()
+	var releaseUser func()
+	defer func() {
+		defer func() {
+			if releaseUser != nil {
+				releaseUser()
+			}
+		}()
 		if recovered := recover(); recovered != nil {
 			logger.L().Error("image_task.execution_panicked", zap.String("task_id", taskID), zap.Any("panic", recovered))
 			h.failTask(taskID, http.StatusInternalServerError, imageTaskErrorPayload("api_error", "image generation task panicked"), taskCtx, snapshot)
 		}
 	}()
-
+	user, ok := middleware2.GetAuthSubjectFromContext(taskCtx)
+	if !ok || h.openAI == nil || h.openAI.concurrencyHelper == nil {
+		h.failTask(taskID, http.StatusServiceUnavailable, imageTaskErrorPayload("api_error", "Unable to confirm user concurrency admission"), taskCtx, snapshot)
+		return
+	}
+	var err error
+	releaseUser, err = h.openAI.concurrencyHelper.acquireWorkerUserSlotWithWait(taskCtx, user.UserID, user.Concurrency)
+	if err != nil {
+		h.failTask(taskID, http.StatusServiceUnavailable, imageTaskErrorPayload("api_error", "Unable to confirm user concurrency admission"), taskCtx, snapshot)
+		return
+	}
+	if unfinished != nil {
+		markCtx, cancelMark := context.WithTimeout(context.Background(), 5*time.Second)
+		markErr := h.openAI.unfinishedTasks.MarkUncertain(markCtx, unfinished, "worker_execution_inflight")
+		cancelMark()
+		if markErr != nil {
+			h.failTask(taskID, http.StatusServiceUnavailable, imageTaskErrorPayload("api_error", "Task capacity is unavailable"), taskCtx, snapshot)
+			return
+		}
+	}
 	taskCtx.Request = taskCtx.Request.WithContext(service.WithImageTaskResultDownloadScope(taskCtx.Request.Context()))
+	executionStarted = true
 	h.execute(platform, taskCtx)
 	body := bytes.TrimSpace(recorder.Body.Bytes())
 	if err := taskCtx.Request.Context().Err(); err != nil && len(body) == 0 {
@@ -588,8 +674,17 @@ func (h *AsyncImageHandler) run(taskID, platform string, taskCtx *gin.Context, r
 			h.failTask(taskID, http.StatusBadGateway, imageTaskErrorPayload("api_error", "upstream returned an invalid image response"), taskCtx, snapshot)
 			return
 		}
-		if err := h.tasks.Complete(context.WithoutCancel(taskCtx.Request.Context()), taskID, statusCode, json.RawMessage(body)); err != nil {
+		if !completedImageOutput(body) {
+			h.failTask(taskID, http.StatusBadGateway, imageTaskErrorPayload("api_error", "upstream returned no completed image output"), taskCtx, snapshot)
+			return
+		}
+		h.releaseProviderCompletedTask(taskID, taskCtx)
+		if err := h.tasks.Complete(service.ConcurrencyCapacityContext(taskCtx.Request.Context()), taskID, statusCode, json.RawMessage(body)); err != nil {
 			logger.L().Error("image_task.complete_store_failed", zap.String("task_id", taskID), zap.Error(err))
+			// Lost capacity must cancel the real download/upload. Persist the
+			// resulting local failure with an independent bounded context so a
+			// cancelled storage context cannot strand the task as processing.
+			h.failTask(taskID, http.StatusBadGateway, imageTaskErrorPayload("api_error", "failed to store generated image to object storage"), taskCtx, snapshot)
 			return
 		}
 		// Complete can intentionally turn a task into failed (for example when
@@ -602,7 +697,9 @@ func (h *AsyncImageHandler) run(taskID, platform string, taskCtx *gin.Context, r
 }
 
 func (h *AsyncImageHandler) failTask(taskID string, statusCode int, taskErr json.RawMessage, taskCtx *gin.Context, snapshot asyncImageOpsSnapshot) {
-	if err := h.tasks.Fail(context.Background(), taskID, statusCode, taskErr); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := h.tasks.Fail(ctx, taskID, statusCode, taskErr); err != nil {
 		logger.L().Error("image_task.failure_store_failed", zap.String("task_id", taskID), zap.Error(err))
 		return
 	}
@@ -856,7 +953,7 @@ func int64Pointer(value int64) *int64 { return &value }
 func int16Pointer(value int16) *int16 { return &value }
 
 func newAsyncImageContext(c *gin.Context, body []byte, timeoutDuration time.Duration) (*gin.Context, *httptest.ResponseRecorder, context.CancelFunc) {
-	base := context.WithoutCancel(c.Request.Context())
+	base := service.WithoutConcurrencyLeaseContext(c.Request.Context())
 	executionCtx, cancel := context.WithTimeout(base, timeoutDuration)
 	request := c.Request.Clone(executionCtx)
 	request.Body = io.NopCloser(bytes.NewReader(body))
@@ -925,4 +1022,53 @@ func imageTaskError(c *gin.Context, err error) {
 func imageTaskJSONError(c *gin.Context, status int, code, message string) {
 	c.Header("Cache-Control", "no-store")
 	c.JSON(status, gin.H{"error": gin.H{"type": code, "code": code, "message": message}})
+}
+
+func (h *AsyncImageHandler) releaseFinishedTask(taskID string, c *gin.Context) {
+	if h == nil || h.openAI == nil || h.tasks == nil || c == nil {
+		return
+	}
+	key, ok := middleware2.GetAPIKeyFromContext(c)
+	if !ok || key == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	task, err := h.tasks.Get(ctx, service.ImageTaskOwner{UserID: key.UserID, APIKeyID: key.ID}, taskID)
+	if err != nil || task == nil || task.Status != service.ImageTaskStatusCompleted || !completedImageOutput(task.Result) {
+		return
+	}
+	if err := h.openAI.unfinishedTasks.ReleaseTask(ctx, service.GatewayTaskOwner{UserID: key.UserID, APIKeyID: key.ID}, service.GatewayTaskKindAsyncImage, taskID, "task_completed"); err != nil {
+		logger.L().Error("image_task.capacity_release_failed", zap.String("task_id", taskID), zap.Error(err))
+	}
+}
+
+func completedImageOutput(body []byte) bool {
+	var response struct {
+		Data []struct {
+			URL    string `json:"url"`
+			Base64 string `json:"b64_json"`
+		} `json:"data"`
+	}
+	if json.Unmarshal(body, &response) != nil {
+		return false
+	}
+	for _, image := range response.Data {
+		if strings.TrimSpace(image.URL) != "" || strings.TrimSpace(image.Base64) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *AsyncImageHandler) releaseProviderCompletedTask(taskID string, c *gin.Context) {
+	key, ok := middleware2.GetAPIKeyFromContext(c)
+	if !ok || key == nil || h.openAI == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := h.openAI.unfinishedTasks.ReleaseTask(ctx, service.GatewayTaskOwner{UserID: key.UserID, APIKeyID: key.ID}, service.GatewayTaskKindAsyncImage, taskID, "provider_terminal"); err != nil {
+		logger.L().Error("image_task.provider_terminal_capacity_release_failed", zap.String("task_id", taskID), zap.Error(err))
+	}
 }

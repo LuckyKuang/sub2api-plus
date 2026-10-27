@@ -333,6 +333,39 @@ func (_u *PaymentOrderUpdate) SetNillablePlanName(v *string) *PaymentOrderUpdate
 	return _u
 }
 
+// SetPricingPolicyVersion sets the "pricing_policy_version" field.
+func (_u *PaymentOrderUpdate) SetPricingPolicyVersion(v int64) *PaymentOrderUpdate {
+	_u.mutation.ResetPricingPolicyVersion()
+	_u.mutation.SetPricingPolicyVersion(v)
+	return _u
+}
+
+// SetNillablePricingPolicyVersion sets the "pricing_policy_version" field if the given value is not nil.
+func (_u *PaymentOrderUpdate) SetNillablePricingPolicyVersion(v *int64) *PaymentOrderUpdate {
+	if v != nil {
+		_u.SetPricingPolicyVersion(*v)
+	}
+	return _u
+}
+
+// AddPricingPolicyVersion adds value to the "pricing_policy_version" field.
+func (_u *PaymentOrderUpdate) AddPricingPolicyVersion(v int64) *PaymentOrderUpdate {
+	_u.mutation.AddPricingPolicyVersion(v)
+	return _u
+}
+
+// SetPricingSummary sets the "pricing_summary" field.
+func (_u *PaymentOrderUpdate) SetPricingSummary(v map[string]interface{}) *PaymentOrderUpdate {
+	_u.mutation.SetPricingSummary(v)
+	return _u
+}
+
+// ClearPricingSummary clears the value of the "pricing_summary" field.
+func (_u *PaymentOrderUpdate) ClearPricingSummary() *PaymentOrderUpdate {
+	_u.mutation.ClearPricingSummary()
+	return _u
+}
+
 // SetRedeemCodeID sets the "redeem_code_id" field.
 func (_u *PaymentOrderUpdate) SetRedeemCodeID(v int64) *PaymentOrderUpdate {
 	_u.mutation.ResetRedeemCodeID()
@@ -1031,6 +1064,18 @@ func (_u *PaymentOrderUpdate) sqlSave(ctx context.Context) (_node int, err error
 	if value, ok := _u.mutation.PlanName(); ok {
 		_spec.SetField(paymentorder.FieldPlanName, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.PricingPolicyVersion(); ok {
+		_spec.SetField(paymentorder.FieldPricingPolicyVersion, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedPricingPolicyVersion(); ok {
+		_spec.AddField(paymentorder.FieldPricingPolicyVersion, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.PricingSummary(); ok {
+		_spec.SetField(paymentorder.FieldPricingSummary, field.TypeJSON, value)
+	}
+	if _u.mutation.PricingSummaryCleared() {
+		_spec.ClearField(paymentorder.FieldPricingSummary, field.TypeJSON)
+	}
 	if value, ok := _u.mutation.RedeemCodeID(); ok {
 		_spec.SetField(paymentorder.FieldRedeemCodeID, field.TypeInt64, value)
 	}
@@ -1522,6 +1567,39 @@ func (_u *PaymentOrderUpdateOne) SetNillablePlanName(v *string) *PaymentOrderUpd
 	if v != nil {
 		_u.SetPlanName(*v)
 	}
+	return _u
+}
+
+// SetPricingPolicyVersion sets the "pricing_policy_version" field.
+func (_u *PaymentOrderUpdateOne) SetPricingPolicyVersion(v int64) *PaymentOrderUpdateOne {
+	_u.mutation.ResetPricingPolicyVersion()
+	_u.mutation.SetPricingPolicyVersion(v)
+	return _u
+}
+
+// SetNillablePricingPolicyVersion sets the "pricing_policy_version" field if the given value is not nil.
+func (_u *PaymentOrderUpdateOne) SetNillablePricingPolicyVersion(v *int64) *PaymentOrderUpdateOne {
+	if v != nil {
+		_u.SetPricingPolicyVersion(*v)
+	}
+	return _u
+}
+
+// AddPricingPolicyVersion adds value to the "pricing_policy_version" field.
+func (_u *PaymentOrderUpdateOne) AddPricingPolicyVersion(v int64) *PaymentOrderUpdateOne {
+	_u.mutation.AddPricingPolicyVersion(v)
+	return _u
+}
+
+// SetPricingSummary sets the "pricing_summary" field.
+func (_u *PaymentOrderUpdateOne) SetPricingSummary(v map[string]interface{}) *PaymentOrderUpdateOne {
+	_u.mutation.SetPricingSummary(v)
+	return _u
+}
+
+// ClearPricingSummary clears the value of the "pricing_summary" field.
+func (_u *PaymentOrderUpdateOne) ClearPricingSummary() *PaymentOrderUpdateOne {
+	_u.mutation.ClearPricingSummary()
 	return _u
 }
 
@@ -2252,6 +2330,18 @@ func (_u *PaymentOrderUpdateOne) sqlSave(ctx context.Context) (_node *PaymentOrd
 	}
 	if value, ok := _u.mutation.PlanName(); ok {
 		_spec.SetField(paymentorder.FieldPlanName, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.PricingPolicyVersion(); ok {
+		_spec.SetField(paymentorder.FieldPricingPolicyVersion, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedPricingPolicyVersion(); ok {
+		_spec.AddField(paymentorder.FieldPricingPolicyVersion, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.PricingSummary(); ok {
+		_spec.SetField(paymentorder.FieldPricingSummary, field.TypeJSON, value)
+	}
+	if _u.mutation.PricingSummaryCleared() {
+		_spec.ClearField(paymentorder.FieldPricingSummary, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.RedeemCodeID(); ok {
 		_spec.SetField(paymentorder.FieldRedeemCodeID, field.TypeInt64, value)

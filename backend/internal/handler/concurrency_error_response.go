@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+
+	"github.com/LuckyKuang/sub2api-plus/internal/service"
 )
 
 const statusClientClosedRequest = 499
@@ -15,6 +17,10 @@ const (
 )
 
 func concurrencyErrorResponse(err error, slotType string) (int, string, string, string) {
+	if errors.Is(err, service.ErrUserRPMExceeded) || errors.Is(err, service.ErrGroupRPMExceeded) {
+		status, code, message, _ := billingErrorDetails(err)
+		return status, "rate_limit_error", code, message
+	}
 	var waitQueueFullErr *WaitQueueFullError
 	if errors.As(err, &waitQueueFullErr) {
 		return http.StatusTooManyRequests, "rate_limit_error", gatewayQueueFullCode,

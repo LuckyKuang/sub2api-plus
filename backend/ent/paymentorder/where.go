@@ -145,6 +145,11 @@ func PlanName(v string) predicate.PaymentOrder {
 	return predicate.PaymentOrder(sql.FieldEQ(FieldPlanName, v))
 }
 
+// PricingPolicyVersion applies equality check predicate on the "pricing_policy_version" field. It's identical to PricingPolicyVersionEQ.
+func PricingPolicyVersion(v int64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldEQ(FieldPricingPolicyVersion, v))
+}
+
 // RedeemCodeID applies equality check predicate on the "redeem_code_id" field. It's identical to RedeemCodeIDEQ.
 func RedeemCodeID(v int64) predicate.PaymentOrder {
 	return predicate.PaymentOrder(sql.FieldEQ(FieldRedeemCodeID, v))
@@ -1333,6 +1338,56 @@ func PlanNameEqualFold(v string) predicate.PaymentOrder {
 // PlanNameContainsFold applies the ContainsFold predicate on the "plan_name" field.
 func PlanNameContainsFold(v string) predicate.PaymentOrder {
 	return predicate.PaymentOrder(sql.FieldContainsFold(FieldPlanName, v))
+}
+
+// PricingPolicyVersionEQ applies the EQ predicate on the "pricing_policy_version" field.
+func PricingPolicyVersionEQ(v int64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldEQ(FieldPricingPolicyVersion, v))
+}
+
+// PricingPolicyVersionNEQ applies the NEQ predicate on the "pricing_policy_version" field.
+func PricingPolicyVersionNEQ(v int64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldNEQ(FieldPricingPolicyVersion, v))
+}
+
+// PricingPolicyVersionIn applies the In predicate on the "pricing_policy_version" field.
+func PricingPolicyVersionIn(vs ...int64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldIn(FieldPricingPolicyVersion, vs...))
+}
+
+// PricingPolicyVersionNotIn applies the NotIn predicate on the "pricing_policy_version" field.
+func PricingPolicyVersionNotIn(vs ...int64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldNotIn(FieldPricingPolicyVersion, vs...))
+}
+
+// PricingPolicyVersionGT applies the GT predicate on the "pricing_policy_version" field.
+func PricingPolicyVersionGT(v int64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldGT(FieldPricingPolicyVersion, v))
+}
+
+// PricingPolicyVersionGTE applies the GTE predicate on the "pricing_policy_version" field.
+func PricingPolicyVersionGTE(v int64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldGTE(FieldPricingPolicyVersion, v))
+}
+
+// PricingPolicyVersionLT applies the LT predicate on the "pricing_policy_version" field.
+func PricingPolicyVersionLT(v int64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldLT(FieldPricingPolicyVersion, v))
+}
+
+// PricingPolicyVersionLTE applies the LTE predicate on the "pricing_policy_version" field.
+func PricingPolicyVersionLTE(v int64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldLTE(FieldPricingPolicyVersion, v))
+}
+
+// PricingSummaryIsNil applies the IsNil predicate on the "pricing_summary" field.
+func PricingSummaryIsNil() predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldIsNull(FieldPricingSummary))
+}
+
+// PricingSummaryNotNil applies the NotNil predicate on the "pricing_summary" field.
+func PricingSummaryNotNil() predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldNotNull(FieldPricingSummary))
 }
 
 // RedeemCodeIDEQ applies the EQ predicate on the "redeem_code_id" field.

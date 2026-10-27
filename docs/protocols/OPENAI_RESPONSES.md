@@ -62,7 +62,12 @@ Responses WS refreshes the same API key's group pricing on later turns through
 the existing authentication cache. A valid snapshot must retain the same key,
 group, platform and subscription type; lookup failure or an ownership/type
 change retains the connection's billing group. User/key limits and subscription
-eligibility keep the Plus per-turn checks. Each turn's profit admission and
+eligibility keep the Plus per-turn checks. Same-key, same-user global RPM is
+refreshed even if the key moved groups or has no group. An incompatible group
+cannot supply its override to the connection's retained billing group; that
+group's own override is queried. Each external turn counts once under the
+[shared request-admission policy](../GATEWAY_ADMISSION.md).
+Each turn's profit admission and
 settlement share its frozen pricing time and billing-group snapshot. The current
 and previous turn retain separate snapshots so deferred settlement cannot use
 the next turn's price. Every refresh follows that turn's ingress audit, before
@@ -182,6 +187,27 @@ authentication headers or obtaining a token. The WebSocket dial uses the frozen
 route. A broken binding cannot initiate a dial or alter the supplied call record,
 including its lease and encrypted attestation fields. Explicit unbinding ignores
 a residual hydrated proxy association here as well.
+
+Creation also requires an enabled WS control transport for the selected
+credential owner. A successful provider creation is never replayed because its
+SDP answer cannot be read or its mapping cannot be saved. The gateway instead
+attempts to close the known call with the original grant, identity and proxy,
+retaining capacity while closure is unconfirmed. A success response without a
+usable call location cannot be closed by ID; its capacity reservation has the
+same bounded lifetime and emits an explicit unconfirmed-closure reason.
+See [Live creation compensation](../COMPOSITE_GROUPS.md#user-concurrency-across-suppliers-and-agent-requests)
+for recovery bounds and limitations. Sideband reconnects enter security audit
+and user/group RPM before mapping lookup or controller takeover, reuse the
+existing Live execution lease, and retain per-frame content audit.
+
+Live sessions share the user's execution capacity with HTTP requests, Responses
+WS turns and other gateway operations across keys and instances. A missing Live
+lease owner or a renewal-backend error makes both the client controller and
+observer send the existing `session.close` instruction with a two-second write
+bound, then close the sideband socket. Socket closure still runs when that write
+fails. The real-socket regression is
+`TestLiveConcurrencyLeaseLossStopsActualProviderSessionAndSocket`; it does not
+prove availability or permissions for a real platform account.
 
 These checks preserve the Codex identity order: valid credential-owning account
 `credentials.user_agent`, then valid global `openai_codex_user_agent`, then the
@@ -505,9 +531,13 @@ to schedule:
   then top-level `headers` on WebSocket metadata events; `response.model` is
   a Plus fallback when neither header is present. For Codex-protocol
   accounts a server-declared model that differs from the baseline billing
-  model and has identified pricing corrects the recorded billing model; the
-  downstream response body is never rewritten. The `x-openai-model` spelling is
-  accepted as well.
+  model and has identified pricing corrects the recorded billing model when
+  no accepted public model price owns that request. Explicit public token,
+  per-request and free cards retain their selling price and factors; upstream
+  model observations remain recorded. Explicit upstream/response-model billing
+  sources, actual channel mappings and accepted legacy price selection retain
+  their existing correction behavior. The downstream response body is never
+  rewritten. The `x-openai-model` spelling is accepted as well.
 - `x-models-etag` marks the upstream model-catalog revision and is recorded
   as a structured log signal for the future pinned-models integration.
 - The `codex_rollout_budget_units` declaration in `response.completed` usage
@@ -833,6 +863,13 @@ unavailable lease backend closes the upgraded socket with code `1013` (try again
 later); clients should reconnect with backoff. Audit rejection retains its own
 error frame and close status and never consumes a connection lease.
 
+Each active turn independently enters the shared user execution pool after its
+ingress audit and reads the current server-side user limit. A stale handshake
+limit or a main/subagent header cannot enlarge capacity; idle connections keep
+only the separate connection guard. Losing an active turn's execution lease
+cancels its actual provider socket, independently from the ingress connection
+lease. See [global user concurrency](../COMPOSITE_GROUPS.md#user-concurrency-across-suppliers-and-agent-requests).
+
 Large contexts or slow image-heavy requests may require a higher first-message
 timeout. The timeout expires before HTTP bridge routing and is not overridden
 by bridge mode.
@@ -901,6 +938,14 @@ existing billable `service_tier` and cost calculations remain unchanged and are
 not used to infer either diagnostic value. A `default` response alone does not
 prove that Fast was disabled, especially through Codex OAuth or compatible
 providers with their own reporting behavior.
+
+Anthropic Messages conversion applies the same OpenAI Fast policy whether the
+selected OpenAI account uses Responses or Chat Completions. The exact
+`anthropic-beta` Fast token requests priority; trusted group force applies
+before global pass/filter/block/missing-tier rules. A blocked request returns
+before an upstream write. Usage records capture the final converted tier and
+settlement uses the accepted retail Free Fast setting. Native Anthropic
+forwarding and other target platforms retain their own protocol behavior.
 
 Usage tier fields are administrator-only API data. User usage responses omit
 `service_tier`, `requested_service_tier` and `response_service_tier`; user usage

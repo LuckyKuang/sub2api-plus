@@ -1045,7 +1045,9 @@ func (s *GeminiCachedContentService) doUpstream(ctx context.Context, account *Ac
 		return nil, geminiCachedContentNotSent(errors.New("gemini upstream client not configured"))
 	}
 	ctx = WithAccountOutboundIdentity(ctx, account)
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
+	upstreamCtx, releaseUpstream := detachUpstreamContext(ctx)
+	defer releaseUpstream()
+	ctx, cancel := context.WithTimeout(upstreamCtx, timeout)
 	defer cancel()
 	var reader io.Reader
 	if body != nil {
@@ -1189,9 +1191,13 @@ func geminiCachedContentVertexHost(location string) string {
 
 // GeminiCachedContentView 返回客户端可见的缓存元数据。
 func GeminiCachedContentView(record *GeminiCachedContent) map[string]any {
+	model := record.Model
+	if publicModel := strings.TrimSpace(record.ChannelUsage.OriginalModel); publicModel != "" {
+		model = publicModel
+	}
 	view := map[string]any{
 		"name":          record.PublicName(),
-		"model":         "models/" + record.Model,
+		"model":         "models/" + model,
 		"usageMetadata": map[string]any{"totalTokenCount": record.TotalTokenCount},
 		"createTime":    record.CreatedAt.UTC().Format(time.RFC3339Nano),
 		"updateTime":    record.UpdatedAt.UTC().Format(time.RFC3339Nano),

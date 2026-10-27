@@ -16,6 +16,16 @@ records. Scenario definitions are not evidence of a passing run. The owning
 matrix records the final container execution result; this README does not
 establish a passing result.
 
+A separate fifteenth scenario, `composite billing: real browser edits and stale
+policy conflict`, covers group configuration only. It creates a disposable
+Composite group through the real admin API, edits platform/model factors through
+the browser, verifies persisted zero/model rates and version increments, and
+checks that a concurrent real API writer causes HTTP 409 while preserving the
+browser draft. It does not establish inference, payment, account availability or
+seven-provider authorization coverage. The runner requires this scenario
+separately from the unchanged 14-case provider management manifest; focused
+execution uses `--grep 'composite'` for billing policy and API Key rate disclosure.
+
 | Existing management requirement | Independent acceptance observation in every applicable case |
 | --- | --- |
 | Administrator authentication | Browser submits the real login form and receives an actual server token. |

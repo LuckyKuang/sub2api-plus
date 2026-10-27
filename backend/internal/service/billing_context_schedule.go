@@ -124,13 +124,30 @@ func (s *BillingService) ResolveContextPricingSchedule(ctx context.Context, reso
 		r.Tokens = tokens
 		return s.CalculateTokenCostForRequest(r)
 	}
+	// Output probes carry a fixed input solely to select their context tier.
+	// That placeholder is canceled by the difference quotient and cannot
+	// establish a real input selling price, or hide a known output price when
+	// the saved card has no input price. Keep this evidence local to the probe.
+	outputResolved := *resolved
+	if resolved.channelPricing != nil {
+		card := resolved.channelPricing.Clone()
+		placeholderPrice := 0.0
+		card.InputPrice = &placeholderPrice
+		outputResolved.channelPricing = &card
+	}
+	outputProbe := func(tokens UsageTokens) (*CostBreakdown, error) {
+		r := req
+		r.Tokens = tokens
+		r.Resolved = &outputResolved
+		return s.CalculateTokenCostForRequest(r)
+	}
 
 	plan := s.contextPricingBreakpoints(resolver, resolved, in.Model)
 	segments := buildContextSegments(plan.bounds)
 
 	tiers := make([]ContextPricingTier, 0, len(segments))
 	for _, seg := range segments {
-		tier, err := probeContextTier(seg, resolved, probe)
+		tier, err := probeContextTier(seg, resolved, probe, outputProbe)
 		if err != nil {
 			return nil, err
 		}
@@ -278,7 +295,7 @@ func buildContextSegments(bounds []int) []contextSegment {
 // 每次只喂一种 token，ActualCost 即该项费用；旧边际规则的加倍只体现在 ActualCost
 // 而不在分项费用里，因此统一读 ActualCost。整单阶梯与边际规则在同一段内都是
 // 线性函数，差商同时适用，无需区分规则类型。
-func probeContextTier(seg contextSegment, resolved *ResolvedPricing, probe func(UsageTokens) (*CostBreakdown, error)) (ContextPricingTier, error) {
+func probeContextTier(seg contextSegment, resolved *ResolvedPricing, probe, outputProbe func(UsageTokens) (*CostBreakdown, error)) (ContextPricingTier, error) {
 	tier := ContextPricingTier{MinTokens: seg.min, MaxTokens: seg.max}
 	c := seg.min + 1
 	delta := contextProbeDelta
@@ -306,7 +323,7 @@ func probeContextTier(seg contextSegment, resolved *ResolvedPricing, probe func(
 	if err != nil {
 		return tier, err
 	}
-	tier.Output, err = probeComponentPrice(func(n int) UsageTokens { return UsageTokens{InputTokens: c, OutputTokens: n} }, 0, contextProbeDelta, probe)
+	tier.Output, err = probeComponentPrice(func(n int) UsageTokens { return UsageTokens{InputTokens: c, OutputTokens: n} }, 0, contextProbeDelta, outputProbe)
 	if err != nil {
 		return tier, err
 	}
@@ -328,6 +345,9 @@ func probeComponentPrice(tokensAt func(int) UsageTokens, from, delta int, probe 
 			n = 1
 		}
 		cost, err := probe(tokensAt(n))
+		if isMissingTokenPriceError(err) {
+			return nil, nil
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -335,10 +355,16 @@ func probeComponentPrice(tokensAt func(int) UsageTokens, from, delta int, probe 
 		return &v, nil
 	}
 	lo, err := probe(tokensAt(from))
+	if isMissingTokenPriceError(err) {
+		return nil, nil
+	}
 	if err != nil {
 		return nil, err
 	}
 	hi, err := probe(tokensAt(from + delta))
+	if isMissingTokenPriceError(err) {
+		return nil, nil
+	}
 	if err != nil {
 		return nil, err
 	}

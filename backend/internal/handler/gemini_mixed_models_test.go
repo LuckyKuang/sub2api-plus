@@ -46,6 +46,7 @@ func TestGeminiNativeModelsUsesAccountMappings(t *testing.T) {
 			if tt.forced {
 				c.Set(string(middleware.ContextKeyForcePlatform), service.PlatformAntigravity)
 			}
+			prepareGatewayMetadataTest(h, c)
 			h.GeminiV1BetaListModels(c)
 			require.Equal(t, tt.status, rec.Code, rec.Body.String())
 			if tt.status != 200 {
@@ -119,6 +120,7 @@ func TestGeminiNativeModelsMergesNativeUpstream(t *testing.T) {
 			c, _ := gin.CreateTestContext(rec)
 			c.Request = httptest.NewRequest(http.MethodGet, "/v1beta/models", nil)
 			c.Set(string(middleware.ContextKeyAPIKey), &service.APIKey{GroupID: &id, Group: &service.Group{ID: id, Platform: service.PlatformGemini}})
+			prepareGatewayMetadataTest(h, c)
 			h.GeminiV1BetaListModels(c)
 			if tt.status == 429 {
 				require.Equal(t, 429, rec.Code)

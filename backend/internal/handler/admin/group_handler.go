@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/LuckyKuang/sub2api-plus/internal/domain"
 	"log/slog"
 	"strconv"
 	"strings"
@@ -220,6 +221,7 @@ type CreateGroupRequest struct {
 	QuotaResetIncludeMonthly  bool                          `json:"quota_reset_include_monthly"`
 	LongContextPricingEnabled *bool                         `json:"long_context_pricing_enabled"`
 	ModelPricing              []service.ChannelModelPricing `json:"model_pricing"`
+	BillingRatePolicy         domain.BillingRatePolicy      `json:"billing_rate_policy"`
 	// 图片生成计费配置（antigravity 和 gemini 平台使用，负数表示清除配置）
 	AllowImageGeneration            bool                          `json:"allow_image_generation"`
 	AllowBatchImageGeneration       bool                          `json:"allow_batch_image_generation"`
@@ -283,22 +285,24 @@ type CreateGroupRequest struct {
 
 // UpdateGroupRequest represents update group request
 type UpdateGroupRequest struct {
-	Name                      string                         `json:"name"`
-	Description               *string                        `json:"description"`
-	I18n                      *service.GroupI18n             `json:"i18n"` // 缺省不修改，传入则整体替换
-	Platform                  string                         `json:"platform" binding:"omitempty,group_platform"`
-	RateMultiplier            *float64                       `json:"rate_multiplier"`
-	IsExclusive               *bool                          `json:"is_exclusive"`
-	Status                    string                         `json:"status" binding:"omitempty,oneof=active inactive"`
-	SubscriptionType          string                         `json:"subscription_type" binding:"omitempty,oneof=standard subscription"`
-	DailyLimitUSD             optionalLimitField             `json:"daily_limit_usd"`
-	WeeklyLimitUSD            optionalLimitField             `json:"weekly_limit_usd"`
-	MonthlyLimitUSD           optionalLimitField             `json:"monthly_limit_usd"`
-	FiveHourLimitUSD          optionalLimitField             `json:"five_hour_limit_usd"`
-	QuotaResetSourceAccountID optionalInt64Field             `json:"quota_reset_source_account_id"`
-	QuotaResetIncludeMonthly  *bool                          `json:"quota_reset_include_monthly"`
-	LongContextPricingEnabled *bool                          `json:"long_context_pricing_enabled"`
-	ModelPricing              *[]service.ChannelModelPricing `json:"model_pricing"`
+	Name                         string                         `json:"name"`
+	Description                  *string                        `json:"description"`
+	I18n                         *service.GroupI18n             `json:"i18n"` // 缺省不修改，传入则整体替换
+	Platform                     string                         `json:"platform" binding:"omitempty,group_platform"`
+	RateMultiplier               *float64                       `json:"rate_multiplier"`
+	IsExclusive                  *bool                          `json:"is_exclusive"`
+	Status                       string                         `json:"status" binding:"omitempty,oneof=active inactive"`
+	SubscriptionType             string                         `json:"subscription_type" binding:"omitempty,oneof=standard subscription"`
+	DailyLimitUSD                optionalLimitField             `json:"daily_limit_usd"`
+	WeeklyLimitUSD               optionalLimitField             `json:"weekly_limit_usd"`
+	MonthlyLimitUSD              optionalLimitField             `json:"monthly_limit_usd"`
+	FiveHourLimitUSD             optionalLimitField             `json:"five_hour_limit_usd"`
+	QuotaResetSourceAccountID    optionalInt64Field             `json:"quota_reset_source_account_id"`
+	QuotaResetIncludeMonthly     *bool                          `json:"quota_reset_include_monthly"`
+	LongContextPricingEnabled    *bool                          `json:"long_context_pricing_enabled"`
+	ModelPricing                 *[]service.ChannelModelPricing `json:"model_pricing"`
+	BillingRatePolicy            *domain.BillingRatePolicy      `json:"billing_rate_policy"`
+	ExpectedBillingPolicyVersion *int64                         `json:"expected_billing_policy_version"`
 	// 图片生成计费配置（antigravity 和 gemini 平台使用，负数表示清除配置）
 	AllowImageGeneration            *bool                         `json:"allow_image_generation"`
 	AllowBatchImageGeneration       *bool                         `json:"allow_batch_image_generation"`
@@ -708,6 +712,7 @@ func (h *GroupHandler) Create(c *gin.Context) {
 		QuotaResetIncludeMonthly:        req.QuotaResetIncludeMonthly,
 		LongContextPricingEnabled:       req.LongContextPricingEnabled,
 		ModelPricing:                    req.ModelPricing,
+		BillingRatePolicy:               req.BillingRatePolicy,
 		AllowImageGeneration:            req.AllowImageGeneration,
 		AllowBatchImageGeneration:       req.AllowBatchImageGeneration,
 		ImageRateIndependent:            req.ImageRateIndependent,
@@ -856,9 +861,11 @@ func (h *GroupHandler) Update(c *gin.Context) {
 		FiveHourLimitUSD:                req.FiveHourLimitUSD.ToServiceInput(),
 		QuotaResetSourceAccountID:       req.QuotaResetSourceAccountID.value,
 		QuotaResetSourceAccountIDSet:    req.QuotaResetSourceAccountID.set,
+		ExpectedBillingPolicyVersion:    req.ExpectedBillingPolicyVersion,
 		QuotaResetIncludeMonthly:        req.QuotaResetIncludeMonthly,
 		LongContextPricingEnabled:       req.LongContextPricingEnabled,
 		ModelPricing:                    req.ModelPricing,
+		BillingRatePolicy:               req.BillingRatePolicy,
 		AllowImageGeneration:            req.AllowImageGeneration,
 		AllowBatchImageGeneration:       req.AllowBatchImageGeneration,
 		ImageRateIndependent:            req.ImageRateIndependent,

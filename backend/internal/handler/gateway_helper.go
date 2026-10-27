@@ -3,9 +3,11 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand/v2"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -119,7 +121,7 @@ func claudeCodeBodyMapFromParsedRequest(parsedReq *service.ParsedRequest) map[st
 // 3. 减少 Redis 压力，避免惊群效应
 const (
 	// maxConcurrencyWait 等待并发槽位的最大时间
-	maxConcurrencyWait = 30 * time.Second
+	maxConcurrencyWait = service.WorkerUserConcurrencyWaitTimeout
 	// defaultPingInterval 流式响应等待时发送 ping 的默认间隔
 	defaultPingInterval = 10 * time.Second
 	// initialBackoff 初始退避时间
@@ -165,9 +167,18 @@ func (e *WaitQueueFullError) Error() string {
 
 // ConcurrencyHelper provides common concurrency slot management for gateway handlers
 type ConcurrencyHelper struct {
-	concurrencyService *service.ConcurrencyService
-	pingFormat         SSEPingFormat
-	pingInterval       time.Duration
+	concurrencyService  *service.ConcurrencyService
+	billingCacheService *service.BillingCacheService
+	pingFormat          SSEPingFormat
+	pingInterval        time.Duration
+}
+
+// WithRPMAdmission binds the gateway's existing user/group policy to all Gin
+// admission paths, including content-free controls. Internal rechecks share the
+// process-owned request scope; no API-key RPM counter is introduced.
+func (h *ConcurrencyHelper) WithRPMAdmission(billing *service.BillingCacheService) *ConcurrencyHelper {
+	h.billingCacheService = billing
+	return h
 }
 
 // NewConcurrencyHelper creates a new ConcurrencyHelper
@@ -193,7 +204,10 @@ func wrapReleaseOnDone(ctx context.Context, releaseFunc func()) func() {
 	releaseOnce := func() {
 		once.Do(releaseFunc)
 	}
-	stop := context.AfterFunc(ctx, releaseOnce)
+	// Detached upstream draining can continue after a client disconnect. Keep
+	// counting that execution until Forward returns, unless capacity itself is
+	// lost; its separate cancellation domain also stops the upstream operation.
+	stop := context.AfterFunc(service.ConcurrencyCapacityContext(ctx), releaseOnce)
 
 	return func() {
 		_ = stop()
@@ -222,8 +236,13 @@ func (h *ConcurrencyHelper) DecrementAccountWaitCount(ctx context.Context, accou
 }
 
 // TryAcquireUserSlot 尝试立即获取用户并发槽位。
+// Callers without Gin must install WithConcurrencyLeaseContext on execution
+// before calling; this API returns only release/capacity, not a replacement ctx.
 // 返回值: (releaseFunc, acquired, error)
 func (h *ConcurrencyHelper) TryAcquireUserSlot(ctx context.Context, userID int64, maxConcurrency int) (func(), bool, error) {
+	if h == nil || h.concurrencyService == nil {
+		return nil, false, fmt.Errorf("concurrency service is unavailable")
+	}
 	result, err := h.concurrencyService.AcquireUserSlot(ctx, userID, maxConcurrency)
 	if err != nil {
 		return nil, false, err
@@ -254,6 +273,9 @@ func (h *ConcurrencyHelper) AcquireOpenAIWSIngressLease(ctx context.Context, api
 // TryAcquireAccountSlot 尝试立即获取账号并发槽位。
 // 返回值: (releaseFunc, acquired, error)
 func (h *ConcurrencyHelper) TryAcquireAccountSlot(ctx context.Context, accountID int64, maxConcurrency int) (func(), bool, error) {
+	if h == nil || h.concurrencyService == nil {
+		return nil, false, fmt.Errorf("concurrency service is unavailable")
+	}
 	result, err := h.concurrencyService.AcquireAccountSlot(ctx, accountID, maxConcurrency)
 	if err != nil {
 		return nil, false, err
@@ -264,15 +286,25 @@ func (h *ConcurrencyHelper) TryAcquireAccountSlot(ctx context.Context, accountID
 	return result.ReleaseFunc, true, nil
 }
 
-// AcquireUserSlotWithWait acquires a user concurrency slot, waiting if necessary.
-// For streaming requests, sends ping events during the wait.
-// streamStarted is updated if streaming response has begun.
-func (h *ConcurrencyHelper) AcquireUserSlotWithWait(c *gin.Context, userID int64, maxConcurrency int, isStream bool, streamStarted *bool) (func(), error) {
-	return h.acquireUserSlotWithWaitTimeout(c, userID, maxConcurrency, maxConcurrencyWait, isStream, streamStarted)
+// installConcurrencyExecutionContext shares one lease cancellation domain with
+// every Gin user/account acquisition and the upstream operation that follows.
+func installConcurrencyExecutionContext(c *gin.Context) (context.Context, error) {
+	if c == nil || c.Request == nil {
+		return nil, fmt.Errorf("request context is unavailable")
+	}
+	ctx, _ := service.WithConcurrencyLeaseContext(service.WithRPMAdmissionScope(c.Request.Context()))
+	c.Request = c.Request.WithContext(ctx)
+	return ctx, nil
 }
 
-func (h *ConcurrencyHelper) acquireUserSlotWithWaitTimeout(c *gin.Context, userID int64, maxConcurrency int, timeout time.Duration, isStream bool, streamStarted *bool) (func(), error) {
-	ctx := c.Request.Context()
+// AcquireUserSlot admits one external execution immediately. A full user is
+// rejected before queue accounting, account selection, or streaming writes.
+// Durable workers use their separate bounded wait during ownership handoff.
+func (h *ConcurrencyHelper) AcquireUserSlot(c *gin.Context, userID int64, maxConcurrency int) (func(), error) {
+	ctx, contextErr := installConcurrencyExecutionContext(c)
+	if contextErr != nil {
+		return nil, contextErr
+	}
 
 	// Try to acquire immediately
 	releaseFunc, acquired, err := h.TryAcquireUserSlot(ctx, userID, maxConcurrency)
@@ -281,28 +313,26 @@ func (h *ConcurrencyHelper) acquireUserSlotWithWaitTimeout(c *gin.Context, userI
 	}
 
 	if acquired {
+		if key, ok := middleware2.GetAPIKeyFromContext(c); ok && key != nil {
+			if err := h.billingCacheService.CheckRequestRPM(ctx, key.User, key.Group); err != nil {
+				if releaseFunc != nil {
+					releaseFunc()
+				}
+				setRPMRetryAfter(c, err)
+				return nil, err
+			}
+		}
 		return h.withAPIKeySlotFromGin(c, releaseFunc), nil
 	}
 
-	queueLimit := service.CalculateMaxWait(maxConcurrency) - maxConcurrency
-	if queueLimit < 1 {
-		queueLimit = 1
-	}
-	canWait, err := h.IncrementWaitCount(ctx, userID, queueLimit)
-	if err != nil {
-		return nil, err
-	}
-	if !canWait {
-		return nil, &WaitQueueFullError{SlotType: "user"}
-	}
-	defer h.DecrementWaitCount(ctx, userID)
+	return nil, &ConcurrencyError{SlotType: "user"}
+}
 
-	// Need to wait - handle streaming ping if needed
-	releaseFunc, err = h.waitForSlotWithPingTimeout(c, "user", userID, maxConcurrency, timeout, isStream, streamStarted, false)
-	if err != nil {
-		return nil, err
+func setRPMRetryAfter(c *gin.Context, err error) {
+	if errors.Is(err, service.ErrUserRPMExceeded) || errors.Is(err, service.ErrGroupRPMExceeded) {
+		_, _, _, retry := billingErrorDetails(err)
+		c.Header("Retry-After", strconv.Itoa(retry))
 	}
-	return h.withAPIKeySlotFromGin(c, releaseFunc), nil
 }
 
 func (h *ConcurrencyHelper) withAPIKeySlotFromGin(c *gin.Context, releaseFunc func()) func() {
@@ -321,62 +351,35 @@ func (h *ConcurrencyHelper) withAPIKeySlot(ctx context.Context, apiKeyID int64, 
 		return releaseFunc
 	}
 	apiKeyReleaseFunc := h.concurrencyService.TrackAPIKeySlot(ctx, apiKeyID)
+	var once sync.Once
 	return func() {
-		if releaseFunc != nil {
-			releaseFunc()
-		}
-		if apiKeyReleaseFunc != nil {
-			apiKeyReleaseFunc()
-		}
+		once.Do(func() {
+			if releaseFunc != nil {
+				releaseFunc()
+			}
+			if apiKeyReleaseFunc != nil {
+				apiKeyReleaseFunc()
+			}
+		})
 	}
-}
-
-// AcquireAccountSlotWithWait acquires an account concurrency slot, waiting if necessary.
-// For streaming requests, sends ping events during the wait.
-// streamStarted is updated if streaming response has begun.
-func (h *ConcurrencyHelper) AcquireAccountSlotWithWait(c *gin.Context, accountID int64, maxConcurrency int, isStream bool, streamStarted *bool) (func(), error) {
-	ctx := c.Request.Context()
-
-	// Try to acquire immediately
-	releaseFunc, acquired, err := h.TryAcquireAccountSlot(ctx, accountID, maxConcurrency)
-	if err != nil {
-		return nil, err
-	}
-
-	if acquired {
-		return releaseFunc, nil
-	}
-
-	// Need to wait - handle streaming ping if needed
-	return h.waitForSlotWithPing(c, "account", accountID, maxConcurrency, isStream, streamStarted)
-}
-
-// waitForSlotWithPing waits for a concurrency slot, sending ping events for streaming requests.
-// streamStarted pointer is updated when streaming begins (for proper error handling by caller).
-func (h *ConcurrencyHelper) waitForSlotWithPing(c *gin.Context, slotType string, id int64, maxConcurrency int, isStream bool, streamStarted *bool) (func(), error) {
-	return h.waitForSlotWithPingTimeout(c, slotType, id, maxConcurrency, maxConcurrencyWait, isStream, streamStarted, false)
 }
 
 // waitForSlotWithPingTimeout waits for a concurrency slot with a custom timeout.
-func (h *ConcurrencyHelper) waitForSlotWithPingTimeout(c *gin.Context, slotType string, id int64, maxConcurrency int, timeout time.Duration, isStream bool, streamStarted *bool, tryImmediate bool) (func(), error) {
-	ctx, cancel := context.WithTimeout(c.Request.Context(), timeout)
+func (h *ConcurrencyHelper) waitForSlotWithPingTimeout(c *gin.Context, slotType string, id int64, maxConcurrency int, timeout time.Duration, isStream bool, streamStarted *bool) (func(), error) {
+	if h == nil || h.concurrencyService == nil {
+		return nil, fmt.Errorf("concurrency service is unavailable")
+	}
+	executionCtx, contextErr := installConcurrencyExecutionContext(c)
+	if contextErr != nil {
+		return nil, contextErr
+	}
+	// The wait deadline bounds queueing only. Renewal and upstream execution must
+	// outlive this function's deferred cancel after a queued slot is acquired.
+	ctx, cancel := context.WithTimeout(executionCtx, timeout)
 	defer cancel()
 
 	acquireSlot := func() (*service.AcquireResult, error) {
-		if slotType == "user" {
-			return h.concurrencyService.AcquireUserSlot(ctx, id, maxConcurrency)
-		}
-		return h.concurrencyService.AcquireAccountSlot(ctx, id, maxConcurrency)
-	}
-
-	if tryImmediate {
-		result, err := acquireSlot()
-		if err != nil {
-			return nil, err
-		}
-		if result.Acquired {
-			return result.ReleaseFunc, nil
-		}
+		return h.concurrencyService.AcquireAccountSlot(executionCtx, id, maxConcurrency)
 	}
 
 	// Determine if ping is needed (streaming + ping format defined)
@@ -431,6 +434,12 @@ func (h *ConcurrencyHelper) waitForSlotWithPingTimeout(c *gin.Context, slotType 
 			flusher.Flush()
 
 		case <-timer.C:
+			if err := ctx.Err(); err != nil {
+				if parentErr := executionCtx.Err(); parentErr != nil {
+					return nil, parentErr
+				}
+				return nil, &ConcurrencyError{SlotType: slotType, IsTimeout: true}
+			}
 			// Try to acquire slot
 			result, err := acquireSlot()
 			if err != nil {
@@ -438,6 +447,16 @@ func (h *ConcurrencyHelper) waitForSlotWithPingTimeout(c *gin.Context, slotType 
 			}
 
 			if result.Acquired {
+				// Acquisition has its own bounded transport operation. A success
+				// arriving after the queue deadline cannot authorize execution.
+				// Return that exact owner without binding renewal to the queue ctx.
+				if ctx.Err() != nil {
+					result.ReleaseFunc()
+					if parentErr := executionCtx.Err(); parentErr != nil {
+						return nil, parentErr
+					}
+					return nil, &ConcurrencyError{SlotType: slotType, IsTimeout: true}
+				}
 				return result.ReleaseFunc, nil
 			}
 			backoff = nextBackoff(backoff)
@@ -446,9 +465,107 @@ func (h *ConcurrencyHelper) waitForSlotWithPingTimeout(c *gin.Context, slotType 
 	}
 }
 
-// AcquireAccountSlotWithWaitTimeout acquires an account slot with a custom timeout (keeps SSE ping).
-func (h *ConcurrencyHelper) AcquireAccountSlotWithWaitTimeout(c *gin.Context, accountID int64, maxConcurrency int, timeout time.Duration, isStream bool, streamStarted *bool) (func(), error) {
-	return h.waitForSlotWithPingTimeout(c, "account", accountID, maxConcurrency, timeout, isStream, streamStarted, true)
+// AcquireAccountSlotForWaitPlan is the admission boundary for scheduler queues.
+// A free slot does not consume queue capacity. Every waiter must first own one
+// of the persisted bounded queue entries; dependency failure cannot grant one.
+func (h *ConcurrencyHelper) AcquireAccountSlotForWaitPlan(c *gin.Context, accountID int64, plan *service.AccountWaitPlan, isStream bool, streamStarted *bool) (func(), error) {
+	if plan == nil {
+		return nil, &ConcurrencyError{SlotType: "account"}
+	}
+	ctx, err := installConcurrencyExecutionContext(c)
+	if err != nil {
+		return nil, err
+	}
+	release, acquired, err := h.TryAcquireAccountSlot(ctx, accountID, plan.MaxConcurrency)
+	if err != nil || acquired {
+		return release, err
+	}
+	allowed, err := h.IncrementAccountWaitCount(ctx, accountID, plan.MaxWaiting)
+	if err != nil {
+		return nil, err
+	}
+	if !allowed {
+		return nil, &WaitQueueFullError{SlotType: "account"}
+	}
+	defer h.DecrementAccountWaitCount(ctx, accountID)
+	return h.waitForSlotWithPingTimeout(c, "account", accountID, plan.MaxConcurrency, plan.Timeout, isStream, streamStarted)
+}
+
+// A durable image worker owns admission until its stored result is complete.
+// Its synchronous gateway call reuses the trusted worker lease, while the
+// submitting HTTP request and independent workers remain separate executions.
+func (h *ConcurrencyHelper) acquireWorkerUserSlotWithWait(c *gin.Context, userID int64, limit int) (func(), error) {
+	if h == nil || h.concurrencyService == nil {
+		return nil, fmt.Errorf("concurrency service is unavailable")
+	}
+	ctx, err := installConcurrencyExecutionContext(c)
+	if err != nil {
+		return nil, err
+	}
+	limit, err = h.concurrencyService.ResolveUserConcurrency(ctx, userID, limit)
+	if err != nil {
+		return nil, err
+	}
+	acquire := func(admissionCtx context.Context) (func(), bool, error) {
+		if err := admissionCtx.Err(); err != nil {
+			return nil, false, err
+		}
+		result, err := h.concurrencyService.AcquireWorkerUserSlot(ctx, userID, limit)
+		if err != nil {
+			return nil, false, err
+		}
+		if !result.Acquired {
+			return nil, false, nil
+		}
+		if err := admissionCtx.Err(); err != nil {
+			result.ReleaseFunc()
+			return nil, false, err
+		}
+		c.Request = c.Request.WithContext(result.Context)
+		return h.withAPIKeySlotFromGin(c, result.ReleaseFunc), true, nil
+	}
+	if release, acquired, err := acquire(ctx); err != nil || acquired {
+		return release, err
+	}
+	queueLimit := service.CalculateMaxWait(limit) - limit
+	if queueLimit < 1 {
+		queueLimit = 1
+	}
+	allowed, err := h.IncrementWaitCount(ctx, userID, queueLimit)
+	if err != nil {
+		return nil, err
+	}
+	if !allowed {
+		return nil, &WaitQueueFullError{SlotType: "user"}
+	}
+	defer h.DecrementWaitCount(ctx, userID)
+	waitCtx, stopWait := context.WithTimeout(ctx, maxConcurrencyWait)
+	defer stopWait()
+	backoff := initialBackoff
+	timer := time.NewTimer(backoff)
+	defer timer.Stop()
+	for {
+		select {
+		case <-waitCtx.Done():
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			return nil, &ConcurrencyError{SlotType: "user", IsTimeout: true}
+		case <-timer.C:
+			release, acquired, err := acquire(waitCtx)
+			if err != nil && waitCtx.Err() != nil {
+				if ctx.Err() != nil {
+					return nil, ctx.Err()
+				}
+				return nil, &ConcurrencyError{SlotType: "user", IsTimeout: true}
+			}
+			if err != nil || acquired {
+				return release, err
+			}
+			backoff = nextBackoff(backoff)
+			timer.Reset(backoff)
+		}
+	}
 }
 
 // nextBackoff 计算下一次退避时间

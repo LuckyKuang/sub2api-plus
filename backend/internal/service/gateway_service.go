@@ -493,11 +493,15 @@ type GatewayCache interface {
 	SetGrokVideoPendingBilling(ctx context.Context, key string, payload []byte, ttl time.Duration) error
 	// GetGrokVideoPendingBilling returns the create-time billing snapshot; miss → nil, nil.
 	GetGrokVideoPendingBilling(ctx context.Context, key string) ([]byte, error)
-	// ClaimGrokVideoBilled atomically marks a video request as billed (SetNX).
-	// Returns true when this caller won the claim; false when already billed or claim unavailable.
-	ClaimGrokVideoBilled(ctx context.Context, key string, ttl time.Duration) (bool, error)
-	// ReleaseGrokVideoBilled clears a claim so a failed RecordUsage can retry billing.
-	ReleaseGrokVideoBilled(ctx context.Context, key string) error
+	// ClaimGrokVideoBilled acquires a recoverable processing lease (SetNX).
+	// Returns true for this processing owner; false while another owner or a
+	// completed marker exists. Errors remain explicit.
+	ClaimGrokVideoBilled(ctx context.Context, key, owner string, ttl time.Duration) (bool, error)
+	// CompleteGrokVideoBilled replaces only the matching processing owner with a
+	// completed marker after durable billing succeeds.
+	CompleteGrokVideoBilled(ctx context.Context, key, owner string, ttl time.Duration) (bool, error)
+	// ReleaseGrokVideoBilled clears only the matching processing owner.
+	ReleaseGrokVideoBilled(ctx context.Context, key, owner string) error
 
 	// Reasoning content cache (Responses→Chat Completions 桥接）。
 	// SetReasoningContent 按 reasoning item id 缓存 reasoning 全文，供后续请求
@@ -715,23 +719,24 @@ type GatewayFailureReason string
 // trigger account failover. Additive metadata keeps existing composite literals
 // source-compatible and preserves their legacy retry-next-account behavior.
 type UpstreamFailoverError struct {
-	StatusCode               int
-	ResponseBody             []byte        // 上游响应体，用于错误透传规则匹配
-	ResponseHeaders          http.Header   // 上游响应头，用于透传 cf-ray/cf-mitigated/content-type 等诊断信息
-	ForceCacheBilling        bool          // Antigravity 粘性会话切换时设为 true
-	RetryableOnSameAccount   bool          // 临时性错误（如 Google 间歇性 400、空响应），应在同一账号上重试 N 次再切换
-	SameAccountRetryDelay    time.Duration // 同账号重试的最小间隔；零值使用 handler 默认值
-	SameAccountRetryDeadline time.Time     // 同账号重试截止时间；零值表示仅受 retryLimit 限制
-	SameAccountRetryMax      int           // 可选的错误级同账号重试上限，低于 handler 默认预算时优先采用
-	RequestScopedTransient   bool          // 故障因素与账号无关（如上游按客户端身份/模型容量降载）：不得据此对账号做临时封禁。容量降载本身不再同账号重试或换号。
-	SafeToFailoverAfterWrite bool          // 仅写出 SSE 注释等非语义字节时，仍可在同一客户端流中切换账号
-	BoundUpstreamPassthrough bool          // 绑定显式缓存的请求在上游网关账号上收到的 429 / 5xx：反映持有缓存的上游账号状态，原样回写不走错误映射
-	Stage                    GatewayFailureStage
-	Scope                    GatewayFailureScope
-	Reason                   GatewayFailureReason
-	NextAccountAction        NextAccountAction
-	ClientStatusCode         int
-	ClientMessage            string
+	AsyncCreateDefinitelyRejected bool // only a confirmed pre-send failure or trusted provider rejection proves no async job was accepted
+	StatusCode                    int
+	ResponseBody                  []byte        // 上游响应体，用于错误透传规则匹配
+	ResponseHeaders               http.Header   // 上游响应头，用于透传 cf-ray/cf-mitigated/content-type 等诊断信息
+	ForceCacheBilling             bool          // Antigravity 粘性会话切换时设为 true
+	RetryableOnSameAccount        bool          // 临时性错误（如 Google 间歇性 400、空响应），应在同一账号上重试 N 次再切换
+	SameAccountRetryDelay         time.Duration // 同账号重试的最小间隔；零值使用 handler 默认值
+	SameAccountRetryDeadline      time.Time     // 同账号重试截止时间；零值表示仅受 retryLimit 限制
+	SameAccountRetryMax           int           // 可选的错误级同账号重试上限，低于 handler 默认预算时优先采用
+	RequestScopedTransient        bool          // 故障因素与账号无关（如上游按客户端身份/模型容量降载）：不得据此对账号做临时封禁。容量降载本身不再同账号重试或换号。
+	SafeToFailoverAfterWrite      bool          // 仅写出 SSE 注释等非语义字节时，仍可在同一客户端流中切换账号
+	BoundUpstreamPassthrough      bool          // 绑定显式缓存的请求在上游网关账号上收到的 429 / 5xx：反映持有缓存的上游账号状态，原样回写不走错误映射
+	Stage                         GatewayFailureStage
+	Scope                         GatewayFailureScope
+	Reason                        GatewayFailureReason
+	NextAccountAction             NextAccountAction
+	ClientStatusCode              int
+	ClientMessage                 string
 	// RedactClientBody 表示 ResponseBody 携带 Antigravity 账号池身份（项目号/邮箱/consumer id），
 	// handler 在命中透传规则并把 body 回写客户端前必须再次脱敏。默认 false 不影响其他平台。
 	RedactClientBody bool

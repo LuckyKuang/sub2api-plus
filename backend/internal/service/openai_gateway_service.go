@@ -312,8 +312,12 @@ type OpenAIUsage struct {
 
 // OpenAIForwardResult represents the result of forwarding
 type OpenAIForwardResult struct {
-	RequestID  string
-	ResponseID string
+	AsyncTaskTerminal bool // provider-confirmed async terminal state, independent of billable usage
+	// VideoBillingClaim is internal processing ownership for deferred media
+	// settlement; it is never part of an upstream or client response.
+	VideoBillingClaim *GrokVideoBillingClaim `json:"-"`
+	RequestID         string
+	ResponseID        string
 	// UpstreamHeaders 是直接上游的响应头，用于按账户配置解析上游请求标识。
 	UpstreamHeaders http.Header
 	Usage           OpenAIUsage
@@ -616,6 +620,9 @@ type OpenAIGatewayService struct {
 	userPlatformQuotaRepo UserPlatformQuotaRepository
 	liveAttestation       liveattestation.Provider
 	liveAttestationCipher SecretEncryptor
+	// Bounds in-flight Live creation and unsaved-session compensation even
+	// when Redis is unavailable long enough for distributed leases to expire.
+	liveCreateReservations atomic.Int32
 
 	// sessionRouteStore is the authoritative logical-session route store. A nil
 	// value keeps the legacy Redis-only sticky behaviour.

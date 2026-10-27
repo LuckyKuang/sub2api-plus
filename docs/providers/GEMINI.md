@@ -33,7 +33,11 @@ clamped to a nonnegative uncached-input count when a prompt is blocked.
 ## Explicit context caching
 
 Explicit caches are scoped to the requesting gateway API key and its current
-Gemini group. Composite groups do not expose cache management.
+group. Gemini groups and Composite requests resolved to the Gemini supplier
+expose the same cache management APIs. Antigravity and other supplier targets
+do not support this resource domain. Composite creation resolves the public
+model through the Gemini route registry, sends the selected private model
+upstream, and retains the original public alias for rate rules and metadata.
 
 | Endpoint | Behavior |
 | --- | --- |
@@ -54,6 +58,10 @@ gateway resolves ownership and rewrites the name for the provider. A referenced
 cache is routed only to its creating account, without session-based rerouting or
 failover to another owner. Missing, expired, foreign-key or foreign-group
 references are unavailable to the caller.
+For Composite aliases, both the public model and its currently resolved model
+must match the stored binding. Resource-only operations use the authorized
+record and its creating account; they do not infer a provider from a cache ID.
+Extensions capture the current request's prices using the stored public model.
 
 Creation charges input tokens and storage for the requested lifetime together.
 Storage uses `cache_storage_cost_per_token_per_hour`, with configured prices

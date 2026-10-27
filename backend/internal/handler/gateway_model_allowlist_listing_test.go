@@ -56,6 +56,8 @@ func TestGatewayModels_ModelAllowlistWildcardExpandsAgainstSource(t *testing.T) 
 		},
 	})
 
+	prepareGatewayMetadataTest(h, c)
+
 	h.Models(c)
 
 	require.Equal(t, http.StatusOK, rec.Code)
@@ -116,6 +118,8 @@ func TestGeminiV1BetaListModels_FiltersFallbackByAllowlist(t *testing.T) {
 		},
 	})
 
+	prepareGatewayMetadataTest(h, c)
+
 	h.GeminiV1BetaListModels(c)
 
 	require.Equal(t, http.StatusOK, rec.Code)
@@ -156,6 +160,8 @@ func TestAntigravityModels_FiltersByAllowlist(t *testing.T) {
 			},
 		},
 	})
+
+	prepareGatewayMetadataTest(h, c)
 
 	h.AntigravityModels(c)
 

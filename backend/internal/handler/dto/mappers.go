@@ -159,6 +159,8 @@ func GroupFromServiceAdmin(g *service.Group) *AdminGroup {
 		ProfitMinMargin:             g.ProfitMinMargin,
 		ProfitSafetyBuffer:          g.ProfitSafetyBuffer,
 		ModelPricing:                g.ModelPricing,
+		BillingRatePolicy:           g.BillingRatePolicy.Clone(),
+		BillingPolicyVersion:        g.BillingPolicyVersion,
 		ModelRouting:                g.ModelRouting,
 		ModelRoutingEnabled:         g.ModelRoutingEnabled,
 		MCPXMLInject:                g.MCPXMLInject,
@@ -750,6 +752,8 @@ func usageLogFromServiceUser(l *service.UsageLog) UsageLog {
 		TotalCost:                 l.TotalCost,
 		ActualCost:                l.ActualCost,
 		RateMultiplier:            l.RateMultiplier,
+		BillingPolicyVersion:      l.BillingPolicyVersion,
+		BillingRateSnapshot:       publicBillingRateSnapshot(l.BillingRateSnapshot),
 		LongContextBillingApplied: l.LongContextBillingApplied,
 		BillingType:               l.BillingType,
 		RequestType:               requestType.String(),
@@ -788,6 +792,58 @@ func usageLogFromServiceUser(l *service.UsageLog) UsageLog {
 		Group:                     GroupFromServiceShallow(l.Group),
 		Subscription:              UserSubscriptionFromService(l.Subscription),
 	}
+}
+
+// Stored evidence is internal data. Only the documented scalar selling-rate
+// fields may cross the user boundary, including for historical records.
+func publicBillingRateSnapshot(snapshot map[string]any) map[string]any {
+	out := publicBillingRateFields(snapshot)
+	components := []map[string]any{}
+	appendComponent := func(component map[string]any) {
+		if public := publicBillingRateFields(component); len(public) > 0 {
+			components = append(components, public)
+		}
+	}
+	switch stored := snapshot["components"].(type) {
+	case []map[string]any:
+		for _, component := range stored {
+			appendComponent(component)
+		}
+	case []any:
+		for _, component := range stored {
+			if value, ok := component.(map[string]any); ok {
+				appendComponent(value)
+			}
+		}
+	}
+	if len(components) > 0 {
+		if out == nil {
+			out = make(map[string]any)
+		}
+		out["components"] = components
+	}
+	return out
+}
+
+func publicBillingRateFields(snapshot map[string]any) map[string]any {
+	if len(snapshot) == 0 {
+		return nil
+	}
+	out := make(map[string]any)
+	for _, key := range []string{"platform", "model", "billing_unit", "base_multiplier", "policy_multiplier", "platform_multiplier", "model_multiplier", "rate_calculation", "peak_scope", "peak_multiplier", "effective_multiplier", "base_source", "source", "pattern", "policy_version", "as_of", "pricing_state", "batch_discount_multiplier", "settlement_multiplier"} {
+		value, ok := snapshot[key]
+		if !ok {
+			continue
+		}
+		switch value.(type) {
+		case string, float64, float32, int, int32, int64, uint, uint32, uint64, bool:
+			out[key] = value
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // UsageLogFromService converts a service UsageLog to DTO for regular users.

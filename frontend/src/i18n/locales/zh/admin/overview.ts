@@ -643,7 +643,7 @@ export default {
         concurrencyPlaceholder: '0 表示不限制',
         concurrencyHint: '该用户的最大并发请求数，0 = 不限制',
         rpmLimitPlaceholder: '0 表示不限制',
-        rpmLimitHint: '该用户每分钟最大请求数，0 = 不限制；仅在所用分组未设置 rpm_limit 时作为兜底生效'
+        rpmLimitHint: '该用户跨所有 Key 和分组的每分钟全局上限，0 = 不限制；分组上限和用户分组覆盖值不能替代此上限'
       },
       adjustBalance: '调整余额',
       adjustConcurrency: '调整并发数',
@@ -901,7 +901,7 @@ export default {
         rateMultiplierHint: '1.0 = 标准费率，0.5 = 半价，2.0 = 双倍',
         rpmLimit: '每分钟请求数 (RPM)',
         rpmLimitPlaceholder: '0 表示不限制',
-        rpmLimitHint: '每用户在本分组每分钟最大请求数，0 = 不限制；一旦设置即接管该用户的限流（覆盖用户级 rpm_limit）',
+        rpmLimitHint: '每用户在本分组的默认每分钟上限，0 = 不限制；用户分组覆盖值可替代此默认值，用户全局上限仍同时生效',
         maxReasoningEffort: '推理强度上限',
         maxReasoningEffortUnlimited: '不限制（跟随请求）',
         maxReasoningEffortHint: '仅限制客户端主动请求的 Anthropic/OpenAI 推理强度；Composite 分组按实际目标平台生效。不会为缺省请求主动开启推理。上限优先级高于推理强度映射。',
@@ -1085,6 +1085,7 @@ export default {
           }
         }
       },
+      pricingReferenceHint: '参考价仅包含平面单价和分组基础倍率或媒体独立倍率。最终费用按具体模型价格，并结合平台、模型、个人及适用的高峰倍率计算。',
       imagePricing: {
         title: '图片生成计费',
         description: '配置图片生成能力和图片基础单价，留空则使用默认价格',
@@ -1097,8 +1098,8 @@ export default {
         batchSectionHint: '批量生图仅影响批量任务：结算价格会叠加批量折扣倍率，提交时冻结金额按普通生图原价 × 批量冻结价格比例计算。参考图也会产生上游输入 token 消耗，建议批量生图折扣倍率设置大于 0.5。',
         batchDisabledHint: '请先开启当前分组生图，才能开启批量生图。',
         batchGeminiOnlyHint: '批量生图当前仅支持 Gemini 分组。',
-        modeHint: '默认关闭独立倍率时，图片费用 = 图片价格 × 当前分组有效倍率；开启独立倍率后，图片费用 = 图片价格 × 生图独立倍率。',
-        finalPricePreview: '最终单张价格预览',
+        modeHint: '图片计费使用分组或个人基础倍率；开启独立倍率后改用生图独立倍率。平台、模型及适用的高峰倍率仍会叠加。',
+        basePricePreview: '基础单张参考价',
         notConfigured: '未配置'
       },
       videoPricing: {
@@ -1110,8 +1111,8 @@ export default {
         independentMultiplier: '视频倍率独立',
         videoMultiplier: '视频独立倍率',
         modeHint:
-          '视频按秒计费：费用 = 每秒价格 × 时长（1-15 秒，未指定默认 8 秒）。默认叠加当前分组有效倍率；开启独立倍率后改用视频独立倍率。',
-        finalPricePreview: '最终每秒价格预览',
+          '视频按秒计费：每秒价格 × 时长（1-15 秒，未指定默认 8 秒）。开启独立倍率后，以视频独立倍率替代分组或个人基础倍率。平台、模型及适用的高峰倍率仍会叠加。',
+        basePricePreview: '基础每秒参考价',
         notConfigured: '未配置'
       },
       explicitPricing: {
@@ -1139,15 +1140,15 @@ export default {
         title: 'Codex 网页搜索计费',
         pricePerCall: '搜索单次价格（USD/次）',
         pricePerCallHint:
-          '留空使用默认价 $0.01/次（官方定价 $10/1000 次）；填 0 表示免费。实际扣费会叠加分组费率倍数。',
-        finalPricePreview: '应用当前倍率后的单次价格：{price}'
+          '留空使用默认价 $0.01/次（官方定价 $10/1000 次）；填 0 表示免费。实际扣费还会应用分组或个人基础倍率、平台、模型及适用的高峰倍率。',
+        basePricePreview: '基础单次参考价：{price}'
       },
       peakRate: {
         enable: '启用高峰倍率',
         peakStart: '高峰开始',
         peakEnd: '高峰结束',
         peakMultiplier: '高峰倍率',
-        multiplierHint: '作用于 token 计费倍率；token 计费的图片 token 同样适用，0 表示高峰 token 请求按 0 倍计费'
+        multiplierHint: '新请求的所有计费单位均在平台、模型倍率之上叠加高峰倍率，包括按次、图片和视频费用；0 表示高峰费用免费。已受理任务保留其冻结计费规则。'
       },
       profitControl: {
         enable: '启用利润控制',

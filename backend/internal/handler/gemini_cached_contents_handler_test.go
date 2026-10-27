@@ -77,7 +77,7 @@ func (r *geminiCachedContentHandlerRepoStub) SoftDelete(context.Context, int64) 
 }
 
 func newGeminiCachedContentHandlerForTest(repo *geminiCachedContentHandlerRepoStub) *GatewayHandler {
-	return &GatewayHandler{geminiCachedContentService: service.NewGeminiCachedContentService(repo, nil, &config.Config{})}
+	return &GatewayHandler{concurrencyHelper: newGatewayAdmissionForTest().concurrencyHelper, geminiCachedContentService: service.NewGeminiCachedContentService(repo, nil, &config.Config{})}
 }
 
 func geminiCachedContentTestAPIKey(platform string) *service.APIKey {
@@ -157,14 +157,89 @@ func TestResolveGeminiCachedContentBinding(t *testing.T) {
 		require.Contains(t, rec.Body.String(), "has to be the same")
 	})
 
-	t.Run("composite groups are rejected", func(t *testing.T) {
+	t.Run("composite Gemini target preserves the creating account binding", func(t *testing.T) {
 		composite := geminiCachedContentTestAPIKey(service.PlatformComposite)
-		c, rec := newGeminiCachedContentTestContext(http.MethodPost, "/v1beta/models/gemini-3.8-flash:generateContent", composite)
-		_, _, ok := h.resolveGeminiCachedContentBinding(c, zap.NewNop(), composite, "gemini-3.8-flash",
+		c, _ := newGeminiCachedContentTestContext(http.MethodPost, "/v1beta/models/gemini-3.8-flash:generateContent", composite)
+		c.Request = c.Request.WithContext(service.WithResolvedTargetPlatform(c.Request.Context(), service.PlatformGemini))
+		record, out, ok := h.resolveGeminiCachedContentBinding(c, zap.NewNop(), composite, "gemini-3.8-flash",
 			[]byte(`{"cachedContent":"cachedContents/abc","contents":[]}`))
-		require.False(t, ok)
-		require.Equal(t, http.StatusBadRequest, rec.Code)
+		require.True(t, ok)
+		require.Equal(t, int64(900), record.AccountID)
+		require.JSONEq(t, `{"cachedContent":"cachedContents/upstreamabc","contents":[]}`, string(out))
 	})
+
+	t.Run("composite different resource owners remain private", func(t *testing.T) {
+		for _, foreign := range []string{"key", "group"} {
+			t.Run(foreign, func(t *testing.T) {
+				composite := geminiCachedContentTestAPIKey(service.PlatformComposite)
+				name := "foreign"
+				if foreign == "group" {
+					groupID := int64(43)
+					composite.GroupID = &groupID
+					composite.Group.ID = groupID
+					name = "abc"
+				}
+				c, rec := newGeminiCachedContentTestContext(http.MethodPost, "/v1beta/models/gemini-3.8-flash:generateContent", composite)
+				c.Request = c.Request.WithContext(service.WithResolvedTargetPlatform(c.Request.Context(), service.PlatformGemini))
+				_, out, ok := h.resolveGeminiCachedContentBinding(c, zap.NewNop(), composite, "gemini-3.8-flash",
+					[]byte(`{"cachedContent":"cachedContents/`+name+`","contents":[]}`))
+				require.False(t, ok)
+				require.Nil(t, out)
+				require.Equal(t, http.StatusForbidden, rec.Code)
+				require.NotContains(t, rec.Body.String(), "upstream")
+			})
+		}
+	})
+
+	t.Run("composite unresolved and non Gemini targets remain rejected", func(t *testing.T) {
+		for _, target := range []string{"", service.PlatformAntigravity, service.PlatformOpenAI} {
+			composite := geminiCachedContentTestAPIKey(service.PlatformComposite)
+			c, rec := newGeminiCachedContentTestContext(http.MethodPost, "/v1beta/models/gemini-3.8-flash:generateContent", composite)
+			if target != "" {
+				c.Request = c.Request.WithContext(service.WithResolvedTargetPlatform(c.Request.Context(), target))
+			}
+			_, _, ok := h.resolveGeminiCachedContentBinding(c, zap.NewNop(), composite, "gemini-3.8-flash",
+				[]byte(`{"cachedContent":"cachedContents/abc","contents":[]}`))
+			require.False(t, ok)
+			require.Equal(t, http.StatusBadRequest, rec.Code)
+		}
+	})
+}
+
+// Requirements: the Gemini-specific resource API is available to a resolved
+// Composite key, while listing/getting still enforce the original key/group.
+// These real handlers failed their old Composite preamble before the fix.
+func TestGeminiCachedContentsCompositeListAndGetPreserveOwnership(t *testing.T) {
+	repo := &geminiCachedContentHandlerRepoStub{}
+	owned := seedGeminiCachedContent(repo, "own", 7, time.Now().Add(time.Hour))
+	owned.ChannelUsage.OriginalModel = "cache-public-alias"
+	seedGeminiCachedContent(repo, "foreign", 8, time.Now().Add(time.Hour))
+	otherGroup := seedGeminiCachedContent(repo, "othergroup", 7, time.Now().Add(time.Hour))
+	otherGroup.GroupID = 99
+	h := newGeminiCachedContentHandlerForTest(repo)
+	key := geminiCachedContentTestAPIKey(service.PlatformComposite)
+	c, rec := newGeminiCachedContentTestContext(http.MethodGet, "/v1beta/cachedContents", key)
+	c.Request = c.Request.WithContext(service.WithResolvedTargetPlatform(c.Request.Context(), service.PlatformGemini))
+	h.GeminiCachedContentsList(c)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.Contains(t, rec.Body.String(), "cachedContents/own")
+	require.Contains(t, rec.Body.String(), "models/cache-public-alias")
+	require.NotContains(t, rec.Body.String(), "gemini-3.8-flash")
+	require.NotContains(t, rec.Body.String(), "foreign")
+	require.NotContains(t, rec.Body.String(), "othergroup")
+	for _, id := range []string{"own", "foreign", "othergroup"} {
+		c, rec = newGeminiCachedContentTestContext(http.MethodGet, "/v1beta/cachedContents/"+id, key)
+		c.Params = gin.Params{{Key: "cacheID", Value: id}}
+		c.Request = c.Request.WithContext(service.WithResolvedTargetPlatform(c.Request.Context(), service.PlatformGemini))
+		h.GeminiCachedContentsGet(c)
+		if id == "own" {
+			require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+			require.Contains(t, rec.Body.String(), "models/cache-public-alias")
+		} else {
+			require.Equal(t, http.StatusForbidden, rec.Code, rec.Body.String())
+		}
+		require.NotContains(t, rec.Body.String(), "upstream")
+	}
 }
 
 func TestGeminiCachedContentsListAndGet(t *testing.T) {

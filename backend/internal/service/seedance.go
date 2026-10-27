@@ -72,7 +72,13 @@ func buildSeedanceURL(base string, endpoint GrokMediaEndpoint, taskID string) (s
 
 // ForwardSeedance preserves the Ark protocol, including multimodal content and
 // future fields. Only model is rewritten using the account's configured mapping.
-func (s *OpenAIGatewayService) ForwardSeedance(ctx context.Context, c *gin.Context, account *Account, endpoint GrokMediaEndpoint, taskID string, body []byte) (*OpenAIForwardResult, error) {
+func (s *OpenAIGatewayService) ForwardSeedance(ctx context.Context, c *gin.Context, account *Account, endpoint GrokMediaEndpoint, taskID string, body []byte) (result *OpenAIForwardResult, err error) {
+	createNotSent := endpoint == SeedanceEndpointCreate
+	defer func() {
+		if createNotSent {
+			err = withAsyncCreateNotSent(err)
+		}
+	}()
 	if !account.SupportsOpenAIEndpointCapability(OpenAIEndpointCapabilitySeedance) || !endpoint.IsSeedance() {
 		return nil, fmt.Errorf("seedance requires an OpenAI API key account with a custom base URL")
 	}
@@ -119,6 +125,7 @@ func (s *OpenAIGatewayService) ForwardSeedance(ctx context.Context, c *gin.Conte
 	if account.ProxyID != nil && account.Proxy != nil {
 		proxy = account.Proxy.URL()
 	}
+	createNotSent = false
 	resp, err := s.httpUpstream.Do(req, proxy, account.ID, account.Concurrency)
 	SetOpsLatencyMs(c, OpsUpstreamLatencyMsKey, time.Since(started).Milliseconds())
 	if err != nil {
@@ -133,9 +140,12 @@ func (s *OpenAIGatewayService) ForwardSeedance(ctx context.Context, c *gin.Conte
 	// accepted a billable job. Preserve native error codes and response bodies.
 	if resp.StatusCode >= 300 {
 		writeGrokMediaResponse(c, resp, responseBody, s.responseHeaderFilter)
+		if (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests) && gjson.ValidBytes(responseBody) && gjson.GetBytes(responseBody, "error").Exists() {
+			return nil, fmt.Errorf("seedance upstream status %d: %w", resp.StatusCode, &UpstreamFailoverError{StatusCode: resp.StatusCode, ResponseBody: responseBody, ResponseHeaders: resp.Header.Clone(), AsyncCreateDefinitelyRejected: true, NextAccountAction: NextAccountStop})
+		}
 		return nil, fmt.Errorf("seedance upstream status %d", resp.StatusCode)
 	}
-	result := &OpenAIForwardResult{Model: model, BillingModel: model, UpstreamModel: upstreamModel, Duration: time.Since(started), ResponseHeaders: resp.Header.Clone()}
+	result = &OpenAIForwardResult{Model: model, BillingModel: model, UpstreamModel: upstreamModel, Duration: time.Since(started), ResponseHeaders: resp.Header.Clone()}
 	if endpoint == SeedanceEndpointCreate {
 		id := strings.TrimSpace(gjson.GetBytes(responseBody, "id").String())
 		if id == "" {
@@ -143,7 +153,14 @@ func (s *OpenAIGatewayService) ForwardSeedance(ctx context.Context, c *gin.Conte
 		}
 		result.ResponseID = SeedanceTaskKey(id)
 	}
+	if endpoint == SeedanceEndpointDelete {
+		result.AsyncTaskTerminal = resp.StatusCode == http.StatusNoContent || strings.EqualFold(gjson.GetBytes(responseBody, "status").String(), "cancelled")
+	}
 	if endpoint == SeedanceEndpointStatus {
+		switch strings.ToLower(gjson.GetBytes(responseBody, "status").String()) {
+		case "succeeded", "failed", "cancelled", "expired":
+			result.AsyncTaskTerminal = true
+		}
 		result.ResponseID = taskID
 		result.UpstreamModel = gjson.GetBytes(responseBody, "model").String()
 		if gjson.GetBytes(responseBody, "status").String() == "succeeded" {

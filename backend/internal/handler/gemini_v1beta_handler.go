@@ -48,6 +48,12 @@ func (h *GatewayHandler) GeminiV1BetaListModels(c *gin.Context) {
 		return
 	}
 
+	userRelease, admitted := h.admitControl(c, service.ContentModerationProtocolGemini)
+	if !admitted {
+		return
+	}
+	defer userRelease()
+
 	// 分组级模型白名单开启时过滤 models[].name（名字形如 models/xxx）。
 	filterGeminiModels := func(models []gemini.Model) []gemini.Model {
 		if apiKey.Group == nil || !apiKey.Group.ModelAllowlistEnabled() {
@@ -253,6 +259,12 @@ func (h *GatewayHandler) GeminiV1BetaGetModel(c *gin.Context) {
 		return
 	}
 
+	userRelease, admitted := h.admitControl(c, service.ContentModerationProtocolGemini)
+	if !admitted {
+		return
+	}
+	defer userRelease()
+
 	// 强制 antigravity 模式或 composite 路由到 antigravity：返回 antigravity 模型信息
 	if forcePlatform == service.PlatformAntigravity || effectivePlatform == service.PlatformAntigravity {
 		c.JSON(http.StatusOK, antigravity.FallbackGeminiModel(modelName))
@@ -392,14 +404,14 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 	subscription, _ := middleware.GetSubscriptionFromContext(c)
 
 	// For Gemini native API, do not send Claude-style ping frames.
-	geminiConcurrency := NewConcurrencyHelper(h.concurrencyHelper.concurrencyService, SSEPingFormatNone, 0)
+	geminiConcurrency := NewConcurrencyHelper(h.concurrencyHelper.concurrencyService, SSEPingFormatNone, 0).WithRPMAdmission(h.billingCacheService)
 
 	// 1) user concurrency slot
 	streamStarted := false
 	if h.errorPassthroughService != nil {
 		service.BindErrorPassthroughService(c, h.errorPassthroughService)
 	}
-	userReleaseFunc, err := geminiConcurrency.AcquireUserSlotWithWait(c, authSubject.UserID, authSubject.Concurrency, stream, &streamStarted)
+	userReleaseFunc, err := geminiConcurrency.AcquireUserSlot(c, authSubject.UserID, authSubject.Concurrency)
 	if err != nil {
 		reqLog.Warn("gemini.user_slot_acquire_failed", zap.Error(err))
 		googleConcurrencyError(c, err, "user")
@@ -421,7 +433,7 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 	}
 
 	// 余额模式在途预留：防止并发请求在预检时看到同一份余额而集体透支。
-	inflightRelease, err := reserveInflightBalance(c, h.billingCacheService, h.gatewayService, apiKey, subscription, tokenInflightEstimate(modelName, body))
+	inflightRelease, err := reserveInflightBalance(c, h.billingCacheService, h.gatewayService, apiKey, subscription, tokenInflightEstimate(service.ContentModerationProtocolGemini, modelName, body))
 	if err != nil {
 		reqLog.Info("gemini.inflight_reservation_rejected", zap.Error(err))
 		status, code, message, retryAfter := billingErrorDetails(err)
@@ -652,32 +664,10 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 				googleError(c, http.StatusServiceUnavailable, "No available Gemini accounts")
 				return
 			}
-			accountWaitCounted := false
-			canWait, err := geminiConcurrency.IncrementAccountWaitCount(c.Request.Context(), account.ID, selection.WaitPlan.MaxWaiting)
-			if err != nil {
-				reqLog.Warn("gemini.account_wait_counter_increment_failed", zap.Int64("account_id", account.ID), zap.Error(err))
-			} else if !canWait {
-				reqLog.Info("gemini.account_wait_queue_full",
-					zap.Int64("account_id", account.ID),
-					zap.Int("max_waiting", selection.WaitPlan.MaxWaiting),
-				)
-				googleError(c, http.StatusTooManyRequests, "Too many pending requests, please retry later")
-				return
-			}
-			if err == nil && canWait {
-				accountWaitCounted = true
-			}
-			defer func() {
-				if accountWaitCounted {
-					geminiConcurrency.DecrementAccountWaitCount(c.Request.Context(), account.ID)
-				}
-			}()
-
-			accountReleaseFunc, err = geminiConcurrency.AcquireAccountSlotWithWaitTimeout(
+			accountReleaseFunc, err = geminiConcurrency.AcquireAccountSlotForWaitPlan(
 				c,
 				account.ID,
-				selection.WaitPlan.MaxConcurrency,
-				selection.WaitPlan.Timeout,
+				selection.WaitPlan,
 				stream,
 				&streamStarted,
 			)
@@ -685,10 +675,6 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 				reqLog.Warn("gemini.account_slot_acquire_failed", zap.Int64("account_id", account.ID), zap.Error(err))
 				googleConcurrencyError(c, err, "account")
 				return
-			}
-			if accountWaitCounted {
-				geminiConcurrency.DecrementAccountWaitCount(c.Request.Context(), account.ID)
-				accountWaitCounted = false
 			}
 		}
 		// 终检与准入后绑定使用选号结果携带的门（见 responses 同名注释）。
@@ -809,6 +795,7 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 		// 长上下文阶梯由目录数据驱动，统一在计费路径内生效，入口无需声明。
 		h.submitUsageRecordTask(c.Request.Context(), func(ctx context.Context) {
 			if err := h.gatewayService.RecordUsage(ctx, &service.RecordUsageInput{
+				PricingSnapshot:    service.BillingPricingSnapshotFromContext(ctx),
 				Result:             result,
 				QuotaPlatform:      quotaPlatform,
 				APIKey:             apiKey,
@@ -974,6 +961,7 @@ func googleClientErrorType(status int) string {
 // 沿用 concurrencyErrorResponse 的统一映射（客户端断开为 499）。
 func googleConcurrencyError(c *gin.Context, err error, slotType string) {
 	status, errType, code, message := concurrencyErrorResponse(err, slotType)
+	setRPMRetryAfter(c, err)
 	googleErrorWithType(c, status, errType, code, message)
 }
 

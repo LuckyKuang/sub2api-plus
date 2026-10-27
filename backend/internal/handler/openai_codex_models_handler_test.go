@@ -674,6 +674,7 @@ func performCodexModelsRequestForGroup(t *testing.T, handler *OpenAIGatewayHandl
 		Group:   group,
 	})
 
+	prepareOpenAIMetadataTest(handler, c)
 	handler.CodexModels(c)
 	return recorder
 }

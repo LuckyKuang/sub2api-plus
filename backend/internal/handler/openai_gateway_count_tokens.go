@@ -75,6 +75,12 @@ func (h *OpenAIGatewayHandler) ResponsesInputTokens(c *gin.Context) {
 		return
 	}
 
+	userRelease, admitted := acquireGatewayUserRequest(c, h.concurrencyHelper, h.errorResponse)
+	if !admitted {
+		return
+	}
+	defer userRelease()
+
 	subscription, _ := middleware2.GetSubscriptionFromContext(c)
 	if err := h.billingCacheService.CheckBillingEligibility(c.Request.Context(), apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(c.Request.Context(), apiKey)); err != nil {
 		reqLog.Info("openai_input_tokens.billing_eligibility_check_failed", zap.Error(err))
@@ -180,6 +186,12 @@ func (h *OpenAIGatewayHandler) GrokCountTokens(c *gin.Context) {
 		return
 	}
 
+	userRelease, admitted := acquireGatewayUserRequest(c, h.concurrencyHelper, h.anthropicErrorResponse)
+	if !admitted {
+		return
+	}
+	defer userRelease()
+
 	estimated, err := service.EstimateGrokCountTokens(parsedReq.Body.Bytes())
 	if err != nil {
 		reqLog.Warn("grok_count_tokens.local_estimate_failed", zap.Error(err))
@@ -268,6 +280,12 @@ func (h *OpenAIGatewayHandler) CountTokens(c *gin.Context) {
 		h.anthropicSecurityAuditError(c, decision)
 		return
 	}
+
+	userRelease, admitted := acquireGatewayUserRequest(c, h.concurrencyHelper, h.anthropicErrorResponse)
+	if !admitted {
+		return
+	}
+	defer userRelease()
 	routingModel := service.NormalizeOpenAICompatRequestedModel(reqModel)
 	preferredMappedModel := resolveOpenAIMessagesDispatchMappedModel(c, apiKey, reqModel)
 

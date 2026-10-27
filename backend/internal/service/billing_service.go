@@ -199,6 +199,8 @@ type UsageTokens struct {
 
 // CostBreakdown 费用明细
 type CostBreakdown struct {
+	pricingErr                error   // retain pricing failures through legacy pointer-returning helpers
+	BillingUnit               string  // customer policy meter, independent of display mode
 	InputCost                 float64 // 文本输入费用（不含图片输入，图片输入单独记入 ImageInputCost）
 	ImageInputCost            float64 // 图片输入 token 费用（如 gpt-image-2 图片编辑）
 	OutputCost                float64
@@ -209,6 +211,10 @@ type CostBreakdown struct {
 	ActualCost                float64 // 应用倍率后的实际费用
 	BillingMode               string  // 计费模式（"token"/"per_request"/"image"），由 CalculateCostUnified 填充
 	LongContextBillingApplied bool
+}
+
+func unavailableUsageCost(err error) *CostBreakdown {
+	return &CostBreakdown{pricingErr: err, TotalCost: math.NaN(), ActualCost: math.NaN()}
 }
 
 func applyCostBreakdownMultiplier(cost *CostBreakdown, multiplier float64) {
@@ -382,9 +388,17 @@ func isDeepSeekProModel(model string) bool {
 
 // BillingService 计费服务
 type BillingService struct {
-	cfg            *config.Config
-	pricingService *PricingService
-	fallbackPrices map[string]*ModelPricing // 硬编码回退价格
+	frozenPricing                bool
+	frozenPricingAt              time.Time
+	frozenModelPrices            map[string]*ModelPricing
+	frozenMissingModels          map[string]bool
+	frozenImagePrices            map[string]map[string]float64
+	frozenVideoPrices            map[string]map[string]float64
+	frozenCacheStoragePrices     map[string]float64
+	frozenDeepSeekPeakMultiplier *float64
+	cfg                          *config.Config
+	pricingService               *PricingService
+	fallbackPrices               map[string]*ModelPricing // 硬编码回退价格
 
 	// fallbackWarnSeen 记录已打过 fallback 警告日志的(已小写化)模型名,
 	// 让 "[Billing] Using fallback pricing" 每个模型每进程最多打一条,
@@ -1534,6 +1548,9 @@ func (s *BillingService) HasIdentifiedTokenPricing(model string) bool {
 
 // GetModelPricing 获取模型价格配置
 func (s *BillingService) GetModelPricing(model string) (*ModelPricing, error) {
+	if s != nil && !s.frozenPricingAt.IsZero() {
+		return s.getModelPricingAt(model, s.frozenPricingAt)
+	}
 	// 无显式计费时点，DeepSeek pro→Flash 切换按当前时刻判定。
 	return s.getModelPricingAt(model, timezone.Now())
 }
@@ -1542,6 +1559,9 @@ func (s *BillingService) GetModelPricing(model string) (*ModelPricing, error) {
 // 优先级：价格表（override_file 等）按确定性识别配置的值 > 内置型号价 > 内置 Pro/Flash 系列兜底价；
 // 均未命中返回 0。
 func (s *BillingService) CacheStoragePricePerTokenHour(model string) float64 {
+	if s != nil && s.frozenCacheStoragePrices != nil {
+		return s.frozenCacheStoragePrices[strings.ToLower(model)]
+	}
 	if s != nil && s.pricingService != nil {
 		if pricing := s.pricingService.GetIdentifiedModelPricing(model); pricing != nil && pricing.CacheStorageCostPerTokenPerHour > 0 {
 			return pricing.CacheStorageCostPerTokenPerHour
@@ -1556,6 +1576,12 @@ func (s *BillingService) CacheStoragePricePerTokenHour(model string) float64 {
 func (s *BillingService) getModelPricingAt(model string, pricingAt time.Time) (*ModelPricing, error) {
 	// 标准化模型名称（转小写）
 	model = strings.ToLower(model)
+	if s.frozenModelPrices != nil {
+		if price := s.frozenModelPrices[model]; price != nil {
+			return price, nil
+		}
+		return nil, fmt.Errorf("%w for frozen model: %s", ErrModelPricingUnavailable, model)
+	}
 
 	// 1. 优先从动态价格服务获取
 	if s.pricingService != nil {
@@ -1605,7 +1631,7 @@ func (s *BillingService) getModelPricingAt(model string, pricingAt time.Time) (*
 	if fallback != nil {
 		// 按模型名去重:每个模型每进程最多打一条 warn,避免热路径每请求刷屏（issue #3394）。
 		// model 在函数入口已 ToLower,故 GLM-5.2 / glm-5.2 视为同一条目。
-		if _, seen := s.fallbackWarnSeen.LoadOrStore(model, struct{}{}); !seen {
+		if _, seen := s.fallbackWarnSeen.LoadOrStore(model, struct{}{}); !seen && !s.frozenPricing {
 			log.Printf("[Billing] Using fallback pricing for model: %s", model)
 		}
 		return s.applyModelSpecificPricingPolicyEx(model, fallback, true, pricingAt), nil
@@ -1688,6 +1714,18 @@ func channelTierOverridePrice(baseStandard, baseTier, channelStandard float64) f
 	return 0
 }
 
+// A catalog that has only a common cache-write price still prices both TTLs.
+// Preserve that inheritance before enabling separate prices, so an explicit
+// zero for one TTL cannot fall back to the paid common rate or erase the other.
+func enableCacheCreationBreakdown(pricing *ModelPricing) {
+	if pricing == nil || pricing.SupportsCacheBreakdown {
+		return
+	}
+	pricing.CacheCreation5mPrice = pricing.CacheCreationPricePerToken
+	pricing.CacheCreation1hPrice = pricing.CacheCreationPricePerToken
+	pricing.SupportsCacheBreakdown = true
+}
+
 func applyChannelTokenPriceOverrides(pricing *ModelPricing, channelPricing *ChannelModelPricing) {
 	if pricing == nil || channelPricing == nil {
 		return
@@ -1715,8 +1753,8 @@ func applyChannelTokenPriceOverrides(pricing *ModelPricing, channelPricing *Chan
 		}
 	}
 	if channelPricing.CacheWrite1hPrice != nil {
+		enableCacheCreationBreakdown(pricing)
 		pricing.CacheCreation1hPrice = *channelPricing.CacheWrite1hPrice
-		pricing.SupportsCacheBreakdown = true
 	}
 	if channelPricing.CacheReadPrice != nil {
 		priority := channelTierOverridePrice(pricing.CacheReadPricePerToken, pricing.CacheReadPricePerTokenPriority, *channelPricing.CacheReadPrice)
@@ -1729,6 +1767,7 @@ func applyChannelTokenPriceOverrides(pricing *ModelPricing, channelPricing *Chan
 
 // CostInput 统一计费输入
 type CostInput struct {
+	BillingUnit               string // optional explicit meter for duration-based media
 	Ctx                       context.Context
 	Model                     string
 	GroupID                   *int64 // 用于渠道定价查找
@@ -1751,6 +1790,15 @@ type CostInput struct {
 // CalculateCostUnified 统一计费入口，支持三种计费模式。
 // 使用 ModelPricingResolver 解析定价，然后根据 BillingMode 分发计算。
 func (s *BillingService) CalculateCostUnified(input CostInput) (*CostBreakdown, error) {
+	if err := validateDurableBillingModel(input.Ctx, input.Model); err != nil {
+		return nil, err
+	}
+	if err := ValidateBillingPricingSnapshot(input.Ctx); err != nil {
+		return nil, fmt.Errorf("billing snapshot unavailable: %w", err)
+	}
+	if frozen := billingServiceForContext(input.Ctx, s); frozen != s {
+		return frozen.CalculateCostUnified(input)
+	}
 	if input.Resolver == nil {
 		// 无 Resolver，回退到旧路径
 		applyLongContextBilling := true
@@ -1784,6 +1832,14 @@ func (s *BillingService) CalculateCostUnified(input CostInput) (*CostBreakdown, 
 			Group:   input.Group,
 		})
 	}
+	if snapshot := BillingPricingSnapshotFromContext(input.Ctx); snapshot != nil && input.Group != nil && input.Group.ID == snapshot.group.ID {
+		unit := input.BillingUnit
+		if unit == "" {
+			unit = billingUnitForMode(string(resolved.Mode))
+		}
+		input.RateMultiplier = customerBillingRate(input.Ctx, &APIKey{Group: input.Group}, unit, input.RateMultiplier)
+		input.PricingAt = snapshot.pricingAt
+	}
 
 	// 保存时强制 > 0；若仍有负数泄漏（缓存/迁移残留），按 0 处理避免按 1x 误扣。
 	if input.RateMultiplier < 0 {
@@ -1802,6 +1858,10 @@ func (s *BillingService) CalculateCostUnified(input CostInput) (*CostBreakdown, 
 		breakdown, err = s.calculateTokenCost(resolved, input)
 	}
 	if err == nil && breakdown != nil {
+		breakdown.BillingUnit = input.BillingUnit
+		if breakdown.BillingUnit == "" {
+			breakdown.BillingUnit = billingUnitForMode(string(resolved.Mode))
+		}
 		breakdown.BillingMode = string(resolved.Mode)
 		if breakdown.BillingMode == "" {
 			breakdown.BillingMode = string(BillingModeToken)
@@ -1830,6 +1890,9 @@ func (s *BillingService) calculateTokenCost(resolved *ResolvedPricing, input Cos
 	if pricing == nil {
 		return nil, fmt.Errorf("no pricing available for model: %s: %w", input.Model, ErrModelPricingUnavailable)
 	}
+	if err := s.validateUsedTokenPriceEvidence(resolved, input.Model, input.Tokens, pricingContext, pricing); err != nil {
+		return nil, err
+	}
 
 	// 计费时点：优先请求级 PricingAt（历史补账与 DeepSeek pro→Flash 切换判定
 	// 同源），零值回退当前时刻。
@@ -1847,7 +1910,11 @@ func (s *BillingService) calculateTokenCost(resolved *ResolvedPricing, input Cos
 	// 仅作用于默认价卡（Source=LiteLLM，无分组/渠道自定义定价）——分组/渠道
 	// 自定义定价保持运营者语义，不叠加。先克隆再乘，避免污染共享 fallbackPrices 指针。
 	if resolved.Source == PricingSourceLiteLLM && isDeepSeekModel(input.Model) {
-		if mult := deepseekPeakMultiplierAt(pricingAt); mult > 1 {
+		mult := deepseekPeakMultiplierAt(pricingAt)
+		if s.frozenDeepSeekPeakMultiplier != nil {
+			mult = *s.frozenDeepSeekPeakMultiplier
+		}
+		if mult > 1 {
 			cloned := *pricing
 			cloned.InputPricePerToken *= mult
 			cloned.OutputPricePerToken *= mult
@@ -2048,19 +2115,23 @@ func (s *BillingService) calculatePerRequestCost(resolved *ResolvedPricing, inpu
 	}
 
 	var unitPrice float64
+	var priced bool
 
 	if input.SizeTier != "" {
-		unitPrice = input.Resolver.GetRequestTierPrice(resolved, input.SizeTier)
+		unitPrice, priced = requestTierPrice(resolved, input.SizeTier)
 	}
 
-	if unitPrice == 0 {
+	if !priced {
 		totalContext := input.Tokens.InputTokens + input.Tokens.CacheCreationTokens + input.Tokens.CacheReadTokens
-		unitPrice = input.Resolver.GetRequestTierPriceByContext(resolved, totalContext)
+		unitPrice, priced = requestTierPriceByContext(resolved, totalContext)
 	}
 
 	// 回退到默认按次价格
-	if unitPrice == 0 {
-		unitPrice = resolved.DefaultPerRequestPrice
+	if !priced {
+		unitPrice, priced = defaultRequestPrice(resolved)
+	}
+	if !priced || !validCost(unitPrice) {
+		return nil, fmt.Errorf("%w: %s", ErrModelPricingUnavailable, input.Model)
 	}
 
 	totalCost := unitPrice * units
@@ -2137,6 +2208,9 @@ func (s *BillingService) applyModelSpecificPricingPolicy(model string, pricing *
 func (s *BillingService) applyModelSpecificPricingPolicyEx(model string, pricing *ModelPricing, forceOfficialDefaultRates bool, pricingAt time.Time) *ModelPricing {
 	if pricing == nil {
 		return nil
+	}
+	if s != nil && s.frozenModelPrices != nil {
+		return pricing // durable cards already include their captured model policy
 	}
 	// DeepSeek 模型：无论 JSON/远端价格表给什么价，一律强制官方低谷价
 	// （Flash 三档为 2026-09-10 官方降价后口径）。这是覆盖远端旧价的关键——远端
@@ -2414,6 +2488,7 @@ func (s *BillingService) CalculateWebSearchCost(callCount int, groupPrice *float
 		TotalCost:   totalCost,
 		ActualCost:  totalCost * rateMultiplier,
 		BillingMode: string(BillingModePerRequest),
+		BillingUnit: "request",
 	}
 }
 
@@ -2442,6 +2517,7 @@ func (s *BillingService) CalculateSearchCost(numCalls int, groupPricePer1k *floa
 		TotalCost:   total,
 		ActualCost:  total * rateMultiplier,
 		BillingMode: string(BillingModePerRequest),
+		BillingUnit: "request",
 	}
 }
 
@@ -2488,6 +2564,7 @@ func (s *BillingService) CalculateAudioCost(mode string, durationOrUnits float64
 		TotalCost:   total,
 		ActualCost:  total * rateMultiplier,
 		BillingMode: string(BillingModePerRequest),
+		BillingUnit: audioBillingUnit(mode),
 	}
 }
 
@@ -2519,6 +2596,7 @@ func (s *BillingService) CalculateImageCost(model string, imageSize string, imag
 		TotalCost:   totalCost,
 		ActualCost:  actualCost,
 		BillingMode: string(BillingModeImage),
+		BillingUnit: "image",
 	}
 }
 
@@ -2548,11 +2626,18 @@ func (s *BillingService) CalculateVideoCost(model string, resolution string, vid
 		TotalCost:   totalCost,
 		ActualCost:  actualCost,
 		BillingMode: string(BillingModeVideo),
+		BillingUnit: "second",
 	}
 }
 
 // getImageUnitPrice 获取图片单价
 func (s *BillingService) getImageUnitPrice(model string, imageSize string, groupConfig *ImagePriceConfig) float64 {
+	if s.frozenImagePrices != nil {
+		if price, ok := s.frozenImagePrices[strings.ToLower(model)][NormalizeImageBillingTierOrDefault(imageSize)]; ok {
+			return price
+		}
+		return math.NaN()
+	}
 	// 优先使用分组配置的价格
 	if groupConfig != nil {
 		switch imageSize {
@@ -2576,6 +2661,12 @@ func (s *BillingService) getImageUnitPrice(model string, imageSize string, group
 }
 
 func (s *BillingService) getVideoUnitPrice(model string, resolution string, groupConfig *VideoPriceConfig) float64 {
+	if s.frozenVideoPrices != nil {
+		if price, ok := s.frozenVideoPrices[strings.ToLower(model)][NormalizeVideoBillingResolutionOrDefault(resolution)]; ok {
+			return price
+		}
+		return math.NaN()
+	}
 	// Order: (a) per-model map (b) flat group video_price_* (c) model-aware code defaults.
 	if groupConfig != nil {
 		if price := LookupVideoModelPrice(groupConfig.ModelPrices, model, resolution); price != nil {

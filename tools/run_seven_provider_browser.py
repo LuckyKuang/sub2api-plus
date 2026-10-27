@@ -46,11 +46,16 @@ REQUIRED_MANAGEMENT_TITLES = tuple(
     for provider in ("openai", "grok", "deepseek", "kimi", "minimax", "stepfun", "zhipu")
     for kind in ("apikey", "oauth")
 )
+REQUIRED_BILLING_TITLES = (
+    "composite billing: real browser edits and stale policy conflict",
+    "composite API key: supplier quotes in create, edit, inline and bulk group selection",
+)
+REQUIRED_BROWSER_TITLES = REQUIRED_MANAGEMENT_TITLES + REQUIRED_BILLING_TITLES
 
 
 def browser_coverage_errors(report: dict, *, grep: str | None = None) -> list[str]:
     """Require actual successful Chromium runs for each applicable business case."""
-    expected = {title for title in REQUIRED_MANAGEMENT_TITLES
+    expected = {title for title in REQUIRED_BROWSER_TITLES
                 if grep is None or re.search(grep, title)}
     errors: list[str] = []
     if not expected:
@@ -244,7 +249,7 @@ def main() -> int:
                 print(f"Browser coverage failed: {error}", flush=True)
             if not errors and result.returncode == 0:
                 count = sum(arguments.grep is None or re.search(arguments.grep, title) is not None
-                            for title in REQUIRED_MANAGEMENT_TITLES)
+                            for title in REQUIRED_BROWSER_TITLES)
                 print(f"Browser coverage: {count} required scenarios passed", flush=True)
             return result.returncode or int(bool(errors))
         except BaseException:

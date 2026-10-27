@@ -43,6 +43,8 @@ func TestBatchImageSettlementService_SettlesAndChargesSuccessfulImagesOnly(t *te
 	require.Equal(t, "batch-settlement-session", batchImageDerefString(billing.captures[0].UsageLog.SessionID))
 	require.Equal(t, UsageCompletionCompleted, billing.captures[0].UsageLog.CompletionStatus)
 	require.Equal(t, UsageSourceUpstreamExact, billing.captures[0].UsageLog.UsageSource)
+	require.Zero(t, billing.captures[0].UsageLog.BillingPolicyVersion, "legacy jobs have no historical policy evidence")
+	require.Empty(t, billing.captures[0].UsageLog.BillingRateSnapshot)
 	require.Equal(t, int64(321), billing.captures[0].APIKeyID)
 	require.Equal(t, job.UserID, billing.captures[0].UserID)
 	require.Equal(t, job.BatchID, billing.captures[0].BatchID)
@@ -213,7 +215,7 @@ func TestBatchImagePipelineProcessor_SettlesQueuedSettlingJob(t *testing.T) {
 	billing := &fakeBatchImageBillingRepo{}
 	settlement := &BatchImageSettlementService{Repo: repo, BillingRepo: billing, Pricing: &fakeBatchImagePricingResolver{unitPrice: 0.25}}
 	processor := &BatchImagePipelineProcessor{
-		ProviderProcessor: &BatchImageProviderProcessor{Repo: repo, ProviderRegistry: NewBatchImageProviderRegistry(&fakeProcessorProvider{}), AccountResolver: &fakeBatchImageAccountResolver{account: &Account{}}},
+		ProviderProcessor: &BatchImageProviderProcessor{Concurrency: NewConcurrencyService(&stubConcurrencyCacheForTest{acquireResult: true}), Repo: repo, ProviderRegistry: NewBatchImageProviderRegistry(&fakeProcessorProvider{}), AccountResolver: &fakeBatchImageAccountResolver{account: &Account{}}},
 		SettlementService: settlement,
 	}
 
@@ -230,7 +232,7 @@ func TestBatchImagePipelineProcessor_RequeuesTransientSettlementFailure(t *testi
 	repo.jobs[job.BatchID] = job
 	settlement := &BatchImageSettlementService{Repo: repo, BillingRepo: &fakeBatchImageBillingRepo{err: errors.New("temporary")}, Pricing: &fakeBatchImagePricingResolver{unitPrice: 0.25}}
 	processor := &BatchImagePipelineProcessor{
-		ProviderProcessor: &BatchImageProviderProcessor{Repo: repo, ProviderRegistry: NewBatchImageProviderRegistry(&fakeProcessorProvider{}), AccountResolver: &fakeBatchImageAccountResolver{account: &Account{}}},
+		ProviderProcessor: &BatchImageProviderProcessor{Concurrency: NewConcurrencyService(&stubConcurrencyCacheForTest{acquireResult: true}), Repo: repo, ProviderRegistry: NewBatchImageProviderRegistry(&fakeProcessorProvider{}), AccountResolver: &fakeBatchImageAccountResolver{account: &Account{}}},
 		SettlementService: settlement,
 	}
 
@@ -249,7 +251,7 @@ func TestBatchImagePipelineProcessor_FailsAndReleasesAfterSettlementRetryLimit(t
 	billing := &fakeBatchImageBillingRepo{captureErr: errors.New("temporary billing timeout")}
 	settlement := &BatchImageSettlementService{Repo: repo, BillingRepo: billing, Pricing: &fakeBatchImagePricingResolver{unitPrice: 0.25}}
 	processor := &BatchImagePipelineProcessor{
-		ProviderProcessor: &BatchImageProviderProcessor{Repo: repo, ProviderRegistry: NewBatchImageProviderRegistry(&fakeProcessorProvider{}), AccountResolver: &fakeBatchImageAccountResolver{account: &Account{}}},
+		ProviderProcessor: &BatchImageProviderProcessor{Concurrency: NewConcurrencyService(&stubConcurrencyCacheForTest{acquireResult: true}), Repo: repo, ProviderRegistry: NewBatchImageProviderRegistry(&fakeProcessorProvider{}), AccountResolver: &fakeBatchImageAccountResolver{account: &Account{}}},
 		SettlementService: settlement,
 	}
 

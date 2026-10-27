@@ -139,6 +139,9 @@ func TestOpenAICountTokens_SkipsClientProfileIneligibleAccountAndUsesAPIKeyCandi
 	gin.SetMode(gin.TestMode)
 	groupID := int64(830)
 	cache := &concurrencyCacheMock{
+		acquireUserSlotFn: func(context.Context, int64, int, string) (bool, error) {
+			return true, nil
+		},
 		acquireAccountSlotFn: func(context.Context, int64, int, string) (bool, error) {
 			return true, nil
 		},
@@ -176,6 +179,7 @@ func TestOpenAICountTokens_SkipsClientProfileIneligibleAccountAndUsesAPIKeyCandi
 	require.JSONEq(t, `{"input_tokens":42}`, recorder.Body.String())
 	require.Equal(t, []int64{8302}, upstream.calls())
 	require.Equal(t, int32(2), atomic.LoadInt32(&cache.releaseAccountCalled), "both the rejected and completed account slots must be released")
+	require.Equal(t, int32(1), atomic.LoadInt32(&cache.releaseUserCalled), "the shared user lease spans local rejection and account fallback")
 }
 
 func TestOpenAIAlphaSearch_SkipsClientProfileIneligibleAccountAndUsesAPIKeyCandidate(t *testing.T) {

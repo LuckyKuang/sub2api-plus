@@ -166,6 +166,7 @@
                 <GroupBadge
                   v-if="row.group"
                   :name="row.group.name"
+                  :show-rate="row.group.platform !== 'composite'"
                   :platform="row.group.platform"
                   :subscription-type="row.group.subscription_type"
                   :rate-multiplier="row.group.rate_multiplier"
@@ -552,6 +553,7 @@
               <GroupBadge
                 v-if="option"
                 :name="(option as unknown as GroupOption).label"
+                :show-rate="false"
                 :platform="(option as unknown as GroupOption).platform"
                 :subscription-type="(option as unknown as GroupOption).subscriptionType"
                 :rate-multiplier="(option as unknown as GroupOption).rate"
@@ -576,9 +578,12 @@
                 :peak-rate-multiplier="(option as unknown as GroupOption).peakRateMultiplier"
                 :description="(option as unknown as GroupOption).description"
                 :selected="selected"
-              />
+              >
+                <template #rates><GroupRateSummary :group="quoteFor((option as unknown as GroupOption).value)" :loading="quotesLoading" :failed="quotesFailed" compact /></template>
+              </GroupOptionItem>
             </template>
           </Select>
+          <GroupRateSummary v-if="formData.group_id" class="mt-3 rounded-lg surface-inset p-3" :group="quoteFor(formData.group_id)" :loading="quotesLoading" :failed="quotesFailed" @retry="refreshQuotes" />
         </div>
 
         <!-- Custom Key Section (only for create) -->
@@ -970,6 +975,10 @@
       :show="showBulkEditModal"
       :selected-keys="selectedApiKeys"
       :groups="groups"
+      :quoted-groups="quotedGroups"
+      :quotes-loading="quotesLoading"
+      :quotes-failed="quotesFailed"
+      @retry-quotes="refreshQuotes"
       @close="showBulkEditModal = false"
       @updated="handleBulkUpdated"
     />
@@ -1072,6 +1081,7 @@
     <Teleport to="body">
       <div
         v-if="groupSelectorKeyId !== null && dropdownPosition"
+        data-test="key-inline-group-selector"
         ref="dropdownRef"
         class="animate-in fade-in slide-in-from-top-2 fixed z-[100000020] w-max max-w-[calc(100vw-16px)] overflow-hidden rounded-xl shadow-lg ring-1 ring-black/5 duration-200 sm:min-w-[380px] dark:ring-white/10 surface-panel"
         style="pointer-events: auto !important;"
@@ -1127,12 +1137,15 @@
                 selectedKeyForGroup?.group_id === option.value ||
                 (!selectedKeyForGroup?.group_id && option.value === null)
               "
-            />
+            >
+              <template #rates><GroupRateSummary :group="quoteFor(option.value)" :loading="quotesLoading" :failed="quotesFailed" compact /></template>
+            </GroupOptionItem>
           </button>
           <!-- Empty state when search has no results -->
           <div v-if="filteredGroupOptions.length === 0" class="py-4 text-center text-sm surface-muted">
             {{ t('keys.noGroupFound') }}
           </div>
+          <button v-if="quotesFailed" type="button" class="btn btn-secondary btn-sm m-2" @click.stop="refreshQuotes">{{ t('billingRates.retry') }}</button>
         </div>
       </div>
     </Teleport>
@@ -1168,6 +1181,9 @@ import UseKeyModal from '@/components/keys/UseKeyModal.vue'
 import EndpointPopover from '@/components/keys/EndpointPopover.vue'
 import GroupBadge from '@/components/common/GroupBadge.vue'
 import GroupOptionItem from '@/components/common/GroupOptionItem.vue'
+import GroupRateSummary from '@/components/keys/GroupRateSummary.vue'
+import { useGroupRateQuotes } from '@/composables/useGroupRateQuotes'
+import { useQuoteRefresh } from '@/composables/useQuoteRefresh'
 import type { ApiKey, Group, PublicSettings, SubscriptionType, GroupPlatform, UpdateApiKeyRequest } from '@/types'
 import type { Column } from '@/components/common/types'
 import type { BatchApiKeyUsageStats } from '@/api/usage'
@@ -1206,6 +1222,9 @@ interface GroupOption {
 const appStore = useAppStore()
 const onboardingStore = useOnboardingStore()
 const { copyToClipboard: clipboardCopy } = useClipboard()
+const { groups: quotedGroups, loading: quotesLoading, failed: quotesFailed, refresh: refreshQuotes } = useGroupRateQuotes()
+const quoteFor = (id: number | null) => quotedGroups.value.find(group => group.id === id)
+useQuoteRefresh(refreshQuotes)
 
 const allColumns = computed<Column[]>(() => [
   { key: 'name', label: t('common.name'), sortable: true },
@@ -2036,6 +2055,7 @@ onMounted(() => {
   loadApiKeys()
   loadGroups()
   loadUserGroupRates()
+  void refreshQuotes()
   loadPublicSettings()
   document.addEventListener('click', closeGroupSelector)
   resetTimer = setInterval(() => { now.value = new Date() }, 60000)
@@ -2045,5 +2065,5 @@ onUnmounted(() => {
   document.removeEventListener('click', closeGroupSelector)
   if (resetTimer) clearInterval(resetTimer)
 })
-useLocaleRefresh(() => Promise.all([loadApiKeys(), loadGroups()]))
+useLocaleRefresh(() => Promise.all([loadApiKeys(), loadGroups(), refreshQuotes()]))
 </script>

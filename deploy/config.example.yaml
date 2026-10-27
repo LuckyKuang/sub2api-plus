@@ -252,6 +252,9 @@ security:
 # 网关配置
 # =============================================================================
 gateway:
+  # Persistent per-user unfinished async tasks across API keys and providers; must be positive.
+  # 每用户跨 Key/平台未完成异步任务上限；未知创建结果不会按 TTL 自动释放。
+  max_unfinished_tasks_per_user: 100
   # Minimum max_output_tokens when converting Chat Completions or Anthropic requests to Responses (minimum 16, default 128)
   # Chat Completions 或 Anthropic 请求转换为 Responses 时的最小 max_output_tokens（最小 16，默认 128）
   min_output_tokens: 128

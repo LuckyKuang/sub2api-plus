@@ -50,6 +50,10 @@ const (
 	FieldCurrency = "currency"
 	// FieldPlanName holds the string denoting the plan_name field in the database.
 	FieldPlanName = "plan_name"
+	// FieldPricingPolicyVersion holds the string denoting the pricing_policy_version field in the database.
+	FieldPricingPolicyVersion = "pricing_policy_version"
+	// FieldPricingSummary holds the string denoting the pricing_summary field in the database.
+	FieldPricingSummary = "pricing_summary"
 	// FieldRedeemCodeID holds the string denoting the redeem_code_id field in the database.
 	FieldRedeemCodeID = "redeem_code_id"
 	// FieldOrderType holds the string denoting the order_type field in the database.
@@ -136,6 +140,8 @@ var Columns = []string{
 	FieldOrderSource,
 	FieldCurrency,
 	FieldPlanName,
+	FieldPricingPolicyVersion,
+	FieldPricingSummary,
 	FieldRedeemCodeID,
 	FieldOrderType,
 	FieldPlanID,
@@ -205,6 +211,8 @@ var (
 	DefaultPlanName string
 	// PlanNameValidator is a validator for the "plan_name" field. It is called by the builders before save.
 	PlanNameValidator func(string) error
+	// DefaultPricingPolicyVersion holds the default value on creation for the "pricing_policy_version" field.
+	DefaultPricingPolicyVersion int64
 	// DefaultOrderType holds the default value on creation for the "order_type" field.
 	DefaultOrderType string
 	// OrderTypeValidator is a validator for the "order_type" field. It is called by the builders before save.
@@ -331,6 +339,11 @@ func ByCurrency(opts ...sql.OrderTermOption) OrderOption {
 // ByPlanName orders the results by the plan_name field.
 func ByPlanName(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldPlanName, opts...).ToFunc()
+}
+
+// ByPricingPolicyVersion orders the results by the pricing_policy_version field.
+func ByPricingPolicyVersion(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPricingPolicyVersion, opts...).ToFunc()
 }
 
 // ByRedeemCodeID orders the results by the redeem_code_id field.

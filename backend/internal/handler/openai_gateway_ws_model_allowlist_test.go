@@ -90,7 +90,7 @@ func TestOpenAIResponsesWebSocket_SubsequentTurnOmittedModelUsesSessionModel(t *
 // 白名单关闭：不受任何影响。
 func TestOpenAIResponsesWebSocket_DisabledAllowlistDoesNotInterfere(t *testing.T) {
 	got := runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
-		firstPayload:  `{"type":"response.create","model":"gpt-4.1","stream":false}`,
+		firstPayload:  `{"type":"response.create","model":"gpt-5.6-sol","stream":false}`,
 		secondPayload: `{"type":"response.create","model":"gpt-5.4","stream":false}`,
 		group:         wsAllowlistGroup(false, "gpt-5.4"),
 	})

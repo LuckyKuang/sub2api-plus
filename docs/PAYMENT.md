@@ -286,6 +286,50 @@ When adding a provider, the system auto-generates callback URLs from your site d
 
 ## Payment Flow
 
+Subscription plan cards and checkout expose the currently available models and
+their resolved selling multipliers through `model_catalog`, using the same
+backend policy as request billing. A range reflects the offered models rather
+than applying one group multiplier to every supplier. Current consumption rates
+are base × platform × model × applicable subscription peak, with independently default-1
+platform/model factors and separate factor breakdowns. A model multiplier need
+not replace the unit-price card. The applicable peak factor covers every charged
+meter for new admissions; order audit metadata records `peak_scope: all_meters`.
+Historical accepted task snapshots without a peak scope remain token-only.
+Zero means free when the underlying price is known; an empty
+catalog does not imply that the group's default rate is available for purchase.
+
+The card's usage-rate range comes from backend quotes across its configured
+models. Expanding **Models and rates** shows each model's actual supplier,
+billing unit and effective multiplier; expanding a model shows separate base,
+platform, model and peak factors and applicable prices. A uniform range displays
+one value, including `×0`; an empty or unquotable catalog displays rate
+unavailable instead of substituting the group's base multiplier. The purchase
+price remains a separate amount. The selection page refreshes sale quotes every
+60 seconds while visible and on focus; the additional checkout refresh below
+must succeed before order creation. A confirmation invalidates older background
+refreshes so a late response cannot roll back the reviewed models or rates.
+
+Checkout refreshes before creating an order. Changed plan prices, quotas,
+models or current rates require another confirmation. Requests can include
+`expected_billing_policy_version`; a stale group revision returns HTTP 409
+`BILLING_POLICY_CHANGED` before creating a payment order or contacting a payment
+provider. The order transaction rechecks the plan and group and preserves the
+confirmed group-policy evidence. A concurrent plan-price or entitlement change
+returns `SUBSCRIPTION_PLAN_CHANGED`. Returning from WeChat OAuth retains the
+fresh checkout policy version.
+
+Purchasing grants the subscription's access and quota. Each accepted request
+uses its current pricing snapshot, and its final billed amount consumes quota;
+the purchase does not lock consumption prices for the subscription term.
+Orders store the policy revision and public rules at purchase for review.
+They also record the buyer's current personal base override when configured.
+`expected_billing_policy_version` protects the group revision; it is not a
+version for personal overrides, catalog reloads or timed rate boundaries.
+Historical orders and redemption snapshots without this evidence remain
+version zero. Model prices, availability and time-based adjustments may change
+after checkout; the catalog is a current preview, not an upstream availability
+guarantee. See [Composite group billing](COMPOSITE_GROUPS.md).
+
 ```
 User selects amount and payment method
        │

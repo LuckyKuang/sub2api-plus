@@ -14,6 +14,10 @@
           :label="`${t('payment.tabSubscribe')} / ${t('payment.tabTopUp')}`"
         />
         <div class="workspace-shell workspace-scroll payment-activity" data-testid="payment-activity">
+        <div v-if="errorMessage" role="alert" class="card workspace-shell border border-amber-300 p-4 text-sm text-amber-800 dark:border-amber-700 dark:text-amber-200">
+          <p>{{ errorMessage }}</p>
+          <p v-if="errorHintMessage" class="mt-1">{{ errorHintMessage }}</p>
+        </div>
         <!-- Payment in progress (shared by recharge and subscription) -->
         <template v-if="paymentPhase === 'paying'">
           <PaymentStatusPanel
@@ -140,7 +144,7 @@
                   <div>
                     <span class="text-xs surface-muted">{{ t('payment.planCard.rate') }}</span>
                     <div class="flex items-baseline">
-                      <span :class="['text-lg font-bold', planTextClass]">×{{ selectedPlan.rate_multiplier ?? 1 }}</span>
+                      <span :class="['text-lg font-bold', planTextClass]">{{ planRateLabel(selectedPlan) ?? t('billingRates.unknown') }}</span>
                     </div>
                   </div>
                   <div v-if="planHasPeakRate(selectedPlan)">
@@ -171,6 +175,7 @@
                   </div>
                 </div>
               </div>
+              <PlanModelCatalog :catalog="selectedPlan.model_catalog" />
               <div v-if="enabledMethods.length >= 1" class="card workspace-shell p-6">
                 <PaymentMethodSelector
                   :methods="subMethodOptions"
@@ -316,6 +321,7 @@ import '@/styles/announcement-markdown.css'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useUserView as useAuthStore } from '@/composables/useUserView'
 import { usePaymentStore } from '@/stores/payment'
+import { useQuoteRefresh } from '@/composables/useQuoteRefresh'
 import { useSubscriptionStore } from '@/stores/subscriptions'
 import { useAppStore } from '@/stores'
 import { FeatureFlags, resolveFeatureFlag } from '@/utils/featureFlags'
@@ -343,6 +349,8 @@ import {
 } from '@/components/payment/paymentFlow'
 import { platformBadgeLightClass, platformBadgeClass, platformTextClass, platformLabel } from '@/utils/platformColors'
 import SubscriptionPlanCard from '@/components/payment/SubscriptionPlanCard.vue'
+import PlanModelCatalog from '@/components/payment/PlanModelCatalog.vue'
+import { planRateLabel, saleQuoteChanged } from '@/utils/billingRate'
 import PaymentStatusPanel from '@/components/payment/PaymentStatusPanel.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { DEFAULT_PAYMENT_CURRENCY, formatPaymentAmount, normalizePaymentCurrency } from '@/components/payment/currency'
@@ -564,6 +572,8 @@ const checkout = ref<CheckoutInfoResponse>({
   plans: [], balance_disabled: false, balance_recharge_multiplier: 1, subscription_usd_to_cny_rate: 0, recharge_fee_rate: 0, help_text: '', help_image_url: '', stripe_publishable_key: '',
   recharge_bonus_tiers: [], recharge_bonus_mode: 'bonus', recharge_bonus_notice: '',
 })
+// Confirmation supersedes any background request already in flight.
+let saleQuoteRequest = 0
 
 const renderedHelpText = computed(() => DOMPurify.sanitize(
   marked.parse(checkout.value.help_text || '', { async: false, gfm: true, breaks: false }),
@@ -853,7 +863,34 @@ async function handleSubmitRecharge() {
 
 async function confirmSubscribe() {
   if (!selectedPlan.value || submitting.value) return
-  await createOrder(selectedPlan.value.price, 'subscription', selectedPlan.value.id)
+  const previous = selectedPlan.value
+  const previousPayAmount = subTotalAmount.value
+  const previousCurrency = selectedCurrency.value
+  submitting.value = true
+  errorMessage.value = ''
+  ++saleQuoteRequest
+  try {
+    const response = await paymentAPI.getCheckoutInfo()
+    if (selectedPlan.value?.id !== previous.id) return
+    const current = response.data.plans.find(plan => plan.id === previous.id)
+    checkout.value = response.data
+    if (!current) {
+      selectedPlan.value = null
+      errorMessage.value = t('billingRates.unavailablePlan')
+      return
+    }
+    selectedPlan.value = current
+    if (saleQuoteChanged(previous, current) || previousPayAmount !== subTotalAmount.value || previousCurrency !== selectedCurrency.value || !canSubmitSubscription.value) {
+      errorMessage.value = t('billingRates.changed')
+      return
+    }
+  } catch {
+    errorMessage.value = t('billingRates.refreshFailed')
+    return
+  } finally {
+    submitting.value = false
+  }
+  await createOrder(selectedPlan.value!.price, 'subscription', selectedPlan.value!.id)
 }
 
 async function createOrder(orderAmount: number, orderType: OrderType, planId?: number, options: CreateOrderOptions = {}) {
@@ -878,6 +915,9 @@ async function createOrder(orderAmount: number, orderType: OrderType, planId?: n
     }
     if (options.wechatResumeToken) {
       payload.wechat_resume_token = options.wechatResumeToken
+    }
+    if (orderType === 'subscription' && selectedPlan.value && selectedPlan.value.id === planId && selectedPlan.value.model_catalog) {
+      payload.expected_billing_policy_version = selectedPlan.value.model_catalog.policy_version
     }
 
     const result = await paymentStore.createOrder(payload) as CreateOrderResult & { resume_token?: string }
@@ -1007,7 +1047,10 @@ async function createOrder(orderAmount: number, orderType: OrderType, planId?: n
     }
   } catch (err: unknown) {
     const apiErr = err as Record<string, unknown>
-    if (apiErr.reason === 'TOO_MANY_PENDING') {
+    if (apiErr.reason === 'BILLING_POLICY_CHANGED') {
+      errorMessage.value = t('billingRates.changed')
+      errorHintMessage.value = ''
+    } else if (apiErr.reason === 'TOO_MANY_PENDING') {
       const metadata = apiErr.metadata as Record<string, unknown> | undefined
       errorMessage.value = t('payment.errors.tooManyPending', { max: metadata?.max || '' })
       errorHintMessage.value = ''
@@ -1098,6 +1141,9 @@ async function attemptMobileQrFallback(err: unknown, context: MobileQrFallbackCo
       isMobile: false,
       isWechatBrowser: false,
     })
+    if (context.orderType === 'subscription' && selectedPlan.value && selectedPlan.value.id === context.planId && selectedPlan.value.model_catalog) {
+      payload.expected_billing_policy_version = selectedPlan.value.model_catalog.policy_version
+    }
     const result = await paymentStore.createOrder(payload) as CreateOrderResult & { resume_token?: string }
     const stripeMethod = visibleMethod === 'wxpay' ? 'wechat_pay' : 'alipay'
     const stripeRouteUrl = result.client_secret
@@ -1187,6 +1233,25 @@ async function resumeWechatPaymentFromQuery() {
 }
 
 let checkoutRequest = 0
+useQuoteRefresh(async () => {
+  if (loading.value || paymentPhase.value !== 'select' || submitting.value) return
+  const request = ++saleQuoteRequest
+  const response = await paymentAPI.getCheckoutInfo()
+  if (request !== saleQuoteRequest || paymentPhase.value !== 'select' || submitting.value) return
+  checkout.value.plans = response.data.plans
+  if (selectedPlan.value) {
+    const updated = response.data.plans.find(plan => plan.id === selectedPlan.value!.id)
+    if (!updated) {
+      selectedPlan.value = null
+      errorMessage.value = t('billingRates.unavailablePlan')
+    } else if (saleQuoteChanged(selectedPlan.value, updated)) {
+      selectedPlan.value = updated
+      errorMessage.value = t('billingRates.changed')
+    } else {
+      selectedPlan.value = updated
+    }
+  }
+})
 let translatedGroupNames: Map<number, SubscriptionPlan['group_name']> | null = null
 function applyTranslatedGroupNames() {
   if (!translatedGroupNames) return

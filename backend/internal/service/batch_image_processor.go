@@ -47,6 +47,8 @@ func (r *BatchImageAccountRepositoryResolver) ResolveBatchImageAccount(ctx conte
 }
 
 type BatchImageProviderProcessor struct {
+	UnfinishedTasks  *GatewayUnfinishedTaskService
+	Concurrency      *ConcurrencyService
 	Repo             BatchImageRepository
 	ProviderRegistry *BatchImageProviderRegistry
 	AccountResolver  BatchImageAccountResolver
@@ -65,11 +67,39 @@ func (p *BatchImageProviderProcessor) Process(ctx context.Context, batchID strin
 	if err != nil {
 		return BatchImageProcessResult{}, err
 	}
+	// These durable states are entered only after confirmed provider success.
+	// A restarted worker must recover task capacity before account admission,
+	// result downloads or billing retries can fail again.
+	if job.Status == BatchImageJobStatusIndexing || job.Status == BatchImageJobStatusSettling {
+		if err := releaseBatchImageUnfinished(ctx, p.UnfinishedTasks, job, "provider_terminal"); err != nil {
+			return BatchImageProcessResult{}, err
+		}
+	}
 	if isBatchImageProcessorDoneStatus(job.Status) {
 		if err := p.releaseTerminalHold(ctx, job); err != nil {
 			return BatchImageProcessResult{}, err
 		}
 		return BatchImageProcessResult{Terminal: true}, nil
+	}
+
+	// Each worker execution competes with all of the user's active gateway
+	// requests. The queued/upstream-waiting job itself retains no execution slot.
+	if p.Concurrency == nil {
+		return BatchImageProcessResult{}, infraerrors.New(http.StatusServiceUnavailable, "CONCURRENCY_UNAVAILABLE", "batch execution admission is unavailable")
+	}
+	leaseCtx, cancelLease := WithConcurrencyLeaseContext(ctx)
+	defer cancelLease(nil)
+	lease, admissionErr := p.Concurrency.AcquireUserSlot(leaseCtx, job.UserID, 0)
+	if admissionErr != nil {
+		return BatchImageProcessResult{}, admissionErr
+	}
+	if !lease.Acquired {
+		return BatchImageProcessResult{RequeueAfter: p.requeueDelay(0)}, nil
+	}
+	defer lease.ReleaseFunc()
+	ctx = lease.Context
+	if job.APIKeyID != nil {
+		defer p.Concurrency.TrackAPIKeySlot(ctx, *job.APIKeyID)()
 	}
 
 	provider, ok := p.ProviderRegistry.Get(job.Provider)
@@ -106,6 +136,15 @@ func (p *BatchImageProviderProcessor) Process(ctx context.Context, batchID strin
 	}
 	if status == nil {
 		return BatchImageProcessResult{RequeueAfter: p.requeueDelay(0)}, nil
+	}
+	// Provider execution has finished even if local output-reference persistence
+	// or the following status transition fails. Free only this task's capacity
+	// before those independent writes; unconfirmed states keep their reservation.
+	switch status.InternalState {
+	case BatchProviderStateSucceeded, BatchProviderStateFailed, BatchProviderStateExpired, BatchProviderStateCancelled:
+		if err := releaseBatchImageUnfinished(ctx, p.UnfinishedTasks, job, "provider_terminal"); err != nil {
+			return BatchImageProcessResult{}, err
+		}
 	}
 	if err := p.persistProviderOutputRef(ctx, job, status.ProviderOutputRef); err != nil {
 		return BatchImageProcessResult{}, err
@@ -231,6 +270,11 @@ func (p *BatchImageProviderProcessor) indexAndSettle(ctx context.Context, job *B
 func (p *BatchImageProviderProcessor) releaseTerminalHold(ctx context.Context, job *BatchImageJob) error {
 	if p == nil || job == nil {
 		return nil
+	}
+	if IsTerminalBatchImageJobStatus(job.Status) {
+		if err := releaseBatchImageUnfinished(ctx, p.UnfinishedTasks, job, "local_terminal"); err != nil {
+			return err
+		}
 	}
 	if job.Status != BatchImageJobStatusFailed && job.Status != BatchImageJobStatusCancelled {
 		return nil

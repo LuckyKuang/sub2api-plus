@@ -66,11 +66,19 @@ type PlazaGroup struct {
 // 模型枚举来自渠道配置；token 模型的展示单价与阶梯由 BillingService 的阶梯表
 // 查询给出（与扣费走同一条解析链与计费函数），图片/按次模型沿用渠道/分组档位价。
 type ModelPlazaService struct {
-	channelRepo    ChannelRepository
-	groupRepo      GroupRepository
-	pricingService *PricingService
-	billingService *BillingService
-	resolver       *ModelPricingResolver
+	channelRepo        ChannelRepository
+	groupRepo          GroupRepository
+	pricingService     *PricingService
+	billingService     *BillingService
+	resolver           *ModelPricingResolver
+	commercialRoutes   CompositeModelRouteRepository
+	commercialAccounts AccountRepository
+}
+
+// SetCommercialCatalogSources attaches read-only configuration sources. Catalog
+// reads never discover upstream models, acquire an account, or refresh credentials.
+func (s *ModelPlazaService) SetCommercialCatalogSources(routes CompositeModelRouteRepository, accounts AccountRepository) {
+	s.commercialRoutes, s.commercialAccounts = routes, accounts
 }
 
 // NewModelPlazaService 创建模型广场服务。

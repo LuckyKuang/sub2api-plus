@@ -26,11 +26,13 @@ import (
 
 func TestApplyWeChatPaymentResumeClaims(t *testing.T) {
 	t.Parallel()
+	currentPolicy := int64(7)
 
 	req := CreateOrderRequest{
-		Amount:      0,
-		PaymentType: payment.TypeWxpay,
-		OrderType:   payment.OrderTypeBalance,
+		Amount:                       0,
+		PaymentType:                  payment.TypeWxpay,
+		OrderType:                    payment.OrderTypeBalance,
+		ExpectedBillingPolicyVersion: &currentPolicy,
 	}
 
 	err := applyWeChatPaymentResumeClaims(&req, &service.WeChatPaymentResumeClaims{
@@ -55,6 +57,9 @@ func TestApplyWeChatPaymentResumeClaims(t *testing.T) {
 	if req.PlanID != 7 {
 		t.Fatalf("plan_id = %d, want 7", req.PlanID)
 	}
+	// Returning from OAuth still confirms the freshly displayed consumption
+	// policy; the authentication token must not replace this checkout evidence.
+	require.Equal(t, &currentPolicy, req.ExpectedBillingPolicyVersion)
 }
 
 func TestApplyWeChatPaymentResumeClaimsRejectsPaymentTypeMismatch(t *testing.T) {

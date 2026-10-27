@@ -413,7 +413,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		clientDisconnected = true
 		clientDisconnectDrainStartedAt = time.Now()
 		if !upstreamReadDetached {
-			upstreamReadCtx = context.WithoutCancel(ctx)
+			upstreamReadCtx, _ = detachUpstreamContext(ctx)
 			upstreamReadDetached = true
 		}
 		logOpenAIWSModeInfo(

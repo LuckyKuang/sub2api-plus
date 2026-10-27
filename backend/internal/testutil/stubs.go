@@ -110,11 +110,15 @@ func (c StubGatewayCache) SetGrokVideoPendingBilling(_ context.Context, _ string
 func (c StubGatewayCache) GetGrokVideoPendingBilling(_ context.Context, _ string) ([]byte, error) {
 	return nil, nil
 }
-func (c StubGatewayCache) ClaimGrokVideoBilled(_ context.Context, _ string, _ time.Duration) (bool, error) {
+func (c StubGatewayCache) ClaimGrokVideoBilled(_ context.Context, _ string, _ string, _ time.Duration) (bool, error) {
 	return true, nil
 }
 
-func (c StubGatewayCache) ReleaseGrokVideoBilled(_ context.Context, _ string) error {
+func (c StubGatewayCache) CompleteGrokVideoBilled(_ context.Context, _ string, _ string, _ time.Duration) (bool, error) {
+	return true, nil
+}
+
+func (c StubGatewayCache) ReleaseGrokVideoBilled(_ context.Context, _ string, _ string) error {
 	return nil
 }
 

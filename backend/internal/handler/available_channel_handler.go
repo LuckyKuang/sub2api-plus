@@ -147,6 +147,13 @@ func (h *AvailableChannelHandler) List(c *gin.Context) {
 		return
 	}
 
+	// Key group selection must disclose authorized selling rates even when
+	// the optional available-channels page is disabled.
+	if keyQuotesView(c) {
+		h.listCatalog(c, subject.UserID)
+		return
+	}
+
 	// Feature 未启用时返回空数组（不暴露渠道信息）。检查放在认证之后，
 	// 保持与未开关前的 401 行为一致：未登录先 401，登录后再按开关决定。
 	if !h.featureEnabled(c) {

@@ -464,3 +464,38 @@ Normal refresh preserves session mapping while invalidating obsolete credential
 observations; a fresh token does not inherit an older token’s late error.
 Replacing an API key changes its session mapping; OAuth session ownership is
 bound to the authenticated subject/team so ordinary token rotation preserves it.
+
+
+### Async video creation and capacity
+
+Video create/edit/extend reserve the user's persistent unfinished-task capacity
+before sending upstream, in addition to the active HTTP execution lease.
+Transport errors, ambiguous server failures, malformed success or a lost response
+do not prove that no video was created. Such attempts retain capacity and stop
+automatic retries on another account. A credential failure confirmed before any
+provider send, or a structured 401/403/429 rejection from the trusted provider
+response path, can prove that this attempt accepted no job and preserve eligible
+account failover. Client-visible error rewrites cannot supply that evidence.
+
+Status and content use provider terminal-state evidence independently of whether
+usage is billable. Pending status, a content range error or an empty result does
+not release persistent task capacity. The same rules apply to native Ark/Seedance
+through its supplier-specific handler: an accepted cancellation request is not a
+confirmed terminal task. See [GATEWAY_TASK_LIMITS.md](../GATEWAY_TASK_LIMITS.md).
+
+Completed video settlement uses its create-time pricing evidence. The billing
+worker first holds a 30-second owner lease; only a successful durable billing
+transaction promotes it to a 48-hour completion marker. A failed or crashed
+worker leaves the task retryable while the 24-hour price record is available.
+Failure cleanup and success marking use a separate two-second budget, so a
+timed-out worker cannot strand its claim. Both operations compare the owner;
+late callbacks cannot delete a successor's lease or its completed marker.
+Stable task request IDs provide PostgreSQL billing deduplication if processing
+overlaps after lease expiry. Ark/Seedance uses the same lifecycle with its
+native output-token price evidence.
+The authenticated task route fixes that billing identity; provider status or
+asset response IDs remain observations and cannot create a second charge.
+On upgrade, a versioned Redis namespace rechecks ambiguous legacy `"1"` claims
+through the durable billing request ID. A previously settled task is not charged
+again; an unpaid task can recover at its persisted price. Legacy and unrelated
+cache records are not deleted or migrated.

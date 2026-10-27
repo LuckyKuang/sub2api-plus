@@ -13,6 +13,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/logger"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/timezone"
 	"github.com/google/uuid"
+	"github.com/tidwall/gjson"
 )
 
 // InflightBalanceReservationCache 余额在途预留的缓存能力（可选）。
@@ -365,14 +366,21 @@ const (
 	InflightEstimateVideo
 	// InflightEstimateAudio 语音（tts/stt/realtime）：按 AudioMode/AudioUnits 计。
 	InflightEstimateAudio
+	// InflightEstimateInputOnly prices embeddings without inventing output usage.
+	InflightEstimateInputOnly
 )
 
 // InflightEstimateRequest 单请求估算输入。
 type InflightEstimateRequest struct {
-	Model     string
-	BodyBytes int
-	MaxTokens int
-	Kind      InflightEstimateKind
+	Protocol        string
+	AnthropicFast   bool
+	Model           string
+	BodyBytes       int
+	MaxTokens       int
+	ServiceTier     string
+	ReasoningEffort string
+	effortMetadata  inflightEffortMetadata
+	Kind            InflightEstimateKind
 	// Units 按次/按张数量（<=0 视为 1）。
 	Units int
 	// SearchCalls 叠加的搜索次数（按分组 search_price_per_1k 计）。
@@ -398,6 +406,9 @@ type inflightEstimateDeps struct {
 	// 仅在首选/渠道候选均无法定价（或 composite 分组）时才调用；实现只读调度器快照，
 	// 不在请求路径上直接查库，也不按模型名缓存（内存不随请求模型名增长）。
 	accountMappedModels func(ctx context.Context, apiKey *APIKey, model string) []string
+	// Account protocol selection can translate explicit or default effort levels.
+	// Keep this metadata alongside model mappings without retaining request bodies.
+	accountEffortAccounts func(ctx context.Context, apiKey *APIKey, model string) []Account
 }
 
 // inflightSnapshotLister 调度器快照读取（与账号选择同源：Redis 快照，未命中时由快照服务自身回源并回填）。
@@ -406,23 +417,35 @@ type inflightSnapshotLister func(ctx context.Context, groupID *int64, platform s
 // inflightAccountMappedModelsFromSnapshot 基于调度器快照在内存中匹配账号级映射（支持通配规则）。
 // resolvePlatform 返回与调度器一致的平台；无分组 API Key 使用调度器的未分组账号池（groupID=nil）。
 func inflightAccountMappedModelsFromSnapshot(list inflightSnapshotLister, resolvePlatform func(ctx context.Context, apiKey *APIKey, model string) (string, bool, bool)) func(ctx context.Context, apiKey *APIKey, model string) []string {
-	if list == nil || resolvePlatform == nil {
+	accounts := inflightAccountCandidatesFromSnapshot(list, resolvePlatform)
+	if accounts == nil {
 		return nil
 	}
 	return func(ctx context.Context, apiKey *APIKey, model string) []string {
+		return accountMappedModelsFrom(accounts(ctx, apiKey, model), model)
+	}
+}
+
+func inflightAccountCandidatesFromSnapshot(list inflightSnapshotLister, resolvePlatform func(ctx context.Context, apiKey *APIKey, model string) (string, bool, bool)) func(ctx context.Context, apiKey *APIKey, model string) []Account {
+	if list == nil || resolvePlatform == nil {
+		return nil
+	}
+	return func(ctx context.Context, apiKey *APIKey, model string) []Account {
 		model = strings.TrimSpace(model)
 		if apiKey == nil || model == "" {
 			return nil
 		}
-		platform, forced, ok := resolvePlatform(ctx, apiKey, model)
+		lookupCtx, cancel := context.WithTimeout(inflightSnapshotLookupContext(ctx), 2*time.Second)
+		defer cancel()
+		platform, forced, ok := resolvePlatform(lookupCtx, apiKey, model)
 		if !ok || platform == "" {
 			return nil
 		}
-		accounts, err := list(ctx, apiKey.GroupID, platform, forced)
+		accounts, err := list(lookupCtx, apiKey.GroupID, platform, forced)
 		if err != nil {
 			return nil
 		}
-		return accountMappedModelsFrom(accounts, model)
+		return accounts
 	}
 }
 
@@ -489,6 +512,9 @@ func inflightBillingModelCandidates(ctx context.Context, deps inflightEstimateDe
 }
 
 func (d inflightEstimateDeps) rates(ctx context.Context, apiKey *APIKey) (text, image float64) {
+	if BillingPricingSnapshotFromContext(ctx) != nil {
+		return customerBillingRate(ctx, apiKey, "token", 1), customerBillingRate(ctx, apiKey, "image", 1)
+	}
 	rate := 1.0
 	if d.cfg != nil && d.cfg.Default.RateMultiplier > 0 {
 		rate = d.cfg.Default.RateMultiplier
@@ -499,7 +525,8 @@ func (d inflightEstimateDeps) rates(ctx context.Context, apiKey *APIKey) (text, 
 			rate = d.userGroupRate(ctx, apiKey.User.ID, *apiKey.GroupID, rate)
 		}
 	}
-	return computePeakAwareMultipliers(apiKey, rate, timezone.Now())
+	text, image = computePeakAwareMultipliers(apiKey, rate, timezone.Now())
+	return customerBillingRate(ctx, apiKey, "token", text), customerBillingRate(ctx, apiKey, "image", image)
 }
 
 func tokenCounts(cfg config.InflightReservationConfig, bodyBytes, maxTokens int) (int, int) {
@@ -523,20 +550,48 @@ func tokenCounts(cfg config.InflightReservationConfig, bodyBytes, maxTokens int)
 	return inputTokens, outputTokens
 }
 
-func maxPerRequestPrice(resolved *ResolvedPricing) float64 {
+func maxPerRequestPrice(resolved *ResolvedPricing) (float64, bool) {
 	if resolved == nil {
-		return 0
+		return 0, false
 	}
-	p := resolved.DefaultPerRequestPrice
+	p, priced := defaultRequestPrice(resolved)
 	for _, tier := range resolved.RequestTiers {
-		if tier.PerRequestPrice != nil && *tier.PerRequestPrice > p {
-			p = *tier.PerRequestPrice
+		if tier.PerRequestPrice != nil {
+			if !validCost(*tier.PerRequestPrice) {
+				return 0, false
+			}
+			p = math.Max(p, *tier.PerRequestPrice)
+			priced = true
 		}
 	}
-	return p
+	return p, priced && validCost(p)
 }
 
 func validCost(v float64) bool { return v >= 0 && !math.IsNaN(v) && !math.IsInf(v, 0) }
+
+// WithRequestPricingMetadata retains known forwarded pricing dimensions for
+// admission. It reuses the usage parsers; an implicit thinking budget does not
+// invent a billing effort. Call after any ingress policy rewriting.
+func (req InflightEstimateRequest) WithRequestPricingMetadata(body []byte) InflightEstimateRequest {
+	var effort *string
+	switch req.Protocol {
+	case ContentModerationProtocolAnthropicMessages:
+		effort = NormalizeClaudeOutputEffort(gjson.GetBytes(body, "output_config.effort").String())
+		effort = ApplyThinkingEnabledFallback(effort, body, req.Model)
+	case ContentModerationProtocolGemini:
+		effort = extractGeminiReasoningEffortFromBody(body)
+	case ContentModerationProtocolOpenAIChat, ContentModerationProtocolOpenAIResponses:
+		if tier := extractOpenAIServiceTierFromBody(body); tier != nil {
+			req.ServiceTier = *tier
+		}
+		effort = extractOpenAIReasoningEffortFromBody(body, req.Model)
+		effort = ApplyThinkingEnabledFallback(effort, body, req.Model)
+	}
+	if effort != nil {
+		req.ReasoningEffort = *effort
+	}
+	return req.captureInflightEffortMetadata(body)
+}
 
 // estimateOne 估算单个候选计费模型（未乘倍率的 token 部分与按次部分分开返回，便于套用不同倍率）。
 func (d inflightEstimateDeps) estimateOne(ctx context.Context, apiKey *APIKey, model string, req InflightEstimateRequest, textRate, imageRate float64) (float64, bool) {
@@ -556,31 +611,46 @@ func (d inflightEstimateDeps) estimateOne(ctx context.Context, apiKey *APIKey, m
 	}
 
 	inputTokens, outputTokens := tokenCounts(cfg, req.BodyBytes, req.MaxTokens)
+	if req.Kind == InflightEstimateInputOnly {
+		outputTokens = 0
+	}
 	priced := false
 	tokenCost := func() float64 {
-		var pricing *ModelPricing
-		if resolved != nil && (resolved.Mode == BillingModeToken || resolved.Mode == "") && d.resolver != nil {
-			pricing = d.resolver.GetIntervalPricing(resolved, inputTokens)
+		if d.billing == nil {
+			return 0
 		}
-		if pricing == nil && d.billing != nil {
-			pricing, _ = d.billing.GetModelPricing(model)
+		var group *Group
+		if apiKey != nil {
+			group = apiKey.Group
 		}
-		if pricing == nil {
+		at := timezone.Now()
+		if snapshot := BillingPricingSnapshotFromContext(ctx); snapshot != nil {
+			at = snapshot.pricingAt
+		}
+		cost, err := d.billing.CalculateTokenCostForRequest(TokenCostRequest{Ctx: ctx, Model: model, Group: group,
+			Tokens: UsageTokens{InputTokens: inputTokens, OutputTokens: outputTokens}, RateMultiplier: textRate,
+			PricingAt: at, ServiceTier: req.ServiceTier, ReasoningEffort: req.ReasoningEffort, Resolver: d.resolver, Resolved: resolved})
+		if err != nil || cost == nil {
 			return 0
 		}
 		priced = true
-		return (float64(inputTokens)*pricing.InputPricePerToken + float64(outputTokens)*pricing.OutputPricePerToken) * textRate
+		return cost.ActualCost
 	}
 
 	var cost float64
 	perRequestMode := resolved != nil && (resolved.Mode == BillingModePerRequest || resolved.Mode == BillingModeImage || resolved.Mode == BillingModeVideo)
+	requestPrice, requestPriced := maxPerRequestPrice(resolved)
 	if perRequestMode {
-		priced = true
+		priced = requestPriced
+		if resolved.channelPricing != nil {
+			requestPrice *= reasoningEffortBillingMultiplier(req.ReasoningEffort, resolved.channelPricing.ReasoningEffortMultipliers)
+		}
 	}
 	switch req.Kind {
 	case InflightEstimateImage:
 		if perRequestMode {
-			cost = maxPerRequestPrice(resolved) * float64(units) * imageRate
+			rate := customerBillingRate(ctx, apiKey, billingUnitForMode(string(resolved.Mode)), imageRate)
+			cost = requestPrice * float64(units) * rate
 		}
 		configuredTokenPrice := resolved != nil && resolved.Mode == BillingModeToken &&
 			(resolved.Source == PricingSourceGroup || resolved.Source == PricingSourceChannel)
@@ -600,25 +670,32 @@ func (d inflightEstimateDeps) estimateOne(ctx context.Context, apiKey *APIKey, m
 			cost = tokenCost()
 		}
 	case InflightEstimateVideo:
+		videoRate := customerBillingRate(ctx, apiKey, "second", math.Max(textRate, imageRate))
 		if perRequestMode {
-			cost = maxPerRequestPrice(resolved) * float64(units) * math.Max(textRate, imageRate)
+			u := float64(units)
+			if resolved.Mode == BillingModeVideo {
+				u *= float64(NormalizeVideoBillingDurationSecondsOrDefault(req.VideoDurationSeconds))
+			}
+			rate := customerBillingRate(ctx, apiKey, billingUnitForMode(string(resolved.Mode)), videoRate)
+			cost = requestPrice * u * rate
 		}
 		if !perRequestMode && d.billing != nil {
-			if b := d.billing.CalculateVideoCost(model, req.VideoResolution, units, req.VideoDurationSeconds, videoPriceConfigFromAPIKey(apiKey), math.Max(textRate, imageRate)); b != nil {
+			if b := d.billing.CalculateVideoCost(model, req.VideoResolution, units, req.VideoDurationSeconds, videoPriceConfigFromAPIKey(apiKey), videoRate); b != nil {
 				priced = true
 				cost = b.ActualCost
 			}
 		}
 	case InflightEstimateAudio:
+		textRate = customerBillingRate(ctx, apiKey, audioBillingUnit(req.AudioMode), textRate)
 		// Audio billing only honors per-request overrides, not image/video modes.
 		perRequestMode = perRequestMode && resolved.Mode == BillingModePerRequest
-		priced = perRequestMode
+		priced = perRequestMode && requestPriced
 		if perRequestMode && resolved.Mode == BillingModePerRequest {
 			u := req.AudioUnits
 			if u <= 0 {
 				u = 1
 			}
-			cost = maxPerRequestPrice(resolved) * u * textRate
+			cost = requestPrice * u * textRate
 		}
 		if !perRequestMode && d.billing != nil && req.AudioUnits > 0 {
 			if b := d.billing.CalculateAudioCost(req.AudioMode, req.AudioUnits, groupAudioPriceConfigFromAPIKey(apiKey), textRate); b != nil {
@@ -628,18 +705,18 @@ func (d inflightEstimateDeps) estimateOne(ctx context.Context, apiKey *APIKey, m
 		}
 	default:
 		if perRequestMode {
-			rate := textRate
+			rate := customerBillingRate(ctx, apiKey, "request", textRate)
 			if resolved.Mode == BillingModeImage {
 				rate = imageRate
 			}
-			cost = maxPerRequestPrice(resolved) * float64(units) * rate
+			cost = requestPrice * float64(units) * rate
 		} else if req.Kind != InflightEstimatePerRequest {
 			cost = tokenCost()
 		}
 	}
 	if req.SearchCalls > 0 {
 		if d.billing != nil {
-			if b := d.billing.CalculateSearchCost(req.SearchCalls, groupSearchPricePer1kFromAPIKey(apiKey), textRate); b != nil {
+			if b := d.billing.CalculateSearchCost(req.SearchCalls, groupSearchPricePer1kFromAPIKey(apiKey), customerBillingRate(ctx, apiKey, "request", textRate)); b != nil {
 				priced = true
 				cost += b.ActualCost
 			}
@@ -656,21 +733,56 @@ func (d inflightEstimateDeps) estimate(ctx context.Context, apiKey *APIKey, req 
 	if apiKey == nil || apiKey.User == nil {
 		return 0, false
 	}
+	if snapshot := BillingPricingSnapshotFromContext(ctx); snapshot != nil {
+		if snapshot.captureErr != nil {
+			return 0, false
+		}
+		ctx, apiKey = prepareUsagePricing(ctx, snapshot, apiKey, nil, req.Model, req.Model)
+		d.billing, d.resolver = snapshot.billing, snapshot.resolver
+		if snapshot.channels != nil {
+			d.resolveMapping = snapshot.channels.ResolveChannelMapping
+		} else {
+			d.resolveMapping = nil
+		}
+	} else {
+		ctx = BindBillingPricingModel(ctx, requestBillingPlatform(ctx, apiKey.Group, ""), req.Model)
+	}
 	if req.Model == "" || (req.Kind == InflightEstimateAudio && req.AudioUnits <= 0) {
 		// 非计量请求（媒体状态查询、custom-voices 等）：无需预留，也不算「无法定价」。
 		return 0, true
 	}
 	textRate, imageRate := d.rates(ctx, apiKey)
-	if textRate <= 0 && imageRate <= 0 {
-		// 免费分组：不计费，也无需预留。
-		return 0, true
+	if req.Kind == InflightEstimateImage {
+		ctx = withBillingBaseUnit(ctx, "image")
+	}
+	if req.Kind == InflightEstimateVideo {
+		ctx = withBillingBaseUnit(ctx, "second")
 	}
 	primary, fallbacks, upstreamInput := inflightBillingModelCandidates(ctx, d, apiKey, req.Model)
+	efforts := d.inflightEffortCandidates(ctx, apiKey, req, append(append([]string{}, primary...), fallbacks...), upstreamInput)
+	estimateOne := func(model string) (float64, bool) {
+		best, priced := 0.0, false
+		for _, effort := range efforts {
+			candidate := req
+			candidate.ReasoningEffort = effort
+			if amount, ok := d.estimateOne(ctx, apiKey, model, candidate, textRate, imageRate); ok {
+				best = math.Max(best, amount)
+				priced = true
+			}
+		}
+		return best, priced
+	}
+	// An authoritative public card is the settlement contract. An account mapping
+	// changes the wire model, not the retail price; do not reserve another SKU's
+	// potentially higher catalog price when that card already prices the request.
+	if preferred := preferredConfiguredPublicPricingModel(ctx, d.resolver, apiKey.Group, publicBillingModel(ctx, "", req.Model), ""); preferred != "" {
+		return estimateOne(preferred)
+	}
 	bestOf := func(models []string) (float64, bool) {
 		best := 0.0
 		priced := false
 		for _, m := range models {
-			if c, ok := d.estimateOne(ctx, apiKey, m, req, textRate, imageRate); ok {
+			if c, ok := estimateOne(m); ok {
 				priced = true
 				best = math.Max(best, c)
 			}
@@ -740,16 +852,15 @@ func (s *GatewayService) inflightEstimateDeps() inflightEstimateDeps {
 	d.userGroupRate = s.getUserGroupRateMultiplier
 	if s.schedulerSnapshot != nil {
 		snap := s.schedulerSnapshot
-		d.accountMappedModels = inflightAccountMappedModelsFromSnapshot(
-			func(ctx context.Context, groupID *int64, platform string, forced bool) ([]Account, error) {
-				accounts, _, err := snap.ListSchedulableAccounts(ctx, groupID, platform, forced)
-				return accounts, err
-			},
-			func(ctx context.Context, apiKey *APIKey, model string) (string, bool, bool) {
-				platform, forced, err := s.resolvePlatform(ctx, apiKey.GroupID, apiKey.Group, model)
-				return platform, forced, err == nil
-			},
-		)
+		list := func(ctx context.Context, groupID *int64, platform string, forced bool) ([]Account, error) {
+			return listInflightSnapshotAccounts(ctx, snap, groupID, platform, forced)
+		}
+		resolvePlatform := func(ctx context.Context, apiKey *APIKey, model string) (string, bool, bool) {
+			platform, forced, err := s.resolvePlatform(ctx, apiKey.GroupID, apiKey.Group, model)
+			return platform, forced, err == nil
+		}
+		d.accountMappedModels = inflightAccountMappedModelsFromSnapshot(list, resolvePlatform)
+		d.accountEffortAccounts = inflightAccountCandidatesFromSnapshot(list, resolvePlatform)
 	}
 	return d
 }
@@ -760,7 +871,9 @@ func (s *GatewayService) EstimateInflightReservation(ctx context.Context, apiKey
 	if s == nil {
 		return 0, false
 	}
-	return s.inflightEstimateDeps().estimate(ctx, apiKey, req)
+	ctx, cancel := withInflightSnapshotLookup(ctx)
+	defer cancel()
+	return estimateInflightWithFastPolicy(ctx, apiKey, req, s.inflightEstimateDeps(), s.schedulerSnapshot)
 }
 
 func (s *OpenAIGatewayService) inflightEstimateDeps() inflightEstimateDeps {
@@ -771,19 +884,15 @@ func (s *OpenAIGatewayService) inflightEstimateDeps() inflightEstimateDeps {
 	d.userGroupRate = s.ResolveUserGroupRateMultiplier
 	if s.schedulerSnapshot != nil {
 		snap := s.schedulerSnapshot
-		d.accountMappedModels = inflightAccountMappedModelsFromSnapshot(
-			func(ctx context.Context, groupID *int64, platform string, forced bool) ([]Account, error) {
-				accounts, _, err := snap.ListSchedulableAccounts(ctx, groupID, platform, forced)
-				return accounts, err
-			},
-			func(ctx context.Context, apiKey *APIKey, model string) (string, bool, bool) {
-				platform := PlatformOpenAI
-				if apiKey.Group != nil && apiKey.Group.Platform != "" && apiKey.Group.Platform != PlatformComposite {
-					platform = apiKey.Group.Platform
-				}
-				return NormalizeOpenAICompatiblePlatform(platform), false, true
-			},
-		)
+		list := func(ctx context.Context, groupID *int64, platform string, forced bool) ([]Account, error) {
+			return listInflightSnapshotAccounts(ctx, snap, groupID, platform, forced)
+		}
+		resolvePlatform := func(ctx context.Context, apiKey *APIKey, model string) (string, bool, bool) {
+			platform := requestBillingPlatform(ctx, apiKey.Group, PlatformOpenAI)
+			return NormalizeOpenAICompatiblePlatform(platform), false, true
+		}
+		d.accountMappedModels = inflightAccountMappedModelsFromSnapshot(list, resolvePlatform)
+		d.accountEffortAccounts = inflightAccountCandidatesFromSnapshot(list, resolvePlatform)
 	}
 	return d
 }
@@ -793,5 +902,7 @@ func (s *OpenAIGatewayService) EstimateInflightReservation(ctx context.Context, 
 	if s == nil {
 		return 0, false
 	}
-	return s.inflightEstimateDeps().estimate(ctx, apiKey, req)
+	ctx, cancel := withInflightSnapshotLookup(ctx)
+	defer cancel()
+	return estimateInflightWithFastPolicy(ctx, apiKey, req, s.inflightEstimateDeps(), s.schedulerSnapshot)
 }
