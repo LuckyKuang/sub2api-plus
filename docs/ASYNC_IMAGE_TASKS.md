@@ -289,6 +289,12 @@ Submission returns the public batch object with HTTP 200. It includes `id`,
 `object: image.batch`, `status`, model/provider, item/success/failure counts,
 estimated/actual cost and lifecycle timestamps. Reusing an idempotency key with
 the same normalized payload returns its job; a changed payload is a conflict.
+An omitted or whitespace-only `task_name` gets a display label when a new job is
+created; that generated time does not enter the request fingerprint. Explicit
+names remain part of the payload, so changing or removing one is a conflict.
+Earlier unnamed jobs can retain a fingerprint containing their generated label
+and still return a conflict on retry; use the existing batch ID to query or manage
+those jobs. Stored fingerprints and billing holds are not rewritten.
 Optional `task_name` labels the job; `parent_batch_id` links an owner-scoped
 retry to its original batch. Lists support `status`, `task_name`, `downloaded`,
 `from`, `to`, `limit` and `cursor`; item lists support `status`, `limit` and
