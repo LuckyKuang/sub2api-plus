@@ -721,11 +721,12 @@ func (d inflightEstimateDeps) estimateOne(ctx context.Context, apiKey *APIKey, m
 	}
 	switch req.Kind {
 	case InflightEstimateImage:
+		forcePerImage := imageCountBillingEnabled(apiKey)
 		if perRequestMode {
 			rate := customerBillingRate(ctx, apiKey, billingUnitForMode(string(resolved.Mode)), imageRate)
 			cost = requestPrice * float64(units) * rate
 		}
-		configuredTokenPrice := resolved != nil && resolved.Mode == BillingModeToken &&
+		configuredTokenPrice := !forcePerImage && resolved != nil && resolved.Mode == BillingModeToken &&
 			(resolved.Source == PricingSourceGroup || resolved.Source == PricingSourceChannel)
 		if configuredTokenPrice {
 			cost = tokenCost()
@@ -733,13 +734,16 @@ func (d inflightEstimateDeps) estimateOne(ctx context.Context, apiKey *APIKey, m
 		if !perRequestMode && !configuredTokenPrice && d.billing != nil {
 			cfgImg := imagePriceConfigFromAPIKey(apiKey)
 			for _, tier := range []string{ImageBillingSize1K, ImageBillingSize2K, ImageBillingSize4K} {
+				if forcePerImage && !d.billing.hasIdentifiedImageUnitPrice(model, tier, cfgImg) {
+					continue
+				}
 				if b := d.billing.CalculateImageCost(model, tier, units, cfgImg, imageRate); b != nil {
 					priced = true
 					cost = math.Max(cost, b.ActualCost)
 				}
 			}
 		}
-		if !priced {
+		if !priced && !forcePerImage {
 			cost = tokenCost()
 		}
 	case InflightEstimateVideo:

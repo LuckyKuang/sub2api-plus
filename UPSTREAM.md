@@ -6,10 +6,26 @@ publication status. Release naming and procedures live in
 
 ## Integrated Baseline
 
-The current tree integrates official `v0.2.18`: annotated tag object
-`de86961b627e48db75d61fff8c05535d44a00cbe`, peeled commit
-`ac1b8f1271be0d674fa6f074403c1410f30a3a81`. Plus behavior governs conflict
-resolution; importing source does not itself publish a Plus release.
+The current tree integrates Wei-Shaw/sub2api commit
+`0a2a29b32e6724714c69822296ccd05a6b86bfdd`, following the previous `v0.2.18`
+baseline `ac1b8f1271be0d674fa6f074403c1410f30a3a81`. Importing source does not
+publish a Plus release or change any historical release mapping below.
+
+For OpenAI, xAI, DeepSeek, Kimi, MiniMax, StepFun and Zhipu, the mapped official
+agent sources in [OFFICIAL_AGENT_BASELINES.md](docs/OFFICIAL_AGENT_BASELINES.md)
+govern external protocol behavior. Wei-Shaw/sub2api patches are reviewed against
+those sources; Plus credential ownership, outbound identity, ingress audit,
+strict proxy binding and frozen billing contracts remain mandatory.
+
+This import adds scoped administrator keys, owner-bound Grok catalog diagnostics,
+and opt-in image-count billing for dedicated image requests. New upstream SQL
+migrations 247/248 are imported as 302/303, preserving deployed Plus migrations.
+Codex keeps its manually selected 0.165.0 identity and reviewed Terra descriptor;
+unverified Terra prices/context claims and shared domestic-provider keyword/90%
+quota cooldown heuristics are deferred. DeepSeek Pro pricing no longer switches
+to Flash on a calendar date, following the provider's continued Pro service.
+The image-count option retains frozen prices and factors, rejects unidentified
+prices, and does not reclassify mixed Messages/Chat/Responses/WS requests.
 
 Preserve intentional Plus behavior during every import. Current contracts live
 in [outbound identity](docs/OUTBOUND_IDENTITY.md),

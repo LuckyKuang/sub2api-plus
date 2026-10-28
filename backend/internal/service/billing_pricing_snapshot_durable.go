@@ -12,6 +12,7 @@ import (
 // explanation. It pins only the models needed by the task, never credentials or
 // the process configuration, so a delayed settlement survives reload/restart.
 type durableBillingPricingSnapshot struct {
+	IdentifiedImages       map[string]map[string]bool    `json:"identified_images,omitempty"`
 	Version                int                           `json:"version"`
 	RateCalculation        string                        `json:"rate_calculation"`
 	PeakScope              string                        `json:"peak_scope"`
@@ -67,6 +68,7 @@ func ExportBillingPricingSnapshot(ctx context.Context, models ...string) (json.R
 		DeepSeekPeakMultiplier: deepseekPeakMultiplierAt(snapshot.pricingAt),
 		MissingModels:          make(map[string]bool),
 		Models:                 make(map[string]*ModelPricing), Images: make(map[string]map[string]float64), Videos: make(map[string]map[string]float64), CacheStorage: make(map[string]float64)}
+	stored.IdentifiedImages = make(map[string]map[string]bool)
 	stored.RoutingModel = snapshot.routingModel
 	if snapshot.billing != nil && snapshot.billing.frozenDeepSeekPeakMultiplier != nil {
 		stored.DeepSeekPeakMultiplier = *snapshot.billing.frozenDeepSeekPeakMultiplier
@@ -131,12 +133,14 @@ func ExportBillingPricingSnapshot(ctx context.Context, models ...string) (json.R
 		}
 		stored.Models[model] = price
 		stored.Images[model] = make(map[string]float64)
+		stored.IdentifiedImages[model] = make(map[string]bool)
 		for _, tier := range []string{ImageBillingSize1K, ImageBillingSize2K, ImageBillingSize4K} {
 			price := snapshot.billing.getImageUnitPrice(model, tier, imagePriceConfigFromAPIKey(key))
 			if !validCost(price) {
 				return nil, fmt.Errorf("image unit price is missing from the task snapshot")
 			}
 			stored.Images[model][tier] = price
+			stored.IdentifiedImages[model][tier] = snapshot.billing.hasIdentifiedImageUnitPrice(model, tier, imagePriceConfigFromAPIKey(key))
 		}
 		stored.Videos[model] = make(map[string]float64)
 		for _, resolution := range []string{VideoBillingResolution480P, VideoBillingResolution720P, VideoBillingResolution1080P} {
@@ -178,9 +182,13 @@ func RestoreBillingPricingSnapshot(ctx context.Context, data json.RawMessage) (c
 	if stored.PeakScope != BillingPeakScopeAllMeters && stored.PeakScope != BillingPeakScopeTokenOnly {
 		return ctx, fmt.Errorf("unsupported billing peak scope")
 	}
+	if stored.IdentifiedImages == nil {
+		stored.IdentifiedImages = make(map[string]map[string]bool)
+	}
 	billing := &BillingService{frozenPricing: true, frozenPricingAt: stored.PricingAt, frozenModelPrices: stored.Models,
-		frozenMissingModels: stored.MissingModels,
-		frozenImagePrices:   stored.Images, frozenVideoPrices: stored.Videos, frozenCacheStoragePrices: stored.CacheStorage,
+		frozenMissingModels:         stored.MissingModels,
+		frozenIdentifiedImagePrices: stored.IdentifiedImages,
+		frozenImagePrices:           stored.Images, frozenVideoPrices: stored.Videos, frozenCacheStoragePrices: stored.CacheStorage,
 		frozenDeepSeekPeakMultiplier: &stored.DeepSeekPeakMultiplier}
 	snapshot := &BillingPricingSnapshot{group: stored.Group, personalRate: stored.PersonalRate, pricingAt: stored.PricingAt,
 		rateCalculation:      stored.RateCalculation,

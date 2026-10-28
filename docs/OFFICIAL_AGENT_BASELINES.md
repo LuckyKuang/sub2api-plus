@@ -106,6 +106,37 @@ support-report API. The identity source matrix, environment fingerprint and
 ingress audit ordering remain governed by their existing contracts.
 
 
+## October 28 upstream patch review
+
+Upstream gateway patches are candidates, not provider protocol authorities.
+The October 28 merge review rechecked Terra against the pinned official
+[Codex catalog](https://github.com/openai/codex/blob/154e8736a51224e12b2d990753622a2cd8118f54/codex-rs/models-manager/models.json):
+`context_window=500000`, `max_context_window=872000`, default reasoning `low`,
+and supported efforts `low`, `medium`, `high`, `xhigh`, `max`, `ultra`.
+`default_reasoning_summary=none` is a summary setting, not an advertised `none`
+effort. The catalog does not establish API-wide rejection behavior or prices.
+The candidate 1,050,000 context, 128,000 output and new Terra price fallback
+therefore remain unadopted without independent authoritative evidence.
+The candidate Terra-specific Chat tool prohibition is also deferred: a Codex
+client's use of Responses does not establish a general API restriction on Chat
+tool calls. Likewise the proposed OpenCode-hosted DeepSeek role rewrite is not
+enabled by model spelling alone without evidence for that hosted endpoint;
+existing native-provider role handling remains in force.
+
+A limited xAI catalog review also inspected
+[`EndpointsConfig::resolve_models_list_url`](https://github.com/xai-org/grok-build/blob/f0e3be1100ef5252488e3be8bb0e91cf68d8c305/crates/codegen/xai-grok-shell/src/agent/config.rs)
+and the official
+[subscription-unblock catalog refresh test](https://github.com/xai-org/grok-build/blob/f0e3be1100ef5252488e3be8bb0e91cf68d8c305/crates/codegen/xai-grok-pager-pty-harness/tests/pty_e2e/subscription_watch_and_gate_verify_pty.rs).
+They support destination-specific catalog resolution and refreshing the catalog
+after an authenticated entitlement change. This limited inspection does not
+upgrade the selected xAI client identity or claim review of that entire tree.
+Gateway catalog diagnostics add an owner/proxy fence and bounded snapshot CAS;
+those are gateway controls, not newly inferred provider wire requirements.
+
+The candidate common CN frequency-limit rule based on free-form wording and a
+90-percent quota threshold remains deferred. It must not replace the existing
+provider-specific structured status, captured-owner and cooldown contracts.
+
 ## October 24 protocol alignment
 
 Codex's exact `model_not_found` terminal classification follows main commit

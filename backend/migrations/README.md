@@ -4,6 +4,15 @@ SQL migrations are embedded in the application and applied automatically at
 startup. The runner records each filename and SHA256 checksum in
 `schema_migrations`.
 
+Migration `302_scoped_admin_api_keys.sql` adds revocable, scope-limited
+administrator keys with hashed secrets, IP restrictions, expiry and retained
+revocation/deletion metadata. See [administrator keys](../../docs/admin-api-keys.md).
+Migration `303_group_image_count_billing.sql` adds an opt-in group flag, default
+`false`, for dedicated image request billing. See
+[image-count billing](../../docs/CHANNEL_PRICING.md#image-count-billing).
+These new upstream migrations were numbered 247/248; only the newly imported
+files are renumbered, and historical Plus SQL remains unchanged.
+
 Migration `300_gateway_unfinished_tasks.sql` adds the SQL-owned cross-key and
 cross-provider per-user unfinished task ledger. Active Batch and async-image
 history rows are backfilled; unknown creates never expire automatically. No

@@ -4,6 +4,27 @@ Sub2API Plus supports Grok OAuth subscription accounts and standard xAI API-key
 accounts. Both account types expose OpenAI-compatible traffic through the
 gateway.
 
+Response-model diagnostics observe the provider declaration before any existing
+response adaptation. Each forwarding attempt starts a fresh observation; error
+bodies, retries and a previous account cannot supply the next response's model.
+Native Responses retains its public-model adaptation. The raw Chat Completions
+path preserves the provider's JSON/SSE model field and records that same original
+declaration for diagnostics; observation alone does not authorize body rewriting.
+
+Admin model diagnostics compare mappings with a scoped, bounded observation of
+the authenticated model catalog; they do not change routing or infer permission
+to use an unlisted model. Background discovery and admin catalog sync bind the
+URL, bearer grant, trusted identity and proxy to the acquired credential owner.
+Persisting either success or failure uses an owner-conditional snapshot CAS:
+credential, account type/status or saved proxy changes reject the observation,
+including changes between CAS retries. A conflicting catalog update may be
+reread and merged only while that same owner remains unchanged.
+Freshness also includes a digest of the grant and saved proxy: an endpoint-only
+legacy snapshot or a rotated grant cannot supply a fresh catalog verdict.
+Background discovery leaves account state unchanged after transport and proxy
+authentication failures. Admin catalog sync can record these failures through the
+same owner-conditional diagnostic snapshot.
+
 Fallback token pricing recognizes `grok-4.7` / `grok-4.7-latest` and the separate
 Fast aliases `grok-4.7-fast` / `grok-4.7-build-fast`. Per million tokens, the
 standard card is $2 input, $0.50 cached input and $6 output; Fast is $4, $1 and

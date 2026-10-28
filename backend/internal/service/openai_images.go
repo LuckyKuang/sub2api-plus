@@ -42,12 +42,9 @@ const (
 	openAIImageMaxDownloadBytes = 20 << 20 // 20MB per image download
 	// OpenAIImageMaxUploadPartBytes is also used by the asynchronous image
 	// handler before it detaches a multipart request into a background task.
-	OpenAIImageMaxUploadPartBytes  int64 = 20 << 20 // 20 MiB per multipart upload part
-	openAIImagesResponsesMainModel       = "gpt-5.6-luna"
-	// Keep the official multipart parser limit aligned with the Plus
-	// asynchronous-handler limit.
-	openAIImageMaxUploadPartSize           = OpenAIImageMaxUploadPartBytes
-	openAIImagesVerbatimPromptInstructions = "When invoking the image_generation tool, use the user's image prompt verbatim. Do not rewrite, expand, summarize, embellish, translate, normalize punctuation, or add or remove visual details or constraints. Preserve the original language, wording, capitalization, quotes, and punctuation exactly."
+	OpenAIImageMaxUploadPartBytes          int64 = 20 << 20 // 20 MiB per multipart upload part
+	openAIImagesResponsesMainModel               = "gpt-5.6-luna"
+	openAIImagesVerbatimPromptInstructions       = "When invoking the image_generation tool, use the user's image prompt verbatim. Do not rewrite, expand, summarize, embellish, translate, normalize punctuation, or add or remove visual details or constraints. Preserve the original language, wording, capitalization, quotes, and punctuation exactly."
 )
 
 // OpenAIImageUploadTooLargeError marks a multipart input image that exceeded
@@ -379,11 +376,14 @@ func parseOpenAIImagesMultipartRequest(body []byte, contentType string, req *Ope
 		if fileName != "" {
 			data, err = readOpenAIImageUploadPart(part)
 		} else {
-			data, err = io.ReadAll(io.LimitReader(part, OpenAIImageMaxUploadPartBytes))
+			data, err = io.ReadAll(io.LimitReader(part, OpenAIImageMaxUploadPartBytes+1))
 		}
 		_ = part.Close()
 		if err != nil {
 			return fmt.Errorf("read multipart field %s: %w", name, err)
+		}
+		if int64(len(data)) > OpenAIImageMaxUploadPartBytes {
+			return &OpenAIImageUploadTooLargeError{Limit: OpenAIImageMaxUploadPartBytes}
 		}
 
 		if fileName != "" {
@@ -795,7 +795,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 	MarkClientDisconnectUpstreamAccepted(ctx)
 
 	var usage OpenAIUsage
-	imageCount := parsed.N
+	var imageCount int
 	var firstOutputMs *int
 	if parsed.Stream && isEventStreamResponse(resp.Header) {
 		streamUsage, streamCount, streamSizes, firstOutput, err := s.handleOpenAIImagesStreamingResponse(resp, c, account, startTime, nil)
@@ -812,6 +812,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 					ResponseHeaders:  resp.Header.Clone(),
 					Duration:         time.Since(startTime),
 					FirstOutputMs:    firstOutput,
+					ImageEndpoint:    true,
 					ImageCount:       streamCount,
 					ImageSize:        parsed.SizeTier,
 					ImageInputSize:   parsed.Size,
@@ -825,7 +826,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 			return nil, err
 		}
 		usage = streamUsage
-		imageCount = streamCount
+		imageCount = resolveBillableImageCount(streamCount, 0, imageCountBillingEnabled(getAPIKeyFromContext(c)))
 		imageOutputSizes := streamSizes
 		firstOutputMs = firstOutput
 		result := &OpenAIForwardResult{
@@ -839,6 +840,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 			ResponseHeaders:  resp.Header.Clone(),
 			Duration:         time.Since(startTime),
 			FirstOutputMs:    firstOutputMs,
+			ImageEndpoint:    true,
 			ImageCount:       imageCount,
 			ImageSize:        parsed.SizeTier,
 			ImageInputSize:   parsed.Size,
@@ -854,10 +856,10 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 			return nil, err
 		}
 		usage = nonStreamUsage
+		imageCount = resolveBillableImageCount(nonStreamCount, parsed.N, imageCountBillingEnabled(getAPIKeyFromContext(c)))
 		var firstOutputMs *int
 		firstOutputKind := ""
 		if nonStreamCount > 0 {
-			imageCount = nonStreamCount
 			elapsed := int(time.Since(startTime).Milliseconds())
 			firstOutputMs = &elapsed
 			firstOutputKind = string(apicompat.StreamOutputImage)
@@ -874,6 +876,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 			Duration:         time.Since(startTime),
 			FirstOutputMs:    firstOutputMs,
 			FirstOutputKind:  firstOutputKind,
+			ImageEndpoint:    true,
 			ImageCount:       imageCount,
 			ImageSize:        parsed.SizeTier,
 			ImageInputSize:   parsed.Size,

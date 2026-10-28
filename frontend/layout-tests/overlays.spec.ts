@@ -44,6 +44,29 @@ async function tabTo(page: Page, target: Locator): Promise<void> {
   await expect(target).toBeFocused()
 }
 
+test('checkbox dropdown retains selections and supports narrow translated menus', async ({ page }) => {
+  const field = page.getByTestId('checkbox-dropdown-field')
+  const trigger = field.locator('button')
+  await trigger.scrollIntoViewIfNeeded()
+  await expectReachable(trigger)
+  await trigger.click()
+  const panel = page.locator(`#${await trigger.getAttribute('aria-controls')}`)
+  await expectReachable(panel)
+  const options = panel.locator('input[type="checkbox"]')
+  await options.first().check()
+  await options.nth(1).check()
+  await expect(options.first()).toBeChecked()
+  await expect(options.nth(1)).toBeChecked()
+  await options.last().scrollIntoViewIfNeeded()
+  await expectReachable(options.last())
+  await options.last().check()
+  await expect(page.getByTestId('checkbox-selection')).toHaveText('1,2,24')
+  await options.last().focus()
+  await page.keyboard.press('Escape')
+  await expect(panel).toHaveCount(0)
+  await expect(trigger).toBeFocused()
+})
+
 async function chooseDate(page: Page, field: Locator, afterOpen?: () => Promise<void>): Promise<void> {
   const trigger = field.locator('.date-picker-trigger')
   await trigger.scrollIntoViewIfNeeded()

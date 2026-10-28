@@ -1113,10 +1113,13 @@ func (s *GatewayService) calculateRecordUsageCost(
 	imageMultiplier float64,
 	pricingAt time.Time,
 ) *CostBreakdown {
-	// 图片生成：渠道定价为 token 计费时走 token 路径，否则走图片计费
+	// 图片生成：渠道定价为 token 计费时走 token 路径，否则走图片计费。
+	// 分组按张计费开关只对专用图片端点生效，混合请求仍按 token 计费。
 	if result.ImageCount > 0 {
-		if resolved := s.resolveChannelPricing(ctx, billingModel, apiKey); resolved != nil && resolved.Mode == BillingModeToken {
-			return s.calculateTokenCost(ctx, result, apiKey, billingModel, multiplier, pricingAt)
+		if !imageCountBillingApplies(apiKey, result.ImageEndpoint) {
+			if resolved := s.resolveChannelPricing(ctx, billingModel, apiKey); resolved != nil && resolved.Mode == BillingModeToken {
+				return s.calculateTokenCost(ctx, result, apiKey, billingModel, multiplier, pricingAt)
+			}
 		}
 		return s.calculateImageCost(ctx, result, apiKey, billingModel, imageMultiplier)
 	}
@@ -1265,12 +1268,21 @@ func (s *GatewayService) calculateImageCost(
 	multiplier float64,
 ) *CostBreakdown {
 	sizeTier := NormalizeImageBillingTierOrDefault(result.ImageSize)
-	resolved := s.resolveChannelPricing(ctx, billingModel, apiKey)
 	multiplier = customerBillingRate(ctx, apiKey, "image", multiplier)
-	if resolved != nil && resolved.Source == PricingSourceGroup {
+	forcePerImage := imageCountBillingApplies(apiKey, result.ImageEndpoint)
+	resolved := s.resolveChannelPricing(ctx, billingModel, apiKey)
+	// 分组定价只有按次/图片模式才能按张结算。token 模式缺少 token 输入时会算出
+	// $0，必须回落到分组图片价或默认图片价，避免开关开启后图片完全免费。
+	if resolved != nil && resolved.Source == PricingSourceGroup &&
+		(resolved.Mode == BillingModePerRequest || resolved.Mode == BillingModeImage) {
 		gid := apiKey.Group.ID
 		cost, err := billingServiceForContext(ctx, s.billingService).CalculateCostUnified(CostInput{
 			Ctx: ctx, Model: billingModel, GroupID: &gid, Group: apiKey.Group,
+			Tokens: UsageTokens{
+				InputTokens: result.Usage.InputTokens, OutputTokens: result.Usage.OutputTokens,
+				CacheReadTokens: result.Usage.CacheReadInputTokens, CacheCreationTokens: result.Usage.CacheCreationInputTokens,
+				ImageOutputTokens: result.Usage.ImageOutputTokens,
+			},
 			RequestCount: result.ImageCount, SizeTier: sizeTier,
 			RateMultiplier: multiplier, Resolver: pricingResolverForContext(ctx, s.resolver), Resolved: resolved,
 			ReasoningEffort: optionalStringValue(result.ReasoningEffort),
@@ -1291,28 +1303,59 @@ func (s *GatewayService) calculateImageCost(
 			OutputTokens:      result.Usage.OutputTokens,
 			ImageOutputTokens: result.Usage.ImageOutputTokens,
 		}
-		gid := apiKey.Group.ID
-		cost, err := billingServiceForContext(ctx, s.billingService).CalculateCostUnified(CostInput{
-			Ctx:             ctx,
-			Model:           billingModel,
-			GroupID:         &gid,
-			Group:           apiKey.Group,
-			Tokens:          tokens,
-			RequestCount:    result.ImageCount,
-			SizeTier:        sizeTier,
-			RateMultiplier:  multiplier,
-			Resolver:        pricingResolverForContext(ctx, s.resolver),
-			Resolved:        resolved,
-			ReasoningEffort: optionalStringValue(result.ReasoningEffort),
-		})
-		if err != nil {
-			logger.LegacyPrintf("service.gateway", "Calculate image token cost failed: %v", err)
-			return unavailableUsageCost(err)
+		switch {
+		case resolved.Mode == BillingModePerRequest || resolved.Mode == BillingModeImage:
+			// 按次/图片模式按请求张数结算。Tokens 不参与计价，但尺寸档未命中时
+			// calculatePerRequestCost 要用它匹配按上下文分档的单价，不能省略。
+			gid := apiKey.Group.ID
+			cost, err := billingServiceForContext(ctx, s.billingService).CalculateCostUnified(CostInput{
+				Ctx:             ctx,
+				Model:           billingModel,
+				GroupID:         &gid,
+				Group:           apiKey.Group,
+				Tokens:          tokens,
+				RequestCount:    result.ImageCount,
+				SizeTier:        sizeTier,
+				ReasoningEffort: optionalStringValue(result.ReasoningEffort),
+				RateMultiplier:  multiplier,
+				Resolver:        pricingResolverForContext(ctx, s.resolver),
+				Resolved:        resolved,
+			})
+			if err != nil {
+				logger.LegacyPrintf("service.gateway", "Calculate image channel cost failed: %v", err)
+				return unavailableUsageCost(err)
+			}
+			return cost
+		case !forcePerImage:
+			// token 模式且开关未强制按张：保持原 token 计费。
+			gid := apiKey.Group.ID
+			cost, err := billingServiceForContext(ctx, s.billingService).CalculateCostUnified(CostInput{
+				Ctx:             ctx,
+				Model:           billingModel,
+				GroupID:         &gid,
+				Group:           apiKey.Group,
+				Tokens:          tokens,
+				RequestCount:    result.ImageCount,
+				SizeTier:        sizeTier,
+				ReasoningEffort: optionalStringValue(result.ReasoningEffort),
+				RateMultiplier:  multiplier,
+				Resolver:        pricingResolverForContext(ctx, s.resolver),
+				Resolved:        resolved,
+			})
+			if err != nil {
+				logger.LegacyPrintf("service.gateway", "Calculate image token cost failed: %v", err)
+				return unavailableUsageCost(err)
+			}
+			return cost
 		}
-		return cost
+		// token 模式 + 开关强制按张：跳过 token 分支，落到下面的按张计费。
 	}
 
-	return billingServiceForContext(ctx, s.billingService).CalculateImageCost(billingModel, sizeTier, result.ImageCount, groupConfig, multiplier)
+	billing := billingServiceForContext(ctx, s.billingService)
+	if forcePerImage && !billing.hasIdentifiedImageUnitPrice(billingModel, sizeTier, groupConfig) {
+		return unavailableUsageCost(ErrModelPricingUnavailable)
+	}
+	return billing.CalculateImageCost(billingModel, sizeTier, result.ImageCount, groupConfig, multiplier)
 }
 
 // calculateTokenCost 计算 Token 计费：路径选择（分组/渠道定价 → 内置定价）

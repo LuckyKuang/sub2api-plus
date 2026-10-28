@@ -786,7 +786,8 @@ describe("admin SettingsView payment visible method controls", () => {
       await openSecurityTab(wrapper);
       const securitySections = visibleSections();
       expect(securitySections).toHaveLength(2);
-      expect(securitySections[0].text()).toContain('admin.settings.adminApiKey.title');
+        expect(securitySections[0].text()).toContain('adminAccessKeys.title');
+        expect(securitySections[0].find('details').exists()).toBe(false);
       expect(securitySections[1].text()).toContain('admin.settings.registration.title');
       body.element.scrollTop = 300;
       await openGatewayTab(wrapper);

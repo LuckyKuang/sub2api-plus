@@ -2155,6 +2155,15 @@ func TestNewModelPricingCatalogFallbackAndContext(t *testing.T) {
 		"catalog": NewBillingService(&config.Config{}, catalog),
 	}
 	for source, svc := range sources {
+		// The reviewed Codex catalog establishes capabilities, not Terra prices.
+		// OFFICIAL_AGENT_BASELINES.md defers the unverified upstream fallback.
+		for _, model := range []string{"gpt-6.1-terra", "openai/gpt-6.1-terra-max"} {
+			t.Run(source+"/unpriced/"+model, func(t *testing.T) {
+				cost, err := svc.CalculateCost(model, UsageTokens{InputTokens: 1000, OutputTokens: 200}, 1)
+				require.Error(t, err)
+				require.Nil(t, cost, "missing Terra price must not inherit another model's price")
+			})
+		}
 		for _, tc := range []struct {
 			model                      string
 			input, output, write, read float64
@@ -2256,6 +2265,18 @@ func TestNewModelPricingCatalogFallbackAndContext(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestTerraExplicitOperatorPriceRemainsUsable(t *testing.T) {
+	// These are operator-selected fixture prices, not an assertion about OpenAI.
+	svc := NewBillingService(&config.Config{}, &PricingService{pricingData: map[string]*LiteLLMModelPricing{
+		"gpt-6.1-terra": {InputCostPerToken: 2e-6, OutputCostPerToken: 3e-6},
+	}})
+	for _, model := range []string{"gpt-6.1-terra", "openai/gpt-6.1-terra-max"} {
+		cost, err := svc.CalculateCost(model, UsageTokens{InputTokens: 1000, OutputTokens: 200}, 1)
+		require.NoError(t, err)
+		require.InDelta(t, 0.0026, cost.TotalCost, 1e-12)
 	}
 }
 

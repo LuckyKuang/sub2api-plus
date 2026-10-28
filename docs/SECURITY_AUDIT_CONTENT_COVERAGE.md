@@ -19,6 +19,14 @@ passes without an audit-derived block. HTTP/WS and OAuth/API-key paths retain
 their original audit-before-selection, concurrency, billing and upstream-write
 ordering. Ordinary malformed or unnamed outputs keep paired-call validation.
 
+Catalog diagnostics, response-model observations and image endpoint billing
+markers introduce no alternate inference extractor. Mixed Messages, Chat,
+Responses and WebSocket requests retain canonical text/image extraction for
+both audit engines even when their responses contain generated images; an
+image in the response cannot reclassify their ingress as a dedicated image
+endpoint or authorize pre-audit provider writes. Scoped administrator Codex
+import parses credentials without creating a gateway inference exemption.
+
 Provider Files ingress uses the same boundary for authenticated
 `POST /v1/files`, `POST /v1/files/upload`, `GET /v1/files`, and
 `GET/DELETE /v1/files/:file_id`. Basic multipart/ID validation precedes audit;

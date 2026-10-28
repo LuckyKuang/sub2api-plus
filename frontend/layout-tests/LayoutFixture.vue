@@ -44,6 +44,10 @@
       <div class="fixture-card-scroll" data-testid="card-scroll">
         <div class="fixture-card-spacer"></div>
         <div class="fixture-fields">
+          <div data-testid="checkbox-dropdown-field">
+            <CheckboxDropdown v-model="checkedOptions" :options="options" :label="copy.select" />
+            <output data-testid="checkbox-selection">{{ checkedOptions.join(',') }}</output>
+          </div>
           <div data-testid="edge-date-field">
             <DateRangePicker v-model:start-date="edgeStart" v-model:end-date="edgeEnd" />
           </div>
@@ -85,6 +89,7 @@ import { useI18n } from 'vue-i18n'
 import BaseDialog from '../src/components/common/BaseDialog.vue'
 import DateRangePicker from '../src/components/common/DateRangePicker.vue'
 import SearchableSelect from '../src/components/common/SearchableSelect.vue'
+import CheckboxDropdown from '../src/components/common/CheckboxDropdown.vue'
 
 const { locale } = useI18n()
 const controlsOnly = new URLSearchParams(location.search).get('view') === 'controls'
@@ -92,6 +97,7 @@ const selectedTab = ref(0)
 const selectedSection = ref(0)
 const selectedSegment = ref(0)
 const galleryClicks = ref(0)
+const checkedOptions = ref<number[]>([])
 const copy = computed(() => locale.value === 'zh' ? {
   tabs: ['运行监控', '告警事件', '系统日志'],
   sections: ['详细配置与使用说明', '包含较长中文翻译的统计和历史记录'],

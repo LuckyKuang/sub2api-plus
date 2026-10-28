@@ -61,6 +61,9 @@ type UpdateProxyRequest struct {
 // List handles listing all proxies with pagination
 // GET /api/v1/admin/proxies
 func (h *ProxyHandler) List(c *gin.Context) {
+	if h.scopedAdminProxyRead(c) {
+		return
+	}
 	page, pageSize := response.ParsePagination(c)
 	protocol := c.Query("protocol")
 	status := c.Query("status")
@@ -90,6 +93,9 @@ func (h *ProxyHandler) List(c *gin.Context) {
 // GET /api/v1/admin/proxies/all
 // Optional query param: with_count=true to include account count per proxy
 func (h *ProxyHandler) GetAll(c *gin.Context) {
+	if h.scopedAdminProxyRead(c) {
+		return
+	}
 	withCount := c.Query("with_count") == "true"
 
 	if withCount {
@@ -122,6 +128,9 @@ func (h *ProxyHandler) GetAll(c *gin.Context) {
 // GetByID handles getting a proxy by ID
 // GET /api/v1/admin/proxies/:id
 func (h *ProxyHandler) GetByID(c *gin.Context) {
+	if h.scopedAdminProxyRead(c) {
+		return
+	}
 	proxyID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		response.BadRequest(c, "Invalid proxy ID")

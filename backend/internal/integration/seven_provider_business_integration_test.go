@@ -139,7 +139,7 @@ func newSevenBusinessServices(t *testing.T) *sevenBusinessServices {
 	settingRepo := repository.NewSettingRepository(client)
 	_, ok := settingRepo.(service.OutboundIDStore)
 	require.True(t, ok, "production settings must provide persistent outbound identity mappings")
-	service.ProvideSettingService(settingRepo, repository.NewGroupRepository(client, db), repository.NewProxyRepository(client, db), &config.Config{})
+	service.ProvideSettingService(nil, settingRepo, repository.NewGroupRepository(client, db), repository.NewProxyRepository(client, db), &config.Config{})
 	t.Cleanup(func() {
 		service.SetDefaultOutboundIDStore(nil)
 		outboundidentity.SetDefaultResolver(nil)

@@ -681,3 +681,33 @@ Structured logs for this feature carry `component`, `stage`
 `error_code` / `warning_code`, and the catalog version and model count. They
 never log caller fields beyond the requested model name, credentials, or
 request bodies.
+
+
+## Image-count billing
+
+OpenAI and composite groups can enable `image_count_billing` when image
+generation is allowed. It defaults to `false` and applies only to dedicated
+image endpoints. Responses, Chat and
+WebSocket requests that also produce images keep their token billing path.
+
+For dedicated images, enabling the switch overrides a token price card with
+per-image billing. Explicit group or channel image/per-request cards remain
+eligible; context-based intervals use the actual input usage to select the tier,
+and the selected unit price is multiplied by the returned image count. A token
+price alone is not evidence of an image price. Without an explicit group image
+price, an identified catalog image price, or an enumerated built-in image price,
+the request cannot obtain a priced reservation or write financial usage.
+
+Successful dedicated OpenAI image responses use the observed image count.
+When the response supplies no count, the enabled option applies a one-image
+minimum as a gateway billing policy, not a provider guarantee. Disabling the
+option preserves the endpoint's existing requested-count/stream fallback.
+
+The accepted request captures the switch, group/channel prices, public-model
+and platform factors, and customer multipliers in its pricing snapshot. Editing
+the group later cannot change that request's quote, reservation or settlement.
+Durable task snapshots also retain image-price evidence; restoring them never
+looks up a current catalog to fill missing evidence. Historical snapshots without
+the switch retain the default disabled behavior. Unknown image prices do not
+become the historical generic image fallback when this switch forces image
+billing.

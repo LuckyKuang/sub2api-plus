@@ -188,6 +188,7 @@ func createGroupRecord(ctx context.Context, client *dbent.Client, groupIn *servi
 		SetQuotaResetConfigVersion(groupIn.QuotaResetConfigVersion).
 		SetAllowImageGeneration(groupIn.AllowImageGeneration).
 		SetAllowBatchImageGeneration(groupIn.AllowBatchImageGeneration).
+		SetImageCountBilling(groupIn.ImageCountBilling).
 		SetImageRateIndependent(groupIn.ImageRateIndependent).
 		SetImageRateMultiplier(groupIn.ImageRateMultiplier).
 		SetNillableImagePrice1k(groupIn.ImagePrice1K).
@@ -408,6 +409,7 @@ func (r *groupRepository) Update(ctx context.Context, groupIn *service.Group) er
 		SetQuotaResetIncludeMonthly(groupIn.QuotaResetIncludeMonthly).
 		SetAllowImageGeneration(groupIn.AllowImageGeneration).
 		SetAllowBatchImageGeneration(groupIn.AllowBatchImageGeneration).
+		SetImageCountBilling(groupIn.ImageCountBilling).
 		SetImageRateIndependent(groupIn.ImageRateIndependent).
 		SetImageRateMultiplier(groupIn.ImageRateMultiplier).
 		SetNillableImagePrice1k(groupIn.ImagePrice1K).

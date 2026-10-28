@@ -1,6 +1,8 @@
 import workspace from './workspace'
 import requestList from './requestList'
 import featureExtensions from './featureExtensions'
+import adminAccessKeys from './adminAccessKeys'
+
 import landing from './landing'
 import common from './common'
 import dashboard from './dashboard'
@@ -19,6 +21,8 @@ export default {
   ...inspection,
   ...billingRates,
   ...featureExtensions,
+  adminAccessKeys,
+
   ...landing,
   ...common,
   ...dashboard,
