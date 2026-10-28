@@ -186,7 +186,7 @@ GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.19-custom.001
 | `v0.2.18+custom.001` | `v0.2.18` | `ac1b8f1271be0d674fa6f074403c1410f30a3a81` | published |
 | `v0.2.18+custom.002` | `v0.2.18` | `ac1b8f1271be0d674fa6f074403c1410f30a3a81` | withdrawn |
 | `v0.2.18+custom.003` | `v0.2.18` | `ac1b8f1271be0d674fa6f074403c1410f30a3a81` | published |
-| `v0.2.19+custom.001` | `v0.2.19` | `dece26153621959ccd7635814f4b2d08304e681a` | planned |
+| `v0.2.19+custom.001` | `v0.2.19` | `dece26153621959ccd7635814f4b2d08304e681a` | published |
 
 `v0.2.15+custom.003` records the integrated official main snapshot in the
 Official Commit column. Its tagged official baseline remains
