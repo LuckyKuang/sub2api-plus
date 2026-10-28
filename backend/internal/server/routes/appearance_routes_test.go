@@ -28,7 +28,7 @@ func TestConsoleAppearanceRoutesRequireRealAdmin(t *testing.T) {
 	router := gin.New()
 	h := &handler.Handlers{Admin: &handler.AdminHandlers{Setting: admin.NewSettingHandler(nil, nil, nil, nil, nil, nil, nil)}}
 	group := router.Group("/api/v1/admin", gin.HandlerFunc(middleware.NewAdminAuthMiddleware(auth, users, nil, nil)))
-	registerSettingsRoutes(group, h)
+	registerSettingsRoutes(group, h, middleware.StepUpAuthMiddleware(func(c *gin.Context) { c.Next() }))
 	token, err := auth.GenerateToken(context.Background(), user)
 	require.NoError(t, err)
 	for _, method := range []string{http.MethodGet, http.MethodPut} {

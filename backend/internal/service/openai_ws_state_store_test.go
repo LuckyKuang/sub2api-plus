@@ -222,11 +222,15 @@ func (c *openAIWSStateStoreTimeoutProbeCache) SetGrokVideoPendingBilling(_ conte
 func (c *openAIWSStateStoreTimeoutProbeCache) GetGrokVideoPendingBilling(_ context.Context, _ string) ([]byte, error) {
 	return nil, nil
 }
-func (c *openAIWSStateStoreTimeoutProbeCache) ClaimGrokVideoBilled(_ context.Context, _ string, _ time.Duration) (bool, error) {
+func (c *openAIWSStateStoreTimeoutProbeCache) ClaimGrokVideoBilled(_ context.Context, _ string, _ string, _ time.Duration) (bool, error) {
 	return true, nil
 }
 
-func (c *openAIWSStateStoreTimeoutProbeCache) ReleaseGrokVideoBilled(_ context.Context, _ string) error {
+func (c *openAIWSStateStoreTimeoutProbeCache) CompleteGrokVideoBilled(_ context.Context, _ string, _ string, _ time.Duration) (bool, error) {
+	return true, nil
+}
+
+func (c *openAIWSStateStoreTimeoutProbeCache) ReleaseGrokVideoBilled(_ context.Context, _ string, _ string) error {
 	return nil
 }
 

@@ -92,10 +92,19 @@ async function open(host: Host, provider: Provider) {
 async function begin(view: VueWrapper, provider: Provider) {
   expect(view.findComponent({ name: 'CNOAuthPanel' }).exists()).toBe(true)
   expect(view.findComponent({ name: 'OAuthAuthorizationFlow' }).exists()).toBe(false)
+  const startURL = `/admin/cn/oauth/${provider}/start`
+  const previousStarts = calls.filter(call => call.url === startURL).length
+  expect(button(view, 'admin.accounts.oauth.domestic.reauthorize').attributes('disabled')).toBeUndefined()
   await button(view, 'admin.accounts.oauth.domestic.reauthorize').trigger('click')
-  await flushPromises()
-  const start = calls.filter(call => call.url === `/admin/cn/oauth/${provider}/start`).at(-1)
-  expect(start?.body).toMatchObject({ account_id: current.id, region: provider === 'deepseek' ? 'cn' : 'global' })
+  // Axios interceptors and Vue rendering need not finish within one flush.
+  // Observe this click's request and the usable ready state before editing its owner.
+  await vi.waitFor(() => {
+    const starts = calls.filter(call => call.url === startURL)
+    expect(starts).toHaveLength(previousStarts + 1)
+    expect(starts.at(-1)?.body).toMatchObject({ account_id: current.id, region: provider === 'deepseek' ? 'cn' : 'global' })
+    expect(button(view, 'admin.accounts.oauth.domestic.save').attributes('disabled')).toBeUndefined()
+    expect(view.getComponent({ name: 'CNOAuthPanel' }).find('[role="alert"]').exists()).toBe(false)
+  })
   expect(calls.some(call => call.url.includes('/admin/accounts/generate-auth-url') || call.url.includes('exchange-code'))).toBe(false)
 }
 function reloadCalls() { return calls.filter(call => /^\/admin\/accounts\/\d+$/.test(call.url)) }

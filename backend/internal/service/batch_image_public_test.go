@@ -750,9 +750,10 @@ func newTestBatchImagePublicService(enabled bool) (*BatchImagePublicService, *fa
 	gemini := &publicBatchImageProvider{name: BatchImageProviderGeminiAPI}
 	vertex := &publicBatchImageProvider{name: BatchImageProviderVertex}
 	svc := &BatchImagePublicService{
-		Repo:        repo,
-		AccountRepo: &publicBatchImageAccountRepo{accounts: []Account{testBatchImageAccount(101, AccountTypeAPIKey), testBatchImageAccount(202, AccountTypeServiceAccount)}},
-		Queue:       queue,
+		UnfinishedTasks: NewGatewayUnfinishedTaskService(&unfinishedTaskRepoForTest{}, nil),
+		Repo:            repo,
+		AccountRepo:     &publicBatchImageAccountRepo{accounts: []Account{testBatchImageAccount(101, AccountTypeAPIKey), testBatchImageAccount(202, AccountTypeServiceAccount)}},
+		Queue:           queue,
 		ProviderRegistry: NewBatchImageProviderRegistry(
 			gemini,
 			vertex,

@@ -2099,7 +2099,7 @@ func inferResponsesFailedOpsErrorType(code string) string {
 		return "permission_error"
 	case "invalid_request", "context_length_exceeded":
 		return "invalid_request_error"
-	case "server_is_overloaded":
+	case "server_is_overloaded", "policy_capacity_unavailable":
 		return "overloaded_error"
 	case "service_unavailable", "service_unavailable_error", "server_error":
 		return "service_unavailable_error"
@@ -2121,7 +2121,7 @@ func inferStreamFailureStatus(_ *gin.Context, parsed parsedOpsError) int {
 		return http.StatusForbidden
 	case "invalid_request", "context_length_exceeded":
 		return http.StatusBadRequest
-	case "server_is_overloaded":
+	case "server_is_overloaded", "policy_capacity_unavailable":
 		return http.StatusServiceUnavailable
 	case "service_unavailable", "service_unavailable_error", "server_error":
 		return http.StatusServiceUnavailable

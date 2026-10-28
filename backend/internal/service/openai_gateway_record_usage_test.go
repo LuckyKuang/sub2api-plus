@@ -10,8 +10,12 @@ import (
 	"time"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
+	"github.com/LuckyKuang/sub2api-plus/internal/domain"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/ctxkey"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/logger"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 const (
@@ -386,7 +390,7 @@ func TestOpenAIGatewayServiceRecordUsage_NonStreamDisconnectKeepsExactUsageSourc
 	require.False(t, *usageRepo.lastLog.IsComplete)
 }
 
-func TestOpenAIGatewayServiceRecordUsage_MissingPricingRecordsZeroCostUsageLog(t *testing.T) {
+func TestOpenAIGatewayServiceRecordUsage_MissingPricingRejectsWithoutFinancialWrites(t *testing.T) {
 	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
 	billingRepo := &openAIRecordUsageBillingRepoStub{result: &UsageBillingApplyResult{Applied: true}}
 	userRepo := &openAIRecordUsageUserRepoStub{}
@@ -413,34 +417,16 @@ func TestOpenAIGatewayServiceRecordUsage_MissingPricingRecordsZeroCostUsageLog(t
 		IsComplete:    &incomplete,
 	})
 
-	require.NoError(t, err)
-	require.Equal(t, 1, billingRepo.calls)
-	require.Equal(t, 1, usageRepo.calls)
+	require.ErrorIs(t, err, ErrModelPricingUnavailable)
+	require.Zero(t, billingRepo.calls)
+	require.Zero(t, usageRepo.calls)
 	require.Equal(t, 0, userRepo.deductCalls)
 	require.Equal(t, 0, subRepo.incrementCalls)
 	require.Equal(t, 0, quotaSvc.quotaCalls)
 	require.Equal(t, 0, quotaSvc.rateLimitCalls)
 
-	require.NotNil(t, usageRepo.lastLog)
-	require.Equal(t, "resp_missing_pricing", usageRepo.lastLog.RequestID)
-	require.Equal(t, "pricing-missing-test-model", usageRepo.lastLog.Model)
-	require.Equal(t, "pricing-missing-test-model", usageRepo.lastLog.RequestedModel)
-	require.Equal(t, 1200, usageRepo.lastLog.InputTokens)
-	require.Equal(t, 300, usageRepo.lastLog.OutputTokens)
-	require.Equal(t, 42, usageRepo.lastLog.AudioOutputTokens)
-	require.NotNil(t, usageRepo.lastLog.IsComplete)
-	require.False(t, *usageRepo.lastLog.IsComplete)
-	require.Zero(t, usageRepo.lastLog.TotalCost)
-	require.Zero(t, usageRepo.lastLog.ActualCost)
-	require.NotNil(t, usageRepo.lastLog.BillingMode)
-	require.Equal(t, string(BillingModeToken), *usageRepo.lastLog.BillingMode)
-
-	require.NotNil(t, billingRepo.lastCmd)
-	require.Zero(t, billingRepo.lastCmd.BalanceCost)
-	require.Zero(t, billingRepo.lastCmd.SubscriptionCost)
-	require.Zero(t, billingRepo.lastCmd.APIKeyQuotaCost)
-	require.Zero(t, billingRepo.lastCmd.APIKeyRateLimitCost)
-	require.Zero(t, billingRepo.lastCmd.AccountQuotaCost)
+	require.Nil(t, usageRepo.lastLog)
+	require.Nil(t, billingRepo.lastCmd)
 }
 
 func TestOpenAIGatewayServiceRecordUsage_UsesUserSpecificGroupRate(t *testing.T) {
@@ -722,7 +708,7 @@ func TestOpenAIGatewayServiceRecordUsage_IncludesEndpointMetadata(t *testing.T) 
 	require.Equal(t, "/v1/responses", *usageRepo.lastLog.UpstreamEndpoint)
 }
 
-func TestOpenAIGatewayServiceRecordUsage_FallsBackToGroupDefaultRateOnResolverError(t *testing.T) {
+func TestOpenAIGatewayServiceRecordUsage_RejectsUnavailablePersonalRateSnapshot(t *testing.T) {
 	groupID := int64(12)
 	groupRate := 1.6
 	usage := OpenAIUsage{InputTokens: 10, OutputTokens: 5, CacheReadInputTokens: 2}
@@ -752,13 +738,11 @@ func TestOpenAIGatewayServiceRecordUsage_FallsBackToGroupDefaultRateOnResolverEr
 		Account: &Account{ID: 3002},
 	})
 
-	require.NoError(t, err)
+	require.Error(t, err)
 	require.Equal(t, 1, rateRepo.calls)
-	require.NotNil(t, usageRepo.lastLog)
-	require.Equal(t, groupRate, usageRepo.lastLog.RateMultiplier)
-
-	expected := expectedOpenAICost(t, svc, "gpt-5.1", usage, groupRate)
-	require.InDelta(t, expected.ActualCost, userRepo.lastAmount, 1e-12)
+	require.Zero(t, usageRepo.calls)
+	require.Zero(t, userRepo.deductCalls)
+	require.Zero(t, subRepo.incrementCalls)
 }
 
 func TestOpenAIGatewayServiceRecordUsage_FallsBackToGroupDefaultRateWhenResolverMissing(t *testing.T) {
@@ -2071,7 +2055,7 @@ func TestOpenAIGatewayServiceRecordUsage_FallsBackToUpstreamModelWhenPrimaryUnpr
 	require.InDelta(t, expectedCost.ActualCost, userRepo.lastAmount, 1e-12)
 }
 
-func TestOpenAIGatewayServiceRecordUsage_UnpricedTokenModelFallsBackToZeroCostUsageLog(t *testing.T) {
+func TestOpenAIGatewayServiceRecordUsage_UnpricedTokenModelRejectsWithoutUsageLog(t *testing.T) {
 	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
 	userRepo := &openAIRecordUsageUserRepoStub{}
 	subRepo := &openAIRecordUsageSubRepoStub{}
@@ -2089,14 +2073,9 @@ func TestOpenAIGatewayServiceRecordUsage_UnpricedTokenModelFallsBackToZeroCostUs
 		Account: &Account{ID: 30},
 	})
 
-	require.NoError(t, err)
-	require.Equal(t, 1, usageRepo.calls)
-	require.NotNil(t, usageRepo.lastLog)
-	require.Equal(t, "not-priceable-alias", usageRepo.lastLog.Model)
-	require.Equal(t, 20, usageRepo.lastLog.InputTokens)
-	require.Equal(t, 10, usageRepo.lastLog.OutputTokens)
-	require.Zero(t, usageRepo.lastLog.TotalCost)
-	require.Zero(t, usageRepo.lastLog.ActualCost)
+	require.ErrorIs(t, err, ErrModelPricingUnavailable)
+	require.Zero(t, usageRepo.calls)
+	require.Nil(t, usageRepo.lastLog)
 	require.Equal(t, 0, userRepo.deductCalls)
 	require.Equal(t, 0, subRepo.incrementCalls)
 }
@@ -2903,6 +2882,9 @@ func newOpenAIImageChannelPricingResolverForTest(t *testing.T, groupID int64, mo
 		BillingMode:     BillingModeImage,
 		PerRequestPrice: &price,
 	}
+	for _, platform := range domain.ConcretePlatformIDs() {
+		cache.pricingByGroupModel[channelModelKey{groupID: groupID, platform: platform, model: model}] = cache.pricingByGroupModel[channelModelKey{groupID: groupID, model: model}]
+	}
 	cache.channelByGroupID[groupID] = &Channel{ID: groupID, Status: StatusActive}
 	cache.groupPlatform[groupID] = ""
 	cache.loadedAt = time.Now()
@@ -2922,6 +2904,9 @@ func newOpenAITokenImageChannelPricingResolverForTest(t *testing.T, groupID int6
 		InputPrice:       &inputPrice,
 		OutputPrice:      &outputPrice,
 		ImageOutputPrice: &imageOutputPrice,
+	}
+	for _, platform := range domain.ConcretePlatformIDs() {
+		cache.pricingByGroupModel[channelModelKey{groupID: groupID, platform: platform, model: model}] = cache.pricingByGroupModel[channelModelKey{groupID: groupID, model: model}]
 	}
 	cache.channelByGroupID[groupID] = &Channel{ID: groupID, Status: StatusActive}
 	cache.groupPlatform[groupID] = ""
@@ -3313,7 +3298,7 @@ func TestOpenAIGatewayServiceRecordUsage_FreeOpenAIFastChargesStandard(t *testin
 	require.InDelta(t, standardTotal*0.5, usageRepo.lastLog.ActualCost, 1e-10)
 }
 
-func TestOpenAIGatewayServiceRecordUsage_FreeOpenAIFastMissingPricingRecordsZeroCostUsageLog(t *testing.T) {
+func TestOpenAIGatewayServiceRecordUsage_FreeOpenAIFastMissingPricingRejectsWithoutUsageLog(t *testing.T) {
 	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
 	svc := newOpenAIRecordUsageServiceForTest(
 		usageRepo,
@@ -3346,16 +3331,9 @@ func TestOpenAIGatewayServiceRecordUsage_FreeOpenAIFastMissingPricingRecordsZero
 		Account: &Account{ID: 3021, Platform: PlatformOpenAI, Type: AccountTypeAPIKey},
 	})
 
-	require.NoError(t, err)
-	require.Equal(t, 1, usageRepo.calls)
-	require.NotNil(t, usageRepo.lastLog)
-	require.Equal(t, "resp_free_fast_missing_pricing", usageRepo.lastLog.RequestID)
-	require.Equal(t, 1200, usageRepo.lastLog.InputTokens)
-	require.Equal(t, 300, usageRepo.lastLog.OutputTokens)
-	require.NotNil(t, usageRepo.lastLog.ServiceTier)
-	require.Equal(t, "priority", *usageRepo.lastLog.ServiceTier)
-	require.Zero(t, usageRepo.lastLog.TotalCost)
-	require.Zero(t, usageRepo.lastLog.ActualCost)
+	require.ErrorIs(t, err, ErrModelPricingUnavailable)
+	require.Zero(t, usageRepo.calls)
+	require.Nil(t, usageRepo.lastLog)
 }
 
 func TestGroupBillsOpenAIFastAtStandardRequiresOpenAIAccount(t *testing.T) {
@@ -4149,8 +4127,10 @@ func TestOpenAIGatewayServiceRecordUsage_ProtectedMismatchMissingFallbackRecords
 	svc := newCodexAutoReviewLunaMismatchService(t, usageRepo, userRepo, 0, testGPT56LunaFixturePrice(), true)
 	svc.billingService.fallbackPrices = map[string]*ModelPricing{}
 	usage := OpenAIUsage{InputTokens: 20, OutputTokens: 10}
+	core, diagnostics := observer.New(zap.ErrorLevel)
+	ctx := logger.IntoContext(context.Background(), zap.New(core))
 
-	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
+	err := svc.RecordUsage(ctx, &OpenAIRecordUsageInput{
 		Result: &OpenAIForwardResult{
 			RequestID:             "resp_auto_review_missing_fallback",
 			Model:                 "codex-auto-review",
@@ -4164,10 +4144,17 @@ func TestOpenAIGatewayServiceRecordUsage_ProtectedMismatchMissingFallbackRecords
 		Account:            &Account{ID: 30, Platform: PlatformOpenAI},
 		ChannelUsageFields: ChannelUsageFields{OriginalModel: "codex-auto-review"},
 	})
-	require.NoError(t, err)
-	require.Zero(t, usageRepo.lastLog.ActualCost)
-	require.Zero(t, usageRepo.lastLog.TotalCost)
+	require.ErrorIs(t, err, ErrModelPricingUnavailable)
+	require.Zero(t, usageRepo.calls)
+	require.Nil(t, usageRepo.lastLog, "a diagnostic is not a successful zero-cost money event")
 	require.Equal(t, 0, userRepo.deductCalls)
+	events := diagnostics.FilterMessage("codex_auto_review_luna_mismatch_pricing_unavailable").All()
+	require.Len(t, events, 1)
+	fields := events[0].ContextMap()
+	require.Equal(t, "pricing_unavailable", fields["decision"])
+	require.Equal(t, "resp_auto_review_missing_fallback", fields["request_id"])
+	require.Equal(t, codexAutoReviewModel, fields["billing_model"])
+	require.Equal(t, true, fields["model_mismatch"])
 }
 
 // Both credential types must preserve final request / raw response snapshots;

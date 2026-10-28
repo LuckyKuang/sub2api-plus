@@ -40,6 +40,7 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 	reqStream bool,
 	startTime time.Time,
 ) (*OpenAIForwardResult, error) {
+	beginUpstreamResponseModelObservation(c)
 	ctx, account, proxyURL, err := captureGrokRequestOwner(ctx, account)
 	if err != nil {
 		return nil, err
@@ -218,22 +219,24 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 			usageValue = *usage
 		}
 		result := &OpenAIForwardResult{
-			RequestID:        firstNonEmpty(resp.Header.Get("x-request-id"), resp.Header.Get("xai-request-id")),
-			UpstreamHeaders:  resp.Header,
-			ResponseID:       responseID,
-			Usage:            usageValue,
-			Model:            originalModel,
-			UpstreamModel:    upstreamModel,
-			ReasoningEffort:  reasoningEffort,
-			Stream:           reqStream,
-			OpenAIWSMode:     false,
-			ResponseHeaders:  resp.Header.Clone(),
-			Duration:         time.Since(startTime),
-			FirstTokenMs:     firstTokenMs,
-			LastTokenMs:      lastTokenMs,
-			FirstOutputMs:    firstOutputMs,
-			FirstOutputKind:  firstOutputKind,
-			ClientDisconnect: clientDisconnected,
+			RequestID:                     firstNonEmpty(resp.Header.Get("x-request-id"), resp.Header.Get("xai-request-id")),
+			UpstreamHeaders:               resp.Header,
+			ResponseID:                    responseID,
+			Usage:                         usageValue,
+			Model:                         originalModel,
+			UpstreamModel:                 upstreamModel,
+			UpstreamResponseModel:         observedUpstreamResponseModel(c),
+			UpstreamResponseModelConflict: observedUpstreamResponseModelConflict(c),
+			ReasoningEffort:               reasoningEffort,
+			Stream:                        reqStream,
+			OpenAIWSMode:                  false,
+			ResponseHeaders:               resp.Header.Clone(),
+			Duration:                      time.Since(startTime),
+			FirstTokenMs:                  firstTokenMs,
+			LastTokenMs:                   lastTokenMs,
+			FirstOutputMs:                 firstOutputMs,
+			FirstOutputKind:               firstOutputKind,
+			ClientDisconnect:              clientDisconnected,
 		}
 		if searchCount > 0 {
 			result.SearchCount = searchCount

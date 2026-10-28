@@ -176,10 +176,10 @@
           </template>
 
 	          <template #cell-actions="{ row }">
-	            <div class="flex items-center justify-center gap-1">
+	            <div class="table-actions justify-center">
               <button
                 type="button"
-                class="batch-row-action flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors hover:surface-hover hover:text-primary-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/30 dark:hover:text-primary-400 surface-control surface-muted"
+                class="table-action"
                 :title="t('batchImage.actions.viewDetail')"
                 @click="selectJob(row.id)"
               >
@@ -188,8 +188,7 @@
               </button>
               <button
                 type="button"
-                class="batch-row-action flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/30 surface-control"
-                :class="canDownload(row) ? 'text-gray-500 hover:bg-primary-50/25 hover:text-primary-600 dark:hover:bg-primary-900/20 dark:hover:text-primary-400' : 'text-gray-300 dark:text-dark-500'"
+                class="table-action"
                 :disabled="!canDownload(row) || downloading"
                 :title="t('batchImage.actions.downloadZip')"
                 @click="downloadJob(row)"
@@ -204,8 +203,8 @@
               <div v-if="canRetry(row) || canDeleteRecord(row)">
                 <button
                   type="button"
-                  class="batch-row-action flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors hover:surface-hover hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/30 dark:hover:text-white surface-control surface-muted"
-                  :class="{ 'surface-field text-gray-900 dark:surface-field dark:text-white': openMoreJobId === row.id }"
+                  class="table-action table-action-neutral"
+                  :class="{ 'table-action-active': openMoreJobId === row.id }"
                   :title="t('batchImage.actions.moreActions')"
                   @click.stop="toggleMoreMenu(row, $event)"
                 >
@@ -2657,24 +2656,6 @@ onBeforeUnmount(() => {
 @container table-page-pagination (min-width: 680px) {
   .batch-pagination { flex-direction: row; align-items: center; justify-content: space-between; }
   .batch-pagination > div:last-child { align-self: auto; }
-}
-
-.batch-row-action {
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: center !important;
-  justify-content: center !important;
-  min-width: 42px;
-  line-height: 1;
-  outline: none;
-}
-
-.batch-row-action:focus {
-  outline: none;
-}
-
-.batch-row-action :deep(svg) {
-  margin-right: 0 !important;
 }
 
 .batch-prompt-trigger:focus {

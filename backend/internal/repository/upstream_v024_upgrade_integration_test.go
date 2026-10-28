@@ -111,11 +111,14 @@ INSERT INTO settings (key,value) VALUES ('ops_runtime_log_config','{"level":"war
 		    'poll_scheduled', next_poll_at IS NOT NULL, 'owner', owner_generation, 'pending_owner', pending_generation)::text
 		FROM openai_oauth_weekly_reset_observations WHERE account_id=1`))
 	require.JSONEq(t, `{"sequence":0,"owner":""}`, snapshot(`SELECT jsonb_build_object('sequence',reset_sequence,'owner',owner_generation)::text FROM group_quota_follow_reset_events WHERE group_id=101`))
-	// Migration 286 (migrations/README.md) adds an empty translation map.
+	// Migrations 286, 299 and 303 add translation, selling-policy and image-count metadata.
 	// Keep every pre-existing field in the preservation comparison and assert
 	// the new field's required default independently for all fixture groups.
-	require.JSONEq(t, groupsBefore, snapshot(`SELECT jsonb_agg(to_jsonb(t) - ARRAY['model_allowlist','i18n'] ORDER BY id)::text FROM groups t`))
+	require.JSONEq(t, groupsBefore, snapshot(`SELECT jsonb_agg(to_jsonb(t) - ARRAY['model_allowlist','i18n','billing_rate_policy','billing_policy_version','image_count_billing'] ORDER BY id)::text FROM groups t`))
+	require.JSONEq(t, `{"1":false,"101":false,"102":false}`, snapshot(`SELECT jsonb_object_agg(id,image_count_billing)::text FROM groups`))
 	require.JSONEq(t, `{"1":{},"101":{},"102":{}}`, snapshot(`SELECT jsonb_object_agg(id,i18n)::text FROM groups`))
+	require.JSONEq(t, `{"1":{},"101":{},"102":{}}`, snapshot(`SELECT jsonb_object_agg(id,billing_rate_policy)::text FROM groups`))
+	require.JSONEq(t, `{"1":1,"101":1,"102":1}`, snapshot(`SELECT jsonb_object_agg(id,billing_policy_version)::text FROM groups`))
 	require.JSONEq(t, `{"enabled":true,"models":["GPT-5.6","claude-*"]}`, snapshot(`SELECT model_allowlist::text FROM groups WHERE id=101`))
 	require.JSONEq(t, `{"enabled":false,"models":[]}`, snapshot(`SELECT model_allowlist::text FROM groups WHERE id=102`))
 	require.JSONEq(t, `{"level":"warn","retention_days":45,"persist_access_logs":true}`, snapshot(`SELECT value FROM settings WHERE key='ops_runtime_log_config'`))

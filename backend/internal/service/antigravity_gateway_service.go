@@ -127,7 +127,7 @@ func (s *AntigravityGatewayService) readUpstreamErrorBody(resp *http.Response) [
 	if resp == nil || resp.Body == nil {
 		return nil
 	}
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, s.upstreamErrorBodyReadLimit()))
+	body, _ := readUpstreamErrorResponseBody(resp, s.upstreamErrorBodyReadLimit(), UpstreamErrorBodyReadTimeout)
 	return body
 }
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/openaiwire"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/apicompat"
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
@@ -188,6 +189,7 @@ func flattenOpenAIResponsesNamespaces(c *gin.Context, body []byte) ([]byte, erro
 // array items. Namespace declarations and nested namespace fields are left
 // untouched. Rebuilding the input array once keeps this linear for long
 // histories and avoids decoding JSON numbers through float64.
+// Official named unpaired outputs retain namespace as context-source metadata.
 //
 // keepToolCallNamespaces 保留工具调用项（function_call / custom_tool_call 等）上的
 // namespace，让 Codex 调用能按上游要求原样回传；判定见
@@ -208,6 +210,7 @@ func stripOpenAIResponsesInputNamespaces(body []byte, keepToolCallNamespaces boo
 	var stripErr error
 	input.ForEach(func(_, item gjson.Result) bool {
 		if !item.IsObject() || !item.Get("namespace").Exists() ||
+			openaiwire.IsNamedUnpairedFunctionCallOutputJSON(item) ||
 			(keepToolCallNamespaces && isOpenAIResponsesToolCallItemType(item.Get("type").String())) {
 			return true
 		}

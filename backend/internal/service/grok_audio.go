@@ -160,10 +160,19 @@ func (s *OpenAIGatewayService) ProxyGrokRealtime(ctx context.Context, c *gin.Con
 type GrokRealtimeUpstream struct{ conn openAIWSClientConn }
 
 type GrokRealtimeTurnObserver struct {
-	Accepted  func(responseID string)
-	Completed func(responseID string)
-	Failed    func(responseID string)
+	// BeforeClient performs per-frame admission after JSON validation and before
+	// any upstream write or audio usage observation. Unknown valid events remain
+	// the audit layer's forward-compatible pass-through responsibility.
+	BeforeClient func(context.Context, []byte) error
+	Accepted     func(responseID string)
+	Completed    func(responseID string)
+	Failed       func(responseID string)
 }
+
+type GrokRealtimeAdmissionError struct{ Err error }
+
+func (e *GrokRealtimeAdmissionError) Error() string { return "grok realtime admission rejected" }
+func (e *GrokRealtimeAdmissionError) Unwrap() error { return e.Err }
 
 // GrokRealtimeDialError preserves an HTTP status returned before WebSocket
 // upgrade so handlers can apply the normal Grok account policy.
@@ -309,17 +318,23 @@ func (s *OpenAIGatewayService) ProxyGrokRealtimeConnWithObserver(ctx context.Con
 			if kind != coderws.MessageText && kind != coderws.MessageBinary {
 				continue
 			}
-			if grokRealtimeEventHasAudio(msg) {
-				audioObserved.Store(true)
-			}
 			var raw json.RawMessage
 			if unmarshalErr := json.Unmarshal(msg, &raw); unmarshalErr != nil {
 				errCh <- fmt.Errorf("invalid realtime event: %w", unmarshalErr)
 				return
 			}
+			if observer != nil && observer.BeforeClient != nil {
+				if admissionErr := observer.BeforeClient(ctx, msg); admissionErr != nil {
+					errCh <- &GrokRealtimeAdmissionError{Err: admissionErr}
+					return
+				}
+			}
 			if writeErr := conn.WriteJSON(ctx, raw); writeErr != nil {
 				errCh <- writeErr
 				return
+			}
+			if grokRealtimeEventHasAudio(msg) {
+				audioObserved.Store(true)
 			}
 		}
 	}()

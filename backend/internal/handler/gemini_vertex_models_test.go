@@ -66,6 +66,8 @@ func TestGeminiV1BetaModelsEndpoints_VertexServiceAccountOnlyGroup(t *testing.T)
 		c.Request = httptest.NewRequest(http.MethodGet, "/v1beta/models", nil)
 		c.Set(string(middleware.ContextKeyAPIKey), apiKey)
 
+		prepareGatewayMetadataTest(h, c)
+
 		h.GeminiV1BetaListModels(c)
 		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 		require.JSONEq(t, `{"models":[{"name":"models/gemini-3.8-flash","supportedGenerationMethods":["generateContent","streamGenerateContent"]}]}`, rec.Body.String())
@@ -77,6 +79,8 @@ func TestGeminiV1BetaModelsEndpoints_VertexServiceAccountOnlyGroup(t *testing.T)
 		c.Request = httptest.NewRequest(http.MethodGet, "/v1beta/models/gemini-3.8-flash", nil)
 		c.Params = gin.Params{{Key: "model", Value: "gemini-3.8-flash"}}
 		c.Set(string(middleware.ContextKeyAPIKey), apiKey)
+
+		prepareGatewayMetadataTest(h, c)
 
 		h.GeminiV1BetaGetModel(c)
 		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())

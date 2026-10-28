@@ -1,36 +1,48 @@
 /* Content scrolls inside the console; its toolbar shares the brand's top inset. */
+:root :is(.workspace-tabs, .pagination-card) {
+  background-color: transparent;
+  background-image: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
 .workspace-tabs {
   display: flex;
   flex: none;
   gap: 8px;
   min-width: 0;
-  padding: 8px;
+  padding: 4px;
   overflow-x: auto;
   scrollbar-width: thin;
 }
 .workspace-tab {
   flex: 0 0 auto;
-  min-width: 128px;
-  min-height: 44px;
-  padding: 10px 24px;
+  min-width: max-content;
+  min-height: 38px;
+  padding: 7px 20px;
   border: 1px solid transparent;
-  border-radius: 14px;
+  border-radius: 9px;
+  background-color: transparent;
+  box-shadow: none;
   color: var(--surface-muted);
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 600;
+  line-height: 22px;
   white-space: nowrap;
-  transition: background-color 120ms, box-shadow 120ms;
+  transition: background-color 150ms, border-color 150ms, color 150ms, box-shadow 150ms;
 }
+.workspace-tab[aria-selected="false"] { border-color: transparent; }
 .workspace-tab:hover:not(:disabled) { background: var(--surface-hover); color: var(--surface-text); }
 .workspace-tab[aria-selected="true"] {
-  background: rgb(var(--console-accent-500, 20 184 166) / calc(.24 * var(--console-card-alpha, 1)));
-  border-color: rgb(var(--console-accent-500, 20 184 166) / 65%);
-  box-shadow: inset 0 0 0 1px rgb(var(--console-accent-500, 20 184 166) / 14%);
+  background: rgb(var(--console-accent-500, 20 184 166) / calc(.18 * var(--console-card-alpha, 1)));
+  border-color: rgb(var(--console-accent-500, 20 184 166) / 45%);
+  box-shadow: 0 1px 3px rgb(0 0 0 / calc(.15 * var(--console-card-alpha, 1)));
   color: var(--console-accent-readable, var(--surface-text));
 }
 .workspace-tab[aria-selected="true"]:is(:hover, :active, :focus, :focus-visible) {
-  background: rgb(var(--console-accent-500, 20 184 166) / calc(.30 * var(--console-card-alpha, 1)));
-  border-color: rgb(var(--console-accent-500, 20 184 166) / 80%);
+  background: rgb(var(--console-accent-500, 20 184 166) / calc(.24 * var(--console-card-alpha, 1)));
+  border-color: rgb(var(--console-accent-500, 20 184 166) / 60%);
   color: var(--console-accent-readable, var(--surface-text));
 }
 .workspace-tab:focus-visible { outline: 2px solid rgb(var(--console-accent-500, 20 184 166) / 75%); outline-offset: 2px; }
@@ -60,7 +72,7 @@
   .workspace-scroll > * { flex-shrink: 0; margin-top: 0 !important; margin-bottom: 0 !important; }
   .workspace-scroll > .workspace-body { flex-shrink: 1; }
   .workspace-clip, .workspace-table-card { overflow: hidden; border-radius: var(--surface-radius); }
-  .workspace-clip > :first-child:is(.card, .surface-card, .settings-tabs-shell, .workspace-tabs) { border-radius: var(--surface-radius); }
+  .workspace-clip > :first-child:is(.card, .surface-card, .settings-tabs-shell):not(.workspace-tabs) { border-radius: var(--surface-radius); }
   .workspace-table-viewport {
     flex: 1 1 0%; min-height: 0; min-width: 0; height: auto !important; max-height: none !important;
     overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-gutter: stable;
@@ -92,5 +104,5 @@
     margin-top: 0;
     margin-bottom: 0;
   }
-  .workspace-tab { min-width: max-content; padding: 10px 16px; }
+  .workspace-tab { padding-inline: 16px; }
 }

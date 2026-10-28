@@ -98,7 +98,8 @@ func newCountTokensAuditHandler(t *testing.T, endpoint, accountType string, coor
 	t.Cleanup(billing.Stop)
 	concurrency := service.NewConcurrencyService(&boundary.slots)
 	if endpoint == "grok" {
-		h := &OpenAIGatewayHandler{cfg: cfg, securityAuditCoordinator: coordinator}
+		h := &OpenAIGatewayHandler{cfg: cfg, securityAuditCoordinator: coordinator,
+			concurrencyHelper: NewConcurrencyHelper(concurrency, SSEPingFormatNone, 0)}
 		return h.GrokCountTokens, group, boundary
 	}
 	if endpoint == "openai" {
@@ -112,7 +113,8 @@ func newCountTokensAuditHandler(t *testing.T, endpoint, accountType string, coor
 	scheduler := service.NewSchedulerSnapshotService(&countTokensAuditScheduler{fakeSchedulerCache: fakeSchedulerCache{accounts: []*service.Account{&account}}, reads: &boundary.reads}, nil, nil, nil, nil)
 	gateway := service.NewGatewayService(nil, &fakeGroupRepo{group: group}, nil, nil, nil, nil, nil, nil, cfg, scheduler,
 		nil, service.NewBillingService(cfg, nil), nil, billing, nil, &boundary.wire, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
-	h := &GatewayHandler{gatewayService: gateway, billingCacheService: billing, cfg: cfg, securityAuditCoordinator: coordinator}
+	h := &GatewayHandler{gatewayService: gateway, billingCacheService: billing, cfg: cfg, securityAuditCoordinator: coordinator,
+		concurrencyHelper: NewConcurrencyHelper(concurrency, SSEPingFormatNone, 0)}
 	return h.CountTokens, group, boundary
 }
 
@@ -249,6 +251,8 @@ func TestCountTokensIngressAuditRealEnginesAndSideEffects(t *testing.T) {
 						}
 						require.True(t, completed, "unknown valid content must enter and pass the audit gate")
 						require.True(t, gjson.GetBytes(response, "input_tokens").Exists(), string(response))
+						require.Equal(t, int32(1), boundary.userSlots.Load(), "all accepted count requests share global user admission")
+						require.Equal(t, int32(1), atomic.LoadInt32(&boundary.slots.releaseUserCalled), "completion releases the global user lease")
 						if endpoint == "grok" {
 							require.Zero(t, boundary.reads.Load())
 							require.Empty(t, boundary.wire.calls())

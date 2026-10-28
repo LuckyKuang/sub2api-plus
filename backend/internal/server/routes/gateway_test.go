@@ -42,7 +42,7 @@ func newGatewayRoutesTestRouterWithAuthSubject(cfg *config.Config, subject *serv
 		router,
 		&handler.Handlers{
 			Gateway:       &handler.GatewayHandler{},
-			OpenAIGateway: &handler.OpenAIGatewayHandler{},
+			OpenAIGateway: handler.NewOpenAIGatewayHandler(nil, service.NewConcurrencyService(pinnedModelsConcurrencyCache{}), nil, nil, nil, nil, nil, nil, cfg),
 			AsyncImage:    handler.NewAsyncImageHandler(nil, nil),
 		},
 		servermiddleware.APIKeyAuthMiddleware(func(c *gin.Context) {

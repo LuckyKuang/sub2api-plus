@@ -78,7 +78,7 @@ func TestAsyncImageEnablesWithoutRestart(t *testing.T) {
 	store := &asyncImageMemoryStore{tasks: make(map[string]*service.ImageTaskRecord)}
 	tasks := service.NewImageTaskServiceWithResolver(store, settings.Resolver(), time.Hour, time.Minute)
 
-	h := &AsyncImageHandler{tasks: tasks}
+	h := &AsyncImageHandler{openAI: newGatewayAdmissionForTest(), tasks: tasks}
 	h.execute = func(_ string, c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"created": 1, "data": []gin.H{{"url": "https://upstream.test/i.png"}}})
 	}
@@ -90,6 +90,7 @@ func TestAsyncImageEnablesWithoutRestart(t *testing.T) {
 			ID: 9, UserID: 7, GroupID: &groupID,
 			Group: &service.Group{ID: groupID, Platform: service.PlatformOpenAI, AllowImageGeneration: true},
 		})
+		c.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: 7, Concurrency: 3})
 		c.Next()
 	})
 	router.POST("/v1/images/generations/async", h.Submit)

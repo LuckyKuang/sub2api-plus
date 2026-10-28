@@ -282,11 +282,11 @@ func RegisterGatewayRoutes(
 		gateway.GET("/videos/:request_id", videoStatusHandler)
 		gateway.GET("/videos/:request_id/content", videoContentHandler)
 
-		// xAI Voice APIs (Grok platform only): HTTP TTS/STT + Realtime WS.
+		// xAI native Voice APIs: Grok and Composite groups, HTTP + Realtime WS.
 		// Not part of the creation-center product surface — gateway relay only.
 		voiceHandler := func(endpoint string) gin.HandlerFunc {
 			return func(c *gin.Context) {
-				if getGroupPlatform(c) != service.PlatformGrok {
+				if !bindGrokNativeRoute(c) {
 					service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalFeatureGate)
 					c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"type": "not_found_error", "message": "Voice API is not supported for this platform"}})
 					return
@@ -298,7 +298,7 @@ func RegisterGatewayRoutes(
 		gateway.POST("/stt", voiceHandler("stt"))
 		gateway.POST("/custom-voices", voiceHandler("custom-voices"))
 		customVoicePathHandler := func(c *gin.Context) {
-			if getGroupPlatform(c) != service.PlatformGrok {
+			if !bindGrokNativeRoute(c) {
 				service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalFeatureGate)
 				c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"type": "not_found_error", "message": "Voice API is not supported for this platform"}})
 				return
@@ -311,7 +311,7 @@ func RegisterGatewayRoutes(
 		gateway.PATCH("/custom-voices/:voice_id", customVoicePathHandler)
 		gateway.DELETE("/custom-voices/:voice_id", customVoicePathHandler)
 		gateway.GET("/realtime", func(c *gin.Context) {
-			if getGroupPlatform(c) != service.PlatformGrok {
+			if !bindGrokNativeRoute(c) {
 				service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalFeatureGate)
 				c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"type": "not_found_error", "message": "Realtime API is not supported for this platform"}})
 				return
@@ -319,7 +319,7 @@ func RegisterGatewayRoutes(
 			h.OpenAIGateway.GrokRealtime(c)
 		})
 		gateway.POST("/web_search", func(c *gin.Context) {
-			if getGroupPlatform(c) != service.PlatformGrok {
+			if !bindGrokNativeRoute(c) {
 				service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalFeatureGate)
 				c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"type": "not_found_error", "message": "Web Search API is not supported for this platform"}})
 				return
@@ -327,7 +327,7 @@ func RegisterGatewayRoutes(
 			h.Gateway.WebSearch(c)
 		})
 		gateway.POST("/x_search", func(c *gin.Context) {
-			if getGroupPlatform(c) != service.PlatformGrok {
+			if !bindGrokNativeRoute(c) {
 				service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalFeatureGate)
 				c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"type": "not_found_error", "message": "X Search API is not supported for this platform"}})
 				return
@@ -445,7 +445,7 @@ func RegisterGatewayRoutes(
 
 	rootVoiceHandler := func(endpoint string) gin.HandlerFunc {
 		return func(c *gin.Context) {
-			if getGroupPlatform(c) != service.PlatformGrok {
+			if !bindGrokNativeRoute(c) {
 				service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalFeatureGate)
 				c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"type": "not_found_error", "message": "Voice API is not supported for this platform"}})
 				return
@@ -457,7 +457,7 @@ func RegisterGatewayRoutes(
 	rootRoute(http.MethodPost, "/stt", bodyLimit, rootVoiceHandler("stt"))
 	rootRoute(http.MethodPost, "/custom-voices", bodyLimit, rootVoiceHandler("custom-voices"))
 	rootCustomVoicePathHandler := func(c *gin.Context) {
-		if getGroupPlatform(c) != service.PlatformGrok {
+		if !bindGrokNativeRoute(c) {
 			service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalFeatureGate)
 			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"type": "not_found_error", "message": "Voice API is not supported for this platform"}})
 			return
@@ -470,7 +470,7 @@ func RegisterGatewayRoutes(
 	rootRoute(http.MethodPatch, "/custom-voices/:voice_id", bodyLimit, rootCustomVoicePathHandler)
 	rootRoute(http.MethodDelete, "/custom-voices/:voice_id", bodyLimit, rootCustomVoicePathHandler)
 	rootRoute(http.MethodGet, "/realtime", bodyLimit, func(c *gin.Context) {
-		if getGroupPlatform(c) != service.PlatformGrok {
+		if !bindGrokNativeRoute(c) {
 			service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalFeatureGate)
 			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"type": "not_found_error", "message": "Realtime API is not supported for this platform"}})
 			return
@@ -478,7 +478,7 @@ func RegisterGatewayRoutes(
 		h.OpenAIGateway.GrokRealtime(c)
 	})
 	rootRoute(http.MethodPost, "/web_search", bodyLimit, func(c *gin.Context) {
-		if getGroupPlatform(c) != service.PlatformGrok {
+		if !bindGrokNativeRoute(c) {
 			service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalFeatureGate)
 			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"type": "not_found_error", "message": "Web Search API is not supported for this platform"}})
 			return
@@ -486,7 +486,7 @@ func RegisterGatewayRoutes(
 		h.Gateway.WebSearch(c)
 	})
 	rootRoute(http.MethodPost, "/x_search", bodyLimit, func(c *gin.Context) {
-		if getGroupPlatform(c) != service.PlatformGrok {
+		if !bindGrokNativeRoute(c) {
 			service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalFeatureGate)
 			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"type": "not_found_error", "message": "X Search API is not supported for this platform"}})
 			return
@@ -574,7 +574,23 @@ func compositeTargetPlatformMiddleware(resolver *service.CompositeRouteResolver)
 			c.Next()
 			return
 		}
-		if c.Request == nil || c.Request.Method == http.MethodGet {
+		if c.Request == nil {
+			c.Next()
+			return
+		}
+		// These native APIs have an endpoint-defined supplier. Their model
+		// fields are native API parameters, not aliases in the text router.
+		if isGrokNativeRoute(c.FullPath()) {
+			c.Request = c.Request.WithContext(service.WithResolvedTargetPlatform(c.Request.Context(), service.PlatformGrok))
+			c.Next()
+			return
+		}
+		if isSeedanceNativeRoute(c.FullPath()) {
+			c.Request = c.Request.WithContext(service.WithResolvedTargetPlatform(c.Request.Context(), service.PlatformOpenAI))
+			c.Next()
+			return
+		}
+		if c.Request.Method == http.MethodGet {
 			c.Next()
 			return
 		}
@@ -636,6 +652,20 @@ func compositeGeminiTargetPlatformMiddleware(resolver *service.CompositeRouteRes
 		apiKey, ok := middleware.GetAPIKeyFromContext(c)
 		if ok && apiKey != nil && apiKey.Group != nil && apiKey.Group.Platform == service.PlatformComposite {
 			model := compositeGeminiModelFromParams(c)
+			if model == "" && c.Request.Method == http.MethodPost && strings.TrimSuffix(c.FullPath(), "/") == "/v1beta/cachedContents" {
+				body, err := pkghttputil.ReadRequestBodyWithPrealloc(c.Request)
+				if err != nil {
+					status := http.StatusBadRequest
+					var maxErr *http.MaxBytesError
+					if errors.As(err, &maxErr) {
+						status = http.StatusRequestEntityTooLarge
+					}
+					c.AbortWithStatusJSON(status, gin.H{"error": gin.H{"code": status, "message": "Failed to read cached content request body", "status": "INVALID_ARGUMENT"}})
+					return
+				}
+				model = strings.TrimPrefix(requestmodel.FromBodyForRoute(c.FullPath(), c.GetHeader("Content-Type"), body), "models/")
+				requestmodel.ResetRequestBody(c.Request, body)
+			}
 			if model != "" {
 				decision, err := resolver.Resolve(c.Request.Context(), apiKey.Group.ID, model, service.CompositeRouteEndpointGemini)
 				if err != nil {
@@ -652,6 +682,38 @@ func compositeGeminiTargetPlatformMiddleware(resolver *service.CompositeRouteRes
 			}
 		}
 		c.Next()
+	}
+}
+
+// bindGrokNativeRoute admits an existing native Grok API for a plain Grok
+// group or a Composite key and pins its supplier before audit and pricing.
+func bindGrokNativeRoute(c *gin.Context) bool {
+	key, ok := middleware.GetAPIKeyFromContext(c)
+	if !ok || key == nil || key.Group == nil || (key.Group.Platform != service.PlatformGrok && key.Group.Platform != service.PlatformComposite) {
+		return false
+	}
+	c.Request = c.Request.WithContext(service.WithResolvedTargetPlatform(c.Request.Context(), service.PlatformGrok))
+	return true
+}
+
+// Ark task models are native parameters, not text-router aliases. Every
+// registered path shares the existing OpenAI-compatible Ark account pool.
+func isSeedanceNativeRoute(path string) bool {
+	for _, prefix := range []string{"/api/v3", "/v3", "/v1", ""} {
+		if path == prefix+"/contents/generations/tasks" || path == prefix+"/contents/generations/tasks/:task_id" {
+			return true
+		}
+	}
+	return false
+}
+
+func isGrokNativeRoute(path string) bool {
+	path = strings.TrimPrefix(path, "/v1")
+	switch path {
+	case "/tts", "/stt", "/custom-voices", "/custom-voices/:voice_id", "/custom-voices/:voice_id/audio", "/realtime", "/web_search", "/x_search":
+		return true
+	default:
+		return false
 	}
 }
 

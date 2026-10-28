@@ -1560,6 +1560,10 @@ func TestOpenAIResponsesWebSocket_PassthroughUsageLogLeavesUserAgentNilWhenMissi
 }
 
 func TestOpenAIResponsesWebSocket_PassthroughTracksModelPerTurn(t *testing.T) {
+	// The passthrough wire keeps the channel aliases. Give each alias its
+	// explicit selling price rather than relying on account-mapped catalog IDs.
+	solInput, solOutput := 5e-6, 10e-6
+	terraInput, terraOutput := 2e-6, 4e-6
 	got := runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
 		firstPayload:  `{"type":"response.create","model":"sol","stream":false}`,
 		secondPayload: `{"type":"response.create","model":"terra","stream":false}`,
@@ -1573,6 +1577,11 @@ func TestOpenAIResponsesWebSocket_PassthroughTracksModelPerTurn(t *testing.T) {
 			"sol-channel":   "gpt-5.6-sol",
 			"terra-channel": "gpt-5.6-terra",
 		},
+		group: &service.Group{ID: 4201, Platform: service.PlatformOpenAI, RateMultiplier: 1,
+			ModelPricing: []service.ChannelModelPricing{
+				{Models: []string{"sol-channel"}, InputPrice: &solInput, OutputPrice: &solOutput},
+				{Models: []string{"terra-channel"}, InputPrice: &terraInput, OutputPrice: &terraOutput},
+			}},
 	})
 
 	require.Len(t, got.upstreamPayloads, 2)
@@ -1596,6 +1605,8 @@ func TestOpenAIResponsesWebSocket_PassthroughTracksModelPerTurn(t *testing.T) {
 	require.Equal(t, "terra-channel", *got.logs[1].UpstreamModel)
 	require.NotNil(t, got.logs[1].ModelMappingChain)
 	require.Equal(t, "terra→terra-channel", *got.logs[1].ModelMappingChain)
+	require.InDelta(t, 20e-6, got.logs[0].TotalCost, 1e-12, "first turn: 2 input tokens at $5/M plus 1 output token at $10/M")
+	require.InDelta(t, 8e-6, got.logs[1].TotalCost, 1e-12, "second turn: 2 input tokens at $2/M plus 1 output token at $4/M")
 	require.InDelta(t, got.logs[1].TotalCost*2.5, got.logs[0].TotalCost, 1e-12,
 		"each turn must be billed with its own channel-mapped model")
 }
@@ -1988,6 +1999,8 @@ func newOpenAIWSHandlerTestServer(t *testing.T, h *OpenAIGatewayHandler, subject
 
 type openAIResponsesWSUsageLogCase struct {
 	simpleModeRejectAtRead int64
+	rpmCache               service.UserRPMCache
+	rpmOverrideRepo        service.UserGroupRateRepository
 	compositeResolver      *service.CompositeRouteResolver
 	accountPlatform        string
 	closeReason            string
@@ -2017,6 +2030,10 @@ type openAIResponsesWSUsageLogCase struct {
 	// secondTurnCloseExpected：第二个 turn 被拒（连接被 1008 关闭）。
 	secondTurnCloseExpected bool
 	midFrameCloseExpected   bool
+	// collectCompletedUsageOnRejection returns the completed response.create
+	// turns' usage when a later turn is rejected; control-only test frames need
+	// not fabricate one usage record per upstream frame.
+	collectCompletedUsageOnRejection bool
 }
 
 type openAIResponsesWSUsageLogResult struct {
@@ -2060,6 +2077,24 @@ type openAIWSFailoverHandlerAccountRepoStub struct {
 type openAIWSTurnBillingCacheStub struct {
 	service.BillingCache
 	balanceChecks atomic.Int32
+}
+
+// wsRPMBillingCache supplies a stable balance for the shared wire harness in
+// standard mode; RPM regressions retain the real billing-eligibility path.
+type wsRPMBillingCache struct{ service.BillingCache }
+
+func (*wsRPMBillingCache) GetUserBalance(context.Context, int64) (float64, error) {
+	return 100, nil
+}
+
+func (*wsRPMBillingCache) DeductUserBalance(context.Context, int64, float64) error {
+	return nil
+}
+
+type openAIWSUsageHandlerBillingRepoStub struct{ service.UsageBillingRepository }
+
+func (*openAIWSUsageHandlerBillingRepoStub) Apply(context.Context, *service.UsageBillingCommand) (*service.UsageBillingApplyResult, error) {
+	return &service.UsageBillingApplyResult{Applied: true}, nil
 }
 
 func (s *openAIWSTurnBillingCacheStub) GetUserBalance(context.Context, int64) (float64, error) {
@@ -2505,7 +2540,7 @@ func TestOpenAIResponses_APIKeyPassthroughPool5xxRetriesThenExhaustsMaxSwitches(
 	)
 	h := NewOpenAIGatewayHandler(
 		gatewaySvc,
-		service.NewConcurrencyService(nil),
+		service.NewConcurrencyService(&metadataConcurrencyCache{}),
 		billingCacheSvc,
 		service.NewAPIKeyService(nil, nil, nil, nil, nil, nil, cfg),
 		nil,
@@ -2607,7 +2642,7 @@ func TestOpenAIResponses_APIKeyPassthroughPoolAuthFailureRetriesThenSwitchesToHe
 			)
 			h := NewOpenAIGatewayHandler(
 				gatewaySvc,
-				service.NewConcurrencyService(nil),
+				service.NewConcurrencyService(&metadataConcurrencyCache{}),
 				billingCacheSvc,
 				service.NewAPIKeyService(nil, nil, nil, nil, nil, nil, cfg),
 				nil,
@@ -2690,7 +2725,7 @@ func TestOpenAIResponses_APIKeyPassthroughSSERateLimitUsesConfiguredPoolRetry(t 
 	)
 	h := NewOpenAIGatewayHandler(
 		gatewaySvc,
-		service.NewConcurrencyService(nil),
+		service.NewConcurrencyService(&metadataConcurrencyCache{}),
 		billingCacheSvc,
 		service.NewAPIKeyService(nil, nil, nil, nil, nil, nil, cfg),
 		nil,
@@ -3429,6 +3464,7 @@ func runOpenAIResponsesWebSocketUsageLogCase(t *testing.T, tc openAIResponsesWSU
 			"openai_apikey_responses_websockets_v2_enabled": true,
 			"openai_apikey_responses_websockets_v2_mode":    service.OpenAIWSIngressModePassthrough,
 		},
+		AccountGroups: []service.AccountGroup{{AccountID: 9901, GroupID: groupID}},
 	}
 	if tc.accountPlatform != "" {
 		account.Platform = tc.accountPlatform
@@ -3473,12 +3509,19 @@ func runOpenAIResponsesWebSocketUsageLogCase(t *testing.T, tc openAIResponsesWSU
 		cfg.SimpleModeKeyRateLimitEnabled = true
 		keyRepo = &simpleModeWSRateLimitRepo{rejectAt: tc.simpleModeRejectAtRead}
 	}
-	billingCacheSvc := service.NewBillingCacheService(nil, nil, nil, keyRepo, nil, nil, cfg, nil)
+	var billingCache service.BillingCache
+	var usageBilling service.UsageBillingRepository
+	if tc.rpmCache != nil {
+		cfg.RunMode = config.RunModeStandard
+		billingCache = &wsRPMBillingCache{}
+		usageBilling = &openAIWSUsageHandlerBillingRepoStub{}
+	}
+	billingCacheSvc := service.NewBillingCacheService(billingCache, nil, nil, keyRepo, tc.rpmCache, tc.rpmOverrideRepo, cfg, nil)
 	t.Cleanup(billingCacheSvc.Stop)
 	gatewaySvc := service.NewOpenAIGatewayService(
 		accountRepo,
 		usageRepo,
-		nil,
+		usageBilling,
 		nil,
 		nil,
 		nil,
@@ -3649,7 +3692,36 @@ func runOpenAIResponsesWebSocketUsageLogCase(t *testing.T, tc openAIResponsesWSU
 			require.Contains(t, closeErr.Reason, reason)
 			require.Len(t, upstreamPayloadCh, turnCount-1, "rejected turn must not reach upstream")
 			_ = clientConn.CloseNow()
-			return openAIResponsesWSUsageLogResult{}
+			if !tc.collectCompletedUsageOnRejection {
+				return openAIResponsesWSUsageLogResult{}
+			}
+			// A rejected later turn must not erase usage for completed turns.
+			// Collect their evidence so callers can verify its original billing group.
+			usageLogs := make([]*service.UsageLog, 0, turnCount-1)
+			for len(usageLogs) < turnCount-1 {
+				select {
+				case log := <-usageRepo.created:
+					require.NotNil(t, log)
+					usageLogs = append(usageLogs, log)
+				case <-time.After(3 * time.Second):
+					t.Fatal("等待已完成 WebSocket turn 的 usage log 超时")
+				}
+			}
+			upstreamPayloads := make([][]byte, 0, turnCount-1)
+			for len(upstreamPayloads) < turnCount-1 {
+				select {
+				case payload := <-upstreamPayloadCh:
+					upstreamPayloads = append(upstreamPayloads, payload)
+				case <-time.After(3 * time.Second):
+					t.Fatal("等待已完成 WebSocket turn 的上游请求帧超时")
+				}
+			}
+			require.Empty(t, usageRepo.created, "a rejected turn must not create another usage record")
+			return openAIResponsesWSUsageLogResult{
+				log: usageLogs[0], logs: usageLogs,
+				upstreamFirstPayload: upstreamPayloads[0], upstreamPayloads: upstreamPayloads,
+				clientEvents: clientEvents,
+			}
 		}
 		readTerminalEvent()
 	}

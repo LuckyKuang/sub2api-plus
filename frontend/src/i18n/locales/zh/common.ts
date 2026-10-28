@@ -4,7 +4,7 @@ export default {
     submitting: '提交中...',
     justNow: '刚刚',
     peakRateTooltip: '高峰倍率：{window}',
-    peakRateImageNote: '；token 计费的图片 token 同样适用，图片按次计费不受高峰影响',
+    peakRateImageNote: '；新请求的所有计费单位均适用，包括图片按张和按次费用',
     save: '保存',
     saved: '保存成功',
     deleted: '删除成功',

@@ -57,6 +57,9 @@ coverage/
 config.yaml
 config.local.yaml
 
+# Local plans and browser evidence are never build inputs.
+/openspec/
+
 # Logs
 *.log
 logs/

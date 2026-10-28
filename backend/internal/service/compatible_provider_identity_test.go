@@ -31,7 +31,7 @@ func TestCompatibleProviderControlRequestsRetainOwnerSnapshot(t *testing.T) {
 			for _, source := range []string{"account", "global", "invalid_account", "compiled_default"} {
 				t.Run(platform+"/"+source+map[bool]string{false: "/quota", true: "/balance"}[balanceOnly], func(t *testing.T) {
 					settings := emptyOutboundIdentitySettings()
-					wantUA, wantSource := "codex_cli_rs/0.164.0 (Ubuntu 24.04; x86_64) xterm-256color", "compiled_default"
+					wantUA, wantSource := "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color", "compiled_default"
 					if source != "compiled_default" {
 						settings.Defaults[platform+":apikey"] = "grok"
 						settings.Profiles["grok"] = OutboundIdentitySelection{Preset: "grok", Version: "1.2.3"}
@@ -63,7 +63,7 @@ func TestCompatibleProviderControlRequestsRetainOwnerSnapshot(t *testing.T) {
 						assert.Equal(t, wantSource, identity.Source)
 						assert.Equal(t, wantUA, req.Header.Get("User-Agent"))
 						if source == "compiled_default" {
-							assert.Equal(t, "0.164.0", req.Header.Get("Version"))
+							assert.Equal(t, "0.165.0", req.Header.Get("Version"))
 							assert.Equal(t, "codex_cli_rs", req.Header.Get("Originator"))
 						} else {
 							assert.Equal(t, identity.Version, req.Header.Get("X-Grok-Client-Version"))

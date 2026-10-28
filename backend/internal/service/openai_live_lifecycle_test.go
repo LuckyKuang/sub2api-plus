@@ -315,6 +315,8 @@ func TestFinalizeLiveCallIsIdempotentAndWritesZeroUsage(t *testing.T) {
 	require.Zero(t, log.OutputTokens)
 	require.Zero(t, log.TotalCost)
 	require.Zero(t, log.ActualCost)
+	require.Zero(t, log.BillingPolicyVersion, "legacy sessions have no historical policy evidence")
+	require.Empty(t, log.BillingRateSnapshot)
 }
 
 func TestGetLiveCallForIdentityRejectsMismatchedCaller(t *testing.T) {

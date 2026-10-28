@@ -284,6 +284,7 @@ func (s *OpenAIGatewayService) applyOpenAIOutboundIdentity(ctx context.Context, 
 		settings = s.settingService
 	}
 	applyOpenAICodexResidencyFromSettings(ctx, settings, headers, useCodexIdentity)
+	applyOpenAIRegionalRoutingHeaders(ctx, account, headers)
 	return identity
 }
 
@@ -327,7 +328,7 @@ func (a *Account) applyOpenAIHeaderOverrides(headers http.Header) {
 
 func isOpenAIProtectedHeaderOverrideName(lowerName string) bool {
 	lowerName = strings.ToLower(strings.TrimSpace(lowerName))
-	if lowerName == "user-agent" || lowerName == "originator" || lowerName == "version" || lowerName == "openai-beta" || lowerName == "x-openai-internal-codex-residency" {
+	if lowerName == "user-agent" || lowerName == "originator" || lowerName == "version" || lowerName == "openai-beta" || lowerName == "x-openai-internal-codex-residency" || lowerName == "x-openai-fedramp" {
 		return true
 	}
 	if strings.HasPrefix(lowerName, "x-codex-") {

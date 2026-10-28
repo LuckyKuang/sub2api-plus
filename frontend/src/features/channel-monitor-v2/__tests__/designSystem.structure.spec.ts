@@ -127,7 +127,7 @@ describe('channel-monitor-v2 design system structure', () => {
     expect(tabs).toContain('role="tablist"')
     expect(tabs).toContain('role="tab"')
     expect(tabs).toContain(':aria-selected="modelValue === tab.value"')
-    expect(styles).toMatch(/\.workspace-tab\s*\{[^}]*border-radius:\s*14px/s)
+    expect(styles).toMatch(/\.workspace-tab\s*\{[^}]*border-radius:\s*9px/s)
     expect(styles).toContain('.workspace-tab[aria-selected="true"]')
     expect(src).toContain('MonitorSettingsPanel')
   })

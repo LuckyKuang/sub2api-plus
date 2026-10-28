@@ -85,6 +85,11 @@ func RateMultiplier(v float64) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldRateMultiplier, v))
 }
 
+// BillingPolicyVersion applies equality check predicate on the "billing_policy_version" field. It's identical to BillingPolicyVersionEQ.
+func BillingPolicyVersion(v int64) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldBillingPolicyVersion, v))
+}
+
 // PeakRateEnabled applies equality check predicate on the "peak_rate_enabled" field. It's identical to PeakRateEnabledEQ.
 func PeakRateEnabled(v bool) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldPeakRateEnabled, v))
@@ -188,6 +193,11 @@ func AllowImageGeneration(v bool) predicate.Group {
 // AllowBatchImageGeneration applies equality check predicate on the "allow_batch_image_generation" field. It's identical to AllowBatchImageGenerationEQ.
 func AllowBatchImageGeneration(v bool) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldAllowBatchImageGeneration, v))
+}
+
+// ImageCountBilling applies equality check predicate on the "image_count_billing" field. It's identical to ImageCountBillingEQ.
+func ImageCountBilling(v bool) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldImageCountBilling, v))
 }
 
 // ImageRateIndependent applies equality check predicate on the "image_rate_independent" field. It's identical to ImageRateIndependentEQ.
@@ -683,6 +693,46 @@ func RateMultiplierLT(v float64) predicate.Group {
 // RateMultiplierLTE applies the LTE predicate on the "rate_multiplier" field.
 func RateMultiplierLTE(v float64) predicate.Group {
 	return predicate.Group(sql.FieldLTE(FieldRateMultiplier, v))
+}
+
+// BillingPolicyVersionEQ applies the EQ predicate on the "billing_policy_version" field.
+func BillingPolicyVersionEQ(v int64) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldBillingPolicyVersion, v))
+}
+
+// BillingPolicyVersionNEQ applies the NEQ predicate on the "billing_policy_version" field.
+func BillingPolicyVersionNEQ(v int64) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldBillingPolicyVersion, v))
+}
+
+// BillingPolicyVersionIn applies the In predicate on the "billing_policy_version" field.
+func BillingPolicyVersionIn(vs ...int64) predicate.Group {
+	return predicate.Group(sql.FieldIn(FieldBillingPolicyVersion, vs...))
+}
+
+// BillingPolicyVersionNotIn applies the NotIn predicate on the "billing_policy_version" field.
+func BillingPolicyVersionNotIn(vs ...int64) predicate.Group {
+	return predicate.Group(sql.FieldNotIn(FieldBillingPolicyVersion, vs...))
+}
+
+// BillingPolicyVersionGT applies the GT predicate on the "billing_policy_version" field.
+func BillingPolicyVersionGT(v int64) predicate.Group {
+	return predicate.Group(sql.FieldGT(FieldBillingPolicyVersion, v))
+}
+
+// BillingPolicyVersionGTE applies the GTE predicate on the "billing_policy_version" field.
+func BillingPolicyVersionGTE(v int64) predicate.Group {
+	return predicate.Group(sql.FieldGTE(FieldBillingPolicyVersion, v))
+}
+
+// BillingPolicyVersionLT applies the LT predicate on the "billing_policy_version" field.
+func BillingPolicyVersionLT(v int64) predicate.Group {
+	return predicate.Group(sql.FieldLT(FieldBillingPolicyVersion, v))
+}
+
+// BillingPolicyVersionLTE applies the LTE predicate on the "billing_policy_version" field.
+func BillingPolicyVersionLTE(v int64) predicate.Group {
+	return predicate.Group(sql.FieldLTE(FieldBillingPolicyVersion, v))
 }
 
 // PeakRateEnabledEQ applies the EQ predicate on the "peak_rate_enabled" field.
@@ -1618,6 +1668,16 @@ func AllowBatchImageGenerationEQ(v bool) predicate.Group {
 // AllowBatchImageGenerationNEQ applies the NEQ predicate on the "allow_batch_image_generation" field.
 func AllowBatchImageGenerationNEQ(v bool) predicate.Group {
 	return predicate.Group(sql.FieldNEQ(FieldAllowBatchImageGeneration, v))
+}
+
+// ImageCountBillingEQ applies the EQ predicate on the "image_count_billing" field.
+func ImageCountBillingEQ(v bool) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldImageCountBilling, v))
+}
+
+// ImageCountBillingNEQ applies the NEQ predicate on the "image_count_billing" field.
+func ImageCountBillingNEQ(v bool) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldImageCountBilling, v))
 }
 
 // ImageRateIndependentEQ applies the EQ predicate on the "image_rate_independent" field.

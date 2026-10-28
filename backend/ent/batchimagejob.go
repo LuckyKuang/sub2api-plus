@@ -3,6 +3,7 @@
 package ent
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -57,6 +58,8 @@ type BatchImageJob struct {
 	HoldAmount *float64 `json:"hold_amount,omitempty"`
 	// ActualCost holds the value of the "actual_cost" field.
 	ActualCost *float64 `json:"actual_cost,omitempty"`
+	// BillingRateSnapshot holds the value of the "billing_rate_snapshot" field.
+	BillingRateSnapshot map[string]interface{} `json:"billing_rate_snapshot,omitempty"`
 	// Currency holds the value of the "currency" field.
 	Currency string `json:"currency,omitempty"`
 	// HoldID holds the value of the "hold_id" field.
@@ -105,6 +108,8 @@ func (*BatchImageJob) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
+		case batchimagejob.FieldBillingRateSnapshot:
+			values[i] = new([]byte)
 		case batchimagejob.FieldEstimatedCost, batchimagejob.FieldHoldAmount, batchimagejob.FieldActualCost:
 			values[i] = new(sql.NullFloat64)
 		case batchimagejob.FieldID, batchimagejob.FieldUserID, batchimagejob.FieldAPIKeyID, batchimagejob.FieldAccountID, batchimagejob.FieldItemCount, batchimagejob.FieldSuccessCount, batchimagejob.FieldFailCount, batchimagejob.FieldCancelledCount, batchimagejob.FieldRetryCount, batchimagejob.FieldVersion:
@@ -262,6 +267,14 @@ func (_m *BatchImageJob) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.ActualCost = new(float64)
 				*_m.ActualCost = value.Float64
+			}
+		case batchimagejob.FieldBillingRateSnapshot:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field billing_rate_snapshot", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.BillingRateSnapshot); err != nil {
+					return fmt.Errorf("unmarshal field billing_rate_snapshot: %w", err)
+				}
 			}
 		case batchimagejob.FieldCurrency:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -511,6 +524,9 @@ func (_m *BatchImageJob) String() string {
 		builder.WriteString("actual_cost=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
+	builder.WriteString(", ")
+	builder.WriteString("billing_rate_snapshot=")
+	builder.WriteString(fmt.Sprintf("%v", _m.BillingRateSnapshot))
 	builder.WriteString(", ")
 	builder.WriteString("currency=")
 	builder.WriteString(_m.Currency)

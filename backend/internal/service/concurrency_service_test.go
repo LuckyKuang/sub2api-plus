@@ -262,11 +262,12 @@ func TestAcquireUserSlot_IndependentFromAccount(t *testing.T) {
 }
 
 func TestAcquireUserSlot_UnlimitedConcurrency(t *testing.T) {
-	svc := NewConcurrencyService(&stubConcurrencyCacheForTest{})
+	svc := NewConcurrencyService(&stubConcurrencyCacheForTest{acquireResult: true})
 
 	result, err := svc.AcquireUserSlot(context.Background(), 1, 0)
 	require.NoError(t, err)
 	require.True(t, result.Acquired)
+	result.ReleaseFunc()
 }
 
 func TestTrackAPIKeySlot_ReleaseDecrements(t *testing.T) {
@@ -536,22 +537,21 @@ func TestIncrementWaitCount_QueueFull(t *testing.T) {
 	require.False(t, allowed)
 }
 
-func TestIncrementWaitCount_FailOpen(t *testing.T) {
-	// Redis 错误时应 fail-open（允许请求通过）
+func TestIncrementWaitCount_FailsClosed(t *testing.T) {
 	cache := &stubConcurrencyCacheForTest{waitErr: errors.New("redis timeout")}
 	svc := NewConcurrencyService(cache)
 
 	allowed, err := svc.IncrementWaitCount(context.Background(), 1, 25)
-	require.NoError(t, err, "Redis 错误不应传播")
-	require.True(t, allowed, "Redis 错误时应 fail-open")
+	require.ErrorIs(t, err, cache.waitErr)
+	require.False(t, allowed, "an unavailable queue cannot grant unbounded worker waiting")
 }
 
 func TestIncrementWaitCount_NilCache(t *testing.T) {
 	svc := &ConcurrencyService{cache: nil}
 
 	allowed, err := svc.IncrementWaitCount(context.Background(), 1, 25)
-	require.NoError(t, err)
-	require.True(t, allowed, "nil cache 应 fail-open")
+	require.Error(t, err)
+	require.False(t, allowed)
 }
 
 func TestCalculateMaxWait(t *testing.T) {
@@ -600,19 +600,19 @@ func TestGetAccountConcurrencyBatch(t *testing.T) {
 	}
 }
 
-func TestIncrementAccountWaitCount_FailOpen(t *testing.T) {
+func TestIncrementAccountWaitCount_FailsClosed(t *testing.T) {
 	cache := &stubConcurrencyCacheForTest{waitErr: errors.New("redis error")}
 	svc := NewConcurrencyService(cache)
 
 	allowed, err := svc.IncrementAccountWaitCount(context.Background(), 1, 10)
-	require.NoError(t, err, "Redis 错误不应传播")
-	require.True(t, allowed, "Redis 错误时应 fail-open")
+	require.ErrorIs(t, err, cache.waitErr)
+	require.False(t, allowed, "an unavailable account queue must not admit unlimited waiters")
 }
 
 func TestIncrementAccountWaitCount_NilCache(t *testing.T) {
 	svc := &ConcurrencyService{cache: nil}
 
 	allowed, err := svc.IncrementAccountWaitCount(context.Background(), 1, 10)
-	require.NoError(t, err)
-	require.True(t, allowed)
+	require.Error(t, err)
+	require.False(t, allowed)
 }

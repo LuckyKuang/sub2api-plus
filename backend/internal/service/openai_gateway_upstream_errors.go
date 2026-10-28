@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -122,6 +121,9 @@ func isOpenAITransientProcessingError(upstreamStatusCode int, upstreamMsg string
 	if upstreamStatusCode < http.StatusBadRequest {
 		return false
 	}
+	if IsOpenAIPolicyCapacityUnavailable(upstreamBody) {
+		return upstreamStatusCode == http.StatusServiceUnavailable
+	}
 
 	hasOpenAIServerOverloadedCode := func(payload []byte) bool {
 		code := strings.ToLower(strings.TrimSpace(gjson.GetBytes(payload, "error.code").String()))
@@ -179,6 +181,9 @@ func isOpenAITransientProcessingError(upstreamStatusCode int, upstreamMsg string
 const openAIRequestScopedRetryMaxDelay = 8 * time.Second
 
 func openAIRequestScopedRetryDelay(responseHeaders http.Header, responseBody []byte) time.Duration {
+	if IsOpenAIPolicyCapacityUnavailable(responseBody) {
+		responseHeaders = openAIPolicyCapacityRetryHeaders(responseHeaders, responseBody)
+	}
 	type retryAfterValue struct {
 		raw          string
 		milliseconds bool
@@ -211,6 +216,33 @@ func openAIRequestScopedRetryDelay(responseHeaders http.Header, responseBody []b
 		return delay
 	}
 	return 0
+}
+
+// Preserve the provider's case-insensitive retry headers across an SSE-to-HTTP
+// or HTTP-to-WebSocket boundary. Only retry advice is eligible for promotion.
+func openAIPolicyCapacityRetryHeaders(headers http.Header, body []byte) http.Header {
+	result := headers.Clone()
+	if result == nil {
+		result = make(http.Header)
+	}
+	errorObject := gjson.GetBytes(body, "response.error")
+	if !errorObject.IsObject() {
+		errorObject = gjson.GetBytes(body, "error")
+	}
+	errorObject.Get("headers").ForEach(func(name, value gjson.Result) bool {
+		if !strings.EqualFold(name.String(), "Retry-After") && !strings.EqualFold(name.String(), "Retry-After-Ms") {
+			return true
+		}
+		if value.IsObject() || value.IsArray() || value.Type == gjson.Null {
+			return true
+		}
+		raw := value.String()
+		if result.Get(name.String()) == "" && len(raw) <= 128 && !strings.ContainsAny(raw, "\r\n") {
+			result.Set(name.String(), raw)
+		}
+		return true
+	})
+	return result
 }
 
 func parseOpenAIRequestScopedRetryDelay(raw string) (time.Duration, bool) {
@@ -425,13 +457,26 @@ func newOpenAIUpstreamFailoverError(
 	upstreamMsg string,
 	retryableOnSameAccount bool,
 ) *UpstreamFailoverError {
-	requestScopedCapacity := isOpenAIRequestScopedCapacityShed(upstreamMsg, responseBody)
+	if statusCode == http.StatusServiceUnavailable && IsOpenAIPolicyCapacityUnavailable(responseBody) {
+		responseHeaders = openAIPolicyCapacityRetryHeaders(responseHeaders, responseBody)
+	}
+	requestScopedCapacity := isOpenAIHTTPCapacityShed(statusCode, upstreamMsg, responseBody)
 	failoverErr := &UpstreamFailoverError{
 		StatusCode:             statusCode,
 		ResponseBody:           responseBody,
 		ResponseHeaders:        responseHeaders.Clone(),
 		RetryableOnSameAccount: retryableOnSameAccount && !requestScopedCapacity,
 		RequestScopedTransient: requestScopedCapacity,
+	}
+	// The exact policy code takes precedence over free-form message heuristics.
+	if statusCode == http.StatusServiceUnavailable && IsOpenAIPolicyCapacityUnavailable(responseBody) {
+		failoverErr.Scope = GatewayFailureScopeRequest
+		failoverErr.Reason = openAICapacityShedReason
+		failoverErr.NextAccountAction = NextAccountStop
+		failoverErr.SameAccountRetryDelay = openAIRequestScopedRetryDelay(responseHeaders, responseBody)
+		failoverErr.ClientStatusCode = http.StatusServiceUnavailable
+		failoverErr.ClientMessage = openAICapacityShedClientMessage(upstreamMsg, responseBody)
+		return failoverErr
 	}
 	if isOpenAIModelNotFoundError(statusCode, responseBody) {
 		failoverErr.RetryableOnSameAccount = false
@@ -611,7 +656,7 @@ func (s *OpenAIGatewayService) readUpstreamErrorBody(resp *http.Response) []byte
 	if s != nil {
 		cfg = s.cfg
 	}
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, openAIUpstreamErrorBodyReadLimitForConfig(cfg)))
+	body, _ := readUpstreamErrorResponseBody(resp, openAIUpstreamErrorBodyReadLimitForConfig(cfg), UpstreamErrorBodyReadTimeout)
 	return body
 }
 
@@ -1058,6 +1103,16 @@ func isOpenAIRequestScopedCapacityShed(upstreamMsg string, upstreamBody []byte) 
 		(!gjson.ValidBytes(upstreamBody) && isOpenAICapacityShedMessage(string(upstreamBody)))
 }
 
+// Native HTTP policy capacity is defined only for 503. In particular, the same
+// code inside a 401/403 must not suppress a real credential/access failure.
+// Streaming events have no HTTP rejection status and use the code directly.
+func isOpenAIHTTPCapacityShed(status int, upstreamMsg string, body []byte) bool {
+	if IsOpenAIPolicyCapacityUnavailable(body) {
+		return status == http.StatusServiceUnavailable
+	}
+	return isOpenAIRequestScopedCapacityShed(upstreamMsg, body)
+}
+
 func isOpenAIUpstreamAccessStateError(_ string, body []byte) bool {
 	if len(body) == 0 || !gjson.ValidBytes(body) {
 		return false
@@ -1090,6 +1145,9 @@ func isOpenAIHTTPUpstreamAccessStateError(_ int, _ string, body []byte) bool {
 }
 
 func openAICapacityShedClientMessage(upstreamMsg string, body []byte) string {
+	if IsOpenAIPolicyCapacityUnavailable(body) {
+		return "Policy-restricted capacity is unavailable. Please try again later."
+	}
 	for _, candidate := range []string{
 		upstreamMsg,
 		gjson.GetBytes(body, "error.message").String(),

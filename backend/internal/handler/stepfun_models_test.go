@@ -51,6 +51,7 @@ func TestStepFunClientCatalogsRespectDiscoveryAndRestrictions(t *testing.T) {
 					c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{GroupID: &group.ID, Group: group})
 					var got []string
 					if codex {
+						prepareGatewayMetadataTest(h, c)
 						h.CodexModels(c)
 						var response codexModelsResponseForTest
 						require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
@@ -62,6 +63,7 @@ func TestStepFunClientCatalogsRespectDiscoveryAndRestrictions(t *testing.T) {
 							}
 						}
 					} else {
+						prepareGatewayMetadataTest(h, c)
 						h.Models(c)
 						var response gatewayModelsResponseForTest
 						require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
@@ -88,6 +90,7 @@ func TestStepFunRetrieveModelUsesFilteredCatalog(t *testing.T) {
 		c.Request = httptest.NewRequest(http.MethodGet, "/v1/models/"+model, nil)
 		c.Params = gin.Params{{Key: "model", Value: model}}
 		c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{Group: &service.Group{ID: 1, Platform: service.PlatformStepFun, ModelAllowlist: service.GroupModelAllowlist{Enabled: true, Models: []string{"step-5-preview"}}}})
+		prepareGatewayMetadataTest(h, c)
 		h.Models(c)
 		if model == "step-5-preview" {
 			require.Equal(t, http.StatusOK, recorder.Code)

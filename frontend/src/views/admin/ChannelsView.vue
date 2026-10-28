@@ -97,17 +97,17 @@
           </template>
 
           <template #cell-actions="{ row }">
-            <div class="flex items-center gap-1">
+            <div class="table-actions">
               <button
                 @click="openEditDialog(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors hover:surface-hover hover:text-primary-600 dark:hover:text-primary-400 surface-control surface-muted"
+                class="table-action"
               >
                 <Icon name="edit" size="sm" />
                 <span class="text-xs">{{ t('common.edit', 'Edit') }}</span>
               </button>
               <button
                 @click="handleDelete(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors hover:bg-red-50/25 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400 surface-control surface-muted"
+                class="table-action table-action-danger"
               >
                 <Icon name="trash" size="sm" />
                 <span class="text-xs">{{ t('common.delete', 'Delete') }}</span>
@@ -326,9 +326,9 @@
               </div>
             </div>
 
-            <!-- Web Search Emulation (Anthropic only, hidden when global disabled) -->
-            <div v-if="section.platform === 'anthropic' && webSearchGlobalEnabled" class="border-t border-gray-200 pt-3 dark:border-dark-600">
-              <div class="flex items-center justify-between">
+            <!-- Web Search Emulation (platform whitelist, hidden when global disabled) -->
+            <div v-if="WEB_SEARCH_EMULATION_PLATFORMS.has(section.platform) && webSearchGlobalEnabled" class="border-t border-gray-200 pt-3 dark:border-dark-600">
+              <div class="flex items-center justify-between gap-4">
                 <div>
                   <label class="text-xs font-medium surface-muted">
                     {{ t('admin.channels.form.webSearchEmulation') }}
@@ -337,7 +337,7 @@
                     {{ t('admin.channels.form.webSearchEmulationHint') }}
                   </p>
                 </div>
-                <Toggle v-model="section.web_search_emulation" />
+                <Toggle v-model="section.web_search_emulation" :aria-label="t('admin.channels.form.webSearchEmulation')" />
               </div>
             </div>
 
@@ -458,6 +458,8 @@
                 />
               </div>
             </div>
+
+            <GroupModelRateLink :groups="allGroups.filter(group => section.group_ids.includes(group.id))" />
 
             <!-- Account Stats Pricing Rules (per-platform, always visible) -->
             <div class="mt-4 border-t border-gray-200 pt-4 dark:border-dark-700 space-y-3">
@@ -657,6 +659,7 @@ import Icon from '@/components/icons/Icon.vue'
 import PlatformIcon from '@/components/common/PlatformIcon.vue'
 import Toggle from '@/components/common/Toggle.vue'
 import PricingEntryCard from '@/components/admin/channel/PricingEntryCard.vue'
+import GroupModelRateLink from '@/components/admin/group/GroupModelRateLink.vue'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import { useKeyedDebouncedSearch } from '@/composables/useKeyedDebouncedSearch'
 
@@ -664,6 +667,17 @@ const { t } = useI18n()
 const appStore = useAppStore()
 
 // Web Search global enabled state (loaded once on mount)
+// Channel-level Web Search emulation controls. Rendering and submission share
+// this list; account-level overrides retain their provider-specific contract.
+const WEB_SEARCH_EMULATION_PLATFORMS: ReadonlySet<string> = new Set([
+  'anthropic',
+  'openai',
+  'command_code',
+  'opencode_go',
+  'minimax',
+  'zhipu',
+])
+
 const webSearchGlobalEnabled = ref(false)
 async function loadWebSearchGlobalState() {
   try {
@@ -1189,15 +1203,14 @@ function formToAPI(): { group_ids: number[], model_pricing: ChannelModelPricing[
   }
   const uniqueGroupIds = Array.from(new Set(group_ids))
 
-  // Collect web_search_emulation (only anthropic platform supports it)
-  // Always write the key so that disabling in the UI correctly sets platform to false,
-  // rather than leaving a stale true value from the cloned features_config.
-  const wsEmulation: Record<string, boolean> = {}
+  // Preserve dimensions without an editable section. Every displayed platform
+  // writes an explicit value, including false when its section is disabled.
+  const wsEmulation: Record<string, boolean> = {
+    ...(featuresConfig.web_search_emulation as Record<string, boolean> | undefined)
+  }
   for (const section of form.platforms) {
-    if (!section.enabled) continue
-    if (section.platform === 'anthropic') {
-      wsEmulation[section.platform] = !!section.web_search_emulation
-    }
+    if (!WEB_SEARCH_EMULATION_PLATFORMS.has(section.platform)) continue
+    wsEmulation[section.platform] = section.enabled ? !!section.web_search_emulation : false
   }
   if (Object.keys(wsEmulation).length > 0) {
     featuresConfig.web_search_emulation = wsEmulation

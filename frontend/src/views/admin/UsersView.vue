@@ -608,11 +608,11 @@
           </template>
 
           <template #cell-actions="{ row }">
-            <div class="flex items-center gap-1">
+            <div class="table-actions">
               <!-- Edit Button -->
               <button
                 @click="handleEdit(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors hover:surface-hover hover:text-primary-600 dark:hover:text-primary-400 surface-control surface-muted"
+                class="table-action"
               >
                 <Icon name="edit" size="sm" />
                 <span class="text-xs">{{ t('common.edit') }}</span>
@@ -623,10 +623,10 @@
                 v-if="row.role !== 'admin'"
                 @click="handleToggleStatus(row)"
                 :class="[
-                  'surface-control surface-muted flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors',
+                  'table-action',
                   row.status === 'active'
-                    ? 'hover:bg-orange-50/25 hover:text-orange-600 dark:hover:bg-orange-900/20 dark:hover:text-orange-400'
-                    : 'hover:bg-primary-50/25 hover:text-primary-600 dark:hover:bg-primary-900/20 dark:hover:text-primary-400'
+                    ? 'table-action-warning'
+                    : ''
                 ]"
               >
                 <Icon v-if="row.status === 'active'" name="ban" size="sm" />
@@ -637,8 +637,8 @@
               <!-- More Actions Menu Trigger -->
               <button
                 @click="openActionMenu(row, $event)"
-                class="action-menu-trigger flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors hover:surface-hover hover:text-gray-900 dark:hover:text-white surface-control surface-muted"
-                :class="{ 'surface-field text-gray-900 dark:surface-field dark:text-white': activeMenuId === row.id }"
+                class="table-action table-action-neutral action-menu-trigger"
+                :class="{ 'table-action-active': activeMenuId === row.id }"
               >
                 <Icon name="more" size="sm" />
                 <span class="text-xs">{{ t('common.more') }}</span>

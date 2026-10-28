@@ -5,6 +5,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -232,7 +233,7 @@ func TestSyncGrokObservedModelsUsesCLIIdentityAndAccountHeaders(t *testing.T) {
 	require.Equal(t, xai.CLIClientMode, upstream.lastReq.Header.Get("X-Grok-Client-Mode"))
 	require.Equal(t, "user-902", upstream.lastReq.Header.Get("X-UserID"))
 	require.Equal(t, "user902@example.test", upstream.lastReq.Header.Get("X-Email"))
-	require.Contains(t, repo.updates[account.ID], grokObservedModelsExtraKey)
+	require.Equal(t, []string{"grok-4.5"}, parseGrokObservedModels(account.Extra).Models)
 }
 
 type grokQuotaProxyRepo struct {
@@ -1427,4 +1428,38 @@ func TestShouldAutoPauseGrokAccountByQuota(t *testing.T) {
 			require.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func (r *grokQuotaAccountRepo) CompareAndSwapGrokObservedModels(ctx context.Context, expectedOwner *Account, expected, next json.RawMessage) (bool, error) {
+	id := expectedOwner.ID
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	if r == nil || r.mockAccountRepoForPlatform == nil {
+		return false, nil
+	}
+	account := r.accountsByID[id]
+	if account == nil || account.ID != id || account.Platform != PlatformGrok || !grokCatalogOwnerMatches(account, expectedOwner) {
+		return false, nil
+	}
+	var current any
+	if account.Extra != nil {
+		current = account.Extra[grokObservedModelsExtraKey]
+	}
+	currentJSON, err := json.Marshal(current)
+	if err != nil {
+		return false, err
+	}
+	if !jsonValuesEqual(currentJSON, expected) {
+		return false, nil
+	}
+	var decoded any
+	if err := json.Unmarshal(next, &decoded); err != nil {
+		return false, err
+	}
+	if account.Extra == nil {
+		account.Extra = map[string]any{}
+	}
+	account.Extra[grokObservedModelsExtraKey] = decoded
+	return true, nil
 }

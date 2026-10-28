@@ -7,6 +7,24 @@ catalog in the selected region and return AI Studio-shaped model descriptions.
 Vertex accounts authenticated with an API key use the built-in catalog because
 the publisher-model listing path requires an access token.
 
+When every schedulable Gemini account in the group declares servable model names,
+list and detail endpoints use their union, including wildcard declarations.
+API Key and service accounts contribute mapping aliases because native generation
+applies their mapping targets. OAuth contributes only native self-mappings,
+including Google One's default model set; translated OAuth aliases are not advertised.
+If any Gemini account is unrestricted or an OAuth mapping has no native declarations,
+the selected account supplies discovery. Antigravity candidates and the group's
+model allowlist still apply. Built-in Gemini catalogs and account
+connection tests now use the current 3.x models; saved custom mappings can still
+declare older models explicitly.
+
+`gateway.max_same_account_retries_gemini` (environment
+`GATEWAY_MAX_SAME_ACCOUNT_RETRIES_GEMINI`) sets retries for retryable Gemini
+upstream failures before account failover, excluding the first attempt. It
+defaults to 4, accepts 0 through 10, and 0 disables these retries. Signature
+downgrades retain their separate compatibility budget. Existing account error
+policies and pool-mode retry settings remain authoritative for their paths.
+
 ## Quotas, image permissions and interrupted streams
 
 Vertex service accounts support total, daily and weekly account quota limits.
@@ -33,7 +51,11 @@ clamped to a nonnegative uncached-input count when a prompt is blocked.
 ## Explicit context caching
 
 Explicit caches are scoped to the requesting gateway API key and its current
-Gemini group. Composite groups do not expose cache management.
+group. Gemini groups and Composite requests resolved to the Gemini supplier
+expose the same cache management APIs. Antigravity and other supplier targets
+do not support this resource domain. Composite creation resolves the public
+model through the Gemini route registry, sends the selected private model
+upstream, and retains the original public alias for rate rules and metadata.
 
 | Endpoint | Behavior |
 | --- | --- |
@@ -54,6 +76,15 @@ gateway resolves ownership and rewrites the name for the provider. A referenced
 cache is routed only to its creating account, without session-based rerouting or
 failover to another owner. Missing, expired, foreign-key or foreign-group
 references are unavailable to the caller.
+For compatible upstream gateways, bound-cache 429/5xx errors do not punish the
+gateway account. Pool-mode accounts retry only their configured retryable status
+codes and retry count, keeping the original credential owner and proxy route;
+other cases and exhausted retries return the upstream failure without switching
+cache owners.
+For Composite aliases, both the public model and its currently resolved model
+must match the stored binding. Resource-only operations use the authorized
+record and its creating account; they do not infer a provider from a cache ID.
+Extensions capture the current request's prices using the stored public model.
 
 Creation charges input tokens and storage for the requested lifetime together.
 Storage uses `cache_storage_cost_per_token_per_hour`, with configured prices

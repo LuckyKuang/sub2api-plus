@@ -72,9 +72,9 @@ func accountCodexToolCapabilities(account *Account, modelID string) map[string]j
 		baseURL = account.GetOpenAIBaseURL()
 	}
 	parsed, err := url.Parse(baseURL)
-	official := err == nil && (strings.EqualFold(parsed.Hostname(), "api.openai.com") ||
+	official := err == nil && (isOfficialOpenAIModelsBaseURL(baseURL) ||
 		(account.IsOpenAIOAuth() && strings.EqualFold(parsed.Hostname(), "chatgpt.com")))
-	if account.IsOpenAI() && (isOpenAIGPT6AstraModel(modelID) || openai.IsGPT61SolModelSpelling(modelID)) && official {
+	if account.IsOpenAI() && (isOpenAIGPT6AstraModel(modelID) || openai.IsGPT61SolModelSpelling(modelID) || openai.IsGPT61TerraModelSpelling(modelID)) && official {
 		defaults := map[string]json.RawMessage{
 			"supports_search_tool":  json.RawMessage("true"),
 			"apply_patch_tool_type": json.RawMessage(`"freeform"`),

@@ -20,6 +20,8 @@ import (
 type PaymentHandler struct {
 	paymentService *service.PaymentService
 	configService  *service.PaymentConfigService
+	modelCatalog   saleCatalogReader
+	userRates      saleUserRateReader
 }
 
 // NewPaymentHandler creates a new PaymentHandler.
@@ -44,6 +46,10 @@ func (h *PaymentHandler) GetPaymentConfig(c *gin.Context) {
 // GetPlans returns subscription plans available for sale.
 // GET /api/v1/payment/plans
 func (h *PaymentHandler) GetPlans(c *gin.Context) {
+	subject, ok := requireReadAuth(c)
+	if !ok {
+		return
+	}
 	plans, err := h.configService.ListPlansForSale(c.Request.Context())
 	if err != nil {
 		response.ErrorFrom(c, err)
@@ -51,31 +57,40 @@ func (h *PaymentHandler) GetPlans(c *gin.Context) {
 	}
 	// Enrich plans with group platform for frontend color coding
 	type planWithPlatform struct {
-		ID                 int64    `json:"id"`
-		GroupID            int64    `json:"group_id"`
-		GroupPlatform      string   `json:"group_platform"`
-		GroupName          string   `json:"group_name"`
-		RateMultiplier     float64  `json:"rate_multiplier"`
-		PeakRateEnabled    bool     `json:"peak_rate_enabled"`
-		PeakStart          string   `json:"peak_start"`
-		PeakEnd            string   `json:"peak_end"`
-		PeakRateMultiplier float64  `json:"peak_rate_multiplier"`
-		Name               string   `json:"name"`
-		Description        string   `json:"description"`
-		Price              float64  `json:"price"`
-		OriginalPrice      *float64 `json:"original_price,omitempty"`
-		Currency           string   `json:"currency,omitempty"`
-		ValidityDays       int      `json:"validity_days"`
-		ValidityUnit       string   `json:"validity_unit"`
-		Features           string   `json:"features"`
-		ProductName        string   `json:"product_name"`
-		ForSale            bool     `json:"for_sale"`
-		SortOrder          int      `json:"sort_order"`
+		ID                 int64            `json:"id"`
+		GroupID            int64            `json:"group_id"`
+		GroupPlatform      string           `json:"group_platform"`
+		GroupName          string           `json:"group_name"`
+		RateMultiplier     float64          `json:"rate_multiplier"`
+		PeakRateEnabled    bool             `json:"peak_rate_enabled"`
+		PeakStart          string           `json:"peak_start"`
+		PeakEnd            string           `json:"peak_end"`
+		PeakRateMultiplier float64          `json:"peak_rate_multiplier"`
+		Name               string           `json:"name"`
+		Description        string           `json:"description"`
+		Price              float64          `json:"price"`
+		OriginalPrice      *float64         `json:"original_price,omitempty"`
+		Currency           string           `json:"currency,omitempty"`
+		ValidityDays       int              `json:"validity_days"`
+		ValidityUnit       string           `json:"validity_unit"`
+		Features           string           `json:"features"`
+		ProductName        string           `json:"product_name"`
+		ForSale            bool             `json:"for_sale"`
+		SortOrder          int              `json:"sort_order"`
+		ModelCatalog       planModelCatalog `json:"model_catalog"`
 	}
-	groupInfo := h.configService.GetGroupInfoMap(c.Request.Context(), plans)
+	catalogs, err := h.saleCatalogForPlans(c.Request.Context(), plans, subject.UserID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
 	result := make([]planWithPlatform, 0, len(plans))
 	for _, p := range plans {
-		gi := groupInfo[p.GroupID]
+		catalog, ok := catalogs[p.GroupID]
+		if !ok {
+			continue
+		}
+		gi := planGroupInfoFromCatalog(catalog)
 		result = append(result, planWithPlatform{
 			ID: int64(p.ID), GroupID: p.GroupID,
 			GroupPlatform: gi.Platform, GroupName: gi.I18n.LocalizeName(c.GetHeader("Accept-Language"), gi.Name),
@@ -85,6 +100,7 @@ func (h *PaymentHandler) GetPlans(c *gin.Context) {
 			Currency:     p.Currency,
 			ValidityDays: p.ValidityDays, ValidityUnit: p.ValidityUnit, Features: p.Features,
 			ProductName: p.ProductName, ForSale: p.ForSale, SortOrder: p.SortOrder,
+			ModelCatalog: catalog,
 		})
 	}
 	response.Success(c, result)
@@ -94,6 +110,10 @@ func (h *PaymentHandler) GetPlans(c *gin.Context) {
 // payment methods with limits, subscription plans, and configuration.
 // GET /api/v1/payment/checkout-info
 func (h *PaymentHandler) GetCheckoutInfo(c *gin.Context) {
+	subject, ok := requireReadAuth(c)
+	if !ok {
+		return
+	}
 	ctx := c.Request.Context()
 
 	// Fetch limits (methods + global range)
@@ -119,11 +139,23 @@ func (h *PaymentHandler) GetCheckoutInfo(c *gin.Context) {
 	}
 
 	// Fetch plans with group info
-	plans, _ := h.configService.ListPlansForSale(ctx)
-	groupInfo := h.configService.GetGroupInfoMap(ctx, plans)
+	plans, err := h.configService.ListPlansForSale(ctx)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	catalogs, err := h.saleCatalogForPlans(ctx, plans, subject.UserID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
 	planList := make([]checkoutPlan, 0, len(plans))
 	for _, p := range plans {
-		gi := groupInfo[p.GroupID]
+		catalog, ok := catalogs[p.GroupID]
+		if !ok {
+			continue
+		}
+		gi := planGroupInfoFromCatalog(catalog)
 		planList = append(planList, checkoutPlan{
 			ID: int64(p.ID), GroupID: p.GroupID,
 			GroupPlatform: gi.Platform, GroupName: gi.I18n.LocalizeName(c.GetHeader("Accept-Language"), gi.Name),
@@ -136,7 +168,8 @@ func (h *PaymentHandler) GetCheckoutInfo(c *gin.Context) {
 			Name:        p.Name, Description: p.Description, Price: p.Price, OriginalPrice: p.OriginalPrice,
 			Currency:     p.Currency,
 			ValidityDays: p.ValidityDays, ValidityUnit: p.ValidityUnit, Features: parseFeatures(p.Features),
-			ProductName: p.ProductName,
+			ProductName:  p.ProductName,
+			ModelCatalog: catalog,
 		})
 	}
 
@@ -186,29 +219,30 @@ type checkoutInfoResponse struct {
 }
 
 type checkoutPlan struct {
-	ID                 int64    `json:"id"`
-	GroupID            int64    `json:"group_id"`
-	GroupPlatform      string   `json:"group_platform"`
-	GroupName          string   `json:"group_name"`
-	RateMultiplier     float64  `json:"rate_multiplier"`
-	PeakRateEnabled    bool     `json:"peak_rate_enabled"`
-	PeakStart          string   `json:"peak_start"`
-	PeakEnd            string   `json:"peak_end"`
-	PeakRateMultiplier float64  `json:"peak_rate_multiplier"`
-	DailyLimitUSD      *float64 `json:"daily_limit_usd"`
-	WeeklyLimitUSD     *float64 `json:"weekly_limit_usd"`
-	MonthlyLimitUSD    *float64 `json:"monthly_limit_usd"`
-	FiveHourLimitUSD   *float64 `json:"five_hour_limit_usd"`
-	ModelScopes        []string `json:"supported_model_scopes"`
-	Name               string   `json:"name"`
-	Description        string   `json:"description"`
-	Price              float64  `json:"price"`
-	OriginalPrice      *float64 `json:"original_price,omitempty"`
-	Currency           string   `json:"currency,omitempty"`
-	ValidityDays       int      `json:"validity_days"`
-	ValidityUnit       string   `json:"validity_unit"`
-	Features           []string `json:"features"`
-	ProductName        string   `json:"product_name"`
+	ID                 int64            `json:"id"`
+	GroupID            int64            `json:"group_id"`
+	GroupPlatform      string           `json:"group_platform"`
+	GroupName          string           `json:"group_name"`
+	RateMultiplier     float64          `json:"rate_multiplier"`
+	PeakRateEnabled    bool             `json:"peak_rate_enabled"`
+	PeakStart          string           `json:"peak_start"`
+	PeakEnd            string           `json:"peak_end"`
+	PeakRateMultiplier float64          `json:"peak_rate_multiplier"`
+	DailyLimitUSD      *float64         `json:"daily_limit_usd"`
+	WeeklyLimitUSD     *float64         `json:"weekly_limit_usd"`
+	MonthlyLimitUSD    *float64         `json:"monthly_limit_usd"`
+	FiveHourLimitUSD   *float64         `json:"five_hour_limit_usd"`
+	ModelScopes        []string         `json:"supported_model_scopes"`
+	Name               string           `json:"name"`
+	Description        string           `json:"description"`
+	Price              float64          `json:"price"`
+	OriginalPrice      *float64         `json:"original_price,omitempty"`
+	Currency           string           `json:"currency,omitempty"`
+	ValidityDays       int              `json:"validity_days"`
+	ValidityUnit       string           `json:"validity_unit"`
+	Features           []string         `json:"features"`
+	ProductName        string           `json:"product_name"`
+	ModelCatalog       planModelCatalog `json:"model_catalog"`
 }
 
 // parseFeatures splits a newline-separated features string into a string slice.
@@ -241,14 +275,15 @@ func (h *PaymentHandler) GetLimits(c *gin.Context) {
 
 // CreateOrderRequest is the request body for creating a payment order.
 type CreateOrderRequest struct {
-	Amount            float64 `json:"amount"`
-	PaymentType       string  `json:"payment_type" binding:"required"`
-	OpenID            string  `json:"openid"`
-	WechatResumeToken string  `json:"wechat_resume_token"`
-	ReturnURL         string  `json:"return_url"`
-	PaymentSource     string  `json:"payment_source"`
-	OrderType         string  `json:"order_type"`
-	PlanID            int64   `json:"plan_id"`
+	Amount                       float64 `json:"amount"`
+	PaymentType                  string  `json:"payment_type" binding:"required"`
+	OpenID                       string  `json:"openid"`
+	WechatResumeToken            string  `json:"wechat_resume_token"`
+	ReturnURL                    string  `json:"return_url"`
+	PaymentSource                string  `json:"payment_source"`
+	OrderType                    string  `json:"order_type"`
+	PlanID                       int64   `json:"plan_id"`
+	ExpectedBillingPolicyVersion *int64  `json:"expected_billing_policy_version"`
 	// IsMobile lets the frontend declare its mobile status directly. When
 	// nil we fall back to User-Agent heuristics (which miss iPadOS / some
 	// embedded browsers that strip the "Mobile" keyword).
@@ -285,20 +320,21 @@ func (h *PaymentHandler) CreateOrder(c *gin.Context) {
 		mobile = *req.IsMobile
 	}
 	result, err := h.paymentService.CreateOrder(c.Request.Context(), service.CreateOrderRequest{
-		UserID:          subject.UserID,
-		Amount:          req.Amount,
-		PaymentType:     req.PaymentType,
-		OpenID:          req.OpenID,
-		ClientIP:        c.ClientIP(),
-		IsMobile:        mobile,
-		IsWeChatBrowser: isWeChatBrowser(c),
-		SrcHost:         c.Request.Host,
-		SrcURL:          c.Request.Referer(),
-		ReturnURL:       req.ReturnURL,
-		PaymentSource:   req.PaymentSource,
-		OrderType:       req.OrderType,
-		PlanID:          req.PlanID,
-		Locale:          c.GetHeader("Accept-Language"),
+		UserID:                       subject.UserID,
+		Amount:                       req.Amount,
+		PaymentType:                  req.PaymentType,
+		OpenID:                       req.OpenID,
+		ClientIP:                     c.ClientIP(),
+		IsMobile:                     mobile,
+		IsWeChatBrowser:              isWeChatBrowser(c),
+		SrcHost:                      c.Request.Host,
+		SrcURL:                       c.Request.Referer(),
+		ReturnURL:                    req.ReturnURL,
+		PaymentSource:                req.PaymentSource,
+		OrderType:                    req.OrderType,
+		PlanID:                       req.PlanID,
+		ExpectedBillingPolicyVersion: req.ExpectedBillingPolicyVersion,
+		Locale:                       c.GetHeader("Accept-Language"),
 	})
 	if err != nil {
 		response.ErrorFrom(c, err)

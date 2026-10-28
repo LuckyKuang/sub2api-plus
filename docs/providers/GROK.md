@@ -4,6 +4,37 @@ Sub2API Plus supports Grok OAuth subscription accounts and standard xAI API-key
 accounts. Both account types expose OpenAI-compatible traffic through the
 gateway.
 
+Response-model diagnostics observe the provider declaration before any existing
+response adaptation. Each forwarding attempt starts a fresh observation; error
+bodies, retries and a previous account cannot supply the next response's model.
+Native Responses retains its public-model adaptation. The raw Chat Completions
+path preserves the provider's JSON/SSE model field and records that same original
+declaration for diagnostics; observation alone does not authorize body rewriting.
+
+Admin model diagnostics compare mappings with a scoped, bounded observation of
+the authenticated model catalog; they do not change routing or infer permission
+to use an unlisted model. Background discovery and admin catalog sync bind the
+URL, bearer grant, trusted identity and proxy to the acquired credential owner.
+Persisting either success or failure uses an owner-conditional snapshot CAS:
+credential, account type/status or saved proxy changes reject the observation,
+including changes between CAS retries. A conflicting catalog update may be
+reread and merged only while that same owner remains unchanged.
+The captured owner is mandatory even for failures before a request can be built;
+failure persistence never adopts a replacement grant or a repaired proxy from a
+later database read.
+Freshness also includes a digest of the grant and saved proxy: an endpoint-only
+legacy snapshot or a rotated grant cannot supply a fresh catalog verdict.
+Background discovery leaves account state unchanged after transport and proxy
+authentication failures, including interrupted response bodies. HTTP 407 is
+rejected before reading its body, so truncated or oversized proxy responses cannot
+write a catalog attempt. Complete upstream HTTP errors and invalid or oversized
+successful catalog bodies may still record an owner-conditional failed attempt.
+Admin catalog sync can record transport and proxy failures through the same
+owner-conditional diagnostic snapshot.
+The diagnostic `endpoint` is always the currently configured catalog address;
+historical model IDs and success times may belong to a previous source when the
+state is `source_changed`.
+
 Fallback token pricing recognizes `grok-4.7` / `grok-4.7-latest` and the separate
 Fast aliases `grok-4.7-fast` / `grok-4.7-build-fast`. Per million tokens, the
 standard card is $2 input, $0.50 cached input and $6 output; Fast is $4, $1 and
@@ -464,3 +495,38 @@ Normal refresh preserves session mapping while invalidating obsolete credential
 observations; a fresh token does not inherit an older token’s late error.
 Replacing an API key changes its session mapping; OAuth session ownership is
 bound to the authenticated subject/team so ordinary token rotation preserves it.
+
+
+### Async video creation and capacity
+
+Video create/edit/extend reserve the user's persistent unfinished-task capacity
+before sending upstream, in addition to the active HTTP execution lease.
+Transport errors, ambiguous server failures, malformed success or a lost response
+do not prove that no video was created. Such attempts retain capacity and stop
+automatic retries on another account. A credential failure confirmed before any
+provider send, or a structured 401/403/429 rejection from the trusted provider
+response path, can prove that this attempt accepted no job and preserve eligible
+account failover. Client-visible error rewrites cannot supply that evidence.
+
+Status and content use provider terminal-state evidence independently of whether
+usage is billable. Pending status, a content range error or an empty result does
+not release persistent task capacity. The same rules apply to native Ark/Seedance
+through its supplier-specific handler: an accepted cancellation request is not a
+confirmed terminal task. See [GATEWAY_TASK_LIMITS.md](../GATEWAY_TASK_LIMITS.md).
+
+Completed video settlement uses its create-time pricing evidence. The billing
+worker first holds a 30-second owner lease; only a successful durable billing
+transaction promotes it to a 48-hour completion marker. A failed or crashed
+worker leaves the task retryable while the 24-hour price record is available.
+Failure cleanup and success marking use a separate two-second budget, so a
+timed-out worker cannot strand its claim. Both operations compare the owner;
+late callbacks cannot delete a successor's lease or its completed marker.
+Stable task request IDs provide PostgreSQL billing deduplication if processing
+overlaps after lease expiry. Ark/Seedance uses the same lifecycle with its
+native output-token price evidence.
+The authenticated task route fixes that billing identity; provider status or
+asset response IDs remain observations and cannot create a second charge.
+On upgrade, a versioned Redis namespace rechecks ambiguous legacy `"1"` claims
+through the durable billing request ID. A previously settled task is not charged
+again; an unpaid task can recover at its persisted price. Legacy and unrelated
+cache records are not deleted or migrated.

@@ -65,6 +65,28 @@ func TestBatchImageRepository_InvalidProvider(t *testing.T) {
 	require.True(t, errors.Is(err, service.ErrBatchImageInvalidProvider))
 }
 
+func TestBatchImageRepository_PreservesSubmittedBillingPolicy(t *testing.T) {
+	ctx := context.Background()
+	tx := testTx(t)
+	repo := newBatchImageRepositoryWithSQL(tx)
+	batchID := batchImageTestID(t, "billing-policy")
+	job, err := repo.CreateBatchImageJob(ctx, service.CreateBatchImageJobParams{
+		BatchID: batchID, UserID: 1001, Provider: service.BatchImageProviderGeminiAPI,
+		Model: "gemini-2.5-flash-image", ItemCount: 2, PricingSnapshotVersion: 1,
+		BaseUnitPrice: 0.25, GroupRateMultiplier: 1.875,
+		BillableUnitPrice: 0.234375, HoldUnitPrice: 0.28125,
+		BillingRateSnapshot: map[string]any{"policy_version": 12, "platform": "gemini", "model": "gemini-2.5-flash-image", "policy_multiplier": 1.5},
+	})
+	require.NoError(t, err)
+	require.Equal(t, float64(12), job.BillingRateSnapshot["policy_version"])
+	require.Equal(t, "gemini", job.BillingRateSnapshot["platform"])
+	reloaded, err := repo.GetBatchImageJobByBatchID(ctx, batchID)
+	require.NoError(t, err)
+	require.Equal(t, job.BillingRateSnapshot, reloaded.BillingRateSnapshot)
+	require.InDelta(t, 0.234375, reloaded.BillableUnitPrice, 1e-10)
+	require.InDelta(t, 0.28125, reloaded.HoldUnitPrice, 1e-10)
+}
+
 func TestBatchImageRepository_TransitionIncrementsVersionAndEvents(t *testing.T) {
 	ctx := context.Background()
 	tx := testTx(t)

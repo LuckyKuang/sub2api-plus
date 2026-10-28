@@ -6,10 +6,43 @@ publication status. Release naming and procedures live in
 
 ## Integrated Baseline
 
-The current tree integrates official `v0.2.18`: annotated tag object
-`de86961b627e48db75d61fff8c05535d44a00cbe`, peeled commit
-`ac1b8f1271be0d674fa6f074403c1410f30a3a81`. Plus behavior governs conflict
-resolution; importing source does not itself publish a Plus release.
+The current tree integrates official `v0.2.19`, peeled commit
+`dece26153621959ccd7635814f4b2d08304e681a`, following the previously imported
+`0a2a29b32e6724714c69822296ccd05a6b86bfdd` snapshot. Plus is the authoritative
+implementation when upstream behavior conflicts with an intentional Plus contract.
+The candidate release is `v0.2.19+custom.001`; its mapping remains `planned`
+until publication and immutable artifact verification complete.
+
+The v0.2.19 follow-up adds configurable Gemini same-account retries, bound-cache
+pool retries, declared-model discovery, current Gemini catalogs, model-cache
+singleflight rechecks and channel web-search dimension preservation. Bound-cache
+retries retain the first authorized credential owner and proxy route. The frontend
+retains Plus shared controls and every supported platform's model options.
+GPT-6.1 Terra already has Plus catalog/forwarding support; this release adds
+verified official pricing, including cache writes, Fast/Flex and long-context
+rates, while preserving explicit operator prices and frozen request billing.
+Importing the official tag does not change any historical release mapping.
+For OpenAI, xAI, DeepSeek, Kimi, MiniMax, StepFun and Zhipu, the mapped official
+agent sources in [OFFICIAL_AGENT_BASELINES.md](docs/OFFICIAL_AGENT_BASELINES.md)
+govern external protocol behavior. Wei-Shaw/sub2api patches are reviewed against
+those sources; Plus credential ownership, outbound identity, ingress audit,
+strict proxy binding and frozen billing contracts remain mandatory.
+
+This import adds scoped administrator keys, owner-bound Grok catalog diagnostics,
+and opt-in image-count billing for dedicated image requests. New upstream SQL
+migrations 247/248 are imported as 302/303, preserving deployed Plus migrations.
+Codex keeps its manually selected 0.165.0 identity and reviewed Terra descriptor;
+Terra API pricing/specifications are verified separately from the pinned client
+descriptor. Shared domestic-provider keyword/90% quota cooldown heuristics remain
+deferred. DeepSeek Pro pricing no longer switches
+to Flash on a calendar date, following the provider's continued Pro service.
+The image-count option retains frozen prices and factors, rejects unidentified
+prices, and does not reclassify mixed Messages/Chat/Responses/WS requests.
+The follow-up review adds actual Terra forwarding regressions, consistent
+DeepSeek cache usage across protocol bridges, captured-owner Grok failure
+handling, complete image-size admission pricing, and nonblocking scoped OAuth
+refresh when another refresh owns the lock. The requirement-to-test mapping is
+maintained in [the seven-provider matrix](docs/SEVEN_PROVIDER_TEST_MATRIX.md).
 
 Preserve intentional Plus behavior during every import. Current contracts live
 in [outbound identity](docs/OUTBOUND_IDENTITY.md),
@@ -39,12 +72,21 @@ The existing Plus identity priority, fingerprint controls and ingress audit
 boundaries remain governed by the owning contracts above. Historical migrations
 from both branches retain their complete filenames and checksums.
 
+The October 28 Codex protocol review advances the agent baseline to
+`154e8736a51224e12b2d990753622a2cd8118f54` and manually selects stable
+`rust-v0.165.0`. It aligns policy-capacity errors, government API-key routing,
+named tool context, workspace session import and Terra catalog metadata.
+The exact sources and boundaries are recorded in
+[OFFICIAL_AGENT_BASELINES.md](docs/OFFICIAL_AGENT_BASELINES.md); the immutable
+Plus identity precedence, credential-owner isolation and ingress audit ordering
+remain authoritative. This source alignment does not publish a Plus release.
+
 The seven-platform synchronization starts from Plus branch commit
 `90d9f67e0fc891bee6e9d13d97271d8daf7d1924` and merges Plus `main` at
 `1818c299307ac394c0e3101b45d6c6ef22515c0c`. The existing official-agent baselines
 in [OFFICIAL_AGENT_BASELINES.md](docs/OFFICIAL_AGENT_BASELINES.md) govern OpenAI,
 xAI, DeepSeek, Kimi, MiniMax, StepFun and Zhipu. Codex retains its manually
-selected `0.164.0` default, credential-owner/global/default precedence, trusted
+selected version default, credential-owner/global/default precedence, trusted
 fingerprints, model-rejection failover and audit boundary. Compatible upstream
 fixes add semantic-output-aware overload recovery, stream cancellation billing,
 quota/scheduler improvements and authenticated Redis health checks. DeepSeek
@@ -61,9 +103,9 @@ of a new release.
 ## Current Version
 
 ```text
-Git/GitHub: v0.2.18+custom.003
-Application: 0.2.18+custom.003
-GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.18-custom.003
+Git/GitHub: v0.2.19+custom.001
+Application: 0.2.19+custom.001
+GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.19-custom.001
 ```
 
 ## Release Mapping
@@ -144,6 +186,7 @@ GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.18-custom.003
 | `v0.2.18+custom.001` | `v0.2.18` | `ac1b8f1271be0d674fa6f074403c1410f30a3a81` | published |
 | `v0.2.18+custom.002` | `v0.2.18` | `ac1b8f1271be0d674fa6f074403c1410f30a3a81` | withdrawn |
 | `v0.2.18+custom.003` | `v0.2.18` | `ac1b8f1271be0d674fa6f074403c1410f30a3a81` | published |
+| `v0.2.19+custom.001` | `v0.2.19` | `dece26153621959ccd7635814f4b2d08304e681a` | published |
 
 `v0.2.15+custom.003` records the integrated official main snapshot in the
 Official Commit column. Its tagged official baseline remains
@@ -165,6 +208,13 @@ are preserved. Docker's separate resource-copy path is outside this archive defe
 `v0.2.18+custom.003` prepares the binary archive and installer correction on the
 same official baseline. Its mapping is finalized only after publication and
 verification of the immutable release artifacts.
+
+`v0.2.19+custom.001` records official tag `v0.2.19` / peeled
+`dece26153621959ccd7635814f4b2d08304e681a`. Official tag VERSION is `0.2.18`;
+Plus writes `0.2.19+custom.001`. Official migrations 247/248 already entered
+Plus as immutable 302/303 during the preceding snapshot import; this tag adds
+no duplicate migrations. Seven-provider agent identities, audit boundaries,
+strict proxy ownership, frozen billing and the Plus UI remain authoritative.
 
 `v0.2.4+custom.006` is marked withdrawn because official `v0.2.5` was imported before that snapshot overlay was published. Do not reuse or retag `.006`.
 

@@ -53,6 +53,8 @@ const (
 	FieldHoldAmount = "hold_amount"
 	// FieldActualCost holds the string denoting the actual_cost field in the database.
 	FieldActualCost = "actual_cost"
+	// FieldBillingRateSnapshot holds the string denoting the billing_rate_snapshot field in the database.
+	FieldBillingRateSnapshot = "billing_rate_snapshot"
 	// FieldCurrency holds the string denoting the currency field in the database.
 	FieldCurrency = "currency"
 	// FieldHoldID holds the string denoting the hold_id field in the database.
@@ -120,6 +122,7 @@ var Columns = []string{
 	FieldEstimatedCost,
 	FieldHoldAmount,
 	FieldActualCost,
+	FieldBillingRateSnapshot,
 	FieldCurrency,
 	FieldHoldID,
 	FieldIdempotencyKey,
@@ -185,6 +188,8 @@ var (
 	DefaultCancelledCount int
 	// DefaultEstimatedCost holds the default value on creation for the "estimated_cost" field.
 	DefaultEstimatedCost float64
+	// DefaultBillingRateSnapshot holds the default value on creation for the "billing_rate_snapshot" field.
+	DefaultBillingRateSnapshot map[string]interface{}
 	// DefaultCurrency holds the default value on creation for the "currency" field.
 	DefaultCurrency string
 	// CurrencyValidator is a validator for the "currency" field. It is called by the builders before save.

@@ -28,10 +28,14 @@ func ProvideBatchImageWorkerRuntime(
 	billingRepo UsageBillingRepository,
 	pricing *BatchImageModelPricingResolver,
 	authCache APIKeyAuthCacheInvalidator,
+	concurrency *ConcurrencyService,
+	unfinished *GatewayUnfinishedTaskService,
 	cfg *config.Config,
 ) *BatchImageWorkerRuntime {
 	processor := &BatchImagePipelineProcessor{
 		ProviderProcessor: &BatchImageProviderProcessor{
+			UnfinishedTasks:  unfinished,
+			Concurrency:      concurrency,
 			Repo:             repo,
 			ProviderRegistry: NewBatchImageProviderRegistryFromConfig(cfg),
 			AccountResolver:  &BatchImageAccountRepositoryResolver{Repo: accountRepo},
@@ -39,11 +43,12 @@ func ProvideBatchImageWorkerRuntime(
 			AuthCache:        authCache,
 		},
 		SettlementService: &BatchImageSettlementService{
-			Repo:        repo,
-			BillingRepo: billingRepo,
-			Pricing:     pricing,
-			AuthCache:   authCache,
-			Config:      cfg,
+			UnfinishedTasks: unfinished,
+			Repo:            repo,
+			BillingRepo:     billingRepo,
+			Pricing:         pricing,
+			AuthCache:       authCache,
+			Config:          cfg,
 		},
 	}
 	runtime := NewBatchImageWorkerRuntime(NewBatchImageWorker(queue, processor, NewBatchImageWorkerOptionsFromConfig(cfg)), cfg)

@@ -463,6 +463,9 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 	if normalizeCodexModelsManifestConfig(platform, input.CodexModelsManifestConfig).Enabled {
 		return nil, infraerrors.New(http.StatusBadRequest, "INVALID_CODEX_MODELS_MANIFEST_CONFIG", "codex models manifest config cannot be enabled at group creation; configure it after creation in the group editor")
 	}
+	if err := input.BillingRatePolicy.Validate(); err != nil {
+		return nil, infraerrors.Newf(http.StatusBadRequest, "INVALID_BILLING_RATE_POLICY", "%v", err)
+	}
 	modelPricing, err := normalizeGroupModelPricing(platform, input.ModelPricing)
 	if err != nil {
 		return nil, err
@@ -596,6 +599,8 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 	// allow it on subscription groups until it has a native subscription hold /
 	// capture flow; otherwise it could bypass every subscription quota window.
 	allowBatchImageGeneration := input.AllowBatchImageGeneration && allowImageGeneration && platform == PlatformGemini && subscriptionType != SubscriptionTypeSubscription
+	imageCountBilling := input.ImageCountBilling && allowImageGeneration &&
+		(platform == PlatformComposite || platform == PlatformOpenAI)
 
 	// 如果指定了复制账号的源分组，先获取账号 ID 列表
 	var accountIDsToCopy []int64
@@ -651,8 +656,11 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 		QuotaResetIncludeMonthly:        input.QuotaResetSourceAccountID != nil && input.QuotaResetIncludeMonthly && monthlyLimit != nil,
 		LongContextPricingEnabled:       longContextPricingEnabled,
 		ModelPricing:                    modelPricing,
+		BillingRatePolicy:               input.BillingRatePolicy.Clone(),
+		BillingPolicyVersion:            1,
 		AllowImageGeneration:            allowImageGeneration,
 		AllowBatchImageGeneration:       allowBatchImageGeneration,
+		ImageCountBilling:               imageCountBilling,
 		ImageRateIndependent:            input.ImageRateIndependent,
 		ImageRateMultiplier:             imageRateMultiplier,
 		BatchImageDiscountMultiplier:    batchImageDiscountMultiplier,
@@ -840,6 +848,9 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 	if s.cfg != nil && s.cfg.RunMode == config.RunModeSimple {
 		normalizeUpdateGroupInputForSimpleMode(input)
 	}
+	if input.ExpectedBillingPolicyVersion != nil && *input.ExpectedBillingPolicyVersion != group.BillingPolicyVersion {
+		return nil, infraerrors.Conflict("GROUP_CONFIGURATION_CHANGED", "group configuration changed; reload and retry")
+	}
 
 	// 渠道缓存里存了 groupID → platform 的映射，改了平台要让它失效（见函数末尾）
 	previousPlatform := group.Platform
@@ -875,6 +886,12 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 	}
 	if input.LongContextPricingEnabled != nil {
 		group.LongContextPricingEnabled = *input.LongContextPricingEnabled
+	}
+	if input.BillingRatePolicy != nil {
+		if err := input.BillingRatePolicy.Validate(); err != nil {
+			return nil, infraerrors.Newf(http.StatusBadRequest, "INVALID_BILLING_RATE_POLICY", "%v", err)
+		}
+		group.BillingRatePolicy = input.BillingRatePolicy.Clone()
 	}
 	if input.ModelPricing != nil {
 		modelPricing, normalizeErr := normalizeGroupModelPricing(group.Platform, *input.ModelPricing)
@@ -969,6 +986,12 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 	}
 	if !group.AllowImageGeneration || group.Platform != PlatformGemini || group.IsSubscriptionType() {
 		group.AllowBatchImageGeneration = false
+	}
+	if input.ImageCountBilling != nil {
+		group.ImageCountBilling = *input.ImageCountBilling
+	}
+	if !group.AllowImageGeneration || (group.Platform != PlatformComposite && group.Platform != PlatformOpenAI) {
+		group.ImageCountBilling = false
 	}
 	if input.ImageRateIndependent != nil {
 		group.ImageRateIndependent = *input.ImageRateIndependent

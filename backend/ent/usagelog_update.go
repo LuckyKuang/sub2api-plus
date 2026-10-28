@@ -670,6 +670,39 @@ func (_u *UsageLogUpdate) AddRateMultiplier(v float64) *UsageLogUpdate {
 	return _u
 }
 
+// SetBillingPolicyVersion sets the "billing_policy_version" field.
+func (_u *UsageLogUpdate) SetBillingPolicyVersion(v int64) *UsageLogUpdate {
+	_u.mutation.ResetBillingPolicyVersion()
+	_u.mutation.SetBillingPolicyVersion(v)
+	return _u
+}
+
+// SetNillableBillingPolicyVersion sets the "billing_policy_version" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableBillingPolicyVersion(v *int64) *UsageLogUpdate {
+	if v != nil {
+		_u.SetBillingPolicyVersion(*v)
+	}
+	return _u
+}
+
+// AddBillingPolicyVersion adds value to the "billing_policy_version" field.
+func (_u *UsageLogUpdate) AddBillingPolicyVersion(v int64) *UsageLogUpdate {
+	_u.mutation.AddBillingPolicyVersion(v)
+	return _u
+}
+
+// SetBillingRateSnapshot sets the "billing_rate_snapshot" field.
+func (_u *UsageLogUpdate) SetBillingRateSnapshot(v map[string]interface{}) *UsageLogUpdate {
+	_u.mutation.SetBillingRateSnapshot(v)
+	return _u
+}
+
+// ClearBillingRateSnapshot clears the value of the "billing_rate_snapshot" field.
+func (_u *UsageLogUpdate) ClearBillingRateSnapshot() *UsageLogUpdate {
+	_u.mutation.ClearBillingRateSnapshot()
+	return _u
+}
+
 // SetLongContextBillingApplied sets the "long_context_billing_applied" field.
 func (_u *UsageLogUpdate) SetLongContextBillingApplied(v bool) *UsageLogUpdate {
 	_u.mutation.SetLongContextBillingApplied(v)
@@ -1584,6 +1617,18 @@ func (_u *UsageLogUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.AddedRateMultiplier(); ok {
 		_spec.AddField(usagelog.FieldRateMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.BillingPolicyVersion(); ok {
+		_spec.SetField(usagelog.FieldBillingPolicyVersion, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedBillingPolicyVersion(); ok {
+		_spec.AddField(usagelog.FieldBillingPolicyVersion, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.BillingRateSnapshot(); ok {
+		_spec.SetField(usagelog.FieldBillingRateSnapshot, field.TypeJSON, value)
+	}
+	if _u.mutation.BillingRateSnapshotCleared() {
+		_spec.ClearField(usagelog.FieldBillingRateSnapshot, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.LongContextBillingApplied(); ok {
 		_spec.SetField(usagelog.FieldLongContextBillingApplied, field.TypeBool, value)
@@ -2550,6 +2595,39 @@ func (_u *UsageLogUpdateOne) AddRateMultiplier(v float64) *UsageLogUpdateOne {
 	return _u
 }
 
+// SetBillingPolicyVersion sets the "billing_policy_version" field.
+func (_u *UsageLogUpdateOne) SetBillingPolicyVersion(v int64) *UsageLogUpdateOne {
+	_u.mutation.ResetBillingPolicyVersion()
+	_u.mutation.SetBillingPolicyVersion(v)
+	return _u
+}
+
+// SetNillableBillingPolicyVersion sets the "billing_policy_version" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableBillingPolicyVersion(v *int64) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetBillingPolicyVersion(*v)
+	}
+	return _u
+}
+
+// AddBillingPolicyVersion adds value to the "billing_policy_version" field.
+func (_u *UsageLogUpdateOne) AddBillingPolicyVersion(v int64) *UsageLogUpdateOne {
+	_u.mutation.AddBillingPolicyVersion(v)
+	return _u
+}
+
+// SetBillingRateSnapshot sets the "billing_rate_snapshot" field.
+func (_u *UsageLogUpdateOne) SetBillingRateSnapshot(v map[string]interface{}) *UsageLogUpdateOne {
+	_u.mutation.SetBillingRateSnapshot(v)
+	return _u
+}
+
+// ClearBillingRateSnapshot clears the value of the "billing_rate_snapshot" field.
+func (_u *UsageLogUpdateOne) ClearBillingRateSnapshot() *UsageLogUpdateOne {
+	_u.mutation.ClearBillingRateSnapshot()
+	return _u
+}
+
 // SetLongContextBillingApplied sets the "long_context_billing_applied" field.
 func (_u *UsageLogUpdateOne) SetLongContextBillingApplied(v bool) *UsageLogUpdateOne {
 	_u.mutation.SetLongContextBillingApplied(v)
@@ -3494,6 +3572,18 @@ func (_u *UsageLogUpdateOne) sqlSave(ctx context.Context) (_node *UsageLog, err 
 	}
 	if value, ok := _u.mutation.AddedRateMultiplier(); ok {
 		_spec.AddField(usagelog.FieldRateMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.BillingPolicyVersion(); ok {
+		_spec.SetField(usagelog.FieldBillingPolicyVersion, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedBillingPolicyVersion(); ok {
+		_spec.AddField(usagelog.FieldBillingPolicyVersion, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.BillingRateSnapshot(); ok {
+		_spec.SetField(usagelog.FieldBillingRateSnapshot, field.TypeJSON, value)
+	}
+	if _u.mutation.BillingRateSnapshotCleared() {
+		_spec.ClearField(usagelog.FieldBillingRateSnapshot, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.LongContextBillingApplied(); ok {
 		_spec.SetField(usagelog.FieldLongContextBillingApplied, field.TypeBool, value)

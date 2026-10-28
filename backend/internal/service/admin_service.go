@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"github.com/LuckyKuang/sub2api-plus/internal/domain"
 	"net/http"
 	"time"
 
@@ -246,9 +247,11 @@ type CreateGroupInput struct {
 	QuotaResetIncludeMonthly  bool
 	LongContextPricingEnabled *bool
 	ModelPricing              []ChannelModelPricing
+	BillingRatePolicy         domain.BillingRatePolicy
 	// 图片生成计费配置（仅 antigravity 平台使用）
 	AllowImageGeneration         bool
 	AllowBatchImageGeneration    bool
+	ImageCountBilling            bool
 	ImageRateIndependent         bool
 	ImageRateMultiplier          *float64
 	BatchImageDiscountMultiplier *float64
@@ -332,9 +335,12 @@ type UpdateGroupInput struct {
 	QuotaResetIncludeMonthly     *bool
 	LongContextPricingEnabled    *bool
 	ModelPricing                 *[]ChannelModelPricing
+	BillingRatePolicy            *domain.BillingRatePolicy
+	ExpectedBillingPolicyVersion *int64
 	// 图片生成计费配置（仅 antigravity 平台使用）
 	AllowImageGeneration         *bool
 	AllowBatchImageGeneration    *bool
+	ImageCountBilling            *bool
 	ImageRateIndependent         *bool
 	ImageRateMultiplier          *float64
 	BatchImageDiscountMultiplier *float64
@@ -401,6 +407,7 @@ type UpdateGroupInput struct {
 }
 
 type CreateAccountInput struct {
+	ProxyMode          string // 受限写入在验权后选择代理。
 	Name               string
 	Notes              *string
 	Platform           string
@@ -432,6 +439,7 @@ type ShadowOptions struct {
 }
 
 type UpdateAccountInput struct {
+	ProxyMode             string // 受限写入在验权后选择代理。
 	Name                  string
 	Notes                 *string
 	Type                  string // Account type: oauth, setup-token, apikey

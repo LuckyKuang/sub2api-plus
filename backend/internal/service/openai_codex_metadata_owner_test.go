@@ -121,10 +121,10 @@ func TestCodexHTTPMetadataUsesAcquiredOwnerAfterSelectedRowRelink(t *testing.T) 
 			newAccount := func(principal string) *Account {
 				selected := codexMetadataOwnerAccount(principal, adapter == "passthrough")
 				proxyURL := oldProxyServer.URL
-				ua := "codex_cli_rs/0.164.0 (Ubuntu 24.04; x86_64) xterm-256color"
+				ua := "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color"
 				if principal == "new" {
 					proxyURL = newProxyServer.URL
-					ua = "codex_vscode/0.164.0 (Windows 11; aarch64) WindowsTerminal"
+					ua = "codex_vscode/0.165.0 (Windows 11; aarch64) WindowsTerminal"
 				}
 				parsed, err := url.Parse(proxyURL)
 				require.NoError(t, err)
@@ -204,9 +204,9 @@ func TestCodexHTTPMetadataUsesAcquiredOwnerAfterSelectedRowRelink(t *testing.T) 
 			newOnly := send("new", false)
 			require.Equal(t, "old", raced.proxy, "the actual HTTP transport must use the acquired grant's proxy")
 			require.Equal(t, "new", newOnly.proxy)
-			require.Equal(t, "codex_cli_rs/0.164.0 (Ubuntu 24.04; x86_64) xterm-256color", raced.headers.Get("User-Agent"))
+			require.Equal(t, "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color", raced.headers.Get("User-Agent"))
 			require.Equal(t, "codex_cli_rs", raced.headers.Get("Originator"))
-			require.Equal(t, "0.164.0", raced.headers.Get("Version"))
+			require.Equal(t, "0.165.0", raced.headers.Get("Version"))
 			require.Equal(t, "codex_vscode", newOnly.headers.Get("Originator"))
 			require.Equal(t, "Bearer old-token", raced.headers.Get("Authorization"))
 			require.Equal(t, "old-principal", raced.headers.Get("Chatgpt-Account-Id"))
@@ -356,7 +356,7 @@ func TestCodexAPIKeyDestinationAndOverridesUseAcquiredGrant(t *testing.T) {
 				defer newServer.Close()
 				selected := &Account{ID: 9705, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Credentials: map[string]any{
 					"api_key": "old-key", "base_url": oldServer.URL, "header_override_enabled": true,
-					"user_agent":       "codex_vscode/0.164.0 (Ubuntu 24.04; aarch64) vscode",
+					"user_agent":       "codex_vscode/0.165.0 (Ubuntu 24.04; aarch64) vscode",
 					"header_overrides": map[string]any{"X-Acquired-Grant": "old"}}}
 				ctx := WithOutboundIdentityScope(t.Context(), nil)
 				recordRequestCredentialOwner(ctx, selected, "old-key")
@@ -410,9 +410,9 @@ func TestCodexAPIKeyDestinationAndOverridesUseAcquiredGrant(t *testing.T) {
 				require.Equal(t, strings.TrimPrefix(oldServer.URL, "http://"), wire.host, "the acquired API key cannot acquire the replacement OAuth Host")
 				require.Equal(t, "Bearer old-key", wire.headers.Get("Authorization"))
 				require.Equal(t, "old", wire.headers.Get("X-Acquired-Grant"))
-				require.Equal(t, "codex_vscode/0.164.0 (Ubuntu 24.04; aarch64) vscode", wire.headers.Get("User-Agent"))
+				require.Equal(t, "codex_vscode/0.165.0 (Ubuntu 24.04; aarch64) vscode", wire.headers.Get("User-Agent"))
 				require.Equal(t, "codex_vscode", wire.headers.Get("Originator"))
-				require.Equal(t, "0.164.0", wire.headers.Get("Version"))
+				require.Equal(t, "0.165.0", wire.headers.Get("Version"))
 				require.Empty(t, wire.headers.Get("Chatgpt-Account-Id"))
 				if transport != "websocket" {
 					require.True(t, gjson.GetBytes(wire.body, "store").Bool(), "an OpenAI API-key body cannot adopt replacement native-CN stateless normalization")

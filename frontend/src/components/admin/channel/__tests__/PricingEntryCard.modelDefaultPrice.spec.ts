@@ -63,6 +63,22 @@ describe('PricingEntryCard default price auto-fill', () => {
     }))
   })
 
+  it('preserves explicitly shared group prices when removing the first model and avoids auto-fill or splitting', async () => {
+    const entry = { ...createEntry(['model-a', 'model-b']), input_price: 0, output_price: 4, reasoning_effort_multipliers: { high: 1.5 } }
+    const wrapper = shallowMount(PricingEntryCard, { props: { entry, platform: 'openai', autoFillPricing: false, splitNewModels: false } })
+    wrapper.findComponent({ name: 'ModelTagInput' }).vm.$emit('update:models', ['model-b'])
+    await flushPromises()
+    expect(emittedEntries(wrapper).at(-1)).toEqual({ ...entry, models: ['model-b'] })
+    expect(getModelDefaultPricing).not.toHaveBeenCalled()
+    await wrapper.setProps({ entry: { ...entry, models: ['model-b'] } })
+    wrapper.findComponent({ name: 'ModelTagInput' }).vm.$emit('update:models', ['model-b', 'model-c', 'model-d'])
+    await flushPromises()
+    expect(emittedEntries(wrapper).at(-1)).toMatchObject({ models: ['model-b', 'model-c', 'model-d'], input_price: 0, output_price: 4 })
+    expect(wrapper.emitted('split')).toBeUndefined()
+    expect(getModelDefaultPricing).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
   it('auto-fills the default price when a model is added to an empty entry', async () => {
     const wrapper = addModels(createEntry(), ['claude-opus-4-8'])
     await flushPromises()

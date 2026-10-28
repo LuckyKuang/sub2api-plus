@@ -517,11 +517,15 @@ func (c *schedulerTestGatewayCache) SetGrokVideoPendingBilling(_ context.Context
 func (c *schedulerTestGatewayCache) GetGrokVideoPendingBilling(_ context.Context, _ string) ([]byte, error) {
 	return nil, nil
 }
-func (c *schedulerTestGatewayCache) ClaimGrokVideoBilled(_ context.Context, _ string, _ time.Duration) (bool, error) {
+func (c *schedulerTestGatewayCache) ClaimGrokVideoBilled(_ context.Context, _ string, _ string, _ time.Duration) (bool, error) {
 	return true, nil
 }
 
-func (c *schedulerTestGatewayCache) ReleaseGrokVideoBilled(_ context.Context, _ string) error {
+func (c *schedulerTestGatewayCache) CompleteGrokVideoBilled(_ context.Context, _ string, _ string, _ time.Duration) (bool, error) {
+	return true, nil
+}
+
+func (c *schedulerTestGatewayCache) ReleaseGrokVideoBilled(_ context.Context, _ string, _ string) error {
 	return nil
 }
 

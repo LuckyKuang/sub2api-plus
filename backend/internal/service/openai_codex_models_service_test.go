@@ -1763,7 +1763,7 @@ func TestFetchCodexModelsManifestShadowFreezesCredentialProxyAcrossRelink(t *tes
 	owner := newCodexModelsTestAccount()
 	owner.Proxy = proxyAccount(901, ownerProxy.URL)
 	owner.ProxyID = &owner.Proxy.ID
-	owner.Credentials["user_agent"] = "codex_vscode/0.164.0 (Ubuntu 24.04; aarch64) vscode"
+	owner.Credentials["user_agent"] = "codex_vscode/0.165.0 (Ubuntu 24.04; aarch64) vscode"
 	parentID := owner.ID
 	selected := &Account{ID: 902, Platform: PlatformOpenAI, Type: AccountTypeOAuth, ParentAccountID: &parentID, Proxy: proxyAccount(903, foreignProxy.URL)}
 	selected.ProxyID = &selected.Proxy.ID
@@ -1794,10 +1794,10 @@ func TestFetchCodexModelsManifestShadowFreezesCredentialProxyAcrossRelink(t *tes
 	case request := <-requests:
 		require.Equal(t, "Bearer test-access-token", request.Header.Get("Authorization"))
 		require.Equal(t, "acc-123", request.Header.Get("ChatGPT-Account-ID"))
-		require.Equal(t, "codex_vscode/0.164.0 (Ubuntu 24.04; aarch64) vscode", request.UserAgent())
+		require.Equal(t, "codex_vscode/0.165.0 (Ubuntu 24.04; aarch64) vscode", request.UserAgent())
 		require.Equal(t, "codex_vscode", request.Header.Get("Originator"))
-		require.Equal(t, "0.164.0", request.Header.Get("Version"))
-		require.Equal(t, "0.164.0", request.URL.Query().Get("client_version"))
+		require.Equal(t, "0.165.0", request.Header.Get("Version"))
+		require.Equal(t, "0.165.0", request.URL.Query().Get("client_version"))
 		require.Equal(t, "/backend-api/codex/models", request.URL.Path)
 	default:
 		t.Fatal("credential owner proxy received no models request")
@@ -2206,7 +2206,7 @@ func TestFetchCodexModelsManifestAPIKeySelectedIdentity(t *testing.T) {
 			t.Run(source+"/"+foreign, func(t *testing.T) {
 				repo := &outboundIdentityTestRepo{values: map[string]string{
 					SettingKeyOutboundIdentity:         `{"defaults":{"openai:apikey":"` + foreign + `"}}`,
-					SettingKeyOpenAICodexUserAgent:     "codex_cli_rs/0.164.0 (Ubuntu 22.4.0; x86_64) xterm-256color",
+					SettingKeyOpenAICodexUserAgent:     "codex_cli_rs/0.165.0 (Ubuntu 22.4.0; x86_64) xterm-256color",
 					SettingKeyOpenAICodexClientVersion: "0.200.1",
 				}}
 				settings := NewSettingService(repo, nil)
@@ -2215,7 +2215,7 @@ func TestFetchCodexModelsManifestAPIKeySelectedIdentity(t *testing.T) {
 				account.Credentials[outboundIdentityCredential] = OutboundIdentitySelection{Preset: foreign}
 				wantUA := "codex_cli_rs/0.200.1 (Ubuntu 22.4.0; x86_64) xterm-256color"
 				if source == "account" {
-					account.Credentials["user_agent"] = "codex_cli_rs/0.164.0 (Ubuntu 20.4.0; x86_64) xterm-256color"
+					account.Credentials["user_agent"] = "codex_cli_rs/0.165.0 (Ubuntu 20.4.0; x86_64) xterm-256color"
 					wantUA = "codex_cli_rs/0.200.1 (Ubuntu 20.4.0; x86_64) xterm-256color"
 				}
 				account.Credentials[credKeyHeaderOverrideEnabled] = true
@@ -2272,10 +2272,10 @@ func TestFetchCodexModelsManifestNativeAPIKeyRequiresClientVersion(t *testing.T)
 	ctx := outboundidentity.WithResolver(context.Background(), settings.resolveOutboundIdentityKey)
 	_, err := svc.FetchCodexModelsManifest(ctx, account, "9.9.9", "")
 	require.NoError(t, err)
-	require.Equal(t, "codex_cli_rs/0.164.0 (Ubuntu 24.04; x86_64) xterm-256color", captured.UserAgent())
+	require.Equal(t, "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color", captured.UserAgent())
 	require.Equal(t, "codex_cli_rs", captured.Header.Get("Originator"))
-	require.Equal(t, "0.164.0", captured.Header.Get("Version"))
-	require.Equal(t, "0.164.0", captured.URL.Query().Get("client_version"))
+	require.Equal(t, "0.165.0", captured.Header.Get("Version"))
+	require.Equal(t, "0.165.0", captured.URL.Query().Get("client_version"))
 }
 
 func TestFetchCodexModelsManifestRefreshRetainsIdentitySnapshot(t *testing.T) {
@@ -2348,7 +2348,7 @@ func TestFetchCodexModelsManifestAPIKeyCustomUpstream(t *testing.T) {
 	if gotRequest.Header.Get("Originator") != "codex-tui" {
 		t.Errorf("originator header: got %q", gotRequest.Header.Get("Originator"))
 	}
-	if gotRequest.Header.Get("Version") != "0.164.0" {
+	if gotRequest.Header.Get("Version") != "0.165.0" {
 		t.Errorf("version header: got %q", gotRequest.Header.Get("Version"))
 	}
 	if gotRequest.Header.Get("User-Agent") != codexModelsCustomAccountCurrentUserAgent {

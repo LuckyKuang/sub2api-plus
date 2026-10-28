@@ -3,6 +3,7 @@ package service
 import (
 	"strings"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/openaiwire"
 	"github.com/tidwall/gjson"
 )
 
@@ -106,6 +107,9 @@ func AnalyzeToolContinuationSignals(reqBody map[string]any) ToolContinuationSign
 		}
 		itemType, _ := itemMap["type"].(string)
 		switch {
+		case openaiwire.IsNamedUnpairedFunctionCallOutput(itemMap):
+			// Named context is self-contained, not a reply requiring a prior call.
+			continue
 		case isCodexToolCallContextItemType(itemType):
 			callID, _ := itemMap["call_id"].(string)
 			if strings.TrimSpace(callID) != "" {
@@ -174,6 +178,8 @@ func ValidateFunctionCallOutputContextBytes(body []byte) FunctionCallOutputValid
 		}
 		itemType := item.Get("type").String()
 		switch {
+		case openaiwire.IsNamedUnpairedFunctionCallOutputJSON(item):
+			return true
 		case isCodexToolCallOutputItemType(itemType):
 			result.HasFunctionCallOutput = true
 			callID := strings.TrimSpace(item.Get("call_id").String())
@@ -248,6 +254,8 @@ func AnalyzeToolCallOutputContextCoverageBytes(body []byte) ToolCallOutputContex
 		}
 		itemType := item.Get("type").String()
 		switch {
+		case openaiwire.IsNamedUnpairedFunctionCallOutputJSON(item):
+			return
 		case isCodexToolCallOutputItemType(itemType):
 			coverage.HasFunctionCallOutput = true
 			callID := strings.TrimSpace(item.Get("call_id").String())
@@ -322,6 +330,8 @@ func ValidateFunctionCallOutputContext(reqBody map[string]any) FunctionCallOutpu
 		}
 		itemType, _ := itemMap["type"].(string)
 		switch {
+		case openaiwire.IsNamedUnpairedFunctionCallOutput(itemMap):
+			continue
 		case isCodexToolCallOutputItemType(itemType):
 			result.HasFunctionCallOutput = true
 		case isCodexToolCallContextItemType(itemType):
@@ -348,6 +358,8 @@ func ValidateFunctionCallOutputContext(reqBody map[string]any) FunctionCallOutpu
 		}
 		itemType, _ := itemMap["type"].(string)
 		switch {
+		case openaiwire.IsNamedUnpairedFunctionCallOutput(itemMap):
+			continue
 		case isCodexToolCallOutputItemType(itemType):
 			callID, _ := itemMap["call_id"].(string)
 			callID = strings.TrimSpace(callID)

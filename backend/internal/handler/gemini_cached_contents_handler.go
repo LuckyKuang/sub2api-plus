@@ -28,7 +28,8 @@ const geminiCachedContentPersistTimeout = 15 * time.Second
 
 const geminiCachedContentUnavailableMessage = "The account holding this cached content is temporarily unavailable"
 
-// geminiCachedContentsPreamble 校验显式缓存管理接口的公共前置条件：gemini 分组、非 composite 分组、功能已装配。
+// geminiCachedContentsPreamble validates the concrete Gemini resource domain.
+// Composite groups retain the same API-key/group/account ownership rules.
 func (h *GatewayHandler) geminiCachedContentsPreamble(c *gin.Context, component string) (*service.APIKey, middleware.AuthSubject, *zap.Logger, bool) {
 	apiKey, ok := middleware.GetAPIKeyFromContext(c)
 	if !ok || apiKey == nil {
@@ -44,7 +45,7 @@ func (h *GatewayHandler) geminiCachedContentsPreamble(c *gin.Context, component 
 		googlePlatformError(c, http.StatusNotFound, "Explicit context caching is not enabled")
 		return nil, middleware.AuthSubject{}, nil, false
 	}
-	if apiKey.Group == nil || apiKey.GroupID == nil || apiKey.Group.Platform == service.PlatformComposite {
+	if apiKey.Group == nil || apiKey.GroupID == nil || middleware.HasForcePlatform(c) {
 		googleError(c, http.StatusBadRequest, "Explicit context caching is not supported for this API key group")
 		return nil, middleware.AuthSubject{}, nil, false
 	}
@@ -109,6 +110,9 @@ func (h *GatewayHandler) GeminiCachedContentsCreate(c *gin.Context) {
 		return
 	}
 	modelName := req.Model
+	if resolvedModel, ok := service.ResolvedUpstreamModelFromContext(c.Request.Context()); ok && strings.TrimSpace(resolvedModel) != "" {
+		modelName = strings.TrimSpace(resolvedModel)
+	}
 	reqLog = reqLog.With(zap.String("model", modelName))
 
 	setOpsRequestContext(c, modelName, false)
@@ -129,9 +133,8 @@ func (h *GatewayHandler) GeminiCachedContentsCreate(c *gin.Context) {
 	}
 
 	subscription, _ := middleware.GetSubscriptionFromContext(c)
-	geminiConcurrency := NewConcurrencyHelper(h.concurrencyHelper.concurrencyService, SSEPingFormatNone, 0)
-	streamStarted := false
-	userReleaseFunc, err := geminiConcurrency.AcquireUserSlotWithWait(c, authSubject.UserID, authSubject.Concurrency, false, &streamStarted)
+	geminiConcurrency := NewConcurrencyHelper(h.concurrencyHelper.concurrencyService, SSEPingFormatNone, 0).WithRPMAdmission(h.billingCacheService)
+	userReleaseFunc, err := geminiConcurrency.AcquireUserSlot(c, authSubject.UserID, authSubject.Concurrency)
 	if err != nil {
 		reqLog.Warn("gemini.cached_content.user_slot_acquire_failed", zap.Error(err))
 		googleConcurrencyError(c, err, "user")
@@ -145,7 +148,8 @@ func (h *GatewayHandler) GeminiCachedContentsCreate(c *gin.Context) {
 	if !h.checkGeminiCachedContentBilling(c, reqLog, apiKey, subscription) {
 		return
 	}
-	inflightRelease, err := reserveInflightBalance(c, h.billingCacheService, h.gatewayService, apiKey, subscription, tokenInflightEstimate(modelName, body))
+	// Cache creation has no inference effort or generated-output tier.
+	inflightRelease, err := reserveInflightBalance(c, h.billingCacheService, h.gatewayService, apiKey, subscription, tokenInflightEstimate("", modelName, body))
 	if err != nil {
 		reqLog.Info("gemini.cached_content.inflight_reservation_rejected", zap.Error(err))
 		status, code, message, retryAfter := billingErrorDetails(err)
@@ -205,18 +209,27 @@ func (h *GatewayHandler) GeminiCachedContentsCreate(c *gin.Context) {
 			continue
 		}
 		account = latest
+		if err := ensureAccountInflightReservation(c, account); err != nil {
+			accountReleaseFunc()
+			reqLog.Info("gemini.cached_content.account_inflight_reservation_rejected", zap.Int64("account_id", account.ID), zap.Error(err))
+			status, code, message, retryAfter := billingErrorDetails(err)
+			applyBillingQuotaHeaders(c, err, retryAfter)
+			googleErrorWithType(c, status, code, "", message)
+			return
+		}
 		attempts++
 		setOpsSelectedAccount(c, account.ID, account.Platform)
 
 		mappedModel := account.GetMappedModel(modelName)
 		usageFields := clientRequestedUsageFields(c, channelMapping, reqModel, mappedModel)
 		if !h.gatewayService.CacheStoragePriced(c.Request.Context(), &service.RecordUsageInput{
+			PricingSnapshot:    service.BillingPricingSnapshotFromContext(c.Request.Context()),
 			Result:             &service.ForwardResult{Model: modelName, UpstreamModel: mappedModel, CacheStorageTokenHours: 1},
 			APIKey:             apiKey,
 			ChannelUsageFields: usageFields,
 		}) {
 			accountReleaseFunc()
-			googlePlatformError(c, http.StatusBadRequest, fmt.Sprintf("Explicit context caching is not available for model %s: storage pricing is not configured", modelName))
+			googlePlatformError(c, http.StatusBadRequest, fmt.Sprintf("Explicit context caching is not available for model %s: storage pricing is not configured", clientRequestedModel(c, modelName)))
 			return
 		}
 		upstreamModel, err := service.GeminiCachedContentUpstreamModelResource(account, mappedModel)
@@ -270,6 +283,7 @@ func (h *GatewayHandler) GeminiCachedContentsCreate(c *gin.Context) {
 		tokens := upstream.TotalTokenCount
 		storageTokenHours := service.GeminiCachedContentStorageTokenHours(tokens, ttl)
 		amount := h.gatewayService.QuoteUsageCost(c.Request.Context(), &service.RecordUsageInput{
+			PricingSnapshot: service.BillingPricingSnapshotFromContext(c.Request.Context()),
 			Result: &service.ForwardResult{
 				Model: modelName, UpstreamModel: mappedModel,
 				Usage: service.ClaudeUsage{InputTokens: int(tokens)}, CacheStorageTokenHours: storageTokenHours,
@@ -362,6 +376,12 @@ func (h *GatewayHandler) GeminiCachedContentsList(c *gin.Context) {
 		}
 		beforeID = id
 	}
+
+	userRelease, admitted := acquireGatewayUserRequest(c, h.concurrencyHelper, googleUserAdmissionError)
+	if !admitted {
+		return
+	}
+	defer userRelease()
 	records, err := h.geminiCachedContentService.List(c.Request.Context(), apiKey.ID, *apiKey.GroupID, beforeID, pageSize+1)
 	if err != nil {
 		reqLog.Error("gemini.cached_content.list_failed", zap.Error(err))
@@ -393,6 +413,12 @@ func (h *GatewayHandler) GeminiCachedContentsGet(c *gin.Context) {
 		googleSecurityAuditError(c, decision)
 		return
 	}
+	userRelease, admitted := acquireGatewayUserRequest(c, h.concurrencyHelper, googleUserAdmissionError)
+	if !admitted {
+		return
+	}
+	defer userRelease()
+
 	record, ok := h.resolveGeminiCachedContentOrWrite(c, reqLog, apiKey, c.Param("cacheID"))
 	if !ok {
 		return
@@ -418,6 +444,12 @@ func (h *GatewayHandler) GeminiCachedContentsPatch(c *gin.Context) {
 		googleSecurityAuditError(c, decision)
 		return
 	}
+	userRelease, admitted := acquireGatewayUserRequest(c, h.concurrencyHelper, googleUserAdmissionError)
+	if !admitted {
+		return
+	}
+	defer userRelease()
+
 	c.Request = c.Request.WithContext(service.WithOutboundIdentityScope(c.Request.Context(), c))
 	record, ok := h.resolveGeminiCachedContentOrWrite(c, reqLog, apiKey, c.Param("cacheID"))
 	if !ok {
@@ -439,12 +471,19 @@ func (h *GatewayHandler) GeminiCachedContentsPatch(c *gin.Context) {
 		return
 	}
 	setOpsRequestContext(c, record.Model, false)
-	pricingCtx, pricingAt := service.WithGatewayTokenRequestPricing(c.Request.Context())
+	publicModel := firstNonEmptyString(record.ChannelUsage.OriginalModel, record.Model)
+	boundPricing := service.BindBillingPricingModel(c.Request.Context(), service.PlatformGemini, publicModel)
+	if err := service.ValidateBillingPricingSnapshot(boundPricing); err != nil {
+		googleErrorWithType(c, http.StatusServiceUnavailable, "BILLING_RATE_UNAVAILABLE", "", "Billing rates are temporarily unavailable")
+		return
+	}
+	pricingCtx, pricingAt := service.WithGatewayTokenRequestPricing(boundPricing)
 	c.Request = c.Request.WithContext(pricingCtx)
 
 	subscription, _ := middleware.GetSubscriptionFromContext(c)
 	if extension := svc.Now().Add(ttl).Sub(record.ExpireTime); extension > 0 {
 		usage := &service.RecordUsageInput{
+			PricingSnapshot: service.BillingPricingSnapshotFromContext(c.Request.Context()),
 			Result: &service.ForwardResult{
 				Model: record.Model, UpstreamModel: record.UpstreamModelID(),
 				CacheStorageTokenHours: service.GeminiCachedContentStorageTokenHours(record.TotalTokenCount, extension),
@@ -453,7 +492,7 @@ func (h *GatewayHandler) GeminiCachedContentsPatch(c *gin.Context) {
 			ChannelUsageFields: record.ChannelUsage,
 		}
 		if !h.gatewayService.CacheStoragePriced(c.Request.Context(), usage) {
-			googlePlatformError(c, http.StatusBadRequest, fmt.Sprintf("Explicit context caching is not available for model %s: storage pricing is not configured", record.Model))
+			googlePlatformError(c, http.StatusBadRequest, fmt.Sprintf("Explicit context caching is not available for model %s: storage pricing is not configured", publicModel))
 			return
 		}
 		if !h.checkGeminiCachedContentBilling(c, reqLog, apiKey, subscription) {
@@ -541,6 +580,12 @@ func (h *GatewayHandler) GeminiCachedContentsDelete(c *gin.Context) {
 		googleSecurityAuditError(c, decision)
 		return
 	}
+	userRelease, admitted := acquireGatewayUserRequest(c, h.concurrencyHelper, googleUserAdmissionError)
+	if !admitted {
+		return
+	}
+	defer userRelease()
+
 	svc := h.geminiCachedContentService
 	record, ok := h.resolveGeminiCachedContentOrWrite(c, reqLog, apiKey, c.Param("cacheID"))
 	if !ok {
@@ -605,7 +650,7 @@ func (h *GatewayHandler) resolveGeminiCachedContentBinding(c *gin.Context, reqLo
 		return nil, body, true
 	}
 	if middleware.HasForcePlatform(c) || h.geminiCachedContentService == nil ||
-		apiKey.Group == nil || apiKey.Group.Platform == service.PlatformComposite {
+		apiKey.Group == nil || effectiveAPIKeyPlatform(c, apiKey) != service.PlatformGemini {
 		googleError(c, http.StatusBadRequest, "cachedContent is not supported on this route")
 		return nil, nil, false
 	}
@@ -619,9 +664,11 @@ func (h *GatewayHandler) resolveGeminiCachedContentBinding(c *gin.Context, reqLo
 		googleError(c, http.StatusInternalServerError, "Failed to load cached content")
 		return nil, nil, false
 	}
-	if record.Model != modelName {
+	publicModel := clientRequestedModel(c, modelName)
+	cacheModel := firstNonEmptyString(record.ChannelUsage.OriginalModel, record.Model)
+	if record.Model != modelName || (apiKey.Group.Platform == service.PlatformComposite && publicModel != cacheModel) {
 		googleError(c, http.StatusBadRequest, fmt.Sprintf(
-			"Model used by GenerateContent request (models/%s) and CachedContent (models/%s) has to be the same.", modelName, record.Model))
+			"Model used by GenerateContent request (models/%s) and CachedContent (models/%s) has to be the same.", publicModel, cacheModel))
 		return nil, nil, false
 	}
 	rewritten, err := service.RewriteGeminiCachedContentReference(body, ref, record.UpstreamName)
@@ -647,18 +694,8 @@ func (h *GatewayHandler) acquireGeminiCachedContentAccountSlot(c *gin.Context, r
 		googleError(c, http.StatusServiceUnavailable, "No available Gemini accounts")
 		return nil, false
 	}
-	canWait, err := helper.IncrementAccountWaitCount(c.Request.Context(), account.ID, selection.WaitPlan.MaxWaiting)
-	if err != nil {
-		reqLog.Warn("gemini.cached_content.account_wait_counter_increment_failed", zap.Int64("account_id", account.ID), zap.Error(err))
-	} else if !canWait {
-		googleError(c, http.StatusTooManyRequests, "Too many pending requests, please retry later")
-		return nil, false
-	}
 	streamStarted := false
-	release, acquireErr := helper.AcquireAccountSlotWithWaitTimeout(c, account.ID, selection.WaitPlan.MaxConcurrency, selection.WaitPlan.Timeout, false, &streamStarted)
-	if err == nil {
-		helper.DecrementAccountWaitCount(c.Request.Context(), account.ID)
-	}
+	release, acquireErr := helper.AcquireAccountSlotForWaitPlan(c, account.ID, selection.WaitPlan, false, &streamStarted)
 	if acquireErr != nil {
 		reqLog.Warn("gemini.cached_content.account_slot_acquire_failed", zap.Int64("account_id", account.ID), zap.Error(acquireErr))
 		googleConcurrencyError(c, acquireErr, "account")
@@ -707,6 +744,7 @@ func (h *GatewayHandler) submitGeminiCachedContentUsage(
 	quotaPlatform := service.QuotaPlatform(c.Request.Context(), apiKey)
 	h.submitMandatoryUsageRecordTask(c.Request.Context(), func(ctx context.Context) {
 		if err := h.gatewayService.RecordUsage(ctx, &service.RecordUsageInput{
+			PricingSnapshot:    service.BillingPricingSnapshotFromContext(ctx),
 			Result:             result,
 			APIKey:             apiKey,
 			User:               apiKey.User,

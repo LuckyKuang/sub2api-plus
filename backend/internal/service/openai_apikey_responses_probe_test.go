@@ -173,7 +173,7 @@ func TestProbeOpenAIAPIKeyResponsesSupportFreezesWireStateAcrossRelink(t *testin
 	proxyID := int64(8)
 	account.ProxyID = &proxyID
 	account.Proxy = &Proxy{ID: proxyID, Protocol: "http", Host: "old-proxy.example", Port: 8080}
-	account.Credentials["user_agent"] = "codex_vscode/0.164.0 (Ubuntu 24.04; aarch64) vscode"
+	account.Credentials["user_agent"] = "codex_vscode/0.165.0 (Ubuntu 24.04; aarch64) vscode"
 	account.Credentials["model_mapping"] = map[string]any{"client-model": "gpt-old"}
 	account.Credentials["header_override_enabled"] = true
 	account.Credentials["header_overrides"] = map[string]any{"X-Grant": "old"}
@@ -210,9 +210,9 @@ func TestProbeOpenAIAPIKeyResponsesSupportFreezesWireStateAcrossRelink(t *testin
 	require.Equal(t, "https://compat-upstream.example/v1/responses", sent.URL.String())
 	require.Equal(t, "Bearer sk-test", sent.Header.Get("Authorization"))
 	require.Equal(t, "old", getHeaderRaw(sent.Header, "x-grant"))
-	require.Equal(t, "codex_vscode/0.164.0 (Ubuntu 24.04; aarch64) vscode", sent.UserAgent())
+	require.Equal(t, "codex_vscode/0.165.0 (Ubuntu 24.04; aarch64) vscode", sent.UserAgent())
 	require.Equal(t, "codex_vscode", sent.Header.Get("Originator"))
-	require.Equal(t, "0.164.0", sent.Header.Get("Version"))
+	require.Equal(t, "0.165.0", sent.Header.Get("Version"))
 	require.Equal(t, "http://old-proxy.example:8080", sentProxy)
 	var payload map[string]any
 	require.NoError(t, json.NewDecoder(sent.Body).Decode(&payload))

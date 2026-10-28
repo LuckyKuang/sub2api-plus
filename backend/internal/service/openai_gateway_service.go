@@ -61,7 +61,7 @@ const (
 	// 陈旧版本可能被优先丢弃（HTTP 200 + 流内 server_is_overloaded）；非官方客户端配不出
 	// 官方身份时整体回退到本常量，因此它必须跟随官方 CLI 的当前发布版本，
 	// 落后多个版本会让这些请求稳定落在被优先丢弃的一侧。
-	codexCLIVersion = "0.164.0"
+	codexCLIVersion = "0.165.0"
 	// openAICodexProbeVersion is kept as an explicit alias for probe callers
 	// and version-consistency tests; both declarations must remain identical.
 	openAICodexProbeVersion = codexCLIVersion
@@ -312,8 +312,12 @@ type OpenAIUsage struct {
 
 // OpenAIForwardResult represents the result of forwarding
 type OpenAIForwardResult struct {
-	RequestID  string
-	ResponseID string
+	AsyncTaskTerminal bool // provider-confirmed async terminal state, independent of billable usage
+	// VideoBillingClaim is internal processing ownership for deferred media
+	// settlement; it is never part of an upstream or client response.
+	VideoBillingClaim *GrokVideoBillingClaim `json:"-"`
+	RequestID         string
+	ResponseID        string
 	// UpstreamHeaders 是直接上游的响应头，用于按账户配置解析上游请求标识。
 	UpstreamHeaders http.Header
 	Usage           OpenAIUsage
@@ -374,14 +378,16 @@ type OpenAIForwardResult struct {
 	UsageSource                 string
 	ClientDisconnectUsageSource string
 	ImageCount                  int
-	ImageSize                   string
-	ImageInputSize              string
-	ImageOutputSize             string
-	ImageOutputSizes            []string
-	ImageSizeSource             string
-	ImageSizeBreakdown          map[string]int
-	VideoCount                  int
-	VideoResolution             string
+	// ImageEndpoint distinguishes dedicated image requests from mixed Responses/Chat/WS.
+	ImageEndpoint      bool
+	ImageSize          string
+	ImageInputSize     string
+	ImageOutputSize    string
+	ImageOutputSizes   []string
+	ImageSizeSource    string
+	ImageSizeBreakdown map[string]int
+	VideoCount         int
+	VideoResolution    string
 	// VideoDurationSeconds 是提交时请求的生成时长（xAI 按输出秒数计费），已归一化到 1-15 秒。
 	VideoDurationSeconds int
 	// WebSearchCalls 是 Codex alpha/search 网页搜索调用次数（每次成功请求为 1）。
@@ -616,6 +622,9 @@ type OpenAIGatewayService struct {
 	userPlatformQuotaRepo UserPlatformQuotaRepository
 	liveAttestation       liveattestation.Provider
 	liveAttestationCipher SecretEncryptor
+	// Bounds in-flight Live creation and unsaved-session compensation even
+	// when Redis is unavailable long enough for distributed leases to expire.
+	liveCreateReservations atomic.Int32
 
 	// sessionRouteStore is the authoritative logical-session route store. A nil
 	// value keeps the legacy Redis-only sticky behaviour.
@@ -754,10 +763,11 @@ func (s *OpenAIGatewayService) IsModelRestricted(ctx context.Context, groupID in
 // ResolveChannelMappingAndRestrict 解析渠道映射。
 // 模型限制检查已移至调度阶段，restricted 始终返回 false。
 func (s *OpenAIGatewayService) ResolveChannelMappingAndRestrict(ctx context.Context, groupID *int64, model string) (ChannelMappingResult, bool) {
-	if s.channelService == nil {
+	channels := channelServiceForContext(ctx, s.channelService)
+	if channels == nil {
 		return ChannelMappingResult{MappedModel: model}, false
 	}
-	return s.channelService.ResolveChannelMappingAndRestrict(ctx, groupID, model)
+	return channels.ResolveChannelMappingAndRestrict(ctx, groupID, model)
 }
 
 // isCodexImageGenerationBridgeEnabled 决定是否为 Codex 客户端自动注入 hosted

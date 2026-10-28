@@ -14,8 +14,9 @@ import (
 
 // responsesFailedError 对齐 OpenAI Responses 协议 error 子对象。
 type responsesFailedError struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
+	Code    string            `json:"code"`
+	Message string            `json:"message"`
+	Headers map[string]string `json:"headers,omitempty"`
 }
 
 // responsesFailedBody 对齐 apicompat.makeResponsesCompletedEvent 输出的 response 子对象字段集。
@@ -63,6 +64,12 @@ func writeResponsesFailedSSE(c *gin.Context, errType, code, message string) bool
 	if !ok {
 		return false
 	}
+	var retryAdvice map[string]string
+	if code == "policy_capacity_unavailable" {
+		if value := c.Writer.Header().Get("Retry-After"); value != "" && isSafeRetryAfter(value) {
+			retryAdvice = map[string]string{"Retry-After": value}
+		}
+	}
 
 	payload, err := json.Marshal(responsesFailedEvent{
 		Type: "response.failed",
@@ -76,6 +83,7 @@ func writeResponsesFailedSSE(c *gin.Context, errType, code, message string) bool
 			Error: responsesFailedError{
 				Code:    mapResponsesErrorCode(errType, code),
 				Message: message,
+				Headers: retryAdvice,
 			},
 		},
 	})

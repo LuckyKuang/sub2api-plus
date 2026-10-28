@@ -6,6 +6,18 @@ enableAutoUnmount(afterEach)
 const pressEscape = () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
 
 describe('stacked dialog Escape handling', () => {
+  // docs/UI_INTERACTION.md: a nested calendar/menu consumes the first Escape;
+  // its containing dialog stays open even if the child has already unmounted.
+  it('leaves the enclosing dialog open when a child already consumed Escape', () => {
+    const parent = mount(BaseDialog, { props: { show: true, title: 'Parent' } })
+    const event = new KeyboardEvent('keydown', { key: 'Escape', cancelable: true })
+    event.preventDefault()
+    document.dispatchEvent(event)
+    expect(parent.emitted('close')).toBeUndefined()
+    pressEscape()
+    expect(parent.emitted('close')).toHaveLength(1)
+  })
+
   it('closes only the most recently opened dialog, then allows the parent to close', async () => {
     const parent = mount(BaseDialog, { props: { show: true, title: 'Parent' } })
     const child = mount(BaseDialog, { props: { show: true, title: 'Child' } })

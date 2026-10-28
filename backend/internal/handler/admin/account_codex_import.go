@@ -102,12 +102,13 @@ type codexJWTClaims struct {
 }
 
 type codexJWTOpenAIClaims struct {
-	ChatGPTAccountID string                     `json:"chatgpt_account_id"`
-	ChatGPTUserID    string                     `json:"chatgpt_user_id"`
-	ChatGPTPlanType  string                     `json:"chatgpt_plan_type"`
-	UserID           string                     `json:"user_id"`
-	POID             string                     `json:"poid"`
-	Organizations    []openai.OrganizationClaim `json:"organizations"`
+	ChatGPTAccountID        string                     `json:"chatgpt_account_id"`
+	ChatGPTAccountIsFedRAMP bool                       `json:"chatgpt_account_is_fedramp"`
+	ChatGPTUserID           string                     `json:"chatgpt_user_id"`
+	ChatGPTPlanType         string                     `json:"chatgpt_plan_type"`
+	UserID                  string                     `json:"user_id"`
+	POID                    string                     `json:"poid"`
+	Organizations           []openai.OrganizationClaim `json:"organizations"`
 }
 
 type codexAccountIndex struct {
@@ -490,6 +491,7 @@ func flattenCodexImportValues(values []any) []any {
 
 func normalizeCodexImportEntry(entry codexImportEntry) (*codexImportAccount, error) {
 	now := time.Now().UTC()
+	var selectedWorkspaceID string
 	item := &codexImportAccount{
 		Credentials: map[string]any{},
 		Extra: map[string]any{
@@ -556,6 +558,7 @@ func normalizeCodexImportEntry(entry codexImportEntry) (*codexImportAccount, err
 			[]string{"id_token"},
 			[]string{"idToken"},
 		)
+		selectedWorkspaceID = firstCodexString(raw, []string{"tokens", "account_id"})
 		item.Email = firstCodexString(raw, []string{"email"}, []string{"user", "email"})
 		item.AccountID = firstCodexString(raw,
 			[]string{"chatgpt_account_id"},
@@ -633,6 +636,9 @@ func normalizeCodexImportEntry(entry codexImportEntry) (*codexImportAccount, err
 		item.Credentials["id_token"] = item.IDToken
 		_ = enrichCodexImportAccountFromJWT(item, item.IDToken, false, now)
 	}
+	if err := selectCodexImportWorkspace(item, selectedWorkspaceID); err != nil {
+		return nil, err
+	}
 	if err := enrichCodexImportAccountFromJWT(item, item.AccessToken, true, now); err != nil {
 		return nil, err
 	}
@@ -655,6 +661,48 @@ func normalizeCodexImportEntry(entry codexImportEntry) (*codexImportAccount, err
 	item.Name = buildCodexImportAccountName(item, entry.Index)
 
 	return item, nil
+}
+
+// Official workspace switching retains the original ID/refresh token and stores
+// the selected workspace in tokens.account_id. Only matching access-token
+// account and user claims can replace the retained workspace metadata. Parsing
+// imported JWT metadata does not authenticate it; the upstream still validates
+// the actual bearer credential.
+func selectCodexImportWorkspace(item *codexImportAccount, selected string) error {
+	if selected == "" || item.IDToken == "" {
+		return nil
+	}
+	id, err := decodeCodexJWTClaims(item.IDToken)
+	if err != nil || id.OpenAIAuth == nil {
+		return errors.New("工作区凭据缺少可解析的登录身份")
+	}
+	if selected == strings.TrimSpace(id.OpenAIAuth.ChatGPTAccountID) {
+		return nil
+	}
+	access, err := decodeCodexJWTClaims(item.AccessToken)
+	if err != nil || access.OpenAIAuth == nil {
+		return errors.New("工作区凭据缺少可解析的访问身份")
+	}
+	idUser := strings.TrimSpace(id.OpenAIAuth.ChatGPTUserID)
+	if idUser == "" {
+		idUser = strings.TrimSpace(id.OpenAIAuth.UserID)
+	}
+	accessUser := strings.TrimSpace(access.OpenAIAuth.ChatGPTUserID)
+	if accessUser == "" {
+		accessUser = strings.TrimSpace(access.OpenAIAuth.UserID)
+	}
+	if selected != strings.TrimSpace(access.OpenAIAuth.ChatGPTAccountID) || idUser == "" || idUser != accessUser || item.UserID != idUser {
+		return errors.New("工作区凭据的账号或用户身份不一致")
+	}
+	if item.AccountID != "" && item.AccountID != selected && item.AccountID != strings.TrimSpace(id.OpenAIAuth.ChatGPTAccountID) {
+		return errors.New("工作区凭据与导入账号不一致")
+	}
+	item.AccountID = selected
+	item.PlanType = strings.TrimSpace(access.OpenAIAuth.ChatGPTPlanType)
+	// Organization metadata from the old workspace cannot follow the new grant.
+	item.Organization = ""
+	item.Credentials["chatgpt_account_is_fedramp"] = access.OpenAIAuth.ChatGPTAccountIsFedRAMP
+	return nil
 }
 
 func enrichCodexImportAccountFromJWT(item *codexImportAccount, token string, validateExpiry bool, now time.Time) error {
@@ -681,6 +729,9 @@ func enrichCodexImportAccountFromJWT(item *codexImportAccount, token string, val
 			item.UserID = strings.TrimSpace(claims.Sub)
 		}
 		return nil
+	}
+	if _, exists := item.Credentials["chatgpt_account_is_fedramp"]; !exists {
+		item.Credentials["chatgpt_account_is_fedramp"] = claims.OpenAIAuth.ChatGPTAccountIsFedRAMP
 	}
 	if item.AccountID == "" {
 		item.AccountID = strings.TrimSpace(claims.OpenAIAuth.ChatGPTAccountID)

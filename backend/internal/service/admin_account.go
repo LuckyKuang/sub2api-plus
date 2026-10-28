@@ -574,18 +574,20 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 		}
 	}
 
-	// OAuth 账号：创建后异步设置隐私（仅 Antigravity；官方 Codex 不在登录期
-	// PATCH 训练开关，OpenAI 账号的隐私由管理员经 set-privacy 手动设置）。
-	if account.Type == AccountTypeOAuth && account.Platform == PlatformAntigravity {
-		go func() {
-			defer func() {
-				if r := recover(); r != nil {
-					slog.Error("create_account_antigravity_privacy_panic", "account_id", account.ID, "recover", r)
-				}
+	AfterAccountCommit(ctx, func(context.Context) {
+		// OAuth 账号：创建后异步设置隐私（仅 Antigravity；官方 Codex 不在登录期
+		// PATCH 训练开关，OpenAI 账号的隐私由管理员经 set-privacy 手动设置）。
+		if account.Type == AccountTypeOAuth && account.Platform == PlatformAntigravity {
+			go func() {
+				defer func() {
+					if r := recover(); r != nil {
+						slog.Error("create_account_antigravity_privacy_panic", "account_id", account.ID, "recover", r)
+					}
+				}()
+				s.EnsureAntigravityPrivacy(context.Background(), account)
 			}()
-			s.EnsureAntigravityPrivacy(context.Background(), account)
-		}()
-	}
+		}
+	})
 
 	return account, nil
 }
@@ -722,6 +724,9 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 		delete(normalizedExtra, OllamaCloudUsageSessionExtraKey)
 		delete(normalizedExtra, OllamaCloudUsageAutoRefreshExtraKey)
 		delete(normalizedExtra, OllamaCloudUsageSnapshotExtraKey)
+		// 目录观察和能力 metadata 只由同步写入。表单里的旧值或注入值不能进入本次更新。
+		delete(normalizedExtra, grokObservedModelsExtraKey)
+		delete(normalizedExtra, UpstreamModelMetadataExtraKey)
 		// 保留配额用量和专用服务受管字段，防止普通账号编辑意外覆盖。
 		for _, key := range []string{
 			"quota_used",
@@ -730,6 +735,8 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 			"quota_weekly_used",
 			"quota_weekly_start",
 			grokBillingExtraKey,
+			grokObservedModelsExtraKey,
+			UpstreamModelMetadataExtraKey,
 			OllamaCloudUsageSessionExtraKey,
 			OllamaCloudUsageAutoRefreshExtraKey,
 			OllamaCloudUsageSnapshotExtraKey,

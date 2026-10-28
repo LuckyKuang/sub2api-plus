@@ -17,6 +17,7 @@ type concurrencyCacheMock struct {
 	acquireAccountSlotFn  func(ctx context.Context, accountID int64, maxConcurrency int, requestID string) (bool, error)
 	acquireIngressLeaseFn func(ctx context.Context, apiKeyID int64, maxConnections int, leaseID string) (bool, error)
 	releaseIngressLeaseFn func(ctx context.Context, apiKeyID int64, leaseID string) error
+	releaseUserSlotFn     func(ctx context.Context, userID int64, requestID string) error
 	releaseUserCalled     int32
 	releaseAccountCalled  int32
 	releaseIngressCalled  int32
@@ -68,6 +69,9 @@ func (m *concurrencyCacheMock) AcquireUserSlot(ctx context.Context, userID int64
 
 func (m *concurrencyCacheMock) ReleaseUserSlot(ctx context.Context, userID int64, requestID string) error {
 	atomic.AddInt32(&m.releaseUserCalled, 1)
+	if m.releaseUserSlotFn != nil {
+		return m.releaseUserSlotFn(ctx, userID, requestID)
+	}
 	return nil
 }
 

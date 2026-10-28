@@ -4,6 +4,27 @@ SQL migrations are embedded in the application and applied automatically at
 startup. The runner records each filename and SHA256 checksum in
 `schema_migrations`.
 
+Migration `302_scoped_admin_api_keys.sql` adds revocable, scope-limited
+administrator keys with hashed secrets, IP restrictions, expiry and retained
+revocation/deletion metadata. See [administrator keys](../../docs/admin-api-keys.md).
+Migration `303_group_image_count_billing.sql` adds an opt-in group flag, default
+`false`, for dedicated image request billing. See
+[image-count billing](../../docs/CHANNEL_PRICING.md#image-count-billing).
+These new upstream migrations were numbered 247/248; only the newly imported
+files are renumbered, and historical Plus SQL remains unchanged.
+
+Migration `300_gateway_unfinished_tasks.sql` adds the SQL-owned cross-key and
+cross-provider per-user unfinished task ledger. Active Batch and async-image
+history rows are backfilled; unknown creates never expire automatically. No
+prompt or credential data is stored. See [task admission and reconciliation](../../docs/GATEWAY_TASK_LIMITS.md).
+
+Migration `301_release_completed_batch_task_capacity.sql` releases existing
+Batch reservations with matching user, API key and task identities when durable
+`indexing`, `settling`, `completed` or `output_deleted` state proves provider
+completion. Admission recovers before workers resume; output and billing retries
+continue independently. Unknown, locally failed or cancelled work remains
+reserved. Migration 300 and its historical checksum remain unchanged.
+
 Migration `294_outbound_identity_ids.sql` stores official-client random IDs by
 semantic namespace and irreversible scope digest. PostgreSQL atomically chooses
 the first value across replicas. Records have no scheduling-cache TTL, so an
@@ -33,6 +54,13 @@ the table does not contain model inputs/outputs. The feature defaults off;
 applying the schema alone does not enable restart recovery. Tables retain
 pending cleanup evidence after account deletion rather than cascading it away.
 See [Zhipu recovery](../../docs/providers/ZHIPU.md).
+
+Migration `299_composite_billing_rate_policy.sql` adds per-platform/model selling
+factors and monotonically increasing group pricing revisions. Empty policies
+preserve existing charges. Usage and payment orders store public rule evidence;
+historical records keep version zero and NULL evidence rather than fabricating
+past prices. Batch-image jobs retain their submitted rate evidence for deferred
+settlement. See [Composite groups](../../docs/COMPOSITE_GROUPS.md).
 
 ## Mandatory Rules
 

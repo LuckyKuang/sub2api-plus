@@ -60,6 +60,16 @@ import ModelWhitelistSelector from '../ModelWhitelistSelector.vue'
 import { cnOAuthModels } from '@/api/admin/cnOAuth'
 vi.mock('@/api/admin/cnOAuth', () => ({ cnOAuthModels: vi.fn() }))
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((done, fail) => {
+    resolve = done
+    reject = fail
+  })
+  return { promise, resolve, reject }
+}
+
 function mountSelector(props: Record<string, unknown> = {}) {
   return mount(ModelWhitelistSelector, {
     props: {
@@ -73,6 +83,10 @@ function mountSelector(props: Record<string, unknown> = {}) {
       }
     }
   })
+}
+
+function syncButton(wrapper: ReturnType<typeof mountSelector>) {
+  return wrapper.get('[data-testid="sync-upstream-models"]')
 }
 
 function findModelRow(wrapper: ReturnType<typeof mountSelector>, modelId: string) {
@@ -97,6 +111,45 @@ describe('ModelWhitelistSelector', () => {
     syncUpstreamModels.mockReset()
     syncUpstreamModelsPreview.mockReset()
     vi.mocked(cnOAuthModels).mockReset()
+  })
+
+  it.each([
+    ['typesafe', 'jev-latest'],
+    ['opencode_go', 'longcat-2.0'],
+    ['opencode_go', 'mimo-v2.5'],
+    ['opencode_go', 'minimax-m3'],
+    ['opencode_go', 'qwen3.8-max'],
+    ['antigravity', 'gemini-3.8-flash-high'],
+  ])('offers %s candidate %s before discovery and retains custom selections', async (platform, model) => {
+    const wrapper = mountSelector({ platform, modelValue: ['saved-private-model'] })
+    await wrapper.get('div.cursor-pointer').trigger('click')
+    expect(findModelRow(wrapper, 'saved-private-model').exists()).toBe(true)
+    await wrapper.get('input[placeholder="admin.accounts.searchModels"]').setValue(model)
+    expect(wrapper.findAll('[data-testid="select-model"]').map(button => button.text())).toContain(model)
+    await findModelRow(wrapper, model).get('[data-testid="select-model"]').trigger('click')
+    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([['saved-private-model', model]])
+    await wrapper.setProps({ modelValue: ['saved-private-model', model] })
+    await findModelRow(wrapper, model).get('[data-testid="select-model"]').trigger('click')
+    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([['saved-private-model']])
+    expect(syncUpstreamModelsPreview).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('removes retired native Gemini suggestions while preserving saved custom and Antigravity models', async () => {
+    const wrapper = mountSelector({ platform: 'gemini', modelValue: ['gemini-2.5-pro', 'private-gemini-model'] })
+    await wrapper.get('div.cursor-pointer').trigger('click')
+    const values = wrapper.findAll('[data-testid="select-model"]').map(button => button.text())
+    expect(values).toContain('gemini-3.8-flash')
+    expect(values).not.toContain('gemini-2.0-flash')
+    expect(values).not.toContain('gemini-2.5-flash')
+    expect(values).toContain('gemini-2.5-pro')
+    expect(values).toContain('private-gemini-model')
+    wrapper.unmount()
+
+    const antigravity = mountSelector({ platform: 'antigravity' })
+    await antigravity.get('div.cursor-pointer').trigger('click')
+    expect(findModelRow(antigravity, 'gemini-2.5-flash').exists()).toBe(true)
+    antigravity.unmount()
   })
 
   it('offers official Step-Code candidates and the fill action before credentials are entered', async () => {
@@ -420,6 +473,111 @@ describe('ModelWhitelistSelector', () => {
     expect(wrapper.emitted('update:modelValue')).toEqual([[['x-preview-f-free']]])
   })
 
+  it('does not append configured fallback IDs', async () => {
+    syncUpstreamModels.mockResolvedValue({
+      models: ['composer-2.5'],
+      discovery_source: 'configured_fallback',
+      warnings: [{ code: 'grok_model_catalog_configured_fallback', message: 'fallback' }]
+    })
+    const wrapper = mountSelector({ platform: 'grok', accountId: 46, modelValue: ['grok-4.7'] })
+    const button = wrapper.findAll('button').find(b => b.text() === 'admin.accounts.syncUpstreamModels')!
+    await button.trigger('click')
+    await flushPromises()
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    expect(showWarning).toHaveBeenCalledWith('admin.accounts.grokModelDiagnostics.configuredFallback')
+    expect(showSuccess).not.toHaveBeenCalled()
+    expect(wrapper.emitted('upstream-sync-finished')).toHaveLength(1)
+  })
+
+  it('still appends a real catalog when capability metadata is incomplete', async () => {
+    syncUpstreamModels.mockResolvedValue({
+      models: ['grok-4.7'],
+      discovery_source: 'upstream',
+      warnings: [{ code: 'upstream_model_metadata_incomplete', message: 'incomplete' }]
+    })
+    const wrapper = mountSelector({ platform: 'grok', accountId: 46, modelValue: ['grok-4'] })
+    const button = wrapper.findAll('button').find(b => b.text() === 'admin.accounts.syncUpstreamModels')!
+    await button.trigger('click')
+    await flushPromises()
+    expect(wrapper.emitted('update:modelValue')).toEqual([[['grok-4', 'grok-4.7']]])
+    expect(showWarning).toHaveBeenCalledWith('admin.accounts.syncUpstreamModelsMetadataIncomplete')
+    expect(showSuccess).not.toHaveBeenCalled()
+    expect(wrapper.emitted('upstream-sync-finished')).toHaveLength(1)
+    expect(wrapper.emitted('upstream-synced')).toBeUndefined()
+  })
+
+  it('keeps appending models when a non-grok sync omits discovery fields', async () => {
+    syncUpstreamModels.mockResolvedValue({ models: ['gpt-6'] })
+    const wrapper = mountSelector({ platform: 'openai', accountId: 46, modelValue: [] })
+    const button = wrapper.findAll('button').find(b => b.text() === 'admin.accounts.syncUpstreamModels')!
+    await button.trigger('click')
+    await flushPromises()
+    expect(wrapper.emitted('update:modelValue')).toEqual([[['gpt-6']]])
+    expect(showSuccess).toHaveBeenCalledWith('admin.accounts.syncUpstreamModelsSuccess')
+    expect(wrapper.emitted('upstream-sync-finished')).toHaveLength(1)
+    expect(wrapper.emitted('upstream-synced')).toBeUndefined()
+  })
+
+  it('keeps creation preview on the original upstream-synced event only', async () => {
+    syncUpstreamModelsPreview.mockResolvedValue({
+      models: ['grok-4.7'],
+      discovery_source: 'upstream'
+    })
+    const wrapper = mountSelector({
+      syncCredentials: {
+        platform: 'grok',
+        type: 'apikey',
+        base_url: 'https://api.x.ai/v1',
+        api_key: 'xai-test'
+      }
+    })
+    const button = wrapper.findAll('button').find(b => b.text() === 'admin.accounts.syncUpstreamModels')!
+    await button.trigger('click')
+    await flushPromises()
+    expect(syncUpstreamModels).not.toHaveBeenCalled()
+    expect(wrapper.emitted('upstream-synced')).toEqual([[]])
+    expect(wrapper.emitted('upstream-sync-finished')).toBeUndefined()
+    expect(wrapper.emitted('update:modelValue')).toEqual([[['grok-4.7']]])
+  })
+
+  it('does not mark a creation preview synced when the catalog is only a configured fallback', async () => {
+    syncUpstreamModelsPreview.mockResolvedValue({
+      models: ['composer-2.5'],
+      discovery_source: 'configured_fallback',
+      warnings: [{ code: 'grok_model_catalog_configured_fallback', message: 'fallback' }]
+    })
+    const wrapper = mountSelector({
+      syncCredentials: {
+        platform: 'grok',
+        type: 'apikey',
+        api_key: 'xai-test'
+      }
+    })
+    const button = wrapper.findAll('button').find(b => b.text() === 'admin.accounts.syncUpstreamModels')!
+    await button.trigger('click')
+    await flushPromises()
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    expect(wrapper.emitted('upstream-synced')).toBeUndefined()
+    expect(wrapper.emitted('upstream-sync-finished')).toBeUndefined()
+    expect(showWarning).toHaveBeenCalledWith('admin.accounts.grokModelDiagnostics.configuredFallback')
+    expect(showSuccess).not.toHaveBeenCalled()
+  })
+
+  it('emits completion when a saved account sync fails so the last attempt can refresh', async () => {
+    syncUpstreamModels.mockRejectedValue({
+      status: 502,
+      message: 'upstream unavailable'
+    })
+    const wrapper = mountSelector({ platform: 'grok', accountId: 46, modelValue: ['grok-4.7'] })
+    const button = wrapper.findAll('button').find(b => b.text() === 'admin.accounts.syncUpstreamModels')!
+    await button.trigger('click')
+    await flushPromises()
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    expect(showError).toHaveBeenCalled()
+    expect(showSuccess).not.toHaveBeenCalled()
+    expect(wrapper.emitted('upstream-sync-finished')).toHaveLength(1)
+  })
+
   it('shows the upstream sync button for OpenCode Go create-account credentials', () => {
     const wrapper = mountSelector({
       platform: 'opencode_go',
@@ -436,5 +594,139 @@ describe('ModelWhitelistSelector', () => {
 
     expect(syncButton).toBeDefined()
     expect(syncButton?.exists()).toBe(true)
+  })
+
+  it('can hide only the built-in trigger while retaining its public sync action', async () => {
+    syncUpstreamModels.mockResolvedValue({ models: ['grok-4.7'], discovery_source: 'upstream' })
+    const wrapper = mountSelector({ platform: 'grok', accountId: 46, showSyncButton: false })
+    expect(wrapper.find('[data-testid="sync-upstream-models"]').exists()).toBe(false)
+    await wrapper.vm.syncUpstreamModels()
+    await flushPromises()
+    expect(syncUpstreamModels).toHaveBeenCalledTimes(1)
+    expect(syncUpstreamModels).toHaveBeenCalledWith(46)
+    expect(wrapper.emitted('update:modelValue')).toEqual([[['grok-4.7']]])
+    expect(wrapper.emitted('upstream-sync-finished')).toEqual([[]])
+    wrapper.unmount()
+  })
+
+  it('keeps the public busy flag on the newer sync when an older account sync settles', async () => {
+    const first = deferred<any>()
+    const second = deferred<any>()
+    syncUpstreamModels.mockImplementation((id: number) => (id === 1 ? first.promise : second.promise))
+    const wrapper = mountSelector({ platform: 'grok', accountId: 1, modelValue: ['a-local'], showSyncButton: false })
+
+    const firstSync = wrapper.vm.syncUpstreamModels()
+    expect(wrapper.vm.isSyncingUpstream).toBe(true)
+
+    await wrapper.setProps({ accountId: 2, modelValue: ['b-local'] })
+    expect(wrapper.vm.isSyncingUpstream).toBe(false)
+    const secondSync = wrapper.vm.syncUpstreamModels()
+    expect(wrapper.vm.isSyncingUpstream).toBe(true)
+
+    first.resolve({ models: ['a-private-catalog'], discovery_source: 'upstream' })
+    await firstSync
+    await flushPromises()
+    expect(wrapper.vm.isSyncingUpstream).toBe(true)
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    expect(wrapper.emitted('upstream-sync-finished')).toBeUndefined()
+    expect(showSuccess).not.toHaveBeenCalled()
+    expect(showWarning).not.toHaveBeenCalled()
+    expect(showError).not.toHaveBeenCalled()
+
+    second.resolve({ models: ['b-catalog'], discovery_source: 'upstream' })
+    await secondSync
+    await flushPromises()
+    expect(wrapper.vm.isSyncingUpstream).toBe(false)
+    expect(wrapper.emitted('update:modelValue')).toEqual([[['b-local', 'b-catalog']]])
+    expect(wrapper.emitted('upstream-sync-finished')).toEqual([[]])
+    expect(showSuccess).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('still withholds configured fallback ids when the built-in trigger is hidden', async () => {
+    syncUpstreamModels.mockResolvedValue({
+      models: ['composer-2.5'],
+      discovery_source: 'configured_fallback',
+      warnings: [{ code: 'grok_model_catalog_configured_fallback', message: 'fallback' }]
+    })
+    const wrapper = mountSelector({ platform: 'grok', accountId: 46, modelValue: ['grok-4.7'], showSyncButton: false })
+    await wrapper.vm.syncUpstreamModels()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sync-upstream-models"]').exists()).toBe(false)
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    expect(showWarning).toHaveBeenCalledWith('admin.accounts.grokModelDiagnostics.configuredFallback')
+    expect(showSuccess).not.toHaveBeenCalled()
+    expect(wrapper.emitted('upstream-sync-finished')).toEqual([[]])
+    wrapper.unmount()
+  })
+
+  it('does not apply an older account sync to the current draft or clear its loading', async () => {
+    const first = deferred<any>()
+    const second = deferred<any>()
+    syncUpstreamModels.mockImplementation((id: number) => (id === 1 ? first.promise : second.promise))
+    const wrapper = mountSelector({ platform: 'grok', accountId: 1, modelValue: ['a-local'] })
+    await syncButton(wrapper).trigger('click')
+    expect((syncButton(wrapper).element as HTMLButtonElement).disabled).toBe(true)
+
+    await wrapper.setProps({ accountId: 2, modelValue: ['b-local'] })
+    expect((syncButton(wrapper).element as HTMLButtonElement).disabled).toBe(false)
+    await syncButton(wrapper).trigger('click')
+    expect(syncUpstreamModels).toHaveBeenNthCalledWith(1, 1)
+    expect(syncUpstreamModels).toHaveBeenNthCalledWith(2, 2)
+    expect((syncButton(wrapper).element as HTMLButtonElement).disabled).toBe(true)
+
+    first.resolve({ models: ['a-private-catalog'], discovery_source: 'upstream' })
+    await flushPromises()
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    expect(showSuccess).not.toHaveBeenCalled()
+    expect(showWarning).not.toHaveBeenCalled()
+    expect(showError).not.toHaveBeenCalled()
+    expect(wrapper.emitted('upstream-sync-finished')).toBeUndefined()
+    expect((syncButton(wrapper).element as HTMLButtonElement).disabled).toBe(true)
+
+    second.resolve({ models: ['b-catalog'], discovery_source: 'upstream' })
+    await flushPromises()
+    expect(wrapper.emitted('update:modelValue')).toEqual([[['b-local', 'b-catalog']]])
+    expect(showSuccess).toHaveBeenCalledTimes(1)
+    expect(wrapper.emitted('upstream-sync-finished')).toHaveLength(1)
+    expect((syncButton(wrapper).element as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('does not toast or finish an older account sync that fails during a newer sync', async () => {
+    const first = deferred<any>()
+    const second = deferred<any>()
+    syncUpstreamModels.mockImplementation((id: number) => (id === 1 ? first.promise : second.promise))
+    const wrapper = mountSelector({ platform: 'grok', accountId: 1, modelValue: ['a-local'] })
+    await syncButton(wrapper).trigger('click')
+    await wrapper.setProps({ accountId: 2, modelValue: ['b-local'] })
+    await syncButton(wrapper).trigger('click')
+
+    first.reject({ message: 'old account failure' })
+    await flushPromises()
+    expect(showError).not.toHaveBeenCalled()
+    expect(showSuccess).not.toHaveBeenCalled()
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    expect(wrapper.emitted('upstream-sync-finished')).toBeUndefined()
+    expect((syncButton(wrapper).element as HTMLButtonElement).disabled).toBe(true)
+
+    second.reject({ message: 'current failure' })
+    await flushPromises()
+    expect(showError).toHaveBeenCalledTimes(1)
+    expect(wrapper.emitted('upstream-sync-finished')).toHaveLength(1)
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    expect((syncButton(wrapper).element as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('does not toast when a saved sync fails after the selector is destroyed', async () => {
+    const pending = deferred<any>()
+    syncUpstreamModels.mockReturnValue(pending.promise)
+    const wrapper = mountSelector({ platform: 'grok', accountId: 46, modelValue: ['grok-4.7'] })
+    await syncButton(wrapper).trigger('click')
+    wrapper.unmount()
+    pending.reject({ message: 'old account failure' })
+    await flushPromises()
+    expect(showError).not.toHaveBeenCalled()
+    expect(showSuccess).not.toHaveBeenCalled()
+    expect(showWarning).not.toHaveBeenCalled()
   })
 })

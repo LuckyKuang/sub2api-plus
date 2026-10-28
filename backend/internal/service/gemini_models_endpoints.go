@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"slices"
+	"sort"
 	"strings"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/gemini"
@@ -23,6 +24,60 @@ import (
 // errGeminiModelsUpstreamStatus 在 Vertex 分页读取遇到非 2xx 时中止分页，原始响应由调用方另行保存。
 var errGeminiModelsUpstreamStatus = errors.New("upstream model list returned non-2xx status")
 
+// DeclaredModelIDs 返回分组内可调度 Gemini 账号实际可转发的声明模型并集。
+// API Key/服务账号使用映射键；OAuth 不改写模型，只保留原生自映射（含 Google One 默认集）。
+// 未配置映射或 OAuth 只有需转译的别名时返回空，模型接口仍由选中账号的上游应答。
+func (s *GeminiMessagesCompatService) DeclaredModelIDs(ctx context.Context, groupID *int64) ([]string, error) {
+	accounts, err := s.listSchedulableAccountsOnce(ctx, groupID, PlatformGemini, true)
+	if err != nil {
+		return nil, fmt.Errorf("query accounts failed: %w", err)
+	}
+	seen := make(map[string]struct{})
+	for i := range accounts {
+		if accounts[i].Platform != PlatformGemini {
+			continue
+		}
+		if accounts[i].Type != AccountTypeAPIKey && accounts[i].Type != AccountTypeServiceAccount && accounts[i].Type != AccountTypeOAuth {
+			return nil, nil
+		}
+		mapping := accounts[i].GetModelMapping()
+		if len(mapping) == 0 {
+			return nil, nil
+		}
+		declared := 0
+		for model, target := range mapping {
+			// ForwardNative sends OAuth model names unchanged. A self-mapping
+			// declares a native whitelist entry; a translated alias is not served.
+			if accounts[i].Type == AccountTypeOAuth && model != target {
+				continue
+			}
+			seen[model] = struct{}{}
+			declared++
+		}
+		if declared == 0 {
+			return nil, nil
+		}
+	}
+	models := make([]string, 0, len(seen))
+	for model := range seen {
+		models = append(models, model)
+	}
+	sort.Strings(models)
+	return models, nil
+}
+
+// DeclaredModelsCover 判断声明的模型中是否有条目覆盖 model：键末尾的 * 按前缀匹配，
+// 模型别名按请求路径查映射时的规则归一后再比较。
+func DeclaredModelsCover(declared []string, model string) bool {
+	normalized := normalizeRequestedModelForLookup(PlatformGemini, model)
+	for _, pattern := range declared {
+		if matchWildcard(pattern, model) || matchWildcard(pattern, normalized) {
+			return true
+		}
+	}
+	return false
+}
+
 // SelectAccountForModelsEndpoints 为模型列表与模型详情接口选择账号。
 //
 // 优先级：
@@ -35,7 +90,7 @@ var errGeminiModelsUpstreamStatus = errors.New("upstream model list returned non
 //  7. Vertex API Key 账号（列表接口不接受 API Key，只能返回内置列表）
 //
 // Vertex 账号排在所有 AI Studio 兼容账号之后，混合分组始终由 AI Studio 兼容账号应答。
-// 同级账号按 priority、最近使用时间挑选。
+// 同级账号按 priority、最近使用时间挑选。DeclaredModelIDs 非空时模型接口按声明的模型应答，不经过选号。
 func (s *GeminiMessagesCompatService) SelectAccountForModelsEndpoints(ctx context.Context, groupID *int64) (*Account, error) {
 	accounts, err := s.listSchedulableAccountsOnce(ctx, groupID, PlatformGemini, true)
 	if err != nil {

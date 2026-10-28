@@ -25,11 +25,15 @@ describe('published console appearance', () => {
     expect(root.hasAttribute('data-console-custom-cards')).toBe(false)
     expect(root.style.getPropertyValue('--console-light-mask-alpha')).toBe('0.3')
     expect(root.style.getPropertyValue('--console-dark-mask-alpha')).toBe('0.48')
+    expect(root.style.getPropertyValue('--console-primary-foreground')).toBe('#000000')
+    expect(root.style.getPropertyValue('--console-primary-end')).toBe('45 212 191')
     for (const [transparency, alpha] of [[0, '1'], [45, '0.55'], [100, '0']] as const) {
       appearance.value.card_transparency = transparency
       await nextTick()
       expect(root.hasAttribute('data-console-custom-cards')).toBe(false)
       expect(root.style.getPropertyValue('--console-card-alpha')).toBe(alpha)
+      expect(root.style.getPropertyValue('--console-primary-foreground')).toBe('#000000')
+      expect(root.style.getPropertyValue('--console-primary-end')).toBe('45 212 191')
       expect(root.style.opacity).toBe('')
       expect(root.style.getPropertyValue('backdrop-filter')).toBe('')
     }
@@ -42,6 +46,48 @@ describe('published console appearance', () => {
     await nextTick()
     expect(root.hasAttribute('data-console-custom-cards')).toBe(false)
     expect(root.style.getPropertyValue('--console-card-alpha')).toBe('1')
+  })
+
+  it('updates primary label contrast with the accent and removes its tokens on disposal', async () => {
+    const appearance = ref({ ...defaultConsoleAppearance(), accent_color: '#ffff00' })
+    scope.run(() => useConsoleAppearance(() => appearance.value))
+    const root = document.documentElement
+    expect(root.style.getPropertyValue('--console-primary-foreground')).toBe('#000000')
+    expect(root.style.getPropertyValue('--console-primary-end')).toBe('255 255 82')
+    appearance.value.accent_color = '#000080'
+    await nextTick()
+    expect(root.style.getPropertyValue('--console-primary-foreground')).toBe('#ffffff')
+    expect(root.style.getPropertyValue('--console-primary-end')).toBe('0 0 105')
+    appearance.value.accent_color = 'invalid'
+    await nextTick()
+    expect(root.style.getPropertyValue('--console-primary-foreground')).toBe('#000000')
+    expect(root.style.getPropertyValue('--console-primary-end')).toBe('45 212 191')
+    scope.stop()
+    expect(root.style.getPropertyValue('--console-primary-foreground')).toBe('')
+    expect(root.style.getPropertyValue('--console-primary-end')).toBe('')
+    expect(root.style.getPropertyValue('--console-primary-dark-foreground')).toBe('')
+    expect(root.style.getPropertyValue('--console-primary-dark-end')).toBe('')
+  })
+
+  it('updates both theme foregrounds when transparency changes without fading the text', async () => {
+    const appearance = ref({ ...defaultConsoleAppearance(), accent_color: '#ffffff', card_transparency: 50 })
+    scope.run(() => useConsoleAppearance(() => appearance.value))
+    const root = document.documentElement
+    expect(root.style.getPropertyValue('--console-primary-foreground')).toBe('#000000')
+    expect(root.style.getPropertyValue('--console-primary-dark-foreground')).toBe('#000000')
+    appearance.value.accent_color = '#000000'
+    await nextTick()
+    expect(root.style.getPropertyValue('--console-primary-foreground')).toBe('#000000')
+    expect(root.style.getPropertyValue('--console-primary-dark-foreground')).toBe('#ffffff')
+    expect(root.style.getPropertyValue('--console-primary-end')).toBe('82 82 82')
+    expect(root.style.getPropertyValue('--console-primary-dark-end')).toBe('0 0 0')
+    appearance.value.card_transparency = 0
+    await nextTick()
+    expect(root.style.getPropertyValue('--console-primary-foreground')).toBe('#ffffff')
+    appearance.value.card_transparency = 100
+    await nextTick()
+    expect(root.style.getPropertyValue('--console-primary-foreground')).toBe('#000000')
+    expect(root.style.getPropertyValue('--console-primary-dark-foreground')).toBe('#ffffff')
   })
 
   it('preserves the exact default accent and updates the whole palette without reloading', async () => {

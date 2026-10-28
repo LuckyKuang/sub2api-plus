@@ -216,3 +216,30 @@ func TestCalculateTokenCostForRequest_NoResolverFallsBackToCatalog(t *testing.T)
 	require.NoError(t, err)
 	require.Equal(t, want, got)
 }
+
+func TestCalculateTokenCostForRequest_UngroupedCatalogKeepsServiceTier(t *testing.T) {
+	for _, tier := range []struct {
+		name string
+		want float64
+	}{
+		{name: "", want: 60e-6},
+		{name: "default", want: 60e-6},
+		{name: "priority", want: 150e-6},
+		{name: "fast", want: 150e-6},
+		{name: "flex", want: 30e-6},
+	} {
+		t.Run(tier.name, func(t *testing.T) {
+			billing := NewBillingService(&config.Config{}, nil)
+			for _, resolver := range []*ModelPricingResolver{nil, NewModelPricingResolver(nil, billing)} {
+				// GPT-5.5: 2 input tokens at $5/M plus 1 output at $30/M,
+				// customer rate 1.5. Priority is 2.5x and Flex is 0.5x.
+				got, err := billing.CalculateTokenCostForRequest(TokenCostRequest{
+					Ctx: context.Background(), Model: "gpt-5.5", Tokens: UsageTokens{InputTokens: 2, OutputTokens: 1},
+					RateMultiplier: 1.5, ServiceTier: tier.name, Resolver: resolver,
+				})
+				require.NoError(t, err)
+				require.InDelta(t, tier.want, got.ActualCost, 1e-12)
+			}
+		})
+	}
+}

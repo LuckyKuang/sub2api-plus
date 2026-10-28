@@ -14,7 +14,7 @@
       <!-- 检测模式：probe（探活）/ quota（仅配额）/ quota_probe（探活+配额） -->
       <div>
         <label class="input-label">{{ t('admin.channelMonitor.form.checkMode') }}</label>
-        <div class="grid gap-3 sm:grid-cols-3" data-testid="monitor-check-mode">
+        <div class="segmented-control w-full" role="group" :aria-label="t('admin.channelMonitor.form.checkMode')" data-testid="monitor-check-mode">
           <button
             v-for="opt in checkModeOptions"
             :key="opt.value"
@@ -22,12 +22,13 @@
             :data-testid="`monitor-check-mode-${opt.value}`"
             :aria-pressed="form.check_mode === opt.value"
             :disabled="opt.disabled"
-            class="rounded-lg border-2 px-3 py-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 surface-control"
-            :class="checkModeButtonClass(opt.value)"
+            class="segmented-option basis-40"
             @click="selectCheckMode(opt.value)"
           >
-            <span class="block text-sm font-semibold">{{ opt.label }}</span>
-            <span class="mt-0.5 block text-xs opacity-80">{{ opt.hint }}</span>
+            <span class="min-w-0 text-left">
+              <span class="block font-semibold">{{ opt.label }}</span>
+              <span class="mt-0.5 block text-xs opacity-80">{{ opt.hint }}</span>
+            </span>
           </button>
         </div>
       </div>
@@ -80,18 +81,19 @@
 
       <div v-if="form.provider === PROVIDER_OPENAI && usesProbePart" class="rounded-lg border border-blue-100 bg-blue-50/50 p-3 dark:border-blue-500/20 dark:bg-blue-500/10">
         <label class="input-label">{{ t('admin.channelMonitor.form.apiMode') }}</label>
-        <div class="grid gap-3 sm:grid-cols-2">
+        <div class="segmented-control w-full" role="group" :aria-label="t('admin.channelMonitor.form.apiMode')">
           <button
             v-for="opt in apiModeOptions"
             :key="opt.value"
             type="button"
             :aria-pressed="form.api_mode === opt.value"
-            class="rounded-lg border-2 px-3 py-2 text-left transition-colors surface-control"
-            :class="apiModeButtonClass(opt.value)"
+            class="segmented-option basis-40"
             @click="form.api_mode = opt.value"
           >
-            <span class="block text-sm font-semibold">{{ opt.label }}</span>
-            <span class="mt-0.5 block text-xs opacity-80">{{ opt.hint }}</span>
+            <span class="min-w-0 text-left">
+              <span class="block font-semibold">{{ opt.label }}</span>
+              <span class="mt-0.5 block text-xs opacity-80">{{ opt.hint }}</span>
+            </span>
           </button>
         </div>
       </div>
@@ -446,14 +448,6 @@ function normalizeAPIMode(mode: APIMode | undefined | null): APIMode {
   return mode === API_MODE_RESPONSES ? API_MODE_RESPONSES : API_MODE_CHAT_COMPLETIONS
 }
 
-function apiModeButtonClass(mode: APIMode): string {
-  const active = form.api_mode === mode
-  if (active) {
-    return 'border-primary-500 surface-inset text-primary-700 shadow-sm dark:border-primary-400 dark:bg-primary-500/[0.15] dark:text-primary-300'
-  }
-  return 'border-blue-100 surface-inset surface-muted hover:border-primary-300 dark:border-dark-700 dark:surface-inset'
-}
-
 function templateOptionLabel(tpl: ChannelMonitorTemplate): string {
   if (tpl.provider !== PROVIDER_OPENAI) return tpl.name
   const labelKey = normalizeAPIMode(tpl.api_mode) === API_MODE_RESPONSES
@@ -528,14 +522,6 @@ const checkModeOptions = computed<CheckModeOption[]>(() => [
     disabled: form.provider === PROVIDER_ANTIGRAVITY,
   },
 ])
-
-function checkModeButtonClass(mode: CheckMode): string {
-  const active = form.check_mode === mode
-  if (active) {
-    return 'border-primary-500 surface-inset text-primary-700 shadow-sm dark:border-primary-400 dark:bg-primary-500/[0.15] dark:text-primary-300'
-  }
-  return 'border-blue-100 surface-inset surface-muted hover:border-primary-300 dark:border-dark-700 dark:surface-inset'
-}
 
 function selectCheckMode(mode: CheckMode) {
   if (checkModeOptions.value.find((opt) => opt.value === mode)?.disabled) return

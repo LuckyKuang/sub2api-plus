@@ -78,7 +78,7 @@ func (s *OpenAIGatewayService) readOpenAIUpstreamErrorWithCompleteness(resp *htt
 	if s != nil {
 		limit = openAIUpstreamErrorBodyReadLimitForConfig(s.cfg)
 	}
-	respBody, readErr := io.ReadAll(io.LimitReader(resp.Body, limit+1))
+	respBody, readErr := readUpstreamErrorResponseBody(resp, limit+1, UpstreamErrorBodyReadTimeout)
 	complete := readErr == nil && int64(len(respBody)) <= limit
 	if int64(len(respBody)) > limit {
 		respBody = respBody[:limit]

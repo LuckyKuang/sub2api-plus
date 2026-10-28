@@ -24,12 +24,16 @@ channels contribute models. An authorized group without an active bound channel
 or configured models is retained with `models: []`. Each group can belong to at
 most one channel; that database constraint is unchanged.
 
-Model enumeration uses `Channel.SupportedModels()` (mapping/pricing union and
-finite wildcard expansion). Normal groups remain on their own platform;
-composite groups include only configured concrete model platforms. Global price
-catalogs supply prices, not additional models. The request-local channel snapshot
-is shared by enumeration, mappings and billing resolution. There is no shared
-user-directory cache and no provider discovery or refresh.
+Model enumeration combines the finite channel mapping/pricing union, group
+prices, exact account model mappings and enabled exact Composite routes. Prefix
+routes apply to finite configured IDs; wildcards never become literal request
+IDs. The group public-model allowlist filters every source. Normal groups remain
+on their own platform; composite offers retain the resolved concrete supplier.
+Global price catalogs supply prices, not additional models. A group without a
+channel can still publish its configured routes, group prices or account model
+IDs. The request-local channel snapshot is shared by mappings and billing
+resolution. There is no shared user-directory cache or provider discovery,
+credential refresh, account selection or usage write during this read.
 
 ## Catalog DTO
 
@@ -41,8 +45,9 @@ changing model prices, personal rates, IDs or access decisions.
 The `data` object contains `groups` and `user_rate_status`:
 
 - `loaded`: user-rate lookup succeeded, including no overrides.
-- `unavailable`: user-rate lookup failed; defaults are reference prices and the
-  UI offers a retry. No stale personal rates are returned.
+- `unavailable`: user-rate lookup failed; all model quotes and group summary
+  defaults/ranges are null and the UI offers a retry. No personal or group-only
+  substitute is presented as the buyer's effective rate.
 - `not_requested`: the feature is disabled or there are no authorized groups.
 
 Groups include `id`, `name`, `description`, `platform`, `subscription_type`,
@@ -51,6 +56,15 @@ Groups include `id`, `name`, `description`, `platform`, `subscription_type`,
 `peak_timezone` fields, independent image/video rate flags and multipliers,
 `long_context_pricing_enabled`, and `models`. Exclusive membership, subscription
 status and personal rates are independent concepts.
+`policy_version` and server `as_of` identify the policy used for the offer quotes.
+`rate_summary` contains `status` (`available`, `unavailable` or `empty`),
+`policy_version`, `as_of`, and `entries`. Each entry is scoped to one actual
+concrete supplier and billing unit and includes `default_quote` (M=1),
+`rate_min`, `rate_max`, `model_count` and `has_model_exceptions`. Only configured
+public offers contribute; an unused platform-rate rule cannot advertise a new
+supplier. Distinct operation-specific media bases can leave the shared default
+unknown while model details remain quotable. An invalid policy suppresses all
+rate quotes rather than falling back to default 1.
 
 Each model offer contains:
 
@@ -69,12 +83,17 @@ Each model offer contains:
 | `time_pricing` | Optional timezone, weekday restriction and half-open multiplier periods. |
 | `media_tiers` | Optional `{label, unit, price}` resolution/size rows; not token thresholds. |
 | `service_tier_pricing` | Optional `{name, pricing}` resolved price schedules for priority, flex and model-owned ultrafast. |
+| `rate_quote` | Server-resolved `base_multiplier`, separate `platform_multiplier` and `model_multiplier`, their product `policy_multiplier`, `peak_multiplier` and `effective_multiplier`, source, supplier, public model, billing unit, policy version and `as_of`. New quotes use `rate_calculation: product_v2`; unknown personal rates, invalid policies or an unknown unit produce null. |
+| `price_time_multiplier` | Current price-card period factor resolved through the billing rules; 1 outside an applicable period. |
+| `endpoints` | Optional configured Composite route scope; it does not imply additional native upstream capabilities. |
 
 Arrays for groups, models and pricing intervals remain arrays when empty.
 Nullable price fields preserve null and explicit zero. Optional condition arrays
 may be absent. Prices are USD per token or per declared original unit, **before**
 the group/personal/media rate. The frontend converts token prices to USD per
-million and applies the appropriate rate exactly once. No credentials, account
+million and applies `rate_quote.effective_multiplier` and
+`price_time_multiplier` exactly once. It does not independently select personal,
+media, platform or model policies. No credentials, account
 identifiers, upstream URLs, mapping targets or internal channel/pricing IDs are
 serialized. Catalog requests incorporate rates; the user page does not join a
 separate `/groups/rates` response.
@@ -102,11 +121,15 @@ fields on token-mode cards are ignored, as they are by billing.
 
 Ordinary rate is `user_rate_multiplier ?? rate_multiplier`, including zero.
 Independent image/video rates override that rate. Subscription peak rules use
-the server billing timezone, `[start, end)` and the existing token-only scope;
-per-image charges do not inherit the token peak factor. Channel time pricing
+the server billing timezone and `[start, end)`. New request quotes apply the
+peak factor to every actual billing meter, including independent image/video
+bases. The quote's `peak_scope` records `all_meters`; historical accepted task
+snapshots without that field retain their `token_only` behavior. Channel time pricing
 keeps its own timezone, weekday restriction and second precision. DeepSeek's
 model-owned default peak periods are derived from its billing function; catalog
 base prices use a standard period rather than the time of the catalog read.
+The current `price_time_multiplier` and `rate_quote` carry the separately
+resolved period and consumption factors; both share the catalog's `as_of`.
 Residual negative rates are clamped to zero, matching billing. Non-finite final
 amounts, including conversion overflow, render as unknown instead of a number.
 
@@ -208,3 +231,36 @@ platform container described in [CONTRIBUTING.md](../CONTRIBUTING.md). Browser
 checks cover column thresholds, sidebar changes, mobile overflow and keyboard
 interaction. This read-only view adds no inference audit input or outbound
 identity path; see [security audit coverage](SECURITY_AUDIT_CONTENT_COVERAGE.md).
+
+
+### API Key group rate disclosure
+
+`GET /api/v1/channels/available?view=key_quotes` returns the same authorized
+commercial catalog projection used by Key group selection. It remains available
+when the optional Available Channels page is disabled. The `view=catalog` and
+legacy list keep their existing page enablement gate. Authentication and
+bindable-group permissions apply before model or personal-rate lookup; duplicate
+`view` parameters do not select this mode. No account, supplier cost, credential
+or private model mapping fields are included.
+
+`rate_summary` groups current quotes by actual platform and billing unit, with a
+default quote, model exception range, policy version, quote timestamp and explicit
+availability status. Key creation, editing, inline changes and bulk changes use
+this server projection. Failed or superseded requests never render a fallback
+selling rate. A model without an explicit selling multiplier contributes `M=1`;
+a missing base price remains unknown, and an explicit zero remains zero.
+
+Create/edit dialogs show supplier/unit summaries inside the existing searchable
+group dropdown and show the chosen group's expandable model details below it.
+The inline group-change menu shows the same compact summaries. Bulk group
+changes show summaries in each option and model details for the selected target
+group. The default is the backend's effective quote with `M=1`, including the
+applicable personal/group/media base and peak factor; it is not the raw platform
+factor `P`. Model ranges also come from the backend and never merge units.
+
+While the Key page is visible, quotes refresh every 60 seconds and on focus or
+visibility restoration. Starting a refresh clears the previous quotes; a failed
+request displays unavailable with retry. Aborted or late responses cannot
+replace newer quotes. This display is current guidance, while actual usage
+retains the request's accepted pricing evidence. A platform or factor rule with
+no finite configured public models produces an explicitly empty model catalog.

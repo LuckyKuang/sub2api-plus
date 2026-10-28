@@ -435,6 +435,26 @@ func (_c *UsageLogCreate) SetNillableRateMultiplier(v *float64) *UsageLogCreate 
 	return _c
 }
 
+// SetBillingPolicyVersion sets the "billing_policy_version" field.
+func (_c *UsageLogCreate) SetBillingPolicyVersion(v int64) *UsageLogCreate {
+	_c.mutation.SetBillingPolicyVersion(v)
+	return _c
+}
+
+// SetNillableBillingPolicyVersion sets the "billing_policy_version" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableBillingPolicyVersion(v *int64) *UsageLogCreate {
+	if v != nil {
+		_c.SetBillingPolicyVersion(*v)
+	}
+	return _c
+}
+
+// SetBillingRateSnapshot sets the "billing_rate_snapshot" field.
+func (_c *UsageLogCreate) SetBillingRateSnapshot(v map[string]interface{}) *UsageLogCreate {
+	_c.mutation.SetBillingRateSnapshot(v)
+	return _c
+}
+
 // SetLongContextBillingApplied sets the "long_context_billing_applied" field.
 func (_c *UsageLogCreate) SetLongContextBillingApplied(v bool) *UsageLogCreate {
 	_c.mutation.SetLongContextBillingApplied(v)
@@ -921,6 +941,10 @@ func (_c *UsageLogCreate) defaults() {
 		v := usagelog.DefaultRateMultiplier
 		_c.mutation.SetRateMultiplier(v)
 	}
+	if _, ok := _c.mutation.BillingPolicyVersion(); !ok {
+		v := usagelog.DefaultBillingPolicyVersion
+		_c.mutation.SetBillingPolicyVersion(v)
+	}
 	if _, ok := _c.mutation.LongContextBillingApplied(); !ok {
 		v := usagelog.DefaultLongContextBillingApplied
 		_c.mutation.SetLongContextBillingApplied(v)
@@ -1071,6 +1095,9 @@ func (_c *UsageLogCreate) check() error {
 	}
 	if _, ok := _c.mutation.RateMultiplier(); !ok {
 		return &ValidationError{Name: "rate_multiplier", err: errors.New(`ent: missing required field "UsageLog.rate_multiplier"`)}
+	}
+	if _, ok := _c.mutation.BillingPolicyVersion(); !ok {
+		return &ValidationError{Name: "billing_policy_version", err: errors.New(`ent: missing required field "UsageLog.billing_policy_version"`)}
 	}
 	if _, ok := _c.mutation.LongContextBillingApplied(); !ok {
 		return &ValidationError{Name: "long_context_billing_applied", err: errors.New(`ent: missing required field "UsageLog.long_context_billing_applied"`)}
@@ -1300,6 +1327,14 @@ func (_c *UsageLogCreate) createSpec() (*UsageLog, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.RateMultiplier(); ok {
 		_spec.SetField(usagelog.FieldRateMultiplier, field.TypeFloat64, value)
 		_node.RateMultiplier = value
+	}
+	if value, ok := _c.mutation.BillingPolicyVersion(); ok {
+		_spec.SetField(usagelog.FieldBillingPolicyVersion, field.TypeInt64, value)
+		_node.BillingPolicyVersion = value
+	}
+	if value, ok := _c.mutation.BillingRateSnapshot(); ok {
+		_spec.SetField(usagelog.FieldBillingRateSnapshot, field.TypeJSON, value)
+		_node.BillingRateSnapshot = value
 	}
 	if value, ok := _c.mutation.LongContextBillingApplied(); ok {
 		_spec.SetField(usagelog.FieldLongContextBillingApplied, field.TypeBool, value)
@@ -2101,6 +2136,42 @@ func (u *UsageLogUpsert) UpdateRateMultiplier() *UsageLogUpsert {
 // AddRateMultiplier adds v to the "rate_multiplier" field.
 func (u *UsageLogUpsert) AddRateMultiplier(v float64) *UsageLogUpsert {
 	u.Add(usagelog.FieldRateMultiplier, v)
+	return u
+}
+
+// SetBillingPolicyVersion sets the "billing_policy_version" field.
+func (u *UsageLogUpsert) SetBillingPolicyVersion(v int64) *UsageLogUpsert {
+	u.Set(usagelog.FieldBillingPolicyVersion, v)
+	return u
+}
+
+// UpdateBillingPolicyVersion sets the "billing_policy_version" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateBillingPolicyVersion() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldBillingPolicyVersion)
+	return u
+}
+
+// AddBillingPolicyVersion adds v to the "billing_policy_version" field.
+func (u *UsageLogUpsert) AddBillingPolicyVersion(v int64) *UsageLogUpsert {
+	u.Add(usagelog.FieldBillingPolicyVersion, v)
+	return u
+}
+
+// SetBillingRateSnapshot sets the "billing_rate_snapshot" field.
+func (u *UsageLogUpsert) SetBillingRateSnapshot(v map[string]interface{}) *UsageLogUpsert {
+	u.Set(usagelog.FieldBillingRateSnapshot, v)
+	return u
+}
+
+// UpdateBillingRateSnapshot sets the "billing_rate_snapshot" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateBillingRateSnapshot() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldBillingRateSnapshot)
+	return u
+}
+
+// ClearBillingRateSnapshot clears the value of the "billing_rate_snapshot" field.
+func (u *UsageLogUpsert) ClearBillingRateSnapshot() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldBillingRateSnapshot)
 	return u
 }
 
@@ -3277,6 +3348,48 @@ func (u *UsageLogUpsertOne) AddRateMultiplier(v float64) *UsageLogUpsertOne {
 func (u *UsageLogUpsertOne) UpdateRateMultiplier() *UsageLogUpsertOne {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.UpdateRateMultiplier()
+	})
+}
+
+// SetBillingPolicyVersion sets the "billing_policy_version" field.
+func (u *UsageLogUpsertOne) SetBillingPolicyVersion(v int64) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetBillingPolicyVersion(v)
+	})
+}
+
+// AddBillingPolicyVersion adds v to the "billing_policy_version" field.
+func (u *UsageLogUpsertOne) AddBillingPolicyVersion(v int64) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddBillingPolicyVersion(v)
+	})
+}
+
+// UpdateBillingPolicyVersion sets the "billing_policy_version" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateBillingPolicyVersion() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateBillingPolicyVersion()
+	})
+}
+
+// SetBillingRateSnapshot sets the "billing_rate_snapshot" field.
+func (u *UsageLogUpsertOne) SetBillingRateSnapshot(v map[string]interface{}) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetBillingRateSnapshot(v)
+	})
+}
+
+// UpdateBillingRateSnapshot sets the "billing_rate_snapshot" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateBillingRateSnapshot() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateBillingRateSnapshot()
+	})
+}
+
+// ClearBillingRateSnapshot clears the value of the "billing_rate_snapshot" field.
+func (u *UsageLogUpsertOne) ClearBillingRateSnapshot() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearBillingRateSnapshot()
 	})
 }
 
@@ -4699,6 +4812,48 @@ func (u *UsageLogUpsertBulk) AddRateMultiplier(v float64) *UsageLogUpsertBulk {
 func (u *UsageLogUpsertBulk) UpdateRateMultiplier() *UsageLogUpsertBulk {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.UpdateRateMultiplier()
+	})
+}
+
+// SetBillingPolicyVersion sets the "billing_policy_version" field.
+func (u *UsageLogUpsertBulk) SetBillingPolicyVersion(v int64) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetBillingPolicyVersion(v)
+	})
+}
+
+// AddBillingPolicyVersion adds v to the "billing_policy_version" field.
+func (u *UsageLogUpsertBulk) AddBillingPolicyVersion(v int64) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddBillingPolicyVersion(v)
+	})
+}
+
+// UpdateBillingPolicyVersion sets the "billing_policy_version" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateBillingPolicyVersion() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateBillingPolicyVersion()
+	})
+}
+
+// SetBillingRateSnapshot sets the "billing_rate_snapshot" field.
+func (u *UsageLogUpsertBulk) SetBillingRateSnapshot(v map[string]interface{}) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetBillingRateSnapshot(v)
+	})
+}
+
+// UpdateBillingRateSnapshot sets the "billing_rate_snapshot" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateBillingRateSnapshot() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateBillingRateSnapshot()
+	})
+}
+
+// ClearBillingRateSnapshot clears the value of the "billing_rate_snapshot" field.
+func (u *UsageLogUpsertBulk) ClearBillingRateSnapshot() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearBillingRateSnapshot()
 	})
 }
 

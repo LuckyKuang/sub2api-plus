@@ -18,6 +18,11 @@ func (h *OpenAIGatewayHandler) CodexLocalGroupQuotaUsage(c *gin.Context) {
 		h.errorResponse(c, http.StatusNotFound, "not_found_error", "Codex local quota is not available for this group")
 		return
 	}
+	userRelease, admitted := h.admitControl(c)
+	if !admitted {
+		return
+	}
+	defer userRelease()
 	if h == nil || h.gatewayService == nil || !h.gatewayService.IsCodexLocalGroupQuotaEnabledForGroup(c.Request.Context(), apiKey.Group) {
 		h.errorResponse(c, http.StatusNotFound, "not_found_error", "Codex local quota is disabled")
 		return

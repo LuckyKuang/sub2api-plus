@@ -5,6 +5,9 @@ import { nextTick } from 'vue'
 import { setAdminSupportContext } from '@/utils/adminSupportContext'
 import type { ApiKey } from '@/types'
 import { keysAPI } from '@/api'
+import { getKeyQuotes } from '@/api/channels'
+import { group as catalogGroup, offer as catalogOffer, pricing as catalogPricing, rateQuote } from '@/components/channels/__tests__/catalogFixtures'
+import PlanModelCatalog from '@/components/payment/PlanModelCatalog.vue'
 import KeysView from '../KeysView.vue'
 import en from '@/i18n/locales/en'
 import zh from '@/i18n/locales/zh'
@@ -83,6 +86,8 @@ vi.mock('@/api', () => ({
     getUserGroupRates,
   },
 }))
+
+vi.mock('@/api/channels', () => ({ getKeyQuotes: vi.fn(async () => ({ groups: [], user_rate_status: 'loaded' })) }))
 
 vi.mock('@/stores/app', () => ({
   useAppStore: () => ({
@@ -306,6 +311,7 @@ describe('user KeysView column settings', () => {
     getDashboardApiKeysUsage.mockReset()
     getAvailableGroups.mockReset()
     getUserGroupRates.mockReset()
+    vi.mocked(getKeyQuotes).mockReset().mockResolvedValue({ groups: [], user_rate_status: 'loaded' })
     showError.mockReset()
     showSuccess.mockReset()
     copyToClipboard.mockReset()
@@ -660,6 +666,92 @@ describe('user KeysView column settings', () => {
 
     beforeEach(() => {
       getAvailableGroups.mockResolvedValue(availableGroups)
+    })
+
+    it('shows supplier and model quote details for the selected mixed group and on editing a key', async () => {
+      const quoted = catalogGroup(10, [catalogOffer('public-model')], { platform: 'composite', rate_summary: {
+        status: 'available', policy_version: 2, as_of: 'now', entries: [
+          { platform: 'openai', billing_unit: 'token', default_quote: rateQuote(1.2), rate_min: 1.2, rate_max: 1.8, model_count: 1, has_model_exceptions: true },
+          { platform: 'stepfun', billing_unit: 'token', default_quote: rateQuote(0), rate_min: 0, rate_max: 0, model_count: 1, has_model_exceptions: false }
+        ]
+      } })
+      vi.mocked(getKeyQuotes).mockResolvedValue({ groups: [quoted], user_rate_status: 'loaded' })
+      const wrapper = await openCreate()
+      await chooseProvider(wrapper, 'other')
+      groupSelect(wrapper).vm.$emit('update:modelValue', 10)
+      await nextTick()
+      expect(wrapper.get('[data-rate-entry="openai:token"]').text()).toContain('×1.2')
+      expect(wrapper.get('[data-rate-entry="openai:token"]').text()).toContain('×1.2–×1.8')
+      expect(wrapper.get('[data-rate-entry="stepfun:token"]').text()).toContain('×0')
+      await wrapper.get('[data-test="close-dialog"]').trigger('click')
+      listKeys.mockResolvedValue({ items: [{ ...createApiKey(), group_id: 10, group: quoted }], total: 1, page: 1, page_size: 20, pages: 1 })
+      await wrapper.get('button[title="Refresh"]').trigger('click')
+      await flushPromises()
+      await getButtonByText(wrapper, 'common.edit').trigger('click')
+      expect(wrapper.get('[data-rate-entry="openai:token"]').text()).toContain('×1.2–×1.8')
+      wrapper.unmount()
+    })
+
+    it('expands same-named supplier models with independent rates and charges when creating and editing a mixed-group key', async () => {
+      const asOf = '2026-10-26T08:00:00Z'
+      const requestPrice = { ...catalogPricing(), billing_mode: 'per_request' as const, input_price: null, output_price: null, per_request_price: 2 }
+      const quoted = catalogGroup(10, [
+        catalogOffer('model001', { offer_key: 'openai-model001', platform: 'openai', billing_mode: 'per_request', billing_unit: 'request', pricing: requestPrice,
+          rate_quote: rateQuote(6, { platform: 'openai', model: 'model001', billing_unit: 'request', base_multiplier: 1, platform_multiplier: 2, model_multiplier: 3, policy_multiplier: 6, as_of: asOf }) }),
+        catalogOffer('model001', { offer_key: 'stepfun-model001', platform: 'stepfun', billing_mode: 'per_request', billing_unit: 'request', pricing: requestPrice,
+          rate_quote: rateQuote(2, { platform: 'stepfun', model: 'model001', billing_unit: 'request', base_multiplier: 1, platform_multiplier: 0.5, model_multiplier: 4, policy_multiplier: 2, as_of: asOf }) })
+      ], { platform: 'composite', rate_summary: {
+        status: 'available', policy_version: 2, as_of: asOf, entries: [
+          { platform: 'openai', billing_unit: 'request', default_quote: rateQuote(2), rate_min: 6, rate_max: 6, model_count: 1, has_model_exceptions: true },
+          { platform: 'stepfun', billing_unit: 'request', default_quote: rateQuote(0.5), rate_min: 2, rate_max: 2, model_count: 1, has_model_exceptions: true }
+        ]
+      } })
+      vi.mocked(getKeyQuotes).mockResolvedValue({ groups: [quoted], user_rate_status: 'loaded' })
+      const wrapper = await openCreate()
+      const expectIndependentModelQuotes = async () => {
+        const catalog = wrapper.getComponent(PlanModelCatalog)
+        await catalog.get('summary').trigger('click')
+        const rows = catalog.findAll('details > details')
+        expect(rows).toHaveLength(2)
+        expect(rows[0]!.get('summary').text()).toContain('OpenAI')
+        expect(rows[0]!.get('summary').text()).toContain('model001')
+        expect(rows[0]!.get('summary').text()).toContain('×6')
+        expect(rows[1]!.get('summary').text()).toContain('StepFun')
+        expect(rows[1]!.get('summary').text()).toContain('model001')
+        expect(rows[1]!.get('summary').text()).toContain('×2')
+        await rows[0]!.get('summary').trigger('click')
+        expect(rows[0]!.get('table').findAll('tbody td').map(cell => cell.text())).toEqual(['$12'])
+        expect(rows[1]!.find('table').exists()).toBe(false)
+        await rows[1]!.get('summary').trigger('click')
+        expect(rows[1]!.get('table').findAll('tbody td').map(cell => cell.text())).toEqual(['$4'])
+        expect(rows[0]!.get('table').findAll('tbody td').map(cell => cell.text())).toEqual(['$12'])
+      }
+      await chooseProvider(wrapper, 'other')
+      groupSelect(wrapper).vm.$emit('update:modelValue', 10)
+      await nextTick()
+      await expectIndependentModelQuotes()
+      await wrapper.get('[data-test="close-dialog"]').trigger('click')
+      listKeys.mockResolvedValue({ items: [{ ...createApiKey(), group_id: 10, group: quoted }], total: 1, page: 1, page_size: 20, pages: 1 })
+      await wrapper.get('button[title="Refresh"]').trigger('click')
+      await flushPromises()
+      await getButtonByText(wrapper, 'common.edit').trigger('click')
+      await expectIndependentModelQuotes()
+      expect(keysAPI.create).not.toHaveBeenCalled()
+      expect(updateKey).not.toHaveBeenCalled()
+      wrapper.unmount()
+    })
+
+    it('renders unavailable and retries the authorized quote after catalog failure', async () => {
+      vi.mocked(getKeyQuotes).mockRejectedValueOnce(new Error('catalog unavailable'))
+      const wrapper = await openCreate()
+      await chooseProvider(wrapper, 'other')
+      groupSelect(wrapper).vm.$emit('update:modelValue', 10)
+      await nextTick()
+      expect(wrapper.text()).toContain('billingRates.unknown')
+      await getButtonByText(wrapper, 'billingRates.retry').trigger('click')
+      await flushPromises()
+      expect(getKeyQuotes).toHaveBeenCalledTimes(2)
+      wrapper.unmount()
     })
 
     it('classifies all configured platforms and retains the complete table filter', async () => {

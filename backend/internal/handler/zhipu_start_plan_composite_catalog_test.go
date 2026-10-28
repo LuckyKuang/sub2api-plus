@@ -65,12 +65,14 @@ func publicCatalogIDsForStartCompositeTest(t *testing.T, h *GatewayHandler, grou
 	c.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
 	c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{Group: group})
 	if endpoint == "models" {
+		prepareGatewayMetadataTest(h, c)
 		h.Models(c)
 		var result gatewayModelsResponseForTest
 		require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &result))
 		require.Equal(t, http.StatusOK, recorder.Code)
 		return modelIDsForTest(result.Data)
 	}
+	prepareGatewayMetadataTest(h, c)
 	h.CodexModels(c)
 	var result codexModelsResponseForTest
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &result))

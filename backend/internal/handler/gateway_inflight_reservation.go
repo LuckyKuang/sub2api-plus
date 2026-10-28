@@ -2,7 +2,10 @@ package handler
 
 import (
 	"context"
+	"strings"
+	"sync"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/claude"
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
@@ -14,8 +17,19 @@ type inflightReservationEstimator interface {
 }
 
 // requestMaxOutputTokens 从请求体中提取输出 token 上限（兼容 Anthropic / OpenAI Chat / Responses / Gemini）。
-func requestMaxOutputTokens(body []byte) int {
-	for _, path := range []string{"max_tokens", "max_completion_tokens", "max_output_tokens", "generationConfig.maxOutputTokens", "generation_config.max_output_tokens"} {
+func requestMaxOutputTokens(protocol string, body []byte) int {
+	var paths []string
+	switch protocol {
+	case service.ContentModerationProtocolAnthropicMessages:
+		paths = []string{"max_tokens"}
+	case service.ContentModerationProtocolOpenAIChat:
+		paths = []string{"max_completion_tokens", "max_tokens"}
+	case service.ContentModerationProtocolOpenAIResponses:
+		paths = []string{"max_output_tokens"}
+	case service.ContentModerationProtocolGemini:
+		paths = []string{"generationConfig.maxOutputTokens", "generation_config.max_output_tokens"}
+	}
+	for _, path := range paths {
 		if v := gjson.GetBytes(body, path); v.Exists() && v.Type == gjson.Number && v.Int() > 0 {
 			return int(v.Int())
 		}
@@ -24,13 +38,14 @@ func requestMaxOutputTokens(body []byte) int {
 }
 
 // tokenInflightEstimate 文本类请求的估算输入。
-func tokenInflightEstimate(model string, body []byte) service.InflightEstimateRequest {
-	return service.InflightEstimateRequest{
+func tokenInflightEstimate(protocol, model string, body []byte) service.InflightEstimateRequest {
+	return (service.InflightEstimateRequest{
+		Protocol:  protocol,
 		Model:     model,
 		BodyBytes: len(body),
-		MaxTokens: requestMaxOutputTokens(body),
+		MaxTokens: requestMaxOutputTokens(protocol, body),
 		Kind:      service.InflightEstimateToken,
-	}
+	}).WithRequestPricingMetadata(body)
 }
 
 func inflightNoop() {}
@@ -53,6 +68,15 @@ func reserveInflightBalance(
 	if c == nil || c.Request == nil {
 		return inflightNoop, nil
 	}
+	req.RequireCompact = strings.HasSuffix(strings.TrimRight(c.Request.URL.Path, "/"), "/responses/compact")
+	if req.Protocol == service.ContentModerationProtocolAnthropicMessages {
+		for _, token := range strings.Split(c.GetHeader("anthropic-beta"), ",") {
+			if strings.TrimSpace(token) == claude.BetaFastMode {
+				req.AnthropicFast = true
+				break
+			}
+		}
+	}
 	ctx, done, err := reserveInflightBalanceCtx(c.Request.Context(), billing, estimator, apiKey, subscription, req)
 	if err != nil {
 		return inflightNoop, err
@@ -71,6 +95,10 @@ func reserveInflightBalanceCtx(
 	subscription *service.UserSubscription,
 	req service.InflightEstimateRequest,
 ) (context.Context, func(), error) {
+	// This is a new admission owner, including fallback-group admissions and
+	// later WS turns. Inactive/free admissions cannot inherit a closed plan or
+	// a released handle from their parent request context.
+	ctx = context.WithValue(service.WithoutInflightReservation(ctx), inflightAccountReservationPlanKey{}, (*inflightAccountReservationPlan)(nil))
 	if billing == nil || estimator == nil || apiKey == nil || apiKey.User == nil || !billing.InflightReservationEnabled() {
 		return ctx, inflightNoop, nil
 	}
@@ -81,17 +109,102 @@ func reserveInflightBalanceCtx(
 	if !priced && billing.InflightReservationFailClosedOnUnpriced() {
 		return ctx, inflightNoop, service.ErrInsufficientBalance
 	}
-	if estimate <= 0 {
-		return ctx, inflightNoop, nil
+	plan := &inflightAccountReservationPlan{billing: billing, estimator: estimator, key: apiKey, subscription: subscription, request: req}
+	if estimate > 0 {
+		res, err := billing.ReserveInflight(ctx, apiKey.User, apiKey.Group, subscription, estimate)
+		if err != nil {
+			return ctx, inflightNoop, err
+		}
+		plan.reservation = res
 	}
-	res, err := billing.ReserveInflight(ctx, apiKey.User, apiKey.Group, subscription, estimate)
-	if err != nil {
-		return ctx, inflightNoop, err
+	ctx = context.WithValue(ctx, inflightAccountReservationPlanKey{}, plan)
+	ctx = service.WithInflightReservation(ctx, plan.reservation)
+	return ctx, plan.done, nil
+}
+
+// Keep metadata even when the preliminary quote was free or unavailable: a
+// selected account may introduce a paid concrete model. No request body is kept.
+type inflightAccountReservationPlanKey struct{}
+
+type inflightAccountReservationPlan struct {
+	mu           sync.Mutex
+	billing      *service.BillingCacheService
+	estimator    inflightReservationEstimator
+	key          *service.APIKey
+	subscription *service.UserSubscription
+	request      service.InflightEstimateRequest
+	reservation  *service.InflightReservation
+	closed       bool
+}
+
+func (p *inflightAccountReservationPlan) done() {
+	p.mu.Lock()
+	if p.closed {
+		p.mu.Unlock()
+		return
 	}
-	if res == nil {
-		return ctx, inflightNoop, nil
+	p.closed = true
+	res := p.reservation
+	p.mu.Unlock()
+	res.HandlerDone()
+}
+
+type inflightAccountReservationEstimator interface {
+	EstimateInflightReservationForAccount(context.Context, *service.APIKey, service.InflightEstimateRequest, *service.Account) (float64, bool)
+}
+
+// Reconcile before binding or sending. Increasing the existing owner atomically
+// avoids both a release/reserve gap and counting this request twice.
+func ensureAccountInflightReservationCtx(ctx context.Context, account *service.Account) (context.Context, error) {
+	plan, _ := ctx.Value(inflightAccountReservationPlanKey{}).(*inflightAccountReservationPlan)
+	if plan == nil || account == nil {
+		return ctx, nil
 	}
-	return service.WithInflightReservation(ctx, res), res.HandlerDone, nil
+	estimator, ok := plan.estimator.(inflightAccountReservationEstimator)
+	if !ok {
+		return ctx, nil
+	}
+	plan.mu.Lock()
+	defer plan.mu.Unlock()
+	if plan.closed {
+		return ctx, service.ErrInsufficientBalance
+	}
+	estimate, priced := estimator.EstimateInflightReservationForAccount(ctx, plan.key, plan.request, account)
+	if !priced {
+		if plan.billing.InflightReservationFailClosedOnUnpriced() {
+			return ctx, service.ErrInsufficientBalance
+		}
+		// Unknown selected pricing retains fail-open, but an existing owner
+		// must still be alive before another upstream attempt can use it.
+		if plan.reservation != nil {
+			estimate = plan.reservation.Amount()
+		} else {
+			return ctx, nil
+		}
+	}
+	if plan.reservation != nil {
+		if err := plan.billing.IncreaseInflightReservation(ctx, plan.reservation, estimate); err != nil {
+			return ctx, err
+		}
+	} else if estimate > 0 {
+		res, err := plan.billing.ReserveInflight(ctx, plan.key.User, plan.key.Group, plan.subscription, estimate)
+		if err != nil {
+			return ctx, err
+		}
+		plan.reservation = res
+	}
+	return service.WithInflightReservation(ctx, plan.reservation), nil
+}
+
+func ensureAccountInflightReservation(c *gin.Context, account *service.Account) error {
+	if c == nil || c.Request == nil {
+		return nil
+	}
+	ctx, err := ensureAccountInflightReservationCtx(c.Request.Context(), account)
+	if err == nil {
+		c.Request = c.Request.WithContext(ctx)
+	}
+	return err
 }
 
 // grokMediaInflightEstimate 媒体生成请求的估算输入；状态/内容查询返回空模型（不预留：

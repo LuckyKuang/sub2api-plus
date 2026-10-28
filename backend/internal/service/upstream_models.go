@@ -56,9 +56,11 @@ type UpstreamModelMetadataSnapshot struct {
 }
 
 type UpstreamModelCatalog struct {
-	Models   []string                         `json:"models"`
-	Metadata map[string]UpstreamModelMetadata `json:"metadata,omitempty"`
-	Warnings []UpstreamModelSyncWarning       `json:"warnings,omitempty"`
+	Models               []string                         `json:"models"`
+	Metadata             map[string]UpstreamModelMetadata `json:"metadata,omitempty"`
+	Warnings             []UpstreamModelSyncWarning       `json:"warnings,omitempty"`
+	DiscoverySource      string                           `json:"discovery_source,omitempty"`
+	GrokModelDiagnostics *GrokModelDiagnostics            `json:"grok_model_diagnostics,omitempty"`
 }
 
 type UpstreamModelSyncWarning struct {
@@ -250,12 +252,27 @@ func (s *AccountTestService) SyncUpstreamModelCatalog(ctx context.Context, accou
 	if isZhipuStartPlan(account) {
 		return s.syncZhipuStartPlanCatalog(ctx, account)
 	}
-	models, body, observedOwner, err := s.fetchUpstreamModelList(ctx, account)
+	started := time.Now().UTC()
+	models, body, observedOwner, observedRequest, err := s.fetchUpstreamModelListWithRequest(ctx, account)
+	var grokObservation *GrokCatalogObservation
+	if account.IsGrok() {
+		observation := buildGrokCatalogObservation(observedOwner, observedRequest, started, models, err)
+		grokObservation = &observation
+	}
 	liveListAvailable := err == nil
 	if err != nil {
 		configuredModels := configuredUpstreamModelsForCapabilitySync(account)
 		if !upstreamModelListEndpointUnsupported(err) || len(configuredModels) == 0 {
+			s.keepGrokCatalogFailure(ctx, account, grokObservation)
 			return nil, err
+		}
+		if grokObservation != nil {
+			grokObservation.Attempt.Status = grokCatalogStatusConfiguredFallback
+			grokObservation.Attempt.ErrorCode = "http_error"
+			grokObservation.Models = nil
+		}
+		if saveErr := s.saveGrokCatalogObservation(ctx, account, grokObservation); saveErr != nil {
+			return nil, newUpstreamModelSyncInternalError("Failed to save upstream model catalog", saveErr)
 		}
 		models = configuredModels
 		body = nil
@@ -265,8 +282,24 @@ func (s *AccountTestService) SyncUpstreamModelCatalog(ctx context.Context, accou
 			"status_code", upstreamModelSyncStatusCode(err),
 			"model_count", len(models),
 		)
+	} else if saveErr := s.saveGrokCatalogObservation(ctx, account, grokObservation); saveErr != nil {
+		return nil, newUpstreamModelSyncInternalError("Failed to save upstream model catalog", saveErr)
+	}
+	if grokObservation != nil && grokCatalogOwnerMatches(originalAccount, grokObservation.owner) {
+		rememberGrokObservedSnapshot(originalAccount, parseGrokObservedModels(account.Extra))
 	}
 	catalog := &UpstreamModelCatalog{Models: models, Metadata: make(map[string]UpstreamModelMetadata)}
+	if account != nil && account.IsGrok() {
+		if grokObservation != nil && grokObservation.Attempt.Status == grokCatalogStatusConfiguredFallback {
+			catalog.DiscoverySource = "configured_fallback"
+			catalog.Warnings = append(catalog.Warnings, UpstreamModelSyncWarning{
+				Code:    "grok_model_catalog_configured_fallback",
+				Message: "The upstream model list was unavailable; configured IDs were used only for capability enrichment.",
+			})
+		} else if liveListAvailable {
+			catalog.DiscoverySource = "upstream"
+		}
+	}
 	if len(body) > 0 {
 		_, directMetadata, parseErr := extractUpstreamModelCatalog(body, account != nil && account.IsGrok())
 		if parseErr == nil {
@@ -802,49 +835,57 @@ func normalizeModelRegistryBaseURL(raw string) string {
 }
 
 func (s *AccountTestService) fetchUpstreamModelList(ctx context.Context, account *Account) ([]string, []byte, *Account, error) {
+	models, body, owner, _, err := s.fetchUpstreamModelListWithRequest(ctx, account)
+	return models, body, owner, err
+}
+
+func (s *AccountTestService) fetchUpstreamModelListWithRequest(ctx context.Context, account *Account) ([]string, []byte, *Account, *http.Request, error) {
+	var observedRequest *http.Request
 	if s == nil {
-		return nil, nil, nil, newUpstreamModelSyncConfigError("Account test service is not configured", nil)
+		return nil, nil, nil, observedRequest, newUpstreamModelSyncConfigError("Account test service is not configured", nil)
 	}
 	if account == nil {
-		return nil, nil, nil, newUpstreamModelSyncConfigError("Account is required", nil)
+		return nil, nil, nil, observedRequest, newUpstreamModelSyncConfigError("Account is required", nil)
 	}
 	if account.IsShadow() {
 		var err error
 		account, err = resolveCredentialAccount(ctx, s.accountRepo, account)
 		if err != nil {
-			return nil, nil, nil, newUpstreamModelSyncConfigError("Model discovery credential owner is unavailable", err)
+			return nil, nil, nil, observedRequest, newUpstreamModelSyncConfigError("Model discovery credential owner is unavailable", err)
 		}
 	}
 	account, err := snapshotCNControlAccount(account)
 	if err != nil {
-		return nil, nil, nil, newUpstreamModelSyncConfigError("Model discovery credential owner is invalid", err)
+		return nil, nil, nil, observedRequest, newUpstreamModelSyncConfigError("Model discovery credential owner is invalid", err)
 	}
 	if _, err := account.StrictProxyURL(); err != nil {
-		return nil, nil, nil, newUpstreamModelSyncConfigError("Model discovery configured proxy is invalid", err)
+		return nil, nil, account, observedRequest, newUpstreamModelSyncConfigError("Model discovery configured proxy is invalid", err)
 	}
 
 	if account.Platform == PlatformAntigravity && account.Type != AccountTypeAPIKey {
 		models, body, err := s.fetchAntigravityOAuthUpstreamModels(ctx, account)
-		return models, body, account, err
+		return models, body, account, observedRequest, err
 	}
 
 	if s.httpUpstream == nil {
-		return nil, nil, nil, newUpstreamModelSyncConfigError("Upstream HTTP client is not configured", nil)
+		return nil, nil, account, observedRequest, newUpstreamModelSyncConfigError("Upstream HTTP client is not configured", nil)
 	}
 	if isZhipuStartPlan(account) {
-		return s.fetchZhipuStartPlanModels(ctx, account)
+		models, body, owner, err := s.fetchZhipuStartPlanModels(ctx, account)
+		return models, body, owner, nil, err
 	}
 
 	if account.IsGemini() && account.IsVertexServiceAccount() {
 		models, err := s.fetchVertexGeminiUpstreamModels(ctx, account)
-		return models, nil, account, err
+		return models, nil, account, observedRequest, err
 	}
 
 	req, err := s.buildUpstreamModelsRequest(ctx, account)
 	if err != nil {
-		return nil, nil, account, err
+		return nil, nil, account, observedRequest, err
 	}
 
+	observedRequest = req
 	body, err := s.readUpstreamModelsResponse(req, account)
 	observedOwner := cnControlRequestOwner(req.Context(), account)
 	if transmittedOwner, ownerErr := requestCredentialAccount(req.Context(), account); ownerErr == nil && transmittedOwner != nil {
@@ -854,11 +895,11 @@ func (s *AccountTestService) fetchUpstreamModelList(ctx context.Context, account
 		observedOwner = projectOwner
 	}
 	if err != nil {
-		return nil, nil, observedOwner, err
+		return nil, nil, observedOwner, observedRequest, err
 	}
 	body, err = filterDeepSeekNativeModelList(req.Context(), observedOwner, body)
 	if err != nil {
-		return nil, nil, observedOwner, newUpstreamModelSyncUpstreamError("Upstream model list response was not valid JSON", err)
+		return nil, nil, observedOwner, observedRequest, newUpstreamModelSyncUpstreamError("Upstream model list response was not valid JSON", err)
 	}
 
 	extractModels := extractUpstreamModelIDs
@@ -870,25 +911,28 @@ func (s *AccountTestService) fetchUpstreamModelList(ctx context.Context, account
 	}
 	credentialAccount, ownerErr := requestCredentialAccount(req.Context(), account)
 	if ownerErr != nil {
-		return nil, nil, observedOwner, ownerErr
+		return nil, nil, observedOwner, observedRequest, ownerErr
 	}
 	if usesDeepSeekHarnessModels(credentialAccount) {
 		identity, _ := outboundidentity.FromContext(req.Context())
 		filtered, _, filterErr := extractDeepSeekHarnessCatalog(body, identity.Version)
 		if filterErr != nil {
-			return nil, nil, observedOwner, filterErr
+			return nil, nil, observedOwner, observedRequest, filterErr
 		}
 		body = filtered
 	}
 	models, err := extractModels(body)
 	if err != nil {
-		return nil, nil, observedOwner, newUpstreamModelSyncUpstreamError("Upstream model list response was not valid JSON", err)
+		if errors.Is(err, errGrokCatalogEmpty) {
+			return nil, nil, observedOwner, observedRequest, newUpstreamModelSyncUpstreamError("Upstream returned no supported models", err)
+		}
+		return nil, nil, observedOwner, observedRequest, newUpstreamModelSyncUpstreamError("Upstream model list response was not valid JSON", err)
 	}
 	if len(models) == 0 {
-		return nil, nil, observedOwner, newUpstreamModelSyncUpstreamError("Upstream returned no supported models", nil)
+		return nil, nil, observedOwner, observedRequest, newUpstreamModelSyncUpstreamError("Upstream returned no supported models", nil)
 	}
 
-	return models, body, observedOwner, nil
+	return models, body, observedOwner, observedRequest, nil
 }
 
 // readUpstreamModelsResponse 发送模型列表请求并读取受限大小的响应体；非 2xx 返回带状态码的同步错误。
@@ -1718,7 +1762,7 @@ func extractUpstreamModelIDs(body []byte) ([]string, error) {
 }
 
 func extractGrokUpstreamModelIDs(body []byte) ([]string, error) {
-	return extractUpstreamModelIDsWithSelector(body, grokUpstreamModelEntryID)
+	return parseGrokCatalogModelIDs(body)
 }
 
 func extractUpstreamModelCatalog(body []byte, grok bool) ([]string, map[string]UpstreamModelMetadata, error) {
@@ -2058,4 +2102,26 @@ func dedupeAndSortModelIDs(models []string) []string {
 	}
 	sort.Strings(result)
 	return result
+}
+
+func (s *AccountTestService) saveGrokCatalogObservation(ctx context.Context, account *Account, observation *GrokCatalogObservation) error {
+	if s == nil || account == nil || !account.IsGrok() || account.ID <= 0 || observation == nil {
+		return nil
+	}
+	snap, err := PersistGrokCatalogObservation(ctx, s.accountRepo, observation.owner, *observation)
+	if err != nil {
+		return err
+	}
+	rememberGrokObservedSnapshot(account, snap)
+	return nil
+}
+
+func (s *AccountTestService) keepGrokCatalogFailure(ctx context.Context, account *Account, observation *GrokCatalogObservation) {
+	if err := s.saveGrokCatalogObservation(ctx, account, observation); err != nil {
+		slog.Warn("grok model catalog observation was not saved",
+			"account_id", upstreamModelSyncAccountID(account),
+			"platform", upstreamModelSyncPlatform(account),
+			"error", err,
+		)
+	}
 }

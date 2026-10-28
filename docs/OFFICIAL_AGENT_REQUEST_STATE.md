@@ -90,6 +90,17 @@ grant's routing capability.
 
 ## Cache and opaque state
 
+Codex `auth.json` workspace selection may retain the original ID/refresh tokens
+while the new access token and `tokens.account_id` select another workspace.
+Import requires matching selected-account and known-user claims before replacing
+the stale ID token's workspace metadata. Account-owned refresh retains the
+captured selected account, rejects conflicting returned principals before any
+enrichment, and derives replacement plan/organization/government metadata from
+the same selected grant. Government routing can be cleared explicitly; an old
+workspace's organization must not determine the new workspace's auxiliary
+requests. Existing refresh CAS and cache invalidation rules continue to apply.
+See [Codex protocol compatibility](protocols/CODEX_CLIENT_PROFILES.md#october-28-protocol-compatibility).
+
 Native Codex Responses/WS preserve an absent `prompt_cache_key`. A caller's
 custom cache key and session are independently scoped; distinct native threads
 are not collapsed merely because they share a session. Ordinary routing

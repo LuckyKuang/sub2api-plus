@@ -11,8 +11,12 @@ import (
 	"strings"
 	"time"
 
+	"entgo.io/ent/dialect"
+
 	dbent "github.com/LuckyKuang/sub2api-plus/ent"
+	"github.com/LuckyKuang/sub2api-plus/ent/group"
 	"github.com/LuckyKuang/sub2api-plus/ent/paymentorder"
+	"github.com/LuckyKuang/sub2api-plus/ent/subscriptionplan"
 	"github.com/LuckyKuang/sub2api-plus/internal/payment"
 	"github.com/LuckyKuang/sub2api-plus/internal/payment/provider"
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
@@ -153,6 +157,9 @@ func (s *PaymentService) validateSubOrder(ctx context.Context, req CreateOrderRe
 	if err != nil || group.Status != payment.EntityStatusActive {
 		return nil, infraerrors.NotFound("GROUP_NOT_FOUND", "subscription group is no longer available")
 	}
+	if req.ExpectedBillingPolicyVersion != nil && *req.ExpectedBillingPolicyVersion != group.BillingPolicyVersion {
+		return nil, infraerrors.Conflict("BILLING_POLICY_CHANGED", "subscription billing rules changed; refresh and confirm the current quote")
+	}
 	if !group.IsSubscriptionType() {
 		return nil, infraerrors.BadRequest("GROUP_TYPE_MISMATCH", "group is not a subscription type")
 	}
@@ -231,6 +238,55 @@ func (s *PaymentService) createOrderInTx(ctx context.Context, req CreateOrderReq
 		b.SetProviderSnapshot(providerSnapshot)
 	}
 	if plan != nil {
+		planQuery := tx.SubscriptionPlan.Query().Where(subscriptionplan.IDEQ(plan.ID))
+		groupQuery := tx.Group.Query().Where(group.IDEQ(plan.GroupID))
+		// Keep the confirmed entitlement and its rule evidence coherent with
+		// concurrent admin edits until this order commits. SQLite unit fixtures
+		// serialize writers without PostgreSQL's explicit row-lock syntax.
+		if tx.Client().Driver().Dialect() == dialect.Postgres {
+			planQuery.ForShare()
+			groupQuery.ForShare()
+		}
+		currentPlan, err := planQuery.Only(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("load subscription plan: %w", err)
+		}
+		if !currentPlan.ForSale || currentPlan.GroupID != plan.GroupID || currentPlan.Price != plan.Price || currentPlan.Currency != plan.Currency || currentPlan.ValidityDays != plan.ValidityDays || currentPlan.ValidityUnit != plan.ValidityUnit {
+			return nil, infraerrors.Conflict("SUBSCRIPTION_PLAN_CHANGED", "subscription plan changed; refresh and confirm the current offer")
+		}
+		plan = currentPlan
+		currentGroup, err := groupQuery.Only(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("load subscription pricing policy: %w", err)
+		}
+		if currentGroup.Status != StatusActive || currentGroup.SubscriptionType != SubscriptionTypeSubscription {
+			return nil, infraerrors.Conflict("BILLING_POLICY_CHANGED", "subscription group changed; refresh the available plans")
+		}
+		if req.ExpectedBillingPolicyVersion != nil && *req.ExpectedBillingPolicyVersion != currentGroup.BillingPolicyVersion {
+			return nil, infraerrors.Conflict("BILLING_POLICY_CHANGED", "subscription billing rules changed; refresh and confirm the current quote")
+		}
+		summary := map[string]any{
+			"policy_version":        currentGroup.BillingPolicyVersion,
+			"as_of":                 time.Now().UTC().Format(time.RFC3339Nano),
+			"consumption_policy":    "current_request_prices",
+			"rate_calculation":      BillingRateCalculationProduct,
+			"peak_scope":            BillingPeakScopeAllMeters,
+			"group_rate_multiplier": currentGroup.RateMultiplier,
+			"billing_rate_policy":   currentGroup.BillingRatePolicy.Clone(),
+			"personal_rate_status":  "not_recorded",
+		}
+		if s.userGroupRateRepo != nil {
+			personal, err := s.userGroupRateRepo.GetByUserAndGroup(ctx, req.UserID, currentGroup.ID)
+			if err != nil {
+				return nil, fmt.Errorf("load subscription personal pricing: %w", err)
+			}
+			summary["personal_rate_status"] = "inherited"
+			if personal != nil {
+				summary["personal_rate_status"] = "overridden"
+				summary["personal_rate_multiplier"] = *personal
+			}
+		}
+		b.SetPricingPolicyVersion(currentGroup.BillingPolicyVersion).SetPricingSummary(summary)
 		b.SetPlanName(plan.Name).SetPlanID(plan.ID).SetSubscriptionGroupID(plan.GroupID).SetSubscriptionDays(psComputeValidityDays(plan.ValidityDays, plan.ValidityUnit))
 	}
 	order, err := b.Save(ctx)

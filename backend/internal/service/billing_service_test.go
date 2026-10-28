@@ -2155,10 +2155,14 @@ func TestNewModelPricingCatalogFallbackAndContext(t *testing.T) {
 		"catalog": NewBillingService(&config.Config{}, catalog),
 	}
 	for source, svc := range sources {
+		// OpenAI's API pricing and model page independently establish Terra's
+		// own card: https://developers.openai.com/api/docs/models/gpt-6.1-terra
 		for _, tc := range []struct {
 			model                      string
 			input, output, write, read float64
 		}{
+			{"gpt-6.1-terra", 1e-6, 5e-6, 1.25e-6, 0.05e-6},
+			{"openai/gpt-6.1-terra-max", 1e-6, 5e-6, 1.25e-6, 0.05e-6},
 			{"gpt-6.1-sol", 2e-6, 10e-6, 2.5e-6, 0.1e-6},
 			{"gpt-6-sol", 2e-6, 10e-6, 2.5e-6, 0.2e-6},
 			{"gpt-6-luna", 0.1e-6, 0.5e-6, 0.125e-6, 0.01e-6},
@@ -2259,9 +2263,21 @@ func TestNewModelPricingCatalogFallbackAndContext(t *testing.T) {
 	}
 }
 
+func TestTerraExplicitOperatorPriceRemainsUsable(t *testing.T) {
+	// These are operator-selected fixture prices, not an assertion about OpenAI.
+	svc := NewBillingService(&config.Config{}, &PricingService{pricingData: map[string]*LiteLLMModelPricing{
+		"gpt-6.1-terra": {InputCostPerToken: 2e-6, OutputCostPerToken: 3e-6},
+	}})
+	for _, model := range []string{"gpt-6.1-terra", "openai/gpt-6.1-terra-max"} {
+		cost, err := svc.CalculateCost(model, UsageTokens{InputTokens: 1000, OutputTokens: 200}, 1)
+		require.NoError(t, err)
+		require.InDelta(t, 0.0026, cost.TotalCost, 1e-12)
+	}
+}
+
 func TestNewModelPricingChannelOverridesAndFamilyIsolation(t *testing.T) {
 	svc := newTestBillingService()
-	for _, model := range []string{"gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna", "claude-opus-5-5"} {
+	for _, model := range []string{"gpt-6.1-terra", "gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna", "claude-opus-5-5"} {
 		t.Run(model, func(t *testing.T) {
 			zero := 0.0
 			prices, err := svc.GetModelPricingWithChannel(model, &ChannelModelPricing{InputPrice: &zero, OutputPrice: &zero, CacheWritePrice: &zero, CacheReadPrice: &zero})
@@ -2299,9 +2315,9 @@ func TestNewModelPricingExplicitZeroCacheWrite(t *testing.T) {
 func TestNewModelPricingAliasesRetainExplicitOverrides(t *testing.T) {
 	zero := &LiteLLMModelPricing{}
 	svc := &PricingService{pricingData: map[string]*LiteLLMModelPricing{
-		"gpt-6.1-sol": zero, "gpt-6-sol": zero, "gpt-6-luna": zero, "claude-opus-5-5": zero,
+		"gpt-6.1-terra": zero, "gpt-6.1-sol": zero, "gpt-6-sol": zero, "gpt-6-luna": zero, "claude-opus-5-5": zero,
 	}}
-	for _, model := range []string{"gpt-6.1-sol-max", "gpt-6-sol-max", "openai/gpt-6-luna-openai-compact", "claude-opus-5-5-thinking"} {
+	for _, model := range []string{"gpt-6.1-terra-max", "gpt-6.1-sol-max", "gpt-6-sol-max", "openai/gpt-6-luna-openai-compact", "claude-opus-5-5-thinking"} {
 		require.Same(t, zero, svc.GetModelPricing(model))
 	}
 }
@@ -2359,7 +2375,7 @@ func TestGPT61SolExplicitZeroCacheWriteAcrossTiers(t *testing.T) {
 }
 
 func TestGPT6CacheWriteMissingAndNullStillDerivePremium(t *testing.T) {
-	for _, model := range []string{"gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna"} {
+	for _, model := range []string{"gpt-6.1-terra", "gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna"} {
 		for _, field := range []string{"", `,"cache_creation_input_token_cost":null`} {
 			pricing := &PricingService{}
 			var err error

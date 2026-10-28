@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { catalogModels, catalogRange, catalogMoney, defaultCatalogFilters, effectiveRate, normalizeCatalogFilters, rateSource, visibleModels } from '../catalog'
-import { group, offer, pricing } from './catalogFixtures'
+import { group, offer, pricing, rateQuote } from './catalogFixtures'
 
 describe('model-centric available catalog', () => {
   it('merges case-insensitive model IDs within a platform and retains all authorized quotes', () => {
@@ -11,18 +11,17 @@ describe('model-centric available catalog', () => {
     expect(openai.key).not.toBe(models.find(m => m.platform === 'anthropic')!.key)
     expect(catalogModels([group(2, [offer('same')])])[0]!.key).toBe(openai.key)
   })
-  it('ranges effective prices independently, preserving zero personal rates and media precedence', () => {
-    const models = catalogModels([group(1, [offer()], { rate_multiplier: 2 }), group(2, [offer()], { rate_multiplier: 9, user_rate_multiplier: 0 })])
+  it('uses server-resolved rates exactly once, preserving zero and each quote source', () => {
+    const models = catalogModels([group(1, [offer('model', { rate_quote: rateQuote(2) })], { rate_multiplier: 99 }), group(2, [offer('model', { rate_quote: rateQuote(0, { base_source: 'personal' }) })], { rate_multiplier: 9 })])
     expect(models[0]!.prices[0]).toMatchObject({ unit: 'token', input: { min: 0, max: 4e-6 }, output: { min: 0, max: 2e-5 }, incomplete: false })
     expect(catalogRange(models[0]!.prices[0]!.input, 'token')).toBe('$0–$4')
-    const g = group(1, [], { user_rate_multiplier: 0, image_rate_independent: true, image_rate_multiplier: 0.5, video_rate_independent: true, video_rate_multiplier: 0.7 })
-    expect(effectiveRate(g, offer())).toBe(0)
-    expect(rateSource(g, offer())).toBe('personal')
-    expect(effectiveRate(g, offer('image', { billing_mode: 'image' }))).toBe(0.5)
-    expect(effectiveRate(g, offer('video', { billing_mode: 'video' }))).toBe(0.7)
-    expect(rateSource(g, offer('image', { billing_mode: 'image' }))).toBe('media')
-    expect(effectiveRate(group(1, [], { user_rate_multiplier: -1 }), offer())).toBe(0)
-    expect(effectiveRate(group(1, [], { image_rate_independent: true, image_rate_multiplier: -1 }), offer('image', { billing_mode: 'image' }))).toBe(0)
+    const g = group(1, [], { user_rate_multiplier: 99, image_rate_independent: true, image_rate_multiplier: 99 })
+    expect(effectiveRate(g, offer('text', { rate_quote: rateQuote(0, { base_source: 'personal' }) }))).toBe(0)
+    expect(rateSource(g, offer('text', { rate_quote: rateQuote(0, { base_source: 'personal' }) }))).toBe('personal')
+    expect(effectiveRate(g, offer('image', { rate_quote: rateQuote(0.5, { base_source: 'media' }) }))).toBe(0.5)
+    expect(rateSource(g, offer('image', { rate_quote: rateQuote(0.5, { base_source: 'media' }) }))).toBe('media')
+    expect(effectiveRate(g, offer('unknown', { rate_quote: null }))).toBeNaN()
+    expect(catalogModels([group(1, [offer('unknown', { rate_quote: null })])])[0]!.prices[0]!.input).toBeNull()
   })
   it('keeps units separate and excludes unknown quotes without calling them free', () => {
     const models = catalogModels([group(1, [offer()]), group(2, [offer('model', { billing_mode: 'image', billing_unit: 'image', pricing: { ...pricing(), per_request_price: 0.1 } })]), group(3, [offer('model', { price_status: 'unknown', pricing: null })], { user_rate_multiplier: 0 }), group(4, [offer('model', { pricing: { ...pricing(), per_request_price: 0.01 } })])])
@@ -39,6 +38,37 @@ describe('model-centric available catalog', () => {
   it('uses token prices even when a configured card retains an unused per-request field', () => {
     const model = catalogModels([group(1, [offer('token', { pricing: { ...pricing(6e-6), per_request_price: 99 } })])])[0]!
     expect(model.prices[0]).toMatchObject({ input: { min: 6e-6, max: 6e-6 }, incomplete: false })
+  })
+  it.each([
+    { dimension: 'input' as const, value: 2e-6, display: '$12' },
+    { dimension: 'output' as const, value: 2e-6, display: '$12' },
+    { dimension: 'input' as const, value: 0, display: '$0' },
+    { dimension: 'output' as const, value: 0, display: '$0' }
+  ])('retains the known $dimension quote when the other token dimension is unavailable ($display)', ({ dimension, value, display }) => {
+    // A partial card is not a general resolved quote. Its explicitly priced
+    // dimension still has a selling price, while the other remains unknown.
+    const model = catalogModels([group(1, [offer('partial', {
+      price_status: 'unknown', price_reason: 'pricing_unavailable',
+      pricing: { ...pricing(), input_price: dimension === 'input' ? value : null, output_price: dimension === 'output' ? value : null },
+      rate_quote: rateQuote(6, { platform_multiplier: 2, model_multiplier: 3, policy_multiplier: 6 })
+    })])])[0]!
+    const token = model.prices[0]!
+    const unknownDimension = dimension === 'input' ? 'output' : 'input'
+    expect(catalogRange(token[dimension], 'token')).toBe(display)
+    expect(token[unknownDimension]).toBeNull()
+    expect(catalogRange(token[unknownDimension], 'token')).toBe('—')
+    expect(token.incomplete).toBe(true)
+  })
+  it('combines known partial dimensions without converting missing dimensions into free quotes', () => {
+    const model = catalogModels([
+      group(1, [offer('partial', { price_status: 'unknown', price_reason: 'pricing_unavailable', pricing: { ...pricing(), input_price: 2e-6, output_price: null }, rate_quote: rateQuote(6) })]),
+      group(2, [offer('partial', { price_status: 'unknown', price_reason: 'pricing_unavailable', pricing: { ...pricing(), input_price: null, output_price: 3e-6 }, rate_quote: rateQuote(2) })]),
+      group(3, [offer('partial', { price_status: 'unknown', price_reason: 'request_dependent', pricing: null })])
+    ])[0]!
+    expect(catalogRange(model.prices[0]!.input, 'token')).toBe('$12')
+    expect(catalogRange(model.prices[0]!.output, 'token')).toBe('$6')
+    expect(model.prices[0]!.incomplete).toBe(true)
+    expect(model.quotes).toHaveLength(3)
   })
   it('distinguishes partial conditions and gates tiers on each group switch', () => {
     const m = offer('model', { media_tiers: [{ label: '2K', unit: 'image', price: 0.1 }] })

@@ -43,7 +43,9 @@ func TestGeminiV1BetaListModels_ForcedAntigravityAppliesAllowlist(t *testing.T) 
 	key, _ := middleware.GetAPIKeyFromContext(c)
 	key.GroupID = &groupID
 	repo := &geminiAllowlistAccountRepoStub{}
-	(&GatewayHandler{geminiCompatService: service.NewGeminiMessagesCompatService(repo, nil, nil, nil, nil, nil, nil, nil, nil)}).GeminiV1BetaListModels(c)
+	h := &GatewayHandler{geminiCompatService: service.NewGeminiMessagesCompatService(repo, nil, nil, nil, nil, nil, nil, nil, nil)}
+	prepareGatewayMetadataTest(h, c)
+	h.GeminiV1BetaListModels(c)
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	var got antigravity.GeminiModelsListResponse
@@ -238,7 +240,9 @@ func TestGeminiV1BetaGetModel_CompositeAntigravityRoute(t *testing.T) {
 			Group:   &service.Group{ID: groupID, Platform: service.PlatformComposite},
 		})
 
-		(&GatewayHandler{}).GeminiV1BetaGetModel(c)
+		h := &GatewayHandler{}
+		prepareGatewayMetadataTest(h, c)
+		h.GeminiV1BetaGetModel(c)
 		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 		require.Contains(t, rec.Body.String(), "models/gemini-4-argon-high")
 	})
@@ -261,7 +265,9 @@ func TestGeminiV1BetaGetModel_CompositeAntigravityRoute(t *testing.T) {
 			Group:   &service.Group{ID: groupID, Platform: service.PlatformComposite},
 		})
 
-		(&GatewayHandler{}).GeminiV1BetaGetModel(c)
+		h := &GatewayHandler{}
+		prepareGatewayMetadataTest(h, c)
+		h.GeminiV1BetaGetModel(c)
 		require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
 	})
 

@@ -231,7 +231,8 @@ func parseGrokMediaMultipartRequest(contentType string, body []byte, info *GrokM
 			_ = part.Close()
 			continue
 		}
-		data, err := io.ReadAll(io.LimitReader(part, OpenAIImageMaxUploadPartBytes))
+		// The complete request body is bounded before multipart parsing.
+		data, err := io.ReadAll(part)
 		_ = part.Close()
 		if err != nil {
 			return
@@ -375,12 +376,15 @@ func (s *OpenAIGatewayService) SelectMediaVideoRequestAccount(
 // first observes a completed video URL. Status may omit model/duration; we fall
 // back to this snapshot, then defaults.
 type GrokVideoPendingBilling struct {
-	Model                string `json:"model"`
-	BillingModel         string `json:"billing_model,omitempty"`
-	UpstreamModel        string `json:"upstream_model,omitempty"`
-	VideoResolution      string `json:"video_resolution,omitempty"`
-	VideoDurationSeconds int    `json:"video_duration_seconds,omitempty"`
-	OriginalModel        string `json:"original_model,omitempty"`
+	// PricingSnapshot freezes the admitted customer policy and applicable cards
+	// across later status/content requests. It contains no account credentials.
+	PricingSnapshot      json.RawMessage `json:"pricing_snapshot,omitempty"`
+	Model                string          `json:"model"`
+	BillingModel         string          `json:"billing_model,omitempty"`
+	UpstreamModel        string          `json:"upstream_model,omitempty"`
+	VideoResolution      string          `json:"video_resolution,omitempty"`
+	VideoDurationSeconds int             `json:"video_duration_seconds,omitempty"`
+	OriginalModel        string          `json:"original_model,omitempty"`
 	// CreatedAt is when the gateway accepted the async create (RFC3339Nano UTC).
 	// duration_ms for deferred billing is measured from this instant until the
 	// first official done+video.url observation (status poll or content download),
@@ -434,9 +438,16 @@ func grokVideoPendingBillingTTL(cfg *config.Config) time.Duration {
 	return 24 * time.Hour
 }
 
-func grokVideoBilledClaimTTL(cfg *config.Config) time.Duration {
-	_ = cfg
-	return 48 * time.Hour
+const (
+	grokVideoBillingProcessingTTL = 30 * time.Second
+	grokVideoBillingCompletedTTL  = 48 * time.Hour
+)
+
+// GrokVideoBillingClaim identifies one processing lease. Its private owner is
+// required for compare-and-set cleanup after worker timeout or lease expiry.
+type GrokVideoBillingClaim struct {
+	key   string
+	owner string
 }
 
 // StoreGrokVideoPendingBilling persists create-time billing params for deferred status billing.
@@ -469,6 +480,20 @@ func (s *OpenAIGatewayService) StoreGrokVideoPendingBilling(
 	} else {
 		pending.CreatedAt = strings.TrimSpace(pending.CreatedAt)
 	}
+	if len(pending.PricingSnapshot) == 0 {
+		// Ark/Seedance shares this lifecycle store with Grok. Preserve the
+		// supplier chosen by routing rather than inferring it from this type.
+		platform := requestBillingPlatform(ctx, nil, PlatformGrok)
+		if snapshot := BillingPricingSnapshotFromContext(ctx); snapshot != nil && snapshot.platform != "" {
+			platform = snapshot.platform
+		}
+		pricingCtx := BindBillingPricingModel(ctx, platform, firstNonEmpty(pending.OriginalModel, pending.Model))
+		var err error
+		pending.PricingSnapshot, err = ExportBillingPricingSnapshot(pricingCtx, pending.Model, pending.BillingModel, pending.UpstreamModel, pending.OriginalModel)
+		if err != nil {
+			return fmt.Errorf("capture grok video pricing: %w", err)
+		}
+	}
 	payload, err := json.Marshal(pending)
 	if err != nil {
 		return err
@@ -500,38 +525,53 @@ func (s *OpenAIGatewayService) LoadGrokVideoPendingBilling(
 	return &pending, nil
 }
 
-// ClaimGrokVideoBilling returns true once for a completed video request so status
-// polls do not double-bill. Fail-closed: claim errors are treated as already billed.
+// ClaimGrokVideoBilling acquires a short processing lease. A dead worker must
+// not suppress billing longer than the task's accepted pricing evidence exists.
+// Stable durable request IDs supply financial idempotency if a lease expires
+// while the original worker is still running.
 func (s *OpenAIGatewayService) ClaimGrokVideoBilling(
 	ctx context.Context,
 	requestID string,
 	userID, apiKeyID int64,
-) (bool, error) {
+) (*GrokVideoBillingClaim, error) {
 	if s == nil || s.cache == nil {
-		return false, fmt.Errorf("grok video billing claim cache is unavailable")
+		return nil, fmt.Errorf("grok video billing claim cache is unavailable")
 	}
 	key := grokVideoPendingBillingKey(requestID, userID, apiKeyID)
 	if key == "" {
-		return false, fmt.Errorf("grok video billing claim key is invalid")
+		return nil, fmt.Errorf("grok video billing claim key is invalid")
 	}
-	return s.cache.ClaimGrokVideoBilled(ctx, key, grokVideoBilledClaimTTL(s.cfg))
+	claim := &GrokVideoBillingClaim{key: key, owner: generateRequestID()}
+	acquired, err := s.cache.ClaimGrokVideoBilled(ctx, key, claim.owner, grokVideoBillingProcessingTTL)
+	if err != nil || !acquired {
+		return nil, err
+	}
+	return claim, nil
 }
 
-// ReleaseGrokVideoBilling clears a claim after a failed durable RecordUsage so a
-// later status/content poll can retry billing.
-func (s *OpenAIGatewayService) ReleaseGrokVideoBilling(
-	ctx context.Context,
-	requestID string,
-	userID, apiKeyID int64,
-) error {
+// CompleteGrokVideoBilling publishes completion only for the current owner.
+// A stale worker cannot replace a successor's processing lease or done marker.
+func (s *OpenAIGatewayService) CompleteGrokVideoBilling(ctx context.Context, claim *GrokVideoBillingClaim) error {
+	if claim == nil {
+		return nil
+	}
 	if s == nil || s.cache == nil {
 		return fmt.Errorf("grok video billing claim cache is unavailable")
 	}
-	key := grokVideoPendingBillingKey(requestID, userID, apiKeyID)
-	if key == "" {
-		return fmt.Errorf("grok video billing claim key is invalid")
+	_, err := s.cache.CompleteGrokVideoBilled(ctx, claim.key, claim.owner, grokVideoBillingCompletedTTL)
+	return err
+}
+
+// ReleaseGrokVideoBilling clears only this failed processing lease, allowing a
+// later poll to retry without removing a newer owner or completed marker.
+func (s *OpenAIGatewayService) ReleaseGrokVideoBilling(ctx context.Context, claim *GrokVideoBillingClaim) error {
+	if claim == nil {
+		return nil
 	}
-	return s.cache.ReleaseGrokVideoBilled(ctx, key)
+	if s == nil || s.cache == nil {
+		return fmt.Errorf("grok video billing claim cache is unavailable")
+	}
+	return s.cache.ReleaseGrokVideoBilled(ctx, claim.key, claim.owner)
 }
 
 // StableGrokVideoBillingRequestID is the durable usage_logs / dedup key for one
@@ -652,6 +692,12 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 	body []byte,
 	contentType string,
 ) (result *OpenAIForwardResult, err error) {
+	createNotSent := endpoint == GrokMediaEndpointVideosGenerations || endpoint == GrokMediaEndpointVideosEdits || endpoint == GrokMediaEndpointVideosExtensions
+	defer func() {
+		if createNotSent {
+			err = withAsyncCreateNotSent(err)
+		}
+	}()
 	ctx = WithAccountOutboundIdentity(ctx, account)
 	defer func() { finalizeClientDisconnectForwardResult(ctx, c, result, err) }()
 	startTime := time.Now()
@@ -754,6 +800,7 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 	upstreamStart := time.Now()
 	upstreamReq = prepareAccountOutboundRequest(upstreamReq, account)
 	captureImageResultDownloadOwner(upstreamReq, account)
+	createNotSent = false
 	resp, err := s.httpUpstream.Do(upstreamReq, proxyURL, selectedAccount.ID, selectedAccount.Concurrency)
 	SetOpsLatencyMs(c, OpsUpstreamLatencyMsKey, time.Since(upstreamStart).Milliseconds())
 	if err != nil {
@@ -804,6 +851,7 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 		}
 	}
 	return &OpenAIForwardResult{
+		AsyncTaskTerminal:    endpoint == GrokMediaEndpointVideoStatus && isGrokVideoTerminalStatus(respBody),
 		RequestID:            requestIDHeader,
 		UpstreamHeaders:      resp.Header,
 		ResponseID:           usage.ResponseID,
@@ -813,6 +861,7 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 		UpstreamModel:        upstreamModel,
 		ResponseHeaders:      resp.Header.Clone(),
 		Duration:             time.Since(startTime),
+		ImageEndpoint:        endpoint == GrokMediaEndpointImagesGenerations || endpoint == GrokMediaEndpointImagesEdits,
 		ImageCount:           usage.ImageCount,
 		ImageSize:            usage.ImageSize,
 		ImageInputSize:       usage.ImageInputSize,
@@ -947,10 +996,11 @@ func (s *OpenAIGatewayService) forwardGrokMediaVideoContent(
 	// official done+video.url, attach billable units so the handler can claim once
 	// (same path as status polling). Pending snapshot is merged in the handler.
 	result := &OpenAIForwardResult{
-		RequestID:       contentRequestID,
-		UpstreamHeaders: contentResp.Header,
-		ResponseHeaders: contentResp.Header.Clone(),
-		Duration:        time.Since(startTime),
+		AsyncTaskTerminal: isGrokVideoTerminalStatus(statusBody),
+		RequestID:         contentRequestID,
+		UpstreamHeaders:   contentResp.Header,
+		ResponseHeaders:   contentResp.Header.Clone(),
+		Duration:          time.Since(startTime),
 	}
 	if billed := ExtractGrokVideoBillingFromStatusBody(statusBody, nil, requestID); billed != nil {
 		result.ResponseID = firstNonEmpty(billed.ResponseID, strings.TrimSpace(requestID))
@@ -1382,14 +1432,15 @@ func (s *OpenAIGatewayService) handleGrokMediaErrorResponse(
 	if kind == "failover" {
 		retryable, retryDelay, retryDeadline, retryMax := grokSameAccountRetryMetadata(account, resp.StatusCode, body)
 		return nil, &UpstreamFailoverError{
-			StatusCode:               resp.StatusCode,
-			ResponseBody:             body,
-			ResponseHeaders:          resp.Header.Clone(),
-			RetryableOnSameAccount:   retryable,
-			RequestScopedTransient:   retryable && resp.StatusCode == http.StatusTooManyRequests,
-			SameAccountRetryDelay:    retryDelay,
-			SameAccountRetryDeadline: retryDeadline,
-			SameAccountRetryMax:      retryMax,
+			AsyncCreateDefinitelyRejected: (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests) && gjson.ValidBytes(body) && gjson.GetBytes(body, "error").Exists(),
+			StatusCode:                    resp.StatusCode,
+			ResponseBody:                  body,
+			ResponseHeaders:               resp.Header.Clone(),
+			RetryableOnSameAccount:        retryable,
+			RequestScopedTransient:        retryable && resp.StatusCode == http.StatusTooManyRequests,
+			SameAccountRetryDelay:         retryDelay,
+			SameAccountRetryDeadline:      retryDeadline,
+			SameAccountRetryMax:           retryMax,
 		}
 	}
 
@@ -1570,4 +1621,13 @@ func grokMediaContentProxyURL(c *gin.Context, requestID string) string {
 		pathPrefix = "/v1"
 	}
 	return pathPrefix + "/videos/" + url.PathEscape(strings.Trim(requestID, "/")) + "/content"
+}
+
+func isGrokVideoTerminalStatus(body []byte) bool {
+	switch strings.ToLower(strings.TrimSpace(gjson.GetBytes(body, "status").String())) {
+	case "done", "failed", "expired", "cancelled":
+		return true
+	default:
+		return false
+	}
 }

@@ -41,7 +41,7 @@ export function useDialogFocus(
     })
   }
   function onKey(event: KeyboardEvent) {
-    if (!visible() || !isTop()) return
+    if (event.defaultPrevented || !visible() || !isTop()) return
     if (event.key === 'Escape' && closeOnEscape()) {
       event.preventDefault()
       event.stopPropagation()

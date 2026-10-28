@@ -3,6 +3,23 @@
 Native OAuth login is available in account creation and editing. See
 [login, refresh, endpoints and operational details](DOMESTIC_OAUTH.md).
 
+The [official Chat Completions usage schema](https://api-docs.deepseek.com/api/create-chat-completion/)
+defines `prompt_tokens` as `prompt_cache_hit_tokens + prompt_cache_miss_tokens`.
+The cache-hit count is also exposed as `prompt_tokens_details.cached_tokens`.
+The shared response parser accepts the top-level hit field as a final cache-read
+alias, preserving earlier explicit counts, including zero. This response-only
+normalization changes neither request extraction nor ingress audit ordering.
+Both JSON and SSE Chat bridges preserve this count when emitting Responses
+and Messages: Responses keeps total input and its cached subset; Messages
+separates cache hits from uncached input. Raw Chat retains provider usage.
+Typed Responses decoding follows the same alias priority as accounting,
+so buffered terminal events cannot overwrite a valid cache-hit count with zero.
+Mixed compatible usage follows the same presence-based cache priority on both
+sides: `input_tokens_details.cached_tokens`, `prompt_tokens_details.cached_tokens`,
+`cache_read_input_tokens`, `cache_read_tokens`, `cached_tokens`, then
+`prompt_cache_hit_tokens`. An earlier zero is authoritative; unrelated token
+details are retained.
+
 PAYG balance probes freeze the complete API-key and proxy snapshot before sending
 the request. Concurrent probes share work only within that generation. A late
 response cannot update a replacement key's balance metadata or cooldown. Metadata,
@@ -44,6 +61,16 @@ the whitelist check, and the `[1m]` suffix is stripped on the DeepSeek outbound
 path only. Configured `model_mapping` keeps mapping-first semantics. OpenAI
 passthrough accounts still skip mapping admission and send the client model
 unchanged.
+
+## Pro pricing continuity
+
+The provider's [updates](https://api-docs.deepseek.com/updates/) confirm continued
+Pro service after September 14, with unchanged Pro billing. Pro requests retain
+the Pro card; no calendar date substitutes Flash prices. The
+[pricing schedule](https://api-docs.deepseek.com/quick_start/pricing/) still
+distinguishes Pro and Flash peak/off-peak rates. Plus freezes the applicable
+schedule at request admission together with operator overrides and selling
+factors, so edits or a time-window transition cannot reprice an inflight request.
 
 ## Outbound identity
 

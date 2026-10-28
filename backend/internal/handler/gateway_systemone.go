@@ -91,7 +91,7 @@ func (h *GatewayHandler) SystemOne(c *gin.Context) {
 	subscription, _ := middleware2.GetSubscriptionFromContext(c)
 
 	streamStarted := false
-	userRelease, err := h.concurrencyHelper.AcquireUserSlotWithWait(c, subject.UserID, subject.Concurrency, false, &streamStarted)
+	userRelease, err := h.concurrencyHelper.AcquireUserSlot(c, subject.UserID, subject.Concurrency)
 	if err != nil {
 		reqLog.Warn("systemone.user_slot_acquire_failed", zap.Error(err))
 		h.handleConcurrencyError(c, err, "user", false)
@@ -112,7 +112,7 @@ func (h *GatewayHandler) SystemOne(c *gin.Context) {
 		return
 	}
 	// 余额模式在途预留：防止并发请求在预检时看到同一份余额而集体透支。
-	inflightRelease, err := reserveInflightBalance(c, h.billingCacheService, h.gatewayService, apiKey, subscription, tokenInflightEstimate(model, body))
+	inflightRelease, err := reserveInflightBalance(c, h.billingCacheService, h.gatewayService, apiKey, subscription, tokenInflightEstimate(service.ContentModerationProtocolTypeSafeSystemOne, model, body))
 	if err != nil {
 		reqLog.Info("systemone.inflight_reservation_rejected", zap.Error(err))
 		status, code, message, retryAfter := billingErrorDetails(err)
@@ -172,7 +172,7 @@ func (h *GatewayHandler) SystemOne(c *gin.Context) {
 				h.errorResponse(c, http.StatusServiceUnavailable, "api_error", "No available accounts")
 				return
 			}
-			accountRelease, err = h.concurrencyHelper.AcquireAccountSlotWithWaitTimeout(c, account.ID, selection.WaitPlan.MaxConcurrency, selection.WaitPlan.Timeout, false, &streamStarted)
+			accountRelease, err = h.concurrencyHelper.AcquireAccountSlotForWaitPlan(c, account.ID, selection.WaitPlan, false, &streamStarted)
 			if err != nil {
 				reqLog.Warn("systemone.account_slot_acquire_failed", zap.Int64("account_id", account.ID), zap.Error(err))
 				h.handleConcurrencyError(c, err, "account", false)
@@ -195,6 +195,16 @@ func (h *GatewayHandler) SystemOne(c *gin.Context) {
 			continue
 		}
 		account = latest
+		if err := ensureAccountInflightReservation(c, account); err != nil {
+			if accountRelease != nil {
+				accountRelease()
+			}
+			reqLog.Info("systemone.account_inflight_reservation_rejected", zap.Int64("account_id", account.ID), zap.Error(err))
+			status, code, message, retryAfter := billingErrorDetails(err)
+			applyBillingQuotaHeaders(c, err, retryAfter)
+			h.errorResponse(c, status, code, message)
+			return
+		}
 		accountRelease = wrapReleaseOnDone(c.Request.Context(), accountRelease)
 		setOpsSelectedAccount(c, account.ID, account.Platform)
 		service.SetOpsUpstreamModel(c, model)
@@ -275,6 +285,7 @@ func (h *GatewayHandler) recordSystemOneUsage(c *gin.Context, apiKey *service.AP
 // worker cannot observe another request's context, mapping or model.
 func (h *GatewayHandler) systemOneUsageRecordInput(c *gin.Context, apiKey *service.APIKey, account *service.Account, subscription *service.UserSubscription, mapping service.ChannelMappingResult, model string, body []byte, result *service.SystemOneForwardResult, pricingAt time.Time) *service.RecordUsageInput {
 	return &service.RecordUsageInput{
+		PricingSnapshot:    service.BillingPricingSnapshotFromContext(c.Request.Context()),
 		Result:             &result.ForwardResult,
 		APIKey:             apiKey,
 		User:               apiKey.User,

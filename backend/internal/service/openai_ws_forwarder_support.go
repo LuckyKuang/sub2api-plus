@@ -280,6 +280,9 @@ func openAIWSPayloadTransientStatus(payload []byte) int {
 	if len(payload) == 0 {
 		return 0
 	}
+	if IsOpenAIPolicyCapacityUnavailable(payload) {
+		return http.StatusServiceUnavailable
+	}
 	status := int(gjson.GetBytes(payload, "response.error.status_code").Int())
 	if status == 0 {
 		status = int(gjson.GetBytes(payload, "response.error.status").Int())
@@ -305,7 +308,7 @@ func openAIWSPayloadTransientStatus(payload []byte) int {
 		errType = strings.ToLower(strings.TrimSpace(gjson.GetBytes(payload, "error.type").String()))
 	}
 	switch {
-	case code == "server_is_overloaded", code == "slow_down":
+	case IsOpenAIPolicyCapacityUnavailable(payload), code == "server_is_overloaded", code == "slow_down":
 		return http.StatusServiceUnavailable
 	case strings.Contains(code, "server_error"),
 		strings.Contains(code, "internal_error"),

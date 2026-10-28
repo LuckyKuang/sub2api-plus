@@ -211,6 +211,26 @@ func (_c *PaymentOrderCreate) SetNillablePlanName(v *string) *PaymentOrderCreate
 	return _c
 }
 
+// SetPricingPolicyVersion sets the "pricing_policy_version" field.
+func (_c *PaymentOrderCreate) SetPricingPolicyVersion(v int64) *PaymentOrderCreate {
+	_c.mutation.SetPricingPolicyVersion(v)
+	return _c
+}
+
+// SetNillablePricingPolicyVersion sets the "pricing_policy_version" field if the given value is not nil.
+func (_c *PaymentOrderCreate) SetNillablePricingPolicyVersion(v *int64) *PaymentOrderCreate {
+	if v != nil {
+		_c.SetPricingPolicyVersion(*v)
+	}
+	return _c
+}
+
+// SetPricingSummary sets the "pricing_summary" field.
+func (_c *PaymentOrderCreate) SetPricingSummary(v map[string]interface{}) *PaymentOrderCreate {
+	_c.mutation.SetPricingSummary(v)
+	return _c
+}
+
 // SetRedeemCodeID sets the "redeem_code_id" field.
 func (_c *PaymentOrderCreate) SetRedeemCodeID(v int64) *PaymentOrderCreate {
 	_c.mutation.SetRedeemCodeID(v)
@@ -607,6 +627,10 @@ func (_c *PaymentOrderCreate) defaults() {
 		v := paymentorder.DefaultPlanName
 		_c.mutation.SetPlanName(v)
 	}
+	if _, ok := _c.mutation.PricingPolicyVersion(); !ok {
+		v := paymentorder.DefaultPricingPolicyVersion
+		_c.mutation.SetPricingPolicyVersion(v)
+	}
 	if _, ok := _c.mutation.OrderType(); !ok {
 		v := paymentorder.DefaultOrderType
 		_c.mutation.SetOrderType(v)
@@ -721,6 +745,9 @@ func (_c *PaymentOrderCreate) check() error {
 		if err := paymentorder.PlanNameValidator(v); err != nil {
 			return &ValidationError{Name: "plan_name", err: fmt.Errorf(`ent: validator failed for field "PaymentOrder.plan_name": %w`, err)}
 		}
+	}
+	if _, ok := _c.mutation.PricingPolicyVersion(); !ok {
+		return &ValidationError{Name: "pricing_policy_version", err: errors.New(`ent: missing required field "PaymentOrder.pricing_policy_version"`)}
 	}
 	if _, ok := _c.mutation.OrderType(); !ok {
 		return &ValidationError{Name: "order_type", err: errors.New(`ent: missing required field "PaymentOrder.order_type"`)}
@@ -881,6 +908,14 @@ func (_c *PaymentOrderCreate) createSpec() (*PaymentOrder, *sqlgraph.CreateSpec)
 	if value, ok := _c.mutation.PlanName(); ok {
 		_spec.SetField(paymentorder.FieldPlanName, field.TypeString, value)
 		_node.PlanName = value
+	}
+	if value, ok := _c.mutation.PricingPolicyVersion(); ok {
+		_spec.SetField(paymentorder.FieldPricingPolicyVersion, field.TypeInt64, value)
+		_node.PricingPolicyVersion = value
+	}
+	if value, ok := _c.mutation.PricingSummary(); ok {
+		_spec.SetField(paymentorder.FieldPricingSummary, field.TypeJSON, value)
+		_node.PricingSummary = value
 	}
 	if value, ok := _c.mutation.RedeemCodeID(); ok {
 		_spec.SetField(paymentorder.FieldRedeemCodeID, field.TypeInt64, value)
@@ -1316,6 +1351,42 @@ func (u *PaymentOrderUpsert) SetPlanName(v string) *PaymentOrderUpsert {
 // UpdatePlanName sets the "plan_name" field to the value that was provided on create.
 func (u *PaymentOrderUpsert) UpdatePlanName() *PaymentOrderUpsert {
 	u.SetExcluded(paymentorder.FieldPlanName)
+	return u
+}
+
+// SetPricingPolicyVersion sets the "pricing_policy_version" field.
+func (u *PaymentOrderUpsert) SetPricingPolicyVersion(v int64) *PaymentOrderUpsert {
+	u.Set(paymentorder.FieldPricingPolicyVersion, v)
+	return u
+}
+
+// UpdatePricingPolicyVersion sets the "pricing_policy_version" field to the value that was provided on create.
+func (u *PaymentOrderUpsert) UpdatePricingPolicyVersion() *PaymentOrderUpsert {
+	u.SetExcluded(paymentorder.FieldPricingPolicyVersion)
+	return u
+}
+
+// AddPricingPolicyVersion adds v to the "pricing_policy_version" field.
+func (u *PaymentOrderUpsert) AddPricingPolicyVersion(v int64) *PaymentOrderUpsert {
+	u.Add(paymentorder.FieldPricingPolicyVersion, v)
+	return u
+}
+
+// SetPricingSummary sets the "pricing_summary" field.
+func (u *PaymentOrderUpsert) SetPricingSummary(v map[string]interface{}) *PaymentOrderUpsert {
+	u.Set(paymentorder.FieldPricingSummary, v)
+	return u
+}
+
+// UpdatePricingSummary sets the "pricing_summary" field to the value that was provided on create.
+func (u *PaymentOrderUpsert) UpdatePricingSummary() *PaymentOrderUpsert {
+	u.SetExcluded(paymentorder.FieldPricingSummary)
+	return u
+}
+
+// ClearPricingSummary clears the value of the "pricing_summary" field.
+func (u *PaymentOrderUpsert) ClearPricingSummary() *PaymentOrderUpsert {
+	u.SetNull(paymentorder.FieldPricingSummary)
 	return u
 }
 
@@ -2101,6 +2172,48 @@ func (u *PaymentOrderUpsertOne) SetPlanName(v string) *PaymentOrderUpsertOne {
 func (u *PaymentOrderUpsertOne) UpdatePlanName() *PaymentOrderUpsertOne {
 	return u.Update(func(s *PaymentOrderUpsert) {
 		s.UpdatePlanName()
+	})
+}
+
+// SetPricingPolicyVersion sets the "pricing_policy_version" field.
+func (u *PaymentOrderUpsertOne) SetPricingPolicyVersion(v int64) *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.SetPricingPolicyVersion(v)
+	})
+}
+
+// AddPricingPolicyVersion adds v to the "pricing_policy_version" field.
+func (u *PaymentOrderUpsertOne) AddPricingPolicyVersion(v int64) *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.AddPricingPolicyVersion(v)
+	})
+}
+
+// UpdatePricingPolicyVersion sets the "pricing_policy_version" field to the value that was provided on create.
+func (u *PaymentOrderUpsertOne) UpdatePricingPolicyVersion() *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.UpdatePricingPolicyVersion()
+	})
+}
+
+// SetPricingSummary sets the "pricing_summary" field.
+func (u *PaymentOrderUpsertOne) SetPricingSummary(v map[string]interface{}) *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.SetPricingSummary(v)
+	})
+}
+
+// UpdatePricingSummary sets the "pricing_summary" field to the value that was provided on create.
+func (u *PaymentOrderUpsertOne) UpdatePricingSummary() *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.UpdatePricingSummary()
+	})
+}
+
+// ClearPricingSummary clears the value of the "pricing_summary" field.
+func (u *PaymentOrderUpsertOne) ClearPricingSummary() *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.ClearPricingSummary()
 	})
 }
 
@@ -3124,6 +3237,48 @@ func (u *PaymentOrderUpsertBulk) SetPlanName(v string) *PaymentOrderUpsertBulk {
 func (u *PaymentOrderUpsertBulk) UpdatePlanName() *PaymentOrderUpsertBulk {
 	return u.Update(func(s *PaymentOrderUpsert) {
 		s.UpdatePlanName()
+	})
+}
+
+// SetPricingPolicyVersion sets the "pricing_policy_version" field.
+func (u *PaymentOrderUpsertBulk) SetPricingPolicyVersion(v int64) *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.SetPricingPolicyVersion(v)
+	})
+}
+
+// AddPricingPolicyVersion adds v to the "pricing_policy_version" field.
+func (u *PaymentOrderUpsertBulk) AddPricingPolicyVersion(v int64) *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.AddPricingPolicyVersion(v)
+	})
+}
+
+// UpdatePricingPolicyVersion sets the "pricing_policy_version" field to the value that was provided on create.
+func (u *PaymentOrderUpsertBulk) UpdatePricingPolicyVersion() *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.UpdatePricingPolicyVersion()
+	})
+}
+
+// SetPricingSummary sets the "pricing_summary" field.
+func (u *PaymentOrderUpsertBulk) SetPricingSummary(v map[string]interface{}) *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.SetPricingSummary(v)
+	})
+}
+
+// UpdatePricingSummary sets the "pricing_summary" field to the value that was provided on create.
+func (u *PaymentOrderUpsertBulk) UpdatePricingSummary() *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.UpdatePricingSummary()
+	})
+}
+
+// ClearPricingSummary clears the value of the "pricing_summary" field.
+func (u *PaymentOrderUpsertBulk) ClearPricingSummary() *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.ClearPricingSummary()
 	})
 }
 

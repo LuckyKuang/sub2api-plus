@@ -30,7 +30,13 @@
             :aria-label="t('keys.groupLabel')"
             searchable
             data-test="group-input"
-          />
+          >
+            <template #selected="{ option }"><span>{{ option?.label }}</span></template>
+            <template #option="{ option }">
+              <div class="min-w-0 space-y-1"><strong>{{ option.label }}</strong><GroupRateSummary :group="quoteFor(Number(option.value))" :loading="quotesLoading" :failed="quotesFailed" compact /></div>
+            </template>
+          </Select>
+          <GroupRateSummary v-if="enabled.group_id && groupId" :group="quoteFor(groupId)" :loading="quotesLoading" :failed="quotesFailed" @retry="emit('retryQuotes')" />
         </div>
 
         <div class="space-y-2">
@@ -157,6 +163,8 @@ import { keysAPI } from '@/api'
 import { useAppStore } from '@/stores/app'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Select from '@/components/common/Select.vue'
+import GroupRateSummary from './GroupRateSummary.vue'
+import type { CatalogGroup } from '@/api/channels'
 import type { ApiKey, Group, UpdateApiKeyRequest } from '@/types'
 
 type SelectedKey = Pick<ApiKey, 'id' | 'name'>
@@ -168,13 +176,18 @@ const props = defineProps<{
   show: boolean
   selectedKeys: SelectedKey[]
   groups: Group[]
+  quotedGroups?: CatalogGroup[]
+  quotesLoading?: boolean
+  quotesFailed?: boolean
 }>()
 const emit = defineEmits<{
   close: []
   updated: [succeededIds: number[]]
+  retryQuotes: []
 }>()
 
 const { t } = useI18n()
+const quoteFor = (id: number) => props.quotedGroups?.find(group => group.id === id)
 const appStore = useAppStore()
 const submitting = ref(false)
 const pendingKeys = ref<SelectedKey[]>([])

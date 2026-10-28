@@ -2,13 +2,14 @@
 
 Both **OAuth and API Key** accounts for each platform use its official agent
 below. This is the source index for future version and outbound-protocol reviews;
-it contains no developer checkout paths. Reviewed on 2026-10-24 after fast-forwarding all seven official source trees,
+it contains no developer checkout paths. The seven-provider review was on 2026-10-24;
+Codex was reviewed again on 2026-10-28 against the source and stable release below,
 including request headers, typed IDs, OAuth validation, quota ownership,
 model catalogs, terminal errors and retry/failover lifetimes.
 
 | Platform | Official source | Reviewed commit | Selected agent version |
 | --- | --- | --- | --- |
-| OpenAI | [openai/codex](https://github.com/openai/codex.git) | `970111f6cb62cc02fe36a82ea7d71b37a2889c97` | stable `rust-v0.164.0` |
+| OpenAI | [openai/codex](https://github.com/openai/codex.git) | `154e8736a51224e12b2d990753622a2cd8118f54` | stable `rust-v0.165.0` |
 | xAI | [xai-org/grok-build](https://github.com/xai-org/grok-build.git) | `2bdd1d6a6369de0e8c68132ea4539e9abd9e14a8` | `1.0.45` |
 | DeepSeek | [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness.git) | `22ddee3792402c3e70ec5f86a63c3e3e895a2f60` | `0.2.1-rc.3` (prerelease) |
 | Kimi | [MoonshotAI/kimi-code](https://github.com/MoonshotAI/kimi-code.git) | `7ccac2b45b8a3481c76f771bb99c043b562de2c5` | stable `2.3.1` |
@@ -71,9 +72,83 @@ Migration 294 stores random outbound IDs by namespace and irreversible scope
 digest, without a scheduling-cache TTL. See [OFFICIAL_AGENT_REQUEST_STATE.md](OFFICIAL_AGENT_REQUEST_STATE.md)
 for ID versions, lifetime, grant ownership and failover contracts. Codex main
 uses a development manifest version, so its stable identity is manually selected
-as `0.164.0` (stable tag commit `6aaac694803004a63c6f393d153c96d22521a6b9`);
+as `0.165.0` (stable tag commit `360319d8dee62d87e2d59fc0c21805d79519cfed`,
+[published October 27](https://github.com/openai/codex/releases/tag/rust-v0.165.0));
 reviewing protocol changes never enables automatic identity-version updates.
 
+## October 28 Codex alignment
+
+The review compares `970111f6cb62cc02fe36a82ea7d71b37a2889c97` with the
+Codex source above. The gateway changes cover both OAuth and API-key routes:
+
+- Exact `policy_capacity_unavailable` errors follow the official
+  [SSE error classification](https://github.com/openai/codex/blob/154e8736a51224e12b2d990753622a2cd8118f54/codex-rs/codex-api/src/sse/responses_error.rs).
+  They keep their code and bounded Retry-After evidence through HTTP/SSE/WS;
+  Plus treats capacity failures as request-scoped, without account penalties.
+- [FedRAMP API-key recognition](https://github.com/openai/codex/blob/154e8736a51224e12b2d990753622a2cd8118f54/codex-rs/login/src/auth/api_key.rs)
+  selects government default inference/catalog endpoints and the credential-owned
+  routing header. Explicit configured base URLs remain authoritative.
+- [Named additional context](https://github.com/openai/codex/blob/154e8736a51224e12b2d990753622a2cd8118f54/codex-rs/context-fragments/src/additional_context.rs)
+  uses a named `function_call_output` without a call ID. Its content remains
+  subject to the shared audit contract, while it creates no paired-call dependency.
+- [Workspace selection](https://github.com/openai/codex/blob/154e8736a51224e12b2d990753622a2cd8118f54/codex-rs/login/src/auth/manager/workspace_switching.rs)
+  retains the original ID/refresh token. Session import adopts the selected
+  access token's account, plan and government routing only for a matching
+  workspace and known login user; mismatches cannot write an account.
+- The [official model catalog](https://github.com/openai/codex/blob/154e8736a51224e12b2d990753622a2cd8118f54/codex-rs/models-manager/models.json)
+  adds `gpt-6.1-terra`. Catalog metadata and reasoning options do not establish
+  a credential's model entitlement or introduce a new price.
+
+The official doctor WebSocket probe produces a client support report. Local
+workspace switching UI, OpenTelemetry management, local tool execution and
+that report are client responsibilities; this gateway exposes no new client
+support-report API. The identity source matrix, environment fingerprint and
+ingress audit ordering remain governed by their existing contracts.
+
+
+## October 28 upstream patch review
+
+Upstream gateway patches are candidates, not provider protocol authorities.
+The October 28 merge review rechecked Terra against the pinned official
+[Codex catalog](https://github.com/openai/codex/blob/154e8736a51224e12b2d990753622a2cd8118f54/codex-rs/models-manager/models.json):
+`context_window=500000`, `max_context_window=872000`, default reasoning `low`,
+and supported efforts `low`, `medium`, `high`, `xhigh`, `max`, `ultra`.
+`default_reasoning_summary=none` is a summary setting, not an advertised `none`
+effort. The catalog does not establish API-wide rejection behavior or prices.
+At that review the candidate 1,050,000 context, 128,000 output and new Terra
+price fallback were deferred pending independent authoritative evidence.
+The candidate Terra-specific Chat tool prohibition is also deferred: a Codex
+client's use of Responses does not establish a general API restriction on Chat
+tool calls. Likewise the proposed OpenCode-hosted DeepSeek role rewrite is not
+enabled by model spelling alone without evidence for that hosted endpoint;
+existing native-provider role handling remains in force.
+
+The v0.2.19 Plus release review separately verifies the current official
+[Terra API model](https://developers.openai.com/api/docs/models/gpt-6.1-terra)
+and [API pricing](https://developers.openai.com/api/docs/pricing). The API price
+is now independently established: per million tokens, standard input/output/
+cached input/30-minute cache writes are $1/$5/$0.05/$1.25. Fast is twice standard,
+Flex and Batch are half standard, and total input above 272,000 applies twice
+the input/cache prices and 1.5 times the output price to the entire request.
+This evidence authorizes Terra's own price card; no Sol/Astra price is inherited.
+Explicit operator prices and the request's frozen billing snapshot retain Plus
+precedence. API limits and capabilities are a separate contract from the pinned
+Codex client descriptor: this pricing change does not replace that descriptor
+or alter the manually selected client identity.
+
+A limited xAI catalog review also inspected
+[`EndpointsConfig::resolve_models_list_url`](https://github.com/xai-org/grok-build/blob/f0e3be1100ef5252488e3be8bb0e91cf68d8c305/crates/codegen/xai-grok-shell/src/agent/config.rs)
+and the official
+[subscription-unblock catalog refresh test](https://github.com/xai-org/grok-build/blob/f0e3be1100ef5252488e3be8bb0e91cf68d8c305/crates/codegen/xai-grok-pager-pty-harness/tests/pty_e2e/subscription_watch_and_gate_verify_pty.rs).
+They support destination-specific catalog resolution and refreshing the catalog
+after an authenticated entitlement change. This limited inspection does not
+upgrade the selected xAI client identity or claim review of that entire tree.
+Gateway catalog diagnostics add an owner/proxy fence and bounded snapshot CAS;
+those are gateway controls, not newly inferred provider wire requirements.
+
+The candidate common CN frequency-limit rule based on free-form wording and a
+90-percent quota threshold remains deferred. It must not replace the existing
+provider-specific structured status, captured-owner and cooldown contracts.
 
 ## October 24 protocol alignment
 

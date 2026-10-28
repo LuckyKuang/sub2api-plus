@@ -3,7 +3,7 @@ import { DOMWrapper, flushPromises, mount, type VueWrapper } from '@vue/test-uti
 import { nextTick, reactive } from 'vue'
 import AvailableChannelsView from '../AvailableChannelsView.vue'
 import CatalogPriceDetails from '@/components/channels/CatalogPriceDetails.vue'
-import { group, offer, pricing } from '@/components/channels/__tests__/catalogFixtures'
+import { group, offer, pricing, rateQuote } from '@/components/channels/__tests__/catalogFixtures'
 import type { ChannelCatalog } from '@/api/channels'
 
 const mocks = vi.hoisted(() => ({ getCatalog: vi.fn(), copy: vi.fn(), auth: { user: { id: 1 } } as { user: { id: number } | null } }))
@@ -45,7 +45,7 @@ describe('available channels user page', () => {
     const w = page(); await flushPromises()
     const filters = w.get('[data-testid="catalog-filters"]')
     const results = w.get('[data-testid="catalog-results"]')
-    await filters.findAll('.catalog-filter').find(button => button.text().startsWith('openai'))!.trigger('click')
+    await filters.findAll('[role="group"] button[aria-pressed]').find(button => button.text().startsWith('openai'))!.trigger('click')
     await filters.get('input[type="search"]').setValue('model-')
     await filters.get('[role="combobox"]').trigger('click'); await flushPromises()
     const dropdown = document.querySelector('[role="listbox"]')!
@@ -71,16 +71,16 @@ describe('available channels user page', () => {
     expect(w.findAll('.catalog-model-card')).toHaveLength(1)
     await w.get('.catalog-model-card button').trigger('click')
     expect(mocks.copy).toHaveBeenCalledWith('first')
-    expect(w.findAll('.catalog-filter')).toHaveLength(3)
+    expect(w.findAll('[role="group"] button[aria-pressed]')).toHaveLength(3)
   })
   it('shows rate degradation and keeps zero prices visible', async () => {
-    mocks.getCatalog.mockResolvedValue({ groups: [group(1, [offer()], { user_rate_multiplier: 0 })], user_rate_status: 'unavailable' })
+    mocks.getCatalog.mockResolvedValue({ groups: [group(1, [offer('model', { rate_quote: rateQuote(0) })], { user_rate_multiplier: 0 })], user_rate_status: 'unavailable' })
     const w = page(); await flushPromises()
     expect(w.get('[role="status"]').text()).toContain('ratesUnavailable')
     expect(w.text()).toContain('$0')
   })
   it('merges duplicate cards, removes group navigation and lists every quote in details', async () => {
-    mocks.getCatalog.mockResolvedValue({ groups: [group(1, [offer('same', { offer_key: 'one' })]), group(2, [offer('same', { offer_key: 'two' })], { is_exclusive: true, user_rate_multiplier: 0 })], user_rate_status: 'loaded' })
+    mocks.getCatalog.mockResolvedValue({ groups: [group(1, [offer('same', { offer_key: 'one' })]), group(2, [offer('same', { offer_key: 'two', rate_quote: rateQuote(0, { base_source: 'personal' }) })], { is_exclusive: true, user_rate_multiplier: 0 })], user_rate_status: 'loaded' })
     const w = page(); await flushPromises()
     expect(w.findAll('.catalog-grid')).toHaveLength(1)
     expect(w.findAll('.catalog-model-card')).toHaveLength(1)
@@ -151,7 +151,7 @@ describe('available channels user page', () => {
   })
   it('reconciles filters and closes a removed offer after a successful refresh', async () => {
     const w = page(); await flushPromises()
-    await w.findAll('.catalog-filter').find(b => b.text().startsWith('anthropic'))!.trigger('click')
+    await w.findAll('[role="group"] button[aria-pressed]').find(b => b.text().startsWith('anthropic'))!.trigger('click')
     expect(w.findAll('.catalog-model-card')).toHaveLength(1)
     await w.findAll('.catalog-model-card button')[1]!.trigger('click')
     mocks.getCatalog.mockResolvedValueOnce({ groups: [group(1, [offer('replacement')])], user_rate_status: 'loaded' })

@@ -19,7 +19,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
 )
 
-const usageLogSelectColumns = "id, user_id, api_key_id, account_id, request_id, model, requested_model, upstream_model, upstream_response_model, upstream_model_mismatch, group_id, subscription_id, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, cache_creation_5m_tokens, cache_creation_1h_tokens, image_output_tokens, audio_output_tokens, image_output_cost, image_input_tokens, image_input_cost, input_cost, output_cost, cache_creation_cost, cache_read_cost, total_cost, actual_cost, rate_multiplier, account_rate_multiplier, billing_type, request_type, stream, openai_ws_mode, duration_ms, first_token_ms, last_token_ms, first_output_ms, first_output_kind, is_complete, user_agent, ip_address, image_count, image_size, image_input_size, image_output_size, image_size_source, image_size_breakdown, video_count, video_resolution, video_duration_seconds, service_tier, reasoning_effort, requested_reasoning_effort, inbound_endpoint, upstream_endpoint, cache_ttl_overridden, long_context_billing_applied, channel_id, model_mapping_chain, billing_tier, billing_mode, account_stats_cost, upstream_request_id, session_id, completion_status, usage_source, native_compaction_v2, timing_version, created_at, codex_rollout_budget_units, requested_service_tier, response_service_tier, first_byte_ms"
+const usageLogSelectColumns = "id, user_id, api_key_id, account_id, request_id, model, requested_model, upstream_model, upstream_response_model, upstream_model_mismatch, group_id, subscription_id, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, cache_creation_5m_tokens, cache_creation_1h_tokens, image_output_tokens, audio_output_tokens, image_output_cost, image_input_tokens, image_input_cost, input_cost, output_cost, cache_creation_cost, cache_read_cost, total_cost, actual_cost, rate_multiplier, account_rate_multiplier, billing_type, request_type, stream, openai_ws_mode, duration_ms, first_token_ms, last_token_ms, first_output_ms, first_output_kind, is_complete, user_agent, ip_address, image_count, image_size, image_input_size, image_output_size, image_size_source, image_size_breakdown, video_count, video_resolution, video_duration_seconds, service_tier, reasoning_effort, requested_reasoning_effort, inbound_endpoint, upstream_endpoint, cache_ttl_overridden, long_context_billing_applied, channel_id, model_mapping_chain, billing_tier, billing_mode, account_stats_cost, upstream_request_id, session_id, completion_status, usage_source, native_compaction_v2, timing_version, created_at, codex_rollout_budget_units, requested_service_tier, response_service_tier, first_byte_ms, billing_policy_version, billing_rate_snapshot"
 
 func (r *usageLogRepository) GetByID(ctx context.Context, id int64) (log *service.UsageLog, err error) {
 	query := "SELECT " + usageLogSelectColumns + " FROM usage_logs WHERE id = $1"
@@ -491,6 +491,8 @@ func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, e
 		cacheReadCost             float64
 		totalCost                 float64
 		actualCost                float64
+		billingPolicyVersion      int64
+		billingRateSnapshot       sql.NullString
 		rateMultiplier            float64
 		accountRateMultiplier     sql.NullFloat64
 		billingType               int16
@@ -614,11 +616,20 @@ func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, e
 		&requestedServiceTier,
 		&responseServiceTier,
 		&firstByte,
+		&billingPolicyVersion,
+		&billingRateSnapshot,
 	); err != nil {
 		return nil, err
 	}
 
+	var rateSnapshot map[string]any
+	if billingRateSnapshot.Valid {
+		if err := json.Unmarshal([]byte(billingRateSnapshot.String), &rateSnapshot); err != nil {
+			return nil, fmt.Errorf("decode billing rate snapshot: %w", err)
+		}
+	}
 	log := &service.UsageLog{
+		BillingRateSnapshot:       rateSnapshot,
 		ID:                        id,
 		UserID:                    userID,
 		APIKeyID:                  apiKeyID,
@@ -643,6 +654,7 @@ func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, e
 		TotalCost:                 totalCost,
 		ActualCost:                actualCost,
 		RateMultiplier:            rateMultiplier,
+		BillingPolicyVersion:      billingPolicyVersion,
 		AccountRateMultiplier:     nullFloat64Ptr(accountRateMultiplier),
 		BillingType:               int8(billingType),
 		RequestType:               service.RequestTypeFromInt16(requestTypeRaw),

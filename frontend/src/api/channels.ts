@@ -1,3 +1,4 @@
+import type { BillingRateQuote } from '@/types/billingRate'
 /**
  * User Channels API endpoints (non-admin)
  * 用户侧「可用渠道」聚合查询：渠道 + 用户可访问的分组 + 支持模型（含定价）。
@@ -85,9 +86,27 @@ export async function getAvailable(options?: { signal?: AbortSignal }): Promise<
   return data
 }
 
-export type CatalogBillingUnit = 'token' | 'image' | 'request' | 'video' | 'second' | 'unknown'
+export type CatalogBillingUnit = 'token' | 'image' | 'request' | 'video' | 'second' | 'minute' | 'hour' | 'million_characters' | 'unknown'
+
+export interface GroupRateSummary {
+  status: 'available' | 'unavailable' | 'empty'
+  policy_version: number
+  as_of: string
+  entries: Array<{
+    platform: string
+    billing_unit: string
+    default_quote: BillingRateQuote | null
+    rate_min: number | null
+    rate_max: number | null
+    model_count: number
+    has_model_exceptions: boolean
+  }>
+}
 
 export interface CatalogOffer extends PlazaModel {
+  rate_quote?: BillingRateQuote | null
+  price_time_multiplier?: number
+  endpoints?: string[]
   platform: GroupPlatform
   offer_key: string
   billing_mode: BillingMode | null
@@ -100,6 +119,7 @@ export interface CatalogOffer extends PlazaModel {
 }
 
 export interface CatalogGroup extends Omit<ModelPlazaGroup, 'models'> {
+  rate_summary?: GroupRateSummary
   peak_timezone: string
   models: CatalogOffer[]
 }
@@ -117,6 +137,15 @@ export async function getCatalog(options?: { signal?: AbortSignal }): Promise<Ch
   return data
 }
 
-export const userChannelsAPI = { getAvailable, getCatalog }
+/** Key binding quotes remain available when the optional channels page is disabled. */
+export async function getKeyQuotes(options?: { signal?: AbortSignal }): Promise<ChannelCatalog> {
+  const { data } = await apiClient.get<ChannelCatalog>('/channels/available', {
+    params: { view: 'key_quotes' },
+    signal: options?.signal
+  })
+  return data
+}
+
+export const userChannelsAPI = { getAvailable, getCatalog, getKeyQuotes }
 
 export default userChannelsAPI

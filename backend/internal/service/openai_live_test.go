@@ -98,8 +98,10 @@ func TestValidateLiveCallRequestDoesNotRequireDelegation(t *testing.T) {
 
 func TestCreateUpstreamLiveCallPreservesSession(t *testing.T) {
 	upstream := &liveHTTPUpstreamStub{}
+	cfg := &config.Config{}
+	cfg.Gateway.OpenAIWS.Enabled, cfg.Gateway.OpenAIWS.OAuthEnabled = true, true
 	service := &OpenAIGatewayService{
-		cfg:          &config.Config{},
+		cfg:          cfg,
 		httpUpstream: upstream,
 	}
 	account := &Account{

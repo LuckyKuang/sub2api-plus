@@ -103,7 +103,8 @@ func TestAsyncImageSuccessfulPrecheckIsNotRepeatedByDetachedExecution(t *testing
 	store := &asyncImageMemoryStore{tasks: map[string]*service.ImageTaskRecord{}}
 	tasks := service.NewImageTaskServiceWithUploader(store, nil, time.Hour, time.Minute)
 	engine := &handlerPromptEngine{mode: securityaudit.ModeBlocking, decision: &securityaudit.PromptDecision{Kind: securityaudit.DecisionAllow, AllowNextStage: true}}
-	openAI := &OpenAIGatewayHandler{securityAuditCoordinator: securityaudit.NewCoordinator(nil, engine)}
+	openAI := newGatewayAdmissionForTest()
+	openAI.securityAuditCoordinator = securityaudit.NewCoordinator(nil, engine)
 	h := &AsyncImageHandler{tasks: tasks, openAI: openAI}
 	var executionMu sync.Mutex
 	repeatedDecision := false
@@ -114,7 +115,7 @@ func TestAsyncImageSuccessfulPrecheckIsNotRepeatedByDetachedExecution(t *testing
 		executionMu.Lock()
 		repeatedDecision = decision != nil
 		executionMu.Unlock()
-		c.JSON(http.StatusOK, gin.H{"created": 1, "data": []any{}})
+		c.JSON(http.StatusOK, gin.H{"created": 1, "data": []gin.H{{"url": "https://example.test/image.png"}}})
 	}
 
 	router := gin.New()

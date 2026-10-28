@@ -1,6 +1,10 @@
 package service
 
-import "time"
+import (
+	"time"
+
+	"github.com/LuckyKuang/sub2api-plus/internal/domain"
+)
 
 // APIKeyAuthSnapshot API Key 认证缓存快照（仅包含认证所需字段）
 type APIKeyAuthSnapshot struct {
@@ -47,11 +51,11 @@ type APIKeyAuthUserSnapshot struct {
 	BalanceNotifyExtraEmails   []NotifyEmailEntry `json:"balance_notify_extra_emails,omitempty"`
 	TotalRecharged             float64            `json:"total_recharged"`
 
-	// RPMLimit 用户级每分钟请求数上限（0 = 不限制）；用于 billing_cache_service.checkRPM 兜底判断。
+	// RPMLimit 用户全局每分钟硬上限（0 = 不限制）；与分组/override 上限同时生效。
 	RPMLimit int `json:"rpm_limit"`
 
 	// UserGroupRPMOverride 该 API Key 对应的 (user, group) 专属 RPM 覆盖值。
-	// nil = 无 override（回退到 group/user 级）；0 = 不限流；>0 = 专属上限。
+	// nil = 回源查询并缺省使用分组上限；0 = 仅该分组豁免；>0 = 替代分组上限。用户全局上限始终生效。
 	UserGroupRPMOverride *int `json:"user_group_rpm_override,omitempty"`
 }
 
@@ -64,12 +68,15 @@ type APIKeyAuthGroupSnapshot struct {
 	Status                          string                        `json:"status"`
 	SubscriptionType                string                        `json:"subscription_type"`
 	RateMultiplier                  float64                       `json:"rate_multiplier"`
+	BillingRatePolicy               domain.BillingRatePolicy      `json:"billing_rate_policy"`
+	BillingPolicyVersion            int64                         `json:"billing_policy_version"`
 	DailyLimitUSD                   *float64                      `json:"daily_limit_usd,omitempty"`
 	WeeklyLimitUSD                  *float64                      `json:"weekly_limit_usd,omitempty"`
 	MonthlyLimitUSD                 *float64                      `json:"monthly_limit_usd,omitempty"`
 	FiveHourLimitUSD                *float64                      `json:"five_hour_limit_usd,omitempty"`
 	AllowImageGeneration            bool                          `json:"allow_image_generation"`
 	AllowBatchImageGeneration       bool                          `json:"allow_batch_image_generation"`
+	ImageCountBilling               bool                          `json:"image_count_billing"`
 	ImageRateIndependent            bool                          `json:"image_rate_independent"`
 	ImageRateMultiplier             float64                       `json:"image_rate_multiplier"`
 	ImagePrice1K                    *float64                      `json:"image_price_1k,omitempty"`
@@ -113,7 +120,7 @@ type APIKeyAuthGroupSnapshot struct {
 	// Codex /models handler 直接读认证分组对象。
 	CodexModelsManifestConfig GroupCodexModelsManifestConfig `json:"codex_models_manifest_config,omitempty"`
 
-	// RPMLimit 分组级每分钟请求数上限（0 = 不限制）；用于 billing_cache_service.checkRPM 级联判断。
+	// RPMLimit 每个 (user, group) 的默认每分钟上限（0 = 不限制），可被该配对 override 替代，不替代用户全局上限。
 	RPMLimit int `json:"rpm_limit"`
 
 	// MaxReasoningEffort Anthropic/OpenAI 请求的推理强度上限，空字符串表示不限制。

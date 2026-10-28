@@ -47,6 +47,7 @@ func TestLiveSidebandMissingProxyNeverReachesDialer(t *testing.T) {
 	upstream := &httpUpstreamRecorder{resp: &http.Response{StatusCode: http.StatusCreated, Header: http.Header{"Location": []string{"/backend-api/codex/call_strict_proxy"}}, Body: io.NopCloser(strings.NewReader("sdp"))}}
 	s := newOpenAIRejectedFieldTestService(upstream)
 	s.liveAttestationCipher = newLiveAttestationCipher(cfg)
+	s.cfg.Gateway.OpenAIWS.Enabled, s.cfg.Gateway.OpenAIWS.OAuthEnabled = true, true
 	account := turnStateAccount(71, "principal-live-proxy")
 	created, err := s.createUpstreamLiveCall(context.Background(), account, &LiveCallRequest{SDP: "offer", Session: json.RawMessage(`{"type":"realtime"}`)}, "proof")
 	require.NoError(t, err)

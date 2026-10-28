@@ -69,6 +69,10 @@ type LiveCallRecord struct {
 	// AttestationCiphertext 仅用于让同一会话的 Sideband 复用创建时的证明。
 	AttestationCiphertext string
 	OutboundSnapshot      *LiveOutboundSnapshot
+	// PricingSnapshot is internal create-time policy evidence for background
+	// lifecycle work. Live summaries remain non-billable until a usage contract
+	// supplies actual billable units.
+	PricingSnapshot json.RawMessage
 }
 
 // LiveOutboundSnapshot contains no credential material. The call's declarations
@@ -89,6 +93,9 @@ type LiveCallCreated struct {
 	Location         string
 	Account          *Account
 	OutboundSnapshot *LiveOutboundSnapshot
+	// Only kept in memory until mapping persistence succeeds or compensation
+	// finishes. It must never be serialized or persisted with the call record.
+	createCleanup *liveCreateCleanupTarget
 }
 
 // LiveCallStore 由 GatewayCache 的 Redis 实现可选提供，避免扩大旧缓存接口。

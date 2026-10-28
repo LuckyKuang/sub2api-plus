@@ -117,7 +117,7 @@ func NewGatewayHandler(
 		usageRecordWorkerPool:     usageRecordWorkerPool,
 		errorPassthroughService:   errorPassthroughService,
 		contentModerationService:  contentModerationService,
-		concurrencyHelper:         NewConcurrencyHelper(concurrencyService, SSEPingFormatClaude, pingInterval),
+		concurrencyHelper:         NewConcurrencyHelper(concurrencyService, SSEPingFormatClaude, pingInterval).WithRPMAdmission(billingCacheService),
 		userMsgQueueHelper:        umqHelper,
 		maxAccountSwitches:        maxAccountSwitches,
 		maxAccountSwitchesGemini:  maxAccountSwitchesGemini,
@@ -258,7 +258,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 	subscription, _ := middleware2.GetSubscriptionFromContext(c)
 
 	// 1. 首先获取用户并发槽位
-	userReleaseFunc, err := h.concurrencyHelper.AcquireUserSlotWithWait(c, subject.UserID, subject.Concurrency, reqStream, &streamStarted)
+	userReleaseFunc, err := h.concurrencyHelper.AcquireUserSlot(c, subject.UserID, subject.Concurrency)
 	if err != nil {
 		reqLog.Warn("gateway.user_slot_acquire_failed", zap.Error(err))
 		h.handleConcurrencyError(c, err, "user", streamStarted)
@@ -280,7 +280,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 	}
 
 	// 余额模式在途预留：防止并发请求在预检时看到同一份余额而集体透支。
-	inflightRelease, err := reserveInflightBalance(c, h.billingCacheService, h.gatewayService, apiKey, subscription, tokenInflightEstimate(reqModel, body))
+	inflightRelease, err := reserveInflightBalance(c, h.billingCacheService, h.gatewayService, apiKey, subscription, tokenInflightEstimate(service.ContentModerationProtocolAnthropicMessages, reqModel, body))
 	if err != nil {
 		reqLog.Info("gateway.inflight_reservation_rejected", zap.Error(err))
 		status, code, message, retryAfter := billingErrorDetails(err)
@@ -429,44 +429,18 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 					h.handleStreamingAwareError(c, http.StatusServiceUnavailable, "api_error", "No available accounts", streamStarted)
 					return
 				}
-				accountWaitCounted := false
-				canWait, err := h.concurrencyHelper.IncrementAccountWaitCount(c.Request.Context(), account.ID, selection.WaitPlan.MaxWaiting)
-				if err != nil {
-					reqLog.Warn("gateway.account_wait_counter_increment_failed", zap.Int64("account_id", account.ID), zap.Error(err))
-				} else if !canWait {
-					reqLog.Info("gateway.account_wait_queue_full",
-						zap.Int64("account_id", account.ID),
-						zap.Int("max_waiting", selection.WaitPlan.MaxWaiting),
-					)
-					h.handleStreamingAwareErrorWithCode(c, http.StatusTooManyRequests, "rate_limit_error", gatewayQueueFullCode, "Too many pending requests, please retry later", streamStarted)
-					return
-				}
-				if err == nil && canWait {
-					accountWaitCounted = true
-				}
-				releaseWait := func() {
-					if accountWaitCounted {
-						h.concurrencyHelper.DecrementAccountWaitCount(c.Request.Context(), account.ID)
-						accountWaitCounted = false
-					}
-				}
-
-				accountReleaseFunc, err = h.concurrencyHelper.AcquireAccountSlotWithWaitTimeout(
+				accountReleaseFunc, err = h.concurrencyHelper.AcquireAccountSlotForWaitPlan(
 					c,
 					account.ID,
-					selection.WaitPlan.MaxConcurrency,
-					selection.WaitPlan.Timeout,
+					selection.WaitPlan,
 					reqStream,
 					&streamStarted,
 				)
 				if err != nil {
 					reqLog.Warn("gateway.account_slot_acquire_failed", zap.Int64("account_id", account.ID), zap.Error(err))
-					releaseWait()
 					h.handleConcurrencyError(c, err, "account", streamStarted)
 					return
 				}
-				// Slot acquired: no longer waiting in queue.
-				releaseWait()
 			}
 			// 终检与准入后绑定使用选号结果携带的门（见 responses 同名注释）。
 			admissionCtx := service.ContextWithSelectionProfitGate(c.Request.Context(), selection)
@@ -486,6 +460,16 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 			}
 			account = latest
 			selection.Account = latest
+			if err := ensureAccountInflightReservation(c, account); err != nil {
+				if accountReleaseFunc != nil {
+					accountReleaseFunc()
+				}
+				reqLog.Info("gateway.account_inflight_reservation_rejected", zap.Int64("account_id", account.ID), zap.Error(err))
+				status, code, message, retryAfter := billingErrorDetails(err)
+				applyBillingQuotaHeaders(c, err, retryAfter)
+				h.handleStreamingAwareError(c, status, code, message, streamStarted)
+				return
+			}
 			// 等待路径保持既有 eager 绑定（无门时 helper 直接绑定）；调度器已
 			// 抢槽的直达路径无门时由选号内部绑定，这里只在门下补准入后绑定。
 			if selection.ProfitGateActive() || !selection.Acquired {
@@ -613,6 +597,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 			isComplete := err == nil && result.UsageComplete()
 			h.submitUsageRecordTask(c.Request.Context(), func(ctx context.Context) {
 				if err := h.gatewayService.RecordUsage(ctx, &service.RecordUsageInput{
+					PricingSnapshot:    service.BillingPricingSnapshotFromContext(ctx),
 					Result:             result,
 					QuotaPlatform:      quotaPlatform,
 					APIKey:             apiKey,
@@ -778,44 +763,18 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 					h.handleStreamingAwareError(c, http.StatusServiceUnavailable, "api_error", "No available accounts", streamStarted)
 					return
 				}
-				accountWaitCounted := false
-				canWait, err := h.concurrencyHelper.IncrementAccountWaitCount(c.Request.Context(), account.ID, selection.WaitPlan.MaxWaiting)
-				if err != nil {
-					reqLog.Warn("gateway.account_wait_counter_increment_failed", zap.Int64("account_id", account.ID), zap.Error(err))
-				} else if !canWait {
-					reqLog.Info("gateway.account_wait_queue_full",
-						zap.Int64("account_id", account.ID),
-						zap.Int("max_waiting", selection.WaitPlan.MaxWaiting),
-					)
-					h.handleStreamingAwareErrorWithCode(c, http.StatusTooManyRequests, "rate_limit_error", gatewayQueueFullCode, "Too many pending requests, please retry later", streamStarted)
-					return
-				}
-				if err == nil && canWait {
-					accountWaitCounted = true
-				}
-				releaseWait := func() {
-					if accountWaitCounted {
-						h.concurrencyHelper.DecrementAccountWaitCount(c.Request.Context(), account.ID)
-						accountWaitCounted = false
-					}
-				}
-
-				accountReleaseFunc, err = h.concurrencyHelper.AcquireAccountSlotWithWaitTimeout(
+				accountReleaseFunc, err = h.concurrencyHelper.AcquireAccountSlotForWaitPlan(
 					c,
 					account.ID,
-					selection.WaitPlan.MaxConcurrency,
-					selection.WaitPlan.Timeout,
+					selection.WaitPlan,
 					reqStream,
 					&streamStarted,
 				)
 				if err != nil {
 					reqLog.Warn("gateway.account_slot_acquire_failed", zap.Int64("account_id", account.ID), zap.Error(err))
-					releaseWait()
 					h.handleConcurrencyError(c, err, "account", streamStarted)
 					return
 				}
-				// Slot acquired: no longer waiting in queue.
-				releaseWait()
 			}
 			// 终检与准入后绑定使用选号结果携带的门（见 responses 同名注释）。
 			admissionCtx := service.ContextWithSelectionProfitGate(c.Request.Context(), selection)
@@ -838,6 +797,18 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 			}
 			account = latest
 			selection.Account = latest
+			if err := ensureAccountInflightReservation(c, account); err != nil {
+				if accountReleaseFunc != nil {
+					accountReleaseFunc()
+				}
+				h.gatewayService.ReleaseAccountSession(context.Background(), account, sessionKey)
+				delete(sessionSlotAccounts, account.ID)
+				reqLog.Info("gateway.account_inflight_reservation_rejected", zap.Int64("account_id", account.ID), zap.Error(err))
+				status, code, message, retryAfter := billingErrorDetails(err)
+				applyBillingQuotaHeaders(c, err, retryAfter)
+				h.handleStreamingAwareError(c, status, code, message, streamStarted)
+				return
+			}
 			// 记录本请求注册过会话槽的账号（profit 准入后账号已定）
 			sessionSlotAccounts[account.ID] = account
 			// 等待路径保持既有 eager 绑定（无门时 helper 直接绑定）；调度器已
@@ -911,7 +882,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 				}
 			}
 			// Bedrock CC 兼容：清理 body 专有字段 + 过滤 anthropic-beta header，适用于所有转发路径
-			if err := attemptParsedReq.ReplaceBody(h.gatewayService.ApplyBedrockCCCompat(c, attemptParsedReq.Body.Bytes(), attemptParsedReq.Model, account, apiKey.GroupID)); err != nil {
+			if err := attemptParsedReq.ReplaceBody(h.gatewayService.ApplyBedrockCCCompat(c, attemptParsedReq.Body.Bytes(), attemptParsedReq.Model, account, currentAPIKey.GroupID)); err != nil {
 				h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "Failed to parse request body")
 				return
 			}
@@ -977,6 +948,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 				sessionID := service.ExtractClientSessionID(c)
 				h.submitUsageRecordTask(c.Request.Context(), func(ctx context.Context) {
 					if err := h.gatewayService.RecordUsage(ctx, &service.RecordUsageInput{
+						PricingSnapshot:    service.BillingPricingSnapshotFromContext(ctx),
 						Result:             result,
 						QuotaPlatform:      quotaPlatform,
 						APIKey:             currentAPIKey,
@@ -1042,15 +1014,41 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 							return
 						}
 						fallbackAPIKey := cloneAPIKeyWithGroup(apiKey, fallbackGroup)
-						if err := h.billingCacheService.CheckBillingEligibility(c.Request.Context(), fallbackAPIKey.User, fallbackAPIKey, fallbackGroup, nil, service.PlatformFromAPIKey(fallbackAPIKey)); err != nil {
+						// This retry is a new admission to the fallback group. Neither
+						// the old supplier/alias nor its frozen prices belong to it.
+						fallbackCtx := service.WithoutBillingPricingSnapshot(c.Request.Context())
+						fallbackCtx = context.WithValue(fallbackCtx, ctxkey.ForcePlatform, "")
+						fallbackCtx = context.WithValue(fallbackCtx, ctxkey.Group, fallbackGroup)
+						fallbackCtx = context.WithValue(fallbackCtx, ctxkey.ResolvedUpstreamModel, "")
+						fallbackCtx = context.WithValue(fallbackCtx, ctxkey.RequestedPublicModel, "")
+						fallbackCtx = context.WithValue(fallbackCtx, ctxkey.CompositeRouteSource, "")
+						fallbackCtx = service.WithResolvedTargetPlatform(fallbackCtx, fallbackGroup.Platform)
+						fallbackCtx, pricingAt = service.WithGatewayTokenRequestPricing(fallbackCtx)
+						fallbackCtx = h.gatewayService.WithBillingPricingSnapshot(fallbackCtx, fallbackAPIKey, pricingAt, reqModel)
+						c.Request = c.Request.WithContext(fallbackCtx)
+						if decision := validateBillingPricingAdmission(c, reqLog); decision != nil {
+							h.handleStreamingAwareErrorWithCode(c, securityAuditStatus(decision), "api_error", securityAuditErrorCode(decision), securityAuditMessage(decision), streamStarted)
+							return
+						}
+						if err := h.billingCacheService.CheckBillingEligibility(fallbackCtx, fallbackAPIKey.User, fallbackAPIKey, fallbackGroup, nil, service.QuotaPlatform(fallbackCtx, fallbackAPIKey)); err != nil {
 							status, code, message, retryAfter := billingErrorDetails(err)
 							applyBillingQuotaHeaders(c, err, retryAfter)
 							h.handleStreamingAwareError(c, status, code, message, streamStarted)
 							return
 						}
-						// 兜底重试按"直接请求兜底分组"处理：清除强制平台，允许按分组平台调度
-						ctx := context.WithValue(c.Request.Context(), ctxkey.ForcePlatform, "")
-						c.Request = c.Request.WithContext(ctx)
+						inflightRelease()
+						fallbackInflightRelease, reserveErr := reserveInflightBalance(c, h.billingCacheService, h.gatewayService, fallbackAPIKey, nil, tokenInflightEstimate(service.ContentModerationProtocolAnthropicMessages, reqModel, body))
+						if reserveErr != nil {
+							status, code, message, retryAfter := billingErrorDetails(reserveErr)
+							applyBillingQuotaHeaders(c, reserveErr, retryAfter)
+							h.handleStreamingAwareError(c, status, code, message, streamStarted)
+							return
+						}
+						defer fallbackInflightRelease()
+						channelMapping, _ = h.gatewayService.ResolveChannelMappingAndRestrict(c.Request.Context(), fallbackAPIKey.GroupID, reqModel)
+						parsedReq.GroupID = fallbackAPIKey.GroupID
+						platform = fallbackGroup.Platform
+						hasBoundSession, sessionBoundAccountID = false, 0
 						currentAPIKey = fallbackAPIKey
 						currentSubscription = nil
 						fallbackUsed = true
@@ -1158,6 +1156,11 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 // Returns models based on account configurations (model_mapping whitelist)
 // Falls back to default models if no whitelist is configured
 func (h *GatewayHandler) Models(c *gin.Context) {
+	userRelease, admitted := h.admitControl(c, service.ContentModerationProtocolOpenAIResponses)
+	if !admitted {
+		return
+	}
+	defer userRelease()
 	apiKey, _ := middleware2.GetAPIKeyFromContext(c)
 
 	var groupID *int64
@@ -1244,6 +1247,11 @@ func (h *GatewayHandler) CodexModels(c *gin.Context) {
 		h.errorResponse(c, http.StatusUnauthorized, "invalid_request_error", "API key group is required")
 		return
 	}
+	userRelease, admitted := h.admitControl(c, service.ContentModerationProtocolOpenAIResponses)
+	if !admitted {
+		return
+	}
+	defer userRelease()
 
 	forcedPlatform := ""
 	if value, exists := middleware2.GetForcePlatformFromContext(c); exists {
@@ -1584,6 +1592,11 @@ func mergeModelIDs(primary, secondary []string) []string {
 // GET /antigravity/models
 // 分组级模型白名单开启时按白名单过滤。
 func (h *GatewayHandler) AntigravityModels(c *gin.Context) {
+	userRelease, admitted := h.admitControl(c, service.ContentModerationProtocolAnthropicMessages)
+	if !admitted {
+		return
+	}
+	defer userRelease()
 	models := antigravity.DefaultModels()
 	if apiKey, ok := middleware2.GetAPIKeyFromContext(c); ok && apiKey != nil && apiKey.Group != nil && apiKey.Group.ModelAllowlistEnabled() {
 		filtered := make([]antigravity.ClaudeModel, 0, len(models))
@@ -1608,6 +1621,13 @@ func cloneAPIKeyWithGroup(apiKey *service.APIKey, group *service.Group) *service
 	groupID := group.ID
 	cloned.GroupID = &groupID
 	cloned.Group = group
+	if apiKey.User != nil && (apiKey.GroupID == nil || *apiKey.GroupID != group.ID) {
+		user := *apiKey.User
+		// Auth snapshots carry the override for their original group only.
+		// A cross-group fallback must resolve the target group's RPM policy.
+		user.UserGroupRPMOverride = nil
+		cloned.User = &user
+	}
 	return &cloned
 }
 
@@ -1630,8 +1650,6 @@ func (h *GatewayHandler) Usage(c *gin.Context) {
 		return
 	}
 
-	ctx := c.Request.Context()
-
 	// 解析可选的日期范围参数（用于 model_stats 查询）
 	startTime, endTime := h.parseUsageDateRange(c)
 	days, ok := parseAPIKeyDailyUsageDays(c.DefaultQuery("days", ""))
@@ -1639,6 +1657,12 @@ func (h *GatewayHandler) Usage(c *gin.Context) {
 		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "Invalid days, allowed range is 1-90")
 		return
 	}
+	userRelease, admitted := h.admitControl(c, service.ContentModerationProtocolAnthropicMessages)
+	if !admitted {
+		return
+	}
+	defer userRelease()
+	ctx := c.Request.Context()
 
 	// Best-effort: 获取用量统计（按当前 API Key 过滤），失败不影响基础响应
 	usageData := h.buildUsageData(ctx, apiKey.ID)
@@ -1945,7 +1969,15 @@ func (h *GatewayHandler) calculateSubscriptionRemaining(group *service.Group, su
 
 // handleConcurrencyError handles concurrency-related acquire errors.
 func (h *GatewayHandler) handleConcurrencyError(c *gin.Context, err error, slotType string, streamStarted bool) {
+	if c != nil && c.Request != nil && c.Request.Context().Err() != nil {
+		if errors.Is(context.Cause(c.Request.Context()), service.ErrConcurrencyLeaseLost) {
+			err = service.ErrConcurrencyLeaseLost
+		} else if errors.Is(err, context.Canceled) && failoverClientGone(c) {
+			return
+		}
+	}
 	status, errType, code, message := concurrencyErrorResponse(err, slotType)
+	setRPMRetryAfter(c, err)
 	h.handleStreamingAwareErrorWithCode(c, status, errType, code, message, streamStarted)
 }
 
@@ -2242,6 +2274,12 @@ func (h *GatewayHandler) CountTokens(c *gin.Context) {
 		h.anthropicSecurityAuditError(c, decision)
 		return
 	}
+
+	userRelease, admitted := acquireGatewayUserRequest(c, h.concurrencyHelper, h.errorResponse)
+	if !admitted {
+		return
+	}
+	defer userRelease()
 	// Classification and bridge context follow the original-content audit.
 	SetClaudeCodeClientContext(c, body, parsedReq)
 	c.Request = c.Request.WithContext(service.WithThinkingEnabled(c.Request.Context(), parsedReq.ThinkingEnabled, h.metadataBridgeEnabled()))
@@ -2250,7 +2288,7 @@ func (h *GatewayHandler) CountTokens(c *gin.Context) {
 	subscription, _ := middleware2.GetSubscriptionFromContext(c)
 
 	// 校验 billing eligibility（订阅/余额）
-	// 【注意】不计算并发，但需要校验订阅/余额
+	// Token counting shares the user-wide concurrency pool without usage billing.
 	if err := h.billingCacheService.CheckBillingEligibility(c.Request.Context(), apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(c.Request.Context(), apiKey)); err != nil {
 		status, code, message, retryAfter := billingErrorDetails(err)
 		applyBillingQuotaHeaders(c, err, retryAfter)
@@ -2532,7 +2570,7 @@ func extractQuotaResetSeconds(err error) int {
 }
 
 // applyBillingQuotaHeaders keeps every protocol handler consistent when a
-// quota check occurs after the request has waited for user concurrency. The
+// quota check occurs after the request has acquired user concurrency. The
 // standard reset header is Unix seconds; the RFC3339 header is an explicit
 // project extension for human-readable diagnostics.
 func applyBillingQuotaHeaders(c *gin.Context, err error, retryAfter int) {

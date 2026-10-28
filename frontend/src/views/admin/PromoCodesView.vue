@@ -110,31 +110,31 @@
           </template>
 
           <template #cell-actions="{ row }">
-            <div class="flex items-center space-x-1">
+            <div class="table-actions">
               <button
                 @click="copyRegisterLink(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors hover:bg-primary-50/25 hover:text-primary-600 dark:hover:bg-primary-900/20 dark:hover:text-primary-400 surface-control surface-muted"
+                class="table-action"
                 :title="t('admin.promo.copyRegisterLink')"
               >
                 <Icon name="link" size="sm" />
               </button>
               <button
                 @click="handleViewUsages(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors hover:bg-blue-50/25 hover:text-blue-600 dark:hover:bg-blue-900/20 dark:hover:text-blue-400 surface-control surface-muted"
+                class="table-action"
                 :title="t('admin.promo.viewUsages')"
               >
                 <Icon name="eye" size="sm" />
               </button>
               <button
                 @click="handleEdit(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors hover:surface-hover hover:text-gray-700 dark:hover:text-gray-300 surface-control surface-muted"
+                class="table-action table-action-neutral"
                 :title="t('common.edit')"
               >
                 <Icon name="edit" size="sm" />
               </button>
               <button
                 @click="handleDelete(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors hover:bg-red-50/25 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400 surface-control surface-muted"
+                class="table-action table-action-danger"
                 :title="t('common.delete')"
               >
                 <Icon name="trash" size="sm" />

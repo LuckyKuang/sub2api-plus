@@ -3,6 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import BulkEditKeysModal from '../BulkEditKeysModal.vue'
 import DateTimePicker from '@/components/common/DateTimePicker.vue'
 import type { Group } from '@/types'
+import { group, offer, rateQuote } from '@/components/channels/__tests__/catalogFixtures'
 
 const { bulkUpdate, showSuccess, showError } = vi.hoisted(() => ({
   bulkUpdate: vi.fn(), showSuccess: vi.fn(), showError: vi.fn()
@@ -86,6 +87,23 @@ describe('BulkEditKeysModal', () => {
     await wrapper.get('[data-test="group-input"]').setValue('7')
     await wrapper.get('form').trigger('submit')
     expect(bulkUpdate).toHaveBeenCalledWith([1, 2], { group_id: 7 })
+  })
+
+  it('quotes the selected target group with supplier and unit rates before applying a bulk change', async () => {
+    const wrapper = mountModal()
+    await wrapper.setProps({ quotedGroups: [group(7, [offer()], { platform: 'composite', rate_summary: {
+      status: 'available', policy_version: 1, as_of: 'now', entries: [{ platform: 'grok', billing_unit: 'image', default_quote: rateQuote(0.7), rate_min: 0.7, rate_max: 1.4, model_count: 2, has_model_exceptions: true }]
+    } })] })
+    await wrapper.get('[data-test="enable-group"]').setValue(true)
+    await wrapper.get('[data-test="group-input"]').setValue('7')
+    expect(wrapper.get('[data-rate-entry="grok:image"]').text()).toContain('×0.7–×1.4')
+    expect(bulkUpdate).not.toHaveBeenCalled()
+    await wrapper.setProps({ quotesFailed: true })
+    expect(wrapper.text()).toContain('billingRates.unknown')
+    const retry = wrapper.findAll('button').find(button => button.text().includes('billingRates.retry'))!
+    await retry.trigger('click')
+    expect(wrapper.emitted('retryQuotes')).toHaveLength(1)
+    expect(bulkUpdate).not.toHaveBeenCalled()
   })
 
   it('clears only an explicitly selected IP list and expiration', async () => {

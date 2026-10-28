@@ -17,13 +17,17 @@ import (
 // ProvideConcurrencyCache 创建并发控制缓存，从配置读取 TTL 参数
 // 性能优化：TTL 可配置，支持长时间运行的 LLM 请求场景
 func ProvideConcurrencyCache(rdb *redis.Client, cfg *config.Config) service.ConcurrencyCache {
-	waitTTLSeconds := int(cfg.Gateway.Scheduling.StickySessionWaitTimeout.Seconds())
-	if cfg.Gateway.Scheduling.FallbackWaitTimeout > cfg.Gateway.Scheduling.StickySessionWaitTimeout {
-		waitTTLSeconds = int(cfg.Gateway.Scheduling.FallbackWaitTimeout.Seconds())
+	waitTimeout := max(service.WorkerUserConcurrencyWaitTimeout,
+		cfg.Gateway.Scheduling.StickySessionWaitTimeout,
+		cfg.Gateway.Scheduling.FallbackWaitTimeout)
+	// The counter must outlive the final waiter and its bounded cache cleanup.
+	// Rounding down can erase a live queue before its deadline; without the
+	// margin a late decrement could consume a newly admitted queue entry.
+	waitTTLSeconds := int(waitTimeout / time.Second)
+	if waitTimeout%time.Second != 0 {
+		waitTTLSeconds++
 	}
-	if waitTTLSeconds <= 0 {
-		waitTTLSeconds = cfg.Gateway.ConcurrencySlotTTLMinutes * 60
-	}
+	waitTTLSeconds += 10
 	return NewConcurrencyCache(rdb, cfg.Gateway.ConcurrencySlotTTLMinutes, waitTTLSeconds)
 }
 
@@ -66,6 +70,7 @@ func ProvideSchedulerCache(rdb *redis.Client, cfg *config.Config) service.Schedu
 
 // ProviderSet is the Wire provider set for all repositories
 var ProviderSet = wire.NewSet(
+	NewGatewayUnfinishedTaskRepository,
 	NewZhipuOffPeakRepository,
 	NewProviderFilesRepository,
 	NewUserRepository,
@@ -92,6 +97,7 @@ var ProviderSet = wire.NewSet(
 	NewUsageCleanupRepository,
 	NewDashboardAggregationRepository,
 	NewSettingRepository,
+	NewScopedAdminKeyRepository,
 	NewOpsRepository,
 	NewAuditLogRepository,
 	NewIPAccessControlRepository,

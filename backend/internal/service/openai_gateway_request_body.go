@@ -2040,7 +2040,7 @@ func (e *OpenAIFastBlockedError) Error() string { return e.Message }
 //     发生重叠，admin 可通过规则顺序明确意图。因此采用 first-match 而
 //     非 BetaPolicy 那样的"block 覆盖 filter 覆盖 pass"语义。
 func (s *OpenAIGatewayService) evaluateOpenAIFastPolicy(ctx context.Context, account *Account, model, serviceTier string) (action, errMsg string) {
-	if s == nil || s.settingService == nil {
+	if s == nil {
 		return BetaPolicyActionPass, ""
 	}
 	tier := strings.ToLower(strings.TrimSpace(serviceTier))
@@ -2049,6 +2049,9 @@ func (s *OpenAIGatewayService) evaluateOpenAIFastPolicy(ctx context.Context, acc
 	}
 	settings := openAIFastPolicySettingsFromContext(ctx)
 	if settings == nil {
+		if s.settingService == nil {
+			return BetaPolicyActionPass, ""
+		}
 		fetched, err := s.settingService.GetOpenAIFastPolicySettings(ctx)
 		if err != nil || fetched == nil {
 			return BetaPolicyActionPass, ""
@@ -2135,13 +2138,9 @@ func openAIFastPolicyUserMatches(ruleUserIDs []int64, userID int64) bool {
 	return false
 }
 
-// openAIFastPolicyCtxKey 是 context 中预取的 OpenAIFastPolicySettings 缓存
-// 键，仅用于 WebSocket 长会话内多帧复用同一份策略快照，避免每帧 DB 命中。
-//
-// Trade-off：策略变更不会影响当前 WS session（只影响新 session）。这是
-// 有意为之 —— 对长会话来说，"策略一致性"比"立刻生效"更重要，且 Claude
-// BetaPolicy 的 gin.Context 缓存也是同样取舍。需要 hot-reload 时管理员
-// 可以通过踢断 session 强制刷新。
+// openAIFastPolicyCtxKey pins the policy accepted for one request/WS turn.
+// Admission, rewriting and retries reuse it; the next audited turn captures
+// a new generation. Direct WS callers without turn hooks retain their fallback.
 type openAIFastPolicyCtxKeyType struct{}
 
 var openAIFastPolicyCtxKey = openAIFastPolicyCtxKeyType{}
@@ -2169,7 +2168,7 @@ func openAIGroupForcesFast(ctx context.Context, account *Account) bool {
 	if ctx == nil || account == nil || account.Platform != PlatformOpenAI {
 		return false
 	}
-	group, _ := ctx.Value(ctxkey.Group).(*Group)
+	group := openAIFastExecutionGroup(ctx)
 	return IsGroupContextValid(group) && groupSupportsOpenAIFast(group.Platform) && group.ForceOpenAIFast
 }
 
@@ -2725,24 +2724,24 @@ func supportsOpenAIReasoningEffortMax(model string) bool {
 	}
 }
 
-// validateGPT61SolCompatRequest runs after model mapping, before conversion can
+// validateGPT61CompatRequest runs after model mapping, before conversion can
 // discard unsupported explicit effort selections or disabled thinking.
-func validateGPT61SolCompatRequest(body []byte, model string) error {
-	if !openai.IsGPT61SolModelSpelling(model) {
+func validateGPT61CompatRequest(body []byte, model string) error {
+	if !openai.IsGPT61SolModelSpelling(model) && !openai.IsGPT61TerraModelSpelling(model) {
 		return nil
 	}
 	for _, path := range []string{"reasoning.effort", "reasoning_effort", "output_config.effort"} {
-		if err := openai.ValidateGPT61SolReasoningEffort(model, gjson.GetBytes(body, path).String()); err != nil {
+		if err := openai.ValidateGPT61ReasoningEffort(model, gjson.GetBytes(body, path).String()); err != nil {
 			return err
 		}
 	}
 	if gjson.GetBytes(body, "thinking.type").String() == "disabled" {
-		return openai.ValidateGPT61SolReasoningEffort(model, "none")
+		return openai.ValidateGPT61ReasoningEffort(model, "none")
 	}
 	requestedModel := gjson.GetBytes(body, "model").String()
 	for _, effort := range []string{"none", "minimal"} {
 		if strings.HasSuffix(strings.ToLower(requestedModel), "-"+effort) {
-			return openai.ValidateGPT61SolReasoningEffort(model, effort)
+			return openai.ValidateGPT61ReasoningEffort(model, effort)
 		}
 	}
 	return nil

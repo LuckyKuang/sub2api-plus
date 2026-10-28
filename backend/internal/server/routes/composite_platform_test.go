@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/domain"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/requestmodel"
 	servermiddleware "github.com/LuckyKuang/sub2api-plus/internal/server/middleware"
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
@@ -416,4 +417,149 @@ func TestCompositeLiveRouteDispatchesBySessionModelNotTopLevelAlias(t *testing.T
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusNoContent, w.Code)
+}
+
+// Native APIs select their provider by endpoint. A body model remains a native
+// parameter even if its prefix or an any-route alias belongs to another vendor.
+func TestCompositeGrokNativeRoutesPinSupplierWithoutAliasRewrite(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, prefix := range []string{"", "/v1"} {
+		for _, endpoint := range []string{"/tts", "/stt", "/custom-voices", "/custom-voices/:voice_id", "/custom-voices/:voice_id/audio", "/web_search", "/x_search", "/realtime"} {
+			t.Run(prefix+endpoint, func(t *testing.T) {
+				router := gin.New()
+				router.Use(func(c *gin.Context) {
+					id := int64(1)
+					c.Set(string(servermiddleware.ContextKeyAPIKey), &service.APIKey{GroupID: &id, Group: &service.Group{ID: id, Platform: service.PlatformComposite}})
+					c.Next()
+				})
+				router.Use(compositeTargetPlatformMiddleware(nil))
+				method := http.MethodPost
+				if strings.Contains(endpoint, ":voice_id") || endpoint == "/realtime" {
+					method = http.MethodGet
+				}
+				router.Handle(method, prefix+endpoint, func(c *gin.Context) {
+					require.True(t, bindGrokNativeRoute(c))
+					platform, ok := service.ResolvedTargetPlatformFromContext(c.Request.Context())
+					require.True(t, ok)
+					require.Equal(t, service.PlatformGrok, platform)
+					body, err := io.ReadAll(c.Request.Body)
+					require.NoError(t, err)
+					require.JSONEq(t, `{"model":"gpt-5","input":"native argument"}`, string(body))
+					_, mapped := service.ResolvedUpstreamModelFromContext(c.Request.Context())
+					require.False(t, mapped, "fixed API must not inherit a text-model mapping")
+					c.Status(http.StatusNoContent)
+				})
+				path := strings.ReplaceAll(prefix+endpoint, ":voice_id", "voice-1")
+				request := httptest.NewRequest(method, path, strings.NewReader(`{"model":"gpt-5","input":"native argument"}`))
+				request.Header.Set("Content-Type", "application/json")
+				response := httptest.NewRecorder()
+				router.ServeHTTP(response, request)
+				require.Equal(t, http.StatusNoContent, response.Code)
+			})
+		}
+	}
+}
+
+func TestCompositeGeminiCacheCreateResolvesPublicModelAndPreservesBody(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	resolver := service.NewCompositeRouteResolver(compositeRouteRepoStub{routes: []service.CompositeModelRoute{{ID: 1, GroupID: 1, PublicModel: "cache-pro", UpstreamModel: "gemini-2.5-pro", TargetPlatform: service.PlatformGemini, MatchType: service.CompositeRouteMatchExact, Endpoint: service.CompositeRouteEndpointGemini, Enabled: true}}})
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		id := int64(1)
+		c.Set(string(servermiddleware.ContextKeyAPIKey), &service.APIKey{GroupID: &id, Group: &service.Group{ID: id, Platform: service.PlatformComposite}})
+		c.Next()
+	})
+	router.Use(compositeGeminiTargetPlatformMiddleware(resolver))
+	router.POST("/v1beta/cachedContents", func(c *gin.Context) {
+		public, ok := service.RequestedPublicModelFromContext(c.Request.Context())
+		require.True(t, ok)
+		require.Equal(t, "cache-pro", public)
+		upstream, ok := service.ResolvedUpstreamModelFromContext(c.Request.Context())
+		require.True(t, ok)
+		require.Equal(t, "gemini-2.5-pro", upstream)
+		body, err := io.ReadAll(c.Request.Body)
+		require.NoError(t, err)
+		require.JSONEq(t, `{"model":"models/cache-pro","contents":[{"parts":[{"text":"original"}]}]}`, string(body))
+		c.Status(http.StatusNoContent)
+	})
+	request := httptest.NewRequest(http.MethodPost, "/v1beta/cachedContents", strings.NewReader(`{"model":"models/cache-pro","contents":[{"parts":[{"text":"original"}]}]}`))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	require.Equal(t, http.StatusNoContent, response.Code)
+}
+
+func TestCompositeGrokNativeRegisteredRootAndV1RoutesReachHandlers(t *testing.T) {
+	cases := []struct{ method, path string }{
+		{http.MethodPost, "/tts"}, {http.MethodPost, "/stt"},
+		{http.MethodPost, "/custom-voices"}, {http.MethodGet, "/custom-voices"},
+		{http.MethodGet, "/custom-voices/voice-1"}, {http.MethodGet, "/custom-voices/voice-1/audio"},
+		{http.MethodPatch, "/custom-voices/voice-1"}, {http.MethodDelete, "/custom-voices/voice-1"},
+		{http.MethodGet, "/realtime"}, {http.MethodPost, "/web_search"}, {http.MethodPost, "/x_search"},
+	}
+	for _, prefix := range []string{"", "/v1"} {
+		for _, item := range cases {
+			t.Run(item.method+prefix+item.path, func(t *testing.T) {
+				platforms := append([]string{service.PlatformComposite}, domain.ConcretePlatformIDs()...)
+				for _, platform := range platforms {
+					router := newGatewayRoutesTestRouter(platform)
+					request := httptest.NewRequest(item.method, prefix+item.path, strings.NewReader(`{"query":"native search","input":"native voice"}`))
+					request.Header.Set("Content-Type", "application/json")
+					if item.path == "/realtime" {
+						request.Header.Set("Connection", "Upgrade")
+						request.Header.Set("Upgrade", "websocket")
+					}
+					response := httptest.NewRecorder()
+					router.ServeHTTP(response, request)
+					if platform != service.PlatformComposite && platform != service.PlatformGrok {
+						require.Equal(t, http.StatusNotFound, response.Code, "unrelated concrete platform=%s must remain unavailable", platform)
+					} else {
+						require.NotEqual(t, http.StatusNotFound, response.Code, "registered native API must reach its real handler for Composite keys")
+						require.NotContains(t, response.Body.String(), "not supported for this platform")
+					}
+				}
+			})
+		}
+	}
+}
+
+// Native Ark task models must not be rewritten by even a matching any-route
+// text alias. The endpoint's account protocol fixes its supplier to OpenAI.
+func TestCompositeSeedanceNativeRoutesPreserveModelAndSupplier(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	resolver := service.NewCompositeRouteResolver(compositeRouteRepoStub{routes: []service.CompositeModelRoute{{ID: 1, GroupID: 1, PublicModel: "native-model", UpstreamModel: "grok-4.5", TargetPlatform: service.PlatformGrok, MatchType: service.CompositeRouteMatchExact, Endpoint: service.CompositeRouteEndpointAny, Enabled: true}}})
+	for _, prefix := range []string{"/api/v3", "/v3", "/v1", ""} {
+		for _, method := range []string{http.MethodPost, http.MethodGet, http.MethodDelete} {
+			t.Run(method+prefix, func(t *testing.T) {
+				router := gin.New()
+				router.Use(func(c *gin.Context) {
+					id := int64(1)
+					c.Set(string(servermiddleware.ContextKeyAPIKey), &service.APIKey{GroupID: &id, Group: &service.Group{ID: id, Platform: service.PlatformComposite}})
+					c.Next()
+				})
+				router.Use(compositeTargetPlatformMiddleware(resolver))
+				template := prefix + "/contents/generations/tasks"
+				if method != http.MethodPost {
+					template += "/:task_id"
+				}
+				router.Handle(method, template, func(c *gin.Context) {
+					actual, ok := service.ResolvedTargetPlatformFromContext(c.Request.Context())
+					require.True(t, ok)
+					require.Equal(t, service.PlatformOpenAI, actual)
+					raw, err := io.ReadAll(c.Request.Body)
+					require.NoError(t, err)
+					require.JSONEq(t, `{"model":"native-model","content":[]}`, string(raw))
+					_, mapped := service.ResolvedUpstreamModelFromContext(c.Request.Context())
+					require.False(t, mapped, "a text any-route cannot change the native model or supplier")
+					c.Status(http.StatusNoContent)
+				})
+				path := strings.ReplaceAll(template, ":task_id", "task-1")
+				request := httptest.NewRequest(method, path, strings.NewReader(`{"model":"native-model","content":[]}`))
+				request.Header.Set("Content-Type", "application/json")
+				response := httptest.NewRecorder()
+				router.ServeHTTP(response, request)
+				require.Equal(t, http.StatusNoContent, response.Code)
+			})
+		}
+	}
 }

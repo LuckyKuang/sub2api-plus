@@ -424,8 +424,8 @@ func TestPassthroughIngressBeforeTurnRejectsNextTurnBeforeUpstreamWrite(t *testi
 	hookMu.Lock()
 	gotHookOrder := append([]string(nil), hookOrder...)
 	hookMu.Unlock()
-	require.Equal(t, []string{"map:1", "before:1", "map:2", "before:2"}, gotHookOrder,
-		"passthrough must resolve the current turn model before durable turn eligibility runs")
+	require.Equal(t, []string{"before:1", "map:1", "before:2"}, gotHookOrder,
+		"prepare the immutable turn generation before wire mapping; rejected admission cannot map or send the next frame")
 }
 
 func TestPassthroughIngressAfterTurnSettlesWhenFirstWriteNeverReachesUpstream(t *testing.T) {

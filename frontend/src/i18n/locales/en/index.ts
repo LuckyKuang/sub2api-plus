@@ -1,6 +1,8 @@
 import workspace from './workspace'
 import requestList from './requestList'
 import featureExtensions from './featureExtensions'
+import adminAccessKeys from './adminAccessKeys'
+
 import landing from './landing'
 import common from './common'
 import dashboard from './dashboard'
@@ -11,12 +13,16 @@ import asyncImage from './asyncImage'
 import admin from './admin'
 import misc from './misc'
 import inspection from './inspection'
+import billingRates from './billingRates'
 
 export default {
   ...workspace,
   ...requestList,
   ...inspection,
+  ...billingRates,
   ...featureExtensions,
+  adminAccessKeys,
+
   ...landing,
   ...common,
   ...dashboard,

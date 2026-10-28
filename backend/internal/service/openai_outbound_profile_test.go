@@ -156,5 +156,5 @@ func requireOpenAIAPIKeyProbeHeaders(t *testing.T, headers http.Header) {
 	t.Helper()
 	require.Equal(t, DefaultOpenAICodexUserAgent, headers.Get("User-Agent"))
 	require.Equal(t, "codex_cli_rs", headers.Get("Originator"))
-	require.Equal(t, "0.164.0", headers.Get("Version"))
+	require.Equal(t, "0.165.0", headers.Get("Version"))
 }

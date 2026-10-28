@@ -168,6 +168,7 @@ func createGroupRecord(ctx context.Context, client *dbent.Client, groupIn *servi
 		return fmt.Errorf("marshal group model pricing: %w", err)
 	}
 	builder := client.Group.Create().
+		SetBillingPolicyVersion(1).
 		SetName(groupIn.Name).
 		SetDescription(groupIn.Description).
 		SetPlatform(groupIn.Platform).
@@ -187,6 +188,7 @@ func createGroupRecord(ctx context.Context, client *dbent.Client, groupIn *servi
 		SetQuotaResetConfigVersion(groupIn.QuotaResetConfigVersion).
 		SetAllowImageGeneration(groupIn.AllowImageGeneration).
 		SetAllowBatchImageGeneration(groupIn.AllowBatchImageGeneration).
+		SetImageCountBilling(groupIn.ImageCountBilling).
 		SetImageRateIndependent(groupIn.ImageRateIndependent).
 		SetImageRateMultiplier(groupIn.ImageRateMultiplier).
 		SetNillableImagePrice1k(groupIn.ImagePrice1K).
@@ -207,6 +209,7 @@ func createGroupRecord(ctx context.Context, client *dbent.Client, groupIn *servi
 		SetNillableAudioSttPricePerHour(groupIn.AudioSTTPricePerHour).
 		SetLongContextPricingEnabled(groupIn.LongContextPricingEnabled).
 		SetModelPricing(modelPricing).
+		SetBillingRatePolicy(groupIn.BillingRatePolicy.Clone()).
 		SetDefaultValidityDays(groupIn.DefaultValidityDays).
 		SetClaudeCodeOnly(groupIn.ClaudeCodeOnly).
 		SetNillableFallbackGroupID(groupIn.FallbackGroupID).
@@ -254,6 +257,7 @@ func createGroupRecord(ctx context.Context, client *dbent.Client, groupIn *servi
 	if err != nil {
 		return translatePersistenceError(err, nil, service.ErrGroupExists)
 	}
+	groupIn.BillingPolicyVersion = created.BillingPolicyVersion
 	groupIn.ID = created.ID
 	groupIn.CreatedAt = created.CreatedAt
 	groupIn.UpdatedAt = created.UpdatedAt
@@ -389,7 +393,8 @@ func (r *groupRepository) Update(ctx context.Context, groupIn *service.Group) er
 		expectedVersion--
 	}
 	builder := client.Group.UpdateOneID(groupIn.ID).
-		Where(group.QuotaResetConfigVersionEQ(expectedVersion)).
+		AddBillingPolicyVersion(1).
+		Where(group.QuotaResetConfigVersionEQ(expectedVersion), group.BillingPolicyVersionEQ(groupIn.BillingPolicyVersion)).
 		SetName(groupIn.Name).
 		SetDescription(groupIn.Description).
 		SetPlatform(groupIn.Platform).
@@ -404,6 +409,7 @@ func (r *groupRepository) Update(ctx context.Context, groupIn *service.Group) er
 		SetQuotaResetIncludeMonthly(groupIn.QuotaResetIncludeMonthly).
 		SetAllowImageGeneration(groupIn.AllowImageGeneration).
 		SetAllowBatchImageGeneration(groupIn.AllowBatchImageGeneration).
+		SetImageCountBilling(groupIn.ImageCountBilling).
 		SetImageRateIndependent(groupIn.ImageRateIndependent).
 		SetImageRateMultiplier(groupIn.ImageRateMultiplier).
 		SetNillableImagePrice1k(groupIn.ImagePrice1K).
@@ -419,6 +425,7 @@ func (r *groupRepository) Update(ctx context.Context, groupIn *service.Group) er
 		SetVideoModelPrices(service.NormalizeVideoModelPrices(groupIn.VideoModelPrices)).
 		SetLongContextPricingEnabled(groupIn.LongContextPricingEnabled).
 		SetModelPricing(modelPricing).
+		SetBillingRatePolicy(groupIn.BillingRatePolicy.Clone()).
 		SetDefaultValidityDays(groupIn.DefaultValidityDays).
 		SetClaudeCodeOnly(groupIn.ClaudeCodeOnly).
 		SetModelRoutingEnabled(groupIn.ModelRoutingEnabled).
@@ -572,6 +579,7 @@ func (r *groupRepository) Update(ctx context.Context, groupIn *service.Group) er
 	if err != nil {
 		return translatePersistenceError(err, service.ErrGroupNotFound, service.ErrGroupExists)
 	}
+	groupIn.BillingPolicyVersion = updated.BillingPolicyVersion
 	groupIn.UpdatedAt = updated.UpdatedAt
 	groupIn.QuotaResetSourceResetAt = updated.QuotaResetSourceResetAt
 	if tx != nil {
@@ -1399,7 +1407,8 @@ func (r *groupRepository) UpdateSortOrders(ctx context.Context, updates []servic
 
 	query := fmt.Sprintf(`
 		UPDATE groups
-		SET sort_order = CASE id
+		SET billing_policy_version = billing_policy_version + 1,
+			sort_order = CASE id
 			%s
 			ELSE sort_order
 		END

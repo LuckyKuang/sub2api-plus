@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
@@ -38,7 +39,10 @@ func TestSessionRouteScopeTokenCountHandlersRegression(t *testing.T) {
 			cfg.Default.RateMultiplier = 1
 			billing := service.NewBillingCacheService(nil, nil, nil, nil, nil, nil, cfg, nil)
 			t.Cleanup(billing.Stop)
-			concurrency := service.NewConcurrencyService(&concurrencyCacheMock{})
+			slots := &concurrencyCacheMock{
+				acquireUserSlotFn: func(context.Context, int64, int, string) (bool, error) { return true, nil },
+			}
+			concurrency := service.NewConcurrencyService(slots)
 			repo := &openAIWSFailoverHandlerAccountRepoStub{accounts: []service.Account{
 				{ID: 101, Platform: service.PlatformOpenAI, Type: service.AccountTypeAPIKey, Status: service.StatusActive, Schedulable: true, Concurrency: 1,
 					Credentials: map[string]any{"api_key": "fixture-key", "base_url": "https://compat.example"}, Extra: map[string]any{"responses_supported": true}},
@@ -67,6 +71,7 @@ func TestSessionRouteScopeTokenCountHandlersRegression(t *testing.T) {
 			require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 			require.Positive(t, gjson.GetBytes(response.Body.Bytes(), "input_tokens").Int())
 			require.Zero(t, store.reads, "auxiliary requests must succeed independently of the conversation route store")
+			require.Equal(t, int32(1), atomic.LoadInt32(&slots.releaseUserCalled), "auxiliary requests still acquire and release the global user lease")
 		})
 	}
 }

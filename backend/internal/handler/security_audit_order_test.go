@@ -42,6 +42,8 @@ func TestPromptAuditGatePrecedesAccountBillingAndUpstreamSideEffects(t *testing.
 		{file: "openai_chat_completions.go", function: "ChatCompletions", auditToken: "checkSecurityAudit"},
 		{file: "openai_images.go", function: "Images", auditToken: "checkSecurityAudit"},
 		{file: "grok_media.go", function: "handleGrokMedia", auditToken: "checkSecurityAudit"},
+		{file: "grok_audio.go", function: "GrokVoice", auditToken: "checkSecurityAudit"},
+		{file: "grok_audio.go", function: "GrokRealtime", auditToken: "checkSecurityAudit"},
 		{file: "openai_embeddings.go", function: "Embeddings", auditToken: "checkSecurityAudit"},
 		{file: "openai_alpha_search.go", function: "AlphaSearch", auditToken: "checkSecurityAudit"},
 		{file: "gateway_web_search.go", function: "WebSearch", auditToken: "checkSecurityAudit"},
@@ -53,6 +55,7 @@ func TestPromptAuditGatePrecedesAccountBillingAndUpstreamSideEffects(t *testing.
 	sideEffectTokens := []string{
 		"CheckBillingEligibility(", "SelectAccount", ".Forward", "acquireResponsesUserSlot(",
 		"AcquireUserSlot", "TryAcquireUserSlot", "acquireImageGenerationSlot(",
+		"acquireGatewayUserRequest(",
 		"h.tasks.Create(", "h.tasks.CreateWithMetadata(", "h.service.Submit(", "CreateLiveCall(",
 		"StartOpenAICompactSSEKeepalive(", "ResolveChannelMappingAndRestrict(",
 		"AcquireOpenAIWSIngressLease(",
@@ -88,7 +91,7 @@ func TestProviderFilesAuditGatePrecedesEveryACLAndWriteBoundary(t *testing.T) {
 	for _, boundary := range []struct{ name, call string }{
 		{"upload-retry", "providerFilesService.ResolveUploadRetry("},
 		{"scheduler", "providerFilesService.SelectUploadAccount("},
-		{"user-slot", "acquireResponsesUserSlot("},
+		{"user-slot", "acquireGatewayUserRequest("},
 		{"account-slot", "acquireResponsesAccountSlot("},
 		{"upload", "providerFilesService.Upload("},
 		{"metadata", "providerFilesService.Get("},

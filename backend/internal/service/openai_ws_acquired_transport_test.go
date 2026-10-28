@@ -72,9 +72,9 @@ func TestCodexWSProxyAndIdentityUseAcquiredCredentialOwner(t *testing.T) {
 					account.Status, account.Schedulable, account.Concurrency = StatusActive, true, 1
 					account.Extra["responses_websockets_v2_enabled"] = true
 					account.Extra["openai_oauth_responses_websockets_v2_mode"] = mode
-					rawProxy, ua := oldProxy.URL, "codex_cli_rs/0.164.0 (Ubuntu 24.04; x86_64) xterm-256color"
+					rawProxy, ua := oldProxy.URL, "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color"
 					if principal == "new" {
-						rawProxy, ua = newProxy.URL, "codex_vscode/0.164.0 (Windows 11; aarch64) WindowsTerminal"
+						rawProxy, ua = newProxy.URL, "codex_vscode/0.165.0 (Windows 11; aarch64) WindowsTerminal"
 					}
 					parsed, err := url.Parse(rawProxy)
 					require.NoError(t, err)
@@ -153,12 +153,12 @@ func TestCodexWSProxyAndIdentityUseAcquiredCredentialOwner(t *testing.T) {
 				require.Equal(t, "Bearer "+stage.principal+"-token", wire.headers.Get("Authorization"))
 				require.Equal(t, stage.principal+"-principal", wire.headers.Get("ChatGPT-Account-Id"))
 				if stage.principal == "old" {
-					require.Equal(t, "codex_cli_rs/0.164.0 (Ubuntu 24.04; x86_64) xterm-256color", wire.headers.Get("User-Agent"))
+					require.Equal(t, "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color", wire.headers.Get("User-Agent"))
 					require.Equal(t, "codex_cli_rs", wire.headers.Get("Originator"))
 				} else {
 					require.Equal(t, "codex_vscode", wire.headers.Get("Originator"))
 				}
-				require.Equal(t, "0.164.0", wire.headers.Get("Version"))
+				require.Equal(t, "0.165.0", wire.headers.Get("Version"))
 			}
 		})
 	}

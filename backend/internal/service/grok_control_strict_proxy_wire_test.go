@@ -4,6 +4,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net"
 	"net/http"
@@ -24,6 +25,41 @@ type grokControlStrictRepo struct {
 	mu      sync.Mutex
 	account *Account
 	writes  int
+}
+
+func (r *grokControlStrictRepo) GetByID(_ context.Context, id int64) (*Account, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.account == nil || r.account.ID != id {
+		return nil, ErrAccountNotFound
+	}
+	return snapshotRequestCredentialAccount(r.account), nil
+}
+
+func (r *grokControlStrictRepo) CompareAndSwapGrokObservedModels(_ context.Context, owner *Account, expected, next json.RawMessage) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if !grokCatalogOwnerMatches(r.account, owner) {
+		return false, nil
+	}
+	var current any
+	if r.account.Extra != nil {
+		current = r.account.Extra[grokObservedModelsExtraKey]
+	}
+	encoded, err := json.Marshal(current)
+	if err != nil || !jsonValuesEqual(encoded, expected) {
+		return false, err
+	}
+	var value any
+	if err := json.Unmarshal(next, &value); err != nil {
+		return false, err
+	}
+	if r.account.Extra == nil {
+		r.account.Extra = map[string]any{}
+	}
+	r.account.Extra[grokObservedModelsExtraKey] = value
+	r.writes++
+	return true, nil
 }
 
 func (r *grokControlStrictRepo) ApplyCredentialStateMutation(_ context.Context, owner *Account, mutation CredentialStateMutation) (bool, error) {
