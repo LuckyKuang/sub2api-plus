@@ -26,6 +26,11 @@ quota cooldown heuristics are deferred. DeepSeek Pro pricing no longer switches
 to Flash on a calendar date, following the provider's continued Pro service.
 The image-count option retains frozen prices and factors, rejects unidentified
 prices, and does not reclassify mixed Messages/Chat/Responses/WS requests.
+The follow-up review adds actual Terra forwarding regressions, consistent
+DeepSeek cache usage across protocol bridges, captured-owner Grok failure
+handling, complete image-size admission pricing, and nonblocking scoped OAuth
+refresh when another refresh owns the lock. The requirement-to-test mapping is
+maintained in [the seven-provider matrix](docs/SEVEN_PROVIDER_TEST_MATRIX.md).
 
 Preserve intentional Plus behavior during every import. Current contracts live
 in [outbound identity](docs/OUTBOUND_IDENTITY.md),

@@ -34,6 +34,33 @@ otherwise. A source-level mapping becomes release evidence only when its
 applicable unit/integration profile passes on the final tree. Unit mocks do not
 prove PostgreSQL locking, rollback, outbox atomicity, or multi-replica storage.
 
+## October 28 upstream follow-up requirements
+
+These scenarios supplement the pre-existing seven-provider matrix for the
+`0a2a29b32` import. They do not change the pinned official client identities.
+Kimi, MiniMax and StepFun share the native refresh locking regression; Zhipu's
+unsupported business-login refresh remains unsupported. Existing all-provider
+identity, audit, proxy, failover and billing scenarios still apply to shared code.
+
+| Business requirement | Regression and observable acceptance |
+| --- | --- |
+| Terra Messages compatibility preserves the selected model, explicit effort and trusted identity | `TestGPT61TerraMessagesForwardBoundary`: OAuth/API key, account/global identity, suffix/mapping/explicit override; actual outbound Responses body, URL, auth, UA/Originator/Version and downstream response. `TestGPT61TerraMessagesDisabledThinkingStopsBeforeUpstream` asserts the existing local rejection policy and no upstream request. |
+| DeepSeek's documented cache hits survive every accepted Chat bridge | `TestDeepSeekCacheUsageProtocolBridges` and `TestDeepSeekChatCacheUsageSurvivesDownstreamProtocols`: raw Chat, Responses and Messages, JSON/SSE, authoritative zero, independent operator-price settlement and ledger debit. Buffered typed Responses decoding must preserve the same alias priority as the accounting parser. |
+| A Grok discovery failure cannot modify a repaired route or replacement grant | `TestGrokCatalogBackgroundTransportAndProxyBodyFailuresNeverWrite`, `TestGrokCatalogEarlyFailureCannotAdoptReplacementOwner`, `TestGrokCatalogPersistMissingCapturedOwnerNeverReadsOrWrites`: interrupted response, oversized/interrupted 407, early configuration failure, missing owner, unchanged-owner and genuine upstream-failure controls. |
+| A forced image-count reservation cannot use a known size to price a missing size | `TestImageCountBillingRequiresEveryPotentialSizeBeforeReservation`: OpenAI/Grok, in-memory/durable frozen quote, each missing size, maximum known price, explicit zero, and no financial writes for unpriced settlement. Existing `fail_closed_on_unpriced` controls admission when no priced reservation can be obtained. |
+| Scoped OAuth refresh cannot hold the account row while waiting for another refresh to persist its grant | `TestScopedAdminRefreshBusyDoesNotWaitWithAccountRowLocked`: Kimi/MiniMax/StepFun report busy, roll back, issue no second provider request, and allow the first rotation to finish. `TestOAuthRefreshTransactionWithoutContentionPreservesDistributedLockAndCAS` retains uncontended success and distributed lock failure behavior. |
+| Catalog history and management selection remain usable | `GrokModelDiagnosticsPanel.spec.ts` distinguishes the current endpoint from historical models; `CheckboxDropdown.spec.ts` and real Chromium layout cases cover keyboard entry, repeated selection, disabled state, Tab order and Escape. Scoped-key UI tests retain explicit permissions and saved rules. |
+
+`repository/TestScopedAdminRefreshBusyRollsBackRowLockBeforeOrdinaryRotationPersists`
+adds real PostgreSQL evidence: a separate connection observes the scoped row
+lock, busy rolls back and releases it, then the ordinary refresh commits the
+rotated grant and exactly one scheduler outbox event. The Grok catalog CAS
+integration tests retain real concurrent-writer and replacement-owner checks.
+
+The unit, integration and frontend coverage manifests require these regression entrypoints;
+Chromium layout checks remain a separate container command. Validation results
+must be obtained on the current tree, not inferred from this mapping.
+
 ## Required dimensions
 
 | Dimension | Cases that require distinct evidence |

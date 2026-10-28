@@ -14,7 +14,7 @@ only creates clipping/scrolling containers. It does not change production
 routes, build inputs, or the separate seven-provider business suite.
 
 The matrix covers 375×812, 768×900, 1000×600 and 1440×900 in both themes and
-languages (128 cases). It checks translated navigation, segmented choices, row
+languages (144 cases). It checks translated navigation, segmented choices, row
 actions, form controls and button labels at 0%, 20% and 100% transparency,
 configured accent extremes at 0%, 50% and 100% transparency (including immediate
 theme switching), date ranges and their nested calendars,
@@ -26,6 +26,8 @@ they also exercise the final option, final content and apply/save actions.
 Keyboard cases reach the start date and apply button by Tab, then verify that
 successive Escape presses close only the calendar, range and parent dialog in
 that order and restore focus to the corresponding trigger.
+Checkbox menus also open from the keyboard, accept multiple choices without
+closing, and return Tab/Shift+Tab to the surrounding form's normal order.
 JSDOM component tests cannot establish these geometry requirements.
 
 The server and browser processes stop when Playwright exits. The outer

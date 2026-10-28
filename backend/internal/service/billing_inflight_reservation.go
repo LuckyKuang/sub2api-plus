@@ -735,7 +735,10 @@ func (d inflightEstimateDeps) estimateOne(ctx context.Context, apiKey *APIKey, m
 			cfgImg := imagePriceConfigFromAPIKey(apiKey)
 			for _, tier := range []string{ImageBillingSize1K, ImageBillingSize2K, ImageBillingSize4K} {
 				if forcePerImage && !d.billing.hasIdentifiedImageUnitPrice(model, tier, cfgImg) {
-					continue
+					// The estimate has no requested/output size discriminator. Every
+					// possible settlement tier must be known before reserving their
+					// maximum; a known cheaper tier cannot price an unknown one.
+					return 0, false
 				}
 				if b := d.billing.CalculateImageCost(model, tier, units, cfgImg, imageRate); b != nil {
 					priced = true

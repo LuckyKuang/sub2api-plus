@@ -26,6 +26,145 @@ const (
 	grokCatalogMetadataFailure   = "Failed to save upstream model metadata"
 )
 
+type grokCatalogInterruptedReader struct{ io.Reader }
+
+func (r grokCatalogInterruptedReader) Read(p []byte) (int, error) {
+	n, err := r.Reader.Read(p)
+	if err == io.EOF {
+		err = io.ErrUnexpectedEOF
+	}
+	return n, err
+}
+
+func TestGrokCatalogBackgroundTransportAndProxyBodyFailuresNeverWrite(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		status      int
+		body        string
+		interrupted bool
+		wantError   bool
+		wantWrites  int
+		wantAttempt string
+	}{
+		{name: "upstream body interrupted", status: http.StatusOK, body: `{"data":[`, interrupted: true, wantError: true},
+		{name: "proxy auth body interrupted", status: http.StatusProxyAuthRequired, body: `proxy authentication`, interrupted: true, wantError: true},
+		{name: "proxy auth body oversized", status: http.StatusProxyAuthRequired, body: strings.Repeat("x", 129), wantError: true},
+		{name: "proxy auth complete body", status: http.StatusProxyAuthRequired, body: `proxy authentication`, wantError: true},
+		{name: "upstream http failure records diagnostic", status: http.StatusInternalServerError, body: `{"error":"upstream unavailable"}`, wantError: true, wantWrites: 1, wantAttempt: grokCatalogStatusFailed},
+		{name: "invalid upstream catalog records diagnostic", status: http.StatusOK, body: `{"data":[]}`, wantError: true, wantWrites: 1, wantAttempt: grokCatalogStatusFailed},
+		{name: "valid upstream catalog records success", status: http.StatusOK, body: `{"data":[{"id":"grok-new"}]}`, wantWrites: 1, wantAttempt: grokCatalogStatusSuccess},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			account := grokCatalogAccountWithSuccess([]string{"grok-old"}, time.Now().Add(-grokObservedModelsTTL-time.Hour).UTC())
+			proxyID := int64(8)
+			account.ProxyID = &proxyID
+			account.Proxy = &Proxy{ID: proxyID, Protocol: "http", Host: "captured.proxy.example", Port: 8080, Status: StatusActive}
+			before, err := snapshotCNControlAccount(account)
+			require.NoError(t, err)
+			repo := newGrokCatalogMemoryRepo(account)
+			calls := 0
+			upstream := &codexModelsHTTPUpstreamStub{do: func(req *http.Request, route string, id int64, _ int) (*http.Response, error) {
+				calls++
+				require.Equal(t, "http://captured.proxy.example:8080", route)
+				require.Equal(t, account.ID, id)
+				require.Equal(t, "Bearer "+grokCatalogSyncSecretToken, req.Header.Get("Authorization"))
+				var reader io.Reader = strings.NewReader(tc.body)
+				if tc.interrupted {
+					reader = grokCatalogInterruptedReader{reader}
+				}
+				return &http.Response{StatusCode: tc.status, Header: make(http.Header), Body: io.NopCloser(reader)}, nil
+			}}
+			cfg := upstreamModelSyncTestConfig()
+			cfg.Gateway.ModelsListReadMaxBytes = 128
+			err = (&GrokQuotaService{accountRepo: repo, httpUpstream: upstream, cfg: cfg}).syncGrokObservedModels(context.Background(), account)
+			if tc.wantError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+			require.Equal(t, 1, calls)
+			require.Equal(t, tc.wantWrites, repo.casCalls)
+			require.Zero(t, repo.updateExtraCalls)
+			stored, err := repo.GetByID(context.Background(), account.ID)
+			require.NoError(t, err)
+			require.Equal(t, before.Credentials, stored.Credentials)
+			if tc.wantWrites == 0 {
+				require.Equal(t, before.Extra, stored.Extra)
+			} else {
+				snap := parseGrokObservedModels(stored.Extra)
+				require.Equal(t, tc.wantAttempt, snap.LastAttempt.Status)
+				if tc.wantAttempt == grokCatalogStatusFailed {
+					require.Equal(t, []string{"grok-old"}, snap.Models)
+				}
+			}
+		})
+	}
+}
+
+type grokCatalogOwnerChangeOnReadRepo struct {
+	*grokCatalogMemoryRepo
+	beforeFirstRead func(*Account)
+}
+
+func (r *grokCatalogOwnerChangeOnReadRepo) GetByID(ctx context.Context, id int64) (*Account, error) {
+	if mutate := r.beforeFirstRead; mutate != nil {
+		r.beforeFirstRead = nil
+		r.mu.Lock()
+		mutate(r.account)
+		r.mu.Unlock()
+	}
+	return r.grokCatalogMemoryRepo.GetByID(ctx, id)
+}
+
+func TestGrokCatalogEarlyFailureCannotAdoptReplacementOwner(t *testing.T) {
+	for _, change := range []string{"unchanged", "grant", "proxy", "restored proxy", "restored proxy and grant"} {
+		t.Run(change, func(t *testing.T) {
+			account := grokCatalogAccountWithSuccess([]string{"grok-old"}, time.Now().Add(-time.Hour).UTC())
+			proxyID := int64(8)
+			account.ProxyID = &proxyID
+			account.Proxy = &Proxy{ID: proxyID, Protocol: "http", Host: "original.proxy.example", Port: 8080, Status: StatusActive}
+			brokenProxy := strings.HasPrefix(change, "restored proxy")
+			if brokenProxy {
+				account.Proxy = nil
+			}
+			previousExtra := cloneRequestCredentialMap(account.Extra)
+			inner := newGrokCatalogMemoryRepo(account)
+			repo := &grokCatalogOwnerChangeOnReadRepo{grokCatalogMemoryRepo: inner, beforeFirstRead: func(current *Account) {
+				if change == "grant" || change == "restored proxy and grant" {
+					current.Credentials["access_token"] = "replacement-grant"
+				}
+				if change == "proxy" {
+					current.Proxy.Host = "replacement.proxy.example"
+				}
+				if brokenProxy {
+					current.Proxy = &Proxy{ID: proxyID, Protocol: "http", Host: "restored.proxy.example", Port: 8080, Status: StatusActive}
+				}
+			}}
+			// No HTTP client is intentional: this operation fails before a request
+			// exists, so failure persistence must retain the original selected owner.
+			_, err := (&AccountTestService{accountRepo: repo, cfg: upstreamModelSyncTestConfig()}).SyncUpstreamModelCatalog(context.Background(), account)
+			require.Error(t, err)
+			if brokenProxy {
+				require.Equal(t, "Model discovery configured proxy is invalid", syncSafeMessage(t, err))
+			} else {
+				require.Equal(t, "Upstream HTTP client is not configured", syncSafeMessage(t, err))
+			}
+			require.Equal(t, 1, repo.getCalls)
+			require.Zero(t, repo.updateExtraCalls)
+			if change == "unchanged" {
+				require.Equal(t, 1, repo.casCalls)
+				snap := parseGrokObservedModels(repo.account.Extra)
+				require.Equal(t, grokCatalogStatusFailed, snap.LastAttempt.Status)
+				require.Equal(t, "configuration", snap.LastAttempt.ErrorCode)
+				require.Equal(t, []string{"grok-old"}, snap.Models)
+			} else {
+				require.Zero(t, repo.casCalls)
+				require.Equal(t, previousExtra, repo.account.Extra)
+			}
+		})
+	}
+}
+
 func TestGrokCatalogSyncSavesIDOnlyModelsWhenMetadataRegistryFails(t *testing.T) {
 	account := grokOAuthModelSyncTestAccount("https://cli-chat-proxy.grok.com/v1")
 	account.Credentials["model_mapping"] = map[string]any{"alias": "grok-configured"}

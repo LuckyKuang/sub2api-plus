@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	dbent "github.com/LuckyKuang/sub2api-plus/ent"
 )
 
 // OAuthRefreshExecutor 各平台实现的 OAuth 刷新执行器
@@ -93,6 +95,15 @@ func (m *contextMutex) Lock(ctx context.Context) error {
 
 func (m *contextMutex) Unlock() {
 	<-m.token
+}
+
+func (m *contextMutex) TryLock() bool {
+	select {
+	case m.token <- struct{}{}:
+		return true
+	default:
+		return false
+	}
 }
 
 // OAuthRefreshResult 统一刷新结果
@@ -194,7 +205,18 @@ func (api *OAuthRefreshAPI) RefreshIfNeeded(
 
 	// 0. 获取进程内互斥锁（防止同一进程内的并发刷新竞争）
 	localMu := api.getLocalLock(cacheKey)
-	if err := localMu.Lock(ctx); err != nil {
+	if dbent.TxFromContext(ctx) != nil {
+		// Scoped admin authorization holds the account row through this call.
+		// An existing refresh can hold this mutex while waiting to persist its
+		// issuer response to that row. Never wait in the reverse lock order:
+		// return busy so the caller rolls back and the original grant can commit.
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("oauth refresh local lock: %w", err)
+		}
+		if !localMu.TryLock() {
+			return &OAuthRefreshResult{LockHeld: true}, nil
+		}
+	} else if err := localMu.Lock(ctx); err != nil {
 		return nil, fmt.Errorf("oauth refresh local lock: %w", err)
 	}
 	defer localMu.Unlock()

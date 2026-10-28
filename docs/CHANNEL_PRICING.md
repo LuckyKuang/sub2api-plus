@@ -697,6 +697,13 @@ and the selected unit price is multiplied by the returned image count. A token
 price alone is not evidence of an image price. Without an explicit group image
 price, an identified catalog image price, or an enumerated built-in image price,
 the request cannot obtain a priced reservation or write financial usage.
+The conservative image reservation uses the highest price across 1K, 2K and
+4K. When this switch overrides a token card, every possible size tier must have
+an identified image price before a priced reservation; configuring only one size
+cannot price an unknown size. An explicitly configured zero is a known free price,
+whereas an absent price is not. This check uses the admitted pricing snapshot,
+including delayed/asynchronous execution, so later configuration changes cannot
+fill a missing price for an already captured request.
 
 Successful dedicated OpenAI image responses use the observed image count.
 When the response supplies no count, the enabled option applies a one-image

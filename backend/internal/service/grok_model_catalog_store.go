@@ -27,7 +27,9 @@ type GrokCatalogSnapshotRepository interface {
 // PersistGrokCatalogObservation merges one observation into the account snapshot.
 // The observation is fixed for every attempt; a conflict rereads and merges again,
 // at most three times, and never falls back to an unlocked extra update.
-func PersistGrokCatalogObservation(ctx context.Context, repo AccountRepository, accountID int64, observation GrokCatalogObservation) (*GrokObservedModelsSnapshot, error) {
+// capturedOwner must be supplied from before the attempt; a missing owner never
+// authorizes adopting the row that happens to exist at persistence time.
+func PersistGrokCatalogObservation(ctx context.Context, repo AccountRepository, capturedOwner *Account, observation GrokCatalogObservation) (*GrokObservedModelsSnapshot, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -35,11 +37,15 @@ func PersistGrokCatalogObservation(ctx context.Context, repo AccountRepository, 
 	if err != nil {
 		return nil, err
 	}
-	if accountID <= 0 || (observation.Attempt.Scope != nil && observation.Attempt.Scope.AccountID != accountID) {
+	if capturedOwner == nil || capturedOwner.ID <= 0 || (observation.Attempt.Scope != nil && observation.Attempt.Scope.AccountID != capturedOwner.ID) {
 		return nil, errGrokCatalogAccountMismatch
 	}
 
-	expectedOwner := observation.owner
+	expectedOwner, err := snapshotCNControlAccount(capturedOwner)
+	if err != nil {
+		return nil, err
+	}
+	accountID := expectedOwner.ID
 	for attempt := 0; attempt < 3; attempt++ {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -53,12 +59,6 @@ func PersistGrokCatalogObservation(ctx context.Context, repo AccountRepository, 
 		}
 		if account.ID != accountID || account.Platform != PlatformGrok {
 			return nil, errGrokCatalogAccountMismatch
-		}
-		if expectedOwner == nil {
-			expectedOwner, err = snapshotCNControlAccount(account)
-			if err != nil {
-				return nil, err
-			}
 		}
 		if !grokCatalogOwnerMatches(account, expectedOwner) {
 			return nil, errGrokCatalogAccountMismatch

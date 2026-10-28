@@ -90,11 +90,21 @@ func (s *GrokQuotaService) syncGrokObservedModels(ctx context.Context, account *
 		return newUpstreamModelSyncUpstreamError("Failed to request upstream model list", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
+	// A proxy rejection belongs to the route, not to the provider catalog. Do
+	// not consume its body or publish diagnostic state, even if it is malformed,
+	// truncated or larger than the provider response limit.
+	if resp.StatusCode == http.StatusProxyAuthRequired {
+		return &UpstreamModelSyncError{
+			Kind:       UpstreamModelSyncErrorUpstream,
+			Message:    "Upstream model list request failed with HTTP 407",
+			StatusCode: resp.StatusCode,
+		}
+	}
 
 	limit := resolveModelsListReadLimit(s.cfg)
 	body, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
 	if err != nil {
-		return s.finishGrokObservedModelsAttempt(ctx, account, req, started, newUpstreamModelSyncUpstreamError("Failed to read upstream model list", err))
+		return newUpstreamModelSyncUpstreamError("Failed to read upstream model list", err)
 	}
 	if int64(len(body)) > limit {
 		return s.finishGrokObservedModelsAttempt(ctx, account, req, started, newUpstreamModelSyncUpstreamError("Upstream model list response is too large", fmt.Errorf("response exceeds %d bytes", limit)))
@@ -105,9 +115,6 @@ func (s *GrokQuotaService) syncGrokObservedModels(ctx context.Context, account *
 			Message:    fmt.Sprintf("Upstream model list request failed with HTTP %d", resp.StatusCode),
 			StatusCode: resp.StatusCode,
 			Err:        fmt.Errorf("upstream model list returned HTTP %d", resp.StatusCode),
-		}
-		if resp.StatusCode == http.StatusProxyAuthRequired {
-			return failure
 		}
 		return s.finishGrokObservedModelsAttempt(ctx, account, req, started, failure)
 	}
@@ -207,7 +214,7 @@ func (s *GrokQuotaService) saveGrokObservedObservation(ctx context.Context, acco
 	if s == nil || account == nil || account.ID <= 0 || observation == nil || s.accountRepo == nil {
 		return nil
 	}
-	snap, err := PersistGrokCatalogObservation(ctx, s.accountRepo, account.ID, *observation)
+	snap, err := PersistGrokCatalogObservation(ctx, s.accountRepo, observation.owner, *observation)
 	if err != nil {
 		return err
 	}

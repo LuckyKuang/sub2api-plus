@@ -375,6 +375,7 @@ PROFILES = {
                              "missing-active", "retention", "stable_env_keyring_and_retention")
         )),
         RegressionGroup("./internal/pkg/apicompat", (
+            "TestDeepSeekCacheUsageProtocolBridges",
             "TestStepFunParallelChatToolsKeepIndependentAnthropicBlockLifecycles",
             "TestStepFunReviewToolStreamKeepsClosedBlocksImmutable",
         ), tuple(
@@ -408,6 +409,15 @@ PROFILES = {
             "TestMiniMaxOfficialFlashReleaseCandidate",
         )),
         RegressionGroup("./internal/service", (
+            "TestGPT61TerraMessagesForwardBoundary",
+            "TestGPT61TerraMessagesDisabledThinkingStopsBeforeUpstream",
+            "TestDeepSeekChatCacheUsageSurvivesDownstreamProtocols",
+            "TestGrokCatalogBackgroundTransportAndProxyBodyFailuresNeverWrite",
+            "TestGrokCatalogEarlyFailureCannotAdoptReplacementOwner",
+            "TestGrokCatalogPersistMissingCapturedOwnerNeverReadsOrWrites",
+            "TestImageCountBillingRequiresEveryPotentialSizeBeforeReservation",
+            "TestScopedAdminRefreshBusyDoesNotWaitWithAccountRowLocked",
+            "TestOAuthRefreshTransactionWithoutContentionPreservesDistributedLockAndCAS",
             GROK_HTTP_PREFLIGHT,
             GROK_WS_PREFLIGHT,
             GROK_WS_WIRE,
@@ -951,6 +961,12 @@ PROFILES = {
             )
         )),
         RegressionGroup("./internal/repository", (
+            "TestScopedAdminRefreshBusyRollsBackRowLockBeforeOrdinaryRotationPersists",
+            "TestGrokCatalogCASPreservesSingleKeyAndRejectsStaleExpected",
+            "TestGrokCatalogCASTreatsNullMissingAndKeyOrderAsSameValue",
+            "TestGrokCatalogCASDoesNotUpdateSoftDeletedOrOtherPlatform",
+            "TestGrokCatalogCASConcurrentIndependentTransactionsMergeSuccess",
+            "TestGrokCatalogCASRejectsRotatedCredentialOwner",
             "TestGrokRequestOutcomeCASPublishesAtomicOwnerState",
             "TestGrokRequestOutcomeCASRejectsOwnerOrSchedulerChanges",
             "TestGrokRequestOutcomeCASRejectsSameProxyRouteEdits",

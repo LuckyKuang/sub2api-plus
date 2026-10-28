@@ -543,6 +543,7 @@ func (u *ResponsesUsage) UnmarshalJSON(data []byte) error {
 		CacheReadInputTokens     *int                          `json:"cache_read_input_tokens"`
 		CacheReadTokens          *int                          `json:"cache_read_tokens"`
 		CachedTokens             *int                          `json:"cached_tokens"`
+		PromptCacheHitTokens     *int                          `json:"prompt_cache_hit_tokens"`
 		PromptTokensDetails      *ResponsesInputTokensDetails  `json:"prompt_tokens_details,omitempty"`
 		CompletionTokensDetails  *ResponsesOutputTokensDetails `json:"completion_tokens_details,omitempty"`
 	}
@@ -598,6 +599,8 @@ func (u *ResponsesUsage) UnmarshalJSON(data []byte) error {
 		fallbackCacheReadTokens = aux.CacheReadTokens
 	case aux.CachedTokens != nil:
 		fallbackCacheReadTokens = aux.CachedTokens
+	case aux.PromptCacheHitTokens != nil:
+		fallbackCacheReadTokens = aux.PromptCacheHitTokens
 	}
 	if canonicalCacheReadTokens != nil || fallbackCacheReadTokens != nil {
 		if u.InputTokensDetails == nil {
@@ -835,23 +838,37 @@ type ChatUsage struct {
 	CompletionTokensDetails *ChatTokenDetails `json:"completion_tokens_details,omitempty"`
 }
 
-// UnmarshalJSON normalizes StepFun's flat cached_tokens into the canonical
+// UnmarshalJSON normalizes StepFun's cached_tokens and DeepSeek's
+// prompt_cache_hit_tokens into the canonical
 // Chat Completions detail used by both downstream protocol bridges. An explicit
 // nested count (including zero) wins; unrelated details must survive.
 func (u *ChatUsage) UnmarshalJSON(data []byte) error {
 	type chatUsageAlias ChatUsage
 	var aux struct {
 		chatUsageAlias
-		CachedTokens *int `json:"cached_tokens"`
+		CacheReadInputTokens *int `json:"cache_read_input_tokens"`
+		CacheReadTokens      *int `json:"cache_read_tokens"`
+		CachedTokens         *int `json:"cached_tokens"`
+		PromptCacheHitTokens *int `json:"prompt_cache_hit_tokens"`
 	}
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
 	}
 	*u = ChatUsage(aux.chatUsageAlias)
-	if aux.CachedTokens == nil {
-		return nil
+	cacheReadTokens := aux.CacheReadInputTokens
+	if cacheReadTokens == nil {
+		cacheReadTokens = aux.CacheReadTokens
+	}
+	if cacheReadTokens == nil {
+		cacheReadTokens = aux.CachedTokens
+	}
+	if cacheReadTokens == nil {
+		cacheReadTokens = aux.PromptCacheHitTokens
 	}
 	var presence struct {
+		InputTokensDetails *struct {
+			CachedTokens *int `json:"cached_tokens"`
+		} `json:"input_tokens_details"`
 		PromptTokensDetails *struct {
 			CachedTokens *int `json:"cached_tokens"`
 		} `json:"prompt_tokens_details"`
@@ -859,13 +876,18 @@ func (u *ChatUsage) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &presence); err != nil {
 		return err
 	}
-	if presence.PromptTokensDetails != nil && presence.PromptTokensDetails.CachedTokens != nil {
+	if presence.InputTokensDetails != nil && presence.InputTokensDetails.CachedTokens != nil {
+		cacheReadTokens = presence.InputTokensDetails.CachedTokens
+	} else if presence.PromptTokensDetails != nil && presence.PromptTokensDetails.CachedTokens != nil {
+		cacheReadTokens = presence.PromptTokensDetails.CachedTokens
+	}
+	if cacheReadTokens == nil {
 		return nil
 	}
 	if u.PromptTokensDetails == nil {
 		u.PromptTokensDetails = &ChatTokenDetails{}
 	}
-	u.PromptTokensDetails.CachedTokens = max(*aux.CachedTokens, 0)
+	u.PromptTokensDetails.CachedTokens = max(*cacheReadTokens, 0)
 	return nil
 }
 

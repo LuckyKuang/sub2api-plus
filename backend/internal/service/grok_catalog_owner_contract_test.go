@@ -51,7 +51,7 @@ func TestGrokCatalogPersistenceRejectsOwnerChange(t *testing.T) {
 				scope := grokCatalogPersistScope(t, account.ID)
 				observation := grokCatalogPersistSuccess(scope, "2026-10-28T01:00:00Z", "2026-10-28T01:00:01Z", "grok-observed")
 				observation.owner = owner
-				_, err = PersistGrokCatalogObservation(context.Background(), repo, account.ID, observation)
+				_, err = PersistGrokCatalogObservation(context.Background(), repo, owner, observation)
 				require.ErrorIs(t, err, errGrokCatalogAccountMismatch)
 				require.Nil(t, parseGrokObservedModels(repo.account.Extra))
 				require.Zero(t, repo.updateExtraCalls)

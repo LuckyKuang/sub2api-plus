@@ -18,6 +18,20 @@ PROBE_GROUP = "proxy management single and batch probe ownership"
 REAUTH_GROUP = "existing-account reauthorization owner boundaries"
 REAUTH_ENTRIES = ("openai exchange", "openai RT", "grok exchange", "grok RT", "grok SSO")
 REQUIRED = {
+    "src/components/account/__tests__/GrokModelDiagnosticsPanel.spec.ts": (
+        "GrokModelDiagnosticsPanel labels the current endpoint separately from models observed before a source change",
+        "GrokModelDiagnosticsPanel keeps the historical catalog visible when refreshing the latest status fails",
+    ),
+    "src/components/common/__tests__/CheckboxDropdown.spec.ts": (
+        "CheckboxDropdown keyboard interaction enters the teleported options and keeps repeated selections inside the menu",
+        "CheckboxDropdown keyboard interaction opens from either arrow and restores form tab order at panel boundaries",
+        "CheckboxDropdown keyboard interaction does not expose choices when disabled and closes if disabled while open",
+    ),
+    "src/components/admin/settings/__tests__/AdminAccessKeysSettings.spec.ts": (
+        "管理员受限密钥配置 分组选择不会隐式授予操作或全局权限，并支持多个规则",
+        "管理员受限密钥配置 保存失败时保留表单并展示错误，不显示成功密钥",
+        "管理员受限密钥配置 编辑仅修改名称时保留所有规则且不会自动授予操作或全站权限",
+    ),
     "src/components/account/__tests__/ZhipuStartPlanCell.spec.ts": (
         *(f"ZhipuStartPlanCell shows the independent {state} state"
           for state in ("available", "unavailable", "pending", "unknown")),

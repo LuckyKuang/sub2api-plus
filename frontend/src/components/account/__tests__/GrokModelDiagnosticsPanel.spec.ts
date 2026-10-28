@@ -59,7 +59,6 @@ const REQUIRED_KEYS = [
   'historicalModelCount',
   'lastSuccessRelative',
   'source',
-  'historicalSource',
   'historicalModels',
   'savedMappings',
   'currentListed',
@@ -188,6 +187,20 @@ function track(wrapper: VueWrapper) {
 }
 
 describe('GrokModelDiagnosticsPanel', () => {
+  it('labels the current endpoint separately from models observed before a source change', async () => {
+    const wrapper = track(mountPanel({ diagnostics: freshDiagnostics({
+      state: 'source_changed',
+      endpoint: 'https://replacement.example/v1/models',
+    }) }))
+    await openDetails(wrapper)
+    const details = wrapper.get('[data-testid="grok-diagnostics-details"]')
+    expect(details.get('dt').text()).toBe('当前目录端点')
+    expect(details.get('[data-testid="grok-diagnostics-endpoint"]').text()).toBe('https://replacement.example/v1/models')
+    expect(details.findAll('h4')[0].text()).toBe('历史目录')
+    expect(details.text()).not.toContain('历史目录来源')
+    expect(details.text()).toContain('grok-4.7')
+  })
+
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] })
     vi.setSystemTime(START)
@@ -343,7 +356,7 @@ describe('GrokModelDiagnosticsPanel', () => {
     expect(wrapper.get('[data-testid="grok-diagnostics-state"]').text()).not.toContain('历史目录')
     expect(text).not.toContain('来源已变更')
     const details = wrapper.get('[data-testid="grok-diagnostics-details"]')
-    expect(details.get('dt').text()).toBe('历史目录来源')
+    expect(details.get('dt').text()).toBe('当前目录端点')
     expect(details.findAll('h4')[0].text()).toBe('历史目录')
   })
 
@@ -395,7 +408,7 @@ describe('GrokModelDiagnosticsPanel', () => {
     expect(text).toContain('grok-4.7')
     expect(wrapper.get('[data-testid="grok-diagnostics-state"]').text()).not.toContain('历史目录')
     const details = wrapper.get('[data-testid="grok-diagnostics-details"]')
-    expect(details.get('dt').text()).toBe('历史目录来源')
+    expect(details.get('dt').text()).toBe('当前目录端点')
     expect(details.findAll('h4')[0].text()).toBe('历史目录')
   })
 
@@ -812,7 +825,7 @@ describe('GrokModelDiagnosticsPanel', () => {
     expect(wrapper.text()).toContain('历史记录，需重新同步后核验')
     expect(wrapper.get('[data-testid="grok-diagnostics-state"]').text()).toContain('未知')
     const details = wrapper.get('[data-testid="grok-diagnostics-details"]')
-    expect(details.get('dt').text()).toBe('历史目录来源')
+    expect(details.get('dt').text()).toBe('当前目录端点')
     expect(details.findAll('h4')[0].text()).toBe('历史目录')
   })
 
@@ -873,7 +886,7 @@ describe('GrokModelDiagnosticsPanel', () => {
     expect(wrapper.text()).toContain('历史记录，需重新同步后核验')
     expect(wrapper.get('[data-testid="grok-diagnostics-state"]').text()).not.toContain('历史目录')
     const details = wrapper.get('[data-testid="grok-diagnostics-details"]')
-    expect(details.get('dt').text()).toBe('历史目录来源')
+    expect(details.get('dt').text()).toBe('当前目录端点')
     expect(details.findAll('h4')[0].text()).toBe('历史目录')
   })
 

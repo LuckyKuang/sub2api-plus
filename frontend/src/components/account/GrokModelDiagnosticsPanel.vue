@@ -137,9 +137,7 @@
         <dl class="space-y-3 text-xs">
           <div>
             <dt class="text-gray-500 dark:text-dark-400">
-              {{ effectiveState !== 'fresh'
-                ? t('admin.accounts.grokModelDiagnostics.historicalSource')
-                : t('admin.accounts.grokModelDiagnostics.source') }}
+              {{ t('admin.accounts.grokModelDiagnostics.source') }}
             </dt>
             <dd data-testid="grok-diagnostics-endpoint" class="min-w-0 break-all font-mono text-xs">
               {{ diagnostics?.endpoint || t('admin.accounts.grokModelDiagnostics.unknown') }}

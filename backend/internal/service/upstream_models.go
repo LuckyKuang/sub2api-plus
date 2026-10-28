@@ -859,7 +859,7 @@ func (s *AccountTestService) fetchUpstreamModelListWithRequest(ctx context.Conte
 		return nil, nil, nil, observedRequest, newUpstreamModelSyncConfigError("Model discovery credential owner is invalid", err)
 	}
 	if _, err := account.StrictProxyURL(); err != nil {
-		return nil, nil, nil, observedRequest, newUpstreamModelSyncConfigError("Model discovery configured proxy is invalid", err)
+		return nil, nil, account, observedRequest, newUpstreamModelSyncConfigError("Model discovery configured proxy is invalid", err)
 	}
 
 	if account.Platform == PlatformAntigravity && account.Type != AccountTypeAPIKey {
@@ -868,7 +868,7 @@ func (s *AccountTestService) fetchUpstreamModelListWithRequest(ctx context.Conte
 	}
 
 	if s.httpUpstream == nil {
-		return nil, nil, nil, observedRequest, newUpstreamModelSyncConfigError("Upstream HTTP client is not configured", nil)
+		return nil, nil, account, observedRequest, newUpstreamModelSyncConfigError("Upstream HTTP client is not configured", nil)
 	}
 	if isZhipuStartPlan(account) {
 		models, body, owner, err := s.fetchZhipuStartPlanModels(ctx, account)
@@ -2108,7 +2108,7 @@ func (s *AccountTestService) saveGrokCatalogObservation(ctx context.Context, acc
 	if s == nil || account == nil || !account.IsGrok() || account.ID <= 0 || observation == nil {
 		return nil
 	}
-	snap, err := PersistGrokCatalogObservation(ctx, s.accountRepo, account.ID, *observation)
+	snap, err := PersistGrokCatalogObservation(ctx, s.accountRepo, observation.owner, *observation)
 	if err != nil {
 		return err
 	}

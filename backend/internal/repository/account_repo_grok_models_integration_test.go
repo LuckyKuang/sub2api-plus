@@ -210,7 +210,7 @@ func TestGrokCatalogCASConcurrentIndependentTransactionsMergeSuccess(t *testing.
 	wg.Add(2)
 	run := func(tx *dbent.Tx, repo service.AccountRepository, observation service.GrokCatalogObservation) {
 		defer wg.Done()
-		_, persistErr := service.PersistGrokCatalogObservation(ctx, repo, account.ID, observation)
+		_, persistErr := service.PersistGrokCatalogObservation(ctx, repo, account, observation)
 		if persistErr != nil {
 			_ = tx.Rollback()
 			errCh <- persistErr

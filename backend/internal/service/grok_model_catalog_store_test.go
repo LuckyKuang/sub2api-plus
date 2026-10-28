@@ -16,6 +16,17 @@ import (
 
 var errGrokCatalogMemoryInvalidJSON = errors.New("grok model catalog: invalid json")
 
+func TestGrokCatalogPersistMissingCapturedOwnerNeverReadsOrWrites(t *testing.T) {
+	repo := newGrokCatalogMemoryRepo(grokCatalogPersistAccount())
+	observation := grokCatalogPersistFailure(t, 25)
+	got, err := PersistGrokCatalogObservation(context.Background(), repo, nil, observation)
+	require.Nil(t, got)
+	require.ErrorIs(t, err, errGrokCatalogAccountMismatch)
+	require.Zero(t, repo.getCalls)
+	require.Zero(t, repo.casCalls)
+	require.Zero(t, repo.updateExtraCalls)
+}
+
 func TestGrokCatalogPersistMergesAfterConflictWithoutUpdateExtra(t *testing.T) {
 	t.Parallel()
 
@@ -59,7 +70,7 @@ func TestGrokCatalogPersistMergesAfterConflictWithoutUpdateExtra(t *testing.T) {
 		Scope:      scope,
 	}}
 
-	got, err := PersistGrokCatalogObservation(context.Background(), repo, 25, observation)
+	got, err := PersistGrokCatalogObservation(context.Background(), repo, repo.account, observation)
 
 	require.NoError(t, err)
 	require.Equal(t, []string{"concurrent"}, got.Models)
@@ -100,7 +111,7 @@ func TestGrokCatalogPersistStopsAfterThreeConflicts(t *testing.T) {
 	})
 	repo.conflictsRemaining = 3
 
-	got, err := PersistGrokCatalogObservation(context.Background(), repo, 25, grokCatalogPersistSuccess(scope, "2026-10-25T03:00:00Z", "2026-10-25T03:00:01Z", "replacement"))
+	got, err := PersistGrokCatalogObservation(context.Background(), repo, repo.account, grokCatalogPersistSuccess(scope, "2026-10-25T03:00:00Z", "2026-10-25T03:00:01Z", "replacement"))
 
 	require.Nil(t, got)
 	require.ErrorIs(t, err, errGrokCatalogConcurrentChange)
@@ -118,7 +129,7 @@ func TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability(t *testing
 
 	t.Run("nil repository", func(t *testing.T) {
 		t.Parallel()
-		got, err := PersistGrokCatalogObservation(context.Background(), nil, 25, grokCatalogPersistFailure(t, 25))
+		got, err := PersistGrokCatalogObservation(context.Background(), nil, grokCatalogPersistAccount(), grokCatalogPersistFailure(t, 25))
 		require.Nil(t, got)
 		require.ErrorIs(t, err, errGrokCatalogSnapshotRepositoryUnavailable)
 		require.True(t, infraerrors.IsInternalServer(err))
@@ -127,7 +138,7 @@ func TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability(t *testing
 	t.Run("typed nil repository", func(t *testing.T) {
 		t.Parallel()
 		var repo *grokCatalogMemoryRepo
-		got, err := PersistGrokCatalogObservation(context.Background(), repo, 25, grokCatalogPersistFailure(t, 25))
+		got, err := PersistGrokCatalogObservation(context.Background(), repo, grokCatalogPersistAccount(), grokCatalogPersistFailure(t, 25))
 		require.Nil(t, got)
 		require.ErrorIs(t, err, errGrokCatalogSnapshotRepositoryUnavailable)
 	})
@@ -135,7 +146,7 @@ func TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability(t *testing
 	t.Run("capability missing does not update extra", func(t *testing.T) {
 		t.Parallel()
 		repo := &grokCatalogRepoWithoutCAS{}
-		got, err := PersistGrokCatalogObservation(context.Background(), repo, 25, grokCatalogPersistFailure(t, 25))
+		got, err := PersistGrokCatalogObservation(context.Background(), repo, grokCatalogPersistAccount(), grokCatalogPersistFailure(t, 25))
 		require.Nil(t, got)
 		require.ErrorIs(t, err, errGrokCatalogSnapshotRepositoryUnavailable)
 		require.Zero(t, repo.getCalls)
@@ -146,7 +157,7 @@ func TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability(t *testing
 		t.Parallel()
 		repo := newGrokCatalogMemoryRepo(grokCatalogPersistAccount())
 		repo.deleted = true
-		got, err := PersistGrokCatalogObservation(context.Background(), repo, 25, grokCatalogPersistSuccess(grokCatalogPersistScope(t, 25), "2026-10-25T03:00:00Z", "2026-10-25T03:00:01Z", "grok-4.7"))
+		got, err := PersistGrokCatalogObservation(context.Background(), repo, repo.account, grokCatalogPersistSuccess(grokCatalogPersistScope(t, 25), "2026-10-25T03:00:00Z", "2026-10-25T03:00:01Z", "grok-4.7"))
 		require.Nil(t, got)
 		require.ErrorIs(t, err, ErrAccountNotFound)
 		require.Zero(t, repo.casCalls)
@@ -155,7 +166,7 @@ func TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability(t *testing
 	t.Run("scope account id mismatches", func(t *testing.T) {
 		t.Parallel()
 		repo := newGrokCatalogMemoryRepo(grokCatalogPersistAccount())
-		got, err := PersistGrokCatalogObservation(context.Background(), repo, 25, grokCatalogPersistSuccess(grokCatalogPersistScope(t, 99), "2026-10-25T03:00:00Z", "2026-10-25T03:00:01Z", "grok-4.7"))
+		got, err := PersistGrokCatalogObservation(context.Background(), repo, repo.account, grokCatalogPersistSuccess(grokCatalogPersistScope(t, 99), "2026-10-25T03:00:00Z", "2026-10-25T03:00:01Z", "grok-4.7"))
 		require.Nil(t, got)
 		require.ErrorIs(t, err, errGrokCatalogAccountMismatch)
 		require.Zero(t, repo.getCalls)
@@ -169,7 +180,7 @@ func TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability(t *testing
 	t.Run("loaded account id mismatches", func(t *testing.T) {
 		t.Parallel()
 		repo := &grokCatalogMismatchedIDRepo{grokCatalogMemoryRepo: newGrokCatalogMemoryRepo(grokCatalogPersistAccount())}
-		got, err := PersistGrokCatalogObservation(context.Background(), repo, 25, grokCatalogPersistFailure(t, 25))
+		got, err := PersistGrokCatalogObservation(context.Background(), repo, repo.account, grokCatalogPersistFailure(t, 25))
 		require.Nil(t, got)
 		require.ErrorIs(t, err, errGrokCatalogAccountMismatch)
 		require.Zero(t, repo.casCalls)
@@ -181,7 +192,7 @@ func TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability(t *testing
 		account := grokCatalogPersistAccount()
 		account.Platform = PlatformOpenAI
 		repo := newGrokCatalogMemoryRepo(account)
-		got, err := PersistGrokCatalogObservation(context.Background(), repo, 25, grokCatalogPersistFailure(t, 25))
+		got, err := PersistGrokCatalogObservation(context.Background(), repo, repo.account, grokCatalogPersistFailure(t, 25))
 		require.Nil(t, got)
 		require.ErrorIs(t, err, errGrokCatalogAccountMismatch)
 		require.Zero(t, repo.casCalls)
@@ -191,7 +202,7 @@ func TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability(t *testing
 	t.Run("non positive account id", func(t *testing.T) {
 		t.Parallel()
 		repo := newGrokCatalogMemoryRepo(grokCatalogPersistAccount())
-		got, err := PersistGrokCatalogObservation(context.Background(), repo, 0, grokCatalogPersistFailure(t, 25))
+		got, err := PersistGrokCatalogObservation(context.Background(), repo, &Account{}, grokCatalogPersistFailure(t, 25))
 		require.Nil(t, got)
 		require.ErrorIs(t, err, errGrokCatalogAccountMismatch)
 		require.Zero(t, repo.getCalls)
@@ -220,7 +231,7 @@ func TestGrokCatalogPersistKeepsNewerSnapshotWhenObservationIsOlder(t *testing.T
 		},
 	})
 
-	got, err := PersistGrokCatalogObservation(context.Background(), repo, 25, grokCatalogPersistSuccess(scope, "2026-10-25T03:00:00Z", "2026-10-25T03:00:01Z", "older"))
+	got, err := PersistGrokCatalogObservation(context.Background(), repo, repo.account, grokCatalogPersistSuccess(scope, "2026-10-25T03:00:00Z", "2026-10-25T03:00:01Z", "older"))
 
 	require.NoError(t, err)
 	require.Equal(t, []string{"newer"}, got.Models)
@@ -243,7 +254,7 @@ func TestGrokCatalogPersistCancelStopsImmediately(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 
-		got, err := PersistGrokCatalogObservation(ctx, repo, 25, grokCatalogPersistSuccess(grokCatalogPersistScope(t, 25), "2026-10-25T03:00:00Z", "2026-10-25T03:00:01Z", "grok-4.7"))
+		got, err := PersistGrokCatalogObservation(ctx, repo, repo.account, grokCatalogPersistSuccess(grokCatalogPersistScope(t, 25), "2026-10-25T03:00:00Z", "2026-10-25T03:00:01Z", "grok-4.7"))
 
 		require.Nil(t, got)
 		require.ErrorIs(t, err, context.Canceled)
@@ -260,7 +271,7 @@ func TestGrokCatalogPersistCancelStopsImmediately(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		repo.afterCAS = func() { cancel() }
 
-		got, err := PersistGrokCatalogObservation(ctx, repo, 25, grokCatalogPersistSuccess(grokCatalogPersistScope(t, 25), "2026-10-25T03:00:00Z", "2026-10-25T03:00:01Z", "grok-4.7"))
+		got, err := PersistGrokCatalogObservation(ctx, repo, repo.account, grokCatalogPersistSuccess(grokCatalogPersistScope(t, 25), "2026-10-25T03:00:00Z", "2026-10-25T03:00:01Z", "grok-4.7"))
 
 		require.Nil(t, got)
 		require.ErrorIs(t, err, context.Canceled)
@@ -323,18 +334,19 @@ func TestGrokCatalogPersistConcurrentWritersAreRaceSafe(t *testing.T) {
 		Credentials: map[string]any{"access_token": "token-keep"},
 		Extra:       map[string]any{"unrelated": "keep"},
 	})
+	owner := snapshotRequestCredentialAccount(repo.account)
 	scope := grokCatalogPersistScope(t, 25)
 	var wg sync.WaitGroup
 	errCh := make(chan error, 3)
 	wg.Add(3)
 	go func() {
 		defer wg.Done()
-		_, err := PersistGrokCatalogObservation(context.Background(), repo, 25, grokCatalogPersistSuccess(scope, "2026-10-25T02:00:00Z", "2026-10-25T02:00:01Z", "older"))
+		_, err := PersistGrokCatalogObservation(context.Background(), repo, owner, grokCatalogPersistSuccess(scope, "2026-10-25T02:00:00Z", "2026-10-25T02:00:01Z", "older"))
 		errCh <- err
 	}()
 	go func() {
 		defer wg.Done()
-		_, err := PersistGrokCatalogObservation(context.Background(), repo, 25, grokCatalogPersistSuccess(scope, "2026-10-25T03:00:00Z", "2026-10-25T03:00:01Z", "newer"))
+		_, err := PersistGrokCatalogObservation(context.Background(), repo, owner, grokCatalogPersistSuccess(scope, "2026-10-25T03:00:00Z", "2026-10-25T03:00:01Z", "newer"))
 		errCh <- err
 	}()
 	go func() {

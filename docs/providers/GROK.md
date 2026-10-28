@@ -19,11 +19,21 @@ Persisting either success or failure uses an owner-conditional snapshot CAS:
 credential, account type/status or saved proxy changes reject the observation,
 including changes between CAS retries. A conflicting catalog update may be
 reread and merged only while that same owner remains unchanged.
+The captured owner is mandatory even for failures before a request can be built;
+failure persistence never adopts a replacement grant or a repaired proxy from a
+later database read.
 Freshness also includes a digest of the grant and saved proxy: an endpoint-only
 legacy snapshot or a rotated grant cannot supply a fresh catalog verdict.
 Background discovery leaves account state unchanged after transport and proxy
-authentication failures. Admin catalog sync can record these failures through the
-same owner-conditional diagnostic snapshot.
+authentication failures, including interrupted response bodies. HTTP 407 is
+rejected before reading its body, so truncated or oversized proxy responses cannot
+write a catalog attempt. Complete upstream HTTP errors and invalid or oversized
+successful catalog bodies may still record an owner-conditional failed attempt.
+Admin catalog sync can record transport and proxy failures through the same
+owner-conditional diagnostic snapshot.
+The diagnostic `endpoint` is always the currently configured catalog address;
+historical model IDs and success times may belong to a previous source when the
+state is `source_changed`.
 
 Fallback token pricing recognizes `grok-4.7` / `grok-4.7-latest` and the separate
 Fast aliases `grok-4.7-fast` / `grok-4.7-build-fast`. Per million tokens, the
