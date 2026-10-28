@@ -190,3 +190,65 @@ table.record-table .sticky-col::after {
 /* A nested record table starts its own state rather than inheriting the
    enclosing record's hover tint. */
 .record-table-scroll { --record-row-tint: transparent; }
+
+/* Explicit row actions keep unrelated vertical choice cards intact. Groups
+   wrap inside narrow/fixed columns; translated labels may grow vertically. */
+.table-actions {
+  display: flex;
+  min-width: 0;
+  max-width: 240px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  white-space: normal;
+}
+.table-actions > :is(span, div) { min-width: 0; max-width: 100%; }
+.table-actions > span { display: inline-flex; }
+.table-action {
+  --table-action-accent: var(--console-accent-500, 20 184 166);
+  --table-action-ink: var(--console-accent-readable, #0f766e);
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 28px;
+  height: auto;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: 1px solid var(--surface-edge);
+  border-radius: 6px;
+  background: var(--surface-soft);
+  color: var(--surface-muted);
+  box-shadow: 0 1px 2px rgb(0 0 0 / calc(.08 * var(--console-card-alpha, 1)));
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.25;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  transition: background-color 150ms, border-color 150ms, color 150ms, box-shadow 150ms;
+}
+:root .table-action { border-color: var(--surface-edge); }
+.table-action > span { min-width: 0; }
+.table-action > svg { width: 14px; height: 14px; flex: none; }
+.table-action-danger { --table-action-accent: 239 68 68; --table-action-ink: #dc2626; }
+.dark .table-action-danger { --table-action-ink: #f87171; }
+.table-action-warning { --table-action-accent: 245 158 11; --table-action-ink: #b45309; }
+.dark .table-action-warning { --table-action-ink: #fbbf24; }
+.table-action-neutral { --table-action-accent: 100 116 139; --table-action-ink: var(--surface-text); }
+.table-action:not(:disabled):not([aria-disabled="true"]):is(:hover, .table-action-active) {
+  border-color: rgb(var(--table-action-accent) / 45%);
+  background-color: rgb(var(--table-action-accent) / calc(.13 * var(--console-card-alpha, 1)));
+  color: var(--table-action-ink);
+}
+.table-action:focus-visible {
+  outline: 2px solid rgb(var(--console-accent-500, 20 184 166) / 70%);
+  outline-offset: 2px;
+}
+.table-action:is(:disabled, [aria-disabled="true"]) { cursor: not-allowed; opacity: .5; }
+@media (pointer: coarse) {
+  .table-action { min-height: 44px; }
+}

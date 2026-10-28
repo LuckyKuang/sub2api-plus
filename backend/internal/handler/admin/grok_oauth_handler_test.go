@@ -35,10 +35,49 @@ type grokQuotaHandlerAccountRepo struct {
 var _ service.CNControlSnapshotRepository = (*grokQuotaHandlerAccountRepo)(nil)
 
 func (r *grokQuotaHandlerAccountRepo) GetByID(_ context.Context, id int64) (*service.Account, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if r.account != nil && r.account.ID == id {
-		return r.account, nil
+		encoded, err := json.Marshal(r.account)
+		if err != nil {
+			return nil, err
+		}
+		var snapshot service.Account
+		if err := json.Unmarshal(encoded, &snapshot); err != nil {
+			return nil, err
+		}
+		return &snapshot, nil
 	}
 	return nil, service.ErrAccountNotFound
+}
+
+func (r *grokQuotaHandlerAccountRepo) CompareAndSwapGrokObservedModels(_ context.Context, owner *service.Account, expected, next json.RawMessage) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if owner == nil || r.account == nil || owner.ID != r.account.ID || owner.Platform != r.account.Platform || owner.Type != r.account.Type || owner.Status != r.account.Status || !reflect.DeepEqual(owner.Credentials, r.account.Credentials) || !reflect.DeepEqual(owner.ProxyID, r.account.ProxyID) || !reflect.DeepEqual(owner.Proxy, r.account.Proxy) {
+		return false, nil
+	}
+	var current any
+	if r.account.Extra != nil {
+		current = r.account.Extra["grok_observed_models"]
+	}
+	currentJSON, err := json.Marshal(current)
+	if err != nil {
+		return false, err
+	}
+	if string(currentJSON) != string(expected) {
+		return false, nil
+	}
+	var value any
+	if err := json.Unmarshal(next, &value); err != nil {
+		return false, err
+	}
+	if r.account.Extra == nil {
+		r.account.Extra = make(map[string]any)
+	}
+	r.account.Extra["grok_observed_models"] = value
+	r.recordExtraUpdateLocked(owner.ID, map[string]any{"grok_observed_models": value})
+	return true, nil
 }
 
 func (r *grokQuotaHandlerAccountRepo) UpdateExtra(_ context.Context, id int64, updates map[string]any) error {

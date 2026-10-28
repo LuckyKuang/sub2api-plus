@@ -14,6 +14,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
 	middleware2 "github.com/LuckyKuang/sub2api-plus/internal/server/middleware"
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
+	"github.com/LuckyKuang/sub2api-plus/internal/testutil"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
@@ -103,7 +104,7 @@ func newOpenAIResponsesFailoverTestHandler(t *testing.T, upstream service.HTTPUp
 		nil)
 	billingService := service.NewBillingCacheService(nil, nil, nil, nil, nil, nil, cfg, nil)
 	t.Cleanup(billingService.Stop)
-	concurrencyService := service.NewConcurrencyService(nil)
+	concurrencyService := service.NewConcurrencyService(testutil.StubConcurrencyCache{})
 	handler := NewOpenAIGatewayHandler(
 		gatewayService,
 		concurrencyService,

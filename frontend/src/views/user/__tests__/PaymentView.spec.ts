@@ -1,14 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises, shallowMount } from '@vue/test-utils'
+import { enableAutoUnmount, flushPromises, shallowMount } from '@vue/test-utils'
 import PaymentView from '../PaymentView.vue'
 import { PAYMENT_RECOVERY_STORAGE_KEY } from '@/components/payment/paymentFlow'
 import { formatPaymentAmount } from '@/components/payment/currency'
 import AmountInput from '@/components/payment/AmountInput.vue'
 import SubscriptionPlanCard from '@/components/payment/SubscriptionPlanCard.vue'
+import PlanModelCatalog from '@/components/payment/PlanModelCatalog.vue'
 import { notifyLocaleChanged } from '@/utils/localeRefresh'
 import en from '@/i18n/locales/en'
 import zh from '@/i18n/locales/zh'
 import type { CheckoutInfoResponse, MethodLimit, SubscriptionPlan } from '@/types/payment'
+
+enableAutoUnmount(afterEach)
 
 const routeState = vi.hoisted(() => ({
   path: '/purchase',
@@ -419,6 +422,161 @@ describe('PaymentView recharge rate preview', () => {
 })
 
 describe('PaymentView subscription confirmation amounts', () => {
+  it('requires a fresh confirmation after cancelling and reselecting the same plan during quote refresh', async () => {
+    const wrapper = await mountSubscriptionConfirm()
+    let finishQuote!: (value: ReturnType<typeof checkoutInfoWithPlansFixture>) => void
+    getCheckoutInfo.mockReturnValueOnce(new Promise(resolve => { finishQuote = resolve }))
+    await wrapper.get('[data-testid="subscription-checkout-action"] button').trigger('click')
+    expect(getCheckoutInfo).toHaveBeenCalledTimes(2)
+    await wrapper.get('[data-testid="subscription-checkout-action"]').findAll('button')[1]!.trigger('click')
+    const card = wrapper.getComponent(SubscriptionPlanCard)
+    card.vm.$emit('select', card.props('plan'))
+    await flushPromises()
+
+    finishQuote(checkoutInfoWithPlansFixture())
+    await flushPromises()
+    expect(createOrder).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="subscription-checkout-action"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="subscription-checkout-action"] button').attributes('disabled')).toBeUndefined()
+
+    createOrder.mockRejectedValueOnce(new Error('test order stop'))
+    await wrapper.get('[data-testid="subscription-checkout-action"] button').trigger('click')
+    await flushPromises()
+    expect(createOrder).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ plan_id: 7 }))
+    wrapper.unmount()
+  })
+
+  it('does not create an order after leaving during subscription quote refresh', async () => {
+    const wrapper = await mountSubscriptionConfirm()
+    let finishQuote!: (value: ReturnType<typeof checkoutInfoWithPlansFixture>) => void
+    getCheckoutInfo.mockReturnValueOnce(new Promise(resolve => { finishQuote = resolve }))
+    await wrapper.get('[data-testid="subscription-checkout-action"] button').trigger('click')
+    expect(getCheckoutInfo).toHaveBeenCalledTimes(2)
+    wrapper.unmount()
+    finishQuote(checkoutInfoWithPlansFixture())
+    await flushPromises()
+    expect(createOrder).not.toHaveBeenCalled()
+  })
+
+  it('ignores a cancelled quote failure after the same plan is reselected', async () => {
+    const wrapper = await mountSubscriptionConfirm()
+    let rejectQuote!: (error: Error) => void
+    getCheckoutInfo.mockReturnValueOnce(new Promise((_resolve, reject) => { rejectQuote = reject }))
+    await wrapper.get('[data-testid="subscription-checkout-action"] button').trigger('click')
+    await wrapper.get('[data-testid="subscription-checkout-action"]').findAll('button')[1]!.trigger('click')
+    const card = wrapper.getComponent(SubscriptionPlanCard)
+    card.vm.$emit('select', card.props('plan'))
+    await flushPromises()
+    rejectQuote(new Error('stale quote request failed'))
+    await flushPromises()
+    expect(createOrder).not.toHaveBeenCalled()
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('requires reviewing changed payment conversion before creating the subscription order', async () => {
+    const wrapper = await mountSubscriptionConfirm({ checkout: { subscription_usd_to_cny_rate: 7 }, method: { currency: 'CNY' }, plan: { price: 10 } })
+    getCheckoutInfo.mockResolvedValue(checkoutInfoWithPlansFixture({ checkout: { subscription_usd_to_cny_rate: 8 }, method: { currency: 'CNY' }, plan: { price: 10 } }))
+    await wrapper.get('[data-testid="subscription-checkout-action"] button').trigger('click')
+    await flushPromises()
+    expect(createOrder).not.toHaveBeenCalled()
+    expect(wrapper.get('[role="alert"]').text()).toContain('billingRates.changed')
+    expect(wrapper.text()).toContain(formatPaymentAmount(80, 'CNY'))
+    wrapper.unmount()
+  })
+
+  it('refreshes changed billing policies and requires a second confirmation before placing an order', async () => {
+    const catalog = { policy_version: 2, as_of: '2026-10-26T12:00:00Z', models: [], platforms: ['openai'], rate_min: 1, rate_max: 2 }
+    const wrapper = await mountSubscriptionConfirm({ plan: { model_catalog: catalog } })
+    getCheckoutInfo.mockResolvedValue(checkoutInfoWithPlansFixture({ plan: { model_catalog: { ...catalog, policy_version: 3, rate_max: 4 } } }))
+    await wrapper.get('[data-testid="subscription-checkout-action"] button').trigger('click')
+    await flushPromises()
+    expect(createOrder).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('billingRates.changed')
+    createOrder.mockRejectedValue(new Error('test order stop'))
+    await wrapper.get('[data-testid="subscription-checkout-action"] button').trigger('click')
+    await flushPromises()
+    expect(createOrder).toHaveBeenCalledWith(expect.objectContaining({ plan_id: 7, expected_billing_policy_version: 3 }))
+    wrapper.unmount()
+  })
+
+  it('keeps the newer checkout quote when an earlier background refresh arrives after confirmation', async () => {
+    const visible = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
+    const catalog = { policy_version: 2, as_of: '2026-10-26T12:00:00Z', models: [], platforms: ['openai'], rate_min: 1, rate_max: 2 }
+    const wrapper = await mountSubscriptionConfirm({ plan: { model_catalog: catalog } })
+    try {
+      let finishOldRefresh!: (value: ReturnType<typeof checkoutInfoWithPlansFixture>) => void
+      const current = checkoutInfoWithPlansFixture({ plan: { model_catalog: { ...catalog, policy_version: 3, rate_max: 4 } } })
+      getCheckoutInfo
+        .mockReturnValueOnce(new Promise(resolve => { finishOldRefresh = resolve }))
+        .mockResolvedValue(current)
+      window.dispatchEvent(new Event('focus'))
+      expect(getCheckoutInfo).toHaveBeenCalledTimes(2)
+
+      await wrapper.get('[data-testid="subscription-checkout-action"] button').trigger('click')
+      await flushPromises()
+      expect(createOrder).not.toHaveBeenCalled()
+      expect(wrapper.getComponent(PlanModelCatalog).props('catalog')).toEqual(expect.objectContaining({ policy_version: 3 }))
+      expect(wrapper.text()).toContain('billingRates.changed')
+
+      finishOldRefresh(checkoutInfoWithPlansFixture({ plan: { model_catalog: catalog } }))
+      await flushPromises()
+      expect(wrapper.getComponent(PlanModelCatalog).props('catalog')).toEqual(expect.objectContaining({ policy_version: 3, rate_max: 4 }))
+
+      createOrder.mockRejectedValue(new Error('test order stop'))
+      await wrapper.get('[data-testid="subscription-checkout-action"] button').trigger('click')
+      await flushPromises()
+      expect(createOrder).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ plan_id: 7, expected_billing_policy_version: 3 }))
+    } finally {
+      wrapper.unmount()
+      visible.mockRestore()
+    }
+  })
+
+  it('waits for the initial checkout before starting a background quote refresh', async () => {
+    const visible = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
+    routeState.path = '/purchase'
+    routeState.query = { tab: 'subscription' }
+    let finishInitial!: (value: ReturnType<typeof checkoutInfoWithPlansFixture>) => void
+    getCheckoutInfo.mockReset()
+      .mockReturnValueOnce(new Promise(resolve => { finishInitial = resolve }))
+      .mockResolvedValue(checkoutInfoWithPlansFixture())
+    createOrder.mockReset()
+    window.localStorage.clear()
+    const wrapper = shallowMount(PaymentView, { global: { stubs: {
+      AppLayout: { template: '<div><slot /></div>' }, Teleport: true, Transition: false,
+    } } })
+    try {
+      window.dispatchEvent(new Event('focus'))
+      await flushPromises()
+      expect(getCheckoutInfo).toHaveBeenCalledTimes(1)
+      finishInitial(checkoutInfoWithPlansFixture())
+      await flushPromises()
+      window.dispatchEvent(new Event('focus'))
+      await flushPromises()
+      expect(getCheckoutInfo).toHaveBeenCalledTimes(2)
+      expect(createOrder).not.toHaveBeenCalled()
+    } finally {
+      wrapper.unmount()
+      visible.mockRestore()
+    }
+  })
+
+  it('does not place an order when the plan refresh fails or the plan was removed', async () => {
+    const wrapper = await mountSubscriptionConfirm()
+    getCheckoutInfo.mockRejectedValueOnce(new Error('unavailable'))
+    await wrapper.get('[data-testid="subscription-checkout-action"] button').trigger('click')
+    await flushPromises()
+    expect(createOrder).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('billingRates.refreshFailed')
+    getCheckoutInfo.mockResolvedValue(checkoutInfoFixture({ plans: [] }))
+    await wrapper.get('[data-testid="subscription-checkout-action"] button').trigger('click')
+    await flushPromises()
+    expect(createOrder).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('billingRates.unavailablePlan')
+    wrapper.unmount()
+  })
+
   // Group display translations must preserve the payment draft and its terms.
   it('refreshes group names without changing the selected plan or creating an order', async () => {
     const wrapper = await mountSubscriptionConfirm({ plan: { price: 9.99 } })

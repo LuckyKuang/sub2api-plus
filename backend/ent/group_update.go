@@ -124,6 +124,41 @@ func (_u *GroupUpdate) AddRateMultiplier(v float64) *GroupUpdate {
 	return _u
 }
 
+// SetBillingRatePolicy sets the "billing_rate_policy" field.
+func (_u *GroupUpdate) SetBillingRatePolicy(v domain.BillingRatePolicy) *GroupUpdate {
+	_u.mutation.SetBillingRatePolicy(v)
+	return _u
+}
+
+// SetNillableBillingRatePolicy sets the "billing_rate_policy" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableBillingRatePolicy(v *domain.BillingRatePolicy) *GroupUpdate {
+	if v != nil {
+		_u.SetBillingRatePolicy(*v)
+	}
+	return _u
+}
+
+// SetBillingPolicyVersion sets the "billing_policy_version" field.
+func (_u *GroupUpdate) SetBillingPolicyVersion(v int64) *GroupUpdate {
+	_u.mutation.ResetBillingPolicyVersion()
+	_u.mutation.SetBillingPolicyVersion(v)
+	return _u
+}
+
+// SetNillableBillingPolicyVersion sets the "billing_policy_version" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableBillingPolicyVersion(v *int64) *GroupUpdate {
+	if v != nil {
+		_u.SetBillingPolicyVersion(*v)
+	}
+	return _u
+}
+
+// AddBillingPolicyVersion adds value to the "billing_policy_version" field.
+func (_u *GroupUpdate) AddBillingPolicyVersion(v int64) *GroupUpdate {
+	_u.mutation.AddBillingPolicyVersion(v)
+	return _u
+}
+
 // SetPeakRateEnabled sets the "peak_rate_enabled" field.
 func (_u *GroupUpdate) SetPeakRateEnabled(v bool) *GroupUpdate {
 	_u.mutation.SetPeakRateEnabled(v)
@@ -492,6 +527,20 @@ func (_u *GroupUpdate) SetAllowBatchImageGeneration(v bool) *GroupUpdate {
 func (_u *GroupUpdate) SetNillableAllowBatchImageGeneration(v *bool) *GroupUpdate {
 	if v != nil {
 		_u.SetAllowBatchImageGeneration(*v)
+	}
+	return _u
+}
+
+// SetImageCountBilling sets the "image_count_billing" field.
+func (_u *GroupUpdate) SetImageCountBilling(v bool) *GroupUpdate {
+	_u.mutation.SetImageCountBilling(v)
+	return _u
+}
+
+// SetNillableImageCountBilling sets the "image_count_billing" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableImageCountBilling(v *bool) *GroupUpdate {
+	if v != nil {
+		_u.SetImageCountBilling(*v)
 	}
 	return _u
 }
@@ -1617,6 +1666,11 @@ func (_u *GroupUpdate) check() error {
 			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "Group.name": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.BillingRatePolicy(); ok {
+		if err := v.Validate(); err != nil {
+			return &ValidationError{Name: "billing_rate_policy", err: fmt.Errorf(`ent: validator failed for field "Group.billing_rate_policy": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.PeakStart(); ok {
 		if err := group.PeakStartValidator(v); err != nil {
 			return &ValidationError{Name: "peak_start", err: fmt.Errorf(`ent: validator failed for field "Group.peak_start": %w`, err)}
@@ -1724,6 +1778,15 @@ func (_u *GroupUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.AddedRateMultiplier(); ok {
 		_spec.AddField(group.FieldRateMultiplier, field.TypeFloat64, value)
 	}
+	if value, ok := _u.mutation.BillingRatePolicy(); ok {
+		_spec.SetField(group.FieldBillingRatePolicy, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.BillingPolicyVersion(); ok {
+		_spec.SetField(group.FieldBillingPolicyVersion, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedBillingPolicyVersion(); ok {
+		_spec.AddField(group.FieldBillingPolicyVersion, field.TypeInt64, value)
+	}
 	if value, ok := _u.mutation.PeakRateEnabled(); ok {
 		_spec.SetField(group.FieldPeakRateEnabled, field.TypeBool, value)
 	}
@@ -1828,6 +1891,9 @@ func (_u *GroupUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.AllowBatchImageGeneration(); ok {
 		_spec.SetField(group.FieldAllowBatchImageGeneration, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.ImageCountBilling(); ok {
+		_spec.SetField(group.FieldImageCountBilling, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.ImageRateIndependent(); ok {
 		_spec.SetField(group.FieldImageRateIndependent, field.TypeBool, value)
@@ -2491,6 +2557,41 @@ func (_u *GroupUpdateOne) AddRateMultiplier(v float64) *GroupUpdateOne {
 	return _u
 }
 
+// SetBillingRatePolicy sets the "billing_rate_policy" field.
+func (_u *GroupUpdateOne) SetBillingRatePolicy(v domain.BillingRatePolicy) *GroupUpdateOne {
+	_u.mutation.SetBillingRatePolicy(v)
+	return _u
+}
+
+// SetNillableBillingRatePolicy sets the "billing_rate_policy" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableBillingRatePolicy(v *domain.BillingRatePolicy) *GroupUpdateOne {
+	if v != nil {
+		_u.SetBillingRatePolicy(*v)
+	}
+	return _u
+}
+
+// SetBillingPolicyVersion sets the "billing_policy_version" field.
+func (_u *GroupUpdateOne) SetBillingPolicyVersion(v int64) *GroupUpdateOne {
+	_u.mutation.ResetBillingPolicyVersion()
+	_u.mutation.SetBillingPolicyVersion(v)
+	return _u
+}
+
+// SetNillableBillingPolicyVersion sets the "billing_policy_version" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableBillingPolicyVersion(v *int64) *GroupUpdateOne {
+	if v != nil {
+		_u.SetBillingPolicyVersion(*v)
+	}
+	return _u
+}
+
+// AddBillingPolicyVersion adds value to the "billing_policy_version" field.
+func (_u *GroupUpdateOne) AddBillingPolicyVersion(v int64) *GroupUpdateOne {
+	_u.mutation.AddBillingPolicyVersion(v)
+	return _u
+}
+
 // SetPeakRateEnabled sets the "peak_rate_enabled" field.
 func (_u *GroupUpdateOne) SetPeakRateEnabled(v bool) *GroupUpdateOne {
 	_u.mutation.SetPeakRateEnabled(v)
@@ -2859,6 +2960,20 @@ func (_u *GroupUpdateOne) SetAllowBatchImageGeneration(v bool) *GroupUpdateOne {
 func (_u *GroupUpdateOne) SetNillableAllowBatchImageGeneration(v *bool) *GroupUpdateOne {
 	if v != nil {
 		_u.SetAllowBatchImageGeneration(*v)
+	}
+	return _u
+}
+
+// SetImageCountBilling sets the "image_count_billing" field.
+func (_u *GroupUpdateOne) SetImageCountBilling(v bool) *GroupUpdateOne {
+	_u.mutation.SetImageCountBilling(v)
+	return _u
+}
+
+// SetNillableImageCountBilling sets the "image_count_billing" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableImageCountBilling(v *bool) *GroupUpdateOne {
+	if v != nil {
+		_u.SetImageCountBilling(*v)
 	}
 	return _u
 }
@@ -3997,6 +4112,11 @@ func (_u *GroupUpdateOne) check() error {
 			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "Group.name": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.BillingRatePolicy(); ok {
+		if err := v.Validate(); err != nil {
+			return &ValidationError{Name: "billing_rate_policy", err: fmt.Errorf(`ent: validator failed for field "Group.billing_rate_policy": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.PeakStart(); ok {
 		if err := group.PeakStartValidator(v); err != nil {
 			return &ValidationError{Name: "peak_start", err: fmt.Errorf(`ent: validator failed for field "Group.peak_start": %w`, err)}
@@ -4121,6 +4241,15 @@ func (_u *GroupUpdateOne) sqlSave(ctx context.Context) (_node *Group, err error)
 	if value, ok := _u.mutation.AddedRateMultiplier(); ok {
 		_spec.AddField(group.FieldRateMultiplier, field.TypeFloat64, value)
 	}
+	if value, ok := _u.mutation.BillingRatePolicy(); ok {
+		_spec.SetField(group.FieldBillingRatePolicy, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.BillingPolicyVersion(); ok {
+		_spec.SetField(group.FieldBillingPolicyVersion, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedBillingPolicyVersion(); ok {
+		_spec.AddField(group.FieldBillingPolicyVersion, field.TypeInt64, value)
+	}
 	if value, ok := _u.mutation.PeakRateEnabled(); ok {
 		_spec.SetField(group.FieldPeakRateEnabled, field.TypeBool, value)
 	}
@@ -4225,6 +4354,9 @@ func (_u *GroupUpdateOne) sqlSave(ctx context.Context) (_node *Group, err error)
 	}
 	if value, ok := _u.mutation.AllowBatchImageGeneration(); ok {
 		_spec.SetField(group.FieldAllowBatchImageGeneration, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.ImageCountBilling(); ok {
+		_spec.SetField(group.FieldImageCountBilling, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.ImageRateIndependent(); ok {
 		_spec.SetField(group.FieldImageRateIndependent, field.TypeBool, value)

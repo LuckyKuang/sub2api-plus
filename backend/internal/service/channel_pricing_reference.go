@@ -954,7 +954,7 @@ var billingReferenceFallbackIDs func() map[string]struct{}
 //   - gemini-*-tiered thinking 档 → 基名
 //   - normalizeKnownOpenAICodexModel 归一后的同 SKU 名称
 func (s *BillingService) IdentifiedSameModelPricing(model string) (*ModelPricing, string) {
-	if s == nil {
+	if s == nil || isUnregisteredGPT61TerraPricingModel(model) {
 		return nil, ""
 	}
 	lookup := strings.ToLower(strings.TrimSpace(model))

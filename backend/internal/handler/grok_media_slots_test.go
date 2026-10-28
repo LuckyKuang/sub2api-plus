@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -120,11 +121,13 @@ func (s *grokMediaSlotsCache) assertReleased(t *testing.T) {
 
 type grokMediaSlotBindings struct {
 	testutil.StubGatewayCache
-	owner   int64
-	writes  int
-	key     string
-	billed  map[string]bool
-	pending map[string][]byte
+	owner         int64
+	writes        int
+	key           string
+	billed        map[string]bool
+	billingOwners map[string]string
+	pending       map[string][]byte
+	pendingReads  int
 }
 
 func (s *grokMediaSlotBindings) SetGrokVideoPendingBilling(_ context.Context, key string, body []byte, _ time.Duration) error {
@@ -135,6 +138,7 @@ func (s *grokMediaSlotBindings) SetGrokVideoPendingBilling(_ context.Context, ke
 	return nil
 }
 func (s *grokMediaSlotBindings) GetGrokVideoPendingBilling(_ context.Context, key string) ([]byte, error) {
+	s.pendingReads++
 	return s.pending[key], nil
 }
 
@@ -158,7 +162,7 @@ func (s *grokMediaSlotBindings) DeleteSessionAccountID(context.Context, int64, s
 	return nil
 }
 
-func (s *grokMediaSlotBindings) ClaimGrokVideoBilled(_ context.Context, key string, _ time.Duration) (bool, error) {
+func (s *grokMediaSlotBindings) ClaimGrokVideoBilled(_ context.Context, key, owner string, _ time.Duration) (bool, error) {
 	if s.billed == nil {
 		s.billed = make(map[string]bool)
 	}
@@ -166,7 +170,27 @@ func (s *grokMediaSlotBindings) ClaimGrokVideoBilled(_ context.Context, key stri
 		return false, nil
 	}
 	s.billed[key] = true
+	if s.billingOwners == nil {
+		s.billingOwners = make(map[string]string)
+	}
+	s.billingOwners[key] = owner
 	return true, nil
+}
+
+func (s *grokMediaSlotBindings) CompleteGrokVideoBilled(_ context.Context, key, owner string, _ time.Duration) (bool, error) {
+	if s.billingOwners[key] != owner {
+		return false, nil
+	}
+	delete(s.billingOwners, key)
+	return true, nil
+}
+
+func (s *grokMediaSlotBindings) ReleaseGrokVideoBilled(_ context.Context, key, owner string) error {
+	if s.billingOwners[key] == owner {
+		delete(s.billingOwners, key)
+		delete(s.billed, key)
+	}
+	return nil
 }
 
 type grokMediaSlotRepo struct {
@@ -199,6 +223,11 @@ func (p grokMediaSlotProber) ProbeMediaEligibility(ctx context.Context, id int64
 }
 
 func newGrokMediaSlotHandler(t *testing.T, oauth, mismatch bool, platforms ...string) (*OpenAIGatewayHandler, *grokMediaSlotsCache, *grokMediaSlotBindings, *grokMediaSlotUpstream) {
+	t.Helper()
+	return newGrokMediaSlotHandlerWithRates(t, oauth, mismatch, nil, platforms...)
+}
+
+func newGrokMediaSlotHandlerWithRates(t *testing.T, oauth, mismatch bool, rates service.UserGroupRateRepository, platforms ...string) (*OpenAIGatewayHandler, *grokMediaSlotsCache, *grokMediaSlotBindings, *grokMediaSlotUpstream) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	accounts := make([]service.Account, 3)
@@ -234,13 +263,14 @@ func newGrokMediaSlotHandler(t *testing.T, oauth, mismatch bool, platforms ...st
 		_, err := provider.GetAccessToken(context.Background(), &accounts[1])
 		require.NoError(t, err)
 	}
-	gateway := service.NewOpenAIGatewayService(repo, nil, nil, nil, nil, nil, bindings, cfg, nil, concurrency, nil, nil, nil, upstream, nil, nil, provider, nil, nil, nil, nil, nil, nil)
+	gateway := service.NewOpenAIGatewayService(repo, nil, nil, nil, nil, rates, bindings, cfg, nil, concurrency, service.NewBillingService(cfg, nil), nil, nil, upstream, nil, nil, provider, nil, nil, nil, nil, nil, nil)
 	groupID := int64(24)
 	require.NoError(t, gateway.BindGrokMediaVideoRequestAccount(context.Background(), &groupID, "task", 10, 20, 1))
 	bindings.writes = 0
 	billing := service.NewBillingCacheService(nil, nil, nil, nil, nil, nil, cfg, nil)
 	t.Cleanup(billing.Stop)
 	handler := NewOpenAIGatewayHandler(gateway, concurrency, billing, service.NewAPIKeyService(nil, nil, nil, nil, nil, nil, cfg), nil, nil, nil, nil, cfg)
+	handler.unfinishedTasks = service.NewGatewayUnfinishedTaskService(&testutil.StubGatewayUnfinishedTaskRepo{}, nil)
 	return handler, slots, bindings, upstream
 }
 
@@ -346,7 +376,13 @@ func TestGrokMediaEligibilityReleasesBeforeSwitch(t *testing.T) {
 				probes++
 				if scenario == "cancel during probe" {
 					cancel()
-					require.Eventually(t, func() bool { slots.mu.Lock(); defer slots.mu.Unlock(); return len(slots.accounts) == 0 }, time.Second, time.Millisecond)
+					// A probe is still upstream work until it returns. A client
+					// disconnect must not free capacity for another request early.
+					slots.mu.Lock()
+					activeAccounts, activeUsers := len(slots.accounts), len(slots.users)
+					slots.mu.Unlock()
+					require.Equal(t, 1, activeAccounts)
+					require.Equal(t, 1, activeUsers)
 				}
 				if scenario == "switch" && probes == 2 {
 					return true, "eligible", nil
@@ -368,6 +404,13 @@ func TestGrokMediaEligibilityReleasesBeforeSwitch(t *testing.T) {
 				require.Equal(t, 503, w.Code)
 				require.Equal(t, 2, slots.released)
 				require.Zero(t, upstream.calls)
+			}
+			if scenario == "cancel during probe" {
+				require.Equal(t, 1, probes, "disconnect must not select or probe a replacement account")
+				require.Equal(t, 1, slots.released)
+				require.Zero(t, upstream.calls, "a cancelled probe must not start media generation")
+				require.Equal(t, statusClientClosedRequest, c.Writer.Status())
+				require.Zero(t, w.Body.Len())
 			}
 		})
 	}
@@ -407,11 +450,13 @@ func TestGrokMediaVideoCompletionStillClaimsBillingOnce(t *testing.T) {
 	key, ok := middleware2.GetAPIKeyFromContext(c)
 	require.True(t, ok)
 	subject := middleware2.AuthSubject{UserID: 10, Concurrency: 5}
+	require.NoError(t, h.gatewayService.StoreGrokVideoPendingBilling(c.Request.Context(), "task", subject.UserID, key.ID,
+		service.GrokVideoPendingBilling{Model: "grok-imagine-video", VideoResolution: "720p", VideoDurationSeconds: 6}))
 	pollByte := 25
 	result := &service.OpenAIForwardResult{ResponseID: "task", Model: "grok-imagine-video",
 		VideoCount: 1, VideoDurationSeconds: 6, FirstByteMs: &pollByte}
 	for i := range 20 {
-		bill := prepareGrokVideoCompletionBilling(c.Request.Context(), h, zap.NewNop(), key, subject, "task", result)
+		_, bill := prepareGrokVideoCompletionBilling(c.Request.Context(), h, zap.NewNop(), key, subject, "task", result)
 		if i == 0 {
 			require.NotNil(t, bill)
 			require.Equal(t, service.StableGrokVideoBillingRequestID("task"), bill.RequestID)
@@ -422,4 +467,113 @@ func TestGrokMediaVideoCompletionStillClaimsBillingOnce(t *testing.T) {
 		}
 	}
 	require.Len(t, bindings.billed, 1)
+}
+
+func TestGrokVideoMissingPendingNeverRepricesOrBurnsSettlementClaim(t *testing.T) {
+	for _, duration := range []int{0, 8} {
+		t.Run(fmt.Sprintf("status_duration_%d", duration), func(t *testing.T) {
+			h, _, bindings, _ := newGrokMediaSlotHandler(t, false, false)
+			c, _ := grokMediaSlotContext(context.Background(), false)
+			key, ok := middleware2.GetAPIKeyFromContext(c)
+			require.True(t, ok)
+			subject := middleware2.AuthSubject{UserID: 10, Concurrency: 5}
+			result := &service.OpenAIForwardResult{ResponseID: "task", Model: "grok-imagine-video", VideoCount: 1, VideoDurationSeconds: duration}
+			_, bill := prepareGrokVideoCompletionBilling(c.Request.Context(), h, zap.NewNop(), key, subject, "task", result)
+			require.Nil(t, bill, "status cannot reconstruct a missing create-time price or resolution")
+			require.Empty(t, bindings.billed, "storage recovery must retain the ability to settle later")
+			require.NoError(t, h.gatewayService.StoreGrokVideoPendingBilling(c.Request.Context(), "task", subject.UserID, key.ID,
+				service.GrokVideoPendingBilling{Model: "grok-imagine-video", VideoResolution: "1080p", VideoDurationSeconds: 12}))
+			_, bill = prepareGrokVideoCompletionBilling(c.Request.Context(), h, zap.NewNop(), key, subject, "task", result)
+			require.NotNil(t, bill)
+			require.Equal(t, "1080p", bill.VideoResolution)
+			require.Len(t, bindings.billed, 1)
+		})
+	}
+}
+
+func TestGrokVideoMalformedPricingSnapshotDoesNotBurnSettlementClaim(t *testing.T) {
+	h, _, bindings, _ := newGrokMediaSlotHandler(t, false, false)
+	c, _ := grokMediaSlotContext(context.Background(), false)
+	key, ok := middleware2.GetAPIKeyFromContext(c)
+	require.True(t, ok)
+	subject := middleware2.AuthSubject{UserID: 10, Concurrency: 5}
+	// Valid JSON with an unsupported snapshot schema is a corrupted persisted
+	// billing generation. It must remain retryable after storage is repaired.
+	pending := service.GrokVideoPendingBilling{Model: "grok-imagine-video", VideoDurationSeconds: 6, PricingSnapshot: json.RawMessage(`{"schema_version":-1}`)}
+	require.NoError(t, h.gatewayService.StoreGrokVideoPendingBilling(c.Request.Context(), "task", subject.UserID, key.ID, pending))
+	result := &service.OpenAIForwardResult{ResponseID: "task", VideoCount: 1, VideoDurationSeconds: 6}
+	_, bill := prepareGrokVideoCompletionBilling(c.Request.Context(), h, zap.NewNop(), key, subject, "task", result)
+	require.Nil(t, bill)
+	require.Empty(t, bindings.billed, "a corrupt pricing generation must fail before claiming one-time settlement")
+	pending.PricingSnapshot = nil // A historical task without this new field keeps its documented legacy behavior.
+	require.NoError(t, h.gatewayService.StoreGrokVideoPendingBilling(c.Request.Context(), "task", subject.UserID, key.ID, pending))
+	_, bill = prepareGrokVideoCompletionBilling(c.Request.Context(), h, zap.NewNop(), key, subject, "task", result)
+	require.NotNil(t, bill, "repair must permit the first actual settlement")
+	require.Len(t, bindings.billed, 1)
+	_, bill = prepareGrokVideoCompletionBilling(c.Request.Context(), h, zap.NewNop(), key, subject, "task", result)
+	require.Nil(t, bill, "the repaired settlement still occurs once")
+}
+
+func TestGrokVideoMissingDurationPricePreservesClaimForRecoveredSnapshot(t *testing.T) {
+	for _, free := range []bool{false, true} {
+		t.Run(fmt.Sprintf("free=%t", free), func(t *testing.T) {
+			h, _, bindings, _ := newGrokMediaSlotHandler(t, false, false)
+			c, _ := grokMediaSlotContext(context.Background(), false)
+			key, _ := middleware2.GetAPIKeyFromContext(c)
+			if free {
+				zero := 0.0
+				key.Group.VideoPrice480P = &zero
+				key.Group.VideoPrice720P = &zero
+				key.Group.VideoPrice1080P = &zero
+			}
+			subject := middleware2.AuthSubject{UserID: 10}
+			create := h.gatewayService.WithBillingPricingSnapshot(c.Request.Context(), key, time.Now(), "public-video")
+			good, err := service.ExportBillingPricingSnapshot(create, "grok-imagine-video-1.5")
+			require.NoError(t, err)
+			var broken map[string]any
+			require.NoError(t, json.Unmarshal(good, &broken))
+			videos := broken["videos"].(map[string]any)
+			delete(videos, "grok-imagine-video-1.5")
+			missing, err := json.Marshal(broken)
+			require.NoError(t, err)
+			pending := service.GrokVideoPendingBilling{Model: "public-video", OriginalModel: "public-video", BillingModel: "grok-imagine-video-1.5", UpstreamModel: "grok-imagine-video-1.5", VideoResolution: "720p", VideoDurationSeconds: 8, PricingSnapshot: missing}
+			require.NoError(t, h.gatewayService.StoreGrokVideoPendingBilling(create, "repair-video", subject.UserID, key.ID, pending))
+			status := &service.OpenAIForwardResult{VideoCount: 1, ResponseID: "repair-video", VideoDurationSeconds: 8}
+			_, bill := prepareGrokVideoCompletionBilling(c.Request.Context(), h, zap.NewNop(), key, subject, "repair-video", status)
+			require.Nil(t, bill)
+			require.Empty(t, bindings.billed, "missing duration prices must not consume the claim or schedule billing")
+			pending.PricingSnapshot = good
+			require.NoError(t, h.gatewayService.StoreGrokVideoPendingBilling(create, "repair-video", subject.UserID, key.ID, pending))
+			ctx, bill := prepareGrokVideoCompletionBilling(c.Request.Context(), h, zap.NewNop(), key, subject, "repair-video", status)
+			require.NotNil(t, bill)
+			require.Len(t, bindings.billed, 1)
+			require.NoError(t, service.ValidateBillingPricingMeter(ctx, "grok-imagine-video-1.5", "second"))
+			_, bill = prepareGrokVideoCompletionBilling(c.Request.Context(), h, zap.NewNop(), key, subject, "repair-video", status)
+			require.Nil(t, bill)
+			require.Len(t, bindings.billed, 1)
+		})
+	}
+}
+
+func TestGrokVideoCompletionDoesNotReplaceSubmittedSKUWithStatusDefault(t *testing.T) {
+	h, _, _, _ := newGrokMediaSlotHandler(t, false, false)
+	c, _ := grokMediaSlotContext(context.Background(), false)
+	key, ok := middleware2.GetAPIKeyFromContext(c)
+	require.True(t, ok)
+	key.Group.BillingPolicyVersion = 12
+	createCtx := h.gatewayService.WithBillingPricingSnapshot(c.Request.Context(), key, time.Now(), "public-video")
+	subject := middleware2.AuthSubject{UserID: 10}
+	require.NoError(t, h.gatewayService.StoreGrokVideoPendingBilling(createCtx, "task", subject.UserID, key.ID, service.GrokVideoPendingBilling{
+		Model: "public-video", OriginalModel: "public-video", BillingModel: "grok-imagine-video-1.5", UpstreamModel: "grok-imagine-video-1.5", VideoResolution: "720p", VideoDurationSeconds: 8,
+	}))
+	// The upstream's documented status omits model, so extraction already
+	// assigned the generic family. It must not select another frozen card.
+	status := service.ExtractGrokVideoBillingFromStatusBody([]byte(`{"status":"done","video":{"url":"https://video.invalid/a.mp4","duration":8}}`), nil, "task")
+	require.NotNil(t, status)
+	require.Equal(t, "grok-imagine-video", status.BillingModel)
+	_, billed := prepareGrokVideoCompletionBilling(c.Request.Context(), h, zap.NewNop(), key, subject, "task", status)
+	require.NotNil(t, billed)
+	require.Equal(t, "grok-imagine-video-1.5", billed.BillingModel)
+	require.Equal(t, "grok-imagine-video-1.5", billed.UpstreamModel)
+	require.Equal(t, "720p", billed.VideoResolution)
 }

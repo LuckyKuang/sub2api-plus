@@ -15,6 +15,28 @@ import {
 } from '../useModelWhitelist'
 
 describe('useModelWhitelist', () => {
+  it('includes platform-specific TypeSafe and OpenCode candidates once in combined options', () => {
+    const values = allModels.map(model => model.value)
+    expect(new Set(values).size).toBe(values.length)
+    for (const model of ['jev-latest', 'longcat-2.0', 'mimo-v2.5', 'minimax-m3', 'qwen3.8-max', 'hy4-preview', 'omen-alpha']) {
+      expect(values).toContain(model)
+    }
+    expect(getModelsByPlatform('typesafe')).toEqual(['jev-latest'])
+    expect(getModelsByPlatform('opencode_go')).toContain('mimo-v2.5')
+  })
+
+  it('offers current native Gemini mappings while retaining Antigravity legacy identities', () => {
+    const presets = getPresetMappingsByPlatform('gemini')
+    for (const model of ['gemini-3.1-flash-image', 'gemini-3.1-pro-preview', 'gemini-3.8-flash', 'gemini-4-argon']) {
+      expect(presets).toContainEqual(expect.objectContaining({ from: model, to: model }))
+    }
+    expect(presets.some(preset => preset.from.startsWith('gemini-2.') || preset.to.startsWith('gemini-2.'))).toBe(false)
+    expect(getModelsByPlatform('antigravity')).toContain('gemini-2.5-flash')
+    expect(getPresetMappingsByPlatform('antigravity')).toContainEqual(expect.objectContaining({
+      from: 'gemini-2.5-flash-lite', to: 'gemini-2.5-flash-lite'
+    }))
+  })
+
   it.each([
     ['deepseek', ['deepseek-flash', 'deepseek-v4.1-flash', 'deepseek-v4-flash-vision-exp', 'deepseek-v4-flash', 'deepseek-v4-flash-0731', 'deepseek-v4-pro', 'deepseek-v4-pro-0813'], ['deepseek-r1']],
     ['kimi', ['kimi-k3', 'kimi-k2.7-code-highspeed', 'kimi-for-coding-highspeed'], ['moonshot-v1-8k', 'kimi-latest', 'kimi-k2']],
@@ -70,6 +92,7 @@ describe('useModelWhitelist', () => {
     expect(models).toContain('gpt-5.6')
     expect(models).toContain('gpt-6-astra')
     expect(models).toContain('gpt-6.1-sol')
+    expect(models).toContain('gpt-6.1-terra')
     expect(models).toContain('gpt-6-sol')
     expect(models).toContain('gpt-6-luna')
     expect(models).not.toContain('gpt-6')
@@ -84,9 +107,10 @@ describe('useModelWhitelist', () => {
       to: 'gpt-6-astra'
     })
     expect(presets.some(preset => preset.from === 'gpt-6')).toBe(false)
-    expect(presets.map(preset => preset.from).slice(0, 11)).toEqual([
+    expect(presets.map(preset => preset.from).slice(0, 12)).toEqual([
       'gpt-6-astra',
       'gpt-6.1-sol',
+      'gpt-6.1-terra',
       'gpt-6-sol',
       'gpt-6-luna',
       'gpt-5.6',
@@ -100,9 +124,10 @@ describe('useModelWhitelist', () => {
   })
 
   it('openai 模型列表按新系列优先排列', () => {
-    expect(getModelsByPlatform('openai').slice(0, 10)).toEqual([
+    expect(getModelsByPlatform('openai').slice(0, 11)).toEqual([
       'gpt-6-astra',
       'gpt-6.1-sol',
+      'gpt-6.1-terra',
       'gpt-6-sol',
       'gpt-6-luna',
       'gpt-5.6',
@@ -207,10 +232,22 @@ describe('useModelWhitelist', () => {
   it('gemini 模型列表包含原生生图模型', () => {
     const models = getModelsByPlatform('gemini')
 
-    expect(models).toContain('gemini-2.5-flash-image')
     expect(models).toContain('gemini-3.1-flash-image')
-    expect(models.indexOf('gemini-3.1-flash-image')).toBeLessThan(models.indexOf('gemini-2.0-flash'))
-    expect(models.indexOf('gemini-2.5-flash-image')).toBeLessThan(models.indexOf('gemini-2.5-flash'))
+    expect(models).toContain('gemini-3-pro-image')
+    expect(models.indexOf('gemini-3.1-flash-image')).toBeLessThan(models.indexOf('gemini-3-flash'))
+    expect(models.indexOf('gemini-3-pro-image')).toBeLessThan(models.indexOf('gemini-3.5-flash'))
+  })
+
+  it('gemini 模型列表不含已停用的 2.x 模型与 Antigravity 档位别名', () => {
+    const models = getModelsByPlatform('gemini')
+
+    for (const model of ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.5-flash-image', 'gemini-3-pro-preview']) {
+      expect(models).not.toContain(model)
+    }
+    for (const model of ['gemini-3.1-pro', 'gemini-3.1-pro-high', 'gemini-3.1-pro-low']) {
+      expect(models).not.toContain(model)
+    }
+    expect(models).toContain('gemini-3.8-flash')
   })
 
   it('antigravity 模型列表会把新的 Gemini 图片模型排在前面', () => {

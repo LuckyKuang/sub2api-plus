@@ -10,9 +10,47 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
+
+func TestGatewayConcurrencyCancellationSeparatesDisconnectFromLostCapacity(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, handler := range []struct {
+		name string
+		call func(*gin.Context, error, string, bool)
+	}{
+		{"compatible", (&GatewayHandler{}).handleConcurrencyError},
+		{"openai", (&OpenAIGatewayHandler{}).handleConcurrencyError},
+	} {
+		for _, cause := range []struct {
+			name   string
+			err    error
+			status int
+		}{
+			{"client disconnect", context.Canceled, statusClientClosedRequest},
+			{"lost capacity", service.ErrConcurrencyLeaseLost, http.StatusServiceUnavailable},
+		} {
+			t.Run(handler.name+"/"+cause.name, func(t *testing.T) {
+				rec := httptest.NewRecorder()
+				c, _ := gin.CreateTestContext(rec)
+				ctx, cancel := context.WithCancelCause(context.Background())
+				cancel(cause.err)
+				c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil).WithContext(ctx)
+				// Context cancellation exposes context.Canceled for both causes.
+				// Only real client cancellation may be silent or classified 499.
+				handler.call(c, ctx.Err(), "user", false)
+				require.Equal(t, cause.status, c.Writer.Status())
+				if cause.err == context.Canceled {
+					require.Zero(t, rec.Body.Len())
+				} else {
+					require.Contains(t, rec.Body.String(), "Service temporarily unavailable")
+				}
+			})
+		}
+	}
+}
 
 func TestConcurrencyErrorResponse(t *testing.T) {
 	tests := []struct {

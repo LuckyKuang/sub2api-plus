@@ -81,6 +81,10 @@ func (PaymentOrder) Fields() []ent.Field {
 		field.String("order_source").MaxLen(20).Default("payment"),
 		field.String("currency").MaxLen(3).Default(""),
 		field.String("plan_name").MaxLen(255).Default(""),
+		field.Int64("pricing_policy_version").Default(0),
+		field.JSON("pricing_summary", map[string]any{}).
+			Optional().
+			SchemaType(map[string]string{dialect.Postgres: "jsonb"}),
 		// Audit reference intentionally has no FK: deleting a code must retain its order.
 		field.Int64("redeem_code_id").Optional().Nillable().Unique(),
 

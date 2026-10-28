@@ -148,11 +148,13 @@ func TestGatewayCompositeRouteModelsAppearInBothCatalogs(t *testing.T) {
 				c.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
 				c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{Group: group})
 				if endpoint == "models" {
+					prepareGatewayMetadataTest(h, c)
 					h.Models(c)
 					var got gatewayModelsResponseForTest
 					require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
 					require.Equal(t, tc.want, modelIDsForTest(got.Data))
 				} else {
+					prepareGatewayMetadataTest(h, c)
 					h.CodexModels(c)
 					var got codexModelsResponseForTest
 					require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
@@ -243,6 +245,8 @@ func TestGatewayCodexModels_NonOpenAIGroupsUseMappedModels(t *testing.T) {
 				Group: &service.Group{ID: groupID, Platform: tt.platform},
 			})
 
+			prepareGatewayMetadataTest(h, c)
+
 			h.CodexModels(c)
 
 			require.Equal(t, http.StatusOK, rec.Code)
@@ -298,6 +302,8 @@ func TestGatewayCodexModels_CompositeUsesCompleteEffectiveModelList(t *testing.T
 	c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{
 		Group: &service.Group{ID: groupID, Platform: service.PlatformComposite},
 	})
+
+	prepareGatewayMetadataTest(h, c)
 
 	h.CodexModels(c)
 
@@ -400,6 +406,7 @@ func TestGatewayModels_UnmappedOpenAIAccountsSupplementMappedModels(t *testing.T
 				c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{
 					Group: &service.Group{ID: groupID, Platform: service.PlatformOpenAI, ModelAllowlist: tt.config},
 				})
+				prepareGatewayMetadataTest(h, c)
 				h.Models(c)
 				require.Equal(t, http.StatusOK, rec.Code)
 				var got gatewayModelsResponseForTest
@@ -443,6 +450,7 @@ func TestGatewayCodexModels_GeneratedManifestUsesFinalBodyETag(t *testing.T) {
 	firstContext, _ := gin.CreateTestContext(first)
 	firstContext.Request = httptest.NewRequest(http.MethodGet, "/models?client_version=0.163.0", nil)
 	firstContext.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{Group: group})
+	prepareGatewayMetadataTest(h, firstContext)
 	h.CodexModels(firstContext)
 
 	require.Equal(t, http.StatusOK, first.Code)
@@ -455,6 +463,7 @@ func TestGatewayCodexModels_GeneratedManifestUsesFinalBodyETag(t *testing.T) {
 	secondContext.Request = httptest.NewRequest(http.MethodGet, "/models?client_version=0.163.0", nil)
 	secondContext.Request.Header.Set("If-None-Match", "W/"+etag)
 	secondContext.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{Group: group})
+	prepareGatewayMetadataTest(h, secondContext)
 	h.CodexModels(secondContext)
 
 	require.Equal(t, http.StatusNotModified, second.Code)
@@ -500,6 +509,8 @@ func TestGatewayCodexModels_CustomModelsListFiltersCompositeManifest(t *testing.
 			},
 		},
 	})
+
+	prepareGatewayMetadataTest(h, c)
 
 	h.CodexModels(c)
 
@@ -554,6 +565,8 @@ func TestGatewayModels_GeminiGroupFallsBackToGeminiModels(t *testing.T) {
 		Group: &service.Group{ID: groupID, Platform: service.PlatformGemini},
 	})
 
+	prepareGatewayMetadataTest(h, c)
+
 	h.Models(c)
 
 	require.Equal(t, http.StatusOK, rec.Code)
@@ -561,7 +574,7 @@ func TestGatewayModels_GeminiGroupFallsBackToGeminiModels(t *testing.T) {
 	var got gatewayModelsResponseForTest
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
 	require.Equal(t, "list", got.Object)
-	require.Contains(t, modelIDsForTest(got.Data), "gemini-2.5-flash")
+	require.Contains(t, modelIDsForTest(got.Data), "gemini-3.5-flash")
 	require.NotContains(t, modelIDsForTest(got.Data), "claude-sonnet-4-6")
 }
 
@@ -621,6 +634,8 @@ func assertGrokGatewayReasoningEfforts(t *testing.T, groupID int64, modelID stri
 		Group: &service.Group{ID: groupID, Platform: service.PlatformGrok},
 	})
 
+	prepareGatewayMetadataTest(h, c)
+
 	h.Models(c)
 
 	require.Equal(t, http.StatusOK, rec.Code)
@@ -672,6 +687,8 @@ func TestGatewayModels_GeminiGroupFiltersMappedModelsByPlatform(t *testing.T) {
 		Group: &service.Group{ID: groupID, Platform: service.PlatformGemini},
 	})
 
+	prepareGatewayMetadataTest(h, c)
+
 	h.Models(c)
 
 	require.Equal(t, http.StatusOK, rec.Code)
@@ -698,6 +715,8 @@ func TestGatewayCodexModels_CompositeAnthropicDoesNotAdvertiseAntigravityDefault
 	c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{
 		Group: &service.Group{ID: groupID, Platform: service.PlatformComposite},
 	})
+
+	prepareGatewayMetadataTest(h, c)
 
 	h.CodexModels(c)
 
@@ -726,6 +745,8 @@ func TestGatewayModels_CompositeAntigravityAdvertisesAntigravityDefaults(t *test
 	c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{
 		Group: &service.Group{ID: groupID, Platform: service.PlatformComposite},
 	})
+
+	prepareGatewayMetadataTest(h, c)
 
 	h.Models(c)
 
@@ -774,6 +795,8 @@ func TestGatewayModels_CustomModelsListDisabledKeepsOriginalModels(t *testing.T)
 		},
 	})
 
+	prepareGatewayMetadataTest(h, c)
+
 	h.Models(c)
 
 	require.Equal(t, http.StatusOK, rec.Code)
@@ -820,6 +843,8 @@ func TestGatewayModels_CustomModelsListFiltersAndOrdersMappedModels(t *testing.T
 			},
 		},
 	})
+
+	prepareGatewayMetadataTest(h, c)
 
 	h.Models(c)
 
@@ -913,6 +938,8 @@ func TestGatewayModels_CompositeCustomModelsListFiltersAcrossConcretePlatforms(t
 		},
 	})
 
+	prepareGatewayMetadataTest(h, c)
+
 	h.Models(c)
 
 	require.Equal(t, http.StatusOK, rec.Code)
@@ -943,6 +970,8 @@ func TestGatewayModels_CompositeUnmappedAccountsFallbackToLinkedPlatformsOnly(t 
 	c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{
 		Group: &service.Group{ID: groupID, Platform: service.PlatformComposite},
 	})
+
+	prepareGatewayMetadataTest(h, c)
 
 	h.Models(c)
 
@@ -984,6 +1013,8 @@ func TestGatewayModels_CompositeUnmappedCNAccountsContributeNoDefaults(t *testin
 	c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{
 		Group: &service.Group{ID: groupID, Platform: service.PlatformComposite},
 	})
+
+	prepareGatewayMetadataTest(h, c)
 
 	h.Models(c)
 
@@ -1045,6 +1076,8 @@ func TestGatewayCodexModels_DeepSeekWithoutMappingUsesDeepSeekDefaults(t *testin
 		Group: &service.Group{ID: groupID, Platform: service.PlatformDeepseek},
 	})
 
+	prepareGatewayMetadataTest(h, c)
+
 	h.CodexModels(c)
 
 	require.Equal(t, http.StatusOK, rec.Code)
@@ -1091,6 +1124,8 @@ func TestGatewayCodexModels_OmitsWildcardMappingKeys(t *testing.T) {
 	c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{
 		Group: &service.Group{ID: groupID, Platform: service.PlatformDeepseek},
 	})
+
+	prepareGatewayMetadataTest(h, c)
 
 	h.CodexModels(c)
 
@@ -1139,6 +1174,8 @@ func TestGatewayModels_CustomModelsListKeepsConcreteModelAllowedByWildcardMappin
 			},
 		},
 	})
+
+	prepareGatewayMetadataTest(h, c)
 
 	h.Models(c)
 
@@ -1191,6 +1228,8 @@ func TestGatewayModels_AnthropicCustomModelsListIncludesOAuthClaudeAndMappedDeep
 		},
 	})
 
+	prepareGatewayMetadataTest(h, c)
+
 	h.Models(c)
 
 	require.Equal(t, http.StatusOK, rec.Code)
@@ -1242,6 +1281,8 @@ func TestGatewayModels_AnthropicCustomModelsListDisabledKeepsMappedModelList(t *
 		},
 	})
 
+	prepareGatewayMetadataTest(h, c)
+
 	h.Models(c)
 
 	require.Equal(t, http.StatusOK, rec.Code)
@@ -1282,6 +1323,8 @@ func TestGatewayModels_AnthropicCustomModelsListIncludesOAuthClaudeWithoutMappin
 			},
 		},
 	})
+
+	prepareGatewayMetadataTest(h, c)
 
 	h.Models(c)
 
@@ -1328,6 +1371,8 @@ func TestGatewayModels_CustomModelsListCanReturnEmptyWhenSelectionsUnavailable(t
 		},
 	})
 
+	prepareGatewayMetadataTest(h, c)
+
 	h.Models(c)
 
 	require.Equal(t, http.StatusOK, rec.Code)
@@ -1365,6 +1410,8 @@ func TestGatewayModels_CustomModelsListFiltersDefaultFallbackModels(t *testing.T
 		},
 	})
 
+	prepareGatewayMetadataTest(h, c)
+
 	h.Models(c)
 
 	require.Equal(t, http.StatusOK, rec.Code)
@@ -1401,6 +1448,8 @@ func TestGatewayModels_OpenAICustomModelsListKeepsOpenAIResponseShapeForDefaultF
 			},
 		},
 	})
+
+	prepareGatewayMetadataTest(h, c)
 
 	h.Models(c)
 
@@ -1454,6 +1503,7 @@ func TestGatewayModels_AntigravityExplicitMappingAppearsInBothCatalogs(t *testin
 				})
 				var ids []string
 				if codex {
+					prepareGatewayMetadataTest(h, c)
 					h.CodexModels(c)
 					var got codexModelsResponseForTest
 					require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
@@ -1461,6 +1511,7 @@ func TestGatewayModels_AntigravityExplicitMappingAppearsInBothCatalogs(t *testin
 						ids = append(ids, model.Slug)
 					}
 				} else {
+					prepareGatewayMetadataTest(h, c)
 					h.Models(c)
 					var got gatewayModelsResponseForTest
 					require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
@@ -1529,6 +1580,8 @@ func TestGatewayModels_GeminiGroupIncludesAntigravityGeminiMappings(t *testing.T
 		Group: &service.Group{ID: groupID, Platform: service.PlatformGemini},
 	})
 
+	prepareGatewayMetadataTest(h, c)
+
 	h.Models(c)
 
 	require.Equal(t, http.StatusOK, rec.Code)
@@ -1576,6 +1629,8 @@ func TestGatewayModels_GeminiGroupUsesAntigravityDefaultMappingWhenUnset(t *test
 	c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{
 		Group: &service.Group{ID: groupID, Platform: service.PlatformGemini},
 	})
+
+	prepareGatewayMetadataTest(h, c)
 
 	h.Models(c)
 
@@ -1625,6 +1680,8 @@ func TestGatewayModels_CodexGeminiGroupListsAntigravityGeminiMappings(t *testing
 		Group: &service.Group{ID: groupID, Platform: service.PlatformGemini},
 	})
 
+	prepareGatewayMetadataTest(h, c)
+
 	h.CodexModels(c)
 
 	require.Equal(t, http.StatusOK, rec.Code)
@@ -1662,6 +1719,7 @@ func TestGatewayModels_GPT6SolLunaDiscoveryRespectsGroupAndAccountRestrictions(t
 			c, _ := gin.CreateTestContext(rec)
 			c.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
 			c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{Group: &service.Group{ID: groupID, Platform: service.PlatformOpenAI, ModelAllowlist: service.GroupModelAllowlist{Enabled: true, Models: tc.selected}}})
+			prepareGatewayMetadataTest(h, c)
 			h.Models(c)
 			require.Equal(t, http.StatusOK, rec.Code)
 			var got gatewayModelsResponseForTest
@@ -1693,6 +1751,7 @@ func TestGatewayModels_CompositeTypeSafeListingScope(t *testing.T) {
 	}
 
 	c, rec := newContext("/v1/models")
+	prepareGatewayMetadataTest(h, c)
 	h.Models(c)
 	require.Equal(t, http.StatusOK, rec.Code)
 	var models gatewayModelsResponseForTest
@@ -1701,6 +1760,7 @@ func TestGatewayModels_CompositeTypeSafeListingScope(t *testing.T) {
 	require.Contains(t, modelIDsForTest(models.Data), "claude-opus-4-6")
 
 	c, rec = newContext("/models?client_version=0.147.0")
+	prepareGatewayMetadataTest(h, c)
 	h.CodexModels(c)
 	require.Equal(t, http.StatusOK, rec.Code)
 	var manifest codexModelsResponseForTest
@@ -1749,11 +1809,13 @@ func TestGatewayModels_CompositeExactRoutesRespectTypeSafeIsolation(t *testing.T
 				ctx.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
 				ctx.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{Group: group})
 				if codex {
+					prepareGatewayMetadataTest(h, ctx)
 					h.CodexModels(ctx)
 					var manifest codexModelsResponseForTest
 					require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &manifest))
 					require.Equal(t, []string{"responses-alias"}, codexModelSlugsForTest(manifest.Models))
 				} else {
+					prepareGatewayMetadataTest(h, ctx)
 					h.Models(ctx)
 					var models gatewayModelsResponseForTest
 					require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &models))
@@ -1845,6 +1907,7 @@ func TestGatewayModels_CompositeCodexFiltersEffectiveResponsesRoutes(t *testing.
 						ctx.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
 						ctx.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{Group: group})
 						if codex {
+							prepareGatewayMetadataTest(h, ctx)
 							h.CodexModels(ctx)
 							var manifest codexModelsResponseForTest
 							require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &manifest))
@@ -1856,6 +1919,7 @@ func TestGatewayModels_CompositeCodexFiltersEffectiveResponsesRoutes(t *testing.
 								require.Empty(t, slugs)
 							}
 						} else {
+							prepareGatewayMetadataTest(h, ctx)
 							h.Models(ctx)
 							var models gatewayModelsResponseForTest
 							require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &models))
@@ -1888,6 +1952,7 @@ func TestGatewayModels_CompositeCodexRouteLookupErrorKeepsFallback(t *testing.T)
 			ctx, _ := gin.CreateTestContext(recorder)
 			ctx.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
 			ctx.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{Group: group})
+			prepareGatewayMetadataTest(h, ctx)
 			h.CodexModels(ctx)
 			require.Equal(t, http.StatusOK, recorder.Code)
 			var manifest codexModelsResponseForTest

@@ -77,6 +77,35 @@ func (h *OpenAIGatewayHandler) Live(c *gin.Context) {
 		return
 	}
 
+	if h.concurrencyHelper == nil || h.concurrencyHelper.concurrencyService == nil {
+		h.errorResponse(c, http.StatusServiceUnavailable, "api_error", "Live concurrency unavailable")
+		return
+	}
+	leaseCtx, cancelLease := service.WithConcurrencyLeaseContext(c.Request.Context())
+	defer cancelLease(nil)
+	c.Request = c.Request.WithContext(leaseCtx)
+	currentLimit, err := h.concurrencyHelper.concurrencyService.ResolveUserConcurrency(leaseCtx, subject.UserID, subject.Concurrency)
+	if err != nil {
+		h.errorResponse(c, http.StatusServiceUnavailable, "api_error", "Live concurrency unavailable")
+		return
+	}
+	subject.Concurrency = currentLimit
+
+	userRelease, acquired, err := h.concurrencyHelper.TryAcquireUserSlot(
+		c.Request.Context(),
+		subject.UserID,
+		subject.Concurrency,
+	)
+	if err != nil {
+		h.errorResponse(c, http.StatusServiceUnavailable, "api_error", "Live concurrency unavailable")
+		return
+	}
+	if !acquired {
+		h.errorResponse(c, http.StatusTooManyRequests, "rate_limit_error", "Live concurrency limit reached")
+		return
+	}
+	defer userRelease()
+
 	subscription, _ := middleware2.GetSubscriptionFromContext(c)
 	if h.billingCacheService == nil {
 		h.errorResponse(c, http.StatusServiceUnavailable, "api_error", "Billing service unavailable")
@@ -95,21 +124,6 @@ func (h *OpenAIGatewayHandler) Live(c *gin.Context) {
 		h.errorResponse(c, status, code, message)
 		return
 	}
-
-	userRelease, acquired, err := h.concurrencyHelper.TryAcquireUserSlot(
-		c.Request.Context(),
-		subject.UserID,
-		subject.Concurrency,
-	)
-	if err != nil {
-		h.errorResponse(c, http.StatusServiceUnavailable, "api_error", "Live concurrency unavailable")
-		return
-	}
-	if !acquired {
-		h.errorResponse(c, http.StatusTooManyRequests, "rate_limit_error", "Live concurrency limit reached")
-		return
-	}
-	defer userRelease()
 
 	identity := liveCallIdentity(c, apiKey, subject.UserID, subscription)
 	created, err := h.gatewayService.CreateLiveCall(c.Request.Context(), request, identity, subject.Concurrency)
@@ -223,6 +237,16 @@ func (h *OpenAIGatewayHandler) LiveSideband(c *gin.Context) {
 		h.errorResponse(c, http.StatusServiceUnavailable, "server_error", openAIWSIPAccessUnavailableMessage)
 		return
 	}
+	reqLog := requestLogger(
+		c,
+		"handler.openai_gateway.live_sideband",
+		zap.Int64("user_id", subject.UserID),
+		zap.Int64("api_key_id", apiKey.ID),
+		zap.Any("group_id", apiKey.GroupID),
+	)
+	if !h.admitLiveSideband(c, reqLog, apiKey, subject) {
+		return
+	}
 	identity := service.LiveCallIdentity{
 		APIKeyID: apiKey.ID,
 		UserID:   subject.UserID,
@@ -237,14 +261,7 @@ func (h *OpenAIGatewayHandler) LiveSideband(c *gin.Context) {
 		h.errorResponse(c, http.StatusNotFound, "not_found_error", "Live call not found")
 		return
 	}
-	reqLog := requestLogger(
-		c,
-		"handler.openai_gateway.live_sideband",
-		zap.Int64("user_id", subject.UserID),
-		zap.Int64("api_key_id", apiKey.ID),
-		zap.Any("group_id", apiKey.GroupID),
-		zap.String("model", record.Model),
-	)
+	reqLog = reqLog.With(zap.String("model", record.Model))
 	downstream, err := coderws.Accept(c.Writer, c.Request, &coderws.AcceptOptions{
 		InsecureSkipVerify: true,
 	})
@@ -256,20 +273,8 @@ func (h *OpenAIGatewayHandler) LiveSideband(c *gin.Context) {
 		BeforeFrame: func(ctx context.Context) error {
 			return h.enforceOpenAIWSIPAccess(ctx, trustedClientIdentity)
 		},
-		BeforeClientFrame: func(ctx context.Context, _ coderws.MessageType, payload []byte) error {
-			decision := h.checkSecurityAuditStage(
-				c, reqLog, apiKey, subject,
-				service.ContentModerationProtocolOpenAILive, record.Model, payload, "live_sideband",
-			)
-			if decision == nil || decision.AllowNextStage {
-				return nil
-			}
-			writeSecurityAuditWSError(ctx, downstream, decision)
-			return service.NewOpenAIWSClientCloseError(
-				securityAuditWSCloseStatus(decision), securityAuditWSCloseReason(decision), nil,
-			)
-		},
-		RecheckEvery: 5 * time.Second,
+		BeforeClientFrame: h.liveSidebandClientAudit(c, reqLog, apiKey, subject, record.Model, downstream),
+		RecheckEvery:      5 * time.Second,
 	}); err != nil {
 		if closeErr, ok := openAIWSClientPolicyClose(err); ok {
 			_ = downstream.Close(closeErr.StatusCode(), closeErr.Reason())
@@ -279,6 +284,42 @@ func (h *OpenAIGatewayHandler) LiveSideband(c *gin.Context) {
 		return
 	}
 	_ = downstream.Close(coderws.StatusNormalClosure, "")
+}
+
+// A Sideband reconnect is an independent ingress request to the existing Live
+// session. It crosses audit and RPM before resolving or taking over the call,
+// and reuses that session's persistent concurrency lease.
+func (h *OpenAIGatewayHandler) admitLiveSideband(c *gin.Context, reqLog *zap.Logger, apiKey *service.APIKey, subject middleware2.AuthSubject) bool {
+	if decision := h.checkSecurityAuditStage(c, reqLog, apiKey, subject, service.ContentModerationProtocolOpenAILive, "", nil, "live_sideband_connection"); decision != nil && !decision.AllowNextStage {
+		h.openAISecurityAuditError(c, decision)
+		return false
+	}
+	if h.billingCacheService == nil {
+		h.errorResponse(c, http.StatusServiceUnavailable, "api_error", "Billing service unavailable")
+		return false
+	}
+	c.Request = c.Request.WithContext(service.WithNewRPMAdmissionScope(c.Request.Context()))
+	if err := h.billingCacheService.CheckRequestRPM(c.Request.Context(), apiKey.User, apiKey.Group); err != nil {
+		h.handleConcurrencyError(c, err, "user", false)
+		return false
+	}
+	return true
+}
+
+func (h *OpenAIGatewayHandler) liveSidebandClientAudit(c *gin.Context, reqLog *zap.Logger, apiKey *service.APIKey, subject middleware2.AuthSubject, model string, downstream *coderws.Conn) func(context.Context, coderws.MessageType, []byte) error {
+	return func(ctx context.Context, _ coderws.MessageType, payload []byte) error {
+		decision := h.checkSecurityAuditStage(
+			c, reqLog, apiKey, subject,
+			service.ContentModerationProtocolOpenAILive, model, payload, "live_sideband",
+		)
+		if decision == nil || decision.AllowNextStage {
+			return nil
+		}
+		writeSecurityAuditWSError(ctx, downstream, decision)
+		return service.NewOpenAIWSClientCloseError(
+			securityAuditWSCloseStatus(decision), securityAuditWSCloseReason(decision), nil,
+		)
+	}
 }
 
 func liveEnabledForAPIKey(apiKey *service.APIKey) bool {

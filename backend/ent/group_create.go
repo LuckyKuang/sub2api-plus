@@ -112,6 +112,34 @@ func (_c *GroupCreate) SetNillableRateMultiplier(v *float64) *GroupCreate {
 	return _c
 }
 
+// SetBillingRatePolicy sets the "billing_rate_policy" field.
+func (_c *GroupCreate) SetBillingRatePolicy(v domain.BillingRatePolicy) *GroupCreate {
+	_c.mutation.SetBillingRatePolicy(v)
+	return _c
+}
+
+// SetNillableBillingRatePolicy sets the "billing_rate_policy" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableBillingRatePolicy(v *domain.BillingRatePolicy) *GroupCreate {
+	if v != nil {
+		_c.SetBillingRatePolicy(*v)
+	}
+	return _c
+}
+
+// SetBillingPolicyVersion sets the "billing_policy_version" field.
+func (_c *GroupCreate) SetBillingPolicyVersion(v int64) *GroupCreate {
+	_c.mutation.SetBillingPolicyVersion(v)
+	return _c
+}
+
+// SetNillableBillingPolicyVersion sets the "billing_policy_version" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableBillingPolicyVersion(v *int64) *GroupCreate {
+	if v != nil {
+		_c.SetBillingPolicyVersion(*v)
+	}
+	return _c
+}
+
 // SetPeakRateEnabled sets the "peak_rate_enabled" field.
 func (_c *GroupCreate) SetPeakRateEnabled(v bool) *GroupCreate {
 	_c.mutation.SetPeakRateEnabled(v)
@@ -402,6 +430,20 @@ func (_c *GroupCreate) SetAllowBatchImageGeneration(v bool) *GroupCreate {
 func (_c *GroupCreate) SetNillableAllowBatchImageGeneration(v *bool) *GroupCreate {
 	if v != nil {
 		_c.SetAllowBatchImageGeneration(*v)
+	}
+	return _c
+}
+
+// SetImageCountBilling sets the "image_count_billing" field.
+func (_c *GroupCreate) SetImageCountBilling(v bool) *GroupCreate {
+	_c.mutation.SetImageCountBilling(v)
+	return _c
+}
+
+// SetNillableImageCountBilling sets the "image_count_billing" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableImageCountBilling(v *bool) *GroupCreate {
+	if v != nil {
+		_c.SetImageCountBilling(*v)
 	}
 	return _c
 }
@@ -1145,6 +1187,14 @@ func (_c *GroupCreate) defaults() error {
 		v := group.DefaultRateMultiplier
 		_c.mutation.SetRateMultiplier(v)
 	}
+	if _, ok := _c.mutation.BillingRatePolicy(); !ok {
+		v := group.DefaultBillingRatePolicy
+		_c.mutation.SetBillingRatePolicy(v)
+	}
+	if _, ok := _c.mutation.BillingPolicyVersion(); !ok {
+		v := group.DefaultBillingPolicyVersion
+		_c.mutation.SetBillingPolicyVersion(v)
+	}
 	if _, ok := _c.mutation.PeakRateEnabled(); !ok {
 		v := group.DefaultPeakRateEnabled
 		_c.mutation.SetPeakRateEnabled(v)
@@ -1200,6 +1250,10 @@ func (_c *GroupCreate) defaults() error {
 	if _, ok := _c.mutation.AllowBatchImageGeneration(); !ok {
 		v := group.DefaultAllowBatchImageGeneration
 		_c.mutation.SetAllowBatchImageGeneration(v)
+	}
+	if _, ok := _c.mutation.ImageCountBilling(); !ok {
+		v := group.DefaultImageCountBilling
+		_c.mutation.SetImageCountBilling(v)
 	}
 	if _, ok := _c.mutation.ImageRateIndependent(); !ok {
 		v := group.DefaultImageRateIndependent
@@ -1342,6 +1396,17 @@ func (_c *GroupCreate) check() error {
 	if _, ok := _c.mutation.RateMultiplier(); !ok {
 		return &ValidationError{Name: "rate_multiplier", err: errors.New(`ent: missing required field "Group.rate_multiplier"`)}
 	}
+	if _, ok := _c.mutation.BillingRatePolicy(); !ok {
+		return &ValidationError{Name: "billing_rate_policy", err: errors.New(`ent: missing required field "Group.billing_rate_policy"`)}
+	}
+	if v, ok := _c.mutation.BillingRatePolicy(); ok {
+		if err := v.Validate(); err != nil {
+			return &ValidationError{Name: "billing_rate_policy", err: fmt.Errorf(`ent: validator failed for field "Group.billing_rate_policy": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.BillingPolicyVersion(); !ok {
+		return &ValidationError{Name: "billing_policy_version", err: errors.New(`ent: missing required field "Group.billing_policy_version"`)}
+	}
 	if _, ok := _c.mutation.PeakRateEnabled(); !ok {
 		return &ValidationError{Name: "peak_rate_enabled", err: errors.New(`ent: missing required field "Group.peak_rate_enabled"`)}
 	}
@@ -1418,6 +1483,9 @@ func (_c *GroupCreate) check() error {
 	}
 	if _, ok := _c.mutation.AllowBatchImageGeneration(); !ok {
 		return &ValidationError{Name: "allow_batch_image_generation", err: errors.New(`ent: missing required field "Group.allow_batch_image_generation"`)}
+	}
+	if _, ok := _c.mutation.ImageCountBilling(); !ok {
+		return &ValidationError{Name: "image_count_billing", err: errors.New(`ent: missing required field "Group.image_count_billing"`)}
 	}
 	if _, ok := _c.mutation.ImageRateIndependent(); !ok {
 		return &ValidationError{Name: "image_rate_independent", err: errors.New(`ent: missing required field "Group.image_rate_independent"`)}
@@ -1596,6 +1664,14 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 		_spec.SetField(group.FieldRateMultiplier, field.TypeFloat64, value)
 		_node.RateMultiplier = value
 	}
+	if value, ok := _c.mutation.BillingRatePolicy(); ok {
+		_spec.SetField(group.FieldBillingRatePolicy, field.TypeJSON, value)
+		_node.BillingRatePolicy = value
+	}
+	if value, ok := _c.mutation.BillingPolicyVersion(); ok {
+		_spec.SetField(group.FieldBillingPolicyVersion, field.TypeInt64, value)
+		_node.BillingPolicyVersion = value
+	}
 	if value, ok := _c.mutation.PeakRateEnabled(); ok {
 		_spec.SetField(group.FieldPeakRateEnabled, field.TypeBool, value)
 		_node.PeakRateEnabled = value
@@ -1679,6 +1755,10 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.AllowBatchImageGeneration(); ok {
 		_spec.SetField(group.FieldAllowBatchImageGeneration, field.TypeBool, value)
 		_node.AllowBatchImageGeneration = value
+	}
+	if value, ok := _c.mutation.ImageCountBilling(); ok {
+		_spec.SetField(group.FieldImageCountBilling, field.TypeBool, value)
+		_node.ImageCountBilling = value
 	}
 	if value, ok := _c.mutation.ImageRateIndependent(); ok {
 		_spec.SetField(group.FieldImageRateIndependent, field.TypeBool, value)
@@ -2106,6 +2186,36 @@ func (u *GroupUpsert) AddRateMultiplier(v float64) *GroupUpsert {
 	return u
 }
 
+// SetBillingRatePolicy sets the "billing_rate_policy" field.
+func (u *GroupUpsert) SetBillingRatePolicy(v domain.BillingRatePolicy) *GroupUpsert {
+	u.Set(group.FieldBillingRatePolicy, v)
+	return u
+}
+
+// UpdateBillingRatePolicy sets the "billing_rate_policy" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateBillingRatePolicy() *GroupUpsert {
+	u.SetExcluded(group.FieldBillingRatePolicy)
+	return u
+}
+
+// SetBillingPolicyVersion sets the "billing_policy_version" field.
+func (u *GroupUpsert) SetBillingPolicyVersion(v int64) *GroupUpsert {
+	u.Set(group.FieldBillingPolicyVersion, v)
+	return u
+}
+
+// UpdateBillingPolicyVersion sets the "billing_policy_version" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateBillingPolicyVersion() *GroupUpsert {
+	u.SetExcluded(group.FieldBillingPolicyVersion)
+	return u
+}
+
+// AddBillingPolicyVersion adds v to the "billing_policy_version" field.
+func (u *GroupUpsert) AddBillingPolicyVersion(v int64) *GroupUpsert {
+	u.Add(group.FieldBillingPolicyVersion, v)
+	return u
+}
+
 // SetPeakRateEnabled sets the "peak_rate_enabled" field.
 func (u *GroupUpsert) SetPeakRateEnabled(v bool) *GroupUpsert {
 	u.Set(group.FieldPeakRateEnabled, v)
@@ -2427,6 +2537,18 @@ func (u *GroupUpsert) SetAllowBatchImageGeneration(v bool) *GroupUpsert {
 // UpdateAllowBatchImageGeneration sets the "allow_batch_image_generation" field to the value that was provided on create.
 func (u *GroupUpsert) UpdateAllowBatchImageGeneration() *GroupUpsert {
 	u.SetExcluded(group.FieldAllowBatchImageGeneration)
+	return u
+}
+
+// SetImageCountBilling sets the "image_count_billing" field.
+func (u *GroupUpsert) SetImageCountBilling(v bool) *GroupUpsert {
+	u.Set(group.FieldImageCountBilling, v)
+	return u
+}
+
+// UpdateImageCountBilling sets the "image_count_billing" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateImageCountBilling() *GroupUpsert {
+	u.SetExcluded(group.FieldImageCountBilling)
 	return u
 }
 
@@ -3345,6 +3467,41 @@ func (u *GroupUpsertOne) UpdateRateMultiplier() *GroupUpsertOne {
 	})
 }
 
+// SetBillingRatePolicy sets the "billing_rate_policy" field.
+func (u *GroupUpsertOne) SetBillingRatePolicy(v domain.BillingRatePolicy) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetBillingRatePolicy(v)
+	})
+}
+
+// UpdateBillingRatePolicy sets the "billing_rate_policy" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateBillingRatePolicy() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateBillingRatePolicy()
+	})
+}
+
+// SetBillingPolicyVersion sets the "billing_policy_version" field.
+func (u *GroupUpsertOne) SetBillingPolicyVersion(v int64) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetBillingPolicyVersion(v)
+	})
+}
+
+// AddBillingPolicyVersion adds v to the "billing_policy_version" field.
+func (u *GroupUpsertOne) AddBillingPolicyVersion(v int64) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddBillingPolicyVersion(v)
+	})
+}
+
+// UpdateBillingPolicyVersion sets the "billing_policy_version" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateBillingPolicyVersion() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateBillingPolicyVersion()
+	})
+}
+
 // SetPeakRateEnabled sets the "peak_rate_enabled" field.
 func (u *GroupUpsertOne) SetPeakRateEnabled(v bool) *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
@@ -3720,6 +3877,20 @@ func (u *GroupUpsertOne) SetAllowBatchImageGeneration(v bool) *GroupUpsertOne {
 func (u *GroupUpsertOne) UpdateAllowBatchImageGeneration() *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateAllowBatchImageGeneration()
+	})
+}
+
+// SetImageCountBilling sets the "image_count_billing" field.
+func (u *GroupUpsertOne) SetImageCountBilling(v bool) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetImageCountBilling(v)
+	})
+}
+
+// UpdateImageCountBilling sets the "image_count_billing" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateImageCountBilling() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateImageCountBilling()
 	})
 }
 
@@ -4931,6 +5102,41 @@ func (u *GroupUpsertBulk) UpdateRateMultiplier() *GroupUpsertBulk {
 	})
 }
 
+// SetBillingRatePolicy sets the "billing_rate_policy" field.
+func (u *GroupUpsertBulk) SetBillingRatePolicy(v domain.BillingRatePolicy) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetBillingRatePolicy(v)
+	})
+}
+
+// UpdateBillingRatePolicy sets the "billing_rate_policy" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateBillingRatePolicy() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateBillingRatePolicy()
+	})
+}
+
+// SetBillingPolicyVersion sets the "billing_policy_version" field.
+func (u *GroupUpsertBulk) SetBillingPolicyVersion(v int64) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetBillingPolicyVersion(v)
+	})
+}
+
+// AddBillingPolicyVersion adds v to the "billing_policy_version" field.
+func (u *GroupUpsertBulk) AddBillingPolicyVersion(v int64) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddBillingPolicyVersion(v)
+	})
+}
+
+// UpdateBillingPolicyVersion sets the "billing_policy_version" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateBillingPolicyVersion() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateBillingPolicyVersion()
+	})
+}
+
 // SetPeakRateEnabled sets the "peak_rate_enabled" field.
 func (u *GroupUpsertBulk) SetPeakRateEnabled(v bool) *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
@@ -5306,6 +5512,20 @@ func (u *GroupUpsertBulk) SetAllowBatchImageGeneration(v bool) *GroupUpsertBulk 
 func (u *GroupUpsertBulk) UpdateAllowBatchImageGeneration() *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateAllowBatchImageGeneration()
+	})
+}
+
+// SetImageCountBilling sets the "image_count_billing" field.
+func (u *GroupUpsertBulk) SetImageCountBilling(v bool) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetImageCountBilling(v)
+	})
+}
+
+// UpdateImageCountBilling sets the "image_count_billing" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateImageCountBilling() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateImageCountBilling()
 	})
 }
 

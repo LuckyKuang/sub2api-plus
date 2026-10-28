@@ -32,6 +32,11 @@ func TestRecordUsage_ImageReasoningPricing(t *testing.T) {
 							resolver := newOpenAIImageChannelPricingResolverForTest(t, groupID, model, price)
 							cache := resolver.channelService.cache.Load().(*channelCache)
 							cache.pricingByGroupModel[channelModelKey{groupID: groupID, model: model}] = &pricing
+							for key := range cache.pricingByGroupModel {
+								if key.groupID == groupID && key.model == model {
+									cache.pricingByGroupModel[key] = &pricing
+								}
+							}
 							group := &Group{
 								ID: groupID, Platform: platform, Status: StatusActive, Hydrated: true,
 								RateMultiplier: 0.5, ImageRateIndependent: independent, ImageRateMultiplier: 0.25,

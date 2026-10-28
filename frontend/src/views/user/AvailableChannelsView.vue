@@ -11,12 +11,14 @@
         </button>
       </div>
       <div class="surface-card workspace-fixed space-y-4 rounded-xl border border-gray-200 p-4 dark:border-dark-700" data-testid="catalog-filters">
-        <div class="catalog-platforms flex flex-wrap items-center gap-2" role="group" :aria-label="t('modelPlaza.filters.platformLabel')">
+        <div class="catalog-platforms flex flex-wrap items-center gap-2">
           <span class="mr-2 text-xs surface-muted">{{ t('modelPlaza.filters.platformLabel') }}</span>
-          <button class="catalog-filter surface-control" :class="{ selected: !filters.platform }" :aria-pressed="!filters.platform" @click="selectPlatform('')">{{ t('modelPlaza.filters.all') }} <span class="opacity-60">{{ models.length }}</span></button>
-          <button v-for="platform in platforms" :key="platform" class="catalog-filter surface-control" :class="{ selected: filters.platform === platform }" :aria-pressed="filters.platform === platform" @click="selectPlatform(platform)">
-            <PlatformIcon :platform="platform" size="sm" />{{ platform }} <span class="opacity-60">{{ platformCount(platform) }}</span>
-          </button>
+          <div class="segmented-control" role="group" :aria-label="t('modelPlaza.filters.platformLabel')">
+            <button type="button" class="segmented-option" :aria-pressed="!filters.platform" @click="selectPlatform('')">{{ t('modelPlaza.filters.all') }} <span class="opacity-60">{{ models.length }}</span></button>
+            <button v-for="platform in platforms" :key="platform" type="button" class="segmented-option" :aria-pressed="filters.platform === platform" @click="selectPlatform(platform)">
+              <PlatformIcon :platform="platform" size="sm" />{{ platform }} <span class="opacity-60">{{ platformCount(platform) }}</span>
+            </button>
+          </div>
         </div>
         <div class="flex flex-wrap items-center gap-3 border-t border-gray-100 pt-3 dark:border-dark-800">
           <label class="catalog-search relative w-full min-w-0 max-w-sm">
@@ -61,6 +63,7 @@
 
 <script setup lang="ts">
 import Select from '@/components/common/Select.vue'
+import { useQuoteRefresh } from '@/composables/useQuoteRefresh'
 import { useLocaleRefresh } from '@/utils/localeRefresh'
 import { computed, nextTick, onUnmounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -136,14 +139,12 @@ watch(() => auth.user?.id, () => {
 }, { immediate: true })
 onUnmounted(() => { ++requestId; controller?.abort() })
 useLocaleRefresh(loadCatalog)
+useQuoteRefresh(async () => { if (!loading.value) await loadCatalog() })
 </script>
 
 <style scoped>
 .catalog-page { container-type: inline-size; }
 .catalog-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
-.catalog-filter { @apply inline-flex items-center gap-1.5 rounded-lg border border-transparent px-3 py-1.5 text-xs text-gray-600 transition-colors focus-visible:ring-2 focus-visible:ring-primary-500 dark:text-dark-300; }
-.catalog-filter:hover { background-color: var(--surface-hover); }
-.catalog-filter.selected { @apply border-primary-200 bg-primary-50/[0.15] text-primary-700 dark:border-primary-800 dark:bg-primary-900/30 dark:text-primary-300; }
 @container (min-width: 460px) { .catalog-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @container (min-width: 700px) { .catalog-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @container (min-width: 940px) { .catalog-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
@@ -153,5 +154,7 @@ useLocaleRefresh(loadCatalog)
 @media (min-width: 1024px) and (max-height: 600px) {
   .catalog-platforms { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; }
   .catalog-platforms > * { flex-shrink: 0; }
+  .catalog-platforms .segmented-control { flex-wrap: nowrap; max-width: none; }
+  .catalog-platforms .segmented-option { flex: none; }
 }
 </style>

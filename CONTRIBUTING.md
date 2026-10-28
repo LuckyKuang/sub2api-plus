@@ -216,6 +216,11 @@ validation container with explicit disposable PostgreSQL/Redis settings and
 `SUB2API_E2E_ISOLATED=1`. Its runner requires all fourteen browser scenarios to
 execute successfully; missing/skipped cases fail. The ordinary frontend gate
 checks Vue/API lifecycle regressions and does not claim browser execution.
+For shared styling, dialog and dropdown changes, run
+`pnpm --dir frontend run test:layout` in the validation container as well. This
+independent [component layout suite](frontend/layout-tests/README.md) uses real
+Chromium geometry and hit testing without backend accounts or services; it does
+not replace the management business suite.
 Authorization regressions must use redacted account DTOs and the initiating
 `oauth_credential_owner`, include both owner-replacement isolation and unchanged
 owner success controls, and retain pending grants across unrelated observation

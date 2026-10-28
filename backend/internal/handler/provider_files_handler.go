@@ -99,6 +99,12 @@ func (h *OpenAIGatewayHandler) ProviderFiles(c *gin.Context) {
 		h.openAISecurityAuditError(c, decision)
 		return
 	}
+
+	userRelease, admitted := acquireGatewayUserRequest(c, h.concurrencyHelper, h.errorResponse)
+	if !admitted {
+		return
+	}
+	defer userRelease()
 	c.Request = c.Request.WithContext(service.WithOpenAIProfitControlSuppressed(c.Request.Context()))
 	switch c.Request.Method {
 	case http.MethodPost:
@@ -109,13 +115,6 @@ func (h *OpenAIGatewayHandler) ProviderFiles(c *gin.Context) {
 		}
 		c.Request = c.Request.WithContext(ctx)
 		started := false
-		userRelease, acquired := h.acquireResponsesUserSlot(c, subject.UserID, subject.Concurrency, false, &started, reqLog)
-		if !acquired {
-			return
-		}
-		if userRelease != nil {
-			defer userRelease()
-		}
 		selection, err := h.providerFilesService.SelectUploadAccount(c.Request.Context(), key, platform)
 		if err != nil {
 			h.providerFilesError(c, err)

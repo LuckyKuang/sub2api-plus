@@ -6,7 +6,7 @@
     </div>
 
     <template #footer>
-      <div class="flex justify-end space-x-3">
+      <div class="flex min-w-0 max-w-full flex-wrap justify-end gap-3 [overflow-wrap:anywhere]">
         <button
           @click="handleCancel"
           type="button"

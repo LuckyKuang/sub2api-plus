@@ -709,7 +709,7 @@ func (e *GeminiAPIError) Error() string {
 }
 
 func readGeminiAPIError(resp *http.Response) error {
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 8192))
+	body, _ := readUpstreamErrorResponseBody(resp, 8192, UpstreamErrorBodyReadTimeout)
 	message := string(body)
 	var parsed struct {
 		Error struct {

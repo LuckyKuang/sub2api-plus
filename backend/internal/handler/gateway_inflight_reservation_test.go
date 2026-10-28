@@ -20,12 +20,37 @@ import (
 )
 
 func TestRequestMaxOutputTokens(t *testing.T) {
-	require.Equal(t, 1024, requestMaxOutputTokens([]byte(`{"max_tokens":1024}`)))
-	require.Equal(t, 2048, requestMaxOutputTokens([]byte(`{"max_completion_tokens":2048}`)))
-	require.Equal(t, 4096, requestMaxOutputTokens([]byte(`{"max_output_tokens":4096}`)))
-	require.Equal(t, 512, requestMaxOutputTokens([]byte(`{"generationConfig":{"maxOutputTokens":512}}`)))
-	require.Equal(t, 0, requestMaxOutputTokens([]byte(`{"max_tokens":"x"}`)))
-	require.Equal(t, 0, requestMaxOutputTokens([]byte(`{}`)))
+	require.Equal(t, 1024, requestMaxOutputTokens(service.ContentModerationProtocolAnthropicMessages, []byte(`{"max_tokens":1024}`)))
+	require.Equal(t, 2048, requestMaxOutputTokens(service.ContentModerationProtocolOpenAIChat, []byte(`{"max_completion_tokens":2048}`)))
+	require.Equal(t, 4096, requestMaxOutputTokens(service.ContentModerationProtocolOpenAIResponses, []byte(`{"max_output_tokens":4096}`)))
+	require.Equal(t, 512, requestMaxOutputTokens(service.ContentModerationProtocolGemini, []byte(`{"generationConfig":{"maxOutputTokens":512}}`)))
+	require.Equal(t, 0, requestMaxOutputTokens(service.ContentModerationProtocolAnthropicMessages, []byte(`{"max_tokens":"x"}`)))
+	require.Equal(t, 0, requestMaxOutputTokens(service.ContentModerationProtocolOpenAIChat, []byte(`{}`)))
+	// Foreign protocol fields cannot lower an endpoint's own output bound.
+	require.Equal(t, 4096, requestMaxOutputTokens(service.ContentModerationProtocolOpenAIResponses, []byte(`{"max_tokens":1,"max_output_tokens":4096}`)))
+	require.Equal(t, 512, requestMaxOutputTokens(service.ContentModerationProtocolGemini, []byte(`{"max_tokens":1,"generationConfig":{"maxOutputTokens":512}}`)))
+}
+
+// The hold must carry the same explicit forwarded billing dimensions as the
+// later usage record. Missing effort/tier would admit parallel requests at a
+// lower price than the configured selling contract.
+func TestTokenInflightEstimateRetainsBillingMetadata(t *testing.T) {
+	for _, tc := range []struct{ name, protocol, model, body, tier, effort string }{
+		{"chat", service.ContentModerationProtocolOpenAIChat, "gpt-5.5", `{"service_tier":"priority","reasoning_effort":"high"}`, "priority", "high"},
+		{"responses", service.ContentModerationProtocolOpenAIResponses, "gpt-5.5", `{"service_tier":"flex","reasoning":{"effort":"max"}}`, "flex", "xhigh"},
+		{"messages", service.ContentModerationProtocolAnthropicMessages, "claude-opus-4-7", `{"output_config":{"effort":"max"}}`, "", "max"},
+		{"gemini", service.ContentModerationProtocolGemini, "gemini-3-pro", `{"generationConfig":{"thinkingConfig":{"thinkingLevel":"HIGH"}}}`, "", "high"},
+		{"gemini snake case", service.ContentModerationProtocolGemini, "gemini-3-pro", `{"generation_config":{"thinking_config":{"thinking_level":"low"}}}`, "", "low"},
+		{"thinking enabled", service.ContentModerationProtocolOpenAIChat, "kimi-k2.5", `{"thinking":{"type":"enabled"}}`, "", "high"},
+		{"budget does not imply effort", service.ContentModerationProtocolGemini, "gemini-3-pro", `{"generationConfig":{"thinkingConfig":{"thinkingBudget":1000}}}`, "", ""},
+		{"none is explicit", service.ContentModerationProtocolOpenAIChat, "gpt-5.5", `{"reasoning_effort":"none"}`, "", "none"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tokenInflightEstimate(tc.protocol, tc.model, []byte(tc.body))
+			require.Equal(t, tc.tier, got.ServiceTier)
+			require.Equal(t, tc.effort, got.ReasoningEffort)
+		})
+	}
 }
 
 type auditInflightConcurrencyCache struct{ service.ConcurrencyCache }
@@ -158,14 +183,14 @@ func TestReserveInflightBalance_SkipsWhenDisabledOrSubscription(t *testing.T) {
 	est := &countingEstimator{cost: 1, priced: true}
 	apiKey := &service.APIKey{User: &service.User{ID: 1}}
 
-	done, err := reserveInflightBalance(newInflightTestGinContext(), billing, est, apiKey, nil, tokenInflightEstimate("m", []byte(`{}`)))
+	done, err := reserveInflightBalance(newInflightTestGinContext(), billing, est, apiKey, nil, tokenInflightEstimate(service.ContentModerationProtocolOpenAIChat, "m", []byte(`{}`)))
 	require.NoError(t, err)
 	done()
 	require.Equal(t, 0, est.calls, "disabled switch must not even estimate")
 
 	cfg.Billing.InflightReservation.Enabled = true
 	apiKey.Group = &service.Group{SubscriptionType: service.SubscriptionTypeSubscription}
-	done, err = reserveInflightBalance(newInflightTestGinContext(), billing, est, apiKey, &service.UserSubscription{}, tokenInflightEstimate("m", []byte(`{}`)))
+	done, err = reserveInflightBalance(newInflightTestGinContext(), billing, est, apiKey, &service.UserSubscription{}, tokenInflightEstimate(service.ContentModerationProtocolOpenAIChat, "m", []byte(`{}`)))
 	require.NoError(t, err)
 	done()
 	require.Equal(t, 0, est.calls, "subscription mode must be unaffected")
@@ -180,12 +205,12 @@ func TestReserveInflightBalance_UnpricedFailOpenByDefaultFailClosedOptIn(t *test
 	apiKey := &service.APIKey{User: &service.User{ID: 1}}
 	est := &countingEstimator{priced: false}
 
-	done, err := reserveInflightBalance(newInflightTestGinContext(), billing, est, apiKey, nil, tokenInflightEstimate("unknown", nil))
+	done, err := reserveInflightBalance(newInflightTestGinContext(), billing, est, apiKey, nil, tokenInflightEstimate(service.ContentModerationProtocolOpenAIChat, "unknown", nil))
 	require.NoError(t, err)
 	done()
 
 	cfg.Billing.InflightReservation.FailClosedOnUnpriced = true
-	_, err = reserveInflightBalance(newInflightTestGinContext(), billing, est, apiKey, nil, tokenInflightEstimate("unknown", nil))
+	_, err = reserveInflightBalance(newInflightTestGinContext(), billing, est, apiKey, nil, tokenInflightEstimate(service.ContentModerationProtocolOpenAIChat, "unknown", nil))
 	require.ErrorIs(t, err, service.ErrInsufficientBalance)
 }
 
@@ -247,7 +272,7 @@ func TestWrapUsageRecordTaskContext_HandsReservationToBillingTask(t *testing.T) 
 	apiKey := &service.APIKey{User: &service.User{ID: 5}}
 
 	c := newInflightTestGinContext()
-	done, err := reserveInflightBalance(c, billing, &countingEstimator{cost: 0.9, priced: true}, apiKey, nil, tokenInflightEstimate("m", nil))
+	done, err := reserveInflightBalance(c, billing, &countingEstimator{cost: 0.9, priced: true}, apiKey, nil, tokenInflightEstimate(service.ContentModerationProtocolOpenAIChat, "m", nil))
 	require.NoError(t, err)
 	require.Equal(t, 1, cache.count())
 
@@ -262,7 +287,7 @@ func TestWrapUsageRecordTaskContext_HandsReservationToBillingTask(t *testing.T) 
 
 	// Dropped task: the submitter abandons it and the reservation is released.
 	c2 := newInflightTestGinContext()
-	done2, err := reserveInflightBalance(c2, billing, &countingEstimator{cost: 0.9, priced: true}, apiKey, nil, tokenInflightEstimate("m", nil))
+	done2, err := reserveInflightBalance(c2, billing, &countingEstimator{cost: 0.9, priced: true}, apiKey, nil, tokenInflightEstimate(service.ContentModerationProtocolOpenAIChat, "m", nil))
 	require.NoError(t, err)
 	_, abandon2 := wrapUsageRecordTaskContext(c2.Request.Context(), func(context.Context) {})
 	done2()
@@ -283,7 +308,11 @@ func TestWebSearch_RejectsWhenInflightExceedsBalance(t *testing.T) {
 		nil, nil, nil, nil, nil, nil, nil, nil, cfg, nil, nil, billing, nil, nil,
 		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, service.NewModelPricingResolver(nil, billing), nil, nil, nil,
 	)
-	h := &GatewayHandler{gatewayService: gw, billingCacheService: billingCache}
+	slots := &helperConcurrencyCacheStub{userSeq: []bool{true}}
+	h := &GatewayHandler{
+		gatewayService: gw, billingCacheService: billingCache,
+		concurrencyHelper: NewConcurrencyHelper(service.NewConcurrencyService(slots), SSEPingFormatNone, 0),
+	}
 
 	groupID := int64(3)
 	perK := 1000.0 // $1 per search
@@ -307,7 +336,12 @@ func TestWebSearch_RejectsWhenInflightExceedsBalance(t *testing.T) {
 
 	h.WebSearch(c)
 
-	require.NotEqual(t, http.StatusOK, w.Code)
+	require.Equal(t, http.StatusForbidden, w.Code)
 	require.Contains(t, w.Body.String(), "balance")
 	require.Equal(t, 1, cache.count(), "rejected request must not leave a reservation behind")
+	slots.mu.Lock()
+	defer slots.mu.Unlock()
+	require.Equal(t, 1, slots.userAcquireCalls, "the balance rejection occurs after global user admission")
+	require.Equal(t, 1, slots.userReleaseCalls, "the rejected request releases its global user lease")
+	require.Zero(t, slots.accountAcquireCalls, "insufficient balance cannot acquire a provider account")
 }

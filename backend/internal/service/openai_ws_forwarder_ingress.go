@@ -126,13 +126,10 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		)
 	}
 
-	// 预取一次 OpenAI Fast Policy settings，绑定到 ctx，让该 WS session
-	// 内所有帧的 evaluateOpenAIFastPolicy 调用复用同一份快照，避免每帧
-	// 进入 DB / settingRepo。Trade-off 见 withOpenAIFastPolicyContext 注释。
-	if s.settingService != nil {
-		if settings, err := s.settingService.GetOpenAIFastPolicySettings(ctx); err == nil && settings != nil {
-			ctx = withOpenAIFastPolicyContext(ctx, settings)
-		}
+	// Direct callers retain a session fallback. Handler-managed turns supply
+	// their own audited pricing generation through TurnContext below.
+	if openAIFastPolicySettingsFromContext(ctx) == nil {
+		ctx = withOpenAIFastPolicyContext(ctx, captureInflightFastPolicy(ctx, s.settingService))
 	}
 
 	// The handler normally owns this registration across retry attempts. Direct
@@ -148,8 +145,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	}
 
 	wsDecision := s.getOpenAIWSProtocolResolver().Resolve(account)
-	forceHTTPBridge := !s.codexUpstreamWSAllowed(ctx, account) || account.Platform == PlatformGrok ||
-		(s.pluginManager != nil && s.pluginManager.ShouldRouteOpenAIOAuth(account))
+	forceHTTPBridge := s.responsesWSForceHTTPBridge(ctx, account)
 	modeRouterV2Enabled := s != nil && s.cfg != nil && s.cfg.Gateway.OpenAIWS.ModeRouterV2Enabled
 	ingressMode := OpenAIWSIngressModeCtxPool
 	if account.IsOpenAI() && forceHTTPBridge {
@@ -244,6 +240,12 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	}
 	ingressSessionOriginalModel := ""
 	ingressSessionPromptCacheIdentity := ""
+	// Forced/Grok bridging is known before parsing. Size-based bridging is
+	// decided after the first normalized frame, and never accepts an initial
+	// previous_response_id. Keep continuation eligibility ahead of admission.
+	useHTTPBridge := forceHTTPBridge || account.Platform == PlatformGrok
+	bridgeReplayInputExists := false
+	bridgeLastResponseID := ""
 
 	applyPayloadMutation := func(current []byte, path string, value any) ([]byte, error) {
 		next, err := sjson.SetBytes(current, path, value)
@@ -339,6 +341,22 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		if turn > 1 && hooks != nil && hooks.BeforeRequest != nil {
 			if err := hooks.BeforeRequest(turn, trimmed, originalModel); err != nil {
 				return openAIWSClientPayload{}, err
+			}
+		}
+		if useHTTPBridge && previousResponseID != "" && (!bridgeReplayInputExists || previousResponseID != bridgeLastResponseID) {
+			return openAIWSClientPayload{}, NewOpenAIWSClientCloseError(coderws.StatusServiceRestart, "reconnect with full input history; HTTP bridge cannot resolve this continuation", nil)
+		}
+		// Admission captures the turn before model mapping or policy rewriting.
+		// Parsing runs once per external frame; internal retries reuse its result.
+		if hooks != nil && hooks.BeforeTurn != nil {
+			if err := hooks.BeforeTurn(turn); err != nil {
+				return openAIWSClientPayload{}, err
+			}
+		}
+		turnCtx := ctx
+		if hooks != nil && hooks.TurnContext != nil {
+			if prepared := hooks.TurnContext(turn); prepared != nil {
+				turnCtx = prepared
 			}
 		}
 		requestedReasoningEffort := CanonicalRequestedReasoningEffort(normalized, strings.TrimSpace(values[1].String()))
@@ -489,7 +507,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		// follow-up response.create frames may omit it and then reuse
 		// ingressSessionOriginalModel. We always write a concrete upstream model
 		// before evaluating policy, so whitelist / filter behavior remains stable.
-		policyApplied, blocked, policyErr := s.applyOpenAIFastPolicyToWSResponseCreate(ctx, account, upstreamModel, normalized)
+		policyApplied, blocked, policyErr := s.applyOpenAIFastPolicyToWSResponseCreate(turnCtx, account, upstreamModel, normalized)
 		if policyErr != nil {
 			return openAIWSClientPayload{}, NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "invalid websocket request payload", policyErr)
 		}
@@ -646,7 +664,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	}
 	ingressSessionPromptCacheIdentity = strings.TrimSpace(firstPayload.promptCacheKey)
 
-	useHTTPBridge := forceHTTPBridge || s.shouldBridgeOpenAIWSHTTP(account, firstPayload.payloadBytes, firstPayload.previousResponseID)
+	useHTTPBridge = useHTTPBridge || s.shouldBridgeOpenAIWSHTTP(account, firstPayload.payloadBytes, firstPayload.previousResponseID)
 	turnState := strings.TrimSpace(c.GetHeader(openAIWSTurnStateHeader))
 	stateStore := s.getOpenAIWSStateStore()
 	groupID := getOpenAIGroupIDFromContext(c)
@@ -705,21 +723,9 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		// cannot reuse another model's upstream cache identity.
 		grokCacheSeedPayload := firstPayload.payloadRaw
 		var bridgeReplayInput []json.RawMessage
-		bridgeReplayInputExists := false
-		bridgeLastResponseID := ""
 		var bridgeAccountFailoverInput []json.RawMessage
 		bridgeAccountFailoverInputExists := false
 		for turn := 1; ; turn++ {
-			// A fresh bridge cannot reconstruct the history behind an opaque ID.
-			// Subsequent turns may replay only history retained by this connection.
-			if currentBridgePayload.previousResponseID != "" && (!bridgeReplayInputExists || currentBridgePayload.previousResponseID != bridgeLastResponseID) {
-				return NewOpenAIWSClientCloseError(coderws.StatusServiceRestart, "reconnect with full input history; HTTP bridge cannot resolve this continuation", nil)
-			}
-			if hooks != nil && hooks.BeforeTurn != nil {
-				if err := hooks.BeforeTurn(turn); err != nil {
-					return err
-				}
-			}
 			if turnState != "" && c != nil && c.Request != nil {
 				c.Request.Header.Set(openAIWSTurnStateHeader, turnState)
 			}
@@ -1516,7 +1522,6 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	lastTurnReplayInputExists := false
 	currentTurnReplayInput := []json.RawMessage(nil)
 	currentTurnReplayInputExists := false
-	skipBeforeTurn := false
 	hasCurrentOrReplayFunctionCallOutput := func(payload []byte) bool {
 		if openAIWSRawPayloadHasToolCallOutput(payload) {
 			return true
@@ -1599,7 +1604,6 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		currentPayload = updatedWithInput
 		currentPayloadBytes = len(updatedWithInput)
 		resetSessionLease(true)
-		skipBeforeTurn = true
 		return true
 	}
 	retryIngressTurn := func(relayErr error, turn int, connID string) bool {
@@ -1625,19 +1629,12 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			truncateOpenAIWSLogValue(connID, openAIWSIDValueMaxLen),
 		)
 		resetSessionLease(true)
-		skipBeforeTurn = true
 		return true
 	}
 	for {
 		if err := s.requireCodexUpstreamWS(ctx, account); err != nil {
 			return err
 		}
-		if !skipBeforeTurn && hooks != nil && hooks.BeforeTurn != nil {
-			if err := hooks.BeforeTurn(turn); err != nil {
-				return err
-			}
-		}
-		skipBeforeTurn = false
 		// 剥离本会话已知失效的加密项，阻断同一失效密文随历史反复触发上游拒绝。
 		// 历史序列须同步剥离，否则与已剥离的当前 input 项错位，prefix 复用失配。
 		if invalidDigests := s.sessionInvalidEncryptedContentDigests(groupID, sessionHash); len(invalidDigests) > 0 {
@@ -1910,7 +1907,6 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 								currentPayload = updatedWithInput
 								currentPayloadBytes = len(updatedWithInput)
 								resetSessionLease(true)
-								skipBeforeTurn = true
 								continue
 							}
 						}
@@ -1984,7 +1980,6 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			if errors.As(relayErr, &rejectedFieldErr) && rejectedFieldErr != nil && len(rejectedFieldErr.body) > 0 {
 				currentPayload = append([]byte(nil), rejectedFieldErr.body...)
 				currentPayloadBytes = len(currentPayload)
-				skipBeforeTurn = true
 				continue
 			}
 			if recoverIngressPrevResponseNotFound(relayErr, turn, connID) {

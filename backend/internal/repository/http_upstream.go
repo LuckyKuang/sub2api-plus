@@ -318,18 +318,33 @@ func doUpstreamRequest(client *http.Client, req *http.Request) (*http.Response, 
 		return resp, err
 	}
 	firstbyte.Track(req, resp)
-	decompressResponseBody(resp)
-	resp.Body = &cancelOnCloseBody{ReadCloser: resp.Body, cancel: cancel}
+	errorReadTimer := prepareUpstreamResponseBody(resp, cancel)
+	resp.Body = &cancelOnCloseBody{ReadCloser: resp.Body, cancel: cancel, errorReadTimer: errorReadTimer}
 	return resp, nil
+}
+
+// Decoder constructors may read before the response reaches the service's
+// bounded error-body reader (gzip headers and the zstd frame probe both do).
+// Bound the entire rejected-response body lifetime from headers, including
+// initialization and independent control/media readers. Preserve successful
+// long streams and cancel only this attempt, never its caller or retries.
+func prepareUpstreamResponseBody(resp *http.Response, cancel context.CancelFunc) *time.Timer {
+	var timer *time.Timer
+	if resp.StatusCode >= http.StatusBadRequest {
+		timer = time.AfterFunc(service.UpstreamErrorBodyReadTimeout, cancel)
+	}
+	decompressResponseBody(resp)
+	return timer
 }
 
 type cancelOnCloseBody struct {
 	io.ReadCloser
-	cancel context.CancelFunc
-	once   sync.Once
-	err    error
-	readMu sync.Mutex
-	closed bool
+	cancel         context.CancelFunc
+	once           sync.Once
+	err            error
+	readMu         sync.Mutex
+	closed         bool
+	errorReadTimer *time.Timer
 }
 
 func (b *cancelOnCloseBody) Read(p []byte) (int, error) {
@@ -338,11 +353,18 @@ func (b *cancelOnCloseBody) Read(p []byte) (int, error) {
 	if b.closed {
 		return 0, http.ErrBodyReadAfterClose
 	}
-	return b.ReadCloser.Read(p)
+	n, err := b.ReadCloser.Read(p)
+	if err != nil && b.errorReadTimer != nil {
+		b.errorReadTimer.Stop()
+	}
+	return n, err
 }
 
 func (b *cancelOnCloseBody) Close() error {
 	b.once.Do(func() {
+		if b.errorReadTimer != nil {
+			b.errorReadTimer.Stop()
+		}
 		// Cancel before closing, including before closing a decompressor. In Go
 		// 1.27 an early HTTP/1 close concurrent with Read can otherwise leave an
 		// EOF waiter on a reused connection and stall subsequent responses.

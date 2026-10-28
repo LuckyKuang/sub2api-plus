@@ -30,6 +30,8 @@ const (
 	liveObserverPollInterval      = 250 * time.Millisecond
 	liveObserverStoreRetryLimit   = 5
 	liveUpstreamBodyLimit         = 2 << 20
+	liveCreateCleanupTimeout      = 2 * time.Second
+	liveCreateReservationLimit    = 128
 )
 
 // liveObserverStoreRetryInterval 是 var 以便测试缩短 store 报错的重试等待。
@@ -44,6 +46,15 @@ type liveFrameConn interface {
 	ReadFrame(ctx context.Context) (coderws.MessageType, []byte, error)
 	WriteFrame(ctx context.Context, msgType coderws.MessageType, payload []byte) error
 	Close() error
+}
+
+// A failed mapping write cannot re-resolve an edited or relinked account: only
+// the grant, route and declarations which created the session can close it.
+// This evidence never leaves memory and is discarded after successful mapping.
+type liveCreateCleanupTarget struct {
+	headers http.Header
+	proxy   string
+	account *Account
 }
 
 func liveSidebandReadError(err error) error {
@@ -139,13 +150,31 @@ func (s *OpenAIGatewayService) CreateLiveCall(
 	if err != nil {
 		return nil, err
 	}
+	if !s.reserveLiveCreate() {
+		return nil, ErrLiveUnavailable
+	}
+	reservationTransferred := false
+	defer func() {
+		if !reservationTransferred {
+			s.liveCreateReservations.Add(-1)
+		}
+	}()
 	attestation, attestationCiphertext, err := s.prepareLiveAttestation(ctx)
 	if err != nil {
 		return nil, err
 	}
+	model := strings.TrimSpace(gjson.GetBytes(request.Session, "model").String())
+	if model == "" {
+		model = "gpt-live"
+	}
+	publicModel := publicBillingModel(ctx, "", model)
+	pricingSnapshot, err := ExportBillingPricingSnapshot(BindBillingPricingModel(ctx, PlatformOpenAI, publicModel), publicModel, model)
+	if err != nil {
+		return nil, fmt.Errorf("capture live pricing: %w", err)
+	}
 
 	excluded := make(map[int64]struct{})
-	// Live 按通话时长计费，不属于 token 利润门的语义范围：显式豁免，避免
+	// Live 会话没有文本 token 结算，不属于 token 利润门的语义范围：显式豁免，避免
 	// 防御性装门按文本 D 过滤 Live 账号池且门与计费时刻不同源。
 	ctx = WithOpenAIProfitControlSuppressed(ctx)
 	var lastErr error
@@ -177,13 +206,24 @@ func (s *OpenAIGatewayService) CreateLiveCall(
 		}
 
 		account := selection.Account
+		if controlErr := s.requireCodexUpstreamWS(ctx, account); controlErr != nil {
+			selection.ReleaseFunc()
+			excluded[account.ID] = struct{}{}
+			lastErr = errors.Join(ErrLiveUnavailable, controlErr)
+			continue
+		}
 		leaseID := generateRequestID()
+		currentUserLimit, limitErr := s.concurrencyService.ResolveUserConcurrency(ctx, identity.UserID, userMaxConcurrency)
+		if limitErr != nil {
+			selection.ReleaseFunc()
+			return nil, limitErr
+		}
 		acquired, acquireErr := liveCache.AcquireLiveLease(
 			ctx,
 			account.ID,
 			account.Concurrency,
 			identity.UserID,
-			userMaxConcurrency,
+			currentUserLimit,
 			identity.APIKeyID,
 			leaseID,
 			true,
@@ -198,7 +238,7 @@ func (s *OpenAIGatewayService) CreateLiveCall(
 
 		created, createErr := s.createUpstreamLiveCall(ctx, account, request, attestation)
 		selection.ReleaseFunc()
-		if createErr != nil {
+		if createErr != nil && created == nil {
 			s.releaseLiveLease(account.ID, identity.UserID, identity.APIKeyID, leaseID)
 			if !s.shouldFailoverLiveCreateError(account, createErr) {
 				return nil, createErr
@@ -209,10 +249,6 @@ func (s *OpenAIGatewayService) CreateLiveCall(
 		}
 
 		now := time.Now()
-		model := strings.TrimSpace(gjson.GetBytes(request.Session, "model").String())
-		if model == "" {
-			model = "gpt-live"
-		}
 		record := &LiveCallRecord{
 			CallID:                created.CallID,
 			CallHash:              hashLiveCallID(created.CallID),
@@ -231,12 +267,27 @@ func (s *OpenAIGatewayService) CreateLiveCall(
 			InboundEndpoint:       identity.InboundEndpoint,
 			AttestationCiphertext: attestationCiphertext,
 			OutboundSnapshot:      created.OutboundSnapshot,
+			PricingSnapshot:       pricingSnapshot,
+		}
+		if created.CallID == "" {
+			// No upstream ID may be invented for a successful but unlocatable
+			// create. This hash identifies only the local compensation owner.
+			record.CallHash = hashLiveCallID("unlocated:" + leaseID)
+		}
+		if createErr != nil {
+			reservationTransferred = true
+			s.cleanupUnmappedLiveCall(record, created.createCleanup)
+			created.createCleanup = nil
+			return nil, fmt.Errorf("read live creation result: %w", createErr)
 		}
 		mappingTTL := s.liveMaxSessionDuration() + 5*time.Minute
 		if saveErr := store.SaveLiveCall(ctx, record, mappingTTL); saveErr != nil {
-			s.releaseLiveLease(account.ID, identity.UserID, identity.APIKeyID, leaseID)
+			reservationTransferred = true
+			s.cleanupUnmappedLiveCall(record, created.createCleanup)
+			created.createCleanup = nil
 			return nil, fmt.Errorf("save live call mapping: %w", saveErr)
 		}
+		created.createCleanup = nil
 		created.Account = account
 		go s.observeLiveCall(record)
 		return created, nil
@@ -245,6 +296,18 @@ func (s *OpenAIGatewayService) CreateLiveCall(
 		return nil, lastErr
 	}
 	return nil, ErrLiveUnavailable
+}
+
+func (s *OpenAIGatewayService) reserveLiveCreate() bool {
+	for {
+		current := s.liveCreateReservations.Load()
+		if current >= liveCreateReservationLimit {
+			return false
+		}
+		if s.liveCreateReservations.CompareAndSwap(current, current+1) {
+			return true
+		}
+	}
 }
 
 func (s *OpenAIGatewayService) shouldFailoverLiveCreateError(account *Account, err error) bool {
@@ -277,6 +340,9 @@ func (s *OpenAIGatewayService) createUpstreamLiveCall(
 	owner := openAICodexStateOwner(ctx, account)
 	if !known || credentialOwner == nil || owner == "" {
 		return nil, fmt.Errorf("live create: credential owner cannot be established: %w", ErrLiveIdentityMismatch)
+	}
+	if controlErr := s.requireCodexUpstreamWS(ctx, credentialOwner); controlErr != nil {
+		return nil, errors.Join(ErrLiveUnavailable, controlErr)
 	}
 	body, err := json.Marshal(struct {
 		SDP     string          `json:"sdp"`
@@ -329,12 +395,33 @@ func (s *OpenAIGatewayService) createUpstreamLiveCall(
 		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
+	// A successful status has already created provider work. Capture its grant
+	// before reading the SDP so a truncated/oversized answer cannot authorize
+	// another create. A missing ID retains bounded capacity without fabricating
+	// a provider endpoint or claiming that the remote work was rolled back.
+	var created *LiveCallCreated
+	var locationErr error
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		created = &LiveCallCreated{
+			Location:         resp.Header.Get("Location"),
+			OutboundSnapshot: snapshot,
+			createCleanup: &liveCreateCleanupTarget{
+				headers: upstreamReq.Header.Clone(),
+				proxy:   resolveAccountProxyURL(credentialOwner),
+				account: snapshotRequestCredentialAccount(credentialOwner),
+			},
+		}
+		created.CallID, locationErr = liveCallIDFromLocation(created.Location)
+		if locationErr != nil {
+			created.createCleanup = nil
+		}
+	}
 	responseBody, readErr := io.ReadAll(io.LimitReader(resp.Body, liveUpstreamBodyLimit+1))
 	if readErr != nil {
-		return nil, readErr
+		return created, readErr
 	}
 	if len(responseBody) > liveUpstreamBodyLimit {
-		return nil, errors.New("live upstream response is too large")
+		return created, errors.New("live upstream response is too large")
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		logLiveUpstreamFailure(ctx, account.ID, resp.StatusCode, resp.Header, responseBody)
@@ -344,16 +431,122 @@ func (s *OpenAIGatewayService) createUpstreamLiveCall(
 			ResponseHeaders: resp.Header.Clone(),
 		}
 	}
-	callID, err := liveCallIDFromLocation(resp.Header.Get("Location"))
-	if err != nil {
-		return nil, err
+	if locationErr != nil {
+		return created, locationErr
 	}
-	return &LiveCallCreated{
-		SDP:              responseBody,
-		CallID:           callID,
-		Location:         resp.Header.Get("Location"),
-		OutboundSnapshot: snapshot,
-	}, nil
+	created.SDP = responseBody
+	return created, nil
+}
+
+// cleanupUnmappedLiveCall compensates only the already-created session. The
+// ordinary request context may have been cancelled, and the mapping store may
+// be unavailable. Neither is needed to close this session. Execution capacity
+// stays owned until the provider confirms closure or the bounded lifetime ends.
+func (s *OpenAIGatewayService) cleanupUnmappedLiveCall(record *LiveCallRecord, target *liveCreateCleanupTarget) {
+	// Mapping failure has its own absolute recovery bound; it does not change
+	// the configured lifetime of successfully persisted Live sessions.
+	boundedRecord := *record
+	if limit := time.Now().Add(defaultLiveMaxSessionDuration); limit.Before(boundedRecord.ExpiresAt) {
+		boundedRecord.ExpiresAt = limit
+	}
+	record = &boundedRecord
+	if target == nil {
+		logger.L().Warn("OpenAI Live created call cannot be located for cleanup", zap.Int64("account_id", record.AccountID), zap.String("call_hash", record.CallHash), zap.String("reason", "created_call_unlocatable"))
+		go s.compensateUnmappedLiveCall(record, nil)
+		return
+	}
+	err := s.closeUnmappedLiveCall(record, target)
+	if err == nil {
+		s.releaseLiveLease(record.AccountID, record.UserID, record.APIKeyID, record.LeaseID)
+		s.liveCreateReservations.Add(-1)
+		return
+	}
+	logger.L().Warn("OpenAI Live mapping cleanup pending", zap.Int64("account_id", record.AccountID), zap.String("call_hash", record.CallHash), zap.String("reason", "upstream_close_unconfirmed"), zap.String("error_type", fmt.Sprintf("%T", err)))
+	go s.compensateUnmappedLiveCall(record, target)
+}
+
+func (s *OpenAIGatewayService) compensateUnmappedLiveCall(record *LiveCallRecord, target *liveCreateCleanupTarget) {
+	defer s.liveCreateReservations.Add(-1)
+	// One immediate recovery attempt handles brief storage/transport races. All
+	// later attempts are paced. Retain and renew only this orphan's existing
+	// lease; never create a replacement owner or depend on the failed mapping.
+	leaseWarningLogged := false
+	for {
+		if !time.Now().Before(record.ExpiresAt) {
+			logger.L().Warn("OpenAI Live mapping cleanup lifetime expired without close confirmation", zap.Int64("account_id", record.AccountID), zap.String("call_hash", record.CallHash), zap.String("reason", "cleanup_lifetime_expired"))
+			s.releaseLiveLease(record.AccountID, record.UserID, record.APIKeyID, record.LeaseID)
+			return
+		}
+		if !s.refreshLiveLease(record) && !leaseWarningLogged {
+			leaseWarningLogged = true
+			logger.L().Warn("OpenAI Live mapping cleanup lease renewal unavailable", zap.Int64("account_id", record.AccountID), zap.String("call_hash", record.CallHash), zap.String("reason", "cleanup_lease_renewal_unavailable"))
+		}
+		if target != nil {
+			if err := s.closeUnmappedLiveCall(record, target); err == nil {
+				s.releaseLiveLease(record.AccountID, record.UserID, record.APIKeyID, record.LeaseID)
+				return
+			}
+		}
+		wait := min(liveLeaseRefreshInterval, time.Until(record.ExpiresAt))
+		if wait > 0 {
+			time.Sleep(wait)
+		}
+	}
+}
+
+func (s *OpenAIGatewayService) closeUnmappedLiveCall(record *LiveCallRecord, target *liveCreateCleanupTarget) error {
+	if target == nil || record == nil || !validLiveOutboundSnapshot(record.OutboundSnapshot) {
+		return ErrLiveIdentityMismatch
+	}
+	deadline := time.Now().Add(liveCreateCleanupTimeout)
+	if record.ExpiresAt.Before(deadline) {
+		deadline = record.ExpiresAt
+	}
+	ctx, cancel := context.WithDeadline(context.Background(), deadline)
+	defer cancel()
+	if err := s.requireCodexUpstreamWS(ctx, target.account); err != nil {
+		return err
+	}
+	headers := target.headers.Clone()
+	headers.Del("Content-Type")
+	headers.Del("Accept")
+	endpoint := strings.TrimRight(chatGPTLiveSidebandBaseURL, "/") + "/" + url.PathEscape(record.CallID)
+	conn, status, _, err := s.getOpenAIWSPassthroughDialer().Dial(ctx, endpoint, headers, target.proxy)
+	if err != nil {
+		return fmt.Errorf("dial unsaved live cleanup (status %d): %w", status, err)
+	}
+	// The production graceful Close waits for its own handshake budget. Cleanup
+	// has already obtained its provider acknowledgement, so close the raw socket
+	// immediately instead of extending this operation beyond its deadline.
+	defer func() {
+		if immediate, ok := conn.(interface{ CloseNow() error }); ok {
+			_ = immediate.CloseNow()
+		} else {
+			_ = conn.Close()
+		}
+	}()
+	upstream, ok := conn.(liveFrameConn)
+	if !ok {
+		return errors.New("live cleanup transport does not support raw frames")
+	}
+	if err := upstream.WriteFrame(ctx, coderws.MessageText, []byte(`{"type":"session.close"}`)); err != nil {
+		return err
+	}
+	for {
+		kind, payload, err := upstream.ReadFrame(ctx)
+		if err != nil {
+			if coderws.CloseStatus(err) == coderws.StatusNormalClosure {
+				return nil
+			}
+			return err
+		}
+		if kind == coderws.MessageText {
+			switch gjson.GetBytes(payload, "type").String() {
+			case "session.closed", "session.ended":
+				return nil
+			}
+		}
+	}
 }
 
 func logLiveCreateStageFailure(ctx context.Context, accountID int64, stage string, err error) {
@@ -741,6 +934,16 @@ func liveSessionEnded(err error) bool {
 		errors.Is(err, context.DeadlineExceeded)
 }
 
+// Explicitly end the provider media session before releasing execution capacity.
+// The write remains bounded when the lease is lost or its Redis check fails;
+// the control socket still closes if the close message cannot be delivered.
+func closeLiveSession(upstream liveFrameConn) {
+	closeCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	_ = upstream.WriteFrame(closeCtx, coderws.MessageText, []byte(`{"type":"session.close"}`))
+	cancel()
+	_ = upstream.Close()
+}
+
 func (s *OpenAIGatewayService) runLiveController(
 	ctx context.Context,
 	record *LiveCallRecord,
@@ -758,12 +961,11 @@ func (s *OpenAIGatewayService) runLiveController(
 		case err := <-errCh:
 			return err
 		case <-maxTimer.C:
-			closeCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-			_ = upstream.WriteFrame(closeCtx, coderws.MessageText, []byte(`{"type":"session.close"}`))
-			cancel()
+			closeLiveSession(upstream)
 			return context.DeadlineExceeded
 		case <-refreshTicker.C:
 			if !s.refreshLiveLease(record) {
+				closeLiveSession(upstream)
 				return ErrLiveUnavailable
 			}
 		}
@@ -890,12 +1092,11 @@ func (s *OpenAIGatewayService) runLiveObserverConnection(record *LiveCallRecord,
 			}
 		case <-refreshTicker.C:
 			if !s.refreshLiveLease(record) {
+				closeLiveSession(upstream)
 				return ErrLiveUnavailable
 			}
 		case <-maxTimer.C:
-			closeCtx, closeCancel := context.WithTimeout(context.Background(), 2*time.Second)
-			_ = upstream.WriteFrame(closeCtx, coderws.MessageText, []byte(`{"type":"session.close"}`))
-			closeCancel()
+			closeLiveSession(upstream)
 			return context.DeadlineExceeded
 		}
 	}
@@ -993,7 +1194,7 @@ func (s *OpenAIGatewayService) finalizeLiveCall(record *LiveCallRecord) {
 	//
 	// 这是该会话唯一一次落库机会（MarkLiveCallClosed 已标记 first），失败即永久
 	// 丢失，因此走带日志与同步兜底的 writeUsageLogBestEffort（issue #3656）。
-	writeUsageLogBestEffort(context.Background(), s.usageLogRepo, &UsageLog{
+	usage := &UsageLog{
 		UserID:           record.UserID,
 		APIKeyID:         record.APIKeyID,
 		AccountID:        record.AccountID,
@@ -1012,5 +1213,17 @@ func (s *OpenAIGatewayService) finalizeLiveCall(record *LiveCallRecord) {
 		InboundEndpoint:  &inboundEndpoint,
 		UpstreamEndpoint: &upstreamEndpoint,
 		CreatedAt:        record.CreatedAt,
-	}, "service.openai_live")
+	}
+	if len(record.PricingSnapshot) > 0 {
+		pricingCtx, restoreErr := RestoreBillingPricingSnapshot(context.Background(), record.PricingSnapshot)
+		if restoreErr != nil {
+			logger.L().Error("live.pricing_snapshot_restore_failed", zap.String("request_id", record.CallHash), zap.Error(restoreErr))
+		} else if snapshot := BillingPricingSnapshotFromContext(pricingCtx); snapshot != nil && snapshot.group != nil {
+			usage.RequestedModel = firstNonEmpty(snapshot.publicModel, record.Model)
+			usage.BillingPolicyVersion = snapshot.group.BillingPolicyVersion
+			usage.BillingRateSnapshot = map[string]any{"pricing_state": "non_billable_live", "policy_version": snapshot.group.BillingPolicyVersion,
+				"as_of": snapshot.pricingAt.UTC().Format(time.RFC3339Nano), "platform": PlatformOpenAI, "model": firstNonEmpty(snapshot.publicModel, record.Model)}
+		}
+	}
+	writeUsageLogBestEffort(context.Background(), s.usageLogRepo, usage, "service.openai_live")
 }

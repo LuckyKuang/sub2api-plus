@@ -82,6 +82,8 @@
         </div>
       </div>
 
+      <PlanModelCatalog class="mb-3" :catalog="plan.model_catalog" />
+
       <!-- Features list (compact) -->
       <div v-if="plan.features.length > 0" class="mb-3 space-y-1">
         <div v-for="feature in plan.features" :key="feature" class="flex items-start gap-1.5">
@@ -113,6 +115,8 @@ import { useAppStore } from '@/stores/app'
 import { hasPeakRate as groupHasPeakRate, formatPeakRateWindow, serverTimezoneLabel } from '@/utils/peak-rate'
 import { planValiditySuffix } from './validity'
 import { currencySymbol } from '@/components/payment/currency'
+import PlanModelCatalog from './PlanModelCatalog.vue'
+import { planRateLabel } from '@/utils/billingRate'
 import {
   platformBadgeLightClass,
   platformBorderClass,
@@ -150,8 +154,7 @@ const discountText = computed(() => {
 })
 
 const rateDisplay = computed(() => {
-  const rate = props.plan.rate_multiplier ?? 1
-  return `×${Number(rate.toPrecision(10))}`
+  return planRateLabel(props.plan) ?? t('billingRates.unknown')
 })
 
 const appStore = useAppStore()

@@ -578,7 +578,7 @@ export default {
         concurrencyPlaceholder: '0 = unlimited',
         concurrencyHint: 'Max concurrent requests for this user; 0 = unlimited.',
         rpmLimitPlaceholder: '0 = unlimited',
-        rpmLimitHint: 'Max requests per minute for this user; 0 = unlimited. Acts as a fallback only when the group has no rpm_limit set.'
+        rpmLimitHint: 'Global requests per minute across all keys and groups; 0 = unlimited. Group limits and overrides do not replace this cap.'
       },
       columns: {
         user: 'User',
@@ -919,7 +919,7 @@ export default {
         rateMultiplierHint: '1.0 = standard rate, 0.5 = half price, 2.0 = double',
         rpmLimit: 'Requests Per Minute (RPM)',
         rpmLimitPlaceholder: '0 = unlimited',
-        rpmLimitHint: 'Max requests per minute for each user in this group; 0 = unlimited. Once set, it takes over per-user rate limiting in this group (overrides the user-level rpm_limit fallback).',
+        rpmLimitHint: 'Default requests per minute for each user in this group; 0 = unlimited. A user-group override replaces this default; the global user cap still applies.',
         maxReasoningEffort: 'Max reasoning effort',
         maxReasoningEffortUnlimited: 'Unlimited (follow request)',
         maxReasoningEffortHint: 'Limits explicit Anthropic and OpenAI reasoning effort requests. For Composite groups, it applies to the resolved target platform. Omitted effort stays omitted. The ceiling takes precedence over reasoning effort mappings.',
@@ -1088,11 +1088,13 @@ export default {
           }
         }
       },
+      pricingReferenceHint: 'Reference uses the flat unit price and group or independent media base only. Final charges use model-specific prices and platform, model, personal and applicable peak factors.',
       imagePricing: {
         title: 'Image Generation Pricing',
         description: 'Configure image generation access and base image prices. Leave empty to use default prices.',
         allowImageGeneration: 'Allow image generation for this group',
         allowBatchImageGeneration: 'Allow batch image generation for this group',
+        perImageBilling: 'Bill per generated image',
         independentMultiplier: 'Use independent image multiplier',
         imageMultiplier: 'Image multiplier',
         batchDiscountMultiplier: 'Batch image discount',
@@ -1100,8 +1102,8 @@ export default {
         batchSectionHint: 'Batch image settings only apply to batch jobs: settlement applies the batch discount, and the upfront hold is normal image price × batch hold price ratio. Reference images also create upstream input-token usage, so a batch image discount above 0.5 is recommended.',
         batchDisabledHint: 'Enable image generation for this group before enabling batch image generation.',
         batchGeminiOnlyHint: 'Batch image generation is currently available only for Gemini groups.',
-        modeHint: 'By default, image billing uses image price × current effective group multiplier. Independent mode uses image price × image multiplier.',
-        finalPricePreview: 'Final per-image price preview',
+        modeHint: 'Image billing uses the group or personal base; independent mode replaces that base with the image multiplier. Platform, model and applicable peak factors also apply.',
+        basePricePreview: 'Base per-image reference',
         notConfigured: 'Not configured'
       },
       videoPricing: {
@@ -1113,8 +1115,8 @@ export default {
         independentMultiplier: 'Use independent video multiplier',
         videoMultiplier: 'Video multiplier',
         modeHint:
-          'Videos are billed per second: per-second price × duration (1-15s, default 8s). By default the current effective group multiplier applies; independent mode uses the video multiplier instead.',
-        finalPricePreview: 'Final per-second price preview',
+          'Videos are billed per second: per-second price × duration (1-15s, default 8s). Independent mode replaces the group or personal base with the video multiplier. Platform, model and applicable peak factors also apply.',
+        basePricePreview: 'Base per-second reference',
         notConfigured: 'Not configured'
       },
       explicitPricing: {
@@ -1142,15 +1144,15 @@ export default {
         title: 'Codex Web Search Pricing',
         pricePerCall: 'Price per search call (USD)',
         pricePerCallHint:
-          'Leave empty to use the default $0.01 per call (official pricing: $10 per 1,000 calls); 0 means free. The group rate multiplier is applied on top.',
-        finalPricePreview: 'Per-call price after current multiplier: {price}'
+          'Leave empty to use the default $0.01 per call (official pricing: $10 per 1,000 calls); 0 means free. Charges also apply the group or personal base, platform, model and applicable peak factors.',
+        basePricePreview: 'Base per-call reference: {price}'
       },
       peakRate: {
         enable: 'Enable peak rate multiplier',
         peakStart: 'Peak start',
         peakEnd: 'Peak end',
         peakMultiplier: 'Peak multiplier',
-        multiplierHint: 'Applies to token billing multiplier; image tokens in token billing are also affected. 0 means peak token requests are billed at 0x.'
+        multiplierHint: 'Multiplies platform and model rates for all billing units on new requests, including per-request, image and video charges. 0 makes peak charges free. Accepted tasks retain their frozen pricing rules.'
       },
       profitControl: {
         enable: 'Enable profit control',

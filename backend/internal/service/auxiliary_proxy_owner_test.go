@@ -92,8 +92,8 @@ func (r *auxiliaryOwnerRepo) ApplyGrokRequestOutcomeIfUnchanged(_ context.Contex
 	return GrokRequestOutcomeResult{Applied: true, RecoveryGeneration: runtimeRecoveryGeneration(owner)}, nil
 }
 
-const auxiliaryOwnerUA = "codex_cli_rs/0.164.0 (Ubuntu 24.04; x86_64) xterm-256color"
-const auxiliaryReplacementUA = "codex-tui/0.164.0 (Ubuntu 22.4.0; x86_64) xterm-256color (codex-tui; 0.164.0)"
+const auxiliaryOwnerUA = "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color"
+const auxiliaryReplacementUA = "codex-tui/0.165.0 (Ubuntu 22.4.0; x86_64) xterm-256color (codex-tui; 0.165.0)"
 
 func auxiliaryCodexAccount(token, ua string, proxyID int64) *Account {
 	a := &Account{ID: 883001, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive,

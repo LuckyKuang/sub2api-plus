@@ -4,6 +4,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -24,7 +25,7 @@ func TestSevenProviderModelObservationRequiresCurrentCredentialAndProxyOwner(t *
 			t.Run(platform+"/"+change, func(t *testing.T) {
 				account := openAIAuxiliaryProxy(t, "valid-bound", func(http.ResponseWriter, *http.Request) {})
 				account.Platform = platform
-				repo := &auxiliaryProbeOwnerRepo{current: account, failStorage: change == "storage-failure"}
+				repo := &modelObservationCatalogOwnerRepo{auxiliaryProbeOwnerRepo: &auxiliaryProbeOwnerRepo{current: account, failStorage: change == "storage-failure"}}
 				body := `{"data":[{"id":"observed-owner-model","reasoning":false,"input_modalities":["text"],"context_window":64000}]}`
 				if platform == PlatformStepFun {
 					body = `{"data":[{"id":"observed-owner-model","enable_reason":false,"enable_vision_input":false,"max_input_tokens":64000}]}`
@@ -132,4 +133,39 @@ func TestShadowModelObservationPersistsOnlyCurrentCredentialParent(t *testing.T)
 			}
 		})
 	}
+}
+
+// Catalog observation and capability metadata use separate owner-fenced writes.
+type modelObservationCatalogOwnerRepo struct{ *auxiliaryProbeOwnerRepo }
+
+func (r *modelObservationCatalogOwnerRepo) CompareAndSwapGrokObservedModels(ctx context.Context, owner *Account, expected, next json.RawMessage) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	if r.failStorage {
+		return false, errors.New("injected catalog storage failure")
+	}
+	if !grokCatalogOwnerMatches(r.current, owner) {
+		return false, nil
+	}
+	var current any
+	if r.current.Extra != nil {
+		current = r.current.Extra[grokObservedModelsExtraKey]
+	}
+	encoded, err := json.Marshal(current)
+	if err != nil {
+		return false, err
+	}
+	if !jsonValuesEqual(encoded, expected) {
+		return false, nil
+	}
+	var decoded any
+	if err := json.Unmarshal(next, &decoded); err != nil {
+		return false, err
+	}
+	if r.current.Extra == nil {
+		r.current.Extra = map[string]any{}
+	}
+	r.current.Extra[grokObservedModelsExtraKey] = decoded
+	return true, nil
 }

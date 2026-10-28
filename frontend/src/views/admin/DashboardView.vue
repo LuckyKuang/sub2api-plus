@@ -287,9 +287,9 @@
           <div v-show="!compactCharts || chartTab === 'users'" class="card dashboard-user-trend p-4">
             <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
               <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.dashboard.recentUsage') }} (Top 12)</h3>
-              <div class="flex gap-1" role="group" :aria-label="t('admin.dashboard.recentUsage')">
+              <div class="segmented-control" role="group" :aria-label="t('admin.dashboard.recentUsage')">
                 <button v-for="metric in (['tokens', 'actual_cost'] as const)" :key="metric" type="button"
-                  class="rounded px-2 py-1 text-xs surface-control" :class="userTrendMetric === metric ? 'bg-blue-600 text-white' : 'surface-muted'"
+                  class="segmented-option"
                   :aria-pressed="userTrendMetric === metric" @click="setUserTrendMetric(metric)">
                   {{ t(metric === 'tokens' ? 'admin.dashboard.tokens' : 'admin.dashboard.actualSpending') }}
                 </button>

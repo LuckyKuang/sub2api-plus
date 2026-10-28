@@ -5,6 +5,13 @@ prices, how they are matched, and what to do when a price is missing. It is the
 durable specification for the admin API contract; code changes that alter this
 behavior must update this file in the same commit.
 
+Channel updates preserve `features_config.web_search_emulation` dimensions that
+the client omits. Supplied platform values replace that dimension, including
+explicit `false`; an explicit empty object or `null` clears the whole feature.
+Other feature keys retain whole-block replacement semantics. The editor writes
+explicit values for its supported platform sections and preserves dimensions
+it cannot edit, including while global emulation is disabled.
+
 ## 1. Design principles
 
 1. Channel prices are operator selling prices. A reference price is only a
@@ -28,6 +35,118 @@ For request billing, an unset channel image price inherits the catalog price.
 Set an explicit `0` to keep image output free. An explicit zero image-output
 price never falls back to text pricing.
 
+### Customer rate policies
+
+Saved unit prices remain separate from the group's selling-rate policy.
+`billing_rate_policy` applies to concrete supplier platforms from the shared
+platform registry and public request model IDs. The platform factor and longest
+matching model factor (exact before prefix) multiply independently; each missing
+factor inherits 1 and an explicit zero is free. A unit-specific model rule wins an otherwise
+equal all-unit rule. See [Composite groups](COMPOSITE_GROUPS.md#consumption-rate-policies-and-sale-catalogs)
+for configuration, examples and bounds.
+
+The customer base is the personal group override or group default. Independent
+image/video bases retain precedence, even for a media card billed per request;
+the policy still matches that card's actual `request` unit. For new admissions,
+the applicable subscription peak multiplies every actual meter, including
+independent image/video bases, search, duration audio and cache storage.
+Price-card time periods, context tiers and service tiers keep their own scopes.
+Channel `TimePricing` continues to apply only to token pricing; it is independent
+of the group subscription peak factor and the two applicable factors multiply.
+Supplier account multipliers remain separate for ordinary inference,
+media and cache requests. The existing Gemini balance-only batch API preserves
+its historical account-adjusted unit-price, discount and hold formula; its
+submission estimate and stored snapshot govern that operation, rather than a
+synchronous model offer. Subscription quota uses the final customer charge
+rather than the price before these selling factors.
+
+New HTTP requests and Responses WebSocket turns freeze their customer rates,
+price-card generation and pricing time after ingress audit and before admission
+effects. Grok Voice Realtime keeps its existing whole-session minute meter and
+freezes rates at session admission; its frames remain independently audited.
+Retries and detached settlement reuse this evidence. Deferred media and batch
+jobs persist their accepted evidence rather than applying later administrator
+edits at completion. A pricing dependency error rejects new admission; it must
+not silently select a cheaper or free rate. This does not change the documented
+same-model billing fallback for an otherwise valid price lookup.
+
+An explicit public model price survives Composite routing and account-level
+model mapping. A missing/empty card retains normal concrete-model fallbacks.
+Explicit `upstream` or `response_model` billing sources keep their selected
+models; `channel_mapped` keeps the actual channel mapping when one exists.
+Codex server-model correction also preserves an accepted public card, including
+explicit zero and per-request prices. The reported upstream model remains in
+diagnostics. With no accepted public card, an empty card, an explicit billing
+source that selects another model, or accepted version-1 price selection, the
+existing identified server-model correction remains available.
+Catalog, reservation and settlement share this price-model selection, while
+platform/model selling factors always use the public model and actual supplier.
+New durable pricing evidence uses private snapshot version 2 for this price
+selection. Restored version-1 tasks retain their original candidate order and
+re-export as version 1; a restart cannot switch their accepted upstream card to
+a newly preferred public card. Calculation and peak-scope compatibility remain
+independent of this private format version.
+
+Sale and authorized catalogs use the same backend rate selection. They publish
+supplier, public model, billing unit, policy revision, timestamp and factor
+breakdown, including separate platform/model factors; unresolved or request-dependent prices remain unknown.
+New selling rates use base × platform × model × applicable subscription peak. A
+model multiplier does not require a custom price card; omitted prices inherit
+the next configured price source (channel, then catalog) instead of becoming zero.
+An empty group card cannot hide a lower channel price or change its billing mode;
+partially specified same-mode cards inherit omitted flat prices and service-tier
+factors from that channel. An effective group price-card override selects the
+group price source and does not apply channel `TimePricing`, even when some
+prices inherit. A selling model multiplier without a price override keeps the
+lower price source and its existing time-pricing behavior.
+Explicit zero prices remain valid, including zero-valued request tiers; a missing
+unit price or a pure multiplier on an unknown model is unavailable, not free.
+For a partial token card without a same-name catalog price, each actually used
+input, output, cache or image dimension must have explicit price evidence or its
+documented text/image fallback. An omitted output price does not become zero
+and does not inherit another model's account-mapped price. Explicit zero is valid.
+Input-only embeddings may use an input-only card; their reservation estimates
+no generated output. Once an explicit public card is selected, an incomplete
+used dimension rejects pricing rather than replacing that whole card with a
+mapped model's prices. Known same-name catalog/channel fields still inherit.
+Catalogs retain known fields and leave unpriced fields null, reporting
+`pricing_unavailable` when the general token quote is incomplete. Frozen card
+pointer presence preserves this distinction through durable export and restore.
+An output-only card still publishes its known output price, including zero;
+the input tokens used only to select a display-probe context tier do not create
+an input selling price or relax real usage validation. When a same-name catalog
+has one common cache-write price, adding a separate one-hour override preserves
+that inherited five-minute price. An explicit zero one-hour override stays free,
+including in matching context intervals and after durable restoration; outside
+the interval, the original common price still applies to both TTLs.
+Settlement returns a pricing error before usage/ledger writes when every billing
+candidate is unpriced, even if an additive search surcharge has a known price.
+Fixed-amount reservation rejects non-finite/negative quotes; known zero is valid.
+This preserves the configured unpriced-admission policy while preventing a
+served request from being reported as a successful free settlement.
+Once a native audio/image/video model card is selected, a missing applicable
+tier cannot fall back to a group flat price, catalog default or a free charge.
+Grok video group and channel cards accept the existing `per_request`, `image`
+and `video` modes: the first two charge per returned video, and `video` charges
+duration in seconds times the video count. Admission and settlement use the
+same quantity and independent platform, model and applicable peak multipliers.
+Durable tasks retain their
+accepted calculation version across restarts, including the historical override
+calculation for version-1 snapshots without a discriminator. New snapshots carry
+`peak_scope: all_meters`; accepted snapshots without that field retain the
+historical `token_only` peak scope, independently of their calculation version.
+The catalog
+does not create upstream capability, entitlement or account availability, and
+selling factors alone do not prove subscription profitability.
+
+The admin group editor's image, video and search previews show base references:
+flat unit price times the group base, or the independent media base when enabled.
+They have no selected public model or personal rate and do not promise final
+charges. Actual model prices, platform/model factors, personal bases and
+applicable subscription peak factors are resolved by backend billing and the
+authorized model catalog. For example, a $2 base reference with platform 2,
+model 3 and peak 1.5 charges $18 for that meter when the customer base is 1.
+
 ## 2. Source priority
 
 For one model, the reference service resolves in this order:
@@ -48,7 +167,7 @@ The following are **never** used for an admin reference price:
 - a similar but different version, e.g. `kimi-k2.7-code` priced as `kimi-k2`;
   `claude-opus-5-5-preview` priced as `claude-opus-5-5`.
 
-GPT-6.1 Sol, GPT-6 Sol, GPT-6 Luna, and GPT-6 Astra are separate SKUs. Registered
+GPT-6.1 Terra, GPT-6.1 Sol, GPT-6 Sol, GPT-6 Luna, and GPT-6 Astra are separate SKUs. Registered
 provider-qualified spellings and effort suffixes may use the same SKU's card;
 bare `gpt-6` and preview names never inherit Astra pricing. GPT-6.1 Sol's
 built-in Standard input/output/cache-write/cache-read reference rates per
@@ -57,6 +176,31 @@ GPT-6 Luna's are $0.10/$0.50/$0.125/$0.01. Saved selling prices remain explicit
 overrides, including zero cache-write values across Standard, Fast, and Flex.
 Astra Ultrafast uses six times the selected Standard token prices independently
 of the operator's Fast multiplier; it does not grant upstream capability.
+
+GPT-6.1 Terra has an exact release-catalog card and same-SKU built-in fallback,
+reviewed against [OpenAI API pricing](https://developers.openai.com/api/docs/pricing)
+and the [Terra API model page](https://developers.openai.com/api/docs/models/gpt-6.1-terra)
+on 2026-10-28. Its Standard input/output/cache-read/30-minute cache-write rates
+are $1/$5/$0.05/$1.25 per million tokens; Fast is 2x, and Flex/Batch are 0.5x.
+When total input, including cache reads and writes, exceeds 272000 tokens, the
+whole request's input/cache prices double and output prices increase 1.5x.
+Exactly 272000 remains at the base price. Saved catalog/channel prices retain
+precedence, including explicit zero cache-write prices; registered provider and
+effort aliases share this card, while unknown Terra suffixes receive no guessed
+price, including suffixes containing another provider/model family such as
+`-codex` or `-claude`; an explicitly configured exact SKU price remains valid.
+Their literal channel cards and explicitly declared billing-model alternatives
+remain valid; a different model's card, tier policy or usage candidate is never
+inferred from those suffixes.
+Admission and durable settlement pin the selected card across reloads.
+
+The official 12-hour cache-write reference rate is $2.50 per million tokens
+before context and speed adjustments. The existing OpenAI usage contract
+provides aggregate cache-write tokens and uses the 30-minute card; this update
+does not add a 12-hour usage breakdown. The release pricing resource records
+the API's 1050000 context window, 922000 maximum input and 128000 maximum output.
+These API limits are separate from the reviewed Codex client descriptor and do
+not change its pinned metadata, request behavior or identity.
 
 ## 3. Status and reason codes
 
@@ -308,6 +452,9 @@ Two consequences worth calling out:
 
 ### 6.2 Manual addition and paste
 
+These reference-fill rules apply to channel pricing and account cost-statistics
+cards. Group model cards use the separate selling-policy editor described below.
+
 - An untouched rule with one model resolves that model's reference price.
 - Multiple pasted models are resolved independently and split into separate
   rules. The first model's price is never applied to the others.
@@ -373,10 +520,136 @@ Explicit `cache_creation_input_token_cost: 0` stays zero. Derived cache-write
 rules only apply when the catalog field is absent, and the derived value is
 never presented as an operator override.
 
+### Group model selling-factor editing
+
+The group's model-pricing section edits the same
+`billing_rate_policy.model_multipliers` saved with the group. It does not add a
+second selling-factor field to a channel price or an account cost card. A price
+card containing several models exposes a separate all-unit factor for each
+model. Mixed groups require a concrete supplier selection; the registered
+platform catalog supplies these options, including newly registered suppliers.
+
+An unset model factor is `1` when no advanced exact/prefix or unit rule matches.
+Clearing a card's factor removes its exact all-unit rule; explicit `0` remains
+free. It does not clear a matching prefix or unit-specific rule. Those rules,
+and rules without a price card, remain visible in the rate-only/advanced editor.
+Platform and model factors are independent: clearing `M` does not remove `P`.
+
+Group cards do not automatically fetch reference prices or split pasted models.
+They can configure factors while all unit prices remain empty. Saving such a
+card writes only the policy and creates no empty unit-price override, so the
+existing channel/catalog price remains available. A model factor alone does not
+publish a new model or establish a previously unknown price. Explicit zero unit
+prices are saved. Prices shared by a multi-model group card remain unchanged
+when its first model is removed; only the removed model's exact policy rules
+are cleared.
+
+Deleting a group price card removes its models' rules for the same supplier,
+including unit-specific rules. The explicit **Keep rates only** action removes
+the price card while retaining those rules visibly in the advanced editor.
+Prices and the one policy draft save in a single version-checked group update;
+invalid or unfinished edits block submission. Editing another policy section
+does not discard an unfinished draft.
+
+Channel unit prices can serve several groups. The channel editor offers a
+bound-group selector and opens that group's same model-factor editor; it never
+writes one customer factor into all bound groups. Account cost-statistics cards
+do not expose or apply these customer selling-factor controls.
+
 ## Inflight balance reservations
 
 When `billing.inflight_reservation.enabled` is enabled, admission estimates the
 same billing-model candidates and channel/group selling prices used by billing.
+Text request estimates retain explicit service tiers and reasoning levels using
+the endpoint's usage parser after ingress policy rewriting. Unknown sibling
+fields from another protocol cannot select a parser or replace the endpoint's
+output-token bound, effort or service tier. Configured reasoning factors
+also apply to per-request, image, video and audio per-request reservations; an
+omitted or unconfigured effort retains factor `1`. Explicit free cards remain
+free. Actual usage and response-model declarations can still differ from an
+admission estimate.
+
+After selecting and revalidating the account, supported synchronous inference
+handlers reconcile the estimate before forwarding. The selected account's actual
+model mapping and protocol policy determine the concrete price candidate without
+reading other accounts. An explicit public group/channel card (including zero)
+and the configured billing-model source keep their settlement precedence. The
+public requested model still owns the platform/model selling multipliers.
+Increasing an existing balance hold is atomic, excludes that same owner from the
+balance sum, and never decreases the amount accepted for an earlier attempt.
+Insufficient balance returns the endpoint's billing error, releases this
+request's slots and hold, and does not fail over or send the request upstream.
+Expired or released owners cannot be recreated by an increase. A preliminary
+free or unpriced estimate can create a hold after selection if the selected
+contract becomes paid.
+
+Responses WebSocket requests hold a separate reservation for each accepted turn;
+each turn uses its own public model, pricing snapshot and output bound. A turn's
+billing task takes ownership before handler cleanup returns that turn's reference.
+Connection closure cleans up any remaining handler references. A retried turn
+creates a new owner while keeping its accepted public model and price snapshot.
+WS passthrough preserves its channel model; the pool mode applies account model
+mapping. Reservation reconciliation follows that actual transport behavior.
+Forced HTTP and large-first-frame bridging use the mapped HTTP model even when
+the account is configured for passthrough. Reservation and forwarding share the
+same attempt's captured transport decision. Later account edits can revalidate
+eligibility, but an existing connection reserves against the mapping snapshot
+actually used by its proxy; a new connection adopts the updated account mapping.
+Channel mapping and OpenAI Fast rules instead refresh after each external
+turn's audit. That turn's frozen generation drives its upstream model/tier,
+reservation, profitability admission and settlement in passthrough, pool and
+HTTP bridge modes. Same-turn retries retain the accepted generation. Ungrouped
+keys retain the full turn execution context even without a retail snapshot.
+Reservation caps, the existing first-request allowance when there are no other
+owners, and dependency-error fail-open behavior remain in effect. These estimates
+do not guarantee that a balance can never become negative.
+
+For supported Chat, Responses and Messages conversions, the estimate also
+evaluates the reachable account's actual protocol effort scale on the same
+public selling card. This includes GLM medium-to-high/xhigh-to-max, Grok effort
+normalization, OpenAI-to-Anthropic xhigh-to-max, Messages conversion defaults,
+Claude 5.5 model defaults, and group effort rules applied after account mapping.
+Native Messages that retain xhigh do not acquire the OpenAI conversion's max
+level. Account metadata comes from the scheduler snapshot with a two-second
+budget; admission does not start provider model discovery. A model-routed
+account whose catalog can select another protocol considers only protocols
+supported by that same account. Raw Chat settlement records the final outbound
+effort after provider rewriting, so the charged factor matches the wire value.
+Nested and flat OpenAI effort fields retain their positions: a typed protocol
+converter may omit a compatibility field that a direct Responses path accepts.
+Its resulting default factor `1` remains part of the reservation estimate.
+If account metadata is unavailable, an authoritative public card reserves the
+largest amount among its own configured effort factors and the unconfigured
+factor `1`; recovery cannot substitute another public SKU or turn a free card
+into a paid one.
+Fast-tier, effort-conversion and mapped-model fallback reads within one estimate
+reuse the same success or failure for each authorization pool and share one
+two-second lookup budget. Results never carry into another request; recovery
+and another group, platform or forced-routing pool obtain their own evidence.
+
+OpenAI token reservations also evaluate the frozen Fast policy and execution
+group's forced-priority setting. This covers Chat, Responses and Messages
+conversion to either OpenAI protocol. Ungrouped keys also pin and evaluate global
+and user-scoped Fast rules before ingress and selected-account reservation;
+their absence of a retail group does not disable an upstream tier rewrite.
+The OpenAI gateway's ungrouped default is OpenAI, including when no target
+context was supplied. Explicit platform overrides and resolved targets retain
+precedence; the generic gateway does not acquire that default.
+Ungrouped catalog fallback also preserves the accepted `service_tier`:
+`priority`/`fast` use the catalog's Fast rates and `flex` uses its Flex rates in
+both reservation and settlement.
+The exact Messages `anthropic-beta`
+Fast token becomes priority only for an OpenAI conversion; a native Anthropic
+request or another target platform does not acquire an OpenAI tier. Scoped
+policy matching uses reachable accounts and their final normalized upstream
+model names, while preserving the public model's selling card and the original
+retail group's Free Fast setting. Missing account-pool evidence conservatively
+reserves the highest possible tier; unavailable global settings retain the
+existing pass behavior and emit a structured warning. Dependency reads have a
+two-second budget, bounded by the request deadline. Fast-tier calculation for
+ordinary traffic and group-only force/free settings does not enumerate the
+account pool. Effort conversion also skips account lookup when the authoritative
+public card has no effort factors.
 Reservations run only after authentication, basic validation, security audit,
 and billing eligibility. Simple mode and subscription billing retain their
 existing behavior. Unknown pricing normally admits without a reservation;
@@ -440,3 +713,40 @@ Structured logs for this feature carry `component`, `stage`
 `error_code` / `warning_code`, and the catalog version and model count. They
 never log caller fields beyond the requested model name, credentials, or
 request bodies.
+
+
+## Image-count billing
+
+OpenAI and composite groups can enable `image_count_billing` when image
+generation is allowed. It defaults to `false` and applies only to dedicated
+image endpoints. Responses, Chat and
+WebSocket requests that also produce images keep their token billing path.
+
+For dedicated images, enabling the switch overrides a token price card with
+per-image billing. Explicit group or channel image/per-request cards remain
+eligible; context-based intervals use the actual input usage to select the tier,
+and the selected unit price is multiplied by the returned image count. A token
+price alone is not evidence of an image price. Without an explicit group image
+price, an identified catalog image price, or an enumerated built-in image price,
+the request cannot obtain a priced reservation or write financial usage.
+The conservative image reservation uses the highest price across 1K, 2K and
+4K. When this switch overrides a token card, every possible size tier must have
+an identified image price before a priced reservation; configuring only one size
+cannot price an unknown size. An explicitly configured zero is a known free price,
+whereas an absent price is not. This check uses the admitted pricing snapshot,
+including delayed/asynchronous execution, so later configuration changes cannot
+fill a missing price for an already captured request.
+
+Successful dedicated OpenAI image responses use the observed image count.
+When the response supplies no count, the enabled option applies a one-image
+minimum as a gateway billing policy, not a provider guarantee. Disabling the
+option preserves the endpoint's existing requested-count/stream fallback.
+
+The accepted request captures the switch, group/channel prices, public-model
+and platform factors, and customer multipliers in its pricing snapshot. Editing
+the group later cannot change that request's quote, reservation or settlement.
+Durable task snapshots also retain image-price evidence; restoring them never
+looks up a current catalog to fill missing evidence. Historical snapshots without
+the switch retain the default disabled behavior. Unknown image prices do not
+become the historical generic image fallback when this switch forces image
+billing.

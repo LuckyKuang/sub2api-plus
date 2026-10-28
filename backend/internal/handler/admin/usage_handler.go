@@ -370,14 +370,10 @@ func (h *UsageHandler) List(c *gin.Context) {
 		return
 	}
 
-	out := make([]dto.AdminUsageLog, 0, len(records))
-	for i := range records {
-		out = append(out, *dto.UsageLogFromServiceAdmin(&records[i]))
-	}
 	response.Success(c, struct {
 		response.PaginatedData
 		SnapshotMaxID *int64 `json:"snapshot_max_id,omitempty"`
-	}{response.PaginatedData{Items: out, Total: result.Total, Page: page, PageSize: pageSize, Pages: max(1, result.Pages)}, result.SnapshotMaxID})
+	}{response.PaginatedData{Items: adminUsageLogResponses(c, records), Total: result.Total, Page: page, PageSize: pageSize, Pages: max(1, result.Pages)}, result.SnapshotMaxID})
 }
 
 func parseUsageCompletionFilters(c *gin.Context) (string, string, bool) {

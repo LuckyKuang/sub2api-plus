@@ -46,6 +46,7 @@ func TestBatchImageMVPFlow(t *testing.T) {
 	owner := testBatchImageOwner()
 
 	publicSvc := &BatchImagePublicService{
+		UnfinishedTasks:  NewGatewayUnfinishedTaskService(&unfinishedTaskRepoForTest{}, nil),
 		Repo:             repo,
 		AccountRepo:      accountRepo,
 		Queue:            queue,
@@ -55,7 +56,7 @@ func TestBatchImageMVPFlow(t *testing.T) {
 		Config:           cfg,
 	}
 	processor := &BatchImagePipelineProcessor{
-		ProviderProcessor: &BatchImageProviderProcessor{
+		ProviderProcessor: &BatchImageProviderProcessor{Concurrency: NewConcurrencyService(&stubConcurrencyCacheForTest{acquireResult: true}),
 			Repo:             repo,
 			ProviderRegistry: registry,
 			AccountResolver:  &fakeBatchImageAccountResolver{account: &accountRepo.accounts[0]},

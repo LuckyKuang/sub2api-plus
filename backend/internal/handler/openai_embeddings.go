@@ -92,7 +92,7 @@ func (h *OpenAIGatewayHandler) Embeddings(c *gin.Context) {
 	subscription, _ := middleware2.GetSubscriptionFromContext(c)
 	service.SetOpsLatencyMs(c, service.OpsAuthLatencyMsKey, time.Since(requestStart).Milliseconds())
 
-	userReleaseFunc, acquired := h.acquireResponsesUserSlot(c, subject.UserID, subject.Concurrency, false, &streamStarted, reqLog)
+	userReleaseFunc, acquired := h.acquireResponsesUserSlot(c, subject.UserID, subject.Concurrency, &streamStarted, reqLog)
 	if !acquired {
 		return
 	}
@@ -109,7 +109,7 @@ func (h *OpenAIGatewayHandler) Embeddings(c *gin.Context) {
 	}
 
 	// 余额模式在途预留（与计费同口径估算；计费任务扣减余额缓存后才释放）。
-	inflightDone, inflightErr := reserveInflightBalance(c, h.billingCacheService, h.gatewayService, apiKey, subscription, service.InflightEstimateRequest{Model: reqModel, BodyBytes: len(body), MaxTokens: 1, Kind: service.InflightEstimateToken})
+	inflightDone, inflightErr := reserveInflightBalance(c, h.billingCacheService, h.gatewayService, apiKey, subscription, service.InflightEstimateRequest{Model: reqModel, BodyBytes: len(body), Kind: service.InflightEstimateInputOnly})
 	if inflightErr != nil {
 		status, code, message, retryAfter := billingErrorDetails(inflightErr)
 		if retryAfter > 0 {
@@ -277,6 +277,7 @@ func (h *OpenAIGatewayHandler) Embeddings(c *gin.Context) {
 
 		h.submitOpenAIUsageRecordTask(c.Request.Context(), result, func(ctx context.Context) {
 			if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
+				PricingSnapshot:    service.BillingPricingSnapshotFromContext(ctx),
 				Result:             result,
 				APIKey:             apiKey,
 				User:               apiKey.User,

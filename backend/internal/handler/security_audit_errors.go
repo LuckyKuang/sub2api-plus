@@ -120,6 +120,10 @@ func googleSecurityAuditError(c *gin.Context, decision *securityaudit.Decision) 
 		googleStatus = "UNAVAILABLE"
 	}
 	requestID := ""
+	domain := "gateway.security"
+	if decision.Kind == billingAdmissionUnavailableKind {
+		domain = "gateway.billing"
+	}
 	if c != nil && c.Request != nil {
 		requestID = contentModerationRequestID(c.Request.Context())
 	}
@@ -127,7 +131,7 @@ func googleSecurityAuditError(c *gin.Context, decision *securityaudit.Decision) 
 		"code": status, "message": securityAuditMessage(decision), "status": googleStatus,
 		"details": []gin.H{{
 			"@type":  "type.googleapis.com/google.rpc.ErrorInfo",
-			"reason": securityAuditErrorCode(decision), "domain": "gateway.security",
+			"reason": securityAuditErrorCode(decision), "domain": domain,
 			"metadata": gin.H{"request_id": requestID},
 		}},
 	}})
@@ -145,9 +149,13 @@ func writeSecurityAuditWSError(ctx context.Context, conn *coderws.Conn, decision
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	eventID, errorType := "evt_prompt_guard_rejected", "invalid_request_error"
+	if decision.Kind == billingAdmissionUnavailableKind {
+		eventID, errorType = "evt_billing_rate_unavailable", "server_error"
+	}
 	payload, err := json.Marshal(gin.H{
-		"event_id": "evt_prompt_guard_rejected", "type": "error",
-		"error": gin.H{"type": "invalid_request_error", "code": securityAuditErrorCode(decision), "message": securityAuditMessage(decision)},
+		"event_id": eventID, "type": "error",
+		"error": gin.H{"type": errorType, "code": securityAuditErrorCode(decision), "message": securityAuditMessage(decision)},
 	})
 	if err != nil {
 		return

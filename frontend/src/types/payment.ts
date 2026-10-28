@@ -1,3 +1,4 @@
+import type { SaleModelCatalog } from './billingRate'
 /**
  * Payment System Type Definitions
  */
@@ -131,6 +132,7 @@ export interface PaymentOrder {
 // ==================== Plans & Channels ====================
 
 export interface SubscriptionPlan {
+  model_catalog?: SaleModelCatalog
   id: number
   group_id: number
   group_platform?: string
@@ -190,6 +192,7 @@ export interface ProviderInstance {
 // ==================== Request / Response ====================
 
 export interface CreateOrderRequest {
+  expected_billing_policy_version?: number
   amount: number
   payment_type: string
   order_type: string

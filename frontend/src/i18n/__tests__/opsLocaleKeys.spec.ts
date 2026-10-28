@@ -55,7 +55,10 @@ describe('groups locale key completeness', () => {
     'admin.groups.webSearchPricing.title',
     'admin.groups.webSearchPricing.pricePerCall',
     'admin.groups.webSearchPricing.pricePerCallHint',
-    'admin.groups.webSearchPricing.finalPricePreview',
+    'admin.groups.webSearchPricing.basePricePreview',
+    'admin.groups.imagePricing.basePricePreview',
+    'admin.groups.videoPricing.basePricePreview',
+    'admin.groups.pricingReferenceHint',
   ]
 
   for (const key of webSearchPricingKeys) {

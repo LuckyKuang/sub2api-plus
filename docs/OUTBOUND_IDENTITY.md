@@ -50,7 +50,13 @@ credential-owner metadata. Existing API-key explicit keys may see one cache
 miss when upgrading to this shared derivation; subsequent owner changes keep
 the key stable. Explicit OAuth sharing retains its authorized scope.
 The Codex source-priority matrix below is unchanged. Its manually reviewed
-compiled version is `0.164.0`; the client family and environment stay fixed.
+compiled version is `0.165.0`; the client family and environment stay fixed.
+The manual October 28 upgrade retains the account/global/default source matrix
+and administrator version pins. Government endpoint selection for recognized
+native OpenAI API-key issuance prefixes and `X-OpenAI-Fedramp` comes from the
+acquired credential owner, never from the inbound client or a generic header
+override. Explicit base URLs remain authoritative. See
+[Codex protocol compatibility](protocols/CODEX_CLIENT_PROFILES.md#october-28-protocol-compatibility).
 
 All built-in OS declarations describe one fixed **Ubuntu 24.04 x86_64** client,
 independent of the gateway/container host. Device name is `ubuntu`. The baseline
@@ -63,7 +69,7 @@ SDK versions do not update this baseline.
 
 | Preset | Exact default OS/architecture declarations |
 | --- | --- |
-| Codex | `codex_cli_rs/0.164.0 (Ubuntu 24.04; x86_64) xterm-256color` |
+| Codex | `codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color` |
 | Claude | `X-Stainless-OS: Linux`, `X-Stainless-Arch: x64` |
 | Gemini | `GeminiCLI/0.1.5 (Linux; x64)` |
 | Grok | `grok-shell/1.0.45 (linux; x86_64)` |

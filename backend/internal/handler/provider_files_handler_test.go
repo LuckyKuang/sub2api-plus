@@ -118,7 +118,7 @@ func TestProviderFilesAuditPrecedesACLRead(t *testing.T) {
 				require.True(t, exists)
 				require.Equal(t, true, completed, "ACL reads must occur after the common audit boundary")
 			}}
-			h := &OpenAIGatewayHandler{providerFilesService: service.NewProviderFilesService(repo, nil), securityAuditCoordinator: securityaudit.NewCoordinator(nil, nil)}
+			h := &OpenAIGatewayHandler{concurrencyHelper: newGatewayAdmissionForTest().concurrencyHelper, providerFilesService: service.NewProviderFilesService(repo, nil), securityAuditCoordinator: securityaudit.NewCoordinator(nil, nil)}
 			h.ProviderFiles(c)
 			require.Equal(t, 1, touched)
 		})

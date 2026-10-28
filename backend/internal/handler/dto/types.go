@@ -31,7 +31,7 @@ type User struct {
 	BalanceNotifyExtraEmails   []NotifyEmailEntry `json:"balance_notify_extra_emails"`
 	TotalRecharged             float64            `json:"total_recharged"`
 
-	// RPMLimit 用户级每分钟请求数上限（0 = 不限制），仅在所用分组未设置 rpm_limit 时作为兜底生效。
+	// RPMLimit 用户全局每分钟请求数上限（0 = 不限制），与 (user, group) 上限同时生效，不被分组或 override 替代。
 	RPMLimit int `json:"rpm_limit"`
 
 	APIKeys       []APIKey           `json:"api_keys,omitempty"`
@@ -113,6 +113,7 @@ type Group struct {
 	// 图片生成计费配置（仅 antigravity 平台使用）
 	AllowImageGeneration         bool    `json:"allow_image_generation"`
 	AllowBatchImageGeneration    bool    `json:"allow_batch_image_generation"`
+	ImageCountBilling            bool    `json:"image_count_billing"`
 	ImageRateIndependent         bool    `json:"image_rate_independent"`
 	ImageRateMultiplier          float64 `json:"image_rate_multiplier"`
 	BatchImageDiscountMultiplier float64 `json:"batch_image_discount_multiplier"`
@@ -154,7 +155,7 @@ type Group struct {
 	RequireOAuthOnly  bool `json:"require_oauth_only"`
 	RequirePrivacySet bool `json:"require_privacy_set"`
 
-	// RPMLimit 分组级每分钟请求数上限（0 = 不限制），设置后覆盖用户级 rpm_limit。
+	// RPMLimit 每个 (user, group) 的默认每分钟上限（0 = 不限制），可由该用户的分组 override 替代；用户全局上限始终生效。
 	RPMLimit int `json:"rpm_limit"`
 	// MaxReasoningEffort Anthropic/OpenAI 请求的推理强度上限，空字符串表示不限制。
 	MaxReasoningEffort string `json:"max_reasoning_effort"`
@@ -188,6 +189,8 @@ type AdminGroup struct {
 	ProfitMinMargin      float64                       `json:"profit_min_margin"`
 	ProfitSafetyBuffer   float64                       `json:"profit_safety_buffer"`
 	ModelPricing         []service.ChannelModelPricing `json:"model_pricing"`
+	BillingRatePolicy    domain.BillingRatePolicy      `json:"billing_rate_policy"`
+	BillingPolicyVersion int64                         `json:"billing_policy_version"`
 
 	// 模型路由配置（仅 anthropic 平台使用）
 	ModelRouting        map[string][]int64 `json:"model_routing"`
@@ -334,6 +337,9 @@ type Account struct {
 
 	GroupIDs []int64  `json:"group_ids,omitempty"`
 	Groups   []*Group `json:"groups,omitempty"`
+
+	// 仅账号详情填充。列表和公共 mapper 不计算，避免把目录诊断扩散到调度响应。
+	GrokModelDiagnostics *service.GrokModelDiagnostics `json:"grok_model_diagnostics,omitempty"`
 }
 
 // AccountListItem is the compact representation returned by the admin account
@@ -647,14 +653,16 @@ type UsageLog struct {
 	CacheCreation1hTokens int `json:"cache_creation_1h_tokens"`
 	AudioOutputTokens     int `json:"audio_output_tokens"`
 
-	InputCost                 float64 `json:"input_cost"`
-	OutputCost                float64 `json:"output_cost"`
-	CacheCreationCost         float64 `json:"cache_creation_cost"`
-	CacheReadCost             float64 `json:"cache_read_cost"`
-	TotalCost                 float64 `json:"total_cost"`
-	ActualCost                float64 `json:"actual_cost"`
-	RateMultiplier            float64 `json:"rate_multiplier"`
-	LongContextBillingApplied bool    `json:"long_context_billing_applied"`
+	InputCost                 float64        `json:"input_cost"`
+	OutputCost                float64        `json:"output_cost"`
+	CacheCreationCost         float64        `json:"cache_creation_cost"`
+	CacheReadCost             float64        `json:"cache_read_cost"`
+	TotalCost                 float64        `json:"total_cost"`
+	ActualCost                float64        `json:"actual_cost"`
+	RateMultiplier            float64        `json:"rate_multiplier"`
+	BillingPolicyVersion      int64          `json:"billing_policy_version"`
+	BillingRateSnapshot       map[string]any `json:"billing_rate_snapshot,omitempty"`
+	LongContextBillingApplied bool           `json:"long_context_billing_applied"`
 
 	BillingType  int8   `json:"billing_type"`
 	RequestType  string `json:"request_type"`

@@ -62,6 +62,7 @@ func performCodexLocalQuotaRequest(t *testing.T, handler *OpenAIGatewayHandler, 
 	if subscription != nil {
 		ctx.Set(string(middleware2.ContextKeySubscription), subscription)
 	}
+	prepareOpenAIMetadataTest(handler, ctx)
 	handler.CodexLocalGroupQuotaUsage(ctx)
 	return recorder
 }

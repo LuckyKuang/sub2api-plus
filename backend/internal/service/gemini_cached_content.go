@@ -262,6 +262,7 @@ func ParseGeminiCachedContentPublicID(name string) (string, bool) {
 }
 
 type geminiCachedContentBoundCtxKey struct{}
+type geminiCachedContentRequestAccountCtxKey struct{}
 
 // WithGeminiCachedContentBound 标记请求引用了显式缓存并已硬绑定到持有账号。
 func WithGeminiCachedContentBound(ctx context.Context) context.Context {
@@ -276,8 +277,32 @@ func geminiCachedContentBoundFromContext(ctx context.Context) bool {
 	return bound
 }
 
+// WithGeminiCachedContentRequestAccount retains the admitted credential owner
+// across handler-level retries. Selection still checks current eligibility, but
+// a cache name must never be replayed with a replacement grant or proxy merely
+// because the replacement occupies the same account record.
+func WithGeminiCachedContentRequestAccount(ctx context.Context, account *Account) (context.Context, *Account, error) {
+	if !geminiCachedContentBoundFromContext(ctx) {
+		return ctx, account, nil
+	}
+	if account == nil {
+		return ctx, nil, errors.New("cached content credential owner is unavailable")
+	}
+	if owner, _ := ctx.Value(geminiCachedContentRequestAccountCtxKey{}).(*Account); owner != nil {
+		if owner.ID != account.ID || owner.Platform != account.Platform || owner.Type != account.Type {
+			return ctx, nil, errors.New("cached content credential owner changed")
+		}
+		return ctx, snapshotRequestCredentialAccount(owner), nil
+	}
+	owner := snapshotRequestCredentialAccount(account)
+	if _, err := owner.StrictProxyURL(); err != nil {
+		return ctx, nil, err
+	}
+	return context.WithValue(ctx, geminiCachedContentRequestAccountCtxKey{}, owner), snapshotRequestCredentialAccount(owner), nil
+}
+
 // isGeminiBoundCacheUpstreamPassthrough 判断绑定缓存的请求在上游网关账号上收到的错误是否只反映
-// 上游持有缓存的那个账号的状态（429 / 5xx），不应据此限流或重试本账号。
+// 上游持有缓存的那个账号的状态（429 / 5xx），不应据此限流或封禁本账号。
 func isGeminiBoundCacheUpstreamPassthrough(ctx context.Context, account *Account, statusCode int) bool {
 	if statusCode != http.StatusTooManyRequests && statusCode < http.StatusInternalServerError {
 		return false
@@ -1045,7 +1070,9 @@ func (s *GeminiCachedContentService) doUpstream(ctx context.Context, account *Ac
 		return nil, geminiCachedContentNotSent(errors.New("gemini upstream client not configured"))
 	}
 	ctx = WithAccountOutboundIdentity(ctx, account)
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
+	upstreamCtx, releaseUpstream := detachUpstreamContext(ctx)
+	defer releaseUpstream()
+	ctx, cancel := context.WithTimeout(upstreamCtx, timeout)
 	defer cancel()
 	var reader io.Reader
 	if body != nil {
@@ -1189,9 +1216,13 @@ func geminiCachedContentVertexHost(location string) string {
 
 // GeminiCachedContentView 返回客户端可见的缓存元数据。
 func GeminiCachedContentView(record *GeminiCachedContent) map[string]any {
+	model := record.Model
+	if publicModel := strings.TrimSpace(record.ChannelUsage.OriginalModel); publicModel != "" {
+		model = publicModel
+	}
 	view := map[string]any{
 		"name":          record.PublicName(),
-		"model":         "models/" + record.Model,
+		"model":         "models/" + model,
 		"usageMetadata": map[string]any{"totalTokenCount": record.TotalTokenCount},
 		"createTime":    record.CreatedAt.UTC().Format(time.RFC3339Nano),
 		"updateTime":    record.UpdatedAt.UTC().Format(time.RFC3339Nano),

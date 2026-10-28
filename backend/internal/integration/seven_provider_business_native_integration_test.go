@@ -221,7 +221,7 @@ func TestSevenProviderNativeStreamingToolsPersistRedisAffinityAndPostgresDebits(
 		provider sevenBusinessProvider
 		native   sevenNativeScenario
 	}{
-		{sevenBusinessProvider{"openai", "codex", "0.164.0", "codex_cli_rs/0.164.0 (Ubuntu 24.04; x86_64) xterm-256color", map[string]string{"Originator": "codex_cli_rs", "Version": "0.164.0"}},
+		{sevenBusinessProvider{"openai", "codex", "0.165.0", "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color", map[string]string{"Originator": "codex_cli_rs", "Version": "0.165.0"}},
 			sevenNativeScenario{protocol: "responses", ingress: "/v1/responses", host: "chatgpt.com", path: "/backend-api/codex/responses", model: "gpt-5.4", authorization: "Authorization"}},
 		{sevenBusinessProvider{"grok", "grok", "1.0.45", "grok-shell/1.0.45 (linux; x86_64)", map[string]string{"X-Grok-Client-Identifier": "grok-shell", "X-Grok-Client-Version": "1.0.45", "X-Xai-Token-Auth": "xai-grok-cli"}},
 			sevenNativeScenario{protocol: "responses", ingress: "/v1/responses", host: "cli-chat-proxy.grok.com", path: "/v1/responses", model: "grok-4.5", authorization: "Authorization"}},

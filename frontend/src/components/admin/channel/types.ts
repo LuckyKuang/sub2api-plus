@@ -26,6 +26,8 @@ export interface IntervalFormEntry {
 }
 
 export interface PricingFormEntry {
+  /** Group model cards may target one concrete supplier in a mixed group. */
+  platform?: string
   models: string[]
   billing_mode: BillingMode
   input_price: number | string | null

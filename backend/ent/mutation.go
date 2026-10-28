@@ -11307,65 +11307,66 @@ func (m *BatchImageItemMutation) ResetEdge(name string) error {
 // BatchImageJobMutation represents an operation that mutates the BatchImageJob nodes in the graph.
 type BatchImageJobMutation struct {
 	config
-	op                  Op
-	typ                 string
-	id                  *int64
-	batch_id            *string
-	user_id             *int64
-	adduser_id          *int64
-	api_key_id          *int64
-	addapi_key_id       *int64
-	account_id          *int64
-	addaccount_id       *int64
-	provider            *string
-	model               *string
-	task_name           *string
-	status              *string
-	provider_job_name   *string
-	provider_input_ref  *string
-	provider_output_ref *string
-	gcs_input_uri       *string
-	gcs_output_uri      *string
-	item_count          *int
-	additem_count       *int
-	success_count       *int
-	addsuccess_count    *int
-	fail_count          *int
-	addfail_count       *int
-	cancelled_count     *int
-	addcancelled_count  *int
-	estimated_cost      *float64
-	addestimated_cost   *float64
-	hold_amount         *float64
-	addhold_amount      *float64
-	actual_cost         *float64
-	addactual_cost      *float64
-	currency            *string
-	hold_id             *string
-	idempotency_key     *string
-	request_hash        *string
-	manifest_hash       *string
-	retry_count         *int
-	addretry_count      *int
-	version             *int
-	addversion          *int
-	output_expires_at   *time.Time
-	input_deleted_at    *time.Time
-	output_deleted_at   *time.Time
-	downloaded_at       *time.Time
-	user_deleted_at     *time.Time
-	last_error_code     *string
-	last_error_message  *string
-	created_at          *time.Time
-	updated_at          *time.Time
-	submitted_at        *time.Time
-	started_at          *time.Time
-	finished_at         *time.Time
-	settled_at          *time.Time
-	clearedFields       map[string]struct{}
-	done                bool
-	oldValue            func(context.Context) (*BatchImageJob, error)
-	predicates          []predicate.BatchImageJob
+	op                    Op
+	typ                   string
+	id                    *int64
+	batch_id              *string
+	user_id               *int64
+	adduser_id            *int64
+	api_key_id            *int64
+	addapi_key_id         *int64
+	account_id            *int64
+	addaccount_id         *int64
+	provider              *string
+	model                 *string
+	task_name             *string
+	status                *string
+	provider_job_name     *string
+	provider_input_ref    *string
+	provider_output_ref   *string
+	gcs_input_uri         *string
+	gcs_output_uri        *string
+	item_count            *int
+	additem_count         *int
+	success_count         *int
+	addsuccess_count      *int
+	fail_count            *int
+	addfail_count         *int
+	cancelled_count       *int
+	addcancelled_count    *int
+	estimated_cost        *float64
+	addestimated_cost     *float64
+	hold_amount           *float64
+	addhold_amount        *float64
+	actual_cost           *float64
+	addactual_cost        *float64
+	billing_rate_snapshot *map[string]interface{}
+	currency              *string
+	hold_id               *string
+	idempotency_key       *string
+	request_hash          *string
+	manifest_hash         *string
+	retry_count           *int
+	addretry_count        *int
+	version               *int
+	addversion            *int
+	output_expires_at     *time.Time
+	input_deleted_at      *time.Time
+	output_deleted_at     *time.Time
+	downloaded_at         *time.Time
+	user_deleted_at       *time.Time
+	last_error_code       *string
+	last_error_message    *string
+	created_at            *time.Time
+	updated_at            *time.Time
+	submitted_at          *time.Time
+	started_at            *time.Time
+	finished_at           *time.Time
+	settled_at            *time.Time
+	clearedFields         map[string]struct{}
+	done                  bool
+	oldValue              func(context.Context) (*BatchImageJob, error)
+	predicates            []predicate.BatchImageJob
 }
 
 var _ ent.Mutation = (*BatchImageJobMutation)(nil)
@@ -12507,6 +12508,42 @@ func (m *BatchImageJobMutation) ResetActualCost() {
 	delete(m.clearedFields, batchimagejob.FieldActualCost)
 }
 
+// SetBillingRateSnapshot sets the "billing_rate_snapshot" field.
+func (m *BatchImageJobMutation) SetBillingRateSnapshot(value map[string]interface{}) {
+	m.billing_rate_snapshot = &value
+}
+
+// BillingRateSnapshot returns the value of the "billing_rate_snapshot" field in the mutation.
+func (m *BatchImageJobMutation) BillingRateSnapshot() (r map[string]interface{}, exists bool) {
+	v := m.billing_rate_snapshot
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBillingRateSnapshot returns the old "billing_rate_snapshot" field's value of the BatchImageJob entity.
+// If the BatchImageJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *BatchImageJobMutation) OldBillingRateSnapshot(ctx context.Context) (v map[string]interface{}, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBillingRateSnapshot is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBillingRateSnapshot requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBillingRateSnapshot: %w", err)
+	}
+	return oldValue.BillingRateSnapshot, nil
+}
+
+// ResetBillingRateSnapshot resets all changes to the "billing_rate_snapshot" field.
+func (m *BatchImageJobMutation) ResetBillingRateSnapshot() {
+	m.billing_rate_snapshot = nil
+}
+
 // SetCurrency sets the "currency" field.
 func (m *BatchImageJobMutation) SetCurrency(s string) {
 	m.currency = &s
@@ -13496,7 +13533,7 @@ func (m *BatchImageJobMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *BatchImageJobMutation) Fields() []string {
-	fields := make([]string, 0, 40)
+	fields := make([]string, 0, 41)
 	if m.batch_id != nil {
 		fields = append(fields, batchimagejob.FieldBatchID)
 	}
@@ -13556,6 +13593,9 @@ func (m *BatchImageJobMutation) Fields() []string {
 	}
 	if m.actual_cost != nil {
 		fields = append(fields, batchimagejob.FieldActualCost)
+	}
+	if m.billing_rate_snapshot != nil {
+		fields = append(fields, batchimagejob.FieldBillingRateSnapshot)
 	}
 	if m.currency != nil {
 		fields = append(fields, batchimagejob.FieldCurrency)
@@ -13665,6 +13705,8 @@ func (m *BatchImageJobMutation) Field(name string) (ent.Value, bool) {
 		return m.HoldAmount()
 	case batchimagejob.FieldActualCost:
 		return m.ActualCost()
+	case batchimagejob.FieldBillingRateSnapshot:
+		return m.BillingRateSnapshot()
 	case batchimagejob.FieldCurrency:
 		return m.Currency()
 	case batchimagejob.FieldHoldID:
@@ -13754,6 +13796,8 @@ func (m *BatchImageJobMutation) OldField(ctx context.Context, name string) (ent.
 		return m.OldHoldAmount(ctx)
 	case batchimagejob.FieldActualCost:
 		return m.OldActualCost(ctx)
+	case batchimagejob.FieldBillingRateSnapshot:
+		return m.OldBillingRateSnapshot(ctx)
 	case batchimagejob.FieldCurrency:
 		return m.OldCurrency(ctx)
 	case batchimagejob.FieldHoldID:
@@ -13942,6 +13986,13 @@ func (m *BatchImageJobMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetActualCost(v)
+		return nil
+	case batchimagejob.FieldBillingRateSnapshot:
+		v, ok := value.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBillingRateSnapshot(v)
 		return nil
 	case batchimagejob.FieldCurrency:
 		v, ok := value.(string)
@@ -14485,6 +14536,9 @@ func (m *BatchImageJobMutation) ResetField(name string) error {
 		return nil
 	case batchimagejob.FieldActualCost:
 		m.ResetActualCost()
+		return nil
+	case batchimagejob.FieldBillingRateSnapshot:
+		m.ResetBillingRateSnapshot()
 		return nil
 	case batchimagejob.FieldCurrency:
 		m.ResetCurrency()
@@ -22832,6 +22886,9 @@ type GroupMutation struct {
 	i18n                                    *domain.GroupI18n
 	rate_multiplier                         *float64
 	addrate_multiplier                      *float64
+	billing_rate_policy                     *domain.BillingRatePolicy
+	billing_policy_version                  *int64
+	addbilling_policy_version               *int64
 	peak_rate_enabled                       *bool
 	peak_start                              *string
 	peak_end                                *string
@@ -22861,6 +22918,7 @@ type GroupMutation struct {
 	addquota_reset_config_version           *int64
 	allow_image_generation                  *bool
 	allow_batch_image_generation            *bool
+	image_count_billing                     *bool
 	image_rate_independent                  *bool
 	image_rate_multiplier                   *float64
 	addimage_rate_multiplier                *float64
@@ -23348,6 +23406,98 @@ func (m *GroupMutation) AddedRateMultiplier() (r float64, exists bool) {
 func (m *GroupMutation) ResetRateMultiplier() {
 	m.rate_multiplier = nil
 	m.addrate_multiplier = nil
+}
+
+// SetBillingRatePolicy sets the "billing_rate_policy" field.
+func (m *GroupMutation) SetBillingRatePolicy(drp domain.BillingRatePolicy) {
+	m.billing_rate_policy = &drp
+}
+
+// BillingRatePolicy returns the value of the "billing_rate_policy" field in the mutation.
+func (m *GroupMutation) BillingRatePolicy() (r domain.BillingRatePolicy, exists bool) {
+	v := m.billing_rate_policy
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBillingRatePolicy returns the old "billing_rate_policy" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldBillingRatePolicy(ctx context.Context) (v domain.BillingRatePolicy, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBillingRatePolicy is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBillingRatePolicy requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBillingRatePolicy: %w", err)
+	}
+	return oldValue.BillingRatePolicy, nil
+}
+
+// ResetBillingRatePolicy resets all changes to the "billing_rate_policy" field.
+func (m *GroupMutation) ResetBillingRatePolicy() {
+	m.billing_rate_policy = nil
+}
+
+// SetBillingPolicyVersion sets the "billing_policy_version" field.
+func (m *GroupMutation) SetBillingPolicyVersion(i int64) {
+	m.billing_policy_version = &i
+	m.addbilling_policy_version = nil
+}
+
+// BillingPolicyVersion returns the value of the "billing_policy_version" field in the mutation.
+func (m *GroupMutation) BillingPolicyVersion() (r int64, exists bool) {
+	v := m.billing_policy_version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBillingPolicyVersion returns the old "billing_policy_version" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldBillingPolicyVersion(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBillingPolicyVersion is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBillingPolicyVersion requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBillingPolicyVersion: %w", err)
+	}
+	return oldValue.BillingPolicyVersion, nil
+}
+
+// AddBillingPolicyVersion adds i to the "billing_policy_version" field.
+func (m *GroupMutation) AddBillingPolicyVersion(i int64) {
+	if m.addbilling_policy_version != nil {
+		*m.addbilling_policy_version += i
+	} else {
+		m.addbilling_policy_version = &i
+	}
+}
+
+// AddedBillingPolicyVersion returns the value that was added to the "billing_policy_version" field in this mutation.
+func (m *GroupMutation) AddedBillingPolicyVersion() (r int64, exists bool) {
+	v := m.addbilling_policy_version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetBillingPolicyVersion resets all changes to the "billing_policy_version" field.
+func (m *GroupMutation) ResetBillingPolicyVersion() {
+	m.billing_policy_version = nil
+	m.addbilling_policy_version = nil
 }
 
 // SetPeakRateEnabled sets the "peak_rate_enabled" field.
@@ -24360,6 +24510,42 @@ func (m *GroupMutation) OldAllowBatchImageGeneration(ctx context.Context) (v boo
 // ResetAllowBatchImageGeneration resets all changes to the "allow_batch_image_generation" field.
 func (m *GroupMutation) ResetAllowBatchImageGeneration() {
 	m.allow_batch_image_generation = nil
+}
+
+// SetImageCountBilling sets the "image_count_billing" field.
+func (m *GroupMutation) SetImageCountBilling(b bool) {
+	m.image_count_billing = &b
+}
+
+// ImageCountBilling returns the value of the "image_count_billing" field in the mutation.
+func (m *GroupMutation) ImageCountBilling() (r bool, exists bool) {
+	v := m.image_count_billing
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldImageCountBilling returns the old "image_count_billing" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldImageCountBilling(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldImageCountBilling is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldImageCountBilling requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldImageCountBilling: %w", err)
+	}
+	return oldValue.ImageCountBilling, nil
+}
+
+// ResetImageCountBilling resets all changes to the "image_count_billing" field.
+func (m *GroupMutation) ResetImageCountBilling() {
+	m.image_count_billing = nil
 }
 
 // SetImageRateIndependent sets the "image_rate_independent" field.
@@ -27027,7 +27213,7 @@ func (m *GroupMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *GroupMutation) Fields() []string {
-	fields := make([]string, 0, 73)
+	fields := make([]string, 0, 76)
 	if m.created_at != nil {
 		fields = append(fields, group.FieldCreatedAt)
 	}
@@ -27048,6 +27234,12 @@ func (m *GroupMutation) Fields() []string {
 	}
 	if m.rate_multiplier != nil {
 		fields = append(fields, group.FieldRateMultiplier)
+	}
+	if m.billing_rate_policy != nil {
+		fields = append(fields, group.FieldBillingRatePolicy)
+	}
+	if m.billing_policy_version != nil {
+		fields = append(fields, group.FieldBillingPolicyVersion)
 	}
 	if m.peak_rate_enabled != nil {
 		fields = append(fields, group.FieldPeakRateEnabled)
@@ -27111,6 +27303,9 @@ func (m *GroupMutation) Fields() []string {
 	}
 	if m.allow_batch_image_generation != nil {
 		fields = append(fields, group.FieldAllowBatchImageGeneration)
+	}
+	if m.image_count_billing != nil {
+		fields = append(fields, group.FieldImageCountBilling)
 	}
 	if m.image_rate_independent != nil {
 		fields = append(fields, group.FieldImageRateIndependent)
@@ -27269,6 +27464,10 @@ func (m *GroupMutation) Field(name string) (ent.Value, bool) {
 		return m.I18n()
 	case group.FieldRateMultiplier:
 		return m.RateMultiplier()
+	case group.FieldBillingRatePolicy:
+		return m.BillingRatePolicy()
+	case group.FieldBillingPolicyVersion:
+		return m.BillingPolicyVersion()
 	case group.FieldPeakRateEnabled:
 		return m.PeakRateEnabled()
 	case group.FieldPeakStart:
@@ -27311,6 +27510,8 @@ func (m *GroupMutation) Field(name string) (ent.Value, bool) {
 		return m.AllowImageGeneration()
 	case group.FieldAllowBatchImageGeneration:
 		return m.AllowBatchImageGeneration()
+	case group.FieldImageCountBilling:
+		return m.ImageCountBilling()
 	case group.FieldImageRateIndependent:
 		return m.ImageRateIndependent()
 	case group.FieldImageRateMultiplier:
@@ -27424,6 +27625,10 @@ func (m *GroupMutation) OldField(ctx context.Context, name string) (ent.Value, e
 		return m.OldI18n(ctx)
 	case group.FieldRateMultiplier:
 		return m.OldRateMultiplier(ctx)
+	case group.FieldBillingRatePolicy:
+		return m.OldBillingRatePolicy(ctx)
+	case group.FieldBillingPolicyVersion:
+		return m.OldBillingPolicyVersion(ctx)
 	case group.FieldPeakRateEnabled:
 		return m.OldPeakRateEnabled(ctx)
 	case group.FieldPeakStart:
@@ -27466,6 +27671,8 @@ func (m *GroupMutation) OldField(ctx context.Context, name string) (ent.Value, e
 		return m.OldAllowImageGeneration(ctx)
 	case group.FieldAllowBatchImageGeneration:
 		return m.OldAllowBatchImageGeneration(ctx)
+	case group.FieldImageCountBilling:
+		return m.OldImageCountBilling(ctx)
 	case group.FieldImageRateIndependent:
 		return m.OldImageRateIndependent(ctx)
 	case group.FieldImageRateMultiplier:
@@ -27614,6 +27821,20 @@ func (m *GroupMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetRateMultiplier(v)
 		return nil
+	case group.FieldBillingRatePolicy:
+		v, ok := value.(domain.BillingRatePolicy)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBillingRatePolicy(v)
+		return nil
+	case group.FieldBillingPolicyVersion:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBillingPolicyVersion(v)
+		return nil
 	case group.FieldPeakRateEnabled:
 		v, ok := value.(bool)
 		if !ok {
@@ -27760,6 +27981,13 @@ func (m *GroupMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetAllowBatchImageGeneration(v)
+		return nil
+	case group.FieldImageCountBilling:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetImageCountBilling(v)
 		return nil
 	case group.FieldImageRateIndependent:
 		v, ok := value.(bool)
@@ -28087,6 +28315,9 @@ func (m *GroupMutation) AddedFields() []string {
 	if m.addrate_multiplier != nil {
 		fields = append(fields, group.FieldRateMultiplier)
 	}
+	if m.addbilling_policy_version != nil {
+		fields = append(fields, group.FieldBillingPolicyVersion)
+	}
 	if m.addpeak_rate_multiplier != nil {
 		fields = append(fields, group.FieldPeakRateMultiplier)
 	}
@@ -28184,6 +28415,8 @@ func (m *GroupMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
 	case group.FieldRateMultiplier:
 		return m.AddedRateMultiplier()
+	case group.FieldBillingPolicyVersion:
+		return m.AddedBillingPolicyVersion()
 	case group.FieldPeakRateMultiplier:
 		return m.AddedPeakRateMultiplier()
 	case group.FieldDailyLimitUsd:
@@ -28257,6 +28490,13 @@ func (m *GroupMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddRateMultiplier(v)
+		return nil
+	case group.FieldBillingPolicyVersion:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddBillingPolicyVersion(v)
 		return nil
 	case group.FieldPeakRateMultiplier:
 		v, ok := value.(float64)
@@ -28662,6 +28902,12 @@ func (m *GroupMutation) ResetField(name string) error {
 	case group.FieldRateMultiplier:
 		m.ResetRateMultiplier()
 		return nil
+	case group.FieldBillingRatePolicy:
+		m.ResetBillingRatePolicy()
+		return nil
+	case group.FieldBillingPolicyVersion:
+		m.ResetBillingPolicyVersion()
+		return nil
 	case group.FieldPeakRateEnabled:
 		m.ResetPeakRateEnabled()
 		return nil
@@ -28724,6 +28970,9 @@ func (m *GroupMutation) ResetField(name string) error {
 		return nil
 	case group.FieldAllowBatchImageGeneration:
 		m.ResetAllowBatchImageGeneration()
+		return nil
+	case group.FieldImageCountBilling:
+		m.ResetImageCountBilling()
 		return nil
 	case group.FieldImageRateIndependent:
 		m.ResetImageRateIndependent()
@@ -31380,67 +31629,70 @@ func (m *PaymentAuditLogMutation) ResetEdge(name string) error {
 // PaymentOrderMutation represents an operation that mutates the PaymentOrder nodes in the graph.
 type PaymentOrderMutation struct {
 	config
-	op                       Op
-	typ                      string
-	id                       *int64
-	user_email               *string
-	user_name                *string
-	user_notes               *string
-	amount                   *float64
-	addamount                *float64
-	pay_amount               *float64
-	addpay_amount            *float64
-	fee_rate                 *float64
-	addfee_rate              *float64
-	bonus_amount             *float64
-	addbonus_amount          *float64
-	recharge_code            *string
-	out_trade_no             *string
-	payment_type             *string
-	payment_trade_no         *string
-	pay_url                  *string
-	qr_code                  *string
-	qr_code_img              *string
-	order_source             *string
-	currency                 *string
-	plan_name                *string
-	redeem_code_id           *int64
-	addredeem_code_id        *int64
-	order_type               *string
-	plan_id                  *int64
-	addplan_id               *int64
-	subscription_group_id    *int64
-	addsubscription_group_id *int64
-	subscription_days        *int
-	addsubscription_days     *int
-	provider_instance_id     *string
-	provider_key             *string
-	provider_snapshot        *map[string]interface{}
-	status                   *string
-	refund_amount            *float64
-	addrefund_amount         *float64
-	refund_reason            *string
-	refund_at                *time.Time
-	force_refund             *bool
-	refund_requested_at      *time.Time
-	refund_request_reason    *string
-	refund_requested_by      *string
-	expires_at               *time.Time
-	paid_at                  *time.Time
-	completed_at             *time.Time
-	failed_at                *time.Time
-	failed_reason            *string
-	client_ip                *string
-	src_host                 *string
-	src_url                  *string
-	created_at               *time.Time
-	updated_at               *time.Time
-	clearedFields            map[string]struct{}
-	user                     *int64
-	cleareduser              bool
-	done                     bool
-	oldValue                 func(context.Context) (*PaymentOrder, error)
-	predicates               []predicate.PaymentOrder
+	op                        Op
+	typ                       string
+	id                        *int64
+	user_email                *string
+	user_name                 *string
+	user_notes                *string
+	amount                    *float64
+	addamount                 *float64
+	pay_amount                *float64
+	addpay_amount             *float64
+	fee_rate                  *float64
+	addfee_rate               *float64
+	bonus_amount              *float64
+	addbonus_amount           *float64
+	recharge_code             *string
+	out_trade_no              *string
+	payment_type              *string
+	payment_trade_no          *string
+	pay_url                   *string
+	qr_code                   *string
+	qr_code_img               *string
+	order_source              *string
+	currency                  *string
+	plan_name                 *string
+	pricing_policy_version    *int64
+	addpricing_policy_version *int64
+	pricing_summary           *map[string]interface{}
+	redeem_code_id            *int64
+	addredeem_code_id         *int64
+	order_type                *string
+	plan_id                   *int64
+	addplan_id                *int64
+	subscription_group_id     *int64
+	addsubscription_group_id  *int64
+	subscription_days         *int
+	addsubscription_days      *int
+	provider_instance_id      *string
+	provider_key              *string
+	provider_snapshot         *map[string]interface{}
+	status                    *string
+	refund_amount             *float64
+	addrefund_amount          *float64
+	refund_reason             *string
+	refund_at                 *time.Time
+	force_refund              *bool
+	refund_requested_at       *time.Time
+	refund_request_reason     *string
+	refund_requested_by       *string
+	expires_at                *time.Time
+	paid_at                   *time.Time
+	completed_at              *time.Time
+	failed_at                 *time.Time
+	failed_reason             *string
+	client_ip                 *string
+	src_host                  *string
+	src_url                   *string
+	created_at                *time.Time
+	updated_at                *time.Time
+	clearedFields             map[string]struct{}
+	user                      *int64
+	cleareduser               bool
+	done                      bool
+	oldValue                  func(context.Context) (*PaymentOrder, error)
+	predicates                []predicate.PaymentOrder
 }
 
 var _ ent.Mutation = (*PaymentOrderMutation)(nil)
@@ -32319,6 +32571,111 @@ func (m *PaymentOrderMutation) OldPlanName(ctx context.Context) (v string, err e
 // ResetPlanName resets all changes to the "plan_name" field.
 func (m *PaymentOrderMutation) ResetPlanName() {
 	m.plan_name = nil
+}
+
+// SetPricingPolicyVersion sets the "pricing_policy_version" field.
+func (m *PaymentOrderMutation) SetPricingPolicyVersion(i int64) {
+	m.pricing_policy_version = &i
+	m.addpricing_policy_version = nil
+}
+
+// PricingPolicyVersion returns the value of the "pricing_policy_version" field in the mutation.
+func (m *PaymentOrderMutation) PricingPolicyVersion() (r int64, exists bool) {
+	v := m.pricing_policy_version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPricingPolicyVersion returns the old "pricing_policy_version" field's value of the PaymentOrder entity.
+// If the PaymentOrder object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PaymentOrderMutation) OldPricingPolicyVersion(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPricingPolicyVersion is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPricingPolicyVersion requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPricingPolicyVersion: %w", err)
+	}
+	return oldValue.PricingPolicyVersion, nil
+}
+
+// AddPricingPolicyVersion adds i to the "pricing_policy_version" field.
+func (m *PaymentOrderMutation) AddPricingPolicyVersion(i int64) {
+	if m.addpricing_policy_version != nil {
+		*m.addpricing_policy_version += i
+	} else {
+		m.addpricing_policy_version = &i
+	}
+}
+
+// AddedPricingPolicyVersion returns the value that was added to the "pricing_policy_version" field in this mutation.
+func (m *PaymentOrderMutation) AddedPricingPolicyVersion() (r int64, exists bool) {
+	v := m.addpricing_policy_version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetPricingPolicyVersion resets all changes to the "pricing_policy_version" field.
+func (m *PaymentOrderMutation) ResetPricingPolicyVersion() {
+	m.pricing_policy_version = nil
+	m.addpricing_policy_version = nil
+}
+
+// SetPricingSummary sets the "pricing_summary" field.
+func (m *PaymentOrderMutation) SetPricingSummary(value map[string]interface{}) {
+	m.pricing_summary = &value
+}
+
+// PricingSummary returns the value of the "pricing_summary" field in the mutation.
+func (m *PaymentOrderMutation) PricingSummary() (r map[string]interface{}, exists bool) {
+	v := m.pricing_summary
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPricingSummary returns the old "pricing_summary" field's value of the PaymentOrder entity.
+// If the PaymentOrder object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PaymentOrderMutation) OldPricingSummary(ctx context.Context) (v map[string]interface{}, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPricingSummary is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPricingSummary requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPricingSummary: %w", err)
+	}
+	return oldValue.PricingSummary, nil
+}
+
+// ClearPricingSummary clears the value of the "pricing_summary" field.
+func (m *PaymentOrderMutation) ClearPricingSummary() {
+	m.pricing_summary = nil
+	m.clearedFields[paymentorder.FieldPricingSummary] = struct{}{}
+}
+
+// PricingSummaryCleared returns if the "pricing_summary" field was cleared in this mutation.
+func (m *PaymentOrderMutation) PricingSummaryCleared() bool {
+	_, ok := m.clearedFields[paymentorder.FieldPricingSummary]
+	return ok
+}
+
+// ResetPricingSummary resets all changes to the "pricing_summary" field.
+func (m *PaymentOrderMutation) ResetPricingSummary() {
+	m.pricing_summary = nil
+	delete(m.clearedFields, paymentorder.FieldPricingSummary)
 }
 
 // SetRedeemCodeID sets the "redeem_code_id" field.
@@ -33643,7 +34000,7 @@ func (m *PaymentOrderMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *PaymentOrderMutation) Fields() []string {
-	fields := make([]string, 0, 44)
+	fields := make([]string, 0, 46)
 	if m.user != nil {
 		fields = append(fields, paymentorder.FieldUserID)
 	}
@@ -33697,6 +34054,12 @@ func (m *PaymentOrderMutation) Fields() []string {
 	}
 	if m.plan_name != nil {
 		fields = append(fields, paymentorder.FieldPlanName)
+	}
+	if m.pricing_policy_version != nil {
+		fields = append(fields, paymentorder.FieldPricingPolicyVersion)
+	}
+	if m.pricing_summary != nil {
+		fields = append(fields, paymentorder.FieldPricingSummary)
 	}
 	if m.redeem_code_id != nil {
 		fields = append(fields, paymentorder.FieldRedeemCodeID)
@@ -33820,6 +34183,10 @@ func (m *PaymentOrderMutation) Field(name string) (ent.Value, bool) {
 		return m.Currency()
 	case paymentorder.FieldPlanName:
 		return m.PlanName()
+	case paymentorder.FieldPricingPolicyVersion:
+		return m.PricingPolicyVersion()
+	case paymentorder.FieldPricingSummary:
+		return m.PricingSummary()
 	case paymentorder.FieldRedeemCodeID:
 		return m.RedeemCodeID()
 	case paymentorder.FieldOrderType:
@@ -33917,6 +34284,10 @@ func (m *PaymentOrderMutation) OldField(ctx context.Context, name string) (ent.V
 		return m.OldCurrency(ctx)
 	case paymentorder.FieldPlanName:
 		return m.OldPlanName(ctx)
+	case paymentorder.FieldPricingPolicyVersion:
+		return m.OldPricingPolicyVersion(ctx)
+	case paymentorder.FieldPricingSummary:
+		return m.OldPricingSummary(ctx)
 	case paymentorder.FieldRedeemCodeID:
 		return m.OldRedeemCodeID(ctx)
 	case paymentorder.FieldOrderType:
@@ -34103,6 +34474,20 @@ func (m *PaymentOrderMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetPlanName(v)
+		return nil
+	case paymentorder.FieldPricingPolicyVersion:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPricingPolicyVersion(v)
+		return nil
+	case paymentorder.FieldPricingSummary:
+		v, ok := value.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPricingSummary(v)
 		return nil
 	case paymentorder.FieldRedeemCodeID:
 		v, ok := value.(int64)
@@ -34306,6 +34691,9 @@ func (m *PaymentOrderMutation) AddedFields() []string {
 	if m.addbonus_amount != nil {
 		fields = append(fields, paymentorder.FieldBonusAmount)
 	}
+	if m.addpricing_policy_version != nil {
+		fields = append(fields, paymentorder.FieldPricingPolicyVersion)
+	}
 	if m.addredeem_code_id != nil {
 		fields = append(fields, paymentorder.FieldRedeemCodeID)
 	}
@@ -34337,6 +34725,8 @@ func (m *PaymentOrderMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedFeeRate()
 	case paymentorder.FieldBonusAmount:
 		return m.AddedBonusAmount()
+	case paymentorder.FieldPricingPolicyVersion:
+		return m.AddedPricingPolicyVersion()
 	case paymentorder.FieldRedeemCodeID:
 		return m.AddedRedeemCodeID()
 	case paymentorder.FieldPlanID:
@@ -34383,6 +34773,13 @@ func (m *PaymentOrderMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddBonusAmount(v)
+		return nil
+	case paymentorder.FieldPricingPolicyVersion:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddPricingPolicyVersion(v)
 		return nil
 	case paymentorder.FieldRedeemCodeID:
 		v, ok := value.(int64)
@@ -34438,6 +34835,9 @@ func (m *PaymentOrderMutation) ClearedFields() []string {
 	}
 	if m.FieldCleared(paymentorder.FieldQrCodeImg) {
 		fields = append(fields, paymentorder.FieldQrCodeImg)
+	}
+	if m.FieldCleared(paymentorder.FieldPricingSummary) {
+		fields = append(fields, paymentorder.FieldPricingSummary)
 	}
 	if m.FieldCleared(paymentorder.FieldRedeemCodeID) {
 		fields = append(fields, paymentorder.FieldRedeemCodeID)
@@ -34515,6 +34915,9 @@ func (m *PaymentOrderMutation) ClearField(name string) error {
 		return nil
 	case paymentorder.FieldQrCodeImg:
 		m.ClearQrCodeImg()
+		return nil
+	case paymentorder.FieldPricingSummary:
+		m.ClearPricingSummary()
 		return nil
 	case paymentorder.FieldRedeemCodeID:
 		m.ClearRedeemCodeID()
@@ -34628,6 +35031,12 @@ func (m *PaymentOrderMutation) ResetField(name string) error {
 		return nil
 	case paymentorder.FieldPlanName:
 		m.ResetPlanName()
+		return nil
+	case paymentorder.FieldPricingPolicyVersion:
+		m.ResetPricingPolicyVersion()
+		return nil
+	case paymentorder.FieldPricingSummary:
+		m.ResetPricingSummary()
 		return nil
 	case paymentorder.FieldRedeemCodeID:
 		m.ResetRedeemCodeID()
@@ -46672,6 +47081,9 @@ type UsageLogMutation struct {
 	addactual_cost                *float64
 	rate_multiplier               *float64
 	addrate_multiplier            *float64
+	billing_policy_version        *int64
+	addbilling_policy_version     *int64
+	billing_rate_snapshot         *map[string]interface{}
 	long_context_billing_applied  *bool
 	account_rate_multiplier       *float64
 	addaccount_rate_multiplier    *float64
@@ -48467,6 +48879,111 @@ func (m *UsageLogMutation) ResetRateMultiplier() {
 	m.addrate_multiplier = nil
 }
 
+// SetBillingPolicyVersion sets the "billing_policy_version" field.
+func (m *UsageLogMutation) SetBillingPolicyVersion(i int64) {
+	m.billing_policy_version = &i
+	m.addbilling_policy_version = nil
+}
+
+// BillingPolicyVersion returns the value of the "billing_policy_version" field in the mutation.
+func (m *UsageLogMutation) BillingPolicyVersion() (r int64, exists bool) {
+	v := m.billing_policy_version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBillingPolicyVersion returns the old "billing_policy_version" field's value of the UsageLog entity.
+// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageLogMutation) OldBillingPolicyVersion(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBillingPolicyVersion is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBillingPolicyVersion requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBillingPolicyVersion: %w", err)
+	}
+	return oldValue.BillingPolicyVersion, nil
+}
+
+// AddBillingPolicyVersion adds i to the "billing_policy_version" field.
+func (m *UsageLogMutation) AddBillingPolicyVersion(i int64) {
+	if m.addbilling_policy_version != nil {
+		*m.addbilling_policy_version += i
+	} else {
+		m.addbilling_policy_version = &i
+	}
+}
+
+// AddedBillingPolicyVersion returns the value that was added to the "billing_policy_version" field in this mutation.
+func (m *UsageLogMutation) AddedBillingPolicyVersion() (r int64, exists bool) {
+	v := m.addbilling_policy_version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetBillingPolicyVersion resets all changes to the "billing_policy_version" field.
+func (m *UsageLogMutation) ResetBillingPolicyVersion() {
+	m.billing_policy_version = nil
+	m.addbilling_policy_version = nil
+}
+
+// SetBillingRateSnapshot sets the "billing_rate_snapshot" field.
+func (m *UsageLogMutation) SetBillingRateSnapshot(value map[string]interface{}) {
+	m.billing_rate_snapshot = &value
+}
+
+// BillingRateSnapshot returns the value of the "billing_rate_snapshot" field in the mutation.
+func (m *UsageLogMutation) BillingRateSnapshot() (r map[string]interface{}, exists bool) {
+	v := m.billing_rate_snapshot
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBillingRateSnapshot returns the old "billing_rate_snapshot" field's value of the UsageLog entity.
+// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageLogMutation) OldBillingRateSnapshot(ctx context.Context) (v map[string]interface{}, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBillingRateSnapshot is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBillingRateSnapshot requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBillingRateSnapshot: %w", err)
+	}
+	return oldValue.BillingRateSnapshot, nil
+}
+
+// ClearBillingRateSnapshot clears the value of the "billing_rate_snapshot" field.
+func (m *UsageLogMutation) ClearBillingRateSnapshot() {
+	m.billing_rate_snapshot = nil
+	m.clearedFields[usagelog.FieldBillingRateSnapshot] = struct{}{}
+}
+
+// BillingRateSnapshotCleared returns if the "billing_rate_snapshot" field was cleared in this mutation.
+func (m *UsageLogMutation) BillingRateSnapshotCleared() bool {
+	_, ok := m.clearedFields[usagelog.FieldBillingRateSnapshot]
+	return ok
+}
+
+// ResetBillingRateSnapshot resets all changes to the "billing_rate_snapshot" field.
+func (m *UsageLogMutation) ResetBillingRateSnapshot() {
+	m.billing_rate_snapshot = nil
+	delete(m.clearedFields, usagelog.FieldBillingRateSnapshot)
+}
+
 // SetLongContextBillingApplied sets the "long_context_billing_applied" field.
 func (m *UsageLogMutation) SetLongContextBillingApplied(b bool) {
 	m.long_context_billing_applied = &b
@@ -50056,7 +50573,7 @@ func (m *UsageLogMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UsageLogMutation) Fields() []string {
-	fields := make([]string, 0, 59)
+	fields := make([]string, 0, 61)
 	if m.user != nil {
 		fields = append(fields, usagelog.FieldUserID)
 	}
@@ -50152,6 +50669,12 @@ func (m *UsageLogMutation) Fields() []string {
 	}
 	if m.rate_multiplier != nil {
 		fields = append(fields, usagelog.FieldRateMultiplier)
+	}
+	if m.billing_policy_version != nil {
+		fields = append(fields, usagelog.FieldBillingPolicyVersion)
+	}
+	if m.billing_rate_snapshot != nil {
+		fields = append(fields, usagelog.FieldBillingRateSnapshot)
 	}
 	if m.long_context_billing_applied != nil {
 		fields = append(fields, usagelog.FieldLongContextBillingApplied)
@@ -50306,6 +50829,10 @@ func (m *UsageLogMutation) Field(name string) (ent.Value, bool) {
 		return m.ActualCost()
 	case usagelog.FieldRateMultiplier:
 		return m.RateMultiplier()
+	case usagelog.FieldBillingPolicyVersion:
+		return m.BillingPolicyVersion()
+	case usagelog.FieldBillingRateSnapshot:
+		return m.BillingRateSnapshot()
 	case usagelog.FieldLongContextBillingApplied:
 		return m.LongContextBillingApplied()
 	case usagelog.FieldAccountRateMultiplier:
@@ -50433,6 +50960,10 @@ func (m *UsageLogMutation) OldField(ctx context.Context, name string) (ent.Value
 		return m.OldActualCost(ctx)
 	case usagelog.FieldRateMultiplier:
 		return m.OldRateMultiplier(ctx)
+	case usagelog.FieldBillingPolicyVersion:
+		return m.OldBillingPolicyVersion(ctx)
+	case usagelog.FieldBillingRateSnapshot:
+		return m.OldBillingRateSnapshot(ctx)
 	case usagelog.FieldLongContextBillingApplied:
 		return m.OldLongContextBillingApplied(ctx)
 	case usagelog.FieldAccountRateMultiplier:
@@ -50720,6 +51251,20 @@ func (m *UsageLogMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetRateMultiplier(v)
 		return nil
+	case usagelog.FieldBillingPolicyVersion:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBillingPolicyVersion(v)
+		return nil
+	case usagelog.FieldBillingRateSnapshot:
+		v, ok := value.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBillingRateSnapshot(v)
+		return nil
 	case usagelog.FieldLongContextBillingApplied:
 		v, ok := value.(bool)
 		if !ok {
@@ -50965,6 +51510,9 @@ func (m *UsageLogMutation) AddedFields() []string {
 	if m.addrate_multiplier != nil {
 		fields = append(fields, usagelog.FieldRateMultiplier)
 	}
+	if m.addbilling_policy_version != nil {
+		fields = append(fields, usagelog.FieldBillingPolicyVersion)
+	}
 	if m.addaccount_rate_multiplier != nil {
 		fields = append(fields, usagelog.FieldAccountRateMultiplier)
 	}
@@ -51038,6 +51586,8 @@ func (m *UsageLogMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedActualCost()
 	case usagelog.FieldRateMultiplier:
 		return m.AddedRateMultiplier()
+	case usagelog.FieldBillingPolicyVersion:
+		return m.AddedBillingPolicyVersion()
 	case usagelog.FieldAccountRateMultiplier:
 		return m.AddedAccountRateMultiplier()
 	case usagelog.FieldBillingType:
@@ -51181,6 +51731,13 @@ func (m *UsageLogMutation) AddField(name string, value ent.Value) error {
 		}
 		m.AddRateMultiplier(v)
 		return nil
+	case usagelog.FieldBillingPolicyVersion:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddBillingPolicyVersion(v)
+		return nil
 	case usagelog.FieldAccountRateMultiplier:
 		v, ok := value.(float64)
 		if !ok {
@@ -51305,6 +51862,9 @@ func (m *UsageLogMutation) ClearedFields() []string {
 	if m.FieldCleared(usagelog.FieldCodexRolloutBudgetUnits) {
 		fields = append(fields, usagelog.FieldCodexRolloutBudgetUnits)
 	}
+	if m.FieldCleared(usagelog.FieldBillingRateSnapshot) {
+		fields = append(fields, usagelog.FieldBillingRateSnapshot)
+	}
 	if m.FieldCleared(usagelog.FieldAccountRateMultiplier) {
 		fields = append(fields, usagelog.FieldAccountRateMultiplier)
 	}
@@ -51408,6 +51968,9 @@ func (m *UsageLogMutation) ClearField(name string) error {
 		return nil
 	case usagelog.FieldCodexRolloutBudgetUnits:
 		m.ClearCodexRolloutBudgetUnits()
+		return nil
+	case usagelog.FieldBillingRateSnapshot:
+		m.ClearBillingRateSnapshot()
 		return nil
 	case usagelog.FieldAccountRateMultiplier:
 		m.ClearAccountRateMultiplier()
@@ -51563,6 +52126,12 @@ func (m *UsageLogMutation) ResetField(name string) error {
 		return nil
 	case usagelog.FieldRateMultiplier:
 		m.ResetRateMultiplier()
+		return nil
+	case usagelog.FieldBillingPolicyVersion:
+		m.ResetBillingPolicyVersion()
+		return nil
+	case usagelog.FieldBillingRateSnapshot:
+		m.ResetBillingRateSnapshot()
 		return nil
 	case usagelog.FieldLongContextBillingApplied:
 		m.ResetLongContextBillingApplied()

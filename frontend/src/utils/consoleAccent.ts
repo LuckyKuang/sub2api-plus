@@ -21,3 +21,24 @@ export function consoleAccentPalette(value: unknown): Record<string, string> {
     )).join(' ')
   ]))
 }
+
+export function consolePrimaryColors(value: unknown, options: { alpha?: number; dark?: boolean } = {}): { foreground: string; end: string } {
+  const palette = consoleAccentPalette(value)
+  const alpha = Number.isFinite(options.alpha) ? Math.max(0, Math.min(1, options.alpha!)) : 1
+  // Match the theme's --surface-solid channels. The text itself stays opaque;
+  // interpolating black/white text with the surface text can erase contrast at
+  // intermediate alpha, even when both fully opaque endpoints are readable.
+  const surface = options.dark ? [38, 44, 45] : [248, 250, 249]
+  // WCAG relative luminance: select the higher-contrast black/white foreground
+  // after compositing the accent over the theme surface, then move the other
+  // gradient stop away from that foreground at the same alpha.
+  const [red, green, blue] = palette[500]!.split(' ').map((channel, index) => {
+    const srgb = (Number(channel) * alpha + surface[index]! * (1 - alpha)) / 255
+    return srgb <= .04045 ? srgb / 12.92 : ((srgb + .055) / 1.055) ** 2.4
+  })
+  const luminance = .2126 * red! + .7152 * green! + .0722 * blue!
+  const blackContrast = (luminance + .05) / .05
+  const whiteContrast = 1.05 / (luminance + .05)
+  const blackText = blackContrast >= whiteContrast
+  return { foreground: blackText ? '#000000' : '#ffffff', end: palette[blackText ? 400 : 600]! }
+}

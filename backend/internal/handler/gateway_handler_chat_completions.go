@@ -134,7 +134,7 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 
 	service.SetOpsLatencyMs(c, service.OpsAuthLatencyMsKey, time.Since(requestStart).Milliseconds())
 
-	userReleaseFunc, err := h.concurrencyHelper.AcquireUserSlotWithWait(c, subject.UserID, subject.Concurrency, reqStream, &streamStarted)
+	userReleaseFunc, err := h.concurrencyHelper.AcquireUserSlot(c, subject.UserID, subject.Concurrency)
 	if err != nil {
 		reqLog.Warn("gateway.cc.user_slot_acquire_failed", zap.Error(err))
 		h.handleConcurrencyError(c, err, "user", streamStarted)
@@ -155,7 +155,7 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 	}
 
 	// 余额模式在途预留：防止并发请求在预检时看到同一份余额而集体透支。
-	inflightRelease, err := reserveInflightBalance(c, h.billingCacheService, h.gatewayService, apiKey, subscription, tokenInflightEstimate(reqModel, body))
+	inflightRelease, err := reserveInflightBalance(c, h.billingCacheService, h.gatewayService, apiKey, subscription, tokenInflightEstimate(service.ContentModerationProtocolOpenAIChat, reqModel, body))
 	if err != nil {
 		reqLog.Info("gateway.cc.inflight_reservation_rejected", zap.Error(err))
 		status, code, message, retryAfter := billingErrorDetails(err)
@@ -240,11 +240,10 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 				h.chatCompletionsErrorResponse(c, http.StatusServiceUnavailable, "api_error", "No available accounts")
 				return
 			}
-			accountReleaseFunc, err = h.concurrencyHelper.AcquireAccountSlotWithWaitTimeout(
+			accountReleaseFunc, err = h.concurrencyHelper.AcquireAccountSlotForWaitPlan(
 				c,
 				account.ID,
-				selection.WaitPlan.MaxConcurrency,
-				selection.WaitPlan.Timeout,
+				selection.WaitPlan,
 				reqStream,
 				&streamStarted,
 			)
@@ -271,6 +270,17 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 		}
 		account = latest
 		selection.Account = latest
+		if err := ensureAccountInflightReservation(c, account); err != nil {
+			if accountReleaseFunc != nil {
+				accountReleaseFunc()
+			}
+			h.gatewayService.ReleaseAccountSession(context.Background(), account, selectionSessionHash)
+			reqLog.Info("gateway.cc.account_inflight_reservation_rejected", zap.Int64("account_id", account.ID), zap.Error(err))
+			status, code, message, retryAfter := billingErrorDetails(err)
+			applyBillingQuotaHeaders(c, err, retryAfter)
+			h.chatCompletionsErrorResponse(c, status, code, message)
+			return
+		}
 		if selection.ProfitGateActive() {
 			if err := h.gatewayService.BindStickySessionAfterProfitAdmission(admissionCtx, apiKey.GroupID, selectionSessionHash, account.ID); err != nil {
 				reqLog.Warn("gateway.cc.bind_sticky_session_after_profit_admission_failed", zap.Int64("account_id", account.ID), zap.Error(err))
@@ -371,6 +381,7 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 		isComplete := err == nil && result.UsageComplete()
 		h.submitUsageRecordTask(c.Request.Context(), func(ctx context.Context) {
 			if err := h.gatewayService.RecordUsage(ctx, &service.RecordUsageInput{
+				PricingSnapshot:    service.BillingPricingSnapshotFromContext(ctx),
 				Result:             result,
 				QuotaPlatform:      quotaPlatform,
 				APIKey:             apiKey,
@@ -425,6 +436,12 @@ func (h *GatewayHandler) handleCCFailoverExhausted(c *gin.Context, lastErr *serv
 		status := lastErr.ClientStatusCode
 		if status <= 0 {
 			status = http.StatusServiceUnavailable
+		}
+		if service.IsOpenAIPolicyCapacityUnavailable(lastErr.ResponseBody) {
+			c.JSON(status, gin.H{"error": gin.H{
+				"type": "service_unavailable_error", "code": "policy_capacity_unavailable", "message": lastErr.ClientMessage,
+			}})
+			return
 		}
 		h.chatCompletionsErrorResponse(c, status, "server_error", lastErr.ClientMessage)
 		return

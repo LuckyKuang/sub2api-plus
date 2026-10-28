@@ -14,13 +14,13 @@
         <div ref="dialogRef" tabindex="-1" :class="['modal-content', placement === 'right' ? 'detail-dialog' : widthClasses]" @click.stop>
           <!-- Header -->
           <div class="modal-header">
-            <h3 :id="dialogId" class="modal-title">
+            <h3 :id="dialogId" ref="titleRef" class="modal-title" :tabindex="titleOverflows ? 0 : undefined">
               {{ title }}
             </h3>
             <button
               v-if="showCloseButton"
               @click="emit('close')"
-              class="-mr-2 rounded-xl p-2 transition-colors hover:surface-hover hover:text-gray-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/30 focus-visible:ring-offset-2 dark:hover:text-dark-300 dark:focus-visible:ring-offset-dark-900 surface-control surface-muted"
+              class="-mr-2 shrink-0 rounded-xl p-2 transition-colors hover:surface-hover hover:text-gray-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/30 focus-visible:ring-offset-2 dark:hover:text-dark-300 dark:focus-visible:ring-offset-dark-900 surface-control surface-muted"
               aria-label="Close modal"
             >
               <Icon name="x" size="md" />
@@ -48,6 +48,7 @@ let dialogIdCounter = 0
 
 <script setup lang="ts">
 import { computed, watch, ref, nextTick } from 'vue'
+import { useResizeObserver } from '@vueuse/core'
 import { useDialogFocus } from '@/composables/useDialogFocus'
 import Icon from '@/components/icons/Icon.vue'
 
@@ -57,6 +58,15 @@ const dialogId = `modal-title-${++dialogIdCounter}`
 // 焦点管理
 const dialogRef = ref<HTMLElement | null>(null)
 const modalBodyRef = ref<HTMLElement | null>(null)
+const titleRef = ref<HTMLElement | null>(null)
+const titleOverflows = ref(false)
+
+function updateTitleOverflow() {
+  const title = titleRef.value
+  titleOverflows.value = !!title && title.scrollHeight > title.clientHeight + 1
+}
+
+useResizeObserver(titleRef, updateTitleOverflow)
 
 type DialogWidth = 'narrow' | 'normal' | 'wide' | 'extra-wide' | 'full'
 
@@ -116,4 +126,19 @@ watch(() => props.show, async show => {
   await nextTick()
   if (modalBodyRef.value) modalBodyRef.value.scrollTop = 0
 }, { immediate: true })
+
+watch(() => [props.show, props.title], async () => {
+  await nextTick()
+  updateTitleOverflow()
+}, { immediate: true })
 </script>
+
+<style scoped>
+/* Exceptionally long titles scroll on their own so the close button, form
+   body and footer retain usable space even in short windows. */
+.modal-title {
+  max-height: 30dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+</style>

@@ -396,7 +396,7 @@ func TestOpenAIQuotaTokenOwnerRejectsRelinkBeforeAdoptionOrRefresh(t *testing.T)
 			t.Run(operation+"/"+phase, func(t *testing.T) {
 				tc := quotaProxyOwnerCase{provider: PlatformOpenAI, operation: operation, ownerKind: "oauth"}
 				repo, owner, requestID := tc.fixture(t)
-				owner.Credentials["user_agent"] = "codex_cli_rs/0.164.0 (Ubuntu 24.04; aarch64) xterm-256color"
+				owner.Credentials["user_agent"] = "codex_cli_rs/0.165.0 (Ubuntu 24.04; aarch64) xterm-256color"
 				owner.Credentials["_token_version"] = int64(1)
 				if phase != "cache-version-relink" && phase != "cache-hit-replacement-token" && phase != "same-owner-cache-positive" {
 					owner.Credentials["expires_at"] = time.Now().Add(time.Minute).UTC().Format(time.RFC3339)
@@ -458,7 +458,7 @@ func TestOpenAIQuotaTokenOwnerRejectsRelinkBeforeAdoptionOrRefresh(t *testing.T)
 					for _, call := range calls {
 						require.Equal(t, bearer, call.request.Header.Get("Authorization"))
 						require.Equal(t, "quota-owner-account", call.request.Header.Get("Chatgpt-Account-Id"))
-						require.Equal(t, "codex_cli_rs/0.164.0 (Ubuntu 24.04; aarch64) xterm-256color", call.request.UserAgent())
+						require.Equal(t, "codex_cli_rs/0.165.0 (Ubuntu 24.04; aarch64) xterm-256color", call.request.UserAgent())
 						require.Equal(t, "http://captured-user:captured-password@captured.proxy.example:8080", call.route)
 					}
 					if phase == "same-owner-rotation" {
@@ -490,7 +490,7 @@ func TestOpenAIQuotaCapturesRouteBeforeTokenLookup(t *testing.T) {
 		t.Run(operation, func(t *testing.T) {
 			tc := quotaProxyOwnerCase{provider: PlatformOpenAI, operation: operation, ownerKind: "oauth"}
 			repo, owner, requestID := tc.fixture(t)
-			owner.Credentials["user_agent"] = "codex_cli_rs/0.164.0 (Ubuntu 24.04; aarch64) xterm-256color"
+			owner.Credentials["user_agent"] = "codex_cli_rs/0.165.0 (Ubuntu 24.04; aarch64) xterm-256color"
 			cache := &quotaProxyOwnerTokenCache{onRead: func() {
 				owner.Proxy.Host = "edited-during-token.proxy.example"
 				owner.Proxy.Password = "replacement-password"
@@ -510,7 +510,7 @@ func TestOpenAIQuotaCapturesRouteBeforeTokenLookup(t *testing.T) {
 			for _, call := range calls {
 				require.Equal(t, "http://captured-user:captured-password@captured.proxy.example:8080", call.route,
 					"a later proxy edit cannot replace the route already captured for this credential operation")
-				require.Equal(t, "codex_cli_rs/0.164.0 (Ubuntu 24.04; aarch64) xterm-256color", call.request.UserAgent(),
+				require.Equal(t, "codex_cli_rs/0.165.0 (Ubuntu 24.04; aarch64) xterm-256color", call.request.UserAgent(),
 					"a later identity edit cannot accompany an earlier owner's bearer and route")
 				require.Empty(t, call.request.Header.Get("Originator"))
 				require.Empty(t, call.request.Header.Get("Version"))
@@ -525,7 +525,7 @@ func TestOpenAIQuotaCredentialOwnerSnapshotDoesNotAdoptReplacementAgent(t *testi
 		t.Run(operation, func(t *testing.T) {
 			tc := quotaProxyOwnerCase{provider: PlatformOpenAI, operation: operation, ownerKind: "oauth"}
 			repo, owner, requestID := tc.fixture(t)
-			owner.Credentials["user_agent"] = "codex_cli_rs/0.164.0 (Ubuntu 24.04; aarch64) xterm-256color"
+			owner.Credentials["user_agent"] = "codex_cli_rs/0.165.0 (Ubuntu 24.04; aarch64) xterm-256color"
 			agentCase := quotaProxyOwnerCase{provider: PlatformOpenAI, ownerKind: "agent"}
 			_, replacement, _ := agentCase.fixture(t)
 			replacement.Credentials["chatgpt_account_id"] = "replacement-agent-account"
@@ -547,7 +547,7 @@ func TestOpenAIQuotaCredentialOwnerSnapshotDoesNotAdoptReplacementAgent(t *testi
 			for _, call := range calls {
 				require.Equal(t, "Bearer quota-owner-access", call.request.Header.Get("Authorization"), "an OAuth operation cannot switch to a replacement login's AgentAssertion")
 				require.Equal(t, "quota-owner-account", call.request.Header.Get("Chatgpt-Account-Id"))
-				require.Equal(t, "codex_cli_rs/0.164.0 (Ubuntu 24.04; aarch64) xterm-256color", call.request.UserAgent())
+				require.Equal(t, "codex_cli_rs/0.165.0 (Ubuntu 24.04; aarch64) xterm-256color", call.request.UserAgent())
 			}
 		})
 	}
@@ -558,7 +558,7 @@ func TestOpenAIQuotaCredentialOwnerSnapshotKeepsCapturedAgentAssertion(t *testin
 		t.Run(operation, func(t *testing.T) {
 			tc := quotaProxyOwnerCase{provider: PlatformOpenAI, operation: operation, ownerKind: "agent"}
 			repo, owner, requestID := tc.fixture(t)
-			owner.Credentials["user_agent"] = "codex_cli_rs/0.164.0 (Ubuntu 24.04; aarch64) xterm-256color"
+			owner.Credentials["user_agent"] = "codex_cli_rs/0.165.0 (Ubuntu 24.04; aarch64) xterm-256color"
 			wire := &quotaProxyOwnerWire{onFactory: func() {
 				owner.Credentials = map[string]any{"access_token": "replacement-oauth-access", "chatgpt_account_id": "replacement-oauth-account", "user_agent": "codex-tui/0.158.0 (Mac OS X 14.0; arm64) iTerm"}
 			}}
@@ -576,7 +576,7 @@ func TestOpenAIQuotaCredentialOwnerSnapshotKeepsCapturedAgentAssertion(t *testin
 				require.True(t, strings.HasPrefix(call.request.Header.Get("Authorization"), "AgentAssertion "))
 				require.Equal(t, "quota-owner-task", decodeAgentAssertionTask(t, call.request.Header.Get("Authorization")))
 				require.Equal(t, "quota-owner-account", call.request.Header.Get("Chatgpt-Account-Id"))
-				require.Equal(t, "codex_cli_rs/0.164.0 (Ubuntu 24.04; aarch64) xterm-256color", call.request.UserAgent())
+				require.Equal(t, "codex_cli_rs/0.165.0 (Ubuntu 24.04; aarch64) xterm-256color", call.request.UserAgent())
 			}
 		})
 	}

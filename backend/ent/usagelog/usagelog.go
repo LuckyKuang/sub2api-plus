@@ -78,6 +78,10 @@ const (
 	FieldActualCost = "actual_cost"
 	// FieldRateMultiplier holds the string denoting the rate_multiplier field in the database.
 	FieldRateMultiplier = "rate_multiplier"
+	// FieldBillingPolicyVersion holds the string denoting the billing_policy_version field in the database.
+	FieldBillingPolicyVersion = "billing_policy_version"
+	// FieldBillingRateSnapshot holds the string denoting the billing_rate_snapshot field in the database.
+	FieldBillingRateSnapshot = "billing_rate_snapshot"
 	// FieldLongContextBillingApplied holds the string denoting the long_context_billing_applied field in the database.
 	FieldLongContextBillingApplied = "long_context_billing_applied"
 	// FieldAccountRateMultiplier holds the string denoting the account_rate_multiplier field in the database.
@@ -216,6 +220,8 @@ var Columns = []string{
 	FieldTotalCost,
 	FieldActualCost,
 	FieldRateMultiplier,
+	FieldBillingPolicyVersion,
+	FieldBillingRateSnapshot,
 	FieldLongContextBillingApplied,
 	FieldAccountRateMultiplier,
 	FieldBillingType,
@@ -304,6 +310,8 @@ var (
 	DefaultActualCost float64
 	// DefaultRateMultiplier holds the default value on creation for the "rate_multiplier" field.
 	DefaultRateMultiplier float64
+	// DefaultBillingPolicyVersion holds the default value on creation for the "billing_policy_version" field.
+	DefaultBillingPolicyVersion int64
 	// DefaultLongContextBillingApplied holds the default value on creation for the "long_context_billing_applied" field.
 	DefaultLongContextBillingApplied bool
 	// DefaultBillingType holds the default value on creation for the "billing_type" field.
@@ -514,6 +522,11 @@ func ByActualCost(opts ...sql.OrderTermOption) OrderOption {
 // ByRateMultiplier orders the results by the rate_multiplier field.
 func ByRateMultiplier(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldRateMultiplier, opts...).ToFunc()
+}
+
+// ByBillingPolicyVersion orders the results by the billing_policy_version field.
+func ByBillingPolicyVersion(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldBillingPolicyVersion, opts...).ToFunc()
 }
 
 // ByLongContextBillingApplied orders the results by the long_context_billing_applied field.

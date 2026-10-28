@@ -48,6 +48,46 @@ func TestLoadMinOutputTokensFromEnv(t *testing.T) {
 	require.Equal(t, 16, cfg.Gateway.MinOutputTokens)
 }
 
+func TestLoadGeminiSameAccountRetries(t *testing.T) {
+	resetViperWithJWTSecret(t)
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.Equal(t, 4, cfg.Gateway.MaxSameAccountRetriesGemini)
+
+	resetViperWithJWTSecret(t)
+	t.Setenv("GATEWAY_MAX_SAME_ACCOUNT_RETRIES_GEMINI", "0")
+	cfg, err = Load()
+	require.NoError(t, err)
+	require.Zero(t, cfg.Gateway.MaxSameAccountRetriesGemini)
+}
+
+func TestLoadGeminiSameAccountRetriesYAMLAndEnvPrecedence(t *testing.T) {
+	// Operator contract: YAML accepts the whole 0-10 range, and an explicit
+	// environment zero disables retries even when YAML sets a positive value.
+	for _, tc := range []struct {
+		name string
+		yaml string
+		env  string
+		want int
+	}{
+		{name: "yaml zero", yaml: "0", want: 0},
+		{name: "yaml maximum", yaml: "10", want: 10},
+		{name: "environment zero overrides yaml", yaml: "10", env: "0", want: 0},
+		{name: "environment maximum overrides yaml", yaml: "1", env: "10", want: 10},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resetViperWithJWTSecret(t)
+			path := filepath.Join(t.TempDir(), "config.yaml")
+			require.NoError(t, os.WriteFile(path, []byte("gateway:\n  max_same_account_retries_gemini: "+tc.yaml+"\n"), 0o600))
+			t.Setenv("CONFIG_FILE", path)
+			t.Setenv("GATEWAY_MAX_SAME_ACCOUNT_RETRIES_GEMINI", tc.env)
+			cfg, err := Load()
+			require.NoError(t, err)
+			require.Equal(t, tc.want, cfg.Gateway.MaxSameAccountRetriesGemini)
+		})
+	}
+}
+
 func TestValidateMinOutputTokensMinimum(t *testing.T) {
 	resetViperWithJWTSecret(t)
 	cfg, err := Load()
@@ -1954,6 +1994,16 @@ func TestValidateConfigErrors(t *testing.T) {
 			name:    "gateway openai response header timeout",
 			mutate:  func(c *Config) { c.Gateway.OpenAIResponseHeaderTimeout = -1 },
 			wantErr: "gateway.openai_response_header_timeout",
+		},
+		{
+			name:    "gateway gemini same account retries negative",
+			mutate:  func(c *Config) { c.Gateway.MaxSameAccountRetriesGemini = -1 },
+			wantErr: "gateway.max_same_account_retries_gemini",
+		},
+		{
+			name:    "gateway gemini same account retries too large",
+			mutate:  func(c *Config) { c.Gateway.MaxSameAccountRetriesGemini = 11 },
+			wantErr: "gateway.max_same_account_retries_gemini",
 		},
 		{
 			name:    "gateway openai first output timeout below minimum",

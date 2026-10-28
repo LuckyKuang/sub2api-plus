@@ -30,6 +30,10 @@ const (
 	FieldI18n = "i18n"
 	// FieldRateMultiplier holds the string denoting the rate_multiplier field in the database.
 	FieldRateMultiplier = "rate_multiplier"
+	// FieldBillingRatePolicy holds the string denoting the billing_rate_policy field in the database.
+	FieldBillingRatePolicy = "billing_rate_policy"
+	// FieldBillingPolicyVersion holds the string denoting the billing_policy_version field in the database.
+	FieldBillingPolicyVersion = "billing_policy_version"
 	// FieldPeakRateEnabled holds the string denoting the peak_rate_enabled field in the database.
 	FieldPeakRateEnabled = "peak_rate_enabled"
 	// FieldPeakStart holds the string denoting the peak_start field in the database.
@@ -72,6 +76,8 @@ const (
 	FieldAllowImageGeneration = "allow_image_generation"
 	// FieldAllowBatchImageGeneration holds the string denoting the allow_batch_image_generation field in the database.
 	FieldAllowBatchImageGeneration = "allow_batch_image_generation"
+	// FieldImageCountBilling holds the string denoting the image_count_billing field in the database.
+	FieldImageCountBilling = "image_count_billing"
 	// FieldImageRateIndependent holds the string denoting the image_rate_independent field in the database.
 	FieldImageRateIndependent = "image_rate_independent"
 	// FieldImageRateMultiplier holds the string denoting the image_rate_multiplier field in the database.
@@ -244,6 +250,8 @@ var Columns = []string{
 	FieldDescription,
 	FieldI18n,
 	FieldRateMultiplier,
+	FieldBillingRatePolicy,
+	FieldBillingPolicyVersion,
 	FieldPeakRateEnabled,
 	FieldPeakStart,
 	FieldPeakEnd,
@@ -265,6 +273,7 @@ var Columns = []string{
 	FieldQuotaResetConfigVersion,
 	FieldAllowImageGeneration,
 	FieldAllowBatchImageGeneration,
+	FieldImageCountBilling,
 	FieldImageRateIndependent,
 	FieldImageRateMultiplier,
 	FieldImagePrice1k,
@@ -351,6 +360,10 @@ var (
 	DefaultI18n domain.GroupI18n
 	// DefaultRateMultiplier holds the default value on creation for the "rate_multiplier" field.
 	DefaultRateMultiplier float64
+	// DefaultBillingRatePolicy holds the default value on creation for the "billing_rate_policy" field.
+	DefaultBillingRatePolicy domain.BillingRatePolicy
+	// DefaultBillingPolicyVersion holds the default value on creation for the "billing_policy_version" field.
+	DefaultBillingPolicyVersion int64
 	// DefaultPeakRateEnabled holds the default value on creation for the "peak_rate_enabled" field.
 	DefaultPeakRateEnabled bool
 	// DefaultPeakStart holds the default value on creation for the "peak_start" field.
@@ -393,6 +406,8 @@ var (
 	DefaultAllowImageGeneration bool
 	// DefaultAllowBatchImageGeneration holds the default value on creation for the "allow_batch_image_generation" field.
 	DefaultAllowBatchImageGeneration bool
+	// DefaultImageCountBilling holds the default value on creation for the "image_count_billing" field.
+	DefaultImageCountBilling bool
 	// DefaultImageRateIndependent holds the default value on creation for the "image_rate_independent" field.
 	DefaultImageRateIndependent bool
 	// DefaultImageRateMultiplier holds the default value on creation for the "image_rate_multiplier" field.
@@ -505,6 +520,11 @@ func ByRateMultiplier(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldRateMultiplier, opts...).ToFunc()
 }
 
+// ByBillingPolicyVersion orders the results by the billing_policy_version field.
+func ByBillingPolicyVersion(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldBillingPolicyVersion, opts...).ToFunc()
+}
+
 // ByPeakRateEnabled orders the results by the peak_rate_enabled field.
 func ByPeakRateEnabled(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldPeakRateEnabled, opts...).ToFunc()
@@ -608,6 +628,11 @@ func ByAllowImageGeneration(opts ...sql.OrderTermOption) OrderOption {
 // ByAllowBatchImageGeneration orders the results by the allow_batch_image_generation field.
 func ByAllowBatchImageGeneration(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldAllowBatchImageGeneration, opts...).ToFunc()
+}
+
+// ByImageCountBilling orders the results by the image_count_billing field.
+func ByImageCountBilling(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldImageCountBilling, opts...).ToFunc()
 }
 
 // ByImageRateIndependent orders the results by the image_rate_independent field.

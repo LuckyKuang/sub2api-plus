@@ -201,7 +201,7 @@ func TestRefreshOpenAIWSTurnBillingAPIKey(t *testing.T) {
 		ID:      5,
 		Key:     "sk-conn",
 		GroupID: &groupID,
-		User:    &service.User{ID: 9},
+		User:    &service.User{ID: 9, Balance: 12, RPMLimit: 100},
 		Group:   &service.Group{ID: groupID, Platform: service.PlatformOpenAI, SubscriptionType: service.SubscriptionTypeStandard, RateMultiplier: 3},
 	}
 	latestWith := func(mutate func(k *service.APIKey)) *service.APIKey {
@@ -219,14 +219,26 @@ func TestRefreshOpenAIWSTurnBillingAPIKey(t *testing.T) {
 		return k
 	}
 
-	t.Run("same group adopts the latest group and nothing else", func(t *testing.T) {
+	t.Run("same group adopts the latest group and RPM policy", func(t *testing.T) {
+		override := 4
+		latest := latestWith(func(k *service.APIKey) {
+			k.User.RPMLimit = 8
+			k.User.UserGroupRPMOverride = &override
+		})
 		got := refreshOpenAIWSTurnBillingAPIKey(context.Background(), wsTurnAPIKeyLookupFunc(func(ctx context.Context, key string) (*service.APIKey, error) {
 			require.Equal(t, "sk-conn", key)
-			return latestWith(nil), nil
+			return latest, nil
 		}), conn)
 		require.NotSame(t, conn, got)
 		require.InDelta(t, 0.3, got.Group.RateMultiplier, 1e-12)
-		require.Same(t, conn.User, got.User, "only the group snapshot is refreshed")
+		require.NotSame(t, conn.User, got.User)
+		require.Equal(t, 8, got.User.RPMLimit)
+		require.Equal(t, 4, *got.User.UserGroupRPMOverride)
+		require.InDelta(t, 12, got.User.Balance, 1e-12, "unrelated accepted monetary policy remains at the connection snapshot")
+		require.Equal(t, 100, conn.User.RPMLimit, "refresh cannot mutate the connection or previous turn")
+		require.Nil(t, conn.User.UserGroupRPMOverride)
+		override = 99
+		require.Equal(t, 4, *got.User.UserGroupRPMOverride, "a turn freezes its own override value")
 		require.Equal(t, conn.ID, got.ID)
 		require.InDelta(t, 3.0, conn.Group.RateMultiplier, 1e-12, "the connection snapshot is never mutated")
 	})
@@ -242,17 +254,14 @@ func TestRefreshOpenAIWSTurnBillingAPIKey(t *testing.T) {
 		"different key id": func(ctx context.Context, key string) (*service.APIKey, error) {
 			return latestWith(func(k *service.APIKey) { k.ID = 6 }), nil
 		},
-		"moved group": func(ctx context.Context, key string) (*service.APIKey, error) {
-			return latestWith(func(k *service.APIKey) { other := int64(78); k.GroupID = &other; k.Group.ID = other }), nil
+		"different user": func(ctx context.Context, key string) (*service.APIKey, error) {
+			return latestWith(func(k *service.APIKey) { k.User.ID = 10 }), nil
 		},
-		"no group": func(ctx context.Context, key string) (*service.APIKey, error) {
-			return latestWith(func(k *service.APIKey) { k.Group = nil }), nil
+		"different key owner": func(ctx context.Context, key string) (*service.APIKey, error) {
+			return latestWith(func(k *service.APIKey) { k.UserID = 10 }), nil
 		},
-		"platform changed": func(ctx context.Context, key string) (*service.APIKey, error) {
-			return latestWith(func(k *service.APIKey) { k.Group.Platform = service.PlatformAnthropic }), nil
-		},
-		"billing type changed": func(ctx context.Context, key string) (*service.APIKey, error) {
-			return latestWith(func(k *service.APIKey) { k.Group.SubscriptionType = service.SubscriptionTypeSubscription }), nil
+		"missing user": func(ctx context.Context, key string) (*service.APIKey, error) {
+			return latestWith(func(k *service.APIKey) { k.User = nil }), nil
 		},
 	}
 	for name, lookup := range keep {
@@ -261,7 +270,32 @@ func TestRefreshOpenAIWSTurnBillingAPIKey(t *testing.T) {
 		})
 	}
 
-	t.Run("no credential or no group skips the lookup", func(t *testing.T) {
+	keepBilling := map[string]func(k *service.APIKey){
+		"moved group":          func(k *service.APIKey) { other := int64(78); k.GroupID = &other; k.Group.ID = other },
+		"no group":             func(k *service.APIKey) { k.Group = nil },
+		"platform changed":     func(k *service.APIKey) { k.Group.Platform = service.PlatformAnthropic },
+		"billing type changed": func(k *service.APIKey) { k.Group.SubscriptionType = service.SubscriptionTypeSubscription },
+	}
+	for name, mutate := range keepBilling {
+		t.Run(name+" retains billing identity while refreshing global RPM", func(t *testing.T) {
+			latest := latestWith(mutate)
+			latest.User.RPMLimit = 1
+			foreignOverride := 999
+			latest.User.UserGroupRPMOverride = &foreignOverride
+			got := refreshOpenAIWSTurnBillingAPIKey(context.Background(), wsTurnAPIKeyLookupFunc(func(context.Context, string) (*service.APIKey, error) { return latest, nil }), conn)
+			require.NotSame(t, conn, got)
+			require.NotSame(t, conn.User, got.User)
+			require.Same(t, conn.Group, got.Group)
+			require.Equal(t, groupID, *got.GroupID)
+			require.Equal(t, 3.0, got.Group.RateMultiplier)
+			require.Equal(t, 12.0, got.User.Balance)
+			require.Equal(t, 1, got.User.RPMLimit)
+			require.Nil(t, got.User.UserGroupRPMOverride)
+			require.Equal(t, 100, conn.User.RPMLimit)
+		})
+	}
+
+	t.Run("no credential skips the lookup", func(t *testing.T) {
 		called := false
 		lookup := wsTurnAPIKeyLookupFunc(func(ctx context.Context, key string) (*service.APIKey, error) {
 			called = true
@@ -270,12 +304,24 @@ func TestRefreshOpenAIWSTurnBillingAPIKey(t *testing.T) {
 		noKey := *conn
 		noKey.Key = ""
 		require.Same(t, &noKey, refreshOpenAIWSTurnBillingAPIKey(context.Background(), lookup, &noKey))
-		noGroup := *conn
-		noGroup.Group = nil
-		require.Same(t, &noGroup, refreshOpenAIWSTurnBillingAPIKey(context.Background(), lookup, &noGroup))
 		require.Nil(t, refreshOpenAIWSTurnBillingAPIKey(context.Background(), lookup, nil))
 		require.Same(t, conn, refreshOpenAIWSTurnBillingAPIKey(context.Background(), nil, conn))
 		require.False(t, called)
+	})
+	t.Run("missing connection group still refreshes global RPM", func(t *testing.T) {
+		noGroup := *conn
+		noGroup.Group = nil
+		called := false
+		lookup := wsTurnAPIKeyLookupFunc(func(context.Context, string) (*service.APIKey, error) {
+			called = true
+			return latestWith(func(k *service.APIKey) { k.User.RPMLimit = 1 }), nil
+		})
+		got := refreshOpenAIWSTurnBillingAPIKey(context.Background(), lookup, &noGroup)
+		require.True(t, called)
+		require.Nil(t, got.Group)
+		require.Equal(t, groupID, *got.GroupID)
+		require.Equal(t, 1, got.User.RPMLimit)
+		require.Equal(t, 12.0, got.User.Balance)
 	})
 }
 

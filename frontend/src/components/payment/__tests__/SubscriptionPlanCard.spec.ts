@@ -3,7 +3,11 @@ import { describe, expect, it } from "vitest";
 import { createPinia } from "pinia";
 import { createI18n } from "vue-i18n";
 import type { SubscriptionPlan } from "@/types/payment";
+import { useAppStore } from '@/stores/app'
 import SubscriptionPlanCard from "../SubscriptionPlanCard.vue";
+import { offer, pricing, rateQuote } from '@/components/channels/__tests__/catalogFixtures'
+
+type NamedMessageContext = { named: (key: string) => unknown }
 
 const i18n = createI18n({
   legacy: false,
@@ -12,6 +16,11 @@ const i18n = createI18n({
   missingWarn: false,
   messages: {
     en: {
+      billingRates: {
+        asOf: ({ named }: NamedMessageContext) => `Quoted at ${named('time')}`,
+        factorBreakdown: ({ named }: NamedMessageContext) => `Base ${named('base')} × platform ${named('platform')} × model ${named('model')} × peak ${named('peak')}`,
+        legacyFactorBreakdown: ({ named }: NamedMessageContext) => `Historical base ${named('base')} × policy ${named('policy')} × peak ${named('peak')}`,
+      },
       payment: {
         days: "days",
         weeks: "weeks",
@@ -52,6 +61,57 @@ const mountPlanCard = (groupPlatform: string, overrides: Partial<SubscriptionPla
   });
 
 describe("SubscriptionPlanCard", () => {
+  it.each([
+    { name: 'standard', asOf: '2026-10-26T08:00:00Z', peak: 1, effective: 6, calculation: 'product_v2' as const, scope: 'all_meters' as const, policy: 6, charge: '$12' },
+    { name: 'peak', asOf: '2026-10-26T10:00:00Z', peak: 1.5, effective: 9, calculation: 'product_v2' as const, scope: 'all_meters' as const, policy: 6, charge: '$18' },
+    { name: 'historical override', asOf: '2026-10-26T10:00:00Z', peak: 1, effective: 3, calculation: 'override_v1' as const, scope: 'token_only' as const, policy: 3, charge: '$6' }
+  ])('shows the $name consumption charge, quote time and peak window before purchase', async ({ asOf, peak, effective, calculation, scope, policy, charge }) => {
+    const wrapper = mountPlanCard('composite', { rate_multiplier: 99,
+      peak_rate_enabled: true, peak_start: '09:00', peak_end: '12:00', peak_rate_multiplier: 1.5,
+      model_catalog: { policy_version: 7, as_of: asOf, platforms: ['openai'], rate_min: effective, rate_max: effective,
+        models: [offer('model001', { offer_key: 'openai-model001', billing_mode: 'per_request', billing_unit: 'request',
+          pricing: { ...pricing(), billing_mode: 'per_request', input_price: null, output_price: null, per_request_price: 2 },
+          rate_quote: rateQuote(effective, { base_multiplier: 1, platform_multiplier: 2, model_multiplier: 3, policy_multiplier: policy,
+            peak_multiplier: peak, rate_calculation: calculation, peak_scope: scope, model: 'model001', billing_unit: 'request', as_of: asOf }) })] }
+    })
+    useAppStore().$patch({ cachedPublicSettings: { server_utc_offset: '+00:00' } })
+    await wrapper.vm.$nextTick()
+    expect(wrapper.text()).toContain('09:00-12:00 ×1.5 (UTC+00:00)')
+    expect(wrapper.text()).toContain(`×${effective}`)
+    expect(wrapper.text()).not.toContain('×99')
+    await wrapper.get('details > summary').trigger('click')
+    await wrapper.get('details > details > summary').trigger('click')
+    expect(wrapper.get('table').findAll('tbody td').map(cell => cell.text())).toEqual([charge])
+    expect(wrapper.text()).toContain(`Quoted at ${asOf}`)
+    if (calculation === 'override_v1') {
+      expect(wrapper.text()).toContain('Historical base 1 × policy 3 × peak 1')
+      expect(wrapper.text()).not.toContain('Base 1 × platform 2 × model 3')
+      expect(wrapper.get('table').text()).not.toContain('$18')
+    } else {
+      expect(wrapper.text()).toContain(`Base 1 × platform 2 × model 3 × peak ${peak}`)
+    }
+    expect(wrapper.emitted('select')).toBeUndefined()
+    await wrapper.get('button').trigger('click')
+    expect(wrapper.emitted('select')).toEqual([[wrapper.props('plan')]])
+    wrapper.unmount()
+  })
+
+  it('shows the backend quote range, including free models, and pre-purchase model details', () => {
+    const wrapper = mountPlanCard('composite', { rate_multiplier: 99, model_catalog: { policy_version: 3, as_of: '2026-10-26T12:00:00Z', models: [offer('free', { rate_quote: rateQuote(0) }), offer('paid', { platform: 'stepfun', rate_quote: rateQuote(2) })], platforms: ['openai', 'stepfun'], rate_min: 0, rate_max: 2 } })
+    expect(wrapper.text()).toContain('×0–×2')
+    expect(wrapper.text()).not.toContain('×99')
+    expect(wrapper.get('details summary').text()).toContain('billingRates.models')
+  })
+  it('shows unavailable instead of a default multiplier when sale quotes are absent or empty', () => {
+    const missing = mountPlanCard('composite', { rate_multiplier: 1 })
+    expect(missing.text()).toContain('billingRates.unknown')
+    expect(missing.text()).not.toContain('×1')
+    const empty = mountPlanCard('composite', { rate_multiplier: 1, model_catalog: { policy_version: 3, as_of: '', models: [], platforms: [], rate_min: null, rate_max: null } })
+    expect(empty.text()).toContain('billingRates.unknown')
+    expect(empty.text()).not.toContain('×1')
+    missing.unmount()
+    empty.unmount()
+  })
   it("keeps the catalog purchase action at the card bottom and emits the unchanged selected plan", async () => {
     const wrapper = mountPlanCard("openai", { features: ["Priority support", "Advanced models"] });
     await wrapper.setProps({ catalog: true });

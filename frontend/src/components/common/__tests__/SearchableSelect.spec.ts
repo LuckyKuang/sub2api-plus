@@ -69,6 +69,7 @@ afterEach(() => {
   setViewportHeight(originalInnerHeight)
   vi.useRealTimers()
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
 })
 
 describe('Select dropdown viewport constraints', () => {
@@ -150,9 +151,10 @@ describe('Select dropdown viewport constraints', () => {
     return (nextTop: number, nextBottom: number) => { top = nextTop; bottom = nextBottom }
   }
 
-  const mountLongSelect = async (searchable = true) => {
+  const mountLongSelect = async (searchable = true, stubTransition = false) => {
     const wrapper = mount(Select, {
       attachTo: document.body,
+      global: { stubs: stubTransition ? { Transition: true } : {} },
       props: {
         modelValue: 0,
         searchable,
@@ -225,6 +227,97 @@ describe('Select dropdown viewport constraints', () => {
     expect(panel.style.top).toBe('')
     expect(panel.style.bottom).toBe('144px')
     expect(panel.style.maxHeight).toBe('328px')
+  })
+
+  it('keeps an open search menu inside the visible viewport as a keyboard opens and the viewport pans', async () => {
+    setViewportWidth(1024)
+    setViewportHeight(800)
+    const visibleViewport = Object.assign(new EventTarget(), { offsetLeft: 0, offsetTop: 0, width: 1024, height: 800 })
+    vi.stubGlobal('visualViewport', visibleViewport)
+    mockVerticalLayout()
+    const wrapper = await mountLongSelect()
+    const panel = document.querySelector<HTMLElement>('[role="listbox"]')!
+    expect(panel.style.top).toBe('175px')
+    expect(panel.offsetHeight).toBe(359)
+
+    // The layout viewport remains 1024x800, but the keyboard leaves only
+    // 390x300 visible. Above the trigger has 119px; below has 117px.
+    Object.assign(visibleViewport, { width: 390, height: 300 })
+    visibleViewport.dispatchEvent(new Event('resize'))
+    await nextTick(); await nextTick()
+    expect(panel.style.left).toBe('182px')
+    expect(panel.style.minWidth).toBe('200px')
+    expect(panel.style.maxWidth).toBe('200px')
+    expect(panel.style.top).toBe('')
+    expect(panel.style.bottom).toBe('673px')
+    expect(panel.style.maxHeight).toBe('119px')
+    expect(800 - Number.parseFloat(panel.style.bottom) - panel.offsetHeight).toBe(8)
+    expect(Number.parseFloat(panel.style.left) + Number.parseFloat(panel.style.maxWidth)).toBe(382)
+
+    // Panning reveals y=100..400 and x=140..390. The larger available side
+    // is now below, so the already constrained menu must switch sides.
+    Object.assign(visibleViewport, { offsetLeft: 140, offsetTop: 100, width: 250 })
+    visibleViewport.dispatchEvent(new Event('scroll'))
+    await nextTick(); await nextTick()
+    expect(panel.style.left).toBe('182px')
+    expect(panel.style.bottom).toBe('')
+    expect(panel.style.top).toBe('175px')
+    expect(panel.style.maxHeight).toBe('217px')
+    expect(Number.parseFloat(panel.style.top) + panel.offsetHeight).toBe(392)
+
+    // A narrower visible area must also relax the normal 200px minimum,
+    // retaining 8px gutters even when the trigger is partly out of view.
+    Object.assign(visibleViewport, { offsetLeft: 230, offsetTop: 160, width: 160, height: 260 })
+    visibleViewport.dispatchEvent(new Event('scroll'))
+    await nextTick(); await nextTick()
+    expect(panel.style.left).toBe('238px')
+    expect(panel.style.minWidth).toBe('144px')
+    expect(panel.style.maxWidth).toBe('144px')
+    expect(panel.style.top).toBe('175px')
+    expect(panel.style.maxHeight).toBe('237px')
+    expect(Number.parseFloat(panel.style.top) + panel.offsetHeight).toBe(412)
+    expect(panel.querySelectorAll('[role="option"]')).toHaveLength(11)
+    expect(document.activeElement).toBe(panel.querySelector('input'))
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    expect(wrapper.emitted('change')).toBeUndefined()
+  })
+
+  it('stops following the visual viewport after closing and removes reopened listeners on unmount', async () => {
+    const visibleViewport = Object.assign(new EventTarget(), { offsetLeft: 0, offsetTop: 0, width: 390, height: 800 })
+    vi.stubGlobal('visualViewport', visibleViewport)
+    const addListener = vi.spyOn(visibleViewport, 'addEventListener')
+    const removeListener = vi.spyOn(visibleViewport, 'removeEventListener')
+    mockVerticalLayout()
+    // This case exercises listener lifetime; remove the visual leave delay
+    // so the disappearing DOM follows the closed state in the same tick.
+    const wrapper = await mountLongSelect(true, true)
+    const listeners = addListener.mock.calls.filter(([type]) => type === 'resize' || type === 'scroll')
+    expect(listeners.map(([type]) => type).sort()).toEqual(['resize', 'scroll'])
+
+    await wrapper.get('.select-trigger').trigger('click')
+    await nextTick()
+    for (const [type, listener] of listeners) {
+      expect(removeListener).toHaveBeenCalledWith(type, listener)
+    }
+    const readRect = vi.mocked(HTMLElement.prototype.getBoundingClientRect)
+    readRect.mockClear()
+    visibleViewport.dispatchEvent(new Event('resize'))
+    visibleViewport.dispatchEvent(new Event('scroll'))
+    await nextTick(); await nextTick()
+    expect(readRect).not.toHaveBeenCalled()
+    expect(document.querySelector('[role="listbox"]')).toBeNull()
+
+    await wrapper.get('.select-trigger').trigger('click')
+    await nextTick()
+    expect(document.querySelector('[role="listbox"]')).not.toBeNull()
+    removeListener.mockClear()
+    wrapper.unmount()
+    unmountWrapper = undefined
+    for (const [type, listener] of listeners) {
+      expect(removeListener).toHaveBeenCalledWith(type, listener)
+    }
+    expect(document.querySelector('[role="listbox"]')).toBeNull()
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
   })
 })
 

@@ -23,6 +23,7 @@ func performOrdinaryPinnedModelsRequest(t *testing.T, codex *OpenAIGatewayHandle
 	c.Request = httptest.NewRequest(http.MethodGet, path, nil)
 	c.Request.Header.Set("If-None-Match", etag)
 	c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{GroupID: &group.ID, Group: group})
+	prepareGatewayMetadataTest(h, c)
 	h.Models(c)
 	return recorder
 }

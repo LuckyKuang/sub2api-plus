@@ -26,6 +26,7 @@ var errBillingCacheUnavailable = fmt.Errorf("billing cache unavailable")
 var (
 	ErrSubscriptionInvalid       = infraerrors.Forbidden("SUBSCRIPTION_INVALID", "subscription is invalid or expired")
 	ErrBillingServiceUnavailable = infraerrors.ServiceUnavailable("BILLING_SERVICE_ERROR", "Billing service temporarily unavailable. Please retry later.")
+	ErrBillingRateUnavailable    = infraerrors.ServiceUnavailable("BILLING_RATE_UNAVAILABLE", "Billing rate configuration is unavailable.")
 	// RPM 超限错误。gateway_handler 负责映射为 HTTP 429。
 	ErrGroupRPMExceeded = infraerrors.TooManyRequests("GROUP_RPM_EXCEEDED", "group requests-per-minute limit exceeded")
 	ErrUserRPMExceeded  = infraerrors.TooManyRequests("USER_RPM_EXCEEDED", "user requests-per-minute limit exceeded")
@@ -816,6 +817,9 @@ func (s *BillingCacheService) IncrementUserPlatformQuotaUsage(userID int64, plat
 // 订阅模式：检查缓存用量未超过限额（Group限额从参数传入）
 // platform 为请求的目标平台（如 "anthropic"），传空串 "" 时跳过 user × platform quota 检查。
 func (s *BillingCacheService) CheckBillingEligibility(ctx context.Context, user *User, apiKey *APIKey, group *Group, subscription *UserSubscription, platform string) error {
+	if err := ValidateBillingPricingSnapshot(ctx); err != nil {
+		return ErrBillingRateUnavailable
+	}
 	// 简易模式默认跳过所有计费检查. An explicit key-window opt-in keeps
 	// balance/subscription/platform checks bypassed while enforcing the three
 	// API-key monetary windows from the database source of truth.
@@ -856,7 +860,8 @@ func (s *BillingCacheService) CheckBillingEligibility(ctx context.Context, user 
 		}
 	}
 
-	// RPM 限流：级联回落（Override → Group → User），放在最后以避免为注定失败的请求增加计数。
+	// RPM 限流：分组（可由用户分组 override 替代）与用户全局上限同时生效。
+	// 同一入口请求的重试和 fallback 共用准入计数，每个新分组独立检查。
 	if err := s.checkRPM(ctx, user, group); err != nil {
 		return err
 	}
@@ -872,7 +877,10 @@ func (s *BillingCacheService) CheckBillingEligibility(ctx context.Context, user 
 // 返回的句柄可能为 nil（未登记任何预留）；调用方须在 handler 结束时调用 HandlerDone，预留在计费任务落库后释放。
 // 须在 CheckBillingEligibility 通过后调用；简易模式不校验。
 func (s *BillingCacheService) ReserveFixedCharge(ctx context.Context, user *User, apiKey *APIKey, group *Group, subscription *UserSubscription, amount float64) (*InflightReservation, error) {
-	if user == nil || amount <= 0 || math.IsNaN(amount) || math.IsInf(amount, 0) {
+	if amount < 0 || math.IsNaN(amount) || math.IsInf(amount, 0) {
+		return nil, ErrBillingRateUnavailable
+	}
+	if user == nil || amount == 0 {
 		return nil, nil
 	}
 	if s.cfg != nil && s.cfg.RunMode == config.RunModeSimple {
@@ -1000,7 +1008,7 @@ func (s *BillingCacheService) checkSimpleModeAPIKeyRateLimits(ctx context.Contex
 //
 //  1. (用户, 分组) rpm_override       — 最细粒度：管理员为特定用户在特定分组设定的专属限额。
 //     override=0 表示该用户在该分组免检（绿灯），但 user 级全局上限仍然生效。
-//  2. group.rpm_limit                 — 分组级：该分组的统一 RPM 容量（仅当无 override 时生效）。
+//  2. group.rpm_limit                 — 每个 (用户, 分组) 的默认上限（仅当无 override 时生效）。
 //  3. user.rpm_limit                  — 用户级全局硬上限：无论 override/group 如何配置，始终生效。
 //
 // 与旧版"级联互斥"设计不同，新版确保 user.rpm_limit 作为全局天花板不会被 group 或 override 覆盖。
@@ -1032,7 +1040,7 @@ func (s *BillingCacheService) checkRPM(ctx context.Context, user *User, group *G
 		if override != nil {
 			// override=0 → 该用户在该分组免检（但 user 级仍会在下面检查）。
 			if *override > 0 {
-				count, incErr := s.userRPMCache.IncrementUserGroupRPM(ctx, user.ID, group.ID)
+				count, incErr := s.incrementRequestUserGroupRPM(ctx, user.ID, group.ID)
 				if incErr != nil {
 					logger.LegacyPrintf(
 						"service.billing_cache",
@@ -1047,7 +1055,7 @@ func (s *BillingCacheService) checkRPM(ctx context.Context, user *User, group *G
 			// override 命中后跳过 group.rpm_limit（override 替代 group），但不 return——继续检查 user 级。
 		} else if group.RPMLimit > 0 {
 			// 无 override，检查 group.rpm_limit。
-			count, err := s.userRPMCache.IncrementUserGroupRPM(ctx, user.ID, group.ID)
+			count, err := s.incrementRequestUserGroupRPM(ctx, user.ID, group.ID)
 			if err != nil {
 				logger.LegacyPrintf(
 					"service.billing_cache",
@@ -1063,7 +1071,7 @@ func (s *BillingCacheService) checkRPM(ctx context.Context, user *User, group *G
 
 	// ── 第二层：用户级全局硬上限（始终生效） ──
 	if user.RPMLimit > 0 {
-		count, err := s.userRPMCache.IncrementUserRPM(ctx, user.ID)
+		count, err := s.incrementRequestUserRPM(ctx, user.ID)
 		if err != nil {
 			logger.LegacyPrintf(
 				"service.billing_cache",

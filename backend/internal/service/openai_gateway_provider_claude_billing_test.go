@@ -51,13 +51,9 @@ func TestOpenAIGatewayServiceRecordUsage_CNAndOpenCodeClaudeRequireExplicitPrici
 
 			err := svc.RecordUsage(context.Background(), providerClaudeRecordUsageInput(platform, "claude-sonnet-4-6", group, usage))
 
-			require.NoError(t, err)
-			require.Equal(t, 1, usageRepo.calls)
-			require.NotNil(t, usageRepo.lastLog)
-			require.Equal(t, usage.InputTokens, usageRepo.lastLog.InputTokens)
-			require.Equal(t, usage.OutputTokens, usageRepo.lastLog.OutputTokens)
-			require.Zero(t, usageRepo.lastLog.TotalCost)
-			require.Zero(t, usageRepo.lastLog.ActualCost)
+			require.ErrorIs(t, err, ErrModelPricingUnavailable)
+			require.Zero(t, usageRepo.calls)
+			require.Nil(t, usageRepo.lastLog)
 			require.Zero(t, userRepo.deductCalls)
 		})
 	}

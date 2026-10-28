@@ -24,6 +24,7 @@ type grokObservedStrictAccountRepo struct {
 	account      *Account
 	legacyWrites int
 	casCalls     int
+	ownerReads   int
 	writes       int
 	updates      map[string]any
 	done         chan struct{}
@@ -58,6 +59,34 @@ func (r *grokObservedStrictAccountRepo) UpdateCNControlExtraIfUnchanged(_ contex
 	r.writes++
 	r.updates = updates
 	return true, nil
+}
+
+func (r *grokObservedStrictAccountRepo) GetByID(_ context.Context, id int64) (*Account, error) {
+	r.ownerReads++
+	defer r.finish()
+	if r.account == nil || r.account.ID != id {
+		return nil, ErrAccountNotFound
+	}
+	return snapshotRequestCredentialAccount(r.account), nil
+}
+
+func (r *grokObservedStrictAccountRepo) CompareAndSwapGrokObservedModels(ctx context.Context, owner *Account, expected, next json.RawMessage) (bool, error) {
+	var current any
+	if r.account != nil && r.account.Extra != nil {
+		current = r.account.Extra[grokObservedModelsExtraKey]
+	}
+	encoded, err := json.Marshal(current)
+	if err != nil {
+		return false, err
+	}
+	if !jsonValuesEqual(encoded, expected) {
+		return false, nil
+	}
+	var value any
+	if err := json.Unmarshal(next, &value); err != nil {
+		return false, err
+	}
+	return r.UpdateCNControlExtraIfUnchanged(ctx, owner, map[string]any{grokObservedModelsExtraKey: value})
 }
 
 func (r *grokObservedStrictAccountRepo) finish() {
@@ -226,7 +255,12 @@ func TestGrokObservedModelsSyncRejectsLateCredentialAndProxyOwnerChanges(t *test
 			require.Equal(t, 1, upstream.calls)
 			require.Equal(t, "Bearer private-observed-models-owner-token", upstream.request.Header.Get("Authorization"))
 			require.Equal(t, "http://private-observed-proxy-user:private-observed-proxy-password@captured.proxy.example:8080", upstream.proxy)
-			require.Equal(t, 1, repo.casCalls, "a late reply must pass the original complete owner to atomic persistence")
+			require.Equal(t, 1, repo.ownerReads, "a late reply must recheck the complete captured owner before persistence")
+			if mutation == "unchanged" {
+				require.Equal(t, 1, repo.casCalls)
+			} else {
+				require.Zero(t, repo.casCalls)
+			}
 			require.Zero(t, repo.legacyWrites, "account-ID writes would publish observations into a replacement login")
 			if mutation == "unchanged" {
 				require.NoError(t, syncErr)
@@ -303,7 +337,8 @@ func TestGrokObservedModelsScheduleFreezesDeepOwnerBeforeBackgroundWork(t *testi
 			require.Equal(t, "Bearer private-observed-models-owner-token", upstream.request.Header.Get("Authorization"))
 			require.Equal(t, "grok-shell/1.0.45 (linux; x86_64)", upstream.request.UserAgent())
 			require.Equal(t, "http://private-observed-proxy-user:private-observed-proxy-password@captured.proxy.example:8080", upstream.proxy)
-			require.Equal(t, 1, repo.casCalls)
+			require.Equal(t, 1, repo.ownerReads)
+			require.Zero(t, repo.casCalls)
 			require.Zero(t, repo.legacyWrites)
 			require.Zero(t, repo.writes, "scheduled discovery must not publish into its newly edited owner")
 			require.Nil(t, repo.updates)

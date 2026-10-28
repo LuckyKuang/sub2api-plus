@@ -27,9 +27,10 @@ func TestLiveCreateSidebandAndReconnectReuseCallIdentity(t *testing.T) {
 	cfg.JWT.Secret = "unit-only-live-cipher-key"
 	upstream := &httpUpstreamRecorder{resp: &http.Response{StatusCode: 201, Header: http.Header{"Location": []string{"https://chatgpt.com/backend-api/codex/call_123"}}, Body: io.NopCloser(strings.NewReader("sdp-answer"))}}
 	svc := newOpenAIRejectedFieldTestService(upstream)
+	svc.cfg.Gateway.OpenAIWS.Enabled, svc.cfg.Gateway.OpenAIWS.OAuthEnabled = true, true
 	svc.liveAttestationCipher = newLiveAttestationCipher(cfg)
 	account := turnStateAccount(12, "principal-a")
-	account.Credentials["user_agent"] = "codex_cli_rs/0.164.0 (Ubuntu 24.04; x86_64) xterm-256color"
+	account.Credentials["user_agent"] = "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color"
 	created, err := svc.createUpstreamLiveCall(context.Background(), account, &LiveCallRequest{SDP: "offer", Session: json.RawMessage(`{"type":"realtime"}`)}, "proof")
 	require.NoError(t, err)
 	require.NotNil(t, created.OutboundSnapshot)
@@ -43,7 +44,7 @@ func TestLiveCreateSidebandAndReconnectReuseCallIdentity(t *testing.T) {
 	second := &OpenAIGatewayService{liveAttestationCipher: newLiveAttestationCipher(cfg)}
 	refreshed := turnStateAccount(12, "principal-a")
 	refreshed.Credentials["access_token"] = "rotated-token"
-	refreshed.Credentials["user_agent"] = "codex_vscode/0.164.0 (Ubuntu 24.04; x86_64) xterm-256color"
+	refreshed.Credentials["user_agent"] = "codex_vscode/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color"
 	for i := 0; i < 2; i++ {
 		headers, _, err := second.liveSidebandHeaders(context.Background(), refreshed, record)
 		require.NoError(t, err)
@@ -141,7 +142,7 @@ func TestLiveAcquiredOwnerIdentityAndProxySurviveSelectedRowRelink(t *testing.T)
 				return &Account{ID: 81, Platform: PlatformOpenAI, Type: AccountTypeOAuth,
 					ProxyID: &proxy.ID, Proxy: proxy,
 					Credentials: map[string]any{"access_token": token, "chatgpt_account_id": principal, "chatgpt_user_id": "same-user",
-						"user_agent": "codex_cli_rs/0.164.0 (Ubuntu 24.04; x86_64) xterm-256color"}}
+						"user_agent": "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color"}}
 			}
 			oldCallsURL, oldSidebandURL := chatGPTLiveCallsURL, chatGPTLiveSidebandBaseURL
 			chatGPTLiveCallsURL, chatGPTLiveSidebandBaseURL = "http://live-wire.invalid/calls", "ws://live-wire.invalid/sideband"
@@ -166,7 +167,7 @@ func TestLiveAcquiredOwnerIdentityAndProxySurviveSelectedRowRelink(t *testing.T)
 					recordRequestCredentialOwner(ctx, owner, token)
 					if relink {
 						replacement := newOwner("replacement-token", "replacement-principal", newProxy)
-						replacement.Credentials["user_agent"] = "codex_vscode/0.164.0 (Windows 11; aarch64) WindowsTerminal"
+						replacement.Credentials["user_agent"] = "codex_vscode/0.165.0 (Windows 11; aarch64) WindowsTerminal"
 						owner.Credentials, owner.ProxyID, owner.Proxy = replacement.Credentials, replacement.ProxyID, replacement.Proxy
 					}
 					return token
@@ -180,9 +181,9 @@ func TestLiveAcquiredOwnerIdentityAndProxySurviveSelectedRowRelink(t *testing.T)
 			creation := <-captured
 			require.Equal(t, "Bearer creation-token", creation.Get("Authorization"))
 			require.Equal(t, "old-principal", creation.Get("ChatGPT-Account-Id"))
-			require.Equal(t, "codex_cli_rs/0.164.0 (Ubuntu 24.04; x86_64) xterm-256color", creation.Get("User-Agent"))
+			require.Equal(t, "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color", creation.Get("User-Agent"))
 			require.Equal(t, "codex_cli_rs", creation.Get("Originator"))
-			require.Equal(t, "0.164.0", creation.Get("Version"))
+			require.Equal(t, "0.165.0", creation.Get("Version"))
 			encrypted, err := svc.liveAttestationCipher.Encrypt("proof")
 			require.NoError(t, err)
 			record := &LiveCallRecord{CallID: created.CallID, AccountID: selected.ID, OutboundSnapshot: created.OutboundSnapshot, AttestationCiphertext: encrypted}

@@ -736,13 +736,22 @@ describe('UseKeyModal', () => {
 
     const parsed = JSON.parse(wrapper.find('pre code').text())
     const models = parsed.provider.openai.models
-    for (const model of ['gpt-5.6', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-6.1-sol', 'gpt-6-sol', 'gpt-6-luna']) {
+    for (const model of ['gpt-5.6', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-6.1-sol', 'gpt-6.1-terra', 'gpt-6-sol', 'gpt-6-luna']) {
       expect(models[model]).toBeDefined()
       expect(models[model].variants).toHaveProperty('max')
       expect(models[model].variants).toHaveProperty('xhigh')
     }
     expect(models['gpt-5.6'].name).toBe('GPT-5.6 (Sol)')
     expect(models['gpt-6.1-sol'].variants).not.toHaveProperty('none')
+    // Codex 126a0ee92ed2 introduces Terra with a 500k default context and no
+    // disabled reasoning. Its catalog's ultra option is client delegation,
+    // so this OpenCode API configuration exposes the wire effort levels only.
+    expect(models['gpt-6.1-terra']).toEqual({
+      name: 'GPT-6.1 Terra',
+      limit: { context: 500000 },
+      options: { store: false },
+      variants: { low: {}, medium: {}, high: {}, xhigh: {}, max: {} }
+    })
     expect(models['gpt-6-sol'].variants).toHaveProperty('none')
     expect(models['gpt-6-luna'].limit).toEqual({ context: 1050000, output: 128000 })
     expect(models).not.toHaveProperty('gpt-6')
@@ -888,8 +897,8 @@ describe('UseKeyModal', () => {
     await flushPromises()
 
     expect(fetchMock).toHaveBeenCalledWith(
-      // Reviewed baseline: docs/OFFICIAL_AGENT_BASELINES.md, rust-v0.164.0.
-      'https://example.com/v1/models?client_version=0.164.0',
+      // Reviewed baseline: docs/OFFICIAL_AGENT_BASELINES.md, rust-v0.165.0.
+      'https://example.com/v1/models?client_version=0.165.0',
       expect.objectContaining({
         headers: expect.objectContaining({ Authorization: 'Bearer sk-composite-test' })
       })

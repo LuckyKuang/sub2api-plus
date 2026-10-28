@@ -406,10 +406,10 @@
           </template>
 
           <template #cell-actions="{ row }">
-            <div class="flex items-center gap-1">
+            <div class="table-actions">
               <button
                 @click="handleEdit(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors hover:surface-hover hover:text-primary-600 dark:hover:text-primary-400 surface-control surface-muted"
+                class="table-action"
               >
                 <Icon name="edit" size="sm" />
                 <span class="text-xs">{{ t("common.edit") }}</span>
@@ -424,7 +424,7 @@
                 "
                 :disabled="duplicatingGroupIds.has(row.id)"
                 @click="handleDuplicate(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors hover:surface-hover hover:text-primary-600 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:text-primary-400 surface-control surface-muted"
+                class="table-action"
               >
                 <Icon name="copy" size="sm" />
                 <span class="text-xs">
@@ -439,7 +439,7 @@
                 v-if="!authStore.isSimpleMode && row.platform === 'composite'"
                 data-testid="group-composite-routes"
                 @click="handleCompositeRoutes(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors hover:surface-hover hover:text-cyan-600 dark:hover:text-cyan-400 surface-control surface-muted"
+                class="table-action"
               >
                 <Icon name="swap" size="sm" />
                 <span class="text-xs">{{
@@ -450,7 +450,7 @@
                 v-if="!authStore.isSimpleMode"
                 data-testid="group-rate-multipliers"
                 @click="handleRateMultipliers(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors hover:surface-hover hover:text-purple-600 dark:hover:text-purple-400 surface-control surface-muted"
+                class="table-action"
               >
                 <Icon name="dollar" size="sm" />
                 <span class="text-xs">{{
@@ -461,7 +461,7 @@
                 v-if="!authStore.isSimpleMode"
                 data-testid="group-rpm-overrides"
                 @click="handleRPMOverrides(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors hover:surface-hover hover:text-orange-600 dark:hover:text-orange-400 surface-control surface-muted"
+                class="table-action table-action-warning"
               >
                 <Icon name="bolt" size="sm" />
                 <span class="text-xs">{{
@@ -470,7 +470,7 @@
               </button>
               <button
                 @click="handleDelete(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors hover:bg-red-50/25 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400 surface-control surface-muted"
+                class="table-action table-action-danger"
               >
                 <Icon name="trash" size="sm" />
                 <span class="text-xs">{{ t("common.delete") }}</span>
@@ -626,6 +626,7 @@
           />
           <p class="input-hint">{{ t("admin.groups.rateMultiplierHint") }}</p>
         </div>
+        <BillingRatePolicyFields ref="createBillingRatePolicyRef" v-model="createForm.billing_rate_policy" :platform="createForm.platform" :show-models="false" id-prefix="create-billing-rate" />
         <div>
           <label class="input-label">{{ t("admin.groups.form.rpmLimit") }}</label>
           <input
@@ -967,6 +968,20 @@
               />
               {{ t(imagePricingI18nKey(createForm.platform, "independentMultiplier")) }}
             </label>
+            <label
+              v-if="
+                createForm.allow_image_generation &&
+                (createForm.platform === 'composite' || createForm.platform === 'openai')
+              "
+              class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300"
+            >
+              <input
+                v-model="createForm.image_count_billing"
+                type="checkbox"
+                class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              {{ t("admin.groups.imagePricing.perImageBilling") }}
+            </label>
           </div>
           <div
             v-if="createForm.image_rate_independent"
@@ -1024,16 +1039,17 @@
           </p>
           <div class="mt-2 rounded-lg surface-inset p-3 text-xs surface-muted">
             <div class="mb-1 font-medium">
-              {{ t(imagePricingI18nKey(createForm.platform, "finalPricePreview")) }}
+              {{ t(imagePricingI18nKey(createForm.platform, "basePricePreview")) }}
             </div>
             <div class="grid grid-cols-3 gap-2">
               <div
-                v-for="item in createImageFinalPricePreview"
+                v-for="item in createImageBasePricePreview"
                 :key="item.label"
               >
                 {{ item.label }}: {{ item.value }}
               </div>
             </div>
+            <p class="mt-2">{{ t("admin.groups.pricingReferenceHint") }}</p>
           </div>
           <div v-if="createForm.platform === 'gemini' && createForm.allow_image_generation && createForm.subscription_type !== 'subscription'" class="mt-4 border-t border-dashed border-gray-200 pt-4 dark:border-dark-700">
             <label
@@ -1207,16 +1223,17 @@
           </p>
           <div class="mt-2 rounded-lg surface-inset p-3 text-xs surface-muted">
             <div class="mb-1 font-medium">
-              {{ t(videoPricingI18nKey("finalPricePreview")) }}
+              {{ t(videoPricingI18nKey("basePricePreview")) }}
             </div>
             <div class="grid grid-cols-3 gap-2">
               <div
-                v-for="item in createVideoFinalPricePreview"
+                v-for="item in createVideoBasePricePreview"
                 :key="item.label"
               >
                 {{ item.label }}: {{ item.value }}
               </div>
             </div>
+            <p class="mt-2">{{ t("admin.groups.pricingReferenceHint") }}</p>
           </div>
         </div>
 
@@ -1510,10 +1527,11 @@
               class="mt-2 rounded-lg surface-inset p-3 text-xs surface-muted"
             >
               {{
-                t("admin.groups.webSearchPricing.finalPricePreview", {
-                  price: createWebSearchFinalPricePreview,
+                t("admin.groups.webSearchPricing.basePricePreview", {
+                  price: createWebSearchBasePricePreview,
                 })
               }}
+              <p class="mt-2">{{ t("admin.groups.pricingReferenceHint") }}</p>
             </div>
           </div>
         </div>
@@ -1534,7 +1552,10 @@
             <span><span class="block text-sm surface-muted">{{ t("admin.groups.modelPricing.longContext") }}</span><span class="block text-xs surface-muted">{{ t("admin.groups.modelPricing.longContextHint") }}</span></span>
           </label>
           <div class="mt-3 space-y-2">
-            <PricingEntryCard v-for="(entry, index) in createForm.model_pricing" :key="index" :entry="entry" :platform="createForm.platform" hide-token-intervals @update="createForm.model_pricing[index] = $event" @remove="createForm.model_pricing.splice(index, 1)" />
+            <PricingEntryCard v-for="(entry, index) in createForm.model_pricing" :key="index" :entry="entry" :platform="createForm.platform === 'composite' ? entry.platform : createForm.platform" :auto-fill-pricing="false" :split-new-models="false" hide-token-intervals @update="updateGroupPricing(createForm, index, $event)" @remove="removeGroupPricing(createForm, index)">
+              <template #selling-rates><GroupModelRateFields v-model="createForm.billing_rate_policy" :models="entry.models" :platform="createForm.platform === 'composite' ? (entry.platform || 'composite') : createForm.platform" :selectable-platform="createForm.platform === 'composite'" :id-prefix="`create-model-rate-${index}`" @update:platform="entry.platform = $event" @rate-only="createForm.model_pricing.splice(index, 1)" /></template>
+            </PricingEntryCard>
+            <BillingRatePolicyFields ref="createModelBillingRatePolicyRef" v-model="createForm.billing_rate_policy" :platform="createForm.platform" :show-platforms="false" :card-model-keys="modelRateCardKeys(createForm.model_pricing, createForm.platform)" id-prefix="create-model-billing-rate" />
           </div>
         </div>
 
@@ -2287,6 +2308,7 @@
             data-tour="group-form-multiplier"
           />
         </div>
+        <BillingRatePolicyFields ref="editBillingRatePolicyRef" v-model="editForm.billing_rate_policy" :platform="editForm.platform" :show-models="false" id-prefix="edit-billing-rate" />
         <div>
           <label class="input-label">{{ t("admin.groups.form.rpmLimit") }}</label>
           <input
@@ -2660,6 +2682,20 @@
               />
               {{ t(imagePricingI18nKey(editForm.platform, "independentMultiplier")) }}
             </label>
+            <label
+              v-if="
+                editForm.allow_image_generation &&
+                (editForm.platform === 'composite' || editForm.platform === 'openai')
+              "
+              class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300"
+            >
+              <input
+                v-model="editForm.image_count_billing"
+                type="checkbox"
+                class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              {{ t("admin.groups.imagePricing.perImageBilling") }}
+            </label>
           </div>
           <div
             v-if="editForm.image_rate_independent"
@@ -2717,16 +2753,17 @@
           </p>
           <div class="mt-2 rounded-lg surface-inset p-3 text-xs surface-muted">
             <div class="mb-1 font-medium">
-              {{ t(imagePricingI18nKey(editForm.platform, "finalPricePreview")) }}
+              {{ t(imagePricingI18nKey(editForm.platform, "basePricePreview")) }}
             </div>
             <div class="grid grid-cols-3 gap-2">
               <div
-                v-for="item in editImageFinalPricePreview"
+                v-for="item in editImageBasePricePreview"
                 :key="item.label"
               >
                 {{ item.label }}: {{ item.value }}
               </div>
             </div>
+            <p class="mt-2">{{ t("admin.groups.pricingReferenceHint") }}</p>
           </div>
           <div v-if="editForm.platform === 'gemini' && editForm.allow_image_generation && editForm.subscription_type !== 'subscription'" class="mt-4 border-t border-dashed border-gray-200 pt-4 dark:border-dark-700">
             <label
@@ -2900,16 +2937,17 @@
           </p>
           <div class="mt-2 rounded-lg surface-inset p-3 text-xs surface-muted">
             <div class="mb-1 font-medium">
-              {{ t(videoPricingI18nKey("finalPricePreview")) }}
+              {{ t(videoPricingI18nKey("basePricePreview")) }}
             </div>
             <div class="grid grid-cols-3 gap-2">
               <div
-                v-for="item in editVideoFinalPricePreview"
+                v-for="item in editVideoBasePricePreview"
                 :key="item.label"
               >
                 {{ item.label }}: {{ item.value }}
               </div>
             </div>
+            <p class="mt-2">{{ t("admin.groups.pricingReferenceHint") }}</p>
           </div>
         </div>
 
@@ -3203,10 +3241,11 @@
               class="mt-2 rounded-lg surface-inset p-3 text-xs surface-muted"
             >
               {{
-                t("admin.groups.webSearchPricing.finalPricePreview", {
-                  price: editWebSearchFinalPricePreview,
+                t("admin.groups.webSearchPricing.basePricePreview", {
+                  price: editWebSearchBasePricePreview,
                 })
               }}
+              <p class="mt-2">{{ t("admin.groups.pricingReferenceHint") }}</p>
             </div>
           </div>
         </div>
@@ -3237,7 +3276,10 @@
             <span><span class="block text-sm surface-muted">{{ t("admin.groups.modelPricing.longContext") }}</span><span class="block text-xs surface-muted">{{ t("admin.groups.modelPricing.longContextHint") }}</span></span>
           </label>
           <div class="mt-3 space-y-2">
-            <PricingEntryCard v-for="(entry, index) in editForm.model_pricing" :key="index" :entry="entry" :platform="editForm.platform" hide-token-intervals @update="editForm.model_pricing[index] = $event" @remove="editForm.model_pricing.splice(index, 1)" />
+            <PricingEntryCard v-for="(entry, index) in editForm.model_pricing" :key="index" :entry="entry" :platform="editForm.platform === 'composite' ? entry.platform : editForm.platform" :auto-fill-pricing="false" :split-new-models="false" hide-token-intervals @update="updateGroupPricing(editForm, index, $event)" @remove="removeGroupPricing(editForm, index)">
+              <template #selling-rates><GroupModelRateFields v-model="editForm.billing_rate_policy" :models="entry.models" :platform="editForm.platform === 'composite' ? (entry.platform || 'composite') : editForm.platform" :selectable-platform="editForm.platform === 'composite'" :id-prefix="`edit-model-rate-${index}`" @update:platform="entry.platform = $event" @rate-only="editForm.model_pricing.splice(index, 1)" /></template>
+            </PricingEntryCard>
+            <BillingRatePolicyFields ref="editModelBillingRatePolicyRef" v-model="editForm.billing_rate_policy" :platform="editForm.platform" :show-platforms="false" :card-model-keys="modelRateCardKeys(editForm.model_pricing, editForm.platform)" id-prefix="edit-model-billing-rate" />
           </div>
         </div>
 
@@ -4369,7 +4411,8 @@
 <script setup lang="ts">
 import DateTimePicker from '@/components/common/DateTimePicker.vue'
 import Toggle from '@/components/common/Toggle.vue'
-import { ref, reactive, computed, onMounted, onUnmounted, watch } from "vue";
+import { ref, reactive, computed, onMounted, onUnmounted, watch, inject } from "vue";
+import { routeLocationKey } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { useAppStore } from "@/stores/app";
 import { useAuthStore } from "@/stores/auth";
@@ -4405,6 +4448,11 @@ import PlatformIcon from "@/components/common/PlatformIcon.vue";
 import { platformLabel } from "@/utils/platformColors";
 import Icon from "@/components/icons/Icon.vue";
 import GroupI18nField from "@/components/admin/group/GroupI18nField.vue";
+import BillingRatePolicyFields from "@/components/admin/group/BillingRatePolicyFields.vue";
+import GroupModelRateFields from "@/components/admin/group/GroupModelRateFields.vue";
+import { hasGroupPriceOverride, modelRateCardKeys, removeModelCardRates } from "@/components/admin/group/modelRateCards";
+import type { BillingRatePolicy } from "@/types/billingRate";
+import { cloneBillingRatePolicy } from "@/utils/billingRate";
 import GroupRateMultipliersModal from "@/components/admin/group/GroupRateMultipliersModal.vue";
 import GroupRPMOverridesModal from "@/components/admin/group/GroupRPMOverridesModal.vue";
 import GroupCapacityBadge from "@/components/common/GroupCapacityBadge.vue";
@@ -4506,10 +4554,28 @@ const emptyGroupPricing = (): PricingFormEntry => ({
 const addGroupPricing = (entries: PricingFormEntry[]) =>
   entries.push(emptyGroupPricing());
 
+function removeGroupPricing(form: { model_pricing: PricingFormEntry[]; billing_rate_policy: BillingRatePolicy; platform: string }, index: number) {
+  const entry = form.model_pricing[index];
+  if (!entry) return;
+  form.billing_rate_policy = removeModelCardRates(form.billing_rate_policy, entry, form.platform);
+  form.model_pricing.splice(index, 1);
+}
+
+function updateGroupPricing(form: { model_pricing: PricingFormEntry[]; billing_rate_policy: BillingRatePolicy; platform: string }, index: number, next: PricingFormEntry) {
+  const previous = form.model_pricing[index];
+  if (previous) {
+    const remaining = new Set(next.models.map(model => model.toLowerCase()));
+    const removed = { ...previous, models: previous.models.filter(model => !remaining.has(model.toLowerCase())) };
+    form.billing_rate_policy = removeModelCardRates(form.billing_rate_policy, removed, form.platform);
+  }
+  form.model_pricing[index] = next;
+}
+
 const groupPricingFromAPI = (
   pricing: ChannelModelPricing[] | undefined,
 ): PricingFormEntry[] =>
   (pricing || []).map((entry) => ({
+    platform: entry.platform,
     models: entry.models || [],
     billing_mode: entry.billing_mode || "token",
     input_price: perTokenToMTok(entry.input_price),
@@ -4517,6 +4583,8 @@ const groupPricingFromAPI = (
     cache_write_price: perTokenToMTok(entry.cache_write_price),
     cache_write_1h_price: perTokenToMTok(entry.cache_write_1h_price),
     cache_read_price: perTokenToMTok(entry.cache_read_price),
+    fast_multiplier: entry.fast_multiplier,
+    flex_multiplier: entry.flex_multiplier,
     reasoning_effort_multipliers: entry.reasoning_effort_multipliers
       ? { ...entry.reasoning_effort_multipliers }
       : null,
@@ -4532,9 +4600,9 @@ const groupPricingToAPI = (
   platform: string,
 ): ChannelModelPricing[] =>
   pricing
-    .filter((entry) => entry.models.length > 0)
+    .filter((entry) => entry.models.length > 0 && hasGroupPriceOverride(entry))
     .map((entry) => ({
-      platform,
+      platform: platform === "composite" ? (entry.platform || platform) : platform,
       models: entry.models,
       billing_mode: entry.billing_mode,
       input_price: mTokToPerToken(entry.input_price),
@@ -4542,6 +4610,8 @@ const groupPricingToAPI = (
       cache_write_price: mTokToPerToken(entry.cache_write_price),
       cache_write_1h_price: mTokToPerToken(entry.cache_write_1h_price),
       cache_read_price: mTokToPerToken(entry.cache_read_price),
+      fast_multiplier: toNullableNumber(entry.fast_multiplier),
+      flex_multiplier: toNullableNumber(entry.flex_multiplier),
       reasoning_effort_multipliers: formReasoningEffortMultipliersToAPI(
         entry.reasoning_effort_multipliers,
       ),
@@ -5047,12 +5117,17 @@ const submitEditAllowlistCustomEntry = () => {
   }
 };
 
+const createBillingRatePolicyRef = ref<InstanceType<typeof BillingRatePolicyFields> | null>(null);
+const editBillingRatePolicyRef = ref<InstanceType<typeof BillingRatePolicyFields> | null>(null);
+const createModelBillingRatePolicyRef = ref<InstanceType<typeof BillingRatePolicyFields> | null>(null);
+const editModelBillingRatePolicyRef = ref<InstanceType<typeof BillingRatePolicyFields> | null>(null);
 const createForm = reactive({
   name: "",
   description: "",
   i18n: {} as GroupI18n,
   platform: "anthropic" as GroupPlatform,
   rate_multiplier: 1.0,
+  billing_rate_policy: cloneBillingRatePolicy(),
   is_exclusive: false,
   subscription_type: "standard" as SubscriptionType,
   daily_limit_usd: null as number | null,
@@ -5068,6 +5143,7 @@ const createForm = reactive({
   // 图片生成计费配置
   allow_image_generation: false,
   allow_batch_image_generation: false,
+  image_count_billing: false,
   image_rate_independent: false,
   image_rate_multiplier: 1,
   batch_image_discount_multiplier: 0.5,
@@ -5421,6 +5497,8 @@ const editForm = reactive({
   i18n: {} as GroupI18n,
   platform: "anthropic" as GroupPlatform,
   rate_multiplier: 1.0,
+  billing_rate_policy: cloneBillingRatePolicy(),
+  expected_billing_policy_version: undefined as number | undefined,
   is_exclusive: false,
   status: "active" as "active" | "inactive",
   subscription_type: "standard" as SubscriptionType,
@@ -5437,6 +5515,7 @@ const editForm = reactive({
   // 图片生成计费配置
   allow_image_generation: false,
   allow_batch_image_generation: false,
+  image_count_billing: false,
   image_rate_independent: false,
   image_rate_multiplier: 1,
   batch_image_discount_multiplier: 0.5,
@@ -5629,6 +5708,7 @@ type ImagePricingFormState = {
   subscription_type: SubscriptionType;
   allow_image_generation: boolean;
   allow_batch_image_generation: boolean;
+  image_count_billing: boolean;
   rate_multiplier: number;
   image_rate_independent: boolean;
   image_rate_multiplier: number;
@@ -5703,7 +5783,7 @@ const formatVideoPricePreview = (value: number | string | null | undefined) => {
   return `$${price.toFixed(6).replace(/0+$/, "").replace(/\.$/, "")}`;
 };
 
-const buildImageFinalPricePreview = (form: ImagePricingFormState) => {
+const buildImageBasePricePreview = (form: ImagePricingFormState) => {
   const imageMultiplier = form.image_rate_independent
     ? normalizePreviewNumber(form.image_rate_multiplier, 1)
     : normalizePreviewNumber(form.rate_multiplier, 1);
@@ -5721,7 +5801,7 @@ const buildImageFinalPricePreview = (form: ImagePricingFormState) => {
   });
 };
 
-const buildVideoFinalPricePreview = (form: VideoPricingFormState) => {
+const buildVideoBasePricePreview = (form: VideoPricingFormState) => {
   const multiplier = form.video_rate_independent
     ? normalizePreviewNumber(form.video_rate_multiplier, 1)
     : normalizePreviewNumber(form.rate_multiplier, 1);
@@ -5738,23 +5818,23 @@ const buildVideoFinalPricePreview = (form: VideoPricingFormState) => {
   });
 };
 
-const createImageFinalPricePreview = computed(() =>
-  buildImageFinalPricePreview(createForm),
+const createImageBasePricePreview = computed(() =>
+  buildImageBasePricePreview(createForm),
 );
-const editImageFinalPricePreview = computed(() =>
-  buildImageFinalPricePreview(editForm),
+const editImageBasePricePreview = computed(() =>
+  buildImageBasePricePreview(editForm),
 );
-const createVideoFinalPricePreview = computed(() =>
-  buildVideoFinalPricePreview(createForm),
+const createVideoBasePricePreview = computed(() =>
+  buildVideoBasePricePreview(createForm),
 );
-const editVideoFinalPricePreview = computed(() =>
-  buildVideoFinalPricePreview(editForm),
+const editVideoBasePricePreview = computed(() =>
+  buildVideoBasePricePreview(editForm),
 );
 
 // Codex 网页搜索单次默认价（与后端 defaultWebSearchPricePerCall 一致，官方 $10/1000 次）
 const DEFAULT_WEB_SEARCH_PRICE_PER_CALL = 0.01;
 
-const buildWebSearchFinalPricePreview = (form: {
+const buildWebSearchBasePricePreview = (form: {
   web_search_price_per_call: number | string | null;
   rate_multiplier: number | string | null;
 }) => {
@@ -5765,17 +5845,18 @@ const buildWebSearchFinalPricePreview = (form: {
   return formatImagePricePreview(basePrice * multiplier);
 };
 
-const createWebSearchFinalPricePreview = computed(() =>
-  buildWebSearchFinalPricePreview(createForm),
+const createWebSearchBasePricePreview = computed(() =>
+  buildWebSearchBasePricePreview(createForm),
 );
-const editWebSearchFinalPricePreview = computed(() =>
-  buildWebSearchFinalPricePreview(editForm),
+const editWebSearchBasePricePreview = computed(() =>
+  buildWebSearchBasePricePreview(editForm),
 );
 
 const resetDisabledBatchImagePricing = (
   form: Pick<
     ImagePricingFormState,
-    "platform" | "subscription_type" | "allow_image_generation" | "allow_batch_image_generation" | "batch_image_discount_multiplier" | "batch_image_hold_multiplier"
+    "platform" | "subscription_type" | "image_count_billing" | "allow_image_generation" | "allow_batch_image_generation" | "batch_image_discount_multiplier" | "batch_image_hold_multiplier"
+
   >,
 ) => {
   if (form.platform !== "gemini" || form.subscription_type === "subscription" || !form.allow_image_generation) {
@@ -5784,6 +5865,12 @@ const resetDisabledBatchImagePricing = (
   if (!form.allow_batch_image_generation) {
     form.batch_image_discount_multiplier = 0.5;
     form.batch_image_hold_multiplier = 0.6;
+  }
+  if (
+    !form.allow_image_generation ||
+    (form.platform !== "composite" && form.platform !== "openai")
+  ) {
+    form.image_count_billing = false;
   }
 };
 
@@ -6018,6 +6105,7 @@ const closeCreateModal = () => {
   createForm.i18n = {};
   createForm.platform = "anthropic";
   createForm.rate_multiplier = 1.0;
+  createForm.billing_rate_policy = cloneBillingRatePolicy();
   createForm.is_exclusive = false;
   createForm.subscription_type = "standard";
   createForm.daily_limit_usd = null;
@@ -6028,6 +6116,7 @@ const closeCreateModal = () => {
   createForm.quota_reset_include_monthly = false;
   createForm.allow_image_generation = false;
   createForm.allow_batch_image_generation = false;
+  createForm.image_count_billing = false;
   createForm.image_rate_independent = false;
   createForm.image_rate_multiplier = 1;
   createForm.batch_image_discount_multiplier = 0.5;
@@ -6119,6 +6208,8 @@ const validateProfitControlForm = (form: ProfitControlFormState): boolean => {
 };
 
 const handleCreateGroup = async () => {
+  if (!authStore.isSimpleMode && createModelBillingRatePolicyRef.value && !createModelBillingRatePolicyRef.value.validate()) return;
+  if (!authStore.isSimpleMode && createBillingRatePolicyRef.value && !createBillingRatePolicyRef.value.validate()) return;
   if (!createForm.name.trim()) {
     appStore.showError(t("admin.groups.nameRequired"));
     return;
@@ -6320,6 +6411,8 @@ const handleEdit = async (group: AdminGroup) => {
   );
   editForm.platform = group.platform;
   editForm.rate_multiplier = group.rate_multiplier;
+  editForm.billing_rate_policy = cloneBillingRatePolicy(group.billing_rate_policy);
+  editForm.expected_billing_policy_version = group.billing_policy_version;
   editForm.is_exclusive = group.is_exclusive;
   editForm.status = group.status;
   editForm.subscription_type = group.subscription_type || "standard";
@@ -6339,6 +6432,7 @@ const handleEdit = async (group: AdminGroup) => {
   editForm.allow_image_generation = group.allow_image_generation ?? false;
   editForm.allow_batch_image_generation =
     group.allow_batch_image_generation ?? false;
+  editForm.image_count_billing = group.image_count_billing ?? false;
   editForm.image_rate_independent = group.image_rate_independent ?? false;
   editForm.image_rate_multiplier = group.image_rate_multiplier ?? 1;
   editForm.batch_image_discount_multiplier =
@@ -6521,6 +6615,8 @@ const closeEditModal = () => {
 };
 
 const handleUpdateGroup = async () => {
+  if (!authStore.isSimpleMode && editModelBillingRatePolicyRef.value && !editModelBillingRatePolicyRef.value.validate()) return;
+  if (!authStore.isSimpleMode && editBillingRatePolicyRef.value && !editBillingRatePolicyRef.value.validate()) return;
   if (!editingGroup.value) return;
   if (!editForm.name.trim()) {
     appStore.showError(t("admin.groups.nameRequired"));
@@ -6707,7 +6803,9 @@ const handleUpdateGroup = async () => {
     loadGroups();
   } catch (error: any) {
     appStore.showError(
-      extractApiErrorMessage(error, t("admin.groups.failedToUpdate")),
+      error?.reason === "GROUP_CONFIGURATION_CHANGED"
+        ? t("billingRates.editConflict")
+        : extractApiErrorMessage(error, t("admin.groups.failedToUpdate")),
     );
     console.error("Error updating group:", error);
   } finally {
@@ -7261,6 +7359,8 @@ const saveSortOrder = async () => {
 
 onMounted(() => {
   loadGroups();
+  const requestedGroup = Number(inject(routeLocationKey, undefined)?.query.edit_group_id);
+  if (Number.isSafeInteger(requestedGroup) && requestedGroup > 0) void handleEdit({ id: requestedGroup } as AdminGroup);
   if (!authStore.isSimpleMode) {
     void loadLiveCapability();
     loadModelAllowlistCandidates("create", 0, createForm.platform);

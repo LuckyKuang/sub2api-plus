@@ -183,11 +183,11 @@
           </template>
 
           <template #cell-actions="{ row }">
-            <div class="flex items-center space-x-2">
+            <div class="table-actions">
               <button
                 v-if="row.status === 'unused'"
                 @click="handleDelete(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors hover:bg-red-50/25 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400 surface-control surface-muted"
+                class="table-action table-action-danger"
               >
                 <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path

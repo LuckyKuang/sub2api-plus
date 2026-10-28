@@ -18,6 +18,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/repository"
 	middleware2 "github.com/LuckyKuang/sub2api-plus/internal/server/middleware"
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
+	"github.com/LuckyKuang/sub2api-plus/internal/testutil"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
@@ -90,7 +91,7 @@ func TestAsyncImageContainerWorkflowWithMinIO(t *testing.T) {
 	store := &asyncImageMemoryStore{tasks: make(map[string]*service.ImageTaskRecord)}
 	tasks := service.NewImageTaskServiceWithUploader(store, service.NewImageResultUploader(storage, "images/", false, 0, nil), time.Hour, time.Minute)
 	tasks.SetHistoryRepository(repository.NewImageTaskHistoryRepository(db))
-	handler := &AsyncImageHandler{tasks: tasks}
+	handler := &AsyncImageHandler{openAI: &OpenAIGatewayHandler{unfinishedTasks: service.NewGatewayUnfinishedTaskService(&testutil.StubGatewayUnfinishedTaskRepo{}, nil), concurrencyHelper: NewConcurrencyHelper(service.NewConcurrencyService(asyncImageIntegrationConcurrencyCache{}), SSEPingFormatNone, 0)}, tasks: tasks}
 	handler.execute = func(_ string, c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"created": 123, "data": []gin.H{{"b64_json": asyncImageContainerTestPNG}}})
 	}
@@ -102,6 +103,7 @@ func TestAsyncImageContainerWorkflowWithMinIO(t *testing.T) {
 			ID: 9, UserID: 7, GroupID: &groupID,
 			Group: &service.Group{ID: groupID, Platform: service.PlatformOpenAI, AllowImageGeneration: true},
 		})
+		c.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: 7, Concurrency: 3})
 		c.Next()
 	})
 	router.POST("/v1/images/generations/async", handler.Submit)
@@ -159,4 +161,15 @@ func TestAsyncImageContainerWorkflowWithMinIO(t *testing.T) {
 	var storedStatus string
 	require.NoError(t, db.QueryRowContext(ctx, "SELECT status FROM async_image_tasks WHERE task_id = $1", accepted.TaskID).Scan(&storedStatus))
 	require.Equal(t, service.ImageTaskStatusCompleted, storedStatus)
+}
+
+// This storage integration isolates provider execution while still explicitly
+// admitting the external request and detached worker through the user pool.
+type asyncImageIntegrationConcurrencyCache struct{ service.ConcurrencyCache }
+
+func (asyncImageIntegrationConcurrencyCache) AcquireUserSlot(context.Context, int64, int, string) (bool, error) {
+	return true, nil
+}
+func (asyncImageIntegrationConcurrencyCache) ReleaseUserSlot(context.Context, int64, string) error {
+	return nil
 }

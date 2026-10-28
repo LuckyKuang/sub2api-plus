@@ -22,6 +22,9 @@ type Group struct {
 	I18n           GroupI18n // 名称与描述的界面语言译文；缺失的语言沿用 Name/Description
 	Platform       string
 	RateMultiplier float64
+	// Provider/model selling factors; an empty policy preserves legacy billing.
+	BillingRatePolicy    domain.BillingRatePolicy
+	BillingPolicyVersion int64
 	// 高峰时段倍率：peak_rate_enabled 为 true 且当前时刻处于 [PeakStart, PeakEnd) 时，
 	// token 计费倍率额外乘以 PeakRateMultiplier。详见 PeakMultiplierAt。
 	PeakRateEnabled    bool
@@ -53,6 +56,7 @@ type Group struct {
 	// 图片生成计费配置（antigravity 和 gemini 平台使用）
 	AllowImageGeneration         bool
 	AllowBatchImageGeneration    bool
+	ImageCountBilling            bool
 	ImageRateIndependent         bool
 	ImageRateMultiplier          float64
 	ImagePrice1K                 *float64
@@ -121,8 +125,8 @@ type Group struct {
 	// 固定账号列表拉取并合并，不经过调度器（仅 openai 平台）。
 	CodexModelsManifestConfig GroupCodexModelsManifestConfig
 
-	// RPMLimit 分组级每分钟请求数上限（0 = 不限制）。
-	// 一旦设置即接管该分组用户的限流（覆盖用户级 rpm_limit），可被 user-group rpm_override 进一步覆盖。
+	// RPMLimit 每个 (用户, 分组) 的默认每分钟上限（0 = 不限制），不是全组共享计数。
+	// 可被 user-group rpm_override 替代；与用户全局 rpm_limit 同时生效。
 	RPMLimit int
 
 	// MaxReasoningEffort limits the effective Anthropic/OpenAI reasoning effort.
@@ -349,7 +353,7 @@ func (g *Group) PeakMultiplierAt(now time.Time) float64 {
 
 // ValidatePeakRateConfig 是高峰倍率配置的唯一校验来源，供 handler 与 service 层共用。
 // enabled=true 时仅允许订阅类型分组；并要求 start/end 合法且 end>start（不支持跨天），multiplier>=0。
-// multiplier=0 是允许的，表示高峰 token 请求按 0 倍计费，可用于折扣/免费策略。
+// multiplier=0 是允许的，新请求所有计费单位均按 0 倍计费，可用于折扣/免费策略。
 // enabled=false 时放行（不关心类型）。subscriptionType 为空按 standard 处理。
 func ValidatePeakRateConfig(subscriptionType string, enabled bool, start, end string, multiplier float64) error {
 	if !enabled {
@@ -404,10 +408,10 @@ func NormalizePeakRateConfig(subscriptionType string, enabled bool, start, end s
 	return enabled, start, end, multiplier
 }
 
-// computePeakAwareMultipliers 把"基础 token 倍率 base"（已含系统/分组/用户级倍率，但不含高峰）
-// 拆分为最终 token 倍率与图片按次倍率：图片按次倍率基于 base 现算、不受高峰影响；token 倍率在 base 上叠加高峰因子。
-// gateway_service.recordUsageCore 与 openai_gateway_service.RecordUsage 共用此函数，
-// 锁死"高峰因子只乘入 token 倍率、图片按次倍率不受影响"这一叠加顺序——任何调换都会被 group_peak_rate_test 覆盖。
+// computePeakAwareMultipliers retains the historical no-snapshot token-only
+// calculation. New admissions and restored task settlements use the captured
+// BillingPricingSnapshot quote, whose peak_scope selects all_meters or the
+// accepted historical token_only contract instead of these fallback values.
 func computePeakAwareMultipliers(apiKey *APIKey, base float64, now time.Time) (text, image float64) {
 	image = resolveImageRateMultiplier(apiKey, base)
 	peak := 1.0

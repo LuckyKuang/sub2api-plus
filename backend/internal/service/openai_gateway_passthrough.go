@@ -1433,6 +1433,9 @@ func openAIStreamFailedEventErrorCode(payload []byte) string {
 // 上游在容量紧张时会把请求丢进降载路径：HTTP 200 之后立刻推 event: error
 // （code=server_is_overloaded / slow_down）并以 response.failed 收尾。
 func isOpenAIUpstreamCapacityShedEvent(payload []byte) bool {
+	if IsOpenAIPolicyCapacityUnavailable(payload) {
+		return true
+	}
 	switch openAIStreamFailedEventErrorCode(payload) {
 	case "server_is_overloaded", "slow_down":
 		return true
@@ -1443,6 +1446,16 @@ func isOpenAIUpstreamCapacityShedEvent(payload []byte) bool {
 		}
 	}
 	return false
+}
+
+// IsOpenAIPolicyCapacityUnavailable follows the official Codex error code
+// exactly. A policy-like type or message is not evidence of this capacity class.
+func IsOpenAIPolicyCapacityUnavailable(payload []byte) bool {
+	errorObject := gjson.GetBytes(payload, "response.error")
+	if !errorObject.IsObject() {
+		errorObject = gjson.GetBytes(payload, "error")
+	}
+	return errorObject.Get("code").String() == "policy_capacity_unavailable"
 }
 
 func logOpenAICapacityFailoverSuppressed(
@@ -1507,6 +1520,9 @@ func sanitizeOpenAICapacityShedErrorCodeForClient(payload []byte) ([]byte, bool)
 func openAIStreamFailedEventSemanticStatus(payload []byte, message string) int {
 	if status, ok := openAIModelNotFoundEventStatus(payload); ok {
 		return status
+	}
+	if IsOpenAIPolicyCapacityUnavailable(payload) {
+		return http.StatusServiceUnavailable
 	}
 	if isOpenAIContextWindowError(message, payload) {
 		return http.StatusBadRequest
@@ -1628,6 +1644,18 @@ func openAIStreamFailedEventPassthroughBody(payload []byte, failedMessage string
 	if code := strings.TrimSpace(gjson.Get(responseError.Raw, "code").String()); code != "" {
 		errorPayload["code"] = code
 	}
+	if IsOpenAIPolicyCapacityUnavailable(payload) {
+		retryHeaders := openAIPolicyCapacityRetryHeaders(nil, payload)
+		retryAdvice := make(map[string]string)
+		for _, name := range []string{"Retry-After", "Retry-After-Ms"} {
+			if value := retryHeaders.Get(name); value != "" {
+				retryAdvice[name] = value
+			}
+		}
+		if len(retryAdvice) > 0 {
+			errorPayload["headers"] = retryAdvice
+		}
+	}
 	if param := strings.TrimSpace(gjson.Get(responseError.Raw, "param").String()); param != "" {
 		errorPayload["param"] = param
 	}
@@ -1671,6 +1699,11 @@ func applyOpenAIStreamFailedErrorPassthroughRule(
 }
 
 func openAIStreamFailedEventShouldFailover(payload []byte, message string) bool {
+	// This exact capacity code is transient, even though its spelling contains
+	// "policy". Route it through the request-scoped stop/error synthesis path.
+	if IsOpenAIPolicyCapacityUnavailable(payload) {
+		return true
+	}
 	if _, ok := openAIModelNotFoundEventStatus(payload); ok {
 		return false
 	}
@@ -1726,6 +1759,9 @@ func openAIStreamFailedEventShouldFailover(payload []byte, message string) bool 
 }
 
 func openAIStreamErrorEventShouldFailover(payload []byte, message string) bool {
+	if IsOpenAIPolicyCapacityUnavailable(payload) {
+		return true
+	}
 	if _, ok := openAIModelNotFoundEventStatus(payload); ok {
 		return false
 	}

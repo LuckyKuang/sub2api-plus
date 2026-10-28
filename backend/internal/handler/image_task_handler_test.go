@@ -171,7 +171,7 @@ func TestAsyncImageHandlerSubmitAndPoll(t *testing.T) {
 	tasks := service.NewImageTaskServiceWithUploader(store, nil, time.Hour, time.Minute)
 	tasks.SetHistoryRepository(&asyncImageMemoryHistory{})
 	release := make(chan struct{})
-	h := &AsyncImageHandler{tasks: tasks}
+	h := &AsyncImageHandler{openAI: newGatewayAdmissionForTest(), tasks: tasks}
 	h.execute = func(_ string, c *gin.Context) {
 		<-release
 		c.JSON(http.StatusOK, gin.H{"created": 123, "data": []gin.H{{"url": "https://example.test/image.png"}}})
@@ -186,6 +186,7 @@ func TestAsyncImageHandlerSubmitAndPoll(t *testing.T) {
 			GroupID: &groupID,
 			Group:   &service.Group{ID: groupID, Platform: service.PlatformOpenAI, AllowImageGeneration: true},
 		})
+		c.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: 7, Concurrency: 3})
 		c.Next()
 	})
 	router.POST("/v1/images/generations/async", h.Submit)
@@ -254,10 +255,11 @@ func TestAsyncImageHandlerSupportUsesSameKeyScopedRead(t *testing.T) {
 	}, order: []string{"target", "other"}}
 	tasks := service.NewImageTaskService(&asyncImageMemoryStore{tasks: history.tasks})
 	tasks.SetHistoryRepository(history)
-	h := &AsyncImageHandler{tasks: tasks}
+	h := &AsyncImageHandler{openAI: newGatewayAdmissionForTest(), tasks: tasks}
 	router := gin.New()
 	router.Use(func(c *gin.Context) {
 		c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{ID: 99, UserID: 7})
+		c.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: 7, Concurrency: 3})
 	})
 	router.GET("/support/images/tasks", h.List)
 	router.GET("/support/images/tasks/:task_id", h.Get)
@@ -280,7 +282,7 @@ func TestAsyncImageHandlerSubmitEditPreservesMultipartRequestAndTaskType(t *test
 	var executedPath string
 	var executedContentType string
 	var executedBody []byte
-	h := &AsyncImageHandler{tasks: tasks}
+	h := &AsyncImageHandler{openAI: newGatewayAdmissionForTest(), tasks: tasks}
 	h.execute = func(_ string, c *gin.Context) {
 		executedPath = c.Request.URL.Path
 		executedContentType = c.GetHeader("Content-Type")
@@ -338,7 +340,7 @@ func TestAsyncImageHandlerDeleteFailedTask(t *testing.T) {
 	history := &asyncImageMemoryHistory{tasks: map[string]*service.ImageTaskRecord{task.ID: task}, order: []string{task.ID}}
 	tasks := service.NewImageTaskServiceWithOptions(store, time.Hour, time.Minute)
 	tasks.SetHistoryRepository(history)
-	h := &AsyncImageHandler{tasks: tasks}
+	h := &AsyncImageHandler{openAI: newGatewayAdmissionForTest(), tasks: tasks}
 
 	router := gin.New()
 	router.Use(asyncImageTestAPIKeyMiddleware)
@@ -362,7 +364,7 @@ func TestAsyncImageHandlerDeleteRejectsProcessingTask(t *testing.T) {
 	history := &asyncImageMemoryHistory{tasks: map[string]*service.ImageTaskRecord{task.ID: task}}
 	tasks := service.NewImageTaskServiceWithOptions(store, time.Hour, time.Minute)
 	tasks.SetHistoryRepository(history)
-	h := &AsyncImageHandler{tasks: tasks}
+	h := &AsyncImageHandler{openAI: newGatewayAdmissionForTest(), tasks: tasks}
 
 	router := gin.New()
 	router.Use(asyncImageTestAPIKeyMiddleware)
@@ -386,8 +388,9 @@ func TestAsyncImageHandlerFailedTaskEnqueuesOneSanitizedCorrelatedOpsError(t *te
 	tasks := service.NewImageTaskServiceWithUploader(store, nil, time.Hour, time.Minute)
 	opsRepo := &asyncImageOpsCaptureRepo{}
 	h := &AsyncImageHandler{
-		tasks: tasks,
-		ops:   service.NewOpsService(opsRepo, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil),
+		openAI: newGatewayAdmissionForTest(),
+		tasks:  tasks,
+		ops:    service.NewOpsService(opsRepo, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil),
 	}
 	h.execute = func(_ string, c *gin.Context) {
 		upstreamStatus := http.StatusServiceUnavailable
@@ -465,8 +468,9 @@ func TestAsyncImageHandlerRoutingFailureDoesNotInventUpstreamStatus(t *testing.T
 	store := &asyncImageMemoryStore{tasks: make(map[string]*service.ImageTaskRecord)}
 	tasks := service.NewImageTaskServiceWithUploader(store, nil, time.Hour, time.Minute)
 	h := &AsyncImageHandler{
-		tasks: tasks,
-		ops:   service.NewOpsService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil),
+		openAI: newGatewayAdmissionForTest(),
+		tasks:  tasks,
+		ops:    service.NewOpsService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil),
 	}
 	h.execute = func(_ string, c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{
@@ -500,8 +504,9 @@ func TestAsyncImageHandlerSuccessfulTaskDoesNotEnqueueOpsError(t *testing.T) {
 	store := &asyncImageMemoryStore{tasks: make(map[string]*service.ImageTaskRecord)}
 	tasks := service.NewImageTaskServiceWithUploader(store, nil, time.Hour, time.Minute)
 	h := &AsyncImageHandler{
-		tasks: tasks,
-		ops:   service.NewOpsService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil),
+		openAI: newGatewayAdmissionForTest(),
+		tasks:  tasks,
+		ops:    service.NewOpsService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil),
 	}
 	h.execute = func(_ string, c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"created": 123, "data": []gin.H{{"url": "https://example.test/image.png"}}})
@@ -533,7 +538,7 @@ func TestAsyncImageHandlerSuccessfulTaskDoesNotEnqueueOpsError(t *testing.T) {
 func TestAsyncImageHandlerDownloadReturnsCompletedZIP(t *testing.T) {
 	storage := &asyncImageDownloadStorage{}
 	tasks, task := completedAsyncImageDownloadTask(t, storage)
-	h := &AsyncImageHandler{tasks: tasks}
+	h := &AsyncImageHandler{openAI: newGatewayAdmissionForTest(), tasks: tasks}
 	router := gin.New()
 	router.Use(asyncImageTestAPIKeyMiddleware)
 	router.GET("/v1/images/tasks/:task_id/download", h.Download)
@@ -554,7 +559,7 @@ func TestAsyncImageHandlerDownloadReturnsJSONWhenObjectStorageReadFails(t *testi
 	storage := &asyncImageDownloadStorage{}
 	tasks, task := completedAsyncImageDownloadTask(t, storage)
 	storage.openErr = errors.New("object storage read denied")
-	h := &AsyncImageHandler{tasks: tasks}
+	h := &AsyncImageHandler{openAI: newGatewayAdmissionForTest(), tasks: tasks}
 	router := gin.New()
 	router.Use(asyncImageTestAPIKeyMiddleware)
 	router.GET("/v1/images/tasks/:task_id/download", h.Download)
@@ -636,6 +641,7 @@ func asyncImageTestAPIKeyMiddleware(c *gin.Context) {
 		GroupID: &groupID,
 		Group:   &service.Group{ID: groupID, Platform: service.PlatformOpenAI, AllowImageGeneration: true},
 	})
+	c.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: 7, Concurrency: 3})
 	c.Next()
 }
 
@@ -645,7 +651,7 @@ func TestAsyncImageHandlerDisabledReturns404(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	store := &asyncImageMemoryStore{tasks: make(map[string]*service.ImageTaskRecord)}
 	tasks := service.NewImageTaskServiceWithOptions(store, time.Hour, time.Minute) // enabled == false
-	h := &AsyncImageHandler{tasks: tasks}
+	h := &AsyncImageHandler{openAI: newGatewayAdmissionForTest(), tasks: tasks}
 
 	router := gin.New()
 	router.Use(func(c *gin.Context) {
@@ -656,6 +662,7 @@ func TestAsyncImageHandlerDisabledReturns404(t *testing.T) {
 			GroupID: &groupID,
 			Group:   &service.Group{ID: groupID, Platform: service.PlatformOpenAI, AllowImageGeneration: true},
 		})
+		c.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: 7, Concurrency: 3})
 		c.Next()
 	})
 	router.POST("/v1/images/generations/async", h.Submit)

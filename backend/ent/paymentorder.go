@@ -55,6 +55,10 @@ type PaymentOrder struct {
 	Currency string `json:"currency,omitempty"`
 	// PlanName holds the value of the "plan_name" field.
 	PlanName string `json:"plan_name,omitempty"`
+	// PricingPolicyVersion holds the value of the "pricing_policy_version" field.
+	PricingPolicyVersion int64 `json:"pricing_policy_version,omitempty"`
+	// PricingSummary holds the value of the "pricing_summary" field.
+	PricingSummary map[string]interface{} `json:"pricing_summary,omitempty"`
 	// RedeemCodeID holds the value of the "redeem_code_id" field.
 	RedeemCodeID *int64 `json:"redeem_code_id,omitempty"`
 	// OrderType holds the value of the "order_type" field.
@@ -138,13 +142,13 @@ func (*PaymentOrder) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case paymentorder.FieldProviderSnapshot:
+		case paymentorder.FieldPricingSummary, paymentorder.FieldProviderSnapshot:
 			values[i] = new([]byte)
 		case paymentorder.FieldForceRefund:
 			values[i] = new(sql.NullBool)
 		case paymentorder.FieldAmount, paymentorder.FieldPayAmount, paymentorder.FieldFeeRate, paymentorder.FieldBonusAmount, paymentorder.FieldRefundAmount:
 			values[i] = new(sql.NullFloat64)
-		case paymentorder.FieldID, paymentorder.FieldUserID, paymentorder.FieldRedeemCodeID, paymentorder.FieldPlanID, paymentorder.FieldSubscriptionGroupID, paymentorder.FieldSubscriptionDays:
+		case paymentorder.FieldID, paymentorder.FieldUserID, paymentorder.FieldPricingPolicyVersion, paymentorder.FieldRedeemCodeID, paymentorder.FieldPlanID, paymentorder.FieldSubscriptionGroupID, paymentorder.FieldSubscriptionDays:
 			values[i] = new(sql.NullInt64)
 		case paymentorder.FieldUserEmail, paymentorder.FieldUserName, paymentorder.FieldUserNotes, paymentorder.FieldRechargeCode, paymentorder.FieldOutTradeNo, paymentorder.FieldPaymentType, paymentorder.FieldPaymentTradeNo, paymentorder.FieldPayURL, paymentorder.FieldQrCode, paymentorder.FieldQrCodeImg, paymentorder.FieldOrderSource, paymentorder.FieldCurrency, paymentorder.FieldPlanName, paymentorder.FieldOrderType, paymentorder.FieldProviderInstanceID, paymentorder.FieldProviderKey, paymentorder.FieldStatus, paymentorder.FieldRefundReason, paymentorder.FieldRefundRequestReason, paymentorder.FieldRefundRequestedBy, paymentorder.FieldFailedReason, paymentorder.FieldClientIP, paymentorder.FieldSrcHost, paymentorder.FieldSrcURL:
 			values[i] = new(sql.NullString)
@@ -282,6 +286,20 @@ func (_m *PaymentOrder) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field plan_name", values[i])
 			} else if value.Valid {
 				_m.PlanName = value.String
+			}
+		case paymentorder.FieldPricingPolicyVersion:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field pricing_policy_version", values[i])
+			} else if value.Valid {
+				_m.PricingPolicyVersion = value.Int64
+			}
+		case paymentorder.FieldPricingSummary:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field pricing_summary", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.PricingSummary); err != nil {
+					return fmt.Errorf("unmarshal field pricing_summary: %w", err)
+				}
 			}
 		case paymentorder.FieldRedeemCodeID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -559,6 +577,12 @@ func (_m *PaymentOrder) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("plan_name=")
 	builder.WriteString(_m.PlanName)
+	builder.WriteString(", ")
+	builder.WriteString("pricing_policy_version=")
+	builder.WriteString(fmt.Sprintf("%v", _m.PricingPolicyVersion))
+	builder.WriteString(", ")
+	builder.WriteString("pricing_summary=")
+	builder.WriteString(fmt.Sprintf("%v", _m.PricingSummary))
 	builder.WriteString(", ")
 	if v := _m.RedeemCodeID; v != nil {
 		builder.WriteString("redeem_code_id=")

@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/securityaudit"
 	middleware2 "github.com/LuckyKuang/sub2api-plus/internal/server/middleware"
@@ -15,6 +16,10 @@ import (
 const securityAuditCompletedContextKey = "sub2api.security_audit.completed"
 const securityAuditWSTurnContextKey = "sub2api.security_audit.ws_turn"
 const securityAuditWSDedupeContextKey = "sub2api.security_audit.ws_dedupe"
+
+// This is only a response-envelope discriminator after a successful audit.
+// It never enters the audit coordinator, audit metrics or policy attribution.
+const billingAdmissionUnavailableKind securityaudit.DecisionKind = "billing_unavailable"
 
 type securityAuditWSDedupeEntry struct {
 	stage    string
@@ -48,21 +53,64 @@ func (h *GatewayHandler) checkSecurityAudit(c *gin.Context, reqLog *zap.Logger, 
 	if h == nil {
 		return nil
 	}
-	return runSecurityAudit(c, reqLog, h.securityAuditCoordinator, h.contentModerationService, apiKey, subject, protocol, model, body, "http")
+	decision := runSecurityAudit(c, reqLog, h.securityAuditCoordinator, h.contentModerationService, apiKey, subject, protocol, model, body, "http")
+	if (decision == nil || decision.AllowNextStage) && c != nil && c.Request != nil && h.gatewayService != nil {
+		at := service.GatewayTokenRequestPricingAtFromContext(c.Request.Context())
+		if at.IsZero() {
+			at = time.Now()
+		}
+		c.Request = c.Request.WithContext(h.gatewayService.WithBillingPricingSnapshot(c.Request.Context(), apiKey, at, clientRequestedModel(c, model)))
+		if rejected := validateBillingPricingAdmission(c, reqLog); rejected != nil {
+			return rejected
+		}
+	}
+	return decision
 }
 
 func (h *OpenAIGatewayHandler) checkSecurityAudit(c *gin.Context, reqLog *zap.Logger, apiKey *service.APIKey, subject middleware2.AuthSubject, protocol, model string, body []byte) *securityaudit.Decision {
 	if h == nil {
 		return nil
 	}
-	return runSecurityAudit(c, reqLog, h.securityAuditCoordinator, h.contentModerationService, apiKey, subject, protocol, model, body, "http")
+	decision := runSecurityAudit(c, reqLog, h.securityAuditCoordinator, h.contentModerationService, apiKey, subject, protocol, model, body, "http")
+	if (decision == nil || decision.AllowNextStage) && c != nil && c.Request != nil && h.gatewayService != nil {
+		at := service.OpenAIPricingAtFromContext(c.Request.Context())
+		if at.IsZero() {
+			at = time.Now()
+		}
+		c.Request = c.Request.WithContext(h.gatewayService.WithBillingPricingSnapshot(c.Request.Context(), apiKey, at, clientRequestedModel(c, model)))
+		if rejected := validateBillingPricingAdmission(c, reqLog); rejected != nil {
+			return rejected
+		}
+	}
+	return decision
 }
 
 func (h *OpenAIGatewayHandler) checkSecurityAuditStage(c *gin.Context, reqLog *zap.Logger, apiKey *service.APIKey, subject middleware2.AuthSubject, protocol, model string, body []byte, stage string) *securityaudit.Decision {
 	if h == nil {
 		return nil
 	}
-	return runSecurityAudit(c, reqLog, h.securityAuditCoordinator, h.contentModerationService, apiKey, subject, protocol, model, body, stage)
+	decision := runSecurityAudit(c, reqLog, h.securityAuditCoordinator, h.contentModerationService, apiKey, subject, protocol, model, body, stage)
+	// The first audited WS turn needs a snapshot before connection admission.
+	// Later turns refresh their authenticated group and snapshot in BeforeTurn;
+	// do not overwrite an in-flight turn on the shared Gin context here.
+	if stage == "first_turn" && (decision == nil || decision.AllowNextStage) && c != nil && c.Request != nil && h.gatewayService != nil {
+		c.Request = c.Request.WithContext(h.gatewayService.WithBillingPricingSnapshot(c.Request.Context(), apiKey, time.Now(), clientRequestedModel(c, model)))
+		if rejected := validateBillingPricingAdmission(c, reqLog); rejected != nil {
+			return rejected
+		}
+	}
+	return decision
+}
+
+func validateBillingPricingAdmission(c *gin.Context, reqLog *zap.Logger) *securityaudit.Decision {
+	if err := service.ValidateBillingPricingSnapshot(c.Request.Context()); err != nil {
+		if reqLog != nil {
+			reqLog.Warn("billing.pricing_snapshot_unavailable", zap.String("stage", "billing_admission"), zap.String("code", "BILLING_RATE_UNAVAILABLE"))
+		}
+		return &securityaudit.Decision{Kind: billingAdmissionUnavailableKind, HTTPStatus: http.StatusServiceUnavailable,
+			ErrorCode: "BILLING_RATE_UNAVAILABLE", ClientMessage: "Billing rates are temporarily unavailable", AllowNextStage: false}
+	}
+	return nil
 }
 
 func runSecurityAudit(c *gin.Context, reqLog *zap.Logger, coordinator *securityaudit.Coordinator, legacy *service.ContentModerationService, apiKey *service.APIKey, subject middleware2.AuthSubject, protocol, model string, body []byte, stage string) (result *securityaudit.Decision) {

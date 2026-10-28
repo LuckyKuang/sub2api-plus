@@ -358,6 +358,9 @@ its result cannot overwrite a newer account binding.
 This source matrix applies identically to OAuth and API-key HTTP/WS provider
 requests, including retries, discovery and probes. Transport preference and
 inbound client classification never change the selected source.
+The October 28 manual upgrade selects stable `0.165.0` after this matrix;
+it changes the version declaration only. Valid administrator version overrides
+retain priority and every selected family, OS, architecture and terminal stays intact.
 
 OpenAI monitor checks, Prompt Audit scans/model probes and Content Moderation
 requests resolve the native Codex global/default identity and emit the same
@@ -376,9 +379,9 @@ string clears it through an explicit null in the JSONB update.
 The exact compiled identity is:
 
 ```text
-User-Agent: codex_cli_rs/0.164.0 (Ubuntu 24.04; x86_64) xterm-256color
+User-Agent: codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color
 Originator: codex_cli_rs
-Version: 0.164.0
+Version: 0.165.0
 ```
 
 The version resolver runs after source selection: a valid administrator version
@@ -607,9 +610,72 @@ Neither capability is implied by matching UA/Originator/Version.
 ## User-Agent suffix
 
 An administrator User-Agent may end with the official ` ({suffix})` group, for
-example `codex_cli_rs/0.164.0 (Ubuntu 24.04; x86_64) xterm-256color (mcp: server-a)`.
+example `codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color (mcp: server-a)`.
 Pairing, validation, and manual version updates accept that form and keep the
 suffix unchanged. The gateway does not generate a suffix.
+
+## October 28 protocol compatibility
+
+The reviewed source and release are pinned in
+[Official agent baselines](../OFFICIAL_AGENT_BASELINES.md#october-28-codex-alignment).
+
+**Capacity errors.** Native HTTP `503` with exact
+`error.code = policy_capacity_unavailable` and SSE/WS error events with that
+exact code are request-scoped capacity failures. The gateway keeps the code
+across JSON, SSE, native WS and HTTP-to-WS conversion, and carries only bounded
+`Retry-After` / `Retry-After-Ms` advice from embedded error headers. Synthesized
+WS errors include top-level `status: 503` so the official client can classify
+them. Plus does not penalize credentials, retry that account or scan the pool
+for these failures. Partial output is not replayed. The same code in a native
+HTTP 401/403 does not suppress ordinary authentication/access handling; a
+policy-like type/message alone does not select this error class.
+
+**Government API keys.** Native OpenAI API keys with the case-sensitive official
+prefix `sk-proj-fedramp-` or `sk-svcacct-fedramp-` default to
+`https://gov.api.openai.com/v1` for inference and standard model lists. Their
+Codex manifest default is `https://gov.chatgpt.com/backend-api/codex/models`.
+An explicit account base URL retains precedence, including an explicitly chosen
+commercial URL. `X-OpenAI-Fedramp: true` derives from the acquired key's issuance
+prefix; ordinary keys remove stale/injected declarations. OAuth and setup-token
+accounts use the credential owner's government-workspace claim. Inbound headers and generic
+header overrides cannot select the region or substitute another credential.
+These routing hints do not validate a token or grant model entitlement.
+
+**Named context outputs.** Official additional context can be a
+`function_call_output` with `name`, optional `namespace`, `output` and an absent
+or null `call_id`. This named context requires no preceding function call and
+cannot establish a continuation anchor. Ordinary tool outputs still require
+their paired context. The canonical audit extractor processes recognized output
+content and siblings before account selection or side effects, with the same
+unknown/incomplete-content pass-through contract for both audit engines.
+See [content coverage](../SECURITY_AUDIT_CONTENT_COVERAGE.md).
+
+**Workspace imports.** Official `auth.json` workspace switching may retain an
+old ID Token while `tokens.account_id` and the access token name the newly
+selected workspace. Import selects the access token's account, plan and
+government flag only when the selected account matches and both tokens name
+the same known user. Conflicting workspace/user declarations fail that item
+before create/update. The original ID/refresh token is retained, and an
+existing row for a different workspace is not overwritten by a shared refresh
+token. JWT metadata parsing is not signature validation; provider authentication
+continues to validate the transmitted bearer token.
+Account-owned refresh keeps that selected account and known user, rejects
+conflicting returned principals before enrichment or persistence, and uses
+matching access-token metadata when an ID Token still describes the old
+workspace. Returned ID/access principals must also agree when the stored user
+is unknown. An explicit false government flag clears the previous true value;
+the existing conditional refresh persistence remains mandatory.
+
+**Terra catalog.** The official `gpt-6.1-terra` descriptor supplies a 500,000
+default context window, 872,000 maximum context window, text/image input,
+`low` through `max` plus client-side `ultra`, and the priority tier. The gateway
+retains the descriptor and supports configured aliases; disabled reasoning
+(`none` / `minimal`) is rejected on compatibility paths. Native API-key catalogs
+retain the standard Responses boundary with Responses Lite disabled. Catalog
+visibility does not assert account availability. The v0.2.19 Plus release adds
+Terra's independently verified [API pricing](https://developers.openai.com/api/docs/pricing)
+as a missing-catalog fallback, preserving configured prices and frozen billing.
+The pinned client descriptor remains distinct from the current API model limits.
 
 ## Standalone search
 

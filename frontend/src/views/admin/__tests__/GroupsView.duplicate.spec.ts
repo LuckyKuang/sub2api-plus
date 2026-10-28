@@ -5,7 +5,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AdminGroup } from '@/types'
 import GroupsView from '@/views/admin/GroupsView.vue'
 import Select from '@/components/common/Select.vue'
+import PricingEntryCard from '@/components/admin/channel/PricingEntryCard.vue'
+import GroupModelRateFields from '@/components/admin/group/GroupModelRateFields.vue'
 import { adminAPI } from '@/api/admin'
+import en from '@/i18n/locales/en/admin/overview'
+import zh from '@/i18n/locales/zh/admin/overview'
+import type { BillingRatePolicy } from '@/types/billingRate'
 
 const {
   listGroups,
@@ -38,6 +43,9 @@ const {
 }))
 
 const authState = vi.hoisted(() => ({ isSimpleMode: false }))
+const translationState = vi.hoisted(() => ({
+  translate: (key: string, _params?: Record<string, unknown>): string => key
+}))
 
 vi.mock('@/api/admin', () => ({
   adminAPI: {
@@ -81,7 +89,7 @@ vi.mock('vue-i18n', async () => {
   const actual = await vi.importActual<typeof import('vue-i18n')>('vue-i18n')
   return {
     ...actual,
-    useI18n: () => ({ t: (key: string) => key })
+    useI18n: () => ({ t: (key: string, params?: Record<string, unknown>) => translationState.translate(key, params) })
   }
 })
 
@@ -188,6 +196,7 @@ function mountView() {
 describe('GroupsView duplicate action', () => {
   beforeEach(() => {
     authState.isSimpleMode = false
+    translationState.translate = key => key
     localStorage.clear()
     vi.spyOn(console, 'error').mockImplementation(() => {})
     for (const fn of [
@@ -234,6 +243,202 @@ describe('GroupsView duplicate action', () => {
 
   afterEach(() => {
     vi.restoreAllMocks()
+  })
+
+  it.each([
+    { locale: 'en', messages: en, reference: ['Base per-image reference', 'Base per-second reference', 'Base per-call reference: $2'], hint: 'platform, model, personal and applicable peak factors' },
+    { locale: 'zh', messages: zh, reference: ['基础单张参考价', '基础每秒参考价', '基础单次参考价：$2'], hint: '平台、模型、个人及适用的高峰倍率' }
+  ])('distinguishes base media/search references from final model charges in $locale for create and edit', async ({ messages, reference, hint }) => {
+    type PreviewForm = {
+      platform: string
+      subscription_type: string
+      rate_multiplier: number
+      billing_rate_policy: BillingRatePolicy
+      image_price_1k: number
+      video_price_480p: number
+      web_search_price_per_call: number
+      image_rate_independent: boolean
+      image_rate_multiplier: number
+      video_rate_independent: boolean
+      video_rate_multiplier: number
+      peak_rate_enabled: boolean
+      peak_rate_multiplier: number
+    }
+    const w = mountView()
+    await flushPromises()
+    for (const mode of ['create', 'edit'] as const) {
+      await w.findAll('button').find(button => button.text() === (mode === 'create' ? 'admin.groups.createGroup' : 'common.edit'))!.trigger('click')
+      await flushPromises()
+      const vm = w.vm as unknown as { createForm: PreviewForm; editForm: PreviewForm }
+      const state = mode === 'create' ? vm.createForm : vm.editForm
+      state.platform = 'grok'
+      state.subscription_type = 'subscription'
+      await flushPromises()
+      Object.assign(state, {
+        rate_multiplier: 1, image_price_1k: 2, video_price_480p: 2, web_search_price_per_call: 2,
+        image_rate_independent: false, image_rate_multiplier: 0.5,
+        video_rate_independent: false, video_rate_multiplier: 0.5,
+        peak_rate_enabled: true, peak_rate_multiplier: 1.5,
+        billing_rate_policy: { platform_multipliers: { grok: 2, openai: 2 }, model_multipliers: [
+          { platform: 'grok', model: 'model001', multiplier: 3 },
+          { platform: 'openai', model: 'model001', multiplier: 3 }
+        ] }
+      })
+      translationState.translate = (key, params) => {
+        const value = key.replace(/^admin\./, '').split('.').reduce<unknown>((current, part) =>
+          current && typeof current === 'object' ? (current as Record<string, unknown>)[part] : undefined, messages)
+        return typeof value === 'string' ? value.replace(/\{(\w+)\}/g, (_, name: string) => String(params?.[name] ?? `{${name}}`)) : key
+      }
+      await flushPromises()
+      const form = () => w.get(`#${mode}-group-form`)
+      // $2 × platform 2 × model 3 × peak 1.5 is $18. This generic
+      // size preview lacks a model, so $2 may only be a base reference.
+      expect(form().text()).toContain('1K: $2')
+      expect(form().text()).toContain('480p: $2')
+      expect(form().text()).toContain(reference[0])
+      expect(form().text()).toContain(reference[1])
+      expect(form().text()).toContain(hint)
+      state.image_rate_independent = true
+      state.video_rate_independent = true
+      await flushPromises()
+      expect(form().text()).toContain('1K: $1')
+      expect(form().text()).toContain('480p: $1')
+      state.image_rate_multiplier = 0
+      state.video_rate_multiplier = 0
+      await flushPromises()
+      expect(form().text()).toContain('1K: $0')
+      expect(form().text()).toContain('480p: $0')
+      state.platform = 'openai'
+      await flushPromises()
+      expect(form().text()).toContain(reference[2])
+      expect(form().text()).toContain(hint)
+      // Restore key labels before locating the next action.
+      translationState.translate = key => key
+      w.vm.$forceUpdate()
+      await flushPromises()
+    }
+    w.unmount()
+  })
+
+  it('saves different exact model factors from one price card together with the same CAS group update', async () => {
+    getGroupById.mockResolvedValue({ ...sourceGroup, billing_policy_version: 7,
+      billing_rate_policy: { platform_multipliers: { openai: 1.2 }, model_multipliers: [
+        { platform: 'openai', model: 'b', multiplier: 1.5 },
+        { platform: 'grok', model: 'a', multiplier: 7 }
+      ] },
+      model_pricing: [{ platform: 'openai', models: ['a', 'b'], billing_mode: 'token', input_price: 0.000001, output_price: 0.000002, intervals: [] }]
+    })
+    const w = mountView()
+    await flushPromises()
+    await w.findAll('button').find(button => button.text() === 'common.edit')!.trigger('click')
+    await flushPromises()
+    const fields = w.getComponent(GroupModelRateFields).findAll('input[type="number"]')
+    expect(fields.map(field => (field.element as HTMLInputElement).value)).toEqual(['', '1.5'])
+    await fields[0]!.setValue('2')
+    await fields[1]!.setValue('0')
+    await w.get('#edit-group-form').trigger('submit')
+    await flushPromises()
+    expect(updateGroup).toHaveBeenCalledWith(sourceGroup.id, expect.objectContaining({ expected_billing_policy_version: 7,
+      billing_rate_policy: { platform_multipliers: { openai: 1.2 }, model_multipliers: [
+        { platform: 'grok', model: 'a', multiplier: 7 },
+        { platform: 'openai', model: 'a', multiplier: 2 },
+        { platform: 'openai', model: 'b', multiplier: 0 }
+      ] },
+      model_pricing: [expect.objectContaining({ platform: 'openai', models: ['a', 'b'], input_price: 0.000001, output_price: 0.000002 })]
+    }))
+    w.unmount()
+  })
+
+  it.each(['set', 'clear', 'default'] as const)('saves a newly added price-free model card without inventing a price override: %s', async mode => {
+    // A selling factor may be configured without a custom unit price or model
+    // mapping. Blank/cleared M means the independent default of 1, represented
+    // by no stored model rule; it must not create an empty/free price override.
+    getGroupById.mockResolvedValue({ ...sourceGroup, billing_policy_version: 11,
+      billing_rate_policy: {
+        platform_multipliers: { openai: 1.2, grok: 2 },
+        model_multipliers: [{ platform: 'grok', model: 'public-model', multiplier: 7 }]
+      },
+      model_pricing: [], model_routing: null, model_routing_enabled: false,
+      default_mapped_model: '', messages_dispatch_model_config: undefined
+    })
+    const w = mountView()
+    await flushPromises()
+    await w.findAll('button').find(button => button.text() === 'common.edit')!.trigger('click')
+    await flushPromises()
+    const form = w.get('#edit-group-form')
+    expect(w.findComponent(PricingEntryCard).exists()).toBe(false)
+    await form.findAll('button').find(button => button.text() === 'admin.groups.modelPricing.add')!.trigger('click')
+    const card = w.getComponent(PricingEntryCard)
+    card.findComponent({ name: 'ModelTagInput' }).vm.$emit('update:models', ['public-model'])
+    await flushPromises()
+    const field = w.getComponent(GroupModelRateFields).get('input[type="number"]')
+    expect(field.element).toHaveProperty('value', '')
+    expect(field.attributes('placeholder')).toBe('1')
+    if (mode !== 'default') await field.setValue('1.5')
+    if (mode === 'clear') await field.setValue('')
+    await form.trigger('submit')
+    await flushPromises()
+    expect(updateGroup).toHaveBeenCalledExactlyOnceWith(sourceGroup.id, expect.objectContaining({
+      expected_billing_policy_version: 11,
+      model_pricing: [],
+      billing_rate_policy: {
+        platform_multipliers: { openai: 1.2, grok: 2 },
+        model_multipliers: mode === 'set'
+          ? [{ platform: 'grok', model: 'public-model', multiplier: 7 }, { platform: 'openai', model: 'public-model', multiplier: 1.5 }]
+          : [{ platform: 'grok', model: 'public-model', multiplier: 7 }]
+      }
+    }))
+    w.unmount()
+  })
+
+  it.each([false, true])('preserves independent supplier service-tier overrides when saving a group: tier-only=%s', async tierOnly => {
+    getGroupById.mockResolvedValue({ ...sourceGroup, platform: 'composite', billing_policy_version: 13,
+      billing_rate_policy: { platform_multipliers: { openai: 2, grok: 0.5 }, model_multipliers: [] },
+      model_pricing: [
+        { platform: 'openai', models: ['shared-model'], billing_mode: 'token', input_price: tierOnly ? null : 0.000001, fast_multiplier: 3, flex_multiplier: 0.25, intervals: [] },
+        { platform: 'grok', models: ['shared-model'], billing_mode: 'token', input_price: tierOnly ? null : 0.000002, fast_multiplier: 4, flex_multiplier: 0.75, intervals: [] }
+      ]
+    })
+    const w = mountView()
+    await flushPromises()
+    await w.findAll('button').find(button => button.text() === 'common.edit')!.trigger('click')
+    await flushPromises()
+    const cards = w.findAllComponents(PricingEntryCard)
+    expect(cards).toHaveLength(2)
+    expect(cards.map(card => [card.props('entry').fast_multiplier, card.props('entry').flex_multiplier])).toEqual([[3, 0.25], [4, 0.75]])
+    await w.get('#edit-group-form').trigger('submit')
+    await flushPromises()
+    expect(updateGroup).toHaveBeenCalledExactlyOnceWith(sourceGroup.id, expect.objectContaining({
+      expected_billing_policy_version: 13,
+      billing_rate_policy: { platform_multipliers: { openai: 2, grok: 0.5 }, model_multipliers: [] },
+      model_pricing: [
+        expect.objectContaining({ platform: 'openai', models: ['shared-model'], input_price: tierOnly ? null : 0.000001, fast_multiplier: 3, flex_multiplier: 0.25 }),
+        expect.objectContaining({ platform: 'grok', models: ['shared-model'], input_price: tierOnly ? null : 0.000002, fast_multiplier: 4, flex_multiplier: 0.75 })
+      ]
+    }))
+    w.unmount()
+  })
+
+  it.each([false, true])('removes card rules by default and preserves only an explicit rate-only choice: %s', async keepRates => {
+    getGroupById.mockResolvedValue({ ...sourceGroup,
+      billing_rate_policy: { platform_multipliers: {}, model_multipliers: [{ platform: 'openai', model: 'a', multiplier: 1.5 }] },
+      model_pricing: [{ platform: 'openai', models: ['a'], billing_mode: 'token', input_price: 0.000001, output_price: 0.000002, intervals: [] }]
+    })
+    const w = mountView()
+    await flushPromises()
+    await w.findAll('button').find(button => button.text() === 'common.edit')!.trigger('click')
+    await flushPromises()
+    if (keepRates) w.getComponent(GroupModelRateFields).vm.$emit('rateOnly')
+    else w.getComponent(PricingEntryCard).vm.$emit('remove')
+    await flushPromises()
+    expect(w.findComponent(PricingEntryCard).exists()).toBe(false)
+    expect(w.find('#edit-model-billing-rate-model-0-name').exists()).toBe(keepRates)
+    await w.get('#edit-group-form').trigger('submit')
+    await flushPromises()
+    expect(updateGroup).toHaveBeenCalledWith(sourceGroup.id, expect.objectContaining({
+      model_pricing: [], billing_rate_policy: { platform_multipliers: {}, model_multipliers: keepRates ? [{ platform: 'openai', model: 'a', multiplier: 1.5 }] : [] }
+    }))
+    w.unmount()
   })
 
   it('keeps the exclusive switch visible, defaults it on for subscriptions, and submits that value', async () => {
@@ -596,6 +801,27 @@ describe('GroupsView duplicate action', () => {
       require_oauth_only: true,
       require_privacy_set: true,
     }))
+    wrapper.unmount()
+  })
+
+  it('sends the billing version originally loaded in the editor and keeps stale drafts on conflict', async () => {
+    getGroupById.mockResolvedValue({ ...sourceGroup, billing_policy_version: 7, billing_rate_policy: { platform_multipliers: { openai: 1 }, model_multipliers: [] } })
+    updateGroup.mockRejectedValueOnce({ status: 409, reason: 'GROUP_CONFIGURATION_CHANGED', message: 'reload group' })
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.findAll('button').find(button => button.text() === 'common.edit')!.trigger('click')
+    await flushPromises()
+    const vm = wrapper.vm as unknown as { editForm: { name: string; expected_billing_policy_version?: number }; showEditModal: boolean }
+    vm.editForm.name = 'My unsaved group'
+    // A later server value must never be silently adopted by an open editor.
+    getGroupById.mockResolvedValue({ ...sourceGroup, billing_policy_version: 8 })
+    await wrapper.get('#edit-group-form').trigger('submit')
+    await flushPromises()
+    expect(updateGroup).toHaveBeenCalledWith(42, expect.objectContaining({ name: 'My unsaved group', expected_billing_policy_version: 7 }))
+    expect(showError).toHaveBeenCalledWith('billingRates.editConflict')
+    expect(vm.editForm.name).toBe('My unsaved group')
+    expect(vm.editForm.expected_billing_policy_version).toBe(7)
+    expect(vm.showEditModal).toBe(true)
     wrapper.unmount()
   })
 

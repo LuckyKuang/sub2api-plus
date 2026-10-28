@@ -4,6 +4,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -34,6 +35,7 @@ func TestGatewayCacheLiveCallIdentityAndController(t *testing.T) {
 		ExpiresAt:             time.Now().Add(time.Hour),
 		Controller:            service.LiveControllerPending,
 		OutboundSnapshot:      &service.LiveOutboundSnapshot{Owner: "owner-v2:principal", SessionID: "01912345-6789-7abc-8def-0123456789ab", ThreadID: "01912345-7000-7abc-8def-0123456789ab", UserAgent: "codex_cli_rs/0.163.0 (Ubuntu 24.04; x86_64) xterm-256color", Originator: "codex_cli_rs", Version: "0.163.0"},
+		PricingSnapshot:       json.RawMessage(`{"version":1,"public_model":"gpt-live-test","policy_version":7,"pricing_state":"non_billable_live"}`),
 	}
 	require.NoError(t, cache.SaveLiveCall(context.Background(), record, time.Hour))
 
@@ -43,10 +45,16 @@ func TestGatewayCacheLiveCallIdentityAndController(t *testing.T) {
 	require.Equal(t, record.AccountID, loaded.AccountID)
 	require.Equal(t, record.AttestationCiphertext, loaded.AttestationCiphertext)
 	require.Equal(t, record.OutboundSnapshot, loaded.OutboundSnapshot)
+	require.Equal(t, record.PricingSnapshot, loaded.PricingSnapshot,
+		"a background observer on another instance needs the admitted pricing evidence")
 
 	claimed, err := cache.ClaimLiveController(context.Background(), record.CallHash, service.LiveControllerObserver, "observer-1")
 	require.NoError(t, err)
 	require.True(t, claimed)
+	loaded, err = otherInstance.GetLiveCall(context.Background(), record.CallHash)
+	require.NoError(t, err)
+	require.Equal(t, record.PricingSnapshot, loaded.PricingSnapshot,
+		"controller handoff must preserve the create-time pricing evidence")
 	claimed, err = cache.ClaimLiveController(context.Background(), record.CallHash, service.LiveControllerProxy, "proxy-1")
 	require.NoError(t, err)
 	require.True(t, claimed)
@@ -63,4 +71,11 @@ func TestGatewayCacheLiveCallIdentityAndController(t *testing.T) {
 	closed, err = cache.MarkLiveCallClosed(context.Background(), record.CallHash, time.Hour)
 	require.NoError(t, err)
 	require.False(t, closed)
+
+	// Records written before this field existed remain readable without
+	// inventing admission evidence from the current policy.
+	require.NoError(t, client.HDel(context.Background(), liveCallKey(record.CallHash), "pricing_snapshot").Err())
+	loaded, err = otherInstance.GetLiveCall(context.Background(), record.CallHash)
+	require.NoError(t, err)
+	require.Nil(t, loaded.PricingSnapshot)
 }

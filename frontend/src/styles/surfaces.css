@@ -6,7 +6,8 @@
 .surface-control { background-color: var(--surface-field); color: var(--surface-text); }
 :where(.surface-control) { border-radius: var(--surface-radius-control); }
 /* Surface roles keep their shape even when older callers carry rounded utilities. */
-:root :is(.surface-card, .settings-tabs-shell) { border-radius: var(--surface-radius); }
+:root :is(.card, .glass, .glass-card, .card-glass, .glass-surface, .surface-card, .stat-card, .subscription-plan-card) { border-radius: var(--surface-radius-card); }
+:root .settings-tabs-shell { border-radius: var(--surface-radius); }
 :root .surface-panel { border-radius: var(--surface-radius-panel); }
 :root :is(.card, .glass, .glass-card, .card-glass, .glass-surface, .shell-surface,
   .surface-card, .surface-panel, .stat-card, .settings-tabs-shell,

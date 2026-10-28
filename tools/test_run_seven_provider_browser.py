@@ -16,7 +16,7 @@ class BrowserCoverageTests(unittest.TestCase):
                 "projectName": "chromium", "expectedStatus": "passed", "status": "expected",
                 "results": [{"status": "passed"}],
             }]}
-            for title in browser.REQUIRED_MANAGEMENT_TITLES
+            for title in browser.REQUIRED_BROWSER_TITLES
         ]}]}], "errors": []}
 
     def test_all_seven_platforms_and_both_account_types_must_execute(self) -> None:
@@ -28,6 +28,15 @@ class BrowserCoverageTests(unittest.TestCase):
             with self.subTest(missing=missing):
                 self.assertTrue(any("missing browser scenario" in error
                                     for error in browser.browser_coverage_errors(report)))
+
+    def test_composite_billing_is_separate_required_configuration_coverage(self) -> None:
+        self.assertEqual(len(browser.REQUIRED_BILLING_TITLES), 2)
+        report = self.report()
+        report["suites"][0]["suites"][0]["specs"] = report["suites"][0]["suites"][0]["specs"][:14]
+        self.assertTrue(any("composite billing" in error for error in browser.browser_coverage_errors(report)))
+        focused = self.report()
+        focused["suites"][0]["suites"][0]["specs"] = focused["suites"][0]["suites"][0]["specs"][14:]
+        self.assertEqual(browser.browser_coverage_errors(focused, grep="composite"), [])
 
     def test_skipped_expected_failure_retries_and_other_browsers_cannot_pass(self) -> None:
         valid = self.report()

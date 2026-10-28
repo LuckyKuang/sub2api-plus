@@ -437,6 +437,9 @@ func beginOpenAISessionRouteForward(ctx context.Context, account *Account, timeo
 // disconnect draining after acceptance retains its existing behavior.
 func openAISessionRouteDetachedContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	base := context.WithoutCancel(ctx)
+	if execution, ok := ctx.Value(concurrencyExecutionKey{}).(*concurrencyExecution); ok && execution != nil {
+		base = ConcurrencyCapacityContext(ctx)
+	}
 	a := openAIRouteAttempt(ctx)
 	if a == nil {
 		return base, func() {}

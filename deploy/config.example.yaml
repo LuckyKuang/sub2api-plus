@@ -252,6 +252,9 @@ security:
 # 网关配置
 # =============================================================================
 gateway:
+  # Persistent per-user unfinished async tasks across API keys and providers; must be positive.
+  # 每用户跨 Key/平台未完成异步任务上限；未知创建结果不会按 TTL 自动释放。
+  max_unfinished_tasks_per_user: 100
   # Minimum max_output_tokens when converting Chat Completions or Anthropic requests to Responses (minimum 16, default 128)
   # Chat Completions 或 Anthropic 请求转换为 Responses 时的最小 max_output_tokens（最小 16，默认 128）
   min_output_tokens: 128
@@ -291,6 +294,11 @@ gateway:
   # Enable Gemini upstream response header debug logs (default: false)
   # 是否开启 Gemini 上游响应头调试日志（默认 false）
   gemini_debug_response_headers: false
+  # Retries on one Gemini account before failover, excluding the first attempt (0-10).
+  # Gemini 换号前的同账号重试次数，不含首次请求（0-10，默认 4）；0 禁用此类重试。
+  # Environment: GATEWAY_MAX_SAME_ACCOUNT_RETRIES_GEMINI
+  # Explicit-cache gateway pool retries use the account's pool-mode retry settings instead.
+  max_same_account_retries_gemini: 4
   # Maximum TTL (seconds) a Gemini explicit context cache may be created or extended to (default: 86400)
   # Gemini 显式上下文缓存单次可设置的最长有效期（秒，默认 86400）；存储费在创建/延长请求中一次性收取
   gemini_cached_content_max_ttl_seconds: 86400

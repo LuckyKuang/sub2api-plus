@@ -51,7 +51,7 @@ type ConcurrencyCache interface {
 	CleanupExpiredAccountSlots(ctx context.Context, accountID int64) error
 	CleanupExpiredAccountSlotKeys(ctx context.Context) error
 
-	// 启动时清理旧进程遗留槽位与等待计数
+	// 启动时回收过期槽位；不能删除仍存活的其他实例槽位或等待计数
 	CleanupStaleProcessSlots(ctx context.Context, activeRequestPrefix string) error
 }
 
@@ -229,7 +229,9 @@ const (
 
 // ConcurrencyService 管理账号和用户的并发限制。
 type ConcurrencyService struct {
-	cache ConcurrencyCache
+	cache         ConcurrencyCache
+	userRepo      UserRepository
+	ownerRecovery concurrencyOwnerRecovery
 
 	accountLoadCacheTTL atomic.Int64
 	accountLoadCacheMu  sync.RWMutex
@@ -309,7 +311,8 @@ func (s *ConcurrencyService) SetAccountLoadBatchCacheTTL(ttl time.Duration) {
 // AcquireResult represents the result of acquiring a concurrency slot
 type AcquireResult struct {
 	Acquired    bool
-	ReleaseFunc func() // Must be called when done (typically via defer)
+	Context     context.Context // Execution context cancelled when its capacity lease is lost.
+	ReleaseFunc func()          // Must be called when done (typically via defer)
 }
 
 type AccountWithConcurrency struct {
@@ -337,81 +340,18 @@ type UserLoadInfo struct {
 }
 
 // AcquireAccountSlot attempts to acquire a concurrency slot for an account.
-// If the account is at max concurrency, it waits until a slot is available or timeout.
+// A full pool returns Acquired=false; waiting is the handler's responsibility.
 // Returns a release function that MUST be called when the request completes.
 func (s *ConcurrencyService) AcquireAccountSlot(ctx context.Context, accountID int64, maxConcurrency int) (*AcquireResult, error) {
-	// If maxConcurrency is 0 or negative, no limit
-	if maxConcurrency <= 0 {
-		return &AcquireResult{
-			Acquired:    true,
-			ReleaseFunc: func() {}, // no-op
-		}, nil
-	}
-
-	// Generate unique request ID for this slot
-	requestID := generateRequestID()
-
-	acquired, err := s.cache.AcquireAccountSlot(ctx, accountID, maxConcurrency, requestID)
-	if err != nil {
-		return nil, err
-	}
-
-	if acquired {
-		return &AcquireResult{
-			Acquired: true,
-			ReleaseFunc: func() {
-				bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel()
-				if err := s.cache.ReleaseAccountSlot(bgCtx, accountID, requestID); err != nil {
-					logger.LegacyPrintf("service.concurrency", "Warning: failed to release account slot for %d (req=%s): %v", accountID, requestID, err)
-				}
-			},
-		}, nil
-	}
-
-	return &AcquireResult{
-		Acquired:    false,
-		ReleaseFunc: nil,
-	}, nil
+	return s.acquireRequestSlot(ctx, "account", accountID, maxConcurrency)
 }
 
 // AcquireUserSlot attempts to acquire a concurrency slot for a user.
-// If the user is at max concurrency, it waits until a slot is available or timeout.
+// All keys, platforms and agent requests use the same user pool. A full pool
+// returns Acquired=false; waiting is the handler's responsibility.
 // Returns a release function that MUST be called when the request completes.
 func (s *ConcurrencyService) AcquireUserSlot(ctx context.Context, userID int64, maxConcurrency int) (*AcquireResult, error) {
-	// If maxConcurrency is 0 or negative, no limit
-	if maxConcurrency <= 0 {
-		return &AcquireResult{
-			Acquired:    true,
-			ReleaseFunc: func() {}, // no-op
-		}, nil
-	}
-
-	// Generate unique request ID for this slot
-	requestID := generateRequestID()
-
-	acquired, err := s.cache.AcquireUserSlot(ctx, userID, maxConcurrency, requestID)
-	if err != nil {
-		return nil, err
-	}
-
-	if acquired {
-		return &AcquireResult{
-			Acquired: true,
-			ReleaseFunc: func() {
-				bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel()
-				if err := s.cache.ReleaseUserSlot(bgCtx, userID, requestID); err != nil {
-					logger.LegacyPrintf("service.concurrency", "Warning: failed to release user slot for %d (req=%s): %v", userID, requestID, err)
-				}
-			},
-		}, nil
-	}
-
-	return &AcquireResult{
-		Acquired:    false,
-		ReleaseFunc: nil,
-	}, nil
+	return s.acquireRequestSlot(ctx, "user", userID, maxConcurrency)
 }
 
 // TrackAPIKeySlot records one active request slot for an API key without
@@ -424,6 +364,15 @@ func (s *ConcurrencyService) TrackAPIKeySlot(ctx context.Context, apiKeyID int64
 	cache, ok := s.cache.(APIKeyConcurrencyCache)
 	if !ok {
 		return func() {}
+	}
+	var worker *workerUserLease
+	if ctx != nil {
+		if owner, ok := ctx.Value(workerUserLeaseKey{}).(*workerUserLease); ok && owner != nil && owner.service == s && owner.active.Load() && owner.execution == ctx.Value(concurrencyExecutionKey{}) {
+			if owner.statsKey.Load() == apiKeyID {
+				return func() {}
+			}
+			worker = owner
+		}
 	}
 
 	requestID := generateRequestID()
@@ -438,13 +387,28 @@ func (s *ConcurrencyService) TrackAPIKeySlot(ctx context.Context, apiKeyID int64
 		logger.LegacyPrintf("service.concurrency", "Warning: failed to track api key slot for %d (req=%s): %v", apiKeyID, requestID, err)
 		return func() {}
 	}
+	delegated := worker != nil && worker.statsKey.CompareAndSwap(0, apiKeyID)
 
+	stop, done := make(chan struct{}), make(chan struct{})
+	if renewer, ok := s.cache.(APIKeyConcurrencyLeaseCache); ok && renewer.ConcurrencySlotTTL() > 0 {
+		go refreshAPIKeyStatsLease(ConcurrencyCapacityContext(ctx), renewer, apiKeyID, requestID, renewer.ConcurrencySlotTTL(), stop, done)
+	} else {
+		close(done)
+	}
+	var once sync.Once
 	return func() {
-		bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := cache.ReleaseAPIKeySlot(bgCtx, apiKeyID, requestID); err != nil {
-			logger.LegacyPrintf("service.concurrency", "Warning: failed to release api key slot for %d (req=%s): %v", apiKeyID, requestID, err)
-		}
+		once.Do(func() {
+			if delegated {
+				worker.statsKey.CompareAndSwap(apiKeyID, 0)
+			}
+			close(stop)
+			<-done
+			bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := cache.ReleaseAPIKeySlot(bgCtx, apiKeyID, requestID); err != nil {
+				logger.LegacyPrintf("service.concurrency", "Warning: failed to release api key slot for %d (req=%s): %v", apiKeyID, requestID, err)
+			}
+		})
 	}
 }
 
@@ -493,18 +457,12 @@ func zeroAPIKeyConcurrencyMap(apiKeyIDs []int64) map[int64]int {
 // Returns true if successful, false if the wait queue is full.
 // maxWait should be user.Concurrency + defaultExtraWaitSlots
 func (s *ConcurrencyService) IncrementWaitCount(ctx context.Context, userID int64, maxWait int) (bool, error) {
-	if s.cache == nil {
-		// Redis not available, allow request
-		return true, nil
+	if s == nil || s.cache == nil {
+		return false, errors.New("concurrency wait queue unavailable")
 	}
-
-	result, err := s.cache.IncrementWaitCount(ctx, userID, maxWait)
-	if err != nil {
-		// On error, allow the request to proceed (fail open)
-		logger.LegacyPrintf("service.concurrency", "Warning: increment wait count failed for user %d: %v", userID, err)
-		return true, nil
-	}
-	return result, nil
+	queueCtx, cancel := context.WithTimeout(ctx, regularLeaseOperationTimeout)
+	defer cancel()
+	return s.cache.IncrementWaitCount(queueCtx, userID, maxWait)
 }
 
 // DecrementWaitCount decrements the wait queue counter for a user.
@@ -525,16 +483,12 @@ func (s *ConcurrencyService) DecrementWaitCount(ctx context.Context, userID int6
 
 // IncrementAccountWaitCount increments the wait queue counter for an account.
 func (s *ConcurrencyService) IncrementAccountWaitCount(ctx context.Context, accountID int64, maxWait int) (bool, error) {
-	if s.cache == nil {
-		return true, nil
+	if s == nil || s.cache == nil {
+		return false, errors.New("concurrency wait queue unavailable")
 	}
-
-	result, err := s.cache.IncrementAccountWaitCount(ctx, accountID, maxWait)
-	if err != nil {
-		logger.LegacyPrintf("service.concurrency", "Warning: increment wait count failed for account %d: %v", accountID, err)
-		return true, nil
-	}
-	return result, nil
+	queueCtx, cancel := context.WithTimeout(ctx, regularLeaseOperationTimeout)
+	defer cancel()
+	return s.cache.IncrementAccountWaitCount(queueCtx, accountID, maxWait)
 }
 
 // DecrementAccountWaitCount decrements the wait queue counter for an account.
@@ -728,6 +682,7 @@ func (s *ConcurrencyService) StartSlotCleanupWorker(_ AccountRepository, interva
 
 	runCleanup := func() {
 		cleanupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		s.recoverPendingConcurrencyOwners(cleanupCtx)
 		err := s.cache.CleanupExpiredAccountSlotKeys(cleanupCtx)
 		cancel()
 		if err != nil {

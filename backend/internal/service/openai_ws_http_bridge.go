@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"slices"
 	"strconv"
@@ -582,7 +581,7 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 			break
 		}
 
-		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, openAIWSHTTPBridgeErrorBodyLimitBytes))
+		respBody, _ := readUpstreamErrorResponseBody(resp, openAIWSHTTPBridgeErrorBodyLimitBytes, UpstreamErrorBodyReadTimeout)
 		_ = resp.Body.Close()
 		markOpenAICyberPolicyEvent(c, respBody, resp.StatusCode, nil)
 		if resp.StatusCode == http.StatusBadRequest &&
@@ -618,20 +617,40 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 			if shouldFailover && (turn == 1 || resp.StatusCode == http.StatusTooManyRequests) {
 				return nil, newOpenAIUpstreamFailoverError(resp.StatusCode, resp.Header, respBody, upstreamMsg, false)
 			}
-		} else if shouldFailover && (turn == 1 || resp.StatusCode == http.StatusTooManyRequests) && !isOpenAIRequestScopedCapacityShed(upstreamMsg, respBody) {
+		} else if shouldFailover && (turn == 1 || resp.StatusCode == http.StatusTooManyRequests) && !isOpenAIHTTPCapacityShed(resp.StatusCode, upstreamMsg, respBody) {
 			return nil, s.handleFailoverErrorResponsePassthrough(ctx, resp, c, account, body, respBody)
 		}
 		if account.Platform != PlatformGrok && (shouldFailover || shouldCooldownOpenAITransientUpstreamError(resp.StatusCode, respBody)) {
 			s.handleOpenAIAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody, actualModel)
 		}
 		clientError := buildOpenAIWSHTTPBridgeErrorEvent(resp.StatusCode, upstreamMsg)
+		if resp.StatusCode == http.StatusServiceUnavailable && IsOpenAIPolicyCapacityUnavailable(respBody) {
+			retryAdvice := make(map[string]string)
+			retryHeaders := openAIPolicyCapacityRetryHeaders(resp.Header, respBody)
+			for _, name := range []string{"Retry-After", "Retry-After-Ms"} {
+				if value := retryHeaders.Get(name); value != "" {
+					retryAdvice[name] = value
+				}
+			}
+			clientError, _ = json.Marshal(map[string]any{
+				"type":            "error",
+				"sequence_number": 0,
+				"status":          http.StatusServiceUnavailable,
+				"error": map[string]any{
+					"type":    "service_unavailable_error",
+					"code":    "policy_capacity_unavailable",
+					"message": openAICapacityShedClientMessage(upstreamMsg, respBody),
+					"headers": retryAdvice,
+				},
+			})
+		}
 		if rewritten, changed := sanitizeOpenAICapacityShedErrorCodeForClient(clientError); changed {
 			clientError = rewritten
 		}
 		if writeErr := writeClientMessage(clientError); writeErr == nil {
 			markOpenAIWSClientVisibleFailure(c, "error", clientError)
 		}
-		if isOpenAIRequestScopedCapacityShed(upstreamMsg, respBody) {
+		if isOpenAIHTTPCapacityShed(resp.StatusCode, upstreamMsg, respBody) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("upstream http bridge error: status=%d message=%s", resp.StatusCode, upstreamMsg)

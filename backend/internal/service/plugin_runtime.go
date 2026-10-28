@@ -348,6 +348,9 @@ func (r *pluginRuntime) roundTrip(ctx context.Context, request *http.Request, pr
 		cancel: cancel,
 		done:   r.finishRequest,
 	}
+	if start.StatusCode >= http.StatusBadRequest {
+		body.startErrorReadBudget(UpstreamErrorBodyReadTimeout)
+	}
 	go receivePluginResponseBody(stream, pipeWriter, sendErr)
 	return &http.Response{
 		Status:        start.Status,
@@ -456,21 +459,53 @@ func receivePluginResponseBody(stream pluginv1.TransportPlugin_ForwardClient, wr
 }
 
 type pluginResponseBody struct {
-	reader *io.PipeReader
-	cancel context.CancelFunc
-	done   func()
-	once   sync.Once
+	reader         *io.PipeReader
+	cancel         context.CancelFunc
+	done           func()
+	once           sync.Once
+	timerMu        sync.Mutex
+	errorReadTimer *time.Timer
+	finished       bool
 }
 
 func (b *pluginResponseBody) Read(data []byte) (int, error) {
-	return b.reader.Read(data)
+	n, err := b.reader.Read(data)
+	if err != nil {
+		_ = b.finish(err)
+	}
+	return n, err
 }
 
 func (b *pluginResponseBody) Close() error {
+	return b.finish(nil)
+}
+
+// The plugin can return a rejected body outside HTTPUpstream (including
+// input_tokens and Live creation, whose callers read it directly). Cancel the
+// actual RPC and pipe after the diagnostic budget, independently of consumers.
+func (b *pluginResponseBody) startErrorReadBudget(timeout time.Duration) {
+	b.timerMu.Lock()
+	defer b.timerMu.Unlock()
+	if b.finished {
+		return
+	}
+	b.errorReadTimer = time.AfterFunc(timeout, func() { _ = b.finish(context.DeadlineExceeded) })
+}
+
+func (b *pluginResponseBody) finish(cause error) error {
 	var err error
 	b.once.Do(func() {
+		// A very short budget may fire before AfterFunc returns its timer.
+		// Serialize assignment, stopping and finalization rather than relying
+		// on the usual five-second delay to hide that race.
+		b.timerMu.Lock()
+		b.finished = true
+		if b.errorReadTimer != nil {
+			b.errorReadTimer.Stop()
+		}
+		b.timerMu.Unlock()
 		b.cancel()
-		err = b.reader.Close()
+		err = b.reader.CloseWithError(cause)
 		b.done()
 	})
 	return err

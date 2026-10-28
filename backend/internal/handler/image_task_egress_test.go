@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	middleware "github.com/LuckyKuang/sub2api-plus/internal/server/middleware"
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -41,7 +42,8 @@ func TestAsyncImageHandlerURLOnlyCompletionRequiresCapturedOwner(t *testing.T) {
 	c, _ := gin.CreateTestContext(recorder)
 	ctx, cancel := context.WithCancel(context.Background())
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/images/generations", nil).WithContext(ctx)
-	h := &AsyncImageHandler{tasks: tasks, execute: func(_ string, c *gin.Context) {
+	c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: owner.UserID, Concurrency: 3})
+	h := &AsyncImageHandler{openAI: newGatewayAdmissionForTest(), tasks: tasks, execute: func(_ string, c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"data": []gin.H{{"url": "https://cdn.example.test/image.png"}}})
 	}}
 	h.run(task.ID, service.PlatformOpenAI, c, recorder, cancel, asyncImageOpsSnapshot{})

@@ -203,17 +203,19 @@ const dropdownPosition = ref<'bottom' | 'top'>('bottom')
 const triggerRect = ref<DOMRect | null>(null)
 const dropdownViewportPadding = 8
 const dropdownMinimumWidth = 200
+const viewport = ref({ left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight })
 
 const dropdownVerticalBounds = computed(() => {
   if (!triggerRect.value) return null
-  const viewportBottom = Math.max(dropdownViewportPadding, window.innerHeight - dropdownViewportPadding)
-  const top = Math.min(viewportBottom, Math.max(dropdownViewportPadding, triggerRect.value.bottom + 4))
-  const bottom = Math.min(viewportBottom, Math.max(dropdownViewportPadding, triggerRect.value.top - 4))
+  const viewportTop = viewport.value.top + dropdownViewportPadding
+  const viewportBottom = Math.max(viewportTop, viewport.value.bottom - dropdownViewportPadding)
+  const top = Math.min(viewportBottom, Math.max(viewportTop, triggerRect.value.bottom + 4))
+  const bottom = Math.min(viewportBottom, Math.max(viewportTop, triggerRect.value.top - 4))
   return {
     top,
     bottom,
     spaceBelow: viewportBottom - top,
-    spaceAbove: bottom - dropdownViewportPadding,
+    spaceAbove: bottom - viewportTop,
   }
 })
 
@@ -239,12 +241,13 @@ const dropdownStyle = computed(() => {
 
   const rect = triggerRect.value
   const bounds = dropdownVerticalBounds.value
-  const viewportRight = Math.max(dropdownViewportPadding, window.innerWidth - dropdownViewportPadding)
+  const viewportLeft = viewport.value.left + dropdownViewportPadding
+  const viewportRight = Math.max(viewportLeft, viewport.value.right - dropdownViewportPadding)
   const preferredMinWidth = Math.max(dropdownMinimumWidth, rect.width)
-  const minWidth = Math.min(preferredMinWidth, Math.max(0, viewportRight - dropdownViewportPadding))
+  const minWidth = Math.min(preferredMinWidth, Math.max(0, viewportRight - viewportLeft))
   const left = Math.min(
-    Math.max(dropdownViewportPadding, rect.left),
-    Math.max(dropdownViewportPadding, viewportRight - minWidth)
+    Math.max(viewportLeft, rect.left),
+    Math.max(viewportLeft, viewportRight - minWidth)
   )
   const availableWidth = Math.max(0, viewportRight - left)
   const style: Record<string, string> = {
@@ -366,6 +369,15 @@ const handleOptionMouseEnter = (option: any, index: number) => {
 
 // Update trigger rect periodically while open to follow scroll/resize
 const updateTriggerRect = () => {
+  const visibleViewport = window.visualViewport
+  const left = visibleViewport?.offsetLeft ?? 0
+  const top = visibleViewport?.offsetTop ?? 0
+  viewport.value = {
+    left,
+    top,
+    right: left + (visibleViewport?.width ?? window.innerWidth),
+    bottom: top + (visibleViewport?.height ?? window.innerHeight),
+  }
   if (containerRef.value) {
     triggerRect.value = containerRef.value.getBoundingClientRect()
   }
@@ -425,6 +437,8 @@ watch(isOpen, (open) => {
     // Add scroll listener to update position
     window.addEventListener('scroll', calculateDropdownPosition, { capture: true, passive: true })
     window.addEventListener('resize', calculateDropdownPosition)
+    window.visualViewport?.addEventListener('resize', calculateDropdownPosition)
+    window.visualViewport?.addEventListener('scroll', calculateDropdownPosition)
   } else {
     searchQuery.value = ''
     focusedIndex.value = -1
@@ -435,6 +449,8 @@ watch(isOpen, (open) => {
     }
     window.removeEventListener('scroll', calculateDropdownPosition, { capture: true })
     window.removeEventListener('resize', calculateDropdownPosition)
+    window.visualViewport?.removeEventListener('resize', calculateDropdownPosition)
+    window.visualViewport?.removeEventListener('scroll', calculateDropdownPosition)
   }
 })
 
@@ -553,6 +569,8 @@ onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside)
   window.removeEventListener('scroll', calculateDropdownPosition, { capture: true })
   window.removeEventListener('resize', calculateDropdownPosition)
+  window.visualViewport?.removeEventListener('resize', calculateDropdownPosition)
+  window.visualViewport?.removeEventListener('scroll', calculateDropdownPosition)
   if (remoteSearchTimer) {
     clearTimeout(remoteSearchTimer)
     remoteSearchTimer = null
@@ -598,7 +616,7 @@ onUnmounted(() => {
 }
 
 .select-dropdown-portal .select-search-input {
-  @apply flex-1 bg-transparent text-sm;
+  @apply min-w-0 flex-1 bg-transparent text-sm;
   @apply text-gray-900 dark:text-gray-100;
   @apply placeholder:text-gray-400 dark:placeholder:text-dark-400;
   @apply focus:outline-none;

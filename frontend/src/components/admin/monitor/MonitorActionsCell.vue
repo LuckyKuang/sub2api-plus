@@ -1,12 +1,12 @@
 <template>
-  <div class="flex items-center gap-1">
+  <div class="table-actions">
     <span :title="runTitle" :class="running || probesEnabled === false ? 'cursor-not-allowed' : ''">
       <button
         data-testid="monitor-run"
         :title="runTitle"
         @click="$emit('run', row)"
         :disabled="running || probesEnabled === false"
-        class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors hover:surface-hover hover:text-primary-600 disabled:pointer-events-none disabled:opacity-50 dark:hover:text-primary-400 surface-control surface-muted"
+        class="table-action disabled:pointer-events-none"
       >
         <Icon name="refresh" size="sm" :class="running ? 'animate-spin' : ''" />
         <span class="text-xs">{{ t(running ? 'admin.channelMonitor.running' : 'admin.channelMonitor.runNow') }}</span>
@@ -17,7 +17,7 @@
       :title="duplicateTitle"
       :disabled="duplicating || Boolean(row.api_key_decrypt_failed)"
       @click="$emit('duplicate', row)"
-      class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors hover:surface-hover hover:text-primary-600 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:text-primary-400 surface-control surface-muted"
+      class="table-action"
     >
       <Icon name="copy" size="sm" />
       <span class="text-xs">
@@ -26,14 +26,14 @@
     </button>
     <button
       @click="$emit('edit', row)"
-      class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors hover:surface-hover hover:text-primary-600 dark:hover:text-primary-400 surface-control surface-muted"
+      class="table-action"
     >
       <Icon name="edit" size="sm" />
       <span class="text-xs">{{ t('common.edit') }}</span>
     </button>
     <button
       @click="$emit('delete', row)"
-      class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors hover:bg-red-50/25 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400 surface-control surface-muted"
+      class="table-action table-action-danger"
     >
       <Icon name="trash" size="sm" />
       <span class="text-xs">{{ t('common.delete') }}</span>

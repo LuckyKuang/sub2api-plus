@@ -418,6 +418,12 @@ func (_u *BatchImageJobUpdate) ClearActualCost() *BatchImageJobUpdate {
 	return _u
 }
 
+// SetBillingRateSnapshot sets the "billing_rate_snapshot" field.
+func (_u *BatchImageJobUpdate) SetBillingRateSnapshot(v map[string]interface{}) *BatchImageJobUpdate {
+	_u.mutation.SetBillingRateSnapshot(v)
+	return _u
+}
+
 // SetCurrency sets the "currency" field.
 func (_u *BatchImageJobUpdate) SetCurrency(v string) *BatchImageJobUpdate {
 	_u.mutation.SetCurrency(v)
@@ -1027,6 +1033,9 @@ func (_u *BatchImageJobUpdate) sqlSave(ctx context.Context) (_node int, err erro
 	if _u.mutation.ActualCostCleared() {
 		_spec.ClearField(batchimagejob.FieldActualCost, field.TypeFloat64)
 	}
+	if value, ok := _u.mutation.BillingRateSnapshot(); ok {
+		_spec.SetField(batchimagejob.FieldBillingRateSnapshot, field.TypeJSON, value)
+	}
 	if value, ok := _u.mutation.Currency(); ok {
 		_spec.SetField(batchimagejob.FieldCurrency, field.TypeString, value)
 	}
@@ -1542,6 +1551,12 @@ func (_u *BatchImageJobUpdateOne) AddActualCost(v float64) *BatchImageJobUpdateO
 // ClearActualCost clears the value of the "actual_cost" field.
 func (_u *BatchImageJobUpdateOne) ClearActualCost() *BatchImageJobUpdateOne {
 	_u.mutation.ClearActualCost()
+	return _u
+}
+
+// SetBillingRateSnapshot sets the "billing_rate_snapshot" field.
+func (_u *BatchImageJobUpdateOne) SetBillingRateSnapshot(v map[string]interface{}) *BatchImageJobUpdateOne {
+	_u.mutation.SetBillingRateSnapshot(v)
 	return _u
 }
 
@@ -2183,6 +2198,9 @@ func (_u *BatchImageJobUpdateOne) sqlSave(ctx context.Context) (_node *BatchImag
 	}
 	if _u.mutation.ActualCostCleared() {
 		_spec.ClearField(batchimagejob.FieldActualCost, field.TypeFloat64)
+	}
+	if value, ok := _u.mutation.BillingRateSnapshot(); ok {
+		_spec.SetField(batchimagejob.FieldBillingRateSnapshot, field.TypeJSON, value)
 	}
 	if value, ok := _u.mutation.Currency(); ok {
 		_spec.SetField(batchimagejob.FieldCurrency, field.TypeString, value)
