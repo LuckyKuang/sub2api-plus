@@ -258,9 +258,9 @@ func TestCountTokensProductionProxyContract(t *testing.T) {
 				require.Equal(t, "Bearer private-count-wire-token", sent.headers.Get("Authorization"))
 				require.Empty(t, sent.headers.Get("Proxy-Authorization"), "proxy credentials cannot reach the provider")
 				// Version synchronization preserves the configured account fingerprint.
-				require.Equal(t, "codex_cli_rs/0.164.0 (Ubuntu 24.04; x86_64) xterm-256color", sent.headers.Get("User-Agent"))
+				require.Equal(t, "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color", sent.headers.Get("User-Agent"))
 				require.Equal(t, "codex_cli_rs", sent.headers.Get("Originator"))
-				require.Equal(t, "0.164.0", sent.headers.Get("Version"))
+				require.Equal(t, "0.165.0", sent.headers.Get("Version"))
 				require.Contains(t, sent.body, `"model":"gpt-5.4"`)
 				require.Contains(t, sent.body, "hello world")
 				require.NotContains(t, strings.ToLower(sent.body), "private-")

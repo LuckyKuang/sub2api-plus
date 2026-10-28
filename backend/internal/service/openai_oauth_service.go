@@ -160,21 +160,22 @@ type OpenAIExchangeCodeInput struct {
 
 // OpenAITokenInfo represents the token information for OpenAI
 type OpenAITokenInfo struct {
-	AccessToken           string `json:"access_token"`
-	RefreshToken          string `json:"refresh_token"`
-	IDToken               string `json:"id_token,omitempty"`
-	ExpiresIn             int64  `json:"expires_in"`
-	ExpiresAt             int64  `json:"expires_at"`
-	ClientID              string `json:"client_id,omitempty"`
-	AuthMode              string `json:"auth_mode,omitempty"`
-	Email                 string `json:"email,omitempty"`
-	ChatGPTAccountID      string `json:"chatgpt_account_id,omitempty"`
-	ChatGPTUserID         string `json:"chatgpt_user_id,omitempty"`
-	ChatGPTAccountFedRAMP bool   `json:"chatgpt_account_is_fedramp,omitempty"`
-	OrganizationID        string `json:"organization_id,omitempty"`
-	PlanType              string `json:"plan_type,omitempty"`
-	SubscriptionExpiresAt string `json:"subscription_expires_at,omitempty"`
-	PrivacyMode           string `json:"privacy_mode,omitempty"`
+	AccessToken                string `json:"access_token"`
+	RefreshToken               string `json:"refresh_token"`
+	IDToken                    string `json:"id_token,omitempty"`
+	ExpiresIn                  int64  `json:"expires_in"`
+	ExpiresAt                  int64  `json:"expires_at"`
+	ClientID                   string `json:"client_id,omitempty"`
+	AuthMode                   string `json:"auth_mode,omitempty"`
+	Email                      string `json:"email,omitempty"`
+	ChatGPTAccountID           string `json:"chatgpt_account_id,omitempty"`
+	ChatGPTUserID              string `json:"chatgpt_user_id,omitempty"`
+	ChatGPTAccountFedRAMP      bool   `json:"chatgpt_account_is_fedramp,omitempty"`
+	chatGPTAccountFedRAMPKnown bool
+	OrganizationID             string `json:"organization_id,omitempty"`
+	PlanType                   string `json:"plan_type,omitempty"`
+	SubscriptionExpiresAt      string `json:"subscription_expires_at,omitempty"`
+	PrivacyMode                string `json:"privacy_mode,omitempty"`
 }
 
 // ExchangeCode exchanges authorization code for tokens
@@ -250,6 +251,8 @@ func (s *OpenAIOAuthService) ExchangeCode(ctx context.Context, input *OpenAIExch
 		tokenInfo.ChatGPTUserID = userInfo.ChatGPTUserID
 		tokenInfo.OrganizationID = userInfo.OrganizationID
 		tokenInfo.PlanType = userInfo.PlanType
+		tokenInfo.ChatGPTAccountFedRAMP = userInfo.ChatGPTAccountFedRAMP
+		tokenInfo.chatGPTAccountFedRAMPKnown = userInfo.ChatGPTAccountID != ""
 	}
 
 	s.enrichTokenInfoWithAccount(ctx, tokenInfo, proxyURL, account)
@@ -308,11 +311,80 @@ func (s *OpenAIOAuthService) refreshTokenWithClientIDAndIdentity(ctx context.Con
 		tokenInfo.ChatGPTUserID = userInfo.ChatGPTUserID
 		tokenInfo.OrganizationID = userInfo.OrganizationID
 		tokenInfo.PlanType = userInfo.PlanType
+		tokenInfo.ChatGPTAccountFedRAMP = userInfo.ChatGPTAccountFedRAMP
+		tokenInfo.chatGPTAccountFedRAMPKnown = userInfo.ChatGPTAccountID != ""
 	}
 
+	if account != nil {
+		if err := retainOpenAIRefreshCredentialOwner(tokenInfo, account); err != nil {
+			return nil, err
+		}
+	}
 	s.enrichTokenInfoWithAccount(ctx, tokenInfo, proxyURL, account)
 
 	return tokenInfo, nil
+}
+
+// Refresh retains the selected workspace, just as Codex persist_tokens retains
+// tokens.account_id. A retained ID token may still describe the home workspace.
+func retainOpenAIRefreshCredentialOwner(info *OpenAITokenInfo, account *Account) error {
+	selected := strings.TrimSpace(account.GetCredential("chatgpt_account_id"))
+	user := strings.TrimSpace(account.GetCredential("chatgpt_user_id"))
+	if user == "" {
+		if old, err := openai.DecodeIDToken(account.GetCredential("id_token")); err == nil && old.OpenAIAuth != nil {
+			user = strings.TrimSpace(old.GetUserInfo().ChatGPTUserID)
+		}
+	}
+	mismatch := func() error {
+		return infraerrors.New(http.StatusBadGateway, "OPENAI_OAUTH_REFRESH_OWNER_MISMATCH", "refreshed token does not belong to the selected credential owner")
+	}
+	if user != "" && info.ChatGPTUserID != "" && info.ChatGPTUserID != user {
+		return mismatch()
+	}
+	if selected != "" && info.ChatGPTAccountID != selected {
+		info.PlanType = account.GetCredential("plan_type")
+		info.OrganizationID = account.GetCredential("organization_id")
+		info.ChatGPTAccountFedRAMP = false
+		info.chatGPTAccountFedRAMPKnown = false
+	}
+	if claims, err := openai.DecodeIDToken(info.AccessToken); err == nil && claims.OpenAIAuth != nil {
+		auth := claims.OpenAIAuth
+		accessUser := claims.GetUserInfo().ChatGPTUserID
+		// selected_workspace_tokens compares access and retained/new ID-token
+		// principals. Even a legacy row with no known user cannot mix them.
+		if info.ChatGPTUserID != "" && accessUser != "" && info.ChatGPTUserID != accessUser {
+			return mismatch()
+		}
+		if selected != "" && auth.ChatGPTAccountID != "" && auth.ChatGPTAccountID != selected {
+			return mismatch()
+		}
+		if user != "" && accessUser != "" && accessUser != user {
+			return mismatch()
+		}
+		if selected != "" && auth.ChatGPTAccountID == selected && user != "" && accessUser == user {
+			info.PlanType = auth.ChatGPTPlanType
+			info.OrganizationID = claims.GetUserInfo().OrganizationID
+			if auth.POID != "" {
+				info.OrganizationID = auth.POID
+			}
+			if info.OrganizationID == "" {
+				info.OrganizationID = account.GetCredential("organization_id")
+			}
+			info.ChatGPTAccountFedRAMP = auth.ChatGPTAccountFedRAMP
+			info.chatGPTAccountFedRAMPKnown = true
+		}
+	}
+	if selected != "" {
+		// Do not borrow metadata from a retained ID token for another workspace.
+		if info.ChatGPTAccountID != selected && !info.chatGPTAccountFedRAMPKnown {
+			info.PlanType = account.GetCredential("plan_type")
+		}
+		info.ChatGPTAccountID = selected
+	}
+	if user != "" {
+		info.ChatGPTUserID = user
+	}
+	return nil
 }
 
 func (s *OpenAIOAuthService) enrichTokenInfoWithAccount(ctx context.Context, tokenInfo *OpenAITokenInfo, proxyURL string, account *Account) {
@@ -522,8 +594,8 @@ func (s *OpenAIOAuthService) BuildAccountCredentials(tokenInfo *OpenAITokenInfo)
 		creds[openAIAuthModeLegacyCredentialKey] = "personal_access_token"
 		creds["token_type"] = "Bearer"
 		creds["chatgpt_account_is_fedramp"] = tokenInfo.ChatGPTAccountFedRAMP
-	} else if tokenInfo.ChatGPTAccountFedRAMP {
-		creds["chatgpt_account_is_fedramp"] = true
+	} else if tokenInfo.chatGPTAccountFedRAMPKnown || tokenInfo.ChatGPTAccountFedRAMP {
+		creds["chatgpt_account_is_fedramp"] = tokenInfo.ChatGPTAccountFedRAMP
 	}
 
 	return NormalizeOpenAIPersonalAccessTokenCredentials(nil, tokenInfo, creds)

@@ -69,8 +69,8 @@ describe('complete scoped assistance requests', () => {
     vi.stubGlobal('fetch', fetchMock)
     const { fetchCodexModelsManifest } = await import('@/api/codex')
     expect((await fetchCodexModelsManifest('https://public-base.example.com', key)).modelCount).toBe(1)
-    // The reviewed Codex baseline in docs/OFFICIAL_AGENT_BASELINES.md is rust-v0.164.0.
-    expect(fetchMock.mock.calls[0][0]).toContain('/admin/support/users/42/images/models?client_version=0.164.0&api_key_id=7')
+    // The reviewed Codex baseline in docs/OFFICIAL_AGENT_BASELINES.md is rust-v0.165.0.
+    expect(fetchMock.mock.calls[0][0]).toContain('/admin/support/users/42/images/models?client_version=0.165.0&api_key_id=7')
     expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer administrator-session')
   })
 })

@@ -437,6 +437,12 @@ func (h *GatewayHandler) handleCCFailoverExhausted(c *gin.Context, lastErr *serv
 		if status <= 0 {
 			status = http.StatusServiceUnavailable
 		}
+		if service.IsOpenAIPolicyCapacityUnavailable(lastErr.ResponseBody) {
+			c.JSON(status, gin.H{"error": gin.H{
+				"type": "service_unavailable_error", "code": "policy_capacity_unavailable", "message": lastErr.ClientMessage,
+			}})
+			return
+		}
 		h.chatCompletionsErrorResponse(c, status, "server_error", lastErr.ClientMessage)
 		return
 	}

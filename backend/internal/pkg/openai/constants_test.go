@@ -63,11 +63,11 @@ func TestGPT61SolIdentityAndEffort(t *testing.T) {
 		require.False(t, IsGPT61SolModelSpelling(id), id)
 	}
 	for _, effort := range []string{"", "low", "medium", "high", "xhigh", "max"} {
-		require.NoError(t, ValidateGPT61SolReasoningEffort("gpt-6.1-sol", effort))
+		require.NoError(t, ValidateGPT61ReasoningEffort("gpt-6.1-sol", effort))
 	}
 	for _, effort := range []string{"none", "minimal"} {
-		require.Error(t, ValidateGPT61SolReasoningEffort("gpt-6.1-sol", effort))
-		require.NoError(t, ValidateGPT61SolReasoningEffort("gpt-6-sol", effort))
+		require.Error(t, ValidateGPT61ReasoningEffort("gpt-6.1-sol", effort))
+		require.NoError(t, ValidateGPT61ReasoningEffort("gpt-6-sol", effort))
 	}
 	require.Contains(t, CodexBaseInstructionsForModel("gpt-6.1-sol"), "based on GPT-6")
 }

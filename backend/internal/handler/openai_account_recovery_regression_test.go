@@ -103,6 +103,10 @@ func (w *recoveryHandlerWire) Do(req *http.Request, _ string, id int64, _ int) (
 			return &http.Response{StatusCode: 504, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"error":{"message":"upstream request timeout"}}`))}, nil
 		case "shared-capacity":
 			return &http.Response{StatusCode: 503, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"error":{"code":"server_is_overloaded","message":"Selected model is at capacity"}}`))}, nil
+		case "policy-capacity":
+			return &http.Response{StatusCode: 503, Header: http.Header{"Content-Type": {"application/json"}, "Retry-After": {"3"}}, Body: io.NopCloser(strings.NewReader(`{"error":{"code":"policy_capacity_unavailable","type":"service_unavailable_error"}}`))}, nil
+		case "policy-code-401":
+			return &http.Response{StatusCode: http.StatusUnauthorized, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"error":{"code":"policy_capacity_unavailable","type":"authentication_error","message":"credential rejected"}}`))}, nil
 		case "after-output":
 			return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(
 				"data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_partial\",\"model\":\"gpt-5.1\",\"status\":\"in_progress\",\"output\":[]}}\n\n" +
@@ -130,7 +134,7 @@ func (w *recoveryHandlerWire) calls() []int64 {
 func TestOpenAIAccountRecoveryAcrossHTTPHandlersRegression(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	for _, endpoint := range []string{"responses", "responses-passthrough", "chat/completions", "messages"} {
-		for _, scenario := range []string{"missing-key", "expired-oauth", "permanent-401", "transport", "gateway-timeout", "shared-capacity", "after-output"} {
+		for _, scenario := range []string{"missing-key", "expired-oauth", "permanent-401", "policy-code-401", "transport", "gateway-timeout", "shared-capacity", "policy-capacity", "after-output"} {
 			t.Run(endpoint+"/"+scenario, func(t *testing.T) {
 				requestEndpoint := strings.TrimSuffix(endpoint, "-passthrough")
 				cfg := &config.Config{RunMode: config.RunModeSimple}
@@ -191,7 +195,7 @@ func TestOpenAIAccountRecoveryAcrossHTTPHandlersRegression(t *testing.T) {
 					return response
 				}
 				response := request()
-				if scenario == "shared-capacity" || scenario == "after-output" {
+				if scenario == "shared-capacity" || scenario == "policy-capacity" || scenario == "after-output" {
 					require.Equal(t, []int64{101}, wire.ids, response.Body.String())
 					require.EqualValues(t, 101, store.route.OwnerAccountID)
 					require.Zero(t, store.migrations)
@@ -199,8 +203,14 @@ func TestOpenAIAccountRecoveryAcrossHTTPHandlersRegression(t *testing.T) {
 					if scenario == "after-output" {
 						require.Contains(t, response.Body.String(), "already delivered")
 					}
-					if scenario == "shared-capacity" {
+					if scenario == "shared-capacity" || scenario == "policy-capacity" {
 						require.Equal(t, http.StatusServiceUnavailable, response.Code)
+					}
+					if scenario == "policy-capacity" {
+						require.Equal(t, "3", response.Header().Get("Retry-After"))
+						if endpoint != "messages" {
+							require.Equal(t, "policy_capacity_unavailable", gjson.Get(response.Body.String(), "error.code").String())
+						}
 					}
 					return
 				}
@@ -214,7 +224,7 @@ func TestOpenAIAccountRecoveryAcrossHTTPHandlersRegression(t *testing.T) {
 				if scenario == "missing-key" || scenario == "expired-oauth" {
 					require.Equal(t, []int64{102, 102}, wire.ids, "invalid credentials must never be sent upstream")
 					require.Equal(t, []int64{101}, repo.quarantined)
-				} else if scenario == "permanent-401" {
+				} else if scenario == "permanent-401" || scenario == "policy-code-401" {
 					require.Equal(t, []int64{101, 102, 102}, wire.ids)
 					require.Equal(t, []int64{101}, repo.quarantined, "a rejected grant is quarantined before the replacement becomes sticky")
 				} else {

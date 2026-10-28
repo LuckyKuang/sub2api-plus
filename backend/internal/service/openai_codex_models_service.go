@@ -558,6 +558,13 @@ func newConfiguredCodexModelDescriptor(modelID string) configuredCodexModelDescr
 		// the bundled official snapshot. Explicit upstream metadata still wins.
 		descriptor.ContextWindow = 500_000
 	}
+	if openai.IsGPT61TerraModelSpelling(modelID) {
+		if err := json.Unmarshal(openai.CodexGPT61TerraMetadata, &descriptor); err != nil {
+			panic(err)
+		}
+		descriptor.Slug = modelID
+		descriptor.officialMetadata = openai.CodexGPT61TerraMetadata
+	}
 	return descriptor
 }
 
@@ -660,7 +667,7 @@ func configuredCodexGPTReasoningLevels(modelID string) []configuredCodexReasonin
 			Description: "Maximum reasoning depth for complex tasks",
 		})
 	}
-	if isOpenAIGPT6AstraModel(modelID) || openai.IsGPT61SolModelSpelling(modelID) || normalized == "gpt-5.6-sol" || normalized == "gpt-5.6-terra" {
+	if isOpenAIGPT6AstraModel(modelID) || openai.IsGPT61SolModelSpelling(modelID) || openai.IsGPT61TerraModelSpelling(modelID) || normalized == "gpt-5.6-sol" || normalized == "gpt-5.6-terra" {
 		levels = append(levels, configuredCodexReasoningLevel{
 			Effort:      "ultra",
 			Description: "Maximum reasoning with automatic task delegation",
@@ -1701,6 +1708,12 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 		requestEndpoint = normalizedBaseURL
 		useAPIKeyUpstream = true
 		appendModelsPath = true
+		// The official regional catalog is distinct from the inference API.
+		// An explicit endpoint remains authoritative, including commercial URLs.
+		if credAccount.IsOpenAIAPIKeyFedRAMP() && strings.TrimSpace(credAccount.GetCredential("base_url")) == "" {
+			requestEndpoint = openAIFedRAMPCodexModelsURL
+			appendModelsPath = false
+		}
 	default:
 		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_CODEX_MODELS_ACCOUNT_TYPE_UNSUPPORTED", "account type %q cannot fetch the Codex models manifest", credAccount.Type)
 	}
@@ -1765,6 +1778,7 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 		}
 	}
 	applyOpenAICodexResidencyFromSettings(ctx, s.settingService, headers, useCodexResidency)
+	applyOpenAIRegionalRoutingHeaders(ctx, credAccount, headers)
 
 	proxyURL, err := requestCredentialOwnerProxyURL(ctx, account)
 	if err != nil {
@@ -2110,6 +2124,7 @@ func CodexModelsManifestETag(body []byte) string {
 
 var apiKeyCodexModelsWithoutResponsesLite = map[string]struct{}{
 	"gpt-6.1-sol":   {},
+	"gpt-6.1-terra": {},
 	"gpt-6-astra":   {},
 	"gpt-5.6-sol":   {},
 	"gpt-5.6-terra": {},
@@ -2660,7 +2675,7 @@ func isOfficialOpenAIModelsBaseURL(raw string) bool {
 		return false
 	}
 	hostname := strings.TrimSuffix(parsed.Hostname(), ".")
-	return strings.EqualFold(hostname, "api.openai.com")
+	return strings.EqualFold(hostname, "api.openai.com") || strings.EqualFold(hostname, "gov.api.openai.com")
 }
 
 func buildCodexModelsManifestURL(endpoint string, appendModelsPath bool, clientVersion string) (*url.URL, error) {

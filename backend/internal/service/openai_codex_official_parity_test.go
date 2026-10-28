@@ -202,9 +202,9 @@ func TestCodexOfficialRetiredSynchronizationCannotChangeVersion(t *testing.T) {
 		"openai_codex_version_auto_sync_enabled": "true",
 	}}
 	settings := &SettingService{settingRepo: repo}
-	require.Equal(t, "0.164.0", settings.GetOpenAICodexClientVersion(context.Background()))
+	require.Equal(t, "0.165.0", settings.GetOpenAICodexClientVersion(context.Background()))
 	for _, tc := range []struct{ candidate, want string }{
-		{"", "0.164.0"}, {"0.200.1", "0.200.1"}, {"bad", "0.164.0"}, {"0.1.0", "0.164.0"},
+		{"", "0.165.0"}, {"0.200.1", "0.200.1"}, {"bad", "0.165.0"}, {"0.1.0", "0.165.0"},
 	} {
 		repo.values[SettingKeyOpenAICodexClientVersion] = tc.candidate
 		settings.InvalidateOpenAICodexClientVersionCache()
@@ -217,9 +217,9 @@ func TestCodexOfficialForeignAPIKeyCandidatesNeverReachWire(t *testing.T) {
 	// compiled priority. A stale foreign preset must not override that choice.
 	for _, kind := range []string{AccountTypeOAuth, AccountTypeAPIKey} {
 		for _, tc := range []struct{ name, accountUA, globalUA, want string }{
-			{"compiled", "", "", "codex_cli_rs/0.164.0 (Ubuntu 24.04; x86_64) xterm-256color"},
-			{"global", "", "codex_cli_rs/0.164.0 (Ubuntu 22.4.0; x86_64) xterm-256color", "codex_cli_rs/0.164.0 (Ubuntu 22.4.0; x86_64) xterm-256color"},
-			{"account", "codex_cli_rs/0.164.0 (Ubuntu 20.4.0; x86_64) xterm-256color", "codex_cli_rs/0.164.0 (Ubuntu 22.4.0; x86_64) xterm-256color", "codex_cli_rs/0.164.0 (Ubuntu 20.4.0; x86_64) xterm-256color"},
+			{"compiled", "", "", "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color"},
+			{"global", "", "codex_cli_rs/0.165.0 (Ubuntu 22.4.0; x86_64) xterm-256color", "codex_cli_rs/0.165.0 (Ubuntu 22.4.0; x86_64) xterm-256color"},
+			{"account", "codex_cli_rs/0.165.0 (Ubuntu 20.4.0; x86_64) xterm-256color", "codex_cli_rs/0.165.0 (Ubuntu 22.4.0; x86_64) xterm-256color", "codex_cli_rs/0.165.0 (Ubuntu 20.4.0; x86_64) xterm-256color"},
 		} {
 			t.Run(kind+"/"+tc.name, func(t *testing.T) {
 				config := `{"defaults":{"openai:apikey":"grok"}}`
@@ -236,7 +236,7 @@ func TestCodexOfficialForeignAPIKeyCandidatesNeverReachWire(t *testing.T) {
 				for _, h := range headers {
 					require.Equal(t, tc.want, h.Get("User-Agent"))
 					require.Equal(t, "codex_cli_rs", h.Get("Originator"))
-					require.Equal(t, "0.164.0", h.Get("Version"))
+					require.Equal(t, "0.165.0", h.Get("Version"))
 					require.Equal(t, "remote_compaction_v2", h.Get("x-codex-beta-features"))
 					require.Empty(t, h.Get("x-grok-client-version"))
 				}

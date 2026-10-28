@@ -61,7 +61,7 @@ func (h sevenManagementRedisNamespace) ProcessPipelineHook(next redis.ProcessPip
 
 func sevenManagementProviders() []sevenBusinessProvider {
 	return []sevenBusinessProvider{
-		{"openai", "codex", "0.164.0", "codex_cli_rs/0.164.0 (Ubuntu 24.04; x86_64) xterm-256color", nil},
+		{"openai", "codex", "0.165.0", "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color", nil},
 		{"grok", "grok", "1.0.45", "grok-shell/1.0.45 (linux; x86_64)", nil},
 		{"deepseek", "deepseek", "0.2.0-rc.2", "deepseek-harness/0.2.0-rc.2 (+https://github.com/deepseek-ai/deepseek-harness)", nil},
 		{"kimi", "kimi", "2.1.1", "kimi-code-cli/2.1.1", nil},

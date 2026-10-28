@@ -45,12 +45,12 @@ func TestCodexProviderIdentityHTTPAndWebSocketWire(t *testing.T) {
 				svc := &OpenAIGatewayService{cfg: cfg}
 				account := &Account{ID: 7, Platform: PlatformOpenAI, Type: kind, Concurrency: 1, Credentials: map[string]any{
 					"api_key": "fixture", "access_token": "fixture", "base_url": upstream.URL,
-					"user_agent": "codex_vscode/0.164.0 (Ubuntu 24.04; x86_64) vscode",
+					"user_agent": "codex_vscode/0.165.0 (Ubuntu 24.04; x86_64) vscode",
 				}}
 				body := []byte(`{"model":"gpt-6.1-sol","stream":true,"input":"hello","instructions":"test"}`)
 				c, _ := gin.CreateTestContext(httptest.NewRecorder())
 				c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
-				c.Request.Header.Set("User-Agent", "codex_cli_rs/0.164.0 (Ubuntu 24.04; x86_64) xterm-256color")
+				c.Request.Header.Set("User-Agent", "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color")
 				c.Request.Header.Set("Originator", "codex_work_desktop")
 				c.Request.Header.Set("Version", "0.1.0")
 				c.Request.Header.Set("session_id", "fixture-session")
@@ -76,9 +76,9 @@ func TestCodexProviderIdentityHTTPAndWebSocketWire(t *testing.T) {
 				_ = conn.Close()
 				for range 2 {
 					h := <-captured
-					require.Equal(t, "codex_vscode/0.164.0 (Ubuntu 24.04; x86_64) vscode", h.Get("User-Agent"))
+					require.Equal(t, "codex_vscode/0.165.0 (Ubuntu 24.04; x86_64) vscode", h.Get("User-Agent"))
 					require.Equal(t, "codex_vscode", h.Get("Originator"), "inbound official thread labels cannot override the account")
-					require.Equal(t, "0.164.0", h.Get("Version"))
+					require.Equal(t, "0.165.0", h.Get("Version"))
 					require.Equal(t, "Bearer fixture", h.Get("Authorization"))
 					require.Empty(t, h.Get("session_id"))
 					require.Empty(t, h.Get("conversation_id"))

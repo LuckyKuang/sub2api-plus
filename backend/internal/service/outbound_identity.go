@@ -959,12 +959,14 @@ func ApplyAccountOutboundIdentity(ctx context.Context, account *Account, req *ht
 	}
 	*req = *req.WithContext(WithAccountOutboundIdentity(ctx, account))
 	outboundidentity.ApplyContext(req)
+	applyOpenAIRegionalRoutingHeaders(req.Context(), account, req.Header)
 }
 
 func ApplyAccountOutboundHeaders(ctx context.Context, account *Account, headers http.Header) {
 	if i, ok := outboundidentity.FromContext(WithAccountOutboundIdentity(ctx, account)); ok {
 		i.Apply(headers)
 	}
+	applyOpenAIRegionalRoutingHeaders(ctx, account, headers)
 }
 
 // WithStandaloneOutboundIdentity starts an operation using independently owned

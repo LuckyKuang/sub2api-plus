@@ -336,7 +336,7 @@ func TestSevenProviderChatFailoverPreservesWireOwnerStickySessionAndBilling(t *t
 		platform, userAgent string
 		companions          map[string]string
 	}{
-		{service.PlatformOpenAI, "codex_cli_rs/0.164.0 (Ubuntu 24.04; x86_64) xterm-256color", nil},
+		{service.PlatformOpenAI, "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color", nil},
 		{service.PlatformGrok, "grok-shell/1.0.45 (linux; x86_64)", map[string]string{"X-Grok-Client-Identifier": "grok-shell", "X-Grok-Client-Version": "1.0.45"}},
 		{service.PlatformDeepseek, "deepseek-harness/0.2.1-rc.3 (+https://github.com/deepseek-ai/deepseek-harness)", nil},
 		{service.PlatformKimi, "kimi-code-cli/2.3.1", map[string]string{"X-Msh-Platform": "kimi_code_cli", "X-Msh-Version": "2.3.1", "X-Stainless-Package-Version": "6.34.0"}},

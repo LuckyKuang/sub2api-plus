@@ -7,6 +7,18 @@ Moderation and Prompt Audit. The shared implementation is
 `backend/internal/auditcontent`; protocol handlers and account paths must not
 maintain alternate text extractors.
 
+Codex's October 28 source review includes named unpaired `function_call_output`
+context from official commit `6d8f311b00e823052622eac2b463919ad86a666d`.
+The item has a nonempty `name`, optional `namespace`, a text/content-array
+`output`, and an absent/null `call_id`. It is self-contained context rather
+than a reply requiring a previous tool call or response anchor. Both audit
+engines retain the existing canonical tool-output extraction: name/namespace
+are source metadata, recognized current user siblings remain auditable, and
+tool context never becomes direct user text. Unknown sibling content still
+passes without an audit-derived block. HTTP/WS and OAuth/API-key paths retain
+their original audit-before-selection, concurrency, billing and upstream-write
+ordering. Ordinary malformed or unnamed outputs keep paired-call validation.
+
 Provider Files ingress uses the same boundary for authenticated
 `POST /v1/files`, `POST /v1/files/upload`, `GET /v1/files`, and
 `GET/DELETE /v1/files/:file_id`. Basic multipart/ID validation precedes audit;

@@ -2,13 +2,14 @@
 
 Both **OAuth and API Key** accounts for each platform use its official agent
 below. This is the source index for future version and outbound-protocol reviews;
-it contains no developer checkout paths. Reviewed on 2026-10-24 after fast-forwarding all seven official source trees,
+it contains no developer checkout paths. The seven-provider review was on 2026-10-24;
+Codex was reviewed again on 2026-10-28 against the source and stable release below,
 including request headers, typed IDs, OAuth validation, quota ownership,
 model catalogs, terminal errors and retry/failover lifetimes.
 
 | Platform | Official source | Reviewed commit | Selected agent version |
 | --- | --- | --- | --- |
-| OpenAI | [openai/codex](https://github.com/openai/codex.git) | `970111f6cb62cc02fe36a82ea7d71b37a2889c97` | stable `rust-v0.164.0` |
+| OpenAI | [openai/codex](https://github.com/openai/codex.git) | `154e8736a51224e12b2d990753622a2cd8118f54` | stable `rust-v0.165.0` |
 | xAI | [xai-org/grok-build](https://github.com/xai-org/grok-build.git) | `2bdd1d6a6369de0e8c68132ea4539e9abd9e14a8` | `1.0.45` |
 | DeepSeek | [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness.git) | `22ddee3792402c3e70ec5f86a63c3e3e895a2f60` | `0.2.1-rc.3` (prerelease) |
 | Kimi | [MoonshotAI/kimi-code](https://github.com/MoonshotAI/kimi-code.git) | `7ccac2b45b8a3481c76f771bb99c043b562de2c5` | stable `2.3.1` |
@@ -71,8 +72,38 @@ Migration 294 stores random outbound IDs by namespace and irreversible scope
 digest, without a scheduling-cache TTL. See [OFFICIAL_AGENT_REQUEST_STATE.md](OFFICIAL_AGENT_REQUEST_STATE.md)
 for ID versions, lifetime, grant ownership and failover contracts. Codex main
 uses a development manifest version, so its stable identity is manually selected
-as `0.164.0` (stable tag commit `6aaac694803004a63c6f393d153c96d22521a6b9`);
+as `0.165.0` (stable tag commit `360319d8dee62d87e2d59fc0c21805d79519cfed`,
+[published October 27](https://github.com/openai/codex/releases/tag/rust-v0.165.0));
 reviewing protocol changes never enables automatic identity-version updates.
+
+## October 28 Codex alignment
+
+The review compares `970111f6cb62cc02fe36a82ea7d71b37a2889c97` with the
+Codex source above. The gateway changes cover both OAuth and API-key routes:
+
+- Exact `policy_capacity_unavailable` errors follow the official
+  [SSE error classification](https://github.com/openai/codex/blob/154e8736a51224e12b2d990753622a2cd8118f54/codex-rs/codex-api/src/sse/responses_error.rs).
+  They keep their code and bounded Retry-After evidence through HTTP/SSE/WS;
+  Plus treats capacity failures as request-scoped, without account penalties.
+- [FedRAMP API-key recognition](https://github.com/openai/codex/blob/154e8736a51224e12b2d990753622a2cd8118f54/codex-rs/login/src/auth/api_key.rs)
+  selects government default inference/catalog endpoints and the credential-owned
+  routing header. Explicit configured base URLs remain authoritative.
+- [Named additional context](https://github.com/openai/codex/blob/154e8736a51224e12b2d990753622a2cd8118f54/codex-rs/context-fragments/src/additional_context.rs)
+  uses a named `function_call_output` without a call ID. Its content remains
+  subject to the shared audit contract, while it creates no paired-call dependency.
+- [Workspace selection](https://github.com/openai/codex/blob/154e8736a51224e12b2d990753622a2cd8118f54/codex-rs/login/src/auth/manager/workspace_switching.rs)
+  retains the original ID/refresh token. Session import adopts the selected
+  access token's account, plan and government routing only for a matching
+  workspace and known login user; mismatches cannot write an account.
+- The [official model catalog](https://github.com/openai/codex/blob/154e8736a51224e12b2d990753622a2cd8118f54/codex-rs/models-manager/models.json)
+  adds `gpt-6.1-terra`. Catalog metadata and reasoning options do not establish
+  a credential's model entitlement or introduce a new price.
+
+The official doctor WebSocket probe produces a client support report. Local
+workspace switching UI, OpenTelemetry management, local tool execution and
+that report are client responsibilities; this gateway exposes no new client
+support-report API. The identity source matrix, environment fingerprint and
+ingress audit ordering remain governed by their existing contracts.
 
 
 ## October 24 protocol alignment

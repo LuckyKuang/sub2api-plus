@@ -228,7 +228,7 @@ func TestImageBackfillFreezesAcquiredProxyAndRejectsUncertainPreparation(t *test
 	for _, scenario := range []string{"relinked", "ambiguous", "missing-proxy", "preparation-error"} {
 		t.Run(scenario, func(t *testing.T) {
 			account := b64BackfillAccount(true)
-			account.Credentials["user_agent"] = "codex_vscode/0.164.0 (Ubuntu 24.04; aarch64) vscode"
+			account.Credentials["user_agent"] = "codex_vscode/0.165.0 (Ubuntu 24.04; aarch64) vscode"
 			proxyID := int64(41)
 			account.ProxyID = &proxyID
 			account.Proxy = &Proxy{ID: proxyID, Protocol: "http", Host: "acquired-proxy.example", Port: 8080}
@@ -262,9 +262,9 @@ func TestImageBackfillFreezesAcquiredProxyAndRejectsUncertainPreparation(t *test
 			require.Equal(t, "http://acquired-proxy.example:8080", upstream.lastProxyURL)
 			require.Len(t, upstream.requests, 1)
 			require.Empty(t, upstream.lastReq.Header.Get("Authorization"), "image CDN requests must not inherit inference credentials")
-			require.Equal(t, "codex_vscode/0.164.0 (Ubuntu 24.04; aarch64) vscode", upstream.lastReq.Header.Get("User-Agent"))
+			require.Equal(t, "codex_vscode/0.165.0 (Ubuntu 24.04; aarch64) vscode", upstream.lastReq.Header.Get("User-Agent"))
 			require.Equal(t, "codex_vscode", upstream.lastReq.Header.Get("Originator"))
-			require.Equal(t, "0.164.0", upstream.lastReq.Header.Get("Version"))
+			require.Equal(t, "0.165.0", upstream.lastReq.Header.Get("Version"))
 		})
 	}
 }

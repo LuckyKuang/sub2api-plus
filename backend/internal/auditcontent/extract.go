@@ -722,7 +722,10 @@ func appendResponsesItem(document *Document, value any, current bool) {
 				markContentBearing(document, output)
 				appendToolOutput(document, output, current)
 			}
-			markUnknownNonEmptyFields(document, typed, "type", "id", "call_id", "output", "status")
+			// Official named outputs carry source labels without a paired call_id.
+			// Their output retains the same tool-context extraction and current-user
+			// policy as paired outputs; labels are metadata, not prompt text.
+			markUnknownNonEmptyFields(document, typed, "type", "id", "call_id", "name", "namespace", "output", "status")
 			return
 		case "computer_call_output":
 			output, exists := typed["output"]

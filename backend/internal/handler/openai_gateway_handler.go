@@ -3811,7 +3811,11 @@ func (h *OpenAIGatewayHandler) handleFailoverExhausted(c *gin.Context, failoverE
 		if status <= 0 {
 			status = http.StatusServiceUnavailable
 		}
-		h.handleStreamingAwareError(c, status, "server_error", failoverErr.ClientMessage, streamStarted)
+		if service.IsOpenAIPolicyCapacityUnavailable(failoverErr.ResponseBody) {
+			h.handleStreamingAwareErrorWithCode(c, status, "service_unavailable_error", "policy_capacity_unavailable", failoverErr.ClientMessage, streamStarted, false)
+		} else {
+			h.handleStreamingAwareError(c, status, "server_error", failoverErr.ClientMessage, streamStarted)
+		}
 		return
 	}
 	statusCode := failoverErr.StatusCode
@@ -4244,19 +4248,38 @@ func closeOpenAIWSFailoverExhausted(c *gin.Context, conn *coderws.Conn, failover
 		if message == "" {
 			message = "upstream service temporarily overloaded"
 		}
-		payload, err := json.Marshal(gin.H{
+		errType, errCode := "server_error", "server_error"
+		var retryAdvice map[string]string
+		if service.IsOpenAIPolicyCapacityUnavailable(failoverErr.ResponseBody) {
+			errType, errCode = "service_unavailable_error", "policy_capacity_unavailable"
+			retryAdvice = make(map[string]string)
+			for _, name := range []string{"Retry-After", "Retry-After-Ms"} {
+				if value := failoverErr.ResponseHeaders.Get(name); value != "" {
+					retryAdvice[name] = value
+				}
+			}
+		}
+		errorObject := gin.H{"type": errType, "code": errCode, "message": message}
+		if retryAdvice != nil {
+			errorObject["headers"] = retryAdvice
+		}
+		event := gin.H{
 			"type":            "error",
 			"sequence_number": 0,
-			"error": gin.H{
-				"type":    "server_error",
-				"code":    "server_error",
-				"message": message,
-			},
-		})
+			"error":           errorObject,
+		}
+		if errCode == "policy_capacity_unavailable" {
+			event["status"] = http.StatusServiceUnavailable
+		}
+		payload, err := json.Marshal(event)
 		if err != nil {
 			payload = []byte(`{"type":"error","sequence_number":0,"error":{"type":"server_error","code":"server_error","message":"upstream service temporarily overloaded"}}`)
 		}
-		service.MarkOpsStreamFailure(c, "server_error", string(failoverErr.Reason), message, http.StatusServiceUnavailable)
+		opsCode := string(failoverErr.Reason)
+		if errCode == "policy_capacity_unavailable" {
+			opsCode = errCode
+		}
+		service.MarkOpsStreamFailure(c, errType, opsCode, message, http.StatusServiceUnavailable)
 		if conn != nil {
 			writeCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			_ = conn.Write(writeCtx, coderws.MessageText, payload)

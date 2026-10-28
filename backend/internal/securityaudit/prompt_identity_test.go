@@ -109,7 +109,7 @@ func TestPromptScannerCompiledIdentity(t *testing.T) {
 	// Official Codex 1b6e0d8145 create_openai_provider supplies Version;
 	// default_client supplies Originator for API keys too. Independent audit
 	// credentials use the configured native Codex preset and exact pinned triple.
-	require.Equal(t, "codex_cli_rs/0.164.0 (Ubuntu 24.04; x86_64) xterm-256color", headers.Get("User-Agent"))
-	require.Equal(t, "0.164.0", headers.Get("Version"))
+	require.Equal(t, "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color", headers.Get("User-Agent"))
+	require.Equal(t, "0.165.0", headers.Get("Version"))
 	require.Equal(t, "codex_cli_rs", headers.Get("Originator"))
 }

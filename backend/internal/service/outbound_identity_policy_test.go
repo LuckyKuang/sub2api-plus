@@ -92,7 +92,7 @@ func TestNativeIdentityStoredForeignCandidatesNeverReachWire(t *testing.T) {
 		"minimax_apikey": "Anthropic/JS 0.91.1", "zcode": "ZCode/3.16.2",
 		"stepfun": "stepcode (linux 6.8.0-31-generic; x64)",
 		"grok":    "grok-shell/1.0.45 (linux; x86_64)",
-		"codex":   "codex_cli_rs/0.164.0 (Ubuntu 24.04; x86_64) xterm-256color",
+		"codex":   "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color",
 	}
 	for _, tc := range fixedIdentityCases[:14] {
 		t.Run(tc.platform+":"+tc.kind, func(t *testing.T) {

@@ -56,7 +56,7 @@ func TestFetchOpenAIModelsListUsesStandardRequestAndIsolatesCodexCache(t *testin
 			return ordinaryModelsUpstreamResponse(`{"models":[{"slug":"codex-only"}]}`), nil
 		}
 		assert.Equal(t, "codex_cli_rs", req.Header.Get("Originator"))
-		assert.Equal(t, "0.164.0", req.Header.Get("Version"))
+		assert.Equal(t, "0.165.0", req.Header.Get("Version"))
 		return ordinaryModelsUpstreamResponse(`{"object":"list","data":[{"id":"special-upstream-model","owned_by":"provider","created":1234,"custom":true},{"id":"gpt-image-1"},{"id":"text-embedding-3-large"}]}`), nil
 	}})
 	account := newCodexModelsAPIKeyTestAccount("https://models.example/v1")

@@ -39,12 +39,21 @@ The existing Plus identity priority, fingerprint controls and ingress audit
 boundaries remain governed by the owning contracts above. Historical migrations
 from both branches retain their complete filenames and checksums.
 
+The October 28 Codex protocol review advances the agent baseline to
+`154e8736a51224e12b2d990753622a2cd8118f54` and manually selects stable
+`rust-v0.165.0`. It aligns policy-capacity errors, government API-key routing,
+named tool context, workspace session import and Terra catalog metadata.
+The exact sources and boundaries are recorded in
+[OFFICIAL_AGENT_BASELINES.md](docs/OFFICIAL_AGENT_BASELINES.md); the immutable
+Plus identity precedence, credential-owner isolation and ingress audit ordering
+remain authoritative. This source alignment does not publish a Plus release.
+
 The seven-platform synchronization starts from Plus branch commit
 `90d9f67e0fc891bee6e9d13d97271d8daf7d1924` and merges Plus `main` at
 `1818c299307ac394c0e3101b45d6c6ef22515c0c`. The existing official-agent baselines
 in [OFFICIAL_AGENT_BASELINES.md](docs/OFFICIAL_AGENT_BASELINES.md) govern OpenAI,
 xAI, DeepSeek, Kimi, MiniMax, StepFun and Zhipu. Codex retains its manually
-selected `0.164.0` default, credential-owner/global/default precedence, trusted
+selected version default, credential-owner/global/default precedence, trusted
 fingerprints, model-rejection failover and audit boundary. Compatible upstream
 fixes add semantic-output-aware overload recovery, stream cancellation billing,
 quota/scheduler improvements and authenticated Redis health checks. DeepSeek

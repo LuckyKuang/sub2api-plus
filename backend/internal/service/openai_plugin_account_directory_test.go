@@ -268,7 +268,7 @@ func TestResolvePluginOutboundIdentityCodexSourcePriority(t *testing.T) {
 		{"empty-account", "", globalUA, "0.200.1", "codex_vscode/0.200.1 (Ubuntu 24.04; aarch64) vscode", "codex_vscode", "0.200.1"},
 		{"invalid-account", "curl/8.0", globalUA, "0.200.1", "codex_vscode/0.200.1 (Ubuntu 24.04; aarch64) vscode", "codex_vscode", "0.200.1"},
 		{"invalid-global", "curl/8.0", "curl/8.1", "0.200.1", "codex_cli_rs/0.200.1 (Ubuntu 24.04; x86_64) xterm-256color", "codex_cli_rs", "0.200.1"},
-		{"compiled", "", "", "", "codex_cli_rs/0.164.0 (Ubuntu 24.04; x86_64) xterm-256color", "codex_cli_rs", "0.164.0"},
+		{"compiled", "", "", "", "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color", "codex_cli_rs", "0.165.0"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			account := &Account{ID: 9402, Platform: PlatformOpenAI, Type: AccountTypeOAuth,
@@ -371,9 +371,9 @@ func TestResolvePluginOutboundIdentityUsesAcquiredProxyAndMetadata(t *testing.T)
 	require.Equal(t, "http://acquired-proxy.invalid:8081", identity.ProxyURL)
 	require.Equal(t, "acquired-principal", identity.Headers.Get("Chatgpt-Account-Id"))
 	require.Equal(t, "true", identity.Headers.Get("X-Openai-Fedramp"))
-	require.Equal(t, "codex_vscode/0.164.0 (Windows 11; aarch64) WindowsTerminal", identity.Headers.Get("User-Agent"))
+	require.Equal(t, "codex_vscode/0.165.0 (Windows 11; aarch64) WindowsTerminal", identity.Headers.Get("User-Agent"))
 	require.Equal(t, "codex_vscode", identity.Headers.Get("Originator"))
-	require.Equal(t, "0.164.0", identity.Headers.Get("Version"))
+	require.Equal(t, "0.165.0", identity.Headers.Get("Version"))
 }
 
 func TestResolvePluginOutboundIdentityRejectsUnavailableAcquiredOwner(t *testing.T) {

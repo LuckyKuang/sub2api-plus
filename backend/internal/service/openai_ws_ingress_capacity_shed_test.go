@@ -62,6 +62,17 @@ func TestProxyResponsesWebSocketFromClient_RewritesCapacityShedCodeForClient(t *
 			wantAbsent: []string{"server_is_overloaded"},
 		},
 		{
+			// Official Codex 6a6e2fb1 gives this exact capacity code distinct
+			// attribution and server-directed retry advice on native WS too.
+			name: "policy_capacity_preserves_code_and_retry_advice",
+			upstreamEvents: [][]byte{
+				[]byte(`{"type":"error","error":{"type":"service_unavailable_error","code":"policy_capacity_unavailable","headers":{"Retry-After":"3"}}}`),
+				[]byte(`{"type":"response.failed","response":{"id":"resp_policy","status":"failed","error":{"code":"policy_capacity_unavailable","headers":{"Retry-After":"3"}}}}`),
+			},
+			wantContains: []string{`"code":"policy_capacity_unavailable"`, `"Retry-After":"3"`},
+			wantAbsent:   []string{`"code":"server_error"`},
+		},
+		{
 			name: "non_capacity_error_code_is_passed_through",
 			upstreamEvents: [][]byte{
 				[]byte(`{"type":"error","error":{"type":"invalid_request_error","code":"workspace_suspended","message":"workspace is suspended"}}`),

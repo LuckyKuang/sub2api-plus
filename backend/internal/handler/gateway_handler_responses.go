@@ -423,6 +423,9 @@ func (h *GatewayHandler) handleResponsesFailoverExhausted(c *gin.Context, lastEr
 			status = http.StatusServiceUnavailable
 		}
 		message = lastErr.ClientMessage
+		if service.IsOpenAIPolicyCapacityUnavailable(lastErr.ResponseBody) {
+			code = "policy_capacity_unavailable"
+		}
 	} else if lastErr != nil && service.IsOpenAISilentRefusalErrorBody(lastErr.ResponseBody) {
 		service.SetOpsUpstreamError(c, statusCode, service.OpenAISilentRefusalClientMessage(), "")
 		status, code, message = http.StatusBadGateway, "upstream_error", service.OpenAISilentRefusalClientMessage()
@@ -436,7 +439,11 @@ func (h *GatewayHandler) handleResponsesFailoverExhausted(c *gin.Context, lastEr
 		// generic response.failed.
 		service.MarkOpsStreamError(c, code, message, status)
 		if c != nil && c.Writer != nil && (c.Writer.Size() <= 0 || gatewayStreamHasOnlyHeartbeats(c)) {
-			writeResponsesFailedSSE(c, code, "", message)
+			terminalCode := ""
+			if code == "policy_capacity_unavailable" {
+				terminalCode = code
+			}
+			writeResponsesFailedSSE(c, code, terminalCode, message)
 		}
 		return
 	}

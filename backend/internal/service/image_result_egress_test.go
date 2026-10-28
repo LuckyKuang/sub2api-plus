@@ -199,7 +199,7 @@ func TestAsyncURLOnlyImageOffloadRetainsActualAccountProxy(t *testing.T) {
 					require.NotEmpty(t, header.Get("Proxy-Authorization"))
 					if kind == "openai-apikey" {
 						require.Equal(t, auxiliaryOwnerUA, header.Get("User-Agent"))
-						require.Equal(t, "0.164.0", header.Get("Version"))
+						require.Equal(t, "0.165.0", header.Get("Version"))
 					} else {
 						require.Equal(t, "grok-shell/3.9.1 (linux; x86_64)", header.Get("User-Agent"))
 						require.Equal(t, "3.9.1", header.Get("x-grok-client-version"))
