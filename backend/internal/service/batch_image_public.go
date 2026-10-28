@@ -275,6 +275,12 @@ func (s *BatchImagePublicService) Submit(ctx context.Context, owner BatchImageOw
 	accountID := account.ID
 	holdID := BatchImageHoldRequestID(batchID)
 	holdAmount := pricingSnapshot.HoldAmount
+	taskName := normalized.TaskName
+	if taskName == "" {
+		// A generated display label belongs to the new job, not to the
+		// normalized payload whose fingerprint identifies later retries.
+		taskName = defaultBatchImageTaskName(time.Now())
+	}
 	job, err := s.Repo.CreateBatchImageJob(ctx, CreateBatchImageJobParams{
 		BatchID:                 batchID,
 		UserID:                  owner.UserID,
@@ -282,7 +288,7 @@ func (s *BatchImagePublicService) Submit(ctx context.Context, owner BatchImageOw
 		AccountID:               &accountID,
 		Provider:                provider.Name(),
 		Model:                   normalized.Model,
-		TaskName:                normalized.TaskName,
+		TaskName:                taskName,
 		ParentBatchID:           parentBatchID,
 		Status:                  BatchImageJobStatusCreated,
 		ItemCount:               len(normalized.Items),
@@ -860,9 +866,6 @@ func (s *BatchImagePublicService) validateSubmitRequest(req BatchImageSubmitRequ
 	req.ImageSize = strings.TrimSpace(req.ImageSize)
 	if req.Model == "" {
 		return req, ErrBatchImageInvalidModel
-	}
-	if req.TaskName == "" {
-		req.TaskName = defaultBatchImageTaskName(time.Now())
 	}
 	if len(req.TaskName) > 255 {
 		req.TaskName = truncateBatchImageMessage(req.TaskName, 255)
