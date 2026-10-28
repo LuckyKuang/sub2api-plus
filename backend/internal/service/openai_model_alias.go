@@ -141,6 +141,9 @@ func appendUsageBillingModelCandidate(candidates []string, seen map[string]struc
 	if canonical := canonicalizeOpenAIModelAliasSpelling(trimmed); canonical != "" {
 		add(canonical)
 	}
+	if isUnregisteredGPT61TerraPricingModel(trimmed) {
+		return candidates
+	}
 	if normalized := normalizeKnownOpenAICodexModel(trimmed); normalized != "" {
 		add(normalized)
 	}

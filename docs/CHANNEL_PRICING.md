@@ -187,7 +187,12 @@ whole request's input/cache prices double and output prices increase 1.5x.
 Exactly 272000 remains at the base price. Saved catalog/channel prices retain
 precedence, including explicit zero cache-write prices; registered provider and
 effort aliases share this card, while unknown Terra suffixes receive no guessed
-price. Admission and durable settlement pin the selected card across reloads.
+price, including suffixes containing another provider/model family such as
+`-codex` or `-claude`; an explicitly configured exact SKU price remains valid.
+Their literal channel cards and explicitly declared billing-model alternatives
+remain valid; a different model's card, tier policy or usage candidate is never
+inferred from those suffixes.
+Admission and durable settlement pin the selected card across reloads.
 
 The official 12-hour cache-write reference rate is $2.50 per million tokens
 before context and speed adjustments. The existing OpenAI usage contract

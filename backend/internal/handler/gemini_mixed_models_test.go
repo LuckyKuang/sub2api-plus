@@ -142,12 +142,17 @@ func TestGeminiNativeModelsMergesNativeUpstream(t *testing.T) {
 
 type geminiModelsUpstreamCounter struct {
 	service.HTTPUpstream
-	calls int
+	calls   int
+	respond func(*http.Request) (int, string)
 }
 
-func (u *geminiModelsUpstreamCounter) Do(_ *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
+func (u *geminiModelsUpstreamCounter) Do(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
 	u.calls++
-	return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"models":[{"name":"gemini-4-argon-high"}]}`))}, nil
+	status, body := http.StatusOK, `{"models":[{"name":"gemini-4-argon-high"}]}`
+	if u.respond != nil {
+		status, body = u.respond(req)
+	}
+	return &http.Response{StatusCode: status, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(body))}, nil
 }
 
 type geminiDeclaredModelsFixture struct {
@@ -164,7 +169,7 @@ func newGeminiDeclaredModelsFixture(t *testing.T, accounts []service.Account) *g
 	return &geminiDeclaredModelsFixture{
 		t:        t,
 		groupID:  groupID,
-		handler:  &GatewayHandler{geminiCompatService: service.NewGeminiMessagesCompatService(repo, nil, nil, nil, nil, nil, upstream, nil, &config.Config{})},
+		handler:  &GatewayHandler{geminiCompatService: service.NewGeminiMessagesCompatService(repo, nil, nil, nil, service.NewGeminiTokenProvider(nil, nil, nil), nil, upstream, nil, &config.Config{})},
 		upstream: upstream,
 	}
 }
@@ -245,4 +250,95 @@ func TestGeminiNativeModelsUnmappedAccountKeepsUpstream(t *testing.T) {
 	rec := f.get("gemini-2.5-pro")
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	require.Equal(t, 2, f.upstream.calls)
+}
+
+func TestGeminiNativeModelsOAuthTranslationAliasesStayUnavailable(t *testing.T) {
+	for _, oauthType := range []string{"ai_studio", "code_assist", "google_one"} {
+		t.Run(oauthType, func(t *testing.T) {
+			f := newGeminiDeclaredModelsFixture(t, []service.Account{{
+				ID: 1, Platform: service.PlatformGemini, Type: service.AccountTypeOAuth,
+				Credentials: map[string]any{"oauth_type": oauthType, "model_mapping": map[string]any{
+					"customer-alias": "gemini-2.5-flash", "gemini-2.5-flash": "gemini-2.5-flash",
+				}},
+			}})
+
+			require.Equal(t, []string{"models/gemini-2.5-flash"}, f.list(service.GroupModelAllowlist{}), "OAuth discovery must preserve native names without promising translated aliases")
+			alias := f.get("customer-alias")
+			require.Equal(t, http.StatusNotFound, alias.Code, "OAuth ForwardNative does not translate account mapping aliases")
+			require.Contains(t, alias.Body.String(), "models/customer-alias is not found")
+			native := f.get("gemini-2.5-flash")
+			require.Equal(t, http.StatusOK, native.Code, native.Body.String())
+			require.JSONEq(t, `{"name":"models/gemini-2.5-flash","supportedGenerationMethods":["generateContent","streamGenerateContent"]}`, native.Body.String())
+			require.Zero(t, f.upstream.calls)
+		})
+	}
+}
+
+func TestGeminiNativeModelsOAuthAliasOnlyMappingKeepsNativeDiscovery(t *testing.T) {
+	f := newGeminiDeclaredModelsFixture(t, []service.Account{{
+		ID: 1, Platform: service.PlatformGemini, Type: service.AccountTypeOAuth,
+		Credentials: map[string]any{
+			"oauth_type": "ai_studio", "access_token": "oauth-discovery-token", "expires_at": "2099-01-01T00:00:00Z",
+			"model_mapping": map[string]any{"customer-alias": "gemini-2.5-flash"},
+		},
+	}})
+	const listBody = `{"models":[{"name":"models/gemini-2.5-flash","inputTokenLimit":123}],"nextPageToken":"native-page"}`
+	const nativeBody = `{"name":"models/gemini-2.5-flash","inputTokenLimit":123,"displayName":"Native Gemini"}`
+	const missingBody = `{"error":{"code":404,"message":"unknown native model","status":"NOT_FOUND"}}`
+	var paths []string
+	f.upstream.respond = func(req *http.Request) (int, string) {
+		paths = append(paths, req.URL.Path)
+		require.Equal(t, "Bearer oauth-discovery-token", req.Header.Get("Authorization"))
+		switch req.URL.Path {
+		case "/v1beta/models":
+			return http.StatusOK, listBody
+		case "/v1beta/models/gemini-2.5-flash":
+			return http.StatusOK, nativeBody
+		default:
+			return http.StatusNotFound, missingBody
+		}
+	}
+
+	c, listed := f.context("/v1beta/models", "", service.GroupModelAllowlist{})
+	f.handler.GeminiV1BetaListModels(c)
+	require.Equal(t, http.StatusOK, listed.Code, listed.Body.String())
+	require.JSONEq(t, listBody, listed.Body.String(), "OAuth discovery must retain native model metadata")
+	alias := f.get("customer-alias")
+	require.Equal(t, http.StatusNotFound, alias.Code, "an OAuth-only translated alias must not acquire a synthetic successful descriptor")
+	require.JSONEq(t, missingBody, alias.Body.String())
+	native := f.get("gemini-2.5-flash")
+	require.Equal(t, http.StatusOK, native.Code, native.Body.String())
+	require.JSONEq(t, nativeBody, native.Body.String())
+	require.Equal(t, []string{"/v1beta/models", "/v1beta/models/customer-alias", "/v1beta/models/gemini-2.5-flash"}, paths)
+	require.Equal(t, 3, f.upstream.calls)
+}
+
+func TestGeminiNativeModelsGoogleOneKeepsNativeWhitelist(t *testing.T) {
+	f := newGeminiDeclaredModelsFixture(t, []service.Account{{
+		ID: 1, Platform: service.PlatformGemini, Type: service.AccountTypeOAuth,
+		Credentials: map[string]any{"oauth_type": "google_one"},
+	}})
+
+	require.Equal(t, []string{"models/gemini-2.0-flash", "models/gemini-2.5-flash", "models/gemini-2.5-pro"}, f.list(service.GroupModelAllowlist{}))
+	require.Equal(t, http.StatusOK, f.get("gemini-2.5-pro").Code)
+	require.Equal(t, http.StatusNotFound, f.get("gemini-3.5-flash").Code)
+	require.Zero(t, f.upstream.calls)
+}
+
+func TestGeminiNativeModelsMappedCredentialTypesKeepDeclaredAliases(t *testing.T) {
+	for _, accountType := range []string{service.AccountTypeAPIKey, service.AccountTypeServiceAccount} {
+		t.Run(accountType, func(t *testing.T) {
+			f := newGeminiDeclaredModelsFixture(t, []service.Account{{
+				ID: 1, Platform: service.PlatformGemini, Type: accountType,
+				Credentials: map[string]any{"model_mapping": map[string]any{"customer-alias": "gemini-2.5-flash"}},
+			}})
+
+			require.Equal(t, []string{"models/customer-alias"}, f.list(service.GroupModelAllowlist{}))
+			rec := f.get("customer-alias")
+			require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+			require.JSONEq(t, `{"name":"models/customer-alias","supportedGenerationMethods":["generateContent","streamGenerateContent"]}`, rec.Body.String())
+			require.Equal(t, http.StatusNotFound, f.get("gemini-2.5-flash").Code)
+			require.Zero(t, f.upstream.calls)
+		})
+	}
 }

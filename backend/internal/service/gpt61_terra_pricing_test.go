@@ -62,8 +62,10 @@ func TestGPT61TerraPricingAliasesAndUnknownSKUIsolation(t *testing.T) {
 		"gpt-5.6-terra": {InputCostPerToken: 2e-6, OutputCostPerToken: 12e-6},
 		"gpt-6.1":       {InputCostPerToken: 999e-6, OutputCostPerToken: 999e-6},
 		"gpt-5.1-codex": {InputCostPerToken: 999e-6, OutputCostPerToken: 999e-6},
+		"claude-opus-5": {InputCostPerToken: 999e-6, OutputCostPerToken: 999e-6},
 	}}
 	billing := NewBillingService(&config.Config{}, pricing)
+	fallbackBilling := NewBillingService(&config.Config{}, nil)
 	for _, model := range []string{
 		"gpt-6.1-terra", "openai/GPT-6.1-Terra-max", "gpt_6.1_terra",
 		"gpt-6.1-terra-openai-compact", "openai/gpt-6.1-terra-low",
@@ -80,23 +82,36 @@ func TestGPT61TerraPricingAliasesAndUnknownSKUIsolation(t *testing.T) {
 	for _, model := range []string{
 		"gpt-6.1-terrain", "gpt-6.1-terra-preview", "gpt-6.1-terra-pro",
 		"gpt-6.1-terra-ultra", "gpt-6.1-terra-2026-10-28",
+		"gpt-6.1-terra-codex", "gpt-6.1-terra-claude", "gpt-6.1-terra-claude-opus-5",
+		"openai/GPT_6.1_TERRA_CODEX", "gpt-6.1-terra-gpt-5.4",
 	} {
 		t.Run(model, func(t *testing.T) {
 			require.Nil(t, pricing.GetModelPricing(model), "unregistered SKU cannot inherit a family/default price")
-			cost, err := billing.CalculateCost(model, UsageTokens{InputTokens: 1000}, 1)
-			require.ErrorIs(t, err, ErrModelPricingUnavailable)
-			require.Nil(t, cost)
-			require.False(t, billing.HasIdentifiedTokenPricing(model))
+			require.Nil(t, pricing.GetIdentifiedModelPricing(model))
+			for _, source := range []*BillingService{billing, fallbackBilling} {
+				cost, err := source.CalculateCost(model, UsageTokens{InputTokens: 1000}, 1)
+				require.ErrorIs(t, err, ErrModelPricingUnavailable)
+				require.Nil(t, cost)
+				require.False(t, source.HasIdentifiedTokenPricing(model))
+				card, matched := source.IdentifiedSameModelPricing(model)
+				require.Nil(t, card, "a cross-family fallback must not be reported as a same-SKU reference")
+				require.Empty(t, matched)
+			}
 		})
 	}
 	// An operator may explicitly price a distinct SKU. Only inferred fallback
 	// is forbidden; exact configuration remains authoritative.
-	pricing.mu.Lock()
-	pricing.pricingData["gpt-6.1-terra-preview"] = &LiteLLMModelPricing{InputCostPerToken: 3e-6, OutputCostPerToken: 7e-6}
-	pricing.mu.Unlock()
-	cost, err := billing.CalculateCost("gpt-6.1-terra-preview", UsageTokens{InputTokens: 1000, OutputTokens: 200}, 1)
-	require.NoError(t, err)
-	require.InDelta(t, 0.0044, cost.TotalCost, 1e-12)
+	for _, model := range []string{"gpt-6.1-terra-preview", "gpt-6.1-terra-codex", "gpt-6.1-terra-claude-opus-5"} {
+		t.Run("explicit price/"+model, func(t *testing.T) {
+			pricing.mu.Lock()
+			pricing.pricingData[model] = &LiteLLMModelPricing{InputCostPerToken: 3e-6, OutputCostPerToken: 7e-6}
+			pricing.mu.Unlock()
+			cost, err := billing.CalculateCost(model, UsageTokens{InputTokens: 1000, OutputTokens: 200}, 1)
+			require.NoError(t, err)
+			require.InDelta(t, 0.0044, cost.TotalCost, 1e-12)
+			require.True(t, billing.HasIdentifiedTokenPricing(model))
+		})
+	}
 }
 
 func TestGPT61TerraExplicitCatalogCachePricesOverrideFallback(t *testing.T) {

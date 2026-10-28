@@ -1418,6 +1418,9 @@ func (s *PricingService) GetModelPricing(modelName string) *LiteLLMModelPricing 
 	if pricing := s.lookupIdentifiedModelPricingLocked(lookupCandidates); pricing != nil {
 		return pricing
 	}
+	if isUnregisteredGPT61TerraPricingModel(modelLower) {
+		return nil
+	}
 	if strings.HasPrefix(lastSegment(modelLower), "step-") {
 		return nil
 	}
@@ -1433,6 +1436,13 @@ func (s *PricingService) GetModelPricing(modelName string) *LiteLLMModelPricing 
 	}
 
 	return nil
+}
+
+// Unregistered Terra variants may have an explicit catalog price, but cannot
+// borrow another SKU's price through a date, family or generic billing fallback.
+func isUnregisteredGPT61TerraPricingModel(model string) bool {
+	canonical := canonicalizeOpenAIModelAliasSpelling(model)
+	return strings.HasPrefix(canonical, "gpt-6.1-terra") && !openai.IsGPT61TerraModelSpelling(canonical)
 }
 
 // lookupIdentifiedModelPricingLocked 只做"确定性识别"的三步查找：精确键、已知拼写
@@ -1455,7 +1465,7 @@ func (s *PricingService) lookupIdentifiedModelPricingLocked(lookupCandidates []s
 	}
 	// A configured exact price is valid, but an unregistered Terra spelling
 	// must never acquire another SKU's card through date/family matching.
-	if model := lastSegment(lookupCandidates[0]); strings.HasPrefix(model, "gpt-6.1-terra") && !openai.IsGPT61TerraModelSpelling(model) {
+	if isUnregisteredGPT61TerraPricingModel(lookupCandidates[0]) {
 		return nil
 	}
 

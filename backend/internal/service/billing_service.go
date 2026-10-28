@@ -1188,6 +1188,9 @@ func (s *BillingService) initFallbackPricing() {
 
 // getFallbackPricing 根据模型系列获取回退价格
 func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
+	if isUnregisteredGPT61TerraPricingModel(model) {
+		return nil
+	}
 	modelLower := normalizeAntigravityClaudeTierAlias(strings.ToLower(model))
 	if native := lastPricingSegment(strings.TrimSpace(modelLower)); strings.HasPrefix(native, "step-") {
 		return s.fallbackPrices[native]
@@ -2210,6 +2213,9 @@ func (s *BillingService) applyModelSpecificPricingPolicyEx(model string, pricing
 	}
 	if s != nil && s.frozenModelPrices != nil {
 		return pricing // durable cards already include their captured model policy
+	}
+	if isUnregisteredGPT61TerraPricingModel(model) {
+		return pricing // an explicit SKU card cannot inherit another model's policy
 	}
 	// DeepSeek 模型：无论 JSON/远端价格表给什么价，一律强制官方低谷价
 	// （Flash 三档为 2026-09-10 官方降价后口径）。这是覆盖远端旧价的关键——远端

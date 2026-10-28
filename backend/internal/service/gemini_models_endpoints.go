@@ -24,9 +24,9 @@ import (
 // errGeminiModelsUpstreamStatus 在 Vertex 分页读取遇到非 2xx 时中止分页，原始响应由调用方另行保存。
 var errGeminiModelsUpstreamStatus = errors.New("upstream model list returned non-2xx status")
 
-// DeclaredModelIDs 在分组内每个可调度 Gemini 账号都有生效的 model_mapping（含 Google One 的默认映射）时，
-// 返回这些映射键的并集（去重排序，通配符键原样保留）。有账号未配置映射时该账号接受任意模型，返回空，
-// 模型接口由选中账号的上游应答。
+// DeclaredModelIDs 返回分组内可调度 Gemini 账号实际可转发的声明模型并集。
+// API Key/服务账号使用映射键；OAuth 不改写模型，只保留原生自映射（含 Google One 默认集）。
+// 未配置映射或 OAuth 只有需转译的别名时返回空，模型接口仍由选中账号的上游应答。
 func (s *GeminiMessagesCompatService) DeclaredModelIDs(ctx context.Context, groupID *int64) ([]string, error) {
 	accounts, err := s.listSchedulableAccountsOnce(ctx, groupID, PlatformGemini, true)
 	if err != nil {
@@ -37,12 +37,25 @@ func (s *GeminiMessagesCompatService) DeclaredModelIDs(ctx context.Context, grou
 		if accounts[i].Platform != PlatformGemini {
 			continue
 		}
+		if accounts[i].Type != AccountTypeAPIKey && accounts[i].Type != AccountTypeServiceAccount && accounts[i].Type != AccountTypeOAuth {
+			return nil, nil
+		}
 		mapping := accounts[i].GetModelMapping()
 		if len(mapping) == 0 {
 			return nil, nil
 		}
-		for model := range mapping {
+		declared := 0
+		for model, target := range mapping {
+			// ForwardNative sends OAuth model names unchanged. A self-mapping
+			// declares a native whitelist entry; a translated alias is not served.
+			if accounts[i].Type == AccountTypeOAuth && model != target {
+				continue
+			}
 			seen[model] = struct{}{}
+			declared++
+		}
+		if declared == 0 {
+			return nil, nil
 		}
 	}
 	models := make([]string, 0, len(seen))

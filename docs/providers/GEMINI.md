@@ -7,11 +7,14 @@ catalog in the selected region and return AI Studio-shaped model descriptions.
 Vertex accounts authenticated with an API key use the built-in catalog because
 the publisher-model listing path requires an access token.
 
-When every schedulable Gemini account in the group declares a model mapping,
-list and detail endpoints use the union of those public model names, including
-Google One's default mapping and wildcard declarations. Antigravity candidates
-and the group's model allowlist still apply. If any Gemini account is unrestricted,
-the selected account supplies discovery. Built-in Gemini catalogs and account
+When every schedulable Gemini account in the group declares servable model names,
+list and detail endpoints use their union, including wildcard declarations.
+API Key and service accounts contribute mapping aliases because native generation
+applies their mapping targets. OAuth contributes only native self-mappings,
+including Google One's default model set; translated OAuth aliases are not advertised.
+If any Gemini account is unrestricted or an OAuth mapping has no native declarations,
+the selected account supplies discovery. Antigravity candidates and the group's
+model allowlist still apply. Built-in Gemini catalogs and account
 connection tests now use the current 3.x models; saved custom mappings can still
 declare older models explicitly.
 

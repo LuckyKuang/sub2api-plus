@@ -416,6 +416,10 @@ PROFILES = {
             "TestGPT61TerraExplicitCatalogCachePricesOverrideFallback",
             "TestGPT61TerraExplicitZeroCacheReadRemainsFreeAcrossTiers",
             "TestGPT61TerraAcceptedPricingSurvivesCatalogReloadAndDurableSettlement",
+            "TestGPT61TerraUnknownExactCatalogKeepsItsTierPrices",
+            "TestGPT61TerraUnknownSKUDoesNotBorrowChannelModelPrice",
+            "TestGPT61TerraUnknownSKURetainsItsExplicitChannelPrice",
+            "TestGPT61TerraUsageBillingCandidatesDoNotInventAnotherSKU",
             "TestOpenAIModelsRefreshRechecksFreshOwnerScopedCache",
             "TestOpenAIModelsRefreshRevalidatesStaleCache",
             "TestDeepSeekChatCacheUsageSurvivesDownstreamProtocols",
@@ -865,6 +869,12 @@ PROFILES = {
             for mode in ("success", "timeout", "refused", "authentication_required", "missing", "mismatched")
         )),
         RegressionGroup("./internal/handler", (
+            "TestGeminiNativeModelsUsesDeclaredMappings",
+            "TestGeminiNativeModelsUnmappedAccountKeepsUpstream",
+            "TestGeminiNativeModelsOAuthTranslationAliasesStayUnavailable",
+            "TestGeminiNativeModelsOAuthAliasOnlyMappingKeepsNativeDiscovery",
+            "TestGeminiNativeModelsGoogleOneKeepsNativeWhitelist",
+            "TestGeminiNativeModelsMappedCredentialTypesKeepDeclaredAliases",
             "TestGrokRealtimeHandlerRejectsBrokenProxyBeforeCredential",
             "TestGrokRealtimeHandlerRetainsRouteAcrossCredentialLookup",
             "TestGrokRealtimeHandlerLateRejectionCannotCoolReplacementOwner",
