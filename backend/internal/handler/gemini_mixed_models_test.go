@@ -4,17 +4,18 @@ package handler
 
 import (
 	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/gemini"
 	"github.com/LuckyKuang/sub2api-plus/internal/server/middleware"
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
-	"io"
-	"net/http"
-	"net/http/httptest"
-	"strings"
-	"testing"
 )
 
 func TestGeminiNativeModelsUsesAccountMappings(t *testing.T) {
@@ -176,6 +177,7 @@ func (f *geminiDeclaredModelsFixture) context(path, model string, allowlist serv
 		c.Params = gin.Params{{Key: "model", Value: model}}
 	}
 	c.Set(string(middleware.ContextKeyAPIKey), &service.APIKey{GroupID: &f.groupID, Group: &service.Group{ID: f.groupID, Platform: service.PlatformGemini, ModelAllowlist: allowlist}})
+	prepareGatewayMetadataTest(f.handler, c)
 	return c, rec
 }
 
