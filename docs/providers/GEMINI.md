@@ -7,6 +7,21 @@ catalog in the selected region and return AI Studio-shaped model descriptions.
 Vertex accounts authenticated with an API key use the built-in catalog because
 the publisher-model listing path requires an access token.
 
+When every schedulable Gemini account in the group declares a model mapping,
+list and detail endpoints use the union of those public model names, including
+Google One's default mapping and wildcard declarations. Antigravity candidates
+and the group's model allowlist still apply. If any Gemini account is unrestricted,
+the selected account supplies discovery. Built-in Gemini catalogs and account
+connection tests now use the current 3.x models; saved custom mappings can still
+declare older models explicitly.
+
+`gateway.max_same_account_retries_gemini` (environment
+`GATEWAY_MAX_SAME_ACCOUNT_RETRIES_GEMINI`) sets retries for retryable Gemini
+upstream failures before account failover, excluding the first attempt. It
+defaults to 4, accepts 0 through 10, and 0 disables these retries. Signature
+downgrades retain their separate compatibility budget. Existing account error
+policies and pool-mode retry settings remain authoritative for their paths.
+
 ## Quotas, image permissions and interrupted streams
 
 Vertex service accounts support total, daily and weekly account quota limits.
@@ -58,6 +73,11 @@ gateway resolves ownership and rewrites the name for the provider. A referenced
 cache is routed only to its creating account, without session-based rerouting or
 failover to another owner. Missing, expired, foreign-key or foreign-group
 references are unavailable to the caller.
+For compatible upstream gateways, bound-cache 429/5xx errors do not punish the
+gateway account. Pool-mode accounts retry only their configured retryable status
+codes and retry count, keeping the original credential owner and proxy route;
+other cases and exhausted retries return the upstream failure without switching
+cache owners.
 For Composite aliases, both the public model and its currently resolved model
 must match the stored binding. Resource-only operations use the authorized
 record and its creating account; they do not infer a provider from a cache ID.

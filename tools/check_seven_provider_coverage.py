@@ -411,6 +411,13 @@ PROFILES = {
         RegressionGroup("./internal/service", (
             "TestGPT61TerraMessagesForwardBoundary",
             "TestGPT61TerraMessagesDisabledThinkingStopsBeforeUpstream",
+            "TestGPT61TerraReleaseCatalogRatesAndAPILimits",
+            "TestGPT61TerraPricingAliasesAndUnknownSKUIsolation",
+            "TestGPT61TerraExplicitCatalogCachePricesOverrideFallback",
+            "TestGPT61TerraExplicitZeroCacheReadRemainsFreeAcrossTiers",
+            "TestGPT61TerraAcceptedPricingSurvivesCatalogReloadAndDurableSettlement",
+            "TestOpenAIModelsRefreshRechecksFreshOwnerScopedCache",
+            "TestOpenAIModelsRefreshRevalidatesStaleCache",
             "TestDeepSeekChatCacheUsageSurvivesDownstreamProtocols",
             "TestGrokCatalogBackgroundTransportAndProxyBodyFailuresNeverWrite",
             "TestGrokCatalogEarlyFailureCannotAdoptReplacementOwner",

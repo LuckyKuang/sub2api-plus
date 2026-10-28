@@ -100,6 +100,25 @@ var (
 		Mode:                                "chat",
 		SupportsPromptCaching:               true,
 	}
+	// OpenAI API pricing, reviewed 2026-10-28:
+	// https://developers.openai.com/api/docs/models/gpt-6.1-terra
+	openAIGPT61TerraFallbackPricing = &LiteLLMModelPricing{
+		InputCostPerToken:                   1e-6,
+		InputCostPerTokenPriority:           2e-6,
+		OutputCostPerToken:                  5e-6,
+		OutputCostPerTokenPriority:          10e-6,
+		CacheCreationInputTokenCost:         1.25e-6,
+		CacheCreationInputTokenCostPriority: 2.5e-6,
+		CacheReadInputTokenCost:             0.05e-6,
+		CacheReadInputTokenCostPriority:     0.1e-6,
+		LongContextInputTokenThreshold:      272_000,
+		LongContextInputCostMultiplier:      2,
+		LongContextOutputCostMultiplier:     1.5,
+		SupportsServiceTier:                 true,
+		LiteLLMProvider:                     "openai",
+		Mode:                                "chat",
+		SupportsPromptCaching:               true,
+	}
 	// 官方 v0.2.10 新增：Claude Opus/Sonnet 5.5 的内置兜底卡。
 	// GPT-6 Sol/Luna 兜底由 Plus 在下方独立维护（UPSTREAM.md
 	// "Restored Upstream Pricing Branches"），此处不重复声明。
@@ -1434,6 +1453,11 @@ func (s *PricingService) lookupIdentifiedModelPricingLocked(lookupCandidates []s
 			return pricing
 		}
 	}
+	// A configured exact price is valid, but an unregistered Terra spelling
+	// must never acquire another SKU's card through date/family matching.
+	if model := lastSegment(lookupCandidates[0]); strings.HasPrefix(model, "gpt-6.1-terra") && !openai.IsGPT61TerraModelSpelling(model) {
+		return nil
+	}
 
 	// StepFun only publishes prices for exact IDs. Date stripping and family
 	// matches must not turn an unregistered SKU into a different priced model.
@@ -1568,6 +1592,9 @@ func normalizeModelNameForPricing(model string) string {
 		return "claude-sonnet-5"
 	}
 	if canonical := canonicalizeOpenAIModelAliasSpelling(model); canonical != "" {
+		if openai.IsGPT61TerraModelSpelling(canonical) {
+			return "gpt-6.1-terra"
+		}
 		if openai.IsGPT61SolModelSpelling(canonical) {
 			return "gpt-6.1-sol"
 		}
@@ -1834,7 +1861,10 @@ func (s *PricingService) matchOpenAIModel(model string) *LiteLLMModelPricing {
 		if pricing, ok := s.pricingData["gpt-6.1-terra"]; ok {
 			return pricing
 		}
-		return nil // No verified built-in Terra price; explicit catalog pricing remains authoritative.
+		return openAIGPT61TerraFallbackPricing
+	}
+	if strings.HasPrefix(model, "gpt-6.1-terra") {
+		return nil
 	}
 	if openai.IsGPT61SolModelSpelling(model) {
 		if pricing, ok := s.pricingData["gpt-6.1-sol"]; ok {

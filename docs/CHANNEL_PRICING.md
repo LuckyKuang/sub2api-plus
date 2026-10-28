@@ -5,6 +5,13 @@ prices, how they are matched, and what to do when a price is missing. It is the
 durable specification for the admin API contract; code changes that alter this
 behavior must update this file in the same commit.
 
+Channel updates preserve `features_config.web_search_emulation` dimensions that
+the client omits. Supplied platform values replace that dimension, including
+explicit `false`; an explicit empty object or `null` clears the whole feature.
+Other feature keys retain whole-block replacement semantics. The editor writes
+explicit values for its supported platform sections and preserves dimensions
+it cannot edit, including while global emulation is disabled.
+
 ## 1. Design principles
 
 1. Channel prices are operator selling prices. A reference price is only a
@@ -160,7 +167,7 @@ The following are **never** used for an admin reference price:
 - a similar but different version, e.g. `kimi-k2.7-code` priced as `kimi-k2`;
   `claude-opus-5-5-preview` priced as `claude-opus-5-5`.
 
-GPT-6.1 Sol, GPT-6 Sol, GPT-6 Luna, and GPT-6 Astra are separate SKUs. Registered
+GPT-6.1 Terra, GPT-6.1 Sol, GPT-6 Sol, GPT-6 Luna, and GPT-6 Astra are separate SKUs. Registered
 provider-qualified spellings and effort suffixes may use the same SKU's card;
 bare `gpt-6` and preview names never inherit Astra pricing. GPT-6.1 Sol's
 built-in Standard input/output/cache-write/cache-read reference rates per
@@ -169,6 +176,26 @@ GPT-6 Luna's are $0.10/$0.50/$0.125/$0.01. Saved selling prices remain explicit
 overrides, including zero cache-write values across Standard, Fast, and Flex.
 Astra Ultrafast uses six times the selected Standard token prices independently
 of the operator's Fast multiplier; it does not grant upstream capability.
+
+GPT-6.1 Terra has an exact release-catalog card and same-SKU built-in fallback,
+reviewed against [OpenAI API pricing](https://developers.openai.com/api/docs/pricing)
+and the [Terra API model page](https://developers.openai.com/api/docs/models/gpt-6.1-terra)
+on 2026-10-28. Its Standard input/output/cache-read/30-minute cache-write rates
+are $1/$5/$0.05/$1.25 per million tokens; Fast is 2x, and Flex/Batch are 0.5x.
+When total input, including cache reads and writes, exceeds 272000 tokens, the
+whole request's input/cache prices double and output prices increase 1.5x.
+Exactly 272000 remains at the base price. Saved catalog/channel prices retain
+precedence, including explicit zero cache-write prices; registered provider and
+effort aliases share this card, while unknown Terra suffixes receive no guessed
+price. Admission and durable settlement pin the selected card across reloads.
+
+The official 12-hour cache-write reference rate is $2.50 per million tokens
+before context and speed adjustments. The existing OpenAI usage contract
+provides aggregate cache-write tokens and uses the 30-minute card; this update
+does not add a 12-hour usage breakdown. The release pricing resource records
+the API's 1050000 context window, 922000 maximum input and 128000 maximum output.
+These API limits are separate from the reviewed Codex client descriptor and do
+not change its pinned metadata, request behavior or identity.
 
 ## 3. Status and reason codes
 
