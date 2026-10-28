@@ -166,6 +166,10 @@
 
         <!-- Tab: Gateway -->
         <div v-show="activeTab === 'gateway'" class="space-y-6">
+          <PlatformPricingFallbackSettings
+            v-model="form.pricing_fallback_models"
+            :disabled="saving || loadFailed || !pricingFallbackLoaded"
+          />
           <!-- Overload Cooldown (529) Settings -->
           <div class="card workspace-shell">
             <div
@@ -8773,6 +8777,7 @@ import type {
   AuthSourceDefaultsState,
   AuthSourceType,
   SystemSettings,
+  PricingFallbackModels,
   UpdateSettingsRequest,
   DefaultSubscriptionSetting,
   DefaultPlatformQuotasMap,
@@ -8822,6 +8827,7 @@ import {
   type RechargeBonusTierDraft,
 } from "@/utils/rechargeBonus";
 import OpenAIFastPolicyUserSelector from "@/views/admin/settings/OpenAIFastPolicyUserSelector.vue";
+import PlatformPricingFallbackSettings from "@/views/admin/settings/PlatformPricingFallbackSettings.vue";
 import { useClipboard } from "@/composables/useClipboard";
 import {
   useStepUp,
@@ -8900,6 +8906,7 @@ type SettingsTab =
   | "backup";
 const activeTab = ref<SettingsTab>("general");
 const settingsBody = ref<HTMLElement | null>(null);
+const pricingFallbackLoaded = ref(false);
 watch(activeTab, () => {
   if (settingsBody.value) settingsBody.value.scrollTop = 0;
 });
@@ -9773,6 +9780,7 @@ const form = reactive<SettingsForm>({
   google_oauth_redirect_url: "",
   google_oauth_frontend_redirect_url: "/auth/oauth/callback",
   // Model fallback
+  pricing_fallback_models: {} as PricingFallbackModels,
   enable_model_fallback: false,
   fallback_model_anthropic: "claude-3-5-sonnet-20241022",
   fallback_model_openai: "gpt-4o",
@@ -10857,6 +10865,12 @@ async function loadSettings() {
         (form as Record<string, unknown>)[key] = value;
       }
     }
+    pricingFallbackLoaded.value = !!settings.pricing_fallback_models
+      && typeof settings.pricing_fallback_models === "object"
+      && !Array.isArray(settings.pricing_fallback_models);
+    if (pricingFallbackLoaded.value) {
+      form.pricing_fallback_models = { ...settings.pricing_fallback_models };
+    }
     syncCaptchaProviderSelection();
     if (!form.claude_oauth_system_prompt_blocks?.trim()) {
       form.claude_oauth_system_prompt_blocks =
@@ -11442,6 +11456,9 @@ async function saveSettings() {
       google_oauth_redirect_url: form.google_oauth_redirect_url,
       google_oauth_frontend_redirect_url:
         form.google_oauth_frontend_redirect_url,
+      pricing_fallback_models: pricingFallbackLoaded.value
+        ? { ...form.pricing_fallback_models }
+        : undefined,
       enable_model_fallback: form.enable_model_fallback,
       fallback_model_anthropic: form.fallback_model_anthropic,
       fallback_model_openai: form.fallback_model_openai,
@@ -11667,6 +11684,9 @@ async function saveSettings() {
       if (value !== null && value !== undefined) {
         (form as Record<string, unknown>)[key] = value;
       }
+    }
+    if (updated.pricing_fallback_models) {
+      form.pricing_fallback_models = { ...updated.pricing_fallback_models };
     }
     Object.assign(authSourceDefaults, buildAuthSourceDefaultsState(updated));
     await outboundIdentitySettings.value?.refresh();

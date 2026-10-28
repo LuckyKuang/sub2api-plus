@@ -81,6 +81,13 @@ func TestReserveInflightBalance_SimpleModeDisabled(t *testing.T) {
 // estimate: same model / resolver as billing
 // ---------------------------------------------------------------------------
 
+// Account-mapping scenarios require real prices for their target SKUs. Keep
+// these exact catalog cards independent of the compiled family-price guesses.
+const inflightMappedModelCatalogJSON = `{
+	"claude-sonnet-4-5":{"litellm_provider":"anthropic","input_cost_per_token":0.000003,"output_cost_per_token":0.000015},
+	"claude-opus-4-1":{"litellm_provider":"anthropic","input_cost_per_token":0.000015,"output_cost_per_token":0.000075}
+}`
+
 func newInflightEstimateGateway(t *testing.T, channelService *ChannelService) *GatewayService {
 	t.Helper()
 	cfg := &config.Config{}
@@ -106,6 +113,8 @@ func TestInflightEstimate_ChannelAliasUsesMappedModel(t *testing.T) {
 	}
 	cs := newTestChannelService(makeStandardRepo(ch, map[int64]string{groupID: "anthropic"}))
 	svc := newInflightEstimateGateway(t, cs)
+	svc.billingService.pricingService = newStubPricingServiceFromJSON(t, inflightMappedModelCatalogJSON)
+	svc.billingService.frozenPricingFallbackModels = map[string]string{PlatformAnthropic: ""}
 	apiKey := &APIKey{User: &User{ID: 1}, GroupID: &groupID, Group: &Group{ID: groupID, Platform: PlatformAnthropic, RateMultiplier: 1}}
 
 	// Old estimate (client model, base pricing only) → 0 → reservation bypassed.
@@ -394,6 +403,8 @@ func TestInflightEstimate_RequestedSourceUnpricedAliasFallsBackLikeBilling(t *te
 	}
 	cs := newTestChannelService(makeStandardRepo(ch, map[int64]string{groupID: "anthropic"}))
 	svc := newInflightEstimateGateway(t, cs)
+	svc.billingService.pricingService = newStubPricingServiceFromJSON(t, inflightMappedModelCatalogJSON)
+	svc.billingService.frozenPricingFallbackModels = map[string]string{PlatformAnthropic: ""}
 	apiKey := &APIKey{User: &User{ID: 1}, GroupID: &groupID, Group: &Group{ID: groupID, Platform: PlatformAnthropic, RateMultiplier: 1}}
 	ctx := context.Background()
 
@@ -412,6 +423,8 @@ func TestInflightEstimate_RequestedSourceUnpricedAliasFallsBackLikeBilling(t *te
 func TestInflightEstimate_AccountLevelMappingFallsBackLikeBilling(t *testing.T) {
 	groupID := int64(31)
 	svc := newInflightEstimateGateway(t, nil)
+	svc.billingService.pricingService = newStubPricingServiceFromJSON(t, inflightMappedModelCatalogJSON)
+	svc.billingService.frozenPricingFallbackModels = map[string]string{PlatformAnthropic: ""}
 	snap := &inflightSnapshotCacheStub{byBucket: map[string][]Account{inflightBucketKey(groupID, PlatformAnthropic): {
 		{ID: 1, Platform: PlatformAnthropic, Credentials: map[string]any{"model_mapping": map[string]any{"acct-alias-31": "claude-sonnet-4-5"}}},
 		{ID: 2, Platform: PlatformAnthropic, Credentials: map[string]any{"model_mapping": map[string]any{"acct-alias-31": "claude-opus-4-1"}}},
@@ -490,6 +503,8 @@ func attachInflightSnapshot(svc *GatewayService, snap *inflightSnapshotCacheStub
 func TestInflightEstimate_AccountMappingNoDBAndBoundedMemory(t *testing.T) {
 	groupID := int64(40)
 	svc := newInflightEstimateGateway(t, nil)
+	svc.billingService.pricingService = newStubPricingServiceFromJSON(t, inflightMappedModelCatalogJSON)
+	svc.billingService.frozenPricingFallbackModels = map[string]string{PlatformAnthropic: ""}
 	snap := &inflightSnapshotCacheStub{byBucket: map[string][]Account{inflightBucketKey(groupID, PlatformAnthropic): {
 		{ID: 1, Platform: PlatformAnthropic, Credentials: map[string]any{"model_mapping": map[string]any{"acct-alias-40": "claude-sonnet-4-5"}}},
 	}}}
@@ -521,6 +536,8 @@ func TestInflightEstimate_AccountMappingNoDBAndBoundedMemory(t *testing.T) {
 // 无分组 API Key：使用调度器的未分组账号池，估算与计费回退的账号映射模型同口径。
 func TestInflightEstimate_NoGroupKeyUsesUngroupedAccountMapping(t *testing.T) {
 	svc := newInflightEstimateGateway(t, nil)
+	svc.billingService.pricingService = newStubPricingServiceFromJSON(t, inflightMappedModelCatalogJSON)
+	svc.billingService.frozenPricingFallbackModels = map[string]string{PlatformAnthropic: ""}
 	snap := &inflightSnapshotCacheStub{byBucket: map[string][]Account{inflightBucketKey(0, PlatformAnthropic): {
 		{ID: 1, Platform: PlatformAnthropic, Credentials: map[string]any{"model_mapping": map[string]any{"acct-alias-nog": "claude-opus-4-1"}}},
 	}}}
@@ -539,6 +556,8 @@ func TestInflightEstimate_NoGroupKeyUsesUngroupedAccountMapping(t *testing.T) {
 func TestInflightEstimate_AccountMappingNoNegativeCaching(t *testing.T) {
 	groupID := int64(41)
 	svc := newInflightEstimateGateway(t, nil)
+	svc.billingService.pricingService = newStubPricingServiceFromJSON(t, inflightMappedModelCatalogJSON)
+	svc.billingService.frozenPricingFallbackModels = map[string]string{PlatformAnthropic: ""}
 	snap := &inflightSnapshotCacheStub{byBucket: map[string][]Account{}}
 	attachInflightSnapshot(svc, snap)
 	apiKey := &APIKey{User: &User{ID: 1}, GroupID: &groupID, Group: &Group{ID: groupID, Platform: PlatformAnthropic, RateMultiplier: 1}}

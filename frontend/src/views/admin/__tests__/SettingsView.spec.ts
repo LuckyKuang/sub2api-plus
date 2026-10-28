@@ -7,6 +7,7 @@ import enSettings from "@/i18n/locales/en/admin/settings";
 import zhCommon from "@/i18n/locales/zh/common";
 import zhSettings from "@/i18n/locales/zh/admin/settings";
 import SettingsView from "../SettingsView.vue";
+import PlatformPricingFallbackSettings from "../settings/PlatformPricingFallbackSettings.vue";
 import { identityPresets, type OutboundIdentityView } from "@/api/admin/outboundIdentity";
 import { identityPolicyFixture } from "@/components/account/__tests__/identityPolicyFixture";
 import { cssPixels, installAppStyles } from "@/__tests__/appStyles";
@@ -385,6 +386,22 @@ const ImageUploadStub = defineComponent({
 });
 
 const baseSettingsResponse = {
+  pricing_fallback_models: {
+    anthropic: 'claude-sonnet-4-5-20250929',
+    openai: 'gpt-6.1-sol',
+    gemini: 'gemini-2.5-pro',
+    antigravity: 'claude-sonnet-4-5-20250929',
+    grok: 'grok-4.5',
+    kimi: 'kimi-k2.5',
+    zhipu: 'glm-5.1',
+    deepseek: 'deepseek-v4-pro',
+    minimax: 'MiniMax-M2.7',
+    stepfun: 'step-3.5-flash',
+    opencode_go: '',
+    typesafe: '',
+    command_code: '',
+    cline: '',
+  },
   registration_enabled: true,
   email_verify_enabled: false,
   registration_email_suffix_whitelist: [],
@@ -983,6 +1000,91 @@ describe("admin SettingsView payment visible method controls", () => {
     expect(updateSettings).toHaveBeenCalledWith(
       expect.objectContaining({ compact_home_enabled: true }),
     );
+  });
+
+  it("loads and saves platform pricing fallbacks without changing routing fallbacks", async () => {
+    const saved = { ...baseSettingsResponse.pricing_fallback_models, command_code: 'gpt-6.1-terra' };
+    getSettings.mockResolvedValue({
+      ...baseSettingsResponse,
+      pricing_fallback_models: saved,
+      enable_model_fallback: false,
+      fallback_model_openai: 'gpt-4o',
+    });
+    const wrapper = mountView();
+    try {
+      await flushPromises();
+      await openGatewayTab(wrapper);
+      const editor = wrapper.findComponent(PlatformPricingFallbackSettings);
+      expect(editor.props('modelValue')).toEqual(saved);
+      expect(editor.props('disabled')).toBe(false);
+
+      const edited = { ...saved, openai: '', cline: 'claude-opus-4-8' };
+      editor.vm.$emit('update:modelValue', edited);
+      await wrapper.find('form').trigger('submit.prevent');
+      await flushPromises();
+
+      expect(updateSettings).toHaveBeenCalledWith(expect.objectContaining({
+        pricing_fallback_models: edited,
+        enable_model_fallback: false,
+        fallback_model_openai: 'gpt-4o',
+      }));
+      expect(editor.props('modelValue')).toEqual(edited);
+      expect(saved.openai).toBe('gpt-6.1-sol');
+    } finally { wrapper.unmount(); }
+  });
+
+  it("resets pricing fallback defaults with an empty map and displays the server defaults after saving", async () => {
+    updateSettings.mockImplementation(async payload => ({
+      ...baseSettingsResponse,
+      ...payload,
+      pricing_fallback_models: baseSettingsResponse.pricing_fallback_models,
+    }));
+    const wrapper = mountView();
+    try {
+      await flushPromises();
+      await openGatewayTab(wrapper);
+      await wrapper.get('[data-testid="pricing-fallback-restore"]').trigger('click');
+      await wrapper.find('form').trigger('submit.prevent');
+      await flushPromises();
+
+      expect(updateSettings).toHaveBeenCalledWith(expect.objectContaining({ pricing_fallback_models: {} }));
+      expect(wrapper.findComponent(PlatformPricingFallbackSettings).props('modelValue'))
+        .toEqual(baseSettingsResponse.pricing_fallback_models);
+    } finally { wrapper.unmount(); }
+  });
+
+  it("omits an unavailable pricing fallback field instead of resetting persisted defaults on an unrelated save", async () => {
+    getSettings.mockResolvedValue({ ...baseSettingsResponse, pricing_fallback_models: undefined });
+    const wrapper = mountView();
+    try {
+      await flushPromises();
+      expect(wrapper.findComponent(PlatformPricingFallbackSettings).props('disabled')).toBe(true);
+      await wrapper.find('form').trigger('submit.prevent');
+      await flushPromises();
+
+      expect(updateSettings).toHaveBeenCalledTimes(1);
+      expect(updateSettings.mock.calls[0][0].pricing_fallback_models).toBeUndefined();
+    } finally { wrapper.unmount(); }
+  });
+
+  it("retains a rejected pricing fallback draft so the administrator can correct its SKU", async () => {
+    updateSettings.mockRejectedValue(new Error('Pricing SKU has no system price'));
+    const wrapper = mountView();
+    try {
+      await flushPromises();
+      await openGatewayTab(wrapper);
+      const editor = wrapper.findComponent(PlatformPricingFallbackSettings);
+      const draft = { ...baseSettingsResponse.pricing_fallback_models, command_code: 'unpriced-custom-sku' };
+      editor.vm.$emit('update:modelValue', draft);
+      await wrapper.find('form').trigger('submit.prevent');
+      await flushPromises();
+
+      expect(updateSettings).toHaveBeenCalledWith(expect.objectContaining({ pricing_fallback_models: draft }));
+      expect(showError).toHaveBeenCalledWith('error');
+      expect(showSuccess).not.toHaveBeenCalled();
+      expect(editor.props('modelValue')).toEqual(draft);
+      expect(editor.props('disabled')).toBe(false);
+    } finally { wrapper.unmount(); }
   });
 
 	it("loads and submits the consecutive client disconnect ban settings", async () => {

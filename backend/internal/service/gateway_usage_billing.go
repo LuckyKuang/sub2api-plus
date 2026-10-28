@@ -1225,7 +1225,11 @@ func (s *GatewayService) hasResolvableTokenPricing(ctx context.Context, model st
 	if billingServiceForContext(ctx, s.billingService) == nil {
 		return false
 	}
-	_, err := billingServiceForContext(ctx, s.billingService).GetModelPricing(model)
+	var group *Group
+	if apiKey != nil {
+		group = apiKey.Group
+	}
+	_, err := billingServiceForContext(ctx, s.billingService).GetModelPricingForPlatform(ctx, requestBillingPlatform(ctx, group, ""), model)
 	return err == nil
 }
 

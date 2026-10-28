@@ -186,12 +186,14 @@ func TestCompositeUnknownUnitPriceRejectsSettlementWithoutFinancialWrites(t *tes
 				var err error
 				if gateway == "generic" {
 					svc := newGatewayRecordUsageServiceWithBillingRepoForTest(logs, ledger, users, subs)
+					svc.billingService.frozenPricingFallbackModels = map[string]string{platform: ""}
 					input := &RecordUsageInput{Result: &ForwardResult{RequestID: "unpriced", Model: "no-price-evidence-model", Usage: ClaudeUsage{InputTokens: 20, OutputTokens: 10}, SearchCount: 1},
 						APIKey: key, User: user, Account: account, OriginalModel: "model001", APIKeyService: quota}
 					require.True(t, math.IsNaN(svc.QuoteUsageCost(ctx, input)), "a paid search component cannot hide missing token prices")
 					err = svc.RecordUsage(ctx, input)
 				} else {
 					svc := newOpenAIRecordUsageServiceWithBillingRepoForTest(logs, ledger, users, subs, nil)
+					svc.billingService.frozenPricingFallbackModels = map[string]string{platform: ""}
 					err = svc.RecordUsage(ctx, &OpenAIRecordUsageInput{Result: &OpenAIForwardResult{RequestID: "unpriced", Model: "no-price-evidence-model", Usage: OpenAIUsage{InputTokens: 20, OutputTokens: 10}, SearchCount: 1},
 						APIKey: key, User: user, Account: account, OriginalModel: "model001", APIKeyService: quota})
 				}

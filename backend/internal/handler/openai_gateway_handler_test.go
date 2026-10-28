@@ -1014,6 +1014,7 @@ func TestOpenAIResponses_FunctionCallOutputHTTPGuidanceDoesNotSuggestPreviousRes
 		ID:      101,
 		GroupID: &groupID,
 		User:    &service.User{ID: 1},
+		Group:   &service.Group{ID: groupID, Platform: service.PlatformOpenAI, Status: service.StatusActive, Hydrated: true, RateMultiplier: 1},
 	})
 	c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{
 		UserID:      1,
@@ -1986,6 +1987,7 @@ func newOpenAIWSHandlerTestServer(t *testing.T, h *OpenAIGatewayHandler, subject
 		ID:      101,
 		GroupID: &groupID,
 		User:    &service.User{ID: subject.UserID},
+		Group:   &service.Group{ID: groupID, Platform: service.PlatformOpenAI, Status: service.StatusActive, Hydrated: true, RateMultiplier: 1},
 	}
 	router := gin.New()
 	router.Use(func(c *gin.Context) {
@@ -2017,7 +2019,7 @@ type openAIResponsesWSUsageLogCase struct {
 	billingModelSource        string
 	accountModelMapping       map[string]any
 	afterFirstUpstreamRequest func(channelSvc *service.ChannelService) error
-	// group 覆盖 apiKey.Group（分组级模型白名单测试用）；nil 保持原有无分组行为。
+	// group 覆盖 apiKey.Group（分组级模型白名单测试用）；nil 使用默认具体平台分组。
 	group *service.Group
 	// apiKeyService 非 nil 时模拟 API Key 认证中间件：连接认证快照经它按
 	// apiKeyCredential 取得，并把其分组放入请求 ctx；handler 也使用它。
@@ -3566,6 +3568,8 @@ func runOpenAIResponsesWebSocketUsageLogCase(t *testing.T, tc openAIResponsesWSU
 		ID:      1801,
 		GroupID: &groupID,
 		User:    &service.User{ID: 1701, Status: service.StatusActive},
+		Group: &service.Group{ID: groupID, Platform: account.Platform, Status: service.StatusActive, Hydrated: true,
+			RateMultiplier: cfg.Default.RateMultiplier, LongContextPricingEnabled: true},
 	}
 	if tc.apiKeyService != nil {
 		h.apiKeyService = tc.apiKeyService

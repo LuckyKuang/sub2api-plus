@@ -219,11 +219,12 @@ type UpdateSettingsRequest struct {
 	ForceEmailOnThirdPartySignup              *bool                             `json:"force_email_on_third_party_signup"`
 
 	// Model fallback configuration
-	EnableModelFallback      bool   `json:"enable_model_fallback"`
-	FallbackModelAnthropic   string `json:"fallback_model_anthropic"`
-	FallbackModelOpenAI      string `json:"fallback_model_openai"`
-	FallbackModelGemini      string `json:"fallback_model_gemini"`
-	FallbackModelAntigravity string `json:"fallback_model_antigravity"`
+	EnableModelFallback      bool              `json:"enable_model_fallback"`
+	FallbackModelAnthropic   string            `json:"fallback_model_anthropic"`
+	FallbackModelOpenAI      string            `json:"fallback_model_openai"`
+	FallbackModelGemini      string            `json:"fallback_model_gemini"`
+	FallbackModelAntigravity string            `json:"fallback_model_antigravity"`
+	PricingFallbackModels    map[string]string `json:"pricing_fallback_models"`
 
 	// Identity patch configuration (Claude -> Gemini)
 	EnableIdentityPatch bool   `json:"enable_identity_patch"`
@@ -529,6 +530,14 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 	}
 	auditReq := settingsAuditRequest(req)
 	omitted := omittedSettingKeys(sentFields)
+	if raw, supplied := sentFields[service.SettingKeyPricingFallbackModels]; supplied && strings.TrimSpace(string(raw)) != "null" {
+		models, err := service.ParsePricingFallbackModelsJSON(raw)
+		if err != nil {
+			response.ErrorFrom(c, err)
+			return
+		}
+		req.PricingFallbackModels = models
+	}
 
 	previousSettings, err := h.settingService.GetAllSettings(c.Request.Context())
 	if err != nil {
@@ -1764,6 +1773,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		FallbackModelOpenAI:                    req.FallbackModelOpenAI,
 		FallbackModelGemini:                    req.FallbackModelGemini,
 		FallbackModelAntigravity:               req.FallbackModelAntigravity,
+		PricingFallbackModels:                  req.PricingFallbackModels,
 		EnableIdentityPatch:                    req.EnableIdentityPatch,
 		IdentityPatchPrompt:                    req.IdentityPatchPrompt,
 		MinClaudeCodeVersion:                   req.MinClaudeCodeVersion,
@@ -2479,6 +2489,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		FallbackModelOpenAI:                                    updatedSettings.FallbackModelOpenAI,
 		FallbackModelGemini:                                    updatedSettings.FallbackModelGemini,
 		FallbackModelAntigravity:                               updatedSettings.FallbackModelAntigravity,
+		PricingFallbackModels:                                  updatedSettings.PricingFallbackModels,
 		EnableIdentityPatch:                                    updatedSettings.EnableIdentityPatch,
 		IdentityPatchPrompt:                                    updatedSettings.IdentityPatchPrompt,
 		OpsMonitoringEnabled:                                   updatedSettings.OpsMonitoringEnabled,

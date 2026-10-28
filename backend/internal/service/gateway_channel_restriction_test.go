@@ -103,7 +103,7 @@ func TestCheckChannelPricingRestriction_ChannelMapped_Restricted(t *testing.T) {
 		RestrictModels:     true,
 		BillingModelSource: BillingModelSourceChannelMapped,
 		ModelPricing: []ChannelModelPricing{
-			{Platform: "anthropic", Models: []string{"claude-opus-4-6"}},
+			{Platform: "anthropic", Models: []string{"claude-opus-4-6"}, InputPrice: testPtrFloat64(0)},
 		},
 		ModelMapping: map[string]map[string]string{
 			"anthropic": {"claude-sonnet-4-5": "claude-sonnet-4-6"},
@@ -127,7 +127,7 @@ func TestCheckChannelPricingRestriction_ChannelMapped_Allowed(t *testing.T) {
 		RestrictModels:     true,
 		BillingModelSource: BillingModelSourceChannelMapped,
 		ModelPricing: []ChannelModelPricing{
-			{Platform: "anthropic", Models: []string{"claude-sonnet-4-6"}},
+			{Platform: "anthropic", Models: []string{"claude-sonnet-4-6"}, InputPrice: testPtrFloat64(0)},
 		},
 		ModelMapping: map[string]map[string]string{
 			"anthropic": {"claude-sonnet-4-5": "claude-sonnet-4-6"},
@@ -151,7 +151,7 @@ func TestCheckChannelPricingRestriction_Requested_Restricted(t *testing.T) {
 		RestrictModels:     true,
 		BillingModelSource: BillingModelSourceRequested,
 		ModelPricing: []ChannelModelPricing{
-			{Platform: "anthropic", Models: []string{"claude-sonnet-4-6"}},
+			{Platform: "anthropic", Models: []string{"claude-sonnet-4-6"}, InputPrice: testPtrFloat64(0)},
 		},
 	}
 	channelSvc := newTestChannelService(makeStandardRepo(ch, map[int64]string{10: "anthropic"}))
@@ -171,7 +171,7 @@ func TestCheckChannelPricingRestriction_Requested_Allowed(t *testing.T) {
 		RestrictModels:     true,
 		BillingModelSource: BillingModelSourceRequested,
 		ModelPricing: []ChannelModelPricing{
-			{Platform: "anthropic", Models: []string{"claude-sonnet-4-5"}},
+			{Platform: "anthropic", Models: []string{"claude-sonnet-4-5"}, InputPrice: testPtrFloat64(0)},
 		},
 	}
 	channelSvc := newTestChannelService(makeStandardRepo(ch, map[int64]string{10: "anthropic"}))
@@ -192,7 +192,7 @@ func TestCheckChannelPricingRestriction_Upstream_SkipsPreCheck(t *testing.T) {
 		RestrictModels:     true,
 		BillingModelSource: BillingModelSourceUpstream,
 		ModelPricing: []ChannelModelPricing{
-			{Platform: "anthropic", Models: []string{"claude-opus-4-6"}},
+			{Platform: "anthropic", Models: []string{"claude-opus-4-6"}, InputPrice: testPtrFloat64(0)},
 		},
 	}
 	channelSvc := newTestChannelService(makeStandardRepo(ch, map[int64]string{10: "anthropic"}))
@@ -211,7 +211,7 @@ func TestCheckChannelPricingRestriction_RestrictModelsDisabled(t *testing.T) {
 		GroupIDs:       []int64{10},
 		RestrictModels: false, // 未开启模型限制
 		ModelPricing: []ChannelModelPricing{
-			{Platform: "anthropic", Models: []string{"claude-opus-4-6"}},
+			{Platform: "anthropic", Models: []string{"claude-opus-4-6"}, InputPrice: testPtrFloat64(0)},
 		},
 	}
 	channelSvc := newTestChannelService(makeStandardRepo(ch, map[int64]string{10: "anthropic"}))
@@ -246,7 +246,7 @@ func TestIsUpstreamModelRestrictedByChannel_Restricted(t *testing.T) {
 		GroupIDs:       []int64{10},
 		RestrictModels: true,
 		ModelPricing: []ChannelModelPricing{
-			{Platform: "anthropic", Models: []string{"claude-opus-4-6"}},
+			{Platform: "anthropic", Models: []string{"claude-opus-4-6"}, InputPrice: testPtrFloat64(0)},
 		},
 	}
 	channelSvc := newTestChannelService(makeStandardRepo(ch, map[int64]string{10: "anthropic"}))
@@ -267,7 +267,7 @@ func TestIsUpstreamModelRestrictedByChannel_Allowed(t *testing.T) {
 		GroupIDs:       []int64{10},
 		RestrictModels: true,
 		ModelPricing: []ChannelModelPricing{
-			{Platform: "anthropic", Models: []string{"claude-sonnet-4-6"}},
+			{Platform: "anthropic", Models: []string{"claude-sonnet-4-6"}, InputPrice: testPtrFloat64(0)},
 		},
 	}
 	channelSvc := newTestChannelService(makeStandardRepo(ch, map[int64]string{10: "anthropic"}))
@@ -286,7 +286,7 @@ func TestIsUpstreamModelRestrictedByChannel_UnsupportedModel(t *testing.T) {
 		GroupIDs:       []int64{10},
 		RestrictModels: true,
 		ModelPricing: []ChannelModelPricing{
-			{Platform: "anthropic", Models: []string{"claude-opus-4-6"}},
+			{Platform: "anthropic", Models: []string{"claude-opus-4-6"}, InputPrice: testPtrFloat64(0)},
 		},
 	}
 	channelSvc := newTestChannelService(makeStandardRepo(ch, map[int64]string{10: "anthropic"}))

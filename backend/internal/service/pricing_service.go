@@ -36,8 +36,9 @@ const (
 )
 
 var (
-	openAIModelDatePattern = regexp.MustCompile(`-\d{8}$`)
-	openAIModelBasePattern = regexp.MustCompile(`^(gpt-\d+(?:\.\d+)?)(?:-|$)`)
+	openAIModelDatePattern          = regexp.MustCompile(`-\d{8}$`)
+	openAIModelBasePattern          = regexp.MustCompile(`^(gpt-\d+(?:\.\d+)?)(?:-|$)`)
+	pricingModelCalendarDatePattern = regexp.MustCompile(`-\d{4}-\d{2}-\d{2}$`)
 	// aboveTierPricePattern 匹配 LiteLLM 长上下文绝对价字段名
 	// （input_cost_per_token_above_272k_tokens / output_cost_per_token_above_200k_tokens 等）。
 	// 带 _flex/_priority 服务档后缀的变体与 cache 侧字段不参与阈值/倍率折算。
@@ -280,6 +281,11 @@ type LiteLLMModelPricing struct {
 	// 此类条目只可用于图片计费，token 计费必须回退到 fallback 或 fail-closed，
 	// 否则 token 流量会被按 $0 计费。零值（false）表示条目具备 token 价格。
 	TokenPricingAbsent bool `json:"-"`
+	// Preserve individual field presence for platform fallback eligibility.
+	// An omitted text-token dimension is not an explicit free price; handwritten
+	// fixtures and compiled cards retain their existing zero-value semantics.
+	InputTokenPriceAbsent  bool `json:"-"`
+	OutputTokenPriceAbsent bool `json:"-"`
 
 	// CacheCreationInputTokenCostExplicit preserves source field presence so
 	// an explicit zero is not replaced by a derived cache-write premium.
@@ -718,11 +724,13 @@ func (s *PricingService) parsePricingData(body []byte) (map[string]*LiteLLMModel
 		}
 
 		pricing := &LiteLLMModelPricing{
-			LiteLLMProvider:       entry.LiteLLMProvider,
-			Mode:                  entry.Mode,
-			SupportsPromptCaching: entry.SupportsPromptCaching,
-			SupportsServiceTier:   entry.SupportsServiceTier,
-			TokenPricingAbsent:    entry.InputCostPerToken == nil && entry.OutputCostPerToken == nil,
+			LiteLLMProvider:        entry.LiteLLMProvider,
+			Mode:                   entry.Mode,
+			SupportsPromptCaching:  entry.SupportsPromptCaching,
+			SupportsServiceTier:    entry.SupportsServiceTier,
+			TokenPricingAbsent:     entry.InputCostPerToken == nil && entry.OutputCostPerToken == nil,
+			InputTokenPriceAbsent:  entry.InputCostPerToken == nil,
+			OutputTokenPriceAbsent: entry.OutputCostPerToken == nil,
 		}
 
 		if entry.InputCostPerToken != nil {
@@ -1418,6 +1426,10 @@ func (s *PricingService) GetModelPricing(modelName string) *LiteLLMModelPricing 
 	if pricing := s.lookupIdentifiedModelPricingLocked(lookupCandidates); pricing != nil {
 		return pricing
 	}
+	// Exact caller spellings stay first in the deterministic lookup. Legacy
+	// family lookup still classifies the normalized native name, so provider
+	// prefixes and compact GPT spellings do not hide its established fallback.
+	fallbackModel := normalizeModelNameForPricing(modelLower)
 	if isUnregisteredGPT61TerraPricingModel(modelLower) {
 		return nil
 	}
@@ -1426,13 +1438,13 @@ func (s *PricingService) GetModelPricing(modelName string) *LiteLLMModelPricing 
 	}
 
 	// 4. 基于模型系列匹配（Claude）
-	if pricing := s.matchByModelFamily(lookupCandidates[0]); pricing != nil {
+	if pricing := s.matchByModelFamily(fallbackModel); pricing != nil {
 		return pricing
 	}
 
 	// 5. OpenAI 模型回退策略
-	if strings.HasPrefix(lookupCandidates[0], "gpt-") {
-		return s.matchOpenAIModel(lookupCandidates[0])
+	if strings.HasPrefix(fallbackModel, "gpt-") {
+		return s.matchOpenAIModel(fallbackModel)
 	}
 
 	return nil
@@ -1475,22 +1487,44 @@ func (s *PricingService) lookupIdentifiedModelPricingLocked(lookupCandidates []s
 		return nil
 	}
 
-	// 2. 处理常见的模型名称变体
-	// claude-opus-4-5-20251101 -> claude-opus-4.5-20251101
+	// 2. Shared, deterministic spelling and registered same-SKU aliases.
 	for _, candidate := range lookupCandidates {
-		normalized := strings.ReplaceAll(candidate, "-4-5-", "-4.5-")
-		if pricing, ok := s.pricingData[normalized]; ok {
-			return pricing
+		for _, alias := range modelLookupCandidates(candidate) {
+			if pricing := s.pricingData[alias]; pricing != nil {
+				return pricing
+			}
 		}
 	}
+	if strings.HasPrefix(lastSegment(lookupCandidates[0]), "deepseek-") {
+		// Only the explicitly registered DeepSeek snapshots above are aliases.
+		return nil
+	}
 
-	// 3. 尝试模糊匹配（去掉版本号后缀）
-	// claude-opus-4-5-20251101 -> claude-opus-4.5
-	baseName := s.extractBaseName(lookupCandidates[0])
-	for key, pricing := range s.pricingData {
-		keyBase := s.extractBaseName(strings.ToLower(key))
-		if keyBase == baseName {
-			return pricing
+	// 3. Date snapshots retain their own model and version. Try a base card
+	// directly before scanning catalog snapshots so its complete tier data is
+	// preserved, even if multiple dates of that SKU are present.
+	bases := make(map[string]struct{})
+	for _, candidate := range lookupCandidates {
+		for _, base := range modelLookupCandidates(s.extractBaseName(candidate)) {
+			bases[base] = struct{}{}
+			if pricing := s.pricingData[base]; pricing != nil {
+				return pricing
+			}
+		}
+	}
+	keys := make([]string, 0, len(s.pricingData))
+	for key := range s.pricingData {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		if isUnregisteredGPT61TerraPricingModel(key) {
+			continue
+		}
+		for _, base := range modelLookupCandidates(s.extractBaseName(strings.ToLower(key))) {
+			if _, ok := bases[base]; ok {
+				return s.pricingData[key]
+			}
 		}
 	}
 
@@ -1550,16 +1584,9 @@ func (s *PricingService) buildModelLookupCandidates(modelLower string) []string 
 	}
 	normalized := normalizeModelNameForPricing(modelLower)
 
-	// A tier-specific entry should take precedence when the pricing catalog gains
-	// one later. Antigravity's Gemini thinking tiers share the base rate,
-	// so the normalized base remains the fallback after the exact aliases.
-	candidates := rawCandidates
-	if isAntigravityThinkingTierAlias(lastSegment(modelLower)) {
-		candidates = append(candidates, normalized)
-	} else {
-		// Prefer canonical model names for all other aliases (including models/xxx).
-		candidates = append([]string{normalized}, candidates...)
-	}
+	// Exact provider-qualified, snapshot and tier entries take precedence over
+	// the canonical base SKU whenever the catalog explicitly prices them.
+	candidates := append(rawCandidates, normalized)
 
 	seen := make(map[string]struct{}, len(candidates))
 	out := make([]string, 0, len(candidates))
@@ -1641,12 +1668,6 @@ func normalizeAntigravityClaudeTierAlias(model string) string {
 	return model
 }
 
-// isAntigravityThinkingTierAlias reports whether model is an Antigravity
-// Gemini or Claude thinking-tier alias of a priced base model.
-func isAntigravityThinkingTierAlias(model string) bool {
-	return normalizeGeminiThinkingTierAlias(model) != model || normalizeAntigravityClaudeTierAlias(model) != model
-}
-
 // normalizeGeminiThinkingTierAlias maps Antigravity's Gemini thinking-tier
 // model IDs to the public base model. The tier controls reasoning behavior, not
 // the published token rate, so this keeps -high/-low/-medium and -tiered
@@ -1671,6 +1692,14 @@ func lastSegment(model string) string {
 
 // extractBaseName 提取基础模型名称（去掉日期版本号）
 func (s *PricingService) extractBaseName(model string) string {
+	// Astra only registers its canonical ID. A dated SKU needs its own literal
+	// catalog card and cannot acquire the canonical model's price (or vice versa).
+	if strings.HasPrefix(canonicalizeOpenAIModelAliasSpelling(model), "gpt-6-astra-") {
+		return model
+	}
+	// GPT snapshots use both -YYYYMMDD and -YYYY-MM-DD spellings. Removing
+	// only eight-digit dates loses the base model's long-context tier card.
+	model = pricingModelCalendarDatePattern.ReplaceAllString(model, "")
 	// 移除日期后缀 (如 -20251101, -20241022)
 	parts := strings.Split(model, "-")
 	result := make([]string, 0, len(parts))

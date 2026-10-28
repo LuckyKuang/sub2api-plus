@@ -217,7 +217,7 @@
                 <span class="input-label mb-0">{{ t('admin.channels.form.restrictModels', 'Restrict Models') }}</span>
               </label>
               <p class="mt-1 ml-6 text-xs surface-muted">
-                {{ t('admin.channels.form.restrictModelsHint', 'When enabled, only models in the pricing list are allowed. Others will be rejected.') }}
+                {{ t('admin.channels.form.restrictModelsHint', 'Require channel, system, or platform fallback pricing. Group and account rules still control model access.') }}
               </p>
             </div>
 
