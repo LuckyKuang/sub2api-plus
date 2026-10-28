@@ -28,7 +28,10 @@ func (s *BillingService) validateUsedTokenPriceEvidence(resolved *ResolvedPricin
 	if resolved == nil || resolved.channelPricing == nil {
 		return nil
 	}
-	if base, err := s.GetModelPricing(model); err == nil && base != nil {
+	if resolved.BasePricing != nil && resolved.BasePricing.FallbackModel != "" {
+		return nil // missing configured dimensions inherit the captured platform price
+	}
+	if base, err := s.getSystemModelPricingAt(model, s.frozenPricingAt, true); err == nil && base != nil {
 		return nil
 	}
 	card := resolved.channelPricing

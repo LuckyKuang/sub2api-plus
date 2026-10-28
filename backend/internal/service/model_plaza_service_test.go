@@ -545,10 +545,11 @@ func TestListGroups_ImageModelKeepsTierSynthesisWithBilling(t *testing.T) {
 }
 
 func TestListGroups_CatalogMissingStillShowsChannelFlatPricing(t *testing.T) {
-	// 目录查不到的模型：计费按渠道平价（未配置项 $0），广场单档展示渠道平价，官方价为空。
+	// 目录查不到且平台兜底禁用：广场展示渠道平价，未配置维度及官方价保持缺失。
 	channels := []Channel{plazaPricedChannel(1, "ch", []int64{10}, PlatformAnthropic, "unknown-model-xyz")}
 	groups := []Group{{ID: 10, Name: "g", Platform: PlatformAnthropic, RateMultiplier: 1, LongContextPricingEnabled: true}}
 	svc := newPlazaServiceWithBilling(channels, groups, map[int64]string{10: PlatformAnthropic}, nil)
+	svc.billingService.frozenPricingFallbackModels = map[string]string{PlatformAnthropic: ""}
 	out, err := svc.ListGroups(context.Background())
 	require.NoError(t, err)
 	m := out[0].Models[0]

@@ -45,7 +45,7 @@ func TestPartialUnknownTokenCardRequiresOnlyActuallyUsedPrices(t *testing.T) {
 			billing := NewBillingService(&config.Config{}, nil)
 			resolver := NewModelPricingResolver(nil, billing)
 			tc.card.BillingMode = BillingModeToken
-			resolved := resolver.resolveConfiguredPricing(&tc.card, "unknown-partial-model", PricingSourceChannel)
+			resolved := resolver.resolveConfiguredPricingForRequest(context.Background(), PricingInput{Model: "unknown-partial-model"}, &tc.card, PricingSourceChannel)
 			cost, err := billing.CalculateCostUnified(CostInput{Ctx: context.Background(), Model: "unknown-partial-model", Tokens: tc.usage, RateMultiplier: 1, Resolver: resolver, Resolved: resolved})
 			if tc.missing != "" {
 				require.ErrorIs(t, err, ErrModelPricingUnavailable)
@@ -84,6 +84,9 @@ func TestPartialPublicTokenCardCannotFallBackToMappedGPTAndLoseItsInputPrice(t *
 				key := &APIKey{ID: 11, Group: group, GroupID: &group.ID, User: user}
 				account := &Account{ID: 33, Platform: PlatformOpenAI}
 				billing := NewBillingService(&config.Config{}, nil)
+				// This regression exercises genuinely missing dimensions with the
+				// separately configured final platform fallback explicitly disabled.
+				billing.frozenPricingFallbackModels = map[string]string{PlatformOpenAI: ""}
 				ctx := withBillingPricingSnapshot(WithResolvedTargetPlatform(context.Background(), PlatformOpenAI), key, time.Now(), billing, nil, nil, "model001")
 				// Presence/absence is private durable evidence, not a float-zero flag.
 				data, err := ExportBillingPricingSnapshot(ctx, "gpt-5.4")
@@ -146,6 +149,7 @@ func TestPartialPublicTokenCatalogKeepsMissingOutputUnknownAndKnownZeroExplicit(
 			group := Group{ID: 77, Platform: PlatformComposite, RateMultiplier: 1, ModelAllowlist: GroupModelAllowlist{Enabled: true, Models: []string{"model001"}},
 				ModelPricing: []ChannelModelPricing{{Platform: PlatformOpenAI, Models: []string{"model001"}, BillingMode: BillingModeToken, InputPrice: billingFloat(2e-6), OutputPrice: tc.output}}}
 			plaza := newPlazaServiceWithBilling(nil, nil, nil, nil)
+			plaza.billingService.frozenPricingFallbackModels = map[string]string{PlatformOpenAI: ""}
 			plaza.SetCommercialCatalogSources(&compositeRouteRepoStub{routes: []CompositeModelRoute{{ID: 1, GroupID: 77, PublicModel: "model001", MatchType: CompositeRouteMatchExact, Endpoint: CompositeRouteEndpointEmbeddings,
 				TargetPlatform: PlatformOpenAI, UpstreamModel: "text-embedding-3-small", Enabled: true}}}, nil)
 			items, err := plaza.ListAvailableCatalog(context.Background(), []Group{group})
@@ -178,6 +182,7 @@ func TestPartialTokenChannelIntervalsAndZeroEvidenceSurviveRestore(t *testing.T)
 	channel := &ChannelService{frozenCache: cache}
 	channel.cache.Store(cache)
 	billing := NewBillingService(&config.Config{}, nil)
+	billing.frozenPricingFallbackModels = map[string]string{PlatformOpenAI: ""}
 	ctx := withBillingPricingSnapshot(WithResolvedTargetPlatform(context.Background(), PlatformOpenAI), &APIKey{Group: group, GroupID: &group.ID}, time.Now(), billing, channel, nil, "model001")
 	data, err := ExportBillingPricingSnapshot(ctx)
 	require.NoError(t, err)
@@ -253,6 +258,7 @@ func TestOutputOnlyTokenCatalogRetainsKnownOutputWithoutInventingInput(t *testin
 			group := Group{ID: 77, Platform: PlatformComposite, RateMultiplier: 1, ModelAllowlist: GroupModelAllowlist{Enabled: true, Models: []string{"output-only-alias"}},
 				ModelPricing: []ChannelModelPricing{{Platform: PlatformOpenAI, Models: []string{"output-only-alias"}, BillingMode: BillingModeToken, OutputPrice: billingFloat(tc.output)}}}
 			plaza := newPlazaServiceWithBilling(nil, nil, nil, nil)
+			plaza.billingService.frozenPricingFallbackModels = map[string]string{PlatformOpenAI: ""}
 			plaza.SetCommercialCatalogSources(&compositeRouteRepoStub{routes: []CompositeModelRoute{{ID: 1, GroupID: 77, PublicModel: "output-only-alias", MatchType: CompositeRouteMatchExact, Endpoint: CompositeRouteEndpointResponses,
 				TargetPlatform: PlatformOpenAI, UpstreamModel: "gpt-6-astra", Enabled: true}}}, nil)
 			items, err := plaza.ListAvailableCatalog(context.Background(), []Group{group})
@@ -276,6 +282,7 @@ func TestOutputOnlyContextIntervalsKeepTheirIndependentPrices(t *testing.T) {
 	channel := &ChannelService{frozenCache: cache}
 	channel.cache.Store(cache)
 	billing := NewBillingService(&config.Config{}, nil)
+	billing.frozenPricingFallbackModels = map[string]string{PlatformOpenAI: ""}
 	resolver := NewModelPricingResolver(channel, billing)
 	schedule, err := billing.ResolveContextPricingSchedule(context.Background(), resolver, ContextPricingScheduleInput{Model: "output-only-interval", Group: group, Platform: PlatformOpenAI})
 	require.NoError(t, err)

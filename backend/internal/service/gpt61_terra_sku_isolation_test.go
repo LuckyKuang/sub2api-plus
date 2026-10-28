@@ -28,6 +28,9 @@ func TestGPT61TerraUnknownSKUDoesNotBorrowChannelModelPrice(t *testing.T) {
 				Platform: PlatformOpenAI, Models: []string{"gpt-5.3-codex", "gpt-5.4"}, BillingMode: BillingModeToken,
 				InputPrice: testPtrFloat64(3e-6), OutputPrice: testPtrFloat64(7e-6),
 			}}, nil)
+			// This SKU-isolation case explicitly disables the separately configured
+			// platform fallback; it must never borrow a different channel SKU.
+			billing.frozenPricingFallbackModels = map[string]string{PlatformOpenAI: ""}
 			group := &Group{ID: 100, Platform: PlatformOpenAI}
 			resolved := resolver.Resolve(context.Background(), PricingInput{Model: model, GroupID: &group.ID, Group: group})
 			require.NotEqual(t, PricingSourceChannel, resolved.Source, "an unknown Terra SKU cannot select another model's channel card")

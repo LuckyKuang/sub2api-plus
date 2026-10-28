@@ -193,7 +193,7 @@ export default {
         searchGroups: '搜索分组...',
         noGroupsMatch: '没有匹配的分组',
         restrictModels: '限制模型',
-        restrictModelsHint: '开启后，仅允许模型定价列表中的模型。不在列表中的模型请求将被拒绝。',
+        restrictModelsHint: '开启后，模型须有渠道价格、系统默认价格或平台兜底模型价格。模型访问权限仍由分组和账号控制。',
         defaultPerRequestPrice: '默认单次价格（未命中层级时使用）',
         defaultImagePrice: '默认图片价格（未命中层级时使用）',
         defaultVideoPrice: '默认视频每秒价格（未命中层级时使用）',

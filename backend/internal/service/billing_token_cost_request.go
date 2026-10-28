@@ -20,27 +20,17 @@ type TokenCostRequest struct {
 	Resolved *ResolvedPricing
 }
 
-// CalculateTokenCostForRequest 按通用网关的路径选择计算 token 费用：
-//  1. 分组/渠道显式定价，或有解析器与分组 → 统一计费
-//     （区间、分组卡、目录长上下文阶梯均在其中，阶梯由目录数据驱动）；
-//  2. 否则按模型目录直接计费。
-//
+// CalculateTokenCostForRequest uses the same price chain for grouped and
+// ungrouped gateway requests, including the resolved concrete platform fallback.
 // 模型广场的阶梯表查询与网关使用同一入口，保证展示与扣费同源。
 func (s *BillingService) CalculateTokenCostForRequest(req TokenCostRequest) (*CostBreakdown, error) {
 	if frozen := billingServiceForContext(req.Ctx, s); frozen != s {
 		return frozen.CalculateTokenCostForRequest(req)
 	}
-	resolved := req.Resolved
-	if resolved != nil && (resolved.Source == PricingSourceGroup || resolved.Source == PricingSourceChannel) {
-		return s.CalculateCostUnified(s.tokenCostInput(req, resolved))
+	if req.Resolver == nil {
+		req.Resolver = NewModelPricingResolver(nil, s)
 	}
-	if req.Resolver != nil && req.Group != nil {
-		return s.CalculateCostUnified(s.tokenCostInput(req, resolved))
-	}
-	if req.ReasoningEffort != "" {
-		return s.CalculateCostUnified(s.tokenCostInput(req, resolved))
-	}
-	return s.CalculateCostWithServiceTier(req.Model, req.Tokens, req.RateMultiplier, req.ServiceTier)
+	return s.CalculateCostUnified(s.tokenCostInput(req, req.Resolved))
 }
 
 func (s *BillingService) tokenCostInput(req TokenCostRequest, resolved *ResolvedPricing) CostInput {

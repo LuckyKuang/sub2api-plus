@@ -11,8 +11,8 @@ import (
 )
 
 // loadAwareRestrictionFixture 构造走负载感知路径（load_batch 开启 + 并发服务存在）的
-// GatewayService：分组 10 绑定 upstream 计费基准的渠道，定价列表只允许 claude-sonnet-4-6。
-// 账号 1 把 claude-fable-5-1 映射为自身（不在定价列表），账号 2 映射为 claude-sonnet-4-6（在列表）。
+// GatewayService：分组 10 绑定 upstream 计费基准的渠道，claude-sonnet-4-6 有显式价格。
+// 账号 1 把 restriction-unpriced-request 映射为自身（无价格），账号 2 映射为 claude-sonnet-4-6（有价格）。
 type loadAwareRestrictionFixture struct {
 	svc              *GatewayService
 	ctx              context.Context
@@ -32,7 +32,7 @@ func newLoadAwareRestrictionFixture(t *testing.T, restrict bool, sessionBindings
 		RestrictModels:     restrict,
 		BillingModelSource: BillingModelSourceUpstream,
 		ModelPricing: []ChannelModelPricing{
-			{Platform: PlatformAnthropic, Models: []string{"claude-sonnet-4-6"}},
+			{Platform: PlatformAnthropic, Models: []string{"claude-sonnet-4-6"}, InputPrice: testPtrFloat64(0)},
 		},
 	}
 	channelSvc := newTestChannelService(makeStandardRepo(ch, map[int64]string{groupID: PlatformAnthropic}))
@@ -42,13 +42,13 @@ func newLoadAwareRestrictionFixture(t *testing.T, restrict bool, sessionBindings
 			{
 				ID: 1, Platform: PlatformAnthropic, Priority: 1, Status: StatusActive, Schedulable: true, Concurrency: 5,
 				Credentials: map[string]any{
-					"model_mapping": map[string]any{"claude-fable-5-1": "claude-fable-5-1"},
+					"model_mapping": map[string]any{"restriction-unpriced-request": "restriction-unpriced-request"},
 				},
 			},
 			{
 				ID: 2, Platform: PlatformAnthropic, Priority: 2, Status: StatusActive, Schedulable: true, Concurrency: 5,
 				Credentials: map[string]any{
-					"model_mapping": map[string]any{"claude-fable-5-1": "claude-sonnet-4-6"},
+					"model_mapping": map[string]any{"restriction-unpriced-request": "claude-sonnet-4-6"},
 				},
 			},
 		},
@@ -69,6 +69,8 @@ func newLoadAwareRestrictionFixture(t *testing.T, restrict bool, sessionBindings
 	groupRepo := &mockGroupRepoForGateway{groups: map[int64]*Group{groupID: group}}
 
 	cfg := testConfig()
+	channelSvc.billingService = NewBillingService(cfg, nil)
+	channelSvc.billingService.frozenPricingFallbackModels = map[string]string{PlatformAnthropic: ""}
 	cfg.Gateway.Scheduling.LoadBatchEnabled = true
 	cache := &mockGatewayCacheForPlatform{sessionBindings: sessionBindings}
 	concurrencyCache := &mockConcurrencyCache{}
@@ -95,11 +97,11 @@ func TestSelectAccountWithLoadAwareness_UpstreamRestrictionSkipsDisallowedAccoun
 	t.Parallel()
 
 	f := newLoadAwareRestrictionFixture(t, true, nil, nil)
-	result, err := f.svc.SelectAccountWithLoadAwareness(f.ctx, &f.groupID, "", "claude-fable-5-1", nil, "", 0)
+	result, err := f.svc.SelectAccountWithLoadAwareness(f.ctx, &f.groupID, "", "restriction-unpriced-request", nil, "", 0)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.NotNil(t, result.Account)
-	require.Equal(t, int64(2), result.Account.ID, "上游模型不在渠道定价列表的高优先级账号必须被跳过")
+	require.Equal(t, int64(2), result.Account.ID, "上游模型没有有效价格的高优先级账号必须被跳过")
 	require.Equal(t, 1, f.concurrencyCache.loadBatchCalls, "应经过 Layer 2 负载感知选择")
 }
 
@@ -107,12 +109,12 @@ func TestSelectAccountWithLoadAwareness_UpstreamRestrictionRejectsWhenAllAccount
 	t.Parallel()
 
 	f := newLoadAwareRestrictionFixture(t, true, nil, nil)
-	// 账号 2 也改为映射到不在定价列表的模型
+	// 账号 2 也改为映射到无有效价格的模型
 	f.svc.accountRepo.(*mockAccountRepoForPlatform).accounts[1].Credentials = map[string]any{
-		"model_mapping": map[string]any{"claude-fable-5-1": "claude-fable-5-1"},
+		"model_mapping": map[string]any{"restriction-unpriced-request": "restriction-unpriced-request"},
 	}
 
-	result, err := f.svc.SelectAccountWithLoadAwareness(f.ctx, &f.groupID, "", "claude-fable-5-1", nil, "", 0)
+	result, err := f.svc.SelectAccountWithLoadAwareness(f.ctx, &f.groupID, "", "restriction-unpriced-request", nil, "", 0)
 	require.ErrorIs(t, err, ErrNoAvailableAccounts)
 	require.ErrorContains(t, err, "channel pricing restriction")
 	require.Nil(t, result)
@@ -123,19 +125,19 @@ func TestSelectAccountWithLoadAwareness_UpstreamRestrictionIgnoresStickyAccount(
 	t.Parallel()
 
 	f := newLoadAwareRestrictionFixture(t, true, map[string]int64{"sticky": 1}, nil)
-	result, err := f.svc.SelectAccountWithLoadAwareness(f.ctx, &f.groupID, "sticky", "claude-fable-5-1", nil, "", 0)
+	result, err := f.svc.SelectAccountWithLoadAwareness(f.ctx, &f.groupID, "sticky", "restriction-unpriced-request", nil, "", 0)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.NotNil(t, result.Account)
-	require.Equal(t, int64(2), result.Account.ID, "粘性账号的上游模型不在定价列表时不得沿用粘性会话")
+	require.Equal(t, int64(2), result.Account.ID, "粘性账号的上游模型无有效价格时不得沿用粘性会话")
 	require.Equal(t, int64(2), f.cache.sessionBindings["sticky"], "粘性会话应重新绑定到合规账号")
 }
 
 func TestSelectAccountWithLoadAwareness_UpstreamRestrictionFiltersRoutedAccounts(t *testing.T) {
 	t.Parallel()
 
-	f := newLoadAwareRestrictionFixture(t, true, nil, map[string][]int64{"claude-fable-5-1": {1}})
-	result, err := f.svc.SelectAccountWithLoadAwareness(f.ctx, &f.groupID, "", "claude-fable-5-1", nil, "", 0)
+	f := newLoadAwareRestrictionFixture(t, true, nil, map[string][]int64{"restriction-unpriced-request": {1}})
+	result, err := f.svc.SelectAccountWithLoadAwareness(f.ctx, &f.groupID, "", "restriction-unpriced-request", nil, "", 0)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.NotNil(t, result.Account)
@@ -145,8 +147,8 @@ func TestSelectAccountWithLoadAwareness_UpstreamRestrictionFiltersRoutedAccounts
 func TestSelectAccountWithLoadAwareness_UpstreamRestrictionRoutedStickyAccountNotHonored(t *testing.T) {
 	t.Parallel()
 
-	f := newLoadAwareRestrictionFixture(t, true, map[string]int64{"sticky": 1}, map[string][]int64{"claude-fable-5-1": {1, 2}})
-	result, err := f.svc.SelectAccountWithLoadAwareness(f.ctx, &f.groupID, "sticky", "claude-fable-5-1", nil, "", 0)
+	f := newLoadAwareRestrictionFixture(t, true, map[string]int64{"sticky": 1}, map[string][]int64{"restriction-unpriced-request": {1, 2}})
+	result, err := f.svc.SelectAccountWithLoadAwareness(f.ctx, &f.groupID, "sticky", "restriction-unpriced-request", nil, "", 0)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.NotNil(t, result.Account)
@@ -157,7 +159,7 @@ func TestSelectAccountWithLoadAwareness_RestrictModelsDisabledKeepsPriorityOrder
 	t.Parallel()
 
 	f := newLoadAwareRestrictionFixture(t, false, nil, nil)
-	result, err := f.svc.SelectAccountWithLoadAwareness(f.ctx, &f.groupID, "", "claude-fable-5-1", nil, "", 0)
+	result, err := f.svc.SelectAccountWithLoadAwareness(f.ctx, &f.groupID, "", "restriction-unpriced-request", nil, "", 0)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.NotNil(t, result.Account)

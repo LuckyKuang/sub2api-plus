@@ -23,9 +23,8 @@ import (
 // 否则同一型号会在两条路径上给出不同价格（历史上 Sol/Luna 就因此出现过
 // 同步列表里有、建规则时却查不到价的割裂）。
 //
-// 与请求计费路径的关键区别：这里**不允许**按家族子串猜价。热路径为了不中断
-// 计费可以容忍 getFallbackPricing 的 "opus"→claude-opus-5 这类宽匹配，管理端
-// 参考价一旦宽匹配就会把错价写进运营者配置，因此只接受：
+// 与请求计费路径的关键区别：这里不使用平台最终兜底价，也不按家族子串猜价。
+// 管理端参考价一旦跨型号匹配就会把错价写进运营者配置，因此只接受：
 //
 //	精确目录项 → 已登记同 SKU 别名 → 同型号内置 fallback → 显式代理参考价
 //
@@ -778,15 +777,21 @@ func modelLookupCandidates(model string) []string {
 		seen[candidate] = struct{}{}
 		out = append(out, candidate)
 	}
+	// Preserve an explicit provider-qualified or alias-specific catalog card
+	// before looking at any registered spelling of its native SKU.
 	add(normalized)
-	add(canonicalizeOpenAIModelAliasSpelling(normalized))
-	for _, alias := range registeredSameSKUAliases(normalized) {
-		add(alias)
+	add(lastPricingSegment(normalized))
+	for i := 0; i < len(out); i++ {
+		candidate := out[i]
+		add(canonicalizeOpenAIModelAliasSpelling(candidate))
+		if isUnregisteredGPT61TerraPricingModel(candidate) {
+			continue
+		}
+		add(normalizeModelNameForPricing(candidate))
+		for _, alias := range registeredSameSKUAliases(candidate) {
+			add(alias)
+		}
 	}
-	if idx := strings.LastIndex(normalized, "/"); idx >= 0 {
-		add(normalized[idx+1:])
-	}
-	add(normalizeGeminiThinkingTierAlias(lastPricingSegment(normalized)))
 	return out
 }
 
@@ -797,6 +802,22 @@ func modelLookupCandidates(model string) []string {
 // composer 系列归到同一张价卡，参考价若另行一套就会两条路径两个价。
 func registeredSameSKUAliases(model string) []string {
 	out := make([]string, 0, 2)
+	if strings.HasPrefix(model, "claude-") {
+		// Punctuation changes only the version spelling, never the model
+		// family or suffix. In particular, 4.6 must not become Sonnet 4.
+		out = append(out, strings.ReplaceAll(model, ".", "-"))
+		parts := strings.Split(model, "-")
+		if len(parts) >= 4 && (parts[1] == "opus" || parts[1] == "sonnet" || parts[1] == "haiku") &&
+			parts[2] != "" && isNumeric(parts[2]) && parts[3] != "" && len(parts[3]) <= 2 && isNumeric(parts[3]) {
+			dotted := parts[0] + "-" + parts[1] + "-" + parts[2] + "." + parts[3]
+			if len(parts) > 4 {
+				dotted += "-" + strings.Join(parts[4:], "-")
+			}
+			out = append(out, dotted)
+		}
+		// Reuse the published short/snapshot IDs maintained by Claude OAuth.
+		out = append(out, claude.NormalizeModelID(model), claude.DenormalizeModelID(model))
+	}
 	if isClaudeSonnet5Model(model) && model != "claude-sonnet-5" {
 		out = append(out, "claude-sonnet-5")
 	}
@@ -811,7 +832,31 @@ func registeredSameSKUAliases(model string) []string {
 	if alias, ok := grokSameSKUAliases[model]; ok {
 		out = append(out, alias)
 	}
+	if alias, ok := deepseekSameSKUAliases[model]; ok {
+		out = append(out, alias)
+	}
+	// Reuse the registered OpenAI SKU prefixes and reasoning/date suffix
+	// grammar. Routing aliases that change SKU (gpt-5-mini -> gpt-5.4, for
+	// example) and unregistered suffixes are deliberately excluded.
+	for _, item := range codexVersionModelPrefixes {
+		if item.prefix != item.target {
+			continue
+		}
+		if suffix, ok := strings.CutPrefix(model, item.prefix+"-"); ok &&
+			(isKnownCodexModelSuffix(suffix) || len(suffix) == 8 && isNumeric(suffix)) {
+			out = append(out, item.target)
+		}
+	}
 	return out
+}
+
+// These are the explicitly registered DeepSeek renames and snapshots. Unknown
+// deepseek-* names and arbitrary date/preview suffixes must not borrow a card.
+var deepseekSameSKUAliases = map[string]string{
+	"deepseek-flash":         "deepseek-v4-flash",
+	"deepseek-v4.1-flash":    "deepseek-v4-flash",
+	"deepseek-v4-flash-0731": "deepseek-v4-flash",
+	"deepseek-v4-pro-0813":   "deepseek-v4-pro",
 }
 
 // grokSameSKUAliases 是 xAI 已登记的同 SKU 拼写（日期快照/推理变体/composer
@@ -952,7 +997,7 @@ var billingReferenceFallbackIDs func() map[string]struct{}
 //   - 已登记拼写变体（gpt-5.6 ↔ gpt-5.6-sol、claude-opus-4-5 ↔ claude-opus-4.5）
 //   - 已登记同 SKU 别名（claude-*-thinking、gemini-2.5-flash-thinking → 基名）
 //   - gemini-*-tiered thinking 档 → 基名
-//   - normalizeKnownOpenAICodexModel 归一后的同 SKU 名称
+//   - 已登记的 OpenAI 推理/日期后缀；不采用路由层的跨 SKU 或子串兜底
 func (s *BillingService) IdentifiedSameModelPricing(model string) (*ModelPricing, string) {
 	if s == nil || isUnregisteredGPT61TerraPricingModel(model) {
 		return nil, ""
@@ -961,37 +1006,9 @@ func (s *BillingService) IdentifiedSameModelPricing(model string) (*ModelPricing
 	if lookup == "" {
 		return nil, ""
 	}
-	if pricing := s.fallbackPrices[lookup]; pricing != nil {
-		return pricing, lookup
-	}
-	// 已登记拼写变体：小数点/连字符互换（claude-opus-4.5 ↔ claude-opus-4-5）。
-	for _, variant := range []string{
-		strings.ReplaceAll(lookup, ".", "-"),
-		strings.ReplaceAll(lookup, "-5-5", "-5.5"),
-	} {
-		if variant == lookup {
-			continue
-		}
-		if pricing := s.fallbackPrices[variant]; pricing != nil {
-			return pricing, variant
-		}
-	}
-	// 已登记同 SKU 别名：thinking 后缀只改变推理行为，单价与基名一致。
-	for _, alias := range registeredSameSKUAliases(lookup) {
-		if pricing := s.fallbackPrices[alias]; pricing != nil {
-			return pricing, alias
-		}
-	}
-	// Gemini thinking 档位（-high/-low/-medium/-tiered）与基名同价。
-	if base := normalizeGeminiThinkingTierAlias(lastPricingSegment(lookup)); base != lookup {
-		if pricing := s.fallbackPrices[base]; pricing != nil {
-			return pricing, base
-		}
-	}
-	// OpenAI/Codex 同 SKU 归一（gpt-5.6 → gpt-5.6-sol 等）。
-	if normalized := normalizeKnownOpenAICodexModel(lookup); normalized != "" && normalized != lookup {
-		if pricing := s.fallbackPrices[normalized]; pricing != nil {
-			return pricing, normalized
+	for _, candidate := range modelLookupCandidates(lookup) {
+		if pricing := s.fallbackPrices[candidate]; pricing != nil {
+			return pricing, candidate
 		}
 	}
 	return nil, ""

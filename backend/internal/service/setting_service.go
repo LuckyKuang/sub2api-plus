@@ -399,6 +399,11 @@ func (s *SettingService) GetAllSettings(ctx context.Context) (*SystemSettings, e
 	if err != nil {
 		return nil, fmt.Errorf("get all settings: %w", err)
 	}
+	if raw, exists := settings[SettingKeyPricingFallbackModels]; exists {
+		if _, err := parsePricingFallbackModelsSetting(raw); err != nil {
+			return nil, fmt.Errorf("parse stored pricing fallback models: %w", err)
+		}
+	}
 
 	return s.parseSettings(settings), nil
 }

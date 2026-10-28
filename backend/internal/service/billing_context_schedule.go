@@ -211,6 +211,24 @@ func resolvedTimePricingSchedule(resolved *ResolvedPricing) *TimePricingSchedule
 	return out
 }
 
+// resolvedDefaultPricingModel identifies the system card whose model-owned
+// policies apply. An explicit retail override keeps its own time-pricing rules,
+// even when omitted dimensions inherit a platform fallback card.
+func resolvedDefaultPricingModel(resolved *ResolvedPricing, model string) string {
+	if resolved == nil {
+		return ""
+	}
+	switch resolved.Source {
+	case PricingSourceLiteLLM:
+		return model
+	case PricingSourcePlatformFallback:
+		if resolved.BasePricing != nil {
+			return resolved.BasePricing.FallbackModel
+		}
+	}
+	return ""
+}
+
 // contextBreakpointPlan 描述断点来源。
 type contextBreakpointPlan struct {
 	bounds []int
@@ -251,7 +269,11 @@ func (s *BillingService) contextPricingBreakpoints(resolver *ModelPricingResolve
 	}
 	// 此处 pricing 仅取 LongContextInputThreshold 等时间无关字段，
 	// DeepSeek pro→Flash 切换不影响断点结果。
-	pricing = s.applyModelSpecificPricingPolicyEx(model, pricing, true, timezone.Now())
+	policyModel := model
+	if defaultModel := resolvedDefaultPricingModel(resolved, model); defaultModel != "" {
+		policyModel = defaultModel
+	}
+	pricing = s.applyModelSpecificPricingPolicyEx(policyModel, pricing, true, timezone.Now())
 	if pricing.LongContextInputThreshold <= 0 {
 		return plan
 	}

@@ -19,6 +19,12 @@ export interface DefaultSubscriptionSetting {
   validity_days: number;
 }
 
+/** Model SKU whose system price is used only after both exact pricing stages miss.
+ * An empty value disables that platform's final fallback. An empty map resets
+ * every platform to its default; omitting the update leaves settings unchanged.
+ */
+export type PricingFallbackModels = Record<string, string>;
+
 // ── 平台限额类型 ──────────────────────────────────────────────────
 /** 可设置默认限额的平台：平台清单中的全部具体平台（与后端 AllowedQuotaPlatforms 同源）。 */
 export type PlatformType = AccountPlatform
@@ -600,6 +606,7 @@ export interface SystemSettings {
   google_oauth_frontend_redirect_url: string;
 
   // Model fallback configuration
+  pricing_fallback_models: PricingFallbackModels;
   enable_model_fallback: boolean;
   fallback_model_anthropic: string;
   fallback_model_openai: string;
@@ -951,6 +958,7 @@ export interface UpdateSettingsRequest {
   google_oauth_client_secret?: string;
   google_oauth_redirect_url?: string;
   google_oauth_frontend_redirect_url?: string;
+  pricing_fallback_models?: PricingFallbackModels;
   enable_model_fallback?: boolean;
   fallback_model_anthropic?: string;
   fallback_model_openai?: string;

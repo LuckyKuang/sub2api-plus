@@ -193,7 +193,7 @@ export default {
         searchGroups: 'Search groups...',
         noGroupsMatch: 'No groups match your search',
         restrictModels: 'Restrict Models',
-        restrictModelsHint: 'When enabled, only models in the pricing list are allowed. Others will be rejected.',
+        restrictModelsHint: 'Require channel, system, or platform fallback pricing. Group and account rules still control model access.',
         defaultPerRequestPrice: 'Default per-request price (fallback when no tier matches)',
         defaultImagePrice: 'Default image price (fallback when no tier matches)',
         defaultVideoPrice: 'Default video price per second (fallback when no tier matches)',

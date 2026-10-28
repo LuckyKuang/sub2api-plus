@@ -149,7 +149,9 @@ func newOpenAIWSGlobalConcurrencyHarness(t *testing.T, upstreamURL string, initi
 	}
 	attachDisabledIPAccessControlForWebSocketTest(h)
 	key := &service.APIKey{ID: 1801, UserID: wsGlobalConcurrencyUserID, GroupID: &groupID,
-		User: &service.User{ID: wsGlobalConcurrencyUserID, Status: service.StatusActive}}
+		User: &service.User{ID: wsGlobalConcurrencyUserID, Status: service.StatusActive},
+		Group: &service.Group{ID: groupID, Platform: account.Platform, Status: service.StatusActive, Hydrated: true,
+			RateMultiplier: cfg.Default.RateMultiplier}}
 	done := make(chan struct{})
 	router := gin.New()
 	router.Use(func(c *gin.Context) {

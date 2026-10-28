@@ -132,6 +132,9 @@ func TestOpenAIGatewayServiceRecordUsage_GPT61SolUsesCredentialAndUpstreamModel(
 		t.Run(tt.name, func(t *testing.T) {
 			usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
 			svc := newOpenAIRecordUsageServiceForTest(usageRepo, &openAIRecordUsageUserRepoStub{}, &openAIRecordUsageSubRepoStub{}, nil)
+			// Exercise the actual upstream candidate's subscription policy. An
+			// unpriced public alias must not acquire the platform's final card first.
+			svc.billingService.frozenPricingFallbackModels = map[string]string{PlatformOpenAI: ""}
 			parentID := int64(4)
 			svc.accountRepo = &openAIRecordUsageAccountRepoStub{account: &Account{
 				ID: parentID, Platform: PlatformOpenAI, Type: tt.parentType,

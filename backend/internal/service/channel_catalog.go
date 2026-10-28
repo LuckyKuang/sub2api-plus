@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/ctxkey"
 )
 
 // CatalogGroup contains only groups already authorized by GetAvailableGroups.
@@ -62,6 +64,14 @@ func (s *ModelPlazaService) ListAvailableCatalog(ctx context.Context, groups []G
 	// reloads publish immutable maps; one response must not join generations.
 	local := *s
 	local.billingService = snapshotBillingService(s.billingService)
+	if local.billingService != nil {
+		models, err := local.billingService.pricingFallbackModelsForRequest(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("snapshot catalog platform pricing fallbacks: %w", err)
+		}
+		local.billingService.frozenPricingFallbackModels = models
+		local.billingService.pricingFallbackModels = nil
+	}
 	if s.pricingService != nil {
 		if s.billingService != nil && s.billingService.pricingService == s.pricingService {
 			local.pricingService = local.billingService.pricingService
@@ -107,7 +117,7 @@ func (s *ModelPlazaService) ListAvailableCatalog(ctx context.Context, groups []G
 			bound[id] = &active[i]
 		}
 	}
-	localChannels := &ChannelService{}
+	localChannels := &ChannelService{billingService: s.billingService}
 	localChannels.cache.Store(populateChannelCache(active, platforms))
 	resolver := NewModelPricingResolver(localChannels, s.billingService)
 	references := NewChannelPricingReferenceService(s.pricingService, s.billingService)
@@ -127,7 +137,8 @@ func (s *ModelPlazaService) ListAvailableCatalog(ctx context.Context, groups []G
 			if candidate.UpstreamModel != "" {
 				model.Name = candidate.UpstreamModel
 			}
-			if channel.RestrictModels && localChannels.IsModelRestricted(WithResolvedTargetPlatform(ctx, model.Platform), g.ID, model.Name) {
+			pricingCtx := context.WithValue(WithResolvedTargetPlatform(ctx, model.Platform), ctxkey.Group, &g)
+			if channel.RestrictModels && localChannels.IsModelRestricted(pricingCtx, g.ID, model.Name) {
 				continue
 			}
 			offer := s.catalogOffer(ctx, &g, channel, model, candidate.Name, resolver, references, asOf)
@@ -261,9 +272,9 @@ func (s *ModelPlazaService) catalogOffer(ctx context.Context, g *Group, ch *Chan
 		o.PriceTimeMultiplier = catalogPriceTimeMultiplier(resolved, billingModel, asOf)
 		o.BillingUnit = "token"
 		input := ContextPricingScheduleInput{Model: billingModel, Group: g, Platform: model.Platform}
-		if resolved.Source == PricingSourceLiteLLM && isDeepSeekModel(billingModel) {
-			now := time.Now().UTC()
-			input.PricingAt = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+		if isDeepSeekPricingModel(resolvedDefaultPricingModel(resolved, billingModel)) {
+			day := asOf.UTC()
+			input.PricingAt = time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, time.UTC)
 		}
 		sched, err := s.billingService.ResolveContextPricingSchedule(ctx, resolver, input)
 		if err != nil || sched == nil || len(sched.Tiers) == 0 {
@@ -311,7 +322,7 @@ func catalogPriceTimeMultiplier(resolved *ResolvedPricing, model string, at time
 	if resolved == nil || (resolved.Mode != "" && resolved.Mode != BillingModeToken) {
 		return 1
 	}
-	if resolved.Source == PricingSourceLiteLLM && isDeepSeekModel(model) {
+	if isDeepSeekPricingModel(resolvedDefaultPricingModel(resolved, model)) {
 		return deepseekPeakMultiplierAt(at)
 	}
 	return resolvedChannelTimeMultiplier(resolved, at)

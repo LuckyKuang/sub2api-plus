@@ -96,6 +96,9 @@ type BillingCache interface {
 
 // ModelPricing 模型价格配置（per-token价格，与LiteLLM格式一致）
 type ModelPricing struct {
+	// Explicit platform fallback provenance; request/upstream model identity stays unchanged.
+	FallbackModel    string `json:"fallback_model,omitempty"`
+	FallbackPlatform string `json:"fallback_platform,omitempty"`
 	// UltrafastMultiplier is model-owned and independent of operator Fast pricing.
 	UltrafastMultiplier                float64
 	InputPricePerToken                 float64            // 每token输入价格 (USD)
@@ -347,6 +350,25 @@ func isDeepSeekModel(model string) bool {
 	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(model)), "deepseek-")
 }
 
+// Pricing also accepts provider-qualified spellings of registered DeepSeek
+// SKUs. Keep this separate from protocol classification: choosing a price must
+// not change outbound request normalization or admit an unknown prefixed SKU.
+func isDeepSeekPricingModel(model string) bool {
+	if isDeepSeekModel(model) {
+		return true
+	}
+	native := lastPricingSegment(strings.ToLower(strings.TrimSpace(model)))
+	if alias, ok := deepseekSameSKUAliases[native]; ok {
+		native = alias
+	}
+	switch native {
+	case "deepseek-v4-flash", "deepseek-v4-flash-vision-exp", "deepseek-v4-pro":
+		return true
+	default:
+		return false
+	}
+}
+
 // deepseekPeakMultiplierAt 返回指定时刻的 DeepSeek 官方峰谷定价因子。
 // 官方口径（2026-08-23 起生效）：高峰价 = 2× 低谷价；高峰时段为
 // 01:00–04:00 与 06:00–10:00 UTC（半开区间），仅工作日；
@@ -383,6 +405,8 @@ type BillingService struct {
 	frozenDeepSeekPeakMultiplier *float64
 	cfg                          *config.Config
 	pricingService               *PricingService
+	pricingFallbackModels        func(context.Context) (map[string]string, error)
+	frozenPricingFallbackModels  map[string]string
 	fallbackPrices               map[string]*ModelPricing // 硬编码回退价格
 
 	// fallbackWarnSeen 记录已打过 fallback 警告日志的(已小写化)模型名,
@@ -1577,6 +1601,12 @@ func (s *BillingService) CacheStoragePricePerTokenHour(model string) float64 {
 // getModelPricingAt 保留带计费时点的内部调用接口。DeepSeek 默认低谷价
 // 仅由模型决定，峰谷倍率由统一计费入口按请求时点处理。
 func (s *BillingService) getModelPricingAt(model string, pricingAt time.Time) (*ModelPricing, error) {
+	return s.getSystemModelPricingAt(model, pricingAt, false)
+}
+
+// identifiedOnly excludes heuristic family prices from the explicit platform
+// fallback chain. Registered same-SKU aliases retain their existing prices.
+func (s *BillingService) getSystemModelPricingAt(model string, pricingAt time.Time, identifiedOnly bool) (*ModelPricing, error) {
 	// 标准化模型名称（转小写）
 	model = strings.ToLower(model)
 	if s.frozenModelPrices != nil {
@@ -1588,7 +1618,12 @@ func (s *BillingService) getModelPricingAt(model string, pricingAt time.Time) (*
 
 	// 1. 优先从动态价格服务获取
 	if s.pricingService != nil {
-		litellmPricing := s.pricingService.GetModelPricing(model)
+		var litellmPricing *LiteLLMModelPricing
+		if identifiedOnly {
+			litellmPricing = s.pricingService.GetIdentifiedModelPricing(model)
+		} else {
+			litellmPricing = s.pricingService.GetModelPricing(model)
+		}
 		// 仅有图片价、无 token 价的条目（如 LiteLLM 的 imagen 类模型）不能用于
 		// token 计费：直接返回会把 token 流量按 $0 计费。跳过后走 fallback，
 		// 无 fallback 则 fail-closed（ErrModelPricingUnavailable）。
@@ -1630,7 +1665,12 @@ func (s *BillingService) getModelPricingAt(model string, pricingAt time.Time) (*
 	}
 
 	// 2. 使用硬编码回退价格
-	fallback := s.getFallbackPricing(model)
+	var fallback *ModelPricing
+	if identifiedOnly {
+		fallback, _ = s.IdentifiedSameModelPricing(model)
+	} else {
+		fallback = s.getFallbackPricing(model)
+	}
 	if fallback != nil {
 		// 按模型名去重:每个模型每进程最多打一条 warn,避免热路径每请求刷屏（issue #3394）。
 		// model 在函数入口已 ToLower,故 GLM-5.2 / glm-5.2 视为同一条目。
@@ -1802,6 +1842,9 @@ func (s *BillingService) CalculateCostUnified(input CostInput) (*CostBreakdown, 
 	if frozen := billingServiceForContext(input.Ctx, s); frozen != s {
 		return frozen.CalculateCostUnified(input)
 	}
+	if input.Resolver == nil && requestBillingPlatform(input.Ctx, input.Group, "") != "" {
+		input.Resolver = NewModelPricingResolver(nil, s)
+	}
 	if input.Resolver == nil {
 		// 无 Resolver，回退到旧路径
 		applyLongContextBilling := true
@@ -1835,7 +1878,7 @@ func (s *BillingService) CalculateCostUnified(input CostInput) (*CostBreakdown, 
 			Group:   input.Group,
 		})
 	}
-	if snapshot := BillingPricingSnapshotFromContext(input.Ctx); snapshot != nil && input.Group != nil && input.Group.ID == snapshot.group.ID {
+	if snapshot := BillingPricingSnapshotFromContext(input.Ctx); snapshot != nil && (snapshot.ungrouped || (snapshot.group != nil && input.Group != nil && input.Group.ID == snapshot.group.ID)) {
 		unit := input.BillingUnit
 		if unit == "" {
 			unit = billingUnitForMode(string(resolved.Mode))
@@ -1879,8 +1922,12 @@ func (s *BillingService) calculateTokenCost(resolved *ResolvedPricing, input Cos
 
 	// 分组开关是统一入口；账号 API 开关保留为额外开启能力，但 false 不否决分组配置。
 	contextTierPricingEnabled := resolved.longContextPricingEnabled
-	if input.LongContextBillingEnabled != nil && *input.LongContextBillingEnabled {
-		contextTierPricingEnabled = true
+	if input.LongContextBillingEnabled != nil {
+		if input.Group == nil {
+			contextTierPricingEnabled = *input.LongContextBillingEnabled
+		} else if *input.LongContextBillingEnabled {
+			contextTierPricingEnabled = true
+		}
 	}
 
 	pricingContext := totalContext
@@ -1905,13 +1952,17 @@ func (s *BillingService) calculateTokenCost(resolved *ResolvedPricing, input Cos
 
 	// 默认价卡（Source=LiteLLM）应用 DeepSeek 官方价强制覆盖（幂等，GetModelPricing
 	// 内部已强制过）；分组/渠道自定义定价保留运营者配置，不强制覆盖官方价。
-	pricing = s.applyModelSpecificPricingPolicyEx(input.Model, pricing, resolved.Source == PricingSourceLiteLLM, pricingAt)
+	policyModel := input.Model
+	if pricing.FallbackModel != "" {
+		policyModel = pricing.FallbackModel
+	}
+	pricing = s.applyModelSpecificPricingPolicyEx(policyModel, pricing, resolved.Source == PricingSourceLiteLLM || resolved.Source == PricingSourcePlatformFallback, pricingAt)
 
 	// DeepSeek 模型默认价卡按官方峰谷口径调整：高峰时段（01:00–04:00 与
 	// 06:00–10:00 UTC，仅工作日；北京时间周末全天低谷）按 2× 低谷价计费。
 	// 仅作用于默认价卡（Source=LiteLLM，无分组/渠道自定义定价）——分组/渠道
 	// 自定义定价保持运营者语义，不叠加。先克隆再乘，避免污染共享 fallbackPrices 指针。
-	if resolved.Source == PricingSourceLiteLLM && isDeepSeekModel(input.Model) {
+	if (resolved.Source == PricingSourceLiteLLM || resolved.Source == PricingSourcePlatformFallback) && isDeepSeekPricingModel(policyModel) {
 		mult := deepseekPeakMultiplierAt(pricingAt)
 		if s.frozenDeepSeekPeakMultiplier != nil {
 			mult = *s.frozenDeepSeekPeakMultiplier
@@ -2154,16 +2205,6 @@ func (s *BillingService) CalculateCostWithServiceTier(model string, tokens Usage
 	return s.calculateCostInternal(model, tokens, rateMultiplier, serviceTier, nil)
 }
 
-func (s *BillingService) calculateCostWithServiceTierPolicy(
-	model string,
-	tokens UsageTokens,
-	rateMultiplier float64,
-	serviceTier string,
-	longContextBillingEnabled bool,
-) (*CostBreakdown, error) {
-	return s.calculateCostInternalWithPolicy(model, tokens, rateMultiplier, serviceTier, nil, longContextBillingEnabled)
-}
-
 func (s *BillingService) calculateCostInternal(model string, tokens UsageTokens, rateMultiplier float64, serviceTier string, channelPricing *ChannelModelPricing) (*CostBreakdown, error) {
 	return s.calculateCostInternalWithPolicy(model, tokens, rateMultiplier, serviceTier, channelPricing, true)
 }
@@ -2226,7 +2267,7 @@ func (s *BillingService) applyModelSpecificPricingPolicyEx(model string, pricing
 	// 官方后续保留了 Pro 服务及其计费方式，Pro 不按日期切换成 Flash 价。
 	// 高峰时段倍率不在本函数处理，由 calculateTokenCost 按 deepseekPeakMultiplierAt
 	// 对默认价卡另行叠加（分组/渠道自定义定价不叠加）。
-	if forceOfficialDefaultRates && isDeepSeekModel(model) {
+	if forceOfficialDefaultRates && isDeepSeekPricingModel(model) {
 		cloned := *pricing
 		if isDeepSeekProModel(model) {
 			cloned.InputPricePerToken = deepseekProOffPeakInputPrice

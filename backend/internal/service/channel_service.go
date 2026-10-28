@@ -166,6 +166,7 @@ type ChannelService struct {
 	groupRepo            GroupRepository
 	authCacheInvalidator APIKeyAuthCacheInvalidator
 	pricingService       *PricingService // 用于「可用渠道」展示时回落到全局定价；可为 nil（测试场景）
+	billingService       *BillingService // system/default platform pricing for unconfigured cards
 	cachePubSub          ChannelCachePubSub
 
 	cache   atomic.Value // *channelCache
@@ -583,7 +584,7 @@ func (s *ChannelService) ResolveChannelMapping(ctx context.Context, groupID int6
 }
 
 // IsModelRestricted 检查模型是否被渠道限制。
-// 返回 true 表示模型被限制（不在允许列表中）。
+// 返回 true 表示模型没有渠道、分组或有效系统价格。
 // 如果渠道未启用模型限制或分组无渠道关联，返回 false。
 func (s *ChannelService) IsModelRestricted(ctx context.Context, groupID int64, model string) bool {
 	lk, err := s.lookupGroupChannel(ctx, groupID)
@@ -593,7 +594,47 @@ func (s *ChannelService) IsModelRestricted(ctx context.Context, groupID int64, m
 	if lk == nil {
 		return false
 	}
-	return checkRestricted(lk, groupID, model)
+	if !checkRestricted(lk, groupID, model) {
+		return false
+	}
+	var group *Group
+	if snapshot := BillingPricingSnapshotFromContext(ctx); snapshot != nil && snapshot.group != nil && snapshot.group.ID == groupID {
+		group = snapshot.group
+	} else if ctx != nil {
+		group, _ = ctx.Value(ctxkey.Group).(*Group)
+		if group != nil && group.ID != groupID {
+			group = nil
+		}
+	}
+	if group == nil && s.groupRepo != nil {
+		group, err = s.groupRepo.GetByID(ctx, groupID)
+		if err != nil {
+			return true
+		}
+	}
+	platform := requestBillingPlatform(ctx, group, lk.platform)
+	if configured := matchGroupModelPricingForPlatform(group, model, platform); configured != nil {
+		// Group token cards support flat rates only; Resolve discards their
+		// intervals, so an interval alone cannot establish admission evidence.
+		if configured.BillingMode == "" || configured.BillingMode == BillingModeToken {
+			if hasFlatTokenPrice(configured) {
+				return false
+			}
+		} else if hasConfiguredUnitPrice(configured) {
+			return false
+		}
+	}
+	if configured := lookupPricingAcrossPlatforms(lk.cache, groupID, lk.platform, strings.ToLower(model)); configured != nil &&
+		configured.BillingMode != "" && configured.BillingMode != BillingModeToken {
+		// A selected per-request/image/video mode needs a price in that unit.
+		// A text-token fallback cannot fill its missing per-unit price.
+		return true
+	}
+	if s.billingService != nil {
+		_, err := s.billingService.GetModelPricingForPlatform(ctx, platform, model)
+		return err != nil
+	}
+	return true
 }
 
 // ResolveChannelMappingAndRestrict 解析渠道映射。
@@ -638,7 +679,7 @@ func checkRestricted(lk *channelLookup, groupID int64, model string) bool {
 	}
 	modelLower := strings.ToLower(model)
 	// 使用与查找定价相同的跨平台逻辑
-	if lookupPricingAcrossPlatforms(lk.cache, groupID, lk.platform, modelLower) != nil {
+	if hasConfiguredUnitPrice(lookupPricingAcrossPlatforms(lk.cache, groupID, lk.platform, modelLower)) {
 		return false
 	}
 	return true

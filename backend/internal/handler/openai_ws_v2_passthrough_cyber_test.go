@@ -104,6 +104,7 @@ func newOpenAIWSPassthroughHandlerHarness(t *testing.T, upstreamURL string, sett
 		Key:     "sk-handler-cyber-test",
 		GroupID: &groupID,
 		User:    &service.User{ID: 1751, Status: service.StatusActive},
+		Group:   &service.Group{ID: groupID, Platform: account.Platform, Status: service.StatusActive, Hydrated: true, RateMultiplier: cfg.Default.RateMultiplier},
 	}
 	handlerDone := make(chan struct{})
 	router := gin.New()

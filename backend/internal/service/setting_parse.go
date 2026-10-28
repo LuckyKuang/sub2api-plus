@@ -52,6 +52,10 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("marshal default forwarded client IP headers: %w", err)
 	}
+	pricingFallbackModelsJSON, err := json.Marshal(DefaultPricingFallbackModels())
+	if err != nil {
+		return fmt.Errorf("marshal default pricing fallback models: %w", err)
+	}
 
 	// 初始化默认设置
 	defaults := map[string]string{
@@ -177,6 +181,7 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyFallbackModelOpenAI:      "gpt-4o",
 		SettingKeyFallbackModelGemini:      "gemini-2.5-pro",
 		SettingKeyFallbackModelAntigravity: "gemini-2.5-pro",
+		SettingKeyPricingFallbackModels:    string(pricingFallbackModelsJSON),
 		// Identity patch defaults
 		SettingKeyEnableIdentityPatch: "true",
 		SettingKeyIdentityPatchPrompt: "",
@@ -795,6 +800,11 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	result.FallbackModelOpenAI = s.getStringOrDefault(settings, SettingKeyFallbackModelOpenAI, "gpt-4o")
 	result.FallbackModelGemini = s.getStringOrDefault(settings, SettingKeyFallbackModelGemini, "gemini-2.5-pro")
 	result.FallbackModelAntigravity = s.getStringOrDefault(settings, SettingKeyFallbackModelAntigravity, "gemini-2.5-pro")
+	result.PricingFallbackModels = DefaultPricingFallbackModels()
+	if raw, exists := settings[SettingKeyPricingFallbackModels]; exists {
+		// GetAllSettings validates this field before exposing parsed settings.
+		result.PricingFallbackModels, _ = parsePricingFallbackModelsSetting(raw)
+	}
 
 	// Identity patch settings (default: enabled, to preserve existing behavior)
 	if v, ok := settings[SettingKeyEnableIdentityPatch]; ok && v != "" {
