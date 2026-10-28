@@ -18,6 +18,7 @@ import (
 	_ "github.com/LuckyKuang/sub2api-plus/ent/runtime"
 	"github.com/LuckyKuang/sub2api-plus/internal/repository"
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
+	"github.com/LuckyKuang/sub2api-plus/internal/testutil/postgresdsn"
 	"github.com/gin-gonic/gin"
 	_ "github.com/lib/pq"
 	"github.com/stretchr/testify/require"
@@ -65,13 +66,17 @@ func TestLegacyAdminKeyRotationPostgres(t *testing.T) {
 	}
 	base, err := sql.Open("postgres", dsn)
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = base.Close() })
 	schema := fmt.Sprintf("legacy_key_test_%d", time.Now().UnixNano())
 	_, err = base.Exec(`CREATE SCHEMA ` + schema)
 	require.NoError(t, err)
-	db, err := sql.Open("postgres", dsn+" search_path="+schema)
+	t.Cleanup(func() { _, _ = base.Exec(`DROP SCHEMA ` + schema + ` CASCADE`) })
+	scopedDSN, err := postgresdsn.WithSearchPath(dsn, schema)
+	require.NoError(t, err)
+	db, err := sql.Open("postgres", scopedDSN)
 	require.NoError(t, err)
 	client := dbent.NewClient(dbent.Driver(entsql.OpenDB(dialect.Postgres, db)))
-	t.Cleanup(func() { _ = client.Close(); _, _ = base.Exec(`DROP SCHEMA ` + schema + ` CASCADE`); _ = base.Close() })
+	t.Cleanup(func() { _ = client.Close() })
 	_, err = db.Exec(`CREATE TABLE settings(id BIGSERIAL PRIMARY KEY, key VARCHAR(100) UNIQUE NOT NULL, value TEXT NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`)
 	require.NoError(t, err)
 	repo := repository.NewSettingRepository(client)

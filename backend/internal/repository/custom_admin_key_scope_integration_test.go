@@ -17,6 +17,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/adminaccess"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/pagination"
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
+	"github.com/LuckyKuang/sub2api-plus/internal/testutil/postgresdsn"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,17 +31,17 @@ func TestScopedAdminAccountListPostgresRulesAndPagination(t *testing.T) {
 	}
 	base, err := sql.Open("postgres", dsn)
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = base.Close() })
 	schema := fmt.Sprintf("scoped_list_test_%d", time.Now().UnixNano())
 	_, err = base.Exec(`CREATE SCHEMA ` + schema)
 	require.NoError(t, err)
-	db, err := sql.Open("postgres", dsn+" search_path="+schema)
+	t.Cleanup(func() { _, _ = base.Exec(`DROP SCHEMA ` + schema + ` CASCADE`) })
+	scopedDSN, err := postgresdsn.WithSearchPath(dsn, schema)
+	require.NoError(t, err)
+	db, err := sql.Open("postgres", scopedDSN)
 	require.NoError(t, err)
 	client := dbent.NewClient(dbent.Driver(entsql.OpenDB(dialect.Postgres, db)))
-	t.Cleanup(func() {
-		_ = client.Close()
-		_, _ = base.Exec(`DROP SCHEMA ` + schema + ` CASCADE`)
-		_ = base.Close()
-	})
+	t.Cleanup(func() { _ = client.Close() })
 	// 最小数据集刻意交叉分组、类型和平台，防止不同规则被拆开组合。
 	_, err = db.Exec(`CREATE TABLE accounts (
 		id BIGINT PRIMARY KEY, name TEXT NOT NULL DEFAULT '', notes TEXT, platform TEXT NOT NULL,

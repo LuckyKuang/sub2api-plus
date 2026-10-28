@@ -32,8 +32,9 @@ This import adds scoped administrator keys, owner-bound Grok catalog diagnostics
 and opt-in image-count billing for dedicated image requests. New upstream SQL
 migrations 247/248 are imported as 302/303, preserving deployed Plus migrations.
 Codex keeps its manually selected 0.165.0 identity and reviewed Terra descriptor;
-unverified Terra prices/context claims and shared domestic-provider keyword/90%
-quota cooldown heuristics are deferred. DeepSeek Pro pricing no longer switches
+Terra API pricing/specifications are verified separately from the pinned client
+descriptor. Shared domestic-provider keyword/90% quota cooldown heuristics remain
+deferred. DeepSeek Pro pricing no longer switches
 to Flash on a calendar date, following the provider's continued Pro service.
 The image-count option retains frozen prices and factors, rejects unidentified
 prices, and does not reclassify mixed Messages/Chat/Responses/WS requests.
