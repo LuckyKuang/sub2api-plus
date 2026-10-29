@@ -5,8 +5,19 @@ import DateTimePicker from '../DateTimePicker.vue'
 import BaseDialog from '../BaseDialog.vue'
 
 vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string) => key, locale: ref('en') }) }))
-enableAutoUnmount(afterEach)
-afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
+enableAutoUnmount(cleanup => afterEach(async () => {
+  cleanup()
+  try {
+    // Native Transition keeps a portal connected through its leave frames,
+    // including when its owning wrapper unmounts after a failed assertion.
+    await waitForPopupToClose()
+    await vi.waitFor(() => expect(document.querySelector('.modal-overlay')).toBeNull())
+  } finally {
+    document.body.replaceChildren()
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  }
+}))
 function mountPicker(props: Record<string, unknown> = {}, attrs: Record<string, unknown> = {}) {
   const update = (value: string): void => { void wrapper.setProps({ modelValue: value }) }
   const wrapper = mount(DateTimePicker, { props: { modelValue: '2026-10-24T08:15', ...props, 'onUpdate:modelValue': update }, attrs, attachTo: document.body })
@@ -14,7 +25,12 @@ function mountPicker(props: Record<string, unknown> = {}, attrs: Record<string, 
 }
 const popup = () => document.querySelector<HTMLElement>('.date-time-panel')!
 const button = (label: string) => [...popup().querySelectorAll<HTMLButtonElement>('button')].find(element => element.textContent === label)!
-async function open(wrapper: ReturnType<typeof mountPicker>) { await wrapper.get('.date-time-trigger').trigger('click'); await flushPromises() }
+async function waitForPopupToClose() { await vi.waitFor(() => expect(document.querySelector('.date-time-panel')).toBeNull()) }
+async function open(wrapper: ReturnType<typeof mountPicker>) {
+  await waitForPopupToClose()
+  await wrapper.get('.date-time-trigger').trigger('click')
+  await flushPromises()
+}
 function timeInput(unit: string) { return popup().querySelector<HTMLInputElement>(`input[aria-label="dates.${unit}"]`)! }
 async function setTime(unit: string, value: string) { const input = timeInput(unit); input.value = value; input.dispatchEvent(new Event('input', { bubbles: true })); await flushPromises() }
 async function clickDate(value: string) { popup().querySelector<HTMLButtonElement>(`[data-date="${value}"]`)!.click(); await flushPromises() }
@@ -195,7 +211,7 @@ describe('shared local date and time cards', () => {
     expect(wrapper.emitted('update:modelValue')).toEqual([['']])
     await wrapper.setProps({ disabled: true })
     await wrapper.get('.date-time-trigger').trigger('click')
-    expect(document.querySelector('.date-time-panel')).toBeNull()
+    await waitForPopupToClose()
     expect(wrapper.get<HTMLInputElement>('.date-time-value-proxy').element.disabled).toBe(true)
     await wrapper.setProps({ disabled: false, readonly: true })
     await wrapper.get('.date-time-trigger').trigger('click')
@@ -231,7 +247,7 @@ describe('shared local date and time cards', () => {
     await flushPromises()
     expect(wrapper.emitted('update:modelValue')).toBeUndefined()
     expect(wrapper.emitted('change')).toBeUndefined()
-    expect(document.querySelector('.date-time-panel')).toBeNull()
+    await waitForPopupToClose()
     wrapper.get<HTMLButtonElement>('.date-time-trigger').element.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
     await flushPromises()
     expect(document.querySelector('.date-time-panel')).toBeNull()
@@ -259,7 +275,7 @@ describe('shared local date and time cards', () => {
     outside.focus()
     outside.click()
     await flushPromises()
-    expect(document.querySelector('.date-time-panel')).toBeNull()
+    await waitForPopupToClose()
     expect(document.activeElement).toBe(outside)
     expect(wrapper.emitted('change')).toBeUndefined()
     outside.remove()
@@ -274,7 +290,7 @@ describe('shared local date and time cards', () => {
     expect(document.body.classList.contains('modal-open')).toBe(true)
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
     await flushPromises()
-    expect(document.querySelector('.date-time-panel')).toBeNull()
+    await waitForPopupToClose()
     expect(wrapper.getComponent(BaseDialog).emitted('close')).toBeUndefined()
     expect(document.body.classList.contains('modal-open')).toBe(true)
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))

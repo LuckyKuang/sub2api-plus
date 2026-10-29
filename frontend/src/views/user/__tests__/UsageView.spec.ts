@@ -350,12 +350,16 @@ describe('user UsageView', () => {
     expect(wrapper.findComponent(UsageTable).props('columns').map((column: { key: string }) => column.key)).not.toContain('api_key')
     expect(wrapper.findComponent(UsageTable).props('columns').map((column: { key: string }) => column.key)).not.toContain('model')
     menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
-    await flushPromises()
-    expect(document.body.querySelector('[data-testid="usage-column-menu"]')).toBeNull()
+    // The real dropdown stays mounted until its leave transition completes.
+    await vi.waitFor(() => {
+      expect(document.body.querySelector('[data-testid="usage-column-menu"]')).toBeNull()
+    })
     await wrapper.get('[data-testid="usage-column-settings"]').trigger('click')
+    expect(document.body.querySelector('[data-testid="usage-column-menu"]')).not.toBeNull()
     document.body.click()
-    await flushPromises()
-    expect(document.body.querySelector('[data-testid="usage-column-menu"]')).toBeNull()
+    await vi.waitFor(() => {
+      expect(document.body.querySelector('[data-testid="usage-column-menu"]')).toBeNull()
+    })
     wrapper.unmount()
   })
 

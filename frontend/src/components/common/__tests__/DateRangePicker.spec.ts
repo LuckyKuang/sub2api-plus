@@ -38,8 +38,17 @@ const formatLocalDate = (date: Date): string => {
 const rangePanel = () => new DOMWrapper(document.body.querySelector<HTMLElement>('.date-picker-dropdown')!)
 const rangeIsOpen = () => !!document.body.querySelector('.date-picker-dropdown')
 
-enableAutoUnmount(afterEach)
-afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers() })
+enableAutoUnmount(cleanup => afterEach(async () => {
+  cleanup()
+  try {
+    await vi.waitFor(() => expect(document.body.querySelector('.date-picker-dropdown, .date-time-panel, .modal-overlay')).toBeNull())
+  } finally {
+    document.body.replaceChildren()
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+    vi.useRealTimers()
+  }
+}))
 
 describe('DateRangePicker', () => {
   // Approved audit: a calendar portal inside the range menu must not dismiss
@@ -50,7 +59,8 @@ describe('DateRangePicker', () => {
     const wrapper = mount(DateRangePicker, {
       props: { startDate: '2026-10-01', endDate: '2026-10-22' },
       attachTo: document.body,
-      global: { stubs: { Icon: true, Transition: true } },
+      // Keep the real Transition: it adds no DOM wrapper to the body portal.
+      global: { stubs: { Icon: true, Transition: false } },
     })
     await wrapper.get('.date-picker-trigger').trigger('click')
     const start = wrapper.findAllComponents(DateTimePicker)[0]
@@ -74,7 +84,7 @@ describe('DateRangePicker', () => {
     await flushPromises()
     expect(start.emitted('update:modelValue')?.at(-1)).toEqual(['2026-10-05'])
     expect(start.props('modelValue')).toBe('2026-10-05')
-    expect(document.body.querySelector('.date-time-panel')).toBeNull()
+    await vi.waitFor(() => expect(document.body.querySelector('.date-time-panel')).toBeNull())
     expect(rangeIsOpen()).toBe(true)
     expect(wrapper.emitted('update:startDate')).toBeUndefined()
     await rangePanel().get('.date-picker-apply').trigger('click')
