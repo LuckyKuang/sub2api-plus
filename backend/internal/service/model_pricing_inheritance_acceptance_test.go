@@ -101,6 +101,9 @@ func TestPricingEmptyAndMultiplierOnlyCardsCannotInventFreeUnknownModel(t *testi
 			tc.card.Platform, tc.card.Models = PlatformOpenAI, []string{"no-price-evidence-model"}
 			group.ModelPricing = []ChannelModelPricing{tc.card}
 			billing := NewBillingService(&config.Config{}, nil)
+			// Neither an empty card nor a multiplier supplies unit-price evidence
+			// when the administrator has disabled the final platform fallback.
+			billing.frozenPricingFallbackModels = map[string]string{PlatformOpenAI: ""}
 			resolver := NewModelPricingResolver(nil, billing)
 			ctx := WithResolvedTargetPlatform(context.Background(), PlatformOpenAI)
 			cost, err := billing.CalculateCostUnified(CostInput{Ctx: ctx, Model: "no-price-evidence-model", Group: group, GroupID: &group.ID,

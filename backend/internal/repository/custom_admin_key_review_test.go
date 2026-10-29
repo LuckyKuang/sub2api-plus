@@ -20,6 +20,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/adminaccess"
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
+	"github.com/LuckyKuang/sub2api-plus/internal/testutil/postgresdsn"
 	"github.com/stretchr/testify/require"
 )
 
@@ -33,12 +34,16 @@ func TestScopedAdminReviewGroupPriorityAndStatus(t *testing.T) {
 	}
 	base, err := sql.Open("postgres", dsn)
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = base.Close() })
 	name := fmt.Sprintf("scoped_review_%d", time.Now().UnixNano())
 	_, err = base.Exec(`CREATE SCHEMA ` + name)
 	require.NoError(t, err)
-	db, err := sql.Open("postgres", dsn+" search_path="+name)
+	t.Cleanup(func() { _, _ = base.Exec(`DROP SCHEMA ` + name + ` CASCADE`) })
+	scopedDSN, err := postgresdsn.WithSearchPath(dsn, name)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = db.Close(); _, _ = base.Exec(`DROP SCHEMA ` + name + ` CASCADE`); _ = base.Close() })
+	db, err := sql.Open("postgres", scopedDSN)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
 	driver := entsql.OpenDB(dialect.Postgres, db)
 	client := dbent.NewClient(dbent.Driver(driver))
 	require.NoError(t, migrate.Create(context.Background(), migrate.NewSchema(driver), []*schema.Table{migrate.ProxiesTable, migrate.AccountsTable, migrate.GroupsTable, migrate.AccountGroupsTable}, migrate.WithForeignKeys(false)))

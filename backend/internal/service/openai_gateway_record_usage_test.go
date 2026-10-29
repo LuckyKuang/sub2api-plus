@@ -275,6 +275,7 @@ func openAIRecordUsageAPIKeyWithGroup(svc *OpenAIGatewayService, id int64, group
 		ID: id,
 		Group: &Group{
 			ID:                        1,
+			Platform:                  PlatformOpenAI,
 			LongContextPricingEnabled: groupLongContext,
 		},
 	}
@@ -321,7 +322,7 @@ func TestOpenAIGatewayServiceRecordUsage_ZeroUsageStillWritesUsageLog(t *testing
 			Model:     "gpt-5.1",
 			Duration:  time.Second,
 		},
-		APIKey:        &APIKey{ID: 1000, Quota: 100, Group: &Group{RateMultiplier: 1}},
+		APIKey:        &APIKey{ID: 1000, Quota: 100, Group: &Group{Platform: PlatformOpenAI, RateMultiplier: 1}},
 		User:          &User{ID: 2000},
 		Account:       &Account{ID: 3000, Type: AccountTypeAPIKey},
 		APIKeyService: quotaSvc,
@@ -377,7 +378,7 @@ func TestOpenAIGatewayServiceRecordUsage_NonStreamDisconnectKeepsExactUsageSourc
 			ClientDisconnectUsageSource: UsageSourceUpstreamExact,
 			Usage:                       OpenAIUsage{InputTokens: 10, OutputTokens: 5},
 		},
-		APIKey:  &APIKey{ID: 1000, Quota: 100, Group: &Group{RateMultiplier: 1}},
+		APIKey:  &APIKey{ID: 1000, Quota: 100, Group: &Group{Platform: PlatformOpenAI, RateMultiplier: 1}},
 		User:    &User{ID: 2000},
 		Account: &Account{ID: 3000, Type: AccountTypeAPIKey},
 	})
@@ -397,6 +398,8 @@ func TestOpenAIGatewayServiceRecordUsage_MissingPricingRejectsWithoutFinancialWr
 	subRepo := &openAIRecordUsageSubRepoStub{}
 	quotaSvc := &openAIRecordUsageAPIKeyQuotaStub{}
 	svc := newOpenAIRecordUsageServiceWithBillingRepoForTest(usageRepo, billingRepo, userRepo, subRepo, nil)
+	// Keep every token-price source absent for the missing-pricing scenario.
+	svc.billingService.frozenPricingFallbackModels = map[string]string{PlatformOpenAI: ""}
 
 	incomplete := false
 	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
@@ -410,7 +413,7 @@ func TestOpenAIGatewayServiceRecordUsage_MissingPricingRejectsWithoutFinancialWr
 			Model:    "pricing-missing-test-model",
 			Duration: time.Second,
 		},
-		APIKey:        &APIKey{ID: 1002, Quota: 100, Group: &Group{RateMultiplier: 1}},
+		APIKey:        &APIKey{ID: 1002, Quota: 100, Group: &Group{Platform: PlatformOpenAI, RateMultiplier: 1}},
 		User:          &User{ID: 2002},
 		Account:       &Account{ID: 3002, Type: AccountTypeAPIKey},
 		APIKeyService: quotaSvc,
@@ -453,6 +456,7 @@ func TestOpenAIGatewayServiceRecordUsage_UsesUserSpecificGroupRate(t *testing.T)
 			GroupID: i64p(groupID),
 			Group: &Group{
 				ID:             groupID,
+				Platform:       PlatformOpenAI,
 				RateMultiplier: groupRate,
 			},
 		},
@@ -501,6 +505,7 @@ func TestOpenAIGatewayServiceRecordUsage_PeakRateAffectsTokenModeImageOutputToke
 			GroupID: i64p(groupID),
 			Group: &Group{
 				ID:                 groupID,
+				Platform:           PlatformOpenAI,
 				RateMultiplier:     groupRate,
 				SubscriptionType:   "subscription",
 				PeakRateEnabled:    true,
@@ -557,7 +562,7 @@ func TestOpenAIGatewayServiceRecordUsage_TimePricingUsesPricingAt(t *testing.T) 
 			Usage:     OpenAIUsage{InputTokens: 1000, OutputTokens: 500},
 		},
 		APIKey: &APIKey{ID: 1006, GroupID: i64p(groupID), Group: &Group{
-			ID: groupID, RateMultiplier: 0.8, SubscriptionType: SubscriptionTypeSubscription,
+			ID: groupID, Platform: PlatformOpenAI, RateMultiplier: 0.8, SubscriptionType: SubscriptionTypeSubscription,
 		}},
 		User:      &User{ID: 2006},
 		Account:   &Account{ID: 3006},
@@ -590,7 +595,7 @@ func TestOpenAIGatewayServiceRecordUsage_TimePricingUsesExplicitPricingAt(t *tes
 			Usage:     OpenAIUsage{InputTokens: 1000, OutputTokens: 500},
 		},
 		APIKey: &APIKey{ID: 1007, GroupID: i64p(groupID), Group: &Group{
-			ID: groupID, RateMultiplier: 0.8, SubscriptionType: SubscriptionTypeSubscription,
+			ID: groupID, Platform: PlatformOpenAI, RateMultiplier: 0.8, SubscriptionType: SubscriptionTypeSubscription,
 		}},
 		User:      &User{ID: 2007},
 		Account:   &Account{ID: 3007},
@@ -692,7 +697,7 @@ func TestOpenAIGatewayServiceRecordUsage_IncludesEndpointMetadata(t *testing.T) 
 		},
 		APIKey: &APIKey{
 			ID:    1002,
-			Group: &Group{RateMultiplier: 1},
+			Group: &Group{Platform: PlatformOpenAI, RateMultiplier: 1},
 		},
 		User:             &User{ID: 2002},
 		Account:          &Account{ID: 3002},
@@ -731,6 +736,7 @@ func TestOpenAIGatewayServiceRecordUsage_RejectsUnavailablePersonalRateSnapshot(
 			GroupID: i64p(groupID),
 			Group: &Group{
 				ID:             groupID,
+				Platform:       PlatformOpenAI,
 				RateMultiplier: groupRate,
 			},
 		},
@@ -768,6 +774,7 @@ func TestOpenAIGatewayServiceRecordUsage_FallsBackToGroupDefaultRateWhenResolver
 			GroupID: i64p(groupID),
 			Group: &Group{
 				ID:             groupID,
+				Platform:       PlatformOpenAI,
 				RateMultiplier: groupRate,
 			},
 		},
@@ -1681,7 +1688,7 @@ func TestOpenAIGatewayServiceRecordUsage_UsesRequestedModelAndUpstreamModelMetad
 			Duration:     2 * time.Second,
 			FirstTokenMs: func() *int { v := 120; return &v }(),
 		},
-		APIKey:    &APIKey{ID: 10, GroupID: i64p(11), Group: &Group{ID: 11, RateMultiplier: 1.2}},
+		APIKey:    &APIKey{ID: 10, GroupID: i64p(11), Group: &Group{ID: 11, Platform: PlatformOpenAI, RateMultiplier: 1.2}},
 		User:      &User{ID: 20},
 		Account:   &Account{ID: 30},
 		UserAgent: "codex-cli/1.0",
@@ -2026,6 +2033,9 @@ func TestOpenAIGatewayServiceRecordUsage_FallsBackToUpstreamModelWhenPrimaryUnpr
 	userRepo := &openAIRecordUsageUserRepoStub{}
 	subRepo := &openAIRecordUsageSubRepoStub{}
 	svc := newOpenAIRecordUsageServiceForTest(usageRepo, userRepo, subRepo, nil)
+	// The upstream SKU must supply the price, without a platform fallback
+	// making the otherwise unpriced primary alias billable first.
+	svc.billingService.frozenPricingFallbackModels = map[string]string{PlatformOpenAI: ""}
 	usage := OpenAIUsage{InputTokens: 20, OutputTokens: 10}
 
 	expectedCost, err := svc.billingService.CalculateCost("gpt-5.4", UsageTokens{
@@ -2060,6 +2070,8 @@ func TestOpenAIGatewayServiceRecordUsage_UnpricedTokenModelRejectsWithoutUsageLo
 	userRepo := &openAIRecordUsageUserRepoStub{}
 	subRepo := &openAIRecordUsageSubRepoStub{}
 	svc := newOpenAIRecordUsageServiceForTest(usageRepo, userRepo, subRepo, nil)
+	// An explicit platform opt-out keeps this model genuinely unpriced.
+	svc.billingService.frozenPricingFallbackModels = map[string]string{PlatformOpenAI: ""}
 
 	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
 		Result: &OpenAIForwardResult{
@@ -2094,7 +2106,7 @@ func TestOpenAIGatewayServiceRecordUsage_SubscriptionBillingSetsSubscriptionFiel
 			Model:     "gpt-5.1",
 			Duration:  time.Second,
 		},
-		APIKey:       &APIKey{ID: 100, GroupID: i64p(88), Group: &Group{ID: 88, SubscriptionType: SubscriptionTypeSubscription, RateMultiplier: 1.0}},
+		APIKey:       &APIKey{ID: 100, GroupID: i64p(88), Group: &Group{ID: 88, Platform: PlatformOpenAI, SubscriptionType: SubscriptionTypeSubscription, RateMultiplier: 1.0}},
 		User:         &User{ID: 200},
 		Account:      &Account{ID: 300},
 		Subscription: subscription,
@@ -3042,7 +3054,7 @@ func TestRecordUsageKeepsCompactionSemanticFlagOrthogonalToTransport(t *testing.
 	logStub := &openAIRecordUsageLogRepoStub{inserted: true}
 	svc := newOpenAIRecordUsageServiceForTest(logStub, &openAIRecordUsageUserRepoStub{}, &openAIRecordUsageSubRepoStub{}, nil)
 
-	apiKey := &APIKey{ID: 20, UserID: 21, Group: &Group{RateMultiplier: 1}}
+	apiKey := &APIKey{ID: 20, UserID: 21, Group: &Group{Platform: PlatformOpenAI, RateMultiplier: 1}}
 	require.NoError(t, svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
 		NativeCompactionV2: true,
 		Result: &OpenAIForwardResult{
@@ -3077,7 +3089,7 @@ func TestRecordUsageMarksCyberRequestType(t *testing.T) {
 			Duration: time.Second,
 			Usage:    OpenAIUsage{InputTokens: 100, OutputTokens: 0},
 		},
-		APIKey:  &APIKey{ID: 2, Group: &Group{RateMultiplier: 1}},
+		APIKey:  &APIKey{ID: 2, Group: &Group{Platform: PlatformOpenAI, RateMultiplier: 1}},
 		User:    &User{ID: 1},
 		Account: &Account{ID: 3},
 	}
@@ -3307,6 +3319,9 @@ func TestOpenAIGatewayServiceRecordUsage_FreeOpenAIFastMissingPricingRejectsWith
 		nil,
 	)
 	svc.resolver = NewModelPricingResolver(nil, svc.billingService)
+	// With final fallback explicitly disabled, Free Fast does not invent
+	// unit-price evidence for a model absent from every price source.
+	svc.billingService.frozenPricingFallbackModels = map[string]string{PlatformOpenAI: ""}
 	groupID := int64(78)
 	serviceTier := "priority"
 	apiKey := &APIKey{

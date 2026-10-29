@@ -110,7 +110,7 @@ importers:
         version: 7.18.0(eslint@8.57.1)(typescript@5.6.3)
       '@vitejs/plugin-vue':
         specifier: ^5.2.3
-        version: 5.2.4(vite@6.4.3(@types/node@20.19.27)(jiti@1.21.7))(vue@3.5.43(typescript@5.6.3))
+        version: 5.2.4(vite@6.4.5(@types/node@20.19.27)(jiti@1.21.7))(vue@3.5.43(typescript@5.6.3))
       '@vitest/coverage-v8':
         specifier: ^2.1.9
         version: 2.1.9(vitest@4.1.11)
@@ -139,14 +139,14 @@ importers:
         specifier: ~5.6.0
         version: 5.6.3
       vite:
-        specifier: ^6.4.3
-        version: 6.4.3(@types/node@20.19.27)(jiti@1.21.7)
+        specifier: ^6.4.5
+        version: 6.4.5(@types/node@20.19.27)(jiti@1.21.7)
       vite-plugin-checker:
         specifier: ^0.9.1
-        version: 0.9.3(eslint@8.57.1)(optionator@0.9.4)(typescript@5.6.3)(vite@6.4.3(@types/node@20.19.27)(jiti@1.21.7))(vue-tsc@2.2.12(typescript@5.6.3))
+        version: 0.9.3(eslint@8.57.1)(optionator@0.9.4)(typescript@5.6.3)(vite@6.4.5(@types/node@20.19.27)(jiti@1.21.7))(vue-tsc@2.2.12(typescript@5.6.3))
       vitest:
         specifier: ^4.1.11
-        version: 4.1.11(@types/node@20.19.27)(@vitest/coverage-v8@2.1.9)(jsdom@24.1.3)(vite@6.4.3(@types/node@20.19.27)(jiti@1.21.7))
+        version: 4.1.11(@types/node@20.19.27)(@vitest/coverage-v8@2.1.9)(jsdom@24.1.3)(vite@6.4.5(@types/node@20.19.27)(jiti@1.21.7))
       vue-tsc:
         specifier: ^2.2.0
         version: 2.2.12(typescript@5.6.3)
@@ -4320,8 +4320,8 @@ packages:
       vue-tsc:
         optional: true
 
-  vite@6.4.3:
-    resolution: {integrity: sha512-NTKlcQjlAK7MlQoyb6LgaqHc8sso/pVyUJYWMws3jg21uTJw/LddqIFPcPqP6PzpgbIcZyKI85sFE4HBrQDA8A==}
+  vite@6.4.5:
+    resolution: {integrity: sha512-4enwjFfi4IwtEh0w+jPzpLVOFQiPHmmzPxcHXQOyEur47o6u0jE573DmGpjA+7irXoMLYRZD5ZaFUEneS3abPg==}
     engines: {node: ^18.0.0 || ^20.0.0 || >=22.0.0}
     hasBin: true
     peerDependencies:
@@ -6269,9 +6269,9 @@ snapshots:
       '@use-gesture/core': 10.3.1
       react: 19.2.3
 
-  '@vitejs/plugin-vue@5.2.4(vite@6.4.3(@types/node@20.19.27)(jiti@1.21.7))(vue@3.5.43(typescript@5.6.3))':
+  '@vitejs/plugin-vue@5.2.4(vite@6.4.5(@types/node@20.19.27)(jiti@1.21.7))(vue@3.5.43(typescript@5.6.3))':
     dependencies:
-      vite: 6.4.3(@types/node@20.19.27)(jiti@1.21.7)
+      vite: 6.4.5(@types/node@20.19.27)(jiti@1.21.7)
       vue: 3.5.43(typescript@5.6.3)
 
   '@vitest/coverage-v8@2.1.9(vitest@4.1.11)':
@@ -6288,7 +6288,7 @@ snapshots:
       std-env: 3.10.0
       test-exclude: 7.0.1
       tinyrainbow: 1.2.0
-      vitest: 4.1.11(@types/node@20.19.27)(@vitest/coverage-v8@2.1.9)(jsdom@24.1.3)(vite@6.4.3(@types/node@20.19.27)(jiti@1.21.7))
+      vitest: 4.1.11(@types/node@20.19.27)(@vitest/coverage-v8@2.1.9)(jsdom@24.1.3)(vite@6.4.5(@types/node@20.19.27)(jiti@1.21.7))
     transitivePeerDependencies:
       - supports-color
 
@@ -6301,13 +6301,13 @@ snapshots:
       chai: 6.2.2
       tinyrainbow: 3.1.1
 
-  '@vitest/mocker@4.1.11(vite@6.4.3(@types/node@20.19.27)(jiti@1.21.7))':
+  '@vitest/mocker@4.1.11(vite@6.4.5(@types/node@20.19.27)(jiti@1.21.7))':
     dependencies:
       '@vitest/spy': 4.1.11
       estree-walker: 3.0.3
       magic-string: 0.30.21
     optionalDependencies:
-      vite: 6.4.3(@types/node@20.19.27)(jiti@1.21.7)
+      vite: 6.4.5(@types/node@20.19.27)(jiti@1.21.7)
 
   '@vitest/pretty-format@4.1.11':
     dependencies:
@@ -9515,7 +9515,7 @@ snapshots:
       '@types/unist': 3.0.3
       vfile-message: 4.0.3
 
-  vite-plugin-checker@0.9.3(eslint@8.57.1)(optionator@0.9.4)(typescript@5.6.3)(vite@6.4.3(@types/node@20.19.27)(jiti@1.21.7))(vue-tsc@2.2.12(typescript@5.6.3)):
+  vite-plugin-checker@0.9.3(eslint@8.57.1)(optionator@0.9.4)(typescript@5.6.3)(vite@6.4.5(@types/node@20.19.27)(jiti@1.21.7))(vue-tsc@2.2.12(typescript@5.6.3)):
     dependencies:
       '@babel/code-frame': 7.27.1
       chokidar: 4.0.3
@@ -9525,7 +9525,7 @@ snapshots:
       strip-ansi: 7.1.2
       tiny-invariant: 1.3.3
       tinyglobby: 0.2.15
-      vite: 6.4.3(@types/node@20.19.27)(jiti@1.21.7)
+      vite: 6.4.5(@types/node@20.19.27)(jiti@1.21.7)
       vscode-uri: 3.1.0
     optionalDependencies:
       eslint: 8.57.1
@@ -9533,12 +9533,12 @@ snapshots:
       typescript: 5.6.3
       vue-tsc: 2.2.12(typescript@5.6.3)
 
-  vite@6.4.3(@types/node@20.19.27)(jiti@1.21.7):
+  vite@6.4.5(@types/node@20.19.27)(jiti@1.21.7):
     dependencies:
       esbuild: 0.25.12
       fdir: 6.5.0(picomatch@4.0.5)
       picomatch: 4.0.5
-      postcss: 8.5.26
+      postcss: 8.5.29
       rollup: 4.62.4
       tinyglobby: 0.2.17
     optionalDependencies:
@@ -9546,10 +9546,10 @@ snapshots:
       fsevents: 2.3.3
       jiti: 1.21.7
 
-  vitest@4.1.11(@types/node@20.19.27)(@vitest/coverage-v8@2.1.9)(jsdom@24.1.3)(vite@6.4.3(@types/node@20.19.27)(jiti@1.21.7)):
+  vitest@4.1.11(@types/node@20.19.27)(@vitest/coverage-v8@2.1.9)(jsdom@24.1.3)(vite@6.4.5(@types/node@20.19.27)(jiti@1.21.7)):
     dependencies:
       '@vitest/expect': 4.1.11
-      '@vitest/mocker': 4.1.11(vite@6.4.3(@types/node@20.19.27)(jiti@1.21.7))
+      '@vitest/mocker': 4.1.11(vite@6.4.5(@types/node@20.19.27)(jiti@1.21.7))
       '@vitest/pretty-format': 4.1.11
       '@vitest/runner': 4.1.11
       '@vitest/snapshot': 4.1.11
@@ -9566,7 +9566,7 @@ snapshots:
       tinyexec: 1.3.1
       tinyglobby: 0.2.17
       tinyrainbow: 3.1.1
-      vite: 6.4.3(@types/node@20.19.27)(jiti@1.21.7)
+      vite: 6.4.5(@types/node@20.19.27)(jiti@1.21.7)
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 20.19.27

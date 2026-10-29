@@ -5,6 +5,13 @@ prices, how they are matched, and what to do when a price is missing. It is the
 durable specification for the admin API contract; code changes that alter this
 behavior must update this file in the same commit.
 
+Channel updates preserve `features_config.web_search_emulation` dimensions that
+the client omits. Supplied platform values replace that dimension, including
+explicit `false`; an explicit empty object or `null` clears the whole feature.
+Other feature keys retain whole-block replacement semantics. The editor writes
+explicit values for its supported platform sections and preserves dimensions
+it cannot edit, including while global emulation is disabled.
+
 ## 1. Design principles
 
 1. Channel prices are operator selling prices. A reference price is only a
@@ -15,10 +22,11 @@ behavior must update this file in the same commit.
 3. Missing, explicit zero, and positive price are three different states.
    The API encodes a missing field as `null` and an explicit free field as `0`,
    and the frontend preserves both.
-4. Reference matching is stricter than request billing fallback. The billing hot
-   path may use broad family fallbacks so a request is never interrupted; the
-   admin reference API must not, because a wrong reference price gets written
-   into operator configuration.
+4. Request billing uses configured model prices first, then an identified
+   same-model built-in price, then the selected platform's explicit fallback
+   model. A similar family name never authorizes an implicit price substitution.
+   Reference prices remain same-model suggestions and do not turn a platform
+   fallback into that model's official reference price.
 5. token, image-token, per-image, per-request, per-video, per-second and audio
    units are not interchangeable and are never converted into one another.
 6. A remote refresh failure keeps the last usable snapshot. No failure clears or
@@ -27,6 +35,104 @@ behavior must update this file in the same commit.
 For request billing, an unset channel image price inherits the catalog price.
 Set an explicit `0` to keep image output free. An explicit zero image-output
 price never falls back to text pricing.
+
+### Platform pricing fallback settings
+
+The administrator settings API (`GET`/`PUT /api/v1/admin/settings`) exposes
+`pricing_fallback_models`, a JSON object mapping each concrete platform ID to a
+literal price-model ID. The object is persisted in the existing settings store;
+it requires no deployment environment variable or database schema change.
+The effective order is configured group/channel/global model pricing, an
+identified same-model built-in card, then the selected concrete platform's
+configured fallback price model. Missing channel pricing uses this chain rather
+than requiring the administrator to duplicate system prices in a channel card.
+Explicit zero prices remain configured values and never advance to a later
+source. Units, context tiers and service tiers retain their existing contracts.
+
+The channel's `restrict_models` switch checks whether effective pricing is
+available. It accepts a matching channel card, an explicit group price, a usable
+same-model system card, or the selected platform's usable final fallback; it no longer treats the list
+of custom channel cards as a model authorization list. With no valid price
+evidence, the pricing check rejects the request explicitly. Group and account
+model authorization remain the independent controls for which models may run.
+
+Fallback selects a price card only. It does not rewrite the request model,
+advertise new capabilities, change routing or failover ownership, or bypass
+group model authorization, account model mappings, endpoint capabilities or
+quota checks. This setting is independent from the older
+`enable_model_fallback` / `fallback_model_*` settings, which may replace an
+Antigravity upstream model after a model-not-found response.
+
+All concrete platforms in the shared registry have an independent entry:
+
+| Platform | Default fallback price model |
+| --- | --- |
+| `anthropic` | `claude-sonnet-5` |
+| `openai` | `gpt-5.4` |
+| `gemini` | `gemini-3.8-flash` |
+| `antigravity` | `gemini-3.8-flash` |
+| `grok` | `grok-4.6` |
+| `kimi` | `kimi-k3` |
+| `zhipu` | `glm-5.3` |
+| `deepseek` | `deepseek-v4-flash` |
+| `minimax` | `minimax-m3` |
+| `stepfun` | `step-5-preview` |
+| `opencode_go` | `glm-5.3` |
+| `typesafe` | `jev-latest` |
+| `command_code` | `deepseek-v4-flash` |
+| `cline` | `deepseek-v4-flash` |
+
+These defaults name existing price cards and introduce no new price numbers.
+`composite` is not a concrete supplier: its request uses the resolved target
+platform's entry. Aggregators such as OpenCode, Command Code and Cline retain
+their own entries and may explicitly name an existing global SKU from any
+vendor they serve; a model's vendor prefix does not change the selected platform.
+The lookup never borrows a different platform's fallback configuration.
+
+For updates, omitting the entire field or sending `null` preserves the stored
+object. A supplied object replaces the previous object; omitted platform keys
+receive their server defaults, and `{}` restores all defaults. An explicit empty
+string disables the final fallback for that platform:
+
+```json
+{
+  "pricing_fallback_models": {
+    "openai": "",
+    "cline": "openai/gpt-6.1-terra"
+  }
+}
+```
+
+The API returns all effective platform entries. Unknown platform keys,
+`composite`, non-string values (including a nested `null`), control characters,
+embedded whitespace, wildcard model names and names longer than 255 bytes are
+rejected before any settings write. Surrounding ordinary spaces are trimmed.
+Saving validates the literal format; the price lookup must still find a valid
+card for the configured target at admission. A disabled or unavailable fallback
+does not become a zero price or trigger another fallback chain.
+
+The final fallback supplies text-token prices. Its system card must explicitly
+contain both input and output token prices, including an explicit `0` for a
+free dimension. Input-only embedding cards, per-image prices and image-token
+prices cannot supply a missing text-output price. An incomplete catalog card
+may inherit missing text dimensions from the complete compiled card for that
+same fallback SKU, preserving its configured dimensions and explicit zeros;
+it never selects a different SKU. Existing image, video and audio meters keep their own unit
+prices and are never billed with a text-token fallback. The fallback model's
+group or channel selling prices are not consulted.
+
+New requests and WebSocket turns freeze the fallback configuration with the
+catalog and channel-price generation. Retries and accepted deferred jobs retain
+that evidence across administrator edits. Ungrouped requests also freeze their
+catalog, fallback configuration, default rate and pricing time without creating
+a group membership; new requests capture later edits. A missing settings key uses the
+declared defaults; a settings dependency error or invalid stored JSON is an
+error and must not silently select defaults.
+Deferred snapshots persist the selected fallback model, platform and complete
+price card. Settlement after restart uses that captured evidence, even if the
+live settings or catalog are no longer available; absent evidence stays absent.
+Durable ungrouped evidence has an explicit discriminator and default rate;
+a missing group in older evidence remains invalid.
 
 ### Customer rate policies
 
@@ -92,11 +198,12 @@ factors from that channel. An effective group price-card override selects the
 group price source and does not apply channel `TimePricing`, even when some
 prices inherit. A selling model multiplier without a price override keeps the
 lower price source and its existing time-pricing behavior.
-Explicit zero prices remain valid, including zero-valued request tiers; a missing
-unit price or a pure multiplier on an unknown model is unavailable, not free.
-For a partial token card without a same-name catalog price, each actually used
-input, output, cache or image dimension must have explicit price evidence or its
-documented text/image fallback. An omitted output price does not become zero
+Explicit zero prices remain valid, including zero-valued request tiers. A missing
+unit price or a pure multiplier is unavailable when neither a same-model system
+card nor a usable platform fallback supplies that unit; it never becomes free.
+For a partial token card without a same-model system price or usable platform
+fallback, each actually used input, output, cache or image dimension must have
+explicit price evidence or its documented text/image fallback. An omitted output price does not become zero
 and does not inherit another model's account-mapped price. Explicit zero is valid.
 Input-only embeddings may use an input-only card; their reservation estimates
 no generated output. Once an explicit public card is selected, an incomplete
@@ -160,7 +267,7 @@ The following are **never** used for an admin reference price:
 - a similar but different version, e.g. `kimi-k2.7-code` priced as `kimi-k2`;
   `claude-opus-5-5-preview` priced as `claude-opus-5-5`.
 
-GPT-6.1 Sol, GPT-6 Sol, GPT-6 Luna, and GPT-6 Astra are separate SKUs. Registered
+GPT-6.1 Terra, GPT-6.1 Sol, GPT-6 Sol, GPT-6 Luna, and GPT-6 Astra are separate SKUs. Registered
 provider-qualified spellings and effort suffixes may use the same SKU's card;
 bare `gpt-6` and preview names never inherit Astra pricing. GPT-6.1 Sol's
 built-in Standard input/output/cache-write/cache-read reference rates per
@@ -169,6 +276,32 @@ GPT-6 Luna's are $0.10/$0.50/$0.125/$0.01. Saved selling prices remain explicit
 overrides, including zero cache-write values across Standard, Fast, and Flex.
 Astra Ultrafast uses six times the selected Standard token prices independently
 of the operator's Fast multiplier; it does not grant upstream capability.
+
+GPT-6.1 Terra has an exact release-catalog card and same-SKU built-in fallback,
+reviewed against [OpenAI API pricing](https://developers.openai.com/api/docs/pricing)
+and the [Terra API model page](https://developers.openai.com/api/docs/models/gpt-6.1-terra)
+on 2026-10-28. Its Standard input/output/cache-read/30-minute cache-write rates
+are $1/$5/$0.05/$1.25 per million tokens; Fast is 2x, and Flex/Batch are 0.5x.
+When total input, including cache reads and writes, exceeds 272000 tokens, the
+whole request's input/cache prices double and output prices increase 1.5x.
+Exactly 272000 remains at the base price. Saved catalog/channel prices retain
+precedence, including explicit zero cache-write prices; registered provider and
+effort aliases share this card, while unknown Terra suffixes receive no guessed
+price, including suffixes containing another provider/model family such as
+`-codex` or `-claude`; an explicitly configured exact SKU price remains valid.
+Their literal channel cards, explicitly declared billing-model alternatives and
+the selected platform's configured final fallback remain valid; a different
+model's card, tier policy or usage candidate is never inferred from those
+suffixes.
+Admission and durable settlement pin the selected card across reloads.
+
+The official 12-hour cache-write reference rate is $2.50 per million tokens
+before context and speed adjustments. The existing OpenAI usage contract
+provides aggregate cache-write tokens and uses the 30-minute card; this update
+does not add a 12-hour usage breakdown. The release pricing resource records
+the API's 1050000 context window, 922000 maximum input and 128000 maximum output.
+These API limits are separate from the reviewed Codex client descriptor and do
+not change its pinned metadata, request behavior or identity.
 
 ## 3. Status and reason codes
 

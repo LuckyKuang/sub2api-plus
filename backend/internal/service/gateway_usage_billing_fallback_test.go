@@ -65,9 +65,9 @@ func TestHasResolvableTokenPricing(t *testing.T) {
 	ctx := context.Background()
 
 	require.True(t, svc.hasResolvableTokenPricing(ctx, "claude-sonnet-4", apiKey))
-	// 注意：含家族词的名字（all/claude）会被价格表家族兜底解析为"有价"，
-	// 这正是 compositeBillableModel 必须先于通用兜底拦截别名的原因。
-	require.True(t, svc.hasResolvableTokenPricing(ctx, "all/claude", apiKey))
+	// No concrete platform or exact SKU price: a family word cannot select
+	// either another SKU's system price or a platform fallback by guessing.
+	require.False(t, svc.hasResolvableTokenPricing(ctx, "all/claude", apiKey))
 	require.False(t, svc.hasResolvableTokenPricing(ctx, "team/best", apiKey))
 	require.False(t, svc.hasResolvableTokenPricing(ctx, "", apiKey))
 

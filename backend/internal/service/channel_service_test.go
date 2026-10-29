@@ -1098,7 +1098,7 @@ func TestIsModelRestricted_ModelInPricing(t *testing.T) {
 		GroupIDs:       []int64{10},
 		RestrictModels: true,
 		ModelPricing: []ChannelModelPricing{
-			{Platform: "anthropic", Models: []string{"claude-opus-4", "claude-sonnet-4"}},
+			{Platform: "anthropic", Models: []string{"claude-opus-4", "claude-sonnet-4"}, InputPrice: testPtrFloat64(0)},
 		},
 	}
 	repo := makeStandardRepo(ch, map[int64]string{10: "anthropic"})
@@ -1115,7 +1115,7 @@ func TestIsModelRestricted_ModelInWildcard(t *testing.T) {
 		GroupIDs:       []int64{10},
 		RestrictModels: true,
 		ModelPricing: []ChannelModelPricing{
-			{Platform: "anthropic", Models: []string{"claude-*"}},
+			{Platform: "anthropic", Models: []string{"claude-*"}, InputPrice: testPtrFloat64(0)},
 		},
 	}
 	repo := makeStandardRepo(ch, map[int64]string{10: "anthropic"})
@@ -1132,7 +1132,7 @@ func TestIsModelRestricted_ModelNotFound(t *testing.T) {
 		GroupIDs:       []int64{10},
 		RestrictModels: true,
 		ModelPricing: []ChannelModelPricing{
-			{Platform: "anthropic", Models: []string{"claude-opus-4"}},
+			{Platform: "anthropic", Models: []string{"claude-opus-4"}, InputPrice: testPtrFloat64(0)},
 		},
 	}
 	repo := makeStandardRepo(ch, map[int64]string{10: "anthropic"})
@@ -1149,7 +1149,7 @@ func TestIsModelRestricted_CaseInsensitive(t *testing.T) {
 		GroupIDs:       []int64{10},
 		RestrictModels: true,
 		ModelPricing: []ChannelModelPricing{
-			{Platform: "anthropic", Models: []string{"claude-opus-4"}},
+			{Platform: "anthropic", Models: []string{"claude-opus-4"}, InputPrice: testPtrFloat64(0)},
 		},
 	}
 	repo := makeStandardRepo(ch, map[int64]string{10: "anthropic"})

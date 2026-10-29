@@ -20,7 +20,7 @@ func TestTypeSafeChannelMappingSemanticsAndSchedulingRestriction(t *testing.T) {
 		GroupIDs:           []int64{9},
 		BillingModelSource: BillingModelSourceChannelMapped,
 		ModelPricing: []ChannelModelPricing{
-			{Platform: PlatformTypeSafe, Models: []string{"jev-latest"}},
+			{Platform: PlatformTypeSafe, Models: []string{"jev-latest"}, InputPrice: testPtrFloat64(0)},
 		},
 		ModelMapping: map[string]map[string]string{
 			PlatformTypeSafe: {"jev-latest": "jev-latest-alias"},
@@ -56,7 +56,7 @@ func TestTypeSafeChannelMappingSemanticsAndSchedulingRestriction(t *testing.T) {
 		GroupIDs:       []int64{9},
 		RestrictModels: true,
 		ModelPricing: []ChannelModelPricing{
-			{Platform: PlatformTypeSafe, Models: []string{"jev-latest"}},
+			{Platform: PlatformTypeSafe, Models: []string{"jev-latest"}, InputPrice: testPtrFloat64(0)},
 		},
 	}
 	allowedSvc := newTestChannelService(makeStandardRepo(allowed, map[int64]string{9: PlatformTypeSafe}))
@@ -70,7 +70,7 @@ func TestTypeSafeChannelMappingSemanticsAndSchedulingRestriction(t *testing.T) {
 		GroupIDs:       []int64{9},
 		RestrictModels: true,
 		ModelPricing: []ChannelModelPricing{
-			{Platform: PlatformTypeSafe, Models: []string{"some-other-model"}},
+			{Platform: PlatformTypeSafe, Models: []string{"some-other-model"}, InputPrice: testPtrFloat64(0)},
 		},
 	}
 	blockedSvc := newTestChannelService(makeStandardRepo(blocked, map[int64]string{9: PlatformTypeSafe}))

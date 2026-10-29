@@ -115,13 +115,26 @@ The October 28 merge review rechecked Terra against the pinned official
 and supported efforts `low`, `medium`, `high`, `xhigh`, `max`, `ultra`.
 `default_reasoning_summary=none` is a summary setting, not an advertised `none`
 effort. The catalog does not establish API-wide rejection behavior or prices.
-The candidate 1,050,000 context, 128,000 output and new Terra price fallback
-therefore remain unadopted without independent authoritative evidence.
+At that review the candidate 1,050,000 context, 128,000 output and new Terra
+price fallback were deferred pending independent authoritative evidence.
 The candidate Terra-specific Chat tool prohibition is also deferred: a Codex
 client's use of Responses does not establish a general API restriction on Chat
 tool calls. Likewise the proposed OpenCode-hosted DeepSeek role rewrite is not
 enabled by model spelling alone without evidence for that hosted endpoint;
 existing native-provider role handling remains in force.
+
+The v0.2.19 Plus release review separately verifies the current official
+[Terra API model](https://developers.openai.com/api/docs/models/gpt-6.1-terra)
+and [API pricing](https://developers.openai.com/api/docs/pricing). The API price
+is now independently established: per million tokens, standard input/output/
+cached input/30-minute cache writes are $1/$5/$0.05/$1.25. Fast is twice standard,
+Flex and Batch are half standard, and total input above 272,000 applies twice
+the input/cache prices and 1.5 times the output price to the entire request.
+This evidence authorizes Terra's own price card; no Sol/Astra price is inherited.
+Explicit operator prices and the request's frozen billing snapshot retain Plus
+precedence. API limits and capabilities are a separate contract from the pinned
+Codex client descriptor: this pricing change does not replace that descriptor
+or alter the manually selected client identity.
 
 A limited xAI catalog review also inspected
 [`EndpointsConfig::resolve_models_list_url`](https://github.com/xai-org/grok-build/blob/f0e3be1100ef5252488e3be8bb0e91cf68d8c305/crates/codegen/xai-grok-shell/src/agent/config.rs)

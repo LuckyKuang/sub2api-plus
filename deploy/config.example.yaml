@@ -294,6 +294,11 @@ gateway:
   # Enable Gemini upstream response header debug logs (default: false)
   # 是否开启 Gemini 上游响应头调试日志（默认 false）
   gemini_debug_response_headers: false
+  # Retries on one Gemini account before failover, excluding the first attempt (0-10).
+  # Gemini 换号前的同账号重试次数，不含首次请求（0-10，默认 4）；0 禁用此类重试。
+  # Environment: GATEWAY_MAX_SAME_ACCOUNT_RETRIES_GEMINI
+  # Explicit-cache gateway pool retries use the account's pool-mode retry settings instead.
+  max_same_account_retries_gemini: 4
   # Maximum TTL (seconds) a Gemini explicit context cache may be created or extended to (default: 86400)
   # Gemini 显式上下文缓存单次可设置的最长有效期（秒，默认 86400）；存储费在创建/延长请求中一次性收取
   gemini_cached_content_max_ttl_seconds: 86400

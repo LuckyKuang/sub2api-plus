@@ -212,9 +212,12 @@ func TestCalculateTokenCostForRequest_NoResolverFallsBackToCatalog(t *testing.T)
 	tokens := UsageTokens{InputTokens: 1000, OutputTokens: 10}
 	got, err := bs.CalculateTokenCostForRequest(TokenCostRequest{Model: "gpt-5.4", Tokens: tokens, RateMultiplier: 1})
 	require.NoError(t, err)
-	want, err := bs.CalculateCost("gpt-5.4", tokens, 1)
-	require.NoError(t, err)
-	require.Equal(t, want, got)
+	require.InDelta(t, .0025, got.InputCost, 1e-12)
+	require.InDelta(t, .00015, got.OutputCost, 1e-12)
+	require.InDelta(t, .00265, got.TotalCost, 1e-12)
+	require.InDelta(t, .00265, got.ActualCost, 1e-12)
+	require.Equal(t, "token", got.BillingMode)
+	require.Equal(t, "token", got.BillingUnit)
 }
 
 func TestCalculateTokenCostForRequest_UngroupedCatalogKeepsServiceTier(t *testing.T) {

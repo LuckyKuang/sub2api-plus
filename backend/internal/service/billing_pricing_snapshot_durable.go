@@ -17,6 +17,9 @@ type durableBillingPricingSnapshot struct {
 	RateCalculation        string                        `json:"rate_calculation"`
 	PeakScope              string                        `json:"peak_scope"`
 	Group                  *Group                        `json:"group"`
+	Ungrouped              bool                          `json:"ungrouped,omitempty"`
+	DefaultRate            *float64                      `json:"default_rate,omitempty"`
+	LegacyPriceSelection   bool                          `json:"legacy_price_selection,omitempty"`
 	PersonalRate           *float64                      `json:"personal_rate,omitempty"`
 	TokenPeak              *float64                      `json:"token_peak"`
 	PricingAt              time.Time                     `json:"pricing_at"`
@@ -59,7 +62,7 @@ func ExportBillingPricingSnapshot(ctx context.Context, models ...string) (json.R
 		return nil, err
 	}
 	version := 2
-	if snapshot.legacyPriceSelection {
+	if snapshot.legacyPriceSelection && !snapshot.ungrouped {
 		version = 1
 	}
 	stored := durableBillingPricingSnapshot{Version: version, RateCalculation: snapshot.calculation(), PeakScope: snapshot.peakMeterScope(), Group: cloneBillingGroup(snapshot.group), PersonalRate: snapshot.personalRate,
@@ -69,6 +72,11 @@ func ExportBillingPricingSnapshot(ctx context.Context, models ...string) (json.R
 		MissingModels:          make(map[string]bool),
 		Models:                 make(map[string]*ModelPricing), Images: make(map[string]map[string]float64), Videos: make(map[string]map[string]float64), CacheStorage: make(map[string]float64)}
 	stored.IdentifiedImages = make(map[string]map[string]bool)
+	if snapshot.ungrouped {
+		rate := snapshot.defaultRate
+		stored.Ungrouped, stored.DefaultRate = true, &rate
+		stored.LegacyPriceSelection = snapshot.legacyPriceSelection
+	}
 	stored.RoutingModel = snapshot.routingModel
 	if snapshot.billing != nil && snapshot.billing.frozenDeepSeekPeakMultiplier != nil {
 		stored.DeepSeekPeakMultiplier = *snapshot.billing.frozenDeepSeekPeakMultiplier
@@ -76,11 +84,13 @@ func ExportBillingPricingSnapshot(ctx context.Context, models ...string) (json.R
 	if routeModel, ok := ResolvedUpstreamModelFromContext(ctx); stored.RoutingModel == "" && ok {
 		stored.RoutingModel = routeModel
 	}
-	if stored.Group == nil {
+	if stored.Group == nil && !stored.Ungrouped {
 		return nil, fmt.Errorf("billing group snapshot unavailable")
 	}
-	pinBillingComponentDefaults(stored.Group)
-	if snapshot.channels != nil {
+	if stored.Group != nil {
+		pinBillingComponentDefaults(stored.Group)
+	}
+	if snapshot.channels != nil && stored.Group != nil {
 		channel, err := snapshot.channels.GetChannelForGroup(ctx, stored.Group.ID)
 		if err != nil {
 			return nil, fmt.Errorf("billing channel snapshot unavailable: %w", err)
@@ -112,13 +122,13 @@ func ExportBillingPricingSnapshot(ctx context.Context, models ...string) (json.R
 				return nil, fmt.Errorf("billing model is absent from the task pricing snapshot")
 			}
 		}
-		if snapshot.channels != nil {
+		if snapshot.channels != nil && stored.Group != nil {
 			mapping := snapshot.channels.ResolveChannelMapping(ctx, stored.Group.ID, model)
 			if mapping.MappedModel != "" {
 				models = append(models, mapping.MappedModel)
 			}
 		}
-		price, _ := snapshot.billing.getModelPricingAt(model, snapshot.pricingAt)
+		price, _ := snapshot.billing.GetModelPricingForPlatform(ctx, stored.Platform, model)
 		if price != nil {
 			copy := *price
 			fast, flex := configuredServiceTierMultiplier("fast", price), configuredServiceTierMultiplier("flex", price)
@@ -163,7 +173,9 @@ func RestoreBillingPricingSnapshot(ctx context.Context, data json.RawMessage) (c
 	if err := json.Unmarshal(data, &stored); err != nil {
 		return ctx, fmt.Errorf("invalid billing snapshot: %w", err)
 	}
-	if (stored.Version != 1 && stored.Version != 2) || stored.Group == nil || stored.PricingAt.IsZero() || stored.Group.AccountGroups != nil || stored.Models == nil || stored.Images == nil || stored.Videos == nil || stored.CacheStorage == nil || stored.DeepSeekPeakMultiplier < 1 || stored.TokenPeak == nil || !validCost(*stored.TokenPeak) {
+	validGroup := stored.Group != nil && !stored.Ungrouped && stored.Group.AccountGroups == nil
+	validUngrouped := stored.Version == 2 && stored.Ungrouped && stored.Group == nil && stored.DefaultRate != nil && validCost(*stored.DefaultRate) && stored.PersonalRate == nil && stored.Channel == nil
+	if (stored.Version != 1 && stored.Version != 2) || (!validGroup && !validUngrouped) || stored.PricingAt.IsZero() || stored.Models == nil || stored.Images == nil || stored.Videos == nil || stored.CacheStorage == nil || stored.DeepSeekPeakMultiplier < 1 || stored.TokenPeak == nil || !validCost(*stored.TokenPeak) {
 		return ctx, fmt.Errorf("unsupported or incomplete billing snapshot")
 	}
 	// Version 1 tasks accepted before the product calculation had no discriminator.
@@ -193,16 +205,19 @@ func RestoreBillingPricingSnapshot(ctx context.Context, data json.RawMessage) (c
 	snapshot := &BillingPricingSnapshot{group: stored.Group, personalRate: stored.PersonalRate, pricingAt: stored.PricingAt,
 		rateCalculation:      stored.RateCalculation,
 		peakScope:            stored.PeakScope,
-		legacyPriceSelection: stored.Version == 1,
+		legacyPriceSelection: stored.Version == 1 || (stored.Ungrouped && stored.LegacyPriceSelection),
 		tokenPeak:            stored.TokenPeak,
 		platform:             stored.Platform, publicModel: stored.PublicModel, routingModel: stored.RoutingModel, billing: billing}
+	if stored.Ungrouped {
+		snapshot.ungrouped, snapshot.defaultRate = true, *stored.DefaultRate
+	}
 	if stored.Channel != nil {
 		groupPlatform := stored.Group.Platform
 		if groupPlatform == "" {
 			groupPlatform = stored.Platform
 		}
 		cache := populateChannelCache([]Channel{*stored.Channel}, map[int64]string{stored.Group.ID: groupPlatform})
-		snapshot.channels = &ChannelService{frozenCache: cache}
+		snapshot.channels = &ChannelService{frozenCache: cache, billingService: billing}
 		snapshot.channels.cache.Store(cache)
 	}
 	snapshot.resolver = NewModelPricingResolver(snapshot.channels, billing)

@@ -166,6 +166,7 @@ type ChannelService struct {
 	groupRepo            GroupRepository
 	authCacheInvalidator APIKeyAuthCacheInvalidator
 	pricingService       *PricingService // 用于「可用渠道」展示时回落到全局定价；可为 nil（测试场景）
+	billingService       *BillingService // system/default platform pricing for unconfigured cards
 	cachePubSub          ChannelCachePubSub
 
 	cache   atomic.Value // *channelCache
@@ -583,7 +584,7 @@ func (s *ChannelService) ResolveChannelMapping(ctx context.Context, groupID int6
 }
 
 // IsModelRestricted 检查模型是否被渠道限制。
-// 返回 true 表示模型被限制（不在允许列表中）。
+// 返回 true 表示模型没有渠道、分组或有效系统价格。
 // 如果渠道未启用模型限制或分组无渠道关联，返回 false。
 func (s *ChannelService) IsModelRestricted(ctx context.Context, groupID int64, model string) bool {
 	lk, err := s.lookupGroupChannel(ctx, groupID)
@@ -593,7 +594,47 @@ func (s *ChannelService) IsModelRestricted(ctx context.Context, groupID int64, m
 	if lk == nil {
 		return false
 	}
-	return checkRestricted(lk, groupID, model)
+	if !checkRestricted(lk, groupID, model) {
+		return false
+	}
+	var group *Group
+	if snapshot := BillingPricingSnapshotFromContext(ctx); snapshot != nil && snapshot.group != nil && snapshot.group.ID == groupID {
+		group = snapshot.group
+	} else if ctx != nil {
+		group, _ = ctx.Value(ctxkey.Group).(*Group)
+		if group != nil && group.ID != groupID {
+			group = nil
+		}
+	}
+	if group == nil && s.groupRepo != nil {
+		group, err = s.groupRepo.GetByID(ctx, groupID)
+		if err != nil {
+			return true
+		}
+	}
+	platform := requestBillingPlatform(ctx, group, lk.platform)
+	if configured := matchGroupModelPricingForPlatform(group, model, platform); configured != nil {
+		// Group token cards support flat rates only; Resolve discards their
+		// intervals, so an interval alone cannot establish admission evidence.
+		if configured.BillingMode == "" || configured.BillingMode == BillingModeToken {
+			if hasFlatTokenPrice(configured) {
+				return false
+			}
+		} else if hasConfiguredUnitPrice(configured) {
+			return false
+		}
+	}
+	if configured := lookupPricingAcrossPlatforms(lk.cache, groupID, lk.platform, strings.ToLower(model)); configured != nil &&
+		configured.BillingMode != "" && configured.BillingMode != BillingModeToken {
+		// A selected per-request/image/video mode needs a price in that unit.
+		// A text-token fallback cannot fill its missing per-unit price.
+		return true
+	}
+	if s.billingService != nil {
+		_, err := s.billingService.GetModelPricingForPlatform(ctx, platform, model)
+		return err != nil
+	}
+	return true
 }
 
 // ResolveChannelMappingAndRestrict 解析渠道映射。
@@ -638,7 +679,7 @@ func checkRestricted(lk *channelLookup, groupID int64, model string) bool {
 	}
 	modelLower := strings.ToLower(model)
 	// 使用与查找定价相同的跨平台逻辑
-	if lookupPricingAcrossPlatforms(lk.cache, groupID, lk.platform, modelLower) != nil {
+	if hasConfiguredUnitPrice(lookupPricingAcrossPlatforms(lk.cache, groupID, lk.platform, modelLower)) {
 		return false
 	}
 	return true
@@ -979,7 +1020,7 @@ func (s *ChannelService) applyUpdateInput(ctx context.Context, channel *Channel,
 		channel.BillingModelSource = input.BillingModelSource
 	}
 	if input.FeaturesConfig != nil {
-		channel.FeaturesConfig = input.FeaturesConfig
+		channel.FeaturesConfig = mergeWebSearchEmulationDimensions(channel.FeaturesConfig, input.FeaturesConfig)
 	}
 	if input.ApplyPricingToAccountStats != nil {
 		channel.ApplyPricingToAccountStats = *input.ApplyPricingToAccountStats
@@ -988,6 +1029,65 @@ func (s *ChannelService) applyUpdateInput(ctx context.Context, channel *Channel,
 		channel.AccountStatsPricingRules = *input.AccountStatsPricingRules
 	}
 	return nil
+}
+
+// mergeWebSearchEmulationDimensions keeps the per-platform dimensions of
+// features_config.web_search_emulation across channel updates.
+//
+// Why: the key is a map keyed by platform ("anthropic", "openai", ...), but
+// UpdateChannel replaces features_config as a whole block. A client that only
+// knows about a subset of platforms (the admin UI used to submit the anthropic
+// dimension only) therefore erased every other platform's setting on each save —
+// silently disabling web search emulation for openai/command_code/... channels.
+//
+// Rules:
+//   - key present in the request: request dimensions win, missing dimensions are
+//     inherited from the current value;
+//   - key absent from the request: the whole key is inherited, so clients that do
+//     not know the feature cannot wipe it;
+//   - explicit empty object {} or null: treated as "clear" and replaces the value.
+//
+// Other features_config keys keep the historical whole-block replacement
+// semantics. No generic deep merge is performed: nested objects are replaced as
+// a unit so deleting a dimension stays expressible.
+func mergeWebSearchEmulationDimensions(existing, incoming map[string]any) map[string]any {
+	if incoming == nil {
+		return nil
+	}
+	current, _ := existing[featureKeyWebSearchEmulation].(map[string]any)
+	rawIncoming, present := incoming[featureKeyWebSearchEmulation]
+	incomingDims, incomingIsMap := rawIncoming.(map[string]any)
+
+	if !present && len(current) > 0 {
+		return withWebSearchEmulationKey(incoming, current)
+	}
+	if !incomingIsMap || len(current) == 0 || len(incomingDims) == 0 {
+		return incoming
+	}
+
+	merged := make(map[string]any, len(incomingDims)+len(current))
+	for platform, value := range current {
+		merged[platform] = value
+	}
+	for platform, value := range incomingDims {
+		merged[platform] = value
+	}
+	return withWebSearchEmulationKey(incoming, merged)
+}
+
+// withWebSearchEmulationKey returns a copy of incoming whose
+// web_search_emulation key points at a copy of value.
+func withWebSearchEmulationKey(incoming, value map[string]any) map[string]any {
+	out := make(map[string]any, len(incoming)+1)
+	for key, item := range incoming {
+		out[key] = item
+	}
+	copied := make(map[string]any, len(value))
+	for platform, item := range value {
+		copied[platform] = item
+	}
+	out[featureKeyWebSearchEmulation] = copied
+	return out
 }
 
 // checkGroupConflicts 检查待关联的分组是否已属于其他渠道。

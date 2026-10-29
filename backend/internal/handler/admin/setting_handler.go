@@ -283,6 +283,7 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		FallbackModelOpenAI:                                    settings.FallbackModelOpenAI,
 		FallbackModelGemini:                                    settings.FallbackModelGemini,
 		FallbackModelAntigravity:                               settings.FallbackModelAntigravity,
+		PricingFallbackModels:                                  settings.PricingFallbackModels,
 		EnableIdentityPatch:                                    settings.EnableIdentityPatch,
 		IdentityPatchPrompt:                                    settings.IdentityPatchPrompt,
 		OpsMonitoringEnabled:                                   opsEnabled && settings.OpsMonitoringEnabled,

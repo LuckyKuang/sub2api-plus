@@ -96,6 +96,9 @@ type BillingCache interface {
 
 // ModelPricing 模型价格配置（per-token价格，与LiteLLM格式一致）
 type ModelPricing struct {
+	// Explicit platform fallback provenance; request/upstream model identity stays unchanged.
+	FallbackModel    string `json:"fallback_model,omitempty"`
+	FallbackPlatform string `json:"fallback_platform,omitempty"`
 	// UltrafastMultiplier is model-owned and independent of operator Fast pricing.
 	UltrafastMultiplier                float64
 	InputPricePerToken                 float64            // 每token输入价格 (USD)
@@ -347,6 +350,25 @@ func isDeepSeekModel(model string) bool {
 	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(model)), "deepseek-")
 }
 
+// Pricing also accepts provider-qualified spellings of registered DeepSeek
+// SKUs. Keep this separate from protocol classification: choosing a price must
+// not change outbound request normalization or admit an unknown prefixed SKU.
+func isDeepSeekPricingModel(model string) bool {
+	if isDeepSeekModel(model) {
+		return true
+	}
+	native := lastPricingSegment(strings.ToLower(strings.TrimSpace(model)))
+	if alias, ok := deepseekSameSKUAliases[native]; ok {
+		native = alias
+	}
+	switch native {
+	case "deepseek-v4-flash", "deepseek-v4-flash-vision-exp", "deepseek-v4-pro":
+		return true
+	default:
+		return false
+	}
+}
+
 // deepseekPeakMultiplierAt 返回指定时刻的 DeepSeek 官方峰谷定价因子。
 // 官方口径（2026-08-23 起生效）：高峰价 = 2× 低谷价；高峰时段为
 // 01:00–04:00 与 06:00–10:00 UTC（半开区间），仅工作日；
@@ -383,6 +405,8 @@ type BillingService struct {
 	frozenDeepSeekPeakMultiplier *float64
 	cfg                          *config.Config
 	pricingService               *PricingService
+	pricingFallbackModels        func(context.Context) (map[string]string, error)
+	frozenPricingFallbackModels  map[string]string
 	fallbackPrices               map[string]*ModelPricing // 硬编码回退价格
 
 	// fallbackWarnSeen 记录已打过 fallback 警告日志的(已小写化)模型名,
@@ -668,6 +692,22 @@ func (s *BillingService) initFallbackPricing() {
 		LongContextOutputMultiplier:        1.5,
 	}
 
+	// GPT-6.1 Terra API rates, reviewed 2026-10-28:
+	// https://developers.openai.com/api/docs/models/gpt-6.1-terra
+	s.fallbackPrices["gpt-6.1-terra"] = &ModelPricing{
+		InputPricePerToken:                 1e-6,
+		InputPricePerTokenPriority:         2e-6,
+		OutputPricePerToken:                5e-6,
+		OutputPricePerTokenPriority:        10e-6,
+		CacheCreationPricePerToken:         1.25e-6,
+		CacheCreationPricePerTokenPriority: 2.5e-6,
+		CacheReadPricePerToken:             0.05e-6,
+		CacheReadPricePerTokenPriority:     0.1e-6,
+		CacheCreationPriceExplicit:         true,
+		LongContextInputThreshold:          272_000,
+		LongContextInputMultiplier:         2,
+		LongContextOutputMultiplier:        1.5,
+	}
 	// GPT-6 Sol/Luna official rates, 2026-09-22.
 	s.fallbackPrices["gpt-6.1-sol"] = &ModelPricing{
 		InputPricePerToken:                 2e-6,
@@ -1172,6 +1212,9 @@ func (s *BillingService) initFallbackPricing() {
 
 // getFallbackPricing 根据模型系列获取回退价格
 func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
+	if isUnregisteredGPT61TerraPricingModel(model) {
+		return nil
+	}
 	modelLower := normalizeAntigravityClaudeTierAlias(strings.ToLower(model))
 	if native := lastPricingSegment(strings.TrimSpace(modelLower)); strings.HasPrefix(native, "step-") {
 		return s.fallbackPrices[native]
@@ -1403,7 +1446,7 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 	// OpenAI（GPT-5 / Codex 族）：仅匹配已知型号，避免未知 OpenAI 型号误计价。
 	if normalized := normalizeKnownOpenAICodexModel(modelLower); normalized != "" {
 		switch normalized {
-		case "gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna":
+		case "gpt-6.1-terra", "gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna":
 			return s.fallbackPrices[normalized]
 		case "gpt-6-astra":
 			return s.fallbackPrices["gpt-6-astra"]
@@ -1558,6 +1601,12 @@ func (s *BillingService) CacheStoragePricePerTokenHour(model string) float64 {
 // getModelPricingAt 保留带计费时点的内部调用接口。DeepSeek 默认低谷价
 // 仅由模型决定，峰谷倍率由统一计费入口按请求时点处理。
 func (s *BillingService) getModelPricingAt(model string, pricingAt time.Time) (*ModelPricing, error) {
+	return s.getSystemModelPricingAt(model, pricingAt, false)
+}
+
+// identifiedOnly excludes heuristic family prices from the explicit platform
+// fallback chain. Registered same-SKU aliases retain their existing prices.
+func (s *BillingService) getSystemModelPricingAt(model string, pricingAt time.Time, identifiedOnly bool) (*ModelPricing, error) {
 	// 标准化模型名称（转小写）
 	model = strings.ToLower(model)
 	if s.frozenModelPrices != nil {
@@ -1569,7 +1618,12 @@ func (s *BillingService) getModelPricingAt(model string, pricingAt time.Time) (*
 
 	// 1. 优先从动态价格服务获取
 	if s.pricingService != nil {
-		litellmPricing := s.pricingService.GetModelPricing(model)
+		var litellmPricing *LiteLLMModelPricing
+		if identifiedOnly {
+			litellmPricing = s.pricingService.GetIdentifiedModelPricing(model)
+		} else {
+			litellmPricing = s.pricingService.GetModelPricing(model)
+		}
 		// 仅有图片价、无 token 价的条目（如 LiteLLM 的 imagen 类模型）不能用于
 		// token 计费：直接返回会把 token 流量按 $0 计费。跳过后走 fallback，
 		// 无 fallback 则 fail-closed（ErrModelPricingUnavailable）。
@@ -1590,7 +1644,7 @@ func (s *BillingService) getModelPricingAt(model string, pricingAt time.Time) (*
 				InputPricePerTokenPriority:         litellmPricing.InputCostPerTokenPriority,
 				OutputPricePerToken:                litellmPricing.OutputCostPerToken,
 				OutputPricePerTokenPriority:        litellmPricing.OutputCostPerTokenPriority,
-				CacheCreationPriceExplicit:         (openai.IsGPT6SolOrLunaModelSpelling(model) || openai.IsGPT61SolModelSpelling(model)) && litellmPricing.CacheCreationInputTokenCostExplicit,
+				CacheCreationPriceExplicit:         (openai.IsGPT6SolOrLunaModelSpelling(model) || openai.IsGPT61SolModelSpelling(model) || openai.IsGPT61TerraModelSpelling(model)) && litellmPricing.CacheCreationInputTokenCostExplicit,
 				CacheCreationPricePerToken:         litellmPricing.CacheCreationInputTokenCost,
 				CacheCreationPricePerTokenPriority: litellmPricing.CacheCreationInputTokenCostPriority,
 				CacheReadPricePerToken:             litellmPricing.CacheReadInputTokenCost,
@@ -1611,7 +1665,12 @@ func (s *BillingService) getModelPricingAt(model string, pricingAt time.Time) (*
 	}
 
 	// 2. 使用硬编码回退价格
-	fallback := s.getFallbackPricing(model)
+	var fallback *ModelPricing
+	if identifiedOnly {
+		fallback, _ = s.IdentifiedSameModelPricing(model)
+	} else {
+		fallback = s.getFallbackPricing(model)
+	}
 	if fallback != nil {
 		// 按模型名去重:每个模型每进程最多打一条 warn,避免热路径每请求刷屏（issue #3394）。
 		// model 在函数入口已 ToLower,故 GLM-5.2 / glm-5.2 视为同一条目。
@@ -1783,6 +1842,9 @@ func (s *BillingService) CalculateCostUnified(input CostInput) (*CostBreakdown, 
 	if frozen := billingServiceForContext(input.Ctx, s); frozen != s {
 		return frozen.CalculateCostUnified(input)
 	}
+	if input.Resolver == nil && requestBillingPlatform(input.Ctx, input.Group, "") != "" {
+		input.Resolver = NewModelPricingResolver(nil, s)
+	}
 	if input.Resolver == nil {
 		// 无 Resolver，回退到旧路径
 		applyLongContextBilling := true
@@ -1816,7 +1878,7 @@ func (s *BillingService) CalculateCostUnified(input CostInput) (*CostBreakdown, 
 			Group:   input.Group,
 		})
 	}
-	if snapshot := BillingPricingSnapshotFromContext(input.Ctx); snapshot != nil && input.Group != nil && input.Group.ID == snapshot.group.ID {
+	if snapshot := BillingPricingSnapshotFromContext(input.Ctx); snapshot != nil && (snapshot.ungrouped || (snapshot.group != nil && input.Group != nil && input.Group.ID == snapshot.group.ID)) {
 		unit := input.BillingUnit
 		if unit == "" {
 			unit = billingUnitForMode(string(resolved.Mode))
@@ -1860,8 +1922,12 @@ func (s *BillingService) calculateTokenCost(resolved *ResolvedPricing, input Cos
 
 	// 分组开关是统一入口；账号 API 开关保留为额外开启能力，但 false 不否决分组配置。
 	contextTierPricingEnabled := resolved.longContextPricingEnabled
-	if input.LongContextBillingEnabled != nil && *input.LongContextBillingEnabled {
-		contextTierPricingEnabled = true
+	if input.LongContextBillingEnabled != nil {
+		if input.Group == nil {
+			contextTierPricingEnabled = *input.LongContextBillingEnabled
+		} else if *input.LongContextBillingEnabled {
+			contextTierPricingEnabled = true
+		}
 	}
 
 	pricingContext := totalContext
@@ -1886,13 +1952,17 @@ func (s *BillingService) calculateTokenCost(resolved *ResolvedPricing, input Cos
 
 	// 默认价卡（Source=LiteLLM）应用 DeepSeek 官方价强制覆盖（幂等，GetModelPricing
 	// 内部已强制过）；分组/渠道自定义定价保留运营者配置，不强制覆盖官方价。
-	pricing = s.applyModelSpecificPricingPolicyEx(input.Model, pricing, resolved.Source == PricingSourceLiteLLM, pricingAt)
+	policyModel := input.Model
+	if pricing.FallbackModel != "" {
+		policyModel = pricing.FallbackModel
+	}
+	pricing = s.applyModelSpecificPricingPolicyEx(policyModel, pricing, resolved.Source == PricingSourceLiteLLM || resolved.Source == PricingSourcePlatformFallback, pricingAt)
 
 	// DeepSeek 模型默认价卡按官方峰谷口径调整：高峰时段（01:00–04:00 与
 	// 06:00–10:00 UTC，仅工作日；北京时间周末全天低谷）按 2× 低谷价计费。
 	// 仅作用于默认价卡（Source=LiteLLM，无分组/渠道自定义定价）——分组/渠道
 	// 自定义定价保持运营者语义，不叠加。先克隆再乘，避免污染共享 fallbackPrices 指针。
-	if resolved.Source == PricingSourceLiteLLM && isDeepSeekModel(input.Model) {
+	if (resolved.Source == PricingSourceLiteLLM || resolved.Source == PricingSourcePlatformFallback) && isDeepSeekPricingModel(policyModel) {
 		mult := deepseekPeakMultiplierAt(pricingAt)
 		if s.frozenDeepSeekPeakMultiplier != nil {
 			mult = *s.frozenDeepSeekPeakMultiplier
@@ -2135,16 +2205,6 @@ func (s *BillingService) CalculateCostWithServiceTier(model string, tokens Usage
 	return s.calculateCostInternal(model, tokens, rateMultiplier, serviceTier, nil)
 }
 
-func (s *BillingService) calculateCostWithServiceTierPolicy(
-	model string,
-	tokens UsageTokens,
-	rateMultiplier float64,
-	serviceTier string,
-	longContextBillingEnabled bool,
-) (*CostBreakdown, error) {
-	return s.calculateCostInternalWithPolicy(model, tokens, rateMultiplier, serviceTier, nil, longContextBillingEnabled)
-}
-
 func (s *BillingService) calculateCostInternal(model string, tokens UsageTokens, rateMultiplier float64, serviceTier string, channelPricing *ChannelModelPricing) (*CostBreakdown, error) {
 	return s.calculateCostInternalWithPolicy(model, tokens, rateMultiplier, serviceTier, channelPricing, true)
 }
@@ -2195,6 +2255,9 @@ func (s *BillingService) applyModelSpecificPricingPolicyEx(model string, pricing
 	if s != nil && s.frozenModelPrices != nil {
 		return pricing // durable cards already include their captured model policy
 	}
+	if isUnregisteredGPT61TerraPricingModel(model) {
+		return pricing // an explicit SKU card cannot inherit another model's policy
+	}
 	// DeepSeek 模型：无论 JSON/远端价格表给什么价，一律强制官方低谷价
 	// （Flash 三档为 2026-09-10 官方降价后口径）。这是覆盖远端旧价的关键——远端
 	// 仓库不可改，生产会先拉到旧价，必须在此兜底修正；克隆后再覆盖，避免污染
@@ -2204,7 +2267,7 @@ func (s *BillingService) applyModelSpecificPricingPolicyEx(model string, pricing
 	// 官方后续保留了 Pro 服务及其计费方式，Pro 不按日期切换成 Flash 价。
 	// 高峰时段倍率不在本函数处理，由 calculateTokenCost 按 deepseekPeakMultiplierAt
 	// 对默认价卡另行叠加（分组/渠道自定义定价不叠加）。
-	if forceOfficialDefaultRates && isDeepSeekModel(model) {
+	if forceOfficialDefaultRates && isDeepSeekPricingModel(model) {
 		cloned := *pricing
 		if isDeepSeekProModel(model) {
 			cloned.InputPricePerToken = deepseekProOffPeakInputPrice
@@ -2245,7 +2308,7 @@ func (s *BillingService) applyModelSpecificPricingPolicyEx(model string, pricing
 		cloned.UltrafastMultiplier = 6
 		return &cloned
 	}
-	isCacheCreation125Model := isGPT56 || isAstra || openai.IsGPT6SolOrLunaModelSpelling(normalized) || openai.IsGPT61SolModelSpelling(normalized)
+	isCacheCreation125Model := isGPT56 || isAstra || openai.IsGPT6SolOrLunaModelSpelling(normalized) || openai.IsGPT61SolModelSpelling(normalized) || openai.IsGPT61TerraModelSpelling(normalized)
 	needsCacheCreationPolicy := isCacheCreation125Model && !pricing.CacheCreationPriceExplicit && (pricing.CacheCreationPricePerToken <= 0 ||
 		(pricing.InputPricePerTokenPriority > 0 && pricing.CacheCreationPricePerTokenPriority <= 0))
 	fastRatio := openAIModelFastPricingRatio(normalized)
@@ -2271,7 +2334,10 @@ func (s *BillingService) applyModelSpecificPricingPolicyEx(model string, pricing
 	}
 	if fastRatio > 0 {
 		enforceOpenAIFastPricingRatio(&cloned, fastRatio)
-		if (openai.IsGPT6SolOrLunaModelSpelling(normalized) || openai.IsGPT61SolModelSpelling(normalized)) && cloned.CacheCreationPriceExplicit {
+		if openai.IsGPT61TerraModelSpelling(normalized) {
+			cloned.CacheReadPricePerTokenPriority = cloned.CacheReadPricePerToken * fastRatio
+		}
+		if (openai.IsGPT6SolOrLunaModelSpelling(normalized) || openai.IsGPT61SolModelSpelling(normalized) || openai.IsGPT61TerraModelSpelling(normalized)) && cloned.CacheCreationPriceExplicit {
 			cloned.CacheCreationPricePerTokenPriority = cloned.CacheCreationPricePerToken * fastRatio
 		}
 	}
@@ -2283,7 +2349,7 @@ func (s *BillingService) applyModelSpecificPricingPolicyEx(model string, pricing
 // 档的模型（如 gpt-5.5-pro、gpt-5.4-mini/nano）返回 0。
 func openAIModelFastPricingRatio(normalized string) float64 {
 	switch normalized {
-	case "gpt-5.4", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-6-astra", "gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna":
+	case "gpt-5.4", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-6-astra", "gpt-6.1-terra", "gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna":
 		return 2.0
 	case "gpt-5.5":
 		return 2.5

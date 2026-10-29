@@ -2,17 +2,17 @@ package service
 
 import (
 	"context"
-	"log/slog"
 	"maps"
 	"strings"
 )
 
 // PricingSource 定价来源标识
 const (
-	PricingSourceGroup    = "group"
-	PricingSourceChannel  = "channel"
-	PricingSourceLiteLLM  = "litellm"
-	PricingSourceFallback = "fallback"
+	PricingSourceGroup            = "group"
+	PricingSourceChannel          = "channel"
+	PricingSourceLiteLLM          = "litellm"
+	PricingSourceFallback         = "fallback"
+	PricingSourcePlatformFallback = "platform_fallback"
 )
 
 // ResolvedPricing 统一定价解析结果
@@ -101,7 +101,7 @@ func (r *ModelPricingResolver) Resolve(ctx context.Context, input PricingInput) 
 			stripped.Intervals = nil
 			groupPricing = &stripped
 		}
-		resolved := r.resolveConfiguredPricing(groupPricing, input.Model, PricingSourceGroup)
+		resolved := r.resolveConfiguredPricingForRequest(ctx, input, groupPricing, PricingSourceGroup)
 		resolved.longContextPricingEnabled = longContextPricingEnabled
 		return resolved
 	}
@@ -134,7 +134,7 @@ func (r *ModelPricingResolver) resolveLowerPricing(ctx context.Context, input Pr
 	}
 
 	// 1. 获取基础定价
-	basePricing, source := r.resolveBasePricing(input.Model)
+	basePricing, source := r.resolveBasePricingForRequest(ctx, input)
 
 	resolved := &ResolvedPricing{
 		Mode:                   BillingModeToken,
@@ -202,7 +202,33 @@ func hasConfiguredPricingOverrides(config *ChannelModelPricing) bool {
 		len(filterValidIntervals(config.Intervals)) > 0 || config.TimePricing != nil)
 }
 
-func (r *ModelPricingResolver) resolveConfiguredPricing(config *ChannelModelPricing, model, source string) *ResolvedPricing {
+func hasConfiguredUnitPrice(config *ChannelModelPricing) bool {
+	if config == nil {
+		return false
+	}
+	if config.BillingMode == "" || config.BillingMode == BillingModeToken {
+		if hasFlatTokenPrice(config) {
+			return true
+		}
+		for i := range config.Intervals {
+			if hasIntervalTokenPrice(&config.Intervals[i]) {
+				return true
+			}
+		}
+		return false
+	}
+	if config.PerRequestPrice != nil {
+		return true
+	}
+	for i := range config.Intervals {
+		if config.Intervals[i].PerRequestPrice != nil {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *ModelPricingResolver) resolveConfiguredPricingForRequest(ctx context.Context, input PricingInput, config *ChannelModelPricing, source string) *ResolvedPricing {
 	mode := config.BillingMode
 	if mode == "" {
 		mode = BillingModeToken
@@ -212,7 +238,7 @@ func (r *ModelPricingResolver) resolveConfiguredPricing(config *ChannelModelPric
 		r.applyRequestTierOverrides(config, resolved)
 		return resolved
 	}
-	resolved.BasePricing, _ = r.resolveBasePricing(model)
+	resolved.BasePricing, _ = r.resolveBasePricingForRequest(ctx, input)
 	resolved.SupportsCacheBreakdown = resolved.BasePricing != nil && resolved.BasePricing.SupportsCacheBreakdown
 	r.applyTokenOverrides(config, resolved)
 	return resolved
@@ -266,27 +292,22 @@ func matchGroupModelPricingForPlatform(group *Group, model, platform string) *Ch
 	return best
 }
 
-// resolveBasePricing 从 LiteLLM 或 Fallback 获取基础定价
-func (r *ModelPricingResolver) resolveBasePricing(model string) (*ModelPricing, string) {
-	pricing, err := r.billingService.GetModelPricing(model)
+func (r *ModelPricingResolver) resolveBasePricingForRequest(ctx context.Context, input PricingInput) (*ModelPricing, string) {
+	platform := requestBillingPlatform(ctx, input.Group, "")
+	pricing, err := r.billingService.GetModelPricingForPlatform(ctx, platform, input.Model)
 	if err != nil {
-		slog.Debug("failed to get model pricing from LiteLLM, using fallback",
-			"model", model, "error", err)
 		return nil, PricingSourceFallback
+	}
+	if pricing.FallbackModel != "" {
+		return pricing, PricingSourcePlatformFallback
 	}
 	return pricing, PricingSourceLiteLLM
 }
 
-// lookupChannelPricingNormalized 查找渠道定价：先用字面模型名做精确/通配匹配，
-// 未命中时用与官方兜底价一致的归一化模型名再查一次。
-//
-// 官方兜底价对 OpenAI/Codex 族会把 gpt-5.6-luna-high 这类变体名归一化到基名
-// （billing_service.go 的 normalizeKnownOpenAICodexModel 分支），而渠道定价此前
-// 只认字面名。两者不对称导致：管理员只配基名、请求模型带 effort 后缀时，渠道定价
-// 未命中而官方兜底命中，计费候选循环首个成功即返回，渠道定价永远轮不到（issue #5256）。
-//
-// 字面名优先，保证管理员对具体变体的显式配价不被基名覆盖；非 OpenAI 模型
-// normalizeKnownOpenAICodexModel 返回空串，此处天然 no-op。
+// lookupChannelPricingNormalized preserves literal and explicit wildcard cards
+// before trying registered same-SKU spellings. Unknown preview/family suffixes
+// cannot borrow another model's retail price and bypass platform fallback.
+// Registered effort/date aliases still inherit their own base card (issue #5256).
 func (r *ModelPricingResolver) lookupChannelPricingNormalized(ctx context.Context, groupID int64, model string) *ChannelModelPricing {
 	if r.channelService == nil {
 		return nil
@@ -294,11 +315,18 @@ func (r *ModelPricingResolver) lookupChannelPricingNormalized(ctx context.Contex
 	if pricing := r.channelService.GetChannelModelPricing(ctx, groupID, model); pricing != nil {
 		return pricing
 	}
-	normalized := normalizeKnownOpenAICodexModel(model)
-	if normalized == "" || strings.EqualFold(normalized, strings.TrimSpace(model)) {
+	if isUnregisteredGPT61TerraPricingModel(model) {
 		return nil
 	}
-	return r.channelService.GetChannelModelPricing(ctx, groupID, normalized)
+	for _, candidate := range modelLookupCandidates(model) {
+		if strings.EqualFold(candidate, strings.TrimSpace(model)) {
+			continue
+		}
+		if pricing := r.channelService.GetChannelModelPricing(ctx, groupID, candidate); pricing != nil {
+			return pricing
+		}
+	}
+	return nil
 }
 
 // applyTokenOverrides 应用 token 模式的渠道覆盖

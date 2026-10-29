@@ -113,6 +113,45 @@ describe('ModelWhitelistSelector', () => {
     vi.mocked(cnOAuthModels).mockReset()
   })
 
+  it.each([
+    ['typesafe', 'jev-latest'],
+    ['opencode_go', 'longcat-2.0'],
+    ['opencode_go', 'mimo-v2.5'],
+    ['opencode_go', 'minimax-m3'],
+    ['opencode_go', 'qwen3.8-max'],
+    ['antigravity', 'gemini-3.8-flash-high'],
+  ])('offers %s candidate %s before discovery and retains custom selections', async (platform, model) => {
+    const wrapper = mountSelector({ platform, modelValue: ['saved-private-model'] })
+    await wrapper.get('div.cursor-pointer').trigger('click')
+    expect(findModelRow(wrapper, 'saved-private-model').exists()).toBe(true)
+    await wrapper.get('input[placeholder="admin.accounts.searchModels"]').setValue(model)
+    expect(wrapper.findAll('[data-testid="select-model"]').map(button => button.text())).toContain(model)
+    await findModelRow(wrapper, model).get('[data-testid="select-model"]').trigger('click')
+    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([['saved-private-model', model]])
+    await wrapper.setProps({ modelValue: ['saved-private-model', model] })
+    await findModelRow(wrapper, model).get('[data-testid="select-model"]').trigger('click')
+    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([['saved-private-model']])
+    expect(syncUpstreamModelsPreview).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('removes retired native Gemini suggestions while preserving saved custom and Antigravity models', async () => {
+    const wrapper = mountSelector({ platform: 'gemini', modelValue: ['gemini-2.5-pro', 'private-gemini-model'] })
+    await wrapper.get('div.cursor-pointer').trigger('click')
+    const values = wrapper.findAll('[data-testid="select-model"]').map(button => button.text())
+    expect(values).toContain('gemini-3.8-flash')
+    expect(values).not.toContain('gemini-2.0-flash')
+    expect(values).not.toContain('gemini-2.5-flash')
+    expect(values).toContain('gemini-2.5-pro')
+    expect(values).toContain('private-gemini-model')
+    wrapper.unmount()
+
+    const antigravity = mountSelector({ platform: 'antigravity' })
+    await antigravity.get('div.cursor-pointer').trigger('click')
+    expect(findModelRow(antigravity, 'gemini-2.5-flash').exists()).toBe(true)
+    antigravity.unmount()
+  })
+
   it('offers official Step-Code candidates and the fill action before credentials are entered', async () => {
     const wrapper = mountSelector({ platform: 'stepfun' })
     const fill = wrapper.findAll('button').find(b => b.text() === 'admin.accounts.fillRelatedModels')

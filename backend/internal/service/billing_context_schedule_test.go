@@ -15,17 +15,18 @@ import (
 
 // scheduleScenario 阶梯表测试场景：同一份场景既做断言也做与计费函数的对账。
 type scheduleScenario struct {
-	name          string
-	model         string
-	platform      string
-	groupPlatform string
-	group         *Group
-	channel       []ChannelModelPricing
-	catalog       *PricingService
-	wantErr       bool
-	wantNil       bool
-	wantBasis     ContextPricingBasis
-	check         func(t *testing.T, s *ContextPricingSchedule)
+	name                    string
+	model                   string
+	platform                string
+	groupPlatform           string
+	group                   *Group
+	channel                 []ChannelModelPricing
+	catalog                 *PricingService
+	disablePlatformFallback bool
+	wantErr                 bool
+	wantNil                 bool
+	wantBasis               ContextPricingBasis
+	check                   func(t *testing.T, s *ContextPricingSchedule)
 }
 
 func enabledGroup(platform string) *Group {
@@ -329,14 +330,18 @@ func scheduleScenarios() []scheduleScenario {
 		},
 		{
 			name: "无任何定价来源报错", model: "unknown-model-xyz", platform: PlatformOpenAI, groupPlatform: PlatformOpenAI,
-			group: enabledGroup(PlatformOpenAI), wantErr: true,
+			group: enabledGroup(PlatformOpenAI), disablePlatformFallback: true, wantErr: true,
 		},
 	}
 }
 
 func newScheduleTestEnv(t *testing.T, sc scheduleScenario) (*BillingService, *ModelPricingResolver) {
 	t.Helper()
-	return newTokenCostTestEnv(t, sc.groupPlatform, sc.channel, sc.catalog)
+	billing, resolver := newTokenCostTestEnv(t, sc.groupPlatform, sc.channel, sc.catalog)
+	if sc.disablePlatformFallback {
+		billing.frozenPricingFallbackModels = map[string]string{sc.platform: ""}
+	}
+	return billing, resolver
 }
 
 func TestResolveContextPricingSchedule_Scenarios(t *testing.T) {

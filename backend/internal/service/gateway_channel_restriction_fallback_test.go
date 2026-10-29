@@ -21,7 +21,7 @@ func TestSelectAccountForModelWithExclusions_UsesFallbackGroupForChannelRestrict
 		GroupIDs:       []int64{fallbackID},
 		RestrictModels: true,
 		ModelPricing: []ChannelModelPricing{
-			{Platform: PlatformAnthropic, Models: []string{"claude-sonnet-4-6"}},
+			{Platform: PlatformAnthropic, Models: []string{"claude-sonnet-4-6"}, InputPrice: testPtrFloat64(0)},
 		},
 	}
 	channelSvc := newTestChannelService(makeStandardRepo(ch, map[int64]string{
@@ -80,7 +80,7 @@ func TestSelectAccountWithLoadAwareness_UsesFallbackGroupForChannelRestriction(t
 		GroupIDs:       []int64{fallbackID},
 		RestrictModels: true,
 		ModelPricing: []ChannelModelPricing{
-			{Platform: PlatformAnthropic, Models: []string{"claude-sonnet-4-6"}},
+			{Platform: PlatformAnthropic, Models: []string{"claude-sonnet-4-6"}, InputPrice: testPtrFloat64(0)},
 		},
 	}
 	channelSvc := newTestChannelService(makeStandardRepo(ch, map[int64]string{

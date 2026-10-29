@@ -17,11 +17,14 @@ func TestOpenAIGatewayServiceRecordUsage_AggregatorClaudeUsesDefaultPricing(t *t
 				usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
 				userRepo := &openAIRecordUsageUserRepoStub{}
 				svc := newOpenAIRecordUsageServiceForTest(usageRepo, userRepo, &openAIRecordUsageSubRepoStub{}, nil)
+				// Supply the real same-SKU catalog card. A Sonnet family name is
+				// not price evidence when the exact catalog is unavailable.
+				svc.billingService.pricingService = newStubPricingServiceFromJSON(t, `{
+					"claude-sonnet-4-6":{"input_cost_per_token":0.000003,"output_cost_per_token":0.000015}
+				}`)
 				svc.resolver = NewModelPricingResolver(nil, svc.billingService)
 				group := &Group{ID: 1, Platform: platform, RateMultiplier: 1.1}
 				usage := OpenAIUsage{InputTokens: 1000, OutputTokens: 200}
-				expected := expectedOpenAICost(t, svc, model, usage, group.RateMultiplier)
-				require.Greater(t, expected.ActualCost, 0.0)
 
 				err := svc.RecordUsage(context.Background(), providerClaudeRecordUsageInput(platform, model, group, usage))
 
@@ -30,10 +33,10 @@ func TestOpenAIGatewayServiceRecordUsage_AggregatorClaudeUsesDefaultPricing(t *t
 				require.NotNil(t, usageRepo.lastLog)
 				require.Equal(t, usage.InputTokens, usageRepo.lastLog.InputTokens)
 				require.Equal(t, usage.OutputTokens, usageRepo.lastLog.OutputTokens)
-				require.InDelta(t, expected.TotalCost, usageRepo.lastLog.TotalCost, 1e-12)
-				require.InDelta(t, expected.ActualCost, usageRepo.lastLog.ActualCost, 1e-12)
+				require.InDelta(t, .006, usageRepo.lastLog.TotalCost, 1e-12)
+				require.InDelta(t, .0066, usageRepo.lastLog.ActualCost, 1e-12)
 				require.Equal(t, 1, userRepo.deductCalls)
-				require.InDelta(t, expected.ActualCost, userRepo.lastAmount, 1e-12)
+				require.InDelta(t, .0066, userRepo.lastAmount, 1e-12)
 			})
 		}
 	}

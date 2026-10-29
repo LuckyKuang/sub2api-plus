@@ -243,6 +243,7 @@ func TestCalculateTokenCostContextTierEnablement(t *testing.T) {
 		resolved.longContextPricingEnabled = false
 		cost, err := service.calculateTokenCost(resolved, CostInput{
 			Model: "custom", Tokens: tokens, RateMultiplier: 1, Resolver: resolver,
+			Group: &Group{ID: 1, Platform: PlatformOpenAI},
 		})
 		require.NoError(t, err)
 		require.InDelta(t, 200e-6, cost.TotalCost, 1e-12)
@@ -253,6 +254,7 @@ func TestCalculateTokenCostContextTierEnablement(t *testing.T) {
 		accountDisabled := false
 		cost, err := service.calculateTokenCost(resolved, CostInput{
 			Model: "custom", Tokens: tokens, RateMultiplier: 1, Resolver: resolver,
+			Group:                     &Group{ID: 1, Platform: PlatformOpenAI, LongContextPricingEnabled: true},
 			LongContextBillingEnabled: &accountDisabled,
 		})
 		require.NoError(t, err)
@@ -264,6 +266,7 @@ func TestCalculateTokenCostContextTierEnablement(t *testing.T) {
 		accountEnabled := true
 		cost, err := service.calculateTokenCost(resolved, CostInput{
 			Model: "custom", Tokens: tokens, RateMultiplier: 1, Resolver: resolver,
+			Group:                     &Group{ID: 1, Platform: PlatformOpenAI},
 			LongContextBillingEnabled: &accountEnabled,
 		})
 		require.NoError(t, err)

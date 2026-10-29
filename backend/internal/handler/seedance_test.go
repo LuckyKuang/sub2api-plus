@@ -144,7 +144,16 @@ func seedanceTokenPriceCard(output float64) []service.ChannelModelPricing {
 }
 
 func TestSeedanceMissingTokenPricePreservesClaimForRecoveredSnapshot(t *testing.T) {
-	h, _, bindings, _ := newGrokMediaSlotHandler(t, false, false, service.PlatformOpenAI)
+	bindings := &grokMediaSlotBindings{}
+	cfg := &config.Config{RunMode: config.RunModeSimple}
+	// This scenario requires genuinely missing prices, including an explicit
+	// opt-out from the platform fallback that otherwise supplies a token card.
+	settings := service.NewSettingService(&contentModerationHandlerSettingRepo{values: map[string]string{
+		service.SettingKeyPricingFallbackModels: `{"openai":""}`,
+	}}, cfg)
+	billing := service.ProvideBillingService(cfg, nil, settings)
+	gateway := service.NewOpenAIGatewayService(nil, nil, nil, nil, nil, nil, bindings, cfg, nil, nil, billing, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	h := &OpenAIGatewayHandler{gatewayService: gateway}
 	c, _ := grokMediaSlotContext(context.Background(), false)
 	key, _ := middleware.GetAPIKeyFromContext(c)
 	key.Group.Platform = service.PlatformOpenAI

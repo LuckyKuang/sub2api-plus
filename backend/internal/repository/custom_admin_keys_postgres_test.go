@@ -13,6 +13,7 @@ import (
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/adminaccess"
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
+	"github.com/LuckyKuang/sub2api-plus/internal/testutil/postgresdsn"
 	"github.com/stretchr/testify/require"
 )
 
@@ -28,16 +29,16 @@ func scopedAdminKeyTestDB(t *testing.T) *sql.DB {
 	}
 	base, err := sql.Open("postgres", dsn)
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = base.Close() })
 	schema := fmt.Sprintf("scoped_admin_test_%d", time.Now().UnixNano())
 	_, err = base.Exec(`CREATE SCHEMA ` + schema)
 	require.NoError(t, err)
-	db, err := sql.Open("postgres", dsn+" search_path="+schema)
+	t.Cleanup(func() { _, _ = base.Exec(`DROP SCHEMA ` + schema + ` CASCADE`) })
+	scopedDSN, err := postgresdsn.WithSearchPath(dsn, schema)
 	require.NoError(t, err)
-	t.Cleanup(func() {
-		_ = db.Close()
-		_, _ = base.Exec(`DROP SCHEMA ` + schema + ` CASCADE`)
-		_ = base.Close()
-	})
+	db, err := sql.Open("postgres", scopedDSN)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
 	_, err = db.Exec(`CREATE TABLE users(id BIGINT PRIMARY KEY); INSERT INTO users(id) VALUES(9)`)
 	require.NoError(t, err)
 	migration, err := os.ReadFile(filepath.Join("..", "..", "migrations", "302_scoped_admin_api_keys.sql"))

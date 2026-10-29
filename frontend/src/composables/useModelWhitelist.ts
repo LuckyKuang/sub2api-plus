@@ -52,13 +52,21 @@ const geminiModels = [
   // Keep in sync with backend curated Gemini lists.
   // This list is intentionally conservative (models commonly available across OAuth/API key).
   'gemini-3.1-flash-image',
-  'gemini-2.5-flash-image',
-  'gemini-2.0-flash',
-  'gemini-2.5-flash',
-  'gemini-2.5-pro',
-  'gemini-3.5-flash',
+  'gemini-3.1-flash-image-preview',
+  'gemini-3.1-flash-lite-image',
+  'gemini-3-pro-image',
+  'gemini-3-pro-image-preview',
+  'gemini-3-flash',
   'gemini-3-flash-preview',
-  'gemini-3-pro-preview',
+  'gemini-3.1-pro-preview',
+  'gemini-3.1-pro-preview-customtools',
+  'gemini-3.1-flash-lite',
+  'gemini-3.1-flash-lite-preview',
+  'gemini-3.5-flash',
+  'gemini-3.5-flash-lite',
+  'gemini-3.6-flash',
+  'gemini-3.7-flash',
+  'gemini-3.8-flash',
   'gemini-4-argon'
 ]
 
@@ -252,11 +260,27 @@ const perplexityModels = [
   'llama-3-sonar-small-32k-chat', 'llama-3-sonar-large-32k-chat'
 ]
 
+const opencodeGoModels = [
+  'grok-4.6', 'gpt-5.6-luna',
+  'glm-5.3-flash', 'glm-5.3', 'glm-5.2', 'glm-5.1',
+  'kimi-k3', 'kimi-k2.7-code', 'kimi-k2.6',
+  'longcat-2.0',
+  'deepseek-v4-pro', 'deepseek-v4-flash', 'deepseek-v4-flash-vision-exp',
+  'mimo-v2.5', 'mimo-v2.5-pro',
+  'minimax-m3', 'minimax-m2.7', 'minimax-m2.5',
+  'muse-spark-1.3-contributor', 'muse-spark-1.2-contributor',
+  'qwen3.8-max', 'qwen3.8-flash', 'qwen3.7-max', 'qwen3.7-plus', 'qwen3.6-plus',
+  'hy4-preview', 'hy3', 'omen-alpha'
+]
+
+const typesafeModels = ['jev-latest']
+
 // 所有模型（去重）
-const allModelsList: string[] = [
+const allModelsList: string[] = Array.from(new Set([
   ...openaiModels,
   ...claudeModels,
   ...geminiModels,
+  ...antigravityModels,
   ...zhipuModels,
   ...qwenModels,
   ...deepseekModels,
@@ -272,8 +296,10 @@ const allModelsList: string[] = [
   ...baiduModels,
   ...sparkModels,
   ...hunyuanModels,
-  ...perplexityModels
-]
+  ...perplexityModels,
+  ...opencodeGoModels,
+  ...typesafeModels
+]))
 
 // 转换为下拉选项格式
 export const allModels = allModelsList.map(m => ({ value: m, label: m }))
@@ -325,14 +351,12 @@ const openaiPresetMappings = [
   { label: 'o1', from: 'o1', to: 'o1', color: 'bg-purple-100 text-purple-700 hover:bg-purple-200 dark:bg-purple-900/30 dark:text-purple-400' }
 ]
 
-const geminiPresetMappings = [
-  { label: 'Flash 2.0', from: 'gemini-2.0-flash', to: 'gemini-2.0-flash', color: 'bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-400' },
-  { label: '2.5 Flash', from: 'gemini-2.5-flash', to: 'gemini-2.5-flash', color: 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-400' },
-  { label: '2.5 Image', from: 'gemini-2.5-flash-image', to: 'gemini-2.5-flash-image', color: 'bg-sky-100 text-sky-700 hover:bg-sky-200 dark:bg-sky-900/30 dark:text-sky-400' },
-  { label: '2.5 Pro', from: 'gemini-2.5-pro', to: 'gemini-2.5-pro', color: 'bg-purple-100 text-purple-700 hover:bg-purple-200 dark:bg-purple-900/30 dark:text-purple-400' },
-  { label: '3.5 Flash', from: 'gemini-3.5-flash', to: 'gemini-3.5-flash', color: 'bg-violet-100 text-violet-700 hover:bg-violet-200 dark:bg-violet-900/30 dark:text-violet-400' },
-  { label: '3.1 Image', from: 'gemini-3.1-flash-image', to: 'gemini-3.1-flash-image', color: 'bg-sky-100 text-sky-700 hover:bg-sky-200 dark:bg-sky-900/30 dark:text-sky-400' }
-]
+const geminiPresetMappings = geminiModels.map(model => ({
+  label: model,
+  from: model,
+  to: model,
+  color: 'bg-sky-100 text-sky-700 hover:bg-sky-200 dark:bg-sky-900/30 dark:text-sky-400'
+}))
 
 const grokPresetMappings = [
   { label: 'Grok 4.6', from: 'grok-4.6', to: 'grok-4.6', color: 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800/50 dark:text-slate-300' },
@@ -480,19 +504,8 @@ export function getModelsByPlatform(platform: string): string[] {
     case 'yi': return yiModels
     case 'moonshot':
     case 'kimi': return moonshotModels
-    case 'opencode_go': return [
-      'grok-4.6', 'gpt-5.6-luna',
-      'glm-5.3-flash', 'glm-5.3', 'glm-5.2', 'glm-5.1',
-      'kimi-k3', 'kimi-k2.7-code', 'kimi-k2.6',
-      'longcat-2.0',
-      'deepseek-v4-pro', 'deepseek-v4-flash', 'deepseek-v4-flash-vision-exp',
-      'mimo-v2.5', 'mimo-v2.5-pro',
-      'minimax-m3', 'minimax-m2.7', 'minimax-m2.5',
-      'muse-spark-1.3-contributor', 'muse-spark-1.2-contributor',
-      'qwen3.8-max', 'qwen3.8-flash', 'qwen3.7-max', 'qwen3.7-plus', 'qwen3.6-plus',
-      'hy4-preview', 'hy3', 'omen-alpha'
-    ]
-    case 'typesafe': return ['jev-latest']
+    case 'opencode_go': return opencodeGoModels
+    case 'typesafe': return typesafeModels
     case 'doubao': return doubaoModels
     case 'stepfun': return stepfunModels
     case 'minimax': return minimaxModels

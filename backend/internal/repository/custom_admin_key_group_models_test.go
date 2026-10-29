@@ -17,6 +17,7 @@ import (
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/pagination"
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
+	"github.com/LuckyKuang/sub2api-plus/internal/testutil/postgresdsn"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,17 +31,17 @@ func TestScopedAdminGroupModelsPostgresScopeAndAtomicWrite(t *testing.T) {
 	}
 	base, err := sql.Open("postgres", dsn)
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = base.Close() })
 	schema := fmt.Sprintf("scoped_models_test_%d", time.Now().UnixNano())
 	_, err = base.Exec(`CREATE SCHEMA ` + schema)
 	require.NoError(t, err)
-	db, err := sql.Open("postgres", dsn+" search_path="+schema)
+	t.Cleanup(func() { _, _ = base.Exec(`DROP SCHEMA ` + schema + ` CASCADE`) })
+	scopedDSN, err := postgresdsn.WithSearchPath(dsn, schema)
+	require.NoError(t, err)
+	db, err := sql.Open("postgres", scopedDSN)
 	require.NoError(t, err)
 	client := dbent.NewClient(dbent.Driver(entsql.OpenDB(dialect.Postgres, db)))
-	t.Cleanup(func() {
-		_ = client.Close()
-		_, _ = base.Exec(`DROP SCHEMA ` + schema + ` CASCADE`)
-		_ = base.Close()
-	})
+	t.Cleanup(func() { _ = client.Close() })
 	_, err = db.Exec(`CREATE TABLE groups(id BIGINT PRIMARY KEY, name TEXT DEFAULT '模型组', platform TEXT DEFAULT 'openai',
 		model_allowlist JSONB DEFAULT '{}', rate_multiplier NUMERIC DEFAULT 9, status TEXT DEFAULT 'active', updated_at TIMESTAMPTZ DEFAULT NOW(), deleted_at TIMESTAMPTZ);
 		CREATE TABLE scheduler_outbox(id BIGSERIAL PRIMARY KEY, event_type TEXT, account_id BIGINT, group_id BIGINT, payload JSONB, dedup_key TEXT);

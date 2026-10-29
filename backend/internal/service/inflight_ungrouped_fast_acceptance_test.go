@@ -58,7 +58,10 @@ func TestInflightUngroupedFastPolicyCoversWireAndSettlement(t *testing.T) {
 				} else {
 					ctx = svc.WithBillingPricingSnapshot(ctx, key, time.Now(), "gpt-5.5")
 				}
-				require.Nil(t, BillingPricingSnapshotFromContext(ctx), "ungrouped pricing has no group snapshot")
+				snapshot := BillingPricingSnapshotFromContext(ctx)
+				require.NotNil(t, snapshot, "ungrouped pricing captures its catalog and settings generation")
+				require.True(t, snapshot.ungrouped)
+				require.Nil(t, snapshot.group, "pricing capture must not create a group membership")
 				body := []byte(`{"model":"gpt-5.5","messages":[{"role":"user","content":"hello"}],"max_tokens":1}`)
 				if test.tier != "" {
 					body = []byte(`{"model":"gpt-5.5","messages":[{"role":"user","content":"hello"}],"max_tokens":1,"service_tier":"` + test.tier + `"}`)
@@ -71,7 +74,7 @@ func TestInflightUngroupedFastPolicyCoversWireAndSettlement(t *testing.T) {
 				require.True(t, selectedPriced)
 				require.InDelta(t, test.wantCharge, selectedHold, 1e-12)
 				// An administrator may change the rules after admission. Forwarding
-				// must retain this request's accepted policy without a group snapshot.
+				// must retain this request's accepted policy with its ungrouped snapshot.
 				svc.settingService = newOpenAIGatewayServiceWithSettings(t, &OpenAIFastPolicySettings{}).settingService
 
 				// Capture the actual outbound request and settle its returned usage;

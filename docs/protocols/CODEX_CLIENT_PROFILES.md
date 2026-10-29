@@ -672,8 +672,10 @@ default context window, 872,000 maximum context window, text/image input,
 retains the descriptor and supports configured aliases; disabled reasoning
 (`none` / `minimal`) is rejected on compatibility paths. Native API-key catalogs
 retain the standard Responses boundary with Responses Lite disabled. Catalog
-visibility does not assert account availability, and this change supplies no
-new billing price; the existing configured/dynamic pricing source applies.
+visibility does not assert account availability. The v0.2.19 Plus release adds
+Terra's independently verified [API pricing](https://developers.openai.com/api/docs/pricing)
+as a missing-catalog fallback, preserving configured prices and frozen billing.
+The pinned client descriptor remains distinct from the current API model limits.
 
 ## Standalone search
 

@@ -24,6 +24,8 @@ type billingRateIdentity struct{ platform, model, baseUnit string }
 // It contains no account credentials and is never exposed through an API DTO.
 type BillingPricingSnapshot struct {
 	group                *Group
+	ungrouped            bool
+	defaultRate          float64
 	personalRate         *float64
 	tokenPeak            *float64
 	pricingAt            time.Time
@@ -60,8 +62,7 @@ func CopyBillingPricingSnapshot(parent, base context.Context) context.Context {
 	if base == nil {
 		base = context.Background()
 	}
-	// Ungrouped OpenAI requests have no retail snapshot. Their independently
-	// captured policy is still part of the accepted pricing generation.
+	// Preserve a captured Fast policy even when no billing snapshot was installed.
 	if policy := openAIFastPolicySettingsFromContext(parent); policy != nil {
 		base = withOpenAIFastPolicyContext(base, policy)
 	}
@@ -109,11 +110,17 @@ func ValidateBillingPricingSnapshot(ctx context.Context) error {
 	if snapshot.captureErr != nil {
 		return snapshot.captureErr
 	}
-	if snapshot.group == nil {
+	if snapshot.group == nil && !snapshot.ungrouped {
 		return fmt.Errorf("billing group snapshot unavailable")
 	}
-	if err := snapshot.group.BillingRatePolicy.Validate(); err != nil {
-		return err
+	if snapshot.ungrouped {
+		if snapshot.group != nil || !validCost(snapshot.defaultRate) || snapshot.defaultRate > domain.MaxBillingRateMultiplier {
+			return fmt.Errorf("ungrouped billing rate snapshot is invalid")
+		}
+	} else {
+		if err := snapshot.group.BillingRatePolicy.Validate(); err != nil {
+			return err
+		}
 	}
 	model := snapshot.publicModel
 	if current, ok := RequestedPublicModelFromContext(ctx); model == "" && ok {
@@ -149,6 +156,7 @@ func (s *GatewayService) WithBillingPricingSnapshot(ctx context.Context, key *AP
 	existing := BillingPricingSnapshotFromContext(ctx)
 	ctx = withBillingPricingSnapshot(ctx, billingKeyWithDefaultRate(key, s.cfg), at, s.billingService, channels, resolver.ResolveFreshSnapshot, publicModel...)
 	if existing == nil {
+		ctx = withUngroupedBillingDefaultRate(ctx, s.cfg)
 		ctx = freezeInflightFastPolicy(ctx, s.settingService)
 	}
 	return ctx
@@ -170,6 +178,7 @@ func (s *OpenAIGatewayService) WithBillingPricingSnapshot(ctx context.Context, k
 	existing := BillingPricingSnapshotFromContext(ctx)
 	ctx = withBillingPricingSnapshot(ctx, billingKeyWithDefaultRate(key, s.cfg), at, s.billingService, channels, resolver.ResolveFreshSnapshot, publicModel...)
 	if existing == nil {
+		ctx = withUngroupedBillingDefaultRate(ctx, s.cfg)
 		ctx = freezeInflightFastPolicy(ctx, s.settingService)
 	}
 	return ctx
@@ -201,7 +210,8 @@ func snapshotBillingService(service *BillingService) *BillingService {
 	// Price generations are immutable: reloaders publish a new map under mu.
 	// Pinning that generation is O(1), instead of copying the full catalog for
 	// every inference request. Compiled fallback cards never change at runtime.
-	copy := &BillingService{cfg: service.cfg, fallbackPrices: service.fallbackPrices, frozenPricing: true}
+	copy := &BillingService{cfg: service.cfg, fallbackPrices: service.fallbackPrices, frozenPricing: true,
+		pricingFallbackModels: service.pricingFallbackModels, frozenPricingFallbackModels: service.frozenPricingFallbackModels}
 	if service.pricingService != nil {
 		service.pricingService.mu.RLock()
 		copy.pricingService = &PricingService{pricingData: service.pricingService.pricingData, localHash: service.pricingService.localHash, localVersion: service.pricingService.localVersion, lastUpdated: service.pricingService.lastUpdated}
@@ -222,8 +232,38 @@ func withBillingPricingSnapshot(ctx context.Context, key *APIKey, at time.Time, 
 		}
 		return ctx
 	}
-	if key == nil || key.Group == nil {
+	if key == nil {
 		return ctx
+	}
+	if key.Group == nil {
+		if key.GroupID != nil {
+			return pricingSnapshotContext(ctx, &BillingPricingSnapshot{captureErr: fmt.Errorf("billing group snapshot unavailable")})
+		}
+		if at.IsZero() {
+			at = timezone.Now()
+		}
+		snapshot := &BillingPricingSnapshot{ungrouped: true, defaultRate: 1, pricingAt: at,
+			billing: snapshotBillingService(billing), platform: requestBillingPlatform(ctx, nil, "")}
+		if billing != nil && billing.cfg != nil {
+			snapshot.defaultRate = billing.cfg.Default.RateMultiplier
+		}
+		freezeSnapshotPlatformPricing(ctx, snapshot)
+		if snapshot.billing != nil {
+			snapshot.billing.frozenPricingAt = at
+		}
+		snapshot.publicModel, _ = RequestedPublicModelFromContext(ctx)
+		if len(publicModel) > 0 && publicModel[0] != "" {
+			snapshot.publicModel = publicModel[0]
+		}
+		snapshot.routingModel, _ = ResolvedUpstreamModelFromContext(ctx)
+		peak := 1.0
+		snapshot.tokenPeak = &peak
+		if legacy, _ := ctx.Value(legacyBillingSettlementCtxKey{}).(bool); legacy {
+			snapshot.legacyPriceSelection = true
+			snapshot.peakScope = BillingPeakScopeTokenOnly
+		}
+		snapshot.resolver = NewModelPricingResolver(nil, snapshot.billing)
+		return pricingSnapshotContext(ctx, snapshot)
 	}
 	sourceGroup := key.Group
 	if groupMediaPricingLooksIncomplete(sourceGroup) && channels != nil && channels.groupRepo != nil && key.GroupID != nil {
@@ -250,6 +290,7 @@ func withBillingPricingSnapshot(ctx context.Context, key *APIKey, at time.Time, 
 	}
 	pinBillingComponentDefaults(group)
 	snapshot := &BillingPricingSnapshot{group: group, pricingAt: at, billing: snapshotBillingService(billing), platform: requestBillingPlatform(ctx, group, "")}
+	freezeSnapshotPlatformPricing(ctx, snapshot)
 	snapshot.routingModel, _ = ResolvedUpstreamModelFromContext(ctx)
 	if legacy, _ := ctx.Value(legacyBillingSettlementCtxKey{}).(bool); legacy {
 		snapshot.legacyPriceSelection = true
@@ -282,7 +323,7 @@ func withBillingPricingSnapshot(ctx context.Context, key *APIKey, at time.Time, 
 			snapshot.captureErr = fmt.Errorf("billing channel snapshot unavailable: %w", err)
 		}
 		if err == nil {
-			local := &ChannelService{}
+			local := &ChannelService{billingService: snapshot.billing}
 			// Cache generations are immutable, just like the model catalog. Keep
 			// their exact platform index and custom lookup semantics.
 			local.frozenCache = cache
@@ -295,6 +336,32 @@ func withBillingPricingSnapshot(ctx context.Context, key *APIKey, at time.Time, 
 	}
 	snapshot.resolver = NewModelPricingResolver(snapshot.channels, snapshot.billing)
 	return context.WithValue(ctx, billingPricingSnapshotCtxKey{}, snapshot)
+}
+
+func freezeSnapshotPlatformPricing(ctx context.Context, snapshot *BillingPricingSnapshot) {
+	if snapshot.billing == nil {
+		return
+	}
+	models, err := snapshot.billing.pricingFallbackModelsForRequest(ctx)
+	if err != nil {
+		snapshot.captureErr = fmt.Errorf("billing platform fallback snapshot unavailable: %w", err)
+		return
+	}
+	snapshot.billing.frozenPricingFallbackModels = models
+	snapshot.billing.pricingFallbackModels = nil
+}
+
+func withUngroupedBillingDefaultRate(ctx context.Context, cfg *config.Config) context.Context {
+	snapshot := BillingPricingSnapshotFromContext(ctx)
+	if snapshot == nil || !snapshot.ungrouped {
+		return ctx
+	}
+	copy := *snapshot
+	copy.defaultRate = 1
+	if cfg != nil {
+		copy.defaultRate = cfg.Default.RateMultiplier
+	}
+	return pricingSnapshotContext(ctx, &copy)
 }
 
 func billingKeyWithDefaultRate(key *APIKey, cfg *config.Config) *APIKey {
@@ -319,6 +386,9 @@ func requestBillingPlatform(ctx context.Context, group *Group, fallback string) 
 		}
 		if platform, ok := ResolvedTargetPlatformFromContext(ctx); ok {
 			return platform
+		}
+		if snapshot := BillingPricingSnapshotFromContext(ctx); group == nil && snapshot != nil && snapshot.ungrouped && snapshot.platform != "" {
+			return snapshot.platform
 		}
 	}
 	if group != nil && group.Platform != PlatformComposite {
@@ -350,6 +420,10 @@ func billingRateSnapshotMap(quote BillingRateQuote) map[string]any {
 
 func (snapshot *BillingPricingSnapshot) quote(platform, model, unit string) BillingRateQuote {
 	quote := resolveBillingRateQuote(snapshot.group, platform, model, unit, snapshot.personalRate, snapshot.pricingAt, snapshot.calculation(), snapshot.peakMeterScope())
+	if snapshot.ungrouped {
+		quote.BaseMultiplier, quote.BaseSource = snapshot.defaultRate, "default"
+		quote = quoteWithEffectiveRate(quote)
+	}
 	if (snapshot.peakMeterScope() == BillingPeakScopeAllMeters || unit == "token") && snapshot.tokenPeak != nil {
 		quote.PeakMultiplier = *snapshot.tokenPeak
 		quote = quoteWithEffectiveRate(quote)
@@ -572,6 +646,9 @@ func legacyBillingSettlementContext(ctx context.Context) context.Context {
 	ctx = context.WithValue(ctx, legacyBillingSettlementCtxKey{}, true)
 	if snapshot := BillingPricingSnapshotFromContext(ctx); snapshot != nil {
 		if snapshot.group == nil {
+			if snapshot.ungrouped {
+				return ctx
+			}
 			return WithoutBillingPricingSnapshot(ctx)
 		}
 		copy := *snapshot
@@ -629,7 +706,11 @@ func ValidateBillingPricingMeter(ctx context.Context, model, unit string) error 
 	if snapshot.billing == nil || snapshot.resolver == nil {
 		return fmt.Errorf("task billing price evidence is unavailable")
 	}
-	resolved := snapshot.resolver.Resolve(ctx, PricingInput{Group: snapshot.group, GroupID: &snapshot.group.ID, Model: model})
+	var groupID *int64
+	if snapshot.group != nil {
+		groupID = &snapshot.group.ID
+	}
+	resolved := snapshot.resolver.Resolve(ctx, PricingInput{Group: snapshot.group, GroupID: groupID, Model: model})
 	if resolved.Mode == BillingModePerRequest || resolved.Mode == BillingModeImage || resolved.Mode == BillingModeVideo {
 		if resolved.channelPricing != nil && resolved.channelPricing.PerRequestPrice != nil && validCost(*resolved.channelPricing.PerRequestPrice) {
 			return nil
@@ -646,7 +727,7 @@ func ValidateBillingPricingMeter(ctx context.Context, model, unit string) error 
 		if !resolved.longContextPricingEnabled {
 			pricingContext = 1
 		}
-		base, _ := snapshot.billing.getModelPricingAt(model, snapshot.pricingAt)
+		base, _ := snapshot.billing.GetModelPricingForPlatform(ctx, snapshot.platform, model)
 		explicitOutput := resolved.channelPricing != nil && resolved.channelPricing.OutputPrice != nil
 		if tier := FindMatchingInterval(resolved.Intervals, pricingContext); tier != nil && tier.OutputPrice != nil {
 			explicitOutput = true

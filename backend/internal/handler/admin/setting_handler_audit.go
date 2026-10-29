@@ -2,6 +2,7 @@ package admin
 
 import (
 	"log/slog"
+	"maps"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/handler/dto"
 	"github.com/LuckyKuang/sub2api-plus/internal/server/middleware"
@@ -382,6 +383,9 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	}
 	if before.FallbackModelAntigravity != after.FallbackModelAntigravity {
 		changed = append(changed, "fallback_model_antigravity")
+	}
+	if !maps.Equal(before.PricingFallbackModels, after.PricingFallbackModels) {
+		changed = append(changed, service.SettingKeyPricingFallbackModels)
 	}
 	if before.EnableIdentityPatch != after.EnableIdentityPatch {
 		changed = append(changed, "enable_identity_patch")

@@ -6,12 +6,14 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	dbent "github.com/LuckyKuang/sub2api-plus/ent"
-	_ "github.com/lib/pq"
-	"github.com/stretchr/testify/require"
 	"os"
 	"testing"
 	"time"
+
+	dbent "github.com/LuckyKuang/sub2api-plus/ent"
+	"github.com/LuckyKuang/sub2api-plus/internal/testutil/postgresdsn"
+	_ "github.com/lib/pq"
+	"github.com/stretchr/testify/require"
 )
 
 type scopedTestSQL interface {
@@ -37,12 +39,16 @@ func scopedAdminAccountTestDB(t *testing.T) (*scopedTestDB, *sql.DB) {
 	}
 	base, err := sql.Open("postgres", dsn)
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = base.Close() })
 	name := fmt.Sprintf("scoped_accounts_%d", time.Now().UnixNano())
 	_, err = base.Exec(`CREATE SCHEMA ` + name)
 	require.NoError(t, err)
-	db, err := sql.Open("postgres", dsn+" search_path="+name)
+	t.Cleanup(func() { _, _ = base.Exec(`DROP SCHEMA ` + name + ` CASCADE`) })
+	scopedDSN, err := postgresdsn.WithSearchPath(dsn, name)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = db.Close(); _, _ = base.Exec(`DROP SCHEMA ` + name + ` CASCADE`); _ = base.Close() })
+	db, err := sql.Open("postgres", scopedDSN)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
 	_, err = db.Exec(`CREATE TABLE accounts(id BIGSERIAL PRIMARY KEY,name TEXT DEFAULT '',platform TEXT DEFAULT 'openai',type TEXT DEFAULT 'oauth',credentials JSONB DEFAULT '{}',status TEXT DEFAULT 'active',schedulable BOOLEAN DEFAULT true,error_message TEXT,temp_unschedulable_until TIMESTAMPTZ,temp_unschedulable_reason TEXT,deleted_at TIMESTAMPTZ,parent_account_id BIGINT,proxy_id BIGINT,expires_at TIMESTAMPTZ,updated_at TIMESTAMPTZ DEFAULT NOW());
  CREATE TABLE proxies(id BIGSERIAL PRIMARY KEY,protocol TEXT,host TEXT,port INT,username TEXT,password TEXT,status TEXT DEFAULT 'active',expires_at TIMESTAMPTZ,deleted_at TIMESTAMPTZ);`)
 	require.NoError(t, err)

@@ -907,24 +907,21 @@ func (s *OpenAIGatewayService) calculateOpenAIRecordUsageTokenCost(
 	longContextBillingGate *bool,
 	modelLongContextExempt bool,
 ) (*CostBreakdown, error) {
-	if pricingResolverForContext(ctx, s.resolver) != nil && apiKey.Group != nil {
-		gid := apiKey.Group.ID
-		return billingServiceForContext(ctx, s.billingService).CalculateCostUnified(CostInput{
-			Ctx: ctx, Model: billingModel, GroupID: &gid, Group: apiKey.Group,
-			Tokens: tokens, RequestCount: 1, RateMultiplier: multiplier, PricingAt: pricingAt,
-			ServiceTier: serviceTier, ReasoningEffort: reasoningEffort, Resolver: pricingResolverForContext(ctx, s.resolver),
-			LongContextBillingEnabled:      longContextBillingGate,
-			DisableModelLongContextPricing: modelLongContextExempt,
-		})
+	var group *Group
+	var groupID *int64
+	if apiKey != nil {
+		group = apiKey.Group
+		if group != nil {
+			groupID = &group.ID
+		}
 	}
-	breakdown, err := billingServiceForContext(ctx, s.billingService).calculateCostWithServiceTierPolicy(
-		billingModel,
-		tokens,
-		multiplier,
-		serviceTier,
-		(longContextBillingGate == nil || *longContextBillingGate) && !modelLongContextExempt,
-	)
-	return breakdown, err
+	return billingServiceForContext(ctx, s.billingService).CalculateCostUnified(CostInput{
+		Ctx: withOpenAIDefaultBillingPlatform(ctx, apiKey), Model: billingModel, GroupID: groupID, Group: group,
+		Tokens: tokens, RequestCount: 1, RateMultiplier: multiplier, PricingAt: pricingAt,
+		ServiceTier: serviceTier, ReasoningEffort: reasoningEffort, Resolver: pricingResolverForContext(ctx, s.resolver),
+		LongContextBillingEnabled:      longContextBillingGate,
+		DisableModelLongContextPricing: modelLongContextExempt,
+	})
 }
 
 func isUnmappedCodexAutoReviewLunaMismatch(

@@ -141,8 +141,14 @@ func appendUsageBillingModelCandidate(candidates []string, seen map[string]struc
 	if canonical := canonicalizeOpenAIModelAliasSpelling(trimmed); canonical != "" {
 		add(canonical)
 	}
-	if normalized := normalizeKnownOpenAICodexModel(trimmed); normalized != "" {
-		add(normalized)
+	if isUnregisteredGPT61TerraPricingModel(trimmed) {
+		return candidates
+	}
+	// Candidate expansion is pricing-only: include registered same-SKU
+	// spellings, never routing/family guesses for an unpriced request SKU.
+	// Explicit alternates are appended separately by the caller in order.
+	for _, candidate := range modelLookupCandidates(trimmed) {
+		add(candidate)
 	}
 	return candidates
 }
