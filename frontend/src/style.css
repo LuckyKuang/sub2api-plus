@@ -409,7 +409,7 @@ input:is([type=range], [type=checkbox], [type=radio]) { accent-color: rgb(var(--
     border: 1px solid var(--surface-edge);
     border-radius: var(--surface-radius-panel);
     @apply p-1.5;
-    @apply origin-top-right animate-scale-in;
+    @apply origin-top-right;
   }
 
   .dropdown-item {

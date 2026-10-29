@@ -117,7 +117,7 @@ groups and model time schedules display an amber Dynamic billing badge; tiered
 prices display a separate blue badge only when the group enables long-context
 pricing and the offer contains context or media tiers. Dynamic billing indicates a configured
 condition, not that the current request falls inside the peak window. A merged
-card says “Some quotes” when only part of its quote set has that condition. Service-tier
+card says “Some quotes” when only part of its quote set has that condition. Service
 tiers start collapsed; official-reference tables remain expanded within an opened
 quote, as described below.
 

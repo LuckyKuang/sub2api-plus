@@ -18,7 +18,7 @@ test.beforeEach(async ({ page }, info) => {
 
 async function frames(page: Page, trigger: string, rootSelector: string, milliseconds: number) {
   return page.evaluate(async ({ trigger, rootSelector, milliseconds }) => {
-    const samples: Array<{ time: number; connected: boolean; active: boolean; duration: number; properties: string; opacity: number; x: number; y: number; scale: number }> = []
+    const samples: Array<{ time: number; connected: boolean; active: boolean; duration: number; properties: string; animation: string; opacity: number; x: number; y: number; scale: number }> = []
     const start = performance.now()
     const button = document.querySelector<HTMLElement>(trigger)!
     button.focus()
@@ -36,6 +36,7 @@ async function frames(page: Page, trigger: string, rootSelector: string, millise
         active: !!root && /(?:enter|leave)-active/.test(root.className),
         duration: rootStyle ? parseFloat(rootStyle.transitionDuration) : 0,
         properties: rootStyle?.transitionProperty ?? '',
+        animation: rootStyle?.animationName ?? '',
         opacity: style ? parseFloat(style.opacity) : 0,
         x: matrix.m41, y: matrix.m42, scale: matrix.m11,
       })
@@ -78,6 +79,7 @@ test('header user, subscription and announcement surfaces use the shared transit
     await expect(page.locator(trigger)).toBeVisible()
     const enter = await frames(page, trigger, panel, 260)
     expect(enter.some(frame => frame.active && frame.duration === .15)).toBe(true)
+    expect(enter.filter(frame => frame.connected).every(frame => frame.animation === 'none')).toBe(true)
     const leave = await frames(page, '[data-testid="outside-control"]', panel, 220)
     expect(leave.some(frame => frame.active && frame.duration === .1)).toBe(true)
     expect(leave.at(-1)!.connected).toBe(false)
@@ -96,7 +98,9 @@ test('the real administrator version menu retains 150/100ms timing without legac
   const enter = await frames(page, trigger, '.version-dropdown', 260)
   expect(enter.some(frame => frame.active && frame.duration === .15)).toBe(true)
   expect(enter.filter(frame => frame.active).every(frame => !frame.properties.includes('all'))).toBe(true)
-  const leave = await frames(page, '[data-testid="outside-control"]', '.version-dropdown', 220)
+  // This component deliberately ignores outside button clicks; close it using
+  // its original toggle rather than changing its hit-testing contract.
+  const leave = await frames(page, trigger, '.version-dropdown', 220)
   expect(leave.some(frame => frame.active && frame.duration === .1)).toBe(true)
   expect(leave.at(-1)!.connected).toBe(false)
 })
@@ -153,17 +157,21 @@ test('reduced motion covers body portals and overlay children without suppressin
     ['.date-picker-trigger', '.date-picker-dropdown'],
     ['button[aria-label="Motion calendar"]', '.date-time-panel'],
   ]) {
-    const enter = await frames(page, trigger, root, 80)
-    expect(enter.some(frame => frame.active && frame.duration <= .001)).toBe(true)
-    expect(enter.every(frame => frame.x === 0 && frame.y === 0 && frame.scale === 1)).toBe(true)
-    if (root === '.modal-overlay') {
-      await page.locator('.modal-header button').click()
-      await expect(page.getByTestId('open-motion-dialog')).toBeFocused()
-    } else if (root === '.surface-overlay') {
-      await page.getByTestId('announcement-popup-dismiss').click()
-    } else {
-      await page.getByTestId('outside-control').click()
-    }
-    await expect(page.locator(root)).toHaveCount(0)
+    await test.step(`reduced motion: ${root}`, async () => {
+      const enter = await frames(page, trigger, root, 80)
+      expect(enter.some(frame => frame.active && frame.duration <= .001)).toBe(true)
+      expect(enter.every(frame => frame.x === 0 && frame.y === 0 && frame.scale === 1)).toBe(true)
+      if (root === '.modal-overlay') {
+        await page.locator('.modal-header button').click({ timeout: 5_000 })
+        await expect(page.getByTestId('open-motion-dialog')).toBeFocused()
+      } else if (root === '.surface-overlay') {
+        await page.getByTestId('announcement-popup-dismiss').click({ timeout: 5_000 })
+      } else {
+        // Calendar panels legitimately cover the following outside control.
+        // Escape uses the real keyboard path without clicking through a panel.
+        await page.keyboard.press('Escape')
+      }
+      await expect(page.locator(root)).toHaveCount(0)
+    })
   }
 })
