@@ -19,12 +19,14 @@ const locales = ['en-US', 'zh-CN']
 
 export default defineConfig({
   testDir: '.',
-  testMatch: 'overlays.spec.ts',
+  testMatch: ['overlays.spec.ts', 'user-layout.spec.ts', 'user-audit-workspaces.spec.ts', 'motion.spec.ts'],
   fullyParallel: true,
   workers: 2,
   retries: 0,
   forbidOnly: true,
-  timeout: 30_000,
+  // Cold transforms of the full AppLayout graph on a WSL bind mount can
+  // exceed 30s; individual geometry/reachability expectations stay at 5s.
+  timeout: 90_000,
   expect: { timeout: 5_000 },
   reporter: 'list',
   outputDir: process.env.SUB2API_LAYOUT_OUTPUT_DIR || '/tmp/sub2api-layout-results',
@@ -36,15 +38,37 @@ export default defineConfig({
     screenshot: 'off',
     video: 'off',
   },
-  projects: viewports.flatMap(viewport => themes.flatMap(colorScheme => locales.map(locale => ({
+  projects: [...viewports.flatMap(viewport => themes.flatMap(colorScheme => locales.map(locale => ({
     name: `${viewport.width}x${viewport.height}-${colorScheme}-${locale}`,
+    testMatch: 'overlays.spec.ts',
     use: { viewport, colorScheme, locale },
   })))),
-  webServer: {
+  ...themes.flatMap(colorScheme => locales.map(locale => ({
+    name: `user-layout-${colorScheme}-${locale}`,
+    testMatch: ['user-layout.spec.ts', 'user-audit-workspaces.spec.ts'],
+    use: { viewport: { width: 1440, height: 900 }, colorScheme, locale },
+  }))),
+  ...[{ width: 390, height: 844 }, { width: 1440, height: 600 }].flatMap(viewport => themes.map(colorScheme => ({
+    name: `product-${viewport.width}-${colorScheme}`,
+    testMatch: 'overlays.spec.ts',
+    use: { viewport, colorScheme, locale: colorScheme === 'dark' ? 'zh-CN' : 'en-US' },
+  }))),
+  ...themes.map(colorScheme => ({
+    name: `motion-production-${colorScheme}`,
+    testMatch: 'motion.spec.ts',
+    use: { baseURL: 'http://127.0.0.1:18194', viewport: { width: 1440, height: 900 }, colorScheme, locale: 'en-US', reducedMotion: 'no-preference' as const },
+  }))],
+  webServer: [{
     cwd: frontend,
     command: 'pnpm exec vite --config layout-tests/vite.config.ts',
     url: 'http://127.0.0.1:18193/layout-tests/index.html',
     timeout: 30_000,
     reuseExistingServer: false,
-  },
+  }, {
+    cwd: frontend,
+    command: 'pnpm exec vite build --config layout-tests/motion.vite.config.ts && pnpm exec vite preview --config layout-tests/motion.vite.config.ts',
+    url: 'http://127.0.0.1:18194/layout-tests/motion.html',
+    timeout: 120_000,
+    reuseExistingServer: false,
+  }],
 })

@@ -60,6 +60,7 @@ describe('user error table workspace', () => {
     expect(content.contains(pager)).toBe(true)
     expect(scroll.contains(pager)).toBe(false)
     expect(pager.parentElement?.classList.contains('flex-shrink-0')).toBe(true)
+    expect(pager.parentElement?.classList.contains('workspace-fixed')).toBe(true)
 
     await wrapper.get('[data-testid="table-scroll"] button').trigger('click')
     expect(wrapper.get('[role="dialog"] [data-testid="error-detail"]').text()).toBe('12')
@@ -90,5 +91,12 @@ describe('user error table workspace', () => {
     expect(wrapper.get('[data-testid="table-scroll"]').classes()).not.toContain('workspace-table-viewport')
     await wrapper.get('[data-testid="pagination"] button').trigger('click')
     expect(wrapper.emitted('update:page')).toEqual([[3]])
+  })
+  it('keeps the independent bottom pagination card when the filtered result is empty', async () => {
+    const wrapper = setup()
+    const pager = wrapper.get('[data-testid="pagination"]').element
+    await wrapper.setProps({ rows: [], total: 0, page: 1 })
+    expect(wrapper.get('[data-testid="pagination"]').element).toBe(pager)
+    expect(wrapper.get('[data-testid="table-scroll"]').element.contains(pager)).toBe(false)
   })
 })

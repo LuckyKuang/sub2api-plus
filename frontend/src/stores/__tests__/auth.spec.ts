@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
+import { cacheAvailableChannelCatalog, clearAvailableChannelCatalogCache, readAvailableChannelCatalog } from '@/utils/availableChannelCatalogCache'
 
 // Mock authAPI
 const mockLogin = vi.fn()
@@ -58,6 +59,7 @@ describe('useAuthStore', () => {
     localStorage.clear()
     vi.useFakeTimers()
     vi.clearAllMocks()
+    clearAvailableChannelCatalogCache()
   })
 
   afterEach(() => {
@@ -67,6 +69,17 @@ describe('useAuthStore', () => {
   // --- login ---
 
   describe('login', () => {
+    it('starts a new catalog session even when the account ID is unchanged', async () => {
+      mockLogin.mockResolvedValue(fakeAuthResponse)
+      const store = useAuthStore()
+      await store.login({ email: 'test@example.com', password: '123456' })
+      cacheAvailableChannelCatalog('same-account', { groups: [], user_rate_status: 'loaded' })
+
+      await store.login({ email: 'test@example.com', password: '123456' })
+
+      expect(readAvailableChannelCatalog('same-account')).toBeUndefined()
+    })
+
     it('成功登录后设置 token 和 user', async () => {
       mockLogin.mockResolvedValue(fakeAuthResponse)
       const store = useAuthStore()
@@ -137,6 +150,21 @@ describe('useAuthStore', () => {
   // --- logout ---
 
   describe('logout', () => {
+    it('discards private catalog successes before the same user can sign in again', async () => {
+      mockLogin.mockResolvedValue(fakeAuthResponse)
+      mockLogout.mockResolvedValue(undefined)
+      const store = useAuthStore()
+      await store.login({ email: 'test@example.com', password: '123456' })
+      cacheAvailableChannelCatalog('user-1-en', { groups: [], user_rate_status: 'loaded' })
+      cacheAvailableChannelCatalog('actor-1-target-2-zh', { groups: [], user_rate_status: 'loaded' })
+
+      await store.logout()
+      await store.login({ email: 'test@example.com', password: '123456' })
+
+      expect(readAvailableChannelCatalog('user-1-en')).toBeUndefined()
+      expect(readAvailableChannelCatalog('actor-1-target-2-zh')).toBeUndefined()
+    })
+
     it('注销后清除所有状态和 localStorage', async () => {
       mockLogin.mockResolvedValue(fakeAuthResponse)
       mockLogout.mockResolvedValue(undefined)
@@ -160,6 +188,16 @@ describe('useAuthStore', () => {
   })
 
   // --- checkAuth ---
+
+  it('clears private catalog data when adopting a new OAuth session', async () => {
+    cacheAvailableChannelCatalog('previous-session', { groups: [], user_rate_status: 'loaded' })
+    mockGetCurrentUser.mockResolvedValue({ data: fakeUser })
+    const store = useAuthStore()
+
+    await store.setToken('oauth-session-token')
+
+    expect(readAvailableChannelCatalog('previous-session')).toBeUndefined()
+  })
 
   describe('checkAuth', () => {
     it('从 localStorage 恢复持久化状态', () => {

@@ -203,6 +203,32 @@ describe('RedeemView refresh after redemption', () => {
     wrapper.unmount()
   })
 
+  // Accepted browser review keeps paging outside the independently scrolling
+  // history while preserving all four existing redemption explanations.
+  it('keeps history navigation independent from the scrollable records and retains all guidance', async () => {
+    getHistory.mockResolvedValue({ items: [], total: 61 })
+    const wrapper = mount(RedeemView, {
+      global: { stubs: { AppLayout: { template: '<main><slot /></main>' }, Icon: true } },
+    })
+    await flushPromises()
+    const guidance = wrapper.findAll('li').map(item => item.text())
+    expect(guidance).toHaveLength(4)
+    for (const key of ['redeem.codeRule1', 'redeem.codeRule2', 'redeem.codeRule3', 'redeem.codeRule4']) {
+      expect(guidance.some(text => text.includes(key))).toBe(true)
+    }
+    const navigation = wrapper.get('nav')
+    const history = wrapper.get('.redeem-history')
+    expect(history.element.contains(navigation.element)).toBe(false)
+    const viewport = history.element as HTMLElement
+    viewport.scrollTop = 120
+    await navigation.findAll('button').find(button => button.text() === 'pagination.next')!.trigger('click')
+    await flushPromises()
+    expect(getHistory).toHaveBeenLastCalledWith(2, 20)
+    expect(viewport.scrollTop).toBe(0)
+    expect(redeem).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
   it('finishes normally without a warning when profile refresh succeeds', async () => {
     const wrapper = await submitCode()
 

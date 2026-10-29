@@ -147,6 +147,9 @@ func (m *mockAccountRepoForGemini) ListSchedulableUngroupedByPlatform(ctx contex
 func (m *mockAccountRepoForGemini) ListSchedulableUngroupedByPlatforms(ctx context.Context, platforms []string) ([]Account, error) {
 	return m.ListSchedulableByPlatforms(ctx, platforms)
 }
+func (m *mockAccountRepoForGemini) ListCommercialModelMappings(context.Context, []int64) (map[int64][]CommercialModelMapping, error) {
+	panic("unexpected ListCommercialModelMappings call")
+}
 func (m *mockAccountRepoForGemini) ListModelAvailabilityCandidates(ctx context.Context, _ *int64, platforms []string, _ bool) ([]Account, error) {
 	return m.ListSchedulableByPlatforms(ctx, platforms)
 }

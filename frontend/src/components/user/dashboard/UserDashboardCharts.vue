@@ -27,29 +27,29 @@
           <LoadingSpinner size="md" />
         </div>
         <h3 class="mb-4 text-sm font-semibold text-gray-900 dark:text-white">{{ t('dashboard.modelDistribution') }}</h3>
-        <div class="flex flex-col items-center gap-4 sm:flex-row sm:gap-6">
-          <div class="h-48 w-48 shrink-0">
+        <div class="model-distribution-body flex flex-col items-center gap-4">
+          <div class="model-distribution-doughnut shrink-0">
             <Doughnut v-if="modelData" :data="modelData" :options="doughnutOptions" />
             <div v-else class="flex h-full items-center justify-center text-sm surface-muted">{{ t('dashboard.noDataAvailable') }}</div>
           </div>
-          <div class="record-table-scroll max-h-48 w-full min-w-0 flex-1 overflow-auto">
-            <table class="record-table record-table-compact w-full text-xs">
+          <div class="model-distribution-records record-table-scroll w-full min-w-0">
+            <table class="model-distribution-table record-table record-table-compact w-full text-xs">
               <thead>
                 <tr class="surface-muted">
                   <th class="pb-2 text-left">{{ t('dashboard.model') }}</th>
-                  <th class="pb-2 text-right">{{ t('dashboard.requests') }}</th>
-                  <th class="pb-2 text-right">{{ t('dashboard.tokens') }}</th>
-                  <th class="pb-2 text-right">{{ t('dashboard.actual') }}</th>
-                  <th class="pb-2 text-right">{{ t('dashboard.standard') }}</th>
+                  <th class="pb-2 text-left">{{ t('dashboard.requests') }}</th>
+                  <th class="pb-2 text-left">{{ t('dashboard.tokens') }}</th>
+                  <th class="pb-2 text-left">{{ t('dashboard.actual') }}</th>
+                  <th class="pb-2 text-left">{{ t('dashboard.standard') }}</th>
                 </tr>
               </thead>
               <tbody>
                 <tr v-for="model in models" :key="model.model" class="border-t border-gray-100 dark:border-dark-700">
-                  <td class="max-w-[100px] truncate py-1.5 font-medium text-gray-900 dark:text-white" :title="model.model">{{ model.model }}</td>
-                  <td class="py-1.5 text-right surface-muted">{{ formatNumber(model.requests) }}</td>
-                  <td class="py-1.5 text-right surface-muted">{{ formatTokens(model.total_tokens) }} <span v-if="modelTokenShare(model.total_tokens)" class="surface-muted">({{ modelTokenShare(model.total_tokens) }})</span></td>
-                  <td class="py-1.5 text-right text-green-600 dark:text-green-400">${{ formatCost(model.actual_cost) }}</td>
-                  <td class="py-1.5 text-right surface-muted">${{ formatCost(model.cost) }}</td>
+                  <td class="py-1.5 font-medium text-gray-900 dark:text-white" :title="model.model">{{ model.model }}</td>
+                  <td class="py-1.5 text-left surface-muted" :data-label="t('dashboard.requests')">{{ formatNumber(model.requests) }}</td>
+                  <td class="py-1.5 text-left surface-muted" :data-label="t('dashboard.tokens')">{{ formatTokens(model.total_tokens) }} <span v-if="modelTokenShare(model.total_tokens)" class="surface-muted">({{ modelTokenShare(model.total_tokens) }})</span></td>
+                  <td class="py-1.5 text-left text-green-600 dark:text-green-400" :data-label="t('dashboard.actual')">${{ formatCost(model.actual_cost) }}</td>
+                  <td class="py-1.5 text-left surface-muted" :data-label="t('dashboard.standard')">${{ formatCost(model.cost) }}</td>
                 </tr>
               </tbody>
             </table>
@@ -119,13 +119,32 @@ const doughnutOptions = computed(() => ({
 </script>
 
 <style scoped>
-.record-table-scroll { --record-table-max-height: 12rem; max-height: var(--record-table-max-height); }
-@media (min-width: 1024px) {
-  .user-chart-grid { display: grid; gap: 12px; }
-  .user-model-chart { display: flex; min-height: 0; flex-direction: column; padding: 14px; }
-  .user-model-chart > h3 { flex: none; margin-bottom: 12px; }
-  .user-model-chart > div:not(.absolute) { min-height: 0; flex: 1; gap: 10px; }
-  .user-model-chart .h-48.w-48 { width: clamp(110px, 9vw, 178px); height: clamp(110px, 9vw, 178px); flex: none; }
-  .user-model-chart .record-table-scroll { --record-table-max-height: 100%; min-height: 0; align-self: stretch; }
+.user-dashboard-charts { display: block; height: auto; flex: none; container-type: inline-size; }
+.user-chart-grid { display: grid; grid-template-columns: minmax(0, 1fr); align-items: stretch; gap: 16px !important; height: auto; flex: none; }
+.user-chart-grid > .card { min-width: 0; min-height: 360px; padding: 20px; }
+.user-model-chart { display: flex; flex-direction: column; container-type: inline-size; }
+.model-distribution-body { flex: 1; min-width: 0; }
+.model-distribution-doughnut { width: 154px; height: 154px; }
+.user-dashboard-charts .user-model-chart .model-distribution-records { max-height: none; overflow: visible; }
+.model-distribution-table { table-layout: auto; }
+.model-distribution-table :is(th, td) { text-align: left; white-space: nowrap; }
+.user-chart-grid :deep(.chart-workspace) { display: flex; flex-direction: column; }
+.user-chart-grid :deep(.chart-workspace > .h-48) { height: 280px; min-height: 280px; flex: 1; }
+@container (min-width: 1480px) {
+  .user-chart-grid { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); }
+}
+@container (min-width: 780px) {
+  .model-distribution-body { flex-direction: row; }
+  .user-dashboard-charts .user-model-chart .model-distribution-records { flex: 1 1 0%; }
+}
+/* Compact records retain the full, single-line model name without requiring
+   sideways navigation when all five columns cannot fit beside each other. */
+@container (max-width: 580px) {
+  .model-distribution-table, .model-distribution-table tbody { display: block; }
+  .model-distribution-table thead { display: none; }
+  .model-distribution-table tbody tr { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .model-distribution-table td:first-child { grid-column: 1 / -1; }
+  .model-distribution-table td[data-label]::before { display: block; margin-bottom: 4px; color: var(--surface-muted); content: attr(data-label); }
+  .model-distribution-table td:nth-child(3) > span { display: block; }
 }
 </style>

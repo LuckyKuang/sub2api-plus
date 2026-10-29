@@ -72,12 +72,12 @@ type ModelPlazaService struct {
 	billingService     *BillingService
 	resolver           *ModelPricingResolver
 	commercialRoutes   CompositeModelRouteRepository
-	commercialAccounts AccountRepository
+	commercialAccounts CommercialModelMappingRepository
 }
 
 // SetCommercialCatalogSources attaches read-only configuration sources. Catalog
 // reads never discover upstream models, acquire an account, or refresh credentials.
-func (s *ModelPlazaService) SetCommercialCatalogSources(routes CompositeModelRouteRepository, accounts AccountRepository) {
+func (s *ModelPlazaService) SetCommercialCatalogSources(routes CompositeModelRouteRepository, accounts CommercialModelMappingRepository) {
 	s.commercialRoutes, s.commercialAccounts = routes, accounts
 }
 

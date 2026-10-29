@@ -1,5 +1,5 @@
 <template>
-  <AppLayout workspace>
+  <AppLayout appearance="user" workspace record-workspace>
     <div class="workspace-page">
       <!-- Filters -->
       <div class="card workspace-fixed p-4" data-test="user-orders-filters">
@@ -36,7 +36,6 @@
 
       <!-- Pagination -->
       <Pagination
-        v-if="pagination.total > 0"
         class="workspace-fixed"
         data-test="user-orders-pagination"
         :page="pagination.page"

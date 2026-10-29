@@ -1,5 +1,6 @@
 <template>
-  <div ref="panel" class="min-w-0 p-3 sm:p-4" :class="workspace ? 'workspace-body' : 'space-y-4'" @pointerdown="markReading" @focusin="markReading" @wheel.passive="markReading" @touchstart.passive="markReading">
+  <div ref="panel" class="min-w-0" :class="[workspace ? 'workspace-body' : 'space-y-4', mode === 'admin' ? 'p-3 sm:p-4' : 'live-user-workspace gap-4']" @pointerdown="markReading" @focusin="markReading" @wheel.passive="markReading" @touchstart.passive="markReading">
+    <div :class="mode === 'user' ? 'card workspace-fixed space-y-3 p-4' : workspace ? 'workspace-fixed space-y-3' : 'space-y-4'">
     <div class="flex flex-wrap items-center justify-between gap-3" :class="{ 'workspace-fixed': workspace }">
       <div class="text-xs surface-muted"><p>{{ t('inspection.liveHint') }}</p><p>{{ t('inspection.liveWindow', { limit: snapshot?.limit ?? 200 }) }}</p></div>
       <RefreshControl :state="refresh" switch-visible manual />
@@ -27,8 +28,10 @@
     <p class="text-xs surface-muted" :class="{ 'workspace-fixed': workspace }">{{ t('requestList.windowFilters') }}</p>
     <p v-if="snapshot?.truncated" role="status" class="text-xs text-amber-600" :class="{ 'workspace-fixed': workspace }">{{ t('inspection.liveTruncated') }}</p>
     <button v-if="pending" type="button" class="btn btn-secondary" :class="{ 'workspace-fixed': workspace }" @click="showLatest">{{ t('inspection.newRecords') }}</button>
+    </div>
+    <div :class="mode === 'user' ? ['card overflow-hidden', workspace ? 'workspace-table-card workspace-shell' : ''] : workspace ? 'workspace-body !gap-0' : ''">
     <div v-if="desktop" :class="workspace ? 'workspace-body !gap-0' : 'overflow-x-auto'">
-      <DataTable :class="{ 'workspace-table-viewport': workspace }" :columns="columns" :data="filteredRows" :loading="!snapshot && refresh.fetching.value">
+      <DataTable ref="dataTable" :class="{ 'workspace-table-viewport': workspace }" :columns="columns" :data="displayedRows" :loading="!snapshot && refresh.fetching.value">
         <template #cell-started_at="{ row }"><time class="whitespace-nowrap text-xs tabular-nums" :datetime="row.started_at" :title="formatDateTime(row.started_at)">{{ shortTime(row.started_at) }}</time></template>
         <template #cell-model="{ row }"><div class="max-w-52 break-words text-sm font-medium" :title="row.model">{{ row.model }}</div><div v-if="row.reasoning_effort" class="text-xs surface-muted">{{ row.reasoning_effort }}</div></template>
         <template #cell-user_id="{ row }"><span class="text-xs">#{{ row.user_id }}</span><div class="max-w-40 break-all text-xs surface-muted">{{ row.key_name }}</div></template>
@@ -42,10 +45,10 @@
         <template #cell-client="{ row }"><button type="button" class="max-w-44 text-left text-xs surface-control" :title="row.user_agent" @click="copyClient(row)"><span class="block truncate">{{ clientName(row) }}</span><span class="block break-all surface-muted">{{ row.ip_address || '—' }}</span></button></template>
       </DataTable>
     </div>
-    <div v-else class="space-y-2" :aria-busy="refresh.fetching.value">
+    <div v-else ref="mobileViewport" class="space-y-2" :class="{ 'workspace-scroll p-3': mode === 'user' && workspace }" :aria-busy="refresh.fetching.value">
       <p v-if="!snapshot && refresh.fetching.value" class="p-6 text-center text-sm surface-muted">{{ t('common.loading') }}</p>
       <p v-else-if="!filteredRows.length" class="p-6 text-center text-sm surface-muted">{{ t('empty.noData') }}</p>
-      <article v-for="row in filteredRows" :key="row.id" class="min-w-0 rounded-xl border border-gray-200 surface-inset p-3 dark:border-dark-700">
+      <article v-for="row in displayedRows" :key="row.id" class="min-w-0 rounded-xl border border-gray-200 surface-inset p-3 dark:border-dark-700">
         <div class="flex items-start justify-between gap-2"><div class="min-w-0 break-all text-sm font-medium">{{ row.model }} <span class="text-[11px] font-normal surface-muted">{{ typeLabel(row) }}</span></div><span class="shrink-0 text-xs tabular-nums">{{ cost(row) }}</span></div>
         <div class="mt-1 flex flex-wrap items-center justify-between gap-1"><div><LiveRequestResult :row="row" /></div><time class="text-xs text-gray-500" :datetime="row.started_at">{{ shortTime(row.started_at) }}</time></div>
         <div class="mt-1 flex items-start justify-between gap-2"><div class="min-w-0"><LiveRequestTokens :row="row" /></div><span class="min-w-0 max-w-[40%] break-words text-right text-xs surface-muted">{{ row.group_name || '—' }}</span></div>
@@ -63,7 +66,17 @@
         </dl>
       </article>
     </div>
+    </div>
     <p v-if="copied" role="status" class="text-xs text-primary-600" :class="{ 'workspace-fixed': workspace }">{{ t('inspection.copied') }}</p>
+    <Pagination
+      v-if="mode === 'user'"
+      class="workspace-fixed"
+      :page="page"
+      :page-size="pageSize"
+      :total="filteredRows.length"
+      :show-page-size-selector="false"
+      @update:page="page = $event"
+    />
   </div>
 </template>
 <script setup lang="ts">
@@ -81,6 +94,7 @@ import { liveAbnormal, liveActive, liveCSVValue } from '@/utils/liveRequestPrese
 import { usageMoney } from '@/utils/usageInspection'
 import DataTable from '@/components/common/DataTable.vue'
 import Select from '@/components/common/Select.vue'
+import Pagination from '@/components/common/Pagination.vue'
 import RefreshControl from '@/components/common/RefreshControl.vue'
 import LiveRequestResult from './LiveRequestResult.vue'
 import LiveRequestMetrics from './LiveRequestMetrics.vue'
@@ -93,10 +107,14 @@ const storageKey = useColumnPreferenceKey(`${props.mode}-live-requests-v2`)
 const columnKey = useColumnPreferenceKey(`${props.mode}-live-columns-v2`)
 const peers = usePollingBudget(`live-requests:${auth.user?.id ?? 'anonymous'}`)
 const panel = ref<HTMLElement>()
+const dataTable = ref<InstanceType<typeof DataTable> | null>(null)
+const mobileViewport = ref<HTMLElement | null>(null)
 const rows = ref<LiveRequest[]>([])
 const snapshot = ref<LiveRequestSnapshot | null>(null)
 const pending = ref<LiveRequest[] | null>(null)
 const expanded = ref(new Set<string>())
+const page = ref(1)
+const pageSize = 20
 const resultFilter = ref('all'), modelFilter = ref(''), groupFilter = ref(''), userFilter = ref('')
 const hiddenColumns = ref<string[]>(['client'])
 const fixedColumns = ['started_at', 'model', 'status']
@@ -120,7 +138,7 @@ function saveColumns() { try { localStorage.setItem(columnKey, JSON.stringify(hi
 function toggleColumn(key: string) { if (fixedColumns.includes(key)) return; hiddenColumns.value = hiddenColumns.value.includes(key) ? hiddenColumns.value.filter(item => item !== key) : [...hiddenColumns.value, key]; saveColumns() }
 function resetColumns() { hiddenColumns.value = ['client']; saveColumns() }
 function markReading() { readingUntil = performance.now() + 5000 }
-function isReading() { return expanded.value.size > 0 || performance.now() < readingUntil || window.scrollY > 160 || !!window.getSelection()?.toString() || !!panel.value?.contains(document.activeElement) }
+function isReading() { return (props.mode === 'user' && page.value > 1) || expanded.value.size > 0 || performance.now() < readingUntil || window.scrollY > 160 || !!window.getSelection()?.toString() || !!panel.value?.contains(document.activeElement) }
 const refresh = useAutoRefresh({
   storageKey, intervals: [2, 5, 15, 30], defaultInterval: 2, defaultEnabled: true, temporaryPause: true,
   minimumIntervalSeconds: () => Math.max(snapshot.value?.poll_after_seconds ?? 2, snapshot.value?.items.length === 0 ? 5 : 2, peers.value * 2),
@@ -139,11 +157,23 @@ const refresh = useAutoRefresh({
   },
 })
 const observationClock = { now: clock, receivedAt, serverNow, healthy: computed(() => refresh.enabled.value && !refresh.error.value && !refresh.paused.value) }
-function showLatest() { if (pending.value) rows.value = pending.value; pending.value = null; expanded.value = new Set() }
+function showLatest() { if (pending.value) rows.value = pending.value; pending.value = null; expanded.value = new Set(); page.value = 1 }
 function toggleExpanded(id: string) { const next = new Set(expanded.value); if (next.has(id)) next.delete(id); else next.add(id); expanded.value = next }
 const filteredRows = computed(() => rows.value.filter(row =>
   (resultFilter.value === 'all' || (resultFilter.value === 'success' ? row.status === 'completed' : liveAbnormal(row))) &&
   (!modelFilter.value || row.model === modelFilter.value) && (!groupFilter.value || row.group_name === groupFilter.value) && (!userFilter.value || String(row.user_id) === userFilter.value)))
+const displayedRows = computed(() => props.mode === 'user'
+  ? filteredRows.value.slice((page.value - 1) * pageSize, page.value * pageSize)
+  : filteredRows.value)
+watch([resultFilter, modelFilter, groupFilter, userFilter], () => { page.value = 1 })
+watch(() => filteredRows.value.length, total => {
+  page.value = Math.min(page.value, Math.max(1, Math.ceil(total / pageSize)))
+})
+watch(page, () => {
+  if (props.mode !== 'user') return
+  const viewport = desktop.value ? dataTable.value?.scrollViewportEl : mobileViewport.value
+  if (viewport) viewport.scrollTop = 0
+}, { flush: 'post' })
 const options = (label: string, values: string[]) => [{ value: '', label }, ...Array.from(new Set(values.filter(Boolean))).sort().map(value => ({ value, label: value }))]
 const modelOptions = computed(() => options(t('requestList.allModels'), rows.value.map(row => row.model)))
 const groupOptions = computed(() => options(t('requestList.allGroups'), rows.value.map(row => row.group_name ?? '')))
@@ -164,7 +194,7 @@ function exportWindow() {
 }
 onMounted(() => { void refresh.refresh(); timer = setInterval(() => { if (!document.hidden) clock.value = performance.now() }, 250) })
 watch([() => adminSupportContext.value?.userId, () => auth.user?.id], () => {
-  controller?.abort(); rows.value = []; snapshot.value = null; pending.value = null; expanded.value = new Set()
+  controller?.abort(); rows.value = []; snapshot.value = null; pending.value = null; expanded.value = new Set(); page.value = 1
 })
 onBeforeUnmount(() => { controller?.abort(); if (timer) clearInterval(timer) })
 </script>

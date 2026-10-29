@@ -34,6 +34,12 @@ const localizedMessages: Record<'en' | 'zh', Record<string, string>> = {
 
 const messages: Record<string, string> = {
   'usage.outputTps': 'Output TPS',
+  'usage.reasoningEffort': 'Reasoning effort',
+  'usage.fastStateLabel': 'Fast',
+  'usage.fastEnabled': 'Enabled',
+  'usage.fastDisabled': 'Disabled',
+  'usage.fastUnrecorded': 'Not recorded',
+  'usage.fastStateHint': 'Final request Fast state; not response tier or billing.',
   'admin.usage.userDeletedBadge': 'Deleted',
   'usage.costDetails': 'Cost Breakdown',
   'admin.usage.inputCost': 'Input Cost',
@@ -179,6 +185,57 @@ const baseImageRow = {
   image_size_source: null,
   image_size_breakdown: null,
 }
+
+describe('user UsageTable model metadata', () => {
+  // Audited user table: request effort and safe Fast state belong below the
+  // requested model. Unknown history cannot be inferred from admin tier hints.
+  it.each([
+    { value: true, label: 'Fast: Enabled' },
+    { value: false, label: 'Fast: Disabled' },
+    { value: null, label: 'Fast: Not recorded' },
+    { value: undefined, label: 'Fast: Not recorded' },
+  ])('shows the final request Fast state $value beneath the model', ({ value, label }) => {
+    const wrapper = mount(UsageTable, {
+      props: {
+        modelMetadata: true,
+        showAccountBilling: false,
+        data: [{ ...baseImageRow, model: 'requested-model', reasoning_effort: 'high', request_fast_enabled: value, response_service_tier: 'priority', service_tier: 'priority' }],
+        columns: [{ key: 'model', label: 'Model' }, { key: 'cost', label: 'Cost' }],
+      },
+      global: { stubs: { DataTable: DataTableStub, EmptyState: true, Icon: true, Teleport: true } },
+    })
+    const metadata = wrapper.get('[data-testid="usage-model-metadata"]')
+    expect(metadata.text()).toContain('High')
+    expect(metadata.text()).toContain(label)
+    expect(metadata.element.previousElementSibling?.textContent).toBe('requested-model')
+    const fastBadge = metadata.get('span.border')
+    expect(fastBadge.attributes('title')).toContain('not response tier or billing')
+    expect(fastBadge.classes().includes('text-primary-600')).toBe(value === true)
+    expect(wrapper.find('[data-testid="service-tier-cell"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('$0.4')
+  })
+  it('keeps existing model mappings and incomplete diagnostics with user metadata enabled', () => {
+    const wrapper = mount(UsageTable, {
+      props: {
+        modelMetadata: true,
+        data: [{ ...baseImageRow, model: 'requested-model', model_mapping_chain: 'requested-model→mapped-model', reasoning_effort: 'max', upstream_reasoning_effort: 'xhigh', is_complete: false }],
+        columns: [{ key: 'model', label: 'Model' }],
+      },
+      global: { stubs: { DataTable: DataTableStub, EmptyState: true, Icon: true, Teleport: true } },
+    })
+    expect(wrapper.text()).toContain('requested-model')
+    expect(wrapper.text()).toContain('mapped-model')
+    expect(wrapper.get('[data-testid="usage-model-metadata"]').text()).toContain('Max ↳ XHigh')
+    expect(wrapper.get('[data-testid="usage-incomplete-badge"]').text()).toBe('Incomplete')
+  })
+  it('leaves the shared admin table without user metadata by default', () => {
+    const wrapper = mount(UsageTable, {
+      props: { data: [{ ...baseImageRow, request_fast_enabled: true }], columns: [{ key: 'model', label: 'Model' }] },
+      global: { stubs: { DataTable: DataTableStub, EmptyState: true, Icon: true, Teleport: true } },
+    })
+    expect(wrapper.find('[data-testid="usage-model-metadata"]').exists()).toBe(false)
+  })
+})
 
 describe('admin UsageTable tooltip', () => {
   it('shows output TPS in the latency cell using total duration', () => {

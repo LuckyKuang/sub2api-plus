@@ -32,7 +32,13 @@ on their own platform; composite offers retain the resolved concrete supplier.
 Global price catalogs supply prices, not additional models. A group without a
 channel can still publish its configured routes, group prices or account model
 IDs. The request-local channel snapshot is shared by mappings and billing
-resolution. There is no shared user-directory cache or provider discovery,
+resolution. Account-derived candidates come from one request-local projection
+of authorized group IDs, concrete platform and model mappings, without loading
+account credentials beyond those mappings, proxy records or group associations.
+Only active, schedulable, undeleted accounts contribute; transient scheduling
+and expiry windows remain irrelevant to configured model availability. Repository
+errors abort the catalog instead of producing partial results. There is no
+server-side shared user-directory cache or provider discovery,
 credential refresh, account selection or usage write during this read.
 
 ## Catalog DTO
@@ -111,8 +117,9 @@ groups and model time schedules display an amber Dynamic billing badge; tiered
 prices display a separate blue badge only when the group enables long-context
 pricing and the offer contains context or media tiers. Dynamic billing indicates a configured
 condition, not that the current request falls inside the peak window. A merged
-card says “Some quotes” when only part of its quote set has that condition. Service-tier
-and official-reference tables are always expanded in details.
+card says “Some quotes” when only part of its quote set has that condition. Service
+tiers start collapsed; official-reference tables remain expanded within an opened
+quote, as described below.
 
 Base-context image-token prices also use billing probes for Standard, priority
 and flex. A configured zero image-input price follows billing's text-input
@@ -175,8 +182,9 @@ base prices are excluded from ranges, with an incomplete-price
 notice; explicit zero remains zero. Failed personal-rate lookup labels ranges as
 default-rate references. Minimum displayed price does not select a routing group.
 
-The catalog adapts from one to at most four columns, with 20px gaps and 20px card
-corners, including loading placeholders.
+The catalog adapts from one to at most three columns, with 20px gaps and larger
+cards with 16px corners. Wrapped platform buttons retain their natural width.
+Desktop controls remain fixed above the independently scrolling results.
 
 Details immediately show every authorized quote in the group comparison table.
 Each group's complete pricing and billing conditions are available through its
@@ -222,6 +230,16 @@ shows a retryable error. Request sequence and authenticated user identity guard
 against stale completion; logout/user changes clear all previous data. Details
 support keyboard focus containment, Escape and focus restoration. Copy uses the
 application clipboard helper, including failure feedback and a selectable ID.
+
+Successful catalogs with loaded user rates are reused for 180 seconds in
+document memory, isolated by login session, actor, assistance target and locale.
+The cache holds at most four scopes and clears on login/logout; reads do not
+extend freshness. It never stores tokens or responses in persistent browser
+storage. Entry and locale changes may reuse a fresh response; manual Refresh
+and Retry always invalidate it and perform a real request. Failed, aborted,
+unavailable-rate and superseded responses never populate the cache. Filters
+operate locally, with no timer, focus or visibility refresh. Cached quote
+timestamps remain visible evidence of their original snapshot.
 
 ## Validation
 

@@ -1,6 +1,8 @@
 <template>
-  <AppLayout>
+  <AppLayout appearance="user" workspace>
+    <div class="workspace-page legacy-status-page">
     <MonitorHero
+      class="card workspace-fixed legacy-status-heading"
       :overall-status="overallStatus"
       :interval-seconds="DEFAULT_INTERVAL_SECONDS"
       :window="currentWindow"
@@ -10,6 +12,7 @@
       @refresh="refresh()"
     />
 
+    <div class="workspace-scroll legacy-status-cards" tabindex="0">
     <MonitorCardGrid
       :items="items"
       :window="currentWindow"
@@ -18,6 +21,8 @@
       :detail-cache="detailCache"
       @card-click="openDetail"
     />
+    </div>
+    </div>
 
     <MonitorDetailDialog
       :show="showDetail"
@@ -170,3 +175,8 @@ onBeforeUnmount(() => {
   if (abortController) abortController.abort()
 })
 </script>
+
+<style scoped>
+.legacy-status-heading { padding: 16px 20px; }
+.legacy-status-cards { border-radius: 16px; }
+</style>

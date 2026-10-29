@@ -13,6 +13,22 @@ function mountPagination() {
 }
 
 describe('pagination jump input', () => {
+  // Approved user audit keeps pagination visible even when no records match.
+  it('keeps an empty list on page one with both directions disabled', async () => {
+    const wrapper = mountPagination()
+    await wrapper.setProps({ total: 0 })
+    const directions = wrapper.findAll('button').filter(button =>
+      button.attributes('aria-label') === 'pagination.previous' || button.attributes('aria-label') === 'pagination.next'
+    )
+    expect(directions).toHaveLength(2)
+    expect(directions.every(button => (button.element as HTMLButtonElement).disabled)).toBe(true)
+    const current = wrapper.get('button[aria-current="page"]')
+    expect(current.text()).toBe('1')
+    await wrapper.get('input').setValue('9')
+    await wrapper.get('.btn').trigger('click')
+    expect(wrapper.emitted('update:page')).toBeUndefined()
+  })
+
   it.each(['click', 'enter'])('jumps to the entered numeric page using %s', async (action) => {
     const wrapper = mountPagination()
     const input = wrapper.get('input[type="number"]')

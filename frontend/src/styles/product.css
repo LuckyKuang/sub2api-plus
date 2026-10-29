@@ -1,0 +1,161 @@
+/* Explicit public/user presentation; admin pages keep the console palette.
+   Root tokens also reach menus and dialogs portalled directly to body. */
+:root[data-product-ui] {
+  --surface-solid: rgb(255 255 255 / var(--console-card-alpha, 1));
+  --surface-soft: rgb(245 245 246 / var(--console-card-alpha, 1));
+  --surface-text: #202124;
+  --surface-muted: #60646c;
+  --surface-edge: rgb(113 113 122 / 25%);
+  --surface-glint: transparent;
+  --surface-shadow: 0 2px 5px -2px rgb(24 24 27 / calc(.08 * var(--console-card-alpha, 1)));
+  --console-canvas: #f6f6f7;
+  --console-glow: transparent;
+  --console-glow-secondary: transparent;
+  --console-background-mask: rgb(246 246 247 / var(--console-light-mask-alpha, .3));
+  --console-control-edge: rgb(113 113 122 / 40%);
+}
+:root.dark[data-product-ui] {
+  --surface-solid: rgb(36 37 40 / var(--console-card-alpha, 1));
+  --surface-soft: rgb(29 30 33 / var(--console-card-alpha, 1));
+  --surface-text: #f1f1f3;
+  --surface-muted: #b4b6be;
+  --surface-edge: rgb(161 161 170 / 28%);
+  --surface-shadow: 0 2px 5px -2px rgb(0 0 0 / calc(.24 * var(--console-card-alpha, 1)));
+  --console-canvas: #191a1d;
+  --console-background-mask: rgb(25 26 29 / var(--console-dark-mask-alpha, .48));
+  --console-control-edge: rgb(161 161 170 / 48%);
+}
+:root[data-product-ui] body { background-color: var(--console-canvas); }
+:root[data-product-ui] :is(.card, .glass-surface, .shell-surface, .stat-card, .surface-control, .input, .select-trigger, .btn-secondary) {
+  background-image: none;
+}
+:root[data-product-ui] :is(.surface-control, .input, .select-trigger, .btn-secondary) { box-shadow: none; }
+:root[data-product-ui] :is(.app-header, .sidebar-header, .sidebar-panel, .sidebar-footer) { box-shadow: none; }
+:root[data-product-ui] .surface-panel { box-shadow: 0 10px 32px -12px rgb(0 0 0 / calc(.25 * var(--console-card-alpha, 1))); }
+
+/* Narrow screens count the floating shell once. Desktop content is centered
+   with proportional whitespace and the Café Shop content-width limit. */
+.app-layout-user {
+  --user-page-inset: 1rem;
+  --user-left-reservation: max(var(--shell-gutter), env(safe-area-inset-left));
+  --user-right-reservation: max(var(--shell-gutter), env(safe-area-inset-right));
+}
+.app-layout-user .app-main {
+  padding-left: max(0px, calc(var(--user-page-inset) - var(--user-left-reservation)));
+  padding-right: max(0px, calc(var(--user-page-inset) - var(--user-right-reservation)));
+  border-radius: 0;
+}
+.app-layout-user .app-page { color: var(--surface-text); }
+.app-layout-user .card-header { padding: 1rem 1.25rem; }
+.app-layout-user .card-body { padding: 1.25rem; }
+.app-layout-user .stat-value { font-variant-numeric: tabular-nums; letter-spacing: -.025em; }
+.app-layout-user .sidebar-link { font-size: .875rem; }
+.app-layout-user .sidebar-link-active { box-shadow: inset 3px 0 0 rgb(var(--console-accent-500, 20 184 166)); }
+.auth-layout, .home-page { background-color: var(--console-canvas); color: var(--surface-text); }
+:root[data-console-background] :is(.auth-layout, .home-page) {
+  background-image: linear-gradient(var(--console-background-mask), var(--console-background-mask)), var(--console-custom-background-image);
+  background-size: cover;
+  background-position: center;
+}
+.auth-brand { min-height: 120px; }
+.auth-card h2 { letter-spacing: -.025em; }
+
+@media (min-width: 768px) {
+  .app-layout-user { --user-page-inset: 1.5rem; }
+}
+@media (min-width: 1024px) {
+  .app-layout-user .app-main { padding-inline: 0; }
+  .app-layout-user .app-page { width: 94%; max-width: 100rem; margin-inline: auto; }
+  .app-layout-user.app-layout-workspace .app-main { scrollbar-gutter: auto; }
+  .app-layout-user.app-layout-workspace .app-page { padding-bottom: 0; }
+  .app-layout-user.app-layout-workspace :is(.app-page, .workspace-page, .workspace-body, .workspace-stack, .workspace-scroll),
+  .app-layout-user.app-layout-workspace .table-page-layout:not(.mobile-mode) { gap: 16px !important; }
+
+  .app-layout-user:not(.app-layout-workspace) .app-main { overflow: auto; scrollbar-gutter: stable; }
+  .app-layout-user:not(.app-layout-workspace) .app-page { height: auto; min-height: 0; padding-bottom: 24px; }
+  .app-layout-user:not(.app-layout-workspace) :is(.workspace-page, .workspace-body, .workspace-stack, .workspace-scroll, .workspace-table-card, .table-page-layout) {
+    height: auto; max-height: none; flex: 0 0 auto; min-height: 0;
+  }
+  .app-layout-user:not(.app-layout-workspace) .table-page-layout { display: flex; flex-direction: column; gap: 16px; }
+  .app-layout-user:not(.app-layout-workspace) :is(.layout-section-scrollable, .table-scroll-container, .table-page-content, .layout-section-table) {
+    height: auto; max-height: none; min-height: 0; overflow: visible; flex: 0 0 auto;
+  }
+  .app-layout-user:not(.app-layout-workspace) :is(.workspace-table-card, .workspace-scroll) { overflow: visible; overscroll-behavior-y: auto; }
+  .app-layout-user:not(.app-layout-workspace) :is(.workspace-table-viewport, .table-wrapper, .record-table-scroll) {
+    height: auto !important; max-height: none !important; min-height: 0; min-width: 0;
+    flex: 0 0 auto; overflow: auto; overscroll-behavior-y: auto; scrollbar-gutter: auto;
+  }
+}
+
+/* User lists keep their native content widths. Composite values use separate
+   lines; row actions retain the shared wrapping button layout. DataTable uses
+   its existing cards when these columns cannot fit the available container. */
+.app-layout-user table.record-table {
+  table-layout: auto !important; width: 100%; min-width: 100% !important;
+}
+.app-layout-user table:is(.record-table, .static-table-header-table) :is(th, td) {
+  min-width: 0; width: auto; max-width: none;
+  padding: 10px 6px; vertical-align: middle;
+  text-align: left !important; white-space: nowrap;
+  overflow-wrap: normal; word-break: normal; clip-path: none !important;
+  font-size: 12px;
+}
+.app-layout-user table:is(.record-table, .static-table-header-table) th { line-height: 1.5; letter-spacing: 0; }
+.app-layout-user table.record-table td { line-height: 1.65; }
+.app-layout-user table:is(.record-table, .static-table-header-table) :is(th, td:not([data-field="actions"])) * {
+  white-space: nowrap; overflow-wrap: normal; word-break: normal; text-align: left;
+}
+.app-layout-user table:is(.record-table, .static-table-header-table) :is(th, td:not([data-field="actions"])) > :is(div, span, button) {
+  min-width: 0; max-width: none;
+}
+.app-layout-user table:is(.record-table, .static-table-header-table) :is(.truncate, .whitespace-nowrap, .break-all) {
+  overflow: visible; white-space: nowrap; text-overflow: clip; overflow-wrap: normal; max-width: none;
+}
+.app-layout-user table:is(.record-table, .static-table-header-table) :is(.text-sm, .text-xs) { font-size: 12px; }
+.app-layout-user table:is(.record-table, .static-table-header-table) :is(th, td:not([data-field="actions"])) :is(.justify-end, .justify-between, .justify-center) { justify-content: flex-start; }
+.app-layout-user table.record-table td:not([data-field="actions"]) .items-end { align-items: flex-start; }
+.app-layout-user table:is(.record-table, .static-table-header-table) :is(th, td:not([data-field="actions"])) .flex { flex-wrap: nowrap; }
+.app-layout-user table.record-table [data-field="group"] button { margin: 0; white-space: nowrap; flex-wrap: nowrap; }
+.app-layout-user table.record-table td[data-field="actions"] { white-space: normal; }
+.app-layout-user table.record-table td[data-field="tokens"] > .flex > .space-y-1 > .flex { flex-direction: column; align-items: flex-start; gap: 4px; }
+.app-layout-user table.record-table td[data-field="created_at"] > span { display: block; max-width: 82px; white-space: normal; }
+.app-layout-user table.record-table td[data-field="endpoint"] .break-all { white-space: normal; overflow-wrap: anywhere; }
+.app-layout-user table.record-table td[data-field="endpoint"] { white-space: normal; max-width: 200px; }
+
+.app-layout-user .user-record-cards .user-record-fields {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); gap: 16px;
+}
+.app-layout-user .user-record-cards :is(.user-record-selection, .user-record-actions) { grid-column: 1 / -1; }
+.app-layout-user .user-record-cards [data-field] { flex-direction: column; align-items: flex-start; gap: 4px; }
+.app-layout-user .user-record-cards [data-field] > div { width: 100%; text-align: left; }
+.app-layout-user .user-record-cards :is([data-field="model"], [data-field="group"], [data-field="group_name"]) :is(div, span) {
+  white-space: nowrap; word-break: normal; overflow-wrap: normal;
+}
+.app-layout-user .user-record-cards .truncate { max-width: 100%; overflow: visible; text-overflow: clip; }
+.app-layout-user .user-record-cards [data-field] :is(.justify-end, .justify-center) { justify-content: flex-start; }
+.app-layout-user .user-record-cards .table-actions { justify-content: flex-start; }
+
+/* User audit: pagination owns an independent surface while its record area
+   scrolls. The administrator console retains its existing page chrome. */
+:root .app-layout-user .pagination-card {
+  flex: none;
+  margin: 0;
+  border: 1px solid var(--surface-edge) !important;
+  border-radius: 16px;
+  background-color: var(--surface-solid);
+  box-shadow: var(--surface-shadow) !important;
+}
+
+:root .app-layout-user.app-layout-workspace .app-main :is(.workspace-shell.card, .workspace-table-card, .workspace-fixed.card, .workspace-fixed.surface-card, .workspace-tabs) {
+  border: 1px solid var(--surface-edge) !important;
+  border-radius: 16px;
+  background-color: var(--surface-solid);
+  box-shadow: var(--surface-shadow) !important;
+}
+:root .app-layout-user.app-layout-workspace .table-page-layout > .layout-section-fixed:not(.table-page-pagination) {
+  padding: 12px 16px;
+  border: 1px solid var(--surface-edge) !important;
+  border-radius: 16px;
+  background-color: var(--surface-solid);
+  box-shadow: var(--surface-shadow) !important;
+}

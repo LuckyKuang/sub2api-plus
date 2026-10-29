@@ -954,9 +954,15 @@ before an upstream write. Usage records capture the final converted tier and
 settlement uses the accepted retail Free Fast setting. Native Anthropic
 forwarding and other target platforms retain their own protocol behavior.
 
-Usage tier fields are administrator-only API data. User usage responses omit
-`service_tier`, `requested_service_tier` and `response_service_tier`; user usage
-tables, column settings, cost tooltips and exports do not show service tiers.
+Raw usage tier fields are administrator-only API data. User usage responses omit
+`service_tier`, `requested_service_tier` and `response_service_tier`. The public
+nullable boolean `request_fast_enabled` describes the recorded final request:
+trimmed, case-insensitive `priority`/`fast` mean true, `default`/`auto`/`flex` mean
+false, and missing, empty or unrecognized values mean null. It is derived only
+from `requested_service_tier`, never the upstream response, billable tier, model,
+cost or current configuration. The user table places this state and reasoning
+effort below the requested model; raw tiers remain absent from user column
+settings, cost tooltips and exports. This display does not change pricing.
 
 
 ## Codex transport and active probe timing

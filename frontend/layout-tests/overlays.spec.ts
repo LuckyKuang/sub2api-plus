@@ -132,7 +132,7 @@ async function chooseDate(page: Page, field: Locator, afterOpen?: () => Promise<
 test.beforeEach(async ({ page }, info) => {
   const locale = String(info.project.use.locale).startsWith('zh') ? 'zh' : 'en'
   const theme = info.project.use.colorScheme === 'dark' ? 'dark' : 'light'
-  await page.goto(`/layout-tests/index.html?locale=${locale}&theme=${theme}`)
+  await page.goto(`/layout-tests/index.html?locale=${locale}&theme=${theme}&product=${info.project.name.startsWith('product-') ? '1' : '0'}`)
   await expect(page.getByTestId('layout-ready')).toBeVisible()
 })
 
@@ -276,7 +276,7 @@ test('an exceptionally long title remains readable without displacing actions in
 test('shared navigation, segmented choices and horizontal row actions keep translated controls readable and reachable', async ({ page }, info) => {
   const locale = String(info.project.use.locale).startsWith('zh') ? 'zh' : 'en'
   const theme = info.project.use.colorScheme === 'dark' ? 'dark' : 'light'
-  await page.goto(`/layout-tests/index.html?locale=${locale}&theme=${theme}&view=controls&accent=%23ec4899`)
+  await page.goto(`/layout-tests/index.html?locale=${locale}&theme=${theme}&view=controls&accent=%23ec4899&product=${info.project.name.startsWith('product-') ? '1' : '0'}`)
   const gallery = page.getByTestId('style-gallery')
   await expect(gallery).toBeVisible()
   for (const alpha of ['1', '.8', '0']) {
@@ -324,7 +324,7 @@ test('primary labels stay opaque and legible at opaque, half-transparent and tra
   const theme = info.project.use.colorScheme === 'dark' ? 'dark' : 'light'
   for (const alpha of [1, .5, 0]) {
     for (const accent of ['ffffff', 'ffff00', '000000', '000080', '14b8a6']) {
-      await page.goto(`/layout-tests/index.html?locale=${locale}&theme=${theme}&view=controls&accent=%23${accent}&alpha=${alpha}`)
+      await page.goto(`/layout-tests/index.html?locale=${locale}&theme=${theme}&view=controls&accent=%23${accent}&alpha=${alpha}&product=${info.project.name.startsWith('product-') ? '1' : '0'}`)
       const button = page.getByTestId('style-gallery').locator('.btn-primary')
       await button.scrollIntoViewIfNeeded()
       await expectReachable(button)

@@ -1,5 +1,5 @@
 <template>
-  <AppLayout>
+  <AppLayout appearance="user">
     <div class="space-y-4">
       <div class="flex flex-wrap items-center gap-3">
         <RouterLink to="/purchase" class="btn btn-secondary">{{ t('featureExtensions.backPurchase') }}</RouterLink>

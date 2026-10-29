@@ -629,6 +629,21 @@ class DeclaredToolchainsTest(unittest.TestCase):
         self.assertGreaterEqual(declared.node_major_minimum, 20)
         self.assertRegex(declared.golangci_lint, r"^\d+\.\d+\.\d+$")
 
+    def test_validation_node_uses_node_24_lts_and_matches_image_default(self) -> None:
+        # The validation runtime must support the declared frontend engine and
+        # use the selected Node 24 LTS line for both managed and direct builds.
+        pinned = push_cli.validation_runtime.declared_validation_pins(push_cli.ROOT)["NODE_VERSION"]
+        self.assertRegex(pinned, r"^24\.\d+\.\d+$")
+        self.assertGreaterEqual(
+            int(pinned.split(".")[0]),
+            push_cli.declared_toolchains().node_major_minimum,
+        )
+        dockerfile = (push_cli.ROOT / "deploy/Dockerfile.validation").read_text()
+        self.assertEqual(
+            [f"ARG NODE_VERSION={pinned}"],
+            [line for line in dockerfile.splitlines() if line.startswith("ARG NODE_VERSION=")],
+        )
+
 
 class BranchAndProofTest(unittest.TestCase):
     def test_default_branch_is_never_pushable(self) -> None:
@@ -792,7 +807,9 @@ class ValidationGenerationTest(unittest.TestCase):
             root = Path(temp_dir)
             self.create_inputs(root)
             original = push_cli.validation_runtime.validation_image_digest(root)
-            with mock.patch.object(push_cli.validation_runtime, "NODE_VERSION", "20.19.5"):
+            major, minor, patch = push_cli.validation_runtime.NODE_VERSION.split(".")
+            next_patch = f"{major}.{minor}.{int(patch) + 1}"
+            with mock.patch.object(push_cli.validation_runtime, "NODE_VERSION", next_patch):
                 changed = push_cli.validation_runtime.validation_image_digest(root)
 
         self.assertNotEqual(original, changed)

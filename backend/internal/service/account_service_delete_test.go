@@ -159,6 +159,9 @@ func (s *accountRepoStub) ListSchedulableUngroupedByPlatforms(ctx context.Contex
 	panic("unexpected ListSchedulableUngroupedByPlatforms call")
 }
 
+func (s *accountRepoStub) ListCommercialModelMappings(context.Context, []int64) (map[int64][]CommercialModelMapping, error) {
+	panic("unexpected ListCommercialModelMappings call")
+}
 func (s *accountRepoStub) ListModelAvailabilityCandidates(ctx context.Context, groupID *int64, platforms []string, includeGrouped bool) ([]Account, error) {
 	panic("unexpected ListModelAvailabilityCandidates call")
 }

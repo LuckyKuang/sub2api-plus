@@ -1,5 +1,5 @@
 <template>
-  <AppLayout workspace>
+  <AppLayout appearance="user" workspace record-workspace>
     <TablePageLayout>
       <template #filters>
         <div class="flex flex-col gap-3">
@@ -98,6 +98,7 @@
 
       <template #table>
         <DataTable
+          class="workspace-table-viewport"
           :columns="columns"
           :data="apiKeys"
           :loading="loading"
@@ -457,7 +458,6 @@
 
       <template #pagination>
         <Pagination
-          v-if="pagination.total > 0"
           :page="pagination.page"
           :total="pagination.total"
           :page-size="pagination.page_size"

@@ -1,10 +1,16 @@
 import { enableAutoUnmount, mount } from '@vue/test-utils'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 import CheckboxDropdown from '../CheckboxDropdown.vue'
 
-enableAutoUnmount(afterEach)
-afterEach(() => { document.body.innerHTML = '' })
+enableAutoUnmount(cleanup => afterEach(async () => {
+  cleanup()
+  try {
+    await vi.waitFor(() => expect(options()).toHaveLength(0))
+  } finally {
+    document.body.replaceChildren()
+  }
+}))
 
 function mountDropdown(disabled = false) {
   return mount(CheckboxDropdown, {
@@ -42,7 +48,7 @@ describe('CheckboxDropdown keyboard interaction', () => {
     await key(options()[1], 'End')
     expect(options()[2]).toBe(document.activeElement)
     await key(options()[2], 'Escape')
-    expect(options()).toHaveLength(0)
+    await vi.waitFor(() => expect(options()).toHaveLength(0))
     expect(wrapper.get('button').element).toBe(document.activeElement)
   })
 
@@ -54,13 +60,13 @@ describe('CheckboxDropdown keyboard interaction', () => {
     const forward = await key(options()[2], 'Tab')
     expect(forward.defaultPrevented).toBe(false)
     expect(trigger.element).toBe(document.activeElement)
-    expect(options()).toHaveLength(0)
+    await vi.waitFor(() => expect(options()).toHaveLength(0))
     await trigger.trigger('keydown', { key: 'ArrowDown' })
     expect(options()[0]).toBe(document.activeElement)
     const backward = await key(options()[0], 'Tab', true)
     expect(backward.defaultPrevented).toBe(true)
     expect(trigger.element).toBe(document.activeElement)
-    expect(options()).toHaveLength(0)
+    await vi.waitFor(() => expect(options()).toHaveLength(0))
   })
 
   it('does not expose choices when disabled and closes if disabled while open', async () => {
@@ -71,7 +77,7 @@ describe('CheckboxDropdown keyboard interaction', () => {
     await wrapper.get('button').trigger('click')
     expect(options()).toHaveLength(3)
     await wrapper.setProps({ disabled: true })
-    expect(options()).toHaveLength(0)
+    await vi.waitFor(() => expect(options()).toHaveLength(0))
     expect(wrapper.emitted('update:modelValue')).toBeUndefined()
   })
 })

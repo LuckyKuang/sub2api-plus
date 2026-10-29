@@ -121,11 +121,22 @@ func (s *ModelPlazaService) ListAvailableCatalog(ctx context.Context, groups []G
 	localChannels.cache.Store(populateChannelCache(active, platforms))
 	resolver := NewModelPricingResolver(localChannels, s.billingService)
 	references := NewChannelPricingReferenceService(s.pricingService, s.billingService)
+	var accountMappings map[int64][]CommercialModelMapping
+	if s.commercialAccounts != nil {
+		groupIDs := make([]int64, 0, len(groups))
+		for _, group := range groups {
+			groupIDs = append(groupIDs, group.ID)
+		}
+		accountMappings, err = s.commercialAccounts.ListCommercialModelMappings(ctx, groupIDs)
+		if err != nil {
+			return nil, fmt.Errorf("commercial account models: %w", err)
+		}
+	}
 	asOf := time.Now().UTC()
 	for _, g := range groups {
 		cg := CatalogGroup{Group: g, Models: []CatalogOffer{}, AsOf: asOf}
 		channel := bound[g.ID]
-		candidates, err := s.commercialModelCandidates(ctx, &g, channel)
+		candidates, err := s.commercialModelCandidates(ctx, &g, channel, accountMappings[g.ID])
 		if err != nil {
 			return nil, err
 		}

@@ -31,29 +31,30 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers() })
 
 describe('user dashboard workspace', () => {
-  it('retains the summary and one toolbar while switching charts, quotas and recent usage', async () => {
+  // Approved UI audit: charts, platform quotas and recent usage are one page;
+  // none of the three sections may be hidden behind a tab.
+  it('shows charts, quotas and recent usage together with one summary and toolbar', async () => {
     const wrapper = mount(DashboardView, { attachTo: document.body, global: { stubs: {
       AppLayout: { template: '<div><slot /></div>' }, LoadingSpinner: true, DateRangePicker: true, Select: true, RefreshControl: true,
       UserDashboardStats: summary, UserDashboardCharts: charts, UserDashboardRecentUsage: { template: '<div />' },
     } } })
     await flushPromises()
-    const toolbar = wrapper.get('.dashboard-toolbar').element
-    const summaryCard = wrapper.get('[data-section="summary"]').element
-    const chart = wrapper.get('[data-testid="chart-content"]').element
-    const tabs = wrapper.findAll('[role="tab"]')
-    expect(tabs).toHaveLength(3)
+    expect(wrapper.findAll('[role="tab"]')).toHaveLength(0)
     expect(wrapper.findComponent(charts).props('showToolbar')).toBe(false)
     expect(wrapper.findAllComponents(summary)[1].props('platformQuotas')).toEqual(quotas)
 
-    for (const [index, panel] of [[1, 'quotas'], [2, 'recent'], [0, 'charts']] as const) {
-      await tabs[index].trigger('click')
+    for (const panel of ['charts', 'quotas', 'recent']) {
       expect(wrapper.get(`[data-testid="dashboard-${panel}-panel"]`).isVisible()).toBe(true)
-      expect(wrapper.get('[data-section="summary"]').isVisible()).toBe(true)
-      expect(wrapper.get('.dashboard-toolbar').element).toBe(toolbar)
-      expect(wrapper.get('[data-section="summary"]').element).toBe(summaryCard)
     }
-    expect(wrapper.get('[data-testid="chart-content"]').element).toBe(chart)
+    expect(wrapper.get('[data-section="summary"]').isVisible()).toBe(true)
+    expect(wrapper.get('[data-testid="chart-content"]').isVisible()).toBe(true)
     expect(wrapper.findAll('.dashboard-toolbar')).toHaveLength(1)
+    const activity = wrapper.get('[data-testid="dashboard-activity"]')
+    expect(activity.element.contains(wrapper.get('.dashboard-toolbar').element)).toBe(false)
+    expect(activity.element.contains(wrapper.get('[data-section="summary"]').element)).toBe(true)
+    for (const panel of ['charts', 'quotas', 'recent']) {
+      expect(activity.element.contains(wrapper.get(`[data-testid="dashboard-${panel}-panel"]`).element)).toBe(true)
+    }
     expect(wrapper.text()).not.toContain('dashboard.quickActions')
     expect(getStats).toHaveBeenCalledTimes(1)
     expect(getTrend).toHaveBeenCalledTimes(1)

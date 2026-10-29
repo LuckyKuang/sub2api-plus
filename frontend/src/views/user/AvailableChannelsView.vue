@@ -1,12 +1,12 @@
 <template>
-  <AppLayout workspace>
+  <AppLayout appearance="user" workspace>
     <div class="catalog-page workspace-page min-w-0 space-y-5">
       <div class="card workspace-fixed flex items-start justify-between gap-3 p-4" data-testid="catalog-heading">
         <div>
           <h1 class="text-xl font-semibold text-gray-900 dark:text-gray-100">{{ t('availableChannels.title') }}</h1>
           <p class="mt-1 text-sm surface-muted">{{ t('availableChannels.description') }}</p>
         </div>
-        <button ref="refreshButton" class="btn btn-secondary" :disabled="loading" :aria-label="t('common.refresh')" @click="loadCatalog">
+        <button ref="refreshButton" class="btn btn-secondary" :disabled="loading" :aria-label="t('common.refresh')" @click="loadCatalog(true)">
           <Icon name="refresh" size="md" :class="{ 'animate-spin': loading }" />
         </button>
       </div>
@@ -38,7 +38,7 @@
         </div>
       </div>
       <div v-if="catalog.user_rate_status === 'unavailable'" role="status" class="workspace-fixed flex flex-wrap items-center gap-3 rounded-lg bg-amber-50/[0.15] p-3 text-sm text-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
-        {{ t('availableChannels.catalog.ratesUnavailable') }}<button class="underline surface-control" @click="loadCatalog">{{ t('availableChannels.catalog.retry') }}</button>
+        {{ t('availableChannels.catalog.ratesUnavailable') }}<button class="underline surface-control" @click="loadCatalog(true)">{{ t('availableChannels.catalog.retry') }}</button>
       </div>
       <p v-if="!loading && !error" class="workspace-fixed text-xs surface-muted" aria-live="polite">{{ t('availableChannels.catalog.modelCount', { count: visible.length }) }}</p>
       <section class="workspace-shell workspace-scroll" :aria-label="t('availableChannels.title')" data-testid="catalog-results">
@@ -46,7 +46,7 @@
           <div v-for="i in 12" :key="i" class="glass-surface h-52 animate-pulse" />
         </div>
         <div v-else-if="error" role="alert" class="card py-12 text-center">
-          <p class="text-red-600 dark:text-red-400">{{ error }}</p><button class="btn btn-secondary mt-4" @click="loadCatalog">{{ t('availableChannels.catalog.retry') }}</button>
+          <p class="text-red-600 dark:text-red-400">{{ error }}</p><button class="btn btn-secondary mt-4" @click="loadCatalog(true)">{{ t('availableChannels.catalog.retry') }}</button>
         </div>
         <div v-else-if="!visible.length" class="card py-12 text-center surface-muted">
           <p>{{ models.length ? t('availableChannels.catalog.noMatches') : t('availableChannels.noModels') }}</p>
@@ -63,8 +63,6 @@
 
 <script setup lang="ts">
 import Select from '@/components/common/Select.vue'
-import { useQuoteRefresh } from '@/composables/useQuoteRefresh'
-import { useLocaleRefresh } from '@/utils/localeRefresh'
 import { computed, nextTick, onUnmounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
@@ -74,11 +72,24 @@ import CatalogModelCard from '@/components/channels/CatalogModelCard.vue'
 import CatalogPriceDetails from '@/components/channels/CatalogPriceDetails.vue'
 import { catalogModels, defaultCatalogFilters, normalizeCatalogFilters, visibleModels, type CatalogModel } from '@/components/channels/catalog'
 import userChannelsAPI, { type ChannelCatalog } from '@/api/channels'
-import { useUserView as useAuthStore } from '@/composables/useUserView'
+import { useUserView } from '@/composables/useUserView'
+import { useAuthStore } from '@/stores/auth'
+import { getLocale } from '@/i18n'
+import { adminSupportContext } from '@/utils/adminSupportContext'
+import { availableChannelCatalogGeneration, cacheAvailableChannelCatalog, invalidateAvailableChannelCatalog, readAvailableChannelCatalog } from '@/utils/availableChannelCatalogCache'
 import { extractApiErrorMessage } from '@/utils/apiError'
 
 const { t } = useI18n()
 const auth = useAuthStore()
+const userView = useUserView()
+const catalogIdentity = computed(() => {
+  const actorId = auth.user?.id
+  const userId = userView.user?.id
+  const support = adminSupportContext.value
+  if (!auth.isAuthenticated || actorId == null || userId == null || (support && support.actorId !== actorId)) return null
+  return JSON.stringify([availableChannelCatalogGeneration(), actorId, support ? userId : null])
+})
+const catalogKey = computed(() => catalogIdentity.value === null ? null : JSON.stringify([catalogIdentity.value, getLocale()]))
 const emptyCatalog = (): ChannelCatalog => ({ groups: [], user_rate_status: 'not_requested' })
 const catalog = ref<ChannelCatalog>(emptyCatalog())
 const filters = reactive(defaultCatalogFilters())
@@ -99,21 +110,26 @@ function selectPlatform(platform: string) {
 }
 function reset() { Object.assign(filters, defaultCatalogFilters()) }
 function openDetails(model: CatalogModel) { selectedKey.value = model.key }
-async function loadCatalog() {
+async function loadCatalog(force = false) {
   controller?.abort()
   const id = ++requestId
-  const user = auth.user?.id
-  if (user == null) return
-  controller = new AbortController()
-  loading.value = true
+  const key = catalogKey.value
+  if (key === null) return
   error.value = ''
+  if (force) invalidateAvailableChannelCatalog(key)
+  const cached = force ? undefined : readAvailableChannelCatalog(key)
+  const currentController = new AbortController()
+  controller = currentController
+  loading.value = !cached
   try {
-    const result = await userChannelsAPI.getCatalog({ signal: controller.signal })
-    if (id !== requestId || auth.user?.id !== user) return
+    const result = cached ?? await userChannelsAPI.getCatalog({ signal: currentController.signal })
+    if (id !== requestId || catalogKey.value !== key || currentController.signal.aborted) return
     catalog.value = result
+    if (!cached) cacheAvailableChannelCatalog(key, result)
     normalizeCatalogFilters(models.value, filters)
   } catch (err) {
-    if (id !== requestId || auth.user?.id !== user) return
+    if (id !== requestId || catalogKey.value !== key || currentController.signal.aborted) return
+    invalidateAvailableChannelCatalog(key)
     catalog.value = emptyCatalog()
     error.value = extractApiErrorMessage(err, t('availableChannels.catalog.loadFailed'))
   } finally {
@@ -122,39 +138,41 @@ async function loadCatalog() {
       if (selectedKey.value && !selected.value) {
         selectedKey.value = null
         await nextTick()
-        refreshButton.value?.focus()
+        if (id === requestId && catalogKey.value === key) refreshButton.value?.focus()
       }
     }
   }
 }
-watch(() => auth.user?.id, () => {
+let previousIdentity: string | null | undefined
+watch(catalogKey, () => {
   ++requestId
   controller?.abort()
-  catalog.value = emptyCatalog()
-  selectedKey.value = null
+  if (catalogIdentity.value !== previousIdentity) {
+    catalog.value = emptyCatalog()
+    selectedKey.value = null
+    reset()
+  }
+  previousIdentity = catalogIdentity.value
   loading.value = false
   error.value = ''
-  reset()
   void loadCatalog()
-}, { immediate: true })
+}, { immediate: true, flush: 'sync' })
 onUnmounted(() => { ++requestId; controller?.abort() })
-useLocaleRefresh(loadCatalog)
-useQuoteRefresh(async () => { if (!loading.value) await loadCatalog() })
 </script>
 
 <style scoped>
 .catalog-page { container-type: inline-size; }
 .catalog-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
+.catalog-platforms { align-items: flex-start; flex-wrap: nowrap; }
+.catalog-platforms > span { flex: none; padding-top: 10px; }
+.catalog-platforms .segmented-control { flex: 1 1 0%; justify-content: flex-start; gap: 5px; }
+.catalog-platforms .segmented-option { flex: none; min-height: 30px; padding: 5px 12px; white-space: nowrap; }
+.catalog-grid :deep(.catalog-model-card) { min-height: 300px; padding: 22px; border-radius: 16px; }
+.catalog-grid :deep(.catalog-model-card h3) { font-size: 16px; }
+.catalog-grid :deep(.catalog-model-card .font-mono.text-base) { font-size: 20px; }
 @container (min-width: 460px) { .catalog-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @container (min-width: 700px) { .catalog-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-@container (min-width: 940px) { .catalog-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 @media (min-width: 1024px) {
   .catalog-search { flex: 1 1 200px; width: auto; }
-}
-@media (min-width: 1024px) and (max-height: 600px) {
-  .catalog-platforms { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; }
-  .catalog-platforms > * { flex-shrink: 0; }
-  .catalog-platforms .segmented-control { flex-wrap: nowrap; max-width: none; }
-  .catalog-platforms .segmented-option { flex: none; }
 }
 </style>

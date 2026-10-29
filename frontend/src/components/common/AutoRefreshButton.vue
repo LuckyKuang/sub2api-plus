@@ -20,6 +20,7 @@
       </span>
     </button>
 
+    <Transition name="dropdown">
     <div
       v-if="showDropdown"
       class="absolute right-0 z-20 mt-1 w-44 rounded-lg border border-gray-200 shadow-lg dark:border-dark-600 surface-panel"
@@ -49,6 +50,7 @@
         </button>
       </div>
     </div>
+    </Transition>
   </div>
 </template>
 

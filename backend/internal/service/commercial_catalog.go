@@ -17,6 +17,20 @@ type commercialModelCandidate struct {
 }
 
 type commercialModelKey struct{ platform, name string }
+
+// CommercialModelMapping contains only the account configuration used to
+// enumerate public models. It is not a schedulable account or a credential.
+type CommercialModelMapping struct {
+	Platform     string
+	ModelMapping any
+}
+
+// CommercialModelMappingRepository reads only persistently enabled accounts
+// bound to the supplied groups, ignoring transient state and expiry windows.
+type CommercialModelMappingRepository interface {
+	ListCommercialModelMappings(ctx context.Context, groupIDs []int64) (map[int64][]CommercialModelMapping, error)
+}
+
 type commercialCatalogBuilder struct {
 	group         *Group
 	candidates    map[commercialModelKey]commercialModelCandidate
@@ -25,13 +39,13 @@ type commercialCatalogBuilder struct {
 
 // commercialModelCandidates enumerates finite configured public IDs. Global
 // price catalogs never add models; this read does not contact a provider.
-func (s *ModelPlazaService) commercialModelCandidates(ctx context.Context, group *Group, channel *Channel) ([]commercialModelCandidate, error) {
-	routes, accounts, err := s.commercialCatalogInputs(ctx, group)
+func (s *ModelPlazaService) commercialModelCandidates(ctx context.Context, group *Group, channel *Channel, mappings []CommercialModelMapping) ([]commercialModelCandidate, error) {
+	routes, err := s.commercialCatalogRoutes(ctx, group)
 	if err != nil {
 		return nil, err
 	}
 	builder := commercialCatalogBuilder{group: group, candidates: make(map[commercialModelKey]commercialModelCandidate), accountOwners: make(map[string]map[string]bool)}
-	builder.seedConfiguredModels(channel, accounts, routes)
+	builder.seedConfiguredModels(channel, mappings, routes)
 	names := make(map[string]string)
 	for key, candidate := range builder.candidates {
 		names[key.name] = candidate.Name
@@ -52,12 +66,12 @@ func (s *ModelPlazaService) commercialModelCandidates(ctx context.Context, group
 	return out, nil
 }
 
-func (s *ModelPlazaService) commercialCatalogInputs(ctx context.Context, group *Group) ([]CompositeModelRoute, []Account, error) {
+func (s *ModelPlazaService) commercialCatalogRoutes(ctx context.Context, group *Group) ([]CompositeModelRoute, error) {
 	var routes []CompositeModelRoute
 	if group.Platform == PlatformComposite && s.commercialRoutes != nil {
 		rows, err := s.commercialRoutes.ListByGroup(ctx, group.ID, false)
 		if err != nil {
-			return nil, nil, fmt.Errorf("commercial model routes: %w", err)
+			return nil, fmt.Errorf("commercial model routes: %w", err)
 		}
 		for _, route := range rows {
 			if route.Enabled {
@@ -65,19 +79,7 @@ func (s *ModelPlazaService) commercialCatalogInputs(ctx context.Context, group *
 			}
 		}
 	}
-	var accounts []Account
-	if s.commercialAccounts != nil {
-		platforms := []string{group.Platform}
-		if group.Platform == PlatformComposite {
-			platforms = domain.ConcretePlatformIDs()
-		}
-		var err error
-		accounts, err = s.commercialAccounts.ListModelAvailabilityCandidates(ctx, &group.ID, platforms, false)
-		if err != nil {
-			return nil, nil, fmt.Errorf("commercial account models: %w", err)
-		}
-	}
-	return routes, accounts, nil
+	return routes, nil
 }
 
 func (b *commercialCatalogBuilder) add(model SupportedModel, upstream string, endpoints []string) {
@@ -98,7 +100,7 @@ func (b *commercialCatalogBuilder) add(model SupportedModel, upstream string, en
 	b.candidates[key] = commercialModelCandidate{SupportedModel: model, UpstreamModel: upstream, Endpoints: dedupeAndSortModelIDs(endpoints), RequestDependent: dependent}
 }
 
-func (b *commercialCatalogBuilder) seedConfiguredModels(channel *Channel, accounts []Account, routes []CompositeModelRoute) {
+func (b *commercialCatalogBuilder) seedConfiguredModels(channel *Channel, mappings []CommercialModelMapping, routes []CompositeModelRoute) {
 	if channel != nil {
 		for _, model := range channel.SupportedModels() {
 			b.add(model, "", nil)
@@ -114,8 +116,11 @@ func (b *commercialCatalogBuilder) seedConfiguredModels(channel *Channel, accoun
 			b.add(SupportedModel{Name: model, Platform: platform, Pricing: &p}, "", nil)
 		}
 	}
-	for _, account := range accounts {
-		for model, target := range stringMappingFromRaw(account.Credentials["model_mapping"]) {
+	for _, account := range mappings {
+		if !domain.IsConcretePlatform(account.Platform) || (b.group.Platform != PlatformComposite && account.Platform != b.group.Platform) {
+			continue
+		}
+		for model, target := range stringMappingFromRaw(account.ModelMapping) {
 			if strings.TrimSpace(target) == "" {
 				continue
 			}

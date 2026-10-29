@@ -554,6 +554,8 @@ func TestAPIContracts(t *testing.T) {
 		},
 		{
 			name: "GET /api/v1/usage (paginated)",
+			// The public Fast state is explicit null for historical requests
+			// without a recorded tier (docs/protocols/OPENAI_RESPONSES.md).
 			setup: func(t *testing.T, deps *contractDeps) {
 				t.Helper()
 				deps.usageRepo.SetUserLogs(1, []service.UsageLog{
@@ -598,6 +600,7 @@ func TestAPIContracts(t *testing.T) {
 							"account_id": 200,
 								"request_id": "req_123",
 								"model": "claude-3",
+								"request_fast_enabled": null,
 								"request_type": "stream",
 								"native_compaction_v2": false,
 								"openai_ws_mode": false,
@@ -2120,6 +2123,9 @@ func (s *stubAccountRepo) ListSchedulableUngroupedByPlatforms(ctx context.Contex
 	return nil, errors.New("not implemented")
 }
 
+func (s *stubAccountRepo) ListCommercialModelMappings(context.Context, []int64) (map[int64][]service.CommercialModelMapping, error) {
+	panic("unexpected ListCommercialModelMappings call")
+}
 func (s *stubAccountRepo) ListModelAvailabilityCandidates(ctx context.Context, groupID *int64, platforms []string, includeGrouped bool) ([]service.Account, error) {
 	return nil, errors.New("not implemented")
 }

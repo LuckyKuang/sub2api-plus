@@ -139,7 +139,7 @@ describe('DataTable', () => {
       realHead.replaceWith(copy)
       observed.length = 0
       firstWidth = 221
-      wrapper.element.dispatchEvent(new Event('static-table-header-measured'))
+      wrapper.get('.table-wrapper').element.dispatchEvent(new Event('static-table-header-measured'))
       await flushPromises()
       expect(observed).toContain(copy.rows[0]!.cells[0])
       expect((wrapper.get('tbody [data-field="account"]').element as HTMLElement).style.left).toBe('221px')
@@ -179,7 +179,7 @@ describe('DataTable', () => {
     const original = wrapper.get('[data-record]').element
     await wrapper.setProps({ loading: true })
     expect(wrapper.get('[data-record]').element).toBe(original)
-    expect(wrapper.attributes('aria-busy')).toBe('true')
+    expect(wrapper.get('[aria-busy]').attributes('aria-busy')).toBe('true')
     expect(wrapper.find('.animate-pulse').exists()).toBe(false)
     wrapper.unmount()
   })

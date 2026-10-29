@@ -253,16 +253,20 @@ describe('usage reasoning effort page display', () => {
     localStorage.clear()
   })
 
-  it('user usage page shows the requested reasoning effort by default', async () => {
+  it('user usage page shows only the requested reasoning effort beneath the model by default', async () => {
     const wrapper = mount(UserUsageView, {
       global: { stubs: sharedPageStubs },
     })
     await flushPromises()
 
-    const cell = reasoningCellText(wrapper)
-    expect(cell).toContain('Max')
-    expect(cell).not.toContain('XHigh')
-    expect(cell).not.toContain('↳')
+    const modelCell = wrapper.get('td[data-field="model"]')
+    const metadata = modelCell.get('[data-testid="usage-model-metadata"]')
+    expect(modelCell.text()).toContain('gpt-5.4')
+    expect(metadata.get('[title="Reasoning Effort"]').text()).toBe('Max')
+    expect(metadata.text()).not.toContain('XHigh')
+    expect(metadata.text()).not.toContain('↳')
+    expect(wrapper.find('[data-field="reasoning_effort"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="reasoning-effort-cell"]').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('XHigh')
   })
 

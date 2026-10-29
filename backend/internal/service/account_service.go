@@ -58,6 +58,7 @@ type OpenAISessionPolicyDiagnosticRepository interface {
 }
 
 type AccountRepository interface {
+	CommercialModelMappingRepository
 	Create(ctx context.Context, account *Account) error
 	GetByID(ctx context.Context, id int64) (*Account, error)
 	// GetByIDs fetches accounts by IDs in a single query.

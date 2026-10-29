@@ -13,9 +13,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': resolve(frontend, 'src'),
-      'vue-i18n': 'vue-i18n/dist/vue-i18n.runtime.esm-bundler.js',
+      'vue-i18n': 'vue-i18n/dist/vue-i18n.mjs',
     },
   },
-  define: { __INTLIFY_JIT_COMPILATION__: true },
   server: { host: '127.0.0.1', port: 18193, strictPort: true },
 })

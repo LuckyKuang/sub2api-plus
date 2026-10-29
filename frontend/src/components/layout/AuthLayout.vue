@@ -1,19 +1,18 @@
 <template>
-  <div class="relative flex min-h-screen items-center justify-center p-[var(--shell-gutter)]">
-    <div class="absolute inset-0 bg-canvas dark:surface-inset"></div>
+  <div class="auth-layout relative flex min-h-screen items-center justify-center px-4 py-10 sm:px-6">
 
     <!-- Content Container -->
-    <div class="relative z-10 flex w-full max-w-md flex-col gap-[var(--shell-gap)]">
+    <div class="relative z-10 flex w-full max-w-md flex-col gap-6">
       <!-- Logo/Brand -->
-      <div class="shell-surface px-5 py-6 text-center">
+      <div class="auth-brand px-4 pb-2 text-center">
         <!-- Custom Logo or Default Logo -->
         <template v-if="settingsLoaded">
           <div
-            class="mb-4 inline-flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl shadow-lg shadow-primary-500/30"
+            class="mb-4 inline-flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl"
           >
             <img :src="siteLogo || '/logo.svg'" alt="Logo" class="h-full w-full object-contain" />
           </div>
-          <h1 class="text-gradient mb-2 text-3xl font-bold">
+          <h1 class="mb-2 break-words text-2xl font-semibold tracking-tight text-gray-900 dark:text-white">
             {{ siteName }}
           </h1>
           <p class="text-sm surface-muted">
@@ -23,12 +22,12 @@
       </div>
 
       <!-- Card Container -->
-      <div class="card p-5 sm:p-8">
+      <div class="card auth-card p-6 sm:p-8">
         <slot />
       </div>
 
       <!-- Footer Links -->
-      <div v-if="$slots.footer" class="card px-4 py-4 text-center text-sm">
+      <div v-if="$slots.footer" class="px-2 text-center text-sm surface-muted">
         <slot name="footer" />
       </div>
 
@@ -44,6 +43,9 @@
 import { computed, onMounted } from 'vue'
 import { useAppStore } from '@/stores'
 import { sanitizeUrl } from '@/utils/url'
+import { useProductAppearance } from '@/composables/useProductAppearance'
+
+useProductAppearance()
 
 const appStore = useAppStore()
 
@@ -59,8 +61,3 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
-.text-gradient {
-  @apply bg-gradient-to-r from-primary-600 to-primary-500 bg-clip-text text-transparent;
-}
-</style>

@@ -139,14 +139,34 @@ describe("SubscriptionPlanCard", () => {
     expect(text).toContain("Imagen");
   });
 
-  // #4607：管理端保存的单位是复数（months/weeks），此前用户侧只匹配单数
-  // 'month'，「1 个月」的套餐卡片被显示成「1天」。测试环境的 vue-i18n 为
-  // runtime-only 构建，t() 原样返回 key，故按 key 断言单位分支。
-  it("renders plural admin-form validity units instead of mislabeled days (#4607)", () => {
-    expect(mountPlanCard("openai", { validity_days: 1, validity_unit: "months" }).text()).toContain("/ payment.perMonth");
-    expect(mountPlanCard("openai", { validity_days: 3, validity_unit: "months" }).text()).toContain("/ 3payment.months");
-    expect(mountPlanCard("openai", { validity_days: 2, validity_unit: "weeks" }).text()).toContain("/ 2payment.weeks");
-    expect(mountPlanCard("openai", { validity_days: 30, validity_unit: "day" }).text()).toContain("/ 30payment.days");
+  // #4607: admin forms save plural units. The displayed English duration must
+  // retain months/weeks rather than mislabeling them as days.
+  it.each([
+    [1, "months", "/ month"],
+    [3, "months", "/ 3months"],
+    [1, "month", "/ month"],
+    [2, "weeks", "/ 2weeks"],
+    [1, "week", "/ 1weeks"],
+    [30, "days", "/ 30days"],
+    [30, "day", "/ 30days"],
+  ] as const)("renders the configured %s %s validity with localized units (#4607)", (validity_days, validity_unit, expected) => {
+    const wrapper = mountPlanCard("openai", { validity_days, validity_unit });
+    expect(wrapper.get(".plan-price .text-\\[11px\\].surface-muted").text()).toBe(expected);
+    wrapper.unmount();
+  });
+
+  // Billing's psComputeValidityDays honors only month(s), week(s), and days;
+  // hours and unknown units must explicitly retain the same day fallback.
+  it.each([
+    [2, "hour", "/ 2days"],
+    [24, "hours", "/ 24days"],
+    [1, "year", "/ 1days"],
+    [365, "unknown", "/ 365days"],
+    [30, "", "/ 30days"],
+  ] as const)("uses the billing-compatible day fallback for %s %s", (validity_days, validity_unit, expected) => {
+    const wrapper = mountPlanCard("openai", { validity_days, validity_unit });
+    expect(wrapper.get(".plan-price .text-\\[11px\\].surface-muted").text()).toBe(expected);
+    wrapper.unmount();
   });
 
   it("uses the configured currency symbol while preserving USD for legacy plans", () => {
@@ -197,11 +217,11 @@ describe("SubscriptionPlanCard", () => {
       "items-center",
       "justify-end",
     ]));
-    expect(badge?.element.parentElement?.textContent).toContain("/ 30payment.days");
+    expect(badge?.element.parentElement?.textContent).toContain("/ 30days");
     expect(badge?.element.parentElement?.parentElement?.classList).toContain("shrink-0");
     expect(price?.element.parentElement?.parentElement?.classList).toContain("shrink-0");
     expect(wrapper.get("p").text()).toBe("Includes advanced models and priority support.");
-    expect(wrapper.get("button").text()).toBe("payment.subscribeNow");
+    expect(wrapper.get("button").text()).toBe("Subscribe now");
   });
 
   it("keeps short plan titles compact and aligned", () => {
@@ -217,6 +237,6 @@ describe("SubscriptionPlanCard", () => {
       "items-center",
       "justify-end",
     ]));
-    expect(badge?.element.parentElement?.textContent).toContain("/ 30payment.days");
+    expect(badge?.element.parentElement?.textContent).toContain("/ 30days");
   });
 });

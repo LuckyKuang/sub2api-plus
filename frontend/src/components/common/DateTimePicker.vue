@@ -40,6 +40,7 @@
       <Icon :name="type === 'time' ? 'clock' : 'calendar'" size="sm" class="shrink-0 surface-muted" />
     </button>
     <Teleport to="body">
+      <Transition name="date-picker-dropdown">
       <div
         v-if="opened"
         :id="panelId"
@@ -111,6 +112,7 @@
           <button type="button" class="btn btn-primary btn-sm" :disabled="!draftValid" @click="apply">{{ t('dates.apply') }}</button>
         </div>
       </div>
+      </Transition>
     </Teleport>
   </div>
 </template>

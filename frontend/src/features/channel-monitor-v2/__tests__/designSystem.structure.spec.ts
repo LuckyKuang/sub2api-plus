@@ -5,6 +5,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { parse } from 'vue/compiler-sfc'
 
 const root = resolve(__dirname, '../../..')
 
@@ -30,7 +31,16 @@ describe('channel-monitor-v2 design system structure', () => {
     expect(src).toContain("'cache'")
     // Approved transparent layout: the fixed toolbar is outside the only
     // activity scrollport, so content cannot travel behind it.
-    expect(src).toContain('<AppLayout workspace>')
+    const { descriptor, errors } = parse(src)
+    expect(errors).toEqual([])
+    const shell = descriptor.template?.ast?.children
+      .filter(node => 'tag' in node)
+      .find(node => node.tag === 'AppLayout')
+    expect(shell, 'the user monitor must use AppLayout as its template shell').toBeDefined()
+    const shellAttributes = Object.fromEntries((shell?.props ?? [])
+      .filter(prop => prop.type === 6) // Vue AttributeNode; directives are not static shell attributes.
+      .map(prop => [prop.name, prop.value?.content ?? true]))
+    expect(shellAttributes).toMatchObject({ workspace: true, appearance: 'user' })
     expect(src).toContain('channel-monitor-toolbar card workspace-shell workspace-fixed')
     expect(src).toContain('data-testid="channel-status-activity"')
     expect(src).not.toContain('top-[var(--shell-sticky-offset)]')

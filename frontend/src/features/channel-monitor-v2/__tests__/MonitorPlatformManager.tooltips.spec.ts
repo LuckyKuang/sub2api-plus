@@ -1,15 +1,11 @@
 import { defineComponent, h, nextTick } from 'vue'
 import { createI18n } from 'vue-i18n'
 import { flushPromises, mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils'
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import TitleTooltip from '@/components/common/TitleTooltip.vue'
 import en from '@/i18n/locales/en/channelMonitorV2'
 import zh from '@/i18n/locales/zh/channelMonitorV2'
 import MonitorPlatformManager from '../MonitorPlatformManager.vue'
-
-// Match vite.config.ts: the CSP-safe runtime compiles real locale messages in JIT mode.
-vi.hoisted(() => { vi.stubGlobal('__INTLIFY_JIT_COMPILATION__', true) })
-afterAll(() => vi.unstubAllGlobals())
 
 vi.mock('@/api/channelMonitorV2', () => ({ getModelCatalog: vi.fn(async () => ({ items: [
   { platform: 'custom', model: 'Alpha', sources: ['success'], success_requests: 1, error_requests: 0 },

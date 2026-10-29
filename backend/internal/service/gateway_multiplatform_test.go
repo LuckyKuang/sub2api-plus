@@ -156,6 +156,9 @@ func (m *mockAccountRepoForPlatform) ListSchedulableUngroupedByPlatform(ctx cont
 func (m *mockAccountRepoForPlatform) ListSchedulableUngroupedByPlatforms(ctx context.Context, platforms []string) ([]Account, error) {
 	return m.ListSchedulableByPlatforms(ctx, platforms)
 }
+func (m *mockAccountRepoForPlatform) ListCommercialModelMappings(context.Context, []int64) (map[int64][]CommercialModelMapping, error) {
+	panic("unexpected ListCommercialModelMappings call")
+}
 func (m *mockAccountRepoForPlatform) ListModelAvailabilityCandidates(_ context.Context, groupID *int64, platforms []string, includeGrouped bool) ([]Account, error) {
 	platformSet := make(map[string]struct{}, len(platforms))
 	for _, platform := range platforms {

@@ -152,10 +152,11 @@ func TestUsageLogFromService_ServiceTiersAreAdminOnly(t *testing.T) {
 	userDTO := UsageLogFromService(log)
 	adminDTO := UsageLogFromServiceAdmin(log)
 
-	// Requirement: no service-tier information in user usage API JSON.
+	// Raw tiers stay admin-only; users receive only the final request Fast state.
 	userJSON, err := json.Marshal(userDTO)
 	require.NoError(t, err)
 	require.NotContains(t, string(userJSON), "service_tier")
+	require.Contains(t, string(userJSON), `"request_fast_enabled":true`)
 	adminJSON, err := json.Marshal(adminDTO)
 	require.NoError(t, err)
 	require.Contains(t, string(adminJSON), `"requested_service_tier":"priority"`)
@@ -171,6 +172,58 @@ func TestUsageLogFromService_ServiceTiersAreAdminOnly(t *testing.T) {
 	require.Equal(t, upstreamEndpoint, *adminDTO.UpstreamEndpoint)
 	require.NotNil(t, adminDTO.AccountRateMultiplier)
 	require.InDelta(t, 1.5, *adminDTO.AccountRateMultiplier, 1e-12)
+}
+
+// docs/protocols/OPENAI_RESPONSES.md: the user-safe tri-state must use only the
+// final requested tier, never upstream response, billing, model, or cost hints.
+func TestUsageLogFromService_RequestFastEnabledContract(t *testing.T) {
+	t.Parallel()
+	str := func(value string) *string { return &value }
+	cases := []struct {
+		name string
+		tier *string
+		want any
+	}{
+		{name: "historical absence", want: nil},
+		{name: "captured empty", tier: str(""), want: nil},
+		{name: "whitespace", tier: str(" \t "), want: nil},
+		{name: "priority", tier: str("priority"), want: true},
+		{name: "fast normalized", tier: str(" FAST "), want: true},
+		{name: "priority normalized", tier: str(" Priority "), want: true},
+		{name: "default", tier: str("default"), want: false},
+		{name: "auto", tier: str(" AUTO "), want: false},
+		{name: "flex", tier: str("flex"), want: false},
+		{name: "future provider value", tier: str("turbo"), want: nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, otherTier := range []string{"priority", "default", ""} {
+				log := &service.UsageLog{
+					Model:                "gpt-5.4",
+					RequestedServiceTier: tc.tier,
+					ResponseServiceTier:  &otherTier,
+					ServiceTier:          &otherTier,
+					ActualCost:           123,
+				}
+				for _, result := range []any{UsageLogFromService(log), UsageLogFromServiceAdmin(log)} {
+					raw, err := json.Marshal(result)
+					require.NoError(t, err)
+					var body map[string]any
+					require.NoError(t, json.Unmarshal(raw, &body))
+					value, present := body["request_fast_enabled"]
+					require.True(t, present, "unknown state must be explicit JSON null")
+					require.Equal(t, tc.want, value)
+				}
+				userRaw, err := json.Marshal(UsageLogFromService(log))
+				require.NoError(t, err)
+				var userBody map[string]any
+				require.NoError(t, json.Unmarshal(userRaw, &userBody))
+				for _, private := range []string{"service_tier", "requested_service_tier", "response_service_tier", "account", "account_rate_multiplier"} {
+					require.NotContains(t, userBody, private)
+				}
+			}
+		})
+	}
 }
 
 func TestUsageLogFromService_UsesRequestedModelAndKeepsUpstreamAdminOnly(t *testing.T) {

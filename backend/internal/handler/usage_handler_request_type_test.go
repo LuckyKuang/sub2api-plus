@@ -369,8 +369,8 @@ func TestUserUsageSnapshotRejectsInvalidIncludeFlags(t *testing.T) {
 	}
 }
 
-// User requirement: the usage API must never disclose service-tier diagnostics,
-// even when stored values are available for administrators.
+// User requirement: raw tier diagnostics stay private, while the final request
+// Fast state may be shown independently from the upstream response and billing.
 func TestUserUsageListOmitsServiceTierDiagnostics(t *testing.T) {
 	priority, defaultTier := "priority", "default"
 	repo := &userUsageRepoCapture{listRows: []service.UsageLog{{
@@ -383,4 +383,5 @@ func TestUserUsageListOmitsServiceTierDiagnostics(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Contains(t, rec.Body.String(), `"model":"gpt-5.5"`)
 	require.NotContains(t, rec.Body.String(), "service_tier")
+	require.Contains(t, rec.Body.String(), `"request_fast_enabled":true`)
 }
