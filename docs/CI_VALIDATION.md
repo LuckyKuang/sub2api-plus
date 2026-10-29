@@ -39,8 +39,12 @@ Release archive, workflow, OCI integrity and immutable pricing regressions and
 the image script syntax check are also in both full profiles.
 
 The image resolves Go, Node, pnpm, lint, GoReleaser, govulncheck and PyYAML from repository
-declarations. Its identity includes these pins and the Dockerfile. Dependency
-generation additionally includes Go and pnpm lock inputs. Remote caches are
+declarations. Node uses an exact Node 24 LTS pin in
+[`validation_runtime.py`](../tools/validation_runtime.py), mirrored by the
+[`Dockerfile.validation`](../deploy/Dockerfile.validation) default, and must meet
+the frontend's declared minimum engine version. The image identity includes
+these pins and the Dockerfile. Dependency generation additionally includes Go
+and pnpm lock inputs. Remote caches are
 separated by architecture and lane; fallback preserves the exact generation.
 GitHub ref visibility still applies: prefixes do not guarantee cross-tag reuse
 or warm compilation. No validation image is pushed to a registry.

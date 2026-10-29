@@ -446,11 +446,33 @@ test('dashboard shows all sections, four permanent performance cards and complet
       alignment: getComputedStyle(el).textAlign,
       overflow: el.scrollWidth - el.clientWidth,
       recordsOverflow: el.closest('.record-table-scroll')!.scrollWidth - el.closest('.record-table-scroll')!.clientWidth,
+      width: innerWidth,
+      recordsWidth: el.closest('.record-table-scroll')!.clientWidth,
     }))
     expect(layout.wrapping).toBe('nowrap')
     expect(layout.alignment).toBe('left')
-    expect(layout.overflow).toBeLessThanOrEqual(1)
-    expect(layout.recordsOverflow).toBeLessThanOrEqual(1)
-    expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false)
+    expect(layout.overflow, JSON.stringify(layout)).toBeLessThanOrEqual(1)
+    expect(layout.recordsOverflow, JSON.stringify(layout)).toBeLessThanOrEqual(1)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), `${width}px dashboard document width`).toBe(false)
+    if (width === 390) {
+      // A desktop canvas keeps this inline width until Chart.js handles its
+      // ResizeObserver on the next frame. It must fit during that interval too.
+      const staleCanvas = await page.locator('.user-chart-grid .chart-workspace canvas').evaluate(canvas => {
+        const element = canvas as HTMLCanvasElement
+        const originalWidth = element.style.width
+        try {
+          element.style.width = '1005px'
+          return {
+            width: element.getBoundingClientRect().width,
+            available: element.parentElement!.clientWidth,
+            documentOverflow: document.documentElement.scrollWidth > innerWidth,
+          }
+        } finally {
+          element.style.width = originalWidth
+        }
+      })
+      expect(staleCanvas.width).toBeLessThanOrEqual(staleCanvas.available)
+      expect(staleCanvas.documentOverflow).toBe(false)
+    }
   }
 })

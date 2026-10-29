@@ -127,6 +127,9 @@ onBeforeUnmount(() => { disposed = true; chartSeq++; recentSeq++ })
 
 <style scoped>
 .dashboard-section { flex: none; min-width: 0; }
+/* Chart.js resizes on its next animation frame. Constrain the previous
+   canvas width immediately when the dashboard's viewport becomes narrower. */
+.dashboard-section :deep(canvas) { max-width: 100%; }
 .user-dashboard-details { display: flex; flex-direction: column; gap: 16px; }
 .user-dashboard-details > * { margin-block: 0; }
 .dashboard-refresh { margin-left: auto; }

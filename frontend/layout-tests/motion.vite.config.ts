@@ -12,9 +12,8 @@ export default defineConfig({
   plugins: [vue()],
   resolve: { alias: {
     '@': resolve(frontend, 'src'),
-    'vue-i18n': 'vue-i18n/dist/vue-i18n.runtime.esm-bundler.js',
+    'vue-i18n': 'vue-i18n/dist/vue-i18n.mjs',
   } },
-  define: { __INTLIFY_JIT_COMPILATION__: true },
   build: {
     outDir: process.env.SUB2API_MOTION_DIST || '/tmp/sub2api-motion-dist',
     emptyOutDir: true,

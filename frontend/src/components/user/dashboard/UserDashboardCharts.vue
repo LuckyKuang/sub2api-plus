@@ -135,7 +135,7 @@ const doughnutOptions = computed(() => ({
 }
 @container (min-width: 780px) {
   .model-distribution-body { flex-direction: row; }
-  .user-dashboard-charts .user-model-chart .model-distribution-records { width: 0; flex: 1 1 0%; }
+  .user-dashboard-charts .user-model-chart .model-distribution-records { flex: 1 1 0%; }
 }
 /* Compact records retain the full, single-line model name without requiring
    sideways navigation when all five columns cannot fit beside each other. */

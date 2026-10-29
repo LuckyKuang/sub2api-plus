@@ -12,6 +12,18 @@ content may retain a readable inner width.
 `frontend/src/styles/console.css` owns the shared shell and default surface tokens;
 `frontend/src/styles/product.css` owns public/user palette and content geometry.
 
+Locale modules remain lazy-loaded TypeScript strings. Production, Vitest and
+browser fixtures use Vue I18n's compiler-inclusive `vue-i18n.mjs` build; its
+default JIT compiles to AST without `unsafe-eval`. Keep this explicit compiler
+dependency rather than relying on a runtime entry's transitive compiler exposure.
+Keep Vue I18n and the message compiler on the same patched version. Runtime
+regressions cover English/Chinese switching,
+named/list interpolation, plurals, fallback, trusted onboarding HTML and the
+`escapeParameter` srcdoc fix in
+[GHSA-83rm-6c8r-g728](https://github.com/advisories/GHSA-83rm-6c8r-g728).
+Trusted tour markup remains separate from user-provided content; existing Markdown
+sanitization and sandboxed email previews retain their own protections.
+
 | Viewport | Outer inset on all four sides | Card gap | Navigation |
 | --- | --- | --- | --- |
 | Desktop, at least 1024px | 24px | 24px | 256px column; 72px when collapsed |
