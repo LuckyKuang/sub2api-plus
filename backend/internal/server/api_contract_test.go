@@ -554,6 +554,8 @@ func TestAPIContracts(t *testing.T) {
 		},
 		{
 			name: "GET /api/v1/usage (paginated)",
+			// The public Fast state is explicit null for historical requests
+			// without a recorded tier (docs/protocols/OPENAI_RESPONSES.md).
 			setup: func(t *testing.T, deps *contractDeps) {
 				t.Helper()
 				deps.usageRepo.SetUserLogs(1, []service.UsageLog{
@@ -598,6 +600,7 @@ func TestAPIContracts(t *testing.T) {
 							"account_id": 200,
 								"request_id": "req_123",
 								"model": "claude-3",
+								"request_fast_enabled": null,
 								"request_type": "stream",
 								"native_compaction_v2": false,
 								"openai_ws_mode": false,
