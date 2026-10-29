@@ -669,14 +669,4 @@ onUnmounted(() => {
   color: var(--surface-muted);
 }
 
-.select-dropdown-enter-active,
-.select-dropdown-leave-active {
-  transition: all 0.2s ease;
-}
-
-.select-dropdown-enter-from,
-.select-dropdown-leave-to {
-  opacity: 0;
-  transform: translateY(-8px);
-}
 </style>

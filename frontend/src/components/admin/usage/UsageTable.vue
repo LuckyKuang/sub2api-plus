@@ -73,6 +73,16 @@
               </div>
             </div>
             <span v-else class="font-medium text-gray-900 dark:text-white">{{ row.model }}</span>
+            <div v-if="modelMetadata" data-testid="usage-model-metadata" class="usage-model-metadata pt-1 text-[11px] surface-muted">
+              <span :title="t('usage.reasoningEffort')">{{ formatReasoningEffort(row.reasoning_effort) }}<template v-if="hasReasoningEffortMapping(row)"> ↳ {{ formatReasoningEffort(row.upstream_reasoning_effort) }}</template></span>
+              <span
+                class="inline-flex items-center rounded border px-1.5 py-px text-[10px] leading-tight"
+                :class="row.request_fast_enabled === true ? 'border-primary-200 bg-primary-50/40 text-primary-600 dark:border-primary-700 dark:bg-primary-900/30 dark:text-primary-400' : 'border-gray-200 dark:border-dark-600 surface-muted'"
+                :title="t('usage.fastStateHint')"
+              >
+                {{ t('usage.fastStateLabel') }}: {{ t(row.request_fast_enabled === true ? 'usage.fastEnabled' : row.request_fast_enabled === false ? 'usage.fastDisabled' : 'usage.fastUnrecorded') }}
+              </span>
+            </div>
 			<span
 			  v-if="row.completion_status === 'client_disconnected' || row.is_complete === false"
 			  data-testid="usage-incomplete-badge"
@@ -710,6 +720,8 @@ interface Props {
   showServiceTier?: boolean
   showAccountBilling?: boolean
   showUpstreamEndpoint?: boolean
+  /** User workspace: keep request metadata beneath the requested model. */
+  modelMetadata?: boolean
   /** 嵌入统一卡片内使用：去掉自身卡片外观 */
   flat?: boolean
   workspace?: boolean
@@ -723,6 +735,7 @@ const props = withDefaults(defineProps<Props>(), {
   showServiceTier: false,
   showAccountBilling: true,
   showUpstreamEndpoint: true,
+  modelMetadata: false,
   flat: false,
   workspace: false
 })
@@ -1009,3 +1022,7 @@ const hideLatencyTooltip = () => {
   latencyTooltipData.value = null
 }
 </script>
+
+<style scoped>
+.usage-model-metadata { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+</style>

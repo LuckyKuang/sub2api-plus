@@ -14,7 +14,8 @@
         </div>
       </div>
 
-      <section class="card workspace-table-card workspace-shell" data-testid="usage-records-panel">
+      <section class="workspace-body usage-records-workspace" data-testid="usage-records-panel">
+      <div class="card workspace-fixed overflow-hidden">
       <div class="usage-detail-tabs card-tabs workspace-fixed" role="tablist" :aria-label="t('usage.tabs.usage')">
         <button type="button" role="tab" class="card-tab" :aria-selected="activeTab === 'live'" @click="selectRecordTab('live')">{{ t('inspection.live') }}</button>
         <button type="button" role="tab" class="card-tab" :aria-selected="activeTab === 'usage'" @click="selectRecordTab('usage')">
@@ -104,6 +105,7 @@
                 <span class="hidden md:inline">{{ t('admin.users.columnSettings') }}</span>
               </button>
               <Teleport to="body">
+              <Transition name="dropdown">
               <div
                 v-if="showColumnDropdown"
                 class="absolute right-0 top-full z-50 mt-1 max-h-80 w-48 space-y-0.5 overflow-y-auto border border-gray-200 p-1 shadow-lg dark:border-dark-600 surface-panel"
@@ -125,6 +127,7 @@
                 </button>
                 <button type="button" class="w-full rounded-[var(--surface-radius-item)] border-t px-3 py-2 text-left text-sm text-primary-600 hover:surface-hover surface-control" @click="restoreRecommendedColumns">{{ t('inspection.resetColumns') }}</button>
               </div>
+              </Transition>
               </Teleport>
             </div>
             <button v-if="activeTab !== 'errors'" type="button" @click="exportToCSV" :disabled="exporting" class="btn btn-primary">
@@ -134,7 +137,8 @@
         </div>
       </div>
 
-      <div v-if="activeTab === 'usage'" class="workspace-body !gap-0">
+      </div>
+      <div v-if="activeTab === 'usage'" class="workspace-body usage-history-workspace gap-4">
         <UsageTable
           workspace
           :data="usageLogs"
@@ -143,6 +147,7 @@
           :server-side-sort="true"
           :show-account-billing="false"
           :show-upstream-endpoint="false"
+          model-metadata
           default-sort-key="created_at"
           default-sort-order="desc"
           @sort="handleSort"
@@ -151,7 +156,6 @@
 
         <Pagination
           class="workspace-fixed"
-          v-if="pagination.total > 0"
           :page="pagination.page"
           :total="pagination.total"
           :page-size="pagination.page_size"
@@ -595,7 +599,6 @@ const HIDDEN_COLUMNS_KEY = useColumnPreferenceKey('user-usage-restored-v2-hidden
 const allColumns = computed<Column[]>(() => [
   { key: 'api_key', label: t('usage.apiKeyFilter'), sortable: false },
   { key: 'model', label: t('usage.model'), sortable: true },
-  { key: 'reasoning_effort', label: t('usage.reasoningEffort'), sortable: false },
   { key: 'endpoint', label: t('usage.endpoint'), sortable: false },
   { key: 'ip_address', label: 'IP', sortable: false },
   { key: 'group', label: t('admin.usage.group'), sortable: false },

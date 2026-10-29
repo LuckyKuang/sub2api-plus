@@ -38,6 +38,24 @@ async function render() {
 describe('V3 service status', () => {
   beforeEach(() => { vi.mocked(getStatusSnapshot).mockReset(); vi.mocked(getStatusSnapshot).mockResolvedValue(fixture()) })
   afterEach(() => wrapper?.unmount())
+  // Approved layout: toolbar, summary and explanatory footer stay outside the
+  // platform/event scrollports, including when switching tabs.
+  it('keeps the fixed page cards outside both independently scrolling lists', async () => {
+    await render()
+    const platforms = wrapper.get('.status-card-grid')
+    const footer = wrapper.get('.status-footer')
+    for (const fixed of ['.status-heading', '.overview', '.status-toolbar', '.status-footer']) {
+      expect(wrapper.get(fixed).classes()).toContain('workspace-fixed')
+      expect(platforms.element.contains(wrapper.get(fixed).element)).toBe(false)
+    }
+    expect(footer.findAll('.legend-dot')).toHaveLength(5)
+    await wrapper.get('#v3-events-tab').trigger('click')
+    const events = wrapper.get('.status-event-list')
+    expect(events.findAll('details')).toHaveLength(1)
+    expect(events.element.contains(footer.element)).toBe(false)
+    expect(wrapper.get('.status-footer').element).toBe(footer.element)
+    expect(wrapper.get('.status-events-panel > .workspace-fixed').text()).toContain('最近 30 天')
+  })
   // Current observations and historical aggregation have independent clocks.
   it('shows the current observation cutoff even when historical aggregation lags', async () => {
     const value = fixture()

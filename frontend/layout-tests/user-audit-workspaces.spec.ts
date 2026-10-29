@@ -1,0 +1,238 @@
+import { expect, test, type Locator, type Page, type TestInfo } from '@playwright/test'
+
+// Acceptance source: the approved Chrome user-page audit requires fixed page
+// chrome, independent record/card scrolling, aligned rounded panels, 10 invited
+// users per page, and a three-column/nine-card subscription page. These tests
+// mount production views and intercept only their HTTP boundary; they never
+// inject CSS or replacement DOM to obtain the expected geometry.
+const user = {
+  id: 9999, role: 'user', status: 'active', email: 'review@example.test', username: 'Reviewer',
+  balance: 260, concurrency: 6, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
+}
+const invitees = Array.from({ length: 32 }, (_, index) => ({
+  user_id: index + 1, email: `invitee-${index + 1}@example.test`, username: `Invitee ${String(index + 1).padStart(2, '0')}`,
+  total_rebate: index + 1, created_at: '2026-10-01T12:00:00Z',
+}))
+const subscriptions = Array.from({ length: 28 }, (_, index) => ({
+  id: index + 1, user_id: 9999, group_id: index + 1, status: 'active',
+  starts_at: '2026-01-01T00:00:00Z', expires_at: '2099-12-31T00:00:00Z',
+  created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
+  daily_usage_usd: 2, weekly_usage_usd: 5, monthly_usage_usd: 10, five_hour_usage_usd: 1,
+  daily_window_start: null, weekly_window_start: null, monthly_window_start: null, five_hour_window_start: null,
+  group: {
+    id: index + 1, name: `Audit plan ${String(index + 1).padStart(2, '0')}`, platform: 'openai',
+    description: 'Monthly production-compatible subscription fixture', rate_multiplier: 1,
+    status: 'active', is_exclusive: false, subscription_type: 'subscription',
+    five_hour_limit_usd: 10, daily_limit_usd: 25, weekly_limit_usd: 125, monthly_limit_usd: 400,
+    peak_rate_enabled: false,
+  },
+}))
+
+async function interceptAuditAPI(page: Page) {
+  const writes: string[] = []
+  const historyRequests: Array<{ page: number; size: number }> = []
+  await page.route('**/api/v1/**', async route => {
+    const request = route.request()
+    const url = new URL(request.url())
+    if (request.method() !== 'GET') writes.push(`${request.method()} ${url.pathname}`)
+    let data: unknown = { items: [], total: 0, pages: 0, enabled: false }
+    if (url.pathname === '/api/v1/redeem/history') {
+      const current = Number(url.searchParams.get('page') || 1)
+      const size = Number(url.searchParams.get('page_size') || 20)
+      historyRequests.push({ page: current, size })
+      const count = Math.min(size, Math.max(0, 61 - (current - 1) * size))
+      data = { total: 61, page: current, page_size: size, pages: Math.ceil(61 / size), items: Array.from({ length: count }, (_, index) => {
+        const id = (current - 1) * size + index + 1
+        return { id, code: `R${String(id).padStart(6, '0')}-CODE`, type: 'balance', value: id, status: 'used',
+          used_at: '2026-10-01T12:00:00Z', created_at: '2026-10-01T12:00:00Z', notes: `Redeemed record ${id}` }
+      }) }
+    } else if (url.pathname === '/api/v1/user/aff') {
+      data = { user_id: 9999, aff_code: 'AUDIT-INVITE', inviter_id: null, aff_count: 32, aff_quota: 12.5,
+        aff_frozen_quota: 2.5, aff_history_quota: 30, effective_rebate_rate_percent: 10, invitees }
+    } else if (url.pathname === '/api/v1/subscriptions') data = subscriptions
+    else if (url.pathname === '/api/v1/subscriptions/active' || url.pathname === '/api/v1/subscriptions/progress') data = []
+    else if (url.pathname === '/api/v1/subscriptions/summary') data = { active_count: 0, subscriptions: [] }
+    else if (url.pathname === '/api/v1/auth/me' || url.pathname === '/api/v1/user/profile') data = user
+    else if (url.pathname === '/api/v1/settings/public') data = { contact_info: 'support@example.test' }
+    await route.fulfill({ json: { code: 0, data } })
+  })
+  return { writes, historyRequests }
+}
+
+function presentation(info: TestInfo) {
+  return { theme: info.project.use.colorScheme === 'dark' ? 'dark' : 'light', locale: info.project.use.locale?.startsWith('zh') ? 'zh' : 'en' }
+}
+
+async function openAuditPage(page: Page, name: string, info: TestInfo, width: number) {
+  const { theme, locale } = presentation(info)
+  await page.setViewportSize({ width, height: width === 2560 ? 1205 : 900 })
+  await page.goto(`/layout-tests/index.html?view=user-layout&auditPage=${name}&theme=${theme}&locale=${locale}`)
+  await expect(page.locator('.app-layout-user.app-layout-workspace')).toBeVisible({ timeout: 60_000 })
+}
+
+async function assertFooterAtWorkspaceBottom(footer: Locator, anchor: Locator) {
+  await expect(footer).toBeInViewport()
+  const content = (await anchor.boundingBox())!
+  const values = await footer.evaluate(footerElement => {
+    const main = document.querySelector('.app-main') as HTMLElement
+    const rect = footerElement.getBoundingClientRect()
+    const box = main.getBoundingClientRect()
+    const style = getComputedStyle(footerElement)
+    return {
+      left: rect.left, right: rect.right, bottom: rect.bottom - box.bottom,
+      radius: [style.borderTopLeftRadius, style.borderTopRightRadius, style.borderBottomLeftRadius, style.borderBottomRightRadius].map(parseFloat),
+      mainOverflow: main.scrollHeight - main.clientHeight,
+      documentOverflow: document.documentElement.scrollWidth - innerWidth,
+      hit: footerElement.contains(document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)),
+    }
+  })
+  values.left -= content.x
+  values.right -= content.x + content.width
+  expect(Math.abs(values.left)).toBeLessThanOrEqual(1)
+  expect(Math.abs(values.right)).toBeLessThanOrEqual(1)
+  expect(Math.abs(values.bottom)).toBeLessThanOrEqual(1)
+  expect(values.radius.every(radius => radius >= 14)).toBe(true)
+  expect(values.mainOverflow).toBeLessThanOrEqual(1)
+  expect(values.documentOverflow).toBeLessThanOrEqual(1)
+  expect(values.hit).toBe(true)
+}
+
+async function assertEqualPairAndFourGuides(page: Page, pairSelector: string, guidesSelector: string) {
+  const pair = await page.locator(pairSelector).evaluateAll(elements => elements.map(el => {
+    const r = el.getBoundingClientRect()
+    return { top: r.top, left: r.left, right: r.right, height: r.height, width: r.width }
+  }))
+  expect(pair).toHaveLength(2)
+  expect(Math.abs(pair[0]!.top - pair[1]!.top)).toBeLessThanOrEqual(1)
+  expect(Math.abs(pair[0]!.height - pair[1]!.height)).toBeLessThanOrEqual(1)
+  expect(Math.abs(pair[0]!.width - pair[1]!.width)).toBeLessThanOrEqual(1)
+  expect(Math.abs(pair[1]!.left - pair[0]!.right - 16)).toBeLessThanOrEqual(1)
+  const guides = await page.locator(guidesSelector).evaluateAll(elements => elements.map(el => {
+    const r = el.getBoundingClientRect()
+    return { top: r.top, left: r.left, right: r.right, height: r.height }
+  }))
+  expect(guides).toHaveLength(4)
+  expect(guides.every(rect => Math.abs(rect.top - guides[0]!.top) <= 1)).toBe(true)
+  expect(guides.every(rect => Math.abs(rect.height - guides[0]!.height) <= 1)).toBe(true)
+  expect(Math.abs(guides[0]!.left - pair[0]!.left)).toBeLessThanOrEqual(1)
+  expect(Math.abs(guides[3]!.right - pair[1]!.right)).toBeLessThanOrEqual(1)
+}
+
+async function wheelBodyWithoutMovingFooter(page: Page, viewport: Locator, footer: Locator) {
+  await expect(viewport).toBeVisible()
+  const originalFooter = await footer.boundingBox()
+  await viewport.hover()
+  await page.mouse.wheel(0, 600)
+  await expect.poll(() => viewport.evaluate(el => el.scrollTop)).toBeGreaterThan(0)
+  expect(await footer.boundingBox()).toEqual(originalFooter)
+}
+
+for (const width of [1440, 2560]) {
+  test(`real redemption layout keeps equal cards, four guidance panels and fixed paging at ${width}px`, async ({ page }, info) => {
+    const { writes, historyRequests } = await interceptAuditAPI(page)
+    await openAuditPage(page, 'redeem', info, width)
+    const root = page.locator('.redeem-workspace')
+    const footer = page.locator('.redeem-history-pagination')
+    await expect(page.getByText('Redeemed record 1', { exact: true })).toBeVisible()
+    await assertEqualPairAndFourGuides(page, '.redeem-top-row > .card', '.redeem-guide-grid > li')
+    await assertFooterAtWorkspaceBottom(footer, root)
+    await wheelBodyWithoutMovingFooter(page, page.locator('.redeem-history'), footer)
+    const labels = presentation(info).locale === 'zh' ? { next: '下一页', previous: '上一页' } : { next: 'Next', previous: 'Previous' }
+    await footer.getByRole('button', { name: labels.next, exact: true }).click()
+    await expect(page.getByText('Redeemed record 21', { exact: true })).toBeVisible()
+    await expect(page.getByText('Redeemed record 1', { exact: true })).toHaveCount(0)
+    expect(historyRequests).toContainEqual({ page: 2, size: 20 })
+    await expect.poll(() => page.locator('.redeem-history').evaluate(el => el.scrollTop)).toBe(0)
+    await expect(footer.getByRole('button', { name: labels.previous, exact: true })).toBeEnabled()
+    await assertFooterAtWorkspaceBottom(footer, root)
+    expect(writes).toEqual([])
+  })
+
+  test(`real affiliate layout keeps its table independently scrollable with ten actual rows at ${width}px`, async ({ page }, info) => {
+    const { writes } = await interceptAuditAPI(page)
+    await openAuditPage(page, 'affiliate', info, width)
+    const root = page.locator('.affiliate-workspace')
+    const footer = page.locator('.affiliate-pagination')
+    const rows = page.locator('.affiliate-invitees table.record-table tbody tr')
+    await expect(rows).toHaveCount(10)
+    await expect(rows.first()).toContainText('Invitee 01')
+    await assertEqualPairAndFourGuides(page, '.affiliate-top-row > .card', '.affiliate-guide-grid > li')
+    await assertFooterAtWorkspaceBottom(footer, root)
+    // The production App.vue table adapter owns the header rail and native body.
+    const viewport = page.locator('.affiliate-invitees .static-table-body-viewport')
+    await expect(viewport).toBeVisible()
+    const header = page.locator('.affiliate-invitees .static-table-header-rail')
+    const usableBody = await viewport.evaluate(element => {
+      const style = getComputedStyle(element)
+      return {
+        height: element.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom),
+        twoRows: [...element.querySelectorAll('tbody tr')].slice(0, 2).reduce((height, row) => height + row.getBoundingClientRect().height, 0),
+      }
+    })
+    expect(usableBody.height).toBeGreaterThanOrEqual(usableBody.twoRows)
+    const frame = page.locator('.affiliate-invitees .static-table-frame')
+    expect(await frame.evaluate(element => element.scrollHeight - element.clientHeight)).toBeLessThanOrEqual(1)
+    const headerBefore = await header.boundingBox()
+    await wheelBodyWithoutMovingFooter(page, viewport, footer)
+    expect(await header.boundingBox()).toEqual(headerBefore)
+    expect(await frame.evaluate(element => element.scrollTop)).toBe(0)
+    const labels = presentation(info).locale === 'zh' ? { next: '下一页', pageFour: '跳转到第 4 页' } : { next: 'Next', pageFour: 'Go to page 4' }
+    await footer.getByRole('button', { name: labels.next, exact: true }).click()
+    await expect(rows).toHaveCount(10)
+    await expect(rows.first()).toContainText('Invitee 11')
+    await expect.poll(() => viewport.evaluate(el => el.scrollTop)).toBe(0)
+    await footer.getByRole('button', { name: labels.pageFour, exact: true }).click()
+    await expect(rows).toHaveCount(2)
+    await expect(rows.first()).toContainText('Invitee 31')
+    await expect(footer.getByRole('button', { name: labels.next, exact: true })).toBeDisabled()
+    await assertFooterAtWorkspaceBottom(footer, root)
+    expect(await page.locator('.affiliate-invitation button').count()).toBe(2)
+    await expect(page.locator('.affiliate-transfer button')).toBeEnabled()
+    expect(writes).toEqual([])
+  })
+
+  test(`real subscriptions keep three columns, nine cards, aligned transparent scroll and fixed footer at ${width}px`, async ({ page }, info) => {
+    const { writes } = await interceptAuditAPI(page)
+    const { theme, locale } = presentation(info)
+    await page.setViewportSize({ width, height: width === 2560 ? 1205 : 900 })
+    // Exercise full transparency: the scrollport must not clip its final cards
+    // or reserve a blank strip between the cards and the fixed chrome.
+    await page.goto(`/layout-tests/index.html?view=user-layout&auditPage=subscriptions&theme=${theme}&locale=${locale}&alpha=0`)
+    const header = page.getByTestId('subscriptions-heading')
+    const footer = page.locator('.subscriptions-pagination')
+    const cards = page.getByTestId('subscription-card')
+    const frame = page.getByTestId('subscriptions-activity')
+    const viewport = frame.locator('.user-card-scroll-viewport')
+    await expect(cards).toHaveCount(9)
+    await expect(cards.first()).toContainText('Audit plan 01')
+    const cardBoxes = await cards.evaluateAll(elements => elements.map(el => {
+      const r = el.getBoundingClientRect()
+      return { left: r.left, right: r.right, top: r.top }
+    }))
+    expect(cardBoxes.slice(0, 3).every(rect => Math.abs(rect.top - cardBoxes[0]!.top) <= 1)).toBe(true)
+    expect(cardBoxes[3]!.top).toBeGreaterThan(cardBoxes[0]!.top)
+    expect(cardBoxes[6]!.top).toBeGreaterThan(cardBoxes[3]!.top)
+    const headingBox = (await header.boundingBox())!
+    expect(Math.abs(cardBoxes[0]!.left - headingBox.x)).toBeLessThanOrEqual(1)
+    expect(Math.abs(cardBoxes[2]!.right - headingBox.x - headingBox.width)).toBeLessThanOrEqual(1)
+    const frameBox = (await frame.boundingBox())!
+    expect(Math.abs(frameBox.x - headingBox.x)).toBeLessThanOrEqual(1)
+    expect(Math.abs(frameBox.width - headingBox.width)).toBeLessThanOrEqual(1)
+    expect(await viewport.evaluate(el => ['borderTopLeftRadius', 'borderTopRightRadius', 'borderBottomLeftRadius', 'borderBottomRightRadius'].every(property => parseFloat(getComputedStyle(el).getPropertyValue(property.replace(/[A-Z]/g, letter => `-${letter.toLowerCase()}`))) >= 14))).toBe(true)
+    await assertFooterAtWorkspaceBottom(footer, page.locator('.subscriptions-page'))
+    const beforeHeader = await header.boundingBox()
+    await wheelBodyWithoutMovingFooter(page, viewport, footer)
+    expect(await header.boundingBox()).toEqual(beforeHeader)
+    const labels = locale === 'zh' ? { next: '下一页', pageFour: '跳转到第 4 页' } : { next: 'Next', pageFour: 'Go to page 4' }
+    await footer.getByRole('button', { name: labels.next, exact: true }).filter({ visible: true }).click()
+    await expect(cards).toHaveCount(9)
+    await expect(cards.first()).toContainText('Audit plan 10')
+    await expect.poll(() => viewport.evaluate(el => el.scrollTop)).toBe(0)
+    await footer.getByRole('button', { name: labels.pageFour, exact: true }).filter({ visible: true }).click()
+    await expect(cards).toHaveCount(1)
+    await expect(cards.first()).toContainText('Audit plan 28')
+    await expect(footer.getByRole('button', { name: labels.next, exact: true }).filter({ visible: true })).toBeDisabled()
+    await assertFooterAtWorkspaceBottom(footer, page.locator('.subscriptions-page'))
+    expect(writes).toEqual([])
+  })
+}

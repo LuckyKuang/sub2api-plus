@@ -66,17 +66,22 @@
 @media (min-width: 1024px) {
   .app-layout-user .app-main { padding-inline: 0; }
   .app-layout-user .app-page { width: 94%; max-width: 100rem; margin-inline: auto; }
-  .app-layout-user:not(.app-layout-record-workspace) .app-main { overflow: auto; scrollbar-gutter: stable; }
-  .app-layout-user:not(.app-layout-record-workspace) .app-page { height: auto; min-height: 0; padding-bottom: 24px; }
-  .app-layout-user:not(.app-layout-record-workspace) :is(.workspace-page, .workspace-body, .workspace-stack, .workspace-scroll, .workspace-table-card, .table-page-layout) {
+  .app-layout-user.app-layout-workspace .app-main { scrollbar-gutter: auto; }
+  .app-layout-user.app-layout-workspace .app-page { padding-bottom: 0; }
+  .app-layout-user.app-layout-workspace :is(.app-page, .workspace-page, .workspace-body, .workspace-stack, .workspace-scroll),
+  .app-layout-user.app-layout-workspace .table-page-layout:not(.mobile-mode) { gap: 16px !important; }
+
+  .app-layout-user:not(.app-layout-workspace) .app-main { overflow: auto; scrollbar-gutter: stable; }
+  .app-layout-user:not(.app-layout-workspace) .app-page { height: auto; min-height: 0; padding-bottom: 24px; }
+  .app-layout-user:not(.app-layout-workspace) :is(.workspace-page, .workspace-body, .workspace-stack, .workspace-scroll, .workspace-table-card, .table-page-layout) {
     height: auto; max-height: none; flex: 0 0 auto; min-height: 0;
   }
-  .app-layout-user:not(.app-layout-record-workspace) .table-page-layout { display: flex; flex-direction: column; gap: 16px; }
-  .app-layout-user:not(.app-layout-record-workspace) :is(.layout-section-scrollable, .table-scroll-container, .table-page-content, .layout-section-table) {
+  .app-layout-user:not(.app-layout-workspace) .table-page-layout { display: flex; flex-direction: column; gap: 16px; }
+  .app-layout-user:not(.app-layout-workspace) :is(.layout-section-scrollable, .table-scroll-container, .table-page-content, .layout-section-table) {
     height: auto; max-height: none; min-height: 0; overflow: visible; flex: 0 0 auto;
   }
-  .app-layout-user:not(.app-layout-record-workspace) :is(.workspace-table-card, .workspace-scroll) { overflow: visible; overscroll-behavior-y: auto; }
-  .app-layout-user:not(.app-layout-record-workspace) :is(.workspace-table-viewport, .table-wrapper, .record-table-scroll) {
+  .app-layout-user:not(.app-layout-workspace) :is(.workspace-table-card, .workspace-scroll) { overflow: visible; overscroll-behavior-y: auto; }
+  .app-layout-user:not(.app-layout-workspace) :is(.workspace-table-viewport, .table-wrapper, .record-table-scroll) {
     height: auto !important; max-height: none !important; min-height: 0; min-width: 0;
     flex: 0 0 auto; overflow: auto; overscroll-behavior-y: auto; scrollbar-gutter: auto;
   }
@@ -129,3 +134,28 @@
 .app-layout-user .user-record-cards .truncate { max-width: 100%; overflow: visible; text-overflow: clip; }
 .app-layout-user .user-record-cards [data-field] :is(.justify-end, .justify-center) { justify-content: flex-start; }
 .app-layout-user .user-record-cards .table-actions { justify-content: flex-start; }
+
+/* User audit: pagination owns an independent surface while its record area
+   scrolls. The administrator console retains its existing page chrome. */
+:root .app-layout-user .pagination-card {
+  flex: none;
+  margin: 0;
+  border: 1px solid var(--surface-edge) !important;
+  border-radius: 16px;
+  background-color: var(--surface-solid);
+  box-shadow: var(--surface-shadow) !important;
+}
+
+:root .app-layout-user.app-layout-workspace .app-main :is(.workspace-shell.card, .workspace-table-card, .workspace-fixed.card, .workspace-fixed.surface-card, .workspace-tabs) {
+  border: 1px solid var(--surface-edge) !important;
+  border-radius: 16px;
+  background-color: var(--surface-solid);
+  box-shadow: var(--surface-shadow) !important;
+}
+:root .app-layout-user.app-layout-workspace .table-page-layout > .layout-section-fixed:not(.table-page-pagination) {
+  padding: 12px 16px;
+  border: 1px solid var(--surface-edge) !important;
+  border-radius: 16px;
+  background-color: var(--surface-solid);
+  box-shadow: var(--surface-shadow) !important;
+}

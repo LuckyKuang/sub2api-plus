@@ -1,88 +1,91 @@
 <template>
-  <AppLayout appearance="user">
-    <div class="space-y-6">
-      <!-- Current Balance Card -->
-      <div class="card workspace-shell overflow-hidden">
-        <div class="redeem-balance px-6 py-8 text-center">
-          <div
-            class="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl surface-inset"
-          >
-            <Icon name="creditCard" size="xl" class="text-primary-600 dark:text-primary-400" />
-          </div>
-          <p class="text-sm font-medium surface-muted">{{ t('redeem.currentBalance') }}</p>
-          <p class="mt-2 text-4xl font-bold">
-            ${{ user?.balance?.toFixed(2) || '0.00' }}
-          </p>
-          <p class="mt-2 text-sm surface-muted">
-            {{ t('redeem.concurrency') }}: {{ user?.concurrency || 0 }} {{ t('redeem.requests') }}
-          </p>
-        </div>
-      </div>
-
-      <!-- Redeem Form -->
-      <div class="card workspace-shell">
-        <div class="p-6">
-          <form v-support-readonly @submit.prevent="handleRedeem" class="space-y-5">
-            <div>
-              <label for="code" class="input-label">
-                {{ t('redeem.redeemCodeLabel') }}
-              </label>
-              <div class="relative mt-1">
-                <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
-                  <Icon name="gift" size="md" class="surface-muted" />
-                </div>
-                <input
-                  id="code"
-                  v-model="redeemCode"
-                  type="text"
-                  required
-                  :placeholder="t('redeem.redeemCodePlaceholder')"
-                  :disabled="submitting"
-                  class="input py-3 pl-12 text-lg"
-                />
-              </div>
-              <p class="input-hint">
-                {{ t('redeem.redeemCodeHint') }}
-              </p>
-            </div>
-
-            <button
-              type="submit"
-              :disabled="!redeemCode || submitting"
-              class="btn btn-primary w-full py-3"
+  <AppLayout appearance="user" workspace>
+    <div class="workspace-page redeem-workspace">
+      <div class="redeem-top-row workspace-fixed">
+        <!-- Current Balance Card -->
+        <div class="card redeem-balance-card overflow-hidden">
+          <div class="redeem-balance">
+            <div
+              class="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl surface-inset"
             >
-              <svg
-                v-if="submitting"
-                class="-ml-1 mr-2 h-5 w-5 animate-spin"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle
-                  class="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  stroke-width="4"
-                ></circle>
-                <path
-                  class="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                ></path>
-              </svg>
-              <Icon v-else name="checkCircle" size="md" class="mr-2" />
-              {{ submitting ? t('redeem.redeeming') : t('redeem.redeemButton') }}
-            </button>
-          </form>
+              <Icon name="creditCard" size="xl" class="text-primary-600 dark:text-primary-400" />
+            </div>
+            <p class="text-sm font-medium surface-muted">{{ t('redeem.currentBalance') }}</p>
+            <p class="mt-2 text-4xl font-bold">
+              ${{ user?.balance?.toFixed(2) || '0.00' }}
+            </p>
+            <p class="mt-2 text-sm surface-muted">
+              {{ t('redeem.concurrency') }}: {{ user?.concurrency || 0 }} {{ t('redeem.requests') }}
+            </p>
+          </div>
         </div>
+
+        <!-- Redeem Form -->
+        <div class="card redeem-form-card">
+          <div class="p-6">
+            <form v-support-readonly @submit.prevent="handleRedeem" class="space-y-5">
+              <div>
+                <label for="code" class="input-label">
+                  {{ t('redeem.redeemCodeLabel') }}
+                </label>
+                <div class="relative mt-1">
+                  <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
+                    <Icon name="gift" size="md" class="surface-muted" />
+                  </div>
+                  <input
+                    id="code"
+                    v-model="redeemCode"
+                    type="text"
+                    required
+                    :placeholder="t('redeem.redeemCodePlaceholder')"
+                    :disabled="submitting"
+                    class="input py-3 pl-12 text-lg"
+                  />
+                </div>
+                <p class="input-hint">
+                  {{ t('redeem.redeemCodeHint') }}
+                </p>
+              </div>
+
+              <button
+                type="submit"
+                :disabled="!redeemCode || submitting"
+                class="btn btn-primary w-full py-3"
+              >
+                <svg
+                  v-if="submitting"
+                  class="-ml-1 mr-2 h-5 w-5 animate-spin"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    class="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    stroke-width="4"
+                  ></circle>
+                  <path
+                    class="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  ></path>
+                </svg>
+                <Icon v-else name="checkCircle" size="md" class="mr-2" />
+                {{ submitting ? t('redeem.redeeming') : t('redeem.redeemButton') }}
+              </button>
+            </form>
+          </div>
+        </div>
+
       </div>
 
       <!-- Success Message -->
       <transition name="fade">
         <div
           v-if="redeemResult"
-          class="card workspace-shell border-emerald-200 bg-emerald-50/[0.15] dark:border-emerald-800/50 dark:bg-emerald-900/20"
+          class="card workspace-fixed redeem-feedback border-emerald-200 bg-emerald-50/[0.15] dark:border-emerald-800/50 dark:bg-emerald-900/20"
         >
           <div class="p-6">
             <div class="flex items-start gap-4">
@@ -136,7 +139,7 @@
       <transition name="fade">
         <div
           v-if="errorMessage"
-          class="card workspace-shell border-red-200 bg-red-50/[0.15] dark:border-red-800/50 dark:bg-red-900/20"
+          class="card workspace-fixed redeem-feedback border-red-200 bg-red-50/[0.15] dark:border-red-800/50 dark:bg-red-900/20"
         >
           <div class="p-6">
             <div class="flex items-start gap-4">
@@ -162,50 +165,31 @@
         </div>
       </transition>
 
-      <!-- Information Card -->
-      <div
-        class="card workspace-shell border-primary-200 bg-primary-50/[0.15] dark:border-primary-800/50 dark:bg-primary-900/20"
-      >
-        <div class="p-6">
-          <div class="flex items-start gap-4">
-            <div
-              class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-primary-100/[0.15] dark:bg-primary-900/30"
-            >
-              <Icon name="infoCircle" size="md" class="text-primary-600 dark:text-primary-400" />
+      <section class="workspace-fixed redeem-guidance" :aria-label="t('redeem.aboutCodes')">
+        <h3 class="mb-3 text-sm font-semibold">{{ t('redeem.aboutCodes') }}</h3>
+        <ul class="redeem-guide-grid">
+          <li v-for="(rule, index) in redeemRules" :key="rule.body" class="card redeem-guide-card">
+            <div class="redeem-guide-top">
+              <span class="redeem-guide-icon"><Icon :name="rule.icon" size="md" /></span>
+              <span class="redeem-guide-step">{{ String(index + 1).padStart(2, '0') }}</span>
             </div>
-            <div class="flex-1">
-              <h3 class="text-sm font-semibold text-primary-800 dark:text-primary-300">
-                {{ t('redeem.aboutCodes') }}
-              </h3>
-              <ul
-                class="mt-2 list-inside list-disc space-y-1 text-sm text-primary-700 dark:text-primary-400"
-              >
-                <li>{{ t('redeem.codeRule1') }}</li>
-                <li>{{ t('redeem.codeRule2') }}</li>
-                <li>
-                  {{ t('redeem.codeRule3') }}
-                  <span
-                    v-if="contactInfo"
-                    class="ml-1.5 inline-flex items-center rounded-md bg-primary-200/50 px-2 py-0.5 text-xs font-medium text-primary-800 dark:bg-primary-800/40 dark:text-primary-200"
-                  >
-                    {{ contactInfo }}
-                  </span>
-                </li>
-                <li>{{ t('redeem.codeRule4') }}</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </div>
+            <h4 class="text-sm font-semibold">{{ t(rule.title) }}</h4>
+            <p class="text-[13px] leading-relaxed surface-muted">
+              {{ t(rule.body) }}
+              <span v-if="index === 2 && contactInfo" class="ml-1.5 inline-flex rounded-md surface-inset px-2 py-0.5 text-xs font-medium">{{ contactInfo }}</span>
+            </p>
+          </li>
+        </ul>
+      </section>
 
       <!-- Recent Activity -->
-      <div class="card workspace-shell">
+      <div class="card workspace-table-card redeem-history-card">
         <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
           <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
             {{ t('redeem.recentActivity') }}
           </h2>
         </div>
-        <div class="redeem-history p-6">
+        <div ref="historyViewport" class="redeem-history workspace-table-viewport p-6">
           <!-- Loading State -->
           <div v-if="loadingHistory" class="flex items-center justify-center py-8">
             <svg class="h-6 w-6 animate-spin text-primary-500" fill="none" viewBox="0 0 24 24">
@@ -335,32 +319,38 @@
               {{ t('redeem.historyWillAppear') }}
             </p>
           </div>
-          <div class="redeem-history-pagination mt-4 text-sm">
-            <span>{{ t('common.total') }}: {{ historyTotal }} {{ t('pagination.results') }}</span>
-            <label>
-              {{ t('pagination.perPage') }}
-              <Select
-                v-model="historyPageSize"
-                class="w-24"
-                :disabled="loadingHistory || submitting"
-                @change="fetchHistory(1)"
-                :searchable="false"
-                :options="[20, 50, 100].map(size => ({ value: size, label: String(size) }))"
-              />
-            </label>
-            <button
-              class="btn btn-secondary"
-              :disabled="loadingHistory || submitting || historyPage <= 1"
-              @click="fetchHistory(historyPage - 1)"
-            >{{ t('pagination.previous') }}</button>
-            <button
-              class="btn btn-secondary"
-              :disabled="loadingHistory || submitting || historyPage * historyPageSize >= historyTotal"
-              @click="fetchHistory(historyPage + 1)"
-            >{{ t('pagination.next') }}</button>
-          </div>
         </div>
       </div>
+
+      <nav class="card workspace-fixed redeem-history-pagination" :aria-label="t('redeem.recentActivity')">
+        <div class="redeem-pagination-info">
+          <span>{{ t('common.total') }}: {{ historyTotal }} {{ t('pagination.results') }}</span>
+          <label>
+            {{ t('pagination.perPage') }}
+            <Select
+              v-model="historyPageSize"
+              class="w-24"
+              :disabled="loadingHistory || submitting"
+              @change="fetchHistory(1)"
+              :searchable="false"
+              :options="[20, 50, 100].map(size => ({ value: size, label: String(size) }))"
+            />
+          </label>
+        </div>
+        <div class="redeem-pagination-actions">
+          <span class="text-xs surface-muted">{{ t('pagination.pageOf', { page: historyPage, total: historyPageCount }) }}</span>
+          <button
+            class="btn btn-secondary"
+            :disabled="loadingHistory || submitting || historyPage <= 1"
+            @click="fetchHistory(historyPage - 1)"
+          >{{ t('pagination.previous') }}</button>
+          <button
+            class="btn btn-secondary"
+            :disabled="loadingHistory || submitting || historyPage * historyPageSize >= historyTotal"
+            @click="fetchHistory(historyPage + 1)"
+          >{{ t('pagination.next') }}</button>
+        </div>
+      </nav>
     </div>
   </AppLayout>
 </template>
@@ -369,7 +359,7 @@
 import Select from '@/components/common/Select.vue'
 import { useLocaleRefresh } from '@/utils/localeRefresh'
 import { supportReadonly as vSupportReadonly } from '@/directives/supportReadonly'
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useUserView as useAuthStore } from '@/composables/useUserView'
 import { useAppStore } from '@/stores/app'
@@ -408,6 +398,14 @@ const historyTotal = ref(0)
 let historyRequest = 0
 let loadedHistoryPageSize = 20
 const contactInfo = ref('')
+const historyViewport = ref<HTMLElement | null>(null)
+const historyPageCount = computed(() => Math.max(1, Math.ceil(historyTotal.value / historyPageSize.value)))
+const redeemRules = [
+  { title: 'redeem.ruleTitles.once', body: 'redeem.codeRule1', icon: 'shield' },
+  { title: 'redeem.ruleTitles.benefits', body: 'redeem.codeRule2', icon: 'gift' },
+  { title: 'redeem.ruleTitles.support', body: 'redeem.codeRule3', icon: 'chat' },
+  { title: 'redeem.ruleTitles.instant', body: 'redeem.codeRule4', icon: 'checkCircle' },
+] as const
 
 // Helper functions for history display
 const isBalanceType = (type: string) => {
@@ -464,6 +462,8 @@ const fetchHistory = async (page = 1) => {
     historyPage.value = page
     historyPageSize.value = pageSize
     loadedHistoryPageSize = pageSize
+    await nextTick()
+    if (request === historyRequest && historyViewport.value) historyViewport.value.scrollTop = 0
   } catch (error) {
     if (request !== historyRequest) return
     historyPageSize.value = loadedHistoryPageSize
@@ -537,30 +537,37 @@ useLocaleRefresh(() => fetchHistory(historyPage.value))
 </script>
 
 <style scoped>
-.redeem-balance { color: var(--surface-text); background-color: var(--surface-fill); background-image: linear-gradient(135deg, var(--surface-glint), transparent 65%); }
-.redeem-history { container-name: redeem-history; container-type: inline-size; }
-.redeem-history-pagination {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto auto;
-  align-items: center;
-  gap: 12px;
+.redeem-top-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: stretch; }
+.redeem-top-row > .card { min-width: 0; border-radius: 16px; }
+.redeem-balance { display: grid; grid-template-columns: 64px minmax(0, 1fr); column-gap: 20px; align-content: center; height: 100%; min-height: 200px; padding: 22px 24px; color: var(--surface-text); }
+.redeem-balance > div { grid-row: 1 / 4; align-self: center; margin: 0; }
+.redeem-balance > p { grid-column: 2; margin: 4px 0; }
+.redeem-form-card { display: flex; align-items: center; }
+.redeem-form-card > div { width: 100%; padding: 24px 28px; }
+.redeem-guide-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.redeem-guide-card { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 18px 20px; border-radius: 16px; }
+.redeem-guide-top { display: flex; align-items: center; justify-content: space-between; }
+.redeem-guide-icon { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 12px; background: var(--surface-soft); color: var(--console-accent-readable); }
+.redeem-guide-step { color: var(--surface-muted); opacity: .65; font: 500 12px/1.5 ui-monospace, monospace; }
+.redeem-history-card { min-height: 0; border-radius: 16px; overflow: hidden; }
+.redeem-history { padding: 16px 20px; border-radius: 0 0 16px 16px; }
+.redeem-history-pagination { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 20px; min-width: 0; border-radius: 16px; }
+.redeem-pagination-info, .redeem-pagination-actions { display: flex; align-items: center; gap: 16px; min-width: 0; }
+.redeem-pagination-info { color: var(--surface-muted); font-size: 13px; }
+.redeem-pagination-info > label { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+.redeem-pagination-actions { gap: 8px; margin-left: auto; }
+.redeem-pagination-actions > button { min-width: 80px; white-space: nowrap; }
+.redeem-feedback { max-height: 200px; overflow: auto; }
+@media (max-width: 1023px) {
+  .redeem-top-row { grid-template-columns: 1fr; }
+  .redeem-guide-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
-.redeem-history-pagination > label { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
-.redeem-history-pagination > button { min-width: 80px; white-space: nowrap; }
-@container redeem-history (max-width: 540px) {
-  .redeem-history-pagination { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .redeem-history-pagination > label { justify-self: end; }
-  .redeem-history-pagination > button { width: 100%; }
+@media (max-width: 639px) {
+  .redeem-guide-grid { grid-template-columns: 1fr; }
+  .redeem-history-pagination { flex-wrap: wrap; }
+  .redeem-pagination-info { width: 100%; justify-content: space-between; }
+  .redeem-pagination-actions { width: 100%; justify-content: flex-end; flex-wrap: wrap; }
 }
-
-.fade-enter-active,
-.fade-leave-active {
-  transition: all 0.3s ease;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-  transform: translateY(-8px);
-}
+.fade-enter-active, .fade-leave-active { transition: all .3s ease; }
+.fade-enter-from, .fade-leave-to { opacity: 0; transform: translateY(-8px); }
 </style>

@@ -334,6 +334,11 @@ export default {
 
   // Usage
   usage: {
+    fastStateLabel: 'Fast',
+    fastEnabled: 'Enabled',
+    fastDisabled: 'Disabled',
+    fastUnrecorded: 'Not recorded',
+    fastStateHint: 'Whether the final request enabled Fast; this does not describe the upstream response tier or billing.',
     title: 'Usage Records',
     description: 'View and analyze your API usage history',
     costDetails: 'Cost Breakdown',
@@ -845,6 +850,10 @@ export default {
       }
     },
     tips: {
+      shareTitle: 'Share invitations',
+      earnTitle: 'Earn rebates',
+      transferTitle: 'Transfer to balance',
+      frozenTitle: 'Waiting period',
       title: 'How It Works',
       line1: 'Share your affiliate code or invite link with new users.',
       line2: 'When invitees recharge, you receive {rate} of the recharge as rebate quota.',
@@ -855,6 +864,12 @@ export default {
 
   // Redeem
   redeem: {
+    ruleTitles: {
+      once: 'Single use',
+      benefits: 'Multiple benefits',
+      support: 'Redemption support',
+      instant: 'Instant updates',
+    },
     title: 'Redeem Code',
     description: 'Enter your redeem code to add balance or increase concurrency',
     currentBalance: 'Current Balance',

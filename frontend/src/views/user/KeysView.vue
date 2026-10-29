@@ -458,7 +458,6 @@
 
       <template #pagination>
         <Pagination
-          v-if="pagination.total > 0"
           :page="pagination.page"
           :total="pagination.total"
           :page-size="pagination.page_size"

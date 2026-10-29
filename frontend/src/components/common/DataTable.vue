@@ -1073,6 +1073,8 @@ defineExpose({
   sortedData,
   resolveRowKey,
   tableWrapperEl: tableWrapperRef,
+  // User tables can render cards even at desktop widths when columns do not fit.
+  scrollViewportEl: computed(() => showDesktopTable.value ? tableWrapperRef.value : cardsWrapperRef.value),
 })
 </script>
 

@@ -339,6 +339,11 @@ export default {
 
   // Usage
   usage: {
+    fastStateLabel: 'Fast',
+    fastEnabled: '已开启',
+    fastDisabled: '未开启',
+    fastUnrecorded: '未记录',
+    fastStateHint: '最终请求是否启用 Fast；不表示上游实际响应档位或计费。',
     title: '使用记录',
     description: '查看和分析您的 API 使用历史',
     costDetails: '费用明细',
@@ -849,6 +854,10 @@ export default {
       }
     },
     tips: {
+      shareTitle: '分享邀请',
+      earnTitle: '获得返利',
+      transferTitle: '转入余额',
+      frozenTitle: '冻结期',
       title: '使用说明',
       line1: '将邀请码或邀请链接分享给新用户。',
       line2: '被邀请用户充值后，你可获得 {rate} 的返利额度。',
@@ -859,6 +868,12 @@ export default {
 
   // Redeem
   redeem: {
+    ruleTitles: {
+      once: '一次兑换',
+      benefits: '多种权益',
+      support: '兑换支持',
+      instant: '即时更新',
+    },
     title: '兑换码',
     description: '输入兑换码以充值余额或增加并发数',
     currentBalance: '当前余额',

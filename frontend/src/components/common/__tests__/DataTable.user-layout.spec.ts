@@ -71,11 +71,14 @@ describe('DataTable user fit layout', () => {
       await flushPromises()
       expect(wrapper.find('table').exists()).toBe(true)
       expect(wrapper.findAll('.sticky-col')).toHaveLength(0)
+      expect(wrapper.vm.scrollViewportEl).toBe(wrapper.get('.table-wrapper').element)
 
       geometry.setAvailable(800)
       await geometry.resize()
       expect(wrapper.find('table').exists()).toBe(false)
       const cards = wrapper.get('.user-record-cards').element
+      expect(wrapper.vm.tableWrapperEl).toBeNull()
+      expect(wrapper.vm.scrollViewportEl).toBe(cards)
       expect(wrapper.find('.user-record-fields').exists()).toBe(true)
       expect(wrapper.find('.user-record-selection').exists()).toBe(true)
       expect(wrapper.find('.user-record-actions').exists()).toBe(true)
@@ -96,6 +99,7 @@ describe('DataTable user fit layout', () => {
       expect(wrapper.find('.user-record-cards').exists()).toBe(false)
       expect(wrapper.find('.data-table-fit-probe').exists()).toBe(false)
       expect(wrapper.findAll('.sticky-col')).toHaveLength(0)
+      expect(wrapper.vm.scrollViewportEl).toBe(wrapper.get('.table-wrapper').element)
     } finally { wrapper.unmount(); geometry.restore() }
   })
 

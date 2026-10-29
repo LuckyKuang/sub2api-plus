@@ -6,6 +6,7 @@
 @import './styles/tabs.css';
 @import './styles/segments.css';
 @import './styles/product.css';
+@import './styles/motion.css';
 
 @tailwind base;
 @tailwind components;
@@ -37,8 +38,6 @@ input:is([type=range], [type=checkbox], [type=radio]) { accent-color: rgb(var(--
   border-radius: var(--surface-radius);
 }
 .detail-dialog .modal-body { overscroll-behavior: contain; padding-bottom: max(24px, env(safe-area-inset-bottom)); }
-.modal-enter-active .modal-content.detail-dialog, .modal-leave-active .modal-content.detail-dialog { transition: transform 200ms ease-out; }
-.modal-enter-from .modal-content.detail-dialog, .modal-leave-to .modal-content.detail-dialog { transform: translateX(100%); }
 
 @layer base {
   * {
@@ -471,54 +470,6 @@ input:is([type=range], [type=checkbox], [type=radio]) { accent-color: rgb(var(--
   /* 防止body滚动的工具类 */
   body.modal-open {
     overflow: hidden;
-  }
-
-  .modal-enter-active {
-    transition: opacity 250ms ease-out;
-  }
-
-  .modal-leave-active {
-    transition: opacity 200ms ease-in;
-  }
-
-  .modal-enter-from,
-  .modal-leave-to {
-    opacity: 0;
-  }
-
-  .modal-enter-active .modal-content {
-    transition: transform 250ms ease-out, opacity 250ms ease-out;
-  }
-
-  .modal-leave-active .modal-content {
-    transition: transform 200ms ease-in, opacity 200ms ease-in;
-  }
-
-  .modal-enter-from .modal-content,
-  .modal-leave-to .modal-content {
-    transform: scale(0.95);
-    opacity: 0;
-  }
-
-  .modal-enter-to .modal-content,
-  .modal-leave-from .modal-content {
-    transform: scale(1);
-    opacity: 1;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .modal-enter-active,
-    .modal-leave-active,
-    .modal-enter-active .modal-content,
-    .modal-leave-active .modal-content {
-      transition-duration: 1ms;
-      transition-delay: 0ms;
-    }
-
-    .modal-enter-from .modal-content,
-    .modal-leave-to .modal-content {
-      transform: none;
-    }
   }
 
   /* ============ Dialog ============ */

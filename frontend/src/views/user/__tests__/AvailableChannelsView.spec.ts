@@ -5,20 +5,251 @@ import AvailableChannelsView from '../AvailableChannelsView.vue'
 import CatalogPriceDetails from '@/components/channels/CatalogPriceDetails.vue'
 import { group, offer, pricing, rateQuote } from '@/components/channels/__tests__/catalogFixtures'
 import type { ChannelCatalog } from '@/api/channels'
+import { setAdminSupportContext } from '@/utils/adminSupportContext'
+import { clearAvailableChannelCatalogCache } from '@/utils/availableChannelCatalogCache'
 
-const mocks = vi.hoisted(() => ({ getCatalog: vi.fn(), copy: vi.fn(), auth: { user: { id: 1 } } as { user: { id: number } | null } }))
+const mocks = vi.hoisted(() => ({
+  getCatalog: vi.fn(), copy: vi.fn(),
+  auth: { user: { id: 1 }, isAuthenticated: true } as { user: { id: number } | null; isAuthenticated: boolean },
+  support: { target: null } as { target: { id: number } | null },
+  locale: { value: 'en' }
+}))
 vi.mock('@/api/channels', () => ({ default: { getCatalog: mocks.getCatalog } }))
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => mocks.auth }))
+vi.mock('@/stores/adminSupportView', () => ({ useAdminSupportViewStore: () => mocks.support }))
+vi.mock('@/i18n', () => ({ getLocale: () => mocks.locale.value }))
 vi.mock('@/composables/useClipboard', () => ({ useClipboard: () => ({ copyToClipboard: mocks.copy }) }))
 vi.mock('vue-i18n', async () => ({ ...await vi.importActual('vue-i18n'), useI18n: () => ({ t: (key: string) => key }) }))
 const wrappers: VueWrapper[] = []
 const data = (): ChannelCatalog => ({ groups: [group(1, [offer('first'), offer('second')]), group(2, [offer('claude', { platform: 'anthropic' })])], user_rate_status: 'loaded' })
 const global = { stubs: { AppLayout: { name: 'AppLayout', props: { workspace: Boolean }, template: '<main><slot /></main>' }, PlatformIcon: { template: '<span />' }, Icon: { template: '<span />' } } }
 function page() { const wrapper = mount(AvailableChannelsView, { global, attachTo: document.body }); wrappers.push(wrapper); return wrapper }
-beforeEach(() => { vi.clearAllMocks(); mocks.auth = reactive({ user: { id: 1 } }); mocks.getCatalog.mockResolvedValue(data()) })
-afterEach(() => { wrappers.splice(0).forEach(w => w.unmount()); document.body.innerHTML = '' })
+function leave(wrapper: VueWrapper) { wrappers.splice(wrappers.indexOf(wrapper), 1); wrapper.unmount() }
+beforeEach(() => {
+  vi.clearAllMocks()
+  clearAvailableChannelCatalogCache()
+  setAdminSupportContext(null)
+  mocks.auth = reactive({ user: { id: 1 }, isAuthenticated: true })
+  mocks.support = reactive({ target: null })
+  mocks.locale = reactive({ value: 'en' })
+  mocks.getCatalog.mockResolvedValue(data())
+})
+afterEach(() => {
+  wrappers.splice(0).forEach(w => w.unmount())
+  setAdminSupportContext(null)
+  clearAvailableChannelCatalogCache()
+  document.body.innerHTML = ''
+})
 
 describe('available channels user page', () => {
+  // Approved loading behavior: a fresh authorized success renders immediately
+  // on return; only the user's refresh bypasses the 180-second memory cache.
+  it('immediately reuses the last successful catalog on return and forces a new manual refresh', async () => {
+    const first = page(); await flushPromises()
+    leave(first)
+    mocks.getCatalog.mockResolvedValueOnce({ groups: [group(1, [offer('latest-model')])], user_rate_status: 'loaded' })
+
+    const returning = page()
+    expect(returning.findAll('h3').map(title => title.text())).toEqual(['claude', 'first', 'second'])
+    expect(returning.find('[aria-busy="true"]').exists()).toBe(false)
+    expect(mocks.getCatalog).toHaveBeenCalledTimes(1)
+
+    await returning.get('button[aria-label="common.refresh"]').trigger('click'); await flushPromises()
+    expect(mocks.getCatalog).toHaveBeenCalledTimes(2)
+    expect(returning.findAll('h3').map(title => title.text())).toEqual(['latest-model'])
+    leave(returning)
+    const refreshed = page()
+    expect(refreshed.findAll('h3').map(title => title.text())).toEqual(['latest-model'])
+    expect(mocks.getCatalog).toHaveBeenCalledTimes(2)
+  })
+
+  it('expires the catalog at 180 seconds without extending freshness on cache reads', async () => {
+    vi.useFakeTimers()
+    try {
+      const started = new Date('2026-10-29T12:00:00Z')
+      vi.setSystemTime(started)
+      const first = page(); await flushPromises(); leave(first)
+
+      vi.setSystemTime(started.getTime() + 179_999)
+      const fresh = page()
+      expect(fresh.findAll('.catalog-model-card')).toHaveLength(3)
+      expect(mocks.getCatalog).toHaveBeenCalledTimes(1)
+      leave(fresh)
+
+      vi.setSystemTime(started.getTime() + 180_000)
+      mocks.getCatalog.mockResolvedValueOnce({ groups: [group(1, [offer('after-expiry')])], user_rate_status: 'loaded' })
+      const expired = page()
+      expect(expired.find('[aria-busy="true"]').exists()).toBe(true)
+      expect(mocks.getCatalog).toHaveBeenCalledTimes(2)
+      await flushPromises()
+      expect(expired.findAll('h3').map(title => title.text())).toEqual(['after-expiry'])
+    } finally { vi.useRealTimers() }
+  })
+
+  it('isolates cached user catalogs and ignores same-user profile refreshes', async () => {
+    mocks.getCatalog.mockResolvedValueOnce({ groups: [group(1, [offer('first-user')])], user_rate_status: 'loaded' })
+    const w = page(); await flushPromises()
+    mocks.auth.user = { id: 1 }; await flushPromises()
+    expect(mocks.getCatalog).toHaveBeenCalledTimes(1)
+
+    mocks.getCatalog.mockResolvedValueOnce({ groups: [group(2, [offer('second-user')])], user_rate_status: 'loaded' })
+    mocks.auth.user = { id: 2 }; await flushPromises()
+    expect(w.findAll('h3').map(title => title.text())).toEqual(['second-user'])
+    mocks.auth.user = { id: 1 }; await flushPromises()
+    expect(w.findAll('h3').map(title => title.text())).toEqual(['first-user'])
+    expect(mocks.getCatalog).toHaveBeenCalledTimes(2)
+  })
+
+  it('isolates assistance targets, assistance actors and the actor own-user view', async () => {
+    mocks.getCatalog.mockResolvedValueOnce({ groups: [group(1, [offer('own-view')])], user_rate_status: 'loaded' })
+    const w = page(); await flushPromises()
+
+    mocks.support.target = { id: 1 }
+    mocks.getCatalog.mockResolvedValueOnce({ groups: [group(1, [offer('assisted-view')])], user_rate_status: 'loaded' })
+    setAdminSupportContext({ actorId: 1, userId: 1 }); await flushPromises()
+    expect(w.findAll('h3').map(title => title.text())).toEqual(['assisted-view'])
+
+    mocks.getCatalog.mockResolvedValueOnce({ groups: [group(2, [offer('other-target')])], user_rate_status: 'loaded' })
+    setAdminSupportContext({ actorId: 1, userId: 2 })
+    mocks.support.target = { id: 2 }; await flushPromises()
+    expect(w.findAll('h3').map(title => title.text())).toEqual(['other-target'])
+
+    setAdminSupportContext({ actorId: 1, userId: 1 })
+    mocks.support.target = { id: 1 }; await flushPromises()
+    expect(w.findAll('h3').map(title => title.text())).toEqual(['assisted-view'])
+    expect(mocks.getCatalog).toHaveBeenCalledTimes(3)
+
+    mocks.getCatalog.mockResolvedValueOnce({ groups: [group(1, [offer('other-actor')])], user_rate_status: 'loaded' })
+    mocks.auth.user = { id: 9 }
+    setAdminSupportContext({ actorId: 9, userId: 1 }); await flushPromises()
+    expect(w.findAll('h3').map(title => title.text())).toEqual(['other-actor'])
+    expect(mocks.getCatalog).toHaveBeenCalledTimes(4)
+  })
+
+  it('keeps localized catalogs separate while preserving filters and current model details', async () => {
+    mocks.getCatalog.mockResolvedValueOnce({ groups: [group(1, [offer('first')], { name: 'English group' })], user_rate_status: 'loaded' })
+    const w = page(); await flushPromises()
+    await w.get('input[type="search"]').setValue('first')
+    await w.findAll('.catalog-model-card button')[1]!.trigger('click')
+
+    mocks.getCatalog.mockResolvedValueOnce({ groups: [group(1, [offer('first')], { name: '中文分组' })], user_rate_status: 'loaded' })
+    mocks.locale.value = 'zh'; await flushPromises()
+    expect(w.findComponent(CatalogPriceDetails).props('model').quotes[0].group.name).toBe('中文分组')
+    expect((w.get('input[type="search"]').element as HTMLInputElement).value).toBe('first')
+
+    mocks.locale.value = 'en'; await flushPromises()
+    expect(w.findComponent(CatalogPriceDetails).props('model').quotes[0].group.name).toBe('English group')
+    expect(mocks.getCatalog).toHaveBeenCalledTimes(2)
+  })
+
+  it.each(['unavailable', 'not_requested'] as const)('does not reuse a %s response as a fresh successful catalog', async status => {
+    mocks.getCatalog.mockResolvedValueOnce({ groups: [group(1, [offer('incomplete')])], user_rate_status: status })
+    const first = page(); await flushPromises(); leave(first)
+    const returning = page(); await flushPromises()
+    expect(returning.findAll('h3').map(title => title.text())).toEqual(['claude', 'first', 'second'])
+    expect(mocks.getCatalog).toHaveBeenCalledTimes(2)
+  })
+
+  it.each(['error', 'unavailable'] as const)('invalidates an older success when a manual refresh returns %s', async outcome => {
+    const first = page(); await flushPromises()
+    if (outcome === 'error') mocks.getCatalog.mockRejectedValueOnce(new Error('offline'))
+    else mocks.getCatalog.mockResolvedValueOnce({ groups: [], user_rate_status: 'unavailable' })
+    await first.get('button[aria-label="common.refresh"]').trigger('click'); await flushPromises()
+    leave(first)
+    mocks.getCatalog.mockResolvedValueOnce({ groups: [group(1, [offer('new-success')])], user_rate_status: 'loaded' })
+    const returning = page(); await flushPromises()
+    expect(returning.findAll('h3').map(title => title.text())).toEqual(['new-success'])
+    expect(mocks.getCatalog).toHaveBeenCalledTimes(3)
+  })
+
+  it('aborts an abandoned request and never caches its late successful response', async () => {
+    let finish!: (catalog: ChannelCatalog) => void
+    mocks.getCatalog.mockImplementationOnce(() => new Promise<ChannelCatalog>(resolve => { finish = resolve }))
+    const first = page()
+    const signal = mocks.getCatalog.mock.calls[0]![0].signal as AbortSignal
+    leave(first)
+    expect(signal.aborted).toBe(true)
+    finish({ groups: [group(1, [offer('abandoned')])], user_rate_status: 'loaded' }); await flushPromises()
+    const returning = page(); await flushPromises()
+    expect(returning.text()).not.toContain('abandoned')
+    expect(returning.findAll('.catalog-model-card')).toHaveLength(3)
+    expect(mocks.getCatalog).toHaveBeenCalledTimes(2)
+  })
+
+  it('clears current details and rejects old responses when a new session uses the same user ID', async () => {
+    const w = page(); await flushPromises()
+    await w.findAll('.catalog-model-card button')[1]!.trigger('click')
+    let finish!: (catalog: ChannelCatalog) => void
+    mocks.getCatalog.mockImplementationOnce(() => new Promise<ChannelCatalog>(resolve => { finish = resolve }))
+    await w.get('button[aria-label="common.refresh"]').trigger('click')
+    const oldSignal = mocks.getCatalog.mock.calls[1]![0].signal as AbortSignal
+
+    mocks.getCatalog.mockResolvedValueOnce({ groups: [group(1, [offer('new-session')])], user_rate_status: 'loaded' })
+    clearAvailableChannelCatalogCache()
+    await flushPromises()
+    expect(oldSignal.aborted).toBe(true)
+    expect(w.findComponent(CatalogPriceDetails).props('model')).toBeNull()
+    expect(w.findAll('h3').map(title => title.text())).toEqual(['new-session'])
+
+    finish({ groups: [group(1, [offer('old-session')])], user_rate_status: 'loaded' }); await flushPromises()
+    leave(w)
+    expect(page().findAll('h3').map(title => title.text())).toEqual(['new-session'])
+    expect(mocks.getCatalog).toHaveBeenCalledTimes(3)
+  })
+
+  it('aborts the previous locale read and does not cache a late response under another language', async () => {
+    let finish!: (catalog: ChannelCatalog) => void
+    mocks.getCatalog.mockImplementationOnce(() => new Promise<ChannelCatalog>(resolve => { finish = resolve }))
+    const w = page()
+    const englishSignal = mocks.getCatalog.mock.calls[0]![0].signal as AbortSignal
+    mocks.getCatalog.mockResolvedValueOnce({ groups: [group(1, [offer('中文模型')])], user_rate_status: 'loaded' })
+    mocks.locale.value = 'zh'; await flushPromises()
+    expect(englishSignal.aborted).toBe(true)
+    finish({ groups: [group(1, [offer('late-english')])], user_rate_status: 'loaded' }); await flushPromises()
+    expect(w.findAll('h3').map(title => title.text())).toEqual(['中文模型'])
+
+    mocks.getCatalog.mockResolvedValueOnce({ groups: [group(1, [offer('fresh-english')])], user_rate_status: 'loaded' })
+    mocks.locale.value = 'en'; await flushPromises()
+    expect(w.findAll('h3').map(title => title.text())).toEqual(['fresh-english'])
+    expect(mocks.getCatalog).toHaveBeenCalledTimes(3)
+  })
+
+  it('does not let one consumer cancellation cancel another consumer request', async () => {
+    const finishes: Array<(catalog: ChannelCatalog) => void> = []
+    mocks.getCatalog.mockImplementation(() => new Promise<ChannelCatalog>(resolve => finishes.push(resolve)))
+    const first = page()
+    const second = page()
+    const signals = mocks.getCatalog.mock.calls.map(call => call[0].signal as AbortSignal)
+    leave(first)
+    expect(signals.map(signal => signal.aborted)).toEqual([true, false])
+    finishes[1]!({ groups: [group(1, [offer('remaining-consumer')])], user_rate_status: 'loaded' })
+    finishes[0]!({ groups: [group(1, [offer('cancelled-consumer')])], user_rate_status: 'loaded' })
+    await flushPromises()
+    expect(second.findAll('h3').map(title => title.text())).toEqual(['remaining-consumer'])
+    leave(second)
+    expect(page().findAll('h3').map(title => title.text())).toEqual(['remaining-consumer'])
+    expect(mocks.getCatalog).toHaveBeenCalledTimes(2)
+  })
+
+  // Approved user review: channel prices refresh only on the page's manual
+  // action; elapsed time, browser focus and visibility changes must not reload
+  // the card list or discard the user's current position.
+  it('keeps catalog requests manual across timers, focus and visibility changes', async () => {
+    vi.useFakeTimers()
+    try {
+      const w = page(); await flushPromises()
+      expect(mocks.getCatalog).toHaveBeenCalledTimes(1)
+      await vi.advanceTimersByTimeAsync(180_000)
+      window.dispatchEvent(new Event('focus'))
+      document.dispatchEvent(new Event('visibilitychange'))
+      await flushPromises()
+      expect(mocks.getCatalog).toHaveBeenCalledTimes(1)
+      await w.get('button[aria-label="common.refresh"]').trigger('click')
+      await flushPromises()
+      expect(mocks.getCatalog).toHaveBeenCalledTimes(2)
+    } finally { vi.useRealTimers() }
+  })
+
   it('keeps heading, filters and count outside the independently scrolling channel cards', async () => {
     const w = page(); await flushPromises()
     const results = w.get('[data-testid="catalog-results"]')

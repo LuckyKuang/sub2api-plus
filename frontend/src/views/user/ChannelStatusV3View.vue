@@ -1,7 +1,7 @@
 <template>
-  <AppLayout appearance="user">
-    <div class="service-status w-full space-y-5">
-      <header class="flex flex-wrap items-center justify-between gap-3">
+  <AppLayout appearance="user" workspace>
+    <div class="service-status workspace-page w-full">
+      <header class="card workspace-fixed status-heading flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">{{ t('channelMonitorV3.title') }}</h1>
           <p class="mt-1 text-sm surface-muted">{{ t('channelMonitorV3.subtitle') }}</p>
@@ -16,7 +16,7 @@
 
       <p v-if="error" class="rounded-xl border border-red-200 bg-red-50/[0.15] p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300" role="alert">{{ error }}</p>
       <template v-if="snapshot">
-        <section class="overview flex gap-4 rounded-xl border p-5" :class="`status-${summary.status}`" aria-live="polite">
+        <section class="overview workspace-fixed flex gap-4 rounded-xl border p-5" :class="`status-${summary.status}`" aria-live="polite">
           <span class="status-ink mt-0.5"><Icon :name="summary.status === 'normal' ? 'check' : 'exclamationTriangle'" size="lg" /></span>
           <div class="min-w-0 flex-1">
             <h2 class="text-base font-semibold text-gray-900 dark:text-white">{{ t(snapshot.monitoring_enabled ? `channelMonitorV3.overview.${summary.status}` : 'channelMonitorV3.monitoringDisabled') }}</h2>
@@ -29,7 +29,7 @@
           </div>
         </section>
 
-        <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="card workspace-fixed status-toolbar flex flex-wrap items-center justify-between gap-3">
           <div class="tabs" role="tablist" :aria-label="t('channelMonitorV3.title')">
             <button id="v3-platform-tab" class="tab" :class="tab === 'platforms' ? 'tab-active' : ''" role="tab" :aria-selected="tab === 'platforms'" aria-controls="v3-platform-panel" @click="tab = 'platforms'">{{ t('channelMonitorV3.platforms') }}</button>
             <button id="v3-events-tab" ref="eventsTab" class="tab" :class="tab === 'events' ? 'tab-active' : ''" role="tab" :aria-selected="tab === 'events'" aria-controls="v3-events-panel" @click="tab = 'events'">{{ t('channelMonitorV3.events') }} <span class="ml-1 text-xs">{{ summary.active_events || '' }}</span></button>
@@ -49,8 +49,8 @@
           </div>
         </div>
 
-        <section v-if="tab === 'platforms'" id="v3-platform-panel" role="tabpanel" aria-labelledby="v3-platform-tab">
-          <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <section v-if="tab === 'platforms'" id="v3-platform-panel" class="status-platform-panel" role="tabpanel" aria-labelledby="v3-platform-tab">
+          <div class="status-card-grid grid gap-4 md:grid-cols-2 xl:grid-cols-3" tabindex="0">
             <button v-for="item in platforms" :key="item.platform" class="platform-card glass-surface p-5 text-left transition hover:border-gray-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-500 dark:hover:border-dark-500" @click="openDetail(item.platform)">
               <div class="flex items-center justify-between gap-3">
                 <div class="flex items-center gap-2.5">
@@ -72,13 +72,11 @@
             </button>
           </div>
           <p v-if="!platforms.length" class="py-12 text-center text-sm surface-muted">{{ t(snapshot.monitoring_enabled ? 'channelMonitorV3.emptyPlatforms' : 'channelMonitorV3.monitoringDisabled') }}</p>
-          <div class="mt-4 flex flex-wrap gap-4 text-[11px] surface-muted">
-            <span v-for="status in legend" :key="status" class="inline-flex items-center gap-1.5"><span class="legend-dot" :class="`status-${status}`" />{{ statusLabel(status) }}</span>
-          </div>
         </section>
 
-        <section v-else id="v3-events-panel" class="space-y-3" role="tabpanel" aria-labelledby="v3-events-tab">
-          <div class="flex justify-between text-xs surface-muted"><span>{{ t('channelMonitorV3.events') }}</span><span>{{ t('channelMonitorV3.recent30Days') }}</span></div>
+        <section v-else id="v3-events-panel" class="status-events-panel" role="tabpanel" aria-labelledby="v3-events-tab">
+          <div class="workspace-fixed flex justify-between text-xs surface-muted"><span>{{ t('channelMonitorV3.events') }}</span><span>{{ t('channelMonitorV3.recent30Days') }}</span></div>
+          <div class="status-event-list workspace-scroll" tabindex="0">
           <details v-for="event in incidents" :key="event.id" class="glass-surface" :open="!event.resolved_at">
             <summary class="cursor-pointer p-5">
               <span class="font-medium text-gray-900 dark:text-white">{{ t(`channelMonitorV3.eventTitle.${event.severity}`, { platform: platformLabel(event.platform) }) }}</span>
@@ -94,8 +92,14 @@
             </div>
           </details>
           <p v-if="!incidents.length" class="py-12 text-center text-sm surface-muted">{{ t('channelMonitorV3.emptyEvents') }}</p>
+          </div>
         </section>
-        <p class="text-xs surface-muted">{{ t('channelMonitorV3.note') }}</p>
+        <footer class="card workspace-fixed status-footer">
+          <div v-if="tab === 'platforms'" class="flex flex-wrap gap-4 text-[11px] surface-muted">
+            <span v-for="status in legend" :key="status" class="inline-flex items-center gap-1.5"><span class="legend-dot" :class="`status-${status}`" />{{ statusLabel(status) }}</span>
+          </div>
+          <p class="text-xs surface-muted">{{ t('channelMonitorV3.note') }}</p>
+        </footer>
       </template>
       <p v-else-if="loading" class="py-12 text-center text-sm surface-muted">{{ t('common.loading') }}</p>
     </div>
@@ -245,6 +249,15 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .service-status { --status-color: #737373; --status-tint: #7373730a; }
+.status-heading, .status-footer { padding: 16px 20px; }
+.status-toolbar { padding: 12px 16px; }
+.status-footer { display: flex; flex-direction: column; gap: 10px; }
+.status-card-grid { grid-auto-rows: max-content; align-content: start; }
+.status-events-panel { display: flex; flex-direction: column; gap: 16px; }
+@media (min-width: 1024px) {
+  .status-platform-panel, .status-events-panel { display: flex; flex: 1 1 0%; flex-direction: column; gap: 16px; min-height: 0; overflow: hidden; }
+  .status-card-grid { flex: 1 1 0%; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; border-radius: 16px; }
+}
 .status-normal { --status-color: #16a34a; --status-tint: #16a34a0a; }
 .status-degraded { --status-color: #ca8a04; --status-tint: #ca8a040a; }
 .status-partial { --status-color: #ea580c; --status-tint: #ea580c0a; }

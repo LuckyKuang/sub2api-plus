@@ -5,6 +5,7 @@
       <span class="shrink-0 surface-muted" aria-hidden="true">⌄</span>
     </button>
     <Teleport to="body">
+      <Transition name="select-dropdown">
       <div v-if="open" :id="panelID" ref="panel" class="select-dropdown-portal" :style="panelStyle" @keydown="onPanelKeydown">
         <div class="select-options">
           <label v-for="option in options" :key="option.value" class="select-option hover:surface-hover" :class="modelValue.includes(option.value) && 'select-option-selected'">
@@ -13,6 +14,7 @@
           </label>
         </div>
       </div>
+      </Transition>
     </Teleport>
   </div>
 </template>

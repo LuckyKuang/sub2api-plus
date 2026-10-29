@@ -331,16 +331,3 @@ onBeforeUnmount(() => {
   document.removeEventListener('click', handleClickOutside)
 })
 </script>
-
-<style scoped>
-.dropdown-enter-active,
-.dropdown-leave-active {
-  transition: all 0.2s ease;
-}
-
-.dropdown-enter-from,
-.dropdown-leave-to {
-  opacity: 0;
-  transform: scale(0.95) translateY(-4px);
-}
-</style>

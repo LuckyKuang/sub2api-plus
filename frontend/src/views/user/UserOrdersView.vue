@@ -36,7 +36,6 @@
 
       <!-- Pagination -->
       <Pagination
-        v-if="pagination.total > 0"
         class="workspace-fixed"
         data-test="user-orders-pagination"
         :page="pagination.page"

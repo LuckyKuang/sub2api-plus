@@ -6,7 +6,7 @@
       <!-- Mobile pagination -->
       <button
         @click="goToPage(page - 1)"
-        :disabled="page === 1"
+        :disabled="page <= 1"
         class="pagination-button relative inline-flex items-center border border-gray-300 px-4 py-2 text-sm font-medium hover:surface-hover disabled:cursor-not-allowed disabled:opacity-50 dark:border-dark-600 surface-control surface-muted"
       >
         {{ t('pagination.previous') }}
@@ -16,7 +16,7 @@
       </span>
       <button
         @click="goToPage(page + 1)"
-        :disabled="page === totalPages"
+        :disabled="page >= totalPages"
         class="pagination-button relative inline-flex items-center border border-gray-300 px-4 py-2 text-sm font-medium hover:surface-hover disabled:cursor-not-allowed disabled:opacity-50 dark:border-dark-600 surface-control surface-muted"
       >
         {{ t('pagination.next') }}
@@ -75,7 +75,7 @@
         <!-- Previous button -->
         <button
           @click="goToPage(page - 1)"
-          :disabled="page === 1"
+          :disabled="page <= 1"
           class="pagination-button relative inline-flex items-center border border-gray-300 px-2 py-2 text-sm font-medium hover:surface-hover disabled:cursor-not-allowed disabled:opacity-50 dark:border-dark-600 surface-control surface-muted"
           :aria-label="t('pagination.previous')"
         >
@@ -106,7 +106,7 @@
         <!-- Next button -->
         <button
           @click="goToPage(page + 1)"
-          :disabled="page === totalPages"
+          :disabled="page >= totalPages"
           class="pagination-button relative inline-flex items-center border border-gray-300 px-2 py-2 text-sm font-medium hover:surface-hover disabled:cursor-not-allowed disabled:opacity-50 dark:border-dark-600 surface-control surface-muted"
           :aria-label="t('pagination.next')"
         >
@@ -149,7 +149,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<Emits>()
 
-const totalPages = computed(() => Math.ceil(props.total / props.pageSize))
+const totalPages = computed(() => Math.max(1, Math.ceil(props.total / props.pageSize)))
 
 const fromItem = computed(() => {
   if (props.total === 0) return 0

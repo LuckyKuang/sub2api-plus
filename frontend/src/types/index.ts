@@ -1737,6 +1737,8 @@ export interface UsageLog {
   request_id: string
   model: string
   reasoning_effort?: string | null
+  /** Final recorded request Fast state; absent/unknown is not disabled. */
+  request_fast_enabled?: boolean | null
   inbound_endpoint?: string | null
   upstream_endpoint?: string | null
 

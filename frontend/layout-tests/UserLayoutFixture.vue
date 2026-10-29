@@ -1,5 +1,6 @@
 <template>
-  <UsageView v-if="usage" />
+  <component :is="auditComponent" v-if="auditComponent" />
+  <UsageView v-else-if="usage" />
   <DashboardView v-else-if="dashboard" />
   <AppLayout v-else :appearance="admin ? 'admin' : 'user'" :workspace="workspace" :record-workspace="recordWorkspace">
     <div :class="workspace ? 'workspace-page' : 'space-y-6'">
@@ -43,6 +44,13 @@ import { useAuthStore } from '../src/stores/auth'
 import type { User } from '../src/types'
 
 const parameters = new URLSearchParams(location.search)
+const auditPage = parameters.get('auditPage')
+const auditPages = {
+  redeem: defineAsyncComponent(() => import('../src/views/user/RedeemView.vue')),
+  affiliate: defineAsyncComponent(() => import('../src/views/user/AffiliateView.vue')),
+  subscriptions: defineAsyncComponent(() => import('../src/views/user/SubscriptionsView.vue')),
+} as const
+const auditComponent = auditPage && Object.prototype.hasOwnProperty.call(auditPages, auditPage) ? auditPages[auditPage as keyof typeof auditPages] : null
 const dashboard = parameters.get('dashboard') === '1'
 const usage = parameters.get('usage') === '1'
 const recordWorkspace = parameters.get('recordWorkspace') === '1'
@@ -82,7 +90,11 @@ app.versionLoaded = true
 app.siteName = 'UI Review'
 const auth = useAuthStore()
 auth.user = { id: 9999, role: 'user', email: 'review@example.test', username: 'Reviewer', balance: 12.34 } as User
-if (dashboard || usage) auth.token = 'browser-fixture-token'
+if (auditComponent && auth.user) {
+  auth.user.balance = 260
+  auth.user.concurrency = 6
+}
+if (dashboard || usage || auditComponent) auth.token = 'browser-fixture-token'
 localStorage.setItem('user_guide_9999_user_v4_interactive', 'true')
 const { t } = useI18n()
 const selection = ref('all')

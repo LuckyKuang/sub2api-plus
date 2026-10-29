@@ -176,22 +176,24 @@ func TestSaleCatalogOnlyReturnsRequestedActiveSubscriptionGroups(t *testing.T) {
 }
 
 type commercialAccountsStub struct {
-	AccountRepository
-	accounts []Account
+	byGroup  map[int64][]CommercialModelMapping
+	groupIDs []int64
+	err      error
 	calls    int
 }
 
-func (r *commercialAccountsStub) ListModelAvailabilityCandidates(_ context.Context, groupID *int64, platforms []string, includeGrouped bool) ([]Account, error) {
+func (r *commercialAccountsStub) ListCommercialModelMappings(_ context.Context, groupIDs []int64) (map[int64][]CommercialModelMapping, error) {
 	r.calls++
-	return r.accounts, nil
+	r.groupIDs = append([]int64(nil), groupIDs...)
+	return r.byGroup, r.err
 }
 
 func TestCommercialCatalogIncludesEveryRegisteredSupplierWithoutProviderRequests(t *testing.T) {
-	accounts := make([]Account, 0)
-	for i, spec := range domain.Platforms() {
-		accounts = append(accounts, Account{ID: int64(i + 1), Platform: spec.ID, Credentials: map[string]any{"model_mapping": map[string]any{spec.ID + "-public": "private-upstream"}}})
+	mappings := make([]CommercialModelMapping, 0)
+	for _, spec := range domain.Platforms() {
+		mappings = append(mappings, CommercialModelMapping{Platform: spec.ID, ModelMapping: map[string]any{spec.ID + "-public": "private-upstream"}})
 	}
-	repo := &commercialAccountsStub{accounts: accounts}
+	repo := &commercialAccountsStub{byGroup: map[int64][]CommercialModelMapping{1: mappings}}
 	svc := newPlazaServiceWithBilling(nil, nil, nil, nil)
 	svc.SetCommercialCatalogSources(nil, repo)
 	out, err := svc.ListAvailableCatalog(context.Background(), []Group{{ID: 1, Platform: PlatformComposite}})
@@ -201,6 +203,73 @@ func TestCommercialCatalogIncludesEveryRegisteredSupplierWithoutProviderRequests
 	for _, offer := range out[0].Models {
 		require.NotEqual(t, "private-upstream", offer.Name)
 	}
+}
+
+func TestCommercialCatalogReadsAuthorizedMappingsOnceAndPreservesModelPrices(t *testing.T) {
+	// docs/COMPOSITE_GROUPS.md: finite public models retain their owning
+	// supplier, obey the group's allowlist, and never expose private targets.
+	// One directory read must not hydrate account/proxy/group entities per group.
+	repo := &commercialAccountsStub{byGroup: map[int64][]CommercialModelMapping{
+		1: {
+			{Platform: PlatformOpenAI, ModelMapping: map[string]any{"public-a": "private-a", "bad": 42, "empty": " ", "wild*": "target"}},
+			{Platform: PlatformAnthropic, ModelMapping: map[string]any{"wrong-platform": "target"}},
+		},
+		2: {
+			{Platform: PlatformOpenCodeGo, ModelMapping: map[string]any{"public-b": "private-b", "not-allowed": "target"}},
+			{Platform: "unknown-platform", ModelMapping: map[string]any{"unknown": "target"}},
+		},
+		999: {{Platform: PlatformOpenAI, ModelMapping: map[string]any{"unauthorized": "private-secret"}}},
+	}}
+	groups := []Group{
+		{ID: 1, Name: "A", Platform: PlatformOpenAI, ModelPricing: []ChannelModelPricing{{Models: []string{"public-a"}, InputPrice: testPtrFloat64(0), OutputPrice: testPtrFloat64(.000002)}}},
+		{ID: 2, Name: "B", Platform: PlatformComposite, ModelAllowlist: GroupModelAllowlist{Enabled: true, Models: []string{"public-b"}}, ModelPricing: []ChannelModelPricing{{Platform: PlatformOpenCodeGo, Models: []string{"public-b"}, InputPrice: testPtrFloat64(.000003), OutputPrice: testPtrFloat64(.000004)}}},
+		{ID: 3, Name: "Empty", Platform: PlatformOpenAI},
+	}
+	svc := newPlazaServiceWithBilling(nil, nil, nil, nil)
+	svc.SetCommercialCatalogSources(nil, repo)
+	out, err := svc.ListAvailableCatalog(context.Background(), groups)
+	require.NoError(t, err)
+	require.Equal(t, 1, repo.calls, "catalog reads one projection for the complete authorized group set")
+	require.Equal(t, []int64{1, 2, 3}, repo.groupIDs)
+	require.Len(t, out, 3)
+	require.Len(t, out[0].Models, 1)
+	require.Equal(t, "public-a", out[0].Models[0].Name)
+	require.Equal(t, PlatformOpenAI, out[0].Models[0].Platform)
+	require.Equal(t, "resolved", out[0].Models[0].PriceStatus)
+	require.Zero(t, *out[0].Models[0].Pricing.InputPrice, "explicit free configured input remains free")
+	require.InDelta(t, .000002, *out[0].Models[0].Pricing.OutputPrice, 1e-12)
+	require.Len(t, out[1].Models, 1)
+	require.Equal(t, "public-b", out[1].Models[0].Name)
+	require.Equal(t, PlatformOpenCodeGo, out[1].Models[0].Platform)
+	require.InDelta(t, .000003, *out[1].Models[0].Pricing.InputPrice, 1e-12)
+	require.InDelta(t, .000004, *out[1].Models[0].Pricing.OutputPrice, 1e-12)
+	require.Empty(t, out[2].Models)
+
+	// A second request must observe configuration changes, not reuse a process
+	// cache or a previous request's mappings.
+	repo.byGroup = map[int64][]CommercialModelMapping{3: {{Platform: PlatformOpenAI, ModelMapping: map[string]any{"new-public": "new-private"}}}}
+	out, err = svc.ListAvailableCatalog(context.Background(), groups[2:])
+	require.NoError(t, err)
+	require.Equal(t, 2, repo.calls)
+	require.Equal(t, []int64{3}, repo.groupIDs)
+	require.Len(t, out[0].Models, 1)
+	require.Equal(t, "new-public", out[0].Models[0].Name)
+}
+
+func TestCommercialCatalogMappingReadFailureReturnsNoPartialCatalog(t *testing.T) {
+	dependencyError := errors.New("mapping read failed")
+	repo := &commercialAccountsStub{err: dependencyError}
+	svc := newPlazaServiceWithBilling(nil, nil, nil, nil)
+	svc.SetCommercialCatalogSources(nil, repo)
+	empty, err := svc.ListAvailableCatalog(context.Background(), nil)
+	require.NoError(t, err)
+	require.Empty(t, empty)
+	require.Zero(t, repo.calls)
+	out, err := svc.ListAvailableCatalog(context.Background(), []Group{{ID: 1, Platform: PlatformOpenAI}, {ID: 2, Platform: PlatformComposite}})
+	require.Nil(t, out)
+	require.ErrorIs(t, err, dependencyError)
+	require.ErrorContains(t, err, "commercial account models")
+	require.Equal(t, 1, repo.calls)
 }
 
 func TestCommercialQuoteTimeFactorUsesBillingPeriodAndPriceSource(t *testing.T) {
@@ -218,10 +287,10 @@ func TestCommercialQuoteTimeFactorUsesBillingPeriodAndPriceSource(t *testing.T) 
 func TestCommercialCatalogSuppressesUnsupportedEndpointAndAmbiguousAliases(t *testing.T) {
 	svc := newPlazaServiceWithBilling(nil, nil, nil, nil)
 	svc.SetCommercialCatalogSources(&compositeRouteRepoStub{routes: []CompositeModelRoute{{ID: 1, GroupID: 1, PublicModel: "not-an-embedding", MatchType: "exact", Endpoint: "embeddings", TargetPlatform: PlatformStepFun, Enabled: true}}},
-		&commercialAccountsStub{accounts: []Account{
-			{Platform: PlatformOpenAI, Credentials: map[string]any{"model_mapping": map[string]any{"shared": "target"}}},
-			{Platform: PlatformOpenCodeGo, Credentials: map[string]any{"model_mapping": map[string]any{"shared": "target"}}},
-		}})
+		&commercialAccountsStub{byGroup: map[int64][]CommercialModelMapping{1: {
+			{Platform: PlatformOpenAI, ModelMapping: map[string]any{"shared": "target"}},
+			{Platform: PlatformOpenCodeGo, ModelMapping: map[string]any{"shared": "target"}},
+		}}})
 	out, err := svc.ListAvailableCatalog(context.Background(), []Group{{ID: 1, Platform: PlatformComposite}})
 	require.NoError(t, err)
 	require.Empty(t, out[0].Models)

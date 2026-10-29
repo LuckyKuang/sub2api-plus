@@ -1,6 +1,16 @@
 <template>
-  <AppLayout appearance="user">
-    <div class="space-y-6">
+  <AppLayout appearance="user" workspace>
+    <div class="workspace-page subscriptions-page">
+      <header class="card workspace-fixed subscriptions-heading flex flex-wrap items-center justify-between gap-4 p-5" data-testid="subscriptions-heading">
+        <div>
+          <h2 class="text-base font-semibold">{{ t('userSubscriptions.title') }}</h2>
+          <p class="mt-1 text-xs surface-muted">{{ t('userSubscriptions.description') }}</p>
+        </div>
+        <span class="rounded-lg border px-3 py-2 text-xs surface-muted">
+          {{ t('userSubscriptions.count', { count: subscriptions.length }) }} · {{ t('userSubscriptions.pageSize', { count: PAGE_SIZE }) }}
+        </span>
+      </header>
+      <UserCardScroll :label="t('userSubscriptions.title')" :reset-key="page" data-testid="subscriptions-activity">
       <!-- Loading State -->
       <div v-if="loading" class="flex justify-center py-12">
         <div
@@ -24,10 +34,11 @@
       </div>
 
       <!-- Subscriptions Grid -->
-      <div v-else class="grid gap-6 lg:grid-cols-2">
+      <div v-else class="subscriptions-grid grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
         <div
-          v-for="subscription in subscriptions"
+          v-for="subscription in pagedSubscriptions"
           :key="subscription.id"
+          data-testid="subscription-card"
           class="glass-surface overflow-hidden border"
           :class="platformBorderClass(subscription.group?.platform || '')"
         >
@@ -271,19 +282,34 @@
           </div>
         </div>
       </div>
+      </UserCardScroll>
+      <Pagination
+        v-if="!loading && subscriptions.length"
+        class="subscriptions-pagination workspace-fixed"
+        :total="subscriptions.length"
+        :page="page"
+        :page-size="PAGE_SIZE"
+        :show-page-size-selector="false"
+        @update:page="page = $event"
+      />
+      <footer v-else class="card workspace-fixed subscriptions-pagination p-5 text-sm surface-muted">
+        {{ loading ? t('common.loading') : t('userSubscriptions.count', { count: 0 }) }}
+      </footer>
     </div>
   </AppLayout>
 </template>
 
 <script setup lang="ts">
 import { useLocaleRefresh } from '@/utils/localeRefresh'
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import subscriptionsAPI from '@/api/subscriptions'
 import type { UserSubscription } from '@/types'
 import AppLayout from '@/components/layout/AppLayout.vue'
+import Pagination from '@/components/common/Pagination.vue'
+import UserCardScroll from '@/components/user/UserCardScroll.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { formatDateTimeToMinute } from '@/utils/format'
 import { hasPeakRate, formatPeakRateWindow, serverTimezoneLabel } from '@/utils/peak-rate'
@@ -311,6 +337,12 @@ const appStore = useAppStore()
 
 const subscriptions = ref<UserSubscription[]>([])
 const loading = ref(true)
+const PAGE_SIZE = 9
+const page = ref(1)
+const pagedSubscriptions = computed(() => subscriptions.value.slice((page.value - 1) * PAGE_SIZE, page.value * PAGE_SIZE))
+watch(() => subscriptions.value.length, count => {
+  page.value = Math.min(page.value, Math.max(1, Math.ceil(count / PAGE_SIZE)))
+})
 
 function subscriptionHasPeakRate(subscription: UserSubscription): boolean {
   return hasPeakRate(subscription.group)
@@ -425,3 +457,11 @@ onMounted(() => {
 })
 useLocaleRefresh(loadSubscriptions)
 </script>
+
+<style scoped>
+.subscriptions-page > :is(.subscriptions-heading, .subscriptions-pagination) {
+  flex: none;
+}
+.subscriptions-grid { grid-auto-rows: max-content; align-content: start; }
+.subscriptions-grid > .glass-surface { min-width: 0; border-radius: 16px !important; }
+</style>

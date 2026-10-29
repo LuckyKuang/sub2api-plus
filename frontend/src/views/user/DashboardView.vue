@@ -13,6 +13,7 @@
           <button v-if="!stats && overviewRefresh.error.value" class="btn btn-secondary" @click="refreshAll">{{ t('inspection.retry') }}</button>
         </div>
       </div>
+      <UserCardScroll class="dashboard-activity" data-testid="dashboard-activity">
       <div v-if="loading && !stats" class="flex items-center justify-center py-12"><LoadingSpinner /></div>
       <template v-else-if="stats">
         <UserDashboardStats workspace section="summary" :stats="stats" :balance="user?.balance || 0" :frozen-balance="user?.frozen_balance" :is-simple="authStore.isSimpleMode" :platform-quotas="platformQuotas" />
@@ -27,6 +28,7 @@
           <UserDashboardRecentUsage class="workspace-shell" :data="recentUsage" :loading="loadingUsage" :start-date="startDate" :end-date="endDate" />
         </section>
       </template>
+      </UserCardScroll>
     </div>
   </AppLayout>
 </template>
@@ -36,6 +38,7 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue'; import { useUse
 import AppLayout from '@/components/layout/AppLayout.vue'; import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import UserDashboardStats from '@/components/user/dashboard/UserDashboardStats.vue'; import UserDashboardCharts from '@/components/user/dashboard/UserDashboardCharts.vue'
 import UserDashboardRecentUsage from '@/components/user/dashboard/UserDashboardRecentUsage.vue'
+import UserCardScroll from '@/components/user/UserCardScroll.vue'
 import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import Select from '@/components/common/Select.vue'
 import type { UsageLog, TrendDataPoint, ModelStat, PlatformQuotaItem } from '@/types'
@@ -128,7 +131,7 @@ onBeforeUnmount(() => { disposed = true; chartSeq++; recentSeq++ })
 .user-dashboard-details > * { margin-block: 0; }
 .dashboard-refresh { margin-left: auto; }
 @media (min-width: 1024px) {
-  .dashboard-toolbar { padding: 12px 16px; }
+  .dashboard-toolbar { padding: 14px 20px; }
 }
 @media (min-width: 1024px) and (max-height: 799px) {
   .dashboard-toolbar { padding-top: 8px; padding-bottom: 8px; }

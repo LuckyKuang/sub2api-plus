@@ -636,6 +636,9 @@ type UsageLog struct {
 	// OpenAI: "low"/"medium"/"high"/"xhigh"; Claude: "low"/"medium"/"high"/"max".
 	// Historical rows without requested_reasoning_effort fall back to the stored effective value.
 	ReasoningEffort *string `json:"reasoning_effort,omitempty"`
+	// RequestFastEnabled describes only the recorded final outbound request tier.
+	// Nil means absent, unspecified, or unrecognized; it is not a billing verdict.
+	RequestFastEnabled *bool `json:"request_fast_enabled"`
 	// InboundEndpoint is the client-facing API endpoint path, e.g. /v1/chat/completions.
 	InboundEndpoint *string `json:"inbound_endpoint,omitempty"`
 	// UpstreamEndpoint is the normalized upstream endpoint path, e.g. /v1/responses.

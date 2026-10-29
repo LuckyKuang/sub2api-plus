@@ -7,6 +7,7 @@ import { defineStore } from 'pinia'
 import { ref, computed, readonly, watch } from 'vue'
 import { authAPI, isTotp2FARequired, passkeyAPI, type LoginResponse } from '@/api'
 import { setAdminSupportContext } from '@/utils/adminSupportContext'
+import { clearAvailableChannelCatalogCache } from '@/utils/availableChannelCatalogCache'
 import { useAppStore } from '@/stores/app'
 import type {
   User,
@@ -305,6 +306,7 @@ export const useAuthStore = defineStore('auth', () => {
    * Internal helper function
    */
   function setAuthFromResponse(response: AuthResponse): void {
+    clearAvailableChannelCatalogCache()
     // Store token and user
     token.value = response.access_token
 
@@ -368,6 +370,7 @@ export const useAuthStore = defineStore('auth', () => {
     stopAutoRefresh()
     stopTokenRefresh()
     token.value = null
+    clearAvailableChannelCatalogCache()
     setAdminSupportContext(null)
     user.value = null
 
@@ -478,6 +481,7 @@ export const useAuthStore = defineStore('auth', () => {
     stopTokenRefresh()
 
     token.value = null
+    clearAvailableChannelCatalogCache()
     refreshTokenValue.value = null
     tokenExpiresAt.value = null
     setAdminSupportContext(null)

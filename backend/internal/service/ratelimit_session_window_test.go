@@ -145,6 +145,9 @@ func (m *sessionWindowMockRepo) ListSchedulableUngroupedByPlatform(context.Conte
 func (m *sessionWindowMockRepo) ListSchedulableUngroupedByPlatforms(context.Context, []string) ([]Account, error) {
 	panic("unexpected")
 }
+func (m *sessionWindowMockRepo) ListCommercialModelMappings(context.Context, []int64) (map[int64][]CommercialModelMapping, error) {
+	panic("unexpected ListCommercialModelMappings call")
+}
 func (m *sessionWindowMockRepo) ListModelAvailabilityCandidates(context.Context, *int64, []string, bool) ([]Account, error) {
 	panic("unexpected")
 }

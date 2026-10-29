@@ -493,15 +493,4 @@ onUnmounted(() => {
   @apply transition-colors duration-150;
 }
 
-/* Dropdown animation */
-.date-picker-dropdown-enter-active,
-.date-picker-dropdown-leave-active {
-  transition: all 0.2s ease;
-}
-
-.date-picker-dropdown-enter-from,
-.date-picker-dropdown-leave-to {
-  opacity: 0;
-  transform: translateY(-8px);
-}
 </style>

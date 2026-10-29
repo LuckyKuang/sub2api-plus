@@ -2,7 +2,8 @@
 
 The console retains its colors, typography, navigation and business permissions.
 The brand and toolbar retain the shell surface; business panels use compact cards.
-Navigation links and tab/pagination containers stay lightweight and transparent.
+Administrator navigation links and tab/pagination containers stay lightweight and transparent.
+User workspaces use independent rounded surface cards for fixed controls and pagination.
 Admin and operations pages use fluid content columns. User and support-user
 content shares the centered width and responsive insets described below.
 Individual forms and external
@@ -24,7 +25,7 @@ content start on the same horizontal line.
 The desktop console fills the viewport. Its toolbar and brand start at the same
 outer top inset; the toolbar stays in the shell's normal flow without applying
 the sticky inset a second time. The content below it scrolls independently.
-Administrator workspace pages and user record workspaces keep their title, navigation, filters and pagination fixed and
+Administrator and explicitly opted-in user workspace pages keep their title, navigation, filters and pagination fixed and
 allocate the remaining height to their content or table body. `AppLayout`'s
 `workspace` prop and `styles/workspace.css` own this layout. `TablePageLayout`
 uses the same available space for its table. Below 1024px, pages return to normal
@@ -34,8 +35,10 @@ fullscreen remains a dedicated full-screen view.
 Dashboard quick actions are removed. Administrator desktop dashboards fit their available
 height; shorter administrator windows switch between the model/trend charts and
 user trend instead of hiding charts below the viewport. The user dashboard shows
-charts, platform/quota information and recent usage together in one naturally
-scrolling page, without section tabs. Performance metrics use a permanent card
+charts, platform/quota information and recent usage together in one independently
+scrolling region below its fixed refresh toolbar, without section tabs. The rounded
+outer frame is transparent. Its cards share the toolbar's overall left and right
+edges, with any scrollbar outside the card column. Performance metrics use a permanent card
 with four bordered inner cards and the single Performance heading. The platform
 breakdown remains a separate card with a 16px gap. Date controls and
 refresh remain available; chart dates do not change the semantics of today's KPI
@@ -54,6 +57,14 @@ dashboard. User usage does not fetch aggregate statistics or show chart granular
 Its history view has only the existing manual Refresh and Reset actions, without
 an automatic-refresh row, pending-record row or background history polling.
 Live requests retain their existing automatic-refresh controls and lifecycle.
+The user view paginates its real recent observation window (at most 200 rows),
+20 per page, with a separate fixed bottom pagination card. Filters and exports
+still cover the complete observation window. History and errors also retain
+their bottom pagination card for empty results. Controls, scrolling content and
+footer cards have 16px gaps. User history places reasoning and the three-state
+request Fast indicator below the model name, removing the separate reasoning
+column. This indicator describes recorded final request intent, independently
+of upstream response tier or billing; raw administrator tier snapshots stay private.
 Its model filter suggests loaded record models and accepts other model names.
 Switching record tabs does not reset filters,
 pagination or drafts. Channel-monitor mode switching retains its original
@@ -74,8 +85,14 @@ the remaining space; pagination and filters remain visible. User usage keeps its
 server-side `page`/`page_size` interface and loads only the selected page.
 Admin Order Management and Subscription Plans also use the fixed workspace:
 query controls, refresh/create actions and pagination stay outside the scrolling
-table. Available Channels places its title, description, filters, result count
-and model cards in the same natural vertical page flow.
+table. Available Channels keeps controls outside its scrolling model catalog,
+shows three larger cards per desktop row and retains the natural width of wrapped
+platform buttons. Filters operate locally. On entry and locale changes it reuses
+a successful catalog for up to three minutes in document memory, isolated by
+signed-in actor, assistance target and locale. Logging out clears this cache.
+Manual refresh and Retry bypass it; failed, cancelled and unavailable-rate
+responses never become fresh cache entries. Timer, focus and visibility changes
+do not refresh it. Cached prices retain their original quote timestamps.
 The purchase catalog keeps the subscription/recharge navigation visible,
 uses four columns for desktop plans and preset recharge amounts, and keeps checkout
 actions visible. On desktop, navigation and checkout actions occupy separate fixed
@@ -83,6 +100,16 @@ layout slots around the catalog's scrolling body. The channel-status monitoring
 toolbar likewise sits above its own scrolling activity area. Content cannot pass
 behind these controls, including at 100% transparency. Mobile layouts retain
 natural page scrolling without transparent sticky cards overlapping content.
+
+My Subscriptions paginates nine real subscriptions, three per desktop row,
+between aligned fixed header and bottom cards. Redeem pairs the balance and
+redemption form in aligned cards, followed by four guide cards. Affiliate keeps
+its four statistics, pairs invitation details and the existing balance transfer,
+and shows four guide cards. Its invited-user list paginates ten real entries
+locally. Both pages allocate the remaining desktop height to records alone;
+aligned bottom pagination stays fixed. Changing page resets the record viewport,
+and reduced results clamp the page. Redemption, copying and balance-transfer
+business rules stay unchanged. Mobile layouts keep natural page scrolling.
 
 Scroll clipping belongs to the actual viewport: large content viewports use the
 outer card radius, and inset table viewports use the panel radius. Their corners
@@ -92,14 +119,17 @@ header above the body scrollport, so even rapid upward scrolling cannot paint
 records behind a transparent header. Portalled menus and dialogs retain their
 positioning; no global mask, transform or clip-path is used.
 
-Main content shells, full-width headings, filters, navigation and pagination have
+Administrator main content shells, full-width headings, filters, navigation and pagination have
 no outline, inset edge or ring, including their header/footer seams. Standalone
 settings sections and composite workspaces follow the same rule. Nested business
 cards, grid cards, controls and record rows retain their own borders. This keeps
 partially filled grids and nested cards from exposing an extra frame.
 Secondary navigation has transparent inactive tabs and a soft accent fill with a
 1px outline only on selection. Tab and pagination containers have no separate
-card fill, frame or shadow; hover and keyboard focus remain visible.
+card fill, frame or shadow; hover and keyboard focus remain visible. User
+workspace control, table and pagination cards instead have theme fills, 1px
+edges and 16px corners, separated by 16px gaps. Transparent outer card-scrolling
+frames do not add a second fill.
 
 Cards, nested sections, inputs, buttons, Select triggers, menus and dialogs use
 solid theme fills with their existing edges, soft shadows, highlights and focus
@@ -136,6 +166,17 @@ Right-side details are floating cards inset from every viewport edge, including
 safe areas. Their height excludes the top/bottom shell insets and their width
 fits the remaining viewport; mobile views keep all four rounded corners. Existing
 dialog focus loops, Escape, background scroll locks and focus restoration remain.
+
+Transient motion is owned by `styles/motion.css`, outside Tailwind's generated
+layers so dynamically applied Vue transition states survive production builds.
+Dialog and announcement roots and panels enter together in 200ms and leave in
+140ms, using a short vertical movement and restrained scale. Details drawers use
+a short horizontal movement. Selects and menus enter in 150ms and leave in 100ms;
+only opacity and transform animate, preserving their measured positions and
+dimensions. Date panels fade without transforms. Conditional menus retain their
+DOM during leave through Vue Transition. Reduced-motion preferences use 1ms
+transitions without movement. Production-built Chromium regressions verify root
+and panel timing, intermediate frames, removal timing and reduced motion.
 
 `HelpTooltip` and delegated `TitleTooltip` render themed, arrowless rounded panels
 through body portals. Legacy HTML title attributes are suppressed while their
@@ -222,8 +263,8 @@ distributions, compact rankings and model summaries, including expanded user
 breakdowns, price tiers and short reference/monitor tables. The extra-model
 table inside monitor tooltips uses `record-table-dense` for 6px corners on its
 very short rows. Hover and selected states keep the same corners. Available
-channel cards use at most four columns; their actual content width selects one,
-two, three or four columns. Redeem balance cards use the ordinary theme surface.
+channel cards use at most three columns; their actual content width selects one,
+two or three columns. Redeem balance cards use the ordinary theme surface.
 
 Pagination responds to its containing card rather than the browser width. Wide
 cards keep information and navigation on one line; narrower cards put controls
@@ -504,8 +545,8 @@ expanded region, dropdown and popup backgrounds, including chart hover cards.
 Text/icons, focus and 1px borders remain visible at every setting. QR quiet zones
 and accent picker swatches remain opaque. Table records retain compact rounded
 outlines with accent hover, fixed columns/headers clip content behind them, and
-scrolling viewports retain rounded corners. Main content shells have no outline;
-their nested cards and controls retain visible edges. Settings and usage navigation share the lightweight tab treatment; local
+scrolling viewports retain rounded corners. Administrator main content shells have no outline;
+user workspace cards and nested business cards and controls retain visible edges. Settings and usage navigation share the lightweight tab treatment; local
 scrolling layouts continue to reserve the space needed by their controls.
 
 Adjustments produce a local draft. Preview affects only that administrator and
@@ -588,8 +629,9 @@ pagination outer edges align.
 Existing short forms, QR codes and payment results may retain an inner readable
 width; custom HTML and iframes retain their own internal layout. User record
 workspaces retain fixed controls and independently scrolling tables/cards on
-desktop, including their server-side pagination. Dashboards and ordinary user
-pages retain natural main-content scrolling. Their natural-height inner surfaces
+desktop, including their server-side pagination. Ordinary user pages retain
+natural main-content scrolling; the dashboard uses the fixed-toolbar workspace
+described above. Natural-height inner surfaces
 must allow vertical scroll chaining to the main viewport; a non-scrolling inner
 surface must not trap the mouse wheel. Administrator workspaces retain their
 existing fixed controls and independent table scroll.

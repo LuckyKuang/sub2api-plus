@@ -49,6 +49,12 @@ describe('user dashboard workspace', () => {
     expect(wrapper.get('[data-section="summary"]').isVisible()).toBe(true)
     expect(wrapper.get('[data-testid="chart-content"]').isVisible()).toBe(true)
     expect(wrapper.findAll('.dashboard-toolbar')).toHaveLength(1)
+    const activity = wrapper.get('[data-testid="dashboard-activity"]')
+    expect(activity.element.contains(wrapper.get('.dashboard-toolbar').element)).toBe(false)
+    expect(activity.element.contains(wrapper.get('[data-section="summary"]').element)).toBe(true)
+    for (const panel of ['charts', 'quotas', 'recent']) {
+      expect(activity.element.contains(wrapper.get(`[data-testid="dashboard-${panel}-panel"]`).element)).toBe(true)
+    }
     expect(wrapper.text()).not.toContain('dashboard.quickActions')
     expect(getStats).toHaveBeenCalledTimes(1)
     expect(getTrend).toHaveBeenCalledTimes(1)

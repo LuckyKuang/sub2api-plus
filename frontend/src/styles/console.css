@@ -221,7 +221,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .app-layout *, .modal-overlay *, .modal-overlay {
+  .app-layout * {
     animation-duration: 1ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 1ms !important;

@@ -29,7 +29,7 @@
         <div
           v-if="dropdownOpen"
           ref="dropdownRef"
-          class="version-dropdown glass-surface absolute left-0 z-50 mt-2 w-80 whitespace-normal transition-all duration-200"
+          class="version-dropdown glass-surface absolute left-0 z-50 mt-2 w-80 whitespace-normal"
         >
           <!-- Header with refresh button -->
           <div
@@ -923,17 +923,6 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.dropdown-enter-active,
-.dropdown-leave-active {
-  transition: all 0.2s ease;
-}
-
-.dropdown-enter-from,
-.dropdown-leave-to {
-  opacity: 0;
-  transform: scale(0.95) translateY(-4px);
-}
-
 .rollback-enter-active,
 .rollback-leave-active {
   transition: all 0.2s ease;

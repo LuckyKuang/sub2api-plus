@@ -14,7 +14,7 @@ test('user content stays centered with natural page scrolling and portal theme',
   const cases = [[320, 16], [390, 16], [767, 16], [768, 24], [1023, 24], [1024, 0], [1440, 0], [1920, 0], [3072, 0]] as const
   for (const [width, inset] of cases) {
     await page.setViewportSize({ width, height: 600 })
-    await page.goto(`/layout-tests/index.html?view=user-layout&theme=${theme}&locale=${locale}`)
+    await page.goto(`/layout-tests/index.html?view=user-layout&workspace=0&theme=${theme}&locale=${locale}`)
     await expect(page.getByTestId('page-table')).toBeVisible({ timeout: 60_000 })
     const assertGeometry = async () => {
       const geometry = await page.evaluate(() => {
@@ -74,13 +74,26 @@ test('user content stays centered with natural page scrolling and portal theme',
   }
 })
 
-test('record workspace scrolls rows with the wheel while pagination stays fixed', async ({ page }) => {
-  for (const width of [3072, 1440]) {
+test('user workspace scrolls rows with the wheel while pagination stays in a separate bottom card', async ({ page }) => {
+  // Approved audit applies fixed chrome to every explicitly opted-in user
+  // workspace, including pages without the record-workspace marker.
+  for (const [width, recordWorkspace] of [[3072, 1], [1440, 0]]) {
     await page.setViewportSize({ width, height: 600 })
-    await page.goto('/layout-tests/index.html?view=user-layout&recordWorkspace=1')
+    await page.goto(`/layout-tests/index.html?view=user-layout&recordWorkspace=${recordWorkspace}`)
     const viewport = page.locator('.workspace-table-viewport')
     const pagination = page.getByTestId('page-pagination')
     await expect(pagination).toBeInViewport()
+    const card = await pagination.evaluate(el => ({
+      fill: getComputedStyle(el).backgroundColor,
+      radius: parseFloat(getComputedStyle(el).borderRadius),
+      border: parseFloat(getComputedStyle(el).borderTopWidth),
+      bottom: el.getBoundingClientRect().bottom,
+      mainBottom: el.closest('.app-main')!.getBoundingClientRect().bottom,
+    }))
+    expect(card.fill).not.toBe('rgba(0, 0, 0, 0)')
+    expect(card.radius).toBe(16)
+    expect(card.border).toBe(1)
+    expect(Math.abs(card.bottom - card.mainBottom)).toBeLessThanOrEqual(1)
     const before = await pagination.boundingBox()
     await viewport.hover()
     await page.mouse.wheel(0, 500)
@@ -108,6 +121,7 @@ test('real usage records support wheel scrolling and reachable server pagination
         return { id, user_id: 9999, api_key_id: 1, account_id: null, request_id: `audit-request-${id}`, model: `audit-model-${id}`,
           api_key: { id: 1, name: 'UI audit application integration key' }, group: { id: 1, name: 'OpenAI standard production audit group', platform: 'openai' }, group_id: 1,
           inbound_endpoint: '/v1/responses', upstream_endpoint: '/v1/responses', ip_address: `192.0.2.${id}`,
+          reasoning_effort: 'high', request_fast_enabled: id % 2 === 1,
           input_tokens: 1200, output_tokens: 300, cache_creation_tokens: 0, cache_read_tokens: 0,
           input_cost: .01, output_cost: .02, total_cost: .03, actual_cost: .03, rate_multiplier: 1,
           billing_type: 0, billing_mode: 'token', stream: true, request_type: 'stream', duration_ms: 1000,
@@ -125,6 +139,10 @@ test('real usage records support wheel scrolling and reachable server pagination
     await expect(page.locator('.app-layout-record-workspace')).toBeVisible({ timeout: 60_000 })
     const panel = page.getByTestId('usage-records-panel')
     await expect(panel.getByText('audit-model-1', { exact: true })).toBeVisible()
+    const metadata = panel.getByTestId('usage-model-metadata').first()
+    await expect(metadata).toContainText('High')
+    await expect(metadata).toContainText(locale === 'zh' ? '已开启' : 'Enabled')
+    await expect(panel.locator('th[data-field="reasoning_effort"]')).toHaveCount(0)
     await expect(page.locator('.data-table-fit-probe')).toHaveCount(0)
     const viewport = panel.locator('.workspace-table-viewport').filter({ visible: true })
     if (width >= 1024) {
@@ -391,6 +409,28 @@ test('dashboard shows all sections, four permanent performance cards and complet
     await page.setViewportSize({ width, height: 900 })
     for (const section of ['dashboard-charts-panel', 'dashboard-quotas-panel', 'dashboard-recent-panel']) {
       await expect(page.getByTestId(section)).toBeVisible()
+    }
+    if (width >= 1024) {
+      const toolbar = page.locator('.dashboard-toolbar')
+      const viewport = page.locator('.dashboard-activity .user-card-scroll-viewport')
+      const edges = await page.locator('.dashboard-activity').evaluate(frame => {
+        const toolbar = document.querySelector('.dashboard-toolbar')!.getBoundingClientRect()
+        const content = frame.querySelector('.user-card-scroll-content')!.getBoundingClientRect()
+        return {
+          background: getComputedStyle(frame).backgroundColor,
+          left: content.left - toolbar.left,
+          right: content.right - toolbar.right,
+        }
+      })
+      expect(edges.background).toBe('rgba(0, 0, 0, 0)')
+      expect(Math.abs(edges.left)).toBeLessThanOrEqual(1)
+      expect(Math.abs(edges.right)).toBeLessThanOrEqual(1)
+      const fixed = await toolbar.boundingBox()
+      await viewport.hover()
+      await page.mouse.wheel(0, 500)
+      await expect.poll(() => viewport.evaluate(el => el.scrollTop)).toBeGreaterThan(0)
+      expect(await toolbar.boundingBox()).toEqual(fixed)
+      await viewport.evaluate(el => { el.scrollTop = 0 })
     }
     await expect(page.locator('.user-dashboard > [role="tablist"]')).toHaveCount(0)
     const performance = page.getByTestId('dashboard-performance')

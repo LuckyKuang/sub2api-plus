@@ -47,6 +47,15 @@ Additional 390px and 1440px overlay projects exercise the public/user palette in
 both themes, including configured accent and transparency. Synthetic stores and
 intercepted API responses keep the layout fixture independent of any instance.
 
+The motion projects use a separately production-built entrypoint through the
+application's PostCSS/Tailwind pipeline. Real dialog, drawer, announcement,
+header, subscription, version, select, checkbox, refresh and calendar controls
+exercise the approved 200/140ms dialog and 150/100ms menu durations. Frame samples
+check root timing, continuous panel movement, DOM retention through leave,
+position-preserving calendar fades and reduced motion. This catches production
+purging of Vue's dynamically applied transition classes; JSDOM class assertions
+cannot establish that contract.
+
 The server and browser processes stop when Playwright exits. The outer
 validation launcher owns removal of its one-shot container and temporary output
 directory (`SUB2API_LAYOUT_OUTPUT_DIR`, default `/tmp/sub2api-layout-results`).

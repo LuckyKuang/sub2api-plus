@@ -15,6 +15,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -2185,6 +2186,49 @@ func (r *accountRepository) ListSchedulableByGroupIDAndPlatforms(ctx context.Con
 		schedulable: true,
 		platforms:   platforms,
 	})
+}
+
+// ListCommercialModelMappings projects configured model mappings for one catalog
+// read. It never hydrates account secrets, proxies or group entities. The
+// persistent-state predicates match ListModelAvailabilityCandidates; runtime
+// cooldowns and expiry do not remove configured public models from a catalog.
+func (r *accountRepository) ListCommercialModelMappings(ctx context.Context, groupIDs []int64) (map[int64][]service.CommercialModelMapping, error) {
+	out := make(map[int64][]service.CommercialModelMapping)
+	groupIDs = uniquePositiveInt64s(groupIDs)
+	if len(groupIDs) == 0 {
+		return out, nil
+	}
+	rows, err := r.sql.QueryContext(ctx, `
+		SELECT ag.group_id, a.platform,
+			COALESCE(a.credentials->'model_mapping', 'null'::jsonb)::text
+		FROM account_groups ag
+		JOIN accounts a ON a.id = ag.account_id
+		WHERE ag.group_id = ANY($1)
+			AND a.deleted_at IS NULL
+			AND a.status = $2
+			AND a.schedulable = TRUE
+		ORDER BY ag.group_id ASC, ag.priority ASC, a.priority ASC, a.id ASC
+	`, pq.Array(groupIDs), service.StatusActive)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var groupID int64
+		var mapping service.CommercialModelMapping
+		var raw string
+		if err := rows.Scan(&groupID, &mapping.Platform, &raw); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(raw), &mapping.ModelMapping); err != nil {
+			return nil, fmt.Errorf("decode commercial model mapping: %w", err)
+		}
+		out[groupID] = append(out[groupID], mapping)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // ListModelAvailabilityCandidates returns the persistently configured account

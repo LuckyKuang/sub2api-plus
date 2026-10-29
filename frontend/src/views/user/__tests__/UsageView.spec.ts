@@ -8,6 +8,7 @@ vi.mock('vue-router', () => ({ useRoute: () => routeState, useRouter: () => ({ r
 import UsageView from '../UsageView.vue'
 import Select, { type SelectOption } from '@/components/common/Select.vue'
 import DateRangePicker from '@/components/common/DateRangePicker.vue'
+import Pagination from '@/components/common/Pagination.vue'
 import RefreshControl from '@/components/common/RefreshControl.vue'
 import LiveRequestsPanel from '@/components/usage/LiveRequestsPanel.vue'
 import UsageTable from '@/components/admin/usage/UsageTable.vue'
@@ -175,7 +176,7 @@ function mountUsageView() {
         Select: true,
         DateRangePicker: true,
         Icon: true,
-        UsageTable: { ...chartStub, props: ['columns', 'showServiceTier'] },
+        UsageTable: { ...chartStub, props: { columns: Array, showServiceTier: Boolean, modelMetadata: Boolean } },
         UserErrorRequestsTable: { ...chartStub, props: { workspace: Boolean } },
         LiveRequestsPanel: { template: '<div data-testid="live-panel" />', props: { mode: String, workspace: Boolean } },
       },
@@ -192,13 +193,14 @@ function expectNoStatisticsRequests() {
 describe('user UsageView', () => {
   afterEach(expectNoStatisticsRequests)
 
-  it('restores independent historical columns and strips only obsolete record links', async () => {
+  it('keeps historical columns with request metadata under the model and strips obsolete record links', async () => {
     routeState.query = { record: '123', api_key_id: '9' }
     const wrapper = mountUsageView()
     await flushPromises()
     expect(wrapper.findComponent(UsageTable).props('columns').map((column: { key: string }) => column.key)).toEqual([
-      'api_key', 'model', 'reasoning_effort', 'endpoint', 'ip_address', 'group', 'stream', 'billing_mode', 'tokens', 'cost', 'latency', 'created_at',
+      'api_key', 'model', 'endpoint', 'ip_address', 'group', 'stream', 'billing_mode', 'tokens', 'cost', 'latency', 'created_at',
     ])
+    expect(wrapper.findComponent(UsageTable).props('modelMetadata')).toBe(true)
     expect(routeReplace).toHaveBeenCalledWith({ path: '/usage', query: { api_key_id: '9' }, hash: '#records' })
     expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
     expect(wrapper.get('[data-testid="usage-records-panel"]').isVisible()).toBe(true)
@@ -339,6 +341,7 @@ describe('user UsageView', () => {
     const menu = document.body.querySelector<HTMLElement>('[data-testid="usage-column-menu"]')!
     expect(menu).not.toBeNull()
     expect(wrapper.element.contains(menu)).toBe(false)
+    expect(menu.querySelector('[data-testid="usage-column-toggle-reasoning_effort"]')).toBeNull()
     expect(menu.style.position).toBe('fixed')
     menu.querySelector<HTMLElement>('[data-testid="usage-column-toggle-api_key"]')!.click()
     menu.querySelector<HTMLElement>('[data-testid="usage-column-toggle-model"]')!.click()
@@ -372,6 +375,18 @@ describe('user UsageView', () => {
     expect(list).toHaveBeenCalledTimes(1)
     expect(list).toHaveBeenCalledWith(1, 100)
     expect(getAvailable).toHaveBeenCalled()
+  })
+
+  it('keeps the historical pagination card outside the table when no records match', async () => {
+    query.mockResolvedValue({ items: [], total: 0, pages: 0 })
+    const wrapper = mountUsageView()
+    await flushPromises()
+    const pager = wrapper.findComponent(Pagination)
+    expect(pager.exists()).toBe(true)
+    expect(pager.props('total')).toBe(0)
+    expect(pager.classes()).toContain('workspace-fixed')
+    expect(wrapper.findComponent(UsageTable).element.contains(pager.element)).toBe(false)
+    wrapper.unmount()
   })
 
   it('suggests loaded models and filters an off-page model without a statistics request', async () => {

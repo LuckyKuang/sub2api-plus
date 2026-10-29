@@ -2088,6 +2088,9 @@ func (s *stubAccountRepo) ListSchedulableUngroupedByPlatforms(ctx context.Contex
 	return nil, errors.New("not implemented")
 }
 
+func (s *stubAccountRepo) ListCommercialModelMappings(context.Context, []int64) (map[int64][]service.CommercialModelMapping, error) {
+	panic("unexpected ListCommercialModelMappings call")
+}
 func (s *stubAccountRepo) ListModelAvailabilityCandidates(ctx context.Context, groupID *int64, platforms []string, includeGrouped bool) ([]service.Account, error) {
 	return nil, errors.New("not implemented")
 }

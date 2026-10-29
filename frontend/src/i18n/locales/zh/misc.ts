@@ -112,6 +112,8 @@ export default {
 
   // User Subscriptions Page
   userSubscriptions: {
+    count: '{count} 个订阅',
+    pageSize: '每页 {count} 个',
     title: '我的订阅',
     description: '查看您的订阅计划和用量',
     noActiveSubscriptions: '暂无有效订阅',

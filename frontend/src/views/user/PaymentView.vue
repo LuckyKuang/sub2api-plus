@@ -13,7 +13,7 @@
           :tabs="tabs"
           :label="`${t('payment.tabSubscribe')} / ${t('payment.tabTopUp')}`"
         />
-        <div class="workspace-shell workspace-scroll payment-activity" data-testid="payment-activity">
+        <div class="workspace-shell workspace-scroll payment-activity" data-testid="payment-activity" tabindex="0">
         <div v-if="errorMessage" role="alert" class="card workspace-shell border border-amber-300 p-4 text-sm text-amber-800 dark:border-amber-700 dark:text-amber-200">
           <p>{{ errorMessage }}</p>
           <p v-if="errorHintMessage" class="mt-1">{{ errorHintMessage }}</p>
@@ -1348,6 +1348,9 @@ onMounted(async () => {
 .payment-tabs {
   flex: none;
 }
+
+.payment-tabs { padding: 8px; }
+.payment-activity { border-radius: 16px; }
 
 .payment-tabs :deep(.workspace-tab) {
   flex: 1 1 0%;

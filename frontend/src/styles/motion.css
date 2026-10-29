@@ -1,0 +1,88 @@
+/* Vue creates these state classes at runtime. Keep them outside Tailwind's
+   demand-generated layers so production builds retain root transition timing. */
+:root {
+  --motion-dialog-enter: 200ms;
+  --motion-dialog-leave: 140ms;
+  --motion-menu-enter: 150ms;
+  --motion-menu-leave: 100ms;
+  --motion-ease-enter: cubic-bezier(.16, 1, .3, 1);
+  --motion-ease-leave: cubic-bezier(.4, 0, 1, 1);
+}
+
+:is(.modal-enter-active, .modal-fade-enter-active, .popup-fade-enter-active) {
+  transition: opacity var(--motion-dialog-enter) var(--motion-ease-enter);
+}
+:is(.modal-leave-active, .modal-fade-leave-active, .popup-fade-leave-active) {
+  transition: opacity var(--motion-dialog-leave) var(--motion-ease-leave);
+}
+:is(.modal-enter-active, .modal-fade-enter-active, .popup-fade-enter-active) > :is(.modal-content, .dialog-container, .glass-surface) {
+  transition: opacity var(--motion-dialog-enter) var(--motion-ease-enter), transform var(--motion-dialog-enter) var(--motion-ease-enter);
+  will-change: opacity, transform;
+}
+:is(.modal-leave-active, .modal-fade-leave-active, .popup-fade-leave-active) > :is(.modal-content, .dialog-container, .glass-surface) {
+  transition: opacity var(--motion-dialog-leave) var(--motion-ease-leave), transform var(--motion-dialog-leave) var(--motion-ease-leave);
+  will-change: opacity, transform;
+}
+:is(.modal-enter-from, .modal-leave-to, .modal-fade-enter-from, .modal-fade-leave-to, .popup-fade-enter-from, .popup-fade-leave-to) {
+  opacity: 0;
+}
+:is(.modal-enter-from, .modal-fade-enter-from, .popup-fade-enter-from) > :is(.modal-content, .dialog-container, .glass-surface) {
+  opacity: 0;
+  transform: translateY(8px) scale(.99);
+}
+:is(.modal-leave-to, .modal-fade-leave-to, .popup-fade-leave-to) > :is(.modal-content, .dialog-container, .glass-surface) {
+  opacity: 0;
+  transform: translateY(4px) scale(.995);
+}
+:is(.modal-enter-to, .modal-leave-from, .modal-fade-enter-to, .modal-fade-leave-from, .popup-fade-enter-to, .popup-fade-leave-from) > :is(.modal-content, .dialog-container, .glass-surface) {
+  opacity: 1;
+  transform: none;
+}
+.modal-enter-from > .modal-content.detail-dialog { transform: translateX(20px); }
+.modal-leave-to > .modal-content.detail-dialog { transform: translateX(12px); }
+
+:is(.select-dropdown-enter-active, .date-picker-dropdown-enter-active, .dropdown-enter-active) {
+  transition: opacity var(--motion-menu-enter) var(--motion-ease-enter), transform var(--motion-menu-enter) var(--motion-ease-enter);
+  will-change: opacity, transform;
+}
+:is(.select-dropdown-leave-active, .date-picker-dropdown-leave-active, .dropdown-leave-active) {
+  transition: opacity var(--motion-menu-leave) var(--motion-ease-leave), transform var(--motion-menu-leave) var(--motion-ease-leave);
+  will-change: opacity, transform;
+}
+:is(.select-dropdown-enter-from, .select-dropdown-leave-to, .dropdown-enter-from, .dropdown-leave-to) {
+  opacity: 0;
+  transform: translateY(-3px);
+}
+:is(.select-dropdown-enter-to, .select-dropdown-leave-from, .dropdown-enter-to, .dropdown-leave-from) {
+  opacity: 1;
+  transform: none;
+}
+/* Calendar geometry is measured during positioning; never scale or translate it. */
+:is(.date-picker-dropdown-enter-active, .date-picker-dropdown-leave-active) {
+  transition-property: opacity;
+  will-change: opacity;
+}
+:is(.date-picker-dropdown-enter-from, .date-picker-dropdown-leave-to) { opacity: 0; }
+:is(.date-picker-dropdown-enter-to, .date-picker-dropdown-leave-from) { opacity: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  :is(.modal-overlay, .dialog-overlay, .surface-overlay, .select-dropdown-portal, .select-dropdown, .date-picker-dropdown, .date-time-panel, .header-user-dropdown, .version-dropdown),
+  :is(.modal-overlay, .dialog-overlay, .surface-overlay, .select-dropdown-portal, .select-dropdown, .date-picker-dropdown, .date-time-panel, .header-user-dropdown, .version-dropdown) * {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    transition-delay: 0s !important;
+    scroll-behavior: auto !important;
+  }
+  :is(.modal-enter-active, .modal-leave-active, .modal-fade-enter-active, .modal-fade-leave-active, .popup-fade-enter-active, .popup-fade-leave-active,
+    .select-dropdown-enter-active, .select-dropdown-leave-active, .date-picker-dropdown-enter-active, .date-picker-dropdown-leave-active, .dropdown-enter-active, .dropdown-leave-active),
+  :is(.modal-enter-active, .modal-leave-active, .modal-fade-enter-active, .modal-fade-leave-active, .popup-fade-enter-active, .popup-fade-leave-active) > :is(.modal-content, .dialog-container, .glass-surface) {
+    transition-duration: 1ms !important;
+    transition-delay: 0s !important;
+    will-change: auto;
+  }
+  :is(.modal-enter-from, .modal-leave-to, .modal-fade-enter-from, .modal-fade-leave-to, .popup-fade-enter-from, .popup-fade-leave-to) > :is(.modal-content, .dialog-container, .glass-surface),
+  :is(.select-dropdown-enter-from, .select-dropdown-leave-to, .dropdown-enter-from, .dropdown-leave-to) {
+    transform: none !important;
+  }
+}

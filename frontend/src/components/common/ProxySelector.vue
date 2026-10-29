@@ -421,15 +421,4 @@ onUnmounted(() => {
   @apply transition-colors disabled:cursor-not-allowed disabled:opacity-50;
 }
 
-/* Dropdown animation */
-.select-dropdown-enter-active,
-.select-dropdown-leave-active {
-  transition: all 0.2s ease;
-}
-
-.select-dropdown-enter-from,
-.select-dropdown-leave-to {
-  opacity: 0;
-  transform: translateY(-8px);
-}
 </style>
