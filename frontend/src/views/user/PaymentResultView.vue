@@ -1,5 +1,5 @@
 <template>
-  <div class="flex min-h-screen items-center justify-center bg-canvas p-[var(--shell-gutter)] dark:surface-inset">
+  <div class="flex min-h-screen items-center justify-center bg-canvas p-4 md:p-6 lg:p-8 dark:surface-inset">
     <div class="card w-full min-w-0 max-w-md space-y-6 p-5 sm:p-8">
       <!-- Loading -->
       <div v-if="loading" class="flex items-center justify-center py-20">
@@ -101,6 +101,9 @@
 </template>
 
 <script setup lang="ts">
+import { useProductAppearance } from '@/composables/useProductAppearance'
+
+useProductAppearance()
 import { ref, computed, onBeforeUnmount, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'

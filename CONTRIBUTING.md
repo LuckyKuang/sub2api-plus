@@ -83,9 +83,11 @@ separate search input above or alongside a second selection field.
 Checkbox/multi-selection and other composite controls retain their existing
 dropdown layouts and interactions. Keep checkboxes inside the dropdown and
 allow repeated selection without reopening it. Keep combined auto-refresh
-enable/interval actions in their original menu. Usage history and live requests
-are the explicit exception: show a temporary auto-refresh switch directly, with
-the interval choices retained in the integrated refresh menu. Do not replace composite
+enable/interval actions in their original menu. Live requests are the explicit
+exception: show a temporary auto-refresh switch directly, with the interval
+choices retained in the integrated refresh menu. User usage history uses its
+existing manual Refresh and Reset buttons without a second refresh row or
+background polling. Do not replace composite
 controls with plain selectors or split them into separate visible fields.
 The shared dropdown owns keyboard navigation and focus, including disabled/group
 skipping, selection, Escape, and Tab. Keep trigger styles in `frontend/src/style.css`

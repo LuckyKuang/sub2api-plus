@@ -1,5 +1,5 @@
 <template>
-  <AppLayout workspace>
+  <AppLayout appearance="user" workspace record-workspace>
     <div class="workspace-page">
       <!-- Filters -->
       <div class="card workspace-fixed p-4" data-test="user-orders-filters">

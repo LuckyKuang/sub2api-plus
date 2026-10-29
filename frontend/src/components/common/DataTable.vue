@@ -1,5 +1,5 @@
 <template>
-  <div v-if="!isDesktopViewport" class="space-y-3" :aria-busy="loading">
+  <div v-if="!showDesktopTable" ref="cardsWrapperRef" v-bind="$attrs" class="space-y-3" :class="{ 'user-record-cards': userTableLayout }" :aria-busy="loading">
     <template v-if="loading && !data?.length">
       <div v-for="i in 5" :key="i" class="glass-inset rounded-2xl border border-gray-200 p-4 dark:border-dark-700">
         <div class="space-y-3">
@@ -55,8 +55,8 @@
         }"
         @click="handleRowClick($event, row)"
       >
-        <div class="space-y-3">
-          <div v-if="selectable" class="flex justify-end">
+        <div :class="userTableLayout ? 'user-record-fields' : 'space-y-3'">
+          <div v-if="selectable" class="flex justify-end" :class="{ 'user-record-selection': userTableLayout }">
             <input
               type="checkbox"
               class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-dark-600 dark:bg-dark-800"
@@ -82,7 +82,7 @@
               </slot>
             </div>
           </div>
-          <div v-if="hasActionsColumn" class="border-t border-gray-200 pt-3 dark:border-dark-700">
+          <div v-if="hasActionsColumn" class="border-t border-gray-200 pt-3 dark:border-dark-700" :class="{ 'user-record-actions': userTableLayout }">
             <slot name="cell-actions" :row="row" :value="row['actions']" :expanded="actionsExpanded"></slot>
           </div>
         </div>
@@ -91,14 +91,16 @@
   </div>
 
   <div
-    v-else
+    v-if="showDesktopTable || probingTable"
     ref="tableWrapperRef"
+    v-bind="$attrs"
     class="table-wrapper table-container record-table-scroll"
+    :class="{ 'data-table-fit-probe': probingTable && !showDesktopTable, 'actions-expanded': actionsExpanded }"
+    :style="probingTable && !showDesktopTable ? tableProbeStyle : undefined"
+    :aria-hidden="probingTable && !showDesktopTable ? true : undefined"
+    :inert="probingTable && !showDesktopTable || undefined"
     @static-table-header-measured="refreshHeaderTracking"
     :aria-busy="loading"
-    :class="{
-      'actions-expanded': actionsExpanded
-    }"
   >
     <table class="record-table w-full min-w-max divide-y divide-gray-200 dark:divide-dark-700">
       <thead class="table-header surface-inset">
@@ -107,9 +109,9 @@
             v-if="selectable"
             scope="col"
             class="sticky-header-cell w-11 min-w-11 px-3 py-3 text-center"
-            :class="{ 'sticky-col sticky-col-left': stickyFirstColumn }"
-            :data-sticky="stickyFirstColumn ? 'left' : undefined"
-            :style="stickyFirstColumn ? { left: '0px' } : undefined"
+            :class="{ 'sticky-col sticky-col-left': stickyFirstColumn && !userTableLayout }"
+            :data-sticky="stickyFirstColumn && !userTableLayout ? 'left' : undefined"
+            :style="stickyFirstColumn && !userTableLayout ? { left: '0px' } : undefined"
           >
             <input
               type="checkbox"
@@ -230,8 +232,8 @@
             <td
               v-if="selectable"
               class="w-11 min-w-11 px-3 py-4 text-center"
-              :class="{ 'sticky-col sticky-col-left': stickyFirstColumn }"
-              :style="stickyFirstColumn ? { left: '0px' } : undefined"
+              :class="{ 'sticky-col sticky-col-left': stickyFirstColumn && !userTableLayout }"
+              :style="stickyFirstColumn && !userTableLayout ? { left: '0px' } : undefined"
             >
               <input
                 type="checkbox"
@@ -277,11 +279,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { computed, inject, ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useVirtualizer, observeElementRect as observeElementRectDefault } from '@tanstack/vue-virtual'
 import { useI18n } from 'vue-i18n'
 import type { Column } from './types'
 import Icon from '@/components/icons/Icon.vue'
+import { USER_TABLE_LAYOUT_KEY } from '@/composables/useUserTableLayout'
+
+defineOptions({ inheritAttrs: false })
 
 const { t } = useI18n()
 
@@ -299,7 +304,70 @@ const emit = defineEmits<{
 
 // 表格容器引用
 const tableWrapperRef = ref<HTMLElement | null>(null)
+const cardsWrapperRef = ref<HTMLElement | null>(null)
+const userTableLayout = inject(USER_TABLE_LAYOUT_KEY, computed(() => false))
+const tableDoesNotFit = ref(false)
+const probingTable = ref(false)
+const probeWidth = ref(0)
+const showDesktopTable = computed(() => isDesktopViewport.value && (!userTableLayout.value || !tableDoesNotFit.value))
+const tableProbeStyle = computed(() => ({
+  position: 'absolute' as const,
+  visibility: 'hidden' as const,
+  pointerEvents: 'none' as const,
+  width: `${probeWidth.value}px`,
+  top: '0',
+  left: '0',
+}))
+let requiredTableWidth = 0
+let fitResizeObserver: ResizeObserver | null = null
+let fitMeasurementPending = false
+let unmounted = false
 const actionsColumnNeedsExpanding = ref(false)
+
+// Cache the overflowing table's required width. A card has no overflowing table
+// to measure, so testing only its scrollWidth would oscillate between layouts.
+const measureUserTable = () => {
+  if (!userTableLayout.value || !isDesktopViewport.value) return
+  const wrapper = tableWrapperRef.value
+  const table = wrapper?.querySelector<HTMLTableElement>('table.record-table')
+  if (!wrapper || !table || wrapper.clientWidth <= 0) return
+  const width = Math.max(table.scrollWidth, table.getBoundingClientRect().width)
+  requiredTableWidth = Math.ceil(width + wrapper.offsetWidth - wrapper.clientWidth)
+  tableDoesNotFit.value = width > wrapper.clientWidth + 1
+}
+
+const observeUserTableContainer = () => {
+  fitResizeObserver?.disconnect()
+  if (!userTableLayout.value || typeof ResizeObserver === 'undefined') return
+  const root = cardsWrapperRef.value ?? tableWrapperRef.value
+  if (!root?.parentElement) return
+  fitResizeObserver ??= new ResizeObserver(() => {
+    if (showDesktopTable.value) measureUserTable()
+    else if (isDesktopViewport.value && (cardsWrapperRef.value?.getBoundingClientRect().width ?? 0) >= requiredTableWidth) {
+      tableDoesNotFit.value = false
+    }
+  })
+  fitResizeObserver.observe(root.parentElement)
+}
+
+const refreshUserTableFit = async () => {
+  if (!userTableLayout.value || !isDesktopViewport.value || fitMeasurementPending || unmounted) return
+  fitMeasurementPending = true
+  try {
+    if (!showDesktopTable.value) {
+      probeWidth.value = cardsWrapperRef.value?.getBoundingClientRect().width ?? 0
+      if (probeWidth.value <= 0) return
+      // Keep the current cards (and their local state) mounted while measuring
+      // the updated slots; this hidden probe is removed before the next paint.
+      probingTable.value = true
+      await nextTick()
+    }
+    if (!unmounted) measureUserTable()
+  } finally {
+    probingTable.value = false
+    fitMeasurementPending = false
+  }
+}
 
 // --- 虚拟滚动「整表空白」根治 ---
 // 根因:本组件根 .table-wrapper 为 flex:1 / min-h-0,高度由父级 flex 链决定。@tanstack 虚拟化器
@@ -324,7 +392,7 @@ const observeElementRectNonZero = (
 
 // 检查操作列是否需要展开
 const checkActionsColumnWidth = () => {
-  if (!props.expandableActions) {
+  if (!props.expandableActions || userTableLayout.value) {
     actionsColumnNeedsExpanding.value = false
     actionsExpanded.value = false
     return
@@ -400,10 +468,12 @@ const detachDesktopTableTracking = () => {
 const attachDesktopTableTracking = () => {
   checkActionsColumnWidth()
   updateStickyOffsets()
+  measureUserTable()
   if (tableWrapperRef.value && typeof ResizeObserver !== 'undefined') {
     resizeObserver = new ResizeObserver(() => {
       checkActionsColumnWidth()
       updateStickyOffsets()
+      measureUserTable()
     })
     resizeObserver.observe(tableWrapperRef.value)
     tableWrapperRef.value.querySelectorAll('thead th').forEach(cell => resizeObserver?.observe(cell))
@@ -412,6 +482,7 @@ const attachDesktopTableTracking = () => {
     resizeHandler = () => {
       checkActionsColumnWidth()
       updateStickyOffsets()
+      measureUserTable()
     }
     window.addEventListener('resize', resizeHandler)
   }
@@ -433,6 +504,8 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  unmounted = true
+  fitResizeObserver?.disconnect()
   detachDesktopTableTracking()
   if (desktopViewportMediaQuery && desktopViewportListener) {
     if (typeof desktopViewportMediaQuery.removeEventListener === 'function') {
@@ -662,14 +735,31 @@ const columnsSignature = computed(() =>
 )
 
 watch(
-  isDesktopViewport,
+  showDesktopTable,
   async (isDesktop) => {
     detachDesktopTableTracking()
     if (!isDesktop) return
     await nextTick()
+    if (unmounted || !showDesktopTable.value) return
     attachDesktopTableTracking()
   },
   { immediate: true, flush: 'post' }
+)
+
+watch([cardsWrapperRef, tableWrapperRef, userTableLayout], () => observeUserTableContainer(), { flush: 'post' })
+
+// API polling often replaces arrays without changing their contents. Reuse the
+// last measurement in that case; changed rows, labels or selected columns probe
+// again even while cards are visible, so stale width estimates cannot persist.
+const userFitContent = computed(() => {
+  if (!userTableLayout.value) return ''
+  try { return JSON.stringify(props.data) }
+  catch { return props.data }
+})
+watch(
+  [userFitContent, columnsSignature, () => props.selectable, userTableLayout, isDesktopViewport],
+  async () => { await nextTick(); await refreshUserTableFit() },
+  { flush: 'post' }
 )
 
 // 数据/列变化时重新检查操作布局和固定列偏移。
@@ -781,7 +871,7 @@ const toggleAllVisible = (checked: boolean) => {
 // 是否启用虚拟化:仅桌面端且行数超过阈值时开启。小列表全量渲染,彻底绕开虚拟器的
 // 估算/测量/滚动补偿链路,消除可变行高导致的滚动抖动。
 const shouldVirtualize = computed(() =>
-  isDesktopViewport.value && (sortedData.value?.length ?? 0) > (props.virtualizeThreshold ?? 100)
+  showDesktopTable.value && (sortedData.value?.length ?? 0) > (props.virtualizeThreshold ?? 100)
 )
 
 const rowVirtualizer = useVirtualizer(computed(() => ({
@@ -882,6 +972,7 @@ const hasSelectColumn = computed(() => {
 const stickyOffsets = ref<Record<string, number>>({})
 
 const getStickyColumnSide = (column: Column, index: number): 'left' | 'right' | undefined => {
+  if (userTableLayout.value) return undefined
   if (column.sticky !== undefined) return column.sticky || undefined
   if (props.stickyFirstColumn && (index === 0 || (hasSelectColumn.value && index === 1))) return 'left'
   if (props.stickyActionsColumn && column.key === 'actions') return 'right'

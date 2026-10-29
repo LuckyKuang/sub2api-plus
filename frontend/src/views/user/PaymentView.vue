@@ -1,5 +1,5 @@
 <template>
-  <AppLayout workspace>
+  <AppLayout appearance="user" workspace>
     <div class="payment-page workspace-page">
       <div v-if="loading" class="card workspace-shell workspace-scroll items-center justify-center py-20">
         <div class="h-8 w-8 animate-spin rounded-full border-4 border-primary-500 border-t-transparent"></div>

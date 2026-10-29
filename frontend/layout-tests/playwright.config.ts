@@ -19,12 +19,14 @@ const locales = ['en-US', 'zh-CN']
 
 export default defineConfig({
   testDir: '.',
-  testMatch: 'overlays.spec.ts',
+  testMatch: ['overlays.spec.ts', 'user-layout.spec.ts'],
   fullyParallel: true,
   workers: 2,
   retries: 0,
   forbidOnly: true,
-  timeout: 30_000,
+  // Cold transforms of the full AppLayout graph on a WSL bind mount can
+  // exceed 30s; individual geometry/reachability expectations stay at 5s.
+  timeout: 90_000,
   expect: { timeout: 5_000 },
   reporter: 'list',
   outputDir: process.env.SUB2API_LAYOUT_OUTPUT_DIR || '/tmp/sub2api-layout-results',
@@ -36,10 +38,21 @@ export default defineConfig({
     screenshot: 'off',
     video: 'off',
   },
-  projects: viewports.flatMap(viewport => themes.flatMap(colorScheme => locales.map(locale => ({
+  projects: [...viewports.flatMap(viewport => themes.flatMap(colorScheme => locales.map(locale => ({
     name: `${viewport.width}x${viewport.height}-${colorScheme}-${locale}`,
+    testMatch: 'overlays.spec.ts',
     use: { viewport, colorScheme, locale },
   })))),
+  ...themes.flatMap(colorScheme => locales.map(locale => ({
+    name: `user-layout-${colorScheme}-${locale}`,
+    testMatch: 'user-layout.spec.ts',
+    use: { viewport: { width: 1440, height: 900 }, colorScheme, locale },
+  }))),
+  ...[{ width: 390, height: 844 }, { width: 1440, height: 600 }].flatMap(viewport => themes.map(colorScheme => ({
+    name: `product-${viewport.width}-${colorScheme}`,
+    testMatch: 'overlays.spec.ts',
+    use: { viewport, colorScheme, locale: colorScheme === 'dark' ? 'zh-CN' : 'en-US' },
+  })))],
   webServer: {
     cwd: frontend,
     command: 'pnpm exec vite --config layout-tests/vite.config.ts',

@@ -1,5 +1,5 @@
 <template>
-  <AppLayout>
+  <AppLayout appearance="user">
     <div class="space-y-6">
       <!-- Current Balance Card -->
       <div class="card workspace-shell overflow-hidden">

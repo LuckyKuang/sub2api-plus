@@ -1,5 +1,5 @@
 <template>
-  <AppLayout>
+  <AppLayout appearance="user">
     <MonitorHero
       :overall-status="overallStatus"
       :interval-seconds="DEFAULT_INTERVAL_SECONDS"

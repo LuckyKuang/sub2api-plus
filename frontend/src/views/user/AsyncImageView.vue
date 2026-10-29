@@ -1,5 +1,5 @@
 <template>
-  <AppLayout workspace>
+  <AppLayout appearance="user" workspace record-workspace>
     <TablePageLayout>
       <template #filters>
         <div class="card flex flex-col gap-3 p-4">
@@ -41,7 +41,7 @@
       </template>
 
       <template #table>
-        <DataTable :columns="columns" :data="tasks" :loading="loadingTasks" row-key="task_id">
+        <DataTable class="workspace-table-viewport" :columns="columns" :data="tasks" :loading="loadingTasks" row-key="task_id">
           <template #cell-prompt_preview="{ row }">
             <div class="max-w-[360px]">
               <p class="line-clamp-2 text-sm text-gray-800 dark:text-gray-100" :title="row.prompt_preview || ''">

@@ -82,6 +82,27 @@ function cardPlatforms(w: VueWrapper): string[] {
 }
 
 describe('UserDashboardStats 按平台拆分', () => {
+  // Approved UI audit: performance is a normal, permanently visible card
+  // containing the same four metrics, with no disclosure or extra title text.
+  it('shows all four performance metrics without a collapse control', () => {
+    const w = mountStats(makeStats({
+      active_api_keys: 2, total_api_keys: 4, total_requests: 20,
+      rpm: 12, tpm: 3000, average_duration_ms: 1250, total_tokens: 12000,
+    }))
+    const performance = w.get('[data-testid="dashboard-performance"]')
+    expect(performance.get('h3').text()).toBe('dashboard.performance')
+    expect(performance.find('summary').exists()).toBe(false)
+    expect(performance.element.tagName).toBe('SECTION')
+    const cards = performance.findAll('[data-testid="performance-card"]')
+    expect(cards).toHaveLength(4)
+    expect(cards.map(card => card.isVisible())).toEqual([true, true, true, true])
+    expect(cards[0].text()).toContain('2 / 4')
+    expect(cards[1].text()).toContain('RPM / TPM')
+    expect(cards[2].text()).toContain('dashboard.avgResponse')
+    expect(cards[3].text()).toContain('dashboard.totalTokens')
+    w.unmount()
+  })
+
   it('keeps summary cards fixed while retaining every quota in the details section', () => {
     const stats = makeStats({
       today_requests: 123,
@@ -98,7 +119,9 @@ describe('UserDashboardStats 按平台拆分', () => {
     expect(summary.find('details').exists()).toBe(false)
     expect(cardPlatforms(summary)).toEqual([])
     expect(details.text()).not.toContain('inspection.todayRecords')
-    expect(details.find('details').exists()).toBe(true)
+    expect(details.find('details').exists()).toBe(false)
+    expect(details.get('[data-testid="dashboard-performance"] h3').text()).toBe('dashboard.performance')
+    expect(details.findAll('[data-testid="performance-card"]')).toHaveLength(4)
     expect(cardPlatforms(details)).toEqual(['openai', 'grok'])
     expect(details.text()).toContain('2.50')
     expect(details.text()).toContain('10.00')

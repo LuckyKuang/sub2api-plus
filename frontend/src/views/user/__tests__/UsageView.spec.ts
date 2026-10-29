@@ -8,6 +8,8 @@ vi.mock('vue-router', () => ({ useRoute: () => routeState, useRouter: () => ({ r
 import UsageView from '../UsageView.vue'
 import Select, { type SelectOption } from '@/components/common/Select.vue'
 import DateRangePicker from '@/components/common/DateRangePicker.vue'
+import RefreshControl from '@/components/common/RefreshControl.vue'
+import LiveRequestsPanel from '@/components/usage/LiveRequestsPanel.vue'
 import UsageTable from '@/components/admin/usage/UsageTable.vue'
 import UserErrorRequestsTable from '@/components/user/UserErrorRequestsTable.vue'
 
@@ -173,20 +175,23 @@ function mountUsageView() {
         Select: true,
         DateRangePicker: true,
         Icon: true,
-        UsageStatsCards: chartStub,
         UsageTable: { ...chartStub, props: ['columns', 'showServiceTier'] },
         UserErrorRequestsTable: { ...chartStub, props: { workspace: Boolean } },
-        LiveRequestsPanel: { template: '<div data-testid="live-panel" />' },
-        ModelDistributionChart: chartStub,
-        GroupDistributionChart: chartStub,
-        EndpointDistributionChart: chartStub,
-        TokenUsageTrend: chartStub,
+        LiveRequestsPanel: { template: '<div data-testid="live-panel" />', props: { mode: String, workspace: Boolean } },
       },
     },
   })
 }
 
+function expectNoStatisticsRequests() {
+  expect(getStats).not.toHaveBeenCalled()
+  expect(getDashboardModels).not.toHaveBeenCalled()
+  expect(getDashboardSnapshotV2).not.toHaveBeenCalled()
+}
+
 describe('user UsageView', () => {
+  afterEach(expectNoStatisticsRequests)
+
   it('restores independent historical columns and strips only obsolete record links', async () => {
     routeState.query = { record: '123', api_key_id: '9' }
     const wrapper = mountUsageView()
@@ -197,7 +202,7 @@ describe('user UsageView', () => {
     expect(routeReplace).toHaveBeenCalledWith({ path: '/usage', query: { api_key_id: '9' }, hash: '#records' })
     expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
     expect(wrapper.get('[data-testid="usage-records-panel"]').isVisible()).toBe(true)
-    expect(wrapper.get('[data-testid="usage-charts-panel"]').isVisible()).toBe(false)
+    expect(wrapper.find('[data-testid="usage-charts-panel"]').exists()).toBe(false)
     wrapper.unmount()
   })
 
@@ -217,38 +222,12 @@ describe('user UsageView', () => {
     showInfo.mockReset()
 
     query.mockResolvedValue({ items: [usageLog], total: 1, pages: 1 })
-    getStats.mockResolvedValue({
-      total_requests: 1,
-      total_input_tokens: 10,
-      total_output_tokens: 20,
-      total_cache_tokens: 0,
-      total_tokens: 30,
-      total_cost: 0.1,
-      total_actual_cost: 0.08,
-      average_duration_ms: 12,
-      endpoints: [],
-      upstream_endpoints: [],
-      endpoint_paths: [],
-    })
-    getDashboardModels.mockResolvedValue({
-      models: [{ model: 'gpt-5.4', requests: 1, input_tokens: 10, output_tokens: 20, cache_creation_tokens: 0, cache_read_tokens: 0, total_tokens: 30, cost: 0.1, actual_cost: 0.08 }],
-      start_date: '2026-03-08',
-      end_date: '2026-03-08',
-    })
-    getDashboardSnapshotV2.mockResolvedValue({
-      generated_at: '2026-03-08T00:00:00Z',
-      start_date: '2026-03-08',
-      end_date: '2026-03-08',
-      granularity: 'hour',
-      trend: [],
-      groups: [],
-    })
     listMyErrorRequests.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 20, pages: 0 })
     list.mockResolvedValue({ items: [{ id: 1, name: 'demo-key' }], total: 1, page: 1, page_size: 100, pages: 1 })
     getAvailable.mockResolvedValue([{ id: 1, name: 'default' }])
   })
 
-  it('preserves historical filters, dates and pagination between charts and records', async () => {
+  it('preserves historical filters, dates, pagination and column drafts between record modes', async () => {
     const wrapper = mountUsageView()
     await flushPromises()
     const vm = wrapper.vm as any
@@ -256,62 +235,98 @@ describe('user UsageView', () => {
     vm.pagination.page = 4
     vm.startDate = '2026-10-01'
     vm.endDate = '2026-10-10'
+    vm.toggleColumn('model')
     const dates = wrapper.findComponent(DateRangePicker).vm
 
-    await wrapper.get('[role="tablist"] button:nth-child(2)').trigger('click')
-    expect(wrapper.get('[data-testid="usage-records-panel"]').isVisible()).toBe(true)
-    await wrapper.get('[role="tablist"] button:first-child').trigger('click')
-    expect(wrapper.get('[data-testid="usage-charts-panel"]').isVisible()).toBe(true)
-    expect(vm.filters.model).toBe('selected-model')
-    expect(vm.pagination.page).toBe(4)
-    expect(vm.startDate).toBe('2026-10-01')
-    expect(vm.endDate).toBe('2026-10-10')
-    expect(wrapper.findComponent(DateRangePicker).vm).toBe(dates)
-    wrapper.unmount()
-  })
-
-  it('restores errors after leaving live requests and keeps one historical table per tab', async () => {
-    const wrapper = mountUsageView()
-    await flushPromises()
-    // Audited record navigation has a single selected card and no bottom rule.
-    expect(wrapper.get('.usage-detail-tabs').classes()).not.toContain('border-b')
-    for (let cycle = 0; cycle < 2; cycle++) {
-      await wrapper.findAll('.usage-detail-tabs [role="tab"]').find(button => button.text() === 'Error records')!.trigger('click')
-      expect(wrapper.findAll('.usage-detail-tabs [aria-selected="true"]').map(button => button.text())).toEqual(['Error records'])
-      expect(wrapper.findComponent(UsageTable).exists()).toBe(false)
-      expect(wrapper.findComponent(UserErrorRequestsTable).props('workspace')).toBe(true)
-      await wrapper.findAll('.usage-detail-tabs [role="tab"]').find(button => button.text() === 'inspection.live')!.trigger('click')
-      expect(wrapper.findAll('.usage-detail-tabs [aria-selected="true"]').map(button => button.text())).toEqual(['inspection.live'])
-      expect(wrapper.find('[data-testid="live-panel"]').exists()).toBe(true)
-      expect(wrapper.find('[data-testid="usage-charts-panel"]').exists()).toBe(false)
-      expect(wrapper.get('.usage-date').isVisible()).toBe(false)
-
-      await wrapper.get('[role="tablist"] button:first-child').trigger('click')
-      expect(wrapper.find('[data-testid="live-panel"]').exists()).toBe(false)
-      expect((wrapper.vm as any).activeTab).toBe('errors')
-      expect(wrapper.get('[data-testid="usage-charts-panel"]').isVisible()).toBe(true)
-      expect(wrapper.get('.usage-date').isVisible()).toBe(true)
-      await wrapper.get('[role="tablist"] button:nth-child(2)').trigger('click')
-      await wrapper.findAll('.usage-detail-tabs [role="tab"]').find(button => button.text() === 'Usage records')!.trigger('click')
-      expect(wrapper.findAll('.usage-detail-tabs [aria-selected="true"]').map(button => button.text())).toEqual(['Usage records'])
-      expect(wrapper.findAllComponents(UsageTable)).toHaveLength(1)
-      expect(wrapper.findAll('[data-testid="usage-column-settings"]')).toHaveLength(1)
+    for (const tab of ['inspection.live', 'Error records', 'Usage records']) {
+      await wrapper.findAll('.usage-detail-tabs button').find(button => button.text() === tab)!.trigger('click')
+      await flushPromises()
+      expect(wrapper.get('[data-testid="usage-records-panel"]').isVisible()).toBe(true)
+      expect(vm.filters.model).toBe('selected-model')
+      expect(vm.pagination.page).toBe(4)
+      expect(vm.startDate).toBe('2026-10-01')
+      expect(vm.endDate).toBe('2026-10-10')
+      expect(vm.hiddenColumns.has('model')).toBe(true)
+      expect(wrapper.findComponent(DateRangePicker).vm).toBe(dates)
     }
-    wrapper.unmount()
+    expectNoStatisticsRequests()
   })
 
-  it('holds new records while the historical table is scrolled for reading', async () => {
-    routeState.query = { record: '1' }
+  it('shows only the selected live, historical or error list with appropriate date controls', async () => {
     const wrapper = mountUsageView()
     await flushPromises()
-    const table = wrapper.findComponent(UsageTable).element
-    table.classList.add('workspace-table-viewport')
-    table.scrollTop = 200
-    query.mockResolvedValue({ items: [{ ...usageLog, id: 2 }, usageLog], total: 2, pages: 1 })
-    await (wrapper.vm as any).historyRefresh.refresh()
+    expect(wrapper.get('.usage-detail-tabs').classes()).not.toContain('border-b')
+    expect(wrapper.findAll('[role="tablist"]')).toHaveLength(1)
+    expect(wrapper.findAll('.usage-detail-tabs [role="tab"]')).toHaveLength(3)
+    for (let cycle = 0; cycle < 2; cycle++) {
+      for (const tab of ['Error records', 'inspection.live', 'Usage records']) {
+        await wrapper.findAll('.usage-detail-tabs button').find(button => button.text() === tab)!.trigger('click')
+        await flushPromises()
+        expect(wrapper.findAll('.usage-detail-tabs [aria-selected="true"]').map(button => button.text())).toEqual([tab])
+        expect(wrapper.findComponent(UsageTable).exists()).toBe(tab === 'Usage records')
+        expect(wrapper.findComponent(UserErrorRequestsTable).exists()).toBe(tab === 'Error records')
+        expect(wrapper.find('[data-testid="live-panel"]').exists()).toBe(tab === 'inspection.live')
+        expect(wrapper.get('.usage-date').isVisible()).toBe(tab !== 'inspection.live')
+        expect(wrapper.findAll('[data-testid="usage-column-settings"]')).toHaveLength(tab === 'inspection.live' ? 0 : 1)
+      }
+    }
+    expect(wrapper.find('[data-testid="usage-charts-panel"]').exists()).toBe(false)
+    expectNoStatisticsRequests()
+  })
+
+  // UI audit requirement: history uses its existing Refresh/Reset actions;
+  // remove the extra auto-refresh row and polling, while live mode keeps its own controls.
+  it('refreshes history only on demand and leaves live mode to its existing panel', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] })
+    const wrapper = mountUsageView()
+    try {
+      await flushPromises()
+      expect(wrapper.find('.usage-history-refresh').exists()).toBe(false)
+      expect(wrapper.findComponent(RefreshControl).exists()).toBe(false)
+      expect(wrapper.findAll('button').filter(button => button.text() === 'Refresh')).toHaveLength(1)
+      expect(wrapper.findAll('button').filter(button => button.text() === 'Reset')).toHaveLength(1)
+      expect(query).toHaveBeenCalledTimes(1)
+
+      query.mockClear()
+      query.mockResolvedValue({ items: [{ ...usageLog, id: 2 }, usageLog], total: 2, pages: 1 })
+      await vi.advanceTimersByTimeAsync(180_000)
+      await flushPromises()
+      expect(query).not.toHaveBeenCalled()
+      expect((wrapper.vm as any).usageLogs.map((row: { id: number }) => row.id)).toEqual([1])
+
+      await wrapper.findAll('button').find(button => button.text() === 'Refresh')!.trigger('click')
+      await flushPromises()
+      expect(query).toHaveBeenCalledTimes(1)
+      expect(query).toHaveBeenCalledWith(expect.objectContaining({ snapshot_max_id: 'new' }), expect.anything())
+      expect((wrapper.vm as any).usageLogs.map((row: { id: number }) => row.id)).toEqual([2, 1])
+
+      await wrapper.findAll('.usage-detail-tabs button').find(button => button.text() === 'inspection.live')!.trigger('click')
+      expect(wrapper.findComponent(LiveRequestsPanel).props()).toMatchObject({ mode: 'user', workspace: true })
+      expect(wrapper.findComponent(UsageTable).exists()).toBe(false)
+    } finally {
+      wrapper.unmount()
+      vi.useRealTimers()
+    }
+  })
+
+  it('keeps the paging snapshot until the existing manual Refresh action requests current records', async () => {
+    query.mockResolvedValue({ items: [usageLog], total: 41, pages: 3, snapshot_max_id: 100 })
+    const wrapper = mountUsageView()
     await flushPromises()
-    expect((wrapper.vm as any).usageLogs.map((row: { id: number }) => row.id)).toEqual([1])
-    expect((wrapper.vm as any).newRecordsAvailable).toBe(true)
+    query.mockClear()
+
+    ;(wrapper.vm as any).handlePageChange(2)
+    await flushPromises()
+    expect(query).toHaveBeenCalledWith(
+      expect.objectContaining({ page: 2, snapshot_max_id: 100 }), expect.anything()
+    )
+
+    query.mockClear()
+    await wrapper.findAll('button').find(button => button.text() === 'Refresh')!.trigger('click')
+    await flushPromises()
+    expect(query).toHaveBeenCalledWith(
+      expect.objectContaining({ page: 2, snapshot_max_id: 'new' }), expect.anything()
+    )
     wrapper.unmount()
   })
 
@@ -341,7 +356,7 @@ describe('user UsageView', () => {
     wrapper.unmount()
   })
 
-  it('loads logs, stats, model stats, and snapshot on first render', async () => {
+  it('opens the historical list immediately and loads no redundant statistics', async () => {
     const wrapper = mountUsageView()
     await flushPromises()
 
@@ -349,16 +364,37 @@ describe('user UsageView', () => {
     expect(wrapper.findComponent(UsageTable).props('columns').map((column: { key: string }) => column.key)).not.toContain('service_tier')
     expect(wrapper.findComponent(UsageTable).props('showServiceTier')).toBeFalsy()
     expect(query).toHaveBeenCalled()
-    expect(getStats).toHaveBeenCalled()
-    expect(getDashboardModels).toHaveBeenCalled()
-    expect(getDashboardSnapshotV2).toHaveBeenCalledWith(expect.objectContaining({
-      include_trend: true,
-      include_model_stats: false,
-      include_group_stats: true,
-    }))
+    expect(wrapper.findComponent(UsageTable).isVisible()).toBe(true)
+    expect(wrapper.find('[data-testid="usage-charts-panel"]').exists()).toBe(false)
+    expect(wrapper.find('.workspace-tabs').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('Granularity')
+    expectNoStatisticsRequests()
     expect(list).toHaveBeenCalledTimes(1)
     expect(list).toHaveBeenCalledWith(1, 100)
     expect(getAvailable).toHaveBeenCalled()
+  })
+
+  it('suggests loaded models and filters an off-page model without a statistics request', async () => {
+    const wrapper = mountUsageView()
+    await flushPromises()
+    const modelSelect = wrapper.findAllComponents(Select).find(select =>
+      select.props('options').some((option: SelectOption) => option.label === 'All models'))!
+    expect(modelSelect.props()).toMatchObject({ searchable: true, creatable: true, clearable: true })
+    expect(modelSelect.props('options')).toContainEqual({ value: 'gpt-5.4', label: 'gpt-5.4' })
+    query.mockResolvedValue({ items: [], total: 0, pages: 0 })
+    query.mockClear()
+    modelSelect.vm.$emit('update:modelValue', 'off-page-model')
+    modelSelect.vm.$emit('change', 'off-page-model')
+    await flushPromises()
+    expect(query).toHaveBeenCalledWith(expect.objectContaining({ model: 'off-page-model', page: 1 }), expect.anything())
+    expect(modelSelect.props('options')).toContainEqual({ value: 'off-page-model', label: 'off-page-model' })
+    await (wrapper.vm as any).refreshData()
+    expect(query).toHaveBeenLastCalledWith(expect.objectContaining({ model: 'off-page-model' }), expect.anything())
+    modelSelect.vm.$emit('update:modelValue', null)
+    modelSelect.vm.$emit('change', null)
+    await flushPromises()
+    expect(query).toHaveBeenLastCalledWith(expect.objectContaining({ model: null, page: 1 }), expect.anything())
+    expectNoStatisticsRequests()
   })
 
   it('includes API keys after the first page in both record filters and queries by the selected key', async () => {
@@ -486,9 +522,6 @@ describe('user UsageView', () => {
       expect.objectContaining({ native_compaction_v2: true }),
       expect.anything()
     )
-    expect(getStats).toHaveBeenCalledWith(expect.objectContaining({ native_compaction_v2: true }))
-    expect(getDashboardModels).toHaveBeenCalledWith(expect.objectContaining({ native_compaction_v2: true }))
-    expect(getDashboardSnapshotV2).toHaveBeenCalledWith(expect.objectContaining({ native_compaction_v2: true }))
 
     query.mockClear()
     getStats.mockClear()
@@ -503,9 +536,6 @@ describe('user UsageView', () => {
       expect.objectContaining({ native_compaction_v2: null }),
       expect.anything()
     )
-    expect(getStats).toHaveBeenCalledWith(expect.objectContaining({ native_compaction_v2: null }))
-    expect(getDashboardModels).toHaveBeenCalledWith(expect.objectContaining({ native_compaction_v2: null }))
-    expect(getDashboardSnapshotV2).toHaveBeenCalledWith(expect.objectContaining({ native_compaction_v2: null }))
   })
 
   it('exports csv with current filters and without admin-only fields', async () => {

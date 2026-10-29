@@ -1,12 +1,12 @@
 <template>
   <!-- Custom Home Content: Full Page Mode -->
-  <div v-if="hasHomeContent" class="min-h-screen p-[var(--shell-gutter)]">
+  <div v-if="hasHomeContent" class="home-page min-h-screen p-4 md:p-6 lg:p-8">
     <div class="card overflow-hidden">
       <!-- iframe mode -->
       <iframe
         v-if="isHomeContentUrl"
         :src="homeContent.trim()"
-        class="h-[calc(100dvh-var(--shell-gutter)*2)] w-full border-0"
+        class="h-[calc(100dvh-2rem)] w-full border-0 md:h-[calc(100dvh-3rem)] lg:h-[calc(100dvh-4rem)]"
         allowfullscreen
       ></iframe>
       <!-- HTML mode - SECURITY: homeContent is admin-only setting, XSS risk is acceptable -->
@@ -18,7 +18,7 @@
   <div
     v-else-if="compactHomeEnabled"
     data-testid="compact-home"
-    class="flex min-h-screen flex-col gap-[var(--shell-gap)] bg-canvas p-[var(--shell-gutter)] text-gray-900 dark:surface-inset dark:text-white"
+    class="home-page home-compact flex min-h-screen flex-col gap-6 p-4 text-gray-900 md:p-6 lg:p-8 dark:text-white"
   >
     <header class="shell-surface px-4 py-4 sm:px-6">
       <nav class="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 sm:gap-4">
@@ -95,16 +95,17 @@
   <!-- Default Home Page -->
   <div
     v-else
-    class="relative flex min-h-screen flex-col gap-[var(--shell-gap)] bg-canvas p-[var(--shell-gutter)] dark:surface-inset"
+    class="home-page home-default relative flex min-h-screen flex-col gap-8 p-4 md:p-6 lg:p-8"
   >
     <!-- Header -->
-    <header class="shell-surface relative z-20 px-4 py-4 sm:px-6">
+    <header class="home-nav relative z-20 px-2 py-2 sm:px-4">
       <nav class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3">
         <!-- Logo -->
-        <div class="flex items-center">
-          <div class="h-10 w-10 overflow-hidden rounded-xl shadow-md">
+        <div class="flex min-w-0 items-center gap-3">
+          <div class="h-10 w-10 shrink-0 overflow-hidden rounded-xl">
             <img :src="siteLogo || '/logo.svg'" alt="Logo" class="h-full w-full object-contain" />
           </div>
+          <span class="max-w-[14rem] truncate text-base font-semibold tracking-tight">{{ siteName }}</span>
         </div>
 
         <!-- Nav Actions -->
@@ -186,15 +187,15 @@
     <main class="relative z-10 min-w-0 flex-1">
       <div class="mx-auto flex max-w-6xl flex-col gap-[var(--shell-gap)]">
         <!-- Hero Section - Left/Right Layout -->
-        <section class="card flex min-w-0 flex-col items-center justify-between gap-8 px-4 py-8 sm:p-8 lg:flex-row lg:gap-12 lg:p-10">
+        <section class="home-hero flex min-w-0 flex-col items-center justify-between gap-10 px-2 py-8 sm:px-6 sm:py-12 lg:flex-row lg:gap-14 lg:py-16">
           <!-- Left: Text Content -->
           <div class="min-w-0 flex-1 text-center lg:text-left">
             <h1
-              class="mb-4 break-words text-4xl font-bold text-gray-900 dark:text-white md:text-5xl lg:text-6xl"
+              class="mb-5 break-words text-4xl font-semibold tracking-tight text-gray-900 dark:text-white md:text-5xl lg:text-6xl"
             >
               {{ siteName }}
             </h1>
-            <p class="mb-8 text-lg md:text-xl surface-muted">
+            <p class="mb-8 whitespace-pre-wrap text-base leading-relaxed md:text-lg surface-muted">
               {{ siteSubtitle }}
             </p>
 
@@ -202,7 +203,7 @@
             <div>
               <router-link
                 :to="isAuthenticated ? dashboardPath : '/login'"
-                class="btn btn-primary px-8 py-3 text-base shadow-lg shadow-primary-500/30"
+                class="btn btn-primary px-6 py-3 text-sm"
               >
                 {{ isAuthenticated ? t('home.goToDashboard') : t('home.getStarted') }}
                 <Icon name="arrowRight" size="md" class="ml-2" :stroke-width="2" />
@@ -280,12 +281,12 @@
         <div class="grid gap-[var(--shell-gap)] md:grid-cols-3">
           <!-- Feature 1: Unified Gateway -->
           <div
-            class="card group p-6 transition-all duration-300 hover:shadow-xl hover:shadow-primary-500/10"
+            class="card home-feature p-6"
           >
             <div
-              class="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 shadow-lg shadow-blue-500/30 transition-transform group-hover:scale-110"
+              class="home-feature-icon mb-5 flex h-10 w-10 items-center justify-center rounded-xl"
             >
-              <Icon name="server" size="lg" class="text-white" />
+              <Icon name="server" size="md" />
             </div>
             <h3 class="mb-2 text-lg font-semibold text-gray-900 dark:text-white">
               {{ t('home.features.unifiedGateway') }}
@@ -297,13 +298,13 @@
 
           <!-- Feature 2: Account Pool -->
           <div
-            class="card group p-6 transition-all duration-300 hover:shadow-xl hover:shadow-primary-500/10"
+            class="card home-feature p-6"
           >
             <div
-              class="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 shadow-lg shadow-primary-500/30 transition-transform group-hover:scale-110"
+              class="home-feature-icon mb-5 flex h-10 w-10 items-center justify-center rounded-xl"
             >
               <svg
-                class="h-6 w-6 text-white"
+                class="h-5 w-5"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -326,13 +327,13 @@
 
           <!-- Feature 3: Billing & Quota -->
           <div
-            class="card group p-6 transition-all duration-300 hover:shadow-xl hover:shadow-primary-500/10"
+            class="card home-feature p-6"
           >
             <div
-              class="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 shadow-lg shadow-purple-500/30 transition-transform group-hover:scale-110"
+              class="home-feature-icon mb-5 flex h-10 w-10 items-center justify-center rounded-xl"
             >
               <svg
-                class="h-6 w-6 text-white"
+                class="h-5 w-5"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -447,7 +448,7 @@
     </main>
 
     <!-- Footer -->
-    <footer class="shell-surface relative z-10 px-4 py-6 sm:px-6">
+    <footer class="home-footer relative z-10 px-2 py-6 sm:px-4">
       <div
         class="mx-auto flex max-w-6xl flex-col items-center justify-center gap-4 text-center sm:flex-row sm:text-left"
       >
@@ -486,6 +487,9 @@ import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { sanitizeUrl } from '@/utils/url'
 import { FeatureFlags, isFeatureFlagEnabled } from '@/utils/featureFlags'
+import { useProductAppearance } from '@/composables/useProductAppearance'
+
+useProductAppearance()
 
 const { t } = useI18n()
 
@@ -577,19 +581,11 @@ onMounted(() => {
 /* Terminal Window */
 .terminal-window {
   width: 100%;
-  background: linear-gradient(145deg, #282828 0%, #202020 100%);
+  background: #222326;
   border-radius: var(--surface-radius-inset);
-  box-shadow:
-    0 25px 50px -12px rgba(0, 0, 0, 0.4),
-    0 0 0 1px rgba(255, 255, 255, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  box-shadow: 0 16px 40px -20px rgb(0 0 0 / 45%);
+  border: 1px solid rgb(255 255 255 / 12%);
   overflow: hidden;
-  transform: perspective(1000px) rotateX(2deg) rotateY(-2deg);
-  transition: transform 0.3s ease;
-}
-
-.terminal-window:hover {
-  transform: perspective(1000px) rotateX(0deg) rotateY(0deg) translateY(-4px);
 }
 
 /* Terminal Header */
@@ -627,7 +623,7 @@ onMounted(() => {
   text-align: center;
   font-size: 12px;
   font-family: ui-monospace, monospace;
-  color: #737373;
+  color: #a1a1aa;
   margin-right: 52px;
 }
 
@@ -686,7 +682,7 @@ onMounted(() => {
   color: rgb(var(--console-accent-500, 20 184 166));
 }
 .code-comment {
-  color: #737373;
+  color: #a1a1aa;
   font-style: italic;
 }
 .code-success {
@@ -720,12 +716,12 @@ onMounted(() => {
   }
 }
 
-/* Dark mode adjustments */
-:deep(.dark) .terminal-window {
-  box-shadow:
-    0 25px 50px -12px rgba(0, 0, 0, 0.6),
-    0 0 0 1px rgb(var(--console-accent-500, 20 184 166) / 20%),
-    0 0 40px rgb(var(--console-accent-500, 20 184 166) / 10%),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+/* Public presentation follows the same restrained surface hierarchy. */
+.home-feature-icon { background: var(--surface-soft); color: var(--console-accent-readable); }
+.home-footer { border-top: 1px solid var(--surface-edge); }
+.home-compact > :is(header, footer) { background: transparent; border: 0; box-shadow: none; }
+@media (prefers-reduced-motion: reduce) {
+  .code-line { opacity: 1; animation: none; }
+  .cursor { animation: none; }
 }
 </style>

@@ -5,6 +5,7 @@
 @import './styles/workspace.css';
 @import './styles/tabs.css';
 @import './styles/segments.css';
+@import './styles/product.css';
 
 @tailwind base;
 @tailwind components;

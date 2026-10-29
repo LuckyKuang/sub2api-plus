@@ -1,5 +1,5 @@
 <template>
-  <AppLayout>
+  <AppLayout appearance="user">
     <div class="mx-auto max-w-lg space-y-6 py-8">
       <div v-if="loading" class="flex items-center justify-center py-20">
         <div class="h-8 w-8 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent"></div>

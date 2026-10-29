@@ -1,5 +1,5 @@
 <template>
-  <AppLayout>
+  <AppLayout appearance="user">
     <div class="service-status w-full space-y-5">
       <header class="flex flex-wrap items-center justify-between gap-3">
         <div>

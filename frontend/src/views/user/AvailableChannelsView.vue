@@ -1,5 +1,5 @@
 <template>
-  <AppLayout workspace>
+  <AppLayout appearance="user" workspace>
     <div class="catalog-page workspace-page min-w-0 space-y-5">
       <div class="card workspace-fixed flex items-start justify-between gap-3 p-4" data-testid="catalog-heading">
         <div>

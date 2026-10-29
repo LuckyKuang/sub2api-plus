@@ -1,5 +1,5 @@
 <template>
-  <AppLayout>
+  <AppLayout appearance="user">
     <div
       data-testid="profile-shell"
       class="space-y-6"

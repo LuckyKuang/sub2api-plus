@@ -1,5 +1,5 @@
 <template>
-  <div class="app-layout" :class="{ 'sidebar-is-collapsed': sidebarCollapsed, 'app-layout-workspace': workspace }">
+  <div class="app-layout" :class="{ 'sidebar-is-collapsed': sidebarCollapsed, 'app-layout-workspace': workspace, 'app-layout-record-workspace': recordWorkspace, 'app-layout-user': appearance === 'user' }">
     <!-- Sidebar -->
     <AppSidebar />
 
@@ -21,7 +21,7 @@
 
 <script setup lang="ts">
 import '@/styles/onboarding.css'
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, provide } from 'vue'
 import { useAppStore } from '@/stores'
 import { useAuthStore } from '@/stores/auth'
 import { useOnboardingTour } from '@/composables/useOnboardingTour'
@@ -29,10 +29,18 @@ import { useOnboardingStore } from '@/stores/onboarding'
 import AdminSupportBanner from '@/components/admin/support/AdminSupportBanner.vue'
 import { useUserView } from '@/composables/useUserView'
 import { adminSupportContext } from '@/utils/adminSupportContext'
+import { useProductAppearance } from '@/composables/useProductAppearance'
+import { USER_TABLE_LAYOUT_KEY } from '@/composables/useUserTableLayout'
 import AppSidebar from './AppSidebar.vue'
 import AppHeader from './AppHeader.vue'
 
-withDefaults(defineProps<{ workspace?: boolean }>(), { workspace: false })
+const props = withDefaults(defineProps<{ workspace?: boolean; recordWorkspace?: boolean; appearance?: 'user' | 'admin' }>(), {
+  workspace: false,
+  recordWorkspace: false,
+  appearance: 'admin'
+})
+useProductAppearance(() => props.appearance === 'user')
+provide(USER_TABLE_LAYOUT_KEY, computed(() => props.appearance === 'user'))
 
 const appStore = useAppStore()
 const authStore = useAuthStore()
