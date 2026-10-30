@@ -331,6 +331,9 @@ func (s *adminServiceImpl) DuplicateAccount(ctx context.Context, id int64, actor
 	if err := s.normalizeOpenAIAccountUserAgent(ctx, source.Platform, source.Type, input.Credentials); err != nil {
 		return nil, err
 	}
+	if err := ValidateCodexCLIEnablement(ctx, nil, input.Credentials); err != nil {
+		return nil, err
+	}
 	if err := NormalizeProtocolRulesCredentials(input.Credentials); err != nil {
 		return nil, err
 	}
@@ -537,6 +540,9 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 	if err := s.normalizeOpenAIAccountUserAgent(ctx, input.Platform, input.Type, input.Credentials); err != nil {
 		return nil, err
 	}
+	if err := ValidateCodexCLIEnablement(ctx, nil, input.Credentials); err != nil {
+		return nil, err
+	}
 
 	account, err := buildAccountForCreate(input, accountExtra)
 	if err != nil {
@@ -597,6 +603,7 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 	if err != nil {
 		return nil, err
 	}
+	previousCredentials := maps.Clone(account.Credentials)
 	if account.Platform == PlatformTypeSafe && input.Type != "" && input.Type != AccountTypeAPIKey {
 		return nil, errors.New("typesafe accounts only support apikey credentials")
 	}
@@ -710,9 +717,15 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 	// Changing the auth type can change the required family (MiniMax OAuth vs
 	// API Key), even when the caller sends no credential patch.
 	if !account.IsCredentialShadow() && input.Type != "" && len(input.Credentials) == 0 {
+		if err := NormalizeCodexCLIAccountCredentials(account.Platform, account.Type, account.Credentials); err != nil {
+			return nil, err
+		}
 		if err := NormalizeAccountOutboundIdentity(account.Platform, account.Type, account.Credentials); err != nil {
 			return nil, err
 		}
+	}
+	if err := ValidateCodexCLIEnablement(ctx, previousCredentials, account.Credentials); err != nil {
+		return nil, err
 	}
 	// Extra 使用 map：需要区分“未提供(nil)”与“显式清空({})”。
 	// 关闭配额限制时前端会删除 quota_* 键并提交 extra:{}，此时也必须落库。
@@ -940,6 +953,9 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 // normalizeOpenAIAccountUserAgent makes account validation observe the same
 // global policy snapshot used later by outbound identity resolution.
 func (s *adminServiceImpl) normalizeOpenAIAccountUserAgent(ctx context.Context, platform, accountType string, credentials map[string]any) error {
+	if err := NormalizeCodexCLIAccountCredentials(platform, accountType, credentials); err != nil {
+		return err
+	}
 	normalizeDeepSeekAnonymousUser(platform, credentials)
 	if err := validateStepFunCredentials(platform, accountType, credentials); err != nil {
 		return err
@@ -1160,6 +1176,23 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 	}
 	if err := normalizeBulkAccountOutboundIdentity(input.Credentials, cachedTargets); err != nil {
 		return nil, err
+	}
+	if len(input.Credentials) > 0 {
+		for _, account := range cachedTargets {
+			if account == nil {
+				continue
+			}
+			candidate := MergeCredentials(account.Credentials, maps.Clone(input.Credentials))
+			if err := NormalizeCodexCLIAccountCredentials(account.Platform, account.Type, candidate); err != nil {
+				return nil, err
+			}
+			if err := ValidateCodexCLIEnablement(ctx, account.Credentials, candidate); err != nil {
+				return nil, err
+			}
+			if _, supplied := input.Credentials[CodexCLIConfigCredentialKey]; supplied {
+				input.Credentials[CodexCLIConfigCredentialKey] = candidate[CodexCLIConfigCredentialKey]
+			}
+		}
 	}
 	if raw, supplied := input.Credentials["user_agent"]; supplied {
 		for _, account := range cachedTargets {

@@ -15,6 +15,12 @@ const { updateAccountMock, checkMixedChannelRiskMock, authIsSimpleMode } = vi.ho
 }))
 
 vi.mock('@/components/account/OutboundIdentityEditor.vue', () => ({ default: { template: '<div />' } }))
+vi.mock('@/components/account/CodexCLIEditor.vue', () => ({ default: {
+  setup: (_props: unknown, { expose }: { expose: (methods: Record<string, unknown>) => void }) => {
+    expose({ prepareSave: () => null })
+    return () => null
+  },
+} }))
 
 vi.mock('@/stores/app', () => ({
   useAppStore: () => ({

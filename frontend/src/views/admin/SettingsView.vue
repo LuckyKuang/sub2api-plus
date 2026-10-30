@@ -8524,6 +8524,7 @@
         <div v-show="activeTab === 'identity'">
           <OutboundIdentitySettings v-if="identityTabVisited" ref="outboundIdentitySettings">
             <template #codex>
+              <CodexCLIRuntimeSettings />
               <div class="space-y-4 rounded-lg border border-gray-200 p-4 dark:border-dark-600">
                 <div class="flex items-start justify-between gap-4">
                   <div>
@@ -8818,6 +8819,7 @@ import AppearanceSettingsCard from "@/components/admin/settings/AppearanceSettin
 import BackupSettings from "@/views/admin/BackupView.vue";
 import EmailTemplateEditor from "@/views/admin/settings/EmailTemplateEditor.vue";
 import OutboundIdentitySettings from "@/views/admin/settings/OutboundIdentitySettings.vue";
+import CodexCLIRuntimeSettings from "@/views/admin/settings/CodexCLIRuntimeSettings.vue";
 import RechargeBonusTierEditor from "@/components/admin/settings/RechargeBonusTierEditor.vue";
 import {
   normalizeRechargeBonusMode,

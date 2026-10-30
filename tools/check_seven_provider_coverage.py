@@ -86,6 +86,30 @@ COUNT_TOKENS_PREFLIGHT = "TestCountTokensUpstreamRejectsBrokenProxyBeforeCredent
 COUNT_TOKENS_OWNER = "TestCountTokensUpstreamKeepsCapturedOwnerDuringTokenLookup"
 COUNT_TOKENS_LOCAL = "TestCountTokensLocalEstimatesKeepZeroCredentialAndNetworkEffects"
 COUNT_TOKENS_WIRE = "TestCountTokensProductionProxyContract"
+CODEX_CLI_SERVICE_TESTS = (
+    "TestCodexCLIAccountConfigurationDefaultsAndOverrides",
+    "TestCodexCLITaskDefaultPermissionsSurvivePartialAccountConfig",
+    "TestCodexCLIAccountRejectsUnsupportedApprovalAndDiscoveryBeforeWrites",
+    "TestCodexCLIAccountRejectsProfilesBeforeAnyCredentialOrPersistenceWrite",
+    "TestCodexCLIAccountRejectsUnverifiableServiceTiersBeforeWrites",
+    "TestCodexCLIAuthPatchPreserveClearAndReplace",
+    "TestCodexCLIAuthRejectsOwnerMixingAndMaskedValues",
+    "TestCodexCLIAuthPatchRetainsAccessTokenOwnerWithoutIDTokenOrUserMetadata",
+    "TestCodexCLIConfigSurvivesOrdinaryAccountUpdateAndRejectsInvalidWrites",
+    "TestCodexCLIEnablementRequiresRuntimeOnlyForNewEnable",
+    "TestCodexCLIBulkConfigurationCannotCopyOneAccountsCredentialsToAnother",
+    "TestCodexCLITaskRejectsAmbiguousAuditAndExecutionFields",
+    "TestCodexCLITaskIdentitySourcePriorityAtExecution",
+    "TestCodexCLITaskConcurrentAccountsKeepCredentialsAndFilesIndependent",
+    "TestCodexCLITaskExecutionFailurePreservesUsageWithoutReplay",
+    "TestCodexCLITaskUnavailableRuntimePrecedesCredentialLookup",
+    "TestCodexCLITaskClientCancellationPreservesPartialUsageAndCleansHome",
+    "TestCodexCLITaskStreamingEmitsOnlyCompletedResponse",
+    "TestCodexCLITaskBillingUsesEffectiveConfiguredReasoning",
+    "TestCodexCLITaskAcceptsMaxFromExistingGroupReasoningMapping",
+    "TestCodexCLITaskStandardTierHonorsFastPolicyBeforeSideEffects",
+    "TestCodexCLITaskIgnoresInheritedConversationAcceptanceDeadline",
+)
 STEP_PROFILES = ("oauth_plan_cn", "oauth_plan_global", "apikey_payg_cn", "apikey_payg_global",
                  "apikey_plan_cn", "apikey_plan_global")
 STEP_PROTOCOLS = ("chat", "responses", "messages")
@@ -366,6 +390,19 @@ APIKEY_CODING_SUBTESTS = tuple(
 
 PROFILES = {
     "unit": (
+        RegressionGroup("./internal/codexcli", (
+            "TestReviewedManifestUsesOnlyPinnedOfficialAssets",
+            "TestUnverifiedSystemCLIDetectionNeverExecutesVersionProbe",
+            "TestSystemNativeCLINeedsReviewedBinaryDigestAndExactVersion",
+            "TestInstallFailuresPreservePreviousFilesAndRemoveStages",
+            "TestIndependentManagersShareInstallationFilesystemLock",
+            "TestArchiveExtractionRejectsUnsafeEntriesAndRemovesOutput",
+            "TestRunTaskFailureDoesNotRetryOrExposeProviderSecrets",
+            "TestRunTaskEnvironmentAndWorkingDirectoryAreAccountSpecific",
+            "TestRunTaskCancellationTerminatesTheWholeProcessGroup",
+            "TestHostConfigurationInstallStopsBeforeDownloadAndPublication",
+            "TestHostConfigurationTaskRechecksBeforeStartingPreviouslyReadyRuntime",
+        )),
         RegressionGroup("./internal/securityaudit", (
             "TestProviderFilesPromptAuditAllowsBinaryAndLogsSafeDiagnostics",
         )),
@@ -591,7 +628,19 @@ PROFILES = {
             "TestGrokMediaUsageFromResponseVideoCreateDoesNotBill",
             "TestGrokMediaUsageFromResponseVideoStatusBillsOnOfficialDone",
             ZHIPU_START_PLAN_TEST,
-        ) + CAPABILITY_SERVICE_TESTS, ("TestZhipuOAuthBuildAccountMaterialForEachPlan/start_plan_and_off-peak_are_estate_independent",)
+        ) + CAPABILITY_SERVICE_TESTS + CODEX_CLI_SERVICE_TESTS, ("TestZhipuOAuthBuildAccountMaterialForEachPlan/start_plan_and_off-peak_are_estate_independent",)
+        + tuple(
+            "TestCodexCLITaskBillingUsesEffectiveConfiguredReasoning/" + scenario
+            for scenario in ("saved_high", "request_overrides_saved_high", "request_high", "request_max", "unconfigured_default",
+                             "explicit_none_overrides_high", "failed_task_saved_high", "failed_task_override")
+        )
+        + tuple(
+            "TestCodexCLITaskStandardTierHonorsFastPolicyBeforeSideEffects/" + scenario
+            for scenario in ("standard_success", "group_force_rejected", "group_force_pass_rejected",
+                             "group_force_filter_allows_standard", "group_force_block_rejected",
+                             "global_missing_force_rejected", "global_any_force_leaves_missing_standard",
+                             "global_priority_block_leaves_standard", "missing_force_for_another_model_leaves_standard")
+        )
         + APIKEY_OBSERVATION_SUBTESTS + APIKEY_CODING_SUBTESTS + tuple(
             f"{NATIVE_REFRESH_COORDINATOR}/{provider}"
             for provider in ("deepseek", "kimi", "minimax", "stepfun")
@@ -872,6 +921,13 @@ PROFILES = {
             for mode in ("success", "timeout", "refused", "authentication_required", "missing", "mismatched")
         )),
         RegressionGroup("./internal/handler", (
+            "TestCodexCLIResponsesBothAuditEnginesSeeOriginalContentBeforeSideEffects",
+            "TestCodexCLIResponsesRealAuditEnginesPreserveCanonicalUserSelection",
+            "TestCodexCLIResponsesUnsupportedShapesFailBeforeAuditAndSideEffects",
+            "TestCodexCLIResponsesRequiresAuthenticationBeforeAudit",
+            "TestOrdinaryResponsesDoesNotEnableCLITransportFromHeadersOrRequestPath",
+            "TestCodexCLIResponsesRejectsDisabledAccountsAndNeverFallsBackToNativeTransport",
+            "TestCodexCLIResponsesDoesNotReadOrWriteConversationAffinity",
             "TestGeminiNativeModelsUsesDeclaredMappings",
             "TestGeminiNativeModelsUnmappedAccountKeepsUpstream",
             "TestGeminiNativeModelsOAuthTranslationAliasesStayUnavailable",
@@ -949,6 +1005,10 @@ PROFILES = {
             for scenario in ("chat-allowed", "chat-denied", "live-session-allowed", "live-session-denied")
         )),
         RegressionGroup("./internal/handler/admin", (NATIVE_UNSUPPORTED_REFRESH,
+            "TestCodexCLIAccountHandlerSecretAwareRoundTrip",
+            "TestCodexCLIAccountHandlerValidationPrecedesEveryWrite",
+            "TestCodexCLIInstallFailureDoesNotExposePrivateDiagnostics",
+            "TestCodexCLIInstallSuccessReturnsRuntimeStatus",
             "TestZhipuOffPeakSegmentHandlerOpaqueReadAndExactTermination",
             "TestZhipuOffPeakSegmentHandlerValidatesBeforeControlSideEffects",
             "TestZhipuOffPeakSegmentHandlerReportsDisabledMissingAndStoreFailure",

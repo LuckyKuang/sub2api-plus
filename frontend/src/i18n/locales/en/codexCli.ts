@@ -1,0 +1,27 @@
+export default {
+  codexCli: {
+    account: {
+      title: 'Official Codex CLI',
+      taskModeHint: 'Enable the separate CLI task endpoint for this account. It waits for the task to finish and returns the final result. Streaming sends only a completion event. Existing model endpoints keep their current outbound mode.',
+      runtimeUnavailable: 'The required official CLI is not ready. Install the release-pinned version in Settings before enabling task mode. You can still edit configuration or turn task mode off.',
+      configHint: 'Default: full access, no approval prompts, file credential storage. You can change the sandbox settings. Noninteractive tasks require approval_policy = "never". Leave empty to restore defaults. Authentication, provider routing and outbound identity fields are managed by the gateway.',
+      authTitle: 'OAuth credentials',
+      authHint: 'These edits update the account grant stored by the gateway. Saved credentials are never shown again. Keep, replace or explicitly clear each value; the server verifies account and workspace ownership. The CLI receives only a static auth.json projection of the current access token, without the refresh token or ID token, and never refreshes the grant itself.',
+      workspace: 'ChatGPT account / workspace ID',
+      configured: 'Configured',
+      notConfigured: 'Not configured',
+      secretAction: '{name}: update action',
+      keep: 'Keep existing value',
+      retry: 'Retry',
+      replace: 'Replace value',
+      clear: 'Clear value',
+      saveHint: 'Changes are saved with the account Save action. Closing or cancelling discards these edits.',
+      loadFailed: 'Could not load CLI configuration. Retry to edit it. Other account fields can still be saved.',
+      saveFailed: 'Could not save CLI configuration. Check the TOML, credentials and account ownership, or reopen the account after an authorization change.',
+      replacementRequired: 'Enter a value for every credential marked for replacement, or select Keep existing value.',
+      ownerChanged: 'The selected account changed. Reopen it before saving CLI configuration.',
+      saveProxyFirst: 'Save the proxy change separately, then reopen the account to edit CLI configuration or credentials. Neither change has been saved.',
+      partialSave: 'The account was saved, but its CLI configuration was not saved. Your CLI edits remain in the form.',
+    },
+  },
+}

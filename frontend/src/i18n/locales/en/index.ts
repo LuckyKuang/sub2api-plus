@@ -2,6 +2,8 @@ import workspace from './workspace'
 import requestList from './requestList'
 import featureExtensions from './featureExtensions'
 import adminAccessKeys from './adminAccessKeys'
+import codexCli from './codexCli'
+import codexCliRuntime from './codexCliRuntime'
 
 import landing from './landing'
 import common from './common'
@@ -21,6 +23,8 @@ export default {
   ...inspection,
   ...billingRates,
   ...featureExtensions,
+  ...codexCli,
+  ...codexCliRuntime,
   adminAccessKeys,
 
   ...landing,

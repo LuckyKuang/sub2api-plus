@@ -91,6 +91,9 @@ func (s *adminServiceImpl) CommitOAuthCredentials(ctx context.Context, expected 
 	if err := s.normalizeOpenAIAccountUserAgent(ctx, expected.Platform, accountType, credentials); err != nil {
 		return nil, err
 	}
+	if err := ValidateCodexCLIEnablement(ctx, expected.Credentials, credentials); err != nil {
+		return nil, err
+	}
 	updates, err := cloneAccountJSONMap(extra)
 	if err != nil {
 		return nil, err

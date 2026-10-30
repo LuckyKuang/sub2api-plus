@@ -255,6 +255,12 @@ func NewAccountService(accountRepo AccountRepository, groupRepo GroupRepository)
 
 // Create 创建账号
 func (s *AccountService) Create(ctx context.Context, req CreateAccountRequest) (*Account, error) {
+	if err := NormalizeCodexCLIAccountCredentials(req.Platform, req.Type, req.Credentials); err != nil {
+		return nil, err
+	}
+	if err := ValidateCodexCLIEnablement(ctx, nil, req.Credentials); err != nil {
+		return nil, err
+	}
 	if req.Platform == PlatformTypeSafe && req.Type != AccountTypeAPIKey {
 		return nil, errors.New("typesafe accounts only support apikey credentials")
 	}
@@ -370,7 +376,22 @@ func (s *AccountService) Update(ctx context.Context, id int64, req UpdateAccount
 	}
 
 	if req.Credentials != nil {
-		account.Credentials = SanitizeStoredCredentials(account.Platform, *req.Credentials)
+		candidate := make(map[string]any, len(*req.Credentials)+1)
+		for key, value := range *req.Credentials {
+			candidate[key] = value
+		}
+		if _, supplied := candidate[CodexCLIConfigCredentialKey]; !supplied {
+			if current, exists := account.Credentials[CodexCLIConfigCredentialKey]; exists {
+				candidate[CodexCLIConfigCredentialKey] = current
+			}
+		}
+		if err := NormalizeCodexCLIAccountCredentials(account.Platform, account.Type, candidate); err != nil {
+			return nil, err
+		}
+		if err := ValidateCodexCLIEnablement(ctx, account.Credentials, candidate); err != nil {
+			return nil, err
+		}
+		account.Credentials = SanitizeStoredCredentials(account.Platform, candidate)
 	}
 
 	if req.Extra != nil {

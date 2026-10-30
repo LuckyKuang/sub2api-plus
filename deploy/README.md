@@ -74,6 +74,18 @@ are not required.
 | **Apple container** | Native local stack on macOS 26 | Not needed (auto-setup) |
 | **Binary Install** | Production servers, systemd | Web-based wizard |
 
+The optional [managed Codex CLI task mode](../docs/CODEX_CLI.md) works with
+binary, Docker and Apple-container installations. Install its pinned runtime
+through the running gateway's Outbound identity settings and retain the
+application data volume. Runtime files and private task homes live under
+`DATA_DIR/codex` (default `./data/codex`). The service user requires write and
+execute access there plus HTTPS access to the pinned official GitHub release.
+The initial Full Access/no-approval policy lets CLI tools use the service user's
+permissions, including exposed container mounts. Per-account/task directories
+provide logical state isolation; they are not an OS isolation boundary.
+System or managed Codex configuration disables task mode; see its
+[configuration environment requirements](../docs/CODEX_CLI.md#isolation-and-deployment).
+
 ## Files
 
 | File | Description |

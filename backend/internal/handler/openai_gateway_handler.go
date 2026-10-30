@@ -556,6 +556,12 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	}
 
 	// 使用 gjson 只读提取字段做校验，避免完整 Unmarshal
+	if service.IsCodexCLITask(c.Request.Context()) {
+		if _, err := service.ParseCodexCLITaskRequest(securityAuditBody); err != nil {
+			h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", err.Error())
+			return
+		}
+	}
 	modelResult := gjson.GetBytes(securityAuditBody, "model")
 	if !modelResult.Exists() || modelResult.Type != gjson.String || modelResult.String() == "" {
 		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "model is required")
@@ -749,13 +755,18 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	defer inflightRelease()
 
 	// Generate session hash (header first; fallback to prompt_cache_key)
-	sessionHash := h.gatewayService.GenerateSessionHash(c, sessionHashBody)
+	sessionHash := ""
+	if !service.IsCodexCLITask(c.Request.Context()) {
+		sessionHash = h.gatewayService.GenerateSessionHash(c, sessionHashBody)
+	}
 	if h.rejectIfCyberSessionBlocked(c, apiKey, sessionHashBody, reqModel, cyberBlockFormatResponses) {
 		return
 	}
-	c.Request = c.Request.WithContext(service.WithOpenAIGuardianParentAffinity(
-		c.Request.Context(), c, sessionHashBody, reqModel,
-	))
+	if !service.IsCodexCLITask(c.Request.Context()) {
+		c.Request = c.Request.WithContext(service.WithOpenAIGuardianParentAffinity(
+			c.Request.Context(), c, sessionHashBody, reqModel,
+		))
+	}
 	requireCompact := legacyCompact
 
 	maxAccountSwitches := h.maxAccountSwitches
@@ -847,6 +858,8 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			}
 			if lastFailoverErr != nil {
 				h.handleFailoverExhausted(c, lastFailoverErr, streamStarted)
+			} else if service.IsCodexCLITask(c.Request.Context()) {
+				h.handleStreamingAwareError(c, http.StatusServiceUnavailable, "cli_account_unavailable", "No available accounts have Codex CLI task mode enabled", streamStarted)
 			} else {
 				h.handleFailoverExhaustedSimple(c, 502, streamStarted)
 			}
@@ -873,6 +886,14 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			zap.Float64("load_skew", scheduleDecision.LoadSkew),
 		)
 		account := selection.Account
+		if service.IsCodexCLITask(c.Request.Context()) && !service.CodexCLITaskAccountEnabled(account) {
+			failedAccountIDs[account.ID] = struct{}{}
+			if selection.ReleaseFunc != nil {
+				selection.ReleaseFunc()
+				selection.ReleaseFunc = nil
+			}
+			continue
+		}
 		if previousResponseID != "" && requestPlatform == service.PlatformOpenAI && !account.IsOpenAIApiKey() {
 			// The public Responses HTTP API supports previous_response_id on API-key
 			// accounts. OAuth/SetupToken upstreams do not, so keep searching instead

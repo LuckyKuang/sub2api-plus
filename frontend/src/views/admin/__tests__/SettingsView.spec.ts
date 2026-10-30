@@ -12,6 +12,22 @@ import { identityPresets, type OutboundIdentityView } from "@/api/admin/outbound
 import { identityPolicyFixture } from "@/components/account/__tests__/identityPolicyFixture";
 import { cssPixels, installAppStyles } from "@/__tests__/appStyles";
 
+// Runtime detection and installation have their own component suite. These
+// settings workflow tests must not call the local runtime management API.
+vi.mock("@/views/admin/settings/CodexCLIRuntimeSettings.vue", () => ({
+  default: { template: '<div data-testid="codex-cli-runtime-settings-stub" />' },
+}));
+// The access-key card starts two reads even while its settings tab is hidden.
+// Keep those independent management APIs inside the same fixture boundary.
+vi.mock("@/api/admin/adminAccessKeys", async (original) => ({
+  ...await original<typeof import("@/api/admin/adminAccessKeys")>(),
+  list: vi.fn().mockResolvedValue({ items: [], permissions: [] }),
+}));
+vi.mock("@/api/admin/groups", async (original) => ({
+  ...await original<typeof import("@/api/admin/groups")>(),
+  getAllIncludingInactive: vi.fn().mockResolvedValue([]),
+}));
+
 const { getOutboundIdentity, updateOutboundIdentity } = vi.hoisted(() => ({
   getOutboundIdentity: vi.fn(), updateOutboundIdentity: vi.fn(),
 }));

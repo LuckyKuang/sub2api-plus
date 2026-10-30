@@ -21,6 +21,15 @@ FORBIDDEN_BYPASSES = (
     "openai_codex_version_auto_sync_enabled",
 )
 PATH_GUARDS = {
+    Path("backend/internal/service/codex_cli_forward.go"): {
+        "required": (
+            ("ctx = withRequestCredentialOwner(ctx, account, token)", 1),
+            ("requestCredentialOwner(ctx, account)", 1),
+            ("s.applyOpenAIOutboundIdentity(ctx, owner, headers, true)", 1),
+            ('"http_headers": trustedHeaders', 1),
+        ),
+        "forbidden": ('headers.Set("User-Agent", codexCLIUserAgent)', 'os.Getenv("CODEX_USER_AGENT")'),
+    },
     Path("backend/internal/service/account_header_override.go"): {
         "required": (("outboundidentity.IsIdentityHeader(lowerName)", 1),),
         "forbidden": (),

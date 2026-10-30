@@ -4,6 +4,15 @@ Sub2API Plus accepts OpenAI-compatible Responses requests over HTTP and
 client-facing WebSocket ingress. Account routing can use an upstream WebSocket
 or bridge the client WebSocket to an HTTP/SSE upstream.
 
+The separate [managed Codex CLI task endpoint](../CODEX_CLI.md),
+`POST /v1/codex-cli/responses`, accepts only single-turn text tasks and maps
+the CLI's final result to a limited Responses-shaped response. Enabling it on
+an account leaves the ordinary Responses HTTP/WebSocket routes unchanged. The
+CLI executes an agent task and may run tools under its saved sandbox/approval
+policy; it does not transparently relay arbitrary Responses payloads.
+It supports Standard service tier only; a group/global policy that ultimately
+requires Fast returns HTTP 403 before credential lookup or CLI startup.
+
 The **Use Key** dialog enables `api_key_model_discovery = true` under `[features]`
 when generating a remote Codex model catalog configuration. This applies to
 OpenAI HTTP/WebSocket, Grok, and all routed Codex groups, including StepFun and

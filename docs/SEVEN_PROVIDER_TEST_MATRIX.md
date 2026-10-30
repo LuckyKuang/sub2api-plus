@@ -34,6 +34,36 @@ otherwise. A source-level mapping becomes release evidence only when its
 applicable unit/integration profile passes on the final tree. Unit mocks do not
 prove PostgreSQL locking, rollback, outbox atomicity, or multi-replica storage.
 
+## Independent pinned Codex CLI task requirements
+
+The [task contract](CODEX_CLI.md) adds one OpenAI OAuth execution entrypoint;
+it does not change ordinary Responses/Chat/WS transports or implement a
+transparent CLI proxy. The unit coverage manifest and frontend coverage
+manifest require the entrypoints below. Their observed run results apply only
+to the validated source tree.
+
+| Business requirement | Regression and observable acceptance |
+| --- | --- |
+| Only the project-pinned official executable is eligible; installation failure preserves the existing artifact | `codexcli/TestReviewedManifestUsesOnlyPinnedOfficialAssets`, `TestUnverifiedSystemCLIDetectionNeverExecutesVersionProbe`, `TestSystemNativeCLINeedsReviewedBinaryDigestAndExactVersion`, `TestInstallFailuresPreservePreviousFilesAndRemoveStages`, `TestIndependentManagersShareInstallationFilesystemLock`, and `TestArchiveExtractionRejectsUnsafeEntriesAndRemovesOutput`: literal version/digests, no unverified execution, atomic publication, lock ownership and unsafe archive rejection. |
+| Host configuration cannot replace the account's controlled execution settings | `codexcli/TestHostConfigurationInstallStopsBeforeDownloadAndPublication` and `TestHostConfigurationTaskRechecksBeforeStartingPreviouslyReadyRuntime`: conflicting/inconclusive system or managed settings stop download/process startup. Injected macOS command tests do not claim native macOS execution. |
+| Account management preserves credential ownership and ordinary editor behavior | `service/TestCodexCLIAuthPatchPreserveClearAndReplace`, `TestCodexCLIAuthRejectsOwnerMixingAndMaskedValues`, `TestCodexCLIConfigSurvivesOrdinaryAccountUpdateAndRejectsInvalidWrites`, `TestCodexCLIEnablementRequiresRuntimeOnlyForNewEnable`, and `TestCodexCLIBulkConfigurationCannotCopyOneAccountsCredentialsToAnother`; `handler/admin/TestCodexCLIAccountHandlerSecretAwareRoundTrip` and `TestCodexCLIAccountHandlerValidationPrecedesEveryWrite`: write-only tokens, owner checks, readiness before new enablement, no cross-account credential copying and no invalid writes. |
+| Every accepted task reaches both canonical ingress audit engines before side effects | `handler/TestCodexCLIResponsesBothAuditEnginesSeeOriginalContentBeforeSideEffects`, `TestCodexCLIResponsesRealAuditEnginesPreserveCanonicalUserSelection`, `TestCodexCLIResponsesUnsupportedShapesFailBeforeAuditAndSideEffects`, and `TestCodexCLIResponsesRequiresAuthenticationBeforeAudit`: original input/instructions and applicable canonical extraction, zero selection/billing/concurrency/native-transport effects on rejection. |
+| Tasks retain one account's identity, proxy and private state without using ordinary conversation affinity | `service/TestCodexCLITaskIdentitySourcePriorityAtExecution`, `TestCodexCLITaskConcurrentAccountsKeepCredentialsAndFilesIndependent`, `TestCodexCLITaskIgnoresInheritedConversationAcceptanceDeadline`; `handler/TestCodexCLIResponsesDoesNotReadOrWriteConversationAffinity`, `TestCodexCLIResponsesRejectsDisabledAccountsAndNeverFallsBackToNativeTransport`, and `TestOrdinaryResponsesDoesNotEnableCLITransportFromHeadersOrRequestPath`: literal identity priority, separate account files/bearers, unchanged conversation routes/cache, released ineligible slots and no HTTP fallback. |
+| Started tasks never replay and cancellation removes temporary credentials | `service/TestCodexCLITaskExecutionFailurePreservesUsageWithoutReplay`, `TestCodexCLITaskClientCancellationPreservesPartialUsageAndCleansHome`; `codexcli/TestRunTaskFailureDoesNotRetryOrExposeProviderSecrets` and `TestRunTaskCancellationTerminatesTheWholeProcessGroup`: one launch, sanitized errors, retained reported usage, removed private state and child-group cancellation. |
+| Final-only SSE and billing retain the actual execution settings | `service/TestCodexCLITaskStreamingEmitsOnlyCompletedResponse` and `TestCodexCLITaskBillingUsesEffectiveConfiguredReasoning`: completed event without invented token deltas; eight required pricing scenarios for saved/request/override/default/none/max and failed partial usage, with independent $1/$1.50/$2/$3 expectations. `TestCodexCLITaskAcceptsMaxFromExistingGroupReasoningMapping` retains the existing group's supported max mapping in the materialized execution configuration. |
+| Standard-only tasks cannot bypass Fast policy or be billed from an unverified paid-tier configuration | `service/TestCodexCLITaskStandardTierHonorsFastPolicyBeforeSideEffects`: nine required standard/group-force/global pass/filter/block/force/model-filter scenarios; only the native default sentinel reaches task config, unsupported required Fast returns 403 with zero credential/cache/files/process effects, and successful Standard never acquires paid-tier billing. `TestCodexCLIAccountRejectsUnverifiableServiceTiersBeforeWrites` rejects all paid/unknown tier edits without changing stored credentials. |
+| Runtime/account UI keeps installation explicit and late saves isolated | Required cases in `CodexCLIRuntimeSettings.spec.ts`, `CodexCLIEditor.spec.ts`, and `EditAccountModal.codexCli.spec.ts`: pinned-source readiness, explicit install/retry, write-only preserve/replace/clear, old-owner invalidation, partial-save feedback and no obsolete draft submission. Component fixtures do not prove browser or production OAuth execution. |
+
+`tools/test_codex_cli_wire.py` separately runs the exact reviewed official Linux
+binary against a synthetic upstream for default/account/global identity, Plus
+and Enterprise terminal 401, and Business saved reasoning under hostile trusted
+ancestor configuration. It checks actual headers/body, aggregate usage and
+unchanged execution/canonical credentials. This is local protocol evidence,
+not production entitlement or live-model acceptance. The proxy trap observes
+proxy-aware requests only; arbitrary sockets from task tools are outside that
+claim. Run the ordinary unit/frontend coverage gates in the maintained
+validation container; the real-binary harness is a separate explicit command.
+
 ## October 28 upstream follow-up requirements
 
 These scenarios supplement the pre-existing seven-provider matrix for the

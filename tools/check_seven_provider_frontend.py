@@ -18,6 +18,25 @@ PROBE_GROUP = "proxy management single and batch probe ownership"
 REAUTH_GROUP = "existing-account reauthorization owner boundaries"
 REAUTH_ENTRIES = ("openai exchange", "openai RT", "grok exchange", "grok RT", "grok SSO")
 REQUIRED = {
+    "src/components/account/__tests__/CodexCLIEditor.spec.ts": (
+        "Codex CLI account editor shows defaults and disables task mode until the pinned runtime is ready",
+        "Codex CLI account editor separates secret preservation, replacement and explicit clearing",
+        "Codex CLI account editor revokes a prepared save when authorization changes under the same account ID",
+    ),
+    "src/components/account/__tests__/EditAccountModal.codexCli.spec.ts": (
+        "EditAccountModal Codex CLI save workflow saves unrelated account edits without writing CLI defaults or credentials",
+        "EditAccountModal Codex CLI save workflow keeps CLI drafts and reports partial success if its save fails",
+        "EditAccountModal Codex CLI save workflow does not submit an old CLI draft after the selected account changes during Save",
+        "EditAccountModal Codex CLI save workflow rejects changing proxy null to 7 with CLI edits before either write",
+        "EditAccountModal Codex CLI save workflow rejects changing proxy 7 to null with CLI edits before either write",
+        "EditAccountModal Codex CLI save workflow saves a proxy independently and binds subsequent CLI edits to the reloaded owner",
+    ),
+    "src/views/admin/settings/__tests__/CodexCLIRuntimeSettings.spec.ts": (
+        "Codex CLI runtime settings checks installation without automatically installing or checking a latest release",
+        "Codex CLI runtime settings does not call a version-matching system CLI ready without source verification",
+        "Codex CLI runtime settings shows a detected unverified installation without claiming it is missing or executing it to read its version",
+        "Codex CLI runtime settings keeps old installation information after a failed update and retries explicitly",
+    ),
     "src/components/account/__tests__/GrokModelDiagnosticsPanel.spec.ts": (
         "GrokModelDiagnosticsPanel labels the current endpoint separately from models observed before a source change",
         "GrokModelDiagnosticsPanel keeps the historical catalog visible when refreshing the latest status fails",

@@ -402,6 +402,8 @@ func registerAccountRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpAu
 		accounts.GET("/opencode-go-usage/settings", h.Admin.Account.GetOpenCodeGoUsageSettings)
 		accounts.PUT("/opencode-go-usage/settings", h.Admin.Account.UpdateOpenCodeGoUsageSettings)
 		accounts.GET("/:id", h.Admin.Account.GetByID)
+		accounts.GET("/:id/codex-cli", h.Admin.Account.GetCodexCLIAccount)
+		accounts.PUT("/:id/codex-cli", h.Admin.Account.UpdateCodexCLIAccount)
 		accounts.GET("/:id/claude/reset-credits", h.Admin.Account.ClaudeResetCredits)
 		// Same protection as the Codex reset-quota route (admin auth, audit, compliance guard).
 		accounts.POST("/:id/claude/reset-credits/redeem", h.Admin.Account.RedeemClaudeResetCredit)
@@ -617,6 +619,8 @@ func registerSettingsRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpA
 		adminSettings.GET("/outbound-identity", h.Admin.Setting.GetOutboundIdentity)
 		adminSettings.PUT("/outbound-identity", h.Admin.Setting.UpdateOutboundIdentity)
 		adminSettings.POST("/outbound-identity/preview", h.Admin.Setting.PreviewOutboundIdentity)
+		adminSettings.GET("/codex-cli", h.Admin.Setting.GetCodexCLI)
+		adminSettings.POST("/codex-cli/install", gin.HandlerFunc(stepUpAuth), h.Admin.Setting.InstallCodexCLI)
 		adminSettings.POST("/test-smtp", h.Admin.Setting.TestSMTPConnection)
 		adminSettings.POST("/send-test-email", h.Admin.Setting.SendTestEmail)
 		adminSettings.GET("/email-templates", h.Admin.Setting.ListEmailTemplates)

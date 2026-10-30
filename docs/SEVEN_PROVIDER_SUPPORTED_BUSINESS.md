@@ -17,7 +17,7 @@ Start 权益和可选 off-peak 持久恢复。完整后端 unit/integration/lint
 
 | 平台 | 已实现的账号与授权 | 已实现的推理和控制业务 | 必须保留的边界 |
 | --- | --- | --- | --- |
-| OpenAI / Codex | API Key、既有 OAuth 账号；授权码、设备授权、刷新与撤销等独立操作 | Responses HTTP/WS、Chat/Messages 适配、图像兼容与异步任务/S3 结果存储、模型目录、用量与配额重置、已有 Alpha Search 和 Live 创建/sideband 路径；可选 OAuth 传输插件宿主 | HTTP、WS、图像任务/存储、插件进程、模型发现、预检、登录和控制请求分别验收；各账号类型不自动共享授权能力。Codex 身份优先级及字段省略规则保持不变。 |
+| OpenAI / Codex | API Key、既有 OAuth 账号；授权码、设备授权、刷新与撤销等独立操作 | Responses HTTP/WS、Chat/Messages 适配、图像兼容与异步任务/S3 结果存储、模型目录、用量与配额重置、已有 Alpha Search 和 Live 创建/sideband 路径；可选 OAuth 传输插件宿主；普通凭据所有者 OAuth 账号的独立固定版 Codex CLI 单轮任务 | HTTP、WS、图像任务/存储、插件进程、CLI 任务、模型发现、预检、登录和控制请求分别验收；各账号类型不自动共享授权能力。Codex 身份优先级及字段省略规则保持不变。 |
 | xAI / Grok | API Key、OAuth 浏览器授权；可选 SSO/device 转换 | Responses、Chat、Messages、搜索、语音/Realtime、图像、视频及状态查询；模型、计费/配额与压缩能力探测 | 媒体、Realtime、控制和辅助 HTTP 发送是独立入口；SSO 原文不落库。实际模型/套餐权限由上游决定。 |
 | DeepSeek | API Key；Harness 授权码与 PKCE 登录、重授权 | 原生 Messages；Chat/Responses 适配；模型能力过滤、用户与钱包观测；API Key 余额入口；首批 Anthropic 图片 Files 上传、本地列表/元数据、到期、删除与推理引用 | 原生 OAuth 使用 `x-dsh-auth-token`；官方协议未公布刷新操作，不能虚构刷新成功。当前只有一个授权地区。Files 仅支持已冻结的 Anthropic 家族与媒体类型，不泛称任意文件或 OpenAI Files 支持。 |
 | Kimi | API Key 的 payg/coding 配置；中国/国际设备授权、刷新和重授权 | 原生 Messages 及已有适配；模型发现、coding 用量和 API Key 余额/配额控制 | 登录、轮询、刷新、推理和控制保留同一地区、设备身份与凭据 owner；不能以通用 base URL 改写原生 issuer。 |
@@ -35,6 +35,18 @@ Start 权益和可选 off-peak 持久恢复。完整后端 unit/integration/lint
 [插件宿主协议](PLUGIN_DEVELOPMENT.md)。
 公共入口以[网关路由](../backend/internal/server/routes/gateway.go)为准；服务方法存在
 不代表新增公共路由，也不代表任意平台均允许访问。
+
+独立 `POST /v1/codex-cli/responses` 的有限支持以 [Codex CLI 契约](CODEX_CLI.md)
+为准：直接使用经校验的项目固定版本 `codex exec`，只接受单轮字符串输入，流式
+响应仅发送最终完成事件。旧推理入口不改走 CLI。OAuth 登录和刷新保留在项目，
+每次执行仅投影所选账号的 access token；账号配置和任务目录分离属于逻辑隔离。
+默认 Full Access 仍使用服务用户权限，不构成账号间操作系统安全边界。任务开始
+后禁止项目重放和换号；失败已报告用量及实际生效 reasoning 倍率仍走现有计费。
+任务固定 Standard tier，账号不能配置付费 tier；分组或全局 Fast 策略要求付费
+执行时，在取凭据、落盘或启动进程前明确拒绝。全局 filter 仍能移除分组 Fast
+要求后允许 Standard，禁止假定 CLI 接受配置就按 Fast 收费。
+其单测、组件测试和真实官方二进制的模拟上游证据分别列在测试矩阵；没有生产
+OAuth/套餐权限、原生 macOS MDM 命令或真实浏览器执行验收声明。
 
 ## 每个平台适用的共同验收项
 
@@ -147,8 +159,10 @@ Grok 创建弹窗目前没有显示密码登录选项。保留的密码事件处
 
 ## 明确排除或仍有限制的能力
 
-- 七个官方 coding agent 的本地工作区、编辑器、终端/TUI、本地 MCP、工具执行循环、
-  操作系统集成和所有 agent 内部恢复策略不属于本次网关等价实现。
+- 七个官方 coding agent 的编辑器、终端/TUI、操作系统集成和全部内部恢复策略
+  不属于网关等价实现。独立 Codex CLI 模式仅按上述任务契约运行官方 agent 的
+  临时工作区和工具循环；不提供通用工作区、调用方 MCP 或交互工具续接能力，
+  也不扩展到其他平台或旧网关入口。
 - Files 以[分平台契约](providers/FILES.md)为准。DeepSeek 首批仅 Anthropic 图片家族；
   MiniMax 首批仅 global API Key Chat 视频上传/引用及本地访问撤销。DeepSeek 其他文件
   家族及 MiniMax 的其他地区、managed OAuth、purpose，另有未列入首批的远程管理
