@@ -77,6 +77,25 @@ class CodexIdentityGuardTests(unittest.TestCase):
                 finally:
                     target.write_text(original, encoding="utf-8")
 
+    def test_cli_tasks_cannot_drop_acquired_owner_or_trusted_identity(self) -> None:
+        target = self.root / "backend/internal/service/codex_cli_forward.go"
+        original = target.read_text(encoding="utf-8")
+        for boundary in (
+            "ctx = withRequestCredentialOwner(ctx, account, token)",
+            "requestCredentialOwner(ctx, account)",
+            "s.applyOpenAIOutboundIdentity(ctx, owner, headers, true)",
+            '"http_headers": trustedHeaders',
+        ):
+            with self.subTest(boundary=boundary):
+                self.assertIn(boundary, original)
+                target.write_text(original.replace(boundary, "removed_boundary", 1), encoding="utf-8")
+                try:
+                    result, errors = self.check()
+                    self.assertEqual(1, result, errors)
+                    self.assertIn("codex_cli_forward.go", errors)
+                finally:
+                    target.write_text(original, encoding="utf-8")
+
 
 if __name__ == "__main__":
     unittest.main()

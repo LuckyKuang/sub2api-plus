@@ -87,6 +87,10 @@ preventing two large Go heaps from exhausting the 8-GiB container. It serializes
 lint and repository policy commands. Go test/lint commands and the frontend
 production build share one memory slot; cold compilation must not overlap the
 production build in the 8-GiB VM.
+The shared launcher sets `GOMEMLIMIT=6GiB` for Go processes, including cold-cache
+lint, while preserving the exact matrix commands. This per-process soft
+managed-memory target leaves runtime headroom and does not replace heavy-step
+serialization or cap total VM RSS.
 The frontend lane keeps install before lint, typecheck, full Vitest, build, and
 audit. Default parallel execution limits Vitest to two workers within the
 four-CPU container; `--serial` uses four. Every command and lane reports elapsed

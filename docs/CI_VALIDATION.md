@@ -64,6 +64,11 @@ retain their separate cache ownership.
 CI uses Docker on Linux and executes unit suites natively on amd64/arm64.
 Local checks continue to use Apple Containers on macOS, Docker in supported
 WSL2 Debian/Ubuntu, or Docker on Linux, with existing scoped cleanup.
+The shared launcher fixes `GOMEMLIMIT=6GiB` inside its 8-GiB validation container,
+so cold-cache Go lint leaves headroom without changing the command, linter scope
+or heavy-step scheduling. This is a per-process soft managed-memory target;
+non-Go memory and aggregate process RSS remain outside that target. Host
+environment values cannot disable or replace the declared container setting.
 
 The Apple lifecycle tests use fake runtime fixtures. Running them inside Linux
 containers does not claim live Apple Containers/WSL integration. Record any

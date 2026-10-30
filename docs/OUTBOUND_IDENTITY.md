@@ -4,6 +4,71 @@ Manage client declarations in **System Settings → Outbound identity**, next to
 Gateway. Gateway retains routing, timeouts, concurrency and protocol behavior.
 Identity settings do not change account authentication, model access or routing.
 
+## Managed Codex CLI tasks
+
+The optional [managed CLI mode](CODEX_CLI.md) adds a distinct
+`POST /v1/codex-cli/responses` task route. Its pinned executable version is
+`0.165.0`; it never changes the normal gateway transports or automatically
+updates Codex identity declarations. Runtime installation and wire identity are
+separate checks. A system CLI can execute only after both its exact version and
+native executable SHA-256 match the embedded official baseline; a version
+string alone cannot authorize execution.
+
+Task execution resolves the same credential-owning account identity as native
+gateway forwarding: valid `credentials.user_agent` → valid global
+`openai_codex_user_agent` → compiled default. Invalid/empty candidates fall
+through only to the next source. The exact default remains
+`codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color`, with
+`Originator: codex_cli_rs` and `Version: 0.165.0`. Running an official binary
+does not authorize its ambient OS, architecture, terminal or default headers
+to replace the selected identity.
+
+The gateway renders a controlled provider overlay into the private task
+`config.toml`. Its provider headers receive the already resolved User-Agent,
+Originator, Version and applicable trusted region/residency declarations;
+`Chatgpt-Account-Id` comes from the same owner snapshot. The access bearer is
+passed through the controlled provider's environment key with native
+`requires_openai_auth=false`, leaving refresh locking and database CAS owned by
+the project. The execution `auth.json` uses the official static `apikey` file
+mode with this same opaque access token. It never contains refresh/ID tokens
+or enables native ChatGPT cloud bootstrap/auth recovery; the stored account
+remains OAuth. Account-editable TOML cannot supply authentication, providers,
+environment credentials, headers or identity declarations. Inbound headers,
+request classification and the CLI's own ambient defaults never select a new
+identity source.
+
+The task overlay also turns off CLI update checks, analytics, feedback, web
+search, OpenTelemetry export, automatic plugin catalogs/remote apps and cloud
+skills in the account's root configuration. Each account supplies one
+`config.toml`; top-level `profile` and `profiles` are rejected, and external
+profile files or legacy profile mappings are unsupported. Saved root sandbox
+settings remain effective; noninteractive tasks require `approval_policy = "never"`
+and reject other policies on save. These auxiliary paths must not
+introduce independent provider traffic, identity selection or credential
+refresh outside the controlled task transport.
+
+The fixed official-binary contract harness is
+`tools/test_codex_cli_wire.py`. It captures real outbound headers rather than
+assuming provider header overrides win over native defaults. Runtime/version
+proof, same-owner credentials, source priority, exact default fingerprint and
+account/global overrides must remain covered before this route is enabled in a
+release. CLI tasks do not retry or fail over after process startup; ordinary
+HTTP/WS/probe/discovery and OAuth transports retain their existing source and
+snapshot regressions.
+
+Tasks explicitly use Standard service tier. The shared Fast policy is checked
+before credentials or task files; a final Fast requirement or block rejects
+execution. The fixed CLI can drop a configured paid tier according to model
+metadata and its JSONL does not report the actual tier, so task billing must not
+infer a paid tier from TOML. The effective request/account reasoning effort
+still participates in existing pricing multipliers.
+
+Task startup forces `project_root_markers=[]` at the command-line tier, bounding
+project configuration discovery to the fresh private workspace. Runtime checks
+reject system configuration files and macOS forced Codex preferences, whose
+managed layer could otherwise override account routing or identity. Inconclusive
+host checks disable execution; installing another copy does not bypass them.
+
 The gateway resolves a trusted triple: User-Agent, client identifier and client
 version. A preset renders only its defined wire declarations. Gemini and
 Antigravity encode the identifier/version in User-Agent; they do not acquire

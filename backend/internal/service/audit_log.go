@@ -136,6 +136,9 @@ var auditBodySensitiveExactKeys = func() map[string]struct{} {
 		"proxy_key", "custom_key", "session",
 		// Uploaded appearance images are user content, never audit payloads.
 		"background_image",
+		// CLI TOML is editable free text, including rejected secret-bearing
+		// input. Dedicated account writes must not log source snippets.
+		"config_toml", "auth_json",
 	}
 	set := make(map[string]struct{}, len(builtin)+len(SensitiveCredentialKeys)+16)
 	for _, k := range builtin {

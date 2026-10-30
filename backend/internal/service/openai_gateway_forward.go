@@ -47,11 +47,13 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	if shouldForwardOpenAIResponsesViaRawChatCompletions(account) {
 		SetActualOpenAIUpstreamEndpoint(c, "/v1/chat/completions")
 	}
-	filteredBody, filterErr := filterOpenAIResponsesNoneReasoningEffortForAccount(account, body)
-	if filterErr != nil {
-		return nil, filterErr
+	if !IsCodexCLITask(ctx) {
+		filteredBody, filterErr := filterOpenAIResponsesNoneReasoningEffortForAccount(account, body)
+		if filterErr != nil {
+			return nil, filterErr
+		}
+		body = filteredBody
 	}
-	body = filteredBody
 	clearGrokResponsesClientToolMapping(c)
 	clearOpenAIResponsesClientToolMapping(c)
 	clearOpenAIResponsesNamespaceNames(c)
@@ -85,6 +87,9 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			},
 		})
 		return nil, errors.New("codex_cli_only restriction: only codex official clients are allowed")
+	}
+	if IsCodexCLITask(ctx) {
+		return s.forwardCodexCLITask(ctx, c, account, body)
 	}
 
 	normalizedBody, normalized, err := normalizeOpenAICodexCompactReasoningEffortForAccount(c, account, body)

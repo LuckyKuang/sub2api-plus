@@ -562,6 +562,10 @@ def validation_run_command(
         "--env",
         "GOMAXPROCS=4",
         "--env",
+        # Leave headroom for non-Go memory in the fixed 8-GiB VM. This is a
+        # per-process soft managed-memory target, not a hard RSS limit.
+        "GOMEMLIMIT=6GiB",
+        "--env",
         "GOFLAGS=-p=2",
         "--env",
         "GIT_CONFIG_COUNT=3",

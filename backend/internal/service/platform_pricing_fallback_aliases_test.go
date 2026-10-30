@@ -5,6 +5,7 @@ package service
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -82,8 +83,11 @@ func TestPlatformPricingFallback_RegisteredDeepSeekAliasesPreserveFlashAndProRat
 			cost, err := billing.CalculateCostUnified(CostInput{
 				Ctx: context.Background(), Model: tc.model,
 				Group: &Group{ID: 77, Platform: PlatformDeepseek}, RateMultiplier: 1,
-				Tokens:   UsageTokens{InputTokens: 1000, OutputTokens: 500, CacheReadTokens: 1000},
-				Resolver: NewModelPricingResolver(nil, billing),
+				// These alias rates describe Sunday off-peak pricing. Pin the
+				// request time too; zero intentionally uses the current time.
+				PricingAt: time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC),
+				Tokens:    UsageTokens{InputTokens: 1000, OutputTokens: 500, CacheReadTokens: 1000},
+				Resolver:  NewModelPricingResolver(nil, billing),
 			})
 			require.NoError(t, err)
 			require.InDelta(t, tc.total, cost.TotalCost, 1e-12)

@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -944,6 +945,7 @@ class ValidationLaunchTest(unittest.TestCase):
     def test_macos_launch_uses_apple_container_run(self) -> None:
         runtime = push_cli.Runtime("apple-containers", compose_required=False)
         with (
+            mock.patch.dict(os.environ, {"GOMEMLIMIT": "off"}),
             mock.patch.object(push_cli, "ROOT", Path("/repo")),
             mock.patch.object(push_cli, "SCRIPT", Path("/repo/skills/push-cli/scripts/push_cli.py")),
             mock.patch.object(
@@ -982,6 +984,9 @@ class ValidationLaunchTest(unittest.TestCase):
         self.assertIn("run", command)
         self.assertIn("--memory", command)
         self.assertIn("8G", command)
+        self.assertIn("GOMEMLIMIT=6GiB", command)
+        self.assertNotIn("GOMEMLIMIT=off", command)
+        self.assertNotIn("GOMEMLIMIT", command)
         self.assertIn(
             "type=bind,source=/repo,target=/repo",
             command,
@@ -1001,6 +1006,7 @@ class ValidationLaunchTest(unittest.TestCase):
             "/mnt/c/repo",
         )
         with (
+            mock.patch.dict(os.environ, {"GOMEMLIMIT": "off"}),
             mock.patch.object(push_cli, "ROOT", Path("/repo")),
             mock.patch.object(push_cli, "SCRIPT", Path("/repo/skills/push-cli/scripts/push_cli.py")),
             mock.patch.object(
@@ -1039,12 +1045,16 @@ class ValidationLaunchTest(unittest.TestCase):
             command[:11],
         )
         self.assertIn("/mnt/c/repo:/mnt/c/repo", command)
+        self.assertIn("GOMEMLIMIT=6GiB", command)
+        self.assertNotIn("GOMEMLIMIT=off", command)
+        self.assertNotIn("GOMEMLIMIT", command)
         self.assertNotIn("go", command)
         cleanup.assert_called_once()
 
     def test_linux_launch_uses_docker_run(self) -> None:
         runtime = push_cli.Runtime("docker")
         with (
+            mock.patch.dict(os.environ, {"GOMEMLIMIT": "off"}),
             mock.patch.object(push_cli, "ROOT", Path("/repo")),
             mock.patch.object(push_cli, "SCRIPT", Path("/repo/skills/push-cli/scripts/push_cli.py")),
             mock.patch.object(
@@ -1079,6 +1089,9 @@ class ValidationLaunchTest(unittest.TestCase):
 
         command = run_step.call_args.args[1]
         self.assertEqual(["docker", "run", "--rm", "--cpus", "4", "--memory", "8G"], command[:7])
+        self.assertIn("GOMEMLIMIT=6GiB", command)
+        self.assertNotIn("GOMEMLIMIT=off", command)
+        self.assertNotIn("GOMEMLIMIT", command)
         self.assertNotIn("go", command)
         self.assertNotIn("pnpm", command)
         cleanup.assert_called_once()
