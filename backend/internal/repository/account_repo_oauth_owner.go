@@ -93,7 +93,9 @@ func (r *accountRepository) updateCredentialConfigurationIfUnchanged(ctx context
 	if r == nil || r.sql == nil {
 		return false, errors.New("OAuth credential repository SQL executor is not configured")
 	}
-	if expected == nil || expected.ID <= 0 || (!expected.IsOAuth() && !(expected.Platform == service.PlatformOpenAI && expected.Type == service.AccountTypeAPIKey && accountType == service.AccountTypeAPIKey && !recover && len(extra) == 0)) || expected.IsCredentialShadow() || len(credentials) == 0 ||
+	validOwnerType := expected != nil && (expected.IsOAuth() ||
+		(expected.Platform == service.PlatformOpenAI && expected.Type == service.AccountTypeAPIKey && accountType == service.AccountTypeAPIKey && !recover && len(extra) == 0))
+	if !validOwnerType || expected.ID <= 0 || expected.IsCredentialShadow() || len(credentials) == 0 ||
 		(accountType != service.AccountTypeOAuth && accountType != service.AccountTypeSetupToken && accountType != service.AccountTypeAPIKey) {
 		return false, errors.New("OAuth credential owner is invalid")
 	}

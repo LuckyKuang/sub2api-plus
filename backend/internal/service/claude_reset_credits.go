@@ -102,6 +102,9 @@ func NewClaudeResetCreditService(accounts AccountRepository, tokens *ClaudeToken
 		isolated := *client
 		isolated.Transport = claudeResetCreditTransport{base: client.Transport}
 		isolated.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+		// #nosec G704 -- only fetchBlock/organization/claim call this closure;
+		// they use fixed api.anthropic.com URLs and a canonical UUID path segment.
+		// Redirects are disabled above and resolved destination IPs are validated.
 		return isolated.Do(req)
 	}
 	return s

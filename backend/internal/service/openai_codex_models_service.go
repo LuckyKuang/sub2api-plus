@@ -1999,7 +1999,10 @@ func (s *OpenAIGatewayService) fetchOpenAIModelsUpstream(ctx context.Context, re
 				if clientErr != nil {
 					return nil, infraerrors.Newf(http.StatusInternalServerError, "OPENAI_CODEX_MODELS_PROXY_INVALID", "invalid proxy configuration: %v", clientErr)
 				}
-				resp, err = client.Do(req)
+				// This native branch uses the server-controlled ChatGPT models endpoint;
+				// validated account API Key destinations use httpUpstream above. The CLI
+				// callback preserves this original request and cannot choose another URL.
+				resp, err = client.Do(req) // #nosec G704 -- fixed OAuth destination; no account or inbound URL reaches this branch.
 			}
 		}
 		return resp, err

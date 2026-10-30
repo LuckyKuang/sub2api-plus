@@ -11,7 +11,7 @@ import (
 // reviewed executable must never change the transport of existing accounts.
 const SettingKeyCodexCLIBridgeEnabled = "openai_codex_cli_bridge_enabled"
 
-var ErrCodexCLIBridgeSettingUnavailable = errors.New("Codex CLI bridge setting is unavailable")
+var ErrCodexCLIBridgeSettingUnavailable = errors.New("codex CLI bridge setting is unavailable")
 
 // GetCodexCLIBridgeEnabled reads the current permission without a process-local
 // cache, so a successful disable applies to the next admission on every node.
