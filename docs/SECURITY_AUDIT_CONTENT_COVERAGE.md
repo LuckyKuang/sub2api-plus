@@ -20,6 +20,11 @@ global bridge switches cannot change content classification or bypass audit.
 `TestCodexCLIBridgeOrdinaryResponsesBothRealAuditsPrecedeSideEffects` and
 `TestCodexCLIBridgeOrdinaryResponsesBothEnginesReceiveOriginalEnvelope` retain
 the real-engine recognized-sibling and unchanged-envelope ordering evidence.
+`TestCodexCLIBridgeUnknownResponsesPassBothAuditsBeforeTransportAdmission`
+checks OAuth and API Key accounts with their bridge permission enabled: unknown
+valid input passes each real engine before user/account admission, without
+calling an audit supplier. A later unavailable bridge remains a transport error
+and cannot authorize native fallback.
 
 The optional [managed Codex CLI task route](CODEX_CLI.md),
 `POST /v1/codex-cli/responses`, accepts a deliberately limited single-turn text

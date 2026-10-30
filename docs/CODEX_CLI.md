@@ -254,6 +254,15 @@ or account. Provider HTTP failures remain provider HTTP responses.
 This includes proxy exit or relay read failure before the first response byte:
 Responses, Chat, Messages and WebSocket adapters preserve the terminal bridge
 error instead of turning it into account failover or temporary unscheduling.
+For HTTP 4xx/5xx, the bridge establishes that the entire error body arrived
+before any provider-status recovery or failover policy runs. Its diagnostic
+read uses the existing five-second and configured error-body byte limits
+(512 KiB by default). Read failures, timeouts and oversized error bodies close
+the bridge and remain terminal local failures. Complete provider rejections
+retain their original status, headers, bytes and ordinary recovery policy.
+The trusted provider callback applies the budget before the official proxy can
+buffer headers while waiting for the first body byte; a second check catches
+local proxy read failures. Successful responses retain streaming behavior.
 
 Disabling the global switch prevents new bridge admissions and leaves saved
 account configuration, installed artifacts and session routes intact. Ordinary
@@ -454,3 +463,8 @@ credential owner, proxy and headers. OAuth issuer login, refresh and revocation
 remain separate operations. Enabling bridging generates no additional probe.
 OAuth availability is `http_bridge_and_tasks`; API Key is `http_bridge_only`.
 API Key custom endpoints and bearers never acquire OAuth workspace/token fields.
+The automatic API Key Responses-capability probe also follows both live bridge
+switches and the acquired owner snapshot. An unavailable runtime or bridge
+failure cannot fall back to a native probe or become evidence of Responses
+support or lack of support. External image-result/CDN downloads retain their
+separate download transport and URL policy; they are not inference bridge hops.

@@ -775,11 +775,22 @@ The following remain explicit boundaries, rather than passing scenarios:
   full account/route CAS, atomic scheduler outbox, stale-key rejection, unchanged
   API Key/base URL and forbidden OAuth persistence reuse.
 - `openai_codex_cli_bridge_audit_test.go`: both real audit engines reject before
-  side effects for OAuth and API Key accounts. Existing unknown-item and sibling
-  extraction requirements apply unchanged.
+  side effects for OAuth and API Key accounts. Unknown valid input passes both
+  real engines before concurrency/account admission, without an audit supplier
+  request; unavailable bridge permissions remain a later transport failure and
+  never authorize native fallback. Recognized siblings remain auditable.
 
 - `codex_cli_control_plane_test.go`: OAuth/API Key model discovery, API Key
   chat/image probes, existing usage inference and WHAM usage/credit requests
   follow current global/account flags without replay. Prepared endpoint, body,
   auth and protocol headers remain intact; wrapping WHAM leaves its shared
   native client unchanged.
+- `codex_cli_capability_probe_test.go`: the actual automatic API Key Responses
+  capability probe obeys both permissions, preserves the acquired request and
+  manual identity pin, and cannot persist capability evidence or fall back to
+  native transport after a required setting/runtime or bridge failure.
+- `codex_cli_bridge_stream_test.go` and `codex_cli_bridge_error_response_test.go`:
+  incomplete 401/429/503 bodies remain terminal bridge errors across Responses,
+  Chat, Messages and WS adapters for OAuth/API Key accounts. Gateway, account
+  probe and control-plane boundaries retain complete provider errors, enforce
+  byte/time budgets, and release failed body resources without replay.

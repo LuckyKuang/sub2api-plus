@@ -101,6 +101,13 @@ is unavailable. Codex models discovery also uses the acquired credential
 owner's frozen proxy, including shadow accounts, and fails before sending when
 that proxy cannot be proven.
 
+Automatic API-key Responses capability probes also use the current global and
+credential-owner Codex CLI bridge permissions. Both enabled selects the official
+bridge; either disabled preserves the native TLS sender. The prepared request
+and owner snapshot remain unchanged. An unavailable required permission or
+runtime, or a bridge failure before/after sending, never authorizes a native
+fallback and cannot be persisted as evidence of Responses support.
+
 ## GPT-6 Astra
 
 The gateway uses OpenAI's canonical `gpt-6-astra` model ID. Bare `gpt-6`

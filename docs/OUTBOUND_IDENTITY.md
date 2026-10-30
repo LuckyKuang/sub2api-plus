@@ -97,6 +97,12 @@ CLI tasks do not retry or fail over after process startup; a transparent bridge
 must not replay a locally failed attempt after its provider callback has begun.
 Existing HTTP/WS/probe/discovery and OAuth paths retain their source and snapshot
 regressions, including when they use the selected transport callback.
+HTTP error responses must complete within the existing diagnostic byte/time
+budget before provider-status retries or failover become eligible. A bridge
+read failure, timeout or oversized diagnostic is terminal; complete rejection
+headers and bytes keep their ordinary policy. The automatic API Key Responses
+capability probe uses the same live bridge permissions and prepared owner
+identity; a bridge failure cannot trigger a native bypass or capability update.
 
 Tasks explicitly use Standard service tier. The shared Fast policy is checked
 before credentials or task files; a final Fast requirement or block rejects
