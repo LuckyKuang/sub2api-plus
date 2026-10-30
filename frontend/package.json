@@ -81,6 +81,7 @@
       "flatted@3.3.3": "3.4.2",
       "source-map-js@<1.2.2": ">=1.2.2",
       "dompurify@<3.4.17": ">=3.4.17",
+      "decode-uri-component@<0.5.1": "0.5.1",
       "follow-redirects@<1.16.1": ">=1.16.1"
     }
   }
