@@ -5,7 +5,6 @@
       <p class="mt-1 text-xs surface-muted">{{ t('codexCliRuntime.description') }}</p>
     </div>
     <p class="text-xs surface-muted">
-      <code>POST /v1/codex-cli/responses</code>
       {{ t('codexCliRuntime.taskHint') }}
     </p>
     <p class="text-xs text-amber-700 dark:text-amber-300">{{ t('codexCliRuntime.permissionsHint') }}</p>
@@ -29,13 +28,37 @@
         {{ t(ready ? 'codexCliRuntime.ready' : 'codexCliRuntime.notReady') }}
       </dd>
     </dl>
+    <div v-if="status" class="flex items-start justify-between gap-4 border-t border-gray-200 pt-4 dark:border-dark-600">
+      <div>
+        <h4 class="text-sm font-medium">{{ t('codexCliRuntime.bridgeTitle') }}</h4>
+        <p class="mt-1 text-xs surface-muted">{{ t('codexCliRuntime.bridgeHint') }}</p>
+        <p v-if="!ready && !bridgeEnabled" class="mt-1 text-xs text-amber-700 dark:text-amber-300">{{ t('codexCliRuntime.bridgeRequiresReady') }}</p>
+      </div>
+      <Toggle
+        v-model="bridgeEnabled"
+        :disabled="busy || (!bridgeEnabled && !ready)"
+        :aria-label="t('codexCliRuntime.bridgeTitle')"
+        data-testid="codex-cli-bridge-toggle"
+      />
+    </div>
     <p v-if="status && !ready && !checking && !errorKey" class="text-xs surface-muted" data-testid="codex-cli-runtime-reason">
       {{ reasonLabel }}
     </p>
     <p v-if="errorKey" role="alert" class="text-sm text-red-600 dark:text-red-400">{{ t(errorKey) }}</p>
     <p v-if="installedSuccessfully" role="status" class="text-sm text-emerald-700 dark:text-emerald-300">{{ t('codexCliRuntime.installedSuccessfully') }}</p>
+    <p v-if="bridgeSaved" role="status" class="text-sm text-emerald-700 dark:text-emerald-300">{{ t('codexCliRuntime.bridgeSaved') }}</p>
 
     <div class="flex flex-wrap gap-2">
+      <button
+        v-if="status"
+        type="button"
+        class="btn btn-primary btn-sm"
+        :disabled="busy || bridgeEnabled === status.bridge_enabled || (bridgeEnabled && !ready)"
+        data-testid="codex-cli-bridge-save"
+        @click="saveBridge"
+      >
+        {{ t(savingBridge ? 'codexCliRuntime.bridgeSaving' : 'codexCliRuntime.bridgeSave') }}
+      </button>
       <button
         type="button"
         class="btn btn-secondary btn-sm"
@@ -62,17 +85,21 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { getCodexCLIRuntime, installCodexCLI, type CodexCLIRuntimeStatus } from '@/api/admin/codexCliRuntime'
+import { getCodexCLIRuntime, installCodexCLI, updateCodexCLIBridge, type CodexCLIRuntimeStatus } from '@/api/admin/codexCliRuntime'
+import Toggle from '@/components/common/Toggle.vue'
 
 const { t } = useI18n()
 const status = ref<CodexCLIRuntimeStatus | null>(null)
 const checking = ref(false)
 const installing = ref(false)
+const savingBridge = ref(false)
+const bridgeEnabled = ref(false)
+const bridgeSaved = ref(false)
 const errorKey = ref('')
 const installedSuccessfully = ref(false)
 let generation = 0
-const busy = computed(() => checking.value || installing.value)
-const ready = computed(() => !errorKey.value && status.value?.execution_available
+const busy = computed(() => checking.value || installing.value || savingBridge.value)
+const ready = computed(() => errorKey.value !== 'codexCliRuntime.checkFailed' && status.value?.execution_available
   && status.value.installed && status.value.version_match && status.value.source_verified)
 const sourceLabel = computed(() => {
   if (status.value?.source === 'managed') return t('codexCliRuntime.managed')
@@ -97,9 +124,13 @@ async function refresh() {
   checking.value = true
   errorKey.value = ''
   installedSuccessfully.value = false
+  bridgeSaved.value = false
   try {
     const next = await getCodexCLIRuntime()
-    if (current === generation) status.value = next
+    if (current === generation) {
+      status.value = next
+      bridgeEnabled.value = next.bridge_enabled
+    }
   } catch {
     if (current === generation) errorKey.value = 'codexCliRuntime.checkFailed'
   } finally {
@@ -113,10 +144,12 @@ async function install() {
   installing.value = true
   errorKey.value = ''
   installedSuccessfully.value = false
+  bridgeSaved.value = false
   try {
     const next = await installCodexCLI()
     if (current !== generation) return
     status.value = next
+    bridgeEnabled.value = next.bridge_enabled
     if (next.execution_available && next.installed && next.version_match && next.source_verified) {
       installedSuccessfully.value = true
     } else {
@@ -126,6 +159,27 @@ async function install() {
     if (current === generation) errorKey.value = 'codexCliRuntime.installFailed'
   } finally {
     if (current === generation) installing.value = false
+  }
+}
+
+async function saveBridge() {
+  if (busy.value || !status.value || bridgeEnabled.value === status.value.bridge_enabled || (bridgeEnabled.value && !ready.value)) return
+  const current = ++generation
+  const requested = bridgeEnabled.value
+  savingBridge.value = true
+  bridgeSaved.value = false
+  errorKey.value = ''
+  installedSuccessfully.value = false
+  try {
+    const next = await updateCodexCLIBridge(requested)
+    if (current !== generation) return
+    status.value = next
+    bridgeEnabled.value = next.bridge_enabled
+    bridgeSaved.value = true
+  } catch {
+    if (current === generation) errorKey.value = 'codexCliRuntime.bridgeSaveFailed'
+  } finally {
+    if (current === generation) savingBridge.value = false
   }
 }
 

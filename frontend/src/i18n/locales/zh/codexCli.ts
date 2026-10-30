@@ -2,11 +2,13 @@ export default {
   codexCli: {
     account: {
       title: '官方 Codex CLI',
-      taskModeHint: '为此账号启用独立的 CLI 任务入口，等待任务完成后返回最终结果；流式请求仅发送完成事件。现有模型接口继续使用当前出站方式。',
-      runtimeUnavailable: '所需官方 CLI 尚未就绪，请先在设置中安装当前发行版固定的版本，再启用任务模式。仍可编辑配置或关闭任务模式。',
-      configHint: '默认完全访问、无需审批、文件存储凭据。可修改沙箱设置；非交互任务要求 approval_policy = "never"。留空恢复默认。认证、上游路由及出站身份字段由网关管理。',
+      taskModeHint: '此账号与统一出站身份中的全局桥接开关均开启时，现有模型接口通过官方 Codex CLI 桥接，仍使用本站的审计、调度、计费与会话粘性。',
+      bridgeDisabled: '全局桥接尚未开启。可先保存账号设置，再到系统设置 → 统一出站身份 → 官方 Codex CLI 运行环境开启桥接。',
+      createHint: 'CLI 设置与账号授权一并保存。使用本次授权的账号凭据，无需单独填写另一套凭据。',
+      runtimeUnavailable: '所需官方 CLI 尚未就绪，请先在设置中安装并检测当前发行版固定的版本，再启用此账号。仍可编辑配置或关闭账号开关。',
+      configHint: '此配置仅用于独立 CLI 任务接口，不改变现有模型接口透明桥接的请求与工具语义。独立任务默认完全访问、无需审批、文件存储凭据；可修改沙箱，approval_policy 必须为 "never"。留空恢复默认。认证、路由及出站身份由网关管理。',
       authTitle: 'OAuth 授权凭据',
-      authHint: '以下修改更新网关保存的账号授权，已保存的凭据不会再次显示。每项可选择保留、替换或明确清空，服务器会验证账号及工作区归属。CLI 仅接收当前 access token 的静态 auth.json 投影，不接收 refresh token 或 ID token，也不自行刷新授权。',
+      authHint: '以下修改更新网关保存的账号授权，已保存的凭据不会再次显示。每项可选择保留、替换或明确清空，服务器会验证账号及工作区归属。桥接使用本站选中账号的当前 access token，授权刷新由本站管理；独立 CLI 任务使用该令牌的静态 auth.json 投影，不接收 refresh token 或 ID token。',
       workspace: 'ChatGPT 账号 / 工作区 ID',
       configured: '已配置',
       notConfigured: '未配置',

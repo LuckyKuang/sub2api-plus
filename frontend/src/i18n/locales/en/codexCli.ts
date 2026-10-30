@@ -2,11 +2,13 @@ export default {
   codexCli: {
     account: {
       title: 'Official Codex CLI',
-      taskModeHint: 'Enable the separate CLI task endpoint for this account. It waits for the task to finish and returns the final result. Streaming sends only a completion event. Existing model endpoints keep their current outbound mode.',
-      runtimeUnavailable: 'The required official CLI is not ready. Install the release-pinned version in Settings before enabling task mode. You can still edit configuration or turn task mode off.',
-      configHint: 'Default: full access, no approval prompts, file credential storage. You can change the sandbox settings. Noninteractive tasks require approval_policy = "never". Leave empty to restore defaults. Authentication, provider routing and outbound identity fields are managed by the gateway.',
+      taskModeHint: 'When this account switch and the global bridge switch under Outbound identity are on, existing model endpoints use official Codex CLI bridging with the gateway audit, scheduling, billing and session affinity.',
+      bridgeDisabled: 'The global bridge is off. You can save account settings first, then enable bridging in System Settings → Outbound identity → Official Codex CLI runtime.',
+      createHint: 'CLI settings are saved together with the account authorization and use its credentials. No separate credentials are required.',
+      runtimeUnavailable: 'The required official CLI is not ready. Install and detect the release-pinned version in Settings before enabling this account. You can still edit configuration or turn the account switch off.',
+      configHint: 'This configuration applies only to the separate CLI task endpoint. It does not change request or tool semantics for transparent bridging on existing model endpoints. Separate tasks default to full access, no approvals and file credential storage. Sandbox settings are editable; approval_policy must be "never". Leave empty to restore defaults. The gateway manages authentication, routing and outbound identity.',
       authTitle: 'OAuth credentials',
-      authHint: 'These edits update the account grant stored by the gateway. Saved credentials are never shown again. Keep, replace or explicitly clear each value; the server verifies account and workspace ownership. The CLI receives only a static auth.json projection of the current access token, without the refresh token or ID token, and never refreshes the grant itself.',
+      authHint: 'These edits update the account grant stored by the gateway. Saved credentials are never shown again. Keep, replace or explicitly clear each value; the server verifies account and workspace ownership. Bridging uses the selected account current access token, with refresh managed by the gateway. Separate CLI tasks receive its static auth.json projection without refresh or ID tokens.',
       workspace: 'ChatGPT account / workspace ID',
       configured: 'Configured',
       notConfigured: 'Not configured',

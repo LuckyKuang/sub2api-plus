@@ -40,6 +40,9 @@ type runtimeCodexWSResolver struct {
 
 func (r runtimeCodexWSResolver) Resolve(account *Account) OpenAIWSProtocolDecision {
 	decision := r.base.Resolve(account)
+	// Protocol eligibility has no acquired-owner context. Bridge permission is
+	// evaluated by the live owner-aware ingress/send gate instead of freezing
+	// the selected row's CLI flag into this protocol decision.
 	if !r.settings.GetCodexTransportSettings(context.Background()).WSEnabled {
 		return openAIWSHTTPDecision("outbound_ws_disabled")
 	}
@@ -50,6 +53,9 @@ func (r runtimeCodexWSResolver) Resolve(account *Account) OpenAIWSProtocolDecisi
 // Responses mode selection remains the protocol resolver's responsibility.
 func (s *OpenAIGatewayService) codexUpstreamWSAllowed(ctx context.Context, account *Account) bool {
 	if s == nil {
+		return false
+	}
+	if enabled, err := s.codexCLIBridgeEnabled(ctx, account); enabled || err != nil {
 		return false
 	}
 	if !s.settingService.GetCodexTransportSettings(ctx).WSEnabled {
@@ -75,6 +81,9 @@ func (s *OpenAIGatewayService) requireCodexUpstreamWS(ctx context.Context, accou
 }
 
 func (s *OpenAIGatewayService) codexHTTPWSDecision(ctx context.Context, c *gin.Context, account *Account, body []byte) OpenAIWSProtocolDecision {
+	if enabled, err := s.codexCLIBridgeEnabled(ctx, account); enabled || err != nil {
+		return openAIWSHTTPDecision("official_cli_bridge")
+	}
 	if GetOpenAIClientTransport(c) != OpenAIClientTransportHTTP || isOpenAIResponsesCompactPath(c) {
 		return openAIWSHTTPDecision("client_protocol_http")
 	}

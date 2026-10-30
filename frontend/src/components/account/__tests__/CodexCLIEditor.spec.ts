@@ -57,7 +57,7 @@ function choose(wrapper: VueWrapper, name: string, value: string) {
 describe('Codex CLI account editor', () => {
   beforeEach(() => {
     getAccount.mockReset().mockResolvedValue(view())
-    getRuntime.mockReset().mockResolvedValue({ execution_available: false })
+    getRuntime.mockReset().mockResolvedValue({ execution_available: false, bridge_enabled: true })
     updateAccount.mockReset().mockResolvedValue(view({ expected_owner: ownerB }))
   })
   afterEach(() => {
@@ -72,7 +72,7 @@ describe('Codex CLI account editor', () => {
     expect(wrapper.get('[data-testid="codex-cli-id_token-status"]').text()).toBe('codexCli.account.notConfigured')
     expect(wrapper.get('[data-testid="codex-cli-mode"]').attributes('disabled')).toBeDefined()
     expect(wrapper.get('[data-testid="codex-cli-mode"]').attributes('aria-checked')).toBe('false')
-    expect(wrapper.text()).toContain('/v1/codex-cli/responses')
+    expect(wrapper.text()).not.toContain('/v1/codex-cli/responses')
     expect(wrapper.text()).toContain('codexCli.account.taskModeHint')
     expect(wrapper.find('select').exists()).toBe(false)
     expect(wrapper.find('input[type="password"]').exists()).toBe(false)
@@ -80,24 +80,42 @@ describe('Codex CLI account editor', () => {
     expect(updateAccount).not.toHaveBeenCalled()
   })
 
-  it('enables only the separate task mode when the runtime is ready', async () => {
-    getRuntime.mockResolvedValueOnce({ execution_available: true })
+  it.each(['off', 'unknown', 'check-failed'])('hides official CLI controls when global bridge is %s', async state => {
+    if (state === 'off') getRuntime.mockResolvedValue({ execution_available: true, bridge_enabled: false })
+    else if (state === 'unknown') getRuntime.mockResolvedValue({ execution_available: true })
+    else getRuntime.mockRejectedValue(new Error('never-show-runtime-secret'))
     const wrapper = editor()
     await flushPromises()
-    await wrapper.get('[data-testid="codex-cli-mode"]').trigger('click')
-    expect(wrapper.vm.prepareSave()!.payload).toEqual({ expected_owner: ownerA, config_toml: defaultConfig, enabled: true })
+    expect(wrapper.find('[data-testid="codex-cli-editor"]').exists()).toBe(false)
+    expect(wrapper.vm.prepareSave()).toBeNull()
+    expect(wrapper.html()).not.toContain('never-show-runtime-secret')
     expect(updateAccount).not.toHaveBeenCalled()
   })
 
-  it.each(['missing', 'check-failed'])('keeps task mode disabled for runtime %s', async state => {
-    if (state === 'check-failed') getRuntime.mockRejectedValueOnce(new Error('never-show-runtime-secret'))
+  it('preserves a custom saved config when global bridging is enabled', async () => {
+    const custom = 'sandbox_mode = "read-only"\nmodel = "gpt-6.1-sol"\n'
+    getRuntime.mockResolvedValue({ execution_available: true, bridge_enabled: true })
+    getAccount.mockResolvedValueOnce(view({ config_toml: custom }))
     const wrapper = editor()
     await flushPromises()
-    expect(wrapper.get('[data-testid="codex-cli-mode"]').attributes('disabled')).toBeDefined()
-    expect(wrapper.text()).toContain('codexCli.account.runtimeUnavailable')
-    expect(wrapper.html()).not.toContain('never-show-runtime-secret')
-    await wrapper.get('[data-testid="codex-cli-config"]').setValue('editable-config')
-    expect(wrapper.vm.prepareSave()!.payload).toEqual({ expected_owner: ownerA, config_toml: 'editable-config' })
+    expect(wrapper.get<HTMLTextAreaElement>('[data-testid="codex-cli-config"]').element.value).toBe(custom)
+    expect(wrapper.vm.prepareSave()).toBeNull()
+  })
+
+  it('refreshes global permission when reopened and does not save a hidden draft', async () => {
+    const wrapper = editor()
+    await flushPromises()
+    await wrapper.get('[data-testid="codex-cli-config"]').setValue('sandbox_mode = "read-only"')
+    expect(wrapper.vm.prepareSave()).not.toBeNull()
+    await wrapper.setProps({ active: false })
+    expect(wrapper.vm.prepareSave()).toBeNull()
+    getRuntime.mockResolvedValueOnce({ execution_available: true, bridge_enabled: false })
+    await wrapper.setProps({ active: true })
+    await flushPromises()
+    expect(getRuntime).toHaveBeenCalledTimes(2)
+    expect(wrapper.find('[data-testid="codex-cli-editor"]').exists()).toBe(false)
+    expect(wrapper.vm.prepareSave()).toBeNull()
+    expect(updateAccount).not.toHaveBeenCalled()
   })
 
   it('allows turning a saved task mode off while its runtime is missing', async () => {

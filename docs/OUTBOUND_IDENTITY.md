@@ -4,17 +4,20 @@ Manage client declarations in **System Settings → Outbound identity**, next to
 Gateway. Gateway retains routing, timeouts, concurrency and protocol behavior.
 Identity settings do not change account authentication, model access or routing.
 
-## Managed Codex CLI tasks
+## Managed Codex CLI bridge and tasks
 
-The optional [managed CLI mode](CODEX_CLI.md) adds a distinct
-`POST /v1/codex-cli/responses` task route. Its pinned executable version is
-`0.165.0`; it never changes the normal gateway transports or automatically
-updates Codex identity declarations. Runtime installation and wire identity are
+The optional [managed CLI mode](CODEX_CLI.md) uses the fixed official
+`responses-api-proxy` for existing gateway traffic only when both the global
+bridge environment and credential-owning account switches are enabled. It also
+retains the distinct `POST /v1/codex-cli/responses` agent task route. Both modes
+require global permission. Its pinned executable version is `0.165.0`; installing
+it never automatically enables a transport or updates Codex identity declarations.
+Runtime installation and wire identity are
 separate checks. A system CLI can execute only after both its exact version and
 native executable SHA-256 match the embedded official baseline; a version
 string alone cannot authorize execution.
 
-Task execution resolves the same credential-owning account identity as native
+Bridge and task execution resolve the same credential-owning account identity as native
 gateway forwarding: valid `credentials.user_agent` → valid global
 `openai_codex_user_agent` → compiled default. Invalid/empty candidates fall
 through only to the next source. The exact default remains
@@ -22,6 +25,42 @@ through only to the next source. The exact default remains
 `Originator: codex_cli_rs` and `Version: 0.165.0`. Running an official binary
 does not authorize its ambient OS, architecture, terminal or default headers
 to replace the selected identity.
+
+Transparent bridging receives the already prepared provider request and keeps
+its trusted User-Agent/Originator/Version triple, owner/workspace, target URL,
+body and proxy. The official proxy receives only a random one-use loopback
+nonce through stdin, never an OAuth JWT. Its authenticated private relay can
+invoke only the one original credential-owner callback and checks the relay
+payload before any provider write. Local proxy URLs or CLI-generated header
+defaults cannot become provider routing or identity inputs. The callback uses
+the gateway's existing native TLS or plugin sender and retains signing and
+trusted declarations. Credential-owner acquisition and same-owner snapshots
+remain authoritative across preparation, retries and failover; a new account
+resolves a new snapshot. No service-wide CLI auth file or thread state is
+switched between accounts, and bridge toggles never reset conversation affinity.
+Direct upstream WebSocket is disabled for selected bridge accounts; the
+existing HTTP bridge adapter owns WebSocket ingress/history without selecting
+a new outbound identity source.
+
+The bridge switches choose a transport, not an identity preset. Each new
+request, probe or accepted WebSocket turn evaluates the current global flag
+AND the current acquired credential owner's account flag. Either flag off
+uses the existing unified native sender with the same account → global →
+compiled-default identity precedence above; both flags on use the official
+CLI hop with that same resolved identity. The live account read supplies only
+the transport flag and cannot replace credentials, proxy or identity snapshots.
+A known disabled switch selects native transport even if the other switch is
+unavailable. When neither switch is known disabled, unavailable required
+permission storage fails closed rather than selecting an alternate hop.
+An already submitted request finishes on its chosen transport without replay.
+
+Existing HTTP bridge connections reevaluate the hop for each next turn in
+both directions. An already open native upstream WebSocket may finish its
+submitted turn, but enabling both switches requires a client reconnect before
+another upstream write; continuation follows the existing full-history rules.
+Switches never clear account identity overrides, session affinity, owner,
+generation or migration leases. Disabling CLI bridging does not force the
+compiled fingerprint over a valid account or global declaration.
 
 The gateway renders a controlled provider overlay into the private task
 `config.toml`. Its provider headers receive the already resolved User-Agent,
@@ -52,9 +91,12 @@ The fixed official-binary contract harness is
 assuming provider header overrides win over native defaults. Runtime/version
 proof, same-owner credentials, source priority, exact default fingerprint and
 account/global overrides must remain covered before this route is enabled in a
-release. CLI tasks do not retry or fail over after process startup; ordinary
-HTTP/WS/probe/discovery and OAuth transports retain their existing source and
-snapshot regressions.
+release. The same harness covers the real official proxy and Go nonce relay,
+unchanged opaque Responses request/response bytes and terminal provider errors.
+CLI tasks do not retry or fail over after process startup; a transparent bridge
+must not replay a locally failed attempt after its provider callback has begun.
+Existing HTTP/WS/probe/discovery and OAuth paths retain their source and snapshot
+regressions, including when they use the selected transport callback.
 
 Tasks explicitly use Standard service tier. The shared Fast policy is checked
 before credentials or task files; a final Fast requirement or block rejects

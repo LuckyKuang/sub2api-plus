@@ -114,7 +114,7 @@ func TestForwardAlphaSearchOAuthAcceptsOfficialProductOriginatorAndPreservesWire
 		Header:     http.Header{"Content-Type": []string{"application/json"}},
 		Body:       io.NopCloser(strings.NewReader(`{"encrypted_output":"ciphertext","output":"search result"}`)),
 	}}
-	service := &OpenAIGatewayService{
+	service := &OpenAIGatewayService{settingService: &SettingService{settingRepo: &openAIIdentitySettingRepoStub{values: map[string]string{SettingKeyCodexCLIBridgeEnabled: "false"}}},
 		cfg:          &config.Config{Gateway: config.GatewayConfig{ForceCodexCLI: true}},
 		httpUpstream: upstream,
 	}
@@ -176,7 +176,7 @@ func TestForwardAlphaSearch_CodexProfileGateRunsBeforeCredentialLookup(t *testin
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/alpha/search", bytes.NewReader(body))
 
 	upstream := &httpUpstreamRecorder{}
-	svc := &OpenAIGatewayService{httpUpstream: upstream}
+	svc := &OpenAIGatewayService{settingService: &SettingService{settingRepo: &openAIIdentitySettingRepoStub{values: map[string]string{SettingKeyCodexCLIBridgeEnabled: "false"}}}, httpUpstream: upstream}
 	account := &Account{
 		ID:       43,
 		Platform: PlatformOpenAI,
@@ -224,7 +224,7 @@ func TestForwardAlphaSearchPATUsesResponsesWebSearchFallback(t *testing.T) {
 		Header:     http.Header{"Content-Type": []string{"text/event-stream"}, "x-request-id": []string{"req-search"}},
 		Body:       io.NopCloser(strings.NewReader(alphaSearchResponsesSSE("search result"))),
 	}}
-	service := &OpenAIGatewayService{
+	service := &OpenAIGatewayService{settingService: &SettingService{settingRepo: &openAIIdentitySettingRepoStub{values: map[string]string{SettingKeyCodexCLIBridgeEnabled: "false"}}},
 		cfg:          &config.Config{Gateway: config.GatewayConfig{ForceCodexCLI: true}},
 		httpUpstream: upstream,
 	}
@@ -318,7 +318,7 @@ func TestForwardAlphaSearchPATBackfillsMissingChatGPTAccountMetadata(t *testing.
 		Body:       io.NopCloser(strings.NewReader(alphaSearchResponsesSSE("search result"))),
 	}}
 	oauthService := NewOpenAIOAuthService(nil, nil)
-	service := &OpenAIGatewayService{
+	service := &OpenAIGatewayService{settingService: &SettingService{settingRepo: &openAIIdentitySettingRepoStub{values: map[string]string{SettingKeyCodexCLIBridgeEnabled: "false"}}},
 		cfg:                 &config.Config{},
 		httpUpstream:        upstream,
 		openAITokenProvider: NewOpenAITokenProvider(nil, nil, oauthService),
@@ -387,7 +387,7 @@ func TestForwardAlphaSearchPATWhoamiMetadataFencesPersistenceAndAttemptEvidence(
 			upstream := &httpUpstreamRecorder{resp: &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"text/event-stream"}},
 				Body: io.NopCloser(strings.NewReader(alphaSearchResponsesSSE("search result")))}}
 			oauthService := NewOpenAIOAuthService(nil, nil)
-			service := &OpenAIGatewayService{cfg: &config.Config{}, accountRepo: repo, httpUpstream: upstream,
+			service := &OpenAIGatewayService{settingService: &SettingService{settingRepo: &openAIIdentitySettingRepoStub{values: map[string]string{SettingKeyCodexCLIBridgeEnabled: "false"}}}, cfg: &config.Config{}, accountRepo: repo, httpUpstream: upstream,
 				openAITokenProvider: NewOpenAITokenProvider(nil, nil, oauthService)}
 			ctx := WithOutboundIdentityScope(context.Background(), c)
 			recordRequestCredentialOwner(ctx, account, "at-test-token")
@@ -462,7 +462,7 @@ func TestForwardAlphaSearchAPIKeyMapsModelAndPassesThroughError(t *testing.T) {
 		Header:     http.Header{"Content-Type": []string{"application/json"}},
 		Body:       io.NopCloser(strings.NewReader(upstreamBody)),
 	}}
-	service := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream}
+	service := &OpenAIGatewayService{settingService: &SettingService{settingRepo: &openAIIdentitySettingRepoStub{values: map[string]string{SettingKeyCodexCLIBridgeEnabled: "false"}}}, cfg: &config.Config{}, httpUpstream: upstream}
 	account := &Account{
 		ID:       7,
 		Platform: PlatformOpenAI,
@@ -502,7 +502,7 @@ func TestForwardAlphaSearchReturnsFailoverBeforeWriting(t *testing.T) {
 		Header:     http.Header{"Content-Type": []string{"application/json"}},
 		Body:       io.NopCloser(strings.NewReader(`{"error":{"message":"rate limited"}}`)),
 	}}
-	service := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream}
+	service := &OpenAIGatewayService{settingService: &SettingService{settingRepo: &openAIIdentitySettingRepoStub{values: map[string]string{SettingKeyCodexCLIBridgeEnabled: "false"}}}, cfg: &config.Config{}, httpUpstream: upstream}
 	account := &Account{
 		ID:       8,
 		Platform: PlatformOpenAI,
@@ -545,7 +545,7 @@ func TestForwardAlphaSearchSetupToken429CarriesSameAccountRetryWindow(t *testing
 		},
 		Body: io.NopCloser(strings.NewReader(`{"error":{"type":"rate_limit_error","code":"rate_limit_exceeded","message":"rate limited"}}`)),
 	}}
-	service := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream}
+	service := &OpenAIGatewayService{settingService: &SettingService{settingRepo: &openAIIdentitySettingRepoStub{values: map[string]string{SettingKeyCodexCLIBridgeEnabled: "false"}}}, cfg: &config.Config{}, httpUpstream: upstream}
 	account := &Account{
 		ID:          81,
 		Platform:    PlatformOpenAI,
@@ -585,7 +585,7 @@ func TestForwardAlphaSearchAccessStateUsesTypedFailover(t *testing.T) {
 		},
 		Body: io.NopCloser(strings.NewReader(`{"error":{"code":"deactivated_workspace","message":"Workspace is deactivated"}}`)),
 	}}
-	service := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream}
+	service := &OpenAIGatewayService{settingService: &SettingService{settingRepo: &openAIIdentitySettingRepoStub{values: map[string]string{SettingKeyCodexCLIBridgeEnabled: "false"}}}, cfg: &config.Config{}, httpUpstream: upstream}
 	account := &Account{
 		ID:          11,
 		Platform:    PlatformOpenAI,
@@ -620,7 +620,7 @@ func TestForwardAlphaSearchPATFallbackAccessStateUsesTypedFailover(t *testing.T)
 		},
 		Body: io.NopCloser(strings.NewReader(`{"error":{"code":"account_disabled","message":"Account is disabled"}}`)),
 	}}
-	service := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream}
+	service := &OpenAIGatewayService{settingService: &SettingService{settingRepo: &openAIIdentitySettingRepoStub{values: map[string]string{SettingKeyCodexCLIBridgeEnabled: "false"}}}, cfg: &config.Config{}, httpUpstream: upstream}
 	account := &Account{
 		ID:          12,
 		Platform:    PlatformOpenAI,
@@ -670,7 +670,7 @@ func TestForwardAlphaSearchUnauthorizedDoesNotMarkAccountError(t *testing.T) {
 	}}
 	repo := &alphaSearchAccountStateRepo{}
 	cfg := &config.Config{}
-	service := &OpenAIGatewayService{
+	service := &OpenAIGatewayService{settingService: &SettingService{settingRepo: &openAIIdentitySettingRepoStub{values: map[string]string{SettingKeyCodexCLIBridgeEnabled: "false"}}},
 		cfg:              cfg,
 		httpUpstream:     upstream,
 		accountRepo:      repo,
@@ -713,7 +713,7 @@ func TestForwardAlphaSearchPATResponsesFallbackUnauthorizedDoesNotMarkAccountErr
 	}}
 	repo := &alphaSearchAccountStateRepo{}
 	cfg := &config.Config{}
-	service := &OpenAIGatewayService{
+	service := &OpenAIGatewayService{settingService: &SettingService{settingRepo: &openAIIdentitySettingRepoStub{values: map[string]string{SettingKeyCodexCLIBridgeEnabled: "false"}}},
 		cfg:              cfg,
 		httpUpstream:     upstream,
 		accountRepo:      repo,
@@ -763,7 +763,7 @@ func TestForwardAlphaSearchAPIKeyEndpointNotFoundFailsOver(t *testing.T) {
 	}}
 	repo := &alphaSearchAccountStateRepo{}
 	cfg := &config.Config{}
-	service := &OpenAIGatewayService{
+	service := &OpenAIGatewayService{settingService: &SettingService{settingRepo: &openAIIdentitySettingRepoStub{values: map[string]string{SettingKeyCodexCLIBridgeEnabled: "false"}}},
 		cfg:              cfg,
 		httpUpstream:     upstream,
 		accountRepo:      repo,
@@ -810,7 +810,7 @@ func TestForwardAlphaSearchOAuthNotFoundPassesThrough(t *testing.T) {
 		Body: io.NopCloser(strings.NewReader(upstreamBody)),
 	}}
 	accountRepo := &alphaSearchAccountStateRepo{}
-	service := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream, accountRepo: accountRepo}
+	service := &OpenAIGatewayService{settingService: &SettingService{settingRepo: &openAIIdentitySettingRepoStub{values: map[string]string{SettingKeyCodexCLIBridgeEnabled: "false"}}}, cfg: &config.Config{}, httpUpstream: upstream, accountRepo: accountRepo}
 	observerRepo := &quotaFollowObservationRecorder{}
 	observer := &OpenAIGroupQuotaFollowResetService{repo: observerRepo}
 	setOpenAIGroupQuotaFollowResetObserver(observer)

@@ -3763,6 +3763,7 @@ func TestOpenAIWSHTTPBridgeSSEErrorSideEffectsRunOncePerPlatform(t *testing.T) {
 				httpUpstream: upstream,
 			}
 			if platform == PlatformOpenAI {
+				svc.settingService = &SettingService{settingRepo: &openAIIdentitySettingRepoStub{values: map[string]string{SettingKeyCodexCLIBridgeEnabled: "false"}}}
 				svc.rateLimitService = NewRateLimitService(repo, nil, cfg, nil, nil)
 			}
 			account := &Account{ID: 70, Platform: platform, Type: AccountTypeOAuth, Concurrency: 1}

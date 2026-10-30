@@ -76,9 +76,38 @@ describe('EditAccountModal Codex CLI save workflow', () => {
     updateAccount.mockReset().mockResolvedValue(account())
     getCLI.mockReset().mockResolvedValue(cliView())
     updateCLI.mockReset().mockResolvedValue(cliView())
-    getRuntime.mockReset().mockResolvedValue({ execution_available: true })
+    getRuntime.mockReset().mockResolvedValue({ execution_available: true, bridge_enabled: true })
   })
   afterEach(() => wrappers.splice(0).forEach(wrapper => wrapper.unmount()))
+
+  it.each(['off', 'unknown', 'failed'])('hides official CLI editing when global bridge is %s', async state => {
+    if (state === 'off') getRuntime.mockResolvedValue({ execution_available: true, bridge_enabled: false })
+    else if (state === 'unknown') getRuntime.mockResolvedValue({ execution_available: true })
+    else getRuntime.mockRejectedValue(new Error('private-runtime-diagnostic'))
+    const wrapper = modal()
+    expect(wrapper.find('[data-testid="codex-cli-editor"]').exists()).toBe(false)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="codex-cli-editor"]').exists()).toBe(false)
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(updateAccount).toHaveBeenCalledTimes(1)
+    expect(updateCLI).not.toHaveBeenCalled()
+    expect(wrapper.html()).not.toContain('private-runtime-diagnostic')
+  })
+
+  it('preserves existing custom configuration when opening and saving unrelated edits', async () => {
+    const custom = 'sandbox_mode = "workspace-write"\napproval_policy = "never"\nmodel = "gpt-6.1-sol"\n'
+    getCLI.mockResolvedValue({ ...cliView(), config_toml: custom })
+    const wrapper = modal()
+    await flushPromises()
+    const userAgentGroup = wrapper.get('[data-testid="edit-openai-account-user-agent"]').element.parentElement!
+    expect(userAgentGroup.nextElementSibling).toBe(wrapper.get('[data-testid="codex-cli-editor"]').element)
+    expect(userAgentGroup.nextElementSibling?.nextElementSibling?.textContent).toContain('admin.accounts.openai.oauthSessionSharing')
+    expect(wrapper.get<HTMLTextAreaElement>('[data-testid="codex-cli-config"]').element.value).toBe(custom)
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(updateCLI).not.toHaveBeenCalled()
+  })
 
   it('saves unrelated account edits without writing CLI defaults or credentials', async () => {
     const wrapper = modal()

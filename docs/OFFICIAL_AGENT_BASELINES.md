@@ -17,7 +17,7 @@ model catalogs, terminal errors and retry/failover lifetimes.
 | StepFun | [stepfun-ai/Step-Code](https://github.com/stepfun-ai/Step-Code.git) | `81e79bc4b699148d6823fedde9b5e70d9a80255f` | product `0.84.4`; inference UA versionless; OpenAI JS `6.40.0` |
 | Zhipu | [zai-org/ZCode](https://github.com/zai-org/ZCode.git) | `3c5b227649371507ddc4eb46ac5133afe6db1cab` | product source `3.16.2`; separate CLI line `0.17.0` |
 
-The managed Codex task runtime additionally pins the official
+The managed Codex bridge/task runtime additionally pins the official
 [`rust-v0.165.0` release](https://github.com/openai/codex/releases/tag/rust-v0.165.0)
 and its source commit
 [`360319d8dee62d87e2d59fc0c21805d79519cfed`](https://github.com/openai/codex/tree/360319d8dee62d87e2d59fc0c21805d79519cfed).
@@ -26,9 +26,20 @@ providers, Responses Lite `additional_tools`, `exec` JSONL events, noninteractiv
 approval enforcement, plugin startup, cloud skills, configuration discovery and
 system/MDM precedence. Relevant entries include `codex-rs/exec/src/lib.rs`,
 `codex-rs/config/src/loader/{mod.rs,macos.rs}` and
-`codex-rs/core/src/client.rs`. Embedded archive and native-executable digests are owned by
+`codex-rs/core/src/client.rs`. Transparent bridge review additionally covers
+[`codex-rs/responses-api-proxy/src/lib.rs`](https://github.com/openai/codex/blob/360319d8dee62d87e2d59fc0c21805d79519cfed/codex-rs/responses-api-proxy/src/lib.rs)
+and [`read_api_key.rs`](https://github.com/openai/codex/blob/360319d8dee62d87e2d59fc0c21805d79519cfed/codex-rs/responses-api-proxy/src/read_api_key.rs): HTTP-only request forwarding, stdin API-key constraints,
+startup status, upstream errors and streaming bytes. The gateway uses a random
+loopback nonce for that stdin key, keeping the actual OAuth JWT in its existing
+credential-owner sender. Embedded archive and native-executable digests are owned by
 `backend/internal/codexcli/manifest.go`; the real-binary contract harness is
-`tools/test_codex_cli_wire.py`.
+`tools/test_codex_cli_wire.py`. Its official proxy cases and
+`codexcli/TestCodexBridgeOfficialBinaryWire` capture real wire traffic through
+the Go nonce relay and synthetic upstream; they do not imply real-account or
+live-model acceptance. Project bridge owners are
+`backend/internal/codexcli/bridge.go`,
+`backend/internal/service/codex_cli_bridge_transport.go`,
+`openai_plugin_transport.go` and `openai_codex_transport.go`.
 
 ZCode's selected product version comes from current source and is paired with
 the project-access-token implementation at that commit. It has no matching
@@ -37,7 +48,7 @@ explicitly follows a prerelease. Neither is represented as a stable Release.
 
 | Agent | Official code entrypoints to review | Project owners |
 | --- | --- | --- |
-| Codex | `codex-rs/login/src/auth/default_client.rs`, `codex-rs/model-provider`, `codex-rs/codex-api`, auth and WebSocket clients, `codex-rs/protocol/src/{session_id,thread_id}.rs`, `codex-rs/core/src/{installation_id,responses_metadata,client,realtime_conversation}.rs`, `codex-rs/core/src/state/auto_compact_window.rs`, `codex-rs/core/src/session/mod.rs`, `codex-rs/exec/src/exec_events.rs` | `service/openai_codex_identity.go`, `openai_gateway_service.go`, `openai_ws_client.go`, `pkg/openai`, `internal/codexcli`, `service/codex_cli_{account,forward,request}.go`, `tools/test_codex_cli_wire.py`, complete Codex transport/identity suites |
+| Codex | `codex-rs/login/src/auth/default_client.rs`, `codex-rs/model-provider`, `codex-rs/codex-api`, auth and WebSocket clients, `codex-rs/protocol/src/{session_id,thread_id}.rs`, `codex-rs/core/src/{installation_id,responses_metadata,client,realtime_conversation}.rs`, `codex-rs/core/src/state/auto_compact_window.rs`, `codex-rs/core/src/session/mod.rs`, `codex-rs/exec/src/exec_events.rs`, `codex-rs/responses-api-proxy/src/{lib,read_api_key}.rs` | `service/openai_codex_identity.go`, `openai_gateway_service.go`, `openai_ws_client.go`, `pkg/openai`, `internal/codexcli`, `service/codex_cli_{account,forward,request,bridge_setting,bridge_transport}.go`, `service/openai_plugin_transport.go`, `service/openai_codex_transport.go`, `tools/test_codex_cli_wire.py`, complete Codex transport/identity suites |
 | grok-build | `crates/codegen/xai-grok-sampler`, `xai-grok-voice`, `xai-grok-imagine`, OAuth/OIDC nonce and JWT verification, billing clients and sampler request/conversation IDs | `pkg/xai`, `service/grok_*`, `account_test_service_grok_test.go` |
 | deepseek-harness | `packages/llm/llm/src/attribution.ts`, `packages/llm/llm-deepseek/src/{config,adapter,messages-api,files-api,file-id,file-store}.ts`, `llm-deepseek/src/{listing,listed-catalog}.ts`, `llm-deepseek-api-key/src/{index,config}.ts`, account-platform and anonymous-user-id packages | `pkg/deepseek`, `pkg/cnoauth/client.go`, `service/{deepseek_request_state,domestic_agent_models,cn_oauth_service,provider_files}.go`, `handler/provider_files_handler.go`, `repository/provider_files_repo.go` |
 | kimi-code | `packages/oauth/src/{identity,oauth,managed-kimi-code,managed-usage}.ts`, `packages/agent-core-v2/src/llm-adapter` | `pkg/kimi`, `pkg/cnoauth/client.go`, `service/{domestic_agent_models,upstream_models,cn_oauth_service}.go` |

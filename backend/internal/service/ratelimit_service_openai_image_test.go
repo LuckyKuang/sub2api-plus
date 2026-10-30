@@ -138,7 +138,8 @@ func TestOpenAIGatewayServiceForwardImages_TextFallbackDoesNotCoolImageCapabilit
 	c.Request = req
 
 	svc := &OpenAIGatewayService{
-		accountRepo: repo,
+		settingService: openAIProbeNativeSettings(),
+		accountRepo:    repo,
 		httpUpstream: &httpUpstreamRecorder{
 			resp: &http.Response{
 				StatusCode: http.StatusOK,
@@ -190,7 +191,8 @@ func TestOpenAIGatewayServiceForwardImages_StructuredUnavailableCoolsImageCapabi
 	c.Request = req
 
 	svc := &OpenAIGatewayService{
-		accountRepo: repo,
+		settingService: openAIProbeNativeSettings(),
+		accountRepo:    repo,
 		httpUpstream: &httpUpstreamRecorder{
 			resp: &http.Response{
 				StatusCode: http.StatusOK,

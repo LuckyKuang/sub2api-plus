@@ -55,6 +55,13 @@ func (s *OpenAIGatewayService) forwardCodexCLITaskWithRuntime(ctx context.Contex
 	if !CodexCLITaskAccountEnabled(account) {
 		return fail(http.StatusServiceUnavailable, "cli_account_unavailable")
 	}
+	bridgeEnabled, bridgeErr := s.settingService.GetCodexCLIBridgeEnabled(ctx)
+	if bridgeErr != nil {
+		return fail(http.StatusServiceUnavailable, "cli_bridge_setting_unavailable")
+	}
+	if !bridgeEnabled {
+		return fail(http.StatusServiceUnavailable, "cli_bridge_disabled")
+	}
 	if _, err := account.StrictProxyURL(); err != nil {
 		return fail(http.StatusBadGateway, "cli_proxy_unavailable")
 	}

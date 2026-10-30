@@ -620,6 +620,7 @@ func registerSettingsRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpA
 		adminSettings.PUT("/outbound-identity", h.Admin.Setting.UpdateOutboundIdentity)
 		adminSettings.POST("/outbound-identity/preview", h.Admin.Setting.PreviewOutboundIdentity)
 		adminSettings.GET("/codex-cli", h.Admin.Setting.GetCodexCLI)
+		adminSettings.PUT("/codex-cli", gin.HandlerFunc(stepUpAuth), h.Admin.Setting.UpdateCodexCLIBridge)
 		adminSettings.POST("/codex-cli/install", gin.HandlerFunc(stepUpAuth), h.Admin.Setting.InstallCodexCLI)
 		adminSettings.POST("/test-smtp", h.Admin.Setting.TestSMTPConnection)
 		adminSettings.POST("/send-test-email", h.Admin.Setting.SendTestEmail)

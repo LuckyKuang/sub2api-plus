@@ -1,7 +1,10 @@
 package service
 
 import (
+	"context"
 	"net/http"
+
+	"github.com/LuckyKuang/sub2api-plus/internal/codexcli"
 )
 
 func (s *OpenAIGatewayService) SetPluginManager(manager *PluginManager) {
@@ -61,13 +64,26 @@ func (s *OpenAIGatewayService) doOpenAIUpstreamPrepared(request *http.Request, _
 	}
 	request = ticket.bindRequest(request)
 	defer func() { holdZhipuOffPeakResponse(request.Context(), ticket, response, responseErr) }()
+	bridgeEnabled, err := s.codexCLIBridgeEnabled(request.Context(), credentialAccount)
+	if err != nil {
+		return nil, err
+	}
+	if bridgeEnabled {
+		return s.doOpenAICodexCLIBridge(request, ownerProxyURL, credentialAccount, account)
+	}
+	return s.doOpenAIPreparedTransport(request, ownerProxyURL, credentialAccount, account)
+}
+
+func (s *OpenAIGatewayService) doOpenAIPreparedTransport(request *http.Request, ownerProxyURL string, owner, selected *Account) (*http.Response, error) {
 	if s.pluginManager != nil {
-		response, handled, err := s.pluginManager.RoundTripOpenAIOAuth(request.Context(), request, ownerProxyURL, credentialAccount)
+		response, handled, err := s.pluginManager.RoundTripOpenAIOAuth(request.Context(), request, ownerProxyURL, owner)
 		if handled {
 			return response, err
 		}
 	}
-	return s.httpUpstream.Do(request, ownerProxyURL, account.ID, account.Concurrency)
+	// Credentials and routing belong to the owner; resource accounting retains
+	// the logically selected account, including a shadow's own concurrency.
+	return s.httpUpstream.Do(request, ownerProxyURL, selected.ID, selected.Concurrency)
 }
 
 // doOpenAIAccountTestUpstream 让 OpenAI OAuth 账号测试与真实转发使用同一插件路径。
@@ -122,8 +138,33 @@ func (s *AccountTestService) doOpenAIAccountTestUpstreamPrepared(
 	}
 	request = ticket.bindRequest(request)
 	defer func() { holdZhipuOffPeakResponse(request.Context(), ticket, response, responseErr) }()
+	bridgeService := s.openaiGatewayService
+	if bridgeService == nil {
+		bridgeService = &OpenAIGatewayService{settingService: s.settingService, accountRepo: s.accountRepo}
+	}
+	bridgeEnabled, err := bridgeService.codexCLIBridgeEnabled(request.Context(), credentialAccount)
+	if err != nil {
+		return nil, err
+	}
+	if bridgeEnabled {
+		runtime := bridgeService.codexCLIBridgeRuntime
+		if runtime == nil {
+			runtime = managedCodexCLIHTTPBridgeRuntime{}
+		}
+		status := runtime.Status(request.Context())
+		if !status.ExecutionAvailable || !status.Installed || !status.SourceVerified || !status.VersionMatch {
+			return nil, &codexcli.TaskError{Code: "bridge_runtime_unavailable"}
+		}
+		return runtime.Bridge(request.Context(), status, request, func(ctx context.Context, trusted *http.Request) (*http.Response, error) {
+			return s.doOpenAIAccountTestPreparedTransport(trusted.WithContext(ctx), ownerProxyURL, credentialAccount, account, useTLSFallback)
+		})
+	}
+	return s.doOpenAIAccountTestPreparedTransport(request, ownerProxyURL, credentialAccount, account, useTLSFallback)
+}
+
+func (s *AccountTestService) doOpenAIAccountTestPreparedTransport(request *http.Request, ownerProxyURL string, owner, selected *Account, useTLSFallback bool) (*http.Response, error) {
 	if s.pluginManager != nil {
-		response, handled, err := s.pluginManager.RoundTripOpenAIOAuth(request.Context(), request, ownerProxyURL, credentialAccount)
+		response, handled, err := s.pluginManager.RoundTripOpenAIOAuth(request.Context(), request, ownerProxyURL, owner)
 		if handled {
 			return response, err
 		}
@@ -132,10 +173,10 @@ func (s *AccountTestService) doOpenAIAccountTestUpstreamPrepared(
 		return s.httpUpstream.DoWithTLS(
 			request,
 			ownerProxyURL,
-			account.ID,
-			account.Concurrency,
-			s.tlsFPProfileService.ResolveTLSProfile(credentialAccount),
+			selected.ID,
+			selected.Concurrency,
+			s.tlsFPProfileService.ResolveTLSProfile(owner),
 		)
 	}
-	return s.httpUpstream.Do(request, ownerProxyURL, account.ID, account.Concurrency)
+	return s.httpUpstream.Do(request, ownerProxyURL, selected.ID, selected.Concurrency)
 }

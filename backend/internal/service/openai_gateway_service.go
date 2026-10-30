@@ -610,6 +610,7 @@ type OpenAIGatewayService struct {
 	cnOAuthService        *CNOAuthService
 	projectTokens         *ZhipuProjectTokenManager
 	pluginManager         *PluginManager
+	codexCLIBridgeRuntime codexCLIHTTPBridgeRuntime
 	deferredService       *DeferredService
 	openAITokenProvider   *OpenAITokenProvider
 	grokTokenProvider     *GrokTokenProvider

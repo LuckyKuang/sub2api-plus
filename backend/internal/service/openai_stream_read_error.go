@@ -36,6 +36,9 @@ func (e *openAIUpstreamStreamReadError) Error() string {
 func (e *openAIUpstreamStreamReadError) Unwrap() error { return e.cause }
 
 func newOpenAIUpstreamStreamReadError(err error) error {
+	if isCodexCLIBridgeFailure(err) {
+		return err
+	}
 	code, message := classifyOpenAIUpstreamStreamReadError(err)
 	return &openAIUpstreamStreamReadError{
 		cause:         err,
@@ -47,6 +50,9 @@ func newOpenAIUpstreamStreamReadError(err error) error {
 // shouldClassifyOpenAIUpstreamStreamReadError excludes cancellation and
 // response-size enforcement from upstream retry.
 func shouldClassifyOpenAIUpstreamStreamReadError(err error, contexts ...context.Context) bool {
+	if isCodexCLIBridgeFailure(err) {
+		return false
+	}
 	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, ErrUpstreamResponseBodyTooLarge) {
 		return false
 	}

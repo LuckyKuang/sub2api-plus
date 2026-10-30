@@ -478,6 +478,9 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 			result, err := finalizeStream()
 			return result, err, true
 		}
+		if isCodexCLIBridgeFailure(scanErr) {
+			return resultWithUsage(), s.handleOpenAIUpstreamTransportError(ctx, c, account, scanErr, false), true
+		}
 		// 客户端断开/取消请求时，上游读取往往会返回 context canceled。
 		// /v1/responses 的 SSE 事件必须符合 OpenAI 协议；这里不注入自定义 error event，避免下游 SDK 解析失败。
 		if errors.Is(scanErr, context.Canceled) || errors.Is(scanErr, context.DeadlineExceeded) {

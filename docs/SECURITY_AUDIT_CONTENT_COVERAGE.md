@@ -7,6 +7,20 @@ Moderation and Prompt Audit. The shared implementation is
 `backend/internal/auditcontent`; protocol handlers and account paths must not
 maintain alternate text extractors.
 
+The opt-in [official Codex CLI transparent bridge](CODEX_CLI.md) retains the
+existing Responses, Chat, Messages and Responses WebSocket ingress endpoints.
+It changes the prepared outbound HTTP transport only after their existing
+authentication, basic validation, canonical audit, scheduling and admission.
+Both audit engines receive the original protocol envelope before a CLI process,
+local relay or provider send can start. Each WebSocket turn retains the same
+audit and owner-generation fence; the existing HTTP bridge adapts SSE events
+back to frames without invoking the CLI agent loop. Unknown valid items and
+siblings retain this document's extraction pass-through contract. Account and
+global bridge switches cannot change content classification or bypass audit.
+`TestCodexCLIBridgeOrdinaryResponsesBothRealAuditsPrecedeSideEffects` and
+`TestCodexCLIBridgeOrdinaryResponsesBothEnginesReceiveOriginalEnvelope` retain
+the real-engine recognized-sibling and unchanged-envelope ordering evidence.
+
 The optional [managed Codex CLI task route](CODEX_CLI.md),
 `POST /v1/codex-cli/responses`, accepts a deliberately limited single-turn text
 Responses envelope. Its basic-validation contract permits only `model`,
