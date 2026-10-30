@@ -109,7 +109,13 @@ func (s *OpenAIGatewayService) doOpenAICodexCLIBridge(request *http.Request, pro
 		// Bridge supplies the same trusted upstream request, not an incoming
 		// relay URL/header set. Keep all native/plugin preparation and signing
 		// declarations in the existing provider-bound transport.
-		return s.doOpenAIPreparedTransport(trusted.WithContext(ctx), proxyURL, owner, selected)
+		trusted = trusted.WithContext(ctx)
+		response, err := s.doOpenAIPreparedTransport(trusted, proxyURL, owner, selected)
+		response, err = s.completeCodexCLIBridgeErrorResponse(response, err)
+		if err != nil {
+			finalizeTransmittedRequestCredentialOwner(request.Context(), trusted)
+		}
+		return response, err
 	})
 	return s.completeCodexCLIBridgeErrorResponse(response, err)
 }
@@ -117,7 +123,9 @@ func (s *OpenAIGatewayService) doOpenAICodexCLIBridge(request *http.Request, pro
 // Error classifiers historically accept partial diagnostic bodies. A failed
 // CLI relay must not turn an incomplete rejection into permission to refresh,
 // retry or fail over. Establish completeness before returning an HTTP error to
-// those classifiers; successful streams retain their streaming read path.
+// those classifiers; successful streams retain their streaming read path. Run
+// this on the provider callback as well as the local response: the official
+// proxy may buffer headers while waiting for the first provider body bytes.
 func (s *OpenAIGatewayService) completeCodexCLIBridgeErrorResponse(response *http.Response, bridgeErr error) (*http.Response, error) {
 	if bridgeErr != nil || response == nil || response.StatusCode < http.StatusBadRequest {
 		return response, bridgeErr
@@ -162,7 +170,13 @@ func (s *OpenAIGatewayService) doOpenAICodexCLIControlPlane(request *http.Reques
 		return nil, &codexcli.TaskError{Code: "bridge_runtime_unavailable"}
 	}
 	response, err := runtime.Bridge(request.Context(), status, request, func(ctx context.Context, trusted *http.Request) (*http.Response, error) {
-		return forward(trusted.WithContext(ctx))
+		trusted = trusted.WithContext(ctx)
+		response, err := forward(trusted)
+		response, err = s.completeCodexCLIBridgeErrorResponse(response, err)
+		if err != nil {
+			finalizeTransmittedRequestCredentialOwner(request.Context(), trusted)
+		}
+		return response, err
 	})
 	return s.completeCodexCLIBridgeErrorResponse(response, err)
 }

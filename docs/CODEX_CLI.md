@@ -260,7 +260,9 @@ read uses the existing five-second and configured error-body byte limits
 (512 KiB by default). Read failures, timeouts and oversized error bodies close
 the bridge and remain terminal local failures. Complete provider rejections
 retain their original status, headers, bytes and ordinary recovery policy.
-Successful response streams retain streaming behavior.
+The trusted provider callback applies the budget before the official proxy can
+buffer headers while waiting for the first body byte; a second check catches
+local proxy read failures. Successful responses retain streaming behavior.
 
 Disabling the global switch prevents new bridge admissions and leaves saved
 account configuration, installed artifacts and session routes intact. Ordinary

@@ -51,6 +51,53 @@ func TestCodexCLIBridgeHTTPErrorBodyTimeoutIsTerminal(t *testing.T) {
 	require.ErrorIs(t, err, io.ErrClosedPipe)
 }
 
+// The real proxy can wait for body bytes before exposing headers. A deadline
+// checked only after Bridge returns cannot stop that wait. Also retain the
+// immutable transmitted owner when a failed callback yields no local response.
+func TestCodexCLIBridgeProviderCallbackBoundsErrorsAndFinalizesOwner(t *testing.T) {
+	for _, path := range []string{"gateway", "probe", "control-plane"} {
+		t.Run(path, func(t *testing.T) {
+			owner := codexBridgeAPIKeyFixture()
+			ctx := withRequestCredentialOwner(WithOutboundIdentityScope(t.Context(), nil), owner, "acquired-api-key")
+			sentOwner := snapshotRequestCredentialAccount(owner)
+			sentOwner.Credentials["api_key"] = "actually-transmitted-key"
+			reader, writer := io.Pipe()
+			defer writer.Close()
+			forward := func(r *http.Request) (*http.Response, error) {
+				recordTransmittedRequestCredentialOwner(r, sentOwner, "actually-transmitted-key")
+				return &http.Response{StatusCode: http.StatusTooManyRequests, Body: reader, Header: make(http.Header), Request: r}, nil
+			}
+			gateway := &OpenAIGatewayService{settingService: enabledCodexCLIBridgeTestSettings(),
+				httpUpstream: &codexModelsHTTPUpstreamStub{do: func(r *http.Request, _ string, _ int64, _ int) (*http.Response, error) { return forward(r) }},
+				codexCLIBridgeRuntime: codexCLIBridgeTransportStub{status: codexCLIBridgeReadyFixture(), bridge: func(ctx context.Context, _ codexcli.Status, r *http.Request, send func(context.Context, *http.Request) (*http.Response, error)) (*http.Response, error) {
+					_, err := send(ctx, r.Clone(ctx))
+					require.Error(t, err, "provider diagnostic budget must apply inside the trusted callback")
+					return nil, err // The real runtime discards callback responses on failure.
+				}},
+			}
+			request, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://compatible.example/v1/responses", strings.NewReader(`{"input":"once"}`))
+			require.NoError(t, err)
+			switch path {
+			case "gateway":
+				_, err = gateway.doOpenAIUpstream(request, "", owner)
+			case "probe":
+				probe := &AccountTestService{openaiGatewayService: gateway, httpUpstream: gateway.httpUpstream}
+				_, err = probe.doOpenAIAccountTestUpstream(request, "", owner, false)
+			case "control-plane":
+				_, err = gateway.doOpenAICodexCLIControlPlane(request, owner, forward)
+			}
+			var bridgeErr *codexcli.BridgeError
+			require.ErrorAs(t, err, &bridgeErr)
+			require.True(t, bridgeErr.RequestSent)
+			finalOwner, ownerErr := requestCredentialAccount(ctx, owner)
+			require.NoError(t, ownerErr)
+			require.Equal(t, "actually-transmitted-key", finalOwner.GetCredential("api_key"))
+			_, err = writer.Write([]byte("closed"))
+			require.ErrorIs(t, err, io.ErrClosedPipe)
+		})
+	}
+}
+
 // A fully received provider rejection remains authoritative. The bridge must
 // not suppress the existing provider-status failover policy just because the
 // request used the official transport hop.

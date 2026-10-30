@@ -328,6 +328,60 @@ func TestCodexBridgeTruncatedProviderHTTPErrorRemainsTerminal(t *testing.T) {
 	}
 }
 
+// The official proxy may buffer headers until the first provider body byte.
+// The trusted callback must therefore be able to bound a stalled diagnostic
+// before handing its response to the proxy. The service owns the five-second
+// policy; this wire fixture uses a shorter independent callback deadline.
+func TestCodexBridgeProviderErrorBodyDeadlineBeforeFirstByte(t *testing.T) {
+	testCodexBridgeProviderErrorBodyDeadlineBeforeFirstByte(t, bridgeFixture(t))
+}
+
+func testCodexBridgeProviderErrorBodyDeadlineBeforeFirstByte(t *testing.T, status Status) {
+	t.Helper()
+	stopped := make(chan struct{})
+	var calls atomic.Int32
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusTooManyRequests)
+		_ = http.NewResponseController(w).Flush()
+		<-r.Context().Done()
+		close(stopped)
+	}))
+	defer provider.Close()
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, provider.URL+"/v1/responses", strings.NewReader(`{"input":"once"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := bridgeWithHostCheck(ctx, status, request, func(_ context.Context, out *http.Request) (*http.Response, error) {
+		response, err := provider.Client().Do(out)
+		if err != nil {
+			return response, err
+		}
+		timer := time.AfterFunc(100*time.Millisecond, func() { _ = response.Body.Close() })
+		_, readErr := io.ReadAll(response.Body)
+		timer.Stop()
+		_ = response.Body.Close()
+		return response, readErr
+	}, func(context.Context) error { return nil })
+	if response != nil {
+		_ = response.Body.Close()
+	}
+	var bridgeErr *BridgeError
+	if !errors.As(err, &bridgeErr) || !bridgeErr.RequestSent || bridgeErr.Code != "bridge_upstream_transport_failed" || ctx.Err() != nil {
+		t.Fatalf("provider callback deadline did not stop bridge before request deadline: %v", err)
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("provider attempt replayed: %d", calls.Load())
+	}
+	select {
+	case <-stopped:
+	case <-ctx.Done():
+		t.Fatal("provider body survived callback read deadline")
+	}
+}
+
 func TestCodexBridgePreservesOtherTrustedMethodsAndDestinations(t *testing.T) {
 	for _, method := range []string{http.MethodGet, http.MethodPut, http.MethodDelete} {
 		t.Run(method, func(t *testing.T) {
@@ -370,6 +424,9 @@ func TestCodexBridgeOfficialBinaryWire(t *testing.T) {
 		t.Fatal("official bridge executable digest mismatch")
 	}
 	status := Status{Path: path, Installed: true, Source: "managed", SourceVerified: true, VersionMatch: true, ExecutionAvailable: true, proof: &runtimeProof{path: path, executableSHA256: digest.Sum(nil)}}
+	t.Run("provider-error-deadline-before-first-byte", func(t *testing.T) {
+		testCodexBridgeProviderErrorBodyDeadlineBeforeFirstByte(t, status)
+	})
 	for _, code := range []int{200, 302, 401} {
 		body := `{"model":"fixture-model","input":[{"role":"user","content":"retain"}],"tools":[{"type":"function","name":"external","parameters":{}}],"unknown_sibling":{"retain":true}}`
 		req, _ := http.NewRequest(http.MethodPost, "https://chatgpt.com/backend-api/codex/responses", strings.NewReader(body))
