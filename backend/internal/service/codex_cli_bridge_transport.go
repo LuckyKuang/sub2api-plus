@@ -1,8 +1,10 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -103,12 +105,42 @@ func (s *OpenAIGatewayService) doOpenAICodexCLIBridge(request *http.Request, pro
 	if !status.ExecutionAvailable || !status.Installed || !status.SourceVerified || !status.VersionMatch {
 		return nil, &codexcli.TaskError{Code: "bridge_runtime_unavailable"}
 	}
-	return runtime.Bridge(request.Context(), status, request, func(ctx context.Context, trusted *http.Request) (*http.Response, error) {
+	response, err := runtime.Bridge(request.Context(), status, request, func(ctx context.Context, trusted *http.Request) (*http.Response, error) {
 		// Bridge supplies the same trusted upstream request, not an incoming
 		// relay URL/header set. Keep all native/plugin preparation and signing
 		// declarations in the existing provider-bound transport.
 		return s.doOpenAIPreparedTransport(trusted.WithContext(ctx), proxyURL, owner, selected)
 	})
+	return s.completeCodexCLIBridgeErrorResponse(response, err)
+}
+
+// Error classifiers historically accept partial diagnostic bodies. A failed
+// CLI relay must not turn an incomplete rejection into permission to refresh,
+// retry or fail over. Establish completeness before returning an HTTP error to
+// those classifiers; successful streams retain their streaming read path.
+func (s *OpenAIGatewayService) completeCodexCLIBridgeErrorResponse(response *http.Response, bridgeErr error) (*http.Response, error) {
+	if bridgeErr != nil || response == nil || response.StatusCode < http.StatusBadRequest {
+		return response, bridgeErr
+	}
+	limit := openAIUpstreamErrorBodyReadLimitForConfig(s.cfg)
+	body, readErr := readUpstreamErrorResponseBody(response, limit+1, UpstreamErrorBodyReadTimeout)
+	if response.Body != nil {
+		_ = response.Body.Close()
+	}
+	// Keep the response and its original request so the outer send boundary can
+	// finalize the credential owner even when this diagnostic read fails.
+	response.Body = http.NoBody
+	if readErr != nil {
+		if isCodexCLIBridgeFailure(readErr) {
+			return response, readErr
+		}
+		return response, &codexcli.BridgeError{Code: "bridge_response_read_failed", RequestSent: true}
+	}
+	if int64(len(body)) > limit {
+		return response, &codexcli.BridgeError{Code: "bridge_response_too_large", RequestSent: true}
+	}
+	response.Body = io.NopCloser(bytes.NewReader(body))
+	return response, nil
 }
 
 // Control-plane callers keep their prepared auth, endpoint, fingerprint and
@@ -129,7 +161,8 @@ func (s *OpenAIGatewayService) doOpenAICodexCLIControlPlane(request *http.Reques
 	if !status.ExecutionAvailable || !status.Installed || !status.SourceVerified || !status.VersionMatch {
 		return nil, &codexcli.TaskError{Code: "bridge_runtime_unavailable"}
 	}
-	return runtime.Bridge(request.Context(), status, request, func(ctx context.Context, trusted *http.Request) (*http.Response, error) {
+	response, err := runtime.Bridge(request.Context(), status, request, func(ctx context.Context, trusted *http.Request) (*http.Response, error) {
 		return forward(trusted.WithContext(ctx))
 	})
+	return s.completeCodexCLIBridgeErrorResponse(response, err)
 }

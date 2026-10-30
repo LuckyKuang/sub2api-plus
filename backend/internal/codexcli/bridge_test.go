@@ -9,6 +9,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -287,6 +288,43 @@ func TestCodexBridgeTransportErrorRetainsCauseWithoutDiagnostics(t *testing.T) {
 	var bridgeErr *BridgeError
 	if !errors.As(err, &bridgeErr) || !bridgeErr.RequestSent {
 		t.Fatal("real provider write was not marked terminal")
+	}
+}
+
+// A real provider can announce an HTTP rejection and then truncate its body.
+// The proxy/relay must retain that read failure as a submitted local transport
+// failure, so downstream error classifiers cannot treat a partial body as a
+// completed provider rejection and authorize another submission.
+func TestCodexBridgeTruncatedProviderHTTPErrorRemainsTerminal(t *testing.T) {
+	for _, code := range []int{http.StatusUnauthorized, http.StatusTooManyRequests, http.StatusServiceUnavailable} {
+		t.Run(http.StatusText(code), func(t *testing.T) {
+			var calls atomic.Int32
+			provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				calls.Add(1)
+				w.Header().Set("Content-Length", "100")
+				w.WriteHeader(code)
+				_, _ = io.WriteString(w, `{"error":`)
+			}))
+			defer provider.Close()
+			request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, provider.URL+"/v1/responses", strings.NewReader(`{"input":"once"}`))
+			if err != nil {
+				t.Fatal(err)
+			}
+			response, err := bridgeWithHostCheck(t.Context(), bridgeFixture(t), request, func(_ context.Context, out *http.Request) (*http.Response, error) {
+				return provider.Client().Do(out)
+			}, func(context.Context) error { return nil })
+			if err == nil {
+				_, err = io.ReadAll(response.Body)
+				_ = response.Body.Close()
+			}
+			var bridgeErr *BridgeError
+			if !errors.As(err, &bridgeErr) || !bridgeErr.RequestSent {
+				t.Fatalf("truncated provider rejection lost submitted failure: %v", err)
+			}
+			if calls.Load() != 1 {
+				t.Fatalf("provider attempt replayed: %d", calls.Load())
+			}
+		})
 	}
 }
 

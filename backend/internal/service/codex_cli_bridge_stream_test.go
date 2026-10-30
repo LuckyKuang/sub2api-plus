@@ -40,18 +40,39 @@ func (b *codexCLIBridgeCountingErrorBody) Read(p []byte) (int, error) {
 // response byte is ambiguous. Every public adapter must preserve that failure,
 // avoid account failover/replay and leave the credential owner schedulable.
 func TestCodexCLIBridgeSubmittedReadFailureNeverFailsOver(t *testing.T) {
+	testCodexCLIBridgeSubmittedReadFailure(t, AccountTypeOAuth, http.StatusOK)
+}
+
+// An incomplete HTTP error is still a bridge failure, not an authoritative
+// provider rejection that permits credential refresh, failover or cooling.
+func TestCodexCLIBridgeHTTPErrorReadFailureNeverFailsOver(t *testing.T) {
+	for _, kind := range []string{AccountTypeOAuth, AccountTypeAPIKey} {
+		for _, status := range []int{http.StatusUnauthorized, http.StatusTooManyRequests, http.StatusServiceUnavailable} {
+			t.Run(kind+"/"+http.StatusText(status), func(t *testing.T) {
+				testCodexCLIBridgeSubmittedReadFailure(t, kind, status)
+			})
+		}
+	}
+}
+
+func testCodexCLIBridgeSubmittedReadFailure(t *testing.T, kind string, status int) {
+	t.Helper()
 	for _, path := range []string{"responses", "passthrough", "chat-buffered", "chat-streaming", "messages-buffered", "messages-streaming", "ws-http-bridge"} {
 		t.Run(path, func(t *testing.T) {
 			bridgeErr := &codexcli.BridgeError{Code: "bridge_response_read_failed", RequestSent: true}
 			bodyReader := &codexCLIBridgeCountingErrorBody{ReadCloser: &errReadCloser{err: bridgeErr}}
 			upstreamCalls, bridgeCalls := 0, 0
 			account := enabledCodexCLIExecutionAccount(101, "access", "workspace")
+			if kind == AccountTypeAPIKey {
+				account = codexBridgeAPIKeyFixture()
+				account.ID = 101
+			}
 			repo := &codexCLIBridgeStreamAccountRepo{openaiTransportAccountRepoStub: &openaiTransportAccountRepoStub{}, owner: account}
 			cfg := &config.Config{Gateway: config.GatewayConfig{MaxLineSize: defaultMaxLineSize}}
 			upstream := &codexModelsHTTPUpstreamStub{do: func(_ *http.Request, _ string, ownerID int64, _ int) (*http.Response, error) {
 				upstreamCalls++
 				require.Equal(t, int64(101), ownerID)
-				return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"text/event-stream"}}, Body: bodyReader}, nil
+				return &http.Response{StatusCode: status, Header: http.Header{"Content-Type": {"text/event-stream"}}, Body: bodyReader}, nil
 			}}
 			svc := &OpenAIGatewayService{cfg: cfg, accountRepo: repo, settingService: enabledCodexCLIBridgeTestSettings(), httpUpstream: upstream, cache: &stubGatewayCache{}, toolCorrector: NewCodexToolCorrector(),
 				codexCLIBridgeRuntime: codexCLIBridgeTransportStub{status: codexCLIBridgeReadyFixture(), bridge: func(ctx context.Context, _ codexcli.Status, req *http.Request, forward func(context.Context, *http.Request) (*http.Response, error)) (*http.Response, error) {

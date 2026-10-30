@@ -155,9 +155,10 @@ func (s *AccountTestService) doOpenAIAccountTestUpstreamPrepared(
 		if !status.ExecutionAvailable || !status.Installed || !status.SourceVerified || !status.VersionMatch {
 			return nil, &codexcli.TaskError{Code: "bridge_runtime_unavailable"}
 		}
-		return runtime.Bridge(request.Context(), status, request, func(ctx context.Context, trusted *http.Request) (*http.Response, error) {
+		response, err := runtime.Bridge(request.Context(), status, request, func(ctx context.Context, trusted *http.Request) (*http.Response, error) {
 			return s.doOpenAIAccountTestPreparedTransport(trusted.WithContext(ctx), ownerProxyURL, credentialAccount, account, useTLSFallback)
 		})
+		return bridgeService.completeCodexCLIBridgeErrorResponse(response, err)
 	}
 	return s.doOpenAIAccountTestPreparedTransport(request, ownerProxyURL, credentialAccount, account, useTLSFallback)
 }
