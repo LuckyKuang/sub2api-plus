@@ -328,7 +328,7 @@ func TestCodexCLITaskConcurrentAccountsKeepCredentialsAndFilesIndependent(t *tes
 		<-release
 		return codexcli.TaskResult{Started: true, Output: "completed independently", Usage: codexcli.TaskUsage{InputTokens: 10, OutputTokens: 2}}, snapshot.err
 	}}
-	gateway := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: &codexModelsHTTPUpstreamStub{do: func(*http.Request, string, int64, int) (*http.Response, error) {
+	gateway := &OpenAIGatewayService{cfg: &config.Config{}, settingService: enabledCodexCLIBridgeTestSettings(), httpUpstream: &codexModelsHTTPUpstreamStub{do: func(*http.Request, string, int64, int) (*http.Response, error) {
 		panic("a CLI task must never use direct HTTP fallback")
 	}}}
 	type outcome struct {
@@ -416,7 +416,7 @@ func TestCodexCLITaskExecutionFailurePreservesUsageWithoutReplay(t *testing.T) {
 		home = request.Home
 		return codexcli.TaskResult{Started: true, Output: "private partial model output", Usage: codexcli.TaskUsage{InputTokens: 100, CachedInputTokens: 30, OutputTokens: 20}}, &codexcli.TaskError{Code: "upstream_error"}
 	}}
-	gateway := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: &codexModelsHTTPUpstreamStub{do: func(*http.Request, string, int64, int) (*http.Response, error) {
+	gateway := &OpenAIGatewayService{cfg: &config.Config{}, settingService: enabledCodexCLIBridgeTestSettings(), httpUpstream: &codexModelsHTTPUpstreamStub{do: func(*http.Request, string, int64, int) (*http.Response, error) {
 		panic("side-effectful tasks cannot acquire a direct HTTP fallback")
 	}}}
 	ctx := WithOutboundIdentityScope(context.Background(), c)
@@ -444,7 +444,7 @@ func TestCodexCLITaskUnavailableRuntimePrecedesCredentialLookup(t *testing.T) {
 	account := enabledCodexCLIExecutionAccount(11, "owner-one-access", "workspace-one")
 	c, recorder := newCodexCLIExecutionContext()
 	cache := &countTokensOwnerCache{}
-	gateway := &OpenAIGatewayService{cfg: &config.Config{}, openAITokenProvider: NewOpenAITokenProvider(nil, cache, nil)}
+	gateway := &OpenAIGatewayService{cfg: &config.Config{}, settingService: enabledCodexCLIBridgeTestSettings(), openAITokenProvider: NewOpenAITokenProvider(nil, cache, nil)}
 	runtime := codexCLIExecutionRuntime{available: false, run: func(context.Context, codexcli.TaskRequest) (codexcli.TaskResult, error) {
 		panic("unavailable runtime cannot start a task")
 	}}
@@ -471,7 +471,7 @@ func TestCodexCLITaskClientCancellationPreservesPartialUsageAndCleansHome(t *tes
 		cancel()
 		return codexcli.TaskResult{Started: true, Usage: codexcli.TaskUsage{InputTokens: 10, OutputTokens: 2}}, context.Canceled
 	}}
-	result, err := (&OpenAIGatewayService{cfg: &config.Config{}}).forwardCodexCLITaskWithRuntime(ctx, c, account, []byte(`{"model":"gpt-6-astra","input":"task"}`), runtime)
+	result, err := (&OpenAIGatewayService{cfg: &config.Config{}, settingService: enabledCodexCLIBridgeTestSettings()}).forwardCodexCLITaskWithRuntime(ctx, c, account, []byte(`{"model":"gpt-6-astra","input":"task"}`), runtime)
 	require.ErrorIs(t, err, context.Canceled)
 	require.NotNil(t, result)
 	require.True(t, result.ClientDisconnect)
@@ -488,7 +488,7 @@ func TestCodexCLITaskStreamingEmitsOnlyCompletedResponse(t *testing.T) {
 	runtime := codexCLIExecutionRuntime{available: true, run: func(context.Context, codexcli.TaskRequest) (codexcli.TaskResult, error) {
 		return codexcli.TaskResult{Started: true, Output: "final task answer", Usage: codexcli.TaskUsage{InputTokens: 10, OutputTokens: 2}}, nil
 	}}
-	result, err := (&OpenAIGatewayService{cfg: &config.Config{}}).forwardCodexCLITaskWithRuntime(WithOutboundIdentityScope(context.Background(), c), c, account, []byte(`{"model":"gpt-6-astra","input":"task","stream":true}`), runtime)
+	result, err := (&OpenAIGatewayService{cfg: &config.Config{}, settingService: enabledCodexCLIBridgeTestSettings()}).forwardCodexCLITaskWithRuntime(WithOutboundIdentityScope(context.Background(), c), c, account, []byte(`{"model":"gpt-6-astra","input":"task","stream":true}`), runtime)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.True(t, result.Stream)
@@ -549,7 +549,7 @@ func TestCodexCLITaskBillingUsesEffectiveConfiguredReasoning(t *testing.T) {
 			}}
 			cfg := rawChatCompletionsTestConfig()
 			billing := NewBillingService(cfg, nil)
-			gateway := &OpenAIGatewayService{cfg: cfg, billingService: billing, resolver: NewModelPricingResolver(nil, billing)}
+			gateway := &OpenAIGatewayService{cfg: cfg, settingService: enabledCodexCLIBridgeTestSettings(), billingService: billing, resolver: NewModelPricingResolver(nil, billing)}
 			c, recorder := newCodexCLIExecutionContext()
 			result, err := gateway.forwardCodexCLITaskWithRuntime(WithOutboundIdentityScope(context.Background(), c), c, account, encoded, runtime)
 			if test.failed {
@@ -593,7 +593,7 @@ func TestCodexCLITaskAcceptsMaxFromExistingGroupReasoningMapping(t *testing.T) {
 		return codexcli.TaskResult{Started: true, Output: "mapped answer"}, nil
 	}}
 	c, recorder := newCodexCLIExecutionContext()
-	result, err := (&OpenAIGatewayService{cfg: &config.Config{}}).forwardCodexCLITaskWithRuntime(WithOutboundIdentityScope(context.Background(), c), c, account, body, runtime)
+	result, err := (&OpenAIGatewayService{cfg: &config.Config{}, settingService: enabledCodexCLIBridgeTestSettings()}).forwardCodexCLITaskWithRuntime(WithOutboundIdentityScope(context.Background(), c), c, account, body, runtime)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, recorder.Code)
 	require.Equal(t, "max", optionalStringValue(result.ReasoningEffort))
@@ -635,7 +635,7 @@ func TestCodexCLITaskStandardTierHonorsFastPolicyBeforeSideEffects(t *testing.T)
 			}
 			ctx = withOpenAIFastPolicyContext(ctx, settings)
 			cache := &countTokensOwnerCache{}
-			gateway := &OpenAIGatewayService{cfg: &config.Config{}}
+			gateway := &OpenAIGatewayService{cfg: &config.Config{}, settingService: enabledCodexCLIBridgeTestSettings()}
 			if test.rejected {
 				gateway.openAITokenProvider = NewOpenAITokenProvider(nil, cache, nil)
 			}

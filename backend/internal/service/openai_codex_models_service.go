@@ -1961,50 +1961,57 @@ func (s *OpenAIGatewayService) fetchOpenAIModelsUpstream(ctx context.Context, re
 		req.Header.Set("If-None-Match", ifNoneMatch)
 	}
 
-	var resp *http.Response
-	if request.useAPIKeyUpstream {
-		if s.httpUpstream == nil {
-			return nil, infraerrors.New(http.StatusInternalServerError, "OPENAI_CODEX_MODELS_UPSTREAM_NOT_CONFIGURED", "Codex models upstream HTTP client is not configured")
-		}
-		req = req.WithContext(WithHTTPUpstreamProfile(req.Context(), HTTPUpstreamProfileOpenAI))
-		if usesZhipuProjectToken(request.credentialAccount) {
-			resp, err = s.projectTokens.RoundTrip(req, request.credentialAccount, func(attempt *http.Request) (*http.Response, error) {
-				return s.httpUpstream.Do(attempt, request.proxyURL, request.accountID, request.accountConcurrency)
-			})
+	send := func(req *http.Request) (*http.Response, error) {
+		var resp *http.Response
+		if request.useAPIKeyUpstream {
+			if s.httpUpstream == nil {
+				return nil, infraerrors.New(http.StatusInternalServerError, "OPENAI_CODEX_MODELS_UPSTREAM_NOT_CONFIGURED", "Codex models upstream HTTP client is not configured")
+			}
+			req = req.WithContext(WithHTTPUpstreamProfile(req.Context(), HTTPUpstreamProfileOpenAI))
+			if usesZhipuProjectToken(request.credentialAccount) {
+				resp, err = s.projectTokens.RoundTrip(req, request.credentialAccount, func(attempt *http.Request) (*http.Response, error) {
+					return s.httpUpstream.Do(attempt, request.proxyURL, request.accountID, request.accountConcurrency)
+				})
+			} else {
+				if request.credentialAccount != nil && request.credentialAccount.IsDomesticOAuth() {
+					oauth := s.cnOAuthService
+					if oauth == nil {
+						oauth = NewCNOAuthService(nil, nil, nil)
+					}
+					if err = oauth.prepareRequest(req, request.credentialAccount); err != nil {
+						return nil, err
+					}
+					prepareAccountOutboundRequest(req, cnControlRequestOwner(req.Context(), request.credentialAccount))
+				}
+				resp, err = s.httpUpstream.Do(req, request.proxyURL, request.accountID, request.accountConcurrency)
+			}
 		} else {
-			if request.credentialAccount != nil && request.credentialAccount.IsDomesticOAuth() {
-				oauth := s.cnOAuthService
-				if oauth == nil {
-					oauth = NewCNOAuthService(nil, nil, nil)
-				}
-				if err = oauth.prepareRequest(req, request.credentialAccount); err != nil {
-					return nil, err
-				}
-				prepareAccountOutboundRequest(req, cnControlRequestOwner(req.Context(), request.credentialAccount))
+			handled := false
+			if s.pluginManager != nil {
+				resp, handled, err = s.pluginManager.RoundTripOpenAIOAuth(req.Context(), req, request.proxyURL, request.credentialAccount)
 			}
-			resp, err = s.httpUpstream.Do(req, request.proxyURL, request.accountID, request.accountConcurrency)
-		}
-	} else {
-		handled := false
-		if s.pluginManager != nil {
-			resp, handled, err = s.pluginManager.RoundTripOpenAIOAuth(reqCtx, req, request.proxyURL, request.credentialAccount)
-		}
-		if !handled {
-			client, clientErr := httpclient.GetClient(httpclient.Options{
-				ProxyURL:              request.proxyURL,
-				Timeout:               codexModelsManifestRequestTimeout,
-				ResponseHeaderTimeout: 10 * time.Second,
-			})
-			if clientErr != nil {
-				return nil, infraerrors.Newf(http.StatusInternalServerError, "OPENAI_CODEX_MODELS_PROXY_INVALID", "invalid proxy configuration: %v", clientErr)
+			if !handled {
+				client, clientErr := httpclient.GetClient(httpclient.Options{
+					ProxyURL:              request.proxyURL,
+					Timeout:               codexModelsManifestRequestTimeout,
+					ResponseHeaderTimeout: 10 * time.Second,
+				})
+				if clientErr != nil {
+					return nil, infraerrors.Newf(http.StatusInternalServerError, "OPENAI_CODEX_MODELS_PROXY_INVALID", "invalid proxy configuration: %v", clientErr)
+				}
+				// This native branch uses the server-controlled ChatGPT models endpoint;
+				// validated account API Key destinations use httpUpstream above. The CLI
+				// callback preserves this original request and cannot choose another URL.
+				resp, err = client.Do(req) // #nosec G704 -- fixed OAuth destination; no account or inbound URL reaches this branch.
 			}
-			resp, err = client.Do(req)
 		}
+		return resp, err
 	}
+	resp, err := s.doOpenAICodexCLIControlPlane(req, request.credentialAccount, send)
 	if err != nil {
 		return nil, &codexModelsManifestUpstreamError{
 			err:       infraerrors.Newf(http.StatusBadGateway, "OPENAI_CODEX_MODELS_UPSTREAM_FAILED", "codex models manifest request failed: %v", err),
-			retryable: isRetryableCodexModelsManifestTransportError(err),
+			retryable: !isCodexCLIBridgeFailure(err) && isRetryableCodexModelsManifestTransportError(err),
 		}
 	}
 	defer func() { _ = resp.Body.Close() }()
@@ -2033,7 +2040,7 @@ func (s *OpenAIGatewayService) fetchOpenAIModelsUpstream(ctx context.Context, re
 	if err != nil {
 		return nil, &codexModelsManifestUpstreamError{
 			err:       infraerrors.Newf(http.StatusBadGateway, "OPENAI_CODEX_MODELS_UPSTREAM_FAILED", "read codex models manifest response: %v", err),
-			retryable: isRetryableCodexModelsManifestTransportError(err),
+			retryable: !isCodexCLIBridgeFailure(err) && isRetryableCodexModelsManifestTransportError(err),
 		}
 	}
 	if int64(len(body)) > bodyLimit {

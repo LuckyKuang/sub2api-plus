@@ -34,6 +34,22 @@ function render() {
 // tool through the user menu with one mounted subscription component at a time.
 describe('header tools in the fluid workspace', () => {
   beforeEach(() => { width.value = 1200 })
+  it.each([1200, 600])('Escape closes the user menu while focus remains on its trigger at width %s', async availableWidth => {
+    width.value = availableWidth
+    const wrapper = render()
+    const trigger = wrapper.get('button[aria-label="common.userMenu"]')
+    ;(trigger.element as HTMLButtonElement).focus()
+    await trigger.trigger('click')
+    expect(trigger.attributes('aria-expanded')).toBe('true')
+    expect(wrapper.find('.header-user-dropdown').exists()).toBe(true)
+    expect(document.activeElement).toBe(trigger.element)
+
+    await trigger.trigger('keydown', { key: 'Escape' })
+
+    expect(trigger.attributes('aria-expanded')).toBe('false')
+    await vi.waitFor(() => expect(wrapper.find('.header-user-dropdown').exists()).toBe(false))
+    expect(document.activeElement).toBe(trigger.element)
+  })
   it('moves tools into the menu at narrow widths and restores them when space returns', async () => {
     const wrapper = render()
     expect(wrapper.findAll('[data-feature="locale"]')).toHaveLength(1)

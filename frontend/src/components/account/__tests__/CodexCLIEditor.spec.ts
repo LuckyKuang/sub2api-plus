@@ -29,7 +29,7 @@ function view(overrides: Partial<CodexCLIAccountView> = {}): CodexCLIAccountView
     auth_status: { has_access_token: true, has_refresh_token: true, has_id_token: false },
     expected_owner: ownerA,
     oauth_credential_owner: ownerA,
-    availability: { available: true, code: 'exec_task_only', reason: 'task mode' },
+    availability: { available: true, code: 'http_bridge_and_tasks', reason: 'HTTP bridge and tasks' },
     ...overrides,
   }
 }
@@ -57,7 +57,7 @@ function choose(wrapper: VueWrapper, name: string, value: string) {
 describe('Codex CLI account editor', () => {
   beforeEach(() => {
     getAccount.mockReset().mockResolvedValue(view())
-    getRuntime.mockReset().mockResolvedValue({ execution_available: false })
+    getRuntime.mockReset().mockResolvedValue({ execution_available: false, bridge_enabled: true })
     updateAccount.mockReset().mockResolvedValue(view({ expected_owner: ownerB }))
   })
   afterEach(() => {
@@ -72,7 +72,7 @@ describe('Codex CLI account editor', () => {
     expect(wrapper.get('[data-testid="codex-cli-id_token-status"]').text()).toBe('codexCli.account.notConfigured')
     expect(wrapper.get('[data-testid="codex-cli-mode"]').attributes('disabled')).toBeDefined()
     expect(wrapper.get('[data-testid="codex-cli-mode"]').attributes('aria-checked')).toBe('false')
-    expect(wrapper.text()).toContain('/v1/codex-cli/responses')
+    expect(wrapper.text()).not.toContain('/v1/codex-cli/responses')
     expect(wrapper.text()).toContain('codexCli.account.taskModeHint')
     expect(wrapper.find('select').exists()).toBe(false)
     expect(wrapper.find('input[type="password"]').exists()).toBe(false)
@@ -80,24 +80,42 @@ describe('Codex CLI account editor', () => {
     expect(updateAccount).not.toHaveBeenCalled()
   })
 
-  it('enables only the separate task mode when the runtime is ready', async () => {
-    getRuntime.mockResolvedValueOnce({ execution_available: true })
+  it.each(['off', 'unknown', 'check-failed'])('hides official CLI controls when global bridge is %s', async state => {
+    if (state === 'off') getRuntime.mockResolvedValue({ execution_available: true, bridge_enabled: false })
+    else if (state === 'unknown') getRuntime.mockResolvedValue({ execution_available: true })
+    else getRuntime.mockRejectedValue(new Error('never-show-runtime-secret'))
     const wrapper = editor()
     await flushPromises()
-    await wrapper.get('[data-testid="codex-cli-mode"]').trigger('click')
-    expect(wrapper.vm.prepareSave()!.payload).toEqual({ expected_owner: ownerA, config_toml: defaultConfig, enabled: true })
+    expect(wrapper.find('[data-testid="codex-cli-editor"]').exists()).toBe(false)
+    expect(wrapper.vm.prepareSave()).toBeNull()
+    expect(wrapper.html()).not.toContain('never-show-runtime-secret')
     expect(updateAccount).not.toHaveBeenCalled()
   })
 
-  it.each(['missing', 'check-failed'])('keeps task mode disabled for runtime %s', async state => {
-    if (state === 'check-failed') getRuntime.mockRejectedValueOnce(new Error('never-show-runtime-secret'))
+  it('preserves a custom saved config when global bridging is enabled', async () => {
+    const custom = 'sandbox_mode = "read-only"\nmodel = "gpt-6.1-sol"\n'
+    getRuntime.mockResolvedValue({ execution_available: true, bridge_enabled: true })
+    getAccount.mockResolvedValueOnce(view({ config_toml: custom }))
     const wrapper = editor()
     await flushPromises()
-    expect(wrapper.get('[data-testid="codex-cli-mode"]').attributes('disabled')).toBeDefined()
-    expect(wrapper.text()).toContain('codexCli.account.runtimeUnavailable')
-    expect(wrapper.html()).not.toContain('never-show-runtime-secret')
-    await wrapper.get('[data-testid="codex-cli-config"]').setValue('editable-config')
-    expect(wrapper.vm.prepareSave()!.payload).toEqual({ expected_owner: ownerA, config_toml: 'editable-config' })
+    expect(wrapper.get<HTMLTextAreaElement>('[data-testid="codex-cli-config"]').element.value).toBe(custom)
+    expect(wrapper.vm.prepareSave()).toBeNull()
+  })
+
+  it('refreshes global permission when reopened and does not save a hidden draft', async () => {
+    const wrapper = editor()
+    await flushPromises()
+    await wrapper.get('[data-testid="codex-cli-config"]').setValue('sandbox_mode = "read-only"')
+    expect(wrapper.vm.prepareSave()).not.toBeNull()
+    await wrapper.setProps({ active: false })
+    expect(wrapper.vm.prepareSave()).toBeNull()
+    getRuntime.mockResolvedValueOnce({ execution_available: true, bridge_enabled: false })
+    await wrapper.setProps({ active: true })
+    await flushPromises()
+    expect(getRuntime).toHaveBeenCalledTimes(2)
+    expect(wrapper.find('[data-testid="codex-cli-editor"]').exists()).toBe(false)
+    expect(wrapper.vm.prepareSave()).toBeNull()
+    expect(updateAccount).not.toHaveBeenCalled()
   })
 
   it('allows turning a saved task mode off while its runtime is missing', async () => {
@@ -110,7 +128,7 @@ describe('Codex CLI account editor', () => {
   })
 
   it.each([
-    { platform: 'anthropic' }, { type: 'apikey' }, { type: 'setup-token' }, { parent_account_id: 2 },
+    { platform: 'anthropic' }, { type: 'setup-token' }, { parent_account_id: 2 },
     { credentials: { auth_mode: 'agentIdentity' } },
     { credentials: { auth_mode: 'personalAccessToken' } },
     { credentials: { openai_auth_mode: 'personal_access_token' } },
@@ -120,6 +138,43 @@ describe('Codex CLI account editor', () => {
     expect(wrapper.find('[data-testid="codex-cli-editor"]').exists()).toBe(false)
     expect(getAccount).not.toHaveBeenCalled()
     expect(wrapper.vm.prepareSave()).toBeNull()
+  })
+
+  it('edits API-key bridge configuration without exposing or submitting OAuth credentials', async () => {
+    getRuntime.mockResolvedValue({ execution_available: true, bridge_enabled: true })
+    getAccount.mockResolvedValue(view({ auth: { auth_mode: 'apikey', tokens: {} }, oauth_credential_owner: '', availability: { available: true, code: 'http_bridge_only', reason: 'HTTP bridge' } }))
+    const wrapper = editor({ type: 'apikey', credentials: { api_key: 'private-key' } })
+    await flushPromises()
+    expect(wrapper.get<HTMLTextAreaElement>('[data-testid="codex-cli-config"]').element.value).toBe(defaultConfig)
+    expect(wrapper.find('[data-testid="codex-cli-workspace"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="codex-cli-access_token-action"]').exists()).toBe(false)
+    expect(wrapper.html()).not.toContain('private-key')
+    await wrapper.get('[data-testid="codex-cli-mode"]').trigger('click')
+    const prepared = wrapper.vm.prepareSave()!
+    expect(prepared.payload).toEqual({ expected_owner: ownerA, config_toml: defaultConfig, enabled: true })
+    await wrapper.vm.save(prepared)
+    expect(updateAccount).toHaveBeenCalledExactlyOnceWith(24, prepared.payload)
+  })
+
+  it.each(['off', 'pending', 'failed'])('does not admit hidden API-key bridge edits while global state is %s', async state => {
+    if (state === 'off') getRuntime.mockResolvedValue({ execution_available: true, bridge_enabled: false })
+    else if (state === 'pending') getRuntime.mockReturnValue(new Promise(() => {}))
+    else getRuntime.mockRejectedValue(new Error('private-error'))
+    const wrapper = editor({ type: 'apikey' })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="codex-cli-editor"]').exists()).toBe(false)
+    expect(wrapper.vm.prepareSave()).toBeNull()
+    expect(updateAccount).not.toHaveBeenCalled()
+  })
+
+  it('rejects a prepared API-key update after the credential owner changes', async () => {
+    const wrapper = editor({ type: 'apikey', oauth_credential_owner: '', credentials: { api_key: 'old-key' } })
+    await flushPromises()
+    await wrapper.get('[data-testid="codex-cli-config"]').setValue('sandbox_mode = "read-only"')
+    const prepared = wrapper.vm.prepareSave()!
+    await wrapper.setProps({ account: account(24, { type: 'apikey', oauth_credential_owner: '', credentials: { api_key: 'new-key' } }) })
+    await expect(wrapper.vm.save(prepared)).rejects.toThrow('codexCli.account.ownerChanged')
+    expect(updateAccount).not.toHaveBeenCalled()
   })
 
   it('keeps config edits local and includes the original owner when explicitly saved', async () => {

@@ -1,15 +1,22 @@
-# Managed official Codex CLI tasks
+# Managed official Codex CLI bridge and tasks
 
-Sub2API Plus can install the reviewed official Codex CLI and run separate,
-single-turn tasks for credential-owning OpenAI ChatGPT OAuth accounts. The
+Sub2API Plus can install the reviewed official Codex CLI and bridge existing
+gateway traffic for credential-owning OpenAI ChatGPT OAuth and API Key accounts. The
 project pins CLI **0.165.0**. Installation never resolves `latest`, upgrades a
 system installation, or changes account/global outbound identity declarations.
 
-This is a separate execution mode. Existing `/v1/responses`, Chat, Messages,
-WebSocket, discovery, usage, refresh and probe routes keep their existing
-transports. Enabling an account's CLI mode does not redirect those routes into
-the CLI. The reviewed CLI `exec --json` interface runs an agent task; it is not
-a transparent OpenAI Responses HTTP/WebSocket proxy.
+Two explicit switches control bridging: the global bridge environment and the
+selected credential owner's account setting. Both default off. Installation or
+detection never opts traffic in. Enabled traffic keeps the gateway's existing
+authentication, canonical ingress audit, scheduling, concurrency, billing,
+protocol conversion and conversation affinity. The reviewed official
+`responses-api-proxy` supplies the HTTP transport hop; it does not run an agent,
+execute local tools or select a different account.
+
+The separate `POST /v1/codex-cli/responses` single-turn task endpoint remains an
+`exec --json` agent interface with the narrower task contract below. It also
+requires the global bridge switch. Its task-only limitations must not be applied
+to the transparent bridge, and its tasks do not acquire conversation affinity.
 
 ## Installation and account setup
 
@@ -28,6 +35,7 @@ The authenticated administrator endpoints are:
 | Endpoint | Behavior |
 | --- | --- |
 | `GET /api/v1/admin/settings/codex-cli` | Local runtime status; no download or release lookup |
+| `PUT /api/v1/admin/settings/codex-cli` | Step-up protected explicit `bridge_enabled` boolean |
 | `POST /api/v1/admin/settings/codex-cli/install` | Step-up protected installation of the pinned official artifact |
 | `GET /api/v1/admin/accounts/:id/codex-cli` | Account configuration, masked auth status and opaque owner values |
 | `PUT /api/v1/admin/accounts/:id/codex-cli` | Atomically save configuration and an optional write-only auth patch |
@@ -42,8 +50,38 @@ release archive is part of later integrity verification. Files are stored
 under `${DATA_DIR:-./data}/codex/cli/versions/0.165.0/`; the host's global
 `codex` installation is left in place.
 
-Open an eligible account's editor to enable task mode and edit `config.toml`.
-New configuration starts with:
+After the runtime is installed and verified, enable **Enable bridge environment**
+in the same Outbound identity card and save. `bridge_enabled` is independent of
+`execution_available`: the latter continues to report verified runtime readiness.
+Enabling requires the exact installed release version, verified official source
+and execution availability. Disabling remains possible when the runtime is no
+longer ready. A rejected enable or failed storage write leaves the persisted
+choice unchanged. Reads are bounded to two seconds and retain an earlier caller
+deadline or cancellation, including background WebSocket protocol selection.
+Read timeouts and storage failures do not authorize a native bypass for an
+opted-in account. Settings API errors expose stable reasons rather than database,
+proxy or filesystem diagnostics.
+
+When the global bridge environment is enabled, both **Add account** and
+**Edit account** expose **Official Codex CLI** in the same OpenAI OAuth or API Key settings
+position for eligible accounts. With the global bridge disabled, or while its
+status is unknown, both forms hide these controls. Opening either form refreshes
+the global status, so reopening it after saving global settings uses a fresh
+runtime response.
+Hiding the controls preserves existing account configuration and does not turn
+an account's saved opt-in off. Creation saves `enabled` and `config_toml` with
+the account's credentials in the original create operation; it does not create
+an account and then issue a second configuration write. Editing retains the
+credential-owner comparison and write-only token controls below. Account opt-in
+requires the global switch to expose its controls and a ready runtime to enable
+the account. Changing either switch does not reset a session route.
+
+The account's `config.toml` configures the independent agent task interface,
+including its sandbox and local tools. The transparent transport bridge does not
+execute those agent tools. Enabling Official Codex CLI during account creation
+fills an empty `config.toml` with the server's defaults below, returned as
+`default_config_toml` by the runtime status API. Existing custom
+text is preserved, including when toggling the account setting repeatedly:
 
 ```toml
 sandbox_mode = "danger-full-access"
@@ -71,21 +109,24 @@ official pinned runtime, otherwise the write returns HTTP 422
 `CODEX_CLI_RUNTIME_UNAVAILABLE`. Editing or disabling an already enabled account
 remains possible while the runtime is unavailable.
 
-API-key, setup-token, AgentIdentity, personal-access-token and credential-shadow
-accounts are ineligible. Ordinary account responses omit the entire managed
-CLI configuration; use the dedicated account endpoint to edit it.
+Credential-owning OpenAI OAuth and API Key accounts are eligible for bridging;
+independent agent tasks require ChatGPT OAuth. Setup-token, AgentIdentity,
+personal-access-token and credential-shadow accounts remain ineligible. Ordinary
+account responses omit the entire managed CLI configuration; use the dedicated
+account endpoint to edit it.
 
 ## Credential ownership and writes
 
-The database's existing OAuth credential fields remain canonical. The CLI
+The database's existing account credential fields remain canonical. The CLI
 configuration stores only `enabled` and `config_toml`; there is no second
-persisted `auth_json` credential bundle. Reads expose the ChatGPT workspace ID
-and booleans indicating whether access, refresh and ID tokens are configured.
-Tokens are never returned.
+persisted `auth_json` credential bundle. OAuth reads expose the ChatGPT workspace
+ID and booleans indicating whether access, refresh and ID tokens are configured.
+API Key reads return `auth_mode: apikey`, an empty token map and false token-status
+flags. Tokens and API keys are never returned.
 
 The dedicated account PUT requires the initiating form's `expected_owner` and
 `config_toml`; optional `enabled` preserves its current value when omitted.
-An optional `auth.tokens` object accepts `account_id`, `access_token`,
+For OAuth accounts, an optional `auth.tokens` object accepts `account_id`, `access_token`,
 `refresh_token` and `id_token`: omission preserves a value, a nonempty string
 replaces it, and `null` clears it. Empty or masked token placeholders and
 unknown fields are rejected. Replacement access/ID claims are checked for
@@ -95,15 +136,23 @@ different owner. Use the existing OAuth authorization flow to change accounts.
 
 `expected_owner` binds the form to the credential grant, route and CLI
 configuration. Credential or proxy changes require reloading the form. The
-write also uses the existing database OAuth-owner compare-and-swap, so a login
-or route change racing with the save cannot be overwritten. The returned
+OAuth write also uses the existing database OAuth-owner compare-and-swap. API
+Key writes use a configuration-only compare-and-swap that preserves the API key
+and base URL. Both compare the captured account and route, so concurrent
+credential or route changes cannot be overwritten. For OAuth, the returned
 `oauth_credential_owner` refreshes the ordinary account editor's comparison
-value. Unrelated account names, priorities and usage observations do not
-invalidate the CLI form.
+value; it is empty for API Key accounts. Unrelated account names, priorities and
+usage observations do not invalidate the CLI form.
 
 Save proxy changes separately before editing CLI settings or credentials. The
 account editor rejects a combined proxy/CLI change before either write; reopen
 the editor after saving the proxy to bind the CLI form to its new route.
+API-key accounts also save API key or base URL changes separately from CLI
+settings. A combined edit is rejected before either write and both drafts stay
+in the form. Revert the CLI edits, save the credential or destination change,
+then reopen the account and apply CLI settings against its new owner snapshot.
+Key-only, CLI-only and unrelated metadata plus CLI edits retain their normal
+save flow; this restriction does not relax owner CAS or reorder the writes.
 
 Before each task, existing project token-provider locking/refresh and owner
 checks acquire one account snapshot. The private execution `auth.json` uses
@@ -130,6 +179,86 @@ Each execution supplies `-c project_root_markers=[]` so project discovery stops
 at the fresh private working directory. A trusted ancestor Git project's
 `.codex/config.toml` must not override the account's saved configuration or
 reactivate independent network features.
+
+## Transparent bridge and conversation affinity
+
+When both switches are on, existing Responses requests reach the official
+proxy after the gateway has resolved and prepared the credential owner's
+destination, bearer, identity and proxy. Existing Chat and Messages conversion
+paths continue to produce Responses requests through their owning adapters;
+their parsing, error mapping, SSE processing and billing remain in the gateway.
+Caller tool definitions, tool outputs, opaque response IDs, unknown sibling
+fields and streaming bytes are not converted into a task prompt or synthesized
+completion. The request method, original trusted URL, body and provider response
+status/body are preserved by the bridge.
+
+Transport selection is evaluated again for the next request, probe or accepted
+WebSocket turn. The current global switch and the current credential owner's
+account switch are an AND condition: both enabled selects the CLI bridge;
+either disabled selects the existing unified native sender. Changing a switch
+does not restart, replay or move an already submitted request. A live account
+lookup reads only that owner's bridge flag; it does not replace the acquired
+credential, identity or proxy snapshot. A known disabled switch selects native
+transport even if the other switch cannot be read. When neither switch is
+known disabled, failure to read a required permission is an error, not
+permission to silently choose another transport.
+
+The unified native sender retains the normal identity source order: valid
+credential-owner `credentials.user_agent`, then valid global
+`openai_codex_user_agent`, then the compiled default. Switching transport never
+clears an account override, resets identity settings or substitutes CLI ambient
+headers. Subsequent requests resolve identities under the same existing rules.
+
+The official proxy has an HTTP Responses interface, not native upstream
+WebSocket support. Bridge-enabled accounts use the gateway's existing
+`http_bridge` WebSocket ingress adapter, which owns SSE-to-frame conversion and
+history replay. The direct upstream WebSocket path is unavailable while
+bridging is selected. This does not disable per-turn audit or replace the
+ordinary HTTP/WebSocket conversation routing contract.
+
+If bridging is enabled while a native upstream WebSocket is already open,
+the accepted turn may finish, but the next turn cannot reuse that socket. The
+gateway requests a reconnect before another upstream write; it retains the
+session owner and generation. The reconnected client follows the existing
+HTTP bridge continuation and full-history requirements.
+
+For a connection already using the HTTP bridge adapter, each subsequent turn
+selects the current CLI or native HTTP hop without reconnecting. Disabling
+either switch therefore takes effect on the next turn of that connection;
+enabling both on an existing native upstream socket uses the reconnect rule
+above. Neither direction changes the session owner, generation or migration
+lease, and a transport toggle does not authorize account failover.
+
+Logical sessions retain their authorization-domain-scoped route, owner,
+generation and migration lease. Global/account switches cannot clear or rewrite
+that ownership, and bridge processes never maintain a second shared Codex
+conversation home. Failover resolves the newly selected credential owner and
+its identity/proxy anew; a request's acquired owner snapshot stays fixed while
+it is sent. Opaque continuation IDs remain under the existing protocol and
+history-replay rules and are not silently moved to an unrelated account.
+Concurrency and transport resource accounting retain the logically selected
+account, including a shadow's own limits; the credential owner determines the
+provider bearer, workspace, identity and proxy.
+
+Each transport hop starts a private, verified official proxy and a loopback-only
+relay with a random one-use nonce. The nonce, not an OAuth JWT, is the proxy's
+stdin API-key-shaped credential. The relay can enter only the one already
+prepared provider callback: its original destination and authentication (OAuth bearer/workspace or API Key bearer)
+are fixed by the gateway. Proxy-supplied URLs, headers or payload changes cannot
+choose another owner or provider. The callback retains the existing plugin,
+proxy and native TLS sender; the CLI does not replace trusted outbound identity
+or signing declarations. Cancellation closes the body/process/relay resources.
+Local bridge failures have stable error codes; after the provider callback has
+started, the attempt cannot be automatically replayed through another transport
+or account. Provider HTTP failures remain provider HTTP responses.
+This includes proxy exit or relay read failure before the first response byte:
+Responses, Chat, Messages and WebSocket adapters preserve the terminal bridge
+error instead of turning it into account failover or temporary unscheduling.
+
+Disabling the global switch prevents new bridge admissions and leaves saved
+account configuration, installed artifacts and session routes intact. Ordinary
+gateway requests then follow their existing native transport selection. The
+separate task endpoint refuses execution while the global switch is off.
 
 ## Task protocol
 
@@ -199,7 +328,11 @@ The service user needs write/execute access to its data directory and HTTPS
 access to the pinned GitHub release download. Persist `DATA_DIR` with the
 application data volume. A binary on the Docker host is not automatically
 available inside the container; install the managed runtime through the running
-gateway's settings.
+gateway's settings. The global choice is stored in the settings table as
+`openai_codex_cli_bridge_enabled`, default `false`, with no environment override.
+Account `credentials.codex_cli` retains its existing `enabled`/`config_toml`
+shape. No database migration, additional volume or second credential bundle is
+needed for bridge configuration.
 
 Each execution receives
 `${DATA_DIR:-./data}/codex/accounts/{account-id}/runs/{random}/home` as its
@@ -254,7 +387,22 @@ account editor's save, cancellation, late-response and partial-failure paths.
 Run checks through the [validation container workflow](../CONTRIBUTING.md).
 
 `python3 tools/test_codex_cli_wire.py` runs the pinned official Linux executable
-against a local synthetic Responses server. It checks exact trusted headers,
+against a local synthetic Responses server. Its transparent-proxy cases and
+`codexcli/TestCodexBridgeOfficialBinaryWire` exercise the actual pinned
+`responses-api-proxy`, including the Go nonce relay, unchanged request/response
+bytes, terminal provider errors, one provider send and rejected local requests.
+The Go wire cases also retain API Key authentication and custom destinations
+for model GETs, Responses, image generation JSON and binary multipart image
+edits, without introducing OAuth workspace headers.
+Injected-process fixtures separately cover unverified runtime, payload tamper,
+cancellation, cleanup and stable errors. Service tests cover both switches,
+credential-owner snapshots, failover identity/proxy, forbidden native bypass and
+unchanged conversation ownership across switch changes. Frontend tests cover
+explicit global saves, ready-only enabling, unavailable-runtime disabling,
+atomic account creation and stale/failed saves. These fixture and wire checks
+do not establish a real OpenAI account's entitlement or live model acceptance.
+
+The task cases check exact trusted headers,
 account/global/default identity values, final model and usage, saved root
 reasoning effort, unchanged credential snapshots and terminal 401 behavior.
 Every case also verifies that no paid `service_tier` is sent.
@@ -270,3 +418,39 @@ account or a real OpenAI model request.
 The real-binary harness executes Linux. The macOS forced-preferences command is
 covered through its injected command boundary; it has not been executed on a
 native macOS runtime by these Linux-container checks.
+
+
+### OpenAI API Key accounts and the official CLI bridge
+
+Credential-owning OpenAI API Key accounts use the same account `codex_cli.enabled`
+and `config_toml` settings and default TOML as ChatGPT OAuth accounts. Both the
+current global bridge switch and the current credential owner's account switch
+must permit each new request/turn. Disabling either restores the existing unified
+sender. An already submitted generation completes without replay; a native WS
+connection requiring the bridge reconnects with 1012 before the next generation.
+The HTTP WS adapter chooses the CLI hop again on each turn.
+
+API Key bridging includes existing OpenAI compatible custom base URLs. The trusted
+prepared request retains its endpoint, API Key bearer, account proxy and coherent
+outbound identity; no ChatGPT workspace or OAuth token is added. Live configuration
+reads select only the bridge boolean and never replace acquired credentials or
+identity. The authenticated CLI configuration API exposes no API Key secret and
+uses a configuration-only account/route CAS; OAuth auth patches are rejected for
+API Key accounts. Standalone agent tasks and OAuth auth.json generation remain
+ChatGPT OAuth only. The account TOML cannot override authentication, routing or
+identity, and the transparent HTTP hop does not execute agent tools.
+
+All existing HTTP/WS ingress audit, canonical content extraction, billing,
+concurrency, session affinity and no-replay boundaries remain ahead of provider
+writes. API Key bridge regression coverage includes eligibility and default
+configuration, secret-free config edits, hot global/account switches, gateway and
+probe endpoint/auth/identity/body preservation, native WS admission and absence of
+OAuth workspace leakage.
+
+The same switches cover model discovery, account connection/image/chat probes,
+the existing internal Codex usage inference probe, and supported WHAM usage,
+credit-detail and credit-consumption requests. They retain prepared protocol,
+credential owner, proxy and headers. OAuth issuer login, refresh and revocation
+remain separate operations. Enabling bridging generates no additional probe.
+OAuth availability is `http_bridge_and_tasks`; API Key is `http_bridge_only`.
+API Key custom endpoints and bearers never acquire OAuth workspace/token fields.

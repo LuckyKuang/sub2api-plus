@@ -4,8 +4,8 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import type { CodexCLIRuntimeStatus } from '@/api/admin/codexCliRuntime'
 import CodexCLIRuntimeSettings from '../CodexCLIRuntimeSettings.vue'
 
-const { getRuntime, installRuntime } = vi.hoisted(() => ({ getRuntime: vi.fn(), installRuntime: vi.fn() }))
-vi.mock('@/api/admin/codexCliRuntime', () => ({ getCodexCLIRuntime: getRuntime, installCodexCLI: installRuntime }))
+const { getRuntime, installRuntime, saveBridge } = vi.hoisted(() => ({ getRuntime: vi.fn(), installRuntime: vi.fn(), saveBridge: vi.fn() }))
+vi.mock('@/api/admin/codexCliRuntime', () => ({ getCodexCLIRuntime: getRuntime, installCodexCLI: installRuntime, updateCodexCLIBridge: saveBridge }))
 vi.mock('vue-i18n', () => ({ useI18n: () => ({
   t: (key: string, params?: { version?: string }) => params?.version ? `${key} ${params.version}` : key,
 }) }))
@@ -14,7 +14,7 @@ function status(overrides: Partial<CodexCLIRuntimeStatus> = {}): CodexCLIRuntime
   return {
     target_version: '0.165.0', installed_version: '', path: '', source: '', source_verified: false,
     platform: 'linux-arm64', installed: false, version_match: false, can_install: true,
-    execution_available: false, unavailable_code: 'not_installed', message: 'safe server description',
+    execution_available: false, bridge_enabled: false, unavailable_code: 'not_installed', message: 'safe server description',
     mode: 'exec_task', transparent_proxy_available: false, ...overrides,
   }
 }
@@ -42,6 +42,7 @@ describe('Codex CLI runtime settings', () => {
   beforeEach(() => {
     getRuntime.mockReset().mockResolvedValue(status())
     installRuntime.mockReset().mockResolvedValue(readyStatus())
+    saveBridge.mockReset().mockImplementation(async (enabled: boolean) => ({ ...readyStatus(), bridge_enabled: enabled }))
   })
   afterEach(() => wrappers.splice(0).forEach(wrapper => wrapper.unmount()))
 
@@ -55,9 +56,10 @@ describe('Codex CLI runtime settings', () => {
     expect(wrapper.get('[data-testid="codex-cli-runtime-readiness"]').text()).toBe('codexCliRuntime.notReady')
     expect(wrapper.get('[data-testid="codex-cli-runtime-install"]').text()).toContain('0.165.0')
     expect(wrapper.find('input').exists()).toBe(false)
-    expect(wrapper.text()).toContain('POST /v1/codex-cli/responses')
     expect(wrapper.text()).toContain('codexCliRuntime.taskHint')
     expect(wrapper.text()).toContain('codexCliRuntime.permissionsHint')
+    expect(wrapper.get('[data-testid="codex-cli-bridge-toggle"]').attributes('disabled')).toBeDefined()
+    expect(saveBridge).not.toHaveBeenCalled()
   })
 
   it('installs only after an explicit click and displays verified readiness', async () => {
@@ -225,5 +227,86 @@ describe('Codex CLI runtime settings', () => {
     expect(wrapper.get('[role="alert"]').text()).toBe('codexCliRuntime.installFailed')
     expect(wrapper.text()).not.toContain('codexCliRuntime.installedSuccessfully')
     expect(wrapper.get('[data-testid="codex-cli-runtime-readiness"]').text()).toBe('codexCliRuntime.notReady')
+  })
+
+  // Requirement: installing/detecting an official CLI never grants permission
+  // to bridge traffic. Only an explicit saved global choice may do so.
+  it('keeps the bridge disabled after installation and saves a separate explicit opt-in', async () => {
+    const wrapper = settings()
+    await flushPromises()
+    await wrapper.get('[data-testid="codex-cli-runtime-install"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="codex-cli-bridge-toggle"]').attributes('aria-checked')).toBe('false')
+    expect(saveBridge).not.toHaveBeenCalled()
+    await wrapper.get('[data-testid="codex-cli-bridge-toggle"]').trigger('click')
+    expect(saveBridge).not.toHaveBeenCalled()
+    await wrapper.get('[data-testid="codex-cli-bridge-save"]').trigger('click')
+    await flushPromises()
+    expect(saveBridge).toHaveBeenCalledExactlyOnceWith(true)
+    expect(wrapper.get('[data-testid="codex-cli-bridge-save"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.text()).toContain('codexCliRuntime.bridgeSaved')
+  })
+
+  it('can disable an enabled bridge even when the runtime is no longer available', async () => {
+    getRuntime.mockResolvedValueOnce(status({ bridge_enabled: true }))
+    saveBridge.mockResolvedValueOnce(status({ bridge_enabled: false }))
+    const wrapper = settings()
+    await flushPromises()
+    expect(wrapper.get('[data-testid="codex-cli-bridge-toggle"]').attributes('disabled')).toBeUndefined()
+    await wrapper.get('[data-testid="codex-cli-bridge-toggle"]').trigger('click')
+    await wrapper.get('[data-testid="codex-cli-bridge-save"]').trigger('click')
+    await flushPromises()
+    expect(saveBridge).toHaveBeenCalledExactlyOnceWith(false)
+    expect(wrapper.get('[data-testid="codex-cli-bridge-toggle"]').attributes('aria-checked')).toBe('false')
+    expect(installRuntime).not.toHaveBeenCalled()
+  })
+
+  it.each(['source_verified', 'version_match', 'installed', 'execution_available'] as const)(
+    'prevents enabling the bridge when %s is false', async field => {
+      getRuntime.mockResolvedValueOnce({ ...readyStatus(), [field]: false })
+      const wrapper = settings()
+      await flushPromises()
+      expect(wrapper.get('[data-testid="codex-cli-bridge-toggle"]').attributes('disabled')).toBeDefined()
+      await wrapper.get('[data-testid="codex-cli-bridge-toggle"]').trigger('click')
+      await wrapper.get('[data-testid="codex-cli-bridge-save"]').trigger('click')
+      expect(saveBridge).not.toHaveBeenCalled()
+    },
+  )
+
+  it('retains a failed bridge draft for explicit retry and never displays private errors', async () => {
+    getRuntime.mockResolvedValueOnce(readyStatus())
+    saveBridge.mockRejectedValueOnce(new Error('private-auth-token'))
+    const wrapper = settings()
+    await flushPromises()
+    await wrapper.get('[data-testid="codex-cli-bridge-toggle"]').trigger('click')
+    await wrapper.get('[data-testid="codex-cli-bridge-save"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[role="alert"]').text()).toBe('codexCliRuntime.bridgeSaveFailed')
+    expect(wrapper.html()).not.toContain('private-auth-token')
+    expect(wrapper.text()).not.toContain('codexCliRuntime.bridgeSaved')
+    expect(wrapper.get('[data-testid="codex-cli-bridge-toggle"]').attributes('aria-checked')).toBe('true')
+    await wrapper.get('[data-testid="codex-cli-bridge-save"]').trigger('click')
+    await flushPromises()
+    expect(saveBridge).toHaveBeenCalledTimes(2)
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+  })
+
+  it('serializes global saves with runtime checks and ignores a late save after unmount', async () => {
+    getRuntime.mockResolvedValueOnce(readyStatus())
+    const pending = deferred<CodexCLIRuntimeStatus>()
+    saveBridge.mockReturnValueOnce(pending.promise)
+    const wrapper = settings()
+    await flushPromises()
+    await wrapper.get('[data-testid="codex-cli-bridge-toggle"]').trigger('click')
+    await wrapper.get('[data-testid="codex-cli-bridge-save"]').trigger('click')
+    expect(wrapper.get('[data-testid="codex-cli-runtime-check"]').attributes('disabled')).toBeDefined()
+    await wrapper.get('[data-testid="codex-cli-bridge-save"]').trigger('click')
+    await wrapper.get('[data-testid="codex-cli-runtime-check"]').trigger('click')
+    expect(saveBridge).toHaveBeenCalledTimes(1)
+    expect(getRuntime).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+    pending.resolve({ ...readyStatus(), bridge_enabled: true })
+    await flushPromises()
+    expect(saveBridge).toHaveBeenCalledTimes(1)
   })
 })

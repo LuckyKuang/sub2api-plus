@@ -4,10 +4,10 @@
       <span class="font-mono text-sm">#{{ value }}</span>
     </template>
     <template #cell-out_trade_no="{ value }">
-      <span class="text-sm text-gray-900 dark:text-white">{{ value }}</span>
+      <span class="break-all text-sm text-gray-900 dark:text-white">{{ value }}</span>
     </template>
     <template v-if="showUser" #cell-user_email="{ value, row }">
-      <div class="text-sm">
+      <div class="min-w-0 break-words text-sm">
         <span class="text-gray-900 dark:text-white">{{ value || row.user_name || '#' + row.user_id }}</span>
         <span v-if="row.user_notes" class="ml-1 text-xs surface-muted">({{ row.user_notes }})</span>
       </div>

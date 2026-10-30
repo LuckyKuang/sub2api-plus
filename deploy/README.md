@@ -74,7 +74,7 @@ are not required.
 | **Apple container** | Native local stack on macOS 26 | Not needed (auto-setup) |
 | **Binary Install** | Production servers, systemd | Web-based wizard |
 
-The optional [managed Codex CLI task mode](../docs/CODEX_CLI.md) works with
+The optional [managed Codex CLI bridge and task modes](../docs/CODEX_CLI.md) work with
 binary, Docker and Apple-container installations. Install its pinned runtime
 through the running gateway's Outbound identity settings and retain the
 application data volume. Runtime files and private task homes live under
@@ -85,6 +85,19 @@ permissions, including exposed container mounts. Per-account/task directories
 provide logical state isolation; they are not an OS isolation boundary.
 System or managed Codex configuration disables task mode; see its
 [configuration environment requirements](../docs/CODEX_CLI.md#isolation-and-deployment).
+
+Installation/detection does not enable bridging. After the official runtime is
+verified, explicitly save **Enable bridge environment** in Outbound identity and
+enable **Official Codex CLI** on each eligible OpenAI OAuth account, either while
+creating it or in its editor. The global choice is stored in the existing
+settings table as `openai_codex_cli_bridge_enabled` (default `false`, no YAML or
+environment override). Account settings remain in
+`accounts.credentials.codex_cli` as `enabled` and `config_toml`; no additional
+credential copy, migration or volume is introduced. Existing application/DB
+persistence retains both settings across container replacement. Disabling global
+bridging preserves installed files, account settings and conversation routes;
+new ordinary requests use existing native transports, and independent CLI tasks
+are refused. Runtime readiness remains visible separately from global permission.
 
 ## Files
 

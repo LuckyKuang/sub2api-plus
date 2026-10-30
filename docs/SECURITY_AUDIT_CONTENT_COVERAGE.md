@@ -7,6 +7,20 @@ Moderation and Prompt Audit. The shared implementation is
 `backend/internal/auditcontent`; protocol handlers and account paths must not
 maintain alternate text extractors.
 
+The opt-in [official Codex CLI transparent bridge](CODEX_CLI.md) retains the
+existing Responses, Chat, Messages and Responses WebSocket ingress endpoints.
+It changes the prepared outbound HTTP transport only after their existing
+authentication, basic validation, canonical audit, scheduling and admission.
+Both audit engines receive the original protocol envelope before a CLI process,
+local relay or provider send can start. Each WebSocket turn retains the same
+audit and owner-generation fence; the existing HTTP bridge adapts SSE events
+back to frames without invoking the CLI agent loop. Unknown valid items and
+siblings retain this document's extraction pass-through contract. Account and
+global bridge switches cannot change content classification or bypass audit.
+`TestCodexCLIBridgeOrdinaryResponsesBothRealAuditsPrecedeSideEffects` and
+`TestCodexCLIBridgeOrdinaryResponsesBothEnginesReceiveOriginalEnvelope` retain
+the real-engine recognized-sibling and unchanged-envelope ordering evidence.
+
 The optional [managed Codex CLI task route](CODEX_CLI.md),
 `POST /v1/codex-cli/responses`, accepts a deliberately limited single-turn text
 Responses envelope. Its basic-validation contract permits only `model`,
@@ -885,3 +899,21 @@ without account selection or an audit-derived violation.
 Regressions include `user_request_admission_test.go`,
 `gateway_metadata_admission_test.go` and the existing media/cache/file ordering
 suites. Unknown valid fields retain the established pass-through behavior.
+
+
+### OpenAI API Key CLI bridge audit coverage
+
+The transparent CLI hop also accepts credential-owning OpenAI API Key accounts,
+including compatible custom base URLs, without changing canonical extraction or
+audit ordering. Both real audit engines run before account selection, billing,
+slots and CLI/provider writes; unknown structures retain the documented
+pass-through policy. Native WS requires 1012 reconnect before a newly bridged
+turn; submitted turns are never replayed. Regression coverage is in
+`openai_codex_cli_bridge_audit_test.go`, `codex_cli_apikey_bridge_test.go` and
+`codex_cli_bridge_ws_switch_test.go`. Independent agent tasks remain OAuth only.
+
+The CLI hop also wraps existing administrator probes and model/quota control
+requests. Model discovery and WHAM metadata do not become new content ingress.
+The existing fixed internal usage inference probe remains system-owned; the hop
+introduces no additional prompt or audit exemption for accepted user traffic.
+OAuth issuer login, refresh and revocation remain outside this hop.

@@ -305,7 +305,7 @@ func TestSystemNativeCLICanBeReferencedThroughSymlink(t *testing.T) {
 	}
 }
 
-func TestVerifiedManagedCLIHasPrecedenceAndOnlyTaskCapabilities(t *testing.T) {
+func TestVerifiedManagedCLIHasPrecedenceAndReviewedTaskAndProxyCapabilities(t *testing.T) {
 	archive := validFixture(t)
 	m := fixtureManager(t, archive)
 	seedManaged(t, m, archive, testExecutable)
@@ -326,10 +326,10 @@ func TestVerifiedManagedCLIHasPrecedenceAndOnlyTaskCapabilities(t *testing.T) {
 	if !s.Installed || s.Source != "managed" || !s.SourceVerified || !s.VersionMatch || !s.ExecutionAvailable || s.UnavailableCode != "" {
 		t.Fatalf("unexpected managed status: %+v", s)
 	}
-	if s.Mode != "exec_task" || s.TransparentProxyAvailable || !s.Capabilities.ExecJSON || !s.Capabilities.Ephemeral || !s.Capabilities.AccountConfig {
+	if s.Mode != "exec_task" || !s.TransparentProxyAvailable || !s.Capabilities.HTTPResponsesProxy || !s.Capabilities.ExecJSON || !s.Capabilities.Ephemeral || !s.Capabilities.AccountConfig {
 		t.Fatalf("wrong task capability contract: %+v", s)
 	}
-	if !strings.Contains(s.Message, "transparent Responses forwarding is unavailable") {
+	if !strings.Contains(s.Message, "transparent HTTP Responses proxy") {
 		t.Fatalf("missing capability explanation: %s", s.Message)
 	}
 }

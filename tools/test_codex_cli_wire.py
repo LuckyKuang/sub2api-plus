@@ -31,9 +31,11 @@ import sys
 import tarfile
 import tempfile
 import threading
+import time
 from typing import Any, Iterator
 import urllib.request
 import urllib.parse
+import urllib.error
 
 from validation_runtime import ValidationRuntimeError, require_in_validation
 
@@ -614,6 +616,87 @@ def run_case(binary: Path, root: Path, proxy: FixtureServer, identity: dict[str,
         }
 
 
+def run_transparent_bridge_case(binary: Path, root: Path) -> dict[str, Any]:
+    """Independent exact-release proof; no agent loop or actual OAuth is used."""
+    nonce = "bridge_fixture_0123456789abcdef"
+    wire_body = b'{"model":"fixture-model","input":[{"role":"user","content":"unchanged"}],"tools":[{"type":"function","name":"caller_tool","parameters":{}}],"future":{"keep":true}}'
+    wire_response = b'event: response.completed\ndata: {"type":"response.completed","response":{"id":"resp_bridge","status":"completed","future":true}}\n\n'
+    captured: list[dict[str, Any]] = []
+
+    class BridgeUpstream(QuietHandler):
+        def do_POST(self) -> None:
+            captured.append({"path": self.path, "authorization_ok": self.headers.get("Authorization") == "Bearer " + nonce,
+                             "identity": self.headers.get("User-Agent"), "originator": self.headers.get("Originator"),
+                             "version": self.headers.get("Version"), "body": self.rfile.read(int(self.headers["Content-Length"]))})
+            self.reply(401 if self.server.reject else 200, wire_response, "text/event-stream")
+
+    directory = root / "transparent-bridge"
+    directory.mkdir(mode=0o700)
+    info = directory / "server.json"
+    with serving(BridgeUpstream) as target:
+        process = subprocess.Popen([str(binary), "responses-api-proxy", "--server-info", str(info),
+                                    "--upstream-url", f"http://127.0.0.1:{target.server_port}/trusted-owner"],
+                                   cwd=directory, env={"PATH": "/usr/local/bin:/usr/bin:/bin", "HOME": str(directory),
+                                                      "CODEX_HOME": str(directory), "NO_PROXY": "*", "no_proxy": "*"},
+                                   stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                   start_new_session=True)
+        try:
+            process.stdin.write((nonce + "\n").encode())
+            process.stdin.close()
+            deadline = time.monotonic() + 10
+            while not info.exists() and process.poll() is None and time.monotonic() < deadline:
+                time.sleep(0.01)
+            require(info.exists() and process.poll() is None, "transparent_bridge_startup_failed")
+            status = json.loads(info.read_text())
+            require(status["pid"] == process.pid and 0 < status["port"] < 65536, "transparent_bridge_invalid_startup")
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            for identity in IDENTITIES:
+                request = urllib.request.Request(f'http://127.0.0.1:{status["port"]}/v1/responses', wire_body,
+                                                 {"User-Agent": identity["user_agent"], "Originator": identity["originator"],
+                                                  "Version": identity["version"], "Authorization": "Bearer not-provider-secret"}, method="POST")
+                with opener.open(request, timeout=10) as response:
+                    require(response.status == 200 and response.read() == wire_response, "transparent_bridge_response_changed")
+                got = captured[-1]
+                require(got == {"path": "/trusted-owner", "authorization_ok": True, "identity": identity["user_agent"],
+                                "originator": identity["originator"], "version": identity["version"], "body": wire_body},
+                        "transparent_bridge_request_changed")
+            target.reject = True
+            before = len(captured)
+            try:
+                opener.open(request, timeout=10)
+                raise WireFailure("transparent_bridge_401_lost")
+            except urllib.error.HTTPError as error:
+                require(error.code == 401 and error.read() == wire_response, "transparent_bridge_401_changed")
+            require(len(captured) == before + 1, "transparent_bridge_replayed_401")
+            before = len(captured)
+            try:
+                opener.open(f'http://127.0.0.1:{status["port"]}/v1/responses', timeout=10)
+                raise WireFailure("transparent_bridge_get_allowed")
+            except urllib.error.HTTPError as error:
+                require(error.code == 403, "transparent_bridge_get_not_forbidden")
+            require(len(captured) == before, "transparent_bridge_forwarded_forbidden_request")
+            return {"mode": "official-transparent-responses-http", "identities": len(IDENTITIES), "body_unchanged": True,
+                    "sse_unchanged": True, "terminal_401_no_replay": True, "non_post_forbidden": True}
+        finally:
+            if process.poll() is None:
+                os.killpg(process.pid, signal.SIGKILL)
+            process.wait(timeout=5)
+
+
+def run_go_transparent_bridge(binary: Path) -> None:
+    environment = os.environ.copy()
+    environment["SUB2API_CODEX_BRIDGE_BINARY"] = str(binary.resolve())
+    repository = Path(__file__).resolve().parents[1]
+    result = subprocess.run(["go", "test", "-C", str(repository / "backend"), "-tags=unit", "./internal/codexcli",
+                             "-run", "^TestCodexBridgeOfficialBinaryWire$", "-count=1", "-v"],
+                            env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=180)
+    output = result.stdout.decode("utf-8", errors="replace")
+    # A real binary must be exercised. A missing fixture, skipped case or build
+    # failure cannot silently reduce this gate to the proxy-only Python check.
+    require(result.returncode == 0 and "--- PASS: TestCodexBridgeOfficialBinaryWire" in output
+            and "--- SKIP:" not in output, "official_go_bridge_wire_failed")
+
+
 def main() -> int:
     require_in_validation(tool="Official Codex CLI wire regression")
     parser = argparse.ArgumentParser(description=__doc__)
@@ -624,6 +707,9 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="sub2api-codex-wire-") as temporary:
         root = Path(temporary)
         binary, artifact = checked_artifact(args.archive, root)
+        bridge_case = run_transparent_bridge_case(binary, root)
+        run_go_transparent_bridge(binary)
+        bridge_case["gateway_nonce_relay_wire"] = True
         with serving(ProxyTrap) as proxy:
             version_home, version_work = root / "version-home", root / "version-work"
             version_home.mkdir(mode=0o700)
@@ -639,7 +725,7 @@ def main() -> int:
         print(json.dumps({
             "result": "passed", "official_version": VERSION, "official_source_commit": SOURCE_COMMIT,
             "release_asset": artifact["name"], "release_sha256": artifact["sha256"],
-            "release_size": artifact["size"], "cases": cases,
+            "release_size": artifact["size"], "cases": cases, "transparent_bridge": bridge_case,
             "scope": {
                 "provider": "sub2api_managed_codex", "mode": "exec-task-jsonl-over-http-responses",
                 "native_oauth_refresh": False, "automatic_task_replay": False,

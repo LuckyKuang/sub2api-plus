@@ -58,12 +58,23 @@ func (h *AccountHandler) UpdateCodexCLIAccount(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
-	committer, ok := h.adminService.(service.OAuthCredentialCommitter)
-	if !ok {
-		response.ErrorFrom(c, infraerrors.ServiceUnavailable("OAUTH_PERSISTENCE_UNAVAILABLE", "atomic OAuth credential persistence is unavailable"))
-		return
+	var updated *service.Account
+	if expected.Type == service.AccountTypeAPIKey {
+		committer, ok := h.adminService.(service.CodexCLIAPIKeyConfigurationCommitter)
+		if !ok {
+			response.ErrorFrom(c, infraerrors.ServiceUnavailable("CODEX_CLI_PERSISTENCE_UNAVAILABLE", "atomic CLI configuration persistence is unavailable"))
+			return
+		}
+		updated, err = committer.CommitCodexCLIAPIKeyConfiguration(c.Request.Context(), expected, credentials)
+	} else {
+		committer, ok := h.adminService.(service.OAuthCredentialCommitter)
+		if !ok {
+			response.ErrorFrom(c, infraerrors.ServiceUnavailable("OAUTH_PERSISTENCE_UNAVAILABLE", "atomic OAuth credential persistence is unavailable"))
+			return
+		}
+		updated, err = committer.CommitOAuthCredentials(c.Request.Context(), expected, expected.Type, credentials, nil, false)
 	}
-	updated, err := committer.CommitOAuthCredentials(c.Request.Context(), expected, expected.Type, credentials, nil, false)
+
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return

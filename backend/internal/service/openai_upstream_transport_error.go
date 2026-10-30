@@ -132,6 +132,19 @@ func (s *OpenAIGatewayService) handleOpenAIUpstreamTransportError(ctx context.Co
 	if err == nil {
 		return nil
 	}
+	if isCodexCLIBridgeFailure(err) {
+		// A local bridge failure is not an account/provider health signal. Once
+		// the relay submitted the request its outcome can also be ambiguous;
+		// never replay it on another account or bypass the configured CLI hop.
+		if isClientCanceledTransportError(ctx, err) {
+			return err
+		}
+		setOpsUpstreamError(c, http.StatusServiceUnavailable, "Codex CLI bridge unavailable", "")
+		if c != nil && !c.Writer.Written() {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"type": "codex_cli_error", "code": "cli_bridge_unavailable", "message": "Codex CLI bridge unavailable"}})
+		}
+		return err
+	}
 	var credentialErr *CredentialFailureError
 	if errors.As(err, &credentialErr) {
 		return s.accountCredentialFailure(ctx, c, account, err)

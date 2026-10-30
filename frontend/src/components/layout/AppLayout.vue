@@ -1,5 +1,5 @@
 <template>
-  <div class="app-layout" :class="{ 'sidebar-is-collapsed': sidebarCollapsed, 'app-layout-workspace': workspace, 'app-layout-record-workspace': recordWorkspace, 'app-layout-user': appearance === 'user' }">
+  <div class="app-layout" :class="{ 'sidebar-is-collapsed': sidebarCollapsed, 'app-layout-workspace': workspace, 'app-layout-record-workspace': recordWorkspace, 'app-layout-user': appearance === 'user', 'app-layout-admin': appearance === 'admin' }">
     <!-- Sidebar -->
     <AppSidebar />
 
@@ -39,7 +39,7 @@ const props = withDefaults(defineProps<{ workspace?: boolean; recordWorkspace?: 
   recordWorkspace: false,
   appearance: 'admin'
 })
-useProductAppearance(() => props.appearance === 'user')
+useProductAppearance()
 provide(USER_TABLE_LAYOUT_KEY, computed(() => props.appearance === 'user'))
 
 const appStore = useAppStore()

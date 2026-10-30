@@ -9,6 +9,10 @@
 .static-table-frame {
   display: flex;
   flex-direction: column;
+  /* The replacement viewport must keep its available width even when its
+     parent centers flex children and the table has wide intrinsic columns. */
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
   min-height: 0;
   overflow: hidden;

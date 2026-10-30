@@ -950,13 +950,21 @@ func (s *AccountUsageService) probeOpenAICodexSnapshot(ctx context.Context, acco
 		return nil, fmt.Errorf("build openai probe client: %w", err)
 	}
 	probeStartedAt := time.Now()
-	resp, err := client.Do(req)
+	resp, err := s.doOpenAICodexUsageProbe(req, account, client.Do)
 	if err != nil {
 		return nil, fmt.Errorf("openai codex probe request failed: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	return s.recordOpenAICodexProbeResponse(ctx, account, resp, probeStartedAt)
+}
+
+func (s *AccountUsageService) doOpenAICodexUsageProbe(request *http.Request, owner *Account, forward func(*http.Request) (*http.Response, error)) (*http.Response, error) {
+	bridgeService := s.openAIIdentityResolver
+	if bridgeService == nil {
+		bridgeService = &OpenAIGatewayService{accountRepo: s.accountRepo}
+	}
+	return bridgeService.doOpenAICodexCLIControlPlane(request, owner, forward)
 }
 
 func (s *AccountUsageService) recordOpenAICodexProbeResponse(ctx context.Context, account *Account, resp *http.Response, probeStartedAt time.Time) (map[string]any, error) {

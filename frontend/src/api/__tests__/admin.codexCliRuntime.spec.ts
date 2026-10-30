@@ -1,13 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { get, post } = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }))
-vi.mock('@/api/client', () => ({ apiClient: { get, post } }))
-import { getCodexCLIRuntime, installCodexCLI } from '@/api/admin/codexCliRuntime'
+const { get, post, put } = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), put: vi.fn() }))
+vi.mock('@/api/client', () => ({ apiClient: { get, post, put } }))
+import { getCodexCLIRuntime, installCodexCLI, updateCodexCLIBridge } from '@/api/admin/codexCliRuntime'
 
 describe('Codex CLI runtime API', () => {
   beforeEach(() => {
     get.mockReset()
     post.mockReset()
+    put.mockReset()
   })
 
   it('reads the release-pinned runtime without invoking installation', async () => {
@@ -36,5 +37,22 @@ describe('Codex CLI runtime API', () => {
     await expect(installCodexCLI()).rejects.toBe(error)
     expect(post).toHaveBeenCalledTimes(1)
     expect(get).not.toHaveBeenCalled()
+  })
+
+  it.each([true, false])('persists an explicit global bridge choice %s without installing a runtime', async bridgeEnabled => {
+    const status = { bridge_enabled: bridgeEnabled, execution_available: true }
+    put.mockResolvedValueOnce({ data: status })
+    await expect(updateCodexCLIBridge(bridgeEnabled)).resolves.toEqual(status)
+    expect(put).toHaveBeenCalledExactlyOnceWith('/admin/settings/codex-cli', { bridge_enabled: bridgeEnabled })
+    expect(post).not.toHaveBeenCalled()
+    expect(get).not.toHaveBeenCalled()
+  })
+
+  it('propagates a bridge write failure without retrying or claiming success', async () => {
+    const error = { status: 503, reason: 'CODEX_CLI_BRIDGE_SETTING_UNAVAILABLE' }
+    put.mockRejectedValueOnce(error)
+    await expect(updateCodexCLIBridge(true)).rejects.toBe(error)
+    expect(put).toHaveBeenCalledTimes(1)
+    expect(post).not.toHaveBeenCalled()
   })
 })

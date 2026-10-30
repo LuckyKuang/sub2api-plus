@@ -3013,6 +3013,112 @@ func TestForwardAsAnthropicForGrokUsesConfiguredDefaultBaseURL(t *testing.T) {
 	require.False(t, gjson.GetBytes(upstream.bodies[1], "input.1.encrypted_content").Exists())
 }
 
+// Hold the first metadata event while the scanner queues the following visible
+// event. This controls queue arrival without sleeps or production test hooks.
+type grokFirstEventQueueWriter struct {
+	gin.ResponseWriter
+	queued <-chan struct{}
+	waited bool
+}
+
+func (w *grokFirstEventQueueWriter) Size() int {
+	if !w.waited {
+		w.waited = true
+		<-w.queued
+	}
+	return w.ResponseWriter.Size()
+}
+
+func TestForwardGrokResponses_FirstVisibleEventFlushesBeforeNextUpstreamEvent(t *testing.T) {
+	for _, separateBoundary := range []bool{false, true} {
+		name := "data and boundary arrive together"
+		if separateBoundary {
+			name = "boundary arrives in a separate read"
+		}
+		t.Run(name, func(t *testing.T) {
+			gin.SetMode(gin.TestMode)
+			recorder := newOpenAIResponseFlushRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			requestBody := []byte(`{"model":"grok","stream":true,"input":"hi"}`)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(requestBody))
+			account := healthyGrokOAuthGatewayTestAccount(61, "access-token")
+			repo := &grokQuotaAccountRepo{mockAccountRepoForPlatform: &mockAccountRepoForPlatform{
+				accountsByID: map[int64]*Account{61: account},
+			}}
+			preamble := "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_first_visible\",\"created_at\":1700000000}}\n\n"
+			visible := "data: {\"type\":\"response.output_text.delta\",\"delta\":\"first\"}\n"
+			terminal := "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_first_visible\",\"usage\":{\"input_tokens\":9,\"output_tokens\":4}}}\n\n"
+			allowBoundary := make(chan struct{})
+			allowTerminal := make(chan struct{})
+			boundaryWaiting := make(chan struct{})
+			terminalWaiting := make(chan struct{})
+			visibleObserved := make(chan struct{})
+			c.Request = c.Request.WithContext(WithLiveOutputObserver(c.Request.Context(), func(int, int, string) {
+				close(visibleObserved)
+			}))
+			defer func() {
+				for _, gate := range []chan struct{}{allowBoundary, allowTerminal} {
+					select {
+					case <-gate:
+					default:
+						close(gate)
+					}
+				}
+			}()
+			upstreamBody := &stagedOpenAISSEReadCloser{
+				segments: [][]byte{[]byte(preamble + visible + "\n"), []byte(terminal)},
+				gates:    []<-chan struct{}{nil, allowTerminal},
+				waiting:  []chan struct{}{nil, terminalWaiting},
+			}
+			if separateBoundary {
+				upstreamBody.segments = [][]byte{[]byte(preamble + visible), []byte("\n"), []byte(terminal)}
+				upstreamBody.gates = []<-chan struct{}{nil, allowBoundary, allowTerminal}
+				upstreamBody.waiting = []chan struct{}{nil, boundaryWaiting, terminalWaiting}
+			}
+			queued := terminalWaiting
+			if separateBoundary {
+				queued = boundaryWaiting
+			}
+			c.Writer = &grokFirstEventQueueWriter{ResponseWriter: c.Writer, queued: queued}
+			upstream := &httpUpstreamRecorder{resp: &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+				Body:       upstreamBody,
+			}}
+			svc := &OpenAIGatewayService{httpUpstream: upstream, grokTokenProvider: NewGrokTokenProvider(repo, nil), accountRepo: repo}
+			var result *OpenAIForwardResult
+			var err error
+			done := make(chan struct{})
+			go func() {
+				result, err = svc.forwardGrokResponses(context.Background(), c, account, requestBody, "grok", true, time.Now())
+				close(done)
+			}()
+			if separateBoundary {
+				waitOpenAIResponseFlushSignal(t, boundaryWaiting)
+				waitOpenAIResponseFlushSignal(t, visibleObserved)
+				body, flushes := recorder.snapshot()
+				require.Empty(t, body, "an incomplete first visible event cannot reach the client")
+				require.Empty(t, flushes)
+				close(allowBoundary)
+			}
+			waitOpenAIResponseFlushSignal(t, terminalWaiting)
+			waitOpenAIResponseFlushCount(t, recorder, 1)
+			body, flushes := recorder.snapshot()
+			require.Equal(t, preamble+visible+"\n", body)
+			require.Equal(t, []string{preamble + visible + "\n"}, flushes, "flush the complete first visible event while the next upstream event is still withheld")
+			close(allowTerminal)
+			waitOpenAIResponseFlushSignal(t, done)
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			require.Equal(t, 9, result.Usage.InputTokens)
+			require.Equal(t, 4, result.Usage.OutputTokens)
+			require.NotNil(t, result.FirstTokenMs)
+			require.NotNil(t, result.FirstOutputMs)
+			require.False(t, result.ClientDisconnect)
+		})
+	}
+}
+
 func TestForwardGrokResponses_StreamErrorPreservesPartialResult(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -3763,6 +3869,7 @@ func TestOpenAIWSHTTPBridgeSSEErrorSideEffectsRunOncePerPlatform(t *testing.T) {
 				httpUpstream: upstream,
 			}
 			if platform == PlatformOpenAI {
+				svc.settingService = &SettingService{settingRepo: &openAIIdentitySettingRepoStub{values: map[string]string{SettingKeyCodexCLIBridgeEnabled: "false"}}}
 				svc.rateLimitService = NewRateLimitService(repo, nil, cfg, nil, nil)
 			}
 			account := &Account{ID: 70, Platform: platform, Type: AccountTypeOAuth, Concurrency: 1}

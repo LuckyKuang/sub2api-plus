@@ -1241,6 +1241,12 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 			//     覆盖（Store(nil)），因为 OpenAI 上游对该帧实际不传
 			//     service_tier 时按 default 处理，billing 应如实反映。
 			if policyErr == nil && blocked == nil && isResponseCreate {
+				// Admission hooks can wait for a concurrency slot. Read the live
+				// bridge permission again after that wait, before accepting a new
+				// native generation. Never replay a generation already submitted.
+				if err := s.requireCodexUpstreamWS(frameCtx, account); err != nil {
+					return payload, nil, err
+				}
 				usageMeta.updateFromResponseCreate(out, model, requestModelForThisFrame)
 				_, actualModel := usageMeta.turnModels(requestModelForThisFrame)
 				SetOpsUpstreamModel(c, actualModel)

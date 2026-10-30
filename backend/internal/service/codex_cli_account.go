@@ -73,9 +73,19 @@ func codexCLIConfigError(message string) error {
 }
 
 func ValidateCodexCLIAccount(account *Account) error {
-	if account == nil || account.Platform != PlatformOpenAI || account.Type != AccountTypeOAuth ||
+	if account == nil || account.Platform != PlatformOpenAI || (account.Type != AccountTypeOAuth && account.Type != AccountTypeAPIKey) ||
 		account.IsCredentialShadow() || account.IsOpenAIAgentIdentity() || account.IsOpenAIPersonalAccessToken() {
-		return infraerrors.BadRequest("CODEX_CLI_ACCOUNT_UNSUPPORTED", "Codex CLI configuration requires a credential-owning OpenAI ChatGPT OAuth account")
+		return infraerrors.BadRequest("CODEX_CLI_ACCOUNT_UNSUPPORTED", "Codex CLI configuration requires a credential-owning OpenAI OAuth or API Key account")
+	}
+	return nil
+}
+
+func validateCodexCLITaskAccount(account *Account) error {
+	if err := ValidateCodexCLIAccount(account); err != nil {
+		return err
+	}
+	if account.Type != AccountTypeOAuth {
+		return infraerrors.BadRequest("CODEX_CLI_ACCOUNT_UNSUPPORTED", "Codex CLI agent tasks require an OpenAI ChatGPT OAuth account")
 	}
 	return nil
 }
@@ -254,7 +264,7 @@ func CodexCLIAccountOwner(account *Account) string {
 		return ""
 	}
 	credentials := make(map[string]any)
-	for _, key := range []string{CodexCLIConfigCredentialKey, "access_token", "refresh_token", "id_token", "auth_mode", "openai_auth_mode", "chatgpt_account_id", "chatgpt_user_id", "client_id", "expires_at", "_token_version", "agent_runtime_id", "agent_private_key"} {
+	for _, key := range []string{CodexCLIConfigCredentialKey, "api_key", "base_url", "access_token", "refresh_token", "id_token", "auth_mode", "openai_auth_mode", "chatgpt_account_id", "chatgpt_user_id", "client_id", "expires_at", "_token_version", "agent_runtime_id", "agent_private_key"} {
 		if value, present := account.Credentials[key]; present {
 			credentials[key] = value
 		}
@@ -277,7 +287,7 @@ func CodexCLIAccountViewFromAccount(account *Account) (*CodexCLIAccountView, err
 	if err != nil {
 		return nil, err
 	}
-	return &CodexCLIAccountView{
+	view := &CodexCLIAccountView{
 		Enabled:    config.Enabled,
 		ConfigTOML: config.ConfigTOML,
 		Auth:       CodexCLIAuthView{AuthMode: "chatgpt", Tokens: map[string]string{"account_id": account.GetChatGPTAccountID()}},
@@ -286,8 +296,14 @@ func CodexCLIAccountViewFromAccount(account *Account) (*CodexCLIAccountView, err
 		},
 		ExpectedOwner:        CodexCLIAccountOwner(account),
 		OAuthCredentialOwner: OAuthCredentialOwner(account),
-		Availability:         CodexCLIAvailability{Available: true, Code: "exec_task_only", Reason: "This account supports the separate Codex CLI task endpoint; runtime installation is checked separately and ordinary Responses forwarding remains unchanged"},
-	}, nil
+		Availability:         CodexCLIAvailability{Available: true, Code: "http_bridge_and_tasks", Reason: "This account supports the transparent HTTP bridge and independent Codex CLI tasks; both require a verified runtime and their explicit permissions"},
+	}
+	if account.Type == AccountTypeAPIKey {
+		view.Auth = CodexCLIAuthView{AuthMode: "apikey", Tokens: map[string]string{}}
+		view.AuthStatus = CodexCLIAuthStatus{}
+		view.Availability = CodexCLIAvailability{Available: true, Code: "http_bridge_only", Reason: "API Key accounts support transparent HTTP bridging; agent tasks are not supported"}
+	}
+	return view, nil
 }
 
 // PrepareCodexCLIAccountUpdate validates a write-only auth patch and returns
@@ -321,6 +337,9 @@ func PrepareCodexCLIAccountUpdate(account *Account, input CodexCLIAccountUpdate)
 	credentials := MergeCredentials(account.Credentials, map[string]any{CodexCLIConfigCredentialKey: map[string]any{"enabled": config.Enabled, "config_toml": text}})
 	changed := false
 	if input.Auth != nil {
+		if account.Type == AccountTypeAPIKey {
+			return nil, false, infraerrors.BadRequest("CODEX_CLI_AUTH_INVALID", "API Key credentials are managed by the account editor")
+		}
 		if input.Auth.AuthMode != nil && *input.Auth.AuthMode != "chatgpt" {
 			return nil, false, infraerrors.BadRequest("CODEX_CLI_AUTH_INVALID", "auth_mode must be chatgpt")
 		}
@@ -455,7 +474,7 @@ func validateCodexCLIAuthOwner(account *Account, credentials map[string]any, pat
 // the mapped OAuth access token as opaque; refresh/ID tokens remain exclusively
 // in the gateway's canonical store and never enter the CLI process or files.
 func BuildCodexCLIAuthJSON(account *Account) ([]byte, error) {
-	if err := ValidateCodexCLIAccount(account); err != nil {
+	if err := validateCodexCLITaskAccount(account); err != nil {
 		return nil, err
 	}
 	access := strings.TrimSpace(account.GetCredential("access_token"))

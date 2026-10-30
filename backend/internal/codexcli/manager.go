@@ -19,15 +19,16 @@ import (
 const (
 	versionTimeout  = 5 * time.Second
 	archiveName     = "official.tar.gz"
-	execTaskMessage = "The reviewed CLI supports exec task mode only; transparent Responses forwarding is unavailable."
+	execTaskMessage = "The reviewed CLI supports independent exec tasks and a transparent HTTP Responses proxy; WebSocket frames use the gateway protocol adapter."
 )
 
-// Capabilities describe the reviewed target's task interface, rather than
-// claiming that exec JSONL is an OpenAI Responses transport.
+// Capabilities distinguish exec JSONL from the separate reviewed official
+// responses-api-proxy HTTP transport; exec output is never a wire proxy.
 type Capabilities struct {
-	ExecJSON      bool `json:"exec_json"`
-	Ephemeral     bool `json:"ephemeral"`
-	AccountConfig bool `json:"account_config"`
+	ExecJSON           bool `json:"exec_json"`
+	Ephemeral          bool `json:"ephemeral"`
+	AccountConfig      bool `json:"account_config"`
+	HTTPResponsesProxy bool `json:"http_responses_proxy"`
 }
 
 type Status struct {
@@ -181,7 +182,10 @@ func (m *Manager) Status(ctx context.Context) (s Status) {
 		s.UnavailableCode = "version_mismatch"
 	} else {
 		s.ExecutionAvailable = true
-		s.Capabilities = Capabilities{ExecJSON: true, Ephemeral: true, AccountConfig: true}
+		// rust-v0.165.0 cli/src/main.rs exposes ResponsesApiProxy; its
+		// responses-api-proxy/src/lib.rs forwards HTTP/SSE without an agent loop.
+		s.TransparentProxyAvailable = true
+		s.Capabilities = Capabilities{ExecJSON: true, Ephemeral: true, AccountConfig: true, HTTPResponsesProxy: true}
 		s.proof = &runtimeProof{path: s.Path, executableSHA256: executableDigest}
 	}
 	return s

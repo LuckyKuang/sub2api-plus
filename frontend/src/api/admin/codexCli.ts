@@ -6,15 +6,15 @@ export interface CodexCLIAccountView {
   enabled: boolean
   config_toml: string
   auth: {
-    auth_mode: 'chatgpt'
-    tokens: { account_id: string }
+    auth_mode: 'chatgpt' | 'apikey'
+    tokens: { account_id?: string }
   }
   auth_status: Record<`has_${CodexCLISecretName}`, boolean>
   expected_owner: string
   oauth_credential_owner: string
   availability: {
     available: true
-    code: 'exec_task_only'
+    code: 'http_bridge_and_tasks' | 'http_bridge_only'
     reason: string
   }
 }

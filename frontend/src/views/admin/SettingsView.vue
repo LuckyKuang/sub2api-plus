@@ -8309,8 +8309,8 @@
               </p>
             </div>
             <div class="p-6">
-              <div class="flex items-end gap-4">
-                <div class="flex-1">
+              <div class="flex min-w-0 flex-wrap items-end gap-4">
+                <div class="min-w-0 basis-full sm:flex-1">
                   <label
                     class="mb-2 block text-sm font-medium surface-muted"
                   >
@@ -13092,9 +13092,7 @@ watch(
   border-radius: var(--surface-radius);
   background: var(--surface-fill);
   border-color: var(--surface-edge);
-  box-shadow:
-    0 12px 28px rgb(0 0 0 / 0.07),
-    0 1px 0 rgb(255 255 255 / 0.9) inset;
+  box-shadow: var(--surface-shadow);
 }
 
 .settings-tabs-scroll {
@@ -13114,7 +13112,8 @@ watch(
 }
 
 .settings-tab {
-  @apply relative isolate flex h-11 min-h-11 min-w-[6.75rem] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-transparent px-3 text-sm font-medium text-gray-600 outline-none transition-colors duration-200 ease-out dark:text-gray-300;
+  @apply relative isolate flex h-11 min-h-11 min-w-[6.75rem] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-transparent px-3 text-sm font-medium outline-none transition-colors duration-200 ease-out;
+  color: var(--surface-muted);
 }
 
 @media (min-width: 1024px) and (max-height: 799px) {
@@ -13147,15 +13146,15 @@ watch(
 }
 
 .settings-tab:focus-visible {
-  @apply ring-2 ring-primary-500/40 ring-offset-2 ring-offset-white dark:ring-offset-dark-900;
+  outline: 2px solid var(--console-control-hover-edge);
+  outline-offset: -2px;
 }
 
 .settings-tab-active {
-  @apply border-primary-200/80 text-primary-700 shadow-sm dark:border-primary-400/30 dark:text-primary-200;
+  border-color: var(--console-control-edge);
+  color: var(--console-accent-readable);
   background-color: var(--surface-selected);
-  box-shadow:
-    0 8px 18px rgb(0 0 0 / 0.08),
-    0 1px 0 rgb(255 255 255 / 0.92) inset;
+  box-shadow: var(--surface-shadow);
 }
 
 .settings-tab-active::before {
@@ -13167,7 +13166,8 @@ watch(
 }
 
 .settings-tab-icon {
-  @apply flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-gray-500 transition-colors duration-200 dark:text-gray-400;
+  @apply flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors duration-200;
+  color: var(--surface-muted);
 }
 
 .settings-tab:hover .settings-tab-icon,
@@ -13176,7 +13176,8 @@ watch(
 }
 
 .settings-tab-active .settings-tab-icon {
-  @apply bg-primary-50/[0.15] text-primary-600 dark:bg-primary-400/10 dark:text-primary-300;
+  background: var(--surface-hover);
+  color: var(--console-accent-readable);
 }
 
 .settings-tab-label {
@@ -13184,25 +13185,3 @@ watch(
 }
 </style>
 
-<style>
-/* Dark-mode overrides for the settings tabs shell. Kept in an UNSCOPED block
-   because Vue's scoped-CSS compiler was dropping the `:global(.dark) ...`
-   rules in the production build, leaving inactive tabs unreadable on dark. */
-.dark .settings-tabs-shell {
-  border-color: theme('colors.dark.700');
-  background: var(--surface-fill);
-  box-shadow:
-    0 16px 36px rgb(0 0 0 / 0.28),
-    0 1px 0 rgb(255 255 255 / 0.06) inset;
-}
-
-.dark .settings-tab::before {
-  background: var(--surface-hover);
-}
-
-.dark .settings-tab-active {
-  box-shadow:
-    0 12px 26px rgb(0 0 0 / 0.22),
-    0 1px 0 rgb(255 255 255 / 0.08) inset;
-}
-</style>

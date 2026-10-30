@@ -34,11 +34,13 @@ otherwise. A source-level mapping becomes release evidence only when its
 applicable unit/integration profile passes on the final tree. Unit mocks do not
 prove PostgreSQL locking, rollback, outbox atomicity, or multi-replica storage.
 
-## Independent pinned Codex CLI task requirements
+## Pinned Codex CLI bridge and independent task requirements
 
-The [task contract](CODEX_CLI.md) adds one OpenAI OAuth execution entrypoint;
-it does not change ordinary Responses/Chat/WS transports or implement a
-transparent CLI proxy. The unit coverage manifest and frontend coverage
+The [CLI contract](CODEX_CLI.md) adds an opt-in official HTTP proxy transport
+for existing OpenAI OAuth and API Key gateway routes and retains a separate independent
+agent task entrypoint. The global and account switches leave the established
+authentication, audit, billing, credential ownership and affinity contracts in
+place. The unit coverage manifest and frontend coverage
 manifest require the entrypoints below. Their observed run results apply only
 to the validated source tree.
 
@@ -46,13 +48,29 @@ to the validated source tree.
 | --- | --- |
 | Only the project-pinned official executable is eligible; installation failure preserves the existing artifact | `codexcli/TestReviewedManifestUsesOnlyPinnedOfficialAssets`, `TestUnverifiedSystemCLIDetectionNeverExecutesVersionProbe`, `TestSystemNativeCLINeedsReviewedBinaryDigestAndExactVersion`, `TestInstallFailuresPreservePreviousFilesAndRemoveStages`, `TestIndependentManagersShareInstallationFilesystemLock`, and `TestArchiveExtractionRejectsUnsafeEntriesAndRemovesOutput`: literal version/digests, no unverified execution, atomic publication, lock ownership and unsafe archive rejection. |
 | Host configuration cannot replace the account's controlled execution settings | `codexcli/TestHostConfigurationInstallStopsBeforeDownloadAndPublication` and `TestHostConfigurationTaskRechecksBeforeStartingPreviouslyReadyRuntime`: conflicting/inconclusive system or managed settings stop download/process startup. Injected macOS command tests do not claim native macOS execution. |
+| Global bridge permission is explicit, persistent and independent of runtime installation | `service/TestCodexCLIBridgeSettingDefaultsOffAndPersistsAcrossServices`, `TestCodexCLIBridgeSettingStorageFailuresAreSanitizedAndNeverEnable`; `handler/admin/TestCodexCLIBridgeEnablementRequiresVerifiedRuntimeBeforeWriting`, `TestCodexCLIBridgeRejectsMalformedInputBeforeRuntimeOrWrites`, `TestCodexCLIBridgeStorageFailuresDoNotExposeDiagnostics`: default off, exact source/version/readiness before enabling, unavailable-runtime disabling, no invalid writes or private diagnostics. `service/TestCodexCLITaskGlobalBridgeGatePrecedesCredentialsFilesAndProcess` prevents the independent task route bypassing global permission. |
+| Transparent transport retains the prepared protocol, credential owner and provider result | `service/TestCodexCLIBridgeRequiresBothGlobalAndEligibleAccountOptIn`, `TestCodexCLIBridgePreservesPreparedWireAndAccountFailoverOwnership`, `TestCodexCLIBridgeUsesAcquiredCredentialOwnerInsteadOfSelectedShadow`, `TestCodexCLIBridgeGlobalDisableKeepsOrdinaryTransport`, `TestCodexCLIBridgeUnavailableRuntimeNeverCallsNativeTransport` and `TestCodexCLIBridgeErrorIsTerminalWithoutNativeFallbackOrAccountReplay`: literal opaque body/continuation/tool fields, trusted identity/workspace, owner proxy and destination; fail-closed selected bridge and no native replay. |
+| HTTP and probes use current global AND credential-owner account permission without replacing acquired identity | `service/TestCodexCLIBridgeHotSwitchHTTPAndProbeUseCurrentFlags`: seven flag transitions for two owners with real HTTP wire observations; `TestCodexCLIBridgeHotDisablePreservesSubmittedHTTPStream`: submitted stream completes without replay. `TestCodexCLIBridgeAccountToggleUsesLatestFlagWithoutReplacingSnapshot`, `TestCodexCLIBridgeLatestAccountSettingBoundaries`, `TestCodexCLIBridgeLiveSettingsFailureAndDisabledPrecedence`, and `TestCodexCLIBridgeProbeFallbackReadsLiveAccountFlag` cover live flag isolation, malformed values, known-disable precedence and probe fallback. |
+| Existing WebSocket sessions reevaluate both switches before the next native write or HTTP bridge turn | `service/TestCodexCLIBridgeNativeWSReadsLiveAccountToggleBothDirections`, `TestCodexCLIBridgeWebSocketTurnsPreserveSessionAndOwnerIsolation`: live toggles and six turns preserve owner, identity, tools, usage and affinity; `TestCodexCLIBridgeEnableStopsNativePassthroughNextTurn` checks reconnect without a second native write, including a switch during `BeforeTurn` admission. |
+| Local CLI proxy cannot choose another credential owner or destination, replay a provider write, or retain resources after cancellation | `codexcli/TestCodexBridgePreservesResponsesBytesOwnerAndStatusWithoutReplay`, `TestCodexBridgeRejectsUnverifiedRuntimeBeforeReadingRequest`, `TestCodexBridgeRejectsTamperedProxyPayloadBeforeProviderWrite`, `TestCodexBridgeCancellationClosesProviderContextAndDoesNotReplay`, `TestCodexBridgeTransportErrorRetainsCauseWithoutDiagnostics`, `TestCodexBridgePreservesOtherTrustedMethodsAndDestinations`: injected-process request/response and terminal-status assertions, one-use nonce/payload checks, zero unauthorised provider writes, cancellation and cleanup. These fixtures do not establish official binary behavior; `TestCodexBridgeOfficialBinaryWire` and the real-binary harness below supply that independent evidence. |
+| Bridge switches preserve session affinity and route WebSocket ingress through the existing HTTP adapter | `service/TestCodexCLIBridgeSwitchPreservesConversationOwnerAndDisablesDirectWS`: global changes retain authorization-scoped owner, route generation and migration lease; selected bridge or unavailable permission cannot use direct upstream WebSocket. Existing HTTP/WebSocket history-replay, per-turn audit, migration and credential-owner regressions remain required. |
+| Existing native sockets obey bridge enablement before the next upstream turn | `service/TestCodexCLIBridgeEnableDrainsNativePool`, `TestCodexCLIBridgeEnableStopsNativePassthroughNextTurn`: accepted work may finish; subsequent reuse, dial, prewarm or passthrough writes cannot bypass the bridge. |
+| Submitted bridge read failures cannot turn into account replay | `service/TestCodexCLIBridgeSubmittedReadFailureNeverFailsOver`: real Responses, passthrough, Chat, Messages and WS HTTP adapters preserve the submitted bridge error and do not temporarily unschedule its owner. `codexcli/TestCodexBridgeProxyExitBeforeProviderEOFIsTerminal` covers official-hop process exit before and after first bytes with resource cleanup. |
 | Account management preserves credential ownership and ordinary editor behavior | `service/TestCodexCLIAuthPatchPreserveClearAndReplace`, `TestCodexCLIAuthRejectsOwnerMixingAndMaskedValues`, `TestCodexCLIConfigSurvivesOrdinaryAccountUpdateAndRejectsInvalidWrites`, `TestCodexCLIEnablementRequiresRuntimeOnlyForNewEnable`, and `TestCodexCLIBulkConfigurationCannotCopyOneAccountsCredentialsToAnother`; `handler/admin/TestCodexCLIAccountHandlerSecretAwareRoundTrip` and `TestCodexCLIAccountHandlerValidationPrecedesEveryWrite`: write-only tokens, owner checks, readiness before new enablement, no cross-account credential copying and no invalid writes. |
 | Every accepted task reaches both canonical ingress audit engines before side effects | `handler/TestCodexCLIResponsesBothAuditEnginesSeeOriginalContentBeforeSideEffects`, `TestCodexCLIResponsesRealAuditEnginesPreserveCanonicalUserSelection`, `TestCodexCLIResponsesUnsupportedShapesFailBeforeAuditAndSideEffects`, and `TestCodexCLIResponsesRequiresAuthenticationBeforeAudit`: original input/instructions and applicable canonical extraction, zero selection/billing/concurrency/native-transport effects on rejection. |
 | Tasks retain one account's identity, proxy and private state without using ordinary conversation affinity | `service/TestCodexCLITaskIdentitySourcePriorityAtExecution`, `TestCodexCLITaskConcurrentAccountsKeepCredentialsAndFilesIndependent`, `TestCodexCLITaskIgnoresInheritedConversationAcceptanceDeadline`; `handler/TestCodexCLIResponsesDoesNotReadOrWriteConversationAffinity`, `TestCodexCLIResponsesRejectsDisabledAccountsAndNeverFallsBackToNativeTransport`, and `TestOrdinaryResponsesDoesNotEnableCLITransportFromHeadersOrRequestPath`: literal identity priority, separate account files/bearers, unchanged conversation routes/cache, released ineligible slots and no HTTP fallback. |
 | Started tasks never replay and cancellation removes temporary credentials | `service/TestCodexCLITaskExecutionFailurePreservesUsageWithoutReplay`, `TestCodexCLITaskClientCancellationPreservesPartialUsageAndCleansHome`; `codexcli/TestRunTaskFailureDoesNotRetryOrExposeProviderSecrets` and `TestRunTaskCancellationTerminatesTheWholeProcessGroup`: one launch, sanitized errors, retained reported usage, removed private state and child-group cancellation. |
 | Final-only SSE and billing retain the actual execution settings | `service/TestCodexCLITaskStreamingEmitsOnlyCompletedResponse` and `TestCodexCLITaskBillingUsesEffectiveConfiguredReasoning`: completed event without invented token deltas; eight required pricing scenarios for saved/request/override/default/none/max and failed partial usage, with independent $1/$1.50/$2/$3 expectations. `TestCodexCLITaskAcceptsMaxFromExistingGroupReasoningMapping` retains the existing group's supported max mapping in the materialized execution configuration. |
 | Standard-only tasks cannot bypass Fast policy or be billed from an unverified paid-tier configuration | `service/TestCodexCLITaskStandardTierHonorsFastPolicyBeforeSideEffects`: nine required standard/group-force/global pass/filter/block/force/model-filter scenarios; only the native default sentinel reaches task config, unsupported required Fast returns 403 with zero credential/cache/files/process effects, and successful Standard never acquires paid-tier billing. `TestCodexCLIAccountRejectsUnverifiableServiceTiersBeforeWrites` rejects all paid/unknown tier edits without changing stored credentials. |
-| Runtime/account UI keeps installation explicit and late saves isolated | Required cases in `CodexCLIRuntimeSettings.spec.ts`, `CodexCLIEditor.spec.ts`, and `EditAccountModal.codexCli.spec.ts`: pinned-source readiness, explicit install/retry, write-only preserve/replace/clear, old-owner invalidation, partial-save feedback and no obsolete draft submission. Component fixtures do not prove browser or production OAuth execution. |
+| Runtime/account UI exposes both switches, keeps installation explicit and isolates late saves | Required cases in `CodexCLIRuntimeSettings.spec.ts`, `CodexCLICreateSettings.spec.ts`, `CreateAccountModal.spec.ts`, `CodexCLIEditor.spec.ts`, and `EditAccountModal.codexCli.spec.ts`: no installation-derived opt-in, explicit global save, ready-only enabling, unavailable-runtime disabling, account settings in the original create payload, write-only preserve/replace/clear, old-owner invalidation, partial-save feedback and no obsolete draft submission. Global off, pending or failed reads hide create/edit controls; newly visible create controls use the server-owned default TOML, and both forms place CLI settings after User-Agent and before session sharing. Component fixtures do not prove browser or production OAuth execution. |
+
+`tools/test_codex_cli_wire.py` additionally invokes the exact official
+`responses-api-proxy` and runs `codexcli/TestCodexBridgeOfficialBinaryWire`
+through the Go gateway nonce relay. The synthetic provider must observe exact
+request bytes, trusted identity/owner/destination and one send for terminal 401;
+the client must receive the original response bytes/status, and unsupported
+local proxy requests must cause zero provider writes. This real-binary check
+complements injected process/service tests; it uses no real OpenAI account.
 
 `tools/test_codex_cli_wire.py` separately runs the exact reviewed official Linux
 binary against a synthetic upstream for default/account/global identity, Plus
@@ -740,3 +758,28 @@ The following remain explicit boundaries, rather than passing scenarios:
   for focused `-race` service and PostgreSQL repository checks. Their actual
   selected tests and final source must accompany any passing result; they do
   not establish a full-suite race result.
+
+
+### OpenAI API Key CLI bridge requirements
+
+- `codex_cli_apikey_bridge_test.go`: shared default TOML, secret-free API Key
+  configuration, OAuth-task exclusion, gateway/probe current-switch transitions,
+  custom endpoint, API Key bearer, exact body and trusted identity preservation,
+  no ChatGPT workspace leakage and no replay.
+- `codex_cli_bridge_ws_switch_test.go`: real OAuth/API Key native passthrough,
+  global/account enablement after a turn or during admission, audit before
+  admission, 1012 reconnect and zero second native writes.
+- `account_codex_cli_test.go`: API Key configuration GET/PUT, no key readback,
+  rejection of OAuth auth patches and unchanged canonical API Key/base URL.
+- `account_repo_codex_cli_apikey_test.go` and its integration counterpart:
+  full account/route CAS, atomic scheduler outbox, stale-key rejection, unchanged
+  API Key/base URL and forbidden OAuth persistence reuse.
+- `openai_codex_cli_bridge_audit_test.go`: both real audit engines reject before
+  side effects for OAuth and API Key accounts. Existing unknown-item and sibling
+  extraction requirements apply unchanged.
+
+- `codex_cli_control_plane_test.go`: OAuth/API Key model discovery, API Key
+  chat/image probes, existing usage inference and WHAM usage/credit requests
+  follow current global/account flags without replay. Prepared endpoint, body,
+  auth and protocol headers remain intact; wrapping WHAM leaves its shared
+  native client unchanged.

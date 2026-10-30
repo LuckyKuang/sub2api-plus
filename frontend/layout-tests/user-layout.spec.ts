@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { wheelScroll } from './wheel'
 
 // Approved UI audit: 16/24px on narrow screens; 94%, capped at 1600px,
 // centered within the desktop main viewport regardless of sidebar width.
@@ -95,11 +96,10 @@ test('user workspace scrolls rows with the wheel while pagination stays in a sep
     expect(card.border).toBe(1)
     expect(Math.abs(card.bottom - card.mainBottom)).toBeLessThanOrEqual(1)
     const before = await pagination.boundingBox()
-    await viewport.hover()
-    await page.mouse.wheel(0, 500)
+    await wheelScroll(page, viewport, 500)
     await expect.poll(() => viewport.evaluate(el => el.scrollTop)).toBeGreaterThan(0)
     expect(await pagination.boundingBox()).toEqual(before)
-    await page.mouse.wheel(0, -1000)
+    await wheelScroll(page, viewport, -1000)
     await expect.poll(() => viewport.evaluate(el => el.scrollTop)).toBe(0)
   }
 })
@@ -172,15 +172,13 @@ test('real usage records support wheel scrolling and reachable server pagination
       const pagination = panel.locator('.pagination-card')
       await expect(pagination).toBeInViewport()
       const before = await pagination.boundingBox()
-      await panel.getByText('audit-model-1', { exact: true }).hover()
-      await page.mouse.wheel(0, 500)
+      await wheelScroll(page, viewport, 500, panel.getByText('audit-model-1', { exact: true }))
       await expect.poll(() => viewport.evaluate(el => el.scrollTop)).toBeGreaterThan(0)
       expect(await pagination.boundingBox()).toEqual(before)
-      await page.mouse.wheel(0, -2000)
+      await wheelScroll(page, viewport, -2000)
       await expect.poll(() => viewport.evaluate(el => el.scrollTop)).toBe(0)
     } else {
-      await panel.getByText('audit-model-1', { exact: true }).hover()
-      await page.mouse.wheel(0, 20000)
+      await wheelScroll(page, page.locator('html'), 20000, panel.getByText('audit-model-1', { exact: true }))
       await expect(panel.locator('.pagination-card')).toBeInViewport()
     }
     const next = panel.locator('.pagination-card button:visible').filter({ hasText: locale === 'zh' ? '下一页' : 'Next' })
@@ -208,7 +206,9 @@ test('ordinary pages, empty groups and admin defaults retain their layout owners
     expect(table?.width).toBe(title?.width)
   }
   await page.goto('/layout-tests/index.html?view=user-layout&admin=1')
-  await expect(page.locator('html')).not.toHaveAttribute('data-product-ui')
+  // Administration shares the polished palette, but retains its original
+  // horizontal geometry and independent table scrolling.
+  await expect(page.locator('html')).toHaveAttribute('data-product-ui')
   const sidebar = await page.locator('.sidebar').boundingBox()
   const title = await page.getByTestId('page-title').boundingBox()
   expect(title!.x - sidebar!.x - sidebar!.width).toBe(24)
@@ -426,8 +426,7 @@ test('dashboard shows all sections, four permanent performance cards and complet
       expect(Math.abs(edges.left)).toBeLessThanOrEqual(1)
       expect(Math.abs(edges.right)).toBeLessThanOrEqual(1)
       const fixed = await toolbar.boundingBox()
-      await viewport.hover()
-      await page.mouse.wheel(0, 500)
+      await wheelScroll(page, viewport, 500)
       await expect.poll(() => viewport.evaluate(el => el.scrollTop)).toBeGreaterThan(0)
       expect(await toolbar.boundingBox()).toEqual(fixed)
       await viewport.evaluate(el => { el.scrollTop = 0 })

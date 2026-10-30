@@ -11,6 +11,8 @@ export interface CodexCLIRuntimeStatus {
   version_match: boolean
   can_install: boolean
   execution_available: boolean
+  bridge_enabled: boolean
+  default_config_toml: string
   unavailable_code: string
   message: string
   mode: 'exec_task'
@@ -27,4 +29,10 @@ export async function installCodexCLI(): Promise<CodexCLIRuntimeStatus> {
     undefined,
     { timeout: 310000 }
   )).data
+}
+
+export async function updateCodexCLIBridge(bridgeEnabled: boolean): Promise<CodexCLIRuntimeStatus> {
+  return (await apiClient.put<CodexCLIRuntimeStatus>('/admin/settings/codex-cli', {
+    bridge_enabled: bridgeEnabled,
+  })).data
 }

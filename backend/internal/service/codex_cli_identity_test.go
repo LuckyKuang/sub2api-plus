@@ -33,6 +33,7 @@ func TestCodexCLITaskIdentitySourcePriorityAtExecution(t *testing.T) {
 			account := enabledCodexCLIExecutionAccount(81, "owner-access", "owner-workspace")
 			account.Credentials["user_agent"] = scenario.accountUA
 			settings := &SettingService{settingRepo: &agentIdentitySettingRepoStub{values: map[string]string{
+				SettingKeyCodexCLIBridgeEnabled:    "true",
 				SettingKeyOpenAICodexUserAgent:     scenario.globalUA,
 				SettingKeyOpenAICodexClientVersion: "0.165.0",
 			}}}

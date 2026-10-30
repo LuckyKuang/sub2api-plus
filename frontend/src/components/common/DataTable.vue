@@ -1,5 +1,5 @@
 <template>
-  <div v-if="!showDesktopTable" ref="cardsWrapperRef" v-bind="$attrs" class="space-y-3" :class="{ 'user-record-cards': userTableLayout }" :aria-busy="loading">
+  <div v-if="!showDesktopTable" ref="cardsWrapperRef" v-bind="$attrs" class="record-cards space-y-3" :class="{ 'user-record-cards': userTableLayout }" :aria-busy="loading">
     <template v-if="loading && !data?.length">
       <div v-for="i in 5" :key="i" class="glass-inset rounded-2xl border border-gray-200 p-4 dark:border-dark-700">
         <div class="space-y-3">
@@ -55,8 +55,8 @@
         }"
         @click="handleRowClick($event, row)"
       >
-        <div :class="userTableLayout ? 'user-record-fields' : 'space-y-3'">
-          <div v-if="selectable" class="flex justify-end" :class="{ 'user-record-selection': userTableLayout }">
+        <div class="record-card-fields" :class="userTableLayout ? 'user-record-fields' : 'space-y-3'">
+          <div v-if="selectable" class="record-card-selection flex justify-end" :class="{ 'user-record-selection': userTableLayout }">
             <input
               type="checkbox"
               class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-dark-600 dark:bg-dark-800"
@@ -82,7 +82,7 @@
               </slot>
             </div>
           </div>
-          <div v-if="hasActionsColumn" class="border-t border-gray-200 pt-3 dark:border-dark-700" :class="{ 'user-record-actions': userTableLayout }">
+          <div v-if="hasActionsColumn" class="record-card-actions border-t border-gray-200 pt-3 dark:border-dark-700" :class="{ 'user-record-actions': userTableLayout }">
             <slot name="cell-actions" :row="row" :value="row['actions']" :expanded="actionsExpanded"></slot>
           </div>
         </div>

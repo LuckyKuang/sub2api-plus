@@ -1676,6 +1676,7 @@ func TestIsRetryableCodexModelsManifestStatus(t *testing.T) {
 
 func newCodexModelsAPIKeyTestService(upstream HTTPUpstream) *OpenAIGatewayService {
 	return &OpenAIGatewayService{
+		settingService: &SettingService{settingRepo: &openAIIdentitySettingRepoStub{values: map[string]string{SettingKeyCodexCLIBridgeEnabled: "false"}}},
 		cfg: &config.Config{Security: config.SecurityConfig{URLAllowlist: config.URLAllowlistConfig{
 			Enabled: false,
 		}}},
@@ -4014,6 +4015,7 @@ func TestFetchCodexModelsManifestOAuthSharedAcrossGroupsWithIndependentFiltering
 	t.Cleanup(func() { chatgptCodexModelsURL = original })
 
 	s := &OpenAIGatewayService{
+		settingService: &SettingService{settingRepo: &openAIIdentitySettingRepoStub{values: map[string]string{SettingKeyCodexCLIBridgeEnabled: "false"}}},
 		accountRepo: codexModelsVisibilityAccountRepo{
 			byGroup: map[int64][]Account{
 				91: {},

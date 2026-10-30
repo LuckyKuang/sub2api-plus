@@ -40,7 +40,7 @@
 
     <!-- Step 1: Basic Info -->
     <form
-      v-if="step === 1"
+      v-show="step === 1"
       id="create-account-form"
       @submit.prevent="handleSubmit"
       class="space-y-5"
@@ -3078,6 +3078,18 @@
         <p class="input-hint">{{ t('admin.accounts.openai.accountUserAgentDesc') }}</p>
       </div>
 
+      <CodexCLICreateSettings
+        v-if="form.platform === 'openai' && (accountCategory === 'apikey' || (accountCategory === 'oauth-based' && !['agent_identity', 'codex_pat'].includes(oauthFlowRef?.inputMethod || '')))"
+        ref="codexCLICreateSettings"
+        v-model:enabled="codexCLIBridgeEnabled"
+        v-model:config-toml="codexCLIConfigTOML"
+        :active="show"
+        :disabled="submitting || currentOAuthLoading"
+        @initialize:config-toml="codexCLIConfigTOML = $event"
+        @update:enabled="codexCLIDraftTouched = true"
+        @update:config-toml="codexCLIDraftTouched = true"
+      />
+
       <div
         v-if="form.platform === 'openai' && form.type === 'oauth'"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
@@ -3439,7 +3451,7 @@
     </form>
 
     <!-- Step 2: OAuth Authorization -->
-    <div v-else class="space-y-5">
+    <div v-if="step !== 1" class="space-y-5">
       <OAuthAuthorizationFlow
         ref="oauthFlowRef"
         :add-method="form.platform === 'anthropic' ? addMethod : 'oauth'"
@@ -3797,6 +3809,7 @@
 <script setup lang="ts">
 import DateTimePicker from '@/components/common/DateTimePicker.vue'
 import OutboundIdentityEditor from './OutboundIdentityEditor.vue'
+import CodexCLICreateSettings from './CodexCLICreateSettings.vue'
 import type { IdentitySelection } from '@/api/admin/outboundIdentity'
 import Toggle from '@/components/common/Toggle.vue'
 import { ref, reactive, computed, onScopeDispose, watch } from 'vue'
@@ -3925,6 +3938,10 @@ interface OAuthFlowExposed {
 
 const { t, locale } = useI18n()
 const browserTimeZone = getBrowserTimeZone()
+const codexCLICreateSettings = ref<InstanceType<typeof CodexCLICreateSettings> | null>(null)
+const codexCLIBridgeEnabled = ref(false)
+const codexCLIConfigTOML = ref('')
+const codexCLIDraftTouched = ref(false)
 
 const oauthStepTitle = computed(() => {
   if (form.platform === 'openai') return t('admin.accounts.oauth.openai.title')
@@ -5311,10 +5328,18 @@ const ensureAntigravityMixedChannelConfirmed = async (onConfirm: () => Promise<v
   }
 }
 
-const createAccountWithOutboundIdentity = (payload: CreateAccountRequest) => adminAPI.accounts.create({
-  ...payload,
-  credentials: { ...payload.credentials, ...(outboundIdentitySelection.value ? { outbound_identity: outboundIdentitySelection.value } : {}) }
-})
+const createAccountWithOutboundIdentity = (payload: CreateAccountRequest) => {
+  const codexCLI = payload.platform === 'openai' && ['oauth', 'apikey'].includes(payload.type)
+    ? codexCLICreateSettings.value?.prepareCreate() : null
+  return adminAPI.accounts.create({
+    ...payload,
+    credentials: {
+      ...payload.credentials,
+      ...(codexCLI ? { codex_cli: codexCLI } : {}),
+      ...(outboundIdentitySelection.value ? { outbound_identity: outboundIdentitySelection.value } : {})
+    }
+  })
+}
 
 const submitCreateAccount = async (payload: CreateAccountRequest, run = oauthFlowGeneration) => {
   if (run !== oauthFlowGeneration) return
@@ -5436,6 +5461,9 @@ const resetForm = () => {
   openaiPassthroughEnabled.value = false
   openaiAccountUserAgent.value = ''
   outboundIdentitySelection.value = null
+  codexCLIBridgeEnabled.value = false
+  codexCLIConfigTOML.value = ''
+  codexCLIDraftTouched.value = false
   openaiOAuthSessionSharingEnabled.value = false
   openaiFlattenNamespacesEnabled.value = false
   openAILongContextBillingEnabled.value = false
@@ -6592,8 +6620,18 @@ const handleStartOpenAIDeviceCode = async () => {
 // OpenAI Mobile RT client_id
 const OPENAI_MOBILE_RT_CLIENT_ID = 'app_LlGpXReQgckcGGUo2JrYvtJK'
 
-const buildOpenAICodexImportCredentialExtras = (): Record<string, unknown> | null => {
+const buildOpenAICodexImportCredentialExtras = (includeCLI = false): Record<string, unknown> | null => {
   const credentials: Record<string, unknown> = {}
+
+  if (includeCLI && codexCLIDraftTouched.value && codexCLICreateSettings.value) {
+    try {
+      const codexCLI = codexCLICreateSettings.value.prepareCreate()
+      if (codexCLI) credentials.codex_cli = codexCLI
+    } catch (error) {
+      appStore.showError(error instanceof Error ? error.message : t('codexCli.account.runtimeUnavailable'))
+      return null
+    }
+  }
 	applyOpenAIAccountUserAgent(credentials)
   if (!isOpenAIModelRestrictionDisabled.value) {
     const modelMapping = buildModelMappingObject(modelRestrictionMode.value, allowedModels.value, modelMappings.value)
@@ -6658,7 +6696,7 @@ const handleOpenAIImportCodexSession = async (content: string) => {
     return
   }
 
-  const credentialExtras = buildOpenAICodexImportCredentialExtras()
+  const credentialExtras = buildOpenAICodexImportCredentialExtras(!isAgentIdentityImportContent(trimmed))
   if (credentialExtras === null) {
     return
   }

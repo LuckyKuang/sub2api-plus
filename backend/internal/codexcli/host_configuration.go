@@ -102,6 +102,8 @@ func (p hostConfigurationProbe) check(ctx context.Context) error {
 
 func applyHostConfigurationFailure(status *Status, err error) {
 	status.ExecutionAvailable, status.CanInstall, status.proof = false, false, nil
+	status.TransparentProxyAvailable = false
+	status.Capabilities = Capabilities{}
 	status.UnavailableCode = hostConfigurationErrorCode(err)
 	if status.UnavailableCode == hostConfigurationConflict {
 		status.Message = "Host Codex configuration conflicts with account-isolated task execution."

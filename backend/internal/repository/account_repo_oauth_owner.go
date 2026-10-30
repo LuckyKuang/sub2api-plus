@@ -17,6 +17,9 @@ var _ service.OAuthCredentialOwnerRepository = (*accountRepository)(nil)
 // captured credential, route and scheduler owner. Recovery cannot erase a newer
 // account/model cooldown. Unrelated current metadata is merged in the write.
 func (r *accountRepository) UpdateOAuthCredentialsIfUnchanged(ctx context.Context, expected *service.Account, accountType string, credentials, extra map[string]any, recover bool) (bool, error) {
+	if expected == nil || !expected.IsOAuth() || (accountType != service.AccountTypeOAuth && accountType != service.AccountTypeSetupToken) {
+		return false, errors.New("OAuth credential owner is invalid")
+	}
 	if expected != nil && expected.Platform == service.PlatformOpenAI && expected.Type != accountType {
 		if r == nil || r.client == nil {
 			return false, errors.New("OAuth credential repository transaction client is not configured")
@@ -43,7 +46,7 @@ func (r *accountRepository) UpdateOAuthCredentialsIfUnchanged(ctx context.Contex
 			if len(shadows) != 0 {
 				return infraerrors.BadRequest("SPARK_SHADOW_PARENT_IMMUTABLE_TYPE", "cannot change account type while it has a spark shadow; delete the shadow first")
 			}
-			applied, err = writer.updateOAuthCredentialsIfUnchanged(writeCtx, expected, accountType, credentials, extra, recover)
+			applied, err = writer.updateCredentialConfigurationIfUnchanged(writeCtx, expected, accountType, credentials, extra, recover)
 			return err
 		})
 		if err != nil {
@@ -51,15 +54,49 @@ func (r *accountRepository) UpdateOAuthCredentialsIfUnchanged(ctx context.Contex
 		}
 		return applied, nil
 	}
-	return r.updateOAuthCredentialsIfUnchanged(ctx, expected, accountType, credentials, extra, recover)
+	return r.updateCredentialConfigurationIfUnchanged(ctx, expected, accountType, credentials, extra, recover)
 }
 
-func (r *accountRepository) updateOAuthCredentialsIfUnchanged(ctx context.Context, expected *service.Account, accountType string, credentials, extra map[string]any, recover bool) (bool, error) {
+// UpdateCodexCLIAPIKeyConfigurationIfUnchanged reuses the full account/route
+// comparison while accepting only a CLI configuration change, never key rotation.
+func (r *accountRepository) UpdateCodexCLIAPIKeyConfigurationIfUnchanged(ctx context.Context, expected *service.Account, credentials map[string]any) (bool, error) {
+	if expected == nil || expected.Platform != service.PlatformOpenAI || expected.Type != service.AccountTypeAPIKey || expected.IsCredentialShadow() {
+		return false, errors.New("invalid CLI API Key owner")
+	}
+	oldCopy := make(map[string]any)
+	newCopy := make(map[string]any)
+	for key, value := range expected.Credentials {
+		if key != service.CodexCLIConfigCredentialKey {
+			oldCopy[key] = value
+		}
+	}
+	for key, value := range credentials {
+		if key != service.CodexCLIConfigCredentialKey {
+			newCopy[key] = value
+		}
+	}
+	oldJSON, err := json.Marshal(oldCopy)
+	if err != nil {
+		return false, err
+	}
+	newJSON, err := json.Marshal(newCopy)
+	if err != nil {
+		return false, err
+	}
+	if string(oldJSON) != string(newJSON) {
+		return false, errors.New("CLI configuration cannot change API Key credentials")
+	}
+	return r.updateCredentialConfigurationIfUnchanged(ctx, expected, expected.Type, credentials, nil, false)
+}
+
+func (r *accountRepository) updateCredentialConfigurationIfUnchanged(ctx context.Context, expected *service.Account, accountType string, credentials, extra map[string]any, recover bool) (bool, error) {
 	if r == nil || r.sql == nil {
 		return false, errors.New("OAuth credential repository SQL executor is not configured")
 	}
-	if expected == nil || expected.ID <= 0 || !expected.IsOAuth() || expected.IsCredentialShadow() || len(credentials) == 0 ||
-		(accountType != service.AccountTypeOAuth && accountType != service.AccountTypeSetupToken) {
+	validOwnerType := expected != nil && (expected.IsOAuth() ||
+		(expected.Platform == service.PlatformOpenAI && expected.Type == service.AccountTypeAPIKey && accountType == service.AccountTypeAPIKey && !recover && len(extra) == 0))
+	if !validOwnerType || expected.ID <= 0 || expected.IsCredentialShadow() || len(credentials) == 0 ||
+		(accountType != service.AccountTypeOAuth && accountType != service.AccountTypeSetupToken && accountType != service.AccountTypeAPIKey) {
 		return false, errors.New("OAuth credential owner is invalid")
 	}
 	expectedJSON, err := json.Marshal(normalizeJSONMap(expected.Credentials))

@@ -274,6 +274,7 @@ func (s *OpenAIQuotaService) queryUsage(ctx context.Context, accountID int64, in
 		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_QUOTA_CLIENT_ERROR", "failed to build upstream client: %v", err)
 	}
 
+	client = s.codexCLIQuotaClient(client, operation.owner)
 	callCtx, cancel := context.WithTimeout(operation.ctx, openaiQuotaUpstreamTimeout)
 	defer cancel()
 	agentIdentity := operation.owner.IsOpenAIAgentIdentity()
@@ -408,6 +409,20 @@ func (s *OpenAIQuotaService) cacheResetCreditsSnapshot(ctx context.Context, acco
 	return nil
 }
 
+func (s *OpenAIQuotaService) codexCLIQuotaClient(client *req.Client, owner *Account) *req.Client {
+	bridgeService := s.openAIIdentityResolver
+	if bridgeService == nil {
+		bridgeService = &OpenAIGatewayService{accountRepo: s.accountRepo}
+	}
+	cloned := client.Clone()
+	cloned.Transport.WrapRoundTripFunc(func(native http.RoundTripper) req.HttpRoundTripFunc {
+		return func(request *http.Request) (*http.Response, error) {
+			return bridgeService.doOpenAICodexCLIControlPlane(request, owner, native.RoundTrip)
+		}
+	})
+	return cloned
+}
+
 func (s *OpenAIQuotaService) queryResetCreditDetails(ctx context.Context, client *req.Client, operation *openAIQuotaOperation) *openAIRateLimitResetCreditDetails {
 	accountID := operation.selected.ID
 	quotaHeaders, _, headerErr := s.buildCodexQuotaHeaders(ctx, operation)
@@ -492,6 +507,7 @@ func (s *OpenAIQuotaService) resetCredit(ctx context.Context, accountID int64, c
 		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_QUOTA_CLIENT_ERROR", "failed to build upstream client: %v", err)
 	}
 
+	client = s.codexCLIQuotaClient(client, operation.owner)
 	callCtx, cancel := context.WithTimeout(operation.ctx, openaiQuotaUpstreamTimeout)
 	defer cancel()
 	agentIdentity := operation.owner.IsOpenAIAgentIdentity()

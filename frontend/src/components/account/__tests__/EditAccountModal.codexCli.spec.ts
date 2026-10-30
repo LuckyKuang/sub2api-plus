@@ -49,7 +49,7 @@ function cliView(): CodexCLIAccountView {
     auth_status: { has_access_token: true, has_refresh_token: true, has_id_token: false },
     expected_owner: owner,
     oauth_credential_owner: owner,
-    availability: { available: true, code: 'exec_task_only', reason: 'task endpoint' },
+    availability: { available: true, code: 'http_bridge_and_tasks', reason: 'HTTP bridge and tasks' },
   }
 }
 const BaseDialog = defineComponent({
@@ -76,9 +76,108 @@ describe('EditAccountModal Codex CLI save workflow', () => {
     updateAccount.mockReset().mockResolvedValue(account())
     getCLI.mockReset().mockResolvedValue(cliView())
     updateCLI.mockReset().mockResolvedValue(cliView())
-    getRuntime.mockReset().mockResolvedValue({ execution_available: true })
+    getRuntime.mockReset().mockResolvedValue({ execution_available: true, bridge_enabled: true })
   })
   afterEach(() => wrappers.splice(0).forEach(wrapper => wrapper.unmount()))
+
+  it.each(['off', 'unknown', 'failed'])('hides official CLI editing when global bridge is %s', async state => {
+    if (state === 'off') getRuntime.mockResolvedValue({ execution_available: true, bridge_enabled: false })
+    else if (state === 'unknown') getRuntime.mockResolvedValue({ execution_available: true })
+    else getRuntime.mockRejectedValue(new Error('private-runtime-diagnostic'))
+    const wrapper = modal()
+    expect(wrapper.find('[data-testid="codex-cli-editor"]').exists()).toBe(false)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="codex-cli-editor"]').exists()).toBe(false)
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(updateAccount).toHaveBeenCalledTimes(1)
+    expect(updateCLI).not.toHaveBeenCalled()
+    expect(wrapper.html()).not.toContain('private-runtime-diagnostic')
+  })
+
+  it('preserves existing custom configuration when opening and saving unrelated edits', async () => {
+    const custom = 'sandbox_mode = "workspace-write"\napproval_policy = "never"\nmodel = "gpt-6.1-sol"\n'
+    getCLI.mockResolvedValue({ ...cliView(), config_toml: custom })
+    const wrapper = modal()
+    await flushPromises()
+    const userAgentGroup = wrapper.get('[data-testid="edit-openai-account-user-agent"]').element.parentElement!
+    expect(userAgentGroup.nextElementSibling).toBe(wrapper.get('[data-testid="codex-cli-editor"]').element)
+    expect(userAgentGroup.nextElementSibling?.nextElementSibling?.textContent).toContain('admin.accounts.openai.oauthSessionSharing')
+    expect(wrapper.get<HTMLTextAreaElement>('[data-testid="codex-cli-config"]').element.value).toBe(custom)
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(updateCLI).not.toHaveBeenCalled()
+  })
+
+  it('saves API-key bridge settings in the same position without an OAuth auth patch', async () => {
+    const apiKeyAccount = { ...account(), type: 'apikey', credentials: { api_key: 'private-api-key', base_url: 'https://api.openai.com' }, oauth_credential_owner: '' } as Account
+    getCLI.mockResolvedValue({ ...cliView(), auth: { auth_mode: 'apikey', tokens: {} }, oauth_credential_owner: '', availability: { available: true, code: 'http_bridge_only', reason: 'HTTP bridge' } })
+    updateAccount.mockResolvedValue(apiKeyAccount)
+    const wrapper = modal(apiKeyAccount)
+    await flushPromises()
+    const userAgentGroup = wrapper.get('[data-testid="edit-openai-account-user-agent"]').element.parentElement!
+    expect(userAgentGroup.nextElementSibling).toBe(wrapper.get('[data-testid="codex-cli-editor"]').element)
+    expect(wrapper.find('[data-testid="codex-cli-workspace"]').exists()).toBe(false)
+    await wrapper.get('form#edit-account-form input[type="text"]').setValue('Renamed API key account')
+    await wrapper.get('[data-testid="codex-cli-mode"]').trigger('click')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(updateCLI).toHaveBeenCalledExactlyOnceWith(apiKeyAccount.id, { expected_owner: owner, enabled: true, config_toml: defaultConfig })
+    expect(updateAccount.mock.calls[0][1].name).toBe('Renamed API key account')
+    expect(wrapper.emitted('close')).toHaveLength(1)
+  })
+
+  it.each([{}, { base_url: '' }])('preserves an implicit API-key destination during CLI-only saves: %j', async savedCredentials => {
+    const original = { ...account(), type: 'apikey', oauth_credential_owner: '', credentials: savedCredentials, credentials_status: { has_api_key: true } } as Account
+    getCLI.mockResolvedValue({ ...cliView(), auth: { auth_mode: 'apikey', tokens: {} }, oauth_credential_owner: '' })
+    updateAccount.mockResolvedValue(original)
+    const wrapper = modal(original)
+    await flushPromises()
+    await wrapper.get('[data-testid="codex-cli-mode"]').trigger('click')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(updateAccount).toHaveBeenCalledTimes(1)
+    const credentials = updateAccount.mock.calls[0][1].credentials
+    expect(Object.prototype.hasOwnProperty.call(credentials, 'base_url')).toBe(Object.prototype.hasOwnProperty.call(savedCredentials, 'base_url'))
+    expect(credentials.base_url).toBe((savedCredentials as Record<string, unknown>).base_url)
+    expect(updateCLI).toHaveBeenCalledExactlyOnceWith(original.id, { expected_owner: owner, enabled: true, config_toml: defaultConfig })
+    expect(showError).not.toHaveBeenCalled()
+  })
+
+  it.each(['api_key', 'base_url'])('rejects simultaneous %s and CLI edits before either write while retaining both drafts', async field => {
+    const original = { ...account(), type: 'apikey', oauth_credential_owner: '', credentials: { base_url: 'https://api.openai.com' }, credentials_status: { has_api_key: true } } as Account
+    getCLI.mockResolvedValue({ ...cliView(), auth: { auth_mode: 'apikey', tokens: {} }, oauth_credential_owner: '' })
+    const wrapper = modal(original)
+    await flushPromises()
+    const input = field === 'api_key'
+      ? wrapper.get('input[type="password"][placeholder="sk-proj-..."]')
+      : wrapper.get('input[placeholder="https://api.openai.com"]')
+    const replacement = field === 'api_key' ? 'replacement-api-key' : 'https://new-provider.example/v1'
+    await input.setValue(replacement)
+    await wrapper.get('[data-testid="codex-cli-config"]').setValue('sandbox_mode = "read-only"')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(updateAccount).not.toHaveBeenCalled()
+    expect(updateCLI).not.toHaveBeenCalled()
+    expect(showError).toHaveBeenCalledWith('codexCli.account.saveCredentialsFirst')
+    expect(wrapper.emitted('close')).toBeUndefined()
+    expect((input.element as HTMLInputElement).value).toBe(replacement)
+    expect(wrapper.get<HTMLTextAreaElement>('[data-testid="codex-cli-config"]').element.value).toBe('sandbox_mode = "read-only"')
+  })
+
+  it('allows a redacted API-key replacement without CLI edits', async () => {
+    const original = { ...account(), type: 'apikey', oauth_credential_owner: '', credentials: { base_url: 'https://api.openai.com' }, credentials_status: { has_api_key: true } } as Account
+    getCLI.mockResolvedValue({ ...cliView(), auth: { auth_mode: 'apikey', tokens: {} }, oauth_credential_owner: '' })
+    const wrapper = modal(original)
+    await flushPromises()
+    await wrapper.get('input[type="password"][placeholder="sk-proj-..."]').setValue('replacement-api-key')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(updateAccount).toHaveBeenCalledTimes(1)
+    expect(updateAccount.mock.calls[0][1].credentials.api_key).toBe('replacement-api-key')
+    expect(updateCLI).not.toHaveBeenCalled()
+    expect(wrapper.emitted('close')).toHaveLength(1)
+  })
 
   it('saves unrelated account edits without writing CLI defaults or credentials', async () => {
     const wrapper = modal()

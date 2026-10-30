@@ -14,7 +14,7 @@ only creates clipping/scrolling containers. It does not change production
 routes, build inputs, or the separate seven-provider business suite.
 
 The matrix covers 375×812, 768×900, 1000×600 and 1440×900 in both themes and
-languages (144 shared-console cases), plus user/public presentation cases. It checks translated navigation, segmented choices, row
+languages, plus user/public and administrator presentation cases. It checks translated navigation, segmented choices, row
 actions, form controls and button labels at 0%, 20% and 100% transparency,
 configured accent extremes at 0%, 50% and 100% transparency (including immediate
 theme switching), date ranges and their nested calendars,
@@ -40,6 +40,12 @@ single-line model/group labels, wrapping actions and complete first-column hover
 and empty-row borders. Dense-record fallbacks retain multiple field columns on
 desktop, one on phones, and full-width selection and action rows.
 Administrator fixed-scroll ownership remains covered.
+The administrator fixture checks the original 12/16/24px shell insets, expanded
+and collapsed sidebars, independent toolbar and pagination surfaces, pinned
+columns during horizontal scrolling, full mobile record fields and actions,
+and neutral colors in body-portalled controls across both themes and languages.
+Centered distribution tables keep their scrollport within the parent card while
+preserving wide columns and synchronized horizontal header scrolling.
 Real user usage records also exercise mouse-wheel scrolling in the native table
 and responsive cards, fixed pagination, and server requests for the selected page.
 It also checks body-portalled user colors and preserved admin default insets.

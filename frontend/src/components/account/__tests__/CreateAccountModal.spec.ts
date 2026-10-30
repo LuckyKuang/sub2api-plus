@@ -18,6 +18,10 @@ const {
   cnOAuthRequestMock,
   cnOAuthModelsMock,
   previewModelsMock,
+  codexRuntimeMock,
+  refreshOpenAITokenMock,
+  startOpenAIDeviceCodeMock,
+  pollOpenAIDeviceCodeMock,
 } = vi.hoisted(() => ({
   createAccountMock: vi.fn(),
   syncUpstreamModelsMock: vi.fn(),
@@ -28,9 +32,14 @@ const {
   cnOAuthRequestMock: vi.fn(),
   cnOAuthModelsMock: vi.fn(),
   previewModelsMock: vi.fn(),
+  codexRuntimeMock: vi.fn(),
+  refreshOpenAITokenMock: vi.fn(),
+  startOpenAIDeviceCodeMock: vi.fn(),
+  pollOpenAIDeviceCodeMock: vi.fn(),
 }))
 
 vi.mock('@/components/account/OutboundIdentityEditor.vue', () => ({ default: { template: '<div />' } }))
+vi.mock('@/api/admin/codexCliRuntime', () => ({ getCodexCLIRuntime: codexRuntimeMock }))
 
 vi.mock('@/stores/app', () => ({
   useAppStore: () => ({
@@ -57,6 +66,9 @@ vi.mock('@/api/admin', () => ({
       checkMixedChannelRisk: vi.fn().mockResolvedValue({ has_risk: false }),
       importCodexSession: importCodexSessionMock,
       createOpenAICodexPAT: createOpenAICodexPATMock,
+      refreshOpenAIToken: refreshOpenAITokenMock,
+      startOpenAIDeviceCode: startOpenAIDeviceCodeMock,
+      pollOpenAIDeviceCode: pollOpenAIDeviceCodeMock,
     },
     settings: {
       getWebSearchEmulationConfig: vi.fn().mockResolvedValue({ enabled: false, providers: [] }),
@@ -104,7 +116,7 @@ const OAuthAuthorizationFlowStub = defineComponent({
     initialInputMethod: String,
   },
   data: () => ({ inputMethod: 'manual' }),
-  emits: ['import-codex-session', 'import-codex-pat'],
+  emits: ['import-codex-session', 'import-codex-pat', 'start-device-code', 'validate-refresh-token', 'validate-mobile-refresh-token'],
   template: `
     <div>
       <button data-testid="import-codex-session" @click="$emit('import-codex-session', 'session-json')">session</button>
@@ -247,6 +259,10 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
     cnOAuthRequestMock.mockReset()
     cnOAuthModelsMock.mockReset()
     previewModelsMock.mockReset()
+    codexRuntimeMock.mockReset().mockResolvedValue({ execution_available: true, bridge_enabled: true, default_config_toml: 'sandbox_mode = "danger-full-access"\napproval_policy = "never"\ncli_auth_credentials_store = "file"\n' })
+    refreshOpenAITokenMock.mockReset()
+    startOpenAIDeviceCodeMock.mockReset()
+    pollOpenAIDeviceCodeMock.mockReset()
   })
 
   afterEach(() => vi.useRealTimers())
@@ -910,6 +926,153 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
 
     expect(importCodexSessionMock).toHaveBeenCalledTimes(1)
     expect(importCodexSessionMock.mock.calls[0]?.[0]?.extra?.openai_long_context_billing_enabled).toBeUndefined()
+  })
+
+  // Requirements: the new-account form exposes the same account-level CLI setting,
+  // saves it in the account's first write, and never applies it to PAT/AgentIdentity.
+  it.each(['off', 'unknown', 'failed'])('hides official CLI creation settings when global bridge is %s', async state => {
+    if (state === 'off') codexRuntimeMock.mockResolvedValue({ execution_available: true, bridge_enabled: false })
+    else if (state === 'unknown') codexRuntimeMock.mockResolvedValue({ execution_available: true })
+    else codexRuntimeMock.mockRejectedValue(new Error('private-runtime-diagnostic'))
+    const wrapper = mountModal()
+    await selectButtonByText(wrapper, 'OpenAI')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="codex-cli-create-settings"]').exists()).toBe(false)
+    expect(wrapper.html()).not.toContain('private-runtime-diagnostic')
+    wrapper.unmount()
+  })
+
+  it('initializes and saves the official default config for a new OAuth account', async () => {
+    const wrapper = await openCodexImportStep()
+    await flushPromises()
+    const expected = 'sandbox_mode = "danger-full-access"\napproval_policy = "never"\ncli_auth_credentials_store = "file"\n'
+    expect(wrapper.get<HTMLTextAreaElement>('[data-testid="codex-cli-create-config"]').element.value).toBe(expected)
+    await wrapper.get('[data-testid="codex-cli-create-mode"]').trigger('click')
+    await wrapper.get('[data-testid="import-codex-session"]').trigger('click')
+    await flushPromises()
+    expect(importCodexSessionMock.mock.calls[0][0].credential_extras.codex_cli).toEqual({ enabled: true, config_toml: expected })
+    wrapper.unmount()
+  })
+
+  it('preserves CLI settings across both OAuth steps and includes them in the import write', async () => {
+    const wrapper = mountModal()
+    await selectButtonByText(wrapper, 'OpenAI')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="codex-cli-create-settings"]').exists()).toBe(true)
+    const userAgentGroup = wrapper.get('[data-testid="create-openai-account-user-agent"]').element.parentElement!
+    expect(userAgentGroup.nextElementSibling).toBe(wrapper.get('[data-testid="codex-cli-create-settings"]').element)
+    expect(userAgentGroup.nextElementSibling?.nextElementSibling?.textContent).toContain('admin.accounts.openai.oauthSessionSharing')
+    await wrapper.get('[data-testid="codex-cli-create-mode"]').trigger('click')
+    await wrapper.get('[data-testid="codex-cli-create-config"]').setValue('sandbox_mode = "read-only"')
+    await wrapper.get('form#create-account-form input[type="text"]').setValue('CLI OAuth')
+    await wrapper.get('form#create-account-form').trigger('submit.prevent')
+    expect(wrapper.get<HTMLTextAreaElement>('[data-testid="codex-cli-create-config"]').element.value).toBe('sandbox_mode = "read-only"')
+    await wrapper.get('[data-testid="import-codex-session"]').trigger('click')
+    await flushPromises()
+    expect(importCodexSessionMock).toHaveBeenCalledOnce()
+    expect(importCodexSessionMock.mock.calls[0][0].credential_extras.codex_cli).toEqual({ enabled: true, config_toml: 'sandbox_mode = "read-only"' })
+    expect(createAccountMock).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it.each(['device', 'refresh', 'mobile-refresh'])('saves CLI settings in the first %s OAuth account write', async method => {
+    startOpenAIDeviceCodeMock.mockResolvedValue({ session_id: 'device-session', user_code: 'code', verification_url: 'https://example.test/device', interval_seconds: 1 })
+    pollOpenAIDeviceCodeMock.mockResolvedValue({ access_token: 'device-access', refresh_token: 'device-refresh', chatgpt_account_id: 'device-workspace' })
+    refreshOpenAITokenMock
+      .mockResolvedValueOnce({ access_token: 'access-one', refresh_token: 'refresh-one', chatgpt_account_id: 'workspace-one' })
+      .mockResolvedValueOnce({ access_token: 'access-two', refresh_token: 'refresh-two', chatgpt_account_id: 'workspace-two' })
+    const wrapper = await openCodexImportStep()
+    await flushPromises()
+    await wrapper.get('[data-testid="codex-cli-create-mode"]').trigger('click')
+    await wrapper.get('[data-testid="codex-cli-create-config"]').setValue('sandbox_mode = "read-only"')
+    const flow = wrapper.findComponent(OAuthAuthorizationFlowStub)
+    if (method === 'device') flow.vm.$emit('start-device-code')
+    else flow.vm.$emit(method === 'refresh' ? 'validate-refresh-token' : 'validate-mobile-refresh-token', 'refresh-one\nrefresh-two')
+    await flushPromises()
+    expect(createAccountMock).toHaveBeenCalledTimes(method === 'device' ? 1 : 2)
+    for (const [payload] of createAccountMock.mock.calls) {
+      expect(payload).toMatchObject({ platform: 'openai', type: 'oauth', credentials: { codex_cli: { enabled: true, config_toml: 'sandbox_mode = "read-only"' } } })
+    }
+    if (method !== 'device') {
+      expect(createAccountMock.mock.calls[0][0].credentials.access_token).toBe('access-one')
+      expect(createAccountMock.mock.calls[1][0].credentials.access_token).toBe('access-two')
+      expect(createAccountMock.mock.calls[0][0].credentials.chatgpt_account_id).toBe('workspace-one')
+      expect(createAccountMock.mock.calls[1][0].credentials.chatgpt_account_id).toBe('workspace-two')
+    }
+    expect(importCodexSessionMock).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('preserves existing CLI preferences when importing without editing its creation settings', async () => {
+    const wrapper = await openCodexImportStep()
+    await flushPromises()
+    await wrapper.get('[data-testid="import-codex-session"]').trigger('click')
+    await flushPromises()
+    expect(importCodexSessionMock.mock.calls[0][0].credential_extras?.codex_cli).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('does not copy an enabled CLI draft into a PAT import', async () => {
+    const wrapper = mountModal()
+    await selectButtonByText(wrapper, 'OpenAI')
+    await flushPromises()
+    await wrapper.get('[data-testid="codex-cli-create-mode"]').trigger('click')
+    await wrapper.get('form#create-account-form input[type="text"]').setValue('PAT')
+    await wrapper.get('form#create-account-form').trigger('submit.prevent')
+    const flow = wrapper.findComponent(OAuthAuthorizationFlowStub)
+    flow.vm.inputMethod = 'codex_pat'
+    await flushPromises()
+    expect(wrapper.find('[data-testid="codex-cli-create-settings"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="import-codex-pat"]').trigger('click')
+    await flushPromises()
+    expect(createOpenAICodexPATMock.mock.calls[0][0].credential_extras?.codex_cli).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('does not copy an enabled CLI draft into an AgentIdentity import', async () => {
+    const wrapper = mountModal()
+    await selectButtonByText(wrapper, 'OpenAI')
+    await flushPromises()
+    await wrapper.get('[data-testid="codex-cli-create-mode"]').trigger('click')
+    await wrapper.get('form#create-account-form input[type="text"]').setValue('AgentIdentity')
+    await wrapper.get('form#create-account-form').trigger('submit.prevent')
+    const flow = wrapper.findComponent(OAuthAuthorizationFlowStub)
+    flow.vm.inputMethod = 'agent_identity'
+    await flushPromises()
+    expect(wrapper.find('[data-testid="codex-cli-create-settings"]').exists()).toBe(false)
+    flow.vm.$emit('import-codex-session', JSON.stringify({ auth_mode: 'agentIdentity', agent_identity: { agent_runtime_id: 'runtime' } }))
+    await flushPromises()
+    expect(importCodexSessionMock.mock.calls[0][0].credential_extras?.codex_cli).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('creates an API-key account with its explicit CLI switch and server default in the first write', async () => {
+    const wrapper = mountModal()
+    await selectButtonByText(wrapper, 'OpenAI')
+    await selectButtonByText(wrapper, 'API Key')
+    await flushPromises()
+    const expected = 'sandbox_mode = "danger-full-access"\napproval_policy = "never"\ncli_auth_credentials_store = "file"\n'
+    expect(wrapper.get<HTMLTextAreaElement>('[data-testid="codex-cli-create-config"]').element.value).toBe(expected)
+    const userAgentGroup = wrapper.get('[data-testid="create-openai-account-user-agent"]').element.parentElement!
+    expect(userAgentGroup.nextElementSibling).toBe(wrapper.get('[data-testid="codex-cli-create-settings"]').element)
+    await wrapper.get('[data-testid="codex-cli-create-mode"]').trigger('click')
+    await wrapper.get('[data-tour="account-form-name"]').setValue('API key CLI')
+    await wrapper.get('form#create-account-form input[type="password"]').setValue('test-api-key')
+    await wrapper.get('form#create-account-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(createAccountMock).toHaveBeenCalledTimes(1)
+    expect(createAccountMock.mock.calls[0][0]).toMatchObject({ platform: 'openai', type: 'apikey', credentials: { api_key: 'test-api-key', codex_cli: { enabled: true, config_toml: expected } } })
+    wrapper.unmount()
+  })
+
+  it.each(['off', 'pending', 'failed'])('omits hidden API-key CLI configuration while global status is %s', async state => {
+    if (state === 'off') codexRuntimeMock.mockResolvedValue({ execution_available: true, bridge_enabled: false })
+    else if (state === 'pending') codexRuntimeMock.mockReturnValue(new Promise(() => {}))
+    else codexRuntimeMock.mockRejectedValue(new Error('private-runtime-error'))
+    const wrapper = await submitApiKeyAccount('openai')
+    expect(wrapper.find('[data-testid="codex-cli-create-settings"]').exists()).toBe(false)
+    expect(createAccountMock.mock.calls[0][0].credentials.codex_cli).toBeUndefined()
+    wrapper.unmount()
   })
 
   it('persists the explicit device fingerprint default for new Codex imports', async () => {

@@ -2454,6 +2454,9 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 		if sawFailedEvent {
 			return resultWithUsage(), fmt.Errorf("upstream response failed: %s", failedMessage)
 		}
+		if isCodexCLIBridgeFailure(err) {
+			return resultWithUsage(), s.handleOpenAIUpstreamTransportError(ctx, c, account, err, true)
+		}
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return resultWithUsage(), fmt.Errorf("stream usage incomplete: %w", err)
 		}

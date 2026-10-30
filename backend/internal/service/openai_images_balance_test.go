@@ -59,7 +59,7 @@ func TestForwardOpenAIImagesAPIKey_ClassifiesWrappedBalanceBeforeTransientFailov
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := &openAIImagesBalanceRepo{}
-			svc := &OpenAIGatewayService{accountRepo: repo, httpUpstream: openAIImagesBalanceUpstream{}, cfg: &config.Config{}}
+			svc := &OpenAIGatewayService{settingService: &SettingService{settingRepo: &openAIIdentitySettingRepoStub{values: map[string]string{SettingKeyCodexCLIBridgeEnabled: "false"}}}, accountRepo: repo, httpUpstream: openAIImagesBalanceUpstream{}, cfg: &config.Config{}}
 			account := &Account{
 				ID: 7, Platform: PlatformOpenAI, Type: AccountTypeAPIKey,
 				Status: StatusActive, Schedulable: true,
