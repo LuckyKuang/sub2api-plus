@@ -45,6 +45,7 @@ const adapter: AxiosAdapter = async config => {
     return response(config, await zcodeCreate())
   }
   if (config.method === 'get') {
+    if (url === '/admin/settings/codex-cli') return response(config, { bridge_enabled: false, execution_available: false })
     if (url.endsWith('/tls-fingerprint-profiles')) return response(config, [])
     if (url.endsWith('/web-search-emulation')) return response(config, { enabled: false, providers: [] })
     if (url === '/admin/settings') return response(config, {})
@@ -89,7 +90,7 @@ function openModal() {
     props: { show: true, groups: [], proxies: [31, 32].map(id => ({ id, name: `Route ${id}`, host: `route${id}.example`, protocol: 'http', port: 8080, status: 'active' })) as any },
     global: { stubs: {
       BaseDialog: { props: ['show'], template: '<div v-if="show"><slot /><slot name="footer" /></div>' },
-      OAuthAuthorizationFlow: false, ProxySelector: false, Icon: true,
+      OAuthAuthorizationFlow: false, CodexCLICreateSettings: false, ProxySelector: false, Icon: true,
       Transition: { template: '<div><slot /></div>' }
     } }
   })
@@ -120,9 +121,15 @@ async function changeRoute(wrapper: ReturnType<typeof openModal>) {
   await flushPromises()
 }
 async function enterCallback(wrapper: ReturnType<typeof openModal>, state: string) {
-  await wrapper.get('textarea').setValue(`http://localhost/callback?code=old-code&state=${state}`)
+  await oauthTextarea(wrapper).setValue(`http://localhost/callback?code=old-code&state=${state}`)
   await button(wrapper, 'admin.accounts.oauth.completeAuth').trigger('click')
   await flushPromises()
+}
+
+function oauthTextarea(wrapper: ReturnType<typeof openModal>) {
+  const input = wrapper.getComponent({ name: 'OAuthAuthorizationFlow' }).get('textarea')
+  expect(input.isVisible()).toBe(true)
+  return input
 }
 
 // A login belongs to the modal generation, account form and captured proxy.
@@ -172,7 +179,7 @@ describe('OAuth proxy change and late browser callback isolation', () => {
     const wrapper = openModal()
     await enterFlow(wrapper, platform)
     await wrapper.get('input[value="refresh_token"]').setValue(true)
-    await wrapper.get('textarea').setValue('old-first-rt\nold-second-rt')
+    await oauthTextarea(wrapper).setValue('old-first-rt\nold-second-rt')
     await button(wrapper, `admin.accounts.oauth.${platform}.validateAndCreate`).trigger('click')
     await flushPromises()
     expect(requests.filter(request => request.url.endsWith('/refresh-token'))).toHaveLength(1)
@@ -231,7 +238,7 @@ describe('Grok independent import and saved-account completion boundaries', () =
     const wrapper = openModal()
     await enterFlow(wrapper, 'grok')
     await wrapper.get('input[value="sso_cookie"]').setValue(true)
-    await wrapper.get('textarea').setValue('old-ephemeral-sso')
+    await oauthTextarea(wrapper).setValue('old-ephemeral-sso')
     await button(wrapper, 'admin.accounts.oauth.grok.convertSSOAndCreate').trigger('click')
     await flushPromises()
     expect(requests.filter(request => request.url === '/admin/grok/sso-to-oauth')).toHaveLength(1)

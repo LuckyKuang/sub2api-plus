@@ -109,21 +109,24 @@ official pinned runtime, otherwise the write returns HTTP 422
 `CODEX_CLI_RUNTIME_UNAVAILABLE`. Editing or disabling an already enabled account
 remains possible while the runtime is unavailable.
 
-API-key, setup-token, AgentIdentity, personal-access-token and credential-shadow
-accounts are ineligible. Ordinary account responses omit the entire managed
-CLI configuration; use the dedicated account endpoint to edit it.
+Credential-owning OpenAI OAuth and API Key accounts are eligible for bridging;
+independent agent tasks require ChatGPT OAuth. Setup-token, AgentIdentity,
+personal-access-token and credential-shadow accounts remain ineligible. Ordinary
+account responses omit the entire managed CLI configuration; use the dedicated
+account endpoint to edit it.
 
 ## Credential ownership and writes
 
-The database's existing OAuth credential fields remain canonical. The CLI
+The database's existing account credential fields remain canonical. The CLI
 configuration stores only `enabled` and `config_toml`; there is no second
-persisted `auth_json` credential bundle. Reads expose the ChatGPT workspace ID
-and booleans indicating whether access, refresh and ID tokens are configured.
-Tokens are never returned.
+persisted `auth_json` credential bundle. OAuth reads expose the ChatGPT workspace
+ID and booleans indicating whether access, refresh and ID tokens are configured.
+API Key reads return `auth_mode: apikey`, an empty token map and false token-status
+flags. Tokens and API keys are never returned.
 
 The dedicated account PUT requires the initiating form's `expected_owner` and
 `config_toml`; optional `enabled` preserves its current value when omitted.
-An optional `auth.tokens` object accepts `account_id`, `access_token`,
+For OAuth accounts, an optional `auth.tokens` object accepts `account_id`, `access_token`,
 `refresh_token` and `id_token`: omission preserves a value, a nonempty string
 replaces it, and `null` clears it. Empty or masked token placeholders and
 unknown fields are rejected. Replacement access/ID claims are checked for
@@ -133,11 +136,13 @@ different owner. Use the existing OAuth authorization flow to change accounts.
 
 `expected_owner` binds the form to the credential grant, route and CLI
 configuration. Credential or proxy changes require reloading the form. The
-write also uses the existing database OAuth-owner compare-and-swap, so a login
-or route change racing with the save cannot be overwritten. The returned
+OAuth write also uses the existing database OAuth-owner compare-and-swap. API
+Key writes use a configuration-only compare-and-swap that preserves the API key
+and base URL. Both compare the captured account and route, so concurrent
+credential or route changes cannot be overwritten. For OAuth, the returned
 `oauth_credential_owner` refreshes the ordinary account editor's comparison
-value. Unrelated account names, priorities and usage observations do not
-invalidate the CLI form.
+value; it is empty for API Key accounts. Unrelated account names, priorities and
+usage observations do not invalidate the CLI form.
 
 Save proxy changes separately before editing CLI settings or credentials. The
 account editor rejects a combined proxy/CLI change before either write; reopen

@@ -37,7 +37,7 @@ prove PostgreSQL locking, rollback, outbox atomicity, or multi-replica storage.
 ## Pinned Codex CLI bridge and independent task requirements
 
 The [CLI contract](CODEX_CLI.md) adds an opt-in official HTTP proxy transport
-for existing OpenAI OAuth gateway routes and retains a separate independent
+for existing OpenAI OAuth and API Key gateway routes and retains a separate independent
 agent task entrypoint. The global and account switches leave the established
 authentication, audit, billing, credential ownership and affinity contracts in
 place. The unit coverage manifest and frontend coverage

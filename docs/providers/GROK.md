@@ -98,6 +98,13 @@ includes the case where a non-streaming downstream client is served by upstream
 SSE aggregation. `Content-Type` stays `application/json` for the JSON sampler
 body. Account header overrides cannot change the operation-owned `Accept`.
 
+Responses streaming flushes the first visible output at its complete SSE event
+boundary, including when the data line and terminating blank line are already
+queued together. Recording first-token timing cannot defer that flush until a
+later upstream event. Subsequent events retain normal batching; disconnects
+after visible output retain the partial result and drain available terminal
+usage for billing.
+
 ## Request compression
 
 The gateway can send zstd-compressed sampler JSON toward the trusted Grok CLI

@@ -738,6 +738,10 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 				startsClientOutput = false
 			}
 			startsVisibleOutput := observation.MeaningfulOutput
+			// Observe below records the first token immediately on non-staged
+			// streams. Capture this beforehand so an already queued event boundary
+			// cannot leave the first visible event buffered until more data arrives.
+			firstVisibleOutput := timing.firstTokenMs == nil && startsVisibleOutput
 			if stageFirstOutput {
 				eventStartsClientOutput = eventStartsClientOutput || startsClientOutput
 				eventStartsVisibleOutput = eventStartsVisibleOutput || startsVisibleOutput
@@ -775,7 +779,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 			// 写入客户端（客户端断开后继续 drain 上游）
 			if !clientDisconnected && !failureDelivered && !suppressCurrentEvent {
 				shouldFlush := queueDrained && (clientOutputStarted || startsClientOutput)
-				if timing.firstTokenMs == nil && startsVisibleOutput {
+				if firstVisibleOutput {
 					// 保证首个 token 事件尽快出站，避免影响 TTFT。
 					shouldFlush = true
 				}

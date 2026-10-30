@@ -25,6 +25,16 @@ type pinnedModelsRoutesRepository struct {
 	account service.Account
 }
 
+// Transport permission reads the same stored owner; these native catalog fixtures
+// have no account-level CLI opt-in.
+func (r *pinnedModelsRoutesRepository) GetByID(_ context.Context, id int64) (*service.Account, error) {
+	if id != r.account.ID {
+		return nil, service.ErrAccountNotFound
+	}
+	account := r.account
+	return &account, nil
+}
+
 func (r *pinnedModelsRoutesRepository) ListByGroup(context.Context, int64) ([]service.Account, error) {
 	return []service.Account{r.account}, nil
 }
