@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page, type TestInfo } from '@playwright/test'
+import { wheelScroll } from './wheel'
 
 // Acceptance source: the approved Chrome user-page audit requires fixed page
 // chrome, independent record/card scrolling, aligned rounded panels, 10 invited
@@ -119,10 +120,8 @@ async function assertEqualPairAndFourGuides(page: Page, pairSelector: string, gu
 }
 
 async function wheelBodyWithoutMovingFooter(page: Page, viewport: Locator, footer: Locator) {
-  await expect(viewport).toBeVisible()
   const originalFooter = await footer.boundingBox()
-  await viewport.hover()
-  await page.mouse.wheel(0, 600)
+  await wheelScroll(page, viewport, 600)
   await expect.poll(() => viewport.evaluate(el => el.scrollTop)).toBeGreaterThan(0)
   expect(await footer.boundingBox()).toEqual(originalFooter)
 }

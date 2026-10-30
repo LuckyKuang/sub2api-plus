@@ -1,7 +1,7 @@
 # Managed official Codex CLI bridge and tasks
 
 Sub2API Plus can install the reviewed official Codex CLI and bridge existing
-gateway traffic for credential-owning OpenAI ChatGPT OAuth accounts. The
+gateway traffic for credential-owning OpenAI ChatGPT OAuth and API Key accounts. The
 project pins CLI **0.165.0**. Installation never resolves `latest`, upgrades a
 system installation, or changes account/global outbound identity declarations.
 
@@ -63,7 +63,7 @@ opted-in account. Settings API errors expose stable reasons rather than database
 proxy or filesystem diagnostics.
 
 When the global bridge environment is enabled, both **Add account** and
-**Edit account** expose **Official Codex CLI** in the same OpenAI OAuth settings
+**Edit account** expose **Official Codex CLI** in the same OpenAI OAuth or API Key settings
 position for eligible accounts. With the global bridge disabled, or while its
 status is unknown, both forms hide these controls. Opening either form refreshes
 the global status, so reopening it after saving global settings uses a fresh
@@ -142,6 +142,12 @@ invalidate the CLI form.
 Save proxy changes separately before editing CLI settings or credentials. The
 account editor rejects a combined proxy/CLI change before either write; reopen
 the editor after saving the proxy to bind the CLI form to its new route.
+API-key accounts also save API key or base URL changes separately from CLI
+settings. A combined edit is rejected before either write and both drafts stay
+in the form. Revert the CLI edits, save the credential or destination change,
+then reopen the account and apply CLI settings against its new owner snapshot.
+Key-only, CLI-only and unrelated metadata plus CLI edits retain their normal
+save flow; this restriction does not relax owner CAS or reorder the writes.
 
 Before each task, existing project token-provider locking/refresh and owner
 checks acquire one account snapshot. The private execution `auth.json` uses
@@ -232,7 +238,7 @@ provider bearer, workspace, identity and proxy.
 Each transport hop starts a private, verified official proxy and a loopback-only
 relay with a random one-use nonce. The nonce, not an OAuth JWT, is the proxy's
 stdin API-key-shaped credential. The relay can enter only the one already
-prepared provider callback: its original destination, OAuth bearer and workspace
+prepared provider callback: its original destination and authentication (OAuth bearer/workspace or API Key bearer)
 are fixed by the gateway. Proxy-supplied URLs, headers or payload changes cannot
 choose another owner or provider. The callback retains the existing plugin,
 proxy and native TLS sender; the CLI does not replace trusted outbound identity
@@ -380,6 +386,9 @@ against a local synthetic Responses server. Its transparent-proxy cases and
 `codexcli/TestCodexBridgeOfficialBinaryWire` exercise the actual pinned
 `responses-api-proxy`, including the Go nonce relay, unchanged request/response
 bytes, terminal provider errors, one provider send and rejected local requests.
+The Go wire cases also retain API Key authentication and custom destinations
+for model GETs, Responses, image generation JSON and binary multipart image
+edits, without introducing OAuth workspace headers.
 Injected-process fixtures separately cover unverified runtime, payload tamper,
 cancellation, cleanup and stable errors. Service tests cover both switches,
 credential-owner snapshots, failover identity/proxy, forbidden native bypass and
@@ -404,3 +413,39 @@ account or a real OpenAI model request.
 The real-binary harness executes Linux. The macOS forced-preferences command is
 covered through its injected command boundary; it has not been executed on a
 native macOS runtime by these Linux-container checks.
+
+
+### OpenAI API Key accounts and the official CLI bridge
+
+Credential-owning OpenAI API Key accounts use the same account `codex_cli.enabled`
+and `config_toml` settings and default TOML as ChatGPT OAuth accounts. Both the
+current global bridge switch and the current credential owner's account switch
+must permit each new request/turn. Disabling either restores the existing unified
+sender. An already submitted generation completes without replay; a native WS
+connection requiring the bridge reconnects with 1012 before the next generation.
+The HTTP WS adapter chooses the CLI hop again on each turn.
+
+API Key bridging includes existing OpenAI compatible custom base URLs. The trusted
+prepared request retains its endpoint, API Key bearer, account proxy and coherent
+outbound identity; no ChatGPT workspace or OAuth token is added. Live configuration
+reads select only the bridge boolean and never replace acquired credentials or
+identity. The authenticated CLI configuration API exposes no API Key secret and
+uses a configuration-only account/route CAS; OAuth auth patches are rejected for
+API Key accounts. Standalone agent tasks and OAuth auth.json generation remain
+ChatGPT OAuth only. The account TOML cannot override authentication, routing or
+identity, and the transparent HTTP hop does not execute agent tools.
+
+All existing HTTP/WS ingress audit, canonical content extraction, billing,
+concurrency, session affinity and no-replay boundaries remain ahead of provider
+writes. API Key bridge regression coverage includes eligibility and default
+configuration, secret-free config edits, hot global/account switches, gateway and
+probe endpoint/auth/identity/body preservation, native WS admission and absence of
+OAuth workspace leakage.
+
+The same switches cover model discovery, account connection/image/chat probes,
+the existing internal Codex usage inference probe, and supported WHAM usage,
+credit-detail and credit-consumption requests. They retain prepared protocol,
+credential owner, proxy and headers. OAuth issuer login, refresh and revocation
+remain separate operations. Enabling bridging generates no additional probe.
+OAuth availability is `http_bridge_and_tasks`; API Key is `http_bridge_only`.
+API Key custom endpoints and bearers never acquire OAuth workspace/token fields.

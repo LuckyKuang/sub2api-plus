@@ -3079,7 +3079,7 @@
       </div>
 
       <CodexCLICreateSettings
-        v-if="form.platform === 'openai' && accountCategory === 'oauth-based' && !['agent_identity', 'codex_pat'].includes(oauthFlowRef?.inputMethod || '')"
+        v-if="form.platform === 'openai' && (accountCategory === 'apikey' || (accountCategory === 'oauth-based' && !['agent_identity', 'codex_pat'].includes(oauthFlowRef?.inputMethod || '')))"
         ref="codexCLICreateSettings"
         v-model:enabled="codexCLIBridgeEnabled"
         v-model:config-toml="codexCLIConfigTOML"
@@ -5329,7 +5329,7 @@ const ensureAntigravityMixedChannelConfirmed = async (onConfirm: () => Promise<v
 }
 
 const createAccountWithOutboundIdentity = (payload: CreateAccountRequest) => {
-  const codexCLI = payload.platform === 'openai' && payload.type === 'oauth'
+  const codexCLI = payload.platform === 'openai' && ['oauth', 'apikey'].includes(payload.type)
     ? codexCLICreateSettings.value?.prepareCreate() : null
   return adminAPI.accounts.create({
     ...payload,

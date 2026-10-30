@@ -29,7 +29,7 @@ function view(overrides: Partial<CodexCLIAccountView> = {}): CodexCLIAccountView
     auth_status: { has_access_token: true, has_refresh_token: true, has_id_token: false },
     expected_owner: ownerA,
     oauth_credential_owner: ownerA,
-    availability: { available: true, code: 'exec_task_only', reason: 'task mode' },
+    availability: { available: true, code: 'http_bridge_and_tasks', reason: 'HTTP bridge and tasks' },
     ...overrides,
   }
 }
@@ -128,7 +128,7 @@ describe('Codex CLI account editor', () => {
   })
 
   it.each([
-    { platform: 'anthropic' }, { type: 'apikey' }, { type: 'setup-token' }, { parent_account_id: 2 },
+    { platform: 'anthropic' }, { type: 'setup-token' }, { parent_account_id: 2 },
     { credentials: { auth_mode: 'agentIdentity' } },
     { credentials: { auth_mode: 'personalAccessToken' } },
     { credentials: { openai_auth_mode: 'personal_access_token' } },
@@ -138,6 +138,43 @@ describe('Codex CLI account editor', () => {
     expect(wrapper.find('[data-testid="codex-cli-editor"]').exists()).toBe(false)
     expect(getAccount).not.toHaveBeenCalled()
     expect(wrapper.vm.prepareSave()).toBeNull()
+  })
+
+  it('edits API-key bridge configuration without exposing or submitting OAuth credentials', async () => {
+    getRuntime.mockResolvedValue({ execution_available: true, bridge_enabled: true })
+    getAccount.mockResolvedValue(view({ auth: { auth_mode: 'apikey', tokens: {} }, oauth_credential_owner: '', availability: { available: true, code: 'http_bridge_only', reason: 'HTTP bridge' } }))
+    const wrapper = editor({ type: 'apikey', credentials: { api_key: 'private-key' } })
+    await flushPromises()
+    expect(wrapper.get<HTMLTextAreaElement>('[data-testid="codex-cli-config"]').element.value).toBe(defaultConfig)
+    expect(wrapper.find('[data-testid="codex-cli-workspace"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="codex-cli-access_token-action"]').exists()).toBe(false)
+    expect(wrapper.html()).not.toContain('private-key')
+    await wrapper.get('[data-testid="codex-cli-mode"]').trigger('click')
+    const prepared = wrapper.vm.prepareSave()!
+    expect(prepared.payload).toEqual({ expected_owner: ownerA, config_toml: defaultConfig, enabled: true })
+    await wrapper.vm.save(prepared)
+    expect(updateAccount).toHaveBeenCalledExactlyOnceWith(24, prepared.payload)
+  })
+
+  it.each(['off', 'pending', 'failed'])('does not admit hidden API-key bridge edits while global state is %s', async state => {
+    if (state === 'off') getRuntime.mockResolvedValue({ execution_available: true, bridge_enabled: false })
+    else if (state === 'pending') getRuntime.mockReturnValue(new Promise(() => {}))
+    else getRuntime.mockRejectedValue(new Error('private-error'))
+    const wrapper = editor({ type: 'apikey' })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="codex-cli-editor"]').exists()).toBe(false)
+    expect(wrapper.vm.prepareSave()).toBeNull()
+    expect(updateAccount).not.toHaveBeenCalled()
+  })
+
+  it('rejects a prepared API-key update after the credential owner changes', async () => {
+    const wrapper = editor({ type: 'apikey', oauth_credential_owner: '', credentials: { api_key: 'old-key' } })
+    await flushPromises()
+    await wrapper.get('[data-testid="codex-cli-config"]').setValue('sandbox_mode = "read-only"')
+    const prepared = wrapper.vm.prepareSave()!
+    await wrapper.setProps({ account: account(24, { type: 'apikey', oauth_credential_owner: '', credentials: { api_key: 'new-key' } }) })
+    await expect(wrapper.vm.save(prepared)).rejects.toThrow('codexCli.account.ownerChanged')
+    expect(updateAccount).not.toHaveBeenCalled()
   })
 
   it('keeps config edits local and includes the original owner when explicitly saved', async () => {

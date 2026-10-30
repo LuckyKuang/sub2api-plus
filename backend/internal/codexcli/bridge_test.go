@@ -358,4 +358,49 @@ func TestCodexBridgeOfficialBinaryWire(t *testing.T) {
 			t.Fatal("official CLI transparent bridge wire or no-replay contract failed")
 		}
 	}
+	// API Key accounts retain their own authentication and endpoint, including
+	// metadata GETs and image payloads. The official proxy carries only the
+	// private relay envelope; it must not reinterpret the trusted provider wire.
+	for _, fixture := range []struct {
+		name, method, endpoint, contentType, body string
+	}{
+		{"models", http.MethodGet, "https://api.openai.com/v1/models", "", ""},
+		{"compatible-responses", http.MethodPost, "https://compatible.example/v1/responses", "application/json", `{"model":"fixture-model","input":"retain"}`},
+		{"image-generation", http.MethodPost, "https://api.openai.com/v1/images/generations", "application/json", `{"model":"gpt-image-1","prompt":"fixture"}`},
+		{"image-edit", http.MethodPost, "https://compatible.example/v1/images/edits", "multipart/form-data; boundary=fixture", "--fixture\r\nContent-Disposition: form-data; name=\"image\"; filename=\"fixture.png\"\r\nContent-Type: image/png\r\n\r\n\x89PNG\x00\xff\r\n--fixture--\r\n"},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			request, err := http.NewRequestWithContext(t.Context(), fixture.method, fixture.endpoint, strings.NewReader(fixture.body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			request.Header.Set("Authorization", "Bearer synthetic-api-key")
+			request.Header.Set("User-Agent", "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color")
+			request.Header.Set("Originator", "codex_cli_rs")
+			request.Header.Set("Version", "0.165.0")
+			if fixture.contentType != "" {
+				request.Header.Set("Content-Type", fixture.contentType)
+			}
+			var calls atomic.Int32
+			response, err := Bridge(t.Context(), status, request, func(_ context.Context, out *http.Request) (*http.Response, error) {
+				calls.Add(1)
+				body, readErr := io.ReadAll(out.Body)
+				if readErr != nil || out.Method != fixture.method || out.URL.String() != fixture.endpoint || string(body) != fixture.body ||
+					out.Header.Get("Content-Type") != fixture.contentType || out.Header.Get("Authorization") != "Bearer synthetic-api-key" ||
+					out.Header.Get("Chatgpt-Account-Id") != "" || out.Header.Get("User-Agent") != "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color" ||
+					out.Header.Get("Originator") != "codex_cli_rs" || out.Header.Get("Version") != "0.165.0" {
+					t.Error("official CLI changed the prepared API Key request")
+				}
+				return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"retained":true}`))}, nil
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			body, readErr := io.ReadAll(response.Body)
+			closeErr := response.Body.Close()
+			if readErr != nil || closeErr != nil || string(body) != `{"retained":true}` || response.StatusCode != http.StatusOK || calls.Load() != 1 {
+				t.Fatal("official CLI API Key response or no-replay contract failed")
+			}
+		})
+	}
 }

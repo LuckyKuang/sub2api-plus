@@ -39,6 +39,30 @@ func (s *codexCLIAdminStub) CommitOAuthCredentials(_ context.Context, expected *
 	return &updated, nil
 }
 
+func (s *codexCLIAdminStub) CommitCodexCLIAPIKeyConfiguration(ctx context.Context, expected *service.Account, credentials map[string]any) (*service.Account, error) {
+	return s.CommitOAuthCredentials(ctx, expected, expected.Type, credentials, nil, false)
+}
+
+func TestCodexCLIAPIKeyAccountHandlerConfigOnly(t *testing.T) {
+	stub, router := newCodexCLIHandlerFixture()
+	stub.getAccountResult.Type = service.AccountTypeAPIKey
+	stub.getAccountResult.Credentials = map[string]any{"api_key": "private-api-key", "base_url": "https://compatible.example/v1"}
+	get := codexCLIRequest(t, router, http.MethodGet, nil)
+	require.Equal(t, http.StatusOK, get.Code)
+	require.NotContains(t, get.Body.String(), "private-api-key")
+	require.Contains(t, get.Body.String(), "http_bridge_only")
+	owner := service.CodexCLIAccountOwner(stub.getAccountResult)
+	put := codexCLIRequest(t, router, http.MethodPut, map[string]any{"expected_owner": owner, "config_toml": ""})
+	require.Equal(t, http.StatusOK, put.Code, put.Body.String())
+	require.Equal(t, 1, stub.commits)
+	require.Equal(t, "private-api-key", stub.getAccountResult.GetCredential("api_key"))
+	require.Equal(t, "https://compatible.example/v1", stub.getAccountResult.GetCredential("base_url"))
+	owner = service.CodexCLIAccountOwner(stub.getAccountResult)
+	bad := codexCLIRequest(t, router, http.MethodPut, map[string]any{"expected_owner": owner, "config_toml": "", "auth": map[string]any{"tokens": map[string]any{"access_token": "forbidden"}}})
+	require.Equal(t, http.StatusBadRequest, bad.Code)
+	require.Equal(t, 1, stub.commits)
+}
+
 func newCodexCLIHandlerFixture() (*codexCLIAdminStub, *gin.Engine) {
 	gin.SetMode(gin.TestMode)
 	stub := &codexCLIAdminStub{stubAdminService: newStubAdminService()}
@@ -110,7 +134,7 @@ func TestCodexCLIAccountHandlerValidationPrecedesEveryWrite(t *testing.T) {
 				stub.beforeCommit = func() { stub.getAccountResult.Credentials["refresh_token"] = "replacement-grant" }
 				expectedStatus = http.StatusConflict
 			case "unsupported-account":
-				stub.getAccountResult.Type = service.AccountTypeAPIKey
+				stub.getAccountResult.Type = service.AccountTypeSetupToken
 			}
 			response := codexCLIRequest(t, router, http.MethodPut, body)
 			require.Equal(t, expectedStatus, response.Code, response.Body.String())

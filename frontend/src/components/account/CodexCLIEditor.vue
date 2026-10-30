@@ -38,7 +38,7 @@
         <p class="input-hint">{{ t('codexCli.account.configHint') }}</p>
       </div>
 
-      <div class="space-y-3">
+      <div v-if="account.type === 'oauth'" class="space-y-3">
         <h4 class="input-label mb-0">{{ t('codexCli.account.authTitle') }}</h4>
         <p class="input-hint">{{ t('codexCli.account.authHint') }}</p>
         <div>
@@ -133,7 +133,7 @@ let controller: AbortController | null = null
 const eligible = computed(() => {
   const authModes = [props.account.credentials?.auth_mode, props.account.credentials?.openai_auth_mode]
     .map(value => String(value || '').trim().replace(/_/g, '').toLowerCase())
-  return props.account.platform === 'openai' && props.account.type === 'oauth'
+  return props.account.platform === 'openai' && ['oauth', 'apikey'].includes(props.account.type)
     && props.account.parent_account_id == null
     && !authModes.some(mode => ['agentidentity', 'personalaccesstoken', 'pat'].includes(mode))
     && !props.account.credentials?.agent_private_key
@@ -209,8 +209,8 @@ function prepareSave(): PreparedSave | null {
     throw new Error(t(errorKey.value))
   }
   const tokens: NonNullable<NonNullable<CodexCLIAccountPatch['auth']>['tokens']> = {}
-  if (workspaceID.value !== view.value.auth.tokens.account_id) tokens.account_id = workspaceID.value.trim() || null
-  for (const name of secretNames) {
+  if (props.account.type === 'oauth' && workspaceID.value !== view.value.auth.tokens.account_id) tokens.account_id = workspaceID.value.trim() || null
+  for (const name of props.account.type === 'oauth' ? secretNames : []) {
     if (secretActions[name] === 'replace') {
       if (!secretValues[name].trim()) {
         errorKey.value = 'codexCli.account.replacementRequired'

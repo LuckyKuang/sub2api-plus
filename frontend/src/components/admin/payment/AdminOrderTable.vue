@@ -2,7 +2,7 @@
   <div class="space-y-4">
     <div class="card p-4">
       <div class="flex flex-wrap items-center gap-3">
-        <div class="flex-1 sm:max-w-64">
+        <div class="min-w-0 w-full sm:flex-1 sm:max-w-64">
           <input
             v-model="searchQuery"
             type="text"
@@ -14,26 +14,26 @@
         <Select
           v-model="filters.status"
           :options="statusFilterOptions"
-          class="w-36"
+          class="w-full min-w-0 sm:w-36"
           @change="emitFiltersChanged"
         />
         <Select
           v-model="filters.payment_type"
           :options="paymentTypeFilterOptions"
-          class="w-40"
+          class="w-full min-w-0 sm:w-40"
           @change="emitFiltersChanged"
         />
         <Select
           v-model="filters.order_source"
           :options="sourceFilterOptions"
           :searchable="false"
-          class="w-36"
+          class="w-full min-w-0 sm:w-36"
           @change="emitFiltersChanged"
         />
         <Select
           v-model="filters.order_type"
           :options="orderTypeFilterOptions"
-          class="w-36"
+          class="w-full min-w-0 sm:w-36"
           @change="emitFiltersChanged"
         />
         <div class="flex flex-1 flex-wrap items-center justify-end gap-2">

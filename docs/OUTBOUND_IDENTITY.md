@@ -1456,3 +1456,21 @@ managed identity. The monitor stream and identity regressions cover this path.
 versions, relationship preservation, request/conversation/device lifetimes,
 credential ownership, persisted random mappings and failure behavior. These
 fields supplement the trusted identity triple; they never select its source.
+
+
+### OpenAI API Key CLI bridge identity
+
+Credential-owning OpenAI API Key accounts, including existing compatible custom
+base URLs, can select the official CLI HTTP hop with the current global and
+account switches. The prepared endpoint, API Key bearer, proxy and trusted
+User-Agent/Originator/Version remain unchanged. No ChatGPT workspace or OAuth
+authentication is synthesized. Live account reads change only bridge permission,
+never acquired identity or credential ownership. Independent agent tasks remain
+OAuth only. See [Codex CLI configuration and switching](CODEX_CLI.md).
+
+The trusted prepared-request CLI hop also covers model discovery, account
+chat/image/connection probes, the existing internal usage inference probe, and
+supported WHAM usage/credit reads and consumption. WHAM preserves its existing
+User-Agent-only identity contract without adding Originator or Version. Live
+switch reads select the hop without replacing acquired credentials, identity or
+route. OAuth issuer login, refresh and revocation remain separate operations.

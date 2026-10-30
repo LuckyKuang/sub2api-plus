@@ -111,6 +111,7 @@
           <button
             ref="userMenuButton"
             @click="toggleDropdown"
+            @keydown.esc.stop="closeDropdownAndFocus"
             class="flex items-center gap-2 rounded-xl p-1.5 transition-colors hover:surface-hover surface-control"
             :aria-label="t('common.userMenu')"
             :aria-expanded="dropdownOpen"

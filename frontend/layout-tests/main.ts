@@ -24,6 +24,7 @@ const appearance = {
 
 const pinia = createPinia()
 const UserLayoutFixture = defineAsyncComponent(() => import('./UserLayoutFixture.vue'))
+const AdminLayoutFixture = defineAsyncComponent(() => import('./AdminLayoutFixture.vue'))
 const router = createRouter({ history: createWebHistory(), routes: [{ path: '/:pathMatch(.*)*', component: { render: () => null }, meta: { title: 'Review' } }] })
 
 createApp({
@@ -34,7 +35,7 @@ createApp({
     const tableRoot = ref<HTMLElement | null>(document.body)
     useStaticTableHeaders(tableRoot)
     useTransparentTableClipping(tableRoot, () => true)
-    return () => h(parameters.get('view') === 'user-layout' ? UserLayoutFixture : LayoutFixture)
+    return () => h(parameters.get('view') === 'admin-layout' ? AdminLayoutFixture : parameters.get('view') === 'user-layout' ? UserLayoutFixture : LayoutFixture)
   },
 }).use(pinia).use(router).use(createI18n({
   legacy: false,

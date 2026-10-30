@@ -5152,6 +5152,17 @@ const submitUpdateAccount = async (accountID: number, updatePayload: Record<stri
       // would inevitably reject the second write with an obsolete owner.
       throw new Error(t('codexCli.account.saveProxyFirst'))
     }
+    if (cliUpdate && props.account?.platform === 'openai' && props.account.type === 'apikey') {
+      const currentCredentials = props.account.credentials || {}
+      const nextCredentials = updatePayload.credentials as Record<string, unknown> | undefined
+      // CLI CAS owns the saved credential and destination. Reject a combined
+      // owner change before either write instead of creating partial success.
+      if (nextCredentials && ['api_key', 'base_url'].some(key =>
+        Object.prototype.hasOwnProperty.call(nextCredentials, key)
+        && nextCredentials[key] !== currentCredentials[key])) {
+        throw new Error(t('codexCli.account.saveCredentialsFirst'))
+      }
+    }
     let updatedAccount = await adminAPI.accounts.update(accountID, withAntigravityConfirmFlag(updatePayload))
     accountSaved = true
     if (!isCurrent()) return
@@ -5233,6 +5244,16 @@ const handleSubmit = async () => {
       const newCredentials: Record<string, unknown> = {
         ...currentCredentials,
         base_url: newBaseUrl
+      }
+      if (props.account.platform === 'openai'
+        && newBaseUrl === (String(currentCredentials.base_url || '').trim() || defaultBaseUrl.value)) {
+        // An unchanged effective default must not mutate the saved owner by
+        // converting an absent/empty destination into an explicit URL.
+        if (Object.prototype.hasOwnProperty.call(currentCredentials, 'base_url')) {
+          newCredentials.base_url = currentCredentials.base_url
+        } else {
+          delete newCredentials.base_url
+        }
       }
 
       // 国产供应商：模式与协议写入凭据（决定额度/余额探测与转发端点/格式）。

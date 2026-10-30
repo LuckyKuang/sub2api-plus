@@ -35,8 +35,9 @@ credential-owner sender. Embedded archive and native-executable digests are owne
 `backend/internal/codexcli/manifest.go`; the real-binary contract harness is
 `tools/test_codex_cli_wire.py`. Its official proxy cases and
 `codexcli/TestCodexBridgeOfficialBinaryWire` capture real wire traffic through
-the Go nonce relay and synthetic upstream; they do not imply real-account or
-live-model acceptance. Project bridge owners are
+the Go nonce relay and synthetic upstream, including API Key model GETs,
+compatible Responses and JSON/binary multipart image requests. They do not
+imply real-account or live-model acceptance. Project bridge owners are
 `backend/internal/codexcli/bridge.go`,
 `backend/internal/service/codex_cli_bridge_transport.go`,
 `openai_plugin_transport.go` and `openai_codex_transport.go`.

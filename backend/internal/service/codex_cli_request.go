@@ -125,6 +125,9 @@ func decodeCodexCLITaskObject(body []byte) (map[string]json.RawMessage, error) {
 }
 
 func CodexCLITaskAccountEnabled(account *Account) bool {
+	if validateCodexCLITaskAccount(account) != nil {
+		return false
+	}
 	configuration, err := CodexCLIConfigurationForAccount(account)
 	return err == nil && configuration.Enabled
 }

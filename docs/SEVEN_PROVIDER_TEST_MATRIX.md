@@ -758,3 +758,28 @@ The following remain explicit boundaries, rather than passing scenarios:
   for focused `-race` service and PostgreSQL repository checks. Their actual
   selected tests and final source must accompany any passing result; they do
   not establish a full-suite race result.
+
+
+### OpenAI API Key CLI bridge requirements
+
+- `codex_cli_apikey_bridge_test.go`: shared default TOML, secret-free API Key
+  configuration, OAuth-task exclusion, gateway/probe current-switch transitions,
+  custom endpoint, API Key bearer, exact body and trusted identity preservation,
+  no ChatGPT workspace leakage and no replay.
+- `codex_cli_bridge_ws_switch_test.go`: real OAuth/API Key native passthrough,
+  global/account enablement after a turn or during admission, audit before
+  admission, 1012 reconnect and zero second native writes.
+- `account_codex_cli_test.go`: API Key configuration GET/PUT, no key readback,
+  rejection of OAuth auth patches and unchanged canonical API Key/base URL.
+- `account_repo_codex_cli_apikey_test.go` and its integration counterpart:
+  full account/route CAS, atomic scheduler outbox, stale-key rejection, unchanged
+  API Key/base URL and forbidden OAuth persistence reuse.
+- `openai_codex_cli_bridge_audit_test.go`: both real audit engines reject before
+  side effects for OAuth and API Key accounts. Existing unknown-item and sibling
+  extraction requirements apply unchanged.
+
+- `codex_cli_control_plane_test.go`: OAuth/API Key model discovery, API Key
+  chat/image probes, existing usage inference and WHAM usage/credit requests
+  follow current global/account flags without replay. Prepared endpoint, body,
+  auth and protocol headers remain intact; wrapping WHAM leaves its shared
+  native client unchanged.

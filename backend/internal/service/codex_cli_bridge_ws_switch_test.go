@@ -119,103 +119,115 @@ func TestCodexCLIBridgeEnableDrainsNativePool(t *testing.T) {
 // A completed native passthrough turn must not authorize the next native turn
 // after global CLI permission changes. Reconnect preserves the selected owner.
 func TestCodexCLIBridgeEnableStopsNativePassthroughNextTurn(t *testing.T) {
-	for _, switchSource := range []string{"global", "account"} {
-		for _, switchTiming := range []string{"afterTurn", "beforeTurn"} {
-			t.Run(switchSource+"/"+switchTiming, func(t *testing.T) {
-				gin.SetMode(gin.TestMode)
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel()
-				upstream := newStagedPassthroughConn()
-				cfg := passthroughLifecycleConfig()
-				cfg.Gateway.OpenAIWS.OAuthEnabled = true
-				svc := newPassthroughLifecycleService(cfg, upstream)
-				repo := &codexBridgeSwitchRepo{openAIIdentitySettingRepoStub: &openAIIdentitySettingRepoStub{values: map[string]string{}}}
-				svc.settingService = &SettingService{settingRepo: repo}
-				svc.settingService.storeCodexTransportSettings(CodexTransportSettings{WSEnabled: true})
-				// The lifecycle server passes sk-test as the acquired bearer. Its OAuth
-				// fixture must own that exact token so the identity boundary can establish
-				// the credential owner rather than rejecting ambiguous acquired evidence.
-				account := enabledCodexCLIExecutionAccount(1702, "sk-test", "owner-workspace")
-				account.Status, account.Schedulable, account.Concurrency = StatusActive, true, 1
-				account.Extra = map[string]any{"responses_websockets_v2_enabled": true, "openai_oauth_responses_websockets_v2_mode": OpenAIWSIngressModePassthrough}
-				liveAccount := &codexBridgeWSLiveAccountRepo{owner: account}
-				liveAccount.enabled.Store(switchSource == "global")
-				repo.enabled.Store(switchSource == "account")
-				svc.accountRepo = liveAccount
-				require.True(t, svc.codexUpstreamWSAllowed(ctx, account))
-				require.Equal(t, OpenAIUpstreamTransportResponsesWebsocketV2, svc.getOpenAIWSProtocolResolver().Resolve(account).Transport)
-				require.Equal(t, OpenAIWSIngressModePassthrough, account.ResolveOpenAIResponsesWebSocketV2Mode(cfg.Gateway.OpenAIWS.IngressModeDefault))
-				enableBridge := func() {
-					if switchSource == "global" {
-						repo.enabled.Store(true)
-					} else {
-						liveAccount.enabled.Store(true)
+	for _, accountType := range []string{AccountTypeOAuth, AccountTypeAPIKey} {
+		for _, switchSource := range []string{"global", "account"} {
+			for _, switchTiming := range []string{"afterTurn", "beforeTurn"} {
+				t.Run(accountType+"/"+switchSource+"/"+switchTiming, func(t *testing.T) {
+					gin.SetMode(gin.TestMode)
+					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+					defer cancel()
+					upstream := newStagedPassthroughConn()
+					cfg := passthroughLifecycleConfig()
+					cfg.Gateway.OpenAIWS.OAuthEnabled = true
+					svc := newPassthroughLifecycleService(cfg, upstream)
+					repo := &codexBridgeSwitchRepo{openAIIdentitySettingRepoStub: &openAIIdentitySettingRepoStub{values: map[string]string{}}}
+					svc.settingService = &SettingService{settingRepo: repo}
+					svc.settingService.storeCodexTransportSettings(CodexTransportSettings{WSEnabled: true})
+					// The lifecycle server passes sk-test as the acquired bearer. Its OAuth
+					// fixture must own that exact token so the identity boundary can establish
+					// the credential owner rather than rejecting ambiguous acquired evidence.
+					account := enabledCodexCLIExecutionAccount(1702, "sk-test", "owner-workspace")
+					if accountType == AccountTypeAPIKey {
+						account.Type = AccountTypeAPIKey
+						account.Credentials = map[string]any{"api_key": "sk-test", CodexCLIConfigCredentialKey: map[string]any{"enabled": true, "config_toml": DefaultCodexCLIConfigTOML}}
 					}
-				}
-				admissionEvents := make(chan string, 4)
-				server, serverErr := startPassthroughLifecycleServerWithHooks(t, ctx, svc, account, func(_ *gin.Context) *OpenAIWSIngressHooks {
-					return &OpenAIWSIngressHooks{
-						BeforeRequest: func(turn int, _ []byte, _ string) error {
-							if turn == 2 {
-								admissionEvents <- "audit"
-							}
-							return nil
-						},
-						BeforeTurn: func(turn int) error {
-							if turn == 2 {
-								admissionEvents <- "admission"
-								if switchTiming == "beforeTurn" {
+					account.Status, account.Schedulable, account.Concurrency = StatusActive, true, 1
+					account.Extra = map[string]any{"responses_websockets_v2_enabled": true, "openai_oauth_responses_websockets_v2_mode": OpenAIWSIngressModePassthrough}
+					account.Extra["openai_apikey_responses_websockets_v2_mode"] = OpenAIWSIngressModePassthrough
+					liveAccount := &codexBridgeWSLiveAccountRepo{owner: account}
+					liveAccount.enabled.Store(switchSource == "global")
+					repo.enabled.Store(switchSource == "account")
+					svc.accountRepo = liveAccount
+					require.True(t, svc.codexUpstreamWSAllowed(ctx, account))
+					require.Equal(t, OpenAIUpstreamTransportResponsesWebsocketV2, svc.getOpenAIWSProtocolResolver().Resolve(account).Transport)
+					require.Equal(t, OpenAIWSIngressModePassthrough, account.ResolveOpenAIResponsesWebSocketV2Mode(cfg.Gateway.OpenAIWS.IngressModeDefault))
+					enableBridge := func() {
+						if switchSource == "global" {
+							repo.enabled.Store(true)
+						} else {
+							liveAccount.enabled.Store(true)
+						}
+					}
+					admissionEvents := make(chan string, 4)
+					server, serverErr := startPassthroughLifecycleServerWithHooks(t, ctx, svc, account, func(_ *gin.Context) *OpenAIWSIngressHooks {
+						return &OpenAIWSIngressHooks{
+							BeforeRequest: func(turn int, _ []byte, _ string) error {
+								if turn == 2 {
+									admissionEvents <- "audit"
+								}
+								return nil
+							},
+							BeforeTurn: func(turn int) error {
+								if turn == 2 {
+									admissionEvents <- "admission"
+									if switchTiming == "beforeTurn" {
+										enableBridge()
+									}
+								}
+								return nil
+							},
+							AfterTurn: func(turn int, _ *OpenAIForwardResult, _ error) {
+								if turn == 1 && switchTiming == "afterTurn" {
 									enableBridge()
 								}
-							}
-							return nil
-						},
-						AfterTurn: func(turn int, _ *OpenAIForwardResult, _ error) {
-							if turn == 1 && switchTiming == "afterTurn" {
-								enableBridge()
-							}
-						},
+							},
+						}
+					})
+					defer server.Close()
+					client := dialPassthroughLifecycleClient(t, server)
+					defer client.CloseNow()
+					requirePassthroughUpstreamWrite(t, upstream, time.Second)
+					upstream.Send(`{"type":"response.completed","response":{"id":"resp_owner","model":"gpt-5.1","usage":{"input_tokens":1,"output_tokens":1}}}`)
+					_, err := readPassthroughLifecycleFrame(t, client, time.Second)
+					require.NoError(t, err)
+					// The adapter may close immediately after the first turn or after reading
+					// this continuation; neither path may submit it or replay the first turn.
+					_ = client.Write(ctx, coderws.MessageText, []byte(`{"type":"response.create","model":"gpt-5.1","previous_response_id":"resp_owner","input":"continue"}`))
+					// Read the close frame so the peer acknowledges the server's close
+					// handshake. Waiting only for serverErr would leave coder/websocket.Close
+					// blocked waiting for a client response, obscuring the immediate reconnect.
+					_, closeReadErr := readPassthroughLifecycleFrame(t, client, time.Second)
+					var wireClose coderws.CloseError
+					require.ErrorAs(t, closeReadErr, &wireClose)
+					require.Equal(t, coderws.StatusServiceRestart, wireClose.Code)
+					select {
+					case err := <-serverErr:
+						var closeErr *OpenAIWSClientCloseError
+						require.ErrorAs(t, err, &closeErr)
+						require.Equal(t, coderws.StatusServiceRestart, closeErr.StatusCode())
+					case <-ctx.Done():
+						t.Fatal("native passthrough continued after enabling CLI bridge")
 					}
-				})
-				defer server.Close()
-				client := dialPassthroughLifecycleClient(t, server)
-				defer client.CloseNow()
-				requirePassthroughUpstreamWrite(t, upstream, time.Second)
-				upstream.Send(`{"type":"response.completed","response":{"id":"resp_owner","model":"gpt-5.1","usage":{"input_tokens":1,"output_tokens":1}}}`)
-				_, err := readPassthroughLifecycleFrame(t, client, time.Second)
-				require.NoError(t, err)
-				// The adapter may close immediately after the first turn or after reading
-				// this continuation; neither path may submit it or replay the first turn.
-				_ = client.Write(ctx, coderws.MessageText, []byte(`{"type":"response.create","model":"gpt-5.1","previous_response_id":"resp_owner","input":"continue"}`))
-				// Read the close frame so the peer acknowledges the server's close
-				// handshake. Waiting only for serverErr would leave coder/websocket.Close
-				// blocked waiting for a client response, obscuring the immediate reconnect.
-				_, closeReadErr := readPassthroughLifecycleFrame(t, client, time.Second)
-				var wireClose coderws.CloseError
-				require.ErrorAs(t, closeReadErr, &wireClose)
-				require.Equal(t, coderws.StatusServiceRestart, wireClose.Code)
-				select {
-				case err := <-serverErr:
-					var closeErr *OpenAIWSClientCloseError
-					require.ErrorAs(t, err, &closeErr)
-					require.Equal(t, coderws.StatusServiceRestart, closeErr.StatusCode())
-				case <-ctx.Done():
-					t.Fatal("native passthrough continued after enabling CLI bridge")
-				}
-				select {
-				case payload := <-upstream.writes:
-					t.Fatalf("native continuation or replay after enabling bridge: %s", payload)
-				default:
-				}
-				require.Equal(t, int64(1702), account.ID)
-				require.Equal(t, "sk-test", account.GetOpenAIAccessToken())
-				if switchTiming == "beforeTurn" {
-					require.Len(t, admissionEvents, 2)
-					require.Equal(t, "audit", <-admissionEvents, "audit must precede concurrency admission")
-					require.Equal(t, "admission", <-admissionEvents, "this regression changes permission inside BeforeTurn")
-				}
+					select {
+					case payload := <-upstream.writes:
+						t.Fatalf("native continuation or replay after enabling bridge: %s", payload)
+					default:
+					}
+					require.Equal(t, int64(1702), account.ID)
+					if accountType == AccountTypeAPIKey {
+						require.Equal(t, "sk-test", account.GetCredential("api_key"))
+						require.Empty(t, account.GetChatGPTAccountID())
+					} else {
+						require.Equal(t, "sk-test", account.GetOpenAIAccessToken())
+					}
+					if switchTiming == "beforeTurn" {
+						require.Len(t, admissionEvents, 2)
+						require.Equal(t, "audit", <-admissionEvents, "audit must precede concurrency admission")
+						require.Equal(t, "admission", <-admissionEvents, "this regression changes permission inside BeforeTurn")
+					}
 
-			})
+				})
+			}
 		}
 	}
 }

@@ -1046,7 +1046,29 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
     wrapper.unmount()
   })
 
-  it('hides CLI settings for API-key creation and does not attach them to its credentials', async () => {
+  it('creates an API-key account with its explicit CLI switch and server default in the first write', async () => {
+    const wrapper = mountModal()
+    await selectButtonByText(wrapper, 'OpenAI')
+    await selectButtonByText(wrapper, 'API Key')
+    await flushPromises()
+    const expected = 'sandbox_mode = "danger-full-access"\napproval_policy = "never"\ncli_auth_credentials_store = "file"\n'
+    expect(wrapper.get<HTMLTextAreaElement>('[data-testid="codex-cli-create-config"]').element.value).toBe(expected)
+    const userAgentGroup = wrapper.get('[data-testid="create-openai-account-user-agent"]').element.parentElement!
+    expect(userAgentGroup.nextElementSibling).toBe(wrapper.get('[data-testid="codex-cli-create-settings"]').element)
+    await wrapper.get('[data-testid="codex-cli-create-mode"]').trigger('click')
+    await wrapper.get('[data-tour="account-form-name"]').setValue('API key CLI')
+    await wrapper.get('form#create-account-form input[type="password"]').setValue('test-api-key')
+    await wrapper.get('form#create-account-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(createAccountMock).toHaveBeenCalledTimes(1)
+    expect(createAccountMock.mock.calls[0][0]).toMatchObject({ platform: 'openai', type: 'apikey', credentials: { api_key: 'test-api-key', codex_cli: { enabled: true, config_toml: expected } } })
+    wrapper.unmount()
+  })
+
+  it.each(['off', 'pending', 'failed'])('omits hidden API-key CLI configuration while global status is %s', async state => {
+    if (state === 'off') codexRuntimeMock.mockResolvedValue({ execution_available: true, bridge_enabled: false })
+    else if (state === 'pending') codexRuntimeMock.mockReturnValue(new Promise(() => {}))
+    else codexRuntimeMock.mockRejectedValue(new Error('private-runtime-error'))
     const wrapper = await submitApiKeyAccount('openai')
     expect(wrapper.find('[data-testid="codex-cli-create-settings"]').exists()).toBe(false)
     expect(createAccountMock.mock.calls[0][0].credentials.codex_cli).toBeUndefined()

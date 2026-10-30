@@ -1,5 +1,5 @@
 <template>
-  <component :is="isFullscreen ? 'div' : AppLayout" :workspace="!isFullscreen || undefined" :class="isFullscreen ? 'flex min-h-screen flex-col justify-center bg-gray-50 dark:bg-dark-950' : ''">
+  <component :is="isFullscreen ? 'div' : AppLayout" :workspace="!isFullscreen || undefined" :class="isFullscreen ? 'flex min-h-screen flex-col justify-center bg-[var(--console-canvas)] text-[var(--surface-text)]' : ''">
     <div :class="[isFullscreen ? 'space-y-6 p-4 md:p-6' : 'workspace-page']">
       <div
         v-if="errorMessage"
@@ -168,6 +168,7 @@ import { useDebounceFn, useIntervalFn } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import AppLayout from '@/components/layout/AppLayout.vue'
+import { useProductAppearance } from '@/composables/useProductAppearance'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import WorkspaceTabs from '@/components/common/WorkspaceTabs.vue'
 import {
@@ -197,6 +198,8 @@ import OpsRequestDetailsModal, { type OpsRequestDetailsPreset } from './componen
 import OpsSettingsDialog from './components/OpsSettingsDialog.vue'
 import OpsAlertRulesCard from './components/OpsAlertRulesCard.vue'
 
+// Fullscreen replaces AppLayout, so the view must keep owning its palette.
+useProductAppearance()
 const route = useRoute()
 const router = useRouter()
 const appStore = useAppStore()

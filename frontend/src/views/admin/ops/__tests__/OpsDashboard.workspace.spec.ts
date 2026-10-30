@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
-import { defineComponent } from 'vue'
+import { defineComponent, reactive } from 'vue'
+import { useProductAppearance } from '@/composables/useProductAppearance'
 import OpsDashboard from '../OpsDashboard.vue'
 import OpsDashboardHeader from '../components/OpsDashboardHeader.vue'
 import OpsSystemLogTable from '../components/OpsSystemLogTable.vue'
@@ -42,16 +43,18 @@ vi.mock('@/stores', () => ({
 }))
 vi.mock('@/stores/app', () => ({ useAppStore: () => ({ showError, showSuccess: vi.fn() }) }))
 vi.mock('vue-router', () => ({
-  useRoute: () => ({ query: {} }),
-  useRouter: () => ({ replace: vi.fn().mockResolvedValue(undefined) }),
+  useRoute: () => routeState,
+  useRouter: () => ({ replace: vi.fn(async (location: { query: Record<string, string> }) => { routeState.query = location.query }) }),
 }))
 vi.mock('vue-i18n', async (importOriginal) => ({
   ...await importOriginal<typeof import('vue-i18n')>(),
   useI18n: () => ({ t: (key: string) => key }),
 }))
 
+const routeState = reactive({ query: {} as Record<string, string> })
 const AppLayoutStub = defineComponent({
   props: { workspace: Boolean },
+  setup() { useProductAppearance() },
   template: '<main><slot /></main>',
 })
 
@@ -91,6 +94,7 @@ function mountDashboard() {
 
 describe('Ops dashboard workspace tabs', () => {
   beforeEach(() => {
+    routeState.query = {}
     vi.resetAllMocks()
     getGroups.mockResolvedValue([])
     api.getAdvancedSettings.mockResolvedValue({
@@ -118,6 +122,26 @@ describe('Ops dashboard workspace tabs', () => {
       sampling_initial: 100, sampling_thereafter: 100, caller: true,
       stacktrace_level: 'error', retention_days: 30,
     })
+  })
+
+  it('retains the shared palette through fullscreen entry, exit and route unmount', async () => {
+    const wrapper = mountDashboard()
+    await flushPromises()
+    expect(document.documentElement.hasAttribute('data-product-ui')).toBe(true)
+    expect(wrapper.findComponent(AppLayoutStub).exists()).toBe(true)
+    wrapper.getComponent(OpsDashboardHeader).vm.$emit('enterFullscreen')
+    await flushPromises()
+    expect(wrapper.findComponent(AppLayoutStub).exists()).toBe(false)
+    expect(wrapper.getComponent(OpsDashboardHeader).props('fullscreen')).toBe(true)
+    expect(document.documentElement.hasAttribute('data-product-ui')).toBe(true)
+    wrapper.getComponent(OpsDashboardHeader).vm.$emit('exitFullscreen')
+    await flushPromises()
+    expect(wrapper.findComponent(AppLayoutStub).exists()).toBe(true)
+    expect(document.documentElement.hasAttribute('data-product-ui')).toBe(true)
+    wrapper.getComponent(OpsDashboardHeader).vm.$emit('enterFullscreen')
+    await flushPromises()
+    wrapper.unmount()
+    expect(document.documentElement.hasAttribute('data-product-ui')).toBe(false)
   })
 
   it('keeps the toolbar outside each scrolling panel and preserves independent log drafts without fetching on tab changes', async () => {

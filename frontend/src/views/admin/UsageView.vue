@@ -4,17 +4,18 @@
       <WorkspaceTabs v-model="workspaceTab" class="workspace-fixed" :tabs="workspaceTabs" :label="t('usage.tabs.usage')" />
         <div v-show="activeTab !== 'live'" class="card workspace-fixed usage-date p-4">
           <div class="flex flex-wrap items-center gap-4">
-            <div class="flex items-center gap-2">
+            <div class="flex min-w-0 max-w-full flex-wrap items-center gap-2">
               <span class="text-sm font-medium surface-muted">{{ t('admin.dashboard.timeRange') }}:</span>
               <DateRangePicker
+                class="min-w-0 max-w-full"
                 v-model:start-date="startDate"
                 v-model:end-date="endDate"
                 @change="onDateRangeChange"
               />
             </div>
-            <div class="ml-auto flex items-center gap-2">
+            <div class="flex w-full min-w-0 flex-wrap items-center gap-2 sm:ml-auto sm:w-auto">
               <span class="text-sm font-medium surface-muted">{{ t('admin.dashboard.granularity') }}:</span>
-              <div class="w-28">
+              <div class="w-28 min-w-0 max-w-full">
                 <Select v-model="granularity" :options="granularityOptions" @change="loadChartData" />
               </div>
             </div>

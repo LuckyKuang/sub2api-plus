@@ -34,7 +34,7 @@ func TestCodexCLIAccountConfigurationDefaultsAndOverrides(t *testing.T) {
 	require.Equal(t, "sandbox_mode = \"danger-full-access\"\napproval_policy = \"never\"\ncli_auth_credentials_store = \"file\"\n", view.ConfigTOML)
 	require.False(t, view.Enabled)
 	require.True(t, view.Availability.Available)
-	require.Equal(t, "exec_task_only", view.Availability.Code)
+	require.Equal(t, "http_bridge_and_tasks", view.Availability.Code)
 
 	text := "sandbox_mode = \"read-only\"\napproval_policy = \"never\"\n"
 	updated, authChanged, err := PrepareCodexCLIAccountUpdate(account, CodexCLIAccountUpdate{ExpectedOwner: view.ExpectedOwner, ConfigTOML: &text})
@@ -162,7 +162,7 @@ func TestCodexCLIConfigRejectsNestedSecretsOnEveryNormalizedWrite(t *testing.T) 
 		require.NotContains(t, err.Error(), "private-token-source")
 	}
 	for _, account := range []*Account{
-		{Platform: PlatformAnthropic, Type: AccountTypeOAuth}, {Platform: PlatformOpenAI, Type: AccountTypeAPIKey},
+		{Platform: PlatformAnthropic, Type: AccountTypeOAuth}, {Platform: PlatformOpenAI, Type: AccountTypeSetupToken},
 		{Platform: PlatformOpenAI, Type: AccountTypeOAuth, Credentials: map[string]any{"auth_mode": "agentIdentity"}},
 		{Platform: PlatformOpenAI, Type: AccountTypeOAuth, Credentials: map[string]any{"auth_mode": "personalAccessToken"}},
 		{Platform: PlatformOpenAI, Type: AccountTypeOAuth, Credentials: map[string]any{"openai_auth_mode": " PERSONAL_ACCESS_TOKEN "}},
@@ -380,7 +380,7 @@ func TestCodexCLIConfigCannotRemainOnIncompatibleAccountType(t *testing.T) {
 	account.Credentials[CodexCLIConfigCredentialKey] = map[string]any{"enabled": false, "config_toml": DefaultCodexCLIConfigTOML}
 	repo := &codexCLITypeChangeRepo{updateAccountCredsRepoStub: &updateAccountCredsRepoStub{account: account}}
 	svc := &adminServiceImpl{accountRepo: repo}
-	_, err := svc.UpdateAccount(context.Background(), 1, &UpdateAccountInput{Type: AccountTypeAPIKey})
+	_, err := svc.UpdateAccount(context.Background(), 1, &UpdateAccountInput{Type: AccountTypeSetupToken})
 	require.Error(t, err)
 	require.Zero(t, repo.updateCalls, "changing only the account type cannot bypass CLI eligibility")
 }

@@ -60,7 +60,8 @@ func (s *OpenAIGatewayService) codexCLIBridgeEnabled(ctx context.Context, accoun
 func (s *OpenAIGatewayService) latestCodexCLIAccountBridgeEnabled(ctx context.Context, owner *Account) (bool, error) {
 	if s.accountRepo == nil {
 		// Internal services constructed without repositories use their snapshot.
-		return CodexCLITaskAccountEnabled(owner), nil
+		configuration, err := CodexCLIConfigurationForAccount(owner)
+		return configuration.Enabled, err
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -71,7 +72,7 @@ func (s *OpenAIGatewayService) latestCodexCLIAccountBridgeEnabled(ctx context.Co
 	if err != nil || current == nil || current.ID != owner.ID {
 		return false, ErrCodexCLIBridgeSettingUnavailable
 	}
-	if ValidateCodexCLIAccount(current) != nil {
+	if current.Type != owner.Type || ValidateCodexCLIAccount(current) != nil {
 		return false, nil
 	}
 	raw, exists := current.Credentials[CodexCLIConfigCredentialKey]
@@ -107,5 +108,28 @@ func (s *OpenAIGatewayService) doOpenAICodexCLIBridge(request *http.Request, pro
 		// relay URL/header set. Keep all native/plugin preparation and signing
 		// declarations in the existing provider-bound transport.
 		return s.doOpenAIPreparedTransport(trusted.WithContext(ctx), proxyURL, owner, selected)
+	})
+}
+
+// Control-plane callers keep their prepared auth, endpoint, fingerprint and
+// existing transport. This hop must never rebuild them as inference requests.
+func (s *OpenAIGatewayService) doOpenAICodexCLIControlPlane(request *http.Request, owner *Account, forward func(*http.Request) (*http.Response, error)) (*http.Response, error) {
+	enabled, err := s.codexCLIBridgeEnabled(request.Context(), owner)
+	if err != nil {
+		return nil, err
+	}
+	if !enabled {
+		return forward(request)
+	}
+	runtime := s.codexCLIBridgeRuntime
+	if runtime == nil {
+		runtime = managedCodexCLIHTTPBridgeRuntime{}
+	}
+	status := runtime.Status(request.Context())
+	if !status.ExecutionAvailable || !status.Installed || !status.SourceVerified || !status.VersionMatch {
+		return nil, &codexcli.TaskError{Code: "bridge_runtime_unavailable"}
+	}
+	return runtime.Bridge(request.Context(), status, request, func(ctx context.Context, trusted *http.Request) (*http.Response, error) {
+		return forward(trusted.WithContext(ctx))
 	})
 }

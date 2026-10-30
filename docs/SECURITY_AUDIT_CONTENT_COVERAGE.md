@@ -899,3 +899,21 @@ without account selection or an audit-derived violation.
 Regressions include `user_request_admission_test.go`,
 `gateway_metadata_admission_test.go` and the existing media/cache/file ordering
 suites. Unknown valid fields retain the established pass-through behavior.
+
+
+### OpenAI API Key CLI bridge audit coverage
+
+The transparent CLI hop also accepts credential-owning OpenAI API Key accounts,
+including compatible custom base URLs, without changing canonical extraction or
+audit ordering. Both real audit engines run before account selection, billing,
+slots and CLI/provider writes; unknown structures retain the documented
+pass-through policy. Native WS requires 1012 reconnect before a newly bridged
+turn; submitted turns are never replayed. Regression coverage is in
+`openai_codex_cli_bridge_audit_test.go`, `codex_cli_apikey_bridge_test.go` and
+`codex_cli_bridge_ws_switch_test.go`. Independent agent tasks remain OAuth only.
+
+The CLI hop also wraps existing administrator probes and model/quota control
+requests. Model discovery and WHAM metadata do not become new content ingress.
+The existing fixed internal usage inference probe remains system-owned; the hop
+introduces no additional prompt or audit exemption for accepted user traffic.
+OAuth issuer login, refresh and revocation remain outside this hop.

@@ -45,7 +45,7 @@ func TestCodexCLIBridgeRequiresBothGlobalAndEligibleAccountOptIn(t *testing.T) {
 		}
 	}
 	broken := &SettingService{settingRepo: &codexCLIBridgeSettingRepo{readErr: errors.New("private-password")}}
-	for _, kind := range []string{"nil", "disabled", "apikey", "setup-token", "other-provider", "shadow", "pat"} {
+	for _, kind := range []string{"nil", "disabled", "setup-token", "other-provider", "shadow", "pat"} {
 		t.Run(kind, func(t *testing.T) {
 			account := enabledCodexCLIExecutionAccount(101, "access", "workspace")
 			switch kind {

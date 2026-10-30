@@ -240,8 +240,9 @@ func TestForwardAsRawChatCompletions_TransportErrorFailsOver(t *testing.T) {
 		err: errors.New(`Post "https://opencode.ai/zen/v1/chat/completions": EOF`),
 	}
 	svc := &OpenAIGatewayService{
-		accountRepo:  repo,
-		httpUpstream: upstream,
+		settingService: &SettingService{settingRepo: &openAIIdentitySettingRepoStub{values: map[string]string{SettingKeyCodexCLIBridgeEnabled: "false"}}},
+		accountRepo:    repo,
+		httpUpstream:   upstream,
 		cfg: &config.Config{
 			Security: config.SecurityConfig{
 				URLAllowlist: config.URLAllowlistConfig{Enabled: false},
@@ -291,8 +292,9 @@ func TestForwardAsRawChatCompletions_TransportErrorFailsOver(t *testing.T) {
 func TestForwardAsRawChatCompletions_RecordsProxyPerAccountAttempt(t *testing.T) {
 	upstream := &failingOpenAIHTTPUpstream{err: errors.New("EOF")}
 	svc := &OpenAIGatewayService{
-		accountRepo:  &openaiTransportAccountRepoStub{},
-		httpUpstream: upstream,
+		settingService: &SettingService{settingRepo: &openAIIdentitySettingRepoStub{values: map[string]string{SettingKeyCodexCLIBridgeEnabled: "false"}}},
+		accountRepo:    &openaiTransportAccountRepoStub{},
+		httpUpstream:   upstream,
 		cfg: &config.Config{Security: config.SecurityConfig{
 			URLAllowlist: config.URLAllowlistConfig{Enabled: false},
 		}},
@@ -332,6 +334,7 @@ func TestForwardAsRawChatCompletions_RecordsProxyPerAccountAttempt(t *testing.T)
 func TestHandleOpenAIUpstreamTransportError_RecordsOllamaActivityOnly(t *testing.T) {
 	deferred := NewDeferredService(nil, nil, time.Second)
 	svc := &OpenAIGatewayService{
+		settingService:  &SettingService{settingRepo: &openAIIdentitySettingRepoStub{values: map[string]string{SettingKeyCodexCLIBridgeEnabled: "false"}}},
 		accountRepo:     &openaiTransportAccountRepoStub{},
 		deferredService: deferred,
 	}
@@ -357,6 +360,7 @@ func TestHandleOpenAIUpstreamTransportError_RecordsOllamaActivityOnly(t *testing
 func TestHandleOpenAIUpstreamTransportError_ContextCanceledSkipsOllamaActivity(t *testing.T) {
 	deferred := NewDeferredService(nil, nil, time.Second)
 	svc := &OpenAIGatewayService{
+		settingService:  &SettingService{settingRepo: &openAIIdentitySettingRepoStub{values: map[string]string{SettingKeyCodexCLIBridgeEnabled: "false"}}},
 		accountRepo:     &openaiTransportAccountRepoStub{},
 		deferredService: deferred,
 	}
