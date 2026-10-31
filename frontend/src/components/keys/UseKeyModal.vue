@@ -152,8 +152,8 @@
                   @click="copyContent(file.content, index)"
                   class="flex flex-shrink-0 items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg transition-colors surface-control"
                   :class="copiedIndex === index
-                    ? 'bg-green-500/20 text-green-400'
-                    : 'surface-field hover:bg-gray-600 text-gray-300 hover:text-white'"
+                    ? 'bg-green-500/20 text-green-700 dark:text-green-400'
+                    : 'surface-field text-gray-700 hover:bg-gray-200 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-600 dark:hover:text-white'"
                 >
                   <svg v-if="copiedIndex === index" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
@@ -165,7 +165,7 @@
                 </button>
               </div>
               <!-- Code Content -->
-              <pre class="p-4 text-sm font-mono text-gray-100 overflow-x-auto"><code v-if="file.highlighted" v-html="file.highlighted"></code><code v-else v-text="file.content"></code></pre>
+              <pre class="p-4 text-sm font-mono text-gray-900 dark:text-gray-100 overflow-x-auto"><code v-if="file.highlighted" v-html="file.highlighted"></code><code v-else v-text="file.content"></code></pre>
             </div>
           </div>
         </div>
@@ -726,11 +726,11 @@ const escapeHtml = (value: string) => value
 const wrapToken = (className: string, value: string) =>
   `<span class="${className}">${escapeHtml(value)}</span>`
 
-const keyword = (value: string) => wrapToken('text-emerald-300', value)
-const variable = (value: string) => wrapToken('text-sky-200', value)
-const operator = (value: string) => wrapToken('text-slate-400', value)
-const string = (value: string) => wrapToken('text-amber-200', value)
-const comment = (value: string) => wrapToken('text-slate-500', value)
+const keyword = (value: string) => wrapToken('text-emerald-700 dark:text-emerald-300', value)
+const variable = (value: string) => wrapToken('text-sky-800 dark:text-sky-200', value)
+const operator = (value: string) => wrapToken('text-slate-600 dark:text-slate-400', value)
+const string = (value: string) => wrapToken('text-amber-800 dark:text-amber-200', value)
+const comment = (value: string) => wrapToken('text-slate-600 dark:text-slate-400', value)
 
 // Syntax highlighting helpers
 // Generate file configs based on platform and active tab

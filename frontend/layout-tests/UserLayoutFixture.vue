@@ -46,6 +46,7 @@ import type { User } from '../src/types'
 const parameters = new URLSearchParams(location.search)
 const auditPage = parameters.get('auditPage')
 const auditPages = {
+  keys: defineAsyncComponent(() => import('../src/views/user/KeysView.vue')),
   redeem: defineAsyncComponent(() => import('../src/views/user/RedeemView.vue')),
   affiliate: defineAsyncComponent(() => import('../src/views/user/AffiliateView.vue')),
   subscriptions: defineAsyncComponent(() => import('../src/views/user/SubscriptionsView.vue')),

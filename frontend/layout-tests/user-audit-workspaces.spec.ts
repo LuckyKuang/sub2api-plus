@@ -361,3 +361,67 @@ for (const width of [320, 390]) {
     })
   }
 }
+
+
+// The user must be able to read and copy CLI configuration in either theme.
+// Contrast is computed from the rendered production code and composited surface,
+// independently of the classes chosen by the component.
+for (const width of [1280, 1920]) for (const platform of ['openai', 'gemini']) {
+  test(`API key instructions keep readable code and copy controls at ${width}px for ${platform}`, async ({ page }, info) => {
+    await interceptAuditAPI(page)
+    await page.route(url => url.pathname === '/api/v1/keys', route => route.fulfill({ json: { code: 0, data: {
+      items: [{ id: 99901, name: 'Readability review key', key: 'sk-read-only-browser-fixture', status: 'active',
+        created_at: '2026-01-01T00:00:00Z', group_id: 99901, group: {
+          id: 99901, name: 'CLI readability review', platform, status: 'active', rate_multiplier: 1,
+        } }], total: 1, pages: 1, page: 1, page_size: 20,
+    } } }))
+    await page.route(url => url.pathname === '/api/v1/usage/dashboard/api-keys-usage', route => route.fulfill({ json: { code: 0, data: { stats: {} } } }))
+    await openAuditPage(page, 'keys', info, width)
+    const locale = presentation(info).locale
+    await page.getByRole('button', { name: locale === 'zh' ? '使用密钥' : 'Use Key', exact: true }).click()
+    const code = page.locator('.modal-body pre').first()
+    await expect(code).toBeVisible()
+    await expect(code).toContainText(platform === 'openai' ? 'model_provider' : 'GOOGLE_GEMINI_BASE_URL')
+    const readContrast = () => code.evaluate(element => {
+      type Color = [number, number, number, number]
+      const pixel = document.createElement('canvas')
+      pixel.width = pixel.height = 1
+      const context = pixel.getContext('2d')!
+      const parse = (value: string): Color => {
+        context.clearRect(0, 0, 1, 1)
+        context.fillStyle = value
+        context.fillRect(0, 0, 1, 1)
+        const rgba = context.getImageData(0, 0, 1, 1).data
+        return [rgba[0]!, rgba[1]!, rgba[2]!, rgba[3]! / 255]
+      }
+      const over = (top: Color, bottom: Color): Color => {
+        const alpha = top[3] + bottom[3] * (1 - top[3])
+        return [0, 1, 2].map(i => (top[i]! * top[3] + bottom[i]! * bottom[3] * (1 - top[3])) / alpha).concat(alpha) as Color
+      }
+      const background = (target: Element): Color => {
+        const ancestors: Element[] = []
+        for (let current: Element | null = target; current; current = current.parentElement) ancestors.unshift(current)
+        return ancestors.reduce((color, node) => over(parse(getComputedStyle(node).backgroundColor), color), [255, 255, 255, 1] as Color)
+      }
+      const luminance = (color: Color) => {
+        const linear = color.slice(0, 3).map(value => { const channel = value / 255; return channel <= .04045 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4 })
+        return .2126 * linear[0]! + .7152 * linear[1]! + .0722 * linear[2]!
+      }
+      const ratio = (target: Element) => {
+        const bg = background(target), fg = over(parse(getComputedStyle(target).color), bg)
+        const a = luminance(bg), b = luminance(fg)
+        return (Math.max(a, b) + .05) / (Math.min(a, b) + .05)
+      }
+      const blocks = [...element.closest('.modal-body')!.querySelectorAll('pre')]
+      const targets = blocks.flatMap(block => [block, ...block.querySelectorAll('span'), block.parentElement!.querySelector('button')!])
+      return Math.min(...targets.filter(target => target.textContent?.trim()).map(ratio))
+    })
+    await expect.poll(readContrast).toBeGreaterThanOrEqual(4.5)
+    const copy = code.locator('..').getByRole('button')
+    await copy.hover()
+    await expect.poll(readContrast).toBeGreaterThanOrEqual(4.5)
+    await copy.click()
+    await expect(copy).toHaveText(locale === 'zh' ? '已复制' : 'Copied')
+    await expect.poll(readContrast).toBeGreaterThanOrEqual(4.5)
+  })
+}
