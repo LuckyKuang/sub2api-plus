@@ -1,6 +1,6 @@
 <template>
-  <div ref="panel" class="min-w-0" :class="[workspace ? 'workspace-body' : 'space-y-4', mode === 'admin' ? 'p-3 sm:p-4' : 'live-user-workspace gap-4']" @pointerdown="markReading" @focusin="markReading" @wheel.passive="markReading" @touchstart.passive="markReading">
-    <div :class="mode === 'user' ? 'card workspace-fixed space-y-3 p-4' : workspace ? 'workspace-fixed space-y-3' : 'space-y-4'">
+  <div ref="panel" class="min-w-0" :class="[workspace ? 'workspace-body' : 'space-y-4', mode === 'admin' ? (workspace ? 'live-admin-workspace gap-4' : 'p-3 sm:p-4') : 'live-user-workspace gap-4']" @pointerdown="markReading" @focusin="markReading" @wheel.passive="markReading" @touchstart.passive="markReading">
+    <div :class="mode === 'user' || workspace ? 'card workspace-fixed space-y-3 p-4' : 'space-y-4'">
     <div class="flex flex-wrap items-center justify-between gap-3" :class="{ 'workspace-fixed': workspace }">
       <div class="text-xs surface-muted"><p>{{ t('inspection.liveHint') }}</p><p>{{ t('inspection.liveWindow', { limit: snapshot?.limit ?? 200 }) }}</p></div>
       <RefreshControl :state="refresh" switch-visible manual />
@@ -29,7 +29,7 @@
     <p v-if="snapshot?.truncated" role="status" class="text-xs text-amber-600" :class="{ 'workspace-fixed': workspace }">{{ t('inspection.liveTruncated') }}</p>
     <button v-if="pending" type="button" class="btn btn-secondary" :class="{ 'workspace-fixed': workspace }" @click="showLatest">{{ t('inspection.newRecords') }}</button>
     </div>
-    <div :class="mode === 'user' ? ['card overflow-hidden', workspace ? 'workspace-table-card workspace-shell' : ''] : workspace ? 'workspace-body !gap-0' : ''">
+    <div :class="mode === 'user' || workspace ? ['card overflow-hidden', workspace ? 'workspace-table-card workspace-shell' : ''] : ''">
     <div v-if="desktop" :class="workspace ? 'workspace-body !gap-0' : 'overflow-x-auto'">
       <DataTable ref="dataTable" :class="{ 'workspace-table-viewport': workspace }" :columns="columns" :data="displayedRows" :loading="!snapshot && refresh.fetching.value">
         <template #cell-started_at="{ row }"><time class="whitespace-nowrap text-xs tabular-nums" :datetime="row.started_at" :title="formatDateTime(row.started_at)">{{ shortTime(row.started_at) }}</time></template>
@@ -45,7 +45,7 @@
         <template #cell-client="{ row }"><button type="button" class="max-w-44 text-left text-xs surface-control" :title="row.user_agent" @click="copyClient(row)"><span class="block truncate">{{ clientName(row) }}</span><span class="block break-all surface-muted">{{ row.ip_address || '—' }}</span></button></template>
       </DataTable>
     </div>
-    <div v-else ref="mobileViewport" class="space-y-2" :class="{ 'workspace-scroll p-3': mode === 'user' && workspace }" :aria-busy="refresh.fetching.value">
+    <div v-else ref="mobileViewport" class="space-y-2" :class="{ 'workspace-scroll p-3': workspace }" :aria-busy="refresh.fetching.value">
       <p v-if="!snapshot && refresh.fetching.value" class="p-6 text-center text-sm surface-muted">{{ t('common.loading') }}</p>
       <p v-else-if="!filteredRows.length" class="p-6 text-center text-sm surface-muted">{{ t('empty.noData') }}</p>
       <article v-for="row in displayedRows" :key="row.id" class="min-w-0 rounded-xl border border-gray-200 surface-inset p-3 dark:border-dark-700">

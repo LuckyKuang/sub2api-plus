@@ -65,7 +65,8 @@
           <TokenUsageTrend :trend-data="trendData" :loading="chartsLoading" />
         </div>
       </section>
-      <div ref="recordsPanel" v-show="workspaceTab === 'records'" class="card workspace-table-card workspace-shell" data-testid="usage-records-panel">
+      <div ref="recordsPanel" v-show="workspaceTab === 'records'" class="workspace-body usage-records-workspace" data-testid="usage-records-panel">
+        <div class="card workspace-fixed overflow-hidden usage-record-controls">
         <div class="usage-detail-tabs card-tabs workspace-fixed" role="tablist" :aria-label="t('usage.tabs.usage')">
           <button
             v-for="tab in detailTabs"
@@ -129,16 +130,16 @@
             </div>
           </template>
         </UsageFilters>
+        </div>
 
-        <div v-show="activeTab === 'usage'" class="workspace-body !gap-0">
-          <div class="usage-history-refresh workspace-fixed flex flex-wrap items-center justify-between gap-3 p-4">
+        <div v-show="activeTab === 'usage'" class="workspace-body usage-history-workspace gap-4">
+          <div class="usage-history-refresh card workspace-fixed flex flex-wrap items-center justify-between gap-3 p-4">
             <RefreshControl :state="historyRefresh" switch-visible manual />
             <button v-if="newRecordsAvailable" type="button" class="btn btn-secondary" @click="showLatestRecords">{{ t('inspection.newRecords') }}</button>
           </div>
           <UsageTable
             workspace
             :show-service-tier="true"
-            flat
             :data="usageLogs"
             :loading="loading"
             :columns="visibleColumns"
@@ -149,13 +150,13 @@
             @userClick="handleUserClick"
             @ipGeoBatchFailed="handleIpGeoBatchFailed"
           />
-          <Pagination class="workspace-fixed" v-if="pagination.total > 0" :page="pagination.page" :total="pagination.total" :page-size="pagination.page_size" @update:page="handlePageChange" @update:pageSize="handlePageSizeChange" />
+          <Pagination class="workspace-fixed" :page="pagination.page" :total="pagination.total" :page-size="pagination.page_size" @update:page="handlePageChange" @update:pageSize="handlePageSizeChange" />
 
         </div>
         <LiveRequestsPanel workspace v-if="activeTab === 'live'" mode="admin" />
-        <div v-show="activeTab === 'errors'" class="workspace-body !gap-0">
+        <div v-show="activeTab === 'errors'" class="workspace-body usage-errors-workspace gap-4">
           <OpsErrorLogTable
-            flat
+            workspace
             compact
             :active-row-key="showErrorModal ? selectedErrorId ?? undefined : undefined"
             :rows="errRows" :total="errTotal" :loading="errLoading"
@@ -172,7 +173,7 @@
 
         </div>
         <!-- 懒挂载：首次切到该 tab 才请求排行数据，之后随筛选自动刷新 -->
-        <div v-if="rankingMounted" v-show="activeTab === 'ranking'" class="workspace-body !gap-0">
+        <div v-if="rankingMounted" v-show="activeTab === 'ranking'" class="card workspace-table-card workspace-shell workspace-body !gap-0">
           <UserTokenRanking
             workspace
             ref="rankingRef"
@@ -184,7 +185,7 @@
             @select-user="handleRankingSelectUser"
           />
         </div>
-        <ClientDisconnectEventsPanel workspace v-if="disconnectEventsMounted" v-show="activeTab === 'disconnects'" class="workspace-body !gap-0" />
+        <ClientDisconnectEventsPanel workspace v-if="disconnectEventsMounted" v-show="activeTab === 'disconnects'" class="card workspace-table-card workspace-shell workspace-body !gap-0" />
       </div>
     </div>
   </AppLayout>

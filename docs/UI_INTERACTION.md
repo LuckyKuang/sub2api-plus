@@ -70,7 +70,11 @@ Operations separates monitoring, alert events and system logs; risk control
 separates configuration and audit records; IP access control separates automatic
 protection, trusted proxies, login failures and rules. Existing rule links activate
 the rules tab. Admin usage separates chart statistics and usage lists, retaining
-its live/history/error/ranking subviews. User usage opens directly to historical
+its live/history/error/ranking subviews. Administrator live, history and error
+lists use separate rounded control and table surfaces, with independent pagination
+for history and errors even when empty. The shared 16px desktop card gaps do not
+change administrator shell insets, pinned columns or horizontal scrolling. Live
+requests retain their complete bounded window without pagination. User usage opens directly to historical
 records and provides live/history/error lists only; statistics remain on the
 dashboard. User usage does not fetch aggregate statistics or show chart granularity.
 Its history view has only the existing manual Refresh and Reset actions, without
