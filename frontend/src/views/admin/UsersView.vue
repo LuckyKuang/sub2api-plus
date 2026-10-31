@@ -124,7 +124,7 @@
           </div>
 
           <!-- Right: Actions and Settings -->
-          <div class="flex flex-wrap items-center justify-end gap-2">
+          <div class="flex w-full flex-wrap items-center justify-end gap-2 md:w-auto">
             <!-- Mobile: Secondary buttons (icon only) -->
             <div class="flex items-center gap-2 md:contents">
               <!-- Refresh Button -->
@@ -244,7 +244,7 @@
 
             <button
               v-if="selectedCount > 0"
-              class="btn btn-secondary flex-1 md:flex-initial"
+              class="btn btn-secondary min-w-max flex-1 whitespace-nowrap md:flex-initial"
               data-test="bulk-edit-limits"
               @click="showBulkEditModal = true"
             >
@@ -254,7 +254,7 @@
 
             <button
               v-if="selectedCount > 0"
-              class="btn btn-danger flex-1 md:flex-initial"
+              class="btn btn-danger min-w-max flex-1 whitespace-nowrap md:flex-initial"
               data-test="bulk-delete-users"
               :disabled="bulkDeleting"
               @click="bulkDeleteIds = [...selectedIds]"
@@ -264,7 +264,7 @@
             </button>
 
             <!-- Create User Button (full width on mobile, auto width on desktop) -->
-            <button @click="showCreateModal = true" class="btn btn-primary flex-1 md:flex-initial">
+            <button @click="showCreateModal = true" class="btn btn-primary min-w-max flex-1 whitespace-nowrap md:flex-initial">
               <Icon name="plus" size="md" class="mr-2" />
               {{ t('admin.users.createUser') }}
             </button>

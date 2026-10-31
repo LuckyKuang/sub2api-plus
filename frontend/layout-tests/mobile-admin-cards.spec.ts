@@ -71,6 +71,23 @@ test('mobile user-management records keep short fields on the same line and natu
     const selection = first.locator('[data-test="select-row"]')
     await selection.check()
     await expect(selection).toBeChecked()
+    const limits = page.locator('[data-test="bulk-edit-limits"]')
+    const deletion = page.locator('[data-test="bulk-delete-users"]')
+    const creation = page.getByRole('button', { name: locale === 'zh' ? '创建用户' : 'Create User', exact: true }).first()
+    for (const button of [limits, deletion, creation]) {
+      await expect(button).toBeVisible()
+      const metrics = await button.evaluate(element => ({
+        height: element.getBoundingClientRect().height,
+        x: element.getBoundingClientRect().x,
+        right: element.getBoundingClientRect().right,
+        contentWidth: element.scrollWidth,
+        width: element.clientWidth,
+      }))
+      expect(metrics.height).toBeLessThanOrEqual(48)
+      expect(metrics.x).toBeGreaterThanOrEqual(12)
+      expect(metrics.right).toBeLessThanOrEqual(width - 12 + 1)
+      expect(metrics.contentWidth).toBeLessThanOrEqual(metrics.width + 1)
+    }
     await first.getByRole('button', { name: locale === 'zh' ? '编辑' : 'Edit', exact: true }).click()
     await expect(page.locator('.modal-overlay')).toBeVisible()
     await page.keyboard.press('Escape')
