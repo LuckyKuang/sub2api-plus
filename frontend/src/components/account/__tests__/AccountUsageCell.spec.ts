@@ -1795,9 +1795,15 @@ describe('AccountUsageCell', () => {
 
     const text = wrapper.text()
     expect(text).toContain('ai studio paid')
-    expect(text).toContain('admin.accounts.gemini.quotaPolicy.title')
+    // The policy must remain readable when the mobile-safe portalled help opens.
+    await wrapper.find('.help-tooltip-trigger').trigger('focusin')
+    await flushPromises()
+    const policy = document.body.querySelector('[role="tooltip"]')
+    expect(policy?.textContent).toContain('admin.accounts.gemini.quotaPolicy.title')
+    expect(policy?.textContent).toContain('admin.accounts.gemini.quotaPolicy.note')
     expect(text).toContain('admin.accounts.gemini.quotaPolicy.simulatedNote')
     expect(getUsage).toHaveBeenCalledWith(4003)
+    wrapper.unmount()
   })
 
   it('Anthropic OAuth 会渲染 7d F (Fable) 进度条，且 7d S 逻辑保留', async () => {

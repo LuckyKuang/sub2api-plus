@@ -78,9 +78,12 @@
 </template>
 
 <script setup lang="ts">
+import { useProductAppearance } from '@/composables/useProductAppearance'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import Icon from '@/components/icons/Icon.vue'
+
+useProductAppearance()
 
 const { t } = useI18n()
 const router = useRouter()

@@ -5,7 +5,7 @@
         {{ qrUrl ? scanTitle : t('payment.qr.payInNewWindow') }}
       </h2>
       <div v-if="qrUrl" class="w-full rounded-[var(--surface-radius-inset)] surface-opaque p-3">
-        <canvas ref="qrCanvas" class="mx-auto max-w-full"></canvas>
+        <canvas ref="qrCanvas" class="mx-auto !h-auto max-w-full"></canvas>
       </div>
       <!-- Scan prompt for QR code -->
       <p v-if="qrUrl && !expired && scanHint" class="text-center text-sm surface-muted">

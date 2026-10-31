@@ -83,3 +83,27 @@ describe('setup administrator credentials', () => {
     expect(install).not.toHaveBeenCalled()
   })
 })
+
+
+describe('setup connection controls', () => {
+  it('keeps the Redis TLS setting in the Redis connection step', async () => {
+    const wrapper = mount(SetupWizardView)
+    const button = (key: string) => wrapper.findAll('button').find((item) => item.text().trim() === key)!
+
+    expect(wrapper.text()).not.toContain('setup.redis.enableTls')
+    expect(wrapper.find('[role="switch"]').exists()).toBe(false)
+    await button('setup.status.testConnection').trigger('click')
+    await flushPromises()
+    expect(testDatabase).toHaveBeenCalledWith(expect.objectContaining({ sslmode: 'disable' }))
+    expect(testDatabase).not.toHaveBeenCalledWith(expect.objectContaining({ enable_tls: expect.anything() }))
+
+    await button('common.next').trigger('click')
+    expect(wrapper.findAll('[role="switch"]')).toHaveLength(1)
+    expect(wrapper.text()).toContain('setup.redis.enableTls')
+    await wrapper.get('[role="switch"]').trigger('click')
+    await button('setup.status.testConnection').trigger('click')
+    await flushPromises()
+    expect(testRedis).toHaveBeenCalledWith(expect.objectContaining({ enable_tls: true }))
+    expect(install).not.toHaveBeenCalled()
+  })
+})

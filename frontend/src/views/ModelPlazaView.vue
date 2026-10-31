@@ -14,6 +14,7 @@
 </template>
 
 <script setup lang="ts">
+import { useProductAppearance } from '@/composables/useProductAppearance'
 import { computed, onMounted, ref } from 'vue'
 import { useLocaleRefresh } from '@/utils/localeRefresh'
 import { useRoute } from 'vue-router'
@@ -23,6 +24,8 @@ import ModelPlazaContent from '@/components/modelPlaza/ModelPlazaContent.vue'
 import { getModelPlaza, type ModelPlazaResponse } from '@/api/modelPlaza'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
+
+useProductAppearance()
 
 const route = useRoute()
 const appStore = useAppStore()

@@ -71,10 +71,15 @@ separates configuration and audit records; IP access control separates automatic
 protection, trusted proxies, login failures and rules. Existing rule links activate
 the rules tab. Admin usage separates chart statistics and usage lists, retaining
 its live/history/error/ranking subviews. Administrator live, history and error
-lists use separate rounded control and table surfaces, with independent pagination
-for history and errors even when empty. The shared 16px desktop card gaps do not
-change administrator shell insets, pinned columns or horizontal scrolling. Live
-requests retain their complete bounded window without pagination. User usage opens directly to historical
+lists use separate rounded control and table surfaces, with independent fixed
+bottom pagination cards for live, history and errors even when empty. The shared
+16px desktop card gaps do not change administrator shell insets, pinned columns
+or horizontal scrolling. Administrator live requests paginate the bounded
+observation window using the shared page-size preference (20 by default);
+filters and exports continue to cover the complete window. Browsing later pages
+holds insertions behind the existing new-record notice. Short desktop windows
+keep the administrator live empty-state icon and complete message readable above
+the fixed footer, using a compact horizontal layout. User usage opens directly to historical
 records and provides live/history/error lists only; statistics remain on the
 dashboard. User usage does not fetch aggregate statistics or show chart granularity.
 Its history view has only the existing manual Refresh and Reset actions, without
@@ -152,7 +157,9 @@ pinned columns, their horizontal scroll and fixed control/footer slots; sharing
 surface presentation does not change those behaviors or the administrator
 content column's existing horizontal insets. Responsive administrator record
 cards align labels and values left, use an available-width field grid and put
-selection and actions across the full card; phone-width cards use one column.
+selection and actions across the full card. Phone-width cards keep one field per
+row with its short label and value side by side and 8px field gaps; long values
+wrap and card height follows content.
 
 Administrator dashboard and usage date toolbars wrap their labels and controls
 within the card. Granularity occupies its own row on phones. Order searches and
@@ -292,11 +299,15 @@ Data cells, footer totals and frozen-column paint layers have no static fill;
 the enclosing card supplies their background at every transparency setting.
 This also applies to grouped price tiers in Model Plaza. Hover and selection
 add only their shared state tint and outline.
+Frozen columns paint these states and rounded corners directly on their cells,
+without a negative-z pseudo layer; horizontal clipping still keeps scrolling
+content out of their transparent cutouts.
 Headers match the surrounding table background, have no independent card, and
 remain 12px from the first data row. Header groups and cells add no fill layers
 over the enclosing card. A static header rail and a separate body scrollport
-prevent vertical overlap without a scroll-driven masking delay. Every constrained
-scrolling record table uses this separation, including distribution tables whose
+prevent vertical overlap without a scroll-driven masking delay. Their geometry
+remains stable during reactive row updates and resize, including empty lists.
+Every constrained scrolling record table uses this separation, including distribution tables whose
 headers were not previously sticky. Long dialog tables have a local, bounded body
 viewport; short reference tables retain their natural height. Header sorting,
 selection and column visibility stay synchronized with the source table; frozen

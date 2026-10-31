@@ -3,7 +3,7 @@
     <div class="space-y-6">
       <!-- Header with Day Switcher -->
       <div class="flex items-center justify-end">
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center justify-end gap-2">
           <Select v-model="sourceFilter" :options="sourceFilters" class="w-36" />
           <div class="flex rounded-lg border border-gray-200 dark:border-dark-600">
             <button
@@ -55,10 +55,10 @@
             <div v-else class="space-y-2">
               <div v-for="[currency, users] in sortedTopUsers(stats.top_users)" :key="currency" class="space-y-2">
                 <p class="text-xs font-semibold surface-muted">{{ currency }}</p>
-                <div v-for="(user, idx) in users" :key="user.user_id" class="flex items-center justify-between rounded-lg px-3 py-2 hover:surface-hover">
-                  <div class="flex items-center gap-3">
-                    <span :class="['flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold', rankClass(idx)]">{{ idx + 1 }}</span>
-                    <span class="text-sm surface-muted">{{ user.email }}</span>
+                <div v-for="(user, idx) in users" :key="user.user_id" class="flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2 hover:surface-hover">
+                  <div class="flex min-w-0 flex-1 items-center gap-3">
+                    <span :class="['flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold', rankClass(idx)]">{{ idx + 1 }}</span>
+                    <span class="min-w-0 break-all text-sm surface-muted">{{ user.email }}</span>
                   </div>
                   <span class="text-sm font-medium text-gray-900 dark:text-white">{{ formatMoney(currency, user.amount) }}</span>
                 </div>

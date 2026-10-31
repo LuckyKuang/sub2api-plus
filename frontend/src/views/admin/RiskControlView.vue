@@ -1108,12 +1108,12 @@
             </div>
             <p class="text-sm surface-muted">{{ t('admin.riskControl.sessionBlockCount', { count: formatNumber(status?.blocked_session_count ?? sessionPagination.total) }) }}</p>
             <div class="flex flex-col gap-2 sm:flex-row">
-              <input v-model.trim="sessionFilters.search" type="search" class="input" :placeholder="t('admin.riskControl.sessionBlockSearch')" @keyup.enter="reloadSessionBlocksFromFirstPage" />
-              <button type="button" class="btn btn-secondary" :disabled="sessionBlocksLoading" @click="reloadSessionBlocksFromFirstPage">{{ t('admin.riskControl.refresh') }}</button>
+              <input v-model.trim="sessionFilters.search" type="search" class="input min-w-0 flex-1" :placeholder="t('admin.riskControl.sessionBlockSearch')" @keyup.enter="reloadSessionBlocksFromFirstPage" />
+              <button type="button" class="btn btn-secondary shrink-0 whitespace-nowrap" :disabled="sessionBlocksLoading" @click="reloadSessionBlocksFromFirstPage">{{ t('admin.riskControl.refresh') }}</button>
             </div>
             <div class="record-table-scroll record-table-dialog-scroll table-container overflow-x-auto">
-              <table class="record-table min-w-full divide-y divide-gray-200 dark:divide-dark-700">
-                <thead class="surface-inset">
+              <table class="record-table w-full min-w-[760px] divide-y divide-gray-200 dark:divide-dark-700">
+                <thead class="surface-inset [&_th]:whitespace-nowrap">
                   <tr>
                     <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider surface-muted">{{ t('admin.riskControl.table.time') }}</th>
                     <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider surface-muted">session_id</th>

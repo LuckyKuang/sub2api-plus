@@ -236,6 +236,7 @@
           <template #cell-group="{ row }">
             <GroupBadge
               v-if="row.group"
+              class="max-w-full"
               :name="row.group.name"
               :platform="row.group.platform"
               :subscription-type="row.group.subscription_type"
@@ -246,7 +247,7 @@
           </template>
 
           <template #cell-usage="{ row }">
-            <div class="min-w-[280px] space-y-2">
+            <div class="min-w-0 space-y-2 sm:min-w-[280px]">
               <!-- 5-hour rolling usage -->
               <div v-if="row.group?.five_hour_limit_usd" class="usage-row">
                 <div class="flex items-center gap-2">

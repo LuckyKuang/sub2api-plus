@@ -20,12 +20,12 @@
       <div class="card workspace-table-card workspace-shell" data-test="user-orders-table">
         <OrderTable class="workspace-table-viewport" :orders="orders" :loading="loading">
           <template #actions="{ row }">
-            <div class="flex items-center gap-2">
-              <button v-support-readonly v-if="row.status === 'PENDING'" @click="handleCancel(row.id)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-yellow-600 hover:bg-yellow-50/25 dark:text-yellow-400 dark:hover:bg-yellow-900/20 surface-control">
+            <div class="table-actions">
+              <button v-support-readonly v-if="row.status === 'PENDING'" @click="handleCancel(row.id)" class="table-action table-action-warning">
                 <Icon name="x" size="sm" />
                 <span>{{ t('payment.orders.cancel') }}</span>
               </button>
-              <button v-support-readonly v-if="canRequestRefund(row)" @click="openRefundDialog(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-purple-600 hover:bg-purple-50/25 dark:text-purple-400 dark:hover:bg-purple-900/20 surface-control">
+              <button v-support-readonly v-if="canRequestRefund(row)" @click="openRefundDialog(row)" class="table-action">
                 <Icon name="dollar" size="sm" />
                 <span>{{ t('payment.orders.requestRefund') }}</span>
               </button>

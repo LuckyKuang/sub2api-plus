@@ -50,12 +50,12 @@
           <!-- Saved email entries -->
           <div v-if="emailEntries.length > 0" class="space-y-2 mb-3">
             <div v-for="(entry, idx) in emailEntries" :key="idx"
-              class="flex items-center justify-between px-3 py-2 surface-inset rounded-lg">
+              class="flex flex-col items-stretch justify-between gap-2 px-3 py-2 surface-inset rounded-lg sm:flex-row sm:items-center">
               <div class="flex items-center gap-2 min-w-0 flex-1">
                 <Toggle :model-value="!entry.disabled" :aria-label="entry.email" @update:model-value="handleEmailToggle(entry)" />
                 <span class="text-sm truncate surface-muted">{{ entry.email }}</span>
               </div>
-              <div class="flex items-center gap-2 shrink-0">
+              <div class="flex flex-wrap items-center gap-2 sm:shrink-0">
                 <template v-if="!entry.verified">
                   <!-- Inline verify flow for saved unverified emails -->
                   <template v-if="verifyingEmail === entry.email">
@@ -95,9 +95,9 @@
           <!-- Pending (unverified) emails in verification flow -->
           <div v-if="pendingEmails.length > 0" class="space-y-2 mb-3">
             <div v-for="(pe, idx) in pendingEmails" :key="pe.email" data-testid="pending-notify-email"
-              class="flex items-center gap-2 px-3 py-2 bg-yellow-50/[0.15] dark:bg-yellow-900/10 rounded-lg border border-yellow-200 dark:border-yellow-800">
-              <span class="flex-1 text-sm surface-muted">{{ pe.email }}</span>
-              <div v-if="!pe.codeSent" class="flex items-center gap-1">
+              class="flex flex-col items-stretch gap-2 px-3 py-2 bg-yellow-50/[0.15] dark:bg-yellow-900/10 rounded-lg border border-yellow-200 dark:border-yellow-800 sm:flex-row sm:items-center">
+              <span class="min-w-0 flex-1 break-all text-sm surface-muted">{{ pe.email }}</span>
+              <div v-if="!pe.codeSent" class="flex flex-wrap items-center gap-1">
                 <button @click="sendCodeFor(idx)" :disabled="pe.sending" class="text-xs text-primary-600 hover:text-primary-700 surface-control">
                   {{ t('profile.balanceNotify.sendCode') }}
                 </button>
@@ -105,7 +105,7 @@
                   {{ t('profile.balanceNotify.removeEmail') }}
                 </button>
               </div>
-              <div v-else class="flex items-center gap-1">
+              <div v-else class="flex flex-wrap items-center gap-1">
                 <input
                   v-model="pe.code"
                   type="text"

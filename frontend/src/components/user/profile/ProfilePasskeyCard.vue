@@ -1,7 +1,7 @@
 <template>
   <div class="card">
-    <div class="flex items-start justify-between border-b border-gray-100 px-6 py-4 dark:border-dark-700">
-      <div>
+    <div class="flex flex-col gap-4 border-b border-gray-100 px-6 py-4 dark:border-dark-700 sm:flex-row sm:items-start sm:justify-between">
+      <div class="min-w-0">
         <h2 class="text-lg font-medium text-gray-900 dark:text-white">
           {{ t('profile.passkey.title') }}
         </h2>
@@ -12,7 +12,7 @@
       <button v-support-readonly
         v-if="enabled && supported && !showAddForm"
         type="button"
-        class="btn btn-primary"
+        class="btn btn-primary w-full shrink-0 sm:w-auto"
         :disabled="busy"
         @click="showAddForm = true"
       >
@@ -84,17 +84,17 @@
           <div
             v-for="credential in credentials"
             :key="credential.id"
-            class="flex items-center justify-between gap-4 py-4 first:pt-0 last:pb-0"
+            class="flex flex-col gap-4 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between"
           >
-            <div class="min-w-0">
+            <div class="min-w-0 flex-1">
               <div class="flex items-center gap-2">
                 <Icon name="key" size="md" class="shrink-0 text-primary-500" />
-                <p class="truncate font-medium text-gray-900 dark:text-white">
+                <p class="min-w-0 flex-1 truncate font-medium text-gray-900 dark:text-white">
                   {{ credential.name }}
                 </p>
                 <span
                   v-if="credential.backup"
-                  class="rounded-full bg-green-50/[0.15] px-2 py-0.5 text-xs text-green-700 dark:bg-green-900/30 dark:text-green-300"
+                  class="shrink-0 whitespace-nowrap rounded-full bg-green-50/[0.15] px-2 py-0.5 text-xs text-green-700 dark:bg-green-900/30 dark:text-green-300"
                 >
                   {{ t('profile.passkey.synced') }}
                 </span>
@@ -106,7 +106,7 @@
                 </template>
               </p>
             </div>
-            <div class="flex shrink-0 gap-2">
+            <div class="flex shrink-0 justify-end gap-2">
               <button v-support-readonly
                 type="button"
                 class="btn btn-secondary btn-sm"
@@ -139,7 +139,7 @@
           <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
             {{ t('profile.passkey.deleteTitle') }}
           </h3>
-          <p class="mt-2 text-sm surface-muted">
+          <p class="mt-2 break-words text-sm surface-muted">
             {{ t('profile.passkey.deleteConfirm', { name: deleteTarget.name }) }}
           </p>
           <form v-support-readonly class="mt-4 space-y-4" @submit.prevent="confirmDelete">
