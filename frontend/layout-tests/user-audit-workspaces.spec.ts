@@ -158,7 +158,7 @@ for (const width of [1440, 2560]) {
     await assertEqualPairAndFourGuides(page, '.affiliate-top-row > .card', '.affiliate-guide-grid > li')
     await assertFooterAtWorkspaceBottom(footer, root)
     // The production App.vue table adapter owns the header rail and native body.
-    const viewport = page.locator('.affiliate-invitees .static-table-body-viewport')
+    const viewport = page.locator('.affiliate-invitees [data-static-table-body-viewport]')
     await expect(viewport).toBeVisible()
     const header = page.locator('.affiliate-invitees .static-table-header-rail')
     const usableBody = await viewport.evaluate(element => {

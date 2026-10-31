@@ -53,7 +53,7 @@ describe('record table appearance requirements', () => {
     expect(dialogPaint.get('height')).toBeUndefined()
     expect(dialogPaint.get('overflow')).toBe('auto')
     expect(dialogPaint.get('overscroll-behavior')).toBe('contain')
-    container.classList.add('static-table-body-viewport')
+    container.setAttribute('data-static-table-body-viewport', '')
     expect(paint(container, '', headerStylesheet).get('max-height')).toBe('none')
   })
 

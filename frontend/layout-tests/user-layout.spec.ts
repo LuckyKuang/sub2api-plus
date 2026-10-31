@@ -517,9 +517,16 @@ test('dashboard shows all sections, four permanent performance cards and complet
         const originalWidth = element.style.width
         try {
           element.style.width = '1005px'
+          const parent = element.parentElement!
+          const parentStyle = getComputedStyle(parent)
+          // Compare CSS-pixel content boxes: clientWidth rounds fractional
+          // widths to integers and can reject a canvas that fits exactly.
+          const available = parent.getBoundingClientRect().width
+            - parseFloat(parentStyle.borderLeftWidth) - parseFloat(parentStyle.borderRightWidth)
+            - parseFloat(parentStyle.paddingLeft) - parseFloat(parentStyle.paddingRight)
           return {
             width: element.getBoundingClientRect().width,
-            available: element.parentElement!.clientWidth,
+            available,
             documentOverflow: document.documentElement.scrollWidth > innerWidth,
           }
         } finally {

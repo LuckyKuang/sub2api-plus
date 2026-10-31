@@ -11,6 +11,7 @@ Sub2API Plus v0.2.19+custom.003
 - Keep onboarding actions visible on mobile and retain spacing inside narrow two-factor verification dialogs.
 - Use shared dialogs for administrator group and redemption-code operations, with responsive layouts and consistent footer actions.
 - Restore record-row borders and rounded surfaces around frozen table columns, and keep mobile record labels, long values and actions within their cards.
+- Keep separated table headers and body spacing stable when reactive updates rewrite component classes, preventing repeated resize-driven layout jumps.
 - Preserve readable copied and selected states with configured accent colors, including API-key instructions and user security settings.
 - Keep administrator live-request controls, empty-state text and pagination visible in shorter desktop windows. Browsing later pages holds new insertions behind the existing new-record notice.
 

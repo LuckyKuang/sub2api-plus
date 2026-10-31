@@ -305,8 +305,9 @@ content out of their transparent cutouts.
 Headers match the surrounding table background, have no independent card, and
 remain 12px from the first data row. Header groups and cells add no fill layers
 over the enclosing card. A static header rail and a separate body scrollport
-prevent vertical overlap without a scroll-driven masking delay. Every constrained
-scrolling record table uses this separation, including distribution tables whose
+prevent vertical overlap without a scroll-driven masking delay. Their geometry
+remains stable during reactive row updates and resize, including empty lists.
+Every constrained scrolling record table uses this separation, including distribution tables whose
 headers were not previously sticky. Long dialog tables have a local, bounded body
 viewport; short reference tables retain their natural height. Header sorting,
 selection and column visibility stay synchronized with the source table; frozen

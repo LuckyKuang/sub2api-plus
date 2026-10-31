@@ -410,27 +410,55 @@ test('short admin live empty message and icon remain completely readable', async
     await expect(message).toBeVisible()
     const icon = message.locator('..').locator('svg')
     await expect(icon).toHaveCount(1)
-    await page.screenshot({ path: info.outputPath(`live-empty-${height}.png`) })
-    const viewportBounds = (await viewport.boundingBox())!
-    const headerBounds = (await viewport.locator('thead').boundingBox())!
-    for (const content of [message, icon]) {
-      const bounds = (await content.boundingBox())!
-      expect(bounds.x).toBeGreaterThanOrEqual(viewportBounds.x)
-      expect(bounds.x + bounds.width).toBeLessThanOrEqual(viewportBounds.x + viewportBounds.width)
-      expect(bounds.y).toBeGreaterThanOrEqual(headerBounds.y + headerBounds.height)
-      expect(bounds.y + bounds.height).toBeLessThanOrEqual(viewportBounds.y + viewportBounds.height)
-      expect(await content.evaluate(element => {
-        const box = element.getBoundingClientRect()
-        return [0.05, 0.5, 0.95].every(fraction => {
-          const target = document.elementFromPoint(box.x + box.width / 2, box.y + box.height * fraction)
-          return target !== null && (element.contains(target) || target === element.parentElement)
-        })
-      })).toBe(true)
+    const geometry = await workspace.evaluate(async element => {
+      await document.fonts.ready
+      const viewport = element.querySelector<HTMLElement>('.workspace-table-viewport')!
+      const message = viewport.querySelector<HTMLElement>('[data-test="live-empty-message"]')!
+      const icon = viewport.querySelector<SVGElement>('[data-test="live-empty-icon"]')!
+      const rect = (target: Element) => {
+        const bounds = target.getBoundingClientRect()
+        return { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }
+      }
+      const sample = () => {
+        // The real header can move into a separate rail on a later frame.
+        // Its hidden measurement copy is not the visible header boundary.
+        const header = viewport.closest('.static-table-frame')?.querySelector('.static-table-header-rail thead')
+          ?? viewport.querySelector('thead')!
+        return { viewport: rect(viewport), header: rect(header), message: rect(message), icon: rect(icon) }
+      }
+      let previous = '', stable = 0
+      for (let frame = 0; frame < 60 && stable < 4; frame++) {
+        await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
+        const signature = JSON.stringify(sample())
+        stable = signature === previous ? stable + 1 : 0
+        previous = signature
+      }
+      // Read all bounds and hit targets together, after header reparenting and
+      // font layout settle, so a single assertion never mixes separate frames.
+      const bounds = sample()
+      return {
+        ...bounds, stable,
+        hits: [message, icon].map(target => {
+          const box = target.getBoundingClientRect()
+          return [0.05, 0.5, 0.95].every(fraction => {
+            const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height * fraction)
+            return hit !== null && (target.contains(hit) || hit === target.parentElement)
+          })
+        }),
+      }
+    })
+    expect(geometry.stable, JSON.stringify(geometry)).toBe(4)
+    for (const bounds of [geometry.message, geometry.icon]) {
+      expect(bounds.x, JSON.stringify(geometry)).toBeGreaterThanOrEqual(geometry.viewport.x)
+      expect(bounds.x + bounds.width, JSON.stringify(geometry)).toBeLessThanOrEqual(geometry.viewport.x + geometry.viewport.width)
+      expect(bounds.y, JSON.stringify(geometry)).toBeGreaterThanOrEqual(geometry.header.y + geometry.header.height)
+      expect(bounds.y + bounds.height, JSON.stringify(geometry)).toBeLessThanOrEqual(geometry.viewport.y + geometry.viewport.height)
     }
+    expect(geometry.hits).toEqual([true, true])
     if (height === 800) {
       // Standard-height desktops retain the established vertical empty state.
-      const iconBounds = (await icon.boundingBox())!
-      const messageBounds = (await message.boundingBox())!
+      const iconBounds = geometry.icon
+      const messageBounds = geometry.message
       expect(iconBounds.y + iconBounds.height).toBeLessThan(messageBounds.y)
       expect(Math.abs(iconBounds.x + iconBounds.width / 2 - messageBounds.x - messageBounds.width / 2)).toBeLessThanOrEqual(1)
     }
