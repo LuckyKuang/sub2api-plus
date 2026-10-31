@@ -5,16 +5,18 @@ import AvailableChannelsView from '../AvailableChannelsView.vue'
 import CatalogPriceDetails from '@/components/channels/CatalogPriceDetails.vue'
 import { group, offer, pricing, rateQuote } from '@/components/channels/__tests__/catalogFixtures'
 import type { ChannelCatalog } from '@/api/channels'
+import { update as updateChannel } from '@/api/admin/channels'
 import { setAdminSupportContext } from '@/utils/adminSupportContext'
 import { clearAvailableChannelCatalogCache } from '@/utils/availableChannelCatalogCache'
 
 const mocks = vi.hoisted(() => ({
-  getCatalog: vi.fn(), copy: vi.fn(),
+  getCatalog: vi.fn(), copy: vi.fn(), put: vi.fn(),
   auth: { user: { id: 1 }, isAuthenticated: true } as { user: { id: number } | null; isAuthenticated: boolean },
   support: { target: null } as { target: { id: number } | null },
   locale: { value: 'en' }
 }))
 vi.mock('@/api/channels', () => ({ default: { getCatalog: mocks.getCatalog } }))
+vi.mock('@/api/client', () => ({ apiClient: { put: mocks.put } }))
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => mocks.auth }))
 vi.mock('@/stores/adminSupportView', () => ({ useAdminSupportViewStore: () => mocks.support }))
 vi.mock('@/i18n', () => ({ getLocale: () => mocks.locale.value }))
@@ -42,6 +44,22 @@ afterEach(() => {
 })
 
 describe('available channels user page', () => {
+  it('fetches the revised model list after saving channel pricing within the cache lifetime', async () => {
+    // Saving channel pricing must prevent a return visit from rendering the
+    // removed models out of the still-fresh 180-second cache.
+    const first = page(); await flushPromises(); leave(first)
+    mocks.put.mockResolvedValueOnce({ data: { id: 7 } })
+    mocks.getCatalog.mockResolvedValueOnce({ groups: [group(1, [offer('second')])], user_rate_status: 'loaded' })
+
+    await updateChannel(7, {
+      model_pricing: [{ ...pricing(), platform: 'openai', models: ['second'], intervals: [], time_pricing: null }]
+    })
+    const returning = page(); await flushPromises()
+
+    expect(mocks.getCatalog).toHaveBeenCalledTimes(2)
+    expect(returning.findAll('h3').map(title => title.text())).toEqual(['second'])
+  })
+
   // Approved loading behavior: a fresh authorized success renders immediately
   // on return; only the user's refresh bypasses the 180-second memory cache.
   it('immediately reuses the last successful catalog on return and forces a new manual refresh', async () => {

@@ -48,7 +48,7 @@ func TestCodexServerModelPreservesExplicitPublicPrice(t *testing.T) {
 	}
 }
 
-func TestCodexServerModelFallbackAndExplicitSourcesRetainCorrection(t *testing.T) {
+func TestCodexServerModelPreservesFallbackAndExplicitSourceSelection(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		source   string
@@ -57,13 +57,13 @@ func TestCodexServerModelFallbackAndExplicitSourcesRetainCorrection(t *testing.T
 		legacy   bool
 		wantCost float64
 	}{
-		{name: "no public card", wantCost: 30},
-		{name: "empty public card", card: true, empty: true, wantCost: 30},
+		{name: "no public card", wantCost: 24},
+		{name: "empty public card", card: true, empty: true, wantCost: 24},
 		{name: "requested public card", source: BillingModelSourceRequested, card: true, wantCost: 12},
-		{name: "explicit upstream source", source: BillingModelSourceUpstream, card: true, wantCost: 30},
-		{name: "explicit response source", source: BillingModelSourceResponse, card: true, wantCost: 30},
-		{name: "explicit channel mapping", source: BillingModelSourceChannelMapped, card: true, wantCost: 30},
-		{name: "accepted legacy selection", card: true, legacy: true, wantCost: 30},
+		{name: "explicit upstream source", source: BillingModelSourceUpstream, card: true, wantCost: 24},
+		{name: "explicit response source", source: BillingModelSourceResponse, card: true, wantCost: 24},
+		{name: "explicit channel mapping", source: BillingModelSourceChannelMapped, card: true, wantCost: 24},
+		{name: "accepted legacy selection", card: true, legacy: true, wantCost: 24},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var card ChannelModelPricing
@@ -84,7 +84,7 @@ func TestCodexServerModelFallbackAndExplicitSourcesRetainCorrection(t *testing.T
 				APIKey: key, User: key.User, Account: &Account{ID: 33, Platform: PlatformOpenAI, Type: AccountTypeOAuth},
 				ChannelUsageFields: ChannelUsageFields{OriginalModel: "model001", ChannelMappedModel: "gpt-5.4", BillingModelSource: tc.source}}))
 			require.NotNil(t, ledger.lastCmd)
-			require.InDelta(t, tc.wantCost, ledger.lastCmd.BalanceCost, 1e-12, "public-card protection must preserve explicit opt-outs and ordinary Codex correction")
+			require.InDelta(t, tc.wantCost, ledger.lastCmd.BalanceCost, 1e-12, "selected mapped/upstream card is $4 × platform 2 × model 3; a $5 response must not raise the bill")
 			require.NotNil(t, logs.lastLog.UpstreamResponseModel)
 			require.Equal(t, "gpt-5.3-codex", *logs.lastLog.UpstreamResponseModel)
 		})

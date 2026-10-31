@@ -18,20 +18,20 @@ import (
 
 func expectedPlatformPricingFallbackModels() map[string]string {
 	return map[string]string{
-		"anthropic":    "claude-sonnet-5",
-		"openai":       "gpt-5.4",
+		"anthropic":    "claude-opus-5-5",
+		"openai":       "gpt-6.1-sol",
 		"gemini":       "gemini-3.8-flash",
 		"antigravity":  "gemini-3.8-flash",
 		"grok":         "grok-4.6",
 		"kimi":         "kimi-k3",
 		"zhipu":        "glm-5.3",
-		"deepseek":     "deepseek-v4-flash",
+		"deepseek":     "deepseek-v4.1-flash",
 		"minimax":      "minimax-m3",
 		"stepfun":      "step-5-preview",
 		"opencode_go":  "glm-5.3",
 		"typesafe":     "jev-latest",
-		"command_code": "deepseek-v4-flash",
-		"cline":        "deepseek-v4-flash",
+		"command_code": "deepseek-v4.1-flash",
+		"cline":        "deepseek-v4.1-flash",
 	}
 }
 

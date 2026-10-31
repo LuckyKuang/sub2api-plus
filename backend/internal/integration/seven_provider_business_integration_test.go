@@ -474,8 +474,8 @@ func runSevenBusinessFlow(t *testing.T, services *sevenBusinessServices, provide
 	inputPrice, outputPrice := 0.000002, 0.000004
 	pricedModels := []string{"business-chat"}
 	if native != nil {
-		// Price the actual native model as well: Codex server-model correction
-		// and Step Plan's native billing policy legitimately select that ID.
+		// Step Plan's native billing policy may select the native model ID;
+		// reported Codex models remain diagnostic evidence.
 		pricedModels = append(pricedModels, native.model)
 	}
 	channel := &service.Channel{Name: "seven-business-" + uuid.NewString(), Status: service.StatusActive, BillingModelSource: service.BillingModelSourceRequested,

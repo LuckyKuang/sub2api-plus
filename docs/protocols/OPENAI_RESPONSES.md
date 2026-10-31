@@ -552,15 +552,18 @@ to schedule:
   still win, and a disagreement raises the conflict flag). In-band events
   follow the official `response_model()` order: nested `response.headers`,
   then top-level `headers` on WebSocket metadata events; `response.model` is
-  a Plus fallback when neither header is present. For Codex-protocol
-  accounts a server-declared model that differs from the baseline billing
-  model and has identified pricing corrects the recorded billing model when
-  no accepted public model price owns that request. Explicit public token,
-  per-request and free cards retain their selling price and factors; upstream
-  model observations remain recorded. Explicit upstream/response-model billing
-  sources, actual channel mappings and accepted legacy price selection retain
-  their existing correction behavior. The downstream response body is never
-  rewritten. The `x-openai-model` spelling is accepted as well.
+  a Plus fallback when neither header is present. These observations remain
+  diagnostic evidence and do not implicitly replace the requested,
+  channel-mapped or upstream-selected billing model, including for OAuth and
+  setup-token accounts without a public price card and restored legacy tasks.
+  Thus channel mapping `gpt-6-luna` to `gpt-6-sol` bills Sol, and a request for
+  `gpt-6.1-sol` retains its price even if the provider reports `gpt-6-luna`.
+  Only an explicit `response_model` billing source may adopt the observation,
+  with identified pricing, no conflict or media charges, and the existing
+  non-increasing-price and retail-price protections. Public paid/free cards
+  retain their prices and selling factors. The downstream response body is
+  never rewritten by billing. The `x-openai-model` spelling is accepted as well.
+
 - `x-models-etag` marks the upstream model-catalog revision and is recorded
   as a structured log signal for the future pinned-models integration.
 - The `codex_rollout_budget_units` declaration in `response.completed` usage

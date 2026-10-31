@@ -163,6 +163,11 @@ func TestAvailableCatalogLegacyMediaCardsAreRequestDependent(t *testing.T) {
 func TestAvailableCatalogMediaFallbackAndUnsupportedUnit(t *testing.T) {
 	group := Group{ID: 1, Platform: PlatformComposite}
 	ch := Channel{ID: 1, Status: StatusActive, GroupIDs: []int64{1}, ModelMapping: map[string]map[string]string{PlatformGrok: {"grok-imagine-video": "grok-imagine-video"}, PlatformOpenAI: {"gpt-4o-mini-tts": "gpt-4o-mini-tts"}}}
+	// Declare membership while leaving prices unset to exercise fallback pricing.
+	ch.ModelPricing = []ChannelModelPricing{
+		{Platform: PlatformGrok, Models: []string{"grok-imagine-video"}},
+		{Platform: PlatformOpenAI, Models: []string{"gpt-4o-mini-tts"}},
+	}
 	catalog := mustCatalogFromJSON(`{"gpt-4o-mini-tts":{"litellm_provider":"openai","mode":"audio_speech","input_cost_per_token":0.000001}}`)
 	svc := newPlazaServiceWithBilling([]Channel{ch}, nil, nil, catalog)
 	out, err := svc.ListAvailableCatalog(context.Background(), []Group{group})
@@ -184,6 +189,7 @@ func TestAvailableCatalogMediaFallbackAndUnsupportedUnit(t *testing.T) {
 func TestAvailableCatalogDeepSeekStandardAndDerivedPeriods(t *testing.T) {
 	group := Group{ID: 1, Platform: PlatformDeepseek}
 	ch := Channel{ID: 1, Status: StatusActive, GroupIDs: []int64{1}, ModelMapping: map[string]map[string]string{PlatformDeepseek: {"deepseek-flash": "deepseek-flash"}}}
+	ch.ModelPricing = []ChannelModelPricing{{Platform: PlatformDeepseek, Models: []string{"deepseek-flash"}}}
 	catalog := mustCatalogFromJSON(`{"deepseek-flash":{"litellm_provider":"deepseek","mode":"chat","input_cost_per_token":0.000001,"output_cost_per_token":0.000002}}`)
 	svc := newPlazaServiceWithBilling([]Channel{ch}, nil, nil, catalog)
 	out, err := svc.ListAvailableCatalog(context.Background(), []Group{group})

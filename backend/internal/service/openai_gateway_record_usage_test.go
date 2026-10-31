@@ -82,37 +82,33 @@ func TestOpenAIGatewayServiceRecordUsage_RejectsNilInput(t *testing.T) {
 }
 
 func TestRecordCyberPolicyUsageLog_BillsRealUpstreamTokens(t *testing.T) {
-	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
-	userRepo := &openAIRecordUsageUserRepoStub{}
-	subRepo := &openAIRecordUsageSubRepoStub{}
-	svc := newOpenAIRecordUsageServiceForTest(usageRepo, userRepo, subRepo, nil)
-	usage := OpenAIUsage{InputTokens: 1200, OutputTokens: 300}
-
-	// 流式 cyber：上游 response.failed 报告了真实 token，须按真实 token 计费并扣费，
-	// 与 WS cyber / 正常请求口径一致（不再是 tokens=0 免费行）。
-	svc.RecordCyberPolicyUsageLog(context.Background(), CyberPolicyUsageInput{
-		APIKey:       &APIKey{ID: 2, User: &User{ID: 1}},
-		Account:      &Account{ID: 3},
-		RequestID:    "rid-cyber-stream",
-		Model:        "gpt-5.1",
-		Stream:       true,
-		InputTokens:  1200,
-		OutputTokens: 300,
-	})
-
-	require.Equal(t, 1, usageRepo.calls)
-	require.NotNil(t, usageRepo.lastLog)
-	require.Equal(t, "gpt-5.1", usageRepo.lastLog.Model)
-	require.Equal(t, 1200, usageRepo.lastLog.InputTokens)
-	require.Equal(t, 300, usageRepo.lastLog.OutputTokens)
-	require.Equal(t, RequestTypeCyberBlocked, usageRepo.lastLog.RequestType, "cyber 行须标 request_type=cyber")
-	require.True(t, usageRepo.lastLog.Stream, "cyber 不覆盖真实 stream 字段")
-
-	expected := expectedOpenAICost(t, svc, "gpt-5.1", usage, 1.1)
-	require.Greater(t, usageRepo.lastLog.ActualCost, 0.0, "流式 cyber 有真实 token，须计费")
-	require.InDelta(t, expected.ActualCost, usageRepo.lastLog.ActualCost, 1e-12)
-	require.Equal(t, 1, userRepo.deductCalls, "按真实 token 扣费，与 WS/正常请求一致")
-	require.InDelta(t, expected.ActualCost, userRepo.lastAmount, 1e-12)
+	// A cyber-blocked stream still bills the upstream's real tokens. Known Sol
+	// uses its exact card; legacy/future SKUs without exact cards use the OpenAI
+	// default Sol card. Independent oracle: 1200 × $2/M + 300 × $10/M = $0.0054;
+	// the fixture's default selling rate 1.1 makes the customer debit $0.00594.
+	for _, model := range []string{"gpt-6.1-sol", "gpt-5.1", "gpt-6.2"} {
+		t.Run(model, func(t *testing.T) {
+			usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
+			userRepo := &openAIRecordUsageUserRepoStub{}
+			svc := newOpenAIRecordUsageServiceForTest(usageRepo, userRepo, &openAIRecordUsageSubRepoStub{}, nil)
+			svc.RecordCyberPolicyUsageLog(context.Background(), CyberPolicyUsageInput{
+				APIKey: &APIKey{ID: 2, User: &User{ID: 1}}, Account: &Account{ID: 3},
+				RequestID: "rid-cyber-stream", Model: model, Stream: true,
+				InputTokens: 1200, OutputTokens: 300,
+			})
+			require.Equal(t, 1, usageRepo.calls)
+			require.NotNil(t, usageRepo.lastLog)
+			require.Equal(t, model, usageRepo.lastLog.Model)
+			require.Equal(t, 1200, usageRepo.lastLog.InputTokens)
+			require.Equal(t, 300, usageRepo.lastLog.OutputTokens)
+			require.Equal(t, RequestTypeCyberBlocked, usageRepo.lastLog.RequestType)
+			require.True(t, usageRepo.lastLog.Stream)
+			require.InDelta(t, .0054, usageRepo.lastLog.TotalCost, 1e-12)
+			require.InDelta(t, .00594, usageRepo.lastLog.ActualCost, 1e-12)
+			require.Equal(t, 1, userRepo.deductCalls, "real upstream tokens must produce a debit")
+			require.InDelta(t, .00594, userRepo.lastAmount, 1e-12)
+		})
+	}
 }
 
 func TestRecordCyberPolicyUsageLog_NonStreamZeroTokensZeroCost(t *testing.T) {
@@ -471,9 +467,11 @@ func TestOpenAIGatewayServiceRecordUsage_UsesUserSpecificGroupRate(t *testing.T)
 	require.Equal(t, 12, usageRepo.lastLog.InputTokens)
 	require.Equal(t, 3, usageRepo.lastLog.CacheReadTokens)
 
-	expected := expectedOpenAICost(t, svc, "gpt-5.1", usage, userRate)
-	require.InDelta(t, expected.ActualCost, usageRepo.lastLog.ActualCost, 1e-12)
-	require.InDelta(t, expected.ActualCost, userRepo.lastAmount, 1e-12)
+	// Sol fallback: 12 input × $2/M + 4 output × $10/M + 3 cache reads × $0.1/M.
+	// The personal rate 1.8 takes precedence over the group rate 1.4.
+	require.InDelta(t, .0000643, usageRepo.lastLog.TotalCost, 1e-12)
+	require.InDelta(t, .00011574, usageRepo.lastLog.ActualCost, 1e-12)
+	require.InDelta(t, .00011574, userRepo.lastAmount, 1e-12)
 	require.Equal(t, 1, userRepo.deductCalls)
 }
 
@@ -1183,8 +1181,9 @@ func TestOpenAIGatewayServiceRecordUsage_UpdatesAPIKeyQuotaWhenConfigured(t *tes
 	require.NoError(t, err)
 	require.Equal(t, 1, quotaSvc.quotaCalls)
 	require.Equal(t, 0, quotaSvc.rateLimitCalls)
-	expected := expectedOpenAICost(t, svc, "gpt-5.1", usage, 1.1)
-	require.InDelta(t, expected.ActualCost, quotaSvc.lastAmount, 1e-12)
+	// Sol fallback: (8 × $2/M + 6 × $10/M + 2 × $0.1/M) × 1.1.
+	require.InDelta(t, .0000762, usageRepo.lastLog.TotalCost, 1e-12)
+	require.InDelta(t, .00008382, quotaSvc.lastAmount, 1e-12)
 }
 
 func TestOpenAIGatewayServiceRecordUsage_ClampsActualInputTokensToZero(t *testing.T) {
@@ -1820,20 +1819,16 @@ func TestOpenAIGatewayServiceRecordUsage_BillsMappedRequestsUsingRequestedModel(
 	subRepo := &openAIRecordUsageSubRepoStub{}
 	svc := newOpenAIRecordUsageServiceForTest(usageRepo, userRepo, subRepo, nil)
 	usage := OpenAIUsage{InputTokens: 20, OutputTokens: 10}
+	// Sol: (20 × $2/M + 10 × $10/M) × 1.1 = $0.000154.
 
-	// Billing should use the requested model ("gpt-5.1"), not the upstream mapped model ("gpt-5.1-codex").
+	// Billing should use the requested model ("gpt-6.1-sol"), not the upstream mapped model ("gpt-6-luna").
 	// This ensures pricing is always based on the model the user requested.
-	expectedCost, err := svc.billingService.CalculateCost("gpt-5.1", UsageTokens{
-		InputTokens:  20,
-		OutputTokens: 10,
-	}, 1.1)
-	require.NoError(t, err)
 
-	err = svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
+	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
 		Result: &OpenAIForwardResult{
 			RequestID:     "resp_upstream_model_billing_fallback",
-			Model:         "gpt-5.1",
-			UpstreamModel: "gpt-5.1-codex",
+			Model:         "gpt-6.1-sol",
+			UpstreamModel: "gpt-6-luna",
 			Usage:         usage,
 			Duration:      time.Second,
 		},
@@ -1844,10 +1839,10 @@ func TestOpenAIGatewayServiceRecordUsage_BillsMappedRequestsUsingRequestedModel(
 
 	require.NoError(t, err)
 	require.NotNil(t, usageRepo.lastLog)
-	require.Equal(t, "gpt-5.1", usageRepo.lastLog.Model)
-	require.Equal(t, expectedCost.ActualCost, usageRepo.lastLog.ActualCost)
-	require.Equal(t, expectedCost.TotalCost, usageRepo.lastLog.TotalCost)
-	require.Equal(t, expectedCost.ActualCost, userRepo.lastAmount)
+	require.Equal(t, "gpt-6.1-sol", usageRepo.lastLog.Model)
+	require.InDelta(t, .000154, usageRepo.lastLog.ActualCost, 1e-12)
+	require.InDelta(t, .00014, usageRepo.lastLog.TotalCost, 1e-12)
+	require.InDelta(t, .000154, userRepo.lastAmount, 1e-12)
 }
 
 func TestOpenAIGatewayServiceRecordUsage_ChannelMappedDoesNotOverrideBillingModelWhenUnmapped(t *testing.T) {
@@ -1858,19 +1853,14 @@ func TestOpenAIGatewayServiceRecordUsage_ChannelMappedDoesNotOverrideBillingMode
 	usage := OpenAIUsage{InputTokens: 20, OutputTokens: 10}
 
 	// 渠道未发生模型映射时，应使用 result.BillingModel 中记录的实际上游计费模型，
-	// 而不是未映射的原始请求模型。
-	expectedCost, err := svc.billingService.CalculateCost("gpt-5.1", UsageTokens{
-		InputTokens:  20,
-		OutputTokens: 10,
-	}, 1.1)
-	require.NoError(t, err)
+	// 而不是未映射的原始请求模型。20 × $0.1/M + 10 × $0.5/M，售价倍率 1.1。
 
-	err = svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
+	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
 		Result: &OpenAIForwardResult{
 			RequestID:     "resp_channel_unmapped_billing",
 			Model:         "glm",
-			BillingModel:  "gpt-5.1",
-			UpstreamModel: "gpt-5.1",
+			BillingModel:  "gpt-6-luna",
+			UpstreamModel: "gpt-6-luna",
 			Usage:         usage,
 			Duration:      time.Second,
 		},
@@ -1887,7 +1877,7 @@ func TestOpenAIGatewayServiceRecordUsage_ChannelMappedDoesNotOverrideBillingMode
 
 	require.NoError(t, err)
 	require.NotNil(t, usageRepo.lastLog)
-	require.Equal(t, expectedCost.ActualCost, usageRepo.lastLog.ActualCost)
+	require.InDelta(t, .0000077, usageRepo.lastLog.ActualCost, 1e-12)
 	require.True(t, usageRepo.lastLog.ActualCost > 0, "cost must not be zero")
 }
 
@@ -1897,21 +1887,17 @@ func TestOpenAIGatewayServiceRecordUsage_ChannelMappedOverridesBillingModelWhenM
 	subRepo := &openAIRecordUsageSubRepoStub{}
 	svc := newOpenAIRecordUsageServiceForTest(usageRepo, userRepo, subRepo, nil)
 	usage := OpenAIUsage{InputTokens: 20, OutputTokens: 10}
+	// Sol: (20 × $2/M + 10 × $10/M) × 1.1 = $0.000154.
 
 	// When channel DID map the model (ChannelMappedModel != OriginalModel),
 	// billing should use the channel-mapped model, honoring admin intent.
-	expectedCost, err := svc.billingService.CalculateCost("gpt-5.1", UsageTokens{
-		InputTokens:  20,
-		OutputTokens: 10,
-	}, 1.1)
-	require.NoError(t, err)
 
-	err = svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
+	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
 		Result: &OpenAIForwardResult{
 			RequestID:     "resp_channel_mapped_billing",
 			Model:         "glm",
-			BillingModel:  "gpt-5.1-codex",
-			UpstreamModel: "gpt-5.1-codex",
+			BillingModel:  "gpt-6-luna",
+			UpstreamModel: "gpt-6-luna",
 			Usage:         usage,
 			Duration:      time.Second,
 		},
@@ -1921,14 +1907,14 @@ func TestOpenAIGatewayServiceRecordUsage_ChannelMappedOverridesBillingModelWhenM
 		ChannelUsageFields: ChannelUsageFields{
 			ChannelID:          1,
 			OriginalModel:      "glm",
-			ChannelMappedModel: "gpt-5.1", // channel mapped glm → gpt-5.1
+			ChannelMappedModel: "gpt-6.1-sol", // channel mapped glm → gpt-6.1-sol
 			BillingModelSource: BillingModelSourceChannelMapped,
 		},
 	})
 
 	require.NoError(t, err)
 	require.NotNil(t, usageRepo.lastLog)
-	require.Equal(t, expectedCost.ActualCost, usageRepo.lastLog.ActualCost)
+	require.InDelta(t, .000154, usageRepo.lastLog.ActualCost, 1e-12)
 	require.True(t, usageRepo.lastLog.ActualCost > 0, "cost must not be zero")
 }
 

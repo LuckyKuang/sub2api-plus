@@ -54,7 +54,11 @@ func TestUpdateSettingsPricingFallbackModelsResetsDefaultsAndDisablesOnePlatform
 	rec := doUpdateSettings(t, h, map[string]any{"pricing_fallback_models": map[string]string{}}, nil)
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	models := pricingFallbackResponseModels(t, rec)
-	require.Equal(t, "gpt-5.4", models["openai"])
+	require.Equal(t, "gpt-6.1-sol", models["openai"])
+	require.Equal(t, "claude-opus-5-5", models["anthropic"])
+	require.Equal(t, "deepseek-v4.1-flash", models["deepseek"])
+	require.Equal(t, "deepseek-v4.1-flash", models["command_code"])
+	require.Equal(t, "deepseek-v4.1-flash", models["cline"])
 	require.Equal(t, "grok-4.6", models["grok"])
 
 	rec = doUpdateSettings(t, h, map[string]any{"pricing_fallback_models": map[string]string{
@@ -83,7 +87,10 @@ func TestGetSettingsPricingFallbackModelsReturnsEffectiveDefaultsAndOverrides(t 
 	models := pricingFallbackResponseModels(t, rec)
 	require.Equal(t, "anthropic/claude-sonnet-5", models["command_code"])
 	require.Empty(t, models["typesafe"])
-	require.Equal(t, "gpt-5.4", models["openai"])
+	require.Equal(t, "gpt-6.1-sol", models["openai"])
+	require.Equal(t, "claude-opus-5-5", models["anthropic"])
+	require.Equal(t, "deepseek-v4.1-flash", models["deepseek"])
+	require.Equal(t, "deepseek-v4.1-flash", models["cline"])
 }
 
 func TestUpdateSettingsPricingFallbackModelsRejectsInvalidInputWithoutWrites(t *testing.T) {
