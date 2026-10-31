@@ -390,3 +390,55 @@ test('admin live paging stays at the workspace bottom while records scroll', asy
     expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth || document.documentElement.scrollHeight > innerHeight)).toBe(false)
   }
 })
+
+// Short windows must expose the entire empty message and its icon above the
+// fixed pagination card; Playwright visibility alone permits clipped content.
+test('short admin live empty message and icon remain completely readable', async ({ page }, info) => {
+  const theme = info.project.use.colorScheme === 'dark' ? 'dark' : 'light'
+  const locale = info.project.use.locale?.startsWith('zh') ? 'zh' : 'en'
+  await mockAdminUsage(page, true)
+  for (const height of [600, 800]) {
+    await page.setViewportSize({ width: 1440, height })
+    await page.goto(`/layout-tests/index.html?view=admin-layout&usage=1&theme=${theme}&locale=${locale}`)
+    const panel = page.getByTestId('usage-records-panel')
+    await panel.locator('[data-tab="live"]').click()
+    const workspace = panel.locator('.live-admin-workspace')
+    const viewport = workspace.locator('.workspace-table-viewport')
+    const footer = workspace.locator('.pagination-card')
+    const message = viewport.getByText(locale === 'zh' ? '暂无数据' : 'No data found', { exact: true })
+    await expect(message).toHaveCount(1)
+    await expect(message).toBeVisible()
+    const icon = message.locator('..').locator('svg')
+    await expect(icon).toHaveCount(1)
+    await page.screenshot({ path: info.outputPath(`live-empty-${height}.png`) })
+    const viewportBounds = (await viewport.boundingBox())!
+    const headerBounds = (await viewport.locator('thead').boundingBox())!
+    for (const content of [message, icon]) {
+      const bounds = (await content.boundingBox())!
+      expect(bounds.x).toBeGreaterThanOrEqual(viewportBounds.x)
+      expect(bounds.x + bounds.width).toBeLessThanOrEqual(viewportBounds.x + viewportBounds.width)
+      expect(bounds.y).toBeGreaterThanOrEqual(headerBounds.y + headerBounds.height)
+      expect(bounds.y + bounds.height).toBeLessThanOrEqual(viewportBounds.y + viewportBounds.height)
+      expect(await content.evaluate(element => {
+        const box = element.getBoundingClientRect()
+        return [0.05, 0.5, 0.95].every(fraction => {
+          const target = document.elementFromPoint(box.x + box.width / 2, box.y + box.height * fraction)
+          return target !== null && (element.contains(target) || target === element.parentElement)
+        })
+      })).toBe(true)
+    }
+    if (height === 800) {
+      // Standard-height desktops retain the established vertical empty state.
+      const iconBounds = (await icon.boundingBox())!
+      const messageBounds = (await message.boundingBox())!
+      expect(iconBounds.y + iconBounds.height).toBeLessThan(messageBounds.y)
+      expect(Math.abs(iconBounds.x + iconBounds.width / 2 - messageBounds.x - messageBounds.width / 2)).toBeLessThanOrEqual(1)
+    }
+    await expect(footer).toBeInViewport()
+    expect(await footer.evaluate(element => element.closest('.workspace-table-card'))).toBeNull()
+    const footerBounds = (await footer.boundingBox())!
+    const workspaceBounds = (await workspace.boundingBox())!
+    expect(Math.abs(footerBounds.y + footerBounds.height - workspaceBounds.y - workspaceBounds.height)).toBeLessThanOrEqual(1)
+    expect(await page.evaluate(() => document.documentElement.scrollHeight > innerHeight)).toBe(false)
+  }
+})

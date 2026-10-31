@@ -77,7 +77,9 @@ bottom pagination cards for live, history and errors even when empty. The shared
 or horizontal scrolling. Administrator live requests paginate the bounded
 observation window using the shared page-size preference (20 by default);
 filters and exports continue to cover the complete window. Browsing later pages
-holds insertions behind the existing new-record notice. User usage opens directly to historical
+holds insertions behind the existing new-record notice. Short desktop windows
+keep the administrator live empty-state icon and complete message readable above
+the fixed footer, using a compact horizontal layout. User usage opens directly to historical
 records and provides live/history/error lists only; statistics remain on the
 dashboard. User usage does not fetch aggregate statistics or show chart granularity.
 Its history view has only the existing manual Refresh and Reset actions, without

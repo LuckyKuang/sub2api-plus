@@ -32,6 +32,12 @@
     <div :class="mode === 'user' || workspace ? ['card overflow-hidden', workspace ? 'workspace-table-card workspace-shell' : ''] : ''">
     <div v-if="desktop" :class="workspace ? 'workspace-body !gap-0' : 'overflow-x-auto'">
       <DataTable ref="dataTable" :class="{ 'workspace-table-viewport': workspace }" :columns="columns" :data="displayedRows" :loading="!snapshot && refresh.fetching.value">
+        <template v-if="mode === 'admin' && workspace" #empty>
+          <div class="live-admin-empty flex flex-col items-center" data-test="live-empty-state">
+            <Icon name="inbox" size="xl" class="live-admin-empty-icon mb-4 h-12 w-12 surface-muted" data-test="live-empty-icon" />
+            <p class="live-admin-empty-message text-lg font-medium text-gray-900 dark:text-gray-100" data-test="live-empty-message">{{ t('empty.noData') }}</p>
+          </div>
+        </template>
         <template #cell-started_at="{ row }"><time class="whitespace-nowrap text-xs tabular-nums" :datetime="row.started_at" :title="formatDateTime(row.started_at)">{{ shortTime(row.started_at) }}</time></template>
         <template #cell-model="{ row }"><div class="max-w-52 break-words text-sm font-medium" :title="row.model">{{ row.model }}</div><div v-if="row.reasoning_effort" class="text-xs surface-muted">{{ row.reasoning_effort }}</div></template>
         <template #cell-user_id="{ row }"><span class="text-xs">#{{ row.user_id }}</span><div class="max-w-40 break-all text-xs surface-muted">{{ row.key_name }}</div></template>
@@ -94,6 +100,7 @@ import { formatDateTime } from '@/utils/format'
 import { liveAbnormal, liveActive, liveCSVValue } from '@/utils/liveRequestPresentation'
 import { usageMoney } from '@/utils/usageInspection'
 import DataTable from '@/components/common/DataTable.vue'
+import Icon from '@/components/icons/Icon.vue'
 import Select from '@/components/common/Select.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import RefreshControl from '@/components/common/RefreshControl.vue'
@@ -204,5 +211,8 @@ onBeforeUnmount(() => { controller?.abort(); if (timer) clearInterval(timer) })
   .live-admin-workspace .live-request-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
   .live-admin-workspace .live-request-hint p { display: inline; }
   .live-admin-workspace .live-request-hint p + p::before { content: ' '; }
+  .live-admin-empty { flex-direction: row; justify-content: center; gap: 8px; }
+  .live-admin-empty-icon { width: 24px; height: 24px; margin-bottom: 0; }
+  .live-admin-empty-message { font-size: 13px; line-height: 20px; }
 }
 </style>
