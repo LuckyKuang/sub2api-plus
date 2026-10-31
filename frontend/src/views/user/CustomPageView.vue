@@ -28,7 +28,7 @@
         </div>
 
         <!-- Markdown mode with TOC -->
-        <div v-else-if="isMarkdownMode" class="flex h-full overflow-hidden">
+        <div v-else-if="isMarkdownMode" class="relative flex h-full overflow-hidden">
           <!-- TOC Sidebar -->
           <aside
             v-show="tocVisible"

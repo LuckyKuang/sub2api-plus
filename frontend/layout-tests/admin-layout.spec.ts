@@ -116,6 +116,65 @@ test('admin mobile cards retain every field, selection and actions within origin
   }
 })
 
+test('mobile prompt audit configuration keeps long group choices and save controls inside the page', async ({ page }, info) => {
+  // Acceptance source: every mobile admin page and its configuration tabs must
+  // fit the phone. A selected-group policy with a long name must not create an
+  // implicit min-content grid track wider than the configuration panel.
+  const theme = info.project.use.colorScheme === 'dark' ? 'dark' : 'light'
+  const locale = info.project.use.locale?.startsWith('zh') ? 'zh' : 'en'
+  const name = `PromptAuditGroup${'UnbrokenRoutingGroup'.repeat(6)}`
+  const writes: string[] = []
+  await page.route('**/api/v1/**', async route => {
+    const request = route.request()
+    const url = new URL(request.url())
+    if (request.method() !== 'GET') writes.push(`${request.method()} ${url.pathname}`)
+    let data: unknown = { items: [], total: 0, pages: 0, enabled: false }
+    if (url.pathname === '/api/v1/admin/prompt-audit/config') data = {
+      enabled: false, blocking_enabled: false, store_pass_events: false, effective_mode: 'off', strategy: 'priority',
+      worker_count: 4, queue_capacity: 100, scanners: ['prompt_injection'], all_groups: false, group_ids: [1],
+      endpoints: [], config_version: 1, updated_at: '2026-07-16T00:00:00Z', updated_by: 1, change_summary: '{}',
+    }
+    else if (url.pathname === '/api/v1/admin/groups/all') data = [{ id: 1, name, platform: 'openai', status: 'active' }]
+    else if (url.pathname === '/api/v1/admin/prompt-audit/runtime') data = {
+      process_status: 'disabled', effective_mode: 'off', expected_config_version: 1, active_config_version: 1,
+      worker_total: 0, worker_active: 0, queue_capacity: 100,
+      queue: { staging: 0, queued: 0, processing: 0, retry: 0, done: 0, failed: 0, active: 0 },
+      processed_total: 0, failed_total: 0, enqueued_total: 0, dropped_total: 0,
+      extraction_attempted: 0, extraction_succeeded: 0, extraction_empty: 0, extraction_failed: 0,
+      database_status: 'ok', redis_status: 'ok', endpoints: {},
+    }
+    await route.fulfill({ json: { code: 0, data } })
+  })
+  for (const width of [320, 390]) {
+    await page.setViewportSize({ width, height: 844 })
+    await page.goto(`/layout-tests/index.html?view=admin-layout&promptAudit=1&theme=${theme}&locale=${locale}`)
+    await page.locator('[data-test="tab-config"]').click()
+    const panel = page.locator('[data-test="tab-panel-config"]')
+    const choice = panel.getByRole('checkbox', { name: new RegExp(name) })
+    await expect(choice).toBeChecked()
+    await expect(panel.getByText(name, { exact: true })).toBeVisible()
+    const geometry = await panel.evaluate(element => ({
+      panelOverflow: element.scrollWidth - element.clientWidth,
+      documentOverflow: document.documentElement.scrollWidth - innerWidth,
+      fieldsets: [...element.querySelectorAll('fieldset')].map(fieldset => fieldset.scrollWidth - fieldset.clientWidth),
+    }))
+    expect(geometry.panelOverflow).toBeLessThanOrEqual(1)
+    expect(geometry.documentOverflow).toBeLessThanOrEqual(1)
+    expect(geometry.fieldsets.every(overflow => overflow <= 1)).toBe(true)
+    await choice.uncheck()
+    await expect(choice).not.toBeChecked()
+    const save = page.locator('[data-test="save-config"]')
+    await expect(save).toBeEnabled()
+    await save.scrollIntoViewIfNeeded()
+    expect(await save.evaluate(element => {
+      const rect = element.getBoundingClientRect()
+      return rect.left >= 0 && rect.right <= innerWidth
+        && element.contains(document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2))
+    })).toBe(true)
+  }
+  expect(writes).toEqual([])
+})
+
 // Acceptance: administrator usage adopts the user lists' separate rounded
 // controls, record body and footer cards, with 16px gaps. It retains the admin
 // fluid width, frozen columns, horizontal scrolling and live-window semantics.

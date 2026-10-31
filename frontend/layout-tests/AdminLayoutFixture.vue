@@ -1,5 +1,6 @@
 <template>
-  <UsageView v-if="usage" />
+  <PromptAuditView v-if="promptAudit" />
+  <UsageView v-else-if="usage" />
   <AppLayout v-else workspace>
     <TablePageLayout>
       <template #filters>
@@ -39,7 +40,9 @@ import { useAppStore } from '../src/stores/app'
 import { useAuthStore } from '../src/stores/auth'
 
 const usage = new URLSearchParams(location.search).get('usage') === '1'
+const promptAudit = new URLSearchParams(location.search).get('promptAudit') === '1'
 const UsageView = defineAsyncComponent(() => import('../src/views/admin/UsageView.vue'))
+const PromptAuditView = defineAsyncComponent(() => import('../src/features/prompt-audit/PromptAuditView.vue'))
 const app = useAppStore()
 app.publicSettingsLoaded = true
 app.versionLoaded = true
@@ -47,7 +50,7 @@ app.siteName = 'Admin layout review'
 app.sidebarCollapsed = false
 const auth = useAuthStore()
 auth.user = { id: 9998, role: 'admin', email: 'fixture@example.test', username: 'Reviewer', balance: 0 } as User
-if (usage) auth.token = 'browser-fixture-token'
+if (usage || promptAudit) auth.token = 'browser-fixture-token'
 localStorage.setItem('admin_guide', 'true')
 localStorage.setItem('admin_guide_9998_admin_v4_interactive', 'true')
 const { t } = useI18n()

@@ -82,8 +82,8 @@
           <!-- QR Code and Secret -->
           <template v-if="setupData">
             <div class="flex justify-center">
-              <div class="rounded-lg border border-gray-200 p-4 surface-opaque dark:border-dark-600">
-                <img :src="qrCodeDataUrl" alt="QR Code" class="h-48 w-48" />
+              <div class="max-w-full rounded-lg border border-gray-200 p-4 surface-opaque dark:border-dark-600">
+                <img :src="qrCodeDataUrl" alt="QR Code" class="aspect-square h-auto w-48 max-w-full" />
               </div>
             </div>
 
@@ -91,13 +91,13 @@
               <p class="text-sm mb-2 surface-muted">
                 {{ t('profile.totp.manualEntry') }}
               </p>
-              <div class="flex items-center justify-center gap-2">
-                <code class="rounded surface-inset px-3 py-2 font-mono text-sm">
+              <div class="flex min-w-0 items-center justify-center gap-2">
+                <code class="min-w-0 break-all rounded surface-inset px-3 py-2 font-mono text-sm">
                   {{ setupData.secret }}
                 </code>
                 <button
                   type="button"
-                  class="rounded p-1.5 hover:surface-hover surface-control surface-muted"
+                  class="shrink-0 rounded p-1.5 hover:surface-hover surface-control surface-muted"
                   @click="copySecret"
                 >
                   <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">

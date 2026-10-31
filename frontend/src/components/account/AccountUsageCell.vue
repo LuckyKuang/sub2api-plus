@@ -212,27 +212,22 @@
           {{ antigravityTierLabel }}
         </span>
         <!-- 不合格账户警告图标 -->
-        <span
-          v-if="hasIneligibleTiers"
-          class="group relative cursor-help"
-        >
-          <svg
-            class="h-3.5 w-3.5 text-red-500"
-            fill="currentColor"
-            viewBox="0 0 20 20"
-          >
-            <path
-              fill-rule="evenodd"
-              d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
-              clip-rule="evenodd"
-            />
-          </svg>
-          <span
-            class="pointer-events-none absolute left-0 top-full z-50 mt-1 w-80 whitespace-normal break-words rounded-[var(--surface-radius-panel)] px-3 py-2 text-xs leading-relaxed text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 surface-panel"
-          >
-            {{ t('admin.accounts.ineligibleWarning') }}
-          </span>
-        </span>
+        <HelpTooltip v-if="hasIneligibleTiers" width-class="w-80">
+          <template #trigger>
+            <svg
+              class="h-3.5 w-3.5 text-red-500"
+              fill="currentColor"
+              viewBox="0 0 20 20"
+            >
+              <path
+                fill-rule="evenodd"
+                d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                clip-rule="evenodd"
+              />
+            </svg>
+          </template>
+          {{ t('admin.accounts.ineligibleWarning') }}
+        </HelpTooltip>
       </div>
 
       <!-- Forbidden state (403) -->
@@ -475,37 +470,32 @@
           {{ geminiAuthTypeLabel }}
         </span>
         <!-- Help icon -->
-        <span
-          v-if="showGeminiQuotaPolicy"
-          class="group relative cursor-help"
-        >
-          <svg
-            class="h-3.5 w-3.5 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
-            fill="currentColor"
-            viewBox="0 0 20 20"
-          >
-            <path
-              fill-rule="evenodd"
-              d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z"
-              clip-rule="evenodd"
-            />
-          </svg>
-          <span
-            class="pointer-events-none absolute left-0 top-full z-50 mt-1 w-80 whitespace-normal break-words rounded-[var(--surface-radius-panel)] px-3 py-2 text-xs leading-relaxed text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 surface-panel"
-          >
-            <div class="font-semibold mb-1">{{ t('admin.accounts.gemini.quotaPolicy.title') }}</div>
-            <div class="mb-2 surface-muted">{{ t('admin.accounts.gemini.quotaPolicy.note') }}</div>
-            <div class="space-y-1">
-              <div><strong>{{ geminiQuotaPolicyChannel }}:</strong></div>
-              <div class="pl-2">• {{ geminiQuotaPolicyLimits }}</div>
-              <div class="mt-2">
-                <a :href="geminiQuotaPolicyDocsUrl" target="_blank" rel="noopener noreferrer" class="text-blue-400 hover:text-blue-300 underline">
-                  {{ t('admin.accounts.gemini.quotaPolicy.columns.docs') }} →
-                </a>
-              </div>
+        <HelpTooltip v-if="showGeminiQuotaPolicy" width-class="w-80">
+          <template #trigger>
+            <svg
+              class="h-3.5 w-3.5 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
+              fill="currentColor"
+              viewBox="0 0 20 20"
+            >
+              <path
+                fill-rule="evenodd"
+                d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z"
+                clip-rule="evenodd"
+              />
+            </svg>
+          </template>
+          <div class="font-semibold mb-1">{{ t('admin.accounts.gemini.quotaPolicy.title') }}</div>
+          <div class="mb-2 surface-muted">{{ t('admin.accounts.gemini.quotaPolicy.note') }}</div>
+          <div class="space-y-1">
+            <div><strong>{{ geminiQuotaPolicyChannel }}:</strong></div>
+            <div class="pl-2">• {{ geminiQuotaPolicyLimits }}</div>
+            <div class="mt-2">
+              <a :href="geminiQuotaPolicyDocsUrl" target="_blank" rel="noopener noreferrer" class="text-blue-400 hover:text-blue-300 underline">
+                {{ t('admin.accounts.gemini.quotaPolicy.columns.docs') }} →
+              </a>
             </div>
-          </span>
-        </span>
+          </div>
+        </HelpTooltip>
       </div>
 
       <!-- Usage data or unlimited flow -->
@@ -689,6 +679,7 @@ import { formatCompactNumber } from '@/utils/format'
 import { isOfficialGeminiBaseUrl } from '@/utils/geminiExplicitCache'
 import { supportsAccountQuota } from '@/utils/accountQuota'
 import UsageProgressBar from './UsageProgressBar.vue'
+import HelpTooltip from '@/components/common/HelpTooltip.vue'
 import AccountQuotaInfo from './AccountQuotaInfo.vue'
 import ClaudeResetCreditsCell from './ClaudeResetCreditsCell.vue'
 import OpenAIQuotaResetCell from './OpenAIQuotaResetCell.vue'

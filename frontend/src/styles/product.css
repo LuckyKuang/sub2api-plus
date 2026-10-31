@@ -133,11 +133,12 @@
 }
 .app-layout-user .user-record-cards :is(.user-record-selection, .user-record-actions) { grid-column: 1 / -1; }
 .app-layout-user .user-record-cards [data-field] { flex-direction: column; align-items: flex-start; gap: 4px; }
-.app-layout-user .user-record-cards [data-field] > div { width: 100%; text-align: left; }
+.app-layout-user .user-record-cards [data-field] > div { width: 100%; text-align: left; overflow-wrap: anywhere; }
 .app-layout-user .user-record-cards :is([data-field="model"], [data-field="group"], [data-field="group_name"]) :is(div, span) {
-  white-space: nowrap; word-break: normal; overflow-wrap: normal;
+  min-width: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere;
 }
-.app-layout-user .user-record-cards .truncate { max-width: 100%; overflow: visible; text-overflow: clip; }
+.app-layout-user .user-record-cards [data-field="group"] button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.app-layout-user .user-record-cards .truncate { max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .app-layout-user .user-record-cards [data-field] :is(.justify-end, .justify-center) { justify-content: flex-start; }
 .app-layout-user .user-record-cards .table-actions { justify-content: flex-start; }
 

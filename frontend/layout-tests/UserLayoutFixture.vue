@@ -49,6 +49,7 @@ const auditPages = {
   redeem: defineAsyncComponent(() => import('../src/views/user/RedeemView.vue')),
   affiliate: defineAsyncComponent(() => import('../src/views/user/AffiliateView.vue')),
   subscriptions: defineAsyncComponent(() => import('../src/views/user/SubscriptionsView.vue')),
+  'payment-result': defineAsyncComponent(() => import('../src/views/user/PaymentResultView.vue')),
 } as const
 const auditComponent = auditPage && Object.prototype.hasOwnProperty.call(auditPages, auditPage) ? auditPages[auditPage as keyof typeof auditPages] : null
 const dashboard = parameters.get('dashboard') === '1'

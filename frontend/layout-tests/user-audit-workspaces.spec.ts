@@ -235,3 +235,83 @@ for (const width of [1440, 2560]) {
     expect(writes).toEqual([])
   })
 }
+
+// Acceptance source: the mobile page audit requires long user-controlled labels
+// and order references to stay inside their cards, with fully reachable actions
+// at both a narrow phone width and the reviewed 390px viewport. Checking only
+// document overflow misses content clipped by overflow-hidden cards.
+for (const width of [320, 390]) {
+  test(`mobile subscription names and renewal actions remain inside their cards at ${width}px`, async ({ page }, info) => {
+    const { writes } = await interceptAuditAPI(page)
+    const longName = `MobileSubscription${'LongGroupName'.repeat(8)}`
+    await page.route(url => url.pathname === '/api/v1/subscriptions', route => route.fulfill({
+      json: { code: 0, data: [{ ...subscriptions[0], group: {
+        ...subscriptions[0]!.group, name: longName, description: 'UnbrokenDescription'.repeat(8),
+      } }] },
+    }))
+    await openAuditPage(page, 'subscriptions', info, width)
+    const card = page.getByTestId('subscription-card')
+    await expect(card).toHaveCount(1)
+    await expect(card.getByRole('heading', { name: longName })).toBeVisible()
+    const renewLabel = presentation(info).locale === 'zh' ? '续费' : 'Renew'
+    const renew = card.getByRole('button', { name: renewLabel })
+    await renew.scrollIntoViewIfNeeded()
+    const bounds = await card.evaluate(element => {
+      const cardRect = element.getBoundingClientRect()
+      const heading = element.querySelector('h3')!
+      const button = element.querySelector('button')!
+      const headingRect = heading.getBoundingClientRect()
+      const buttonRect = button.getBoundingClientRect()
+      return {
+        overflow: element.scrollWidth - element.clientWidth,
+        headingOverflow: heading.scrollWidth - heading.clientWidth,
+        headingInside: headingRect.left >= cardRect.left && headingRect.right <= cardRect.right,
+        buttonInside: buttonRect.left >= cardRect.left && buttonRect.right <= cardRect.right,
+        buttonHit: [0.15, 0.5, 0.85].every(position => button.contains(document.elementFromPoint(
+          buttonRect.left + buttonRect.width * position, buttonRect.top + buttonRect.height / 2,
+        ))),
+        documentOverflow: document.documentElement.scrollWidth - innerWidth,
+      }
+    })
+    expect(bounds.overflow).toBeLessThanOrEqual(1)
+    expect(bounds.headingOverflow).toBeLessThanOrEqual(1)
+    expect(bounds.headingInside).toBe(true)
+    expect(bounds.buttonInside).toBe(true)
+    expect(bounds.buttonHit).toBe(true)
+    expect(bounds.documentOverflow).toBeLessThanOrEqual(1)
+    await renew.click()
+    await expect(page).toHaveURL(/\/purchase\?tab=subscription&group=1$/)
+    expect(writes).toEqual([])
+  })
+
+  for (const resolved of [true, false]) {
+    test(`mobile payment result keeps a long ${resolved ? 'resolved' : 'return'} order reference and actions reachable at ${width}px`, async ({ page }, info) => {
+      await interceptAuditAPI(page)
+      const reference = `MOBILE${'1234567890'.repeat(12)}`
+      await page.route('**/api/v1/**/orders/verify', route => route.fulfill(resolved ? {
+        json: { code: 0, data: { out_trade_no: reference, status: 'FAILED', paid: false } },
+      } : { status: 404, json: { code: 404, message: 'Order not found' } }))
+      const { theme, locale } = presentation(info)
+      await page.setViewportSize({ width, height: 844 })
+      await page.goto(`/layout-tests/index.html?view=user-layout&auditPage=payment-result&theme=${theme}&locale=${locale}&out_trade_no=${reference}&trade_status=TRADE_CLOSED`)
+      const orderReference = page.getByText(reference, { exact: true })
+      await expect(orderReference).toBeVisible()
+      const card = page.locator('.card').filter({ has: orderReference })
+      expect(await card.evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
+      expect(await orderReference.evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1)
+      const actions = card.getByRole('button')
+      await expect(actions).toHaveCount(2)
+      for (const action of await actions.all()) {
+        await action.scrollIntoViewIfNeeded()
+        expect(await action.evaluate(element => {
+          const rect = element.getBoundingClientRect()
+          return rect.left >= 0 && rect.right <= innerWidth
+            && element.contains(document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2))
+        })).toBe(true)
+      }
+      await actions.last().click()
+      await expect(page).toHaveURL(/\/orders$/)
+    })
+  }
+}
