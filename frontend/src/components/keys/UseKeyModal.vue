@@ -152,7 +152,7 @@
                   @click="copyContent(file.content, index)"
                   class="flex flex-shrink-0 items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg transition-colors surface-control"
                   :class="copiedIndex === index
-                    ? 'bg-green-500/20 text-green-700 dark:text-green-400'
+                    ? 'bg-green-500/20 text-green-800 dark:text-green-400'
                     : 'surface-field text-gray-700 hover:bg-gray-200 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-600 dark:hover:text-white'"
                 >
                   <svg v-if="copiedIndex === index" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
