@@ -2340,24 +2340,38 @@ describe("admin SettingsView platform quota matrix", () => {
     try {
       await flushPromises();
       await openUsersTab(wrapper);
-      for (const source of ["email", "linuxdo", "oidc", "wechat", "github", "google", "dingtalk"]) {
-        await wrapper.get(`[data-testid="auth-source-${source}-enabled"]`).setValue(true);
-      }
+      // These independent fixture toggles can share one Vue render; the
+      // assertions below still inspect every source's actual rendered table.
+      await Promise.all(["email", "linuxdo", "oidc", "wechat", "github", "google", "dingtalk"].map(source =>
+        wrapper.get(`[data-testid="auth-source-${source}-enabled"]`).setValue(true),
+      ));
       const tables = wrapper.findAll("table").filter(table => table.find("thead th").text() === "平台");
       expect(tables).toHaveLength(8);
+      // Styles do not change during measurement. Resolve rem once and read
+      // each header once instead of rescanning the production stylesheet for
+      // the same root/header on every body cell.
+      const rootFontSize = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+      const paddingPixels = (value: string) => value.endsWith("rem")
+        ? Number.parseFloat(value) * rootFontSize
+        : cssPixels(value);
+      const sides = ["paddingLeft", "paddingRight"] as const;
       for (const table of tables) {
         const headers = table.findAll("thead th");
         expect(headers.map(cell => cell.text())).toEqual(["平台", "日限额 (USD)", "周限额 (USD)", "月限额 (USD, 30天滚动)"]);
+        const headerPaddings = headers.map(header => {
+          const style = getComputedStyle(header.element);
+          return sides.map(side => paddingPixels(style[side]));
+        });
         for (const row of table.findAll("tbody tr")) {
           expect(getComputedStyle(row.element).verticalAlign).toBe("middle");
           const cells = row.findAll("td");
           expect(cells).toHaveLength(4);
           cells.forEach((cell, index) => {
-            const headerStyle = getComputedStyle(headers[index].element);
             const cellStyle = getComputedStyle(cell.element);
-            for (const side of ["paddingLeft", "paddingRight"] as const) {
-              expect(cssPixels(cellStyle[side])).toBeGreaterThanOrEqual(12);
-              expect(cssPixels(headerStyle[side])).toBe(cssPixels(cellStyle[side]));
+            for (const [sideIndex, side] of sides.entries()) {
+              const padding = paddingPixels(cellStyle[side]);
+              expect(padding).toBeGreaterThanOrEqual(12);
+              expect(headerPaddings[index][sideIndex]).toBe(padding);
             }
           });
         }
