@@ -1,5 +1,5 @@
 <template>
-  <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+  <div class="grid grid-cols-1 gap-4 min-[375px]:grid-cols-2 lg:grid-cols-4">
     <!-- Today Revenue -->
     <div class="card min-w-0 p-4">
       <div class="flex min-w-0 flex-col items-start gap-3 sm:flex-row sm:items-center">
