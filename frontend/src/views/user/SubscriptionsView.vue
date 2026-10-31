@@ -44,7 +44,7 @@
         >
           <!-- Header -->
           <div
-            class="flex flex-col items-stretch justify-between gap-3 border-b border-gray-100 p-4 dark:border-dark-700 sm:flex-row sm:flex-wrap sm:items-start"
+            class="flex flex-col items-stretch gap-3 border-b border-gray-100 p-4 dark:border-dark-700"
           >
             <div class="flex min-w-0 flex-1 items-start gap-3">
               <div :class="['console-data-mark h-1.5 w-1.5 shrink-0 rounded-full', platformAccentDotClass(subscription.group?.platform || '')]" />
@@ -68,7 +68,7 @@
                 </div>
               </div>
             </div>
-            <div class="flex shrink-0 flex-wrap items-center gap-2">
+            <div class="flex shrink-0 flex-wrap items-center justify-between gap-2">
               <span
                 :class="[
                   'rounded-full px-2 py-0.5 text-xs font-medium',
@@ -94,16 +94,16 @@
           <!-- Usage Progress -->
           <div class="space-y-4 p-4">
             <!-- Expiration Info -->
-            <div v-if="subscription.expires_at" class="flex items-center justify-between text-sm">
-              <span class="surface-muted">{{
+            <div v-if="subscription.expires_at" class="flex items-start justify-between gap-3 text-sm">
+              <span class="shrink-0 whitespace-nowrap surface-muted">{{
                 t('userSubscriptions.expires')
               }}</span>
-              <span :class="getExpirationClass(subscription.expires_at)">
+              <span class="min-w-0 text-right" :class="getExpirationClass(subscription.expires_at)">
                 {{ formatExpirationDate(subscription.expires_at) }}
               </span>
             </div>
-            <div v-else class="flex items-center justify-between text-sm">
-              <span class="surface-muted">{{
+            <div v-else class="flex items-start justify-between gap-3 text-sm">
+              <span class="shrink-0 whitespace-nowrap surface-muted">{{
                 t('userSubscriptions.expires')
               }}</span>
               <span class="surface-muted">{{

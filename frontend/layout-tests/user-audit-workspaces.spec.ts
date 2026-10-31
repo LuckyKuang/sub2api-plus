@@ -236,6 +236,52 @@ for (const width of [1440, 2560]) {
   })
 }
 
+// Acceptance source: the desktop page audit requires subscription titles to use
+// the card's available width, with complete renewal actions below them and an
+// unbroken expiration label. Three cards per row remain part of UI_INTERACTION.
+for (const width of [1280, 1920]) {
+  test(`desktop subscription titles use the available card width without squeezing their actions at ${width}px`, async ({ page }, info) => {
+    const { writes } = await interceptAuditAPI(page)
+    const longName = `DesktopSubscription${'LongPlanName'.repeat(8)}`
+    await page.route(url => url.pathname === '/api/v1/subscriptions', route => route.fulfill({
+      json: { code: 0, data: [{ ...subscriptions[0], group: {
+        ...subscriptions[0]!.group, name: longName,
+      } }] },
+    }))
+    await openAuditPage(page, 'subscriptions', info, width)
+    const card = page.getByTestId('subscription-card')
+    const renewLabel = presentation(info).locale === 'zh' ? '续费' : 'Renew'
+    const renew = card.getByRole('button', { name: renewLabel })
+    await expect(renew).toBeVisible()
+    const geometry = await card.evaluate(element => {
+      const heading = element.querySelector('h3')!
+      const headingRect = heading.getBoundingClientRect()
+      const button = element.querySelector('button')!
+      const buttonRect = button.getBoundingClientRect()
+      const header = heading.closest('.border-b')!
+      const headerRect = header.getBoundingClientRect()
+      const expiryRow = element.querySelector('.space-y-4.p-4')!.firstElementChild!
+      const label = expiryRow.firstElementChild!
+      const labelRect = label.getBoundingClientRect()
+      return {
+        headerWidth: headerRect.width,
+        titleWidth: headingRect.width,
+        actionsBelowTitle: buttonRect.top >= headingRect.bottom,
+        expiryLabelHeight: labelRect.height,
+        expiryLabelLineHeight: parseFloat(getComputedStyle(label).lineHeight),
+        actionHit: button.contains(document.elementFromPoint(buttonRect.left + buttonRect.width / 2, buttonRect.top + buttonRect.height / 2)),
+        overflow: element.scrollWidth - element.clientWidth,
+      }
+    })
+    expect(geometry.titleWidth).toBeGreaterThan(geometry.headerWidth - 64)
+    expect(geometry.actionsBelowTitle).toBe(true)
+    expect(geometry.expiryLabelHeight).toBeLessThanOrEqual(geometry.expiryLabelLineHeight + 1)
+    expect(geometry.actionHit).toBe(true)
+    expect(geometry.overflow).toBeLessThanOrEqual(1)
+    expect(writes).toEqual([])
+  })
+}
+
 // Acceptance source: the mobile page audit requires long user-controlled labels
 // and order references to stay inside their cards, with fully reachable actions
 // at both a narrow phone width and the reviewed 390px viewport. Checking only
