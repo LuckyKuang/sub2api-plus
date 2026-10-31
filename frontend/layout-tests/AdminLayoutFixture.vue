@@ -1,5 +1,6 @@
 <template>
-  <AppLayout workspace>
+  <UsageView v-if="usage" />
+  <AppLayout v-else workspace>
     <TablePageLayout>
       <template #filters>
         <div class="flex flex-wrap items-center gap-3" data-testid="admin-toolbar">
@@ -25,7 +26,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { defineAsyncComponent, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppLayout from '../src/components/layout/AppLayout.vue'
 import TablePageLayout from '../src/components/layout/TablePageLayout.vue'
@@ -37,6 +38,8 @@ import type { User } from '../src/types'
 import { useAppStore } from '../src/stores/app'
 import { useAuthStore } from '../src/stores/auth'
 
+const usage = new URLSearchParams(location.search).get('usage') === '1'
+const UsageView = defineAsyncComponent(() => import('../src/views/admin/UsageView.vue'))
 const app = useAppStore()
 app.publicSettingsLoaded = true
 app.versionLoaded = true
@@ -44,6 +47,7 @@ app.siteName = 'Admin layout review'
 app.sidebarCollapsed = false
 const auth = useAuthStore()
 auth.user = { id: 9998, role: 'admin', email: 'fixture@example.test', username: 'Reviewer', balance: 0 } as User
+if (usage) auth.token = 'browser-fixture-token'
 localStorage.setItem('admin_guide', 'true')
 localStorage.setItem('admin_guide_9998_admin_v4_interactive', 'true')
 const { t } = useI18n()

@@ -10,7 +10,7 @@ The current tree integrates official `v0.2.19`, peeled commit
 `dece26153621959ccd7635814f4b2d08304e681a`, following the previously imported
 `0a2a29b32e6724714c69822296ccd05a6b86bfdd` snapshot. Plus is the authoritative
 implementation when upstream behavior conflicts with an intentional Plus contract.
-The candidate release is `v0.2.19+custom.001`; its mapping remains `planned`
+The candidate release is `v0.2.19+custom.002`; its mapping remains `planned`
 until publication and immutable artifact verification complete.
 
 The v0.2.19 follow-up adds configurable Gemini same-account retries, bound-cache
@@ -103,9 +103,9 @@ of a new release.
 ## Current Version
 
 ```text
-Git/GitHub: v0.2.19+custom.001
-Application: 0.2.19+custom.001
-GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.19-custom.001
+Git/GitHub: v0.2.19+custom.002
+Application: 0.2.19+custom.002
+GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.19-custom.002
 ```
 
 ## Release Mapping
@@ -187,6 +187,7 @@ GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.19-custom.001
 | `v0.2.18+custom.002` | `v0.2.18` | `ac1b8f1271be0d674fa6f074403c1410f30a3a81` | withdrawn |
 | `v0.2.18+custom.003` | `v0.2.18` | `ac1b8f1271be0d674fa6f074403c1410f30a3a81` | published |
 | `v0.2.19+custom.001` | `v0.2.19` | `dece26153621959ccd7635814f4b2d08304e681a` | published |
+| `v0.2.19+custom.002` | `v0.2.19` | `dece26153621959ccd7635814f4b2d08304e681a` | planned |
 
 `v0.2.15+custom.003` records the integrated official main snapshot in the
 Official Commit column. Its tagged official baseline remains
@@ -215,6 +216,11 @@ Plus writes `0.2.19+custom.001`. Official migrations 247/248 already entered
 Plus as immutable 302/303 during the preceding snapshot import; this tag adds
 no duplicate migrations. Seven-provider agent identities, audit boundaries,
 strict proxy ownership, frozen billing and the Plus UI remain authoritative.
+
+`v0.2.19+custom.002` retains the same official baseline and prepares the
+Codex CLI bridge, pricing and console updates accumulated since `.001`,
+including consistent administrator usage-record table surfaces. Its mapping
+remains planned until publication and immutable artifact verification.
 
 `v0.2.4+custom.006` is marked withdrawn because official `v0.2.5` was imported before that snapshot overlay was published. Do not reuse or retag `.006`.
 

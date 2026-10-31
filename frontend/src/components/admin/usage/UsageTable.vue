@@ -1,5 +1,5 @@
 <template>
-  <div :class="[flat ? '' : 'card overflow-hidden', { 'workspace-table-card': workspace, 'workspace-shell': workspace }]">
+  <div class="card overflow-hidden" :class="{ 'workspace-table-card': workspace, 'workspace-shell': workspace }">
     <div
       v-if="showIpGeoToolbar"
       class="flex items-center justify-end gap-2 border-b border-gray-200 px-4 py-2 dark:border-dark-700"
@@ -722,8 +722,6 @@ interface Props {
   showUpstreamEndpoint?: boolean
   /** User workspace: keep request metadata beneath the requested model. */
   modelMetadata?: boolean
-  /** 嵌入统一卡片内使用：去掉自身卡片外观 */
-  flat?: boolean
   workspace?: boolean
 }
 
@@ -736,7 +734,6 @@ const props = withDefaults(defineProps<Props>(), {
   showAccountBilling: true,
   showUpstreamEndpoint: true,
   modelMetadata: false,
-  flat: false,
   workspace: false
 })
 const emit = defineEmits<{

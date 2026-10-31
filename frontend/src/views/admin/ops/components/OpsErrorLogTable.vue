@@ -1,9 +1,10 @@
 <template>
-  <div class="flex h-full min-h-0 flex-col" :class="{ 'error-compact': compact }" :style="{ '--error-table-width': compactTableWidth + 'px' }">
-    <div class="flex min-h-0 flex-1 flex-col overflow-hidden" :class="flat ? '' : 'card'">
-      <IpGeoBatchToolbar :ips="rows.map((r) => r.client_ip)" @failed="emit('ipGeoBatchFailed')" />
+  <div class="flex h-full min-h-0 flex-col" :class="{ 'error-compact': compact, 'workspace-body gap-4': workspace }" :style="{ '--error-table-width': compactTableWidth + 'px' }">
+    <div class="card flex min-h-0 flex-1 flex-col overflow-hidden" :class="{ 'workspace-table-card workspace-shell': workspace }">
+      <IpGeoBatchToolbar :class="{ 'workspace-fixed': workspace }" :ips="rows.map((r) => r.client_ip)" @failed="emit('ipGeoBatchFailed')" />
 
       <DataTable
+        :class="{ 'workspace-table-viewport': workspace }"
         :columns="columns"
         :data="rows"
         :loading="loading"
@@ -181,9 +182,9 @@
       </DataTable>
     </div>
 
-    <div class="flex-shrink-0">
+    <div class="flex-shrink-0" :class="{ 'workspace-fixed': workspace }">
       <Pagination
-        v-if="total > 0"
+        v-if="workspace || total > 0"
         :total="total"
         :page="page"
         :page-size="pageSize"
@@ -337,8 +338,8 @@ interface Props {
   visibleColumnKeys?: string[]
   /** 运维弹窗优先展示时间和响应内容 */
   summaryFirst?: boolean
-  /** 嵌入统一卡片内使用：去掉自身卡片外观 */
-  flat?: boolean
+  /** Keep filters and pagination outside the bounded table viewport. */
+  workspace?: boolean
   compact?: boolean
   activeRowKey?: number
 }
