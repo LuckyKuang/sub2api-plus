@@ -456,6 +456,19 @@ configuration, secret-free config edits, hot global/account switches, gateway an
 probe endpoint/auth/identity/body preservation, native WS admission and absence of
 OAuth workspace leakage.
 
+Identity-source coverage also starts at the Responses builder, automatic
+Responses-capability probe, public model discovery, Codex manifest, embeddings,
+Responses input-token count, Messages token count and legacy compaction entrypoints.
+These regressions exercise enabled bridging, global disable and account disable
+with literal account/global/default identity expectations. The auxiliary inference
+cases also disable and re-enable the same running service between requests;
+setup-token accounts retain native transport throughout. Empty or invalid account
+identities inherit the valid global setting; only an empty or invalid global
+setting falls through to the compiled default. Tests check the transmitted
+credentials and single provider write alongside identity, so a correct header
+alone cannot hide a transport replay or an owner change. See the linked
+[regression inventory](OUTBOUND_IDENTITY.md#requirement-based-regression-coverage).
+
 The same switches cover model discovery, account connection/image/chat probes,
 the existing internal Codex usage inference probe, and supported WHAM usage,
 credit-detail and credit-consumption requests. They retain prepared protocol,
