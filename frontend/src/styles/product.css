@@ -193,3 +193,28 @@
 .app-layout-admin .record-cards [data-field] > div { width: 100%; text-align: left; overflow-wrap: anywhere; }
 .app-layout-admin .record-cards [data-field] :is(.justify-end, .justify-center) { justify-content: flex-start; }
 .app-layout-admin .record-cards .table-actions { justify-content: flex-start; }
+
+/* Phone records keep each short label and value together while allowing long
+   identifiers and composite values to wrap. */
+@media (max-width: 767px) {
+  .app-layout-admin .record-cards .record-card-fields {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+  .app-layout-admin .record-cards .record-card-fields > :is([data-field], .record-card-selection, .record-card-actions) {
+    margin-block: 0;
+  }
+  .app-layout-admin .record-cards [data-field] {
+    flex-direction: row;
+    gap: 12px;
+  }
+  .app-layout-admin .record-cards [data-field] > span {
+    flex: 0 0 34%;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .app-layout-admin .record-cards [data-field] > div {
+    flex: 1 1 0%;
+    width: auto;
+  }
+}

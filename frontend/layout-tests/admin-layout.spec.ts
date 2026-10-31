@@ -265,14 +265,11 @@ test('real admin usage lists separate controls, scrolling records and paging wit
     await expect(viewport.locator('table.record-table tbody tr:not([aria-hidden="true"])').first()).toContainText(`admin-${tab === 'usage' ? 'history' : tab === 'errors' ? 'error' : 'live'}-model-1`)
     const surfaces = [controls]
     if (tab === 'usage') surfaces.push(workspace.locator('.usage-history-refresh'))
-    if (tab === 'live') surfaces.push(workspace.locator('.card.workspace-fixed'))
+    if (tab === 'live') surfaces.push(workspace.locator('.card.workspace-fixed').first())
     surfaces.push(body)
     const pagination = workspace.locator('.pagination-card')
-    if (tab !== 'live') surfaces.push(pagination)
-    else {
-      await expect(pagination).toHaveCount(0)
-      await expect(viewport.locator('tbody tr:not([aria-hidden="true"])')).toHaveCount(48)
-    }
+    surfaces.push(pagination)
+    await expect(viewport.locator('tbody tr:not([aria-hidden="true"])')).toHaveCount(20)
     await assertAdminSurfaceStack(page, surfaces)
     const fixedBoxes = await Promise.all(surfaces.filter(surface => surface !== body).map(surface => surface.boundingBox()))
     await wheelScroll(page, viewport, 500)
@@ -286,28 +283,27 @@ test('real admin usage lists separate controls, scrolling records and paging wit
       await viewport.evaluate(el => { el.scrollLeft = el.scrollWidth })
       expect(Math.abs((await frozen.boundingBox())!.x - left)).toBeLessThanOrEqual(1)
     }
-    if (tab !== 'live') {
-      await pagination.getByRole('button', { name: locale === 'zh' ? '下一页' : 'Next', exact: true }).filter({ visible: true }).click()
-      await expect(viewport.locator('tbody tr:not([aria-hidden="true"])').first()).toContainText(`admin-${tab === 'usage' ? 'history' : 'error'}-model-21`)
-    }
+    await pagination.getByRole('button', { name: locale === 'zh' ? '下一页' : 'Next', exact: true }).filter({ visible: true }).click()
+    await expect(viewport.locator('tbody tr:not([aria-hidden="true"])').first()).toContainText(`admin-${tab === 'usage' ? 'history' : tab === 'errors' ? 'error' : 'live'}-model-21`)
   }
 })
 
-test('empty admin history and errors keep separate visible pagination cards', async ({ page }, info) => {
+test('empty admin live, history and errors keep separate visible pagination cards', async ({ page }, info) => {
   const theme = info.project.use.colorScheme === 'dark' ? 'dark' : 'light'
   const locale = info.project.use.locale?.startsWith('zh') ? 'zh' : 'en'
   await mockAdminUsage(page, true)
   await page.setViewportSize({ width: 1440, height: 1000 })
   await page.goto(`/layout-tests/index.html?view=admin-layout&usage=1&theme=${theme}&locale=${locale}`)
   const panel = page.getByTestId('usage-records-panel')
-  for (const tab of ['usage', 'errors']) {
+  for (const tab of ['usage', 'errors', 'live']) {
     await panel.locator(`[data-tab="${tab}"]`).click()
-    const workspace = panel.locator(tab === 'usage' ? '.usage-history-workspace' : '.usage-errors-workspace')
+    const workspace = panel.locator(tab === 'usage' ? '.usage-history-workspace' : tab === 'errors' ? '.usage-errors-workspace' : '.live-admin-workspace')
     const footer = workspace.locator('.pagination-card')
     await expect(footer).toBeInViewport()
     await expect(footer.getByRole('button', { name: locale === 'zh' ? '下一页' : 'Next', exact: true }).filter({ visible: true })).toBeDisabled()
     expect(await footer.evaluate(el => el.closest('.workspace-table-card'))).toBeNull()
-    await expect(workspace.locator('.workspace-table-viewport .empty-state')).toBeVisible()
+    if (tab === 'live') await expect(workspace.locator('.workspace-table-viewport').getByText(locale === 'zh' ? '暂无数据' : 'No data found', { exact: true })).toBeVisible()
+    else await expect(workspace.locator('.workspace-table-viewport .empty-state')).toBeVisible()
   }
 })
 
@@ -330,19 +326,67 @@ test('real admin usage cards and paging remain reachable inside phone shell inse
       expect(Math.abs(390 - box.x - box.width - 12)).toBeLessThanOrEqual(1)
     }
     if (tab === 'live') {
-      await expect(body.locator('article')).toHaveCount(48)
+      await expect(body.locator('article')).toHaveCount(20)
       const first = body.locator('article').first()
       await first.getByRole('button', { name: locale === 'zh' ? '更多字段' : 'More fields', exact: true }).click()
       await expect(first.locator('dl')).toBeVisible()
       await expect(first.locator('dl')).toContainText('Admin layout key')
-      await expect(workspace.locator('.pagination-card')).toHaveCount(0)
-    } else {
-      const footer = workspace.locator('.pagination-card')
-      await footer.scrollIntoViewIfNeeded()
-      await expect(footer).toBeInViewport()
-      await footer.getByRole('button', { name: locale === 'zh' ? '下一页' : 'Next', exact: true }).filter({ visible: true }).click()
-      await expect(body.getByText(`admin-${tab === 'usage' ? 'history' : 'error'}-model-21`, { exact: true })).toHaveCount(1)
     }
+    const footer = workspace.locator('.pagination-card')
+    await footer.scrollIntoViewIfNeeded()
+    await expect(footer).toBeInViewport()
+    await footer.getByRole('button', { name: locale === 'zh' ? '下一页' : 'Next', exact: true }).filter({ visible: true }).click()
+    if (tab === 'live') await expect(body.locator('article').first()).toContainText('admin-live-model-21')
+    else await expect(body.getByText(`admin-${tab === 'usage' ? 'history' : 'error'}-model-21`, { exact: true })).toHaveCount(1)
     expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false)
+  }
+})
+
+// User audit requirement: admin live requests need an independently fixed
+// bottom pagination card, including in short desktop windows and empty filters.
+test('admin live paging stays at the workspace bottom while records scroll', async ({ page }, info) => {
+  const theme = info.project.use.colorScheme === 'dark' ? 'dark' : 'light'
+  const locale = info.project.use.locale?.startsWith('zh') ? 'zh' : 'en'
+  await mockAdminUsage(page)
+  for (const [width, height] of [[1280, 800], [1440, 600], [1920, 1080]]) {
+    await page.setViewportSize({ width, height })
+    await page.goto(`/layout-tests/index.html?view=admin-layout&usage=1&theme=${theme}&locale=${locale}`)
+    const panel = page.getByTestId('usage-records-panel')
+    await panel.locator('[data-tab="live"]').click()
+    const workspace = panel.locator('.live-admin-workspace')
+    const footer = workspace.locator('.pagination-card')
+    const viewport = workspace.locator('.workspace-table-viewport')
+    const rows = viewport.locator('tbody tr:not([aria-hidden="true"])')
+    await expect(rows).toHaveCount(20)
+    await expect(rows.first()).toContainText('admin-live-model-1')
+    const firstRecord = (await rows.first().boundingBox())!
+    const recordViewport = (await viewport.boundingBox())!
+    expect(firstRecord.y).toBeGreaterThanOrEqual(recordViewport.y)
+    expect(firstRecord.y + firstRecord.height).toBeLessThanOrEqual(recordViewport.y + recordViewport.height)
+    await expect(footer).toBeInViewport()
+    expect(await footer.evaluate(element => element.closest('.workspace-table-card'))).toBeNull()
+    const before = (await footer.boundingBox())!
+    const bounds = (await workspace.boundingBox())!
+    expect(Math.abs(before.y + before.height - bounds.y - bounds.height)).toBeLessThanOrEqual(1)
+    if (height === 600) await page.screenshot({ path: info.outputPath('live-pagination-before-scroll.png') })
+    await wheelScroll(page, viewport, 600)
+    await expect.poll(() => viewport.evaluate(element => element.scrollTop)).toBeGreaterThan(0)
+    expect(await footer.boundingBox()).toEqual(before)
+    if (height === 600) await page.screenshot({ path: info.outputPath('live-pagination-after-scroll.png') })
+    const next = footer.getByRole('button', { name: locale === 'zh' ? '下一页' : 'Next', exact: true }).filter({ visible: true })
+    await next.click()
+    await expect(rows.first()).toContainText('admin-live-model-21')
+    await expect.poll(() => viewport.evaluate(element => element.scrollTop)).toBe(0)
+    await next.click()
+    await expect(rows).toHaveCount(8)
+    await expect(rows.first()).toContainText('admin-live-model-41')
+    await expect(next).toBeDisabled()
+    await workspace.locator('[role="group"] button').nth(2).click()
+    await expect(viewport.getByText(locale === 'zh' ? '暂无数据' : 'No data found', { exact: true })).toBeVisible()
+    await expect(footer).toBeInViewport()
+    await expect(footer.locator('[aria-current="page"]')).toHaveText('1')
+    await expect(next).toBeDisabled()
+    expect(await footer.boundingBox()).toEqual(before)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth || document.documentElement.scrollHeight > innerHeight)).toBe(false)
   }
 })
