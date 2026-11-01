@@ -5,6 +5,7 @@
 
 import { apiClient } from '../client'
 import type { BillingMode, ChannelStatus, BillingModelSource } from '@/constants/channel'
+import { clearAvailableChannelCatalogCache } from '@/utils/availableChannelCatalogCache'
 
 export type { BillingMode } from '@/constants/channel'
 
@@ -153,6 +154,7 @@ export async function getById(id: number): Promise<Channel> {
  */
 export async function create(req: CreateChannelRequest): Promise<Channel> {
   const { data } = await apiClient.post<Channel>('/admin/channels', req)
+  clearAvailableChannelCatalogCache()
   return data
 }
 
@@ -161,6 +163,7 @@ export async function create(req: CreateChannelRequest): Promise<Channel> {
  */
 export async function update(id: number, req: UpdateChannelRequest): Promise<Channel> {
   const { data } = await apiClient.put<Channel>(`/admin/channels/${id}`, req)
+  clearAvailableChannelCatalogCache()
   return data
 }
 
@@ -169,6 +172,7 @@ export async function update(id: number, req: UpdateChannelRequest): Promise<Cha
  */
 export async function remove(id: number): Promise<void> {
   await apiClient.delete(`/admin/channels/${id}`)
+  clearAvailableChannelCatalogCache()
 }
 
 /** 单模型参考价状态。priced 之外的值都不能被当成「已填价」使用。 */

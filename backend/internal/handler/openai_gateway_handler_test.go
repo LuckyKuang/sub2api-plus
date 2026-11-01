@@ -2013,6 +2013,7 @@ type openAIResponsesWSUsageLogCase struct {
 	midPayload                string
 	secondPayload             string
 	terminalEventType         string
+	reportedModel             string
 	userAgent                 *string
 	ingressMode               string
 	channelMapping            map[string]string
@@ -3430,11 +3431,16 @@ func runOpenAIResponsesWebSocketUsageLogCase(t *testing.T, tc openAIResponsesWSU
 				}
 			}
 
+			reportedModel := tc.reportedModel
+			if reportedModel == "" {
+				reportedModel = gjson.GetBytes(payload, "model").String()
+			}
+
 			response := fmt.Sprintf(
 				`{"type":%q,"response":{"id":"resp_usage_e2e_%d","model":%q,"usage":{"input_tokens":2,"output_tokens":1}}}`,
 				terminalEventType,
 				turn,
-				gjson.GetBytes(payload, "model").String(),
+				reportedModel,
 			)
 			writeCtx, cancelWrite := context.WithTimeout(r.Context(), 3*time.Second)
 			writeErr := conn.Write(writeCtx, coderws.MessageText, []byte(response))

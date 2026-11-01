@@ -315,7 +315,7 @@ func TestPlatformPricingFallbackAdmission_PriceResolutionDoesNotGrantGroupAllowl
 	resolved := NewModelPricingResolver(channels, billing).Resolve(ctx, PricingInput{Model: model, Group: group, GroupID: &group.ID})
 	require.Equal(t, PricingSourcePlatformFallback, resolved.Source)
 	require.NotNil(t, resolved.BasePricing)
-	require.Equal(t, "gpt-5.4", resolved.BasePricing.FallbackModel)
+	require.Equal(t, "gpt-6.1-sol", resolved.BasePricing.FallbackModel)
 	require.False(t, group.ModelAllowlist.Allows(model), "a priced request must remain forbidden by its original group allowlist")
 	require.Equal(t, []string{"gpt-5.4"}, group.ModelAllowlist.Models)
 }

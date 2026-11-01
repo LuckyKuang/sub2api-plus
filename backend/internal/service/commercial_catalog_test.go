@@ -118,7 +118,9 @@ func TestCommercialCatalogImageRequestCardKeepsIndependentBaseAndRequestPolicy(t
 		ModelPricing: []ChannelModelPricing{{Platform: PlatformOpenAI, Models: []string{"public-image"}, BillingMode: BillingModePerRequest, PerRequestPrice: testPtrFloat64(0.2)}},
 	}
 	routes := &compositeRouteRepoStub{routes: []CompositeModelRoute{{ID: 1, GroupID: 8, PublicModel: "public-image", MatchType: "exact", Endpoint: "images", TargetPlatform: PlatformOpenAI, UpstreamModel: "gpt-image-2", Enabled: true}}}
-	channel := Channel{ID: 1, Status: StatusActive, GroupIDs: []int64{8}, BillingModelSource: BillingModelSourceRequested}
+	channel := Channel{ID: 1, Status: StatusActive, GroupIDs: []int64{8}, BillingModelSource: BillingModelSourceRequested,
+		ModelPricing: []ChannelModelPricing{{Platform: PlatformOpenAI, Models: []string{"public-image"}}},
+	}
 	svc := newPlazaServiceWithBilling([]Channel{channel}, nil, nil, nil)
 	svc.SetCommercialCatalogSources(routes, nil)
 	catalog, err := svc.ListAvailableCatalog(context.Background(), []Group{group})
@@ -294,4 +296,111 @@ func TestCommercialCatalogSuppressesUnsupportedEndpointAndAmbiguousAliases(t *te
 	out, err := svc.ListAvailableCatalog(context.Background(), []Group{{ID: 1, Platform: PlatformComposite}})
 	require.NoError(t, err)
 	require.Empty(t, out[0].Models)
+}
+
+func TestCommercialCatalogFollowsCurrentChannelPricing(t *testing.T) {
+	// Bug requirement: deleting a channel's priced models must remove its public
+	// offers even while account/channel mappings, group prices, routes and global
+	// reference prices still contain them. Another channel must remain unchanged.
+	for _, platform := range []string{PlatformOpenAI, PlatformComposite} {
+		t.Run(platform, func(t *testing.T) {
+			groups := []Group{
+				{ID: 1, Name: "A", Platform: platform, Status: StatusActive, SubscriptionType: SubscriptionTypeSubscription,
+					ModelPricing: []ChannelModelPricing{{Platform: PlatformOpenAI, Models: []string{"gpt-5"}, InputPrice: testPtrFloat64(.000007)}}},
+				{ID: 2, Name: "B", Platform: platform, Status: StatusActive, SubscriptionType: SubscriptionTypeSubscription},
+			}
+			channels := []Channel{
+				plazaPricedChannel(1, "A", []int64{1}, PlatformOpenAI, "gpt-5", "gpt-5.1"),
+				plazaPricedChannel(2, "B", []int64{2}, PlatformOpenAI, "gpt-5"),
+			}
+			channels[0].ModelMapping = map[string]map[string]string{PlatformOpenAI: {"gpt-5": "gpt-5", "gpt-5.1": "gpt-5.1"}}
+			pricing := mustCatalogFromJSON(`{"gpt-5":{"litellm_provider":"openai","mode":"chat","input_cost_per_token":0.000002,"output_cost_per_token":0.000004}}`)
+			svc := newPlazaServiceWithBilling(channels, groups, nil, pricing)
+			svc.channelRepo = &mockChannelRepository{listAllFn: func(context.Context) ([]Channel, error) { return channels, nil }}
+			svc.SetCommercialCatalogSources(&compositeRouteRepoStub{routes: []CompositeModelRoute{
+				{ID: 1, GroupID: 1, PublicModel: "gpt-5", MatchType: CompositeRouteMatchExact, Endpoint: CompositeRouteEndpointResponses, TargetPlatform: PlatformOpenAI, UpstreamModel: "gpt-5", Enabled: true},
+			}}, &commercialAccountsStub{byGroup: map[int64][]CommercialModelMapping{
+				1: {{Platform: PlatformOpenAI, ModelMapping: map[string]any{"gpt-5": "gpt-5"}}},
+			}})
+			assertModels := func(want []string) {
+				for _, sale := range []bool{false, true} {
+					var catalog []CatalogGroup
+					var err error
+					if sale {
+						catalog, err = svc.ListSaleCatalog(context.Background(), []int64{1, 2})
+					} else {
+						catalog, err = svc.ListAvailableCatalog(context.Background(), groups)
+					}
+					require.NoError(t, err)
+					require.Len(t, catalog, 2)
+					names := make([]string, 0, len(catalog[0].Models))
+					for _, offer := range catalog[0].Models {
+						names = append(names, offer.Name)
+					}
+					require.Equal(t, want, names)
+					require.Len(t, catalog[1].Models, 1)
+					require.Equal(t, "gpt-5", catalog[1].Models[0].Name)
+				}
+			}
+			assertModels([]string{"gpt-5", "gpt-5.1"})
+			channels[0].ModelPricing[0].Models = []string{"gpt-5.1"}
+			assertModels([]string{"gpt-5.1"})
+			channels[0].ModelPricing = nil
+			assertModels([]string{})
+			channels[0].ModelPricing = []ChannelModelPricing{{Platform: PlatformOpenAI, Models: []string{"gpt-5"}, InputPrice: testPtrFloat64(0)}}
+			assertModels([]string{"gpt-5"})
+			// Existing trailing-wildcard pricing still covers finite public IDs;
+			// narrowing its prefix must remove models outside that price rule.
+			channels[0].ModelPricing[0].Models = []string{"GPT-5.1*"}
+			assertModels([]string{"gpt-5.1"})
+			channels[0].ModelPricing[0].Models = []string{"GPT-*"}
+			assertModels([]string{"gpt-5", "gpt-5.1"})
+		})
+	}
+}
+
+func TestCommercialCatalogChannelPricingScopesSupplierAndAllowsMissingPrices(t *testing.T) {
+	// Configured membership is independent of price completeness, zero prices,
+	// and casing. A same-named model from another supplier is a different offer.
+	ch := plazaPricedChannel(1, "A", []int64{1}, PlatformOpenAI, "SHARED", "unpriced")
+	ch.ModelPricing[0].InputPrice, ch.ModelPricing[0].OutputPrice = nil, nil
+	ch.ModelPricing = append(ch.ModelPricing, ChannelModelPricing{Platform: PlatformStepFun, Models: []string{"free"}, InputPrice: testPtrFloat64(0), OutputPrice: testPtrFloat64(0)})
+	svc := newPlazaServiceWithBilling([]Channel{ch}, nil, nil, nil)
+	svc.billingService.frozenPricingFallbackModels = map[string]string{PlatformOpenAI: ""}
+	svc.SetCommercialCatalogSources(nil, &commercialAccountsStub{byGroup: map[int64][]CommercialModelMapping{1: {
+		{Platform: PlatformOpenAI, ModelMapping: map[string]any{"shared": "private", "unpriced": "private"}},
+		{Platform: PlatformStepFun, ModelMapping: map[string]any{"removed": "private", "free": "private"}},
+	}}})
+	out, err := svc.ListAvailableCatalog(context.Background(), []Group{{ID: 1, Platform: PlatformComposite}})
+	require.NoError(t, err)
+	require.Len(t, out[0].Models, 3)
+	require.Equal(t, "SHARED", out[0].Models[0].Name)
+	require.Equal(t, PlatformOpenAI, out[0].Models[0].Platform)
+	require.Equal(t, "unpriced", out[0].Models[1].Name)
+	require.Equal(t, "unknown", out[0].Models[1].PriceStatus)
+	require.Equal(t, "free", out[0].Models[2].Name)
+	require.Equal(t, "resolved", out[0].Models[2].PriceStatus)
+	require.Zero(t, *out[0].Models[2].Pricing.InputPrice)
+}
+
+func TestCommercialCatalogChannelPricingScopesRoutedSuppliers(t *testing.T) {
+	// A route must not restore a supplier removed from channel pricing, even
+	// when the same public model is still priced under another supplier.
+	channels := []Channel{plazaPricedChannel(1, "A", []int64{1}, PlatformOpenAI, "shared")}
+	svc := newPlazaServiceWithBilling(channels, nil, nil, nil)
+	svc.channelRepo = &mockChannelRepository{listAllFn: func(context.Context) ([]Channel, error) { return channels, nil }}
+	svc.SetCommercialCatalogSources(&compositeRouteRepoStub{routes: []CompositeModelRoute{
+		{ID: 1, GroupID: 1, PublicModel: "shared", MatchType: CompositeRouteMatchExact, Endpoint: CompositeRouteEndpointChatCompletions, TargetPlatform: PlatformStepFun, UpstreamModel: "step-3.5-flash", Enabled: true},
+	}}, nil)
+	groups := []Group{{ID: 1, Platform: PlatformComposite}}
+	out, err := svc.ListAvailableCatalog(context.Background(), groups)
+	require.NoError(t, err)
+	require.Empty(t, out[0].Models)
+
+	channels[0].ModelPricing = append(channels[0].ModelPricing, ChannelModelPricing{Platform: PlatformStepFun, Models: []string{"shared"}})
+	out, err = svc.ListAvailableCatalog(context.Background(), groups)
+	require.NoError(t, err)
+	require.Len(t, out[0].Models, 1)
+	require.Equal(t, PlatformStepFun, out[0].Models[0].Platform)
+	require.Equal(t, "shared", out[0].Models[0].Name)
 }

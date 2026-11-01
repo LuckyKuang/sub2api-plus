@@ -275,31 +275,8 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	if protectedMismatch {
 		billingModels = []string{codexAutoReviewModel}
 	}
-	// Codex 协议账号：服务端经 openai-model 响应头 / terminal 事件自报实际服务
-	// 模型（服务端模型覆盖信号）。没有已接受的公开价卡时，与基线计费模型
-	// 不一致的自报模型可校正计费记录（不改写下游事件）。公开价卡、不可识别
-	// 定价、观测冲突或媒体计费保留基线候选链；原始模型观测仍独立记录。
-	if account.UsesOpenAICodexProtocol() && publicPriceModel == "" && !protectedMismatch &&
-		!result.UpstreamResponseModelConflict &&
-		result.ImageCount == 0 && result.VideoCount == 0 && result.WebSearchCalls == 0 &&
-		result.AudioUsage == nil && result.SearchCount == 0 {
-		if serverModel := strings.TrimSpace(result.UpstreamResponseModel); serverModel != "" &&
-			!strings.EqualFold(serverModel, firstUsageBillingModel(billingModels)) {
-			if identified, _ := s.hasIdentifiedOpenAIResponsePricing(ctx, serverModel, apiKey); identified {
-				logger.L().Info("codex_server_model_billing_correction",
-					zap.String("component", "service.openai_gateway"),
-					zap.String("event", "billing.codex_server_model_correction"),
-					zap.String("request_id", result.RequestID),
-					zap.String("baseline_billing_model", firstUsageBillingModel(billingModels)),
-					zap.String("server_model", serverModel),
-					zap.Int64("account_id", account.ID),
-				)
-				serverModels := s.filterCNProviderBillingModelCandidates(
-					ctx, account, apiKey, usageBillingModelCandidates(serverModel))
-				billingModels = append(serverModels, billingModels...)
-			}
-		}
-	}
+	// Upstream model observations are diagnostic evidence. Only the explicit
+	// response_model path below may replace the selected billing candidate.
 	serviceTier := ""
 	if result.ServiceTier != nil {
 		serviceTier = strings.TrimSpace(*result.ServiceTier)

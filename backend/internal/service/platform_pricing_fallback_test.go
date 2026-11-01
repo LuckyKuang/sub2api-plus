@@ -33,20 +33,20 @@ func TestPlatformPricingFallback_DefaultsHaveExactSystemPricesForAllConcretePlat
 		platform, model string
 		input, output   float64
 	}{
-		{"anthropic", "claude-sonnet-5", 2e-6, 10e-6},
-		{"openai", "gpt-5.4", 2.5e-6, 15e-6},
+		{"anthropic", "claude-opus-5-5", 4e-6, 20e-6},
+		{"openai", "gpt-6.1-sol", 2e-6, 10e-6},
 		{"gemini", "gemini-3.8-flash", 0.75e-6, 3.75e-6},
 		{"antigravity", "gemini-3.8-flash", 0.75e-6, 3.75e-6},
 		{"grok", "grok-4.6", 2e-6, 6e-6},
 		{"kimi", "kimi-k3", 3e-6, 15e-6},
 		{"zhipu", "glm-5.3", 1.4e-6, 4.4e-6},
-		{"deepseek", "deepseek-v4-flash", 0.15e-6, 0.60e-6},
+		{"deepseek", "deepseek-v4.1-flash", 0.15e-6, 0.60e-6},
 		{"minimax", "minimax-m3", 0.60e-6, 2.40e-6},
 		{"stepfun", "step-5-preview", 1e-6, 2.70e-6},
 		{"opencode_go", "glm-5.3", 1.4e-6, 4.4e-6},
 		{"typesafe", "jev-latest", 0.042e-6, 0},
-		{"command_code", "deepseek-v4-flash", 0.15e-6, 0.60e-6},
-		{"cline", "deepseek-v4-flash", 0.15e-6, 0.60e-6},
+		{"command_code", "deepseek-v4.1-flash", 0.15e-6, 0.60e-6},
+		{"cline", "deepseek-v4.1-flash", 0.15e-6, 0.60e-6},
 	}
 	defaults := DefaultPricingFallbackModels()
 	require.Len(t, defaults, 14)

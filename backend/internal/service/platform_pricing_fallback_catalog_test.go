@@ -92,6 +92,7 @@ func TestPlatformPricingFallback_RestrictedCatalogRecognizesExplicitGroupCardsWh
 	}}}
 	channel := Channel{ID: 1, Status: StatusActive, RestrictModels: true, GroupIDs: []int64{group.ID},
 		BillingModelSource: BillingModelSourceChannelMapped,
+		ModelPricing:       []ChannelModelPricing{{Platform: PlatformOpenAI, Models: []string{model}}},
 		ModelMapping:       map[string]map[string]string{PlatformOpenAI: {model: model}}}
 	svc := newPlazaServiceWithBilling([]Channel{channel}, nil, map[int64]string{group.ID: PlatformOpenAI}, nil)
 	svc.billingService.frozenPricingFallbackModels = map[string]string{PlatformOpenAI: ""}
@@ -112,6 +113,7 @@ func TestPlatformPricingFallback_RestrictedCatalogRecognizesExplicitGroupCardsWh
 func TestPlatformPricingFallback_CatalogPinsOneSettingsGenerationBeforeReadingChannels(t *testing.T) {
 	configured := map[string]string{PlatformOpenAI: "gpt-5.4-mini"}
 	channel := Channel{ID: 1, Status: StatusActive, GroupIDs: []int64{77},
+		ModelPricing: []ChannelModelPricing{{Platform: PlatformOpenAI, Models: []string{"first-unpublished-sku", "second-unpublished-sku"}}},
 		ModelMapping: map[string]map[string]string{PlatformOpenAI: {
 			"first-unpublished-sku": "first-unpublished-sku", "second-unpublished-sku": "second-unpublished-sku",
 		}}}

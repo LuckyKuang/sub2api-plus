@@ -67,22 +67,24 @@ All concrete platforms in the shared registry have an independent entry:
 
 | Platform | Default fallback price model |
 | --- | --- |
-| `anthropic` | `claude-sonnet-5` |
-| `openai` | `gpt-5.4` |
+| `anthropic` | `claude-opus-5-5` |
+| `openai` | `gpt-6.1-sol` |
 | `gemini` | `gemini-3.8-flash` |
 | `antigravity` | `gemini-3.8-flash` |
 | `grok` | `grok-4.6` |
 | `kimi` | `kimi-k3` |
 | `zhipu` | `glm-5.3` |
-| `deepseek` | `deepseek-v4-flash` |
+| `deepseek` | `deepseek-v4.1-flash` |
 | `minimax` | `minimax-m3` |
 | `stepfun` | `step-5-preview` |
 | `opencode_go` | `glm-5.3` |
 | `typesafe` | `jev-latest` |
-| `command_code` | `deepseek-v4-flash` |
-| `cline` | `deepseek-v4-flash` |
+| `command_code` | `deepseek-v4.1-flash` |
+| `cline` | `deepseek-v4.1-flash` |
 
 These defaults name existing price cards and introduce no new price numbers.
+Saved explicit model choices and disabled entries remain overrides after a
+default update; resetting the setting with `{}` adopts the current defaults.
 `composite` is not a concrete supplier: its request uses the resolved target
 platform's entry. Aggregators such as OpenCode, Command Code and Cline retain
 their own entries and may explicitly name an existing global SKU from any
@@ -173,11 +175,21 @@ An explicit public model price survives Composite routing and account-level
 model mapping. A missing/empty card retains normal concrete-model fallbacks.
 Explicit `upstream` or `response_model` billing sources keep their selected
 models; `channel_mapped` keeps the actual channel mapping when one exists.
-Codex server-model correction also preserves an accepted public card, including
-explicit zero and per-request prices. The reported upstream model remains in
-diagnostics. With no accepted public card, an empty card, an explicit billing
-source that selects another model, or accepted version-1 price selection, the
-existing identified server-model correction remains available.
+Upstream response headers and terminal events are diagnostic evidence. They
+never implicitly replace the requested, channel-mapped or upstream-selected
+billing model, including for Codex OAuth/setup-token accounts and restored
+version-1 tasks. For example, `gpt-6-luna` mapped by the channel to `gpt-6-sol`
+uses the Sol price; a request for `gpt-6.1-sol` still uses its own price when the
+provider reports `gpt-6-luna`. Missing channel cards continue to use the selected
+SKU's global/system price and then the concrete platform's configured fallback.
+Explicit zero remains zero. The original request, sent model and reported model
+remain independently visible in usage diagnostics.
+OpenAI Composite selected-account reservations honor the same explicit requested or
+channel-mapped SKU, even when the credential owner maps it to another wire model.
+Only an administrator's explicit `response_model` selection may adopt a reported
+model, subject to the existing identified-price, no-conflict, no-media and
+non-increasing-price protections; it cannot turn a paid baseline free or bypass
+a channel retail price with an unrelated system card.
 Catalog, reservation and settlement share this price-model selection, while
 platform/model selling factors always use the public model and actual supplier.
 New durable pricing evidence uses private snapshot version 2 for this price

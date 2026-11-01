@@ -118,7 +118,8 @@ func (s *ModelPlazaService) ListAvailableCatalog(ctx context.Context, groups []G
 		}
 	}
 	localChannels := &ChannelService{billingService: s.billingService}
-	localChannels.cache.Store(populateChannelCache(active, platforms))
+	channelSnapshot := populateChannelCache(active, platforms)
+	localChannels.cache.Store(channelSnapshot)
 	resolver := NewModelPricingResolver(localChannels, s.billingService)
 	references := NewChannelPricingReferenceService(s.pricingService, s.billingService)
 	var accountMappings map[int64][]CommercialModelMapping
@@ -145,6 +146,12 @@ func (s *ModelPlazaService) ListAvailableCatalog(ctx context.Context, groups []G
 		}
 		for _, candidate := range candidates {
 			model := candidate.SupportedModel
+			// A bound channel's current pricing cards own catalog membership.
+			// Other sources cannot restore deleted public model/supplier pairs.
+			// Reuse billing's exact and wildcard matching on the same snapshot.
+			if bound[g.ID] != nil && lookupPricingAcrossPlatforms(channelSnapshot, g.ID, model.Platform, candidate.Name) == nil {
+				continue
+			}
 			if candidate.UpstreamModel != "" {
 				model.Name = candidate.UpstreamModel
 			}

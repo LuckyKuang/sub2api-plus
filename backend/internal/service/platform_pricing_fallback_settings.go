@@ -18,20 +18,20 @@ import (
 // including providers that expose models from several vendors.
 func DefaultPricingFallbackModels() map[string]string {
 	return map[string]string{
-		PlatformAnthropic:   "claude-sonnet-5",
-		PlatformOpenAI:      "gpt-5.4",
+		PlatformAnthropic:   "claude-opus-5-5",
+		PlatformOpenAI:      "gpt-6.1-sol",
 		PlatformGemini:      "gemini-3.8-flash",
 		PlatformAntigravity: "gemini-3.8-flash",
 		PlatformGrok:        "grok-4.6",
 		PlatformKimi:        "kimi-k3",
 		PlatformZhipu:       "glm-5.3",
-		PlatformDeepseek:    "deepseek-v4-flash",
+		PlatformDeepseek:    "deepseek-v4.1-flash",
 		PlatformMiniMax:     "minimax-m3",
 		PlatformStepFun:     "step-5-preview",
 		PlatformOpenCodeGo:  "glm-5.3",
 		PlatformTypeSafe:    "jev-latest",
-		PlatformCommandCode: "deepseek-v4-flash",
-		PlatformCline:       "deepseek-v4-flash",
+		PlatformCommandCode: "deepseek-v4.1-flash",
+		PlatformCline:       "deepseek-v4.1-flash",
 	}
 }
 

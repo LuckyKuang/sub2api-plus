@@ -193,9 +193,12 @@ for the four selection paths and refresh/error behavior, and
 for empty, zero, deletion and shared-channel ownership semantics.
 
 The authenticated available-model catalog and sale-scoped payment catalog share
-one read-only configuration and price assembler. Finite public models come from
-channel mappings/prices, group prices, account exact model mappings and enabled
-exact Composite routes. Prefix routes apply to known finite IDs and are never
+one read-only configuration and price assembler. For groups bound to an active
+channel, finite public platform/model pairs must match its current channel
+pricing rules; deleting those declarations removes the offers even if other
+mappings, prices or routes still reference them. Groups without an active bound
+channel enumerate group prices, account exact model mappings and enabled exact
+Composite routes. Prefix routes apply to known finite IDs and are never
 advertised as literal models. The group public-model allowlist filters all
 sources. Concrete supplier identity is retained when an OpenAI-branded model is
 served by OpenCode or another supplier. Endpoint-dependent upstream targets
@@ -518,7 +521,9 @@ has been executed. Run checks in the repository validation container.
 | Literal request charges ($12 and peak $18), defaults and all registered suppliers | `backend/internal/service/composite_product_billing_acceptance_test.go` |
 | Real HTTP routing, account/channel mappings, wire credentials, ledger charges and released slots | `backend/internal/server/routes/composite_billing_acceptance_test.go` |
 | Public price ownership, frozen routing and historical durable selection | `backend/internal/service/public_model_pricing_acceptance_test.go` |
-| Codex terminal-model observations cannot replace explicit paid/free public cards; explicit sources and legacy correction remain | `backend/internal/service/codex_public_price_correction_acceptance_test.go` |
+| Codex terminal-model observations cannot replace selected request/mapped prices or explicit paid/free public cards; explicit response billing retains its guards | `backend/internal/service/codex_public_price_correction_acceptance_test.go` |
+| Selected Sol billing despite Luna observations, account mappings, credential types, stream settlement and durable evidence | `backend/internal/service/openai_selected_model_billing_test.go`, `backend/internal/handler/openai_gateway_ws_selected_billing_test.go` |
+| All 14 platform defaults retain their own fallback bill across estimates and durable settlement | `backend/internal/service/platform_pricing_default_settlement_test.go` |
 | Inflight per-request/media effort factors, endpoint metadata and foreign-field isolation | `backend/internal/service/inflight_request_effort_acceptance_test.go`, `backend/internal/handler/gateway_inflight_reservation_test.go`, `backend/internal/handler/inflight_pricing_protocol_test.go` |
 | Selected-account price reconciliation, Luna mappings, public cards/zero, source precedence and final settlement | `backend/internal/service/inflight_account_mapping_acceptance_test.go`, `backend/internal/service/inflight_selected_contract_test.go` |
 | Final mapped-price rejection before HTTP forwarding, own-resource cleanup and preservation of other owners | `backend/internal/handler/gateway_account_inflight_boundary_test.go`, `backend/internal/handler/openai_account_inflight_boundary_test.go`, `backend/internal/handler/gateway_inflight_account_plan_test.go`, `backend/internal/handler/gateway_account_inflight_retail_success_test.go` |

@@ -41,9 +41,9 @@ func (d inflightEstimateDeps) selectedBillingModelCandidates(ctx context.Context
 			chosen = input
 		}
 	}
-	// Composite aliases without a public card settle against the concrete SKU.
-	// The caller checks authoritative public cards before using this chain.
-	if key.Group != nil && key.Group.Platform == PlatformComposite {
+	// Generic Composite aliases without a public card settle against the concrete
+	// SKU. OpenAI keeps the explicit request/channel selection made above.
+	if !d.selectedOpenAI && key.Group != nil && key.Group.Platform == PlatformComposite {
 		chosen = upstream
 	}
 	return []string{chosen}, []string{upstream, input, public}, input

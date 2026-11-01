@@ -20,18 +20,27 @@ channel or user-rate dependencies; the legacy view returns `data: []`.
 `GetAvailableGroups` authorizes groups before catalog assembly: standard groups
 respect exclusivity and public-group restrictions; subscription groups require
 an active subscription, including exclusive subscription groups. Only active
-channels contribute models. An authorized group without an active bound channel
-or configured models is retained with `models: []`. Each group can belong to at
+channels contribute channel models. An authorized group without configured
+public models is retained with `models: []`. Each group can belong to at
 most one channel; that database constraint is unchanged.
 
-Model enumeration combines the finite channel mapping/pricing union, group
-prices, exact account model mappings and enabled exact Composite routes. Prefix
-routes apply to finite configured IDs; wildcards never become literal request
-IDs. The group public-model allowlist filters every source. Normal groups remain
-on their own platform; composite offers retain the resolved concrete supplier.
-Global price catalogs supply prices, not additional models. A group without a
-channel can still publish its configured routes, group prices or account model
-IDs. The request-local channel snapshot is shared by mappings and billing
+For a group bound to an active channel, its catalog models must be explicitly
+covered by that channel's current model pricing, matched by concrete platform
+and public model ID using billing's existing case-insensitive exact and trailing
+wildcard rules. Removing some or all models removes those
+offers on the next catalog request, even if channel/account mappings, group
+prices, Composite routes or global reference prices still contain them. A price
+card with missing prices or an explicit zero still declares a model; existing
+billing rules determine its displayed price or unknown-price status.
+
+A group without an active bound channel can publish its group prices, exact
+account model mappings and enabled exact Composite routes. Prefix routes apply
+to finite configured IDs; wildcards never become literal request IDs. Mappings
+and routes resolve configured offers but cannot add a model/supplier pair outside
+a bound channel's pricing rules. The group public-model allowlist filters every
+source. Normal groups remain on their own platform; composite offers retain the
+resolved concrete supplier. Global price catalogs supply prices, not additional
+models. The request-local channel snapshot is shared by mappings and billing
 resolution. Account-derived candidates come from one request-local projection
 of authorized group IDs, concrete platform and model mappings, without loading
 account credentials beyond those mappings, proxy records or group associations.
@@ -240,6 +249,12 @@ and Retry always invalidate it and perform a real request. Failed, aborted,
 unavailable-rate and superseded responses never populate the cache. Filters
 operate locally, with no timer, focus or visibility refresh. Cached quote
 timestamps remain visible evidence of their original snapshot.
+
+Successful channel creation, editing (including pricing and status changes),
+and deletion clear all catalog scopes in the same document and invalidate
+in-flight reads. Failed channel saves preserve the existing cache. Other browser
+sessions obtain the current configuration on Refresh or their next uncached
+read; configuration edits do not broadcast across sessions.
 
 ## Validation
 
