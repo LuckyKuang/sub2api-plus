@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -16,7 +17,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/outboundidentity"
 	openaiwsv2 "github.com/LuckyKuang/sub2api-plus/internal/service/openai_ws_v2"
 	coderws "github.com/coder/websocket"
-	"github.com/coder/websocket/wsjson"
+	"github.com/tidwall/gjson"
 )
 
 const openAIWSMessageReadLimitBytes int64 = 16 * 1024 * 1024
@@ -125,7 +126,7 @@ func (d *coderOpenAIWSClientDialer) Dial(
 		return nil, 0, nil, errors.New("ws url is empty")
 	}
 
-	wrapped := &coderOpenAIWSClientConn{}
+	wrapped := &coderOpenAIWSClientConn{outboundHeaders: cloneHeader(headers)}
 	opts := &coderws.DialOptions{
 		HTTPHeader:      cloneHeader(headers),
 		CompressionMode: coderws.CompressionContextTakeover,
@@ -308,8 +309,9 @@ func (d *coderOpenAIWSClientDialer) SnapshotTransportMetrics() OpenAIWSTransport
 }
 
 type coderOpenAIWSClientConn struct {
-	conn          *coderws.Conn
-	upstreamPings atomic.Int64
+	conn            *coderws.Conn
+	outboundHeaders http.Header
+	upstreamPings   atomic.Int64
 }
 
 func (c *coderOpenAIWSClientConn) UpstreamPingCount() int64 {
@@ -328,7 +330,13 @@ func (c *coderOpenAIWSClientConn) WriteJSON(ctx context.Context, value any) erro
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	return wsjson.Write(ctx, c.conn, value)
+	payload, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	// Observe precisely the bytes written, without invoking custom marshalers twice.
+	observeOutboundWS(ctx, c.outboundHeaders, payload)
+	return c.conn.Write(ctx, coderws.MessageText, payload)
 }
 
 func (c *coderOpenAIWSClientConn) ReadMessage(ctx context.Context) ([]byte, error) {
@@ -414,4 +422,30 @@ func (c *coderOpenAIWSClientConn) CloseNow() error {
 	}
 	_ = c.conn.CloseNow()
 	return nil
+}
+
+func observeOutboundWS(ctx context.Context, headers http.Header, payload []byte) {
+	if gjson.GetBytes(payload, "type").String() == "response.create" && gjson.GetBytes(payload, "generate").Raw != "false" {
+		observeOutbound(ctx, outboundMetadataForPayload(headers, payload))
+	}
+}
+
+// Passthrough admission serializes response.create with the preceding terminal
+// write. Keep the same per-turn ownership as usage/tier metadata; session and
+// control frames never overwrite a generation observation.
+type openAIWSObservedFrameConn struct {
+	openaiwsv2.FrameConn
+	headers     http.Header
+	observation *atomic.Pointer[OutboundMetadata]
+}
+
+func (c *openAIWSObservedFrameConn) WriteFrame(ctx context.Context, kind coderws.MessageType, payload []byte) error {
+	generation := gjson.GetBytes(payload, "type").String() == "response.create" && gjson.GetBytes(payload, "generate").Raw != "false"
+	if generation {
+		// Publish before dispatch: the read goroutine can receive a terminal
+		// response before WriteFrame returns. No subsequent turn can be
+		// admitted until that terminal is handled.
+		c.observation.Store(outboundMetadataForPayload(c.headers, payload))
+	}
+	return c.FrameConn.WriteFrame(ctx, kind, payload)
 }

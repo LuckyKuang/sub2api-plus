@@ -394,3 +394,34 @@ wait
 		t.Fatal("task child survived process-group cancellation")
 	}
 }
+
+// A valid zero is authoritative. Later execution/output failure does not erase
+// already reported measurements; a failed turn without usage invents none.
+func TestTaskUsageReportedEvidenceSurvivesLaterFailure(t *testing.T) {
+	for _, tc := range []struct {
+		name, stream string
+		reported     bool
+		input        int64
+	}{
+		{"zero", taskFinal + "\n" + `{"type":"turn.completed","usage":{"input_tokens":0,"cached_input_tokens":0,"output_tokens":0}}`, true, 0},
+		{"completion_then_failure", taskFinal + "\n" + taskCompleted + "\n" + `{"type":"turn.failed"}`, true, 25},
+		{"completion_then_bad_output", taskCompleted + "\ninvalid", true, 25},
+		{"failed_without_usage", `{"type":"turn.failed"}`, false, 0},
+		{"missing_usage", `{"type":"turn.completed"}`, false, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			result := TaskResult{UsageIncomplete: true}
+			err := parseTaskEvents(strings.NewReader(tc.stream+"\n"), &result)
+			if tc.name == "zero" {
+				if err != nil {
+					t.Fatal(err)
+				}
+			} else if err == nil {
+				t.Fatal("expected task error")
+			}
+			if result.UsageReported != tc.reported || result.Usage.InputTokens != tc.input {
+				t.Fatalf("wrong evidence: %+v", result)
+			}
+		})
+	}
+}

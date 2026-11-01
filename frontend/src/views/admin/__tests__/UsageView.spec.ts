@@ -580,9 +580,9 @@ describe('admin UsageView distribution metric toggles', () => {
 })
 
 describe('admin UsageView column preferences', () => {
-  // Product requirement: exactly these 13 columns start visible; personal settings override defaults.
+  // Product requirement: these 14 columns start visible, including independent outbound evidence; personal settings override defaults.
   const defaultColumns = [
-    'user', 'account', 'model', 'reasoning_effort', 'service_tier', 'endpoint', 'group',
+    'user', 'account', 'model', 'reasoning_effort', 'service_tier', 'outbound', 'endpoint', 'group',
     'stream', 'tokens', 'cost', 'latency', 'created_at', 'user_agent',
   ]
   const preferenceKey = 'admin-usage-restored-v2-hidden-columns:1:self'
@@ -677,7 +677,7 @@ describe('admin UsageView column preferences', () => {
     const restored = mountView()
     await restored.vm.$nextTick()
     expect(restored.findComponent(UsageTableStub).props('columns').map((column: { key: string }) => column.key)).toEqual([
-      'user', 'api_key', 'account', 'model', 'reasoning_effort', 'service_tier', 'endpoint',
+      'user', 'api_key', 'account', 'model', 'reasoning_effort', 'service_tier', 'outbound', 'endpoint',
       'group', 'stream', 'billing_mode', 'tokens', 'cost', 'latency', 'created_at', 'request_id', 'session_id', 'ip_address',
     ])
     restored.unmount()
@@ -687,7 +687,7 @@ describe('admin UsageView column preferences', () => {
     vi.mocked(localStorage.getItem).mockImplementation(key => key === preferenceKey ? '[]' : null)
     const wrapper = mountView()
     await wrapper.vm.$nextTick()
-    expect(wrapper.findComponent(UsageTableStub).props('columns')).toHaveLength(18)
+    expect(wrapper.findComponent(UsageTableStub).props('columns')).toHaveLength(19)
     await wrapper.get('[data-testid="usage-column-settings"]').trigger('click')
     await wrapper.findAll('button').find(button => button.text() === 'inspection.resetColumns')!.trigger('click')
     expect(wrapper.findComponent(UsageTableStub).props('columns').map((column: { key: string }) => column.key)).toEqual(defaultColumns)

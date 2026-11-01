@@ -202,6 +202,11 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	if !isGrokVideoUsageResult(result, nil) {
 		ApplyOpenAIImageBillingResolution(result)
 	}
+	// Prefer the generation body observed at dispatch over an earlier transform.
+	if result.Outbound != nil && result.Outbound.TierKnown {
+		tier := result.Outbound.ServiceTier
+		result.ServiceTier = &tier
+	}
 	requestedServiceTier := optionalStringValue(result.ServiceTier)
 	responseServiceTier := result.ResponseServiceTier
 	logServiceTierBillingDowngrade("service.openai_gateway", account, result.RequestID, ApplyOpenAIServiceTierBillingResolution(billingAccount, result))
@@ -489,6 +494,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		CodexRolloutBudgetUnits:  result.Usage.CodexRolloutBudgetUnits,
 		IsComplete:               usageCompletionPtr(input.IsComplete, result.UsageComplete()),
 		UsageSource:              result.UsageSource,
+		Outbound:                 result.Outbound.Clone(),
 		ImageCount:               result.ImageCount,
 		ImageSize:                optionalTrimmedStringPtr(result.ImageSize),
 		ImageInputSize:           optionalTrimmedStringPtr(result.ImageInputSize),

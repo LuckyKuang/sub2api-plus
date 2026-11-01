@@ -20,6 +20,12 @@ import (
 
 // Forward forwards request to OpenAI API
 func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, account *Account, body []byte) (result *OpenAIForwardResult, err error) {
+	ctx, outbound := beginOutboundObservation(ctx)
+	defer func() {
+		if result != nil && result.Outbound == nil {
+			result.Outbound = outbound.snapshot()
+		}
+	}()
 	if err := validateOpenAISessionContinuation(ctx, body); err != nil {
 		return nil, err
 	}

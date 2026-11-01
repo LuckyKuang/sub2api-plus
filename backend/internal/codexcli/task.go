@@ -51,6 +51,8 @@ type TaskResult struct {
 	ThreadID        string    `json:"thread_id"`
 	Usage           TaskUsage `json:"usage"`
 	UsageIncomplete bool      `json:"usage_incomplete"`
+	// UsageReported distinguishes an authoritative zero from absent counters.
+	UsageReported bool `json:"usage_reported"`
 }
 
 // TaskError never contains child output, stderr, command arguments, filesystem
@@ -352,6 +354,7 @@ func parseTaskEvents(reader io.Reader, result *TaskResult) error {
 				return taskError("invalid_usage")
 			}
 			result.Usage, result.UsageIncomplete, completed = usage, false, true
+			result.UsageReported = true
 		case "turn.failed":
 			return taskError("turn_failed")
 		case "error":

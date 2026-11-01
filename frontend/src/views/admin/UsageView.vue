@@ -691,6 +691,7 @@ const allColumns = computed(() => [
   { key: 'model', label: t('usage.model'), sortable: true },
   { key: 'reasoning_effort', label: t('usage.reasoningEffort'), sortable: false },
   { key: 'service_tier', label: t('admin.usage.serviceTier'), sortable: false },
+  { key: 'outbound', label: t('admin.usage.outbound'), sortable: false },
   { key: 'endpoint', label: t('usage.endpoint'), sortable: false },
   { key: 'group', label: t('admin.usage.group'), sortable: false },
   { key: 'stream', label: t('usage.type'), sortable: false },
@@ -700,7 +701,7 @@ const allColumns = computed(() => [
   { key: 'latency', label: t('usage.latency'), sortable: false },
   { key: 'created_at', label: t('usage.time'), sortable: true },
   { key: 'request_id', label: t('admin.usage.requestId'), sortable: false },
-  { key: 'user_agent', label: t('usage.userAgent'), sortable: false },
+  { key: 'user_agent', label: t('admin.usage.inboundUserAgent'), sortable: false },
   { key: 'session_id', label: t('usage.sessionId'), sortable: false },
   { key: 'ip_address', label: t('admin.usage.ipAddress'), sortable: false }
 ])

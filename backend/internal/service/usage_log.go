@@ -199,6 +199,7 @@ type UsageLog struct {
 	IsComplete         *bool
 	CompletionStatus   string
 	UsageSource        string
+	Outbound           *OutboundMetadata
 	UserAgent          *string
 	IPAddress          *string
 	// SessionID is the explicit client-provided request correlation identifier

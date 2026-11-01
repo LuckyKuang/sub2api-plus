@@ -2555,6 +2555,16 @@ func UsageSourceContainsFold(v string) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldContainsFold(FieldUsageSource, v))
 }
 
+// OutboundMetadataIsNil applies the IsNil predicate on the "outbound_metadata" field.
+func OutboundMetadataIsNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIsNull(FieldOutboundMetadata))
+}
+
+// OutboundMetadataNotNil applies the NotNil predicate on the "outbound_metadata" field.
+func OutboundMetadataNotNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotNull(FieldOutboundMetadata))
+}
+
 // UserAgentEQ applies the EQ predicate on the "user_agent" field.
 func UserAgentEQ(v string) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldUserAgent, v))

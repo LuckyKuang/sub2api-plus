@@ -94,7 +94,11 @@ func (h *AvailableChannelHandler) listCatalog(c *gin.Context, userID int64) {
 		response.Success(c, out)
 		return
 	}
-	catalog, err := h.plazaService.ListAvailableCatalog(c.Request.Context(), groups)
+	readCatalog := h.plazaService.ListAvailableChannelCatalog
+	if keyQuotesView(c) {
+		readCatalog = h.plazaService.ListAvailableCatalog
+	}
+	catalog, err := readCatalog(c.Request.Context(), groups)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return

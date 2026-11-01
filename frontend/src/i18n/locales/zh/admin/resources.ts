@@ -571,6 +571,14 @@ export default {
     // Usage Records
     usage: {
       serviceTier: '服务档位',
+      inboundUserAgent: '入站 User-Agent',
+      outbound: '出站证据',
+      outboundTransport: { unknown: '未记录', native: '原生出站', codex_cli_bridge: '官方 CLI 桥接', codex_cli_task: '官方 CLI 任务' },
+      outboundProcess: '已启动 CLI 进程；未观测最终网络请求',
+      outboundDispatch: '已在网关发送；不代表上游执行保证',
+      outboundTier: '发送档位',
+      serviceTierBilling: '计费',
+      serviceTierDifference: '请求与响应档位不同；需结合出站证据核查',
       serviceTierRequest: '请求',
       serviceTierResponse: '响应',
       serviceTierUnrecorded: '未记录',

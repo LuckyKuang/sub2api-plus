@@ -884,7 +884,13 @@ func UsageLogFromServiceAdmin(l *service.UsageLog) *AdminUsageLog {
 	}
 	usageLog := usageLogFromServiceUser(l)
 	usageLog.UpstreamEndpoint = l.UpstreamEndpoint
+	var outbound *OutboundMetadata
+	if m := l.Outbound; m != nil {
+		outbound = &OutboundMetadata{Transport: m.TransportName(), Evidence: m.Evidence, CLIVersion: m.CLIVersion, UserAgent: m.UserAgent, Originator: m.Originator, ClientVersion: m.ClientVersion, TierKnown: m.TierKnown, ServiceTier: m.ServiceTier}
+	}
 	return &AdminUsageLog{
+		OutboundTransport:       l.Outbound.TransportName(),
+		OutboundMetadata:        outbound,
 		UsageLog:                usageLog,
 		ServiceTier:             l.ServiceTier,
 		RequestedServiceTier:    l.RequestedServiceTier,

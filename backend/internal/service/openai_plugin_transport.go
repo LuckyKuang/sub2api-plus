@@ -75,6 +75,7 @@ func (s *OpenAIGatewayService) doOpenAIUpstreamPrepared(request *http.Request, _
 }
 
 func (s *OpenAIGatewayService) doOpenAIPreparedTransport(request *http.Request, ownerProxyURL string, owner, selected *Account) (*http.Response, error) {
+	observeOutboundHTTP(request, owner)
 	if s.pluginManager != nil {
 		response, handled, err := s.pluginManager.RoundTripOpenAIOAuth(request.Context(), request, ownerProxyURL, owner)
 		if handled {

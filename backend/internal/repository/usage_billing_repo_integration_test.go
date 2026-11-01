@@ -927,3 +927,40 @@ func TestUsageBillingAccountQuotaScalarExtraIsRejectedAtomically(t *testing.T) {
 	require.NoError(t, integrationDB.QueryRowContext(ctx, "SELECT extra::text FROM accounts WHERE id=$1", account.ID).Scan(&after))
 	require.JSONEq(t, before, after)
 }
+
+// A rejected task log must roll back debit and its dedup key, so the corrected
+// source can settle once. Measurements and transport are independent evidence.
+func TestUsageBillingRepositoryCLIUsageEvidenceAndRetry(t *testing.T) {
+	ctx := context.Background()
+	client := testEntClient(t)
+	repo := NewUsageBillingRepository(client, integrationDB)
+	user := mustCreateUser(t, client, &service.User{Email: "cli-usage-" + uuid.NewString() + "@example.com", PasswordHash: "hash", Balance: 100})
+	key := mustCreateApiKey(t, client, &service.APIKey{UserID: user.ID, Key: "sk-cli-usage-" + uuid.NewString(), Name: "task"})
+	account := mustCreateAccount(t, client, &service.Account{Name: "cli-usage-" + uuid.NewString(), Type: service.AccountTypeOAuth})
+	request := uuid.NewString()
+	cleanupPersistedUsageLogFixture(t, ctx, user.ID, key.ID, account.ID, request)
+	complete := false
+	log := &service.UsageLog{UserID: user.ID, APIKeyID: key.ID, AccountID: account.ID, RequestID: request, Model: "gpt-6.1-sol", InputTokens: 100, ActualCost: 1.25, IsComplete: &complete, UsageSource: "codex_cli_task", Outbound: &service.OutboundMetadata{Transport: service.OutboundCodexCLITask, Evidence: "cli_process", CLIVersion: "0.165.0"}}
+	command := &service.UsageBillingCommand{RequestID: request, APIKeyID: key.ID, UserID: user.ID, AccountID: account.ID, AccountType: service.AccountTypeOAuth, BalanceCost: 1.25, UsageLog: log}
+	_, err := repo.Apply(ctx, command)
+	require.Error(t, err, "legacy invalid source is still rejected")
+	var balance float64
+	require.NoError(t, integrationDB.QueryRowContext(ctx, "SELECT balance FROM users WHERE id=$1", user.ID).Scan(&balance))
+	require.Equal(t, 100.0, balance)
+	log.UsageSource = service.UsageSourceUpstreamExact
+	applied, err := repo.Apply(ctx, command)
+	require.NoError(t, err)
+	require.True(t, applied.Applied)
+	require.True(t, applied.UsageLogPersisted)
+	retried, err := repo.Apply(ctx, command)
+	require.NoError(t, err)
+	require.False(t, retried.Applied)
+	require.NoError(t, integrationDB.QueryRowContext(ctx, "SELECT balance FROM users WHERE id=$1", user.ID).Scan(&balance))
+	require.Equal(t, 98.75, balance)
+	persisted, err := scanUsageLog(integrationDB.QueryRowContext(ctx, "SELECT "+usageLogSelectColumns+" FROM usage_logs WHERE request_id=$1 AND api_key_id=$2", request, key.ID))
+	require.NoError(t, err)
+	require.Equal(t, service.UsageSourceUpstreamExact, persisted.UsageSource)
+	require.False(t, *persisted.IsComplete)
+	require.Equal(t, log.Outbound, persisted.Outbound)
+	require.Equal(t, 100, persisted.InputTokens)
+}

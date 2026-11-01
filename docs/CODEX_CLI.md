@@ -481,3 +481,51 @@ switches and the acquired owner snapshot. An unavailable runtime or bridge
 failure cannot fall back to a native probe or become evidence of Responses
 support or lack of support. External image-result/CDN downloads retain their
 separate download transport and URL policy; they are not inference bridge hops.
+
+## Usage accuracy and outbound evidence
+
+The pinned executable remains **0.165.0**. A task's execution mode is not a
+`usage_source`: the database's existing accuracy enum remains unchanged.
+A valid `turn.completed` JSONL usage object (including all-zero counters) is
+`upstream_exact`, independently of a later process, output or client failure.
+Known counters without complete measurement evidence are `partial`; no reported
+measurement is `unknown` and never creates estimated billable tokens. A failed
+turn does not expose unsupported usage fields or invent missing counters.
+Billing, usage insertion and request deduplication remain one transaction.
+Historical failed insertions are not automatically reconstructed or charged.
+
+New administrator usage records include nullable `outbound_metadata` and an
+`outbound_transport` projection. Historical or unobserved requests are `unknown`;
+inbound `user_agent`, account enablement and current settings never backfill
+proof. The snapshot contains only transport, evidence, executable version,
+trusted outbound identity declarations and the dispatched service tier. It
+contains no prompts, credentials, destinations or proxy configuration. User
+usage DTOs do not expose this administrator evidence.
+
+- `native` / `gateway_send`: submitted at the gateway's prepared HTTP dispatcher,
+  or a native WS generation dispatch with that connection's identity.
+- `codex_cli_bridge` / `gateway_send`: reached the provider callback of the
+  verified official `responses-api-proxy` process. Enabling the bridge or
+  starting it without reaching that callback cannot produce this observation.
+- `codex_cli_task` / `cli_process`: the verified `exec --json` process started.
+  Its final provider network request is not observed by the gateway; therefore
+  this row does not claim a wire identity or actual service tier.
+
+Gateway dispatch does not establish provider receipt, actual execution or a
+latency guarantee. The executable's `cli_version` is independent of the
+resolved account/global/default identity's `client_version`; a permitted
+identity override must not be presented as a binary upgrade. HTTP observations
+are scoped to an attempt; pooled and passthrough WS observations belong to the
+accepted generation. Prewarm and session/control frames do not overwrite them.
+
+Fast remains available through the normal Responses/transparent HTTP bridge
+path. `fast` is normalized to `priority` under the shared group/global policy;
+the official proxy preserves that final JSON body. The administrator table
+shows dispatched, requested, response and billing tiers separately and marks a
+`priority` request answered with `default` for investigation. A request badge
+indicates requested Fast, not proven provider Fast execution. Public API-key
+responses may lower billing to the declared cheaper tier; private Codex OAuth
+`default` declarations retain their existing non-authoritative behavior.
+Managed tasks remain Standard-only and reject paid-tier policy before acquiring
+credentials or writing task files. These diagnostics do not enable Fast on the
+managed-task endpoint.

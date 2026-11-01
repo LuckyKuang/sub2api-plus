@@ -109,9 +109,11 @@ add an ingress extraction rule, policy decision, or audit bypass. Encrypted
 compact output is not treated as a text-token delta; see [usage timing](USAGE_TIMING.md).
 
 The authenticated [available-channel catalog](AVAILABLE_CHANNELS.md) is a
-configuration read. Its local price calculations do not accept inference
-content, select accounts, acquire inference concurrency, reserve balances or
-contact providers. Catalog search and price details stay in the browser. This
+configuration read. Restricting the page to authorized groups bound to active
+channels only narrows this read projection; API-key and sale group quotes retain their
+separate configured-model scope. These reads do not accept inference content,
+select accounts, acquire inference concurrency, reserve balances or contact
+providers. Catalog search and price details stay in the browser. This
 view adds no inference endpoint, extraction input or alternative audit path;
 actual model requests still enter both audit engines through the existing
 HTTP/WS handlers before their side effects.
@@ -922,3 +924,12 @@ requests. Model discovery and WHAM metadata do not become new content ingress.
 The existing fixed internal usage inference probe remains system-owned; the hop
 introduces no additional prompt or audit exemption for accepted user traffic.
 OAuth issuer login, refresh and revocation remain outside this hop.
+
+Codex CLI usage accuracy and administrator outbound evidence do not change
+canonical ingress extraction, accepted payloads or audit ordering. Observation
+occurs at the existing post-audit prepared transport/generation boundary; it
+extracts only the tier and trusted identity declarations, retains no raw body,
+and performs no routing, credential acquisition or extra provider request.
+Managed tasks retain the Standard-only admission checks and existing audit
+before task side effects. Existing real-payload, pass-through and HTTP/WS
+side-effect-order regressions remain required.

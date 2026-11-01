@@ -428,7 +428,7 @@ func TestCodexBridgeOfficialBinaryWire(t *testing.T) {
 		testCodexBridgeProviderErrorBodyDeadlineBeforeFirstByte(t, status)
 	})
 	for _, code := range []int{200, 302, 401} {
-		body := `{"model":"fixture-model","input":[{"role":"user","content":"retain"}],"tools":[{"type":"function","name":"external","parameters":{}}],"unknown_sibling":{"retain":true}}`
+		body := `{"service_tier":"priority","model":"fixture-model","input":[{"role":"user","content":"retain"}],"tools":[{"type":"function","name":"external","parameters":{}}],"unknown_sibling":{"retain":true}}`
 		req, _ := http.NewRequest(http.MethodPost, "https://chatgpt.com/backend-api/codex/responses", strings.NewReader(body))
 		req.Header.Set("Authorization", "Bearer synthetic.oauth.jwt.with.dots")
 		req.Header.Set("User-Agent", "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color")

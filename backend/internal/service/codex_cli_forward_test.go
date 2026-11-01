@@ -226,6 +226,9 @@ func TestCodexCLITaskResponseUsageAndIncompleteBillingProjection(t *testing.T) {
 	require.Equal(t, 30, result.Usage.CacheReadInputTokens)
 	require.Equal(t, 20, result.Usage.OutputTokens)
 	require.True(t, result.UsageIncomplete)
+	// Migration 247 permits accuracy/provenance values, not transport names.
+	// Observed incomplete counters must remain persistable and billable.
+	require.Equal(t, UsageSourcePartial, result.UsageSource)
 	require.Nil(t, result.FirstTokenMs)
 	response := codexCLITaskResponse(task, "client-alias", "resp_fixture")
 	usage := response["usage"].(gin.H)

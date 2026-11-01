@@ -192,13 +192,16 @@ for the four selection paths and refresh/error behavior, and
 [group model-factor editing](CHANNEL_PRICING.md#group-model-selling-factor-editing)
 for empty, zero, deletion and shared-channel ownership semantics.
 
-The authenticated available-model catalog and sale-scoped payment catalog share
-one read-only configuration and price assembler. For groups bound to an active
-channel, finite public platform/model pairs must match its current channel
+The Available Channels page, API-key group quotes and sale-scoped payment catalog
+share one read-only configuration and price assembler. The channel page includes
+only authorized groups bound to active channels, including Composite groups.
+For groups bound to an active channel, finite public platform/model pairs must
+match its current channel
 pricing rules; deleting those declarations removes the offers even if other
 mappings, prices or routes still reference them. Groups without an active bound
 channel enumerate group prices, account exact model mappings and enabled exact
-Composite routes. Prefix routes apply to known finite IDs and are never
+Composite routes only in API-key group quotes and the sale catalog, not the
+Available Channels page. Prefix routes apply to known finite IDs and are never
 advertised as literal models. The group public-model allowlist filters all
 sources. Concrete supplier identity is retained when an OpenAI-branded model is
 served by OpenCode or another supplier. Endpoint-dependent upstream targets

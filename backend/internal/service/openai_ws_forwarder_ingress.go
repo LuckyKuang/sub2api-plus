@@ -1102,6 +1102,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 
 	var rejectedFieldRetryState *openAIResponsesRejectedFieldRetryState
 	sendAndRelay := func(turn int, lease *openAIWSConnLease, payload []byte, payloadBytes int, originalModel string, imageBillingModel string, imageSizeTier string, imageInputSize string, requestedReasoningEffort *string) (*OpenAIForwardResult, error) {
+		ctx, outbound := beginOutboundObservation(ctx)
 		responseModelObserver := &upstreamResponseModelObserver{}
 		if lease == nil {
 			return nil, errors.New("upstream websocket lease is nil")
@@ -1404,6 +1405,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 				imageCount := imageCounter.Count()
 				result := &OpenAIForwardResult{
 					codexUsageOwner:               capturedCodexUsageOwner(ctx, account),
+					Outbound:                      outbound.snapshot(),
 					RequestID:                     responseID,
 					Usage:                         usage,
 					Model:                         originalModel,
