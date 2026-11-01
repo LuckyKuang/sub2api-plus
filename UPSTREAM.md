@@ -226,7 +226,11 @@ remains planned until publication and immutable artifact verification.
 `v0.2.19+custom.003` retains the same official baseline and prepares the desktop
 and mobile console layout corrections accumulated since `.002`, including
 readable verification dialogs, responsive record cards, themed key instructions
-and administrator live-request pagination. Its mapping remains planned until
+and administrator live-request pagination. It also aligns available-channel
+catalog membership with current channel pricing, invalidates catalog caches after
+channel edits, preserves explicitly selected OpenAI billing models, refreshes
+default fallback pricing models and updates frontend dependency security floors.
+Its mapping remains planned until
 publication and immutable artifact verification.
 
 `v0.2.4+custom.006` is marked withdrawn because official `v0.2.5` was imported before that snapshot overlay was published. Do not reuse or retag `.006`.
