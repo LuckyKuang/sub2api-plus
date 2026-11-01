@@ -49,33 +49,29 @@ describe('approved real-time request list', () => {
     await buttons[2].trigger('click')
     expect(wrapper.findComponent(table).props('data').map((row: LiveRequest) => row.status)).toEqual(['failed'])
   })
-  // Audited user workspace: paginate the real 200-record observation window at
-  // 20 records/page; filtering and export continue to cover the whole window.
-  it('paginates the user window at 20 rows and leaves the admin window intact', async () => {
+  // Both roles must paginate the bounded observation window; filtering and
+  // export continue to cover the whole window, independently of the page.
+  it.each(['user', 'admin'] as const)('paginates the %s observation window at 20 rows by default', async mode => {
     const items = Array.from({ length: 200 }, (_, i) => ({ ...processing, id: `request-${i}` }))
     read.mockResolvedValue(snapshot(items))
-    const user = setup(); await flushPromises()
+    const user = setup(mode); await flushPromises()
     const firstPage: LiveRequest[] = user.findComponent(table).props('data')
     expect(firstPage).toHaveLength(20)
     expect(firstPage[0].id).toBe('request-0')
     expect(firstPage[19].id).toBe('request-19')
-    expect(user.findComponent(Pagination).props()).toMatchObject({ page: 1, pageSize: 20, total: 200, showPageSizeSelector: false })
+    expect(user.findComponent(Pagination).props()).toMatchObject({ page: 1, pageSize: 20, total: 200, showPageSizeSelector: mode === 'admin' })
     user.findComponent(Pagination).vm.$emit('update:page', 10); await flushPromises()
     const lastPage: LiveRequest[] = user.findComponent(table).props('data')
     expect(lastPage).toHaveLength(20)
     expect(lastPage[0].id).toBe('request-180')
     expect(lastPage[19].id).toBe('request-199')
     expect(user.findComponent(table).element.contains(user.findComponent(Pagination).element)).toBe(false)
-    user.unmount()
-    const admin = setup('admin'); await flushPromises()
-    expect(admin.findComponent(table).props('data')).toHaveLength(200)
-    expect(admin.findComponent(Pagination).exists()).toBe(false)
   })
-  it('resets the user page for filters and keeps its pagination card in the empty state', async () => {
+  it.each(['user', 'admin'] as const)('resets the %s page for filters and keeps its pagination card in the empty state', async mode => {
     read.mockResolvedValue(snapshot(Array.from({ length: 45 }, (_, i) => ({
       ...processing, id: `request-${i}`, status: i === 44 ? 'completed' : 'processing',
     }))))
-    const wrapper = setup(); await flushPromises()
+    const wrapper = setup(mode); await flushPromises()
     wrapper.findComponent(Pagination).vm.$emit('update:page', 3); await flushPromises()
     expect(wrapper.findComponent(table).props('data')).toHaveLength(5)
     const buttons = wrapper.find('[role="group"]').findAll('button')
@@ -86,11 +82,11 @@ describe('approved real-time request list', () => {
     expect(wrapper.findComponent(Pagination).props()).toMatchObject({ page: 1, total: 0 })
     expect(wrapper.findComponent(table).props('data')).toEqual([])
   })
-  it.each([false, true])('resets the actual user viewport only when the page changes (mobile=%s)', async mobile => {
+  it.each([['user', false], ['user', true], ['admin', false], ['admin', true]] as const)('resets the actual %s viewport only when the page changes (mobile=%s)', async (mode, mobile) => {
     viewport.mobile = mobile
     const items = Array.from({ length: 45 }, (_, i) => ({ ...processing, id: `request-${i}` }))
     read.mockResolvedValueOnce(snapshot(items)).mockResolvedValue(snapshot(items.map(row => ({ ...row, version: 2, status: 'completed' }))))
-    const wrapper = setup(); await flushPromises()
+    const wrapper = setup(mode); await flushPromises()
     const scroll = (mobile
       ? wrapper.get('div[aria-busy]')
       : wrapper.get('[data-testid="live-table-scroll"]')).element as HTMLElement
@@ -152,10 +148,10 @@ describe('approved real-time request list', () => {
       vi.restoreAllMocks(); vi.unstubAllGlobals()
     }
   })
-  it('clamps a later user page when updated observations leave fewer filtered results', async () => {
+  it.each(['user', 'admin'] as const)('clamps a later %s page when updated observations leave fewer filtered results', async mode => {
     const items = Array.from({ length: 45 }, (_, i) => ({ ...processing, id: `request-${i}`, status: 'completed' }))
     read.mockResolvedValueOnce(snapshot(items)).mockResolvedValue(snapshot(items.map((row, i) => ({ ...row, status: i < 2 ? 'completed' : 'failed' }))))
-    const wrapper = setup(); await flushPromises()
+    const wrapper = setup(mode); await flushPromises()
     await wrapper.find('[role="group"]').findAll('button')[1].trigger('click')
     wrapper.findComponent(Pagination).vm.$emit('update:page', 3); await flushPromises()
     expect(wrapper.findComponent(table).props('data')).toHaveLength(5)
@@ -163,9 +159,9 @@ describe('approved real-time request list', () => {
     expect(wrapper.findComponent(Pagination).props()).toMatchObject({ page: 1, total: 2 })
     expect(wrapper.findComponent(table).props('data').map((row: LiveRequest) => row.id)).toEqual(['request-0', 'request-1'])
   })
-  it('exports the full filtered observation window while viewing a later page', async () => {
+  it.each(['user', 'admin'] as const)('exports the full filtered %s observation window while viewing a later page', async mode => {
     read.mockResolvedValue(snapshot(Array.from({ length: 45 }, (_, i) => ({ ...processing, id: `request-${i}`, model: `model-${i}` }))))
-    const wrapper = setup(); await flushPromises()
+    const wrapper = setup(mode); await flushPromises()
     wrapper.findComponent(Pagination).vm.$emit('update:page', 2); await flushPromises()
     let csv = ''
     const OriginalBlob = globalThis.Blob
@@ -188,6 +184,43 @@ describe('approved real-time request list', () => {
       URL.createObjectURL = originalCreate; URL.revokeObjectURL = originalRevoke
       vi.unstubAllGlobals()
     }
+  })
+  it('uses the admin page-size preference and resets its page and viewport when the size changes', async () => {
+    localStorage.setItem('table-page-size', '50')
+    read.mockResolvedValue(snapshot(Array.from({ length: 120 }, (_, i) => ({ ...processing, id: `request-${i}` }))))
+    const wrapper = setup('admin'); await flushPromises()
+    expect(wrapper.findComponent(Pagination).props()).toMatchObject({ pageSize: 50, total: 120, showPageSizeSelector: true })
+    expect(wrapper.findComponent(table).props('data')).toHaveLength(50)
+    wrapper.findComponent(Pagination).vm.$emit('update:page', 3); await flushPromises()
+    expect(wrapper.findComponent(table).props('data')[0].id).toBe('request-100')
+    const scroll = wrapper.get('[data-testid="live-table-scroll"]').element as HTMLElement
+    scroll.scrollTop = 240
+    wrapper.findComponent(Pagination).vm.$emit('update:pageSize', 20); await flushPromises()
+    expect(wrapper.findComponent(Pagination).props()).toMatchObject({ page: 1, pageSize: 20 })
+    expect(wrapper.findComponent(table).props('data').map((row: LiveRequest) => row.id)).toEqual(Array.from({ length: 20 }, (_, i) => `request-${i}`))
+    expect(scroll.scrollTop).toBe(0)
+    scroll.scrollTop = 240
+    wrapper.findComponent(Pagination).vm.$emit('update:pageSize', 10); await flushPromises()
+    expect(wrapper.findComponent(table).props('data')).toHaveLength(10)
+    expect(scroll.scrollTop).toBe(0)
+    expect(read).toHaveBeenCalledTimes(1)
+  })
+  it('keeps new insertions behind the notice while an administrator browses a later page', async () => {
+    const items = Array.from({ length: 45 }, (_, i) => ({ ...processing, id: `request-${i}` }))
+    read.mockResolvedValueOnce(snapshot(items)).mockResolvedValue(snapshot([
+      { ...processing, id: 'new-request' }, ...items.map(row => ({ ...row, version: 2, status: 'completed' })),
+    ]))
+    const wrapper = setup('admin'); await flushPromises()
+    wrapper.findComponent(Pagination).vm.$emit('update:page', 2); await flushPromises()
+    await vi.advanceTimersByTimeAsync(2000); await flushPromises()
+    expect(wrapper.findComponent(Pagination).props()).toMatchObject({ page: 2, total: 45 })
+    expect(wrapper.findComponent(table).props('data')[0]).toMatchObject({ id: 'request-20', status: 'completed' })
+    const notice = wrapper.findAll('button').find(button => button.text() === 'inspection.newRecords')!
+    expect(notice.exists()).toBe(true)
+    await notice.trigger('click')
+    expect(wrapper.findComponent(Pagination).props()).toMatchObject({ page: 1, total: 46 })
+    expect(wrapper.findComponent(table).props('data')[0].id).toBe('new-request')
+    expect(read).toHaveBeenCalledTimes(2)
   })
   it('keeps mobile expansion and marks a lost active observation unknown without fetching details', async () => {
     viewport.mobile = true

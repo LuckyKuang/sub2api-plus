@@ -104,7 +104,7 @@
           </template>
 
           <template #cell-id="{ row }">
-	            <div class="flex w-[220px] items-start gap-1" :class="row.is_child ? 'pl-6' : ''">
+	            <div class="flex w-full min-w-0 max-w-[220px] items-start gap-1" :class="row.is_child ? 'pl-6' : ''">
 	              <button
 	                v-if="row.child_count > 0 && !row.is_child"
 	                type="button"
@@ -488,7 +488,7 @@
       </div>
 
       <template #footer>
-        <div class="flex justify-end gap-3">
+        <div class="flex flex-wrap justify-end gap-3">
 	          <button v-support-readonly type="button" class="btn btn-secondary" :disabled="!currentJob || !canCancel(currentJob) || cancelling" @click="cancelSelected">
 	            <Icon v-if="cancelling" name="refresh" size="sm" class="mr-2 animate-spin" />
 	            {{ t('batchImage.actions.cancelJob') }}
@@ -702,7 +702,7 @@
 	      </form>
 
       <template #footer>
-        <div class="flex justify-end gap-3">
+        <div class="flex flex-wrap justify-end gap-3">
           <button type="button" class="btn btn-secondary" :disabled="submitting" @click="closeCreateModal">{{ t('common.cancel') }}</button>
 	          <button v-support-readonly type="button" class="btn btn-primary inline-flex min-w-[120px] justify-center" :disabled="submitting || loadingModels || (parsedItems.length === 0 && !promptDraft.trim()) || !selectedApiKey || !form.model" @click="submitJob">
             <Icon v-if="submitting" name="refresh" size="sm" class="mr-2 animate-spin" />
@@ -736,7 +736,7 @@
 	        </section>
 	      </div>
       <template #footer>
-        <div class="flex justify-end gap-3">
+        <div class="flex flex-wrap justify-end gap-3">
           <button type="button" class="btn btn-secondary" @click="showGuideModal = false">{{ t('common.close') }}</button>
           <button type="button" class="btn btn-primary" @click="copyInstruction">
             <Icon name="copy" size="sm" class="mr-2" />

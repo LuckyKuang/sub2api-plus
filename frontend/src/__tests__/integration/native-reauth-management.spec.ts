@@ -96,6 +96,9 @@ async function begin(view: VueWrapper, provider: Provider) {
   const previousStarts = calls.filter(call => call.url === startURL).length
   expect(button(view, 'admin.accounts.oauth.domestic.reauthorize').attributes('disabled')).toBeUndefined()
   await button(view, 'admin.accounts.oauth.domestic.reauthorize').trigger('click')
+  // trigger() waits for Vue's tick, but Axios dispatch follows its request
+  // interceptor microtasks. Drain those before starting a timed state check.
+  await flushPromises()
   // Axios interceptors and Vue rendering need not finish within one flush.
   // Observe this click's request and the usable ready state before editing its owner.
   await vi.waitFor(() => {

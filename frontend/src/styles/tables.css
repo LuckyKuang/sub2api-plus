@@ -146,46 +146,10 @@ table.record-table .sticky-col::after {
   content: none !important;
 }
 
-/* Transparent pinned columns use the table clipping contract to keep scrolling
-   text out of their cutouts. Paint the outside curve inside its sticky context. */
-:root table.record-table > :is(tbody, tfoot):not(.record-group) > tr:not([aria-hidden="true"]) > .sticky-col:is(:first-child, :last-child) {
-  border-radius: 0 !important;
-  background-color: transparent !important;
-  background-image: none !important;
-  background-clip: border-box !important;
-  box-shadow: none !important;
-}
-
-:root table.record-table > :is(tbody, tfoot):not(.record-group) > tr:not([aria-hidden="true"]) > .sticky-col:is(:first-child, :last-child)::before {
-  content: '' !important;
-  position: absolute;
-  /* The containing padding box already excludes the transparent 4px borders. */
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background-color: transparent;
-  background-image: linear-gradient(var(--record-row-tint, transparent), var(--record-row-tint, transparent));
-  box-shadow: var(--record-edge-top), var(--record-edge-bottom), var(--record-edge-left), var(--record-edge-right);
-}
-
-:root table.record-table > :is(tbody, tfoot):not(.record-group) > tr:not([aria-hidden="true"]) > .sticky-col:first-child::before {
-  border-top-left-radius: 16px;
-  border-bottom-left-radius: 16px;
-}
-
-:root table.record-table > :is(tbody, tfoot):not(.record-group) > tr:not([aria-hidden="true"]) > .sticky-col:last-child::before {
-  border-top-right-radius: 16px;
-  border-bottom-right-radius: 16px;
-}
-
-:root table.record-table.record-table-compact > :is(tbody, tfoot):not(.record-group) > tr:not([aria-hidden="true"]) > .sticky-col:first-child::before {
-  border-top-left-radius: var(--record-compact-radius);
-  border-bottom-left-radius: var(--record-compact-radius);
-}
-:root table.record-table.record-table-compact > :is(tbody, tfoot):not(.record-group) > tr:not([aria-hidden="true"]) > .sticky-col:last-child::before {
-  border-top-right-radius: var(--record-compact-radius);
-  border-bottom-right-radius: var(--record-compact-radius);
-}
+/* Frozen cells use the same native outline, tint and corner painting as the
+   rest of the record. A negative-z pseudo element inside a sticky table cell
+   is not a reliable paint layer across browser compositors. The horizontal
+   clipping contract keeps scrolling text out of their transparent cutouts. */
 
 /* A nested record table starts its own state rather than inheriting the
    enclosing record's hover tint. */

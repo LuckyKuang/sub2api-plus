@@ -1,5 +1,9 @@
 <template>
-  <UsageView v-if="usage" />
+  <UsersView v-if="users" />
+  <GroupsView v-else-if="groups" />
+  <IPAccessControlView v-else-if="ipAccessControl" />
+  <PromptAuditView v-else-if="promptAudit" />
+  <UsageView v-else-if="usage" />
   <AppLayout v-else workspace>
     <TablePageLayout>
       <template #filters>
@@ -39,7 +43,15 @@ import { useAppStore } from '../src/stores/app'
 import { useAuthStore } from '../src/stores/auth'
 
 const usage = new URLSearchParams(location.search).get('usage') === '1'
+const promptAudit = new URLSearchParams(location.search).get('promptAudit') === '1'
+const users = new URLSearchParams(location.search).get('users') === '1'
+const groups = new URLSearchParams(location.search).get('groups') === '1'
+const ipAccessControl = new URLSearchParams(location.search).get('ipAccessControl') === '1'
+const UsersView = defineAsyncComponent(() => import('../src/views/admin/UsersView.vue'))
+const GroupsView = defineAsyncComponent(() => import('../src/views/admin/GroupsView.vue'))
+const IPAccessControlView = defineAsyncComponent(() => import('../src/views/admin/IPAccessControlView.vue'))
 const UsageView = defineAsyncComponent(() => import('../src/views/admin/UsageView.vue'))
+const PromptAuditView = defineAsyncComponent(() => import('../src/features/prompt-audit/PromptAuditView.vue'))
 const app = useAppStore()
 app.publicSettingsLoaded = true
 app.versionLoaded = true
@@ -47,7 +59,7 @@ app.siteName = 'Admin layout review'
 app.sidebarCollapsed = false
 const auth = useAuthStore()
 auth.user = { id: 9998, role: 'admin', email: 'fixture@example.test', username: 'Reviewer', balance: 0 } as User
-if (usage) auth.token = 'browser-fixture-token'
+if (usage || promptAudit || users || groups || ipAccessControl) auth.token = 'browser-fixture-token'
 localStorage.setItem('admin_guide', 'true')
 localStorage.setItem('admin_guide_9998_admin_v4_interactive', 'true')
 const { t } = useI18n()
@@ -62,7 +74,7 @@ const columns: Column[] = [
   { key: 'endpoint', label: 'Endpoint' }, { key: 'request_id', label: 'Request ID' },
   { key: 'actions', label: 'Actions', sticky: 'right' },
 ]
-const rows = Array.from({ length: 60 }, (_, index) => ({
+const rows = Array.from({ length: Number(new URLSearchParams(location.search).get('count') ?? '60') }, (_, index) => ({
   id: index + 1, name: `Admin record ${index + 1}`,
   model: 'gpt-5.4-admin-layout-long-model-name-complete',
   group: '管理端完整分组名称 Admin complete routing group',

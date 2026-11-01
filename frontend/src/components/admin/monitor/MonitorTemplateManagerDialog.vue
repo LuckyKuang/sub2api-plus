@@ -54,10 +54,10 @@
         :key="tpl.id"
         class="rounded-lg border border-gray-200 surface-inset p-4 dark:border-dark-700"
       >
-        <div class="flex items-start justify-between gap-3">
+        <div class="flex flex-col items-start justify-between gap-3 sm:flex-row">
           <div class="min-w-0 flex-1">
-            <div class="flex items-center gap-2">
-              <span class="font-medium text-gray-900 dark:text-white">{{ tpl.name }}</span>
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="min-w-0 [overflow-wrap:anywhere] font-medium text-gray-900 dark:text-white">{{ tpl.name }}</span>
               <span
                 class="inline-flex items-center rounded-md px-1.5 py-0.5 text-xs"
                 :class="modeBadgeClass(tpl.body_override_mode)"
@@ -87,7 +87,7 @@
               }) }}
             </p>
           </div>
-          <div class="flex flex-shrink-0 gap-2">
+          <div class="flex max-w-full flex-wrap gap-2 sm:flex-shrink-0">
             <button
               class="btn btn-secondary btn-sm"
               :disabled="tpl.associated_monitors === 0"

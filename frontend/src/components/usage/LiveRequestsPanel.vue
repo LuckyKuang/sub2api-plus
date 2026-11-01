@@ -1,8 +1,8 @@
 <template>
   <div ref="panel" class="min-w-0" :class="[workspace ? 'workspace-body' : 'space-y-4', mode === 'admin' ? (workspace ? 'live-admin-workspace gap-4' : 'p-3 sm:p-4') : 'live-user-workspace gap-4']" @pointerdown="markReading" @focusin="markReading" @wheel.passive="markReading" @touchstart.passive="markReading">
-    <div :class="mode === 'user' || workspace ? 'card workspace-fixed space-y-3 p-4' : 'space-y-4'">
-    <div class="flex flex-wrap items-center justify-between gap-3" :class="{ 'workspace-fixed': workspace }">
-      <div class="text-xs surface-muted"><p>{{ t('inspection.liveHint') }}</p><p>{{ t('inspection.liveWindow', { limit: snapshot?.limit ?? 200 }) }}</p></div>
+    <div class="live-request-controls" :class="mode === 'user' || workspace ? 'card workspace-fixed space-y-3 p-4' : 'space-y-4'">
+    <div class="live-request-header flex flex-wrap items-center justify-between gap-3" :class="{ 'workspace-fixed': workspace }">
+      <div class="live-request-hint text-xs surface-muted"><p>{{ t('inspection.liveHint') }}</p><p>{{ t('inspection.liveWindow', { limit: snapshot?.limit ?? 200 }) }}</p></div>
       <RefreshControl :state="refresh" switch-visible manual />
     </div>
     <div class="flex flex-wrap items-end gap-2" :class="{ 'workspace-fixed': workspace }">
@@ -32,6 +32,12 @@
     <div :class="mode === 'user' || workspace ? ['card overflow-hidden', workspace ? 'workspace-table-card workspace-shell' : ''] : ''">
     <div v-if="desktop" :class="workspace ? 'workspace-body !gap-0' : 'overflow-x-auto'">
       <DataTable ref="dataTable" :class="{ 'workspace-table-viewport': workspace }" :columns="columns" :data="displayedRows" :loading="!snapshot && refresh.fetching.value">
+        <template v-if="mode === 'admin' && workspace" #empty>
+          <div class="live-admin-empty flex flex-col items-center" data-test="live-empty-state">
+            <Icon name="inbox" size="xl" class="live-admin-empty-icon mb-4 h-12 w-12 surface-muted" data-test="live-empty-icon" />
+            <p class="live-admin-empty-message text-lg font-medium text-gray-900 dark:text-gray-100" data-test="live-empty-message">{{ t('empty.noData') }}</p>
+          </div>
+        </template>
         <template #cell-started_at="{ row }"><time class="whitespace-nowrap text-xs tabular-nums" :datetime="row.started_at" :title="formatDateTime(row.started_at)">{{ shortTime(row.started_at) }}</time></template>
         <template #cell-model="{ row }"><div class="max-w-52 break-words text-sm font-medium" :title="row.model">{{ row.model }}</div><div v-if="row.reasoning_effort" class="text-xs surface-muted">{{ row.reasoning_effort }}</div></template>
         <template #cell-user_id="{ row }"><span class="text-xs">#{{ row.user_id }}</span><div class="max-w-40 break-all text-xs surface-muted">{{ row.key_name }}</div></template>
@@ -69,13 +75,13 @@
     </div>
     <p v-if="copied" role="status" class="text-xs text-primary-600" :class="{ 'workspace-fixed': workspace }">{{ t('inspection.copied') }}</p>
     <Pagination
-      v-if="mode === 'user'"
       class="workspace-fixed"
       :page="page"
       :page-size="pageSize"
       :total="filteredRows.length"
-      :show-page-size-selector="false"
+      :show-page-size-selector="mode === 'admin'"
       @update:page="page = $event"
+      @update:pageSize="pageSize = $event"
     />
   </div>
 </template>
@@ -87,12 +93,14 @@ import { getLiveRequests, type LiveRequest, type LiveRequestSnapshot } from '@/a
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
 import { useColumnPreferenceKey } from '@/composables/useColumnPreferenceKey'
 import { usePollingBudget } from '@/composables/usePollingBudget'
+import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import { adminSupportContext, supportRequestGeneration } from '@/utils/adminSupportContext'
 import { useAuthStore } from '@/stores/auth'
 import { formatDateTime } from '@/utils/format'
 import { liveAbnormal, liveActive, liveCSVValue } from '@/utils/liveRequestPresentation'
 import { usageMoney } from '@/utils/usageInspection'
 import DataTable from '@/components/common/DataTable.vue'
+import Icon from '@/components/icons/Icon.vue'
 import Select from '@/components/common/Select.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import RefreshControl from '@/components/common/RefreshControl.vue'
@@ -114,7 +122,7 @@ const snapshot = ref<LiveRequestSnapshot | null>(null)
 const pending = ref<LiveRequest[] | null>(null)
 const expanded = ref(new Set<string>())
 const page = ref(1)
-const pageSize = 20
+const pageSize = ref(props.mode === 'admin' ? getPersistedPageSize() : 20)
 const resultFilter = ref('all'), modelFilter = ref(''), groupFilter = ref(''), userFilter = ref('')
 const hiddenColumns = ref<string[]>(['client'])
 const fixedColumns = ['started_at', 'model', 'status']
@@ -138,7 +146,7 @@ function saveColumns() { try { localStorage.setItem(columnKey, JSON.stringify(hi
 function toggleColumn(key: string) { if (fixedColumns.includes(key)) return; hiddenColumns.value = hiddenColumns.value.includes(key) ? hiddenColumns.value.filter(item => item !== key) : [...hiddenColumns.value, key]; saveColumns() }
 function resetColumns() { hiddenColumns.value = ['client']; saveColumns() }
 function markReading() { readingUntil = performance.now() + 5000 }
-function isReading() { return (props.mode === 'user' && page.value > 1) || expanded.value.size > 0 || performance.now() < readingUntil || window.scrollY > 160 || !!window.getSelection()?.toString() || !!panel.value?.contains(document.activeElement) }
+function isReading() { return page.value > 1 || expanded.value.size > 0 || performance.now() < readingUntil || window.scrollY > 160 || !!window.getSelection()?.toString() || !!panel.value?.contains(document.activeElement) }
 const refresh = useAutoRefresh({
   storageKey, intervals: [2, 5, 15, 30], defaultInterval: 2, defaultEnabled: true, temporaryPause: true,
   minimumIntervalSeconds: () => Math.max(snapshot.value?.poll_after_seconds ?? 2, snapshot.value?.items.length === 0 ? 5 : 2, peers.value * 2),
@@ -162,15 +170,12 @@ function toggleExpanded(id: string) { const next = new Set(expanded.value); if (
 const filteredRows = computed(() => rows.value.filter(row =>
   (resultFilter.value === 'all' || (resultFilter.value === 'success' ? row.status === 'completed' : liveAbnormal(row))) &&
   (!modelFilter.value || row.model === modelFilter.value) && (!groupFilter.value || row.group_name === groupFilter.value) && (!userFilter.value || String(row.user_id) === userFilter.value)))
-const displayedRows = computed(() => props.mode === 'user'
-  ? filteredRows.value.slice((page.value - 1) * pageSize, page.value * pageSize)
-  : filteredRows.value)
-watch([resultFilter, modelFilter, groupFilter, userFilter], () => { page.value = 1 })
+const displayedRows = computed(() => filteredRows.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value))
+watch([resultFilter, modelFilter, groupFilter, userFilter, pageSize], () => { page.value = 1 })
 watch(() => filteredRows.value.length, total => {
-  page.value = Math.min(page.value, Math.max(1, Math.ceil(total / pageSize)))
+  page.value = Math.min(page.value, Math.max(1, Math.ceil(total / pageSize.value)))
 })
-watch(page, () => {
-  if (props.mode !== 'user') return
+watch([page, pageSize], () => {
   const viewport = desktop.value ? dataTable.value?.scrollViewportEl : mobileViewport.value
   if (viewport) viewport.scrollTop = 0
 }, { flush: 'post' })
@@ -198,3 +203,16 @@ watch([() => adminSupportContext.value?.userId, () => auth.user?.id], () => {
 })
 onBeforeUnmount(() => { controller?.abort(); if (timer) clearInterval(timer) })
 </script>
+
+<style scoped>
+@media (min-width: 1024px) and (max-height: 799px) {
+  .live-admin-workspace > .live-request-controls { padding: 4px 12px; }
+  .live-admin-workspace > .live-request-controls > :not(:first-child) { margin-top: 4px; }
+  .live-admin-workspace .live-request-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+  .live-admin-workspace .live-request-hint p { display: inline; }
+  .live-admin-workspace .live-request-hint p + p::before { content: ' '; }
+  .live-admin-empty { flex-direction: row; justify-content: center; gap: 8px; }
+  .live-admin-empty-icon { width: 24px; height: 24px; margin-bottom: 0; }
+  .live-admin-empty-message { font-size: 13px; line-height: 20px; }
+}
+</style>

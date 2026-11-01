@@ -24,7 +24,7 @@ test('centered distribution tables keep wide columns inside their own horizontal
   await expect.poll(() => host.evaluate(element => {
     const outer = element.getBoundingClientRect()
     const wrapper = element.querySelector('.static-table-frame')!.getBoundingClientRect()
-    const viewport = element.querySelector<HTMLElement>('.static-table-body-viewport')!
+    const viewport = element.querySelector<HTMLElement>('[data-static-table-body-viewport]')!
     const body = viewport.getBoundingClientRect()
     return {
       frameInside: wrapper.left >= outer.left - 1 && wrapper.right <= outer.right + 1,
@@ -32,9 +32,9 @@ test('centered distribution tables keep wide columns inside their own horizontal
       wideColumnsPreserved: viewport.scrollWidth > viewport.clientWidth + 100,
     }
   })).toEqual({ frameInside: true, viewportInside: true, wideColumnsPreserved: true })
-  await host.locator('.static-table-body-viewport').evaluate(element => { element.scrollLeft = element.scrollWidth })
+  await host.locator('[data-static-table-body-viewport]').evaluate(element => { element.scrollLeft = element.scrollWidth })
   await expect.poll(() => host.evaluate(element => {
-    const viewport = element.querySelector<HTMLElement>('.static-table-body-viewport')!
+    const viewport = element.querySelector<HTMLElement>('[data-static-table-body-viewport]')!
     const rail = element.querySelector<HTMLElement>('.static-table-header-rail')!
     return viewport.scrollLeft > 100 && Math.abs(rail.scrollLeft - viewport.scrollLeft) <= 1
   })).toBe(true)

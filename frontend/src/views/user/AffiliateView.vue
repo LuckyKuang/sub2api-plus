@@ -287,7 +287,7 @@ onMounted(() => {
 .affiliate-page-number[aria-current="page"] { border-color: var(--surface-edge); background: var(--surface-soft); color: var(--surface-text); font-weight: 600; }
 @media (min-width: 1024px) {
   .affiliate-invitees :deep(.static-table-frame) { flex: 1 1 0; min-height: 0; height: 0; overflow: hidden; }
-  .affiliate-invitees :deep(.static-table-body-viewport) { flex: 1 1 0; min-height: 0; height: 0 !important; overflow: auto; }
+  .affiliate-invitees :deep([data-static-table-body-viewport]) { flex: 1 1 0; min-height: 0; height: 0 !important; overflow: auto; }
 }
 /* Keep actual record rows visible when the fixed panels share a laptop screen. */
 @media (min-width: 1024px) and (max-height: 1000px) {

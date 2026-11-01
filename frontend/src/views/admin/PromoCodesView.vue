@@ -4,7 +4,7 @@
       <template #filters>
         <div class="flex flex-wrap items-center gap-3">
           <!-- Left: Search + Filters -->
-          <div class="flex-1 sm:max-w-64">
+          <div class="w-full min-w-0 sm:flex-1 sm:max-w-64">
             <input
               v-model="searchQuery"
               type="text"
@@ -16,12 +16,12 @@
           <Select
             v-model="filters.status"
             :options="filterStatusOptions"
-            class="w-36"
+            class="w-full sm:w-36"
             @change="loadCodes"
           />
 
           <!-- Right: Action buttons -->
-          <div class="flex flex-1 flex-wrap items-center justify-end gap-2">
+          <div class="ml-auto flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
             <button
               @click="loadCodes"
               :disabled="loading"
@@ -30,7 +30,7 @@
             >
               <Icon name="refresh" size="md" :class="loading ? 'animate-spin' : ''" />
             </button>
-            <button @click="showCreateDialog = true" class="btn btn-primary">
+            <button @click="showCreateDialog = true" class="btn btn-primary shrink-0 whitespace-nowrap">
               <Icon name="plus" size="md" class="mr-1" />
               {{ t('admin.promo.createCode') }}
             </button>

@@ -5,9 +5,9 @@
       <p class="mt-1 text-sm surface-muted">{{ t('admin.promptAudit.policy.description') }}</p>
     </div>
 
-    <div class="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(260px,0.45fr)]">
-      <div class="rounded-xl border border-gray-200 p-4 dark:border-dark-700/60 dark:surface-inset sm:p-5">
-        <fieldset>
+    <div class="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(260px,0.45fr)]">
+      <div class="min-w-0 rounded-xl border border-gray-200 p-4 dark:border-dark-700/60 dark:surface-inset sm:p-5">
+        <fieldset class="min-w-0">
           <legend class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.promptAudit.policy.scope') }}</legend>
           <div class="mt-3 flex flex-wrap gap-5 text-sm surface-muted">
             <label class="flex items-center gap-2">
@@ -27,10 +27,10 @@
             <input v-model="groupSearch" type="search" class="input mt-1.5 w-full" :aria-label="t('admin.promptAudit.policy.searchGroups')" />
           </label>
           <div class="mt-3 max-h-52 overflow-y-auto rounded-lg border border-gray-200 p-2 dark:border-dark-700">
-            <label v-for="group in filteredGroups" :key="group.id" class="flex cursor-pointer items-center justify-between gap-3 rounded-md px-2 py-2 text-sm hover:surface-hover">
-              <span class="flex items-center gap-2 text-gray-800 dark:text-dark-100">
-                <input type="checkbox" :checked="draft.group_ids.includes(group.id)" @change="toggleGroup(group.id)" />
-                {{ group.name }}
+            <label v-for="group in filteredGroups" :key="group.id" class="flex min-w-0 cursor-pointer flex-col items-start gap-1 rounded-md px-2 py-2 text-sm hover:surface-hover sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+              <span class="flex min-w-0 items-start gap-2 text-gray-800 dark:text-dark-100">
+                <input type="checkbox" class="shrink-0" :checked="draft.group_ids.includes(group.id)" @change="toggleGroup(group.id)" />
+                <span class="min-w-0 [overflow-wrap:anywhere]">{{ group.name }}</span>
               </span>
               <span class="text-xs surface-muted">{{ group.platform }} · {{ group.status }}</span>
             </label>
@@ -42,7 +42,7 @@
           <p class="mt-2 text-xs surface-muted">{{ t('admin.promptAudit.policy.selectedCount', { count: draft.group_ids.length }) }}</p>
         </div>
 
-        <fieldset class="mt-5 border-t border-gray-100 pt-5 dark:border-dark-800">
+        <fieldset class="mt-5 min-w-0 border-t border-gray-100 pt-5 dark:border-dark-800">
           <legend class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.promptAudit.policy.scanners') }}</legend>
           <div class="mt-3 grid gap-2 sm:grid-cols-2">
             <label v-for="scanner in SCANNER_CATALOG" :key="scanner.id" class="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:surface-hover surface-muted">
@@ -53,7 +53,7 @@
         </fieldset>
       </div>
 
-      <div class="space-y-4 rounded-xl border border-gray-200 p-4 dark:border-dark-700/60 dark:surface-inset sm:p-5">
+      <div class="min-w-0 space-y-4 rounded-xl border border-gray-200 p-4 dark:border-dark-700/60 dark:surface-inset sm:p-5">
         <label class="block text-sm surface-muted">
           <span>{{ t('admin.promptAudit.policy.workerCount') }}</span>
           <input :value="draft.worker_count" type="number" min="1" max="32" class="input mt-1.5 w-full" :aria-label="t('admin.promptAudit.policy.workerCount')" @input="patch({ worker_count: Number(($event.target as HTMLInputElement).value) })" />

@@ -73,7 +73,7 @@ beforeEach(() => {
       if (ancestor.hidden || ancestor.style.display === 'none') return bounds(0, 0, 0, 0)
       ancestor = ancestor.parentElement
     }
-    if (this.matches('.record-table-scroll')) return bounds(100, this.classList.contains('static-table-body-viewport') ? 208 : 160, 324, 240)
+    if (this.matches('.record-table-scroll')) return bounds(100, this.hasAttribute('data-static-table-body-viewport') ? 208 : 160, 324, 240)
     if (this.tagName === 'TH') return bounds(112, this.closest('.static-table-header-rail') ? 160 : 208, Number(this.dataset.width) || 100, 48)
     if (this.tagName === 'THEAD') return bounds(112, 160, 600, 48)
     if (this.tagName === 'TABLE') {
@@ -219,6 +219,21 @@ describe('static table headers', () => {
     expect(frames.size).toBe(0)
   })
 
+  it('preserves separated body layout while Vue rewrites its root classes during a resize render', async () => {
+    // The header/body boundary must remain fixed during ordinary Vue renders;
+    // restoring a cleared class on a later frame would expose padding briefly
+    // and feed another ResizeObserver update back into the component.
+    const { viewport } = fixture()
+    scope.run(() => useStaticTableHeaders(ref(viewport)))
+    await settle()
+    expect(viewport.getBoundingClientRect().top).toBe(208)
+    viewport.className = 'record-table-scroll table-wrapper refreshed'
+    expect(viewport.getBoundingClientRect().top).toBe(208)
+    await settle()
+    expect(viewport.className).toBe('record-table-scroll table-wrapper refreshed')
+    expect(frames.size).toBe(0)
+  })
+
   it('updates translated labels, new columns and sticky offsets and notifies the owner after measurement', async () => {
     const { viewport, table, head } = fixture()
     const measured = vi.fn()
@@ -273,7 +288,7 @@ describe('static table headers', () => {
     expect(rail.querySelector('thead')).toBe(head)
     expect(rail.nextElementSibling).toBe(viewport)
     expect(viewport.contains(head)).toBe(false)
-    expect(viewport.classList.contains('static-table-body-viewport')).toBe(true)
+    expect(viewport.hasAttribute('data-static-table-body-viewport')).toBe(true)
     expect(viewport.parentElement!.style.maxHeight).toBe('240px')
   })
 
@@ -416,6 +431,7 @@ describe('static table headers', () => {
     scope.stop()
     expect(first.table.tHead).toBe(first.head)
     expect(first.viewport.parentElement).toBe(first.parent)
+    expect(first.viewport.hasAttribute('data-static-table-body-viewport')).toBe(false)
     expect(first.table.classList.contains('static-table-source')).toBe(false)
     expect(first.table.style.getPropertyValue('--static-table-head-height')).toBe('')
     expect(document.querySelector('.static-table-frame')).toBeNull()

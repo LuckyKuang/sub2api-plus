@@ -152,7 +152,7 @@ export function useStaticTableHeaders(root: Ref<HTMLElement | null>): void {
         table.classList.remove('static-table-source')
         table.style.removeProperty('--static-table-head-height')
         if (state.originalLabel === null) table.removeAttribute('aria-label')
-        state.viewport.classList.remove('static-table-body-viewport')
+        state.viewport.removeAttribute('data-static-table-body-viewport')
         // A Vue root v-if (desktop table -> mobile cards) may insert its new
         // root into our frame before removing the original viewport. Preserve
         // every remaining Vue node, rather than removing that replacement.
@@ -207,7 +207,10 @@ export function useStaticTableHeaders(root: Ref<HTMLElement | null>): void {
       headerTable.append(head)
       viewport.before(frameElement)
       frameElement.append(rail, viewport)
-      viewport.classList.add('static-table-body-viewport')
+      // Vue owns the root's complete class attribute and may rewrite it during
+      // a resize render. Keep imperative layout state in our own attribute so
+      // restoring it cannot trigger a padding/ResizeObserver feedback loop.
+      viewport.setAttribute('data-static-table-body-viewport', '')
       table.classList.add('static-table-source')
 
       const state: HeaderState = {
@@ -259,8 +262,8 @@ export function useStaticTableHeaders(root: Ref<HTMLElement | null>): void {
           if (state.frame.hidden !== hidden) {
             writes.push(() => { state.frame.hidden = hidden; if (!hidden) schedule(table) })
           }
-          if (!viewport.classList.contains('static-table-body-viewport') || !table.classList.contains('static-table-source')) {
-            writes.push(() => { viewport.classList.add('static-table-body-viewport'); table.classList.add('static-table-source'); schedule(table) })
+          if (!viewport.hasAttribute('data-static-table-body-viewport') || !table.classList.contains('static-table-source')) {
+            writes.push(() => { viewport.setAttribute('data-static-table-body-viewport', ''); table.classList.add('static-table-source'); schedule(table) })
             continue
           }
         }

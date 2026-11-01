@@ -160,7 +160,7 @@
               <button
                 :ref="(el) => setGroupButtonRef(row.id, el)"
                 @click="openGroupSelector(row)"
-                class="-mx-2 -my-1 flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 transition-all duration-200 hover:surface-hover surface-control"
+                class="-mx-2 -my-1 flex cursor-pointer flex-wrap items-center gap-2 rounded-lg px-2 py-1 transition-all duration-200 hover:surface-hover surface-control sm:flex-nowrap"
                 :title="t('keys.clickToChangeGroup')"
                 :disabled="changingGroupIds.has(row.id)"
               >
@@ -180,9 +180,9 @@
                 <span v-else class="text-sm surface-muted">{{
                   t('keys.noGroup')
                 }}</span>
-                <span class="text-xs surface-muted">{{ t('keys.selectGroup') }}</span>
+                <span class="shrink-0 text-xs surface-muted">{{ t('keys.selectGroup') }}</span>
                 <svg
-                  class="h-3.5 w-3.5 text-gray-400 opacity-60 transition-opacity group-hover/dropdown:opacity-100"
+                  class="h-3.5 w-3.5 shrink-0 text-gray-400 opacity-60 transition-opacity group-hover/dropdown:opacity-100"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"

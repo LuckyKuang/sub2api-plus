@@ -419,6 +419,7 @@
 </template>
 
 <script setup lang="ts">
+import { useProductAppearance } from '@/composables/useProductAppearance'
 import DateTimePicker from '@/components/common/DateTimePicker.vue'
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -430,6 +431,8 @@ import { buildGatewayUrl } from '@/api/client'
 import { formatDateLocalInput } from '@/utils/format'
 import { sanitizeUrl } from '@/utils/url'
 import { formatTokenShare, sumTokenBuckets } from '@/utils/tokenShare'
+
+useProductAppearance()
 
 const { t, locale } = useI18n()
 const appStore = useAppStore()

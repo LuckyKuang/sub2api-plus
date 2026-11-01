@@ -53,7 +53,7 @@ describe('record table appearance requirements', () => {
     expect(dialogPaint.get('height')).toBeUndefined()
     expect(dialogPaint.get('overflow')).toBe('auto')
     expect(dialogPaint.get('overscroll-behavior')).toBe('contain')
-    container.classList.add('static-table-body-viewport')
+    container.setAttribute('data-static-table-body-viewport', '')
     expect(paint(container, '', headerStylesheet).get('max-height')).toBe('none')
   })
 
@@ -123,10 +123,10 @@ describe('record table appearance requirements', () => {
       expect(paint(cell).get('background-color')).toBe('transparent')
     }
     for (const cell of container.querySelectorAll('.sticky-col')) {
-      const rounded = paint(cell, '::before')
-      expect(rounded.get('background-color')).toBe('transparent')
-      expect(rounded.get('background-image')).toContain('var(--record-row-tint, transparent)')
-      expect(rounded.get('box-shadow')).toContain('var(--record-edge-top)')
+      const frozen = paint(cell)
+      expect(frozen.get('background-color')).toBe('transparent')
+      expect(frozen.get('background-image')).toContain('var(--record-row-tint, transparent)')
+      expect(frozen.get('box-shadow')).toContain('var(--record-edge-top)')
     }
     const spacer = container.querySelector<HTMLElement>('[aria-hidden="true"] td')!
     expect(paint(spacer).get('background')).toBe('none')
@@ -151,34 +151,17 @@ describe('record table appearance requirements', () => {
       expect(cellPaint.get('--record-edge-right')).toBe('inset 0 0 0 transparent')
       expect(cellPaint.get('box-shadow')).toContain('var(--record-edge-top)')
     }
-    // Interior pinned cells keep ordinary record geometry. Actual outer
-    // table edges use a rounded outline/tint layer without a static fill.
-    expect(paint(row.children[1]!, '::before').get('content')).toBe('none')
-    for (const cell of [row.firstElementChild!, row.lastElementChild!]) {
-      const blocker = paint(cell)
-      expect(blocker.get('border-radius')).toBe('0')
-      expect(blocker.get('background-color')).toBe('transparent')
-      expect(blocker.get('background-image')).toBe('none')
-      expect(blocker.get('background-clip')).toBe('border-box')
-      expect(blocker.get('border-block-width')).toBe('4px')
-      expect(blocker.get('box-shadow')).toBe('none')
-      const rounded = paint(cell, '::before')
-      expect(rounded.get('content')).toBe("''")
-      expect(rounded.get('position')).toBe('absolute')
-      expect(rounded.get('inset')).toBe('0')
-      expect(rounded.get('z-index')).toBe('-1')
-      expect(rounded.get('pointer-events')).toBe('none')
-      expect(rounded.get('background-color')).toBe('transparent')
-      expect(rounded.get('background-image')).toContain('var(--record-row-tint, transparent)')
-      expect(rounded.get('box-shadow')).toContain('var(--record-edge-left)')
-      // A matching border-radius shorthand can reset these longhands through
-      // specificity even when declared earlier. Forbid that competing reset.
-      expect(rounded.has('border-radius')).toBe(false)
-      const side = cell === row.firstElementChild ? 'left' : 'right'
-      expect(rounded.get(`border-top-${side}-radius`)).toBe('16px')
-      expect(rounded.get(`border-bottom-${side}-radius`)).toBe('16px')
-      expect(paint(cell, '::after').get('content')).toBe('none')
+    // Frozen columns share the record's native cell paint in every state.
+    // They must not depend on a negative layer behind a sticky table cell.
+    for (const cell of [row.firstElementChild!, row.children[1]!, row.lastElementChild!]) {
+      const cellPaint = paint(cell)
+      expect(cellPaint.get('background-image')).toContain('var(--record-row-tint, transparent)')
+      expect(cellPaint.get('box-shadow')).toContain('var(--record-edge-top)')
+      expect(cellPaint.get('background-clip')).toBe('padding-box')
+      expect(paint(cell, '::before').get('content')).toBe('none')
     }
+    expect(paint(row.firstElementChild!).get('border-top-left-radius')).toBe('16px 20px')
+    expect(paint(row.lastElementChild!).get('border-top-right-radius')).toBe('16px 20px')
   })
 
   // Audited requirement: every record has a 1px outline even at 100% fill
@@ -234,8 +217,8 @@ describe('record table appearance requirements', () => {
     recordTable.classList.add(...classes.split(' '))
     expect(paint(recordTable).get('--record-compact-radius')).toBe(radius)
     const row = container.querySelector('tr')!
-    expect(paint(row.firstElementChild!, '::before').get('border-top-left-radius')).toBe('var(--record-compact-radius)')
-    expect(paint(row.lastElementChild!, '::before').get('border-bottom-right-radius')).toBe('var(--record-compact-radius)')
+    expect(paint(row.firstElementChild!).get('border-top-left-radius')).toBe('var(--record-compact-radius) calc(var(--record-compact-radius) + 4px)')
+    expect(paint(row.lastElementChild!).get('border-bottom-right-radius')).toBe('var(--record-compact-radius) calc(var(--record-compact-radius) + 4px)')
   })
 
   it('opts every authored Vue table into the shared record-card layout', () => {

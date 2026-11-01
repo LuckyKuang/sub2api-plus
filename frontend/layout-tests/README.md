@@ -52,6 +52,9 @@ It also checks body-portalled user colors and preserved admin default insets.
 Additional 390px and 1440px overlay projects exercise the public/user palette in
 both themes, including configured accent and transparency. Synthetic stores and
 intercepted API responses keep the layout fixture independent of any instance.
+Mobile subscription and payment-result cases at 320px and 390px check long
+unbroken names and order references inside their cards, including renewal and
+navigation action hit targets and real click destinations.
 
 The motion projects use a separately production-built entrypoint through the
 application's PostCSS/Tailwind pipeline. Real dialog, drawer, announcement,

@@ -19,7 +19,7 @@ const locales = ['en-US', 'zh-CN']
 
 export default defineConfig({
   testDir: '.',
-  testMatch: ['overlays.spec.ts', 'user-layout.spec.ts', 'user-audit-workspaces.spec.ts', 'admin-layout.spec.ts', 'motion.spec.ts'],
+  testMatch: ['overlays.spec.ts', 'user-layout.spec.ts', 'user-audit-workspaces.spec.ts', 'admin-layout.spec.ts', 'admin-hover-cards.spec.ts', 'mobile-admin-cards.spec.ts', 'motion.spec.ts'],
   fullyParallel: true,
   workers: 2,
   retries: 0,
@@ -50,7 +50,7 @@ export default defineConfig({
   }))),
   ...themes.flatMap(colorScheme => locales.map(locale => ({
     name: `admin-layout-${colorScheme}-${locale}`,
-    testMatch: 'admin-layout.spec.ts',
+    testMatch: ['admin-layout.spec.ts', 'admin-hover-cards.spec.ts', 'mobile-admin-cards.spec.ts'],
     use: { viewport: { width: 1440, height: 900 }, colorScheme, locale },
   }))),
   ...[{ width: 390, height: 844 }, { width: 1440, height: 600 }].flatMap(viewport => themes.map(colorScheme => ({

@@ -39,10 +39,13 @@
 </template>
 
 <script setup lang="ts">
+import { useProductAppearance } from '@/composables/useProductAppearance'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { useAppStore } from '@/stores'
+
+useProductAppearance()
 
 const { t } = useI18n()
 const route = useRoute()

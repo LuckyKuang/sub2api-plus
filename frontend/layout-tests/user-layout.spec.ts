@@ -368,6 +368,62 @@ test('dense user records retain every field when the viewport cannot fit a table
   await expect(panel.locator('table.record-table')).toBeVisible()
 })
 
+test('mobile usage cards contain long unbroken key, model and group names', async ({ page }, info) => {
+  // Acceptance source: the full mobile-page review requires every record card
+  // to fit the phone, including long user-defined names. The enclosing page can
+  // hide overflow, so assert the card and each value wrapper independently.
+  const theme = info.project.use.colorScheme === 'dark' ? 'dark' : 'light'
+  const locale = info.project.use.locale?.startsWith('zh') ? 'zh' : 'en'
+  const names = {
+    api_key: `MobileKey${'UnbrokenApplicationName'.repeat(6)}`,
+    model: `MobileModel${'UnbrokenModelName'.repeat(6)}`,
+    group: `MobileGroup${'UnbrokenRoutingGroup'.repeat(6)}`,
+  }
+  await page.route('**/api/v1/**', async route => {
+    const url = new URL(route.request().url())
+    let data: unknown = { items: [], total: 0, pages: 0, enabled: false }
+    if (url.pathname === '/api/v1/usage') data = {
+      total: 1, page: 1, page_size: 20, pages: 1, items: [{
+        id: 1, user_id: 9999, api_key_id: 1, account_id: null, request_id: 'mobile-long-name-record',
+        api_key: { id: 1, name: names.api_key }, model: names.model,
+        group_id: 1, group: { id: 1, name: names.group, platform: 'openai' },
+        inbound_endpoint: '/v1/responses', upstream_endpoint: '/v1/responses', ip_address: '192.0.2.1',
+        input_tokens: 1200, output_tokens: 300, cache_creation_tokens: 0, cache_read_tokens: 0,
+        input_cost: .01, output_cost: .02, total_cost: .03, actual_cost: .03, rate_multiplier: 1,
+        billing_type: 0, billing_mode: 'token', stream: true, request_type: 'stream', duration_ms: 1000,
+        first_token_ms: 100, created_at: '2026-10-29T10:00:00Z',
+      }],
+    }
+    else if (url.pathname === '/api/v1/keys') data = { items: [{ id: 1, name: names.api_key }], total: 1, pages: 1 }
+    else if (url.pathname.includes('/groups')) data = [{ id: 1, name: names.group, platform: 'openai' }]
+    else if (url.pathname.includes('/stats')) data = { total_requests: 1, total_tokens: 1500, total_cost: .03, total_actual_cost: .03 }
+    else if (url.pathname === '/api/v1/auth/me') data = { id: 9999, role: 'user', email: 'review@example.test', balance: 12.34 }
+    await route.fulfill({ json: { code: 0, data } })
+  })
+  for (const width of [320, 390]) {
+    await page.setViewportSize({ width, height: 844 })
+    await page.goto(`/layout-tests/index.html?view=user-layout&usage=1&theme=${theme}&locale=${locale}`)
+    const fields = page.getByTestId('usage-records-panel').locator('.user-record-fields')
+    await expect(fields).toHaveCount(1)
+    for (const [field, name] of Object.entries(names)) {
+      await expect(fields.locator(`[data-field="${field}"]`)).toContainText(name)
+    }
+    const geometry = await fields.evaluate(element => {
+      const card = element.parentElement!
+      return {
+        cardOverflow: card.scrollWidth - card.clientWidth,
+        fieldsOverflow: element.scrollWidth - element.clientWidth,
+        valuesOverflow: [...element.querySelectorAll('[data-field] > div')].map(value => value.scrollWidth - value.clientWidth),
+        documentOverflow: document.documentElement.scrollWidth - innerWidth,
+      }
+    })
+    expect(geometry.cardOverflow).toBeLessThanOrEqual(1)
+    expect(geometry.fieldsOverflow).toBeLessThanOrEqual(1)
+    expect(geometry.valuesOverflow.every(overflow => overflow <= 1)).toBe(true)
+    expect(geometry.documentOverflow).toBeLessThanOrEqual(1)
+  }
+})
+
 test('dashboard shows all sections, four permanent performance cards and complete model records', async ({ page }, info) => {
   // Approved audit: chart/quotas/recent sections share one page; performance
   // has no disclosure and sits 16px above the platform card. Long model names
@@ -461,9 +517,16 @@ test('dashboard shows all sections, four permanent performance cards and complet
         const originalWidth = element.style.width
         try {
           element.style.width = '1005px'
+          const parent = element.parentElement!
+          const parentStyle = getComputedStyle(parent)
+          // Compare CSS-pixel content boxes: clientWidth rounds fractional
+          // widths to integers and can reject a canvas that fits exactly.
+          const available = parent.getBoundingClientRect().width
+            - parseFloat(parentStyle.borderLeftWidth) - parseFloat(parentStyle.borderRightWidth)
+            - parseFloat(parentStyle.paddingLeft) - parseFloat(parentStyle.paddingRight)
           return {
             width: element.getBoundingClientRect().width,
-            available: element.parentElement!.clientWidth,
+            available,
             documentOverflow: document.documentElement.scrollWidth > innerWidth,
           }
         } finally {

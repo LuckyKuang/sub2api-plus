@@ -4567,11 +4567,11 @@
                   <div
                     v-for="(row, i) in codexFingerprintRows"
                     :key="`codex-fp-${i}`"
-                    class="mb-2 flex items-center gap-2"
+                    class="mb-2 grid min-w-0 grid-cols-1 items-center gap-2 sm:flex"
                   >
                     <Select
                       v-model="row.type"
-                      class="w-40 shrink-0"
+                      class="w-full min-w-0 sm:w-40 sm:shrink-0"
                       trigger-class="text-sm"
                       :searchable="false"
                       :options="[{ value: 'header_exact', label: t('admin.settings.gatewayForwarding.codexFpTypeHeaderExact') }, { value: 'header_prefix', label: t('admin.settings.gatewayForwarding.codexFpTypeHeaderPrefix') }, { value: 'body_path', label: t('admin.settings.gatewayForwarding.codexFpTypeBodyPath') }]"
@@ -4579,7 +4579,7 @@
                     <input
                       v-model="row.match"
                       type="text"
-                      class="input flex-1 font-mono text-sm"
+                      class="input min-w-0 flex-1 font-mono text-sm"
                       :placeholder="t('admin.settings.gatewayForwarding.codexFpMatchPlaceholder')"
                     />
                     <label class="flex shrink-0 items-center gap-1 text-xs surface-muted">
@@ -4629,12 +4629,12 @@
                   <div
                     v-for="(row, i) in codexBlacklistRows"
                     :key="`codex-bl-${i}`"
-                    class="mb-2 flex gap-2"
+                    class="mb-2 grid min-w-0 grid-cols-1 gap-2 sm:flex"
                   >
                     <input
                       v-model="row.originator"
                       type="text"
-                      class="input w-1/3 font-mono text-sm"
+                      class="input min-w-0 font-mono text-sm sm:w-1/3"
                       :placeholder="
                         t(
                           'admin.settings.gatewayForwarding.codexOriginatorPlaceholder',
@@ -4644,7 +4644,7 @@
                     <input
                       v-model="row.uaContains"
                       type="text"
-                      class="input flex-1 font-mono text-sm"
+                      class="input min-w-0 flex-1 font-mono text-sm"
                       :placeholder="
                         t(
                           'admin.settings.gatewayForwarding.codexUaContainsPlaceholder',
@@ -4680,12 +4680,12 @@
                   <div
                     v-for="(row, i) in codexWhitelistRows"
                     :key="`codex-wl-${i}`"
-                    class="mb-2 flex gap-2"
+                    class="mb-2 grid min-w-0 grid-cols-1 gap-2 sm:flex"
                   >
                     <input
                       v-model="row.originator"
                       type="text"
-                      class="input w-1/3 font-mono text-sm"
+                      class="input min-w-0 font-mono text-sm sm:w-1/3"
                       :placeholder="
                         t(
                           'admin.settings.gatewayForwarding.codexOriginatorPlaceholder',
@@ -4695,7 +4695,7 @@
                     <input
                       v-model="row.uaContains"
                       type="text"
-                      class="input flex-1 font-mono text-sm"
+                      class="input min-w-0 flex-1 font-mono text-sm"
                       :placeholder="
                         t(
                           'admin.settings.gatewayForwarding.codexUaContainsPlaceholder',
@@ -7896,11 +7896,11 @@
                       class="w-40"
                     />
                   </div>
-                  <div>
+                  <div class="min-w-0 max-w-full">
                     <label class="input-label">{{
                       t("admin.settings.payment.cancelRateLimit")
                     }}</label>
-                    <div class="flex items-center gap-2">
+                    <div class="flex flex-wrap items-center gap-2">
                       <Toggle
                         v-model="form.payment_cancel_rate_limit_enabled"
                       />

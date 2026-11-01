@@ -274,354 +274,311 @@
     />
 
     <!-- Generate Codes Dialog -->
-    <Teleport to="body">
-      <div v-if="showGenerateDialog" class="fixed inset-0 z-50 flex items-center justify-center">
-        <div class="fixed inset-0 surface-overlay" @click="showGenerateDialog = false"></div>
-        <div
-          class="relative z-10 w-full max-w-md rounded-xl p-6 shadow-xl surface-panel"
-        >
-          <h2 class="mb-4 text-lg font-semibold text-gray-900 dark:text-white">
-            {{ t('admin.redeem.generateCodesTitle') }}
-          </h2>
-          <form @submit.prevent="handleGenerateCodes" class="space-y-4">
-            <div>
-              <label class="input-label">{{ t('admin.redeem.codeType') }}</label>
-              <Select v-model="generateForm.type" :options="typeOptions" />
-            </div>
-            <div v-if="generateForm.type === 'balance' || generateForm.type === 'subscription'">
-              <label class="input-label">{{ t('featureExtensions.generateOrder') }}</label>
-              <Select v-model="generateForm.generate_order" :options="[{ value: false, label: t('featureExtensions.noOrder') }, { value: true, label: t('featureExtensions.withOrder') }]" />
-            </div>
-            <div v-if="generateForm.generate_order && generateForm.type === 'balance'">
-              <label class="input-label">{{ t('featureExtensions.orderCurrency') }}</label>
-              <Select v-model="generateForm.order_currency" :options="[{ value: 'CNY', label: 'CNY' }, { value: 'USD', label: 'USD' }]" />
-              <p class="mt-1 text-xs surface-muted">{{ t('featureExtensions.noExchange') }}</p>
-            </div>
-            <div v-if="generateForm.generate_order && generateForm.type === 'subscription'">
-              <label class="input-label">{{ t('featureExtensions.orderPlan') }}</label>
-              <Select v-model="generateForm.order_plan_id" :options="orderPlanOptions" :searchable="false" :placeholder="t('featureExtensions.selectPlan')" />
-              <p v-if="selectedOrderPlan" class="mt-1 text-xs surface-muted">{{ t('featureExtensions.planSnapshot', { name: selectedOrderPlan.name, price: selectedOrderPlan.price, currency: selectedOrderPlan.currency || 'CNY' }) }}</p>
-            </div>
-            <!-- 余额/并发类型：显示数值输入 -->
-            <div v-if="generateForm.type !== 'subscription' && generateForm.type !== 'invitation'">
-              <label class="input-label">
-                {{
-                  generateForm.type === 'balance'
-                    ? t('admin.redeem.amount')
-                    : t('admin.redeem.columns.value')
-                }}
-              </label>
-              <input
-                v-model.number="generateForm.value"
-                type="number"
-                :step="generateForm.type === 'balance' ? '0.01' : '1'"
-                :min="generateForm.type === 'balance' ? '0.01' : '1'"
-                required
-                class="input"
-              />
-            </div>
-            <!-- 邀请码类型：显示提示信息 -->
-            <div v-if="generateForm.type === 'invitation'" class="rounded-lg bg-blue-50/[0.15] p-3 dark:bg-blue-900/20">
-              <p class="text-sm text-blue-700 dark:text-blue-300">
-                {{ t('admin.redeem.invitationHint') }}
-              </p>
-            </div>
-            <!-- 订阅类型：显示分组选择和有效天数 -->
-            <template v-if="generateForm.type === 'subscription' && !generateForm.generate_order">
-              <div>
-                <label class="input-label">{{ t('admin.redeem.selectGroup') }}</label>
-                <Select
-                  v-model="generateForm.group_id"
-                  :options="subscriptionGroupOptions"
-                  :placeholder="t('admin.redeem.selectGroupPlaceholder')"
-                >
-                  <template #selected="{ option }">
-                    <GroupBadge
-                      v-if="option"
-                      :name="(option as unknown as GroupOption).label"
-                      :platform="(option as unknown as GroupOption).platform"
-                      :subscription-type="(option as unknown as GroupOption).subscriptionType"
-                      :rate-multiplier="(option as unknown as GroupOption).rate"
-                    />
-                    <span v-else class="surface-muted">{{
-                      t('admin.redeem.selectGroupPlaceholder')
-                    }}</span>
-                  </template>
-                  <template #option="{ option, selected }">
-                    <GroupOptionItem
-                      :name="(option as unknown as GroupOption).label"
-                      :platform="(option as unknown as GroupOption).platform"
-                      :subscription-type="(option as unknown as GroupOption).subscriptionType"
-                      :rate-multiplier="(option as unknown as GroupOption).rate"
-                      :description="(option as unknown as GroupOption).description"
-                      :selected="selected"
-                    />
-                  </template>
-                </Select>
-              </div>
-              <div>
-                <label class="input-label">{{ t('admin.redeem.validityDays') }}</label>
-                <input
-                  v-model.number="generateForm.validity_days"
-                  type="number"
-                  min="1"
-                  max="36500"
-                  required
-                  class="input"
-                />
-              </div>
-            </template>
-            <div>
-              <label class="input-label">{{ t('admin.redeem.codeExpiry') }}</label>
-              <div class="grid grid-cols-2 gap-2 sm:grid-cols-5">
-                <button
-                  v-for="option in redeemCodeExpiryOptions"
-                  :key="option.value"
-                  type="button"
-                  @click="generateForm.expiry_option = option.value"
-                  :class="[
-                    'rounded-lg border px-3 py-2 text-sm transition-colors',
-                    generateForm.expiry_option === option.value
-                      ? 'border-primary-500 bg-primary-50/[0.15] text-primary-700 dark:border-primary-400 dark:bg-primary-900/20 dark:text-primary-300'
-                      : 'border-gray-200 text-gray-700 hover:surface-hover dark:border-dark-600 dark:text-gray-300 dark:hover:surface-hover'
-                  ]"
-                >
-                  {{ option.label }}
-                </button>
-              </div>
-              <input
-                v-if="generateForm.expiry_option === 'custom'"
-                v-model.number="generateForm.custom_expiry_days"
-                type="number"
-                min="1"
-                max="3650"
-                required
-                class="input mt-2"
-                :placeholder="t('admin.redeem.customExpiryDays')"
-              />
-            </div>
-            <div>
-              <label class="input-label">{{ t('admin.redeem.count') }}</label>
-              <input
-                v-model.number="generateForm.count"
-                type="number"
-                min="1"
-                max="100"
-                required
-                class="input"
-              />
-            </div>
-            <div class="flex justify-end gap-3 pt-2">
-              <button type="button" @click="showGenerateDialog = false" class="btn btn-secondary">
-                {{ t('common.cancel') }}
-              </button>
-              <button type="submit" :disabled="generating" class="btn btn-primary">
-                {{ generating ? t('admin.redeem.generating') : t('admin.redeem.generate') }}
-              </button>
-            </div>
-          </form>
+    <BaseDialog
+      :show="showGenerateDialog"
+      :title="t('admin.redeem.generateCodesTitle')"
+      width="narrow"
+      close-on-click-outside
+      @close="showGenerateDialog = false"
+    >
+      <form id="generate-redeem-codes-form" @submit.prevent="handleGenerateCodes" class="space-y-4">
+        <div>
+          <label class="input-label">{{ t('admin.redeem.codeType') }}</label>
+          <Select v-model="generateForm.type" :options="typeOptions" />
         </div>
-      </div>
-    </Teleport>
-
-    <!-- Batch Update Dialog -->
-    <Teleport to="body">
-      <div
-        v-if="showBatchUpdateDialog"
-        class="fixed inset-0 z-50 flex items-center justify-center p-4"
-      >
-        <div class="fixed inset-0 surface-overlay" @click="closeBatchUpdateDialog"></div>
-        <div
-          class="relative z-10 w-full max-w-lg rounded-xl p-6 shadow-xl surface-panel"
-        >
-          <h2 class="mb-1 text-lg font-semibold text-gray-900 dark:text-white">
-            {{ t('admin.redeem.batchUpdateTitle') }}
-          </h2>
-          <p class="mb-4 text-sm surface-muted">
-            {{ t('admin.redeem.selectedCount', { count: selectedCount }) }}
+        <div v-if="generateForm.type === 'balance' || generateForm.type === 'subscription'">
+          <label class="input-label">{{ t('featureExtensions.generateOrder') }}</label>
+          <Select v-model="generateForm.generate_order" :options="[{ value: false, label: t('featureExtensions.noOrder') }, { value: true, label: t('featureExtensions.withOrder') }]" />
+        </div>
+        <div v-if="generateForm.generate_order && generateForm.type === 'balance'">
+          <label class="input-label">{{ t('featureExtensions.orderCurrency') }}</label>
+          <Select v-model="generateForm.order_currency" :options="[{ value: 'CNY', label: 'CNY' }, { value: 'USD', label: 'USD' }]" />
+          <p class="mt-1 text-xs surface-muted">{{ t('featureExtensions.noExchange') }}</p>
+        </div>
+        <div v-if="generateForm.generate_order && generateForm.type === 'subscription'">
+          <label class="input-label">{{ t('featureExtensions.orderPlan') }}</label>
+          <Select v-model="generateForm.order_plan_id" :options="orderPlanOptions" :searchable="false" :placeholder="t('featureExtensions.selectPlan')" />
+          <p v-if="selectedOrderPlan" class="mt-1 text-xs surface-muted">{{ t('featureExtensions.planSnapshot', { name: selectedOrderPlan.name, price: selectedOrderPlan.price, currency: selectedOrderPlan.currency || 'CNY' }) }}</p>
+        </div>
+        <!-- 余额/并发类型：显示数值输入 -->
+        <div v-if="generateForm.type !== 'subscription' && generateForm.type !== 'invitation'">
+          <label class="input-label">
+            {{
+              generateForm.type === 'balance'
+                ? t('admin.redeem.amount')
+                : t('admin.redeem.columns.value')
+            }}
+          </label>
+          <input
+            v-model.number="generateForm.value"
+            type="number"
+            :step="generateForm.type === 'balance' ? '0.01' : '1'"
+            :min="generateForm.type === 'balance' ? '0.01' : '1'"
+            required
+            class="input"
+          />
+        </div>
+        <!-- 邀请码类型：显示提示信息 -->
+        <div v-if="generateForm.type === 'invitation'" class="rounded-lg bg-blue-50/[0.15] p-3 dark:bg-blue-900/20">
+          <p class="text-sm text-blue-700 dark:text-blue-300">
+            {{ t('admin.redeem.invitationHint') }}
           </p>
-
-          <form data-test="batch-update-form" class="space-y-4" @submit.prevent="handleBatchUpdate">
-            <div class="space-y-2">
-              <label class="flex items-center gap-2 text-sm font-medium surface-muted">
-                <input
-                  data-test="batch-field-status"
-                  v-model="batchUpdateForm.update_status"
-                  type="checkbox"
-                  class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                />
-                {{ t('admin.redeem.batchFields.status') }}
-              </label>
-              <Select
-                v-if="batchUpdateForm.update_status"
-                v-model="batchUpdateForm.status"
-                data-test="batch-status-select"
-                :options="batchStatusOptions"
-              />
-            </div>
-
-            <div class="space-y-2">
-              <label class="flex items-center gap-2 text-sm font-medium surface-muted">
-                <input
-                  v-model="batchUpdateForm.update_expires_at"
-                  type="checkbox"
-                  class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                />
-                {{ t('admin.redeem.batchFields.expiresAt') }}
-              </label>
-              <template v-if="batchUpdateForm.update_expires_at">
-                <Select v-model="batchUpdateForm.expires_mode" :options="batchExpiryModeOptions" />
-                <DateTimePicker :aria-label="t('admin.redeem.batchFields.expiresAt')"
-                  v-if="batchUpdateForm.expires_mode === 'custom'"
-                  v-model="batchUpdateForm.expires_at_local"
-                  type="datetime-local"
-                  class="input"
-                />
-                <p v-if="batchUpdateForm.expires_mode === 'custom'" class="input-hint">
-                  {{ t('admin.redeem.localTimeZoneHint', { timezone: browserTimeZone }) }}
-                </p>
-              </template>
-            </div>
-
-            <div class="space-y-2">
-              <label class="flex items-center gap-2 text-sm font-medium surface-muted">
-                <input
-                  data-test="batch-field-notes"
-                  v-model="batchUpdateForm.update_notes"
-                  type="checkbox"
-                  class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                />
-                {{ t('admin.redeem.batchFields.notes') }}
-              </label>
-              <textarea
-                v-if="batchUpdateForm.update_notes"
-                data-test="batch-notes-input"
-                v-model="batchUpdateForm.notes"
-                rows="3"
-                class="input"
-                :placeholder="t('admin.redeem.batchNotesPlaceholder')"
-              ></textarea>
-            </div>
-
-            <div class="space-y-2">
-              <label class="flex items-center gap-2 text-sm font-medium surface-muted">
-                <input
-                  v-model="batchUpdateForm.update_group_id"
-                  type="checkbox"
-                  class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                />
-                {{ t('admin.redeem.batchFields.group') }}
-              </label>
-              <Select
-                v-if="batchUpdateForm.update_group_id"
-                v-model="batchUpdateForm.group_id"
-                :options="batchGroupOptions"
-                :placeholder="t('admin.redeem.selectGroupPlaceholder')"
-              />
-            </div>
-
-            <div class="flex justify-end gap-3 pt-2">
-              <button type="button" @click="closeBatchUpdateDialog" class="btn btn-secondary">
-                {{ t('common.cancel') }}
-              </button>
-              <button
-                data-test="batch-update-submit"
-                type="submit"
-                :disabled="batchUpdating"
-                class="btn btn-primary"
-              >
-                {{ batchUpdating ? t('common.submitting') : t('admin.redeem.batchUpdate') }}
-              </button>
-            </div>
-          </form>
         </div>
-      </div>
-    </Teleport>
-
-    <!-- Generated Codes Result Dialog -->
-    <Teleport to="body">
-      <div v-if="showResultDialog" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div class="fixed inset-0 surface-overlay" @click="closeResultDialog"></div>
-        <div class="relative z-10 w-full max-w-lg rounded-xl shadow-xl surface-panel">
-          <!-- Header -->
-          <div
-            class="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-dark-600"
-          >
-            <div class="flex items-center gap-3">
-              <div
-                class="flex h-10 w-10 items-center justify-center rounded-full bg-green-100/[0.15] dark:bg-green-900/30"
-              >
-                <svg
-                  class="h-5 w-5 text-green-600 dark:text-green-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-              </div>
-              <div>
-                <h2 class="text-base font-semibold text-gray-900 dark:text-white">
-                  {{ t('admin.redeem.generatedSuccessfully') }}
-                </h2>
-                <p class="text-sm surface-muted">
-                  {{ t('admin.redeem.codesCreated', { count: generatedCodes.length }) }}
-                </p>
-              </div>
-            </div>
-            <button
-              @click="closeResultDialog"
-              class="rounded-lg p-1.5 transition-colors hover:surface-hover hover:text-gray-600 dark:hover:text-gray-300 surface-control surface-muted"
+        <!-- 订阅类型：显示分组选择和有效天数 -->
+        <template v-if="generateForm.type === 'subscription' && !generateForm.generate_order">
+          <div>
+            <label class="input-label">{{ t('admin.redeem.selectGroup') }}</label>
+            <Select
+              v-model="generateForm.group_id"
+              :options="subscriptionGroupOptions"
+              :placeholder="t('admin.redeem.selectGroupPlaceholder')"
             >
-              <Icon name="x" size="md" :stroke-width="2" />
-            </button>
+              <template #selected="{ option }">
+                <GroupBadge
+                  v-if="option"
+                  :name="(option as unknown as GroupOption).label"
+                  :platform="(option as unknown as GroupOption).platform"
+                  :subscription-type="(option as unknown as GroupOption).subscriptionType"
+                  :rate-multiplier="(option as unknown as GroupOption).rate"
+                />
+                <span v-else class="surface-muted">{{
+                  t('admin.redeem.selectGroupPlaceholder')
+                }}</span>
+              </template>
+              <template #option="{ option, selected }">
+                <GroupOptionItem
+                  :name="(option as unknown as GroupOption).label"
+                  :platform="(option as unknown as GroupOption).platform"
+                  :subscription-type="(option as unknown as GroupOption).subscriptionType"
+                  :rate-multiplier="(option as unknown as GroupOption).rate"
+                  :description="(option as unknown as GroupOption).description"
+                  :selected="selected"
+                />
+              </template>
+            </Select>
           </div>
-          <!-- Content -->
-          <div class="p-5">
-            <div class="relative">
-              <textarea
-                readonly
-                :value="generatedCodesText"
-                :style="{ height: textareaHeight }"
-                class="w-full resize-none rounded-lg border border-gray-200 surface-inset p-3 font-mono text-sm text-gray-800 focus:outline-none dark:border-dark-600 dark:text-gray-200"
-              ></textarea>
-            </div>
+          <div>
+            <label class="input-label">{{ t('admin.redeem.validityDays') }}</label>
+            <input
+              v-model.number="generateForm.validity_days"
+              type="number"
+              min="1"
+              max="36500"
+              required
+              class="input"
+            />
           </div>
-          <!-- Footer -->
-          <div
-            class="flex justify-end gap-2 rounded-b-xl border-t border-gray-200 surface-inset px-5 py-4 dark:border-dark-600"
-          >
+        </template>
+        <div>
+          <label class="input-label">{{ t('admin.redeem.codeExpiry') }}</label>
+          <div class="flex flex-wrap gap-2">
             <button
-              @click="copyGeneratedCodes"
+              v-for="option in redeemCodeExpiryOptions"
+              :key="option.value"
+              type="button"
+              @click="generateForm.expiry_option = option.value"
               :class="[
-                'btn flex items-center gap-2 transition-all',
-                copiedAll ? 'btn-success' : 'btn-secondary'
+                'flex-1 whitespace-nowrap rounded-lg border px-3 py-2 text-sm transition-colors',
+                generateForm.expiry_option === option.value
+                  ? 'border-primary-500 bg-primary-50/[0.15] text-primary-700 dark:border-primary-400 dark:bg-primary-900/20 dark:text-primary-300'
+                  : 'border-gray-200 text-gray-700 hover:surface-hover dark:border-dark-600 dark:text-gray-300 dark:hover:surface-hover'
               ]"
             >
-              <Icon v-if="!copiedAll" name="copy" size="sm" :stroke-width="2" />
-              <svg v-else class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M5 13l4 4L19 7"
-                />
-              </svg>
-              {{ copiedAll ? t('admin.redeem.copied') : t('admin.redeem.copyAll') }}
-            </button>
-            <button @click="downloadGeneratedCodes" class="btn btn-primary flex items-center gap-2">
-              <Icon name="download" size="sm" :stroke-width="2" />
-              {{ t('admin.redeem.download') }}
+              {{ option.label }}
             </button>
           </div>
+          <input
+            v-if="generateForm.expiry_option === 'custom'"
+            v-model.number="generateForm.custom_expiry_days"
+            type="number"
+            min="1"
+            max="3650"
+            required
+            class="input mt-2"
+            :placeholder="t('admin.redeem.customExpiryDays')"
+          />
         </div>
+        <div>
+          <label class="input-label">{{ t('admin.redeem.count') }}</label>
+          <input
+            v-model.number="generateForm.count"
+            type="number"
+            min="1"
+            max="100"
+            required
+            class="input"
+          />
+        </div>
+      </form>
+      <template #footer>
+        <div class="flex justify-end gap-3">
+          <button type="button" @click="showGenerateDialog = false" class="btn btn-secondary">
+            {{ t('common.cancel') }}
+          </button>
+          <button type="submit" form="generate-redeem-codes-form" :disabled="generating" class="btn btn-primary">
+            {{ generating ? t('admin.redeem.generating') : t('admin.redeem.generate') }}
+          </button>
+        </div>
+      </template>
+    </BaseDialog>
+
+    <!-- Batch Update Dialog -->
+    <BaseDialog
+      :show="showBatchUpdateDialog"
+      :title="t('admin.redeem.batchUpdateTitle')"
+      close-on-click-outside
+      @close="closeBatchUpdateDialog"
+    >
+      <p class="mb-4 text-sm surface-muted">
+        {{ t('admin.redeem.selectedCount', { count: selectedCount }) }}
+      </p>
+
+      <form id="batch-update-redeem-codes-form" data-test="batch-update-form" class="space-y-4" @submit.prevent="handleBatchUpdate">
+        <div class="space-y-2">
+          <label class="flex items-center gap-2 text-sm font-medium surface-muted">
+            <input
+              data-test="batch-field-status"
+              v-model="batchUpdateForm.update_status"
+              type="checkbox"
+              class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            />
+            {{ t('admin.redeem.batchFields.status') }}
+          </label>
+          <Select
+            v-if="batchUpdateForm.update_status"
+            v-model="batchUpdateForm.status"
+            data-test="batch-status-select"
+            :options="batchStatusOptions"
+          />
+        </div>
+
+        <div class="space-y-2">
+          <label class="flex items-center gap-2 text-sm font-medium surface-muted">
+            <input
+              v-model="batchUpdateForm.update_expires_at"
+              type="checkbox"
+              class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            />
+            {{ t('admin.redeem.batchFields.expiresAt') }}
+          </label>
+          <template v-if="batchUpdateForm.update_expires_at">
+            <Select v-model="batchUpdateForm.expires_mode" :options="batchExpiryModeOptions" />
+            <DateTimePicker :aria-label="t('admin.redeem.batchFields.expiresAt')"
+              v-if="batchUpdateForm.expires_mode === 'custom'"
+              v-model="batchUpdateForm.expires_at_local"
+              type="datetime-local"
+              class="input"
+            />
+            <p v-if="batchUpdateForm.expires_mode === 'custom'" class="input-hint">
+              {{ t('admin.redeem.localTimeZoneHint', { timezone: browserTimeZone }) }}
+            </p>
+          </template>
+        </div>
+
+        <div class="space-y-2">
+          <label class="flex items-center gap-2 text-sm font-medium surface-muted">
+            <input
+              data-test="batch-field-notes"
+              v-model="batchUpdateForm.update_notes"
+              type="checkbox"
+              class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            />
+            {{ t('admin.redeem.batchFields.notes') }}
+          </label>
+          <textarea
+            v-if="batchUpdateForm.update_notes"
+            data-test="batch-notes-input"
+            v-model="batchUpdateForm.notes"
+            rows="3"
+            class="input"
+            :placeholder="t('admin.redeem.batchNotesPlaceholder')"
+          ></textarea>
+        </div>
+
+        <div class="space-y-2">
+          <label class="flex items-center gap-2 text-sm font-medium surface-muted">
+            <input
+              v-model="batchUpdateForm.update_group_id"
+              type="checkbox"
+              class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            />
+            {{ t('admin.redeem.batchFields.group') }}
+          </label>
+          <Select
+            v-if="batchUpdateForm.update_group_id"
+            v-model="batchUpdateForm.group_id"
+            :options="batchGroupOptions"
+            :placeholder="t('admin.redeem.selectGroupPlaceholder')"
+          />
+        </div>
+
+      </form>
+      <template #footer>
+        <div class="flex justify-end gap-3">
+          <button type="button" @click="closeBatchUpdateDialog" class="btn btn-secondary">
+            {{ t('common.cancel') }}
+          </button>
+          <button
+            data-test="batch-update-submit"
+            type="submit"
+            form="batch-update-redeem-codes-form"
+            :disabled="batchUpdating"
+            class="btn btn-primary"
+          >
+            {{ batchUpdating ? t('common.submitting') : t('admin.redeem.batchUpdate') }}
+          </button>
+        </div>
+      </template>
+    </BaseDialog>
+
+    <!-- Generated Codes Result Dialog -->
+    <BaseDialog
+      :show="showResultDialog"
+      :title="t('admin.redeem.generatedSuccessfully')"
+      close-on-click-outside
+      @close="closeResultDialog"
+    >
+      <div class="mb-4 flex items-center gap-3">
+        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-green-100/[0.15] dark:bg-green-900/30">
+          <Icon name="check" size="md" class="text-green-600 dark:text-green-400" />
+        </div>
+        <p class="text-sm surface-muted">{{ t('admin.redeem.codesCreated', { count: generatedCodes.length }) }}</p>
       </div>
-    </Teleport>
+      <div class="relative">
+        <textarea
+          readonly
+          :value="generatedCodesText"
+          :style="{ height: textareaHeight }"
+          class="w-full resize-none rounded-lg border border-gray-200 surface-inset p-3 font-mono text-sm text-gray-800 focus:outline-none dark:border-dark-600 dark:text-gray-200"
+        ></textarea>
+      </div>
+      <template #footer>
+        <div class="flex justify-end gap-2">
+          <button
+            @click="copyGeneratedCodes"
+            :class="[
+              'btn flex items-center gap-2 transition-all',
+              copiedAll ? 'btn-success' : 'btn-secondary'
+            ]"
+          >
+            <Icon v-if="!copiedAll" name="copy" size="sm" :stroke-width="2" />
+            <svg v-else class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M5 13l4 4L19 7"
+              />
+            </svg>
+            {{ copiedAll ? t('admin.redeem.copied') : t('admin.redeem.copyAll') }}
+          </button>
+          <button @click="downloadGeneratedCodes" class="btn btn-primary flex items-center gap-2">
+            <Icon name="download" size="sm" :stroke-width="2" />
+            {{ t('admin.redeem.download') }}
+          </button>
+        </div>
+      </template>
+    </BaseDialog>
   </AppLayout>
 </template>
 
@@ -655,6 +612,7 @@ import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import BaseDialog from '@/components/common/BaseDialog.vue'
 import Select from '@/components/common/Select.vue'
 import GroupBadge from '@/components/common/GroupBadge.vue'
 import GroupOptionItem from '@/components/common/GroupOptionItem.vue'
