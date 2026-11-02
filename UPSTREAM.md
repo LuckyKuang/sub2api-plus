@@ -10,7 +10,7 @@ The current tree integrates official `v0.2.19`, peeled commit
 `dece26153621959ccd7635814f4b2d08304e681a`, following the previously imported
 `0a2a29b32e6724714c69822296ccd05a6b86bfdd` snapshot. Plus is the authoritative
 implementation when upstream behavior conflicts with an intentional Plus contract.
-The candidate release is `v0.2.19+custom.003`; its mapping remains `planned`
+The candidate release is `v0.2.19+custom.004`; its mapping remains `planned`
 until publication and immutable artifact verification complete.
 
 The v0.2.19 follow-up adds configurable Gemini same-account retries, bound-cache
@@ -103,9 +103,9 @@ of a new release.
 ## Current Version
 
 ```text
-Git/GitHub: v0.2.19+custom.003
-Application: 0.2.19+custom.003
-GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.19-custom.003
+Git/GitHub: v0.2.19+custom.004
+Application: 0.2.19+custom.004
+GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.19-custom.004
 ```
 
 ## Release Mapping
@@ -189,6 +189,7 @@ GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.19-custom.003
 | `v0.2.19+custom.001` | `v0.2.19` | `dece26153621959ccd7635814f4b2d08304e681a` | published |
 | `v0.2.19+custom.002` | `v0.2.19` | `dece26153621959ccd7635814f4b2d08304e681a` | published |
 | `v0.2.19+custom.003` | `v0.2.19` | `dece26153621959ccd7635814f4b2d08304e681a` | published |
+| `v0.2.19+custom.004` | `v0.2.19` | `dece26153621959ccd7635814f4b2d08304e681a` | planned |
 
 `v0.2.15+custom.003` records the integrated official main snapshot in the
 Official Commit column. Its tagged official baseline remains
@@ -221,7 +222,7 @@ strict proxy ownership, frozen billing and the Plus UI remain authoritative.
 `v0.2.19+custom.002` retains the same official baseline and prepares the
 Codex CLI bridge, pricing and console updates accumulated since `.001`,
 including consistent administrator usage-record table surfaces. Its mapping
-remains planned until publication and immutable artifact verification.
+was published after immutable artifact verification.
 
 `v0.2.19+custom.003` retains the same official baseline and prepares the desktop
 and mobile console layout corrections accumulated since `.002`, including
@@ -230,8 +231,12 @@ and administrator live-request pagination. It also aligns available-channel
 catalog membership with current channel pricing, invalidates catalog caches after
 channel edits, preserves explicitly selected OpenAI billing models, refreshes
 default fallback pricing models and updates frontend dependency security floors.
-Its mapping remains planned until
-publication and immutable artifact verification.
+Its mapping was published after immutable artifact verification.
+
+`v0.2.19+custom.004` retains the same official baseline and adds available-channel
+binding corrections, Codex usage-record source tracking and persisted outbound
+metadata accumulated since `.003`. Its mapping remains planned until publication
+and immutable artifact verification.
 
 `v0.2.4+custom.006` is marked withdrawn because official `v0.2.5` was imported before that snapshot overlay was published. Do not reuse or retag `.006`.
 
