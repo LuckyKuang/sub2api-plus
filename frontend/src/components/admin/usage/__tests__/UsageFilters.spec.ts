@@ -143,7 +143,8 @@ describe('UsageFilters — user search dropdown', () => {
     const fields = wrapper.get('.usage-filter-fields').element
     const actions = wrapper.get('.usage-filter-actions').element
     expect(fields.contains(actions)).toBe(false)
-    expect(fields.children).toHaveLength(12)
+    // Primary filters + one collapsible advanced group + the more/fewer toggle.
+    expect(fields.children).toHaveLength(6)
     const input = wrapper.get('input[placeholder="Search user..."]')
     await input.trigger('focus')
     await input.setValue('workspace')

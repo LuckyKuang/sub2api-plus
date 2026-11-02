@@ -641,6 +641,8 @@ export default {
 	  usageSourcePartial: 'Partial',
 	  usageSourceEstimated: 'Estimated',
 	  usageSourceReconciled: 'Reconciled',
+	  moreFilters: 'More filters',
+	  fewerFilters: 'Fewer filters',
       ipAddress: 'IP',
       clickToViewBalance: 'Click to view balance history',
       failedToLoadUser: 'Failed to load user info',

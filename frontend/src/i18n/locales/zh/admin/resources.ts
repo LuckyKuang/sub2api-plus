@@ -638,6 +638,8 @@ export default {
 	  usageSourcePartial: '部分用量',
 	  usageSourceEstimated: '估算用量',
 	  usageSourceReconciled: '对账补录',
+	  moreFilters: '更多筛选',
+	  fewerFilters: '收起筛选',
       ipAddress: 'IP',
       clickToViewBalance: '点击查看充值记录',
       failedToLoadUser: '加载用户信息失败',
