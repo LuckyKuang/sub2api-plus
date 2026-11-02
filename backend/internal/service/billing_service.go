@@ -1967,7 +1967,8 @@ func (s *BillingService) calculateTokenCost(resolved *ResolvedPricing, input Cos
 	// 06:00–10:00 UTC，仅工作日；北京时间周末全天低谷）按 2× 低谷价计费。
 	// 仅作用于默认价卡（Source=LiteLLM，无分组/渠道自定义定价）——分组/渠道
 	// 自定义定价保持运营者语义，不叠加。先克隆再乘，避免污染共享 fallbackPrices 指针。
-	if (resolved.Source == PricingSourceLiteLLM || resolved.Source == PricingSourcePlatformFallback) && isDeepSeekPricingModel(policyModel) && !(resolved.longContextCustomPrices && contextTierPricingEnabled && len(resolved.Intervals) > 0 && totalContext > resolved.Intervals[0].MinTokens) {
+	customHighTierPrices := resolved.longContextCustomPrices && contextTierPricingEnabled && len(resolved.Intervals) > 0 && totalContext > resolved.Intervals[0].MinTokens
+	if (resolved.Source == PricingSourceLiteLLM || resolved.Source == PricingSourcePlatformFallback) && isDeepSeekPricingModel(policyModel) && !customHighTierPrices {
 		mult := deepseekPeakMultiplierAt(pricingAt)
 		if s.frozenDeepSeekPeakMultiplier != nil {
 			mult = *s.frozenDeepSeekPeakMultiplier
