@@ -41,7 +41,7 @@ describe('appearance settings draft and publication', () => {
     expect(wrapper.get<HTMLInputElement>('#console-appearance-transparency-number').element.value).toBe('0')
     expect(wrapper.findAll('input[type=range]')).toHaveLength(3)
     expect(wrapper.findAll<HTMLElement>('.appearance-sample-card').map(item => item.element.style.backgroundColor))
-      .toEqual(['rgb(248, 250, 249)', 'rgb(38, 44, 45)'])
+      .toEqual(['rgb(255, 255, 255)', 'rgb(41, 38, 36)'])
     expect(button(wrapper, 'save').attributes('disabled')).toBeDefined()
     expect(mocks.store.consoleAppearancePreview).toBeNull()
   })

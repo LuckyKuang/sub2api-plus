@@ -70,7 +70,7 @@ test('user content stays centered with natural page scrolling and portal theme',
     const panel = page.locator('.select-dropdown-portal')
     await expect(panel).toBeVisible()
     expect(await panel.evaluate(el => el.parentElement === document.body)).toBe(true)
-    expect(await panel.evaluate(el => getComputedStyle(el).getPropertyValue('--surface-text').trim())).toBe(theme === 'dark' ? '#f1f1f3' : '#202124')
+    expect(await panel.evaluate(el => getComputedStyle(el).getPropertyValue('--surface-text').trim())).toBe(theme === 'dark' ? '#f2f0ed' : '#221f1c')
     await page.keyboard.press('Escape')
   }
 })

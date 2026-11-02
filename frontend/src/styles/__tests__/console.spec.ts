@@ -130,13 +130,13 @@ describe('shared transparent surface rendering', () => {
     for (const property of fills) {
       expect(lastValue(root, property), property).toBe('var(--surface-solid)')
     }
-    expect(lastValue(root, '--surface-solid')).toBe('rgb(248 250 249 / var(--console-card-alpha, 1))')
-    expect(lastValue(root, '--surface-soft')).toBe('rgb(237 242 240 / var(--console-card-alpha, 1))')
-    expect(lastValue(root, '--surface-edge')).toBe('rgb(100 116 139 / 34%)')
+    expect(lastValue(root, '--surface-solid')).toBe('rgb(253 251 248 / var(--console-card-alpha, 1))')
+    expect(lastValue(root, '--surface-soft')).toBe('rgb(240 237 232 / var(--console-card-alpha, 1))')
+    expect(lastValue(root, '--surface-edge')).toBe('rgb(120 112 102 / 24%)')
     const dark = declarationsFor(fixture('<div class="dark"></div>'))
-    expect(lastValue(dark, '--surface-solid')).toBe('rgb(38 44 45 / var(--console-card-alpha, 1))')
-    expect(lastValue(dark, '--surface-soft')).toBe('rgb(32 38 39 / var(--console-card-alpha, 1))')
-    expect(lastValue(dark, '--surface-edge')).toBe('rgb(203 213 225 / 28%)')
+    expect(lastValue(dark, '--surface-solid')).toBe('rgb(41 38 36 / var(--console-card-alpha, 1))')
+    expect(lastValue(dark, '--surface-soft')).toBe('rgb(34 31 29 / var(--console-card-alpha, 1))')
+    expect(lastValue(dark, '--surface-edge')).toBe('rgb(170 162 152 / 22%)')
 
     // Check every override, including media queries and custom appearance rules,
     // so a page-specific preference cannot restore an opaque surface or fade

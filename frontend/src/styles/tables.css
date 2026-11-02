@@ -202,7 +202,7 @@ table.record-table .sticky-col::after {
 .dark .table-action-danger { --table-action-ink: #f87171; }
 .table-action-warning { --table-action-accent: 245 158 11; --table-action-ink: #b45309; }
 .dark .table-action-warning { --table-action-ink: #fbbf24; }
-.table-action-neutral { --table-action-accent: 100 116 139; --table-action-ink: var(--surface-text); }
+.table-action-neutral { --table-action-accent: 120 112 102; --table-action-ink: var(--surface-text); }
 .table-action:not(:disabled):not([aria-disabled="true"]):is(:hover, .table-action-active) {
   border-color: rgb(var(--table-action-accent) / 45%);
   background-color: rgb(var(--table-action-accent) / calc(.13 * var(--console-card-alpha, 1)));
