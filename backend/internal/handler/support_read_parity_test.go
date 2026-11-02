@@ -50,7 +50,7 @@ func (r *supportKeyRepository) ListByUserID(_ context.Context, userID int64, _ p
 func TestSupportKeyReadsMatchUserIncludingFullCredentialsAndIPRules(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	repo := &supportKeyRepository{key: service.APIKey{ID: 7, UserID: 42, Key: "sk-support-parity-fixture", Name: "first key", IPWhitelist: []string{"192.0.2.0/24"}, IPBlacklist: []string{"198.51.100.10"}}}
-	h := NewAPIKeyHandler(service.NewAPIKeyService(repo, nil, nil, nil, nil, nil, nil))
+	h := NewAPIKeyHandler(service.NewAPIKeyService(repo, nil, nil, nil, nil, nil, nil), nil, nil, nil, nil)
 	for _, detail := range []bool{false, true} {
 		invoke := func(support bool) *httptest.ResponseRecorder {
 			rec := httptest.NewRecorder()

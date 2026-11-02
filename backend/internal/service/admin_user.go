@@ -25,6 +25,9 @@ func (s *adminServiceImpl) ListUsers(ctx context.Context, page, pageSize int, fi
 	if err != nil {
 		return nil, 0, err
 	}
+	if filters.IdentityOnly {
+		return users, result.Total, nil
+	}
 	if len(users) > 0 {
 		userIDs := make([]int64, 0, len(users))
 		for i := range users {

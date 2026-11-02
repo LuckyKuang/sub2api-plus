@@ -2423,6 +2423,11 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, decision.AmbiguousMessage())
 			return
 		}
+		allowed, capabilityErr := h.compositeResolver.NativeAccessAllowed(c.Request.Context(), decision, service.APIProtocolResponses)
+		if capabilityErr != nil || !allowed {
+			closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "Model does not support native Responses access")
+			return
+		}
 		if decision.Matched {
 			c.Request = c.Request.WithContext(service.WithCompositeRouteDecision(c.Request.Context(), decision))
 			wsRouteModel = decision.UpstreamModel

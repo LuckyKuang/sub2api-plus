@@ -107,3 +107,12 @@ describe('group billing rate policy', () => {
     w.unmount()
   })
 })
+
+it('does not erase long-context overrides when cloning or editing rate policies', () => {
+ const source = { platform_multipliers: {}, model_multipliers: [], long_context_platforms: { openai: 0 }, long_context_models: [{ platform: 'openai', model: 'model', threshold: 100, mode: 'prices' as const, input: 2, output: 3, cache_read: 0 }] }
+ const clone = cloneBillingRatePolicy(source)
+ clone.long_context_platforms!.openai = 200
+ clone.long_context_models![0]!.cache_read = 5
+ expect(source.long_context_platforms.openai).toBe(0)
+ expect(source.long_context_models[0]!.cache_read).toBe(0)
+})

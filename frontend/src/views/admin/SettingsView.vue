@@ -7137,7 +7137,7 @@
 			  />
             </div>
 
-            <div v-if="form.client_disconnect_consecutive_ban_enabled">
+            <div>
               <label class="input-label">
                 {{ t('admin.settings.features.riskControl.disconnectBanThreshold') }}
                 <span class="text-red-500">*</span>

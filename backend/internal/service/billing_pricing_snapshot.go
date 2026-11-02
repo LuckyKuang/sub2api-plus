@@ -126,6 +126,20 @@ func ValidateBillingPricingSnapshot(ctx context.Context) error {
 	if current, ok := RequestedPublicModelFromContext(ctx); model == "" && ok {
 		model = current
 	}
+	if snapshot.group != nil && snapshot.resolver != nil && (len(snapshot.group.BillingRatePolicy.LongContextPlatforms) > 0 || len(snapshot.group.BillingRatePolicy.LongContextModels) > 0) {
+		pricingModel := snapshot.routingModel
+		if pricingModel == "" {
+			pricingModel = model
+		}
+		policyCtx := ctx
+		if model != "" {
+			policyCtx = WithCompositeRouteDecision(ctx, CompositeRouteDecision{Matched: true, PublicModel: model, TargetPlatform: snapshot.platform, UpstreamModel: pricingModel})
+		}
+		resolved := snapshot.resolver.Resolve(policyCtx, PricingInput{Model: pricingModel, Group: snapshot.group, GroupID: &snapshot.group.ID})
+		if resolved != nil && resolved.longContextPricingError != nil {
+			return resolved.longContextPricingError
+		}
+	}
 	for _, unit := range []string{"token", "image", "second", "request", "minute", "hour", "million_characters"} {
 		quote := snapshot.quote(snapshot.platform, model, unit)
 		if math.IsNaN(quote.EffectiveMultiplier) || math.IsInf(quote.EffectiveMultiplier, 0) || quote.EffectiveMultiplier < 0 || quote.EffectiveMultiplier > domain.MaxBillingRateMultiplier {

@@ -72,6 +72,34 @@ func (_u *APIKeyUpdate) SetNillableUserID(v *int64) *APIKeyUpdate {
 	return _u
 }
 
+// SetDefaultClient sets the "default_client" field.
+func (_u *APIKeyUpdate) SetDefaultClient(v string) *APIKeyUpdate {
+	_u.mutation.SetDefaultClient(v)
+	return _u
+}
+
+// SetNillableDefaultClient sets the "default_client" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillableDefaultClient(v *string) *APIKeyUpdate {
+	if v != nil {
+		_u.SetDefaultClient(*v)
+	}
+	return _u
+}
+
+// SetDefaultEndpoint sets the "default_endpoint" field.
+func (_u *APIKeyUpdate) SetDefaultEndpoint(v string) *APIKeyUpdate {
+	_u.mutation.SetDefaultEndpoint(v)
+	return _u
+}
+
+// SetNillableDefaultEndpoint sets the "default_endpoint" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillableDefaultEndpoint(v *string) *APIKeyUpdate {
+	if v != nil {
+		_u.SetDefaultEndpoint(*v)
+	}
+	return _u
+}
+
 // SetKey sets the "key" field.
 func (_u *APIKeyUpdate) SetKey(v string) *APIKeyUpdate {
 	_u.mutation.SetKey(v)
@@ -545,6 +573,16 @@ func (_u *APIKeyUpdate) defaults() error {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *APIKeyUpdate) check() error {
+	if v, ok := _u.mutation.DefaultClient(); ok {
+		if err := apikey.DefaultClientValidator(v); err != nil {
+			return &ValidationError{Name: "default_client", err: fmt.Errorf(`ent: validator failed for field "APIKey.default_client": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.DefaultEndpoint(); ok {
+		if err := apikey.DefaultEndpointValidator(v); err != nil {
+			return &ValidationError{Name: "default_endpoint", err: fmt.Errorf(`ent: validator failed for field "APIKey.default_endpoint": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Key(); ok {
 		if err := apikey.KeyValidator(v); err != nil {
 			return &ValidationError{Name: "key", err: fmt.Errorf(`ent: validator failed for field "APIKey.key": %w`, err)}
@@ -586,6 +624,12 @@ func (_u *APIKeyUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.DeletedAtCleared() {
 		_spec.ClearField(apikey.FieldDeletedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.DefaultClient(); ok {
+		_spec.SetField(apikey.FieldDefaultClient, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.DefaultEndpoint(); ok {
+		_spec.SetField(apikey.FieldDefaultEndpoint, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Key(); ok {
 		_spec.SetField(apikey.FieldKey, field.TypeString, value)
@@ -855,6 +899,34 @@ func (_u *APIKeyUpdateOne) SetUserID(v int64) *APIKeyUpdateOne {
 func (_u *APIKeyUpdateOne) SetNillableUserID(v *int64) *APIKeyUpdateOne {
 	if v != nil {
 		_u.SetUserID(*v)
+	}
+	return _u
+}
+
+// SetDefaultClient sets the "default_client" field.
+func (_u *APIKeyUpdateOne) SetDefaultClient(v string) *APIKeyUpdateOne {
+	_u.mutation.SetDefaultClient(v)
+	return _u
+}
+
+// SetNillableDefaultClient sets the "default_client" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillableDefaultClient(v *string) *APIKeyUpdateOne {
+	if v != nil {
+		_u.SetDefaultClient(*v)
+	}
+	return _u
+}
+
+// SetDefaultEndpoint sets the "default_endpoint" field.
+func (_u *APIKeyUpdateOne) SetDefaultEndpoint(v string) *APIKeyUpdateOne {
+	_u.mutation.SetDefaultEndpoint(v)
+	return _u
+}
+
+// SetNillableDefaultEndpoint sets the "default_endpoint" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillableDefaultEndpoint(v *string) *APIKeyUpdateOne {
+	if v != nil {
+		_u.SetDefaultEndpoint(*v)
 	}
 	return _u
 }
@@ -1345,6 +1417,16 @@ func (_u *APIKeyUpdateOne) defaults() error {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *APIKeyUpdateOne) check() error {
+	if v, ok := _u.mutation.DefaultClient(); ok {
+		if err := apikey.DefaultClientValidator(v); err != nil {
+			return &ValidationError{Name: "default_client", err: fmt.Errorf(`ent: validator failed for field "APIKey.default_client": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.DefaultEndpoint(); ok {
+		if err := apikey.DefaultEndpointValidator(v); err != nil {
+			return &ValidationError{Name: "default_endpoint", err: fmt.Errorf(`ent: validator failed for field "APIKey.default_endpoint": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Key(); ok {
 		if err := apikey.KeyValidator(v); err != nil {
 			return &ValidationError{Name: "key", err: fmt.Errorf(`ent: validator failed for field "APIKey.key": %w`, err)}
@@ -1403,6 +1485,12 @@ func (_u *APIKeyUpdateOne) sqlSave(ctx context.Context) (_node *APIKey, err erro
 	}
 	if _u.mutation.DeletedAtCleared() {
 		_spec.ClearField(apikey.FieldDeletedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.DefaultClient(); ok {
+		_spec.SetField(apikey.FieldDefaultClient, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.DefaultEndpoint(); ok {
+		_spec.SetField(apikey.FieldDefaultEndpoint, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Key(); ok {
 		_spec.SetField(apikey.FieldKey, field.TypeString, value)

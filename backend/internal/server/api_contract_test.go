@@ -1617,7 +1617,7 @@ func newContractDeps(t *testing.T) *contractDeps {
 
 	adminService := service.NewAdminService(nil, userRepo, groupRepo, &accountRepo, proxyRepo, apiKeyRepo, redeemRepo, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	authHandler := handler.NewAuthHandler(cfg, nil, userService, settingService, nil, redeemService, nil, nil)
-	apiKeyHandler := handler.NewAPIKeyHandler(apiKeyService)
+	apiKeyHandler := handler.NewAPIKeyHandler(apiKeyService, nil, nil, nil, nil)
 	usageHandler := handler.NewUsageHandler(usageService, apiKeyService, nil, nil)
 	adminUsageHandler := adminhandler.NewUsageHandler(usageService, apiKeyService, adminService, nil)
 	adminSettingHandler := adminhandler.NewSettingHandler(settingService, nil, nil, nil, nil, nil, nil)

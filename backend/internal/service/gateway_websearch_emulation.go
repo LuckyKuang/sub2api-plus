@@ -61,6 +61,9 @@ func shouldEmulateWebSearchFor(
 	ctx context.Context, settingService *SettingService, channelService *ChannelService,
 	account *Account, groupID *int64, body []byte,
 ) bool {
+	if CompositeNativeProtocol(ctx) != "" {
+		return false
+	}
 	if getWebSearchManager() == nil || account == nil || settingService == nil {
 		return false
 	}

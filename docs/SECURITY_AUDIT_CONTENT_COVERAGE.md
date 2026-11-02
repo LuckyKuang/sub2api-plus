@@ -933,3 +933,16 @@ and performs no routing, credential acquisition or extra provider request.
 Managed tasks retain the Standard-only admission checks and existing audit
 before task side effects. Existing real-payload, pass-through and HTTP/WS
 side-effect-order regressions remain required.
+
+### Composite native endpoint admission
+
+Composite accepts only a resolved model's native ingress protocol; it does not
+convert Responses, Chat, Messages, Gemini or System One payloads, including
+retry/failover. URL/body protocol mismatches are endpoint basic-validation
+errors. Unsupported endpoint/model combinations are rejected before account
+selection, billing reservation, concurrency or upstream forwarding. Authorized
+native requests keep the same canonical extraction and both audit engines,
+including pass-through of unrecognized valid-JSON structures and all existing
+structured audit exception logs. Native payload/cache/continuation fields are
+not reconstructed by a cross-protocol adapter. The key's saved default client
+and endpoint are presentation preferences and cannot bypass this boundary.

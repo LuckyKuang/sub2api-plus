@@ -1,6 +1,7 @@
 import { apiClient } from './client'
 import type { UsageRequestType, UsageLog } from '@/types'
 export interface LiveRequest {
+	user_email?: string
   id: string; version: number; user_id: number; api_key_id: number; key_name: string; group_name?: string; account_id?: number
   model: string; endpoint: string; request_id: string; request_type: UsageRequestType; turn?: number
   status: 'processing' | 'transmitting' | 'finished' | 'failed' | 'rejected' | 'cancelled' | 'completed' | 'client_disconnected' | 'incomplete' | 'unknown'

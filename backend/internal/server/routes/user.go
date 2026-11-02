@@ -86,6 +86,7 @@ func RegisterUserRoutes(
 		groups := authenticated.Group("/groups")
 		{
 			groups.GET("/available", h.APIKey.GetAvailableGroups)
+			groups.GET("/:id/native-access", h.APIKey.GetNativeAccess)
 			groups.GET("/rates", h.APIKey.GetUserGroupRates)
 		}
 

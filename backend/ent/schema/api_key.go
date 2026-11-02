@@ -34,6 +34,8 @@ func (APIKey) Mixin() []ent.Mixin {
 func (APIKey) Fields() []ent.Field {
 	return []ent.Field{
 		field.Int64("user_id"),
+		field.String("default_client").MaxLen(32).Default(""),
+		field.String("default_endpoint").MaxLen(64).Default(""),
 		field.String("key").
 			MaxLen(128).
 			NotEmpty().

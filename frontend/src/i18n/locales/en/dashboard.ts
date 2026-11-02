@@ -656,6 +656,7 @@ export default {
   // Available Channels (user-facing)
   availableChannels: {
     catalog: {
+      category: 'Channel category', groupPlatforms: 'Group platforms', compositePlatforms: 'Composite platforms',
       quoteComparison: 'Group quote comparison',
       quoteDetails: 'Expand pricing and billing conditions',
       effectiveRateLabel: 'Effective rate',

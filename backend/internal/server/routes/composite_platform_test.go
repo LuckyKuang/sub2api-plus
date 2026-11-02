@@ -190,8 +190,8 @@ func TestCompositeTargetPlatformMiddlewareRewritesNestedLiveModel(t *testing.T) 
 
 // Scenario: 回归 —— openai OAuth 与 deepseek API Key 同时映射 gpt-6-astra 时，
 // 请求必须在路由层被拒绝，不能落到默认 Anthropic handler 后再按模型名猜平台。
-// 仅 API Key 的跨平台歧义保持原行为（放行且不解析平台）。
-func TestCompositeTargetPlatformMiddlewareRejectsOnlyOAuthAmbiguousOwnership(t *testing.T) {
+// Native-only Composite also rejects API-key-only ambiguity instead of guessing a bridge.
+func TestCompositeTargetPlatformMiddlewareRejectsAmbiguousOwnership(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	for _, tc := range []struct {
 		name         string
@@ -199,7 +199,7 @@ func TestCompositeTargetPlatformMiddlewareRejectsOnlyOAuthAmbiguousOwnership(t *
 		wantStatus   int
 	}{
 		{name: "oauth claimant", oauthClaimed: true, wantStatus: http.StatusBadRequest},
-		{name: "apikey only", oauthClaimed: false, wantStatus: http.StatusNoContent},
+		{name: "apikey only", oauthClaimed: false, wantStatus: http.StatusBadRequest},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			resolver := service.NewCompositeRouteResolver(nil)
@@ -561,5 +561,46 @@ func TestCompositeSeedanceNativeRoutesPreserveModelAndSupplier(t *testing.T) {
 				require.Equal(t, http.StatusNoContent, response.Code)
 			})
 		}
+	}
+}
+
+// Composite endpoint and payload selection is native-only. The downstream
+// handler represents audit/reservation/selection/upstream side effects here:
+// invalid combinations must never enter it.
+func TestCompositeNativeIngressRejectsBridgesAndPreservesNativeBody(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, tc := range []struct {
+		path, body string
+		status     int
+	}{
+		{"/v1/responses", `{"model":"claude-opus-5-5","input":"hello"}`, 400},
+		{"/v1/messages", `{"model":"gpt-6.1-sol","messages":[{"role":"user","content":"hello"}]}`, 400},
+		{"/v1/chat/completions", `{"model":"gpt-6.1-sol","input":"hello"}`, 400},
+		{"/v1/responses", `{"model":"unresolved-public-alias","input":"hello"}`, 400},
+		{"/v1/responses", `{"model":"gpt-6.1-sol","input":[{"role":"user","content":"hello"}],"prompt_cache_key":"keep-me","previous_response_id":"resp_keep"}`, 204},
+		{"/v1/messages", `{"model":"claude-opus-5-5","messages":[{"role":"user","content":[{"type":"text","text":"stable","cache_control":{"type":"ephemeral"}}]}],"max_tokens":100}`, 204},
+	} {
+		t.Run(tc.path+tc.body, func(t *testing.T) {
+			entered := false
+			router := gin.New()
+			router.Use(func(c *gin.Context) {
+				c.Set(string(servermiddleware.ContextKeyAPIKey), &service.APIKey{Group: &service.Group{ID: 1, Platform: service.PlatformComposite}})
+				c.Next()
+			})
+			router.Use(compositeTargetPlatformMiddleware(nil))
+			router.POST(tc.path, func(c *gin.Context) {
+				entered = true
+				b, err := io.ReadAll(c.Request.Body)
+				require.NoError(t, err)
+				require.JSONEq(t, tc.body, string(b))
+				c.Status(204)
+			})
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest("POST", tc.path, strings.NewReader(tc.body))
+			request.Header.Set("Content-Type", "application/json")
+			router.ServeHTTP(recorder, request)
+			require.Equal(t, tc.status, recorder.Code, recorder.Body.String())
+			require.Equal(t, tc.status == 204, entered)
+		})
 	}
 }

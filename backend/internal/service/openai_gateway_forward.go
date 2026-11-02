@@ -20,6 +20,9 @@ import (
 
 // Forward forwards request to OpenAI API
 func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, account *Account, body []byte) (result *OpenAIForwardResult, err error) {
+	if err := CheckCompositeNativeForward(ctx, c, account, APIProtocolResponses, gjson.GetBytes(body, "model").String()); err != nil {
+		return nil, err
+	}
 	ctx, outbound := beginOutboundObservation(ctx)
 	defer func() {
 		if result != nil && result.Outbound == nil {

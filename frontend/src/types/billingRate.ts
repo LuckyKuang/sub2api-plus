@@ -7,7 +7,21 @@ export interface BillingModelMultiplier {
   billing_unit?: string
 }
 
+export interface LongContextModelRule {
+  platform: string
+  model: string
+  threshold: number
+  mode?: 'inherit' | 'prices' | 'multipliers'
+  input?: number
+  output?: number
+  cache_write?: number
+  cache_write_1h?: number
+  cache_read?: number
+}
+
 export interface BillingRatePolicy {
+  long_context_platforms?: Record<string, number>
+  long_context_models?: LongContextModelRule[]
   platform_multipliers: Record<string, number>
   model_multipliers: BillingModelMultiplier[]
 }

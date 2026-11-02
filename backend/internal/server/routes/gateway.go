@@ -579,6 +579,7 @@ func compositeTargetPlatformMiddleware(resolver *service.CompositeRouteResolver)
 			c.Next()
 			return
 		}
+		c.Request = c.Request.WithContext(service.WithCompositeNativeProtocol(c.Request.Context(), service.CompositeNativeProtocolForPath(c.Request.URL.Path)))
 		// These native APIs have an endpoint-defined supplier. Their model
 		// fields are native API parameters, not aliases in the text router.
 		if isGrokNativeRoute(c.FullPath()) {
@@ -610,6 +611,17 @@ func compositeTargetPlatformMiddleware(resolver *service.CompositeRouteResolver)
 			return
 		}
 
+		// Endpoint basic validation precedes audit and all side effects.
+		if gjson.ValidBytes(body) {
+			protocol := service.CompositeNativeProtocol(c.Request.Context())
+			wrongShape := protocol == service.APIProtocolChatCompletions && !gjson.GetBytes(body, "messages").Exists() && gjson.GetBytes(body, "input").Exists()
+			wrongShape = wrongShape || (protocol == service.APIProtocolResponses && gjson.GetBytes(body, "messages").Exists() && !gjson.GetBytes(body, "input").Exists())
+			if wrongShape {
+				c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": gin.H{"type": "invalid_request_error", "code": "native_payload_mismatch", "message": "Request body must use the selected native endpoint protocol"}})
+				return
+			}
+		}
+
 		// Live 入口按 session.model 分发并改写（与白名单准入、Live handler 的
 		// 解析保持一致），避免顶层 model 别名与 session 模型不一致时改错对象。
 		routePath := c.FullPath()
@@ -629,7 +641,21 @@ func compositeTargetPlatformMiddleware(resolver *service.CompositeRouteResolver)
 				c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": gin.H{"type": "invalid_request_error", "message": decision.AmbiguousMessage()}})
 				return
 			}
+			if !decision.Matched {
+				c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": gin.H{"type": "invalid_request_error", "code": "composite_model_unresolved", "message": "Configure an unambiguous composite model route"}})
+				return
+			}
 			if decision.Matched {
+				protocol := service.CompositeNativeProtocol(c.Request.Context())
+				allowed, capabilityErr := resolver.NativeAccessAllowed(c.Request.Context(), decision, protocol)
+				if capabilityErr != nil {
+					c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"type": "server_error", "code": "native_capability_unavailable", "message": "Unable to check native model capabilities"}})
+					return
+				}
+				if !allowed || (strings.Contains(c.Request.URL.Path, "/responses/compact") && decision.TargetPlatform != service.PlatformOpenAI) {
+					c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": gin.H{"type": "invalid_request_error", "code": "native_endpoint_unsupported", "message": "Model does not support this native endpoint; use the model's advertised native endpoint"}})
+					return
+				}
 				c.Request = c.Request.WithContext(service.WithCompositeRouteDecision(c.Request.Context(), decision))
 				if upstreamModel := strings.TrimSpace(decision.UpstreamModel); upstreamModel != "" && upstreamModel != model && gjson.ValidBytes(body) {
 					if _, modelPath := requestmodel.JSONModelPathForRoute(routePath, body); modelPath != "" {
@@ -652,6 +678,7 @@ func compositeGeminiTargetPlatformMiddleware(resolver *service.CompositeRouteRes
 	return func(c *gin.Context) {
 		apiKey, ok := middleware.GetAPIKeyFromContext(c)
 		if ok && apiKey != nil && apiKey.Group != nil && apiKey.Group.Platform == service.PlatformComposite {
+			c.Request = c.Request.WithContext(service.WithCompositeNativeProtocol(c.Request.Context(), "gemini"))
 			model := compositeGeminiModelFromParams(c)
 			if model == "" && c.Request.Method == http.MethodPost && strings.TrimSuffix(c.FullPath(), "/") == "/v1beta/cachedContents" {
 				body, err := pkghttputil.ReadRequestBodyWithPrealloc(c.Request)
@@ -675,6 +702,15 @@ func compositeGeminiTargetPlatformMiddleware(resolver *service.CompositeRouteRes
 					return
 				}
 				if decision.Matched {
+					allowed, capabilityErr := resolver.NativeAccessAllowed(c.Request.Context(), decision, "gemini")
+					if capabilityErr != nil {
+						c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "native_capability_unavailable", "message": "Unable to check native model capabilities"}})
+						return
+					}
+					if !allowed {
+						c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "native_endpoint_unsupported", "message": "Model does not support the native Gemini endpoint"}})
+						return
+					}
 					c.Request = c.Request.WithContext(service.WithCompositeRouteDecision(c.Request.Context(), decision))
 				}
 			}

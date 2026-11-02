@@ -6,10 +6,36 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/LuckyKuang/sub2api-plus/internal/domain"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
+
+// A retail alias's explicit zero must suppress its supplier's positive default
+// in the advertised quote, just as it does during actual request settlement.
+func TestAvailableCatalogCompositeLongContextPublicAlias(t *testing.T) {
+	group := Group{ID: 1, Platform: PlatformComposite, BillingRatePolicy: domain.BillingRatePolicy{
+		LongContextPlatforms: map[string]int{PlatformGemini: 100},
+		LongContextModels:    []domain.LongContextModelRule{{Platform: PlatformGemini, Model: "retail-model", Threshold: 0}},
+	}}
+	ch := plazaPricedChannel(1, "Composite", []int64{1}, PlatformGemini, "gemini-2.5-pro")
+	ch.ModelPricing[0].Intervals = []PricingInterval{{MinTokens: 100, InputMultiplier: testPtrFloat64(2)}}
+	group.ModelPricing = ch.ModelPricing
+	svc := newPlazaServiceWithBilling(nil, nil, nil, geminiCatalogStub())
+	svc.SetCommercialCatalogSources(&compositeRouteRepoStub{routes: []CompositeModelRoute{{ID: 1, GroupID: 1, PublicModel: "retail-model", MatchType: CompositeRouteMatchExact, Endpoint: CompositeRouteEndpointGemini, TargetPlatform: PlatformGemini, UpstreamModel: "gemini-2.5-pro", Enabled: true}}}, nil)
+	out, err := svc.ListAvailableCatalog(context.Background(), []Group{group})
+	require.NoError(t, err)
+	for _, offer := range out[0].Models {
+		if offer.Name == "retail-model" {
+			require.Equal(t, "resolved", offer.PriceStatus)
+			require.Empty(t, offer.Pricing.Intervals)
+			require.InDelta(t, 3e-6, *offer.Pricing.InputPrice, 1e-12)
+			return
+		}
+	}
+	t.Fatal("public alias missing from Composite catalog")
+}
 
 func TestAvailableCatalogAuthorizationAndStableIdentity(t *testing.T) {
 	groups := []Group{{ID: 1, Name: "Zulu", Platform: PlatformOpenAI}, {ID: 2, Name: "Alpha", Platform: PlatformComposite}, {ID: 3, Name: "Empty", Platform: PlatformOpenAI}, {ID: 4, Name: "Inactive channel", Platform: PlatformOpenAI}}

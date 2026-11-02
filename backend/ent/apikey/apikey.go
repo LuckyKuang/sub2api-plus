@@ -23,6 +23,10 @@ const (
 	FieldDeletedAt = "deleted_at"
 	// FieldUserID holds the string denoting the user_id field in the database.
 	FieldUserID = "user_id"
+	// FieldDefaultClient holds the string denoting the default_client field in the database.
+	FieldDefaultClient = "default_client"
+	// FieldDefaultEndpoint holds the string denoting the default_endpoint field in the database.
+	FieldDefaultEndpoint = "default_endpoint"
 	// FieldKey holds the string denoting the key field in the database.
 	FieldKey = "key"
 	// FieldName holds the string denoting the name field in the database.
@@ -99,6 +103,8 @@ var Columns = []string{
 	FieldUpdatedAt,
 	FieldDeletedAt,
 	FieldUserID,
+	FieldDefaultClient,
+	FieldDefaultEndpoint,
 	FieldKey,
 	FieldName,
 	FieldGroupID,
@@ -144,6 +150,14 @@ var (
 	DefaultUpdatedAt func() time.Time
 	// UpdateDefaultUpdatedAt holds the default value on update for the "updated_at" field.
 	UpdateDefaultUpdatedAt func() time.Time
+	// DefaultDefaultClient holds the default value on creation for the "default_client" field.
+	DefaultDefaultClient string
+	// DefaultClientValidator is a validator for the "default_client" field. It is called by the builders before save.
+	DefaultClientValidator func(string) error
+	// DefaultDefaultEndpoint holds the default value on creation for the "default_endpoint" field.
+	DefaultDefaultEndpoint string
+	// DefaultEndpointValidator is a validator for the "default_endpoint" field. It is called by the builders before save.
+	DefaultEndpointValidator func(string) error
 	// KeyValidator is a validator for the "key" field. It is called by the builders before save.
 	KeyValidator func(string) error
 	// NameValidator is a validator for the "name" field. It is called by the builders before save.
@@ -196,6 +210,16 @@ func ByDeletedAt(opts ...sql.OrderTermOption) OrderOption {
 // ByUserID orders the results by the user_id field.
 func ByUserID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUserID, opts...).ToFunc()
+}
+
+// ByDefaultClient orders the results by the default_client field.
+func ByDefaultClient(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldDefaultClient, opts...).ToFunc()
+}
+
+// ByDefaultEndpoint orders the results by the default_endpoint field.
+func ByDefaultEndpoint(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldDefaultEndpoint, opts...).ToFunc()
 }
 
 // ByKey orders the results by the key field.

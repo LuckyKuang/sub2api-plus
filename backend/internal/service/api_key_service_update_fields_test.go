@@ -131,3 +131,22 @@ func TestUpdateQuotaUsed_ExhaustedMarkOnlyDeclaresStatus(t *testing.T) {
 	require.NoError(t, svc.UpdateQuotaUsed(context.Background(), 1, 5))
 	require.Equal(t, []APIKeyUpdateFields{{Status: true}}, repo.updateFields)
 }
+
+// Default endpoint preferences are editable metadata. Omitted fields preserve
+// them, invalid combinations write nothing, and editing them must not reset
+// concurrent usage counters or change the key's group authorization.
+func TestAPIKeyUpdate_NativePreferencesAreAtomicAndScoped(t *testing.T) {
+	svc, repo := newUpdateFieldsAPIKeyService(&APIKey{ID: 1, UserID: 7, Key: "sk-test", Status: StatusActive, DefaultClient: "codex", DefaultEndpoint: "/v1/responses", QuotaUsed: 30, Usage5h: 12})
+	client, endpoint := "claude", "/v1/messages"
+	got, err := svc.Update(context.Background(), 1, 7, UpdateAPIKeyRequest{DefaultClient: &client, DefaultEndpoint: &endpoint})
+	require.NoError(t, err)
+	require.Equal(t, client, got.DefaultClient)
+	require.Equal(t, endpoint, got.DefaultEndpoint)
+	require.Equal(t, []APIKeyUpdateFields{{Preferences: true}}, repo.updateFields)
+	require.Equal(t, 30.0, got.QuotaUsed)
+	require.Equal(t, 12.0, got.Usage5h)
+	bad := "/v1/messages"
+	_, err = svc.Update(context.Background(), 1, 7, UpdateAPIKeyRequest{DefaultEndpoint: &bad})
+	require.Error(t, err)
+	require.Len(t, repo.updateFields, 1)
+}

@@ -559,3 +559,78 @@ has been executed. Run checks in the repository validation container.
 | Admin draft/zero/unknown quotes and checkout reconfirmation | Frontend billing-rate, catalog, payment and group-editor specs |
 | Partial token prices preserve known dimensions and explicit zero; media/search previews are base references in both locales | `frontend/src/components/channels/__tests__/catalog.spec.ts`, `frontend/src/views/admin/__tests__/GroupsView.duplicate.spec.ts`, `frontend/src/i18n/__tests__/opsLocaleKeys.spec.ts` |
 | Real browser persistence and stale-editor conflict | `composite billing` scenario in `frontend/e2e/seven-provider-management.spec.ts` |
+
+## Native endpoint access and key preferences
+
+Composite text requests never bridge Responses, Chat Completions, Messages,
+Gemini or System One protocols. The public model route, actual credential's
+native protocol and required transport must all agree, including sticky
+sessions, retries and failover. Native endpoint support is separate from
+account health: unsupported combinations return HTTP 400
+`native_endpoint_unsupported`; a temporarily exhausted native account pool
+retains the existing availability error. Unknown or ambiguous public models
+return `composite_model_unresolved`. A request body using a different protocol
+than its URL returns `native_payload_mismatch`. Ordinary single-provider groups
+retain their existing compatibility behavior. Composite does not enable search
+emulation or Grok's Chat-to-Responses bridge. Non-OpenAI compaction emulation is
+unavailable to Composite keys.
+
+`GET /api/v1/groups/:id/native-access` returns only an authenticated user's
+available group's public models and native endpoints. It exposes neither
+account IDs nor credentials. The key supports the union of these endpoints,
+but each individual request must use an endpoint supported by its chosen model.
+For example, use the same key with GPT at `/v1/responses` and Claude at
+`/v1/messages`. The OpenAI SDK Base URL ends in `/v1`; the Anthropic SDK Base URL
+is the site root, since that SDK appends `/v1/messages` itself. Gemini uses
+`/v1beta/models/{model}:generateContent` and System One `/v1/systemone`.
+
+Discovery combines the price directory, account models and exact public routes;
+it works before prices have been configured and respects the group allowlist.
+Model-routed suppliers use configured protocol rules, credential-scoped upstream
+capability metadata and maintained provider defaults in that order. Management
+discovery may refresh metadata; gateway admission only reads captured metadata
+and never starts provider I/O before security audit.
+
+Key creation/update accepts `default_client` and `default_endpoint`. They persist
+as display/example preferences only, never permissions or routing instructions.
+Omitting an update preserves them; empty strings clear them. Changing a client
+requires a compatible endpoint in the same update. The key remains usable at
+its other authorized native endpoints. The client/endpoint UI lists compatible
+models and provides copyable addresses, keys and examples.
+
+Native protocol admission preserves existing audit-before-selection ordering,
+credential-owning outbound identity and session owner checks. It does not
+rebuild conversation/tool history or translate cache controls, cache keys or
+continuation IDs between protocols. Server-owned native transport/authentication
+normalization remains in place. Provider-side cache hits still depend on the
+same native prefix, credential/tenant, model and retention policy; a gateway
+cannot guarantee a cache hit.
+
+## Per-platform and per-model long-context thresholds
+
+`billing_rate_policy.long_context_platforms` maps concrete supplier IDs to
+integer input thresholds. `long_context_models` contains exact public-model
+rules with `platform`, `model`, `threshold` and optional `mode` (`inherit`,
+`prices`, `multipliers`). Matching order is exact model, explicit platform
+threshold, existing model price preset, then no tier. Missing entries inherit;
+explicit zero disables tier pricing even when an account enables it. Replacing
+zero with a positive threshold enables it again without discarding retained
+prices. Composite groups inherit model presets independently of the legacy
+group-wide switch; ordinary supplier groups retain that switch when no explicit
+rule applies. A model with no preset or custom tier remains at threshold zero.
+
+Custom `input`, `output`, `cache_write`, `cache_write_1h`, `cache_read` values
+are USD per million tokens in `prices` mode or factors of the base meter in
+`multipliers` mode. Input/output are required for custom pricing. Omitted cache
+meters inherit; explicit zero means free. A positive threshold without existing
+high-tier prices requires a custom price or multiplier; it never guesses a
+surcharge. Invalid price evidence fails before account reservation/upstream use.
+Existing multi-step cards retain later tiers; a threshold that overlaps another
+tier is rejected.
+
+Custom thresholds use strict `input > threshold`; inherited official presets
+retain their original strict/inclusive boundary. Normalized input includes
+uncached input plus cache creation/read tokens. The selected tier prices the
+whole request, including output. This policy changes selling prices, never the
+model context window, request payload, provider cache settings or supplier cost.
+Catalogs, key quotes, charging and captured billing snapshots share the resolver.

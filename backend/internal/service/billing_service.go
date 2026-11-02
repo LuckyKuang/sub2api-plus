@@ -1918,11 +1918,14 @@ func (s *BillingService) CalculateCostUnified(input CostInput) (*CostBreakdown, 
 
 // calculateTokenCost 按 token 区间计费
 func (s *BillingService) calculateTokenCost(resolved *ResolvedPricing, input CostInput) (*CostBreakdown, error) {
+	if resolved.longContextPricingError != nil {
+		return nil, resolved.longContextPricingError
+	}
 	totalContext := input.Tokens.InputTokens + input.Tokens.CacheCreationTokens + input.Tokens.CacheReadTokens
 
 	// 分组开关是统一入口；账号 API 开关保留为额外开启能力，但 false 不否决分组配置。
 	contextTierPricingEnabled := resolved.longContextPricingEnabled
-	if input.LongContextBillingEnabled != nil {
+	if input.LongContextBillingEnabled != nil && !resolved.longContextRuleExplicit {
 		if input.Group == nil {
 			contextTierPricingEnabled = *input.LongContextBillingEnabled
 		} else if *input.LongContextBillingEnabled {
@@ -1956,13 +1959,15 @@ func (s *BillingService) calculateTokenCost(resolved *ResolvedPricing, input Cos
 	if pricing.FallbackModel != "" {
 		policyModel = pricing.FallbackModel
 	}
-	pricing = s.applyModelSpecificPricingPolicyEx(policyModel, pricing, resolved.Source == PricingSourceLiteLLM || resolved.Source == PricingSourcePlatformFallback, pricingAt)
+	if !resolved.longContextRuleExplicit {
+		pricing = s.applyModelSpecificPricingPolicyEx(policyModel, pricing, resolved.Source == PricingSourceLiteLLM || resolved.Source == PricingSourcePlatformFallback, pricingAt)
+	}
 
 	// DeepSeek 模型默认价卡按官方峰谷口径调整：高峰时段（01:00–04:00 与
 	// 06:00–10:00 UTC，仅工作日；北京时间周末全天低谷）按 2× 低谷价计费。
 	// 仅作用于默认价卡（Source=LiteLLM，无分组/渠道自定义定价）——分组/渠道
 	// 自定义定价保持运营者语义，不叠加。先克隆再乘，避免污染共享 fallbackPrices 指针。
-	if (resolved.Source == PricingSourceLiteLLM || resolved.Source == PricingSourcePlatformFallback) && isDeepSeekPricingModel(policyModel) {
+	if (resolved.Source == PricingSourceLiteLLM || resolved.Source == PricingSourcePlatformFallback) && isDeepSeekPricingModel(policyModel) && !(resolved.longContextCustomPrices && contextTierPricingEnabled && len(resolved.Intervals) > 0 && totalContext > resolved.Intervals[0].MinTokens) {
 		mult := deepseekPeakMultiplierAt(pricingAt)
 		if s.frozenDeepSeekPeakMultiplier != nil {
 			mult = *s.frozenDeepSeekPeakMultiplier

@@ -572,7 +572,9 @@ export default {
     usage: {
       serviceTier: '服务档位',
       inboundUserAgent: '入站 User-Agent',
-      outbound: '出站证据',
+      outbound: '出入站证据',
+      inboundEvidence: '入站',
+      outboundEvidence: '出站',
       outboundTransport: { unknown: '未记录', native: '原生出站', codex_cli_bridge: '官方 CLI 桥接', codex_cli_task: '官方 CLI 任务' },
       outboundProcess: '已启动 CLI 进程；未观测最终网络请求',
       outboundDispatch: '已在网关发送；不代表上游执行保证',

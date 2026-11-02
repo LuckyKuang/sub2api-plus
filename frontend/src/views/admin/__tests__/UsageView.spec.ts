@@ -580,12 +580,13 @@ describe('admin UsageView distribution metric toggles', () => {
 })
 
 describe('admin UsageView column preferences', () => {
-  // Product requirement: these 14 columns start visible, including independent outbound evidence; personal settings override defaults.
+  // Approved requirement: service tier starts hidden; reasoning is model metadata,
+  // ingress and egress evidence share the rightmost column. Personal choices persist.
   const defaultColumns = [
-    'user', 'account', 'model', 'reasoning_effort', 'service_tier', 'outbound', 'endpoint', 'group',
-    'stream', 'tokens', 'cost', 'latency', 'created_at', 'user_agent',
+    'user', 'account', 'model', 'endpoint', 'group',
+    'stream', 'tokens', 'cost', 'latency', 'created_at', 'outbound',
   ]
-  const preferenceKey = 'admin-usage-restored-v2-hidden-columns:1:self'
+  const preferenceKey = 'admin-usage-native-v3-hidden-columns:1:self'
 
   beforeEach(() => {
     vi.useFakeTimers()
@@ -666,18 +667,18 @@ describe('admin UsageView column preferences', () => {
     const wrapper = mountView()
     await wrapper.vm.$nextTick()
     await wrapper.get('[data-testid="usage-column-settings"]').trigger('click')
-    for (const key of ['api_key', 'billing_mode', 'request_id', 'session_id', 'ip_address']) {
+    for (const key of ['api_key', 'billing_mode', 'request_id', 'session_id', 'ip_address', 'service_tier']) {
       await wrapper.get(`[data-testid="usage-column-toggle-${key}"]`).trigger('click')
       expect(wrapper.findComponent(UsageTableStub).props('columns').map((column: { key: string }) => column.key)).toContain(key)
     }
-    await wrapper.get('[data-testid="usage-column-toggle-user_agent"]').trigger('click')
-    expect(saved).toBe('["user_agent"]')
+    await wrapper.get('[data-testid="usage-column-toggle-outbound"]').trigger('click')
+    expect(saved).toBe('["outbound"]')
     wrapper.unmount()
 
     const restored = mountView()
     await restored.vm.$nextTick()
     expect(restored.findComponent(UsageTableStub).props('columns').map((column: { key: string }) => column.key)).toEqual([
-      'user', 'api_key', 'account', 'model', 'reasoning_effort', 'service_tier', 'outbound', 'endpoint',
+      'user', 'api_key', 'account', 'model', 'service_tier', 'endpoint',
       'group', 'stream', 'billing_mode', 'tokens', 'cost', 'latency', 'created_at', 'request_id', 'session_id', 'ip_address',
     ])
     restored.unmount()
@@ -687,11 +688,11 @@ describe('admin UsageView column preferences', () => {
     vi.mocked(localStorage.getItem).mockImplementation(key => key === preferenceKey ? '[]' : null)
     const wrapper = mountView()
     await wrapper.vm.$nextTick()
-    expect(wrapper.findComponent(UsageTableStub).props('columns')).toHaveLength(19)
+    expect(wrapper.findComponent(UsageTableStub).props('columns')).toHaveLength(17)
     await wrapper.get('[data-testid="usage-column-settings"]').trigger('click')
     await wrapper.findAll('button').find(button => button.text() === 'inspection.resetColumns')!.trigger('click')
     expect(wrapper.findComponent(UsageTableStub).props('columns').map((column: { key: string }) => column.key)).toEqual(defaultColumns)
-    expect(localStorage.setItem).toHaveBeenCalledWith(preferenceKey, '["api_key","billing_mode","request_id","session_id","ip_address"]')
+    expect(localStorage.setItem).toHaveBeenCalledWith(preferenceKey, '["api_key","billing_mode","request_id","session_id","ip_address","service_tier"]')
     wrapper.unmount()
   })
 

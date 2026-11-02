@@ -61,6 +61,39 @@ type modelProtocolCatalog struct {
 // upstreamModelProtocols 是全进程共享的模型协议目录。
 var upstreamModelProtocols modelProtocolCatalog
 
+// cachedNativeModelProtocols reads only an already captured, credential-scoped
+// catalog. Gateway admission must never start provider I/O before ingress audit.
+func cachedNativeModelProtocols(account *Account, model string) []string {
+	if account == nil || !account.routesByModel() || !account.IsAdaptiveAPIProtocol() {
+		return nil
+	}
+	ctx := WithAccountOutboundIdentity(context.Background(), account)
+	proxyURL, err := requestCredentialOwnerProxyURL(ctx, account)
+	if err != nil {
+		return nil
+	}
+	url := buildOpenAIModelsURL(account.GetCNProtocolBaseURL(APIProtocolChatCompletions))
+	key := modelProtocolCatalogKey(account, url, modelProtocolCatalogHeaders(ctx, account), proxyURL)
+	upstreamModelProtocols.mu.Lock()
+	defer upstreamModelProtocols.mu.Unlock()
+	entry := upstreamModelProtocols.entries[key]
+	if entry == nil {
+		return nil
+	}
+	return slices.Clone(entry.models[strings.ToLower(strings.TrimSpace(model))])
+}
+
+// NativeAccessProtocols is used by the authenticated management capability API.
+// Unlike gateway admission it may refresh metadata, using the existing trusted
+// identity and credential-owner isolation. Configured model rules keep priority.
+func (s *OpenAIGatewayService) NativeAccessProtocols(ctx context.Context, account *Account, model string) []string {
+	if account != nil && account.routesByModel() && account.IsAdaptiveAPIProtocol() {
+		catalog := s.modelCatalogProtocols(ctx, account, model)
+		return account.supportedCatalogProtocols(account.modelProtocolSet(model, catalog))
+	}
+	return account.NativeProtocols(model)
+}
+
 func (c *modelProtocolCatalog) entryLocked(key string) *modelProtocolCatalogEntry {
 	if c.entries == nil {
 		c.entries = make(map[string]*modelProtocolCatalogEntry)
@@ -273,5 +306,10 @@ func (s *OpenAIGatewayService) fetchModelProtocolCatalog(ctx context.Context, ur
 // resolveUpstreamProtocolFor 是网关入口使用的 resolveUpstreamProtocol：按模型分流且平台
 // 提供模型目录时，带上目录中该模型支持的协议。
 func (s *OpenAIGatewayService) resolveUpstreamProtocolFor(ctx context.Context, account *Account, inbound, model string) string {
+	if CompositeNativeProtocol(ctx) != "" {
+		// Admission and terminal guards reject unavailable capabilities. Never
+		// select a different preferred protocol for a Composite request.
+		return inbound
+	}
 	return resolveUpstreamProtocol(account, inbound, model, s.modelCatalogProtocols(ctx, account, model))
 }

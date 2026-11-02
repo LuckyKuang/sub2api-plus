@@ -586,6 +586,8 @@
           <GroupRateSummary v-if="formData.group_id" class="mt-3 rounded-lg surface-inset p-3" :group="quoteFor(formData.group_id)" :loading="quotesLoading" :failed="quotesFailed" @retry="refreshQuotes" />
         </div>
 
+        <NativeAccessFields v-if="groups.find(group => group.id === formData.group_id)?.platform === 'composite'" ref="nativeAccessFields" v-model:client="formData.default_client" v-model:endpoint="formData.default_endpoint" :group-id="formData.group_id" :base-url="publicSettings?.api_base_url" />
+
         <!-- Custom Key Section (only for create) -->
         <div v-if="!showEditModal" class="space-y-3">
           <div class="flex items-center justify-between">
@@ -1025,6 +1027,9 @@
       :api-key="selectedKey?.key || ''"
       :base-url="publicSettings?.api_base_url || ''"
       :platform="selectedKey?.group?.platform || null"
+      :group-id="selectedKey?.group_id || null"
+      :default-client="selectedKey?.default_client || ''"
+      :default-endpoint="selectedKey?.default_endpoint || ''"
       :claude-code-only="selectedKey?.group?.claude_code_only || false"
       :allow-messages-dispatch="selectedKey?.group?.allow_messages_dispatch || false"
       @close="closeUseKeyModal"
@@ -1177,6 +1182,7 @@ import EmptyState from '@/components/common/EmptyState.vue'
 import Select from '@/components/common/Select.vue'
 import SearchInput from '@/components/common/SearchInput.vue'
 import Icon from '@/components/icons/Icon.vue'
+import NativeAccessFields from '@/components/keys/NativeAccessFields.vue'
 import UseKeyModal from '@/components/keys/UseKeyModal.vue'
 import EndpointPopover from '@/components/keys/EndpointPopover.vue'
 import GroupBadge from '@/components/common/GroupBadge.vue'
@@ -1394,8 +1400,11 @@ const setGroupButtonRef = (keyId: number, el: Element | ComponentPublicInstance 
   }
 }
 
+const nativeAccessFields = ref<InstanceType<typeof NativeAccessFields> | null>(null)
 const formData = ref({
   name: '',
+  default_client: '',
+  default_endpoint: '',
   group_id: null as number | null,
   status: 'active' as 'active' | 'inactive',
   use_custom_key: false,
@@ -1668,6 +1677,8 @@ const editKey = (key: ApiKey) => {
   const hasExpiration = !!key.expires_at
   formData.value = {
     name: key.name,
+    default_client: key.default_client || '',
+    default_endpoint: key.default_endpoint || '',
     group_id: key.group_id,
     status: key.status === 'active' ? 'active' : 'inactive',
     use_custom_key: false,
@@ -1770,6 +1781,7 @@ const confirmDelete = (key: ApiKey) => {
 }
 
 const handleSubmit = async () => {
+  if (nativeAccessFields.value && !nativeAccessFields.value.validate()) return
   // Validate group_id is required
   if (formData.value.group_id === null) {
     appStore.showError(t('keys.groupRequired'))
@@ -1828,6 +1840,8 @@ const handleSubmit = async () => {
     if (showEditModal.value && selectedKey.value) {
       const updates: UpdateApiKeyRequest = {
         name: formData.value.name,
+        default_client: formData.value.default_client,
+        default_endpoint: formData.value.default_endpoint,
         group_id: formData.value.group_id,
         ip_whitelist: ipWhitelist,
         ip_blacklist: ipBlacklist,
@@ -1852,7 +1866,8 @@ const handleSubmit = async () => {
         ipBlacklist,
         quota,
         expiresInDays,
-        rateLimitData
+        rateLimitData,
+        { default_client: formData.value.default_client, default_endpoint: formData.value.default_endpoint }
       )
       appStore.showSuccess(t('keys.keyCreatedSuccess'))
       // Only advance tour if active, on submit step, and creation succeeded
@@ -1897,6 +1912,8 @@ const closeModals = () => {
   selectedKey.value = null
   formData.value = {
     name: '',
+    default_client: '',
+    default_endpoint: '',
     group_id: null,
     status: 'active',
     use_custom_key: false,

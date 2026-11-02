@@ -61,6 +61,9 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 	promptCacheKey string,
 	defaultMappedModel string,
 ) (forwardResult *OpenAIForwardResult, forwardErr error) {
+	if err := CheckCompositeNativeForward(ctx, c, account, APIProtocolChatCompletions, gjson.GetBytes(body, "model").String()); err != nil {
+		return nil, err
+	}
 	if err := validateOpenAISessionContinuation(ctx, body); err != nil {
 		return nil, err
 	}
@@ -109,6 +112,9 @@ func (s *OpenAIGatewayService) forwardAsChatCompletions(
 		return nil, errors.New("codex_cli_only restriction: only codex official clients are allowed")
 	}
 
+	if CompositeNativeProtocol(ctx) == APIProtocolChatCompletions && (account.Platform == PlatformOpenAI || account.Platform == PlatformGrok) {
+		return s.forwardAsRawChatCompletions(ctx, c, account, body, defaultMappedModel)
+	}
 	if account.Platform == PlatformGrok {
 		if account.IsGrokOAuth() {
 			if eligible, reason := grokChatResponsesBridgeEligibility(body); eligible {

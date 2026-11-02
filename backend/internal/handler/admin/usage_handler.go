@@ -44,6 +44,30 @@ func (h *UsageHandler) LiveRequests(c *gin.Context) {
 		response.Error(c, http.StatusServiceUnavailable, "Live requests unavailable")
 		return
 	}
+	if h.adminService != nil && len(data.Items) > 0 {
+		seen := map[int64]bool{}
+		var ids []int64
+		for _, item := range data.Items {
+			if !seen[item.UserID] {
+				seen[item.UserID] = true
+				ids = append(ids, item.UserID)
+			}
+		}
+		includeSubscriptions := false
+		users, _, lookupErr := h.adminService.ListUsers(ctx, 1, len(ids), service.UserListFilters{IDs: ids, IdentityOnly: true, IncludeDeleted: true, IncludeSubscriptions: &includeSubscriptions}, "id", "asc")
+		if lookupErr != nil {
+			logger.LegacyPrintf("handler.admin.usage", "live request user identities unavailable: %v", lookupErr)
+		}
+		if lookupErr == nil {
+			emails := map[int64]string{}
+			for _, user := range users {
+				emails[user.ID] = user.Email
+			}
+			for index := range data.Items {
+				data.Items[index].UserEmail = emails[data.Items[index].UserID]
+			}
+		}
+	}
 	c.Header("Cache-Control", "no-store")
 	response.Success(c, data)
 }

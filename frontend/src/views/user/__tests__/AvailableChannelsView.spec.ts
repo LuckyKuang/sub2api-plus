@@ -489,3 +489,15 @@ describe('available channels user page', () => {
     expect(Array.from(document.querySelectorAll<HTMLDetailsElement>('details')).every(d => !d.open)).toBe(true)
   })
 })
+
+it('shows only populated categories with independent supplier filters and separate prices', async () => {
+ mocks.getCatalog.mockResolvedValueOnce({ groups: [group(1, [offer('ordinary-only'), offer('claude', { platform: 'anthropic' })]), group(2, [offer('aggregate-only')], { platform: 'composite' })], user_rate_status: 'loaded' })
+ const wrapper = page(); await flushPromises()
+ expect(wrapper.findAll('h3').map(node => node.text())).toContain('ordinary-only')
+ const category = wrapper.findAll('button').find(button => button.text() === 'availableChannels.catalog.compositePlatforms')!
+ await category.trigger('click')
+ expect(wrapper.findAll('h3').map(node => node.text())).toEqual(['aggregate-only'])
+ await wrapper.findAll('button').find(button => button.text() === 'availableChannels.catalog.groupPlatforms')!.trigger('click')
+ expect(wrapper.findAll('h3').map(node => node.text())).toContain('ordinary-only')
+ expect(wrapper.findAll('h3').map(node => node.text())).not.toContain('aggregate-only')
+})

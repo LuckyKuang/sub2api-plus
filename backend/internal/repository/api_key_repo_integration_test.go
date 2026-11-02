@@ -59,6 +59,34 @@ func (s *APIKeyRepoSuite) TestGetByID_NotFound() {
 	s.Require().Error(err, "expected error for non-existent ID")
 }
 
+// Client/endpoint defaults are management preferences. Saving them must survive
+// every key read without overwriting usage accumulated since the editor loaded.
+func (s *APIKeyRepoSuite) TestNativePreferencesRoundTripAndUsageIsolation() {
+	user := s.mustCreateUser("native-preferences@test.com")
+	key := &service.APIKey{UserID: user.ID, Key: "sk-native-preferences", Name: "Native", Status: service.StatusActive, DefaultClient: "codex", DefaultEndpoint: "/v1/responses"}
+	s.Require().NoError(s.repo.Create(s.ctx, key))
+	_, err := s.repo.IncrementQuotaUsed(s.ctx, key.ID, 2.5)
+	s.Require().NoError(err)
+	key.DefaultClient, key.DefaultEndpoint = "claude", "/v1/messages"
+	s.Require().NoError(s.repo.Update(s.ctx, key, service.APIKeyUpdateFields{Preferences: true}))
+	byID, err := s.repo.GetByID(s.ctx, key.ID)
+	s.Require().NoError(err)
+	byKey, err := s.repo.GetByKey(s.ctx, key.Key)
+	s.Require().NoError(err)
+	for _, got := range []*service.APIKey{byID, byKey} {
+		s.Equal("claude", got.DefaultClient)
+		s.Equal("/v1/messages", got.DefaultEndpoint)
+		s.Equal(2.5, got.QuotaUsed)
+	}
+	key.DefaultClient, key.DefaultEndpoint = "", ""
+	s.Require().NoError(s.repo.Update(s.ctx, key, service.APIKeyUpdateFields{Preferences: true}))
+	cleared, err := s.repo.GetByID(s.ctx, key.ID)
+	s.Require().NoError(err)
+	s.Empty(cleared.DefaultClient)
+	s.Empty(cleared.DefaultEndpoint)
+	s.Equal(2.5, cleared.QuotaUsed)
+}
+
 func (s *APIKeyRepoSuite) TestGetByKey() {
 	user := s.mustCreateUser("getbykey@test.com")
 	group := s.mustCreateGroup("g-key")
