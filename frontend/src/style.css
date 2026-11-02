@@ -51,6 +51,9 @@ input:is([type=range], [type=checkbox], [type=radio]) { accent-color: rgb(var(--
 
   .dark {
     color-scheme: dark;
+    /* Focus rings keep a dark offset color so .btn and pagination rings do
+       not render a white halo on dark surfaces (Tailwind defaults to #fff). */
+    --tw-ring-offset-color: #282828;
   }
 
   body {
@@ -158,6 +161,15 @@ input:is([type=range], [type=checkbox], [type=radio]) { accent-color: rgb(var(--
     font-size: 12px;
   }
 
+  /* Extra-small inline actions (dense toolbars). Previously referenced but
+     undefined, so it silently fell back to the base .btn size. */
+  .btn-xs {
+    border-radius: 7px;
+    padding: 3px 8px;
+    font-size: 11px;
+    line-height: 1.4;
+  }
+
   .btn-md {
     @apply rounded-xl px-4 py-2 text-sm;
   }
@@ -207,7 +219,7 @@ input:is([type=range], [type=checkbox], [type=radio]) { accent-color: rgb(var(--
     background-color: var(--surface-field);
     @apply border border-gray-200 dark:border-dark-600;
     @apply text-gray-900 dark:text-gray-100;
-    @apply placeholder:text-gray-400 dark:placeholder:text-dark-400;
+    @apply placeholder:text-gray-500 dark:placeholder:text-dark-400;
     @apply transition-all duration-200;
     @apply focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30;
     @apply disabled:cursor-not-allowed disabled:opacity-60;

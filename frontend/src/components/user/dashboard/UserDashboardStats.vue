@@ -6,7 +6,7 @@
       <p v-if="frozenBalance" class="mt-2 text-xs text-amber-600">{{ t('inspection.frozen') }} ${{ formatBalance(frozenBalance) }}</p>
     </div>
     <div class="card p-5">
-      <p class="text-sm surface-muted" :title="t('inspection.recordsHint')">{{ t('inspection.todayRecords') }}</p>
+      <p class="text-sm surface-muted">{{ t('inspection.todayRecords') }}</p>
       <p class="stat-value mt-3 text-2xl font-semibold tabular-nums">{{ formatNumber(stats.today_requests) }}</p>
       <p class="mt-2 text-xs surface-muted">{{ t('inspection.recordsHint') }}</p>
     </div>

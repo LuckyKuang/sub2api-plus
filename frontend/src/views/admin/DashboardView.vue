@@ -36,19 +36,67 @@
             </div>
           </div>
 
-      <!-- Loading State -->
-      <div v-if="loading && !stats" class="flex items-center justify-center py-12">
-        <LoadingSpinner />
+      <!-- Loading State: KPI skeletons (match the loaded layout to avoid a jump) -->
+      <div v-if="loading && !stats" class="dashboard-kpis workspace-fixed flex flex-col gap-4">
+        <div class="card p-5">
+          <div class="skeleton h-3 w-24"></div>
+          <div class="skeleton mt-3 h-9 w-44"></div>
+          <div class="skeleton mt-3 h-3 w-64"></div>
+        </div>
+        <div class="grid grid-cols-2 gap-4 md:grid-cols-3">
+          <div v-for="n in 6" :key="n" class="card p-4">
+            <div class="skeleton h-3 w-16"></div>
+            <div class="skeleton mt-3 h-6 w-20"></div>
+            <div class="skeleton mt-2 h-3 w-24"></div>
+          </div>
+        </div>
       </div>
 
       <template v-else-if="stats">
-        <!-- Row 1: Core Stats -->
-        <div class="dashboard-kpis workspace-fixed grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <!-- Hero: today's operational + financial pulse (the one primary focus) -->
+        <div class="dashboard-kpis workspace-fixed flex flex-col gap-4">
+          <div class="dashboard-hero card p-5">
+            <div class="flex flex-wrap items-start justify-between gap-6">
+              <div class="min-w-0">
+                <p class="text-xs font-medium surface-muted">{{ t('admin.dashboard.todayTokens') }}</p>
+                <p class="mt-1 text-3xl font-bold tracking-tight text-gray-900 dark:text-white">
+                  {{ formatTokens(stats.today_tokens) }}
+                </p>
+                <p class="mt-1 flex flex-wrap gap-x-1.5 text-xs surface-muted">
+                  <span>{{ t('dashboard.input') }} {{ todayTokenShare(stats.today_input_tokens) }}</span>
+                  <span aria-hidden="true">·</span>
+                  <span>{{ t('dashboard.output') }} {{ todayTokenShare(stats.today_output_tokens) }}</span>
+                  <template v-if="todayCacheTokens > 0">
+                    <span aria-hidden="true">·</span>
+                    <span>{{ t('dashboard.cache') }} {{ todayTokenShare(todayCacheTokens) }}</span>
+                  </template>
+                </p>
+              </div>
+              <div class="shrink-0 text-right">
+                <p class="text-xs font-medium surface-muted">{{ t('admin.dashboard.todayRequests') }}</p>
+                <p class="mt-1 text-2xl font-bold text-gray-900 dark:text-white">{{ formatNumber(stats.today_requests) }}</p>
+                <p class="mt-1 text-xs surface-muted">{{ t('common.total') }}: {{ formatNumber(stats.total_requests) }}</p>
+              </div>
+            </div>
+            <div class="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-gray-100 pt-3 text-xs dark:border-dark-700">
+              <span class="surface-muted">{{ t('admin.dashboard.actual') }}</span>
+              <span class="font-semibold text-green-600 dark:text-green-400">${{ formatCost(stats.today_actual_cost) }}</span>
+              <span class="surface-muted" aria-hidden="true">/</span>
+              <span class="surface-muted">{{ t('admin.dashboard.accountCost') }}</span>
+              <span class="font-medium text-orange-500 dark:text-orange-400">${{ formatCost(stats.today_account_cost) }}</span>
+              <span class="surface-muted" aria-hidden="true">/</span>
+              <span class="surface-muted">{{ t('admin.dashboard.standard') }}</span>
+              <span class="font-medium surface-muted">${{ formatCost(stats.today_cost) }}</span>
+            </div>
+          </div>
+
+          <!-- Supporting KPIs: uniform and neutral; color carries no meaning here -->
+          <div class="dashboard-kpi-grid grid grid-cols-2 gap-4 md:grid-cols-3">
           <!-- Total API Keys -->
           <div class="card p-4">
             <div class="flex items-center gap-3">
-              <div class="rounded-lg bg-blue-100/[0.15] p-2 dark:bg-blue-900/30">
-                <Icon name="key" size="md" class="text-blue-600 dark:text-blue-400" :stroke-width="2" />
+              <div class="rounded-lg surface-inset p-2">
+                <Icon name="key" size="md" class="surface-muted" :stroke-width="2" />
               </div>
               <div>
                 <p class="text-xs font-medium surface-muted">
@@ -67,8 +115,8 @@
           <!-- Service Accounts -->
           <div class="card p-4">
             <div class="flex items-center gap-3">
-              <div class="rounded-lg bg-purple-100/[0.15] p-2 dark:bg-purple-900/30">
-                <Icon name="server" size="md" class="text-purple-600 dark:text-purple-400" :stroke-width="2" />
+              <div class="rounded-lg surface-inset p-2">
+                <Icon name="server" size="md" class="surface-muted" :stroke-width="2" />
               </div>
               <div>
                 <p class="text-xs font-medium surface-muted">
@@ -89,31 +137,11 @@
             </div>
           </div>
 
-          <!-- Today Requests -->
-          <div class="card p-4">
-            <div class="flex items-center gap-3">
-              <div class="rounded-lg bg-green-100/[0.15] p-2 dark:bg-green-900/30">
-                <Icon name="chart" size="md" class="text-green-600 dark:text-green-400" :stroke-width="2" />
-              </div>
-              <div>
-                <p class="text-xs font-medium surface-muted">
-                  {{ t('admin.dashboard.todayRequests') }}
-                </p>
-                <p class="text-xl font-bold text-gray-900 dark:text-white">
-                  {{ stats.today_requests }}
-                </p>
-                <p class="text-xs surface-muted">
-                  {{ t('common.total') }}: {{ formatNumber(stats.total_requests) }}
-                </p>
-              </div>
-            </div>
-          </div>
-
           <!-- New Users Today -->
           <div class="card p-4">
             <div class="flex items-center gap-3">
-              <div class="rounded-lg bg-emerald-100/[0.15] p-2 dark:bg-emerald-900/30">
-                <Icon name="userPlus" size="md" class="text-emerald-600 dark:text-emerald-400" :stroke-width="2" />
+              <div class="rounded-lg surface-inset p-2">
+                <Icon name="userPlus" size="md" class="surface-muted" :stroke-width="2" />
               </div>
               <div>
                 <p class="text-xs font-medium surface-muted">
@@ -129,54 +157,11 @@
             </div>
           </div>
 
-        <!-- Token and performance stats -->
-          <!-- Today Tokens -->
-          <div class="card p-4">
-            <div class="flex items-center gap-3">
-              <div class="rounded-lg bg-amber-100/[0.15] p-2 dark:bg-amber-900/30">
-                <Icon name="cube" size="md" class="text-amber-600 dark:text-amber-400" :stroke-width="2" />
-              </div>
-              <div>
-                <p class="text-xs font-medium surface-muted">
-                  {{ t('admin.dashboard.todayTokens') }}
-                </p>
-                <p class="text-xl font-bold text-gray-900 dark:text-white">
-                  {{ formatTokens(stats.today_tokens) }}
-                </p>
-                <p class="flex flex-wrap gap-x-1 text-xs surface-muted">
-                  <span>{{ t('dashboard.input') }} {{ todayTokenShare(stats.today_input_tokens) }}</span>
-                  <span>&middot;</span>
-                  <span>{{ t('dashboard.output') }} {{ todayTokenShare(stats.today_output_tokens) }}</span>
-                  <span v-if="todayCacheTokens > 0">&middot; {{ t('dashboard.cache') }} {{ todayTokenShare(todayCacheTokens) }}</span>
-                </p>
-                <p class="text-xs">
-                  <span
-                    class="text-green-600 dark:text-green-400"
-                    :title="t('admin.dashboard.actual')"
-                    >${{ formatCost(stats.today_actual_cost) }}</span
-                  >
-                  <span class="surface-muted"> / </span>
-                  <span
-                    class="text-orange-500 dark:text-orange-400"
-                    :title="t('admin.dashboard.accountCost')"
-                    >${{ formatCost(stats.today_account_cost) }}</span
-                  >
-                  <span class="surface-muted"> / </span>
-                  <span
-                    class="surface-muted"
-                    :title="t('admin.dashboard.standard')"
-                    >${{ formatCost(stats.today_cost) }}</span
-                  >
-                </p>
-              </div>
-            </div>
-          </div>
-
           <!-- Total Tokens -->
           <div class="card p-4">
             <div class="flex items-center gap-3">
-              <div class="rounded-lg bg-indigo-100/[0.15] p-2 dark:bg-indigo-900/30">
-                <Icon name="database" size="md" class="text-indigo-600 dark:text-indigo-400" :stroke-width="2" />
+              <div class="rounded-lg surface-inset p-2">
+                <Icon name="database" size="md" class="surface-muted" :stroke-width="2" />
               </div>
               <div>
                 <p class="text-xs font-medium surface-muted">
@@ -217,8 +202,8 @@
           <!-- Performance (RPM/TPM) -->
           <div class="card p-4">
             <div class="flex items-center gap-3">
-              <div class="rounded-lg bg-violet-100/[0.15] p-2 dark:bg-violet-900/30">
-                <Icon name="bolt" size="md" class="text-violet-600 dark:text-violet-400" :stroke-width="2" />
+              <div class="rounded-lg surface-inset p-2">
+                <Icon name="bolt" size="md" class="surface-muted" :stroke-width="2" />
               </div>
               <div class="flex-1">
                 <p class="text-xs font-medium surface-muted">
@@ -243,8 +228,8 @@
           <!-- Avg Response Time -->
           <div class="card p-4">
             <div class="flex items-center gap-3">
-              <div class="rounded-lg bg-rose-100/[0.15] p-2 dark:bg-rose-900/30">
-                <Icon name="clock" size="md" class="text-rose-600 dark:text-rose-400" :stroke-width="2" />
+              <div class="rounded-lg surface-inset p-2">
+                <Icon name="clock" size="md" class="surface-muted" :stroke-width="2" />
               </div>
               <div>
                 <p class="text-xs font-medium surface-muted">
@@ -258,6 +243,7 @@
                 </p>
               </div>
             </div>
+          </div>
           </div>
         </div>
 
@@ -301,16 +287,23 @@
                 <LoadingSpinner size="md" />
               </div>
               <Line v-else-if="userTrendChartData" :data="userTrendChartData" :options="lineOptions" />
-              <div
-                v-else
-                class="flex h-full items-center justify-center text-sm surface-muted"
-              >
-                {{ t('admin.dashboard.noDataAvailable') }}
+              <div v-else class="flex h-full items-center justify-center">
+                <EmptyState :title="t('admin.dashboard.noDataAvailable')" />
               </div>
             </div>
           </div>
         </div>
       </template>
+
+      <!-- Empty/error: the overview failed to load and no inline error banner is shown -->
+      <div v-else class="flex flex-1 items-center justify-center p-8">
+        <EmptyState
+          :title="t('common.noData')"
+          :action-text="t('common.refresh')"
+          :action-icon="false"
+          @action="refreshAll"
+        />
+      </div>
     </div>
   </AppLayout>
 </template>
@@ -339,6 +332,7 @@ import type {
 } from '@/types'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
 import Icon from '@/components/icons/Icon.vue'
 import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import Select from '@/components/common/Select.vue'
@@ -786,8 +780,10 @@ onMounted(() => {
   .dashboard-toolbar { padding: 12px 16px; }
   .dashboard-toolbar > div { gap: 12px; }
   .dashboard-kpis { gap: 10px; }
-  .dashboard-kpis > .card { min-width: 0; padding: 12px; }
-  .dashboard-kpis > .card > div { gap: 10px; }
+  .dashboard-hero { min-width: 0; }
+  .dashboard-kpi-grid { gap: 10px; }
+  .dashboard-kpi-grid > .card { min-width: 0; padding: 12px; }
+  .dashboard-kpi-grid > .card > div { gap: 10px; }
   .dashboard-charts { display: grid; grid-template-rows: minmax(0, 1fr) minmax(0, 1.02fr); gap: 12px; }
   .dashboard-charts-compact { grid-template-rows: minmax(0, 1fr); }
   .dashboard-chart-grid { min-height: 0; gap: 12px; }
@@ -796,14 +792,14 @@ onMounted(() => {
   .dashboard-line-canvas { position: relative; height: auto; min-height: 0; flex: 1; }
 }
 @media (min-width: 1800px) and (min-height: 960px) {
-  .dashboard-kpis { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+  .dashboard-kpi-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 }
 @media (min-width: 1024px) and (max-height: 959px) {
-  .dashboard-kpis > .card { padding: 10px; }
+  .dashboard-kpi-grid > .card { padding: 10px; }
 }
 @media (min-width: 1024px) and (max-height: 799px) {
   .dashboard-toolbar { padding-top: 8px; padding-bottom: 8px; }
-  .dashboard-kpis { display: flex; overflow-x: auto; scrollbar-width: thin; padding-bottom: 4px; }
-  .dashboard-kpis > .card { flex: 0 0 300px; }
+  .dashboard-kpis { gap: 8px; }
+  .dashboard-kpi-grid { gap: 8px; }
 }
 </style>
