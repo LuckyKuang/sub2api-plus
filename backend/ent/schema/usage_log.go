@@ -175,6 +175,7 @@ func (UsageLog) Fields() []ent.Field {
 			MaxLen(32).
 			Default("unknown").
 			Comment("Quality/source of the usage used for billing"),
+		field.JSON("outbound_metadata", map[string]any{}).Optional().SchemaType(map[string]string{dialect.Postgres: "jsonb"}),
 		field.String("user_agent").
 			MaxLen(512).
 			Optional().

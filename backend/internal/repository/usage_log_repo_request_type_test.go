@@ -123,6 +123,7 @@ func TestUsageLogRepositoryCreateSyncRequestTypeAndLegacyFields(t *testing.T) {
 			sqlmock.AnyArg(), // first_byte_ms
 			sqlmock.AnyArg(), // billing_policy_version
 			sqlmock.AnyArg(), // billing_rate_snapshot
+			sqlmock.AnyArg(), // outbound_metadata
 		).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "created_at"}).AddRow(int64(99), createdAt))
 
@@ -232,6 +233,7 @@ func TestUsageLogRepositoryCreate_PersistsServiceTier(t *testing.T) {
 			sqlmock.AnyArg(), // first_byte_ms
 			sqlmock.AnyArg(), // billing_policy_version
 			sqlmock.AnyArg(), // billing_rate_snapshot
+			sqlmock.AnyArg(), // outbound_metadata
 		).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "created_at"}).AddRow(int64(100), createdAt))
 
@@ -1043,6 +1045,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullInt64{},   // first_byte_ms remains unknown in this historical fixture
 			int64(0),          // historical billing policy version
 			sql.NullString{},  // historical billing rate evidence
+			sql.NullString{},  // historical outbound evidence
 		}})
 		require.NoError(t, err)
 		require.Equal(t, 2, log.ImageCount)
@@ -1148,6 +1151,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullInt64{},   // first_byte_ms remains unknown in this historical fixture
 			int64(0),          // historical billing policy version
 			sql.NullString{},  // historical billing rate evidence
+			sql.NullString{},  // historical outbound evidence
 		}})
 		require.NoError(t, err)
 		require.NotNil(t, log.ServiceTier)
@@ -1224,6 +1228,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullInt64{},   // first_byte_ms remains unknown in this historical fixture
 			int64(0),          // historical billing policy version
 			sql.NullString{},  // historical billing rate evidence
+			sql.NullString{},  // historical outbound evidence
 		}})
 		require.NoError(t, err)
 		require.NotNil(t, log.ServiceTier)
@@ -1301,6 +1306,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullInt64{},   // first_byte_ms remains unknown in this historical fixture
 			int64(0),          // historical billing policy version
 			sql.NullString{},  // historical billing rate evidence
+			sql.NullString{},  // historical outbound evidence
 		}})
 		require.NoError(t, err)
 		require.NotNil(t, log.ServiceTier)

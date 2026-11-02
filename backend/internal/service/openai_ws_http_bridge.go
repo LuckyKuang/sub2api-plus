@@ -430,6 +430,7 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 	turn int,
 	writeClientMessage func([]byte) error,
 ) (*OpenAIForwardResult, error) {
+	ctx, outbound := beginOutboundObservation(ctx)
 	if s == nil {
 		return nil, errors.New("service is nil")
 	}
@@ -701,6 +702,7 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 		imageCount := imageCounter.Count()
 		result := &OpenAIForwardResult{
 			codexUsageOwner:               capturedCodexUsageOwner(ctx, account),
+			Outbound:                      outbound.snapshot(),
 			RequestID:                     responseID,
 			Usage:                         usage,
 			Model:                         originalModel,

@@ -450,3 +450,19 @@ func TestUsageLogServiceTierJSONDistinguishesHistoryAndAbsence(t *testing.T) {
 		require.NotContains(t, string(userJSON), "service_tier")
 	}
 }
+
+func TestUsageLogOutboundEvidenceAdminOnlyAndUnknownHistory(t *testing.T) {
+	inbound := "codex-tui/0.166.0"
+	log := &service.UsageLog{UserAgent: &inbound}
+	require.Equal(t, "unknown", UsageLogFromServiceAdmin(log).OutboundTransport)
+	require.Nil(t, UsageLogFromServiceAdmin(log).OutboundMetadata)
+	log.Outbound = &service.OutboundMetadata{Transport: service.OutboundCodexCLIBridge, Evidence: "gateway_send", CLIVersion: "0.165.0", UserAgent: "codex_cli_rs/0.164.0", ClientVersion: "0.164.0", TierKnown: true, ServiceTier: "priority"}
+	userJSON, err := json.Marshal(UsageLogFromService(log))
+	require.NoError(t, err)
+	require.NotContains(t, string(userJSON), "outbound_")
+	admin := UsageLogFromServiceAdmin(log)
+	require.Equal(t, "codex_cli_bridge", admin.OutboundTransport)
+	require.Equal(t, "0.165.0", admin.OutboundMetadata.CLIVersion)
+	require.Equal(t, "0.164.0", admin.OutboundMetadata.ClientVersion, "executable version is independent from trusted identity")
+	require.Equal(t, inbound, *admin.UserAgent)
+}

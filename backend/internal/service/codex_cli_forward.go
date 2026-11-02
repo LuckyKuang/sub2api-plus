@@ -137,6 +137,9 @@ func (s *OpenAIGatewayService) forwardCodexCLITaskWithRuntime(ctx context.Contex
 	// Billing and usage records must retain the effort sent to the CLI,
 	// including an account default and partial usage after task failure.
 	result.ReasoningEffort = reasoningEffort
+	if task.Started {
+		result.Outbound = &OutboundMetadata{Transport: OutboundCodexCLITask, Evidence: "cli_process", CLIVersion: status.InstalledVersion}
+	}
 	if taskErr != nil {
 		result.UsageIncomplete = true
 		result.ClientDisconnect = ctx.Err() != nil
@@ -241,9 +244,15 @@ func disableCodexCLITaskRemoteFeatures(config map[string]any) {
 }
 
 func codexCLITaskForwardResult(task codexcli.TaskResult, request CodexCLITaskRequest, model, id string, duration time.Duration) *OpenAIForwardResult {
+	source := UsageSourceUnknown
+	if task.UsageReported {
+		source = UsageSourceUpstreamExact
+	} else if task.Usage.InputTokens > 0 || task.Usage.OutputTokens > 0 {
+		source = UsageSourcePartial
+	}
 	return &OpenAIForwardResult{RequestID: id, ResponseID: id, Model: request.Model, UpstreamModel: model,
 		Stream: request.Stream, Duration: duration, UpstreamEndpoint: openAIResponsesUpstreamEndpoint,
-		UsageSource: "codex_cli_task", UsageIncomplete: task.UsageIncomplete,
+		UsageSource: source, UsageIncomplete: task.UsageIncomplete,
 		Usage: OpenAIUsage{InputTokens: int(task.Usage.InputTokens), OutputTokens: int(task.Usage.OutputTokens), CacheReadInputTokens: int(task.Usage.CachedInputTokens), CacheCreationInputTokens: int(task.Usage.CacheWriteInputTokens)}}
 }
 

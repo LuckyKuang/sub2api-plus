@@ -18,9 +18,9 @@ func TestUsageLogBillingRateSnapshotInsertEvidence(t *testing.T) {
 		BillingRateSnapshot: map[string]any{"platform": "openai", "model": "public-code", "base_multiplier": .8, "policy_multiplier": 1.5, "effective_multiplier": 1.2},
 	}
 	prepared := prepareUsageLogInsert(entry)
-	require.Equal(t, int64(9), prepared.args[len(prepared.args)-2])
+	require.Equal(t, int64(9), prepared.args[len(prepared.args)-3])
 	var stored map[string]any
-	require.NoError(t, json.Unmarshal([]byte(prepared.args[len(prepared.args)-1].(string)), &stored))
+	require.NoError(t, json.Unmarshal([]byte(prepared.args[len(prepared.args)-2].(string)), &stored))
 	require.Equal(t, 1.2, stored["effective_multiplier"])
 	require.Equal(t, "public-code", stored["model"])
 	require.NotContains(t, stored, "upstream_model")
@@ -28,6 +28,6 @@ func TestUsageLogBillingRateSnapshotInsertEvidence(t *testing.T) {
 	entry.BillingRateSnapshot["effective_multiplier"] = 99
 	require.Equal(t, 1.2, stored["effective_multiplier"])
 	legacy := prepareUsageLogInsert(&service.UsageLog{})
-	require.Equal(t, int64(0), legacy.args[len(legacy.args)-2])
-	require.Nil(t, legacy.args[len(legacy.args)-1])
+	require.Equal(t, int64(0), legacy.args[len(legacy.args)-3])
+	require.Nil(t, legacy.args[len(legacy.args)-2])
 }

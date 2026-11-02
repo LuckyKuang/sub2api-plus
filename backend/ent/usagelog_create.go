@@ -651,6 +651,12 @@ func (_c *UsageLogCreate) SetNillableUsageSource(v *string) *UsageLogCreate {
 	return _c
 }
 
+// SetOutboundMetadata sets the "outbound_metadata" field.
+func (_c *UsageLogCreate) SetOutboundMetadata(v map[string]interface{}) *UsageLogCreate {
+	_c.mutation.SetOutboundMetadata(v)
+	return _c
+}
+
 // SetUserAgent sets the "user_agent" field.
 func (_c *UsageLogCreate) SetUserAgent(v string) *UsageLogCreate {
 	_c.mutation.SetUserAgent(v)
@@ -1391,6 +1397,10 @@ func (_c *UsageLogCreate) createSpec() (*UsageLog, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.UsageSource(); ok {
 		_spec.SetField(usagelog.FieldUsageSource, field.TypeString, value)
 		_node.UsageSource = value
+	}
+	if value, ok := _c.mutation.OutboundMetadata(); ok {
+		_spec.SetField(usagelog.FieldOutboundMetadata, field.TypeJSON, value)
+		_node.OutboundMetadata = value
 	}
 	if value, ok := _c.mutation.UserAgent(); ok {
 		_spec.SetField(usagelog.FieldUserAgent, field.TypeString, value)
@@ -2436,6 +2446,24 @@ func (u *UsageLogUpsert) SetUsageSource(v string) *UsageLogUpsert {
 // UpdateUsageSource sets the "usage_source" field to the value that was provided on create.
 func (u *UsageLogUpsert) UpdateUsageSource() *UsageLogUpsert {
 	u.SetExcluded(usagelog.FieldUsageSource)
+	return u
+}
+
+// SetOutboundMetadata sets the "outbound_metadata" field.
+func (u *UsageLogUpsert) SetOutboundMetadata(v map[string]interface{}) *UsageLogUpsert {
+	u.Set(usagelog.FieldOutboundMetadata, v)
+	return u
+}
+
+// UpdateOutboundMetadata sets the "outbound_metadata" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateOutboundMetadata() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldOutboundMetadata)
+	return u
+}
+
+// ClearOutboundMetadata clears the value of the "outbound_metadata" field.
+func (u *UsageLogUpsert) ClearOutboundMetadata() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldOutboundMetadata)
 	return u
 }
 
@@ -3698,6 +3726,27 @@ func (u *UsageLogUpsertOne) SetUsageSource(v string) *UsageLogUpsertOne {
 func (u *UsageLogUpsertOne) UpdateUsageSource() *UsageLogUpsertOne {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.UpdateUsageSource()
+	})
+}
+
+// SetOutboundMetadata sets the "outbound_metadata" field.
+func (u *UsageLogUpsertOne) SetOutboundMetadata(v map[string]interface{}) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetOutboundMetadata(v)
+	})
+}
+
+// UpdateOutboundMetadata sets the "outbound_metadata" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateOutboundMetadata() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateOutboundMetadata()
+	})
+}
+
+// ClearOutboundMetadata clears the value of the "outbound_metadata" field.
+func (u *UsageLogUpsertOne) ClearOutboundMetadata() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearOutboundMetadata()
 	})
 }
 
@@ -5162,6 +5211,27 @@ func (u *UsageLogUpsertBulk) SetUsageSource(v string) *UsageLogUpsertBulk {
 func (u *UsageLogUpsertBulk) UpdateUsageSource() *UsageLogUpsertBulk {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.UpdateUsageSource()
+	})
+}
+
+// SetOutboundMetadata sets the "outbound_metadata" field.
+func (u *UsageLogUpsertBulk) SetOutboundMetadata(v map[string]interface{}) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetOutboundMetadata(v)
+	})
+}
+
+// UpdateOutboundMetadata sets the "outbound_metadata" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateOutboundMetadata() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateOutboundMetadata()
+	})
+}
+
+// ClearOutboundMetadata clears the value of the "outbound_metadata" field.
+func (u *UsageLogUpsertBulk) ClearOutboundMetadata() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearOutboundMetadata()
 	})
 }
 

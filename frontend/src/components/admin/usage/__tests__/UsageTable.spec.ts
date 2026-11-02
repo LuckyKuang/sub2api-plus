@@ -49,6 +49,15 @@ const messages: Record<string, string> = {
   'usage.inputTokenPrice': 'Input price',
   'usage.outputTokenPrice': 'Output price',
   'usage.perMillionTokens': '/ 1M tokens',
+  'admin.usage.serviceTierBilling': '计费',
+  'admin.usage.serviceTierDifference': '请求与响应档位不同；需结合出站证据核查',
+  'admin.usage.outboundTransport.unknown': '未记录',
+  'admin.usage.outboundTransport.native': '原生出站',
+  'admin.usage.outboundTransport.codex_cli_bridge': '官方 CLI 桥接',
+  'admin.usage.outboundTransport.codex_cli_task': '官方 CLI 任务',
+  'admin.usage.outboundDispatch': '已在网关发送；不代表上游执行保证',
+  'admin.usage.outboundProcess': '已启动 CLI 进程；未观测最终网络请求',
+  'admin.usage.outboundTier': '发送档位',
   'admin.usage.serviceTierRequest': '请求',
   'admin.usage.serviceTierResponse': '响应',
   'admin.usage.serviceTierUnrecorded': '未记录',
@@ -1612,7 +1621,11 @@ describe('service tier column', () => {
       },
       global: { stubs: { DataTable: DataTableStub, EmptyState: true, Icon: true, Teleport: true } },
     })
-    expect(wrapper.get('[data-testid="service-tier-cell"]').findAll('div').map(line => line.text())).toEqual([requestText, responseText])
+    const lines = wrapper.get('[data-testid="service-tier-cell"]').findAll('div').map(line => line.text())
+    expect(lines).toEqual([
+      requestText, responseText, '计费 未记录',
+      ...(requested === 'priority' && response === 'default' ? ['请求与响应档位不同；需结合出站证据核查'] : []),
+    ])
     wrapper.unmount()
   })
 
@@ -1628,5 +1641,31 @@ describe('service tier column', () => {
     expect(wrapper.find('[data-testid="service-tier-cell"]').exists()).toBe(false)
     expect(wrapper.text()).not.toMatch(/Fast|priority|provider-tier|serviceTier/)
     wrapper.unmount()
+  })
+})
+
+
+describe('outbound dispatch evidence', () => {
+  const table = { props: ['data'], template: `<div><template v-for="row in data" :key="row.id"><slot name="cell-outbound" :row="row" /></template></div>` }
+  it('does not infer CLI dispatch from a historical inbound Codex UA', () => {
+    const wrapper = mount(UsageTable, {
+      props: { data: [{ ...baseImageRow, user_agent: 'codex-tui/0.166.0' }], columns: [], loading: false },
+      global: { stubs: { DataTable: table, EmptyState: true, Icon: true } },
+    })
+    expect(wrapper.get('[data-testid="outbound-cell"]').text()).toBe('未记录')
+  })
+  it.each(['native', 'codex_cli_bridge', 'codex_cli_task'] as const)('distinguishes %s and its evidence level', (transport) => {
+    const process = transport === 'codex_cli_task'
+    const wrapper = mount(UsageTable, {
+      props: { data: [{ ...baseImageRow, outbound_transport: transport, outbound_metadata: {
+        transport, evidence: process ? 'cli_process' : 'gateway_send', cli_version: transport === 'native' ? undefined : '0.165.0',
+        user_agent: process ? undefined : 'codex_cli_rs/0.165.0', tier_known: !process, service_tier: process ? undefined : 'priority',
+      } }], columns: [], loading: false },
+      global: { stubs: { DataTable: table, EmptyState: true, Icon: true } },
+    })
+    const text = wrapper.get('[data-testid="outbound-cell"]').text()
+    expect(text).toContain(process ? '未观测最终网络请求' : '已在网关发送')
+    expect(text.includes('发送档位 Fast')).toBe(!process)
+    expect(text.includes('CLI 0.165.0')).toBe(transport !== 'native')
   })
 })

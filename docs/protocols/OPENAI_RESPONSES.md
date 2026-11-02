@@ -946,8 +946,8 @@ returned normally. See [error diagnostics](../ERROR_REQUEST_DIAGNOSTICS.md).
 ## Administrator usage service-tier diagnostics
 
 The administrator usage table has a default-visible **Service tier** column,
-which can be hidden through column settings. It shows two lines, for example
-`Request Fast` and `Response default`, for both OAuth and API-key accounts.
+which can be hidden through column settings. It shows request, response and billing lines, for example
+`Request Fast`, `Response default` and `Billing default`, for both OAuth and API-key accounts.
 `requested_service_tier` records the final outbound tier after pass/filter/force
 policy, before billing resolution; `priority` and `fast` display as `Fast`.
 `response_service_tier` independently records the upstream declaration, preserving
@@ -1069,3 +1069,13 @@ candidate cannot expose it to another key through the shared index.
 
 
 Quota read-side provenance is mandatory as well as write-side CAS. Automatic quota pause, credit-reset decisions, and quota-based scheduling scores may use only observations whose `codex_usage_owner_generation` matches the current credential owner and proxy. Unmarked legacy or mismatched observations may be displayed and trigger a new probe, but cannot pause an account, consume a credit, inherit probe-failure backoff, or reset subscription usage. Operator thresholds, explicit disable flags and manual session windows remain intact. Spark shadows validate their own quota against the current parent grant using the existing parent-health lookup; the parent's global quota does not block Spark.
+
+The administrator table also displays the billing tier and flags
+`priority`/`default` request/response differences. New `outbound_metadata`
+records the dispatched tier when the final JSON body is observed; this takes
+precedence over an earlier transform's tier at usage settlement. An omitted
+wire tier is recorded as observed but unspecified, not silently reused from a
+previous turn. `outbound_transport` distinguishes native sends, verified CLI
+bridge callbacks and managed-task execution; historical evidence is unknown.
+These fields are administrator-only and do not prove upstream Fast execution.
+See [CLI usage and evidence](../CODEX_CLI.md#usage-accuracy-and-outbound-evidence).

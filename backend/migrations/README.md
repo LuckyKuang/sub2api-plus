@@ -4,6 +4,10 @@ SQL migrations are embedded in the application and applied automatically at
 startup. The runner records each filename and SHA256 checksum in
 `schema_migrations`.
 
+Migration `304_usage_outbound_metadata.sql` adds nullable administrator dispatch
+evidence. Historical rows stay NULL; the existing usage accuracy CHECK and
+atomic billing transaction remain unchanged. See [Codex CLI evidence](../../docs/CODEX_CLI.md#usage-accuracy-and-outbound-evidence).
+
 Migration `302_scoped_admin_api_keys.sql` adds revocable, scope-limited
 administrator keys with hashed secrets, IP restrictions, expiry and retained
 revocation/deletion metadata. See [administrator keys](../../docs/admin-api-keys.md).

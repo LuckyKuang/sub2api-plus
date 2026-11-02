@@ -574,6 +574,14 @@ export default {
     // Usage Records
     usage: {
       serviceTier: 'Service tier',
+      inboundUserAgent: 'Inbound User-Agent',
+      outbound: 'Outbound evidence',
+      outboundTransport: { unknown: 'Not recorded', native: 'Native', codex_cli_bridge: 'Official CLI bridge', codex_cli_task: 'Official CLI task' },
+      outboundProcess: 'CLI process started; final network request not observed',
+      outboundDispatch: 'Dispatched by gateway; provider execution not guaranteed',
+      outboundTier: 'Dispatched tier',
+      serviceTierBilling: 'Billing',
+      serviceTierDifference: 'Request and response tiers differ; check outbound evidence',
       serviceTierRequest: 'Request',
       serviceTierResponse: 'Response',
       serviceTierUnrecorded: 'Not recorded',

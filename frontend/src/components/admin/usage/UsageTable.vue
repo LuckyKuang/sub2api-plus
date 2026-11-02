@@ -114,6 +114,22 @@
           <div v-if="showServiceTier" data-testid="service-tier-cell" class="space-y-0.5 whitespace-nowrap text-xs">
             <div class="text-gray-900 dark:text-white">{{ t('admin.usage.serviceTierRequest') }} {{ formatRequestedServiceTier(row.requested_service_tier, t) }}</div>
             <div class="surface-muted">{{ t('admin.usage.serviceTierResponse') }} {{ formatResponseServiceTier(row.response_service_tier, t) }}</div>
+            <div class="surface-muted">{{ t('admin.usage.serviceTierBilling') }} {{ formatRequestedServiceTier(row.service_tier, t) }}</div>
+            <div v-if="row.requested_service_tier === 'priority' && row.response_service_tier === 'default'" data-testid="service-tier-difference" class="text-amber-700 dark:text-amber-300">{{ t('admin.usage.serviceTierDifference') }}</div>
+          </div>
+        </template>
+
+        <template #cell-outbound="{ row }">
+          <div data-testid="outbound-cell" class="max-w-[320px] space-y-0.5 text-xs">
+            <div class="font-medium text-gray-900 dark:text-white">{{ t(`admin.usage.outboundTransport.${row.outbound_transport || 'unknown'}`) }}</div>
+            <template v-if="row.outbound_metadata">
+              <div class="surface-muted">{{ t(row.outbound_metadata.evidence === 'cli_process' ? 'admin.usage.outboundProcess' : 'admin.usage.outboundDispatch') }}</div>
+              <div v-if="row.outbound_metadata.cli_version">CLI {{ row.outbound_metadata.cli_version }}</div>
+              <div v-if="row.outbound_metadata.user_agent" class="truncate surface-muted" :title="row.outbound_metadata.user_agent">UA: {{ row.outbound_metadata.user_agent }}</div>
+              <div v-if="row.outbound_metadata.originator" class="surface-muted">Originator: {{ row.outbound_metadata.originator }}</div>
+              <div v-if="row.outbound_metadata.client_version" class="surface-muted">Version: {{ row.outbound_metadata.client_version }}</div>
+              <div v-if="row.outbound_metadata.tier_known" class="surface-muted">{{ t('admin.usage.outboundTier') }} {{ formatRequestedServiceTier(row.outbound_metadata.service_tier || '', t) }}</div>
+            </template>
           </div>
         </template>
 

@@ -110,6 +110,8 @@ const (
 	FieldCompletionStatus = "completion_status"
 	// FieldUsageSource holds the string denoting the usage_source field in the database.
 	FieldUsageSource = "usage_source"
+	// FieldOutboundMetadata holds the string denoting the outbound_metadata field in the database.
+	FieldOutboundMetadata = "outbound_metadata"
 	// FieldUserAgent holds the string denoting the user_agent field in the database.
 	FieldUserAgent = "user_agent"
 	// FieldIPAddress holds the string denoting the ip_address field in the database.
@@ -236,6 +238,7 @@ var Columns = []string{
 	FieldIsComplete,
 	FieldCompletionStatus,
 	FieldUsageSource,
+	FieldOutboundMetadata,
 	FieldUserAgent,
 	FieldIPAddress,
 	FieldImageCount,

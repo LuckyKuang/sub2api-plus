@@ -320,6 +320,7 @@ type OpenAIForwardResult struct {
 	ResponseID        string
 	// UpstreamHeaders 是直接上游的响应头，用于按账户配置解析上游请求标识。
 	UpstreamHeaders http.Header
+	Outbound        *OutboundMetadata
 	Usage           OpenAIUsage
 	Model           string // 原始模型（用于响应和日志显示）
 	// BillingModel is the model used for cost calculation.

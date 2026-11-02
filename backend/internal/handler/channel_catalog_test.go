@@ -40,6 +40,10 @@ type catalogReaderStub struct {
 	calls    int
 }
 
+func (s *catalogReaderStub) ListAvailableChannelCatalog(ctx context.Context, groups []service.Group) ([]service.CatalogGroup, error) {
+	return s.ListAvailableCatalog(ctx, groups)
+}
+
 func (s *catalogReaderStub) ListAvailableCatalog(_ context.Context, groups []service.Group) ([]service.CatalogGroup, error) {
 	s.received = groups
 	s.calls++

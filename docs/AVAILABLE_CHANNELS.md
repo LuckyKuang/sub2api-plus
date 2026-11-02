@@ -1,8 +1,8 @@
 # Available-channel model catalog
 
 The authenticated `/available-channels` page lists configured models and their
-prices in the groups the current user can bind to an API key. It uses the
-`available_channels_enabled` setting independently of `model_plaza_enabled`.
+prices in active channels bound to groups the current user can bind to an API
+key. It uses `available_channels_enabled` independently of `model_plaza_enabled`.
 The public model plaza and administrator support table retain their existing
 contracts. A catalog entry is not a guarantee of live account health, available
 quota or successful routing.
@@ -20,9 +20,12 @@ channel or user-rate dependencies; the legacy view returns `data: []`.
 `GetAvailableGroups` authorizes groups before catalog assembly: standard groups
 respect exclusivity and public-group restrictions; subscription groups require
 an active subscription, including exclusive subscription groups. Only active
-channels contribute channel models. An authorized group without configured
-public models is retained with `models: []`. Each group can belong to at
-most one channel; that database constraint is unchanged.
+channels contribute groups and models. An authorized group bound to an active
+channel without configured public models is retained with `models: []`.
+Unbound groups and groups bound only to a disabled or deleted channel are
+omitted, including Composite groups, even if group prices, account mappings
+or routes still declare models. Each group can belong to at most one channel;
+that database constraint is unchanged.
 
 For a group bound to an active channel, its catalog models must be explicitly
 covered by that channel's current model pricing, matched by concrete platform
@@ -33,9 +36,8 @@ prices, Composite routes or global reference prices still contain them. A price
 card with missing prices or an explicit zero still declares a model; existing
 billing rules determine its displayed price or unknown-price status.
 
-A group without an active bound channel can publish its group prices, exact
-account model mappings and enabled exact Composite routes. Prefix routes apply
-to finite configured IDs; wildcards never become literal request IDs. Mappings
+Within an active bound group, prefix routes apply to finite configured IDs;
+wildcards never become literal request IDs. Mappings
 and routes resolve configured offers but cannot add a model/supplier pair outside
 a bound channel's pricing rules. The group public-model allowlist filters every
 source. Normal groups remain on their own platform; composite offers retain the
@@ -268,9 +270,15 @@ identity path; see [security audit coverage](SECURITY_AUDIT_CONTENT_COVERAGE.md)
 
 ### API Key group rate disclosure
 
-`GET /api/v1/channels/available?view=key_quotes` returns the same authorized
-commercial catalog projection used by Key group selection. It remains available
-when the optional Available Channels page is disabled. The `view=catalog` and
+`GET /api/v1/channels/available?view=key_quotes` returns the authorized commercial
+group catalog used by Key group selection. Unlike `view=catalog`, this projection
+also includes groups without an active bound channel; their configured group
+prices, exact account mappings and enabled exact Composite routes may declare
+models. Subscription sale catalogs retain the same unbound-group behavior.
+These reads share the price assembler with the channel page, while the page
+requires an active channel binding from that same request-local snapshot.
+Key quotes remain available when the optional Available Channels page is
+disabled. The `view=catalog` and
 legacy list keep their existing page enablement gate. Authentication and
 bindable-group permissions apply before model or personal-rate lookup; duplicate
 `view` parameters do not select this mode. No account, supplier cost, credential

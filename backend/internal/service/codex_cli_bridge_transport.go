@@ -109,7 +109,7 @@ func (s *OpenAIGatewayService) doOpenAICodexCLIBridge(request *http.Request, pro
 		// Bridge supplies the same trusted upstream request, not an incoming
 		// relay URL/header set. Keep all native/plugin preparation and signing
 		// declarations in the existing provider-bound transport.
-		trusted = trusted.WithContext(ctx)
+		trusted = trusted.WithContext(context.WithValue(ctx, outboundCLIExecutionKey{}, status.InstalledVersion))
 		response, err := s.doOpenAIPreparedTransport(trusted, proxyURL, owner, selected)
 		response, err = s.completeCodexCLIBridgeErrorResponse(response, err)
 		if err != nil {

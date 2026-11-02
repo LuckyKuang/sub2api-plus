@@ -119,6 +119,8 @@ type UsageLog struct {
 	CompletionStatus string `json:"completion_status,omitempty"`
 	// Quality/source of the usage used for billing
 	UsageSource string `json:"usage_source,omitempty"`
+	// OutboundMetadata holds the value of the "outbound_metadata" field.
+	OutboundMetadata map[string]interface{} `json:"outbound_metadata,omitempty"`
 	// UserAgent holds the value of the "user_agent" field.
 	UserAgent *string `json:"user_agent,omitempty"`
 	// IPAddress holds the value of the "ip_address" field.
@@ -228,7 +230,7 @@ func (*UsageLog) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case usagelog.FieldBillingRateSnapshot, usagelog.FieldImageSizeBreakdown:
+		case usagelog.FieldBillingRateSnapshot, usagelog.FieldOutboundMetadata, usagelog.FieldImageSizeBreakdown:
 			values[i] = new([]byte)
 		case usagelog.FieldUpstreamModelMismatch, usagelog.FieldLongContextBillingApplied, usagelog.FieldStream, usagelog.FieldIsComplete, usagelog.FieldCacheTTLOverridden:
 			values[i] = new(sql.NullBool)
@@ -572,6 +574,14 @@ func (_m *UsageLog) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.UsageSource = value.String
 			}
+		case usagelog.FieldOutboundMetadata:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field outbound_metadata", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.OutboundMetadata); err != nil {
+					return fmt.Errorf("unmarshal field outbound_metadata: %w", err)
+				}
+			}
 		case usagelog.FieldUserAgent:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field user_agent", values[i])
@@ -906,6 +916,9 @@ func (_m *UsageLog) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("usage_source=")
 	builder.WriteString(_m.UsageSource)
+	builder.WriteString(", ")
+	builder.WriteString("outbound_metadata=")
+	builder.WriteString(fmt.Sprintf("%v", _m.OutboundMetadata))
 	builder.WriteString(", ")
 	if v := _m.UserAgent; v != nil {
 		builder.WriteString("user_agent=")

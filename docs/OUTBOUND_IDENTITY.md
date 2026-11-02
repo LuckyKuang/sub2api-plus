@@ -1483,3 +1483,15 @@ supported WHAM usage/credit reads and consumption. WHAM preserves its existing
 User-Agent-only identity contract without adding Originator or Version. Live
 switch reads select the hop without replacing acquired credentials, identity or
 route. OAuth issuer login, refresh and revocation remain separate operations.
+
+## Administrator dispatch evidence
+
+Usage `user_agent` remains the incoming client declaration. New OpenAI gateway
+usage observations store the allowlisted identity at prepared HTTP dispatch or
+WS generation dispatch in `outbound_metadata`; the CLI bridge transport
+is observed only inside its real provider callback. Executable and identity
+versions remain distinct. This diagnostic snapshot never selects identity,
+changes precedence, overrides headers, or substitutes for wire regression tests.
+Managed tasks record verified process execution without claiming to observe the
+CLI's provider request. Unknown history is not inferred from incoming UA or
+current account settings. See [evidence semantics](CODEX_CLI.md#usage-accuracy-and-outbound-evidence).

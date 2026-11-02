@@ -154,6 +154,7 @@ func openAIWSPassthroughPolicyModelFromSessionFrame(account *Account, payload []
 
 type openAIWSPassthroughUsageMeta struct {
 	serviceTier              atomic.Pointer[string]
+	outbound                 atomic.Pointer[OutboundMetadata]
 	reasoningEffort          atomic.Pointer[string]
 	requestedReasoningEffort atomic.Pointer[string]
 	requestModel             atomic.Pointer[string]
@@ -988,6 +989,9 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 	if !ok {
 		return errors.New("openai ws passthrough upstream connection does not support frame relay")
 	}
+	if wire, ok := upstreamConn.(*coderOpenAIWSClientConn); ok {
+		upstreamFrameConn = &openAIWSObservedFrameConn{FrameConn: upstreamFrameConn, headers: wire.outboundHeaders, observation: &usageMeta.outbound}
+	}
 	relayUpstreamFrameConn := &openAIWSPassthroughFirstOutputFrameConn{
 		inner:             upstreamFrameConn,
 		activeReadTimeout: s.openAIWSPassthroughIdleTimeout(),
@@ -1403,6 +1407,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 					UpstreamResponseServiceTier:   normalizeObservedOpenAIServiceTier(turn.ResponseServiceTier),
 					ResponseServiceTier:           boundedDeclaredServiceTier(turn.ResponseServiceTier),
 					ServiceTier:                   usageMeta.serviceTier.Load(),
+					Outbound:                      usageMeta.outbound.Load().Clone(),
 					ReasoningEffort:               usageMeta.reasoningEffort.Load(),
 					RequestedReasoningEffort:      usageMeta.requestedReasoningEffort.Load(),
 					Stream:                        true,
@@ -1595,6 +1600,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 		UpstreamResponseServiceTier:   normalizeObservedOpenAIServiceTier(relayResult.ResponseServiceTier),
 		ResponseServiceTier:           boundedDeclaredServiceTier(relayResult.ResponseServiceTier),
 		ServiceTier:                   usageMeta.serviceTier.Load(),
+		Outbound:                      usageMeta.outbound.Load().Clone(),
 		ReasoningEffort:               usageMeta.reasoningEffort.Load(),
 		RequestedReasoningEffort:      usageMeta.requestedReasoningEffort.Load(),
 		Stream:                        true,

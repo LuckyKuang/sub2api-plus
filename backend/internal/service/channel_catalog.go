@@ -52,10 +52,23 @@ func (o CatalogOffer) ResolveBillingRateQuote(group *Group, personalRate *float6
 	return snapshot.quoteWithBase(billingRateIdentity{platform: o.Platform, model: o.Name, baseUnit: o.billingBaseUnit}, o.BillingUnit)
 }
 
-// ListAvailableCatalog never discovers models, selects accounts or writes usage.
+// ListAvailableChannelCatalog limits the Available Channels page to groups
+// bound to active channels. Unbound group configuration remains available to
+// API-key quotes and sale catalogs through ListAvailableCatalog.
+func (s *ModelPlazaService) ListAvailableChannelCatalog(ctx context.Context, groups []Group) ([]CatalogGroup, error) {
+	return s.listAvailableCatalog(ctx, groups, true)
+}
+
+// ListAvailableCatalog assembles configured group offers for API-key quotes and
+// sale catalogs, including unbound groups. It never discovers models, selects
+// accounts or writes usage.
 // Resolve against a request-local channel snapshot, so enumeration, mapping and
 // pricing cannot join different channel-cache generations during a refresh.
 func (s *ModelPlazaService) ListAvailableCatalog(ctx context.Context, groups []Group) ([]CatalogGroup, error) {
+	return s.listAvailableCatalog(ctx, groups, false)
+}
+
+func (s *ModelPlazaService) listAvailableCatalog(ctx context.Context, groups []Group, requireChannel bool) ([]CatalogGroup, error) {
 	out := make([]CatalogGroup, 0, len(groups))
 	if len(groups) == 0 {
 		return out, nil
@@ -115,6 +128,18 @@ func (s *ModelPlazaService) ListAvailableCatalog(ctx context.Context, groups []G
 				return nil, fmt.Errorf("catalog group has conflicting channel bindings")
 			}
 			bound[id] = &active[i]
+		}
+	}
+	if requireChannel {
+		boundGroups := make([]Group, 0, len(bound))
+		for _, group := range groups {
+			if bound[group.ID] != nil {
+				boundGroups = append(boundGroups, group)
+			}
+		}
+		groups = boundGroups
+		if len(groups) == 0 {
+			return out, nil
 		}
 	}
 	localChannels := &ChannelService{billingService: s.billingService}

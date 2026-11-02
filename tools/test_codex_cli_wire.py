@@ -619,7 +619,7 @@ def run_case(binary: Path, root: Path, proxy: FixtureServer, identity: dict[str,
 def run_transparent_bridge_case(binary: Path, root: Path) -> dict[str, Any]:
     """Independent exact-release proof; no agent loop or actual OAuth is used."""
     nonce = "bridge_fixture_0123456789abcdef"
-    wire_body = b'{"model":"fixture-model","input":[{"role":"user","content":"unchanged"}],"tools":[{"type":"function","name":"caller_tool","parameters":{}}],"future":{"keep":true}}'
+    wire_body = b'{"service_tier":"priority","model":"fixture-model","input":[{"role":"user","content":"unchanged"}],"tools":[{"type":"function","name":"caller_tool","parameters":{}}],"future":{"keep":true}}'
     wire_response = b'event: response.completed\ndata: {"type":"response.completed","response":{"id":"resp_bridge","status":"completed","future":true}}\n\n'
     captured: list[dict[str, Any]] = []
 
@@ -675,7 +675,7 @@ def run_transparent_bridge_case(binary: Path, root: Path) -> dict[str, Any]:
             except urllib.error.HTTPError as error:
                 require(error.code == 403, "transparent_bridge_get_not_forbidden")
             require(len(captured) == before, "transparent_bridge_forwarded_forbidden_request")
-            return {"mode": "official-transparent-responses-http", "identities": len(IDENTITIES), "body_unchanged": True,
+            return {"mode": "official-transparent-responses-http", "identities": len(IDENTITIES), "body_unchanged": True, "priority_preserved": True,
                     "sse_unchanged": True, "terminal_401_no_replay": True, "non_post_forbidden": True}
         finally:
             if process.poll() is None:
