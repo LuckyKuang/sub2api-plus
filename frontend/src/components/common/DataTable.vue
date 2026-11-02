@@ -188,24 +188,29 @@
           </td>
         </tr>
 
-        <!-- Empty state -->
+        <!-- Empty state: centered within the visible scrollport (not the full
+             min-w-max table width) so the message stays visible and keeps the
+             pinned left columns covered when the table is wider than the viewport. -->
         <tr v-else-if="!data || data.length === 0">
           <td
             :colspan="tableColumnCount"
-            :class="['py-12 text-center surface-muted', getAdaptivePaddingClass()]"
+            class="empty-state-cell"
+            :class="getAdaptivePaddingClass()"
           >
-            <slot name="empty">
-              <div class="flex flex-col items-center">
-                <Icon
-                  name="inbox"
-                  size="xl"
-                  class="mb-4 h-12 w-12 surface-muted"
-                />
-                <p class="text-lg font-medium text-gray-900 dark:text-gray-100">
-                  {{ t('empty.noData') }}
-                </p>
-              </div>
-            </slot>
+            <div class="empty-state-fill surface-muted">
+              <slot name="empty">
+                <div class="flex flex-col items-center">
+                  <Icon
+                    name="inbox"
+                    size="xl"
+                    class="mb-4 h-12 w-12 surface-muted"
+                  />
+                  <p class="text-lg font-medium text-gray-900 dark:text-gray-100">
+                    {{ t('empty.noData') }}
+                  </p>
+                </div>
+              </slot>
+            </div>
           </td>
         </tr>
 
@@ -1122,6 +1127,23 @@ defineExpose({
 /* 表头 sticky 列 - 需要比普通表头单元格更高的 z-index */
 .sticky-header-cell.sticky-col {
   z-index: 220; /* 高于普通表头单元格和表体固定列 */
+}
+
+/* Empty state stays within the visible scrollport rather than centering across
+   the full min-w-max table width, so the message keeps the pinned left columns
+   covered when the table is wider than the viewport. Sticky pins the
+   shrink-to-fit message to the visible area; the 50%/translateX centers it. */
+.empty-state-cell { padding: 0 !important; }
+.empty-state-fill {
+  position: sticky;
+  left: 50%;
+  transform: translateX(-50%);
+  width: fit-content;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 16px;
+  text-align: center;
 }
 
 /* Mobile cards do not use table-cell paint. */

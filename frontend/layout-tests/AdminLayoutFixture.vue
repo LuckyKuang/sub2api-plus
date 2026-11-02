@@ -4,6 +4,9 @@
   <IPAccessControlView v-else-if="ipAccessControl" />
   <PromptAuditView v-else-if="promptAudit" />
   <UsageView v-else-if="usage" />
+  <AppLayout v-else-if="emptyWide" workspace>
+    <DataTable :columns="wideColumns" :data="[]" :sticky-first-column="true" :sticky-actions-column="true" />
+  </AppLayout>
   <AppLayout v-else workspace>
     <TablePageLayout>
       <template #filters>
@@ -43,6 +46,7 @@ import { useAppStore } from '../src/stores/app'
 import { useAuthStore } from '../src/stores/auth'
 
 const usage = new URLSearchParams(location.search).get('usage') === '1'
+const emptyWide = new URLSearchParams(location.search).get('emptyWide') === '1'
 const promptAudit = new URLSearchParams(location.search).get('promptAudit') === '1'
 const users = new URLSearchParams(location.search).get('users') === '1'
 const groups = new URLSearchParams(location.search).get('groups') === '1'
@@ -59,7 +63,7 @@ app.siteName = 'Admin layout review'
 app.sidebarCollapsed = false
 const auth = useAuthStore()
 auth.user = { id: 9998, role: 'admin', email: 'fixture@example.test', username: 'Reviewer', balance: 0 } as User
-if (usage || promptAudit || users || groups || ipAccessControl) auth.token = 'browser-fixture-token'
+if (usage || promptAudit || users || groups || ipAccessControl || emptyWide) auth.token = 'browser-fixture-token'
 localStorage.setItem('admin_guide', 'true')
 localStorage.setItem('admin_guide_9998_admin_v4_interactive', 'true')
 const { t } = useI18n()
@@ -73,6 +77,18 @@ const columns: Column[] = [
   { key: 'model', label: 'Model' }, { key: 'group', label: 'Group' },
   { key: 'endpoint', label: 'Endpoint' }, { key: 'request_id', label: 'Request ID' },
   { key: 'actions', label: 'Actions', sticky: 'right' },
+]
+// Deliberately wider than the console content area so the empty state must
+// center inside the visible scrollport rather than across the full table width.
+const wideColumns: Column[] = [
+  { key: 'user', label: 'User account full display name', sticky: 'left' },
+  { key: 'account', label: 'Service account identifier', sticky: 'left' },
+  { key: 'model', label: 'Model' }, { key: 'effort', label: 'Reasoning effort' },
+  { key: 'tier', label: 'Service tier' }, { key: 'outbound', label: 'Outbound identity' },
+  { key: 'endpoint', label: 'Endpoint' }, { key: 'group', label: 'Routing group' },
+  { key: 'stream', label: 'Stream type' }, { key: 'tokens', label: 'Tokens' },
+  { key: 'cost', label: 'Cost' }, { key: 'latency', label: 'Latency' },
+  { key: 'time', label: 'Time' }, { key: 'ua', label: 'Inbound user agent' },
 ]
 const rows = Array.from({ length: Number(new URLSearchParams(location.search).get('count') ?? '60') }, (_, index) => ({
   id: index + 1, name: `Admin record ${index + 1}`,
