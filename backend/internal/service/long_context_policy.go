@@ -61,6 +61,7 @@ func (r *ModelPricingResolver) applyLongContextPolicy(resolved *ResolvedPricing,
 			return
 		}
 		base.LongContextInputThreshold = rule.Threshold
+		base.LongContextThresholdInclusive = false
 		return
 	}
 	if rule.CacheWrite1h != nil {

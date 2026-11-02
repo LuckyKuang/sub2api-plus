@@ -45,6 +45,23 @@ func TestCompositeLongContextDefaultInheritsModelPreset(t *testing.T) {
 	require.InDelta(t, .75, got.InputCost, 1e-9)
 }
 
+// Custom thresholds are strict even when the model's inherited preset is
+// inclusive (Grok). Inherited behavior remains inclusive when the rule clears.
+func TestCompositeLongContextCustomThresholdReplacesInclusiveBoundary(t *testing.T) {
+	bs, resolver := newTokenCostTestEnv(t, PlatformComposite, nil, nil)
+	group := &Group{ID: 100, Platform: PlatformComposite, BillingRatePolicy: domain.BillingRatePolicy{LongContextPlatforms: map[string]int{PlatformGrok: 200000}}}
+	ctx := WithResolvedTargetPlatform(context.Background(), PlatformGrok)
+	cost := func(tokens int) float64 {
+		got, err := bs.CalculateTokenCostForRequest(TokenCostRequest{Ctx: ctx, Model: "grok-4.5", Group: group, Tokens: UsageTokens{InputTokens: tokens}, RateMultiplier: 1, Resolver: resolver})
+		require.NoError(t, err)
+		return got.InputCost
+	}
+	require.InDelta(t, .4, cost(200000), 1e-9)
+	require.InDelta(t, .800004, cost(200001), 1e-9)
+	group.BillingRatePolicy.LongContextPlatforms = nil
+	require.InDelta(t, .8, cost(200000), 1e-9)
+}
+
 // Requirements: custom absolute prices are USD/million, zeros are intentional,
 // no guessed surcharge; read/write and output prices apply to the whole request.
 func TestCompositeLongContextCustomPricesAndMultipliers(t *testing.T) {

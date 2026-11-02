@@ -51,6 +51,8 @@ func TestCompositeNativeCandidates(t *testing.T) {
 		{PlatformOpenAI, AccountTypeOAuth, APIProtocolChatCompletions, false},
 		{PlatformOpenAI, AccountTypeOAuth, APIProtocolResponses, true},
 		{PlatformOpenAI, AccountTypeAPIKey, APIProtocolChatCompletions, true},
+		{PlatformOpenAI, AccountTypeUpstream, APIProtocolResponses, false},
+		{PlatformOpenAI, AccountTypeUpstream, APIProtocolChatCompletions, false},
 		{PlatformGemini, AccountTypeAPIKey, APIProtocolAnthropic, false},
 		{PlatformGemini, AccountTypeAPIKey, "gemini", true},
 		{PlatformZhipu, AccountTypeAPIKey, APIProtocolResponses, false},
@@ -109,4 +111,22 @@ func TestNativeAccessPreferenceDoesNotChangeProtocol(t *testing.T) {
 	svc := &OpenAIGatewayService{}
 	ctx := WithCompositeNativeProtocol(context.Background(), APIProtocolAnthropic)
 	require.Equal(t, APIProtocolAnthropic, svc.resolveUpstreamProtocolFor(ctx, &Account{Platform: PlatformOpenAI}, APIProtocolAnthropic, "model"))
+}
+
+// A missing ingress marker must fail closed instead of allowing an internal
+// caller to re-enter ordinary compatibility routing and send another protocol.
+func TestCompositeNativeUnmarkedSenderDoesNotWriteUpstream(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	body := []byte(`{"model":"gpt-5.4","messages":[{"role":"user","content":"hello"}],"stream":false}`)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(body))
+	c.Set("api_key", &APIKey{Group: &Group{Platform: PlatformComposite}})
+	upstream := &httpUpstreamRecorder{err: io.EOF}
+	svc := &OpenAIGatewayService{cfg: rawChatCompletionsTestConfig(), httpUpstream: upstream}
+	result, err := svc.ForwardAsChatCompletions(context.Background(), c, rawChatCompletionsTestAccount(), body, "", "")
+	require.Error(t, err)
+	require.Nil(t, result)
+	require.Equal(t, 400, rec.Code)
+	require.Nil(t, upstream.lastReq)
 }

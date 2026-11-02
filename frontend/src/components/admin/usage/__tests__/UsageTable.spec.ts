@@ -1652,7 +1652,10 @@ describe('outbound dispatch evidence', () => {
       props: { data: [{ ...baseImageRow, user_agent: 'codex-tui/0.166.0' }], columns: [], loading: false },
       global: { stubs: { DataTable: table, EmptyState: true, Icon: true } },
     })
-    expect(wrapper.get('[data-testid="outbound-cell"]').text()).toBe('未记录')
+    const evidence = wrapper.get('[data-testid="outbound-cell"]').text()
+    expect(evidence).toContain('UA: codex-tui/0.166.0')
+    expect(evidence).toContain('未记录')
+    expect(evidence).not.toMatch(/CLI|codex_cli/)
   })
   it.each(['native', 'codex_cli_bridge', 'codex_cli_task'] as const)('distinguishes %s and its evidence level', (transport) => {
     const process = transport === 'codex_cli_task'

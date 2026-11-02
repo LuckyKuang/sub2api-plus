@@ -57,8 +57,13 @@ func (a *Account) NativeProtocols(model string) []string {
 	case PlatformTypeSafe:
 		return []string{"systemone"}
 	case PlatformOpenAI:
-		if a.Type != AccountTypeAPIKey {
+		if a.IsOpenAIOAuthLike() {
 			return []string{APIProtocolResponses}
+		}
+		// GetAccessToken does not accept other OpenAI credential types. Do not
+		// advertise a protocol that this credential cannot actually send.
+		if a.Type != AccountTypeAPIKey {
+			return nil
 		}
 		protocols := []string{APIProtocolChatCompletions}
 		if !shouldForwardOpenAIResponsesViaRawChatCompletions(a) {
@@ -112,7 +117,7 @@ func CheckCompositeNativeForward(ctx context.Context, c *gin.Context, account *A
 	if key == nil || key.Group == nil || key.Group.Platform != PlatformComposite {
 		return nil
 	}
-	if account != nil && (CompositeNativeProtocol(ctx) == "" || CompositeNativeProtocol(ctx) == protocol) && slices.Contains(account.NativeProtocols(account.GetMappedModel(model)), protocol) {
+	if account != nil && CompositeNativeProtocol(ctx) == protocol && slices.Contains(account.NativeProtocols(account.GetMappedModel(model)), protocol) {
 		return nil
 	}
 	err := fmt.Errorf("model does not support this native endpoint with the selected account; use one of its advertised native endpoints")

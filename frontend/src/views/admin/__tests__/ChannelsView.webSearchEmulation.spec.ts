@@ -104,6 +104,18 @@ describe('ChannelsView web search configuration', () => {
     updateChannel.mockResolvedValue({})
   })
 
+  // Supplier membership is the public Composite configuration contract; assert
+  // actual editor controls, independently of how the component builds its list.
+  it('offers Composite and every supported supplier in the channel editor', async () => {
+    const wrapper = mountView()
+    await openEdit(wrapper)
+    const labels = wrapper.findAll('label').map(label => label.text())
+    for (const supplier of ['composite', 'anthropic', 'gemini', 'openai', 'antigravity', 'grok', 'kimi', 'zhipu', 'deepseek', 'minimax', 'stepfun', 'opencode_go', 'typesafe', 'command_code', 'cline']) {
+      expect(labels).toContain(`admin.groups.platforms.${supplier}`)
+    }
+    wrapper.unmount()
+  })
+
   // Requirement: bind a Composite group once; preserve real supplier identity,
   // prices and mappings through edit -> save -> reload -> save.
   it('round trips a Composite channel without supplier groups or merged prices', async () => {

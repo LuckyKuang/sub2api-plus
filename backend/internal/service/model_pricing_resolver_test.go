@@ -7,6 +7,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/domain"
 	"github.com/stretchr/testify/require"
 )
 
@@ -930,14 +931,16 @@ func TestResolve_GroupPricingOverridesChannel(t *testing.T) {
 	require.InDelta(t, 2e-6, resolved.BasePricing.OutputPricePerToken, 1e-12)
 }
 
-func TestResolve_GroupLongContextUsesPresetNotCustomIntervals(t *testing.T) {
+// The saved group ladder replaces preset prices. An explicit zero disables
+// charging high tiers without deleting them; a positive threshold re-enables it.
+func TestResolve_GroupLongContextRetainsCustomIntervals(t *testing.T) {
 	bs := newTestBillingServiceForResolver()
 	bs.fallbackPrices["claude-sonnet-4"].LongContextInputThreshold = 200000
 	bs.fallbackPrices["claude-sonnet-4"].LongContextThresholdInclusive = true
 	bs.fallbackPrices["claude-sonnet-4"].LongContextInputMultiplier = 2
 	bs.fallbackPrices["claude-sonnet-4"].LongContextOutputMultiplier = 2
 	r := NewModelPricingResolver(nil, bs)
-	group := &Group{ID: 100, ModelPricing: []ChannelModelPricing{{
+	group := &Group{ID: 100, Platform: PlatformAnthropic, LongContextPricingEnabled: true, ModelPricing: []ChannelModelPricing{{
 		Models: []string{"claude-sonnet-4"}, BillingMode: BillingModeToken,
 		InputPrice: testPtrFloat64(1e-6), OutputPrice: testPtrFloat64(2e-6),
 		Intervals: []PricingInterval{
@@ -947,18 +950,22 @@ func TestResolve_GroupLongContextUsesPresetNotCustomIntervals(t *testing.T) {
 	}}}
 
 	resolved := r.Resolve(context.Background(), PricingInput{Model: "claude-sonnet-4", Group: group})
-	require.False(t, resolved.longContextPricingEnabled)
-	require.Empty(t, resolved.Intervals, "group token intervals are not a user-facing long-context ladder")
-	require.InDelta(t, 1e-6, r.GetIntervalPricing(resolved, 300000).InputPricePerToken, 1e-12)
-	require.Equal(t, 200000, resolved.BasePricing.LongContextInputThreshold)
-
-	group.LongContextPricingEnabled = true
-	resolved = r.Resolve(context.Background(), PricingInput{Model: "claude-sonnet-4", Group: group})
 	require.True(t, resolved.longContextPricingEnabled)
-	require.Empty(t, resolved.Intervals)
-	require.InDelta(t, 1e-6, r.GetIntervalPricing(resolved, 300000).InputPricePerToken, 1e-12)
-	require.Equal(t, 200000, resolved.BasePricing.LongContextInputThreshold)
-	require.InDelta(t, 2.0, resolved.BasePricing.LongContextInputMultiplier, 1e-12)
+	require.Len(t, resolved.Intervals, 2)
+	require.InDelta(t, 9e-6, r.GetIntervalPricing(resolved, 200000).InputPricePerToken, 1e-12)
+	require.InDelta(t, 18e-6, r.GetIntervalPricing(resolved, 200001).InputPricePerToken, 1e-12)
+	cost := func(tokens int) float64 {
+		result, err := bs.CalculateTokenCostForRequest(TokenCostRequest{Ctx: context.Background(), Model: "claude-sonnet-4", Group: group, Tokens: UsageTokens{InputTokens: tokens}, RateMultiplier: 1, Resolver: r})
+		require.NoError(t, err)
+		return result.InputCost
+	}
+	require.InDelta(t, 5.4, cost(300000), 1e-9)
+	group.BillingRatePolicy.LongContextPlatforms = map[string]int{PlatformAnthropic: 0}
+	require.InDelta(t, 2.7, cost(300000), 1e-9)
+	require.Len(t, group.ModelPricing[0].Intervals, 2, "disabling must retain saved prices")
+	group.BillingRatePolicy.LongContextModels = []domain.LongContextModelRule{{Platform: PlatformAnthropic, Model: "claude-sonnet-4", Threshold: 150000}}
+	require.InDelta(t, 1.35, cost(150000), 1e-9)
+	require.InDelta(t, 2.700018, cost(150001), 1e-9)
 }
 
 func TestCalculateCostUnified_UsesContinuousMediaUnits(t *testing.T) {

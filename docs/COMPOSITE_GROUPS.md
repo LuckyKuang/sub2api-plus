@@ -465,7 +465,8 @@ are exercised by
   `subscription_type` is `subscription`. The plan grants access to the
   composite group; each request is still billed and quota-checked against the
   resolved concrete provider platform.
-- Channel configuration exposes composite groups in concrete provider sections.
+- Channel configuration binds composite groups once in its Composite section,
+  with a concrete-supplier selector for price cards and model mappings.
   The channel `group_ids` payload is still flat; provider-specific model
   mapping and pricing remain keyed by concrete platform.
 
