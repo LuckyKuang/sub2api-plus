@@ -23,6 +23,9 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	if err := CheckCompositeNativeForward(ctx, c, account, APIProtocolResponses, gjson.GetBytes(body, "model").String()); err != nil {
 		return nil, err
 	}
+	if err := CheckCompositeResponsesContinuation(ctx, c, account, body); err != nil {
+		return nil, err
+	}
 	ctx, outbound := beginOutboundObservation(ctx)
 	defer func() {
 		if result != nil && result.Outbound == nil {

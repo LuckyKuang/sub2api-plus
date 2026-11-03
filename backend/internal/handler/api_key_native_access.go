@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -15,9 +16,10 @@ import (
 )
 
 type nativeAccessModel struct {
-	Name      string   `json:"name"`
-	Platform  string   `json:"platform"`
-	Endpoints []string `json:"endpoints"`
+	Name                string   `json:"name"`
+	Platform            string   `json:"platform"`
+	Endpoints           []string `json:"endpoints"`
+	ConversionEndpoints []string `json:"conversion_endpoints"`
 }
 
 // GetNativeAccess projects only the caller's authorized group and public models.
@@ -72,6 +74,7 @@ func (h *APIKeyHandler) GetNativeAccess(c *gin.Context) {
 	defer cancel()
 	for _, offer := range candidates {
 		available := map[string]bool{}
+		convertible := map[string]bool{}
 		for _, account := range accounts {
 			if account.Platform != offer.Platform || account.Status != service.StatusActive {
 				continue
@@ -97,6 +100,9 @@ func (h *APIKeyHandler) GetNativeAccess(c *gin.Context) {
 				if !account.IsModelSupported(upstreamModel) {
 					continue
 				}
+				if service.CompositePlatformConversionSupported(account.Platform, protocol) && len(account.NativeProtocols(account.GetMappedModel(upstreamModel))) > 0 {
+					convertible[path] = true
+				}
 				native := false
 				for _, supported := range h.openaiGateway.NativeAccessProtocols(metadataCtx, &account, account.GetMappedModel(upstreamModel)) {
 					if supported == protocol {
@@ -111,12 +117,16 @@ func (h *APIKeyHandler) GetNativeAccess(c *gin.Context) {
 				endpoints[path] = true
 			}
 		}
-		model := nativeAccessModel{Name: offer.Name, Platform: offer.Platform, Endpoints: []string{}}
+		model := nativeAccessModel{Name: offer.Name, Platform: offer.Platform, Endpoints: []string{}, ConversionEndpoints: []string{}}
+		for path := range convertible {
+			model.ConversionEndpoints = append(model.ConversionEndpoints, path)
+		}
+		sort.Strings(model.ConversionEndpoints)
 		for path := range available {
 			model.Endpoints = append(model.Endpoints, path)
 		}
 		sort.Strings(model.Endpoints)
-		if len(model.Endpoints) > 0 {
+		if len(model.Endpoints) > 0 || len(model.ConversionEndpoints) > 0 {
 			models = append(models, model)
 		}
 	}
@@ -125,7 +135,20 @@ func (h *APIKeyHandler) GetNativeAccess(c *gin.Context) {
 		all = append(all, endpoint)
 	}
 	sort.Strings(all)
-	response.Success(c, gin.H{"endpoints": all, "models": models})
+	response.Success(c, gin.H{"endpoints": all, "conversion_endpoints": compositeConversionEndpoints(models), "models": models})
+}
+
+func compositeConversionEndpoints(models []nativeAccessModel) []string {
+	common := []string{}
+	if len(models) == 0 {
+		return common
+	}
+	for _, endpoint := range service.CompositeConversionEndpoints() {
+		if !slices.ContainsFunc(models, func(model nativeAccessModel) bool { return !slices.Contains(model.ConversionEndpoints, endpoint) }) {
+			common = append(common, endpoint)
+		}
+	}
+	return common
 }
 
 // Capability discovery also works before a channel price directory exists.

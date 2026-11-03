@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -112,7 +113,7 @@ func (s *OpenAIGatewayService) forwardAsChatCompletions(
 		return nil, errors.New("codex_cli_only restriction: only codex official clients are allowed")
 	}
 
-	if CompositeNativeProtocol(ctx) == APIProtocolChatCompletions && (account.Platform == PlatformOpenAI || account.Platform == PlatformGrok) {
+	if (CompositeNativeProtocol(ctx) == APIProtocolChatCompletions || CompositeUnifiedEndpoint(ctx) == "/v1/chat/completions") && (account.Platform == PlatformOpenAI || account.Platform == PlatformGrok) && slices.Contains(account.NativeProtocols(gjson.GetBytes(body, "model").String()), APIProtocolChatCompletions) {
 		return s.forwardAsRawChatCompletions(ctx, c, account, body, defaultMappedModel)
 	}
 	if account.Platform == PlatformGrok {

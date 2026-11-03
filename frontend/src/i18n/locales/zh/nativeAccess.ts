@@ -1,18 +1,24 @@
 export default {
   "nativeAccess": {
-    "copyBase": "复制基础地址", "copyKey": "复制 API 密钥", "copyExample": "复制示例",
+    "copyBase": "复制基础地址",
+    "copyKey": "复制 API 密钥",
+    "copyExample": "复制示例",
     "channelHint": "聚合分组在此绑定一次。选择下方任意供应平台编辑模型价格与映射，价格保留真实供应平台。同一渠道内共享价卡，需要独立价格时请创建独立渠道。",
-    "title": "聚合原生接入",
-    "hint": "选择默认客户端和原生端点。这把密钥也可以使用各模型列出的其他原生端点。请求不会在不同协议之间转换。",
+    "title": "聚合接入配置",
+    "hint": "此项为可选配置。默认不配置，各模型使用自身支持的原生端点。",
     "client": "客户端",
-    "endpoint": "原生请求端点",
+    "endpoint": "统一请求端点",
     "baseUrl": "SDK 基础地址",
     "requestUrl": "完整请求地址",
-    "models": "支持此端点的模型",
+    "models": "可通过此统一端点使用的模型",
     "noModels": "没有模型支持此客户端与端点组合。",
     "allModels": "查看所有模型的原生端点",
     "custom": "自定义客户端",
-    "loadFailed": "无法加载原生端点，请重新选择分组后重试。"
+    "loadFailed": "无法加载接入能力，请重新选择分组重试。",
+    "enableConversion": "配置所有模型统一使用的端点（可选）",
+    "nativeMode": "原生模式：不转换协议，不限制统一端点，各模型使用自身支持的端点。",
+    "conversionHint": "保存后，云端会将所有模型的请求和响应转换为所选端点格式，并拒绝其他端点的推理请求。统一接入支持 HTTP/SSE Responses、Chat Completions 和 Messages；支持原生直通时优先直通，协议转换可能影响供应商缓存。",
+    "noConversion": "没有可覆盖所有模型的共同转换端点。请取消配置，使用各模型原生端点。"
   },
   "longContext": {
     "title": "长上下文阶梯定价",
@@ -31,6 +37,9 @@ export default {
     "cache_read": "缓存读取",
     "priceUnit": "美元 / 百万 Token",
     "factorUnit": "× 基础价格",
-    "invalid": "请检查阈值、唯一的精确模型名和高阶价格。自定义定价必须填写输入与输出，缓存价格留空则继承。"
+    "invalid": "请检查阈值、唯一的精确模型名和高阶价格。自定义定价必须填写输入与输出，缓存价格留空则继承。",
+    "presetValues": "模型默认阈值：{values} 输入 tokens；留空继承，0 关闭。",
+    "defaultsFailed": "无法加载默认阈值。",
+    "defaultsUnknown": "未知"
   }
 }

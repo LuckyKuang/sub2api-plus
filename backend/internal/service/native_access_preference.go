@@ -20,3 +20,15 @@ func ValidateNativeAccessPreference(client, endpoint string) error {
 	}
 	return infraerrors.BadRequest("API_KEY_NATIVE_ACCESS_INVALID", "Choose a supported client and native endpoint combination")
 }
+
+// ValidateCompositeAccessConfiguration separates legacy display preferences from
+// explicit conversion consent. A selected endpoint alone never enables conversion.
+func ValidateCompositeAccessConfiguration(enabled bool, client, endpoint string) error {
+	if err := ValidateNativeAccessPreference(client, endpoint); err != nil {
+		return err
+	}
+	if enabled && (endpoint != "/v1/responses" && endpoint != "/v1/chat/completions" && endpoint != "/v1/messages") {
+		return infraerrors.BadRequest("API_KEY_NATIVE_ACCESS_INVALID", "Choose a supported unified conversion endpoint before enabling conversion")
+	}
+	return nil
+}

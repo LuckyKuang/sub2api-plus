@@ -150,3 +150,38 @@ func TestAPIKeyUpdate_NativePreferencesAreAtomicAndScoped(t *testing.T) {
 	require.Error(t, err)
 	require.Len(t, repo.updateFields, 1)
 }
+
+func TestAPIKeyUpdate_ConversionRequiresExplicitConsent(t *testing.T) {
+	key := &APIKey{ID: 1, UserID: 7, Key: "sk-test", Status: StatusActive, Group: &Group{Platform: PlatformComposite}, DefaultClient: "codex", DefaultEndpoint: "/v1/responses", QuotaUsed: 30}
+	svc, repo := newUpdateFieldsAPIKeyService(key)
+	endpoint, enabled, name := "/v1/responses", true, "renamed"
+	got, err := svc.Update(context.Background(), 1, 7, UpdateAPIKeyRequest{DefaultEndpoint: &endpoint})
+	require.NoError(t, err)
+	require.False(t, got.ConversionEnabled, "legacy preference edits must not opt into conversion")
+	got, err = svc.Update(context.Background(), 1, 7, UpdateAPIKeyRequest{ConversionEnabled: &enabled})
+	require.NoError(t, err)
+	require.True(t, got.ConversionEnabled)
+	require.Equal(t, 30.0, got.QuotaUsed)
+	require.Equal(t, APIKeyUpdateFields{Preferences: true}, repo.updateFields[1])
+	repo.key = got
+	got, err = svc.Update(context.Background(), 1, 7, UpdateAPIKeyRequest{Name: &name})
+	require.NoError(t, err)
+	require.True(t, got.ConversionEnabled, "omitted flag preserves saved policy")
+	enabled = false
+	got, err = svc.Update(context.Background(), 1, 7, UpdateAPIKeyRequest{ConversionEnabled: &enabled})
+	require.NoError(t, err)
+	require.False(t, got.ConversionEnabled, "disabling immediately restores native admission, even with saved preferences")
+}
+
+func TestAPIKeyUpdate_RejectsInvalidConversionWithoutWriting(t *testing.T) {
+	for _, key := range []*APIKey{
+		{ID: 1, UserID: 7, Group: &Group{Platform: PlatformComposite}},
+		{ID: 1, UserID: 7, DefaultEndpoint: "/v1/responses", Group: &Group{Platform: PlatformOpenAI}},
+	} {
+		svc, repo := newUpdateFieldsAPIKeyService(key)
+		enabled := true
+		_, err := svc.Update(context.Background(), 1, 7, UpdateAPIKeyRequest{ConversionEnabled: &enabled})
+		require.Error(t, err)
+		require.Empty(t, repo.updateFields)
+	}
+}

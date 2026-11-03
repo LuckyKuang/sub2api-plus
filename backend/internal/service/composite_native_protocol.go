@@ -102,6 +102,9 @@ func (a *Account) NativeProtocols(model string) []string {
 }
 
 func compositeNativeAccountAllowed(ctx context.Context, account *Account, model string) bool {
+	if endpoint := CompositeUnifiedEndpoint(ctx); endpoint != "" {
+		return compositeAccountConversionSupported(account, model, CompositeNativeProtocolForPath(endpoint))
+	}
 	protocol := CompositeNativeProtocol(ctx)
 	return protocol == "" || (account != nil && slices.Contains(account.NativeProtocols(account.GetMappedModel(model)), protocol))
 }
@@ -117,7 +120,10 @@ func CheckCompositeNativeForward(ctx context.Context, c *gin.Context, account *A
 	if key == nil || key.Group == nil || key.Group.Platform != PlatformComposite {
 		return nil
 	}
-	if account != nil && CompositeNativeProtocol(ctx) == protocol && slices.Contains(account.NativeProtocols(account.GetMappedModel(model)), protocol) {
+	if key.ConversionEnabled && key.DefaultEndpoint != "" && CompositeUnifiedEndpoint(ctx) == key.DefaultEndpoint && CompositeNativeProtocolForPath(key.DefaultEndpoint) == protocol && compositeAccountConversionSupported(account, model, protocol) {
+		return nil
+	}
+	if !key.ConversionEnabled && account != nil && CompositeNativeProtocol(ctx) == protocol && slices.Contains(account.NativeProtocols(account.GetMappedModel(model)), protocol) {
 		return nil
 	}
 	err := fmt.Errorf("model does not support this native endpoint with the selected account; use one of its advertised native endpoints")

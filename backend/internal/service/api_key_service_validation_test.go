@@ -44,3 +44,13 @@ func TestValidateUpdateAPIKeyRequestNumericLimits(t *testing.T) {
 		require.Error(t, validateUpdateAPIKeyRequest(req))
 	}
 }
+
+func TestCompositeConversionConfigurationValidation(t *testing.T) {
+	for _, endpoint := range []string{"/v1/responses", "/v1/chat/completions", "/v1/messages"} {
+		require.NoError(t, validateCreateAPIKeyRequest(CreateAPIKeyRequest{ConversionEnabled: true, DefaultClient: "custom", DefaultEndpoint: endpoint}))
+	}
+	for _, endpoint := range []string{"", "/v1beta", "/v1/systemone"} {
+		require.Error(t, validateCreateAPIKeyRequest(CreateAPIKeyRequest{ConversionEnabled: true, DefaultClient: "custom", DefaultEndpoint: endpoint}))
+		require.NoError(t, validateCreateAPIKeyRequest(CreateAPIKeyRequest{DefaultClient: "custom", DefaultEndpoint: endpoint}), "legacy display preferences remain editable in native mode")
+	}
+}

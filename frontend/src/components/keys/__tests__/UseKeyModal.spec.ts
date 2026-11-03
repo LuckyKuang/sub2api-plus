@@ -833,31 +833,25 @@ describe('UseKeyModal', () => {
     expect(fable.options.thinking).not.toHaveProperty('budgetTokens')
   })
 
-  // Native-only Composite pairs each client with its supported models and URL.
-  it('uses the same Composite key at native Responses and Messages endpoints', async () => {
-    nativeAccessGetMock.mockResolvedValue({ data: {
-      endpoints: ['/v1/responses', '/v1/messages'], models: [
-        { name: 'gpt-6.1-sol', platform: 'openai', endpoints: ['/v1/responses'] },
-        { name: 'claude-opus-5-5', platform: 'anthropic', endpoints: ['/v1/messages'] },
-      ],
-    } })
+  // The use dialog reflects the saved server policy; local edits cannot change it.
+  it('shows every converted model and keeps a saved Composite endpoint read-only', async () => {
+    const endpoints = ['/v1/responses', '/v1/messages']
+    nativeAccessGetMock.mockResolvedValue({ data: { endpoints, conversion_endpoints: endpoints, models: [
+      { name: 'gpt-6.1-sol', platform: 'openai', endpoints: ['/v1/responses'], conversion_endpoints: endpoints },
+      { name: 'claude-opus-5-5', platform: 'anthropic', endpoints: ['/v1/messages'], conversion_endpoints: endpoints },
+    ] } })
     const wrapper = mount(UseKeyModal, {
-      props: { show: true, apiKey: 'sk-composite-test', baseUrl: 'https://example.com/v1', platform: 'composite', groupId: 99, defaultClient: 'codex', defaultEndpoint: '/v1/responses' },
+      props: { show: true, apiKey: 'sk-composite-test', baseUrl: 'https://example.com/v1', platform: 'composite', groupId: 99, conversionEnabled: true, defaultClient: 'codex', defaultEndpoint: '/v1/responses' },
       global: { stubs: { BaseDialog: { template: '<div><slot /><slot name="footer" /></div>' }, Icon: { template: '<span />' } } },
     })
     await flushPromises()
     expect(nativeAccessGetMock).toHaveBeenCalledWith('/groups/99/native-access', expect.any(Object))
-    expect(wrapper.get('pre').text()).toContain('model = "gpt-6.1-sol"')
     expect(wrapper.get('pre').text()).toContain('base_url = "https://example.com/v1"')
     expect(wrapper.get('pre').text()).toContain('wire_api = "responses"')
-    expect(wrapper.get('ul').text()).not.toContain('claude-opus-5-5')
-    expect(wrapper.find('nav[aria-label="Client"]').exists()).toBe(false)
-    await chooseSelect(wrapper.get('[data-testid="native-access"]'), 'Claude Code')
-    await flushPromises()
-    expect(wrapper.get('pre').text()).toContain('"ANTHROPIC_BASE_URL": "https://example.com"')
-    expect(wrapper.get('pre').text()).toContain('"ANTHROPIC_MODEL": "claude-opus-5-5"')
-    expect(wrapper.get('pre').text()).toContain('sk-composite-test')
-    expect(wrapper.get('ul').text()).not.toContain('gpt-6.1-sol')
+    expect(wrapper.get('ul').text()).toContain('gpt-6.1-sol')
+    expect(wrapper.get('ul').text()).toContain('claude-opus-5-5')
+    expect(wrapper.find('[data-testid="composite-conversion-toggle"]').exists()).toBe(false)
+    expect(wrapper.findAll('[data-testid="native-access"] .select-trigger').every(el => el.attributes('disabled') !== undefined)).toBe(true)
     wrapper.unmount()
   })
 

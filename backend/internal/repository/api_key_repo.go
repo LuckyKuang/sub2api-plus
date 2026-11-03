@@ -47,6 +47,7 @@ func (r *apiKeyRepository) Create(ctx context.Context, key *service.APIKey) erro
 		SetUserID(key.UserID).
 		SetKey(key.Key).
 		SetName(key.Name).
+		SetConversionEnabled(key.ConversionEnabled).
 		SetDefaultClient(key.DefaultClient).
 		SetDefaultEndpoint(key.DefaultEndpoint).
 		SetStatus(key.Status).
@@ -134,6 +135,9 @@ func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*se
 		Where(apikey.KeyEQ(key)).
 		Select(
 			apikey.FieldID,
+			apikey.FieldConversionEnabled,
+			apikey.FieldDefaultClient,
+			apikey.FieldDefaultEndpoint,
 			apikey.FieldUserID,
 			apikey.FieldGroupID,
 			apikey.FieldName,
@@ -266,7 +270,8 @@ func (r *apiKeyRepository) Update(ctx context.Context, key *service.APIKey, fiel
 		builder.SetName(key.Name)
 	}
 	if fields.Preferences {
-		builder.SetDefaultClient(key.DefaultClient).SetDefaultEndpoint(key.DefaultEndpoint)
+		builder.SetConversionEnabled(key.ConversionEnabled).
+			SetDefaultClient(key.DefaultClient).SetDefaultEndpoint(key.DefaultEndpoint)
 	}
 	if fields.Status {
 		builder.SetStatus(key.Status)
@@ -891,31 +896,32 @@ func apiKeyEntityToService(m *dbent.APIKey) *service.APIKey {
 		return nil
 	}
 	out := &service.APIKey{
-		ID:              m.ID,
-		UserID:          m.UserID,
-		Key:             m.Key,
-		Name:            m.Name,
-		DefaultClient:   m.DefaultClient,
-		DefaultEndpoint: m.DefaultEndpoint,
-		Status:          m.Status,
-		IPWhitelist:     m.IPWhitelist,
-		IPBlacklist:     m.IPBlacklist,
-		LastUsedAt:      m.LastUsedAt,
-		CreatedAt:       m.CreatedAt,
-		UpdatedAt:       m.UpdatedAt,
-		GroupID:         m.GroupID,
-		Quota:           m.Quota,
-		QuotaUsed:       m.QuotaUsed,
-		ExpiresAt:       m.ExpiresAt,
-		RateLimit5h:     m.RateLimit5h,
-		RateLimit1d:     m.RateLimit1d,
-		RateLimit7d:     m.RateLimit7d,
-		Usage5h:         m.Usage5h,
-		Usage1d:         m.Usage1d,
-		Usage7d:         m.Usage7d,
-		Window5hStart:   m.Window5hStart,
-		Window1dStart:   m.Window1dStart,
-		Window7dStart:   m.Window7dStart,
+		ID:                m.ID,
+		UserID:            m.UserID,
+		Key:               m.Key,
+		Name:              m.Name,
+		ConversionEnabled: m.ConversionEnabled,
+		DefaultClient:     m.DefaultClient,
+		DefaultEndpoint:   m.DefaultEndpoint,
+		Status:            m.Status,
+		IPWhitelist:       m.IPWhitelist,
+		IPBlacklist:       m.IPBlacklist,
+		LastUsedAt:        m.LastUsedAt,
+		CreatedAt:         m.CreatedAt,
+		UpdatedAt:         m.UpdatedAt,
+		GroupID:           m.GroupID,
+		Quota:             m.Quota,
+		QuotaUsed:         m.QuotaUsed,
+		ExpiresAt:         m.ExpiresAt,
+		RateLimit5h:       m.RateLimit5h,
+		RateLimit1d:       m.RateLimit1d,
+		RateLimit7d:       m.RateLimit7d,
+		Usage5h:           m.Usage5h,
+		Usage1d:           m.Usage1d,
+		Usage7d:           m.Usage7d,
+		Window5hStart:     m.Window5hStart,
+		Window1dStart:     m.Window1dStart,
+		Window7dStart:     m.Window7dStart,
 	}
 	if m.Edges.User != nil {
 		out.User = userEntityToService(m.Edges.User)

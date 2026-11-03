@@ -75,6 +75,11 @@ func UserID(v int64) predicate.APIKey {
 	return predicate.APIKey(sql.FieldEQ(FieldUserID, v))
 }
 
+// ConversionEnabled applies equality check predicate on the "conversion_enabled" field. It's identical to ConversionEnabledEQ.
+func ConversionEnabled(v bool) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldConversionEnabled, v))
+}
+
 // DefaultClient applies equality check predicate on the "default_client" field. It's identical to DefaultClientEQ.
 func DefaultClient(v string) predicate.APIKey {
 	return predicate.APIKey(sql.FieldEQ(FieldDefaultClient, v))
@@ -318,6 +323,16 @@ func UserIDIn(vs ...int64) predicate.APIKey {
 // UserIDNotIn applies the NotIn predicate on the "user_id" field.
 func UserIDNotIn(vs ...int64) predicate.APIKey {
 	return predicate.APIKey(sql.FieldNotIn(FieldUserID, vs...))
+}
+
+// ConversionEnabledEQ applies the EQ predicate on the "conversion_enabled" field.
+func ConversionEnabledEQ(v bool) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldConversionEnabled, v))
+}
+
+// ConversionEnabledNEQ applies the NEQ predicate on the "conversion_enabled" field.
+func ConversionEnabledNEQ(v bool) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNEQ(FieldConversionEnabled, v))
 }
 
 // DefaultClientEQ applies the EQ predicate on the "default_client" field.

@@ -81,3 +81,16 @@ func TestNativeAccessCandidatesWithoutPriceDirectory(t *testing.T) {
 	filtered := nativeAccessCandidates(group, accounts, nil, []string{"route-alias"})
 	require.Equal(t, []nativeAccessModel{{Name: "public-gpt", Platform: service.PlatformOpenAI}}, filtered)
 }
+
+func TestCompositeConversionEndpointsMustCoverEveryModel(t *testing.T) {
+	responses := "/v1/responses"
+	messages := "/v1/messages"
+	models := []nativeAccessModel{
+		{Name: "gpt-6.1-sol", Endpoints: []string{responses}, ConversionEndpoints: []string{responses, messages}},
+		{Name: "claude-opus-5-5", Endpoints: []string{messages}, ConversionEndpoints: []string{responses, messages}},
+	}
+	require.ElementsMatch(t, []string{responses, messages}, compositeConversionEndpoints(models))
+	models = append(models, nativeAccessModel{Name: "systemone", Endpoints: []string{"/v1/systemone"}})
+	require.Empty(t, compositeConversionEndpoints(models), "dedicated non-chat APIs must not be falsely advertised as convertible")
+	require.Empty(t, compositeConversionEndpoints(nil))
+}

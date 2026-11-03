@@ -73,6 +73,20 @@ func (_c *APIKeyCreate) SetUserID(v int64) *APIKeyCreate {
 	return _c
 }
 
+// SetConversionEnabled sets the "conversion_enabled" field.
+func (_c *APIKeyCreate) SetConversionEnabled(v bool) *APIKeyCreate {
+	_c.mutation.SetConversionEnabled(v)
+	return _c
+}
+
+// SetNillableConversionEnabled sets the "conversion_enabled" field if the given value is not nil.
+func (_c *APIKeyCreate) SetNillableConversionEnabled(v *bool) *APIKeyCreate {
+	if v != nil {
+		_c.SetConversionEnabled(*v)
+	}
+	return _c
+}
+
 // SetDefaultClient sets the "default_client" field.
 func (_c *APIKeyCreate) SetDefaultClient(v string) *APIKeyCreate {
 	_c.mutation.SetDefaultClient(v)
@@ -411,6 +425,10 @@ func (_c *APIKeyCreate) defaults() error {
 		v := apikey.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.ConversionEnabled(); !ok {
+		v := apikey.DefaultConversionEnabled
+		_c.mutation.SetConversionEnabled(v)
+	}
 	if _, ok := _c.mutation.DefaultClient(); !ok {
 		v := apikey.DefaultDefaultClient
 		_c.mutation.SetDefaultClient(v)
@@ -468,6 +486,9 @@ func (_c *APIKeyCreate) check() error {
 	}
 	if _, ok := _c.mutation.UserID(); !ok {
 		return &ValidationError{Name: "user_id", err: errors.New(`ent: missing required field "APIKey.user_id"`)}
+	}
+	if _, ok := _c.mutation.ConversionEnabled(); !ok {
+		return &ValidationError{Name: "conversion_enabled", err: errors.New(`ent: missing required field "APIKey.conversion_enabled"`)}
 	}
 	if _, ok := _c.mutation.DefaultClient(); !ok {
 		return &ValidationError{Name: "default_client", err: errors.New(`ent: missing required field "APIKey.default_client"`)}
@@ -574,6 +595,10 @@ func (_c *APIKeyCreate) createSpec() (*APIKey, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.DeletedAt(); ok {
 		_spec.SetField(apikey.FieldDeletedAt, field.TypeTime, value)
 		_node.DeletedAt = &value
+	}
+	if value, ok := _c.mutation.ConversionEnabled(); ok {
+		_spec.SetField(apikey.FieldConversionEnabled, field.TypeBool, value)
+		_node.ConversionEnabled = value
 	}
 	if value, ok := _c.mutation.DefaultClient(); ok {
 		_spec.SetField(apikey.FieldDefaultClient, field.TypeString, value)
@@ -796,6 +821,18 @@ func (u *APIKeyUpsert) SetUserID(v int64) *APIKeyUpsert {
 // UpdateUserID sets the "user_id" field to the value that was provided on create.
 func (u *APIKeyUpsert) UpdateUserID() *APIKeyUpsert {
 	u.SetExcluded(apikey.FieldUserID)
+	return u
+}
+
+// SetConversionEnabled sets the "conversion_enabled" field.
+func (u *APIKeyUpsert) SetConversionEnabled(v bool) *APIKeyUpsert {
+	u.Set(apikey.FieldConversionEnabled, v)
+	return u
+}
+
+// UpdateConversionEnabled sets the "conversion_enabled" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateConversionEnabled() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldConversionEnabled)
 	return u
 }
 
@@ -1238,6 +1275,20 @@ func (u *APIKeyUpsertOne) SetUserID(v int64) *APIKeyUpsertOne {
 func (u *APIKeyUpsertOne) UpdateUserID() *APIKeyUpsertOne {
 	return u.Update(func(s *APIKeyUpsert) {
 		s.UpdateUserID()
+	})
+}
+
+// SetConversionEnabled sets the "conversion_enabled" field.
+func (u *APIKeyUpsertOne) SetConversionEnabled(v bool) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetConversionEnabled(v)
+	})
+}
+
+// UpdateConversionEnabled sets the "conversion_enabled" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdateConversionEnabled() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateConversionEnabled()
 	})
 }
 
@@ -1904,6 +1955,20 @@ func (u *APIKeyUpsertBulk) SetUserID(v int64) *APIKeyUpsertBulk {
 func (u *APIKeyUpsertBulk) UpdateUserID() *APIKeyUpsertBulk {
 	return u.Update(func(s *APIKeyUpsert) {
 		s.UpdateUserID()
+	})
+}
+
+// SetConversionEnabled sets the "conversion_enabled" field.
+func (u *APIKeyUpsertBulk) SetConversionEnabled(v bool) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetConversionEnabled(v)
+	})
+}
+
+// UpdateConversionEnabled sets the "conversion_enabled" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdateConversionEnabled() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateConversionEnabled()
 	})
 }
 

@@ -1,18 +1,24 @@
 export default {
   "nativeAccess": {
-    "copyBase": "Copy Base URL", "copyKey": "Copy API key", "copyExample": "Copy example",
+    "copyBase": "Copy Base URL",
+    "copyKey": "Copy API key",
+    "copyExample": "Copy example",
     "channelHint": "Composite groups bind here once. Choose any supplier below to edit its model prices and mappings. Prices retain their supplier identity; separate channels can use different prices.",
-    "title": "Composite native access",
-    "hint": "Choose a default client and native endpoint. This key also works at the other endpoints listed for each model. Requests are never converted between protocols.",
+    "title": "Composite access",
+    "hint": "Configuration is optional. Leave it off to use the native endpoints supported by each model.",
     "client": "Client",
-    "endpoint": "Native endpoint",
+    "endpoint": "Unified endpoint",
     "baseUrl": "SDK Base URL",
     "requestUrl": "Full request URL",
-    "models": "Models supporting this endpoint",
+    "models": "Models available through this unified endpoint",
     "noModels": "No model supports this client and endpoint combination.",
     "allModels": "View native endpoints for every model",
     "custom": "Custom client",
-    "loadFailed": "Could not load native capabilities. Retry by selecting the group again."
+    "loadFailed": "Could not load access capabilities. Retry by selecting the group again.",
+    "enableConversion": "Configure one endpoint for all models (optional)",
+    "nativeMode": "Native mode: no protocol conversion or endpoint restriction. Each model uses its own supported endpoints.",
+    "conversionHint": "When saved, the server converts requests and responses for every model through this endpoint and rejects inference at other endpoints. Supported unified interfaces are HTTP/SSE Responses, Chat Completions and Messages. Native protocols are preferred when available; conversion can change provider cache behavior.",
+    "noConversion": "No common converter is available for every model. Clear this configuration to use native endpoints."
   },
   "longContext": {
     "title": "Long-context tier pricing",
@@ -31,6 +37,9 @@ export default {
     "cache_read": "Cache read",
     "priceUnit": "USD / 1M tokens",
     "factorUnit": "× base price",
-    "invalid": "Check thresholds, unique exact model IDs and high-tier prices. Custom pricing requires input and output; blank cache meters inherit."
+    "invalid": "Check thresholds, unique exact model IDs and high-tier prices. Custom pricing requires input and output; blank cache meters inherit.",
+    "presetValues": "Model presets: {values} input tokens. Blank inherits; 0 disables.",
+    "defaultsFailed": "Could not load default thresholds.",
+    "defaultsUnknown": "Unknown"
   }
 }

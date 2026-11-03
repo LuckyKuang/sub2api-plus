@@ -561,51 +561,70 @@ has been executed. Run checks in the repository validation container.
 | Partial token prices preserve known dimensions and explicit zero; media/search previews are base references in both locales | `frontend/src/components/channels/__tests__/catalog.spec.ts`, `frontend/src/views/admin/__tests__/GroupsView.duplicate.spec.ts`, `frontend/src/i18n/__tests__/opsLocaleKeys.spec.ts` |
 | Real browser persistence and stale-editor conflict | `composite billing` scenario in `frontend/e2e/seven-provider-management.spec.ts` |
 
-## Native endpoint access and key preferences
+## Optional unified endpoint and native access
 
-Composite text requests never bridge Responses, Chat Completions, Messages,
-Gemini or System One protocols. The public model route, actual credential's
-native protocol and required transport must all agree, including sticky
-sessions, retries and failover. Native endpoint support is separate from
-account health: unsupported combinations return HTTP 400
-`native_endpoint_unsupported`; a temporarily exhausted native account pool
-retains the existing availability error. Unknown or ambiguous public models
-return `composite_model_unresolved`. A request body using a different protocol
-than its URL returns `native_payload_mismatch`. Ordinary single-provider groups
-retain their existing compatibility behavior. Composite does not enable search
-emulation or Grok's Chat-to-Responses bridge. Non-OpenAI compaction emulation is
-unavailable to Composite keys.
+Composite key creation and editing starts with no endpoint configuration. With
+`conversion_enabled` false (the storage and API default), requests use each resolved
+model/account's native protocol, including retries and failover. The same key can use GPT Responses,
+Claude Messages, Gemini native generation and System One at their own supported
+endpoints. Unsupported combinations return HTTP 400 `native_endpoint_unsupported`;
+unknown/ambiguous routes return `composite_model_unresolved`. Native mode does
+not enable protocol conversion, search emulation or non-OpenAI compaction.
 
-`GET /api/v1/groups/:id/native-access` returns only an authenticated user's
-available group's public models and native endpoints. It exposes neither
-account IDs nor credentials. The key supports the union of these endpoints,
-but each individual request must use an endpoint supported by its chosen model.
-For example, use the same key with GPT at `/v1/responses` and Claude at
-`/v1/messages`. The OpenAI SDK Base URL ends in `/v1`; the Anthropic SDK Base URL
-is the site root, since that SDK appends `/v1/messages` itself. Gemini uses
-`/v1beta/models/{model}:generateContent` and System One `/v1/systemone`.
+Users can explicitly enable unified access by saving `conversion_enabled: true`
+with `default_client` and a supported, nonempty `default_endpoint`. Existing keys
+with saved client/endpoint preferences remain native until this explicit opt-in.
+The endpoint becomes an enforced server policy: every model uses that HTTP/SSE interface, the gateway converts requests/responses when needed,
+and other inference paths return HTTP 400 `composite_endpoint_required` before
+routing, account selection, concurrency, billing reservation or upstream writes.
+Model discovery remains available at `/v1/models` and `/v1/models/:model`.
+Unified choices are `/v1/responses`, `/v1/chat/completions` and `/v1/messages`.
+The UI offers only interfaces with maintained converters for every advertised
+model. Dedicated APIs such as System One, media, cache CRUD, compaction and
+WebSocket sessions are not unified chat converters; use an unconfigured key for
+those native APIs. A new platform needs actual adapter coverage before it can
+be advertised as convertible. A model using an unsupported dedicated protocol
+returns `composite_conversion_unsupported` instead of guessing a conversion.
 
-Discovery combines the price directory, account models and exact public routes;
-it works before prices have been configured and respects the group allowlist.
-Model-routed suppliers use configured protocol rules, credential-scoped upstream
-capability metadata and maintained provider defaults in that order. Management
-discovery may refresh metadata; gateway admission only reads captured metadata
-and never starts provider I/O before security audit.
+HTTP/SSE Responses, Chat and Messages use the existing provider adapters. Gemini
+Responses shares Gemini Chat's native credential-owner transport/retries/usage
+collection and directly renders its Responses stream events. Account-native
+Chat is preferred for OpenAI/Grok when available, preserving native cache fields
+and conversation history. OpenAI OAuth can still use its Responses transport
+when the selected ingress is Chat. Selecting unified Messages explicitly
+allows its existing OpenAI Messages adapter without another group switch.
 
-Key creation/update accepts `default_client` and `default_endpoint`. They persist
-as display/example preferences only, never permissions or routing instructions.
-Omitting an update preserves them; empty strings clear them. Changing a client
-requires a compatible endpoint in the same update. The key remains usable at
-its other authorized native endpoints. The client/endpoint UI lists compatible
-models and provides copyable addresses, keys and examples.
+Omitted update fields preserve the saved configuration; `conversion_enabled: false`
+restores native access. The editor also clears the client and endpoint on disable.
+A key cannot enable conversion without a Composite group and valid endpoint.
+Creation does not auto-select a client or endpoint,
+even after capabilities load. The Use Key dialog displays the persisted policy
+read-only; changing a local example cannot change the server policy. API-key
+authentication selects these fields from storage, includes them in auth snapshot
+version 27 and invalidates both cache layers on edits. Older snapshots reload.
+`default_client` only generates the matching client example and never selects
+provider identity, authentication or a different upstream credential.
 
-Native protocol admission preserves existing audit-before-selection ordering,
-credential-owning outbound identity and session owner checks. It does not
-rebuild conversation/tool history or translate cache controls, cache keys or
-continuation IDs between protocols. Server-owned native transport/authentication
-normalization remains in place. Provider-side cache hits still depend on the
-same native prefix, credential/tenant, model and retention policy; a gateway
-cannot guarantee a cache hit.
+`GET /api/v1/groups/:id/native-access` returns an authorized group's public
+models, each model's `endpoints` and `conversion_endpoints`, and the native union
+`endpoints` plus conversion intersection `conversion_endpoints`. No account IDs
+or credentials are exposed. It works before a price directory exists and obeys
+route domains and model allowlists. Management discovery may refresh metadata;
+gateway admission only reads captured metadata before audit. Temporary account
+exhaustion remains distinct from unsupported capability.
+
+The OpenAI SDK Base URL ends in `/v1`; the Anthropic SDK Base URL is the site
+root because that SDK appends `/v1/messages`. Gemini native uses
+`/v1beta/models/{model}:generateContent`; System One uses `/v1/systemone`.
+
+Both modes audit the original ingress protocol and content before account
+selection, billing, concurrency and conversion. Trusted outbound identity,
+provider-specific continuation ownership and session affinity remain unchanged.
+Conversion cannot guarantee a provider cache hit or translate provider-owned
+continuation IDs. `previous_response_id` requires native Responses support;
+conversion-only models return `composite_native_continuation_required` and
+require full conversation history instead of silently losing state. Native
+cache hits still depend on prefix, credential/tenant, model and retention.
 
 ## Per-platform and per-model long-context thresholds
 
@@ -635,3 +654,13 @@ uncached input plus cache creation/read tokens. The selected tier prices the
 whole request, including output. This policy changes selling prices, never the
 model context window, request payload, provider cache settings or supplier cost.
 Catalogs, key quotes, charging and captured billing snapshots share the resolver.
+
+The create/edit editor expands platform defaults and reads
+`GET /api/v1/admin/channels/long-context-defaults`. The response lists each
+maintained model's numeric threshold (and inclusive boundary where applicable)
+from the same current price reference service as channel editing, including
+local overrides and built-in fallbacks. Multiple defaults within one platform
+are displayed together rather than inventing a single supplier threshold.
+Platforms without a tier visibly show 0. Placeholders and hints disclose these
+numbers without persisting inherited values as explicit overrides. A failed
+lookup shows unknown/error and retry rather than presenting a false zero.

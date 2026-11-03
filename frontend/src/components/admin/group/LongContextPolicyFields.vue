@@ -2,12 +2,13 @@
   <section class="mt-3 space-y-3 rounded-xl border border-gray-200 p-4 dark:border-dark-600" data-testid="long-context-policy">
     <h4 class="text-sm font-medium">{{ t('longContext.title') }}</h4>
     <p class="input-hint">{{ t('longContext.hint') }}</p>
-    <details>
+    <details open>
       <summary class="cursor-pointer text-sm">{{ t('longContext.platformDefaults') }}</summary>
       <div class="mt-3 grid gap-3 sm:grid-cols-2">
-        <label v-for="item in platforms" :key="item.id" class="min-w-0"><span class="input-label">{{ item.display_name }}</span><input :value="modelValue.long_context_platforms?.[item.id] ?? ''" type="number" min="0" max="1000000000" step="1" class="input" :placeholder="t('longContext.inherit')" @input="setPlatform(item.id, $event)" /></label>
+        <label v-for="item in platforms" :key="item.id" class="min-w-0" :data-platform="item.id"><span class="input-label">{{ item.display_name }}</span><input :value="modelValue.long_context_platforms?.[item.id] ?? ''" type="number" min="0" max="1000000000" step="1" class="input" :aria-label="`${item.display_name} ${t('longContext.threshold')}`" :placeholder="defaultThresholds(item.id)" @input="setPlatform(item.id, $event)" /><span class="mt-1 block text-xs surface-muted">{{ t('longContext.presetValues', { values: defaultThresholds(item.id) }) }}</span></label>
       </div>
     </details>
+    <p v-if="defaultsError" role="alert" class="text-sm text-red-600">{{ t('longContext.defaultsFailed') }} <button type="button" class="underline" @click="loadDefaults">{{ t('common.tryAgain') }}</button></p>
     <div class="flex items-center justify-between gap-2"><span class="text-sm">{{ t('longContext.modelOverrides') }}</span><button type="button" class="btn btn-secondary btn-sm" :disabled="rules.length >= 256" @click="addRule">{{ t('common.add') }}</button></div>
     <div v-for="(rule, index) in rules" :key="index" class="space-y-3 rounded-lg surface-inset p-3">
       <div class="grid gap-3 sm:grid-cols-2">
@@ -25,16 +26,35 @@
   </section>
 </template>
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Select from '@/components/common/Select.vue'
 import { listPlatforms } from '@/constants/platformCatalog'
 import { cloneBillingRatePolicy } from '@/utils/billingRate'
 import type { BillingRatePolicy, LongContextModelRule } from '@/types/billingRate'
+import { apiClient } from '@/api/client'
 const props = defineProps<{ modelValue: BillingRatePolicy; platform: string }>()
 const emit = defineEmits<{ 'update:modelValue': [value: BillingRatePolicy] }>()
 const { t } = useI18n()
 const showValidation = ref(false)
+const defaults = ref<Record<string, { model: string; threshold: number }[]>>({})
+const defaultsLoaded = ref(false)
+const defaultsError = ref(false)
+async function loadDefaults() {
+  defaultsError.value = false
+  try {
+    const { data } = await apiClient.get<typeof defaults.value>('/admin/channels/long-context-defaults')
+    if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Invalid defaults response')
+    defaults.value = data
+    defaultsLoaded.value = true
+  } catch { defaultsError.value = true }
+}
+onMounted(loadDefaults)
+function defaultThresholds(platform: string) {
+  if (!defaultsLoaded.value) return t(defaultsError.value ? 'longContext.defaultsUnknown' : 'common.loading')
+  const values = [...new Set((defaults.value[platform] ?? []).map(item => item.threshold))].sort((a, b) => a - b)
+  return (values.length ? values : [0]).join(' / ')
+}
 const platforms = computed(() => listPlatforms().filter(item => props.platform === 'composite' || item.id === props.platform))
 const platformOptions = computed(() => platforms.value.map(item => ({ value: item.id, label: item.display_name })))
 const rules = computed(() => props.modelValue.long_context_models ?? [])

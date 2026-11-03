@@ -883,3 +883,9 @@ changes clear both categories' filter state.
 Long-context supplier defaults and exact public-model overrides are stored in
 the group's billing policy, including explicit zero and independent high-tier
 cache prices. See [Composite threshold policy](COMPOSITE_GROUPS.md#per-platform-and-per-model-long-context-thresholds).
+
+The group create/edit threshold editor also displays the current numeric
+platform/model presets from `/api/v1/admin/channels/long-context-defaults`.
+Different thresholds in one platform remain visible; missing tiers show 0,
+while explicit group/model overrides retain priority. Displaying inherited
+values never silently stores them as explicit overrides.

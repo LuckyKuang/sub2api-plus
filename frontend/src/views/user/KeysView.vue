@@ -586,7 +586,7 @@
           <GroupRateSummary v-if="formData.group_id" class="mt-3 rounded-lg surface-inset p-3" :group="quoteFor(formData.group_id)" :loading="quotesLoading" :failed="quotesFailed" @retry="refreshQuotes" />
         </div>
 
-        <NativeAccessFields v-if="groups.find(group => group.id === formData.group_id)?.platform === 'composite'" ref="nativeAccessFields" v-model:client="formData.default_client" v-model:endpoint="formData.default_endpoint" :group-id="formData.group_id" :base-url="publicSettings?.api_base_url" />
+        <NativeAccessFields v-if="groups.find(group => group.id === formData.group_id)?.platform === 'composite'" ref="nativeAccessFields" v-model:conversion-enabled="formData.conversion_enabled" v-model:client="formData.default_client" v-model:endpoint="formData.default_endpoint" :group-id="formData.group_id" :base-url="publicSettings?.api_base_url" />
 
         <!-- Custom Key Section (only for create) -->
         <div v-if="!showEditModal" class="space-y-3">
@@ -1028,6 +1028,7 @@
       :base-url="publicSettings?.api_base_url || ''"
       :platform="selectedKey?.group?.platform || null"
       :group-id="selectedKey?.group_id || null"
+      :conversion-enabled="selectedKey?.conversion_enabled || false"
       :default-client="selectedKey?.default_client || ''"
       :default-endpoint="selectedKey?.default_endpoint || ''"
       :claude-code-only="selectedKey?.group?.claude_code_only || false"
@@ -1403,6 +1404,7 @@ const setGroupButtonRef = (keyId: number, el: Element | ComponentPublicInstance 
 const nativeAccessFields = ref<InstanceType<typeof NativeAccessFields> | null>(null)
 const formData = ref({
   name: '',
+  conversion_enabled: false,
   default_client: '',
   default_endpoint: '',
   group_id: null as number | null,
@@ -1677,6 +1679,7 @@ const editKey = (key: ApiKey) => {
   const hasExpiration = !!key.expires_at
   formData.value = {
     name: key.name,
+    conversion_enabled: key.conversion_enabled || false,
     default_client: key.default_client || '',
     default_endpoint: key.default_endpoint || '',
     group_id: key.group_id,
@@ -1840,6 +1843,7 @@ const handleSubmit = async () => {
     if (showEditModal.value && selectedKey.value) {
       const updates: UpdateApiKeyRequest = {
         name: formData.value.name,
+        conversion_enabled: groups.value.find(group => group.id === formData.value.group_id)?.platform === 'composite' && formData.value.conversion_enabled,
         default_client: formData.value.default_client,
         default_endpoint: formData.value.default_endpoint,
         group_id: formData.value.group_id,
@@ -1867,7 +1871,7 @@ const handleSubmit = async () => {
         quota,
         expiresInDays,
         rateLimitData,
-        { default_client: formData.value.default_client, default_endpoint: formData.value.default_endpoint }
+        { conversion_enabled: groups.value.find(group => group.id === formData.value.group_id)?.platform === 'composite' && formData.value.conversion_enabled, default_client: formData.value.default_client, default_endpoint: formData.value.default_endpoint }
       )
       appStore.showSuccess(t('keys.keyCreatedSuccess'))
       // Only advance tour if active, on submit step, and creation succeeded
@@ -1912,7 +1916,8 @@ const closeModals = () => {
   selectedKey.value = null
   formData.value = {
     name: '',
-    default_client: '',
+    conversion_enabled: false,
+  default_client: '',
     default_endpoint: '',
     group_id: null,
     status: 'active',

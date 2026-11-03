@@ -759,6 +759,7 @@ export interface CompositeRouteDecision {
 }
 
 export interface ApiKey {
+  conversion_enabled?: boolean
   default_client?: string
   default_endpoint?: string
   id: number
@@ -793,6 +794,7 @@ export interface ApiKey {
 }
 
 export interface CreateApiKeyRequest {
+  conversion_enabled?: boolean
   default_client?: string
   default_endpoint?: string
   name: string
@@ -808,6 +810,7 @@ export interface CreateApiKeyRequest {
 }
 
 export interface UpdateApiKeyRequest {
+  conversion_enabled?: boolean
   default_client?: string
   default_endpoint?: string
   name?: string

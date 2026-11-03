@@ -21,7 +21,7 @@
         </div>
       </div>
 
-      <NativeAccessFields v-else-if="platform === 'composite'" v-model:client="nativeClient" v-model:endpoint="nativeEndpoint" :group-id="groupId || null" :base-url="baseUrl" :api-key="apiKey" />
+      <NativeAccessFields :editable="false" :conversion-enabled="conversionEnabled || false" v-else-if="platform === 'composite'" v-model:client="nativeClient" v-model:endpoint="nativeEndpoint" :group-id="groupId || null" :base-url="baseUrl" :api-key="apiKey" />
 
       <!-- Platform-specific content -->
       <template v-else>
@@ -286,6 +286,7 @@ import {
 
 interface Props {
   groupId?: number | null
+  conversionEnabled?: boolean
   defaultClient?: string
   defaultEndpoint?: string
   show: boolean

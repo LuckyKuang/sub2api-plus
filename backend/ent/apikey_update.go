@@ -72,6 +72,20 @@ func (_u *APIKeyUpdate) SetNillableUserID(v *int64) *APIKeyUpdate {
 	return _u
 }
 
+// SetConversionEnabled sets the "conversion_enabled" field.
+func (_u *APIKeyUpdate) SetConversionEnabled(v bool) *APIKeyUpdate {
+	_u.mutation.SetConversionEnabled(v)
+	return _u
+}
+
+// SetNillableConversionEnabled sets the "conversion_enabled" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillableConversionEnabled(v *bool) *APIKeyUpdate {
+	if v != nil {
+		_u.SetConversionEnabled(*v)
+	}
+	return _u
+}
+
 // SetDefaultClient sets the "default_client" field.
 func (_u *APIKeyUpdate) SetDefaultClient(v string) *APIKeyUpdate {
 	_u.mutation.SetDefaultClient(v)
@@ -625,6 +639,9 @@ func (_u *APIKeyUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if _u.mutation.DeletedAtCleared() {
 		_spec.ClearField(apikey.FieldDeletedAt, field.TypeTime)
 	}
+	if value, ok := _u.mutation.ConversionEnabled(); ok {
+		_spec.SetField(apikey.FieldConversionEnabled, field.TypeBool, value)
+	}
 	if value, ok := _u.mutation.DefaultClient(); ok {
 		_spec.SetField(apikey.FieldDefaultClient, field.TypeString, value)
 	}
@@ -899,6 +916,20 @@ func (_u *APIKeyUpdateOne) SetUserID(v int64) *APIKeyUpdateOne {
 func (_u *APIKeyUpdateOne) SetNillableUserID(v *int64) *APIKeyUpdateOne {
 	if v != nil {
 		_u.SetUserID(*v)
+	}
+	return _u
+}
+
+// SetConversionEnabled sets the "conversion_enabled" field.
+func (_u *APIKeyUpdateOne) SetConversionEnabled(v bool) *APIKeyUpdateOne {
+	_u.mutation.SetConversionEnabled(v)
+	return _u
+}
+
+// SetNillableConversionEnabled sets the "conversion_enabled" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillableConversionEnabled(v *bool) *APIKeyUpdateOne {
+	if v != nil {
+		_u.SetConversionEnabled(*v)
 	}
 	return _u
 }
@@ -1485,6 +1516,9 @@ func (_u *APIKeyUpdateOne) sqlSave(ctx context.Context) (_node *APIKey, err erro
 	}
 	if _u.mutation.DeletedAtCleared() {
 		_spec.ClearField(apikey.FieldDeletedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.ConversionEnabled(); ok {
+		_spec.SetField(apikey.FieldConversionEnabled, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.DefaultClient(); ok {
 		_spec.SetField(apikey.FieldDefaultClient, field.TypeString, value)

@@ -86,25 +86,29 @@ func TestCompositeNativeTerminalBridgeRejectedBeforeUpstream(t *testing.T) {
 // use /chat/completions on the wire and retain trusted outbound identity setup.
 func TestCompositeNativeChatPreservesCacheAndHistory(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	body := []byte(`{"model":"gpt-5.4","messages":[{"role":"system","content":"stable prefix"},{"role":"user","content":"hello"}],"prompt_cache_key":"stable-cache","prompt_cache_retention":"24h","stream":false}`)
-	rec := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(rec)
-	c.Request = httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(body))
-	c.Set("api_key", &APIKey{Group: &Group{Platform: PlatformComposite}})
-	upstream := &httpUpstreamRecorder{resp: &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"id":"c1","object":"chat.completion","model":"gpt-5.4","choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":1}}`))}}
-	svc := &OpenAIGatewayService{cfg: rawChatCompletionsTestConfig(), httpUpstream: upstream}
-	result, err := svc.ForwardAsChatCompletions(WithCompositeNativeProtocol(context.Background(), APIProtocolChatCompletions), c, rawChatCompletionsTestAccount(), body, "", "")
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.NotNil(t, upstream.lastReq)
-	require.True(t, strings.HasSuffix(upstream.lastReq.URL.Path, "/chat/completions"))
-	require.Equal(t, "stable-cache", gjson.GetBytes(upstream.lastBody, "prompt_cache_key").String())
-	require.Equal(t, "24h", gjson.GetBytes(upstream.lastBody, "prompt_cache_retention").String())
-	require.JSONEq(t, gjson.GetBytes(body, "messages").Raw, gjson.GetBytes(upstream.lastBody, "messages").Raw)
-	require.NotEmpty(t, upstream.lastReq.Header.Get("User-Agent"))
+	for _, endpoint := range []string{"", "/v1/chat/completions"} {
+		body := []byte(`{"model":"gpt-5.4","messages":[{"role":"system","content":"stable prefix"},{"role":"user","content":"hello"}],"prompt_cache_key":"stable-cache","prompt_cache_retention":"24h","stream":false}`)
+		rec := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(rec)
+		c.Request = httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(body))
+		key := &APIKey{ConversionEnabled: endpoint != "", DefaultEndpoint: endpoint, Group: &Group{Platform: PlatformComposite}}
+		c.Set("api_key", key)
+		require.True(t, BindCompositeAccessPolicy(c, key))
+		upstream := &httpUpstreamRecorder{resp: &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"id":"c1","object":"chat.completion","model":"gpt-5.4","choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":1}}`))}}
+		svc := &OpenAIGatewayService{cfg: rawChatCompletionsTestConfig(), httpUpstream: upstream}
+		result, err := svc.ForwardAsChatCompletions(c.Request.Context(), c, rawChatCompletionsTestAccount(), body, "", "")
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.NotNil(t, upstream.lastReq)
+		require.True(t, strings.HasSuffix(upstream.lastReq.URL.Path, "/chat/completions"))
+		require.Equal(t, "stable-cache", gjson.GetBytes(upstream.lastBody, "prompt_cache_key").String())
+		require.Equal(t, "24h", gjson.GetBytes(upstream.lastBody, "prompt_cache_retention").String())
+		require.JSONEq(t, gjson.GetBytes(body, "messages").Raw, gjson.GetBytes(upstream.lastBody, "messages").Raw)
+		require.NotEmpty(t, upstream.lastReq.Header.Get("User-Agent"))
+	}
 }
 
-func TestNativeAccessPreferenceDoesNotChangeProtocol(t *testing.T) {
+func TestNativeAccessValidationAndUnconfiguredProtocol(t *testing.T) {
 	require.NoError(t, ValidateNativeAccessPreference("codex", "/v1/responses"))
 	require.Error(t, ValidateNativeAccessPreference("codex", "/v1/messages"))
 	require.Error(t, ValidateNativeAccessPreference("unknown", "/v1/responses"))

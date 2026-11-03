@@ -359,3 +359,10 @@ is enabled. Account deletion cannot cascade away outstanding settlement intent.
 The rows contain no prompt or model response. See
 [ZCode recovery](../../docs/providers/ZHIPU.md#durable-off-peak-recovery) for
 configuration, key rotation, retention and the default process-local mode.
+
+### Optional Composite conversion (306)
+
+`306_api_key_composite_conversion.sql` adds `api_keys.conversion_enabled`,
+defaulting to false for both existing and new keys. Previously saved client and
+endpoint preferences remain native access until the owner explicitly enables
+conversion. See [Composite groups](../../docs/COMPOSITE_GROUPS.md).

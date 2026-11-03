@@ -323,6 +323,9 @@ func allowOpenAICompatibleMessagesDispatch(c *gin.Context, apiKey *service.APIKe
 	if apiKey == nil || apiKey.Group == nil {
 		return true
 	}
+	if c != nil && c.Request != nil && apiKey.Group.Platform == service.PlatformComposite && apiKey.DefaultEndpoint == "/v1/messages" && service.CompositeUnifiedEndpoint(c.Request.Context()) == apiKey.DefaultEndpoint {
+		return true
+	}
 	if apiKey.Group.Platform == service.PlatformGrok {
 		return true
 	}

@@ -579,7 +579,9 @@ func compositeTargetPlatformMiddleware(resolver *service.CompositeRouteResolver)
 			c.Next()
 			return
 		}
-		c.Request = c.Request.WithContext(service.WithCompositeNativeProtocol(c.Request.Context(), service.CompositeNativeProtocolForPath(c.Request.URL.Path)))
+		if !service.BindCompositeAccessPolicy(c, apiKey) {
+			return
+		}
 		// These native APIs have an endpoint-defined supplier. Their model
 		// fields are native API parameters, not aliases in the text router.
 		if isGrokNativeRoute(c.FullPath()) {
@@ -613,7 +615,7 @@ func compositeTargetPlatformMiddleware(resolver *service.CompositeRouteResolver)
 
 		// Endpoint basic validation precedes audit and all side effects.
 		if gjson.ValidBytes(body) {
-			protocol := service.CompositeNativeProtocol(c.Request.Context())
+			protocol := service.CompositeNativeProtocolForPath(c.Request.URL.Path)
 			wrongShape := protocol == service.APIProtocolChatCompletions && !gjson.GetBytes(body, "messages").Exists() && gjson.GetBytes(body, "input").Exists()
 			wrongShape = wrongShape || (protocol == service.APIProtocolResponses && gjson.GetBytes(body, "messages").Exists() && !gjson.GetBytes(body, "input").Exists())
 			if wrongShape {
@@ -647,6 +649,21 @@ func compositeTargetPlatformMiddleware(resolver *service.CompositeRouteResolver)
 			}
 			if decision.Matched {
 				protocol := service.CompositeNativeProtocol(c.Request.Context())
+				if service.CompositeUnifiedEndpoint(c.Request.Context()) == "/v1/responses" && gjson.GetBytes(body, "previous_response_id").String() != "" {
+					native, nativeErr := resolver.NativeAccessAllowed(c.Request.Context(), decision, service.APIProtocolResponses)
+					if nativeErr != nil {
+						c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"type": "server_error", "code": "native_capability_unavailable", "message": "Unable to check native continuation capabilities"}})
+						return
+					}
+					if !native {
+						c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": gin.H{"type": "invalid_request_error", "code": "composite_native_continuation_required", "message": "previous_response_id requires native Responses support; send the full conversation history for protocol conversion"}})
+						return
+					}
+				}
+				if service.CompositeUnifiedEndpoint(c.Request.Context()) != "" && !service.CompositePlatformConversionSupported(decision.TargetPlatform, service.CompositeNativeProtocolForPath(apiKey.DefaultEndpoint)) {
+					c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": gin.H{"type": "invalid_request_error", "code": "composite_conversion_unsupported", "message": "This model uses a dedicated protocol that cannot be converted to the configured endpoint"}})
+					return
+				}
 				allowed, capabilityErr := resolver.NativeAccessAllowed(c.Request.Context(), decision, protocol)
 				if capabilityErr != nil {
 					c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"type": "server_error", "code": "native_capability_unavailable", "message": "Unable to check native model capabilities"}})
@@ -678,7 +695,9 @@ func compositeGeminiTargetPlatformMiddleware(resolver *service.CompositeRouteRes
 	return func(c *gin.Context) {
 		apiKey, ok := middleware.GetAPIKeyFromContext(c)
 		if ok && apiKey != nil && apiKey.Group != nil && apiKey.Group.Platform == service.PlatformComposite {
-			c.Request = c.Request.WithContext(service.WithCompositeNativeProtocol(c.Request.Context(), "gemini"))
+			if !service.BindCompositeAccessPolicy(c, apiKey) {
+				return
+			}
 			model := compositeGeminiModelFromParams(c)
 			if model == "" && c.Request.Method == http.MethodPost && strings.TrimSuffix(c.FullPath(), "/") == "/v1beta/cachedContents" {
 				body, err := pkghttputil.ReadRequestBodyWithPrealloc(c.Request)

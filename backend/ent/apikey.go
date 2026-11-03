@@ -28,6 +28,8 @@ type APIKey struct {
 	DeletedAt *time.Time `json:"deleted_at,omitempty"`
 	// UserID holds the value of the "user_id" field.
 	UserID int64 `json:"user_id,omitempty"`
+	// ConversionEnabled holds the value of the "conversion_enabled" field.
+	ConversionEnabled bool `json:"conversion_enabled,omitempty"`
 	// DefaultClient holds the value of the "default_client" field.
 	DefaultClient string `json:"default_client,omitempty"`
 	// DefaultEndpoint holds the value of the "default_endpoint" field.
@@ -127,6 +129,8 @@ func (*APIKey) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case apikey.FieldIPWhitelist, apikey.FieldIPBlacklist:
 			values[i] = new([]byte)
+		case apikey.FieldConversionEnabled:
+			values[i] = new(sql.NullBool)
 		case apikey.FieldQuota, apikey.FieldQuotaUsed, apikey.FieldRateLimit5h, apikey.FieldRateLimit1d, apikey.FieldRateLimit7d, apikey.FieldUsage5h, apikey.FieldUsage1d, apikey.FieldUsage7d:
 			values[i] = new(sql.NullFloat64)
 		case apikey.FieldID, apikey.FieldUserID, apikey.FieldGroupID:
@@ -180,6 +184,12 @@ func (_m *APIKey) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field user_id", values[i])
 			} else if value.Valid {
 				_m.UserID = value.Int64
+			}
+		case apikey.FieldConversionEnabled:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field conversion_enabled", values[i])
+			} else if value.Valid {
+				_m.ConversionEnabled = value.Bool
 			}
 		case apikey.FieldDefaultClient:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -381,6 +391,9 @@ func (_m *APIKey) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("user_id=")
 	builder.WriteString(fmt.Sprintf("%v", _m.UserID))
+	builder.WriteString(", ")
+	builder.WriteString("conversion_enabled=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ConversionEnabled))
 	builder.WriteString(", ")
 	builder.WriteString("default_client=")
 	builder.WriteString(_m.DefaultClient)

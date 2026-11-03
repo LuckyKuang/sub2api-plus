@@ -23,6 +23,8 @@ const (
 	FieldDeletedAt = "deleted_at"
 	// FieldUserID holds the string denoting the user_id field in the database.
 	FieldUserID = "user_id"
+	// FieldConversionEnabled holds the string denoting the conversion_enabled field in the database.
+	FieldConversionEnabled = "conversion_enabled"
 	// FieldDefaultClient holds the string denoting the default_client field in the database.
 	FieldDefaultClient = "default_client"
 	// FieldDefaultEndpoint holds the string denoting the default_endpoint field in the database.
@@ -103,6 +105,7 @@ var Columns = []string{
 	FieldUpdatedAt,
 	FieldDeletedAt,
 	FieldUserID,
+	FieldConversionEnabled,
 	FieldDefaultClient,
 	FieldDefaultEndpoint,
 	FieldKey,
@@ -150,6 +153,8 @@ var (
 	DefaultUpdatedAt func() time.Time
 	// UpdateDefaultUpdatedAt holds the default value on update for the "updated_at" field.
 	UpdateDefaultUpdatedAt func() time.Time
+	// DefaultConversionEnabled holds the default value on creation for the "conversion_enabled" field.
+	DefaultConversionEnabled bool
 	// DefaultDefaultClient holds the default value on creation for the "default_client" field.
 	DefaultDefaultClient string
 	// DefaultClientValidator is a validator for the "default_client" field. It is called by the builders before save.
@@ -210,6 +215,11 @@ func ByDeletedAt(opts ...sql.OrderTermOption) OrderOption {
 // ByUserID orders the results by the user_id field.
 func ByUserID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUserID, opts...).ToFunc()
+}
+
+// ByConversionEnabled orders the results by the conversion_enabled field.
+func ByConversionEnabled(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldConversionEnabled, opts...).ToFunc()
 }
 
 // ByDefaultClient orders the results by the default_client field.
