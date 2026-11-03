@@ -55,6 +55,21 @@ function lastValue(declarations: Declaration[], property: string): string | unde
   return declarations.filter(declaration => declaration.prop === property).slice(-1)[0]?.value
 }
 
+// Base-layer token values, so a `var(--surface-radius)` declaration can be
+// compared numerically against another token's value.
+const rootTokens = new Map<string, string>()
+stylesheet.walkDecls(declaration => {
+  if (declaration.prop.startsWith('--') && declaration.parent?.selector?.includes(':root')) {
+    rootTokens.set(declaration.prop, declaration.value)
+  }
+})
+
+function resolveRadius(value: string | undefined): number {
+  if (!value) return Number.NaN
+  const token = value.match(/^var\((--[\w-]+)\)$/)
+  return parseFloat(token ? rootTokens.get(token[1]) ?? '' : value)
+}
+
 function fixture(markup: string): Element {
   const container = document.createElement('div')
   container.innerHTML = markup
@@ -186,9 +201,30 @@ describe('shared transparent surface rendering', () => {
     expect(lastValue(declarationsFor(container.querySelector('.workspace-page > .glass-surface > header')!), 'border-bottom')).toBe('0')
     expect(lastValue(declarationsFor(container.querySelector('.workspace-shell > section.card > .card-header')!), 'border-bottom')).toBeUndefined()
     expect(lastValue(declarationsFor(container.querySelector('.workspace-tab')!), 'border')).toBeUndefined()
-    expect(lastValue(declarations, 'border-radius')).toBe('var(--surface-radius-card)')
+    // A zone container owns the outermost curve; it is never a business card.
+    // Taking the card radius here would let an inner scrollport carry a larger
+    // arc than the box clipping it, cutting the corner mid-arc.
+    expect(lastValue(declarations, 'border-radius')).toBe('var(--surface-radius)')
     expect(lastValue(declarations, 'background-color')).toBe('var(--surface-fill)')
     expect(lastValue(declarationsFor(container.querySelector('.surface-control')!), 'box-shadow')).toContain('inset 0 1px 0 var(--surface-glint)')
+    container.remove()
+  })
+
+  // The radius ladder is concentric: every inner curve sits strictly inside its
+  // clipping ancestor, so no scrollport can cut a corner mid-arc.
+  it('keeps every zone container curve outside the curves of the cards nested in it', () => {
+    const container = fixture('<main class="app-main"><div class="workspace-page"><div class="workspace-scroll"><section class="card"><article class="card"></article></section></div></div><div class="table-page-layout"><div class="layout-section-fixed"><div class="card"></div></div><div class="layout-section-scrollable"><div class="card table-scroll-container"><div class="card"></div></div></div></div><footer class="pagination-card"></footer></main>')
+    document.body.append(container)
+    const containers = container.querySelectorAll<HTMLElement>('.workspace-page, .workspace-scroll, .table-page-layout, .layout-section-fixed, .layout-section-scrollable, .pagination-card, .app-main')
+    expect(containers.length).toBeGreaterThan(0)
+    for (const element of containers) {
+      const outer = resolveRadius(lastValue(declarationsFor(element), 'border-radius'))
+      expect(Number.isFinite(outer), `${element.className} has a zone radius`).toBe(true)
+      for (const card of element.querySelectorAll<HTMLElement>(':scope .card')) {
+        const inner = resolveRadius(lastValue(declarationsFor(card), 'border-radius'))
+        expect(inner, `${element.className} >= ${card.className}`).toBeLessThanOrEqual(outer)
+      }
+    }
     container.remove()
   })
 })

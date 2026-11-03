@@ -1,5 +1,5 @@
 <template>
-  <AppLayout appearance="user" workspace record-workspace>
+  <AppLayout appearance="user" workspace>
     <TablePageLayout>
       <template #filters>
         <div class="card flex flex-col gap-3 p-4">
@@ -137,7 +137,7 @@
         <div v-else class="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div class="sm:col-span-2">
             <span class="input-label">{{ t('asyncImage.create.mode') }}</span>
-            <div class="mt-2 inline-flex gap-1 rounded-[var(--surface-radius-inset)] border border-gray-200 p-1 dark:border-dark-600">
+            <div class="mt-2 inline-flex gap-1 rounded-[var(--surface-radius-panel)] border border-gray-200 p-1 dark:border-dark-600">
               <button
                 type="button"
                 class="h-9 rounded-[var(--surface-radius-item)] px-4 text-sm font-medium transition-colors surface-control"

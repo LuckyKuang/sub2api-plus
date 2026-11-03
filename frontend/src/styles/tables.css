@@ -8,6 +8,7 @@
   overflow-x: auto;
   background-color: transparent !important;
   background-image: none !important;
+  border-radius: var(--surface-radius);
 }
 
 table.record-table {
@@ -63,15 +64,16 @@ table.record-table {
 
 :root table.record-table > :is(tbody, tfoot):not(.record-group) > tr > :first-child {
   --record-edge-left: inset 1px 0 0 var(--record-row-edge);
-  /* The 4px transparent border leaves a visible 16px inner curve. */
-  border-top-left-radius: 16px 20px !important;
-  border-bottom-left-radius: 16px 20px !important;
+  /* The 4px transparent border leaves a visible inner curve, so the row arc
+     tracks the panel token and the zone container arc minus that border. */
+  border-top-left-radius: var(--surface-radius-panel) calc(var(--surface-radius) - 4px) !important;
+  border-bottom-left-radius: var(--surface-radius-panel) calc(var(--surface-radius) - 4px) !important;
 }
 
 :root table.record-table > :is(tbody, tfoot):not(.record-group) > tr > :last-child {
   --record-edge-right: inset -1px 0 0 var(--record-row-edge);
-  border-top-right-radius: 16px 20px !important;
-  border-bottom-right-radius: 16px 20px !important;
+  border-top-right-radius: var(--surface-radius-panel) calc(var(--surface-radius) - 4px) !important;
+  border-bottom-right-radius: var(--surface-radius-panel) calc(var(--surface-radius) - 4px) !important;
 }
 
 /* Each logical record starts its own edge state, including nested tables. */
@@ -111,10 +113,10 @@ table.record-table > .record-group:is(.table-row-selected, [aria-selected="true"
 :root table.record-table > .record-group > tr:not([aria-hidden="true"]) > [data-record-edges~="r"] { --record-edge-right: inset -1px 0 0 var(--record-row-edge); }
 :root table.record-table > .record-group > tr > [data-record-edges~="t"] { border-top-width: 4px !important; }
 :root table.record-table > .record-group > tr > [data-record-edges~="b"] { border-bottom-width: 4px !important; }
-:root table.record-table > .record-group > tr > [data-record-edges~="tl"] { border-top-left-radius: 16px 20px !important; }
-:root table.record-table > .record-group > tr > [data-record-edges~="tr"] { border-top-right-radius: 16px 20px !important; }
-:root table.record-table > .record-group > tr > [data-record-edges~="bl"] { border-bottom-left-radius: 16px 20px !important; }
-:root table.record-table > .record-group > tr > [data-record-edges~="br"] { border-bottom-right-radius: 16px 20px !important; }
+:root table.record-table > .record-group > tr > [data-record-edges~="tl"] { border-top-left-radius: var(--surface-radius-panel) calc(var(--surface-radius) - 4px) !important; }
+:root table.record-table > .record-group > tr > [data-record-edges~="tr"] { border-top-right-radius: var(--surface-radius-panel) calc(var(--surface-radius) - 4px) !important; }
+:root table.record-table > .record-group > tr > [data-record-edges~="bl"] { border-bottom-left-radius: var(--surface-radius-panel) calc(var(--surface-radius) - 4px) !important; }
+:root table.record-table > .record-group > tr > [data-record-edges~="br"] { border-bottom-right-radius: var(--surface-radius-panel) calc(var(--surface-radius) - 4px) !important; }
 
 /* Short data rows use 10px visible corners in every state. Expanded details
    keep only the business record's outside corners, just like full-size rows. */

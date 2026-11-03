@@ -27,7 +27,8 @@ test('admin keeps original horizontal reservations and fixed record chrome', asy
   await assertInset()
   for (const surface of [toolbar, pagination]) {
     const style = await surface.evaluate(el => ({ radius: parseFloat(getComputedStyle(el).borderRadius), border: parseFloat(getComputedStyle(el).borderTopWidth), fill: getComputedStyle(el).backgroundColor }))
-    expect(style.radius).toBe(16)
+    // Zone containers carry the shell page radius, never the card radius.
+    expect(style.radius).toBe(24)
     expect(style.border).toBe(1)
     expect(style.fill).not.toBe('rgba(0, 0, 0, 0)')
   }
@@ -239,7 +240,8 @@ async function assertAdminSurfaceStack(page: Page, surfaces: Locator[]) {
       const css = getComputedStyle(el)
       return { radius: parseFloat(css.borderRadius), border: parseFloat(css.borderTopWidth), fill: css.backgroundColor }
     })
-    expect(style.radius).toBe(16)
+    // Every zone surface shares the shell page radius, never the card radius.
+    expect(style.radius).toBe(24)
     expect(style.border).toBe(1)
     expect(style.fill).not.toBe('rgba(0, 0, 0, 0)')
     if (bottom !== undefined) expect(Math.abs(box.y - bottom - 16)).toBeLessThanOrEqual(1)

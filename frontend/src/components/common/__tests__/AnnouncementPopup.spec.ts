@@ -106,7 +106,8 @@ describe('AnnouncementPopup', () => {
     expect(dismissPopup).not.toHaveBeenCalled()
 
     await wrapper.setProps({ announcement: null })
-    expect(document.body.style.overflow).toBe('')
+    // BaseDialog owns scroll locking through useDialogFocus's body class.
+    expect(document.body.classList.contains('modal-open')).toBe(false)
     wrapper.unmount()
   })
 

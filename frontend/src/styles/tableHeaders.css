@@ -5,7 +5,13 @@
   max-height: var(--record-table-max-height);
   overflow: auto;
   overscroll-behavior: contain;
+  border-radius: var(--surface-radius-panel);
 }
+/* The frame is the outermost clipping ancestor of both the header rail and the
+   body scrollport, so it owns all four outer corners. The rail/scrollport seam
+   is an interior seam: neither child may paint a curve of its own, or the
+   visible corner would be cut mid-arc and the top and bottom curves would
+   disagree. This is what keeps the corners rounded while the body scrolls. */
 .static-table-frame {
   display: flex;
   flex-direction: column;
@@ -16,7 +22,7 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  border-radius: var(--surface-radius-panel);
+  border-radius: var(--surface-radius);
 }
 .static-table-frame[hidden] { display: none; }
 .static-table-header-rail {
@@ -31,9 +37,9 @@
   margin: 0 !important;
   max-height: none !important;
   padding-top: 0 !important;
-  border-top-left-radius: 0 !important;
-  border-top-right-radius: 0 !important;
+  border-radius: 0 !important;
 }
+:root .static-table-frame > [data-static-table-body-viewport] { border-radius: 0 !important; }
 :root table.static-table-source {
   margin-top: calc(-1 * var(--static-table-head-height, 0px)) !important;
 }

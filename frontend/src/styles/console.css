@@ -4,13 +4,22 @@
   --console-control-hover-edge: rgb(var(--console-accent-500, 20 184 166) / 65%);
   --shell-gap: 12px;
   --shell-gutter: 12px;
+  /* One gap separates the three console zones (top / middle / bottom). */
+  --shell-zone-gap: 16px;
+  /* One page width token; the admin console takes it at full width, the user
+     console narrows it and opts into its own cap. */
+  --shell-page-width: 100%;
   --shell-header-height: 64px;
   --shell-inset-top: max(var(--shell-gutter), env(safe-area-inset-top));
   --shell-inset-bottom: max(var(--shell-gutter), env(safe-area-inset-bottom));
   --shell-sticky-offset: calc(var(--shell-inset-top) + var(--shell-header-height) + var(--shell-gap));
+  /* Concentric radius ladder. Every inner curve sits strictly inside its
+     clipping ancestor, so no curve is ever cut mid-arc:
+     L0 shell page + zone container > L1 inset frame / scrollport / dropdown
+     > L2 business card nested in a zone > L3 row / menu item > L4 control.
+     A zone container never takes the card radius. */
   --surface-radius: 20px;
   --surface-radius-card: 14px;
-  --surface-radius-inset: 16px;
   --surface-radius-panel: 16px;
   --surface-radius-control: 9px;
   --surface-radius-item: 10px;
@@ -90,7 +99,7 @@
   flex-direction: column;
   gap: var(--shell-gap);
 }
-.app-main, .app-page { width: 100%; min-width: 0; }
+.app-main, .app-page { min-width: 0; }
 .app-main { scroll-margin-top: var(--shell-sticky-offset); }
 .support-banner-spacing { margin-bottom: var(--shell-gap); }
 .app-layout .app-page > :where(.space-y-4, .space-y-5, .space-y-6, .space-y-8),

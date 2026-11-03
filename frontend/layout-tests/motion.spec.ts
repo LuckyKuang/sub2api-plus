@@ -47,7 +47,9 @@ async function frames(page: Page, trigger: string, rootSelector: string, millise
 
 for (const kind of ['dialog', 'announcement'] as const) {
   test(`production ${kind} retains root timing and does not snap before its panel completes`, async ({ page }) => {
-    const root = kind === 'dialog' ? '.modal-overlay' : '.surface-overlay'
+    // Both use the one shared dialog treatment: .modal-overlay plus the modal
+    // transition, so the announcement popup is no longer a special case.
+    const root = '.modal-overlay'
     const trigger = kind === 'dialog' ? '[data-testid="open-motion-dialog"]' : '[data-testid="open-motion-announcement"]'
     const enter = await frames(page, trigger, root, 320)
     expect(enter.some(frame => frame.active && frame.duration === .2)).toBe(true)
@@ -84,9 +86,10 @@ test('header user, subscription and announcement surfaces use the shared transit
     expect(leave.some(frame => frame.active && frame.duration === .1)).toBe(true)
     expect(leave.at(-1)!.connected).toBe(false)
   }
-  const enter = await frames(page, '.app-header button[aria-label="Announcements"]', '.surface-overlay', 320)
+  // The announcement bell now opens the same shared dialog treatment.
+  const enter = await frames(page, '.app-header button[aria-label="Announcements"]', '.modal-overlay', 320)
   expect(enter.some(frame => frame.active && frame.duration === .2 && frame.y > 0 && frame.opacity > 0 && frame.opacity < 1)).toBe(true)
-  const leave = await frames(page, '.surface-overlay button[aria-label="Close"]', '.surface-overlay', 260)
+  const leave = await frames(page, '.modal-overlay button[aria-label="Close modal"]', '.modal-overlay', 260)
   expect(leave.some(frame => frame.active && frame.duration === .14)).toBe(true)
   expect(leave.at(-1)!.connected).toBe(false)
 })
@@ -151,7 +154,8 @@ test('reduced motion covers body portals and overlay children without suppressin
   await page.emulateMedia({ reducedMotion: 'reduce' })
   for (const [trigger, root] of [
     ['[data-testid="open-motion-dialog"]', '.modal-overlay'],
-    ['[data-testid="open-motion-announcement"]', '.surface-overlay'],
+    // The announcement popup now uses the one shared dialog overlay.
+    ['[data-testid="open-motion-announcement"]', '.modal-overlay'],
     ['button[aria-label="Motion select"]', '.select-dropdown-portal'],
     ['button[aria-label="Motion checkboxes"]', '.select-dropdown-portal'],
     ['.date-picker-trigger', '.date-picker-dropdown'],
@@ -161,10 +165,10 @@ test('reduced motion covers body portals and overlay children without suppressin
       const enter = await frames(page, trigger, root, 80)
       expect(enter.some(frame => frame.active && frame.duration <= .001)).toBe(true)
       expect(enter.every(frame => frame.x === 0 && frame.y === 0 && frame.scale === 1)).toBe(true)
-      if (root === '.modal-overlay') {
-        await page.locator('.modal-header button').click({ timeout: 5_000 })
+      if (trigger === '[data-testid="open-motion-dialog"]') {
+        await page.locator('.modal-header button').first().click({ timeout: 5_000 })
         await expect(page.getByTestId('open-motion-dialog')).toBeFocused()
-      } else if (root === '.surface-overlay') {
+      } else if (trigger === '[data-testid="open-motion-announcement"]') {
         await page.getByTestId('announcement-popup-dismiss').click({ timeout: 5_000 })
       } else {
         // Calendar panels legitimately cover the following outside control.

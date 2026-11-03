@@ -23,7 +23,7 @@ describe('announcement read confirmation', () => {
     markRead.mockRejectedValue(new Error('offline'))
     const wrapper = mount(AnnouncementBell, { global: { stubs: { Teleport: true, Transition: true, Icon: true } } })
     await wrapper.get('button').trigger('click')
-    await wrapper.get('.group.relative').trigger('click')
+    await wrapper.get('[data-testid="announcement-row"]').trigger('click')
     await flushPromises()
     const confirm = () => wrapper.findAll('button').find(button => button.text() === 'announcements.markRead')!
     await confirm().trigger('click')

@@ -32,19 +32,37 @@ function value(selector: string, property: string): string | undefined {
 // Keep navigation shells transparent, compact tabs accessible, and the user's
 // configured accent/transparency independent of foreground readability.
 describe('lightweight shared navigation', () => {
-  it.each([':root :is(.workspace-tabs, .pagination-card)', ':root .card-tabs'])('%s removes only the navigation frame', selector => {
-    expect(value(selector, 'background-color')).toBe('transparent')
-    expect(value(selector, 'background-image')).toBe('none')
-    expect(value(selector, 'border')).toBe('0')
-    expect(value(selector, 'box-shadow')).toBe('none')
-    expect(value(selector, 'border-radius')).toBe('0')
+  it(':root :is(.workspace-tabs, .pagination-card) removes only the navigation frame', () => {
+    expect(value(':root :is(.workspace-tabs, .pagination-card)', 'background-color')).toBe('transparent')
+    expect(value(':root :is(.workspace-tabs, .pagination-card)', 'background-image')).toBe('none')
+    expect(value(':root :is(.workspace-tabs, .pagination-card)', 'border')).toBe('0')
+    expect(value(':root :is(.workspace-tabs, .pagination-card)', 'box-shadow')).toBe('none')
+    // Both are zone containers, so they keep the shell page curve and only give
+    // up their frame; this rule no longer declares a radius of its own.
+    expect(value(':root :is(.workspace-tabs, .pagination-card)', 'border-radius')).toBeUndefined()
     const card = document.createElement('article')
     card.className = 'card surface-card'
-    expect(card.matches(selector)).toBe(false)
+    expect(card.matches(':root :is(.workspace-tabs, .pagination-card)')).toBe(false)
     const panel = document.createElement('div')
     panel.className = 'surface-panel'
-    expect(panel.matches(selector)).toBe(false)
-    rule(selector).walkDecls(declaration => { expect(declaration.important).toBeFalsy() })
+    expect(panel.matches(':root :is(.workspace-tabs, .pagination-card)')).toBe(false)
+    rule(':root :is(.workspace-tabs, .pagination-card)').walkDecls(declaration => { expect(declaration.important).toBeFalsy() })
+  })
+
+  it(':root .card-tabs removes only the navigation frame', () => {
+    expect(value(':root .card-tabs', 'background-color')).toBe('transparent')
+    expect(value(':root .card-tabs', 'background-image')).toBe('none')
+    expect(value(':root .card-tabs', 'border')).toBe('0')
+    expect(value(':root .card-tabs', 'box-shadow')).toBe('none')
+    // A segmented tab strip sits inside a card, so it stays flat.
+    expect(value(':root .card-tabs', 'border-radius')).toBe('0')
+    const card = document.createElement('article')
+    card.className = 'card surface-card'
+    expect(card.matches(':root .card-tabs')).toBe(false)
+    const panel = document.createElement('div')
+    panel.className = 'surface-panel'
+    expect(panel.matches(':root .card-tabs')).toBe(false)
+    rule(':root .card-tabs').walkDecls(declaration => { expect(declaration.important).toBeFalsy() })
   })
 
   it.each(['.workspace-tab', '.card-tab'])('%s uses the reference compact shape with transparent inactive paint', selector => {

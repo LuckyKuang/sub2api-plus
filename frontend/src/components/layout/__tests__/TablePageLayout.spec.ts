@@ -23,4 +23,15 @@ describe('TablePageLayout responsive table scrolling', () => {
       true
     )
   })
+
+  // Both page-shell systems are one contract: the fixed sections and the
+  // scrolling section carry the canonical zone classes, so a page built with
+  // TablePageLayout behaves exactly like one built with workspace-* directly.
+  it('emits the canonical zone classes alongside its own section classes', () => {
+    expect(componentSource).toContain('class="table-page-layout workspace-page"')
+    expect(componentSource.match(/class="layout-section-fixed workspace-fixed"/g)).toHaveLength(2)
+    expect(componentSource).toContain('class="layout-section-scrollable workspace-scroll"')
+    expect(componentSource).toContain('card table-scroll-container workspace-shell workspace-table-card')
+    expect(componentSource).toContain('layout-section-fixed table-page-pagination workspace-fixed')
+  })
 })

@@ -33,7 +33,7 @@
           </p>
         </div>
         <!-- Order Info -->
-        <div v-if="order" class="rounded-[var(--surface-radius-inset)] surface-inset p-4">
+        <div v-if="order" class="rounded-[var(--surface-radius-panel)] surface-inset p-4">
           <div class="space-y-3 text-sm">
             <div v-if="hasOrderId(order)" class="flex justify-between">
               <span class="surface-muted">{{ t('payment.orders.orderId') }}</span>
@@ -74,7 +74,7 @@
           </div>
         </div>
         <!-- EasyPay return info (when no order loaded) -->
-        <div v-else-if="returnInfo" class="rounded-[var(--surface-radius-inset)] surface-inset p-4">
+        <div v-else-if="returnInfo" class="rounded-[var(--surface-radius-panel)] surface-inset p-4">
           <div class="space-y-3 text-sm">
             <div v-if="returnInfo.outTradeNo" class="flex justify-between gap-3">
               <span class="shrink-0 surface-muted">{{ t('payment.orders.orderId') }}</span>
