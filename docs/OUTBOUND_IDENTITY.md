@@ -1501,3 +1501,19 @@ request builder and final transport as Gemini Chat.
 `TestCompositeGeminiResponsesPreservesTrustedIdentitySource` captures actual
 HTTP wire headers for compiled/global/account/invalid-account sources and rejects
 inbound identity injection; it does not introduce another identity preset.
+
+Composite's Messages and Chat Completions conversions share the Anthropic
+credential-owner request builder and the send-time
+`prepareAccountOutboundRequest` identity application used by the native
+`/v1/messages` and `/v1/chat/completions` paths, so they add no new identity
+source. The Antigravity compatibility conversions apply the same account identity
+inside their retry loop. Every conversion sender additionally carries the
+Composite terminal protocol guard, so a credential that cannot carry the ingress
+protocol fails before the request is built or signed.
+
+`TestCompositeSendersRejectIncompatibleCredentialBeforeUpstream` proves that
+guard for the Gemini Messages, Antigravity Responses and Antigravity Chat
+Completions senders, and `TestCompositeUnifiedChatAndMessagesAuditOriginalContent
+BeforeConversion` proves the audit gate precedes selection and conversion for
+both unified endpoints. Existing identity regressions remain required for every
+new sender.

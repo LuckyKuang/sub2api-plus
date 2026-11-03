@@ -17,6 +17,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/logger"
 	"github.com/LuckyKuang/sub2api-plus/internal/util/responseheaders"
 	"github.com/gin-gonic/gin"
+	"github.com/tidwall/gjson"
 )
 
 // ForwardAsChatCompletions serves OpenAI Chat Completions clients through
@@ -28,6 +29,9 @@ func (s *GeminiMessagesCompatService) ForwardAsChatCompletions(
 	account *Account,
 	body []byte,
 ) (forwardResult *ForwardResult, firstByteResultErr error) {
+	if err := CheckCompositeNativeForward(ctx, c, account, APIProtocolChatCompletions, gjson.GetBytes(body, "model").String()); err != nil {
+		return nil, err
+	}
 	startTime := time.Now()
 	ctx, byteTiming := beginFirstByteTiming(ctx, startTime)
 	defer func() {
@@ -530,10 +534,6 @@ func geminiResponseToChatCompletions(
 	}
 	responsesResp := apicompat.AnthropicToResponsesResponse(&anthropicResp)
 	return apicompat.ResponsesToChatCompletions(responsesResp, originalModel), usage, nil
-}
-
-func (s *GeminiMessagesCompatService) handleChatCompletionsStreamingResponseFromGemini(c *gin.Context, resp *http.Response, startTime time.Time, originalModel string, isOAuth, includeUsage bool) (*geminiStreamResult, error) {
-	return s.handleOpenAICompatStreamingResponseFromGemini(c, resp, startTime, originalModel, isOAuth, includeUsage, false)
 }
 
 func (s *GeminiMessagesCompatService) handleOpenAICompatStreamingResponseFromGemini(

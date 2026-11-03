@@ -1570,8 +1570,10 @@ func TestGeminiChatStreaming_MediaBeforeTextKeepsTTFTTokenOnly(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
 
-	result, err := (&GeminiMessagesCompatService{}).handleChatCompletionsStreamingResponseFromGemini(
-		c, resp, time.Now(), "gpt-test", false, false,
+	// Chat Completions rendering is the responses=false variant of the shared
+	// OpenAI-compat stream adapter.
+	result, err := (&GeminiMessagesCompatService{}).handleOpenAICompatStreamingResponseFromGemini(
+		c, resp, time.Now(), "gpt-test", false, false, false,
 	)
 	require.NoError(t, err)
 	require.NotNil(t, result)

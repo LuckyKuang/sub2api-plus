@@ -215,6 +215,13 @@
           @click="showAdvanced = !showAdvanced"
         >
           <span>{{ showAdvanced ? t('admin.usage.fewerFilters') : t('admin.usage.moreFilters') }}</span>
+          <!-- A collapsed advanced block keeps its filters active, so the count
+               is the only cue that the visible row is not the whole query. -->
+          <span
+            v-if="!showAdvanced && activeAdvancedCount > 0"
+            class="usage-filter-more-badge rounded-full bg-primary-500/15 px-1.5 py-0.5 text-xs font-semibold text-primary-700 dark:text-primary-300"
+            data-testid="usage-advanced-filter-count"
+          >{{ activeAdvancedCount }}</span>
           <Icon name="chevronDown" size="sm" :class="{ 'rotate-180': showAdvanced }" />
         </button>
       </div>
@@ -299,6 +306,26 @@ const accountSearchRef = ref<HTMLElement | null>(null)
 const userKeyword = ref('')
 const userResults = ref<SimpleUser[]>([])
 const showAdvanced = ref(false)
+
+// Fields rendered inside the collapsed advanced block, keyed by the v-if that
+// gates them. A field the current mode never renders is not part of the query,
+// so counting it would make the badge lie.
+const ADVANCED_FILTER_FIELDS: Record<'usage' | 'errors' | 'ranking', readonly string[]> = {
+  usage: ['request_type', 'native_compaction_v2', 'billing_type', 'billing_mode', 'upstream_model_mismatch', 'completion_status', 'usage_source', 'group_id'],
+  ranking: ['request_type', 'native_compaction_v2', 'billing_type', 'upstream_model_mismatch', 'completion_status', 'usage_source', 'group_id'],
+  errors: ['error_phase', 'error_category', 'status_code', 'group_id'],
+}
+const activeAdvancedCount = computed(() => {
+  const values = filters.value as Record<string, unknown>
+  const applied = ADVANCED_FILTER_FIELDS[props.mode].filter(field => {
+    const value = values[field]
+    return value !== undefined && value !== null && value !== ''
+  }).length
+  // errors mode also hides the record view in the advanced block; its default
+  // shows only errors, so any other value changes which rows come back.
+  if (props.mode === 'errors' && props.errorView !== 'errors') return applied + 1
+  return applied
+})
 const showUserDropdown = ref(false)
 let userSearchTimeout: ReturnType<typeof setTimeout> | null = null
 let userSearchSequence = 0

@@ -102,11 +102,15 @@ func (a *Account) NativeProtocols(model string) []string {
 }
 
 func compositeNativeAccountAllowed(ctx context.Context, account *Account, model string) bool {
+	// A native constraint also applies to unified Responses continuations:
+	// conversion consent cannot make a provider-owned response ID portable.
+	if protocol := CompositeNativeProtocol(ctx); protocol != "" {
+		return account != nil && slices.Contains(account.NativeProtocols(account.GetMappedModel(model)), protocol)
+	}
 	if endpoint := CompositeUnifiedEndpoint(ctx); endpoint != "" {
 		return compositeAccountConversionSupported(account, model, CompositeNativeProtocolForPath(endpoint))
 	}
-	protocol := CompositeNativeProtocol(ctx)
-	return protocol == "" || (account != nil && slices.Contains(account.NativeProtocols(account.GetMappedModel(model)), protocol))
+	return true
 }
 
 // CheckCompositeNativeForward is the terminal defense for direct senders and

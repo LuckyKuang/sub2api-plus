@@ -38,6 +38,8 @@ export default {
     "priceUnit": "美元 / 百万 Token",
     "factorUnit": "× 基础价格",
     "invalid": "请检查阈值、唯一的精确模型名和高阶价格。自定义定价必须填写输入与输出，缓存价格留空则继承。",
+    "publicModelHint": "请填写本分组对客户端暴露的模型名。聚合分组下这是公开模型名，不是供应平台的模型 ID。",
+    "publicModelPlaceholder": "公开模型名",
     "presetValues": "模型默认阈值：{values} 输入 tokens；留空继承，0 关闭。",
     "defaultsFailed": "无法加载默认阈值。",
     "defaultsUnknown": "未知"

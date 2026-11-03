@@ -43,6 +43,9 @@
   border-bottom: 0 !important;
 }
 @layer utilities {
+  /* Background-only counterpart of .surface-inset, for rows that must not pick
+     up the inset gradient or edge (unread announcement rows, table stripes). */
+  .surface-soft { background-color: var(--surface-soft); }
   .surface-inset { background-color: var(--surface-soft); }
   .surface-field { background-color: var(--surface-field); }
   .surface-muted { color: var(--surface-muted); }

@@ -659,6 +659,7 @@ func compositeTargetPlatformMiddleware(resolver *service.CompositeRouteResolver)
 						c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": gin.H{"type": "invalid_request_error", "code": "composite_native_continuation_required", "message": "previous_response_id requires native Responses support; send the full conversation history for protocol conversion"}})
 						return
 					}
+					c.Request = c.Request.WithContext(service.WithCompositeNativeProtocol(c.Request.Context(), service.APIProtocolResponses))
 				}
 				if service.CompositeUnifiedEndpoint(c.Request.Context()) != "" && !service.CompositePlatformConversionSupported(decision.TargetPlatform, service.CompositeNativeProtocolForPath(apiKey.DefaultEndpoint)) {
 					c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": gin.H{"type": "invalid_request_error", "code": "composite_conversion_unsupported", "message": "This model uses a dedicated protocol that cannot be converted to the configured endpoint"}})
@@ -718,6 +719,10 @@ func compositeGeminiTargetPlatformMiddleware(resolver *service.CompositeRouteRes
 				if err != nil {
 					c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"type": "server_error", "message": "Failed to resolve composite model route"}})
 					c.Abort()
+					return
+				}
+				if !decision.Matched {
+					c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "composite_model_unresolved", "message": "Configure an unambiguous composite model route", "status": "INVALID_ARGUMENT"}})
 					return
 				}
 				if decision.Matched {

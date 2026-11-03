@@ -364,6 +364,65 @@ func TestCompositeGeminiTargetPlatformMiddlewareUsesPathRoute(t *testing.T) {
 	require.Equal(t, http.StatusNoContent, w.Code)
 }
 
+// docs/COMPOSITE_GROUPS.md requires unresolved/ambiguous models to fail before
+// downstream admission on Gemini's native paths as well as the chat endpoints.
+func TestCompositeGeminiRejectsUnresolvedRoutesBeforeDownstream(t *testing.T) {
+	for _, ambiguous := range []bool{false, true} {
+		resolver := service.NewCompositeRouteResolver(nil)
+		resolver.SetModelOwnershipResolver(func(context.Context, int64, string) (service.CompositeModelOwnership, error) {
+			return service.CompositeModelOwnership{Ambiguous: ambiguous}, nil
+		})
+		router := gin.New()
+		router.Use(func(c *gin.Context) {
+			id := int64(1)
+			c.Set(string(servermiddleware.ContextKeyAPIKey), &service.APIKey{GroupID: &id, Group: &service.Group{ID: id, Platform: service.PlatformComposite}})
+			c.Next()
+		})
+		router.Use(compositeGeminiTargetPlatformMiddleware(resolver))
+		calls := 0
+		router.POST("/v1beta/models/*modelAction", func(c *gin.Context) { calls++; c.Status(http.StatusNoContent) })
+		router.POST("/v1beta/cachedContents", func(c *gin.Context) { calls++; c.Status(http.StatusNoContent) })
+		for _, path := range []string{"/v1beta/models/public-alias:generateContent", "/v1beta/cachedContents"} {
+			request := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{"model":"models/public-alias","contents":[]}`))
+			request.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, request)
+			require.Equal(t, http.StatusBadRequest, w.Code)
+			require.Contains(t, w.Body.String(), "composite_model_unresolved")
+			require.Zero(t, calls, "unresolved models cannot enter account selection, billing or forwarding")
+		}
+	}
+}
+
+// Unified Responses may bridge ordinary requests. Provider-owned continuation
+// must pin native Responses through scheduling/failover instead.
+func TestCompositeUnifiedContinuationBindsNativeProtocol(t *testing.T) {
+	for _, continuation := range []bool{false, true} {
+		router := gin.New()
+		router.Use(func(c *gin.Context) {
+			id := int64(1)
+			c.Set(string(servermiddleware.ContextKeyAPIKey), &service.APIKey{GroupID: &id, Group: &service.Group{ID: id, Platform: service.PlatformComposite}, ConversionEnabled: true, DefaultEndpoint: "/v1/responses"})
+			c.Next()
+		})
+		router.Use(compositeTargetPlatformMiddleware(nil))
+		router.POST("/v1/responses", func(c *gin.Context) {
+			want := ""
+			if continuation {
+				want = service.APIProtocolResponses
+			}
+			require.Equal(t, want, service.CompositeNativeProtocol(c.Request.Context()))
+			c.Status(http.StatusNoContent)
+		})
+		body := `{"model":"gpt-5.4","input":"hello"}`
+		if continuation {
+			body = `{"model":"gpt-5.4","input":"next","previous_response_id":"resp_native"}`
+		}
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(body)))
+		require.Equal(t, http.StatusNoContent, w.Code)
+	}
+}
+
 // Live 入口顶层 model 与 session.model 不一致时，合成路由必须按 session.model
 // 分发与改写（与白名单准入、Live handler 一致），不得命中顶层别名的映射并把
 // session 模型覆盖为别名上游。

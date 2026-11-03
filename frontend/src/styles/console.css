@@ -36,9 +36,11 @@
   --surface-selected: rgb(var(--console-accent-500, 20 184 166) / calc(.18 * var(--console-card-alpha, 1)));
   --surface-overlay: rgb(24 20 18 / calc(.18 * var(--console-card-alpha, 1)));
   --surface-solid: rgb(253 251 248 / var(--console-card-alpha, 1));
-  /* Outlines remain visible even when all surface fills are transparent. */
-  --surface-edge: rgb(120 112 102 / 24%);
-  --surface-shadow: 0 1px 3px -1px rgb(24 24 27 / calc(.06 * var(--console-card-alpha, 1))), inset 0 1px 0 rgb(255 255 255 / calc(.5 * var(--console-card-alpha, 1)));
+  /* Outlines remain visible even when all surface fills are transparent. The
+     frame is the only separator once card fills sit this close to the canvas,
+     so it keeps enough alpha to read as an edge rather than a stain. */
+  --surface-edge: rgb(120 112 102 / 30%);
+  --surface-shadow: 0 2px 8px -4px rgb(24 24 27 / calc(.1 * var(--console-card-alpha, 1))), inset 0 1px 0 rgb(255 255 255 / calc(.5 * var(--console-card-alpha, 1)));
   --console-canvas: #f4f1ed;
   --console-glow: rgb(var(--console-accent-500, 20 184 166) / 13%);
   --console-glow-secondary: rgb(125 149 212 / 12%);
@@ -57,8 +59,8 @@
   --surface-selected: rgb(var(--console-accent-400, 45 212 191) / calc(.20 * var(--console-card-alpha, 1)));
   --surface-overlay: rgb(4 3 2 / calc(.22 * var(--console-card-alpha, 1)));
   --surface-solid: rgb(41 38 36 / var(--console-card-alpha, 1));
-  --surface-edge: rgb(170 162 152 / 22%);
-  --surface-shadow: 0 1px 3px -1px rgb(0 0 0 / calc(.18 * var(--console-card-alpha, 1))), inset 0 1px 0 rgb(255 255 255 / calc(.04 * var(--console-card-alpha, 1)));
+  --surface-edge: rgb(170 162 152 / 30%);
+  --surface-shadow: 0 2px 10px -4px rgb(0 0 0 / calc(.26 * var(--console-card-alpha, 1))), inset 0 1px 0 rgb(255 255 255 / calc(.04 * var(--console-card-alpha, 1)));
   --console-canvas: #1c1a18;
   --console-glow: rgb(var(--console-accent-500, 20 184 166) / 10%);
   --console-glow-secondary: rgb(103 125 190 / 10%);
@@ -99,7 +101,10 @@
   flex-direction: column;
   gap: var(--shell-gap);
 }
-.app-main, .app-page { min-width: 0; }
+/* Below the shell breakpoint the page fills the shell gutter; at and above it
+   workspace.css applies the width token. Keeping the narrow width explicit
+   avoids relying on flex stretching to size the page. */
+.app-main, .app-page { width: 100%; min-width: 0; }
 .app-main { scroll-margin-top: var(--shell-sticky-offset); }
 .support-banner-spacing { margin-bottom: var(--shell-gap); }
 .app-layout .app-page > :where(.space-y-4, .space-y-5, .space-y-6, .space-y-8),

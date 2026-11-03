@@ -13,7 +13,7 @@
     <div v-for="(rule, index) in rules" :key="index" class="space-y-3 rounded-lg surface-inset p-3">
       <div class="grid gap-3 sm:grid-cols-2">
         <label><span class="input-label">{{ t('billingRates.editor.platform') }}</span><Select :model-value="rule.platform" :options="platformOptions" @update:model-value="setRule(index, 'platform', String($event))" /></label>
-        <label><span class="input-label">{{ t('billingRates.editor.model') }}</span><input :value="rule.model" class="input" maxlength="256" required @input="setRule(index, 'model', text($event))" /></label>
+        <label><span class="input-label">{{ t('billingRates.editor.model') }}</span><input :value="rule.model" class="input" maxlength="256" required :placeholder="props.platform === 'composite' ? t('longContext.publicModelPlaceholder') : ''" @input="setRule(index, 'model', text($event))" /><span v-if="props.platform === 'composite'" class="mt-1 block text-xs surface-muted">{{ t('longContext.publicModelHint') }}</span></label>
         <label><span class="input-label">{{ t('longContext.threshold') }}</span><input :value="rule.threshold" class="input" type="number" min="0" max="1000000000" step="1" required @input="setRule(index, 'threshold', number($event))" /></label>
         <label><span class="input-label">{{ t('longContext.mode') }}</span><Select :model-value="rule.mode || 'inherit'" :options="modeOptions" @update:model-value="setRule(index, 'mode', String($event))" /></label>
       </div>

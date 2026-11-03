@@ -168,6 +168,39 @@ func TestCompositeUnifiedRejectsLosingProviderContinuationBeforeWire(t *testing.
 	require.Contains(t, w.Body.String(), "composite_native_continuation_required")
 }
 
+// Native mode forbids a Gemini Chat bridge at every sending entrypoint. Explicit
+// unified Chat consent must still allow that same real Gemini wire operation.
+func TestCompositeGeminiChatRequiresConversionConsentBeforeWire(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		t.Run(fmt.Sprintf("conversion=%t", enabled), func(t *testing.T) {
+			body := []byte(`{"model":"gemini-2.5-flash","messages":[{"role":"user","content":"hello"}]}`)
+			upstream := &geminiCompatHTTPUpstreamStub{response: &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"candidates":[{"content":{"parts":[{"text":"hello from gemini"}]},"finishReason":"STOP"}]}`))}}
+			svc := &GeminiMessagesCompatService{cfg: &config.Config{}, httpUpstream: upstream}
+			account := &Account{ID: 2, Platform: PlatformGemini, Type: AccountTypeAPIKey, Credentials: map[string]any{"api_key": "fixture"}}
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
+			key := &APIKey{ConversionEnabled: enabled, DefaultEndpoint: "/v1/chat/completions", Group: &Group{Platform: PlatformComposite}}
+			c.Set("api_key", key)
+			require.True(t, BindCompositeAccessPolicy(c, key))
+			result, err := svc.ForwardAsChatCompletions(c.Request.Context(), c, account, body)
+			if !enabled {
+				require.Error(t, err)
+				require.Nil(t, result)
+				require.Zero(t, upstream.calls)
+				require.Equal(t, http.StatusBadRequest, w.Code)
+				require.Contains(t, w.Body.String(), "native_endpoint_unsupported")
+				return
+			}
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			require.Equal(t, 1, upstream.calls)
+			require.Contains(t, upstream.lastReq.URL.Path, ":generateContent")
+			require.Contains(t, w.Body.String(), "hello from gemini")
+		})
+	}
+}
+
 func TestCompositeUnifiedTerminalRequiresAuthenticatedPolicyMarker(t *testing.T) {
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest("POST", "/v1/responses", nil)
@@ -236,4 +269,96 @@ func TestCompositeGeminiResponsesPreservesTrustedIdentitySource(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Requirement: the Anthropic Messages interface exposes count_tokens as a
+// non-inference auxiliary of the same endpoint, so a unified Messages key must
+// admit it. The other unified endpoints have no auxiliary call, so any other
+// sub-path stays rejected.
+func TestCompositeUnifiedMessagesAdmitsCountTokensOnly(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	admit := func(endpoint, path string) (int, int) {
+		key := &APIKey{ConversionEnabled: true, DefaultClient: "custom", DefaultEndpoint: endpoint, Group: &Group{Platform: PlatformComposite}}
+		router := gin.New()
+		calls := 0
+		router.Use(func(c *gin.Context) {
+			if BindCompositeAccessPolicy(c, key) {
+				c.Next()
+			}
+		})
+		router.POST(path, func(c *gin.Context) { calls++; c.Status(204) })
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{"model":"any-model"}`)))
+		return w.Code, calls
+	}
+
+	code, calls := admit("/v1/messages", "/v1/messages/count_tokens")
+	require.Equal(t, 204, code)
+	require.Equal(t, 1, calls, "token counting is not inference and belongs to the Messages endpoint")
+
+	code, calls = admit("/v1/messages", "/v1/messages/batches")
+	require.Equal(t, 400, code)
+	require.Zero(t, calls, "only count_tokens is an auxiliary of the Messages endpoint")
+
+	for _, endpoint := range []string{"/v1/responses", "/v1/chat/completions"} {
+		code, calls = admit(endpoint, "/v1/messages/count_tokens")
+		require.Equal(t, 400, code)
+		require.Zero(t, calls, "count_tokens is not an auxiliary of the "+endpoint+" endpoint")
+	}
+}
+
+// Requirement: every composite sender is a terminal defense point. A failover or
+// retry that lands on a credential which cannot carry the ingress protocol must
+// fail before any upstream write, instead of silently bridging it. Each sender
+// below previously lacked this guard.
+func TestCompositeSendersRejectIncompatibleCredentialBeforeUpstream(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	body := []byte(`{"model":"claude-sonnet-4-5","messages":[{"role":"user","content":"hi"}]}`)
+
+	nativeContext := func(protocol string) (*gin.Context, *httptest.ResponseRecorder) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest("POST", "/v1/messages", bytes.NewReader(body))
+		key := &APIKey{Group: &Group{Platform: PlatformComposite}}
+		c.Set("api_key", key)
+		c.Request = c.Request.WithContext(WithCompositeNativeProtocol(c.Request.Context(), protocol))
+		return c, w
+	}
+
+	// An Anthropic credential cannot carry Responses or Chat Completions.
+	anthropicOnly := &Account{ID: 9, Platform: PlatformAnthropic, Type: AccountTypeAPIKey}
+
+	t.Run("gemini messages forward", func(t *testing.T) {
+		c, w := nativeContext(APIProtocolAnthropic)
+		svc := &GeminiMessagesCompatService{}
+		result, err := svc.Forward(c.Request.Context(), c, &Account{ID: 3, Platform: PlatformOpenAI, Type: AccountTypeAPIKey}, body)
+		require.Error(t, err)
+		require.Nil(t, result)
+		require.Contains(t, w.Body.String(), "native_endpoint_unsupported")
+	})
+
+	t.Run("antigravity responses forward", func(t *testing.T) {
+		c, w := nativeContext(APIProtocolResponses)
+		svc := &AntigravityGatewayService{}
+		result, err := svc.ForwardAsResponses(c.Request.Context(), c, anthropicOnly, body, nil)
+		require.Error(t, err)
+		require.Nil(t, result)
+		require.Contains(t, w.Body.String(), "native_endpoint_unsupported")
+	})
+
+	t.Run("antigravity chat completions forward", func(t *testing.T) {
+		c, w := nativeContext(APIProtocolChatCompletions)
+		svc := &AntigravityGatewayService{}
+		result, err := svc.ForwardAsChatCompletions(c.Request.Context(), c, anthropicOnly, body, nil)
+		require.Error(t, err)
+		require.Nil(t, result)
+		require.Contains(t, w.Body.String(), "native_endpoint_unsupported")
+	})
+
+	// The guard must stay a guard: a credential that can carry the protocol is
+	// still admitted past this point.
+	t.Run("admits a credential that carries the protocol", func(t *testing.T) {
+		c, _ := nativeContext(APIProtocolAnthropic)
+		require.NoError(t, CheckCompositeNativeForward(c.Request.Context(), c, anthropicOnly, APIProtocolAnthropic, "claude-sonnet-4-5"))
+	})
 }

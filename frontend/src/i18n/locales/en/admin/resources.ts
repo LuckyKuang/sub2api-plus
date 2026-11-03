@@ -574,7 +574,6 @@ export default {
     // Usage Records
     usage: {
       serviceTier: 'Service tier',
-      inboundUserAgent: 'Inbound User-Agent',
       outbound: 'Ingress / egress evidence',
       inboundEvidence: 'Ingress',
       outboundEvidence: 'Egress',
@@ -583,7 +582,7 @@ export default {
       outboundDispatch: 'Dispatched by gateway; provider execution not guaranteed',
       outboundTier: 'Dispatched tier',
       serviceTierBilling: 'Billing',
-      serviceTierDifference: 'Request and response tiers differ; check outbound evidence',
+      serviceTierDifference: 'Request and response tiers differ; check the ingress / egress evidence',
       serviceTierRequest: 'Request',
       serviceTierResponse: 'Response',
       serviceTierUnrecorded: 'Not recorded',

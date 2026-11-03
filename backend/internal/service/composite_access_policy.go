@@ -24,6 +24,18 @@ func CompositeUnifiedEndpoint(ctx context.Context) string {
 // BindCompositeAccessPolicy runs after authentication and before routing/audit.
 // It validates the requested interface without selecting an account or editing
 // the original protocol payload consumed by the security audit engines.
+// compositeEndpointAdmits reports whether a canonical path is inference at the
+// configured unified endpoint, or a non-inference auxiliary call that belongs to
+// it. Anthropic clients size a prompt with count_tokens before sending inference,
+// so a unified Messages key must admit its own count_tokens sub-path; the other
+// unified endpoints have no equivalent auxiliary call.
+func compositeEndpointAdmits(canonical, defaultEndpoint string) bool {
+	if canonical == defaultEndpoint {
+		return true
+	}
+	return defaultEndpoint == "/v1/messages" && canonical == "/v1/messages/count_tokens"
+}
+
 func BindCompositeAccessPolicy(c *gin.Context, key *APIKey) bool {
 	if key == nil || key.Group == nil || key.Group.Platform != PlatformComposite {
 		return true
@@ -38,7 +50,7 @@ func BindCompositeAccessPolicy(c *gin.Context, key *APIKey) bool {
 		return true
 	}
 	canonical := "/v1/" + strings.TrimPrefix(strings.TrimPrefix(path, "/v1/"), "/")
-	if c.Request.Method != http.MethodPost || canonical != key.DefaultEndpoint || !slices.Contains(CompositeConversionEndpoints(), key.DefaultEndpoint) {
+	if c.Request.Method != http.MethodPost || !slices.Contains(CompositeConversionEndpoints(), key.DefaultEndpoint) || !compositeEndpointAdmits(canonical, key.DefaultEndpoint) {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": gin.H{"type": "invalid_request_error", "code": "composite_endpoint_required", "message": "This Composite API key only accepts inference at its configured endpoint: " + key.DefaultEndpoint}})
 		return false
 	}

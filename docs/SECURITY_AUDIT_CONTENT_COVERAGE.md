@@ -936,6 +936,15 @@ side-effect-order regressions remain required.
 
 ### Composite endpoint admission and optional conversion
 
+Gemini native generation and cache creation reject unknown/ambiguous public
+models during basic route validation, before downstream admission. Unified
+Responses continuation pins native Responses credentials through selection and
+failover. Gemini Chat, like the other compatibility senders, checks explicit
+conversion consent before any provider write; native mode cannot enter its
+bridge. These checks do not change canonical extraction or audit ordering for
+accepted requests. Regressions are in `composite_platform_test.go`,
+`composite_native_protocol_test.go` and `composite_access_policy_test.go`.
+
 A Composite key with `conversion_enabled: false` (including legacy saved endpoint
 preferences) accepts only the resolved model/account's native
 ingress protocol. A configured key explicitly opts into one HTTP/SSE Responses,
@@ -955,6 +964,16 @@ admit WebSocket or dedicated non-chat protocols through a chat adapter.
 `composite_unified_audit_test.go` sends original Responses payloads with unknown
 siblings through the Anthropic/Gemini handler, compares canonical moderation and
 prompt extraction, and proves blocking occurs before account/concurrency/billing
-or adapter writes. Existing HTTP/WS, account-type, provider real-payload and
-side-effect-order suites remain required. `composite_access_policy_test.go`
-covers native/unified admission, cache parity and actual conversion wire traffic.
+or adapter writes. The same file repeats the proof for the unified Messages and
+Chat Completions endpoints, so every admitted unified interface audits the
+original client payload rather than its converted form. Existing HTTP/WS,
+account-type, provider real-payload and side-effect-order suites remain required.
+`composite_access_policy_test.go` covers native/unified admission, cache parity,
+actual conversion wire traffic, and the terminal per-account protocol guard on
+every conversion sender.
+
+`POST /v1/messages/count_tokens` is an auxiliary of the Messages interface, not
+inference. A unified Messages key admits it alongside its own inference path;
+the Responses and Chat Completions endpoints admit no auxiliary, so every other
+sub-path stays a basic-validation rejection. The admitted call keeps the existing
+ingress audit before its own side effects.

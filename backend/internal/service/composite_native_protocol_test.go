@@ -65,6 +65,21 @@ func TestCompositeNativeCandidates(t *testing.T) {
 	}
 }
 
+// A provider-owned continuation cannot be translated. Once admission requires
+// native Responses, unified conversion consent must not broaden that constraint
+// during account selection or retries (docs/COMPOSITE_GROUPS.md).
+func TestCompositeUnifiedContinuationKeepsNativeCredentialRestriction(t *testing.T) {
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	key := &APIKey{ConversionEnabled: true, DefaultEndpoint: "/v1/responses", Group: &Group{Platform: PlatformComposite}}
+	require.True(t, BindCompositeAccessPolicy(c, key))
+	chatOnly := &Account{Platform: PlatformDeepseek, Type: AccountTypeAPIKey, Credentials: map[string]any{"api_protocol": APIProtocolChatCompletions}}
+	require.True(t, compositeNativeAccountAllowed(c.Request.Context(), chatOnly, "deepseek-v4-flash"), "ordinary unified requests may convert")
+	ctx := WithCompositeNativeProtocol(c.Request.Context(), APIProtocolResponses)
+	require.False(t, compositeNativeAccountAllowed(ctx, chatOnly, "deepseek-v4-flash"), "continuation must exclude conversion-only credentials")
+	require.True(t, compositeNativeAccountAllowed(ctx, &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth}, "gpt-5.4"))
+}
+
 func TestCompositeNativeTerminalBridgeRejectedBeforeUpstream(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	body := []byte(`{"model":"claude-opus-5-5","input":"Hello"}`)

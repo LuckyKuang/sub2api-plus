@@ -1,6 +1,9 @@
 /* Native table layout and zero border-spacing keep virtual row measurements
    accurate. The enclosing card owns the static fill; cells paint only states
-   and outlines inside their padding boxes, including pinned cells. */
+   and outlines inside their padding boxes, including pinned cells.
+   The scroll viewport clips its rows, so it rounds to the card's corner rather
+   than to the shell radius, which would let row paint escape a 14px card
+   corner under a 20px clip. */
 .record-table-scroll {
   border: 0 !important;
   border-inline: 12px solid transparent !important;
@@ -8,7 +11,7 @@
   overflow-x: auto;
   background-color: transparent !important;
   background-image: none !important;
-  border-radius: var(--surface-radius);
+  border-radius: var(--surface-radius-card);
 }
 
 table.record-table {

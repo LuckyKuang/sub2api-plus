@@ -50,6 +50,15 @@ func (r *ModelPricingResolver) applyLongContextPolicy(resolved *ResolvedPricing,
 			return
 		}
 	}
+	if custom {
+		// A channel/group may define its base rates in the first interval.
+		// Capture that effective price before replacing its ladder, so custom
+		// high-tier prices do not reset the low tier to directory defaults.
+		if pricing := r.GetIntervalPricing(resolved, 1); pricing != nil {
+			base := *pricing
+			resolved.BasePricing = &base
+		}
+	}
 	base := resolved.BasePricing
 	if base == nil {
 		resolved.longContextPricingError = fmt.Errorf("long-context pricing requires a known base price")

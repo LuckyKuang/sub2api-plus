@@ -571,7 +571,6 @@ export default {
     // Usage Records
     usage: {
       serviceTier: '服务档位',
-      inboundUserAgent: '入站 User-Agent',
       outbound: '出入站证据',
       inboundEvidence: '入站',
       outboundEvidence: '出站',
@@ -580,7 +579,7 @@ export default {
       outboundDispatch: '已在网关发送；不代表上游执行保证',
       outboundTier: '发送档位',
       serviceTierBilling: '计费',
-      serviceTierDifference: '请求与响应档位不同；需结合出站证据核查',
+      serviceTierDifference: '请求与响应档位不同；需结合出入站证据核查',
       serviceTierRequest: '请求',
       serviceTierResponse: '响应',
       serviceTierUnrecorded: '未记录',

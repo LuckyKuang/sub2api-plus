@@ -89,6 +89,53 @@ func TestCompositeLongContextCustomPricesAndMultipliers(t *testing.T) {
 	require.InDelta(t, 5e-6, high.CacheReadPricePerToken, 1e-12)
 }
 
+// A custom high tier changes only the high tier. The channel's configured
+// first interval remains the base sale price, including inherited cache meters;
+// custom factors apply to that price, not the supplier's fallback directory.
+func TestCompositeLongContextCustomTierPreservesConfiguredBaseInterval(t *testing.T) {
+	for _, mode := range []string{"prices", "multipliers"} {
+		t.Run(mode, func(t *testing.T) {
+			bs, resolver := newTokenCostTestEnv(t, PlatformComposite, []ChannelModelPricing{{
+				Platform: PlatformGemini, Models: []string{"gemini-2.5-pro"}, BillingMode: BillingModeToken,
+				Intervals: []PricingInterval{
+					{MinTokens: 0, MaxTokens: testPtrInt(100), InputPrice: testPtrFloat64(2e-6), OutputPrice: testPtrFloat64(4e-6), CacheReadPrice: testPtrFloat64(1e-6)},
+					{MinTokens: 100, InputPrice: testPtrFloat64(8e-6), OutputPrice: testPtrFloat64(16e-6)},
+				},
+			}}, geminiCatalogStub())
+			group := &Group{ID: 100, Platform: PlatformComposite, BillingRatePolicy: domain.BillingRatePolicy{LongContextModels: []domain.LongContextModelRule{{Platform: PlatformGemini, Model: "gemini-2.5-pro", Threshold: 150, Mode: mode, Input: testPtrFloat64(3), Output: testPtrFloat64(5)}}}}
+			ctx := WithResolvedTargetPlatform(context.Background(), PlatformGemini)
+			calculate := func(input int) *CostBreakdown {
+				got, err := bs.CalculateTokenCostForRequest(TokenCostRequest{Ctx: ctx, Model: "gemini-2.5-pro", Group: group, Tokens: UsageTokens{InputTokens: input, CacheReadTokens: 1, OutputTokens: 10}, RateMultiplier: 1, Resolver: resolver})
+				require.NoError(t, err)
+				return got
+			}
+			base := calculate(149) // exactly T, including cached input
+			require.InDelta(t, .000298, base.InputCost, 1e-12)
+			require.InDelta(t, .00004, base.OutputCost, 1e-12)
+			require.InDelta(t, .000001, base.CacheReadCost, 1e-12)
+			high := calculate(150)
+			if mode == "prices" {
+				require.InDelta(t, .00045, high.InputCost, 1e-12)
+				require.InDelta(t, .00005, high.OutputCost, 1e-12)
+			} else {
+				require.InDelta(t, .0009, high.InputCost, 1e-12)
+				require.InDelta(t, .0002, high.OutputCost, 1e-12)
+			}
+			require.InDelta(t, .000001, high.CacheReadCost, 1e-12, "omitted high-tier cache meters inherit the configured base")
+			schedule, err := bs.ResolveContextPricingSchedule(ctx, resolver, ContextPricingScheduleInput{Model: "gemini-2.5-pro", Group: group, Platform: PlatformGemini})
+			require.NoError(t, err)
+			require.Len(t, schedule.Tiers, 2)
+			require.Equal(t, 150, *schedule.Tiers[0].MaxTokens)
+			require.InDelta(t, 2e-6, *schedule.Tiers[0].Input, 1e-12)
+			if mode == "prices" {
+				require.InDelta(t, 3e-6, *schedule.Tiers[1].Input, 1e-12)
+			} else {
+				require.InDelta(t, 6e-6, *schedule.Tiers[1].Input, 1e-12)
+			}
+		})
+	}
+}
+
 func TestCompositeLongContextMissingHighPriceIsError(t *testing.T) {
 	bs, resolver := newTokenCostTestEnv(t, PlatformGemini, nil, geminiCatalogStub())
 	group := &Group{ID: 100, Platform: PlatformGemini, BillingRatePolicy: domain.BillingRatePolicy{LongContextPlatforms: map[string]int{PlatformGemini: 100}}}

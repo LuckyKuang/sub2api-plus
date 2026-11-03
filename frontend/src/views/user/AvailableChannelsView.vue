@@ -112,6 +112,15 @@ const platforms = computed(() => [...new Set(models.value.map(m => m.platform))]
 const visible = computed(() => visibleModels(models.value, filters.value))
 const selected = computed(() => models.value.find(m => m.key === selectedKey.value) || null)
 function platformCount(platform: string) { return models.value.filter(m => m.platform === platform).length }
+// Each category owns its filters, so every one must be normalized against its
+// own model list. Normalizing only the active category leaves a platform
+// selected that the inactive category no longer offers, and that category then
+// renders an empty list until it is reset by hand.
+function normalizeAllCategoryFilters() {
+  for (const item of ['group', 'composite'] as const) {
+    normalizeCatalogFilters(allModels.value.filter(model => model.category === item), categoryFilters[item])
+  }
+}
 function selectPlatform(platform: string) {
   filters.value.platform = platform
   normalizeCatalogFilters(models.value, filters.value)
@@ -134,7 +143,7 @@ async function loadCatalog(force = false) {
     if (id !== requestId || catalogKey.value !== key || currentController.signal.aborted) return
     catalog.value = result
     if (!cached) cacheAvailableChannelCatalog(key, result)
-    normalizeCatalogFilters(models.value, filters.value)
+    normalizeAllCategoryFilters()
   } catch (err) {
     if (id !== requestId || catalogKey.value !== key || currentController.signal.aborted) return
     invalidateAvailableChannelCatalog(key)

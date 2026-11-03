@@ -5,9 +5,9 @@
   --surface-soft: rgb(245 243 240 / var(--console-card-alpha, 1));
   --surface-text: #221f1c;
   --surface-muted: #635e57;
-  --surface-edge: rgb(120 112 102 / 20%);
+  --surface-edge: rgb(120 112 102 / 30%);
   --surface-glint: transparent;
-  --surface-shadow: 0 1px 3px -1px rgb(24 24 27 / calc(.06 * var(--console-card-alpha, 1)));
+  --surface-shadow: 0 2px 8px -4px rgb(24 24 27 / calc(.1 * var(--console-card-alpha, 1)));
   --console-canvas: #f4f1ed;
   --console-glow: transparent;
   --console-glow-secondary: transparent;
@@ -19,8 +19,8 @@
   --surface-soft: rgb(34 31 29 / var(--console-card-alpha, 1));
   --surface-text: #f2f0ed;
   --surface-muted: #b8b3ac;
-  --surface-edge: rgb(170 162 152 / 22%);
-  --surface-shadow: 0 1px 3px -1px rgb(0 0 0 / calc(.18 * var(--console-card-alpha, 1)));
+  --surface-edge: rgb(170 162 152 / 30%);
+  --surface-shadow: 0 2px 10px -4px rgb(0 0 0 / calc(.26 * var(--console-card-alpha, 1)));
   --console-canvas: #1c1a18;
   --console-background-mask: rgb(28 26 24 / var(--console-dark-mask-alpha, .48));
   --console-control-edge: rgb(170 162 152 / 42%);

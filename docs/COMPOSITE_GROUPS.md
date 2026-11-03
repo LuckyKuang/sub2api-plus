@@ -579,6 +579,9 @@ and other inference paths return HTTP 400 `composite_endpoint_required` before
 routing, account selection, concurrency, billing reservation or upstream writes.
 Model discovery remains available at `/v1/models` and `/v1/models/:model`.
 Unified choices are `/v1/responses`, `/v1/chat/completions` and `/v1/messages`.
+A unified Messages key also admits `POST /v1/messages/count_tokens`, which sizes a
+prompt rather than running inference; the other unified endpoints have no
+auxiliary call and keep rejecting every other sub-path.
 The UI offers only interfaces with maintained converters for every advertised
 model. Dedicated APIs such as System One, media, cache CRUD, compaction and
 WebSocket sessions are not unified chat converters; use an unconfigured key for
@@ -623,7 +626,11 @@ provider-specific continuation ownership and session affinity remain unchanged.
 Conversion cannot guarantee a provider cache hit or translate provider-owned
 continuation IDs. `previous_response_id` requires native Responses support;
 conversion-only models return `composite_native_continuation_required` and
-require full conversation history instead of silently losing state. Native
+require full conversation history instead of silently losing state. Responses
+continuation also restricts account selection and failover to native
+Responses credentials, even when the group includes conversion-only accounts.
+Unresolved models are rejected on Gemini native generation and cache creation
+as well as the unified chat interfaces, before downstream admission. Native
 cache hits still depend on prefix, credential/tenant, model and retention.
 
 ## Per-platform and per-model long-context thresholds
@@ -631,7 +638,9 @@ cache hits still depend on prefix, credential/tenant, model and retention.
 `billing_rate_policy.long_context_platforms` maps concrete supplier IDs to
 integer input thresholds. `long_context_models` contains exact public-model
 rules with `platform`, `model`, `threshold` and optional `mode` (`inherit`,
-`prices`, `multipliers`). Matching order is exact model, explicit platform
+`prices`, `multipliers`). On a Composite group the `model` value is the model
+name the group exposes to clients, not the supplier's model ID, because matching
+runs against the requested public model after route resolution. Matching order is exact model, explicit platform
 threshold, existing model price preset, then no tier. Missing entries inherit;
 explicit zero disables tier pricing even when an account enables it. Replacing
 zero with a positive threshold enables it again without discarding retained
@@ -642,8 +651,11 @@ rule applies. A model with no preset or custom tier remains at threshold zero.
 Custom `input`, `output`, `cache_write`, `cache_write_1h`, `cache_read` values
 are USD per million tokens in `prices` mode or factors of the base meter in
 `multipliers` mode. Input/output are required for custom pricing. Omitted cache
-meters inherit; explicit zero means free. A positive threshold without existing
-high-tier prices requires a custom price or multiplier; it never guesses a
+meters inherit; explicit zero means free. When the price card defines its base
+rates in the first token interval, custom high-tier rules retain those base
+rates at or below the new threshold and use them as the multiplier/inheritance
+base. A positive threshold without existing high-tier prices requires a custom
+price or multiplier; it never guesses a
 surcharge. Invalid price evidence fails before account reservation/upstream use.
 Existing multi-step cards retain later tiers; a threshold that overlaps another
 tier is rejected.
