@@ -85,7 +85,8 @@ type Group struct {
 	AudioSTTPricePerHour         *float64
 
 	// ModelPricing overrides channel and built-in prices for matching models.
-	// Token intervals are selected only when LongContextPricingEnabled is true.
+	// Explicit platform/model rules and Composite presets determine token tiers;
+	// ordinary groups without an explicit rule retain the legacy switch.
 	LongContextPricingEnabled bool
 	ModelPricing              []ChannelModelPricing
 

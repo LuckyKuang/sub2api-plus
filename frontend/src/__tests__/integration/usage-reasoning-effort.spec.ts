@@ -221,7 +221,8 @@ const sharedPageStubs = {
 }
 
 function reasoningCellText(wrapper: ReturnType<typeof mount>): string {
-  return wrapper.get('[data-testid="reasoning-effort-cell"]').text()
+  expect(wrapper.find('[data-testid="reasoning-effort-cell"]').exists()).toBe(false)
+  return wrapper.get('[data-testid="usage-model-metadata"]').text()
 }
 
 describe('usage reasoning effort page display', () => {
@@ -287,7 +288,8 @@ describe('usage reasoning effort page display', () => {
     })
     await flushPromises()
 
-    // Product requirement: reasoning effort is one of the 13 default admin columns.
+    // Updated requirement: requested/mapped effort belongs below the model,
+    // together with Fast state, and has no separate table column.
     const cell = reasoningCellText(wrapper)
     expect(cell).toContain('Max')
     expect(cell).toContain('XHigh')

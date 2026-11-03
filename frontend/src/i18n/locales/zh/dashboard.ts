@@ -661,6 +661,7 @@ export default {
   // Available Channels (user-facing)
   availableChannels: {
     catalog: {
+      category: '渠道分类', groupPlatforms: '分组平台', compositePlatforms: '聚合平台',
       quoteDetails: '展开价格与计费条件',
       quoteComparison: '分组报价对比',
       effectiveRateLabel: '生效倍率',

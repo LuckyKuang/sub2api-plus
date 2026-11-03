@@ -33,6 +33,9 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	promptCacheKey string,
 	defaultMappedModel string,
 ) (forwardResult *OpenAIForwardResult, firstByteResultErr error) {
+	if err := CheckCompositeNativeForward(ctx, c, account, APIProtocolAnthropic, gjson.GetBytes(body, "model").String()); err != nil {
+		return nil, err
+	}
 	if err := validateOpenAISessionContinuation(ctx, body); err != nil {
 		return nil, err
 	}

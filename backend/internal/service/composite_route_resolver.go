@@ -36,6 +36,43 @@ func (d CompositeRouteDecision) AmbiguousMessage() string {
 type CompositeRouteResolver struct {
 	repo                   CompositeModelRouteRepository
 	modelOwnershipResolver CompositeModelOwnershipResolver
+	channelService         *ChannelService
+	nativeAccessResolver   func(context.Context, CompositeRouteDecision, string) (bool, error)
+}
+
+// NativeAccessAllowed distinguishes a configured native capability from temporary
+// scheduling failures. Tests without an account store still apply supplier guards.
+func (r *CompositeRouteResolver) NativeAccessAllowed(ctx context.Context, decision CompositeRouteDecision, protocol string) (bool, error) {
+	if !decision.Matched {
+		return false, nil
+	}
+	if protocol == "" {
+		return true, nil
+	}
+	if decision.TargetPlatform == PlatformAnthropic && protocol != APIProtocolAnthropic {
+		return false, nil
+	}
+	if (decision.TargetPlatform == PlatformGemini || decision.TargetPlatform == PlatformAntigravity) && protocol != "gemini" {
+		return false, nil
+	}
+	if decision.TargetPlatform == PlatformOpenAI && protocol == APIProtocolAnthropic {
+		return false, nil
+	}
+	if decision.TargetPlatform == PlatformTypeSafe && protocol != "systemone" {
+		return false, nil
+	}
+	if r != nil && r.nativeAccessResolver != nil {
+		return r.nativeAccessResolver(ctx, decision, protocol)
+	}
+	return true, nil
+}
+
+// NativeRoutingModel follows the same channel mapping used before account mapping.
+func (r *CompositeRouteResolver) NativeRoutingModel(ctx context.Context, groupID int64, platform, model string) string {
+	if r != nil && r.channelService != nil {
+		return r.channelService.ResolveChannelMapping(WithResolvedTargetPlatform(ctx, platform), groupID, model).MappedModel
+	}
+	return model
 }
 
 func NewCompositeRouteResolver(repo CompositeModelRouteRepository) *CompositeRouteResolver {

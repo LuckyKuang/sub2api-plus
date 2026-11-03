@@ -16,12 +16,14 @@ import admin from './admin'
 import misc from './misc'
 import inspection from './inspection'
 import billingRates from './billingRates'
+import nativeAccess from './nativeAccess'
 
 export default {
   ...workspace,
   ...requestList,
   ...inspection,
   ...billingRates,
+  ...nativeAccess,
   ...featureExtensions,
   ...codexCli,
   ...codexCliRuntime,

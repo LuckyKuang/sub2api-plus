@@ -73,6 +73,48 @@ func (_c *APIKeyCreate) SetUserID(v int64) *APIKeyCreate {
 	return _c
 }
 
+// SetConversionEnabled sets the "conversion_enabled" field.
+func (_c *APIKeyCreate) SetConversionEnabled(v bool) *APIKeyCreate {
+	_c.mutation.SetConversionEnabled(v)
+	return _c
+}
+
+// SetNillableConversionEnabled sets the "conversion_enabled" field if the given value is not nil.
+func (_c *APIKeyCreate) SetNillableConversionEnabled(v *bool) *APIKeyCreate {
+	if v != nil {
+		_c.SetConversionEnabled(*v)
+	}
+	return _c
+}
+
+// SetDefaultClient sets the "default_client" field.
+func (_c *APIKeyCreate) SetDefaultClient(v string) *APIKeyCreate {
+	_c.mutation.SetDefaultClient(v)
+	return _c
+}
+
+// SetNillableDefaultClient sets the "default_client" field if the given value is not nil.
+func (_c *APIKeyCreate) SetNillableDefaultClient(v *string) *APIKeyCreate {
+	if v != nil {
+		_c.SetDefaultClient(*v)
+	}
+	return _c
+}
+
+// SetDefaultEndpoint sets the "default_endpoint" field.
+func (_c *APIKeyCreate) SetDefaultEndpoint(v string) *APIKeyCreate {
+	_c.mutation.SetDefaultEndpoint(v)
+	return _c
+}
+
+// SetNillableDefaultEndpoint sets the "default_endpoint" field if the given value is not nil.
+func (_c *APIKeyCreate) SetNillableDefaultEndpoint(v *string) *APIKeyCreate {
+	if v != nil {
+		_c.SetDefaultEndpoint(*v)
+	}
+	return _c
+}
+
 // SetKey sets the "key" field.
 func (_c *APIKeyCreate) SetKey(v string) *APIKeyCreate {
 	_c.mutation.SetKey(v)
@@ -383,6 +425,18 @@ func (_c *APIKeyCreate) defaults() error {
 		v := apikey.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.ConversionEnabled(); !ok {
+		v := apikey.DefaultConversionEnabled
+		_c.mutation.SetConversionEnabled(v)
+	}
+	if _, ok := _c.mutation.DefaultClient(); !ok {
+		v := apikey.DefaultDefaultClient
+		_c.mutation.SetDefaultClient(v)
+	}
+	if _, ok := _c.mutation.DefaultEndpoint(); !ok {
+		v := apikey.DefaultDefaultEndpoint
+		_c.mutation.SetDefaultEndpoint(v)
+	}
 	if _, ok := _c.mutation.Status(); !ok {
 		v := apikey.DefaultStatus
 		_c.mutation.SetStatus(v)
@@ -432,6 +486,25 @@ func (_c *APIKeyCreate) check() error {
 	}
 	if _, ok := _c.mutation.UserID(); !ok {
 		return &ValidationError{Name: "user_id", err: errors.New(`ent: missing required field "APIKey.user_id"`)}
+	}
+	if _, ok := _c.mutation.ConversionEnabled(); !ok {
+		return &ValidationError{Name: "conversion_enabled", err: errors.New(`ent: missing required field "APIKey.conversion_enabled"`)}
+	}
+	if _, ok := _c.mutation.DefaultClient(); !ok {
+		return &ValidationError{Name: "default_client", err: errors.New(`ent: missing required field "APIKey.default_client"`)}
+	}
+	if v, ok := _c.mutation.DefaultClient(); ok {
+		if err := apikey.DefaultClientValidator(v); err != nil {
+			return &ValidationError{Name: "default_client", err: fmt.Errorf(`ent: validator failed for field "APIKey.default_client": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.DefaultEndpoint(); !ok {
+		return &ValidationError{Name: "default_endpoint", err: errors.New(`ent: missing required field "APIKey.default_endpoint"`)}
+	}
+	if v, ok := _c.mutation.DefaultEndpoint(); ok {
+		if err := apikey.DefaultEndpointValidator(v); err != nil {
+			return &ValidationError{Name: "default_endpoint", err: fmt.Errorf(`ent: validator failed for field "APIKey.default_endpoint": %w`, err)}
+		}
 	}
 	if _, ok := _c.mutation.Key(); !ok {
 		return &ValidationError{Name: "key", err: errors.New(`ent: missing required field "APIKey.key"`)}
@@ -522,6 +595,18 @@ func (_c *APIKeyCreate) createSpec() (*APIKey, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.DeletedAt(); ok {
 		_spec.SetField(apikey.FieldDeletedAt, field.TypeTime, value)
 		_node.DeletedAt = &value
+	}
+	if value, ok := _c.mutation.ConversionEnabled(); ok {
+		_spec.SetField(apikey.FieldConversionEnabled, field.TypeBool, value)
+		_node.ConversionEnabled = value
+	}
+	if value, ok := _c.mutation.DefaultClient(); ok {
+		_spec.SetField(apikey.FieldDefaultClient, field.TypeString, value)
+		_node.DefaultClient = value
+	}
+	if value, ok := _c.mutation.DefaultEndpoint(); ok {
+		_spec.SetField(apikey.FieldDefaultEndpoint, field.TypeString, value)
+		_node.DefaultEndpoint = value
 	}
 	if value, ok := _c.mutation.Key(); ok {
 		_spec.SetField(apikey.FieldKey, field.TypeString, value)
@@ -736,6 +821,42 @@ func (u *APIKeyUpsert) SetUserID(v int64) *APIKeyUpsert {
 // UpdateUserID sets the "user_id" field to the value that was provided on create.
 func (u *APIKeyUpsert) UpdateUserID() *APIKeyUpsert {
 	u.SetExcluded(apikey.FieldUserID)
+	return u
+}
+
+// SetConversionEnabled sets the "conversion_enabled" field.
+func (u *APIKeyUpsert) SetConversionEnabled(v bool) *APIKeyUpsert {
+	u.Set(apikey.FieldConversionEnabled, v)
+	return u
+}
+
+// UpdateConversionEnabled sets the "conversion_enabled" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateConversionEnabled() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldConversionEnabled)
+	return u
+}
+
+// SetDefaultClient sets the "default_client" field.
+func (u *APIKeyUpsert) SetDefaultClient(v string) *APIKeyUpsert {
+	u.Set(apikey.FieldDefaultClient, v)
+	return u
+}
+
+// UpdateDefaultClient sets the "default_client" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateDefaultClient() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldDefaultClient)
+	return u
+}
+
+// SetDefaultEndpoint sets the "default_endpoint" field.
+func (u *APIKeyUpsert) SetDefaultEndpoint(v string) *APIKeyUpsert {
+	u.Set(apikey.FieldDefaultEndpoint, v)
+	return u
+}
+
+// UpdateDefaultEndpoint sets the "default_endpoint" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateDefaultEndpoint() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldDefaultEndpoint)
 	return u
 }
 
@@ -1154,6 +1275,48 @@ func (u *APIKeyUpsertOne) SetUserID(v int64) *APIKeyUpsertOne {
 func (u *APIKeyUpsertOne) UpdateUserID() *APIKeyUpsertOne {
 	return u.Update(func(s *APIKeyUpsert) {
 		s.UpdateUserID()
+	})
+}
+
+// SetConversionEnabled sets the "conversion_enabled" field.
+func (u *APIKeyUpsertOne) SetConversionEnabled(v bool) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetConversionEnabled(v)
+	})
+}
+
+// UpdateConversionEnabled sets the "conversion_enabled" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdateConversionEnabled() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateConversionEnabled()
+	})
+}
+
+// SetDefaultClient sets the "default_client" field.
+func (u *APIKeyUpsertOne) SetDefaultClient(v string) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetDefaultClient(v)
+	})
+}
+
+// UpdateDefaultClient sets the "default_client" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdateDefaultClient() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateDefaultClient()
+	})
+}
+
+// SetDefaultEndpoint sets the "default_endpoint" field.
+func (u *APIKeyUpsertOne) SetDefaultEndpoint(v string) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetDefaultEndpoint(v)
+	})
+}
+
+// UpdateDefaultEndpoint sets the "default_endpoint" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdateDefaultEndpoint() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateDefaultEndpoint()
 	})
 }
 
@@ -1792,6 +1955,48 @@ func (u *APIKeyUpsertBulk) SetUserID(v int64) *APIKeyUpsertBulk {
 func (u *APIKeyUpsertBulk) UpdateUserID() *APIKeyUpsertBulk {
 	return u.Update(func(s *APIKeyUpsert) {
 		s.UpdateUserID()
+	})
+}
+
+// SetConversionEnabled sets the "conversion_enabled" field.
+func (u *APIKeyUpsertBulk) SetConversionEnabled(v bool) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetConversionEnabled(v)
+	})
+}
+
+// UpdateConversionEnabled sets the "conversion_enabled" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdateConversionEnabled() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateConversionEnabled()
+	})
+}
+
+// SetDefaultClient sets the "default_client" field.
+func (u *APIKeyUpsertBulk) SetDefaultClient(v string) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetDefaultClient(v)
+	})
+}
+
+// UpdateDefaultClient sets the "default_client" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdateDefaultClient() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateDefaultClient()
+	})
+}
+
+// SetDefaultEndpoint sets the "default_endpoint" field.
+func (u *APIKeyUpsertBulk) SetDefaultEndpoint(v string) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetDefaultEndpoint(v)
+	})
+}
+
+// UpdateDefaultEndpoint sets the "default_endpoint" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdateDefaultEndpoint() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateDefaultEndpoint()
 	})
 }
 

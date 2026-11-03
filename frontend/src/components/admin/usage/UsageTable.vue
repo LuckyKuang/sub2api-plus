@@ -121,6 +121,10 @@
 
         <template #cell-outbound="{ row }">
           <div data-testid="outbound-cell" class="max-w-[320px] space-y-0.5 text-xs">
+            <div class="font-medium">{{ t('admin.usage.inboundEvidence') }}</div>
+            <div class="truncate surface-muted" :title="row.user_agent || undefined">UA: {{ row.user_agent || '—' }}</div>
+            <div v-if="row.inbound_endpoint" class="break-all surface-muted">{{ row.inbound_endpoint }}</div>
+            <div class="pt-1 font-medium">{{ t('admin.usage.outboundEvidence') }}</div>
             <div class="font-medium text-gray-900 dark:text-white">{{ t(`admin.usage.outboundTransport.${row.outbound_transport || 'unknown'}`) }}</div>
             <template v-if="row.outbound_metadata">
               <div class="surface-muted">{{ t(row.outbound_metadata.evidence === 'cli_process' ? 'admin.usage.outboundProcess' : 'admin.usage.outboundDispatch') }}</div>

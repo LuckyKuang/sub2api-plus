@@ -4,6 +4,10 @@ SQL migrations are embedded in the application and applied automatically at
 startup. The runner records each filename and SHA256 checksum in
 `schema_migrations`.
 
+Migration `305_api_key_native_access_preferences.sql` adds empty-default client
+and endpoint presentation preferences. They grant no endpoint access and change
+no routing; omitted updates preserve values. See [native Composite access](../../docs/COMPOSITE_GROUPS.md#native-endpoint-access-and-key-preferences).
+
 Migration `304_usage_outbound_metadata.sql` adds nullable administrator dispatch
 evidence. Historical rows stay NULL; the existing usage accuracy CHECK and
 atomic billing transaction remain unchanged. See [Codex CLI evidence](../../docs/CODEX_CLI.md#usage-accuracy-and-outbound-evidence).
@@ -355,3 +359,10 @@ is enabled. Account deletion cannot cascade away outstanding settlement intent.
 The rows contain no prompt or model response. See
 [ZCode recovery](../../docs/providers/ZHIPU.md#durable-off-peak-recovery) for
 configuration, key rotation, retention and the default process-local mode.
+
+### Optional Composite conversion (306)
+
+`306_api_key_composite_conversion.sql` adds `api_keys.conversion_enabled`,
+defaulting to false for both existing and new keys. Previously saved client and
+endpoint preferences remain native access until the owner explicitly enables
+conversion. See [Composite groups](../../docs/COMPOSITE_GROUPS.md).

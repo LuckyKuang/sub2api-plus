@@ -1495,3 +1495,9 @@ changes precedence, overrides headers, or substitutes for wire regression tests.
 Managed tasks record verified process execution without claiming to observe the
 CLI's provider request. Unknown history is not inferred from incoming UA or
 current account settings. See [evidence semantics](CODEX_CLI.md#usage-accuracy-and-outbound-evidence).
+
+Composite's optional Gemini Responses adapter uses the same credential-owner
+request builder and final transport as Gemini Chat.
+`TestCompositeGeminiResponsesPreservesTrustedIdentitySource` captures actual
+HTTP wire headers for compiled/global/account/invalid-account sources and rejects
+inbound identity injection; it does not introduce another identity preset.

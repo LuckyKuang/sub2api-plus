@@ -2,7 +2,7 @@ import { defineComponent } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ChannelsView from '@/views/admin/ChannelsView.vue'
-import type { Channel } from '@/api/admin/channels'
+import type { Channel, ChannelModelPricing } from '@/api/admin/channels'
 
 const { listChannels, createChannel, updateChannel, getGroups, getWebSearchConfig, showError } = vi.hoisted(() => ({
   listChannels: vi.fn(),
@@ -102,6 +102,53 @@ describe('ChannelsView web search configuration', () => {
     getWebSearchConfig.mockResolvedValue({ enabled: true, providers: [{ name: 'test' }] })
     createChannel.mockResolvedValue({})
     updateChannel.mockResolvedValue({})
+  })
+
+  // Supplier membership is the public Composite configuration contract; assert
+  // actual editor controls, independently of how the component builds its list.
+  it('offers Composite and every supported supplier in the channel editor', async () => {
+    const wrapper = mountView()
+    await openEdit(wrapper)
+    const labels = wrapper.findAll('label').map(label => label.text())
+    for (const supplier of ['composite', 'anthropic', 'gemini', 'openai', 'antigravity', 'grok', 'kimi', 'zhipu', 'deepseek', 'minimax', 'stepfun', 'opencode_go', 'typesafe', 'command_code', 'cline']) {
+      expect(labels).toContain(`admin.groups.platforms.${supplier}`)
+    }
+    wrapper.unmount()
+  })
+
+  // Requirement: bind a Composite group once; preserve real supplier identity,
+  // prices and mappings through edit -> save -> reload -> save.
+  it('round trips a Composite channel without supplier groups or merged prices', async () => {
+    const compositeGroup = { id: 99, platform: 'composite', name: 'Composite-group', rate_multiplier: 1 }
+    getGroups.mockResolvedValue([...groups, compositeGroup])
+    const prices: ChannelModelPricing[] = ['openai', 'anthropic'].map((platform, i) => ({
+      platform, models: [i === 0 ? 'gpt-native' : 'claude-native'], billing_mode: 'token',
+      input_price: (i + 1) * 1e-6, output_price: (i + 1) * 5e-6,
+      cache_write_price: null, cache_read_price: null, image_input_price: null,
+      image_output_price: null, per_request_price: null, intervals: [], time_pricing: null,
+    }))
+    let saved: Channel = { ...savedChannel(), group_ids: [99], model_pricing: prices,
+      model_mapping: { openai: { 'gpt-public': 'gpt-native' }, anthropic: { 'claude-public': 'claude-native' } } }
+    listChannels.mockImplementation(async () => ({ items: [saved], total: 1 }))
+    updateChannel.mockImplementation(async (_id, payload) => { saved = { ...saved, ...payload }; return saved })
+    for (let round = 0; round < 2; round++) {
+      const wrapper = mountView()
+      await openEdit(wrapper)
+      expect(wrapper.findAll('button[role="tab"]').map(button => button.text())).toEqual([
+        'admin.channels.form.basicSettings', 'admin.groups.platforms.composite',
+      ])
+      await openTab(wrapper, 'composite')
+      await submit(wrapper)
+      expect(saved.group_ids).toEqual([99])
+      expect(saved.model_pricing).toHaveLength(2)
+      expect(saved.model_pricing.map(p => ({ platform: p.platform, models: p.models, input: p.input_price }))).toEqual(expect.arrayContaining([
+        { platform: 'openai', models: ['gpt-native'], input: 1e-6 },
+        { platform: 'anthropic', models: ['claude-native'], input: 2e-6 },
+      ]))
+      expect(saved.model_mapping).toEqual({ openai: { 'gpt-public': 'gpt-native' }, anthropic: { 'claude-public': 'claude-native' } })
+      wrapper.unmount()
+    }
+    expect(updateChannel).toHaveBeenCalledTimes(2)
   })
 
   it.each(editablePlatforms)('saves an explicit %s disable without erasing other dimensions', async platform => {

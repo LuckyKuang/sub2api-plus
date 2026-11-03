@@ -323,6 +323,9 @@ func allowOpenAICompatibleMessagesDispatch(c *gin.Context, apiKey *service.APIKe
 	if apiKey == nil || apiKey.Group == nil {
 		return true
 	}
+	if c != nil && c.Request != nil && apiKey.Group.Platform == service.PlatformComposite && apiKey.DefaultEndpoint == "/v1/messages" && service.CompositeUnifiedEndpoint(c.Request.Context()) == apiKey.DefaultEndpoint {
+		return true
+	}
 	if apiKey.Group.Platform == service.PlatformGrok {
 		return true
 	}
@@ -2421,6 +2424,11 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		if decision.OAuthAmbiguous() {
 			service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalModelConfiguration)
 			closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, decision.AmbiguousMessage())
+			return
+		}
+		allowed, capabilityErr := h.compositeResolver.NativeAccessAllowed(c.Request.Context(), decision, service.APIProtocolResponses)
+		if capabilityErr != nil || !allowed {
+			closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "Model does not support native Responses access")
 			return
 		}
 		if decision.Matched {

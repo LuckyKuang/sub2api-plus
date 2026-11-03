@@ -106,6 +106,9 @@ func (s *AntigravityGatewayService) ForwardAsResponses(
 	body []byte,
 	_ *ParsedRequest,
 ) (*ForwardResult, error) {
+	if err := CheckCompositeResponsesContinuation(ctx, c, account, body); err != nil {
+		return nil, err
+	}
 	if err := s.validateAntigravityCompatAccount(c, account); err != nil {
 		return nil, err
 	}

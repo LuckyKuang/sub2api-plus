@@ -40,7 +40,7 @@
         </template>
         <template #cell-started_at="{ row }"><time class="whitespace-nowrap text-xs tabular-nums" :datetime="row.started_at" :title="formatDateTime(row.started_at)">{{ shortTime(row.started_at) }}</time></template>
         <template #cell-model="{ row }"><div class="max-w-52 break-words text-sm font-medium" :title="row.model">{{ row.model }}</div><div v-if="row.reasoning_effort" class="text-xs surface-muted">{{ row.reasoning_effort }}</div></template>
-        <template #cell-user_id="{ row }"><span class="text-xs">#{{ row.user_id }}</span><div class="max-w-40 break-all text-xs surface-muted">{{ row.key_name }}</div></template>
+        <template #cell-user_id="{ row }"><div class="max-w-48 break-all text-xs">{{ row.user_email || '—' }}</div><span class="text-xs surface-muted">#{{ row.user_id }}</span><div class="max-w-40 break-all text-xs surface-muted">{{ row.key_name }}</div></template>
         <template #cell-request_type="{ row }"><span class="badge badge-gray">{{ typeLabel(row) }}</span><div v-if="row.turn" class="text-xs surface-muted">#{{ row.turn }}</div></template>
         <template #cell-group_name="{ row }"><span class="block max-w-36 break-words text-xs">{{ row.group_name || '—' }}</span></template>
         <template #cell-status="{ row }"><LiveRequestResult :row="row" /></template>
@@ -60,7 +60,7 @@
         <div class="mt-1 flex items-start justify-between gap-2"><div class="min-w-0"><LiveRequestTokens :row="row" /></div><span class="min-w-0 max-w-[40%] break-words text-right text-xs surface-muted">{{ row.group_name || '—' }}</span></div>
         <button type="button" class="mt-1 min-h-9 text-xs text-primary-600 surface-control" :aria-expanded="expanded.has(row.id)" :aria-controls="`live-fields-${row.id}`" @click="toggleExpanded(row.id)">{{ t(expanded.has(row.id) ? 'requestList.less' : 'requestList.more') }}</button>
         <dl v-if="expanded.has(row.id)" :id="`live-fields-${row.id}`" class="space-y-3 border-t border-gray-200 pt-3 text-xs dark:border-dark-700">
-          <div v-if="mode === 'admin'"><dt class="text-gray-500">{{ t('admin.usage.user') }}</dt><dd>#{{ row.user_id }}</dd></div>
+          <div v-if="mode === 'admin'"><dt class="text-gray-500">{{ t('admin.usage.user') }}</dt><dd class="break-all">{{ row.user_email || '—' }} · #{{ row.user_id }}</dd></div>
           <div><dt class="text-gray-500">{{ t('usage.apiKeyFilter') }}</dt><dd class="break-all">{{ row.key_name || '—' }}</dd></div>
           <div><dt class="text-gray-500">{{ t('usage.time') }}</dt><dd>{{ formatDateTime(row.started_at) }}</dd></div>
           <div><dt class="text-gray-500">{{ t('admin.usage.group') }}</dt><dd class="break-all">{{ row.group_name || '—' }}</dd></div>
@@ -182,7 +182,7 @@ watch([page, pageSize], () => {
 const options = (label: string, values: string[]) => [{ value: '', label }, ...Array.from(new Set(values.filter(Boolean))).sort().map(value => ({ value, label: value }))]
 const modelOptions = computed(() => options(t('requestList.allModels'), rows.value.map(row => row.model)))
 const groupOptions = computed(() => options(t('requestList.allGroups'), rows.value.map(row => row.group_name ?? '')))
-const userOptions = computed(() => options(t('requestList.allUsers'), rows.value.map(row => String(row.user_id))))
+const userOptions = computed(() => [{ value: '', label: t('requestList.allUsers') }, ...Array.from(new Map(rows.value.map(row => [row.user_id, { value: String(row.user_id), label: `${row.user_email || '—'} · #${row.user_id}` }])).values())])
 function typeLabel(row: LiveRequest) {
   if (row.native_compaction_v2) return t('usage.compactionOnly')
   return ({ sync: t('requestList.sync'), stream: t('requestList.stream'), ws_v2: 'WS', live: 'Live', cyber: 'Cyber', unknown: '—' })[row.request_type] ?? '—'
@@ -192,8 +192,8 @@ function shortTime(value: string) { const date = new Date(value); return date.to
 function clientName(row: LiveRequest) { return row.user_agent?.split(/[ /]/)[0] || '—' }
 async function copyClient(row: LiveRequest) { try { await navigator.clipboard.writeText(`${row.user_agent || '—'}\n${row.ip_address || '—'}`); copied.value = true } catch { copied.value = false } }
 function exportWindow() {
-  const header = ['time', ...(props.mode === 'admin' ? ['user_id', 'key_name'] : []), 'model', 'type', 'group', 'result', 'reason', 'first_byte_ms', 'duration_ms', 'first_token_ms', 'input_tokens', 'output_tokens', 'cache_read_tokens', 'cache_creation_tokens', 'actual_cost', 'user_agent', 'ip_address']
-  const body = filteredRows.value.map(row => [row.started_at, ...(props.mode === 'admin' ? [row.user_id, row.key_name] : []), row.model, row.request_type, row.group_name, row.status, row.reason, row.first_byte_ms, row.duration_ms, row.first_token_ms, row.input_tokens, row.output_tokens, row.cache_read_tokens, row.cache_creation_tokens, row.actual_cost, row.user_agent, row.ip_address])
+  const header = ['time', ...(props.mode === 'admin' ? ['user_id', 'user_email', 'key_name'] : []), 'model', 'type', 'group', 'result', 'reason', 'first_byte_ms', 'duration_ms', 'first_token_ms', 'input_tokens', 'output_tokens', 'cache_read_tokens', 'cache_creation_tokens', 'actual_cost', 'user_agent', 'ip_address']
+  const body = filteredRows.value.map(row => [row.started_at, ...(props.mode === 'admin' ? [row.user_id, row.user_email, row.key_name] : []), row.model, row.request_type, row.group_name, row.status, row.reason, row.first_byte_ms, row.duration_ms, row.first_token_ms, row.input_tokens, row.output_tokens, row.cache_read_tokens, row.cache_creation_tokens, row.actual_cost, row.user_agent, row.ip_address])
   const url = URL.createObjectURL(new Blob(['\uFEFF' + [header, ...body].map(row => row.map(liveCSVValue).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8;' }))
   const link = document.createElement('a'); link.href = url; link.download = `requests-window-${Date.now()}.csv`; link.click(); URL.revokeObjectURL(url)
 }

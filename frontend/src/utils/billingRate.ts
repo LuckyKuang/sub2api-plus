@@ -5,6 +5,8 @@ import type { SaleModelCatalog } from '@/types/billingRate'
 
 export function cloneBillingRatePolicy(value?: BillingRatePolicy | null): BillingRatePolicy {
   return {
+    ...(value?.long_context_platforms ? { long_context_platforms: { ...value.long_context_platforms } } : {}),
+    ...(value?.long_context_models ? { long_context_models: value.long_context_models.map(row => ({ ...row })) } : {}),
     platform_multipliers: { ...value?.platform_multipliers },
     model_multipliers: (value?.model_multipliers ?? []).map(row => ({ ...row })),
   }

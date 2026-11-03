@@ -16,6 +16,7 @@ type LiveRequest struct {
 	ID                   string     `json:"id"`
 	Version              int64      `json:"version"`
 	UserID               int64      `json:"user_id"`
+	UserEmail            string     `json:"user_email,omitempty"` // Enriched only by the administrator handler.
 	APIKeyID             int64      `json:"api_key_id"`
 	KeyName              string     `json:"key_name"`
 	GroupName            string     `json:"group_name,omitempty"`

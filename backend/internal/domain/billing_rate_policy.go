@@ -11,8 +11,10 @@ import (
 // BillingRatePolicy changes customer charges, never upstream account costs.
 // Platform and model factors multiply independently; an absent factor is one.
 type BillingRatePolicy struct {
-	PlatformMultipliers map[string]float64 `json:"platform_multipliers"`
-	ModelMultipliers    []BillingModelRate `json:"model_multipliers"`
+	PlatformMultipliers  map[string]float64     `json:"platform_multipliers"`
+	ModelMultipliers     []BillingModelRate     `json:"model_multipliers"`
+	LongContextPlatforms map[string]int         `json:"long_context_platforms,omitempty"`
+	LongContextModels    []LongContextModelRule `json:"long_context_models,omitempty"`
 }
 
 type BillingModelRate struct {
@@ -33,7 +35,11 @@ type BillingRateMatch struct {
 const MaxBillingRateMultiplier = 999999.9999
 
 func (p BillingRatePolicy) Clone() BillingRatePolicy {
-	return BillingRatePolicy{PlatformMultipliers: maps.Clone(p.PlatformMultipliers), ModelMultipliers: append([]BillingModelRate(nil), p.ModelMultipliers...)}
+	copy := BillingRatePolicy{PlatformMultipliers: maps.Clone(p.PlatformMultipliers), ModelMultipliers: append([]BillingModelRate(nil), p.ModelMultipliers...), LongContextPlatforms: maps.Clone(p.LongContextPlatforms)}
+	for _, rule := range p.LongContextModels {
+		copy.LongContextModels = append(copy.LongContextModels, rule.Clone())
+	}
+	return copy
 }
 
 func ValidBillingRateUnit(unit string) bool {
@@ -50,6 +56,9 @@ func validBillingRate(v float64) bool {
 }
 
 func (p BillingRatePolicy) Validate() error {
+	if err := p.ValidateLongContext(); err != nil {
+		return err
+	}
 	if len(p.ModelMultipliers) > 256 {
 		return fmt.Errorf("billing rate policy supports at most 256 model rules")
 	}

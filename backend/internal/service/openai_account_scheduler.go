@@ -1982,6 +1982,9 @@ func (s *defaultOpenAIAccountScheduler) isAccountRequestCompatibleReason(ctx con
 	if account == nil {
 		return false, "account_nil", nil
 	}
+	if !compositeNativeAccountAllowed(ctx, account, req.RequestedModel) {
+		return false, "native_endpoint_unsupported", nil
+	}
 	if !providerFilesAccountCandidateAllowed(ctx, account) {
 		return false, "file_owner_mismatch", nil
 	}

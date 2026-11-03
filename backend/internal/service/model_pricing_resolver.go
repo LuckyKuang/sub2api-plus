@@ -43,6 +43,9 @@ type ResolvedPricing struct {
 	channelPricing *ChannelModelPricing
 
 	longContextPricingEnabled bool
+	longContextRuleExplicit   bool
+	longContextCustomPrices   bool
+	longContextPricingError   error
 }
 
 // ModelPricingResolver 统一模型定价解析器。
@@ -70,7 +73,7 @@ type PricingInput struct {
 // Resolve 解析模型定价。
 // 1. 获取基础定价（LiteLLM → Fallback）
 // 2. 如果指定了 GroupID，查找渠道定价并覆盖
-func (r *ModelPricingResolver) Resolve(ctx context.Context, input PricingInput) *ResolvedPricing {
+func (r *ModelPricingResolver) Resolve(ctx context.Context, input PricingInput) (result *ResolvedPricing) {
 	if snapshot := BillingPricingSnapshotFromContext(ctx); snapshot != nil {
 		if snapshot.resolver != nil && r != snapshot.resolver {
 			return snapshot.resolver.Resolve(ctx, input)
@@ -79,7 +82,14 @@ func (r *ModelPricingResolver) Resolve(ctx context.Context, input PricingInput) 
 			input.Group = snapshot.group
 		}
 	}
-	longContextPricingEnabled := input.Group == nil || input.Group.LongContextPricingEnabled
+	longContextPricingEnabled := input.Group == nil || input.Group.Platform == PlatformComposite || input.Group.LongContextPricingEnabled
+	defer func() {
+		policyInput := input
+		if publicModel, ok := RequestedPublicModelFromContext(ctx); ok {
+			policyInput.Model = publicModel
+		}
+		r.applyLongContextPolicy(result, policyInput, requestBillingPlatform(ctx, input.Group, ""))
+	}()
 	resolved := r.resolveLowerPricing(ctx, input)
 	if groupPricing := matchGroupModelPricingForPlatform(input.Group, input.Model, requestBillingPlatform(ctx, input.Group, "")); groupPricing != nil {
 		// An empty editor card is not a zero-price declaration or a change of
@@ -93,13 +103,6 @@ func (r *ModelPricingResolver) Resolve(ctx context.Context, input PricingInput) 
 		}
 		if groupPricing.BillingMode == resolved.Mode && resolved.channelPricing != nil {
 			groupPricing = overlayModelPricing(resolved.channelPricing, groupPricing)
-		}
-		// Group token cards only override the first-tier / flat rates.
-		// Long-context ladders come from official presets, gated by the checkbox.
-		if groupPricing.BillingMode == "" || groupPricing.BillingMode == BillingModeToken {
-			stripped := groupPricing.Clone()
-			stripped.Intervals = nil
-			groupPricing = &stripped
 		}
 		resolved := r.resolveConfiguredPricingForRequest(ctx, input, groupPricing, PricingSourceGroup)
 		resolved.longContextPricingEnabled = longContextPricingEnabled

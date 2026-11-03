@@ -575,7 +575,9 @@ export default {
     usage: {
       serviceTier: 'Service tier',
       inboundUserAgent: 'Inbound User-Agent',
-      outbound: 'Outbound evidence',
+      outbound: 'Ingress / egress evidence',
+      inboundEvidence: 'Ingress',
+      outboundEvidence: 'Egress',
       outboundTransport: { unknown: 'Not recorded', native: 'Native', codex_cli_bridge: 'Official CLI bridge', codex_cli_task: 'Official CLI task' },
       outboundProcess: 'CLI process started; final network request not observed',
       outboundDispatch: 'Dispatched by gateway; provider execution not guaranteed',

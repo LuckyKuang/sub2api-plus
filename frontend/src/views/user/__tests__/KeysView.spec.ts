@@ -9,6 +9,7 @@ import { getKeyQuotes } from '@/api/channels'
 import { group as catalogGroup, offer as catalogOffer, pricing as catalogPricing, rateQuote } from '@/components/channels/__tests__/catalogFixtures'
 import PlanModelCatalog from '@/components/payment/PlanModelCatalog.vue'
 import KeysView from '../KeysView.vue'
+import NativeAccessFields from '@/components/keys/NativeAccessFields.vue'
 import en from '@/i18n/locales/en'
 import zh from '@/i18n/locales/zh'
 import { notifyLocaleChanged } from '@/utils/localeRefresh'
@@ -86,6 +87,8 @@ vi.mock('@/api', () => ({
     getUserGroupRates,
   },
 }))
+
+vi.mock('@/api/client', () => ({ apiClient: { get: vi.fn(async () => ({ data: { endpoints: ['/v1/responses'], conversion_endpoints: ['/v1/responses'], models: [{ name: 'public-model', platform: 'openai', endpoints: ['/v1/responses'], conversion_endpoints: ['/v1/responses'] }] } })) } }))
 
 vi.mock('@/api/channels', () => ({ getKeyQuotes: vi.fn(async () => ({ groups: [], user_rate_status: 'loaded' })) }))
 
@@ -666,6 +669,34 @@ describe('user KeysView column settings', () => {
 
     beforeEach(() => {
       getAvailableGroups.mockResolvedValue(availableGroups)
+    })
+
+    it('persists Composite native defaults and only saves conversion after explicit opt-in', async () => {
+      const wrapper = await openCreate()
+      await wrapper.get('[data-tour="key-form-name"]').setValue('Composite key')
+      await chooseProvider(wrapper, 'other')
+      groupSelect(wrapper).vm.$emit('update:modelValue', 10)
+      await flushPromises()
+      const fields = wrapper.getComponent(NativeAccessFields)
+      expect(fields.props('conversionEnabled')).toBe(false)
+      vi.mocked(keysAPI.create).mockResolvedValue({ ...createApiKey(), group_id: 10 })
+      await wrapper.get('#key-form').trigger('submit')
+      await flushPromises()
+      expect(vi.mocked(keysAPI.create).mock.calls.at(-1)?.[8]).toEqual({ conversion_enabled: false, default_client: '', default_endpoint: '' })
+      listKeys.mockResolvedValue({ items: [{ ...createApiKey(), group_id: 10, group: availableGroups[9], default_client: 'codex', default_endpoint: '/v1/responses' }], total: 1, page: 1, page_size: 20, pages: 1 })
+      await wrapper.get('button[title="Refresh"]').trigger('click')
+      await flushPromises()
+      await getButtonByText(wrapper, 'common.edit').trigger('click')
+      const edited = wrapper.getComponent(NativeAccessFields)
+      expect(edited.props('conversionEnabled')).toBe(false)
+      edited.vm.$emit('update:conversionEnabled', true)
+      edited.vm.$emit('update:client', 'codex')
+      edited.vm.$emit('update:endpoint', '/v1/responses')
+      await nextTick()
+      await wrapper.get('#key-form').trigger('submit')
+      await flushPromises()
+      expect(updateKey).toHaveBeenCalledWith(1, expect.objectContaining({ conversion_enabled: true, default_client: 'codex', default_endpoint: '/v1/responses' }))
+      wrapper.unmount()
     })
 
     it('shows supplier and model quote details for the selected mixed group and on editing a key', async () => {

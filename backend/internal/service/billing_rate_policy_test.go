@@ -55,6 +55,8 @@ func TestBillingRateQuoteCustomerPrecedenceAndMediaUnits(t *testing.T) {
 
 func TestBillingPricingSnapshotPinsCatalogGroupPersonalAndPublicIdentity(t *testing.T) {
 	group := billingPolicyTestGroup()
+	// Isolate the pinned rate factors from Composite's inherited model ladder.
+	group.BillingRatePolicy.LongContextPlatforms = map[string]int{PlatformOpenAI: 0}
 	group.ModelPricing = []ChannelModelPricing{{Platform: PlatformOpenAI, Models: []string{"upstream-model"}, BillingMode: BillingModeToken, InputPrice: billingFloat(2e-6), OutputPrice: billingFloat(4e-6)}}
 	group.AccountGroups = []AccountGroup{{Account: &Account{Credentials: map[string]any{"access_token": "DO-NOT-EXPORT"}}}}
 	prices := &PricingService{pricingData: map[string]*LiteLLMModelPricing{"catalog-model": {InputCostPerToken: 2e-6, OutputCostPerToken: 4e-6}}}

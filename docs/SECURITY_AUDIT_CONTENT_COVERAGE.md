@@ -933,3 +933,28 @@ and performs no routing, credential acquisition or extra provider request.
 Managed tasks retain the Standard-only admission checks and existing audit
 before task side effects. Existing real-payload, pass-through and HTTP/WS
 side-effect-order regressions remain required.
+
+### Composite endpoint admission and optional conversion
+
+A Composite key with `conversion_enabled: false` (including legacy saved endpoint
+preferences) accepts only the resolved model/account's native
+ingress protocol. A configured key explicitly opts into one HTTP/SSE Responses,
+Chat or Messages interface and rejects other inference endpoints before side
+effects. Both modes retain the original canonical extraction: protocol conversion
+runs only after both audit gates, account selection and admission. URL/body
+protocol mismatches remain endpoint basic-validation errors. No new extraction
+rules or audit exceptions are introduced by the client/endpoint fields.
+
+Unknown valid-JSON siblings and incomplete structures retain the existing
+pass-through contract; recognized user content remains auditable by both engines.
+Audit failures retain their structured logs and do not become policy violations.
+Native cache/history fields are preserved, while provider-owned continuation IDs
+cannot be silently dropped by a conversion-only route. Unified mode does not
+admit WebSocket or dedicated non-chat protocols through a chat adapter.
+
+`composite_unified_audit_test.go` sends original Responses payloads with unknown
+siblings through the Anthropic/Gemini handler, compares canonical moderation and
+prompt extraction, and proves blocking occurs before account/concurrency/billing
+or adapter writes. Existing HTTP/WS, account-type, provider real-payload and
+side-effect-order suites remain required. `composite_access_policy_test.go`
+covers native/unified admission, cache parity and actual conversion wire traffic.
