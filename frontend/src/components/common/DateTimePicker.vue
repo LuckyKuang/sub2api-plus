@@ -1,5 +1,5 @@
 <template>
-  <div ref="root" :class="['date-time-picker input', $attrs.class, { 'date-time-picker-disabled': disabled }]" :style="$attrs.style">
+  <div ref="root" :class="['date-time-picker input', $attrs.class, { 'date-time-picker-disabled': disabled }]" :style="($attrs.style as StyleValue)">
     <!-- Keep native value, constraint validation and form submission semantics.
          This proxy never opens a browser-owned picker. -->
     <input
@@ -119,7 +119,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
-import type { CSSProperties } from 'vue'
+import type { CSSProperties, StyleValue } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
 import { useDialogFocus } from '@/composables/useDialogFocus'

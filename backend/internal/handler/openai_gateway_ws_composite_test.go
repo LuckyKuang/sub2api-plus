@@ -77,9 +77,11 @@ func TestOpenAIResponsesWebSocket_CompositeRouteRejections(t *testing.T) {
 		repoErr                                 error
 		status                                  coderws.StatusCode
 	}{
-		{name: "disallowed platform", platform: service.PlatformAnthropic, endpoint: "responses", model: "public-alias", reason: "only supports OpenAI-compatible"},
-		{name: "wrong endpoint", platform: service.PlatformOpenAI, endpoint: "messages", model: "public-alias", reason: "only supports OpenAI-compatible"},
-		{name: "unknown alias", platform: service.PlatformOpenAI, endpoint: "responses", model: "unknown-alias", reason: "only supports OpenAI-compatible"},
+		{name: "disallowed platform", platform: service.PlatformAnthropic, endpoint: "responses", model: "public-alias", reason: "Model does not support native Responses access"},
+		// An unresolved route has no target platform, so the failure must name the
+		// routing cause instead of reporting a missing native Responses capability.
+		{name: "wrong endpoint", platform: service.PlatformOpenAI, endpoint: "messages", model: "public-alias", reason: `Composite model "public-alias" has no resolvable route: no explicit route or built-in detector match`},
+		{name: "unknown alias", platform: service.PlatformOpenAI, endpoint: "responses", model: "unknown-alias", reason: `Composite model "unknown-alias" has no resolvable route: no explicit route or built-in detector match`},
 		{name: "resolver error", model: "gpt-5.4", repoErr: errors.New("database unavailable"), reason: "Failed to resolve composite model route", status: coderws.StatusInternalError},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

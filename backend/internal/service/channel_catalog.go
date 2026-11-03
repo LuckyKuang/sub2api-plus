@@ -258,6 +258,7 @@ func (s *ModelPlazaService) catalogOffer(ctx context.Context, g *Group, ch *Chan
 		return o
 	}
 	ctx = WithResolvedTargetPlatform(ctx, model.Platform)
+	ctx = context.WithValue(ctx, ctxkey.RequestedPublicModel, publicModel)
 	channelInput := publicModel
 	if g.Platform == PlatformComposite && model.Name != "" {
 		channelInput = model.Name

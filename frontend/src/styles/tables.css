@@ -1,6 +1,9 @@
 /* Native table layout and zero border-spacing keep virtual row measurements
    accurate. The enclosing card owns the static fill; cells paint only states
-   and outlines inside their padding boxes, including pinned cells. */
+   and outlines inside their padding boxes, including pinned cells.
+   The scroll viewport clips its rows, so it rounds to the card's corner rather
+   than to the shell radius, which would let row paint escape a 14px card
+   corner under a 20px clip. */
 .record-table-scroll {
   border: 0 !important;
   border-inline: 12px solid transparent !important;
@@ -8,6 +11,7 @@
   overflow-x: auto;
   background-color: transparent !important;
   background-image: none !important;
+  border-radius: var(--surface-radius-card);
 }
 
 table.record-table {
@@ -63,15 +67,16 @@ table.record-table {
 
 :root table.record-table > :is(tbody, tfoot):not(.record-group) > tr > :first-child {
   --record-edge-left: inset 1px 0 0 var(--record-row-edge);
-  /* The 4px transparent border leaves a visible 16px inner curve. */
-  border-top-left-radius: 16px 20px !important;
-  border-bottom-left-radius: 16px 20px !important;
+  /* The 4px transparent border leaves a visible inner curve, so the row arc
+     tracks the panel token and the zone container arc minus that border. */
+  border-top-left-radius: var(--surface-radius-panel) calc(var(--surface-radius) - 4px) !important;
+  border-bottom-left-radius: var(--surface-radius-panel) calc(var(--surface-radius) - 4px) !important;
 }
 
 :root table.record-table > :is(tbody, tfoot):not(.record-group) > tr > :last-child {
   --record-edge-right: inset -1px 0 0 var(--record-row-edge);
-  border-top-right-radius: 16px 20px !important;
-  border-bottom-right-radius: 16px 20px !important;
+  border-top-right-radius: var(--surface-radius-panel) calc(var(--surface-radius) - 4px) !important;
+  border-bottom-right-radius: var(--surface-radius-panel) calc(var(--surface-radius) - 4px) !important;
 }
 
 /* Each logical record starts its own edge state, including nested tables. */
@@ -111,10 +116,10 @@ table.record-table > .record-group:is(.table-row-selected, [aria-selected="true"
 :root table.record-table > .record-group > tr:not([aria-hidden="true"]) > [data-record-edges~="r"] { --record-edge-right: inset -1px 0 0 var(--record-row-edge); }
 :root table.record-table > .record-group > tr > [data-record-edges~="t"] { border-top-width: 4px !important; }
 :root table.record-table > .record-group > tr > [data-record-edges~="b"] { border-bottom-width: 4px !important; }
-:root table.record-table > .record-group > tr > [data-record-edges~="tl"] { border-top-left-radius: 16px 20px !important; }
-:root table.record-table > .record-group > tr > [data-record-edges~="tr"] { border-top-right-radius: 16px 20px !important; }
-:root table.record-table > .record-group > tr > [data-record-edges~="bl"] { border-bottom-left-radius: 16px 20px !important; }
-:root table.record-table > .record-group > tr > [data-record-edges~="br"] { border-bottom-right-radius: 16px 20px !important; }
+:root table.record-table > .record-group > tr > [data-record-edges~="tl"] { border-top-left-radius: var(--surface-radius-panel) calc(var(--surface-radius) - 4px) !important; }
+:root table.record-table > .record-group > tr > [data-record-edges~="tr"] { border-top-right-radius: var(--surface-radius-panel) calc(var(--surface-radius) - 4px) !important; }
+:root table.record-table > .record-group > tr > [data-record-edges~="bl"] { border-bottom-left-radius: var(--surface-radius-panel) calc(var(--surface-radius) - 4px) !important; }
+:root table.record-table > .record-group > tr > [data-record-edges~="br"] { border-bottom-right-radius: var(--surface-radius-panel) calc(var(--surface-radius) - 4px) !important; }
 
 /* Short data rows use 10px visible corners in every state. Expanded details
    keep only the business record's outside corners, just like full-size rows. */
@@ -202,7 +207,7 @@ table.record-table .sticky-col::after {
 .dark .table-action-danger { --table-action-ink: #f87171; }
 .table-action-warning { --table-action-accent: 245 158 11; --table-action-ink: #b45309; }
 .dark .table-action-warning { --table-action-ink: #fbbf24; }
-.table-action-neutral { --table-action-accent: 100 116 139; --table-action-ink: var(--surface-text); }
+.table-action-neutral { --table-action-accent: 120 112 102; --table-action-ink: var(--surface-text); }
 .table-action:not(:disabled):not([aria-disabled="true"]):is(:hover, .table-action-active) {
   border-color: rgb(var(--table-action-accent) / 45%);
   background-color: rgb(var(--table-action-accent) / calc(.13 * var(--console-card-alpha, 1)));

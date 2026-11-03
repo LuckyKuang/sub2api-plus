@@ -275,10 +275,10 @@ onMounted(() => {
 .affiliate-guide-top { display: flex; align-items: center; justify-content: space-between; }
 .affiliate-guide-icon { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 12px; background: var(--surface-soft); color: var(--console-accent-readable); }
 .affiliate-guide-step { color: var(--surface-muted); opacity: .65; font: 500 12px/1.5 ui-monospace, monospace; }
-.affiliate-invitees { border-radius: 16px; overflow: hidden; }
+.affiliate-invitees { border-radius: var(--surface-radius); overflow: hidden; }
 .affiliate-invitees-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 20px; }
-.affiliate-invitees-viewport { padding: 0 16px 12px; border-radius: 0 0 16px 16px; }
-.affiliate-pagination { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-width: 0; padding: 14px 20px; border-radius: 16px; }
+.affiliate-invitees-viewport { padding: 0 16px 12px; }
+.affiliate-pagination { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-width: 0; padding: 14px 20px; }
 .affiliate-pagination-info, .affiliate-pagination-actions { display: flex; align-items: center; gap: 16px; min-width: 0; }
 .affiliate-pagination-info { color: var(--surface-muted); font-size: 13px; }
 .affiliate-pagination-actions { gap: 8px; margin-left: auto; }

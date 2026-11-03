@@ -160,7 +160,7 @@
           </button>
           <!-- Platform Tabs (only enabled) -->
           <button
-            v-for="section in form.platforms.filter(s => s.enabled)"
+            v-for="section in form.platforms.filter(s => s.enabled && (!compositeOnly || s.platform === 'composite'))"
             :key="section.platform"
             type="button"
             role="tab"
@@ -277,11 +277,15 @@
           <div
             v-for="(section, sIdx) in form.platforms"
             :key="'tab-' + section.platform"
-            v-show="section.enabled && activeTab === section.platform"
+            v-show="section.enabled && (activeTab === section.platform || (activeTab === 'composite' && section.platform === compositeSupplier))"
             class="space-y-4"
           >
+            <div v-if="section.platform === 'composite'" class="space-y-3">
+              <p class="input-hint">{{ t('nativeAccess.channelHint') }}</p>
+              <label><span class="input-label">{{ t('billingRates.editor.choosePlatform') }}</span><Select :model-value="compositeSupplier" :options="supplierOptions" @update:model-value="selectCompositeSupplier" /></label>
+            </div>
             <!-- Groups -->
-            <div>
+            <div v-if="section.platform === 'composite' || !compositeOnly">
               <label class="input-label text-xs">
                 {{ t('admin.channels.form.groups', 'Associated Groups') }} <span class="text-red-500">*</span>
                 <span v-if="section.group_ids.length > 0" class="ml-1 font-normal surface-muted">
@@ -326,6 +330,7 @@
               </div>
             </div>
 
+            <template v-if="section.platform !== 'composite'">
             <!-- Web Search Emulation (platform whitelist, hidden when global disabled) -->
             <div v-if="WEB_SEARCH_EMULATION_PLATFORMS.has(section.platform) && webSearchGlobalEnabled" class="border-t border-gray-200 pt-3 dark:border-dark-600">
               <div class="flex items-center justify-between gap-4">
@@ -504,7 +509,7 @@
                   <label class="text-xs surface-muted">{{ t('admin.channels.form.ruleGroups') }}</label>
                   <div class="mt-1 flex flex-wrap gap-1">
                     <label
-                      v-for="gid in section.group_ids"
+                      v-for="gid in sectionGroupIds(section)"
                       :key="gid"
                       class="inline-flex cursor-pointer items-center gap-1 rounded-md border px-2 py-1 text-xs transition-colors"
                       :class="rule.group_ids.includes(gid)
@@ -593,6 +598,7 @@
                 </div>
               </div>
             </div>
+            </template>
           </div>
         </form>
       </div>
@@ -785,9 +791,20 @@ let abortController: AbortController | null = null
 
 // ── Platform config ──
 // 平台清单中的全部具体平台（展示顺序）。
-const platformOrder = computed<GroupPlatform[]>(() => listPlatformIds())
-// Composite pricing/mapping may target every concrete schedulable provider.
-const compositePlatforms = platformOrder
+const platformOrder = computed<GroupPlatform[]>(() => ['composite', ...listPlatformIds()])
+const compositeSupplier = ref<GroupPlatform>('openai')
+const compositeSection = computed(() => form.platforms.find(section => section.enabled && section.platform === 'composite'))
+const compositeOnly = computed(() => !!compositeSection.value && !form.platforms.some(section => section.enabled && section.platform !== 'composite' && section.group_ids.length > 0))
+const supplierOptions = computed(() => listPlatformIds().map(value => ({ value, label: catalogPlatformLabel(value) })))
+function selectCompositeSupplier(value: string | number | boolean | null) {
+  if (!value || !listPlatformIds().includes(value as GroupPlatform)) return
+  compositeSupplier.value = value as GroupPlatform
+  if (!form.platforms.some(section => section.platform === value)) addPlatformSection(value as GroupPlatform)
+  else form.platforms.find(section => section.platform === value)!.enabled = true
+}
+function sectionGroupIds(section: PlatformSection): number[] {
+  return [...new Set([...section.group_ids, ...(compositeSection.value?.group_ids ?? [])])]
+}
 
 // ── Helpers ──
 function formatDate(value: string): string {
@@ -823,11 +840,12 @@ function togglePlatform(platform: GroupPlatform) {
   } else {
     addPlatformSection(platform)
   }
+  if (platform === 'composite' && compositeSection.value) selectCompositeSupplier(compositeSupplier.value)
 }
 
 function getGroupsForPlatform(platform: GroupPlatform): AdminGroup[] {
   return allGroups.value.filter(
-    g => g.platform === platform || (g.platform === 'composite' && compositePlatforms.value.includes(platform))
+    g => g.platform === platform
   )
 }
 
@@ -1172,6 +1190,7 @@ function formToAPI(): { group_ids: number[], model_pricing: ChannelModelPricing[
   for (const section of form.platforms) {
     if (!section.enabled) continue
     group_ids.push(...section.group_ids)
+    if (section.platform === 'composite') continue
 
     // Model mapping per platform
     if (Object.keys(section.model_mapping).length > 0) {
@@ -1258,9 +1277,7 @@ function apiToForm(channel: Channel): PlatformSection[] {
   const activePlatforms = new Set<GroupPlatform>()
   for (const gid of channel.group_ids || []) {
     const p = groupPlatformMap.get(gid)
-    if (p === 'composite') {
-      compositePlatforms.value.forEach(platform => activePlatforms.add(platform))
-    } else if (p) {
+    if (p) {
       activePlatforms.add(p)
     }
   }
@@ -1278,8 +1295,7 @@ function apiToForm(channel: Channel): PlatformSection[] {
 
     const groupIds = (channel.group_ids || []).filter(gid => {
       const groupPlatform = groupPlatformMap.get(gid)
-      return groupPlatform === platform ||
-        (groupPlatform === 'composite' && compositePlatforms.value.includes(platform))
+      return groupPlatform === platform
     })
     const mapping = (channel.model_mapping || {})[platform] || {}
     const pricing = (channel.model_pricing || [])
@@ -1424,6 +1440,7 @@ async function openCreateDialog() {
   editingChannel.value = null
   resetForm()
   await Promise.all([loadGroups(), loadAllChannelsForConflict()])
+  if (compositeOnly.value) selectCompositeSupplier(form.platforms.find(section => section.platform !== 'composite')?.platform || 'openai')
   showDialog.value = true
 }
 
@@ -1445,6 +1462,7 @@ async function openEditDialog(channel: Channel) {
   // Populate ruleAccountNameCache for existing rule accounts
   await populateRuleAccountNameCache()
 
+  if (compositeOnly.value) selectCompositeSupplier(form.platforms.find(section => section.platform !== 'composite')?.platform || 'openai')
   showDialog.value = true
 }
 
@@ -1539,7 +1557,7 @@ async function handleSubmit() {
 
   // Check for pricing entries with empty models (would be silently skipped)
   for (const section of form.platforms.filter(s => s.enabled)) {
-    if (section.group_ids.length === 0) {
+    if (section.group_ids.length === 0 && (section.platform === 'composite' || !compositeSection.value?.group_ids.length)) {
       const platformLabel = t('admin.groups.platforms.' + section.platform, catalogPlatformLabel(section.platform))
       appStore.showError(t('admin.channels.noGroupsSelected', { platform: platformLabel }))
       activeTab.value = section.platform

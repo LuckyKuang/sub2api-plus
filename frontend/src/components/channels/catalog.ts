@@ -14,6 +14,7 @@ export interface CatalogUnitPrice {
   incomplete: boolean
 }
 export interface CatalogModel {
+	category?: 'group' | 'composite'
   key: string
   name: string
   platform: CatalogOffer['platform']
@@ -24,7 +25,7 @@ export interface CatalogModel {
 }
 
 export const defaultCatalogFilters = (): CatalogFilters => ({ platform: '', search: '', sort: 'name' })
-export const modelIdentity = (offer: CatalogOffer) => `${offer.platform}\0${offer.name.toLowerCase()}`
+export const modelIdentity = (offer: CatalogOffer, category: 'group' | 'composite' = 'group') => `${category}\0${offer.platform}\0${offer.name.toLowerCase()}`
 export function rateSource(_group: CatalogGroup | undefined, offer: CatalogOffer): 'media' | 'personal' | 'group' {
   return offer.rate_quote?.base_source ?? 'group'
 }
@@ -60,7 +61,7 @@ function priceRange(values: (number | null)[]): CatalogPriceRange | null {
 export function catalogModels(groups: CatalogGroup[]): CatalogModel[] {
   const models = new Map<string, CatalogQuote[]>()
   for (const group of groups) for (const offer of group.models) {
-    const key = modelIdentity(offer)
+    const key = modelIdentity(offer, group.platform === 'composite' ? 'composite' : 'group')
     const quotes = models.get(key) || []
     quotes.push({ group, offer })
     models.set(key, quotes)
@@ -75,7 +76,7 @@ export function catalogModels(groups: CatalogGroup[]): CatalogModel[] {
       const outputs = unit === 'token' ? matching.map(q => quotePrice(q, true)) : []
       return [{ unit, input: priceRange(inputs), output: priceRange(outputs), incomplete: [...inputs, ...outputs].some(p => p === null) }]
     })
-    return { key, name: representative.name, platform: representative.platform, quotes, prices, tiered: coverage(quotes, hasTieredPricing), dynamic: coverage(quotes, hasDynamicPricing) }
+    return { key, category: quotes[0]!.group.platform === 'composite' ? 'composite' : 'group', name: representative.name, platform: representative.platform, quotes, prices, tiered: coverage(quotes, hasTieredPricing), dynamic: coverage(quotes, hasDynamicPricing) }
   })
 }
 

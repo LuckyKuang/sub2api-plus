@@ -132,6 +132,9 @@ func APIKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, subs
 			abortWithGoogleError(c, 403, "API Key 所属专属分组不再允许当前用户使用")
 			return
 		}
+		if !service.BindCompositeAccessPolicy(c, apiKey) {
+			return
+		}
 		ctx := context.WithValue(c.Request.Context(), ctxkey.UserID, apiKey.User.ID)
 		c.Request = c.Request.WithContext(ctx)
 

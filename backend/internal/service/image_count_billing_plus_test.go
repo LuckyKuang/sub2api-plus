@@ -61,6 +61,8 @@ func TestImageCountBillingPlusMixedRequestRetainsTokenCharge(t *testing.T) {
 	ledger := &openAIRecordUsageBillingRepoStub{}
 	svc := newGatewayRecordUsageServiceWithBillingRepoForTest(logs, ledger, &openAIRecordUsageUserRepoStub{}, &openAIRecordUsageSubRepoStub{})
 	group := imageCountPlusGroup()
+	// This scenario prices the base token meter rather than inherited tiers.
+	group.BillingRatePolicy.LongContextPlatforms = map[string]int{PlatformOpenAI: 0}
 	user := &User{ID: 22}
 	key := &APIKey{ID: 11, GroupID: &group.ID, Group: group, User: user, Quota: 100}
 	ctx := svc.WithBillingPricingSnapshot(WithResolvedTargetPlatform(context.Background(), PlatformOpenAI), key, time.Now(), "retail-image")

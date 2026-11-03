@@ -122,8 +122,8 @@ const accentPresets = [
   { color: '#f59e0b', label: 'accentAmber' }
 ] as const
 const previewThemes = [
-  { key: 'light', maskKey: 'light_mask', maskColor: '245 248 247', cardColor: '248 250 249' },
-  { key: 'dark', maskKey: 'dark_mask', maskColor: '15 23 28', cardColor: '38 44 45' }
+  { key: 'light', maskKey: 'light_mask', maskColor: '244 241 237', cardColor: '255 255 255' },
+  { key: 'dark', maskKey: 'dark_mask', maskColor: '28 26 24', cardColor: '41 38 36' }
 ] as const
 
 function normalizeAppearance(value: ConsoleAppearance): ConsoleAppearance {
@@ -249,8 +249,8 @@ onBeforeUnmount(() => { disposed = true; appStore.consoleAppearancePreview = nul
 
 <style scoped>
 .appearance-preview { position: relative; display: grid; min-height: 180px; place-items: center; overflow: hidden; border-radius: 16px; border: 1px solid rgb(148 163 184 / 25%); }
-.appearance-preview-light { color: #16292b; background: radial-gradient(ellipse at 8% 10%, rgb(20 184 166 / 13%), transparent 55%), #e9efee; }
-.appearance-preview-dark { color: #edf6f5; background: radial-gradient(ellipse at 8% 10%, rgb(20 184 166 / 10%), transparent 55%), #191f21; }
+.appearance-preview-light { color: #221f1c; background: radial-gradient(ellipse at 8% 10%, rgb(20 184 166 / 13%), transparent 55%), #f4f1ed; }
+.appearance-preview-dark { color: #f2f0ed; background: radial-gradient(ellipse at 8% 10%, rgb(20 184 166 / 10%), transparent 55%), #1c1a18; }
 .appearance-sample-card { position: relative; width: 76%; padding: 18px; border-radius: 16px; border: 1px solid rgb(148 163 184 / 25%); }
 .appearance-control-card { min-width: 0; padding: 20px; border: 1px solid var(--surface-edge); border-radius: 16px; background: var(--surface-field); }
 .appearance-color-input { width: 48px; height: 42px; padding: 4px; border: 1px solid var(--surface-edge); border-radius: 10px; background: var(--surface-field); cursor: pointer; }

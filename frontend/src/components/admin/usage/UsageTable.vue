@@ -121,6 +121,10 @@
 
         <template #cell-outbound="{ row }">
           <div data-testid="outbound-cell" class="max-w-[320px] space-y-0.5 text-xs">
+            <div class="font-medium">{{ t('admin.usage.inboundEvidence') }}</div>
+            <div class="truncate surface-muted" :title="row.user_agent || undefined">UA: {{ row.user_agent || '—' }}</div>
+            <div v-if="row.inbound_endpoint" class="break-all surface-muted">{{ row.inbound_endpoint }}</div>
+            <div class="pt-1 font-medium">{{ t('admin.usage.outboundEvidence') }}</div>
             <div class="font-medium text-gray-900 dark:text-white">{{ t(`admin.usage.outboundTransport.${row.outbound_transport || 'unknown'}`) }}</div>
             <template v-if="row.outbound_metadata">
               <div class="surface-muted">{{ t(row.outbound_metadata.evidence === 'cli_process' ? 'admin.usage.outboundProcess' : 'admin.usage.outboundDispatch') }}</div>
@@ -131,20 +135,6 @@
               <div v-if="row.outbound_metadata.tier_known" class="surface-muted">{{ t('admin.usage.outboundTier') }} {{ formatRequestedServiceTier(row.outbound_metadata.service_tier || '', t) }}</div>
             </template>
           </div>
-        </template>
-
-        <template #cell-reasoning_effort="{ row }">
-          <div v-if="hasReasoningEffortMapping(row)" data-testid="reasoning-effort-cell" class="space-y-0.5 text-xs">
-            <div class="font-medium text-gray-900 dark:text-white">
-              {{ formatReasoningEffort(row.reasoning_effort) }}
-            </div>
-            <div class="surface-muted">
-              <span class="mr-0.5">↳</span>{{ formatReasoningEffort(row.upstream_reasoning_effort) }}
-            </div>
-          </div>
-          <span v-else data-testid="reasoning-effort-cell" class="text-sm text-gray-900 dark:text-white">
-            {{ formatReasoningEffort(row.reasoning_effort) }}
-          </span>
         </template>
 
         <template #cell-endpoint="{ row }">

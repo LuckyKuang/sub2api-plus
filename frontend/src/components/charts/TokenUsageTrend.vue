@@ -11,9 +11,10 @@
     </div>
     <div
       v-else
-      class="flex h-48 items-center justify-center text-sm surface-muted"
+      class="flex h-48 flex-col items-center justify-center gap-2 surface-muted"
     >
-      {{ t('admin.dashboard.noDataAvailable') }}
+      <Icon name="chart" size="lg" class="opacity-60" />
+      <span class="text-sm">{{ t('admin.dashboard.noDataAvailable') }}</span>
     </div>
   </div>
 </template>
@@ -36,6 +37,7 @@ import {
 } from 'chart.js'
 import { Line } from 'vue-chartjs'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
+import Icon from '@/components/icons/Icon.vue'
 import type { TrendDataPoint } from '@/types'
 import { formatTokenShare, sumTokenBuckets } from '@/utils/tokenShare'
 

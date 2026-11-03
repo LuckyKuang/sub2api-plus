@@ -531,6 +531,9 @@ func (r *userRepository) ListWithFilters(ctx context.Context, params pagination.
 	}
 
 	q := r.client.User.Query()
+	if len(filters.IDs) > 0 {
+		q = q.Where(dbuser.IDIn(filters.IDs...))
+	}
 
 	if filters.Status != "" {
 		q = q.Where(dbuser.StatusEQ(filters.Status))
@@ -612,6 +615,9 @@ func (r *userRepository) ListWithFilters(ctx context.Context, params pagination.
 		userMap[u.ID] = &outUsers[len(outUsers)-1]
 	}
 
+	if filters.IdentityOnly {
+		return outUsers, paginationResultFromTotal(int64(total), params), nil
+	}
 	shouldLoadSubscriptions := filters.IncludeSubscriptions == nil || *filters.IncludeSubscriptions
 	if shouldLoadSubscriptions {
 		// Batch load active subscriptions with groups to avoid N+1.

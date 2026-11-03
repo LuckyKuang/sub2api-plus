@@ -863,3 +863,29 @@ looks up a current catalog to fill missing evidence. Historical snapshots withou
 the switch retain the default disabled behavior. Unknown image prices do not
 become the historical generic image fallback when this switch forces image
 billing.
+
+## Composite channel editing and customer categories
+
+The channel editor includes a separate Composite tab. Bind Composite groups
+there once, then select any registered concrete supplier to edit its model
+prices and mappings. Stored price rows retain the actual supplier ID. A channel
+has one canonical price card per supplier/model; existing channels shared by
+ordinary and Composite groups retain their effective cards and mappings. Use
+separate channels when the two group categories need different prices. A group
+still belongs to at most one channel.
+
+Customer available channels show **Group platforms** and **Composite platforms**
+as separate categories. Each retains its own supplier filter, search and sort.
+A category without visible models is hidden. The same supplier/model in both
+categories has separate quote sets and price ranges. User/support identity
+changes clear both categories' filter state.
+
+Long-context supplier defaults and exact public-model overrides are stored in
+the group's billing policy, including explicit zero and independent high-tier
+cache prices. See [Composite threshold policy](COMPOSITE_GROUPS.md#per-platform-and-per-model-long-context-thresholds).
+
+The group create/edit threshold editor also displays the current numeric
+platform/model presets from `/api/v1/admin/channels/long-context-defaults`.
+Different thresholds in one platform remain visible; missing tiers show 0,
+while explicit group/model overrides retain priority. Displaying inherited
+values never silently stores them as explicit overrides.

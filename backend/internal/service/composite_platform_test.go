@@ -181,6 +181,18 @@ func TestNewGatewayServiceWiresCompositeModelOwnershipResolver(t *testing.T) {
 	require.True(t, decision.Matched)
 	require.Equal(t, CompositeRouteSourceAccount, decision.Source)
 	require.Equal(t, PlatformDeepseek, decision.TargetPlatform)
+
+	// Native capability checks must stay native even with unified conversion
+	// consent. DeepSeek Chat is convertible but cannot carry a Responses ID.
+	repo.accounts[0].Type = AccountTypeAPIKey
+	repo.accounts[0].Credentials["api_protocol"] = APIProtocolChatCompletions
+	ctx := context.WithValue(context.Background(), compositeUnifiedEndpointKey{}, "/v1/responses")
+	allowed, err := resolver.NativeAccessAllowed(ctx, decision, APIProtocolResponses)
+	require.NoError(t, err)
+	require.False(t, allowed)
+	allowed, err = resolver.NativeAccessAllowed(ctx, decision, APIProtocolChatCompletions)
+	require.NoError(t, err)
+	require.True(t, allowed)
 }
 
 func TestDetectModelPlatform(t *testing.T) {

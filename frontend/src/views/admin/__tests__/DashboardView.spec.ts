@@ -134,7 +134,9 @@ describe('admin DashboardView', () => {
     await flushPromises()
     const chart = wrapper.get('[data-testid="model-chart"]').element
     const toolbar = wrapper.get('.dashboard-toolbar').element
-    expect(wrapper.findAll('.dashboard-kpis > .card')).toHaveLength(8)
+    // One hero pulse card plus a uniform supporting grid (was eight equal cards).
+    expect(wrapper.get('.dashboard-hero').exists()).toBe(true)
+    expect(wrapper.findAll('.dashboard-kpi-grid > .card')).toHaveLength(6)
     expect(wrapper.text()).not.toContain('admin.dashboard.quickActions')
     expect(wrapper.get('.dashboard-user-trend').isVisible()).toBe(false)
     await wrapper.get('[role="tablist"] button:nth-child(2)').trigger('click')

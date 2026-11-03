@@ -11,6 +11,9 @@
         </button>
       </div>
       <div class="surface-card workspace-fixed space-y-4 rounded-xl border border-gray-200 p-4 dark:border-dark-700" data-testid="catalog-filters">
+        <div v-if="categories.length" class="segmented-control" role="tablist" :aria-label="t('availableChannels.catalog.category')">
+          <button v-for="item in categories" :key="item" type="button" class="segmented-option" role="tab" :aria-selected="category === item" @click="category = item; selectedKey = null">{{ t(`availableChannels.catalog.${item}Platforms`) }}</button>
+        </div>
         <div class="catalog-platforms flex flex-wrap items-center gap-2">
           <span class="mr-2 text-xs surface-muted">{{ t('modelPlaza.filters.platformLabel') }}</span>
           <div class="segmented-control" role="group" :aria-label="t('modelPlaza.filters.platformLabel')">
@@ -92,23 +95,37 @@ const catalogIdentity = computed(() => {
 const catalogKey = computed(() => catalogIdentity.value === null ? null : JSON.stringify([catalogIdentity.value, getLocale()]))
 const emptyCatalog = (): ChannelCatalog => ({ groups: [], user_rate_status: 'not_requested' })
 const catalog = ref<ChannelCatalog>(emptyCatalog())
-const filters = reactive(defaultCatalogFilters())
+const category = ref<'group' | 'composite'>('group')
+const categoryFilters = reactive({ group: defaultCatalogFilters(), composite: defaultCatalogFilters() })
+const filters = computed(() => categoryFilters[category.value])
 const loading = ref(false)
 const error = ref('')
 const selectedKey = ref<string | null>(null)
 const refreshButton = ref<HTMLButtonElement>()
 let requestId = 0
 let controller: AbortController | undefined
-const models = computed(() => catalogModels(catalog.value.groups))
+const allModels = computed(() => catalogModels(catalog.value.groups))
+const categories = computed(() => (['group', 'composite'] as const).filter(item => allModels.value.some(model => model.category === item)))
+watch(categories, values => { if (!values.includes(category.value) && values[0]) category.value = values[0] }, { flush: 'sync' })
+const models = computed(() => allModels.value.filter(model => model.category === category.value))
 const platforms = computed(() => [...new Set(models.value.map(m => m.platform))].sort())
-const visible = computed(() => visibleModels(models.value, filters))
+const visible = computed(() => visibleModels(models.value, filters.value))
 const selected = computed(() => models.value.find(m => m.key === selectedKey.value) || null)
 function platformCount(platform: string) { return models.value.filter(m => m.platform === platform).length }
-function selectPlatform(platform: string) {
-  filters.platform = platform
-  normalizeCatalogFilters(models.value, filters)
+// Each category owns its filters, so every one must be normalized against its
+// own model list. Normalizing only the active category leaves a platform
+// selected that the inactive category no longer offers, and that category then
+// renders an empty list until it is reset by hand.
+function normalizeAllCategoryFilters() {
+  for (const item of ['group', 'composite'] as const) {
+    normalizeCatalogFilters(allModels.value.filter(model => model.category === item), categoryFilters[item])
+  }
 }
-function reset() { Object.assign(filters, defaultCatalogFilters()) }
+function selectPlatform(platform: string) {
+  filters.value.platform = platform
+  normalizeCatalogFilters(models.value, filters.value)
+}
+function reset() { Object.assign(filters.value, defaultCatalogFilters()) }
 function openDetails(model: CatalogModel) { selectedKey.value = model.key }
 async function loadCatalog(force = false) {
   controller?.abort()
@@ -126,7 +143,7 @@ async function loadCatalog(force = false) {
     if (id !== requestId || catalogKey.value !== key || currentController.signal.aborted) return
     catalog.value = result
     if (!cached) cacheAvailableChannelCatalog(key, result)
-    normalizeCatalogFilters(models.value, filters)
+    normalizeAllCategoryFilters()
   } catch (err) {
     if (id !== requestId || catalogKey.value !== key || currentController.signal.aborted) return
     invalidateAvailableChannelCatalog(key)
@@ -150,7 +167,9 @@ watch(catalogKey, () => {
   if (catalogIdentity.value !== previousIdentity) {
     catalog.value = emptyCatalog()
     selectedKey.value = null
-    reset()
+    Object.assign(categoryFilters.group, defaultCatalogFilters())
+    Object.assign(categoryFilters.composite, defaultCatalogFilters())
+    category.value = 'group'
   }
   previousIdentity = catalogIdentity.value
   loading.value = false

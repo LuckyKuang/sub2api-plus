@@ -8,11 +8,11 @@ export function chartTooltipStyle(isDark: boolean) {
     padding: 12,
     // Reading the shared ref also invalidates each chart's computed options
     // when the saved or previewed appearance changes while it stays mounted.
-    backgroundColor: isDark ? `rgba(38, 44, 45, ${consoleCardAlpha.value})` : `rgba(248, 250, 249, ${consoleCardAlpha.value})`,
-    titleColor: isDark ? '#eaf3f2' : '#182e31',
-    bodyColor: isDark ? '#c1cdd1' : '#52676b',
-    footerColor: isDark ? '#eaf3f2' : '#182e31',
-    borderColor: isDark ? 'rgba(203, 213, 225, 0.28)' : 'rgba(100, 116, 139, 0.34)',
+    backgroundColor: isDark ? `rgba(41, 38, 36, ${consoleCardAlpha.value})` : `rgba(255, 255, 255, ${consoleCardAlpha.value})`,
+    titleColor: isDark ? '#f2f0ed' : '#221f1c',
+    bodyColor: isDark ? '#b8b3ac' : '#635e57',
+    footerColor: isDark ? '#f2f0ed' : '#221f1c',
+    borderColor: isDark ? 'rgba(170, 162, 152, 0.22)' : 'rgba(120, 112, 102, 0.20)',
     borderWidth: 1,
   }
 }

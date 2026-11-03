@@ -12,7 +12,9 @@ test('user content stays centered with natural page scrolling and portal theme',
   test.setTimeout(120_000)
   const theme = info.project.use.colorScheme === 'dark' ? 'dark' : 'light'
   const locale = info.project.use.locale?.startsWith('zh') ? 'zh' : 'en'
-  const cases = [[320, 16], [390, 16], [767, 16], [768, 24], [1023, 24], [1024, 0], [1440, 0], [1920, 0], [3072, 0]] as const
+  // Both consoles share --shell-gutter, so the user client keeps the admin
+  // client's 12/16px screen insets and no longer adds a second one inside them.
+  const cases = [[320, 12], [390, 12], [767, 12], [768, 16], [1023, 16], [1024, 0], [1440, 0], [1920, 0], [3072, 0]] as const
   for (const [width, inset] of cases) {
     await page.setViewportSize({ width, height: 600 })
     await page.goto(`/layout-tests/index.html?view=user-layout&workspace=0&theme=${theme}&locale=${locale}`)
@@ -70,29 +72,31 @@ test('user content stays centered with natural page scrolling and portal theme',
     const panel = page.locator('.select-dropdown-portal')
     await expect(panel).toBeVisible()
     expect(await panel.evaluate(el => el.parentElement === document.body)).toBe(true)
-    expect(await panel.evaluate(el => getComputedStyle(el).getPropertyValue('--surface-text').trim())).toBe(theme === 'dark' ? '#f1f1f3' : '#202124')
+    expect(await panel.evaluate(el => getComputedStyle(el).getPropertyValue('--surface-text').trim())).toBe(theme === 'dark' ? '#f2f0ed' : '#221f1c')
     await page.keyboard.press('Escape')
   }
 })
 
 test('user workspace scrolls rows with the wheel while pagination stays in a separate bottom card', async ({ page }) => {
   // Approved audit applies fixed chrome to every explicitly opted-in user
-  // workspace, including pages without the record-workspace marker.
-  for (const [width, recordWorkspace] of [[3072, 1], [1440, 0]]) {
+  // workspace; the workspace marker is what makes a page a three-zone shell.
+  for (const width of [3072, 1440]) {
     await page.setViewportSize({ width, height: 600 })
-    await page.goto(`/layout-tests/index.html?view=user-layout&recordWorkspace=${recordWorkspace}`)
+    await page.goto(`/layout-tests/index.html?view=user-layout&workspace=1`)
+    await expect(page.locator('.app-layout.app-layout-workspace')).toBeVisible()
     const viewport = page.locator('.workspace-table-viewport')
     const pagination = page.getByTestId('page-pagination')
     await expect(pagination).toBeInViewport()
     const card = await pagination.evaluate(el => ({
       fill: getComputedStyle(el).backgroundColor,
+      // The bottom zone carries the shell page radius, not the card radius.
       radius: parseFloat(getComputedStyle(el).borderRadius),
       border: parseFloat(getComputedStyle(el).borderTopWidth),
       bottom: el.getBoundingClientRect().bottom,
       mainBottom: el.closest('.app-main')!.getBoundingClientRect().bottom,
     }))
     expect(card.fill).not.toBe('rgba(0, 0, 0, 0)')
-    expect(card.radius).toBe(16)
+    expect(card.radius).toBe(24)
     expect(card.border).toBe(1)
     expect(Math.abs(card.bottom - card.mainBottom)).toBeLessThanOrEqual(1)
     const before = await pagination.boundingBox()
@@ -136,7 +140,7 @@ test('real usage records support wheel scrolling and reachable server pagination
   for (const width of [3072, 1440, 390]) {
     await page.setViewportSize({ width, height: 600 })
     await page.goto(`/layout-tests/index.html?view=user-layout&usage=1&theme=${theme}&locale=${locale}`)
-    await expect(page.locator('.app-layout-record-workspace')).toBeVisible({ timeout: 60_000 })
+    await expect(page.locator('.app-layout.app-layout-workspace')).toBeVisible({ timeout: 60_000 })
     const panel = page.getByTestId('usage-records-panel')
     await expect(panel.getByText('audit-model-1', { exact: true })).toBeVisible()
     const metadata = panel.getByTestId('usage-model-metadata').first()

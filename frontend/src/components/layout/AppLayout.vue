@@ -1,5 +1,5 @@
 <template>
-  <div class="app-layout" :class="{ 'sidebar-is-collapsed': sidebarCollapsed, 'app-layout-workspace': workspace, 'app-layout-record-workspace': recordWorkspace, 'app-layout-user': appearance === 'user', 'app-layout-admin': appearance === 'admin' }">
+  <div class="app-layout" :class="{ 'sidebar-is-collapsed': sidebarCollapsed, 'app-layout-workspace': workspace, 'app-layout-user': appearance === 'user', 'app-layout-admin': appearance === 'admin' }">
     <!-- Sidebar -->
     <AppSidebar />
 
@@ -34,9 +34,8 @@ import { USER_TABLE_LAYOUT_KEY } from '@/composables/useUserTableLayout'
 import AppSidebar from './AppSidebar.vue'
 import AppHeader from './AppHeader.vue'
 
-const props = withDefaults(defineProps<{ workspace?: boolean; recordWorkspace?: boolean; appearance?: 'user' | 'admin' }>(), {
+const props = withDefaults(defineProps<{ workspace?: boolean; appearance?: 'user' | 'admin' }>(), {
   workspace: false,
-  recordWorkspace: false,
   appearance: 'admin'
 })
 useProductAppearance()

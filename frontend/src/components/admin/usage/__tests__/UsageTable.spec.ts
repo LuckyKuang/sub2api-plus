@@ -50,7 +50,7 @@ const messages: Record<string, string> = {
   'usage.outputTokenPrice': 'Output price',
   'usage.perMillionTokens': '/ 1M tokens',
   'admin.usage.serviceTierBilling': '计费',
-  'admin.usage.serviceTierDifference': '请求与响应档位不同；需结合出站证据核查',
+  'admin.usage.serviceTierDifference': '请求与响应档位不同；需结合出入站证据核查',
   'admin.usage.outboundTransport.unknown': '未记录',
   'admin.usage.outboundTransport.native': '原生出站',
   'admin.usage.outboundTransport.codex_cli_bridge': '官方 CLI 桥接',
@@ -149,7 +149,6 @@ const DataTableStub = {
       <div v-for="row in data" :key="row.request_id" :data-request-id="row.request_id">
         <slot v-if="columns.some(col => col.key === 'service_tier')" name="cell-service_tier" :row="row" />
         <slot name="cell-model" :row="row" :value="row.model" />
-        <slot name="cell-reasoning_effort" :row="row" :value="row.reasoning_effort" />
         <slot name="cell-billing_mode" :row="row" />
         <slot name="cell-tokens" :row="row" />
         <slot name="cell-cost" :row="row" />
@@ -1082,17 +1081,16 @@ describe('admin UsageTable tooltip', () => {
     expect(text).toContain('claude-sonnet-4-20250514')
   })
 
-  it('shows requested and forwarded reasoning effort separately when they differ', () => {
-    const wrapper = mount(UsageTable, {
+  // Requirement: the reasoning effort lives under the model name in the model
+  // column, matching the user-side layout. The forwarded effort is appended only
+  // when it was actually mapped to a different value.
+  const mountEffortRow = (row: Record<string, unknown>) =>
+    mount(UsageTable, {
       props: {
-        data: [{
-          request_id: 'req-admin-effort-1',
-          model: 'gpt-5.4',
-          reasoning_effort: 'max',
-          upstream_reasoning_effort: 'xhigh',
-        }],
+        data: [{ request_id: 'req-effort', model: 'gpt-5.4', ...row }],
         loading: false,
         columns: [],
+        modelMetadata: true,
       },
       global: {
         stubs: {
@@ -1104,62 +1102,51 @@ describe('admin UsageTable tooltip', () => {
       },
     })
 
-    const text = wrapper.text()
-    expect(text).toContain('Max')
-    expect(text).toContain('XHigh')
-    expect(text).toContain('↳')
+  it('shows requested and forwarded reasoning effort separately when they differ', () => {
+    const metadata = mountEffortRow({
+      reasoning_effort: 'max',
+      upstream_reasoning_effort: 'xhigh',
+    }).get('[data-testid="usage-model-metadata"]')
+
+    expect(metadata.text()).toContain('Max')
+    expect(metadata.text()).toContain('XHigh')
+    expect(metadata.text()).toContain('↳')
   })
 
   it('shows a single reasoning effort when requested matches forwarded', () => {
-    const wrapper = mount(UsageTable, {
-      props: {
-        data: [{
-          request_id: 'req-admin-effort-2',
-          model: 'gpt-5.6-sol',
-          reasoning_effort: 'max',
-        }],
-        loading: false,
-        columns: [],
-      },
-      global: {
-        stubs: {
-          DataTable: DataTableStub,
-          EmptyState: true,
-          Icon: true,
-          Teleport: true,
-        },
-      },
-    })
+    const metadata = mountEffortRow({
+      reasoning_effort: 'max',
+      upstream_reasoning_effort: 'max',
+    }).get('[data-testid="usage-model-metadata"]')
 
-    const text = wrapper.text()
-    expect(text).toContain('Max')
-    expect(text).not.toContain('↳')
+    expect(metadata.text()).toContain('Max')
+    expect(metadata.text()).not.toContain('XHigh')
+    expect(metadata.text()).not.toContain('↳')
   })
 
   it('hides mapped reasoning effort for user rows that only have the requested value', () => {
+    const wrapper = mountEffortRow({ reasoning_effort: 'max' })
+    const metadata = wrapper.get('[data-testid="usage-model-metadata"]')
+
+    expect(metadata.text()).toContain('Max')
+    expect(metadata.text()).not.toContain('XHigh')
+    expect(metadata.text()).not.toContain('↳')
+  })
+
+  it('keeps reasoning effort out of the model column until metadata is enabled', () => {
     const wrapper = mount(UsageTable, {
       props: {
-        data: [{
-          request_id: 'req-user-effort-1',
-          model: 'gpt-5.4',
-          reasoning_effort: 'max',
-        }],
+        data: [{ request_id: 'req-effort-off', model: 'gpt-5.4', reasoning_effort: 'max' }],
         loading: false,
         columns: [],
       },
       global: {
-        stubs: {
-          DataTable: DataTableStub,
-          EmptyState: true,
-          Icon: true,
-          Teleport: true,
-        },
+        stubs: { DataTable: DataTableStub, EmptyState: true, Icon: true, Teleport: true },
       },
     })
 
-    expect(wrapper.text()).toContain('Max')
-    expect(wrapper.text()).not.toContain('XHigh')
-    expect(wrapper.text()).not.toContain('↳')
+    expect(wrapper.find('[data-testid="usage-model-metadata"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('Max')
   })
 
 	it.each([
@@ -1504,7 +1491,6 @@ const DataTableStubWithUser = {
       <div v-for="row in data" :key="row.request_id">
         <slot name="cell-user" :row="row" />
         <slot name="cell-model" :row="row" :value="row.model" />
-        <slot name="cell-reasoning_effort" :row="row" :value="row.reasoning_effort" />
         <slot name="cell-billing_mode" :row="row" />
         <slot name="cell-tokens" :row="row" />
         <slot name="cell-cost" :row="row" />
@@ -1624,7 +1610,7 @@ describe('service tier column', () => {
     const lines = wrapper.get('[data-testid="service-tier-cell"]').findAll('div').map(line => line.text())
     expect(lines).toEqual([
       requestText, responseText, '计费 未记录',
-      ...(requested === 'priority' && response === 'default' ? ['请求与响应档位不同；需结合出站证据核查'] : []),
+      ...(requested === 'priority' && response === 'default' ? ['请求与响应档位不同；需结合出入站证据核查'] : []),
     ])
     wrapper.unmount()
   })
@@ -1652,7 +1638,10 @@ describe('outbound dispatch evidence', () => {
       props: { data: [{ ...baseImageRow, user_agent: 'codex-tui/0.166.0' }], columns: [], loading: false },
       global: { stubs: { DataTable: table, EmptyState: true, Icon: true } },
     })
-    expect(wrapper.get('[data-testid="outbound-cell"]').text()).toBe('未记录')
+    const evidence = wrapper.get('[data-testid="outbound-cell"]').text()
+    expect(evidence).toContain('UA: codex-tui/0.166.0')
+    expect(evidence).toContain('未记录')
+    expect(evidence).not.toMatch(/CLI|codex_cli/)
   })
   it.each(['native', 'codex_cli_bridge', 'codex_cli_task'] as const)('distinguishes %s and its evidence level', (transport) => {
     const process = transport === 'codex_cli_task'

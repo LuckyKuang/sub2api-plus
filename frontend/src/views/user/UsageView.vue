@@ -1,5 +1,5 @@
 <template>
-  <AppLayout appearance="user" workspace record-workspace>
+  <AppLayout appearance="user" workspace>
     <div class="workspace-page usage-workspace">
       <div v-show="activeTab !== 'live'" class="card workspace-fixed usage-date p-4">
         <div class="flex flex-wrap items-center gap-4">

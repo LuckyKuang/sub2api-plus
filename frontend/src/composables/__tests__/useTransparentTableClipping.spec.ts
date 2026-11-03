@@ -172,6 +172,56 @@ describe('transparent table clipping', () => {
     expect(second.middle.style.clipPath).toBe('')
   })
 
+  it('leaves a full-width empty-state row unclipped so its own paint covers every column', async () => {
+    // The empty state is one cell spanning the whole table. Masking it like
+    // scrolling content cut the row's own background away from the pinned
+    // columns and from everything past the visible scrollport, so hovering
+    // the message highlighted only a middle band instead of all columns.
+    const wrapper = document.createElement('div')
+    wrapper.className = 'record-table-scroll'
+    wrapper.innerHTML = `<table class="record-table"><thead><tr>
+      <th class="sticky-col-left">User</th><th class="sticky-col-left">Account</th><th>Model</th><th class="sticky-col-right">Actions</th>
+      </tr></thead><tbody>
+      <tr><td class="sticky-col-left">User</td><td class="sticky-col-left">Account</td><td>Scrolling model text</td><td class="sticky-col-right">Actions</td></tr>
+      <tr><td colspan="4" class="empty-state-cell"><div class="empty-state-fill">No data</div></td></tr>
+      </tbody></table>`
+    document.body.append(wrapper)
+    Object.defineProperties(wrapper, {
+      clientLeft: { value: 12 }, clientTop: { value: 0 },
+      clientWidth: { value: 360 }, clientHeight: { value: 200 },
+    })
+    const table = wrapper.querySelector('table')!
+    const header = table.tHead!
+    const dataRow = table.tBodies[0]!.rows[0]!
+    const emptyCell = table.tBodies[0]!.rows[1]!.cells[0]!
+    rect(wrapper, 100, 100, 400, 200)
+    rect(table, 112, 100, 600, 300)
+    rect(header, 112, 100, 600, 40)
+    rect(header.rows[0]!, 112, 100, 600, 40)
+    rect(dataRow, 112, 150, 600, 50)
+    rect(table.tBodies[0]!.rows[1]!, 112, 210, 600, 120)
+    rect(emptyCell, 112, 210, 600, 120)
+    for (const [index, [x, width]] of [[112, 50], [162, 80], [210, 250], [432, 40]].entries()) {
+      rect(header.rows[0]!.cells[index]!, x, 100, width, 40)
+      rect(dataRow.cells[index]!, x, 150, width, 50)
+    }
+    scope.run(() => useTransparentTableClipping(ref(wrapper), () => true))
+    await nextTick()
+    flushFrames()
+    expect(emptyCell.style.clipPath).toBe('')
+    // Ordinary content keeps its pinned-column mask in both the header and rows.
+    expect(header.rows[0]!.cells[2]!.style.clipPath).toBe('inset(0px 28px 0px 32px)')
+    expect(dataRow.cells[2]!.style.clipPath).toBe('inset(0px 28px 0px 32px)')
+    expect(dataRow.cells[0]!.style.clipPath).toBe('')
+
+    // The exemption is geometric, not a one-frame artifact: a later geometry
+    // pass must not mask the empty-state row once the table overflows.
+    rect(emptyCell, -40, 210, 600, 120)
+    resizeObservers[0]!.notify(wrapper)
+    flushFrames()
+    expect(emptyCell.style.clipPath).toBe('')
+  })
+
   it('rechecks header geometry after resize and keeps fully covered cells invisible', async () => {
     const { wrapper, middle, header } = fixture()
     scope.run(() => useTransparentTableClipping(ref(wrapper), () => true))

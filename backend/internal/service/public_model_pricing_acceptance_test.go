@@ -108,6 +108,8 @@ func TestPublicTokenPriceCombinesPlatformModelPeakAndChannelTimeOnce(t *testing.
 	group := &Group{ID: 77, Platform: PlatformComposite, RateMultiplier: 1, SubscriptionType: SubscriptionTypeSubscription,
 		PeakRateEnabled: true, PeakStart: "10:00", PeakEnd: "11:00", PeakRateMultiplier: 1.5,
 		BillingRatePolicy: domain.BillingRatePolicy{PlatformMultipliers: map[string]float64{PlatformOpenAI: 2}, ModelMultipliers: []domain.BillingModelRate{{Platform: PlatformOpenAI, Model: "model001", Multiplier: 3}}}}
+	// Keep this rate-factor scenario on the explicitly configured base meter.
+	group.BillingRatePolicy.LongContextPlatforms = map[string]int{PlatformOpenAI: 0}
 	card := ChannelModelPricing{Platform: PlatformOpenAI, Models: []string{"model001"}, BillingMode: BillingModeToken,
 		InputPrice: billingFloat(2e-6), OutputPrice: billingFloat(0), TimePricing: &ChannelTimePricing{Timezone: timezone.Name(),
 			Periods: []ChannelTimePricingPeriod{{StartTime: "10:00", EndTime: "11:00", Multiplier: 2}}}}

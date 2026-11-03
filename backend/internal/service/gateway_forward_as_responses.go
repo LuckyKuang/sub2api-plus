@@ -35,6 +35,12 @@ func (s *GatewayService) ForwardAsResponses(
 	body []byte,
 	parsed *ParsedRequest,
 ) (forwardResult *ForwardResult, firstByteResultErr error) {
+	if err := CheckCompositeNativeForward(ctx, c, account, APIProtocolResponses, gjson.GetBytes(body, "model").String()); err != nil {
+		return nil, err
+	}
+	if err := CheckCompositeResponsesContinuation(ctx, c, account, body); err != nil {
+		return nil, err
+	}
 	startTime := time.Now()
 	ctx, byteTiming := beginFirstByteTiming(ctx, startTime)
 	defer func() {

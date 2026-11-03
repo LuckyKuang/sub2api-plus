@@ -137,7 +137,7 @@ func toCatalogGroupWithRateStatus(cg service.CatalogGroup, rates map[int64]float
 			PeakRateEnabled: g.IsSubscriptionType() && g.PeakRateEnabled, PeakStart: g.PeakStart, PeakEnd: g.PeakEnd, PeakRateMultiplier: g.PeakRateMultiplier,
 			ImageRateIndependent: g.ImageRateIndependent, ImageRateMultiplier: g.ImageRateMultiplier,
 			VideoRateIndependent: g.VideoRateIndependent, VideoRateMultiplier: g.VideoRateMultiplier,
-			LongContextPricingEnabled: g.LongContextPricingEnabled,
+			LongContextPricingEnabled: g.LongContextPricingEnabled || g.Platform == service.PlatformComposite || len(g.BillingRatePolicy.LongContextPlatforms) > 0 || len(g.BillingRatePolicy.LongContextModels) > 0,
 		},
 		PeakTimezone: timezone.Name(), Models: make([]catalogOffer, 0, len(cg.Models)), PolicyVersion: g.BillingPolicyVersion, AsOf: asOf,
 	}

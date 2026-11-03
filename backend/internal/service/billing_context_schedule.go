@@ -273,7 +273,9 @@ func (s *BillingService) contextPricingBreakpoints(resolver *ModelPricingResolve
 	if defaultModel := resolvedDefaultPricingModel(resolved, model); defaultModel != "" {
 		policyModel = defaultModel
 	}
-	pricing = s.applyModelSpecificPricingPolicyEx(policyModel, pricing, true, timezone.Now())
+	if !resolved.longContextRuleExplicit {
+		pricing = s.applyModelSpecificPricingPolicyEx(policyModel, pricing, true, timezone.Now())
+	}
 	if pricing.LongContextInputThreshold <= 0 {
 		return plan
 	}

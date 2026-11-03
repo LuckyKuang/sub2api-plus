@@ -75,6 +75,21 @@ func UserID(v int64) predicate.APIKey {
 	return predicate.APIKey(sql.FieldEQ(FieldUserID, v))
 }
 
+// ConversionEnabled applies equality check predicate on the "conversion_enabled" field. It's identical to ConversionEnabledEQ.
+func ConversionEnabled(v bool) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldConversionEnabled, v))
+}
+
+// DefaultClient applies equality check predicate on the "default_client" field. It's identical to DefaultClientEQ.
+func DefaultClient(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldDefaultClient, v))
+}
+
+// DefaultEndpoint applies equality check predicate on the "default_endpoint" field. It's identical to DefaultEndpointEQ.
+func DefaultEndpoint(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldDefaultEndpoint, v))
+}
+
 // Key applies equality check predicate on the "key" field. It's identical to KeyEQ.
 func Key(v string) predicate.APIKey {
 	return predicate.APIKey(sql.FieldEQ(FieldKey, v))
@@ -308,6 +323,146 @@ func UserIDIn(vs ...int64) predicate.APIKey {
 // UserIDNotIn applies the NotIn predicate on the "user_id" field.
 func UserIDNotIn(vs ...int64) predicate.APIKey {
 	return predicate.APIKey(sql.FieldNotIn(FieldUserID, vs...))
+}
+
+// ConversionEnabledEQ applies the EQ predicate on the "conversion_enabled" field.
+func ConversionEnabledEQ(v bool) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldConversionEnabled, v))
+}
+
+// ConversionEnabledNEQ applies the NEQ predicate on the "conversion_enabled" field.
+func ConversionEnabledNEQ(v bool) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNEQ(FieldConversionEnabled, v))
+}
+
+// DefaultClientEQ applies the EQ predicate on the "default_client" field.
+func DefaultClientEQ(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldDefaultClient, v))
+}
+
+// DefaultClientNEQ applies the NEQ predicate on the "default_client" field.
+func DefaultClientNEQ(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNEQ(FieldDefaultClient, v))
+}
+
+// DefaultClientIn applies the In predicate on the "default_client" field.
+func DefaultClientIn(vs ...string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldIn(FieldDefaultClient, vs...))
+}
+
+// DefaultClientNotIn applies the NotIn predicate on the "default_client" field.
+func DefaultClientNotIn(vs ...string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotIn(FieldDefaultClient, vs...))
+}
+
+// DefaultClientGT applies the GT predicate on the "default_client" field.
+func DefaultClientGT(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGT(FieldDefaultClient, v))
+}
+
+// DefaultClientGTE applies the GTE predicate on the "default_client" field.
+func DefaultClientGTE(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGTE(FieldDefaultClient, v))
+}
+
+// DefaultClientLT applies the LT predicate on the "default_client" field.
+func DefaultClientLT(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLT(FieldDefaultClient, v))
+}
+
+// DefaultClientLTE applies the LTE predicate on the "default_client" field.
+func DefaultClientLTE(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLTE(FieldDefaultClient, v))
+}
+
+// DefaultClientContains applies the Contains predicate on the "default_client" field.
+func DefaultClientContains(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldContains(FieldDefaultClient, v))
+}
+
+// DefaultClientHasPrefix applies the HasPrefix predicate on the "default_client" field.
+func DefaultClientHasPrefix(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldHasPrefix(FieldDefaultClient, v))
+}
+
+// DefaultClientHasSuffix applies the HasSuffix predicate on the "default_client" field.
+func DefaultClientHasSuffix(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldHasSuffix(FieldDefaultClient, v))
+}
+
+// DefaultClientEqualFold applies the EqualFold predicate on the "default_client" field.
+func DefaultClientEqualFold(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEqualFold(FieldDefaultClient, v))
+}
+
+// DefaultClientContainsFold applies the ContainsFold predicate on the "default_client" field.
+func DefaultClientContainsFold(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldContainsFold(FieldDefaultClient, v))
+}
+
+// DefaultEndpointEQ applies the EQ predicate on the "default_endpoint" field.
+func DefaultEndpointEQ(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldDefaultEndpoint, v))
+}
+
+// DefaultEndpointNEQ applies the NEQ predicate on the "default_endpoint" field.
+func DefaultEndpointNEQ(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNEQ(FieldDefaultEndpoint, v))
+}
+
+// DefaultEndpointIn applies the In predicate on the "default_endpoint" field.
+func DefaultEndpointIn(vs ...string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldIn(FieldDefaultEndpoint, vs...))
+}
+
+// DefaultEndpointNotIn applies the NotIn predicate on the "default_endpoint" field.
+func DefaultEndpointNotIn(vs ...string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotIn(FieldDefaultEndpoint, vs...))
+}
+
+// DefaultEndpointGT applies the GT predicate on the "default_endpoint" field.
+func DefaultEndpointGT(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGT(FieldDefaultEndpoint, v))
+}
+
+// DefaultEndpointGTE applies the GTE predicate on the "default_endpoint" field.
+func DefaultEndpointGTE(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGTE(FieldDefaultEndpoint, v))
+}
+
+// DefaultEndpointLT applies the LT predicate on the "default_endpoint" field.
+func DefaultEndpointLT(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLT(FieldDefaultEndpoint, v))
+}
+
+// DefaultEndpointLTE applies the LTE predicate on the "default_endpoint" field.
+func DefaultEndpointLTE(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLTE(FieldDefaultEndpoint, v))
+}
+
+// DefaultEndpointContains applies the Contains predicate on the "default_endpoint" field.
+func DefaultEndpointContains(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldContains(FieldDefaultEndpoint, v))
+}
+
+// DefaultEndpointHasPrefix applies the HasPrefix predicate on the "default_endpoint" field.
+func DefaultEndpointHasPrefix(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldHasPrefix(FieldDefaultEndpoint, v))
+}
+
+// DefaultEndpointHasSuffix applies the HasSuffix predicate on the "default_endpoint" field.
+func DefaultEndpointHasSuffix(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldHasSuffix(FieldDefaultEndpoint, v))
+}
+
+// DefaultEndpointEqualFold applies the EqualFold predicate on the "default_endpoint" field.
+func DefaultEndpointEqualFold(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEqualFold(FieldDefaultEndpoint, v))
+}
+
+// DefaultEndpointContainsFold applies the ContainsFold predicate on the "default_endpoint" field.
+func DefaultEndpointContainsFold(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldContainsFold(FieldDefaultEndpoint, v))
 }
 
 // KeyEQ applies the EQ predicate on the "key" field.

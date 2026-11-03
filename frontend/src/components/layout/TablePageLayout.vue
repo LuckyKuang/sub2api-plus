@@ -1,24 +1,24 @@
 <template>
-  <div ref="layoutRef" class="table-page-layout" :class="{ 'mobile-mode': isMobile }" :style="{ '--table-page-height': availableHeight }">
+  <div ref="layoutRef" class="table-page-layout workspace-page" :class="{ 'mobile-mode': isMobile }" :style="{ '--table-page-height': availableHeight }">
     <!-- 固定区域：操作按钮 -->
-    <div v-if="$slots.actions" class="layout-section-fixed">
+    <div v-if="$slots.actions" class="layout-section-fixed workspace-fixed">
       <slot name="actions" />
     </div>
 
     <!-- 固定区域：搜索和过滤器 -->
-    <div v-if="$slots.filters" class="layout-section-fixed">
+    <div v-if="$slots.filters" class="layout-section-fixed workspace-fixed">
       <slot name="filters" />
     </div>
 
     <!-- 滚动区域：表格 -->
-    <div class="layout-section-scrollable">
-      <div class="card table-scroll-container workspace-shell">
+    <div class="layout-section-scrollable workspace-scroll">
+      <div class="card table-scroll-container workspace-shell workspace-table-card">
         <slot name="table" />
       </div>
     </div>
 
     <!-- 固定区域：分页器 -->
-    <div v-if="$slots.pagination" class="layout-section-fixed table-page-pagination">
+    <div v-if="$slots.pagination" class="layout-section-fixed table-page-pagination workspace-fixed">
       <slot name="pagination" />
     </div>
   </div>

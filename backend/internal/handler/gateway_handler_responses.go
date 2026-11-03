@@ -298,7 +298,16 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 		}
 		var result *service.ForwardResult
 		setActualUpstreamEndpoint(c, "")
-		if shouldUseAntigravityCompat(account) {
+		if account.Platform == service.PlatformGemini {
+			if h.geminiCompatService == nil {
+				h.responsesErrorResponse(c, http.StatusBadGateway, "upstream_error", "Gemini compatibility service is not configured")
+				if accountReleaseFunc != nil {
+					accountReleaseFunc()
+				}
+				return
+			}
+			result, err = h.geminiCompatService.ForwardAsResponses(requestCtx, c, account, forwardBody)
+		} else if shouldUseAntigravityCompat(account) {
 			if h.antigravityGatewayService == nil {
 				h.responsesErrorResponse(c, http.StatusBadGateway, "upstream_error", "Antigravity compatibility service is not configured")
 				if accountReleaseFunc != nil {

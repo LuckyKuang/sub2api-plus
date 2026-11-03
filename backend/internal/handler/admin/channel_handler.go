@@ -621,6 +621,15 @@ func (h *ChannelHandler) GetModelDefaultPricing(c *gin.Context) {
 	response.Success(c, reference)
 }
 
+func (h *ChannelHandler) GetLongContextDefaults(c *gin.Context) {
+	defaults, err := h.pricingReferences().LongContextDefaults(c.Request.Context())
+	if err != nil {
+		h.respondPricingReferenceError(c, err)
+		return
+	}
+	response.Success(c, defaults)
+}
+
 // SyncPricingModels 刷新受信任的价格 Release，并返回该平台支持模型及其参考价。
 //
 // 改为 POST 语义：读一次远端 manifest + 校验 + 原子换装不是幂等的 GET，

@@ -2,7 +2,7 @@
   <component :is="auditComponent" v-if="auditComponent" />
   <UsageView v-else-if="usage" />
   <DashboardView v-else-if="dashboard" />
-  <AppLayout v-else :appearance="admin ? 'admin' : 'user'" :workspace="workspace" :record-workspace="recordWorkspace">
+  <AppLayout v-else :appearance="admin ? 'admin' : 'user'" :workspace="workspace">
     <div :class="workspace ? 'workspace-page' : 'space-y-6'">
       <header class="workspace-fixed" data-testid="page-title"><h2 class="text-xl font-semibold">{{ t('nav.apiKeys') }}</h2></header>
       <div class="workspace-fixed flex flex-wrap gap-3" data-testid="page-filter">
@@ -55,7 +55,6 @@ const auditPages = {
 const auditComponent = auditPage && Object.prototype.hasOwnProperty.call(auditPages, auditPage) ? auditPages[auditPage as keyof typeof auditPages] : null
 const dashboard = parameters.get('dashboard') === '1'
 const usage = parameters.get('usage') === '1'
-const recordWorkspace = parameters.get('recordWorkspace') === '1'
 const UsageView = defineAsyncComponent(() => import('../src/views/user/UsageView.vue'))
 const DashboardView = defineAsyncComponent(() => import('../src/views/user/DashboardView.vue'))
 const admin = parameters.get('admin') === '1'

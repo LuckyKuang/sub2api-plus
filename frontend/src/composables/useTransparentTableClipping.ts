@@ -140,7 +140,17 @@ export function useTransparentTableClipping(root: Ref<HTMLElement | null>, enabl
         }
         for (const row of table.rows) {
           if (row.getAttribute('aria-hidden') === 'true') continue
+          // A lone cell spanning the whole row is that row's own paint (an
+          // empty state or a detail panel), not content that scrolls beneath
+          // the pinned columns. Masking it would strip the row's background
+          // from the pinned columns and from everything past the visible
+          // scrollport, so it stays unclipped.
+          const rowPaint = row.cells.length === 1 && row.cells[0]!.colSpan > 1 ? row.cells[0]! : null
           for (const cell of row.cells) {
+            if (cell === rowPaint) {
+              if (state.clips.has(cell)) writes.push(() => restoreCell(state, cell))
+              continue
+            }
             const rect = cell.getBoundingClientRect()
             if (rect.width < 1 || rect.height < 1) continue
             const fixed = cell.classList.contains('sticky-col-left') || cell.classList.contains('sticky-col-right')

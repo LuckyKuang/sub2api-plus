@@ -171,6 +171,16 @@ for (const width of [1440, 2560]) {
     expect(usableBody.height).toBeGreaterThanOrEqual(usableBody.twoRows)
     const frame = page.locator('.affiliate-invitees .static-table-frame')
     expect(await frame.evaluate(element => element.scrollHeight - element.clientHeight)).toBeLessThanOrEqual(1)
+    // The frame owns all four outer corners and shares the zone card's curve,
+    // so scrolling the body never reveals a cut or mismatched corner.
+    const zoneCard = page.locator('.affiliate-invitees')
+    const [frameRadius, zoneRadius, viewportRadius] = await Promise.all([
+      frame.evaluate(element => parseFloat(getComputedStyle(element).borderRadius)),
+      zoneCard.evaluate(element => parseFloat(getComputedStyle(element).borderRadius)),
+      viewport.evaluate(element => parseFloat(getComputedStyle(element).borderRadius)),
+    ])
+    expect(frameRadius).toBe(zoneRadius)
+    expect(viewportRadius).toBe(0)
     const headerBefore = await header.boundingBox()
     await wheelBodyWithoutMovingFooter(page, viewport, footer)
     expect(await header.boundingBox()).toEqual(headerBefore)
@@ -213,7 +223,19 @@ for (const width of [1440, 2560]) {
     expect(cardBoxes[6]!.top).toBeGreaterThan(cardBoxes[3]!.top)
     const headingBox = (await header.boundingBox())!
     expect(Math.abs(cardBoxes[0]!.left - headingBox.x)).toBeLessThanOrEqual(1)
-    expect(Math.abs(cardBoxes[2]!.right - headingBox.x - headingBox.width)).toBeLessThanOrEqual(1)
+    // The scroll viewport widens itself by its scrollbar so the reserved gutter
+    // never shrinks the cards; that re-measure settles a frame after the cards
+    // appear, so wait for it and then compare the settled geometry.
+    await expect.poll(async () => {
+      const heading = (await header.boundingBox())!
+      const rights = await cards.evaluateAll(elements => elements.map(element => element.getBoundingClientRect().right))
+      return Math.abs(rights[2]! - heading.x - heading.width)
+    }).toBeLessThanOrEqual(1)
+    const settled = await cards.evaluateAll(elements => elements.map(el => {
+      const r = el.getBoundingClientRect()
+      return { left: r.left, right: r.right }
+    }))
+    expect(Math.abs(settled[2]!.right - headingBox.x - headingBox.width)).toBeLessThanOrEqual(1)
     const frameBox = (await frame.boundingBox())!
     expect(Math.abs(frameBox.x - headingBox.x)).toBeLessThanOrEqual(1)
     expect(Math.abs(frameBox.width - headingBox.width)).toBeLessThanOrEqual(1)

@@ -190,8 +190,8 @@ func TestCompositeTargetPlatformMiddlewareRewritesNestedLiveModel(t *testing.T) 
 
 // Scenario: 回归 —— openai OAuth 与 deepseek API Key 同时映射 gpt-6-astra 时，
 // 请求必须在路由层被拒绝，不能落到默认 Anthropic handler 后再按模型名猜平台。
-// 仅 API Key 的跨平台歧义保持原行为（放行且不解析平台）。
-func TestCompositeTargetPlatformMiddlewareRejectsOnlyOAuthAmbiguousOwnership(t *testing.T) {
+// Native-only Composite also rejects API-key-only ambiguity instead of guessing a bridge.
+func TestCompositeTargetPlatformMiddlewareRejectsAmbiguousOwnership(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	for _, tc := range []struct {
 		name         string
@@ -199,7 +199,7 @@ func TestCompositeTargetPlatformMiddlewareRejectsOnlyOAuthAmbiguousOwnership(t *
 		wantStatus   int
 	}{
 		{name: "oauth claimant", oauthClaimed: true, wantStatus: http.StatusBadRequest},
-		{name: "apikey only", oauthClaimed: false, wantStatus: http.StatusNoContent},
+		{name: "apikey only", oauthClaimed: false, wantStatus: http.StatusBadRequest},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			resolver := service.NewCompositeRouteResolver(nil)
@@ -362,6 +362,65 @@ func TestCompositeGeminiTargetPlatformMiddlewareUsesPathRoute(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusNoContent, w.Code)
+}
+
+// docs/COMPOSITE_GROUPS.md requires unresolved/ambiguous models to fail before
+// downstream admission on Gemini's native paths as well as the chat endpoints.
+func TestCompositeGeminiRejectsUnresolvedRoutesBeforeDownstream(t *testing.T) {
+	for _, ambiguous := range []bool{false, true} {
+		resolver := service.NewCompositeRouteResolver(nil)
+		resolver.SetModelOwnershipResolver(func(context.Context, int64, string) (service.CompositeModelOwnership, error) {
+			return service.CompositeModelOwnership{Ambiguous: ambiguous}, nil
+		})
+		router := gin.New()
+		router.Use(func(c *gin.Context) {
+			id := int64(1)
+			c.Set(string(servermiddleware.ContextKeyAPIKey), &service.APIKey{GroupID: &id, Group: &service.Group{ID: id, Platform: service.PlatformComposite}})
+			c.Next()
+		})
+		router.Use(compositeGeminiTargetPlatformMiddleware(resolver))
+		calls := 0
+		router.POST("/v1beta/models/*modelAction", func(c *gin.Context) { calls++; c.Status(http.StatusNoContent) })
+		router.POST("/v1beta/cachedContents", func(c *gin.Context) { calls++; c.Status(http.StatusNoContent) })
+		for _, path := range []string{"/v1beta/models/public-alias:generateContent", "/v1beta/cachedContents"} {
+			request := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{"model":"models/public-alias","contents":[]}`))
+			request.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, request)
+			require.Equal(t, http.StatusBadRequest, w.Code)
+			require.Contains(t, w.Body.String(), "composite_model_unresolved")
+			require.Zero(t, calls, "unresolved models cannot enter account selection, billing or forwarding")
+		}
+	}
+}
+
+// Unified Responses may bridge ordinary requests. Provider-owned continuation
+// must pin native Responses through scheduling/failover instead.
+func TestCompositeUnifiedContinuationBindsNativeProtocol(t *testing.T) {
+	for _, continuation := range []bool{false, true} {
+		router := gin.New()
+		router.Use(func(c *gin.Context) {
+			id := int64(1)
+			c.Set(string(servermiddleware.ContextKeyAPIKey), &service.APIKey{GroupID: &id, Group: &service.Group{ID: id, Platform: service.PlatformComposite}, ConversionEnabled: true, DefaultEndpoint: "/v1/responses"})
+			c.Next()
+		})
+		router.Use(compositeTargetPlatformMiddleware(nil))
+		router.POST("/v1/responses", func(c *gin.Context) {
+			want := ""
+			if continuation {
+				want = service.APIProtocolResponses
+			}
+			require.Equal(t, want, service.CompositeNativeProtocol(c.Request.Context()))
+			c.Status(http.StatusNoContent)
+		})
+		body := `{"model":"gpt-5.4","input":"hello"}`
+		if continuation {
+			body = `{"model":"gpt-5.4","input":"next","previous_response_id":"resp_native"}`
+		}
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(body)))
+		require.Equal(t, http.StatusNoContent, w.Code)
+	}
 }
 
 // Live 入口顶层 model 与 session.model 不一致时，合成路由必须按 session.model
@@ -561,5 +620,46 @@ func TestCompositeSeedanceNativeRoutesPreserveModelAndSupplier(t *testing.T) {
 				require.Equal(t, http.StatusNoContent, response.Code)
 			})
 		}
+	}
+}
+
+// Composite endpoint and payload selection is native-only. The downstream
+// handler represents audit/reservation/selection/upstream side effects here:
+// invalid combinations must never enter it.
+func TestCompositeNativeIngressRejectsBridgesAndPreservesNativeBody(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, tc := range []struct {
+		path, body string
+		status     int
+	}{
+		{"/v1/responses", `{"model":"claude-opus-5-5","input":"hello"}`, 400},
+		{"/v1/messages", `{"model":"gpt-6.1-sol","messages":[{"role":"user","content":"hello"}]}`, 400},
+		{"/v1/chat/completions", `{"model":"gpt-6.1-sol","input":"hello"}`, 400},
+		{"/v1/responses", `{"model":"unresolved-public-alias","input":"hello"}`, 400},
+		{"/v1/responses", `{"model":"gpt-6.1-sol","input":[{"role":"user","content":"hello"}],"prompt_cache_key":"keep-me","previous_response_id":"resp_keep"}`, 204},
+		{"/v1/messages", `{"model":"claude-opus-5-5","messages":[{"role":"user","content":[{"type":"text","text":"stable","cache_control":{"type":"ephemeral"}}]}],"max_tokens":100}`, 204},
+	} {
+		t.Run(tc.path+tc.body, func(t *testing.T) {
+			entered := false
+			router := gin.New()
+			router.Use(func(c *gin.Context) {
+				c.Set(string(servermiddleware.ContextKeyAPIKey), &service.APIKey{Group: &service.Group{ID: 1, Platform: service.PlatformComposite}})
+				c.Next()
+			})
+			router.Use(compositeTargetPlatformMiddleware(nil))
+			router.POST(tc.path, func(c *gin.Context) {
+				entered = true
+				b, err := io.ReadAll(c.Request.Body)
+				require.NoError(t, err)
+				require.JSONEq(t, tc.body, string(b))
+				c.Status(204)
+			})
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest("POST", tc.path, strings.NewReader(tc.body))
+			request.Header.Set("Content-Type", "application/json")
+			router.ServeHTTP(recorder, request)
+			require.Equal(t, tc.status, recorder.Code, recorder.Body.String())
+			require.Equal(t, tc.status == 204, entered)
+		})
 	}
 }

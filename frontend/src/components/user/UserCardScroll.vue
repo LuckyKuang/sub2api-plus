@@ -8,7 +8,7 @@
       :role="label ? 'region' : undefined"
       tabindex="0"
     >
-      <div class="user-card-scroll-content"><slot /></div>
+      <div ref="content" class="user-card-scroll-content"><slot /></div>
     </div>
   </div>
 </template>
@@ -18,9 +18,13 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 const props = defineProps<{ label?: string; resetKey?: string | number }>()
 const viewport = ref<HTMLElement | null>(null)
+const content = ref<HTMLElement | null>(null)
 const scrollbarWidth = ref(0)
 let resize: ResizeObserver | undefined
 
+// The viewport is widened by exactly its scrollbar so the reserved gutter never
+// shrinks the content. That gutter only appears once the content overflows, so
+// measuring the viewport alone misses the moment the slotted cards arrive.
 function measureScrollbar() {
   const element = viewport.value
   if (element) scrollbarWidth.value = Math.max(0, element.offsetWidth - element.clientWidth)
@@ -34,6 +38,7 @@ onMounted(() => {
   measureScrollbar()
   resize = new ResizeObserver(measureScrollbar)
   if (viewport.value) resize.observe(viewport.value)
+  if (content.value) resize.observe(content.value)
 })
 onBeforeUnmount(() => resize?.disconnect())
 </script>

@@ -13,6 +13,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/antigravity"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/apicompat"
 	"github.com/gin-gonic/gin"
+	"github.com/tidwall/gjson"
 )
 
 type antigravityCompatProtocol uint8
@@ -59,6 +60,9 @@ func (s *AntigravityGatewayService) ForwardAsChatCompletions(
 	body []byte,
 	_ *ParsedRequest,
 ) (*ForwardResult, error) {
+	if err := CheckCompositeNativeForward(ctx, c, account, APIProtocolChatCompletions, gjson.GetBytes(body, "model").String()); err != nil {
+		return nil, err
+	}
 	if err := s.validateAntigravityCompatAccount(c, account); err != nil {
 		return nil, err
 	}
@@ -106,6 +110,12 @@ func (s *AntigravityGatewayService) ForwardAsResponses(
 	body []byte,
 	_ *ParsedRequest,
 ) (*ForwardResult, error) {
+	if err := CheckCompositeNativeForward(ctx, c, account, APIProtocolResponses, gjson.GetBytes(body, "model").String()); err != nil {
+		return nil, err
+	}
+	if err := CheckCompositeResponsesContinuation(ctx, c, account, body); err != nil {
+		return nil, err
+	}
 	if err := s.validateAntigravityCompatAccount(c, account); err != nil {
 		return nil, err
 	}

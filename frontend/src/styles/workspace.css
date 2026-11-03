@@ -3,7 +3,6 @@
   background-color: transparent;
   background-image: none;
   border: 0;
-  border-radius: 0;
   box-shadow: none;
 }
 
@@ -49,15 +48,23 @@
 .workspace-tab:disabled { opacity: .5; cursor: not-allowed; }
 
 @media (min-width: 1024px) {
+  /* Both consoles read one width token; only the user console opts into a
+     content cap, so the admin console stays full width on ultra-wide screens.
+     Narrow screens keep the shell gutter instead of a proportional inset. */
+  .app-page {
+    width: var(--shell-page-width);
+    max-width: var(--shell-page-max-width, none);
+    margin-inline: auto;
+  }
   .app-layout { height: 100dvh; min-height: 0; grid-template-rows: minmax(0, 1fr); overflow: hidden; }
   .app-content { height: 100%; min-height: 0; }
   /* A sticky inset here would count the shell padding twice. */
   .app-layout .app-header { position: relative; top: auto; flex: none; }
   .app-main { flex: 1; min-height: 0; overflow: auto; border-radius: var(--surface-radius); overscroll-behavior: contain; }
-  .app-layout-workspace .app-main { overflow: hidden; border-radius: 0; }
-  .app-layout-workspace .app-page { display: flex; flex-direction: column; height: 100%; min-height: 0; gap: 12px; }
+  .app-layout-workspace .app-main { overflow: hidden; border-radius: var(--surface-radius); }
+  .app-layout-workspace .app-page { display: flex; flex-direction: column; height: 100%; min-height: 0; gap: var(--shell-zone-gap); }
   .app-layout-workspace .support-banner-spacing { flex: none; margin-bottom: 0; }
-  .workspace-page { display: flex; flex: 1; flex-direction: column; height: 100%; min-width: 0; min-height: 0; gap: 12px !important; }
+  .workspace-page { display: flex; flex: 1; flex-direction: column; height: 100%; min-width: 0; min-height: 0; gap: var(--shell-zone-gap) !important; }
   .workspace-page > * { margin-top: 0 !important; margin-bottom: 0 !important; }
   .workspace-body, .workspace-stack, .workspace-scroll, .workspace-table-card {
     display: flex;
@@ -66,7 +73,7 @@
     min-height: 0;
   }
   .workspace-body, .workspace-scroll, .workspace-table-card { flex: 1 1 0%; }
-  .workspace-body, .workspace-scroll, .workspace-stack { gap: 12px !important; }
+  .workspace-body, .workspace-scroll, .workspace-stack { gap: var(--shell-zone-gap) !important; }
   .workspace-fixed { flex: 0 0 auto; }
   .workspace-scroll { overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-gutter: stable; border-radius: var(--surface-radius); }
   .workspace-scroll > * { flex-shrink: 0; margin-top: 0 !important; margin-bottom: 0 !important; }
@@ -76,13 +83,11 @@
   .workspace-table-viewport {
     flex: 1 1 0%; min-height: 0; min-width: 0; height: auto !important; max-height: none !important;
     overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-gutter: stable;
-    border-radius: var(--surface-radius-panel);
+    border-radius: var(--surface-radius);
   }
   .workspace-table-viewport thead { position: sticky; top: 0; z-index: 12; }
   .workspace-table-card > .pagination-card { flex: none; margin: 0; }
-  .workspace-page .record-table-scroll { border-radius: var(--surface-radius-panel); }
-  .table-scroll-container { border-radius: var(--surface-radius); }
-  .app-layout-workspace .table-page-layout:not(.mobile-mode) { flex: 1; height: 100%; min-height: 0; gap: 12px; }
+  .app-layout-workspace .table-page-layout:not(.mobile-mode) { flex: 1; height: 100%; min-height: 0; gap: var(--shell-zone-gap); }
 }
 
 /* Filter bars own their fill and corners, without an extra page-level frame. */
@@ -98,7 +103,7 @@
     display: flex;
     flex-direction: column;
     min-width: 0;
-    gap: 12px;
+    gap: var(--shell-zone-gap);
   }
   .workspace-page > *, .workspace-body > *, .workspace-scroll > *, .workspace-stack > * {
     margin-top: 0;

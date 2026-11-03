@@ -14,7 +14,7 @@ import (
 	"github.com/dgraph-io/ristretto"
 )
 
-const apiKeyAuthSnapshotVersion = 26 // v26: composite pricing policy plus image-count billing
+const apiKeyAuthSnapshotVersion = 27 // v27: Composite endpoint policy is enforced on cache hits too
 
 type apiKeyAuthCacheConfig struct {
 	l1Size        int
@@ -336,20 +336,23 @@ func (s *APIKeyService) snapshotFromAPIKey(ctx context.Context, apiKey *APIKey) 
 		return nil
 	}
 	snapshot := &APIKeyAuthSnapshot{
-		Version:     apiKeyAuthSnapshotVersion,
-		APIKeyID:    apiKey.ID,
-		UserID:      apiKey.UserID,
-		GroupID:     apiKey.GroupID,
-		Name:        apiKey.Name,
-		Status:      apiKey.Status,
-		IPWhitelist: apiKey.IPWhitelist,
-		IPBlacklist: apiKey.IPBlacklist,
-		Quota:       apiKey.Quota,
-		QuotaUsed:   apiKey.QuotaUsed,
-		ExpiresAt:   apiKey.ExpiresAt,
-		RateLimit5h: apiKey.RateLimit5h,
-		RateLimit1d: apiKey.RateLimit1d,
-		RateLimit7d: apiKey.RateLimit7d,
+		ConversionEnabled: apiKey.ConversionEnabled,
+		DefaultClient:     apiKey.DefaultClient,
+		DefaultEndpoint:   apiKey.DefaultEndpoint,
+		Version:           apiKeyAuthSnapshotVersion,
+		APIKeyID:          apiKey.ID,
+		UserID:            apiKey.UserID,
+		GroupID:           apiKey.GroupID,
+		Name:              apiKey.Name,
+		Status:            apiKey.Status,
+		IPWhitelist:       apiKey.IPWhitelist,
+		IPBlacklist:       apiKey.IPBlacklist,
+		Quota:             apiKey.Quota,
+		QuotaUsed:         apiKey.QuotaUsed,
+		ExpiresAt:         apiKey.ExpiresAt,
+		RateLimit5h:       apiKey.RateLimit5h,
+		RateLimit1d:       apiKey.RateLimit1d,
+		RateLimit7d:       apiKey.RateLimit7d,
 		User: APIKeyAuthUserSnapshot{
 			ID:                         apiKey.User.ID,
 			Status:                     apiKey.User.Status,
@@ -449,20 +452,23 @@ func (s *APIKeyService) snapshotToAPIKey(key string, snapshot *APIKeyAuthSnapsho
 		return nil
 	}
 	apiKey := &APIKey{
-		ID:          snapshot.APIKeyID,
-		UserID:      snapshot.UserID,
-		GroupID:     snapshot.GroupID,
-		Key:         key,
-		Name:        snapshot.Name,
-		Status:      snapshot.Status,
-		IPWhitelist: snapshot.IPWhitelist,
-		IPBlacklist: snapshot.IPBlacklist,
-		Quota:       snapshot.Quota,
-		QuotaUsed:   snapshot.QuotaUsed,
-		ExpiresAt:   snapshot.ExpiresAt,
-		RateLimit5h: snapshot.RateLimit5h,
-		RateLimit1d: snapshot.RateLimit1d,
-		RateLimit7d: snapshot.RateLimit7d,
+		ConversionEnabled: snapshot.ConversionEnabled,
+		DefaultClient:     snapshot.DefaultClient,
+		DefaultEndpoint:   snapshot.DefaultEndpoint,
+		ID:                snapshot.APIKeyID,
+		UserID:            snapshot.UserID,
+		GroupID:           snapshot.GroupID,
+		Key:               key,
+		Name:              snapshot.Name,
+		Status:            snapshot.Status,
+		IPWhitelist:       snapshot.IPWhitelist,
+		IPBlacklist:       snapshot.IPBlacklist,
+		Quota:             snapshot.Quota,
+		QuotaUsed:         snapshot.QuotaUsed,
+		ExpiresAt:         snapshot.ExpiresAt,
+		RateLimit5h:       snapshot.RateLimit5h,
+		RateLimit1d:       snapshot.RateLimit1d,
+		RateLimit7d:       snapshot.RateLimit7d,
 		User: &User{
 			ID:                         snapshot.User.ID,
 			Status:                     snapshot.User.Status,

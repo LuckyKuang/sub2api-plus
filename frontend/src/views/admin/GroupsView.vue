@@ -1476,12 +1476,13 @@
               <Icon name="plus" size="sm" class="mr-1" />{{ t("admin.groups.modelPricing.add") }}
             </button>
           </div>
-          <label class="mt-3 flex items-start gap-2">
+          <LongContextPolicyFields ref="createLongContextRef" v-model="createForm.billing_rate_policy" :platform="createForm.platform" />
+          <label v-if="createForm.platform !== 'composite'" class="mt-3 flex items-start gap-2">
             <input v-model="createForm.long_context_pricing_enabled" type="checkbox" class="mt-0.5" />
             <span><span class="block text-sm surface-muted">{{ t("admin.groups.modelPricing.longContext") }}</span><span class="block text-xs surface-muted">{{ t("admin.groups.modelPricing.longContextHint") }}</span></span>
           </label>
           <div class="mt-3 space-y-2">
-            <PricingEntryCard v-for="(entry, index) in createForm.model_pricing" :key="index" :entry="entry" :platform="createForm.platform === 'composite' ? entry.platform : createForm.platform" :auto-fill-pricing="false" :split-new-models="false" hide-token-intervals @update="updateGroupPricing(createForm, index, $event)" @remove="removeGroupPricing(createForm, index)">
+            <PricingEntryCard v-for="(entry, index) in createForm.model_pricing" :key="index" :entry="entry" :platform="createForm.platform === 'composite' ? entry.platform : createForm.platform" :auto-fill-pricing="false" :split-new-models="false" @update="updateGroupPricing(createForm, index, $event)" @remove="removeGroupPricing(createForm, index)">
               <template #selling-rates><GroupModelRateFields v-model="createForm.billing_rate_policy" :models="entry.models" :platform="createForm.platform === 'composite' ? (entry.platform || 'composite') : createForm.platform" :selectable-platform="createForm.platform === 'composite'" :id-prefix="`create-model-rate-${index}`" @update:platform="entry.platform = $event" @rate-only="createForm.model_pricing.splice(index, 1)" /></template>
             </PricingEntryCard>
             <BillingRatePolicyFields ref="createModelBillingRatePolicyRef" v-model="createForm.billing_rate_policy" :platform="createForm.platform" :show-platforms="false" :card-model-keys="modelRateCardKeys(createForm.model_pricing, createForm.platform)" id-prefix="create-model-billing-rate" />
@@ -3115,12 +3116,13 @@
               <Icon name="plus" size="sm" class="mr-1" />{{ t("admin.groups.modelPricing.add") }}
             </button>
           </div>
-          <label class="mt-3 flex items-start gap-2">
+          <LongContextPolicyFields ref="editLongContextRef" v-model="editForm.billing_rate_policy" :platform="editForm.platform" />
+          <label v-if="editForm.platform !== 'composite'" class="mt-3 flex items-start gap-2">
             <input v-model="editForm.long_context_pricing_enabled" type="checkbox" class="mt-0.5" />
             <span><span class="block text-sm surface-muted">{{ t("admin.groups.modelPricing.longContext") }}</span><span class="block text-xs surface-muted">{{ t("admin.groups.modelPricing.longContextHint") }}</span></span>
           </label>
           <div class="mt-3 space-y-2">
-            <PricingEntryCard v-for="(entry, index) in editForm.model_pricing" :key="index" :entry="entry" :platform="editForm.platform === 'composite' ? entry.platform : editForm.platform" :auto-fill-pricing="false" :split-new-models="false" hide-token-intervals @update="updateGroupPricing(editForm, index, $event)" @remove="removeGroupPricing(editForm, index)">
+            <PricingEntryCard v-for="(entry, index) in editForm.model_pricing" :key="index" :entry="entry" :platform="editForm.platform === 'composite' ? entry.platform : editForm.platform" :auto-fill-pricing="false" :split-new-models="false" @update="updateGroupPricing(editForm, index, $event)" @remove="removeGroupPricing(editForm, index)">
               <template #selling-rates><GroupModelRateFields v-model="editForm.billing_rate_policy" :models="entry.models" :platform="editForm.platform === 'composite' ? (entry.platform || 'composite') : editForm.platform" :selectable-platform="editForm.platform === 'composite'" :id-prefix="`edit-model-rate-${index}`" @update:platform="entry.platform = $event" @rate-only="editForm.model_pricing.splice(index, 1)" /></template>
             </PricingEntryCard>
             <BillingRatePolicyFields ref="editModelBillingRatePolicyRef" v-model="editForm.billing_rate_policy" :platform="editForm.platform" :show-platforms="false" :card-model-keys="modelRateCardKeys(editForm.model_pricing, editForm.platform)" id-prefix="edit-model-billing-rate" />
@@ -4279,6 +4281,7 @@ import { platformLabel } from "@/utils/platformColors";
 import Icon from "@/components/icons/Icon.vue";
 import HelpTooltip from "@/components/common/HelpTooltip.vue";
 import GroupI18nField from "@/components/admin/group/GroupI18nField.vue";
+import LongContextPolicyFields from "@/components/admin/group/LongContextPolicyFields.vue";
 import BillingRatePolicyFields from "@/components/admin/group/BillingRatePolicyFields.vue";
 import GroupModelRateFields from "@/components/admin/group/GroupModelRateFields.vue";
 import { hasGroupPriceOverride, modelRateCardKeys, removeModelCardRates } from "@/components/admin/group/modelRateCards";
@@ -4948,7 +4951,9 @@ const submitEditAllowlistCustomEntry = () => {
   }
 };
 
+const createLongContextRef = ref<InstanceType<typeof LongContextPolicyFields> | null>(null);
 const createBillingRatePolicyRef = ref<InstanceType<typeof BillingRatePolicyFields> | null>(null);
+const editLongContextRef = ref<InstanceType<typeof LongContextPolicyFields> | null>(null);
 const editBillingRatePolicyRef = ref<InstanceType<typeof BillingRatePolicyFields> | null>(null);
 const createModelBillingRatePolicyRef = ref<InstanceType<typeof BillingRatePolicyFields> | null>(null);
 const editModelBillingRatePolicyRef = ref<InstanceType<typeof BillingRatePolicyFields> | null>(null);
@@ -6039,6 +6044,7 @@ const validateProfitControlForm = (form: ProfitControlFormState): boolean => {
 };
 
 const handleCreateGroup = async () => {
+  if (!authStore.isSimpleMode && createLongContextRef.value && !createLongContextRef.value.validate()) return;
   if (!authStore.isSimpleMode && createModelBillingRatePolicyRef.value && !createModelBillingRatePolicyRef.value.validate()) return;
   if (!authStore.isSimpleMode && createBillingRatePolicyRef.value && !createBillingRatePolicyRef.value.validate()) return;
   if (!createForm.name.trim()) {
@@ -6446,6 +6452,7 @@ const closeEditModal = () => {
 };
 
 const handleUpdateGroup = async () => {
+  if (!authStore.isSimpleMode && editLongContextRef.value && !editLongContextRef.value.validate()) return;
   if (!authStore.isSimpleMode && editModelBillingRatePolicyRef.value && !editModelBillingRatePolicyRef.value.validate()) return;
   if (!authStore.isSimpleMode && editBillingRatePolicyRef.value && !editBillingRatePolicyRef.value.validate()) return;
   if (!editingGroup.value) return;

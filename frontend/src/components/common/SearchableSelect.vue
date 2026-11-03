@@ -1,5 +1,5 @@
 <template>
-  <div class="relative" :class="$attrs.class" :style="$attrs.style" ref="containerRef">
+  <div class="relative" :class="$attrs.class" :style="($attrs.style as StyleValue)" ref="containerRef">
     <button
       v-bind="{ ...$attrs, class: undefined, style: undefined }"
       ref="triggerRef"
@@ -129,6 +129,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import type { StyleValue } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
 

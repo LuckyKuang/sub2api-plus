@@ -323,6 +323,9 @@ func allowOpenAICompatibleMessagesDispatch(c *gin.Context, apiKey *service.APIKe
 	if apiKey == nil || apiKey.Group == nil {
 		return true
 	}
+	if c != nil && c.Request != nil && apiKey.Group.Platform == service.PlatformComposite && apiKey.DefaultEndpoint == "/v1/messages" && service.CompositeUnifiedEndpoint(c.Request.Context()) == apiKey.DefaultEndpoint {
+		return true
+	}
 	if apiKey.Group.Platform == service.PlatformGrok {
 		return true
 	}
@@ -2423,7 +2426,19 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, decision.AmbiguousMessage())
 			return
 		}
-		if decision.Matched {
+		// An unresolved route has no target platform, so the capability probe
+		// below would misreport it as a missing native Responses capability.
+		// Report the routing cause instead of the protocol symptom.
+		if !decision.Matched {
+			closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, fmt.Sprintf("Composite model %q has no resolvable route: %s", reqModel, decision.Reason))
+			return
+		}
+		allowed, capabilityErr := h.compositeResolver.NativeAccessAllowed(c.Request.Context(), decision, service.APIProtocolResponses)
+		if capabilityErr != nil || !allowed {
+			closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "Model does not support native Responses access")
+			return
+		}
+		{
 			c.Request = c.Request.WithContext(service.WithCompositeRouteDecision(c.Request.Context(), decision))
 			wsRouteModel = decision.UpstreamModel
 		}

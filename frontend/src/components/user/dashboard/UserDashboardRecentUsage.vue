@@ -13,14 +13,9 @@
       </div>
       <div v-else class="space-y-3">
         <div v-for="log in data" :key="log.id" class="flex flex-wrap items-center justify-between gap-3 rounded-xl surface-inset p-4 transition-colors hover:surface-hover">
-          <div class="flex min-w-0 items-center gap-4">
-            <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-100/[0.15] dark:bg-primary-900/30">
-              <Icon name="beaker" size="md" class="text-primary-600 dark:text-primary-400" />
-            </div>
-            <div class="min-w-0">
-              <p class="truncate text-sm font-medium text-gray-900 dark:text-white" :title="log.model">{{ log.model }}</p>
-              <p class="text-xs surface-muted">{{ formatDateTime(log.created_at) }}</p>
-            </div>
+          <div class="min-w-0">
+            <p class="truncate text-sm font-medium text-gray-900 dark:text-white" :title="log.model">{{ log.model }}</p>
+            <p class="text-xs surface-muted">{{ formatDateTime(log.created_at) }}</p>
           </div>
           <div class="text-right">
             <p class="text-sm font-semibold">

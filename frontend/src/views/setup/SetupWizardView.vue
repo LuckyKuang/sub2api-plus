@@ -3,14 +3,9 @@
     class="flex min-h-screen items-center justify-center bg-canvas p-[var(--shell-gutter)] dark:surface-inset"
   >
     <div class="flex w-full min-w-0 max-w-2xl flex-col gap-[var(--shell-gap)]">
-      <!-- Logo & Title -->
-      <div class="shell-surface px-5 py-6 text-center">
-        <div
-          class="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-primary-500 to-primary-600 shadow-lg"
-        >
-          <Icon name="cog" size="xl" class="text-white" />
-        </div>
-        <h1 class="text-3xl font-bold text-gray-900 dark:text-white">{{ t('setup.title') }}</h1>
+      <!-- Title -->
+      <div class="shell-surface px-5 py-6">
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-white sm:text-3xl">{{ t('setup.title') }}</h1>
         <p class="mt-2 surface-muted">{{ t('setup.description') }}</p>
       </div>
 

@@ -7,6 +7,13 @@
 :where(.surface-control) { border-radius: var(--surface-radius-control); }
 /* Surface roles keep their shape even when older callers carry rounded utilities. */
 :root :is(.card, .glass, .glass-card, .card-glass, .glass-surface, .surface-card, .stat-card, .subscription-plan-card) { border-radius: var(--surface-radius-card); }
+/* Zone containers own the outermost curve; they are never business cards. A
+   container must not take the card radius, or its inner scrollport would
+   carry a larger arc than the box clipping it and the corner gets cut. */
+:root :is(.workspace-page, .workspace-fixed, .workspace-scroll, .workspace-stack,
+  .workspace-table-card, .workspace-shell, .workspace-clip, .table-scroll-container,
+  .layout-section-fixed, .layout-section-scrollable, .pagination-card,
+  .table-page-layout, .app-main, .app-page) { border-radius: var(--surface-radius); }
 :root .settings-tabs-shell { border-radius: var(--surface-radius); }
 :root .surface-panel { border-radius: var(--surface-radius-panel); }
 :root :is(.card, .glass, .glass-card, .card-glass, .glass-surface, .shell-surface,
@@ -36,6 +43,9 @@
   border-bottom: 0 !important;
 }
 @layer utilities {
+  /* Background-only counterpart of .surface-inset, for rows that must not pick
+     up the inset gradient or edge (unread announcement rows, table stripes). */
+  .surface-soft { background-color: var(--surface-soft); }
   .surface-inset { background-color: var(--surface-soft); }
   .surface-field { background-color: var(--surface-field); }
   .surface-muted { color: var(--surface-muted); }

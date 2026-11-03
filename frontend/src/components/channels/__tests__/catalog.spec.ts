@@ -78,7 +78,7 @@ describe('model-centric available catalog', () => {
     expect(catalogModels(groups.slice(1))[0]).toMatchObject({ tiered: 'none', dynamic: 'none' })
   })
   it('filters only models and platforms without trimming the quote set', () => {
-    const models = catalogModels([group(1, [offer('Keep')]), group(2, [offer('keep'), offer('Other', { platform: 'anthropic' })], { platform: 'composite' })])
+    const models = catalogModels([group(1, [offer('Keep')]), group(2, [offer('keep'), offer('Other', { platform: 'anthropic' })])])
     const filters = { ...defaultCatalogFilters(), search: '  kEEp  ' }
     const result = visibleModels(models, filters)
     expect(result).toHaveLength(1)
@@ -94,4 +94,14 @@ describe('model-centric available catalog', () => {
     const models = catalogModels([group(1, [offer('paid'), offer('unknown', { pricing: null, price_status: 'unknown' }), offer('zero', { pricing: pricing(0) }), offer('mixed')]), group(2, [offer('mixed', { billing_unit: 'image', billing_mode: 'image', pricing: { ...pricing(), per_request_price: 0 } })])])
     expect(visibleModels(models, { ...defaultCatalogFilters(), sort: 'price' }).map(m => m.name)).toEqual(['zero', 'paid', 'unknown', 'mixed'])
   })
+})
+
+// User requirement: ordinary and Composite quotes never merge, even for the
+// same supplier/model. Each category retains its own independent price range.
+it('separates Composite and group prices for the same model', () => {
+ const models = catalogModels([group(1, [offer('same', { pricing: pricing(1e-6) })]), group(2, [offer('same', { pricing: pricing(9e-6) })], { platform: 'composite' })])
+ expect(models).toHaveLength(2)
+ expect(models.map(model => model.category).sort()).toEqual(['composite', 'group'])
+ expect(new Set(models.map(model => model.key)).size).toBe(2)
+ expect(models.every(model => model.quotes.length === 1)).toBe(true)
 })

@@ -114,6 +114,9 @@ type APIKeyMutation struct {
 	created_at         *time.Time
 	updated_at         *time.Time
 	deleted_at         *time.Time
+	conversion_enabled *bool
+	default_client     *string
+	default_endpoint   *string
 	key                *string
 	name               *string
 	status             *string
@@ -408,6 +411,114 @@ func (m *APIKeyMutation) OldUserID(ctx context.Context) (v int64, err error) {
 // ResetUserID resets all changes to the "user_id" field.
 func (m *APIKeyMutation) ResetUserID() {
 	m.user = nil
+}
+
+// SetConversionEnabled sets the "conversion_enabled" field.
+func (m *APIKeyMutation) SetConversionEnabled(b bool) {
+	m.conversion_enabled = &b
+}
+
+// ConversionEnabled returns the value of the "conversion_enabled" field in the mutation.
+func (m *APIKeyMutation) ConversionEnabled() (r bool, exists bool) {
+	v := m.conversion_enabled
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldConversionEnabled returns the old "conversion_enabled" field's value of the APIKey entity.
+// If the APIKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyMutation) OldConversionEnabled(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldConversionEnabled is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldConversionEnabled requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldConversionEnabled: %w", err)
+	}
+	return oldValue.ConversionEnabled, nil
+}
+
+// ResetConversionEnabled resets all changes to the "conversion_enabled" field.
+func (m *APIKeyMutation) ResetConversionEnabled() {
+	m.conversion_enabled = nil
+}
+
+// SetDefaultClient sets the "default_client" field.
+func (m *APIKeyMutation) SetDefaultClient(s string) {
+	m.default_client = &s
+}
+
+// DefaultClient returns the value of the "default_client" field in the mutation.
+func (m *APIKeyMutation) DefaultClient() (r string, exists bool) {
+	v := m.default_client
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDefaultClient returns the old "default_client" field's value of the APIKey entity.
+// If the APIKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyMutation) OldDefaultClient(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDefaultClient is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDefaultClient requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDefaultClient: %w", err)
+	}
+	return oldValue.DefaultClient, nil
+}
+
+// ResetDefaultClient resets all changes to the "default_client" field.
+func (m *APIKeyMutation) ResetDefaultClient() {
+	m.default_client = nil
+}
+
+// SetDefaultEndpoint sets the "default_endpoint" field.
+func (m *APIKeyMutation) SetDefaultEndpoint(s string) {
+	m.default_endpoint = &s
+}
+
+// DefaultEndpoint returns the value of the "default_endpoint" field in the mutation.
+func (m *APIKeyMutation) DefaultEndpoint() (r string, exists bool) {
+	v := m.default_endpoint
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDefaultEndpoint returns the old "default_endpoint" field's value of the APIKey entity.
+// If the APIKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyMutation) OldDefaultEndpoint(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDefaultEndpoint is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDefaultEndpoint requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDefaultEndpoint: %w", err)
+	}
+	return oldValue.DefaultEndpoint, nil
+}
+
+// ResetDefaultEndpoint resets all changes to the "default_endpoint" field.
+func (m *APIKeyMutation) ResetDefaultEndpoint() {
+	m.default_endpoint = nil
 }
 
 // SetKey sets the "key" field.
@@ -1532,7 +1643,7 @@ func (m *APIKeyMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *APIKeyMutation) Fields() []string {
-	fields := make([]string, 0, 23)
+	fields := make([]string, 0, 26)
 	if m.created_at != nil {
 		fields = append(fields, apikey.FieldCreatedAt)
 	}
@@ -1544,6 +1655,15 @@ func (m *APIKeyMutation) Fields() []string {
 	}
 	if m.user != nil {
 		fields = append(fields, apikey.FieldUserID)
+	}
+	if m.conversion_enabled != nil {
+		fields = append(fields, apikey.FieldConversionEnabled)
+	}
+	if m.default_client != nil {
+		fields = append(fields, apikey.FieldDefaultClient)
+	}
+	if m.default_endpoint != nil {
+		fields = append(fields, apikey.FieldDefaultEndpoint)
 	}
 	if m.key != nil {
 		fields = append(fields, apikey.FieldKey)
@@ -1618,6 +1738,12 @@ func (m *APIKeyMutation) Field(name string) (ent.Value, bool) {
 		return m.DeletedAt()
 	case apikey.FieldUserID:
 		return m.UserID()
+	case apikey.FieldConversionEnabled:
+		return m.ConversionEnabled()
+	case apikey.FieldDefaultClient:
+		return m.DefaultClient()
+	case apikey.FieldDefaultEndpoint:
+		return m.DefaultEndpoint()
 	case apikey.FieldKey:
 		return m.Key()
 	case apikey.FieldName:
@@ -1673,6 +1799,12 @@ func (m *APIKeyMutation) OldField(ctx context.Context, name string) (ent.Value, 
 		return m.OldDeletedAt(ctx)
 	case apikey.FieldUserID:
 		return m.OldUserID(ctx)
+	case apikey.FieldConversionEnabled:
+		return m.OldConversionEnabled(ctx)
+	case apikey.FieldDefaultClient:
+		return m.OldDefaultClient(ctx)
+	case apikey.FieldDefaultEndpoint:
+		return m.OldDefaultEndpoint(ctx)
 	case apikey.FieldKey:
 		return m.OldKey(ctx)
 	case apikey.FieldName:
@@ -1747,6 +1879,27 @@ func (m *APIKeyMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetUserID(v)
+		return nil
+	case apikey.FieldConversionEnabled:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetConversionEnabled(v)
+		return nil
+	case apikey.FieldDefaultClient:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDefaultClient(v)
+		return nil
+	case apikey.FieldDefaultEndpoint:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDefaultEndpoint(v)
 		return nil
 	case apikey.FieldKey:
 		v, ok := value.(string)
@@ -2097,6 +2250,15 @@ func (m *APIKeyMutation) ResetField(name string) error {
 		return nil
 	case apikey.FieldUserID:
 		m.ResetUserID()
+		return nil
+	case apikey.FieldConversionEnabled:
+		m.ResetConversionEnabled()
+		return nil
+	case apikey.FieldDefaultClient:
+		m.ResetDefaultClient()
+		return nil
+	case apikey.FieldDefaultEndpoint:
+		m.ResetDefaultEndpoint()
 		return nil
 	case apikey.FieldKey:
 		m.ResetKey()

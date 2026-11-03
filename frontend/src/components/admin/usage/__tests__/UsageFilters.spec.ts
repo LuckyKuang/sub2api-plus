@@ -39,6 +39,8 @@ const messages: Record<string, string> = {
 	'admin.usage.upstreamModelMatchedOnly': 'Matched only',
   'admin.usage.group': 'Group',
   'admin.usage.allGroups': 'All Groups',
+  'admin.usage.moreFilters': 'More filters',
+  'admin.usage.fewerFilters': 'Fewer filters',
   'common.refresh': 'Refresh',
   'common.reset': 'Reset',
   'admin.usage.cleanup.button': 'Cleanup',
@@ -143,7 +145,8 @@ describe('UsageFilters — user search dropdown', () => {
     const fields = wrapper.get('.usage-filter-fields').element
     const actions = wrapper.get('.usage-filter-actions').element
     expect(fields.contains(actions)).toBe(false)
-    expect(fields.children).toHaveLength(12)
+    // Primary filters + one collapsible advanced group + the more/fewer toggle.
+    expect(fields.children).toHaveLength(6)
     const input = wrapper.get('input[placeholder="Search user..."]')
     await input.trigger('focus')
     await input.setValue('workspace')
@@ -353,5 +356,69 @@ describe('security audit error filter', () => {
     await wrapper.vm.$nextTick()
     expect((wrapper.props('modelValue') as { error_category?: string }).error_category).toBe('security_audit')
     expect(wrapper.emitted('change')).toHaveLength(1)
+  })
+})
+
+// Requirement: the advanced block is collapsed with v-show, so its filters stay
+// active while invisible. The collapsed toggle must therefore disclose how many
+// advanced filters are applied, and must not count a field the current mode
+// never renders (a stale value would otherwise be reported as a live filter).
+describe('UsageFilters — collapsed advanced filters disclose their count', () => {
+  const mountWith = (filters: Record<string, unknown>, mode: 'usage' | 'errors' = 'usage') =>
+    mount(UsageFilters, {
+      props: {
+        modelValue: { ...defaultFilters(), ...filters } as never,
+        mode,
+        exporting: false,
+        startDate: '2026-10-07',
+        endDate: '2026-10-08',
+        modelOptions: [],
+        showActions: false,
+      },
+      global: { stubs: { Select: true, Teleport: true } },
+    })
+
+  const badge = (wrapper: ReturnType<typeof mountWith>) =>
+    wrapper.find('[data-testid="usage-advanced-filter-count"]')
+
+  it('shows no badge when every advanced filter is at its default', () => {
+    expect(badge(mountWith({})).exists()).toBe(false)
+  })
+
+  it('counts each applied advanced filter in usage mode', () => {
+    const wrapper = mountWith({ request_type: 'stream', billing_mode: 'token', group_id: 7 })
+    expect(badge(wrapper).text()).toBe('3')
+  })
+
+  it('does not count an errors-only field while in usage mode', () => {
+    const wrapper = mountWith({ request_type: 'stream', error_category: 'security_audit' })
+    expect(badge(wrapper).text()).toBe('1')
+  })
+
+  it('counts only the fields the errors mode renders', () => {
+    const wrapper = mountWith(
+      { error_phase: 'upstream', status_code: 429, group_id: 3 },
+      'errors',
+    )
+    expect(badge(wrapper).text()).toBe('3')
+  })
+
+  it('counts a non-default error record view, and stops once expanded', async () => {
+    const wrapper = mount(UsageFilters, {
+      props: {
+        modelValue: defaultFilters() as never,
+        mode: 'errors',
+        errorView: 'all',
+        exporting: false,
+        startDate: '2026-10-07',
+        endDate: '2026-10-08',
+        modelOptions: [],
+        showActions: false,
+      },
+      global: { stubs: { Select: true, Teleport: true } },
+    })
+    expect(badge(wrapper).text()).toBe('1')
+    await wrapper.find('button.usage-filter-more').trigger('click')
+    expect(badge(wrapper).exists()).toBe(false)
   })
 })

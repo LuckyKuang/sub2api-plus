@@ -4,56 +4,67 @@
   --console-control-hover-edge: rgb(var(--console-accent-500, 20 184 166) / 65%);
   --shell-gap: 12px;
   --shell-gutter: 12px;
+  /* One gap separates the three console zones (top / middle / bottom). */
+  --shell-zone-gap: 16px;
+  /* One page width token; the admin console takes it at full width, the user
+     console narrows it and opts into its own cap. */
+  --shell-page-width: 100%;
   --shell-header-height: 64px;
   --shell-inset-top: max(var(--shell-gutter), env(safe-area-inset-top));
   --shell-inset-bottom: max(var(--shell-gutter), env(safe-area-inset-bottom));
   --shell-sticky-offset: calc(var(--shell-inset-top) + var(--shell-header-height) + var(--shell-gap));
+  /* Concentric radius ladder. Every inner curve sits strictly inside its
+     clipping ancestor, so no curve is ever cut mid-arc:
+     L0 shell page + zone container > L1 inset frame / scrollport / dropdown
+     > L2 business card nested in a zone > L3 row / menu item > L4 control.
+     A zone container never takes the card radius. */
   --surface-radius: 20px;
   --surface-radius-card: 14px;
-  --surface-radius-inset: 16px;
   --surface-radius-panel: 16px;
   --surface-radius-control: 9px;
   --surface-radius-item: 10px;
   --surface-fill: var(--surface-solid);
   --surface-shell: var(--surface-solid);
-  --surface-soft: rgb(237 242 240 / var(--console-card-alpha, 1));
+  --surface-soft: rgb(240 237 232 / var(--console-card-alpha, 1));
   --surface-field: var(--surface-solid);
   --surface-panel: var(--surface-solid);
   --surface-sticky: var(--surface-solid);
-  --surface-text: #182e31;
-  --surface-muted: #52676b;
-  --surface-glint: rgb(255 255 255 / calc(.24 * var(--console-card-alpha, 1)));
+  --surface-text: #221f1c;
+  --surface-muted: #635e57;
+  --surface-glint: rgb(255 255 255 / calc(.18 * var(--console-card-alpha, 1)));
   --surface-hover: rgb(var(--console-accent-500, 20 184 166) / calc(.12 * var(--console-card-alpha, 1)));
   --surface-selected: rgb(var(--console-accent-500, 20 184 166) / calc(.18 * var(--console-card-alpha, 1)));
-  --surface-overlay: rgb(14 30 34 / calc(.18 * var(--console-card-alpha, 1)));
-  --surface-solid: rgb(248 250 249 / var(--console-card-alpha, 1));
-  /* Outlines remain visible even when all surface fills are transparent. */
-  --surface-edge: rgb(100 116 139 / 34%);
-  --surface-shadow: 0 12px 36px -20px rgb(33 57 57 / calc(.28 * var(--console-card-alpha, 1))), inset 0 1px 0 rgb(255 255 255 / calc(.8 * var(--console-card-alpha, 1)));
-  --console-canvas: #e9efee;
+  --surface-overlay: rgb(24 20 18 / calc(.18 * var(--console-card-alpha, 1)));
+  --surface-solid: rgb(253 251 248 / var(--console-card-alpha, 1));
+  /* Outlines remain visible even when all surface fills are transparent. The
+     frame is the only separator once card fills sit this close to the canvas,
+     so it keeps enough alpha to read as an edge rather than a stain. */
+  --surface-edge: rgb(120 112 102 / 30%);
+  --surface-shadow: 0 2px 8px -4px rgb(24 24 27 / calc(.1 * var(--console-card-alpha, 1))), inset 0 1px 0 rgb(255 255 255 / calc(.5 * var(--console-card-alpha, 1)));
+  --console-canvas: #f4f1ed;
   --console-glow: rgb(var(--console-accent-500, 20 184 166) / 13%);
   --console-glow-secondary: rgb(125 149 212 / 12%);
-  --console-background-mask: rgb(245 248 247 / var(--console-light-mask-alpha, 0.3));
+  --console-background-mask: rgb(244 241 237 / var(--console-light-mask-alpha, 0.3));
 }
 
 .dark {
   --console-accent-readable: rgb(var(--console-accent-300, 94 234 212));
   --console-control-edge: rgb(var(--console-accent-400, 45 212 191) / 42%);
   --console-control-hover-edge: rgb(var(--console-accent-400, 45 212 191) / 72%);
-  --surface-soft: rgb(32 38 39 / var(--console-card-alpha, 1));
-  --surface-text: #eaf3f2;
-  --surface-muted: #c1cdd1;
-  --surface-glint: rgb(255 255 255 / calc(.07 * var(--console-card-alpha, 1)));
+  --surface-soft: rgb(34 31 29 / var(--console-card-alpha, 1));
+  --surface-text: #f2f0ed;
+  --surface-muted: #b8b3ac;
+  --surface-glint: rgb(255 255 255 / calc(.05 * var(--console-card-alpha, 1)));
   --surface-hover: rgb(var(--console-accent-400, 45 212 191) / calc(.13 * var(--console-card-alpha, 1)));
   --surface-selected: rgb(var(--console-accent-400, 45 212 191) / calc(.20 * var(--console-card-alpha, 1)));
-  --surface-overlay: rgb(4 12 18 / calc(.22 * var(--console-card-alpha, 1)));
-  --surface-solid: rgb(38 44 45 / var(--console-card-alpha, 1));
-  --surface-edge: rgb(203 213 225 / 28%);
-  --surface-shadow: 0 14px 36px -18px rgb(0 0 0 / calc(.55 * var(--console-card-alpha, 1))), inset 0 1px 0 rgb(255 255 255 / calc(.05 * var(--console-card-alpha, 1)));
-  --console-canvas: #191f21;
+  --surface-overlay: rgb(4 3 2 / calc(.22 * var(--console-card-alpha, 1)));
+  --surface-solid: rgb(41 38 36 / var(--console-card-alpha, 1));
+  --surface-edge: rgb(170 162 152 / 30%);
+  --surface-shadow: 0 2px 10px -4px rgb(0 0 0 / calc(.26 * var(--console-card-alpha, 1))), inset 0 1px 0 rgb(255 255 255 / calc(.04 * var(--console-card-alpha, 1)));
+  --console-canvas: #1c1a18;
   --console-glow: rgb(var(--console-accent-500, 20 184 166) / 10%);
   --console-glow-secondary: rgb(103 125 190 / 10%);
-  --console-background-mask: rgb(15 23 28 / var(--console-dark-mask-alpha, 0.48));
+  --console-background-mask: rgb(28 26 24 / var(--console-dark-mask-alpha, 0.48));
 }
 
 .app-layout {
@@ -90,6 +101,9 @@
   flex-direction: column;
   gap: var(--shell-gap);
 }
+/* Below the shell breakpoint the page fills the shell gutter; at and above it
+   workspace.css applies the width token. Keeping the narrow width explicit
+   avoids relying on flex stretching to size the page. */
 .app-main, .app-page { width: 100%; min-width: 0; }
 .app-main { scroll-margin-top: var(--shell-sticky-offset); }
 .support-banner-spacing { margin-bottom: var(--shell-gap); }
@@ -174,6 +188,16 @@
 }
 .sidebar .sidebar-link:focus-visible { outline: 2px solid rgb(var(--console-accent-500, 20 184 166) / 75%); outline-offset: 2px; }
 .sidebar-nav .sidebar-link:active { background-color: rgb(var(--console-accent-500, 20 184 166) / calc(.18 * var(--console-card-alpha, 1))); }
+
+/* Keyboard focus must stay visible across the shell chrome. Nav links
+   (.sidebar-link) and .btn controls already render their own rings; this
+   covers the remaining header controls, the brand links, and the mobile
+   close button, which previously had no visible focus indicator. */
+.app-header :is(a, button):not(.btn):focus-visible,
+.sidebar :is(a, button):not(.btn, .sidebar-link):focus-visible {
+  outline: 2px solid rgb(var(--console-accent-500, 20 184 166) / 75%);
+  outline-offset: 2px;
+}
 
 /* Align a floating page action card with the shell's actual content column. */
 .app-layout { --console-content-left: max(var(--shell-gutter), env(safe-area-inset-left)); }

@@ -759,6 +759,9 @@ export interface CompositeRouteDecision {
 }
 
 export interface ApiKey {
+  conversion_enabled?: boolean
+  default_client?: string
+  default_endpoint?: string
   id: number
   user_id: number
   key: string
@@ -791,6 +794,9 @@ export interface ApiKey {
 }
 
 export interface CreateApiKeyRequest {
+  conversion_enabled?: boolean
+  default_client?: string
+  default_endpoint?: string
   name: string
   group_id?: number | null
   custom_key?: string // Optional custom API Key
@@ -804,6 +810,9 @@ export interface CreateApiKeyRequest {
 }
 
 export interface UpdateApiKeyRequest {
+  conversion_enabled?: boolean
+  default_client?: string
+  default_endpoint?: string
   name?: string
   group_id?: number | null
   status?: 'active' | 'inactive'

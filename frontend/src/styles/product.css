@@ -2,28 +2,28 @@
    Root tokens also reach menus and dialogs portalled directly to body. */
 :root[data-product-ui] {
   --surface-solid: rgb(255 255 255 / var(--console-card-alpha, 1));
-  --surface-soft: rgb(245 245 246 / var(--console-card-alpha, 1));
-  --surface-text: #202124;
-  --surface-muted: #60646c;
-  --surface-edge: rgb(113 113 122 / 25%);
+  --surface-soft: rgb(245 243 240 / var(--console-card-alpha, 1));
+  --surface-text: #221f1c;
+  --surface-muted: #635e57;
+  --surface-edge: rgb(120 112 102 / 30%);
   --surface-glint: transparent;
-  --surface-shadow: 0 2px 5px -2px rgb(24 24 27 / calc(.08 * var(--console-card-alpha, 1)));
-  --console-canvas: #f6f6f7;
+  --surface-shadow: 0 2px 8px -4px rgb(24 24 27 / calc(.1 * var(--console-card-alpha, 1)));
+  --console-canvas: #f4f1ed;
   --console-glow: transparent;
   --console-glow-secondary: transparent;
-  --console-background-mask: rgb(246 246 247 / var(--console-light-mask-alpha, .3));
-  --console-control-edge: rgb(113 113 122 / 40%);
+  --console-background-mask: rgb(244 241 237 / var(--console-light-mask-alpha, .3));
+  --console-control-edge: rgb(120 112 102 / 34%);
 }
 :root.dark[data-product-ui] {
-  --surface-solid: rgb(36 37 40 / var(--console-card-alpha, 1));
-  --surface-soft: rgb(29 30 33 / var(--console-card-alpha, 1));
-  --surface-text: #f1f1f3;
-  --surface-muted: #b4b6be;
-  --surface-edge: rgb(161 161 170 / 28%);
-  --surface-shadow: 0 2px 5px -2px rgb(0 0 0 / calc(.24 * var(--console-card-alpha, 1)));
-  --console-canvas: #191a1d;
-  --console-background-mask: rgb(25 26 29 / var(--console-dark-mask-alpha, .48));
-  --console-control-edge: rgb(161 161 170 / 48%);
+  --surface-solid: rgb(41 38 36 / var(--console-card-alpha, 1));
+  --surface-soft: rgb(34 31 29 / var(--console-card-alpha, 1));
+  --surface-text: #f2f0ed;
+  --surface-muted: #b8b3ac;
+  --surface-edge: rgb(170 162 152 / 30%);
+  --surface-shadow: 0 2px 10px -4px rgb(0 0 0 / calc(.26 * var(--console-card-alpha, 1)));
+  --console-canvas: #1c1a18;
+  --console-background-mask: rgb(28 26 24 / var(--console-dark-mask-alpha, .48));
+  --console-control-edge: rgb(170 162 152 / 42%);
 }
 :root[data-product-ui] body { background-color: var(--console-canvas); }
 :root[data-product-ui] :is(.card, .glass-surface, .shell-surface, .stat-card, .surface-control, .input, .select-trigger, .btn-secondary) {
@@ -31,20 +31,12 @@
 }
 :root[data-product-ui] :is(.surface-control, .input, .select-trigger, .btn-secondary) { box-shadow: none; }
 :root[data-product-ui] :is(.app-header, .sidebar-header, .sidebar-panel, .sidebar-footer) { box-shadow: none; }
-:root[data-product-ui] .surface-panel { box-shadow: 0 10px 32px -12px rgb(0 0 0 / calc(.25 * var(--console-card-alpha, 1))); }
+:root[data-product-ui] .surface-panel { box-shadow: 0 6px 20px -10px rgb(0 0 0 / calc(.22 * var(--console-card-alpha, 1))); }
 
 /* Narrow screens count the floating shell once. Desktop content is centered
-   with proportional whitespace and the Café Shop content-width limit. */
-.app-layout-user {
-  --user-page-inset: 1rem;
-  --user-left-reservation: max(var(--shell-gutter), env(safe-area-inset-left));
-  --user-right-reservation: max(var(--shell-gutter), env(safe-area-inset-right));
-}
-.app-layout-user .app-main {
-  padding-left: max(0px, calc(var(--user-page-inset) - var(--user-left-reservation)));
-  padding-right: max(0px, calc(var(--user-page-inset) - var(--user-right-reservation)));
-  border-radius: 0;
-}
+   with proportional whitespace and the Café Shop content-width limit; the
+   admin console keeps its full-width page. */
+.app-layout-user { --shell-page-width: 94%; --shell-page-max-width: 100rem; }
 .app-layout-user .app-page { color: var(--surface-text); }
 .app-layout-user .card-header { padding: 1rem 1.25rem; }
 .app-layout-user .card-body { padding: 1.25rem; }
@@ -66,16 +58,9 @@
 .auth-brand { min-height: 120px; }
 .auth-card h2 { letter-spacing: -.025em; }
 
-@media (min-width: 768px) {
-  .app-layout-user { --user-page-inset: 1.5rem; }
-}
 @media (min-width: 1024px) {
-  .app-layout-user .app-main { padding-inline: 0; }
-  .app-layout-user .app-page { width: 94%; max-width: 100rem; margin-inline: auto; }
   .app-layout-user.app-layout-workspace .app-main { scrollbar-gutter: auto; }
   .app-layout.app-layout-workspace .app-page { padding-bottom: 0; }
-  .app-layout.app-layout-workspace :is(.app-page, .workspace-page, .workspace-body, .workspace-stack, .workspace-scroll),
-  .app-layout.app-layout-workspace .table-page-layout:not(.mobile-mode) { gap: 16px !important; }
 
   .app-layout-user:not(.app-layout-workspace) .app-main { overflow: auto; scrollbar-gutter: stable; }
   .app-layout-user:not(.app-layout-workspace) .app-page { height: auto; min-height: 0; padding-bottom: 24px; }
@@ -143,27 +128,27 @@
 .app-layout-user .user-record-cards .table-actions { justify-content: flex-start; }
 
 /* Controls and pagination remain visible on their own surfaces while records
-   scroll. These rules never change either console's horizontal page insets. */
+   scroll. These rules never change either console's horizontal page insets, and
+   they deliberately set no radius: the zone container owns that curve. */
 :root .app-layout .app-main .layout-section-fixed > .pagination-card,
 :root .app-layout .app-main .pagination-card {
   flex: none;
   margin: 0;
   border: 1px solid var(--surface-edge) !important;
-  border-radius: 16px;
   background-color: var(--surface-solid);
   box-shadow: var(--surface-shadow) !important;
 }
 
 :root .app-layout.app-layout-workspace .app-main :is(.workspace-shell.card, .workspace-table-card, .workspace-fixed.card, .workspace-fixed.surface-card, .workspace-tabs) {
   border: 1px solid var(--surface-edge) !important;
-  border-radius: 16px;
   background-color: var(--surface-solid);
   box-shadow: var(--surface-shadow) !important;
 }
+/* A bare fixed section that owns neither a card nor a filter bar still needs
+   its own surface; the zone container supplies the curve. */
 :root .app-layout.app-layout-workspace .table-page-layout > .layout-section-fixed:not(.table-page-pagination) {
   padding: 12px 16px;
   border: 1px solid var(--surface-edge) !important;
-  border-radius: 16px;
   background-color: var(--surface-solid);
   box-shadow: var(--surface-shadow) !important;
 }

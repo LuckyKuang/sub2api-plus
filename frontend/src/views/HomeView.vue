@@ -582,7 +582,7 @@ onMounted(() => {
 .terminal-window {
   width: 100%;
   background: #222326;
-  border-radius: var(--surface-radius-inset);
+  border-radius: var(--surface-radius-panel);
   box-shadow: 0 16px 40px -20px rgb(0 0 0 / 45%);
   border: 1px solid rgb(255 255 255 / 12%);
   overflow: hidden;

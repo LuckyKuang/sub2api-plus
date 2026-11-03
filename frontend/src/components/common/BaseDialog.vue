@@ -17,14 +17,17 @@
             <h3 :id="dialogId" ref="titleRef" class="modal-title" :tabindex="titleOverflows ? 0 : undefined">
               {{ title }}
             </h3>
-            <button
-              v-if="showCloseButton"
-              @click="emit('close')"
-              class="-mr-2 shrink-0 rounded-xl p-2 transition-colors hover:surface-hover hover:text-gray-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/30 focus-visible:ring-offset-2 dark:hover:text-dark-300 dark:focus-visible:ring-offset-dark-900 surface-control surface-muted"
-              aria-label="Close modal"
-            >
-              <Icon name="x" size="md" />
-            </button>
+            <div class="flex shrink-0 items-center gap-2">
+              <slot name="header-actions" />
+              <button
+                v-if="showCloseButton"
+                @click="emit('close')"
+                class="-mr-2 shrink-0 rounded-xl p-2 transition-colors hover:surface-hover hover:text-gray-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/30 focus-visible:ring-offset-2 dark:hover:text-dark-300 dark:focus-visible:ring-offset-dark-900 surface-control surface-muted"
+                aria-label="Close modal"
+              >
+                <Icon name="x" size="md" />
+              </button>
+            </div>
           </div>
 
           <!-- Body -->

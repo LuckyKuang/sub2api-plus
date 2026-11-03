@@ -136,6 +136,8 @@
           </Teleport>
         </div>
 
+        <!-- Advanced filters (collapsed by default to keep the primary row calm) -->
+        <div v-show="showAdvanced" class="usage-filter-advanced">
         <!-- Request Type Filter (usage only) -->
         <div v-if="mode !== 'errors'" class="w-full sm:w-auto sm:min-w-[180px]">
           <label class="input-label">{{ t('usage.type') }}</label>
@@ -204,7 +206,24 @@
           <label class="input-label">{{ t('admin.usage.group') }}</label>
           <Select v-model="filters.group_id" :options="groupOptions" searchable @change="emitChange" />
         </div>
+        </div>
 
+        <button
+          type="button"
+          class="usage-filter-more inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium surface-muted surface-control transition-colors hover:surface-hover dark:border-dark-600"
+          :aria-expanded="showAdvanced"
+          @click="showAdvanced = !showAdvanced"
+        >
+          <span>{{ showAdvanced ? t('admin.usage.fewerFilters') : t('admin.usage.moreFilters') }}</span>
+          <!-- A collapsed advanced block keeps its filters active, so the count
+               is the only cue that the visible row is not the whole query. -->
+          <span
+            v-if="!showAdvanced && activeAdvancedCount > 0"
+            class="usage-filter-more-badge rounded-full bg-primary-500/15 px-1.5 py-0.5 text-xs font-semibold text-primary-700 dark:text-primary-300"
+            data-testid="usage-advanced-filter-count"
+          >{{ activeAdvancedCount }}</span>
+          <Icon name="chevronDown" size="sm" :class="{ 'rotate-180': showAdvanced }" />
+        </button>
       </div>
 
       <!-- Right: actions -->
@@ -234,6 +253,7 @@ import { ref, onMounted, onUnmounted, toRef, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminAPI } from '@/api/admin'
 import Select, { type SelectOption } from '@/components/common/Select.vue'
+import Icon from '@/components/icons/Icon.vue'
 import { COMMON_ERROR_STATUS_CODES } from '@/utils/errorBadges'
 import type { SimpleApiKey, SimpleUser } from '@/api/admin/usage'
 import { useAnchoredDropdown } from '@/composables/useAnchoredDropdown'
@@ -285,6 +305,27 @@ const accountSearchRef = ref<HTMLElement | null>(null)
 
 const userKeyword = ref('')
 const userResults = ref<SimpleUser[]>([])
+const showAdvanced = ref(false)
+
+// Fields rendered inside the collapsed advanced block, keyed by the v-if that
+// gates them. A field the current mode never renders is not part of the query,
+// so counting it would make the badge lie.
+const ADVANCED_FILTER_FIELDS: Record<'usage' | 'errors' | 'ranking', readonly string[]> = {
+  usage: ['request_type', 'native_compaction_v2', 'billing_type', 'billing_mode', 'upstream_model_mismatch', 'completion_status', 'usage_source', 'group_id'],
+  ranking: ['request_type', 'native_compaction_v2', 'billing_type', 'upstream_model_mismatch', 'completion_status', 'usage_source', 'group_id'],
+  errors: ['error_phase', 'error_category', 'status_code', 'group_id'],
+}
+const activeAdvancedCount = computed(() => {
+  const values = filters.value as Record<string, unknown>
+  const applied = ADVANCED_FILTER_FIELDS[props.mode].filter(field => {
+    const value = values[field]
+    return value !== undefined && value !== null && value !== ''
+  }).length
+  // errors mode also hides the record view in the advanced block; its default
+  // shows only errors, so any other value changes which rows come back.
+  if (props.mode === 'errors' && props.errorView !== 'errors') return applied + 1
+  return applied
+})
 const showUserDropdown = ref(false)
 let userSearchTimeout: ReturnType<typeof setTimeout> | null = null
 let userSearchSequence = 0
@@ -621,11 +662,15 @@ defineExpose({ getUserSearchRevision, setUserKeyword })
 </script>
 
 <style scoped>
+/* Collapsible advanced filters: display:contents keeps the fields as direct
+   grid/flex items of the row, so the primary layout is unchanged when shown. */
+.usage-filter-advanced { display: contents; }
 @media (min-width: 1024px) {
   .usage-workspace-filters { padding: 10px 14px; }
   .usage-workspace-filters .usage-filter-layout { display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
   .usage-workspace-filters .usage-filter-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); width: 100%; flex: none; gap: 8px 10px; }
-  .usage-workspace-filters .usage-filter-fields > div { width: auto; min-width: 0; }
+  .usage-workspace-filters .usage-filter-fields > div,
+  .usage-workspace-filters .usage-filter-advanced > div { width: auto; min-width: 0; }
   .usage-workspace-filters .input-label { min-height: 16px; margin-bottom: 4px; font-size: 12px; line-height: 16px; }
   .usage-workspace-filters :deep(.input), .usage-workspace-filters :deep(.select-trigger) { min-height: 34px; padding: 6px 10px; }
   .usage-workspace-filters .usage-filter-dropdown > button { top: 27px; }

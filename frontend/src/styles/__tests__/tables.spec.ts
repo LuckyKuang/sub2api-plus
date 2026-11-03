@@ -66,10 +66,10 @@ describe('record table appearance requirements', () => {
       const last = paint(row.lastElementChild!)
       expect(first.get('border-block-width')).toBe('4px')
       expect(last.get('border-block-width')).toBe('4px')
-      expect(first.get('border-top-left-radius')).toBe('16px 20px')
-      expect(first.get('border-bottom-left-radius')).toBe('16px 20px')
-      expect(last.get('border-top-right-radius')).toBe('16px 20px')
-      expect(last.get('border-bottom-right-radius')).toBe('16px 20px')
+      expect(first.get('border-top-left-radius')).toBe('var(--surface-radius-panel) calc(var(--surface-radius) - 4px)')
+      expect(first.get('border-bottom-left-radius')).toBe('var(--surface-radius-panel) calc(var(--surface-radius) - 4px)')
+      expect(last.get('border-top-right-radius')).toBe('var(--surface-radius-panel) calc(var(--surface-radius) - 4px)')
+      expect(last.get('border-bottom-right-radius')).toBe('var(--surface-radius-panel) calc(var(--surface-radius) - 4px)')
       expect(paint(row).get('background-color')).toBe('transparent')
     }
     // No table geometry may be converted to a block/grid or clip menus.
@@ -160,8 +160,8 @@ describe('record table appearance requirements', () => {
       expect(cellPaint.get('background-clip')).toBe('padding-box')
       expect(paint(cell, '::before').get('content')).toBe('none')
     }
-    expect(paint(row.firstElementChild!).get('border-top-left-radius')).toBe('16px 20px')
-    expect(paint(row.lastElementChild!).get('border-top-right-radius')).toBe('16px 20px')
+    expect(paint(row.firstElementChild!).get('border-top-left-radius')).toBe('var(--surface-radius-panel) calc(var(--surface-radius) - 4px)')
+    expect(paint(row.lastElementChild!).get('border-top-right-radius')).toBe('var(--surface-radius-panel) calc(var(--surface-radius) - 4px)')
   })
 
   // Audited requirement: every record has a 1px outline even at 100% fill
@@ -189,8 +189,8 @@ describe('record table appearance requirements', () => {
     const spanning = paint(container.querySelector('[rowspan]')!)
     expect(spanning.get('border-top-width')).toBe('4px')
     expect(spanning.get('border-bottom-width')).toBe('4px')
-    expect(spanning.get('border-top-left-radius')).toBe('16px 20px')
-    expect(spanning.get('border-bottom-left-radius')).toBe('16px 20px')
+    expect(spanning.get('border-top-left-radius')).toBe('var(--surface-radius-panel) calc(var(--surface-radius) - 4px)')
+    expect(spanning.get('border-bottom-left-radius')).toBe('var(--surface-radius-panel) calc(var(--surface-radius) - 4px)')
     expect(spanning.get('--record-edge-top')).toBe('inset 0 1px 0 var(--record-row-edge)')
     expect(spanning.get('--record-edge-bottom')).toBe('inset 0 -1px 0 var(--record-row-edge)')
     expect(spanning.get('--record-edge-left')).toBe('inset 1px 0 0 var(--record-row-edge)')

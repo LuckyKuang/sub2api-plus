@@ -224,3 +224,21 @@ user-timezone overview queries and historical insertion boundaries. Observed HTT
 is distinct from forwarding `duration_ms`; unavailable TPS remains unavailable.
 The existing strict first-token, first-byte and equal-weight average TPS contracts
 are unchanged.
+
+## Administrator request presentation
+
+The usage list hides service tier by default; column settings can show it.
+Reasoning effort and Fast appear below the model using the shared user/admin
+model metadata presentation. The former reasoning column is removed. Ingress
+User-Agent and endpoint appear with actual egress dispatch evidence in the
+rightmost **Ingress / egress evidence** column. Missing historical egress data
+remains absent. Saved column preferences migrate while preserving other choices.
+
+Admin live requests show account email and user ID on desktop/mobile, in the user
+filter and CSV. One bounded batch identity lookup enriches the current window;
+it does not query subscription/rate/usage details per row. User-facing live
+responses do not acquire administrator-only identity fields.
+
+The risk center's client-disconnect threshold is always editable, independently
+of enforcement enablement (default 10, accepted range 1–1000). Changing it affects
+future decisions; historical disconnect rows retain their captured threshold.
