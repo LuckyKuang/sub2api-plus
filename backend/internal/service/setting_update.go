@@ -595,6 +595,7 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeyOpenAICodexWSEnabled] = strconv.FormatBool(settings.OpenAICodexWSEnabled)
 	updates[SettingKeyOpenAICodexHTTPWSEnabled] = strconv.FormatBool(settings.OpenAICodexHTTPWSEnabled)
 	updates[SettingKeyOpenAICodexSafetyBufferingSuppressed] = strconv.FormatBool(settings.OpenAICodexSafetyBufferingSuppressed)
+	updates[SettingKeyOpenAIErrorMessagesNormalized] = strconv.FormatBool(settings.OpenAIErrorMessagesNormalized)
 	updates[SettingKeyOpenAICodexResidency] = settings.OpenAICodexResidency
 	updates[SettingKeyCodexLegacyClientProfileCompatibilityEnabled] = strconv.FormatBool(settings.CodexLegacyClientProfileCompatibilityEnabled)
 	updates[SettingKeyOpenAICodexLocalGroupQuotaEnabled] = strconv.FormatBool(settings.OpenAICodexLocalGroupQuotaEnabled)

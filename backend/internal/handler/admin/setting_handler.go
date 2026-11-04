@@ -310,6 +310,7 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		OpenAICodexWSEnabled:                                   settings.OpenAICodexWSEnabled,
 		OpenAICodexHTTPWSEnabled:                               settings.OpenAICodexHTTPWSEnabled,
 		OpenAICodexSafetyBufferingSuppressed:                   settings.OpenAICodexSafetyBufferingSuppressed,
+		OpenAIErrorMessagesNormalized:                          settings.OpenAIErrorMessagesNormalized,
 		OpenAICodexWSDeploymentAllowed:                         settings.OpenAICodexWSDeploymentAllowed,
 		OpenAICodexResidency:                                   settings.OpenAICodexResidency,
 		CodexLegacyClientProfileCompatibilityEnabled:           settings.CodexLegacyClientProfileCompatibilityEnabled,

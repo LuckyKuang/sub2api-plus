@@ -691,6 +691,7 @@ def run_go_transparent_bridge(binary: Path) -> None:
         ("./internal/codexcli", "TestCodexBridgeOfficialBinaryWire", "official_go_bridge_wire_failed", 180),
         ("./internal/service", "TestCodexSafetyBufferingOfficialCLIWire", "official_downstream_safety_buffering_wire_failed", 600),
         ("./internal/service", "TestCodexSafetyBufferingOfficialCLIInteractive", "official_interactive_safety_buffering_failed", 600),
+        ("./internal/service", "TestOpenAIErrorMessagesOfficialCLI", "official_error_messages_failed", 600),
     ):
         result = subprocess.run(["go", "test", "-C", str(repository / "backend"), "-tags=unit", package,
                                  "-run", f"^{test}$", "-count=1", "-v"],
@@ -700,6 +701,13 @@ def run_go_transparent_bridge(binary: Path) -> None:
         # build failure cannot silently reduce this gate to proxy-only checks.
         require(result.returncode == 0 and f"--- PASS: {test}" in output
                 and "--- SKIP:" not in output, failure)
+        if test == "TestOpenAIErrorMessagesOfficialCLI":
+            require(all(
+                f"--- PASS: {test}/{account}/cli={cli}/enabled={enabled}/{code} " in output
+                for account in ("oauth", "apikey") for cli in ("false", "true")
+                for enabled in ("false", "true")
+                for code in ("upstream_response_interrupted", "upstream_unavailable", "session_account_lost")
+            ), "official_error_messages_matrix_incomplete")
         if test == "TestCodexSafetyBufferingOfficialCLIInteractive":
             require(all(
                 f"--- PASS: {test}/{account}/cli={cli}/suppressed={suppressed} " in output

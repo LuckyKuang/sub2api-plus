@@ -265,6 +265,7 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyOpenAICodexWSEnabled:                         "true",
 		SettingKeyOpenAICodexHTTPWSEnabled:                     "false",
 		SettingKeyOpenAICodexSafetyBufferingSuppressed:         "false",
+		SettingKeyOpenAIErrorMessagesNormalized:                "false",
 		SettingKeyOpenAICodexResidency:                         DefaultOpenAICodexResidency,
 		SettingKeyCodexLegacyClientProfileCompatibilityEnabled: "false",
 		SettingKeyOpenAICodexLocalGroupQuotaEnabled:            "false",
@@ -942,6 +943,7 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	result.OpenAICodexWSEnabled = parseCodexTransportBool(settings[SettingKeyOpenAICodexWSEnabled], true)
 	result.OpenAICodexHTTPWSEnabled = parseCodexTransportBool(settings[SettingKeyOpenAICodexHTTPWSEnabled], false)
 	result.OpenAICodexSafetyBufferingSuppressed = parseCodexTransportBool(settings[SettingKeyOpenAICodexSafetyBufferingSuppressed], false)
+	result.OpenAIErrorMessagesNormalized = parseCodexTransportBool(settings[SettingKeyOpenAIErrorMessagesNormalized], false)
 	result.OpenAICodexWSDeploymentAllowed = s.cfg != nil && s.cfg.Gateway.OpenAIWS.Enabled && !s.cfg.Gateway.OpenAIWS.ForceHTTP && s.cfg.Gateway.OpenAIWS.ResponsesWebsocketsV2 && (s.cfg.Gateway.OpenAIWS.OAuthEnabled || s.cfg.Gateway.OpenAIWS.APIKeyEnabled)
 	if residency, err := NormalizeOpenAICodexResidency(settings[SettingKeyOpenAICodexResidency]); err == nil {
 		result.OpenAICodexResidency = residency

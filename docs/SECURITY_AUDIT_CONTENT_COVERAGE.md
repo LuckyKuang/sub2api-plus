@@ -1008,3 +1008,20 @@ cannot leak, and temporary-storage failure cannot release raw notices.
 TUI with an off positive control for the real notice and retry/dismiss choices,
 plus on silence and normal completion in the account/outbound matrix. This
 observes client rendering without changing ingress audit or client binaries.
+
+### Downstream session error wording projection
+
+`openai_error_messages_normalized` changes only messages for three exact error
+codes at the final OpenAI HTTP/SSE/WS output boundary. It introduces no request
+extraction, tool-field, endpoint, identity, account-selection or ingress audit
+changes. Both audit engines consume the same original canonical request and
+retain their existing admission/side-effect ordering. Errors remain failures;
+other providers, unknown events, user content and policy codes pass through.
+HTTP ops capture is inside the final projection boundary, and WS observers see
+original frames, so diagnostic persistence remains original. The independently
+derived `TestOpenAIErrorMessages*` regressions cover precise protocol carriers,
+forbidden field changes, ON/OFF at final release, account/outbound/socket matrices,
+settings persistence and reconciliation. Handler
+`TestOpenAIErrorMessagesPreserveOpsDiagnostics` observes actual queued original
+error records and downstream replacement, including handler-produced SSE and EOF.
+The dedicated official CLI consumer matrix provides client display evidence.

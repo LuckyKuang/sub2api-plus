@@ -495,6 +495,9 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	if before.OpenAICodexSafetyBufferingSuppressed != after.OpenAICodexSafetyBufferingSuppressed {
 		changed = append(changed, "openai_codex_safety_buffering_suppressed")
 	}
+	if before.OpenAIErrorMessagesNormalized != after.OpenAIErrorMessagesNormalized {
+		changed = append(changed, "openai_error_messages_normalized")
+	}
 	if before.OpenAICodexResidency != after.OpenAICodexResidency {
 		changed = append(changed, "codex_residency")
 	}

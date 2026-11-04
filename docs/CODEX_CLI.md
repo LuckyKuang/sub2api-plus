@@ -558,3 +558,19 @@ the single-generation assertion applies to the user's original turn.
 The pinned client's UI contract follows
 [`safety_buffering.rs`](https://github.com/openai/codex/blob/360319d8dee62d87e2d59fc0c21805d79519cfed/codex-rs/tui/src/chatwidget/safety_buffering.rs).
 This consumer test does not claim to execute the desktop App UI.
+
+### Downstream session error wording
+
+`openai_error_messages_normalized` is a separate default-off live switch. The
+[Responses contract](protocols/OPENAI_RESPONSES.md#downstream-session-error-wording)
+lists its three exact codes and Chinese messages. Native/official CLI outbound,
+OAuth/API Key and HTTP/SSE/WS share the final output boundary; upstream diagnostic
+observers and original failure/replay behavior stay intact.
+`TestOpenAIErrorMessagesOfficialCLI` runs the independently verified pinned CLI
+as a real downstream consumer, with OFF positive controls and ON expected text
+for all three codes and both account/outbound types. It requires a failed CLI
+turn, collected billing usage and one provider request. The same gate exercises
+WS-to-HTTP through the real outbound bridge. It uses isolated temporary homes,
+synthetic credentials and local upstream fixtures; it does not exercise the
+desktop App or claim live provider acceptance. `tools/test_codex_cli_wire.py`
+rejects missing/skipped cases in this dedicated matrix.

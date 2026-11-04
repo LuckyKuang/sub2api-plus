@@ -621,6 +621,8 @@ export default {
         openaiCodexEgressCountryNone: 'Not set (no declaration)',
         openaiCodexEgressCountryHint:
           'Global default egress country (ISO 3166-1 alpha-2, e.g. US). Account-level egress_country and the egress proxy annotation take precedence; leave empty to declare nothing.',
+        openaiErrorMessagesNormalized: 'Normalize session error messages',
+        openaiErrorMessagesNormalizedHint: 'Applies to OpenAI OAuth and API Key accounts, including official Codex CLI outbound bridging. Off by default. Replaces only downstream messages for upstream_response_interrupted, upstream_unavailable and session_account_lost. Error codes, failure status, usage, original diagnostics and replay policy are preserved. Changes apply to subsequent unsent errors during the current generation; replicas may take a short time to synchronize.',
         codexSafetyBufferingSuppressed: 'Suppress Codex safety buffering notices',
         codexSafetyBufferingSuppressedHint: 'Applies to OpenAI OAuth and API Key accounts, including official Codex CLI outbound bridging. Off by default. Changes apply to subsequent unsent events during the current generation. Turning this off restores future notices. Delivered notices cannot be recalled; suppressed notices are not replayed. Upstream processing and final results keep their existing behavior. Replicas may take a short time to synchronize.',
         codexUpstreamWS: 'Enable Codex upstream WebSocket',

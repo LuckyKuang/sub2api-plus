@@ -1131,3 +1131,39 @@ cleanup are independent of notice suppression.
 An EOF event without a final empty line is flushed before reporting delivery;
 a failure on that final write marks the client disconnected while retaining
 collected usage and any existing upstream error.
+
+## Downstream session error wording
+
+The independent administrator setting `openai_error_messages_normalized`
+(“统一会话错误文案”) defaults to `false` and is persisted in system settings.
+It applies to OpenAI OAuth and API Key owners, native sends and official Codex
+CLI outbound bridging. It does not depend on safety buffering suppression.
+When enabled, only `message` in a recognized protocol error carrier is changed:
+
+| Exact error code | Downstream message |
+| --- | --- |
+| `upstream_response_interrupted` | 响应已中断，请输入「继续」重新提交。 |
+| `upstream_unavailable` | 响应已中断，请输入「继续」重新提交。 |
+| `session_account_lost` | 当前会话可能无法恢复，请新开会话继续。 |
+
+Recognized carriers are HTTP JSON `error`, SSE/WS `type: error` (nested `error`
+or root code/message), and `response.failed` (`response.error` or root `error`).
+Matching is exact and case-sensitive; missing/non-string messages, unknown
+codes/events, ordinary content, tools and opaque nested objects pass through.
+Non-OpenAI responses retain their original bytes and write boundaries.
+HTTP status, error code/type, terminal failure, retry/failover policy and usage
+processing retain existing behavior. The existing Responses failure sanitizer
+may omit wire usage and other response details; internal billing usage is still
+collected before downstream projection. This switch does not synthesize success,
+automatically retry a request, or promise that submitting “继续” restores a session.
+
+HTTP projection sits beneath ops capture, including handler errors emitted after
+`Forward` returns. WS projection runs after upstream observers at the final client
+frame write. Admin error records keep original diagnostics; historical rows are
+not rewritten. Accepted fragmented JSON/SSE is staged per event using the existing
+anonymous spool, with EOF cleanup and transport failure propagation.
+Current-instance settings are read at event release, so ON/OFF affects subsequent
+unsent errors during an ongoing generation. Already delivered messages cannot be
+changed. Both downstream settings share the existing invalidation channel and
+one-second reconciliation worker. Replica changes are eventually consistent;
+read failures retain each last valid setting, and failed writes do not change it.

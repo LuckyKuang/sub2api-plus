@@ -606,7 +606,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	writeDownstream := func(writeCtx context.Context, message []byte) error {
 		message = restoreCodexToolNamesFromContext(c, message)
 		originalSize := len(message)
-		message = s.projectCodexSafetyBufferingOutput(ctx, c, account, message, "websocket")
+		message = s.projectOpenAIWebSocketOutput(ctx, c, account, message)
 		if originalSize > 0 && message == nil {
 			return nil
 		}

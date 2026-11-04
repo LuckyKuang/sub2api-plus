@@ -10,18 +10,21 @@ import (
 
 const SettingKeyOpenAICodexSafetyBufferingSuppressed = "openai_codex_safety_buffering_suppressed"
 
+const SettingKeyOpenAIErrorMessagesNormalized = "openai_error_messages_normalized"
+
 const codexSafetyBufferingRefreshInterval = time.Second
 
 // Reads on the output path are atomic. The mutex orders database refreshes
 // against successful writes so an older refresh cannot overwrite a new save.
 type codexSafetyBufferingRuntime struct {
-	mu          sync.Mutex
-	enabled     atomic.Bool
-	initialized atomic.Bool
-	start       sync.Once
-	bus         InvalidationBus
-	cancel      context.CancelFunc
-	workers     sync.WaitGroup
+	mu            sync.Mutex
+	enabled       atomic.Bool
+	errorMessages atomic.Bool
+	initialized   atomic.Bool
+	start         sync.Once
+	bus           InvalidationBus
+	cancel        context.CancelFunc
+	workers       sync.WaitGroup
 }
 
 func (s *SettingService) CodexSafetyBufferingSuppressed(ctx context.Context) bool {
@@ -32,6 +35,16 @@ func (s *SettingService) CodexSafetyBufferingSuppressed(ctx context.Context) boo
 		s.refreshCodexSafetyBuffering(ctx)
 	}
 	return s.codexSafetyBuffering.enabled.Load()
+}
+
+func (s *SettingService) OpenAIErrorMessagesNormalized(ctx context.Context) bool {
+	if s == nil {
+		return false
+	}
+	if !s.codexSafetyBuffering.initialized.Load() {
+		s.refreshCodexSafetyBuffering(ctx)
+	}
+	return s.codexSafetyBuffering.errorMessages.Load()
 }
 
 func (s *SettingService) refreshCodexSafetyBuffering(ctx context.Context) {
@@ -52,7 +65,7 @@ func (s *SettingService) refreshCodexSafetyBuffering(ctx context.Context) {
 	}
 	readCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	values, err := s.settingRepo.GetMultiple(readCtx, []string{SettingKeyOpenAICodexSafetyBufferingSuppressed})
+	values, err := s.settingRepo.GetMultiple(readCtx, []string{SettingKeyOpenAICodexSafetyBufferingSuppressed, SettingKeyOpenAIErrorMessagesNormalized})
 	if err != nil {
 		if ctx.Err() != nil {
 			return
@@ -60,16 +73,26 @@ func (s *SettingService) refreshCodexSafetyBuffering(ctx context.Context) {
 		slog.Warn("codex safety buffering setting refresh failed", "stage", "settings_refresh", "code", "codex_safety_buffering_setting_read_failed")
 		return
 	}
-	raw := values[SettingKeyOpenAICodexSafetyBufferingSuppressed]
-	if raw != "" && raw != "true" && raw != "false" {
-		slog.Warn("invalid codex safety buffering setting", "stage", "settings_refresh", "code", "codex_safety_buffering_setting_invalid")
-		return
+	for key, target := range map[string]*atomic.Bool{
+		SettingKeyOpenAICodexSafetyBufferingSuppressed: &runtime.enabled,
+		SettingKeyOpenAIErrorMessagesNormalized:        &runtime.errorMessages,
+	} {
+		raw := values[key]
+		if raw != "" && raw != "true" && raw != "false" {
+			code := "codex_safety_buffering_setting_invalid"
+			if key == SettingKeyOpenAIErrorMessagesNormalized {
+				code = "openai_error_message_setting_invalid"
+			}
+			slog.Warn("invalid OpenAI output setting", "stage", "settings_refresh", "code", code, "setting", key)
+			continue
+		}
+		target.Store(raw == "true")
 	}
-	runtime.enabled.Store(raw == "true")
 }
 
 // StartCodexSafetyBufferingRuntime reuses the host invalidation bus. Periodic
 // reconciliation also repairs missed notifications on already-running streams.
+// The shared channel refreshes both downstream display settings.
 func (s *SettingService) StartCodexSafetyBufferingRuntime(ctx context.Context, bus InvalidationBus) {
 	if s == nil {
 		return
@@ -141,10 +164,17 @@ func (s *SettingService) persistSystemSettingsWithCodexSafetyBuffering(ctx conte
 	runtime := &s.codexSafetyBuffering
 	runtime.mu.Lock()
 	err := s.persistSystemSettingsUpdates(ctx, settings, updates)
-	value, changed := updates[SettingKeyOpenAICodexSafetyBufferingSuppressed]
-	if err == nil && changed {
-		runtime.enabled.Store(value == "true")
-		runtime.initialized.Store(true)
+	changed := false
+	if err == nil {
+		for key, target := range map[string]*atomic.Bool{
+			SettingKeyOpenAICodexSafetyBufferingSuppressed: &runtime.enabled,
+			SettingKeyOpenAIErrorMessagesNormalized:        &runtime.errorMessages,
+		} {
+			if value, ok := updates[key]; ok {
+				target.Store(value == "true")
+				changed = true
+			}
+		}
 	}
 	bus := runtime.bus
 	runtime.mu.Unlock()

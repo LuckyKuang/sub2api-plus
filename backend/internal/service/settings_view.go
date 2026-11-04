@@ -259,6 +259,7 @@ type SystemSettings struct {
 	OpenAICodexWSEnabled                         bool   // Runtime Codex upstream transport policy
 	OpenAICodexHTTPWSEnabled                     bool   // Runtime Codex upstream transport policy
 	OpenAICodexSafetyBufferingSuppressed         bool   // Live downstream safety buffering display policy
+	OpenAIErrorMessagesNormalized                bool   // Live downstream session error message policy
 	OpenAICodexWSDeploymentAllowed               bool   // Read-only deployment capability
 	OpenAICodexResidency                         string // 全局 Codex residency：off（默认，不发送）或 us
 	CodexLegacyClientProfileCompatibilityEnabled bool   // 是否临时允许封闭旧版 Codex 客户端档案（默认 false）

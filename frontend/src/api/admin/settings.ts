@@ -653,6 +653,7 @@ export interface SystemSettings {
   openai_codex_ws_enabled: boolean;
   openai_codex_http_ws_enabled: boolean;
   openai_codex_safety_buffering_suppressed: boolean;
+  openai_error_messages_normalized: boolean;
   openai_codex_ws_deployment_allowed: boolean;
   codex_residency: string;
   codex_legacy_client_profile_compatibility_enabled: boolean;
@@ -994,6 +995,7 @@ export interface UpdateSettingsRequest {
   openai_codex_ws_enabled?: boolean;
   openai_codex_http_ws_enabled?: boolean;
   openai_codex_safety_buffering_suppressed?: boolean;
+  openai_error_messages_normalized?: boolean;
   codex_residency?: string;
   codex_legacy_client_profile_compatibility_enabled?: boolean;
   openai_codex_local_group_quota_enabled?: boolean;

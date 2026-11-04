@@ -152,6 +152,12 @@ func flushCodexSafetyBufferingHTTPOutput(c *gin.Context) error {
 	}
 	value, _ := c.Get("codex_safety_buffering_output_writer")
 	if writer, ok := value.(*codexSafetyBufferingHTTPWriter); ok && writer != nil {
+		if err := writer.finish(); err != nil {
+			return err
+		}
+	}
+	value, _ = c.Get("openai_error_message_output_writer")
+	if writer, ok := value.(*codexSafetyBufferingHTTPWriter); ok && writer != nil {
 		return writer.finish()
 	}
 	return nil
@@ -159,19 +165,36 @@ func flushCodexSafetyBufferingHTTPOutput(c *gin.Context) error {
 
 type codexSafetyBufferingHTTPWriter struct {
 	gin.ResponseWriter
-	mu       sync.Mutex
-	ctx      context.Context
-	c        *gin.Context
-	service  *OpenAIGatewayService
-	account  *Account
-	pending  *openAIFirstOutputStage
-	lineSize int
-	lineHead byte
+	mu                sync.Mutex
+	ctx               context.Context
+	c                 *gin.Context
+	service           *OpenAIGatewayService
+	account           *Account
+	projectionEnabled func() bool
+	projectPayload    func([]byte, string) []byte
+	bypassProjection  func() bool
+	pending           *openAIFirstOutputStage
+	lineSize          int
+	lineHead          byte
 }
 
 // Reuse the anonymous spool used by first-output staging. The existing gateway
 // parsers own accepted input limits; a display filter must not add a smaller
 // fail-open threshold. Only one event is retained and it is closed on all paths.
+func (w *codexSafetyBufferingHTTPWriter) enabled() bool {
+	if w.projectionEnabled != nil {
+		return w.projectionEnabled()
+	}
+	return w.service.codexSafetyBufferingOutputEnabled(w.ctx, w.account)
+}
+
+func (w *codexSafetyBufferingHTTPWriter) project(payload []byte, protocol string) []byte {
+	if w.projectPayload != nil {
+		return w.projectPayload(payload, protocol)
+	}
+	return w.service.projectCodexSafetyBufferingOutput(w.ctx, w.c, w.account, payload, protocol)
+}
+
 func (w *codexSafetyBufferingHTTPWriter) appendPending(p []byte) error {
 	if w.pending == nil {
 		w.pending = newOpenAIFirstOutputStage(math.MaxInt64)
@@ -200,7 +223,7 @@ func (w *codexSafetyBufferingHTTPWriter) closeStage(stage *openAIFirstOutputStag
 }
 
 func (w *codexSafetyBufferingHTTPWriter) prepareHeaders() {
-	if !w.Written() && w.service.codexSafetyBufferingOutputEnabled(w.ctx, w.account) {
+	if w.service != nil && !w.Written() && w.service.codexSafetyBufferingOutputEnabled(w.ctx, w.account) {
 		for key := range w.Header() {
 			for _, name := range codexSafetyBufferingHeaders {
 				if strings.EqualFold(key, name) {
@@ -234,6 +257,11 @@ func (w *codexSafetyBufferingHTTPWriter) writeRaw(p []byte) error {
 func (w *codexSafetyBufferingHTTPWriter) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	// Other providers and non-protocol bodies keep their original write/flush
+	// boundaries. Only an eligible OpenAI response needs event framing.
+	if w.pending == nil && w.bypassProjection != nil && w.bypassProjection() {
+		return w.ResponseWriter.Write(p)
+	}
 	if !isEventStreamResponse(w.Header()) {
 		inputSize := len(p)
 		if strings.HasPrefix(strings.ToLower(w.Header().Get("Content-Type")), "application/json") && (w.pending != nil || !json.Valid(p)) {
@@ -260,7 +288,7 @@ func (w *codexSafetyBufferingHTTPWriter) Write(p []byte) (int, error) {
 			defer w.closeStage(stage)
 			p = complete
 		}
-		projected := w.service.projectCodexSafetyBufferingOutput(w.ctx, w.c, w.account, p, "http")
+		projected := w.project(p, "http")
 		if !bytes.Equal(projected, p) && !w.Written() {
 			w.Header().Del("Content-Length")
 		}
@@ -305,7 +333,7 @@ func (w *codexSafetyBufferingHTTPWriter) writeSSEFrame() error {
 	stage := w.pending
 	w.pending = nil
 	defer w.closeStage(stage)
-	if !w.service.codexSafetyBufferingOutputEnabled(w.ctx, w.account) {
+	if !w.enabled() {
 		w.prepareHeaders()
 		return stage.CommitTo(w.ResponseWriter)
 	}
@@ -325,7 +353,7 @@ func (w *codexSafetyBufferingHTTPWriter) writeSSEFrame() error {
 			data = append(data, value...)
 		}
 	}
-	projected := w.service.projectCodexSafetyBufferingOutput(w.ctx, w.c, w.account, data, "sse")
+	projected := w.project(data, "sse")
 	if bytes.Equal(projected, data) {
 		return w.writeRaw(frame)
 	}
@@ -397,7 +425,7 @@ func (w *codexSafetyBufferingHTTPWriter) finish() error {
 		if err != nil {
 			return err
 		}
-		payload := w.service.projectCodexSafetyBufferingOutput(w.ctx, w.c, w.account, original, "http")
+		payload := w.project(original, "http")
 		if !bytes.Equal(payload, original) && !w.Written() {
 			w.Header().Del("Content-Length")
 		}

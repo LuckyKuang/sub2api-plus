@@ -110,6 +110,25 @@ CODEX_CLI_SERVICE_TESTS = (
     "TestCodexCLITaskStandardTierHonorsFastPolicyBeforeSideEffects",
     "TestCodexCLITaskIgnoresInheritedConversationAcceptanceDeadline",
 )
+OPENAI_ERROR_MESSAGE_TESTS = (
+    "TestOpenAIErrorMessagesProtocolContract",
+    "TestOpenAIErrorMessagesLargeEventAndContentBoundaries",
+    "TestOpenAIErrorMessagesEOFFailureRetainsUsage",
+    "TestOpenAIErrorMessagesLiveHTTPBoundary",
+    "TestOpenAIErrorMessagesSettingsPersistenceAndReplicas",
+    "TestOpenAIErrorMessagesGatewayAccountAndCLIMatrix",
+    "TestOpenAIErrorMessagesHTTPClientErrorAccountMatrix",
+    "TestOpenAIErrorMessagesWSPassthroughHotSwitch",
+    "TestOpenAIErrorMessagesWSHTTPBridgeMatrix",
+)
+OPENAI_ERROR_MESSAGE_SUBTESTS = tuple(
+    f"{test}/{account}/cli={cli}/enabled={enabled}"
+    for test in ("TestOpenAIErrorMessagesGatewayAccountAndCLIMatrix", "TestOpenAIErrorMessagesHTTPClientErrorAccountMatrix", "TestOpenAIErrorMessagesWSHTTPBridgeMatrix")
+    for account in ("oauth", "apikey") for cli in ("false", "true") for enabled in ("false", "true")
+) + tuple(
+    f"TestOpenAIErrorMessagesWSPassthroughHotSwitch/{account}/enabled={enabled}/frame={frame}"
+    for account in ("oauth", "apikey") for enabled in ("false", "true") for frame in (1, 2)
+)
 CODEX_SAFETY_BUFFERING_TESTS = (
     "TestCodexSafetyBufferingProjectionContract",
     "TestCodexSafetyBufferingHTTPHotSwitchAfterStaging",
@@ -685,7 +704,7 @@ PROFILES = {
             "TestGrokMediaUsageFromResponseVideoCreateDoesNotBill",
             "TestGrokMediaUsageFromResponseVideoStatusBillsOnOfficialDone",
             ZHIPU_START_PLAN_TEST,
-        ) + CAPABILITY_SERVICE_TESTS + CODEX_CLI_SERVICE_TESTS + CODEX_SAFETY_BUFFERING_TESTS, ("TestZhipuOAuthBuildAccountMaterialForEachPlan/start_plan_and_off-peak_are_estate_independent",)
+        ) + CAPABILITY_SERVICE_TESTS + CODEX_CLI_SERVICE_TESTS + CODEX_SAFETY_BUFFERING_TESTS + OPENAI_ERROR_MESSAGE_TESTS, ("TestZhipuOAuthBuildAccountMaterialForEachPlan/start_plan_and_off-peak_are_estate_independent",)
         + tuple(
             "TestCodexCLITaskBillingUsesEffectiveConfiguredReasoning/" + scenario
             for scenario in ("saved_high", "request_overrides_saved_high", "request_high", "request_max", "unconfigured_default",
@@ -929,7 +948,7 @@ PROFILES = {
                 ("messages-count", ("deepseek", "kimi", "minimax", "stepfun", "zhipu")),
             )
             for provider in providers
-        ) + CAPABILITY_SERVICE_SUBTESTS + CODEX_SAFETY_BUFFERING_SUBTESTS),
+        ) + CAPABILITY_SERVICE_SUBTESTS + CODEX_SAFETY_BUFFERING_SUBTESTS + OPENAI_ERROR_MESSAGE_SUBTESTS),
         RegressionGroup("./internal/repository", (
             GROK_HTTP_WIRE,
             COUNT_TOKENS_WIRE,
@@ -978,6 +997,7 @@ PROFILES = {
             for mode in ("success", "timeout", "refused", "authentication_required", "missing", "mismatched")
         )),
         RegressionGroup("./internal/handler", (
+            "TestOpenAIErrorMessagesPreserveOpsDiagnostics",
             "TestCodexCLIResponsesBothAuditEnginesSeeOriginalContentBeforeSideEffects",
             "TestCodexCLIResponsesRealAuditEnginesPreserveCanonicalUserSelection",
             "TestCodexCLIResponsesUnsupportedShapesFailBeforeAuditAndSideEffects",
@@ -1063,6 +1083,7 @@ PROFILES = {
         )),
         RegressionGroup("./internal/handler/admin", (NATIVE_UNSUPPORTED_REFRESH,
             "TestUpdateSettingsCodexSafetyBufferingToggleAndPartialUpdate",
+            "TestUpdateSettingsOpenAIErrorMessagesToggleAndPartialUpdate",
             "TestCodexCLIAccountHandlerSecretAwareRoundTrip",
             "TestCodexCLIAccountHandlerValidationPrecedesEveryWrite",
             "TestCodexCLIInstallFailureDoesNotExposePrivateDiagnostics",

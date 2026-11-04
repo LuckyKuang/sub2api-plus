@@ -262,6 +262,7 @@ type UpdateSettingsRequest struct {
 	OpenAICodexWSEnabled                         *bool   `json:"openai_codex_ws_enabled"`
 	OpenAICodexHTTPWSEnabled                     *bool   `json:"openai_codex_http_ws_enabled"`
 	OpenAICodexSafetyBufferingSuppressed         *bool   `json:"openai_codex_safety_buffering_suppressed"`
+	OpenAIErrorMessagesNormalized                *bool   `json:"openai_error_messages_normalized"`
 	OpenAICodexResidency                         *string `json:"codex_residency"`
 	CodexLegacyClientProfileCompatibilityEnabled *bool   `json:"codex_legacy_client_profile_compatibility_enabled"`
 	OpenAICodexLocalGroupQuotaEnabled            *bool   `json:"openai_codex_local_group_quota_enabled"`
@@ -535,6 +536,9 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 	// an unrelated save while an administrator is toggling an active stream.
 	if req.OpenAICodexSafetyBufferingSuppressed == nil {
 		omitted[service.SettingKeyOpenAICodexSafetyBufferingSuppressed] = struct{}{}
+	}
+	if req.OpenAIErrorMessagesNormalized == nil {
+		omitted[service.SettingKeyOpenAIErrorMessagesNormalized] = struct{}{}
 	}
 	if raw, supplied := sentFields[service.SettingKeyPricingFallbackModels]; supplied && strings.TrimSpace(string(raw)) != "null" {
 		models, err := service.ParsePricingFallbackModelsJSON(raw)
@@ -1912,6 +1916,12 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.OpenAICodexSafetyBufferingSuppressed
 		}(),
+		OpenAIErrorMessagesNormalized: func() bool {
+			if req.OpenAIErrorMessagesNormalized != nil {
+				return *req.OpenAIErrorMessagesNormalized
+			}
+			return previousSettings.OpenAIErrorMessagesNormalized
+		}(),
 		OpenAICodexResidency: func() string {
 			if req.OpenAICodexResidency != nil {
 				return *req.OpenAICodexResidency
@@ -2528,6 +2538,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		OpenAICodexWSEnabled:                                   updatedSettings.OpenAICodexWSEnabled,
 		OpenAICodexHTTPWSEnabled:                               updatedSettings.OpenAICodexHTTPWSEnabled,
 		OpenAICodexSafetyBufferingSuppressed:                   updatedSettings.OpenAICodexSafetyBufferingSuppressed,
+		OpenAIErrorMessagesNormalized:                          updatedSettings.OpenAIErrorMessagesNormalized,
 		OpenAICodexWSDeploymentAllowed:                         updatedSettings.OpenAICodexWSDeploymentAllowed,
 		OpenAICodexResidency:                                   updatedSettings.OpenAICodexResidency,
 		CodexLegacyClientProfileCompatibilityEnabled:           updatedSettings.CodexLegacyClientProfileCompatibilityEnabled,
