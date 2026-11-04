@@ -5,8 +5,10 @@
   <AppLayout v-else :appearance="admin ? 'admin' : 'user'" :workspace="workspace">
     <div :class="workspace ? 'workspace-page' : 'space-y-6'">
       <header class="workspace-fixed" data-testid="page-title"><h2 class="text-xl font-semibold">{{ t('nav.apiKeys') }}</h2></header>
-      <div class="workspace-fixed flex flex-wrap gap-3" data-testid="page-filter">
-        <Select v-model="selection" class="w-48" :options="options" />
+      <div class="filter-bar workspace-fixed" data-testid="page-filter">
+        <div class="filter-field">
+          <Select v-model="selection" :options="options" />
+        </div>
         <button class="btn btn-secondary" data-testid="collapse-sidebar" @click="app.toggleSidebar()">{{ t('common.menu') }}</button>
         <button v-if="records" class="btn btn-secondary" data-testid="toggle-records" @click="empty = !empty">Toggle sample rows</button>
       </div>

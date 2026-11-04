@@ -44,6 +44,9 @@ The administrator fixture checks the original 12/16/24px shell insets, expanded
 and collapsed sidebars, independent toolbar and pagination surfaces, pinned
 columns during horizontal scrolling, full mobile record fields and actions,
 and neutral colors in body-portalled controls across both themes and languages.
+Real risk-control, prompt-audit and proxy views also check the accepted header
+order, frameless embedded tabs, actions following the final query field,
+right alignment, uniform control heights and wrapping without page overflow.
 Centered distribution tables keep their scrollport within the parent card while
 preserving wide columns and synchronized horizontal header scrolling.
 Real user usage records also exercise mouse-wheel scrolling in the native table

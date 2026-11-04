@@ -18,9 +18,11 @@
               : t('channelMonitorV2.admin.descriptionV2')
           }}
         </p>
+        <!-- Tabs live inside the header card so the page keeps one surface. -->
+        <div class="mt-4 w-full">
+          <WorkspaceTabs v-model="adminMonitorTab" embedded :tabs="monitorTabs" :label="t('channelMonitorV2.admin.tabAria')" />
+        </div>
       </header>
-
-      <WorkspaceTabs v-model="adminMonitorTab" :tabs="monitorTabs" :label="t('channelMonitorV2.admin.tabAria')" />
 
       <div class="workspace-shell" :class="adminMonitorTab === 'legacy' ? 'workspace-body' : 'workspace-scroll'" data-test="monitor-settings-scroll">
       <StatusSettingsPanel v-if="adminMonitorTab === 'v3'" class="workspace-shell" />

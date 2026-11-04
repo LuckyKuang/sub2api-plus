@@ -2,9 +2,9 @@
   <AppLayout workspace>
     <TablePageLayout>
       <template #filters>
-        <div class="flex flex-wrap items-center gap-3">
+        <div class="filter-bar">
           <!-- Left: Search + Filters -->
-          <div class="flex-1 sm:max-w-64">
+          <div class="filter-field filter-field--search">
             <input
               v-model="searchQuery"
               type="text"
@@ -13,18 +13,20 @@
               @input="handleSearch"
             />
           </div>
-          <Select
-            v-model="filters.type"
-            :options="filterTypeOptions"
-            class="w-36"
-            @change="loadCodes"
-          />
-          <Select
-            v-model="filters.status"
-            :options="filterStatusOptions"
-            class="w-36"
-            @change="loadCodes"
-          />
+          <div class="filter-field">
+            <Select
+              v-model="filters.type"
+              :options="filterTypeOptions"
+              @change="loadCodes"
+            />
+          </div>
+          <div class="filter-field">
+            <Select
+              v-model="filters.status"
+              :options="filterStatusOptions"
+              @change="loadCodes"
+            />
+          </div>
 
           <!-- Right: Action buttons -->
           <div class="flex flex-1 flex-wrap items-center justify-end gap-2">

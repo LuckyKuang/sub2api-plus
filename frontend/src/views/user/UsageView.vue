@@ -2,9 +2,9 @@
   <AppLayout appearance="user" workspace>
     <div class="workspace-page usage-workspace">
       <div v-show="activeTab !== 'live'" class="card workspace-fixed usage-date p-4">
-        <div class="flex flex-wrap items-center gap-4">
-          <div class="flex items-center gap-2">
-            <span class="text-sm font-medium surface-muted">{{ t('admin.dashboard.timeRange') }}:</span>
+        <div class="filter-bar">
+          <span class="text-sm font-medium surface-muted">{{ t('admin.dashboard.timeRange') }}:</span>
+          <div class="filter-field">
             <DateRangePicker
               v-model:start-date="startDate"
               v-model:end-date="endDate"
@@ -28,12 +28,12 @@
 
       <div v-if="activeTab !== 'live'" class="usage-workspace-filters workspace-fixed border-b border-gray-100 p-4 dark:border-dark-700/50">
         <div class="usage-filter-layout flex flex-wrap items-end justify-between gap-4">
-          <div v-if="activeTab === 'errors'" class="usage-filter-fields flex flex-1 flex-wrap items-end gap-4">
-            <div class="w-full sm:w-auto sm:min-w-[220px]">
+          <div v-if="activeTab === 'errors'" class="usage-filter-fields filter-bar flex-1">
+            <div class="filter-field">
               <label class="input-label">{{ t('usage.errors.keyName') }}</label>
               <Select v-model="errorFilter.api_key_id" :options="errorKeyOptions" @change="applyErrorFilters" />
             </div>
-            <div class="w-full sm:w-auto sm:min-w-[220px]">
+            <div class="filter-field">
               <label class="input-label">{{ t('usage.errors.model') }}</label>
               <Select
                 v-model="errorFilter.model"
@@ -45,33 +45,33 @@
                 @change="applyErrorFilters"
               />
             </div>
-            <div class="w-full sm:w-auto sm:min-w-[200px]">
+            <div class="filter-field">
               <label class="input-label">{{ t('usage.errors.category') }}</label>
               <Select v-model="errorFilter.category" :options="errorCategoryOptions" @change="applyErrorFilters" />
             </div>
-            <div class="w-full sm:w-auto sm:min-w-[180px]">
+            <div class="filter-field">
               <label class="input-label">{{ t('usage.errors.status') }}</label>
               <Select v-model="errorFilter.status_code" :options="errorStatusOptions" @change="applyErrorFilters" />
             </div>
           </div>
-          <div v-else class="usage-filter-fields flex flex-1 flex-wrap items-end gap-4">
-            <div class="w-full sm:w-auto sm:min-w-[220px]">
+          <div v-else class="usage-filter-fields filter-bar flex-1">
+            <div class="filter-field">
               <label class="input-label">{{ t('usage.apiKeyFilter') }}</label>
               <Select v-model="filters.api_key_id" :options="apiKeyOptions" @change="applyFilters" />
             </div>
-            <div class="w-full sm:w-auto sm:min-w-[220px]">
+            <div class="filter-field">
               <label class="input-label">{{ t('usage.model') }}</label>
               <Select v-model="filters.model" :options="modelOptions" searchable creatable clearable @change="applyFilters" />
             </div>
-            <div class="w-full sm:w-auto sm:min-w-[200px]">
+            <div class="filter-field">
               <label class="input-label">{{ t('admin.usage.group') }}</label>
               <Select v-model="filters.group_id" :options="groupOptions" searchable @change="applyFilters" />
             </div>
-            <div class="w-full sm:w-auto sm:min-w-[180px]">
+            <div class="filter-field">
               <label class="input-label">{{ t('usage.type') }}</label>
               <Select v-model="filters.request_type" :options="requestTypeOptions" @change="applyFilters" />
             </div>
-            <div class="w-full sm:w-auto sm:min-w-[180px]">
+            <div class="filter-field">
               <label class="input-label">{{ t('usage.compactionFilter') }}</label>
               <Select v-model="filters.native_compaction_v2" :options="compactionOptions" @change="applyFilters" />
             </div>
@@ -79,7 +79,7 @@
               <label class="input-label">{{ t('admin.usage.billingType') }}</label>
               <Select v-model="filters.billing_type" :options="billingTypeOptions" @change="applyFilters" />
             </div>
-            <div class="w-full sm:w-auto sm:min-w-[200px]">
+            <div class="filter-field">
               <label class="input-label">{{ t('admin.usage.billingMode') }}</label>
               <Select v-model="filters.billing_mode" :options="billingModeOptions" @change="applyFilters" />
             </div>
@@ -815,8 +815,6 @@ useLocaleRefresh(() => Promise.all([loadLogs(), loadFilterOptions()]))
   .usage-detail-tabs > button { flex: none; white-space: nowrap; }
   .usage-date, .usage-workspace-filters { padding: 10px 14px; }
   .usage-filter-layout { flex-direction: column; align-items: stretch; gap: 8px; }
-  .usage-filter-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); width: 100%; flex: none; gap: 8px 10px; }
-  .usage-filter-fields > div { width: auto; min-width: 0; }
   .usage-filter-fields .input-label { min-height: 16px; margin-bottom: 4px; font-size: 12px; line-height: 16px; }
   .usage-filter-fields :deep(.select-trigger) { min-height: 34px; padding: 6px 10px; }
   .usage-filter-actions { width: 100%; gap: 8px; }
@@ -825,7 +823,6 @@ useLocaleRefresh(() => Promise.all([loadLogs(), loadFilterOptions()]))
 @media (min-width: 1024px) and (max-height: 799px) {
   .usage-date, .usage-workspace-filters { padding: 8px 12px; }
   .usage-filter-layout { gap: 6px; }
-  .usage-filter-fields { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 150px; overflow-x: auto; scrollbar-width: thin; padding-bottom: 2px; }
   .usage-filter-fields .input-label { margin-bottom: 2px; }
   .usage-filter-fields :deep(.select-trigger) { min-height: 32px; padding-top: 5px; padding-bottom: 5px; }
   .usage-workspace :deep(.pagination-card) { padding: 8px 12px; }

@@ -997,9 +997,10 @@ function handleToolbarRefresh() {
           </svg>
         </button>
       </div>
-    </div>
 
-    <slot name="navigation" />
+      <!-- Tab navigation lives inside the toolbar card so the header stays one surface. -->
+      <slot name="navigation" />
+    </div>
 
     <div :class="props.workspace ? 'workspace-body' : 'contents'">
       <div
@@ -1674,11 +1675,14 @@ function handleToolbarRefresh() {
 </template>
 
 <style scoped>
+.ops-toolbar-summary { flex: 1 1 240px; min-width: 0; }
+.ops-toolbar-controls { flex: 0 1 auto; max-width: 100%; justify-content: flex-end; margin-left: auto; }
+
 @media (min-width: 1024px) and (max-width: 1279px), (min-width: 1024px) and (max-height: 800px) {
   .ops-workspace-toolbar { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 12px 16px; }
   .ops-workspace-toolbar .ops-toolbar-summary > div { flex-wrap: wrap; gap: 4px 8px; }
   .ops-workspace-toolbar .ops-toolbar-controls { gap: 8px; }
-  .ops-workspace-toolbar .ops-toolbar-controls > :deep(.relative) { flex: 0 0 calc((100% - 16px) / 3); width: calc((100% - 16px) / 3); min-width: 0; }
+  .ops-workspace-toolbar .ops-toolbar-controls > :deep(.relative) { flex: 0 0 auto; min-width: 140px; }
   .ops-workspace-toolbar .ops-toolbar-controls > .ops-toolbar-separator { display: none; }
   .ops-workspace-toolbar .ops-toolbar-controls > button:first-of-type { margin-left: auto; }
   .ops-workspace-toolbar .ops-toolbar-controls :deep(.select-trigger) { min-height: 36px; padding-block: 7px; }

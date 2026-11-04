@@ -4,14 +4,18 @@
   <IPAccessControlView v-else-if="ipAccessControl" />
   <PromptAuditView v-else-if="promptAudit" />
   <UsageView v-else-if="usage" />
+  <RiskControlView v-else-if="riskControl" />
+  <ProxiesView v-else-if="proxies" />
   <AppLayout v-else-if="emptyWide" workspace>
     <DataTable :columns="wideColumns" :data="[]" :sticky-first-column="true" :sticky-actions-column="true" />
   </AppLayout>
   <AppLayout v-else workspace>
     <TablePageLayout>
       <template #filters>
-        <div class="flex flex-wrap items-center gap-3" data-testid="admin-toolbar">
-          <Select v-model="selection" class="w-48" :options="options" data-testid="admin-select" />
+        <div class="filter-bar" data-testid="admin-toolbar">
+          <div class="filter-field" data-testid="admin-select-field">
+            <Select v-model="selection" :options="options" data-testid="admin-select" />
+          </div>
           <button class="btn btn-secondary" data-testid="admin-collapse" @click="app.toggleSidebar()">{{ t('common.menu') }}</button>
         </div>
       </template>
@@ -46,6 +50,8 @@ import { useAppStore } from '../src/stores/app'
 import { useAuthStore } from '../src/stores/auth'
 
 const usage = new URLSearchParams(location.search).get('usage') === '1'
+const riskControl = new URLSearchParams(location.search).get('riskControl') === '1'
+const proxies = new URLSearchParams(location.search).get('proxies') === '1'
 const emptyWide = new URLSearchParams(location.search).get('emptyWide') === '1'
 const promptAudit = new URLSearchParams(location.search).get('promptAudit') === '1'
 const users = new URLSearchParams(location.search).get('users') === '1'
@@ -55,6 +61,8 @@ const UsersView = defineAsyncComponent(() => import('../src/views/admin/UsersVie
 const GroupsView = defineAsyncComponent(() => import('../src/views/admin/GroupsView.vue'))
 const IPAccessControlView = defineAsyncComponent(() => import('../src/views/admin/IPAccessControlView.vue'))
 const UsageView = defineAsyncComponent(() => import('../src/views/admin/UsageView.vue'))
+const RiskControlView = defineAsyncComponent(() => import('../src/views/admin/RiskControlView.vue'))
+const ProxiesView = defineAsyncComponent(() => import('../src/views/admin/ProxiesView.vue'))
 const PromptAuditView = defineAsyncComponent(() => import('../src/features/prompt-audit/PromptAuditView.vue'))
 const app = useAppStore()
 app.publicSettingsLoaded = true
@@ -63,7 +71,7 @@ app.siteName = 'Admin layout review'
 app.sidebarCollapsed = false
 const auth = useAuthStore()
 auth.user = { id: 9998, role: 'admin', email: 'fixture@example.test', username: 'Reviewer', balance: 0 } as User
-if (usage || promptAudit || users || groups || ipAccessControl || emptyWide) auth.token = 'browser-fixture-token'
+if (usage || promptAudit || users || groups || ipAccessControl || riskControl || proxies || emptyWide) auth.token = 'browser-fixture-token'
 localStorage.setItem('admin_guide', 'true')
 localStorage.setItem('admin_guide_9998_admin_v4_interactive', 'true')
 const { t } = useI18n()

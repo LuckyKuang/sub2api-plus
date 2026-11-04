@@ -3,10 +3,16 @@
     <div class="workspace-page">
       <!-- Filters -->
       <div class="card workspace-fixed p-4" data-test="user-orders-filters">
-        <div class="flex flex-wrap items-center gap-3">
-          <Select v-model="sourceFilter" :options="sourceFilters" class="w-36" @change="handlePageChange(1)" />
-          <Select v-model="typeFilter" :options="typeFilters" class="w-36" @change="handlePageChange(1)" />
-          <Select v-model="currentFilter" :options="statusFilters" class="w-36" @change="handlePageChange(1)" />
+        <div class="filter-bar">
+          <div class="filter-field">
+            <Select v-model="sourceFilter" :options="sourceFilters" @change="handlePageChange(1)" />
+          </div>
+          <div class="filter-field">
+            <Select v-model="typeFilter" :options="typeFilters" @change="handlePageChange(1)" />
+          </div>
+          <div class="filter-field">
+            <Select v-model="currentFilter" :options="statusFilters" @change="handlePageChange(1)" />
+          </div>
           <div class="flex flex-1 items-center justify-end gap-2">
             <button @click="fetchOrders" :disabled="loading" class="btn btn-secondary" :title="t('common.refresh')">
               <Icon name="refresh" size="md" :class="loading ? 'animate-spin' : ''" />
