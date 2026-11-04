@@ -478,6 +478,9 @@ func setOpsSelectedAccount(c *gin.Context, accountID int64, platform ...string) 
 		if len(platform) > 0 {
 			p := strings.TrimSpace(platform[0])
 			if p != "" {
+				// Gin's synchronized map also exposes the selected platform to
+				// final writers while compact keepalives may still be running.
+				c.Set(string(ctxkey.Platform), p)
 				ctx = context.WithValue(ctx, ctxkey.Platform, p)
 			}
 		}
@@ -1074,6 +1077,12 @@ func (state *opsCaptureWriterState) shouldCapture() bool {
 	}
 	_, rejected := middleware2.GetIngressRejectReason(state.ctx)
 	return !rejected
+}
+
+// GatewayOpsErrorLoggerMiddleware places display projection beneath the raw
+// diagnostic capture. Keep this ordering for every gateway route.
+func GatewayOpsErrorLoggerMiddleware(ops *service.OpsService, settings *service.SettingService) gin.HandlerFunc {
+	return service.OpenAIErrorMessageOutput(settings, OpsErrorLoggerMiddleware(ops))
 }
 
 // OpsErrorLoggerMiddleware records error responses (status >= 400) into ops_error_logs.

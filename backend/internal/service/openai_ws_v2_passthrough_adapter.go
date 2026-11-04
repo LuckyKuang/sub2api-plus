@@ -30,6 +30,7 @@ type openAIWSClientFrameConn struct {
 	// model identifier they supplied for the current turn.
 	restoreResponseModel func([]byte) []byte
 	restoreToolNames     func([]byte) []byte
+	projectOutput        func([]byte) []byte
 }
 
 // openAIWSPolicyEnforcingFrameConn wraps a client-side FrameConn and runs
@@ -663,6 +664,13 @@ func (c *openAIWSClientFrameConn) WriteFrame(ctx context.Context, msgType coderw
 			payload = c.restoreToolNames(payload)
 		}
 	}
+	if (msgType == coderws.MessageText || msgType == coderws.MessageBinary) && c.projectOutput != nil {
+		originalSize := len(payload)
+		payload = c.projectOutput(payload)
+		if originalSize > 0 && payload == nil {
+			return nil
+		}
+	}
 	return c.conn.Write(ctx, msgType, payload)
 }
 
@@ -1027,6 +1035,9 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 	stateStore := s.getOpenAIWSStateStore()
 	groupID := getOpenAIGroupIDFromContext(c)
 	clientFrameConn := &openAIWSClientFrameConn{
+		projectOutput: func(payload []byte) []byte {
+			return s.projectOpenAIWebSocketOutput(ctx, c, account, payload)
+		},
 		conn:                 clientConn,
 		controlCtx:           ctx,
 		interTurnIdleTimeout: s.openAIWSIngressInterTurnIdleTimeout(),

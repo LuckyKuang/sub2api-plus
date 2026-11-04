@@ -41,6 +41,16 @@ imply real-account or live-model acceptance. Project bridge owners are
 `backend/internal/codexcli/bridge.go`,
 `backend/internal/service/codex_cli_bridge_transport.go`,
 `openai_plugin_transport.go` and `openai_codex_transport.go`.
+The downstream display review also covers the release source's
+[`codex-rs/tui/src/chatwidget/safety_buffering.rs`](https://github.com/openai/codex/blob/360319d8dee62d87e2d59fc0c21805d79519cfed/codex-rs/tui/src/chatwidget/safety_buffering.rs).
+`service/TestCodexSafetyBufferingOfficialCLIInteractive` runs the unmodified
+pinned binary with `--no-daemon` in a private PTY through the gateway. It observes
+the notice/actions off, their absence on, normal completion and one generation
+for both OAuth/API Key owners and native/official CLI outbound. The PTY owner is
+`tools/test_codex_safety_buffering_tui.py`; desktop App rendering is not executed.
+The auxiliary title request follows
+[`codex-rs/tui/src/app/thread_title.rs`](https://github.com/openai/codex/blob/360319d8dee62d87e2d59fc0c21805d79519cfed/codex-rs/tui/src/app/thread_title.rs)
+and is counted separately from the user's original generation.
 
 ZCode's selected product version comes from current source and is paired with
 the project-access-token implementation at that commit. It has no matching

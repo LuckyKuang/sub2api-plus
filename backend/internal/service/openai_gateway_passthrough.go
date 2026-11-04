@@ -1134,6 +1134,7 @@ func (s *OpenAIGatewayService) handleErrorResponsePassthrough(
 	// context-window 超限是确定性请求失败（shouldFailoverOpenAIPassthroughResponse
 	// 已保证不切号），其文案对客户端可操作（如触发自动压缩）；在净化信封内保留
 	// 脱敏后的上游消息，而不是抹成通用文案。
+	SetOpenAIErrorMessageSource(c, body)
 	if isOpenAIModelNotFoundError(resp.StatusCode, body) {
 		writeOpenAIUpstreamClientError(c, resp.StatusCode, body, upstreamMsg)
 	} else if isOpenAIContextWindowError(upstreamMsg, body) && upstreamMsg != "" {
@@ -1965,6 +1966,7 @@ func (s *OpenAIGatewayService) newOpenAIStreamFailoverErrorWithModel(
 	}
 	// Preserve the existing generic envelope for unclassified stream failures;
 	// only typed access/capacity failures need the original payload downstream.
+	failoverErr.openAIErrorMessageCode = openAIErrorMessageCode(payload)
 	failoverErr.ResponseBody = body
 	return failoverErr
 }
@@ -2039,6 +2041,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 	mappedModel string,
 	encryptedRecoveryAllowed ...bool,
 ) (result *openaiStreamingResultPassthrough, returnErr error) {
+	defer s.beginCodexSafetyBufferingHTTPOutput(ctx, c, account)()
 	modelNotFoundTerminal := false
 	defer func() {
 		if returnErr != nil && modelNotFoundTerminal {
@@ -2141,10 +2144,29 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 		if clientDisconnected || !flushPending {
 			return
 		}
+		if err := flushCodexSafetyBufferingHTTPOutput(c); err != nil {
+			clientDisconnected = true
+			logger.LegacyPrintf("service.openai_gateway", "[OpenAI passthrough] Client disconnected during projected flush, continue draining upstream for usage: account=%d", account.ID)
+			return
+		}
 		flusher.Flush()
 		flushPending = false
 	}
-	defer flushPendingOutput()
+	defer func() {
+		flushPendingOutput()
+		// EOF may leave the final event in the output projection until this
+		// flush. Named return values have already been evaluated, so propagate
+		// a late write failure into the result without losing upstream usage
+		// or replacing an existing upstream error.
+		if clientDisconnected {
+			if result != nil {
+				result.clientDisconnect = true
+			}
+			if returnErr == nil {
+				returnErr = fmt.Errorf("stream usage incomplete: client disconnected")
+			}
+		}
+	}()
 	writePendingLines := func() bool {
 		for _, pending := range pendingLines {
 			if _, err := fmt.Fprintln(w, pending); err != nil {
@@ -2332,6 +2354,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 					}
 					if !cyberHit && !sawBareError {
 						if status, errType, errMsg, matched := applyOpenAIStreamFailedErrorPassthroughRule(c, account.Platform, dataBytes, failedMessage); matched {
+							SetOpenAIErrorMessageSource(c, dataBytes)
 							// 命中透传规则也要记录 ops 上游错误事件（对齐 CC/Messages 与
 							// antigravity 先例），否则透传命中的 failed 在监控中不可见。
 							s.recordOpenAIStreamUpstreamError(c, account, true, upstreamRequestID, "http_error", dataBytes, failedMessage)
@@ -2526,6 +2549,7 @@ func (s *OpenAIGatewayService) handleNonStreamingResponsePassthrough(
 	mappedModel string,
 	encryptedRecoveryAllowed ...bool,
 ) (*openaiNonStreamingResultPassthrough, error) {
+	defer s.beginCodexSafetyBufferingHTTPOutput(ctx, c, account)()
 	body, err := ReadUpstreamResponseBody(resp.Body, s.cfg, c, openAITooLargeError)
 	if err != nil {
 		return nil, err
@@ -2623,6 +2647,7 @@ func (s *OpenAIGatewayService) handlePassthroughSSEToJSON(resp *http.Response, c
 		if failoverErr := s.nonStreamingTerminalFailureFailover(c, resp, account, true, terminalType, terminalPayload, msg, mappedModel); failoverErr != nil {
 			return nil, failoverErr
 		}
+		SetOpenAIErrorMessageSource(c, terminalPayload)
 		return nil, s.writeOpenAINonStreamingProtocolError(resp, c, account, msg)
 	}
 	finalResponse, ok := extractCodexFinalResponse(bodyText)

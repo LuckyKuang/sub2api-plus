@@ -54,6 +54,7 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 }
 
 func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.Context, resp *http.Response, c *gin.Context, account *Account, startTime time.Time, originalModel, mappedModel, reasoningEffort string, encryptedRecoveryAllowed ...bool) (result *openaiStreamingResult, returnErr error) {
+	defer s.beginCodexSafetyBufferingHTTPOutput(ctx, c, account)()
 	modelNotFoundTerminal := false
 	defer func() {
 		if returnErr != nil && modelNotFoundTerminal {
@@ -169,6 +170,9 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 			if err := bufferedWriter.Flush(); err != nil {
 				return err
 			}
+		}
+		if err := flushCodexSafetyBufferingHTTPOutput(c); err != nil {
+			return err
 		}
 		flusher.Flush()
 		return nil
@@ -637,6 +641,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 					}
 					if !cyberHit && !sawBareError {
 						if status, errType, errMsg, matched := applyOpenAIStreamFailedErrorPassthroughRule(c, account.Platform, dataBytes, failedMessage); matched {
+							SetOpenAIErrorMessageSource(c, dataBytes)
 							sawFailedEvent = true
 							// 命中透传规则也要记录 ops 上游错误事件（对齐 CC/Messages 与
 							// antigravity 先例），否则透传命中的 failed 在监控中不可见。
@@ -1687,6 +1692,7 @@ func firstPresentOpenAICacheTokenCount(values ...gjson.Result) int {
 }
 
 func (s *OpenAIGatewayService) handleNonStreamingResponse(ctx context.Context, resp *http.Response, c *gin.Context, account *Account, originalModel, mappedModel string, encryptedRecoveryAllowed ...bool) (*openaiNonStreamingResult, error) {
+	defer s.beginCodexSafetyBufferingHTTPOutput(ctx, c, account)()
 	body, err := ReadUpstreamResponseBody(resp.Body, s.cfg, c, openAITooLargeError)
 	if err != nil {
 		return nil, err
@@ -1832,6 +1838,7 @@ func (s *OpenAIGatewayService) handleSSEToJSON(resp *http.Response, c *gin.Conte
 		if failoverErr := s.nonStreamingTerminalFailureFailover(c, resp, account, false, terminalType, terminalPayload, msg, mappedModel); failoverErr != nil {
 			return nil, failoverErr
 		}
+		SetOpenAIErrorMessageSource(c, terminalPayload)
 		return nil, s.writeOpenAINonStreamingProtocolError(resp, c, account, msg)
 	}
 	finalResponse, ok := extractCodexFinalResponse(bodyText)

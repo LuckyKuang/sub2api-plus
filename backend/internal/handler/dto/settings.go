@@ -219,6 +219,8 @@ type SystemSettings struct {
 	OpenAICodexEgressCountry                     string `json:"openai_codex_egress_country"`
 	OpenAICodexWSEnabled                         bool   `json:"openai_codex_ws_enabled"`
 	OpenAICodexHTTPWSEnabled                     bool   `json:"openai_codex_http_ws_enabled"`
+	OpenAICodexSafetyBufferingSuppressed         bool   `json:"openai_codex_safety_buffering_suppressed"`
+	OpenAIErrorMessagesNormalized                bool   `json:"openai_error_messages_normalized"`
 	OpenAICodexWSDeploymentAllowed               bool   `json:"openai_codex_ws_deployment_allowed"`
 	OpenAICodexResidency                         string `json:"codex_residency"`
 	CodexLegacyClientProfileCompatibilityEnabled bool   `json:"codex_legacy_client_profile_compatibility_enabled"`

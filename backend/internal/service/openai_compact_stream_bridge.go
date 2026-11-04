@@ -112,6 +112,7 @@ func writeOpenAICompactSSEFailureMessage(c *gin.Context, statusCode int, errType
 	if c == nil {
 		return
 	}
+	SetOpenAIErrorMessageGeneratedCode(c, errType)
 	MarkOpsStreamError(c, errType, message, statusCode)
 	payload, err := json.Marshal(map[string]any{
 		"type":            "response.failed",
