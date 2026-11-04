@@ -687,14 +687,25 @@ def run_go_transparent_bridge(binary: Path) -> None:
     environment = os.environ.copy()
     environment["SUB2API_CODEX_BRIDGE_BINARY"] = str(binary.resolve())
     repository = Path(__file__).resolve().parents[1]
-    result = subprocess.run(["go", "test", "-C", str(repository / "backend"), "-tags=unit", "./internal/codexcli",
-                             "-run", "^TestCodexBridgeOfficialBinaryWire$", "-count=1", "-v"],
-                            env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=180)
-    output = result.stdout.decode("utf-8", errors="replace")
-    # A real binary must be exercised. A missing fixture, skipped case or build
-    # failure cannot silently reduce this gate to the proxy-only Python check.
-    require(result.returncode == 0 and "--- PASS: TestCodexBridgeOfficialBinaryWire" in output
-            and "--- SKIP:" not in output, "official_go_bridge_wire_failed")
+    for package, test, failure, timeout in (
+        ("./internal/codexcli", "TestCodexBridgeOfficialBinaryWire", "official_go_bridge_wire_failed", 180),
+        ("./internal/service", "TestCodexSafetyBufferingOfficialCLIWire", "official_downstream_safety_buffering_wire_failed", 600),
+        ("./internal/service", "TestCodexSafetyBufferingOfficialCLIInteractive", "official_interactive_safety_buffering_failed", 600),
+    ):
+        result = subprocess.run(["go", "test", "-C", str(repository / "backend"), "-tags=unit", package,
+                                 "-run", f"^{test}$", "-count=1", "-v"],
+                                env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout)
+        output = result.stdout.decode("utf-8", errors="replace")
+        # A real binary must be exercised. A missing fixture, skipped case or
+        # build failure cannot silently reduce this gate to proxy-only checks.
+        require(result.returncode == 0 and f"--- PASS: {test}" in output
+                and "--- SKIP:" not in output, failure)
+        if test == "TestCodexSafetyBufferingOfficialCLIInteractive":
+            require(all(
+                f"--- PASS: {test}/{account}/cli={cli}/suppressed={suppressed} " in output
+                for account in ("oauth", "apikey") for cli in ("false", "true")
+                for suppressed in ("false", "true")
+            ), "official_interactive_safety_buffering_matrix_incomplete")
 
 
 def main() -> int:

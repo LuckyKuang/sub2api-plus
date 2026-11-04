@@ -977,3 +977,34 @@ inference. A unified Messages key admits it alongside its own inference path;
 the Responses and Chat Completions endpoints admit no auxiliary, so every other
 sub-path stays a basic-validation rejection. The admitted call keeps the existing
 ingress audit before its own side effects.
+
+### Downstream safety buffering display projection
+
+`openai_codex_safety_buffering_suppressed` only projects response display
+metadata at the final HTTP/SSE and WS client writers. Both audit engines retain
+the same canonical request extraction and ingress ordering. Native OAuth/API
+Key and official CLI bridge paths cannot use this switch to skip admission,
+classification or provider policy errors. Internal observers consume original
+events; mixed guardian, moderation and verification fields survive projection.
+Malformed projection input passes through with request/endpoint/protocol/stage,
+a stable diagnostic code and byte counts, without logging raw content.
+
+The `TestCodexSafetyBuffering*` service regressions cover the two carriers,
+mixed metadata, failures, fragmented SSE, release of staged events, per-event
+hot switching, native/CLI account matrices, WS delivery and replica refresh.
+`TestCodexSafetyBufferingEOFFlushAndDisconnectRetainUsage` runs both switch
+states with a real settings service, proving EOF flush delivery and usage
+draining after downstream write failures in native and passthrough parsers.
+`TestCodexSafetyBufferingEOFWriteFailureIsNotSuccess` additionally isolates a
+failure only on the final EOF event write: neither account type nor switch state
+may report successful delivery, and the collected usage must remain available.
+`TestCodexSafetyBufferingOfficialCLIWire` additionally requires the independently
+verified official binary; an absent-binary skip is not official wire evidence.
+`TestCodexSafetyBufferingBusiness*` defines acceptance independently of the
+projection: pure notices leave no event/frame, unknown and security siblings
+survive, staged events follow on/off/on at release, accepted events above 4 MiB
+cannot leak, and temporary-storage failure cannot release raw notices.
+`TestCodexSafetyBufferingOfficialCLIInteractive` drives the verified official
+TUI with an off positive control for the real notice and retry/dismiss choices,
+plus on silence and normal completion in the account/outbound matrix. This
+observes client rendering without changing ingress audit or client binaries.

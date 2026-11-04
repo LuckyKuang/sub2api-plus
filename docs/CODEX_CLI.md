@@ -529,3 +529,32 @@ responses may lower billing to the declared cheaper tier; private Codex OAuth
 Managed tasks remain Standard-only and reject paid-tier policy before acquiring
 credentials or writing task files. These diagnostics do not enable Fast on the
 managed-task endpoint.
+
+### Downstream safety buffering display control
+
+`openai_codex_safety_buffering_suppressed` is independent of both CLI bridge
+switches. OAuth and API Key transparent bridge responses reach the gateway's
+same final downstream HTTP/SSE or WS writer as native sends. Turning the display
+control on or off changes subsequent unsent events in the current generation;
+it does not restart the official process, change the acquired owner/identity,
+switch transport or repeat a provider write. Staged events are projected when
+released. The official proxy and its pinned executable remain unchanged.
+See [Responses display behavior](protocols/OPENAI_RESPONSES.md#downstream-codex-safety-buffering-notices)
+for mixed metadata, response-header limitations and replica synchronization.
+The maintained `tools/test_codex_cli_wire.py` gate also executes the HTTP and
+WS display-switch account matrix through the verified official binary, using
+opaque SSE comments to flush the proxy's small-chunk buffering between
+checkpoints. It rejects skipped or missing gateway cases.
+It also runs the official interactive CLI in an isolated PTY through the real
+gateway for OAuth/API Key owners, native/official CLI outbound, and suppression
+off/on. The off control must render the actual notice and retry/dismiss actions;
+the on case must render none. Both must complete the answer, retain usage, keep
+the client session alive, and make exactly one upstream generation request.
+The pinned TUI also creates an independent structured-output request for the
+session title. The fixture identifies it by the official
+[`thread_title.rs`](https://github.com/openai/codex/blob/360319d8dee62d87e2d59fc0c21805d79519cfed/codex-rs/tui/src/app/thread_title.rs)
+prompt and title schema, serves it separately, and counts it independently;
+the single-generation assertion applies to the user's original turn.
+The pinned client's UI contract follows
+[`safety_buffering.rs`](https://github.com/openai/codex/blob/360319d8dee62d87e2d59fc0c21805d79519cfed/codex-rs/tui/src/chatwidget/safety_buffering.rs).
+This consumer test does not claim to execute the desktop App UI.

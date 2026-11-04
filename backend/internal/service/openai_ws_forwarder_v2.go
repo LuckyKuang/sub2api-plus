@@ -36,6 +36,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 	lastFailureReason string,
 	agentTaskRecoveryTried *bool,
 ) (result *OpenAIForwardResult, returnErr error) {
+	defer s.beginCodexSafetyBufferingHTTPOutput(ctx, c, account)()
 	if s == nil || account == nil {
 		return nil, wrapOpenAIWSFallback("invalid_state", errors.New("service or account is nil"))
 	}

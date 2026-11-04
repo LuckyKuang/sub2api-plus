@@ -621,6 +621,8 @@ export default {
         openaiCodexEgressCountryNone: 'Not set (no declaration)',
         openaiCodexEgressCountryHint:
           'Global default egress country (ISO 3166-1 alpha-2, e.g. US). Account-level egress_country and the egress proxy annotation take precedence; leave empty to declare nothing.',
+        codexSafetyBufferingSuppressed: 'Suppress Codex safety buffering notices',
+        codexSafetyBufferingSuppressedHint: 'Applies to OpenAI OAuth and API Key accounts, including official Codex CLI outbound bridging. Off by default. Changes apply to subsequent unsent events during the current generation. Turning this off restores future notices. Delivered notices cannot be recalled; suppressed notices are not replayed. Upstream processing and final results keep their existing behavior. Replicas may take a short time to synchronize.',
         codexUpstreamWS: 'Enable Codex upstream WebSocket',
         codexUpstreamWSHint: 'Allow OAuth and API key accounts to connect upstream over WebSocket, subject to deployment restrictions and account modes. When disabled, use HTTP streaming. Active generations may finish; existing WS sessions must reconnect for the next turn.',
         codexUpstreamWSDeploymentBlocked: 'Deployment configuration currently prohibits upstream WebSocket. Enabling this setting cannot override it.',

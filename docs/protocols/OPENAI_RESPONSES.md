@@ -1079,3 +1079,55 @@ previous turn. `outbound_transport` distinguishes native sends, verified CLI
 bridge callbacks and managed-task execution; historical evidence is unknown.
 These fields are administrator-only and do not prove upstream Fast execution.
 See [CLI usage and evidence](../CODEX_CLI.md#usage-accuracy-and-outbound-evidence).
+
+## Downstream Codex safety buffering notices
+
+The carrier contract follows the reviewed Codex source's
+[`ResponsesStreamEvent` parsing](https://github.com/openai/codex/blob/154e8736a51224e12b2d990753622a2cd8118f54/codex-rs/codex-api/src/sse/responses.rs)
+and [header treatment](https://github.com/openai/codex/blob/154e8736a51224e12b2d990753622a2cd8118f54/codex-rs/codex-api/src/safety_buffering.rs).
+
+The administrator setting `openai_codex_safety_buffering_suppressed` defaults
+to `false`. It applies to OpenAI OAuth and API Key accounts, including custom
+API Key endpoints, the official CLI transparent bridge, and transport plugins.
+It is a downstream display projection: upstream requests, safety decisions,
+account identity, billing and credential ownership keep their existing rules.
+
+When enabled, the final HTTP/SSE or WebSocket writer removes top-level
+`safety_buffering` and the buffering-specific `type`, `use_cases`, `reasons`
+and `retry_model` fields in `response.metadata` whose `metadata.type` is
+`safety_buffering`. Mixed-event verification, moderation, guardian and unknown
+sibling metadata survive. Body text, tool arguments and nested user fields keep
+their contents. Real errors, usage and terminal events remain visible. The two
+`x-codex-safety-buffering-{enabled,faster-model}` response headers are removed
+before response commitment, including the protocol's embedded header carrier.
+If only the target notice remains after projection, its entire
+`response.metadata` event is discarded, including SSE event/id framing and WS
+text or binary frames. No empty envelope, empty frame, replacement message or
+client action is emitted. Independent SSE comment keepalives survive. Unknown
+root fields or sibling metadata make an event mixed, so they are retained.
+
+Each complete event uses the current instance's setting at actual downstream
+write, including staged/pending output and bridge replay. Enabling or disabling
+it affects an ongoing generation without resubmitting, reconnecting or changing
+transport. Already committed events cannot be recalled; suppressed historical
+fields are not replayed. HTTP/handshake headers cannot be retroactively changed;
+after a mid-stream disable, a later notice without `retry_model` may therefore
+lack the header-derived retry option.
+
+Successful saves update the local runtime atomically. Other replicas reconcile
+through the existing Redis invalidation bus and a one-second background poll;
+this is eventual consistency, not simultaneous cluster-wide commitment. Failed
+refreshes retain the last valid value; an unavailable first read uses the default
+off. Malformed projection input passes through with a structured,
+content-free diagnostic. One event is staged using the existing anonymous spool;
+fragmented JSON and SSE above 4 MiB remain subject to projection. There is no
+size-based raw bypass; existing gateway parsers own accepted input limits. At
+projection the accepted event is materialized for the JSON transform, rather
+than retaining a whole generation. Staging/write failures follow transport
+failure handling and never release unsanitized staged data as a fallback.
+Existing endpoint validation and transport
+failures keep their owning behavior. Keepalive, cancellation and resource
+cleanup are independent of notice suppression.
+An EOF event without a final empty line is flushed before reporting delivery;
+a failure on that final write marks the client disconnected while retaining
+collected usage and any existing upstream error.

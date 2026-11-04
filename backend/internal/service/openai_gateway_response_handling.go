@@ -54,6 +54,7 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 }
 
 func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.Context, resp *http.Response, c *gin.Context, account *Account, startTime time.Time, originalModel, mappedModel, reasoningEffort string, encryptedRecoveryAllowed ...bool) (result *openaiStreamingResult, returnErr error) {
+	defer s.beginCodexSafetyBufferingHTTPOutput(ctx, c, account)()
 	modelNotFoundTerminal := false
 	defer func() {
 		if returnErr != nil && modelNotFoundTerminal {
@@ -169,6 +170,9 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 			if err := bufferedWriter.Flush(); err != nil {
 				return err
 			}
+		}
+		if err := flushCodexSafetyBufferingHTTPOutput(c); err != nil {
+			return err
 		}
 		flusher.Flush()
 		return nil
@@ -1687,6 +1691,7 @@ func firstPresentOpenAICacheTokenCount(values ...gjson.Result) int {
 }
 
 func (s *OpenAIGatewayService) handleNonStreamingResponse(ctx context.Context, resp *http.Response, c *gin.Context, account *Account, originalModel, mappedModel string, encryptedRecoveryAllowed ...bool) (*openaiNonStreamingResult, error) {
+	defer s.beginCodexSafetyBufferingHTTPOutput(ctx, c, account)()
 	body, err := ReadUpstreamResponseBody(resp.Body, s.cfg, c, openAITooLargeError)
 	if err != nil {
 		return nil, err

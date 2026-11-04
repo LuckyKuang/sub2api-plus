@@ -43,7 +43,7 @@ func (s *SettingService) UpdateSettingsOmitting(ctx context.Context, settings *S
 		return err
 	}
 	omitted.dropFrom(updates)
-	if err := s.persistSystemSettingsUpdates(ctx, settings, updates); err != nil {
+	if err := s.persistSystemSettingsWithCodexSafetyBuffering(ctx, settings, updates); err != nil {
 		return err
 	}
 	s.refreshCachedSettingsAfterWrite(ctx, settings, omitted)
@@ -72,7 +72,7 @@ func (s *SettingService) UpdateSettingsWithAuthSourceDefaultsOmitting(ctx contex
 		updates[key] = value
 	}
 	omitted.dropFrom(updates)
-	if err := s.persistSystemSettingsUpdates(ctx, settings, updates); err != nil {
+	if err := s.persistSystemSettingsWithCodexSafetyBuffering(ctx, settings, updates); err != nil {
 		return err
 	}
 	s.refreshCachedSettingsAfterWrite(ctx, settings, omitted)
@@ -594,6 +594,7 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeyOpenAICodexEgressCountry] = strings.TrimSpace(settings.OpenAICodexEgressCountry)
 	updates[SettingKeyOpenAICodexWSEnabled] = strconv.FormatBool(settings.OpenAICodexWSEnabled)
 	updates[SettingKeyOpenAICodexHTTPWSEnabled] = strconv.FormatBool(settings.OpenAICodexHTTPWSEnabled)
+	updates[SettingKeyOpenAICodexSafetyBufferingSuppressed] = strconv.FormatBool(settings.OpenAICodexSafetyBufferingSuppressed)
 	updates[SettingKeyOpenAICodexResidency] = settings.OpenAICodexResidency
 	updates[SettingKeyCodexLegacyClientProfileCompatibilityEnabled] = strconv.FormatBool(settings.CodexLegacyClientProfileCompatibilityEnabled)
 	updates[SettingKeyOpenAICodexLocalGroupQuotaEnabled] = strconv.FormatBool(settings.OpenAICodexLocalGroupQuotaEnabled)

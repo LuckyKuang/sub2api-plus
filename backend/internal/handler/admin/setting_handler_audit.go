@@ -492,6 +492,9 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	if before.OpenAICodexHTTPWSEnabled != after.OpenAICodexHTTPWSEnabled {
 		changed = append(changed, "openai_codex_http_ws_enabled")
 	}
+	if before.OpenAICodexSafetyBufferingSuppressed != after.OpenAICodexSafetyBufferingSuppressed {
+		changed = append(changed, "openai_codex_safety_buffering_suppressed")
+	}
 	if before.OpenAICodexResidency != after.OpenAICodexResidency {
 		changed = append(changed, "codex_residency")
 	}

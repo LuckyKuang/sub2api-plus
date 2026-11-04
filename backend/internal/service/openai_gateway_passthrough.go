@@ -2039,6 +2039,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 	mappedModel string,
 	encryptedRecoveryAllowed ...bool,
 ) (result *openaiStreamingResultPassthrough, returnErr error) {
+	defer s.beginCodexSafetyBufferingHTTPOutput(ctx, c, account)()
 	modelNotFoundTerminal := false
 	defer func() {
 		if returnErr != nil && modelNotFoundTerminal {
@@ -2141,10 +2142,29 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 		if clientDisconnected || !flushPending {
 			return
 		}
+		if err := flushCodexSafetyBufferingHTTPOutput(c); err != nil {
+			clientDisconnected = true
+			logger.LegacyPrintf("service.openai_gateway", "[OpenAI passthrough] Client disconnected during projected flush, continue draining upstream for usage: account=%d", account.ID)
+			return
+		}
 		flusher.Flush()
 		flushPending = false
 	}
-	defer flushPendingOutput()
+	defer func() {
+		flushPendingOutput()
+		// EOF may leave the final event in the output projection until this
+		// flush. Named return values have already been evaluated, so propagate
+		// a late write failure into the result without losing upstream usage
+		// or replacing an existing upstream error.
+		if clientDisconnected {
+			if result != nil {
+				result.clientDisconnect = true
+			}
+			if returnErr == nil {
+				returnErr = fmt.Errorf("stream usage incomplete: client disconnected")
+			}
+		}
+	}()
 	writePendingLines := func() bool {
 		for _, pending := range pendingLines {
 			if _, err := fmt.Fprintln(w, pending); err != nil {
@@ -2526,6 +2546,7 @@ func (s *OpenAIGatewayService) handleNonStreamingResponsePassthrough(
 	mappedModel string,
 	encryptedRecoveryAllowed ...bool,
 ) (*openaiNonStreamingResultPassthrough, error) {
+	defer s.beginCodexSafetyBufferingHTTPOutput(ctx, c, account)()
 	body, err := ReadUpstreamResponseBody(resp.Body, s.cfg, c, openAITooLargeError)
 	if err != nil {
 		return nil, err

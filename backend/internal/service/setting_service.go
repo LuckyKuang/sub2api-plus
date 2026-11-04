@@ -119,6 +119,7 @@ type WebSearchManagerBuilder func(cfg *WebSearchEmulationConfig, proxyURLs map[i
 
 // SettingService 系统设置服务
 type SettingService struct {
+	codexSafetyBuffering      codexSafetyBufferingRuntime
 	scopedAdminKeyRepo        ScopedAdminKeyRepository
 	outboundIdentityCache     atomic.Value // *cachedOutboundIdentitySettings
 	outboundIdentityMu        sync.Mutex

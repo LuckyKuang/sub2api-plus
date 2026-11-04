@@ -603,6 +603,15 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 
 	var pendingMigrationMessages [][]byte
 	var pendingMigrationBytes int64
+	writeDownstream := func(writeCtx context.Context, message []byte) error {
+		message = restoreCodexToolNamesFromContext(c, message)
+		originalSize := len(message)
+		message = s.projectCodexSafetyBufferingOutput(ctx, c, account, message, "websocket")
+		if originalSize > 0 && message == nil {
+			return nil
+		}
+		return clientConn.Write(writeCtx, coderws.MessageText, message)
+	}
 	writeClientMessage := func(message []byte) error {
 		if err := commitOpenAISessionTakeoverEvent(ctx, message); err != nil {
 			return err
@@ -622,14 +631,13 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		writeCtx, cancel := newOpenAIWSDownstreamWriteContext(ctx, hooks, s.openAIWSWriteTimeout())
 		defer cancel()
 		for _, pending := range pendingMigrationMessages {
-			if err := clientConn.Write(writeCtx, coderws.MessageText, restoreCodexToolNamesFromContext(c, pending)); err != nil {
+			if err := writeDownstream(writeCtx, pending); err != nil {
 				return err
 			}
 		}
 		pendingMigrationMessages = nil
 		pendingMigrationBytes = 0
-		message = restoreCodexToolNamesFromContext(c, message)
-		return clientConn.Write(writeCtx, coderws.MessageText, message)
+		return writeDownstream(writeCtx, message)
 	}
 
 	readClientMessage := func() ([]byte, error) {

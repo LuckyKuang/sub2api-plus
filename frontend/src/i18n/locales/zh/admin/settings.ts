@@ -614,6 +614,8 @@ export default {
         openaiCodexEgressCountryNone: '未设置（不声明）',
         openaiCodexEgressCountryHint:
           '全局默认的出口国家（ISO 3166-1 alpha-2，如 US）。账号级 egress_country 与代理出口国家标注优先；留空不声明。',
+        codexSafetyBufferingSuppressed: '拦截 Codex 安全缓冲提示',
+        codexSafetyBufferingSuppressedHint: '适用于 OpenAI OAuth 和 API Key，包括官方 Codex CLI 统一出站。默认关闭。开启后拦截发给下游的安全缓冲提示，对当前生成后续尚未发送的事件生效；关闭后恢复后续提示。已发送的提示不能撤回，已拦截的提示不补发，上游处理和最终结果保持原有行为。多实例存在短暂同步时间。',
         codexUpstreamWS: '启用 Codex 上游 WebSocket',
         codexUpstreamWSHint: '控制 OAuth 和 API Key 账号连接上游时是否允许使用 WebSocket，仍遵守部署限制和账号模式。关闭后使用 HTTP 流式请求；进行中的生成可完成，已有 WS 会话下一轮需重新连接。',
         codexUpstreamWSDeploymentBlocked: '当前部署配置禁止上游 WebSocket，开启页面开关也不会建立 WS 连接。',

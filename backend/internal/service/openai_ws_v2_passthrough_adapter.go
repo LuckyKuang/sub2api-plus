@@ -28,8 +28,9 @@ type openAIWSClientFrameConn struct {
 	waitingForNextTurn   atomic.Bool
 	// The relay observes upstream payloads, while clients must keep seeing the
 	// model identifier they supplied for the current turn.
-	restoreResponseModel func([]byte) []byte
-	restoreToolNames     func([]byte) []byte
+	restoreResponseModel   func([]byte) []byte
+	restoreToolNames       func([]byte) []byte
+	projectSafetyBuffering func([]byte) []byte
 }
 
 // openAIWSPolicyEnforcingFrameConn wraps a client-side FrameConn and runs
@@ -663,6 +664,13 @@ func (c *openAIWSClientFrameConn) WriteFrame(ctx context.Context, msgType coderw
 			payload = c.restoreToolNames(payload)
 		}
 	}
+	if (msgType == coderws.MessageText || msgType == coderws.MessageBinary) && c.projectSafetyBuffering != nil {
+		originalSize := len(payload)
+		payload = c.projectSafetyBuffering(payload)
+		if originalSize > 0 && payload == nil {
+			return nil
+		}
+	}
 	return c.conn.Write(ctx, msgType, payload)
 }
 
@@ -1027,6 +1035,9 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 	stateStore := s.getOpenAIWSStateStore()
 	groupID := getOpenAIGroupIDFromContext(c)
 	clientFrameConn := &openAIWSClientFrameConn{
+		projectSafetyBuffering: func(payload []byte) []byte {
+			return s.projectCodexSafetyBufferingOutput(ctx, c, account, payload, "websocket")
+		},
 		conn:                 clientConn,
 		controlCtx:           ctx,
 		interTurnIdleTimeout: s.openAIWSIngressInterTurnIdleTimeout(),

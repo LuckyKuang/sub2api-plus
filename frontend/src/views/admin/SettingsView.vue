@@ -8552,6 +8552,17 @@
                   <Toggle id="codex-http-ws" v-model="form.openai_codex_http_ws_enabled" :disabled="!form.openai_codex_ws_enabled || !form.openai_codex_ws_deployment_allowed" data-testid="codex-http-ws" />
                 </div>
               </div>
+              <div class="flex items-start justify-between gap-4">
+                <div>
+                  <label class="text-sm font-medium surface-muted" for="codex-safety-buffering-suppressed">
+                    {{ t('admin.settings.gatewayForwarding.codexSafetyBufferingSuppressed') }}
+                  </label>
+                  <p class="mt-1 text-xs surface-muted">
+                    {{ t('admin.settings.gatewayForwarding.codexSafetyBufferingSuppressedHint') }}
+                  </p>
+                </div>
+                <Toggle id="codex-safety-buffering-suppressed" v-model="form.openai_codex_safety_buffering_suppressed" data-testid="codex-safety-buffering-suppressed" />
+              </div>
               <!-- OpenAI Codex UA -->
               <div>
                 <label
@@ -9836,6 +9847,7 @@ const form = reactive<SettingsForm>({
   openai_codex_egress_country: "",
   openai_codex_ws_enabled: true,
   openai_codex_http_ws_enabled: false,
+  openai_codex_safety_buffering_suppressed: false,
   openai_codex_ws_deployment_allowed: true,
   codex_residency: "off",
   codex_legacy_client_profile_compatibility_enabled: false,
@@ -11500,6 +11512,7 @@ async function saveSettings() {
         form.openai_codex_egress_country?.trim() || "",
       openai_codex_ws_enabled: form.openai_codex_ws_enabled,
       openai_codex_http_ws_enabled: form.openai_codex_http_ws_enabled,
+      openai_codex_safety_buffering_suppressed: form.openai_codex_safety_buffering_suppressed,
       codex_residency: form.codex_residency === "us" ? "us" : "off",
       codex_legacy_client_profile_compatibility_enabled:
         form.codex_legacy_client_profile_compatibility_enabled,
