@@ -12,22 +12,86 @@ import (
 	"github.com/tidwall/sjson"
 )
 
-// Only known protocol error carriers are projected. Assistant text, tool
-// arguments, opaque sibling objects and unknown event types remain untouched.
-func normalizeOpenAIErrorMessage(payload []byte) []byte {
-	if !json.Valid(payload) {
-		return payload
+type openAIErrorMessageSource struct {
+	code          string
+	generatedCode string
+}
+
+func openAIErrorMessage(code string) string {
+	switch code {
+	case "upstream_response_interrupted", "upstream_unavailable":
+		return "响应已中断，请输入「继续」重新提交。"
+	case "session_account_lost":
+		return "当前会话可能无法恢复，请新开会话继续。"
+	default:
+		return ""
 	}
-	root := gjson.ParseBytes(payload)
+}
+
+// SetOpenAIErrorMessageSource keeps only the code needed for display, never the
+// private upstream body. Call only when committing a final error, not while
+// classifying retry candidates:
+// a recovered account must not supply the source for a later failure.
+func SetOpenAIErrorMessageSource(c *gin.Context, payload []byte) {
+	if c == nil {
+		return
+	}
+	c.Set("openai_error_message_source", openAIErrorMessageSource{code: openAIErrorMessageCode(payload)})
+}
+
+func openAIErrorMessageCode(payload []byte) string {
+	if json.Valid(payload) {
+		_, object := openAIProtocolError(gjson.ParseBytes(payload))
+		candidate := object.Get("code")
+		if candidate.Type == gjson.String && object.Get("message").Type == gjson.String && openAIErrorMessage(candidate.String()) != "" {
+			return candidate.String()
+		}
+	}
+	return ""
+}
+
+func getOpenAIErrorMessageSource(c *gin.Context) openAIErrorMessageSource {
+	if c == nil {
+		return openAIErrorMessageSource{}
+	}
+	value, _ := c.Get("openai_error_message_source")
+	source, _ := value.(openAIErrorMessageSource)
+	return source
+}
+
+// SetOpenAIErrorMessageGeneratedCode identifies a locally synthesized terminal
+// code. It permits message projection without changing that wire code, while
+// explicit upstream codes retain precedence.
+func SetOpenAIErrorMessageGeneratedCode(c *gin.Context, code string) {
+	if c == nil {
+		return
+	}
+	source := getOpenAIErrorMessageSource(c)
+	source.generatedCode = code
+	c.Set("openai_error_message_source", source)
+}
+
+// SetOpenAIErrorMessageSource retains the final attempt's original display
+// classification even if stream failover had to sanitize ResponseBody earlier.
+func (e *UpstreamFailoverError) SetOpenAIErrorMessageSource(c *gin.Context) {
+	if e == nil || c == nil {
+		return
+	}
+	SetOpenAIErrorMessageSource(c, e.ResponseBody)
+	if e.openAIErrorMessageCode != "" {
+		c.Set("openai_error_message_source", openAIErrorMessageSource{code: e.openAIErrorMessageCode})
+	}
+}
+
+func openAIProtocolError(root gjson.Result) (string, gjson.Result) {
 	if !root.IsObject() {
-		return payload
+		return "", gjson.Result{}
 	}
 	path := ""
 	switch root.Get("type").String() {
 	case "error":
-		path = "error"
-		if !root.Get(path).IsObject() {
-			path = ""
+		if root.Get("error").IsObject() {
+			path = "error"
 		}
 	case "response.failed":
 		path = "response.error"
@@ -35,24 +99,38 @@ func normalizeOpenAIErrorMessage(payload []byte) []byte {
 			path = "error"
 		}
 	case "":
-		path = "error" // HTTP JSON error envelope
+		path = "error"
 	default:
-		return payload
+		return "", gjson.Result{}
 	}
-	errorObject := root
 	if path != "" {
-		errorObject = root.Get(path)
+		return path, root.Get(path)
 	}
-	if !errorObject.IsObject() || errorObject.Get("code").Type != gjson.String || errorObject.Get("message").Type != gjson.String {
+	return path, root
+}
+
+func normalizeOpenAIErrorMessage(payload []byte, source openAIErrorMessageSource) []byte {
+	if !json.Valid(payload) {
 		return payload
 	}
-	message := ""
-	switch errorObject.Get("code").String() {
-	case "upstream_response_interrupted", "upstream_unavailable":
-		message = "响应已中断，请输入「继续」重新提交。"
-	case "session_account_lost":
-		message = "当前会话可能无法恢复，请新开会话继续。"
-	default:
+	path, errorObject := openAIProtocolError(gjson.ParseBytes(payload))
+	if !errorObject.IsObject() || errorObject.Get("message").Type != gjson.String {
+		return payload
+	}
+	code := errorObject.Get("code")
+	sourceCode := source.code
+	if code.Exists() {
+		// Only an explicitly marked locally generated code may use the source;
+		// other explicit unknown/non-string downstream codes take precedence.
+		if code.Type != gjson.String {
+			return payload
+		}
+		if sourceCode == "" || source.generatedCode == "" || code.String() != source.generatedCode {
+			sourceCode = code.String()
+		}
+	}
+	message := openAIErrorMessage(sourceCode)
+	if message == "" {
 		return payload
 	}
 	if path != "" {
@@ -93,7 +171,7 @@ func OpenAIErrorMessageOutput(settings *SettingService, next gin.HandlerFunc) gi
 			},
 			projectPayload: func(payload []byte, _ string) []byte {
 				if enabled() {
-					return normalizeOpenAIErrorMessage(payload)
+					return normalizeOpenAIErrorMessage(payload, getOpenAIErrorMessageSource(c))
 				}
 				return payload
 			},
@@ -114,7 +192,7 @@ func OpenAIErrorMessageOutput(settings *SettingService, next gin.HandlerFunc) gi
 func (s *OpenAIGatewayService) projectOpenAIWebSocketOutput(ctx context.Context, c *gin.Context, account *Account, payload []byte) []byte {
 	payload = s.projectCodexSafetyBufferingOutput(ctx, c, account, payload, "websocket")
 	if account != nil && account.Platform == PlatformOpenAI && s.settingService.OpenAIErrorMessagesNormalized(ctx) {
-		return normalizeOpenAIErrorMessage(payload)
+		return normalizeOpenAIErrorMessage(payload, getOpenAIErrorMessageSource(c))
 	}
 	return payload
 }

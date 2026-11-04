@@ -788,6 +788,7 @@ func (s *OpenAIGatewayService) handleErrorResponse(
 		"upstream_error",
 		"Upstream request failed",
 	); matched {
+		SetOpenAIErrorMessageSource(c, body)
 		MarkResponseCommitted(c)
 		c.JSON(status, gin.H{
 			"error": gin.H{
@@ -819,6 +820,7 @@ func (s *OpenAIGatewayService) handleErrorResponse(
 			Detail:             upstreamDetail,
 		})
 		MarkResponseCommitted(c)
+		SetOpenAIErrorMessageSource(c, body)
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": gin.H{
 				"type":    "upstream_error",
@@ -918,6 +920,7 @@ func (s *OpenAIGatewayService) handleErrorResponse(
 		errMsg = upstreamMsg
 	}
 
+	SetOpenAIErrorMessageSource(c, body)
 	c.JSON(statusCode, gin.H{
 		"error": gin.H{
 			"type":    errType,

@@ -570,6 +570,10 @@ observers and original failure/replay behavior stay intact.
 as a real downstream consumer, with OFF positive controls and ON expected text
 for all three codes and both account/outbound types. It requires a failed CLI
 turn, collected billing usage and one provider request. The same gate exercises
+sanitized HTTP 400 errors before any answer, with OFF requiring the existing
+sanitized text and ON requiring the selected source-code message. These rejected
+requests must also fail normally with one provider send and no CLI replay.
+The matrix additionally exercises
 WS-to-HTTP through the real outbound bridge. It uses isolated temporary homes,
 synthetic credentials and local upstream fixtures; it does not exercise the
 desktop App or claim live provider acceptance. `tools/test_codex_cli_wire.py`

@@ -120,6 +120,14 @@ OPENAI_ERROR_MESSAGE_TESTS = (
     "TestOpenAIErrorMessagesHTTPClientErrorAccountMatrix",
     "TestOpenAIErrorMessagesWSPassthroughHotSwitch",
     "TestOpenAIErrorMessagesWSHTTPBridgeMatrix",
+    "TestOpenAIErrorMessagesSanitizedHTTP",
+    "TestOpenAIErrorMessagesSanitizedPendingToggle",
+    "TestOpenAIErrorMessagesRuleOutput",
+    "TestOpenAIErrorMessagesFirstFailureRule",
+    "TestOpenAIErrorMessagesNonStreamingFailure",
+    "TestOpenAIErrorMessagesCommittedContentLength",
+    "TestOpenAIErrorMessagesTypeIsNotCode",
+    "TestOpenAIErrorMessagesWSHTTPRejection",
 )
 OPENAI_ERROR_MESSAGE_SUBTESTS = tuple(
     f"{test}/{account}/cli={cli}/enabled={enabled}"
@@ -128,6 +136,27 @@ OPENAI_ERROR_MESSAGE_SUBTESTS = tuple(
 ) + tuple(
     f"TestOpenAIErrorMessagesWSPassthroughHotSwitch/{account}/enabled={enabled}/frame={frame}"
     for account in ("oauth", "apikey") for enabled in ("false", "true") for frame in (1, 2)
+) + tuple(
+    f"TestOpenAIErrorMessagesSanitizedHTTP/{account}/cli={cli}/enabled={enabled}/{failure}"
+    for account in ("oauth", "apikey") for cli in ("false", "true") for enabled in ("false", "true")
+    for failure in ("session", "interrupted", "unavailable", "unknown", "case-sensitive")
+) + tuple(
+    f"TestOpenAIErrorMessagesCommittedContentLength/{protocol}/{initial}-to-{final}"
+    for protocol in ("json", "sse") for initial in ("false", "true") for final in ("false", "true")
+) + tuple(
+    f"TestOpenAIErrorMessagesWSHTTPRejection/{account}/cli={cli}/enabled={enabled}/{code}"
+    for account in ("oauth", "apikey") for cli in ("false", "true") for enabled in ("false", "true")
+    for code in ("upstream_unavailable", "session_account_lost", "other_error")
+) + tuple(
+    f"TestOpenAIErrorMessagesFirstFailureRule/{account}/passthrough={passthrough}/cli={cli}/enabled={enabled}"
+    for account in ("oauth", "apikey") for passthrough in ("false", "true")
+    for cli in ("false", "true") for enabled in ("false", "true")
+) + tuple(
+    f"TestOpenAIErrorMessagesSanitizedPendingToggle/{initial}-to-{final}"
+    for initial, final in (("false", "true"), ("true", "false"))
+) + tuple(
+    f"TestOpenAIErrorMessagesNonStreamingFailure/passthrough={passthrough}/enabled={enabled}/compact={compact}"
+    for passthrough in ("false", "true") for enabled in ("false", "true") for compact in ("false", "true")
 )
 CODEX_SAFETY_BUFFERING_TESTS = (
     "TestCodexSafetyBufferingProjectionContract",
@@ -998,6 +1027,8 @@ PROFILES = {
         )),
         RegressionGroup("./internal/handler", (
             "TestOpenAIErrorMessagesPreserveOpsDiagnostics",
+            "TestOpenAIErrorMessagesFailoverExhausted",
+            "TestOpenAIErrorMessagesRealAccountFailover",
             "TestCodexCLIResponsesBothAuditEnginesSeeOriginalContentBeforeSideEffects",
             "TestCodexCLIResponsesRealAuditEnginesPreserveCanonicalUserSelection",
             "TestCodexCLIResponsesUnsupportedShapesFailBeforeAuditAndSideEffects",
@@ -1070,6 +1101,14 @@ PROFILES = {
         ) + tuple(
             f"TestProviderFilesAuditGatePrecedesEveryACLAndWriteBoundary/{boundary}"
             for boundary in ("upload-retry", "scheduler", "user-slot", "account-slot", "upload", "metadata", "list", "delete")
+        ) + tuple(
+            f"TestOpenAIErrorMessagesRealAccountFailover/wire={wire}/passthrough={passthrough}/enabled={enabled}/final={final}"
+            for wire in ("json", "sse") for passthrough in ("false", "true") for enabled in ("false", "true")
+            for final in ("healthy", "other_error", "upstream_unavailable")
+        ) + tuple(
+            f"TestOpenAIErrorMessagesFailoverExhausted/{platform}/enabled={enabled}/stream={stream}/{code}"
+            for platform in ("openai", "grok") for enabled in ("false", "true") for stream in ("false", "true")
+            for code in ("upstream_unavailable", "upstream_response_interrupted", "session_account_lost", "other_error", "UPSTREAM_UNAVAILABLE")
         ) + REVIEW_HANDLER_SUBTESTS),
         RegressionGroup("./internal/server/middleware", (
             "TestProviderFilesReviewAllowlistLeavesUploadBodyUnread",

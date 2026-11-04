@@ -1134,6 +1134,7 @@ func (s *OpenAIGatewayService) handleErrorResponsePassthrough(
 	// context-window 超限是确定性请求失败（shouldFailoverOpenAIPassthroughResponse
 	// 已保证不切号），其文案对客户端可操作（如触发自动压缩）；在净化信封内保留
 	// 脱敏后的上游消息，而不是抹成通用文案。
+	SetOpenAIErrorMessageSource(c, body)
 	if isOpenAIModelNotFoundError(resp.StatusCode, body) {
 		writeOpenAIUpstreamClientError(c, resp.StatusCode, body, upstreamMsg)
 	} else if isOpenAIContextWindowError(upstreamMsg, body) && upstreamMsg != "" {
@@ -1965,6 +1966,7 @@ func (s *OpenAIGatewayService) newOpenAIStreamFailoverErrorWithModel(
 	}
 	// Preserve the existing generic envelope for unclassified stream failures;
 	// only typed access/capacity failures need the original payload downstream.
+	failoverErr.openAIErrorMessageCode = openAIErrorMessageCode(payload)
 	failoverErr.ResponseBody = body
 	return failoverErr
 }
@@ -2352,6 +2354,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 					}
 					if !cyberHit && !sawBareError {
 						if status, errType, errMsg, matched := applyOpenAIStreamFailedErrorPassthroughRule(c, account.Platform, dataBytes, failedMessage); matched {
+							SetOpenAIErrorMessageSource(c, dataBytes)
 							// 命中透传规则也要记录 ops 上游错误事件（对齐 CC/Messages 与
 							// antigravity 先例），否则透传命中的 failed 在监控中不可见。
 							s.recordOpenAIStreamUpstreamError(c, account, true, upstreamRequestID, "http_error", dataBytes, failedMessage)
@@ -2644,6 +2647,7 @@ func (s *OpenAIGatewayService) handlePassthroughSSEToJSON(resp *http.Response, c
 		if failoverErr := s.nonStreamingTerminalFailureFailover(c, resp, account, true, terminalType, terminalPayload, msg, mappedModel); failoverErr != nil {
 			return nil, failoverErr
 		}
+		SetOpenAIErrorMessageSource(c, terminalPayload)
 		return nil, s.writeOpenAINonStreamingProtocolError(resp, c, account, msg)
 	}
 	finalResponse, ok := extractCodexFinalResponse(bodyText)

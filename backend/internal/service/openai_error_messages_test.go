@@ -42,7 +42,7 @@ func TestOpenAIErrorMessagesProtocolContract(t *testing.T) {
 		} {
 			input := fmt.Sprintf(envelope, tc.code, "original diagnostic")
 			want := fmt.Sprintf(envelope, tc.code, tc.message)
-			require.JSONEq(t, want, string(normalizeOpenAIErrorMessage([]byte(input))))
+			require.JSONEq(t, want, string(normalizeOpenAIErrorMessage([]byte(input), openAIErrorMessageSource{})))
 		}
 	}
 	for _, input := range []string{
@@ -58,7 +58,7 @@ func TestOpenAIErrorMessagesProtocolContract(t *testing.T) {
 		`[{"error":{"code":"upstream_unavailable","message":"original"}}]`,
 		`{"error":`, `[DONE]`,
 	} {
-		require.Equal(t, input, string(normalizeOpenAIErrorMessage([]byte(input))))
+		require.Equal(t, input, string(normalizeOpenAIErrorMessage([]byte(input), openAIErrorMessageSource{})))
 	}
 }
 

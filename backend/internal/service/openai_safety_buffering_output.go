@@ -222,7 +222,21 @@ func (w *codexSafetyBufferingHTTPWriter) closeStage(stage *openAIFirstOutputStag
 	}
 }
 
+func (w *codexSafetyBufferingHTTPWriter) removeFixedContentLength() {
+	// Both display policies can change after headers are committed. A fixed
+	// upstream length would then reject longer wording or truncate the body.
+	// Remove it before every possible first commit, even while switches are off.
+	if !w.Written() && (w.bypassProjection == nil || !w.bypassProjection()) &&
+		(isEventStreamResponse(w.Header()) || strings.HasPrefix(strings.ToLower(w.Header().Get("Content-Type")), "application/json")) {
+		w.Header().Del("Content-Length")
+	}
+}
+
 func (w *codexSafetyBufferingHTTPWriter) prepareHeaders() {
+	// Later events may change length even if this first event is unchanged.
+	if isEventStreamResponse(w.Header()) {
+		w.removeFixedContentLength()
+	}
 	if w.service != nil && !w.Written() && w.service.codexSafetyBufferingOutputEnabled(w.ctx, w.account) {
 		for key := range w.Header() {
 			for _, name := range codexSafetyBufferingHeaders {
@@ -237,6 +251,7 @@ func (w *codexSafetyBufferingHTTPWriter) prepareHeaders() {
 func (w *codexSafetyBufferingHTTPWriter) WriteHeaderNow() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	w.removeFixedContentLength()
 	w.prepareHeaders()
 	w.ResponseWriter.WriteHeaderNow()
 }
@@ -407,6 +422,7 @@ func (w *codexSafetyBufferingHTTPWriter) writeSSEFrame() error {
 func (w *codexSafetyBufferingHTTPWriter) Flush() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	w.removeFixedContentLength()
 	w.prepareHeaders()
 	w.ResponseWriter.Flush()
 }

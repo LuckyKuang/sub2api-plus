@@ -36,6 +36,14 @@ func TestOpenAIErrorMessagesOfficialCLI(t *testing.T) {
 	status := codexcli.NewManager(t.TempDir()).Status(t.Context())
 	require.True(t, status.SourceVerified, status.UnavailableCode)
 	require.True(t, status.ExecutionAvailable, status.UnavailableCode)
+	testOpenAIErrorMessagesOfficialCLIMatrix(t, binary, &status, false)
+	t.Run("http-rejection", func(t *testing.T) { testOpenAIErrorMessagesOfficialCLIMatrix(t, binary, &status, true) })
+	// The official outbound path also needs its WS-to-HTTP final writer.
+	t.Run("ws-http", func(t *testing.T) { testOpenAIErrorMessagesWSHTTPBridgeMatrix(t, &status) })
+}
+
+func testOpenAIErrorMessagesOfficialCLIMatrix(t *testing.T, binary string, status *codexcli.Status, rejection bool) {
+	t.Helper()
 	for _, kind := range []string{AccountTypeOAuth, AccountTypeAPIKey} {
 		for _, cli := range []bool{false, true} {
 			for _, enabled := range []bool{false, true} {
@@ -51,12 +59,18 @@ func TestOpenAIErrorMessagesOfficialCLI(t *testing.T) {
 							if req.Header.Get("Authorization") != expected {
 								return nil, fmt.Errorf("wrong fixture credential owner")
 							}
+							if rejection {
+								return &http.Response{StatusCode: 400, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"error":{"code":"` + code + `","type":"invalid_request_error","message":"original diagnostic"}}`))}, nil
+							}
 							wire := `data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_cli_error","object":"response","created_at":1700000000,"status":"in_progress","model":"gpt-6.1-sol","output":[]}}` + "\n\n" +
 								`data: {"type":"response.output_text.delta","sequence_number":1,"delta":"partial answer"}` + "\n\n" +
 								`data: {"type":"response.failed","sequence_number":2,"response":{"id":"resp_cli_error","object":"response","created_at":1700000000,"model":"gpt-6.1-sol","status":"failed","output":[],"error":{"code":"` + code + `","type":"upstream_error","message":"original diagnostic"},"usage":{"input_tokens":12,"output_tokens":3}}}` + "\n\n"
 							return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(wire))}, nil
 						}}
-						svc, owner, bridges := safetyBufferingGatewayFixture(t, kind, cli, &status, upstream)
+						svc, owner, bridges := safetyBufferingGatewayFixture(t, kind, cli, status, upstream)
+						if rejection {
+							owner.Extra["openai_passthrough"] = true
+						}
 						saveErrorMessages(t, svc.settingService, enabled)
 						completed := make(chan error, 1)
 						server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -77,7 +91,7 @@ func TestOpenAIErrorMessagesOfficialCLI(t *testing.T) {
 							c.Request = r.WithContext(context.WithValue(r.Context(), ctxkey.Platform, PlatformOpenAI))
 							OpenAIErrorMessageOutput(svc.settingService, func(c *gin.Context) {
 								result, forwardErr := svc.Forward(c.Request.Context(), c, owner, body)
-								if forwardErr == nil || result == nil || result.Usage.InputTokens != 12 || result.Usage.OutputTokens != 3 {
+								if forwardErr == nil || (!rejection && (result == nil || result.Usage.InputTokens != 12 || result.Usage.OutputTokens != 3)) {
 									completed <- fmt.Errorf("failure/usage contract changed")
 									return
 								}
@@ -87,7 +101,11 @@ func TestOpenAIErrorMessagesOfficialCLI(t *testing.T) {
 						defer server.Close()
 						ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
 						defer cancel()
-						command := exec.CommandContext(ctx, "python3", "../../../tools/test_codex_error_messages.py", "--binary", binary, "--url", server.URL, "--code", code, "--enabled", strconvBool(enabled))
+						args := []string{"../../../tools/test_codex_error_messages.py", "--binary", binary, "--url", server.URL, "--code", code, "--enabled", strconvBool(enabled)}
+						if rejection {
+							args = append(args, "--http-rejection")
+						}
+						command := exec.CommandContext(ctx, "python3", args...)
 						output, err := command.CombinedOutput()
 						require.NoError(t, err, string(output))
 						require.Contains(t, string(output), "PASS: official CLI")
@@ -109,6 +127,4 @@ func TestOpenAIErrorMessagesOfficialCLI(t *testing.T) {
 			}
 		}
 	}
-	// The official outbound path also needs its WS-to-HTTP final writer.
-	t.Run("ws-http", func(t *testing.T) { testOpenAIErrorMessagesWSHTTPBridgeMatrix(t, &status) })
 }

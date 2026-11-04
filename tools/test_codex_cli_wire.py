@@ -703,7 +703,8 @@ def run_go_transparent_bridge(binary: Path) -> None:
                 and "--- SKIP:" not in output, failure)
         if test == "TestOpenAIErrorMessagesOfficialCLI":
             require(all(
-                f"--- PASS: {test}/{account}/cli={cli}/enabled={enabled}/{code} " in output
+                f"--- PASS: {test}/{prefix}{account}/cli={cli}/enabled={enabled}/{code} " in output
+                for prefix in ("", "http-rejection/")
                 for account in ("oauth", "apikey") for cli in ("false", "true")
                 for enabled in ("false", "true")
                 for code in ("upstream_response_interrupted", "upstream_unavailable", "session_account_lost")

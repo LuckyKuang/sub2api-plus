@@ -431,6 +431,7 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 	writeClientMessage func([]byte) error,
 ) (*OpenAIForwardResult, error) {
 	ctx, outbound := beginOutboundObservation(ctx)
+	SetOpenAIErrorMessageSource(c, nil)
 	if s == nil {
 		return nil, errors.New("service is nil")
 	}
@@ -648,6 +649,7 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 		if rewritten, changed := sanitizeOpenAICapacityShedErrorCodeForClient(clientError); changed {
 			clientError = rewritten
 		}
+		SetOpenAIErrorMessageSource(c, respBody)
 		if writeErr := writeClientMessage(clientError); writeErr == nil {
 			markOpenAIWSClientVisibleFailure(c, "error", clientError)
 		}

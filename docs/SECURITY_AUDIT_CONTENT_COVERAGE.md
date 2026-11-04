@@ -1025,3 +1025,13 @@ settings persistence and reconciliation. Handler
 `TestOpenAIErrorMessagesPreserveOpsDiagnostics` observes actual queued original
 error records and downstream replacement, including handler-produced SSE and EOF.
 The dedicated official CLI consumer matrix provides client display evidence.
+Sanitized final errors retain only an exact recognized source code as display
+metadata; retry candidates cannot set it, and each HTTP-bridged WS turn clears
+it. Regressions exercise actual account recovery versus exhaustion, unknown
+final failures, HTTP/WS rejection sanitization and raw ops capture. Real HTTP
+socket checks also cover fixed-length headers committed before live toggles.
+These changes stay after request admission and do not alter either audit engine.
+`TestOpenAIErrorMessagesNonStreamingFailure` covers native/passthrough SSE-to-JSON
+rejections and compact failures after keepalive; the original terminal/error
+code stays intact. `TestOpenAIErrorMessagesSanitizedPendingToggle` exercises
+both live toggle directions before a fragmented sanitized error is released.

@@ -21,6 +21,7 @@ def main() -> None:
     parser.add_argument("--url", required=True)
     parser.add_argument("--code", choices=("upstream_response_interrupted", "upstream_unavailable", "session_account_lost"), required=True)
     parser.add_argument("--enabled", choices=("true", "false"), required=True)
+    parser.add_argument("--http-rejection", action="store_true")
     args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix="sub2api-codex-error-") as temporary:
         root = Path(temporary)
@@ -32,7 +33,7 @@ def main() -> None:
         result = run_process(args.binary, ["exec", "--json", "--ephemeral", "--skip-git-repo-check", "--model", "gpt-6.1-sol", "-"], home, work, 9, prompt="Answer the isolated fixture request without tools.", access_token="synthetic-downstream-key")
         events = parse_events(result.stdout)
         messages = [event.get("message", "") for event in events if event["type"] == "error"]
-        expected = "original diagnostic"
+        expected = "Upstream request failed" if args.http_rejection else "original diagnostic"
         if args.enabled == "true":
             expected = "当前会话可能无法恢复，请新开会话继续。" if args.code == "session_account_lost" else "响应已中断，请输入「继续」重新提交。"
         if result.returncode == 0 or not any(expected in message for message in messages):

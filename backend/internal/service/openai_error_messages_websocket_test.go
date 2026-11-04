@@ -77,6 +77,80 @@ func TestOpenAIErrorMessagesWSHTTPBridgeMatrix(t *testing.T) {
 	testOpenAIErrorMessagesWSHTTPBridgeMatrix(t, nil)
 }
 
+// A rejected HTTP request on a WebSocket bridge is rendered as a local error
+// frame without an upstream code. The display switch must still recognize the
+// exact source code, preserve that frame's status/type and avoid a second send.
+func TestOpenAIErrorMessagesWSHTTPRejection(t *testing.T) {
+	for _, kind := range []string{AccountTypeOAuth, AccountTypeAPIKey} {
+		for _, cli := range []bool{false, true} {
+			for _, enabled := range []bool{false, true} {
+				for _, failure := range []struct{ code, want string }{
+					{"upstream_unavailable", "响应已中断，请输入「继续」重新提交。"},
+					{"session_account_lost", "当前会话可能无法恢复，请新开会话继续。"},
+					{"other_error", "original diagnostic"},
+				} {
+					t.Run(fmt.Sprintf("%s/cli=%t/enabled=%t/%s", kind, cli, enabled, failure.code), func(t *testing.T) {
+						var sends atomic.Int32
+						upstream := &codexModelsHTTPUpstreamStub{do: func(_ *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
+							sends.Add(1)
+							return &http.Response{StatusCode: 400, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"error":{"code":"` + failure.code + `","message":"original diagnostic"}}`))}, nil
+						}}
+						svc, owner, bridges := safetyBufferingGatewayFixture(t, kind, cli, nil, upstream)
+						saveErrorMessages(t, svc.settingService, enabled)
+						errCh := make(chan error, 1)
+						server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+							conn, err := coderws.Accept(w, r, nil)
+							if err != nil {
+								errCh <- err
+								return
+							}
+							defer conn.CloseNow()
+							_, first, err := conn.Read(r.Context())
+							if err != nil {
+								errCh <- err
+								return
+							}
+							c, _ := gin.CreateTestContext(httptest.NewRecorder())
+							c.Request = r
+							token := "acquired-access"
+							if kind == AccountTypeAPIKey {
+								token = "acquired-api-key"
+							}
+							errCh <- svc.ProxyResponsesWebSocketFromClient(r.Context(), c, conn, owner, token, first, nil)
+						}))
+						defer server.Close()
+						ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+						defer cancel()
+						conn, _, err := coderws.Dial(ctx, "ws"+strings.TrimPrefix(server.URL, "http"), nil)
+						require.NoError(t, err)
+						defer conn.CloseNow()
+						require.NoError(t, conn.Write(ctx, coderws.MessageText, []byte(`{"type":"response.create","model":"gpt-5.1","input":"hello"}`)))
+						_, payload, err := conn.Read(ctx)
+						require.NoError(t, err)
+						want := "original diagnostic"
+						if enabled {
+							want = failure.want
+						}
+						require.JSONEq(t, `{"type":"error","status":400,"sequence_number":0,"error":{"type":"upstream_error","message":"`+want+`"}}`, string(payload))
+						select {
+						case err := <-errCh:
+							require.ErrorContains(t, err, "original diagnostic")
+						case <-ctx.Done():
+							t.Fatal("bridge did not release after rejected turn")
+						}
+						require.Equal(t, int32(1), sends.Load())
+						wantBridges := int32(0)
+						if cli {
+							wantBridges = 1
+						}
+						require.Equal(t, wantBridges, bridges.Load())
+					})
+				}
+			}
+		}
+	}
+}
+
 func testOpenAIErrorMessagesWSHTTPBridgeMatrix(t *testing.T, verified *codexcli.Status) {
 	for _, kind := range []string{AccountTypeOAuth, AccountTypeAPIKey} {
 		for _, cli := range []bool{false, true} {

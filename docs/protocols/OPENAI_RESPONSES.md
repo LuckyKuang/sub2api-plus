@@ -1151,6 +1151,21 @@ or root code/message), and `response.failed` (`response.error` or root `error`).
 Matching is exact and case-sensitive; missing/non-string messages, unknown
 codes/events, ordinary content, tools and opaque nested objects pass through.
 Non-OpenAI responses retain their original bytes and write boundaries.
+When an existing HTTP sanitizer, administrator error rule, exhausted failover,
+or WS-to-HTTP rejection rebuilds an error without a code, its final failure's
+recognized source code still selects the message. Only that code is retained
+as internal display metadata; the private upstream body is not restored, and
+no code is added to the sanitized downstream envelope. Explicit downstream
+codes take precedence, except a generic terminal code explicitly marked as
+locally synthesized while rendering this same final failure. Stream failover
+retains its source code on the attempt's error, even if its stored response body
+is sanitized earlier. Recovered/retried attempts cannot supply this metadata
+to later errors, and the HTTP bridge clears it for each WebSocket turn.
+This also covers a non-streaming request receiving an SSE failure upstream and
+remote compact failures after a keepalive has committed HTTP 200: the existing
+JSON error or `response.failed` terminal retains its shape and code.
+An exhausted uncommitted SSE attempt returns a JSON error with JSON content
+type; headers prepared by an abandoned attempt cannot label it as SSE.
 HTTP status, error code/type, terminal failure, retry/failover policy and usage
 processing retain existing behavior. The existing Responses failure sanitizer
 may omit wire usage and other response details; internal billing usage is still
@@ -1162,6 +1177,10 @@ HTTP projection sits beneath ops capture, including handler errors emitted after
 frame write. Admin error records keep original diagnostics; historical rows are
 not rewritten. Accepted fragmented JSON/SSE is staged per event using the existing
 anonymous spool, with EOF cleanup and transport failure propagation.
+Eligible HTTP writers remove fixed `Content-Length` before an early header
+commit, including while disabled, because a later live toggle can change the
+byte length. HTTP framing then owns the actual length; error bodies are never
+truncated or rejected because of a stale upstream length.
 Current-instance settings are read at event release, so ON/OFF affects subsequent
 unsent errors during an ongoing generation. Already delivered messages cannot be
 changed. Both downstream settings share the existing invalidation channel and
