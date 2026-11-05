@@ -2238,6 +2238,12 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 			dataBytes := []byte(data)
 			trimmedData := strings.TrimSpace(data)
 			rawEventType := effectiveOpenAISSEEventType(dataBytes, pendingSSEEventType)
+			if normalized := openAICompatPayloadWithEventType(data, rawEventType); normalized != data {
+				data = normalized
+				dataBytes = []byte(data)
+				trimmedData = strings.TrimSpace(data)
+				line = "data: " + data
+			}
 			observer.ObserveOpenAI(dataBytes, rawEventType)
 			if needModelReplace && strings.Contains(data, mappedModel) {
 				line = s.replaceModelInSSELine(line, mappedModel, originalModel)

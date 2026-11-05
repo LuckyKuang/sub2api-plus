@@ -179,6 +179,16 @@ response to the client instead of scanning other owners. Explicit quota,
 administrative, authorization and model restrictions retain their own gates.
 Request/provider failures do not scan the account pool.
 
+When an already permitted pre-output recovery exhausts the canonical owner's
+budget, that exhaustion remains bound to its authorization domain, session and
+generation throughout the request's existing candidate/switch budget. A failed
+candidate, including one retried on the same account, cannot discard that
+evidence or authorize recovery of an unrelated or newer route. Another candidate
+still requires the normal policy, continuation, concurrency and lease checks.
+An account ID alone is insufficient recovery evidence. Same-account retries also
+validate the selected attempt's domain, session, owner and generation, even when
+the recorded owner ID has not changed.
+
 Migration uses the generation observed at selection and a candidate lease.
 Admission and HTTP/WS handshakes leave the previous owner in place. Valid
 semantic output or a verified successful terminal commits the candidate before
@@ -186,6 +196,11 @@ that result is delivered. Chat Completions without text require a successful
 finish and positive usage; structural chunks stay buffered until acceptance.
 Responses output arrays containing only empty message containers are structural
 too; without semantic output, a successful terminal needs positive usage.
+HTTP Responses readers normalize an absent JSON event `type` from the SSE
+`event:` field before acceptance, output observation and terminal reconstruction,
+including passthrough readers. An explicit JSON `type` takes precedence. The
+normalization preserves the event's remaining fields and does not turn failed,
+unknown or empty structural events into acceptance.
 Failed candidates and lost leases retain the old
 owner. Once committed, recovery of the old account does not reclaim the session.
 During WS passthrough migration, classify upstream failures before testing
@@ -209,6 +224,16 @@ usage-draining requests too. Route errors return a retryable
 as account health failures. Measured upstream usage on a rejected commit stays
 attributed to that candidate as incomplete usage, without automatically
 replaying the request. This does not promise exactly-once upstream execution.
+
+A concurrent request that encounters an active migration lease retains the
+retryable routing error; it cannot send through the old owner or independently
+take over the candidate. Selection, admission, forwarding, retained-socket owner
+validation and failed lease abandonment emit indexed
+`openai_session_route_failed` warnings with a fixed stage/reason, request context,
+owner/candidate IDs, generation and remaining lease milliseconds. Reasons
+distinguish `migration_in_progress`, `lease_lost`, `route_store_unavailable` and
+`candidate_not_accepted`. Logs omit raw errors, credentials, content, session
+digests and lease IDs; the public error envelope remains unchanged.
 
 OAuth and API-key candidates retain their own endpoints, authentication and
 trusted identity snapshots. Logical cache identity is separate from upstream
