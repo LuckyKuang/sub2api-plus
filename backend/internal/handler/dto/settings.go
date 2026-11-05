@@ -338,7 +338,8 @@ type SystemSettings struct {
 	GrokDefaultBaseURLMode         string `json:"grok_default_base_url_mode"`
 
 	// Available Channels feature switch (user-facing aggregate view)
-	AvailableChannelsEnabled bool `json:"available_channels_enabled"`
+	AvailableChannelsEnabled bool   `json:"available_channels_enabled"`
+	AvailableChannelsLayout  string `json:"available_channels_layout"`
 
 	// Subscription feature switch: gates the whole user-facing subscription surface
 	// (sidebar entries, purchase-page subscription tab, header badge, /subscriptions route).
@@ -460,7 +461,8 @@ type PublicSettings struct {
 	ChannelMonitorShowQuota              bool   `json:"channel_monitor_show_quota"`
 	ChannelMonitorHideUserRanking        bool   `json:"channel_monitor_hide_user_ranking"`
 
-	AvailableChannelsEnabled bool `json:"available_channels_enabled"`
+	AvailableChannelsEnabled bool   `json:"available_channels_enabled"`
+	AvailableChannelsLayout  string `json:"available_channels_layout"`
 
 	SubscriptionEnabled bool `json:"subscription_enabled"`
 

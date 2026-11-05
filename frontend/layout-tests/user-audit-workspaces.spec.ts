@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page, type TestInfo } from '@playwright/test'
 import { wheelScroll } from './wheel'
+import { group, offer } from '../src/components/channels/__tests__/catalogFixtures'
 
 // Acceptance source: the approved Chrome user-page audit requires fixed page
 // chrome, independent record/card scrolling, aligned rounded panels, 10 invited
@@ -10,6 +11,73 @@ const user = {
   id: 9999, role: 'user', status: 'active', email: 'review@example.test', username: 'Reviewer',
   balance: 260, concurrency: 6, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
 }
+
+// docs/AVAILABLE_CHANNELS.md: real production list rows must fit 320px phones,
+// use two columns on wide screens, and preserve quotes, keyboard focus and cache.
+test('available-channel list fits both themes and supports quote details, filtering and copying', async ({ page }, info) => {
+  test.setTimeout(120_000)
+  const { theme, locale } = presentation(info)
+  const longName = 'model-00-' + 'long-id-'.repeat(16)
+  const catalog = {
+    groups: [
+      group(1, Array.from({ length: 12 }, (_, index) => offer(index === 0 ? longName : `model-${String(index).padStart(2, '0')}`))),
+      group(2, [offer('anthropic-model', { platform: 'anthropic' })]),
+      group(3, [offer('model-01')]),
+    ],
+    user_rate_status: 'loaded',
+  }
+  let reads = 0
+  const writes: string[] = []
+  await page.route('**/api/v1/**', async route => {
+    const request = route.request()
+    const url = new URL(request.url())
+    if (request.method() !== 'GET') writes.push(url.pathname)
+    let data: unknown = []
+    if (url.pathname === '/api/v1/channels/available') {
+      expect(url.searchParams.get('view')).toBe('catalog')
+      reads++
+      data = catalog
+    } else if (url.pathname === '/api/v1/auth/me' || url.pathname === '/api/v1/user/profile') data = user
+    await route.fulfill({ json: { code: 0, data } })
+  })
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (text: string) => { sessionStorage.setItem('copied-model', text) } } })
+  })
+  for (const width of [320, 768, 1920]) {
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto(`/layout-tests/index.html?view=user-layout&auditPage=channels&layout=list&product=1&theme=${theme}&locale=${locale}`)
+    // The first production-view import on a WSL bind mount can be cold. Wait
+    // for the page itself before applying the normal data/geometry assertions.
+    await expect(page.getByTestId('catalog-results')).toBeVisible({ timeout: 60_000 })
+    const list = page.getByTestId('catalog-model-list')
+    await expect(list.locator('h3')).toHaveCount(13)
+    const geometry = await list.evaluate(element => ({
+      overflow: document.documentElement.scrollWidth > innerWidth,
+      clipped: [...element.querySelectorAll('.catalog-list-row')].some(row => row.scrollWidth > row.clientWidth + 1),
+      columns: getComputedStyle(element.querySelector('.catalog-list-rows')!).gridTemplateColumns.split(' ').length,
+    }))
+    expect(geometry.overflow).toBe(false)
+    expect(geometry.clipped).toBe(false)
+    expect(geometry.columns).toBe(width === 1920 ? 2 : 1)
+  }
+  const readsBeforeFilter = reads
+  await page.locator('input[type="search"]').fill('model-01')
+  const list = page.getByTestId('catalog-model-list')
+  await expect(list.locator('h3')).toHaveCount(1)
+  const trigger = list.locator('h3 button')
+  await trigger.focus()
+  await page.keyboard.press('Enter')
+  const dialog = page.getByRole('dialog')
+  await expect(dialog).toBeVisible()
+  await expect(dialog.locator('.catalog-comparison tbody tr')).toHaveCount(2)
+  await page.keyboard.press('Escape')
+  await expect(dialog).toBeHidden()
+  await expect(trigger).toBeFocused()
+  await list.locator('button').nth(1).click()
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem('copied-model'))).toBe('model-01')
+  expect(reads).toBe(readsBeforeFilter)
+  expect(writes).toEqual([])
+})
 const invitees = Array.from({ length: 32 }, (_, index) => ({
   user_id: index + 1, email: `invitee-${index + 1}@example.test`, username: `Invitee ${String(index + 1).padStart(2, '0')}`,
   total_rebate: index + 1, created_at: '2026-10-01T12:00:00Z',

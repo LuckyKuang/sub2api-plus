@@ -170,8 +170,31 @@ are conditions of a quote, not extra cards.
 
 ## Navigation and lifecycle
 
-Cards fill the content width using container queries: 1/2/3/4 columns at
-0/460/700/940 px, with 20 px gaps. Both themes, sidebar width changes,
+Administrators select **Display layout** under **System Settings → Features →
+Available Channels**. The DB-backed `available_channels_layout` setting accepts
+`card` (default) or `list` and applies to all users, including administrator
+support views. Missing, empty or invalid stored values resolve to `card`.
+Explicit invalid values return HTTP 400 before any settings are written;
+omitted or JSON-null fields preserve the saved choice without rewriting it.
+The setting is available through both public settings JSON and the
+HTML-injected first-paint configuration. It uses
+the existing settings table and requires no migration or environment variable.
+
+The list is a compact menu grouped by concrete platform, with numbered model
+rows, dotted leaders, copy-ID buttons and a model-name button opening the same
+complete quote dialog as cards. It uses two columns at a results-container width
+of 900 px or more and one column below it. Names wrap on narrow screens. It
+retains the project theme, category/platform filters, model search and existing
+sort comparison within each platform; platform sections follow the first match
+in the sorted results. Both layouts consume the same authorized catalog,
+aggregation, effective price ranges, units and condition labels. Layout changes
+preserve filters and open details and perform no catalog request. Unlike the
+reference menu's raw-price/multiplier presentation, list prices here already
+include the effective rate exactly once. Unknown prices are not free and zero
+prices remain zero. No model descriptions or popularity flags are invented.
+
+Cards fill the content width using container queries: 1/2/3 columns at
+0/460/700 px, with 20 px gaps. Both themes, sidebar width changes,
 long IDs and mobile details are supported; only price tables scroll sideways.
 
 Search is capped at 384 px (and fits narrower screens); sorting and reset follow
@@ -193,7 +216,7 @@ base prices are excluded from ranges, with an incomplete-price
 notice; explicit zero remains zero. Failed personal-rate lookup labels ranges as
 default-rate references. Minimum displayed price does not select a routing group.
 
-The catalog adapts from one to at most three columns, with 20px gaps and larger
+The card layout adapts from one to at most three columns, with 20px gaps and larger
 cards with 16px corners. Wrapped platform buttons retain their natural width.
 Desktop controls remain fixed above the independently scrolling results.
 

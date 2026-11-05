@@ -761,6 +761,7 @@ export interface SystemSettings {
 
   // Available Channels feature switch
   available_channels_enabled: boolean;
+  available_channels_layout?: 'card' | 'list';
 
   // Subscription feature switch (user sidebar "My Subscriptions" entry)
   subscription_enabled: boolean;
@@ -1086,6 +1087,7 @@ export interface UpdateSettingsRequest {
 
   // Available Channels feature switch
   available_channels_enabled?: boolean;
+  available_channels_layout?: 'card' | 'list';
 
   // Subscription feature switch
   subscription_enabled?: boolean;

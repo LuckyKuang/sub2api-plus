@@ -19,6 +19,33 @@ type settingHandlerPublicRepoStub struct {
 	values map[string]string
 }
 
+// docs/AVAILABLE_CHANNELS.md: public JSON and first-paint settings must agree.
+func TestSettingHandler_GetPublicSettings_AvailableChannelsLayout(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, tc := range []struct{ stored, want string }{
+		{"", "card"}, {"list", "list"}, {"card", "card"}, {"unknown", "card"},
+	} {
+		t.Run("stored_"+tc.stored, func(t *testing.T) {
+			svc := service.NewSettingService(&settingHandlerPublicRepoStub{values: map[string]string{
+				service.SettingKeyAvailableChannelsLayout: tc.stored,
+			}}, &config.Config{})
+			h := NewSettingHandler(svc, "test-version")
+			rec := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(rec)
+			c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/settings/public", nil)
+			h.GetPublicSettings(c)
+			require.Equal(t, http.StatusOK, rec.Code)
+			var body struct {
+				Data struct {
+					Layout string `json:"available_channels_layout"`
+				} `json:"data"`
+			}
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+			require.Equal(t, tc.want, body.Data.Layout)
+		})
+	}
+}
+
 // docs/CHANNEL_MONITOR.md: the persisted extra-probe setting must reach the
 // public HTTP response, HTML injection and runtime unchanged. A saved true
 // must enable the admin action; absent/invalid values must never enable it.

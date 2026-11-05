@@ -45,8 +45,8 @@
       </div>
       <p v-if="!loading && !error" class="workspace-fixed text-xs surface-muted" aria-live="polite">{{ t('availableChannels.catalog.modelCount', { count: visible.length }) }}</p>
       <section class="workspace-shell workspace-scroll" :aria-label="t('availableChannels.title')" data-testid="catalog-results">
-        <div v-if="loading" class="catalog-grid" aria-busy="true" :aria-label="t('common.loading')">
-          <div v-for="i in 12" :key="i" class="glass-surface h-52 animate-pulse" />
+        <div v-if="loading" :class="app.availableChannelsLayout === 'list' ? 'space-y-3' : 'catalog-grid'" aria-busy="true" :aria-label="t('common.loading')">
+          <div v-for="i in 12" :key="i" class="glass-surface animate-pulse" :class="app.availableChannelsLayout === 'list' ? 'h-16' : 'h-52'" />
         </div>
         <div v-else-if="error" role="alert" class="card py-12 text-center">
           <p class="text-red-600 dark:text-red-400">{{ error }}</p><button class="btn btn-secondary mt-4" @click="loadCatalog(true)">{{ t('availableChannels.catalog.retry') }}</button>
@@ -55,6 +55,7 @@
           <p>{{ models.length ? t('availableChannels.catalog.noMatches') : t('availableChannels.noModels') }}</p>
           <button v-if="models.length" class="btn btn-secondary mt-4" @click="reset">{{ t('availableChannels.catalog.reset') }}</button>
         </div>
+        <CatalogModelList v-else-if="app.availableChannelsLayout === 'list'" :models="visible" :rate-unavailable="catalog.user_rate_status === 'unavailable'" @details="openDetails" />
         <div v-else class="catalog-grid">
           <CatalogModelCard v-for="model in visible" :key="model.key" :model="model" :rate-unavailable="catalog.user_rate_status === 'unavailable'" @details="openDetails" />
         </div>
@@ -72,6 +73,8 @@ import AppLayout from '@/components/layout/AppLayout.vue'
 import Icon from '@/components/icons/Icon.vue'
 import PlatformIcon from '@/components/common/PlatformIcon.vue'
 import CatalogModelCard from '@/components/channels/CatalogModelCard.vue'
+import CatalogModelList from '@/components/channels/CatalogModelList.vue'
+import { useAppStore } from '@/stores/app'
 import CatalogPriceDetails from '@/components/channels/CatalogPriceDetails.vue'
 import { catalogModels, defaultCatalogFilters, normalizeCatalogFilters, visibleModels, type CatalogModel } from '@/components/channels/catalog'
 import userChannelsAPI, { type ChannelCatalog } from '@/api/channels'
@@ -84,6 +87,7 @@ import { extractApiErrorMessage } from '@/utils/apiError'
 
 const { t } = useI18n()
 const auth = useAuthStore()
+const app = useAppStore()
 const userView = useUserView()
 const catalogIdentity = computed(() => {
   const actorId = auth.user?.id

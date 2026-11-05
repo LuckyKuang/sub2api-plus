@@ -360,7 +360,8 @@ type UpdateSettingsRequest struct {
 	GrokDefaultBaseURLMode         *string `json:"grok_default_base_url_mode"`
 
 	// Available Channels feature switch (user-facing)
-	AvailableChannelsEnabled *bool `json:"available_channels_enabled"`
+	AvailableChannelsEnabled *bool   `json:"available_channels_enabled"`
+	AvailableChannelsLayout  *string `json:"available_channels_layout" binding:"omitempty,oneof=card list"`
 
 	// Subscription feature switch (user-facing subscription surface; see SettingKeySubscriptionEnabled)
 	SubscriptionEnabled *bool `json:"subscription_enabled"`
@@ -532,6 +533,11 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 	}
 	auditReq := settingsAuditRequest(req)
 	omitted := omittedSettingKeys(sentFields)
+	// Older clients must not rewrite a layout changed by another administrator
+	// between this request's read and write. JSON null also means no change.
+	if req.AvailableChannelsLayout == nil {
+		omitted[service.SettingKeyAvailableChannelsLayout] = struct{}{}
+	}
 	// This live display setting must not be rewritten from an earlier read by
 	// an unrelated save while an administrator is toggling an active stream.
 	if req.OpenAICodexSafetyBufferingSuppressed == nil {
@@ -2123,6 +2129,12 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.GrokDefaultBaseURLMode
 		}(),
+		AvailableChannelsLayout: func() string {
+			if req.AvailableChannelsLayout != nil {
+				return *req.AvailableChannelsLayout
+			}
+			return previousSettings.AvailableChannelsLayout
+		}(),
 		AvailableChannelsEnabled: func() bool {
 			if req.AvailableChannelsEnabled != nil {
 				return *req.AvailableChannelsEnabled
@@ -2630,6 +2642,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		GrokDefaultBaseURLMode:         updatedSettings.GrokDefaultBaseURLMode,
 
 		AvailableChannelsEnabled: updatedSettings.AvailableChannelsEnabled,
+		AvailableChannelsLayout:  updatedSettings.AvailableChannelsLayout,
 		SubscriptionEnabled:      updatedSettings.SubscriptionEnabled,
 
 		ModelPlazaEnabled:       updatedSettings.ModelPlazaEnabled,

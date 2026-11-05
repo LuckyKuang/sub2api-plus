@@ -113,6 +113,10 @@ export default {
             'When on, the user Channel Monitor V2 page hides the user ranking tab and the user API returns no ranking rows. Admins still see the ranking.',
         },
         availableChannels: {
+          layout: 'Display layout',
+          layoutCard: 'Cards',
+          layoutList: 'List',
+          layoutHint: 'Applies to all users. Cards are the default; List shows a compact model menu grouped by platform.',
           title: 'Available Channels',
           description: 'Show logged-in users an aggregate view of the channels, models and pricing they can access. Disabled by default.',
           configureLink: 'Configure model pricing in Channel Management > Channel Pricing',

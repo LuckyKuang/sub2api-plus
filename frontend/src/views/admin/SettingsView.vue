@@ -6964,6 +6964,20 @@
               </div>
               <Toggle v-model="form.available_channels_enabled" />
             </div>
+            <div>
+              <label for="available-channels-layout" class="input-label">{{ t('admin.settings.features.availableChannels.layout') }}</label>
+              <Select
+                id="available-channels-layout"
+                v-model="form.available_channels_layout"
+                :aria-label="t('admin.settings.features.availableChannels.layout')"
+                :searchable="false"
+                :options="[
+                  { value: 'card', label: t('admin.settings.features.availableChannels.layoutCard') },
+                  { value: 'list', label: t('admin.settings.features.availableChannels.layoutList') },
+                ]"
+              />
+              <p class="mt-1 text-xs surface-muted">{{ t('admin.settings.features.availableChannels.layoutHint') }}</p>
+            </div>
           </div>
         </div>
 
@@ -9891,6 +9905,7 @@ const form = reactive<SettingsForm>({
   channel_monitor_hide_user_ranking: false,
   // Available Channels feature switch
   available_channels_enabled: false,
+  available_channels_layout: 'card' as 'card' | 'list',
   // Subscription feature switch (user sidebar "My Subscriptions" entry)
   subscription_enabled: true,
   // Model Plaza feature switches + description
@@ -10923,6 +10938,7 @@ async function loadSettings() {
       : defaultFingerprintSignalRows();
     form.login_agreement_mode =
       settings.login_agreement_mode === "checkbox" ? "checkbox" : "modal";
+    form.available_channels_layout = settings.available_channels_layout === "list" ? "list" : "card";
     form.channel_monitor_mode =
       settings.channel_monitor_mode === "v2" || settings.channel_monitor_mode === "v3"
         ? settings.channel_monitor_mode : "v1";
@@ -11651,6 +11667,7 @@ async function saveSettings() {
       channel_monitor_hide_user_ranking: Boolean(form.channel_monitor_hide_user_ranking),
       // Available Channels feature switch
       available_channels_enabled: form.available_channels_enabled,
+      available_channels_layout: form.available_channels_layout,
       // Subscription feature switch
       subscription_enabled: form.subscription_enabled,
       // Model Plaza feature switches + description
