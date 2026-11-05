@@ -181,9 +181,12 @@ HTML-injected first-paint configuration. It uses
 the existing settings table and requires no migration or environment variable.
 
 The list is a compact menu grouped by concrete platform, with numbered model
-rows, dotted leaders, copy-ID buttons and a model-name button opening the same
-complete quote dialog as cards. It uses two columns at a results-container width
-of 900 px or more and one column below it. Names wrap on narrow screens. It
+rows, dotted leaders and separate copy-ID buttons. The entire model row,
+including its prices and empty space, opens the same complete quote dialog as
+cards. Hover and keyboard focus show a rounded floating highlight that moves
+between rows without intercepting clicks; reduced-motion preferences disable
+its transitions. Copying never opens details. It uses two columns at a
+results-container width of 900 px or more and one column below it. Names wrap on narrow screens. It
 retains the project theme, category/platform filters, model search and existing
 sort comparison within each platform; platform sections follow the first match
 in the sorted results. Both layouts consume the same authorized catalog,
@@ -220,7 +223,9 @@ The card layout adapts from one to at most three columns, with 20px gaps and lar
 cards with 16px corners. Wrapped platform buttons retain their natural width.
 Desktop controls remain fixed above the independently scrolling results.
 
-Details immediately show every authorized quote in the group comparison table.
+Details identify the model in the dialog title, offer a copy-ID button and
+immediately show every authorized quote in the group comparison table. Escape,
+the close button and clicking the backdrop close the dialog and restore focus.
 Each group's complete pricing and billing conditions are available through its
 keyboard-focusable disclosure. Quote details and each resolved service tier
 (Fast/priority, Flex and Ultrafast) start collapsed; their price tables are mounted

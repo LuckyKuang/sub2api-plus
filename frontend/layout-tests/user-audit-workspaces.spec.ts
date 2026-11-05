@@ -59,22 +59,70 @@ test('available-channel list fits both themes and supports quote details, filter
     expect(geometry.overflow).toBe(false)
     expect(geometry.clipped).toBe(false)
     expect(geometry.columns).toBe(width === 1920 ? 2 : 1)
+    // Café Shop reference and the user's acceptance requirement: the row's
+    // empty area and prices open details, not just its model-name text.
+    const row = list.locator('.catalog-list-row').first()
+    const box = (await row.boundingBox())!
+    await row.click({ position: { x: box.width - 8, y: box.height - 8 } })
+    await expect(page.getByRole('dialog')).toBeVisible()
+    await expect(page.getByRole('dialog')).toHaveAccessibleName('anthropic-model')
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('dialog')).toBeHidden()
+    // Hover is a visible, non-intercepting card overlay, aligned with the
+    // complete row in each theme/viewport (not just a model-name text color).
+    await row.hover()
+    const highlight = list.locator('.catalog-list-highlight.is-active')
+    await expect(highlight).toHaveCount(1)
+    await expect(highlight).toHaveCSS('opacity', '1')
+    await expect(highlight).toHaveCSS('pointer-events', 'none')
+    const markBox = (await highlight.boundingBox())!
+    const rowBox = (await row.boundingBox())!
+    for (const key of ['x', 'y', 'width', 'height'] as const) expect(Math.abs(markBox[key] - rowBox[key])).toBeLessThanOrEqual(1)
+    await expect(highlight).toHaveCSS('transition-duration', '0s')
+    const otherRow = list.locator('.catalog-list-row').nth(1)
+    await otherRow.hover()
+    const movedBox = (await list.locator('.catalog-list-highlight.is-active').boundingBox())!
+    const otherBox = (await otherRow.boundingBox())!
+    for (const key of ['x', 'y', 'width', 'height'] as const) expect(Math.abs(movedBox[key] - otherBox[key])).toBeLessThanOrEqual(1)
+    await row.scrollIntoViewIfNeeded()
+    const prices = row.locator('.font-mono.tabular-nums:not([aria-hidden])').first()
+    await expect(prices).toContainText('$2')
+    const priceBox = (await prices.boundingBox())!
+    await page.mouse.click(priceBox.x + priceBox.width / 2, priceBox.y + priceBox.height / 2)
+    await expect(page.getByRole('dialog')).toBeVisible()
+    // Clicking the read-only dialog's backdrop is another supported close path.
+    await page.getByRole('dialog').click({ position: { x: 1, y: 1 } })
+    await expect(page.getByRole('dialog')).toBeHidden()
   }
   const readsBeforeFilter = reads
   await page.locator('input[type="search"]').fill('model-01')
   const list = page.getByTestId('catalog-model-list')
   await expect(list.locator('h3')).toHaveCount(1)
-  const trigger = list.locator('h3 button')
+  const trigger = list.locator('.catalog-list-open')
   await trigger.focus()
   await page.keyboard.press('Enter')
   const dialog = page.getByRole('dialog')
   await expect(dialog).toBeVisible()
+  await expect(dialog).toHaveAccessibleName('model-01')
   await expect(dialog.locator('.catalog-comparison tbody tr')).toHaveCount(2)
+  await dialog.locator('.catalog-copy-model').click()
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem('copied-model'))).toBe('model-01')
+  await expect(dialog).toBeVisible()
   await page.keyboard.press('Escape')
   await expect(dialog).toBeHidden()
   await expect(trigger).toBeFocused()
-  await list.locator('button').nth(1).click()
+  await page.mouse.move(0, 0)
+  await expect(list.locator('.catalog-list-highlight.is-active')).toHaveCount(1)
+  await page.keyboard.press('Space')
+  await expect(dialog).toBeVisible()
+  await dialog.getByRole('button', { name: 'Close modal' }).click()
+  await expect(dialog).toBeHidden()
+  await list.locator('.catalog-copy-model').click()
+  await expect(dialog).toBeHidden()
   await expect.poll(() => page.evaluate(() => sessionStorage.getItem('copied-model'))).toBe('model-01')
+  await page.emulateMedia({ reducedMotion: 'no-preference' })
+  await list.locator('.catalog-list-row').hover()
+  await expect(list.locator('.catalog-list-highlight.is-active')).toHaveCSS('transition-duration', '0.18s, 0.18s, 0.18s, 0.12s')
   expect(reads).toBe(readsBeforeFilter)
   expect(writes).toEqual([])
 })

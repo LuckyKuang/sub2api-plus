@@ -72,7 +72,7 @@ describe('available channels user page', () => {
     await nextTick()
     expect(w.find('.catalog-model-card').exists()).toBe(false)
     expect(w.get('[data-testid="catalog-model-list"]').findAll('h3').map(title => title.text())).toEqual(['second'])
-    await w.get('[data-testid="catalog-model-list"] h3 button').trigger('click')
+    await w.get('[data-testid="catalog-model-list"] .catalog-list-open').trigger('click')
     expect(w.getComponent(CatalogPriceDetails).props('model').name).toBe('second')
     expect(mocks.getCatalog).toHaveBeenCalledTimes(1)
     mocks.app.availableChannelsLayout = 'card'
