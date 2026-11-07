@@ -20,6 +20,8 @@ configured accent extremes at 0%, 50% and 100% transparency (including immediate
 theme switching), date ranges and their nested calendars,
 plain/searchable selection menus, checkbox dropdowns inside clipping cards, and dialogs with long titles, footer labels
 and body content.
+Wide selection triggers also exercise the 480px menu ceiling with actual
+geometry and selection of the last option.
 Assertions use actual viewport bounds, nested-container bounds and
 `elementFromPoint` at multiple positions to detect clipping and covering layers;
 they also exercise the final option, final content and apply/save actions.
@@ -44,6 +46,9 @@ The administrator fixture checks the original 12/16/24px shell insets, expanded
 and collapsed sidebars, independent toolbar and pagination surfaces, pinned
 columns during horizontal scrolling, full mobile record fields and actions,
 and neutral colors in body-portalled controls across both themes and languages.
+Real risk-control, prompt-audit and proxy views also check the accepted header
+order, frameless embedded tabs, actions following the final query field,
+right alignment, uniform control heights and wrapping without page overflow.
 Centered distribution tables keep their scrollport within the parent card while
 preserving wide columns and synchronized horizontal header scrolling.
 Real user usage records also exercise mouse-wheel scrolling in the native table

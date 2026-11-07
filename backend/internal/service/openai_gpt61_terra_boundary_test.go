@@ -22,8 +22,8 @@ import (
 // they must preserve explicit client effort and the trusted identity contract.
 func TestGPT61TerraMessagesForwardBoundary(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	const globalUA = "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color"
-	const accountUA = "codex_vscode/0.165.0 (Ubuntu 24.04; x86_64) vscode"
+	const globalUA = "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color"
+	const accountUA = "codex_vscode/0.167.0 (Ubuntu 24.04; x86_64) vscode"
 	for _, accountType := range []string{AccountTypeOAuth, AccountTypeAPIKey} {
 		for _, identity := range []struct {
 			name, configuredUA, wantUA, wantOriginator string
@@ -50,7 +50,7 @@ func TestGPT61TerraMessagesForwardBoundary(t *testing.T) {
 						cfg: &config.Config{}, httpUpstream: upstream,
 						settingService: &SettingService{settingRepo: &openAIIdentitySettingRepoStub{values: map[string]string{
 							SettingKeyOpenAICodexUserAgent:     globalUA,
-							SettingKeyOpenAICodexClientVersion: "0.165.0",
+							SettingKeyOpenAICodexClientVersion: "0.167.0",
 						}}},
 					}
 					result, err := svc.ForwardAsAnthropic(context.Background(), c, account, body, "", "")
@@ -67,7 +67,7 @@ func TestGPT61TerraMessagesForwardBoundary(t *testing.T) {
 					require.Equal(t, tc.wantEffort, *result.ReasoningEffort)
 					require.Equal(t, identity.wantUA, upstream.lastReq.Header.Get("User-Agent"))
 					require.Equal(t, identity.wantOriginator, upstream.lastReq.Header.Get("Originator"))
-					require.Equal(t, "0.165.0", upstream.lastReq.Header.Get("Version"))
+					require.Equal(t, "0.167.0", upstream.lastReq.Header.Get("Version"))
 					if accountType == AccountTypeOAuth {
 						require.Equal(t, "https://chatgpt.com/backend-api/codex/responses", upstream.lastReq.URL.String())
 						require.Equal(t, "Bearer oauth-token", upstream.lastReq.Header.Get("Authorization"))

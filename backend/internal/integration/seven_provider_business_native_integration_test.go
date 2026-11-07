@@ -221,19 +221,19 @@ func TestSevenProviderNativeStreamingToolsPersistRedisAffinityAndPostgresDebits(
 		provider sevenBusinessProvider
 		native   sevenNativeScenario
 	}{
-		{sevenBusinessProvider{"openai", "codex", "0.165.0", "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color", map[string]string{"Originator": "codex_cli_rs", "Version": "0.165.0"}},
+		{sevenBusinessProvider{"openai", "codex", "0.167.0", "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color", map[string]string{"Originator": "codex_cli_rs", "Version": "0.167.0"}},
 			sevenNativeScenario{protocol: "responses", ingress: "/v1/responses", host: "chatgpt.com", path: "/backend-api/codex/responses", model: "gpt-5.4", authorization: "Authorization"}},
 		{sevenBusinessProvider{"grok", "grok", "1.0.45", "grok-shell/1.0.45 (linux; x86_64)", map[string]string{"X-Grok-Client-Identifier": "grok-shell", "X-Grok-Client-Version": "1.0.45", "X-Xai-Token-Auth": "xai-grok-cli"}},
 			sevenNativeScenario{protocol: "responses", ingress: "/v1/responses", host: "cli-chat-proxy.grok.com", path: "/v1/responses", model: "grok-4.5", authorization: "Authorization"}},
-		{sevenBusinessProvider{"deepseek", "deepseek", "0.2.1-rc.3", "deepseek-harness/0.2.1-rc.3 (+https://github.com/deepseek-ai/deepseek-harness)", nil},
+		{sevenBusinessProvider{"deepseek", "deepseek", "0.2.2-rc.1", "deepseek-harness/0.2.2-rc.1 (+https://github.com/deepseek-ai/deepseek-harness)", nil},
 			sevenNativeScenario{protocol: "anthropic", ingress: "/v1/messages", host: "api.deepseek.com", path: "/anthropic/v1/messages", model: "deepseek-v4-pro", authorization: "X-Dsh-Auth-Token"}},
-		{sevenBusinessProvider{"kimi", "kimi", "2.3.1", "kimi-code-cli/2.3.1", map[string]string{"X-Msh-Platform": "kimi_code_cli", "X-Msh-Version": "2.3.1", "X-Stainless-Package-Version": "0.95.2"}},
+		{sevenBusinessProvider{"kimi", "kimi", "2.5.2", "kimi-code-cli/2.5.2", map[string]string{"X-Msh-Platform": "kimi_code_cli", "X-Msh-Version": "2.5.2", "X-Stainless-Package-Version": "0.95.2"}},
 			sevenNativeScenario{protocol: "anthropic", ingress: "/v1/messages", host: "api.kimi.com", path: "/coding/v1/messages", model: "kimi-for-coding", authorization: "Authorization", query: "beta=true"}},
 		{sevenBusinessProvider{"minimax", "minimax", "", "MiniMaxAgent", map[string]string{"X-Stainless-Package-Version": "0.91.1"}},
 			sevenNativeScenario{protocol: "anthropic", ingress: "/v1/messages", host: "agent.minimax.cn", path: "/mavis/api/v1/llm/v1/messages", model: "MiniMax-M3.1", authorization: "Authorization"}},
 		{sevenBusinessProvider{"stepfun", "stepfun", "", "stepcode (linux 6.8.0-31-generic; x64)", map[string]string{"X-Step-Client": "stepcode", "X-Stainless-Package-Version": "6.40.0"}},
 			sevenNativeScenario{protocol: "chat_completions", ingress: "/v1/chat/completions", host: "api.stepfun.com", path: "/step_plan/v1/chat/completions", model: "step-3.5-flash", authorization: "Authorization"}},
-		{sevenBusinessProvider{"zhipu", "zcode", "3.16.2", "ZCode/3.16.2 ai/6.0.193 ai-sdk/provider-utils/4.0.27 runtime/node.js/22", map[string]string{"X-ZCode-App-Version": "3.16.2"}},
+		{sevenBusinessProvider{"zhipu", "zcode", "3.17.2", "ZCode/3.17.2 ai/6.0.193 ai-sdk/provider-utils/4.0.27 runtime/node.js/22", map[string]string{"X-ZCode-App-Version": "3.17.2"}},
 			sevenNativeScenario{protocol: "anthropic", ingress: "/v1/messages", host: "zcode.z.ai", path: "/api/v1/zcode-plan/anthropic/v1/messages", model: "glm-5.2", authorization: "Authorization"}},
 	} {
 		t.Run(test.provider.platform, func(t *testing.T) {

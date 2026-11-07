@@ -12,7 +12,7 @@ describe('Codex CLI runtime API', () => {
   })
 
   it('reads the release-pinned runtime without invoking installation', async () => {
-    const status = { target_version: '0.165.0', installed: false, execution_available: false }
+    const status = { target_version: '0.167.0', installed: false, execution_available: false }
     get.mockResolvedValueOnce({ data: status })
     await expect(getCodexCLIRuntime()).resolves.toEqual(status)
     expect(get).toHaveBeenCalledExactlyOnceWith('/admin/settings/codex-cli')
@@ -20,7 +20,7 @@ describe('Codex CLI runtime API', () => {
   })
 
   it('requests the server-pinned installation without a client-controlled version', async () => {
-    const status = { target_version: '0.165.0', installed: true, execution_available: true }
+    const status = { target_version: '0.167.0', installed: true, execution_available: true }
     post.mockResolvedValueOnce({ data: status })
     await expect(installCodexCLI()).resolves.toEqual(status)
     expect(post).toHaveBeenCalledExactlyOnceWith(

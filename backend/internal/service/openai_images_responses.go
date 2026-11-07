@@ -321,6 +321,8 @@ func openAIImageOutputMIMEType(outputFormat string) string {
 		return "image/jpeg"
 	case "webp":
 		return "image/webp"
+	case "gif":
+		return "image/gif"
 	default:
 		return "image/png"
 	}
@@ -360,6 +362,9 @@ func isOpenAIImagesSelfBuiltRequest(ctx context.Context) bool {
 func buildOpenAIImagesResponsesRequest(parsed *OpenAIImagesRequest, toolModel string) ([]byte, error) {
 	if parsed == nil {
 		return nil, fmt.Errorf("parsed images request is required")
+	}
+	if openAIImagesRequiresDirectEndpoint(parsed) {
+		return nil, fmt.Errorf("animated GIF output requires the native Codex Images endpoint")
 	}
 	prompt := strings.TrimSpace(parsed.Prompt)
 	if prompt == "" {
@@ -1912,7 +1917,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesOAuth(
 		respBody := s.readUpstreamErrorBody(resp)
 		_ = resp.Body.Close()
 		respBody = s.redactAgentIdentitySensitiveBody(upstreamCtx, account, respBody)
-		if direct && (resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusMethodNotAllowed) {
+		if direct && !openAIImagesRequiresDirectEndpoint(parsed) && (resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusMethodNotAllowed) {
 			return s.forwardOpenAIImagesOAuth(withOpenAIImagesForceResponses(ctx), c, account, parsed, channelMappedModel)
 		}
 		if !agentIdentityTaskRecoveryWasTried(ctx) && s.isAgentIdentityAccount(ctx, account) && isAgentIdentityTaskInvalidHTTPResponse(resp.StatusCode, respBody) {

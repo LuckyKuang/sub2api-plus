@@ -1315,7 +1315,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 	var pendingMigrationMessages [][]byte
 	var pendingMigrationBytes int64
 	var migrationUsage OpenAIUsage
-	var modelNotFoundTerminal atomic.Bool
+	var requestTerminal atomic.Bool
 	classifyUpstreamEvent := func(msgType coderws.MessageType, payload []byte, wroteDownstream bool) error {
 		if msgType != coderws.MessageText {
 			return nil
@@ -1323,10 +1323,10 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 		eventType, _, _ := parseOpenAIWSEventEnvelope(payload)
 		switch eventType {
 		case "error", "response.failed":
-			_, modelError := openAIModelNotFoundEventStatus(payload)
-			modelNotFoundTerminal.Store(modelError)
+			_, requestError := openAIRequestTerminalEventStatus(payload)
+			requestTerminal.Store(requestError)
 		case "response.completed", "response.done":
-			modelNotFoundTerminal.Store(false)
+			requestTerminal.Store(false)
 		}
 		if eventType == "response.created" {
 			failureAccountSideEffectsApplied = false
@@ -1459,8 +1459,8 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 				)
 				if hooks != nil && hooks.AfterTurn != nil {
 					var observationErr error
-					if modelNotFoundTerminal.Swap(false) && normalizeOpenAIWSTerminalEvent(turn.TerminalEventType) == "response.failed" {
-						observationErr = &openAIModelNotFoundTerminalError{cause: errors.New("upstream model_not_found")}
+					if requestTerminal.Swap(false) && normalizeOpenAIWSTerminalEvent(turn.TerminalEventType) == "response.failed" {
+						observationErr = &openAIRequestTerminalError{cause: errors.New("upstream request rejected")}
 					}
 					hooks.AfterTurn(turnNo, turnResult, observationErr)
 				}

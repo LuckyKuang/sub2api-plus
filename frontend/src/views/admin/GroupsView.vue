@@ -3,11 +3,11 @@
     <TablePageLayout>
       <template #filters>
         <div
-          class="flex flex-col justify-between gap-4 lg:flex-row lg:items-start"
+          class="filter-bar"
         >
           <!-- Left: fuzzy search + filters (can wrap to multiple lines) -->
-          <div class="flex flex-1 flex-wrap items-center gap-3">
-            <div class="relative w-full sm:w-64">
+          <div class="filter-bar filter-bar--inline">
+            <div class="filter-field filter-field--search relative">
               <Icon
                 name="search"
                 size="md"
@@ -21,33 +21,35 @@
                 @input="handleSearch"
               />
             </div>
-            <Select
-              v-model="filters.platform"
-              :options="platformFilterOptions"
-              :placeholder="t('admin.groups.allPlatforms')"
-              class="w-44"
-              @change="loadGroups"
-            />
-            <Select
-              v-model="filters.status"
-              :options="statusOptions"
-              :placeholder="t('admin.groups.allStatus')"
-              class="w-40"
-              @change="loadGroups"
-            />
-            <Select
-              v-if="!authStore.isSimpleMode"
-              v-model="filters.is_exclusive"
-              :options="exclusiveOptions"
-              :placeholder="t('admin.groups.allGroups')"
-              class="w-44"
-              @change="loadGroups"
-            />
+            <div class="filter-field">
+              <Select
+                v-model="filters.platform"
+                :options="platformFilterOptions"
+                :placeholder="t('admin.groups.allPlatforms')"
+                @change="loadGroups"
+              />
+            </div>
+            <div class="filter-field">
+              <Select
+                v-model="filters.status"
+                :options="statusOptions"
+                :placeholder="t('admin.groups.allStatus')"
+                @change="loadGroups"
+              />
+            </div>
+            <div v-if="!authStore.isSimpleMode" class="filter-field">
+              <Select
+                v-model="filters.is_exclusive"
+                :options="exclusiveOptions"
+                :placeholder="t('admin.groups.allGroups')"
+                @change="loadGroups"
+              />
+            </div>
           </div>
 
           <!-- Right: actions -->
           <div
-            class="flex w-full flex-shrink-0 flex-wrap items-center justify-end gap-3 lg:w-auto"
+            class="filter-actions"
           >
             <button
               @click="loadGroups"

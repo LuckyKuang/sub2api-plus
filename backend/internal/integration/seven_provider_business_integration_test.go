@@ -364,13 +364,13 @@ func TestSevenProviderFailoverPersistsRedisAffinityAndPostgresDebits(t *testing.
 	providers := []sevenBusinessProvider{
 		// OUTBOUND_IDENTITY.md: Native OpenAI API-key inference declares the
 		// same selected Codex triple as OAuth inference.
-		{"openai", "codex", "0.165.0", "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color", map[string]string{"Originator": "codex_cli_rs", "Version": "0.165.0"}},
+		{"openai", "codex", "0.167.0", "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color", map[string]string{"Originator": "codex_cli_rs", "Version": "0.167.0"}},
 		{"grok", "grok", "1.0.45", "grok-shell/1.0.45 (linux; x86_64)", map[string]string{"X-Grok-Client-Identifier": "grok-shell", "X-Grok-Client-Version": "1.0.45"}},
-		{"deepseek", "deepseek", "0.2.1-rc.3", "deepseek-harness/0.2.1-rc.3 (+https://github.com/deepseek-ai/deepseek-harness)", nil},
-		{"kimi", "kimi", "2.3.1", "kimi-code-cli/2.3.1", map[string]string{"X-Msh-Platform": "kimi_code_cli", "X-Msh-Version": "2.3.1", "X-Stainless-Package-Version": "6.34.0"}},
+		{"deepseek", "deepseek", "0.2.2-rc.1", "deepseek-harness/0.2.2-rc.1 (+https://github.com/deepseek-ai/deepseek-harness)", nil},
+		{"kimi", "kimi", "2.5.2", "kimi-code-cli/2.5.2", map[string]string{"X-Msh-Platform": "kimi_code_cli", "X-Msh-Version": "2.5.2", "X-Stainless-Package-Version": "6.34.0"}},
 		{"minimax", "minimax_apikey", "0.91.1", "Anthropic/JS 0.91.1", map[string]string{"X-Stainless-Package-Version": "0.91.1"}},
 		{"stepfun", "stepfun", "", "stepcode (linux 6.8.0-31-generic; x64)", map[string]string{"X-Step-Client": "stepcode", "X-Stainless-Package-Version": "6.40.0"}},
-		{"zhipu", "zcode", "3.16.2", "ZCode/3.16.2 ai/6.0.193 ai-sdk/provider-utils/4.0.39 runtime/node.js/22", map[string]string{"X-ZCode-App-Version": "3.16.2"}},
+		{"zhipu", "zcode", "3.17.2", "ZCode/3.17.2 ai/6.0.193 ai-sdk/provider-utils/4.0.39 runtime/node.js/22", map[string]string{"X-ZCode-App-Version": "3.17.2"}},
 	}
 	for _, provider := range providers {
 		for _, failure := range []int{http.StatusServiceUnavailable, http.StatusTooManyRequests} {

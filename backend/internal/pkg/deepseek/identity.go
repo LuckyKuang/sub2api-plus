@@ -41,7 +41,7 @@ const (
 	// DefaultVersion is the manually reviewed published prerelease harness
 	// version. The parenthesized comment is part of the same User-Agent value,
 	// not a second declaration.
-	DefaultVersion = "0.2.1-rc.3"
+	DefaultVersion = "0.2.2-rc.1"
 
 	// StableVersion is the oldest client version this build advertises.
 	StableVersion = "0.2.0-rc.2"

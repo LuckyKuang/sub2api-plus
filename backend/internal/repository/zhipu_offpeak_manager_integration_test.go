@@ -82,7 +82,7 @@ func newOffPeakManagerIntegrationOwner(t *testing.T) (*service.Account, string) 
 	t.Helper()
 	_, old, _ := newOffPeakStoreFixture(t)
 	credentials := map[string]any{"oauth_provider": "bigmodel", "plan_kind": service.ZhipuPlanOffPeak, "account_mode": service.AccountModeCoding, "zcode_jwt_token": "manager-owner-jwt", "api_key": "manager-owner-jwt", "off_peak_plan_key": "manager-plan-key",
-		service.SettingKeyOutboundIdentity: service.OutboundIdentitySelection{Preset: zcode.Preset, Version: "3.16.2", Headers: map[string]string{zcode.HeaderDeviceMid: "7d918214-79ad-4057-bb2b-4ac6bd24a907"}}}
+		service.SettingKeyOutboundIdentity: service.OutboundIdentitySelection{Preset: zcode.Preset, Version: "3.17.2", Headers: map[string]string{zcode.HeaderDeviceMid: "7d918214-79ad-4057-bb2b-4ac6bd24a907"}}}
 	proxy := mustCreateProxy(t, integrationEntClient, &service.Proxy{Name: "offpeak-manager-route", Protocol: "http", Host: "captured-proxy.example", Port: 8080, Status: service.StatusActive})
 	t.Cleanup(func() {
 		_, _ = integrationDB.ExecContext(context.Background(), "UPDATE accounts SET proxy_id=NULL WHERE id=$1", old.ID)
@@ -122,8 +122,8 @@ func assertOffPeakManagerCapturedOwner(t *testing.T, calls []offPeakManagerWireC
 		require.Equal(t, zcode.OffPeakAuth{JWT: "manager-owner-jwt", PlanKey: "manager-plan-key"}, call.Auth)
 		require.Equal(t, route, call.Proxy)
 		require.Equal(t, "zcode", call.Identity.Preset)
-		require.Equal(t, "ZCode/3.16.2", call.Identity.UserAgent)
-		require.Equal(t, "3.16.2", call.Identity.Version)
+		require.Equal(t, "ZCode/3.17.2", call.Identity.UserAgent)
+		require.Equal(t, "3.17.2", call.Identity.Version)
 	}
 }
 

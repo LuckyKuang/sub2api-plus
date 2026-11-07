@@ -13,9 +13,9 @@ import (
 
 func TestDomesticPublicModelsUsesNativeControlAuthAndSeparatesOwners(t *testing.T) {
 	for _, tc := range []struct{ platform, region, target, userAgent string }{
-		{"kimi", "cn", "https://api.kimi.com/coding/v1/models", "kimi-code-cli/2.3.1"},
-		{"kimi", "global", "https://api.kimi.ai/coding/v1/models", "kimi-code-cli/2.3.1"},
-		{"deepseek", "cn", "https://api.deepseek.com/models", "deepseek-harness/0.2.1-rc.3 (+https://github.com/deepseek-ai/deepseek-harness)"},
+		{"kimi", "cn", "https://api.kimi.com/coding/v1/models", "kimi-code-cli/2.5.2"},
+		{"kimi", "global", "https://api.kimi.ai/coding/v1/models", "kimi-code-cli/2.5.2"},
+		{"deepseek", "cn", "https://api.deepseek.com/models", "deepseek-harness/0.2.2-rc.1 (+https://github.com/deepseek-ai/deepseek-harness)"},
 		{"stepfun", "cn", "https://api.stepfun.com/step_plan/v1/models", "stepcode (linux 6.8.0-31-generic; x64)"},
 		{"stepfun", "global", "https://api.stepfun.ai/step_plan/v1/models", "stepcode (linux 6.8.0-31-generic; x64)"},
 	} {

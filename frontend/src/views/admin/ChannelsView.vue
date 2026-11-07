@@ -4,8 +4,8 @@
       <template #filters>
         <div class="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
           <!-- Left: Search + Filters -->
-          <div class="flex flex-1 flex-wrap items-center gap-3">
-            <div class="relative w-full sm:w-64">
+          <div class="filter-bar flex-1">
+            <div class="filter-field filter-field--search relative">
               <Icon
                 name="search"
                 size="md"
@@ -20,13 +20,14 @@
               />
             </div>
 
-            <Select
-              v-model="filters.status"
-              :options="statusFilterOptions"
-              :placeholder="t('admin.channels.allStatus', 'All Status')"
-              class="w-40"
-              @change="loadChannels"
-            />
+            <div class="filter-field">
+              <Select
+                v-model="filters.status"
+                :options="statusFilterOptions"
+                :placeholder="t('admin.channels.allStatus', 'All Status')"
+                @change="loadChannels"
+              />
+            </div>
           </div>
 
           <!-- Right: Actions -->

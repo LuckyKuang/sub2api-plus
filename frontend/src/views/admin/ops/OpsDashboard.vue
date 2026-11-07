@@ -41,7 +41,10 @@
         @exit-fullscreen="exitFullscreen"
       >
         <template #navigation>
-          <WorkspaceTabs v-model="activeTab" :tabs="workspaceTabs" :label="t('admin.ops.title')" />
+          <!-- Full width keeps the tabs on their own line inside the toolbar card. -->
+          <div class="w-full">
+            <WorkspaceTabs v-model="activeTab" embedded :tabs="workspaceTabs" :label="t('admin.ops.title')" />
+          </div>
         </template>
 
         <template #default>

@@ -56,7 +56,7 @@ func taskFixture(t *testing.T, body string) TaskRequest {
 	}
 	digest := sha256.Sum256(executableContent)
 	return TaskRequest{
-		Runtime: Status{Path: executable, Installed: true, Source: "managed", SourceVerified: true, InstalledVersion: "0.165.0", VersionMatch: true, ExecutionAvailable: true, Mode: "exec_task", proof: &runtimeProof{path: executable, executableSHA256: digest[:]}},
+		Runtime: Status{Path: executable, Installed: true, Source: "managed", SourceVerified: true, InstalledVersion: "0.167.0", VersionMatch: true, ExecutionAvailable: true, Mode: "exec_task", proof: &runtimeProof{path: executable, executableSHA256: digest[:]}},
 		Home:    home, WorkDir: workspace, Prompt: "user prompt",
 	}
 }

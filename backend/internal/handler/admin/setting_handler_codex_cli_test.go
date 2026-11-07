@@ -54,11 +54,11 @@ func TestCodexCLIInstallSuccessReturnsRuntimeStatus(t *testing.T) {
 	c, _ := gin.CreateTestContext(recorder)
 	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/admin/settings/codex-cli/install", nil)
 	installCodexCLI(c, func(context.Context) (codexcli.Status, error) {
-		return codexcli.Status{Installed: true, InstalledVersion: "0.165.0", TargetVersion: "0.165.0", ExecutionAvailable: true}, nil
+		return codexcli.Status{Installed: true, InstalledVersion: "0.167.0", TargetVersion: "0.167.0", ExecutionAvailable: true}, nil
 	}, func(context.Context) (bool, error) { return false, nil })
 	require.Equal(t, http.StatusOK, recorder.Code)
 	require.Contains(t, recorder.Body.String(), `"execution_available":true`)
-	require.Contains(t, recorder.Body.String(), `"installed_version":"0.165.0"`)
+	require.Contains(t, recorder.Body.String(), `"installed_version":"0.167.0"`)
 	require.Contains(t, recorder.Body.String(), `"bridge_enabled":false`)
 }
 
@@ -80,7 +80,7 @@ func TestCodexCLIRuntimeReturnsAccountConfigDefault(t *testing.T) {
 				r := httptest.NewRecorder()
 				c, _ := gin.CreateTestContext(r)
 				c.Request = httptest.NewRequest(method, "/api/v1/admin/settings/codex-cli", strings.NewReader(body))
-				status := codexcli.Status{Installed: true, InstalledVersion: "0.165.0", TargetVersion: "0.165.0", SourceVerified: true, VersionMatch: true, ExecutionAvailable: true}
+				status := codexcli.Status{Installed: true, InstalledVersion: "0.167.0", TargetVersion: "0.167.0", SourceVerified: true, VersionMatch: true, ExecutionAvailable: true}
 				read := func(context.Context) (bool, error) { return enabled, nil }
 				switch method {
 				case http.MethodGet:
@@ -110,7 +110,7 @@ func TestCodexCLIRuntimeReturnsAccountConfigDefault(t *testing.T) {
 // writes; disabling remains available after installation becomes unavailable.
 func TestCodexCLIBridgeEnablementRequiresVerifiedRuntimeBeforeWriting(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	ready := codexcli.Status{Installed: true, InstalledVersion: "0.165.0", TargetVersion: "0.165.0", SourceVerified: true, VersionMatch: true, ExecutionAvailable: true}
+	ready := codexcli.Status{Installed: true, InstalledVersion: "0.167.0", TargetVersion: "0.167.0", SourceVerified: true, VersionMatch: true, ExecutionAvailable: true}
 	for _, tc := range []struct {
 		name   string
 		mutate func(*codexcli.Status)

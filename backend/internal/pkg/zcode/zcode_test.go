@@ -23,13 +23,13 @@ import (
 
 func TestIdentityPinsProductVersionAndAcceptsBothOfficialLines(t *testing.T) {
 	t.Setenv(VersionEnv, "")
-	require.Equal(t, "3.16.2", DefaultVersion)
-	require.Equal(t, "ZCode/3.16.2", UserAgent(DefaultVersion))
+	require.Equal(t, "3.17.2", DefaultVersion)
+	require.Equal(t, "ZCode/3.17.2", UserAgent(DefaultVersion))
 	require.Equal(t, "zcode", Preset)
 
 	identity := DefaultIdentity()
 	require.Equal(t, Preset, identity.Preset)
-	require.Equal(t, "ZCode/3.16.2", identity.UserAgent)
+	require.Equal(t, "ZCode/3.17.2", identity.UserAgent)
 	require.Equal(t, ProductToken, identity.Originator)
 	require.Equal(t, DefaultVersion, identity.Version)
 	require.Equal(t, "compiled_default", identity.Source)
@@ -424,7 +424,7 @@ func TestCredentialClientIssuesProjectTokenForBothEstates(t *testing.T) {
 			var paths []string
 			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				paths = append(paths, r.URL.Path)
-				require.Equal(t, "ZCode/3.16.2", r.UserAgent())
+				require.Equal(t, "ZCode/3.17.2", r.UserAgent())
 				switch {
 				case strings.HasSuffix(r.URL.Path, "/getCustomerInfo"):
 					require.Equal(t, "login", r.Header.Get("Authorization"))
@@ -441,7 +441,7 @@ func TestCredentialClientIssuesProjectTokenForBothEstates(t *testing.T) {
 					require.Equal(t, "Bearer login", r.Header.Get("Authorization"))
 					var body map[string]string
 					require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
-					require.Equal(t, map[string]string{"clientType": "zcode", "clientVersion": "3.16.2"}, body)
+					require.Equal(t, map[string]string{"clientType": "zcode", "clientVersion": "3.17.2"}, body)
 					writeEnvelope(t, w, map[string]any{"accessToken": "short-pat", "tokenType": "Bearer", "expiresIn": 3600, "expiresAt": time.Now().Add(30 * time.Minute).Unix()})
 				default:
 					t.Errorf("unexpected request %s", r.URL.Path)

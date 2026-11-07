@@ -9,15 +9,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCodex165ManualUpgradePreservesSourceAndFingerprintOnWire(t *testing.T) {
-	// Oracle: official stable rust-v0.165.0, peeled 360319d8dee62d87e2d59fc0c21805d79519cfed;
+func TestCodex167ManualUpgradePreservesSourceAndFingerprintOnWire(t *testing.T) {
+	// Oracle: official stable rust-v0.167.0, peeled 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a;
 	// docs/protocols/CODEX_CLIENT_PROFILES.md source matrix and version-only contract.
 	for _, kind := range []string{AccountTypeOAuth, AccountTypeAPIKey} {
 		for _, tc := range []struct{ name, accountUA, globalUA, pinnedVersion, source, ua, originator, version string }{
-			{"compiled", "", "", "", "compiled_default", "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color", "codex_cli_rs", "0.165.0"},
-			{"account before global", "codex_vscode/0.164.0 (Windows 11; aarch64) WindowsTerminal", "codex_cli_rs/0.163.0 (Ubuntu 22.04; x86_64) tmux", "", "account", "codex_vscode/0.165.0 (Windows 11; aarch64) WindowsTerminal", "codex_vscode", "0.165.0"},
-			{"invalid account falls to global", "foreign/1.0", "codex_cli_rs/0.163.0 (Ubuntu 22.04; x86_64) tmux", "", "global", "codex_cli_rs/0.165.0 (Ubuntu 22.04; x86_64) tmux", "codex_cli_rs", "0.165.0"},
-			{"invalid both fall to compiled", "foreign/1.0", "foreign/2.0", "", "compiled_default", "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color", "codex_cli_rs", "0.165.0"},
+			{"compiled", "", "", "", "compiled_default", "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color", "codex_cli_rs", "0.167.0"},
+			{"account before global", "codex_vscode/0.164.0 (Windows 11; aarch64) WindowsTerminal", "codex_cli_rs/0.163.0 (Ubuntu 22.04; x86_64) tmux", "", "account", "codex_vscode/0.167.0 (Windows 11; aarch64) WindowsTerminal", "codex_vscode", "0.167.0"},
+			{"invalid account falls to global", "foreign/1.0", "codex_cli_rs/0.163.0 (Ubuntu 22.04; x86_64) tmux", "", "global", "codex_cli_rs/0.167.0 (Ubuntu 22.04; x86_64) tmux", "codex_cli_rs", "0.167.0"},
+			{"invalid both fall to compiled", "foreign/1.0", "foreign/2.0", "", "compiled_default", "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color", "codex_cli_rs", "0.167.0"},
 			{"explicit previous release pin", "codex_vscode/0.163.0 (Windows 11; aarch64) WindowsTerminal", "", "0.164.0", "account", "codex_vscode/0.164.0 (Windows 11; aarch64) WindowsTerminal", "codex_vscode", "0.164.0"},
 		} {
 			t.Run(kind+"/"+tc.name, func(t *testing.T) {

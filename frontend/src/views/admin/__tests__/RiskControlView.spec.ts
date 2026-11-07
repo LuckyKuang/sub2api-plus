@@ -246,6 +246,13 @@ describe('admin RiskControlView', () => {
     })
     try {
       await flushPromises()
+      const heading = wrapper.get('[data-testid="risk-page-heading"]')
+      const actions = heading.get('[data-testid="risk-page-actions"]')
+      const tabs = heading.get('[role="tablist"]')
+      expect(heading.element.children).toHaveLength(3)
+      expect(heading.element.children[0].querySelector('h1')).not.toBeNull()
+      expect(heading.element.children[1].contains(tabs.element)).toBe(true)
+      expect(heading.element.lastElementChild).toBe(actions.element)
       expect(wrapper.get('[data-test="risk-overview"]').isVisible()).toBe(true)
       expect(wrapper.get('[data-test="risk-records"]').isVisible()).toBe(false)
       await findButtonByText(wrapper, 'workspace.auditRecords').trigger('click')

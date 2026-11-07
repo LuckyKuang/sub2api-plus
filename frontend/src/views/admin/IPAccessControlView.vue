@@ -1,15 +1,17 @@
 <template>
   <AppLayout workspace>
     <div class="workspace-page ip-access-workspace">
-      <section class="workspace-fixed card ip-page-heading flex flex-wrap items-start justify-between gap-4 p-5">
+      <section class="workspace-fixed card ip-page-heading grid grid-cols-1 items-center gap-4 p-5 md:grid-cols-[minmax(0,1fr)_auto]">
         <div>
           <h1 class="text-xl font-semibold text-gray-900 dark:text-white">{{ t('admin.ipAccessControl.title') }}</h1>
           <p class="mt-1 max-w-3xl text-sm surface-muted">{{ t('admin.ipAccessControl.description') }}</p>
         </div>
         <RouterLink class="btn btn-secondary" to="/admin/settings">{{ t('admin.ipAccessControl.backToSettings') }}</RouterLink>
+        <!-- Tabs live inside the header card so the page keeps one surface. -->
+        <div class="col-span-full min-w-0 w-full">
+          <WorkspaceTabs v-model="activeTab" embedded :tabs="workspaceTabs" :label="t('admin.ipAccessControl.title')" />
+        </div>
       </section>
-
-      <WorkspaceTabs v-model="activeTab" :tabs="workspaceTabs" :label="t('admin.ipAccessControl.title')" />
 
       <section
         v-show="activeTab === 'failures'"
@@ -34,8 +36,8 @@
           </div>
           <p class="ip-table-description text-sm surface-muted">{{ t('admin.ipAccessControl.failureStates.description') }}</p>
         </div>
-        <div class="workspace-fixed ip-table-filters ip-failure-filters flex flex-wrap items-end gap-3 border-b border-gray-100 p-4 dark:border-dark-700">
-          <label class="ip-filter-field min-w-52 flex-1">
+        <div class="workspace-fixed ip-table-filters ip-failure-filters filter-bar border-b border-gray-100 p-4 dark:border-dark-700">
+          <label class="ip-filter-field filter-field filter-field--search">
             <span class="input-label">{{ t('common.search') }}</span>
             <input v-model.trim="failureFilters.query" class="input" :placeholder="t('admin.ipAccessControl.failureStates.searchPlaceholder')" @keyup.enter="searchFailureStates" />
           </label>
@@ -229,9 +231,9 @@
           <button type="button" class="btn btn-primary" @click="openCreateDialog"><Icon name="plus" size="sm" class="mr-1.5" />{{ t('admin.ipAccessControl.rules.add') }}</button>
           <p class="ip-table-description text-sm surface-muted">{{ t('admin.ipAccessControl.rules.description') }}</p>
         </div>
-        <div class="workspace-fixed ip-table-filters flex flex-wrap items-end gap-3 border-b border-gray-100 p-4 dark:border-dark-700">
-          <label class="ip-filter-field min-w-52 flex-1"><span class="input-label">{{ t('common.search') }}</span><input v-model.trim="filters.query" class="input" :placeholder="t('admin.ipAccessControl.rules.searchPlaceholder')" @keyup.enter="search" /></label>
-          <label class="ip-filter-field w-full sm:w-44"><span class="input-label">{{ t('common.status') }}</span><Select v-model="filters.status" :options="statusOptions" @change="search" /></label>
+        <div class="workspace-fixed ip-table-filters filter-bar border-b border-gray-100 p-4 dark:border-dark-700">
+          <label class="ip-filter-field filter-field filter-field--search"><span class="input-label">{{ t('common.search') }}</span><input v-model.trim="filters.query" class="input" :placeholder="t('admin.ipAccessControl.rules.searchPlaceholder')" @keyup.enter="search" /></label>
+          <label class="ip-filter-field filter-field"><span class="input-label">{{ t('common.status') }}</span><Select v-model="filters.status" :options="statusOptions" @change="search" /></label>
           <button type="button" class="btn btn-secondary" :disabled="rulesLoading" @click="search">{{ t('common.search') }}</button>
         </div>
         <DataTable class="workspace-table-viewport" :columns="columns" :data="rules" :loading="rulesLoading" row-key="id">
@@ -736,18 +738,11 @@ onMounted(() => {
 
 @media (min-width: 1024px) and (max-width: 1279px), (min-width: 1024px) and (max-height: 800px) {
   .ip-page-heading { padding: 12px 16px; gap: 8px 12px; }
-  .ip-page-heading > div { flex: 1; min-width: 0; }
-  .ip-page-heading > .btn { flex: none; }
+  .ip-page-heading > div { min-width: 0; }
   .ip-table-heading { padding: 10px 16px; gap: 4px 12px; }
   .ip-table-heading > .btn, .ip-table-filters > .btn { min-height: 36px; padding-block: 7px; font-size: 13px; line-height: 20px; }
-  .ip-table-filters {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(150px, .55fr) auto;
-    gap: 8px;
-    padding: 10px 16px;
-  }
-  .ip-failure-filters { grid-template-columns: minmax(0, 1fr) auto; }
-  .ip-filter-field { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px; width: auto; min-width: 0; }
+  .ip-table-filters { gap: 8px; padding: 10px 16px; }
+  .ip-filter-field { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px; min-width: 0; }
   .ip-filter-field .input-label { margin: 0; white-space: nowrap; font-size: 13px; }
   .ip-filter-field .input, .ip-filter-field :deep(.select-trigger) { min-height: 36px; padding-block: 7px; }
   .ip-table-note { padding: 8px 16px; }

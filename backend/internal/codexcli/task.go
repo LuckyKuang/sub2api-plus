@@ -310,7 +310,7 @@ func (u *usageEvent) usage() (TaskUsage, bool) {
 }
 
 // The event names and usage fields follow codex-rs/exec/src/exec_events.rs at
-// rust-v0.165.0. Unknown events/items are ignored; they are never Responses data.
+// rust-v0.167.0. Unknown events/items are ignored; they are never Responses data.
 func parseTaskEvents(reader io.Reader, result *TaskResult) error {
 	scanner := bufio.NewScanner(&taskOutputReader{reader: reader, remaining: MaxTaskOutputBytes})
 	scanner.Buffer(make([]byte, 64<<10), MaxTaskLineBytes)

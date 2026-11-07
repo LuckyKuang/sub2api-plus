@@ -79,6 +79,9 @@ func (s *OpenAIGatewayService) resolveOpenAICompactFallbackModel(account *Accoun
 }
 
 func isOpenAICompactModelFailure(statusCode int, upstreamMsg string, upstreamBody []byte) bool {
+	if openAIInputTerminalCode(statusCode, upstreamBody) != "" {
+		return false
+	}
 	if isOpenAIContextWindowError(upstreamMsg, upstreamBody) {
 		return true
 	}

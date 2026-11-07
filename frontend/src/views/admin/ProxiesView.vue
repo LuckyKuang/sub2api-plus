@@ -2,9 +2,9 @@
   <AppLayout workspace>
     <TablePageLayout>
       <template #filters>
-        <div class="flex flex-wrap items-center gap-3">
+        <div class="filter-bar">
           <!-- Left: Search + Filters -->
-          <div class="relative w-full sm:w-64">
+          <div class="filter-field filter-field--search relative">
             <Icon
               name="search"
               size="md"
@@ -19,7 +19,7 @@
             />
           </div>
 
-          <div class="w-full sm:w-40">
+          <div class="filter-field">
             <Select
               v-model="filters.protocol"
               :options="protocolOptions"
@@ -27,7 +27,7 @@
               @change="handleFilterChange"
             />
           </div>
-          <div class="w-full sm:w-36">
+          <div class="filter-field">
             <Select
               v-model="filters.status"
               :options="statusOptions"
@@ -37,7 +37,7 @@
           </div>
 
           <!-- Right: All action buttons -->
-          <div class="flex flex-1 flex-wrap items-center justify-end gap-2">
+          <div class="filter-actions">
             <button
               @click="loadProxies"
               :disabled="loading"

@@ -358,7 +358,7 @@ its result cannot overwrite a newer account binding.
 This source matrix applies identically to OAuth and API-key HTTP/WS provider
 requests, including retries, discovery and probes. Transport preference and
 inbound client classification never change the selected source.
-The October 28 manual upgrade selects stable `0.165.0` after this matrix;
+The November 7 manual upgrade selects stable `0.167.0` after this matrix;
 it changes the version declaration only. Valid administrator version overrides
 retain priority and every selected family, OS, architecture and terminal stays intact.
 
@@ -379,9 +379,9 @@ string clears it through an explicit null in the JSONB update.
 The exact compiled identity is:
 
 ```text
-User-Agent: codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color
+User-Agent: codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color
 Originator: codex_cli_rs
-Version: 0.165.0
+Version: 0.167.0
 ```
 
 The version resolver runs after source selection: a valid administrator version
@@ -610,7 +610,7 @@ Neither capability is implied by matching UA/Originator/Version.
 ## User-Agent suffix
 
 An administrator User-Agent may end with the official ` ({suffix})` group, for
-example `codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color (mcp: server-a)`.
+example `codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color (mcp: server-a)`.
 Pairing, validation, and manual version updates accept that form and keep the
 suffix unchanged. The gateway does not generate a suffix.
 
@@ -797,3 +797,54 @@ They preserve their structured code after bounded cross-owner failover and do
 not count as authentication, account health or quota failures. A generation-
 scoped negative model cache prevents a late old-grant response from blocking
 a replacement grant. Other models on that account remain schedulable.
+
+## November 7 protocol compatibility
+
+The manually selected default identity is stable `rust-v0.167.0` at
+`086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a`; its existing source-priority matrix
+and environment fingerprint remain authoritative. The embedded managed CLI
+executable is upgraded to the same reviewed `0.167.0` release. Every compiled
+default identity upgrade must also update the runtime manifest, official archive
+and executable digests, browser catalog and real-binary wire regressions.
+Settings offers explicit installation/update to that reviewed target; it does
+not select an arbitrary release or change administrator identity pins.
+
+Main commit `41cbd5b9b2d5369ba35957328504093ed324333c` adds optional per-turn
+`prompt_cache_options: {"ttl":"30m"}` or `{"ttl":"12h"}` on HTTP and WS.
+OAuth and setup-token forwarding preserve the caller's options on ordinary,
+compact, passthrough and WS bridge paths. An absent option stays absent on a
+later request. Existing API-key GPT-5.6/GPT-6 gates stay in effect; cache-key
+ownership is independent of cache lifetime. No cache declaration bypasses the
+original-content audit gate or changes identity source selection.
+
+The exact provider codes `budget_reached`, `audio_too_large`, `audio_too_short`,
+`invalid_audio`, `invalid_audio_data`, `invalid_audio_format` and
+`missing_audio_sample_rate` follow the reviewed main error parser: HTTP 400 or
+statusless SSE/WS is terminal for this turn. Preserve the code and do not retry,
+fail over or penalize the credential owner. A real HTTP 401/403/429/5xx is not
+reclassified by those codes; authentication and transport policies still apply.
+Wrapped WebSocket `error` events also preserve their numeric `status` or
+`status_code` (including nested error declarations). Only a missing status or
+400 permits the budget/audio terminal classification. An explicit 429 retains
+API-key cooldown and the OAuth same-owner retry window; 5xx retains transport
+recovery, and 426 retains the HTTP protocol fallback. Status-only envelopes do
+not need a matching error type or message.
+This follows the official
+[`WrappedWebsocketErrorEvent`](https://github.com/openai/codex/blob/efdacaf46ff54660a239189a6d62434c5db33d2c/codex-rs/codex-api/src/endpoint/responses_websocket.rs)
+mapping before terminal-provider parsing. The actual HTTP response status takes
+priority over status hints in its body.
+WebSocket prewarm stops on the same codes before another send. All transport
+adapters carry the request rejection through scheduler and health observations
+without counting it as an account failure.
+Buffered SSE errors retain the existing response-header filtering and local
+quota visibility policy while preserving the terminal code.
+
+Codex source commit `f9e7b19df8aa75490fc1d90f98d3d95ad716d08e` adds native
+Images GIF controls: `output_format: "gif"`, optional integer `frame_count`
+(2–16), and optional integer `frame_duration_ms` (20–2000). JSON and multipart
+input preserve the controls as sibling fields on native OAuth/setup-token Images
+and API-key Images paths. Omitted fields remain omitted; generated GIF data URLs
+use `image/gif`. OAuth animation requires a supported native Codex Images model;
+an unavailable endpoint returns its error instead of falling back to a Responses
+image tool that has no reviewed animation contract. Existing still-image fallback
+behavior is unchanged. See `openai_images_official_gif_test.go`.

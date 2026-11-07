@@ -23,13 +23,13 @@
             </button>
           </div>
         </div>
-        <div class="flex flex-wrap items-center gap-3 border-t border-gray-100 pt-3 dark:border-dark-800">
-          <label class="catalog-search relative w-full min-w-0 max-w-sm">
+        <div class="filter-bar border-t border-gray-100 pt-3 dark:border-dark-800">
+          <label class="filter-field filter-field--search catalog-search relative">
             <span class="sr-only">{{ t('availableChannels.catalog.searchPlaceholder') }}</span>
             <Icon name="search" size="md" class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input v-model="filters.search" class="input w-full pl-10 pr-10" type="search" :placeholder="t('availableChannels.catalog.searchPlaceholder')" />
           </label>
-          <label class="relative">
+          <label class="filter-field relative">
             <span class="sr-only">{{ t('availableChannels.catalog.sort') }}</span>
             <Select
               v-model="filters.sort"

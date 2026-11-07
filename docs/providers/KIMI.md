@@ -38,8 +38,8 @@ surface.
 
 Kimi and Moonshot OAuth/API-key accounts retain the Kimi Code client family.
 Account parameters may override its global profile; cross-family selections and
-the retired `kimi:apikey` mapping are rejected. The compiled identity is: `User-Agent: kimi-code-cli/2.3.1` plus the official companion
-declarations `X-Msh-Platform: kimi_code_cli`, `X-Msh-Version: 2.3.1` and the four
+the retired `kimi:apikey` mapping are rejected. The compiled identity is: `User-Agent: kimi-code-cli/2.5.2` plus the official companion
+declarations `X-Msh-Platform: kimi_code_cli`, `X-Msh-Version: 2.5.2` and the four
 device headers `X-Msh-Device-Name`, `X-Msh-Device-Model`, `X-Msh-Os-Version` and
 `X-Msh-Device-Id`. The official client declares no `Originator` and no standalone
 `Version` header, so neither is sent. `SUB2API_KIMI_CODE_VERSION` may select a
@@ -133,3 +133,8 @@ pause/recovery writes are conditional on that owner. All three also compare the
 cooldown deadline and reason seen before the probe, including a previously absent
 cooldown, preserving newer reactive balance markers and failures. `success` describes the
 provider response; `persisted` is true only after its conditional local write.
+
+The November 7 review selects stable `2.5.2` with unchanged SDK/runtime facts.
+Native Messages requests with enabled or disabled thinking declare
+`anthropic-beta: context-management-2025-06-27`, following the official
+provider-specific transform rather than the generic Anthropic default.

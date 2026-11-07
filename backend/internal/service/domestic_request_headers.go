@@ -35,7 +35,7 @@ func prepareDomesticRequestHeaders(req *http.Request, account *Account) {
 			strings.HasPrefix(lower, "x-openai-") || strings.HasPrefix(lower, "x-responsesapi-") ||
 			strings.HasPrefix(lower, "x-claude-") || lower == "x-client-request-id" ||
 			strings.HasPrefix(lower, "x-mavis-") || strings.HasPrefix(lower, "x-deepseek-harness-") ||
-			lower == "x-zcode-trace-id" || lower == "x-zcode-session-type" || lower == "x-zcode-query-source" ||
+			lower == "x-zcode-trace-id" || lower == "x-zcode-session-type" || lower == "x-zcode-query-source" || lower == "x-zcode-session-features" ||
 			lower == "x-stainless-helper-method" || lower == "x-stainless-retry-count" ||
 			lower == "x-stainless-timeout" || lower == "x-stainless-read-timeout" ||
 			lower == "x-stainless-connect-timeout" || lower == "anthropic-dangerous-direct-browser-access" {
@@ -136,6 +136,11 @@ func domesticAnthropicBeta(account *Account, body []byte, declared string) strin
 		return strings.Join(tokens, ",")
 	}
 	if account.Platform == PlatformKimi || account.Platform == PlatformMiniMax {
+		// Kimi's provider-specific thinking transform explicitly replaces the
+		// generic Anthropic betas, including when thinking is disabled.
+		if account.Platform == PlatformKimi && (gjson.GetBytes(body, "thinking.type").String() == "enabled" || gjson.GetBytes(body, "thinking.type").String() == "disabled") {
+			return "context-management-2025-06-27"
+		}
 		var tokens []string
 		adaptive := gjson.GetBytes(body, "thinking.type").String() == "adaptive"
 		if account.Platform == PlatformMiniMax && gjson.GetBytes(body, "output_config.effort").Exists() {

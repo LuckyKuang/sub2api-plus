@@ -64,7 +64,7 @@ func TestCodexCLIBridgeOrdinaryResponsesBothRealAuditsPrecedeSideEffects(t *test
 				coordinator, supplier := newCountTokensAuditCoordinator(t, engine, true, 1)
 				account := service.Account{ID: 101, Platform: service.PlatformOpenAI, Type: accountType, Status: service.StatusActive, Schedulable: true, Concurrency: 1, Credentials: map[string]any{"access_token": "fixture", "api_key": "fixture-api-key", service.CodexCLIConfigCredentialKey: map[string]any{"enabled": true, "config_toml": service.DefaultCodexCLIConfigTOML}}}
 				h, boundary := newCodexCLIIngressHandler(t, coordinator, []service.Account{account}, false)
-				body := `{"model":"gpt-5.1","instructions":"developer context","input":[{"type":"future_item","opaque":{"preserve":true}},{"role":"user","content":[{"type":"input_text","text":"audit original input"}]}],"tools":[{"type":"function","name":"caller_tool","parameters":{"type":"object"}}],"future_sibling":{"preserve":true}}`
+				body := `{"model":"gpt-5.1","prompt_cache_options":{"ttl":"30m"},"instructions":"developer context","input":[{"type":"future_item","opaque":{"preserve":true}},{"role":"user","content":[{"type":"input_text","text":"audit original input"}]}],"tools":[{"type":"function","name":"caller_tool","parameters":{"type":"object"}}],"future_sibling":{"preserve":true}}`
 				c, w := codexCLIIngressContext(body, true)
 				c.Request.URL.Path = "/v1/responses"
 				h.Responses(c)

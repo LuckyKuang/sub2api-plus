@@ -1,18 +1,28 @@
 <template>
-  <!-- 窄屏两列网格铺满宽度，sm 起恢复单行流式排布 -->
-  <div class="grid w-full grid-cols-2 gap-3 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
-    <SearchInput
-      :model-value="searchQuery"
-      :placeholder="t('admin.accounts.searchAccounts')"
-      class="col-span-2 sm:w-52"
-      @update:model-value="$emit('update:searchQuery', $event)"
-      @search="$emit('change')"
-    />
-    <Select :model-value="filters.platform" class="min-w-0 sm:w-40" :options="pOpts" @update:model-value="updatePlatform" @change="$emit('change')" />
-    <Select :model-value="filters.type" class="min-w-0 sm:w-40" :options="tOpts" @update:model-value="updateType" @change="$emit('change')" />
-    <Select :model-value="filters.status" class="min-w-0 sm:w-40" :options="sOpts" @update:model-value="updateStatus" @change="$emit('change')" />
-    <Select :model-value="filters.privacy_mode" class="min-w-0 sm:w-48" :options="privacyOpts" @update:model-value="updatePrivacyMode" @change="$emit('change')" />
-    <Select :model-value="filters.group" class="col-span-2 min-w-0 sm:w-40" :options="gOpts" @update:model-value="updateGroup" @change="$emit('change')" />
+  <div class="filter-bar filter-bar--inline">
+    <div class="filter-field filter-field--search">
+      <SearchInput
+        :model-value="searchQuery"
+        :placeholder="t('admin.accounts.searchAccounts')"
+        @update:model-value="$emit('update:searchQuery', $event)"
+        @search="$emit('change')"
+      />
+    </div>
+    <div class="filter-field">
+      <Select :model-value="filters.platform" :options="pOpts" @update:model-value="updatePlatform" @change="$emit('change')" />
+    </div>
+    <div class="filter-field">
+      <Select :model-value="filters.type" :options="tOpts" @update:model-value="updateType" @change="$emit('change')" />
+    </div>
+    <div class="filter-field">
+      <Select :model-value="filters.status" :options="sOpts" @update:model-value="updateStatus" @change="$emit('change')" />
+    </div>
+    <div class="filter-field">
+      <Select :model-value="filters.privacy_mode" :options="privacyOpts" @update:model-value="updatePrivacyMode" @change="$emit('change')" />
+    </div>
+    <div class="filter-field">
+      <Select :model-value="filters.group" :options="gOpts" @update:model-value="updateGroup" @change="$emit('change')" />
+    </div>
   </div>
 </template>
 

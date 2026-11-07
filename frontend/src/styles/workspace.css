@@ -15,6 +15,8 @@
   overflow-x: auto;
   scrollbar-width: thin;
 }
+:root .workspace-tabs.workspace-tabs--embedded { padding: 0; border-radius: 0; }
+
 .workspace-tab {
   flex: 0 0 auto;
   min-width: max-content;
@@ -96,6 +98,59 @@
   border-radius: var(--surface-radius);
   background-color: var(--surface-fill);
   background-image: linear-gradient(135deg, var(--surface-glint), transparent 65%);
+}
+
+/* Every data-table filter row shares one control width. `.filter-bar` is the
+   row, `.filter-field` wraps exactly one control; action buttons stay outside
+   `.filter-field` so they keep their natural width. */
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--filter-gap);
+}
+
+/* Component boundaries do not create a separate wrapping lane. */
+.filter-bar--inline { display: contents; }
+.filter-actions {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--filter-gap);
+  max-width: 100%;
+  margin-inline-start: auto;
+}
+.filter-pair { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.filter-pair > span { white-space: nowrap; }
+.filter-field > div { width: 100%; }
+.filter-field :where(.input, .select-trigger, .date-picker-trigger),
+.filter-actions > .btn, .filter-actions > .relative > .btn {
+  height: var(--filter-control-height, 38px);
+  min-height: var(--filter-control-height, 38px);
+}
+
+.filter-field {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+@media (min-width: 1024px) {
+  .filter-field { width: var(--filter-control-width); }
+  .filter-field--search { width: var(--filter-search-width); }
+  /* Scoped so form controls elsewhere keep their own sizing. `:where` keeps
+     this at zero specificity, letting a field opt out with its own width. */
+  .filter-field :where(.input, .select-trigger, .date-picker-trigger, .date-time-picker, .date-picker-input) {
+    width: 100%;
+  }
+}
+
+/* Narrow screens stack full-width controls instead of squeezing them. */
+@media (max-width: 1023px) {
+  .filter-field { width: 100%; }
+  .filter-pair { width: 100%; justify-content: space-between; }
+  .filter-pair > .filter-field { flex: 1; width: auto; }
 }
 
 @media (max-width: 1023px) {

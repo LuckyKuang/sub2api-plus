@@ -837,7 +837,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			if hooks != nil && hooks.AfterTurn != nil {
 				observationErr := bridgeErr
 				if observationErr == nil && result != nil {
-					observationErr = result.modelNotFoundTerminalError
+					observationErr = result.requestTerminalError
 				}
 				hooks.AfterTurn(turn, result, observationErr)
 			}
@@ -1447,8 +1447,8 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 				if openAISessionTakeoverPending(ctx) {
 					return result, ErrOpenAISessionRouteNotAccepted
 				}
-				if _, ok := openAIModelNotFoundEventStatus(upstreamMessage); ok {
-					result.modelNotFoundTerminalError = &openAIModelNotFoundTerminalError{cause: fmt.Errorf("openai ws response failed: %s", extractOpenAISSEErrorMessage(upstreamMessage))}
+				if _, ok := openAIRequestTerminalEventStatus(upstreamMessage); ok {
+					result.requestTerminalError = &openAIRequestTerminalError{cause: fmt.Errorf("openai ws response failed: %s", extractOpenAISSEErrorMessage(upstreamMessage))}
 				}
 				return result, nil
 			}
@@ -2015,7 +2015,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		if hooks != nil && hooks.AfterTurn != nil {
 			var observationErr error
 			if result != nil {
-				observationErr = result.modelNotFoundTerminalError
+				observationErr = result.requestTerminalError
 			}
 			hooks.AfterTurn(turn, result, observationErr)
 		}

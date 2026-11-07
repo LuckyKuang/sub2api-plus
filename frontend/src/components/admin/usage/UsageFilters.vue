@@ -1,11 +1,11 @@
 <template>
-  <div :class="[flat ? 'p-4 sm:p-6' : 'card p-6', { 'usage-workspace-filters': workspace }]">
+  <div :class="[flat ? (workspace ? '' : 'p-4 sm:p-6') : 'card p-6', { 'usage-workspace-filters': workspace }]">
     <!-- Toolbar: left filters (multi-line) + right actions -->
-    <div class="usage-filter-layout flex flex-wrap items-end justify-between gap-4">
+    <div class="usage-filter-layout filter-bar">
       <!-- Left: filters (allowed to wrap to multiple rows) -->
-      <div class="usage-filter-fields flex flex-1 flex-wrap items-end gap-4">
+      <div class="usage-filter-fields filter-bar--inline">
         <!-- User Search -->
-        <div ref="userSearchRef" class="usage-filter-dropdown relative w-full sm:w-auto sm:min-w-[240px]">
+        <div ref="userSearchRef" class="usage-filter-dropdown filter-field relative">
           <label class="input-label">{{ t('admin.usage.userFilter') }}</label>
           <input
             v-model="userKeyword"
@@ -47,7 +47,7 @@
         </div>
 
         <!-- API Key Search -->
-        <div ref="apiKeySearchRef" class="usage-filter-dropdown relative w-full sm:w-auto sm:min-w-[240px]">
+        <div ref="apiKeySearchRef" class="usage-filter-dropdown filter-field relative">
           <label class="input-label">{{ t('usage.apiKeyFilter') }}</label>
           <input
             v-model="apiKeyKeyword"
@@ -89,13 +89,13 @@
         </div>
 
         <!-- Model Filter -->
-        <div class="w-full sm:w-auto sm:min-w-[220px]">
+        <div class="filter-field">
           <label class="input-label">{{ t('usage.model') }}</label>
           <Select v-model="filters.model" :options="modelOptions" searchable @change="emitChange" />
         </div>
 
         <!-- Account Filter -->
-        <div ref="accountSearchRef" class="usage-filter-dropdown relative w-full sm:w-auto sm:min-w-[220px]">
+        <div ref="accountSearchRef" class="usage-filter-dropdown filter-field relative">
           <label class="input-label">{{ t('admin.usage.account') }}</label>
           <input
             v-model="accountKeyword"
@@ -139,70 +139,70 @@
         <!-- Advanced filters (collapsed by default to keep the primary row calm) -->
         <div v-show="showAdvanced" class="usage-filter-advanced">
         <!-- Request Type Filter (usage only) -->
-        <div v-if="mode !== 'errors'" class="w-full sm:w-auto sm:min-w-[180px]">
+        <div v-if="mode !== 'errors'" class="filter-field">
           <label class="input-label">{{ t('usage.type') }}</label>
           <Select v-model="filters.request_type" :options="requestTypeOptions" @change="emitChange" />
         </div>
 
         <!-- Native compaction is independent of the transport request type. -->
-        <div v-if="mode !== 'errors'" class="w-full sm:w-auto sm:min-w-[180px]">
+        <div v-if="mode !== 'errors'" class="filter-field">
           <label class="input-label">{{ t('usage.compactionFilter') }}</label>
           <Select v-model="filters.native_compaction_v2" :options="compactionOptions" @change="emitChange" />
         </div>
 
         <!-- Billing Type Filter (usage only) -->
-        <div v-if="mode !== 'errors'" class="w-full sm:w-auto sm:min-w-[200px]">
+        <div v-if="mode !== 'errors'" class="filter-field">
           <label class="input-label">{{ t('admin.usage.billingType') }}</label>
           <Select v-model="filters.billing_type" :options="billingTypeOptions" @change="emitChange" />
         </div>
 
         <!-- Billing Mode Filter (usage only；用户排行的 user-breakdown 接口不支持该维度) -->
-        <div v-if="mode === 'usage'" class="w-full sm:w-auto sm:min-w-[200px]">
+        <div v-if="mode === 'usage'" class="filter-field">
           <label class="input-label">{{ t('admin.usage.billingMode') }}</label>
           <Select v-model="filters.billing_mode" :options="billingModeOptions" @change="emitChange" />
         </div>
 
-        <div v-if="mode === 'usage'" class="w-full sm:w-auto sm:min-w-[220px]">
+        <div v-if="mode === 'usage'" class="filter-field">
           <label class="input-label">{{ t('admin.usage.upstreamModelAudit') }}</label>
           <Select v-model="filters.upstream_model_mismatch" :options="upstreamModelMismatchOptions" @change="emitChange" />
         </div>
 
-		<div v-if="mode === 'usage'" class="w-full sm:w-auto sm:min-w-[200px]">
+		<div v-if="mode === 'usage'" class="filter-field">
 		  <label class="input-label">{{ t('admin.usage.completionStatus') }}</label>
 		  <Select v-model="filters.completion_status" :options="completionStatusOptions" @change="emitChange" />
 		</div>
 
-		<div v-if="mode === 'usage'" class="w-full sm:w-auto sm:min-w-[200px]">
+		<div v-if="mode === 'usage'" class="filter-field">
 		  <label class="input-label">{{ t('admin.usage.usageSource') }}</label>
 		  <Select v-model="filters.usage_source" :options="usageSourceOptions" @change="emitChange" />
 		</div>
 
         <!-- Error record view (errors only) -->
-        <div v-if="mode === 'errors'" class="w-full sm:w-auto sm:min-w-[180px]">
+        <div v-if="mode === 'errors'" class="filter-field">
           <label class="input-label">{{ t('admin.ops.errorDetails.view') }}</label>
           <Select :model-value="errorView" :options="errorViewOptions" @update:model-value="updateErrorView" />
         </div>
 
         <!-- Error Phase Filter (errors only) -->
-        <div v-if="mode === 'errors'" class="w-full sm:w-auto sm:min-w-[180px]">
+        <div v-if="mode === 'errors'" class="filter-field">
           <label class="input-label">{{ t('admin.ops.errorLog.type') }}</label>
           <Select v-model="filters.error_phase" :options="errorPhaseOptions" @change="emitChange" />
         </div>
 
         <!-- Error Category Filter (errors only) -->
-        <div v-if="mode === 'errors'" class="w-full sm:w-auto sm:min-w-[180px]">
+        <div v-if="mode === 'errors'" class="filter-field">
           <label class="input-label">{{ t('usage.errors.category') }}</label>
           <Select v-model="filters.error_category" :options="errorCategoryOptions" @change="emitChange" />
         </div>
 
         <!-- Status Code Filter (errors only) -->
-        <div v-if="mode === 'errors'" class="w-full sm:w-auto sm:min-w-[180px]">
+        <div v-if="mode === 'errors'" class="filter-field">
           <label class="input-label">{{ t('admin.ops.errorLog.status') }}</label>
           <Select v-model="filters.status_code" :options="statusCodeOptions" @change="emitChange" />
         </div>
 
         <!-- Group Filter -->
-        <div class="w-full sm:w-auto sm:min-w-[200px]">
+        <div class="filter-field">
           <label class="input-label">{{ t('admin.usage.group') }}</label>
           <Select v-model="filters.group_id" :options="groupOptions" searchable @change="emitChange" />
         </div>
@@ -227,7 +227,7 @@
       </div>
 
       <!-- Right: actions -->
-      <div v-if="showActions" class="usage-filter-actions flex w-full flex-wrap items-center justify-end gap-3 sm:w-auto">
+      <div v-if="showActions" class="usage-filter-actions filter-actions">
         <button type="button" @click="$emit('refresh')" class="btn btn-secondary">
           {{ t('common.refresh') }}
         </button>
@@ -252,6 +252,7 @@
 import { ref, onMounted, onUnmounted, toRef, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminAPI } from '@/api/admin'
+import { useAuthStore } from '@/stores'
 import Select, { type SelectOption } from '@/components/common/Select.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { COMMON_ERROR_STATUS_CODES } from '@/utils/errorBadges'
@@ -464,7 +465,13 @@ const debounceUserSearch = () => {
     try {
       const results = await adminAPI.usage.searchUsers(query)
       if (sequence === userSearchSequence) {
-        userResults.value = results.sort((a, b) => Number(a.deleted) - Number(b.deleted))
+        // The signed-in administrator stays first so an admin auditing their own
+        // traffic can switch back to that view without retyping.
+        const adminId = useAuthStore().user?.id
+        const ordered = [...results].sort((a, b) => Number(a.deleted) - Number(b.deleted))
+        userResults.value = adminId === undefined
+          ? ordered
+          : [...ordered.filter(u => u.id === adminId), ...ordered.filter(u => u.id !== adminId)]
       }
     } catch {
       if (sequence === userSearchSequence) {
@@ -662,27 +669,14 @@ defineExpose({ getUserSearchRevision, setUserKeyword })
 </script>
 
 <style scoped>
-/* Collapsible advanced filters: display:contents keeps the fields as direct
-   grid/flex items of the row, so the primary layout is unchanged when shown. */
 .usage-filter-advanced { display: contents; }
-@media (min-width: 1024px) {
-  .usage-workspace-filters { padding: 10px 14px; }
-  .usage-workspace-filters .usage-filter-layout { display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
-  .usage-workspace-filters .usage-filter-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); width: 100%; flex: none; gap: 8px 10px; }
-  .usage-workspace-filters .usage-filter-fields > div,
-  .usage-workspace-filters .usage-filter-advanced > div { width: auto; min-width: 0; }
-  .usage-workspace-filters .input-label { min-height: 16px; margin-bottom: 4px; font-size: 12px; line-height: 16px; }
-  .usage-workspace-filters :deep(.input), .usage-workspace-filters :deep(.select-trigger) { min-height: 34px; padding: 6px 10px; }
-  .usage-workspace-filters .usage-filter-dropdown > button { top: 27px; }
-  .usage-workspace-filters .usage-filter-actions { width: 100%; gap: 8px; }
-  .usage-workspace-filters .usage-filter-actions :deep(.btn) { min-height: 34px; padding: 6px 10px; }
-}
+.usage-filter-more { flex: none; height: var(--filter-control-height, 38px); }
+.usage-workspace-filters .input-label { min-height: 16px; margin-bottom: 4px; font-size: 12px; line-height: 16px; }
+.usage-workspace-filters .usage-filter-actions { gap: 8px; }
+.usage-workspace-filters .usage-filter-dropdown > button { top: 27px; }
 @media (min-width: 1024px) and (max-height: 799px) {
-  .usage-workspace-filters { padding: 8px 12px; }
-  .usage-workspace-filters .usage-filter-layout { gap: 6px; }
-  .usage-workspace-filters .usage-filter-fields { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 150px; overflow-x: auto; scrollbar-width: thin; padding-bottom: 2px; }
+  .usage-workspace-filters { --filter-control-height: 32px; }
+  .usage-workspace-filters .usage-filter-layout { row-gap: 6px; }
   .usage-workspace-filters .input-label { margin-bottom: 2px; }
-  .usage-workspace-filters :deep(.input), .usage-workspace-filters :deep(.select-trigger) { min-height: 32px; padding-top: 5px; padding-bottom: 5px; }
-  .usage-workspace-filters .usage-filter-actions :deep(.btn) { min-height: 32px; padding-top: 5px; padding-bottom: 5px; }
 }
 </style>

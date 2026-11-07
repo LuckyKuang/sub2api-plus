@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-// Official 0.165.0 loads the three Unix system files outside CODEX_HOME.
+// Official 0.167.0 loads the three Unix system files outside CODEX_HOME.
 // Even an empty file, symlink, directory, or inspection error is incompatible
 // with the promise that only this task's managed account config is effective.
 func TestHostConfigurationSystemFilesAndInspectionErrorsFailClosed(t *testing.T) {

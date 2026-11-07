@@ -3,14 +3,22 @@
     <div class="workspace-page">
       <!-- Filters -->
       <div class="card workspace-fixed p-4" data-test="admin-orders-filters">
-        <div class="flex flex-wrap items-center gap-3">
-          <div class="min-w-0 w-full sm:flex-1 sm:max-w-64">
+        <div class="filter-bar">
+          <div class="filter-field filter-field--search">
             <input v-model="orderSearch" type="text" :placeholder="t('payment.admin.searchOrders')" class="input" @input="debounceLoadOrders" />
           </div>
-          <Select v-model="orderFilters.order_source" :options="sourceFilters" class="w-full min-w-0 sm:w-36" @change="handleOrderPageChange(1)" />
-          <Select v-model="orderFilters.status" :options="statusFilterOptions" class="w-full min-w-0 sm:w-36" @change="loadOrders" />
-          <Select v-model="orderFilters.payment_type" :options="paymentTypeFilterOptions" class="w-full min-w-0 sm:w-40" @change="loadOrders" />
-          <Select v-model="orderFilters.order_type" :options="orderTypeFilterOptions" class="w-full min-w-0 sm:w-36" @change="loadOrders" />
+          <div class="filter-field">
+            <Select v-model="orderFilters.order_source" :options="sourceFilters" @change="handleOrderPageChange(1)" />
+          </div>
+          <div class="filter-field">
+            <Select v-model="orderFilters.status" :options="statusFilterOptions" @change="loadOrders" />
+          </div>
+          <div class="filter-field">
+            <Select v-model="orderFilters.payment_type" :options="paymentTypeFilterOptions" @change="loadOrders" />
+          </div>
+          <div class="filter-field">
+            <Select v-model="orderFilters.order_type" :options="orderTypeFilterOptions" @change="loadOrders" />
+          </div>
           <div class="flex flex-1 flex-wrap items-center justify-end gap-2">
             <button @click="loadOrders" :disabled="ordersLoading" class="btn btn-secondary" :title="t('common.refresh')">
               <Icon name="refresh" size="md" :class="ordersLoading ? 'animate-spin' : ''" />

@@ -266,7 +266,7 @@ func TestZhipuProjectTokenLinkedModelDiscovery(t *testing.T) {
 				}
 				require.Equal(t, target, upstream.lastReq.URL.String())
 				require.Equal(t, auth, upstream.lastReq.Header.Get("Authorization"))
-				require.Equal(t, "ZCode/3.16.2", upstream.lastReq.UserAgent())
+				require.Equal(t, "ZCode/3.17.2", upstream.lastReq.UserAgent())
 				require.True(t, HTTPUpstreamRedirectsDisabled(upstream.lastReq.Context()))
 				if plan == ZhipuPlanTeamCodingPlan {
 					require.Equal(t, []string{"org"}, headerValuesEqualFold(upstream.lastReq.Header, "bigmodel-organization"))
@@ -564,8 +564,8 @@ func (u *projectTokenWireUpstream) Do(req *http.Request, proxy string, id int64,
 	body, err := io.ReadAll(req.Body)
 	require.NoError(u.t, err)
 	requireZCodeUnsessionedBusinessBody(u.t, req, body, `{"model":"glm-5.3","messages":[]}`)
-	require.Contains(u.t, req.UserAgent(), "ZCode/3.16.2")
-	require.Equal(u.t, "3.16.2", req.Header.Get("X-ZCode-App-Version"))
+	require.Contains(u.t, req.UserAgent(), "ZCode/3.17.2")
+	require.Equal(u.t, "3.17.2", req.Header.Get("X-ZCode-App-Version"))
 	status := 200
 	if len(u.auth) == 1 {
 		status = u.status
