@@ -250,7 +250,7 @@ const dropdownStyle = computed(() => {
   const bounds = dropdownVerticalBounds.value
   const viewportLeft = viewport.value.left + dropdownViewportPadding
   const viewportRight = Math.max(viewportLeft, viewport.value.right - dropdownViewportPadding)
-  const preferredMinWidth = Math.max(dropdownMinimumWidth, rect.width)
+  const preferredMinWidth = Math.min(dropdownMaximumWidth, Math.max(dropdownMinimumWidth, rect.width))
   const minWidth = Math.min(preferredMinWidth, Math.max(0, viewportRight - viewportLeft))
   const left = Math.min(
     Math.max(viewportLeft, rect.left),

@@ -112,7 +112,9 @@ Expanded select menus stay content-sized (`w-max`), floored at the same
 `--filter-control-width` and capped at 480px so one long label cannot stretch the
 panel across the viewport. `src/styles/__tests__/filterWidths.spec.ts` owns the
 stylesheet contract and the `SearchableSelect` floor; the component layout suite
-measures the rendered rows. Do not add ad-hoc per-page control widths to a query
+measures the rendered rows. The 480px ceiling also constrains the menu minimum
+when its trigger is wider; a smaller visible viewport relaxes the normal floor.
+Do not add ad-hoc per-page control widths to a query
 row. Dense monitor toolbars that cannot fit the unified width without breaking
 their workspace layout (currently the live requests bar and the channel status
 matrix toolbar) keep their own compact widths.

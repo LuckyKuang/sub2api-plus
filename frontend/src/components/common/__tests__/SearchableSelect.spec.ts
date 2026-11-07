@@ -73,6 +73,18 @@ afterEach(() => {
 })
 
 describe('Select dropdown viewport constraints', () => {
+  it.each([480, 481, 640])('caps a %ipx trigger menu at 480px', async (width) => {
+    setViewportWidth(1200)
+    mockTriggerRect(20, width)
+
+    const dropdown = await openSelect()
+
+    expect(dropdown).not.toBeNull()
+    expect(dropdown?.style.minWidth).toBe('480px')
+    expect(dropdown?.style.maxWidth).toBe('480px')
+    expect(dropdown?.style.left).toBe('20px')
+  })
+
   it('preserves the existing 200px minimum width when space is available', async () => {
     setViewportWidth(1024)
     mockTriggerRect(20, 80)

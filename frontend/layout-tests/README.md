@@ -20,6 +20,8 @@ configured accent extremes at 0%, 50% and 100% transparency (including immediate
 theme switching), date ranges and their nested calendars,
 plain/searchable selection menus, checkbox dropdowns inside clipping cards, and dialogs with long titles, footer labels
 and body content.
+Wide selection triggers also exercise the 480px menu ceiling with actual
+geometry and selection of the last option.
 Assertions use actual viewport bounds, nested-container bounds and
 `elementFromPoint` at multiple positions to detect clipping and covering layers;
 they also exercise the final option, final content and apply/save actions.

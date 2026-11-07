@@ -95,8 +95,12 @@ describe('data-table filter widths', () => {
 
   it('never applies the field width outside a filter field', () => {
     // Forms, dialogs and settings pages keep their own control sizing.
-    for (const control of CONTROLS) {
-      expect(declarations(selector => selector === control && selector.startsWith('.filter-field')).length).toBe(0)
+    const sizedRules = all.filter(entry => entry.prop === 'width' && [
+      'var(--filter-control-width)', 'var(--filter-search-width)',
+    ].includes(entry.value))
+    expect(sizedRules.length).toBeGreaterThan(0)
+    for (const entry of sizedRules) {
+      expect(entry.selector.split(',').every(selector => /^\.filter-field(?:--[\w-]+)?$/.test(selector.trim())), entry.selector).toBe(true)
     }
   })
 
