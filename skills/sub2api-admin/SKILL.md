@@ -58,7 +58,11 @@ node scripts/sub2api-admin.js tls-profiles list
   `--confirmation-file`, checks export requirements, then submits the current
   POST API. Use `--ids` or scope filters; omitting both exports all accounts.
   Prefer `--file` for a private backup and a count-only summary; the summary also
-  reports excluded shadow accounts. Keep confirmation files and exports out of
+  reports excluded shadow accounts. File output uses a private staged file and
+  atomic replacement, preserves the previous backup on failure, and never writes
+  through output links. IDs require `--ids`; extra positional arguments fail
+  before requests. Group filters take a positive group ID or `ungrouped`.
+  Keep confirmation files and exports out of
   chat and Git. See the [export contract](references/admin-cli.md#account-export).
 - Redeem code create/redeem commands should use `--idempotency-key` for payment or recharge workflows.
 - For uncertain or newly added backend APIs, use `api <METHOD> <admin-path>` after a read-only check.

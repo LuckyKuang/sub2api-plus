@@ -115,14 +115,14 @@ test("scope filters map to the POST body and omitted proxy flag preserves server
   const f = await fixture(t);
   const result = await f.run([
     "--platform", "openai", "--type", "oauth", "--status", "active",
-    "--group", "primary", "--privacy-mode", "training_disabled",
+    "--group", "12", "--privacy-mode", "training_disabled",
     "--search", "named & selected", "--sort-by", "name", "--sort-order", "desc",
   ]);
   assert.equal(result.code, 0, result.stderr);
   assert.deepEqual(JSON.parse(f.requests[1].rawBody), {
     password: PASSWORD,
     filters: {
-      platform: "openai", type: "oauth", status: "active", group: "primary",
+      platform: "openai", type: "oauth", status: "active", group: "12",
       privacy_mode: "training_disabled", search: "named & selected", sort_by: "name", sort_order: "desc",
     },
   });
@@ -143,6 +143,59 @@ test("overwriting an existing export restricts its permissions", async (t) => {
   assert.equal((await f.run()).code, 0);
   assert.equal(fs.statSync(f.outputFile).mode & 0o777, 0o600);
   assert.deepEqual(JSON.parse(fs.readFileSync(f.outputFile, "utf8")), BACKUP);
+});
+
+test("the ungrouped scope is passed as the server's literal sentinel", async (t) => {
+  const f = await fixture(t);
+  assert.equal((await f.run(["--group", "ungrouped"])).code, 0);
+  assert.deepEqual(JSON.parse(f.requests[1].rawBody), {
+    password: PASSWORD, filters: { group: "ungrouped" },
+  });
+});
+
+// Private backup contract: owning skill/reference requires private replacement,
+// unchanged linked files and preservation of an existing backup on disk failure.
+for (const kind of ["symbolic", "hard"]) {
+  test(`${kind} output links cannot overwrite or expose another file`, async (t) => {
+    const f = await fixture(t);
+    const target = path.join(path.dirname(f.outputFile), "unrelated.json");
+    fs.writeFileSync(target, "unrelated content", { mode: 0o644 });
+    if (kind === "symbolic") fs.symlinkSync(target, f.outputFile);
+    else fs.linkSync(target, f.outputFile);
+    const result = await f.run();
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(fs.readFileSync(target, "utf8"), "unrelated content");
+    assert.equal(fs.statSync(target).mode & 0o777, 0o644);
+    assert.equal(fs.lstatSync(f.outputFile).isSymbolicLink(), false);
+    assert.equal(fs.statSync(f.outputFile).mode & 0o777, 0o600);
+    assert.deepEqual(JSON.parse(fs.readFileSync(f.outputFile, "utf8")), BACKUP);
+  });
+}
+
+test("a partial disk write preserves the previous backup and removes staging files", async (t) => {
+  const f = await fixture(t);
+  const directory = path.dirname(f.outputFile);
+  const preload = path.join(directory, "fail-write.cjs");
+  fs.writeFileSync(f.outputFile, "previous backup", { mode: 0o644 });
+  fs.writeFileSync(preload, `
+    const fs = require('node:fs');
+    const write = fs.writeFileSync;
+    fs.writeFileSync = function(file, data, options) {
+      if (String(data).includes('fixture-exported-secret')) {
+        write(file, String(data).slice(0, 20), options);
+        throw new Error('fixture storage failure');
+      }
+      return write(file, data, options);
+    };
+  `);
+  const before = fs.readdirSync(directory).sort();
+  const result = await f.run([], { NODE_OPTIONS: `--require=${preload}` });
+  assert.equal(result.code, 1);
+  assert.match(result.stderr, /fixture storage failure/);
+  assert.equal(result.stdout, "");
+  assert.equal(fs.readFileSync(f.outputFile, "utf8"), "previous backup");
+  assert.equal(fs.statSync(f.outputFile).mode & 0o777, 0o644);
+  assert.deepEqual(fs.readdirSync(directory).sort(), before);
 });
 
 test("stdout export remains available when no output file is requested", async (t) => {
@@ -191,6 +244,7 @@ for (const [name, args] of [
   ["invalid proxy boolean", ["--include-proxies", "sometimes"]],
   ["missing output path", ["--file"]],
   ["inline confirmation", ["--password", "fixture-inline-secret"]],
+  ["positional account ID", ["40"]],
 ]) {
   test(`${name} fails before any export request`, async (t) => {
     const f = await fixture(t);

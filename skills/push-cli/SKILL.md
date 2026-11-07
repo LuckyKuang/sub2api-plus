@@ -65,6 +65,10 @@ ordering for diagnosis and same-commit timing comparisons. Both modes run the
 same command and test set. `ensure` only prepares the platform runtime and
 validation image. `watch` observes pull-request Actions for the current branch and SHA when a
 PR exists, otherwise the push-triggered runs (used on `main`).
+Verified release finalization completes through release-cli's exact merge
+verification: its protected merge uses `[skip ci]`, so do not wait for main
+workflows with `watch` on that commit. Ordinary and release-candidate merges
+still require their exact main CI and Security Scan evidence.
 
 ## Mandatory GitHub CLI Gate
 

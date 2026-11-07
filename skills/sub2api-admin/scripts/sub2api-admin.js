@@ -9,7 +9,7 @@ const ADMIN_JWT = process.env.SUB2API_JWT || "";
 
 function usage() {
   console.log(`Usage:
-  sub2api-admin.js accounts list [--page-size 200] [--page N] [--search TEXT] [--platform openai] [--type oauth] [--status active] [--group NAME] [--privacy-mode MODE] [--sort-by name] [--sort-order asc]
+  sub2api-admin.js accounts list [--page-size 200] [--page N] [--search TEXT] [--platform openai] [--type oauth] [--status active] [--group ID|ungrouped] [--privacy-mode MODE] [--sort-by name] [--sort-order asc]
   sub2api-admin.js accounts export --confirmation-file confirmation.json [--ids 1,2] [--file accounts.json] [--include-proxies false] [scope filters...]
   sub2api-admin.js accounts import-data --file accounts.json [--skip-default-group-bind]
   sub2api-admin.js accounts create --json '{...}' | --file account.json
@@ -370,15 +370,21 @@ async function commandAccounts(args) {
   }
 
   if (sub === "export") {
+    if (args.positional.length !== 2) {
+      throw new Error("accounts export accepts account IDs only through --ids");
+    }
     const data = await exportAccountData(args.flags);
     if (args.flags.file) {
       const outputPath = path.resolve(args.flags.file);
-      const fd = fs.openSync(outputPath, "w", 0o600);
+      // Stage beside the destination so replacement is atomic. A fresh private
+      // inode also avoids following output symlinks or modifying hard links.
+      const stagingDir = fs.mkdtempSync(path.join(path.dirname(outputPath), ".sub2api-export-"));
       try {
-        fs.fchmodSync(fd, 0o600);
-        fs.writeFileSync(fd, JSON.stringify(data, null, 2));
+        const stagingPath = path.join(stagingDir, "accounts.json");
+        fs.writeFileSync(stagingPath, JSON.stringify(data, null, 2), { flag: "wx", mode: 0o600 });
+        fs.renameSync(stagingPath, outputPath);
       } finally {
-        fs.closeSync(fd);
+        fs.rmSync(stagingDir, { recursive: true, force: true });
       }
       printJson({ file: outputPath, count: data.accounts.length, skipped_shadows: data.skipped_shadows || 0 });
     } else {

@@ -73,6 +73,8 @@ node scripts/sub2api-admin.js accounts export \
 
 `--ids` 与筛选条件互斥；均未指定时导出所有账号。支持 `--platform`、`--type`、
 `--status`、`--group`、`--search`、`--privacy-mode`、`--sort-by` 和 `--sort-order`。
+`--group` 使用正整数分组 ID 或 `ungrouped`，不接受分组名称；列表接口遵循相同约定。
+账号 ID 必须通过 `--ids` 指定，多余的位置参数会在请求前被拒绝，避免误导出全部账号。
 `--include-proxies` 发送布尔值；省略时使用后端默认值。
 
 当前接口为 `GET /api/v1/admin/accounts/export/requirements` 和
@@ -84,7 +86,9 @@ POST 仍由服务器重新检查密码、当前 TOTP 策略和审计要求；失
 以 [后端导出请求和校验](../../../backend/internal/handler/admin/account_data.go)
 及 [前端调用](../../../frontend/src/api/admin/accounts.ts) 为准。
 
-`--file` 保存完整原始备份并将文件权限限制为 `0600`，包括覆盖已有文件时。
+`--file` 在目标目录的私有临时目录中写入权限为 `0600` 的完整备份，成功后原子替换
+目标路径。覆盖时不会跟随符号链接或改写其他硬链接；写入或替换失败保留旧备份，
+并清理临时文件。
 终端只输出文件路径、账号数 `count` 和排除的影子账号数 `skipped_shadows`。
 影子账号的独立配置不在此备份中，恢复时需按后端契约重建和调整。
 未指定 `--file` 时仍会将完整备份输出到 stdout；备份含凭据和 token，不要输出到聊天。
