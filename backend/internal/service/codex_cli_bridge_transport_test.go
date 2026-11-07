@@ -77,7 +77,7 @@ func TestCodexCLIBridgeRequiresBothGlobalAndEligibleAccountOptIn(t *testing.T) {
 }
 
 func codexCLIBridgeReadyFixture() codexcli.Status {
-	return codexcli.Status{Installed: true, InstalledVersion: "0.165.0", TargetVersion: "0.165.0", VersionMatch: true, SourceVerified: true, ExecutionAvailable: true}
+	return codexcli.Status{Installed: true, InstalledVersion: "0.167.0", TargetVersion: "0.167.0", VersionMatch: true, SourceVerified: true, ExecutionAvailable: true}
 }
 
 // The bridge is a transport boundary, not a second request compiler. The

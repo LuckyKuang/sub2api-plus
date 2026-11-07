@@ -1060,3 +1060,12 @@ valid sibling options and empty prompts retain pass-through extraction.
 empty input, and `TestOfficialCodexGIFBothRealAuditsPrecedeImageSideEffects`
 covers real moderation and Prompt Audit rejection on OAuth/API-key image
 requests before account reads, slots, billing, transport or task effects.
+
+The reviewed managed executable is now `0.167.0`, matching the compiled default
+outbound identity. Its unchanged `responses-api-proxy` source forwards the
+already-admitted body through the private nonce relay; installation/update
+cannot admit traffic, change credential owners, or bypass either audit engine.
+`tools/test_codex_cli_wire.py` exercises the actual official binary, including
+OAuth/API-key bridge transport, error output and interactive safety buffering.
+Native and bridged HTTP/WS ingress retain the existing original-content audit
+ordering and unknown-content pass-through contract.

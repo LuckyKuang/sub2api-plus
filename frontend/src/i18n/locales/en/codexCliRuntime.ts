@@ -1,8 +1,8 @@
 export default {
   codexCliRuntime: {
     title: 'Official Codex CLI runtime',
-    description: 'The CLI version is fixed by this Sub2API release. Installation and replacement run only when you click the button.',
-    taskHint: 'Once the runtime is ready, enable the bridge and configure “Official Codex CLI” when creating or editing an OpenAI OAuth account.',
+    description: 'The reviewed CLI version follows this release’s default Codex outbound identity. Click Install / update to download and verify that version.',
+    taskHint: 'Once the runtime is ready, enable the bridge and configure “Official Codex CLI” when creating or editing an OpenAI OAuth or API Key account.',
     bridgeTitle: 'Enable bridge environment',
     bridgeHint: 'Both the global and account switches control official Codex CLI usage. Installation and detection never enable the bridge automatically. Disabling stops new bridge admissions and preserves account configuration and credentials.',
     bridgeRequiresReady: 'Install and verify the required official version before enabling the bridge.',
@@ -29,9 +29,10 @@ export default {
     versionUnavailable: 'Detected; version cannot be read safely until verified',
     checking: 'Checking the local CLI…',
     check: 'Check installation',
-    installTarget: 'Install / switch to {version}',
+    installTarget: 'Install / update to {version}',
+    updateTarget: 'Update / switch to {version}',
     installing: 'Installing required version…',
-    versionHint: 'Older and newer versions must both be switched to the required version. A matching version also needs verified official source before the bridge can be enabled.',
+    versionHint: 'Updates install only this release’s reviewed version and verify its official archive. Outbound identity overrides remain unchanged. A matching version also needs verified official source before the bridge can be enabled.',
     notInstalledHint: 'Install the required version to use bridging or independent tasks.',
     versionMismatch: 'The detected version does not match this release. Install the required version.',
     unsupportedPlatform: 'Managed CLI installation is unavailable for this platform.',

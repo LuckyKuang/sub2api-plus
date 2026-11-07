@@ -182,7 +182,7 @@ func (m *Manager) Status(ctx context.Context) (s Status) {
 		s.UnavailableCode = "version_mismatch"
 	} else {
 		s.ExecutionAvailable = true
-		// rust-v0.165.0 cli/src/main.rs exposes ResponsesApiProxy; its
+		// rust-v0.167.0 cli/src/main.rs exposes ResponsesApiProxy; its
 		// responses-api-proxy/src/lib.rs forwards HTTP/SSE without an agent loop.
 		s.TransparentProxyAvailable = true
 		s.Capabilities = Capabilities{ExecJSON: true, Ephemeral: true, AccountConfig: true, HTTPResponsesProxy: true}

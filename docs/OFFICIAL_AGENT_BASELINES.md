@@ -19,17 +19,17 @@ below retain the source/version they originally evaluated.
 | Zhipu | [zai-org/ZCode](https://github.com/zai-org/ZCode.git) | `a9fe401eede6e6e5e01be9048679c206fe6f02d9` | stable product `3.17.2`; separate CLI line `0.17.1` |
 
 The managed Codex bridge/task runtime additionally pins the official
-[`rust-v0.165.0` release](https://github.com/openai/codex/releases/tag/rust-v0.165.0)
+[`rust-v0.167.0` release](https://github.com/openai/codex/releases/tag/rust-v0.167.0)
 and its source commit
-[`360319d8dee62d87e2d59fc0c21805d79519cfed`](https://github.com/openai/codex/tree/360319d8dee62d87e2d59fc0c21805d79519cfed).
+[`086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a`](https://github.com/openai/codex/tree/086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a).
 Its execution review includes static API-key file authentication, custom model
 providers, Responses Lite `additional_tools`, `exec` JSONL events, noninteractive
 approval enforcement, plugin startup, cloud skills, configuration discovery and
 system/MDM precedence. Relevant entries include `codex-rs/exec/src/lib.rs`,
 `codex-rs/config/src/loader/{mod.rs,macos.rs}` and
 `codex-rs/core/src/client.rs`. Transparent bridge review additionally covers
-[`codex-rs/responses-api-proxy/src/lib.rs`](https://github.com/openai/codex/blob/360319d8dee62d87e2d59fc0c21805d79519cfed/codex-rs/responses-api-proxy/src/lib.rs)
-and [`read_api_key.rs`](https://github.com/openai/codex/blob/360319d8dee62d87e2d59fc0c21805d79519cfed/codex-rs/responses-api-proxy/src/read_api_key.rs): HTTP-only request forwarding, stdin API-key constraints,
+[`codex-rs/responses-api-proxy/src/lib.rs`](https://github.com/openai/codex/blob/086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a/codex-rs/responses-api-proxy/src/lib.rs)
+and [`read_api_key.rs`](https://github.com/openai/codex/blob/086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a/codex-rs/responses-api-proxy/src/read_api_key.rs): HTTP-only request forwarding, stdin API-key constraints,
 startup status, upstream errors and streaming bytes. The gateway uses a random
 loopback nonce for that stdin key, keeping the actual OAuth JWT in its existing
 credential-owner sender. Embedded archive and native-executable digests are owned by
@@ -43,14 +43,14 @@ imply real-account or live-model acceptance. Project bridge owners are
 `backend/internal/service/codex_cli_bridge_transport.go`,
 `openai_plugin_transport.go` and `openai_codex_transport.go`.
 The downstream display review also covers the release source's
-[`codex-rs/tui/src/chatwidget/safety_buffering.rs`](https://github.com/openai/codex/blob/360319d8dee62d87e2d59fc0c21805d79519cfed/codex-rs/tui/src/chatwidget/safety_buffering.rs).
+[`codex-rs/tui/src/chatwidget/safety_buffering.rs`](https://github.com/openai/codex/blob/086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a/codex-rs/tui/src/chatwidget/safety_buffering.rs).
 `service/TestCodexSafetyBufferingOfficialCLIInteractive` runs the unmodified
 pinned binary with `--no-daemon` in a private PTY through the gateway. It observes
 the notice/actions off, their absence on, normal completion and one generation
 for both OAuth/API Key owners and native/official CLI outbound. The PTY owner is
 `tools/test_codex_safety_buffering_tui.py`; desktop App rendering is not executed.
 The auxiliary title request follows
-[`codex-rs/tui/src/app/thread_title.rs`](https://github.com/openai/codex/blob/360319d8dee62d87e2d59fc0c21805d79519cfed/codex-rs/tui/src/app/thread_title.rs)
+[`codex-rs/tui/src/app/thread_title.rs`](https://github.com/openai/codex/blob/086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a/codex-rs/tui/src/app/thread_title.rs)
 and is counted separately from the user's original generation.
 
 ZCode's selected product version matches the published
@@ -117,8 +117,11 @@ reviewing protocol changes never enables automatic identity-version updates.
 - Codex's stable identity is manually advanced to `0.167.0`; source selection,
   Originator, Ubuntu/architecture/terminal fingerprint and explicit administrator
   version pins keep their existing contracts. The separately embedded, digest
-  verified CLI executable remains `0.165.0`; its transport overlays the resolved
-  identity and does not determine the advertised version.
+  verified CLI executable is also upgraded to `0.167.0` with reviewed archive
+  and native executable digests for all four supported platforms. Settings
+  installs or updates only this reviewed target on an explicit click. Runtime,
+  browser catalog and compiled default identity version equality is enforced;
+  explicit administrator identity pins retain priority.
 - Main's [per-turn cache options](https://github.com/openai/codex/commit/41cbd5b9b2d5369ba35957328504093ed324333c)
   serialize `prompt_cache_options.ttl` as `30m` or `12h` on Responses HTTP and WS.
   OAuth/setup-token transforms now preserve that field, including compaction and

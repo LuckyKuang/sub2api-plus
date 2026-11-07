@@ -145,7 +145,7 @@ func TestCodexCLITaskManagedOverlayPreservesPoliciesAndIdentity(t *testing.T) {
 }
 
 func TestCodexCLITaskCannotReenableAuxiliaryNetworkFromSavedConfiguration(t *testing.T) {
-	// rust-v0.165.0 config.schema.json defines FeatureToggleToml as an
+	// rust-v0.167.0 config.schema.json defines FeatureToggleToml as an
 	// object with an enabled boolean. cloud.skills does not accept a bool.
 	text := "sandbox_mode = \"danger-full-access\"\napproval_policy = \"never\"\n[features]\nplugins = true\nremote_plugin = true\nplugin_sharing = true\napps = true\ntool_suggest = true\nrecommended_plugins = true\nshell_tool = true\n[cloud.skills]\nenabled = true\n"
 	config, _, err := codexCLITaskConfig(text, CodexCLITaskRequest{}, http.Header{})
@@ -271,7 +271,7 @@ type codexCLIExecutionRuntime struct {
 }
 
 func (r codexCLIExecutionRuntime) Status(context.Context) codexcli.Status {
-	return codexcli.Status{ExecutionAvailable: r.available, SourceVerified: r.available, Source: "managed", VersionMatch: r.available, Mode: "exec_task", TargetVersion: "0.165.0"}
+	return codexcli.Status{ExecutionAvailable: r.available, SourceVerified: r.available, Source: "managed", VersionMatch: r.available, Mode: "exec_task", TargetVersion: "0.167.0"}
 }
 
 func (r codexCLIExecutionRuntime) RunTask(ctx context.Context, request codexcli.TaskRequest) (codexcli.TaskResult, error) {
@@ -579,7 +579,7 @@ func TestCodexCLITaskBillingUsesEffectiveConfiguredReasoning(t *testing.T) {
 	}
 }
 
-// Existing group mappings can emit max. rust-v0.165.0's official
+// Existing group mappings can emit max. rust-v0.167.0's official
 // protocol/src/openai_models.rs ReasoningEffort supports that exact value.
 func TestCodexCLITaskAcceptsMaxFromExistingGroupReasoningMapping(t *testing.T) {
 	t.Setenv("DATA_DIR", t.TempDir())

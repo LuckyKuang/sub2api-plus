@@ -87,7 +87,7 @@ func fixtureManager(t *testing.T, archive []byte) *Manager {
 		Name: "pinned-fixture.tar.gz", SHA256: hex.EncodeToString(digest[:]), Size: int64(len(archive)), Entry: testEntry,
 	}}
 	m.lookPath = func(string) (string, error) { return "", exec.ErrNotFound }
-	m.version = func(context.Context, string) (string, error) { return "0.165.0", nil }
+	m.version = func(context.Context, string) (string, error) { return "0.167.0", nil }
 	m.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		if req.URL.String() != releaseURL+"pinned-fixture.tar.gz" {
 			t.Errorf("unexpected download URL %s", req.URL)
@@ -127,14 +127,14 @@ func assertNoInstallTemps(t *testing.T, m *Manager) {
 }
 
 func TestReviewedManifestUsesOnlyPinnedOfficialAssets(t *testing.T) {
-	if TargetVersion() != "0.165.0" || releaseURL != "https://github.com/openai/codex/releases/download/rust-v0.165.0/" {
+	if TargetVersion() != "0.167.0" || releaseURL != "https://github.com/openai/codex/releases/download/rust-v0.167.0/" {
 		t.Fatal("target version and official release URL changed without a reviewed baseline")
 	}
 	want := map[string]artifact{
-		"darwin/arm64": {Name: "codex-aarch64-apple-darwin.tar.gz", SHA256: "78ea9c178d2dc8fde71d6494df3b9eab902fd6d6de0a84e65234220d93bb6144", BinarySHA256: "a45099154d7fb4a5ed8a56f40966a95deb938e508bab23e6985035c709e9a85a", Size: 102366249, Entry: "codex-aarch64-apple-darwin"},
-		"darwin/amd64": {Name: "codex-x86_64-apple-darwin.tar.gz", SHA256: "f46451741936ebdf5201b8becd0820a41be2a01d271b98703e0d9a1670c99993", BinarySHA256: "f8096ee535ca7af9c57e315e5680f58457ff49dcc5fc619e5ba5eca24293ffe2", Size: 111288240, Entry: "codex-x86_64-apple-darwin"},
-		"linux/arm64":  {Name: "codex-aarch64-unknown-linux-musl.tar.gz", SHA256: "6522e056d0be7f531da915c9a81ae05bc70811b782542499cc0a9776d3abf5d3", BinarySHA256: "b32ece31af06440da980b733fb8fefdd1f193439595fda84096f1caaceec543f", Size: 107804617, Entry: "codex-aarch64-unknown-linux-musl"},
-		"linux/amd64":  {Name: "codex-x86_64-unknown-linux-musl.tar.gz", SHA256: "be635d3486a5bd060d0fff582ae6d30160280c31344dd85719707fa920e187f0", BinarySHA256: "c06a67fd8ac76508dc78bd99ce20c9f317b8d568beda59485f3f4134df9962d5", Size: 115837472, Entry: "codex-x86_64-unknown-linux-musl"},
+		"darwin/arm64": {Name: "codex-aarch64-apple-darwin.tar.gz", SHA256: "4b22a2a971be2791c3e31f912f3e77a88ebd64a65812a7289ccba65dd6425fe9", BinarySHA256: "030316ecfbb41f4e7946e584b0063ef333b7a36cd312ba349f2f6869e39b62cc", Size: 108379331, Entry: "codex-aarch64-apple-darwin"},
+		"darwin/amd64": {Name: "codex-x86_64-apple-darwin.tar.gz", SHA256: "d8eb4a865a0b17319cde10347523e5bab0978d01725b39f4a639f40905e01221", BinarySHA256: "a3b4df639ed5808100fe9d3dacdb324c9fb50b2804d72d5ab59def67bb2d6ab6", Size: 117941240, Entry: "codex-x86_64-apple-darwin"},
+		"linux/arm64":  {Name: "codex-aarch64-unknown-linux-musl.tar.gz", SHA256: "843489acb4d4b1079745c36b03c5963b887b83155af208fd53584e33ee8eb281", BinarySHA256: "2fe94d848540ff2a6868c7ebcc494126a974aa409711676d14fa0379e49e6143", Size: 114300898, Entry: "codex-aarch64-unknown-linux-musl"},
+		"linux/amd64":  {Name: "codex-x86_64-unknown-linux-musl.tar.gz", SHA256: "9d64836106d5b374e90ee4454c7ebcde7ca7106558bd7e41a34b9f26ebda251a", BinarySHA256: "cdcb45aaa01d0f14e298985e09465aebccd47f64ecd298aea44814af7b62bbda", Size: 122587028, Entry: "codex-x86_64-unknown-linux-musl"},
 	}
 	if len(reviewedArtifacts) != len(want) {
 		t.Fatalf("supported platforms = %d", len(reviewedArtifacts))
@@ -213,7 +213,7 @@ func TestUnverifiedSystemCLIDetectionNeverExecutesVersionProbe(t *testing.T) {
 				}
 			}
 			marker := filepath.Join(root, "version-probe-started")
-			script := fmt.Sprintf("#!/bin/sh\n: > %q\nprintf 'codex-cli 0.165.0\\n'\n", marker)
+			script := fmt.Sprintf("#!/bin/sh\n: > %q\nprintf 'codex-cli 0.167.0\\n'\n", marker)
 			if err := os.WriteFile(binary, []byte(script), 0700); err != nil {
 				t.Fatal(err)
 			}
@@ -247,10 +247,10 @@ func TestSystemNativeCLINeedsReviewedBinaryDigestAndExactVersion(t *testing.T) {
 		name, pin, version, code string
 		verified                 bool
 	}{
-		{name: "official_native", pin: "fixture", version: "0.165.0", verified: true},
+		{name: "official_native", pin: "fixture", version: "0.167.0", verified: true},
 		{name: "official_wrong_version", pin: "fixture", version: "0.164.0", code: "version_mismatch", verified: true},
-		{name: "counterfeit_same_version", pin: strings.Repeat("0", 64), version: "0.165.0", code: "source_unverified"},
-		{name: "missing_reviewed_pin", version: "0.165.0", code: "source_unverified"},
+		{name: "counterfeit_same_version", pin: strings.Repeat("0", 64), version: "0.167.0", code: "source_unverified"},
+		{name: "missing_reviewed_pin", version: "0.167.0", code: "source_unverified"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m := fixtureManager(t, validFixture(t))
@@ -274,7 +274,7 @@ func TestSystemNativeCLINeedsReviewedBinaryDigestAndExactVersion(t *testing.T) {
 				return tc.version, nil
 			}
 			s := m.Status(t.Context())
-			if s.Source != "system" || !s.Installed || s.SourceVerified != tc.verified || s.ExecutionAvailable != (tc.verified && tc.version == "0.165.0") || s.UnavailableCode != tc.code {
+			if s.Source != "system" || !s.Installed || s.SourceVerified != tc.verified || s.ExecutionAvailable != (tc.verified && tc.version == "0.167.0") || s.UnavailableCode != tc.code {
 				t.Fatalf("wrong system provenance status: %+v", s)
 			}
 			if s.ExecutionAvailable && (s.proof == nil || !equalDigest(s.proof.executableSHA256, digest[:])) {
@@ -320,7 +320,7 @@ func TestVerifiedManagedCLIHasPrecedenceAndReviewedTaskAndProxyCapabilities(t *t
 		if path != filepath.Join(m.installDir(), "codex") {
 			t.Errorf("wrong executable: %s", path)
 		}
-		return "0.165.0", nil
+		return "0.167.0", nil
 	}
 	s := m.Status(context.Background())
 	if !s.Installed || s.Source != "managed" || !s.SourceVerified || !s.VersionMatch || !s.ExecutionAvailable || s.UnavailableCode != "" {
@@ -372,7 +372,7 @@ func TestManagedIntegrityMustBeCheckedBeforeExecutingVersionProbe(t *testing.T) 
 			}
 			m.version = func(context.Context, string) (string, error) {
 				t.Error("unverified executable was invoked")
-				return "0.165.0", nil
+				return "0.167.0", nil
 			}
 			status := m.Status(context.Background())
 			if status.SourceVerified || status.ExecutionAvailable || status.UnavailableCode != "integrity_check_failed" {
@@ -429,7 +429,7 @@ func TestInstallPublishesPinnedArchiveAndReusesHealthyTarget(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !status.ExecutionAvailable || status.Source != "managed" || status.InstalledVersion != "0.165.0" {
+		if !status.ExecutionAvailable || status.Source != "managed" || status.InstalledVersion != "0.167.0" {
 			t.Fatalf("install did not enable reviewed task mode: %+v", status)
 		}
 	}
@@ -444,6 +444,65 @@ func TestInstallPublishesPinnedArchiveAndReusesHealthyTarget(t *testing.T) {
 		t.Fatalf("pinned archive was not retained: %v", err)
 	}
 	assertNoInstallTemps(t, m)
+}
+
+// Requirement: settings can upgrade the previous 0.165.0 runtime to the
+// reviewed 0.167.0 release. An old executable is never run to discover its
+// version, and a failed update must leave its files untouched for active work.
+func TestInstallUpgradesPreviousRuntimeOnlyAfterExplicitRequest(t *testing.T) {
+	for _, failFirst := range []bool{false, true} {
+		t.Run(fmt.Sprintf("failed_download_first=%v", failFirst), func(t *testing.T) {
+			archive := validFixture(t)
+			m := fixtureManager(t, archive)
+			oldDir := filepath.Join(m.root, "versions", "0.165.0", "linux-amd64")
+			oldPath := filepath.Join(oldDir, "codex")
+			if err := os.MkdirAll(oldDir, 0700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(oldPath, []byte("previous running executable"), 0700); err != nil {
+				t.Fatal(err)
+			}
+			m.lookPath = func(string) (string, error) { return oldPath, nil }
+			m.version = func(_ context.Context, path string) (string, error) {
+				if path == oldPath {
+					t.Fatal("old unverified executable was run")
+				}
+				return "0.167.0", nil
+			}
+			downloads := 0
+			m.client.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				downloads++
+				if req.URL.String() != "https://github.com/openai/codex/releases/download/rust-v0.167.0/pinned-fixture.tar.gz" || req.Header.Get("Authorization") != "" {
+					t.Fatal("installer changed release or carried provider credentials")
+				}
+				if failFirst && downloads == 1 {
+					return &http.Response{StatusCode: 503, Body: io.NopCloser(strings.NewReader("unavailable"))}, nil
+				}
+				return &http.Response{StatusCode: 200, Body: io.NopCloser(bytes.NewReader(archive)), ContentLength: int64(len(archive))}, nil
+			})
+			status := m.Status(t.Context())
+			if status.TargetVersion != "0.167.0" || status.ExecutionAvailable || downloads != 0 {
+				t.Fatal("status installed or authorized an old runtime")
+			}
+			if failFirst {
+				if _, err := m.Install(t.Context()); err == nil {
+					t.Fatal("failed download claimed success")
+				}
+				if _, err := os.Stat(filepath.Join(m.installDir(), "codex")); !errors.Is(err, os.ErrNotExist) {
+					t.Fatal("failed update published an executable")
+				}
+				assertNoInstallTemps(t, m)
+			}
+			status, err := m.Install(t.Context())
+			if err != nil || !status.ExecutionAvailable || !status.SourceVerified || status.InstalledVersion != "0.167.0" || status.Path != filepath.Join(m.root, "versions", "0.167.0", "linux-amd64", "codex") {
+				t.Fatalf("reviewed upgrade failed: status=%+v err=%v", status, err)
+			}
+			if got, err := os.ReadFile(oldPath); err != nil || string(got) != "previous running executable" {
+				t.Fatal("update changed the old installation")
+			}
+			assertNoInstallTemps(t, m)
+		})
+	}
 }
 
 func TestInstallFailuresPreservePreviousFilesAndRemoveStages(t *testing.T) {
@@ -481,7 +540,7 @@ func TestInstallFailuresPreservePreviousFilesAndRemoveStages(t *testing.T) {
 			case "version_error":
 				m.version = func(context.Context, string) (string, error) { return "", errors.New("not executable") }
 			case "cancel_before_publish":
-				m.version = func(context.Context, string) (string, error) { cancel(); return "0.165.0", nil }
+				m.version = func(context.Context, string) (string, error) { cancel(); return "0.167.0", nil }
 			}
 			if _, err := m.Install(ctx); err == nil {
 				t.Fatal("unsafe or incomplete installation succeeded")
@@ -641,7 +700,7 @@ func TestVersionGrammarRejectsUnrelatedOrAmbiguousVersions(t *testing.T) {
 		input string
 		valid bool
 	}{
-		{"0.165.0", true}, {"1.0.0", true}, {"0.165", false}, {"0.165.0-beta.1", false}, {"latest", false}, {"0.165.0\n", false}, {"0..0", false}, {"-1.165.0", false},
+		{"0.167.0", true}, {"1.0.0", true}, {"0.165", false}, {"0.167.0-beta.1", false}, {"latest", false}, {"0.167.0\n", false}, {"0..0", false}, {"-1.165.0", false},
 	} {
 		if got := validVersion(tc.input); got != tc.valid {
 			t.Errorf("validVersion(%q) = %v", tc.input, got)

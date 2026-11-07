@@ -10,7 +10,7 @@ The optional [managed CLI mode](CODEX_CLI.md) uses the fixed official
 `responses-api-proxy` for existing gateway traffic only when both the global
 bridge environment and credential-owning account switches are enabled. It also
 retains the distinct `POST /v1/codex-cli/responses` agent task route. Both modes
-require global permission. Its pinned executable version is `0.165.0`; installing
+require global permission. Its pinned executable version is `0.167.0`; installing
 it never automatically enables a transport or updates Codex identity declarations.
 Runtime installation and wire identity are
 separate checks. A system CLI can execute only after both its exact version and
@@ -1525,8 +1525,12 @@ The reviewed sources and selected releases are recorded in
 Only the four manually selected product defaults changed; all source-priority
 matrices, administrator version pins, OS/architecture/terminal declarations and
 locked SDK fingerprints retain their contracts. The managed CLI executable is
-still independently pinned at `0.165.0`, while its provider overlay advertises
-the resolved account/global/default identity, whose default is now `0.167.0`.
+pinned at `0.167.0`, matching the reviewed compiled default identity. Settings
+can explicitly install or update this reviewed runtime; archive and native
+executable digests remain independently pinned. The version-consistency gate
+rejects a runtime or browser catalog that lags behind the compiled default.
+The provider overlay still advertises the resolved account/global/default
+identity, including administrator version pins, rather than the binary’s defaults.
 
 Kimi Messages with explicit `thinking.type` of `enabled` or `disabled` use
 `anthropic-beta: context-management-2025-06-27` for both credential types,

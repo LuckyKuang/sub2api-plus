@@ -803,7 +803,11 @@ a replacement grant. Other models on that account remain schedulable.
 The manually selected default identity is stable `rust-v0.167.0` at
 `086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a`; its existing source-priority matrix
 and environment fingerprint remain authoritative. The embedded managed CLI
-executable remains at its separately verified `0.165.0` runtime.
+executable is upgraded to the same reviewed `0.167.0` release. Every compiled
+default identity upgrade must also update the runtime manifest, official archive
+and executable digests, browser catalog and real-binary wire regressions.
+Settings offers explicit installation/update to that reviewed target; it does
+not select an arbitrary release or change administrator identity pins.
 
 Main commit `41cbd5b9b2d5369ba35957328504093ed324333c` adds optional per-turn
 `prompt_cache_options: {"ttl":"30m"}` or `{"ttl":"12h"}` on HTTP and WS.
