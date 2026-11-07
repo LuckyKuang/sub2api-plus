@@ -51,6 +51,26 @@ test('available-channel list fits both themes and supports quote details, filter
     await expect(page.getByTestId('catalog-results')).toBeVisible({ timeout: 60_000 })
     const list = page.getByTestId('catalog-model-list')
     await expect(list.locator('h3')).toHaveCount(13)
+    // Shared filter contract: 240px search and 200px selection fields on
+    // desktop; full-width stacked fields below 1024px, with natural actions.
+    const filterBar = page.getByTestId('catalog-filters').locator('.filter-bar')
+    const searchBox = (await filterBar.locator('.filter-field--search').boundingBox())!
+    const sortBox = (await filterBar.locator('.filter-field:not(.filter-field--search)').boundingBox())!
+    if (width >= 1024) {
+      expect(searchBox.width).toBeCloseTo(240, 0)
+      expect(sortBox.width).toBeCloseTo(200, 0)
+      expect(sortBox.y).toBeCloseTo(searchBox.y, 0)
+    } else {
+      const barBox = (await filterBar.boundingBox())!
+      expect(searchBox.width).toBeCloseTo(barBox.width, 0)
+      expect(sortBox.width).toBeCloseTo(barBox.width, 0)
+      expect(sortBox.y).toBeGreaterThanOrEqual(searchBox.y + searchBox.height)
+    }
+    expect((await filterBar.locator('input[type="search"]').boundingBox())!.width).toBeCloseTo(searchBox.width, 0)
+    expect((await filterBar.locator('.select-trigger').boundingBox())!.width).toBeCloseTo(sortBox.width, 0)
+    const reset = filterBar.getByRole('button').last()
+    expect(await reset.evaluate(element => element.closest('.filter-field') === null)).toBe(true)
+    expect((await reset.boundingBox())!.width).toBeLessThan(200)
     const geometry = await list.evaluate(element => ({
       overflow: document.documentElement.scrollWidth > innerWidth,
       clipped: [...element.querySelectorAll('.catalog-list-row')].some(row => row.scrollWidth > row.clientWidth + 1),

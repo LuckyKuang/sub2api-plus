@@ -24,7 +24,7 @@
           </div>
         </div>
         <div class="filter-bar border-t border-gray-100 pt-3 dark:border-dark-800">
-          <label class="filter-field filter-field--search catalog-search relative">
+          <label class="filter-field filter-field--search relative">
             <span class="sr-only">{{ t('availableChannels.catalog.searchPlaceholder') }}</span>
             <Icon name="search" size="md" class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input v-model="filters.search" class="input w-full pl-10 pr-10" type="search" :placeholder="t('availableChannels.catalog.searchPlaceholder')" />
@@ -195,7 +195,4 @@ onUnmounted(() => { ++requestId; controller?.abort() })
 .catalog-grid :deep(.catalog-model-card .font-mono.text-base) { font-size: 20px; }
 @container (min-width: 460px) { .catalog-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @container (min-width: 700px) { .catalog-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-@media (min-width: 1024px) {
-  .catalog-search { flex: 1 1 200px; width: auto; }
-}
 </style>

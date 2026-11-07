@@ -200,22 +200,24 @@ Cards fill the content width using container queries: 1/2/3 columns at
 0/460/700 px, with 20 px gaps. Both themes, sidebar width changes,
 long IDs and mobile details are supported; only price tables scroll sideways.
 
-Search is capped at 384 px (and fits narrower screens); sorting and reset follow
-it in a left-aligned wrapping row. The directory has only platform filters and
-model name/ID search, with no group filters, headings or group counts.
+Search and sorting use the shared 240px search and 200px selection fields from
+[CONTRIBUTING.md](../CONTRIBUTING.md). Below 1024px, fields stack at full width;
+reset stays outside the fields at its natural width. The directory has category
+and platform filters plus model name/ID search, with no group filters, group
+headings or group counts.
 
 The frontend aggregates the authorized response by concrete platform plus
-case-insensitive request model ID. Each identity produces exactly one card;
-identical names on different platforms remain separate. The card preserves an
+case-insensitive request model ID. Each identity produces exactly one entry;
+identical names on different platforms remain separate. Each entry preserves an
 actual request ID for copying. All underlying group quotes, source channels and
-pricing conditions are retained in details. Search filters whole model cards,
+pricing conditions are retained in details. Search filters whole model entries,
 never removes some quotes from a matched model's comparison.
 
-Cards show per-unit input/output or unit-price ranges after applying each quote's
-own effective rate exactly once. Equal endpoints show one price. Input and output
-ranges are independent and may have minima from different groups. Distinct units
-are displayed separately within one card. Missing, unknown or non-finite
-base prices are excluded from ranges, with an incomplete-price
+Cards and list rows show per-unit input/output or unit-price ranges after
+applying each quote's own effective rate exactly once. Equal endpoints show one
+price. Input and output ranges are independent and may have minima from different
+groups. Distinct units are displayed separately within each entry. Missing,
+unknown or non-finite base prices are excluded from ranges, with an incomplete-price
 notice; explicit zero remains zero. Failed personal-rate lookup labels ranges as
 default-rate references. Minimum displayed price does not select a routing group.
 
