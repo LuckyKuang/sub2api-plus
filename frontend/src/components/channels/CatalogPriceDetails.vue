@@ -1,8 +1,13 @@
 <template>
-  <BaseDialog :show="!!model" :title="t('availableChannels.catalog.details')" width="wide" @close="$emit('close')">
+  <BaseDialog :show="!!model" :title="model?.name || t('availableChannels.catalog.details')" width="wide" close-on-click-outside @close="$emit('close')">
     <div v-if="model" :key="model.key" class="min-w-0 space-y-5">
       <div>
-        <h3 class="break-words font-mono text-lg font-semibold text-gray-900 [overflow-wrap:anywhere] dark:text-gray-100">{{ model.name }}</h3>
+        <div class="flex min-w-0 flex-wrap items-start gap-3">
+          <h3 class="min-w-0 flex-1 break-words font-mono text-lg font-semibold text-gray-900 [overflow-wrap:anywhere] dark:text-gray-100">{{ model.name }}</h3>
+          <button type="button" class="catalog-copy-model btn btn-secondary shrink-0 text-xs" :aria-label="t('availableChannels.catalog.copyModel', { model: model.name })" @click="copyToClipboard(model.name)">
+            <Icon name="copy" size="sm" />{{ t('common.copy') }} ID
+          </button>
+        </div>
         <p class="mt-1 text-sm surface-muted">{{ model.platform }} · {{ t('availableChannels.catalog.groupQuotes', { count: model.quotes.length }) }}</p>
       </div>
       <p class="rounded-lg surface-inset p-3 text-sm surface-muted">{{ t('availableChannels.catalog.billingGroupNote') }}</p>
@@ -42,6 +47,8 @@
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import BaseDialog from '@/components/common/BaseDialog.vue'
+import Icon from '@/components/icons/Icon.vue'
+import { useClipboard } from '@/composables/useClipboard'
 import CatalogQuoteDetails from './CatalogQuoteDetails.vue'
 import CatalogRateBadge from './CatalogRateBadge.vue'
 import { catalogMoney, quotePrice, type CatalogModel } from './catalog'
@@ -49,6 +56,7 @@ import { catalogMoney, quotePrice, type CatalogModel } from './catalog'
 const props = defineProps<{ model: CatalogModel | null; rateUnavailable: boolean }>()
 defineEmits<{ close: [] }>()
 const { t } = useI18n()
+const { copyToClipboard } = useClipboard()
 const openQuotes = ref(new Set<string>())
 const quoteKey = (quote: CatalogModel['quotes'][number]) => `${quote.group.id}:${quote.offer.offer_key}`
 function toggleQuote(key: string) {

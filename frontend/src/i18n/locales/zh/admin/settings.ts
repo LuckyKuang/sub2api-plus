@@ -113,6 +113,10 @@ export default {
             '开启后，用户端渠道监控 V2 不再显示「用户排行」页，用户 API 也不返回排行数据。管理员仍可查看。',
         },
         availableChannels: {
+          layout: '展示布局',
+          layoutCard: '卡片',
+          layoutList: '列表',
+          layoutHint: '所有用户使用此布局。默认卡片；列表按平台分区展示紧凑模型菜单。',
           title: '可用渠道',
           description: '向已登录用户展示他们能访问的渠道、模型和定价聚合视图。默认关闭。',
           configureLink: '前往 渠道管理 > 渠道定价 配置模型价格',

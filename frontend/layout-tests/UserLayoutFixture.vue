@@ -5,8 +5,10 @@
   <AppLayout v-else :appearance="admin ? 'admin' : 'user'" :workspace="workspace">
     <div :class="workspace ? 'workspace-page' : 'space-y-6'">
       <header class="workspace-fixed" data-testid="page-title"><h2 class="text-xl font-semibold">{{ t('nav.apiKeys') }}</h2></header>
-      <div class="workspace-fixed flex flex-wrap gap-3" data-testid="page-filter">
-        <Select v-model="selection" class="w-48" :options="options" />
+      <div class="filter-bar workspace-fixed" data-testid="page-filter">
+        <div class="filter-field">
+          <Select v-model="selection" :options="options" />
+        </div>
         <button class="btn btn-secondary" data-testid="collapse-sidebar" @click="app.toggleSidebar()">{{ t('common.menu') }}</button>
         <button v-if="records" class="btn btn-secondary" data-testid="toggle-records" @click="empty = !empty">Toggle sample rows</button>
       </div>
@@ -41,11 +43,12 @@ import DataTable from '../src/components/common/DataTable.vue'
 import type { Column } from '../src/components/common/types'
 import { useAppStore } from '../src/stores/app'
 import { useAuthStore } from '../src/stores/auth'
-import type { User } from '../src/types'
+import type { PublicSettings, User } from '../src/types'
 
 const parameters = new URLSearchParams(location.search)
 const auditPage = parameters.get('auditPage')
 const auditPages = {
+  channels: defineAsyncComponent(() => import('../src/views/user/AvailableChannelsView.vue')),
   keys: defineAsyncComponent(() => import('../src/views/user/KeysView.vue')),
   redeem: defineAsyncComponent(() => import('../src/views/user/RedeemView.vue')),
   affiliate: defineAsyncComponent(() => import('../src/views/user/AffiliateView.vue')),
@@ -89,6 +92,12 @@ const app = useAppStore()
 app.publicSettingsLoaded = true
 app.versionLoaded = true
 app.siteName = 'UI Review'
+if (auditPage === 'channels') {
+  app.cachedPublicSettings = {
+    available_channels_enabled: true,
+    available_channels_layout: parameters.get('layout') === 'list' ? 'list' : 'card',
+  } as PublicSettings
+}
 const auth = useAuthStore()
 auth.user = { id: 9999, role: 'user', email: 'review@example.test', username: 'Reviewer', balance: 12.34 } as User
 if (auditComponent && auth.user) {

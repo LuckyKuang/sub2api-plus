@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page, type TestInfo } from '@playwright/test'
 import { wheelScroll } from './wheel'
+import { group, offer } from '../src/components/channels/__tests__/catalogFixtures'
 
 // Acceptance source: the approved Chrome user-page audit requires fixed page
 // chrome, independent record/card scrolling, aligned rounded panels, 10 invited
@@ -10,6 +11,141 @@ const user = {
   id: 9999, role: 'user', status: 'active', email: 'review@example.test', username: 'Reviewer',
   balance: 260, concurrency: 6, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
 }
+
+// docs/AVAILABLE_CHANNELS.md: real production list rows must fit 320px phones,
+// use two columns on wide screens, and preserve quotes, keyboard focus and cache.
+test('available-channel list fits both themes and supports quote details, filtering and copying', async ({ page }, info) => {
+  test.setTimeout(120_000)
+  const { theme, locale } = presentation(info)
+  const longName = 'model-00-' + 'long-id-'.repeat(16)
+  const catalog = {
+    groups: [
+      group(1, Array.from({ length: 12 }, (_, index) => offer(index === 0 ? longName : `model-${String(index).padStart(2, '0')}`))),
+      group(2, [offer('anthropic-model', { platform: 'anthropic' })]),
+      group(3, [offer('model-01')]),
+    ],
+    user_rate_status: 'loaded',
+  }
+  let reads = 0
+  const writes: string[] = []
+  await page.route('**/api/v1/**', async route => {
+    const request = route.request()
+    const url = new URL(request.url())
+    if (request.method() !== 'GET') writes.push(url.pathname)
+    let data: unknown = []
+    if (url.pathname === '/api/v1/channels/available') {
+      expect(url.searchParams.get('view')).toBe('catalog')
+      reads++
+      data = catalog
+    } else if (url.pathname === '/api/v1/auth/me' || url.pathname === '/api/v1/user/profile') data = user
+    await route.fulfill({ json: { code: 0, data } })
+  })
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (text: string) => { sessionStorage.setItem('copied-model', text) } } })
+  })
+  for (const width of [320, 768, 1920]) {
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto(`/layout-tests/index.html?view=user-layout&auditPage=channels&layout=list&product=1&theme=${theme}&locale=${locale}`)
+    // The first production-view import on a WSL bind mount can be cold. Wait
+    // for the page itself before applying the normal data/geometry assertions.
+    await expect(page.getByTestId('catalog-results')).toBeVisible({ timeout: 60_000 })
+    const list = page.getByTestId('catalog-model-list')
+    await expect(list.locator('h3')).toHaveCount(13)
+    // Shared filter contract: 240px search and 200px selection fields on
+    // desktop; full-width stacked fields below 1024px, with natural actions.
+    const filterBar = page.getByTestId('catalog-filters').locator('.filter-bar')
+    const searchBox = (await filterBar.locator('.filter-field--search').boundingBox())!
+    const sortBox = (await filterBar.locator('.filter-field:not(.filter-field--search)').boundingBox())!
+    if (width >= 1024) {
+      expect(searchBox.width).toBeCloseTo(240, 0)
+      expect(sortBox.width).toBeCloseTo(200, 0)
+      expect(sortBox.y).toBeCloseTo(searchBox.y, 0)
+    } else {
+      const barBox = (await filterBar.boundingBox())!
+      expect(searchBox.width).toBeCloseTo(barBox.width, 0)
+      expect(sortBox.width).toBeCloseTo(barBox.width, 0)
+      expect(sortBox.y).toBeGreaterThanOrEqual(searchBox.y + searchBox.height)
+    }
+    expect((await filterBar.locator('input[type="search"]').boundingBox())!.width).toBeCloseTo(searchBox.width, 0)
+    expect((await filterBar.locator('.select-trigger').boundingBox())!.width).toBeCloseTo(sortBox.width, 0)
+    const reset = filterBar.getByRole('button').last()
+    expect(await reset.evaluate(element => element.closest('.filter-field') === null)).toBe(true)
+    expect((await reset.boundingBox())!.width).toBeLessThan(200)
+    const geometry = await list.evaluate(element => ({
+      overflow: document.documentElement.scrollWidth > innerWidth,
+      clipped: [...element.querySelectorAll('.catalog-list-row')].some(row => row.scrollWidth > row.clientWidth + 1),
+      columns: getComputedStyle(element.querySelector('.catalog-list-rows')!).gridTemplateColumns.split(' ').length,
+    }))
+    expect(geometry.overflow).toBe(false)
+    expect(geometry.clipped).toBe(false)
+    expect(geometry.columns).toBe(width === 1920 ? 2 : 1)
+    // Café Shop reference and the user's acceptance requirement: the row's
+    // empty area and prices open details, not just its model-name text.
+    const row = list.locator('.catalog-list-row').first()
+    const box = (await row.boundingBox())!
+    await row.click({ position: { x: box.width - 8, y: box.height - 8 } })
+    await expect(page.getByRole('dialog')).toBeVisible()
+    await expect(page.getByRole('dialog')).toHaveAccessibleName('anthropic-model')
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('dialog')).toBeHidden()
+    // Hover is a visible, non-intercepting card overlay, aligned with the
+    // complete row in each theme/viewport (not just a model-name text color).
+    await row.hover()
+    const highlight = list.locator('.catalog-list-highlight.is-active')
+    await expect(highlight).toHaveCount(1)
+    await expect(highlight).toHaveCSS('opacity', '1')
+    await expect(highlight).toHaveCSS('pointer-events', 'none')
+    const markBox = (await highlight.boundingBox())!
+    const rowBox = (await row.boundingBox())!
+    for (const key of ['x', 'y', 'width', 'height'] as const) expect(Math.abs(markBox[key] - rowBox[key])).toBeLessThanOrEqual(1)
+    await expect(highlight).toHaveCSS('transition-duration', '0s')
+    const otherRow = list.locator('.catalog-list-row').nth(1)
+    await otherRow.hover()
+    const movedBox = (await list.locator('.catalog-list-highlight.is-active').boundingBox())!
+    const otherBox = (await otherRow.boundingBox())!
+    for (const key of ['x', 'y', 'width', 'height'] as const) expect(Math.abs(movedBox[key] - otherBox[key])).toBeLessThanOrEqual(1)
+    await row.scrollIntoViewIfNeeded()
+    const prices = row.locator('.font-mono.tabular-nums:not([aria-hidden])').first()
+    await expect(prices).toContainText('$2')
+    const priceBox = (await prices.boundingBox())!
+    await page.mouse.click(priceBox.x + priceBox.width / 2, priceBox.y + priceBox.height / 2)
+    await expect(page.getByRole('dialog')).toBeVisible()
+    // Clicking the read-only dialog's backdrop is another supported close path.
+    await page.getByRole('dialog').click({ position: { x: 1, y: 1 } })
+    await expect(page.getByRole('dialog')).toBeHidden()
+  }
+  const readsBeforeFilter = reads
+  await page.locator('input[type="search"]').fill('model-01')
+  const list = page.getByTestId('catalog-model-list')
+  await expect(list.locator('h3')).toHaveCount(1)
+  const trigger = list.locator('.catalog-list-open')
+  await trigger.focus()
+  await page.keyboard.press('Enter')
+  const dialog = page.getByRole('dialog')
+  await expect(dialog).toBeVisible()
+  await expect(dialog).toHaveAccessibleName('model-01')
+  await expect(dialog.locator('.catalog-comparison tbody tr')).toHaveCount(2)
+  await dialog.locator('.catalog-copy-model').click()
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem('copied-model'))).toBe('model-01')
+  await expect(dialog).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(dialog).toBeHidden()
+  await expect(trigger).toBeFocused()
+  await page.mouse.move(0, 0)
+  await expect(list.locator('.catalog-list-highlight.is-active')).toHaveCount(1)
+  await page.keyboard.press('Space')
+  await expect(dialog).toBeVisible()
+  await dialog.getByRole('button', { name: 'Close modal' }).click()
+  await expect(dialog).toBeHidden()
+  await list.locator('.catalog-copy-model').click()
+  await expect(dialog).toBeHidden()
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem('copied-model'))).toBe('model-01')
+  await page.emulateMedia({ reducedMotion: 'no-preference' })
+  await list.locator('.catalog-list-row').hover()
+  await expect(list.locator('.catalog-list-highlight.is-active')).toHaveCSS('transition-duration', '0.18s, 0.18s, 0.18s, 0.12s')
+  expect(reads).toBe(readsBeforeFilter)
+  expect(writes).toEqual([])
+})
 const invitees = Array.from({ length: 32 }, (_, index) => ({
   user_id: index + 1, email: `invitee-${index + 1}@example.test`, username: `Invitee ${String(index + 1).padStart(2, '0')}`,
   total_rebate: index + 1, created_at: '2026-10-01T12:00:00Z',

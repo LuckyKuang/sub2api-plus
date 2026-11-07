@@ -23,6 +23,9 @@ type openAISessionRecoveryKey struct{}
 type openAISessionRecovery struct {
 	accountID int64
 	retry     bool
+	// Exhaustion belongs to the original route generation, not the last
+	// candidate. A failed candidate must neither discard nor broaden it.
+	exhaustedOwner OpenAISessionRoute
 }
 
 // Protocol readers use the request context for route commits. Attach only the
@@ -42,17 +45,31 @@ func bindOpenAISessionRouteRequestContext(ctx context.Context, c *gin.Context) f
 // WithOpenAISessionRecovery pins a recoverable retry to its original account.
 // Only an exhausted account-scoped recovery may authorize a different owner.
 func WithOpenAISessionRecovery(ctx context.Context, accountID int64, retry bool) context.Context {
-	if retry {
-		if previous := openAIRouteAttempt(ctx); previous != nil {
-			previous.mu.Lock()
-			if previous.accountID == accountID && previous.closed {
+	recovery := openAISessionRecovery{accountID: accountID, retry: retry}
+	if previous := openAIRouteAttempt(ctx); previous != nil {
+		previous.mu.Lock()
+		if previous.accountID == accountID {
+			prior, _ := ctx.Value(openAISessionRecoveryKey{}).(openAISessionRecovery)
+			if sameOpenAISessionRouteGeneration(prior.exhaustedOwner, previous.route) {
+				recovery.exhaustedOwner = prior.exhaustedOwner
+			}
+			if !retry && previous.route.OwnerAccountID == accountID {
+				recovery.exhaustedOwner = previous.route
+			}
+			if retry && previous.closed {
 				next := &openAISessionRouteAttempt{store: previous.store, route: previous.route, accountID: accountID, reason: previous.reason, logCtx: ctx}
 				ctx = context.WithValue(ctx, openAISessionRouteAttemptKey{}, next)
 			}
-			previous.mu.Unlock()
 		}
+		previous.mu.Unlock()
 	}
-	return context.WithValue(ctx, openAISessionRecoveryKey{}, openAISessionRecovery{accountID: accountID, retry: retry})
+	return context.WithValue(ctx, openAISessionRecoveryKey{}, recovery)
+}
+
+func sameOpenAISessionRouteGeneration(a, b OpenAISessionRoute) bool {
+	return a.OwnerAccountID > 0 && a.Generation > 0 &&
+		a.AuthzDomain == b.AuthzDomain && a.SessionDigest == b.SessionDigest &&
+		a.OwnerAccountID == b.OwnerAccountID && a.Generation == b.Generation
 }
 
 func openAISessionRouteForwardError(ctx context.Context, err error) error {
@@ -60,8 +77,10 @@ func openAISessionRouteForwardError(ctx context.Context, err error) error {
 		a.mu.Lock()
 		defer a.mu.Unlock()
 		if a.renewErr != nil {
+			logOpenAISessionRouteFailure(ctx, a.renewErr, "forward", a.route, a.accountID)
 			return a.renewErr
 		}
+		logOpenAISessionRouteFailure(ctx, err, "forward", a.route, a.accountID)
 		var failure *UpstreamFailoverError
 		if a.apiKey && errors.As(err, &failure) && failure.StatusCode == http.StatusTooManyRequests &&
 			failure.ShouldRetryNextAccount() && failure.ShouldReportAccountScheduleFailure() {
@@ -138,9 +157,10 @@ func (a *openAISessionRouteAttempt) current(ctx context.Context) (OpenAISessionR
 	return route, err
 }
 
-func (a *openAISessionRouteAttempt) admit(ctx context.Context, accountID int64) error {
+func (a *openAISessionRouteAttempt) admit(ctx context.Context, accountID int64) (admissionErr error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	defer func() { logOpenAISessionRouteFailure(ctx, admissionErr, "admission", a.route, accountID) }()
 	if (a.closed && !a.committed) || a.accountID != accountID {
 		return ErrOpenAISessionRouteLeaseLost
 	}
@@ -168,11 +188,12 @@ func (a *openAISessionRouteAttempt) admit(ctx context.Context, accountID int64) 
 		return nil
 	}
 	a.leaseID = openAISessionRouteLeaseID()
-	_, err := a.store.BeginMigration(ctx, a.route.AuthzDomain, a.route.SessionDigest, a.route.Generation, accountID, a.leaseID, a.reason, time.Minute)
+	route, err := a.store.BeginMigration(ctx, a.route.AuthzDomain, a.route.SessionDigest, a.route.Generation, accountID, a.leaseID, a.reason, time.Minute)
 	if err != nil {
 		a.leaseID = ""
 		return err
 	}
+	a.route = route
 	a.log(ctx, "leased", a.reason)
 	return nil
 }
@@ -222,13 +243,14 @@ func (a *openAISessionRouteAttempt) commit(ctx context.Context) error {
 // ValidateOpenAISessionRouteOwner fences every new turn on a retained socket.
 // Releasing the previous turn's concurrency slot does not authorize a stale
 // connection to write after another request has moved the logical session.
-func ValidateOpenAISessionRouteOwner(ctx context.Context) error {
+func ValidateOpenAISessionRouteOwner(ctx context.Context) (validationErr error) {
 	a := openAIRouteAttempt(ctx)
 	if a == nil {
 		return nil
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	defer func() { logOpenAISessionRouteFailure(ctx, validationErr, "owner_validation", a.route, a.accountID) }()
 	current, err := a.current(ctx)
 	if err != nil {
 		return err
@@ -261,7 +283,7 @@ func (a *openAISessionRouteAttempt) close() {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	if err := a.store.AbandonMigration(ctx, a.route.AuthzDomain, a.route.SessionDigest, a.leaseID); err != nil {
-		a.log(a.logCtx, "abandon_failed", "route_store_unavailable")
+		logOpenAISessionRouteFailure(a.logCtx, ErrOpenAISessionRouteStoreUnavailable, "abandon", a.route, a.accountID)
 	}
 }
 
@@ -420,7 +442,10 @@ func beginOpenAISessionRouteForward(ctx context.Context, account *Account, timeo
 					return
 				}
 				checkCtx, release := context.WithTimeout(renewCtx, 3*time.Second)
-				_, err := a.store.BeginMigration(checkCtx, a.route.AuthzDomain, a.route.SessionDigest, a.route.Generation, a.accountID, a.leaseID, a.reason, time.Minute)
+				route, err := a.store.BeginMigration(checkCtx, a.route.AuthzDomain, a.route.SessionDigest, a.route.Generation, a.accountID, a.leaseID, a.reason, time.Minute)
+				if err == nil {
+					a.route = route
+				}
 				release()
 				a.mu.Unlock()
 				if err != nil {
@@ -539,7 +564,7 @@ func openAISessionRouteSelectionDeferred(ctx context.Context) bool {
 	return deferred
 }
 
-func (s *OpenAIGatewayService) selectAccountWithCanonicalRoute(ctx context.Context, req OpenAIAccountScheduleRequest, selectCandidate func(context.Context, string, map[int64]struct{}) (*AccountSelectionResult, OpenAIAccountScheduleDecision, error)) (*AccountSelectionResult, OpenAIAccountScheduleDecision, error) {
+func (s *OpenAIGatewayService) selectAccountWithCanonicalRoute(ctx context.Context, req OpenAIAccountScheduleRequest, selectCandidate func(context.Context, string, map[int64]struct{}) (*AccountSelectionResult, OpenAIAccountScheduleDecision, error)) (selected *AccountSelectionResult, scheduled OpenAIAccountScheduleDecision, selectionErr error) {
 	if !openAISessionRouteApplies(req) || openAISessionRouteDisabled(ctx) {
 		ctx = WithoutOpenAISessionRoute(ctx)
 		selection, decision, err := selectCandidate(ctx, req.SessionHash, req.ExcludedIDs)
@@ -571,6 +596,7 @@ func (s *OpenAIGatewayService) selectAccountWithCanonicalRoute(ctx context.Conte
 	ctx = context.WithValue(ctx, openAISessionRouteSelectionKey{}, true)
 	domain, digest := openAISessionRouteDomain(derefGroupID(req.GroupID)), OpenAISessionRouteDigest(req.SessionHash)
 	route, err := store.Get(ctx, domain, digest)
+	defer func() { logOpenAISessionRouteFailure(ctx, selectionErr, "selection", route, route.CandidateAccountID) }()
 	if err != nil && !errors.Is(err, ErrOpenAISessionRouteNotFound) {
 		return nil, OpenAIAccountScheduleDecision{}, fmt.Errorf("%w: read", ErrOpenAISessionRouteStoreUnavailable)
 	}
@@ -597,18 +623,21 @@ func (s *OpenAIGatewayService) selectAccountWithCanonicalRoute(ctx context.Conte
 	reason := "owner_unavailable"
 	if exists {
 		recovery, _ := ctx.Value(openAISessionRecoveryKey{}).(openAISessionRecovery)
+		if recovery.exhaustedOwner.OwnerAccountID > 0 &&
+			recovery.exhaustedOwner.AuthzDomain == domain && recovery.exhaustedOwner.SessionDigest == digest &&
+			!sameOpenAISessionRouteGeneration(recovery.exhaustedOwner, route) {
+			return nil, decision, ErrOpenAISessionRouteLeaseLost
+		}
 		if recovery.retry {
-			if recovery.accountID != route.OwnerAccountID {
-				previous := openAIRouteAttempt(ctx)
-				if previous == nil {
-					return nil, decision, ErrOpenAISessionRouteLeaseLost
-				}
-				previous.mu.Lock()
-				valid := previous.accountID == recovery.accountID && previous.route.Generation == route.Generation && previous.route.OwnerAccountID == route.OwnerAccountID
-				previous.mu.Unlock()
-				if !valid {
-					return nil, decision, ErrOpenAISessionRouteLeaseLost
-				}
+			previous := openAIRouteAttempt(ctx)
+			if previous == nil {
+				return nil, decision, ErrOpenAISessionRouteLeaseLost
+			}
+			previous.mu.Lock()
+			valid := previous.accountID == recovery.accountID && sameOpenAISessionRouteGeneration(previous.route, route)
+			previous.mu.Unlock()
+			if !valid {
+				return nil, decision, ErrOpenAISessionRouteLeaseLost
 			}
 			retryReq := req
 			retryReq.StickyAccountID, retryReq.DisableStickyEscape = recovery.accountID, true
@@ -647,7 +676,8 @@ func (s *OpenAIGatewayService) selectAccountWithCanonicalRoute(ctx context.Conte
 					decision.StickySessionHit = true
 				}
 			} else {
-				if owner != nil && owner.IsSchedulable() && recovery.accountID != route.OwnerAccountID {
+				recoveryAuthorized := sameOpenAISessionRouteGeneration(recovery.exhaustedOwner, route)
+				if owner != nil && owner.IsSchedulable() && !recoveryAuthorized {
 					return nil, decision, ErrNoAvailableAccounts
 				}
 				reason = "owner_recovery_exhausted"

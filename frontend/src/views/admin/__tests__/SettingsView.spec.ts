@@ -802,6 +802,25 @@ describe("admin SettingsView payment visible method controls", () => {
     adminSettingsFetch.mockResolvedValue(undefined);
   });
 
+  // docs/AVAILABLE_CHANNELS.md: old settings default to cards; an administrator
+  // can persist either site-wide layout and subsequent saves retain the choice.
+  it.each([undefined, 'list', 'card', 'invalid'])("loads and saves available-channel layout %s", async (stored) => {
+    getSettings.mockResolvedValueOnce({ ...baseSettingsResponse, available_channels_layout: stored });
+    const wrapper = mountView();
+    await flushPromises();
+    const select = wrapper.get('#available-channels-layout');
+    expect((select.element as HTMLSelectElement).value).toBe(stored === 'list' ? 'list' : 'card');
+    expect(select.findAll('option').map(option => option.attributes('value'))).toEqual(['card', 'list']);
+    for (const layout of ['list', 'card']) {
+      await select.setValue(layout);
+      await wrapper.get('form').trigger('submit.prevent');
+      await flushPromises();
+      expect(updateSettings.mock.calls.at(-1)![0].available_channels_layout).toBe(layout);
+      expect((select.element as HTMLSelectElement).value).toBe(layout);
+    }
+    wrapper.unmount();
+  });
+
   it("keeps all security and gateway sections in the scroll area while tabs and saving remain outside", async () => {
     const wrapper = mountView(document.body);
     try {

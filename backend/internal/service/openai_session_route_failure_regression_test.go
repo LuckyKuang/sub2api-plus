@@ -9,8 +9,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/logger"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 type affinityFaultStore struct {
@@ -79,7 +82,21 @@ func (w *affinityCommitWriter) WriteString(data string) (int, error) {
 func TestCodexRouteFaultsFenceTransportRegression(t *testing.T) {
 	for _, stage := range []string{"create", "begin", "commit", "accepted"} {
 		t.Run(stage, func(t *testing.T) {
-			ctx := context.Background()
+			core, logs := observer.New(zap.WarnLevel)
+			ctx := logger.IntoContext(context.Background(), zap.New(core).With(zap.String("request_id", "fault-request")))
+			t.Cleanup(func() {
+				warnings := logs.FilterMessage("openai_session_route_failed").All()
+				if stage == "accepted" {
+					require.Empty(t, warnings)
+					return
+				}
+				require.Len(t, warnings, 1)
+				expectedStage := map[string]string{"create": "selection", "begin": "admission", "commit": "forward"}[stage]
+				fields := warnings[0].ContextMap()
+				require.Equal(t, expectedStage, fields["stage"])
+				require.Equal(t, "route_store_unavailable", fields["reason"])
+				require.Equal(t, "fault-request", fields["request_id"])
+			})
 			store := &affinityFaultStore{fakeOpenAISessionRouteStore: newFakeOpenAISessionRouteStore(), stage: stage}
 			if stage != "create" {
 				_, err := store.fakeOpenAISessionRouteStore.CreateIfAbsent(ctx, OpenAISessionRoute{AuthzDomain: "group:0", SessionDigest: OpenAISessionRouteDigest("session"), OwnerAccountID: 101})

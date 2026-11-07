@@ -257,16 +257,15 @@ test('real admin usage lists separate controls, scrolling records and paging wit
   await page.setViewportSize({ width: 1440, height: 1000 })
   await page.goto(`/layout-tests/index.html?view=admin-layout&usage=1&theme=${theme}&locale=${locale}`)
   const panel = page.getByTestId('usage-records-panel')
-  const controls = panel.locator('.usage-record-controls')
+  const controls = page.getByTestId('usage-query-card')
   await expect(panel.getByText('admin-history-model-1', { exact: true })).toBeVisible({ timeout: 60_000 })
   for (const tab of ['usage', 'errors', 'live']) {
-    await panel.locator(`[data-tab="${tab}"]`).click()
+    await page.locator(`[data-tab="${tab}"]`).click()
     const workspace = panel.locator(tab === 'usage' ? '.usage-history-workspace' : tab === 'errors' ? '.usage-errors-workspace' : '.live-admin-workspace')
     const body = workspace.locator('.card.workspace-table-card')
     const viewport = body.locator('.workspace-table-viewport').filter({ visible: true })
     await expect(viewport.locator('table.record-table tbody tr:not([aria-hidden="true"])').first()).toContainText(`admin-${tab === 'usage' ? 'history' : tab === 'errors' ? 'error' : 'live'}-model-1`)
     const surfaces = [controls]
-    if (tab === 'usage') surfaces.push(workspace.locator('.usage-history-refresh'))
     if (tab === 'live') surfaces.push(workspace.locator('.card.workspace-fixed').first())
     surfaces.push(body)
     const pagination = workspace.locator('.pagination-card')
@@ -298,7 +297,7 @@ test('empty admin live, history and errors keep separate visible pagination card
   await page.goto(`/layout-tests/index.html?view=admin-layout&usage=1&theme=${theme}&locale=${locale}`)
   const panel = page.getByTestId('usage-records-panel')
   for (const tab of ['usage', 'errors', 'live']) {
-    await panel.locator(`[data-tab="${tab}"]`).click()
+    await page.locator(`[data-tab="${tab}"]`).click()
     const workspace = panel.locator(tab === 'usage' ? '.usage-history-workspace' : tab === 'errors' ? '.usage-errors-workspace' : '.live-admin-workspace')
     const footer = workspace.locator('.pagination-card')
     await expect(footer).toBeInViewport()
@@ -318,11 +317,11 @@ test('real admin usage cards and paging remain reachable inside phone shell inse
   const panel = page.getByTestId('usage-records-panel')
   await expect(panel.getByText('admin-history-model-1', { exact: true })).toBeVisible({ timeout: 60_000 })
   for (const tab of ['usage', 'errors', 'live']) {
-    await panel.locator(`[data-tab="${tab}"]`).click()
+    await page.locator(`[data-tab="${tab}"]`).click()
     const workspace = panel.locator(tab === 'usage' ? '.usage-history-workspace' : tab === 'errors' ? '.usage-errors-workspace' : '.live-admin-workspace')
     const body = workspace.locator('.card.workspace-table-card')
     await expect(body).toBeVisible()
-    for (const surface of [panel.locator('.usage-record-controls'), body]) {
+    for (const surface of [page.getByTestId('usage-query-card'), body]) {
       const box = (await surface.boundingBox())!
       expect(Math.abs(box.x - 12)).toBeLessThanOrEqual(1)
       expect(Math.abs(390 - box.x - box.width - 12)).toBeLessThanOrEqual(1)
@@ -354,7 +353,7 @@ test('admin live paging stays at the workspace bottom while records scroll', asy
     await page.setViewportSize({ width, height })
     await page.goto(`/layout-tests/index.html?view=admin-layout&usage=1&theme=${theme}&locale=${locale}`)
     const panel = page.getByTestId('usage-records-panel')
-    await panel.locator('[data-tab="live"]').click()
+    await page.locator('[data-tab="live"]').click()
     const workspace = panel.locator('.live-admin-workspace')
     const footer = workspace.locator('.pagination-card')
     const viewport = workspace.locator('.workspace-table-viewport')
@@ -403,7 +402,7 @@ test('short admin live empty message and icon remain completely readable', async
     await page.setViewportSize({ width: 1440, height })
     await page.goto(`/layout-tests/index.html?view=admin-layout&usage=1&theme=${theme}&locale=${locale}`)
     const panel = page.getByTestId('usage-records-panel')
-    await panel.locator('[data-tab="live"]').click()
+    await page.locator('[data-tab="live"]').click()
     const workspace = panel.locator('.live-admin-workspace')
     const viewport = workspace.locator('.workspace-table-viewport')
     const footer = workspace.locator('.pagination-card')
@@ -470,5 +469,160 @@ test('short admin live empty message and icon remain completely readable', async
     const workspaceBounds = (await workspace.boundingBox())!
     expect(Math.abs(footerBounds.y + footerBounds.height - workspaceBounds.y - workspaceBounds.height)).toBeLessThanOrEqual(1)
     expect(await page.evaluate(() => document.documentElement.scrollHeight > innerHeight)).toBe(false)
+  }
+})
+
+// Every data-table filter row reads one control width. Measured on the real
+// console views the fixture mounts, not on a purpose-built toolbar, so a page
+// that reintroduces an ad-hoc width fails here.
+for (const view of ['', 'users=1', 'groups=1', 'ipAccessControl=1', 'usage=1']) {
+  test(`admin ${view || 'toolbar'} filter controls share one width`, async ({ page }, info) => {
+    const theme = info.project.use.colorScheme === 'dark' ? 'dark' : 'light'
+    const locale = info.project.use.locale?.startsWith('zh') ? 'zh' : 'en'
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto(`/layout-tests/index.html?view=admin-layout&${view ? `${view}&` : ''}theme=${theme}&locale=${locale}`)
+    // Tabbed views keep inactive panels in the DOM; the rules tab owns the
+    // query row for this console.
+    if (view === 'ipAccessControl=1') await page.locator('[aria-controls=ip-panel-rules]').click()
+    const fields = page.locator('.filter-bar .filter-field')
+    await expect(page.locator('.filter-bar:visible').first()).toBeVisible()
+    // Tabbed views keep inactive panels in the DOM, so only measure rendered rows.
+    const measured = await fields.evaluateAll(elements => elements.map(element => {
+      const box = element.getBoundingClientRect()
+      const control = element.querySelector('.input, .select-trigger, .date-picker-trigger, .date-time-picker')
+      return {
+        width: Math.round(box.width),
+        search: element.classList.contains('filter-field--search'),
+        controlWidth: control ? Math.round(control.getBoundingClientRect().width) : null,
+      }
+    }).filter(field => field.width > 0))
+    expect(measured.length, JSON.stringify(measured)).toBeGreaterThan(0)
+    for (const field of measured) {
+      expect(field.width, JSON.stringify(field)).toBe(field.search ? 240 : 200)
+      // The control fills its field, so no wrapper can size itself to the
+      // longest option label.
+      expect(field.controlWidth, JSON.stringify(field)).toBe(field.width)
+    }
+  })
+}
+
+test('admin filter controls stack full width on a phone', async ({ page }, info) => {
+  const theme = info.project.use.colorScheme === 'dark' ? 'dark' : 'light'
+  const locale = info.project.use.locale?.startsWith('zh') ? 'zh' : 'en'
+  await page.setViewportSize({ width: 375, height: 812 })
+  await page.goto(`/layout-tests/index.html?view=admin-layout&groups=1&theme=${theme}&locale=${locale}`)
+  const bar = page.locator('.filter-bar').first()
+  await expect(bar).toBeVisible()
+  const fields = await bar.locator('.filter-field').evaluateAll(elements => elements.map(element => {
+    const box = element.getBoundingClientRect()
+    return { width: Math.round(box.width), top: Math.round(box.top), height: Math.round(box.height) }
+  }).filter(field => field.width > 0))
+  expect(fields.length).toBeGreaterThan(1)
+  const barWidth = Math.round((await bar.boundingBox())!.width)
+  for (const field of fields) {
+    expect(field.width).toBe(barWidth)
+    expect(field.height).toBeGreaterThan(0)
+  }
+  // Stacked, never squeezed side by side.
+  for (let index = 1; index < fields.length; index += 1) {
+    expect(fields[index]!.top).toBeGreaterThan(fields[index - 1]!.top)
+  }
+})
+
+
+// The accepted header has three distinct rows, with no second frame around tabs.
+test('risk heading places tabs between title and right aligned actions', async ({ page }, info) => {
+  const theme = info.project.use.colorScheme === 'dark' ? 'dark' : 'light'
+  const locale = info.project.use.locale?.startsWith('zh') ? 'zh' : 'en'
+  await page.route('**/api/v1/admin/**', route => {
+    const path = new URL(route.request().url()).pathname
+    const data = path.endsWith('/all') ? [] : path.endsWith('/config') ? {
+      enabled: false, mode: 'async', endpoints: [], thresholds: {}, all_groups: true, group_ids: [],
+    } : path.endsWith('/status') ? {
+      enabled: false, mode: 'async', endpoints: [], worker_count: 4, active_workers: 0, idle_workers: 4,
+      queue_size: 100, queue_length: 0, processed_count: 0, error_count: 0,
+    } : { items: [], total: 0, page: 1, page_size: 20 }
+    return route.fulfill({ json: { code: 0, data } })
+  })
+  for (const width of [390, 1024, 1440]) {
+    await page.setViewportSize({ width, height: 800 })
+    await page.goto(`/layout-tests/index.html?view=admin-layout&riskControl=1&theme=${theme}&locale=${locale}`)
+    const header = page.getByTestId('risk-page-heading')
+    const title = header.locator('h1')
+    const tabs = header.getByRole('tablist')
+    const actions = page.getByTestId('risk-page-actions')
+    await expect(actions).toBeVisible()
+    const titleBox = (await title.boundingBox())!
+    const tabBox = (await tabs.boundingBox())!
+    const actionBox = (await actions.boundingBox())!
+    expect(tabBox.y).toBeGreaterThan(titleBox.y + titleBox.height)
+    expect(actionBox.y).toBeGreaterThanOrEqual(tabBox.y + tabBox.height)
+    const buttonBox = (await actions.getByRole('button').last().boundingBox())!
+    expect(Math.abs(buttonBox.x + buttonBox.width - actionBox.x - actionBox.width)).toBeLessThanOrEqual(1)
+    const tabStyle = await tabs.evaluate(el => {
+      const style = getComputedStyle(el)
+      return { border: style.borderTopWidth, fill: style.backgroundColor, padding: style.paddingLeft, shadow: style.boxShadow }
+    })
+    expect(tabStyle).toEqual({ border: '0px', fill: 'rgba(0, 0, 0, 0)', padding: '0px', shadow: 'none' })
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false)
+  }
+})
+
+test('prompt actions follow the end time field in the same right aligned filter flow', async ({ page }, info) => {
+  const theme = info.project.use.colorScheme === 'dark' ? 'dark' : 'light'
+  const locale = info.project.use.locale?.startsWith('zh') ? 'zh' : 'en'
+  await page.route('**/api/v1/admin/prompt-audit/config', route => route.fulfill({ json: { code: 0, data: {
+    enabled: false, blocking_enabled: false, store_pass_events: false, scanners: [], endpoints: [],
+    all_groups: true, group_ids: [], config_version: 1,
+  } } }))
+  for (const width of [1024, 1280, 1818]) {
+    await page.setViewportSize({ width, height: 800 })
+    await page.goto(`/layout-tests/index.html?view=admin-layout&promptAudit=1&theme=${theme}&locale=${locale}`)
+    await page.locator('[data-test="tab-events"]').click()
+    const form = page.locator('.event-filters')
+    const actions = form.locator('.event-actions')
+    await expect(actions).toBeVisible()
+    expect(await actions.evaluate(el => el.previousElementSibling?.tagName)).toBe('LABEL')
+    expect(await actions.evaluate(el => el.parentElement?.lastElementChild === el)).toBe(true)
+    const end = (await form.locator('label').last().boundingBox())!
+    const group = (await actions.boundingBox())!
+    const formBox = (await form.boundingBox())!
+    expect(group.y).toBeGreaterThanOrEqual(end.y)
+    expect(group.y > end.y + end.height - 1 || group.x >= end.x + end.width).toBe(true)
+    expect(Math.abs(group.x + group.width - formBox.x - formBox.width)).toBeLessThanOrEqual(1)
+    const last = (await actions.getByRole('button').last().boundingBox())!
+    expect(Math.abs(last.x + last.width - group.x - group.width)).toBeLessThanOrEqual(1)
+    const controls = await form.locator('.input, .select-trigger, .event-actions > button').evaluateAll(elements =>
+      elements.map(el => Math.round(el.getBoundingClientRect().height)).filter(height => height > 0))
+    expect(new Set(controls)).toEqual(new Set([32]))
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false)
+  }
+})
+
+test('proxy filters and wrapping actions share control heights and stay within the toolbar', async ({ page }, info) => {
+  const theme = info.project.use.colorScheme === 'dark' ? 'dark' : 'light'
+  const locale = info.project.use.locale?.startsWith('zh') ? 'zh' : 'en'
+  for (const width of [390, 1024, 1280, 1818]) {
+    await page.setViewportSize({ width, height: 800 })
+    await page.goto(`/layout-tests/index.html?view=admin-layout&proxies=1&theme=${theme}&locale=${locale}`)
+    const bar = page.locator('.filter-bar').first()
+    const actions = bar.locator('.filter-actions')
+    await expect(actions).toBeVisible()
+    const barBox = (await bar.boundingBox())!
+    const buttons = await actions.getByRole('button').evaluateAll(elements => elements.map(el => {
+      const box = el.getBoundingClientRect()
+      return { x: box.x, right: box.right, y: box.y, height: box.height }
+    }))
+    expect(buttons).toHaveLength(7)
+    for (const button of buttons) {
+      expect(button.height).toBe(38)
+      expect(button.x).toBeGreaterThanOrEqual(barBox.x - 1)
+      expect(button.right).toBeLessThanOrEqual(barBox.x + barBox.width + 1)
+    }
+    const last = buttons.at(-1)!
+    expect(Math.abs(last.right - barBox.x - barBox.width)).toBeLessThanOrEqual(1)
+    const heights = await bar.locator('.input, .select-trigger').evaluateAll(elements => elements.map(el => el.getBoundingClientRect().height))
+    expect(new Set(heights)).toEqual(new Set([38]))
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false)
   }
 })

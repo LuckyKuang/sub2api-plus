@@ -39,6 +39,8 @@ describe('Prompt Audit integration surface', () => {
     expect(endpoint).toContain('aria-label')
     expect(events).toContain('aria-label')
     expect(events).toContain('overflow-x-auto')
-    expect(events).toContain('sm:grid-cols-2')
+    // Query conditions now use the shared wrapping row; actual ordering,
+    // sizing and alignment are exercised by the Chromium layout suite.
+    expect(events).toContain('event-filters workspace-fixed filter-bar')
   })
 })

@@ -170,34 +170,64 @@ are conditions of a quote, not extra cards.
 
 ## Navigation and lifecycle
 
-Cards fill the content width using container queries: 1/2/3/4 columns at
-0/460/700/940 px, with 20 px gaps. Both themes, sidebar width changes,
+Administrators select **Display layout** under **System Settings → Features →
+Available Channels**. The DB-backed `available_channels_layout` setting accepts
+`card` (default) or `list` and applies to all users, including administrator
+support views. Missing, empty or invalid stored values resolve to `card`.
+Explicit invalid values return HTTP 400 before any settings are written;
+omitted or JSON-null fields preserve the saved choice without rewriting it.
+The setting is available through both public settings JSON and the
+HTML-injected first-paint configuration. It uses
+the existing settings table and requires no migration or environment variable.
+
+The list is a compact menu grouped by concrete platform, with numbered model
+rows, dotted leaders and separate copy-ID buttons. The entire model row,
+including its prices and empty space, opens the same complete quote dialog as
+cards. Hover and keyboard focus show a rounded floating highlight that moves
+between rows without intercepting clicks; reduced-motion preferences disable
+its transitions. Copying never opens details. It uses two columns at a
+results-container width of 900 px or more and one column below it. Names wrap on narrow screens. It
+retains the project theme, category/platform filters, model search and existing
+sort comparison within each platform; platform sections follow the first match
+in the sorted results. Both layouts consume the same authorized catalog,
+aggregation, effective price ranges, units and condition labels. Layout changes
+preserve filters and open details and perform no catalog request. Unlike the
+reference menu's raw-price/multiplier presentation, list prices here already
+include the effective rate exactly once. Unknown prices are not free and zero
+prices remain zero. No model descriptions or popularity flags are invented.
+
+Cards fill the content width using container queries: 1/2/3 columns at
+0/460/700 px, with 20 px gaps. Both themes, sidebar width changes,
 long IDs and mobile details are supported; only price tables scroll sideways.
 
-Search is capped at 384 px (and fits narrower screens); sorting and reset follow
-it in a left-aligned wrapping row. The directory has only platform filters and
-model name/ID search, with no group filters, headings or group counts.
+Search and sorting use the shared 240px search and 200px selection fields from
+[CONTRIBUTING.md](../CONTRIBUTING.md). Below 1024px, fields stack at full width;
+reset stays outside the fields at its natural width. The directory has category
+and platform filters plus model name/ID search, with no group filters, group
+headings or group counts.
 
 The frontend aggregates the authorized response by concrete platform plus
-case-insensitive request model ID. Each identity produces exactly one card;
-identical names on different platforms remain separate. The card preserves an
+case-insensitive request model ID. Each identity produces exactly one entry;
+identical names on different platforms remain separate. Each entry preserves an
 actual request ID for copying. All underlying group quotes, source channels and
-pricing conditions are retained in details. Search filters whole model cards,
+pricing conditions are retained in details. Search filters whole model entries,
 never removes some quotes from a matched model's comparison.
 
-Cards show per-unit input/output or unit-price ranges after applying each quote's
-own effective rate exactly once. Equal endpoints show one price. Input and output
-ranges are independent and may have minima from different groups. Distinct units
-are displayed separately within one card. Missing, unknown or non-finite
-base prices are excluded from ranges, with an incomplete-price
+Cards and list rows show per-unit input/output or unit-price ranges after
+applying each quote's own effective rate exactly once. Equal endpoints show one
+price. Input and output ranges are independent and may have minima from different
+groups. Distinct units are displayed separately within each entry. Missing,
+unknown or non-finite base prices are excluded from ranges, with an incomplete-price
 notice; explicit zero remains zero. Failed personal-rate lookup labels ranges as
 default-rate references. Minimum displayed price does not select a routing group.
 
-The catalog adapts from one to at most three columns, with 20px gaps and larger
+The card layout adapts from one to at most three columns, with 20px gaps and larger
 cards with 16px corners. Wrapped platform buttons retain their natural width.
 Desktop controls remain fixed above the independently scrolling results.
 
-Details immediately show every authorized quote in the group comparison table.
+Details identify the model in the dialog title, offer a copy-ID button and
+immediately show every authorized quote in the group comparison table. Escape,
+the close button and clicking the backdrop close the dialog and restore focus.
 Each group's complete pricing and billing conditions are available through its
 keyboard-focusable disclosure. Quote details and each resolved service tier
 (Fast/priority, Flex and Ultrafast) start collapsed; their price tables are mounted
