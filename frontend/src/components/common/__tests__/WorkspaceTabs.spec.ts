@@ -10,6 +10,22 @@ const tabs = [
 ]
 
 describe('workspace navigation', () => {
+  it('drops its own card surface when embedded in a parent card', () => {
+    // Pages that merge the tabs into their header card must not keep a second
+    // rounded surface, while every other caller keeps the standalone card.
+    const standalone = mount(WorkspaceTabs, { props: { modelValue: 'charts', tabs, label: 'Usage' } })
+    expect(standalone.get('[role=tablist]').classes()).toContain('card')
+    expect(standalone.get('[role=tablist]').classes()).toContain('workspace-tabs')
+    standalone.unmount()
+
+    const embedded = mount(WorkspaceTabs, { props: { modelValue: 'charts', tabs, label: 'Usage', embedded: true } })
+    expect(embedded.get('[role=tablist]').classes()).not.toContain('card')
+    expect(embedded.get('[role=tablist]').classes()).toContain('workspace-tabs')
+    expect(embedded.get('[role=tablist]').classes()).toContain('workspace-tabs--embedded')
+    expect(embedded.get('[role=tablist]').classes()).toContain('workspace-fixed')
+    embedded.unmount()
+  })
+
   it('keeps navigation inside a form from submitting or changing state before its owner accepts it', async () => {
     const wrapper = mount(WorkspaceTabs, { props: { modelValue: 'charts', tabs, label: 'Usage' } })
     expect(wrapper.get('[role=tablist]').attributes('aria-label')).toBe('Usage')

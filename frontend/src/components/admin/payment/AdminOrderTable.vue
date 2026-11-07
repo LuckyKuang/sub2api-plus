@@ -1,8 +1,8 @@
 <template>
   <div class="space-y-4">
     <div class="card p-4">
-      <div class="flex flex-wrap items-center gap-3">
-        <div class="min-w-0 w-full sm:flex-1 sm:max-w-64">
+      <div class="filter-bar">
+        <div class="filter-field filter-field--search">
           <input
             v-model="searchQuery"
             type="text"
@@ -11,31 +11,35 @@
             @input="handleSearch"
           />
         </div>
-        <Select
-          v-model="filters.status"
-          :options="statusFilterOptions"
-          class="w-full min-w-0 sm:w-36"
-          @change="emitFiltersChanged"
-        />
-        <Select
-          v-model="filters.payment_type"
-          :options="paymentTypeFilterOptions"
-          class="w-full min-w-0 sm:w-40"
-          @change="emitFiltersChanged"
-        />
-        <Select
-          v-model="filters.order_source"
-          :options="sourceFilterOptions"
-          :searchable="false"
-          class="w-full min-w-0 sm:w-36"
-          @change="emitFiltersChanged"
-        />
-        <Select
-          v-model="filters.order_type"
-          :options="orderTypeFilterOptions"
-          class="w-full min-w-0 sm:w-36"
-          @change="emitFiltersChanged"
-        />
+        <div class="filter-field">
+          <Select
+            v-model="filters.status"
+            :options="statusFilterOptions"
+            @change="emitFiltersChanged"
+          />
+        </div>
+        <div class="filter-field">
+          <Select
+            v-model="filters.payment_type"
+            :options="paymentTypeFilterOptions"
+            @change="emitFiltersChanged"
+          />
+        </div>
+        <div class="filter-field">
+          <Select
+            v-model="filters.order_source"
+            :options="sourceFilterOptions"
+            :searchable="false"
+            @change="emitFiltersChanged"
+          />
+        </div>
+        <div class="filter-field">
+          <Select
+            v-model="filters.order_type"
+            :options="orderTypeFilterOptions"
+            @change="emitFiltersChanged"
+          />
+        </div>
         <div class="flex flex-1 flex-wrap items-center justify-end gap-2">
           <button
             @click="emit('refresh')"

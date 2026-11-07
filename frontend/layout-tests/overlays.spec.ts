@@ -190,6 +190,24 @@ test('date range escapes a clipped scrolling card at the bottom/right edge, incl
   await expect(page.getByTestId('edge-date-result')).toHaveText('2024-04-02')
 })
 
+test('wide selection triggers keep menus within the 480px cap and the final option reachable', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.getByTestId('edge-card').evaluate(element => { element.style.width = '700px' })
+  await scrollToBottom(page.getByTestId('card-scroll'))
+  const trigger = page.getByTestId('edge-select-field').locator('.select-trigger')
+  expect((await trigger.boundingBox())!.width).toBeGreaterThan(480)
+  await trigger.click()
+  const menu = page.getByRole('listbox')
+  await expectReachable(menu)
+  expect((await menu.boundingBox())!.width).toBe(480)
+  const finalOption = menu.getByRole('option').last()
+  await finalOption.scrollIntoViewIfNeeded()
+  await expectReachable(finalOption)
+  await finalOption.click()
+  await expect(page.getByTestId('edge-select-result')).toHaveText('24')
+  await expect(menu).toHaveCount(0)
+})
+
 test('plain and searchable selection menus stay reachable at screen edges and inside a dialog', async ({ page }) => {
   await scrollToBottom(page.getByTestId('card-scroll'))
   await page.getByTestId('edge-select-field').locator('.select-trigger').click()

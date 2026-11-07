@@ -5,9 +5,9 @@
       <template #filters>
         <div class="flex flex-wrap items-center gap-3">
           <!-- Left: Search + Active Filters -->
-          <div class="flex flex-1 flex-wrap items-center gap-3">
+          <div class="filter-bar flex-1">
             <!-- Search Box -->
-            <div class="relative w-full md:w-64">
+            <div class="filter-field filter-field--search relative">
               <Icon
                 name="search"
                 size="md"
@@ -23,7 +23,7 @@
             </div>
 
             <!-- Role Filter (visible when enabled) -->
-            <div v-if="visibleFilters.has('role')" class="w-full sm:w-32">
+            <div v-if="visibleFilters.has('role')" class="filter-field">
               <Select
                 v-model="filters.role"
                 :options="[
@@ -36,7 +36,7 @@
             </div>
 
             <!-- Status Filter (visible when enabled) -->
-            <div v-if="visibleFilters.has('status')" class="w-full sm:w-32">
+            <div v-if="visibleFilters.has('status')" class="filter-field">
               <Select
                 v-model="filters.status"
                 :options="[
@@ -49,7 +49,7 @@
             </div>
 
             <!-- Group Filter (visible when enabled) -->
-            <div v-if="visibleFilters.has('group')" class="w-full sm:w-44">
+            <div v-if="visibleFilters.has('group')" class="filter-field">
               <Select
                 v-model="filters.group"
                 :options="groupFilterOptions"
@@ -62,7 +62,7 @@
             </div>
 
             <!-- API Key Group Filter (visible when enabled) -->
-            <div v-if="visibleFilters.has('apiKeyGroup')" class="w-full sm:w-44">
+            <div v-if="visibleFilters.has('apiKeyGroup')" class="filter-field">
               <Select
                 v-model="filters.apiKeyGroup"
                 :options="apiKeyGroupFilterOptions"
@@ -76,7 +76,7 @@
             <template v-for="(value, attrId) in activeAttributeFilters" :key="attrId">
               <div
                 v-if="visibleFilters.has(`attr_${attrId}`)"
-                class="relative w-full sm:w-36"
+                class="filter-field relative"
               >
                 <!-- Text/Email/URL/Textarea/Date type: styled input -->
                 <input
@@ -99,16 +99,14 @@
                 />
                 <!-- Select/Multi-select type -->
                 <template v-else-if="['select', 'multi_select'].includes(getAttributeDefinition(Number(attrId))?.type || '')">
-                  <div class="w-full">
-                    <Select
-                      :model-value="value"
-                      :options="[
-                        { value: '', label: getAttributeDefinitionName(Number(attrId)) },
-                        ...(getAttributeDefinition(Number(attrId))?.options || [])
-                      ]"
-                      @update:model-value="(val) => { updateAttributeFilter(Number(attrId), String(val ?? '')); applyFilter() }"
-                    />
-                  </div>
+                  <Select
+                    :model-value="value"
+                    :options="[
+                      { value: '', label: getAttributeDefinitionName(Number(attrId)) },
+                      ...(getAttributeDefinition(Number(attrId))?.options || [])
+                    ]"
+                    @update:model-value="(val) => { updateAttributeFilter(Number(attrId), String(val ?? '')); applyFilter() }"
+                  />
                 </template>
                 <!-- Fallback -->
                 <input

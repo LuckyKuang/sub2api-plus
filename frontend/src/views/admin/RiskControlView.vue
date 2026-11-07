@@ -6,12 +6,16 @@
       </div>
 
       <template v-else>
-        <div class="card workspace-fixed flex flex-col gap-4 px-6 py-4 lg:flex-row lg:items-center lg:justify-between">
+        <div class="card workspace-fixed flex flex-col gap-3 px-6 py-4" data-testid="risk-page-heading">
           <div>
             <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">{{ t('admin.riskControl.title') }}</h1>
             <p class="mt-1 text-sm surface-muted">{{ t('admin.riskControl.description') }}</p>
           </div>
-          <div class="flex flex-wrap items-center gap-2">
+          <!-- Tabs live inside the header card so the page keeps one surface. -->
+          <div class="w-full">
+            <WorkspaceTabs v-model="activePageTab" embedded :tabs="pageTabs" :label="t('admin.riskControl.title')" />
+          </div>
+          <div class="flex w-full flex-wrap items-center justify-end gap-2" data-testid="risk-page-actions">
             <button type="button" class="btn btn-secondary inline-flex items-center gap-2" :disabled="statusLoading" @click="loadStatus(false)">
               <Icon name="refresh" size="sm" :class="statusLoading ? 'animate-spin' : ''" />
               {{ t('admin.riskControl.refreshStatus') }}
@@ -22,8 +26,6 @@
             </button>
           </div>
         </div>
-
-        <WorkspaceTabs v-model="activePageTab" :tabs="pageTabs" :label="t('admin.riskControl.title')" />
 
         <div v-show="activePageTab === 'overview'" id="risk-overview-panel" role="tabpanel" :aria-label="t('workspace.riskControl')" class="workspace-shell workspace-scroll" data-test="risk-overview">
         <div class="workspace-stack space-y-6">

@@ -100,6 +100,33 @@ enough space for the longest supported translation and the dropdown arrow.
 Verify the expanded panel itself in both themes and narrow viewports, including
 menus inside dialogs and scrollable cards; checking only the closed trigger is insufficient.
 
+Data-table query rows read one control width everywhere. `.filter-bar` is the row
+and `.filter-field` wraps exactly one control; both live in
+`frontend/src/styles/workspace.css` and take their sizes from
+`--filter-control-width` (200px), `--filter-search-width` (240px) and
+`--filter-gap`. Action buttons stay outside `.filter-field` so they keep their
+natural width, and labels belong inside the field they name. Controls fill their
+field (`width: 100%`), so a select wrapper can never size itself to its longest
+option label. Below 1024px fields stack at full width instead of squeezing.
+Expanded select menus stay content-sized (`w-max`), floored at the same
+`--filter-control-width` and capped at 480px so one long label cannot stretch the
+panel across the viewport. `src/styles/__tests__/filterWidths.spec.ts` owns the
+stylesheet contract and the `SearchableSelect` floor; the component layout suite
+measures the rendered rows. The 480px ceiling also constrains the menu minimum
+when its trigger is wider; a smaller visible viewport relaxes the normal floor.
+Do not add ad-hoc per-page control widths to a query
+row. Dense monitor toolbars that cannot fit the unified width without breaking
+their workspace layout (currently the live requests bar and the channel status
+matrix toolbar) keep their own compact widths.
+
+Keep fields and `.filter-actions` in one wrapping `.filter-bar`; use
+`.filter-bar--inline` on intermediate component wrappers so they do not reserve
+a separate lane. Actions follow the final field, align to the control bottoms,
+and use their natural widths with the group aligned right. A label displayed
+beside its control stays with it in `.filter-pair`. Embedded `WorkspaceTabs`
+use `.workspace-tabs--embedded` so the owning card supplies the only frame and
+padding.
+
 All validation, including focused checks while iterating, must run in the
 platform validation container: Apple Containers on macOS, Docker inside WSL2
 Debian or Ubuntu on Windows, and Docker on Linux. Do not run tests, lint,

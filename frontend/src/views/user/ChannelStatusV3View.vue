@@ -34,15 +34,16 @@
             <button id="v3-platform-tab" class="tab" :class="tab === 'platforms' ? 'tab-active' : ''" role="tab" :aria-selected="tab === 'platforms'" aria-controls="v3-platform-panel" @click="tab = 'platforms'">{{ t('channelMonitorV3.platforms') }}</button>
             <button id="v3-events-tab" ref="eventsTab" class="tab" :class="tab === 'events' ? 'tab-active' : ''" role="tab" :aria-selected="tab === 'events'" aria-controls="v3-events-panel" @click="tab = 'events'">{{ t('channelMonitorV3.events') }} <span class="ml-1 text-xs">{{ summary.active_events || '' }}</span></button>
           </div>
-          <div class="flex flex-wrap items-center gap-2">
-            <Select
-              v-model="platform"
-              class="w-auto"
-              trigger-class="text-xs"
-              :aria-label="t('channelMonitorV3.filter')"
-              :searchable="false"
-              :options="[{ value: '', label: t('channelMonitorV3.allPlatforms') }, ...snapshot.platforms.map(item => ({ value: item.platform, label: platformLabel(item.platform) }))]"
-            />
+          <div class="filter-bar">
+            <div class="filter-field">
+              <Select
+                v-model="platform"
+                trigger-class="text-xs"
+                :aria-label="t('channelMonitorV3.filter')"
+                :searchable="false"
+                :options="[{ value: '', label: t('channelMonitorV3.allPlatforms') }, ...snapshot.platforms.map(item => ({ value: item.platform, label: platformLabel(item.platform) }))]"
+              />
+            </div>
             <div class="segmented-control" role="group" :aria-label="t('channelMonitorV3.range')">
               <button v-for="value in ranges" :key="value" type="button" class="segmented-option" :aria-pressed="range === value" @click="range = value">{{ t(`channelMonitorV3.ranges.${value}`) }}</button>
             </div>

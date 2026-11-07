@@ -2,9 +2,9 @@
   <AppLayout workspace>
     <TablePageLayout>
       <template #filters>
-        <div class="flex flex-wrap items-center gap-3">
+        <div class="filter-bar">
           <!-- Left: Search + Filters -->
-          <div class="w-full min-w-0 sm:flex-1 sm:max-w-64">
+          <div class="filter-field filter-field--search">
             <input
               v-model="searchQuery"
               type="text"
@@ -13,12 +13,13 @@
               @input="handleSearch"
             />
           </div>
-          <Select
-            v-model="filters.status"
-            :options="statusFilterOptions"
-            class="w-full sm:w-40"
-            @change="handleStatusChange"
-          />
+          <div class="filter-field">
+            <Select
+              v-model="filters.status"
+              :options="statusFilterOptions"
+              @change="handleStatusChange"
+            />
+          </div>
 
           <!-- Right: Action buttons -->
           <div class="ml-auto flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">

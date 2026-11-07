@@ -181,7 +181,10 @@ describe('Prompt Audit components', () => {
       const search = wrapper.get<HTMLButtonElement>('[data-test="event-search"]')
       expect(search.element.form).toBe(form.element)
       expect(form.findAll('label')).toHaveLength(12)
-      expect(form.find('[data-test="event-search"]').exists()).toBe(false)
+      const actions = form.get('.event-actions')
+      expect(search.element.parentElement).toBe(actions.element)
+      expect(form.findAll('label').at(-1)!.element.nextElementSibling).toBe(actions.element)
+      expect(form.element.lastElementChild).toBe(actions.element)
       const filters: PromptEventFilters = {
         decision: 'flag', risk_level: 'high', endpoint: '/v1/responses', client_ip: '203.0.113.9',
         group_id: '3', user_id: '7', api_key_id: '11', request_id: 'request-42',

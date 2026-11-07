@@ -9,6 +9,12 @@
   /* One page width token; the admin console takes it at full width, the user
      console narrows it and opts into its own cap. */
   --shell-page-width: 100%;
+  /* Data-table filter bars read one control width everywhere; the free-text
+     search field is the only wider sibling. Both floors are mirrored by
+     SearchableSelect's dropdownMinimumWidth and .select-dropdown-portal. */
+  --filter-control-width: 200px;
+  --filter-search-width: 240px;
+  --filter-gap: 12px;
   --shell-header-height: 64px;
   --shell-inset-top: max(var(--shell-gutter), env(safe-area-inset-top));
   --shell-inset-bottom: max(var(--shell-gutter), env(safe-area-inset-bottom));

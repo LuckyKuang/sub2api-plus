@@ -1,5 +1,10 @@
 <template>
-  <div ref="navigation" class="card workspace-tabs workspace-fixed" role="tablist" :aria-label="label">
+  <div
+    ref="navigation"
+    :class="embedded ? 'workspace-tabs workspace-tabs--embedded workspace-fixed' : 'card workspace-tabs workspace-fixed'"
+    role="tablist"
+    :aria-label="label"
+  >
     <button
       v-for="tab in tabs"
       :key="tab.value"
@@ -23,6 +28,8 @@ const props = defineProps<{
   modelValue: T
   tabs: { value: T; label: string; panelId?: string; disabled?: boolean }[]
   label: string
+  /** Render inside a parent card instead of as its own card. */
+  embedded?: boolean
 }>()
 const emit = defineEmits<{ 'update:modelValue': [value: T] }>()
 const navigation = ref<HTMLElement | null>(null)

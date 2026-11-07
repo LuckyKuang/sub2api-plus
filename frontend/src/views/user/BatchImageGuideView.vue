@@ -4,18 +4,23 @@
       <template #filters>
         <div class="flex flex-col gap-3">
           <div class="flex flex-col gap-3 2xl:flex-row 2xl:items-center 2xl:justify-between">
-            <div class="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[260px_160px_144px_152px] 2xl:w-auto">
-              <div class="min-w-0">
+            <div class="filter-bar w-full 2xl:w-auto">
+              <div class="filter-field filter-field--search">
                 <SearchInput
                   v-model="filters.taskName"
                   :placeholder="t('batchImage.filters.searchTaskName')"
-                  class="w-full"
                   @search="applyFilters"
                 />
               </div>
-              <Select v-model="filters.apiKeyId" :options="apiKeyFilterOptions" class="w-full" @change="applyFilters" />
-              <Select v-model="filters.status" :options="statusFilterOptions" class="w-full" @change="applyFilters" />
-              <Select v-model="filters.downloaded" :options="downloadFilterOptions" class="w-full" @change="applyFilters" />
+              <div class="filter-field">
+                <Select v-model="filters.apiKeyId" :options="apiKeyFilterOptions" @change="applyFilters" />
+              </div>
+              <div class="filter-field">
+                <Select v-model="filters.status" :options="statusFilterOptions" @change="applyFilters" />
+              </div>
+              <div class="filter-field">
+                <Select v-model="filters.downloaded" :options="downloadFilterOptions" @change="applyFilters" />
+              </div>
             </div>
             <div class="flex flex-wrap items-center justify-start gap-2 sm:justify-end 2xl:flex-shrink-0">
               <button type="button" class="btn btn-secondary" :disabled="loadingJobs" @click="resetFilters">
