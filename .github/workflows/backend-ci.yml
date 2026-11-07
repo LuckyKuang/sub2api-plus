@@ -26,6 +26,8 @@ concurrency:
 
 jobs:
   deployment-config:
+    needs: repository-policy
+    if: needs.repository-policy.outputs.profile == 'full'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -37,17 +39,7 @@ jobs:
       - uses: ./.github/actions/prepare-validation
         with:
           lane: deployment-config
-      - name: Classify validation profile in the validation container
-        id: validation-profile
-        uses: ./.github/actions/classify-release-finalization
-        with:
-          base: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
-          head: ${{ github.event.pull_request.head.sha || github.sha }}
-          branch: ${{ github.head_ref || github.ref_name }}
-          default-branch: ${{ github.event.repository.default_branch }}
-          event: ${{ github.event_name }}
       - name: Run deployment-config checks in the validation container
-        if: steps.validation-profile.outputs.profile == 'full'
         env:
           VALIDATION_BASE: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
           RELEASE_TAG: ${{ inputs.release-tag }}
@@ -56,6 +48,8 @@ jobs:
           --base "$VALIDATION_BASE"
 
   test-unit:
+    needs: repository-policy
+    if: needs.repository-policy.outputs.profile == 'full'
     name: ${{ matrix.runner == 'ubuntu-24.04-arm' && 'test-unit-arm64' || 'test-unit' }}
     runs-on: ${{ matrix.runner }}
     strategy:
@@ -72,17 +66,7 @@ jobs:
       - uses: ./.github/actions/prepare-validation
         with:
           lane: test-unit
-      - name: Classify validation profile in the validation container
-        id: validation-profile
-        uses: ./.github/actions/classify-release-finalization
-        with:
-          base: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
-          head: ${{ github.event.pull_request.head.sha || github.sha }}
-          branch: ${{ github.head_ref || github.ref_name }}
-          default-branch: ${{ github.event.repository.default_branch }}
-          event: ${{ github.event_name }}
       - name: Run test-unit checks in the validation container
-        if: steps.validation-profile.outputs.profile == 'full'
         env:
           VALIDATION_BASE: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
           RELEASE_TAG: ${{ inputs.release-tag }}
@@ -91,6 +75,8 @@ jobs:
           --base "$VALIDATION_BASE"
 
   test-integration:
+    needs: repository-policy
+    if: needs.repository-policy.outputs.profile == 'full'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -102,17 +88,7 @@ jobs:
       - uses: ./.github/actions/prepare-validation
         with:
           lane: test-integration
-      - name: Classify validation profile in the validation container
-        id: validation-profile
-        uses: ./.github/actions/classify-release-finalization
-        with:
-          base: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
-          head: ${{ github.event.pull_request.head.sha || github.sha }}
-          branch: ${{ github.head_ref || github.ref_name }}
-          default-branch: ${{ github.event.repository.default_branch }}
-          event: ${{ github.event_name }}
       - name: Run test-integration checks in the validation container
-        if: steps.validation-profile.outputs.profile == 'full'
         env:
           VALIDATION_BASE: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
           RELEASE_TAG: ${{ inputs.release-tag }}
@@ -122,18 +98,30 @@ jobs:
 
   test:
     runs-on: ubuntu-24.04
-    needs: [test-unit, test-integration]
+    needs: [repository-policy, test-unit, test-integration]
     if: always()
     steps:
-      - name: Require both architecture unit jobs and integration
+      - name: Require the checks selected by the verified profile
         env:
+          POLICY_RESULT: ${{ needs.repository-policy.result }}
+          VALIDATION_PROFILE: ${{ needs.repository-policy.outputs.profile }}
           UNIT_RESULT: ${{ needs.test-unit.result }}
           INTEGRATION_RESULT: ${{ needs.test-integration.result }}
         run: |
-          test "$UNIT_RESULT" = success
-          test "$INTEGRATION_RESULT" = success
+          set -eu
+          test "$POLICY_RESULT" = success
+          if [ "$VALIDATION_PROFILE" = release-finalization ]; then
+            test "$UNIT_RESULT" = skipped
+            test "$INTEGRATION_RESULT" = skipped
+          else
+            test "$VALIDATION_PROFILE" = full
+            test "$UNIT_RESULT" = success
+            test "$INTEGRATION_RESULT" = success
+          fi
 
   frontend:
+    needs: repository-policy
+    if: needs.repository-policy.outputs.profile == 'full'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -145,17 +133,7 @@ jobs:
       - uses: ./.github/actions/prepare-validation
         with:
           lane: frontend
-      - name: Classify validation profile in the validation container
-        id: validation-profile
-        uses: ./.github/actions/classify-release-finalization
-        with:
-          base: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
-          head: ${{ github.event.pull_request.head.sha || github.sha }}
-          branch: ${{ github.head_ref || github.ref_name }}
-          default-branch: ${{ github.event.repository.default_branch }}
-          event: ${{ github.event_name }}
       - name: Run frontend checks in the validation container
-        if: steps.validation-profile.outputs.profile == 'full'
         env:
           VALIDATION_BASE: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
           RELEASE_TAG: ${{ inputs.release-tag }}
@@ -164,6 +142,8 @@ jobs:
           --base "$VALIDATION_BASE"
 
   golangci-lint:
+    needs: repository-policy
+    if: needs.repository-policy.outputs.profile == 'full'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -175,17 +155,7 @@ jobs:
       - uses: ./.github/actions/prepare-validation
         with:
           lane: golangci-lint
-      - name: Classify validation profile in the validation container
-        id: validation-profile
-        uses: ./.github/actions/classify-release-finalization
-        with:
-          base: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
-          head: ${{ github.event.pull_request.head.sha || github.sha }}
-          branch: ${{ github.head_ref || github.ref_name }}
-          default-branch: ${{ github.event.repository.default_branch }}
-          event: ${{ github.event_name }}
       - name: Run golangci-lint checks in the validation container
-        if: steps.validation-profile.outputs.profile == 'full'
         env:
           VALIDATION_BASE: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
           RELEASE_TAG: ${{ inputs.release-tag }}
@@ -194,6 +164,8 @@ jobs:
           --base "$VALIDATION_BASE"
 
   goreleaser-config:
+    needs: repository-policy
+    if: needs.repository-policy.outputs.profile == 'full'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -205,17 +177,7 @@ jobs:
       - uses: ./.github/actions/prepare-validation
         with:
           lane: goreleaser-config
-      - name: Classify validation profile in the validation container
-        id: validation-profile
-        uses: ./.github/actions/classify-release-finalization
-        with:
-          base: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
-          head: ${{ github.event.pull_request.head.sha || github.sha }}
-          branch: ${{ github.head_ref || github.ref_name }}
-          default-branch: ${{ github.event.repository.default_branch }}
-          event: ${{ github.event_name }}
       - name: Run goreleaser-config checks in the validation container
-        if: steps.validation-profile.outputs.profile == 'full'
         env:
           VALIDATION_BASE: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
           RELEASE_TAG: ${{ inputs.release-tag }}
@@ -226,6 +188,8 @@ jobs:
   repository-policy:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    outputs:
+      profile: ${{ steps.validation-profile.outputs.profile }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

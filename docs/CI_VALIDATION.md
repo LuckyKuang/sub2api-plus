@@ -31,12 +31,19 @@ result reuse; the pinned compilation and dependency caches remain available.
 | `backend-security` | Pinned govulncheck | Additional security coverage |
 | `frontend-security` | Production audit and documented exception gate | Same local audit helper; no duplicate audit in frontend CI |
 
-The required `test` context requires both native unit jobs and integration to
-succeed. Failed/skipped dependencies cannot pass through an unconditional
-aggregator. The full local command inventory also runs CI regression tests and
+For the full profile, the required `test` context requires both native unit jobs
+and integration to succeed. Failed/skipped dependencies cannot pass through an
+unconditional aggregator. Verified finalization instead requires successful
+repository policy and deliberately skipped unit/integration jobs. Missing or
+unknown profiles and failed policy always fail the aggregator.
+The full local command inventory also runs CI regression tests and
 gateway/test-tag checks formerly owned only by CI.
 Release archive, workflow, OCI integrity and immutable pricing regressions and
 the image script syntax check are also in both full profiles.
+Admin CLI regressions run the real command against loopback HTTP fixtures in
+both local full validation and the CI repository-policy lane. They cover the
+JWT/password/TOTP export contract, body-only scope, output privacy and failures;
+they never operate a deployed instance.
 
 The image resolves Go, Node, pnpm, lint, GoReleaser, govulncheck and PyYAML from repository
 declarations. Node uses an exact Node 24 LTS pin in
@@ -106,6 +113,31 @@ frontend and vulnerability suites are omitted for this verified profile.
 Ordinary release preparation remains full-profile. Preparing/reusing a
 toolchain image is not repeating the application matrix.
 
+CI classifies once in `repository-policy`, which verifies the published Release,
+immutable assets and focused mapping. The other full CI jobs depend on its
+successful `full` output and are skipped before allocating runners/containers
+for finalization. Security Scan classifies once in `backend-security`; its
+vulnerability scan runs only for `full`, and `frontend-security` starts only
+after that job succeeds with `full`. Ordinary PRs and scheduled security scans
+retain the complete applicable suites.
+
+Existing required status contexts remain unchanged. Finalization promotion
+requires `sub2api/local-validation`, `repository-policy`, `test` and
+`backend-security` to pass. Only `deployment-config`, `frontend`,
+`golangci-lint`, `goreleaser-config` and `frontend-security` may report `SKIPPED`.
+Failed, cancelled, missing or unknown skipped contexts cannot authorize merge.
+These exceptions apply only after independent typed-proof, publication and
+deterministic-tree verification. Ordinary promotion rejects every skipped
+required check.
+
+Finalization branch commits keep PR workflows enabled. Protected auto-merge
+sets the exact subject `docs(release): mark <tag> published [skip ci]`, using
+GitHub's [native skip instruction](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/skip-workflow-runs)
+to suppress CI and Security Scan on the resulting main push. Completion checks
+the actual merge's exact parents, tree, subject and containment in main; it does
+not wait for those absent workflows. This exception does not change ordinary
+main CI, weekly security scans or the exact-main provenance required for tags.
+
 ## CI authority cutover prerequisites
 
 These coverage jobs do not publish local-success or replacement-success
@@ -123,7 +155,8 @@ Before CI-only submission is activated:
    missing/skipped/failed/foreign/stale evidence.
 5. Require the new gate before removing the old one; synchronize CLI proof,
    promotion, repository rules and docs. Submit migration under the old rules.
-   Preserve exact actual merged-main CI/Security Scan.
+   Preserve exact actual merged-main CI/Security Scan for release candidates;
+   retain the independently verified finalization exception above.
 
 Inspection found an active strict default-branch ruleset with required local,
 CI and security contexts and no bypass actors. This is a personal repository

@@ -55,6 +55,15 @@ REQUIRED_PR_STATUS_CONTEXTS = frozenset(
         "frontend-security",
     }
 )
+FINALIZATION_SKIPPABLE_CONTEXTS = frozenset(
+    {
+        "deployment-config",
+        "frontend",
+        "golangci-lint",
+        "goreleaser-config",
+        "frontend-security",
+    }
+)
 PRICING_ASSETS = frozenset({"model-pricing.json", "model-pricing-manifest.json"})
 FINALIZATION_ALLOWED_PATHS = frozenset(
     {
@@ -119,6 +128,7 @@ class PullRequest:
     auto_merge_enabled: bool
     body: str
     url: str
+    auto_merge_subject: str | None = None
 
 
 def display(command: Sequence[str]) -> str:
@@ -744,6 +754,7 @@ def pull_request_details(repository: str, number: int) -> PullRequest:
         head_repo_owner = head_repo.get("owner") if isinstance(head_repo, dict) else None
         head_owner = str(head_repo_owner.get("login", "")) if isinstance(head_repo_owner, dict) else ""
         state = "MERGED" if data.get("merged_at") else str(data["state"]).upper()
+        auto_merge = data.get("auto_merge")
         return PullRequest(
             number=int(data["number"]),
             state=state,
@@ -759,6 +770,7 @@ def pull_request_details(repository: str, number: int) -> PullRequest:
             auto_merge_enabled=data.get("auto_merge") is not None,
             body=str(data.get("body") or ""),
             url=str(data.get("html_url") or number),
+            auto_merge_subject=auto_merge.get("commit_title") if isinstance(auto_merge, dict) else None,
         )
     except (KeyError, TypeError, ValueError) as error:
         raise ReleaseCliError("GitHub pull-request API returned incomplete metadata") from error
@@ -878,7 +890,12 @@ def finalization_tree_command(
     ]
 
 
-def require_required_pr_checks(repository: str, number: int) -> None:
+def require_required_pr_checks(
+    repository: str, number: int, *, profile: str = FULL_PROFILE,
+) -> None:
+    if profile not in (FULL_PROFILE, FINALIZATION_PROFILE):
+        raise ReleaseCliError(f"unsupported PR validation profile: {profile}")
+    skippable = FINALIZATION_SKIPPABLE_CONTEXTS if profile == FINALIZATION_PROFILE else frozenset()
     for attempt in range(DISCOVERY_ATTEMPTS):
         result = run_command([
             "gh", "pr", "checks", str(number), "--repo", repository,
@@ -893,10 +910,17 @@ def require_required_pr_checks(repository: str, number: int) -> None:
             raise ReleaseCliError("required PR checks failed or GitHub API was unavailable")
         if not isinstance(checks, list) or any(not isinstance(check, dict) for check in checks):
             raise ReleaseCliError("invalid required PR check response")
-        if any(check.get("bucket") not in ("pass", "pending") for check in checks):
+        def accepted(check: dict[str, object]) -> bool:
+            return check.get("bucket") == "pass" or (
+                check.get("name") in skippable
+                and check.get("bucket") == "skipping"
+                and check.get("state") == "SKIPPED"
+            )
+
+        if any(check.get("bucket") != "pending" and not accepted(check) for check in checks):
             raise ReleaseCliError("a required PR check failed, was cancelled or skipped")
         names = {check.get("name") for check in checks}
-        if REQUIRED_PR_STATUS_CONTEXTS <= names and all(check.get("bucket") == "pass" for check in checks):
+        if REQUIRED_PR_STATUS_CONTEXTS <= names and all(accepted(check) for check in checks):
             return
         if attempt + 1 < DISCOVERY_ATTEMPTS:
             time.sleep(POLL_SECONDS)
@@ -1016,7 +1040,7 @@ def promote_pull_request(
             finalization_tree_command(proof, pr.head_branch),
         )
     try:
-        require_required_pr_checks(repository, number)
+        require_required_pr_checks(repository, number, profile=proof.profile)
     except PromotionPending as error:
         raise PromotionPending(
             f"{error}: {pr.url}\nRetry: release-cli promote-pr --tag {tag} --pr {number}"
@@ -1031,21 +1055,22 @@ def promote_pull_request(
             f"{remote}/{default_branch} changed while checks were running; "
             "rerun submit-pr"
         )
-    if not latest.auto_merge_enabled:
+    merge_subject = finalization_merge_subject(tag) if proof.profile == FINALIZATION_PROFILE else None
+    reset_auto_merge = latest.auto_merge_enabled and merge_subject is not None and latest.auto_merge_subject != merge_subject
+    if reset_auto_merge:
+        run_step("Replace finalization auto-merge message", [
+            "gh", "pr", "merge", str(number), "--repo", repository, "--disable-auto",
+        ])
+    if not latest.auto_merge_enabled or reset_auto_merge:
+        merge_command = [
+            "gh", "pr", "merge", str(number), "--repo", repository,
+            "--auto", "--merge", "--match-head-commit", proof.head,
+        ]
+        if merge_subject is not None:
+            merge_command.extend(["--subject", merge_subject])
         run_step(
             "Enable protected GitHub auto-merge",
-            [
-                "gh",
-                "pr",
-                "merge",
-                str(number),
-                "--repo",
-                repository,
-                "--auto",
-                "--merge",
-                "--match-head-commit",
-                proof.head,
-            ],
+            merge_command,
         )
 
     merged: PullRequest | None = None
@@ -1086,6 +1111,10 @@ def promote_pull_request(
         raise ReleaseCliError(
             f"merged commit {merge_sha} is not contained by {remote}/{default_branch}"
         )
+    if proof.profile == FINALIZATION_PROFILE:
+        require_finalization_merge(merged, proof, tag)
+        print(f"Finalization PR #{number} merged and verified at {merge_sha}; main CI is skipped.")
+        return merge_sha
     try:
         watch_branch_runs(repository, default_branch, merge_sha)
     except PromotionPending as error:
@@ -1094,6 +1123,25 @@ def promote_pull_request(
         ) from error
     print(f"Pull request #{number} promoted to {default_branch} at {merge_sha}.")
     return merge_sha
+
+
+def finalization_merge_subject(tag: str) -> str:
+    validate_tag(tag)
+    return f"docs(release): mark {tag} published [skip ci]"
+
+
+def require_finalization_merge(pr: PullRequest, proof: ValidationProof, tag: str) -> None:
+    if proof.profile != FINALIZATION_PROFILE or proof.tag != tag or not pr.merge_commit:
+        raise ReleaseCliError("merged finalization does not match its typed tag proof")
+    parents = capture(['git', 'show', '-s', '--format=%P', pr.merge_commit]).split()
+    if parents != [proof.base, proof.head]:
+        raise ReleaseCliError("merged finalization parents differ from the recorded proof")
+    if capture(['git', 'rev-parse', pr.merge_commit + '^{tree}']) != capture(
+            ['git', 'rev-parse', proof.head + '^{tree}']):
+        raise ReleaseCliError("merged finalization tree differs from the validated head")
+    subject = capture(['git', 'show', '-s', '--format=%s', pr.merge_commit])
+    if subject != finalization_merge_subject(tag):
+        raise ReleaseCliError("merged finalization has an unexpected subject; expected the exact [skip ci] message")
 
 
 def resume_merged_finalization(repository, pr, tag, remote, default_branch):
@@ -1109,12 +1157,7 @@ def resume_merged_finalization(repository, pr, tag, remote, default_branch):
         raise ReleaseCliError(f"check out recorded finalization head {proof.head} before resuming")
     require_local_validation_status(repository, proof.head, proof.profile)
     fetch_default_branch(remote, default_branch)
-    parents = capture(['git', 'show', '-s', '--format=%P', pr.merge_commit]).split()
-    if parents != [proof.base, proof.head]:
-        raise ReleaseCliError("merged finalization parents differ from the recorded proof")
-    if capture(['git', 'rev-parse', pr.merge_commit + '^{tree}']) != capture(
-            ['git', 'rev-parse', proof.head + '^{tree}']):
-        raise ReleaseCliError("merged finalization tree differs from the validated head")
+    require_finalization_merge(pr, proof, tag)
     run_step('Verify finalization merge containment', [
         'git', 'merge-base', '--is-ancestor', pr.merge_commit, f'{remote}/{default_branch}',
     ])
@@ -1123,13 +1166,7 @@ def resume_merged_finalization(repository, pr, tag, remote, default_branch):
     verify_release(repository, tag)
     run_release_check('Validate finalized release metadata', finalization_metadata_command(tag))
     run_release_check('Validate deterministic finalization tree', finalization_tree_command(proof, pr.head_branch))
-    try:
-        watch_branch_runs(repository, default_branch, pr.merge_commit)
-    except PromotionPending as error:
-        raise PromotionPending(
-            f"{error}: {pr.url}\nRetry: release-cli promote-pr --tag {tag} --pr {pr.number}"
-        ) from error
-    print(f"Finalization PR #{pr.number} and exact merged-main Actions succeeded: {pr.merge_commit}.")
+    print(f"Finalization PR #{pr.number} merged and verified at {pr.merge_commit}; main CI is skipped.")
     return pr.merge_commit
 
 

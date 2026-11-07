@@ -44,8 +44,11 @@ are owned by `.github/release-tools/README.md`.
 
 The local full submission gate remains required until enforceable trusted CI
 origin and protected cutover are verified under `docs/CI_VALIDATION.md`.
-Finalization automatically promotes its deterministic PR and completes only
-after exact merged-main Actions pass. Already merged finalization requires
+Release candidates require successful PR and exact merged-main CI/Security Scan.
+Finalization automatically promotes its deterministic PR after focused protected
+checks, then verifies exact merge parents/tree, main containment and the
+deterministic `[skip ci]` merge subject instead of waiting for main workflows.
+Its branch commits never skip PR workflows. Already merged finalization requires
 independent proof, tree, publication and merge verification before resuming.
 
 ## Protected Semantics
@@ -128,6 +131,29 @@ Retain only project validation images and dependency caches whose deterministic
 identities match the current pinned toolchain and dependency-lock inputs, and
 remove stale project validation generations without pruning unrelated projects
 or global runtime resources.
+
+## Documentation and Skill Maintenance
+
+`Documentation Maintenance` is a required protected category. Its owning source
+is [CONTRIBUTING.md](../../../CONTRIBUTING.md#documentation-and-skill-maintenance).
+Preserve the user's exact documentation/code conflict sentence, limited to
+descriptive documentation and implementation conventions. Explicit current
+requirements, security boundaries and authoritative protocol/test contracts
+take precedence over existing implementation; stale guidance cannot justify
+a business defect or weakened tests.
+
+When use reveals an issue or a behavior change, update all affected
+documentation, rules, skills and their owning references/scripts/tests in the
+same change. Maintain external sources at their owning location when authorized
+and writable. Report every discovered inconsistency with the documentation and
+code locations, the difference, resolution and any remaining external/read-only
+update with its reason. Scope that report to inspected sources.
+
+The validator protects the sentence, its scope and precedence, synchronized
+maintenance, per-inconsistency reporting and the owning-document link. Tests
+model removal and weakening of each requirement independently from validator
+constants. These structural checks do not prove that all affected sources have
+been updated or that implementation conventions satisfy business requirements.
 
 ## Validation
 

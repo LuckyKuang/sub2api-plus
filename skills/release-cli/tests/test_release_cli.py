@@ -23,6 +23,7 @@ sys.modules[SPEC.name] = release_cli
 SPEC.loader.exec_module(release_cli)
 
 TAG = "v1.2.3+custom.009"
+FINALIZATION_SUBJECT = "docs(release): mark v1.2.3+custom.009 published [skip ci]"
 BASE = "a" * 40
 HEAD = "b" * 40
 MERGE = "c" * 40
@@ -162,7 +163,7 @@ class ValidationProofTest(unittest.TestCase):
             },
             "mergeable_state": "clean",
             "merge_commit_sha": MERGE,
-            "auto_merge": {"merge_method": "merge"},
+            "auto_merge": {"merge_method": "merge", "commit_title": FINALIZATION_SUBJECT},
             "body": marker(),
             "html_url": "https://github.com/LuckyKuang/sub2api-plus/pull/17",
         }
@@ -177,6 +178,7 @@ class ValidationProofTest(unittest.TestCase):
         self.assertEqual(HEAD, pr.head_oid)
         self.assertEqual(MERGE, pr.merge_commit)
         self.assertTrue(pr.auto_merge_enabled)
+        self.assertEqual(FINALIZATION_SUBJECT, pr.auto_merge_subject)
 
     def test_marker_requires_exact_base_and_head(self) -> None:
         proof = release_cli.parse_validation_proof(marker())
@@ -805,6 +807,150 @@ class FinalizationTest(unittest.TestCase):
 
 
 class FinalizationAutomationTest(unittest.TestCase):
+    def focused_checks(self):
+        # The four proof/guard contexts must execute. Only these five full-suite
+        # contexts are irrelevant after deterministic finalization is verified.
+        return [
+            {"name": name, "bucket": "pass", "state": "SUCCESS"}
+            for name in ("sub2api/local-validation", "repository-policy", "test", "backend-security")
+        ] + [
+            {"name": name, "bucket": "skipping", "state": "SKIPPED"}
+            for name in ("deployment-config", "frontend", "golangci-lint",
+                         "goreleaser-config", "frontend-security")
+        ]
+
+    def test_only_verified_finalization_accepts_enumerated_job_skips(self):
+        checks = self.focused_checks()
+        with mock.patch.object(release_cli, "run_command", return_value=subprocess.CompletedProcess([], 0, json.dumps(checks), "")):
+            release_cli.require_required_pr_checks(REPOSITORY, 17, profile="release-finalization")
+            with self.assertRaises(release_cli.ReleaseCliError):
+                release_cli.require_required_pr_checks(REPOSITORY, 17, profile="full")
+
+    def test_focused_checks_reject_failed_cancelled_unknown_or_missing_evidence(self):
+        for index in range(9):
+            for bucket, state in (("fail", "FAILURE"), ("cancel", "CANCELLED"), ("skipping", "NEUTRAL")):
+                checks = self.focused_checks()
+                checks[index] = {**checks[index], "bucket": bucket, "state": state}
+                with self.subTest(index=index, bucket=bucket, state=state), \
+                     mock.patch.object(release_cli, "run_command", return_value=subprocess.CompletedProcess([], 0, json.dumps(checks), "")):
+                    with self.assertRaises(release_cli.ReleaseCliError):
+                        release_cli.require_required_pr_checks(REPOSITORY, 17, profile="release-finalization")
+            checks = self.focused_checks()
+            del checks[index]
+            with self.subTest(missing=index), \
+                 mock.patch.object(release_cli, "DISCOVERY_ATTEMPTS", 1), \
+                 mock.patch.object(release_cli, "run_command", return_value=subprocess.CompletedProcess([], 0, json.dumps(checks), "")):
+                with self.assertRaises(release_cli.PromotionPending):
+                    release_cli.require_required_pr_checks(REPOSITORY, 17, profile="release-finalization")
+        for index in range(4):
+            checks = self.focused_checks()
+            checks[index].update(bucket="skipping", state="SKIPPED")
+            with self.subTest(skipped_proof=index), \
+                 mock.patch.object(release_cli, "run_command", return_value=subprocess.CompletedProcess([], 0, json.dumps(checks), "")):
+                with self.assertRaises(release_cli.ReleaseCliError):
+                    release_cli.require_required_pr_checks(REPOSITORY, 17, profile="release-finalization")
+        checks = self.focused_checks() + [{"name": "future-required-check", "bucket": "skipping", "state": "SKIPPED"}]
+        with mock.patch.object(release_cli, "run_command", return_value=subprocess.CompletedProcess([], 0, json.dumps(checks), "")):
+            with self.assertRaises(release_cli.ReleaseCliError):
+                release_cli.require_required_pr_checks(REPOSITORY, 17, profile="release-finalization")
+
+    def test_finalization_sets_merge_skip_marker_and_never_waits_for_main_ci(self):
+        # User contract: PR checks still run, and only the exact finalization
+        # merge subject suppresses main push workflows through GitHub's marker.
+        proof = release_cli.ValidationProof(BASE, HEAD, profile="release-finalization", tag=TAG)
+        for enabled, subject in ((False, None), (True, None), (True, FINALIZATION_SUBJECT)):
+            candidate = release_cli.PullRequest(**{
+                **pull_request(auto_merge=enabled).__dict__,
+                "head_branch": "release/finalize-1.2.3-custom.009",
+                "body": marker(profile="release-finalization", tag=TAG),
+                "auto_merge_subject": subject,
+            })
+            merged = release_cli.PullRequest(**{**candidate.__dict__, "state": "MERGED", "merge_commit": MERGE})
+            with (
+                self.subTest(enabled=enabled, subject=subject),
+                mock.patch.object(release_cli, "require_clean_worktree"),
+                mock.patch.object(release_cli, "repository_default_branch", return_value="main"),
+                mock.patch.object(release_cli, "require_protected_auto_merge"),
+                mock.patch.object(release_cli, "pull_request_details", side_effect=[candidate, candidate, merged]),
+                mock.patch.object(release_cli, "require_promotable_pr", return_value=proof),
+                mock.patch.object(release_cli, "current_head", return_value=HEAD),
+                mock.patch.object(release_cli, "fetch_default_branch", return_value=BASE),
+                mock.patch.object(release_cli, "setup_git_transport"),
+                mock.patch.object(release_cli, "require_published_remote_tag", return_value=mock.Mock(target="d" * 40)),
+                mock.patch.object(release_cli, "require_release_workflow_success"),
+                mock.patch.object(release_cli, "verify_release"),
+                mock.patch.object(release_cli, "run_release_check"),
+                mock.patch.object(release_cli, "require_required_pr_checks") as required,
+                mock.patch.object(release_cli, "run_step") as step,
+                mock.patch.object(release_cli, "run_command", return_value=subprocess.CompletedProcess([], 0, "")),
+                mock.patch.object(release_cli, "capture", side_effect=[BASE + " " + HEAD, "tree", "tree", FINALIZATION_SUBJECT]),
+                mock.patch.object(release_cli, "watch_branch_runs") as watch,
+            ):
+                self.assertEqual(release_cli.promote_pull_request(REPOSITORY, 17, TAG, None, "origin"), MERGE)
+            required.assert_called_once_with(REPOSITORY, 17, profile="release-finalization")
+            watch.assert_not_called()
+            commands = [call.args[1] for call in step.call_args_list]
+            if enabled and subject == FINALIZATION_SUBJECT:
+                self.assertEqual(commands, [])
+            else:
+                self.assertEqual(commands[-1], [
+                    "gh", "pr", "merge", "17", "--repo", REPOSITORY,
+                    "--auto", "--merge", "--match-head-commit", HEAD,
+                    "--subject", FINALIZATION_SUBJECT,
+                ])
+                self.assertEqual(len(commands), 2 if enabled else 1)
+                if enabled:
+                    self.assertEqual(commands[0][-1], "--disable-auto")
+            self.assertFalse(any("--admin" in command for command in commands))
+
+    def test_real_merge_verification_binds_subject_parents_and_tree(self):
+        # Exercise real Git metadata, including a merge whose subject claims
+        # finalization but whose tree includes an extra change.
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            def git(*args):
+                return subprocess.run(["git", *args], cwd=root, check=True,
+                                      capture_output=True, text=True).stdout.strip()
+            git("init", "--quiet")
+            git("config", "user.name", "Finalization Test")
+            git("config", "user.email", "finalization@example.invalid")
+            (root / "UPSTREAM.md").write_text("planned\n")
+            git("add", ".")
+            git("commit", "--quiet", "-m", "base")
+            base = git("rev-parse", "HEAD")
+            git("checkout", "--quiet", "-b", "release/finalize-1.2.3-custom.009")
+            (root / "UPSTREAM.md").write_text("published\n")
+            git("commit", "--quiet", "-am", "docs(release): mark published")
+            head = git("rev-parse", "HEAD")
+            proof = release_cli.ValidationProof(base, head, profile="release-finalization", tag=TAG)
+            branch_tree = git("rev-parse", "HEAD^{tree}")
+            for subject, tree, parents, accepted in (
+                (FINALIZATION_SUBJECT, branch_tree, [base, head], True),
+                ("docs(release): mark published", branch_tree, [base, head], False),
+                ("unrelated change [skip ci]", branch_tree, [base, head], False),
+                (FINALIZATION_SUBJECT, branch_tree, [head, base], False),
+                (FINALIZATION_SUBJECT, branch_tree, [head], False),
+            ):
+                commit_args = ["commit-tree", tree]
+                for parent in parents:
+                    commit_args.extend(["-p", parent])
+                merge = git(*commit_args, "-m", subject)
+                pr = release_cli.PullRequest(**{**self.merged().__dict__, "merge_commit": merge})
+                with self.subTest(subject=subject, parents=parents), mock.patch.object(release_cli, "ROOT", root):
+                    if accepted:
+                        release_cli.require_finalization_merge(pr, proof, TAG)
+                    else:
+                        with self.assertRaises(release_cli.ReleaseCliError):
+                            release_cli.require_finalization_merge(pr, proof, TAG)
+            (root / "unrelated.py").write_text("print('extra change')\n")
+            git("add", ".")
+            unexpected_tree = git("write-tree")
+            merge = git("commit-tree", unexpected_tree, "-p", base, "-p", head, "-m", FINALIZATION_SUBJECT)
+            pr = release_cli.PullRequest(**{**self.merged().__dict__, "merge_commit": merge})
+            with mock.patch.object(release_cli, "ROOT", root):
+                with self.assertRaisesRegex(release_cli.ReleaseCliError, "tree differs"):
+                    release_cli.require_finalization_merge(pr, proof, TAG)
+
     def test_check_discovery_pending_is_distinct_from_api_and_failed_checks(self):
         cases = [
             (subprocess.CompletedProcess([], 8, json.dumps([{'name': 'test', 'bucket': 'pending'}]), ''), release_cli.PromotionPending),
@@ -840,12 +986,12 @@ class FinalizationAutomationTest(unittest.TestCase):
             'head_branch': release_cli.finalization_branch(TAG),
             'body': marker(profile=release_cli.FINALIZATION_PROFILE, tag=TAG)})
 
-    def test_merged_resume_independently_checks_tree_publication_and_exact_main(self):
+    def test_merged_resume_verifies_merge_and_publication_without_waiting_for_main_ci(self):
         pr = self.merged()
         with mock.patch.object(release_cli, 'current_head', return_value=HEAD), \
              mock.patch.object(release_cli, 'require_local_validation_status') as status, \
              mock.patch.object(release_cli, 'fetch_default_branch'), \
-             mock.patch.object(release_cli, 'capture', side_effect=[BASE + ' ' + HEAD, 'tree', 'tree']), \
+             mock.patch.object(release_cli, 'capture', side_effect=[BASE + ' ' + HEAD, 'tree', 'tree', FINALIZATION_SUBJECT]), \
              mock.patch.object(release_cli, 'run_step') as steps, \
              mock.patch.object(release_cli, 'require_published_remote_tag', return_value=mock.Mock(target='d' * 40)) as tag, \
              mock.patch.object(release_cli, 'require_release_workflow_success') as workflow, \
@@ -859,7 +1005,7 @@ class FinalizationAutomationTest(unittest.TestCase):
         workflow.assert_called_once_with(REPOSITORY, TAG, 'd' * 40)
         published.assert_called_once_with(REPOSITORY, TAG)
         self.assertEqual(focused.call_count, 2)
-        watch.assert_called_once_with(REPOSITORY, 'main', MERGE)
+        watch.assert_not_called()
         self.assertEqual(steps.call_count, 1)
         self.assertNotIn('merge', steps.call_args.args[1])
 
@@ -900,6 +1046,9 @@ class FinalizationAutomationTest(unittest.TestCase):
         self.assertIn('submit-pr', submit)
         self.assertIn('release-finalization', submit)
         self.assertNotIn('full', submit)
+        commit = next(call.args[1] for call in step.call_args_list
+                      if call.args[0] == "Commit release finalization")
+        self.assertEqual(commit, ["git", "commit", "-m", "docs(release): mark v1.2.3+custom.009 published"])
 
     def test_existing_finalization_branch_resumes_without_new_commit(self):
         with mock.patch.object(release_cli, 'require_published_remote_tag', return_value=mock.Mock(target=MERGE)), \

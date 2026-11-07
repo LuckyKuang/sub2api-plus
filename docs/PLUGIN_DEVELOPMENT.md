@@ -8,7 +8,8 @@
 
 建议使用以下环境：
 
-- Go 1.21 或更高版本；
+- 使用本仓库 Go SDK（`backend/pkg/pluginapi/v1`）时，Go 工具链须满足
+  [`backend/go.mod`](../backend/go.mod) 的声明；独立实现 gRPC 客户端时，按所用语言及生成代码的要求准备工具链；
 - Node.js（仅在插件 UI 使用 JavaScript 时需要）；
 - Git；
 - 与目标部署环境一致的构建工具链。

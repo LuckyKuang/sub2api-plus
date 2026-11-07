@@ -26,6 +26,13 @@ matrix and does not wait for Actions. Feature-branch pushes do not start remote
 Use `watch` when remote observation is needed. Use `submit-pr`, never ordinary
 push, for the final PR candidate.
 
+Verified release finalization keeps focused PR workflows enabled and uses
+`[skip ci]` only on its protected merge. Complete it through release-cli's
+exact parents/tree/subject and main-containment checks; `watch` cannot observe
+main workflows suppressed by that marker. This exception does not apply to
+ordinary or release-candidate merges. See
+[the finalization contract](../../../docs/RELEASING.md#finalize-through-a-pr).
+
 ## Validated Submission
 
 The default `full` `submit-pr` performs this fail-closed sequence:
@@ -71,7 +78,7 @@ Commands are maintained in `tools/validation_checks.py` and shared with CI.
 the local proof remains required. CI full suites do not produce local success.
 
 - Go module tidiness, unit tests, integration tests, and golangci-lint.
-- Compress CLI, push CLI, and release CLI self-tests.
+- Compress CLI, push CLI, release CLI, and admin CLI self-tests.
 - Frozen pnpm install, lint, typecheck, Vitest, production build, and production
   audit exception policy.
 - Release policy, release metadata, README synchronization, Codex outbound

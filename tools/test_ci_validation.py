@@ -12,6 +12,8 @@ import tempfile
 import unittest
 from unittest import mock
 
+import yaml
+
 import ci_validation
 import validation_checks
 import validation_runtime
@@ -62,6 +64,13 @@ class FullCoverageTests(unittest.TestCase):
         local = {tuple(step.command) for step in validation_checks.full_steps(ROOT, python="python3")}
         self.assertIn(expected, local)
         self.assertIn(expected, self.commands("deployment-config"))
+
+    def test_admin_export_contract_regressions_are_required_before_promotion(self) -> None:
+        command = ("node", "--test", "skills/sub2api-admin/tests/test_sub2api_admin.cjs")
+        self.assertIn(command, self.commands("repository-policy"))
+        self.assertIn(command, [tuple(step.command) for step in validation_checks.full_steps(
+            ROOT, python="python3", migration_base=BASE,
+        )])
 
     def test_integration_entrypoints_execute_fresh_service_setup_and_business_tests(self) -> None:
         # TestMain setup and external PostgreSQL/Redis state are not a reusable
@@ -196,35 +205,70 @@ class WorkflowCoverageTests(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/backend-ci.yml").read_text()
         self.assertIn("runner: [ubuntu-24.04, ubuntu-24.04-arm]", workflow)
         self.assertIn("fail-fast: false", workflow)
-        self.assertIn("needs: [test-unit, test-integration]", workflow)
+        self.assertIn("needs: [repository-policy, test-unit, test-integration]", workflow)
         self.assertIn('test "$UNIT_RESULT" = success', workflow)
         self.assertIn('test "$INTEGRATION_RESULT" = success', workflow)
 
-    def test_each_candidate_lane_prepares_and_classifies_before_checks(self) -> None:
-        import re
-        for filename, lanes in [
-            ("backend-ci.yml", ("deployment-config", "test-unit", "test-integration",
-                                "frontend", "golangci-lint", "goreleaser-config",
-                                "repository-policy")),
-            ("security-scan.yml", ("backend-security", "frontend-security")),
+    def test_full_jobs_are_gated_before_allocating_validation_containers(self) -> None:
+        # docs/CI_VALIDATION.md: classify once per workflow; only verified
+        # finalization omits full lanes, at job level rather than step level.
+        for filename, owner, lanes in [
+            ("backend-ci.yml", "repository-policy",
+             ("deployment-config", "test-unit", "test-integration",
+              "frontend", "golangci-lint", "goreleaser-config")),
+            ("security-scan.yml", "backend-security", ("frontend-security",)),
         ]:
             workflow = (ROOT / ".github/workflows" / filename).read_text()
-            jobs = dict(re.findall(r"^  ([a-z0-9-]+):\n(.*?)(?=^  [a-z0-9-]+:\n|\Z)",
-                                   workflow, re.M | re.S))
+            jobs = yaml.safe_load(workflow)["jobs"]
             self.assertIn("contents: read", workflow)
             self.assertNotIn("contents: write", workflow)
             self.assertNotIn("statuses: write", workflow)
             self.assertNotIn("checks: write", workflow)
+            classifiers = [
+                (job, step)
+                for job, definition in jobs.items()
+                for step in definition.get("steps", [])
+                if step.get("uses") == "./.github/actions/classify-release-finalization"
+            ]
+            self.assertEqual([job for job, _ in classifiers], [owner])
+            self.assertEqual(jobs[owner]["outputs"]["profile"], "${{ steps.validation-profile.outputs.profile }}")
             for lane in lanes:
                 with self.subTest(workflow=filename, lane=lane):
-                    body = jobs[lane]
-                    prepare = body.index("uses: ./.github/actions/prepare-validation")
-                    classify = body.index("uses: ./.github/actions/classify-release-finalization")
-                    check = body.index("tools/ci_validation.py lane --lane " + lane)
-                    self.assertLess(prepare, classify)
-                    self.assertLess(classify, check)
-                    self.assertIn("if: steps.validation-profile.outputs.profile == 'full'", body)
-                    self.assertIn("persist-credentials: false", body)
+                    self.assertEqual(jobs[lane]["needs"], owner)
+                    self.assertEqual(jobs[lane]["if"], f"needs.{owner}.outputs.profile == 'full'")
+                    steps = jobs[lane]["steps"]
+                    self.assertTrue(any(step.get("uses") == "./.github/actions/prepare-validation" for step in steps))
+                    checkout = next(step for step in steps if step.get("uses", "").startswith("actions/checkout@"))
+                    self.assertIs(checkout["with"]["persist-credentials"], False)
+
+    def test_required_test_gate_rejects_failures_and_unverified_skips(self) -> None:
+        # Execute the actual Actions guard, using expected outcomes derived from
+        # the full/finalization contracts rather than from its implementation.
+        jobs = yaml.safe_load((ROOT / ".github/workflows/backend-ci.yml").read_text())["jobs"]
+        script = jobs["test"]["steps"][0]["run"]
+        cases = [
+            ("full", "success", "success", "success", True),
+            ("release-finalization", "success", "skipped", "skipped", True),
+            ("", "success", "skipped", "skipped", False),
+            ("unknown", "success", "success", "success", False),
+        ]
+        for result in ("failure", "cancelled", "skipped", ""):
+            cases.extend([
+                ("full", "success", result, "success", False),
+                ("full", "success", "success", result, False),
+                ("release-finalization", result, "skipped", "skipped", False),
+            ])
+        for result in ("failure", "cancelled", "success", ""):
+            cases.extend([
+                ("release-finalization", "success", result, "skipped", False),
+                ("release-finalization", "success", "skipped", result, False),
+            ])
+        for profile, policy, unit, integration, accepted in cases:
+            with self.subTest(profile=profile, policy=policy, unit=unit, integration=integration):
+                env = dict(os.environ, VALIDATION_PROFILE=profile, POLICY_RESULT=policy,
+                           UNIT_RESULT=unit, INTEGRATION_RESULT=integration)
+                result = subprocess.run(["bash", "-c", script], env=env, capture_output=True)
+                self.assertEqual(result.returncode == 0, accepted)
 
     def test_classification_itself_runs_in_container(self) -> None:
         action = (ROOT / ".github/actions/classify-release-finalization/action.yml").read_text()

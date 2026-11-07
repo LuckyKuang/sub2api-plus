@@ -6,7 +6,7 @@ startup. The runner records each filename and SHA256 checksum in
 
 Migration `305_api_key_native_access_preferences.sql` adds empty-default client
 and endpoint presentation preferences. They grant no endpoint access and change
-no routing; omitted updates preserve values. See [native Composite access](../../docs/COMPOSITE_GROUPS.md#native-endpoint-access-and-key-preferences).
+no routing; omitted updates preserve values. See [native Composite access](../../docs/COMPOSITE_GROUPS.md#optional-unified-endpoint-and-native-access).
 
 Migration `304_usage_outbound_metadata.sql` adds nullable administrator dispatch
 evidence. Historical rows stay NULL; the existing usage accuracy CHECK and

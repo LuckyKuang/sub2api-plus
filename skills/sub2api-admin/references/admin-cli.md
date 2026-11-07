@@ -9,7 +9,7 @@ export SUB2API_ADMIN_API_KEY='<admin api key>'
 # export SUB2API_JWT='<admin access_token>'
 ```
 
-后台鉴权优先使用 `SUB2API_ADMIN_API_KEY` 发送 `x-api-key`，未设置时使用 `SUB2API_JWT` 发送 `Authorization: Bearer <jwt>`。如果返回 `INVALID_ADMIN_KEY`，重新生成管理员 API Key；如果使用 JWT，先用管理员邮箱密码登录并从响应的 `data.access_token` 复制 token：
+普通命令优先使用 `SUB2API_ADMIN_API_KEY` 发送 `x-api-key`，未设置时使用 `SUB2API_JWT` 发送 `Authorization: Bearer <jwt>`。账号导出必须使用 JWT，且要求取消设置管理员 API Key。如果返回 `INVALID_ADMIN_KEY`，重新生成管理员 API Key；如果使用 JWT，先完成管理员登录（启用 TOTP 时还需完成二次验证），再使用最终响应的 `data.access_token`。密码登录入口为：
 
 ```bash
 curl -sS "$SUB2API_BASE_URL/api/v1/auth/login" \
@@ -42,12 +42,59 @@ node scripts/sub2api-admin.js accounts temp-unschedulable 40
 node scripts/sub2api-admin.js accounts antigravity-default-model-mapping
 ```
 
-`accounts export` 会包含账号凭据和 token，建议写入文件，不要直接刷屏：
+### Account export
+
+导出使用管理员 JWT。先将 `SUB2API_JWT` 设置为已完成登录的管理员 access token，
+并取消设置 `SUB2API_ADMIN_API_KEY`；同时设置两者也会被命令拒绝，避免改变其他命令的鉴权优先级。
+
+在仓库外的受保护本地文件中保存确认信息，例如 `/secure/account-export-confirmation.json`：
+
+```json
+{
+  "password": "your-administrator-password",
+  "totp_code": "012345"
+}
+```
+
+`password` 必填，发送时保留原始值；`totp_code` 必须为字符串以保留前导零，未启用
+step-up 时可以省略。确认文件由用户准备，限制为本人可读写，使用后删除；不要把内容
+放入命令行参数、查询 URL、聊天或 Git。
 
 ```bash
-node scripts/sub2api-admin.js accounts export --ids 40,39 --file accounts-export.json
-node scripts/sub2api-admin.js accounts export --platform openai --type oauth --include-proxies false --file accounts-export.json
+unset SUB2API_ADMIN_API_KEY
+node scripts/sub2api-admin.js accounts export \
+  --confirmation-file /secure/account-export-confirmation.json \
+  --ids 40,39 --include-proxies false --file /secure/accounts-export.json
+
+node scripts/sub2api-admin.js accounts export \
+  --confirmation-file /secure/account-export-confirmation.json \
+  --platform openai --type oauth --file /secure/accounts-export.json
 ```
+
+`--ids` 与筛选条件互斥；均未指定时导出所有账号。支持 `--platform`、`--type`、
+`--status`、`--group`、`--search`、`--privacy-mode`、`--sort-by` 和 `--sort-order`。
+`--group` 使用正整数分组 ID 或 `ungrouped`，不接受分组名称；列表接口遵循相同约定。
+账号 ID 必须通过 `--ids` 指定，多余的位置参数会在请求前被拒绝，避免误导出全部账号。
+`--include-proxies` 发送布尔值；省略时使用后端默认值。
+
+当前接口为 `GET /api/v1/admin/accounts/export/requirements` 和
+`POST /api/v1/admin/accounts/export`。POST 必须使用管理员 JWT 会话，提交管理员
+`password`，并在启用 step-up 时提交 `totp_code`；管理员 API Key 不能授权导出。
+导出范围通过请求体的 `ids` 或 `filters` 指定，`include_proxies` 控制代理导出。
+命令先查询要求；查询失败、响应格式不正确或缺少所需 TOTP 时停止，不提交导出。
+POST 仍由服务器重新检查密码、当前 TOTP 策略和审计要求；失败后不自动重试或改用旧接口。
+以 [后端导出请求和校验](../../../backend/internal/handler/admin/account_data.go)
+及 [前端调用](../../../frontend/src/api/admin/accounts.ts) 为准。
+
+`--file` 在目标目录的私有临时目录中写入权限为 `0600` 的完整备份，成功后原子替换
+目标路径。覆盖时不会跟随符号链接或改写其他硬链接；写入或替换失败保留旧备份，
+并清理临时文件。
+终端只输出文件路径、账号数 `count` 和排除的影子账号数 `skipped_shadows`。
+影子账号的独立配置不在此备份中，恢复时需按后端契约重建和调整。
+未指定 `--file` 时仍会将完整备份输出到 stdout；备份含凭据和 token，不要输出到聊天。
+
+[导出契约回归](../tests/test_sub2api_admin.cjs)使用本地模拟服务，不访问实际实例。
+按 [CONTRIBUTING.md](../../../CONTRIBUTING.md#development-checks) 在平台验证容器中执行。
 
 ### 单账号写入
 
@@ -236,7 +283,8 @@ node scripts/sub2api-admin.js api POST /admin/accounts/bulk-update \
 - `POST /api/v1/admin/accounts/bulk-update`
 - `POST /api/v1/admin/accounts/batch-refresh`
 - `POST /api/v1/admin/accounts/batch-clear-error`
-- `GET /api/v1/admin/accounts/data`
+- `GET /api/v1/admin/accounts/export/requirements`
+- `POST /api/v1/admin/accounts/export` (JWT + password + conditional TOTP)
 - `POST /api/v1/admin/accounts/data`
 - `POST /api/v1/admin/accounts/import/codex-session`
 - `POST /api/v1/admin/accounts/sync/crs/preview`

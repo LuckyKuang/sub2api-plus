@@ -50,6 +50,73 @@ class CompressCliTest(unittest.TestCase):
             self.validate_text(changed), "missing required category 'Test Design'"
         )
 
+    def test_missing_documentation_maintenance_category_fails(self) -> None:
+        changed = "\n".join(
+            line for line in self.valid_document.splitlines()
+            if not line.startswith("|Documentation Maintenance:")
+        )
+        self.assert_error_contains(
+            self.validate_text(changed),
+            "missing required category 'Documentation Maintenance'",
+        )
+
+    def test_documentation_maintenance_requirements_cannot_be_removed_or_weakened(self) -> None:
+        # User-approved scope and CONTRIBUTING.md#documentation-and-skill-maintenance:
+        # descriptive conventions follow code; governing contracts still prevail;
+        # affected sources are updated together and each mismatch is reported.
+        cases = (
+            (
+                "For descriptive documentation and implementation conventions only:",
+                "For all documentation, requirements, security policies and tests:",
+            ),
+            (
+                "When a repository’s documentation and its existing code disagree, follow the conventions used in the existing code, and in your final reply point out each inconsistency you found between the documentation and the code.",
+                "Follow outdated descriptive guidance and omit discrepancies from the final reply.",
+            ),
+            (
+                "Explicit current requirements, security boundaries, and authoritative protocol/test contracts take precedence over existing implementation",
+                "Existing implementation always overrides requirements and security boundaries",
+            ),
+            (
+                "When issues or changes are found during use, update all affected documentation, rules, skills, and their owning references/scripts/tests in the same change",
+                "Only update the edited document and postpone related rules and skills",
+            ),
+            (
+                "Report each discovered inconsistency with documentation/code locations, resolution, and any remaining external/read-only update with its reason",
+                "Report only a general summary and omit unresolved external sources",
+            ),
+            (
+                "Follow CONTRIBUTING.md#documentation-and-skill-maintenance",
+                "Follow any skill description without checking its owning contract",
+            ),
+        )
+        for required, weakened in cases:
+            for replacement in ("", weakened):
+                with self.subTest(required=required, replacement=replacement):
+                    self.assertIn(required, self.valid_document)
+                    changed = self.valid_document.replace(required, replacement)
+                    self.assert_error_contains(
+                        self.validate_text(changed),
+                        "category 'Documentation Maintenance' is missing protected content",
+                    )
+
+    def test_cli_rejects_missing_maintenance_rule_without_rewriting_input(self) -> None:
+        changed = "\n".join(
+            line for line in self.valid_document.splitlines()
+            if not line.startswith("|Documentation Maintenance:")
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "AGENTS.md"
+            path.write_text(changed, encoding="utf-8")
+            before = path.read_bytes()
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "check", str(path)],
+                cwd=ROOT, capture_output=True, text=True, check=False,
+            )
+            self.assertEqual(result.returncode, 1, result.stdout)
+            self.assertIn("missing required category 'Documentation Maintenance'", result.stdout)
+            self.assertEqual(path.read_bytes(), before)
+
     def test_business_test_design_requirements_cannot_be_removed_or_weakened(self) -> None:
         # Independent policy cases from CONTRIBUTING.md#requirement-based-test-design;
         # do not generate cases from the validator's protected-fragment constants.
@@ -312,8 +379,12 @@ class CompressCliTest(unittest.TestCase):
         cases = (
             ("Retain the local full gate until enforceable trusted CI origin and protected cutover are verified",
              "Remove the local gate whenever a same-name CI check succeeds"),
-            ("Finalization automatically promotes its deterministic PR and completes only after exact merged-main Actions pass",
+            ("Release candidates require successful PR plus exact merged-main CI and Security Scan",
+             "Release candidates may skip main checks"),
+            ("Finalization requires successful focused PR gates and completes only after verifying exact merge parents/tree, main containment, and its deterministic [skip ci] merge subject",
              "Finalization completes when its PR is submitted"),
+            ("Finalization branch commits must not skip PR workflows; only its verified merge skips main CI",
+             "Finalization branch commits may skip all PR workflows"),
             ("Resume already-merged finalization only after independent proof, tree, publication, and merge verification",
              "Resume merged finalization by observing any successful main run"),
             ("Only real publication may use write permissions and the release Environment; read-only rehearsals cannot authorize publication",

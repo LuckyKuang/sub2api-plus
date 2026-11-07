@@ -907,34 +907,34 @@ Sub2API Plus supports TLS fingerprint simulation to make requests appear as if t
 
 ### Default Behavior
 
-- Built-in `claude_cli_v2` profile simulates Node.js 20.x + OpenSSL 3.x
-- JA3 Hash: `1a28e69016765d92e3b381168d68922c`
-- JA4: `t13d5911h1_a33745022dd6_1f22a2ca17c4`
-- Profile selection: `accountID % profileCount`
+- The built-in default uses the captured Node.js 24.x ClientHello parameters in
+  [dialer.go](../backend/internal/pkg/tlsfingerprint/dialer.go).
+- Default JA3 hash: `44f88fca027f27bab4bb08d4af15f23e`.
+- Default JA4: `t13d1714h1_5b57614c22b0_7baf387fc6ff` (domain-name variant).
+- TLS fingerprinting is opt-in for Anthropic OAuth/setup-token accounts through
+  `extra.enable_tls_fingerprint`. An explicit profile ID selects a stored
+  template; `-1` selects a random stored template. An unbound/missing template
+  falls back to the built-in default. See
+  [profile resolution](../backend/internal/service/tls_fingerprint_profile_service.go).
 
 ### Configuration
 
-```yaml
-gateway:
-  tls_fingerprint:
-    enabled: true  # Global switch
-    profiles:
-      # Simple profile (uses default cipher suites)
-      profile_1:
-        name: "Profile 1"
+Manage templates in the administrator UI or the
+`/api/v1/admin/tls-fingerprint-profiles` CRUD API, then bind the template to the
+account through `extra.tls_fingerprint_profile_id`. The legacy
+`gateway.tls_fingerprint` YAML fields are still decoded but are not consumed by
+the current account/profile resolution path; they do not enable accounts or
+populate stored templates.
 
-      # Profile with custom cipher suites (use compact array format)
-      profile_2:
-        name: "Profile 2"
-        cipher_suites: [4866, 4867, 4865, 49199, 49195, 49200, 49196]
-        curves: [29, 23, 24]
-        point_formats: 0
+Example template body for `POST /api/v1/admin/tls-fingerprint-profiles`:
 
-      # Another custom profile
-      profile_3:
-        name: "Profile 3"
-        cipher_suites: [4865, 4866, 4867, 49199, 49200]
-        curves: [29, 23, 24, 25]
+```json
+{
+  "name": "Custom Profile",
+  "cipher_suites": [4866, 4867, 4865, 49199, 49195, 49200, 49196],
+  "curves": [29, 23, 24],
+  "point_formats": [0]
+}
 ```
 
 ### Profile Fields
@@ -944,7 +944,11 @@ gateway:
 | `name` | string | Display name (required) |
 | `cipher_suites` | []uint16 | Cipher suites in decimal. Empty = default |
 | `curves` | []uint16 | Elliptic curves in decimal. Empty = default |
-| `point_formats` | []uint8 | EC point formats. Empty = default |
+| `point_formats` | []uint16 | EC point formats. Empty = default |
+
+The complete template schema, including extension order, ALPN and signature
+algorithms, is defined by the
+[admin request types](../backend/internal/handler/admin/tls_fingerprint_profile_handler.go).
 
 ### Common Values Reference
 

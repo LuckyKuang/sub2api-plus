@@ -1453,19 +1453,19 @@ type GatewayUsageRecordConfig struct {
 	AutoScaleCooldownSeconds int `mapstructure:"auto_scale_cooldown_seconds"`
 }
 
-// TLSFingerprintConfig TLS指纹伪装配置
-// 用于模拟 Claude CLI (Node.js) 的 TLS 握手特征，避免被识别为非官方客户端
+// TLSFingerprintConfig 保留历史 YAML 字段的解析结构。
+// 当前运行时由账号设置和 TLSFingerprintProfileService 解析数据库模板；不读取此结构。
 type TLSFingerprintConfig struct {
-	// Enabled: 是否全局启用TLS指纹功能
+	// Enabled: 历史全局开关（当前运行时不读取）
 	Enabled bool `mapstructure:"enabled"`
-	// Profiles: 预定义的TLS指纹配置模板
-	// key 为模板名称，如 "claude_cli_v2", "chrome_120" 等
+	// Profiles: 历史 YAML 模板（当前运行时使用数据库模板）
+	// key 为自定义模板名称
 	Profiles map[string]TLSProfileConfig `mapstructure:"profiles"`
 }
 
-// TLSProfileConfig 单个TLS指纹模板的配置
-// 所有列表字段为空时使用内置默认值（Claude CLI 2.x / Node.js 20.x）
-// 建议通过 TLS 指纹采集工具 (tests/tls-fingerprint-web) 获取完整配置
+// TLSProfileConfig 历史 YAML 中单个 TLS 指纹模板的配置结构。
+// 运行时模板的空列表默认值由 internal/pkg/tlsfingerprint/dialer.go 定义（Node.js 24.x）。
+// 采集验证入口见 internal/pkg/tlsfingerprint/dialer_capture_test.go。
 type TLSProfileConfig struct {
 	// Name: 模板显示名称
 	Name string `mapstructure:"name"`
@@ -1488,7 +1488,7 @@ type TLSProfileConfig struct {
 	// PSKModes: PSK密钥交换模式（如 [1] 即 psk_dhe_ke）
 	PSKModes []uint16 `mapstructure:"psk_modes"`
 	// Extensions: TLS扩展类型ID列表，按发送顺序排列
-	// 空则使用内置默认顺序 [0,11,10,35,16,22,23,13,43,45,51]
+	// 运行时空列表使用 dialer.go 的 defaultExtensionOrder
 	// GREASE值(如0x0a0a)会自动插入GREASE扩展
 	Extensions []uint16 `mapstructure:"extensions"`
 }

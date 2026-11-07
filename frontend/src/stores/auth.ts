@@ -340,7 +340,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   /**
    * User registration
-   * @param userData - Registration data (username, email, password)
+   * @param userData - Email/password and optional verification, CAPTCHA and referral fields
    * @returns Promise resolving to the newly registered and authenticated user
    * @throws Error if registration fails
    */

@@ -26,7 +26,15 @@ line count.
    use `|Category:value` and each category must be unique.
 5. Keep detailed commands and explanations in their linked documents. Do not
    enforce a fixed line-count target.
-6. Run the validator and tests after every change:
+6. Apply the [documentation and skill maintenance contract](../../CONTRIBUTING.md#documentation-and-skill-maintenance).
+   Preserve the requested documentation/code conflict rule and its restriction
+   to descriptive documentation and implementation conventions. Explicit
+   current requirements, security boundaries and authoritative protocol/test
+   contracts still take precedence. Synchronize affected rules, documentation,
+   skills, references, helpers and tests in the same change, and report each
+   discovered inconsistency and its resolution or remaining update in the
+   final reply.
+7. Run the validator and tests after every change:
 
        python3 skills/compress-cli/scripts/compress_cli.py check AGENTS.md
        python3 skills/compress-cli/tests/test_compress_cli.py

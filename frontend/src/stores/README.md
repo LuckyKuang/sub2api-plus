@@ -1,197 +1,72 @@
 # Pinia Stores Documentation
 
-This directory contains all Pinia stores for the Sub2API frontend application.
+[The store barrel](index.ts) exports the frontend's shared Pinia stores.
+Read each store's returned API before adding a caller; internal refresh state
+and helper functions are not necessarily public actions.
 
-## Stores Overview
+## Auth Store
 
-### 1. Auth Store (`auth.ts`)
+[auth.ts](auth.ts) owns `user`, `token`, read-only `runMode` and
+`pendingAuthSession`, plus authentication/admin/simple-mode computed state.
+`isAuthenticated` requires both a token and a user.
 
-Manages user authentication state, login/logout, and token persistence.
+- `login(LoginRequest)` accepts email/password and returns either an auth
+  response or a TOTP challenge. A challenge does not set authenticated state.
+  Use [isTotp2FARequired](../api/auth.ts) and then `login2FA(tempToken, code)`.
+- `loginWithPasskey` uses the passkey API and accepts a CAPTCHA proof when required.
+- `register(RegisterRequest)` accepts email/password and optional verification,
+  CAPTCHA, invitation, promotion and referral fields. See the
+  [registration view](../views/auth/RegisterView.vue) for its settings-driven flow.
+- `checkAuth()` restores saved state, refreshes user data and schedules token
+  refresh. The router invokes it on first navigation.
+- `setToken`, `refreshUser`, `logout`, `setPendingAuthSession` and
+  `clearPendingAuthSession` handle the other session transitions.
 
-**State:**
+Use [LoginView](../views/auth/LoginView.vue) for a complete login example.
+Request types live in [types/index.ts](../types/index.ts). Do not assume that a
+resolved `login()` promise means authentication is complete.
 
-- `user: User | null` - Current authenticated user
-- `token: string | null` - JWT authentication token
+The store persists session and refresh data in localStorage using constants
+declared in auth.ts, including pending authentication where needed. Use store
+actions rather than manually rewriting those keys. See
+[authentication documentation](../../../docs/AUTHENTICATION.md) for the owning
+security behavior.
 
-**Computed:**
+## App Store
 
-- `isAuthenticated: boolean` - Whether user is currently authenticated
-
-**Actions:**
-
-- `login(credentials)` - Authenticate user with username/password
-- `register(userData)` - Register new user account
-- `logout()` - Clear authentication and logout
-- `checkAuth()` - Restore session from localStorage
-- `refreshUser()` - Fetch latest user data from server
-
-### 2. App Store (`app.ts`)
-
-Manages global UI state including sidebar, loading indicators, and toast notifications.
-
-**State:**
-
-- `sidebarCollapsed: boolean` - Sidebar collapsed state
-- `loading: boolean` - Global loading state
-- `toasts: Toast[]` - Active toast notifications
-
-**Computed:**
-
-- `hasActiveToasts: boolean` - Whether any toasts are active
-
-**Actions:**
-
-- `toggleSidebar()` - Toggle sidebar state
-- `setSidebarCollapsed(collapsed)` - Set sidebar state explicitly
-- `setLoading(isLoading)` - Set loading state
-- `showToast(type, message, duration?)` - Show toast notification
-- `showSuccess(message, duration?)` - Show success toast
-- `showError(message, duration?)` - Show error toast
-- `showInfo(message, duration?)` - Show info toast
-- `showWarning(message, duration?)` - Show warning toast
-- `hideToast(id)` - Hide specific toast
-- `clearAllToasts()` - Clear all toasts
-- `withLoading(operation)` - Execute async operation with loading state
-- `withLoadingAndError(operation, errorMessage?)` - Execute with loading and error handling
-- `reset()` - Reset store to defaults
-
-## Usage Examples
-
-### Auth Store
-
-```typescript
-import { useAuthStore } from '@/stores'
-
-// In component setup
-const authStore = useAuthStore()
-
-// Initialize on app startup
-authStore.checkAuth()
-
-// Login
-try {
-  await authStore.login({ username: 'user', password: 'pass' })
-  console.log('Logged in:', authStore.user)
-} catch (error) {
-  console.error('Login failed:', error)
-}
-
-// Check authentication
-if (authStore.isAuthenticated) {
-  console.log('User is logged in:', authStore.user?.username)
-}
-
-// Logout
-authStore.logout()
-```
-
-### App Store
+[app.ts](app.ts) owns sidebar/mobile navigation, loading/toasts, cached public
+settings, appearance and administrator version information.
 
 ```typescript
 import { useAppStore } from '@/stores'
 
-// In component setup
 const appStore = useAppStore()
-
-// Sidebar control
 appStore.toggleSidebar()
-appStore.setSidebarCollapsed(true)
+appStore.setMobileOpen(false)
+appStore.showSuccess('Saved')
 
-// Loading state
-appStore.setLoading(true)
-// ... do work
-appStore.setLoading(false)
-
-// Or use helper
-await appStore.withLoading(async () => {
-  const data = await fetchData()
-  return data
-})
-
-// Toast notifications
-appStore.showSuccess('Operation completed!')
-appStore.showError('Something went wrong!', 5000)
-appStore.showInfo('FYI: This is informational')
-appStore.showWarning('Be careful!')
-
-// Custom toast
-const toastId = appStore.showToast('info', 'Custom message', undefined) // No auto-dismiss
-// Later...
+const toastId = appStore.showToast('info', 'Waiting for completion')
+// Omitting duration leaves this toast visible until explicitly dismissed.
 appStore.hideToast(toastId)
 ```
 
-### Combined Usage in Vue Component
+The store also provides loading helpers and cache invalidation actions.
+Check its returned API and the relevant callers before resetting shared state.
 
-```vue
-<script setup lang="ts">
-import { useAuthStore, useAppStore } from '@/stores'
-import { onMounted } from 'vue'
+## Other stores
 
-const authStore = useAuthStore()
-const appStore = useAppStore()
+| Source | Responsibility |
+| --- | --- |
+| [adminSettings.ts](adminSettings.ts) | Administrator settings and feature configuration. |
+| [adminSupportView.ts](adminSupportView.ts) | Explicit administrator support context. |
+| [adminCompliance.ts](adminCompliance.ts) | Compliance-related administrator state. |
+| [announcements.ts](announcements.ts) | Announcements and read state. |
+| [onboarding.ts](onboarding.ts) | Onboarding tour state. |
+| [payment.ts](payment.ts) | Payment configuration. |
+| [subscriptions.ts](subscriptions.ts) | Subscription state. |
 
-onMounted(() => {
-  // Check for existing session
-  authStore.checkAuth()
-})
+## Verification
 
-async function handleLogin(username: string, password: string) {
-  try {
-    await appStore.withLoading(async () => {
-      await authStore.login({ username, password })
-    })
-    appStore.showSuccess('Welcome back!')
-  } catch (error) {
-    appStore.showError('Login failed. Please check your credentials.')
-  }
-}
-
-async function handleLogout() {
-  authStore.logout()
-  appStore.showInfo('You have been logged out.')
-}
-</script>
-
-<template>
-  <div>
-    <button @click="appStore.toggleSidebar">Toggle Sidebar</button>
-
-    <div v-if="appStore.loading">Loading...</div>
-
-    <div v-if="authStore.isAuthenticated">
-      Welcome, {{ authStore.user?.username }}!
-      <button @click="handleLogout">Logout</button>
-    </div>
-    <div v-else>
-      <button @click="handleLogin('user', 'pass')">Login</button>
-    </div>
-  </div>
-</template>
-```
-
-## Persistence
-
-- **Auth Store**: Token and user data are automatically persisted to `localStorage`
-  - Keys: `auth_token`, `auth_user`
-  - Restored on `checkAuth()` call
-- **App Store**: No persistence (UI state resets on page reload)
-
-## TypeScript Support
-
-All stores are fully typed with TypeScript. Import types from `@/types`:
-
-```typescript
-import type { User, Toast, ToastType } from '@/types'
-```
-
-## Testing
-
-Stores can be reset to initial state:
-
-```typescript
-// Auth store
-authStore.logout() // Clears all auth state
-
-// App store
-appStore.reset() // Resets to defaults
-```
+See [the store tests](__tests__) for observable session, cache and reset behavior.
+Run checks inside the platform validation container from
+[CONTRIBUTING.md](../../../CONTRIBUTING.md#development-checks).

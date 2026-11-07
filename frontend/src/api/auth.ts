@@ -169,7 +169,7 @@ export async function login2FA(request: TotpLogin2FARequest): Promise<AuthRespon
 
 /**
  * User registration
- * @param userData - Registration data (username, email, password)
+ * @param userData - Email/password and optional verification, CAPTCHA and referral fields
  * @returns Authentication response with token and user data
  */
 export async function register(userData: RegisterRequest): Promise<AuthResponse> {

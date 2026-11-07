@@ -60,6 +60,12 @@ def full_steps(
             "backend-lint-policy",
         ),
         ValidationStep(
+            "Admin CLI self-tests",
+            ["node", "--test", "skills/sub2api-admin/tests/test_sub2api_admin.cjs"],
+            root,
+            "backend-lint-policy",
+        ),
+        ValidationStep(
             "Backend unit tests",
             ["go", "test", "-tags=unit", "./..."],
             backend,
@@ -250,7 +256,7 @@ CI_STEP_NAMES = {
     ),
     "golangci-lint": ("Backend lint",),
     "repository-policy": (
-        "Compress CLI self-tests", "Push CLI self-tests", "Release CLI self-tests",
+        "Compress CLI self-tests", "Push CLI self-tests", "Release CLI self-tests", "Admin CLI self-tests",
         "Release policy tests", "Codex outbound identity", "Codex identity guard tests", "README synchronization",
         "Go test build tags", "Go test build-tag regressions",
         "CI validation regressions", "Release metadata sources", "Migration policy",

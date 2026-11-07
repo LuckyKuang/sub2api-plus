@@ -5,13 +5,13 @@
 | Action | Required state | Mutation | Result |
 | --- | --- | --- | --- |
 | `inspect` | Tag; optional PR | None | Reports PR, tag, workflow, and Release state. |
-| `promote-pr` | Submitted candidate PR and notes, or typed finalization PR without notes | Protected GitHub auto-merge; no new merge on finalization resume | PR merged and exact main SHA Actions green. |
+| `promote-pr` | Submitted candidate PR and notes, or typed finalization PR without notes | Protected GitHub auto-merge; no new merge on finalization resume | Candidate: exact main Actions green. Finalization: exact merge verified with `[skip ci]`. |
 | `validate` | Merged PR and notes | None | Focused metadata gate passes at merge commit. |
 | `tag` | Merged PR and notes | One local annotated tag | Tag targets tested merge commit. |
 | `publish` | Reviewed local tag | Exact remote tag push | Release workflow is triggered. |
 | `monitor` | Remote tag | None | Watches automatic workflow publication to completion. |
 | `verify` | Successful workflow | None | Release and immutable assets verified. |
-| `finalize` | Verified Release | Branch, commit, submit-pr, protected auto-merge | Mapping published; exact merged-main CI and Security Scan successful. |
+| `finalize` | Verified Release | Branch, commit, submit-pr, protected auto-merge | Mapping published; focused PR checks and exact merge verification complete, main CI skipped. |
 
 ## Repository Prerequisites
 
@@ -57,9 +57,24 @@ regenerates the tree and verifies the published Release and immutable assets.
 
 Auto-merge may create a commit different from the PR head. Promotion reads the
 actual PR `mergeCommit.oid`, fetches `origin/main`, requires the merge commit to
-be contained there, and discovers push-triggered Actions matching both branch
+be contained there. For release candidates it discovers push-triggered Actions matching both branch
 and SHA. It requires workflows named `CI` and `Security Scan`, then watches every
 matching run with `--exit-status`.
+
+For independently verified finalization, the branch commit keeps PR workflows
+enabled. Each workflow classifies once, and irrelevant full-suite jobs are
+skipped before allocating runners/containers. `sub2api/local-validation`,
+`repository-policy`, `test` and `backend-security` must succeed. Only
+`deployment-config`, `frontend`, `golangci-lint`, `goreleaser-config` and
+`frontend-security` may report `SKIPPED`; ordinary promotion allows no skips.
+
+Protected auto-merge specifies the exact subject
+`docs(release): mark <tag> published [skip ci]`. An existing auto-merge request
+with another subject is disabled and re-enabled with that message. Finalization
+verifies merge parents equal the proof's base/head in order, the merge tree
+equals the validated head, the subject is exact, and the commit is in main.
+It then completes without waiting for main CI/Security Scan, which GitHub's
+native skip instruction suppresses. This exception never authorizes a tag.
 
 ## Focused Release Gate
 
@@ -122,8 +137,9 @@ checks:
 
 ## Recovery
 
-- If auto-merge remains pending, rerun `promote-pr`; an existing auto-merge
-  request is not duplicated.
+- If auto-merge remains pending, rerun `promote-pr`; an existing matching
+  auto-merge request is not duplicated. Finalization replaces an existing
+  request only when its merge subject differs from the required skip message.
 - If PR or main SHAs move, rerun `push-cli submit-pr`; never rewrite its proof.
 - If a local tag is created but not published, inspect it before `publish`.
 - If remote tag transfer succeeds but the terminal disconnects, resume with
@@ -134,8 +150,9 @@ checks:
 - Missing/queued required checks or pending merge return status 2 with the exact
   PR URL and `promote-pr --tag <tag> --pr <number>` retry command. Failed checks,
   invalid evidence and API errors never become pending successes.
-- An already merged finalization resumes after recorded-proof, merge parents/tree,
-  publication and deterministic metadata checks; it observes the exact merge SHA.
+- An already merged finalization resumes after recorded-proof, merge parents/tree/subject,
+  main containment, publication and deterministic metadata checks; it does not
+  wait for skipped main workflows.
   Check out the recorded PR head first. No second merge or mapping update occurs.
 - If a deterministic finalize branch already exists, `finalize` resumes exactly
   one matching open/merged PR; it never resets or overwrites the branch.
