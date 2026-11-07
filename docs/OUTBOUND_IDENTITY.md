@@ -1022,6 +1022,17 @@ this does not remove isolation or enable an inbound identity override. See
 [Codex compatibility boundaries](protocols/CODEX_CLIENT_PROFILES.md#codex-source-compatibility-boundaries)
 for supported contexts and explicit differences from the official client.
 
+Gateway transport codecs follow `backend/go.mod`: Brotli `1.2.7` and
+`klauspost/compress` `1.20.2` include the reviewed malformed-stream fixes
+([Brotli advisory](https://github.com/andybalholm/brotli/security/advisories/GHSA-c9gr-gmg4-2vqv),
+[zstd advisory](https://github.com/klauspost/compress/security/advisories/GHSA-fpmh-frq8-7rj8)).
+These dependencies do not declare a provider SDK identity. Codec upgrades must
+preserve the credential owner's selected headers, explicit version pins,
+signing exclusions, retry body bytes and native compression gates. The
+repository's `decompress_response_test.go`, `openai_codex_compression_test.go`,
+`grok_request_compression_test.go` and outbound identity suites cover those
+transport contracts; the backend vulnerability scan checks affected symbols.
+
 Pre-account Antigravity code exchange / refresh-token validation and Gemini
 code exchange start an independent native OAuth scope before the first provider
 request. Token exchange, user/project discovery, privacy set/verify and Google
