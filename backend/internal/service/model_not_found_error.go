@@ -31,13 +31,7 @@ func IsOpenAIModelNotFoundError(statusCode int, body []byte) bool {
 }
 
 func openAIModelNotFoundEventStatus(body []byte) (int, bool) {
-	status := 0
-	for _, path := range []string{"status", "status_code", "error.status", "error.status_code", "response.error.status", "response.error.status_code"} {
-		if value := gjson.GetBytes(body, path); value.Type == gjson.Number {
-			status = int(value.Int())
-			break
-		}
-	}
+	status := openAIErrorEventStatus(body)
 	if !isOpenAIModelNotFoundError(status, body) {
 		return 0, false
 	}

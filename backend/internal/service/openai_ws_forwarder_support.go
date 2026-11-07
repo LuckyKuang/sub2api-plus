@@ -251,13 +251,7 @@ func markOpenAIWSClientVisibleFailure(c *gin.Context, eventType string, payload 
 		errType = strings.TrimSpace(gjson.GetBytes(payload, prefix+".type").String())
 		message = strings.TrimSpace(gjson.GetBytes(payload, prefix+".message").String())
 	}
-	status := int(gjson.GetBytes(payload, prefix+".status_code").Int())
-	if status == 0 {
-		status = int(gjson.GetBytes(payload, prefix+".status").Int())
-	}
-	if status == 0 && eventType == "error" {
-		status = int(gjson.GetBytes(payload, "status").Int())
-	}
+	status := openAIErrorEventStatus(payload)
 	if status == 0 {
 		status = openAIWSErrorHTTPStatusFromRaw(code, errType)
 	}
@@ -286,16 +280,7 @@ func openAIWSPayloadTransientStatus(payload []byte) int {
 	if IsOpenAIPolicyCapacityUnavailable(payload) {
 		return http.StatusServiceUnavailable
 	}
-	status := int(gjson.GetBytes(payload, "response.error.status_code").Int())
-	if status == 0 {
-		status = int(gjson.GetBytes(payload, "response.error.status").Int())
-	}
-	if status == 0 {
-		status = int(gjson.GetBytes(payload, "error.status_code").Int())
-	}
-	if status == 0 {
-		status = int(gjson.GetBytes(payload, "error.status").Int())
-	}
+	status := openAIErrorEventStatus(payload)
 	if shouldCooldownOpenAITransientUpstreamError(status, payload) {
 		return status
 	}
@@ -758,6 +743,9 @@ func isOpenAIWSRateLimitEvent(payload []byte, code, errType, message string) boo
 	if _, ok := openAIModelNotFoundEventStatus(payload); ok {
 		return false
 	}
+	if isOpenAIInputTerminalCode(code) {
+		return openAIErrorEventStatus(payload) == http.StatusTooManyRequests
+	}
 	return isOpenAIWSRateLimitError(code, errType, message)
 }
 
@@ -765,10 +753,7 @@ func (s *OpenAIGatewayService) persistOpenAIWSRateLimitSignal(ctx context.Contex
 	if s == nil || s.rateLimitService == nil || account == nil || account.Platform != PlatformOpenAI {
 		return
 	}
-	if _, ok := openAIModelNotFoundEventStatus(responseBody); ok {
-		return
-	}
-	if !isOpenAIWSRateLimitError(codeRaw, errTypeRaw, msgRaw) {
+	if !isOpenAIWSRateLimitEvent(responseBody, codeRaw, errTypeRaw, msgRaw) {
 		return
 	}
 	model := firstNonEmpty(canonicalModel...)
@@ -863,6 +848,21 @@ func classifyOpenAIWSErrorEvent(message []byte) (string, bool) {
 		return "event_error", false
 	}
 	code, errType, msg := parseOpenAIWSErrorEventFields(message)
+	// A terminal-looking code outside its allowed status set cannot suppress
+	// the wrapped HTTP error's authentication, rate-limit or server policy.
+	if isOpenAIInputTerminalCode(code) {
+		status := openAIErrorEventStatus(message)
+		if status == http.StatusUpgradeRequired {
+			return "upgrade_required", true
+		}
+		if status >= http.StatusInternalServerError && status <= 599 {
+			return "upstream_error_event", true
+		}
+		if status == http.StatusTooManyRequests {
+			return "upstream_rate_limited", false
+		}
+		return "event_error", false
+	}
 	if code == "model_not_found" {
 		if _, ok := openAIModelNotFoundEventStatus(message); !ok {
 			code = ""
@@ -911,8 +911,11 @@ func openAIWSErrorHTTPStatus(message []byte) int {
 	if status, ok := openAIModelNotFoundEventStatus(message); ok {
 		return status
 	}
+	if status := openAIErrorEventStatus(message); status >= http.StatusBadRequest && status <= 599 {
+		return status
+	}
 	codeRaw, errTypeRaw, _ := parseOpenAIWSErrorEventFields(message)
-	if codeRaw == "model_not_found" {
+	if codeRaw == "model_not_found" || isOpenAIInputTerminalCode(codeRaw) {
 		codeRaw = ""
 	}
 	return openAIWSErrorHTTPStatusFromRaw(codeRaw, errTypeRaw)

@@ -3,6 +3,8 @@ package service
 import (
 	"errors"
 	"net/http"
+
+	"github.com/tidwall/gjson"
 )
 
 // A deterministic request rejection carries no evidence that the credential
@@ -16,6 +18,17 @@ func (e *openAIRequestTerminalError) Unwrap() error { return e.cause }
 func isOpenAIRequestTerminalError(err error) bool {
 	var terminal *openAIRequestTerminalError
 	return errors.As(err, &terminal)
+}
+
+// Wrapped WS errors carry a real HTTP status, including the official
+// status_code alias. A response's string status ("failed") is not an HTTP code.
+func openAIErrorEventStatus(payload []byte) int {
+	for _, path := range []string{"status", "status_code", "error.status", "error.status_code", "response.error.status", "response.error.status_code"} {
+		if value := gjson.GetBytes(payload, path); value.Type == gjson.Number {
+			return int(value.Int())
+		}
+	}
+	return 0
 }
 
 func openAIRequestTerminalEventStatus(payload []byte) (int, bool) {

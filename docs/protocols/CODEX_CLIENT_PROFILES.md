@@ -823,6 +823,16 @@ The exact provider codes `budget_reached`, `audio_too_large`, `audio_too_short`,
 statusless SSE/WS is terminal for this turn. Preserve the code and do not retry,
 fail over or penalize the credential owner. A real HTTP 401/403/429/5xx is not
 reclassified by those codes; authentication and transport policies still apply.
+Wrapped WebSocket `error` events also preserve their numeric `status` or
+`status_code` (including nested error declarations). Only a missing status or
+400 permits the budget/audio terminal classification. An explicit 429 retains
+API-key cooldown and the OAuth same-owner retry window; 5xx retains transport
+recovery, and 426 retains the HTTP protocol fallback. Status-only envelopes do
+not need a matching error type or message.
+This follows the official
+[`WrappedWebsocketErrorEvent`](https://github.com/openai/codex/blob/efdacaf46ff54660a239189a6d62434c5db33d2c/codex-rs/codex-api/src/endpoint/responses_websocket.rs)
+mapping before terminal-provider parsing. The actual HTTP response status takes
+priority over status hints in its body.
 WebSocket prewarm stops on the same codes before another send. All transport
 adapters carry the request rejection through scheduler and health observations
 without counting it as an account failure.

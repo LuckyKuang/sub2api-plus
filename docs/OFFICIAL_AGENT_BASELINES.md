@@ -135,6 +135,11 @@ reviewing protocol changes never enables automatic identity-version updates.
   this includes WebSocket prewarm and scheduler/health observations across
   HTTP, SSE, direct WS, passthrough and the HTTP bridge.
   Unrelated HTTP authentication/server statuses retain their original policy.
+  The follow-up review covers wrapped WS `status`/`status_code` as well:
+  explicit authentication, quota and server statuses cannot be hidden by a
+  budget/audio code, including status-only envelopes without an error type.
+  Regression coverage includes OAuth/API Key final forwarding and API-key
+  quota persistence alongside the statusless/400 no-penalty controls.
 - Codex's [animated Images controls](https://github.com/openai/codex/commit/f9e7b19df8aa75490fc1d90f98d3d95ad716d08e)
   flatten `output_format: "gif"`, optional `frame_count` (2–16), and optional
   `frame_duration_ms` (20–2000) into sibling request fields. Native OAuth/setup

@@ -23,7 +23,13 @@ func isOpenAIInputTerminalCode(code string) bool {
 }
 
 func openAIInputTerminalCode(status int, payload []byte) string {
-	if (status != 0 && status != http.StatusBadRequest) || !gjson.ValidBytes(payload) {
+	if !gjson.ValidBytes(payload) {
+		return ""
+	}
+	if status == 0 {
+		status = openAIErrorEventStatus(payload)
+	}
+	if status != 0 && status != http.StatusBadRequest {
 		return ""
 	}
 	code := gjson.GetBytes(payload, "error.code")

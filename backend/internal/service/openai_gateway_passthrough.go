@@ -1541,11 +1541,9 @@ func openAIStreamFailedEventSemanticStatus(payload []byte, message string) int {
 		errType = strings.ToLower(strings.TrimSpace(gjson.GetBytes(payload, "error.type").String()))
 	}
 	combined := strings.TrimSpace(errType + " " + code + " " + strings.ToLower(strings.TrimSpace(message)))
-	for _, path := range []string{"response.error.status_code", "error.status_code", "status_code"} {
-		if status := int(gjson.GetBytes(payload, path).Int()); status == http.StatusUnauthorized ||
-			status == http.StatusForbidden || status == http.StatusTooManyRequests || status == 529 {
-			return status
-		}
+	if status := openAIErrorEventStatus(payload); status == http.StatusUnauthorized ||
+		status == http.StatusForbidden || status == http.StatusTooManyRequests || status == 529 {
+		return status
 	}
 	if openAIStreamCredentialAuthFailure(payload) {
 		return http.StatusUnauthorized
