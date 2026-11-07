@@ -35,7 +35,7 @@ func TestCodexCLIBridgeModelsUsesCurrentOwnerFlagsForBothAccountTypes(t *testing
 				require.Equal(t, http.MethodGet, r.Method)
 				require.Equal(t, "/custom/models?version=trusted", r.URL.RequestURI())
 				require.Equal(t, "Bearer "+token, r.Header.Get("Authorization"))
-				require.Equal(t, "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color", r.Header.Get("User-Agent"))
+				require.Equal(t, "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color", r.Header.Get("User-Agent"))
 				require.Equal(t, "etag-owned", r.Header.Get("If-None-Match"))
 				if kind == AccountTypeAPIKey {
 					require.Empty(t, r.Header.Get("Chatgpt-Account-Id"))
@@ -53,7 +53,7 @@ func TestCodexCLIBridgeModelsUsesCurrentOwnerFlagsForBothAccountTypes(t *testing
 				return forward(ctx, r)
 			}}}
 			ctx := withRequestCredentialOwner(WithOutboundIdentityScope(context.Background(), nil), owner, token)
-			header := http.Header{"Authorization": {"Bearer " + token}, "User-Agent": {"codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color"}}
+			header := http.Header{"Authorization": {"Bearer " + token}, "User-Agent": {"codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color"}}
 			if kind == AccountTypeOAuth {
 				header.Set("Chatgpt-Account-Id", "captured-workspace")
 			}
@@ -89,7 +89,7 @@ func TestCodexCLIBridgeAPIKeyImageAndChatProbesCannotBypassHop(t *testing.T) {
 				require.Equal(t, owner.ID, id)
 				require.Equal(t, "Bearer acquired-api-key", r.Header.Get("Authorization"))
 				require.Empty(t, r.Header.Get("Chatgpt-Account-Id"))
-				require.Equal(t, "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color", r.Header.Get("User-Agent"))
+				require.Equal(t, "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color", r.Header.Get("User-Agent"))
 				body, err := io.ReadAll(r.Body)
 				require.NoError(t, err)
 				require.Contains(t, string(body), "owned prompt")
@@ -146,7 +146,7 @@ func TestCodexCLIBridgeQuotaClientPreservesPreparedWHAMRequestsAndHotSwitches(t 
 			require.Equal(t, "chatgpt.com", r.URL.Host)
 			require.Equal(t, "Bearer captured-access", r.Header.Get("Authorization"))
 			require.Equal(t, "captured-workspace", r.Header.Get("Chatgpt-Account-Id"))
-			require.Equal(t, "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color", r.Header.Get("User-Agent"))
+			require.Equal(t, "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color", r.Header.Get("User-Agent"))
 			require.Empty(t, r.Header.Get("Originator"))
 			require.Empty(t, r.Header.Get("Version"))
 			if r.Method == http.MethodPost {
@@ -165,7 +165,7 @@ func TestCodexCLIBridgeQuotaClientPreservesPreparedWHAMRequestsAndHotSwitches(t 
 		flag.Store(state.account)
 		before := hops
 		for _, endpoint := range []string{chatGPTUsageURL, chatGPTRateLimitCreditsURL, chatGPTRateLimitResetURL} {
-			request := client.R().SetContext(ctx).SetHeaders(map[string]string{"Authorization": "Bearer captured-access", "Chatgpt-Account-Id": "captured-workspace", "User-Agent": "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color"})
+			request := client.R().SetContext(ctx).SetHeaders(map[string]string{"Authorization": "Bearer captured-access", "Chatgpt-Account-Id": "captured-workspace", "User-Agent": "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color"})
 			var err error
 			if endpoint == chatGPTRateLimitResetURL {
 				_, err = request.SetBody(map[string]string{"redeem_request_id": "owned-reset"}).Post(endpoint)
@@ -185,7 +185,7 @@ func TestCodexCLIBridgeQuotaClientPreservesPreparedWHAMRequestsAndHotSwitches(t 
 	global.enabled.Store(true)
 	flag.Store(true)
 	before := hops
-	_, err := native.R().SetContext(ctx).SetHeaders(map[string]string{"Authorization": "Bearer captured-access", "Chatgpt-Account-Id": "captured-workspace", "User-Agent": "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color"}).Get(chatGPTUsageURL)
+	_, err := native.R().SetContext(ctx).SetHeaders(map[string]string{"Authorization": "Bearer captured-access", "Chatgpt-Account-Id": "captured-workspace", "User-Agent": "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color"}).Get(chatGPTUsageURL)
 	require.NoError(t, err)
 	require.Equal(t, before, hops)
 }
@@ -208,7 +208,7 @@ func TestCodexCLIBridgeUsageProbeUsesLiveFlagsWithoutChangingPreparedInference(t
 		before := hops
 		r, err := http.NewRequestWithContext(ctx, http.MethodPost, chatgptCodexURL, strings.NewReader(`{"model":"gpt-5.1","input":"usage probe","stream":true}`))
 		require.NoError(t, err)
-		r.Header = http.Header{"Authorization": {"Bearer captured-access"}, "Chatgpt-Account-Id": {"captured-workspace"}, "User-Agent": {"codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color"}, "Originator": {"codex_cli_rs"}, "Version": {"0.165.0"}}
+		r.Header = http.Header{"Authorization": {"Bearer captured-access"}, "Chatgpt-Account-Id": {"captured-workspace"}, "User-Agent": {"codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color"}, "Originator": {"codex_cli_rs"}, "Version": {"0.167.0"}}
 		response, err := usage.doOpenAICodexUsageProbe(r, owner, func(actual *http.Request) (*http.Response, error) {
 			writes++
 			require.Equal(t, chatgptCodexURL, actual.URL.String())

@@ -73,6 +73,7 @@ var headerOverrideBlockedNames = map[string]struct{}{
 	"chatgpt-account-id":                    {},
 	"x-claude-code-session-id":              {},
 	"x-client-request-id":                   {},
+	"x-zcode-session-features":              {},
 	"x-grok-conv-id":                        {},
 	"x-grok-client-mode":                    {},
 	"x-grok-client-surface":                 {},

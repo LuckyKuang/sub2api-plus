@@ -75,7 +75,7 @@
         data-testid="codex-cli-runtime-install"
         @click="install"
       >
-        {{ installing ? t('codexCliRuntime.installing') : t('codexCliRuntime.installTarget', { version: status?.target_version || '—' }) }}
+        {{ installing ? t('codexCliRuntime.installing') : t(status?.installed ? 'codexCliRuntime.updateTarget' : 'codexCliRuntime.installTarget', { version: status?.target_version || '—' }) }}
       </button>
     </div>
     <p class="text-xs surface-muted">{{ t('codexCliRuntime.versionHint') }}</p>

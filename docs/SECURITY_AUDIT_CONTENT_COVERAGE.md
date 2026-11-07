@@ -977,3 +977,95 @@ inference. A unified Messages key admits it alongside its own inference path;
 the Responses and Chat Completions endpoints admit no auxiliary, so every other
 sub-path stays a basic-validation rejection. The admitted call keeps the existing
 ingress audit before its own side effects.
+
+### Downstream safety buffering display projection
+
+`openai_codex_safety_buffering_suppressed` only projects response display
+metadata at the final HTTP/SSE and WS client writers. Both audit engines retain
+the same canonical request extraction and ingress ordering. Native OAuth/API
+Key and official CLI bridge paths cannot use this switch to skip admission,
+classification or provider policy errors. Internal observers consume original
+events; mixed guardian, moderation and verification fields survive projection.
+Malformed projection input passes through with request/endpoint/protocol/stage,
+a stable diagnostic code and byte counts, without logging raw content.
+
+The `TestCodexSafetyBuffering*` service regressions cover the two carriers,
+mixed metadata, failures, fragmented SSE, release of staged events, per-event
+hot switching, native/CLI account matrices, WS delivery and replica refresh.
+`TestCodexSafetyBufferingEOFFlushAndDisconnectRetainUsage` runs both switch
+states with a real settings service, proving EOF flush delivery and usage
+draining after downstream write failures in native and passthrough parsers.
+`TestCodexSafetyBufferingEOFWriteFailureIsNotSuccess` additionally isolates a
+failure only on the final EOF event write: neither account type nor switch state
+may report successful delivery, and the collected usage must remain available.
+`TestCodexSafetyBufferingOfficialCLIWire` additionally requires the independently
+verified official binary; an absent-binary skip is not official wire evidence.
+`TestCodexSafetyBufferingBusiness*` defines acceptance independently of the
+projection: pure notices leave no event/frame, unknown and security siblings
+survive, staged events follow on/off/on at release, accepted events above 4 MiB
+cannot leak, and temporary-storage failure cannot release raw notices.
+`TestCodexSafetyBufferingOfficialCLIInteractive` drives the verified official
+TUI with an off positive control for the real notice and retry/dismiss choices,
+plus on silence and normal completion in the account/outbound matrix. This
+observes client rendering without changing ingress audit or client binaries.
+
+### Downstream session error wording projection
+
+`openai_error_messages_normalized` changes only messages for three exact error
+codes at the final OpenAI HTTP/SSE/WS output boundary. It introduces no request
+extraction, tool-field, endpoint, identity, account-selection or ingress audit
+changes. Both audit engines consume the same original canonical request and
+retain their existing admission/side-effect ordering. Errors remain failures;
+other providers, unknown events, user content and policy codes pass through.
+HTTP ops capture is inside the final projection boundary, and WS observers see
+original frames, so diagnostic persistence remains original. The independently
+derived `TestOpenAIErrorMessages*` regressions cover precise protocol carriers,
+forbidden field changes, ON/OFF at final release, account/outbound/socket matrices,
+settings persistence and reconciliation. Handler
+`TestOpenAIErrorMessagesPreserveOpsDiagnostics` observes actual queued original
+error records and downstream replacement, including handler-produced SSE and EOF.
+The dedicated official CLI consumer matrix provides client display evidence.
+Sanitized final errors retain only an exact recognized source code as display
+metadata; retry candidates cannot set it, and each HTTP-bridged WS turn clears
+it. Regressions exercise actual account recovery versus exhaustion, unknown
+final failures, HTTP/WS rejection sanitization and raw ops capture. Real HTTP
+socket checks also cover fixed-length headers committed before live toggles.
+These changes stay after request admission and do not alter either audit engine.
+`TestOpenAIErrorMessagesNonStreamingFailure` covers native/passthrough SSE-to-JSON
+rejections and compact failures after keepalive; the original terminal/error
+code stays intact. `TestOpenAIErrorMessagesSanitizedPendingToggle` exercises
+both live toggle directions before a fragmented sanitized error is released.
+
+## November 7 official-client compatibility
+
+Codex main's per-turn `prompt_cache_options.ttl` (`30m` or `12h`) is request
+control metadata. Preserving it on OAuth/setup-token HTTP/WS, compaction and
+bridge forwarding does not hide the recognized current user input from Content
+Moderation or Prompt Audit. Unknown sibling items still pass with extracted
+siblings auditable. Neither cache lifetime nor ZCode's stripped
+`x-zcode-session-features` attribution may select a client identity, bypass
+canonical extraction or move audit after selection, billing, concurrency or send.
+
+Regression evidence includes `TestCodexProtocolOptionsPreserveCanonicalAuditContent`
+(HTTP, direct/nested WS and unknown content),
+`TestCodexCLIBridgeOrdinaryResponsesBothRealAuditsPrecedeSideEffects` (OAuth/API
+Key with real engines), the HTTP/WS pass-through and side-effect-order suites,
+and `TestCodexOfficialPromptCacheTTLPreservedAcrossTransportsAndTurns`.
+
+Codex native Images GIF controls (`output_format`, `frame_count`,
+`frame_duration_ms`) are non-content options. Both canonical audit engines
+continue to consume the current prompt and recognized input images; unknown
+valid sibling options and empty prompts retain pass-through extraction.
+`TestOfficialCodexGIFControlsPreserveBothCanonicalAudits` covers recognized and
+empty input, and `TestOfficialCodexGIFBothRealAuditsPrecedeImageSideEffects`
+covers real moderation and Prompt Audit rejection on OAuth/API-key image
+requests before account reads, slots, billing, transport or task effects.
+
+The reviewed managed executable is now `0.167.0`, matching the compiled default
+outbound identity. Its unchanged `responses-api-proxy` source forwards the
+already-admitted body through the private nonce relay; installation/update
+cannot admit traffic, change credential owners, or bypass either audit engine.
+`tools/test_codex_cli_wire.py` exercises the actual official binary, including
+OAuth/API-key bridge transport, error output and interactive safety buffering.
+Native and bridged HTTP/WS ingress retain the existing original-content audit
+ordering and unknown-content pass-through contract.

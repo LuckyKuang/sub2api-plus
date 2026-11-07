@@ -319,7 +319,7 @@ func doUpstreamRequest(client *http.Client, req *http.Request) (*http.Response, 
 	}
 	firstbyte.Track(req, resp)
 	errorReadTimer := prepareUpstreamResponseBody(resp, cancel)
-	resp.Body = &cancelOnCloseBody{ReadCloser: resp.Body, cancel: cancel, errorReadTimer: errorReadTimer}
+	resp.Body = &cancelOnCloseBody{ReadCloser: resp.Body, ctx: ctx, cancel: cancel, errorReadTimer: errorReadTimer}
 	return resp, nil
 }
 
@@ -339,6 +339,7 @@ func prepareUpstreamResponseBody(resp *http.Response, cancel context.CancelFunc)
 
 type cancelOnCloseBody struct {
 	io.ReadCloser
+	ctx            context.Context
 	cancel         context.CancelFunc
 	once           sync.Once
 	err            error
@@ -354,6 +355,11 @@ func (b *cancelOnCloseBody) Read(p []byte) (int, error) {
 		return 0, http.ErrBodyReadAfterClose
 	}
 	n, err := b.ReadCloser.Read(p)
+	// Transport cancellation or decoder initialization can consume the original
+	// read error and leave only EOF. An interrupted body is never complete.
+	if errors.Is(err, io.EOF) && b.ctx.Err() != nil {
+		err = b.ctx.Err()
+	}
 	if err != nil && b.errorReadTimer != nil {
 		b.errorReadTimer.Stop()
 	}

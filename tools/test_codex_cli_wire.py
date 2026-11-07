@@ -40,23 +40,23 @@ import urllib.error
 from validation_runtime import ValidationRuntimeError, require_in_validation
 
 
-# Independent reviewed fixtures from the official rust-v0.165.0 release assets.
+# Independent reviewed fixtures from the official rust-v0.167.0 release assets.
 # Do not derive expected versions, digests, or wire values from production code.
-VERSION = "0.165.0"
-SOURCE_COMMIT = "360319d8dee62d87e2d59fc0c21805d79519cfed"
-RELEASE_URL = "https://github.com/openai/codex/releases/download/rust-v0.165.0/"
+VERSION = "0.167.0"
+SOURCE_COMMIT = "086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a"
+RELEASE_URL = "https://github.com/openai/codex/releases/download/rust-v0.167.0/"
 ARTIFACTS = {
     "arm64": {
         "name": "codex-aarch64-unknown-linux-musl.tar.gz",
         "entry": "codex-aarch64-unknown-linux-musl",
-        "sha256": "6522e056d0be7f531da915c9a81ae05bc70811b782542499cc0a9776d3abf5d3",
-        "size": 107804617,
+        "sha256": "843489acb4d4b1079745c36b03c5963b887b83155af208fd53584e33ee8eb281",
+        "size": 114300898,
     },
     "amd64": {
         "name": "codex-x86_64-unknown-linux-musl.tar.gz",
         "entry": "codex-x86_64-unknown-linux-musl",
-        "sha256": "be635d3486a5bd060d0fff582ae6d30160280c31344dd85719707fa920e187f0",
-        "size": 115837472,
+        "sha256": "9d64836106d5b374e90ee4454c7ebcde7ca7106558bd7e41a34b9f26ebda251a",
+        "size": 122587028,
     },
 }
 MODEL = "gpt-6.1-sol"
@@ -70,9 +70,9 @@ EXPECTED_USAGE = {
 IDENTITIES = (
     {
         "case": "compiled-default",
-        "user_agent": "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color",
+        "user_agent": "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color",
         "originator": "codex_cli_rs",
-        "version": "0.165.0",
+        "version": "0.167.0",
     },
     {
         "case": "account-vscode-override",
@@ -283,7 +283,7 @@ def checked_artifact(archive_option: Path | None, root: Path) -> tuple[Path, dic
     require(platform.system() == "Linux" and arch in ARTIFACTS, "unsupported_validation_architecture")
     artifact = ARTIFACTS[arch]
     manifest = (Path(__file__).resolve().parents[1] / "backend/internal/codexcli/manifest.go").read_text()
-    require(re.search(r'const targetVersion = "0\.165\.0"', manifest) is not None, "manifest_version_changed_review_required")
+    require(re.search(r'const targetVersion = "0\.167\.0"', manifest) is not None, "manifest_version_changed_review_required")
     for manifest_arch, expected in ARTIFACTS.items():
         block = re.search(r'"linux/' + manifest_arch + r'":\s*\{([^}]+)\}', manifest)
         require(block is not None, "manifest_artifact_missing")
@@ -437,7 +437,7 @@ def body_identity_declarations(body: dict[str, Any], identity: dict[str, str]) -
 
 
 def assert_reviewed_task_tools(body: dict[str, Any], label: str) -> dict[str, Any]:
-    # Independent fixed-version contract: rust-v0.165.0 models-manager/models.json
+    # Independent fixed-version contract: rust-v0.167.0 models-manager/models.json
     # marks gpt-6.1-sol use_responses_lite=true. core/src/client.rs puts tool
     # declarations in a developer additional_tools input item; codex-api/common.rs
     # omits the root tools field. protocol/src/models.rs defines the item schema.
@@ -498,7 +498,7 @@ def run_case(binary: Path, root: Path, proxy: FixtureServer, identity: dict[str,
         project_directory = ancestor / ".codex"
         project_directory.mkdir(mode=0o700)
         ancestor_config = project_directory / "config.toml"
-        # rust-v0.165.0 codex-rs/config/src/loader/mod.rs: project layers override
+        # rust-v0.167.0 codex-rs/config/src/loader/mod.rs: project layers override
         # HOME config, and default marker discovery accepts .git with HEAD.
         # Use valid, project-allowed fields: the differing saved effort proves
         # exclusion independently from the auxiliary-request proxy trap.
@@ -687,14 +687,34 @@ def run_go_transparent_bridge(binary: Path) -> None:
     environment = os.environ.copy()
     environment["SUB2API_CODEX_BRIDGE_BINARY"] = str(binary.resolve())
     repository = Path(__file__).resolve().parents[1]
-    result = subprocess.run(["go", "test", "-C", str(repository / "backend"), "-tags=unit", "./internal/codexcli",
-                             "-run", "^TestCodexBridgeOfficialBinaryWire$", "-count=1", "-v"],
-                            env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=180)
-    output = result.stdout.decode("utf-8", errors="replace")
-    # A real binary must be exercised. A missing fixture, skipped case or build
-    # failure cannot silently reduce this gate to the proxy-only Python check.
-    require(result.returncode == 0 and "--- PASS: TestCodexBridgeOfficialBinaryWire" in output
-            and "--- SKIP:" not in output, "official_go_bridge_wire_failed")
+    for package, test, failure, timeout in (
+        ("./internal/codexcli", "TestCodexBridgeOfficialBinaryWire", "official_go_bridge_wire_failed", 180),
+        ("./internal/service", "TestCodexSafetyBufferingOfficialCLIWire", "official_downstream_safety_buffering_wire_failed", 600),
+        ("./internal/service", "TestCodexSafetyBufferingOfficialCLIInteractive", "official_interactive_safety_buffering_failed", 600),
+        ("./internal/service", "TestOpenAIErrorMessagesOfficialCLI", "official_error_messages_failed", 600),
+    ):
+        result = subprocess.run(["go", "test", "-C", str(repository / "backend"), "-tags=unit", package,
+                                 "-run", f"^{test}$", "-count=1", "-v"],
+                                env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout)
+        output = result.stdout.decode("utf-8", errors="replace")
+        # A real binary must be exercised. A missing fixture, skipped case or
+        # build failure cannot silently reduce this gate to proxy-only checks.
+        require(result.returncode == 0 and f"--- PASS: {test}" in output
+                and "--- SKIP:" not in output, failure)
+        if test == "TestOpenAIErrorMessagesOfficialCLI":
+            require(all(
+                f"--- PASS: {test}/{prefix}{account}/cli={cli}/enabled={enabled}/{code} " in output
+                for prefix in ("", "http-rejection/")
+                for account in ("oauth", "apikey") for cli in ("false", "true")
+                for enabled in ("false", "true")
+                for code in ("upstream_response_interrupted", "upstream_unavailable", "session_account_lost")
+            ), "official_error_messages_matrix_incomplete")
+        if test == "TestCodexSafetyBufferingOfficialCLIInteractive":
+            require(all(
+                f"--- PASS: {test}/{account}/cli={cli}/suppressed={suppressed} " in output
+                for account in ("oauth", "apikey") for cli in ("false", "true")
+                for suppressed in ("false", "true")
+            ), "official_interactive_safety_buffering_matrix_incomplete")
 
 
 def main() -> int:
@@ -715,7 +735,7 @@ def main() -> int:
             version_home.mkdir(mode=0o700)
             version_work.mkdir(mode=0o700)
             process = run_process(binary, ["--version"], version_home, version_work, proxy.server_port)
-            require(process.returncode == 0 and process.stdout.strip() == b"codex-cli 0.165.0", "official_binary_version_mismatch")
+            require(process.returncode == 0 and process.stdout.strip() == b"codex-cli 0.167.0", "official_binary_version_mismatch")
             require(not proxy.records, "version_probe_external_proxy_attempt")
             cases = [run_case(binary, root, proxy, identity, execution_auth_mode=args.execution_auth_mode) for identity in IDENTITIES]
             cases.append(run_case(binary, root, proxy, IDENTITIES[0], reject=True, execution_auth_mode=args.execution_auth_mode))

@@ -309,7 +309,7 @@ func TestOutboundIdentityBedrockSigningRetainsSelectedDeclarations(t *testing.T)
 func TestBuiltInDeepSeekOutboundIdentityPinsPublishedHarness(t *testing.T) {
 	t.Setenv(deepseek.VersionEnv, "")
 
-	const pinnedUA = "deepseek-harness/0.2.1-rc.3 (+https://github.com/deepseek-ai/deepseek-harness)"
+	const pinnedUA = "deepseek-harness/0.2.2-rc.1 (+https://github.com/deepseek-ai/deepseek-harness)"
 	require.Equal(t, outboundidentity.Identity{
 		Preset:     "deepseek",
 		Language:   "zh-CN",
@@ -317,7 +317,7 @@ func TestBuiltInDeepSeekOutboundIdentityPinsPublishedHarness(t *testing.T) {
 		Source:     "compiled_default",
 		UserAgent:  pinnedUA,
 		Originator: "deepseek-harness",
-		Version:    "0.2.1-rc.3",
+		Version:    "0.2.2-rc.1",
 		Headers:    map[string]string{"User-Agent": pinnedUA},
 	}, builtInOutboundIdentity("deepseek"))
 	require.Equal(t, builtInOutboundIdentity("deepseek"), deepseek.DefaultIdentity())
@@ -507,9 +507,9 @@ func TestMiniMaxAPIKeyDefaultIdentityIsPinnedSDK(t *testing.T) {
 func TestBuiltInZCodeOutboundIdentityPinsProductVersion(t *testing.T) {
 	t.Setenv(zcode.VersionEnv, "")
 	got := builtInOutboundIdentity("zcode")
-	require.Equal(t, "ZCode/3.16.2", got.UserAgent)
+	require.Equal(t, "ZCode/3.17.2", got.UserAgent)
 	require.Equal(t, "ZCode", got.Originator)
-	require.Equal(t, "3.16.2", got.Version)
+	require.Equal(t, "3.17.2", got.Version)
 	require.Equal(t, "compiled_default", got.Source)
 	require.Equal(t, got.Version, got.Headers[zcode.HeaderAppVersion])
 	require.Equal(t, "https://zcode.z.ai", got.Headers["HTTP-Referer"])
@@ -624,7 +624,7 @@ func TestBuiltInKimiOutboundIdentityMatchesOfficialClient(t *testing.T) {
 	pinned := builtInOutboundIdentity("kimi")
 	require.Equal(t, "kimi", pinned.Preset)
 	require.Equal(t, "compiled_default", pinned.Source)
-	require.Equal(t, "kimi-code-cli/2.3.1", pinned.UserAgent)
+	require.Equal(t, "kimi-code-cli/2.5.2", pinned.UserAgent)
 	require.Equal(t, kimi.ProductToken, pinned.Originator)
 	require.Equal(t, kimi.DefaultVersion, pinned.Version)
 	require.Equal(t, pinned, kimi.DefaultIdentity())

@@ -41,7 +41,7 @@ func prepareZCodeRequestState(req *http.Request, account *Account) error {
 	identity = zcode.ModelIdentity(identity)
 	*req = *req.WithContext(outboundidentity.WithIdentity(req.Context(), identity))
 	outboundidentity.ApplyContext(req)
-	for _, name := range []string{"x-request-id", "x-zcode-trace-id", "x-zcode-session-type", "x-session-id", "x-query-id", "x-zcode-query-source"} {
+	for _, name := range []string{"x-request-id", "x-zcode-trace-id", "x-zcode-session-type", "x-session-id", "x-query-id", "x-zcode-query-source", "x-zcode-session-features"} {
 		deleteHeaderAllForms(req.Header, name)
 	}
 	state := zcodeRequestState{trace: uuid.NewString(), device: identity.ControlHeaders[zcode.HeaderDeviceMid]}

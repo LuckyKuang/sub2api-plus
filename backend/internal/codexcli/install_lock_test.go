@@ -66,14 +66,14 @@ func TestVersionProbeDoesNotInheritGatewayCredentials(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "gateway-secret-must-not-reach-version-probe")
 	t.Setenv("CODEX_HOME", "/shared/global-codex-home")
 	path := filepath.Join(t.TempDir(), "codex")
-	script := "#!/bin/sh\n[ \"$#\" = 1 ] && [ \"$1\" = --version ] && [ -z \"${OPENAI_API_KEY-}\" ] && [ -z \"${CODEX_HOME-}\" ] || exit 7\nprintf '%s\\n' 'codex-cli 0.165.0'\n"
+	script := "#!/bin/sh\n[ \"$#\" = 1 ] && [ \"$1\" = --version ] && [ -z \"${OPENAI_API_KEY-}\" ] && [ -z \"${CODEX_HOME-}\" ] || exit 7\nprintf '%s\\n' 'codex-cli 0.167.0'\n"
 	if err := os.WriteFile(path, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	version, err := executableVersion(ctx, path)
-	if err != nil || version != "0.165.0" {
+	if err != nil || version != "0.167.0" {
 		t.Fatalf("isolated version probe failed: %q %v", version, err)
 	}
 	if err := os.WriteFile(path, []byte("#!/bin/sh\nprintf '%s' '"+strings.Repeat("x", 5000)+"'\n"), 0700); err != nil {

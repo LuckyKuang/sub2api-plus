@@ -880,6 +880,52 @@ describe("admin SettingsView payment visible method controls", () => {
     } finally { wrapper.unmount(); }
   });
 
+  it("loads and saves the safety notice switch independently of the Codex transport switches", async () => {
+    getSettings.mockResolvedValue({ ...baseSettingsResponse, openai_codex_safety_buffering_suppressed: true });
+    const wrapper = mountView();
+    try {
+      await flushPromises();
+      await openIdentityTab(wrapper);
+      const suppression = wrapper.get('[data-testid="codex-safety-buffering-suppressed"]');
+      expect((suppression.element as HTMLInputElement).checked).toBe(true);
+      await suppression.setValue(false);
+      await wrapper.find("form").trigger("submit.prevent");
+      await flushPromises();
+      expect(updateSettings).toHaveBeenLastCalledWith(expect.objectContaining({
+        openai_codex_safety_buffering_suppressed: false,
+        openai_codex_ws_enabled: true,
+        openai_codex_http_ws_enabled: false,
+      }));
+      await suppression.setValue(true);
+      await wrapper.find("form").trigger("submit.prevent");
+      await flushPromises();
+      expect(updateSettings).toHaveBeenLastCalledWith(expect.objectContaining({ openai_codex_safety_buffering_suppressed: true }));
+    } finally { wrapper.unmount(); }
+  });
+
+  it("loads and saves the session error message switch independently of the Codex transport switches", async () => {
+    getSettings.mockResolvedValue({ ...baseSettingsResponse, openai_error_messages_normalized: true });
+    const wrapper = mountView();
+    try {
+      await flushPromises();
+      await openIdentityTab(wrapper);
+      const suppression = wrapper.get('[data-testid="openai-error-messages-normalized"]');
+      expect((suppression.element as HTMLInputElement).checked).toBe(true);
+      await suppression.setValue(false);
+      await wrapper.find("form").trigger("submit.prevent");
+      await flushPromises();
+      expect(updateSettings).toHaveBeenLastCalledWith(expect.objectContaining({
+        openai_error_messages_normalized: false,
+        openai_codex_ws_enabled: true,
+        openai_codex_http_ws_enabled: false,
+      }));
+      await suppression.setValue(true);
+      await wrapper.find("form").trigger("submit.prevent");
+      await flushPromises();
+      expect(updateSettings).toHaveBeenLastCalledWith(expect.objectContaining({ openai_error_messages_normalized: true }));
+    } finally { wrapper.unmount(); }
+  });
+
   it("saves Codex transport switches independently and disables HTTP preference while upstream WS is off", async () => {
     const wrapper = mountView();
     await flushPromises();

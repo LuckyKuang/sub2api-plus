@@ -70,7 +70,7 @@ func (r *codexBridgeHotAccountRepo) GetByID(_ context.Context, id int64) (*Accou
 	// values must never replace the acquired owner's immutable wire snapshot.
 	row.Credentials["access_token"] = "unacquired-live-token"
 	row.Credentials["chatgpt_account_id"] = "unacquired-live-workspace"
-	row.Credentials["user_agent"] = "codex_cli_rs/0.165.0 (Debian 12; arm64) xterm-256color"
+	row.Credentials["user_agent"] = "codex_cli_rs/0.167.0 (Debian 12; arm64) xterm-256color"
 	row.ProxyID = nil
 	row.Proxy = nil
 	return row, nil
@@ -84,7 +84,7 @@ func TestCodexCLIBridgeHotSwitchHTTPAndProbeUseCurrentFlags(t *testing.T) {
 	for _, path := range []string{"gateway", "probe"} {
 		t.Run(path, func(t *testing.T) {
 			global := &codexBridgeSwitchRepo{openAIIdentitySettingRepoStub: &openAIIdentitySettingRepoStub{values: map[string]string{
-				SettingKeyOpenAICodexUserAgent: "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) screen-256color",
+				SettingKeyOpenAICodexUserAgent: "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) screen-256color",
 			}}}
 			settings := &SettingService{settingRepo: global}
 			rows := &codexBridgeHotAccountRepo{owners: make(map[int64]*Account), flags: make(map[int64]*atomic.Bool)}
@@ -94,7 +94,7 @@ func TestCodexCLIBridgeHotSwitchHTTPAndProbeUseCurrentFlags(t *testing.T) {
 				owner := enabledCodexCLIExecutionAccount(id, fmt.Sprintf("acquired-token-%d", id), fmt.Sprintf("acquired-workspace-%d", id))
 				owner.Credentials[CodexCLIConfigCredentialKey].(map[string]any)["enabled"] = false
 				if id == 101 {
-					owner.Credentials["user_agent"] = "codex_vscode/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color"
+					owner.Credentials["user_agent"] = "codex_vscode/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color"
 				} else {
 					delete(owner.Credentials, "user_agent")
 				}
@@ -191,13 +191,13 @@ func TestCodexCLIBridgeHotSwitchHTTPAndProbeUseCurrentFlags(t *testing.T) {
 					require.Equal(t, expectedBody, observed.body)
 					require.Equal(t, fmt.Sprintf("Bearer acquired-token-%d", id), observed.header.Get("Authorization"))
 					require.Equal(t, fmt.Sprintf("acquired-workspace-%d", id), observed.header.Get("Chatgpt-Account-Id"))
-					wantUA, wantOriginator := "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) screen-256color", "codex_cli_rs"
+					wantUA, wantOriginator := "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) screen-256color", "codex_cli_rs"
 					if id == 101 {
-						wantUA, wantOriginator = "codex_vscode/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color", "codex_vscode"
+						wantUA, wantOriginator = "codex_vscode/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color", "codex_vscode"
 					}
 					require.Equal(t, wantUA, observed.header.Get("User-Agent"))
 					require.Equal(t, wantOriginator, observed.header.Get("Originator"))
-					require.Equal(t, "0.165.0", observed.header.Get("Version"))
+					require.Equal(t, "0.167.0", observed.header.Get("Version"))
 					want := tc.wantFirst
 					if index == 1 {
 						want = tc.wantSecond

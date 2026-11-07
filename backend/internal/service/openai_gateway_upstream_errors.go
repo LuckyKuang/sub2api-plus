@@ -118,6 +118,9 @@ func isOpenAIInstructionsRequiredError(upstreamStatusCode int, upstreamMsg strin
 }
 
 func isOpenAITransientProcessingError(upstreamStatusCode int, upstreamMsg string, upstreamBody []byte) bool {
+	if openAIInputTerminalCode(upstreamStatusCode, upstreamBody) != "" {
+		return false
+	}
 	if upstreamStatusCode < http.StatusBadRequest {
 		return false
 	}
@@ -320,6 +323,9 @@ func (s *OpenAIGatewayService) shouldFailoverUpstreamError(statusCode int) bool 
 }
 
 func (s *OpenAIGatewayService) shouldFailoverOpenAIUpstreamResponse(account *Account, statusCode int, upstreamMsg string, upstreamBody []byte) bool {
+	if openAIInputTerminalCode(statusCode, upstreamBody) != "" {
+		return false
+	}
 	// cyber_policy is request-scoped even when an intermediary wraps the
 	// provider response in a retryable 5xx status. Never punish or rotate the
 	// selected credential for it.
@@ -467,6 +473,13 @@ func newOpenAIUpstreamFailoverError(
 		ResponseHeaders:        responseHeaders.Clone(),
 		RetryableOnSameAccount: retryableOnSameAccount && !requestScopedCapacity,
 		RequestScopedTransient: requestScopedCapacity,
+	}
+	if openAIInputTerminalCode(statusCode, responseBody) != "" {
+		failoverErr.RetryableOnSameAccount = false
+		failoverErr.RequestScopedTransient = false
+		failoverErr.Scope = GatewayFailureScopeRequest
+		failoverErr.NextAccountAction = NextAccountStop
+		return failoverErr
 	}
 	// The exact policy code takes precedence over free-form message heuristics.
 	if statusCode == http.StatusServiceUnavailable && IsOpenAIPolicyCapacityUnavailable(responseBody) {
@@ -788,6 +801,7 @@ func (s *OpenAIGatewayService) handleErrorResponse(
 		"upstream_error",
 		"Upstream request failed",
 	); matched {
+		SetOpenAIErrorMessageSource(c, body)
 		MarkResponseCommitted(c)
 		c.JSON(status, gin.H{
 			"error": gin.H{
@@ -819,6 +833,7 @@ func (s *OpenAIGatewayService) handleErrorResponse(
 			Detail:             upstreamDetail,
 		})
 		MarkResponseCommitted(c)
+		SetOpenAIErrorMessageSource(c, body)
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": gin.H{
 				"type":    "upstream_error",
@@ -879,8 +894,8 @@ func (s *OpenAIGatewayService) handleErrorResponse(
 	// code/param。原生 Responses 是唯一漏掉的一条。
 	if isOpenAIDeterministicClientError(resp.StatusCode) || isOpenAIModelNotFoundError(resp.StatusCode, body) {
 		writeOpenAIUpstreamClientError(c, resp.StatusCode, body, upstreamMsg)
-		if isOpenAIModelNotFoundError(resp.StatusCode, body) {
-			return nil, &openAIModelNotFoundTerminalError{cause: fmt.Errorf("upstream error: %d message=%s", resp.StatusCode, upstreamMsg)}
+		if isOpenAIModelNotFoundError(resp.StatusCode, body) || openAIInputTerminalCode(resp.StatusCode, body) != "" {
+			return nil, &openAIRequestTerminalError{cause: fmt.Errorf("upstream error: %d message=%s", resp.StatusCode, upstreamMsg)}
 		}
 		if upstreamMsg == "" {
 			return nil, fmt.Errorf("upstream error: %d", resp.StatusCode)
@@ -918,6 +933,7 @@ func (s *OpenAIGatewayService) handleErrorResponse(
 		errMsg = upstreamMsg
 	}
 
+	SetOpenAIErrorMessageSource(c, body)
 	c.JSON(statusCode, gin.H{
 		"error": gin.H{
 			"type":    errType,
@@ -1107,6 +1123,9 @@ func isOpenAIRequestScopedCapacityShed(upstreamMsg string, upstreamBody []byte) 
 // code inside a 401/403 must not suppress a real credential/access failure.
 // Streaming events have no HTTP rejection status and use the code directly.
 func isOpenAIHTTPCapacityShed(status int, upstreamMsg string, body []byte) bool {
+	if openAIInputTerminalCode(status, body) != "" {
+		return false
+	}
 	if IsOpenAIPolicyCapacityUnavailable(body) {
 		return status == http.StatusServiceUnavailable
 	}

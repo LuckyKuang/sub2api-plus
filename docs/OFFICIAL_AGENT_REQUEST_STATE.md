@@ -206,3 +206,10 @@ Regression owners include `outbound_mapped_id*`, `credential_state_mutation*`,
 the repository SQL/Redis tests and provider wire tests. Expected UUID versions,
 header/body associations and forbidden cross-owner writes are asserted from
 this contract, independently of the implementation.
+
+The November 7 ZCode review adds `x-zcode-session-features` to context-owned
+attribution. ZCode's runtime accumulates workflow tags and sorts/deduplicates
+its optional header. This gateway owns no workflow execution facts, so no such
+header is emitted. Incoming values and static overrides are removed on both
+credential types, retries, probes and control paths; no prompt-based inference
+or persisted compatibility fallback supplies it.

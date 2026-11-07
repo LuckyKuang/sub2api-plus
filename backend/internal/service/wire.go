@@ -855,8 +855,9 @@ func ProvideOpsIngressRejectAggregator(opsRepo OpsRepository, opsService *OpsSer
 }
 
 // ProvideSettingService wires SettingService with group reader and proxy repo.
-func ProvideSettingService(scopedKeys ScopedAdminKeyRepository, settingRepo SettingRepository, groupRepo GroupRepository, proxyRepo ProxyRepository, cfg *config.Config) *SettingService {
+func ProvideSettingService(scopedKeys ScopedAdminKeyRepository, settingRepo SettingRepository, groupRepo GroupRepository, proxyRepo ProxyRepository, cfg *config.Config, invalidationBus InvalidationBus) *SettingService {
 	svc := NewSettingService(settingRepo, cfg)
+	svc.StartCodexSafetyBufferingRuntime(context.Background(), invalidationBus)
 	if store, ok := settingRepo.(OutboundIDStore); ok {
 		SetDefaultOutboundIDStore(store)
 	}

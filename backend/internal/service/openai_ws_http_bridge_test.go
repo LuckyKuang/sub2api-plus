@@ -1527,14 +1527,15 @@ func TestProxyOpenAIWSHTTPBridgeTurnFinalizesPromptCacheIdentity(t *testing.T) {
 			wantOriginalKeyGone: true,
 		},
 		{
-			name: "gpt_5_6_oauth_removes_unsupported_options_and_aligns_explicit_key",
+			name: "gpt_5_6_oauth_preserves_official_ttl_and_aligns_explicit_key",
 			account: &Account{
 				ID:          82,
 				Platform:    PlatformOpenAI,
 				Type:        AccountTypeOAuth,
 				Concurrency: 1,
 			},
-			payload:             `{"type":"response.create","model":"gpt-5.6","input":"hello","prompt_cache_key":"oauth-cache-key","prompt_cache_options":{"retention":"24h"}}`,
+			payload:             `{"type":"response.create","model":"gpt-5.6","input":"hello","prompt_cache_key":"oauth-cache-key","prompt_cache_options":{"ttl":"30m"}}`,
+			wantOptions:         true,
 			wantOriginalKeyGone: true,
 		},
 		{

@@ -1,8 +1,8 @@
 export default {
   codexCliRuntime: {
     title: '官方 Codex CLI 运行环境',
-    description: 'CLI 版本由当前 Sub2API 发行版固定，仅在点击按钮后安装或切换版本。',
-    taskHint: '运行环境就绪后，可开启桥接环境，并在 OpenAI OAuth 账号的新增或编辑页面配置“官方 Codex CLI”。',
+    description: '审核的 CLI 版本跟随当前发行版的 Codex 默认出站身份版本。点击“安装 / 更新”后下载并校验对应版本。',
+    taskHint: '运行环境就绪后，可开启桥接环境，并在 OpenAI OAuth 或 API Key 账号的新增或编辑页面配置“官方 Codex CLI”。',
     bridgeTitle: '开启桥接环境',
     bridgeHint: '全局开关与账号开关共同决定是否使用官方 Codex CLI。安装或检测不会自动开启桥接；关闭会阻止新请求使用桥接，不会删除账号配置或凭据。',
     bridgeRequiresReady: '请先安装并检测到已验证的指定版本，再开启桥接环境。',
@@ -29,9 +29,10 @@ export default {
     versionUnavailable: '已检测到；验证前无法安全读取版本',
     checking: '正在检测本机 CLI…',
     check: '检测安装状态',
-    installTarget: '安装 / 切换至 {version}',
+    installTarget: '安装 / 更新至 {version}',
+    updateTarget: '更新 / 切换至 {version}',
     installing: '正在安装指定版本…',
-    versionHint: '低于或高于指定版本均须切换。即使版本相同，也必须验证官方来源后才能开启桥接环境。',
+    versionHint: '仅更新到当前发行版审核的版本，并校验官方制品；不会修改自定义出站身份。即使版本相同，也必须验证官方来源后才能开启桥接环境。',
     notInstalledHint: '请安装发行版指定的 CLI 版本后使用桥接或独立任务。',
     versionMismatch: '检测到的版本与当前发行版不匹配，请安装指定版本。',
     unsupportedPlatform: '当前平台不支持项目管理的 CLI 安装。',

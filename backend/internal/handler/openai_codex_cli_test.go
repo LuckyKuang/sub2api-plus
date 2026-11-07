@@ -230,7 +230,7 @@ func TestOrdinaryResponsesDoesNotEnableCLITransportFromHeadersOrRequestPath(t *t
 	h, boundary := newCodexCLIIngressHandler(t, securityaudit.NewCoordinator(audits, audits), nil, false)
 	c, w := codexCLIIngressContext(`{"model":"gpt-5.1","instructions":"ordinary instructions","input":"ordinary input","future_option":true}`, true)
 	c.Request.Header.Set("X-Codex-CLI", "true")
-	c.Request.Header.Set("User-Agent", "codex_cli_rs/0.165.0")
+	c.Request.Header.Set("User-Agent", "codex_cli_rs/0.167.0")
 	h.Responses(c)
 	require.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
 	require.False(t, service.IsCodexCLITask(c.Request.Context()), "only the explicit route wrapper can authorize task mode")

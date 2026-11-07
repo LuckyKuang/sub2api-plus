@@ -10,7 +10,7 @@ The current tree integrates official `v0.2.19`, peeled commit
 `dece26153621959ccd7635814f4b2d08304e681a`, following the previously imported
 `0a2a29b32e6724714c69822296ccd05a6b86bfdd` snapshot. Plus is the authoritative
 implementation when upstream behavior conflicts with an intentional Plus contract.
-The candidate release is `v0.2.19+custom.005`; its mapping remains `planned`
+The candidate release is `v0.2.19+custom.006`; its mapping remains `planned`
 until publication and immutable artifact verification complete.
 
 The v0.2.19 follow-up adds configurable Gemini same-account retries, bound-cache
@@ -103,9 +103,9 @@ of a new release.
 ## Current Version
 
 ```text
-Git/GitHub: v0.2.19+custom.005
-Application: 0.2.19+custom.005
-GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.19-custom.005
+Git/GitHub: v0.2.19+custom.006
+Application: 0.2.19+custom.006
+GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.19-custom.006
 ```
 
 ## Release Mapping
@@ -191,6 +191,7 @@ GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.19-custom.005
 | `v0.2.19+custom.003` | `v0.2.19` | `dece26153621959ccd7635814f4b2d08304e681a` | published |
 | `v0.2.19+custom.004` | `v0.2.19` | `dece26153621959ccd7635814f4b2d08304e681a` | published |
 | `v0.2.19+custom.005` | `v0.2.19` | `dece26153621959ccd7635814f4b2d08304e681a` | published |
+| `v0.2.19+custom.006` | `v0.2.19` | `dece26153621959ccd7635814f4b2d08304e681a` | published |
 
 `v0.2.15+custom.003` records the integrated official main snapshot in the
 Official Commit column. Its tagged official baseline remains
@@ -240,8 +241,13 @@ metadata accumulated since `.003`. Its mapping was published after immutable
 artifact verification.
 
 `v0.2.19+custom.005` retains the same official baseline for the Composite access,
-tier-pricing and console update. Its mapping remains planned until publication
-and immutable artifact verification.
+tier-pricing and console update. Its mapping was published after immutable
+artifact verification.
+
+`v0.2.19+custom.006` retains the same official baseline for the live Codex
+safety buffering notice suppression and normalized OpenAI session error wording.
+Its mapping remains planned until publication and immutable artifact
+verification.
 
 `v0.2.4+custom.006` is marked withdrawn because official `v0.2.5` was imported before that snapshot overlay was published. Do not reuse or retag `.006`.
 

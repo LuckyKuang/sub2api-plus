@@ -236,6 +236,16 @@ def main() -> int:
                 defaults[name] = match.group(1)
     if len(defaults) == 3:
         version = defaults["codexCLIVersion"]
+        # An approved default upgrade must also advance the reviewed executable
+        # and browser catalog declaration. This check never resolves latest or
+        # changes administrator identity pins.
+        for filename, pattern in (
+            ("backend/internal/codexcli/manifest.go", r'const targetVersion = "([^"\n]+)"'),
+            ("frontend/src/api/codex.ts", r"const DEFAULT_CODEX_CLIENT_VERSION = '([^'\n]+)'"),
+        ):
+            match = re.search(pattern, (ROOT / filename).read_text(encoding="utf-8"))
+            if match is None or match.group(1) != version:
+                violations.append(f"{filename}: reviewed Codex version must match compiled outbound identity {version}")
         originator = defaults["CodexDefaultOriginator"]
         user_agent = f"{originator}/{version}{defaults['codexCLIUserAgentSuffix']}"
         doc = ROOT / "docs/protocols/CODEX_CLIENT_PROFILES.md"

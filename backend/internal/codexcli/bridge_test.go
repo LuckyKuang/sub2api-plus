@@ -22,7 +22,7 @@ import (
 // The acceptance contract is a transparent official HTTP hop: exact arbitrary
 // Responses bytes, trusted owner identity, one provider write, no agent tools,
 // no credential export, cancellation cleanup and no client-controlled target.
-// The independent fixture models rust-v0.165.0 responses-api-proxy/src/lib.rs,
+// The independent fixture models rust-v0.167.0 responses-api-proxy/src/lib.rs,
 // including its restricted stdin token format and startup file.
 const bridgeFixtureProgram = `#!/usr/bin/env python3
 import http.server,json,os,re,sys,urllib.request,urllib.error
@@ -164,15 +164,15 @@ func TestCodexBridgePreservesResponsesBytesOwnerAndStatusWithoutReplay(t *testin
 			body := `{"model":"gpt-6.1-sol","input":[{"role":"user","content":[{"type":"input_text","text":"hello"}]}],"tools":[{"type":"function","name":"caller_tool","parameters":{}}],"previous_response_id":"resp_caller","future":{"preserve":true}}`
 			req, _ := http.NewRequestWithContext(t.Context(), http.MethodPost, "https://chatgpt.com/backend-api/codex/responses?trusted=1", strings.NewReader(body))
 			req.Header.Set("Authorization", "Bearer owner.jwt.with.dots")
-			req.Header.Set("User-Agent", "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color")
+			req.Header.Set("User-Agent", "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color")
 			req.Header.Set("Originator", "codex_cli_rs")
-			req.Header.Set("Version", "0.165.0")
+			req.Header.Set("Version", "0.167.0")
 			req.Header.Set("Chatgpt-Account-Id", "owner-A")
 			var calls atomic.Int32
 			responseBody := "event: response.completed\ndata: {\"type\":\"response.completed\",\"future\":true}\n\n"
 			res, err := bridgeWithHostCheck(t.Context(), runtime, req, func(ctx context.Context, actual *http.Request) (*http.Response, error) {
 				calls.Add(1)
-				if actual.URL.String() != req.URL.String() || actual.Header.Get("Authorization") != "Bearer owner.jwt.with.dots" || actual.Header.Get("Chatgpt-Account-Id") != "owner-A" || actual.Header.Get("User-Agent") != req.Header.Get("User-Agent") || actual.Header.Get("Originator") != "codex_cli_rs" || actual.Header.Get("Version") != "0.165.0" {
+				if actual.URL.String() != req.URL.String() || actual.Header.Get("Authorization") != "Bearer owner.jwt.with.dots" || actual.Header.Get("Chatgpt-Account-Id") != "owner-A" || actual.Header.Get("User-Agent") != req.Header.Get("User-Agent") || actual.Header.Get("Originator") != "codex_cli_rs" || actual.Header.Get("Version") != "0.167.0" {
 					t.Error("trusted owner or destination changed")
 				}
 				got, _ := io.ReadAll(actual.Body)
@@ -407,9 +407,9 @@ func TestCodexBridgeOfficialBinaryWire(t *testing.T) {
 	if path == "" {
 		t.Skip("dedicated official wire gate supplies independently verified binary")
 	}
-	// Independent expected executable digests from rust-v0.165.0 release assets.
+	// Independent expected executable digests from rust-v0.167.0 release assets.
 	// Neither production manifests nor the executable under test produce these.
-	expected := map[string]string{"linux/amd64": "c06a67fd8ac76508dc78bd99ce20c9f317b8d568beda59485f3f4134df9962d5", "linux/arm64": "b32ece31af06440da980b733fb8fefdd1f193439595fda84096f1caaceec543f"}[runtime.GOOS+"/"+runtime.GOARCH]
+	expected := map[string]string{"linux/amd64": "cdcb45aaa01d0f14e298985e09465aebccd47f64ecd298aea44814af7b62bbda", "linux/arm64": "2fe94d848540ff2a6868c7ebcc494126a974aa409711676d14fa0379e49e6143"}[runtime.GOOS+"/"+runtime.GOARCH]
 	if expected == "" || !filepath.IsAbs(path) {
 		t.Fatal("unsupported official wire environment")
 	}
@@ -431,15 +431,15 @@ func TestCodexBridgeOfficialBinaryWire(t *testing.T) {
 		body := `{"service_tier":"priority","model":"fixture-model","input":[{"role":"user","content":"retain"}],"tools":[{"type":"function","name":"external","parameters":{}}],"unknown_sibling":{"retain":true}}`
 		req, _ := http.NewRequest(http.MethodPost, "https://chatgpt.com/backend-api/codex/responses", strings.NewReader(body))
 		req.Header.Set("Authorization", "Bearer synthetic.oauth.jwt.with.dots")
-		req.Header.Set("User-Agent", "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color")
+		req.Header.Set("User-Agent", "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color")
 		req.Header.Set("Originator", "codex_cli_rs")
-		req.Header.Set("Version", "0.165.0")
+		req.Header.Set("Version", "0.167.0")
 		var calls atomic.Int32
 		wire := "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"unknown\":true}}\n\n"
 		res, err := Bridge(t.Context(), status, req, func(ctx context.Context, out *http.Request) (*http.Response, error) {
 			calls.Add(1)
 			got, _ := io.ReadAll(out.Body)
-			if out.URL.String() != req.URL.String() || string(got) != body || out.Header.Get("Authorization") != "Bearer synthetic.oauth.jwt.with.dots" || out.Header.Get("User-Agent") != req.Header.Get("User-Agent") || out.Header.Get("Version") != "0.165.0" || out.Header.Get("Originator") != "codex_cli_rs" {
+			if out.URL.String() != req.URL.String() || string(got) != body || out.Header.Get("Authorization") != "Bearer synthetic.oauth.jwt.with.dots" || out.Header.Get("User-Agent") != req.Header.Get("User-Agent") || out.Header.Get("Version") != "0.167.0" || out.Header.Get("Originator") != "codex_cli_rs" {
 				t.Error("real CLI relay changed trusted provider request")
 			}
 			return &http.Response{StatusCode: code, Header: http.Header{"Content-Type": {"text/event-stream"}, "X-Request-Id": {"real-cli-fixture"}, "Location": {"http://127.0.0.1:1/must-not-follow"}}, Body: io.NopCloser(strings.NewReader(wire))}, nil
@@ -470,9 +470,9 @@ func TestCodexBridgeOfficialBinaryWire(t *testing.T) {
 				t.Fatal(err)
 			}
 			request.Header.Set("Authorization", "Bearer synthetic-api-key")
-			request.Header.Set("User-Agent", "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color")
+			request.Header.Set("User-Agent", "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color")
 			request.Header.Set("Originator", "codex_cli_rs")
-			request.Header.Set("Version", "0.165.0")
+			request.Header.Set("Version", "0.167.0")
 			if fixture.contentType != "" {
 				request.Header.Set("Content-Type", fixture.contentType)
 			}
@@ -482,8 +482,8 @@ func TestCodexBridgeOfficialBinaryWire(t *testing.T) {
 				body, readErr := io.ReadAll(out.Body)
 				if readErr != nil || out.Method != fixture.method || out.URL.String() != fixture.endpoint || string(body) != fixture.body ||
 					out.Header.Get("Content-Type") != fixture.contentType || out.Header.Get("Authorization") != "Bearer synthetic-api-key" ||
-					out.Header.Get("Chatgpt-Account-Id") != "" || out.Header.Get("User-Agent") != "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color" ||
-					out.Header.Get("Originator") != "codex_cli_rs" || out.Header.Get("Version") != "0.165.0" {
+					out.Header.Get("Chatgpt-Account-Id") != "" || out.Header.Get("User-Agent") != "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color" ||
+					out.Header.Get("Originator") != "codex_cli_rs" || out.Header.Get("Version") != "0.167.0" {
 					t.Error("official CLI changed the prepared API Key request")
 				}
 				return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"retained":true}`))}, nil

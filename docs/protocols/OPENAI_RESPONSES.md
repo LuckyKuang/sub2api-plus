@@ -1079,3 +1079,110 @@ previous turn. `outbound_transport` distinguishes native sends, verified CLI
 bridge callbacks and managed-task execution; historical evidence is unknown.
 These fields are administrator-only and do not prove upstream Fast execution.
 See [CLI usage and evidence](../CODEX_CLI.md#usage-accuracy-and-outbound-evidence).
+
+## Downstream Codex safety buffering notices
+
+The carrier contract follows the reviewed Codex source's
+[`ResponsesStreamEvent` parsing](https://github.com/openai/codex/blob/154e8736a51224e12b2d990753622a2cd8118f54/codex-rs/codex-api/src/sse/responses.rs)
+and [header treatment](https://github.com/openai/codex/blob/154e8736a51224e12b2d990753622a2cd8118f54/codex-rs/codex-api/src/safety_buffering.rs).
+
+The administrator setting `openai_codex_safety_buffering_suppressed` defaults
+to `false`. It applies to OpenAI OAuth and API Key accounts, including custom
+API Key endpoints, the official CLI transparent bridge, and transport plugins.
+It is a downstream display projection: upstream requests, safety decisions,
+account identity, billing and credential ownership keep their existing rules.
+
+When enabled, the final HTTP/SSE or WebSocket writer removes top-level
+`safety_buffering` and the buffering-specific `type`, `use_cases`, `reasons`
+and `retry_model` fields in `response.metadata` whose `metadata.type` is
+`safety_buffering`. Mixed-event verification, moderation, guardian and unknown
+sibling metadata survive. Body text, tool arguments and nested user fields keep
+their contents. Real errors, usage and terminal events remain visible. The two
+`x-codex-safety-buffering-{enabled,faster-model}` response headers are removed
+before response commitment, including the protocol's embedded header carrier.
+If only the target notice remains after projection, its entire
+`response.metadata` event is discarded, including SSE event/id framing and WS
+text or binary frames. No empty envelope, empty frame, replacement message or
+client action is emitted. Independent SSE comment keepalives survive. Unknown
+root fields or sibling metadata make an event mixed, so they are retained.
+
+Each complete event uses the current instance's setting at actual downstream
+write, including staged/pending output and bridge replay. Enabling or disabling
+it affects an ongoing generation without resubmitting, reconnecting or changing
+transport. Already committed events cannot be recalled; suppressed historical
+fields are not replayed. HTTP/handshake headers cannot be retroactively changed;
+after a mid-stream disable, a later notice without `retry_model` may therefore
+lack the header-derived retry option.
+
+Successful saves update the local runtime atomically. Other replicas reconcile
+through the existing Redis invalidation bus and a one-second background poll;
+this is eventual consistency, not simultaneous cluster-wide commitment. Failed
+refreshes retain the last valid value; an unavailable first read uses the default
+off. Malformed projection input passes through with a structured,
+content-free diagnostic. One event is staged using the existing anonymous spool;
+fragmented JSON and SSE above 4 MiB remain subject to projection. There is no
+size-based raw bypass; existing gateway parsers own accepted input limits. At
+projection the accepted event is materialized for the JSON transform, rather
+than retaining a whole generation. Staging/write failures follow transport
+failure handling and never release unsanitized staged data as a fallback.
+Existing endpoint validation and transport
+failures keep their owning behavior. Keepalive, cancellation and resource
+cleanup are independent of notice suppression.
+An EOF event without a final empty line is flushed before reporting delivery;
+a failure on that final write marks the client disconnected while retaining
+collected usage and any existing upstream error.
+
+## Downstream session error wording
+
+The independent administrator setting `openai_error_messages_normalized`
+(“统一会话错误文案”) defaults to `false` and is persisted in system settings.
+It applies to OpenAI OAuth and API Key owners, native sends and official Codex
+CLI outbound bridging. It does not depend on safety buffering suppression.
+When enabled, only `message` in a recognized protocol error carrier is changed:
+
+| Exact error code | Downstream message |
+| --- | --- |
+| `upstream_response_interrupted` | 响应已中断，请输入「继续」重新提交。 |
+| `upstream_unavailable` | 响应已中断，请输入「继续」重新提交。 |
+| `session_account_lost` | 当前会话可能无法恢复，请新开会话继续。 |
+
+Recognized carriers are HTTP JSON `error`, SSE/WS `type: error` (nested `error`
+or root code/message), and `response.failed` (`response.error` or root `error`).
+Matching is exact and case-sensitive; missing/non-string messages, unknown
+codes/events, ordinary content, tools and opaque nested objects pass through.
+Non-OpenAI responses retain their original bytes and write boundaries.
+When an existing HTTP sanitizer, administrator error rule, exhausted failover,
+or WS-to-HTTP rejection rebuilds an error without a code, its final failure's
+recognized source code still selects the message. Only that code is retained
+as internal display metadata; the private upstream body is not restored, and
+no code is added to the sanitized downstream envelope. Explicit downstream
+codes take precedence, except a generic terminal code explicitly marked as
+locally synthesized while rendering this same final failure. Stream failover
+retains its source code on the attempt's error, even if its stored response body
+is sanitized earlier. Recovered/retried attempts cannot supply this metadata
+to later errors, and the HTTP bridge clears it for each WebSocket turn.
+This also covers a non-streaming request receiving an SSE failure upstream and
+remote compact failures after a keepalive has committed HTTP 200: the existing
+JSON error or `response.failed` terminal retains its shape and code.
+An exhausted uncommitted SSE attempt returns a JSON error with JSON content
+type; headers prepared by an abandoned attempt cannot label it as SSE.
+HTTP status, error code/type, terminal failure, retry/failover policy and usage
+processing retain existing behavior. The existing Responses failure sanitizer
+may omit wire usage and other response details; internal billing usage is still
+collected before downstream projection. This switch does not synthesize success,
+automatically retry a request, or promise that submitting “继续” restores a session.
+
+HTTP projection sits beneath ops capture, including handler errors emitted after
+`Forward` returns. WS projection runs after upstream observers at the final client
+frame write. Admin error records keep original diagnostics; historical rows are
+not rewritten. Accepted fragmented JSON/SSE is staged per event using the existing
+anonymous spool, with EOF cleanup and transport failure propagation.
+Eligible HTTP writers remove fixed `Content-Length` before an early header
+commit, including while disabled, because a later live toggle can change the
+byte length. HTTP framing then owns the actual length; error bodies are never
+truncated or rejected because of a stale upstream length.
+Current-instance settings are read at event release, so ON/OFF affects subsequent
+unsent errors during an ongoing generation. Already delivered messages cannot be
+changed. Both downstream settings share the existing invalidation channel and
+one-second reconciliation worker. Replica changes are eventually consistent;
+read failures retain each last valid setting, and failed writes do not change it.

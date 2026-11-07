@@ -289,12 +289,12 @@ func TestNormalizeOpenAIPromptCacheControlsForAccount(t *testing.T) {
 		require.False(t, gjson.GetBytes(normalized, "prompt_cache_options").Exists())
 	})
 
-	t.Run("oauth removes", func(t *testing.T) {
+	t.Run("oauth preserves official per-turn TTL", func(t *testing.T) {
 		account := &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth}
 		normalized, changed, err := normalizeOpenAIPromptCacheControlsForAccount(body, account, "gpt-5.6-sol")
 		require.NoError(t, err)
 		require.True(t, changed)
-		require.False(t, gjson.GetBytes(normalized, "prompt_cache_options").Exists())
+		require.Equal(t, "30m", gjson.GetBytes(normalized, "prompt_cache_options.ttl").String())
 	})
 }
 
@@ -337,13 +337,13 @@ func TestOpenAIResponsesCompactPromptCacheFinalization(t *testing.T) {
 			wantUpstreamURL: openaiPlatformAPIURL + "/compact",
 		},
 		{
-			name:  "chatgpt oauth removes options",
+			name:  "chatgpt oauth preserves per-turn options",
 			model: "gpt-5.6-sol",
 			account: Account{
 				ID: 3, Name: "chatgpt-oauth", Platform: PlatformOpenAI, Type: AccountTypeOAuth, Concurrency: 1,
 				Credentials: map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-account"},
 			},
-			wantOptions:     false,
+			wantOptions:     true,
 			wantUpstreamURL: chatgptCodexURL + "/compact",
 		},
 	}
@@ -403,7 +403,7 @@ func TestGPT6CanonicalFamiliesPreservePlatformPromptCacheOptions(t *testing.T) {
 		oauth := &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth}
 		normalized, _, err = normalizeOpenAIPromptCacheControlsForAccount(body, oauth, model)
 		require.NoError(t, err)
-		require.False(t, gjson.GetBytes(normalized, "prompt_cache_options").Exists())
+		require.Equal(t, "30m", gjson.GetBytes(normalized, "prompt_cache_options.ttl").String())
 	}
 	require.False(t, shouldPreserveOpenAIPromptCacheOptions(&Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}, "gpt-6"))
 }

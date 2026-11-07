@@ -30,6 +30,7 @@ type openAIWSClientFrameConn struct {
 	// model identifier they supplied for the current turn.
 	restoreResponseModel func([]byte) []byte
 	restoreToolNames     func([]byte) []byte
+	projectOutput        func([]byte) []byte
 }
 
 // openAIWSPolicyEnforcingFrameConn wraps a client-side FrameConn and runs
@@ -663,6 +664,13 @@ func (c *openAIWSClientFrameConn) WriteFrame(ctx context.Context, msgType coderw
 			payload = c.restoreToolNames(payload)
 		}
 	}
+	if (msgType == coderws.MessageText || msgType == coderws.MessageBinary) && c.projectOutput != nil {
+		originalSize := len(payload)
+		payload = c.projectOutput(payload)
+		if originalSize > 0 && payload == nil {
+			return nil
+		}
+	}
 	return c.conn.Write(ctx, msgType, payload)
 }
 
@@ -1027,6 +1035,9 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 	stateStore := s.getOpenAIWSStateStore()
 	groupID := getOpenAIGroupIDFromContext(c)
 	clientFrameConn := &openAIWSClientFrameConn{
+		projectOutput: func(payload []byte) []byte {
+			return s.projectOpenAIWebSocketOutput(ctx, c, account, payload)
+		},
 		conn:                 clientConn,
 		controlCtx:           ctx,
 		interTurnIdleTimeout: s.openAIWSIngressInterTurnIdleTimeout(),
@@ -1304,7 +1315,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 	var pendingMigrationMessages [][]byte
 	var pendingMigrationBytes int64
 	var migrationUsage OpenAIUsage
-	var modelNotFoundTerminal atomic.Bool
+	var requestTerminal atomic.Bool
 	classifyUpstreamEvent := func(msgType coderws.MessageType, payload []byte, wroteDownstream bool) error {
 		if msgType != coderws.MessageText {
 			return nil
@@ -1312,10 +1323,10 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 		eventType, _, _ := parseOpenAIWSEventEnvelope(payload)
 		switch eventType {
 		case "error", "response.failed":
-			_, modelError := openAIModelNotFoundEventStatus(payload)
-			modelNotFoundTerminal.Store(modelError)
+			_, requestError := openAIRequestTerminalEventStatus(payload)
+			requestTerminal.Store(requestError)
 		case "response.completed", "response.done":
-			modelNotFoundTerminal.Store(false)
+			requestTerminal.Store(false)
 		}
 		if eventType == "response.created" {
 			failureAccountSideEffectsApplied = false
@@ -1448,8 +1459,8 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 				)
 				if hooks != nil && hooks.AfterTurn != nil {
 					var observationErr error
-					if modelNotFoundTerminal.Swap(false) && normalizeOpenAIWSTerminalEvent(turn.TerminalEventType) == "response.failed" {
-						observationErr = &openAIModelNotFoundTerminalError{cause: errors.New("upstream model_not_found")}
+					if requestTerminal.Swap(false) && normalizeOpenAIWSTerminalEvent(turn.TerminalEventType) == "response.failed" {
+						observationErr = &openAIRequestTerminalError{cause: errors.New("upstream request rejected")}
 					}
 					hooks.AfterTurn(turnNo, turnResult, observationErr)
 				}

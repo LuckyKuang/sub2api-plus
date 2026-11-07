@@ -112,6 +112,9 @@ func (s *openAIResponsesRejectedFieldRetryState) rememberLocked(body []byte) {
 }
 
 func normalizeOpenAIResponsesRejectedFieldRetryBody(statusCode int, body, responseBody []byte) ([]byte, string, bool, error) {
+	if openAIInputTerminalCode(statusCode, responseBody) != "" {
+		return nil, "", false, nil
+	}
 	if statusCode != http.StatusBadRequest || len(body) == 0 || len(responseBody) == 0 {
 		return nil, "", false, nil
 	}

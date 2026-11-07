@@ -36,6 +36,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 	lastFailureReason string,
 	agentTaskRecoveryTried *bool,
 ) (result *OpenAIForwardResult, returnErr error) {
+	defer s.beginCodexSafetyBufferingHTTPOutput(ctx, c, account)()
 	if s == nil || account == nil {
 		return nil, wrapOpenAIWSFallback("invalid_state", errors.New("service or account is nil"))
 	}
@@ -765,8 +766,8 @@ readLoop:
 			}
 			if !reqStream {
 				s.finalizeCodexClientQuotaHeaders(c.Writer.Header(), c, account)
-				if modelStatus, ok := openAIModelNotFoundEventStatus(message); ok {
-					writeOpenAIUpstreamClientError(c, modelStatus, message, sanitizeUpstreamErrorMessage(errMsg))
+				if terminalStatus, ok := openAIRequestTerminalEventStatus(message); ok {
+					writeOpenAIUpstreamClientError(c, terminalStatus, message, sanitizeUpstreamErrorMessage(errMsg))
 				} else {
 					c.JSON(statusCode, gin.H{
 						"error": gin.H{
@@ -777,8 +778,8 @@ readLoop:
 				}
 			}
 			terminalErr := fmt.Errorf("openai ws error event: %s", errMsg)
-			if _, ok := openAIModelNotFoundEventStatus(message); ok {
-				return nil, &openAIModelNotFoundTerminalError{cause: terminalErr}
+			if _, ok := openAIRequestTerminalEventStatus(message); ok {
+				return nil, &openAIRequestTerminalError{cause: terminalErr}
 			}
 			return nil, terminalErr
 		}
@@ -830,10 +831,13 @@ readLoop:
 			}
 			upstreamTerminalEvent = s.handleOpenAIWSTerminalTransientFailure(ctx, account, mappedModel, lease.HandshakeHeaders(), message)
 			if eventType == "response.failed" {
-				if status, ok := openAIModelNotFoundEventStatus(message); ok {
+				if status, ok := openAIRequestTerminalEventStatus(message); ok {
 					errMsg := sanitizeUpstreamErrorMessage(extractOpenAISSEErrorMessage(message))
 					if errMsg == "" {
 						errMsg = "model_not_found"
+						if code := openAIInputTerminalCode(0, message); code != "" {
+							errMsg = code
+						}
 					}
 					setOpsUpstreamError(c, status, errMsg, "")
 					if !reqStream {
@@ -841,7 +845,7 @@ readLoop:
 						writeOpenAIUpstreamClientError(c, status, message, errMsg)
 					}
 					cleanExit = len(pendingJSONDocuments) == 0
-					return resultWithUsage(), &openAIModelNotFoundTerminalError{cause: fmt.Errorf("openai ws response failed: %s", errMsg)}
+					return resultWithUsage(), &openAIRequestTerminalError{cause: fmt.Errorf("openai ws response failed: %s", errMsg)}
 				}
 			}
 			// A terminal event must be the final JSON document in its WS message.

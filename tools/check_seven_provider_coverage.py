@@ -110,6 +110,111 @@ CODEX_CLI_SERVICE_TESTS = (
     "TestCodexCLITaskStandardTierHonorsFastPolicyBeforeSideEffects",
     "TestCodexCLITaskIgnoresInheritedConversationAcceptanceDeadline",
 )
+OPENAI_ERROR_MESSAGE_TESTS = (
+    "TestOpenAIErrorMessagesProtocolContract",
+    "TestOpenAIErrorMessagesLargeEventAndContentBoundaries",
+    "TestOpenAIErrorMessagesEOFFailureRetainsUsage",
+    "TestOpenAIErrorMessagesLiveHTTPBoundary",
+    "TestOpenAIErrorMessagesSettingsPersistenceAndReplicas",
+    "TestOpenAIErrorMessagesGatewayAccountAndCLIMatrix",
+    "TestOpenAIErrorMessagesHTTPClientErrorAccountMatrix",
+    "TestOpenAIErrorMessagesWSPassthroughHotSwitch",
+    "TestOpenAIErrorMessagesWSHTTPBridgeMatrix",
+    "TestOpenAIErrorMessagesSanitizedHTTP",
+    "TestOpenAIErrorMessagesSanitizedPendingToggle",
+    "TestOpenAIErrorMessagesRuleOutput",
+    "TestOpenAIErrorMessagesFirstFailureRule",
+    "TestOpenAIErrorMessagesNonStreamingFailure",
+    "TestOpenAIErrorMessagesCommittedContentLength",
+    "TestOpenAIErrorMessagesTypeIsNotCode",
+    "TestOpenAIErrorMessagesWSHTTPRejection",
+)
+OPENAI_ERROR_MESSAGE_SUBTESTS = tuple(
+    f"{test}/{account}/cli={cli}/enabled={enabled}"
+    for test in ("TestOpenAIErrorMessagesGatewayAccountAndCLIMatrix", "TestOpenAIErrorMessagesHTTPClientErrorAccountMatrix", "TestOpenAIErrorMessagesWSHTTPBridgeMatrix")
+    for account in ("oauth", "apikey") for cli in ("false", "true") for enabled in ("false", "true")
+) + tuple(
+    f"TestOpenAIErrorMessagesWSPassthroughHotSwitch/{account}/enabled={enabled}/frame={frame}"
+    for account in ("oauth", "apikey") for enabled in ("false", "true") for frame in (1, 2)
+) + tuple(
+    f"TestOpenAIErrorMessagesSanitizedHTTP/{account}/cli={cli}/enabled={enabled}/{failure}"
+    for account in ("oauth", "apikey") for cli in ("false", "true") for enabled in ("false", "true")
+    for failure in ("session", "interrupted", "unavailable", "unknown", "case-sensitive")
+) + tuple(
+    f"TestOpenAIErrorMessagesCommittedContentLength/{protocol}/{initial}-to-{final}"
+    for protocol in ("json", "sse") for initial in ("false", "true") for final in ("false", "true")
+) + tuple(
+    f"TestOpenAIErrorMessagesWSHTTPRejection/{account}/cli={cli}/enabled={enabled}/{code}"
+    for account in ("oauth", "apikey") for cli in ("false", "true") for enabled in ("false", "true")
+    for code in ("upstream_unavailable", "session_account_lost", "other_error")
+) + tuple(
+    f"TestOpenAIErrorMessagesFirstFailureRule/{account}/passthrough={passthrough}/cli={cli}/enabled={enabled}"
+    for account in ("oauth", "apikey") for passthrough in ("false", "true")
+    for cli in ("false", "true") for enabled in ("false", "true")
+) + tuple(
+    f"TestOpenAIErrorMessagesSanitizedPendingToggle/{initial}-to-{final}"
+    for initial, final in (("false", "true"), ("true", "false"))
+) + tuple(
+    f"TestOpenAIErrorMessagesNonStreamingFailure/passthrough={passthrough}/enabled={enabled}/compact={compact}"
+    for passthrough in ("false", "true") for enabled in ("false", "true") for compact in ("false", "true")
+)
+CODEX_SAFETY_BUFFERING_TESTS = (
+    "TestCodexSafetyBufferingProjectionContract",
+    "TestCodexSafetyBufferingHTTPHotSwitchAfterStaging",
+    "TestCodexSafetyBufferingSSEFragmentationAndToggleBeforeCommit",
+    "TestCodexSafetyBufferingDisabledAndOtherPlatformsPreserveBytes",
+    "TestCodexSafetyBufferingHeadersErrorsAndEOFArePreserved",
+    "TestCodexSafetyBufferingJSONFragmentsUseSettingAtCommit",
+    "TestCodexSafetyBufferingHTTPWriterDoesNotLeakAcrossAttempts",
+    "TestCodexSafetyBufferingLargeSSEPreservesContentAndFollowingEvents",
+    "TestCodexSafetyBufferingHeadersUseSettingAtFirstCommit",
+    "TestCodexSafetyBufferingFailureDiagnosticDoesNotExposePayload",
+    "TestCodexSafetyBufferingEOFFlushAndDisconnectRetainUsage",
+    "TestCodexSafetyBufferingEOFWriteFailureIsNotSuccess",
+    "TestCodexSafetyBufferingGatewayAccountAndCLIMatrix",
+    "TestCodexSafetyBufferingWSBridgeAccountAndCLIMatrix",
+    "TestCodexSafetyBufferingWSPassthroughHotSwitch",
+    "TestCodexSafetyBufferingBusinessPureAndMixedBoundaries",
+    "TestCodexSafetyBufferingBusinessPureNoticeHotSwitchAfterStaging",
+    "TestCodexSafetyBufferingBusinessDropKeepsOnlyIndependentComments",
+    "TestCodexSafetyBufferingBusinessStageFailureCannotReleaseRawNotice",
+    "TestCodexSafetyBufferingBusinessUnreadableStageClosesWithoutFallback",
+    "TestCodexSafetyBufferingBusinessPureNoticeHasNoPlaceholder",
+    "TestCodexSafetyBufferingBusinessLargeAcceptedEventCannotLeak",
+    "TestCodexSafetyBufferingBusinessWSPureNoticeHasNoEmptyFrame",
+    "TestCodexSafetyBufferingSettingDefaultPersistenceAndFailures",
+    "TestCodexSafetyBufferingOlderRefreshCannotOverwriteSave",
+    "TestCodexSafetyBufferingReplicasReconcileMissedNotifications",
+    "TestCodexSafetyBufferingSaveSurvivesBroadcastFailure",
+    "TestCodexSafetyBufferingReplicaPollsWhenSubscriptionFails",
+)
+CODEX_SAFETY_BUFFERING_SUBTESTS = tuple(
+    f"{test}/{account}/passthrough={passthrough}"
+    for test in ("TestCodexSafetyBufferingHTTPHotSwitchAfterStaging",
+                 "TestCodexSafetyBufferingBusinessPureNoticeHotSwitchAfterStaging")
+    for account in ("oauth", "apikey") for passthrough in ("false", "true")
+) + tuple(
+    f"TestCodexSafetyBufferingBusinessPureNoticeHasNoPlaceholder/{account}/passthrough={passthrough}/enabled={enabled}"
+    for account in ("oauth", "apikey") for passthrough in ("false", "true")
+    for enabled in ("false", "true")
+) + tuple(
+    f"{test}/{prefix}{account}/cli={cli}"
+    for test, prefix in (("TestCodexSafetyBufferingGatewayAccountAndCLIMatrix", ""),
+                         ("TestCodexSafetyBufferingWSBridgeAccountAndCLIMatrix", "ws/"))
+    for account in ("oauth", "apikey") for cli in ("false", "true")
+) + tuple(
+    f"{test}/{account}"
+    for test in ("TestCodexSafetyBufferingWSPassthroughHotSwitch",
+                 "TestCodexSafetyBufferingBusinessWSPureNoticeHasNoEmptyFrame")
+    for account in ("oauth", "apikey")
+) + tuple(
+    f"TestCodexSafetyBufferingBusinessLargeAcceptedEventCannotLeak/{content_type}/enabled={enabled}"
+    for content_type in ("text/event-stream", "application/json") for enabled in ("false", "true")
+) + tuple(
+    f"TestCodexSafetyBufferingEOFWriteFailureIsNotSuccess/{account}/passthrough={passthrough}/enabled={enabled}"
+    for account in ("oauth", "apikey") for passthrough in ("false", "true")
+    for enabled in ("false", "true")
+)
 STEP_PROFILES = ("oauth_plan_cn", "oauth_plan_global", "apikey_payg_cn", "apikey_payg_global",
                  "apikey_plan_cn", "apikey_plan_global")
 STEP_PROTOCOLS = ("chat", "responses", "messages")
@@ -628,7 +733,7 @@ PROFILES = {
             "TestGrokMediaUsageFromResponseVideoCreateDoesNotBill",
             "TestGrokMediaUsageFromResponseVideoStatusBillsOnOfficialDone",
             ZHIPU_START_PLAN_TEST,
-        ) + CAPABILITY_SERVICE_TESTS + CODEX_CLI_SERVICE_TESTS, ("TestZhipuOAuthBuildAccountMaterialForEachPlan/start_plan_and_off-peak_are_estate_independent",)
+        ) + CAPABILITY_SERVICE_TESTS + CODEX_CLI_SERVICE_TESTS + CODEX_SAFETY_BUFFERING_TESTS + OPENAI_ERROR_MESSAGE_TESTS, ("TestZhipuOAuthBuildAccountMaterialForEachPlan/start_plan_and_off-peak_are_estate_independent",)
         + tuple(
             "TestCodexCLITaskBillingUsesEffectiveConfiguredReasoning/" + scenario
             for scenario in ("saved_high", "request_overrides_saved_high", "request_high", "request_max", "unconfigured_default",
@@ -872,7 +977,7 @@ PROFILES = {
                 ("messages-count", ("deepseek", "kimi", "minimax", "stepfun", "zhipu")),
             )
             for provider in providers
-        ) + CAPABILITY_SERVICE_SUBTESTS),
+        ) + CAPABILITY_SERVICE_SUBTESTS + CODEX_SAFETY_BUFFERING_SUBTESTS + OPENAI_ERROR_MESSAGE_SUBTESTS),
         RegressionGroup("./internal/repository", (
             GROK_HTTP_WIRE,
             COUNT_TOKENS_WIRE,
@@ -921,6 +1026,9 @@ PROFILES = {
             for mode in ("success", "timeout", "refused", "authentication_required", "missing", "mismatched")
         )),
         RegressionGroup("./internal/handler", (
+            "TestOpenAIErrorMessagesPreserveOpsDiagnostics",
+            "TestOpenAIErrorMessagesFailoverExhausted",
+            "TestOpenAIErrorMessagesRealAccountFailover",
             "TestCodexCLIResponsesBothAuditEnginesSeeOriginalContentBeforeSideEffects",
             "TestCodexCLIResponsesRealAuditEnginesPreserveCanonicalUserSelection",
             "TestCodexCLIResponsesUnsupportedShapesFailBeforeAuditAndSideEffects",
@@ -993,6 +1101,14 @@ PROFILES = {
         ) + tuple(
             f"TestProviderFilesAuditGatePrecedesEveryACLAndWriteBoundary/{boundary}"
             for boundary in ("upload-retry", "scheduler", "user-slot", "account-slot", "upload", "metadata", "list", "delete")
+        ) + tuple(
+            f"TestOpenAIErrorMessagesRealAccountFailover/wire={wire}/passthrough={passthrough}/enabled={enabled}/final={final}"
+            for wire in ("json", "sse") for passthrough in ("false", "true") for enabled in ("false", "true")
+            for final in ("healthy", "other_error", "upstream_unavailable")
+        ) + tuple(
+            f"TestOpenAIErrorMessagesFailoverExhausted/{platform}/enabled={enabled}/stream={stream}/{code}"
+            for platform in ("openai", "grok") for enabled in ("false", "true") for stream in ("false", "true")
+            for code in ("upstream_unavailable", "upstream_response_interrupted", "session_account_lost", "other_error", "UPSTREAM_UNAVAILABLE")
         ) + REVIEW_HANDLER_SUBTESTS),
         RegressionGroup("./internal/server/middleware", (
             "TestProviderFilesReviewAllowlistLeavesUploadBodyUnread",
@@ -1005,6 +1121,8 @@ PROFILES = {
             for scenario in ("chat-allowed", "chat-denied", "live-session-allowed", "live-session-denied")
         )),
         RegressionGroup("./internal/handler/admin", (NATIVE_UNSUPPORTED_REFRESH,
+            "TestUpdateSettingsCodexSafetyBufferingToggleAndPartialUpdate",
+            "TestUpdateSettingsOpenAIErrorMessagesToggleAndPartialUpdate",
             "TestCodexCLIAccountHandlerSecretAwareRoundTrip",
             "TestCodexCLIAccountHandlerValidationPrecedesEveryWrite",
             "TestCodexCLIInstallFailureDoesNotExposePrivateDiagnostics",

@@ -16,6 +16,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/apicompat"
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
 )
 
 const (
@@ -431,6 +432,7 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 	writeClientMessage func([]byte) error,
 ) (*OpenAIForwardResult, error) {
 	ctx, outbound := beginOutboundObservation(ctx)
+	SetOpenAIErrorMessageSource(c, nil)
 	if s == nil {
 		return nil, errors.New("service is nil")
 	}
@@ -625,6 +627,9 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 			s.handleOpenAIAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody, actualModel)
 		}
 		clientError := buildOpenAIWSHTTPBridgeErrorEvent(resp.StatusCode, upstreamMsg)
+		if code := openAIInputTerminalCode(resp.StatusCode, respBody); code != "" {
+			clientError, _ = sjson.SetBytes(clientError, "error.code", code)
+		}
 		if resp.StatusCode == http.StatusServiceUnavailable && IsOpenAIPolicyCapacityUnavailable(respBody) {
 			retryAdvice := make(map[string]string)
 			retryHeaders := openAIPolicyCapacityRetryHeaders(resp.Header, respBody)
@@ -648,13 +653,18 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 		if rewritten, changed := sanitizeOpenAICapacityShedErrorCodeForClient(clientError); changed {
 			clientError = rewritten
 		}
+		SetOpenAIErrorMessageSource(c, respBody)
 		if writeErr := writeClientMessage(clientError); writeErr == nil {
 			markOpenAIWSClientVisibleFailure(c, "error", clientError)
 		}
 		if isOpenAIHTTPCapacityShed(resp.StatusCode, upstreamMsg, respBody) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("upstream http bridge error: status=%d message=%s", resp.StatusCode, upstreamMsg)
+		bridgeErr := fmt.Errorf("upstream http bridge error: status=%d message=%s", resp.StatusCode, upstreamMsg)
+		if openAIInputTerminalCode(resp.StatusCode, respBody) != "" {
+			return nil, &openAIRequestTerminalError{cause: bridgeErr}
+		}
+		return nil, bridgeErr
 	}
 	defer func() { _ = resp.Body.Close() }()
 	stopCancelBody := context.AfterFunc(ctx, func() { _ = resp.Body.Close() })
@@ -686,7 +696,7 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 	var bareErrorPayload []byte
 	var createdAtStamper responsesCreatedAtStamper
 	bareErrorMessage := ""
-	var modelNotFoundTerminalError error
+	var requestTerminalError error
 	failureAccountSideEffectsApplied := false
 	mappedModel := actualModel
 	needModelReplace := false
@@ -717,7 +727,7 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 			Stream:                        reqStream,
 			OpenAIWSMode:                  true,
 			UpstreamTerminalEvent:         upstreamTerminalEvent,
-			modelNotFoundTerminalError:    modelNotFoundTerminalError,
+			requestTerminalError:          requestTerminalError,
 			ResponseHeaders:               cloneHeader(resp.Header),
 			Duration:                      time.Since(turnStart),
 		}
@@ -849,7 +859,7 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 
 		var upstreamEventErr error
 		if eventType == "response.completed" || eventType == "response.done" {
-			modelNotFoundTerminalError = nil
+			requestTerminalError = nil
 		}
 		if officialOpenAIResponses && bareErrorPending && (eventType == "response.completed" || eventType == "response.done") {
 			// Some upstreams emit a recoverable bare error before the authoritative
@@ -862,10 +872,10 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 		suppressClientMessage := officialOpenAIResponses && bareErrorPending && eventType != "response.failed"
 		if eventType == "error" || eventType == "response.failed" {
 			errMessage := extractOpenAISSEErrorMessage(upstreamMessage)
-			if _, ok := openAIModelNotFoundEventStatus(upstreamMessage); ok {
-				modelNotFoundTerminalError = &openAIModelNotFoundTerminalError{cause: fmt.Errorf("upstream model_not_found: %s", errMessage)}
+			if _, ok := openAIRequestTerminalEventStatus(upstreamMessage); ok {
+				requestTerminalError = &openAIRequestTerminalError{cause: fmt.Errorf("upstream request rejected: %s", errMessage)}
 			} else {
-				modelNotFoundTerminalError = nil
+				requestTerminalError = nil
 			}
 			if errMessage == "" {
 				errMessage = "upstream error event"

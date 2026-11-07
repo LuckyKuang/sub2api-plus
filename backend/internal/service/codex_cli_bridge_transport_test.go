@@ -77,7 +77,7 @@ func TestCodexCLIBridgeRequiresBothGlobalAndEligibleAccountOptIn(t *testing.T) {
 }
 
 func codexCLIBridgeReadyFixture() codexcli.Status {
-	return codexcli.Status{Installed: true, InstalledVersion: "0.165.0", TargetVersion: "0.165.0", VersionMatch: true, SourceVerified: true, ExecutionAvailable: true}
+	return codexcli.Status{Installed: true, InstalledVersion: "0.167.0", TargetVersion: "0.167.0", VersionMatch: true, SourceVerified: true, ExecutionAvailable: true}
 }
 
 // The bridge is a transport boundary, not a second request compiler. The
@@ -99,7 +99,7 @@ func TestCodexCLIBridgePreservesPreparedWireAndAccountFailoverOwnership(t *testi
 		require.Equal(t, expectedProxy, proxy)
 		require.Equal(t, expectedUA, req.Header.Get("User-Agent"))
 		require.Equal(t, "codex_cli_rs", req.Header.Get("Originator"))
-		require.Equal(t, "0.165.0", req.Header.Get("Version"))
+		require.Equal(t, "0.167.0", req.Header.Get("Version"))
 		require.Equal(t, expectedWorkspace, req.Header.Get("Chatgpt-Account-Id"))
 		require.Equal(t, "Bearer "+expectedAccess, req.Header.Get("Authorization"))
 		require.Equal(t, "https://chatgpt.com/backend-api/codex/responses", req.URL.String())
@@ -120,7 +120,7 @@ func TestCodexCLIBridgePreservesPreparedWireAndAccountFailoverOwnership(t *testi
 		{202, "owner-two-access", "workspace-two", "xterm-256color", "proxy-two.invalid"},
 	} {
 		account := enabledCodexCLIExecutionAccount(fixture.id, fixture.access, fixture.workspace)
-		account.Credentials["user_agent"] = "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) " + fixture.terminal
+		account.Credentials["user_agent"] = "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) " + fixture.terminal
 		proxyID := fixture.id + 1000
 		account.ProxyID = &proxyID
 		account.Proxy = &Proxy{ID: proxyID, Protocol: "http", Host: fixture.host, Port: 8080, Status: StatusActive}
@@ -195,7 +195,7 @@ func TestCodexCLIBridgeErrorIsTerminalWithoutNativeFallbackOrAccountReplay(t *te
 func TestCodexCLIBridgeUsesAcquiredCredentialOwnerInsteadOfSelectedShadow(t *testing.T) {
 	ctx := WithOutboundIdentityScope(context.Background(), nil)
 	owner := enabledCodexCLIExecutionAccount(101, "acquired-access", "acquired-workspace")
-	owner.Credentials["user_agent"] = "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) screen-256color"
+	owner.Credentials["user_agent"] = "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) screen-256color"
 	parent := owner.ID
 	selected := &Account{ID: 102, Platform: PlatformOpenAI, Type: AccountTypeOAuth, ParentAccountID: &parent, Concurrency: 7}
 	recordRequestCredentialOwner(ctx, owner, "acquired-access")
@@ -204,7 +204,7 @@ func TestCodexCLIBridgeUsesAcquiredCredentialOwnerInsteadOfSelectedShadow(t *tes
 	// routing. Production live-permission tests separately cover account edits
 	// without replacing the acquired credentials or identity.
 	owner.Credentials[CodexCLIConfigCredentialKey].(map[string]any)["enabled"] = false
-	owner.Credentials["user_agent"] = "codex_cli_rs/0.165.0 (Windows 11; x86_64) terminal"
+	owner.Credentials["user_agent"] = "codex_cli_rs/0.167.0 (Windows 11; x86_64) terminal"
 	bridgeCalls, upstreamCalls := 0, 0
 	svc := &OpenAIGatewayService{cfg: &config.Config{}, settingService: enabledCodexCLIBridgeTestSettings(), httpUpstream: &codexModelsHTTPUpstreamStub{do: func(req *http.Request, _ string, resourceID int64, concurrency int) (*http.Response, error) {
 		upstreamCalls++
@@ -214,9 +214,9 @@ func TestCodexCLIBridgeUsesAcquiredCredentialOwnerInsteadOfSelectedShadow(t *tes
 		require.Equal(t, 7, concurrency)
 		require.Equal(t, "Bearer acquired-access", req.Header.Get("Authorization"))
 		require.Equal(t, "acquired-workspace", req.Header.Get("Chatgpt-Account-Id"))
-		require.Equal(t, "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) screen-256color", req.Header.Get("User-Agent"))
+		require.Equal(t, "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) screen-256color", req.Header.Get("User-Agent"))
 		require.Equal(t, "codex_cli_rs", req.Header.Get("Originator"))
-		require.Equal(t, "0.165.0", req.Header.Get("Version"))
+		require.Equal(t, "0.167.0", req.Header.Get("Version"))
 		return openAIIdentityContractSuccessResponse(), nil
 	}}, codexCLIBridgeRuntime: codexCLIBridgeTransportStub{status: codexCLIBridgeReadyFixture(), bridge: func(ctx context.Context, _ codexcli.Status, req *http.Request, forward func(context.Context, *http.Request) (*http.Response, error)) (*http.Response, error) {
 		bridgeCalls++
