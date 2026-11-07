@@ -11,6 +11,7 @@ import { clearAvailableChannelCatalogCache } from '@/utils/availableChannelCatal
 
 const mocks = vi.hoisted(() => ({
   getCatalog: vi.fn(), copy: vi.fn(), put: vi.fn(),
+  app: { availableChannelsLayout: 'card' },
   auth: { user: { id: 1 }, isAuthenticated: true } as { user: { id: number } | null; isAuthenticated: boolean },
   support: { target: null } as { target: { id: number } | null },
   locale: { value: 'en' }
@@ -18,6 +19,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/api/channels', () => ({ default: { getCatalog: mocks.getCatalog } }))
 vi.mock('@/api/client', () => ({ apiClient: { put: mocks.put } }))
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => mocks.auth }))
+vi.mock('@/stores/app', () => ({ useAppStore: () => mocks.app }))
 vi.mock('@/stores/adminSupportView', () => ({ useAdminSupportViewStore: () => mocks.support }))
 vi.mock('@/i18n', () => ({ getLocale: () => mocks.locale.value }))
 vi.mock('@/composables/useClipboard', () => ({ useClipboard: () => ({ copyToClipboard: mocks.copy }) }))
@@ -34,6 +36,7 @@ beforeEach(() => {
   mocks.auth = reactive({ user: { id: 1 }, isAuthenticated: true })
   mocks.support = reactive({ target: null })
   mocks.locale = reactive({ value: 'en' })
+  mocks.app = reactive({ availableChannelsLayout: 'card' })
   mocks.getCatalog.mockResolvedValue(data())
 })
 afterEach(() => {
@@ -44,6 +47,54 @@ afterEach(() => {
 })
 
 describe('available channels user page', () => {
+  it('uses a list loading placeholder and the existing empty/error states with retry', async () => {
+    mocks.app.availableChannelsLayout = 'list'
+    let reject!: (error: Error) => void
+    mocks.getCatalog.mockReturnValueOnce(new Promise((_, fail) => { reject = fail }))
+    const w = page()
+    expect(w.get('[aria-busy="true"]').classes()).not.toContain('catalog-grid')
+    reject(new Error('Catalog temporarily failed'))
+    await flushPromises()
+    expect(w.find('[role="alert"]').exists()).toBe(true)
+    mocks.getCatalog.mockResolvedValueOnce({ groups: [], user_rate_status: 'loaded' })
+    await w.get('[role="alert"] button').trigger('click')
+    await flushPromises()
+    expect(w.text()).toContain('availableChannels.noModels')
+    expect(w.find('[data-testid="catalog-model-list"]').exists()).toBe(false)
+    expect(mocks.getCatalog).toHaveBeenCalledTimes(2)
+  })
+
+  it('defaults to cards and changes to the site list without another catalog read or losing search', async () => {
+    const w = page(); await flushPromises()
+    expect(w.findAll('.catalog-model-card')).toHaveLength(3)
+    await w.get('input[type="search"]').setValue('second')
+    mocks.app.availableChannelsLayout = 'list'
+    await nextTick()
+    expect(w.find('.catalog-model-card').exists()).toBe(false)
+    expect(w.get('[data-testid="catalog-model-list"]').findAll('h3').map(title => title.text())).toEqual(['second'])
+    await w.get('[data-testid="catalog-model-list"] .catalog-list-open').trigger('click')
+    expect(w.getComponent(CatalogPriceDetails).props('model').name).toBe('second')
+    expect(mocks.getCatalog).toHaveBeenCalledTimes(1)
+    mocks.app.availableChannelsLayout = 'card'
+    await nextTick()
+    expect(w.findAll('.catalog-model-card')).toHaveLength(1)
+    expect((w.get('input[type="search"]').element as HTMLInputElement).value).toBe('second')
+    expect(w.getComponent(CatalogPriceDetails).props('model').name).toBe('second')
+  })
+
+  it('uses the existing sorting and platform filters in list mode', async () => {
+    mocks.app.availableChannelsLayout = 'list'
+    mocks.getCatalog.mockResolvedValueOnce({ groups: [group(1, [offer('z-cheap', { pricing: pricing(0) }), offer('a-costly')]), group(2, [offer('other-platform', { platform: 'anthropic' })])], user_rate_status: 'loaded' })
+    const w = page(); await flushPromises()
+    const platform = w.findAll('button').find(button => button.text().includes('openai'))!
+    await platform.trigger('click')
+    const select = w.findComponent({ name: 'Select' })
+    select.vm.$emit('update:modelValue', 'price')
+    await nextTick()
+    expect(w.get('[data-testid="catalog-model-list"]').findAll('h3').map(title => title.text())).toEqual(['z-cheap', 'a-costly'])
+    expect(mocks.getCatalog).toHaveBeenCalledTimes(1)
+  })
+
   it('fetches the revised model list after saving channel pricing within the cache lifetime', async () => {
     // Saving channel pricing must prevent a return visit from rendering the
     // removed models out of the still-fresh 180-second cache.

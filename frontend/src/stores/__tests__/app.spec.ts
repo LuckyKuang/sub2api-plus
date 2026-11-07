@@ -84,6 +84,20 @@ vi.mock('@/api/auth', () => ({
 }))
 
 describe('useAppStore', () => {
+  // docs/AVAILABLE_CHANNELS.md: missing/invalid values use card; a saved list
+  // must apply equally to the first HTML-injected load and a subsequent API read.
+  it.each([undefined, 'card', 'list', 'invalid'])('resolves available-channel layout %s from injection and API', async layout => {
+    const config = createPublicSettings({ available_channels_layout: layout as 'card' | 'list' | undefined })
+    window.__APP_CONFIG__ = config
+    const store = useAppStore()
+    expect(store.availableChannelsLayout).toBe('card')
+    await store.fetchPublicSettings()
+    expect(store.availableChannelsLayout).toBe(layout === 'list' ? 'list' : 'card')
+    vi.mocked(getPublicSettings).mockResolvedValueOnce(createPublicSettings({ available_channels_layout: 'list' }))
+    await store.fetchPublicSettings(true)
+    expect(store.availableChannelsLayout).toBe('list')
+  })
+
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.useFakeTimers()

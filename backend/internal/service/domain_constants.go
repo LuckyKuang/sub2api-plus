@@ -552,6 +552,11 @@ const (
 	// sidebar entry is hidden. Defaults to false (opt-in feature).
 	SettingKeyAvailableChannelsEnabled = "available_channels_enabled"
 
+	// Available-channel presentation is site-wide and independent of its feature gate.
+	SettingKeyAvailableChannelsLayout = "available_channels_layout"
+	AvailableChannelsLayoutCard       = "card"
+	AvailableChannelsLayoutList       = "list"
+
 	// SettingKeySubscriptionEnabled is a DB-backed soft switch for the user-facing
 	// subscription surface: sidebar entries, purchase-page subscription tab, header
 	// progress badge, usage billing-type filter and the /subscriptions route. When

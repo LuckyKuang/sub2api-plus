@@ -43,11 +43,12 @@ import DataTable from '../src/components/common/DataTable.vue'
 import type { Column } from '../src/components/common/types'
 import { useAppStore } from '../src/stores/app'
 import { useAuthStore } from '../src/stores/auth'
-import type { User } from '../src/types'
+import type { PublicSettings, User } from '../src/types'
 
 const parameters = new URLSearchParams(location.search)
 const auditPage = parameters.get('auditPage')
 const auditPages = {
+  channels: defineAsyncComponent(() => import('../src/views/user/AvailableChannelsView.vue')),
   keys: defineAsyncComponent(() => import('../src/views/user/KeysView.vue')),
   redeem: defineAsyncComponent(() => import('../src/views/user/RedeemView.vue')),
   affiliate: defineAsyncComponent(() => import('../src/views/user/AffiliateView.vue')),
@@ -91,6 +92,12 @@ const app = useAppStore()
 app.publicSettingsLoaded = true
 app.versionLoaded = true
 app.siteName = 'UI Review'
+if (auditPage === 'channels') {
+  app.cachedPublicSettings = {
+    available_channels_enabled: true,
+    available_channels_layout: parameters.get('layout') === 'list' ? 'list' : 'card',
+  } as PublicSettings
+}
 const auth = useAuthStore()
 auth.user = { id: 9999, role: 'user', email: 'review@example.test', username: 'Reviewer', balance: 12.34 } as User
 if (auditComponent && auth.user) {
