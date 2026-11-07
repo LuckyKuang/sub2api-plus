@@ -528,6 +528,13 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 		if data, ok := extractOpenAISSEDataLine(line); ok {
 			dataBytes := []byte(data)
 			eventType := effectiveOpenAISSEEventType(dataBytes, pendingSSEEventType)
+			// Acceptance, output observation and terminal reconstruction must see
+			// the same event type as the SSE parser, including event-only upstreams.
+			if normalized := openAICompatPayloadWithEventType(data, eventType); normalized != data {
+				data = normalized
+				dataBytes = []byte(data)
+				line = "data: " + data
+			}
 			switch eventType {
 			case "error", "response.failed":
 				_, requestTerminal = openAIRequestTerminalEventStatus(dataBytes)
