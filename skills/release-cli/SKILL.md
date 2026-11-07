@@ -33,8 +33,8 @@ Wait for GitHub required checks, recheck the unchanged proof, then run protected
 native auto-merge. Never pass `--admin` or directly call a merge API that
 bypasses branch policy.
 
-After merge, resolve the actual merge commit, require it in `origin/main`, and
-wait for both `CI` and `Security Scan` push workflows at that exact SHA. A tag
+After a release-candidate merge, resolve the actual merge commit, require it in
+`origin/main`, and wait for both `CI` and `Security Scan` push workflows at that exact SHA. A tag
 cannot be created before those runs succeed. The tag-triggered Release workflow
 revalidates and reuses this exact provenance instead of rerunning the complete
 application matrix.
@@ -94,13 +94,22 @@ this profile or commits/pushes main.
 `finalize` discovers the exact submitted PR and invokes the complete `promote-pr`
 policy automatically, omitting `--notes-file`. That form requires the matching typed tag proof,
 deterministic branch, regenerated tree, published metadata, Release workflow,
-and immutable assets. Required PR and merged-main contexts classify the same
-tree before selecting focused checks and fail closed on ambiguity. Finalization
-succeeds only after the actual merge and successful exact merged-main CI and
-Security Scan. Positively identified pending checks/merge return status 2 with
+and immutable assets. Each PR workflow classifies the tree once and omits full
+jobs before runner/container allocation. The local proof, repository policy,
+test aggregator and backend-security classifier must pass; only the five
+full-suite contexts in [CI validation](../../docs/CI_VALIDATION.md#focused-release-finalization)
+may be skipped for this independently verified profile. Never accept failed,
+cancelled or missing evidence, or a skipped required check for an ordinary PR.
+
+The branch commit has no skip marker. Protected auto-merge sets the exact
+subject `docs(release): mark <tag> published [skip ci]` to suppress CI and
+Security Scan on the resulting main push. Reconfigure an existing auto-merge
+request if its subject differs. Finalization succeeds only after verifying the
+actual merge's exact parents, tree, subject and containment in `origin/main`;
+it does not wait for main workflows. Positively identified pending checks/merge return status 2 with
 the PR URL and retry command. Failed checks and API errors remain failures.
 An already merged finalization can resume after independent proof, merge
-parents/tree, published Release and deterministic metadata verification.
+parents/tree/subject, main containment, published Release and deterministic metadata verification.
 An existing deterministic branch resumes only its exact matching PR, without
 resetting the branch or creating another commit.
 

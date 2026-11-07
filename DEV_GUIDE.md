@@ -86,7 +86,7 @@ Backend:
 ```bash
 cd backend
 go test -tags=unit ./...
-go test -tags=integration ./...
+go test -count=1 -tags=integration ./...
 golangci-lint run ./...
 ```
 
@@ -135,7 +135,9 @@ When WSL2 uses a proxy, configure the standard `HTTP_PROXY`, `HTTPS_PROXY`, and
 invoking `push_cli.py`. A proxy bound to WSL2 loopback is not reachable from a
 normal validation container; use an accessible Windows host-interface address.
 The validation launcher forwards configured proxy variable names without
-printing their values.
+printing their values. When the proxy must remain on WSL2 loopback, the launcher
+also supports `SUB2API_VALIDATION_WSL_NETWORK=host` with WSL2 Docker. See
+[`CONTRIBUTING.md`](CONTRIBUTING.md#development-checks) for network and proxy setup.
 
 ### Interface compilation failure
 

@@ -28,6 +28,7 @@ REQUIRED_CATEGORIES = (
     "OpenSpec",
     "Secrets",
     "Documented Commands",
+    "Documentation Maintenance",
     "Implementation",
     "Design",
     "Test Design",
@@ -122,6 +123,14 @@ PROTECTED_FRAGMENTS = {
         "repository scripts or Make targets",
         "verify syntax, supported version, and execution environment",
     ),
+    "Documentation Maintenance": (
+        "For descriptive documentation and implementation conventions only:",
+        "When a repository’s documentation and its existing code disagree, follow the conventions used in the existing code, and in your final reply point out each inconsistency you found between the documentation and the code.",
+        "Explicit current requirements, security boundaries, and authoritative protocol/test contracts take precedence over existing implementation",
+        "When issues or changes are found during use, update all affected documentation, rules, skills, and their owning references/scripts/tests in the same change",
+        "Report each discovered inconsistency with documentation/code locations, resolution, and any remaining external/read-only update with its reason",
+        "Follow CONTRIBUTING.md#documentation-and-skill-maintenance",
+    ),
     "Test Design": (
         "Derive test scenarios and expected results independently from business requirements, acceptance criteria, and authoritative contracts",
         "Do not infer correctness from current implementation or compute expected results with the code under test",
@@ -159,7 +168,9 @@ PROTECTED_FRAGMENTS = {
         "Independently regenerate release-finalization trees",
         "without admin bypass",
         "Release metadata validation must not repeat the complete local application matrix",
-        "Finalization automatically promotes its deterministic PR and completes only after exact merged-main Actions pass",
+        "Release candidates require successful PR plus exact merged-main CI and Security Scan",
+        "Finalization requires successful focused PR gates and completes only after verifying exact merge parents/tree, main containment, and its deterministic [skip ci] merge subject",
+        "Finalization branch commits must not skip PR workflows; only its verified merge skips main CI",
         "Resume already-merged finalization only after independent proof, tree, publication, and merge verification",
     ),
     "Release Flow": (

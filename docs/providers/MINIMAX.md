@@ -134,7 +134,7 @@ policy difference, not a claim about an upstream SDK default.
 
 Settings show both presets separately. `MiniMaxCode` in OpenCode Go and
 `MiniMax-Code` in the GitHub downloader describe other destinations. See the
-[source and priority matrix](../OUTBOUND_IDENTITY.md#domestic-provider-source-evidence-and-source-priority).
+[source and priority matrix](../OUTBOUND_IDENTITY.md#official-agent-source-evidence-and-source-priority).
 
 Managed OAuth requests recover one explicit upstream 401 on the same account
 before failover. Refresh is tied to the rejected access-token generation, so a

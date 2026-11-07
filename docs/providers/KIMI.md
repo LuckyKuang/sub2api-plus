@@ -86,7 +86,7 @@ and API-key identity resolution. Both use the first-party host declarations from
 `packages/oauth/src/identity.ts`; runtime values remain stable across retries
 and version updates. An invalid account header candidate falls through as a
 whole, and generic overrides cannot replace device or version companions. See
-[source evidence and priority](../OUTBOUND_IDENTITY.md#domestic-provider-source-evidence-and-source-priority).
+[source evidence and priority](../OUTBOUND_IDENTITY.md#official-agent-source-evidence-and-source-priority).
 
 Kimi's inference SDK adds a protocol-specific `X-Stainless-*` block: Anthropic
 SDK `0.95.2`, OpenAI SDK `6.34.0`, with a pinned supported Linux/arm64 Node

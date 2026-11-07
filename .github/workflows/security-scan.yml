@@ -20,6 +20,8 @@ jobs:
   backend-security:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    outputs:
+      profile: ${{ steps.validation-profile.outputs.profile }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -46,6 +48,8 @@ jobs:
           --base "$VALIDATION_BASE"
 
   frontend-security:
+    needs: backend-security
+    if: needs.backend-security.outputs.profile == 'full'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -56,17 +60,7 @@ jobs:
       - uses: ./.github/actions/prepare-validation
         with:
           lane: frontend-security
-      - name: Classify validation profile in the validation container
-        id: validation-profile
-        uses: ./.github/actions/classify-release-finalization
-        with:
-          base: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
-          head: ${{ github.event.pull_request.head.sha || github.sha }}
-          branch: ${{ github.head_ref || github.ref_name }}
-          default-branch: ${{ github.event.repository.default_branch }}
-          event: ${{ github.event_name }}
       - name: Run frontend-security checks in the validation container
-        if: steps.validation-profile.outputs.profile == 'full'
         env:
           VALIDATION_BASE: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
         run: >-

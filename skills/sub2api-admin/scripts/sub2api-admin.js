@@ -10,7 +10,7 @@ const ADMIN_JWT = process.env.SUB2API_JWT || "";
 function usage() {
   console.log(`Usage:
   sub2api-admin.js accounts list [--page-size 200] [--page N] [--search TEXT] [--platform openai] [--type oauth] [--status active] [--group NAME] [--privacy-mode MODE] [--sort-by name] [--sort-order asc]
-  sub2api-admin.js accounts export [--ids 1,2] [--file accounts.json] [--include-proxies false] [list filters...]
+  sub2api-admin.js accounts export --confirmation-file confirmation.json [--ids 1,2] [--file accounts.json] [--include-proxies false] [scope filters...]
   sub2api-admin.js accounts import-data --file accounts.json [--skip-default-group-bind]
   sub2api-admin.js accounts create --json '{...}' | --file account.json
   sub2api-admin.js accounts update <id> --json '{...}' | --file patch.json
@@ -282,29 +282,83 @@ function printJson(data) {
   console.log(JSON.stringify(data, null, 2));
 }
 
-async function accountData(flags) {
-  const params = {};
-  if (flags.ids) {
-    params.ids = parseIds(flags.ids).join(",");
-  } else {
-    const map = {
-      platform: "platform",
-      type: "type",
-      status: "status",
-      group: "group",
-      search: "search",
-      "privacy-mode": "privacy_mode",
-      "sort-by": "sort_by",
-      "sort-order": "sort_order",
-    };
-    for (const [flag, param] of Object.entries(map)) {
-      if (flags[flag]) params[param] = flags[flag];
+async function exportAccountData(flags) {
+  // Keep the CLI's API-key-first authentication convention. Export is a
+  // JWT-only endpoint, so reject conflicting credentials before any request.
+  if (!ADMIN_JWT || ADMIN_API_KEY) {
+    throw new Error("accounts export requires SUB2API_JWT; unset SUB2API_ADMIN_API_KEY for this command");
+  }
+  const filterFlags = {
+    platform: "platform",
+    type: "type",
+    status: "status",
+    group: "group",
+    search: "search",
+    "privacy-mode": "privacy_mode",
+    "sort-by": "sort_by",
+    "sort-order": "sort_order",
+  };
+  const allowed = new Set(["confirmation-file", "ids", "file", "include-proxies", ...Object.keys(filterFlags)]);
+  for (const flag of Object.keys(flags)) {
+    if (!allowed.has(flag)) throw new Error(`unsupported accounts export option: --${flag}`);
+  }
+  const filters = {};
+  for (const [flag, field] of Object.entries(filterFlags)) {
+    if (flags[flag] !== undefined) {
+      if (typeof flags[flag] !== "string") throw new Error(`--${flag} requires one value`);
+      filters[field] = flags[flag];
     }
   }
-  if (flags["include-proxies"] !== undefined) {
-    params.include_proxies = String(parseBool(flags["include-proxies"], "--include-proxies"));
+  const body = {};
+  if (flags.ids !== undefined) {
+    if (typeof flags.ids !== "string") throw new Error("--ids requires comma-separated positive integer account IDs");
+    const ids = flags.ids.split(",").map((id) => Number(id.trim()));
+    if (ids.some((id) => !Number.isSafeInteger(id) || id <= 0)) {
+      throw new Error("--ids requires comma-separated positive integer account IDs");
+    }
+    if (Object.keys(filters).length) throw new Error("accounts export cannot combine --ids with scope filters");
+    body.ids = ids;
+  } else {
+    body.filters = filters;
   }
-  return adminRequest("GET", `/admin/accounts/data${encodeQuery(params)}`);
+  if (flags["include-proxies"] !== undefined) {
+    body.include_proxies = parseBool(flags["include-proxies"], "--include-proxies");
+  }
+  if (flags.file !== undefined && (typeof flags.file !== "string" || !flags.file.trim())) {
+    throw new Error("--file requires one output path");
+  }
+  if (typeof flags["confirmation-file"] !== "string" || !flags["confirmation-file"].trim()) {
+    throw new Error("accounts export requires --confirmation-file containing password and optional totp_code");
+  }
+  let confirmation;
+  try {
+    confirmation = JSON.parse(fs.readFileSync(path.resolve(flags["confirmation-file"]), "utf8"));
+  } catch {
+    // JSON parser errors may quote the input, including the administrator password.
+    throw new Error("Unable to read export confirmation JSON");
+  }
+  if (!confirmation || Array.isArray(confirmation) || typeof confirmation.password !== "string" || !confirmation.password.trim()) {
+    throw new Error("Export confirmation requires a nonempty password string");
+  }
+  if (confirmation.totp_code !== undefined && typeof confirmation.totp_code !== "string") {
+    throw new Error("Export confirmation totp_code must be a string");
+  }
+  body.password = confirmation.password;
+  if (confirmation.totp_code !== undefined) body.totp_code = confirmation.totp_code.trim();
+
+  const requirements = await adminRequest("GET", "/admin/accounts/export/requirements");
+  if (!requirements || typeof requirements.step_up_required !== "boolean") {
+    throw new Error("Invalid export confirmation requirements response");
+  }
+  if (requirements.step_up_required && !body.totp_code) {
+    throw new Error("Account export requires totp_code in the confirmation file");
+  }
+  // The server rechecks password, TOTP policy, scope and critical audit at export time.
+  const data = await adminRequest("POST", "/admin/accounts/export", body);
+  if (!data || !Array.isArray(data.accounts) || !Array.isArray(data.proxies)) {
+    throw new Error("Invalid account export response");
+  }
+  return data;
 }
 
 async function commandAccounts(args) {
@@ -316,10 +370,17 @@ async function commandAccounts(args) {
   }
 
   if (sub === "export") {
-    const data = await accountData(args.flags);
+    const data = await exportAccountData(args.flags);
     if (args.flags.file) {
-      fs.writeFileSync(path.resolve(args.flags.file), JSON.stringify(data, null, 2));
-      printJson({ file: path.resolve(args.flags.file), count: Array.isArray(data) ? data.length : data.count });
+      const outputPath = path.resolve(args.flags.file);
+      const fd = fs.openSync(outputPath, "w", 0o600);
+      try {
+        fs.fchmodSync(fd, 0o600);
+        fs.writeFileSync(fd, JSON.stringify(data, null, 2));
+      } finally {
+        fs.closeSync(fd);
+      }
+      printJson({ file: outputPath, count: data.accounts.length, skipped_shadows: data.skipped_shadows || 0 });
     } else {
       printJson(data);
     }

@@ -64,6 +64,7 @@ test-frontend-critical:
 
 test-docs:
 	@$(PYTHON) skills/compress-cli/tests/test_compress_cli.py
+	@node --test skills/sub2api-admin/tests/test_sub2api_admin.cjs
 	@$(PYTHON) tools/test_release_policy.py
 	@$(PYTHON) tools/check_openai_codex_identity.py
 	@$(PYTHON) tools/check_readme_sync.py

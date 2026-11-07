@@ -50,8 +50,15 @@ node scripts/sub2api-admin.js tls-profiles list
 
 ## Safety Notes
 
-- Authentication uses `x-api-key` from `SUB2API_ADMIN_API_KEY` first, then falls back to `Authorization: Bearer <jwt>` from `SUB2API_JWT`.
-- If the API returns `INVALID_ADMIN_KEY`, ask the user to regenerate the admin API key. If using JWT, log in as an admin user and copy the `access_token` from `POST /api/v1/auth/login`.
-- `accounts export` includes credentials and tokens. Prefer `--file` and avoid printing exports in chat.
+- Normal commands use `x-api-key` from `SUB2API_ADMIN_API_KEY` first, then fall
+  back to `Authorization: Bearer <jwt>` from `SUB2API_JWT`. Export requires a JWT
+  session and rejects a configured admin API key, including when both are set.
+- If the API returns `INVALID_ADMIN_KEY`, ask the user to regenerate the admin API key. If using JWT, complete administrator login, including any TOTP challenge, and use the resulting `access_token`.
+- `accounts export` reads password and optional string `totp_code` from
+  `--confirmation-file`, checks export requirements, then submits the current
+  POST API. Use `--ids` or scope filters; omitting both exports all accounts.
+  Prefer `--file` for a private backup and a count-only summary; the summary also
+  reports excluded shadow accounts. Keep confirmation files and exports out of
+  chat and Git. See the [export contract](references/admin-cli.md#account-export).
 - Redeem code create/redeem commands should use `--idempotency-key` for payment or recharge workflows.
 - For uncertain or newly added backend APIs, use `api <METHOD> <admin-path>` after a read-only check.

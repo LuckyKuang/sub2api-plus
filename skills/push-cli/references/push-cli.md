@@ -71,7 +71,7 @@ Commands are maintained in `tools/validation_checks.py` and shared with CI.
 the local proof remains required. CI full suites do not produce local success.
 
 - Go module tidiness, unit tests, integration tests, and golangci-lint.
-- Compress CLI, push CLI, and release CLI self-tests.
+- Compress CLI, push CLI, release CLI, and admin CLI self-tests.
 - Frozen pnpm install, lint, typecheck, Vitest, production build, and production
   audit exception policy.
 - Release policy, release metadata, README synchronization, Codex outbound

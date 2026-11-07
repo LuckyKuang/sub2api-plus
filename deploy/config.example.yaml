@@ -630,9 +630,10 @@ gateway:
     outbox_backlog_rebuild_rows: 10000
     # 全量重建周期（秒），0 表示禁用
     full_rebuild_interval_seconds: 300
-  # TLS fingerprint simulation / TLS 指纹伪装
-  # Default profile "claude_cli_v2" simulates Node.js 20.x
-  # 默认模板 "claude_cli_v2" 模拟 Node.js 20.x 指纹
+  # Legacy decoded fields; runtime selection uses account settings and stored profiles.
+  # 历史解析字段；运行时使用账号设置和数据库模板，见 deploy/README.md。
+  # The built-in fallback uses Node.js 24.x ClientHello parameters.
+  # 内置回退使用 Node.js 24.x ClientHello 参数；此处 enabled 不会启用账号指纹。
   tls_fingerprint:
     enabled: true
     # profiles:

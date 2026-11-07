@@ -266,9 +266,23 @@ application container matrix.
 `finalize` discovers the exact submitted PR and runs the complete protected
 promotion flow without release notes. It independently regenerates the tree,
 rechecks the published Release, waits for every required PR check, requests
-native auto-merge with the exact head, and requires successful CI and Security
-Scan at the actual merged-main SHA. It reports completion only after that gate.
+native auto-merge with the exact head, and sets its merge subject to
+`docs(release): mark <tag> published [skip ci]`. The branch commit has no skip
+marker: its focused PR workflows must still succeed. CI classifies once in
+`repository-policy`; Security Scan classifies once in `backend-security`. Full
+jobs are omitted before their runners/containers start. Promotion requires the
+local proof, repository policy, test aggregator and backend-security classifier
+to pass; only the five full-suite contexts enumerated in
+[CI validation](CI_VALIDATION.md#focused-release-finalization) may be skipped.
 It never repeats the full application matrix for finalization.
+
+GitHub's native `[skip ci]` instruction suppresses both CI and Security Scan
+for the actual main merge. Finalization verifies that commit's exact parents,
+tree, expected subject and main containment, then reports completion without
+waiting for main workflows. An existing auto-merge request with another subject
+is disabled and re-enabled through the same protected merge path with the
+expected message. Release candidates still require successful CI and Security
+Scan at their exact actual merged-main SHA before tagging.
 
 Missing/queued checks or a pending merge return exit status 2 with the PR URL.
 Resume that PR without release notes:
@@ -279,18 +293,19 @@ python3 skills/release-cli/scripts/release_cli.py promote-pr \
   --pr <finalization-pr-number>
 ```
 
-An already merged finalization resumes exact-main observation after independently
-checking its recorded proof, merge parents/tree, deterministic metadata and
-published assets. Check out the recorded PR head before resuming. API errors,
+An already merged finalization completes after independently checking its
+recorded proof, merge parents/tree/subject, main containment, deterministic
+metadata and published assets. It does not wait for skipped main workflows.
+Check out the recorded PR head before resuming. API errors,
 failed checks and changed proofs are failures. An existing local finalization
 branch is reused only when exactly one matching PR exists; it is never reset.
 
 The no-notes form is accepted only when the typed proof carries the matching
 tag and deterministic finalization branch. Promotion independently regenerates
 the tree and requires the Release, immutable assets, and `published` mapping.
-Every required PR and merged-main context runs the same classifier before it
-selects focused finalization validation; ambiguous or non-deterministic changes
-fail closed.
+Each PR workflow runs the same classifier once before selecting focused
+finalization validation; ambiguous or non-deterministic changes fail closed.
+Do not add a skip marker to the branch commit or ignore `UPSTREAM.md` globally.
 
 ## Distributed Packaging and Read-only Rehearsal
 

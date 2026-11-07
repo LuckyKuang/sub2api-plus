@@ -23,6 +23,50 @@ Inside the validation container:
 pnpm --dir frontend install --frozen-lockfile
 ```
 
+## Documentation and Skill Maintenance
+
+This contract applies to documentation, repository rules and skills used or
+affected by the current task, including their supporting references, scripts
+and tests. Check the relevant scope as you work; it does not require a complete
+repository audit on every task.
+
+For descriptive documentation and implementation conventions only:
+
+> When a repository’s documentation and its existing code disagree, follow the conventions used in the existing code, and in your final reply point out each inconsistency you found between the documentation and the code.
+
+Explicit current requirements, security boundaries and authoritative protocol
+and test contracts take precedence over existing implementation. Existing code
+is evidence of an implementation convention, not proof of business correctness.
+When code violates a governing requirement, fix the code and its regressions;
+do not rewrite requirements or weaken tests to legitimize the defect.
+
+During implementation or skill use:
+
+1. Compare the affected instructions and examples with the relevant code,
+   maintained entrypoints and governing requirements. Follow the established
+   code convention when descriptive guidance is stale, and verify commands in
+   the prescribed environment before documenting or using them.
+2. Correct discovered errors and synchronize every source affected by a behavior
+   change in the same change. Include owning documentation, repository rules,
+   skills, their references, executable helpers and applicable tests. Remove
+   superseded instructions instead of leaving conflicting guidance in place.
+3. Maintain each source in its owning location. Update authorized writable
+   external skills there; do not create a competing repository copy. If an
+   external or read-only source cannot be updated, record its location, the
+   remaining change and the reason in the final reply.
+4. Treat "current" as the verified implementation, approved requirements and
+   applicable authoritative sources. Keep version references tied to the
+   repository's maintained declarations rather than duplicating version pins.
+5. In the final reply, list each discovered documentation/code inconsistency
+   with both locations, the difference, its resolution and any outstanding
+   update with its reason. Apply the same reporting to rule and skill issues.
+   If none were found, state that for the inspected scope; do not imply an
+   unperformed repository-wide audit.
+
+Changes to the AGENTS.md maintenance contract also update the `compress-cli`
+skill, its reference, validator and requirement-based regression tests. Run
+their focused checks in the platform validation container as described below.
+
 ## Requirement-based Test Design
 
 This is a mandatory repository-wide contract for unit, integration, UI, and
@@ -166,6 +210,7 @@ pnpm --dir frontend run test:run
 # Repository AGENTS.md contract
 python3 skills/compress-cli/scripts/compress_cli.py check AGENTS.md
 python3 skills/compress-cli/tests/test_compress_cli.py
+node --test skills/sub2api-admin/tests/test_sub2api_admin.cjs
 python3 tools/check_test_build_tags.py
 
 # Seven-provider critical business regressions (run inside the same container)
@@ -255,7 +300,10 @@ gate remains active until that cutover is independently verified.
 
 Intermediate branch pushes use the fast path and do not run local tests.
 Remote `CI` and `Security Scan` run on pull requests and on `main` pushes, not
-on every feature-branch push. `watch` follows the pull-request runs when a PR
+on every feature-branch push. Verified post-publication finalization retains
+focused PR checks and uses `[skip ci]` only on its protected main merge; see
+[the finalization contract](docs/RELEASING.md#finalize-through-a-pr).
+`watch` follows the pull-request runs when a PR
 exists, otherwise the `main` push runs:
 
 ```bash
@@ -362,9 +410,13 @@ application matrix. Git/GitHub operations and runtime management remain with
 the host launcher.
 
 Finalization automatically promotes its exact deterministic PR through protected
-auto-merge and verifies CI and Security Scan at the actual merged-main SHA.
-Pending checks/merge return status 2 and a retry command; already merged
-finalization resumes only after independent proof/tree/publication checks.
+auto-merge after its focused PR gates pass. Its deterministic merge subject ends
+with `[skip ci]`; completion verifies the actual merge parents/tree and main
+containment rather than waiting for skipped main workflows. Branch commits must
+still run PR workflows. Release candidates continue to require CI and Security
+Scan at the exact merged-main SHA. Pending PR checks/merge return status 2 and a
+retry command; already merged finalization resumes only after independent
+proof/tree/publication and merge checks.
 See [the release process](docs/RELEASING.md) and
 [distributed packaging and read-only rehearsals](.github/release-tools/README.md).
 

@@ -851,37 +851,27 @@ class WorkflowPolicyTests(unittest.TestCase):
             r"prepare:\n(?:.|\n)*?permissions:\n\s+actions: read\n\s+contents: read",
         )
 
-    def test_every_required_remote_context_classifies_finalization_first(self) -> None:
-        expected_jobs = {
-            "backend-ci.yml": {
-                "deployment-config",
-                "test-unit",
-                "test-integration",
-                "frontend",
-                "golangci-lint",
-                "goreleaser-config",
-                "repository-policy",
-            },
-            "security-scan.yml": {"backend-security", "frontend-security"},
-        }
+    def test_each_workflow_classifies_finalization_once_before_full_jobs(self) -> None:
+        expected_owners = {"backend-ci.yml": "repository-policy",
+                           "security-scan.yml": "backend-security"}
         job_re = re.compile(
             r"^  (?P<job>[a-z0-9-]+):\n(?P<body>.*?)(?=^  [a-z0-9-]+:\n|\Z)",
             re.MULTILINE | re.DOTALL,
         )
-        for workflow_name, required_jobs in expected_jobs.items():
+        for workflow_name, owner in expected_owners.items():
             workflow = ROOT.joinpath(".github", "workflows", workflow_name).read_text(
                 encoding="utf-8"
             )
             jobs = {match.group("job"): match.group("body") for match in job_re.finditer(workflow)}
-            self.assertEqual(required_jobs - jobs.keys(), set())
-            for job in sorted(required_jobs):
-                with self.subTest(workflow=workflow_name, job=job):
-                    body = jobs[job]
-                    self.assertIn(
-                        "uses: ./.github/actions/classify-release-finalization",
-                        body,
-                    )
-                    self.assertIn("fetch-depth: 0", body)
+            with self.subTest(workflow=workflow_name):
+                classifiers = [job for job, body in jobs.items()
+                               if "uses: ./.github/actions/classify-release-finalization" in body]
+                self.assertEqual(classifiers, [owner])
+                body = jobs[owner]
+                self.assertLess(body.index("uses: ./.github/actions/prepare-validation"),
+                                body.index("uses: ./.github/actions/classify-release-finalization"))
+                self.assertIn("fetch-depth: 0", body)
+                self.assertIn("profile: ${{ steps.validation-profile.outputs.profile }}", body)
 
     def test_finalization_repository_policy_rechecks_published_release(self) -> None:
         workflow = ROOT.joinpath(".github/workflows/backend-ci.yml").read_text(
@@ -922,7 +912,7 @@ class WorkflowPolicyTests(unittest.TestCase):
         )
         jobs = {match.group("job"): match.group("body") for match in job_re.finditer(workflow)}
         body = jobs["test"]
-        self.assertIn("needs: [test-unit, test-integration]", body)
+        self.assertIn("needs: [repository-policy, test-unit, test-integration]", body)
         self.assertIn("if: always()", body)
         self.assertNotIn(
             "uses: ./.github/actions/classify-release-finalization",

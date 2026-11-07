@@ -140,6 +140,8 @@ tests
 !skills/push-cli/tests/**
 !skills/release-cli/tests/
 !skills/release-cli/tests/**
+!skills/sub2api-admin/tests/
+!skills/sub2api-admin/tests/**
 CLAUDE.md
 .claude
 scripts
@@ -153,6 +155,8 @@ scripts
 !skills/push-cli/scripts/**
 !skills/release-cli/scripts/
 !skills/release-cli/scripts/**
+!skills/sub2api-admin/scripts/
+!skills/sub2api-admin/scripts/**
 .code-review-state
 /openspec/changes/
 code-reviews/
