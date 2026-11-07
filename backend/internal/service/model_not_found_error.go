@@ -1,24 +1,11 @@
 package service
 
 import (
-	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/tidwall/gjson"
 )
-
-// A terminal model rejection is observable as a failed request, while carrying
-// no evidence that the credential owner or its connection is unhealthy.
-type openAIModelNotFoundTerminalError struct{ cause error }
-
-func (e *openAIModelNotFoundTerminalError) Error() string { return e.cause.Error() }
-func (e *openAIModelNotFoundTerminalError) Unwrap() error { return e.cause }
-
-func isOpenAIModelNotFoundTerminalError(err error) bool {
-	var terminal *openAIModelNotFoundTerminalError
-	return errors.As(err, &terminal)
-}
 
 // isOpenAIModelNotFoundError follows Codex's terminal-provider-error contract:
 // only the exact code with no status, 400, 403, or 404 is a model rejection.

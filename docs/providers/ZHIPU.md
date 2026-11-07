@@ -154,7 +154,7 @@ manual API-key accounts and start-plan ZCode JWTs are preserved. Older Z.ai link
 without original OAuth material work only while their stored business token is
 valid and then require reauthorization. See the
 [official agent baseline](../OFFICIAL_AGENT_BASELINES.md) for the source commit
-and the explicit unreleased product `3.16.2` baseline.
+and the published product `3.17.2` baseline.
 
 Accounts created by the link use `api_protocol=adaptive` with explicit
 per-protocol base URLs, so neither estate ever falls back to another estate's
@@ -356,7 +356,7 @@ Both OAuth and API-key accounts are pinned to that family. Valid account
 parameters can override the global profile; cross-family selections and the
 retired `zhipu:apikey` default mapping are rejected.
 
-The preset sends `ZCode/3.16.2` together with `X-ZCode-App-Version: 3.16.2`,
+The preset sends `ZCode/3.17.2` together with `X-ZCode-App-Version: 3.17.2`,
 `HTTP-Referer: https://zcode.z.ai`, `X-Title: Z Code@electron`,
 `X-Release-Channel: production`, and `X-ZCode-Agent: glm`. Its five host
 facts (`X-Client-Language`, `X-Client-Timezone`, `X-Platform`, `X-Os-Category`,
@@ -509,3 +509,8 @@ Copy Secret, personal/team estates, expiry and rejection, concurrent refresh,
 owner changes, cancellation and unchanged manual-key behavior. These use mock
 transports; real-account PAT issuance, long off-peak queues and provider
 acceptance require separate authorized upstream evidence.
+
+The November 7 review selects published ZCode `3.17.2` (standalone CLI line
+`0.17.1`). The optional `x-zcode-session-features` is owned by the official
+client's workflow runtime. The gateway has no such execution state and omits
+it; inbound values and static header overrides cannot supply capability labels.

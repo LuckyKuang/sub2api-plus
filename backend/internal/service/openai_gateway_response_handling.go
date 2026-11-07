@@ -55,10 +55,10 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 
 func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.Context, resp *http.Response, c *gin.Context, account *Account, startTime time.Time, originalModel, mappedModel, reasoningEffort string, encryptedRecoveryAllowed ...bool) (result *openaiStreamingResult, returnErr error) {
 	defer s.beginCodexSafetyBufferingHTTPOutput(ctx, c, account)()
-	modelNotFoundTerminal := false
+	requestTerminal := false
 	defer func() {
-		if returnErr != nil && modelNotFoundTerminal {
-			returnErr = &openAIModelNotFoundTerminalError{cause: returnErr}
+		if returnErr != nil && requestTerminal {
+			returnErr = &openAIRequestTerminalError{cause: returnErr}
 		}
 	}()
 	resetOpsOpenAIStreamObservation(c)
@@ -530,9 +530,9 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 			eventType := effectiveOpenAISSEEventType(dataBytes, pendingSSEEventType)
 			switch eventType {
 			case "error", "response.failed":
-				_, modelNotFoundTerminal = openAIModelNotFoundEventStatus(dataBytes)
+				_, requestTerminal = openAIRequestTerminalEventStatus(dataBytes)
 			case "response.completed", "response.done":
-				modelNotFoundTerminal = false
+				requestTerminal = false
 			}
 			if codexFailureTerminal && sawBareError && !sawResponseFailed &&
 				(eventType == "response.completed" || eventType == "response.done") {
@@ -1824,6 +1824,9 @@ func (s *OpenAIGatewayService) handleSSEToJSON(resp *http.Response, c *gin.Conte
 		if msg == "" {
 			msg = "Upstream compact response failed"
 		}
+		if openAIInputTerminalCode(0, terminalPayload) != "" {
+			return nil, s.writeOpenAINonStreamingInputTerminal(resp, c, account, terminalPayload, msg)
+		}
 		if status, ok := openAIModelNotFoundEventStatus(terminalPayload); ok {
 			return nil, s.writeOpenAINonStreamingModelNotFound(resp, c, account, status, terminalPayload, msg)
 		}
@@ -2019,7 +2022,7 @@ func sanitizeOpenAIResponseFailedEventForClient(payload []byte, eventType string
 		return updated, !bytes.Equal(updated, payload)
 	}
 	_, modelNotFound := openAIModelNotFoundEventStatus(payload)
-	if !modelNotFound && clientOutputStarted && isOpenAIContextWindowError(extractOpenAISSEErrorMessage(payload), payload) {
+	if !modelNotFound && openAIInputTerminalCode(0, payload) == "" && clientOutputStarted && isOpenAIContextWindowError(extractOpenAISSEErrorMessage(payload), payload) {
 		errorPath := ""
 		switch {
 		case gjson.GetBytes(updated, "response.error").Exists():
@@ -2079,7 +2082,7 @@ func (s *OpenAIGatewayService) writeOpenAINonStreamingModelNotFound(resp *http.R
 		s.finalizeCodexClientQuotaHeaders(c.Writer.Header(), c, account)
 		writeOpenAIUpstreamClientError(c, status, payload, message)
 	}
-	return &openAIModelNotFoundTerminalError{cause: fmt.Errorf("non-streaming openai protocol error: %s", message)}
+	return &openAIRequestTerminalError{cause: fmt.Errorf("non-streaming openai protocol error: %s", message)}
 }
 
 func (s *OpenAIGatewayService) writeOpenAINonStreamingProtocolError(resp *http.Response, c *gin.Context, account *Account, message string) error {

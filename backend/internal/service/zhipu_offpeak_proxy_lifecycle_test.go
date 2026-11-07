@@ -233,7 +233,7 @@ func TestZhipuOffPeakProxySettlementFailureRecoveryRetiresExactlyOnce(t *testing
 			require.Len(t, headers, 1)
 			require.Equal(t, "Bearer zcode-jwt", headers[0].Get("Authorization"))
 			require.Equal(t, "ak.sk", headers[0].Get("X-Coding-Plan-Api-Key"))
-			require.Equal(t, "ZCode/3.16.2", headers[0].Get("User-Agent"))
+			require.Equal(t, "ZCode/3.17.2", headers[0].Get("User-Agent"))
 			manager.sweepOnce()
 			require.EqualValues(t, 2, settleSends.Load(), "successful retirement cannot trigger duplicate settlement")
 			require.Equal(t, attemptsAfterSuccess, proxyAttempts.Load())

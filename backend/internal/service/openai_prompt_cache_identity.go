@@ -350,6 +350,11 @@ func alignOpenAICodexThreadHeaders(headers http.Header) {
 }
 
 func shouldPreserveOpenAIPromptCacheOptions(account *Account, effectiveModel string) bool {
+	// Codex common.rs carries the caller's per-turn TTL on HTTP and WS for
+	// ChatGPT credentials too. Do not erase it or create a default next turn.
+	if account != nil && account.IsOpenAIOAuthLike() {
+		return true
+	}
 	return account != nil &&
 		account.Platform == PlatformOpenAI &&
 		account.Type == AccountTypeAPIKey &&

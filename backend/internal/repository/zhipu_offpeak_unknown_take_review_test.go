@@ -72,7 +72,7 @@ func exerciseOffPeakUnknownTakeReview(t *testing.T, stateField string) {
 		require.Equal(t, http.MethodPost, r.Method)
 		require.Equal(t, "Bearer manager-owner-jwt", r.Header.Get("Authorization"))
 		require.Equal(t, "manager-plan-key", r.Header.Get("X-Coding-Plan-Api-Key"))
-		require.Equal(t, "ZCode/3.16.2", r.UserAgent())
+		require.Equal(t, "ZCode/3.17.2", r.UserAgent())
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/off-peak/ticket":

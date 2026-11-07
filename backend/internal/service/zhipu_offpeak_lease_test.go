@@ -245,7 +245,7 @@ func TestZhipuOffPeak401ControlRetryUsesNewRequestIDAndOwnerPAT(t *testing.T) {
 		ids = append(ids, id.String())
 		keys = append(keys, r.Header.Get("X-Coding-Plan-Api-Key"))
 		require.Equal(t, "Bearer plan-jwt", r.Header.Get("Authorization"))
-		require.Equal(t, "ZCode/3.16.2", r.UserAgent())
+		require.Equal(t, "ZCode/3.17.2", r.UserAgent())
 		if len(ids) == 1 {
 			w.WriteHeader(http.StatusUnauthorized)
 			return

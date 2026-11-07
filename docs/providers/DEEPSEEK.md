@@ -78,7 +78,7 @@ DeepSeek OAuth and API-key accounts use the pinned **DeepSeek** preset by defaul
 (`nativeOutboundPreset`), so DeepSeek receives exactly one declaration:
 
 ```
-User-Agent: deepseek-harness/0.2.1-rc.3 (+https://github.com/deepseek-ai/deepseek-harness)
+User-Agent: deepseek-harness/0.2.2-rc.1 (+https://github.com/deepseek-ai/deepseek-harness)
 ```
 
 The parenthesized product comment belongs to that same User-Agent value
@@ -100,7 +100,7 @@ unchanged.
 
 The **DeepSeek · Harness** card follows the official
 [deepseek-harness source](../OFFICIAL_AGENT_BASELINES.md) directly. The compiled
-version is the reviewed `0.2.1-rc.3` prerelease; valid pins at `0.2.0-rc.2` or
+version is the reviewed `0.2.2-rc.1` prerelease; valid pins at `0.2.0-rc.2` or
 newer retain their priority. It uses no desktop-shell version.
 
 Native Messages requests carry an independently persisted anonymous UUID v4 in

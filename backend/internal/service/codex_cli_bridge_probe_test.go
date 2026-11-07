@@ -22,7 +22,7 @@ import (
 func TestCodexCLIBridgeAccountProbePreservesAcquiredOwnerAndSingleSend(t *testing.T) {
 	ctx := WithOutboundIdentityScope(context.Background(), nil)
 	owner := enabledCodexCLIExecutionAccount(301, "probe-owner-access", "probe-owner-workspace")
-	owner.Credentials["user_agent"] = "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) screen-256color"
+	owner.Credentials["user_agent"] = "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) screen-256color"
 	proxyID := int64(701)
 	owner.ProxyID = &proxyID
 	owner.Proxy = &Proxy{ID: proxyID, Protocol: "http", Host: "probe-owner-proxy.invalid", Port: 8080, Status: StatusActive}
@@ -30,7 +30,7 @@ func TestCodexCLIBridgeAccountProbePreservesAcquiredOwnerAndSingleSend(t *testin
 	selected := &Account{ID: 302, Platform: PlatformOpenAI, Type: AccountTypeOAuth, ParentAccountID: &parent, Concurrency: 9}
 	recordRequestCredentialOwner(ctx, owner, "probe-owner-access")
 	ctx = withRequestCredentialOwner(ctx, selected, "probe-owner-access")
-	owner.Credentials["user_agent"] = "codex_cli_rs/0.165.0 (Windows 11; x86_64) wrong-terminal"
+	owner.Credentials["user_agent"] = "codex_cli_rs/0.167.0 (Windows 11; x86_64) wrong-terminal"
 	owner.Credentials[CodexCLIConfigCredentialKey].(map[string]any)["enabled"] = false
 	owner.Proxy.Host = "later-row-mutation.invalid"
 	const payload = `{"model":"gpt-6-astra","input":[{"role":"user","content":"probe"}],"stream":true}`
@@ -38,7 +38,7 @@ func TestCodexCLIBridgeAccountProbePreservesAcquiredOwnerAndSingleSend(t *testin
 	gateway := &OpenAIGatewayService{cfg: &config.Config{}, settingService: enabledCodexCLIBridgeTestSettings(), codexCLIBridgeRuntime: codexCLIBridgeTransportStub{status: codexCLIBridgeReadyFixture(), bridge: func(ctx context.Context, status codexcli.Status, req *http.Request, forward func(context.Context, *http.Request) (*http.Response, error)) (*http.Response, error) {
 		bridgeCalls++
 		require.True(t, status.SourceVerified)
-		require.Equal(t, "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) screen-256color", req.Header.Get("User-Agent"))
+		require.Equal(t, "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) screen-256color", req.Header.Get("User-Agent"))
 		return forward(ctx, req)
 	}}}
 	probe := &AccountTestService{openaiGatewayService: gateway, settingService: gateway.settingService, httpUpstream: &codexModelsHTTPUpstreamStub{do: func(req *http.Request, proxy string, resourceID int64, concurrency int) (*http.Response, error) {
@@ -50,9 +50,9 @@ func TestCodexCLIBridgeAccountProbePreservesAcquiredOwnerAndSingleSend(t *testin
 		require.Equal(t, "http://probe-owner-proxy.invalid:8080", proxy)
 		require.Equal(t, "Bearer probe-owner-access", req.Header.Get("Authorization"))
 		require.Equal(t, "probe-owner-workspace", req.Header.Get("Chatgpt-Account-Id"))
-		require.Equal(t, "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) screen-256color", req.Header.Get("User-Agent"))
+		require.Equal(t, "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) screen-256color", req.Header.Get("User-Agent"))
 		require.Equal(t, "codex_cli_rs", req.Header.Get("Originator"))
-		require.Equal(t, "0.165.0", req.Header.Get("Version"))
+		require.Equal(t, "0.167.0", req.Header.Get("Version"))
 		require.Equal(t, "https://chatgpt.com/backend-api/codex/responses", req.URL.String())
 		body, err := io.ReadAll(req.Body)
 		require.NoError(t, err)

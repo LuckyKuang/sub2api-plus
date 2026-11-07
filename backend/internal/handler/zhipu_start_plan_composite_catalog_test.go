@@ -41,7 +41,7 @@ func startCompositeCatalogAccount(t *testing.T, edits ...func(*service.Account))
 	t.Helper()
 	account := &service.Account{ID: 992, Platform: service.PlatformZhipu, Type: service.AccountTypeOAuth, Status: service.StatusActive, Schedulable: true, Concurrency: 1,
 		Credentials: map[string]any{"oauth_provider": "zai", "plan_kind": service.ZhipuPlanStartPlan, "account_mode": service.AccountModeCoding, "zcode_jwt_token": "start-catalog-jwt", "api_key": "start-catalog-jwt",
-			service.SettingKeyOutboundIdentity: service.OutboundIdentitySelection{Preset: zcode.Preset, Version: "3.16.2", Headers: map[string]string{zcode.HeaderDeviceMid: "7d918214-79ad-4057-bb2b-4ac6bd24a907"}}}}
+			service.SettingKeyOutboundIdentity: service.OutboundIdentitySelection{Preset: zcode.Preset, Version: "3.17.2", Headers: map[string]string{zcode.HeaderDeviceMid: "7d918214-79ad-4057-bb2b-4ac6bd24a907"}}}}
 	for _, edit := range edits {
 		edit(account)
 	}

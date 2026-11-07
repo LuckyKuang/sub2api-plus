@@ -39,6 +39,12 @@ func usesCodexDirectImages(model string) bool {
 	}
 }
 
+// Codex publishes GIF controls only for its native Images API. A Responses
+// fallback cannot drop the frame controls or claim equivalent animation output.
+func openAIImagesRequiresDirectEndpoint(parsed *OpenAIImagesRequest) bool {
+	return parsed != nil && (strings.EqualFold(strings.TrimSpace(parsed.OutputFormat), "gif") || parsed.FrameCount != nil || parsed.FrameDurationMS != nil)
+}
+
 // 正式转发与后台测试共用同一份端点选择和请求构造。
 func buildOpenAIImagesOAuthPayload(parsed *OpenAIImagesRequest, model string) ([]byte, string, error) {
 	if parsed == nil {
@@ -82,6 +88,12 @@ func buildOpenAIImagesOAuthPayload(parsed *OpenAIImagesRequest, model string) ([
 	}
 	if parsed.PartialImages != nil {
 		payload["partial_images"] = *parsed.PartialImages
+	}
+	if parsed.FrameCount != nil {
+		payload["frame_count"] = *parsed.FrameCount
+	}
+	if parsed.FrameDurationMS != nil {
+		payload["frame_duration_ms"] = *parsed.FrameDurationMS
 	}
 	if parsed.Stream {
 		payload["stream"] = true

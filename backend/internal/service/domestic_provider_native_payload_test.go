@@ -94,7 +94,7 @@ func TestDomesticProviderNativeMessagesPreserveOfficialMediaAndToolChanges(t *te
 					require.Equal(t, wantBeta, wireReq.Header.Get("Anthropic-Beta"))
 					require.Equal(t, "2023-06-01", wireReq.Header.Get("Anthropic-Version"))
 					require.Empty(t, upstream.lastReq.Header.Get("Cookie"))
-					wantUA := "deepseek-harness/0.2.1-rc.3 (+https://github.com/deepseek-ai/deepseek-harness)"
+					wantUA := "deepseek-harness/0.2.2-rc.1 (+https://github.com/deepseek-ai/deepseek-harness)"
 					if tc.platform == PlatformMiniMax {
 						wantUA = "MiniMaxAgent"
 						if accountType == AccountTypeAPIKey {

@@ -130,7 +130,7 @@ func (s *OpenAIGatewayService) performOpenAIWSGeneratePrewarm(
 		}
 
 		if eventType == "error" {
-			if status, ok := openAIModelNotFoundEventStatus(message); ok {
+			if status, ok := openAIRequestTerminalEventStatus(message); ok {
 				lease.MarkBroken()
 				return &UpstreamFailoverError{StatusCode: status, ResponseBody: message, Scope: GatewayFailureScopeRequest, NextAccountAction: NextAccountStop}
 			}
@@ -162,7 +162,7 @@ func (s *OpenAIGatewayService) performOpenAIWSGeneratePrewarm(
 		}
 
 		if isOpenAIWSTerminalEvent(eventType) {
-			if status, ok := openAIModelNotFoundEventStatus(message); ok {
+			if status, ok := openAIRequestTerminalEventStatus(message); ok {
 				lease.MarkBroken()
 				return &UpstreamFailoverError{StatusCode: status, ResponseBody: message, Scope: GatewayFailureScopeRequest, NextAccountAction: NextAccountStop}
 			}
@@ -274,6 +274,9 @@ func markOpenAIWSClientVisibleFailure(c *gin.Context, eventType string, payload 
 }
 
 func openAIWSPayloadTransientStatus(payload []byte) int {
+	if openAIInputTerminalCode(0, payload) != "" {
+		return 0
+	}
 	if _, ok := openAIModelNotFoundEventStatus(payload); ok {
 		return 0
 	}
@@ -729,6 +732,9 @@ func classifyOpenAIWSAcquireError(err error) string {
 }
 
 func isOpenAIWSRateLimitError(codeRaw, errTypeRaw, msgRaw string) bool {
+	if isOpenAIInputTerminalCode(codeRaw) {
+		return false
+	}
 	code := strings.ToLower(strings.TrimSpace(codeRaw))
 	errType := strings.ToLower(strings.TrimSpace(errTypeRaw))
 	msg := strings.ToLower(strings.TrimSpace(msgRaw))
@@ -798,6 +804,9 @@ func (s *OpenAIGatewayService) newOpenAIWSRateLimitFailoverError(account *Accoun
 }
 
 func classifyOpenAIWSErrorEventFromRaw(codeRaw, errTypeRaw, msgRaw string) (string, bool) {
+	if isOpenAIInputTerminalCode(codeRaw) {
+		return codeRaw, false
+	}
 	if codeRaw == "model_not_found" {
 		return "model_not_found", false
 	}
@@ -847,6 +856,9 @@ func classifyOpenAIWSErrorEventFromRaw(codeRaw, errTypeRaw, msgRaw string) (stri
 }
 
 func classifyOpenAIWSErrorEvent(message []byte) (string, bool) {
+	if code := openAIInputTerminalCode(0, message); code != "" {
+		return code, false
+	}
 	if len(message) == 0 {
 		return "event_error", false
 	}
@@ -860,6 +872,9 @@ func classifyOpenAIWSErrorEvent(message []byte) (string, bool) {
 }
 
 func openAIWSErrorHTTPStatusFromRaw(codeRaw, errTypeRaw string) int {
+	if isOpenAIInputTerminalCode(codeRaw) {
+		return http.StatusBadRequest
+	}
 	if codeRaw == "model_not_found" {
 		return http.StatusBadRequest
 	}
@@ -887,6 +902,9 @@ func openAIWSErrorHTTPStatusFromRaw(codeRaw, errTypeRaw string) int {
 }
 
 func openAIWSErrorHTTPStatus(message []byte) int {
+	if openAIInputTerminalCode(0, message) != "" {
+		return http.StatusBadRequest
+	}
 	if len(message) == 0 {
 		return http.StatusBadGateway
 	}

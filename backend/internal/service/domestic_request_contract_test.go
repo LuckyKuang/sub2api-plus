@@ -210,7 +210,7 @@ func TestZCodeDeviceSourcePriorityAndProtocolCarrier(t *testing.T) {
 	_, ctx := outboundIdentityTestSettings(t, settings)
 	for _, tc := range []struct{ pin, expected string }{{"", globalDevice}, {accountDevice, accountDevice}, {"invalid-device", globalDevice}} {
 		account := &Account{ID: 53, Platform: PlatformZhipu, Type: AccountTypeAPIKey, Credentials: map[string]any{
-			outboundIdentityCredential: OutboundIdentitySelection{Preset: "zcode", Version: "3.16.2", Headers: map[string]string{zcode.HeaderDeviceMid: tc.pin}},
+			outboundIdentityCredential: OutboundIdentitySelection{Preset: "zcode", Version: "3.17.2", Headers: map[string]string{zcode.HeaderDeviceMid: tc.pin}},
 		}}
 		request, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://open.bigmodel.cn/v1/messages", bytes.NewBufferString(`{"messages":[],"metadata":{"other":"preserved"}}`))
 		require.NoError(t, err)

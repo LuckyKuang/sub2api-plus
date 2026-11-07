@@ -33,7 +33,7 @@ func (r *codexBridgeWSLiveAccountRepo) GetByID(_ context.Context, id int64) (*Ac
 	// Live row values must not replace the acquired transport identity.
 	row.Credentials["access_token"] = "different-live-access"
 	row.Credentials["chatgpt_account_id"] = "different-live-workspace"
-	row.Credentials["user_agent"] = "codex_cli_rs/0.165.0 (Debian 12; arm64) live-terminal"
+	row.Credentials["user_agent"] = "codex_cli_rs/0.167.0 (Debian 12; arm64) live-terminal"
 	return row, nil
 }
 
@@ -49,7 +49,7 @@ func TestCodexCLIBridgeNativeWSReadsLiveAccountToggleBothDirections(t *testing.T
 	owner.Concurrency = 1
 	owner.Extra = map[string]any{"openai_oauth_responses_websockets_v2_mode": OpenAIWSIngressModePassthrough}
 	svc.cfg.Gateway.OpenAIWS.ResponsesWebsocketsV2 = true
-	owner.Credentials["user_agent"] = "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) owner-terminal"
+	owner.Credentials["user_agent"] = "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) owner-terminal"
 	rows := &codexBridgeWSLiveAccountRepo{owner: owner}
 	svc.accountRepo = rows
 	ctx := WithOutboundIdentityScope(context.Background(), nil)
@@ -68,7 +68,7 @@ func TestCodexCLIBridgeNativeWSReadsLiveAccountToggleBothDirections(t *testing.T
 		require.Equal(t, int64(1703), acquired.ID)
 		require.Equal(t, "acquired-access", acquired.GetOpenAIAccessToken())
 		require.Equal(t, "acquired-workspace", acquired.GetCredential("chatgpt_account_id"))
-		require.Equal(t, "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) owner-terminal", acquired.GetCredential("user_agent"))
+		require.Equal(t, "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) owner-terminal", acquired.GetCredential("user_agent"))
 	}
 }
 

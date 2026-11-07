@@ -106,7 +106,7 @@ func TestCodexCLIBridgeWebSocketTurnsPreserveSessionAndOwnerIsolation(t *testing
 	} {
 		settingsRepo.enabled.Store(true)
 		account := enabledCodexCLIExecutionAccount(fixture.id, fixture.access, fixture.workspace)
-		account.Credentials["user_agent"] = "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) " + fixture.terminal
+		account.Credentials["user_agent"] = "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) " + fixture.terminal
 		account.Status, account.Schedulable, account.Concurrency = StatusActive, true, 1
 		account.Extra = map[string]any{"responses_websockets_v2_enabled": true, "openai_oauth_responses_websockets_v2_mode": OpenAIWSIngressModeCtxPool}
 		proxyID := fixture.id + 1000
@@ -225,7 +225,7 @@ func TestCodexCLIBridgeWebSocketTurnsPreserveSessionAndOwnerIsolation(t *testing
 		}
 		require.Equal(t, "Bearer "+wantAccess, requests[i].Header.Get("Authorization"))
 		require.Equal(t, wantWorkspace, requests[i].Header.Get("Chatgpt-Account-Id"))
-		require.Equal(t, "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) "+wantTerminal, requests[i].Header.Get("User-Agent"))
+		require.Equal(t, "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) "+wantTerminal, requests[i].Header.Get("User-Agent"))
 		require.Equal(t, wantProxy, proxies[i])
 	}
 	require.Empty(t, requests[0].Header.Get(openAIWSTurnStateHeader))

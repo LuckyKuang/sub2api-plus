@@ -1035,3 +1035,28 @@ These changes stay after request admission and do not alter either audit engine.
 rejections and compact failures after keepalive; the original terminal/error
 code stays intact. `TestOpenAIErrorMessagesSanitizedPendingToggle` exercises
 both live toggle directions before a fragmented sanitized error is released.
+
+## November 7 official-client compatibility
+
+Codex main's per-turn `prompt_cache_options.ttl` (`30m` or `12h`) is request
+control metadata. Preserving it on OAuth/setup-token HTTP/WS, compaction and
+bridge forwarding does not hide the recognized current user input from Content
+Moderation or Prompt Audit. Unknown sibling items still pass with extracted
+siblings auditable. Neither cache lifetime nor ZCode's stripped
+`x-zcode-session-features` attribution may select a client identity, bypass
+canonical extraction or move audit after selection, billing, concurrency or send.
+
+Regression evidence includes `TestCodexProtocolOptionsPreserveCanonicalAuditContent`
+(HTTP, direct/nested WS and unknown content),
+`TestCodexCLIBridgeOrdinaryResponsesBothRealAuditsPrecedeSideEffects` (OAuth/API
+Key with real engines), the HTTP/WS pass-through and side-effect-order suites,
+and `TestCodexOfficialPromptCacheTTLPreservedAcrossTransportsAndTurns`.
+
+Codex native Images GIF controls (`output_format`, `frame_count`,
+`frame_duration_ms`) are non-content options. Both canonical audit engines
+continue to consume the current prompt and recognized input images; unknown
+valid sibling options and empty prompts retain pass-through extraction.
+`TestOfficialCodexGIFControlsPreserveBothCanonicalAudits` covers recognized and
+empty input, and `TestOfficialCodexGIFBothRealAuditsPrecedeImageSideEffects`
+covers real moderation and Prompt Audit rejection on OAuth/API-key image
+requests before account reads, slots, billing, transport or task effects.

@@ -107,9 +107,9 @@ func TestCodexCLITaskDefaultPermissionsSurvivePartialAccountConfig(t *testing.T)
 
 func TestCodexCLITaskManagedOverlayPreservesPoliciesAndIdentity(t *testing.T) {
 	headers := http.Header{}
-	headers.Set("User-Agent", "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color")
+	headers.Set("User-Agent", "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color")
 	headers.Set("Originator", "codex_cli_rs")
-	headers.Set("Version", "0.165.0")
+	headers.Set("Version", "0.167.0")
 	headers.Set("Chatgpt-Account-Id", "workspace-one")
 	text := "sandbox_mode = \"read-only\"\napproval_policy = \"never\"\ndeveloper_instructions = \"stale account instructions\"\ncheck_for_update_on_startup = true\nmodel_reasoning_effort = \"low\"\n"
 	normalized, err := NormalizeCodexCLIConfigTOML(text)
@@ -137,9 +137,9 @@ func TestCodexCLITaskManagedOverlayPreservesPoliciesAndIdentity(t *testing.T) {
 	require.EqualValues(t, 0, provider["request_max_retries"])
 	require.EqualValues(t, 0, provider["stream_max_retries"])
 	trusted := provider["http_headers"].(map[string]any)
-	require.Equal(t, "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color", trusted["User-Agent"])
+	require.Equal(t, "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color", trusted["User-Agent"])
 	require.Equal(t, "codex_cli_rs", trusted["Originator"])
-	require.Equal(t, "0.165.0", trusted["Version"])
+	require.Equal(t, "0.167.0", trusted["Version"])
 	require.Equal(t, "workspace-one", trusted["Chatgpt-Account-Id"])
 	require.NotContains(t, string(configBytes), "private-access")
 }
@@ -305,7 +305,7 @@ func TestCodexCLITaskConcurrentAccountsKeepCredentialsAndFilesIndependent(t *tes
 		enabledCodexCLIExecutionAccount(22, "owner-two-access", "workspace-two"),
 	}
 	proxyID := int64(101)
-	accounts[0].Credentials["user_agent"] = "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) screen-256color"
+	accounts[0].Credentials["user_agent"] = "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) screen-256color"
 	accounts[0].ProxyID = &proxyID
 	accounts[0].Proxy = &Proxy{ID: proxyID, Protocol: "http", Host: "proxy-one.invalid", Port: 8080, Status: StatusActive}
 	type executionSnapshot struct {
@@ -382,9 +382,9 @@ func TestCodexCLITaskConcurrentAccountsKeepCredentialsAndFilesIndependent(t *tes
 		provider := parsed["model_providers"].(map[string]any)["sub2api_managed_codex"].(map[string]any)
 		require.Equal(t, expectedWorkspace, provider["http_headers"].(map[string]any)["Chatgpt-Account-Id"])
 		if expectedWorkspace == "workspace-one" {
-			require.Equal(t, "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) screen-256color", provider["http_headers"].(map[string]any)["User-Agent"])
+			require.Equal(t, "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) screen-256color", provider["http_headers"].(map[string]any)["User-Agent"])
 		} else {
-			require.Equal(t, "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color", provider["http_headers"].(map[string]any)["User-Agent"])
+			require.Equal(t, "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color", provider["http_headers"].(map[string]any)["User-Agent"])
 		}
 		require.NotContains(t, string(snapshot.config), "untrusted-client")
 	}
