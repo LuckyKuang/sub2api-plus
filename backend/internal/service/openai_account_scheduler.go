@@ -2916,7 +2916,7 @@ func (s *OpenAIGatewayService) isOpenAIAccountTransportCompatible(account *Accou
 }
 
 func (s *OpenAIGatewayService) ReportOpenAIAccountScheduleResult(account *Account, model string, success bool, firstTokenMs *int, observedErr ...error) bool {
-	if len(observedErr) > 0 && isOpenAIModelNotFoundTerminalError(observedErr[0]) {
+	if len(observedErr) > 0 && isOpenAIRequestTerminalError(observedErr[0]) {
 		return false
 	}
 	if account == nil {
@@ -2946,7 +2946,7 @@ func (s *OpenAIGatewayService) ReportOpenAIAccountScheduleResult(account *Accoun
 // ObserveOpenAIAccountHealthFailure records failures that cannot reach the
 // scheduler-result path, for example after semantic response bytes were sent.
 func (s *OpenAIGatewayService) ObserveOpenAIAccountHealthFailure(ctx context.Context, account *Account, observedErr error) bool {
-	if isOpenAIModelNotFoundTerminalError(observedErr) {
+	if isOpenAIRequestTerminalError(observedErr) {
 		return false
 	}
 	if s == nil || s.rateLimitService == nil || account == nil || observedErr == nil {

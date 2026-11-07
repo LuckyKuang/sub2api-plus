@@ -20,9 +20,9 @@ import (
 // > global > compiled identity precedence, including invalid-candidate fallback,
 // must survive the complete request builder and final provider transport.
 func TestCodexCLIBridgeIdentityFallbackAcrossGatewayAndAutomaticProbe(t *testing.T) {
-	const accountUA = "codex_vscode/0.165.0 (Mac OS X 15.1.0; arm64) iTerm.app"
-	const globalUA = "codex-tui/0.165.0 (Ubuntu 22.4.0; x86_64) screen-256color"
-	const defaultUA = "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color"
+	const accountUA = "codex_vscode/0.167.0 (Mac OS X 15.1.0; arm64) iTerm.app"
+	const globalUA = "codex-tui/0.167.0 (Ubuntu 22.4.0; x86_64) screen-256color"
+	const defaultUA = "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color"
 	for _, source := range []struct {
 		name, accountUA, globalUA, wantUA, wantOriginator string
 	}{
@@ -87,7 +87,7 @@ func TestCodexCLIBridgeIdentityFallbackAcrossGatewayAndAutomaticProbe(t *testing
 						require.Equal(t, "Bearer "+token, request.Header.Get("Authorization"))
 						require.Equal(t, []string{source.wantUA}, headerValues("User-Agent"))
 						require.Equal(t, []string{source.wantOriginator}, headerValues("Originator"))
-						require.Equal(t, []string{"0.165.0"}, headerValues("Version"))
+						require.Equal(t, []string{"0.167.0"}, headerValues("Version"))
 						if path == "oauth-responses" {
 							require.Equal(t, "acquired-workspace", request.Header.Get("Chatgpt-Account-Id"))
 						} else {

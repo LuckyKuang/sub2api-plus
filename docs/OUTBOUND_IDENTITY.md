@@ -10,7 +10,7 @@ The optional [managed CLI mode](CODEX_CLI.md) uses the fixed official
 `responses-api-proxy` for existing gateway traffic only when both the global
 bridge environment and credential-owning account switches are enabled. It also
 retains the distinct `POST /v1/codex-cli/responses` agent task route. Both modes
-require global permission. Its pinned executable version is `0.165.0`; installing
+require global permission. Its pinned executable version is `0.167.0`; installing
 it never automatically enables a transport or updates Codex identity declarations.
 Runtime installation and wire identity are
 separate checks. A system CLI can execute only after both its exact version and
@@ -21,8 +21,8 @@ Bridge and task execution resolve the same credential-owning account identity as
 gateway forwarding: valid `credentials.user_agent` → valid global
 `openai_codex_user_agent` → compiled default. Invalid/empty candidates fall
 through only to the next source. The exact default remains
-`codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color`, with
-`Originator: codex_cli_rs` and `Version: 0.165.0`. Running an official binary
+`codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color`, with
+`Originator: codex_cli_rs` and `Version: 0.167.0`. Running an official binary
 does not authorize its ambient OS, architecture, terminal or default headers
 to replace the selected identity.
 
@@ -163,8 +163,8 @@ credential-owner metadata. Existing API-key explicit keys may see one cache
 miss when upgrading to this shared derivation; subsequent owner changes keep
 the key stable. Explicit OAuth sharing retains its authorized scope.
 The Codex source-priority matrix below is unchanged. Its manually reviewed
-compiled version is `0.165.0`; the client family and environment stay fixed.
-The manual October 28 upgrade retains the account/global/default source matrix
+compiled version is `0.167.0`; the client family and environment stay fixed.
+The manual November 7 upgrade retains the account/global/default source matrix
 and administrator version pins. Government endpoint selection for recognized
 native OpenAI API-key issuance prefixes and `X-OpenAI-Fedramp` comes from the
 acquired credential owner, never from the inbound client or a generic header
@@ -182,7 +182,7 @@ SDK versions do not update this baseline.
 
 | Preset | Exact default OS/architecture declarations |
 | --- | --- |
-| Codex | `codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color` |
+| Codex | `codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color` |
 | Claude | `X-Stainless-OS: Linux`, `X-Stainless-Arch: x64` |
 | Gemini | `GeminiCLI/0.1.5 (Linux; x64)` |
 | Grok | `grok-shell/1.0.45 (linux; x86_64)` |
@@ -408,8 +408,8 @@ baseline upgrades follow [the official agent source index](OFFICIAL_AGENT_BASELI
 current effective identity.
 
 The exact compiled DeepSeek identity is
-`deepseek-harness/0.2.1-rc.3 (+https://github.com/deepseek-ai/deepseek-harness)`,
-with identifier `deepseek-harness` and client version `0.2.1-rc.3`. The
+`deepseek-harness/0.2.2-rc.1 (+https://github.com/deepseek-ai/deepseek-harness)`,
+with identifier `deepseek-harness` and client version `0.2.2-rc.1`. The
 parenthesized product comment belongs to the same User-Agent value the
 published harness renders from its own package manifest; it is not a second
 declaration. Only the User-Agent reaches the wire, so the preset adds no
@@ -429,15 +429,15 @@ resolve this preset by default through `nativeOutboundPreset`, so the
 and valid same-family account overrides remain available; a foreign persisted
 candidate falls through atomically to the native profile/default.
 
-The exact compiled ZCode identity is `ZCode/3.16.2`, with identifier `ZCode`
-and client version `3.16.2`. The desktop host's declaration block comes from
+The exact compiled ZCode identity is `ZCode/3.17.2`, with identifier `ZCode`
+and client version `3.17.2`. The desktop host's declaration block comes from
 `apps/zcode-cli/packages/bootstrap/src/model-config.ts` and
 `runtime-platform-headers.ts`:
 
 | Declaration | Default | Class |
 | --- | --- | --- |
-| `User-Agent` | `ZCode/3.16.2` | Derived |
-| `X-ZCode-App-Version` | `3.16.2`, always paired with UA | Derived |
+| `User-Agent` | `ZCode/3.17.2` | Derived |
+| `X-ZCode-App-Version` | `3.17.2`, always paired with UA | Derived |
 | `HTTP-Referer` | `https://zcode.z.ai` | Pinned |
 | `X-Title` | `Z Code@electron` | Pinned |
 | `X-Release-Channel` | `production` | Pinned |
@@ -546,8 +546,8 @@ over the validated URL and actual body before dispatch; send-time identity
 rendering preserves it. Generic headers cannot select the workspace,
 change these destinations, supply authentication or overwrite identity.
 
-The exact compiled Kimi Code identity is `kimi-code-cli/2.3.1`, with identifier
-`kimi-code-cli`, client version `2.3.1` and platform declaration
+The exact compiled Kimi Code identity is `kimi-code-cli/2.5.2`, with identifier
+`kimi-code-cli`, client version `2.5.2` and platform declaration
 `kimi_code_cli`. The official client renders one product token with dashes and
 one platform token with underscores; the two are not interchangeable. Its engine
 attaches the complete block — the User-Agent plus `X-Msh-Platform`,
@@ -1022,6 +1022,17 @@ this does not remove isolation or enable an inbound identity override. See
 [Codex compatibility boundaries](protocols/CODEX_CLIENT_PROFILES.md#codex-source-compatibility-boundaries)
 for supported contexts and explicit differences from the official client.
 
+Gateway transport codecs follow `backend/go.mod`: Brotli `1.2.7` and
+`klauspost/compress` `1.20.2` include the reviewed malformed-stream fixes
+([Brotli advisory](https://github.com/andybalholm/brotli/security/advisories/GHSA-c9gr-gmg4-2vqv),
+[zstd advisory](https://github.com/klauspost/compress/security/advisories/GHSA-fpmh-frq8-7rj8)).
+These dependencies do not declare a provider SDK identity. Codec upgrades must
+preserve the credential owner's selected headers, explicit version pins,
+signing exclusions, retry body bytes and native compression gates. The
+repository's `decompress_response_test.go`, `openai_codex_compression_test.go`,
+`grok_request_compression_test.go` and outbound identity suites cover those
+transport contracts; the backend vulnerability scan checks affected symbols.
+
 Pre-account Antigravity code exchange / refresh-token validation and Gemini
 code exchange start an independent native OAuth scope before the first provider
 request. Token exchange, user/project discovery, privacy set/verify and Google
@@ -1285,7 +1296,7 @@ Snapshots deep-copy the protocol maps, survive OAuth session serialization, and
 are reapplied at final transport send, including retries. Arbitrary header
 maps cannot supply SDK, device or control-plane declarations.
 
-Kimi's OAuth and API-key inference use the same `kimi-code-cli/2.3.1` UA and
+Kimi's OAuth and API-key inference use the same `kimi-code-cli/2.5.2` UA and
 `X-Msh-*` declarations. Anthropic uses `X-Stainless-Package-Version: 0.95.2`;
 Chat Completions/Responses use `6.34.0` (the reviewed Anthropic/OpenAI JS lockfile
 versions). Both explicitly pin `X-Stainless-Lang: js`, `X-Stainless-OS: Linux`,
@@ -1298,9 +1309,9 @@ ZCode's exact default inference UAs (both account types) are:
 
 | Protocol | User-Agent |
 | --- | --- |
-| Anthropic | `ZCode/3.16.2 ai/6.0.193 ai-sdk/provider-utils/4.0.27 runtime/node.js/22` |
-| Chat Completions | `ZCode/3.16.2 ai/6.0.193 ai-sdk/provider-utils/4.0.39 runtime/node.js/22` |
-| Responses | `ZCode/3.16.2 ai/6.0.193 ai-sdk/provider-utils/4.0.27 runtime/node.js/22` |
+| Anthropic | `ZCode/3.17.2 ai/6.0.193 ai-sdk/provider-utils/4.0.27 runtime/node.js/22` |
+| Chat Completions | `ZCode/3.17.2 ai/6.0.193 ai-sdk/provider-utils/4.0.39 runtime/node.js/22` |
+| Responses | `ZCode/3.17.2 ai/6.0.193 ai-sdk/provider-utils/4.0.27 runtime/node.js/22` |
 
 `runner-options.ts` supplies the bootstrap headers to `ai`, so its `ai/6.0.193`
 suffix replaces the provider factory's suffix; provider-utils appends its own
@@ -1331,7 +1342,7 @@ attaches the source block to its configured ZCode origin. This is an intentional
 extension required by the provider-bound identity contract. Optional telemetry
 IDs are not copied from another installation. DeepSeek uses the official Harness web login branch
 (`platformClientHeaders(null, client)`); its selected client version is
-`0.2.1-rc.3`, independent of any desktop shell.
+`0.2.2-rc.1`, independent of any desktop shell.
 
 Regression evidence: `domestic_identity_review_test.go`,
 `domestic_outbound_identity_test.go`, the complete Codex identity regressions,
@@ -1517,3 +1528,29 @@ Completions senders, and `TestCompositeUnifiedChatAndMessagesAuditOriginalConten
 BeforeConversion` proves the audit gate precedes selection and conversion for
 both unified endpoints. Existing identity regressions remain required for every
 new sender.
+
+## November 7 official-client review
+
+The reviewed sources and selected releases are recorded in
+[OFFICIAL_AGENT_BASELINES.md](OFFICIAL_AGENT_BASELINES.md#november-7-protocol-alignment).
+Only the four manually selected product defaults changed; all source-priority
+matrices, administrator version pins, OS/architecture/terminal declarations and
+locked SDK fingerprints retain their contracts. The managed CLI executable is
+pinned at `0.167.0`, matching the reviewed compiled default identity. Settings
+can explicitly install or update this reviewed runtime; archive and native
+executable digests remain independently pinned. The version-consistency gate
+rejects a runtime or browser catalog that lags behind the compiled default.
+The provider overlay still advertises the resolved account/global/default
+identity, including administrator version pins, rather than the binary’s defaults.
+
+Kimi Messages with explicit `thinking.type` of `enabled` or `disabled` use
+`anthropic-beta: context-management-2025-06-27` for both credential types,
+matching its provider-specific transform. Generic interleaved thinking applies
+only when the provider-specific thinking selection is absent; adaptive and
+context-edit declarations retain their existing handling.
+
+ZCode's optional `x-zcode-session-features` is protocol context, not identity.
+Only ZCode's own runtime can assert accumulated workflow capability labels.
+The gateway omits it, strips inbound case variants on domestic inference/control
+paths and rejects static overrides at save and send time. It never invents
+workflow labels from prompts, tools, account configuration or client headers.

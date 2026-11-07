@@ -107,9 +107,9 @@ func TestCodexCLITaskDefaultPermissionsSurvivePartialAccountConfig(t *testing.T)
 
 func TestCodexCLITaskManagedOverlayPreservesPoliciesAndIdentity(t *testing.T) {
 	headers := http.Header{}
-	headers.Set("User-Agent", "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color")
+	headers.Set("User-Agent", "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color")
 	headers.Set("Originator", "codex_cli_rs")
-	headers.Set("Version", "0.165.0")
+	headers.Set("Version", "0.167.0")
 	headers.Set("Chatgpt-Account-Id", "workspace-one")
 	text := "sandbox_mode = \"read-only\"\napproval_policy = \"never\"\ndeveloper_instructions = \"stale account instructions\"\ncheck_for_update_on_startup = true\nmodel_reasoning_effort = \"low\"\n"
 	normalized, err := NormalizeCodexCLIConfigTOML(text)
@@ -137,15 +137,15 @@ func TestCodexCLITaskManagedOverlayPreservesPoliciesAndIdentity(t *testing.T) {
 	require.EqualValues(t, 0, provider["request_max_retries"])
 	require.EqualValues(t, 0, provider["stream_max_retries"])
 	trusted := provider["http_headers"].(map[string]any)
-	require.Equal(t, "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color", trusted["User-Agent"])
+	require.Equal(t, "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color", trusted["User-Agent"])
 	require.Equal(t, "codex_cli_rs", trusted["Originator"])
-	require.Equal(t, "0.165.0", trusted["Version"])
+	require.Equal(t, "0.167.0", trusted["Version"])
 	require.Equal(t, "workspace-one", trusted["Chatgpt-Account-Id"])
 	require.NotContains(t, string(configBytes), "private-access")
 }
 
 func TestCodexCLITaskCannotReenableAuxiliaryNetworkFromSavedConfiguration(t *testing.T) {
-	// rust-v0.165.0 config.schema.json defines FeatureToggleToml as an
+	// rust-v0.167.0 config.schema.json defines FeatureToggleToml as an
 	// object with an enabled boolean. cloud.skills does not accept a bool.
 	text := "sandbox_mode = \"danger-full-access\"\napproval_policy = \"never\"\n[features]\nplugins = true\nremote_plugin = true\nplugin_sharing = true\napps = true\ntool_suggest = true\nrecommended_plugins = true\nshell_tool = true\n[cloud.skills]\nenabled = true\n"
 	config, _, err := codexCLITaskConfig(text, CodexCLITaskRequest{}, http.Header{})
@@ -271,7 +271,7 @@ type codexCLIExecutionRuntime struct {
 }
 
 func (r codexCLIExecutionRuntime) Status(context.Context) codexcli.Status {
-	return codexcli.Status{ExecutionAvailable: r.available, SourceVerified: r.available, Source: "managed", VersionMatch: r.available, Mode: "exec_task", TargetVersion: "0.165.0"}
+	return codexcli.Status{ExecutionAvailable: r.available, SourceVerified: r.available, Source: "managed", VersionMatch: r.available, Mode: "exec_task", TargetVersion: "0.167.0"}
 }
 
 func (r codexCLIExecutionRuntime) RunTask(ctx context.Context, request codexcli.TaskRequest) (codexcli.TaskResult, error) {
@@ -305,7 +305,7 @@ func TestCodexCLITaskConcurrentAccountsKeepCredentialsAndFilesIndependent(t *tes
 		enabledCodexCLIExecutionAccount(22, "owner-two-access", "workspace-two"),
 	}
 	proxyID := int64(101)
-	accounts[0].Credentials["user_agent"] = "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) screen-256color"
+	accounts[0].Credentials["user_agent"] = "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) screen-256color"
 	accounts[0].ProxyID = &proxyID
 	accounts[0].Proxy = &Proxy{ID: proxyID, Protocol: "http", Host: "proxy-one.invalid", Port: 8080, Status: StatusActive}
 	type executionSnapshot struct {
@@ -382,9 +382,9 @@ func TestCodexCLITaskConcurrentAccountsKeepCredentialsAndFilesIndependent(t *tes
 		provider := parsed["model_providers"].(map[string]any)["sub2api_managed_codex"].(map[string]any)
 		require.Equal(t, expectedWorkspace, provider["http_headers"].(map[string]any)["Chatgpt-Account-Id"])
 		if expectedWorkspace == "workspace-one" {
-			require.Equal(t, "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) screen-256color", provider["http_headers"].(map[string]any)["User-Agent"])
+			require.Equal(t, "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) screen-256color", provider["http_headers"].(map[string]any)["User-Agent"])
 		} else {
-			require.Equal(t, "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color", provider["http_headers"].(map[string]any)["User-Agent"])
+			require.Equal(t, "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color", provider["http_headers"].(map[string]any)["User-Agent"])
 		}
 		require.NotContains(t, string(snapshot.config), "untrusted-client")
 	}
@@ -579,7 +579,7 @@ func TestCodexCLITaskBillingUsesEffectiveConfiguredReasoning(t *testing.T) {
 	}
 }
 
-// Existing group mappings can emit max. rust-v0.165.0's official
+// Existing group mappings can emit max. rust-v0.167.0's official
 // protocol/src/openai_models.rs ReasoningEffort supports that exact value.
 func TestCodexCLITaskAcceptsMaxFromExistingGroupReasoningMapping(t *testing.T) {
 	t.Setenv("DATA_DIR", t.TempDir())

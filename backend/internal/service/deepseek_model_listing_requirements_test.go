@@ -33,8 +33,8 @@ func TestDeepSeekNativeModelListingUsesSelectedIdentityVersion(t *testing.T) {
 		{"invalid-account-falls-to-global", "invalid", "0.2.1-rc.3", "0.2.0-rc.2", "0.2.1-rc.3", "global", true, "0.2.1-rc.3"},
 		{"global-below-floor-cannot-adopt-newer-environment", "", "0.2.0-rc.2", "0.2.1-rc.3", "0.2.0-rc.2", "global", false, "0.2.1-rc.3"},
 		{"environment-at-floor", "", "", "0.2.1-rc.3", "0.2.1-rc.3", "environment", true, "0.2.1-rc.3"},
-		{"compiled-at-floor", "", "", "", "0.2.1-rc.3", "compiled_default", true, "0.2.1-rc.3"},
-		{"compiled-below-floor", "", "", "", "0.2.1-rc.3", "compiled_default", false, "0.2.1-rc.4"},
+		{"compiled-at-floor", "", "", "", "0.2.2-rc.1", "compiled_default", true, "0.2.2-rc.1"},
+		{"compiled-below-floor", "", "", "", "0.2.2-rc.1", "compiled_default", false, "0.2.2-rc.2"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("SUB2API_DEEPSEEK_HARNESS_VERSION", tc.environmentVersion)

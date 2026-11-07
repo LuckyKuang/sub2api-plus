@@ -12,15 +12,15 @@ vi.mock('vue-i18n', () => ({ useI18n: () => ({
 
 function status(overrides: Partial<CodexCLIRuntimeStatus> = {}): CodexCLIRuntimeStatus {
   return {
-    target_version: '0.165.0', installed_version: '', path: '', source: '', source_verified: false,
+    target_version: '0.167.0', installed_version: '', path: '', source: '', source_verified: false,
     platform: 'linux-arm64', installed: false, version_match: false, can_install: true,
     execution_available: false, bridge_enabled: false, unavailable_code: 'not_installed', message: 'safe server description',
     mode: 'exec_task', transparent_proxy_available: false, ...overrides,
   }
 }
 function readyStatus(): CodexCLIRuntimeStatus {
-  return status({ installed: true, installed_version: '0.165.0', source: 'managed',
-    path: '/app/data/codex-cli/0.165.0/codex', source_verified: true, version_match: true,
+  return status({ installed: true, installed_version: '0.167.0', source: 'managed',
+    path: '/app/data/codex-cli/0.167.0/codex', source_verified: true, version_match: true,
     execution_available: true, unavailable_code: '',
   })
 }
@@ -51,10 +51,10 @@ describe('Codex CLI runtime settings', () => {
     await flushPromises()
     expect(getRuntime).toHaveBeenCalledTimes(1)
     expect(installRuntime).not.toHaveBeenCalled()
-    expect(wrapper.get('[data-testid="codex-cli-target-version"]').text()).toBe('0.165.0')
+    expect(wrapper.get('[data-testid="codex-cli-target-version"]').text()).toBe('0.167.0')
     expect(wrapper.get('[data-testid="codex-cli-installed-version"]').text()).toBe('codexCliRuntime.notInstalled')
     expect(wrapper.get('[data-testid="codex-cli-runtime-readiness"]').text()).toBe('codexCliRuntime.notReady')
-    expect(wrapper.get('[data-testid="codex-cli-runtime-install"]').text()).toContain('0.165.0')
+    expect(wrapper.get('[data-testid="codex-cli-runtime-install"]').text()).toContain('0.167.0')
     expect(wrapper.find('input').exists()).toBe(false)
     expect(wrapper.text()).toContain('codexCliRuntime.taskHint')
     expect(wrapper.text()).toContain('codexCliRuntime.permissionsHint')
@@ -68,26 +68,45 @@ describe('Codex CLI runtime settings', () => {
     await wrapper.get('[data-testid="codex-cli-runtime-install"]').trigger('click')
     await flushPromises()
     expect(installRuntime).toHaveBeenCalledExactlyOnceWith()
-    expect(wrapper.get('[data-testid="codex-cli-installed-version"]').text()).toBe('0.165.0')
+    expect(wrapper.get('[data-testid="codex-cli-installed-version"]').text()).toBe('0.167.0')
     expect(wrapper.get('[data-testid="codex-cli-runtime-source"]').text()).toBe('codexCliRuntime.managed')
-    expect(wrapper.get('[data-testid="codex-cli-runtime-path"]').text()).toBe('/app/data/codex-cli/0.165.0/codex')
+    expect(wrapper.get('[data-testid="codex-cli-runtime-path"]').text()).toBe('/app/data/codex-cli/0.167.0/codex')
     expect(wrapper.get('[data-testid="codex-cli-runtime-readiness"]').text()).toBe('codexCliRuntime.ready')
     expect(wrapper.get('[data-testid="codex-cli-runtime-install"]').attributes('disabled')).toBeDefined()
   })
 
-  it.each(['0.164.0', '0.166.0', '0.165.0-alpha.1'])('requires switching %s to the exact release target', async version => {
+  it.each(['0.165.0', '0.168.0', '0.167.0-alpha.1'])('requires switching %s to the exact release target', async version => {
     getRuntime.mockResolvedValueOnce(status({ installed: true, installed_version: version, source: 'system', path: '/usr/bin/codex', unavailable_code: 'version_mismatch' }))
     const wrapper = settings()
     await flushPromises()
     expect(wrapper.get('[data-testid="codex-cli-installed-version"]').text()).toBe(version)
-    expect(wrapper.get('[data-testid="codex-cli-target-version"]').text()).toBe('0.165.0')
+    expect(wrapper.get('[data-testid="codex-cli-target-version"]').text()).toBe('0.167.0')
     expect(wrapper.get('[data-testid="codex-cli-runtime-reason"]').text()).toBe('codexCliRuntime.versionMismatch')
     expect(wrapper.get('[data-testid="codex-cli-runtime-install"]').attributes('disabled')).toBeUndefined()
     expect(installRuntime).not.toHaveBeenCalled()
   })
 
+  // User requirement: settings explicitly update the installed old runtime to
+  // the approved release; updating does not change the saved bridge choice.
+  it('updates an existing 0.165.0 installation to 0.167.0 only after a click', async () => {
+    getRuntime.mockResolvedValueOnce(status({ installed: true, installed_version: '0.165.0',
+      source: 'managed', path: '/old/codex', unavailable_code: 'version_mismatch', bridge_enabled: true }))
+    installRuntime.mockResolvedValueOnce({ ...readyStatus(), bridge_enabled: true })
+    const wrapper = settings()
+    await flushPromises()
+    expect(wrapper.get('[data-testid="codex-cli-runtime-install"]').text()).toBe('codexCliRuntime.updateTarget 0.167.0')
+    expect(installRuntime).not.toHaveBeenCalled()
+    await wrapper.get('[data-testid="codex-cli-runtime-install"]').trigger('click')
+    await flushPromises()
+    expect(installRuntime).toHaveBeenCalledExactlyOnceWith()
+    expect(wrapper.get('[data-testid="codex-cli-installed-version"]').text()).toBe('0.167.0')
+    expect(wrapper.get('[data-testid="codex-cli-runtime-readiness"]').text()).toBe('codexCliRuntime.ready')
+    expect(wrapper.get('[data-testid="codex-cli-bridge-toggle"]').attributes('aria-checked')).toBe('true')
+    expect(saveBridge).not.toHaveBeenCalled()
+  })
+
   it('does not call a version-matching system CLI ready without source verification', async () => {
-    getRuntime.mockResolvedValueOnce(status({ installed: true, installed_version: '0.165.0', version_match: true,
+    getRuntime.mockResolvedValueOnce(status({ installed: true, installed_version: '0.167.0', version_match: true,
       source: 'system', path: '/usr/local/bin/codex', unavailable_code: 'source_unverified',
     }))
     const wrapper = settings()
@@ -148,7 +167,7 @@ describe('Codex CLI runtime settings', () => {
       can_install: false, unavailable_code: code })
     const wrapper = settings()
     await flushPromises()
-    expect(wrapper.get('[data-testid="codex-cli-installed-version"]').text()).toBe('0.165.0')
+    expect(wrapper.get('[data-testid="codex-cli-installed-version"]').text()).toBe('0.167.0')
     expect(wrapper.get('[data-testid="codex-cli-runtime-readiness"]').text()).toBe('codexCliRuntime.notReady')
     expect(wrapper.get('[data-testid="codex-cli-runtime-reason"]').text()).toBe(reason)
     expect(wrapper.get('[data-testid="codex-cli-runtime-install"]').attributes('disabled')).toBeDefined()
@@ -219,7 +238,7 @@ describe('Codex CLI runtime settings', () => {
   })
 
   it('does not report success when an install response is still unverified', async () => {
-    installRuntime.mockResolvedValueOnce(status({ installed: true, installed_version: '0.165.0', version_match: true, unavailable_code: 'source_unverified' }))
+    installRuntime.mockResolvedValueOnce(status({ installed: true, installed_version: '0.167.0', version_match: true, unavailable_code: 'source_unverified' }))
     const wrapper = settings()
     await flushPromises()
     await wrapper.get('[data-testid="codex-cli-runtime-install"]').trigger('click')

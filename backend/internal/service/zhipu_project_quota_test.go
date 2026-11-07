@@ -142,8 +142,8 @@ func TestZhipuProjectQuotaOfficialPersonalAndTeam(t *testing.T) {
 			require.Equal(t, "short-lived-project-token", f.upstream.request.Header.Get("Authorization"), "monitor authorization never adds Bearer or uses a Key ID/copied secret")
 			require.Equal(t, "http://proxy.example:8080", f.upstream.proxy)
 			require.True(t, HTTPUpstreamRedirectsDisabled(f.upstream.request.Context()))
-			require.Equal(t, "ZCode/3.16.2", f.upstream.request.Header.Get("User-Agent"))
-			require.Equal(t, "3.16.2", f.upstream.request.Header.Get("X-ZCode-App-Version"))
+			require.Equal(t, "ZCode/3.17.2", f.upstream.request.Header.Get("User-Agent"))
+			require.Equal(t, "3.17.2", f.upstream.request.Header.Get("X-ZCode-App-Version"))
 			require.Empty(t, f.upstream.request.Header.Get("X-ZCode-Agent"), "inference-only identity declaration is omitted by monitor")
 			if tc.team {
 				require.Equal(t, "org", f.upstream.request.Header.Get("bigmodel-organization"))

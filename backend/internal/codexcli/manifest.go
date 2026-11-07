@@ -2,12 +2,13 @@
 // implement the Responses protocol or start an app-server.
 package codexcli
 
-const targetVersion = "0.165.0"
+const targetVersion = "0.167.0"
 
 const releaseURL = "https://github.com/openai/codex/releases/download/rust-v" + targetVersion + "/"
 
 // TargetVersion is the official version reviewed with this application release.
-// Installation never resolves a latest release or updates this declaration.
+// Its manifest advances with the compiled outbound identity; the consistency
+// gate rejects drift. Installation never resolves latest or changes identity.
 func TargetVersion() string { return targetVersion }
 
 type artifact struct {
@@ -20,36 +21,38 @@ type artifact struct {
 	Entry        string
 }
 
-// These SHA-256 digests are the official rust-v0.165.0 release asset digests.
+// These SHA-256 digests are the official rust-v0.167.0 release asset digests.
+// Source: https://github.com/openai/codex/releases/tag/rust-v0.167.0
+// Native digests were independently computed from those verified archives.
 // Keep them embedded: release metadata downloaded at installation time cannot
 // authorize another executable or another version.
 var reviewedArtifacts = map[string]artifact{
 	"darwin/arm64": {
 		Name:         "codex-aarch64-apple-darwin.tar.gz",
-		SHA256:       "78ea9c178d2dc8fde71d6494df3b9eab902fd6d6de0a84e65234220d93bb6144",
-		BinarySHA256: "a45099154d7fb4a5ed8a56f40966a95deb938e508bab23e6985035c709e9a85a",
-		Size:         102366249,
+		SHA256:       "4b22a2a971be2791c3e31f912f3e77a88ebd64a65812a7289ccba65dd6425fe9",
+		BinarySHA256: "030316ecfbb41f4e7946e584b0063ef333b7a36cd312ba349f2f6869e39b62cc",
+		Size:         108379331,
 		Entry:        "codex-aarch64-apple-darwin",
 	},
 	"darwin/amd64": {
 		Name:         "codex-x86_64-apple-darwin.tar.gz",
-		SHA256:       "f46451741936ebdf5201b8becd0820a41be2a01d271b98703e0d9a1670c99993",
-		BinarySHA256: "f8096ee535ca7af9c57e315e5680f58457ff49dcc5fc619e5ba5eca24293ffe2",
-		Size:         111288240,
+		SHA256:       "d8eb4a865a0b17319cde10347523e5bab0978d01725b39f4a639f40905e01221",
+		BinarySHA256: "a3b4df639ed5808100fe9d3dacdb324c9fb50b2804d72d5ab59def67bb2d6ab6",
+		Size:         117941240,
 		Entry:        "codex-x86_64-apple-darwin",
 	},
 	"linux/arm64": {
 		Name:         "codex-aarch64-unknown-linux-musl.tar.gz",
-		SHA256:       "6522e056d0be7f531da915c9a81ae05bc70811b782542499cc0a9776d3abf5d3",
-		BinarySHA256: "b32ece31af06440da980b733fb8fefdd1f193439595fda84096f1caaceec543f",
-		Size:         107804617,
+		SHA256:       "843489acb4d4b1079745c36b03c5963b887b83155af208fd53584e33ee8eb281",
+		BinarySHA256: "2fe94d848540ff2a6868c7ebcc494126a974aa409711676d14fa0379e49e6143",
+		Size:         114300898,
 		Entry:        "codex-aarch64-unknown-linux-musl",
 	},
 	"linux/amd64": {
 		Name:         "codex-x86_64-unknown-linux-musl.tar.gz",
-		SHA256:       "be635d3486a5bd060d0fff582ae6d30160280c31344dd85719707fa920e187f0",
-		BinarySHA256: "c06a67fd8ac76508dc78bd99ce20c9f317b8d568beda59485f3f4134df9962d5",
-		Size:         115837472,
+		SHA256:       "9d64836106d5b374e90ee4454c7ebcde7ca7106558bd7e41a34b9f26ebda251a",
+		BinarySHA256: "cdcb45aaa01d0f14e298985e09465aebccd47f64ecd298aea44814af7b62bbda",
+		Size:         122587028,
 		Entry:        "codex-x86_64-unknown-linux-musl",
 	},
 }

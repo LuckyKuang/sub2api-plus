@@ -21,6 +21,8 @@ class CodexIdentityGuardTests(unittest.TestCase):
             Path("backend/internal/pkg/outboundidentity/identity.go"),
             Path("backend/internal/pkg/openai/request.go"),
             Path("backend/internal/service/openai_gateway_service.go"),
+            Path("backend/internal/codexcli/manifest.go"),
+            Path("frontend/src/api/codex.ts"),
             Path("backend/internal/service/account_header_override_test.go"),
             Path("frontend/src/components/account/credentialsBuilder.ts"),
             Path("docs/protocols/CODEX_CLIENT_PROFILES.md"),
@@ -39,6 +41,27 @@ class CodexIdentityGuardTests(unittest.TestCase):
     def test_current_native_declarations_and_exact_default_pass(self) -> None:
         result, errors = self.check()
         self.assertEqual(0, result, errors)
+
+    def test_runtime_and_catalog_cannot_lag_behind_default_identity(self) -> None:
+        # Requirement: manually approved identity upgrades also advance the
+        # pinned runtime and browser catalog. Restoring the old runtime version
+        # alone must fail even when the outbound declarations remain coherent.
+        for filename, pattern in (
+            ("backend/internal/codexcli/manifest.go", 'const targetVersion = "0.167.0"'),
+            ("frontend/src/api/codex.ts", "const DEFAULT_CODEX_CLIENT_VERSION = '0.167.0'"),
+        ):
+            with self.subTest(path=filename):
+                target = self.root / filename
+                original = target.read_text(encoding="utf-8")
+                self.assertIn(pattern, original)
+                target.write_text(original.replace(pattern, pattern.replace("0.167.0", "0.165.0"), 1), encoding="utf-8")
+                try:
+                    result, errors = self.check()
+                    self.assertEqual(1, result, errors)
+                    self.assertIn("must match compiled outbound identity", errors)
+                    self.assertIn(filename, errors)
+                finally:
+                    target.write_text(original, encoding="utf-8")
 
     def test_each_inference_path_rejects_oauth_only_declarations(self) -> None:
         # Official Codex inference declares Originator and Version for API keys

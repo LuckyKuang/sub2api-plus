@@ -14,6 +14,44 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type cancelThenEOFBody struct{ cancel context.CancelFunc }
+
+func (b *cancelThenEOFBody) Read([]byte) (int, error) {
+	b.cancel()
+	return 0, io.EOF
+}
+
+func (*cancelThenEOFBody) Close() error { return nil }
+
+// A transport or decoder may expose EOF when an interrupted response has no
+// buffered bytes. Cancellation must still prevent accepting a complete body,
+// including when decoding starts before doUpstreamRequest returns the headers.
+func TestHTTPUpstreamCancellationSurvivesDecoderEOF(t *testing.T) {
+	for _, encoding := range []string{"", "gzip", "zstd"} {
+		t.Run("encoding="+encoding, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			client := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				return &http.Response{
+					StatusCode: http.StatusTooManyRequests,
+					Header:     http.Header{"Content-Encoding": {encoding}},
+					Body:       &cancelThenEOFBody{cancel: cancel},
+					Request:    req,
+				}, nil
+			})}
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://upstream.invalid", nil)
+			require.NoError(t, err)
+			resp, err := doUpstreamRequest(client, req)
+			require.NoError(t, err, "received rejection headers must remain available")
+			require.Equal(t, http.StatusTooManyRequests, resp.StatusCode)
+			body, err := io.ReadAll(resp.Body)
+			require.Empty(t, body)
+			require.ErrorIs(t, err, context.Canceled, "cancelled EOF must not authorize complete-body recovery")
+			require.NoError(t, resp.Body.Close())
+		})
+	}
+}
+
 // A rejected request must release the transport and admission slots even when
 // an upstream/proxy flushes 429 headers but never sends its compressed body.
 // ResponseHeaderTimeout cannot protect this phase, and streaming callers may

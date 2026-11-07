@@ -2,9 +2,9 @@
 """Real interactive consumer for the Go gateway's isolated safety notice fixture.
 
 The maintained official wire gate calls this through the Go test. Expectations
-come from the reviewed official 0.165.0 TUI, not gateway projection internals:
+come from the reviewed official 0.167.0 TUI, not gateway projection internals:
 codex-rs/tui/src/chatwidget/safety_buffering.rs at
-360319d8dee62d87e2d59fc0c21805d79519cfed.
+086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a.
 """
 
 from __future__ import annotations

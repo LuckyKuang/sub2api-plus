@@ -126,10 +126,10 @@ func TestOpenAIFedRAMPSetupTokenRetainsAcquiredClaim(t *testing.T) {
 
 func TestFetchCodexModelsManifestFedRAMPDefaultAndOverrides(t *testing.T) {
 	for _, tc := range []struct{ name, baseURL, expectedURL string }{
-		{"default", "", "https://gov.chatgpt.com/backend-api/codex/models?client_version=0.165.0"},
-		{"explicit-commercial", "https://api.openai.com/v1", "https://api.openai.com/v1/models?client_version=0.165.0"},
-		{"explicit-regional", "https://gov.api.openai.com/v1", "https://gov.api.openai.com/v1/models?client_version=0.165.0"},
-		{"compatible", "https://upstream.example/custom/v1", "https://upstream.example/custom/v1/models?client_version=0.165.0"},
+		{"default", "", "https://gov.chatgpt.com/backend-api/codex/models?client_version=0.167.0"},
+		{"explicit-commercial", "https://api.openai.com/v1", "https://api.openai.com/v1/models?client_version=0.167.0"},
+		{"explicit-regional", "https://gov.api.openai.com/v1", "https://gov.api.openai.com/v1/models?client_version=0.167.0"},
+		{"compatible", "https://upstream.example/custom/v1", "https://upstream.example/custom/v1/models?client_version=0.167.0"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			account := newCodexModelsAPIKeyTestAccount(tc.baseURL)
@@ -145,8 +145,8 @@ func TestFetchCodexModelsManifestFedRAMPDefaultAndOverrides(t *testing.T) {
 			require.Equal(t, tc.expectedURL, captured.URL.String())
 			require.Equal(t, "Bearer sk-svcacct-fedramp-synthetic", captured.Header.Get("Authorization"))
 			require.Equal(t, "true", captured.Header.Get("x-openai-fedramp"))
-			require.Equal(t, "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color", captured.UserAgent())
-			require.Equal(t, "0.165.0", captured.Header.Get("Version"))
+			require.Equal(t, "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color", captured.UserAgent())
+			require.Equal(t, "0.167.0", captured.Header.Get("Version"))
 		})
 	}
 }

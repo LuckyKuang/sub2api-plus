@@ -196,6 +196,9 @@ func (s *OpenAIGatewayService) handleOpenAIAccountUpstreamError(ctx context.Cont
 		scheduleOllamaCloudUsageActivity(s.deferredService, account)
 		scheduleOpenCodeGoUsageActivity(s.deferredService, account)
 	}
+	if account != nil && account.Platform == PlatformOpenAI && openAIInputTerminalCode(statusCode, responseBody) != "" {
+		return false
+	}
 	// Capacity shedding describes this request, not account health. Keep the
 	// account schedulable; the request itself is not retried or failed over.
 	if account != nil && account.Platform == PlatformOpenAI && isOpenAIHTTPCapacityShed(statusCode, "", responseBody) {

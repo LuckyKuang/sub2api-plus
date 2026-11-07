@@ -60,7 +60,7 @@ func TestCodexProtocolOptionsPreserveCanonicalAuditContent(t *testing.T) {
 			{`[{"type":"item_reference","id":"call_1"},{"type":"function_call_output","call_id":"call_1","output":"historical result"},{"type":"message","role":"user","content":[{"type":"input_text","text":"audit current request"},{"type":"future_media","opaque":true}]}]`, "audit current request"},
 		} {
 			t.Run(frame+"/"+input.want, func(t *testing.T) {
-				body := `{"model":"gpt-6.1-sol","input":` + input.body + `,"stream_options":{"reasoning_summary_delivery":"sequential_cutoff","future_option":true},"client_metadata":{"ws_request_header_x_openai_internal_codex_responses_lite":"true","x-codex-turn-metadata":"{\"subagent_kind\":\"guardian\",\"thread_id\":\"child-thread\",\"parent_thread_id\":\"parent-thread\"}"}}`
+				body := `{"model":"gpt-6.1-sol","prompt_cache_options":{"ttl":"12h"},"input":` + input.body + `,"stream_options":{"reasoning_summary_delivery":"sequential_cutoff","future_option":true},"client_metadata":{"ws_request_header_x_openai_internal_codex_responses_lite":"true","x-codex-turn-metadata":"{\"subagent_kind\":\"guardian\",\"thread_id\":\"child-thread\",\"parent_thread_id\":\"parent-thread\"}"}}`
 				if frame == "websocket" {
 					body = `{"type":"response.create",` + body[1:]
 				}

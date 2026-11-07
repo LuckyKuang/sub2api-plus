@@ -155,7 +155,6 @@ var openAIChatGPTInternalUnsupportedFields = []string{
 	"chat_template_kwargs",
 	"user",
 	"metadata",
-	"prompt_cache_options",
 	"prompt_cache_retention",
 	"safety_identifier",
 	"truncation",
