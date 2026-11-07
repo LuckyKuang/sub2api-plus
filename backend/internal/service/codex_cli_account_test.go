@@ -61,7 +61,7 @@ func TestCodexCLITOMLRejectsAlternateAuthAndIdentitySources(t *testing.T) {
 	}
 }
 
-// rust-v0.165.0 exec/src/lib.rs build_exec_config fixes approvals to Never.
+// rust-v0.167.0 exec/src/lib.rs build_exec_config fixes approvals to Never.
 // Reject apparent interactive policies instead of accepting ineffective edits.
 func TestCodexCLIAccountRejectsUnsupportedApprovalAndDiscoveryBeforeWrites(t *testing.T) {
 	for _, text := range []string{

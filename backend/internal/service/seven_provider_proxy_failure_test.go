@@ -23,7 +23,7 @@ type strictProviderProxyCase struct {
 }
 
 var strictProviderProxyCases = []strictProviderProxyCase{
-	{PlatformOpenAI, "gpt-5.4", "codex_cli_rs/0.165.0", "Authorization", "Bearer old-token"},
+	{PlatformOpenAI, "gpt-5.4", "codex_cli_rs/0.167.0", "Authorization", "Bearer old-token"},
 	{PlatformGrok, "grok-4.5", "grok-shell/", "Authorization", "Bearer strict-token"},
 	{PlatformDeepseek, "deepseek-chat", "deepseek-harness/", "x-dsh-auth-token", "strict-token"},
 	{PlatformKimi, "kimi-k2.5", "kimi-code-cli/", "Authorization", "Bearer strict-token"},
@@ -50,11 +50,11 @@ func strictProviderProxyAccount(t *testing.T, tc strictProviderProxyCase, kind s
 		account, _ = zhipuNativeCredentialAccount("bigmodel", zhipuNativeCredentialCase{plan: ZhipuPlanIndividualCodingPlan})
 		account.Credentials["oauth_access_token"] = "strict-token-login"
 		account.Credentials[credentialAPIBaseURLs].(map[string]any)[APIProtocolChatCompletions] = "https://open.bigmodel.cn/api/coding/paas/v4"
-		account.Credentials[outboundIdentityCredential] = OutboundIdentitySelection{Preset: "zcode", Version: "3.16.2"}
+		account.Credentials[outboundIdentityCredential] = OutboundIdentitySelection{Preset: "zcode", Version: "3.17.2"}
 	default:
-		version := "2.3.1"
+		version := "2.5.2"
 		if tc.platform == PlatformZhipu {
-			version = "3.16.2"
+			version = "3.17.2"
 		}
 		account = nativeAcquiredOwnerAccount(tc.platform, proxy, "strict-token", version)
 	}

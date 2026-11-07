@@ -83,6 +83,7 @@ const HEADER_OVERRIDE_BLOCKED_NAMES = new Set([
   // ZCode product/version companions and persisted host facts.
   'x-zcode-app-version',
   'x-zcode-agent',
+  'x-zcode-session-features',
   'http-referer',
   'x-title',
   'x-release-channel',

@@ -133,7 +133,7 @@ func TestOpenAIModelNotFound_DirectHTTPRetainsTerminalCode(t *testing.T) {
 			_, err := svc.handleErrorResponse(context.Background(), newOpenAIUpstreamErrorResponse(status,
 				`{"error":{"code":"model_not_found","message":"Model A unavailable","param":"model"}}`), c, newOpenAIUpstreamErrorTestAccount(), nil)
 			require.Error(t, err)
-			require.True(t, isOpenAIModelNotFoundTerminalError(err))
+			require.True(t, isOpenAIRequestTerminalError(err))
 			var failoverErr *UpstreamFailoverError
 			require.NotErrorAs(t, err, &failoverErr)
 			require.Equal(t, status, rec.Code)
@@ -165,7 +165,7 @@ func TestOpenAIModelNotFound_StreamingTerminalIsNotRetried(t *testing.T) {
 					_, err = svc.handleStreamingResponse(c.Request.Context(), resp, c, account, time.Now(), "model-A", "model-A")
 				}
 				require.Error(t, err)
-				require.True(t, isOpenAIModelNotFoundTerminalError(err))
+				require.True(t, isOpenAIRequestTerminalError(err))
 				var failoverErr *UpstreamFailoverError
 				require.NotErrorAs(t, err, &failoverErr)
 				require.Equal(t, 1, strings.Count(rec.Body.String(), "event: response.failed"))
@@ -195,7 +195,7 @@ func TestOpenAIModelNotFound_NonStreamingSSEAndPassthroughKeepCode(t *testing.T)
 					_, err = svc.handleSSEToJSON(newNonStreamingSSEResponse(), c, newNonStreamingFailoverAccount(), body, "model-A", "model-A")
 				}
 				require.Error(t, err)
-				require.True(t, isOpenAIModelNotFoundTerminalError(err))
+				require.True(t, isOpenAIRequestTerminalError(err))
 				var failoverErr *UpstreamFailoverError
 				require.NotErrorAs(t, err, &failoverErr)
 				require.Equal(t, http.StatusBadRequest, rec.Code)
@@ -285,7 +285,7 @@ func TestOpenAIModelNotFound_WSV2ForwardLoopPreservesTerminalFailure(t *testing.
 				account := &Account{ID: 5886, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1, Credentials: map[string]any{"api_key": "test"}, Extra: map[string]any{"responses_websockets_v2_enabled": true}}
 				_, err := svc.Forward(context.Background(), c, account, []byte(fmt.Sprintf(`{"model":"gpt-5.5","stream":%t,"input":"hello"}`, stream)))
 				require.Error(t, err)
-				require.True(t, isOpenAIModelNotFoundTerminalError(err))
+				require.True(t, isOpenAIRequestTerminalError(err))
 				var failoverErr *UpstreamFailoverError
 				require.NotErrorAs(t, err, &failoverErr)
 				if stream {
@@ -367,7 +367,7 @@ func TestOpenAIModelNotFound_TerminalObservationDoesNotPenalizeScheduler(t *test
 	observer := &codexModelSchedulingObserver{}
 	svc := &OpenAIGatewayService{openaiScheduler: observer}
 	account := &Account{ID: 1000, Platform: PlatformOpenAI, Type: AccountTypeAPIKey}
-	terminal := &openAIModelNotFoundTerminalError{cause: fmt.Errorf("upstream response failed: Model A unavailable")}
+	terminal := &openAIRequestTerminalError{cause: fmt.Errorf("upstream response failed: Model A unavailable")}
 	require.False(t, svc.ReportOpenAIAccountScheduleResult(account, "model-A", false, nil, terminal))
 	require.False(t, svc.ObserveOpenAIAccountHealthFailure(context.Background(), account, terminal))
 	require.Zero(t, observer.reports)

@@ -7,7 +7,7 @@ export interface CodexModelsManifestResult {
   responseBytes: number
 }
 
-const DEFAULT_CODEX_CLIENT_VERSION = '0.165.0'
+const DEFAULT_CODEX_CLIENT_VERSION = '0.167.0'
 
 function normalizeCodexBaseUrl(baseUrl: string): string {
   const fallback = typeof window !== 'undefined' ? window.location.origin : ''

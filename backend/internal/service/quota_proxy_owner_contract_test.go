@@ -458,7 +458,7 @@ func TestOpenAIQuotaTokenOwnerRejectsRelinkBeforeAdoptionOrRefresh(t *testing.T)
 					for _, call := range calls {
 						require.Equal(t, bearer, call.request.Header.Get("Authorization"))
 						require.Equal(t, "quota-owner-account", call.request.Header.Get("Chatgpt-Account-Id"))
-						require.Equal(t, "codex_cli_rs/0.165.0 (Ubuntu 24.04; aarch64) xterm-256color", call.request.UserAgent())
+						require.Equal(t, "codex_cli_rs/0.167.0 (Ubuntu 24.04; aarch64) xterm-256color", call.request.UserAgent())
 						require.Equal(t, "http://captured-user:captured-password@captured.proxy.example:8080", call.route)
 					}
 					if phase == "same-owner-rotation" {
@@ -510,7 +510,7 @@ func TestOpenAIQuotaCapturesRouteBeforeTokenLookup(t *testing.T) {
 			for _, call := range calls {
 				require.Equal(t, "http://captured-user:captured-password@captured.proxy.example:8080", call.route,
 					"a later proxy edit cannot replace the route already captured for this credential operation")
-				require.Equal(t, "codex_cli_rs/0.165.0 (Ubuntu 24.04; aarch64) xterm-256color", call.request.UserAgent(),
+				require.Equal(t, "codex_cli_rs/0.167.0 (Ubuntu 24.04; aarch64) xterm-256color", call.request.UserAgent(),
 					"a later identity edit cannot accompany an earlier owner's bearer and route")
 				require.Empty(t, call.request.Header.Get("Originator"))
 				require.Empty(t, call.request.Header.Get("Version"))
@@ -547,7 +547,7 @@ func TestOpenAIQuotaCredentialOwnerSnapshotDoesNotAdoptReplacementAgent(t *testi
 			for _, call := range calls {
 				require.Equal(t, "Bearer quota-owner-access", call.request.Header.Get("Authorization"), "an OAuth operation cannot switch to a replacement login's AgentAssertion")
 				require.Equal(t, "quota-owner-account", call.request.Header.Get("Chatgpt-Account-Id"))
-				require.Equal(t, "codex_cli_rs/0.165.0 (Ubuntu 24.04; aarch64) xterm-256color", call.request.UserAgent())
+				require.Equal(t, "codex_cli_rs/0.167.0 (Ubuntu 24.04; aarch64) xterm-256color", call.request.UserAgent())
 			}
 		})
 	}
@@ -576,7 +576,7 @@ func TestOpenAIQuotaCredentialOwnerSnapshotKeepsCapturedAgentAssertion(t *testin
 				require.True(t, strings.HasPrefix(call.request.Header.Get("Authorization"), "AgentAssertion "))
 				require.Equal(t, "quota-owner-task", decodeAgentAssertionTask(t, call.request.Header.Get("Authorization")))
 				require.Equal(t, "quota-owner-account", call.request.Header.Get("Chatgpt-Account-Id"))
-				require.Equal(t, "codex_cli_rs/0.165.0 (Ubuntu 24.04; aarch64) xterm-256color", call.request.UserAgent())
+				require.Equal(t, "codex_cli_rs/0.167.0 (Ubuntu 24.04; aarch64) xterm-256color", call.request.UserAgent())
 			}
 		})
 	}

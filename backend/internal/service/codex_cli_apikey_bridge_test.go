@@ -18,7 +18,7 @@ import (
 func codexBridgeAPIKeyFixture() *Account {
 	return &Account{ID: 801, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Concurrency: 1, Credentials: map[string]any{
 		"api_key": "acquired-api-key", "base_url": "https://compatible.example/v1",
-		"user_agent":                "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color",
+		"user_agent":                "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color",
 		CodexCLIConfigCredentialKey: map[string]any{"enabled": true, "config_toml": DefaultCodexCLIConfigTOML},
 	}}
 }
@@ -65,9 +65,9 @@ func TestCodexCLIAPIKeyBridgeHotSwitchGatewayProbeAndWSGate(t *testing.T) {
 				require.Equal(t, "https://compatible.example/v1/responses?trusted=1", req.URL.String())
 				require.Equal(t, "Bearer acquired-api-key", req.Header.Get("Authorization"))
 				require.Empty(t, req.Header.Get("Chatgpt-Account-Id"), "OAuth workspace must not leak into API Key requests")
-				require.Equal(t, "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color", req.Header.Get("User-Agent"))
+				require.Equal(t, "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color", req.Header.Get("User-Agent"))
 				require.Equal(t, "codex_cli_rs", req.Header.Get("Originator"))
-				require.Equal(t, "0.165.0", req.Header.Get("Version"))
+				require.Equal(t, "0.167.0", req.Header.Get("Version"))
 				got, err := io.ReadAll(req.Body)
 				require.NoError(t, err)
 				require.Equal(t, `{"model":"custom-model","input":"opaque","tools":[{"type":"function","name":"caller"}]}`, string(got))

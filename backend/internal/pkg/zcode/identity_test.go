@@ -46,7 +46,7 @@ func TestAuxiliaryClientsSendIdentityWithoutTransportWiring(t *testing.T) {
 			// Official sourceHeaders.ts uses os.version() on OAuth/business
 			// calls; inference separately uses os.release(). Do not derive
 			// this expected block from ControlIdentity under test.
-			version, zone := "3.16.2", "UTC"
+			version, zone := "3.17.2", "UTC"
 			if configured {
 				version, zone = "4.1.0", "Asia/Shanghai"
 			}
@@ -123,9 +123,9 @@ func TestZCodeSDKWireProfilesMatchOfficialRunnerHeaderLayering(t *testing.T) {
 		{"responses", "ai/6.0.193 ai-sdk/provider-utils/4.0.27 runtime/node.js/22"},
 	} {
 		projected := identity.ForProtocol(tc.protocol)
-		require.Equal(t, "ZCode/3.16.2 "+tc.suffix, projected.UserAgent)
-		require.Equal(t, "3.16.2", projected.Headers[HeaderAppVersion])
+		require.Equal(t, "ZCode/3.17.2 "+tc.suffix, projected.UserAgent)
+		require.Equal(t, "3.17.2", projected.Headers[HeaderAppVersion])
 		require.Equal(t, projected.UserAgent, projected.ForProtocol(tc.protocol).UserAgent)
 	}
-	require.Equal(t, "ZCode/3.16.2", identity.UserAgent)
+	require.Equal(t, "ZCode/3.17.2", identity.UserAgent)
 }

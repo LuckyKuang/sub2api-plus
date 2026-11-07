@@ -42,9 +42,9 @@ func TestZhipuStartPlanProductionBalanceStrictProxy(t *testing.T) {
 			var directDials, proxyCalls, providerCalls atomic.Int32
 			destination := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				providerCalls.Add(1)
-				require.Equal(t, "/api/v1/zcode-plan/billing/balance?app_version=3.16.2", r.URL.RequestURI())
+				require.Equal(t, "/api/v1/zcode-plan/billing/balance?app_version=3.17.2", r.URL.RequestURI())
 				require.Equal(t, "Bearer start-wire-jwt-secret", r.Header.Get("Authorization"))
-				require.Equal(t, "ZCode/3.16.2", r.UserAgent())
+				require.Equal(t, "ZCode/3.17.2", r.UserAgent())
 				require.Empty(t, r.Header.Get("X-Coding-Plan-Api-Key"))
 				w.Header().Set("Content-Type", "application/json")
 				_, _ = io.WriteString(w, `{"data":{"plans":[{"plan_id":"start-plan","status":"active"}],"balances":[{"capabilities":["model:GLM-5.3"]}]}}`)

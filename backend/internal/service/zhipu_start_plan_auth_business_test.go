@@ -66,7 +66,7 @@ func TestZhipuStartPlanMaterialForwardsOfficialBearerWithoutManualScheme(t *test
 				require.Empty(t, wire.Header.Get("X-Dsh-Auth-Token"))
 				require.Empty(t, wire.Header.Get("X-Coding-Plan-Api-Key"), "start-plan has no project PAT")
 				// Retain the target branch's reviewed ZCode identity baseline.
-				require.Equal(t, "ZCode/3.16.2 ai/6.0.193 ai-sdk/provider-utils/4.0.27 runtime/node.js/22", wire.Header.Get("User-Agent"))
+				require.Equal(t, "ZCode/3.17.2 ai/6.0.193 ai-sdk/provider-utils/4.0.27 runtime/node.js/22", wire.Header.Get("User-Agent"))
 			})
 		}
 	}

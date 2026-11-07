@@ -35,7 +35,7 @@ func TestOutboundMetadataFinalFastRequestAcrossNativeAndCLIBridge(t *testing.T) 
 				body, err := io.ReadAll(req.Body)
 				require.NoError(t, err)
 				require.Contains(t, string(body), `"service_tier":"priority"`)
-				require.Equal(t, "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color", req.Header.Get("User-Agent"))
+				require.Equal(t, "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color", req.Header.Get("User-Agent"))
 				return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"id":"resp_fast","model":"gpt-6.1-sol","service_tier":"default","status":"completed","output":[],"usage":{"input_tokens":10,"output_tokens":2}}`))}, nil
 			}}
 			svc.codexCLIBridgeRuntime = codexCLIBridgeTransportStub{status: status, bridge: func(ctx context.Context, _ codexcli.Status, req *http.Request, send func(context.Context, *http.Request) (*http.Response, error)) (*http.Response, error) {
@@ -86,7 +86,7 @@ func TestOutboundMetadataCannotClaimAnUnexecutedBridge(t *testing.T) {
 
 func TestOutboundMetadataAttemptAndTurnIsolation(t *testing.T) {
 	parent := context.Background()
-	headers := http.Header{"User-Agent": {"codex_cli_rs/0.165.0"}, "Originator": {"codex_cli_rs"}, "Version": {"0.165.0"}, "Authorization": {"secret"}, "Cookie": {"private"}}
+	headers := http.Header{"User-Agent": {"codex_cli_rs/0.167.0"}, "Originator": {"codex_cli_rs"}, "Version": {"0.167.0"}, "Authorization": {"secret"}, "Cookie": {"private"}}
 	first, one := beginOutboundObservation(parent)
 	second, two := beginOutboundObservation(parent)
 	observeOutboundWS(first, headers, []byte(`{"type":"response.create","service_tier":"priority"}`))

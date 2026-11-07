@@ -18,9 +18,9 @@ import (
 // account > global > compiled identity, including invalid candidate fallthrough.
 // These literal expectations describe the contract, not resolver output.
 func TestOpenAIModelDiscoveryBridgeIdentitySourceMatrix(t *testing.T) {
-	const accountUA = "codex_vscode/0.165.0 (Ubuntu 24.04; aarch64) vscode"
-	const globalUA = "codex-tui/0.165.0 (Ubuntu 24.04; x86_64) screen-256color"
-	const defaultUA = "codex_cli_rs/0.165.0 (Ubuntu 24.04; x86_64) xterm-256color"
+	const accountUA = "codex_vscode/0.167.0 (Ubuntu 24.04; aarch64) vscode"
+	const globalUA = "codex-tui/0.167.0 (Ubuntu 24.04; x86_64) screen-256color"
+	const defaultUA = "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color"
 	for _, source := range []struct {
 		name, account, global, wantUA, wantOriginator string
 	}{
@@ -97,7 +97,7 @@ func TestOpenAIModelDiscoveryBridgeIdentitySourceMatrix(t *testing.T) {
 						require.Equal(t, http.MethodGet, wire.Method)
 						require.Equal(t, []string{source.wantUA}, wire.Header.Values("User-Agent"))
 						require.Equal(t, []string{source.wantOriginator}, wire.Header.Values("Originator"))
-						require.Equal(t, []string{"0.165.0"}, wire.Header.Values("Version"))
+						require.Equal(t, []string{"0.167.0"}, wire.Header.Values("Version"))
 						if accountType == AccountTypeOAuth {
 							require.Equal(t, "/backend-api/codex/models", wire.URL.Path)
 							require.Equal(t, "Bearer owner-access", wire.Header.Get("Authorization"))
@@ -111,7 +111,7 @@ func TestOpenAIModelDiscoveryBridgeIdentitySourceMatrix(t *testing.T) {
 						if public && accountType == AccountTypeAPIKey {
 							require.Empty(t, wire.URL.Query().Get("client_version"))
 						} else {
-							require.Equal(t, "0.165.0", wire.URL.Query().Get("client_version"), "catalog query must agree with the selected identity")
+							require.Equal(t, "0.167.0", wire.URL.Query().Get("client_version"), "catalog query must agree with the selected identity")
 						}
 					})
 				}
