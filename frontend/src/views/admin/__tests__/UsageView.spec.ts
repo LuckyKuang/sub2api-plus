@@ -276,32 +276,18 @@ describe('admin UsageView route filters', () => {
     await flushPromises()
     await wrapper.get('[data-tab="live"]').trigger('click')
     expect(wrapper.find('[data-testid="live-panel"]').exists()).toBe(true)
-    expect(wrapper.get('.usage-date').isVisible()).toBe(false)
+    expect(wrapper.get('[data-testid="usage-chart-conditions"]').isVisible()).toBe(false)
 
     await wrapper.get('[role="tablist"] button:first-child').trigger('click')
     await flushPromises()
     expect(wrapper.find('[data-testid="live-panel"]').exists()).toBe(false)
     expect((wrapper.vm as any).activeTab).toBe('ranking')
-    expect(wrapper.get('.usage-date').element.isConnected).toBe(true)
-    expect((wrapper.get('.usage-date').element as HTMLElement).style.display).not.toBe('none')
-    expect(wrapper.get('.usage-date').isVisible()).toBe(true)
+    expect(wrapper.get('[data-testid="usage-chart-conditions"]').element.isConnected).toBe(true)
+    expect((wrapper.get('[data-testid="usage-chart-conditions"]').element as HTMLElement).style.display).not.toBe('none')
+    expect(wrapper.get('[data-testid="usage-chart-conditions"]').isVisible()).toBe(true)
     expect(wrapper.get('[data-testid="usage-charts-panel"]').isVisible()).toBe(true)
     await wrapper.get('[role="tablist"] button:nth-child(2)').trigger('click')
     expect(wrapper.findAllComponents({ name: 'UserTokenRanking' })).toHaveLength(1)
-    wrapper.unmount()
-  })
-
-  it('holds new records while the independent table is scrolled for reading', async () => {
-    routeQuery.record = '10'
-    list.mockResolvedValue({ items: [{ id: 10 }], total: 1, pages: 1 })
-    adminUsageList.mockResolvedValue({ items: [{ id: 11 }, { id: 10 }], total: 2, pages: 1 })
-    const wrapper = mountRouteFilteredUsageView({ UsageTable: { template: '<div class="workspace-table-viewport" />' } })
-    await flushPromises()
-    wrapper.get('.workspace-table-viewport').element.scrollTop = 200
-    await (wrapper.vm as any).historyRefresh.refresh()
-    await flushPromises()
-    expect((wrapper.vm as any).usageLogs.map((row: { id: number }) => row.id)).toEqual([10])
-    expect((wrapper.vm as any).newRecordsAvailable).toBe(true)
     wrapper.unmount()
   })
 

@@ -1,8 +1,8 @@
 <template>
   <div class="monitor-filters-bar flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
     <!-- Left: Search + Filters -->
-    <div class="monitor-filter-fields flex flex-1 flex-wrap items-center gap-3">
-      <div class="monitor-search relative w-full sm:w-64">
+    <div class="filter-bar flex-1">
+      <div class="filter-field filter-field--search relative">
         <Icon
           name="search"
           size="md"
@@ -17,21 +17,23 @@
         />
       </div>
 
-      <Select
-        v-model="provider"
-        :options="providerFilterOptions"
-        :placeholder="t('admin.channelMonitor.allProviders')"
-        class="monitor-filter-select w-44"
-        @change="$emit('reload')"
-      />
+      <div class="filter-field">
+        <Select
+          v-model="provider"
+          :options="providerFilterOptions"
+          :placeholder="t('admin.channelMonitor.allProviders')"
+          @change="$emit('reload')"
+        />
+      </div>
 
-      <Select
-        v-model="enabled"
-        :options="enabledFilterOptions"
-        :placeholder="t('admin.channelMonitor.enabledFilter')"
-        class="monitor-filter-select w-40"
-        @change="$emit('reload')"
-      />
+      <div class="filter-field">
+        <Select
+          v-model="enabled"
+          :options="enabledFilterOptions"
+          :placeholder="t('admin.channelMonitor.enabledFilter')"
+          @change="$emit('reload')"
+        />
+      </div>
     </div>
 
     <!-- Right: Actions -->
@@ -120,18 +122,11 @@ const enabledFilterOptions = computed(() => [
 </script>
 
 <style scoped>
+/* Control widths come from the shared filter tokens; only this bar stays compact. */
 @media (min-width: 1024px) {
-  .monitor-filters-bar { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: center; gap: 8px; }
-  .monitor-filter-fields { display: contents; }
-  .monitor-search, .monitor-filter-select { min-width: 0; width: auto; }
-  .monitor-filter-actions { grid-column: 1 / -1; width: auto; gap: 8px; }
   .monitor-filters-bar :deep(.input), .monitor-filters-bar :deep(.select-trigger) { height: 32px; min-height: 32px; padding: 6px 10px; font-size: 12px; line-height: 18px; }
-  .monitor-search .input { padding-left: 34px; }
+  .monitor-filters-bar .input { padding-left: 34px; }
   .monitor-filter-actions .btn { min-height: 32px; padding: 6px 10px; font-size: 12px; line-height: 18px; }
   .monitor-filter-actions .btn > :deep(svg) { margin-right: 0; }
-}
-@media (min-width: 1280px) {
-  .monitor-filters-bar { grid-template-columns: minmax(0, 1fr) minmax(100px, .65fr) minmax(100px, .6fr) auto; }
-  .monitor-filter-actions { grid-column: auto; }
 }
 </style>

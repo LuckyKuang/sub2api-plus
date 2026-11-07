@@ -1,26 +1,98 @@
 <template>
   <AppLayout workspace>
     <div class="workspace-page usage-workspace">
-      <WorkspaceTabs v-model="workspaceTab" class="workspace-fixed" :tabs="workspaceTabs" :label="t('usage.tabs.usage')" />
-        <div v-show="activeTab !== 'live'" class="card workspace-fixed usage-date p-4">
-          <div class="flex flex-wrap items-center gap-4">
-            <div class="flex min-w-0 max-w-full flex-wrap items-center gap-2">
+      <!-- One card owns the workspace tabs and every shared query condition. -->
+      <div class="usage-query-card card workspace-fixed flex flex-col gap-3 px-5 py-3" data-testid="usage-query-card">
+        <div class="flex flex-wrap items-center justify-between gap-4">
+          <WorkspaceTabs v-model="workspaceTab" embedded :tabs="workspaceTabs" :label="t('usage.tabs.usage')" />
+          <div v-show="activeTab !== 'live'" class="filter-bar" data-testid="usage-chart-conditions">
+            <div class="filter-pair">
               <span class="text-sm font-medium surface-muted">{{ t('admin.dashboard.timeRange') }}:</span>
-              <DateRangePicker
-                class="min-w-0 max-w-full"
-                v-model:start-date="startDate"
-                v-model:end-date="endDate"
-                @change="onDateRangeChange"
-              />
+              <div class="filter-field">
+                <DateRangePicker
+                  v-model:start-date="startDate"
+                  v-model:end-date="endDate"
+                  @change="onDateRangeChange"
+                />
+              </div>
             </div>
-            <div class="flex w-full min-w-0 flex-wrap items-center gap-2 sm:ml-auto sm:w-auto">
+            <div class="filter-pair">
               <span class="text-sm font-medium surface-muted">{{ t('admin.dashboard.granularity') }}:</span>
-              <div class="w-28 min-w-0 max-w-full">
+              <div class="filter-field">
                 <Select v-model="granularity" :options="granularityOptions" @change="loadChartData" />
               </div>
             </div>
           </div>
         </div>
+
+        <!-- Records-tab controls live in the same card, below the workspace tabs. -->
+        <div v-show="workspaceTab === 'records'" class="usage-record-controls">
+          <div class="usage-detail-tabs card-tabs workspace-fixed" role="tablist" :aria-label="t('usage.tabs.usage')">
+            <button
+              v-for="tab in detailTabs"
+              :key="tab.key"
+              :data-tab="tab.key"
+              type="button"
+              role="tab"
+              :aria-selected="activeTab === tab.key"
+              data-testid="usage-detail-tab"
+              class="card-tab"
+              @click="switchTab(tab.key)"
+            >
+              <Icon :name="tab.icon" size="sm" />
+              {{ tab.label }}
+            </button>
+          </div>
+
+          <UsageFilters workspace v-if="activeTab !== 'disconnects' && activeTab !== 'live'" v-model="filters" ref="usageFiltersRef" flat :mode="usageFilterMode" class="workspace-fixed" :start-date="startDate" :end-date="endDate" :exporting="exporting" :model-options="modelNameOptions" :error-view="errView" @update:error-view="onErrorViewChange" @change="applyFilters" @refresh="refreshData" @reset="resetFilters" @cleanup="openCleanupDialog" @export="exportToExcel">
+            <template #after-reset>
+              <div v-if="activeTab !== 'ranking'" class="relative" ref="columnDropdownRef">
+                <button
+                  data-testid="usage-column-settings"
+                  @click="showColumnDropdown = !showColumnDropdown"
+                  @keydown.esc.stop.prevent="showColumnDropdown = false"
+                  class="btn btn-secondary px-2 md:px-3"
+                  :title="t('admin.users.columnSettings')"
+                >
+                  <svg class="h-4 w-4 md:mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125z" />
+                  </svg>
+                  <span class="hidden md:inline">{{ t('admin.users.columnSettings') }}</span>
+                </button>
+                <Teleport to="body">
+                <div
+                  v-if="showColumnDropdown"
+                  class="absolute right-0 top-full z-50 mt-1 max-h-80 w-48 space-y-0.5 overflow-y-auto border border-gray-200 p-1 shadow-lg dark:border-dark-600 surface-panel"
+                  :style="columnDropdownStyle"
+                  data-testid="usage-column-menu"
+                  @click.stop
+                  @keydown.esc.stop.prevent="showColumnDropdown = false"
+                >
+                  <button
+                    v-for="col in currentToggleableColumns"
+                    :key="col.key"
+                    :data-testid="`usage-column-toggle-${col.key}`"
+                    @click="toggleCurrentColumn(col.key)"
+                    class="flex w-full items-center justify-between rounded-[var(--surface-radius-item)] px-3 py-2 text-left text-sm hover:surface-hover surface-control surface-muted"
+                  >
+                    <span>{{ col.label }}</span>
+                    <Icon
+                      v-if="isCurrentColumnVisible(col.key)"
+                      name="check"
+                      size="sm"
+                      class="text-primary-500"
+                      :stroke-width="2"
+                    />
+                  </button>
+                  <button type="button" class="w-full rounded-[var(--surface-radius-item)] border-t px-3 py-2 text-left text-sm text-primary-600 hover:surface-hover surface-control" @click="restoreRecommendedColumns">{{ t('inspection.resetColumns') }}</button>
+                </div>
+                </Teleport>
+              </div>
+            </template>
+          </UsageFilters>
+        </div>
+      </div>
+
       <section v-show="workspaceTab === 'charts' && activeTab !== 'live'" class="workspace-shell workspace-scroll space-y-4" data-testid="usage-charts-panel">
       <UsageStatsCards :stats="usageStats" />
         <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -66,77 +138,7 @@
         </div>
       </section>
       <div ref="recordsPanel" v-show="workspaceTab === 'records'" class="workspace-body usage-records-workspace" data-testid="usage-records-panel">
-        <div class="card workspace-fixed overflow-hidden usage-record-controls">
-        <div class="usage-detail-tabs card-tabs workspace-fixed" role="tablist" :aria-label="t('usage.tabs.usage')">
-          <button
-            v-for="tab in detailTabs"
-            :key="tab.key"
-            :data-tab="tab.key"
-            type="button"
-            role="tab"
-            :aria-selected="activeTab === tab.key"
-            data-testid="usage-detail-tab"
-            class="card-tab"
-            @click="switchTab(tab.key)"
-          >
-            <Icon :name="tab.icon" size="sm" />
-            {{ tab.label }}
-          </button>
-        </div>
-
-        <UsageFilters workspace v-if="activeTab !== 'disconnects' && activeTab !== 'live'" v-model="filters" ref="usageFiltersRef" flat :mode="usageFilterMode" class="workspace-fixed border-b border-gray-100 dark:border-dark-700/50" :start-date="startDate" :end-date="endDate" :exporting="exporting" :model-options="modelNameOptions" :error-view="errView" @update:error-view="onErrorViewChange" @change="applyFilters" @refresh="refreshData" @reset="resetFilters" @cleanup="openCleanupDialog" @export="exportToExcel">
-          <template #after-reset>
-            <div v-if="activeTab !== 'ranking'" class="relative" ref="columnDropdownRef">
-              <button
-                data-testid="usage-column-settings"
-                @click="showColumnDropdown = !showColumnDropdown"
-                @keydown.esc.stop.prevent="showColumnDropdown = false"
-                class="btn btn-secondary px-2 md:px-3"
-                :title="t('admin.users.columnSettings')"
-              >
-                <svg class="h-4 w-4 md:mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125z" />
-                </svg>
-                <span class="hidden md:inline">{{ t('admin.users.columnSettings') }}</span>
-              </button>
-              <Teleport to="body">
-              <div
-                v-if="showColumnDropdown"
-                class="absolute right-0 top-full z-50 mt-1 max-h-80 w-48 space-y-0.5 overflow-y-auto border border-gray-200 p-1 shadow-lg dark:border-dark-600 surface-panel"
-                :style="columnDropdownStyle"
-                data-testid="usage-column-menu"
-                @click.stop
-                @keydown.esc.stop.prevent="showColumnDropdown = false"
-              >
-                <button
-                  v-for="col in currentToggleableColumns"
-                  :key="col.key"
-                  :data-testid="`usage-column-toggle-${col.key}`"
-                  @click="toggleCurrentColumn(col.key)"
-                  class="flex w-full items-center justify-between rounded-[var(--surface-radius-item)] px-3 py-2 text-left text-sm hover:surface-hover surface-control surface-muted"
-                >
-                  <span>{{ col.label }}</span>
-                  <Icon
-                    v-if="isCurrentColumnVisible(col.key)"
-                    name="check"
-                    size="sm"
-                    class="text-primary-500"
-                    :stroke-width="2"
-                  />
-                </button>
-                <button type="button" class="w-full rounded-[var(--surface-radius-item)] border-t px-3 py-2 text-left text-sm text-primary-600 hover:surface-hover surface-control" @click="restoreRecommendedColumns">{{ t('inspection.resetColumns') }}</button>
-              </div>
-              </Teleport>
-            </div>
-          </template>
-        </UsageFilters>
-        </div>
-
         <div v-show="activeTab === 'usage'" class="workspace-body usage-history-workspace gap-4">
-          <div class="usage-history-refresh card workspace-fixed flex flex-wrap items-center justify-between gap-3 p-4">
-            <RefreshControl :state="historyRefresh" switch-visible manual />
-            <button v-if="newRecordsAvailable" type="button" class="btn btn-secondary" @click="showLatestRecords">{{ t('inspection.newRecords') }}</button>
-          </div>
           <UsageTable
             workspace
             model-metadata
@@ -224,9 +226,7 @@ import UsageTable from '@/components/admin/usage/UsageTable.vue'; import UsageEx
 import ClientDisconnectEventsPanel from '@/components/admin/usage/ClientDisconnectEventsPanel.vue'
 import { useColumnPreferenceKey } from '@/composables/useColumnPreferenceKey'
 import { useAnchoredDropdown } from '@/composables/useAnchoredDropdown'
-import { useAutoRefresh } from '@/composables/useAutoRefresh'
 import { useUsageSnapshot } from '@/composables/useUsageSnapshot'
-import RefreshControl from '@/components/common/RefreshControl.vue'
 import LiveRequestsPanel from '@/components/usage/LiveRequestsPanel.vue'
 import UserTokenRanking from '@/components/admin/usage/UserTokenRanking.vue'
 import UsageCleanupDialog from '@/components/admin/usage/UsageCleanupDialog.vue'
@@ -964,50 +964,17 @@ watch(modelDistributionSource, (source) => {
 
 defineExpose({ requestedModelStats, refreshData })
 
-const newRecordsAvailable = ref(false)
-const historyRefresh = useAutoRefresh({
-  storageKey: useColumnPreferenceKey('admin-usage-auto-refresh'), intervals: [15, 30, 60], defaultInterval: 30, defaultEnabled: true, temporaryPause: true,
-  active: () => workspaceTab.value === 'records' && activeTab.value === 'usage',
-  shouldPause: () => loading.value,
-  onRefresh: async () => {
-    const params = { ...buildUsageListParams(1, pagination.page_size, false), snapshot_max_id: 'new' as const, sort_by: 'created_at', sort_order: 'desc' as const }
-    const filterKey = JSON.stringify(filters.value)
-    const controller = new AbortController()
-    abortController?.abort(); abortController = controller
-    const res = await adminUsageAPI.list(params, { signal: controller.signal })
-    if (controller.signal.aborted || filterKey !== JSON.stringify(filters.value)) return
-    const tableScrollTop = recordsPanel.value?.querySelector<HTMLElement>('.workspace-table-viewport')?.scrollTop ?? 0
-    const reading = window.scrollY >= 160 || tableScrollTop >= 160 || !!window.getSelection()?.toString() || !!document.querySelector('[role="dialog"], [role="tooltip"]') || !!document.activeElement?.closest('button, input, select, textarea, a, summary, [tabindex], [contenteditable="true"]')
-    if (pagination.page === 1 && sortState.sort_by === 'created_at' && sortState.sort_order === 'desc' && !reading) {
-      usageLogs.value = res.items; pagination.total = res.total; historySnapshot.accept(res, true)
-    } else {
-      const latest = new Map(res.items.map(item => [item.id, item]))
-      usageLogs.value = usageLogs.value.map(item => latest.get(item.id) ?? item)
-      if (historySnapshot.observe(res.items[0]?.id)) newRecordsAvailable.value = true
-    }
-  },
-})
-function showLatestRecords() {
-  historySnapshot.reset()
-  newRecordsAvailable.value = false
-  pagination.page = 1
-  sortState.sort_by = 'created_at'; sortState.sort_order = 'desc'
-  void loadLogs()
-}
 </script>
 
 <style scoped>
+.usage-query-card .usage-detail-tabs { padding: 0; margin-bottom: 12px; border: 0; }
 @media (min-width: 1024px) {
   .usage-detail-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; }
   .usage-detail-tabs > button { flex: none; white-space: nowrap; }
-  .usage-date { padding: 10px 14px; }
-  .usage-history-refresh { padding: 8px 14px; }
-  .usage-workspace :deep(.workspace-fixed .btn) { min-height: 34px; padding-top: 6px; padding-bottom: 6px; }
 }
 @media (min-width: 1024px) and (max-height: 799px) {
-  .usage-date { padding: 8px 12px; }
-  .usage-history-refresh { padding: 4px 12px; }
-  .usage-workspace :deep(.workspace-tabs) { padding: 4px; }
+  .usage-query-card { padding-block: 8px; gap: 8px; --filter-control-height: 32px; }
+  .usage-query-card .usage-detail-tabs { min-height: 38px; margin-bottom: 8px; }
   .usage-workspace :deep(.pagination-card) { padding: 8px 12px; }
   .usage-workspace :deep(.pagination-desktop) { gap: 6px; }
   .usage-workspace :deep(.pagination-card .input), .usage-workspace :deep(.pagination-card .select-trigger) { min-height: 32px; height: 32px; padding: 4px 8px; }

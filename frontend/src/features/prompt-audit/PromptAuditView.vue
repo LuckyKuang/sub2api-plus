@@ -1,7 +1,7 @@
 <template>
   <AppLayout workspace>
     <div class="workspace-page">
-      <header class="prompt-page-heading workspace-fixed flex flex-wrap items-end justify-between gap-4">
+      <header class="prompt-page-heading card workspace-fixed grid grid-cols-1 items-center gap-4 px-6 py-4 md:grid-cols-[minmax(0,1fr)_auto]">
         <div class="min-w-0">
           <p class="text-xs font-semibold uppercase tracking-[0.16em] text-primary-600 dark:text-primary-400">{{ t('nav.securityAudit') }}</p>
           <h1 class="mt-1 text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">{{ t('admin.promptAudit.title') }}</h1>
@@ -11,15 +11,9 @@
           <p>{{ t('admin.promptAudit.configVersion', { version: draft.config_version }) }}</p>
           <p v-if="draft.updated_at" class="mt-1">{{ formatDate(draft.updated_at) }}</p>
         </div>
-      </header>
-
-      <div v-if="loadErrors.config && !draft" role="alert" class="rounded-xl border border-red-200 bg-red-50/[0.15] p-5 dark:border-red-900 dark:bg-red-950/30">
-        <p class="text-sm text-red-700 dark:text-red-300">{{ loadErrors.config }}</p>
-        <button type="button" class="btn btn-secondary btn-sm mt-3" @click="loadConfig">{{ t('admin.promptAudit.actions.retry') }}</button>
-      </div>
-
-      <template v-else>
-        <div class="card workspace-tabs workspace-fixed" role="tablist" :aria-label="t('admin.promptAudit.title')">
+        <!-- Tabs live inside the heading card so the page keeps one surface. -->
+        <div class="col-span-full w-full">
+          <div class="workspace-tabs workspace-tabs--embedded workspace-fixed" role="tablist" :aria-label="t('admin.promptAudit.title')">
             <button
               v-for="tab in pageTabs"
               :key="tab.id"
@@ -32,7 +26,16 @@
             >
               {{ tab.label }}
             </button>
+          </div>
         </div>
+      </header>
+
+      <div v-if="loadErrors.config && !draft" role="alert" class="rounded-xl border border-red-200 bg-red-50/[0.15] p-5 dark:border-red-900 dark:bg-red-950/30">
+        <p class="text-sm text-red-700 dark:text-red-300">{{ loadErrors.config }}</p>
+        <button type="button" class="btn btn-secondary btn-sm mt-3" @click="loadConfig">{{ t('admin.promptAudit.actions.retry') }}</button>
+      </div>
+
+      <template v-else>
 
         <main class="card workspace-shell workspace-body workspace-clip px-4 sm:px-6">
           <div v-show="activeTab === 'config'" class="workspace-scroll" data-test="tab-panel-config">
@@ -414,10 +417,16 @@ onMounted(loadInitial)
 
 <style scoped>
 @media (min-width: 1024px) {
-  .prompt-page-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; }
   .prompt-page-heading > div:first-child > p:last-child { margin-top: 4px; font-size: 12px; line-height: 18px; }
   .prompt-events-notice { flex-wrap: nowrap; gap: 8px; margin-top: 12px; padding: 8px 12px; font-size: 12px; line-height: 18px; }
   .prompt-events-notice > span { min-width: 0; flex: 1; }
   .prompt-events-notice > button { flex: none; }
+}
+@media (min-width: 1024px) and (max-height: 900px) {
+  .prompt-page-heading { padding: 12px 20px; gap: 8px 16px; }
+  .prompt-page-heading > div:first-child { display: grid; grid-template-columns: max-content minmax(0, 1fr); align-items: center; gap: 4px 12px; }
+  .prompt-page-heading > div:first-child > p:first-child { grid-area: 1 / 2; margin: 0; }
+  .prompt-page-heading h1 { grid-area: 1 / 1; margin: 0; font-size: 20px; line-height: 28px; }
+  .prompt-page-heading > div:first-child > p:last-child { grid-area: 2 / 1 / auto / -1; margin: 0; font-size: 12px; line-height: 18px; }
 }
 </style>

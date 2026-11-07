@@ -1,24 +1,14 @@
 <template>
   <section aria-labelledby="prompt-events-title" class="event-workspace workspace-body workspace-clip pt-4">
-    <div class="event-heading workspace-fixed flex flex-wrap items-start justify-between gap-3">
+    <div class="event-heading workspace-fixed">
       <div class="min-w-0">
         <h2 id="prompt-events-title" class="text-base font-semibold text-gray-950 dark:text-white">{{ t('admin.promptAudit.events.title') }}</h2>
         <p class="mt-1 text-sm surface-muted">{{ t('admin.promptAudit.events.description') }}</p>
       </div>
-      <div class="event-actions flex flex-wrap gap-2">
-        <button type="submit" :form="filterFormId" class="btn btn-primary btn-sm" data-test="event-search">{{ t('common.search') }}</button>
-        <button type="button" class="btn btn-ghost btn-sm" data-test="event-reset" @click="resetFilters">{{ t('common.reset') }}</button>
-        <button type="button" class="btn btn-secondary btn-sm" :disabled="selectedIds.length === 0" @click="$emit('batch-delete')">
-          {{ t('admin.promptAudit.events.deleteSelected', { count: selectedIds.length }) }}
-        </button>
-        <button type="button" class="btn btn-danger btn-sm" data-test="filter-delete" @click="$emit('preview-delete')">
-          {{ t('admin.promptAudit.events.deleteByFilter') }}
-        </button>
-      </div>
     </div>
 
-    <form :id="filterFormId" class="event-filters workspace-fixed grid gap-3 sm:grid-cols-2 lg:grid-cols-6" @submit.prevent="applyFilters">
-      <label class="text-xs surface-muted">
+    <form :id="filterFormId" class="event-filters workspace-fixed filter-bar" @submit.prevent="applyFilters">
+      <label class="filter-field text-xs surface-muted">
         <span>{{ t('admin.promptAudit.events.decision') }}</span>
         <Select
           v-model="localFilters.decision"
@@ -29,7 +19,7 @@
           :options="[{ value: '', label: t('common.all') }, { value: 'pass', label: t('admin.promptAudit.decisions.pass') }, { value: 'flag', label: t('admin.promptAudit.decisions.flag') }, { value: 'critical', label: t('admin.promptAudit.decisions.critical') }]"
         />
       </label>
-      <label class="text-xs surface-muted">
+      <label class="filter-field text-xs surface-muted">
         <span>{{ t('admin.promptAudit.events.risk') }}</span>
         <Select
           v-model="localFilters.risk_level"
@@ -48,14 +38,24 @@
       <FilterInput v-model="localFilters.request_id" :label="t('admin.promptAudit.events.requestId')" @change="filtersChanged" />
       <FilterInput v-model="localFilters.prompt_hash" :label="t('admin.promptAudit.events.promptHash')" @change="filtersChanged" />
       <FilterInput v-model="localFilters.keyword" :label="t('admin.promptAudit.events.keyword')" @change="filtersChanged" />
-      <label class="text-xs surface-muted">
+      <label class="filter-field text-xs surface-muted">
         <span>{{ t('admin.promptAudit.events.startAt') }}</span>
         <DateTimePicker v-model="localFilters.start_at" type="datetime-local" class="input mt-1 w-full" :aria-label="t('admin.promptAudit.events.startAt')" @change="filtersChanged" />
       </label>
-      <label class="text-xs surface-muted">
+      <label class="filter-field text-xs surface-muted">
         <span>{{ t('admin.promptAudit.events.endAt') }}</span>
         <DateTimePicker v-model="localFilters.end_at" type="datetime-local" class="input mt-1 w-full" :aria-label="t('admin.promptAudit.events.endAt')" @change="filtersChanged" />
       </label>
+      <div class="event-actions filter-actions">
+        <button type="submit" :form="filterFormId" class="btn btn-primary btn-sm" data-test="event-search">{{ t('common.search') }}</button>
+        <button type="button" class="btn btn-ghost btn-sm" data-test="event-reset" @click="resetFilters">{{ t('common.reset') }}</button>
+        <button type="button" class="btn btn-secondary btn-sm" :disabled="selectedIds.length === 0" @click="$emit('batch-delete')">
+          {{ t('admin.promptAudit.events.deleteSelected', { count: selectedIds.length }) }}
+        </button>
+        <button type="button" class="btn btn-danger btn-sm" data-test="filter-delete" @click="$emit('preview-delete')">
+          {{ t('admin.promptAudit.events.deleteByFilter') }}
+        </button>
+      </div>
     </form>
     <div v-if="error" role="alert" class="workspace-fixed rounded-lg bg-red-50/[0.15] px-4 py-3 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300">{{ error }}</div>
     <div class="record-table-scroll workspace-table-viewport overflow-x-auto rounded-xl border border-gray-200 dark:border-dark-700/60" data-test="event-table-scroll">
@@ -159,7 +159,7 @@ const FilterInput = defineComponent({
   props: { modelValue: { type: String, required: true }, label: { type: String, required: true }, type: { type: String, default: 'text' } },
   emits: ['update:modelValue', 'change'],
   setup(componentProps, { emit: componentEmit }) {
-    return () => h('label', { class: 'text-xs surface-muted' }, [
+    return () => h('label', { class: 'filter-field text-xs surface-muted' }, [
       h('span', componentProps.label),
       h('input', {
         value: componentProps.modelValue, type: componentProps.type, class: 'input mt-1 w-full', 'aria-label': componentProps.label,
@@ -252,19 +252,14 @@ function formatCategories(categories: string[]): string {
 </script>
 
 <style scoped>
+.event-actions { gap: 8px; }
 @media (min-width: 1024px) {
   .event-workspace { padding-top: 12px; }
-  .event-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 12px; }
-  .event-heading > div:first-child { display: contents; }
-  .event-heading h2 { grid-area: 1 / 1; }
-  .event-heading p { grid-area: 2 / 1 / auto / -1; margin-top: 0; font-size: 12px; line-height: 18px; }
-  .event-actions { grid-area: 1 / 2; gap: 6px; }
-  .event-actions .btn { min-height: 32px; padding: 6px 10px; font-size: 12px; line-height: 18px; }
-  .event-filters { gap: 8px; }
+  .event-heading p { margin-top: 0; font-size: 12px; line-height: 18px; }
   .event-filters > :deep(label) { min-width: 0; line-height: 16px; }
   .event-filters :deep(.input), .event-filters :deep(.select-trigger) {
-    height: 32px;
-    min-height: 32px;
+    height: var(--filter-control-height, 38px);
+    min-height: var(--filter-control-height, 38px);
     min-width: 0;
     padding: 6px 8px;
     font-size: 12px;
@@ -275,5 +270,10 @@ function formatCategories(categories: string[]): string {
   .event-pagination :deep(.pagination-desktop) { gap: 8px; }
   .event-pagination :deep(.pagination-button) { min-height: 32px; min-width: 32px; padding: 5px 8px; }
   .event-pagination :deep(.select-trigger), .event-pagination :deep(.input) { min-height: 32px; height: 32px; padding: 5px 8px; }
+}
+@media (min-width: 1024px) and (max-height: 900px) {
+  .event-workspace { gap: 8px !important; }
+  .event-filters { --filter-control-height: 32px; gap: 8px 12px; }
+  .event-actions .btn { height: 32px; min-height: 32px; }
 }
 </style>

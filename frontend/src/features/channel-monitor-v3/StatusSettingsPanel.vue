@@ -5,7 +5,7 @@
     <fieldset v-if="draft" class="mt-6" :disabled="saving || loading">
       <legend class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('channelMonitorV3.settings.platformsTitle') }}</legend>
       <p class="mt-2 text-sm surface-muted">{{ t('channelMonitorV3.settings.platformsHint') }}</p>
-      <div class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div class="mt-4 grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5">
         <div v-for="platform in CONCRETE_PLATFORM_OPTIONS" :key="platform.value" class="flex items-center gap-3">
           <Toggle :model-value="!draft.disabled_platforms.includes(platform.value)" :aria-label="t('channelMonitorV3.settings.platformToggle', { platform: platform.label })" :data-testid="`v3-platform-${platform.value}`" :disabled="saving || loading" @update:model-value="setPlatform(platform.value, $event)" />
           <span class="text-sm font-medium text-gray-900 dark:text-white">{{ platform.label }}</span>

@@ -4,27 +4,29 @@
       <template #filters>
         <div class="card flex flex-col gap-3 p-4">
           <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-            <div class="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 xl:w-auto xl:grid-cols-[260px_168px]">
-              <Select
-                v-model="selectedApiKeyId"
-                :options="apiKeyFilterOptions"
-                :disabled="loadingKeys"
-                searchable="auto"
-                class="w-full"
-                data-testid="async-image-api-key-filter"
-                :aria-label="t('asyncImage.filters.apiKey')"
-                @change="selectApiKey"
-              />
-              <Select
-                v-model="filters.status"
-                :options="statusFilterOptions"
-                :disabled="loadingTasks"
-                :searchable="false"
-                class="w-full"
-                data-testid="async-image-status-filter"
-                :aria-label="t('asyncImage.filters.allStatuses')"
-                @change="applyFilters"
-              />
+            <div class="filter-bar w-full xl:w-auto">
+              <div class="filter-field">
+                <Select
+                  v-model="selectedApiKeyId"
+                  :options="apiKeyFilterOptions"
+                  :disabled="loadingKeys"
+                  searchable="auto"
+                  data-testid="async-image-api-key-filter"
+                  :aria-label="t('asyncImage.filters.apiKey')"
+                  @change="selectApiKey"
+                />
+              </div>
+              <div class="filter-field">
+                <Select
+                  v-model="filters.status"
+                  :options="statusFilterOptions"
+                  :disabled="loadingTasks"
+                  :searchable="false"
+                  data-testid="async-image-status-filter"
+                  :aria-label="t('asyncImage.filters.allStatuses')"
+                  @change="applyFilters"
+                />
+              </div>
             </div>
             <div class="flex flex-wrap items-center gap-2 xl:flex-shrink-0">
               <button type="button" class="btn btn-secondary" :disabled="loadingTasks" :title="t('asyncImage.actions.refresh')" @click="() => loadTasks()">

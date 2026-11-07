@@ -1,5 +1,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { enableAutoUnmount, mount, flushPromises } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
+import { useAuthStore } from '@/stores'
 
 import UsageFilters from '../UsageFilters.vue'
 
@@ -94,6 +96,9 @@ const defaultFilters = () => ({
 })
 
 function mountFilters(filters = defaultFilters()) {
+  // The user dropdown pins the signed-in administrator first.
+  setActivePinia(createPinia())
+  useAuthStore().user = { id: 99, email: 'admin@test.com', role: 'admin' } as any
   return mount(UsageFilters, {
     props: {
       modelValue: filters,
@@ -137,6 +142,8 @@ describe('UsageFilters — user search dropdown', () => {
   it('portals workspace search results outside the scrolling fields and still applies the selected user', async () => {
     const filters = defaultFilters()
     mockSearchUsers.mockResolvedValue([{ id: 7, email: 'workspace@test.com', deleted: false }])
+    setActivePinia(createPinia())
+    useAuthStore().user = { id: 99, email: 'admin@test.com', role: 'admin' } as any
     const wrapper = mount(UsageFilters, {
       attachTo: document.body,
       props: { workspace: true, modelValue: filters, exporting: false, startDate: '2026-10-01', endDate: '2026-10-24', modelOptions: [] },
@@ -162,6 +169,31 @@ describe('UsageFilters — user search dropdown', () => {
     expect(wrapper.emitted('change')).toHaveLength(1)
     expect((input.element as HTMLInputElement).value).toBe('workspace@test.com')
     expect(document.body.querySelector('[data-testid="usage-user-options"]')).toBeNull()
+  })
+
+  it('pins the signed-in administrator first so an admin can switch back to their own view', async () => {
+    // The administrator is deliberately last in the response, and a deleted user
+    // leads it, so only the admin pin can put the administrator on top.
+    mockSearchUsers.mockResolvedValue([
+      { id: 5, email: 'gone@test.com', deleted: true },
+      { id: 3, email: 'other@test.com', deleted: false },
+      { id: 99, email: 'admin@test.com', deleted: false },
+    ])
+
+    const wrapper = mountFilters()
+    const input = wrapper.find('input[type="text"]')
+    await input.trigger('focus')
+    await input.setValue('test')
+    await input.trigger('input')
+    vi.advanceTimersByTime(300)
+    await flushPromises()
+
+    const buttons = wrapper.findAll('.usage-filter-dropdown button[type="button"]')
+    const emails = buttons.map((b) => b.text())
+    expect(emails[0]).toContain('admin@test.com')
+    // Active users still sort ahead of deleted ones behind the administrator.
+    expect(emails[1]).toContain('other@test.com')
+    expect(emails[2]).toContain('gone@test.com')
   })
 
   it('(a) labels deleted users with the i18n badge and (b) sorts active users before deleted ones, (c) selection sets user_id', async () => {

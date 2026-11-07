@@ -2,7 +2,7 @@
   <AppLayout workspace>
     <TablePageLayout>
       <template #filters>
-        <div class="flex flex-wrap-reverse items-start justify-between gap-3">
+        <div class="filter-bar">
           <AccountTableFilters
             v-model:searchQuery="params.search"
             :filters="params"
@@ -173,23 +173,24 @@
             {{ t('admin.accounts.listPendingSyncAction') }}
           </button>
         </div>
+      <!-- Bulk actions belong to the filter card, below its controls. -->
+      <AccountBulkActionsBar
+        :selected-ids="selIds"
+        :total-results="pagination.total"
+        :selecting-all="selectingAllResults"
+        :all-results-selected="allResultsSelected"
+        @delete="handleBulkDelete"
+        @reset-status="handleBulkResetStatus"
+        @refresh-token="handleBulkRefreshToken"
+        @edit-selected="openBulkEditSelected"
+        @edit-filtered="openBulkEditFiltered"
+        @clear="clearSelection"
+        @select-page="selectPage"
+        @select-all-results="handleSelectAllResults"
+        @toggle-schedulable="handleBulkToggleSchedulable"
+      />
       </template>
       <template #table>
-        <AccountBulkActionsBar
-          :selected-ids="selIds"
-          :total-results="pagination.total"
-          :selecting-all="selectingAllResults"
-          :all-results-selected="allResultsSelected"
-          @delete="handleBulkDelete"
-          @reset-status="handleBulkResetStatus"
-          @refresh-token="handleBulkRefreshToken"
-          @edit-selected="openBulkEditSelected"
-          @edit-filtered="openBulkEditFiltered"
-          @clear="clearSelection"
-          @select-page="selectPage"
-          @select-all-results="handleSelectAllResults"
-          @toggle-schedulable="handleBulkToggleSchedulable"
-        />
         <div ref="accountTableRef" class="flex min-h-0 flex-1 flex-col overflow-hidden">
         <DataTable
           ref="dataTableRef"

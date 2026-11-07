@@ -139,7 +139,7 @@
   box-shadow: var(--surface-shadow) !important;
 }
 
-:root .app-layout.app-layout-workspace .app-main :is(.workspace-shell.card, .workspace-table-card, .workspace-fixed.card, .workspace-fixed.surface-card, .workspace-tabs) {
+:root .app-layout.app-layout-workspace .app-main :is(.workspace-shell.card, .workspace-table-card, .workspace-fixed.card, .workspace-fixed.surface-card, .workspace-tabs:not(.workspace-tabs--embedded)) {
   border: 1px solid var(--surface-edge) !important;
   background-color: var(--surface-solid);
   box-shadow: var(--surface-shadow) !important;
