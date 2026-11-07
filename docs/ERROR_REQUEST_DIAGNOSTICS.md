@@ -111,6 +111,13 @@ the existing error classification. A client disconnect does not remove this
 budget from a detached upstream request. Successful inference streams retain
 their existing completion and usage-collection lifecycles.
 
+Attempt cancellation remains an error even when a transport or compressed-body
+initializer exposes only EOF after cancellation. The response wrapper preserves
+the cancellation error so an interrupted diagnostic cannot authorize
+complete-body recovery. Completed bodies still return normal EOF and preserve
+keep-alive reuse. Regression coverage includes deterministic plain/gzip/zstd
+cancellation-to-EOF responses and real HTTP/TLS stalled-error responders.
+
 The shared upstream transport starts this budget when rejected response headers
 arrive. It includes gzip header decoding and zstd frame probing before the
 service receives the body, plus independent control and media readers. EOF or
