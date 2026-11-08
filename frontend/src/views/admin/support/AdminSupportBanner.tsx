@@ -1,11 +1,13 @@
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { setAdminSupportContext } from '@/utils/adminSupportContext'
+import { cn } from '@/lib/utils'
 import type { AdminSupportUser } from '@/api/admin/supportView'
 import { Icon } from '@/views/admin/AccountIcon'
 
 export interface AdminSupportBannerProps {
   target: AdminSupportUser
+  className?: string
 }
 
 /**
@@ -13,7 +15,7 @@ export interface AdminSupportBannerProps {
  * Vue AdminSupportBanner; the read-only boundary itself lives in
  * `utils/adminSupportContext`.
  */
-export function AdminSupportBanner({ target }: AdminSupportBannerProps) {
+export function AdminSupportBanner({ target, className }: AdminSupportBannerProps) {
   const { t } = useTranslation()
   const navigate = useNavigate()
 
@@ -26,7 +28,10 @@ export function AdminSupportBanner({ target }: AdminSupportBannerProps) {
 
   return (
     <section
-      className="rounded-xl border border-amber-200 bg-amber-50/90 p-4 shadow-sm dark:border-amber-800/70 dark:bg-amber-950/30"
+      className={cn(
+        'rounded-xl border border-amber-200 bg-amber-50/90 p-4 shadow-sm dark:border-amber-800/70 dark:bg-amber-950/30',
+        className
+      )}
       role="status"
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

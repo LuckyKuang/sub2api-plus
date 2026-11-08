@@ -9,6 +9,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useAdminSettingsStore } from '@/stores/adminSettings'
 import { useOnboardingStore } from '@/stores/onboarding'
 import { getAdminSupportContext } from '@/utils/adminSupportContext'
+import { AdminSupportBanner } from '@/views/admin/support/AdminSupportBanner'
 import { useConsoleAppearance } from '@/composables/useConsoleAppearance'
 import { useOnboardingTour } from '@/composables/useOnboardingTour'
 import { defaultConsoleAppearance } from '@/types/appearance'
@@ -134,7 +135,7 @@ export function AppLayout({ appearance = 'admin' }: AppLayoutProps) {
         siteName={appStore.siteName}
         siteLogo={appStore.siteLogo}
       />
-      <div className="app-content">
+      <div className="app-content" inert={mobileOpen || undefined}>
         <AppHeader
           siteLogo={appStore.siteLogo}
           userName={authStore.user?.username || authStore.user?.email}
@@ -146,6 +147,9 @@ export function AppLayout({ appearance = 'admin' }: AppLayoutProps) {
         />
         <main className="app-main">
           <div className="app-page">
+            {supportUserId && authStore.user && (
+              <AdminSupportBanner target={authStore.user} className="support-banner-spacing" />
+            )}
             <Outlet />
           </div>
         </main>
