@@ -21,7 +21,7 @@ import {
 import { formatDateTimeToMinute } from '@/utils/format'
 import { listPlatforms } from '@/utils/platformCatalog'
 import { AdminDataTable, type Column, type SortOrder } from './AdminDataTable'
-import { AdminTablePageLayout } from './AdminTablePageLayout'
+import { TablePageLayout } from '@/components/layout/TablePageLayout'
 import { getPersistedPageSize } from './shared'
 import { Icon } from './AccountIcon'
 import { GroupBadge } from './GroupBadge'
@@ -984,7 +984,7 @@ export default function SubscriptionsView() {
   )
 
   return (
-    <AdminTablePageLayout
+    <TablePageLayout
       filters={
         <>
           {/* Top Toolbar: Left (search + filters) / Right (actions) */}
@@ -1729,6 +1729,6 @@ export default function SubscriptionsView() {
           </div>
         </div>
       </Modal>
-    </AdminTablePageLayout>
+    </TablePageLayout>
   )
 }

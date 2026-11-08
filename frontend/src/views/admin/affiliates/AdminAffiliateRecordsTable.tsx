@@ -7,7 +7,7 @@ import type { AffiliateInviteRecord, AffiliateRebateRecord, AffiliateTransferRec
 import { extractI18nErrorMessage } from '@/utils/apiError'
 import { formatDateTime as formatDisplayDateTime } from '@/utils/format'
 import { AdminDataTable, type Column, type SortOrder } from '@/views/admin/AdminDataTable'
-import { AdminTablePageLayout } from '@/views/admin/AdminTablePageLayout'
+import { TablePageLayout } from '@/components/layout/TablePageLayout'
 import { Icon } from '@/views/admin/AccountIcon'
 import { DateTimePicker } from '../parts/DateTimePicker'
 import { OrderStatusBadge } from '../parts/OrderStatusBadge'
@@ -299,7 +299,7 @@ export function AdminAffiliateRecordsTable({ type }: AdminAffiliateRecordsTableP
   }
 
   return (
-    <AdminTablePageLayout
+    <TablePageLayout
       filters={
         <div className="filter-bar">
           <div className="filter-field filter-field--search relative">
@@ -405,7 +405,7 @@ export function AdminAffiliateRecordsTable({ type }: AdminAffiliateRecordsTableP
           )
         )}
       </Modal>
-    </AdminTablePageLayout>
+    </TablePageLayout>
   )
 }
 

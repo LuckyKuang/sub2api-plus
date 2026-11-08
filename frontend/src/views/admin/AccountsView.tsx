@@ -25,7 +25,7 @@ import type {
   ClaudeModel
 } from '@/types'
 import { AdminDataTable, type Column, type SortOrder } from './AdminDataTable'
-import AdminTablePageLayout from './AdminTablePageLayout'
+import TablePageLayout from '@/components/layout/TablePageLayout'
 import { ConfirmDialog, useMediaQuery } from './shared'
 import { Icon } from './AccountIcon'
 import { AccountTableFilters } from './AccountTableFilters'
@@ -2172,7 +2172,7 @@ export default function AccountsView() {
 
   return (
     <>
-    <AdminTablePageLayout
+    <TablePageLayout
       filters={
         <div className="card p-4 sm:p-6">
           <div className="filter-bar">

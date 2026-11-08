@@ -8,7 +8,7 @@ import type { AuditLog } from '@/api/admin/audit'
 import { useAppStore } from '@/stores/app'
 import { Button, Input, Modal, Pagination, Select } from '@/components/ui'
 import { AdminDataTable, type Column } from './AdminDataTable'
-import AdminTablePageLayout from './AdminTablePageLayout'
+import TablePageLayout from '@/components/layout/TablePageLayout'
 
 interface AuditFilters {
   q: string
@@ -326,7 +326,7 @@ export default function AuditLogView() {
 
   return (
     <>
-      <AdminTablePageLayout
+      <TablePageLayout
         filters={
         <div className="card p-4 sm:p-6">
           <div className="filter-bar">

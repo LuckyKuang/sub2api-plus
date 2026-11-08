@@ -10,7 +10,7 @@ import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import { Button, EmptyState, Input, Modal, Pagination, Select } from '@/components/ui'
 import { AdminDataTable, type Column } from './AdminDataTable'
-import AdminTablePageLayout from './AdminTablePageLayout'
+import TablePageLayout from '@/components/layout/TablePageLayout'
 
 const ALWAYS_VISIBLE_COLUMNS = new Set(['name', 'actions'])
 const DEFAULT_HIDDEN_COLUMNS = ['id']
@@ -490,7 +490,7 @@ export default function GroupsView() {
 
   return (
     <>
-      <AdminTablePageLayout
+      <TablePageLayout
         filters={
           <div className="filter-bar">
             <div className="filter-bar filter-bar--inline">

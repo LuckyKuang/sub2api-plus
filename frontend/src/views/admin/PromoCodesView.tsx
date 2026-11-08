@@ -7,7 +7,7 @@ import { extractApiErrorMessage } from '@/utils/apiError'
 import { useClipboard } from '@/views/user/useClipboard'
 import type { PromoCode, PromoCodeUsage } from '@/types'
 import { AdminDataTable, type Column, type SortOrder } from '@/views/admin/AdminDataTable'
-import { AdminTablePageLayout } from '@/views/admin/AdminTablePageLayout'
+import { TablePageLayout } from '@/components/layout/TablePageLayout'
 import { Icon } from '@/views/admin/AccountIcon'
 import { ConfirmDialog, getPersistedPageSize } from '@/views/admin/shared'
 import { DateTimePicker } from './parts/DateTimePicker'
@@ -333,7 +333,7 @@ export default function PromoCodesView() {
   }
 
   return (
-    <AdminTablePageLayout
+    <TablePageLayout
       filters={
         <div className="filter-bar">
           <div className="filter-field filter-field--search">
@@ -759,6 +759,6 @@ export default function PromoCodesView() {
         onConfirm={() => void confirmDelete()}
         onCancel={() => setShowDeleteDialog(false)}
       />
-    </AdminTablePageLayout>
+    </TablePageLayout>
   )
 }

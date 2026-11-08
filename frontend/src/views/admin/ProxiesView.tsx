@@ -23,7 +23,7 @@ import type {
   UpdateProxyRequest
 } from '@/types'
 import { AdminDataTable, type Column, type SortOrder } from '@/views/admin/AdminDataTable'
-import { AdminTablePageLayout } from '@/views/admin/AdminTablePageLayout'
+import { TablePageLayout } from '@/components/layout/TablePageLayout'
 import { getPersistedPageSize } from '@/views/admin/shared'
 import { Icon } from '@/views/admin/AccountIcon'
 import { DateTimePicker } from './parts/DateTimePicker'
@@ -1322,7 +1322,7 @@ export default function ProxiesView() {
 
   return (
     <>
-      <AdminTablePageLayout
+      <TablePageLayout
         filters={
           <div className="filter-bar">
             <div className="filter-field filter-field--search relative">

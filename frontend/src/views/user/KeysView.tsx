@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { DataTable, type Column } from '@/components/DataTable'
 import { Modal } from '@/components/ui'
-import { Pagination, SearchInput, Select, ConfirmDialog, toast } from '@/components/ui'
+import { TablePageLayout } from '@/components/layout/TablePageLayout'
+import { EmptyState, Pagination, SearchInput, Select, ConfirmDialog, toast } from '@/components/ui'
 import { DateTimePicker } from '@/components/auth/DateTimePicker'
 import { GroupBadge } from '@/components/badges'
 import { GroupOptionItem } from '@/components/GroupOptionItem'
@@ -1154,9 +1155,10 @@ export default function KeysView() {
   const moreMenuJob = groupSelectorKeyId === null ? null : apiKeys.find((job) => job.id === groupSelectorKeyId) || null
 
   return (
-    <div className="workspace-page">
-      <div className="flex flex-col gap-3">
-        <div className="filter-bar">
+    <TablePageLayout
+      filters={
+        <div className="flex flex-col gap-3">
+          <div className="filter-bar">
           <div className="filter-field filter-field--search">
             <SearchInput
               value={filterSearch}
@@ -1249,9 +1251,9 @@ export default function KeysView() {
             </button>
           </div>
         )}
-      </div>
-
-      <div className="card workspace-table-card workspace-shell">
+        </div>
+      }
+      table={
         <DataTable
           className="workspace-table-viewport"
           columns={columns}
@@ -1268,30 +1270,31 @@ export default function KeysView() {
           onSort={handleSort}
           renderCell={(key, row, value) => renderCell(key, row as ApiKey, value)}
           renderEmpty={() => (
-            <div className="py-8">
-              <div className="flex flex-col items-center gap-3">
-                <p className="text-lg font-medium text-gray-900 dark:text-gray-100">{t('keys.noKeysYet')}</p>
-                <p className="text-sm surface-muted">{t('keys.createFirstKey')}</p>
+            <EmptyState
+              title={t('keys.noKeysYet')}
+              description={t('keys.createFirstKey')}
+              action={
                 <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
                   {t('keys.createKey')}
                 </button>
-              </div>
-            </div>
+              }
+            />
           )}
         />
-      </div>
-
-      <Pagination
-        className="workspace-fixed"
-        page={pagination.page}
-        total={pagination.total}
-        pageSize={pagination.page_size}
-        onPageChange={handlePageChange}
-        onPageSizeChange={(size) => {
-          setPersistedPageSize(size)
-          handlePageSizeChange(size)
-        }}
-      />
+      }
+      pagination={
+        <Pagination
+          page={pagination.page}
+          total={pagination.total}
+          pageSize={pagination.page_size}
+          onPageChange={handlePageChange}
+          onPageSizeChange={(size) => {
+            setPersistedPageSize(size)
+            handlePageSizeChange(size)
+          }}
+        />
+      }
+    >
 
       {/* Create/Edit Modal */}
       <Modal
@@ -1957,7 +1960,7 @@ export default function KeysView() {
           </div>
         </div>
       )}
-    </div>
+    </TablePageLayout>
   )
 }
 

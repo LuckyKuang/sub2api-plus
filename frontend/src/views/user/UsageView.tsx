@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
 import { DateRangePicker } from '@/components/DateRangePicker'
-import { EmptyState, Pagination, Select, toast } from '@/components/ui'
+import { Pagination, Select, toast } from '@/components/ui'
 import { keysAPI, usageAPI, userGroupsAPI } from '@/api'
 import { useAppStore } from '@/stores/app'
 import { FeatureFlags, resolveFeatureFlag } from '@/utils/featureFlags'
@@ -18,6 +18,7 @@ import { useUsageSnapshot, getPersistedPageSize } from './useUsageSnapshot'
 import { useLocaleRefresh as subscribeLocaleRefresh } from '@/utils/localeRefresh'
 import { Icon } from './icons'
 import { UsageTable } from './UsageTable'
+import { LiveRequestsPanel } from '@/views/admin/parts/LiveRequestsPanel'
 import { UserErrorRequestsTable } from './UserErrorRequestsTable'
 
 const ALWAYS_VISIBLE = ['created_at']
@@ -993,9 +994,7 @@ export default function UsageView() {
             />
           </div>
         ) : activeTab === 'live' ? (
-          <div className="card workspace-shell p-6">
-            <EmptyState title={t('inspection.live')} description={t('common.portInProgress')} />
-          </div>
+          <LiveRequestsPanel workspace mode="user" />
         ) : errorViewEnabled ? (
           <UserErrorRequestsTable
             workspace

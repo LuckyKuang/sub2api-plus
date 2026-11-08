@@ -30,7 +30,7 @@ import {
 import { useAppStore } from '@/stores/app'
 import { Button, EmptyState, Input, Modal, Pagination, Select, Toggle } from '@/components/ui'
 import { AdminDataTable, type Column } from './AdminDataTable'
-import AdminTablePageLayout from './AdminTablePageLayout'
+import TablePageLayout from '@/components/layout/TablePageLayout'
 
 const NEUTRAL_BADGE = 'surface-inset text-gray-800 dark:surface-inset dark:text-gray-300'
 
@@ -481,7 +481,7 @@ export default function ChannelMonitorView() {
             />
           </div>
         ) : (
-          <AdminTablePageLayout
+          <TablePageLayout
             filters={
               <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
                 <div className="filter-bar flex-1">

@@ -31,7 +31,7 @@ import { formatDateTime } from '@/utils/format'
 import { useAppStore } from '@/stores/app'
 import { Button, ConfirmDialog, EmptyState, Input, Pagination, Select } from '@/components/ui'
 import { AdminDataTable, type Column } from './AdminDataTable'
-import AdminTablePageLayout from './AdminTablePageLayout'
+import TablePageLayout from '@/components/layout/TablePageLayout'
 import { buildApiKeyGroupFilterOptions } from './apiKeyGroupFilterOptions'
 import { GroupBadge } from './GroupBadge'
 import {
@@ -1109,7 +1109,7 @@ export default function UsersView() {
 
   return (
     <>
-      <AdminTablePageLayout
+      <TablePageLayout
         filters={
           <div className="flex flex-wrap items-center gap-3">
             <div className="filter-bar flex-1">

@@ -17,7 +17,7 @@ import { listPlatforms } from '@/utils/platformCatalog'
 import { useAppStore } from '@/stores/app'
 import { Button, EmptyState, Input, Modal, Pagination, Select, Toggle } from '@/components/ui'
 import { AdminDataTable, type Column } from './AdminDataTable'
-import AdminTablePageLayout from './AdminTablePageLayout'
+import TablePageLayout from '@/components/layout/TablePageLayout'
 import { PricingEntryCard } from './ChannelPricingEntryCard'
 import { GroupModelRateLink } from './GroupModelRateLink'
 import {
@@ -1342,7 +1342,7 @@ export default function ChannelsView() {
 
   return (
     <>
-      <AdminTablePageLayout
+      <TablePageLayout
         filters={
           <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
             <div className="filter-bar flex-1">

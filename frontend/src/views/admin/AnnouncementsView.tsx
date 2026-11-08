@@ -6,7 +6,7 @@ import { formatDateTime, formatDateTimeLocalInput, parseDateTimeLocalInput } fro
 import { extractApiErrorMessage } from '@/utils/apiError'
 import type { AdminGroup, Announcement, AnnouncementTargeting } from '@/types'
 import { AdminDataTable, type Column, type SortOrder } from '@/views/admin/AdminDataTable'
-import { AdminTablePageLayout } from '@/views/admin/AdminTablePageLayout'
+import { TablePageLayout } from '@/components/layout/TablePageLayout'
 import { Icon } from '@/views/admin/AccountIcon'
 import { ConfirmDialog, getPersistedPageSize } from '@/views/admin/shared'
 import { AnnouncementPopup } from './parts/AnnouncementPopup'
@@ -305,7 +305,7 @@ export default function AnnouncementsView() {
   }
 
   return (
-    <AdminTablePageLayout
+    <TablePageLayout
       filters={
         <div className="filter-bar">
           <div className="filter-field filter-field--search">
@@ -651,6 +651,6 @@ export default function AnnouncementsView() {
       />
 
       <AnnouncementPopup announcement={previewAnnouncement} preview onClose={() => setPreviewAnnouncement(null)} />
-    </AdminTablePageLayout>
+    </TablePageLayout>
   )
 }

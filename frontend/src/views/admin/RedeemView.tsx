@@ -16,7 +16,7 @@ import type {
   SubscriptionType
 } from '@/types'
 import { AdminDataTable, type Column, type SortOrder } from '@/views/admin/AdminDataTable'
-import { AdminTablePageLayout } from '@/views/admin/AdminTablePageLayout'
+import { TablePageLayout } from '@/components/layout/TablePageLayout'
 import { ConfirmDialog, getPersistedPageSize } from '@/views/admin/shared'
 import { Icon } from '@/views/admin/AccountIcon'
 import { DateTimePicker } from './parts/DateTimePicker'
@@ -645,7 +645,7 @@ export default function RedeemView() {
 
   return (
     <>
-      <AdminTablePageLayout
+      <TablePageLayout
         filters={
           <div className="filter-bar">
             <div className="filter-field filter-field--search">

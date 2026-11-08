@@ -2,16 +2,15 @@ import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 
 /**
- * Stand-in for the Vue `TablePageLayout` until the shared layout component
- * lands. Keeps the same section structure (`table-page-layout workspace-page`
- * with fixed filter / scrollable table / fixed pagination zones) and the same
- * desktop height calculation so the ported admin views scroll identically.
+ * The console's table page frame: `table-page-layout workspace-page` with fixed
+ * action / filter / pagination zones around a single scrollable table zone, and
+ * the same desktop height calculation as the Vue `TablePageLayout`.
  *
  * `table` is the scrollable table zone. `children` is rendered outside every
  * zone: the Vue original exposes no default slot, so children are overlays
  * (dialogs), not table content.
  */
-export interface AdminTablePageLayoutProps {
+export interface TablePageLayoutProps {
   filters?: React.ReactNode
   actions?: React.ReactNode
   table?: React.ReactNode
@@ -19,7 +18,7 @@ export interface AdminTablePageLayoutProps {
   children?: React.ReactNode
 }
 
-export function AdminTablePageLayout({ filters, actions, table, pagination, children }: AdminTablePageLayoutProps) {
+export function TablePageLayout({ filters, actions, table, pagination, children }: TablePageLayoutProps) {
   const layoutRef = useRef<HTMLDivElement>(null)
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 1024)
   const [availableHeight, setAvailableHeight] = useState('auto')
@@ -80,4 +79,4 @@ export function AdminTablePageLayout({ filters, actions, table, pagination, chil
   )
 }
 
-export default AdminTablePageLayout
+export default TablePageLayout
