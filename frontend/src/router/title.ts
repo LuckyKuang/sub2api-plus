@@ -1,7 +1,5 @@
-import { i18n } from '@/i18n'
-import type { RouteLocationNormalizedLoaded } from 'vue-router'
-import type { CustomMenuItem } from '@/types'
-import type { SiteBillingMode } from '@/utils/siteBillingMode'
+import i18next from '@/i18n'
+import type { RouteMeta } from './routes'
 
 /**
  * 统一生成页面标题，避免多处写入 document.title 产生覆盖冲突。
@@ -11,7 +9,7 @@ export function resolveDocumentTitle(routeTitle: unknown, siteName?: string, tit
   const normalizedSiteName = typeof siteName === 'string' && siteName.trim() ? siteName.trim() : 'Sub2API Plus'
 
   if (typeof titleKey === 'string' && titleKey.trim()) {
-    const translated = i18n.global.t(titleKey)
+    const translated = i18next.t(titleKey)
     if (translated && translated !== titleKey) {
       return `${translated} - ${normalizedSiteName}`
     }
@@ -25,11 +23,7 @@ export function resolveDocumentTitle(routeTitle: unknown, siteName?: string, tit
 }
 
 export interface RouteTitleOptions {
-  /**
-   * 站点计费模式（见 utils/billingMode.ts）。/purchase 的标题与描述随之切换：
-   * 仅充值 → 「充值」，仅订阅 → 「订阅」，缺省/两者都有 → 「充值/订阅」。
-   */
-  billingMode?: SiteBillingMode
+  billingMode?: 'recharge_only' | 'subscription_only'
 }
 
 export interface RouteMetaKeys {
@@ -37,18 +31,24 @@ export interface RouteMetaKeys {
   descriptionKey?: string
 }
 
-/** /purchase 路由名，与 router/index.ts 中的声明保持一致。 */
-export const PURCHASE_ROUTE_NAME = 'PurchaseSubscription'
+export const PURCHASE_ROUTE_PATH = '/purchase'
+
+export interface RouteLike {
+  pathname: string
+  handle?: unknown
+  params?: Record<string, string | undefined>
+}
+
+function readMeta(route: RouteLike): RouteMeta {
+  return (route.handle as RouteMeta | undefined) ?? {}
+}
 
 /**
  * 解析路由的 i18n 标题/描述 key。绝大多数路由直接取 meta；
  * /purchase 随站点计费模式切换文案，AppHeader 与 document.title 共用这一处判断。
  */
-export function resolveRouteMetaKeys(
-  route: Pick<RouteLocationNormalizedLoaded, 'name' | 'meta'>,
-  options: RouteTitleOptions = {},
-): RouteMetaKeys {
-  if (route.name === PURCHASE_ROUTE_NAME) {
+export function resolveRouteMetaKeys(route: RouteLike, options: RouteTitleOptions = {}): RouteMetaKeys {
+  if (route.pathname === PURCHASE_ROUTE_PATH) {
     if (options.billingMode === 'recharge_only') {
       return { titleKey: 'nav.recharge', descriptionKey: 'purchase.rechargeDescription' }
     }
@@ -56,24 +56,54 @@ export function resolveRouteMetaKeys(
       return { titleKey: 'nav.subscribe', descriptionKey: 'purchase.subscriptionDescription' }
     }
   }
+  const meta = readMeta(route)
   return {
-    titleKey: typeof route.meta.titleKey === 'string' ? route.meta.titleKey : undefined,
-    descriptionKey: typeof route.meta.descriptionKey === 'string' ? route.meta.descriptionKey : undefined,
+    titleKey: typeof meta.titleKey === 'string' ? meta.titleKey : undefined,
+    descriptionKey: typeof meta.descriptionKey === 'string' ? meta.descriptionKey : undefined
   }
 }
 
 export function resolveRouteDocumentTitle(
-  route: Pick<RouteLocationNormalizedLoaded, 'name' | 'params' | 'meta'>,
+  route: RouteLike,
   siteName: string | undefined,
-  customMenuItems: CustomMenuItem[] = [],
-  options: RouteTitleOptions = {},
+  customMenuItems: Array<{ id: string; label: string }> = [],
+  options: RouteTitleOptions = {}
 ): string {
-  const id = typeof route.params.id === 'string' ? route.params.id : ''
-  const menuItem = route.name === 'CustomPage' && id
-    ? customMenuItems.find((item) => item.id === id)
-    : undefined
+  const id = route.params?.id ?? ''
+  const isCustomPage = route.pathname.startsWith('/custom/')
+  const menuItem = isCustomPage && id ? customMenuItems.find((item) => item.id === id) : undefined
   const menuTitle = menuItem?.label.trim()
   const { titleKey } = resolveRouteMetaKeys(route, options)
 
-  return resolveDocumentTitle(menuTitle || route.meta.title, siteName, menuTitle ? undefined : titleKey)
+  return resolveDocumentTitle(menuTitle || readMeta(route).title, siteName, menuTitle ? undefined : titleKey)
+}
+
+let titleSiteName = 'Sub2API Plus'
+let titleCustomMenuItems: Array<{ id: string; label: string }> = []
+let titleBillingMode: RouteTitleOptions['billingMode']
+
+export function configureDocumentTitle(
+  siteName: string | undefined,
+  customMenuItems: Array<{ id: string; label: string }> = [],
+  billingMode?: RouteTitleOptions['billingMode']
+): void {
+  titleSiteName = siteName ?? 'Sub2API Plus'
+  titleCustomMenuItems = customMenuItems
+  titleBillingMode = billingMode
+}
+
+/** Re-apply the document title after a locale switch. */
+export function refreshDocumentTitle(): void {
+  if (typeof document === 'undefined') return
+  document.title = resolveRouteDocumentTitle(
+    { pathname: window.location.pathname, params: readCustomPageId(window.location.pathname) },
+    titleSiteName,
+    titleCustomMenuItems,
+    { billingMode: titleBillingMode }
+  )
+}
+
+function readCustomPageId(pathname: string): Record<string, string | undefined> {
+  const match = /^\/custom\/([^/]+)/.exec(pathname)
+  return match ? { id: decodeURIComponent(match[1]) } : {}
 }

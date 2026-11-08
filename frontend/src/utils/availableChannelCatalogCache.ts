@@ -1,13 +1,12 @@
 import type { ChannelCatalog } from '@/api/channels'
-import { shallowRef } from 'vue'
 
 const CACHE_TTL_MS = 180_000
 const MAX_CACHED_CATALOGS = 4
 const catalogs = new Map<string, { catalog: ChannelCatalog; expiresAt: number }>()
-const sessionGeneration = shallowRef(0)
+let sessionGeneration = 0
 
 export function availableChannelCatalogGeneration(): number {
-  return sessionGeneration.value
+  return sessionGeneration
 }
 
 function discardExpired(): void {
@@ -47,5 +46,5 @@ export function invalidateAvailableChannelCatalog(key: string): void {
 
 export function clearAvailableChannelCatalogCache(): void {
   catalogs.clear()
-  sessionGeneration.value += 1
+  sessionGeneration += 1
 }

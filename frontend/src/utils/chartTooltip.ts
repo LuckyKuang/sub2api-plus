@@ -1,4 +1,4 @@
-import { consoleCardAlpha } from '@/utils/consoleAppearanceState'
+import { getConsoleCardAlpha } from '@/utils/consoleAppearanceState'
 
 /** Canvas overlays use the same arrowless card shape and palette as HTML panels. */
 export function chartTooltipStyle(isDark: boolean) {
@@ -6,9 +6,9 @@ export function chartTooltipStyle(isDark: boolean) {
     cornerRadius: 16,
     caretSize: 0,
     padding: 12,
-    // Reading the shared ref also invalidates each chart's computed options
+    // Reading the shared value also invalidates each chart's computed options
     // when the saved or previewed appearance changes while it stays mounted.
-    backgroundColor: isDark ? `rgba(41, 38, 36, ${consoleCardAlpha.value})` : `rgba(255, 255, 255, ${consoleCardAlpha.value})`,
+    backgroundColor: isDark ? `rgba(41, 38, 36, ${getConsoleCardAlpha()})` : `rgba(255, 255, 255, ${getConsoleCardAlpha()})`,
     titleColor: isDark ? '#f2f0ed' : '#221f1c',
     bodyColor: isDark ? '#b8b3ac' : '#635e57',
     footerColor: isDark ? '#f2f0ed' : '#221f1c',

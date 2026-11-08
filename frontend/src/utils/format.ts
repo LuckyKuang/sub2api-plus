@@ -3,7 +3,7 @@
  * 参考 CRS 项目的 format.js 实现
  */
 
-import { i18n, getLocale } from '@/i18n'
+import i18n, { getLocale } from '@/i18n'
 
 /**
  * 格式化相对时间
@@ -11,24 +11,24 @@ import { i18n, getLocale } from '@/i18n'
  * @returns 相对时间字符串，如 "5m ago", "2h ago", "3d ago"
  */
 export function formatRelativeTime(date: string | Date | null | undefined): string {
-  if (!date) return i18n.global.t('common.time.never')
+  if (!date) return i18n.t('common.time.never')
 
   const now = new Date()
   const past = new Date(date)
   const diffMs = now.getTime() - past.getTime()
 
   // 处理未来时间或无效日期
-  if (diffMs < 0 || isNaN(diffMs)) return i18n.global.t('common.time.never')
+  if (diffMs < 0 || isNaN(diffMs)) return i18n.t('common.time.never')
 
   const diffSecs = Math.floor(diffMs / 1000)
   const diffMins = Math.floor(diffSecs / 60)
   const diffHours = Math.floor(diffMins / 60)
   const diffDays = Math.floor(diffHours / 24)
 
-  if (diffDays > 0) return i18n.global.t('common.time.daysAgo', { n: diffDays })
-  if (diffHours > 0) return i18n.global.t('common.time.hoursAgo', { n: diffHours })
-  if (diffMins > 0) return i18n.global.t('common.time.minutesAgo', { n: diffMins })
-  return i18n.global.t('common.time.justNow')
+  if (diffDays > 0) return i18n.t('common.time.daysAgo', { n: diffDays })
+  if (diffHours > 0) return i18n.t('common.time.hoursAgo', { n: diffHours })
+  if (diffMins > 0) return i18n.t('common.time.minutesAgo', { n: diffMins })
+  return i18n.t('common.time.justNow')
 }
 
 /**
@@ -408,14 +408,14 @@ export function formatCountdown(targetDate: string | Date | null | undefined): s
 
   if (diffDays > 0) {
     // 超过1天：显示 "Xd Yh"
-    return i18n.global.t('common.time.countdown.daysHours', { d: diffDays, h: remainingHours })
+    return i18n.t('common.time.countdown.daysHours', { d: diffDays, h: remainingHours })
   }
   if (diffHours > 0) {
     // 小于1天：显示 "Xh Ym"
-    return i18n.global.t('common.time.countdown.hoursMinutes', { h: diffHours, m: remainingMins })
+    return i18n.t('common.time.countdown.hoursMinutes', { h: diffHours, m: remainingMins })
   }
   // 小于1小时：显示 "Ym"
-  return i18n.global.t('common.time.countdown.minutes', { m: diffMins })
+  return i18n.t('common.time.countdown.minutes', { m: diffMins })
 }
 
 /**
@@ -426,7 +426,7 @@ export function formatCountdown(targetDate: string | Date | null | undefined): s
 export function formatCountdownWithSuffix(targetDate: string | Date | null | undefined): string | null {
   const countdown = formatCountdown(targetDate)
   if (!countdown) return null
-  return i18n.global.t('common.time.countdown.withSuffix', { time: countdown })
+  return i18n.t('common.time.countdown.withSuffix', { time: countdown })
 }
 
 /**
@@ -441,7 +441,7 @@ export function formatRelativeWithDateTime(date: string | Date | null | undefine
   const dateTime = formatDateTime(date)
 
   // 如果是 "从未" 或空字符串，只返回相对时间
-  if (!dateTime || relativeTime === i18n.global.t('common.time.never')) {
+  if (!dateTime || relativeTime === i18n.t('common.time.never')) {
     return relativeTime
   }
 

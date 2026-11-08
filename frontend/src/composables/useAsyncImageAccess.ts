@@ -1,23 +1,10 @@
-import { computed, ref, watch } from 'vue'
 import { keysAPI } from '@/api/keys'
-import { useUserView as useAuthStore } from '@/composables/useUserView'
-import { adminSupportContext, supportRequestGeneration } from '@/utils/adminSupportContext'
+import { useAuthStore } from '@/stores/auth'
+import { supportRequestGeneration } from '@/utils/adminSupportContext'
 import type { ApiKey } from '@/types'
-
-const loaded = ref(false)
-const loading = ref(false)
-const hasManageableAsyncImageKey = ref(false)
-let pendingLoad: Promise<boolean> | null = null
-const pageSize = 100
 
 export function keyCanManageAsyncImage(key: ApiKey): boolean {
   return key.status === 'active' || key.status === 'quota_exhausted' || key.status === 'expired'
-}
-
-export function keyAllowsAsyncImage(key: ApiKey): boolean {
-  return key.status === 'active'
-    && (key.group?.platform === 'openai' || key.group?.platform === 'grok')
-    && key.group?.allow_image_generation === true
 }
 
 // Administrators need the entry even when they have not created a personal API
@@ -28,65 +15,28 @@ export function canViewAsyncImage(isAdmin: boolean, hasManagementKey: boolean): 
   return isAdmin || hasManagementKey
 }
 
-async function loadAsyncImageAccess(force = false): Promise<boolean> {
-  const authStore = useAuthStore()
-  if (!authStore.isAuthenticated) {
-    loaded.value = true
-    hasManageableAsyncImageKey.value = false
+export async function loadAsyncImageAccess(): Promise<boolean> {
+  const authStore = useAuthStore.getState()
+  if (!authStore.isAuthenticated()) {
     return false
   }
-  if (loaded.value && !force) return hasManageableAsyncImageKey.value
-  if (pendingLoad && !force) return pendingLoad
 
   const scope = supportRequestGeneration()
-  loading.value = true
-  pendingLoad = (async () => {
-    let page = 1
-    while (true) {
-      const response = await keysAPI.list(page, pageSize, { sort_by: 'created_at', sort_order: 'desc' })
-      if (scope !== supportRequestGeneration()) return false
-      if ((response.items || []).some(keyCanManageAsyncImage)) {
-        hasManageableAsyncImageKey.value = true
-        loaded.value = true
-        return true
-      }
-      const pages = Number.isFinite(response.pages) && response.pages > 0 ? response.pages : 1
-      if (page >= pages || (response.items || []).length === 0) {
-        hasManageableAsyncImageKey.value = false
-        loaded.value = true
-        return false
-      }
-      page += 1
-    }
-  })()
-    .catch(() => {
-      if (scope !== supportRequestGeneration()) return false
-      hasManageableAsyncImageKey.value = false
-      loaded.value = true
-      return false
-    })
-    .finally(() => {
-      if (scope !== supportRequestGeneration()) return
-      loading.value = false
-      pendingLoad = null
-    })
-  return pendingLoad
-}
-
-export function useAsyncImageAccess() {
-  const authStore = useAuthStore()
-
-  return {
-    canUseAsyncImage: computed(() => canViewAsyncImage(authStore.isAdmin, hasManageableAsyncImageKey.value)),
-    asyncImageAccessLoaded: computed(() => loaded.value),
-    asyncImageAccessLoading: computed(() => loading.value),
-    refreshAsyncImageAccess: loadAsyncImageAccess,
+  const pageSize = 100
+  let page = 1
+  while (true) {
+    const response = await keysAPI.list(page, pageSize, { sort_by: 'created_at', sort_order: 'desc' })
+    if (scope !== supportRequestGeneration()) return false
+    if ((response.items || []).some(keyCanManageAsyncImage)) return true
+    const pages = Number.isFinite(response.pages) && response.pages > 0 ? response.pages : 1
+    if (page >= pages || (response.items || []).length === 0) return false
+    page += 1
   }
 }
 
-watch(adminSupportContext, () => {
-  loaded.value = false
-  loading.value = false
-  pendingLoad = null
-  hasManageableAsyncImageKey.value = false
-}, { flush: 'sync' })
+/** Refresh the auth store's cached image-management capability. */
+export async function refreshAsyncImageAccess(): Promise<boolean> {
+  const canManage = await loadAsyncImageAccess()
+  useAuthStore.setState({ hasManageableImageKey: canManage })
+  return canManage
+}

@@ -1,4 +1,4 @@
-import { listPlatforms } from '@/constants/platformCatalog'
+import { listPlatforms } from './platformCatalog'
 import type { BillingRatePolicy } from '@/types/billingRate'
 import type { SubscriptionPlan } from '@/types/payment'
 import type { SaleModelCatalog } from '@/types/billingRate'

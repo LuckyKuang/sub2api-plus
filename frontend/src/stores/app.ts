@@ -3,10 +3,9 @@
  * Manages global UI state including sidebar, loading indicators, and toast notifications
  */
 
-import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { create } from 'zustand'
+import i18n from '@/i18n'
 import type { Toast, ToastType, PublicSettings } from '@/types'
-import { i18n } from '@/i18n'
 import {
   checkUpdates as checkUpdatesAPI,
   type VersionInfo,
@@ -15,50 +14,85 @@ import {
 import { getPublicSettings as fetchPublicSettingsAPI } from '@/api/auth'
 import { defaultConsoleAppearance, type ConsoleAppearance } from '@/types/appearance'
 
-export const useAppStore = defineStore('app', () => {
-  // ==================== State ====================
+export type ChannelsLayout = 'list' | 'card'
 
-  const sidebarCollapsed = ref<boolean>(false)
-  const mobileOpen = ref<boolean>(false)
-  const sidebarScrollTop = ref<number>(0)
-  const loading = ref<boolean>(false)
-  const toasts = ref<Toast[]>([])
+interface AppState {
+  // State
+  sidebarCollapsed: boolean
+  mobileOpen: boolean
+  sidebarScrollTop: number
+  loading: boolean
+  toasts: Toast[]
 
-  // Public settings cache state
-  const publicSettingsLoaded = ref<boolean>(false)
-  const publicSettingsLoading = ref<boolean>(false)
-  const siteName = ref<string>('Sub2API Plus')
-  const siteLogo = ref<string>('')
-  const siteVersion = ref<string>('')
-  const contactInfo = ref<string>('')
-  const apiBaseUrl = ref<string>('')
-  const docUrl = ref<string>('')
-  const cachedPublicSettings = ref<PublicSettings | null>(null)
-  const consoleAppearancePreview = ref<ConsoleAppearance | null>(null)
-  const consoleAppearance = ref<ConsoleAppearance>(defaultConsoleAppearance())
+  // Public settings state
+  publicSettingsLoaded: boolean
+  publicSettingsLoading: boolean
+  siteName: string
+  siteLogo: string
+  siteVersion: string
+  contactInfo: string
+  apiBaseUrl: string
+  docUrl: string
+  cachedPublicSettings: PublicSettings | null
+  consoleAppearancePreview: ConsoleAppearance | null
+  consoleAppearance: ConsoleAppearance
+
+  // Version state
+  versionLoaded: boolean
+  versionLoading: boolean
+  currentVersion: string
+  latestVersion: string
+  hasUpdate: boolean
+  buildType: string
+  releaseInfo: ReleaseInfo | null
+
+  // Computed
+  hasActiveToasts: () => boolean
+  availableChannelsLayout: () => ChannelsLayout
+  backendModeEnabled: () => boolean
+
+  // Actions
+  toggleSidebar: () => void
+  setSidebarCollapsed: (collapsed: boolean) => void
+  toggleMobileSidebar: () => void
+  setMobileOpen: (open: boolean) => void
+  setLoading: (isLoading: boolean) => void
+  showToast: (type: ToastType, message: string, duration?: number) => string
+  showSuccess: (message: string, duration?: number) => string
+  showError: (message: string, duration?: number) => string
+  showInfo: (message: string, duration?: number) => string
+  showWarning: (message: string, duration?: number) => string
+  hideToast: (id: string) => void
+  clearAllToasts: () => void
+  withLoading: <T>(operation: () => Promise<T>) => Promise<T>
+  withLoadingAndError: <T>(operation: () => Promise<T>, errorMessage?: string) => Promise<T | null>
+  reset: () => void
+
+  // Version actions
+  fetchVersion: (force?: boolean) => Promise<VersionInfo | null>
+  invalidateVersionCheck: () => void
+  clearVersionCache: () => void
+
+  // Public settings actions
+  fetchPublicSettings: (force?: boolean) => Promise<PublicSettings | null>
+  clearPublicSettingsCache: () => void
+  initFromInjectedConfig: () => boolean
+  applyConsoleAppearance: (appearance: ConsoleAppearance) => void
+}
+
+export const useAppStore = create<AppState>()((set, get) => {
+  // Public settings request deduplication: one in-flight request shared by every caller.
   let publicSettingsRequest: Promise<PublicSettings | null> | null = null
   let publicSettingsRequestId = 0
 
   // Version cache state
-  const versionLoaded = ref<boolean>(false)
-  const versionLoading = ref<boolean>(false)
-  const currentVersion = ref<string>('')
-  const latestVersion = ref<string>('')
-  const hasUpdate = ref<boolean>(false)
-  const buildType = ref<string>('source')
-  const releaseInfo = ref<ReleaseInfo | null>(null)
   let versionRequestId = 0
 
   // Auto-incrementing ID for toasts
   let toastIdCounter = 0
 
-  // ==================== Computed ====================
-
-  const hasActiveToasts = computed(() => toasts.value.length > 0)
-  const availableChannelsLayout = computed(() => cachedPublicSettings.value?.available_channels_layout === 'list' ? 'list' : 'card')
-  const backendModeEnabled = computed(() => cachedPublicSettings.value?.backend_mode_enabled ?? false)
-
-  const loadingCount = ref<number>(0)
+  // Loading depth counter kept out of the public store surface, like the Vue ref it replaces.
+  let loadingCount = 0
 
   // ==================== Actions ====================
 
@@ -66,7 +100,7 @@ export const useAppStore = defineStore('app', () => {
    * Toggle sidebar collapsed state
    */
   function toggleSidebar(): void {
-    sidebarCollapsed.value = !sidebarCollapsed.value
+    set({ sidebarCollapsed: !get().sidebarCollapsed })
   }
 
   /**
@@ -74,14 +108,14 @@ export const useAppStore = defineStore('app', () => {
    * @param collapsed - Whether sidebar should be collapsed
    */
   function setSidebarCollapsed(collapsed: boolean): void {
-    sidebarCollapsed.value = collapsed
+    set({ sidebarCollapsed: collapsed })
   }
 
   /**
    * Toggle mobile sidebar open state
    */
   function toggleMobileSidebar(): void {
-    mobileOpen.value = !mobileOpen.value
+    set({ mobileOpen: !get().mobileOpen })
   }
 
   /**
@@ -89,7 +123,7 @@ export const useAppStore = defineStore('app', () => {
    * @param open - Whether mobile sidebar should be open
    */
   function setMobileOpen(open: boolean): void {
-    mobileOpen.value = open
+    set({ mobileOpen: open })
   }
 
   /**
@@ -98,11 +132,11 @@ export const useAppStore = defineStore('app', () => {
    */
   function setLoading(isLoading: boolean): void {
     if (isLoading) {
-      loadingCount.value++
+      loadingCount++
     } else {
-      loadingCount.value = Math.max(0, loadingCount.value - 1)
+      loadingCount = Math.max(0, loadingCount - 1)
     }
-    loading.value = loadingCount.value > 0
+    set({ loading: loadingCount > 0 })
   }
 
   /**
@@ -122,7 +156,7 @@ export const useAppStore = defineStore('app', () => {
       startTime: duration !== undefined ? Date.now() : undefined
     }
 
-    toasts.value.push(toast)
+    set({ toasts: [...get().toasts, toast] })
 
     // Auto-dismiss if duration is specified
     if (duration !== undefined) {
@@ -175,9 +209,9 @@ export const useAppStore = defineStore('app', () => {
    * @param id - Toast ID to hide
    */
   function hideToast(id: string): void {
-    const index = toasts.value.findIndex((t) => t.id === id)
+    const index = get().toasts.findIndex((t) => t.id === id)
     if (index !== -1) {
-      toasts.value.splice(index, 1)
+      set({ toasts: get().toasts.filter((t) => t.id !== id) })
     }
   }
 
@@ -185,7 +219,7 @@ export const useAppStore = defineStore('app', () => {
    * Clear all toasts
    */
   function clearAllToasts(): void {
-    toasts.value = []
+    set({ toasts: [] })
   }
 
   /**
@@ -221,7 +255,7 @@ export const useAppStore = defineStore('app', () => {
       const message =
         errorMessage ||
         (error as { message?: string }).message ||
-        i18n.global.t('common.unknownError')
+        i18n.t('common.unknownError')
       showError(message)
       return null
     } finally {
@@ -234,24 +268,27 @@ export const useAppStore = defineStore('app', () => {
    * Useful for cleanup or testing
    */
   function reset(): void {
-    sidebarCollapsed.value = false
-    loading.value = false
-    loadingCount.value = 0
-    toasts.value = []
+    loadingCount = 0
+    set({
+      sidebarCollapsed: false,
+      loading: false,
+      toasts: []
+    })
   }
+  // loadingCount stays a closure counter; the store only mirrors `loading`.
 
   // ==================== Version Management ====================
+
+  async function currentUserIsAdmin(): Promise<boolean> {
+    // Late import avoids a cycle with auth.ts, which clears this cache on logout.
+    const { useAuthStore } = await import('./auth')
+    return useAuthStore.getState().isAdmin()
+  }
 
   /**
    * Fetch version info (uses cache unless force=true)
    * @param force - Force refresh from API
    */
-  async function currentUserIsAdmin(): Promise<boolean> {
-    // Late import avoids a cycle with auth.ts, which clears this cache on logout.
-    const { useAuthStore } = await import('@/stores/auth')
-    return useAuthStore().isAdmin
-  }
-
   async function fetchVersion(force = false): Promise<VersionInfo | null> {
     if (!(await currentUserIsAdmin())) {
       clearVersionCache()
@@ -259,42 +296,44 @@ export const useAppStore = defineStore('app', () => {
     }
 
     // Return cached data if available and not forcing refresh
-    if (versionLoaded.value && !force) {
+    if (get().versionLoaded && !force) {
       return {
-        current_version: currentVersion.value,
-        latest_version: latestVersion.value,
-        has_update: hasUpdate.value,
-        build_type: buildType.value,
-        release_info: releaseInfo.value || undefined,
+        current_version: get().currentVersion,
+        latest_version: get().latestVersion,
+        has_update: get().hasUpdate,
+        build_type: get().buildType,
+        release_info: get().releaseInfo || undefined,
         cached: true
       }
     }
 
     // Prevent duplicate requests
-    if (versionLoading.value) {
+    if (get().versionLoading) {
       return null
     }
 
     const requestId = versionRequestId
-    versionLoading.value = true
+    set({ versionLoading: true })
     try {
       const data = await checkUpdatesAPI(force)
       if (requestId !== versionRequestId || !(await currentUserIsAdmin())) {
         return null
       }
-      currentVersion.value = data.current_version
-      latestVersion.value = data.latest_version
-      hasUpdate.value = data.has_update
-      buildType.value = data.build_type || 'source'
-      releaseInfo.value = data.release_info || null
-      versionLoaded.value = true
+      set({
+        currentVersion: data.current_version,
+        latestVersion: data.latest_version,
+        hasUpdate: data.has_update,
+        buildType: data.build_type || 'source',
+        releaseInfo: data.release_info || null,
+        versionLoaded: true
+      })
       return data
     } catch (error) {
       console.error('Failed to fetch version:', error)
       return null
     } finally {
       if (requestId === versionRequestId) {
-        versionLoading.value = false
+        set({ versionLoading: false })
       }
     }
   }
@@ -305,9 +344,11 @@ export const useAppStore = defineStore('app', () => {
    */
   function invalidateVersionCheck(): void {
     versionRequestId += 1
-    versionLoaded.value = false
-    versionLoading.value = false
-    hasUpdate.value = false
+    set({
+      versionLoaded: false,
+      versionLoading: false,
+      hasUpdate: false
+    })
   }
 
   /**
@@ -315,10 +356,12 @@ export const useAppStore = defineStore('app', () => {
    */
   function clearVersionCache(): void {
     invalidateVersionCheck()
-    currentVersion.value = ''
-    latestVersion.value = ''
-    buildType.value = 'source'
-    releaseInfo.value = null
+    set({
+      currentVersion: '',
+      latestVersion: '',
+      buildType: 'source',
+      releaseInfo: null
+    })
   }
 
   // ==================== Public Settings Management ====================
@@ -330,15 +373,17 @@ export const useAppStore = defineStore('app', () => {
     if (typeof window !== 'undefined') {
       window.__APP_CONFIG__ = { ...config }
     }
-    cachedPublicSettings.value = config
-    consoleAppearance.value = { ...(config.console_appearance ?? defaultConsoleAppearance()) }
-    siteName.value = config.site_name || 'Sub2API Plus'
-    siteLogo.value = config.site_logo || ''
-    siteVersion.value = config.version || ''
-    contactInfo.value = config.contact_info || ''
-    apiBaseUrl.value = config.api_base_url || ''
-    docUrl.value = config.doc_url || ''
-    publicSettingsLoaded.value = true
+    set({
+      cachedPublicSettings: config,
+      consoleAppearance: { ...(config.console_appearance ?? defaultConsoleAppearance()) },
+      siteName: config.site_name || 'Sub2API Plus',
+      siteLogo: config.site_logo || '',
+      siteVersion: config.version || '',
+      contactInfo: config.contact_info || '',
+      apiBaseUrl: config.api_base_url || '',
+      docUrl: config.doc_url || '',
+      publicSettingsLoaded: true
+    })
   }
 
   function applyConsoleAppearance(appearance: ConsoleAppearance): void {
@@ -346,10 +391,19 @@ export const useAppStore = defineStore('app', () => {
     // older appearance when it eventually completes.
     publicSettingsRequestId++
     publicSettingsRequest = null
-    publicSettingsLoading.value = false
-    consoleAppearance.value = { ...appearance }
-    if (cachedPublicSettings.value) cachedPublicSettings.value = { ...cachedPublicSettings.value, console_appearance: { ...appearance } }
-    if (typeof window !== 'undefined' && window.__APP_CONFIG__) window.__APP_CONFIG__ = { ...window.__APP_CONFIG__, console_appearance: { ...appearance } }
+    set({ publicSettingsLoading: false, consoleAppearance: { ...appearance } })
+    const cachedPublicSettings = get().cachedPublicSettings
+    if (cachedPublicSettings) {
+      set({
+        cachedPublicSettings: {
+          ...cachedPublicSettings,
+          console_appearance: { ...appearance }
+        }
+      })
+    }
+    if (typeof window !== 'undefined' && window.__APP_CONFIG__) {
+      window.__APP_CONFIG__ = { ...window.__APP_CONFIG__, console_appearance: { ...appearance } }
+    }
   }
 
   /**
@@ -364,17 +418,18 @@ export const useAppStore = defineStore('app', () => {
     }
 
     // Check for injected config from server (eliminates flash)
-    if (!publicSettingsLoaded.value && !force && window.__APP_CONFIG__) {
+    if (!get().publicSettingsLoaded && !force && window.__APP_CONFIG__) {
       applySettings(window.__APP_CONFIG__)
       return Promise.resolve(window.__APP_CONFIG__)
     }
 
     // Return cached data if available and not forcing refresh
-    if (publicSettingsLoaded.value && !force) {
-      if (cachedPublicSettings.value) {
-        return Promise.resolve({ ...cachedPublicSettings.value })
+    if (get().publicSettingsLoaded && !force) {
+      const cachedPublicSettings = get().cachedPublicSettings
+      if (cachedPublicSettings) {
+        return Promise.resolve({ ...cachedPublicSettings })
       }
-      return Promise.resolve({
+      return Promise.resolve<PublicSettings>({
         registration_enabled: false,
         email_verify_enabled: false,
         force_email_on_third_party_signup: false,
@@ -388,12 +443,12 @@ export const useAppStore = defineStore('app', () => {
         aliyun_captcha_scene_id: '',
         aliyun_captcha_prefix: '',
         aliyun_captcha_region: 'cn',
-        site_name: siteName.value,
-        site_logo: siteLogo.value,
+        site_name: get().siteName,
+        site_logo: get().siteLogo,
         site_subtitle: '',
-        api_base_url: apiBaseUrl.value,
-        contact_info: contactInfo.value,
-        doc_url: docUrl.value,
+        api_base_url: get().apiBaseUrl,
+        contact_info: get().contactInfo,
+        doc_url: get().docUrl,
         home_content: '',
         compact_home_enabled: false,
         hide_ccs_import_button: false,
@@ -413,7 +468,7 @@ export const useAppStore = defineStore('app', () => {
         google_oauth_enabled: false,
         backend_mode_enabled: false,
         passkey_enabled: false,
-        version: siteVersion.value,
+        version: get().siteVersion,
         balance_low_notify_enabled: false,
         account_quota_notify_enabled: false,
         balance_low_notify_threshold: 0,
@@ -436,17 +491,17 @@ export const useAppStore = defineStore('app', () => {
     }
 
     const requestId = publicSettingsRequestId
-    publicSettingsLoading.value = true
+    set({ publicSettingsLoading: true })
     let apiRequest: Promise<PublicSettings>
     try {
       apiRequest = fetchPublicSettingsAPI()
     } catch (error) {
       console.error('Failed to fetch public settings:', error)
-      publicSettingsLoading.value = false
+      set({ publicSettingsLoading: false })
       return Promise.resolve(null)
     }
 
-    const request = apiRequest
+    const request = (apiRequest as Promise<PublicSettings>)
       .then((data) => {
         if (requestId !== publicSettingsRequestId) return null
         applySettings(data)
@@ -459,7 +514,7 @@ export const useAppStore = defineStore('app', () => {
       .finally(() => {
         if (publicSettingsRequest === request) {
           publicSettingsRequest = null
-          publicSettingsLoading.value = false
+          set({ publicSettingsLoading: false })
         }
       })
 
@@ -473,9 +528,11 @@ export const useAppStore = defineStore('app', () => {
   function clearPublicSettingsCache(): void {
     publicSettingsRequestId += 1
     publicSettingsRequest = null
-    publicSettingsLoading.value = false
-    publicSettingsLoaded.value = false
-    cachedPublicSettings.value = null
+    set({
+      publicSettingsLoading: false,
+      publicSettingsLoaded: false,
+      cachedPublicSettings: null
+    })
     if (typeof window !== 'undefined') delete window.__APP_CONFIG__
   }
 
@@ -496,38 +553,39 @@ export const useAppStore = defineStore('app', () => {
 
   return {
     // State
-    sidebarCollapsed,
-    mobileOpen,
-    sidebarScrollTop,
-    loading,
-    toasts,
+    sidebarCollapsed: false,
+    mobileOpen: false,
+    sidebarScrollTop: 0,
+    loading: false,
+    toasts: [],
 
     // Public settings state
-    publicSettingsLoaded,
-    siteName,
-    siteLogo,
-    siteVersion,
-    contactInfo,
-    apiBaseUrl,
-    docUrl,
-    cachedPublicSettings,
-    availableChannelsLayout,
-    consoleAppearancePreview,
-    consoleAppearance,
-    applyConsoleAppearance,
+    publicSettingsLoaded: false,
+    publicSettingsLoading: false,
+    siteName: 'Sub2API Plus',
+    siteLogo: '',
+    siteVersion: '',
+    contactInfo: '',
+    apiBaseUrl: '',
+    docUrl: '',
+    cachedPublicSettings: null,
+    consoleAppearancePreview: null,
+    consoleAppearance: defaultConsoleAppearance(),
 
     // Version state
-    versionLoaded,
-    versionLoading,
-    currentVersion,
-    latestVersion,
-    hasUpdate,
-    buildType,
-    releaseInfo,
+    versionLoaded: false,
+    versionLoading: false,
+    currentVersion: '',
+    latestVersion: '',
+    hasUpdate: false,
+    buildType: 'source',
+    releaseInfo: null,
 
     // Computed
-    hasActiveToasts,
-    backendModeEnabled,
+    hasActiveToasts: () => get().toasts.length > 0,
+    availableChannelsLayout: () =>
+      get().cachedPublicSettings?.available_channels_layout === 'list' ? 'list' : 'card',
+    backendModeEnabled: () => get().cachedPublicSettings?.backend_mode_enabled ?? false,
 
     // Actions
     toggleSidebar,
@@ -554,6 +612,7 @@ export const useAppStore = defineStore('app', () => {
     // Public settings actions
     fetchPublicSettings,
     clearPublicSettingsCache,
-    initFromInjectedConfig
+    initFromInjectedConfig,
+    applyConsoleAppearance
   }
 })

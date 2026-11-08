@@ -70,7 +70,7 @@
  */
 import { useAppStore } from '@/stores/app'
 import type { PublicSettings } from '@/types'
-import { DEFAULT_INTERVAL_SECONDS } from '@/constants/channelMonitor'
+import { DEFAULT_INTERVAL_SECONDS } from './channelMonitor'
 
 export type FeatureFlagMode = 'opt-in' | 'opt-out'
 
@@ -155,7 +155,7 @@ export type RegisteredFeatureFlag = keyof typeof FeatureFlags
  * `false` → the feature is disabled (menu/route should hide).
  */
 export function isFeatureFlagEnabled(flag: FeatureFlagDefinition): boolean {
-  const appStore = useAppStore()
+  const appStore = useAppStore.getState()
   return resolveFeatureFlag(appStore.cachedPublicSettings, flag)
 }
 
@@ -193,7 +193,7 @@ export type ChannelMonitorMode = 'v1' | 'v2' | 'v3'
 
 /** User-visible monitor mode. Invalid/missing → v1. V3 can include active probes. */
 export function getChannelMonitorMode(): ChannelMonitorMode {
-  const appStore = useAppStore()
+  const appStore = useAppStore.getState()
   const mode = appStore.cachedPublicSettings?.channel_monitor_mode
   return mode === 'v2' || mode === 'v3' ? mode : 'v1'
 }
@@ -204,7 +204,7 @@ export function isChannelMonitorV1Mode(): boolean {
 
 /** Admin probe actions can also run alongside the V3 user-visible mode. */
 export function isChannelMonitorActiveProbeEnabled(): boolean {
-  const appStore = useAppStore()
+  const appStore = useAppStore.getState()
   const mode = getChannelMonitorMode()
   return isChannelMonitorRouteEnabled() && (mode === 'v1' || (
     mode === 'v3' && appStore.cachedPublicSettings?.channel_monitor_v1_enabled === true
@@ -216,14 +216,14 @@ export function isChannelMonitorV2Mode(): boolean {
 }
 
 export function getChannelMonitorRefreshIntervalSeconds(): number {
-  const appStore = useAppStore()
+  const appStore = useAppStore.getState()
   const configured = appStore.cachedPublicSettings?.channel_monitor_default_interval_seconds
   return configured && configured > 0 ? configured : DEFAULT_INTERVAL_SECONDS
 }
 
 /** Hide RPM/TPM on user-facing monitor (scale privacy). Admin always shows full metrics. */
 export function isChannelMonitorThroughputHidden(): boolean {
-  const appStore = useAppStore()
+  const appStore = useAppStore.getState()
   return Boolean(appStore.cachedPublicSettings?.channel_monitor_hide_throughput)
 }
 
@@ -234,12 +234,12 @@ export function isChannelMonitorThroughputHidden(): boolean {
  * defense-in-depth only. Admin views always show quota.
  */
 export function isChannelMonitorQuotaVisible(): boolean {
-  const appStore = useAppStore()
+  const appStore = useAppStore.getState()
   return appStore.cachedPublicSettings?.channel_monitor_show_quota === true
 }
 
 /** Hide the user ranking tab on user-facing monitor v2. Admin always keeps it. */
 export function isChannelMonitorUserRankingHidden(): boolean {
-  const appStore = useAppStore()
+  const appStore = useAppStore.getState()
   return Boolean(appStore.cachedPublicSettings?.channel_monitor_hide_user_ranking)
 }

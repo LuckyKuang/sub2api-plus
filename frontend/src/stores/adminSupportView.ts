@@ -1,27 +1,32 @@
-import { defineStore } from 'pinia'
-import { ref, watch } from 'vue'
+import { create } from 'zustand'
 import { adminAPI } from '@/api'
 import * as supportViewAPI from '@/api/admin/supportView'
-import { adminSupportContext } from '@/utils/adminSupportContext'
 import type { AdminUser } from '@/types'
 import type { AdminSupportUser } from '@/api/admin/supportView'
+import { onSupportContextChange, syncSupportContext } from './supportContext'
 
-export const useAdminSupportViewStore = defineStore('adminSupportView', () => {
-  const accounts = ref<AdminUser[]>([])
-  const accountsLoaded = ref(false)
-  const accountsLoading = ref(false)
-  const accountsError = ref('')
-  const target = ref<AdminSupportUser | null>(null)
+interface AdminSupportViewState {
+  accounts: AdminUser[]
+  accountsLoaded: boolean
+  accountsLoading: boolean
+  accountsError: string
+  target: AdminSupportUser | null
+  loadAccounts: (force?: boolean) => Promise<void>
+  loadTarget: (userId: number) => Promise<AdminSupportUser>
+  clearTarget: () => void
+}
+
+export const useAdminSupportViewStore = create<AdminSupportViewState>()((set, get) => {
   let accountsRequest: Promise<void> | null = null
   let targetRequestSequence = 0
 
   async function loadAccounts(force = false): Promise<void> {
-    if (accountsLoaded.value && !force) return
+    syncSupportContext()
+    if (get().accountsLoaded && !force) return
     if (accountsRequest) return accountsRequest
 
     accountsRequest = (async () => {
-      accountsLoading.value = true
-      accountsError.value = ''
+      set({ accountsLoading: true, accountsError: '' })
       try {
         const collected: AdminUser[] = []
         let page = 1
@@ -39,13 +44,12 @@ export const useAdminSupportViewStore = defineStore('adminSupportView', () => {
 
         const unique = new Map<number, AdminUser>()
         for (const user of collected) unique.set(user.id, user)
-        accounts.value = [...unique.values()]
-        accountsLoaded.value = true
+        set({ accounts: [...unique.values()], accountsLoaded: true })
       } catch (error) {
-        accountsError.value = error instanceof Error ? error.message : String(error)
+        set({ accountsError: error instanceof Error ? error.message : String(error) })
         throw error
       } finally {
-        accountsLoading.value = false
+        set({ accountsLoading: false })
         accountsRequest = null
       }
     })()
@@ -53,25 +57,27 @@ export const useAdminSupportViewStore = defineStore('adminSupportView', () => {
   }
 
   async function loadTarget(userId: number): Promise<AdminSupportUser> {
+    syncSupportContext()
     const requestSequence = ++targetRequestSequence
     const user = await supportViewAPI.getProfile(userId)
-    if (requestSequence === targetRequestSequence) target.value = user
+    if (requestSequence === targetRequestSequence) set({ target: user })
     return user
   }
 
   function clearTarget(): void {
     targetRequestSequence += 1
-    target.value = null
+    set({ target: null })
   }
 
-  watch(adminSupportContext, clearTarget, { flush: 'sync' })
+  // Replaces the Vue `watch(adminSupportContext, clearTarget, { flush: 'sync' })`.
+  onSupportContextChange(clearTarget)
 
   return {
-    accounts,
-    accountsLoaded,
-    accountsLoading,
-    accountsError,
-    target,
+    accounts: [],
+    accountsLoaded: false,
+    accountsLoading: false,
+    accountsError: '',
+    target: null,
     loadAccounts,
     loadTarget,
     clearTarget

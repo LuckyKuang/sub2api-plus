@@ -1,56 +1,71 @@
+import { create } from 'zustand'
+import type { Driver } from 'driver.js'
+
 /**
  * Onboarding Store
  * Manages onboarding tour state and control methods
  */
 
-import { defineStore } from 'pinia'
-import { markRaw, ref, shallowRef } from 'vue'
-import type { Driver } from 'driver.js'
-
 type VoidCallback = () => void
 type NextStepCallback = (delay?: number) => Promise<void>
 type IsCurrentStepCallback = (selector: string) => boolean
 
-export const useOnboardingStore = defineStore('onboarding', () => {
-  const replayCallback = ref<VoidCallback | null>(null)
-  const nextStepCallback = ref<NextStepCallback | null>(null)
-  const isCurrentStepCallback = ref<IsCurrentStepCallback | null>(null)
+interface OnboardingState {
+  setReplayCallback: (callback: VoidCallback | null) => void
+  setControlMethods: (methods: {
+    nextStep: NextStepCallback,
+    isCurrentStep: IsCurrentStepCallback
+  }) => void
+  clearControlMethods: () => void
+  setDriverInstance: (driver: Driver | null) => void
+  getDriverInstance: () => Driver | null
+  isDriverActive: () => boolean
+  replay: () => void
+  nextStep: (delay?: number) => Promise<void>
+  isCurrentStep: (selector: string) => boolean
+}
+
+export const useOnboardingStore = create<OnboardingState>()(() => {
+  // Callbacks registered by views; module-level like the Vue refs they replace.
+  let replayCallback: VoidCallback | null = null
+  let nextStepCallback: NextStepCallback | null = null
+  let isCurrentStepCallback: IsCurrentStepCallback | null = null
 
   // 全局 driver 实例，跨组件保持
-  const driverInstance = shallowRef<Driver | null>(null)
+  let driverInstance: Driver | null = null
 
   function setReplayCallback(callback: VoidCallback | null): void {
-    replayCallback.value = callback
+    replayCallback = callback
   }
 
   function setControlMethods(methods: {
     nextStep: NextStepCallback,
     isCurrentStep: IsCurrentStepCallback
   }): void {
-    nextStepCallback.value = methods.nextStep
-    isCurrentStepCallback.value = methods.isCurrentStep
+    nextStepCallback = methods.nextStep
+    isCurrentStepCallback = methods.isCurrentStep
   }
 
   function clearControlMethods(): void {
-    nextStepCallback.value = null
-    isCurrentStepCallback.value = null
+    nextStepCallback = null
+    isCurrentStepCallback = null
   }
 
   function setDriverInstance(driver: Driver | null): void {
-    driverInstance.value = driver ? markRaw(driver) : null
+    driverInstance = driver
   }
 
   function getDriverInstance(): Driver | null {
-    return driverInstance.value
+    return driverInstance
   }
 
   function isDriverActive(): boolean {
-    return driverInstance.value?.isActive?.() ?? false
+    return driverInstance?.isActive?.() ?? false
   }
 
   function replay(): void {
-    if (replayCallback.value) {
-      replayCallback.value()
+    if (replayCallback) {
+      replayCallback()
     }
   }
 
@@ -59,8 +74,8 @@ export const useOnboardingStore = defineStore('onboarding', () => {
    * @param delay Optional delay in ms (useful for waiting for animations)
    */
   async function nextStep(delay = 0): Promise<void> {
-    if (nextStepCallback.value) {
-      await nextStepCallback.value(delay)
+    if (nextStepCallback) {
+      await nextStepCallback(delay)
     }
   }
 
@@ -68,8 +83,8 @@ export const useOnboardingStore = defineStore('onboarding', () => {
    * Check if the tour is currently highlighting a specific element
    */
   function isCurrentStep(selector: string): boolean {
-    if (isCurrentStepCallback.value) {
-      return isCurrentStepCallback.value(selector)
+    if (isCurrentStepCallback) {
+      return isCurrentStepCallback(selector)
     }
     return false
   }

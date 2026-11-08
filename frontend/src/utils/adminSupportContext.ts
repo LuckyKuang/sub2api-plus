@@ -1,18 +1,26 @@
-import { shallowRef } from 'vue'
-
 export interface SupportContext { userId: number; actorId: number }
-export const adminSupportContext = shallowRef<SupportContext | null>(null)
+
+let supportContext: SupportContext | null = null
 let generation = 0
 const imageKeys = new Map<string, number>()
 const pendingImageReads = new Set<AbortController>()
 
+export function getAdminSupportContext(): SupportContext | null {
+  return supportContext
+}
+
 export function setAdminSupportContext(context: SupportContext | null): void {
-  if (context?.userId === adminSupportContext.value?.userId && context?.actorId === adminSupportContext.value?.actorId) return
+  if (
+    context?.userId === supportContext?.userId &&
+    context?.actorId === supportContext?.actorId
+  ) {
+    return
+  }
   generation += 1
   imageKeys.clear()
   for (const controller of pendingImageReads) controller.abort()
   pendingImageReads.clear()
-  adminSupportContext.value = context
+  supportContext = context
 }
 
 export function supportRequestGeneration(): number { return generation }
@@ -42,7 +50,7 @@ export function supportReadURL(url: string, userId: number): string | null {
 }
 
 export function rememberSupportImageKeys(keys: Array<{ id: number; key: string }>): void {
-  if (!adminSupportContext.value) return
+  if (!supportContext) return
   for (const key of keys) imageKeys.set(key.key, key.id)
 }
 
@@ -51,7 +59,7 @@ export function rememberSupportImageKeys(keys: Array<{ id: number; key: string }
 export async function supportImageFetch(
   path: string, apiKey: string, init: RequestInit, gatewayURL: (path: string) => string, apiURL: (path: string) => string
 ): Promise<Response> {
-  const context = adminSupportContext.value
+  const context = supportContext
   if (!context) return fetch(gatewayURL(path), init)
   if ((init.method || 'GET').toUpperCase() !== 'GET') throw supportReadOnlyError()
   const keyId = imageKeys.get(apiKey)

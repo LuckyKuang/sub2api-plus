@@ -1,4 +1,10 @@
-import { shallowRef } from 'vue'
-
 /** Shared with canvas renderers, which cannot resolve CSS custom properties. */
-export const consoleCardAlpha = shallowRef(1)
+let cardAlpha = 1
+
+export function getConsoleCardAlpha(): number {
+  return cardAlpha
+}
+
+export function setConsoleCardAlpha(alpha: number): void {
+  cardAlpha = alpha
+}

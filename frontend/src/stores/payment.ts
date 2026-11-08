@@ -3,33 +3,35 @@
  * Manages payment configuration, current order state, and subscription plans
  */
 
-import { defineStore } from 'pinia'
-import { useLocaleRefresh } from '@/utils/localeRefresh'
-import { ref } from 'vue'
+import { create } from 'zustand'
 import { paymentAPI } from '@/api/payment'
-import type { PaymentConfig, PaymentOrder, SubscriptionPlan, CreateOrderRequest } from '@/types/payment'
+import type { PaymentConfig, PaymentOrder, SubscriptionPlan, CreateOrderRequest, CreateOrderResult } from '@/types/payment'
+import { onLocaleRefresh } from './localeRefresh'
 
-export const usePaymentStore = defineStore('payment', () => {
-  // ==================== State ====================
-
+interface PaymentState {
   /** Payment configuration from backend */
-  const config = ref<PaymentConfig | null>(null)
+  config: PaymentConfig | null
   /** Currently active order (for payment flow) */
-  const currentOrder = ref<PaymentOrder | null>(null)
+  currentOrder: PaymentOrder | null
   /** Available subscription plans */
-  const plans = ref<SubscriptionPlan[]>([])
+  plans: SubscriptionPlan[]
+  configLoading: boolean
+  configLoaded: boolean
+  fetchConfig: (force?: boolean) => Promise<PaymentConfig | null>
+  fetchPlans: () => Promise<SubscriptionPlan[]>
+  createOrder: (params: CreateOrderRequest) => Promise<CreateOrderResult>
+  pollOrderStatus: (orderId: number) => Promise<PaymentOrder | null>
+  clearCurrentOrder: () => void
+}
 
-  const configLoading = ref(false)
-  const configLoaded = ref(false)
+export const usePaymentStore = create<PaymentState>()((set, get) => {
   let configPromise: Promise<PaymentConfig | null> | null = null
   let plansRequest = 0
   let plansLoading = false
 
-  // ==================== Actions ====================
-
   /** Fetch payment configuration */
   async function fetchConfig(force = false): Promise<PaymentConfig | null> {
-    if (configLoaded.value && !force) return config.value
+    if (get().configLoaded && !force) return get().config
     if (configPromise) return configPromise
 
     configPromise = loadConfig()
@@ -37,17 +39,16 @@ export const usePaymentStore = defineStore('payment', () => {
   }
 
   async function loadConfig(): Promise<PaymentConfig | null> {
-    configLoading.value = true
+    set({ configLoading: true })
     try {
       const response = await paymentAPI.getConfig()
-      config.value = response.data
-      configLoaded.value = true
-      return config.value
+      set({ config: response.data, configLoaded: true })
+      return get().config
     } catch (error: unknown) {
       console.error('[payment] Failed to fetch config:', error)
       return null
     } finally {
-      configLoading.value = false
+      set({ configLoading: false })
       configPromise = null
     }
   }
@@ -58,15 +59,17 @@ export const usePaymentStore = defineStore('payment', () => {
     plansLoading = true
     try {
       const response = await paymentAPI.getPlans()
-      if (request !== plansRequest) return plans.value
+      if (request !== plansRequest) return get().plans
       // Backend returns features as newline-separated string; parse to array
-      plans.value = (response.data || []).map((p: Omit<SubscriptionPlan, 'features'> & { features: string | string[] }) => ({
-        ...p,
-        features: typeof p.features === 'string'
-          ? p.features.split('\n').map((f: string) => f.trim()).filter(Boolean)
-          : (p.features || []),
-      }))
-      return plans.value
+      set({
+        plans: (response.data || []).map((p: Omit<SubscriptionPlan, 'features'> & { features: string | string[] }) => ({
+          ...p,
+          features: typeof p.features === 'string'
+            ? p.features.split('\n').map((f: string) => f.trim()).filter(Boolean)
+            : (p.features || []),
+        }))
+      })
+      return get().plans
     } catch (error: unknown) {
       console.error('[payment] Failed to fetch plans:', error)
       return []
@@ -75,7 +78,7 @@ export const usePaymentStore = defineStore('payment', () => {
     }
   }
 
-  useLocaleRefresh(() => plans.value.length || plansLoading ? fetchPlans() : undefined)
+  onLocaleRefresh(() => (get().plans.length || plansLoading ? fetchPlans() : undefined))
 
   /** Create a new order and set it as current */
   async function createOrder(params: CreateOrderRequest) {
@@ -88,8 +91,8 @@ export const usePaymentStore = defineStore('payment', () => {
     try {
       const response = await paymentAPI.getOrder(orderId)
       const order = response.data
-      if (currentOrder.value?.id === orderId) {
-        currentOrder.value = order
+      if (get().currentOrder?.id === orderId) {
+        set({ currentOrder: order })
       }
       return order
     } catch (error: unknown) {
@@ -100,15 +103,15 @@ export const usePaymentStore = defineStore('payment', () => {
 
   /** Clear current order state */
   function clearCurrentOrder() {
-    currentOrder.value = null
+    set({ currentOrder: null })
   }
 
   return {
-    config,
-    currentOrder,
-    plans,
-    configLoading,
-    configLoaded,
+    config: null,
+    currentOrder: null,
+    plans: [],
+    configLoading: false,
+    configLoaded: false,
     fetchConfig,
     fetchPlans,
     createOrder,

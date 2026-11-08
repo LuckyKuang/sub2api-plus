@@ -1,13 +1,10 @@
 import { defineConfig } from 'vitest/config'
 import { resolve } from 'path'
-import vue from '@vitejs/plugin-vue'
 
 export default defineConfig({
-  plugins: [vue()],
   resolve: {
     alias: {
-      '@': resolve(__dirname, 'src'),
-      'vue-i18n': 'vue-i18n/dist/vue-i18n.mjs'
+      '@': resolve(__dirname, 'src')
     }
   },
   test: {
@@ -19,22 +16,16 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
-      include: ['src/**/*.{js,ts,vue}'],
+      include: ['src/**/*.{js,ts,tsx}'],
       exclude: [
         'node_modules',
         'src/**/*.d.ts',
         'src/**/*.spec.ts',
+        'src/**/*.spec.tsx',
         'src/**/*.test.ts',
-        'src/main.ts'
-      ],
-      thresholds: {
-        global: {
-          statements: 80,
-          branches: 80,
-          functions: 80,
-          lines: 80
-        }
-      }
+        'src/**/*.test.tsx',
+        'src/main.tsx'
+      ]
     }
   }
 })

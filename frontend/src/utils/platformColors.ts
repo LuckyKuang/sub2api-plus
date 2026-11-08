@@ -6,7 +6,7 @@
  * the server (see constants/platformCatalog) use the neutral *_DEFAULT styles.
  */
 
-import { getPlatformSpec } from '@/constants/platformCatalog'
+import { getPlatformSpec } from './platformCatalog'
 
 export type Platform =
   | 'anthropic'

@@ -14,7 +14,13 @@ import {
 } from './adminUIRequest'
 import { refreshAuthTokens } from './tokenRefresh'
 import { getAPIBaseURL } from './url'
-import { adminSupportContext, supportReadURL, supportReadOnlyError, supportRequestGeneration, rememberSupportImageKeys } from '@/utils/adminSupportContext'
+import {
+  getAdminSupportContext,
+  supportReadURL,
+  supportReadOnlyError,
+  supportRequestGeneration,
+  rememberSupportImageKeys,
+} from '@/utils/adminSupportContext'
 export { buildApiUrl, buildGatewayUrl } from './url'
 
 // ==================== Axios Instance Configuration ====================
@@ -54,7 +60,7 @@ const getUserTimezone = (): string => {
 
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    const context = adminSupportContext.value
+    const context = getAdminSupportContext()
     if (context) {
       const url = String(config.url || '')
       // This POST is a batch query; support exposes it as a GET read.

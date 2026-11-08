@@ -3,12 +3,11 @@
  * Global state management for user subscriptions with caching and deduplication
  */
 
-import { defineStore } from 'pinia'
-import { useLocaleRefresh } from '@/utils/localeRefresh'
-import { ref, computed, watch } from 'vue'
+import { create } from 'zustand'
 import subscriptionsAPI from '@/api/subscriptions'
-import { adminSupportContext } from '@/utils/adminSupportContext'
 import type { UserSubscription } from '@/types'
+import { onLocaleRefresh } from './localeRefresh'
+import { onSupportContextChange, syncSupportContext } from './supportContext'
 
 // Cache TTL: 60 seconds
 const CACHE_TTL_MS = 60_000
@@ -16,12 +15,21 @@ const CACHE_TTL_MS = 60_000
 // Request generation counter to invalidate stale in-flight responses
 let requestGeneration = 0
 
-export const useSubscriptionStore = defineStore('subscriptions', () => {
-  // State
-  const activeSubscriptions = ref<UserSubscription[]>([])
-  const loading = ref(false)
-  const loaded = ref(false)
-  const lastFetchedAt = ref<number | null>(null)
+interface SubscriptionsState {
+  activeSubscriptions: UserSubscription[]
+  loading: boolean
+  hasActiveSubscriptions: () => boolean
+  fetchActiveSubscriptions: (force?: boolean) => Promise<UserSubscription[]>
+  startPolling: () => void
+  stopPolling: () => void
+  clear: () => void
+  invalidateCache: () => void
+}
+
+export const useSubscriptionsStore = create<SubscriptionsState>()((set, get) => {
+  // Internal bookkeeping kept out of the public store surface, like the Vue refs it replaces.
+  let loaded = false
+  let lastFetchedAt: number | null = null
 
   // In-flight request deduplication
   let activePromise: Promise<UserSubscription[]> | null = null
@@ -29,24 +37,22 @@ export const useSubscriptionStore = defineStore('subscriptions', () => {
   // Auto-refresh interval
   let pollerInterval: ReturnType<typeof setInterval> | null = null
 
-  // Computed
-  const hasActiveSubscriptions = computed(() => activeSubscriptions.value.length > 0)
-
   /**
    * Fetch active subscriptions with caching and deduplication
    * @param force - Force refresh even if cache is valid
    */
   async function fetchActiveSubscriptions(force = false): Promise<UserSubscription[]> {
+    syncSupportContext()
     const now = Date.now()
 
     // Return cached data if valid
     if (
       !force &&
-      loaded.value &&
-      lastFetchedAt.value &&
-      now - lastFetchedAt.value < CACHE_TTL_MS
+      loaded &&
+      lastFetchedAt &&
+      now - lastFetchedAt < CACHE_TTL_MS
     ) {
-      return activeSubscriptions.value
+      return get().activeSubscriptions
     }
 
     // Return in-flight request if exists (deduplication)
@@ -57,14 +63,14 @@ export const useSubscriptionStore = defineStore('subscriptions', () => {
     const currentGeneration = ++requestGeneration
 
     // Start new request
-    loading.value = true
+    set({ loading: true })
     const requestPromise = subscriptionsAPI
       .getActiveSubscriptions()
       .then((data) => {
         if (currentGeneration === requestGeneration) {
-          activeSubscriptions.value = data
-          loaded.value = true
-          lastFetchedAt.value = Date.now()
+          set({
+            activeSubscriptions: data
+          })
         }
         return data
       })
@@ -74,7 +80,7 @@ export const useSubscriptionStore = defineStore('subscriptions', () => {
       })
       .finally(() => {
         if (activePromise === requestPromise) {
-          loading.value = false
+          set({ loading: false })
           activePromise = null
         }
       })
@@ -85,9 +91,10 @@ export const useSubscriptionStore = defineStore('subscriptions', () => {
   }
 
   /**
-   * Start auto-refresh polling 
+   * Start auto-refresh polling
    */
   function startPolling() {
+    syncSupportContext()
     if (pollerInterval) return
 
     pollerInterval = setInterval(() => {
@@ -113,10 +120,9 @@ export const useSubscriptionStore = defineStore('subscriptions', () => {
   function clear() {
     requestGeneration++
     activePromise = null
-    loading.value = false
-    activeSubscriptions.value = []
-    loaded.value = false
-    lastFetchedAt.value = null
+    set({ loading: false, activeSubscriptions: [] })
+    loaded = false
+    lastFetchedAt = null
     stopPolling()
   }
 
@@ -124,20 +130,23 @@ export const useSubscriptionStore = defineStore('subscriptions', () => {
    * Invalidate cache (force next fetch to reload)
    */
   function invalidateCache() {
-    lastFetchedAt.value = null
+    lastFetchedAt = null
   }
 
-  watch(adminSupportContext, clear, { flush: 'sync' })
-  useLocaleRefresh(() => {
-    if (loaded.value || activePromise) return fetchActiveSubscriptions(true)
+  // Replaces the Vue `watch(adminSupportContext, clear, { flush: 'sync' })`.
+  onSupportContextChange(clear)
+
+  // Replaces the Vue `useLocaleRefresh(...)` registration.
+  onLocaleRefresh(() => {
+    if (loaded || activePromise) return fetchActiveSubscriptions(true)
     invalidateCache()
   })
 
   return {
     // State
-    activeSubscriptions,
-    loading,
-    hasActiveSubscriptions,
+    activeSubscriptions: [],
+    loading: false,
+    hasActiveSubscriptions: () => get().activeSubscriptions.length > 0,
 
     // Actions
     fetchActiveSubscriptions,
@@ -147,3 +156,6 @@ export const useSubscriptionStore = defineStore('subscriptions', () => {
     invalidateCache
   }
 })
+
+/** The Vue barrel exported this store as `useSubscriptionStore`. */
+export const useSubscriptionStore = useSubscriptionsStore

@@ -1,5 +1,3 @@
-import { reactive } from 'vue'
-
 export type IpGeoStatus = 'idle' | 'loading' | 'success' | 'error' | 'private'
 
 export interface IpGeoDetail {
@@ -33,7 +31,7 @@ interface StoredEntry {
   fetchedAt: number
 }
 
-const cache = reactive(new Map<string, IpGeoEntry>())
+const cache = new Map<string, IpGeoEntry>()
 
 function isFreshSuccess(entry: IpGeoEntry | undefined): entry is IpGeoEntry & { status: 'success'; fetchedAt: number } {
   return entry?.status === 'success' && typeof entry.fetchedAt === 'number' && Date.now() - entry.fetchedAt <= CACHE_TTL_MS

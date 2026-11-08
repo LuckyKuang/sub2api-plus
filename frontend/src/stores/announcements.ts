@@ -1,104 +1,112 @@
-import { defineStore } from 'pinia'
-import { ref, computed, watch } from 'vue'
+import { create } from 'zustand'
 import { announcementsAPI } from '@/api'
-import { adminSupportContext, supportRequestGeneration } from '@/utils/adminSupportContext'
 import type { UserAnnouncement } from '@/types'
+import { currentSupportContext, onSupportContextChange, syncSupportContext } from './supportContext'
+import { supportRequestGeneration } from '@/utils/adminSupportContext'
 
 const THROTTLE_MS = 20 * 60 * 1000 // 20 minutes
 
-export const useAnnouncementStore = defineStore('announcements', () => {
-  // State
-  const announcements = ref<UserAnnouncement[]>([])
-  const loading = ref(false)
-  const lastFetchTime = ref(0)
-  const popupQueue = ref<UserAnnouncement[]>([])
-  const currentPopup = ref<UserAnnouncement | null>(null)
+interface AnnouncementsState {
+  announcements: UserAnnouncement[]
+  loading: boolean
+  currentPopup: UserAnnouncement | null
+  unreadCount: () => number
+  fetchAnnouncements: (force?: boolean) => Promise<void>
+  dismissPopup: () => Promise<void>
+  markAsRead: (id: number) => Promise<boolean | undefined>
+  markAllAsRead: () => Promise<void>
+  reset: () => void
+}
 
+export const useAnnouncementsStore = create<AnnouncementsState>()((set, get) => {
   // Session-scoped dedup set — not reactive, used as plain lookup only
   let shownPopupIds = new Set<number>()
 
-  // Getters
-  const unreadCount = computed(() =>
-    announcements.value.filter((a) => !a.read_at).length
-  )
-
-  // Actions
-  async function fetchAnnouncements(force = false) {
-    const scope = supportRequestGeneration()
-    const now = Date.now()
-    if (!force && lastFetchTime.value > 0 && now - lastFetchTime.value < THROTTLE_MS) {
-      return
-    }
-
-    // Set immediately to prevent concurrent duplicate requests
-    lastFetchTime.value = now
-
-    try {
-      loading.value = true
-      const all = await announcementsAPI.list(false)
-      if (scope !== supportRequestGeneration()) return
-      announcements.value = all.slice(0, 20)
-      enqueueNewPopups()
-    } catch (err: any) {
-      if (scope !== supportRequestGeneration()) return
-      // Revert throttle timestamp on failure so retry is allowed
-      lastFetchTime.value = 0
-      console.error('Failed to fetch announcements:', err)
-    } finally {
-      if (scope === supportRequestGeneration()) loading.value = false
-    }
-  }
+  // Internal bookkeeping kept out of the public store surface, like the Vue refs it replaces.
+  let lastFetchTime = 0
+  let popupQueue: UserAnnouncement[] = []
 
   function enqueueNewPopups() {
-    if (adminSupportContext.value) return
-    const newPopups = announcements.value.filter(
+    if (currentSupportContext()) return
+    const newPopups = get().announcements.filter(
       (a) => a.notify_mode === 'popup' && !a.read_at && !shownPopupIds.has(a.id)
     )
     if (newPopups.length === 0) return
 
     for (const p of newPopups) {
-      if (!popupQueue.value.some((q) => q.id === p.id)) {
-        popupQueue.value.push(p)
+      if (!popupQueue.some((q) => q.id === p.id)) {
+        popupQueue.push(p)
       }
     }
 
-    if (!currentPopup.value) {
+    if (!get().currentPopup) {
       showNextPopup()
     }
   }
 
   function showNextPopup() {
-    if (adminSupportContext.value || popupQueue.value.length === 0) {
-      currentPopup.value = null
+    if (currentSupportContext() || popupQueue.length === 0) {
+      set({ currentPopup: null })
       return
     }
-    currentPopup.value = popupQueue.value.shift()!
-    shownPopupIds.add(currentPopup.value.id)
+    const next = popupQueue.shift()!
+    shownPopupIds.add(next.id)
+    set({ currentPopup: next })
+  }
+
+  async function fetchAnnouncements(force = false) {
+    syncSupportContext()
+    const scope = supportRequestGeneration()
+    const now = Date.now()
+    if (!force && lastFetchTime > 0 && now - lastFetchTime < THROTTLE_MS) {
+      return
+    }
+
+    // Set immediately to prevent concurrent duplicate requests
+    lastFetchTime = now
+
+    try {
+      set({ loading: true })
+      const all = await announcementsAPI.list(false)
+      if (scope !== supportRequestGeneration()) return
+      set({ announcements: all.slice(0, 20) })
+      enqueueNewPopups()
+    } catch (err: any) {
+      if (scope !== supportRequestGeneration()) return
+      // Revert throttle timestamp on failure so retry is allowed
+      lastFetchTime = 0
+      console.error('Failed to fetch announcements:', err)
+    } finally {
+      if (scope === supportRequestGeneration()) set({ loading: false })
+    }
   }
 
   async function dismissPopup() {
-    if (!currentPopup.value) return
-    const id = currentPopup.value.id
-    currentPopup.value = null
+    syncSupportContext()
+    const popup = get().currentPopup
+    if (!popup) return
+    const id = popup.id
+    set({ currentPopup: null })
 
     // Mark as read (fire-and-forget, UI already updated)
-    if (!adminSupportContext.value) void markAsRead(id)
+    if (!currentSupportContext()) void markAsRead(id)
 
     // Show next popup after a short delay
-    if (popupQueue.value.length > 0) {
+    if (popupQueue.length > 0) {
       const scope = supportRequestGeneration()
       setTimeout(() => { if (scope === supportRequestGeneration()) showNextPopup() }, 300)
     }
   }
 
   async function markAsRead(id: number) {
-    if (adminSupportContext.value) return
+    if (currentSupportContext()) return
     try {
       await announcementsAPI.markRead(id)
-      const ann = announcements.value.find((a) => a.id === id)
-      if (ann) {
-        ann.read_at = new Date().toISOString()
-      }
+      set({
+        announcements: get().announcements.map((a) =>
+          a.id === id ? { ...a, read_at: new Date().toISOString() } : a
+        )
+      })
       return true
     } catch (err: any) {
       console.error('Failed to mark announcement as read:', err)
@@ -107,52 +115,62 @@ export const useAnnouncementStore = defineStore('announcements', () => {
   }
 
   async function markAllAsRead() {
-    if (adminSupportContext.value) return
-    const unread = announcements.value.filter((a) => !a.read_at)
+    if (currentSupportContext()) return
+    const unread = get().announcements.filter((a) => !a.read_at)
     if (unread.length === 0) return
 
     try {
-      loading.value = true
+      set({ loading: true })
+      const readAt = new Map<number, string>()
       const results = await Promise.allSettled(unread.map(async (a) => {
         await announcementsAPI.markRead(a.id)
-        a.read_at = new Date().toISOString()
+        readAt.set(a.id, new Date().toISOString())
       }))
+      set({
+        announcements: get().announcements.map((a) => {
+          const timestamp = readAt.get(a.id)
+          return timestamp ? { ...a, read_at: timestamp } : a
+        })
+      })
       const failure = results.find((result) => result.status === 'rejected')
       if (failure) throw failure.reason
     } catch (err: any) {
       console.error('Failed to mark all as read:', err)
       throw err
     } finally {
-      loading.value = false
+      set({ loading: false })
     }
   }
 
   function reset() {
-    announcements.value = []
-    lastFetchTime.value = 0
+    set({ announcements: [], loading: false, currentPopup: null })
+    lastFetchTime = 0
     shownPopupIds = new Set()
-    popupQueue.value = []
-    currentPopup.value = null
-    loading.value = false
+    popupQueue = []
   }
 
-  watch(adminSupportContext, (context) => {
+  // Replaces the Vue `watch(adminSupportContext, ...)`: entering assistance drops the
+  // previous user's announcements and refetches for the assisted user.
+  onSupportContextChange(() => {
     reset()
-    if (context) void fetchAnnouncements(true)
-  }, { flush: 'sync' })
+    if (currentSupportContext()) void fetchAnnouncements(true)
+  })
 
   return {
     // State
-    announcements,
-    loading,
-    currentPopup,
+    announcements: [],
+    loading: false,
+    currentPopup: null,
     // Getters
-    unreadCount,
+    unreadCount: () => get().announcements.filter((a) => !a.read_at).length,
     // Actions
     fetchAnnouncements,
     dismissPopup,
     markAsRead,
     markAllAsRead,
-    reset,
+    reset
   }
 })
+
+/** The Vue barrel exported this store as `useAnnouncementStore`. */
+export const useAnnouncementStore = useAnnouncementsStore
