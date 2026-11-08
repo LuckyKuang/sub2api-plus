@@ -189,11 +189,14 @@ it never follows cache symlinks or changes permissions in retained generations.
 On Windows the launcher initializes the WSL cache root and enumerates direct
 child paths without newline-valued command arguments, so cleanup also works
 on a fresh installation and across the Windows/WSL command boundary.
-The launcher cleans up automatically before each run and
-sweeps stopped project containers by the `sub2api-validation` label (a hard
-kill that `--rm` cannot reclaim is still removed); on macOS the cross-project
-Apple Builder cache stays under `deploy/APPLE_CONTAINER.md` manual guidance and
-is never touched. To reclaim everything at once, run
+The launcher cleans up stale validation images and caches before each run.
+On Docker it also sweeps stopped project containers by the
+`sub2api-validation` label, including those left by a hard kill that `--rm`
+could not reclaim. Apple Containers relies on `--rm`; after an interrupted
+run, inspect its containers and remove only leftover project validation
+containers. On macOS the cross-project Apple Builder cache stays under
+`deploy/APPLE_CONTAINER.md` manual guidance and is never touched. To reclaim
+validation images and caches, plus project containers on Docker, run
 `python3 skills/push-cli/scripts/push_cli.py clean --yes`; it is manual only,
 and it deletes the current generation, so the next validation rebuilds the
 toolchain and redownloads dependencies.
