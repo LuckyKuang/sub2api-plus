@@ -69,6 +69,10 @@ go test ./internal/service -run '^$' -bench '^BenchmarkOpenAIRequestPatches' -be
 
 ### 2026-11-03 实测
 
+以下数据与旧 lint 限制来自上游当日实验记录；其中宿主平台运行不代表 Plus
+验证方式。Plus 的当前工具链以 `.tool-versions` 为准，所有检查遵循
+[CONTRIBUTING.md](../CONTRIBUTING.md) 的容器要求。
+
 Go 1.27.3，每组 150ms × 3，单 CPU，中位数。Linux 使用支持 AVX2 的
 Xeon Skylake，并固定 CPU；Mac 使用 Apple M2。六次修改包含模型、reasoning、
 删除 previous_response_id、输出上限及 service_tier，输入主体是长文本。

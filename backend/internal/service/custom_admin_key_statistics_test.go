@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -197,6 +198,7 @@ type scopedQuotaParentDisappears struct {
 	AccountRepository
 	shadow, parent *Account
 	parentReads    int
+	unavailable    bool
 }
 
 func (r *scopedQuotaParentDisappears) GetByID(_ context.Context, id int64) (*Account, error) {
@@ -204,10 +206,10 @@ func (r *scopedQuotaParentDisappears) GetByID(_ context.Context, id int64) (*Acc
 		return r.shadow, nil
 	}
 	r.parentReads++
-	if r.parentReads == 1 {
-		return r.parent, nil
+	if r.unavailable {
+		return nil, fmt.Errorf("母账户读取失败")
 	}
-	return nil, fmt.Errorf("母账户读取失败")
+	return r.parent, nil
 }
 
 // Authorized operations retain the captured owner; a new operation must fail
@@ -220,14 +222,21 @@ func TestScopedAdminQuotaHeaderParentResolveFailureFailsClosed(t *testing.T) {
 	ctx := scopedStatisticsServiceContext("openai.quota.read")
 	operation, err := svc.prepareUpstreamCall(ctx, 1)
 	require.NoError(t, err)
+	readsAtCapture := repo.parentReads
+	repo.unavailable = true
 	headers, _, err := svc.buildCodexQuotaHeaders(ctx, operation)
 	require.NoError(t, err)
-	require.Equal(t, "Bearer authorized-token", headers["authorization"])
-	require.Equal(t, "authorized-id", headers["chatgpt-account-id"])
-	require.Equal(t, 1, repo.parentReads, "headers must reuse the authorized snapshot")
+	requestHeaders := make(http.Header)
+	for name, value := range headers {
+		requestHeaders.Set(name, value)
+	}
+	require.Equal(t, "Bearer authorized-token", requestHeaders.Get("Authorization"))
+	require.Equal(t, "authorized-id", requestHeaders.Get("Chatgpt-Account-Id"))
+	require.Equal(t, readsAtCapture, repo.parentReads, "headers must reuse the authorized snapshot even after parent disappearance")
 	operation, err = svc.prepareUpstreamCall(ctx, 1)
 	require.Nil(t, operation)
-	require.Equal(t, 502, infraerrors.Code(err))
+	// New scoped operations hide a missing/inaccessible parent at admission.
+	require.Equal(t, 404, infraerrors.Code(err))
 }
 
 type scopedUsageRoundTripper func(*http.Request) (*http.Response, error)
@@ -252,15 +261,17 @@ func TestScopedAdminOpenAIUsageRefreshNeverGeneratesModelRequests(t *testing.T) 
 				a.ParentAccountID = &parentID
 				a.QuotaDimension = QuotaDimensionSpark
 			}
-			updates := make(chan map[string]any, 1)
+			// A quota query may persist its observation before the display refresh
+			// writes its own owner-checked snapshot. Retain both without blocking.
+			updates := make(chan map[string]any, 8)
 			repo := &sparkShadowUsageTestRepo{accounts: map[int64]*Account{1: a, 2: parent}, updateExtraCh: updates}
-			var quotaCalls, nonReadCalls int
+			var quotaCalls, nonReadCalls atomic.Int64
 			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.Method != "GET" {
-					nonReadCalls++
+					nonReadCalls.Add(1)
 				}
 				if strings.HasSuffix(r.URL.Path, "/usage") {
-					quotaCalls++
+					quotaCalls.Add(1)
 				}
 				w.Header().Set("Content-Type", "application/json")
 				if !strings.HasSuffix(r.URL.Path, "/usage") {
@@ -275,9 +286,9 @@ func TestScopedAdminOpenAIUsageRefreshNeverGeneratesModelRequests(t *testing.T) 
 			require.NoError(t, err)
 			previous := client.Transport
 			defer func() { client.Transport = previous }()
-			modelCalls := 0
+			var modelCalls atomic.Int64
 			client.Transport = scopedUsageRoundTripper(func(r *http.Request) (*http.Response, error) {
-				modelCalls++
+				modelCalls.Add(1)
 				headers := make(http.Header)
 				headers.Set("x-codex-primary-used-percent", "98")
 				headers.Set("x-codex-primary-window-minutes", "300")
@@ -294,17 +305,19 @@ func TestScopedAdminOpenAIUsageRefreshNeverGeneratesModelRequests(t *testing.T) 
 			}
 			usage, err := svc.GetUsageForAccount(ctx, a, true)
 			require.NoError(t, err)
-			require.Equal(t, tc.wantModel, modelCalls, "读取额度不能合成模型消费请求")
+			require.EqualValues(t, tc.wantModel, modelCalls.Load(), "读取额度不能合成模型消费请求")
 			if tc.restricted {
-				require.Equal(t, 1, quotaCalls)
-				require.Zero(t, nonReadCalls)
+				require.EqualValues(t, 1, quotaCalls.Load())
+				require.Zero(t, nonReadCalls.Load())
 			} else {
-				require.Zero(t, quotaCalls)
+				require.Zero(t, quotaCalls.Load())
 			}
 			require.NotNil(t, usage.FiveHour)
 			require.Equal(t, tc.wantUsage, usage.FiveHour.Utilization)
 			select {
-			case <-updates:
+			case saved := <-updates:
+				require.Equal(t, tc.wantUsage, saved["codex_5h_used_percent"])
+				require.NotEmpty(t, saved[OpenAICodexUsageOwnerGenerationExtraKey])
 			case <-time.After(time.Second):
 				t.Fatal("展示快照未写入")
 			}
