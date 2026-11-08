@@ -295,11 +295,12 @@ validation container with explicit disposable PostgreSQL/Redis settings and
 `SUB2API_E2E_ISOLATED=1`. Its runner requires all fourteen browser scenarios to
 execute successfully; missing/skipped cases fail. The ordinary frontend gate
 checks React/API lifecycle regressions and does not claim browser execution.
-For shared styling, dialog and dropdown changes, run
-`pnpm --dir frontend run test:layout` in the validation container as well. This
-independent [component layout suite](frontend/layout-tests/README.md) uses real
-Chromium geometry and hit testing without backend accounts or services; it does
-not replace the management business suite.
+Shared styling, dialog and dropdown geometry is currently covered only by the
+stylesheet contract suite in `frontend/src/styles/__tests__`, which asserts the
+CSS contract in jsdom. The independent real-Chromium component layout suite that
+used to live in `frontend/layout-tests` has not been ported to the React
+components; until it is, geometry and hit-target regressions are not covered by
+an automated gate and need manual verification in the browser.
 Authorization regressions must use redacted account DTOs and the initiating
 `oauth_credential_owner`, include both owner-replacement isolation and unchanged
 owner success controls, and retain pending grants across unrelated observation

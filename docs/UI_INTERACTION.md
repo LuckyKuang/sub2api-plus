@@ -267,15 +267,19 @@ Footer actions, including existing inner flex groups, wrap within the panel.
 The body owns scrolling and can shrink between the header and footer, keeping
 the final form fields and footer actions reachable in narrow or short windows.
 Visual changes must preserve these layout boundaries and must not introduce
-global clipping or stacking contexts on shared cards. The independent
-`pnpm --dir frontend run test:layout` suite exercises real shared components and
-production CSS in container Chromium, checking viewport bounds and hit targets
-for menus, date panels and dialog actions without requiring backend credentials.
+global clipping or stacking contexts on shared cards. The
+stylesheet contract suite exercises the production CSS contract in jsdom,
+checking viewport bounds and hit targets for menus, date panels and dialog
+actions without requiring backend credentials.
 It also covers translated tabs, segmented options, horizontal row actions,
 error/disabled selection triggers and long form actions at opaque, reference
 and fully transparent fills in both themes. Administrator regressions also
 check unchanged outer horizontal geometry, independent control/table/footer
 surfaces, left-aligned responsive record fields and accessible wrapped actions.
+That real-Chromium layout suite has not been ported to the React components yet;
+the stylesheet contract suite in `frontend/src/styles/__tests__` currently covers
+the CSS side only, so geometry and hit-target changes still need manual browser
+verification.
 Page Vitest suites cover settings navigation/save behavior, dashboard and usage
 requests, order filters and operations, and operations workspace transitions;
 DOM-only tests do not establish browser geometry. Deployment browser checks use
