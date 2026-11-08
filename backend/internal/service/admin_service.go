@@ -19,7 +19,9 @@ type AdminService interface {
 	CreateUser(ctx context.Context, input *CreateUserInput) (*User, error)
 	UpdateUser(ctx context.Context, id int64, input *UpdateUserInput) (*User, error)
 	DeleteUser(ctx context.Context, id int64) error
-	UpdateUserBalance(ctx context.Context, userID int64, balance float64, operation string, notes string) (*User, error)
+	// allowNegative is only valid with operation "subtract"; it permits the
+	// resulting balance to go below zero.
+	UpdateUserBalance(ctx context.Context, userID int64, balance float64, operation string, notes string, allowNegative bool) (*User, error)
 	// BumpFederationUsageWatermark advances federation_usage_watermark_seq to
 	// max(current, usageSeq). Pure data recording (see
 	// openspec/changes/federation-balance-sync/) -- no balance mutation, no

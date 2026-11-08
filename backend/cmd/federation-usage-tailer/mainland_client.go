@@ -60,6 +60,10 @@ func (c *mainlandClient) subtractBalance(ctx context.Context, idempotencyKey str
 		"balance":   cost,
 		"operation": "subtract",
 		"notes":     notes,
+		// Usage has already been served overseas, so it is always billed even
+		// when it takes the mainland balance negative; refusing it would block
+		// the strictly ordered cursor for every user.
+		"allow_negative": true,
 	})
 	_, err := c.api.AuthedDo(ctx, http.MethodPost,
 		fmt.Sprintf("/api/v1/admin/users/%d/balance", mainlandUserID), body, idempotencyKey)

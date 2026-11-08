@@ -79,7 +79,10 @@ func (t *tailer) deliverOne(ctx context.Context, row *dbent.UsageLog) error {
 		return nil
 	}
 
-	idempotencyKey := fmt.Sprintf("federation-usage-%d", row.ID)
+	// The "-od" suffix marks the overdraft-capable request body. Mainland
+	// fingerprints the payload per key, so reusing the old key for a row that
+	// was refused before allow_negative existed would be a key conflict.
+	idempotencyKey := fmt.Sprintf("federation-usage-%d-od", row.ID)
 	notes := fmt.Sprintf("federation usage_log id=%d", row.ID)
 	if err := t.mainland.subtractBalance(ctx, idempotencyKey, mainlandID, row.ActualCost, notes); err != nil {
 		return err

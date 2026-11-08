@@ -398,6 +398,37 @@ func TestTailer_SkipsLocalOnlyUserWithoutBlocking(t *testing.T) {
 	require.Nil(t, cursor.LastError)
 }
 
+// Served usage must always be billed, even past zero: the subtract asks
+// mainland to allow overdraft and uses the overdraft-specific key.
+func TestTailer_SubtractAllowsOverdraft(t *testing.T) {
+	ctx := context.Background()
+	client := newTailerTestClient(t)
+	u := insertLocalUser(t, ctx, client, "tailer-overdraft@example.com")
+	accountID, apiKeyID := insertUsageFixtures(t, ctx, client, u.ID)
+	row := insertUsageLog(t, ctx, client, u.ID, accountID, apiKeyID, 7.21)
+
+	var body map[string]any
+	var key string
+	mux := mainlandMux(t, "tailer-overdraft@example.com", 14, func(w http.ResponseWriter, r *http.Request) {
+		key = r.Header.Get("Idempotency-Key")
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		jsonOK(w, map[string]any{"message": "ok"})
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	tl := newTestTailer(t, client, server.URL)
+	require.NoError(t, tl.runOnce(ctx))
+
+	require.Equal(t, "subtract", body["operation"])
+	require.Equal(t, true, body["allow_negative"])
+	require.InDelta(t, 7.21, body["balance"], 1e-9)
+	require.Equal(t, fmt.Sprintf("federation-usage-%d-od", row.ID), key)
+	cursor, err := tl.loadOrCreateCursor(ctx)
+	require.NoError(t, err)
+	require.Equal(t, row.ID, cursor.LastDeliveredID)
+}
+
 // Admin balances are shared with mainland, so admin usage is billed like anyone's.
 func TestTailer_BillsAdminUsage(t *testing.T) {
 	ctx := context.Background()
