@@ -3,6 +3,8 @@
 package service
 
 import (
+	"os"
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -73,40 +75,44 @@ func TestOpenAIResponsesOrphanPrecheck(t *testing.T) {
 }
 
 func TestOpenAIResponsesOrphanPrecheckPreservesSanitizer(t *testing.T) {
-	for _, body := range []string{
-		`{"input":[{"type":"function_call_output","name":"delegate","namespace":"codex_app","output":"task"}]}`,
-		`{"input":[{"type":"function_call_output","call_id":"fc_1","output":"ok"},{"type":"function_call","call_id":" ","id":"fc_1"}]}`,
-		`{"input":[{"type":"tool_search_output","call_id":"ref_1"},{"type":"item_reference","id":"ref_1"}]}`,
-		`{"input":[{"type":"message","type":"function_call_output","call_id":"missing"}]}`,
-		`{"input":[{"type":"function_call_output","type":"message","content":"keep"}]}`,
-		`{"previous_response_id":"resp_1","previous_response_id":null,"input":[{"type":"function_call_output"}]}`,
-		`{"previous_response_id":null,"previous_response_id":"resp_1","input":[{"type":"function_call_output"}]}`,
-		`{"input":[],"input":[{"type":"function_call_output"}]}`,
-		`{"input":[{"type":"function_call_output"}],"input":null}`,
-		`{"inpu\u0074":[{"ty\u0070e":"function_call_\u006futput"}],"vendor":{"count":9007199254740993}}`,
-		`{"input":[{"type":"message","content":"unchanged"}],"vendor":{"count":9007199254740993}}`,
+	// Named outputs and call/reference pairs survive; unmatched outputs are
+	// removed. JSON duplicate keys follow last-key semantics. Vendor numbers
+	// retain precision, and Plus WS normalization always requests encrypted
+	// reasoning content. Expected payloads are explicit protocol examples.
+	for _, tc := range []struct {
+		body, want string
+		changed    bool
+	}{
+		{`{"input":[{"type":"function_call_output","name":"delegate","namespace":"codex_app","output":"task"}]}`, `{"input":[{"type":"function_call_output","name":"delegate","namespace":"codex_app","output":"task"}]}`, false},
+		{`{"input":[{"type":"function_call_output","call_id":"fc_1","output":"ok"},{"type":"function_call","call_id":" ","id":"fc_1"}]}`, `{"input":[{"type":"function_call_output","call_id":"fc_1","output":"ok"},{"type":"function_call","call_id":" ","id":"fc_1"}]}`, false},
+		{`{"input":[{"type":"tool_search_output","call_id":"ref_1"},{"type":"item_reference","id":"ref_1"}]}`, `{"input":[{"type":"tool_search_output","call_id":"ref_1"},{"type":"item_reference","id":"ref_1"}]}`, false},
+		{`{"input":[{"type":"message","type":"function_call_output","call_id":"missing"}]}`, `{"input":[]}`, true},
+		{`{"input":[{"type":"function_call_output","type":"message","content":"keep"}]}`, `{"input":[{"type":"message","content":"keep"}]}`, false},
+		{`{"previous_response_id":"resp_1","previous_response_id":null,"input":[{"type":"function_call_output"}]}`, `{"previous_response_id":null,"input":[]}`, true},
+		{`{"previous_response_id":null,"previous_response_id":"resp_1","input":[{"type":"function_call_output"}]}`, `{"previous_response_id":"resp_1","input":[{"type":"function_call_output"}]}`, false},
+		{`{"input":[],"input":[{"type":"function_call_output"}]}`, `{"input":[]}`, true},
+		{`{"input":[{"type":"function_call_output"}],"input":null}`, `{"input":null}`, false},
+		{`{"inpu\u0074":[{"ty\u0070e":"function_call_\u006futput"}],"vendor":{"count":9007199254740993}}`, `{"input":[],"vendor":{"count":9007199254740993}}`, true},
+		{`{"input":[{"type":"message","content":"unchanged"}],"vendor":{"count":9007199254740993}}`, `{"input":[{"type":"message","content":"unchanged"}],"vendor":{"count":9007199254740993}}`, false},
 	} {
-		t.Run(body, func(t *testing.T) {
+		t.Run(tc.body, func(t *testing.T) {
 			var expected, actual map[string]any
-			require.NoError(t, decodeOpenAIJSONUseNumber([]byte(body), &expected))
-			require.NoError(t, decodeOpenAIJSONUseNumber([]byte(body), &actual))
-			apply := func(request map[string]any) bool {
-				input, _ := request["input"].([]any)
-				return sanitizeOpenAIResponsesOrphanToolOutputs(request, input, firstNonEmptyString(request["previous_response_id"]) != "")
-			}
-			wantChanged := apply(expected)
+			require.NoError(t, decodeOpenAIJSONUseNumber([]byte(tc.want), &expected))
+			require.NoError(t, decodeOpenAIJSONUseNumber([]byte(tc.body), &actual))
 			gotChanged := false
-			if openAIResponsesInputMayNeedOrphanCleanup([]byte(body)) {
-				gotChanged = apply(actual)
+			if openAIResponsesInputMayNeedOrphanCleanup([]byte(tc.body)) {
+				input, _ := actual["input"].([]any)
+				gotChanged = sanitizeOpenAIResponsesOrphanToolOutputs(actual, input, firstNonEmptyString(actual["previous_response_id"]) != "")
 			}
-			require.Equal(t, wantChanged, gotChanged)
+			require.Equal(t, tc.changed, gotChanged)
 			require.Equal(t, expected, actual)
 
 			account := &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth}
-			normalized, _, err := normalizeOpenAIResponsesWebSocketCompatibilityBody([]byte(body), account, false)
+			normalized, _, err := normalizeOpenAIResponsesWebSocketCompatibilityBody([]byte(tc.body), account, false)
 			require.NoError(t, err)
 			var integrated map[string]any
 			require.NoError(t, decodeOpenAIJSONUseNumber(normalized, &integrated))
+			expected["include"] = []any{"reasoning.encrypted_content"}
 			require.Equal(t, expected, integrated)
 		})
 	}
@@ -128,6 +134,16 @@ func TestOpenAIResponsesOrphanPrecheckCompatibilityErrors(t *testing.T) {
 }
 
 func TestOpenAIResponsesOrphanPrecheckLargeEscapedContent(t *testing.T) {
+	// AllocsPerRun samples process-wide counters. Isolate this strict zero-
+	// allocation contract from background service workers started by other tests.
+	const allocationChild = "SUB2API_ORPHAN_ALLOCATION_CHILD"
+	if os.Getenv(allocationChild) != "1" {
+		child := exec.Command(os.Args[0], "-test.run=^TestOpenAIResponsesOrphanPrecheckLargeEscapedContent$")
+		child.Env = append(os.Environ(), allocationChild+"=1")
+		output, err := child.CombinedOutput()
+		require.NoError(t, err, "%s", output)
+		return
+	}
 	body := []byte(`{"vendor":"` + strings.Repeat(`\n\"`, 1<<16) + `","input":[{"content":"` + strings.Repeat(`\n\"`, 1<<16) + `","type":"message"}]}`)
 	require.False(t, openAIResponsesInputMayNeedOrphanCleanup(body))
 	allocations := testing.AllocsPerRun(5, func() {

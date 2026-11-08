@@ -37,6 +37,7 @@ func TestGPT61TerraMessagesForwardBoundary(t *testing.T) {
 				{name: "suffix max", requested: "openai/GPT-6.1-Terra-max", wantEffort: "max"},
 				{name: "explicit effort overrides max suffix", requested: "openai/GPT-6.1-Terra-max", preference: `,"output_config":{"effort":"high"}`, wantEffort: "high"},
 				{name: "saved mapping with explicit max", requested: "my-terra", preference: `,"output_config":{"effort":"max"}`, wantEffort: "max"},
+				{name: "disabled thinking overrides explicit max", requested: "openai/GPT-6.1-Terra-max", preference: `,"thinking":{"type":"disabled"},"output_config":{"effort":"max"}`, wantEffort: "none"},
 			} {
 				t.Run(accountType+"/"+identity.name+"/"+tc.name, func(t *testing.T) {
 					body := []byte(fmt.Sprintf(`{"model":%q,"max_tokens":32,"messages":[{"role":"user","content":"hello"}],"stream":false%s}`, tc.requested, tc.preference))
@@ -83,15 +84,14 @@ func TestGPT61TerraMessagesForwardBoundary(t *testing.T) {
 	}
 }
 
-// Disabled thinking is rejected by the existing local GPT-6.1 compatibility
-// policy. This regression asserts the local boundary, not a universal provider
-// API restriction inferred from the official model catalog.
-func TestGPT61TerraMessagesDisabledThinkingStopsBeforeUpstream(t *testing.T) {
+// The official Terra API effort scale accepts none but excludes minimal:
+// https://developers.openai.com/api/docs/models/gpt-6.1-terra
+func TestGPT61TerraMessagesMinimalEffortStopsBeforeUpstream(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	for _, accountType := range []string{AccountTypeOAuth, AccountTypeAPIKey} {
 		for _, requested := range []string{"openai/GPT-6.1-Terra-max", "my-terra"} {
 			t.Run(accountType+"/"+requested, func(t *testing.T) {
-				body := []byte(fmt.Sprintf(`{"model":%q,"max_tokens":32,"messages":[{"role":"user","content":"hello"}],"thinking":{"type":"disabled"},"output_config":{"effort":"max"},"stream":false}`, requested))
+				body := []byte(fmt.Sprintf(`{"model":%q,"max_tokens":32,"messages":[{"role":"user","content":"hello"}],"output_config":{"effort":"minimal"},"stream":false}`, requested))
 				c, rec := terraMessagesBoundaryContext(body)
 				account := terraMessagesBoundaryAccount(accountType, requested)
 				before := cloneRequestCredentialMap(account.Credentials)
@@ -105,7 +105,7 @@ func TestGPT61TerraMessagesDisabledThinkingStopsBeforeUpstream(t *testing.T) {
 				require.Equal(t, before, account.Credentials)
 				require.Equal(t, http.StatusBadRequest, rec.Code)
 				require.Equal(t, "invalid_request_error", gjson.Get(rec.Body.String(), "error.type").String())
-				require.Contains(t, gjson.Get(rec.Body.String(), "error.message").String(), `reasoning effort "none"`)
+				require.Contains(t, gjson.Get(rec.Body.String(), "error.message").String(), `reasoning effort "minimal"`)
 			})
 		}
 	}

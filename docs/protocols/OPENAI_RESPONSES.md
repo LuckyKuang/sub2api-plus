@@ -1204,7 +1204,9 @@ terminal responses. The WS HTTP bridge resolves fingerprints from the same Plus
 credential-owner snapshot as HTTP and retries; inbound headers cannot select identity.
 
 Image accounts may restrict eligible 1K/2K/4K tiers. Spillover selection preserves
-the binding that existed before the first size pass. Native GPT Image 2.6, SVG,
+the binding that existed before the first size pass. An unspecified size retains
+each Plus scheduler's existing selection policy: legacy priority/load selection
+and advanced response-ID affinity remain distinct. Native GPT Image 2.6, SVG,
 markup and animation controls cannot silently fall back to a Responses path
 that discards them. Ingress audit still precedes account selection and writes.
 Active API-key image probes omit `response_format`: GPT Image models always
@@ -1212,3 +1214,7 @@ return base64 and do not support that legacy parameter, per the
 [official Images API](https://developers.openai.com/api/reference/resources/images/methods/generate).
 Transport-error cooldown remains enabled unless
 `gateway.disable_openai_transport_error_cooldown` is explicitly true.
+Native Anthropic-to-Chat/Responses conversion preserves the original read-limit
+or cancellation error in the returned error chain, including buffered responses.
+Already observed usage remains available as incomplete usage; failed streams
+cannot synthesize a successful terminal response.

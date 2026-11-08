@@ -312,6 +312,9 @@ func (s *OpenAIGatewayService) handleResponsesBufferedFromNativeAnthropic(
 
 	if finalResp != nil && (!sawMessageStop || sawStreamError) {
 		writeResponsesError(c, http.StatusBadGateway, "server_error", "Upstream stream ended without a complete response")
+		if streamStatus.readErr != nil && !errors.Is(streamStatus.readErr, io.EOF) {
+			return partialResult(), fmt.Errorf("upstream anthropic stream incomplete: %w", streamStatus.readErr)
+		}
 		return partialResult(), fmt.Errorf("upstream anthropic stream incomplete")
 	}
 	if finalResp == nil {
@@ -603,6 +606,9 @@ func (s *OpenAIGatewayService) handleResponsesStreamingFromNativeAnthropic(
 			message = "Upstream stream error"
 		}
 		writeIncomplete(message)
+		if streamStatus.readErr != nil && !errors.Is(streamStatus.readErr, io.EOF) {
+			return resultWithUsage(), fmt.Errorf("upstream anthropic stream error: incomplete response: %w", streamStatus.readErr)
+		}
 		return resultWithUsage(), fmt.Errorf("upstream anthropic stream error: incomplete response")
 	}
 	// Finalize state machine（客户端已断开时仍推进，保证 usage 汇总完整；仅在

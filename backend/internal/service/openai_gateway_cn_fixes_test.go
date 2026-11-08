@@ -413,7 +413,7 @@ func TestHandle403_CNProviderConcurrencyLimitAlwaysUsesTemporaryCooldown(t *test
 }
 
 func TestHandle403_KimiConcurrencyLimitRepositoryFailureDoesNotBlockUnprovenGeneration(t *testing.T) {
-	repo := &rateLimitAccountRepoStub{tempErr: errors.New("repository unavailable")}
+	repo := &rateLimitAccountRepoStub{rateLimitedErr: errors.New("repository unavailable")}
 	counter := &openAI403CounterCacheStub{counts: []int64{openAI403DisableThreshold}}
 	blocker := &runtimeBlockRecorder{}
 	service := NewRateLimitService(repo, nil, &config.Config{}, nil, nil)

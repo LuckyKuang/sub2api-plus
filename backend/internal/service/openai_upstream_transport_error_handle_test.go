@@ -90,7 +90,7 @@ func TestHandleOpenAIUpstreamTransportError_DNSCooldownConfig(t *testing.T) {
 					require.Equal(t, account.ID, events[0].AccountID)
 					require.Equal(t, account.Name, events[0].AccountName)
 					require.Equal(t, PlatformOpenAI, events[0].Platform)
-					require.Equal(t, "request_error", events[0].Kind)
+					require.Equal(t, "transport_error", events[0].Kind)
 					require.Zero(t, events[0].UpstreamStatusCode)
 					require.Equal(t, passthrough, events[0].Passthrough)
 					require.Contains(t, events[0].Message, "no such host")

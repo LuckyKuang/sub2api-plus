@@ -484,8 +484,11 @@ func TestSelectAccountWithScheduler_PreviousResponseAccountUnderSizeRouting(t *t
 			svc := newOpenAIImageSizeSchedulerTestService(mode, accounts, nil, schedulerTestConcurrencyCache{})
 			require.NoError(t, svc.getOpenAIWSStateStore().BindResponseAccount(context.Background(), groupID, "resp_image_size", 81102, time.Hour))
 
-			selectWithSize := func(size string) int64 {
-				ctx := WithOpenAIImageSizeRouting(context.Background(), size)
+			selectWithSize := func(size string, routed bool) int64 {
+				ctx := context.Background()
+				if routed {
+					ctx = WithOpenAIImageSizeRouting(ctx, size)
+				}
 				selection, _, err := svc.SelectAccountWithScheduler(ctx, &groupID, "resp_image_size", "", "gpt-5.4", nil, OpenAIUpstreamTransportAny, false)
 				require.NoError(t, err)
 				if selection.ReleaseFunc != nil {
@@ -493,8 +496,16 @@ func TestSelectAccountWithScheduler_PreviousResponseAccountUnderSizeRouting(t *t
 				}
 				return selection.Account.ID
 			}
-			require.Equal(t, int64(81102), selectWithSize(""), "unspecified size keeps the previous_response account")
-			require.Equal(t, int64(81101), selectWithSize("3840x2160"), "explicit 4K leaves a 1K/2K-only previous_response account")
+			// Plus retains its legacy priority/load scheduler. Only the advanced
+			// scheduler uses response-id affinity; adding a size preference must
+			// preserve each scheduler's policy when no size is specified.
+			wantDefault := int64(81101)
+			if mode.advanced {
+				wantDefault = 81102
+			}
+			require.Equal(t, wantDefault, selectWithSize("", false), "existing Plus scheduler policy")
+			require.Equal(t, wantDefault, selectWithSize("", true), "unspecified size preserves the existing scheduler policy")
+			require.Equal(t, int64(81101), selectWithSize("3840x2160", true), "explicit 4K excludes a 1K/2K-only account")
 		})
 	}
 }
