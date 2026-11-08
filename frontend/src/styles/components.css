@@ -821,3 +821,24 @@
   .ops-workspace-toolbar .ops-toolbar-controls > button:first-of-type { margin-left: auto; }
   .ops-workspace-toolbar .ops-toolbar-controls .select-trigger { min-height: 36px; padding-block: 7px; }
 }
+
+/* ==========================================================================
+   DocumentTitleTooltip
+   Ported from the Vue TitleTooltip scoped styles.
+   ========================================================================== */
+
+.title-tooltip {
+  position: fixed;
+  z-index: 100000030;
+  pointer-events: none;
+  width: max-content;
+  max-width: min(360px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  overflow: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--surface-edge);
+  padding: 12px 16px;
+  font-size: 12px;
+  line-height: 1.5;
+}
