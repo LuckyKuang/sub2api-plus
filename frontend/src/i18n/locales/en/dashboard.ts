@@ -142,6 +142,10 @@ export default {
     keyDisabledSuccess: 'API key disabled successfully',
     failedToLoad: 'Failed to load API keys',
     failedToSave: 'Failed to save API key',
+    errors: {
+      API_KEY_COUNT_EXCEEDED: 'API key count limit reached. Delete unused keys before creating another.',
+      API_KEY_CREATE_RATE_LIMITED: 'Too many API keys created recently. Please try again later.'
+    },
     failedToDelete: 'Failed to delete API key',
     failedToUpdateStatus: 'Failed to update API key status',
     clickToChangeGroup: 'Click to change group',
