@@ -69,6 +69,14 @@ func (s *OpenAIQuotaService) prepareReferralOperation(ctx context.Context, id in
 	if account == nil {
 		return nil, ErrAccountNotFound
 	}
+	action := scopedAccountOperation(ctx, "openai.referrals.read")
+	if sending {
+		action = "openai.referrals.invite"
+	}
+	if err := scopedAccountAccess(ctx, s.accountRepo, account, action, !sending); err != nil {
+		return nil, err
+	}
+	ctx = WithScopedAdminAccountOperation(ctx, action)
 	if account.Platform != PlatformOpenAI || account.Type != AccountTypeOAuth {
 		return nil, infraerrors.New(http.StatusBadRequest, "OPENAI_REFERRAL_INVALID_ACCOUNT", "referrals require an OpenAI OAuth account")
 	}
@@ -99,6 +107,7 @@ func (s *OpenAIQuotaService) referralCall(operation *openAIQuotaOperation) (Open
 }
 
 func (s *OpenAIQuotaService) QueryReferralEligibility(ctx context.Context, id int64) (*OpenAIReferralEligibility, error) {
+	ctx = WithScopedAdminAccountOperation(ctx, scopedAccountOperation(ctx, "openai.referrals.read"))
 	operation, err := s.prepareReferralOperation(ctx, id, false)
 	if err != nil {
 		return nil, err
@@ -128,6 +137,9 @@ func (s *OpenAIQuotaService) queryReferralEligibility(ctx context.Context, opera
 }
 
 func (s *OpenAIQuotaService) CacheReferralSnapshot(ctx context.Context, id int64, eligibility *OpenAIReferralEligibility) error {
+	if err := scopedAccountIDAccess(ctx, s.accountRepo, id, scopedAccountOperation(ctx, "openai.referrals.read"), true); err != nil {
+		return err
+	}
 	if eligibility == nil {
 		return infraerrors.New(http.StatusBadGateway, "OPENAI_REFERRAL_INVALID_RESPONSE", "invalid invitation eligibility response")
 	}
@@ -154,6 +166,7 @@ type OpenAIReferralSendResult struct {
 }
 
 func (s *OpenAIQuotaService) SendReferralInvite(ctx context.Context, id int64, input OpenAIReferralSendRequest) (*OpenAIReferralSendResult, error) {
+	ctx = WithScopedAdminAccountOperation(ctx, "openai.referrals.invite")
 	email := strings.TrimSpace(input.Email)
 	address, err := mail.ParseAddress(email)
 	if err != nil || address.Address != email || len(email) > 254 || strings.ContainsAny(email, "\r\n") {

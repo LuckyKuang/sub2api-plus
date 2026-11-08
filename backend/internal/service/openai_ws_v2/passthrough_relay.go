@@ -859,6 +859,7 @@ func observeUpstreamMessage(
 	if responseID != "" {
 		turnTiming = openAIWSRelayGetOrInitTurnTiming(state, responseID, now)
 	} else {
+		// delta 等 token 事件不携带 response.id，归属当前活跃 turn。
 		turnTiming = state.activeTurn
 	}
 	if turnTiming != nil && responseID != "" && turnTiming.firstByteMs == nil {

@@ -311,3 +311,16 @@ and [`official-glm-model-id.ts`](https://github.com/zai-org/ZCode/blob/3c5b22764
 Its independent balance GET carries the trusted `app_version` and linked JWT,
 with ZCode control identity and the same owner's strict proxy. It never issues
 or substitutes a coding project PAT. See [ZHIPU.md](providers/ZHIPU.md).
+
+## November 8 v0.2.20 import review
+
+The [Terra API model page](https://developers.openai.com/api/docs/models/gpt-6.1-terra)
+and [GPT-6 migration guide](https://developers.openai.com/api/docs/guides/latest-model#gpt-6-astra-gpt-61-terra)
+now independently establish API efforts `none`, `low`, `medium` (default),
+`high`, `xhigh`, `max`, and Responses-only tool calling. This supersedes the
+October 28 deferral of the Terra Chat tool restriction and the shared Sol/Terra
+rejection of `none`. `minimal` remains invalid. Codex retains its separately
+reviewed 500,000 default window and low-through-ultra catalog; an API fact does
+not rewrite that client descriptor or change its identity/version selection.
+The gateway adopts the API distinction with actual compatibility-path regressions
+in `openai_gpt61_terra_test.go` and `pkg/openai/constants_test.go`.

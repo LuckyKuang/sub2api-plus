@@ -23,6 +23,15 @@ func NormalizeCodexAutomationBootstrap(body []byte) ([]byte, bool) {
 }
 
 func normalizeCodexCallOutputBootstrap(body []byte, isCandidate func(map[string]any) bool, allowHistoricalContext bool) ([]byte, bool) {
+	// A bootstrap needs a call-output item and one of the supported tool names.
+	// Escaped JSON strings must fall through to the semantic decoder.
+	if !bytes.ContainsRune(body, '\\') &&
+		(!bytes.Contains(body, []byte(`"function_call_output"`)) ||
+			(!bytes.Contains(body, []byte(`"automation_update"`)) &&
+				!bytes.Contains(body, []byte(`"create_thread"`)) &&
+				!bytes.Contains(body, []byte(`"send_message_to_thread"`)))) {
+		return body, false
+	}
 	if !hasUniqueJSONMembers(body) {
 		return body, false
 	}

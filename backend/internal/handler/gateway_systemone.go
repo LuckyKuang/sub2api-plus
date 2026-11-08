@@ -56,11 +56,11 @@ func (h *GatewayHandler) SystemOne(c *gin.Context) {
 
 	body, err := readLenientJSONRequestBodyWithPrealloc(c.Request, h.cfg)
 	if err != nil {
-		if maxErr, ok := extractMaxBytesError(err); ok {
-			h.errorResponse(c, http.StatusRequestEntityTooLarge, "invalid_request_error", buildBodyTooLargeMessage(maxErr.Limit))
+		if handleRequestBodyReadError(c, reqLog, err) {
 			return
 		}
-		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "Failed to read request body")
+		status, message := requestBodyReadFailure(reqLog, c.Request, err)
+		h.errorResponse(c, status, "invalid_request_error", message)
 		return
 	}
 	model, err := typesafe.ValidateSystemOneRequest(body)
@@ -284,9 +284,10 @@ func (h *GatewayHandler) recordSystemOneUsage(c *gin.Context, apiKey *service.AP
 // Gin context is still valid. ChannelUsageFields is computed here so a delayed
 // worker cannot observe another request's context, mapping or model.
 func (h *GatewayHandler) systemOneUsageRecordInput(c *gin.Context, apiKey *service.APIKey, account *service.Account, subscription *service.UserSubscription, mapping service.ChannelMappingResult, model string, body []byte, result *service.SystemOneForwardResult, pricingAt time.Time) *service.RecordUsageInput {
+	forwardResult := result.ForwardResult
 	return &service.RecordUsageInput{
 		PricingSnapshot:    service.BillingPricingSnapshotFromContext(c.Request.Context()),
-		Result:             &result.ForwardResult,
+		Result:             &forwardResult,
 		APIKey:             apiKey,
 		User:               apiKey.User,
 		Account:            account,

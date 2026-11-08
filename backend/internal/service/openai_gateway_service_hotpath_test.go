@@ -70,7 +70,7 @@ func TestOpenAIRequestView_ApplyPatches(t *testing.T) {
 	view.MarkPatchDelete("previous_response_id")
 	view.MarkPatchSet("reasoning.effort", "none")
 
-	patched, err := view.ApplyPatches()
+	patched, err := view.ApplyPatches(context.Background())
 	require.NoError(t, err)
 	require.JSONEq(t, `{"model":"gpt-5.1","reasoning":{"effort":"none"},"input":[{"type":"message","content":"hi"}]}`, string(patched))
 }
@@ -80,7 +80,7 @@ func TestOpenAIRequestView_RejectsEscapedPatchPath(t *testing.T) {
 	view.MarkPatchSet(`metadata.user\.id`, "new")
 
 	require.False(t, view.HasPatches())
-	_, err := view.ApplyPatches()
+	_, err := view.ApplyPatches(context.Background())
 	require.Error(t, err)
 }
 
@@ -89,7 +89,7 @@ func TestOpenAIRequestView_ApplyPatchesDisabled(t *testing.T) {
 	view.MarkPatchSet("model", "gpt-5.1")
 	view.DisablePatches()
 
-	_, err := view.ApplyPatches()
+	_, err := view.ApplyPatches(context.Background())
 	require.Error(t, err)
 }
 

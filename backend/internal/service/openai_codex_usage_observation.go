@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/adminaccess"
 )
 
 // OpenAICodexUsageRepository accepts quota evidence only for the credential
@@ -33,7 +35,7 @@ func persistOpenAICodexUsageObservation(ctx context.Context, repo AccountReposit
 	if targetID == owner.ID && snapshot != nil {
 		observeOpenAIWeeklyUsageSnapshot(withCodexObservationOwner(ctx, owner), targetID, snapshot, fromSession)
 	}
-	if _, sampled := updates["codex_usage_updated_at"]; sampled {
+	if _, sampled := updates["codex_usage_updated_at"]; sampled && adminaccess.RestrictedFromContext(ctx) == nil {
 		notifyOpenAIAutoResetForOwner(owner)
 	}
 	return true, nil

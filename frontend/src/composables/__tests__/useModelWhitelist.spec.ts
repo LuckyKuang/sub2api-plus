@@ -97,6 +97,8 @@ describe('useModelWhitelist', () => {
     expect(models).toContain('gpt-6-luna')
     expect(models).not.toContain('gpt-6')
     expect(new Set(models).size).toBe(models.length)
+    expect(models).toContain('gpt-image-2.6-flare')
+    expect(models).toContain('gpt-image-2.6-sunburst')
   })
 
   it('openai 预设映射将最新旗舰模型放在首位', () => {

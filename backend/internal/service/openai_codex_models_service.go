@@ -559,6 +559,8 @@ func newConfiguredCodexModelDescriptor(modelID string) configuredCodexModelDescr
 		descriptor.ContextWindow = 500_000
 	}
 	if openai.IsGPT61TerraModelSpelling(modelID) {
+		// The Codex descriptor differs from the API model page: Codex offers
+		// low through ultra with a 500k default window. API requests keep none.
 		if err := json.Unmarshal(openai.CodexGPT61TerraMetadata, &descriptor); err != nil {
 			panic(err)
 		}
@@ -2134,8 +2136,8 @@ func CodexModelsManifestETag(body []byte) string {
 }
 
 var apiKeyCodexModelsWithoutResponsesLite = map[string]struct{}{
-	"gpt-6.1-sol":   {},
 	"gpt-6.1-terra": {},
+	"gpt-6.1-sol":   {},
 	"gpt-6-astra":   {},
 	"gpt-5.6-sol":   {},
 	"gpt-5.6-terra": {},

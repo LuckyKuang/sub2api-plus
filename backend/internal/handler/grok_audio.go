@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	pkghttputil "github.com/LuckyKuang/sub2api-plus/internal/pkg/httputil"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/ip"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/logger"
 	middleware2 "github.com/LuckyKuang/sub2api-plus/internal/server/middleware"
@@ -330,7 +330,16 @@ func (h *OpenAIGatewayHandler) GrokVoice(c *gin.Context, endpoint string) {
 	subscription, _ := middleware2.GetSubscriptionFromContext(c)
 	body, err := readGrokVoiceGatewayBody(c)
 	if err != nil {
-		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", err.Error())
+		if errors.Is(err, errGrokVoiceBodyRequired) {
+			h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", err.Error())
+			return
+		}
+		bodyLog := requestLogger(c, "handler.openai_gateway.grok_voice", zap.String("endpoint", endpoint))
+		if handleRequestBodyReadError(c, bodyLog, err) {
+			return
+		}
+		status, message := requestBodyReadFailure(bodyLog, c.Request, err)
+		h.errorResponse(c, status, "invalid_request_error", message)
 		return
 	}
 	reqLog := requestLogger(c, "handler.openai_gateway.grok_voice", zap.String("endpoint", endpoint))
@@ -519,17 +528,22 @@ func (h *OpenAIGatewayHandler) recordGrokVoiceUsage(
 	})
 }
 
+var errGrokVoiceBodyRequired = errors.New("request body is required")
+
+// readGrokVoiceGatewayBody returns errGrokVoiceBodyRequired for a missing body;
+// any other error comes from reading the body and goes through the shared
+// read-failure classification.
 func readGrokVoiceGatewayBody(c *gin.Context) ([]byte, error) {
 	if c == nil || c.Request == nil {
-		return nil, errors.New("request body is required")
+		return nil, errGrokVoiceBodyRequired
 	}
 	if c.Request.Body == nil {
 		if c.Request.Method == http.MethodGet || c.Request.Method == http.MethodDelete {
 			return nil, nil
 		}
-		return nil, errors.New("request body is required")
+		return nil, errGrokVoiceBodyRequired
 	}
-	return io.ReadAll(c.Request.Body)
+	return pkghttputil.ReadRequestBodyWithPrealloc(c.Request)
 }
 
 // extractGrokTTSInputText pulls the primary spoken text from a TTS JSON body.

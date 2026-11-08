@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/apicompat"
+	pkghttputil "github.com/LuckyKuang/sub2api-plus/internal/pkg/httputil"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/logger"
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
@@ -460,10 +461,13 @@ func beginOpenAISessionRouteForward(ctx context.Context, account *Account, timeo
 
 // Detached usage-draining requests still obey lease cancellation. Client
 // disconnect draining after acceptance retains its existing behavior.
-func openAISessionRouteDetachedContext(ctx context.Context) (context.Context, context.CancelFunc) {
-	base := context.WithoutCancel(ctx)
+func openAISessionRouteDetachedContext(ctx context.Context, drainTimeout ...time.Duration) (context.Context, context.CancelFunc) {
+	base := pkghttputil.DetachUpstreamContext(ctx, drainTimeout...)
 	if execution, ok := ctx.Value(concurrencyExecutionKey{}).(*concurrencyExecution); ok && execution != nil {
-		base = ConcurrencyCapacityContext(ctx)
+		capacity := ConcurrencyCapacityContext(ctx)
+		bound, cancel := context.WithCancelCause(base)
+		context.AfterFunc(capacity, func() { cancel(context.Cause(capacity)) })
+		base = bound
 	}
 	a := openAIRouteAttempt(ctx)
 	if a == nil {

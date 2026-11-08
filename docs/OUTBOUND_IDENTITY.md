@@ -1554,3 +1554,17 @@ Only ZCode's own runtime can assert accumulated workflow capability labels.
 The gateway omits it, strips inbound case variants on domestic inference/control
 paths and rejects static overrides at save and send time. It never invents
 workflow labels from prompts, tools, account configuration or client headers.
+
+
+### v0.2.20 import transport review
+
+The WS-to-HTTP bridge stages identity through `prepareCodexFingerprintRaw` and
+reuses the captured credential owner. Installation is declared in
+`client_metadata`/canonical turn metadata; this import does not synthesize an
+account-wide session ID or a direct `x-codex-installation-id` header. Inference,
+quota, referral and retry paths retain the same owner/proxy snapshot; the
+referral adapter is injected through `ProvideOpenAIQuotaService` alongside the
+existing identity resolver. Codex remains pinned to 0.167.0. Resource limits,
+MCP dependency additions and model metadata never select a new client identity.
+The existing owner/wire matrices and
+`TestProxyOpenAIWSHTTPBridgeTurn_StagesCodexFingerprint` cover these boundaries.

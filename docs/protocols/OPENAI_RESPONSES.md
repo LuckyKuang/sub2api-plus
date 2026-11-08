@@ -1186,3 +1186,29 @@ unsent errors during an ongoing generation. Already delivered messages cannot be
 changed. Both downstream settings share the existing invalidation channel and
 one-second reconciliation worker. Replica changes are eventually consistent;
 read failures retain each last valid setting, and failed writes do not change it.
+
+## v0.2.20 protocol corrections
+
+Terra API compatibility accepts `none` reasoning but rejects `minimal`, following
+the [official model page](https://developers.openai.com/api/docs/models/gpt-6.1-terra).
+Tool calls must use Responses; plain Chat requests remain supported. Codex's
+client descriptor retains its separate default effort and window. OAuth/setup-token
+Terra requests share the subscription long-context exemption with Sol; API-key
+requests retain the API card and Plus frozen pricing and explicit operator rules.
+
+OAuth passthrough accepts an empty string `instructions` and restores the client's
+original instructions in response echoes. Missing instructions do not replace
+existing developer/system input. Non-stream Responses reconstruct JSON from SSE
+even when OAuth upstream omits Content-Type, including incomplete/cancelled
+terminal responses. The WS HTTP bridge resolves fingerprints from the same Plus
+credential-owner snapshot as HTTP and retries; inbound headers cannot select identity.
+
+Image accounts may restrict eligible 1K/2K/4K tiers. Spillover selection preserves
+the binding that existed before the first size pass. Native GPT Image 2.6, SVG,
+markup and animation controls cannot silently fall back to a Responses path
+that discards them. Ingress audit still precedes account selection and writes.
+Active API-key image probes omit `response_format`: GPT Image models always
+return base64 and do not support that legacy parameter, per the
+[official Images API](https://developers.openai.com/api/reference/resources/images/methods/generate).
+Transport-error cooldown remains enabled unless
+`gateway.disable_openai_transport_error_cooldown` is explicitly true.

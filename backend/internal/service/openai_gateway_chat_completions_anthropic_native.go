@@ -181,6 +181,7 @@ func (s *OpenAIGatewayService) handleCCBufferedFromNativeAnthropic(
 		maxLineSize = s.cfg.Gateway.MaxLineSize
 	}
 	scanner.Buffer(make([]byte, 0, 64*1024), maxLineSize)
+	scanner.Split(newBoundedSSESplit(s.cfg, maxLineSize, nil))
 
 	var finalResp *apicompat.AnthropicResponse
 	var usage ClaudeUsage
@@ -200,7 +201,8 @@ func (s *OpenAIGatewayService) handleCCBufferedFromNativeAnthropic(
 
 	// 读间隔上限：上游挂住 SSE 时中止组装（缓冲路径尚未提交响应头，可回 502）。
 	streamInterval := anthropicNativeStreamInterval(s.cfg)
-	pump := newAnthropicNativeLinePump(scanner, streamInterval)
+	pump := newAnthropicNativeLinePump(scanner, streamInterval, s.cfg)
+	streamStatus := &anthropicCompatStream{body: resp.Body}
 	defer pump.stop()
 
 	logReadErr := func(err error) {
@@ -228,6 +230,7 @@ func (s *OpenAIGatewayService) handleCCBufferedFromNativeAnthropic(
 				return onIdle()
 			}
 			logReadErr(rerr)
+			streamStatus.readErr = rerr
 			break
 		}
 		// SSE 规范允许 `event:xxx`（冒号后无空格）：Kimi 等 Anthropic 兼容上游
@@ -242,6 +245,7 @@ func (s *OpenAIGatewayService) handleCCBufferedFromNativeAnthropic(
 				return onIdle()
 			}
 			logReadErr(rerr)
+			streamStatus.readErr = rerr
 			break
 		}
 		payload, ok := extractOpenAISSEDataLine(dataLine)
@@ -262,6 +266,11 @@ func (s *OpenAIGatewayService) handleCCBufferedFromNativeAnthropic(
 		}
 		sawMessageStop = sawMessageStop || event.Type == "message_stop"
 		if sawMessageStop {
+			break
+		}
+
+		streamStatus.observe(&event, payload)
+		if streamStatus.upstreamErrType != "" {
 			break
 		}
 
@@ -383,6 +392,7 @@ func (s *OpenAIGatewayService) handleCCStreamingFromNativeAnthropic(
 		maxLineSize = s.cfg.Gateway.MaxLineSize
 	}
 	scanner.Buffer(make([]byte, 0, 64*1024), maxLineSize)
+	scanner.Split(newBoundedSSESplit(s.cfg, maxLineSize, nil))
 
 	resultWithUsage := func() *OpenAIForwardResult {
 		return &OpenAIForwardResult{
@@ -409,7 +419,8 @@ func (s *OpenAIGatewayService) handleCCStreamingFromNativeAnthropic(
 	// WithoutCancel 且 http.Client 无整体 Timeout，无此界限则客户端断开后
 	// scanner.Scan() 永久阻塞（见 anthropic native pump 文件注释）。
 	streamInterval := anthropicNativeStreamInterval(s.cfg)
-	pump := newAnthropicNativeLinePump(scanner, streamInterval)
+	pump := newAnthropicNativeLinePump(scanner, streamInterval, s.cfg)
+	streamStatus := &anthropicCompatStream{body: resp.Body}
 	defer pump.stop()
 
 	logReadErr := func(err error) {
@@ -522,6 +533,7 @@ func (s *OpenAIGatewayService) handleCCStreamingFromNativeAnthropic(
 				return onIdle()
 			}
 			logReadErr(rerr)
+			streamStatus.readErr = rerr
 			break
 		}
 		if _, ok := extractOpenAISSEEventLine(line); !ok {
@@ -535,6 +547,7 @@ func (s *OpenAIGatewayService) handleCCStreamingFromNativeAnthropic(
 			}
 			// EOF / 读错误：事件行后流终止，进入 finalize。
 			logReadErr(rerr)
+			streamStatus.readErr = rerr
 			break
 		}
 		payload, ok := extractOpenAISSEDataLine(dataLine)
@@ -551,6 +564,7 @@ func (s *OpenAIGatewayService) handleCCStreamingFromNativeAnthropic(
 			status, disabled := s.handleOpenAIStreamTerminalAccountSideEffectsContext(ctx, account, []byte(payload), gjson.Get(payload, "error.message").String(), resp.Header, upstreamModel)
 			accountSideEffectsApplied = disabled || status == http.StatusUnauthorized || status == http.StatusTooManyRequests || status == 529
 		}
+		streamStatus.observe(&event, payload)
 		// Forward received usage regardless of the client stream_options.
 		// The intermediate Responses converter synthesizes usage even when absent.
 		ccState.IncludeUsage = ccState.IncludeUsage || anthropicChatStreamHasUsage(&event, payload)

@@ -122,20 +122,6 @@ type openAICreditsSnapshot struct {
 	FetchedAt int64          `json:"fetched_at"`
 }
 
-// CacheCreditsSnapshot 将本轮用量观测到的 Codex 额度写入账号 extra 缓存。
-func (s *OpenAIQuotaService) CacheCreditsSnapshot(ctx context.Context, accountID int64, usage *OpenAIQuotaUsage) error {
-	if usage == nil {
-		return infraerrors.New(http.StatusBadGateway, "OPENAI_QUOTA_EMPTY_USAGE", "openai quota query returned an empty result")
-	}
-	accepted, err := persistOpenAICodexUsageObservation(ctx, s.accountRepo, accountID, usage.credentialOwner, map[string]any{
-		openaiQuotaCreditsKey: openAICreditsSnapshot{Credits: usage.Credits, FetchedAt: usage.FetchedAt},
-	}, nil, false)
-	if err != nil || !accepted {
-		return infraerrors.New(http.StatusConflict, "OPENAI_QUOTA_CACHE_OWNER_CHANGED", "Codex credential owner changed before caching credits").WithCause(err)
-	}
-	return nil
-}
-
 // OpenAIQuotaResetCredit captures the redeemed credit metadata returned by the
 // reset endpoint.
 type OpenAIQuotaResetCredit struct {
@@ -372,8 +358,28 @@ func (s *OpenAIQuotaService) CacheResetCreditsSnapshot(ctx context.Context, acco
 	return s.cacheResetCreditsSnapshot(ctx, accountID, credits, nil, nil)
 }
 
+// CacheCreditsSnapshot stores the queried row's display snapshot independently
+// of reset-credit expiration details. A successful read with absent credits
+// replaces the previous balance with unknown, never with a fabricated zero.
+func (s *OpenAIQuotaService) CacheCreditsSnapshot(ctx context.Context, accountID int64, usage *OpenAIQuotaUsage) error {
+	if err := scopedAccountIDAccess(ctx, s.accountRepo, accountID, scopedAccountOperation(ctx, "openai.quota.read"), true); err != nil {
+		return err
+	}
+	if usage == nil {
+		return infraerrors.New(http.StatusBadGateway, "OPENAI_QUOTA_EMPTY_USAGE", "openai quota query returned an empty result")
+	}
+	accepted, err := persistOpenAICodexUsageObservation(ctx, s.accountRepo, accountID, usage.credentialOwner, map[string]any{openaiQuotaCreditsKey: openAICreditsSnapshot{Credits: usage.Credits, FetchedAt: usage.FetchedAt}}, nil, false)
+	if err != nil || !accepted {
+		return infraerrors.New(http.StatusInternalServerError, "OPENAI_QUOTA_CACHE_WRITE_FAILED", "failed to cache Codex credits").WithCause(err)
+	}
+	return nil
+}
+
 // CachePostResetSnapshot persists the credits and usage windows observed after a reset.
 func (s *OpenAIQuotaService) CachePostResetSnapshot(ctx context.Context, accountID int64, usage *OpenAIQuotaUsage) error {
+	if err := scopedAccountIDAccess(ctx, s.accountRepo, accountID, scopedAccountOperation(ctx, "openai.quota.reset"), true); err != nil {
+		return err
+	}
 	if usage == nil {
 		return s.cacheResetCreditsSnapshot(ctx, accountID, nil, nil, nil)
 	}
@@ -387,6 +393,9 @@ func (s *OpenAIQuotaService) CachePostResetSnapshot(ctx context.Context, account
 }
 
 func (s *OpenAIQuotaService) cacheResetCreditsSnapshot(ctx context.Context, accountID int64, credits *OpenAIRateLimitResetCredits, updates map[string]any, snapshot *OpenAICodexUsageSnapshot) error {
+	if err := scopedAccountIDAccess(ctx, s.accountRepo, accountID, scopedAccountOperation(ctx, "openai.quota.read"), true); err != nil {
+		return err
+	}
 	if credits == nil || (credits.AvailableCount > 0 && len(credits.Credits) == 0) {
 		return infraerrors.New(
 			http.StatusBadGateway,
@@ -479,6 +488,10 @@ func (s *OpenAIQuotaService) ResetCreditTargeted(ctx context.Context, accountID 
 }
 
 func (s *OpenAIQuotaService) resetCredit(ctx context.Context, accountID int64, creditID, redeemRequestID string, targeted bool) (*OpenAIQuotaResetResult, error) {
+	ctx = WithScopedAdminAccountOperation(ctx, "openai.quota.reset")
+	if err := scopedAccountIDAccess(ctx, s.accountRepo, accountID, "openai.quota.reset", false); err != nil {
+		return nil, err
+	}
 	// Shadow guard: resetting credits via a shadow account would silently
 	// operate on the parent's quota; that is surprising and unwanted. Callers
 	// must reset the parent account directly.
@@ -591,6 +604,9 @@ func (s *OpenAIQuotaService) prepareUpstreamAccountCall(ctx context.Context, sel
 	if selected.Type != AccountTypeOAuth {
 		return nil, infraerrors.New(http.StatusBadRequest, "OPENAI_QUOTA_INVALID_TYPE", "account is not an OAuth account")
 	}
+	if err := scopedAccountAccess(ctx, s.accountRepo, selected, scopedAccountOperation(ctx, "openai.quota.read"), true); err != nil {
+		return nil, err
+	}
 	selected = snapshotRequestCredentialAccount(selected)
 	if expected := codexObservationOwner(ctx, selected.ID); expected != nil && credentialStateGeneration(expected) != credentialStateGeneration(selected) {
 		return nil, infraerrors.New(http.StatusConflict, "OPENAI_QUOTA_CREDENTIAL_CHANGED", "credential owner changed during quota operation")
@@ -601,6 +617,9 @@ func (s *OpenAIQuotaService) prepareUpstreamAccountCall(ctx context.Context, sel
 		account, err = resolveCredentialAccount(ctx, s.accountRepo, account)
 		if err != nil || account == nil {
 			return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_QUOTA_SHADOW_RESOLVE_FAILED", "failed to resolve shadow account: %v", err)
+		}
+		if err := scopedAccountAccess(ctx, s.accountRepo, account, scopedAccountOperation(ctx, "openai.quota.read"), false); err != nil {
+			return nil, err
 		}
 	}
 	account = snapshotRequestCredentialAccount(account)

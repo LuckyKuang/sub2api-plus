@@ -138,3 +138,11 @@ The November 7 review selects stable `2.5.2` with unchanged SDK/runtime facts.
 Native Messages requests with enabled or disabled thinking declare
 `anthropic-beta: context-management-2025-06-27`, following the official
 provider-specific transform rather than the generic Anthropic default.
+
+## Concurrency-limit responses
+
+The exact Kimi concurrent-request 403 uses the short 429 fallback cooldown;
+it does not permanently disable the account. Credential-generation CAS still
+authorizes persistent/runtime changes. A failed or stale update cannot block a
+new credential generation. This does not enable broad keyword-based quota
+classification or replace known quota-reset windows.

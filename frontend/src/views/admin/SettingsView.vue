@@ -1509,6 +1509,9 @@
                 />
               </div>
 
+              <!-- Exact Email Blacklist -->
+              <RegistrationEmailBlacklistEditor />
+
               <!-- Promo Code -->
               <div
                 class="flex items-center justify-between border-t border-gray-100 pt-4 dark:border-dark-700"
@@ -8864,6 +8867,7 @@ import {
   type RechargeBonusMode,
   type RechargeBonusTierDraft,
 } from "@/utils/rechargeBonus";
+import RegistrationEmailBlacklistEditor from "@/components/admin/settings/RegistrationEmailBlacklistEditor.vue";
 import OpenAIFastPolicyUserSelector from "@/views/admin/settings/OpenAIFastPolicyUserSelector.vue";
 import PlatformPricingFallbackSettings from "@/views/admin/settings/PlatformPricingFallbackSettings.vue";
 import { useClipboard } from "@/composables/useClipboard";

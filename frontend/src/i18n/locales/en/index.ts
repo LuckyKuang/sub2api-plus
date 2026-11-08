@@ -5,6 +5,7 @@ import adminAccessKeys from './adminAccessKeys'
 import codexCli from './codexCli'
 import codexCliRuntime from './codexCliRuntime'
 
+import mcp from './mcp'
 import landing from './landing'
 import common from './common'
 import dashboard from './dashboard'
@@ -29,6 +30,7 @@ export default {
   ...codexCliRuntime,
   adminAccessKeys,
 
+  mcp,
   ...landing,
   ...common,
   ...dashboard,

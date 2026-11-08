@@ -6,12 +6,39 @@ publication status. Release naming and procedures live in
 
 ## Integrated Baseline
 
-The current tree integrates official `v0.2.19`, peeled commit
-`dece26153621959ccd7635814f4b2d08304e681a`, following the previously imported
-`0a2a29b32e6724714c69822296ccd05a6b86bfdd` snapshot. Plus is the authoritative
-implementation when upstream behavior conflicts with an intentional Plus contract.
-The candidate release is `v0.2.19+custom.006`; its mapping remains `planned`
-until publication and immutable artifact verification complete.
+The current tree integrates official `v0.2.20`, peeled commit
+`dab829a4e9b7d1cc307189aea8b0319eb29e29d0`, after official `v0.2.19`
+`dece26153621959ccd7635814f4b2d08304e681a`. Plus remains authoritative when
+upstream behavior conflicts with an intentional Plus contract. The candidate
+release is `v0.2.20+custom.001`, with status `planned` until publication and
+immutable artifact verification complete. Post-tag official main is excluded.
+
+The import adds bounded request buffering, per-operation upload/write timeouts,
+finite post-disconnect usage draining, bounded stream parsers and background
+work, protocol completion/reasoning fixes, image-size routing and native image
+options, exact registration-email blacklists, explicit administrator permissions
+and opt-in OAuth management MCP. MCP remains disabled without `MCP_PUBLIC_URL`;
+existing keys do not implicitly gain full access. Official migration
+`249_mcp_oauth.sql` is imported as Plus `307_mcp_oauth.sql`, after immutable Plus
+migrations 304–306. No historical migration is rewritten.
+
+Plus retains its credential-owner snapshots and generation-checked observations,
+strict proxy binding, canonical session routing, ingress audit ordering and
+unknown-content pass-through, frozen prices, Composite access/rates, asynchronous
+task capacity and console controls. Codex keeps manually selected `0.167.0`, its
+identity precedence and reviewed fingerprints; the WS HTTP bridge uses the same
+owner-bound fingerprint resolver. Upstream's generic Grok transport fallback,
+legacy scheduler replacement, sponsor content and host-based CI/release paths do
+not replace the corresponding Plus implementations. Provider protocol sources
+remain [the official-agent baselines](docs/OFFICIAL_AGENT_BASELINES.md).
+
+Terra API `none` effort and Responses-only tool calling are independently
+confirmed by the official model documentation; the Codex descriptor remains a
+separate client contract. Resource settings bind `gateway.*`, despite the
+upstream release prose's `security.*` spelling. See
+[resource safety](deploy/EDGE_SECURITY.md), [management MCP](docs/mcp.md),
+[administrator keys](docs/admin-api-keys.md) and
+[security audit coverage](docs/SECURITY_AUDIT_CONTENT_COVERAGE.md).
 
 The v0.2.19 follow-up adds configurable Gemini same-account retries, bound-cache
 pool retries, declared-model discovery, current Gemini catalogs, model-cache
@@ -31,7 +58,8 @@ strict proxy binding and frozen billing contracts remain mandatory.
 This import adds scoped administrator keys, owner-bound Grok catalog diagnostics,
 and opt-in image-count billing for dedicated image requests. New upstream SQL
 migrations 247/248 are imported as 302/303, preserving deployed Plus migrations.
-Codex keeps its manually selected 0.165.0 identity and reviewed Terra descriptor;
+At the v0.2.19 import Codex used manually selected 0.165.0; the current
+0.167.0 identity and reviewed Terra descriptor follow the official-agent baseline;
 Terra API pricing/specifications are verified separately from the pinned client
 descriptor. Shared domestic-provider keyword/90% quota cooldown heuristics remain
 deferred. DeepSeek Pro pricing no longer switches
@@ -103,9 +131,9 @@ of a new release.
 ## Current Version
 
 ```text
-Git/GitHub: v0.2.19+custom.006
-Application: 0.2.19+custom.006
-GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.19-custom.006
+Git/GitHub: v0.2.20+custom.001
+Application: 0.2.20+custom.001
+GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.20-custom.001
 ```
 
 ## Release Mapping
@@ -192,6 +220,7 @@ GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.19-custom.006
 | `v0.2.19+custom.004` | `v0.2.19` | `dece26153621959ccd7635814f4b2d08304e681a` | published |
 | `v0.2.19+custom.005` | `v0.2.19` | `dece26153621959ccd7635814f4b2d08304e681a` | published |
 | `v0.2.19+custom.006` | `v0.2.19` | `dece26153621959ccd7635814f4b2d08304e681a` | published |
+| `v0.2.20+custom.001` | `v0.2.20` | `dab829a4e9b7d1cc307189aea8b0319eb29e29d0` | planned |
 
 `v0.2.15+custom.003` records the integrated official main snapshot in the
 Official Commit column. Its tagged official baseline remains
@@ -246,8 +275,7 @@ artifact verification.
 
 `v0.2.19+custom.006` retains the same official baseline for the live Codex
 safety buffering notice suppression and normalized OpenAI session error wording.
-Its mapping remains planned until publication and immutable artifact
-verification.
+Its mapping was published after immutable artifact verification.
 
 `v0.2.4+custom.006` is marked withdrawn because official `v0.2.5` was imported before that snapshot overlay was published. Do not reuse or retag `.006`.
 

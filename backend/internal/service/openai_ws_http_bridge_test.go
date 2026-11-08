@@ -2358,3 +2358,47 @@ func TestOpenAIWSHTTPBridge_IdleTimeoutClosesClientSession(t *testing.T) {
 	require.Len(t, upstream.bodies, 1, "an idle client must not leave a continuation request running")
 	require.Equal(t, "Bearer sk-upstream", upstream.lastReq.Header.Get("Authorization"))
 }
+
+func TestProxyOpenAIWSHTTPBridgeTurn_StagesCodexFingerprint(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	run := func(account *Account) (*http.Request, []byte) {
+		sse := `data: {"type":"response.completed","response":{"id":"resp_fp","model":"gpt-5.5","status":"completed","usage":{"input_tokens":1,"output_tokens":1}}}` + "\n\n"
+		upstream := &httpUpstreamRecorder{resp: &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+			Body:       io.NopCloser(strings.NewReader(sse)),
+		}}
+		svc := &OpenAIGatewayService{
+			cfg:          &config.Config{Gateway: config.GatewayConfig{MaxLineSize: defaultMaxLineSize}},
+			httpUpstream: upstream,
+		}
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest(http.MethodGet, "/v1/responses", nil)
+		payload := []byte(`{"type":"response.create","model":"gpt-5.5","store":false,"input":"hi"}`)
+		_, err := svc.proxyOpenAIWSHTTPBridgeTurn(
+			context.Background(), c, account, "test-token", payload, len(payload),
+			"gpt-5.5", "", "", "", "", 1,
+			func([]byte) error { return nil },
+		)
+		require.NoError(t, err)
+		require.NotNil(t, upstream.lastReq)
+		return upstream.lastReq, upstream.lastBody
+	}
+
+	// OUTBOUND_IDENTITY.md: installation belongs in provider-defined body
+	// metadata. Never synthesize account-wide session or direct installation headers.
+	full := newTestOAuthAccount(7101, map[string]any{"codex_fingerprint_mode": "full"})
+	ids := resolveCodexFingerprintIDsFromRequest(full, nil)
+	require.NotNil(t, ids)
+	first, body := run(full)
+	require.Empty(t, first.Header.Get("session_id"))
+	require.Empty(t, first.Header.Get("x-codex-installation-id"))
+	require.Equal(t, ids.installationID, gjson.GetBytes(body, "client_metadata.x-codex-installation-id").String())
+	_, nextBody := run(full)
+	require.Equal(t, gjson.GetBytes(body, "client_metadata.x-codex-installation-id").String(), gjson.GetBytes(nextBody, "client_metadata.x-codex-installation-id").String())
+	off := newTestOAuthAccount(7102, map[string]any{"codex_fingerprint_mode": "off"})
+	request, offBody := run(off)
+	require.Empty(t, request.Header.Get("session_id"))
+	require.Empty(t, request.Header.Get("x-codex-installation-id"))
+	require.False(t, gjson.GetBytes(offBody, "client_metadata.x-codex-installation-id").Exists())
+}

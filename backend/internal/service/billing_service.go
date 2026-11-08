@@ -1219,6 +1219,14 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 	if native := lastPricingSegment(strings.TrimSpace(modelLower)); strings.HasPrefix(native, "step-") {
 		return s.fallbackPrices[native]
 	}
+	if modelLower == "gpt-image-2.6-flare" || modelLower == "gpt-image-2.6-sunburst" {
+		p := openAIGPTImage25FallbackPricing
+		return &ModelPricing{
+			InputPricePerToken: p.InputCostPerToken, CacheReadPricePerToken: p.CacheReadInputTokenCost,
+			ImageInputPricePerToken: p.InputCostPerImageToken, ImageCacheReadPricePerToken: p.CacheReadInputImageTokenCost,
+			ImageOutputPricePerToken: p.OutputCostPerImageToken,
+		}
+	}
 	if modelLower == "jev-latest" {
 		return s.fallbackPrices["jev-latest"]
 	}

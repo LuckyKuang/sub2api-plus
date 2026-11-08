@@ -1,7 +1,6 @@
 package service
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"crypto/rand"
@@ -23,11 +22,13 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/apicompat"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/ctxkey"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/gemini"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/geminicli"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/googleapi"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/logger"
 	"github.com/LuckyKuang/sub2api-plus/internal/util/responseheaders"
 	"github.com/LuckyKuang/sub2api-plus/internal/util/urlvalidator"
+
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
 )
@@ -574,7 +575,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 		mappedModel = account.GetMappedModel(req.Model)
 	}
 
-	geminiReq, err := convertClaudeMessagesToGeminiGenerateContent(body)
+	geminiReq, err := convertClaudeMessagesToGeminiGenerateContent(body, mappedModel)
 	if err != nil {
 		return nil, s.writeClaudeError(c, http.StatusBadRequest, "invalid_request_error", err.Error())
 	}
@@ -818,7 +819,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 					stageName = "thinking+tools"
 					signatureRetryStage = 2
 				}
-				retryGeminiReq, txErr := convertClaudeMessagesToGeminiGenerateContent(strippedClaudeBody)
+				retryGeminiReq, txErr := convertClaudeMessagesToGeminiGenerateContent(strippedClaudeBody, mappedModel)
 				if txErr == nil {
 					logger.LegacyPrintf("service.gemini_messages_compat", "Gemini account %d: detected signature-related 400, retrying with downgraded Claude blocks (%s)", account.ID, stageName)
 					// 降级只改写历史块，思考参数沿用客户端原始请求。
@@ -1067,7 +1068,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 		forwardErr = err
 	} else {
 		if useUpstreamStream {
-			collected, usageObj, err := collectGeminiSSE(resp.Body, true)
+			collected, usageObj, err := collectGeminiSSE(s.cfg, resp.Body, true)
 			if err != nil {
 				return nil, s.writeClaudeError(c, http.StatusBadGateway, "upstream_error", "Failed to read upstream stream")
 			}
@@ -1636,7 +1637,7 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 	} else {
 		if useUpstreamStream {
 			var best geminiResponseSignal
-			collected, usageObj, stats, err := collectGeminiSSEObserved(resp.Body, isOAuth, func(rawBytes []byte) {
+			collected, usageObj, stats, err := collectGeminiSSEObserved(s.cfg, resp.Body, isOAuth, func(rawBytes []byte) {
 				if sig, ok := detectGeminiResponseSignal(rawBytes); ok && sig.Kind > best.Kind {
 					best = sig
 				}
@@ -2305,20 +2306,20 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 	nextBlockIndex := 0
 	openBlockIndex := -1
 	openBlockType := ""
-	seenText := ""
-	seenThought := ""
+	var seenText geminiTextDelta
+	var seenThought geminiTextDelta
 	openToolIndex := -1
 	openToolID := ""
 	openToolName := ""
-	seenToolJSON := ""
+	var seenToolJSON geminiTextDelta
 
-	reader := bufio.NewReader(resp.Body)
+	reader := newBoundedSSELineReader(resp.Body, s.cfg)
 	observer := upstreamResponseModelObserverFromContext(c)
 	if observer == nil {
 		observer = beginUpstreamResponseModelObservation(c)
 	}
 	for {
-		line, err := reader.ReadString('\n')
+		line, err := reader.ReadLineString()
 		if err != nil && !errors.Is(err, io.EOF) {
 			billableAbort := geminiStreamAbortedWithBillableOutput(c, err, &usage)
 			result := &geminiStreamResult{
@@ -2373,8 +2374,7 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 		parts := extractGeminiParts(geminiResp)
 		for _, part := range parts {
 			if text, ok := part["text"].(string); ok && isGeminiThoughtPart(part) {
-				delta, newSeen := computeGeminiTextDelta(seenThought, text)
-				seenThought = newSeen
+				delta := seenThought.next(text)
 				if delta == "" {
 					continue
 				}
@@ -2385,7 +2385,7 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 					})
 					openToolIndex = -1
 					openToolName = ""
-					seenToolJSON = ""
+					seenToolJSON.reset()
 				}
 				if openBlockType != "thinking" {
 					if openBlockIndex >= 0 {
@@ -2437,11 +2437,10 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 					})
 					openToolIndex = -1
 					openToolName = ""
-					seenToolJSON = ""
+					seenToolJSON.reset()
 				}
 
-				delta, newSeen := computeGeminiTextDelta(seenText, text)
-				seenText = newSeen
+				delta := seenText.next(text)
 				if delta == "" {
 					continue
 				}
@@ -2509,7 +2508,7 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 					})
 					openToolIndex = -1
 					openToolName = ""
-					seenToolJSON = ""
+					seenToolJSON.reset()
 				}
 
 				if openToolIndex < 0 {
@@ -2555,8 +2554,7 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 					}
 				}
 
-				delta, newSeen := computeGeminiTextDelta(seenToolJSON, argsJSONText)
-				seenToolJSON = newSeen
+				delta := seenToolJSON.next(argsJSONText)
 				if delta != "" {
 					if hasArgsOutput {
 						timing.Observe(startTime, apicompat.StreamOutputObservation{
@@ -2592,7 +2590,7 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 					writeSSE(c.Writer, "content_block_stop", map[string]any{"type": "content_block_stop", "index": openToolIndex})
 					openToolIndex = -1
 					openToolName = ""
-					seenToolJSON = ""
+					seenToolJSON = geminiTextDelta{}
 				}
 				mediaIndex := nextBlockIndex
 				nextBlockIndex++
@@ -2781,8 +2779,8 @@ func unwrapIfNeeded(isOAuth bool, raw []byte) []byte {
 	return inner
 }
 
-func collectGeminiSSE(body io.Reader, isOAuth bool) (map[string]any, *ClaudeUsage, error) {
-	collected, usage, _, err := collectGeminiSSEObserved(body, isOAuth, nil)
+func collectGeminiSSE(cfg *config.Config, body io.Reader, isOAuth bool) (map[string]any, *ClaudeUsage, error) {
+	collected, usage, _, err := collectGeminiSSEObserved(cfg, body, isOAuth, nil)
 	return collected, usage, err
 }
 
@@ -2793,8 +2791,8 @@ type geminiSSECollectStats struct {
 }
 
 // collectGeminiSSEObserved 在聚合的同时把每个解包后的事件原文交给 observe（可为 nil）。
-func collectGeminiSSEObserved(body io.Reader, isOAuth bool, observe func(rawBytes []byte)) (map[string]any, *ClaudeUsage, geminiSSECollectStats, error) {
-	reader := bufio.NewReader(body)
+func collectGeminiSSEObserved(cfg *config.Config, body io.Reader, isOAuth bool, observe func(rawBytes []byte)) (map[string]any, *ClaudeUsage, geminiSSECollectStats, error) {
+	reader := newBoundedSSELineReader(body, cfg)
 
 	var last map[string]any
 	var lastWithParts map[string]any
@@ -2803,7 +2801,7 @@ func collectGeminiSSEObserved(body io.Reader, isOAuth bool, observe func(rawByte
 	stats := geminiSSECollectStats{fallback: &geminiSSEFallbackBody{}}
 
 	for {
-		line, err := reader.ReadString('\n')
+		line, err := reader.ReadLineString()
 		if len(line) > 0 {
 			trimmed := strings.TrimRight(line, "\r\n")
 			if !strings.HasPrefix(trimmed, "data:") {
@@ -3130,7 +3128,7 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 	c.Writer = streamWriter
 	defer func() { c.Writer = streamWriter.ResponseWriter }()
 
-	reader := bufio.NewReader(resp.Body)
+	reader := newBoundedSSELineReader(resp.Body, s.cfg)
 	usage := &ClaudeUsage{}
 	observer := upstreamResponseModelObserverFromContext(c)
 	if observer == nil {
@@ -3145,7 +3143,7 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 	clientDisconnect := false
 
 	for {
-		line, err := reader.ReadString('\n')
+		line, err := reader.ReadLineString()
 		if err != nil && !errors.Is(err, io.EOF) && geminiStreamAbortedWithBillableOutput(c, err, usage) {
 			clientDisconnect = true
 			break
@@ -3721,22 +3719,38 @@ func extractGeminiParts(geminiResp map[string]any) []map[string]any {
 	return nil
 }
 
-func computeGeminiTextDelta(seen, incoming string) (delta, newSeen string) {
+// geminiTextDelta tracks the text already emitted for one stream block. Only the
+// storage differs from concatenating strings: appends are amortized, so
+// delta-mode streams no longer copy the whole prefix on every chunk.
+type geminiTextDelta struct {
+	seen strings.Builder
+}
+
+// next returns the part of incoming that has not been emitted yet.
+func (d *geminiTextDelta) next(incoming string) string {
 	incoming = strings.TrimSuffix(incoming, "\u0000")
 	if incoming == "" {
-		return "", seen
+		return ""
 	}
+	seen := d.seen.String()
 
 	// Cumulative mode: incoming contains full text so far.
 	if strings.HasPrefix(incoming, seen) {
-		return strings.TrimPrefix(incoming, seen), incoming
+		delta := incoming[len(seen):]
+		_, _ = d.seen.WriteString(delta)
+		return delta
 	}
 	// Duplicate/rewind: ignore.
 	if strings.HasPrefix(seen, incoming) {
-		return "", seen
+		return ""
 	}
 	// Delta mode: treat incoming as incremental chunk.
-	return incoming, seen + incoming
+	_, _ = d.seen.WriteString(incoming)
+	return incoming
+}
+
+func (d *geminiTextDelta) reset() {
+	d.seen.Reset()
 }
 
 func mapGeminiFinishReasonToClaudeStopReason(finishReason string) string {
@@ -3750,7 +3764,7 @@ func mapGeminiFinishReasonToClaudeStopReason(finishReason string) string {
 	}
 }
 
-func convertClaudeMessagesToGeminiGenerateContent(body []byte) ([]byte, error) {
+func convertClaudeMessagesToGeminiGenerateContent(body []byte, model string) ([]byte, error) {
 	var req map[string]any
 	if err := json.Unmarshal(body, &req); err != nil {
 		return nil, err
@@ -3759,7 +3773,7 @@ func convertClaudeMessagesToGeminiGenerateContent(body []byte) ([]byte, error) {
 	toolUseIDToName := make(map[string]string)
 
 	systemText := extractClaudeSystemText(req["system"])
-	contents, err := convertClaudeMessagesToGeminiContents(req["messages"], toolUseIDToName)
+	contents, err := convertClaudeMessagesToGeminiContents(req["messages"], toolUseIDToName, gemini.SupportsMultimodalFunctionResponses(model))
 	if err != nil {
 		return nil, err
 	}
@@ -3839,7 +3853,7 @@ func extractClaudeSystemText(system any) string {
 	}
 }
 
-func convertClaudeMessagesToGeminiContents(messages any, toolUseIDToName map[string]string) ([]any, error) {
+func convertClaudeMessagesToGeminiContents(messages any, toolUseIDToName map[string]string, multimodalToolResults bool) ([]any, error) {
 	arr, ok := messages.([]any)
 	if !ok {
 		return nil, errors.New("messages must be an array")
@@ -3915,18 +3929,19 @@ func convertClaudeMessagesToGeminiContents(messages any, toolUseIDToName map[str
 					}
 					text := extractClaudeContentText(bm["content"])
 					images := extractClaudeToolResultImageParts(bm["content"])
-					if text == "" && len(images) > 0 {
+					if text == "" && len(images) > 0 && !multimodalToolResults {
 						text = "[image attached below]"
 					}
-					parts = append(parts, map[string]any{
-						"functionResponse": map[string]any{
-							"name": name,
-							"response": map[string]any{
-								"content": text,
-							},
-						},
-					})
-					toolImageParts = append(toolImageParts, images...)
+					response := map[string]any{
+						"name":     name,
+						"response": map[string]any{"content": text},
+					}
+					if multimodalToolResults && len(images) > 0 {
+						response["parts"] = images
+					} else {
+						toolImageParts = append(toolImageParts, images...)
+					}
+					parts = append(parts, map[string]any{"functionResponse": response})
 				case "image":
 					if src, ok := bm["source"].(map[string]any); ok {
 						if srcType, _ := src["type"].(string); srcType == "base64" {
