@@ -19,6 +19,14 @@ export interface RouteMeta {
   requiresIpAccessControl?: boolean
   requiresSubscription?: boolean
   requiresAsyncImageAccess?: boolean
+  /**
+   * Console shell chrome for this route. The Vue views declared it themselves by
+   * wrapping in `<AppLayout appearance="user">`; here the single shell layout
+   * reads it off the matched route. Omitted means the admin console.
+   */
+  appearance?: 'user' | 'admin'
+  /** Adds `app-layout-workspace`, which pins the main region to its own scroll. */
+  workspace?: boolean
 }
 
 const view = (loader: () => Promise<{ default: React.ComponentType }>) => lazy(loader)
@@ -182,42 +190,42 @@ export const routes: AppRoute[] = [
   {
     path: '/dashboard',
     element: <DashboardView />,
-    handle: meta({ requiresAuth: true, requiresAdmin: false, titleKey: 'dashboard.title' })
+    handle: meta({ requiresAuth: true, requiresAdmin: false, titleKey: 'dashboard.title', appearance: 'user', workspace: true})
   },
   {
     path: '/keys',
     element: <KeysView />,
-    handle: meta({ requiresAuth: true, requiresAdmin: false, titleKey: 'keys.title' })
+    handle: meta({ requiresAuth: true, requiresAdmin: false, titleKey: 'keys.title', appearance: 'user', workspace: true})
   },
   {
     path: '/batch-image',
     element: <BatchImageView />,
-    handle: meta({ requiresAuth: true, requiresAdmin: false, titleKey: 'batchImage.title' })
+    handle: meta({ requiresAuth: true, requiresAdmin: false, titleKey: 'batchImage.title', appearance: 'user', workspace: true})
   },
   {
     path: '/async-image',
     element: <AsyncImageView />,
-    handle: meta({ requiresAuth: true, requiresAdmin: false, titleKey: 'asyncImage.title' })
+    handle: meta({ requiresAuth: true, requiresAdmin: false, titleKey: 'asyncImage.title', appearance: 'user', workspace: true})
   },
   {
     path: '/usage',
     element: <UsageView />,
-    handle: meta({ requiresAuth: true, requiresAdmin: false, titleKey: 'usage.title' })
+    handle: meta({ requiresAuth: true, requiresAdmin: false, titleKey: 'usage.title', appearance: 'user', workspace: true})
   },
   {
     path: '/redeem',
     element: <RedeemView />,
-    handle: meta({ requiresAuth: true, requiresAdmin: false, titleKey: 'redeem.title' })
+    handle: meta({ requiresAuth: true, requiresAdmin: false, titleKey: 'redeem.title', appearance: 'user', workspace: true})
   },
   {
     path: '/affiliate',
     element: <AffiliateView />,
-    handle: meta({ requiresAuth: true, requiresAdmin: false, titleKey: 'affiliate.title' })
+    handle: meta({ requiresAuth: true, requiresAdmin: false, titleKey: 'affiliate.title', appearance: 'user', workspace: true})
   },
   {
     path: '/available-channels',
     element: <AvailableChannelsView />,
-    handle: meta({ requiresAuth: true, requiresAdmin: false, titleKey: 'availableChannels.title' })
+    handle: meta({ requiresAuth: true, requiresAdmin: false, titleKey: 'availableChannels.title', appearance: 'user', workspace: true})
   },
   {
     path: '/settings/mcp',
@@ -232,32 +240,32 @@ export const routes: AppRoute[] = [
   {
     path: '/profile',
     element: <ProfileView />,
-    handle: meta({ requiresAuth: true, requiresAdmin: false, titleKey: 'profile.title' })
+    handle: meta({ requiresAuth: true, requiresAdmin: false, titleKey: 'profile.title', appearance: 'user'})
   },
   {
     path: '/subscriptions',
     element: <SubscriptionsView />,
-    handle: meta({ requiresAuth: true, requiresAdmin: false, titleKey: 'userSubscriptions.title' })
+    handle: meta({ requiresAuth: true, requiresAdmin: false, titleKey: 'userSubscriptions.title', appearance: 'user', workspace: true})
   },
   {
     path: '/purchase/redeem-shop',
     element: <RedeemShopView />,
-    handle: meta({ requiresAuth: true, requiresPayment: true, titleKey: 'featureExtensions.purchaseTitle' })
+    handle: meta({ requiresAuth: true, requiresPayment: true, titleKey: 'featureExtensions.purchaseTitle', appearance: 'user'})
   },
   {
     path: '/purchase',
     element: <PaymentView />,
-    handle: meta({ requiresAuth: true, requiresPayment: true, titleKey: 'nav.buySubscription' })
+    handle: meta({ requiresAuth: true, requiresPayment: true, titleKey: 'nav.buySubscription', appearance: 'user', workspace: true})
   },
   {
     path: '/orders',
     element: <UserOrdersView />,
-    handle: meta({ requiresAuth: true, requiresPayment: true, titleKey: 'nav.myOrders' })
+    handle: meta({ requiresAuth: true, requiresPayment: true, titleKey: 'nav.myOrders', appearance: 'user', workspace: true})
   },
   {
     path: '/payment/qrcode',
     element: <PaymentQRCodeView />,
-    handle: meta({ requiresAuth: true, requiresPayment: true, titleKey: 'payment.qr.scanToPay' })
+    handle: meta({ requiresAuth: true, requiresPayment: true, titleKey: 'payment.qr.scanToPay', appearance: 'user'})
   },
   {
     path: '/payment/result',
@@ -272,7 +280,7 @@ export const routes: AppRoute[] = [
   {
     path: '/payment/airwallex',
     element: <AirwallexPaymentView />,
-    handle: meta({ requiresAuth: false, requiresPayment: false, titleKey: 'payment.airwallexPay' })
+    handle: meta({ requiresAuth: false, requiresPayment: false, titleKey: 'payment.airwallexPay', appearance: 'user'})
   },
   {
     path: '/payment/stripe-popup',
@@ -282,12 +290,12 @@ export const routes: AppRoute[] = [
   {
     path: '/custom/:id',
     element: <CustomPageView />,
-    handle: meta({ requiresAuth: true, requiresAdmin: false, titleKey: 'customPage.title' })
+    handle: meta({ requiresAuth: true, requiresAdmin: false, titleKey: 'customPage.title', appearance: 'user'})
   },
   {
     path: '/monitor',
     element: <ChannelStatusView />,
-    handle: meta({ requiresAuth: true, requiresAdmin: false, titleKey: 'nav.channelStatus' })
+    handle: meta({ requiresAuth: true, requiresAdmin: false, titleKey: 'nav.channelStatus', appearance: 'user', workspace: true})
   },
 
   // ==================== Admin Routes ====================

@@ -1,4 +1,4 @@
-import { createBrowserRouter, Navigate, Outlet, RouterProvider, useLocation } from 'react-router-dom'
+import { createBrowserRouter, Navigate, Outlet, RouterProvider, useLocation, useMatches } from 'react-router-dom'
 import { Suspense, type ReactNode } from 'react'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { routes, type RouteMeta } from './routes'
@@ -81,13 +81,24 @@ function PublicShell() {
   )
 }
 
+/**
+ * The console shell. In Vue each view chose its own chrome by wrapping itself in
+ * `<AppLayout appearance="user" workspace>`; the single React shell reads that
+ * choice off the deepest matched route instead.
+ */
+function ConsoleShell() {
+  const matches = useMatches()
+  const meta = matches.at(-1)?.handle as RouteMeta | undefined
+  return (
+    <Suspense fallback={<LoadingState />}>
+      <AppLayout appearance={meta?.appearance ?? 'admin'} workspace={meta?.workspace ?? false} />
+    </Suspense>
+  )
+}
+
 const shellRoutes = [
   {
-    element: (
-      <Suspense fallback={<LoadingState />}>
-        <AppLayout appearance="admin" />
-      </Suspense>
-    ),
+    element: <ConsoleShell />,
     children: routes
       .filter((route) => !isPublicRoute(route.path))
       .map((route) => ({

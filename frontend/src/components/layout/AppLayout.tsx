@@ -26,9 +26,11 @@ function readTheme(): 'light' | 'dark' {
 
 export interface AppLayoutProps {
   appearance?: 'user' | 'admin'
+  /** Workspace screens pin the main region to its own scroll port. */
+  workspace?: boolean
 }
 
-export function AppLayout({ appearance = 'admin' }: AppLayoutProps) {
+export function AppLayout({ appearance = 'admin', workspace = false }: AppLayoutProps) {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const location = useLocation()
@@ -118,7 +120,8 @@ export function AppLayout({ appearance = 'admin' }: AppLayoutProps) {
       className={[
         'app-layout',
         collapsed && 'sidebar-is-collapsed',
-        appearance === 'user' ? 'app-layout-user' : 'app-layout-admin'
+        appearance === 'user' ? 'app-layout-user' : 'app-layout-admin',
+        workspace && 'app-layout-workspace'
       ]
         .filter(Boolean)
         .join(' ')}
