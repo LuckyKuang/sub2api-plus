@@ -159,7 +159,7 @@ export default {
     remainingQuota: '剩余额度',
     expiresAt: '过期时间',
     todayExpires: '(今日到期)',
-    daysLeft: '({days} 天)',
+    daysLeft: '({{days}} 天)',
     usedQuota: '已用额度',
     resetNow: '即将重置',
     subscriptionType: '订阅类型',

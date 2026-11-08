@@ -159,7 +159,7 @@ export default {
     remainingQuota: 'Remaining Quota',
     expiresAt: 'Expires At',
     todayExpires: '(expires today)',
-    daysLeft: '({days} days)',
+    daysLeft: '({{days}} days)',
     usedQuota: 'Used Quota',
     resetNow: 'Resetting soon',
     subscriptionType: 'Subscription Type',

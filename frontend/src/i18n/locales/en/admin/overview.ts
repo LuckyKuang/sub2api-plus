@@ -95,7 +95,7 @@ export default {
         bucket: 'Bucket',
         prefix: 'Key Prefix',
         appendDatePath: 'Append date path',
-        prefixPreview: 'Effective prefix: {prefix}',
+        prefixPreview: 'Effective prefix: {{prefix}}',
         accessKeyId: 'Access Key ID',
         secretAccessKey: 'Secret Access Key',
         secretHelp: 'Before saving a new Secret, the service must already have a fixed encryption key. Testing a connection, or leaving the field empty to keep the stored secret, does not require this.',
@@ -176,7 +176,7 @@ export default {
         download: 'Download',
         downloadParts: 'Download Parts',
         downloadPartsHint: 'Download every part in order and concatenate the gzip bytes: on Linux/macOS run cat payload.part-* > backup.sql.gz; on Windows run copy /b payload.part-000001+payload.part-000002 backup.sql.gz.',
-        partLabel: 'Part {index}',
+        partLabel: 'Part {{index}}',
         downloadFailed: 'Download URL is empty',
         restore: 'Restore',
         restoreConfirm: 'Are you sure you want to restore from this backup? This will overwrite the current database!',
@@ -362,7 +362,7 @@ export default {
         createTitle: 'Create Source Profile',
         editTitle: 'Edit Source Profile',
         empty: 'No source profiles yet, create one first',
-        deleteConfirm: 'Delete source profile {profileID}?',
+        deleteConfirm: 'Delete source profile {{profileID}}?',
         columns: {
           profile: 'Profile',
           active: 'Active',
@@ -377,7 +377,7 @@ export default {
         editTitle: 'Edit S3 Profile',
         empty: 'No S3 profiles yet, create one first',
         editHint: 'Click "Edit" to modify profile details in the right drawer.',
-        deleteConfirm: 'Delete S3 profile {profileID}?',
+        deleteConfirm: 'Delete S3 profile {{profileID}}?',
         columns: {
           profile: 'Profile',
           active: 'Active',
@@ -387,7 +387,7 @@ export default {
         }
       },
       history: {
-        total: '{count} jobs',
+        total: '{{count}} jobs',
         empty: 'No backup jobs yet',
         columns: {
           jobID: 'Job ID',
@@ -436,7 +436,7 @@ export default {
         sourceProfileActivated: 'Source profile activated',
         sourceProfileDeleted: 'Source profile deleted',
         createBackup: 'Create Backup Job',
-        jobCreated: 'Backup job created: {jobID} ({status})',
+        jobCreated: 'Backup job created: {{jobID}} ({{status}})',
         refreshJobs: 'Refresh Jobs',
         loadMore: 'Load More'
       }
@@ -491,34 +491,34 @@ export default {
       description: 'Manage users and their permissions',
       createUser: 'Create User',
       bulkDelete: {
-        action: 'Delete selected ({count})',
+        action: 'Delete selected ({{count}})',
         title: 'Delete selected users',
-        confirm: 'Delete the {count} selected users? This action cannot be undone. Administrator accounts cannot be deleted.',
-        success: 'Deleted {count} users',
-        failed: 'Failed to delete {count} users. They remain selected for retry.'
+        confirm: 'Delete the {{count}} selected users? This action cannot be undone. Administrator accounts cannot be deleted.',
+        success: 'Deleted {{count}} users',
+        failed: 'Failed to delete {{count}} users. They remain selected for retry.'
       },
       bulkLimits: {
-        action: 'Set limits ({count})',
+        action: 'Set limits ({{count}})',
         title: 'Set user limits',
-        selectedCount: '{count} users selected',
-        selectionLimit: 'Select no more than {max} users at a time.',
-        selectUser: 'Select {email}',
+        selectedCount: '{{count}} users selected',
+        selectionLimit: 'Select no more than {{max}} users at a time.',
+        selectUser: 'Select {{email}}',
         enableConcurrency: 'Update concurrency',
         enableRPMLimit: 'Update RPM limit',
         unlimited: 'Unlimited',
         nonNegativeInteger: 'Enter a non-negative whole number.',
         apply: 'Apply limits',
         applying: 'Applying...',
-        concurrencyValue: 'Concurrency: {value}',
-        rpmValue: 'RPM: {value}',
+        concurrencyValue: 'Concurrency: {{value}}',
+        rpmValue: 'RPM: {{value}}',
         rpmUnlimitedValue: 'RPM: Unlimited',
-        confirm: 'Overwrite limits for {count} users?\n{fields}',
-        success: 'Updated limits for {count} users',
+        confirm: 'Overwrite limits for {{count}} users?\n{{fields}}',
+        success: 'Updated limits for {{count}} users',
         failed: 'Failed to update user limits'
       },
       editUser: 'Edit User',
       deleteUser: 'Delete User',
-      deleteConfirmMessage: "Are you sure you want to delete user '{email}'? This action cannot be undone.",
+      deleteConfirmMessage: "Are you sure you want to delete user '{{email}}'? This action cannot be undone.",
       searchPlaceholder: 'Search by email, username, notes, or API key...',
       searchUsers: 'Search by email, username, notes, or API key',
       roleFilter: 'Role Filter',
@@ -608,10 +608,10 @@ export default {
       sortBy: 'Sort By',
       sortCurrentPageOnly: 'Sorts current page only',
       noSubscription: 'No subscription',
-      publicGroupCount: '+{count} public',
+      publicGroupCount: '+{{count}} public',
       exclusiveLabel: 'exclusive',
       publicLabel: 'public',
-      daysRemaining: '{days}d',
+      daysRemaining: '{{days}}d',
       expired: 'Expired',
       disable: 'Disable',
       enable: 'Enable',
@@ -625,7 +625,7 @@ export default {
       group: 'Group',
       none: 'None',
       groupChangedSuccess: 'Group updated successfully',
-      groupChangedWithGrant: 'Group updated. User auto-granted access to "{group}"',
+      groupChangedWithGrant: 'Group updated. User auto-granted access to "{{group}}"',
       groupChangeFailed: 'Failed to update group',
       noUsersYet: 'No users yet',
       createFirstUser: 'Create your first user to get started.',
@@ -659,7 +659,7 @@ export default {
       concurrencyAdjustedSuccess: 'Concurrency adjusted successfully',
       failedToSave: 'Failed to save user',
       failedToAdjust: 'Adjustment failed',
-      deleteConfirm: "Are you sure you want to delete '{email}'? This action cannot be undone.",
+      deleteConfirm: "Are you sure you want to delete '{{email}}'? This action cannot be undone.",
       setAllowedGroups: 'Set Allowed Groups',
       allowedGroupsHint:
         'Select which standard groups this user can use. Subscription groups are managed separately.',
@@ -671,7 +671,7 @@ export default {
       failedToUpdateAllowedGroups: 'Failed to update allowed groups',
       // User Group Configuration
       groupConfig: 'User Group Configuration',
-      groupConfigHint: 'Configure custom rate multipliers for user {email} (overrides group defaults)',
+      groupConfigHint: 'Configure custom rate multipliers for user {{email}} (overrides group defaults)',
       exclusiveGroups: 'Exclusive Groups',
       publicGroups: 'Public Groups (Default Available)',
       restrictPublicGroups: 'Restrict accessible public groups',
@@ -685,9 +685,9 @@ export default {
       replaceGroup: 'Replace Group',
       clickToReplace: 'Click to replace',
       replaceGroupTitle: 'Replace Exclusive Group',
-      replaceGroupHint: 'Select a new group to replace "{old}". Keys will be migrated and permissions updated automatically.',
+      replaceGroupHint: 'Select a new group to replace "{{old}}". Keys will be migrated and permissions updated automatically.',
       replaceGroupConfirm: 'Confirm Replace',
-      replaceGroupSuccess: 'Group replaced successfully, {count} key(s) migrated',
+      replaceGroupSuccess: 'Group replaced successfully, {{count}} key(s) migrated',
       selectNewGroup: 'Select target group',
       noOtherGroups: 'No other exclusive groups available',
       deposit: 'Deposit',
@@ -749,7 +749,7 @@ export default {
         addAttribute: 'Add Attribute',
         editAttribute: 'Edit Attribute',
         deleteAttribute: 'Delete Attribute',
-        deleteConfirm: "Are you sure you want to delete attribute '{name}'? All user values for this attribute will be deleted.",
+        deleteConfirm: "Are you sure you want to delete attribute '{{name}}'? All user values for this attribute will be deleted.",
         noAttributes: 'No custom attributes',
         noAttributesHint: 'Click the button above to add custom attributes',
         key: 'Attribute Key',
@@ -803,7 +803,7 @@ export default {
       platformQuota: {
         menuItem: 'Platform Quotas',
         title: 'Platform Quotas',
-        subtitle: 'Configure daily / weekly / monthly USD usage limits for each upstream platform for user {email}',
+        subtitle: 'Configure daily / weekly / monthly USD usage limits for each upstream platform for user {{email}}',
         columns: {
           platform: 'Platform',
           daily: 'Daily (USD)',
@@ -820,8 +820,8 @@ export default {
         reset: {
           button: 'Reset window',
           unavailable: 'No limit configured for this platform, so there is no usage window to reset',
-          confirm: 'Reset the {window} usage for {platform} for this user? This is effective immediately.',
-          success: 'Reset {platform} {window} usage',
+          confirm: 'Reset the {{window}} usage for {{platform}} for this user? This is effective immediately.',
+          success: 'Reset {{platform}} {{window}} usage',
           failed: 'Reset failed',
         },
         updateSuccess: 'Platform quotas updated',
@@ -834,7 +834,7 @@ export default {
         cellNotConfigured: 'Not configured',
         cellColumnTooltip: 'Only platforms with a limit are shown',
         subscriptionWarning: 'This user has an active subscription. Platform quotas only apply to balance (standard) mode requests; subscription mode requests are not subject to these limits.',
-        invalidNumber: 'The following fields contain invalid numbers. Please fix them before saving: {fields}',
+        invalidNumber: 'The following fields contain invalid numbers. Please fix them before saving: {{fields}}',
       }
     },
 
@@ -848,7 +848,7 @@ export default {
       deleteGroup: 'Delete Group',
       duplicate: 'Duplicate',
       duplicating: 'Duplicating',
-      duplicateSuccess: 'Group duplicated as "{name}" and disabled. Review its configuration before enabling it.',
+      duplicateSuccess: 'Group duplicated as "{{name}}" and disabled. Review its configuration before enabling it.',
       duplicateFailed: 'Failed to duplicate group',
       sortOrder: 'Sort',
       columnSettings: 'Column Settings',
@@ -893,8 +893,8 @@ export default {
       accountsRateLimited: 'Limited:',
       accountsTotal: 'Total:',
       accountsUnit: 'accounts',
-      rateAndAccounts: '{rate}x rate · {count} accounts',
-      accountsCount: '{count} accounts',
+      rateAndAccounts: '{{rate}}x rate · {{count}} accounts',
+      accountsCount: '{{count}} accounts',
       rateLabel: 'rate',
       accountFilters: {
         title: 'Account Filter Controls',
@@ -968,9 +968,9 @@ export default {
       },
       i18nField: {
         default: 'Default',
-        add: 'Add {language} version',
-        edit: 'Edit {language} version',
-        placeholder: '{language} version; leave empty to show the default text'
+        add: 'Add {{language}} version',
+        edit: 'Edit {{language}} version',
+        placeholder: '{{language}} version; leave empty to show the default text'
       },
       enterGroupName: 'Enter group name',
       optionalDescription: 'Optional description',
@@ -1050,9 +1050,9 @@ export default {
         composite: 'Composite',
       },
       deleteConfirm:
-        "Are you sure you want to delete '{name}'? All associated API keys will no longer belong to any group.",
+        "Are you sure you want to delete '{{name}}'? All associated API keys will no longer belong to any group.",
       deleteConfirmSubscription:
-        "Are you sure you want to delete subscription group '{name}'? This will invalidate all API keys bound to this subscription and delete all related subscription records. This action cannot be undone.",
+        "Are you sure you want to delete subscription group '{{name}}'? This will invalidate all API keys bound to this subscription and delete all related subscription records. This action cannot be undone.",
       subscription: {
         title: 'Subscription Settings',
         type: 'Billing Type',
@@ -1076,14 +1076,14 @@ export default {
           hint: 'Select a bound OpenAI OAuth account. Enabling, re-enabling or changing the source waits for a real inference session on that account to establish a fresh official weekly baseline without resetting quotas. Each subsequent confirmed natural or early official reset clears usage once. Standalone quota refresh does not establish or confirm it. Observing zero usage is not required. Historical spending is not replayed or backfilled. Account routing is unchanged.',
           includeMonthly: 'Reset monthly quota at the same time',
           includeMonthlyHint: 'Available only when this group has a monthly limit. Groups without a monthly limit are skipped automatically.',
-          invalidSource: 'Source {name} (ID {id}) is no longer a bound OpenAI OAuth account in this group. Automatic reset is inactive until another source is selected.',
-          invalidSourceOption: '[Invalid] {name} (ID {id})',
+          invalidSource: 'Source {{name}} (ID {{id}}) is no longer a bound OpenAI OAuth account in this group. Automatic reset is inactive until another source is selected.',
+          invalidSourceOption: '[Invalid] {{name}} (ID {{id}})',
           waitingBaseline: "Waiting for a real inference session on the bound source to establish this activation's official weekly baseline. Old baselines will not be reused and quotas will not reset immediately.",
-          currentBaseline: 'Current official reset-time baseline: {time}',
+          currentBaseline: 'Current official reset-time baseline: {{time}}',
           status: {
-            active: 'Following {source}',
-            waiting: 'Waiting for {source} baseline',
-            invalid: 'Source invalid: {source}',
+            active: 'Following {{source}}',
+            waiting: 'Waiting for {{source}} baseline',
+            invalid: 'Source invalid: {{source}}',
             disabled: 'Disabled'
           }
         }
@@ -1145,7 +1145,7 @@ export default {
         pricePerCall: 'Price per search call (USD)',
         pricePerCallHint:
           'Leave empty to use the default $0.01 per call (official pricing: $10 per 1,000 calls); 0 means free. Charges also apply the group or personal base, platform, model and applicable peak factors.',
-        basePricePreview: 'Base per-call reference: {price}'
+        basePricePreview: 'Base per-call reference: {{price}}'
       },
       peakRate: {
         enable: 'Enable peak rate multiplier',
@@ -1171,7 +1171,7 @@ export default {
         hint: 'When enabled, models outside the allowlist are rejected with 404 model_not_found, and model listing endpoints only show allowlisted models. Entries support exact model IDs and * wildcards anywhere (e.g., gpt-*-codex). Note: Claude Code probes with haiku-family models for titles/summaries and /messages/count_tokens is also allowlist-controlled, so make sure the small models you need are selected too.',
         loading: 'Loading candidate models...',
         empty: 'No candidate models; add custom entries below',
-        selectedSummary: 'Selected {selected} / {total}',
+        selectedSummary: 'Selected {{selected}} / {{total}}',
         selectAll: 'Select all',
         invertSelection: 'Invert',
         wildcardTag: 'wildcard',
@@ -1199,7 +1199,7 @@ export default {
       compositeRoutes: {
         action: 'Routes',
         title: 'Composite Routes',
-        titleWithGroup: 'Composite Routes: {name}',
+        titleWithGroup: 'Composite Routes: {{name}}',
         routes: 'Saved Routes',
         empty: 'No composite routes configured',
         publicModel: 'Public Model',

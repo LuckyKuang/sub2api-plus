@@ -12,7 +12,7 @@ export default {
       workspace: 'ChatGPT 账号 / 工作区 ID',
       configured: '已配置',
       notConfigured: '未配置',
-      secretAction: '{name}：修改方式',
+      secretAction: '{{name}}：修改方式',
       keep: '保留现有值',
       retry: '重试',
       replace: '替换为新值',

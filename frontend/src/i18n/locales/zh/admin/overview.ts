@@ -95,7 +95,7 @@ export default {
         bucket: '存储桶',
         prefix: 'Key 前缀',
         appendDatePath: '添加日期路径',
-        prefixPreview: '实际前缀：{prefix}',
+        prefixPreview: '实际前缀：{{prefix}}',
         accessKeyId: 'Access Key ID',
         secretAccessKey: 'Secret Access Key',
         secretHelp: '保存新的 Secret 前，服务必须已配置固定加密密钥。只测连接，或 Secret 留空沿用已保存的值，不必改这项。',
@@ -176,7 +176,7 @@ export default {
         download: '下载',
         downloadParts: '下载分卷',
         downloadPartsHint: '请按顺序下载全部分卷后拼接 gzip 字节流：Linux/macOS 使用 cat payload.part-* > backup.sql.gz；Windows 使用 copy /b payload.part-000001+payload.part-000002 backup.sql.gz。',
-        partLabel: '第 {index} 卷',
+        partLabel: '第 {{index}} 卷',
         downloadFailed: '下载地址为空',
         restore: '恢复',
         restoreConfirm: '确定要从此备份恢复吗？这将覆盖当前数据库！',
@@ -362,7 +362,7 @@ export default {
         createTitle: '创建数据源配置',
         editTitle: '编辑数据源配置',
         empty: '暂无配置，请先创建',
-        deleteConfirm: '确定删除配置 {profileID} 吗？',
+        deleteConfirm: '确定删除配置 {{profileID}} 吗？',
         columns: {
           profile: '配置',
           active: '激活状态',
@@ -377,7 +377,7 @@ export default {
         editTitle: '编辑 S3 账号',
         empty: '暂无 S3 账号，请先创建',
         editHint: '点击“编辑”将在右侧抽屉中修改账号信息。',
-        deleteConfirm: '确定删除 S3 账号 {profileID} 吗？',
+        deleteConfirm: '确定删除 S3 账号 {{profileID}} 吗？',
         columns: {
           profile: '账号',
           active: '激活状态',
@@ -387,7 +387,7 @@ export default {
         }
       },
       history: {
-        total: '共 {count} 条',
+        total: '共 {{count}} 条',
         empty: '暂无备份任务',
         columns: {
           jobID: '任务 ID',
@@ -436,7 +436,7 @@ export default {
         sourceProfileActivated: '数据源配置已切换为激活',
         sourceProfileDeleted: '数据源配置删除成功',
         createBackup: '创建备份任务',
-        jobCreated: '备份任务已创建：{jobID}（{status}）',
+        jobCreated: '备份任务已创建：{{jobID}}（{{status}}）',
         refreshJobs: '刷新任务',
         loadMore: '加载更多'
       }
@@ -491,34 +491,34 @@ export default {
       description: '管理用户账户和权限',
       createUser: '创建用户',
       bulkDelete: {
-        action: '批量删除（{count}）',
+        action: '批量删除（{{count}}）',
         title: '删除已选用户',
-        confirm: '确定删除已选的 {count} 个用户吗？此操作无法撤销。管理员账号无法删除。',
-        success: '已删除 {count} 个用户',
-        failed: '{count} 个用户删除失败，已保留选中，可重试。'
+        confirm: '确定删除已选的 {{count}} 个用户吗？此操作无法撤销。管理员账号无法删除。',
+        success: '已删除 {{count}} 个用户',
+        failed: '{{count}} 个用户删除失败，已保留选中，可重试。'
       },
       bulkLimits: {
-        action: '批量设置限制（{count}）',
+        action: '批量设置限制（{{count}}）',
         title: '批量设置用户限制',
-        selectedCount: '已选择 {count} 个用户',
-        selectionLimit: '一次最多选择 {max} 个用户。',
-        selectUser: '选择 {email}',
+        selectedCount: '已选择 {{count}} 个用户',
+        selectionLimit: '一次最多选择 {{max}} 个用户。',
+        selectUser: '选择 {{email}}',
         enableConcurrency: '修改并发数',
         enableRPMLimit: '修改 RPM 限制',
         unlimited: '不限制',
         nonNegativeInteger: '请输入非负整数。',
         apply: '应用限制',
         applying: '应用中...',
-        concurrencyValue: '并发数：{value}',
-        rpmValue: 'RPM：{value}',
+        concurrencyValue: '并发数：{{value}}',
+        rpmValue: 'RPM：{{value}}',
         rpmUnlimitedValue: 'RPM：不限制',
-        confirm: '确定覆盖 {count} 个用户的限制吗？\n{fields}',
-        success: '已更新 {count} 个用户的限制',
+        confirm: '确定覆盖 {{count}} 个用户的限制吗？\n{{fields}}',
+        success: '已更新 {{count}} 个用户的限制',
         failed: '批量更新用户限制失败'
       },
       editUser: '编辑用户',
       deleteUser: '删除用户',
-      deleteConfirmMessage: "确定要删除用户 '{email}' 吗？此操作无法撤销。",
+      deleteConfirmMessage: "确定要删除用户 '{{email}}' 吗？此操作无法撤销。",
       searchPlaceholder: '邮箱/用户名/备注/API Key 模糊搜索...',
       searchUsers: '邮箱/用户名/备注/API Key 模糊搜索',
       roleFilter: '角色筛选',
@@ -586,10 +586,10 @@ export default {
       sortBy: '排序方式',
       sortCurrentPageOnly: '仅对本页数据排序',
       noSubscription: '暂无订阅',
-      publicGroupCount: '+{count} 公开',
+      publicGroupCount: '+{{count}} 公开',
       exclusiveLabel: '专属',
       publicLabel: '公开',
-      daysRemaining: '{days}天',
+      daysRemaining: '{{days}}天',
       expired: '已过期',
       disable: '禁用',
       enable: '启用',
@@ -603,7 +603,7 @@ export default {
       group: '分组',
       none: '无',
       groupChangedSuccess: '分组修改成功',
-      groupChangedWithGrant: '分组修改成功，已自动为用户添加「{group}」分组权限',
+      groupChangedWithGrant: '分组修改成功，已自动为用户添加「{{group}}」分组权限',
       groupChangeFailed: '分组修改失败',
       noUsersYet: '暂无用户',
       createFirstUser: '创建您的第一个用户以开始使用系统',
@@ -618,7 +618,7 @@ export default {
       failedToDelete: '删除用户失败',
       failedToToggle: '更新用户状态失败',
       failedToLoadApiKeys: '加载用户 API 密钥失败',
-      deleteConfirm: "确定要删除用户 '{email}' 吗？此操作无法撤销。",
+      deleteConfirm: "确定要删除用户 '{{email}}' 吗？此操作无法撤销。",
       roles: {
         admin: '管理员',
         user: '用户'
@@ -675,7 +675,7 @@ export default {
       failedToUpdateAllowedGroups: '更新允许分组失败',
       // 用户分组配置
       groupConfig: '用户分组配置',
-      groupConfigHint: '为用户 {email} 配置专属分组倍率（覆盖分组默认倍率）',
+      groupConfigHint: '为用户 {{email}} 配置专属分组倍率（覆盖分组默认倍率）',
       exclusiveGroups: '专属分组',
       publicGroups: '公开分组（默认可用）',
       restrictPublicGroups: '限制可访问的公开分组',
@@ -689,9 +689,9 @@ export default {
       replaceGroup: '替换分组',
       clickToReplace: '点击替换分组',
       replaceGroupTitle: '替换专属分组',
-      replaceGroupHint: '选择新分组替换「{old}」，将自动迁移绑定的 Key 并更新分组权限',
+      replaceGroupHint: '选择新分组替换「{{old}}」，将自动迁移绑定的 Key 并更新分组权限',
       replaceGroupConfirm: '确认替换',
-      replaceGroupSuccess: '分组替换成功，已迁移 {count} 个 Key',
+      replaceGroupSuccess: '分组替换成功，已迁移 {{count}} 个 Key',
       selectNewGroup: '请选择目标分组',
       noOtherGroups: '没有其他可用的专属分组',
       deposit: '充值',
@@ -746,7 +746,7 @@ export default {
         addAttribute: '添加属性',
         editAttribute: '编辑属性',
         deleteAttribute: '删除属性',
-        deleteConfirm: "确定要删除属性 '{name}' 吗？所有用户的该属性值将被删除。",
+        deleteConfirm: "确定要删除属性 '{{name}}' 吗？所有用户的该属性值将被删除。",
         noAttributes: '暂无自定义属性',
         noAttributesHint: '点击上方按钮添加自定义属性',
         key: '属性键',
@@ -800,7 +800,7 @@ export default {
       platformQuota: {
         menuItem: '平台限额',
         title: '平台限额',
-        subtitle: '为用户 {email} 配置各上游平台的日 / 周 / 月用量上限',
+        subtitle: '为用户 {{email}} 配置各上游平台的日 / 周 / 月用量上限',
         columns: {
           platform: '平台',
           daily: '日 (USD)',
@@ -817,8 +817,8 @@ export default {
         reset: {
           button: '重置该窗口',
           unavailable: '该平台未配置限额，没有可重置的用量窗口',
-          confirm: '确认重置该用户 {platform} 平台的 {window} 用量？此操作立即生效。',
-          success: '已重置 {platform} {window} 用量',
+          confirm: '确认重置该用户 {{platform}} 平台的 {{window}} 用量？此操作立即生效。',
+          success: '已重置 {{platform}} {{window}} 用量',
           failed: '重置失败',
         },
         updateSuccess: '平台限额已更新',
@@ -831,7 +831,7 @@ export default {
         cellNotConfigured: '未配置',
         cellColumnTooltip: '仅展示已设限额的平台',
         subscriptionWarning: '此用户有活跃订阅，平台限额仅在余额（标准）模式下生效，订阅模式请求不受此限额约束。',
-        invalidNumber: '以下字段填写不是合法数字，请修正后再保存：{fields}',
+        invalidNumber: '以下字段填写不是合法数字，请修正后再保存：{{fields}}',
       }
     },
 
@@ -845,16 +845,16 @@ export default {
       deleteGroup: '删除分组',
       duplicate: '复制',
       duplicating: '复制中',
-      duplicateSuccess: '分组已复制为「{name}」，已默认停用，请确认配置后再启用',
+      duplicateSuccess: '分组已复制为「{{name}}」，已默认停用，请确认配置后再启用',
       duplicateFailed: '复制分组失败',
       sortOrder: '排序',
       columnSettings: '列设置',
       sortOrderHint: '拖拽分组调整显示顺序，排在前面的分组会优先显示',
       sortOrderUpdated: '排序已更新',
       failedToUpdateSortOrder: '更新排序失败',
-      deleteConfirm: "确定要删除分组 '{name}' 吗？所有关联的 API 密钥将不再属于任何分组。",
+      deleteConfirm: "确定要删除分组 '{{name}}' 吗？所有关联的 API 密钥将不再属于任何分组。",
       deleteConfirmSubscription:
-        "确定要删除订阅分组 '{name}' 吗？此操作会让所有绑定此订阅的用户的 API Key 失效，并删除所有相关的订阅记录。此操作无法撤销。",
+        "确定要删除订阅分组 '{{name}}' 吗？此操作会让所有绑定此订阅的用户的 API Key 失效，并删除所有相关的订阅记录。此操作无法撤销。",
       columns: {
         name: '名称',
         id: 'ID',
@@ -990,8 +990,8 @@ export default {
       exclusiveFilter: '专属',
       nonExclusive: '公开',
       public: '公开',
-      rateAndAccounts: '{rate}x 费率 · {count} 个账号',
-      accountsCount: '{count} 个账号',
+      rateAndAccounts: '{{rate}}x 费率 · {{count}} 个账号',
+      accountsCount: '{{count}} 个账号',
       rateLabel: '倍率',
       accountFilters: {
         title: '账号过滤控制',
@@ -1003,9 +1003,9 @@ export default {
       },
       i18nField: {
         default: '默认',
-        add: '新增 {language} 版',
-        edit: '编辑 {language} 版',
-        placeholder: '{language} 版，留空则显示默认内容'
+        add: '新增 {{language}} 版',
+        edit: '编辑 {{language}} 版',
+        placeholder: '{{language}} 版，留空则显示默认内容'
       },
       enterGroupName: '请输入分组名称',
       optionalDescription: '可选描述',
@@ -1073,14 +1073,14 @@ export default {
           hint: '只能选择已绑定到本分组的 OpenAI OAuth 账号。首次开启、重新开启或更换来源后，等来源账号的真实推理会话建立新的官方周窗口基线，不立即重置。随后确认自然到期或官方提前重置时，本分组只重置一次。独立额度刷新不会建立或确认基线。无需捕获到用量为零，不补算或回填历史消费，且不影响账号路由。',
           includeMonthly: '同时重置月额度',
           includeMonthlyHint: '仅当本分组设置了月限额时可选；没有月限额的分组会自动跳过月额度重置。',
-          invalidSource: '来源 {name}（ID {id}）已不再是本分组绑定的 OpenAI OAuth 账号。重新选择来源前，自动重置已失效。',
-          invalidSourceOption: '[已失效] {name}（ID {id}）',
+          invalidSource: '来源 {{name}}（ID {{id}}）已不再是本分组绑定的 OpenAI OAuth 账号。重新选择来源前，自动重置已失效。',
+          invalidSourceOption: '[已失效] {{name}}（ID {{id}}）',
           waitingBaseline: '等待绑定来源账号的真实推理会话建立本次开启后的官方周窗口基线；不会沿用旧基线或立即重置额度。',
-          currentBaseline: '当前官方重置时间基线：{time}',
+          currentBaseline: '当前官方重置时间基线：{{time}}',
           status: {
-            active: '跟随 {source}',
-            waiting: '等待 {source} 基线',
-            invalid: '来源已失效：{source}',
+            active: '跟随 {{source}}',
+            waiting: '等待 {{source}} 基线',
+            invalid: '来源已失效：{{source}}',
             disabled: '未启用'
           }
         }
@@ -1142,7 +1142,7 @@ export default {
         pricePerCall: '搜索单次价格（USD/次）',
         pricePerCallHint:
           '留空使用默认价 $0.01/次（官方定价 $10/1000 次）；填 0 表示免费。实际扣费还会应用分组或个人基础倍率、平台、模型及适用的高峰倍率。',
-        basePricePreview: '基础单次参考价：{price}'
+        basePricePreview: '基础单次参考价：{{price}}'
       },
       peakRate: {
         enable: '启用高峰倍率',
@@ -1168,7 +1168,7 @@ export default {
         hint: '开启后，不在白名单中的模型会被拒绝（404 model_not_found），模型列表接口也只展示白名单内的模型。条目支持精确模型 ID 与任意位置的 * 通配（如 gpt-*-codex）。注意：Claude Code 会用 haiku 系小模型做标题/摘要等探测，/messages/count_tokens 同样受白名单控制，请一并勾选所需的小模型。',
         loading: '正在加载候选模型...',
         empty: '暂无候选模型，可在下方手工添加条目',
-        selectedSummary: '已选 {selected} / {total}',
+        selectedSummary: '已选 {{selected}} / {{total}}',
         selectAll: '全选',
         invertSelection: '反选',
         wildcardTag: '通配',
@@ -1196,7 +1196,7 @@ export default {
       compositeRoutes: {
         action: '路由',
         title: 'Composite 路由',
-        titleWithGroup: 'Composite 路由：{name}',
+        titleWithGroup: 'Composite 路由：{{name}}',
         routes: '已保存路由',
         empty: '暂无 Composite 路由',
         publicModel: '公开模型',

@@ -9,7 +9,7 @@ export default {
     readOnlyTarget: '只读协助视图',
     self: '自己',
     bannerTitle: '用户协助只读视图',
-    bannerDescription: '正在协助 {account}（用户 #{id}）。界面与用户一致，可以查看和复制；变更操作已禁用。',
+    bannerDescription: '正在协助 {{account}}（用户 #{{id}}）。界面与用户一致，可以查看和复制；变更操作已禁用。',
     readOnly: '协助只读',
     exit: '退出协助',
     retry: '重试',

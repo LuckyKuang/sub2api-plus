@@ -1,8 +1,23 @@
 import { describe, expect, it } from 'vitest'
-import { createI18n } from 'vue-i18n'
+import i18next from 'i18next'
+import { initReactI18next } from 'react-i18next'
 
 import en from '../locales/en'
 import zh from '../locales/zh'
+
+async function createInstance(locale: 'en' | 'zh', messages: Record<string, unknown>) {
+  const instance = i18next.createInstance()
+  await instance.use(initReactI18next).init({
+    lng: locale,
+    fallbackLng: locale,
+    defaultNS: 'translation',
+    resources: { [locale]: { translation: messages } },
+    interpolation: { escapeValue: false },
+    initImmediate: false,
+    react: { useSuspense: false }
+  })
+  return instance
+}
 
 describe('account scheduling threshold locale paths', () => {
   it('defines the account editor labels at admin.accounts', () => {
@@ -22,14 +37,9 @@ describe('account scheduling threshold locale paths', () => {
   it.each([
     ['en', en],
     ['zh', zh]
-  ] as const)('registers the account editor path in %s', (locale, messages) => {
-    const i18n = createI18n({
-      legacy: false,
-      locale,
-      messages: { [locale]: messages }
-    })
-
-    expect(i18n.global.te('admin.accounts.accountSchedulingThresholdOverride')).toBe(true)
+  ] as const)('registers the account editor path in %s', async (locale, messages) => {
+    const instance = await createInstance(locale, messages)
+    expect(instance.exists('admin.accounts.accountSchedulingThresholdOverride')).toBe(true)
   })
 
   it('does not nest account editor labels under account status', () => {

@@ -68,9 +68,9 @@ export const useSubscriptionsStore = create<SubscriptionsState>()((set, get) => 
       .getActiveSubscriptions()
       .then((data) => {
         if (currentGeneration === requestGeneration) {
-          set({
-            activeSubscriptions: data
-          })
+          loaded = true
+          lastFetchedAt = Date.now()
+          set({ activeSubscriptions: data })
         }
         return data
       })

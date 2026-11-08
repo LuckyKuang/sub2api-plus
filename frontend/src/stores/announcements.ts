@@ -1,8 +1,8 @@
 import { create } from 'zustand'
 import { announcementsAPI } from '@/api'
 import type { UserAnnouncement } from '@/types'
-import { currentSupportContext, onSupportContextChange, syncSupportContext } from './supportContext'
-import { supportRequestGeneration } from '@/utils/adminSupportContext'
+import { onSupportContextChange, syncSupportContext } from './supportContext'
+import { getAdminSupportContext, supportRequestGeneration } from '@/utils/adminSupportContext'
 
 const THROTTLE_MS = 20 * 60 * 1000 // 20 minutes
 
@@ -27,7 +27,7 @@ export const useAnnouncementsStore = create<AnnouncementsState>()((set, get) => 
   let popupQueue: UserAnnouncement[] = []
 
   function enqueueNewPopups() {
-    if (currentSupportContext()) return
+    if (getAdminSupportContext()) return
     const newPopups = get().announcements.filter(
       (a) => a.notify_mode === 'popup' && !a.read_at && !shownPopupIds.has(a.id)
     )
@@ -45,7 +45,7 @@ export const useAnnouncementsStore = create<AnnouncementsState>()((set, get) => 
   }
 
   function showNextPopup() {
-    if (currentSupportContext() || popupQueue.length === 0) {
+    if (getAdminSupportContext() || popupQueue.length === 0) {
       set({ currentPopup: null })
       return
     }
@@ -89,7 +89,7 @@ export const useAnnouncementsStore = create<AnnouncementsState>()((set, get) => 
     set({ currentPopup: null })
 
     // Mark as read (fire-and-forget, UI already updated)
-    if (!currentSupportContext()) void markAsRead(id)
+    if (!getAdminSupportContext()) void markAsRead(id)
 
     // Show next popup after a short delay
     if (popupQueue.length > 0) {
@@ -99,7 +99,7 @@ export const useAnnouncementsStore = create<AnnouncementsState>()((set, get) => 
   }
 
   async function markAsRead(id: number) {
-    if (currentSupportContext()) return
+    if (getAdminSupportContext()) return
     try {
       await announcementsAPI.markRead(id)
       set({
@@ -115,7 +115,7 @@ export const useAnnouncementsStore = create<AnnouncementsState>()((set, get) => 
   }
 
   async function markAllAsRead() {
-    if (currentSupportContext()) return
+    if (getAdminSupportContext()) return
     const unread = get().announcements.filter((a) => !a.read_at)
     if (unread.length === 0) return
 
@@ -153,7 +153,7 @@ export const useAnnouncementsStore = create<AnnouncementsState>()((set, get) => 
   // previous user's announcements and refetches for the assisted user.
   onSupportContextChange(() => {
     reset()
-    if (currentSupportContext()) void fetchAnnouncements(true)
+    if (getAdminSupportContext()) void fetchAnnouncements(true)
   })
 
   return {

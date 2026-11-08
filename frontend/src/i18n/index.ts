@@ -1,4 +1,4 @@
-import i18next from 'i18next'
+import i18next, { type i18n as I18nInstance } from 'i18next'
 import LanguageDetector from 'i18next-browser-languagedetector'
 import { initReactI18next } from 'react-i18next'
 
@@ -7,7 +7,9 @@ export type LocaleCode = 'en' | 'zh'
 const LOCALE_KEY = 'sub2api_locale'
 const DEFAULT_LOCALE: LocaleCode = 'en'
 
-const localeLoaders: Record<LocaleCode, () => Promise<{ default: Record<string, unknown> }>> = {
+type LocaleMessages = Record<string, unknown>
+
+const localeLoaders: Record<LocaleCode, () => Promise<{ default: LocaleMessages }>> = {
   en: () => import('./locales/en'),
   zh: () => import('./locales/zh')
 }
@@ -25,7 +27,7 @@ function getStoredLocale(): LocaleCode | null {
   }
 }
 
-function getDefaultLocale(): LocaleCode {
+export function getDefaultLocale(): LocaleCode {
   const stored = getStoredLocale()
   if (stored) return stored
   const browserLang = navigator.language.toLowerCase()
@@ -34,33 +36,50 @@ function getDefaultLocale(): LocaleCode {
 }
 
 const loadedLocales = new Set<LocaleCode>()
+/** Bundles fetched before `initI18n()` ran; applied when the instance starts. */
+const pendingBundles = new Map<LocaleCode, LocaleMessages>()
+
+function applyBundle(instance: I18nInstance, locale: LocaleCode, messages: LocaleMessages): void {
+  if (instance.isInitialized) {
+    instance.addResourceBundle(locale, 'translation', messages, true, true)
+  } else {
+    pendingBundles.set(locale, messages)
+  }
+}
 
 export async function loadLocaleMessages(locale: LocaleCode): Promise<void> {
   if (loadedLocales.has(locale)) return
   const module = await localeLoaders[locale]()
-  i18next.addResourceBundle(locale, 'translation', module.default, true, true)
+  applyBundle(i18next, locale, module.default)
   loadedLocales.add(locale)
 }
 
 export async function initI18n(): Promise<void> {
   const current = getDefaultLocale()
   await loadLocaleMessages(current)
-  await i18next
-    .use(LanguageDetector)
-    .use(initReactI18next)
-    .init({
-      resources: {
-        [current]: { translation: (await localeLoaders[current]()).default }
-      },
-      lng: current,
-      fallbackLng: DEFAULT_LOCALE,
-      defaultNS: 'translation',
-      interpolation: { escapeValue: false },
-      // 禁用 HTML 消息警告 - 引导步骤使用富文本内容（driver.js 支持 HTML）
-      // 这些内容是内部定义的，不存在 XSS 风险
-      returnNull: false,
-      react: { useSuspense: false }
-    })
+
+  const resources: Record<string, { translation: LocaleMessages }> = {}
+  for (const [locale, messages] of pendingBundles) {
+    resources[locale] = { translation: messages }
+  }
+  resources[current] = { translation: (await localeLoaders[current]()).default }
+
+  await i18next.use(LanguageDetector).use(initReactI18next).init({
+    resources,
+    lng: current,
+    fallbackLng: DEFAULT_LOCALE,
+    defaultNS: 'translation',
+    interpolation: { escapeValue: false },
+    returnNull: false,
+    react: { useSuspense: false }
+  })
+
+  // Anything loaded during `await` above still needs to land on the instance.
+  for (const [locale, messages] of pendingBundles) {
+    i18next.addResourceBundle(locale, 'translation', messages, true, true)
+  }
+  pendingBundles.clear()
+
   document.documentElement.setAttribute('lang', current)
 }
 

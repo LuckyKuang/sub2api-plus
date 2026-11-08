@@ -23,7 +23,7 @@ export default {
     "noExchange": "币种仅用于订单记录，不计算汇率。面值 100 始终到账 100 USD。",
     "orderPlan": "订阅套餐",
     "selectPlan": "请选择订阅套餐",
-    "planSnapshot": "生成时冻结 {name} 的售价 {price} {currency}、分组和有效期。",
+    "planSnapshot": "生成时冻结 {{name}} 的售价 {{price}} {{currency}}、分组和有效期。",
     "orderSource": "订单来源",
     "orderType": "订单类型",
     "paymentOrder": "支付订单",

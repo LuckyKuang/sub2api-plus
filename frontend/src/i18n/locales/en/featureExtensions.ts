@@ -23,7 +23,7 @@ export default {
     "noExchange": "Currency applies to the order record only. A face value of 100 always credits 100 USD without currency conversion.",
     "orderPlan": "Subscription plan",
     "selectPlan": "Select a subscription plan",
-    "planSnapshot": "The price of {name} ({price} {currency}), group and duration are frozen when codes are generated.",
+    "planSnapshot": "The price of {{name}} ({{price}} {{currency}}), group and duration are frozen when codes are generated.",
     "orderSource": "Order source",
     "orderType": "Order type",
     "paymentOrder": "Payment order",

@@ -31,7 +31,7 @@ export default {
     disabled: 'Disabled',
     error: 'Error',
     starting: 'Starting',
-    configTitle: '{name} configuration',
+    configTitle: '{{name}} configuration',
     loadingUI: 'Loading plugin configuration UI...',
     uiUnavailable: 'Unable to load the plugin configuration UI',
     uploadSuccess: 'Plugin installed and kept disabled',

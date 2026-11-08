@@ -10,7 +10,7 @@ describe('usage ipGeo locale keys', () => {
     expect(zh.usage.ipGeo.failed).toBe('获取失败')
     expect(zh.usage.ipGeo.private).toBe('内网地址')
     expect(zh.usage.ipGeo.batchFetch).toBe('批量获取地区')
-    expect(zh.usage.ipGeo.pending).toBe('{count} 个 IP 待获取地区')
+    expect(zh.usage.ipGeo.pending).toBe('{{count}} 个 IP 待获取地区')
   })
 
   it('contains en labels for IP geolocation UI', () => {
@@ -19,6 +19,6 @@ describe('usage ipGeo locale keys', () => {
     expect(en.usage.ipGeo.failed).toBe('Failed')
     expect(en.usage.ipGeo.private).toBe('Private address')
     expect(en.usage.ipGeo.batchFetch).toBe('Batch fetch regions')
-    expect(en.usage.ipGeo.pending).toBe('{count} IPs pending')
+    expect(en.usage.ipGeo.pending).toBe('{{count}} IPs pending')
   })
 })

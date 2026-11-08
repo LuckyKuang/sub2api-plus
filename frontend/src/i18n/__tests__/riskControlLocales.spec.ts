@@ -12,8 +12,8 @@ describe('risk control locale copy', () => {
   })
 
   it('keeps pre-block audit key summary aware of async worker load', () => {
-    expect(zh.admin.riskControl.preBlockAPIKeyLoadSummary).toContain('worker：{workerActive} / {workerTotal}')
-    expect(en.admin.riskControl.preBlockAPIKeyLoadSummary).toContain('worker: {workerActive} / {workerTotal}')
+    expect(zh.admin.riskControl.preBlockAPIKeyLoadSummary).toContain('worker：{{workerActive}} / {{workerTotal}}')
+    expect(en.admin.riskControl.preBlockAPIKeyLoadSummary).toContain('worker: {{workerActive}} / {{workerTotal}}')
   })
 
   it('does not describe pre-block audit key polling as bypassing the worker pool', () => {

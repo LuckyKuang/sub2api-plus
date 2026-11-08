@@ -40,7 +40,7 @@ export default {
     "invalid": "Check thresholds, unique exact model IDs and high-tier prices. Custom pricing requires input and output; blank cache meters inherit.",
     "publicModelHint": "Enter the model name this group exposes to clients. On a Composite group that is the public model, not the supplier's model ID.",
     "publicModelPlaceholder": "Public model name",
-    "presetValues": "Model presets: {values} input tokens. Blank inherits; 0 disables.",
+    "presetValues": "Model presets: {{values}} input tokens. Blank inherits; 0 disables.",
     "defaultsFailed": "Could not load default thresholds.",
     "defaultsUnknown": "Unknown"
   }

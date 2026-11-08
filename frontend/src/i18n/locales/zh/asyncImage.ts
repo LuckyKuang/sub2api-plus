@@ -10,7 +10,7 @@ export default {
     list: {
       empty: '暂无异步图像任务',
       emptyHint: '点击右上角新建任务，提交生成或编辑请求后可在此查看状态和结果。',
-      previous: '上一页', next: '下一页', page: '第 {page} 页',
+      previous: '上一页', next: '下一页', page: '第 {{page}} 页',
       keyHint: '任务按 API Key 隔离，切换 Key 可查看其对应记录。',
     },
     create: {
@@ -18,7 +18,7 @@ export default {
       noKeys: '当前没有可用于异步图像任务的 API Key。请创建并绑定已开启生图权限的 OpenAI 或 Grok 分组。',
       model: '模型', modelsLoading: '正在加载模型...', noModels: '该 API Key 没有可用模型', prompt: '提示词', promptPlaceholder: '描述你希望生成的画面',
       size: '图片尺寸', quality: '质量', count: '生成数量', width: '宽度', height: '高度',
-      referenceImages: '参考图片', referenceImagesHint: '至少上传 1 张，最多 4 张；上传图片不会被保存到任务历史。', addReferenceImages: '添加参考图', removeReferenceImage: '移除参考图', referenceImageRequired: '编辑任务至少需要上传 1 张参考图', referenceImageLimit: '编辑任务最多可上传 {count} 张参考图',
+      referenceImages: '参考图片', referenceImagesHint: '至少上传 1 张，最多 4 张；上传图片不会被保存到任务历史。', addReferenceImages: '添加参考图', removeReferenceImage: '移除参考图', referenceImageRequired: '编辑任务至少需要上传 1 张参考图', referenceImageLimit: '编辑任务最多可上传 {{count}} 张参考图',
       maskImage: '蒙版图片（可选）', maskImageHint: '蒙版作用于第一张参考图。请使用带透明通道、且尺寸一致的 PNG 或 WebP。', addMaskImage: '添加蒙版', removeMaskImage: '移除蒙版',
       invalidUploadType: '请选择 PNG、JPEG 或 WebP 图片；蒙版仅支持 PNG 或 WebP。', uploadFileTooLarge: '单张上传图片不能超过 20 MiB。', uploadTotalTooLarge: '参考图和蒙版合计不能超过 40 MiB。',
       sizeAuto: '自动', size1K: '1024 × 1024（1K）', sizeLandscape15K: '1536 × 1024（约 1.5K）', sizePortrait15K: '1024 × 1536（约 1.5K）',
@@ -34,12 +34,12 @@ export default {
     },
     detail: {
       title: '异步图像任务详情', taskId: '任务 ID', prompt: '提示词', error: '错误信息',
-      requestedImages: '请求数量', actualImages: '实际数量', countMismatch: '请求生成 {requested} 张，上游实际返回 {actual} 张。任务已保留成功生成的图片。',
+      requestedImages: '请求数量', actualImages: '实际数量', countMismatch: '请求生成 {{requested}} 张，上游实际返回 {{actual}} 张。任务已保留成功生成的图片。',
       pending: '任务仍在生成中', noImage: '任务已完成，但没有可展示的图片地址',
     },
     delete: {
       title: '删除失败任务',
-      confirm: '确定删除失败任务 {taskId} 吗？此操作不可撤销。',
+      confirm: '确定删除失败任务 {{taskId}} 吗？此操作不可撤销。',
       success: '失败任务已删除',
     },
     errors: { loadKeys: '加载 API Key 失败', loadModels: '加载可用模型失败', loadTasks: '加载异步图像任务失败', submit: '提交异步图像任务失败', refresh: '刷新任务状态失败', delete: '删除异步图像任务失败', deleteNotAllowed: '只能删除状态为失败的异步图像任务', download: '下载生成图片失败', invalidArchive: '下载包无效，请稍后重试' },

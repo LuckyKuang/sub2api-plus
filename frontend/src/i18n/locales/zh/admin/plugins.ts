@@ -31,7 +31,7 @@ export default {
     disabled: '已停用',
     error: '异常',
     starting: '启动中',
-    configTitle: '{name} 配置',
+    configTitle: '{{name}} 配置',
     loadingUI: '正在加载插件配置界面...',
     uiUnavailable: '无法加载插件配置界面',
     uploadSuccess: '插件安装成功，当前保持停用',

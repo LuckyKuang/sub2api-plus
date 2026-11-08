@@ -4,7 +4,7 @@ export default {
     title: 'Service status', subtitle: 'Service status and incidents from real request traffic and enabled active probes.', observed: 'Last observed',
     platforms: 'Platforms', events: 'Incidents', viewEvents: 'View incidents', filter: 'Filter platforms', allPlatforms: 'All platforms', range: 'History range',
     ranges: { '24h': '24 hours', '7d': '7 days', '30d': '30 days' },
-    activeEvents: '{count} unresolved incidents', counts: '{normal} normal · {affected} affected · {unknown} awaiting data · {recovering} recovering',
+    activeEvents: '{{count}} unresolved incidents', counts: '{{normal}} normal · {{affected}} affected · {{unknown}} awaiting data · {{recovering}} recovering',
     status: { normal: 'Operational', degraded: 'Degraded performance', partial: 'Partial disruption', outage: 'Service disruption', recovering: 'Monitoring recovery', unknown: 'No recent data', insufficient: 'Insufficient samples' },
     overview: { normal: 'Observed services are operational', degraded: 'Some services are responding slowly', partial: 'Some services are experiencing issues', outage: 'Some platforms are experiencing a disruption', recovering: 'Service observations are improving', unknown: 'Insufficient data to confirm current status', insufficient: 'Insufficient data to confirm current status' },
     overviewDescription: {
@@ -26,7 +26,7 @@ export default {
     eventProgress: 'Incident progress', currentWindow: 'Current observation window', currentNote: 'Recent observations are independent from incident recovery, which requires sustained new evidence. Refreshes every 15 seconds; snapshots cache for at most 10 seconds.', observation: { no_observations: 'No eligible observations in the last five minutes', insufficient: 'Requests observed; insufficient samples', stale: 'Current observations are stale', observed: 'Eligible observations available' },
     modelStatus: 'Model status', model: 'Model', recentStatus: 'Last 5 minutes',
     note: 'Status and incidents combine request traffic and enabled probe observations across active channels. Historical success rates and current status use different time ranges. Gray means no data or insufficient samples. P50 is approximate.', loadFailed: 'Service status is temporarily unavailable. Please refresh later.',
-    eventTitle: { partial: '{platform} service issues', outage: '{platform} channel disruption', degraded: '{platform} increased response times', normal: '{platform} service incident', recovering: '{platform} service incident', unknown: '{platform} service incident', insufficient: '{platform} service incident' },
+    eventTitle: { partial: '{{platform}} service issues', outage: '{{platform}} channel disruption', degraded: '{{platform}} increased response times', normal: '{{platform}} service incident', recovering: '{{platform}} service incident', unknown: '{{platform}} service incident', insufficient: '{{platform}} service incident' },
     phase: { detected: 'Issue detected', ongoing: 'Ongoing', recovering: 'Monitoring recovery', awaiting_data: 'Awaiting new observations', resolved: 'Resolved' },
     phaseDescription: {
       detected: 'An issue was confirmed by consecutive new observations. The affected service may be disrupted.', ongoing: 'Subsequent observations continue to show issues. Monitoring continues.',
@@ -35,7 +35,7 @@ export default {
     modeV3: 'V3 Service status', modeV2: 'V2 Passive monitoring', modeHint: 'V1 actively probes. V2 uses passive aggregation. V3 combines real requests and optional V1 probes. Logged-in users can view the selected mode when enabled.',
     modeV3Hint: 'Observe platforms and incidents automatically from all users’ real requests on this site, with optional V1 active probes.', modeV2Hint: 'Aggregates health metrics from real gateway traffic. Users can view monitoring data for authorized groups.',
     settings: {
-      platformsTitle: 'Enable platform monitoring', platformsHint: 'Disabling a platform stops status observation and incident updates and removes it from service status. Existing history is retained. Re-enabling starts observation at the next full minute; consecutive confirmations require new observations.', platformToggle: 'Enable monitoring for {platform}',
+      platformsTitle: 'Enable platform monitoring', platformsHint: 'Disabling a platform stops status observation and incident updates and removes it from service status. Existing history is retained. Re-enabling starts observation at the next full minute; consecutive confirmations require new observations.', platformToggle: 'Enable monitoring for {{platform}}',
       title: 'V3 service status configuration', description: 'Current status uses requests and enabled probes from the last 5 minutes. Consecutive confirmations require new observations. Silence or insufficient samples cannot confirm recovery. History accumulates after enablement.',
       minimum_samples: 'Minimum request samples', warning_error_rate: 'Issue error rate (0–1, default 0.05)', outage_error_rate: 'Outage error rate (0–1, default 0.9)',
       warning_ttft_ms: 'P50 first-token threshold (ms)', abnormal_windows: 'Consecutive issue confirmations', recovery_windows: 'Consecutive recovery confirmations',

@@ -1,4 +1,4 @@
-import { getAdminSupportContext, supportRequestGeneration } from '@/utils/adminSupportContext'
+import { supportRequestGeneration } from '@/utils/adminSupportContext'
 
 /**
  * Cross-store reaction helper for administrator support ("assistance") context changes.
@@ -31,9 +31,4 @@ export function syncSupportContext(): void {
 /** Register a reaction invoked when the administrator support context changes. */
 export function onSupportContextChange(listener: SupportContextListener): void {
   listeners.add(listener)
-}
-
-/** Current administrator support context, or null outside an assistance view. */
-export function currentSupportContext(): ReturnType<typeof getAdminSupportContext> {
-  return getAdminSupportContext()
 }

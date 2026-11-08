@@ -45,7 +45,7 @@ export default {
       message: 'This permanently deletes all audit logs and cannot be undone. The clear action itself is recorded. Continue?',
       totpTitle: 'Enter Two-Factor Code',
       totpHint: 'Clearing audit logs requires a fresh TOTP verification.',
-      success: 'Cleared {count} audit log(s)',
+      success: 'Cleared {{count}} audit log(s)',
       failed: 'Failed to clear audit logs'
     }
   }

@@ -4,7 +4,7 @@ export default {
     title: '服务状态', subtitle: '结合全站真实请求和已开启的主动探测，展示服务状态与事件。', observed: '最近观测',
     platforms: '平台状态', events: '事件记录', viewEvents: '查看事件', filter: '筛选平台', allPlatforms: '全部平台', range: '历史统计范围',
     ranges: { '24h': '24 小时', '7d': '7 天', '30d': '30 天' },
-    activeEvents: '{count} 个事件未结束', counts: '{normal} 个平台正常 · {affected} 个平台异常 · {unknown} 个平台待观测 · {recovering} 个平台恢复观察',
+    activeEvents: '{{count}} 个事件未结束', counts: '{{normal}} 个平台正常 · {{affected}} 个平台异常 · {{unknown}} 个平台待观测 · {{recovering}} 个平台恢复观察',
     status: { normal: '运行正常', degraded: '性能下降', partial: '部分服务异常', outage: '服务中断', recovering: '恢复观察', unknown: '暂无近期数据', insufficient: '样本不足' },
     overview: { normal: '已观测服务运行正常', degraded: '部分服务响应较慢', partial: '部分服务出现异常', outage: '部分平台服务中断', recovering: '服务观测正在改善', unknown: '暂无足够数据确认当前状态', insufficient: '暂无足够数据确认当前状态' },
     overviewDescription: {
@@ -26,7 +26,7 @@ export default {
     eventProgress: '历史事件进度', currentWindow: '当前观测窗口', currentNote: '近五分钟观测独立显示；历史事件仍需新的持续观测确认恢复。数据每 15 秒刷新，快照最多缓存 10 秒。', observation: { no_observations: '近五分钟无有效观测', insufficient: '已有请求，样本不足', stale: '当前观测数据已过期', observed: '已有有效观测' },
     modelStatus: '模型状态', model: '模型', recentStatus: '近 5 分钟状态',
     note: '状态与事件汇总全站有效请求及已启用探测。历史成功率与当前状态使用不同时间范围；灰色表示无数据或请求样本不足，P50 为真实请求的近似首 Token 延迟。', loadFailed: '暂时无法获取服务状态，请稍后刷新。',
-    eventTitle: { partial: '{platform} 部分服务出现异常', outage: '{platform} 渠道服务中断', degraded: '{platform} 响应时间升高', normal: '{platform} 服务事件', recovering: '{platform} 服务事件', unknown: '{platform} 服务事件', insufficient: '{platform} 服务事件' },
+    eventTitle: { partial: '{{platform}} 部分服务出现异常', outage: '{{platform}} 渠道服务中断', degraded: '{{platform}} 响应时间升高', normal: '{{platform}} 服务事件', recovering: '{{platform}} 服务事件', unknown: '{{platform}} 服务事件', insufficient: '{{platform}} 服务事件' },
     phase: { detected: '监控到故障', ongoing: '异常持续', recovering: '恢复观察', awaiting_data: '等待新观测', resolved: '已恢复' },
     phaseDescription: {
       detected: '系统在连续的新观测中确认异常，相关服务可能受到影响。', ongoing: '后续观测仍表现异常，系统将继续观察。',
@@ -35,7 +35,7 @@ export default {
     modeV3: 'V3 服务状态', modeV2: 'V2 被动监控', modeHint: 'V1 主动探测；V2 被动聚合；V3 结合真实请求和可选的 V1 探测。开启后，登录用户可查看所选模式。',
     modeV3Hint: '基于全站所有用户的真实请求自动观测平台状态和服务事件，可额外开启 V1 主动探测。', modeV2Hint: '基于真实网关流量聚合健康指标，用户可查看授权分组的监控数据。',
     settings: {
-      platformsTitle: '启用平台监控', platformsHint: '关闭后停止该平台的状态观测和事件更新，并从服务状态页面移除。已有历史保留；重新开启后从下一个完整分钟开始观测，连续确认需要新观测。', platformToggle: '启用 {platform} 平台监控',
+      platformsTitle: '启用平台监控', platformsHint: '关闭后停止该平台的状态观测和事件更新，并从服务状态页面移除。已有历史保留；重新开启后从下一个完整分钟开始观测，连续确认需要新观测。', platformToggle: '启用 {{platform}} 平台监控',
       title: 'V3 服务状态配置', description: '当前状态使用最近 5 分钟的请求及已启用探测。连续确认必须有新的观测证据；无流量或样本不足不会确认恢复。开启后开始积累历史。',
       minimum_samples: '最少请求样本', warning_error_rate: '异常错误率（0–1，默认 0.05）', outage_error_rate: '中断错误率（0–1，默认 0.9）',
       warning_ttft_ms: 'P50 首 Token 延迟阈值（毫秒）', abnormal_windows: '故障连续确认次数', recovery_windows: '恢复连续确认次数',

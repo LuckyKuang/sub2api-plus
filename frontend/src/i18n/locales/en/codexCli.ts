@@ -12,7 +12,7 @@ export default {
       workspace: 'ChatGPT account / workspace ID',
       configured: 'Configured',
       notConfigured: 'Not configured',
-      secretAction: '{name}: update action',
+      secretAction: '{{name}}: update action',
       keep: 'Keep existing value',
       retry: 'Retry',
       replace: 'Replace value',
