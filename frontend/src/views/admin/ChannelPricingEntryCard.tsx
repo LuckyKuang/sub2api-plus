@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ChevronDown, ChevronRight, Trash2 } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import type { BillingMode, ModelPricingReference, ModelPricingSource } from '@/api/admin/channels'
 import channelsAPI from '@/api/admin/channels'
 import { Input, Select } from '@/components/ui'
@@ -348,7 +349,7 @@ export function PricingEntryCard({
         </button>
       </div>
 
-      <div className="collapsible-content" style={collapsed ? { gridTemplateRows: '0fr' } : undefined}>
+      <div className={cn('collapsible-content', collapsed && 'collapsible-content--collapsed')}>
         <div className="collapsible-inner">
           <div className="mt-3 flex items-start gap-2">
             <div className="flex-1">

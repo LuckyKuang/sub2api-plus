@@ -789,3 +789,35 @@
 
 .toggle-track { border: 1px solid var(--surface-edge); padding: 1px; }
 .toggle-track[aria-checked="true"] { border-color: rgb(var(--console-accent-500, 20 184 166) / 65%); }
+
+/* ==========================================================================
+   Channel pricing entry card
+   Ported from PricingEntryCard.vue scoped styles. The grid-row trick is what
+   animates the collapse; without `display:grid` an inline 0fr does nothing.
+   ========================================================================== */
+
+.collapsible-content {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.25s ease;
+}
+.collapsible-content--collapsed { grid-template-rows: 0fr; }
+.collapsible-inner { overflow: hidden; }
+
+/* ==========================================================================
+   Ops dashboard toolbar
+   Ported from OpsDashboardHeader.vue scoped styles.
+   ========================================================================== */
+
+.ops-toolbar-summary { flex: 1 1 240px; min-width: 0; }
+.ops-toolbar-controls { flex: 0 1 auto; max-width: 100%; justify-content: flex-end; margin-left: auto; }
+
+@media (min-width: 1024px) and (max-width: 1279px), (min-width: 1024px) and (max-height: 800px) {
+  .ops-workspace-toolbar { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 12px 16px; }
+  .ops-workspace-toolbar .ops-toolbar-summary > div { flex-wrap: wrap; gap: 4px 8px; }
+  .ops-workspace-toolbar .ops-toolbar-controls { gap: 8px; }
+  .ops-workspace-toolbar .ops-toolbar-controls > .relative { flex: 0 0 auto; min-width: 140px; }
+  .ops-workspace-toolbar .ops-toolbar-controls > .ops-toolbar-separator { display: none; }
+  .ops-workspace-toolbar .ops-toolbar-controls > button:first-of-type { margin-left: auto; }
+  .ops-workspace-toolbar .ops-toolbar-controls .select-trigger { min-height: 36px; padding-block: 7px; }
+}
