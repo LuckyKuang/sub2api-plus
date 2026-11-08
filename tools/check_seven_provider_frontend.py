@@ -18,6 +18,16 @@ PROBE_GROUP = "proxy management single and batch probe ownership"
 REAUTH_GROUP = "existing-account reauthorization owner boundaries"
 REAUTH_ENTRIES = ("openai exchange", "openai RT", "grok exchange", "grok RT", "grok SSO")
 REQUIRED = {
+    "src/components/account/__tests__/credentialsBuilder.spec.ts": (
+        "validateHeaderOverrideRows reserves OpenAI actor authorization for credential-owned authentication",
+        *(f"validateHeaderOverrideRows rejects adapter-owned override {name} before save"
+          for name in ("Content-Encoding", "X-OpenAI-Internal-Codex-Residency", "X-OpenAI-Memgen-Request",
+                       "X-OpenAI-Subagent", "X-ResponsesAPI-Include-Timing-Metrics",
+                       "X-Grok-Client-Surface", "X-Grok-Req-Id", "X-Grok-Session-Id", "X-Grok-Agent-Id",
+                       "X-Grok-Conv-Group-Id", "X-Grok-Model-Override", "X-Grok-User-Id",
+                       "X-Grok-Deployment-Id", "X-Grok-Turn-Idx", "X-Grok-Transient-Retry",
+                       "X-UserID", "X-Email", "X-XAI-Token-Auth", "X-AuthenticateResponse")),
+    ),
     "src/components/account/__tests__/CodexCLIEditor.spec.ts": (
         "Codex CLI account editor shows defaults and disables task mode until the pinned runtime is ready",
         "Codex CLI account editor separates secret preservation, replacement and explicit clearing",

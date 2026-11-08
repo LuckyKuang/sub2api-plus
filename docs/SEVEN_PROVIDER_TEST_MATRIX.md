@@ -36,6 +36,25 @@ prove PostgreSQL locking, rollback, outbox atomicity, or multi-replica storage.
 
 ## November 8 official agent review
 
+The subsequent OAuth/API-key account review found that generic API-key header
+overrides could append `X-OpenAI-Actor-Authorization` to the owner's bearer.
+`TestOpenAIActorAuthorizationOverrideRejected` now requires rejection of all
+case variants and empty placeholders. `TestOpenAIActorAuthorizationCannotReachProvider`
+captures real HTTP, passthrough and WS handshake traffic for both account types
+and legacy JSON/string-map overrides, asserting no extra actor credential,
+exact owner auth/default identity and retained ordinary headers. Its WS fixture
+captures the upgrade request and intentionally refuses the upgrade; it does not
+claim a full WS generation. Existing endpoint, auxiliary inference, discovery
+and automatic-probe identity matrices also inject the actor override and require
+its absence, including CLI switch transitions. The frontend gate requires the
+imported-row rejection case. These checks preserve the existing audit boundary
+and use synthetic upstreams without live credentials.
+The editor also rejected none of nineteen previously backend-reserved encoding,
+Codex context/residency and Grok auth/state fields. Independent frontend cases
+now require their rejection, and the identity policy gate detects omissions
+from the editor against the complete server reserved-name list. This synchronizes
+existing restrictions; it introduces no new provider wire declarations.
+
 The [reviewed official trees](OFFICIAL_AGENT_BASELINES.md#november-8-protocol-alignment)
 retain all seven existing identity versions and SDK fingerprints. Five heads
 are unchanged; the Step-Code increment changes client-local task/process

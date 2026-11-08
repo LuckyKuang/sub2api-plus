@@ -544,6 +544,16 @@ Generic override saves reject managed identity headers with
 Authentication, session, routing and protocol-capability fields keep their own
 ownership. The superseded ForceCodexCLI UA staging and disable-enforcement
 branch have been removed; classification does not select an outbound identity.
+
+`X-OpenAI-Actor-Authorization` is reserved authentication as defined by official
+Codex [`model-provider-info/src/lib.rs`](https://github.com/openai/codex/blob/c9b4267c370a755da12ec1c8648c2451163212b7/codex-rs/model-provider-info/src/lib.rs)
+(`uses_openai_actor_authorization`).
+Inbound caller headers and generic account overrides cannot add another actor
+to OAuth/API-key provider requests. Save-time validation rejects every case
+variant, including empty placeholders; final override filtering ignores legacy
+JSON/string-map entries. Ordinary custom headers still work. The client-side
+`local-image-extension` config marker does not authorize provider dispatch.
+
 The OpenAI HTTP passthrough switch, enabled or disabled, retains this same source
 matrix and header contract. Authentication and identity remain gateway-managed;
 protocol handling, safety filtering, audit, billing and concurrency remain in

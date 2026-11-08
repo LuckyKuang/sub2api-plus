@@ -57,7 +57,8 @@ func TestCodexCLIBridgeIdentityFallbackAcrossGatewayAndAutomaticProbe(t *testing
 					owner.Credentials[credKeyHeaderOverrides] = map[string]any{
 						"User-Agent": "codex_cli_rs/9.9.9 (injected; arm64) forged-terminal",
 						"Originator": "injected-originator", "Version": "9.9.9",
-						"X-Bridge-Identity-Test": "enabled-override",
+						"X-Bridge-Identity-Test":       "enabled-override",
+						"X-OpenAI-Actor-Authorization": "Bearer foreign-actor",
 					}
 					repo := &responsesProbeAccountRepo{snapshotUpdateAccountRepo: snapshotUpdateAccountRepo{
 						stubOpenAIAccountRepo: stubOpenAIAccountRepo{accounts: []Account{*owner}},
@@ -85,6 +86,7 @@ func TestCodexCLIBridgeIdentityFallbackAcrossGatewayAndAutomaticProbe(t *testing
 						require.Equal(t, int64(2901), id)
 						require.Equal(t, wantURL, request.URL.String())
 						require.Equal(t, "Bearer "+token, request.Header.Get("Authorization"))
+						require.Empty(t, headerValues("X-OpenAI-Actor-Authorization"))
 						require.Equal(t, []string{source.wantUA}, headerValues("User-Agent"))
 						require.Equal(t, []string{source.wantOriginator}, headerValues("Originator"))
 						require.Equal(t, []string{"0.167.0"}, headerValues("Version"))

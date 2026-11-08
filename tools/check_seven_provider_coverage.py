@@ -739,6 +739,8 @@ PROFILES = {
             "TestResponsesLiteOfficialIncrementalExecForward",
             "TestResponsesLiteMigratedToolsCompareLatestDeclaration",
             "TestCodexOfficialAnswerDisplayMetadata",
+            "TestOpenAIActorAuthorizationOverrideRejected",
+            "TestOpenAIActorAuthorizationCannotReachProvider",
         ) + CAPABILITY_SERVICE_TESTS + CODEX_CLI_SERVICE_TESTS + CODEX_SAFETY_BUFFERING_TESTS + OPENAI_ERROR_MESSAGE_TESTS, ("TestZhipuOAuthBuildAccountMaterialForEachPlan/start_plan_and_off-peak_are_estate_independent",)
         + tuple(
             "TestCodexCLITaskBillingUsesEffectiveConfiguredReasoning/" + scenario
@@ -994,6 +996,14 @@ PROFILES = {
         ) + tuple(
             f"TestResponsesLiteOfficialIncrementalExecHistory/{kind}/websocket={websocket}"
             for kind in ("oauth", "apikey") for websocket in ("false", "true")
+        ) + tuple(
+            f"TestOpenAIActorAuthorizationOverrideRejected/{name}/blank={blank}/enabled={enabled}"
+            for name in ("X-OpenAI-Actor-Authorization", "x-openai-actor-authorization", "X-OPENAI-ACTOR-AUTHORIZATION")
+            for blank in ("false", "true") for enabled in ("false", "true")
+        ) + tuple(
+            f"TestOpenAIActorAuthorizationCannotReachProvider/{kind}/string-map={string_map}/{path}"
+            for kind in ("oauth", "apikey") for string_map in ("false", "true")
+            for path in ("http", "passthrough", "websocket")
         ) + tuple(
             f"TestResponsesLiteOfficialIncrementalExecForward/{kind}/passthrough={passthrough}"
             for kind in ("oauth", "apikey") for passthrough in ("false", "true")

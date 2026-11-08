@@ -19,6 +19,22 @@ def report() -> dict:
 
 
 class FrontendCoverageTests(unittest.TestCase):
+    def test_imported_openai_actor_auth_overrides_must_be_rejected(self) -> None:
+        self.assertIn(
+            "validateHeaderOverrideRows reserves OpenAI actor authorization for credential-owned authentication",
+            gate.REQUIRED["src/components/account/__tests__/credentialsBuilder.spec.ts"],
+        )
+        for name in ("Content-Encoding", "X-OpenAI-Internal-Codex-Residency", "X-OpenAI-Memgen-Request",
+                     "X-OpenAI-Subagent", "X-ResponsesAPI-Include-Timing-Metrics",
+                     "X-Grok-Client-Surface", "X-Grok-Req-Id", "X-Grok-Session-Id", "X-Grok-Agent-Id",
+                     "X-Grok-Conv-Group-Id", "X-Grok-Model-Override", "X-Grok-User-Id",
+                     "X-Grok-Deployment-Id", "X-Grok-Turn-Idx", "X-Grok-Transient-Retry",
+                     "X-UserID", "X-Email", "X-XAI-Token-Auth", "X-AuthenticateResponse"):
+            self.assertIn(
+                f"validateHeaderOverrideRows rejects adapter-owned override {name} before save",
+                gate.REQUIRED["src/components/account/__tests__/credentialsBuilder.spec.ts"],
+            )
+
     def test_start_plan_states_models_reauthorization_and_owner_fences_remain_required(self) -> None:
         expected = {
             *(f"ZhipuStartPlanCell shows the independent {state} state"
