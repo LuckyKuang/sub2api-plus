@@ -1,0 +1,459 @@
+/*
+ * Styles ported from the Vue single-file components of the authentication and
+ * public entry views. Kept in one stylesheet so every ported view shares the
+ * same declarations the original `scoped` blocks provided.
+ */
+
+/* ============ Turnstile widget ============ */
+.turnstile-wrapper {
+  width: 100%;
+}
+
+.turnstile-container {
+  width: 100%;
+  min-height: 65px;
+}
+
+/* Make the Turnstile iframe fill the container width */
+.turnstile-container :deep(iframe),
+.turnstile-container iframe {
+  width: 100% !important;
+}
+
+/* ============ Aliyun captcha widget ============ */
+.aliyun-captcha-wrapper {
+  width: 100%;
+}
+
+.aliyun-captcha-button {
+  display: flex;
+  width: 100%;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgb(209 213 219);
+  background-color: rgb(249 250 251);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: rgb(55 65 81);
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.aliyun-captcha-button:hover:not(:disabled) {
+  border-color: rgb(156 163 175);
+  background-color: rgb(243 244 246);
+}
+
+.aliyun-captcha-button--verified {
+  border-color: rgb(34 197 94);
+  background-color: rgb(240 253 244);
+  color: rgb(21 128 61);
+}
+
+:root.dark .aliyun-captcha-button,
+.dark .aliyun-captcha-button {
+  border-color: rgb(55 65 81);
+  background-color: rgb(31 41 55);
+  color: rgb(209 213 219);
+}
+
+:root.dark .aliyun-captcha-button:hover:not(:disabled),
+.dark .aliyun-captcha-button:hover:not(:disabled) {
+  border-color: rgb(75 85 99);
+  background-color: rgb(55 65 81);
+}
+
+:root.dark .aliyun-captcha-button--verified,
+.dark .aliyun-captcha-button--verified {
+  border-color: rgb(34 197 94);
+  background-color: rgb(20 83 45 / 0.3);
+  color: rgb(134 239 172);
+}
+
+.aliyun-captcha-icon {
+  height: 1rem;
+  width: 1rem;
+  flex-shrink: 0;
+}
+
+/* ============ Agreement dialog transition ============ */
+.agreement-fade-enter-active,
+.agreement-fade-leave-active {
+  transition: opacity 0.18s ease;
+}
+
+.agreement-fade-enter-from,
+.agreement-fade-leave-to {
+  opacity: 0;
+}
+
+/* ============ HomeView terminal ============ */
+.terminal-container {
+  position: relative;
+  display: inline-block;
+  width: 100%;
+  max-width: 420px;
+}
+
+.terminal-window {
+  width: 100%;
+  background: #222326;
+  border-radius: var(--surface-radius-panel);
+  box-shadow: 0 16px 40px -20px rgb(0 0 0 / 45%);
+  border: 1px solid rgb(255 255 255 / 12%);
+  overflow: hidden;
+}
+
+.terminal-header {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  background: rgba(42, 42, 42, 0.8);
+  border-bottom: 1px solid rgba(255, 255, 255 / 0.05);
+}
+
+.terminal-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.terminal-buttons span {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.btn-close {
+  background: #ef4444;
+}
+.btn-minimize {
+  background: #eab308;
+}
+.btn-maximize {
+  background: #22c55e;
+}
+
+.terminal-title {
+  flex: 1;
+  text-align: center;
+  font-size: 12px;
+  font-family: ui-monospace, monospace;
+  color: #a1a1aa;
+  margin-right: 52px;
+}
+
+.terminal-body {
+  padding: 20px 24px;
+  font-family: ui-monospace, 'Fira Code', monospace;
+  font-size: 14px;
+  line-height: 2;
+}
+
+.code-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  opacity: 0;
+  animation: line-appear 0.5s ease forwards;
+}
+
+.line-1 {
+  animation-delay: 0.3s;
+}
+.line-2 {
+  animation-delay: 1s;
+}
+.line-3 {
+  animation-delay: 1.8s;
+}
+.line-4 {
+  animation-delay: 2.5s;
+}
+
+@keyframes line-appear {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.code-prompt {
+  color: #22c55e;
+  font-weight: bold;
+}
+
+.code-cmd {
+  color: rgb(var(--console-accent-500, 20 184 166));
+}
+
+.code-flag {
+  color: #a78bfa;
+}
+
+.code-url {
+  color: rgb(var(--console-accent-500, 20 184 166));
+}
+
+.code-comment {
+  color: #a1a1aa;
+  font-style: italic;
+}
+
+.code-success {
+  color: #22c55e;
+  background: rgba(34, 197, 94, 0.15);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.code-response {
+  color: #fbbf24;
+}
+
+.cursor {
+  display: inline-block;
+  width: 8px;
+  height: 16px;
+  background: #22c55e;
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  51%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Public presentation follows the same restrained surface hierarchy. */
+.home-feature-icon {
+  background: var(--surface-soft);
+  color: var(--console-accent-readable);
+}
+.home-footer {
+  border-top: 1px solid var(--surface-edge);
+}
+.home-compact > :is(header, footer) {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .code-line {
+    opacity: 1;
+    animation: none;
+  }
+  .cursor {
+    animation: none;
+  }
+}
+
+/* ============ KeyUsageView ============ */
+.input-ring {
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.input-ring:focus {
+  box-shadow: 0 0 0 3px rgb(var(--console-accent-500, 20 184 166) / 20%);
+  border-color: rgb(var(--console-accent-500, 20 184 166));
+  outline: none;
+}
+
+.progress-ring {
+  transition: stroke-dashoffset 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+}
+
+@keyframes fade-up-kv {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.fade-up {
+  animation: fade-up-kv 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+.fade-up-delay-1 {
+  animation-delay: 0.1s;
+  opacity: 0;
+}
+.fade-up-delay-2 {
+  animation-delay: 0.2s;
+  opacity: 0;
+}
+.fade-up-delay-3 {
+  animation-delay: 0.3s;
+  opacity: 0;
+}
+.fade-up-delay-4 {
+  animation-delay: 0.4s;
+  opacity: 0;
+}
+
+@keyframes pulse-dot-kv {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 currentColor;
+  }
+  50% {
+    opacity: 0.6;
+    box-shadow: 0 0 8px 2px currentColor;
+  }
+}
+.pulse-dot {
+  animation: pulse-dot-kv 2s ease-in-out infinite;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* ============ LegalDocumentView markdown ============ */
+.legal-document-content {
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+  color: inherit;
+}
+
+.legal-document-content h1 {
+  @apply mb-4 mt-8 border-b border-gray-200 pb-3 text-3xl font-bold dark:border-dark-700;
+}
+
+.legal-document-content h2 {
+  @apply mb-3 mt-7 text-2xl font-bold;
+}
+
+.legal-document-content h3 {
+  @apply mb-2 mt-6 text-xl font-semibold;
+}
+
+.legal-document-content h4 {
+  @apply mb-2 mt-5 text-lg font-semibold;
+}
+
+.legal-document-content p {
+  @apply mb-4;
+  color: var(--surface-muted);
+}
+
+.legal-document-content a {
+  @apply text-primary-600 underline underline-offset-4 hover:text-primary-700 dark:text-primary-300 dark:hover:text-primary-200;
+}
+
+.legal-document-content ul {
+  @apply mb-4 list-disc pl-6;
+}
+
+.legal-document-content ol {
+  @apply mb-4 list-decimal pl-6;
+}
+
+.legal-document-content li {
+  @apply mb-1;
+  color: var(--surface-muted);
+}
+
+.legal-document-content blockquote {
+  @apply my-5 border-l-4 border-gray-300 pl-4 text-gray-600 dark:border-dark-600 dark:text-dark-300;
+}
+
+.legal-document-content code {
+  @apply rounded px-1.5 py-0.5 font-mono text-sm;
+  background-color: var(--surface-soft);
+}
+
+.legal-document-content pre {
+  @apply my-5 overflow-x-auto rounded-lg p-4;
+  background-color: var(--surface-soft);
+  color: var(--surface-text);
+}
+
+.legal-document-content pre code {
+  @apply bg-transparent p-0 text-inherit;
+}
+
+.legal-document-content table {
+  @apply my-5 block w-full overflow-x-auto border-collapse;
+}
+
+.legal-document-content th {
+  @apply border border-gray-300 px-3 py-2 text-left font-semibold dark:border-dark-600;
+  background-color: var(--surface-soft);
+}
+
+.legal-document-content td {
+  @apply border border-gray-300 px-3 py-2 dark:border-dark-600;
+}
+
+.legal-document-content img {
+  @apply my-5 h-auto max-w-full rounded-lg;
+}
+
+.legal-document-content hr {
+  @apply my-7 border-gray-200 dark:border-dark-700;
+}
+
+/* ============ Model plaza markdown ============ */
+.plaza-description {
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.plaza-description h1,
+.plaza-description h2,
+.plaza-description h3 {
+  @apply mb-2 mt-3 font-semibold text-gray-900 first:mt-0 dark:text-white;
+}
+
+.plaza-description p {
+  @apply mb-2 text-gray-700 last:mb-0 dark:text-dark-200;
+}
+
+.plaza-description a {
+  @apply text-primary-600 underline underline-offset-4 hover:text-primary-700 dark:text-primary-300;
+}
+
+.plaza-description ul {
+  @apply mb-2 list-disc pl-5;
+}
+
+.plaza-description ol {
+  @apply mb-2 list-decimal pl-5;
+}
+
+.plaza-description li {
+  @apply mb-0.5;
+  color: var(--surface-muted);
+}
+
+.plaza-description code {
+  @apply rounded px-1.5 py-0.5 font-mono text-xs;
+  background-color: var(--surface-soft);
+}
+
+.plaza-description blockquote {
+  @apply my-2 border-l-4 border-gray-300 pl-3 text-gray-600 dark:border-dark-600 dark:text-dark-300;
+}

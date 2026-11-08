@@ -2,9 +2,9 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'
 import { initI18n } from './i18n'
+import { useAppStore } from './stores/app'
 import { isIOSDevice } from './utils/device'
 import { updateFavicon } from './utils/branding'
-import { useAppStore } from './stores/app'
 import './style.css'
 
 function initIOSViewportZoomFix() {
@@ -33,7 +33,9 @@ async function bootstrap() {
   initThemeClass()
   initIOSViewportZoomFix()
 
-  const appStore = useAppStore()
+  // `getState()` is not a hook, so the injected public settings can be restored
+  // before the first render without triggering an update loop.
+  const appStore = useAppStore.getState()
   appStore.initFromInjectedConfig()
 
   if (appStore.siteName && appStore.siteName !== 'Sub2API Plus') {

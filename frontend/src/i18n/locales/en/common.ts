@@ -74,6 +74,7 @@ export default {
     searchPlaceholder: 'Search...',
     noOptionsFound: 'No options found',
     noGroupsAvailable: 'No groups available',
+    portInProgress: 'This screen is being ported to the new interface.',
     unknownError: 'Unknown error occurred',
     saving: 'Saving...',
     selectedCount: '({{count}} selected)',

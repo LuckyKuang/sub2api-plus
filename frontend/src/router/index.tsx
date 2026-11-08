@@ -45,6 +45,28 @@ function withGuard(element: ReactNode, meta: RouteMeta | undefined) {
   )
 }
 
+const PUBLIC_PATHS = new Set([
+  '/setup',
+  '/home',
+  '/login',
+  '/register',
+  '/email-verify',
+  '/forgot-password',
+  '/reset-password',
+  '/key-usage',
+  '/model-plaza'
+])
+
+function isPublicRoute(path?: string): boolean {
+  if (!path) return false
+  if (PUBLIC_PATHS.has(path)) return true
+  return (
+    path.startsWith('/auth/') ||
+    path.startsWith('/legal/') ||
+    path.startsWith('/payment/')
+  )
+}
+
 const shellRoutes = [
   {
     element: (
@@ -73,28 +95,6 @@ const shellRoutes = [
       }))
   }
 ]
-
-const PUBLIC_PATHS = new Set([
-  '/setup',
-  '/home',
-  '/login',
-  '/register',
-  '/email-verify',
-  '/forgot-password',
-  '/reset-password',
-  '/key-usage',
-  '/model-plaza'
-])
-
-function isPublicRoute(path?: string): boolean {
-  if (!path) return false
-  if (PUBLIC_PATHS.has(path)) return true
-  return (
-    path.startsWith('/auth/') ||
-    path.startsWith('/legal/') ||
-    path.startsWith('/payment/')
-  )
-}
 
 export const router = createBrowserRouter(shellRoutes)
 

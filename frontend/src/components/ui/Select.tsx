@@ -16,6 +16,18 @@ type Value = SelectOption['value']
 const DROPDOWN_MIN_WIDTH = 200
 const DROPDOWN_MAX_WIDTH = 480
 
+/**
+ * The expanded menu is floored by the same width the trigger takes, so expanding
+ * never shrinks below the unified control. Read the token so a stylesheet change
+ * cannot silently desynchronise the floor.
+ */
+function resolveDropdownMinimumWidth(): number {
+  if (typeof window === 'undefined') return DROPDOWN_MIN_WIDTH
+  const raw = getComputedStyle(document.documentElement).getPropertyValue('--filter-control-width')
+  const parsed = Number.parseFloat(raw)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DROPDOWN_MIN_WIDTH
+}
+
 export interface SearchableSelectProps {
   value?: Value | undefined
   options: Option[]
@@ -127,7 +139,8 @@ export function SearchableSelect({
       const dropdownHeight = dropdown.offsetHeight || 260
       const spaceBelow = window.innerHeight - rect.bottom
       const placeAbove = spaceBelow < dropdownHeight + 8 && rect.top > dropdownHeight + 8
-      const width = Math.min(Math.max(rect.width, DROPDOWN_MIN_WIDTH), DROPDOWN_MAX_WIDTH)
+      const floor = resolveDropdownMinimumWidth()
+      const width = Math.min(Math.max(rect.width, floor), DROPDOWN_MAX_WIDTH)
       dropdown.style.width = `${width}px`
       dropdown.style.left = `${rect.left}px`
       dropdown.style.top = placeAbove ? `${rect.top - dropdownHeight - 4}px` : `${rect.bottom + 4}px`

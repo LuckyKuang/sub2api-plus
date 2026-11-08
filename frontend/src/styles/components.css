@@ -1,0 +1,498 @@
+/* Component-level styles ported from Vue SFC <style> blocks that had no shared
+   counterpart: DataTable, date/time pickers, navigation progress, refresh
+   control, detail workspace, proxy selector and dashboard charts. */
+
+/* ==========================================================================
+   DataTable
+   ========================================================================== */
+
+/* 表格横向滚动 */
+.table-wrapper {
+  position: relative;
+  overflow-x: auto;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  isolation: isolate;
+}
+
+/* 表头容器，确保在滚动时覆盖表体内容 */
+.table-wrapper .table-header {
+  position: sticky;
+  top: 0;
+  z-index: 200;
+  background-color: transparent;
+}
+
+/* 表体保持在表头下方 */
+.table-body {
+  position: relative;
+  z-index: 0;
+}
+
+/* 所有表头单元格固定在顶部 */
+.sticky-header-cell {
+  position: sticky;
+  top: 0;
+  z-index: 210; /* 必须高于所有表体内容 */
+  background-color: transparent;
+}
+
+/* Sticky 列基础样式 */
+.sticky-col {
+  position: sticky;
+  z-index: 20; /* 表体固定列 */
+}
+
+/* 表头 sticky 列 - 需要比普通表头单元格更高的 z-index */
+.sticky-header-cell.sticky-col {
+  z-index: 220; /* 高于普通表头单元格和表体固定列 */
+}
+
+/* Empty state stays within the visible scrollport rather than centering across
+   the full min-w-max table width, so the message keeps the pinned left columns
+   covered when the table is wider than the viewport. Sticky pins the
+   shrink-to-fit message to the visible area; the 50%/translateX centers it. */
+.empty-state-cell { padding: 0 !important; }
+.empty-state-fill {
+  position: sticky;
+  left: 50%;
+  transform: translateX(-50%);
+  width: fit-content;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 16px;
+  text-align: center;
+}
+
+/* Mobile cards do not use table-cell paint. */
+:where(.table-row-selected):not(tr) {
+  background-color: var(--surface-selected);
+}
+
+/* ==========================================================================
+   终极悬浮滚动条防丢器 (Sledgehammer Override)
+   绕过 style.css 中 `* { scrollbar-color: transparent }` 的全局悬停隐身诅咒！
+   ========================================================================== */
+
+/* 1. 废除全局针对所有元素的 scrollbar-width 设定，拿回 Chrome/Safari 下 Webkit 滚动条规则的控制权！ */
+.table-wrapper {
+  scrollbar-width: auto !important; /* 阻止 Chrome 121 退化到原生 Mac 闪隐滚动条 */
+}
+
+/* 2. 重写 Webkit 滚动层，全部加上 !important 强制覆盖透明悬停陷阱 */
+.table-wrapper::-webkit-scrollbar {
+  height: 12px !important;
+  width: 12px !important;
+  display: block !important;
+  background-color: transparent !important;
+}
+
+.table-wrapper::-webkit-scrollbar-track {
+  background-color: rgba(0, 0, 0, 0.03) !important;
+  border-radius: 6px !important;
+  margin: 0 4px !important;
+}
+.dark .table-wrapper::-webkit-scrollbar-track {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+/* 常驻、不透明的滑块，无视鼠标是否 hover 都在那！ */
+.table-wrapper::-webkit-scrollbar-thumb {
+  background-color: rgba(115, 115, 115, 0.75) !important;
+  border-radius: 6px !important;
+  border: 2px solid transparent !important;
+  background-clip: padding-box !important;
+  -webkit-appearance: none !important;
+}
+.table-wrapper::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(82, 82, 82, 0.9) !important;
+}
+
+.dark .table-wrapper::-webkit-scrollbar-thumb {
+  background-color: rgba(163, 163, 163, 0.75) !important;
+}
+.dark .table-wrapper::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(212, 212, 212, 0.9) !important;
+}
+
+/* 3. 仅给真正的 Firefox 留的后路 */
+@supports (-moz-appearance: none) {
+  .table-wrapper {
+    scrollbar-width: thin !important;
+    scrollbar-color: rgba(163, 163, 163, 0.5) rgba(0, 0, 0, 0.03) !important;
+  }
+  .dark .table-wrapper {
+    scrollbar-color: rgba(82, 82, 82, 0.5) rgba(255, 255, 255, 0.05) !important;
+  }
+}
+
+/* ==========================================================================
+   DateRangePicker
+   ========================================================================== */
+
+.date-picker-trigger {
+  @apply flex items-center gap-2;
+  @apply min-w-0 text-sm;
+  padding: 6.5px 12px;
+  border-radius: var(--surface-radius-control);
+  background-color: var(--surface-field);
+  @apply border border-gray-200 dark:border-dark-600;
+  color: var(--surface-muted);
+  @apply transition-all duration-200;
+  @apply focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30;
+  @apply hover:border-gray-300 dark:hover:border-dark-500;
+  @apply cursor-pointer;
+}
+
+.date-picker-trigger-open {
+  @apply border-primary-500 ring-2 ring-primary-500/30;
+}
+
+.date-picker-icon {
+  color: var(--surface-muted);
+}
+
+.date-picker-value {
+  @apply min-w-0 font-medium;
+  overflow-wrap: anywhere;
+}
+
+.date-picker-chevron {
+  color: var(--surface-muted);
+}
+
+.date-picker-dropdown {
+  position: fixed;
+  z-index: 100000020;
+  background-color: var(--surface-panel);
+  border-radius: var(--surface-radius-panel);
+  @apply border border-gray-200 dark:border-dark-700;
+  @apply shadow-lg shadow-black/10 dark:shadow-black/30;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  width: 320px;
+  max-width: calc(100vw - 24px);
+}
+
+.date-picker-presets {
+  @apply grid grid-cols-2 gap-1 p-2;
+}
+
+.date-picker-preset {
+  @apply px-3 py-1.5 text-xs font-medium;
+  border-radius: var(--surface-radius-item);
+  color: var(--surface-muted);
+
+  @apply transition-colors duration-150;
+}
+
+.date-picker-preset-active {
+  @apply bg-primary-100/[0.15] dark:bg-primary-900/30;
+  @apply text-primary-700 dark:text-primary-300;
+}
+
+.date-picker-divider {
+  @apply border-t border-gray-100 dark:border-dark-700;
+}
+
+.date-picker-custom {
+  @apply flex items-end gap-2 p-3;
+}
+
+.date-picker-field {
+  @apply min-w-0 flex-1;
+}
+
+.date-picker-label {
+  @apply mb-1 block text-xs font-medium;
+  color: var(--surface-muted);
+}
+
+.date-picker-input {
+  @apply w-full px-2 py-1.5 text-sm;
+  border-radius: var(--surface-radius-item);
+  background-color: var(--surface-field);
+  @apply border border-gray-200 dark:border-dark-600;
+  @apply text-gray-900 dark:text-gray-100;
+  @apply focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30;
+}
+
+.date-picker-separator {
+  @apply flex items-center justify-center pb-1;
+}
+
+.date-picker-actions {
+  @apply flex justify-end p-2 pt-0;
+}
+
+.date-picker-apply {
+  @apply px-4 py-1.5 text-sm font-medium;
+  border-radius: var(--surface-radius-item);
+  @apply bg-primary-600 text-white;
+  @apply hover:bg-primary-700;
+  @apply transition-colors duration-150;
+}
+
+/* ==========================================================================
+   DateTimePicker
+   ========================================================================== */
+
+.date-time-picker { position: relative; min-width: 0; }
+.date-time-picker:focus-within { border-color: rgb(var(--console-accent-500, 20 184 166)); box-shadow: 0 0 0 2px rgb(var(--console-accent-500, 20 184 166) / 30%); }
+.date-time-picker-disabled { opacity: 0.6; cursor: not-allowed; }
+.date-time-value-proxy { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; overflow: hidden; }
+.date-time-trigger { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 0.5rem; text-align: left; min-width: 0; border-radius: inherit; outline: none; }
+.date-time-trigger-value { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.date-time-trigger-empty { color: var(--surface-muted); }
+.date-time-trigger[aria-readonly="true"] { cursor: default; }
+.date-time-panel.surface-panel { position: fixed; z-index: 100000030; width: 352px; max-width: calc(100vw - 24px); overflow: auto; overscroll-behavior: contain; padding: 16px; border: 1px solid var(--surface-edge); border-radius: 20px; box-shadow: var(--surface-shadow); }
+.date-time-month-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.date-time-month-label { font-size: 14px; font-weight: 600; }
+.date-time-icon-button { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: var(--surface-radius-item); }
+.date-time-weekdays, .date-time-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.date-time-week { display: contents; }
+.date-time-weekdays { margin-bottom: 6px; text-align: center; font-size: 11px; color: var(--surface-muted); }
+.date-time-day { min-width: 0; height: 36px; border: 1px solid transparent; border-radius: var(--surface-radius-item); font-size: 13px; font-variant-numeric: tabular-nums; }
+.date-time-day-outside { color: var(--surface-muted); opacity: 0.65; }
+.date-time-day-today { border-color: var(--surface-edge); }
+.date-time-day-selected { color: var(--console-accent-readable, var(--surface-text)); background: rgb(var(--console-accent-500, 20 184 166)); border-color: rgb(var(--console-accent-500, 20 184 166)); opacity: 1; }
+.date-time-panel button:not(:disabled):hover { background-color: var(--surface-hover); }
+.date-time-panel .date-time-day-selected:not(:disabled):hover { background-color: rgb(var(--console-accent-400, 45 212 191)); }
+.date-time-panel button:disabled { cursor: not-allowed; opacity: 0.35; }
+.date-time-panel :is(button, input):focus-visible { outline: 2px solid rgb(var(--console-accent-500, 20 184 166) / 60%); outline-offset: 1px; }
+.date-time-clock { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 12px; padding: 12px; border: 1px solid var(--surface-edge); border-radius: 14px; background: var(--surface-soft); }
+.date-time-clock:first-child { margin-top: 0; }
+.date-time-clock-part { flex: 1 0 90px; min-width: 0; text-align: center; }
+.date-time-clock-part label { display: block; margin-bottom: 6px; font-size: 11px; color: var(--surface-muted); }
+.date-time-stepper { display: flex; align-items: center; gap: 2px; padding: 3px; border: 1px solid var(--surface-edge); border-radius: var(--surface-radius-control); background: var(--surface-field); }
+.date-time-stepper button { display: flex; flex: none; align-items: center; justify-content: center; width: 24px; height: 30px; border-radius: 8px; }
+.date-time-stepper input { width: 100%; min-width: 0; border: 0; padding: 4px 0; background: transparent; color: var(--surface-text); text-align: center; font-size: 16px; font-variant-numeric: tabular-nums; }
+.date-time-actions { display: flex; justify-content: flex-end; align-items: center; gap: 6px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--surface-edge); }
+.date-time-actions .btn { padding-inline: 10px; }
+.date-time-clear { margin-right: auto; }
+.date-time-validation { margin-top: 8px; font-size: 12px; color: #dc2626; }
+.dark .date-time-validation { color: #fca5a5; }
+
+/* ==========================================================================
+   NavigationProgress
+   ========================================================================== */
+
+.navigation-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  z-index: 9999;
+  overflow: hidden;
+  background: transparent;
+}
+
+.navigation-progress-bar {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgb(var(--console-accent-400, 45 212 191)) 20%,
+    rgb(var(--console-accent-500, 20 184 166)) 50%,
+    rgb(var(--console-accent-400, 45 212 191)) 80%,
+    transparent 100%
+  );
+  animation: progress-slide 1.5s ease-in-out infinite;
+}
+
+/* 暗色模式下的进度条颜色 */
+:root.dark .navigation-progress-bar {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgb(var(--console-accent-500, 20 184 166)) 20%,
+    rgb(var(--console-accent-400, 45 212 191)) 50%,
+    rgb(var(--console-accent-500, 20 184 166)) 80%,
+    transparent 100%
+  );
+}
+
+/* 进度条滑动动画 */
+@keyframes progress-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* 减少动画模式 */
+@media (prefers-reduced-motion: reduce) {
+  .navigation-progress-bar {
+    animation: progress-pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes progress-pulse {
+    0%,
+    100% {
+      opacity: 0.4;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+}
+
+/* ==========================================================================
+   RefreshControl
+   ========================================================================== */
+
+.refresh-switch-track { border: 1px solid var(--surface-edge); padding: 1px; }
+[aria-checked="true"] .refresh-switch-track { border-color: rgb(var(--console-accent-500, 20 184 166) / 65%); }
+
+/* ==========================================================================
+   DetailWorkspace
+   ========================================================================== */
+
+.detail-workspace { display: grid; min-width: 0; gap: var(--shell-gap, 24px); align-items: start; }
+.detail-workspace-open { grid-template-columns: minmax(0, 1fr) 440px; }
+.detail-workspace-panel { position: sticky; top: var(--shell-sticky-offset, 112px); max-height: calc(100dvh - var(--shell-sticky-offset, 112px) - var(--shell-inset-bottom, 24px)); display: flex; flex-direction: column; overflow: hidden; }
+@media (min-width: 1024px) {
+  .detail-workspace-contained { flex: 1 1 0%; min-height: 0; grid-template-rows: minmax(0, 1fr); align-items: stretch; gap: 12px; }
+  .detail-workspace-contained > .detail-workspace-content { display: flex; min-height: 0; flex-direction: column; }
+  .detail-workspace-contained > .detail-workspace-panel { position: relative; top: auto; min-height: 0; max-height: 100%; }
+  .detail-workspace-contained .detail-workspace-header { flex: none; }
+  .detail-workspace-contained .detail-workspace-detail { flex: 1 1 0%; }
+}
+
+/* ==========================================================================
+   ProxySelector
+   ========================================================================== */
+
+.proxy-selector .select-trigger {
+  @apply flex w-full items-center justify-between gap-2;
+}
+
+.proxy-selector .select-value {
+  @apply flex-1 truncate text-left;
+}
+
+.proxy-selector .select-icon {
+  @apply flex-shrink-0; color: var(--surface-muted);
+}
+
+.proxy-selector .select-dropdown {
+  @apply absolute z-[100] mt-2 w-full;
+  background-color: var(--surface-panel);
+  border-radius: var(--surface-radius-panel);
+  @apply border border-gray-200 dark:border-dark-700;
+  @apply shadow-lg shadow-black/10 dark:shadow-black/30;
+  @apply overflow-hidden;
+}
+
+.proxy-selector .select-header {
+  @apply flex items-center gap-2 px-3 py-2;
+  @apply border-b border-gray-100 dark:border-dark-700;
+}
+
+.proxy-selector .select-search {
+  @apply flex flex-1 items-center gap-2;
+}
+
+.proxy-selector .select-search-input {
+  @apply flex-1 bg-transparent text-sm;
+  @apply text-gray-900 dark:text-gray-100;
+  @apply placeholder:text-gray-400 dark:placeholder:text-dark-400;
+  @apply focus:outline-none;
+}
+
+.proxy-selector .batch-test-btn {
+  @apply flex-shrink-0 p-1.5;
+  border-radius: var(--surface-radius-item);
+  @apply text-gray-500 hover:text-primary-600 dark:hover:text-primary-400;
+  @apply hover:bg-primary-50/25 dark:hover:bg-primary-900/20;
+  @apply transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+}
+
+.proxy-selector .select-options {
+  @apply max-h-60 space-y-0.5 overflow-y-auto p-1.5;
+}
+
+.proxy-selector .select-option {
+  @apply flex items-center justify-between gap-2;
+  @apply px-3 py-2.5 text-sm;
+  border-radius: var(--surface-radius-item);
+  color: var(--surface-muted);
+  @apply cursor-pointer transition-colors duration-150;
+}
+
+.proxy-selector .select-option:hover {
+  background-color: var(--surface-hover);
+}
+
+.proxy-selector .select-option-selected {
+  @apply bg-primary-50/[0.15] dark:bg-primary-900/20;
+  @apply text-primary-700 dark:text-primary-300;
+}
+
+.proxy-selector .select-option-label {
+  @apply truncate;
+}
+
+.proxy-selector .select-empty {
+  @apply px-4 py-8 text-center text-sm;
+  color: var(--surface-muted);
+}
+
+.proxy-selector .test-btn {
+  @apply flex-shrink-0 p-1;
+  border-radius: var(--surface-radius-item);
+  @apply text-gray-400 hover:text-primary-600 dark:hover:text-primary-400;
+  @apply hover:bg-primary-50/25 dark:hover:bg-primary-900/20;
+  @apply transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+}
+
+/* ==========================================================================
+   GroupOptionItem
+   ========================================================================== */
+
+/* Bold the group name inside GroupBadge when used in dropdown option */
+.groupOptionItemBadge span.truncate {
+  font-weight: 600;
+}
+
+/* ==========================================================================
+   Dashboard charts
+   ========================================================================== */
+
+@media (min-width: 1024px) {
+  .chart-workspace { display: flex; min-height: 0; flex-direction: column; overflow: hidden; padding: 14px; }
+  .chart-workspace > h3 { flex: none; margin-bottom: 10px; }
+  .chart-workspace > div { position: relative; min-height: 0; height: auto; flex: 1; }
+}
+
+/* Scoped equivalent of the chart components' own record-table max-height. */
+.chart-distribution .record-table-scroll { --record-table-max-height: 12rem; max-height: var(--record-table-max-height); }
+@media (min-width: 1024px) {
+  .chart-distribution.chart-workspace > div:first-child { flex: none; margin-bottom: 10px; }
+  .chart-distribution.chart-workspace > div:not(:first-child) { min-height: 0; height: auto; flex: 1; }
+  .chart-distribution.chart-workspace > div.flex { flex-direction: row; align-items: center; gap: 10px; }
+  .chart-distribution.chart-workspace .h-48.w-48 { width: clamp(110px, 9vw, 178px); height: clamp(110px, 9vw, 178px); flex: none; }
+  .chart-distribution.chart-workspace .record-table-scroll { --record-table-max-height: 100%; min-height: 0; align-self: stretch; }
+}
+
+/* ==========================================================================
+   VersionBadge rollback panel transition (Vue <transition name="rollback">)
+   ========================================================================== */
+
+.rollback-enter-active,
+.rollback-leave-active {
+  transition: all 0.2s ease;
+}
+
+.rollback-enter-from,
+.rollback-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}

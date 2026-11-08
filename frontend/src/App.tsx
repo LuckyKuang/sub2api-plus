@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { useEffect } from 'react'
 import { AppRouter } from '@/router'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
@@ -14,13 +15,14 @@ const queryClient = new QueryClient({
 })
 
 export function App() {
-  const appStore = useAppStore()
-  const authStore = useAuthStore()
+  const siteName = useAppStore((s) => s.siteName)
+  const siteLogo = useAppStore((s) => s.siteLogo)
 
-  // Restore the injected public settings before the first render so branding
-  // and feature flags never flash a default state.
-  appStore.initFromInjectedConfig()
-  authStore.checkAuth()
+  // Restore any persisted session exactly once. `checkAuth` schedules token
+  // refreshes and kicks off a user refresh, so it must not run per render.
+  useEffect(() => {
+    useAuthStore.getState().checkAuth()
+  }, [])
 
   return (
     <QueryClientProvider client={queryClient}>

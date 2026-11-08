@@ -74,6 +74,7 @@ export default {
     searchPlaceholder: '搜索...',
     noOptionsFound: '无匹配选项',
     noGroupsAvailable: '无可用分组',
+    portInProgress: '此页面正在迁移到新界面。',
     unknownError: '发生未知错误',
     saving: '保存中...',
     selectedCount: '（已选 {{count}} 个）',
