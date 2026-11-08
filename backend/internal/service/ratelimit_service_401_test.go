@@ -29,6 +29,7 @@ type rateLimitAccountRepoStub struct {
 	lastRateLimitedID      int64
 	lastRateLimitedAt      time.Time
 	tempErr                error
+	rateLimitedErr         error
 }
 
 func (r *rateLimitAccountRepoStub) SetError(ctx context.Context, id int64, errorMsg string) error {
@@ -60,7 +61,7 @@ func (r *rateLimitAccountRepoStub) SetRateLimited(ctx context.Context, id int64,
 	r.rateLimitedCalls++
 	r.lastRateLimitedID = id
 	r.lastRateLimitedAt = resetAt
-	return nil
+	return r.rateLimitedErr
 }
 
 func (r *rateLimitAccountRepoStub) ApplyCredentialStateMutation(ctx context.Context, owner *Account, mutation CredentialStateMutation) (bool, error) {

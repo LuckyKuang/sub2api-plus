@@ -1438,7 +1438,7 @@ func appendGeminiInstances(document *Document, value any) {
 }
 
 func extractMediaPrompts(document *Document, root map[string]any) {
-	for _, key := range []string{"image", "images", "mask", "reference_images"} {
+	for _, key := range []string{"image", "images", "mask", "markup", "reference_images"} {
 		appendImageValues(document, root[key], "user", SourceMediaPrompt, true, true, true)
 	}
 	seen := make(map[string]struct{})

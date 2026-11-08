@@ -34,6 +34,8 @@ belong in GitHub Release notes.
 ## Access, Pricing and Administration
 
 - [Authentication and Passkeys](AUTHENTICATION.md)
+- [OAuth management MCP](mcp.md)
+- [Scoped administrator API keys](admin-api-keys.md)
 - [Security audit content coverage](SECURITY_AUDIT_CONTENT_COVERAGE.md)
 - [Model Plaza visibility](MODEL_PLAZA.md)
 - [Available-channel model catalog](AVAILABLE_CHANNELS.md)
@@ -60,6 +62,8 @@ belong in GitHub Release notes.
 
 - [Official agent sources, versions and outbound review entrypoints](OFFICIAL_AGENT_BASELINES.md)
 - [Contributing](../CONTRIBUTING.md)
+- [Request and stream resource safety](agent-resource-safety.md)
+- [JSON patch batching](moego-json-batching.md)
 - [Release process](RELEASING.md)
 - [CI validation coverage and authority migration](CI_VALIDATION.md)
 - [Upstream mapping](../UPSTREAM.md)

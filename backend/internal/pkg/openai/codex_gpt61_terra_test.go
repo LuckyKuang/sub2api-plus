@@ -11,6 +11,8 @@ import (
 
 // Requirements come from openai/codex 126a0ee92ed2c5e73cd8a8f7e37563e8527552d7,
 // codex-rs/models-manager/models.json; expected values are literal source facts.
+// API effort validation follows https://developers.openai.com/api/docs/models/gpt-6.1-terra
+// (reviewed 2026-11-08), independently of the pinned Codex descriptor.
 func TestGPT61TerraOfficialIdentityAndMetadata(t *testing.T) {
 	require.Contains(t, DefaultModelIDs(), "gpt-6.1-terra")
 	for _, model := range []string{"gpt-6.1-terra", "openai/gpt-6.1-terra-max", "GPT_6.1_TERRA", "gpt-6.1-terra-openai-compact"} {
@@ -20,10 +22,10 @@ func TestGPT61TerraOfficialIdentityAndMetadata(t *testing.T) {
 	for _, model := range []string{"gpt-6.1", "gpt-6.1-terrain", "gpt-6.1-terra-preview", "gpt-6.1-terra-ultra", "gpt-5.6-terra"} {
 		require.False(t, IsGPT61TerraModelSpelling(model), model)
 	}
-	for _, effort := range []string{"none", "minimal"} {
+	for _, effort := range []string{"minimal"} {
 		require.Error(t, ValidateGPT61ReasoningEffort("gpt-6.1-terra", effort))
 	}
-	for _, effort := range []string{"", "low", "medium", "high", "xhigh", "max"} {
+	for _, effort := range []string{"", "none", "low", "medium", "high", "xhigh", "max"} {
 		require.NoError(t, ValidateGPT61ReasoningEffort("gpt-6.1-terra", effort))
 	}
 	var metadata struct {

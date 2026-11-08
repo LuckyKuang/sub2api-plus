@@ -70,6 +70,11 @@ historical records keep version zero and NULL evidence rather than fabricating
 past prices. Batch-image jobs retain their submitted rate evidence for deferred
 settlement. See [Composite groups](../../docs/COMPOSITE_GROUPS.md).
 
+Migration `307_mcp_oauth.sql` imports official migration 249 after Plus 306.
+It stores OAuth grants, one-use authorization-code digests and rotating credential
+digests for the opt-in management MCP. Existing users receive no grant during
+upgrade; schema installation alone does not enable MCP. See [management MCP](../../docs/mcp.md).
+
 ## Mandatory Rules
 
 - Existing migration files are immutable: never modify, delete, or rename them.

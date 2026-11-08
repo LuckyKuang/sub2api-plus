@@ -50,13 +50,14 @@ func TestGPT61TerraNormalizationAndDisabledReasoning(t *testing.T) {
 		require.True(t, isOpenAIGPT6Model(spelling))
 		require.Equal(t, "max", normalizeOpenAIReasoningEffortForModel("max", spelling))
 	}
+	// The API model page accepts none; pinned Codex metadata has its own scale.
+	require.Error(t, validateGPT61CompatRequest([]byte(`{"reasoning_effort":"minimal"}`), "gpt-6.1-terra"))
 	for _, body := range []string{
 		`{"reasoning":{"effort":"none"}}`,
-		`{"reasoning_effort":"minimal"}`,
 		`{"thinking":{"type":"disabled"}}`,
 		`{"model":"gpt-6.1-terra-none"}`,
 	} {
-		require.Error(t, validateGPT61CompatRequest([]byte(body), "gpt-6.1-terra"))
+		require.NoError(t, validateGPT61CompatRequest([]byte(body), "gpt-6.1-terra"))
 	}
 	require.NoError(t, validateGPT61CompatRequest([]byte(`{"reasoning":{"effort":"max"}}`), "gpt-6.1-terra"))
 }

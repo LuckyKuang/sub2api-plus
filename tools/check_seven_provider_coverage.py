@@ -552,7 +552,9 @@ PROFILES = {
         )),
         RegressionGroup("./internal/service", (
             "TestGPT61TerraMessagesForwardBoundary",
-            "TestGPT61TerraMessagesDisabledThinkingStopsBeforeUpstream",
+            "TestGPT61TerraMessagesMinimalEffortStopsBeforeUpstream",
+            "TestGPT61TerraRejectsMinimalEffort",
+            "TestGPT61TerraChatFallbackRejectsTools",
             "TestGPT61TerraReleaseCatalogRatesAndAPILimits",
             "TestGPT61TerraPricingAliasesAndUnknownSKUIsolation",
             "TestGPT61TerraExplicitCatalogCachePricesOverrideFallback",
@@ -977,6 +979,14 @@ PROFILES = {
                 ("messages-count", ("deepseek", "kimi", "minimax", "stepfun", "zhipu")),
             )
             for provider in providers
+        ) + tuple(
+            f"TestGPT61TerraMessagesForwardBoundary/{kind}/{identity}/disabled_thinking_overrides_explicit_max"
+            for kind in ("oauth", "apikey")
+            for identity in ("account_before_global", "invalid_account_falls_through_to_global")
+        ) + tuple(
+            f"TestGPT61TerraMessagesMinimalEffortStopsBeforeUpstream/{kind}/{model}"
+            for kind in ("oauth", "apikey")
+            for model in ("openai/GPT-6.1-Terra-max", "my-terra")
         ) + CAPABILITY_SERVICE_SUBTESTS + CODEX_SAFETY_BUFFERING_SUBTESTS + OPENAI_ERROR_MESSAGE_SUBTESTS),
         RegressionGroup("./internal/repository", (
             GROK_HTTP_WIRE,

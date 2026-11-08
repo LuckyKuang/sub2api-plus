@@ -38,9 +38,11 @@ func TestDefaultModelIDsAreUnique(t *testing.T) {
 	}
 }
 
-func TestDefaultModelsIncludeGPTImage25(t *testing.T) {
+func TestDefaultModelsIncludeGPTImage25And26(t *testing.T) {
 	require.Contains(t, DefaultModelIDs(), "gpt-image-2.5-flare")
 	require.Contains(t, DefaultModelIDs(), "gpt-image-2.5-sunburst")
+	require.Contains(t, DefaultModelIDs(), "gpt-image-2.6-flare")
+	require.Contains(t, DefaultModelIDs(), "gpt-image-2.6-sunburst")
 }
 
 func TestGPT6SolLunaModelIdentity(t *testing.T) {

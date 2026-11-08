@@ -63,6 +63,9 @@ type User struct {
 	// nil 时按目标分组回源查询，缺省使用分组上限；0 仅豁免该分组，正数替代分组上限。
 	// 该值只属于认证快照的原分组，换组须清除后重查；用户全局上限始终生效。字段不持久化到数据库。
 	UserGroupRPMOverride *int
+	// UserGroupRPMOverrideGroupID 是 snapshot 已成功查询 override 的分组 ID（0 = 未知）。
+	// 等于当前分组且 UserGroupRPMOverride 为 nil 时表示确认无 override，checkRPM 不再查 DB。
+	UserGroupRPMOverrideGroupID int64
 
 	APIKeys       []APIKey
 	Subscriptions []UserSubscription

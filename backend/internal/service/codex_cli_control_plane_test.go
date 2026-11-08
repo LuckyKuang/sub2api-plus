@@ -95,7 +95,8 @@ func TestCodexCLIBridgeAPIKeyImageAndChatProbesCannotBypassHop(t *testing.T) {
 				require.Contains(t, string(body), "owned prompt")
 				if path == "image" {
 					require.Equal(t, "https://compatible.example/v1/images/generations", r.URL.String())
-					require.JSONEq(t, `{"model":"gpt-image-2","prompt":"owned prompt","n":1,"response_format":"b64_json"}`, string(body))
+					// GPT Image always returns base64 and does not support response_format.
+					require.JSONEq(t, `{"model":"gpt-image-2","prompt":"owned prompt","n":1}`, string(body))
 					return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"data":[{"b64_json":"aGVsbG8="}]}`))}, nil
 				}
 				require.Equal(t, "https://compatible.example/v1/chat/completions", r.URL.String())

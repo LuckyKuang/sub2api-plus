@@ -127,7 +127,7 @@ func TestOfficialCodexGIFNeverFallsBackAndDropsAnimation(t *testing.T) {
 			require.Error(t, err)
 			require.Equal(t, 1, calls, "an unavailable native endpoint cannot silently send an animation to Responses")
 			_, err = buildOpenAIImagesResponsesRequest(parsed, "gpt-image-1")
-			require.ErrorContains(t, err, "native Codex Images endpoint")
+			require.ErrorContains(t, err, "native Images endpoint")
 		})
 	}
 }
