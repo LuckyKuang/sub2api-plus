@@ -54,6 +54,10 @@ Codex context/residency and Grok auth/state fields. Independent frontend cases
 now require their rejection, and the identity policy gate detects omissions
 from the editor against the complete server reserved-name list. This synchronizes
 existing restrictions; it introduces no new provider wire declarations.
+Account-editor regressions also require removal of legacy authentication rows
+before any account/CLI save and preserve ordinary headers after correction.
+The untouched-save Grok fixture uses ordinary relay headers; its former
+`x-xai-token-auth` row contradicted the backend's existing authentication ban.
 
 The [reviewed official trees](OFFICIAL_AGENT_BASELINES.md#november-8-protocol-alignment)
 retain all seven existing identity versions and SDK fingerprints. Five heads

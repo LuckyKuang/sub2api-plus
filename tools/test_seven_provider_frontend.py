@@ -19,6 +19,19 @@ def report() -> dict:
 
 
 class FrontendCoverageTests(unittest.TestCase):
+    def test_legacy_auth_override_edits_require_correction_before_writes(self) -> None:
+        for name in ("X-OpenAI-Actor-Authorization", "x-openai-actor-authorization", "X-OPENAI-ACTOR-AUTHORIZATION"):
+            self.assertIn(
+                f"EditAccountModal Codex CLI save workflow requires removal of legacy API-key actor override {name} before either save",
+                gate.REQUIRED["src/components/account/__tests__/EditAccountModal.codexCli.spec.ts"],
+            )
+        grok = gate.REQUIRED["src/components/account/__tests__/EditAccountModal.grokUpstream.spec.ts"]
+        self.assertIn("EditAccountModal Grok OAuth upstream config keeps stored header overrides intact on an untouched save", grok)
+        for name in ("x-xai-token-auth", "X-OpenAI-Actor-Authorization"):
+            self.assertIn(
+                f"EditAccountModal Grok OAuth upstream config requires removal of legacy authentication override {name} before saving", grok,
+            )
+
     def test_imported_openai_actor_auth_overrides_must_be_rejected(self) -> None:
         self.assertIn(
             "validateHeaderOverrideRows reserves OpenAI actor authorization for credential-owned authentication",

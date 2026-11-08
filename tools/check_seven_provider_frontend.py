@@ -34,12 +34,19 @@ REQUIRED = {
         "Codex CLI account editor revokes a prepared save when authorization changes under the same account ID",
     ),
     "src/components/account/__tests__/EditAccountModal.codexCli.spec.ts": (
+        *(f"EditAccountModal Codex CLI save workflow requires removal of legacy API-key actor override {name} before either save"
+          for name in ("X-OpenAI-Actor-Authorization", "x-openai-actor-authorization", "X-OPENAI-ACTOR-AUTHORIZATION")),
         "EditAccountModal Codex CLI save workflow saves unrelated account edits without writing CLI defaults or credentials",
         "EditAccountModal Codex CLI save workflow keeps CLI drafts and reports partial success if its save fails",
         "EditAccountModal Codex CLI save workflow does not submit an old CLI draft after the selected account changes during Save",
         "EditAccountModal Codex CLI save workflow rejects changing proxy null to 7 with CLI edits before either write",
         "EditAccountModal Codex CLI save workflow rejects changing proxy 7 to null with CLI edits before either write",
         "EditAccountModal Codex CLI save workflow saves a proxy independently and binds subsequent CLI edits to the reloaded owner",
+    ),
+    "src/components/account/__tests__/EditAccountModal.grokUpstream.spec.ts": (
+        "EditAccountModal Grok OAuth upstream config keeps stored header overrides intact on an untouched save",
+        *(f"EditAccountModal Grok OAuth upstream config requires removal of legacy authentication override {name} before saving"
+          for name in ("x-xai-token-auth", "X-OpenAI-Actor-Authorization")),
     ),
     "src/views/admin/settings/__tests__/CodexCLIRuntimeSettings.spec.ts": (
         "Codex CLI runtime settings checks installation without automatically installing or checking a latest release",
