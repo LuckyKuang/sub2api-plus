@@ -200,6 +200,10 @@ func APIKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, subs
 				abortWithGoogleError(c, status, err.Error())
 				return
 			}
+			if federatedSubscriptionBalanceExhausted(c.Request.Context(), apiKey.User, cfg) {
+				abortWithGoogleError(c, 403, "Insufficient account balance")
+				return
+			}
 
 			c.Set(string(ContextKeySubscription), subscription)
 		} else {
