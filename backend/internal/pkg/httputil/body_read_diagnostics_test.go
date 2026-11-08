@@ -45,7 +45,7 @@ func TestRequestBodyReadFailureHasSafeProgress(t *testing.T) {
 		bytes                         int64
 	}{
 		{"truncated", "", "read", "unexpected_eof", &interruptedAuditBody{cause: io.ErrUnexpectedEOF}, io.ErrUnexpectedEOF, 7},
-		{"cancelled", "", "read", "client_cancelled", &interruptedAuditBody{cause: context.Canceled}, context.Canceled, 7},
+		{"reader cancelled", "", "read", "read_cancelled", &interruptedAuditBody{cause: context.Canceled}, context.Canceled, 7},
 		{"deadline", "", "read", "read_timeout", &interruptedAuditBody{cause: context.DeadlineExceeded}, context.DeadlineExceeded, 7},
 		{"unknown", "", "read", "read_error", &interruptedAuditBody{cause: errors.New("secret-input sk-private")}, nil, 7},
 		{"compression", "gzip", "decode", "invalid_compression", io.NopCloser(strings.NewReader("not-gzip")), nil, 8},
@@ -107,6 +107,39 @@ func TestRequestBodyReadFailureLogPrivacyAndProgress(t *testing.T) {
 	require.EqualValues(t, 20, fields["declared_body_bytes"])
 	for _, private := range []string{"secret-payload", "sk-private", "private-model", "partial"} {
 		require.NotContains(t, entries[0].Message+fmt.Sprint(fields), private)
+	}
+}
+
+func TestRequestBodyReadCancellationDiagnosticMatchesRequest(t *testing.T) {
+	for _, tc := range []struct {
+		name, reason string
+		disconnected bool
+		status       int
+		bytes        int64
+	}{
+		{"reader cancellation", "read_cancelled", false, http.StatusBadRequest, 7},
+		{"client cancellation", "client_cancelled", true, StatusClientClosedRequest, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			core, logs := observer.New(zap.WarnLevel)
+			ctx, cancel := context.WithCancel(logger.IntoContext(context.Background(), zap.New(core)))
+			defer cancel()
+			if tc.disconnected {
+				cancel()
+			}
+			req := httptest.NewRequest(http.MethodPost, "/v1/responses", nil).WithContext(ctx)
+			req.Body = &interruptedAuditBody{cause: context.Canceled}
+			req.ContentLength = 20
+			body, err := ReadRequestBodyWithPrealloc(req)
+			require.ErrorIs(t, err, context.Canceled)
+			require.Nil(t, body)
+			require.Equal(t, tc.status, DescribeRequestBodyReadFailure(req, err).Status)
+			entries := logs.All()
+			require.Len(t, entries, 1)
+			require.Equal(t, tc.reason, entries[0].ContextMap()["reason"])
+			require.EqualValues(t, tc.bytes, entries[0].ContextMap()["body_bytes"])
+			require.NotContains(t, fmt.Sprint(entries[0].ContextMap()), "partial")
+		})
 	}
 }
 

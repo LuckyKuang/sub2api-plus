@@ -38,7 +38,8 @@ func TestOpenAICompatSessionCachesExpireWithoutRevisit(t *testing.T) {
 	s.openaiCompatAnthropicDigestSessions.sweep = 5 * time.Millisecond
 	s.openaiCompatSessionResponses.sweep = 5 * time.Millisecond
 	t.Cleanup(s.CloseOpenAIWSPool)
-	account := &Account{ID: 1}
+	// Plus only caches opaque continuation state for a known credential owner.
+	account := &Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Credentials: map[string]any{"api_key": "fixture-key"}}
 	for i := 0; i < 100; i++ {
 		key := fmt.Sprintf("session-%d", i)
 		s.bindOpenAICompatAnthropicDigestPromptCacheKey(account, 1, "u:"+key, key, "")

@@ -3,13 +3,14 @@ package httputil
 import (
 	"context"
 	"errors"
-	"github.com/LuckyKuang/sub2api-plus/internal/pkg/ctxkey"
-	"github.com/LuckyKuang/sub2api-plus/internal/pkg/logger"
-	"go.uber.org/zap"
 	"io"
 	"net"
 	"net/http"
 	"strings"
+
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/ctxkey"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/logger"
+	"go.uber.org/zap"
 )
 
 func (e *RequestBodyReadError) RequestBodyReadDiagnostic() (string, string, int64, int64) {
@@ -40,7 +41,9 @@ func requestBodyReadReason(err error) string {
 	case errors.As(err, &max):
 		return "body_too_large"
 	case errors.Is(err, context.Canceled):
-		return "client_cancelled"
+		// A reader can cancel independently of the accepted HTTP request.
+		// logRequestBodyReadFailure identifies a cancelled client context.
+		return "read_cancelled"
 	case errors.Is(err, context.DeadlineExceeded):
 		return "read_timeout"
 	case errors.Is(err, io.ErrUnexpectedEOF):
