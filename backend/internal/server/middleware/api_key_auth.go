@@ -254,6 +254,10 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 					AbortWithError(c, status, code, validateErr.Error())
 					return
 				}
+				if federatedSubscriptionBalanceExhausted(c.Request.Context(), apiKey.User, cfg) {
+					AbortWithError(c, 403, "INSUFFICIENT_BALANCE", "Insufficient account balance")
+					return
+				}
 			} else {
 				// 非订阅模式 或 订阅模式但 subscriptionService 未注入：回退到余额检查
 				if apiKeyBalanceBelowAuthThreshold(c.Request.Context(), apiKey.User, cfg) {
@@ -413,6 +417,17 @@ func apiKeyBalanceBelowAuthThreshold(ctx context.Context, u *service.User, cfg *
 		balance = federationAvailableBalance(ctx, u.ID, u.Balance, u.FederationUsageWatermarkSeq)
 	}
 	return balance <= 0
+}
+
+// federatedSubscriptionBalanceExhausted 补上订阅模式的联邦余额准入：联邦用户
+// （admission_check_enabled 且水位 > 0）的订阅分组用量同样由 tailer 从大陆余额
+// 扣除，所以订阅额度检查通过后仍要求可用余额 > 0。纯本地用户（水位 0）的订阅
+// 不看余额，保持原语义。
+func federatedSubscriptionBalanceExhausted(ctx context.Context, u *service.User, cfg *config.Config) bool {
+	if u == nil || cfg == nil || !cfg.Federation.AdmissionCheckEnabled || u.FederationUsageWatermarkSeq <= 0 {
+		return false
+	}
+	return apiKeyBalanceBelowAuthThreshold(ctx, u, cfg)
 }
 
 func abortIfAPIKeyGroupUnavailable(c *gin.Context, apiKey *service.APIKey) bool {

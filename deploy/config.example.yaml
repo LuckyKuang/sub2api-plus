@@ -1293,6 +1293,9 @@ federation:
   outbox_enabled: false
   # 只在海外站开启：准入时用 余额 - 水位之后本地尚未同步回大陆的用量 判断可用余额；
   # 计算出错时回退到普通余额判断；水位为 0 的（未联邦）用户始终用普通余额判断。
+  # 联邦用户（水位 > 0）在订阅分组里也要求可用余额 > 0：订阅额度检查通过后，
+  # 可用余额 <= 0 仍返回 403 INSUFFICIENT_BALANCE（其订阅用量同样由大陆余额扣除）。
+  # 未联邦用户的订阅不看余额，行为不变。
   # 环境变量：FEDERATION_ADMISSION_CHECK_ENABLED
   admission_check_enabled: false
   # 只在海外站开启：允许大陆 federation-pusher 通过
