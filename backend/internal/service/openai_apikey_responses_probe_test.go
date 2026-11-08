@@ -293,10 +293,10 @@ func TestProbeOpenAIAPIKeyResponsesSupportSkipsForcedModes(t *testing.T) {
 				Credentials: map[string]any{"api_key": "sk-test", "base_url": "https://compat-upstream.example/v1"},
 				Extra:       map[string]any{openai_compat.ExtraKeyResponsesMode: tc.mode},
 			}
-			repo := &snapshotUpdateAccountRepo{
+			repo := &responsesProbeAccountRepo{snapshotUpdateAccountRepo: snapshotUpdateAccountRepo{
 				stubOpenAIAccountRepo: stubOpenAIAccountRepo{accounts: []Account{account}},
 				updateExtraCalls:      updateCalls,
-			}
+			}}
 			upstream := &httpUpstreamRecorder{resp: &http.Response{
 				StatusCode: http.StatusOK,
 				Header:     make(http.Header),
@@ -313,10 +313,15 @@ func TestProbeOpenAIAPIKeyResponsesSupportSkipsForcedModes(t *testing.T) {
 			if !tc.wantProbe {
 				require.Nil(t, upstream.lastReq)
 				require.Empty(t, updateCalls)
+				require.Zero(t, repo.casCalls)
+				require.Zero(t, repo.unconditionalWrites)
 				return
 			}
 			require.NotNil(t, upstream.lastReq)
+			require.Len(t, updateCalls, 1)
 			require.Equal(t, true, (<-updateCalls)[openai_compat.ExtraKeyResponsesSupported])
+			require.Equal(t, 1, repo.casCalls)
+			require.Zero(t, repo.unconditionalWrites)
 		})
 	}
 }
