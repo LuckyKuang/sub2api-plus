@@ -8,7 +8,7 @@ a compact index of normative rules, not a substitute for `CONTRIBUTING.md`,
 local OpenSpec change. OpenSpec implementation plans are untracked working
 artifacts; durable behavior belongs in the owning documentation and tests.
 
-This project uses Go, Vue, pnpm, repository-local Python CLIs, and platform
+This project uses Go, React, pnpm, repository-local Python CLIs, and platform
 validation containers.
 
 ## Format Contract

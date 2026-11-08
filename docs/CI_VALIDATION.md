@@ -24,7 +24,7 @@ result reuse; the pinned compilation and dependency caches remain available.
 | --- | --- | --- |
 | `deployment-config` | Installer syntax and real archive/resource installation regressions, Apple lifecycle fixture, real Redis authentication/readiness regressions, Docker security/gateway/resources, Caddy policy | Union of local and CI deployment checks |
 | `test` | Full unit suites on Linux amd64 and arm64; Docker-backed integration on amd64 | Same Go commands, additional architecture coverage |
-| `frontend` | Frozen install, lint, typecheck, full Vitest, required seven-provider Vue/API cases, production build and its locale checks | Complete local frontend coverage; critical-only tests cannot substitute |
+| `frontend` | Frozen install, lint, typecheck, full Vitest, required seven-provider React/API cases, production build and its locale checks | Complete local frontend coverage; critical-only tests cannot substitute |
 | `golangci-lint` | Complete backend lint | Same command |
 | `repository-policy` | CLI/release/CI regressions, test-tag rules, identity, README, metadata and migrations | Shared full definition including local-only checks |
 | `goreleaser-config` | Pinned configuration check with embedded Plus version | Additional CI check |
@@ -60,7 +60,7 @@ can execute with `CGO_ENABLED=1` under the same pinned container toolchain.
 Running an ordinary unit suite does not imply that its race profile was run.
 The exact Playwright pin also determines the image's Chromium revision. Real
 browser management tests use a separate root-owned disposable-service runner;
-the full frontend lane's critical Vue/API tests do not imply browser execution.
+the full frontend lane's critical React/API tests do not imply browser execution.
 Release frontend builds share the `frontend` cache lane with default-branch CI
 under the same exact OS, architecture, toolchain and lock generation. They still
 run frozen installation and the complete production build; other release lanes

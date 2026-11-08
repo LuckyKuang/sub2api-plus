@@ -54,7 +54,7 @@ lifecycles retain their separate unit/network/PostgreSQL/Redis evidence in the
 owning matrix. Do not count this management chain as a browser-to-provider
 authorization/inference/billing flow or use it to close those separate entries.
 
-The separate Vue/API lifecycle regressions use the actual redacted account DTO:
+The separate React/API lifecycle regressions use the actual redacted account DTO:
 provider tokens are absent, presence flags remain under `credentials_status`,
 and `oauth_credential_owner` identifies the credential, saved route and recovery
 state. A changed owner must revoke the active authorization even if account ID,
@@ -101,7 +101,7 @@ and writable snapshot after the attempt.
 To run the browser suite against those already-running isolated processes,
 `pnpm test:e2e` consumes:
 
-- `SUB2API_E2E_BASE_URL`: running Vue application with its real backend.
+- `SUB2API_E2E_BASE_URL`: running React application with its real backend.
 - `SUB2API_E2E_ADMIN_EMAIL` and `SUB2API_E2E_ADMIN_PASSWORD`: disposable admin
   credentials accepted by the real login endpoint.
 - `SUB2API_E2E_FIXTURE_URL`: isolated network fixture control origin.

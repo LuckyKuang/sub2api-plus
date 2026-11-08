@@ -202,7 +202,7 @@ export async function dismissNotifications(page: Page): Promise<void> {
     const before = await close.count()
     if (before === 0) return
     await close.first().click({ timeout: 5_000 })
-    // A leaving Vue transition still owns its DOM. Wait for that removed
+    // A leaving toast transition still owns its DOM. Wait for that removed
     // toast before selecting the next button, rather than clicking it again.
     await expect.poll(() => close.count(), { timeout: 5_000 }).toBeLessThan(before)
   }

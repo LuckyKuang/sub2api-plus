@@ -20,13 +20,11 @@ Applying shared appearance through AppLayout does not opt administrator pages
 into the user layout's centered width or horizontal padding.
 
 Locale modules remain lazy-loaded TypeScript strings. Production, Vitest and
-browser fixtures use Vue I18n's compiler-inclusive `vue-i18n.mjs` build; its
-default JIT compiles to AST without `unsafe-eval`. Keep this explicit compiler
-dependency rather than relying on a runtime entry's transitive compiler exposure.
-Keep Vue I18n and the message compiler on the same patched version. Runtime
+browser fixtures use i18next, whose interpolation is pure string substitution and
+never evaluates source. Runtime
 regressions cover English/Chinese switching,
-named/list interpolation, plurals, fallback, trusted onboarding HTML and the
-`escapeParameter` srcdoc fix in
+named interpolation, plurals, fallback, trusted onboarding HTML and HTML escaping
+of interpolated parameters, the i18next counterpart of the srcdoc fix in
 [GHSA-83rm-6c8r-g728](https://github.com/advisories/GHSA-83rm-6c8r-g728).
 Trusted tour markup remains separate from user-provided content; existing Markdown
 sanitization and sandboxed email previews retain their own protections.
@@ -216,13 +214,13 @@ fits the remaining viewport; mobile views keep all four rounded corners. Existin
 dialog focus loops, Escape, background scroll locks and focus restoration remain.
 
 Transient motion is owned by `styles/motion.css`, outside Tailwind's generated
-layers so dynamically applied Vue transition states survive production builds.
+layers so the keyframes survive production builds.
 Dialog and announcement roots and panels enter together in 200ms and leave in
 140ms, using a short vertical movement and restrained scale. Details drawers use
 a short horizontal movement. Selects and menus enter in 150ms and leave in 100ms;
 only opacity and transform animate, preserving their measured positions and
 dimensions. Date panels fade without transforms. Conditional menus retain their
-DOM during leave through Vue Transition. Reduced-motion preferences use 1ms
+DOM during leave. Reduced-motion preferences use 1ms
 transitions without movement. Production-built Chromium regressions verify root
 and panel timing, intermediate frames, removal timing and reduced motion.
 
@@ -404,12 +402,14 @@ opening a disclosure makes its visible controls reachable.
 ## Usage lists
 
 Plain selection controls, including request category and billing type filters,
-use `Select.vue` and the same teleported panel as searchable model/type controls.
+use `frontend/src/components/ui/Select.tsx` and the same teleported panel as
+searchable model/type controls.
 `searchable: false` hides the search input while preserving the shared menu,
 option highlights, selected checkmark, keyboard navigation and light/dark theme.
 The option count affects automatic search visibility only, never the menu renderer.
 Trigger appearance is shared in `frontend/src/style.css`; panel appearance is
-owned by `SearchableSelect.vue`. Menus teleport to the document body to escape
+owned by `frontend/src/components/ui/Select.tsx`. Menus teleport to the document
+body to escape
 card clipping and stacking contexts. Searchable, clearable and composite controls
 retain their integrated interactions. Compact controls may vary in size, with
 translated labels clear of the arrow. Direct native selects are not used.

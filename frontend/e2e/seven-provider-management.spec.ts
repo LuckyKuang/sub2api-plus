@@ -5,7 +5,7 @@ import {
   type AccountSnapshot, type AccountType, type SavedProxy,
 } from './support'
 
-// The browser, Vue router/components, HTTP handlers, production services,
+// The browser, React router/components, HTTP handlers, production services,
 // PostgreSQL and Redis are real. The isolated control fixture replaces only
 // outside proxy/provider destinations and independently reads saved DB rows.
 // No browser route interception, Axios adapter or forged auth state is used.

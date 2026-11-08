@@ -167,7 +167,7 @@ proxy CIDRs or raw forwarded headers without an enforced edge boundary.
 ```text
 sub2api-plus/
 ├── backend/        Go service, Ent schemas, migrations, and tests
-├── frontend/       Vue application and en/zh locales
+├── frontend/       React application and en/zh locales
 ├── deploy/         Installers, Compose files, and operations documentation
 ├── docs/           Provider, protocol, and maintainer documentation
 ├── openspec/       Specifications for cross-cutting changes
