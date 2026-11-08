@@ -6,6 +6,13 @@ import { cn } from '@/lib/utils'
 import { navSections, type NavContext, type NavItem } from './navConfig'
 import { VersionBadge } from '@/components/VersionBadge'
 
+/** Anchors the interactive tour highlights. */
+const TOUR_ANCHOR_IDS: Record<string, string> = {
+  '/admin/accounts': 'sidebar-channel-manage',
+  '/admin/groups': 'sidebar-group-manage',
+  '/admin/redeem': 'sidebar-wallet'
+}
+
 export interface AppSidebarProps extends NavContext {
   collapsed: boolean
   onToggleCollapsed: () => void
@@ -196,6 +203,7 @@ function SidebarLink({
       to={item.path}
       onClick={onNavigate}
       title={collapsed ? item.label : undefined}
+      id={TOUR_ANCHOR_IDS[item.path]}
       className={({ isActive }) => cn('sidebar-link', isActive && 'sidebar-link-active')}
     >
       <span className="shrink-0">

@@ -7,10 +7,13 @@ import { Toaster } from '@/components/ui'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import { useAdminSettingsStore } from '@/stores/adminSettings'
+import { useOnboardingStore } from '@/stores/onboarding'
 import { getAdminSupportContext } from '@/utils/adminSupportContext'
 import { useConsoleAppearance } from '@/composables/useConsoleAppearance'
+import { useOnboardingTour } from '@/composables/useOnboardingTour'
 import { defaultConsoleAppearance } from '@/types/appearance'
 import { canViewAsyncImage } from '@/composables/useAsyncImageAccess'
+import '@/styles/onboarding.css'
 
 const THEME_KEY = 'theme'
 
@@ -40,6 +43,15 @@ export function AppLayout({ appearance = 'admin' }: AppLayoutProps) {
   const consoleAppearance = appStore.consoleAppearance
   const isAdmin = authStore.user?.role === 'admin'
   const supportUserId = getAdminSupportContext()?.userId ?? null
+
+  const { replayTour } = useOnboardingTour({
+    storageKey: isAdmin ? 'admin_guide' : 'user_guide',
+    autoStart: !supportUserId
+  })
+
+  useEffect(() => {
+    useOnboardingStore.getState().setReplayCallback(replayTour)
+  }, [replayTour])
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark')
