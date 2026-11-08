@@ -159,6 +159,7 @@ docs/*
 !docs/USAGE_TIMING.md
 !docs/SECURITY_AUDIT_CONTENT_COVERAGE.md
 !docs/CLIENT_DISCONNECT_RISK_CONTROL.md
+!docs/UPSTREAM_REFUSAL_GUARD.md
 !docs/BATCH_IMAGE_MVP.md
 !docs/COMPOSITE_GROUPS.md
 !docs/PLUGIN_DEVELOPMENT.md
@@ -191,3 +192,4 @@ __pycache__/
 # 本地闭源插件开发目录及构建产物不进入 Sub2API Plus 仓库
 /plugins/
 .codebuddy/
+.tmp/

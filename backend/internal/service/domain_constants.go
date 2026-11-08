@@ -246,6 +246,7 @@ const (
 	// （即 enforcement_enabled 的存盘名）混淆。
 	SettingKeyGlobalIPAccessControlEnabled = "global_ip_access_control_enabled"
 	SettingKeyContentModerationConfig      = "content_moderation_config"       // 内容审计配置（JSON）
+	SettingKeyUpstreamRefusalGuardConfig   = "upstream_refusal_guard_config"   // 上游拒绝防护配置（JSON）
 	SettingKeyCyberSessionBlockEnabled     = "cyber_session_block_enabled"     // cyber 命中后会话级自动屏蔽总开关(默认关)
 	SettingKeyCyberSessionBlockTTLSeconds  = "cyber_session_block_ttl_seconds" // 会话屏蔽 TTL 秒数(默认 3600)
 	SettingKeyLoginAgreementEnabled        = "login_agreement_enabled"         // 登录前是否要求同意条款

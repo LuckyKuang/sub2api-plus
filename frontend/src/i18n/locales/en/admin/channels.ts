@@ -228,6 +228,16 @@ export default {
      },
 
     riskControl: {
+      refusal: {
+        tab: 'Upstream Refusal', enabled: 'Enable refusal guard', user_threshold: 'User threshold',
+        count_window_seconds: 'Count window (seconds)', user_cooldown_seconds: 'User cooldown (seconds)',
+        sessionDays: 'Session block (days)', rules: 'Detection rules', add: 'Add rule', remove: 'Remove',
+        name: 'Name', status_codes: 'HTTP status codes (comma-separated)', error_codes: 'Error codes',
+        error_types: 'Error types', message_keywords: 'Message keywords', save: 'Save refusal guard',
+        current: 'Current status', refresh: 'Refresh', clearAll: 'Clear all', users: 'Users',
+        count: 'Count', cooldown: 'Cooldown', clear: 'Clear', sessions: 'Blocked sessions',
+        release: 'Unblock', more: 'More', confirm: 'Are you sure?', failed: 'Refusal guard operation failed',
+      },
       title: 'Risk Control',
       description: 'Configure content moderation and review audit records',
       loadFailed: 'Failed to load risk control',

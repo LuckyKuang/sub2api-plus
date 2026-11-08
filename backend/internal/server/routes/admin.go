@@ -212,6 +212,13 @@ func registerAdminComplianceRoutes(admin *gin.RouterGroup, h *handler.Handlers) 
 func registerContentModerationRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	risk := admin.Group("/risk-control")
 	{
+		risk.GET("/refusal-guard/config", h.Admin.RefusalGuard.GetConfig)
+		risk.PUT("/refusal-guard/config", h.Admin.RefusalGuard.UpdateConfig)
+		risk.GET("/refusal-guard/users", h.Admin.RefusalGuard.ListUsers)
+		risk.DELETE("/refusal-guard/users/:user_id", h.Admin.RefusalGuard.ClearUser)
+		risk.GET("/refusal-guard/sessions", h.Admin.RefusalGuard.ListSessions)
+		risk.DELETE("/refusal-guard/sessions", h.Admin.RefusalGuard.ClearSession)
+		risk.DELETE("/refusal-guard/all", h.Admin.RefusalGuard.ClearAll)
 		risk.GET("/config", h.Admin.ContentModeration.GetConfig)
 		risk.PUT("/config", h.Admin.ContentModeration.UpdateConfig)
 		risk.POST("/api-keys/test", h.Admin.ContentModeration.TestAPIKeys)

@@ -42,6 +42,7 @@ func ProvideAdminHandlers(
 	channelMonitorHandler *admin.ChannelMonitorHandler,
 	channelMonitorTemplateHandler *admin.ChannelMonitorRequestTemplateHandler,
 	contentModerationHandler *admin.ContentModerationHandler,
+	refusalGuardHandler *admin.UpstreamRefusalGuardHandler,
 	promptAuditHandler *securityaudit.PromptAdminHandler,
 	paymentHandler *admin.PaymentHandler,
 	affiliateHandler *admin.AffiliateHandler,
@@ -85,6 +86,7 @@ func ProvideAdminHandlers(
 		ChannelMonitor:         channelMonitorHandler,
 		ChannelMonitorTemplate: channelMonitorTemplateHandler,
 		ContentModeration:      contentModerationHandler,
+		RefusalGuard:           refusalGuardHandler,
 		PromptAudit:            promptAuditHandler,
 		Payment:                paymentHandler,
 		Affiliate:              affiliateHandler,
@@ -145,11 +147,13 @@ func ProvideGatewayHandler(
 	settingService *service.SettingService,
 	clientDisconnectRisk *service.ClientDisconnectRiskService,
 	coordinator *securityaudit.Coordinator,
+	refusalGuard *service.UpstreamRefusalGuardService,
 ) *GatewayHandler {
 	h := NewGatewayHandler(gatewayService, openAIGatewayService, geminiCompatService, antigravityGatewayService,
 		userService, concurrencyService, billingCacheService, usageService, apiKeyService, usageRecordWorkerPool,
 		errorPassthroughService, contentModerationService, userMsgQueueService, cfg, settingService)
 	h.securityAuditCoordinator = coordinator
+	h.refusalGuard = refusalGuard
 	h.SetClientDisconnectRiskService(clientDisconnectRisk)
 	return h
 }
@@ -330,6 +334,7 @@ var ProviderSet = wire.NewSet(
 	admin.NewChannelMonitorHandler,
 	admin.NewChannelMonitorRequestTemplateHandler,
 	admin.NewContentModerationHandler,
+	admin.NewUpstreamRefusalGuardHandler,
 	admin.NewPaymentHandler,
 	admin.NewAffiliateHandler,
 	admin.NewComplianceHandler,

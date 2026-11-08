@@ -50,6 +50,7 @@ type GatewayHandler struct {
 	usageRecordWorkerPool     *service.UsageRecordWorkerPool
 	errorPassthroughService   *service.ErrorPassthroughService
 	contentModerationService  *service.ContentModerationService
+	refusalGuard              *service.UpstreamRefusalGuardService
 	securityAuditCoordinator  *securityaudit.Coordinator
 	concurrencyHelper         *ConcurrencyHelper
 	userMsgQueueHelper        *UserMsgQueueHelper
@@ -232,6 +233,27 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 		return
 	}
 
+	// Only this handler can opt upstream error handling into refusal detection.
+	c.Set("upstream_refusal_guard_eligible", true)
+	requestID, _ := c.Request.Context().Value(ctxkey.RequestID).(string)
+	parsedReq.SessionContext = &service.SessionContext{
+		ClientIP: ip.GetClientIP(c), UserAgent: c.GetHeader("User-Agent"), APIKeyID: apiKey.ID,
+	}
+	sessionHash := h.gatewayService.GenerateSessionHash(parsedReq)
+	if h.checkUpstreamRefusal(c, subject.UserID, apiKey.ID, sessionHash, requestID) {
+		return
+	}
+	// Record at most once even if a refused upstream response is retried or fails over.
+	defer func() {
+		if h.refusalGuard == nil || c.GetBool("upstream_refusal_guard_recorded") {
+			return
+		}
+		if mark, ok := service.GetUpstreamRefusalMark(c); ok {
+			c.Set("upstream_refusal_guard_recorded", true)
+			h.refusalGuard.RecordRefusal(context.WithoutCancel(c.Request.Context()), subject.UserID, apiKey.ID, sessionHash, requestID, mark.RuleID, reqModel)
+		}
+	}()
+
 	// 安全审核通过后才解析渠道级模型映射，避免路由阶段先于审核门。
 	channelMapping, _ := h.gatewayService.ResolveChannelMappingAndRestrict(c.Request.Context(), apiKey.GroupID, reqModel)
 
@@ -272,13 +294,6 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 	parsedReq.GroupID = apiKey.GroupID
 
 	// 计算粘性会话hash
-	parsedReq.SessionContext = &service.SessionContext{
-		ClientIP:  ip.GetClientIP(c),
-		UserAgent: c.GetHeader("User-Agent"),
-		APIKeyID:  apiKey.ID,
-	}
-	sessionHash := h.gatewayService.GenerateSessionHash(parsedReq)
-
 	// [DEBUG-STICKY] 打印会话 hash 生成结果
 	reqLog.Info("sticky.session_hash_generated",
 		zap.String("session_hash", sessionHash),

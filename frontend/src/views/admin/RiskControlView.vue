@@ -16,6 +16,10 @@
               <Icon name="refresh" size="sm" :class="statusLoading ? 'animate-spin' : ''" />
               {{ t('admin.riskControl.refreshStatus') }}
             </button>
+            <button type="button" class="btn btn-secondary inline-flex items-center gap-2" data-testid="open-refusal-guard" @click="openRefusalGuard">
+              <Icon name="shield" size="sm" />
+              {{ t('admin.riskControl.refusal.tab') }}
+            </button>
             <button type="button" class="btn btn-primary inline-flex items-center gap-2" @click="openSettings">
               <Icon name="cog" size="sm" />
               {{ t('admin.riskControl.openSettings') }}
@@ -1080,6 +1084,7 @@
             </div>
           </div>
 
+          <RefusalGuardPanel v-else-if="activeSettingsTab === 'refusalGuard'" />
           <div v-else-if="activeSettingsTab === 'sessionBlocks'" class="space-y-5">
             <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
@@ -1230,7 +1235,7 @@
         <template #footer>
           <div class="flex justify-end gap-2">
             <button type="button" class="btn btn-secondary" @click="settingsOpen = false">{{ t('common.cancel') }}</button>
-            <button type="button" class="btn btn-primary inline-flex items-center gap-2" :disabled="saving" @click="saveConfig">
+            <button v-if="activeSettingsTab !== 'refusalGuard'" type="button" class="btn btn-primary inline-flex items-center gap-2" :disabled="saving" @click="saveConfig">
               <Icon v-if="saving" name="refresh" size="sm" class="animate-spin" />
               <Icon v-else name="check" size="sm" />
               {{ saving ? t('common.saving') : t('admin.riskControl.saveConfig') }}
@@ -1349,6 +1354,7 @@
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
+import RefusalGuardPanel from '@/components/admin/risk/RefusalGuardPanel.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Icon from '@/components/icons/Icon.vue'
 import Select from '@/components/common/Select.vue'
@@ -1379,7 +1385,7 @@ import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
 import { formatDateTime as formatDateTimeValue } from '@/utils/format'
 
-type SettingsTab = 'basic' | 'scope' | 'runtime' | 'response' | 'riskThresholds' | 'retention' | 'keywords' | 'sessionBlocks'
+type SettingsTab = 'basic' | 'scope' | 'runtime' | 'response' | 'riskThresholds' | 'retention' | 'keywords' | 'sessionBlocks' | 'refusalGuard'
 type WorkerSlotState = 'active' | 'idle' | 'disabled'
 type APIKeysWriteMode = 'append' | 'replace'
 type OverviewIcon = 'shield' | 'key' | 'users' | 'document'
@@ -1537,6 +1543,7 @@ const settingsTabs = computed<Array<{ id: SettingsTab; label: string }>>(() => [
   { id: 'riskThresholds', label: t('admin.riskControl.tabs.riskThresholds') },
   { id: 'keywords', label: t('admin.riskControl.tabs.keywords') },
   { id: 'sessionBlocks', label: t('admin.riskControl.tabs.sessionBlocks') },
+  { id: 'refusalGuard', label: t('admin.riskControl.refusal.tab') },
   { id: 'retention', label: t('admin.riskControl.tabs.retention') },
 ])
 
@@ -2354,6 +2361,11 @@ function openSettings() {
   activeSettingsTab.value = 'basic'
   settingsOpen.value = true
   void loadSessionBlocks()
+}
+
+function openRefusalGuard() {
+  activeSettingsTab.value = 'refusalGuard'
+  settingsOpen.value = true
 }
 
 function mergeEndpointRuntime(endpoints: ContentModerationEndpoint[] | undefined) {

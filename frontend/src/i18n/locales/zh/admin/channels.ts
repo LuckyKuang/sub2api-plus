@@ -228,6 +228,16 @@ export default {
     },
 
     riskControl: {
+      refusal: {
+        tab: '上游拒绝', enabled: '启用上游拒绝防护', user_threshold: '用户阈值',
+        count_window_seconds: '计数窗口（秒）', user_cooldown_seconds: '用户冷却（秒）',
+        sessionDays: '会话封禁（天）', rules: '识别规则', add: '添加规则', remove: '删除',
+        name: '名称', status_codes: '状态码（逗号分隔）', error_codes: '错误码',
+        error_types: '错误类型', message_keywords: '消息关键词', save: '保存上游拒绝配置',
+        current: '当前状态', refresh: '刷新', clearAll: '全部清空', users: '用户',
+        count: '计数', cooldown: '冷却', clear: '清除', sessions: '封禁会话',
+        release: '解除', more: '更多', confirm: '确定执行此操作吗？', failed: '上游拒绝防护操作失败',
+      },
       title: '风控中心',
       description: '配置内容审计策略并查看审核记录',
       loadFailed: '加载风控中心失败',

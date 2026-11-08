@@ -363,6 +363,7 @@ func (s *AntigravityGatewayService) Forward(ctx context.Context, c *gin.Context,
 
 		// 处理错误响应（重试后仍失败或不触发重试）
 		if resp.StatusCode >= 400 {
+			DetectUpstreamRefusal(c, s.settingService, ctx, resp.StatusCode, respBody)
 			// 检测 prompt too long 错误，返回特殊错误类型供上层 fallback
 			if resp.StatusCode == http.StatusBadRequest && isPromptTooLongError(respBody) {
 				upstreamMsg := strings.TrimSpace(extractAntigravityErrorMessage(respBody))

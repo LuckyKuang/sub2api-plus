@@ -374,6 +374,10 @@ func (s *GatewayService) handleErrorResponse(ctx context.Context, resp *http.Res
 			account.ID, account.Name, resp.StatusCode, readErr)
 	}
 
+	if s != nil && readErr == nil {
+		DetectUpstreamRefusal(c, s.settingService, ctx, resp.StatusCode, body)
+	}
+
 	// 调试日志：打印上游错误响应
 	logger.LegacyPrintf("service.gateway", "[Forward] Upstream error (non-retryable): Account=%d(%s) Status=%d RequestID=%s Body=%s",
 		account.ID, account.Name, resp.StatusCode, resp.Header.Get("x-request-id"), truncateString(string(body), 1000))
