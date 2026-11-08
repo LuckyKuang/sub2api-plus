@@ -1,12 +1,11 @@
-import { createBrowserRouter, Navigate, RouterProvider, useLocation } from 'react-router-dom'
+import { createBrowserRouter, Navigate, Outlet, RouterProvider, useLocation } from 'react-router-dom'
 import { Suspense, type ReactNode } from 'react'
 import { AppLayout } from '@/components/layout/AppLayout'
-import { AuthLayout } from '@/components/layout/AuthLayout'
 import { routes, type RouteMeta } from './routes'
 import { resolveGuardRedirect, type AuthSnapshot } from './guards'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
-import { LoadingState } from '@/components/ui'
+import { LoadingState, Toaster } from '@/components/ui'
 
 /**
  * Wraps a route element with the auth/admin/payment guard. The previous Vue
@@ -67,6 +66,21 @@ function isPublicRoute(path?: string): boolean {
   )
 }
 
+/**
+ * Unauthenticated screens render `AuthLayout` themselves, exactly as the Vue
+ * views did, so the router only supplies suspense and the shared toaster here.
+ */
+function PublicShell() {
+  return (
+    <>
+      <Suspense fallback={<LoadingState className="min-h-screen" />}>
+        <Outlet />
+      </Suspense>
+      <Toaster />
+    </>
+  )
+}
+
 const shellRoutes = [
   {
     element: (
@@ -82,11 +96,7 @@ const shellRoutes = [
       }))
   },
   {
-    element: (
-      <Suspense fallback={<LoadingState />}>
-        <AuthLayout />
-      </Suspense>
-    ),
+    element: <PublicShell />,
     children: routes
       .filter((route) => isPublicRoute(route.path))
       .map((route) => ({

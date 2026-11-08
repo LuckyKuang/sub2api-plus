@@ -25,6 +25,7 @@ import { extractI18nErrorMessage } from '@/utils/apiError'
 import { clearAllAffiliateReferralCodes } from '@/utils/oauthAffiliate'
 import { cn } from '@/lib/utils'
 import '@/views/authViews.css'
+import { AuthLayout } from '@/components/layout/AuthLayout'
 
 export default function LoginView() {
   const { t } = useTranslation()
@@ -399,8 +400,21 @@ export default function LoginView() {
     setTotpErrorMessage('')
   }
 
+  const authFooter =
+    !backendModeEnabled && publicSettingsLoaded && registrationEnabled ? (
+      <p className="surface-muted">
+        {t('auth.dontHaveAccount')}
+        <Link
+          to="/register"
+          className="font-medium text-primary-600 transition-colors hover:text-primary-500 dark:text-primary-400 dark:hover:text-primary-300"
+        >
+          {t('auth.signUp')}
+        </Link>
+      </p>
+    ) : null
+
   return (
-    <>
+    <AuthLayout footer={authFooter}>
       <div className="space-y-6">
         {/* Title */}
         <div className="text-center">
@@ -591,21 +605,6 @@ export default function LoginView() {
         </form>
       </div>
 
-      {/* Footer */}
-      {!backendModeEnabled && publicSettingsLoaded && registrationEnabled && (
-        <div className="mt-6 border-t border-gray-100 pt-4 text-center text-sm surface-inset dark:border-dark-800">
-          <p className="surface-muted">
-            {t('auth.dontHaveAccount')}
-            <Link
-              to="/register"
-              className="font-medium text-primary-600 transition-colors hover:text-primary-500 dark:text-primary-400 dark:hover:text-primary-300"
-            >
-              {t('auth.signUp')}
-            </Link>
-          </p>
-        </div>
-      )}
-
       {/* 2FA Modal */}
       <TotpLoginModal
         open={show2FAModal}
@@ -616,6 +615,6 @@ export default function LoginView() {
         onVerify={(code) => void handle2FAVerify(code)}
         onCancel={handle2FACancel}
       />
-    </>
+    </AuthLayout>
   )
 }

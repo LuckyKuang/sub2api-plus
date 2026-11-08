@@ -35,6 +35,7 @@ import {
 import type { RegisterRequest } from '@/types'
 import { cn } from '@/lib/utils'
 import '@/views/authViews.css'
+import { AuthLayout } from '@/components/layout/AuthLayout'
 
 export default function RegisterView() {
   const { t, i18n } = useTranslation()
@@ -654,7 +655,21 @@ export default function RegisterView() {
   }
 
   return (
-    <>
+    <AuthLayout
+      footer={
+        <>
+        <p className="surface-muted">
+          {t('auth.alreadyHaveAccount')}
+          <Link
+            to="/login"
+            className="font-medium text-primary-600 transition-colors hover:text-primary-500 dark:text-primary-400 dark:hover:text-primary-300"
+          >
+            {t('auth.signIn')}
+          </Link>
+        </p>
+        </>
+      }
+    >
       <div className="space-y-6">
         {/* Title */}
         <div className="text-center">
@@ -1031,17 +1046,6 @@ export default function RegisterView() {
       </div>
 
       {/* Footer */}
-      <div className="mt-6 border-t border-gray-100 pt-4 text-center text-sm surface-inset dark:border-dark-800">
-        <p className="surface-muted">
-          {t('auth.alreadyHaveAccount')}
-          <Link
-            to="/login"
-            className="font-medium text-primary-600 transition-colors hover:text-primary-500 dark:text-primary-400 dark:hover:text-primary-300"
-          >
-            {t('auth.signIn')}
-          </Link>
-        </p>
-      </div>
-    </>
+    </AuthLayout>
   )
 }

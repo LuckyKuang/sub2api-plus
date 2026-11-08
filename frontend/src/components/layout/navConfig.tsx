@@ -203,7 +203,7 @@ function adminNavItems(ctx: NavContext): NavItem[] {
       ? [
           {
             path: '/admin/affiliates',
-            label: t('nav.affiliates'),
+            label: t('nav.affiliateManagement'),
             icon: navIcons.users,
             hideInSimpleMode: true,
             children: [
@@ -255,21 +255,26 @@ export function consoleNavItems(ctx: NavContext): NavItem[] {
 }
 
 export function navSections(ctx: NavContext): Array<{ items: NavItem[] }> {
-  const userItems = userNavItems(ctx)
-    .filter((item) => !(ctx.isSimpleMode && item.hideInSimpleMode))
-    .map((item) => scopeSupportPath(item, ctx.supportUserId))
+  const scoped = (item: NavItem) => scopeSupportPath(item, ctx.supportUserId)
+  const withoutSimpleMode = (item: NavItem) => !(ctx.isSimpleMode && item.hideInSimpleMode)
 
-  const sections: Array<{ items: NavItem[] }> = [
-    { items: consoleNavItems(ctx).map((item) => scopeSupportPath(item, ctx.supportUserId)) }
+  // Vue renders the admin menu first, then the personal menu. The console-root
+  // entries that only an administrator reaches (system settings) close the
+  // personal section, exactly where the Vue sidebar puts them.
+  const personalItems = [
+    ...userNavItems(ctx).filter(withoutSimpleMode).map(scoped),
+    ...(ctx.isAdmin
+      ? [{ path: '/admin/settings', label: ctx.t('nav.settings'), icon: navIcons.settings }]
+      : [])
   ]
 
+  const sections: Array<{ items: NavItem[] }> = []
+
   if (ctx.isAdmin) {
-    sections.push({
-      items: adminNavItems(ctx).filter((item) => !(ctx.isSimpleMode && item.hideInSimpleMode))
-    })
+    sections.push({ items: adminNavItems(ctx).filter(withoutSimpleMode) })
   }
 
-  sections.push({ items: userItems })
+  sections.push({ items: personalItems })
   return sections
 }
 

@@ -26,6 +26,7 @@ import type { PendingAuthSessionSummary } from '@/stores/auth'
 import type { SendVerifyCodeRequest } from '@/types'
 import { cn } from '@/lib/utils'
 import '@/views/authViews.css'
+import { AuthLayout } from '@/components/layout/AuthLayout'
 
 type PendingOAuthCreateAccountResponse = {
   auth_result?: string
@@ -648,7 +649,19 @@ export default function EmailVerifyView() {
   }
 
   return (
-    <>
+    <AuthLayout
+      footer={
+        <>
+        <button
+          onClick={handleBack}
+          className="flex items-center gap-2 transition-colors hover:text-gray-700 dark:hover:text-gray-300 surface-control surface-muted"
+        >
+          <Icon name="arrowLeft" size="sm" />
+          {t('auth.backToRegistration')}
+        </button>
+        </>
+      }
+    >
       <div className="space-y-6">
         {/* Title */}
         <div className="text-center">
@@ -813,15 +826,6 @@ export default function EmailVerifyView() {
       </div>
 
       {/* Footer */}
-      <div className="mt-6 border-t border-gray-100 pt-4 text-center text-sm surface-inset dark:border-dark-800">
-        <button
-          onClick={handleBack}
-          className="flex items-center gap-2 transition-colors hover:text-gray-700 dark:hover:text-gray-300 surface-control surface-muted"
-        >
-          <Icon name="arrowLeft" size="sm" />
-          {t('auth.backToRegistration')}
-        </button>
-      </div>
-    </>
+    </AuthLayout>
   )
 }

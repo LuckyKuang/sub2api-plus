@@ -8,6 +8,7 @@ import { apiClient } from '@/api/client'
 import { persistOAuthTokenContext, type PendingOAuthExchangeResponse } from '@/api/auth'
 import { clearAllAffiliateReferralCodes } from '@/utils/oauthAffiliate'
 import '@/views/authViews.css'
+import { AuthLayout } from '@/components/layout/AuthLayout'
 
 export default function DingTalkEmailCompletionView() {
   const { t } = useTranslation()
@@ -106,7 +107,7 @@ export default function DingTalkEmailCompletionView() {
   }
 
   return (
-    <>
+    <AuthLayout>
       <div className="space-y-6">
         <div className="text-center">
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
@@ -124,6 +125,6 @@ export default function DingTalkEmailCompletionView() {
           onSwitchToBind={handleSwitchToBind}
         />
       </div>
-    </>
+    </AuthLayout>
   )
 }

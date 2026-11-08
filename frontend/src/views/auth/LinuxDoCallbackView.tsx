@@ -35,6 +35,7 @@ import {
   type PendingOAuthCompletionFields
 } from '@/components/auth/pendingOAuthShared'
 import '@/views/authViews.css'
+import { AuthLayout } from '@/components/layout/AuthLayout'
 
 type LinuxDoPendingActionResponse = PendingOAuthExchangeResponse & PendingOAuthCompletionFields
 
@@ -468,7 +469,7 @@ export default function LinuxDoCallbackView() {
   }, [])
 
   return (
-    <>
+    <AuthLayout>
       <div className="space-y-6">
         <div className="text-center">
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
@@ -523,6 +524,6 @@ export default function LinuxDoCallbackView() {
           totpTestIdPrefix="linuxdo"
         />
       </div>
-    </>
+    </AuthLayout>
   )
 }

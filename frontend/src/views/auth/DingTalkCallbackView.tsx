@@ -34,6 +34,7 @@ import {
   type PendingOAuthCompletionFields
 } from '@/components/auth/pendingOAuthShared'
 import '@/views/authViews.css'
+import { AuthLayout } from '@/components/layout/AuthLayout'
 
 type DingTalkPendingActionResponse = PendingOAuthExchangeResponse & PendingOAuthCompletionFields
 
@@ -498,7 +499,7 @@ export default function DingTalkCallbackView() {
   }, [])
 
   return (
-    <>
+    <AuthLayout>
       <div className="space-y-6">
         <div className="text-center">
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
@@ -553,6 +554,6 @@ export default function DingTalkCallbackView() {
           totpTestIdPrefix="dingtalk"
         />
       </div>
-    </>
+    </AuthLayout>
   )
 }

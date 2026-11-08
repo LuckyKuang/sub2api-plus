@@ -8,6 +8,8 @@ import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import { useAdminSettingsStore } from '@/stores/adminSettings'
 import { getAdminSupportContext } from '@/utils/adminSupportContext'
+import { useConsoleAppearance } from '@/composables/useConsoleAppearance'
+import { defaultConsoleAppearance } from '@/types/appearance'
 import { canViewAsyncImage } from '@/composables/useAsyncImageAccess'
 
 const THEME_KEY = 'theme'
@@ -29,11 +31,13 @@ export function AppLayout({ appearance = 'admin' }: AppLayoutProps) {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [theme, setTheme] = useState<'light' | 'dark'>(() => readTheme())
+  const [isDesktop, setIsDesktop] = useState(() => window.matchMedia('(min-width: 1024px)').matches)
 
   const appStore = useAppStore()
   const authStore = useAuthStore()
   const adminSettingsStore = useAdminSettingsStore()
   const settings = appStore.cachedPublicSettings
+  const consoleAppearance = appStore.consoleAppearance
   const isAdmin = authStore.user?.role === 'admin'
   const supportUserId = getAdminSupportContext()?.userId ?? null
 
@@ -42,9 +46,20 @@ export function AppLayout({ appearance = 'admin' }: AppLayoutProps) {
     localStorage.setItem(THEME_KEY, theme)
   }, [theme])
 
+  // Accent palette, card transparency and background come from the saved
+  // console appearance; the admin preview overrides it while being edited.
+  useConsoleAppearance(appStore.consoleAppearancePreview ?? consoleAppearance ?? defaultConsoleAppearance())
+
   useEffect(() => {
     setMobileOpen(false)
   }, [location.pathname])
+
+  useEffect(() => {
+    const query = window.matchMedia('(min-width: 1024px)')
+    const onChange = (event: MediaQueryListEvent) => setIsDesktop(event.matches)
+    query.addEventListener('change', onChange)
+    return () => query.removeEventListener('change', onChange)
+  }, [])
 
   const navContext = useMemo(
     () => ({
@@ -101,10 +116,14 @@ export function AppLayout({ appearance = 'admin' }: AppLayoutProps) {
         onToggleCollapsed={() => setCollapsed((value) => !value)}
         mobileOpen={mobileOpen}
         onCloseMobile={() => setMobileOpen(false)}
+        theme={theme}
+        onToggleTheme={() => setTheme((value) => (value === 'dark' ? 'light' : 'dark'))}
+        isDesktop={isDesktop}
+        siteName={appStore.siteName}
+        siteLogo={appStore.siteLogo}
       />
       <div className="app-content">
         <AppHeader
-          siteName={appStore.siteName}
           siteLogo={appStore.siteLogo}
           userName={authStore.user?.username || authStore.user?.email}
           isAdmin={isAdmin}

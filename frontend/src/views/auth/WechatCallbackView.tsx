@@ -36,6 +36,7 @@ import {
   type PendingOAuthCompletionFields
 } from '@/components/auth/pendingOAuthShared'
 import '@/views/authViews.css'
+import { AuthLayout } from '@/components/layout/AuthLayout'
 
 type PendingWeChatCompletion = PendingOAuthExchangeResponse & PendingOAuthCompletionFields
 
@@ -694,7 +695,7 @@ export default function WechatCallbackView() {
     needsTotpChallenge
 
   return (
-    <>
+    <AuthLayout>
       <div className="space-y-6">
         <div className="text-center">
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
@@ -1017,6 +1018,6 @@ export default function WechatCallbackView() {
           </div>
         )}
       </div>
-    </>
+    </AuthLayout>
   )
 }
