@@ -118,8 +118,6 @@ export function useStaticTableHeaders(root: React.RefObject<HTMLElement | null>)
     const rootElement = root.current
     if (!rootElement) return
 
-    let stopTracking: (() => void) | undefined
-
     const candidates = new Set<HTMLTableElement>()
     const states = new Map<HTMLTableElement, HeaderState>()
     const owners = new Map<Element, Set<HTMLTableElement>>()
@@ -482,7 +480,7 @@ export function useStaticTableHeaders(root: React.RefObject<HTMLElement | null>)
     })
     document.addEventListener('scroll', onScroll, true)
     window.addEventListener('resize', onResize)
-    stopTracking = () => {
+    const disposeTracking = () => {
       disposed = true
       cancelAnimationFrame(frame)
       mutations.disconnect()
@@ -497,7 +495,7 @@ export function useStaticTableHeaders(root: React.RefObject<HTMLElement | null>)
     }
 
     return () => {
-      stopTracking?.()
+      disposeTracking()
     }
   }, [root])
 }

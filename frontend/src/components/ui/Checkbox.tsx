@@ -52,9 +52,22 @@ export interface ToggleProps {
   label?: React.ReactNode
   className?: string
   id?: string
+  /** Names the switch for assistive tech when no visible label is rendered. */
+  ariaLabel?: string
+  /** Test hook rendered as a `data-test` attribute on the switch. */
+  dataTest?: string
 }
 
-export function Toggle({ checked = false, onCheckedChange, disabled, label, className, id }: ToggleProps) {
+export function Toggle({
+  checked = false,
+  onCheckedChange,
+  disabled,
+  label,
+  className,
+  id,
+  ariaLabel,
+  dataTest
+}: ToggleProps) {
   const generatedId = useId()
   const toggleId = id || generatedId
   return (
@@ -64,6 +77,8 @@ export function Toggle({ checked = false, onCheckedChange, disabled, label, clas
         type="button"
         role="switch"
         aria-checked={checked}
+        aria-label={ariaLabel}
+        data-test={dataTest}
         disabled={disabled}
         onClick={() => onCheckedChange?.(!checked)}
         className={cn(
