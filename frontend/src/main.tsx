@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import App from './App'
 import { initI18n } from './i18n'
 import { useAppStore } from './stores/app'
+import { useAuthStore } from './stores/auth'
 import { isIOSDevice } from './utils/device'
 import { updateFavicon } from './utils/branding'
 import './style.css'
@@ -37,6 +38,11 @@ async function bootstrap() {
   // before the first render without triggering an update loop.
   const appStore = useAppStore.getState()
   appStore.initFromInjectedConfig()
+
+  // Restore the persisted session before the first render. The router guard
+  // runs during render, so a deep link to a protected route would otherwise be
+  // bounced to /login and then onward to the dashboard, losing the destination.
+  useAuthStore.getState().checkAuth()
 
   if (appStore.siteName && appStore.siteName !== 'Sub2API Plus') {
     document.title = `${appStore.siteName} - AI API Gateway`

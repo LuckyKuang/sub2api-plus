@@ -408,15 +408,20 @@ export function DateTimePicker({
         step={step}
         required={required}
         disabled={disabled}
-        readOnly={readOnly}
+        // The proxy is a hidden 1px element the component writes to
+        // imperatively; it exists for native validation and form submission,
+        // never for direct entry.
+        readOnly
         tabIndex={-1}
         aria-hidden="true"
+        onInvalid={(event) => event.preventDefault()}
         onClick={(event) => {
           event.preventDefault()
           event.stopPropagation()
           open()
           triggerRef.current?.focus()
         }}
+        onFocus={() => triggerRef.current?.focus()}
       />
       <button
         id={id}
