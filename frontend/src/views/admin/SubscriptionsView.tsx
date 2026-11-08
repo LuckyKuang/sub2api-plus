@@ -888,8 +888,12 @@ export default function SubscriptionsView() {
   )
 
   const handleSelectedKeysUpdate = useCallback((keys: Array<string | number>) => {
+    // The table stringifies row ids; convert back to the numeric subscription
+    // ids this view filters on.
     const visibleIds = new Set(subscriptionsRef.current.map((subscription) => subscription.id))
-    setSelectedIds(keys.filter((key): key is number => typeof key === 'number' && visibleIds.has(key)))
+    setSelectedIds(
+      keys.map((key) => Number(key)).filter((key) => Number.isFinite(key) && visibleIds.has(key))
+    )
   }, [])
 
   // Handle click outside to close dropdowns

@@ -75,9 +75,9 @@ export function AdminDataTable<T>({
   empty,
   className
 }: AdminDataTableProps<T>) {
-  const selectedSet = useMemo(() => new Set(selectedKeys ?? []), [selectedKeys])
-  const allVisibleSelected = data.length > 0 && data.every((row, index) => selectedSet.has(resolveRowKey(row, index, rowKey)))
-  const someVisibleSelected = data.some((row, index) => selectedSet.has(resolveRowKey(row, index, rowKey)))
+  const selectedSet = useMemo(() => new Set((selectedKeys ?? []).map((key) => String(key))), [selectedKeys])
+  const allVisibleSelected = data.length > 0 && data.every((row, index) => selectedSet.has(String(resolveRowKey(row, index, rowKey))))
+  const someVisibleSelected = data.some((row, index) => selectedSet.has(String(resolveRowKey(row, index, rowKey))))
   const tableColumnCount = columns.length + (selectable ? 1 : 0)
 
   const toggleAllVisible = (checked: boolean) => {
@@ -89,7 +89,7 @@ export function AdminDataTable<T>({
       onSelectedKeysChange([...next])
     } else {
       const remove = new Set(keys)
-      onSelectedKeysChange((selectedKeys ?? []).filter((key) => !remove.has(key)))
+      onSelectedKeysChange((selectedKeys ?? []).filter((key) => !remove.has(String(key))))
     }
   }
 
@@ -97,7 +97,7 @@ export function AdminDataTable<T>({
     if (!onSelectedKeysChange) return
     const key = resolveRowKey(row, index, rowKey)
     onSelectedKeysChange(
-      checked ? [...(selectedKeys ?? []), key] : (selectedKeys ?? []).filter((entry) => entry !== key)
+      checked ? [...(selectedKeys ?? []), key] : (selectedKeys ?? []).filter((entry) => String(entry) !== String(key))
     )
   }
 
@@ -182,7 +182,7 @@ export function AdminDataTable<T>({
 
           {data.map((row, rowIndex) => {
             const key = resolveRowKey(row, rowIndex, rowKey)
-            const isSelected = selectedSet.has(key)
+            const isSelected = selectedSet.has(String(key))
             return (
               <tr
                 key={key}

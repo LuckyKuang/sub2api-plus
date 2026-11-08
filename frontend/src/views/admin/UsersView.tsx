@@ -768,7 +768,9 @@ export default function UsersView() {
   const selectedNumbers = selectedIds.filter((key): key is number => typeof key === 'number')
 
   const handleSelectedKeysUpdate = (keys: Array<string | number>) => {
-    setSelectedIds(keys.filter((key): key is number => typeof key === 'number'))
+    // The table stringifies row ids; the rest of this view works in numeric
+    // user ids, so convert back rather than dropping every key.
+    setSelectedIds(keys.map((key) => Number(key)).filter((key) => Number.isFinite(key)))
   }
 
   const clearSelection = () => setSelectedIds([])

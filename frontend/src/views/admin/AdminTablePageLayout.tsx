@@ -5,6 +5,10 @@ import { useEffect, useRef, useState } from 'react'
  * lands. Keeps the same section structure (`table-page-layout workspace-page`
  * with fixed filter / scrollable table / fixed pagination zones) and the same
  * desktop height calculation so the ported admin views scroll identically.
+ *
+ * `table` is the scrollable table zone. `children` is rendered outside every
+ * zone: the Vue original exposes no default slot, so children are overlays
+ * (dialogs), not table content.
  */
 export interface AdminTablePageLayoutProps {
   filters?: React.ReactNode
@@ -59,10 +63,15 @@ export function AdminTablePageLayout({ filters, actions, table, pagination, chil
       {filters && <div className="layout-section-fixed workspace-fixed">{filters}</div>}
       <div className="layout-section-scrollable workspace-scroll">
         <div className="card table-scroll-container workspace-shell workspace-table-card">
-          {table ?? children}
+          {table}
         </div>
       </div>
       {pagination && <div className="layout-section-fixed table-page-pagination workspace-fixed">{pagination}</div>}
+      {/* The Vue TablePageLayout has named slots only and no default slot, so
+          anything passed as children (typically dialogs) is an overlay rather
+          than table content. It renders outside the scroll zone; the shared
+          Modal portals to the body, so placement here does not affect layout. */}
+      {children}
     </div>
   )
 }

@@ -2368,6 +2368,9 @@ export default function AccountsView() {
           rowKey="id"
           selectable
           selectedKeys={selIds}
+          onSelectedKeysChange={(keys) =>
+            setSelectedIds(keys.map((key) => Number(key)).filter((key) => Number.isFinite(key)))
+          }
           sortKey={params.sort_by as string}
           sortOrder={params.sort_order as SortOrder}
           onSort={handleSort}

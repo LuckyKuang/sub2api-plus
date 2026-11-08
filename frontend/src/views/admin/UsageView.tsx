@@ -478,7 +478,10 @@ export default function UsageView() {
         historySnapshot.accept(res, isLatest)
       }
     } catch (error: unknown) {
-      if ((error as { name?: string })?.name !== 'AbortError') {
+      // The API client preserves axios cancellations so callers can ignore them;
+      // they surface as `CanceledError`/`ERR_CANCELED`, not `AbortError`.
+      const cancelled = (error as { name?: string; code?: string } | null) ?? {}
+      if (cancelled.name !== 'AbortError' && cancelled.name !== 'CanceledError' && cancelled.code !== 'ERR_CANCELED') {
         console.error('Failed to load usage logs:', error)
       }
     } finally {
