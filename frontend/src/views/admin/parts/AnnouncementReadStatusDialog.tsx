@@ -180,7 +180,7 @@ export function AnnouncementReadStatusDialog({ open, announcementId, onClose }: 
             setPage(1)
             void load()
           }}
-          renderCell={(key, row, value) => {
+          renderCell={(key, _row, value) => {
             if (key === 'email') {
               return <span className="font-medium text-gray-900 dark:text-white">{String(value ?? '')}</span>
             }

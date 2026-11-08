@@ -30,7 +30,8 @@ function resolveDropdownMinimumWidth(): number {
 
 export interface SearchableSelectProps {
   value?: Value | undefined
-  options: Option[]
+  /** Accepts any option-shaped object; only `valueKey`/`labelKey` are read. */
+  options: readonly unknown[]
   placeholder?: string
   disabled?: boolean
   error?: boolean
@@ -48,6 +49,7 @@ export interface SearchableSelectProps {
   remote?: boolean
   loading?: boolean
   triggerClass?: string
+  className?: string
   renderOption?: (option: Option, state: { selected: boolean }) => React.ReactNode
   renderSelected?: (option: Option | null) => React.ReactNode
   onValueChange?: (value: Value) => void
@@ -79,6 +81,7 @@ export function SearchableSelect({
   remote = false,
   loading = false,
   triggerClass,
+  className,
   renderOption,
   renderSelected,
   onValueChange,
@@ -93,24 +96,26 @@ export function SearchableSelect({
   const searchInputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
 
+  const items = useMemo(() => options as Option[], [options])
+
   const isSearchable =
-    remote || creatable || searchable === true || (searchable === 'auto' && options.length > 5)
+    remote || creatable || searchable === true || (searchable === 'auto' && items.length > 5)
 
   const selectedOption = useMemo(() => {
     if (value === undefined || value === null) return null
-    return options.find((option) => readField(option, valueKey) === value) ?? null
-  }, [options, value, valueKey])
+    return items.find((option) => readField(option, valueKey) === value) ?? null
+  }, [items, value, valueKey])
 
   const filteredOptions = useMemo(() => {
-    if (remote || !query.trim()) return options
+    if (remote || !query.trim()) return items
     const needle = query.trim().toLowerCase()
-    return options.filter((option) => String(readField(option, labelKey) ?? '').toLowerCase().includes(needle))
-  }, [options, query, labelKey, remote])
+    return items.filter((option) => String(readField(option, labelKey) ?? '').toLowerCase().includes(needle))
+  }, [items, query, labelKey, remote])
 
   const canCreate =
     creatable &&
     query.trim().length > 0 &&
-    !options.some((option) => String(readField(option, labelKey) ?? '').toLowerCase() === query.trim().toLowerCase())
+    !items.some((option) => String(readField(option, labelKey) ?? '').toLowerCase() === query.trim().toLowerCase())
 
   const close = useCallback(() => {
     setOpen(false)
@@ -233,7 +238,7 @@ export function SearchableSelect({
               return
             }
             setOpen(true)
-            setFocusedIndex(Math.max(0, options.findIndex((option) => readField(option, valueKey) === value)))
+            setFocusedIndex(Math.max(0, items.findIndex((option) => readField(option, valueKey) === value)))
           }}
           onKeyDown={onTriggerKeyDown}
           className={cn(
@@ -242,7 +247,8 @@ export function SearchableSelect({
             error && 'select-trigger-error',
             open && 'select-trigger-open',
             disabled && 'select-trigger-disabled',
-            triggerClass
+            triggerClass,
+            className
           )}
         >
           <span className={cn('min-w-0 flex-1 truncate text-left', !selectedOption && 'text-gray-500 dark:text-dark-400')}>

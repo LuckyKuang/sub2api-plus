@@ -288,7 +288,7 @@ export function PaymentStatusPanel({
         <div className="card workspace-shell p-6">
           <div className="flex flex-col items-center space-y-4 py-4">
             <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-100/[0.15] dark:bg-green-900/30">
-              <Check className="h-8 w-8 text-green-500" />
+              <Check size={24} strokeWidth={1.5} className="text-green-500" />
             </div>
             <p className="text-lg font-bold text-gray-900 dark:text-white">
               {orderType === 'subscription' ? t('payment.result.subscriptionSuccess') : t('payment.result.success')}
@@ -382,7 +382,7 @@ export function PaymentStatusPanel({
                 <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#00AEEF] border-t-transparent"></div>
               ) : (
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-50/[0.15] dark:bg-blue-950/30">
-                  <CircleCheck size="lg" className="text-[#00AEEF]" />
+                  <CircleCheck size={24} strokeWidth={1.5} className="text-[#00AEEF]" />
                 </div>
               )}
               <p className="text-lg font-semibold text-gray-900 dark:text-white">
@@ -395,7 +395,7 @@ export function PaymentStatusPanel({
                   className="btn btn-alipay inline-flex items-center gap-2 text-sm"
                   onClick={reopenAlipay}
                 >
-                  <ExternalLink size="sm" />
+                  <ExternalLink size={16} strokeWidth={1.5} />
                   {t('payment.qr.reopenAlipay')}
                 </button>
               )}
@@ -458,7 +458,7 @@ export function PaymentStatusPanel({
                 className="btn btn-alipay inline-flex items-center justify-center gap-2"
                 onClick={reopenAlipay}
               >
-                <ExternalLink size="sm" />
+                <ExternalLink size={16} strokeWidth={1.5} />
                 {t('payment.qr.reopenAlipay')}
               </button>
               <button
@@ -466,7 +466,7 @@ export function PaymentStatusPanel({
                 className="btn btn-secondary inline-flex items-center justify-center gap-2"
                 onClick={saveQRCode}
               >
-                <Download size="sm" />
+                <Download size={16} strokeWidth={1.5} />
                 {t('payment.qr.saveQRCode')}
               </button>
             </div>

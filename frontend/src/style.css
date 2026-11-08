@@ -741,3 +741,37 @@ input:is([type=range], [type=checkbox], [type=radio]) { accent-color: rgb(var(--
     padding-bottom: env(safe-area-inset-bottom);
   }
 }
+
+/* ── Channel status V3 (service status page) ─────────────────────────────
+   Ported verbatim from views/user/ChannelStatusV3View.vue scoped styles. */
+.service-status { --status-color: #737373; --status-tint: #7373730a; }
+.status-heading, .status-footer { padding: 16px 20px; }
+.status-toolbar { padding: 12px 16px; }
+.status-footer { display: flex; flex-direction: column; gap: 10px; }
+.status-card-grid { grid-auto-rows: max-content; align-content: start; }
+.status-events-panel { display: flex; flex-direction: column; gap: 16px; }
+@media (min-width: 1024px) {
+  .status-platform-panel, .status-events-panel { display: flex; flex: 1 1 0%; flex-direction: column; gap: 16px; min-height: 0; overflow: hidden; }
+  .status-card-grid { flex: 1 1 0%; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; border-radius: 16px; }
+}
+.status-normal { --status-color: #16a34a; --status-tint: #16a34a0a; }
+.status-degraded { --status-color: #ca8a04; --status-tint: #ca8a040a; }
+.status-partial { --status-color: #ea580c; --status-tint: #ea580c0a; }
+.status-outage { --status-color: #dc2626; --status-tint: #dc26260a; }
+.status-recovering { --status-color: #3b82f6; --status-tint: #3b82f60a; }
+.status-unknown, .status-insufficient { --status-color: #737373; --status-tint: #7373730a; }
+.dark .status-normal { --status-color: #4ade80; }
+.dark .status-degraded { --status-color: #facc15; }
+.dark .status-partial { --status-color: #fb923c; }
+.dark .status-outage { --status-color: #f87171; }
+.dark .status-unknown, .dark .status-insufficient { --status-color: var(--surface-muted); }
+.overview { background: var(--status-tint); border-color: color-mix(in srgb, var(--status-color) 25%, transparent); }
+.status-ink { color: var(--status-color); }
+.status-badge { display: inline-flex; align-items: center; white-space: nowrap; border-radius: 5px; padding: 3px 7px; font-size: 10px; color: var(--status-color); background: var(--status-tint); }
+.history-bar { display: block; border-radius: 2px; background: var(--status-color); height: 22px; }
+.history-bar.status-degraded, .history-bar.status-recovering { height: 17px; }
+.history-bar.status-partial { height: 13px; }
+.history-bar.status-outage { height: 8px; }
+.history-bar.status-unknown, .history-bar.status-insufficient { height: 5px; background: #a3a3a34d; }
+.legend-dot { display: block; width: 8px; height: 8px; border-radius: 2px; background: var(--status-color); }
+.legend-dot.status-unknown { background: #a3a3a34d; }

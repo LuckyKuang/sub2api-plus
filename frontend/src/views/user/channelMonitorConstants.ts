@@ -1,4 +1,3 @@
-import { useTranslation } from 'react-i18next'
 import type { CheckMode, MonitorStatus, Provider } from '@/api/admin/channelMonitor'
 
 /**
@@ -46,3 +45,6 @@ export const MONITOR_STATUSES: readonly MonitorStatus[] = [
   STATUS_FAILED,
   STATUS_ERROR
 ]
+
+/** Default polling interval (seconds) for new monitors. */
+export const DEFAULT_INTERVAL_SECONDS = 60
