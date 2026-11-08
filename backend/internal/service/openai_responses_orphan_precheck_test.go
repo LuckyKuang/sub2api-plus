@@ -138,7 +138,9 @@ func TestOpenAIResponsesOrphanPrecheckLargeEscapedContent(t *testing.T) {
 	// allocation contract from background service workers started by other tests.
 	const allocationChild = "SUB2API_ORPHAN_ALLOCATION_CHILD"
 	if os.Getenv(allocationChild) != "1" {
-		child := exec.Command(os.Args[0], "-test.run=^TestOpenAIResponsesOrphanPrecheckLargeEscapedContent$")
+		testBinary, err := os.Executable()
+		require.NoError(t, err)
+		child := exec.Command(testBinary, "-test.run=^TestOpenAIResponsesOrphanPrecheckLargeEscapedContent$")
 		child.Env = append(os.Environ(), allocationChild+"=1")
 		output, err := child.CombinedOutput()
 		require.NoError(t, err, "%s", output)
