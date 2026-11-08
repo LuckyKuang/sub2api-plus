@@ -34,6 +34,25 @@ otherwise. A source-level mapping becomes release evidence only when its
 applicable unit/integration profile passes on the final tree. Unit mocks do not
 prove PostgreSQL locking, rollback, outbox atomicity, or multi-replica storage.
 
+## November 8 official agent review
+
+The [reviewed official trees](OFFICIAL_AGENT_BASELINES.md#november-8-protocol-alignment)
+retain all seven existing identity versions and SDK fingerprints. Five heads
+are unchanged; the Step-Code increment changes client-local task/process
+management. Codex adds incremental Code Mode catalog and display behavior.
+
+| Business requirement | Regression and observable acceptance |
+| --- | --- |
+| Chronological Lite catalogs remain valid during a separate top-level namespace migration | `service/TestResponsesLiteOfficialIncrementalExecHistory` covers HTTP and `response.create` preparation for OAuth/API Key; `TestResponsesLiteOfficialIncrementalExecForward` captures native/passthrough HTTP forwarding for both types. Initial/restored same-name declarations, developer definitions/removal text, roles, order and unknown siblings survive; spoofed inbound identity cannot replace the literal trusted Codex triple. The top-level namespace is an explicit gateway extension to official history. |
+| A migrated tool cannot replace the effective historical declaration | `service/TestResponsesLiteMigratedToolsCompareLatestDeclaration`: equality with the latest definition deduplicates, while an obsolete definition fails without changing the request. Existing `TestNormalizeOpenAIResponsesLiteTools_RejectsConflictingAdditionalTool` retains simultaneous migration-conflict rejection. |
+| Independent answer display metadata reaches the producing client | `service/TestCodexOfficialAnswerDisplayMetadata`: native/passthrough SSE and OAuth/API Key retain exact display fields for known and unknown actions while the Plus-only safety notice is suppressed. Existing WS sibling-preservation suites retain transport coverage; this test does not claim desktop rendering. |
+| Both audits see current user content before catalog migration or side effects | `handler/TestCodexIncrementalExecCanonicalAudits` covers HTTP and flat/nested WS extraction. `TestCodexIncrementalExecRealAuditsBeforeSideEffects` exercises both real engines, HTTP/WS and both candidate credential types: recognized user text is blocked before selection/billing/concurrency/provider work, while unknown-only current content invokes no supplier and reaches user admission. Catalog/developer text and historical user turns never become current direct-user text. |
+
+These tests use a reduced official-shape fixture and synthetic upstream; they
+do not claim live credentials, provider entitlement, or execution of the new
+unreleased official client. The mandatory existing seven-provider source,
+owner, signing, failover, proxy and fingerprint suites remain applicable.
+
 ## Pinned Codex CLI bridge and independent task requirements
 
 The [CLI contract](CODEX_CLI.md) adds an opt-in official HTTP proxy transport

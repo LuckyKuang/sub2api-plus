@@ -584,6 +584,18 @@ commit links in this document record evidence for individual features rather
 than a different current baseline. Identity-shape alignment does not mean every
 client feature, body, OS fingerprint or transport is identical.
 
+- Responses Lite history is chronological. Initial and restored
+  `input[].additional_tools` declarations may redefine a namespace; incremental
+  Code Mode definitions and removal notices remain developer `input_text`
+  messages in their original positions. OAuth top-level namespace migration
+  preserves all historical declarations and compares migrated tools with the
+  latest declaration of the same identity. A conflicting migrated declaration
+  still fails before provider traffic. API-key requests retain their existing
+  carrier policy. These compatibility operations cannot rewrite developer
+  catalog text, remove unknown siblings or select an outbound identity.
+- `response.metadata` answer moderation display instructions remain opaque
+  producer metadata, including unknown display actions. The independent Plus
+  safety-buffering display setting cannot remove them or change ingress audit.
 - HTTP-to-WS converts the Responses Lite header into the per-generation
   `client_metadata.ws_request_header_x_openai_internal_codex_responses_lite`
   string `"true"`, preserving other metadata. A non-object metadata shape that
