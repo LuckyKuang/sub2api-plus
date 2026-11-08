@@ -513,12 +513,29 @@ func (s *adminServiceImpl) BatchUpdateLimits(ctx context.Context, userIDs []int6
 	return affected, nil
 }
 
-func (s *adminServiceImpl) UpdateUserBalance(ctx context.Context, userID int64, balance float64, operation string, notes string) (*User, error) {
+func (s *adminServiceImpl) UpdateUserBalance(ctx context.Context, userID int64, balance float64, operation string, notes string, allowNegative bool) (*User, error) {
 	// 余额调整必须走原子接口：先读后整行写回会把并发的计费扣款覆盖掉。
 	var (
 		change BalanceChange
 		err    error
 	)
+	if allowNegative && operation != "subtract" {
+		return nil, ErrAllowNegativeRequiresSubtract
+	}
+	switch {
+	case allowNegative:
+		// 透支扣减：已经发生的用量必须记账（联邦用量回扣），余额允许变为负数。
+		// DeductBalance 是原子 UPDATE，并会发出联邦余额快照；调整记录只需要差值 -balance。
+		if err = s.userRepo.DeductBalance(ctx, userID, balance); err == nil {
+			change = BalanceChange{Old: balance, New: 0}
+		}
+	default:
+		change, err = s.adjustBalance(ctx, userID, balance, operation)
+	}
+	return s.finishBalanceUpdate(ctx, userID, balance, operation, notes, change, err)
+}
+
+func (s *adminServiceImpl) adjustBalance(ctx context.Context, userID int64, balance float64, operation string) (change BalanceChange, err error) {
 	switch operation {
 	case "set":
 		change, err = s.userRepo.SetBalance(ctx, userID, balance)
@@ -527,8 +544,12 @@ func (s *adminServiceImpl) UpdateUserBalance(ctx context.Context, userID int64, 
 	case "subtract":
 		change, err = s.userRepo.AdjustBalance(ctx, userID, -balance)
 	default:
-		return nil, fmt.Errorf("unsupported balance operation: %q", operation)
+		return BalanceChange{}, fmt.Errorf("unsupported balance operation: %q", operation)
 	}
+	return change, err
+}
+
+func (s *adminServiceImpl) finishBalanceUpdate(ctx context.Context, userID int64, balance float64, operation string, notes string, change BalanceChange, err error) (*User, error) {
 	if errors.Is(err, ErrBalanceNegative) {
 		return nil, fmt.Errorf("balance cannot be negative, current balance: %.2f, requested operation would result in: %.2f", change.Old, change.New)
 	}

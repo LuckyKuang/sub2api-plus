@@ -95,6 +95,10 @@ type UpdateBalanceRequest struct {
 	Balance   float64 `json:"balance" binding:"required,gt=0"`
 	Operation string  `json:"operation" binding:"required,oneof=set add subtract"`
 	Notes     string  `json:"notes"`
+	// AllowNegative lets a subtract take the balance below zero (overdraft).
+	// Used by the federation usage tailer: usage already served must always be
+	// billed, otherwise one exhausted user blocks the strictly ordered queue.
+	AllowNegative bool `json:"allow_negative"`
 }
 
 type BindUserAuthIdentityRequest struct {
@@ -408,7 +412,7 @@ func (h *UserHandler) UpdateBalance(c *gin.Context) {
 		Body:   req,
 	}
 	executeAdminIdempotentJSON(c, "admin.users.balance.update", idempotencyPayload, service.DefaultWriteIdempotencyTTL(), func(ctx context.Context) (any, error) {
-		user, execErr := h.adminService.UpdateUserBalance(ctx, userID, req.Balance, req.Operation, req.Notes)
+		user, execErr := h.adminService.UpdateUserBalance(ctx, userID, req.Balance, req.Operation, req.Notes, req.AllowNegative)
 		if execErr != nil {
 			return nil, execErr
 		}

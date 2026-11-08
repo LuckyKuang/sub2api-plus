@@ -78,6 +78,8 @@ curl -s "${BASE}/api/v1/admin/users/123" \
 
 用途：人工补偿 / 扣减，支持 `set` / `add` / `subtract`。
 
+默认情况下结果余额不能为负（返回错误）。可选字段 `allow_negative: true` 仅对 `subtract` 有效，允许余额扣成负数（透支）；与 `set` / `add` 同用会返回 400 `ALLOW_NEGATIVE_REQUIRES_SUBTRACT`。联邦用量回扣（federation-usage-tailer）始终带此字段，保证已发生的用量一定记账。
+
 请求体示例（扣减）：
 ```json
 {
@@ -197,6 +199,8 @@ curl -s "${BASE}/api/v1/admin/users/123" \
 `POST /api/v1/admin/users/:id/balance`
 
 Use case: manual correction with `set` / `add` / `subtract`.
+
+By default the resulting balance must not be negative (the request fails). The optional field `allow_negative: true` is valid only with `subtract` and lets the balance go below zero (overdraft); combining it with `set` / `add` returns 400 `ALLOW_NEGATIVE_REQUIRES_SUBTRACT`. The federation usage tailer always sends it so that usage already served is always billed.
 
 Request body example (`subtract`):
 ```json
