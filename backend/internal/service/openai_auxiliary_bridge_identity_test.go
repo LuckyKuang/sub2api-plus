@@ -65,7 +65,8 @@ func TestOpenAIModelDiscoveryBridgeIdentitySourceMatrix(t *testing.T) {
 						owner.Credentials[credKeyHeaderOverrideEnabled] = true
 						owner.Credentials[credKeyHeaderOverrides] = map[string]any{
 							"User-Agent": "untrusted/9.9", "Originator": "untrusted", "Version": "9.9",
-							"X-Discovery-Identity-Test": "allowed-override",
+							"X-Discovery-Identity-Test":    "allowed-override",
+							"X-OpenAI-Actor-Authorization": "Bearer foreign-actor",
 						}
 						settings := &SettingService{settingRepo: &openAIIdentitySettingRepoStub{values: map[string]string{
 							SettingKeyOpenAICodexUserAgent: source.global, SettingKeyCodexCLIBridgeEnabled: switches.global,
@@ -98,6 +99,7 @@ func TestOpenAIModelDiscoveryBridgeIdentitySourceMatrix(t *testing.T) {
 						require.Equal(t, []string{source.wantUA}, wire.Header.Values("User-Agent"))
 						require.Equal(t, []string{source.wantOriginator}, wire.Header.Values("Originator"))
 						require.Equal(t, []string{"0.167.0"}, wire.Header.Values("Version"))
+						require.Empty(t, wire.Header.Values("X-OpenAI-Actor-Authorization"))
 						if accountType == AccountTypeOAuth {
 							require.Equal(t, "/backend-api/codex/models", wire.URL.Path)
 							require.Equal(t, "Bearer owner-access", wire.Header.Get("Authorization"))

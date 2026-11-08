@@ -735,6 +735,12 @@ PROFILES = {
             "TestGrokMediaUsageFromResponseVideoCreateDoesNotBill",
             "TestGrokMediaUsageFromResponseVideoStatusBillsOnOfficialDone",
             ZHIPU_START_PLAN_TEST,
+            "TestResponsesLiteOfficialIncrementalExecHistory",
+            "TestResponsesLiteOfficialIncrementalExecForward",
+            "TestResponsesLiteMigratedToolsCompareLatestDeclaration",
+            "TestCodexOfficialAnswerDisplayMetadata",
+            "TestOpenAIActorAuthorizationOverrideRejected",
+            "TestOpenAIActorAuthorizationCannotReachProvider",
         ) + CAPABILITY_SERVICE_TESTS + CODEX_CLI_SERVICE_TESTS + CODEX_SAFETY_BUFFERING_TESTS + OPENAI_ERROR_MESSAGE_TESTS, ("TestZhipuOAuthBuildAccountMaterialForEachPlan/start_plan_and_off-peak_are_estate_independent",)
         + tuple(
             "TestCodexCLITaskBillingUsesEffectiveConfiguredReasoning/" + scenario
@@ -987,6 +993,27 @@ PROFILES = {
             f"TestGPT61TerraMessagesMinimalEffortStopsBeforeUpstream/{kind}/{model}"
             for kind in ("oauth", "apikey")
             for model in ("openai/GPT-6.1-Terra-max", "my-terra")
+        ) + tuple(
+            f"TestResponsesLiteOfficialIncrementalExecHistory/{kind}/websocket={websocket}"
+            for kind in ("oauth", "apikey") for websocket in ("false", "true")
+        ) + tuple(
+            f"TestOpenAIActorAuthorizationOverrideRejected/{name}/blank={blank}/enabled={enabled}"
+            for name in ("X-OpenAI-Actor-Authorization", "x-openai-actor-authorization", "X-OPENAI-ACTOR-AUTHORIZATION")
+            for blank in ("false", "true") for enabled in ("false", "true")
+        ) + tuple(
+            f"TestOpenAIActorAuthorizationCannotReachProvider/{kind}/string-map={string_map}/{path}"
+            for kind in ("oauth", "apikey") for string_map in ("false", "true")
+            for path in ("http", "passthrough", "websocket")
+        ) + tuple(
+            f"TestResponsesLiteOfficialIncrementalExecForward/{kind}/passthrough={passthrough}"
+            for kind in ("oauth", "apikey") for passthrough in ("false", "true")
+        ) + tuple(
+            f"TestResponsesLiteMigratedToolsCompareLatestDeclaration/latest={latest}"
+            for latest in ("false", "true")
+        ) + tuple(
+            f"TestCodexOfficialAnswerDisplayMetadata/{action}/{kind}/passthrough={passthrough}"
+            for action in ("answerHelpline", "futureDisplayAction")
+            for kind in ("oauth", "apikey") for passthrough in ("false", "true")
         ) + CAPABILITY_SERVICE_SUBTESTS + CODEX_SAFETY_BUFFERING_SUBTESTS + OPENAI_ERROR_MESSAGE_SUBTESTS),
         RegressionGroup("./internal/repository", (
             GROK_HTTP_WIRE,
@@ -1036,6 +1063,8 @@ PROFILES = {
             for mode in ("success", "timeout", "refused", "authentication_required", "missing", "mismatched")
         )),
         RegressionGroup("./internal/handler", (
+            "TestCodexIncrementalExecCanonicalAudits",
+            "TestCodexIncrementalExecRealAuditsBeforeSideEffects",
             "TestOpenAIErrorMessagesPreserveOpsDiagnostics",
             "TestOpenAIErrorMessagesFailoverExhausted",
             "TestOpenAIErrorMessagesRealAccountFailover",
@@ -1119,6 +1148,13 @@ PROFILES = {
             f"TestOpenAIErrorMessagesFailoverExhausted/{platform}/enabled={enabled}/stream={stream}/{code}"
             for platform in ("openai", "grok") for enabled in ("false", "true") for stream in ("false", "true")
             for code in ("upstream_unavailable", "upstream_response_interrupted", "session_account_lost", "other_error", "UPSTREAM_UNAVAILABLE")
+        ) + tuple(
+            f"TestCodexIncrementalExecCanonicalAudits/{frame}"
+            for frame in ("http", "websocket", "websocket_nested")
+        ) + tuple(
+            f"TestCodexIncrementalExecRealAuditsBeforeSideEffects/{kind}/{engine}/websocket={websocket}/recognized={recognized}"
+            for kind in ("oauth", "apikey") for engine in ("moderation", "prompt")
+            for websocket in ("false", "true") for recognized in ("false", "true")
         ) + REVIEW_HANDLER_SUBTESTS),
         RegressionGroup("./internal/server/middleware", (
             "TestProviderFilesReviewAllowlistLeavesUploadBodyUnread",

@@ -3,19 +3,19 @@
 Both **OAuth and API Key** accounts for each platform use its official agent
 below. This is the source index for future version and outbound-protocol reviews;
 it contains no developer checkout paths. The seven-provider review was refreshed
-on 2026-11-07 against each official default branch. It covers OAuth and API-key
+on 2026-11-08 against each official default branch. It covers OAuth and API-key
 request headers/bodies, SDK and runtime declarations, auxiliary authentication,
 model discovery, request ownership and terminal errors. Historical review notes
 below retain the source/version they originally evaluated.
 
 | Platform | Official source | Reviewed commit | Selected agent version |
 | --- | --- | --- | --- |
-| OpenAI | [openai/codex](https://github.com/openai/codex.git) | `efdacaf46ff54660a239189a6d62434c5db33d2c` | stable `rust-v0.167.0` |
+| OpenAI | [openai/codex](https://github.com/openai/codex.git) | `c9b4267c370a755da12ec1c8648c2451163212b7` | stable `rust-v0.167.0` |
 | xAI | [xai-org/grok-build](https://github.com/xai-org/grok-build.git) | `2bdd1d6a6369de0e8c68132ea4539e9abd9e14a8` | `1.0.45` |
 | DeepSeek | [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness.git) | `fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159` | `0.2.2-rc.1` (prerelease) |
 | Kimi | [MoonshotAI/kimi-code](https://github.com/MoonshotAI/kimi-code.git) | `eb2035f3cad57cc12d4d5082ec626f7f0ea5f651` | stable `2.5.2` |
 | MiniMax | [MiniMax-AI/minimax-code](https://github.com/MiniMax-AI/minimax-code) | `3c21163c85a9684030cb147bfef48c6284fa3c46` | product `0.7.2`; managed UA versionless; BYOK SDK `0.91.1` |
-| StepFun | [stepfun-ai/Step-Code](https://github.com/stepfun-ai/Step-Code.git) | `a4141afa49f686296cb04f5aac5bf8940679c0a3` | product `0.84.4`; inference UA versionless; OpenAI JS `6.40.0` |
+| StepFun | [stepfun-ai/Step-Code](https://github.com/stepfun-ai/Step-Code.git) | `c1e9e299674df15bf65d83437eaa60cb49c64de0` | product `0.84.4`; inference UA versionless; OpenAI JS `6.40.0` |
 | Zhipu | [zai-org/ZCode](https://github.com/zai-org/ZCode.git) | `a9fe401eede6e6e5e01be9048679c206fe6f02d9` | stable product `3.17.2`; separate CLI line `0.17.1` |
 
 The managed Codex bridge/task runtime additionally pins the official
@@ -60,7 +60,7 @@ explicitly follows the `dsh-v0.2.2-rc.1` prerelease; it is not a stable Release.
 
 | Agent | Official code entrypoints to review | Project owners |
 | --- | --- | --- |
-| Codex | `codex-rs/login/src/auth/default_client.rs`, `codex-rs/model-provider`, `codex-rs/codex-api`, auth and WebSocket clients, `codex-rs/protocol/src/{session_id,thread_id}.rs`, `codex-rs/core/src/{installation_id,responses_metadata,client,realtime_conversation}.rs`, `codex-rs/core/src/state/auto_compact_window.rs`, `codex-rs/core/src/session/mod.rs`, `codex-rs/exec/src/exec_events.rs`, `codex-rs/responses-api-proxy/src/{lib,read_api_key}.rs` | `service/openai_codex_identity.go`, `openai_gateway_service.go`, `openai_ws_client.go`, `pkg/openai`, `internal/codexcli`, `service/codex_cli_{account,forward,request,bridge_setting,bridge_transport}.go`, `service/openai_plugin_transport.go`, `service/openai_codex_transport.go`, `tools/test_codex_cli_wire.py`, complete Codex transport/identity suites |
+| Codex | `codex-rs/login/src/auth/default_client.rs`, `codex-rs/model-provider`, `codex-rs/model-provider-info/src/lib.rs` (`uses_openai_actor_authorization`), `codex-rs/codex-api`, auth and WebSocket clients, `codex-rs/protocol/src/{session_id,thread_id}.rs`, `codex-rs/runtime-agent-instance/src/installation_id.rs`, `codex-rs/core/src/{responses_metadata,client,realtime_conversation}.rs`, `codex-rs/core/src/state/auto_compact_window.rs`, `codex-rs/core/src/session/mod.rs`, `codex-rs/exec/src/exec_events.rs`, `codex-rs/responses-api-proxy/src/{lib,read_api_key}.rs` | `service/openai_codex_identity.go`, `service/account_header_override.go`, `openai_gateway_service.go`, `openai_ws_client.go`, `pkg/openai`, `internal/codexcli`, `service/codex_cli_{account,forward,request,bridge_setting,bridge_transport}.go`, `service/openai_plugin_transport.go`, `service/openai_codex_transport.go`, `tools/test_codex_cli_wire.py`, complete Codex transport/identity suites |
 | grok-build | `crates/codegen/xai-grok-sampler`, `xai-grok-voice`, `xai-grok-imagine`, OAuth/OIDC nonce and JWT verification, billing clients and sampler request/conversation IDs | `pkg/xai`, `service/grok_*`, `account_test_service_grok_test.go` |
 | deepseek-harness | `packages/llm/llm/src/attribution.ts`, `packages/llm/llm-deepseek/src/{config,adapter,messages-api,files-api,file-id,file-store}.ts`, `llm-deepseek/src/{listing,listed-catalog}.ts`, `llm-deepseek-api-key/src/{index,config}.ts`, account-platform and anonymous-user-id packages | `pkg/deepseek`, `pkg/cnoauth/client.go`, `service/{deepseek_request_state,domestic_agent_models,cn_oauth_service,provider_files}.go`, `handler/provider_files_handler.go`, `repository/provider_files_repo.go` |
 | kimi-code | `packages/oauth/src/{identity,oauth,managed-kimi-code,managed-usage}.ts`, `packages/agent-core-v2/src/llm-adapter`, `packages/agent-core-v2/src/human/llm/builtin/provider/kimi/{index,protocol}.ts` | `pkg/kimi`, `pkg/cnoauth/client.go`, `service/{domestic_agent_models,upstream_models,cn_oauth_service}.go` |
@@ -111,6 +111,49 @@ uses a development manifest version, so its stable identity is manually selected
 as `0.167.0` (stable tag commit `086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a`,
 [published November 6](https://github.com/openai/codex/releases/tag/rust-v0.167.0));
 reviewing protocol changes never enables automatic identity-version updates.
+
+## November 8 protocol alignment
+
+The other five official source heads are unchanged from November 7. None of
+the seven platforms requires a selected product-version, SDK or default
+fingerprint change in this review. Codex's selected stable release remains
+`rust-v0.167.0`; `rust-v0.169.0-alpha.3` is a prerelease and is not selected.
+Account/global pins retain their existing precedence for both credential types.
+
+- Codex's [incremental Code Mode catalog](https://github.com/openai/codex/blob/c9b4267c370a755da12ec1c8648c2451163212b7/codex-rs/core/src/context/world_state/top_level_tools.rs)
+  carries initial/restored declarations in ordered `input[].additional_tools`
+  items. Changed definitions, namespace instructions and removal notices use
+  developer `input_text` messages. A restored namespace may differ from its
+  earlier declaration. The gateway's OAuth Lite compatibility migration now
+  retains that history instead of rejecting it as a simultaneous conflict;
+  a migrated top-level tool is compared with the latest declaration for its
+  identity. Conflicting migrated declarations still fail before sending.
+  Native API-key requests keep their existing carrier policy. The source's
+  [scenario suite](https://github.com/openai/codex/blob/c9b4267c370a755da12ec1c8648c2451163212b7/codex-rs/core/tests/suite/scenarios_exec_tools.rs)
+  supplies the restoration/update requirements; the separate top-level
+  namespace in the project fixture is a gateway compatibility extension.
+- Codex's [answer display instructions](https://github.com/openai/codex/blob/c9b4267c370a755da12ec1c8648c2451163212b7/codex-rs/protocol/src/items.rs)
+  remain opaque response metadata: `action`, `blockType`, `cyberTrustedAccess`
+  and `checkTrustedContacts` reach the producing client, including unknown
+  actions. Plus safety-buffering display suppression cannot remove this
+  independent metadata. This is separate from ingress security audit.
+- Codex Analytics now uses
+  [runtime authentication](https://github.com/openai/codex/blob/c9b4267c370a755da12ec1c8648c2451163212b7/codex-rs/backend-client/src/analytics_session.rs).
+  The gateway exposes no client Analytics endpoint; controlled CLI tasks keep
+  analytics disabled. No new auxiliary request or credential source is added.
+- Step-Code's [four new commits](https://github.com/stepfun-ai/Step-Code/compare/a4141afa49f686296cb04f5aac5bf8940679c0a3...c1e9e299674df15bf65d83437eaa60cb49c64de0)
+  change local subagent admission, session process lifetime and scheduled tasks.
+  Its provider adapters, authentication, SDK lock and versionless inference UA
+  are unchanged. These local tools remain ordinary tool definitions/results
+  for gateway forwarding; the gateway does not execute their task scheduler.
+
+The retained wire families are Codex's coherent UA/Originator/Version, Grok's
+destination-specific sampler/media identities, the versioned DeepSeek Harness
+UA, Kimi's complete first-party product/device block, MiniMax's distinct managed
+and BYOK profiles, Step-Code's versionless inference profile, and ZCode's paired
+product/control declarations. Existing owner, strict-proxy, signing and audit
+boundaries still apply to every path. The regressions and their exact scope
+are listed in [the business matrix](SEVEN_PROVIDER_TEST_MATRIX.md#november-8-official-agent-review).
 
 ## November 7 protocol alignment
 

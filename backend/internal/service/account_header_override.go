@@ -28,7 +28,7 @@ const (
 //   - 连接控制/逐跳头：由 HTTP 栈管理，覆写会破坏请求传输；
 //   - host/content-length：由 Go 的 Request.Host / ContentLength 字段管理，header 覆写不生效或产生冲突；
 //   - content-type：承载报文框架信息（multipart boundary 为每请求随机值），静态覆写必然与 body 不匹配；
-//   - authorization/x-api-key/cookie 等：上游认证头由账号凭据统一注入，禁止通过覆写篡改或重新引入；
+//   - authorization/x-openai-actor-authorization/x-api-key/cookie 等：上游认证头由账号凭据统一注入，禁止通过覆写篡改或重新引入；
 //   - accept-encoding：强制压缩会破坏网关对上游流式响应（SSE/usage）的解析；
 //   - content-encoding：请求体编码由网关的协商压缩层独占，静态覆写会宣告与
 //     实际 body 不符的编码（Grok 请求压缩）；
@@ -52,6 +52,7 @@ var headerOverrideBlockedNames = map[string]struct{}{
 	"trailer":                               {},
 	"upgrade":                               {},
 	"authorization":                         {},
+	"x-openai-actor-authorization":          {},
 	"x-dsh-auth-token":                      {},
 	"x-api-key":                             {},
 	"x-goog-api-key":                        {},

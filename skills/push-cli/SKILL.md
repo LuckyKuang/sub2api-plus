@@ -102,9 +102,11 @@ removes stale Sub2API validation generations. Cleanup is mandatory on success
 and failure and never invokes a global prune that could affect unrelated
 projects or runtime resources. Validation containers carry the label
 `sub2api-validation=<generation>`; `check`/`submit-pr`/`ensure` run an idempotent
-cleanup before ensuring the image, and stopped project containers (including
-ones left by a hard kill that `--rm` could not reclaim) are removed by label
-and status. Use `clean --yes` to remove everything on demand.
+image/cache cleanup before ensuring the image. Docker also removes stopped
+project containers by label and status, including leftovers from a hard kill.
+Apple Containers relies on `--rm`; inspect and remove only leftover project
+validation containers after an interrupted run. `clean --yes` removes all
+project validation images/caches and, on Docker, project validation containers.
 
 ## Pull-Request Proof
 

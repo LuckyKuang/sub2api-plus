@@ -63,6 +63,24 @@ class CodexIdentityGuardTests(unittest.TestCase):
                 finally:
                     target.write_text(original, encoding="utf-8")
 
+    def test_editor_cannot_accept_reserved_auth_and_protocol_headers(self) -> None:
+        target = self.root / "frontend/src/components/account/credentialsBuilder.ts"
+        original = target.read_text(encoding="utf-8")
+        for name in ("x-openai-actor-authorization", "content-encoding", "x-openai-internal-codex-residency",
+                     "x-openai-subagent", "x-openai-memgen-request", "x-responsesapi-include-timing-metrics",
+                     "x-grok-req-id", "x-xai-token-auth"):
+            with self.subTest(header=name):
+                declaration = f"  '{name}',\n"
+                self.assertIn(declaration, original)
+                target.write_text(original.replace(declaration, "", 1), encoding="utf-8")
+                try:
+                    result, errors = self.check()
+                    self.assertEqual(1, result, errors)
+                    self.assertIn("missing reserved override headers", errors)
+                    self.assertIn(name, errors)
+                finally:
+                    target.write_text(original, encoding="utf-8")
+
     def test_each_inference_path_rejects_oauth_only_declarations(self) -> None:
         # Official Codex inference declares Originator and Version for API keys
         # as well as OAuth. Restricting finalization to UsesOpenAICodexProtocol

@@ -190,6 +190,41 @@ describe('EditAccountModal Codex CLI save workflow', () => {
     expect(wrapper.emitted('close')).toHaveLength(1)
   })
 
+  it.each(['X-OpenAI-Actor-Authorization', 'x-openai-actor-authorization', 'X-OPENAI-ACTOR-AUTHORIZATION'])(
+    'requires removal of legacy API-key actor override %s before either save', async name => {
+      // docs/OUTBOUND_IDENTITY.md: auth overrides are rejected even when
+      // unchanged, with no account or CLI side effect before correction.
+      const original = {
+        ...account(), type: 'apikey', oauth_credential_owner: '',
+        credentials: {
+          api_key: 'private-api-key', base_url: 'https://api.openai.com',
+          header_override_enabled: true,
+          header_overrides: { [name]: 'Bearer foreign-actor', 'x-route': 'primary' },
+        },
+      } as Account
+      getCLI.mockResolvedValue({ ...cliView(), auth: { auth_mode: 'apikey', tokens: {} }, oauth_credential_owner: '' })
+      updateAccount.mockResolvedValue(original)
+      const wrapper = modal(original)
+      await flushPromises()
+      await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+      await flushPromises()
+      expect(showError).toHaveBeenCalledWith('admin.accounts.headerOverride.blockedName')
+      expect(updateAccount).not.toHaveBeenCalled()
+      expect(updateCLI).not.toHaveBeenCalled()
+      expect(wrapper.emitted('close')).toBeUndefined()
+
+      wrapper.findComponent({ name: 'HeaderOverrideEditor' }).vm.$emit('update:rows', [
+        { name: 'x-route', value: 'primary' },
+      ])
+      await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+      await flushPromises()
+      expect(updateAccount).toHaveBeenCalledTimes(1)
+      expect(updateAccount.mock.calls[0][1].credentials.header_overrides).toEqual({ 'x-route': 'primary' })
+      expect(updateCLI).not.toHaveBeenCalled()
+      expect(wrapper.emitted('close')).toHaveLength(1)
+    }
+  )
+
   it('saves the general account before replacing a secret through the dedicated API', async () => {
     const calls: string[] = []
     updateAccount.mockImplementationOnce(async () => { calls.push('account'); return account() })

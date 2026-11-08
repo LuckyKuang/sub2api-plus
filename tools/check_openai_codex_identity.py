@@ -222,6 +222,21 @@ def main() -> int:
             if missing:
                 violations.append(f"{filename}: missing managed identity headers: {', '.join(sorted(missing))}")
 
+    # The override editor also mirrors reserved authentication, encoding and
+    # per-request declarations, not only the managed identity registry above.
+    reserved_file = "backend/internal/service/account_header_override.go"
+    reserved = re.search(r"var headerOverrideBlockedNames = map\[string\]struct\{\}\{(.*?)\n\}", (ROOT / reserved_file).read_text(encoding="utf-8"), re.S)
+    editor_file = "frontend/src/components/account/credentialsBuilder.ts"
+    editor = re.search(r"const HEADER_OVERRIDE_BLOCKED_NAMES = new Set\(\[(.*?)\]\)", (ROOT / editor_file).read_text(encoding="utf-8"), re.S)
+    if reserved is None or editor is None:
+        violations.append("header overrides: cannot locate reserved header declarations")
+    else:
+        reserved_names = set(re.findall(r'"([a-z_-]+)"', reserved.group(1)))
+        editor_names = set(re.findall(r"['\"]([a-z_-]+)['\"]", editor.group(1)))
+        missing = reserved_names - editor_names
+        if missing:
+            violations.append(f"{editor_file}: missing reserved override headers: {', '.join(sorted(missing))}")
+
     defaults: dict[str, str] = {}
     for filename, names in (
         ("backend/internal/service/openai_gateway_service.go", ("codexCLIVersion", "codexCLIUserAgentSuffix")),

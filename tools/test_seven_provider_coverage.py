@@ -850,6 +850,19 @@ class GoEventCoverageTests(unittest.TestCase):
 
 
 class ManifestAndExecutionTests(unittest.TestCase):
+    def test_openai_actor_auth_override_boundaries_are_required(self) -> None:
+        group = next(item for item in coverage.PROFILES["unit"] if item.package == "./internal/service")
+        self.assertIn("TestOpenAIActorAuthorizationOverrideRejected", group.tests)
+        self.assertIn("TestOpenAIActorAuthorizationCannotReachProvider", group.tests)
+        for name in ("X-OpenAI-Actor-Authorization", "x-openai-actor-authorization", "X-OPENAI-ACTOR-AUTHORIZATION"):
+            for blank in ("false", "true"):
+                for enabled in ("false", "true"):
+                    self.assertIn(f"TestOpenAIActorAuthorizationOverrideRejected/{name}/blank={blank}/enabled={enabled}", group.required_subtests)
+        for kind in ("oauth", "apikey"):
+            for string_map in ("false", "true"):
+                for path in ("http", "passthrough", "websocket"):
+                    self.assertIn(f"TestOpenAIActorAuthorizationCannotReachProvider/{kind}/string-map={string_map}/{path}", group.required_subtests)
+
     def test_control_cas_manifest_requires_committed_cache_invalidation(self) -> None:
         # Owner CAS merges current Extra, then evicts the scheduler snapshot.
         # A removed publication test must not replace that required execution.

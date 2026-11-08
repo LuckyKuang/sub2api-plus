@@ -544,6 +544,16 @@ Generic override saves reject managed identity headers with
 Authentication, session, routing and protocol-capability fields keep their own
 ownership. The superseded ForceCodexCLI UA staging and disable-enforcement
 branch have been removed; classification does not select an outbound identity.
+
+`X-OpenAI-Actor-Authorization` is reserved authentication as defined by official
+Codex [`model-provider-info/src/lib.rs`](https://github.com/openai/codex/blob/c9b4267c370a755da12ec1c8648c2451163212b7/codex-rs/model-provider-info/src/lib.rs)
+(`uses_openai_actor_authorization`).
+Inbound caller headers and generic account overrides cannot add another actor
+to OAuth/API-key provider requests. Save-time validation rejects every case
+variant, including empty placeholders; final override filtering ignores legacy
+JSON/string-map entries. Ordinary custom headers still work. The client-side
+`local-image-extension` config marker does not authorize provider dispatch.
+
 The OpenAI HTTP passthrough switch, enabled or disabled, retains this same source
 matrix and header contract. Authentication and identity remain gateway-managed;
 protocol handling, safety filtering, audit, billing and concurrency remain in
@@ -584,6 +594,18 @@ commit links in this document record evidence for individual features rather
 than a different current baseline. Identity-shape alignment does not mean every
 client feature, body, OS fingerprint or transport is identical.
 
+- Responses Lite history is chronological. Initial and restored
+  `input[].additional_tools` declarations may redefine a namespace; incremental
+  Code Mode definitions and removal notices remain developer `input_text`
+  messages in their original positions. OAuth top-level namespace migration
+  preserves all historical declarations and compares migrated tools with the
+  latest declaration of the same identity. A conflicting migrated declaration
+  still fails before provider traffic. API-key requests retain their existing
+  carrier policy. These compatibility operations cannot rewrite developer
+  catalog text, remove unknown siblings or select an outbound identity.
+- `response.metadata` answer moderation display instructions remain opaque
+  producer metadata, including unknown display actions. The independent Plus
+  safety-buffering display setting cannot remove them or change ingress audit.
 - HTTP-to-WS converts the Responses Lite header into the per-generation
   `client_metadata.ws_request_header_x_openai_internal_codex_responses_lite`
   string `"true"`, preserving other metadata. A non-object metadata shape that

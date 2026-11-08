@@ -7,6 +7,22 @@ Moderation and Prompt Audit. The shared implementation is
 `backend/internal/auditcontent`; protocol handlers and account paths must not
 maintain alternate text extractors.
 
+The November 8 [Codex source review](OFFICIAL_AGENT_BASELINES.md#november-8-protocol-alignment)
+includes chronological Responses Lite tool catalogs and developer Code Mode
+definition/removal messages. They remain context, not current direct-user text.
+Both engines consume the original envelope before outbound namespace migration;
+recognized current user siblings remain auditable, and an unknown-only current
+item passes without an audit supplier request. The shared real-shape fixture is
+`backend/internal/testdata/official_agents/codex_incremental_exec.json`.
+`handler/TestCodexIncrementalExecCanonicalAudits` covers HTTP and flat/nested
+WS envelopes; `TestCodexIncrementalExecRealAuditsBeforeSideEffects` exercises
+both real engines, HTTP/WS, and OAuth/API-key candidate types, with zero account
+selection, billing, concurrency or provider writes on recognized-content blocks.
+Its unknown-only controls reach user admission without an audit-derived block;
+the fixture then denies that slot before account/provider work. No extraction,
+audit policy or endpoint validation rule changes. Downstream answer display
+metadata is independent of these ingress decisions.
+
 The opt-in [official Codex CLI transparent bridge](CODEX_CLI.md) retains the
 existing Responses, Chat, Messages and Responses WebSocket ingress endpoints.
 It changes the prepared outbound HTTP transport only after their existing

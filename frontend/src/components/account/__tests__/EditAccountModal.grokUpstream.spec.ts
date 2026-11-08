@@ -343,7 +343,7 @@ describe('EditAccountModal Grok OAuth upstream config', () => {
       header_override_enabled: true,
       header_overrides: {
         'x-route': 'primary',
-        'x-xai-token-auth': 'xai-grok-cli'
+        'x-relay-region': 'eu'
       }
     })
     updateAccountMock.mockResolvedValue(account)
@@ -357,9 +357,33 @@ describe('EditAccountModal Grok OAuth upstream config', () => {
     expect(payload?.credentials?.header_override_enabled).toBe(true)
     expect(payload?.credentials?.header_overrides).toEqual({
       'x-route': 'primary',
-      'x-xai-token-auth': 'xai-grok-cli'
+      'x-relay-region': 'eu'
     })
   })
+
+  it.each(['x-xai-token-auth', 'X-OpenAI-Actor-Authorization'])(
+    'requires removal of legacy authentication override %s before saving', async (name) => {
+      // docs/OUTBOUND_IDENTITY.md reserves auth for the credential owner;
+      // legacy stored declarations do not gain a save-time exception.
+      const account = buildGrokOAuthAccount({
+        header_override_enabled: true,
+        header_overrides: { [name]: 'foreign-auth', 'x-route': 'primary' }
+      })
+      updateAccountMock.mockResolvedValue(account)
+      const wrapper = mountModal(account)
+      await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+      await vi.waitFor(() => expect(showErrorMock).toHaveBeenCalledWith('admin.accounts.headerOverride.blockedName'))
+      expect(updateAccountMock).not.toHaveBeenCalled()
+      expect(wrapper.emitted('close')).toBeUndefined()
+
+      wrapper.findComponent({ name: 'HeaderOverrideEditor' }).vm.$emit('update:rows', [
+        { name: 'x-route', value: 'primary' }
+      ])
+      await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+      await vi.waitFor(() => expect(updateAccountMock).toHaveBeenCalledTimes(1))
+      expect(updateAccountMock.mock.calls[0]?.[1]?.credentials?.header_overrides).toEqual({ 'x-route': 'primary' })
+    }
+  )
 
   it('requires removal of legacy identity overrides before saving and preserves ordinary headers', async () => {
     const account = buildGrokOAuthAccount({

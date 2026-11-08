@@ -48,7 +48,7 @@ func TestOpenAIBridgeAuxiliaryInferenceIdentityTransitions(t *testing.T) {
 					account.Credentials["user_agent"] = identity.accountUA
 					account.Credentials[CodexCLIConfigCredentialKey] = map[string]any{"enabled": true, "config_toml": DefaultCodexCLIConfigTOML}
 					account.Credentials[credKeyHeaderOverrideEnabled] = true
-					account.Credentials[credKeyHeaderOverrides] = map[string]any{"user-agent": "injected/999", "originator": "injected", "version": "999.0.0"}
+					account.Credentials[credKeyHeaderOverrides] = map[string]any{"user-agent": "injected/999", "originator": "injected", "version": "999.0.0", "x-openai-actor-authorization": "Bearer foreign-actor"}
 					global := &codexBridgeSwitchRepo{openAIIdentitySettingRepoStub: &openAIIdentitySettingRepoStub{values: map[string]string{SettingKeyOpenAICodexUserAgent: identity.globalUA}}}
 					flag := &atomic.Bool{}
 					rows := &codexBridgeHotAccountRepo{owners: map[int64]*Account{account.ID: account}, flags: map[int64]*atomic.Bool{account.ID: flag}}
@@ -129,6 +129,7 @@ func TestOpenAIBridgeAuxiliaryInferenceIdentityTransitions(t *testing.T) {
 						require.Equal(t, []string{identity.wantUA}, observed.header.Values("User-Agent"))
 						require.Equal(t, []string{identity.wantOriginator}, observed.header.Values("Originator"))
 						require.Equal(t, []string{"0.167.0"}, observed.header.Values("Version"))
+						require.Empty(t, observed.header.Values("X-OpenAI-Actor-Authorization"))
 						require.Equal(t, wantAuth, observed.header.Get("Authorization"))
 					}
 				})

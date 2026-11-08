@@ -839,6 +839,22 @@ runtime. Ordinary custom headers retain their existing behavior. Authentication,
 request/session fields, and destination-owned Grok protocol declarations are
 also reserved where their owning adapter must derive them from credentials,
 request state, or the final target.
+The editor mirrors the complete backend reserved-name list, including encoding,
+Codex residency/turn context and Grok request/auth declarations. The consistency
+gate checks both that list and the separate managed-identity registry so new
+server-side restrictions cannot silently leave the editor accepting invalid rows.
+
+OpenAI's `X-OpenAI-Actor-Authorization` is an authentication declaration, just
+like `Authorization`. Generic override saves reject it case-insensitively,
+including blank placeholders and disabled configurations; runtime filtering
+ignores legacy stored values for both JSON and string maps. Native OAuth and
+API-key requests cannot pair another actor credential with the selected owner.
+This applies to HTTP/passthrough, WS handshakes, discovery, capability probes
+and auxiliary inference, including the CLI transport. The incoming Codex
+configuration's `local-image-extension` marker remains client-side capability
+context; it is never a provider credential. Permitted ordinary headers remain
+available. This restriction does not change identity priority, default or
+embedded versions, signing, endpoint authentication or ingress audit.
 
 Other global settings live in the existing settings store under
 `outbound_identity`; account selections use the existing credentials JSON.

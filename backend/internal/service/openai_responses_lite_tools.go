@@ -196,9 +196,10 @@ func mergeOpenAIResponsesLiteAdditionalTools(existing []any, moved []any) ([]any
 	seen := make(map[string]any, len(existing)+len(moved))
 	for _, rawTool := range existing {
 		if identity := openAIResponsesLiteToolIdentity(rawTool); identity != "" {
-			if previous, exists := seen[identity]; exists && !reflect.DeepEqual(previous, rawTool) {
-				return nil, fmt.Errorf("responses Lite additional_tools contains conflicting definitions for %s", openAIResponsesLiteToolIdentityForError(rawTool))
-			}
+			// These are chronological declarations, not one simultaneous tool
+			// set. Official Codex appends changed/restored namespaces; retain
+			// every historical definition and compare migrated tools only with
+			// the latest declaration for that identity.
 			seen[identity] = rawTool
 		}
 	}

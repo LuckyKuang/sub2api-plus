@@ -1,0 +1,16 @@
+{
+  "model": "gpt-6.1-sol",
+  "stream": true,
+  "reasoning": {"effort": "low", "context": "all_turns"},
+  "parallel_tool_calls": false,
+  "tools": [{"type": "namespace", "name": "workspace", "tools": [{"type": "function", "name": "inspect", "parameters": {"type": "object", "properties": {}, "required": [], "additionalProperties": false}}]}],
+  "input": [
+    {"type": "additional_tools", "role": "developer", "tools": [{"type": "namespace", "name": "functions", "tools": [{"type": "custom", "name": "exec", "description": "Initial exec catalog."}]}]},
+    {"type": "message", "role": "developer", "content": [{"type": "input_text", "text": "## Namespace: functions\n### `lookup`\nUpdated tool definition.\nexec tool declaration:\ndeclare const tools: { lookup(args: { query: string }): Promise<string>; };"}]},
+    {"type": "message", "role": "developer", "content": [{"type": "input_text", "text": "- Tool: tools.lookup\n- Namespace instructions: search"}]},
+    {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "Restore the exec catalog."}]},
+    {"type": "additional_tools", "role": "developer", "tools": [{"type": "namespace", "name": "functions", "tools": [{"type": "custom", "name": "exec", "description": "Restored exec catalog with current definitions."}]}]},
+    {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "audit current request"}, {"type": "future_media", "opaque": true}]}
+  ],
+  "future_options": {"opaque": true}
+}

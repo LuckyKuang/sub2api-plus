@@ -77,7 +77,7 @@ func TestOpenAIIdentityContractEndpointMatrix(t *testing.T) {
 							account.Credentials[outboundIdentityCredential] = map[string]any{"preset": source}
 						}
 						account.Credentials[credKeyHeaderOverrideEnabled] = true
-						overrides := map[string]any{}
+						overrides := map[string]any{"X-OpenAI-Actor-Authorization": "Bearer foreign-actor"}
 						for _, name := range managedIdentityOverrideTestNames {
 							overrides[strings.ToLower(name)] = "override/999.0.0"
 						}
@@ -125,6 +125,7 @@ func TestOpenAIIdentityContractEndpointMatrix(t *testing.T) {
 							// Native API keys ignore stale foreign selections on every endpoint,
 							// including retries and a fresh operation after the version changes.
 							requireOpenAIIdentityContractHeaders(t, req.Header, want, wantAuth)
+							require.Empty(t, getHeaderRaw(req.Header, "X-OpenAI-Actor-Authorization"))
 							if endpoint == "/v1/alpha/search" {
 								metadata := req.Header.Get("X-Codex-Turn-Metadata")
 								require.True(t, gjson.Valid(metadata), "search metadata must survive every auth/preset path")
