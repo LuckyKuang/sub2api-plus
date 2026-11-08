@@ -58,7 +58,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
       {error ? (
         <p className="input-error-text mt-1.5">{error}</p>
       ) : hint ? (
-        <p className="input-hint mt-1.5">{hint}</p>
+        <p className="input-hint">{hint}</p>
       ) : null}
     </div>
   )
@@ -99,7 +99,7 @@ export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(function 
       {error ? (
         <p className="input-error-text mt-1.5">{error}</p>
       ) : hint ? (
-        <p className="input-hint mt-1.5">{hint}</p>
+        <p className="input-hint">{hint}</p>
       ) : null}
     </div>
   )

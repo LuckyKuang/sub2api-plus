@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { createPortal } from 'react-dom'
 import { Check, ChevronDown, Loader2, Plus, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { Icon } from '@/components/Icon'
 
 export interface SelectOption {
   value: string | number | boolean | null
@@ -145,9 +146,18 @@ export function SearchableSelect({
       const spaceBelow = window.innerHeight - rect.bottom
       const placeAbove = spaceBelow < dropdownHeight + 8 && rect.top > dropdownHeight + 8
       const floor = resolveDropdownMinimumWidth()
-      const width = Math.min(Math.max(rect.width, floor), DROPDOWN_MAX_WIDTH)
-      dropdown.style.width = `${width}px`
-      dropdown.style.left = `${rect.left}px`
+      // Vue sizes the menu to its content between a floor and a cap rather than
+      // pinning it to the trigger width, so a long option label is never
+      // clipped by the control. Mirror that with min/max and no explicit width.
+      const minWidth = Math.min(Math.max(rect.width, floor), DROPDOWN_MAX_WIDTH)
+      const viewportLeft = 8
+      const viewportRight = Math.max(viewportLeft, window.innerWidth - 8)
+      const left = Math.min(Math.max(viewportLeft, rect.left), Math.max(viewportLeft, viewportRight - minWidth))
+      const availableWidth = Math.max(0, viewportRight - left)
+      dropdown.style.minWidth = `${minWidth}px`
+      dropdown.style.maxWidth = `${Math.min(DROPDOWN_MAX_WIDTH, availableWidth)}px`
+      dropdown.style.width = ''
+      dropdown.style.left = `${left}px`
       dropdown.style.top = placeAbove ? `${rect.top - dropdownHeight - 4}px` : `${rect.bottom + 4}px`
     }
     place()
@@ -278,7 +288,7 @@ export function SearchableSelect({
                 <X className="h-3.5 w-3.5" />
               </span>
             )}
-            <ChevronDown className={cn('h-4 w-4 text-gray-400 transition-transform', open && 'rotate-180')} />
+            <ChevronDown className={cn('h-5 w-5 text-gray-400 transition-transform duration-200', open && 'rotate-180')} />
           </span>
         </button>
       </div>
@@ -292,7 +302,8 @@ export function SearchableSelect({
             onKeyDown={onListKeyDown}
           >
             {isSearchable && (
-              <div className="border-b border-gray-100 p-2 dark:border-dark-700">
+              <div className="select-search">
+                <Icon name="search" size="sm" className="text-gray-400" />
                 <input
                   ref={searchInputRef}
                   value={query}
@@ -301,12 +312,14 @@ export function SearchableSelect({
                     setFocusedIndex(0)
                     onSearch?.(event.target.value)
                   }}
+                  type="text"
                   placeholder={searchPlaceholder}
-                  className="input w-full"
+                  aria-label={searchPlaceholder}
+                  className="select-search-input"
                 />
               </div>
             )}
-            <div ref={listRef} className="max-h-56 overflow-y-auto p-1.5" role="listbox">
+            <div ref={listRef} className="select-options" role="listbox">
               {filteredOptions.length === 0 && !canCreate && (
                 <div className="px-3 py-6 text-center text-sm text-gray-500 dark:text-dark-400">
                   {loading ? searchPlaceholder : emptyText}
@@ -326,11 +339,11 @@ export function SearchableSelect({
                       commit(readField(option, valueKey) as Value, option)
                     }}
                     className={cn(
-                      'select-option flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm',
-                      (readField(option, 'disabled') as boolean | undefined) && 'cursor-not-allowed opacity-50'
+                      'select-option flex cursor-pointer items-center gap-2 text-sm',
+                      (readField(option, 'disabled') as boolean | undefined) && 'select-option-disabled'
                     )}
                   >
-                    <span className="min-w-0 flex-1">
+                    <span className="select-option-label">
                       {renderOption ? renderOption(option, { selected }) : String(readField(option, labelKey) ?? '')}
                     </span>
                     {selected && <Check className="h-4 w-4 shrink-0 text-primary-500" />}

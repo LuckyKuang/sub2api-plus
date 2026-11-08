@@ -166,3 +166,55 @@
   }
   .workspace-tab { padding-inline: 16px; }
 }
+
+/* Ported from the Vue TablePageLayout scoped styles. `.table-scroll-container`
+   owns the outer curve; its inner scrollport paints only states inside the
+   padding box. These rules are unlayered, so like the Vue originals they take
+   precedence over the Tailwind padding utilities the cells also carry. */
+.table-page-layout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--shell-gap, 24px);
+  height: var(--table-page-height, auto);
+}
+.table-page-layout > .layout-section-fixed { flex-shrink: 0; }
+.table-page-pagination { container-name: table-page-pagination; container-type: inline-size; }
+.table-page-layout > .layout-section-scrollable { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+.table-page-layout > .layout-section-scrollable > .table-scroll-container {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  height: 100%;
+  border-radius: var(--surface-radius);
+}
+.table-page-layout .table-scroll-container .table-wrapper {
+  border-radius: inherit;
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+.table-page-layout .table-scroll-container table {
+  width: 100%;
+  min-width: max-content;
+  display: table;
+}
+.table-page-layout .table-scroll-container :is(th, td) {
+  padding-inline: 20px;
+  padding-block: 16px;
+  text-align: left;
+  font-size: 0.875rem;
+  color: var(--surface-muted);
+}
+
+/* Mobile: restore normal document flow and let the table size to its parent. */
+.table-page-layout.mobile-mode > .layout-section-scrollable > .table-scroll-container {
+  height: auto;
+  overflow: visible;
+  border: none;
+  box-shadow: none;
+  background: transparent;
+}
+.table-page-layout.mobile-mode > .layout-section-scrollable { flex: none; min-height: fit-content; }
+.table-page-layout.mobile-mode .table-scroll-container table { flex: none; min-width: 100%; }

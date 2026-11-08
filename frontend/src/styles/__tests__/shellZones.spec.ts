@@ -23,11 +23,33 @@ interface Entry {
   important: boolean
 }
 
-/** Every declaration of `property` from rules whose selector names `className`. */
+/**
+ * The last compound selector of `selector`, i.e. the element the rule actually
+ * styles. `.a .b` styles `.b`, so a rule must not be attributed to `.a`.
+ */
+function subject(selector: string): string {
+  const compounds: string[] = []
+  let depth = 0
+  let current = ''
+  for (const char of selector) {
+    if (char === '(') depth += 1
+    if (char === ')') depth -= 1
+    if (depth === 0 && /\s/.test(char)) {
+      if (current) compounds.push(current)
+      current = ''
+      continue
+    }
+    current += char
+  }
+  if (current) compounds.push(current)
+  return compounds.at(-1) ?? selector
+}
+
+/** Every declaration of `property` from rules that style `className` itself. */
 function entries(className: string, property: string): Entry[] {
   const found: Entry[] = []
   stylesheet.walkRules(rule => {
-    if (!rule.selectors.some(selector => selector.includes(className))) return
+    if (!rule.selectors.some(selector => subject(selector).includes(className))) return
     rule.walkDecls(declaration => {
       if (declaration.prop === property) {
         found.push({ selector: rule.selector, value: declaration.value, important: declaration.important })

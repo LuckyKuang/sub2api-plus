@@ -654,3 +654,138 @@
   transform: translateX(-4px);
   pointer-events: none;
 }
+
+/* ==========================================================================
+   SearchableSelect
+   Ported from the Vue SearchableSelect scoped styles. The dropdown teleports
+   to <body>, so every rule is scoped under .select-dropdown-portal.
+   ========================================================================== */
+
+.select-dropdown-portal .select-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--surface-edge);
+}
+
+.select-dropdown-portal .select-search-input {
+  min-width: 0;
+  flex: 1;
+  background: transparent;
+  font-size: 0.875rem;
+  color: var(--surface-ink, #111827);
+}
+.select-dropdown-portal .select-search-input::placeholder { color: var(--surface-muted); }
+.select-dropdown-portal .select-search-input:focus { outline: none; }
+
+.select-dropdown-portal .select-options {
+  min-height: 0;
+  flex-shrink: 1;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 6px;
+  outline: none;
+}
+.select-dropdown-portal .select-options > * + * { margin-top: 2px; }
+
+.select-dropdown-portal .select-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  font-size: 0.875rem;
+  border-radius: var(--surface-radius-item);
+  color: var(--surface-muted);
+  cursor: pointer;
+  transition: color 150ms, background-color 150ms;
+  pointer-events: auto !important;
+}
+
+.select-dropdown-portal .select-option-selected {
+  background-color: var(--surface-selected);
+  color: var(--primary-700, #be185d);
+}
+.dark .select-dropdown-portal .select-option-selected { color: var(--primary-300, #f9a8d4); }
+
+.select-dropdown-portal .select-option-focused { background-color: var(--surface-hover); }
+
+.select-dropdown-portal .select-option-disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.select-dropdown-portal .select-option-group {
+  cursor: default;
+  user-select: none;
+  background-color: var(--surface-soft);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--surface-muted);
+}
+.select-dropdown-portal .select-option-group:hover { background-color: var(--surface-soft); }
+
+.select-dropdown-portal .select-option-label {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.select-dropdown-portal .select-empty {
+  padding: 32px 16px;
+  text-align: center;
+  font-size: 0.875rem;
+  color: var(--surface-muted);
+}
+
+/* ==========================================================================
+   Pagination
+   Ported from the Vue Pagination scoped styles. `.pagination-container` is a
+   size container so the mobile branch can swap in without a media query.
+   ========================================================================== */
+
+.pagination-container { container-name: pagination; container-type: inline-size; }
+.pagination-mobile { display: none; }
+.pagination-desktop { display: flex; min-width: 0; flex-direction: column; gap: 12px; }
+
+@container pagination (min-width: 760px) {
+  .pagination-desktop { flex-direction: row; align-items: center; justify-content: space-between; }
+}
+@container pagination (max-width: 540px) {
+  .pagination-desktop { display: none; }
+  .pagination-mobile { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .pagination-page-label { white-space: nowrap; font-size: 12px; }
+  .pagination-mobile .pagination-button { padding-inline: 12px; white-space: nowrap; }
+}
+@container pagination (max-width: 360px) {
+  .pagination-mobile { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pagination-page-label { grid-column: 1 / -1; grid-row: 1; text-align: center; }
+}
+
+.pagination-button {
+  min-height: 36px;
+  min-width: 36px;
+  justify-content: center;
+  transition: color 150ms, background-color 150ms;
+  border-radius: var(--surface-radius-item);
+}
+.pagination-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgb(var(--primary-500, 236 72 153) / 50%);
+}
+
+.page-size-select .select-trigger { padding: 6px 12px; font-size: 0.875rem; }
+
+/* ==========================================================================
+   Toggle
+   Ported from the Vue Toggle scoped styles.
+   ========================================================================== */
+
+.toggle-track { border: 1px solid var(--surface-edge); padding: 1px; }
+.toggle-track[aria-checked="true"] { border-color: rgb(var(--console-accent-500, 20 184 166) / 65%); }

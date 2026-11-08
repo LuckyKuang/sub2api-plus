@@ -1,4 +1,13 @@
+import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
+import { Icon } from '@/components/Icon'
+import { Select } from './Select'
+import {
+  getConfiguredTablePageSizeOptions,
+  normalizeTablePageSize
+} from '@/utils/tablePreferences'
+import { setPersistedPageSize } from '@/composables/usePersistedPageSize'
 
 export interface PaginationProps {
   page: number
@@ -7,8 +16,11 @@ export interface PaginationProps {
   onPageChange?: (page: number) => void
   onPageSizeChange?: (pageSize: number) => void
   pageSizeOptions?: number[]
+  showJump?: boolean
   className?: string
 }
+
+const MAX_VISIBLE_PAGES = 7
 
 export function Pagination({
   page,
@@ -16,104 +28,187 @@ export function Pagination({
   total,
   onPageChange,
   onPageSizeChange,
-  pageSizeOptions = [10, 20, 50, 100],
+  pageSizeOptions,
+  showJump = false,
   className
 }: PaginationProps) {
-  const totalPages = Math.max(1, Math.ceil(total / pageSize))
-  const from = total === 0 ? 0 : (page - 1) * pageSize + 1
-  const to = Math.min(page * pageSize, total)
+  const { t } = useTranslation()
+  const [jumpPage, setJumpPage] = useState('')
 
-  const go = (next: number) => {
-    const clamped = Math.min(Math.max(1, next), totalPages)
-    if (clamped !== page) onPageChange?.(clamped)
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  const fromItem = total === 0 ? 0 : (page - 1) * pageSize + 1
+  const toItem = Math.min(page * pageSize, total)
+
+  const pageSizeSelectOptions = Array.from(
+    new Set([...getConfiguredTablePageSizeOptions(), normalizeTablePageSize(pageSize)])
+  )
+    .sort((a, b) => a - b)
+    .map((size) => ({ value: size, label: String(size) }))
+
+  const goToPage = (next: number) => {
+    if (next >= 1 && next <= totalPages && next !== page) onPageChange?.(next)
   }
 
-  const pages = usePageWindow(page, totalPages)
+  const handlePageSizeChange = (value: string | number | boolean | null) => {
+    if (value === null || typeof value === 'boolean') return
+    const next = normalizeTablePageSize(typeof value === 'string' ? Number.parseInt(value, 10) : value)
+    setPersistedPageSize(next)
+    onPageSizeChange?.(next)
+  }
+
+  const submitJump = () => {
+    const raw = jumpPage.trim()
+    if (!raw) return
+    const parsed = Number.parseInt(raw, 10)
+    if (Number.isNaN(parsed)) return
+    setJumpPage('')
+    goToPage(Math.min(Math.max(parsed, 1), totalPages))
+  }
 
   return (
-    <div className={cn('flex flex-wrap items-center justify-between gap-3 px-1 py-3', className)}>
-      <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-dark-400">
-        <span>
-          {from}-{to} / {total}
+    <div className={cn('pagination-card pagination-container card min-w-0 px-4 py-3 sm:px-6', className)}>
+      {/* Mobile: previous / "page X of Y" / next */}
+      <div className="pagination-mobile">
+        <PageButton onClick={() => goToPage(page - 1)} disabled={page <= 1} className="px-4" label={t('pagination.previous')}>
+          {t('pagination.previous')}
+        </PageButton>
+        <span className="pagination-page-label text-sm surface-muted">
+          {t('pagination.pageOf', { page, total: totalPages })}
         </span>
-        {onPageSizeChange && (
-          <label className="flex items-center gap-1.5">
-            <select
-              value={pageSize}
-              onChange={(event) => onPageSizeChange?.(Number(event.target.value))}
-              className="input !w-auto py-1 text-xs"
-              aria-label="Page size"
-            >
-              {pageSizeOptions.map((size) => (
-                <option key={size} value={size}>
-                  {size}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
+        <PageButton onClick={() => goToPage(page + 1)} disabled={page >= totalPages} className="px-4" label={t('pagination.next')}>
+          {t('pagination.next')}
+        </PageButton>
       </div>
-      <div className="flex items-center gap-1">
-        <PageButton disabled={page <= 1} onClick={() => go(1)} label="«" />
-        <PageButton disabled={page <= 1} onClick={() => go(page - 1)} label="‹" />
-        {pages.map((entry, index) =>
-          entry === '…' ? (
-            <span key={`gap-${index}`} className="px-1.5 text-sm text-gray-400">
-              …
-            </span>
-          ) : (
-            <PageButton
-              key={entry}
-              active={entry === page}
-              onClick={() => go(entry as number)}
-              label={String(entry)}
-            />
-          )
-        )}
-        <PageButton disabled={page >= totalPages} onClick={() => go(page + 1)} label="›" />
-        <PageButton disabled={page >= totalPages} onClick={() => go(totalPages)} label="»" />
+
+      <div className="pagination-desktop">
+        <div className="pagination-info flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
+          <p className="whitespace-nowrap text-sm surface-muted">
+            {t('pagination.showing')} <span className="font-medium">{fromItem}</span> {t('pagination.to')}{' '}
+            <span className="font-medium">{toItem}</span> {t('pagination.of')}{' '}
+            <span className="font-medium">{total}</span> {t('pagination.results')}
+          </p>
+
+          {onPageSizeChange && (
+            <div className="flex shrink-0 items-center space-x-2 whitespace-nowrap">
+              <span className="text-sm surface-muted">{t('pagination.perPage')}:</span>
+              <div className="page-size-select w-24">
+                <Select
+                  value={pageSize}
+                  options={pageSizeOptions ? pageSizeOptions.map((size) => ({ value: size, label: String(size) })) : pageSizeSelectOptions}
+                  searchable={false}
+                  ariaLabel={t('pagination.perPage')}
+                  onValueChange={handlePageSizeChange}
+                />
+              </div>
+            </div>
+          )}
+
+          {showJump && (
+            <div className="flex shrink-0 items-center space-x-2 whitespace-nowrap">
+              <span className="text-sm surface-muted">{t('pagination.jumpTo')}</span>
+              <input
+                value={jumpPage}
+                onChange={(event) => setJumpPage(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') submitJump()
+                }}
+                type="number"
+                min={1}
+                max={totalPages}
+                className="input w-20 text-sm"
+                placeholder={t('pagination.jumpPlaceholder')}
+                aria-label={t('pagination.jumpTo')}
+              />
+              <button type="button" className="btn btn-ghost btn-sm" onClick={submitJump}>
+                {t('pagination.jumpAction')}
+              </button>
+            </div>
+          )}
+        </div>
+
+        <nav
+          className="relative z-0 inline-flex flex-wrap items-center justify-end gap-1.5 self-end"
+          aria-label="Pagination"
+        >
+          <PageButton onClick={() => goToPage(page - 1)} disabled={page <= 1} label={t('pagination.previous')}>
+            <Icon name="chevronLeft" size="md" />
+          </PageButton>
+
+          {visiblePages(page, totalPages).map((entry, index) =>
+            typeof entry === 'number' ? (
+              <PageButton
+                key={`${entry}-${index}`}
+                active={entry === page}
+                onClick={() => goToPage(entry)}
+                label={t('pagination.goToPage', { page: entry })}
+                ariaCurrent={entry === page}
+                className="px-3"
+              >
+                {entry}
+              </PageButton>
+            ) : (
+              <span key={`gap-${index}`} className="px-1.5 text-sm text-gray-400">
+                …
+              </span>
+            )
+          )}
+
+          <PageButton onClick={() => goToPage(page + 1)} disabled={page >= totalPages} label={t('pagination.next')}>
+            <Icon name="chevronRight" size="md" />
+          </PageButton>
+        </nav>
       </div>
     </div>
   )
 }
 
 function PageButton({
-  label,
+  children,
   onClick,
   disabled,
-  active
+  active,
+  label,
+  ariaCurrent,
+  className
 }: {
-  label: string
+  children?: React.ReactNode
   onClick: () => void
   disabled?: boolean
   active?: boolean
+  label: string
+  ariaCurrent?: boolean
+  className?: string
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
-      aria-current={active ? 'page' : undefined}
+      aria-label={label}
+      aria-current={ariaCurrent ? 'page' : undefined}
       className={cn(
-        'min-w-[32px] rounded-lg px-2 py-1 text-sm transition-colors',
-        'disabled:cursor-not-allowed disabled:opacity-40',
+        'pagination-button relative inline-flex items-center border text-sm font-medium',
+        'disabled:cursor-not-allowed disabled:opacity-50',
         active
-          ? 'bg-primary-500 font-medium text-white'
-          : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-800'
+          ? 'z-10 border-primary-500 bg-primary-50/[0.15] text-primary-600 dark:bg-primary-900/30 dark:text-primary-400'
+          : 'border-gray-300 surface-inset text-gray-700 hover:surface-hover dark:border-dark-600 dark:surface-inset dark:text-gray-300 dark:hover:surface-hover',
+        className
       )}
     >
-      {label}
+      {children}
     </button>
   )
 }
 
 /** Build a compact page list with ellipses, e.g. 1 … 4 5 6 … 20 */
-function usePageWindow(page: number, totalPages: number): Array<number | '…'> {
-  if (totalPages <= 7) return Array.from({ length: totalPages }, (_, index) => index + 1)
+function visiblePages(page: number, totalPages: number): Array<number | '…'> {
+  if (totalPages <= MAX_VISIBLE_PAGES) {
+    return Array.from({ length: totalPages }, (_, index) => index + 1)
+  }
 
   const pages: Array<number | '…'> = [1]
-  const start = Math.max(2, page - 1)
-  const end = Math.min(totalPages - 1, page + 1)
+  const start = Math.max(2, page - 2)
+  const end = Math.min(totalPages - 1, page + 2)
 
   if (start > 2) pages.push('…')
   for (let value = start; value <= end; value += 1) pages.push(value)
@@ -121,3 +216,5 @@ function usePageWindow(page: number, totalPages: number): Array<number | '…'> 
   pages.push(totalPages)
   return pages
 }
+
+export default Pagination

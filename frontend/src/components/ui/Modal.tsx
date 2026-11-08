@@ -1,13 +1,12 @@
 import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { Icon } from '@/components/Icon'
 
 export interface ModalProps {
   open: boolean
   onClose?: () => void
   title?: React.ReactNode
-  description?: React.ReactNode
   children?: React.ReactNode
   footer?: React.ReactNode
   size?: 'sm' | 'md' | 'lg' | 'xl' | 'full'
@@ -18,25 +17,26 @@ export interface ModalProps {
   className?: string
 }
 
+/** Mirrors the Vue BaseDialog width guidance; the responsive steps matter
+    because `w-full` below `sm` is what keeps narrow forms usable. */
 const sizeClass = {
-  sm: 'max-w-sm',
+  sm: 'max-w-md',
   md: 'max-w-lg',
-  lg: 'max-w-2xl',
-  xl: 'max-w-4xl',
-  full: 'max-w-6xl'
+  lg: 'w-full sm:max-w-2xl md:max-w-3xl lg:max-w-4xl',
+  xl: 'w-full sm:max-w-3xl md:max-w-4xl lg:max-w-5xl xl:max-w-6xl',
+  full: 'w-full sm:max-w-4xl md:max-w-5xl lg:max-w-6xl xl:max-w-7xl'
 } as const
 
 export function Modal({
   open,
   onClose,
   title,
-  description,
   children,
   footer,
   size = 'md',
   variant = 'dialog',
   showClose = true,
-  closeOnOverlayClick = true,
+  closeOnOverlayClick = false,
   className
 }: ModalProps) {
   const contentRef = useRef<HTMLDivElement>(null)
@@ -72,26 +72,24 @@ export function Modal({
         className={cn(
           isDetail ? 'detail-dialog modal-content' : 'modal-content',
           !isDetail && sizeClass[size],
-          'surface-panel mx-auto',
           className
         )}
       >
         {(title || showClose) && (
           <div className="modal-header">
-            <div className="min-w-0">
-              {title && <h2 className="modal-title">{title}</h2>}
-              {description && <p className="mt-1 text-sm text-gray-500 dark:text-dark-400">{description}</p>}
+            {title && <h3 className="modal-title">{title}</h3>}
+            <div className="flex shrink-0 items-center gap-2">
+              {showClose && onClose && (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  aria-label="Close"
+                  className="-mr-2 shrink-0 rounded-xl p-2 transition-colors hover:surface-hover hover:text-gray-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/30 focus-visible:ring-offset-2 dark:hover:text-dark-300 dark:focus-visible:ring-offset-dark-900 surface-control surface-muted"
+                >
+                  <Icon name="x" size="md" />
+                </button>
+              )}
             </div>
-            {showClose && onClose && (
-              <button
-                type="button"
-                onClick={onClose}
-                aria-label="Close"
-                className="shrink-0 rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-dark-800 dark:hover:text-gray-200"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            )}
           </div>
         )}
         <div className="modal-body">{children}</div>

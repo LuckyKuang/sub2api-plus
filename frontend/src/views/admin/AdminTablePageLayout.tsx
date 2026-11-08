@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { cn } from '@/lib/utils'
 
 /**
  * Stand-in for the Vue `TablePageLayout` until the shared layout component
@@ -20,11 +21,14 @@ export interface AdminTablePageLayoutProps {
 
 export function AdminTablePageLayout({ filters, actions, table, pagination, children }: AdminTablePageLayoutProps) {
   const layoutRef = useRef<HTMLDivElement>(null)
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 1024)
   const [availableHeight, setAvailableHeight] = useState('auto')
 
   useEffect(() => {
     const check = () => {
-      if (window.innerWidth < 1024 || !layoutRef.current) {
+      const mobile = window.innerWidth < 1024
+      setIsMobile(mobile)
+      if (mobile || !layoutRef.current) {
         setAvailableHeight('auto')
         return
       }
@@ -56,7 +60,7 @@ export function AdminTablePageLayout({ filters, actions, table, pagination, chil
   return (
     <div
       ref={layoutRef}
-      className="table-page-layout workspace-page"
+      className={cn('table-page-layout workspace-page', isMobile && 'mobile-mode')}
       style={{ '--table-page-height': availableHeight } as React.CSSProperties}
     >
       {actions && <div className="layout-section-fixed workspace-fixed">{actions}</div>}
