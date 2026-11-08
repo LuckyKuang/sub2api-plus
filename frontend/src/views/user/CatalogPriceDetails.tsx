@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { BaseDialog } from './BaseDialog'
 import { Icon } from './icons'
@@ -18,6 +18,12 @@ export function CatalogPriceDetails({ model, rateUnavailable, onClose }: Catalog
   const { t } = useTranslation()
   const { copyToClipboard } = useClipboard()
   const [openQuotes, setOpenQuotes] = useState<Set<string>>(new Set())
+
+  // Opening a different model starts with every quote collapsed again, as Vue's
+  // watcher on `model.key` did.
+  useEffect(() => {
+    setOpenQuotes(new Set())
+  }, [model?.key])
 
   const quoteKey = (quote: CatalogModel['quotes'][number]) => `${quote.group.id}:${quote.offer.offer_key}`
   const toggleQuote = (key: string) => {

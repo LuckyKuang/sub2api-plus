@@ -677,9 +677,19 @@ export default function UsageView() {
     place()
     window.addEventListener('resize', place)
     window.addEventListener('scroll', place, true)
+
+    // Vue closes this menu from a document click listener; without it the menu
+    // stays open until another interaction happens to toggle it.
+    const onDocumentClick = (event: MouseEvent) => {
+      const root = columnDropdownRef.current
+      if (root && !root.contains(event.target as Node)) setShowColumnDropdown(false)
+    }
+    document.addEventListener('click', onDocumentClick)
+
     return () => {
       window.removeEventListener('resize', place)
       window.removeEventListener('scroll', place, true)
+      document.removeEventListener('click', onDocumentClick)
     }
   }, [showColumnDropdown])
 
