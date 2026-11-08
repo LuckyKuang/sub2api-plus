@@ -113,8 +113,9 @@ Provider identity tests additionally follow the
 
 ## Development Checks
 
-Selection dropdowns use `frontend/src/components/common/Select.vue` and the shared
-panel in `SearchableSelect.vue` for both closed and expanded appearance. Do not
+Selection dropdowns use `frontend/src/components/ui/Select.tsx` and the shared
+panel in `SearchableSelect` from the same module, for both closed and expanded
+appearance. Do not
 introduce native HTML `select` controls or use `.input` for dropdowns: native
 expanded menus cannot reliably share the system's theme and option styling.
 Use typed option values, disabled options, and `kind: 'group'` headers. The default
@@ -135,7 +136,8 @@ background polling. Do not replace composite
 controls with plain selectors or split them into separate visible fields.
 The shared dropdown owns keyboard navigation and focus, including disabled/group
 skipping, selection, Escape, and Tab. Keep trigger styles in `frontend/src/style.css`
-and expanded-menu styles in `SearchableSelect.vue`, including light/dark surfaces,
+and expanded-menu styles in `frontend/src/components/ui/Select.tsx`, including
+light/dark surfaces,
 borders, typography, hover, focus, selected, error and disabled states. Keep spacing
 shared, and do not add local appearance replacements. Use `triggerClass` only for
 compact height, text sizing or font; layout classes belong on the wrapper.
@@ -152,11 +154,11 @@ and `.filter-field` wraps exactly one control; both live in
 natural width, and labels belong inside the field they name. Controls fill their
 field (`width: 100%`), so a select wrapper can never size itself to its longest
 option label. Below 1024px fields stack at full width instead of squeezing.
-Expanded select menus stay content-sized (`w-max`), floored at the same
+Expanded select menus stay content-sized, floored at the same
 `--filter-control-width` and capped at 480px so one long label cannot stretch the
 panel across the viewport. `src/styles/__tests__/filterWidths.spec.ts` owns the
-stylesheet contract and the `SearchableSelect` floor; the component layout suite
-measures the rendered rows. The 480px ceiling also constrains the menu minimum
+stylesheet contract and the `SearchableSelect` floor, which the component reads
+from the token at runtime so the two cannot drift. The 480px ceiling also constrains the menu minimum
 when its trigger is wider; a smaller visible viewport relaxes the normal floor.
 Do not add ad-hoc per-page control widths to a query
 row. Dense monitor toolbars that cannot fit the unified width without breaking
@@ -292,7 +294,7 @@ The separate [real Chromium management suite](frontend/e2e/README.md) runs
 validation container with explicit disposable PostgreSQL/Redis settings and
 `SUB2API_E2E_ISOLATED=1`. Its runner requires all fourteen browser scenarios to
 execute successfully; missing/skipped cases fail. The ordinary frontend gate
-checks Vue/API lifecycle regressions and does not claim browser execution.
+checks React/API lifecycle regressions and does not claim browser execution.
 For shared styling, dialog and dropdown changes, run
 `pnpm --dir frontend run test:layout` in the validation container as well. This
 independent [component layout suite](frontend/layout-tests/README.md) uses real

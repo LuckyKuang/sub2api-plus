@@ -283,6 +283,20 @@ Its mapping was published after immutable artifact verification.
 documented version `0.1.166+custom.006`. Remote Release and OCI artifact status
 still require a maintainer audit. Do not reuse or retag `.007`.
 
+## Frontend Stack
+
+Plus ships the console as a React 19 single-page application. Upstream official
+Sub2API still serves a Vue 3 console, so the two trees no longer share a
+frontend and an upstream frontend change never merges mechanically. The React
+console preserves the Plus backend contract, the public-settings injection, the
+route table and the design tokens; only the client implementation differs.
+
+Upstream merges must therefore continue to apply the Plus backend contracts
+(credential-owner snapshots, generation-checked observations, strict proxy
+binding, canonical session routing, ingress audit ordering, frozen prices,
+Composite access/rates, asynchronous task capacity) and must not import upstream
+frontend sources or Vue toolchain configuration.
+
 ## Repository Roles
 
 - `origin`: [Sub2API Plus](https://github.com/LuckyKuang/sub2api-plus), the
