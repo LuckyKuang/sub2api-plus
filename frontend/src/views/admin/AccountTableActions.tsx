@@ -4,7 +4,7 @@ import { Icon } from './AccountIcon'
 export interface AccountTableActionsProps {
   loading?: boolean
   onRefresh: () => void
-  onCreate: () => void
+  onCreate?: () => void
   /** Rendered before the refresh button. */
   before?: React.ReactNode
   /** Rendered after the refresh button (auto-refresh + more tools). */
@@ -31,7 +31,9 @@ export function AccountTableActions({
       </button>
       {after}
       {beforeCreate}
-      <button onClick={onCreate} className="btn btn-primary">{t('admin.accounts.createAccount')}</button>
+      {onCreate && (
+        <button onClick={onCreate} className="btn btn-primary">{t('admin.accounts.createAccount')}</button>
+      )}
       {afterCreate}
     </div>
   )

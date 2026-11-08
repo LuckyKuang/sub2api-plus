@@ -1,5 +1,7 @@
 export default {
     settings: {
+      loadFailed: '加载设置失败，请重试。',
+      tabPending: '该标签页正在迁移到新控制台，暂不可用。',
       appearance: {
         title: '外观与背景',
         description: '统一管理端和用户端的强调色、卡片透明度与页面背景。点击「保存外观」后全局生效。',

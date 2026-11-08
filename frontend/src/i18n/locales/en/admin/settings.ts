@@ -2,6 +2,8 @@ export default {
     settings: {
       title: 'System Settings',
       description: 'Manage registration, email verification, default values, and SMTP settings',
+      loadFailed: 'Failed to load settings. Please retry.',
+      tabPending: 'This tab is still being ported to the new console and is not available yet.',
       appearance: {
         title: 'Appearance and background',
         description: 'Manage the shared accent color, card transparency and background for both admin and user consoles. Save appearance separately to apply globally.',

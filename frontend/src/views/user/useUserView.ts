@@ -18,6 +18,9 @@ export function useUserView() {
       const target = useAdminSupportViewStore.getState().target
       return target?.id === context.userId ? target : null
     },
+    set user(value: User | null) {
+      if (!getAdminSupportContext()) useAuthStore.setState({ user: value })
+    },
     get isAdmin(): boolean {
       const context = getAdminSupportContext()
       if (!context) return auth.isAdmin()
@@ -28,6 +31,10 @@ export function useUserView() {
     },
     get isSimpleMode(): boolean {
       return auth.isSimpleMode()
+    },
+    /** Embedded external pages must not receive the administrator's JWT. */
+    get token(): string | null {
+      return getAdminSupportContext() ? null : auth.token
     },
     async refreshUser(): Promise<User> {
       const context = getAdminSupportContext()

@@ -65,7 +65,7 @@ function loadScript(): Promise<void> {
   })
 }
 
-export const TurnstileWidget = forwardRef<TurnstileWidgetHandle, TurnstileWidgetHandle>(
+export const TurnstileWidget = forwardRef<TurnstileWidgetHandle, TurnstileWidgetProps>(
   function TurnstileWidget(
     { siteKey, theme = 'auto', size = 'flexible', onVerify, onExpire, onError },
     ref

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from '@/components/ui'
 import { getPublicSettings, sendPendingOAuthVerifyCode } from '@/api/auth'
-import { CaptchaChallenge, type CaptchaChallengeHandle, type ActionCaptchaResult } from './CaptchaChallenge'
+import { CaptchaChallenge, type CaptchaChallengeHandle } from './CaptchaChallenge'
 
 export interface PendingOAuthCreateAccountPayload {
   email: string

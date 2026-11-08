@@ -1,5 +1,5 @@
-import { PlaceholderView } from '@/views/PlaceholderView'
+import { AdminAffiliateRecordsTable } from './AdminAffiliateRecordsTable'
 
 export default function AdminAffiliateRebatesView() {
-  return <PlaceholderView />
+  return <AdminAffiliateRecordsTable type="rebates" />
 }

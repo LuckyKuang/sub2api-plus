@@ -4,10 +4,7 @@ import { useAppStore } from '@/stores/app'
 import ChannelStatusV1View from './ChannelStatusV1View'
 import ChannelStatusV2View from './ChannelStatusV2View'
 import ChannelStatusV3View from './ChannelStatusV3View'
-
 export default function ChannelStatusView() {
-  const appStore = useAppStore()
-  const settings = appStore.cachedPublicSettings
   const mode = getChannelMonitorMode()
   const enabled = isChannelMonitorRouteEnabled()
 

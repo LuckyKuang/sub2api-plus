@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Icon } from '../icons'
 import type { AutoRefreshState } from '../useAutoRefresh'
-import { AutoRefreshButton } from './AutoRefreshButton'
+import { AutoRefreshButton, type MonitorWindow, type OverallStatus } from './AutoRefreshButton'
+
+export type { MonitorWindow, OverallStatus }
 
 export interface MonitorHeroProps {
   overallStatus: OverallStatus

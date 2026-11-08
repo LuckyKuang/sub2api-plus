@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next'
-import { AutoRefreshButton } from './monitor/MonitorHero'
-import type { AutoRefreshState } from '../useAutoRefresh'
+import { AutoRefreshButton } from './monitor/AutoRefreshButton'
+import type { AutoRefreshState } from './useAutoRefresh'
 
 export interface RefreshControlProps {
   state: AutoRefreshState

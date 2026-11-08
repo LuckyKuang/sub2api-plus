@@ -362,7 +362,7 @@ export function DateTimePicker({
     if (!opened) return
     const raf = requestAnimationFrame(() => positionPanel())
     return () => cancelAnimationFrame(raf)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [opened, draftDate, includeSeconds])
 
   function onDayKey(event: React.KeyboardEvent, entry: string) {

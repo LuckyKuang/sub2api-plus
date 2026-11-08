@@ -77,6 +77,7 @@ export default {
     portInProgress: '此页面正在迁移到新界面。',
     unknownError: '发生未知错误',
     saving: '保存中...',
+    retry: '重试',
     selectedCount: '（已选 {{count}} 个）',
     refresh: '刷新',
     autoRefresh: {

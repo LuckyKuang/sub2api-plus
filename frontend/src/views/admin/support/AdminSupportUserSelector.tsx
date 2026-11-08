@@ -107,7 +107,7 @@ export function AdminSupportUserSelector({ collapsed = false }: AdminSupportUser
       triggerClass={collapsed ? 'admin-support-selector admin-support-selector-collapsed' : 'admin-support-selector'}
       onValueChange={selectAccount}
       renderSelected={(option) => {
-        const account = option as AccountOption | undefined
+        const account = option as unknown as AccountOption | undefined
         return (
           <span className="flex min-w-0 items-center gap-2">
             <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-primary-100/[0.15] text-xs font-semibold text-primary-700 dark:bg-primary-900/40 dark:text-primary-300">
@@ -127,7 +127,7 @@ export function AdminSupportUserSelector({ collapsed = false }: AdminSupportUser
         )
       }}
       renderOption={(option, state) => {
-        const account = option as AccountOption
+        const account = option as unknown as AccountOption
         return (
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md surface-inset text-xs font-semibold surface-muted">

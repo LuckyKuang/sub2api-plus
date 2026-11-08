@@ -8,8 +8,8 @@ export interface AccountBulkActionsBarProps {
   onDelete: () => void
   onResetStatus: () => void
   onRefreshToken: () => void
-  onEditSelected: () => void
-  onEditFiltered: () => void
+  onEditSelected?: () => void
+  onEditFiltered?: () => void
   onClear: () => void
   onSelectPage: () => void
   onSelectAllResults: () => void
@@ -90,12 +90,16 @@ export function AccountBulkActionsBar({
             <button onClick={onRefreshToken} className="btn btn-secondary btn-sm">{t('admin.accounts.bulkActions.refreshToken')}</button>
             <button onClick={() => onToggleSchedulable(true)} className="btn btn-success btn-sm">{t('admin.accounts.bulkActions.enableScheduling')}</button>
             <button onClick={() => onToggleSchedulable(false)} className="btn btn-warning btn-sm">{t('admin.accounts.bulkActions.disableScheduling')}</button>
-            <button onClick={onEditSelected} className="btn btn-primary btn-sm">{t('admin.accounts.bulkActions.edit')}</button>
+            {onEditSelected && (
+              <button onClick={onEditSelected} className="btn btn-primary btn-sm">{t('admin.accounts.bulkActions.edit')}</button>
+            )}
           </>
         )}
-        <button onClick={onEditFiltered} className="btn btn-primary btn-sm">
-          {t('admin.accounts.bulkEdit.submit')}
-        </button>
+        {onEditFiltered && (
+          <button onClick={onEditFiltered} className="btn btn-primary btn-sm">
+            {t('admin.accounts.bulkEdit.submit')}
+          </button>
+        )}
       </div>
     </div>
   )

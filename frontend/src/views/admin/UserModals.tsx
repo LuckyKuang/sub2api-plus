@@ -25,7 +25,6 @@ interface UserAttributeFormProps {
 }
 
 export function UserAttributeForm({ userId, value, onValueChange }: UserAttributeFormProps) {
-  const { t } = useTranslation()
   const [loading, setLoading] = useState(false)
   const [attributes, setAttributes] = useState<UserAttributeDefinition[]>([])
   const [localValues, setLocalValues] = useState<UserAttributeValuesMap>({})

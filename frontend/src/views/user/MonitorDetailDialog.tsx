@@ -3,8 +3,8 @@ import { useTranslation } from 'react-i18next'
 import { status as fetchChannelMonitorDetail, type UserMonitorDetail } from '@/api/channelMonitor'
 import { toast } from '@/components/ui'
 import { extractApiErrorMessage } from '@/utils/apiError'
-import { BaseDialog } from '../BaseDialog'
-import { useChannelMonitorFormat } from '../useChannelMonitorFormat'
+import { BaseDialog } from './BaseDialog'
+import { useChannelMonitorFormat } from './useChannelMonitorFormat'
 
 export interface MonitorDetailDialogProps {
   show: boolean

@@ -119,6 +119,7 @@ export function AnnouncementReadStatusDialog({ open, announcementId, onClose }: 
     setPage(1)
     void load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, announcementId])
 
   useEffect(() => () => cancelPendingLoad(), [])

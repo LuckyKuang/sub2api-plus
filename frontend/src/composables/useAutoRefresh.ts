@@ -13,6 +13,24 @@ export interface UseAutoRefreshOptions {
   active?: () => boolean
 }
 
+export interface UseAutoRefreshResult {
+  enabled: boolean
+  intervalSeconds: number
+  countdown: number
+  fetching: boolean
+  paused: boolean
+  error: unknown
+  lastUpdated: number | null
+  intervals: readonly number[]
+  setEnabled: (value: boolean) => void
+  setInterval: (seconds: number) => void
+  resetCountdown: () => void
+  start: () => void
+  stop: () => void
+  refresh: () => Promise<void>
+  activate: () => void
+}
+
 export function retryAfterSeconds(error: unknown, now = Date.now()): number | null {
   const e = error as { retryAfter?: string | number; response?: { headers?: Record<string, string> } } | null
   const raw = e?.retryAfter ?? e?.response?.headers?.['retry-after']
@@ -37,7 +55,7 @@ function readPersisted(storageKey: string): PersistedAutoRefresh | null {
   }
 }
 
-export function useAutoRefresh(options: UseAutoRefreshOptions) {
+export function useAutoRefresh(options: UseAutoRefreshOptions): UseAutoRefreshResult {
   const intervals = options.intervals ?? [5, 10, 15, 30]
 
   const [enabled, setEnabled] = useState(() => {

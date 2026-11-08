@@ -310,7 +310,7 @@ export function useClipboard() {
 
       return success
     },
-    [showError, showSuccess]
+    [showError, showSuccess, t]
   )
 
   return { copied, copyToClipboard }

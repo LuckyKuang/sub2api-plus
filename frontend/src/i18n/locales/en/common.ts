@@ -77,6 +77,7 @@ export default {
     portInProgress: 'This screen is being ported to the new interface.',
     unknownError: 'Unknown error occurred',
     saving: 'Saving...',
+    retry: 'Retry',
     selectedCount: '({{count}} selected)',
     refresh: 'Refresh',
     autoRefresh: {

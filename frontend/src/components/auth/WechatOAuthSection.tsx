@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { resolveWeChatOAuthStart, type OAuthLoginStart } from '@/api/auth'
@@ -19,25 +19,25 @@ export function WechatOAuthSection({
   onStart
 }: WechatOAuthSectionProps) {
   const { t, i18n } = useTranslation()
-  const appStore = useAppStore()
+  const cachedPublicSettings = useAppStore((state) => state.cachedPublicSettings)
+  const publicSettingsLoaded = useAppStore((state) => state.publicSettingsLoaded)
+  const fetchPublicSettings = useAppStore((state) => state.fetchPublicSettings)
   const location = useLocation()
   const providerName = useMemo(() => t('auth.wechatProviderName'), [t])
 
   // The cached settings are populated by the app shell; refetch when they are missing.
   useEffect(() => {
-    if (!appStore.cachedPublicSettings && !appStore.publicSettingsLoaded) {
-      void appStore.fetchPublicSettings()
+    if (!cachedPublicSettings && !publicSettingsLoaded) {
+      void fetchPublicSettings()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [cachedPublicSettings, publicSettingsLoaded, fetchPublicSettings])
 
   const localizeWeChatHint = (zh: string, en: string): string =>
     i18n.language.startsWith('zh') ? zh : en
 
   const resolvedStart = useMemo(
-    () => resolveWeChatOAuthStart(appStore.cachedPublicSettings),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [appStore.cachedPublicSettings]
+    () => resolveWeChatOAuthStart(cachedPublicSettings),
+    [cachedPublicSettings]
   )
 
   const buttonDisabled = disabled || resolvedStart.mode === null

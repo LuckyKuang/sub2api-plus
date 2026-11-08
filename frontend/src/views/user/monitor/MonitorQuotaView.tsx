@@ -47,18 +47,18 @@ const labelI18nKeys: Record<string, string> = {
 const tierColors: TierColor[] = ['indigo', 'emerald', 'purple', 'amber']
 
 export function MonitorQuotaView({ snapshot }: MonitorQuotaViewProps) {
-  const { t, te } = useTranslation()
+  const { t, i18n } = useTranslation()
 
   function windowLabel(window: string): string {
     const key = windowI18nKeys[window]
-    return key && te(key) ? t(key) : window
+    return key && i18n.exists(key) ? t(key) : window
   }
 
   function tierLabel(tier: MonitorQuotaTier): string {
     const window = windowLabel(tier.window)
     if (!tier.label) return window
     const labelKey = labelI18nKeys[tier.label]
-    const label = labelKey && te(labelKey) ? t(labelKey) : tier.label
+    const label = labelKey && i18n.exists(labelKey) ? t(labelKey) : tier.label
     return `${label}/${window}`
   }
 
@@ -104,7 +104,7 @@ export function MonitorQuotaView({ snapshot }: MonitorQuotaViewProps) {
             ) : (
               <UsageProgressBar
                 key={row.key}
-                data-testid="monitor-quota-tier"
+                dataTestId="monitor-quota-tier"
                 label={row.label}
                 title={row.title}
                 labelWidth="auto"

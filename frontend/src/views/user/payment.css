@@ -1,0 +1,14 @@
+/* Payment view layout helpers (ported from PaymentView.vue scoped styles). */
+
+.payment-tabs {
+  flex: none;
+  padding: 8px;
+}
+
+.payment-tabs .workspace-tab {
+  flex: 1 1 0%;
+}
+
+.payment-activity {
+  border-radius: 16px;
+}

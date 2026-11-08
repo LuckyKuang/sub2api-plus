@@ -51,6 +51,8 @@ export interface AutoRefreshState {
   error: unknown
   lastUpdated: number | null
   intervals: readonly number[]
+  /** Report a failure outside the refresh loop (e.g. a manual chart reload). */
+  reportError: (failure: unknown) => void
   setEnabled: (value: boolean) => void
   setInterval: (seconds: number) => void
   resetCountdown: () => void
@@ -251,6 +253,10 @@ export function useAutoRefresh(options: UseAutoRefreshOptions): AutoRefreshState
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  const reportError = useCallback((failure: unknown) => {
+    setError(failure)
+  }, [])
+
   return {
     enabled,
     intervalSeconds,
@@ -260,6 +266,7 @@ export function useAutoRefresh(options: UseAutoRefreshOptions): AutoRefreshState
     error,
     lastUpdated,
     intervals,
+    reportError,
     setEnabled,
     setInterval: setIntervalSeconds,
     resetCountdown,

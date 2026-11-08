@@ -457,3 +457,102 @@
 .plaza-description blockquote {
   @apply my-2 border-l-4 border-gray-300 pl-3 text-gray-600 dark:border-dark-600 dark:text-dark-300;
 }
+
+/* ============ DateTimePicker ============ */
+.date-time-picker { position: relative; min-width: 0; }
+.date-time-picker:focus-within { border-color: rgb(var(--console-accent-500, 20 184 166)); box-shadow: 0 0 0 2px rgb(var(--console-accent-500, 20 184 166) / 30%); }
+.date-time-picker-disabled { opacity: 0.6; cursor: not-allowed; }
+.date-time-value-proxy { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; overflow: hidden; }
+.date-time-trigger { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 0.5rem; text-align: left; min-width: 0; border-radius: inherit; outline: none; background: transparent; border: 0; color: inherit; font: inherit; }
+.date-time-trigger-value { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.date-time-trigger-empty { color: var(--surface-muted); }
+.date-time-trigger[aria-readonly="true"] { cursor: default; }
+.date-time-panel.surface-panel { position: fixed; z-index: 100000030; width: 352px; max-width: calc(100vw - 24px); overflow: auto; overscroll-behavior: contain; padding: 16px; border: 1px solid var(--surface-edge); border-radius: 20px; box-shadow: var(--surface-shadow); }
+.date-time-month-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.date-time-month-label { font-size: 14px; font-weight: 600; }
+.date-time-icon-button { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: var(--surface-radius-item); }
+.date-time-weekdays, .date-time-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.date-time-week { display: contents; }
+.date-time-weekdays { margin-bottom: 6px; text-align: center; font-size: 11px; color: var(--surface-muted); }
+.date-time-day { min-width: 0; height: 36px; border: 1px solid transparent; border-radius: var(--surface-radius-item); font-size: 13px; font-variant-numeric: tabular-nums; }
+.date-time-day-outside { color: var(--surface-muted); opacity: 0.65; }
+.date-time-day-today { border-color: var(--surface-edge); }
+.date-time-day-selected { color: var(--console-accent-readable, var(--surface-text)); background: rgb(var(--console-accent-500, 20 184 166)); border-color: rgb(var(--console-accent-500, 20 184 166)); opacity: 1; }
+.date-time-panel button:not(:disabled):hover { background-color: var(--surface-hover); }
+.date-time-panel .date-time-day-selected:not(:disabled):hover { background-color: rgb(var(--console-accent-400, 45 212 191)); }
+.date-time-panel button:disabled { cursor: not-allowed; opacity: 0.35; }
+.date-time-panel :is(button, input):focus-visible { outline: 2px solid rgb(var(--console-accent-500, 20 184 166) / 60%); outline-offset: 1px; }
+.date-time-clock { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 12px; padding: 12px; border: 1px solid var(--surface-edge); border-radius: 14px; background: var(--surface-soft); }
+.date-time-clock:first-child { margin-top: 0; }
+.date-time-clock-part { flex: 1 0 90px; min-width: 0; text-align: center; }
+.date-time-clock-part label { display: block; margin-bottom: 6px; font-size: 11px; color: var(--surface-muted); }
+.date-time-stepper { display: flex; align-items: center; gap: 2px; padding: 3px; border: 1px solid var(--surface-edge); border-radius: var(--surface-radius-control); background: var(--surface-field); }
+.date-time-stepper button { display: flex; flex: none; align-items: center; justify-content: center; width: 24px; height: 30px; border-radius: 8px; }
+.date-time-stepper input { width: 100%; min-width: 0; border: 0; padding: 4px 0; background: transparent; color: var(--surface-text); text-align: center; font-size: 16px; font-variant-numeric: tabular-nums; }
+.date-time-actions { display: flex; justify-content: flex-end; align-items: center; gap: 6px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--surface-edge); }
+.date-time-actions .btn { padding-inline: 10px; }
+.date-time-clear { margin-right: auto; }
+.date-time-validation { margin-top: 8px; font-size: 12px; color: #dc2626; }
+.dark .date-time-validation { color: #fca5a5; }
+
+/* ============ Model plaza filter chips ============ */
+/* 平台/分组 chip 的配色统一从 --chip-accent(平台主色)派生,新增平台无需扩展样式。
+   激活态与非激活态在模板上互斥挂载,避免选择器优先级互相覆盖。 */
+.chip-tinted {
+  color: var(--chip-accent);
+  color: color-mix(in srgb, var(--chip-accent) 78%, black);
+  background-color: color-mix(in srgb, var(--chip-accent) 9%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--chip-accent) 25%, transparent);
+}
+
+.chip-tinted:not(:disabled):hover {
+  background-color: color-mix(in srgb, var(--chip-accent) 16%, transparent);
+}
+
+.dark .chip-tinted {
+  color: color-mix(in srgb, var(--chip-accent) 72%, white);
+  background-color: color-mix(in srgb, var(--chip-accent) 12%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--chip-accent) 30%, transparent);
+}
+
+.dark .chip-tinted:not(:disabled):hover {
+  background-color: color-mix(in srgb, var(--chip-accent) 18%, transparent);
+}
+
+.chip-tinted-active {
+  color: #fff;
+  background-color: var(--chip-accent);
+  background-color: color-mix(in srgb, var(--chip-accent) 85%, black);
+  box-shadow: 0 1px 2px 0 color-mix(in srgb, var(--chip-accent) 35%, transparent);
+}
+
+.chip-tinted-active:not(:disabled):hover {
+  background-color: color-mix(in srgb, var(--chip-accent) 75%, black);
+}
+
+.dark .chip-tinted-active {
+  background-color: color-mix(in srgb, var(--chip-accent) 80%, transparent);
+}
+
+.dark .chip-tinted-active:not(:disabled):hover {
+  background-color: var(--chip-accent);
+}
+
+/* 实付分区文字色从平台主色派生；底色由外层卡片统一承载。 */
+.plaza-pricing-table {
+  --pz-title: color-mix(in srgb, var(--plaza-accent) 88%, black);
+}
+
+.dark .plaza-pricing-table {
+  --pz-title: color-mix(in srgb, var(--plaza-accent) 70%, white);
+}
+
+.pz-title {
+  /* color-mix 不可用的老浏览器回退为平台原色 */
+  color: var(--plaza-accent);
+  color: var(--pz-title);
+}
+
+.pz-unit {
+  color: color-mix(in srgb, var(--pz-title) 62%, transparent);
+}

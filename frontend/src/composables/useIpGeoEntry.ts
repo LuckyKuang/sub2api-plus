@@ -45,3 +45,25 @@ export function useIpGeoEntry(ip: string): IpGeoEntry {
 
   return entry
 }
+
+/** Reactive snapshot of many IPs' geo entries; re-renders when any entry changes. */
+export function useIpGeoEntries(ips: string[]): IpGeoEntry[] {
+  const key = ips.join('\u0000')
+  const [entries, setEntries] = useState<IpGeoEntry[]>(() => ips.map((ip) => getEntry(ip)))
+
+  useEffect(() => {
+    const list = key === '' ? [] : key.split('\u0000')
+    setEntries(list.map((ip) => getEntry(ip)))
+    const notify = () => {
+      setEntries((previous) => {
+        const next = list.map((ip) => getEntry(ip))
+        return next.length === previous.length && next.every((entry, index) => entry === previous[index])
+          ? previous
+          : next
+      })
+    }
+    return subscribe(notify)
+  }, [key])
+
+  return entries
+}

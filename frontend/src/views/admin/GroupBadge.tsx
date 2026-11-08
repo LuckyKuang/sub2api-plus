@@ -17,6 +17,8 @@ export interface GroupBadgeProps {
   /** Allow full group names to wrap in layouts that have room for multiple lines. */
   truncate?: boolean
   daysRemaining?: number | null
+  /** Falls through to the root element as a native title attribute, as in the Vue original. */
+  title?: string
   /**
    * 订阅分组默认在右侧 label 展示"订阅"或剩余天数；
    * 开启后订阅分组也改为显示倍率（保留订阅主题色 label，配合可用渠道这类
@@ -131,7 +133,8 @@ export function GroupBadge({
   showRate = true,
   truncate = true,
   daysRemaining = null,
-  alwaysShowRate = false
+  alwaysShowRate = false,
+  title
 }: GroupBadgeProps) {
   const { t } = useTranslation()
   const serverUtcOffset = useAppStore((state) => state.cachedPublicSettings?.server_utc_offset)
@@ -182,6 +185,7 @@ export function GroupBadge({
 
   return (
     <span
+      title={title}
       className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium transition-colors ${badgeClass(platform, isSubscription)}`}
     >
       <span className={truncate ? 'truncate' : 'min-w-0 whitespace-normal [overflow-wrap:anywhere]'}>{name}</span>

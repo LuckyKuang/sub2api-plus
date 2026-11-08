@@ -36,7 +36,6 @@ export function TotpStepUpDialog({ controller }: TotpStepUpDialogProps) {
       resetInputs()
       inputRefs.current[0]?.focus()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [controller.visible])
 
   // Auto-submit once 6 digits are entered.

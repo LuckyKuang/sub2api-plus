@@ -62,7 +62,7 @@ export function PaymentStatusPanel({
   const appStore = useAppStore()
 
   const qrCanvas = useRef<HTMLCanvasElement | null>(null)
-  const [qrUrl, setQrUrl] = useState(qrCode)
+  const [qrUrl] = useState(qrCode)
   const [remainingSeconds, setRemainingSeconds] = useState(0)
   const [cancelling, setCancelling] = useState(false)
   const [paidOrder, setPaidOrder] = useState<PaymentOrder | null>(null)
@@ -278,7 +278,6 @@ export function PaymentStatusPanel({
       launcher.dispose()
       alipayLauncher.current = null
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mobileAlipayDeepLink, isAlipay, qrUrl])
 
   // ═══ Terminal States: show result, user clicks to return ═══
