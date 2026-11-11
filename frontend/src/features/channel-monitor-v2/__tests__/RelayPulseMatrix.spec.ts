@@ -549,18 +549,30 @@ describe('RelayPulseMatrix', () => {
   })
 
   it('reconnects measurement and restores a nonempty viewport after an empty filter result', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     const wrapper = mountMatrix(417)
-    await settle()
-    await scroll(wrapper, 7200)
-    await wrapper.setProps({ rows: [] })
-    await settle()
-    expect(wrapper.find('.matrix-scroll').exists()).toBe(false)
-    await wrapper.setProps({ rows: rows(417) })
-    await settle()
-    expect(wrapper.findAll('.matrix-data-row').length).toBeGreaterThan(0)
-    expect(wrapper.findAll('.matrix-data-row').length).toBeLessThan(25)
-    await scroll(wrapper, 14900)
-    expect(wrapper.find('[data-index="416"]').exists()).toBe(true)
+    try {
+      await settle()
+      await scroll(wrapper, 7200)
+      // Filtering must release the old viewport's pending scroll-end callback.
+      // Deliver it after the restored viewport has scrolled to a different row.
+      await vi.advanceTimersByTimeAsync(140)
+      await wrapper.setProps({ rows: [] })
+      await settle()
+      expect(wrapper.find('.matrix-scroll').exists()).toBe(false)
+      await wrapper.setProps({ rows: rows(417) })
+      await settle()
+      expect(wrapper.findAll('.matrix-data-row').length).toBeGreaterThan(0)
+      expect(wrapper.findAll('.matrix-data-row').length).toBeLessThan(25)
+      await scroll(wrapper, 14900)
+      await vi.advanceTimersByTimeAsync(20)
+      await settle()
+      expect(wrapper.find('[data-index="416"]').exists()).toBe(true)
+    } finally {
+      wrapper.unmount()
+      vi.clearAllTimers()
+      vi.useRealTimers()
+    }
   })
 
   it('spans the requested axis with empty cells during partial backfill', async () => {
