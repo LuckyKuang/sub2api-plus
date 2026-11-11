@@ -6,8 +6,9 @@
     @close="emit('close')"
   >
     <div class="space-y-4">
+      <p v-if="aggregateKeyId" class="text-sm surface-muted">{{ t('keys.aggregateUsageHint') }}</p>
       <!-- No Group Assigned Warning -->
-      <div v-if="!platform" class="flex items-start gap-3 p-4 rounded-lg bg-yellow-50/[0.15] dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800">
+      <div v-if="!platform && !aggregateKeyId" class="flex items-start gap-3 p-4 rounded-lg bg-yellow-50/[0.15] dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800">
         <svg class="w-5 h-5 text-yellow-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
         </svg>
@@ -21,7 +22,7 @@
         </div>
       </div>
 
-      <NativeAccessFields :editable="false" :conversion-enabled="conversionEnabled || false" v-else-if="platform === 'composite'" v-model:client="nativeClient" v-model:endpoint="nativeEndpoint" :group-id="groupId || null" :base-url="baseUrl" :api-key="apiKey" />
+      <NativeAccessFields :editable="false" :conversion-enabled="conversionEnabled || false" v-else-if="platform === 'composite' || aggregateKeyId" :aggregate-key-id="aggregateKeyId" v-model:client="nativeClient" v-model:endpoint="nativeEndpoint" :group-id="groupId || null" :base-url="baseUrl" :api-key="apiKey" />
 
       <!-- Platform-specific content -->
       <template v-else>
@@ -286,6 +287,7 @@ import {
 } from '@/utils/codexCatalogConfig'
 
 interface Props {
+  aggregateKeyId?: number
   groupId?: number | null
   conversionEnabled?: boolean
   defaultClient?: string

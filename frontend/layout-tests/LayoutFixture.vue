@@ -69,6 +69,10 @@
           <SearchableSelect v-model="dialogSelection" :options="options" :searchable="true" :placeholder="copy.select" />
         </div>
         <output data-testid="dialog-select-result">{{ dialogSelection }}</output>
+        <div data-testid="dialog-aggregate-field">
+          <CheckboxDropdown v-model="aggregateOptions" :options="options" :label="copy.select" searchable />
+          <output data-testid="dialog-aggregate-selection">{{ aggregateOptions.join(',') }}</output>
+        </div>
         <button class="btn btn-secondary" data-testid="last-content" @click="lastClicked++">{{ copy.last }}</button>
         <output data-testid="last-content-result">{{ lastClicked }}</output>
       </div>
@@ -98,6 +102,7 @@ const selectedSection = ref(0)
 const selectedSegment = ref(0)
 const galleryClicks = ref(0)
 const checkedOptions = ref<number[]>([])
+const aggregateOptions = ref<number[]>([])
 const copy = computed(() => locale.value === 'zh' ? {
   tabs: ['运行监控', '告警事件', '系统日志'],
   sections: ['详细配置与使用说明', '包含较长中文翻译的统计和历史记录'],

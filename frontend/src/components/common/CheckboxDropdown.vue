@@ -1,16 +1,20 @@
 <template>
   <div>
     <button ref="trigger" type="button" class="select-trigger flex items-center gap-2" :class="open && 'select-trigger-open'" :aria-label="label" :aria-expanded="open" :aria-controls="open ? panelID : undefined" :disabled="disabled" @click="toggleOpen" @keydown.down.prevent="openAndFocus()" @keydown.up.prevent="openAndFocus(true)" @keydown.esc.stop.prevent="close">
-      <span class="min-w-0 flex-1 truncate text-left">{{ selectedLabel || label }}</span>
+      <span class="min-w-0 flex-1 whitespace-normal text-left [overflow-wrap:anywhere]">
+        <slot v-if="selectedOptions.length" name="selected" :options="selectedOptions">{{ selectedLabel }}</slot>
+        <template v-else>{{ label }}</template>
+      </span>
       <span class="shrink-0 surface-muted" aria-hidden="true">⌄</span>
     </button>
     <Teleport to="body">
       <Transition name="select-dropdown">
       <div v-if="open" :id="panelID" ref="panel" class="select-dropdown-portal" :style="panelStyle" @keydown="onPanelKeydown">
+        <div v-if="searchable" class="select-search"><input ref="searchInput" v-model="searchQuery" type="search" class="select-search-input" :placeholder="searchPlaceholder || label" :aria-label="searchPlaceholder || label" /></div>
         <div class="select-options">
-          <label v-for="option in options" :key="option.value" class="select-option hover:surface-hover" :class="modelValue.includes(option.value) && 'select-option-selected'">
-            <input class="shrink-0" type="checkbox" :value="option.value" :checked="modelValue.includes(option.value)" :disabled="disabled" @change="toggle(option.value, ($event.target as HTMLInputElement).checked)" />
-            <span class="min-w-0 flex-1 break-words">{{ option.label }}</span>
+          <label v-for="option in filteredOptions" :key="option.value" class="select-option hover:surface-hover" :class="modelValue.includes(option.value) && 'select-option-selected'">
+            <input class="shrink-0" type="checkbox" :value="option.value" :aria-label="option.label" :checked="modelValue.includes(option.value)" :disabled="disabled" @change="toggle(option.value, ($event.target as HTMLInputElement).checked)" />
+            <span class="min-w-0 flex-1 break-words"><slot name="option" :option="option" :selected="modelValue.includes(option.value)">{{ option.label }}</slot></span>
           </label>
         </div>
       </div>
@@ -19,18 +23,22 @@
   </div>
 </template>
 
-<script setup lang="ts" generic="T extends string | number">
+<script setup lang="ts" generic="T extends string | number, O extends { value: T; label: string }">
 import { computed, nextTick, ref, useId, watch } from 'vue'
-import { onClickOutside, useEventListener } from '@vueuse/core'
+import { onClickOutside, useEventListener, useResizeObserver } from '@vueuse/core'
 import { getFloatingPanelPosition } from '@/utils/floatingPanel'
-const props = defineProps<{ modelValue: T[]; options: { value: T; label: string }[]; label: string; disabled?: boolean }>()
+const props = defineProps<{ modelValue: T[]; options: O[]; label: string; disabled?: boolean; searchable?: boolean; searchPlaceholder?: string }>()
 const emit = defineEmits<{ 'update:modelValue': [value: T[]] }>()
 const panelID = `checkbox-dropdown-${useId()}`
 const trigger = ref<HTMLButtonElement>()
 const panel = ref<HTMLElement>()
 const open = ref(false)
+const searchInput = ref<HTMLInputElement>()
+const searchQuery = ref('')
+const filteredOptions = computed(() => props.options.filter(option => option.label.toLocaleLowerCase().includes(searchQuery.value.trim().toLocaleLowerCase())))
 const rect = ref<DOMRect>()
 function updatePosition() { if (open.value) rect.value = trigger.value?.getBoundingClientRect() }
+useResizeObserver(trigger, updatePosition)
 useEventListener(window, 'resize', updatePosition)
 useEventListener(window, 'scroll', updatePosition, { capture: true })
 onClickOutside(trigger, () => { open.value = false }, { ignore: [panel] })
@@ -40,11 +48,13 @@ function checkboxOptions() { return Array.from(panel.value?.querySelectorAll<HTM
 async function openAndFocus(last = false) {
   if (props.disabled) return
   open.value = true
+  searchQuery.value = ''
   updatePosition()
   await nextTick()
   if (!open.value) return
   const options = checkboxOptions()
-  options[last ? options.length - 1 : 0]?.focus()
+  if (props.searchable && !last) searchInput.value?.focus()
+  else options[last ? options.length - 1 : 0]?.focus()
 }
 function toggleOpen() { if (open.value) close(); else void openAndFocus() }
 function onPanelKeydown(event: KeyboardEvent) {
@@ -55,12 +65,17 @@ function onPanelKeydown(event: KeyboardEvent) {
     event.preventDefault()
     event.stopPropagation()
     close()
-  } else if (event.key === 'Tab' && ((event.shiftKey && index === 0) || (!event.shiftKey && index === options.length - 1))) {
+  } else if (document.activeElement === searchInput.value && event.key === 'ArrowDown') {
+    event.preventDefault()
+    options[0]?.focus()
+  } else if (document.activeElement === searchInput.value && event.key === 'Enter') {
+    event.preventDefault()
+  } else if (event.key === 'Tab' && ((event.shiftKey && (props.searchable ? document.activeElement === searchInput.value : index === 0)) || (!event.shiftKey && (index === options.length - 1 || options.length === 0)))) {
     // Restore the trigger's place in the form's tab order before the browser
     // advances focus; the Teleport panel lives at the end of the document.
     if (event.shiftKey) event.preventDefault()
     close()
-  } else if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key) && options.length) {
+  } else if (document.activeElement !== searchInput.value && ['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key) && options.length) {
     event.preventDefault()
     const next = event.key === 'Home' ? 0 : event.key === 'End' ? options.length - 1
       : (index + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length
@@ -75,7 +90,8 @@ const panelStyle = computed(() => {
   const position = getFloatingPanelPosition(rect.value, window.innerWidth, window.innerHeight, { maxWidth: rect.value.width, viewportPadding: 8, gap: 4 })
   return { position: 'fixed' as const, zIndex: 100000020, width: `${position.width}px`, minWidth: '0', left: `${position.left}px`, top: position.top == null ? undefined : `${position.top}px`, bottom: position.bottom == null ? undefined : `${position.bottom}px`, maxHeight: `${position.maxHeight}px` }
 })
-const selectedLabel = computed(() => props.options.filter(option => props.modelValue.includes(option.value)).map(option => option.label).join(', '))
+const selectedOptions = computed(() => props.options.filter(option => props.modelValue.includes(option.value)))
+const selectedLabel = computed(() => selectedOptions.value.map(option => option.label).join(', '))
 function toggle(value: T, checked: boolean) {
   emit('update:modelValue', checked ? [...props.modelValue, value] : props.modelValue.filter(item => item !== value))
 }

@@ -24,6 +24,7 @@ const personalReads = [
   /^\/user\/(profile|platform-quotas|aff|passkeys|totp\/(status|verification-method))$/,
   /^\/user\/api-keys\/\d+\/usage\/daily$/,
   /^\/keys(?:\/\d+)?$/,
+  /^\/(?:keys|groups)\/\d+\/native-access$/,
   /^\/groups\/(available|rates)$/,
   /^\/channels\/available$/,
   /^\/usage(?:\/(live|stats|errors(?:\/\d+)?|\d+|dashboard\/(stats|trend|models|snapshot-v2|api-keys-usage)))?$/,

@@ -634,7 +634,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 	currentAPIKey := apiKey
 	currentSubscription := subscription
 	var fallbackGroupID *int64
-	if apiKey.Group != nil {
+	if apiKey.Group != nil && !apiKey.IsAggregate() {
 		fallbackGroupID = apiKey.Group.FallbackGroupIDOnInvalidRequest
 	}
 	fallbackUsed := false
@@ -1164,6 +1164,10 @@ func (h *GatewayHandler) Models(c *gin.Context) {
 	}
 	defer userRelease()
 	apiKey, _ := middleware2.GetAPIKeyFromContext(c)
+	if apiKey.IsAggregate() {
+		writeModelsList(c, service.PlatformOpenAI, apiKey.AggregateModelIDs)
+		return
+	}
 
 	var groupID *int64
 	var platform string
@@ -1245,7 +1249,7 @@ func (h *GatewayHandler) Models(c *gin.Context) {
 // OpenAIGatewayHandler.CodexModels so their live upstream metadata is preserved.
 func (h *GatewayHandler) CodexModels(c *gin.Context) {
 	apiKey, ok := middleware2.GetAPIKeyFromContext(c)
-	if !ok || apiKey == nil || apiKey.Group == nil {
+	if !ok || apiKey == nil || (apiKey.Group == nil && !apiKey.IsAggregate()) {
 		h.errorResponse(c, http.StatusUnauthorized, "invalid_request_error", "API key group is required")
 		return
 	}
@@ -1259,7 +1263,10 @@ func (h *GatewayHandler) CodexModels(c *gin.Context) {
 	if value, exists := middleware2.GetForcePlatformFromContext(c); exists {
 		forcedPlatform = strings.TrimSpace(value)
 	}
-	modelIDs := h.codexModelIDsForGroup(c.Request.Context(), apiKey.Group, forcedPlatform)
+	modelIDs := apiKey.AggregateModelIDs
+	if !apiKey.IsAggregate() {
+		modelIDs = h.codexModelIDsForGroup(c.Request.Context(), apiKey.Group, forcedPlatform)
+	}
 	modelIDs = service.FilterCodexModelIDsForGroup(modelIDs, apiKey.Group)
 	body, err := h.gatewayService.BuildCodexModelsManifestForGroup(
 		c.Request.Context(),

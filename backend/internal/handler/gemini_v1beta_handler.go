@@ -43,7 +43,7 @@ func (h *GatewayHandler) GeminiV1BetaListModels(c *gin.Context) {
 	// 检查平台：优先使用强制平台（/antigravity 路由），否则要求 gemini 分组（composite 分组允许路由到 antigravity）
 	forcePlatform, hasForcePlatform := middleware.GetForcePlatformFromContext(c)
 	effectivePlatform := effectiveAPIKeyPlatform(c, apiKey)
-	if !hasForcePlatform && effectivePlatform != service.PlatformGemini &&
+	if !apiKey.IsAggregate() && !hasForcePlatform && effectivePlatform != service.PlatformGemini &&
 		!servesCompositeAntigravityGemini(apiKey, effectivePlatform) {
 		googleError(c, http.StatusBadRequest, "API key group platform is not gemini")
 		return
@@ -54,6 +54,14 @@ func (h *GatewayHandler) GeminiV1BetaListModels(c *gin.Context) {
 		return
 	}
 	defer userRelease()
+	if apiKey.IsAggregate() {
+		models := make([]gemini.Model, 0, len(apiKey.AggregateModelIDs))
+		for _, model := range apiKey.AggregateModelIDs {
+			models = append(models, gemini.FallbackModel(model))
+		}
+		c.JSON(http.StatusOK, gemini.ModelsListResponse{Models: models})
+		return
+	}
 
 	// 分组级模型白名单开启时过滤 models[].name（名字形如 models/xxx）。
 	filterGeminiModels := func(models []gemini.Model) []gemini.Model {
@@ -254,7 +262,7 @@ func (h *GatewayHandler) GeminiV1BetaGetModel(c *gin.Context) {
 	// 检查平台：优先使用强制平台（/antigravity 路由），否则要求 gemini 分组（composite 分组允许路由到 antigravity）
 	forcePlatform, hasForcePlatform := middleware.GetForcePlatformFromContext(c)
 	effectivePlatform := effectiveAPIKeyPlatform(c, apiKey)
-	if !hasForcePlatform && effectivePlatform != service.PlatformGemini &&
+	if !apiKey.IsAggregate() && !hasForcePlatform && effectivePlatform != service.PlatformGemini &&
 		!servesCompositeAntigravityGemini(apiKey, effectivePlatform) {
 		googleError(c, http.StatusBadRequest, "API key group platform is not gemini")
 		return
@@ -285,6 +293,14 @@ func (h *GatewayHandler) GeminiV1BetaGetModel(c *gin.Context) {
 	}
 	defer userRelease()
 
+	if apiKey.IsAggregate() {
+		if !slices.Contains(apiKey.AggregateModelIDs, modelName) {
+			googleError(c, http.StatusNotFound, "Model is not available")
+			return
+		}
+		c.JSON(http.StatusOK, gemini.FallbackModel(modelName))
+		return
+	}
 	// 强制 antigravity 模式或 composite 路由到 antigravity：返回 antigravity 模型信息
 	if forcePlatform == service.PlatformAntigravity || effectivePlatform == service.PlatformAntigravity {
 		c.JSON(http.StatusOK, antigravity.FallbackGeminiModel(modelName))

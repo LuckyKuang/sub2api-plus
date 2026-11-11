@@ -1,5 +1,9 @@
 # Composite Groups
 
+Independent all/custom pay-as-you-go key scopes are documented in
+[Aggregate API Keys](AGGREGATE_API_KEYS.md). They do not change Composite groups
+or their optional unified endpoint configuration.
+
 Composite groups are an admin routing layer for API keys that should choose a
 concrete provider from the requested model instead of binding the key to a
 single provider group. They support both built-in model detection and an
@@ -17,9 +21,9 @@ protocol/authentication adapters and supported endpoints still require their own
 implementation and regression evidence. Registration does not add a missing
 native protocol, WebSocket transport or media API.
 
-The selected concrete platform is used for account selection, user platform
-quota checks, post-usage billing, ops error platform attribution, channel
-mapping/pricing lookup, and platform usage reporting.
+The concrete platform drives account selection, billing, ops attribution, channel
+mapping/pricing and platform usage. User platform quotas apply in balance mode;
+subscription mode uses the user's subscription quotas for the Composite group.
 
 ## Route Registry
 
@@ -462,9 +466,9 @@ are exercised by
 - Concrete provider accounts can be assigned directly to composite groups from
   account create/edit and bulk account workflows.
 - Subscription payment plans can bind to a composite group when that group's
-  `subscription_type` is `subscription`. The plan grants access to the
-  composite group; each request is still billed and quota-checked against the
-  resolved concrete provider platform.
+  `subscription_type` is `subscription`. The plan grants access and subscription
+  quota to the Composite group; billing uses the resolved concrete supplier.
+  Subscription mode is exempt from separate user-platform quota checks.
 - Channel configuration binds composite groups once in its Composite section,
   with a concrete-supplier selector for price cards and model mappings.
   The channel `group_ids` payload is still flat; provider-specific model
@@ -603,8 +607,8 @@ A key cannot enable conversion without a Composite group and valid endpoint.
 Creation does not auto-select a client or endpoint,
 even after capabilities load. The Use Key dialog displays the persisted policy
 read-only; changing a local example cannot change the server policy. API-key
-authentication selects these fields from storage, includes them in auth snapshot
-version 27 and invalidates both cache layers on edits. Older snapshots reload.
+authentication selects these fields from storage, includes them in the versioned
+auth snapshot and invalidates both cache layers on edits. Older snapshots reload.
 `default_client` only generates the matching client example and never selects
 provider identity, authentication or a different upstream credential.
 

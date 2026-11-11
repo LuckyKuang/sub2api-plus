@@ -24,7 +24,7 @@
     <p v-if="loading" class="text-xs surface-muted">{{ t('common.loading') }}</p>
     <p v-if="!configured && error" role="alert" class="text-sm text-red-600">{{ error }}</p>
     <button v-if="!configured && apiKey" type="button" class="btn btn-secondary btn-sm" @click="copyToClipboard(apiKey)">{{ t('nativeAccess.copyKey') }}</button>
-    <details v-if="models.length" :open="!configured" class="text-xs"><summary class="cursor-pointer">{{ t('nativeAccess.allModels') }}</summary><div class="mt-2 space-y-2"><div v-for="model in models" :key="`${model.platform}:${model.name}`"><span class="font-mono">{{ model.name }}</span> · {{ model.platform }}<div class="break-all surface-muted">{{ model.endpoints.map(endpoint => `${root}${endpoint}`).join(' · ') || t('nativeAccess.noModels') }}</div></div></div></details>
+    <details v-if="models.length" :open="!configured" class="text-xs"><summary class="cursor-pointer">{{ t('nativeAccess.allModels') }}</summary><div class="mt-2 space-y-2"><div v-for="model in models" :key="`${model.platform}:${model.name}`"><span class="font-mono">{{ model.name }}</span> · {{ model.platform }}<div class="break-all surface-muted">{{ model.endpoints.map(endpoint => `${root}${endpoint}`).join(' · ') || t('nativeAccess.noModels') }}</div><div v-if="aggregateKeyId && model.group_ids?.length" class="mt-1 space-y-1" data-testid="aggregate-native-groups"><p class="surface-muted">{{ t('keys.aggregateGroupHeaders') }}</p><code v-for="id in model.group_ids" :key="id" class="block select-all">X-Composite-Group-ID: {{ id }}</code></div></div></div></details>
   </section>
 </template>
 
@@ -35,11 +35,11 @@ import Select from '@/components/common/Select.vue'
 import { useClipboard } from '@/composables/useClipboard'
 import { apiClient } from '@/api/client'
 
-const props = withDefaults(defineProps<{ conversionEnabled?: boolean; groupId: number | null; client: string; endpoint: string; baseUrl?: string; apiKey?: string; editable?: boolean }>(), { conversionEnabled: false, baseUrl: '', apiKey: '', editable: true })
+const props = withDefaults(defineProps<{ conversionEnabled?: boolean; groupId: number | null; aggregateKeyId?: number; client: string; endpoint: string; baseUrl?: string; apiKey?: string; editable?: boolean }>(), { conversionEnabled: false, baseUrl: '', apiKey: '', editable: true })
 const emit = defineEmits<{ 'update:conversionEnabled': [value: boolean]; 'update:client': [value: string]; 'update:endpoint': [value: string] }>()
 const { t } = useI18n()
 const { copyToClipboard } = useClipboard()
-interface NativeModel { name: string; platform: string; endpoints: string[]; conversion_endpoints: string[] }
+interface NativeModel { name: string; platform: string; endpoints: string[]; conversion_endpoints: string[]; group_ids?: number[] }
 const models = ref<NativeModel[]>([])
 const endpoints = ref<string[]>([])
 const configured = computed(() => props.conversionEnabled)
@@ -80,13 +80,13 @@ function setClient(client: string) {
   const candidates = endpoints.value.filter(endpoint => clients[client]?.includes(endpoint))
   if (!candidates.includes(props.endpoint)) emit('update:endpoint', candidates[0] || '')
 }
-watch(() => props.groupId, async groupId => {
+watch(() => props.aggregateKeyId ? `/keys/${props.aggregateKeyId}/native-access` : props.groupId ? `/groups/${props.groupId}/native-access` : '', async accessUrl => {
   controller?.abort()
   models.value = []; endpoints.value = []; error.value = ''
-  if (!groupId) { loading.value = false; return }
+  if (!accessUrl) { loading.value = false; return }
   const active = new AbortController(); controller = active; loading.value = true
   try {
-    const { data } = await apiClient.get<{ models: NativeModel[]; endpoints: string[]; conversion_endpoints: string[] }>(`/groups/${groupId}/native-access`, { signal: active.signal })
+    const { data } = await apiClient.get<{ models: NativeModel[]; endpoints: string[]; conversion_endpoints: string[] }>(accessUrl, { signal: active.signal })
     if (active.signal.aborted) return
     if (!data || !Array.isArray(data.models) || !Array.isArray(data.conversion_endpoints)) throw new Error('Invalid capabilities response')
     models.value = data.models; endpoints.value = data.conversion_endpoints
