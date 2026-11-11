@@ -23,6 +23,28 @@ ROOT = Path(__file__).resolve().parents[1]
 BASE = "a" * 40
 
 
+class WindowsIntegrationEnvironmentTests(unittest.TestCase):
+    def test_wsl_exports_configured_names_without_values_or_duplicate_entries(self) -> None:
+        # CONTRIBUTING: --env NAME must reach Docker inside WSL, including
+        # isolated external DSNs; credential values never enter command text.
+        with mock.patch.dict(os.environ, {
+            "WSLENV": "EXISTING/p:HTTPS_PROXY/u",
+            "HTTPS_PROXY": "http://private-proxy.invalid",
+            "SUB2API_TEST_POSTGRES_DSN": "postgres://private-fixture",
+            "SUB2API_TEST_REDIS_DB": "1",
+        }, clear=True):
+            validation_runtime.configure_wsl_environment()
+            self.assertEqual("EXISTING/p:HTTPS_PROXY/u:SUB2API_TEST_POSTGRES_DSN:SUB2API_TEST_REDIS_DB", os.environ["WSLENV"])
+            self.assertNotIn("private", os.environ["WSLENV"])
+            validation_runtime.configure_wsl_environment()
+            self.assertEqual(1, os.environ["WSLENV"].split(":").count("SUB2API_TEST_REDIS_DB"))
+
+    def test_unconfigured_variables_do_not_create_an_export(self) -> None:
+        with mock.patch.dict(os.environ, {}, clear=True):
+            validation_runtime.configure_wsl_environment()
+            self.assertNotIn("WSLENV", os.environ)
+
+
 class FullCoverageTests(unittest.TestCase):
     def commands(self, lane: str) -> list[tuple[str, ...]]:
         return [tuple(step.command) for step in validation_checks.ci_steps(
