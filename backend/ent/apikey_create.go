@@ -73,6 +73,26 @@ func (_c *APIKeyCreate) SetUserID(v int64) *APIKeyCreate {
 	return _c
 }
 
+// SetGroupBindingMode sets the "group_binding_mode" field.
+func (_c *APIKeyCreate) SetGroupBindingMode(v string) *APIKeyCreate {
+	_c.mutation.SetGroupBindingMode(v)
+	return _c
+}
+
+// SetNillableGroupBindingMode sets the "group_binding_mode" field if the given value is not nil.
+func (_c *APIKeyCreate) SetNillableGroupBindingMode(v *string) *APIKeyCreate {
+	if v != nil {
+		_c.SetGroupBindingMode(*v)
+	}
+	return _c
+}
+
+// SetAggregateGroupIds sets the "aggregate_group_ids" field.
+func (_c *APIKeyCreate) SetAggregateGroupIds(v []int64) *APIKeyCreate {
+	_c.mutation.SetAggregateGroupIds(v)
+	return _c
+}
+
 // SetConversionEnabled sets the "conversion_enabled" field.
 func (_c *APIKeyCreate) SetConversionEnabled(v bool) *APIKeyCreate {
 	_c.mutation.SetConversionEnabled(v)
@@ -425,6 +445,14 @@ func (_c *APIKeyCreate) defaults() error {
 		v := apikey.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.GroupBindingMode(); !ok {
+		v := apikey.DefaultGroupBindingMode
+		_c.mutation.SetGroupBindingMode(v)
+	}
+	if _, ok := _c.mutation.AggregateGroupIds(); !ok {
+		v := apikey.DefaultAggregateGroupIds
+		_c.mutation.SetAggregateGroupIds(v)
+	}
 	if _, ok := _c.mutation.ConversionEnabled(); !ok {
 		v := apikey.DefaultConversionEnabled
 		_c.mutation.SetConversionEnabled(v)
@@ -486,6 +514,17 @@ func (_c *APIKeyCreate) check() error {
 	}
 	if _, ok := _c.mutation.UserID(); !ok {
 		return &ValidationError{Name: "user_id", err: errors.New(`ent: missing required field "APIKey.user_id"`)}
+	}
+	if _, ok := _c.mutation.GroupBindingMode(); !ok {
+		return &ValidationError{Name: "group_binding_mode", err: errors.New(`ent: missing required field "APIKey.group_binding_mode"`)}
+	}
+	if v, ok := _c.mutation.GroupBindingMode(); ok {
+		if err := apikey.GroupBindingModeValidator(v); err != nil {
+			return &ValidationError{Name: "group_binding_mode", err: fmt.Errorf(`ent: validator failed for field "APIKey.group_binding_mode": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.AggregateGroupIds(); !ok {
+		return &ValidationError{Name: "aggregate_group_ids", err: errors.New(`ent: missing required field "APIKey.aggregate_group_ids"`)}
 	}
 	if _, ok := _c.mutation.ConversionEnabled(); !ok {
 		return &ValidationError{Name: "conversion_enabled", err: errors.New(`ent: missing required field "APIKey.conversion_enabled"`)}
@@ -595,6 +634,14 @@ func (_c *APIKeyCreate) createSpec() (*APIKey, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.DeletedAt(); ok {
 		_spec.SetField(apikey.FieldDeletedAt, field.TypeTime, value)
 		_node.DeletedAt = &value
+	}
+	if value, ok := _c.mutation.GroupBindingMode(); ok {
+		_spec.SetField(apikey.FieldGroupBindingMode, field.TypeString, value)
+		_node.GroupBindingMode = value
+	}
+	if value, ok := _c.mutation.AggregateGroupIds(); ok {
+		_spec.SetField(apikey.FieldAggregateGroupIds, field.TypeJSON, value)
+		_node.AggregateGroupIds = value
 	}
 	if value, ok := _c.mutation.ConversionEnabled(); ok {
 		_spec.SetField(apikey.FieldConversionEnabled, field.TypeBool, value)
@@ -821,6 +868,30 @@ func (u *APIKeyUpsert) SetUserID(v int64) *APIKeyUpsert {
 // UpdateUserID sets the "user_id" field to the value that was provided on create.
 func (u *APIKeyUpsert) UpdateUserID() *APIKeyUpsert {
 	u.SetExcluded(apikey.FieldUserID)
+	return u
+}
+
+// SetGroupBindingMode sets the "group_binding_mode" field.
+func (u *APIKeyUpsert) SetGroupBindingMode(v string) *APIKeyUpsert {
+	u.Set(apikey.FieldGroupBindingMode, v)
+	return u
+}
+
+// UpdateGroupBindingMode sets the "group_binding_mode" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateGroupBindingMode() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldGroupBindingMode)
+	return u
+}
+
+// SetAggregateGroupIds sets the "aggregate_group_ids" field.
+func (u *APIKeyUpsert) SetAggregateGroupIds(v []int64) *APIKeyUpsert {
+	u.Set(apikey.FieldAggregateGroupIds, v)
+	return u
+}
+
+// UpdateAggregateGroupIds sets the "aggregate_group_ids" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateAggregateGroupIds() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldAggregateGroupIds)
 	return u
 }
 
@@ -1275,6 +1346,34 @@ func (u *APIKeyUpsertOne) SetUserID(v int64) *APIKeyUpsertOne {
 func (u *APIKeyUpsertOne) UpdateUserID() *APIKeyUpsertOne {
 	return u.Update(func(s *APIKeyUpsert) {
 		s.UpdateUserID()
+	})
+}
+
+// SetGroupBindingMode sets the "group_binding_mode" field.
+func (u *APIKeyUpsertOne) SetGroupBindingMode(v string) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetGroupBindingMode(v)
+	})
+}
+
+// UpdateGroupBindingMode sets the "group_binding_mode" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdateGroupBindingMode() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateGroupBindingMode()
+	})
+}
+
+// SetAggregateGroupIds sets the "aggregate_group_ids" field.
+func (u *APIKeyUpsertOne) SetAggregateGroupIds(v []int64) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetAggregateGroupIds(v)
+	})
+}
+
+// UpdateAggregateGroupIds sets the "aggregate_group_ids" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdateAggregateGroupIds() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateAggregateGroupIds()
 	})
 }
 
@@ -1955,6 +2054,34 @@ func (u *APIKeyUpsertBulk) SetUserID(v int64) *APIKeyUpsertBulk {
 func (u *APIKeyUpsertBulk) UpdateUserID() *APIKeyUpsertBulk {
 	return u.Update(func(s *APIKeyUpsert) {
 		s.UpdateUserID()
+	})
+}
+
+// SetGroupBindingMode sets the "group_binding_mode" field.
+func (u *APIKeyUpsertBulk) SetGroupBindingMode(v string) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetGroupBindingMode(v)
+	})
+}
+
+// UpdateGroupBindingMode sets the "group_binding_mode" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdateGroupBindingMode() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateGroupBindingMode()
+	})
+}
+
+// SetAggregateGroupIds sets the "aggregate_group_ids" field.
+func (u *APIKeyUpsertBulk) SetAggregateGroupIds(v []int64) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetAggregateGroupIds(v)
+	})
+}
+
+// UpdateAggregateGroupIds sets the "aggregate_group_ids" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdateAggregateGroupIds() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateAggregateGroupIds()
 	})
 }
 

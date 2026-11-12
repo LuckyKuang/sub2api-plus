@@ -30,6 +30,12 @@ successive Escape presses close only the calendar, range and parent dialog in
 that order and restore focus to the corresponding trigger.
 Checkbox menus also open from the keyboard, accept multiple choices without
 closing, and return Tab/Shift+Tab to the surrounding form's normal order.
+The real API Key page checks equal prominence of both creation actions and
+complete selected group names at phone, tablet and desktop widths. Long names
+wrap inside the selection field, and an open checkbox menu follows its growing
+height without covering the selected text.
+Aggregate creation and editing also preserve the ordinary Key's platform badge
+colors in both the checkbox menu and selected content, including saved choices.
 JSDOM component tests cannot establish these geometry requirements.
 
 The user layout fixture mounts the real AppLayout, sidebar, header and Select.

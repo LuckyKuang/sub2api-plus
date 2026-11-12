@@ -354,7 +354,7 @@
       <div v-else class="text-xs surface-muted">-</div>
     </template>
 
-    <!-- Grok OAuth accounts: passive xAI quota headers + local Sub2API usage -->
+    <!-- Grok OAuth accounts: billing windows, with observed rate-limit quotas as fallback. -->
     <template v-else-if="account.platform === 'grok' && account.type === 'oauth'">
       <div v-if="loading" class="space-y-1.5">
         <div class="flex items-center gap-1">
@@ -377,7 +377,7 @@
         </span>
       </div>
       <div v-else-if="usageInfo" class="space-y-1">
-        <!-- Free: only rolling 24h soft-gate bar. Paid: 7d + 30d + prepaid money. -->
+        <!-- Free: rolling 24h soft-gate bar. Paid: billing, then header quotas when unavailable. -->
         <template v-if="grokIsFree">
           <UsageProgressBar
             v-if="grokFreeTokenBar"
@@ -411,6 +411,23 @@
             :show-now-when-idle="true"
             color="indigo"
           />
+          <div v-if="grokHeaderQuotaBars.length" class="space-y-1">
+            <div class="text-[10px] surface-muted">
+              {{ t('admin.accounts.usageWindow.grokHeaderQuota') }}
+            </div>
+            <div v-for="bar in grokHeaderQuotaBars" :key="bar.key" :title="bar.title">
+              <UsageProgressBar
+                :label="bar.label"
+                :utilization="bar.utilization"
+                :resets-at="bar.resetsAt"
+                :remaining-capacity="true"
+                color="emerald"
+              />
+              <div class="text-[10px] surface-muted">
+                {{ formatCompactNumber(bar.remaining) }} / {{ formatCompactNumber(bar.limit) }}
+              </div>
+            </div>
+          </div>
           <div
             v-if="grokPrepaidMoneyLine"
             class="flex flex-wrap items-center gap-1 text-[10px] surface-muted"
@@ -1348,17 +1365,46 @@ const grokFreeTokenBar = computed(() => {
   const used = Math.max(0, grokFreeQuotaUsage.value.tokens || 0)
   return { utilization: Math.min(100, (used / limit) * 100), limit }
 })
+const grokHeaderQuotaBars = computed(() => {
+  // Response rate limits are a separate observation from subscription billing.
+  // Keep paid billing windows and the Free local gate when available, but do
+  // not discard usable headers just because a billing snapshot also exists.
+  if (grokIsFree.value || grokWeeklyBillingBar.value || grokMonthlyBillingBar.value) return []
+  return [
+    { key: 'requests', label: t('admin.accounts.usageWindow.grokRequests'), quota: usageInfo.value?.grok_request_quota },
+    { key: 'tokens', label: t('admin.accounts.usageWindow.grokTokens'), quota: usageInfo.value?.grok_token_quota }
+  ].flatMap(({ key, label, quota }) => {
+    const limit = quota?.limit
+    const remaining = quota?.remaining
+    if (
+      typeof limit !== 'number' || !Number.isFinite(limit) || limit <= 0 ||
+      typeof remaining !== 'number' || !Number.isFinite(remaining)
+    ) return []
+    const boundedRemaining = Math.min(limit, Math.max(0, remaining))
+    const reset = new Date(quota?.reset_at || (quota?.reset_unix ?? NaN) * 1000)
+    return [{
+      key,
+      label,
+      limit,
+      remaining: boundedRemaining,
+      utilization: (boundedRemaining / limit) * 100,
+      resetsAt: Number.isFinite(reset.getTime()) ? reset.toISOString() : null,
+      title: t('admin.accounts.usageWindow.grokHeaderQuotaHint', { remaining, limit })
+    }]
+  })
+})
 const grokQuotaUnknown = computed(() => {
   if (props.account.platform !== 'grok') return false
   if (grokIsFree.value) {
     return !grokFreeTokenBar.value
   }
-  if (grokWeeklyBillingBar.value || grokMonthlyBillingBar.value || grokPrepaidMoneyLine.value) {
-    return false
-  }
-  return usageInfo.value?.grok_quota_snapshot_state !== 'observed'
+  return !grokWeeklyBillingBar.value && !grokMonthlyBillingBar.value &&
+    !grokPrepaidMoneyLine.value && grokHeaderQuotaBars.value.length === 0
 })
 const grokQuotaUnknownLabel = computed(() => {
+  if (grokBilling.value && !grokIsFree.value) {
+    return t('admin.accounts.usageWindow.grokBillingQuotaUnavailable')
+  }
   return usageInfo.value?.grok_quota_snapshot_state === 'no_headers'
     ? t('admin.accounts.usageWindow.grokNoHeaders')
     : t('admin.accounts.usageWindow.grokUnknown')

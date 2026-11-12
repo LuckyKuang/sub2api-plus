@@ -40,6 +40,8 @@ func NewAPIKeyHandler(apiKeyService *service.APIKeyService, accountService *serv
 
 // CreateAPIKeyRequest represents the create API key request payload
 type CreateAPIKeyRequest struct {
+	GroupBindingMode  string   `json:"group_binding_mode"`
+	AggregateGroupIDs []int64  `json:"aggregate_group_ids"`
 	ConversionEnabled bool     `json:"conversion_enabled"`
 	DefaultClient     string   `json:"default_client"`
 	DefaultEndpoint   string   `json:"default_endpoint"`
@@ -59,6 +61,8 @@ type CreateAPIKeyRequest struct {
 
 // UpdateAPIKeyRequest represents the update API key request payload
 type UpdateAPIKeyRequest struct {
+	GroupBindingMode  *string   `json:"group_binding_mode"`
+	AggregateGroupIDs *[]int64  `json:"aggregate_group_ids"`
 	ConversionEnabled *bool     `json:"conversion_enabled"`
 	DefaultClient     *string   `json:"default_client"`
 	DefaultEndpoint   *string   `json:"default_endpoint"`
@@ -231,6 +235,8 @@ func (h *APIKeyHandler) Create(c *gin.Context) {
 	}
 
 	svcReq := service.CreateAPIKeyRequest{
+		GroupBindingMode:  req.GroupBindingMode,
+		AggregateGroupIDs: req.AggregateGroupIDs,
 		ConversionEnabled: req.ConversionEnabled,
 		DefaultClient:     req.DefaultClient,
 		DefaultEndpoint:   req.DefaultEndpoint,
@@ -289,6 +295,8 @@ func (h *APIKeyHandler) Update(c *gin.Context) {
 	}
 
 	svcReq := service.UpdateAPIKeyRequest{
+		GroupBindingMode:    req.GroupBindingMode,
+		AggregateGroupIDs:   req.AggregateGroupIDs,
 		ConversionEnabled:   req.ConversionEnabled,
 		DefaultClient:       req.DefaultClient,
 		DefaultEndpoint:     req.DefaultEndpoint,

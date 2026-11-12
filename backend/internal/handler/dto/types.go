@@ -54,6 +54,8 @@ type AdminUser struct {
 }
 
 type APIKey struct {
+	GroupBindingMode  string     `json:"group_binding_mode"`
+	AggregateGroupIDs []int64    `json:"aggregate_group_ids"`
 	ConversionEnabled bool       `json:"conversion_enabled"`
 	DefaultClient     string     `json:"default_client"`
 	DefaultEndpoint   string     `json:"default_endpoint"`

@@ -3581,6 +3581,12 @@ func runOpenAIResponsesWebSocketUsageLogCase(t *testing.T, tc openAIResponsesWSU
 		h.apiKeyService = tc.apiKeyService
 		authKey, err := tc.apiKeyService.GetByKey(context.Background(), tc.apiKeyCredential)
 		require.NoError(t, err)
+		if authKey.IsAggregate() {
+			scope, scopeErr := tc.apiKeyService.AggregateScope(t.Context(), authKey)
+			require.NoError(t, scopeErr)
+			authKey, err = tc.apiKeyService.BindAggregateGroup(t.Context(), scope, gjson.Get(tc.firstPayload, "model").String(), service.APIProtocolResponses, groupID)
+			require.NoError(t, err)
+		}
 		apiKey = authKey
 	}
 	if tc.simpleModeRejectAtRead > 0 {
@@ -3595,6 +3601,10 @@ func runOpenAIResponsesWebSocketUsageLogCase(t *testing.T, tc openAIResponsesWSU
 		c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: apiKey.User.ID, Concurrency: 1})
 		if tc.apiKeyService != nil && apiKey.Group != nil {
 			c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), ctxkey.Group, apiKey.Group))
+		}
+		if apiKey.IsAggregate() {
+			ctx := service.WithAggregateGroup(c.Request.Context(), *apiKey.GroupID)
+			c.Request = c.Request.WithContext(service.WithCompositeNativeProtocol(ctx, service.APIProtocolResponses))
 		}
 		c.Next()
 	})

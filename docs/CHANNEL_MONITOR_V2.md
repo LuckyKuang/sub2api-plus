@@ -3,6 +3,11 @@
 V2 derives metrics from recorded requests. Model visibility settings do not send
 provider requests, start probes, delete logs or modify collected per-model facts.
 
+The matrix keeps its rows virtual after filters produce an empty result and
+then restore data. Scroll observations belong to their mounted viewport;
+delayed scroll-end callbacks from a detached viewport cannot overwrite the
+replacement's visible range or make its bottom rows unreachable.
+
 ## Model visibility
 
 Administrator `GET/PUT /api/v1/admin/channel-monitor-v2/config` stores each

@@ -521,6 +521,144 @@ for (const width of [320, 390]) {
 }
 
 
+// Audit feedback: the aggregate action must be as prominent as the ordinary
+// creation action, and every selected group name must remain readable in place.
+async function interceptAggregateKeyAPI(page: Page, saved = false) {
+  await interceptAuditAPI(page)
+  const keyWrites: string[] = []
+  page.on('request', request => {
+    const path = new URL(request.url()).pathname
+    // Bulk usage reads use POST; key configuration must remain unchanged until Save.
+    if (request.method() !== 'GET' && /^\/api\/v1\/keys(?:\/|$)/.test(path)) keyWrites.push(`${request.method()} ${path}`)
+  })
+  const groups = [
+    { id: 1, name: 'Claude 生产环境按量分组 · Production messages', platform: 'anthropic' },
+    { id: 2, name: 'OpenAI-production-' + 'longscope'.repeat(10), platform: 'openai' },
+    { id: 3, name: 'Gemini 按量分组 · Production generate content', platform: 'gemini' },
+  ].map(item => ({ ...item, status: 'active', subscription_type: 'standard', rate_multiplier: 1 }))
+  const items = saved ? [{ id: 99901, name: 'Saved aggregate colors', key: 'sk-browser-fixture', status: 'active', group_binding_mode: 'custom', group_id: null, aggregate_group_ids: [1, 2, 3], created_at: '2026-01-01T00:00:00Z' }] : []
+  await page.route(url => url.pathname === '/api/v1/keys', route => route.fulfill({ json: { code: 0, data: { items, total: items.length, pages: saved ? 1 : 0, page: 1, page_size: 20 } } }))
+  await page.route(url => url.pathname === '/api/v1/usage/dashboard/api-keys-usage', route => route.fulfill({ json: { code: 0, data: { stats: {} } } }))
+  await page.route(url => url.pathname === '/api/v1/groups/available', route => route.fulfill({ json: { code: 0, data: groups } }))
+  await page.route(url => url.pathname === '/api/v1/groups/rates', route => route.fulfill({ json: { code: 0, data: {} } }))
+  await page.route(url => url.pathname === '/api/v1/channels/available', route => route.fulfill({ json: { code: 0, data: { groups: [], user_rate_status: 'loaded' } } }))
+  return { keyWrites, groups }
+}
+
+test('aggregate key creation is as prominent as ordinary key creation', async ({ page }, info) => {
+  await interceptAggregateKeyAPI(page)
+  await openAuditPage(page, 'keys', info, 1440)
+  const aggregate = page.getByTestId('create-aggregate-key')
+  const ordinary = page.locator('[data-tour="keys-create-btn"]')
+  await expect(aggregate).toBeVisible()
+  const appearance = (element: Element) => {
+    const style = getComputedStyle(element)
+    return { fill: style.backgroundColor, gradient: style.backgroundImage, border: style.borderColor, foreground: style.color }
+  }
+  expect(await aggregate.evaluate(appearance)).toEqual(await ordinary.evaluate(appearance))
+})
+
+test('aggregate group selections show every full name and keep the open menu clear of the growing field', async ({ page }, info) => {
+  const { keyWrites, groups } = await interceptAggregateKeyAPI(page)
+  const locale = presentation(info).locale
+  for (const width of [375, 768, 1440]) {
+    await openAuditPage(page, 'keys', info, width)
+    await page.getByTestId('create-aggregate-key').click()
+    await page.locator('#key-aggregate-mode').click()
+    await page.getByRole('option', { name: locale === 'zh' ? '自定义分组' : 'Custom groups', exact: true }).click()
+    const field = page.getByTestId('aggregate-key-fields')
+    await expect(field).not.toContainText('Composite 和订阅分组继续使用原有 Key 入口。')
+    await expect(field).not.toContainText('Composite and subscription groups use the original key flow.')
+    const trigger = field.getByRole('button', { name: locale === 'zh' ? '选择按量分组' : 'Select pay-as-you-go groups', exact: true })
+    await trigger.click()
+    const panel = page.locator(`#${await trigger.getAttribute('aria-controls')}`)
+    const colors = []
+    for (const group of groups) {
+      const checkbox = panel.getByRole('checkbox', { name: `${group.name} · ×1`, exact: true })
+      const option = checkbox.locator('..').getByTestId('aggregate-group-option')
+      const color = await option.evaluate(element => getComputedStyle(element).color)
+      colors.push(color)
+      await checkbox.check()
+      await expect(trigger).toContainText(group.name)
+      const badge = trigger.getByTestId('aggregate-selected-group').filter({ hasText: group.name })
+      expect(await badge.evaluate(element => getComputedStyle(element).color)).toBe(color)
+    }
+    expect(new Set(colors).size).toBe(3)
+    const expectFullSelection = async () => {
+      await expect.poll(() => trigger.evaluate(element => {
+        const label = element.querySelector('span')!
+        const bounds = label.getBoundingClientRect()
+        const range = document.createRange()
+        range.selectNodeContents(label)
+        const field = element.getBoundingClientRect()
+        const dialog = element.closest('.modal-content')!.getBoundingClientRect()
+        return {
+          allNamesFit: label.scrollWidth <= label.clientWidth + 1 && label.scrollHeight <= label.clientHeight + 1 && [...range.getClientRects()].every(rect => rect.left >= bounds.left - 1 && rect.right <= bounds.right + 1 && rect.top >= bounds.top - 1 && rect.bottom <= bounds.bottom + 1),
+          fieldFitsDialog: field.left >= dialog.left && field.right <= dialog.right,
+        }
+      })).toEqual({ allNamesFit: true, fieldFitsDialog: true })
+    }
+    await expectFullSelection()
+    await expect.poll(async () => {
+      const menu = (await panel.boundingBox())!
+      const anchor = (await trigger.boundingBox())!
+      return menu.y + menu.height <= anchor.y || menu.y >= anchor.y + anchor.height
+    }).toBe(true)
+    await page.keyboard.press('Escape')
+    await expect(panel).toHaveCount(0)
+    await expectFullSelection()
+    await trigger.click()
+    for (const group of groups) await expect(panel.getByRole('checkbox', { name: `${group.name} · ×1`, exact: true })).toBeChecked()
+    await panel.getByRole('checkbox', { name: `${groups[1]!.name} · ×1`, exact: true }).uncheck()
+    await expect(trigger).not.toContainText(groups[1]!.name)
+    await expect(trigger).toContainText(groups[0]!.name)
+    await expect(trigger).toContainText(groups[2]!.name)
+    await page.keyboard.press('Escape')
+    await expectFullSelection()
+  }
+  expect(keyWrites).toEqual([])
+})
+
+test('aggregate editing retains the ordinary key platform colors for saved group selections', async ({ page }, info) => {
+  const pageErrors: string[] = []
+  page.on('pageerror', error => pageErrors.push(error.message))
+  const { keyWrites, groups } = await interceptAggregateKeyAPI(page, true)
+  const locale = presentation(info).locale
+  await openAuditPage(page, 'keys', info, 1440)
+  // Read the existing ordinary-key option as the reference; no replacement
+  // palette or class names in this test can define what "matches" means.
+  await page.locator('[data-tour="keys-create-btn"]').click()
+  await page.locator('[data-tour="key-form-group"]').click()
+  const reference = page.getByRole('option').filter({ hasText: groups[0]!.name }).locator('.groupOptionItemBadge')
+  await expect(reference).toBeVisible()
+  const ordinaryColor = await reference.evaluate(element => getComputedStyle(element).color)
+  await page.keyboard.press('Escape')
+  await page.getByRole('button', { name: 'Close modal', exact: true }).click()
+
+  await page.getByRole('button', { name: locale === 'zh' ? '编辑' : 'Edit', exact: true }).click()
+  const field = page.getByTestId('aggregate-key-fields')
+  const trigger = field.getByRole('button', { name: locale === 'zh' ? '选择按量分组' : 'Select pay-as-you-go groups', exact: true })
+  await expect(trigger.getByTestId('aggregate-selected-group')).toHaveCount(3)
+  const colors = []
+  for (const group of groups) {
+    const badge = trigger.getByTestId('aggregate-selected-group').filter({ hasText: group.name })
+    colors.push(await badge.evaluate(element => getComputedStyle(element).color))
+  }
+  expect(colors[0]).toBe(ordinaryColor)
+  expect(new Set(colors).size).toBe(3)
+  await trigger.click()
+  const panel = page.locator(`#${await trigger.getAttribute('aria-controls')}`)
+  for (const [index, group] of groups.entries()) {
+    const checkbox = panel.getByRole('checkbox', { name: `${group.name} · ×1`, exact: true })
+    await expect(checkbox).toBeChecked()
+    expect(await checkbox.locator('..').getByTestId('aggregate-group-option').evaluate(element => getComputedStyle(element).color)).toBe(colors[index])
+  }
+  await panel.getByRole('checkbox', { name: `${groups[1]!.name} · ×1`, exact: true }).uncheck()
+  await expect(trigger.getByTestId('aggregate-selected-group')).toHaveCount(2)
+  expect(keyWrites).toEqual([])
+  expect(pageErrors).toEqual([])
+})
+
 // The user must be able to read and copy CLI configuration in either theme.
 // Contrast is computed from the rendered production code and composited surface,
 // independently of the classes chosen by the component.

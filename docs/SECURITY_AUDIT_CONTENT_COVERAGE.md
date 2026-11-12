@@ -1,5 +1,18 @@
 # Security Audit Content Coverage
 
+[Aggregate API keys](AGGREGATE_API_KEYS.md) resolve an authorized ordinary
+pay-as-you-go group using read-only grants, model and native capability metadata.
+The original body is restored before the unchanged canonical audit entrypoint;
+Files uploads retain the streaming parser. The selected group is request-local,
+so both audit engines evaluate its policy before scheduling, concurrency/RPM,
+billing reservations or provider writes. No aggregate cross-group fallback is
+permitted after audit. Unknown valid items, sibling fields and incomplete
+extraction preserve the existing pass-through contract. Explicit group hints
+for resources and continuations cannot grant access outside the current scope
+or replace existing resource/key/account ownership checks. HTTP and every WS
+turn retain the existing canonical extraction and trusted outbound identity.
+
+
 Administrator [read-only user assistance](USER_SUPPORT_VIEW.md) exposes explicitly registered panel GET reads, including existing image history, downloads and model catalogs. Model catalogs reuse the existing discovery handlers and trusted outbound identity contract. It does not expose inference, image submission, provider probes or other gateway write paths. The real administrator remains the management-audit actor, while the separately validated target scopes reads. No inference extraction, moderation ordering or outbound identity behavior changes in this flow.
 
 This document is the normative content-extraction matrix for Content

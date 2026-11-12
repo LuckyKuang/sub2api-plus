@@ -165,6 +165,7 @@ deploy/docker-compose.override.yml
 .gocache/
 vite.config.js
 docs/*
+!docs/AGGREGATE_API_KEYS.md
 !docs/CODEX_CLI.md
 !docs/CHANNEL_MONITOR.md
 !docs/CHANNEL_MONITOR_V2.md
@@ -197,6 +198,9 @@ docs/*
 !docs/AVAILABLE_CHANNELS.md
 !docs/USER_SUPPORT_VIEW.md
 !docs/COMPOSITE_GROUPS.md
+!docs/research/
+docs/research/*
+!docs/research/AGGREGATE_API_KEY_DESIGN.md
 !docs/GATEWAY_ADMISSION.md
 !docs/GATEWAY_TASK_LIMITS.md
 !docs/CN_PROVIDER_MODELS.md

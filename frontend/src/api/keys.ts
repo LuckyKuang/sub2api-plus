@@ -66,9 +66,10 @@ export async function create(
   quota?: number,
   expiresInDays?: number,
   rateLimitData?: { rate_limit_5h?: number; rate_limit_1d?: number; rate_limit_7d?: number },
-  nativeAccess?: { conversion_enabled: boolean; default_client: string; default_endpoint: string }
+  nativeAccess?: { conversion_enabled: boolean; default_client: string; default_endpoint: string },
+  groupBinding?: Pick<CreateApiKeyRequest, 'group_binding_mode' | 'aggregate_group_ids'>
 ): Promise<ApiKey> {
-  const payload: CreateApiKeyRequest = { name, ...nativeAccess }
+  const payload: CreateApiKeyRequest = { name, ...nativeAccess, ...groupBinding }
   if (groupId !== undefined) {
     payload.group_id = groupId
   }

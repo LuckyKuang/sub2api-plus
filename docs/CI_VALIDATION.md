@@ -55,6 +55,12 @@ and pnpm lock inputs. Remote caches are
 separated by architecture and lane; fallback preserves the exact generation.
 GitHub ref visibility still applies: prefixes do not guarantee cross-tag reuse
 or warm compilation. No validation image is pushed to a registry.
+Go security patch updates synchronize `backend/go.mod`, all application
+Dockerfiles and the validation Dockerfile default. The backend security lane
+scans the pinned compiler's standard library as well as application modules;
+standard-library findings require updating that compiler, not an audit exception.
+The [Go release history](https://go.dev/doc/devel/release#go1.27.4) records the
+`net/http` security fixes in the patch adopted for GO-2026-6859.
 The image includes GCC and libc development headers so focused Go race tests
 can execute with `CGO_ENABLED=1` under the same pinned container toolchain.
 Running an ordinary unit suite does not imply that its race profile was run.

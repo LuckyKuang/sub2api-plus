@@ -6,6 +6,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
@@ -72,6 +73,14 @@ func TestAdminSupportRegistersSharedReadsAndNoMutations(t *testing.T) {
 		rec := httptest.NewRecorder()
 		r.ServeHTTP(rec, httptest.NewRequest(method, "/api/v1/admin/support/users/42/keys", nil))
 		require.Equal(t, http.StatusNotFound, rec.Code)
+	}
+	for _, path := range []string{"/keys/:id/native-access", "/groups/:id/native-access"} {
+		require.True(t, registered["/api/v1/admin/support/users/:user_id"+path], "usage guides must use the validated support target")
+		for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodDelete} {
+			rec := httptest.NewRecorder()
+			r.ServeHTTP(rec, httptest.NewRequest(method, "/api/v1/admin/support/users/42"+strings.ReplaceAll(path, ":id", "7"), nil))
+			require.Equal(t, http.StatusNotFound, rec.Code)
+		}
 	}
 	// Target validation runs before a handler can load any user data.
 	rec := httptest.NewRecorder()

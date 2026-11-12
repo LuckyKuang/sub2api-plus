@@ -75,6 +75,11 @@ func UserID(v int64) predicate.APIKey {
 	return predicate.APIKey(sql.FieldEQ(FieldUserID, v))
 }
 
+// GroupBindingMode applies equality check predicate on the "group_binding_mode" field. It's identical to GroupBindingModeEQ.
+func GroupBindingMode(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldGroupBindingMode, v))
+}
+
 // ConversionEnabled applies equality check predicate on the "conversion_enabled" field. It's identical to ConversionEnabledEQ.
 func ConversionEnabled(v bool) predicate.APIKey {
 	return predicate.APIKey(sql.FieldEQ(FieldConversionEnabled, v))
@@ -323,6 +328,71 @@ func UserIDIn(vs ...int64) predicate.APIKey {
 // UserIDNotIn applies the NotIn predicate on the "user_id" field.
 func UserIDNotIn(vs ...int64) predicate.APIKey {
 	return predicate.APIKey(sql.FieldNotIn(FieldUserID, vs...))
+}
+
+// GroupBindingModeEQ applies the EQ predicate on the "group_binding_mode" field.
+func GroupBindingModeEQ(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldGroupBindingMode, v))
+}
+
+// GroupBindingModeNEQ applies the NEQ predicate on the "group_binding_mode" field.
+func GroupBindingModeNEQ(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNEQ(FieldGroupBindingMode, v))
+}
+
+// GroupBindingModeIn applies the In predicate on the "group_binding_mode" field.
+func GroupBindingModeIn(vs ...string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldIn(FieldGroupBindingMode, vs...))
+}
+
+// GroupBindingModeNotIn applies the NotIn predicate on the "group_binding_mode" field.
+func GroupBindingModeNotIn(vs ...string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotIn(FieldGroupBindingMode, vs...))
+}
+
+// GroupBindingModeGT applies the GT predicate on the "group_binding_mode" field.
+func GroupBindingModeGT(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGT(FieldGroupBindingMode, v))
+}
+
+// GroupBindingModeGTE applies the GTE predicate on the "group_binding_mode" field.
+func GroupBindingModeGTE(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGTE(FieldGroupBindingMode, v))
+}
+
+// GroupBindingModeLT applies the LT predicate on the "group_binding_mode" field.
+func GroupBindingModeLT(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLT(FieldGroupBindingMode, v))
+}
+
+// GroupBindingModeLTE applies the LTE predicate on the "group_binding_mode" field.
+func GroupBindingModeLTE(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLTE(FieldGroupBindingMode, v))
+}
+
+// GroupBindingModeContains applies the Contains predicate on the "group_binding_mode" field.
+func GroupBindingModeContains(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldContains(FieldGroupBindingMode, v))
+}
+
+// GroupBindingModeHasPrefix applies the HasPrefix predicate on the "group_binding_mode" field.
+func GroupBindingModeHasPrefix(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldHasPrefix(FieldGroupBindingMode, v))
+}
+
+// GroupBindingModeHasSuffix applies the HasSuffix predicate on the "group_binding_mode" field.
+func GroupBindingModeHasSuffix(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldHasSuffix(FieldGroupBindingMode, v))
+}
+
+// GroupBindingModeEqualFold applies the EqualFold predicate on the "group_binding_mode" field.
+func GroupBindingModeEqualFold(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEqualFold(FieldGroupBindingMode, v))
+}
+
+// GroupBindingModeContainsFold applies the ContainsFold predicate on the "group_binding_mode" field.
+func GroupBindingModeContainsFold(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldContainsFold(FieldGroupBindingMode, v))
 }
 
 // ConversionEnabledEQ applies the EQ predicate on the "conversion_enabled" field.

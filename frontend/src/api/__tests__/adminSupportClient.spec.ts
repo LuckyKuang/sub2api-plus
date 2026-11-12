@@ -22,6 +22,14 @@ describe('complete scoped assistance requests', () => {
     expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/admin/support/users/42/images/tasks?limit=20&api_key_id=7')
     expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer administrator-session')
   })
+  it.each(['/keys/7/native-access', '/groups/9/native-access'])('scopes the %s usage guide to the selected user', async path => {
+    const adapter = vi.fn(async (config: InternalAxiosRequestConfig) => success(config, { models: [] }))
+    apiClient.defaults.adapter = adapter
+    await apiClient.get(path)
+    expect(adapter.mock.calls[0][0].url).toBe(`/admin/support/users/42${path}`)
+    expect(adapter.mock.calls[0][0].headers.get('Authorization')).toBe('Bearer administrator-session')
+    expect(adapter.mock.calls[0][0].method).toBe('get')
+  })
   it.each(['post','put','patch','delete'] as const)('rejects %s changes before any network call', async method => {
     const adapter = vi.fn()
     apiClient.defaults.adapter = adapter

@@ -66,6 +66,18 @@ export default {
 
   // API Keys
   keys: {
+    aggregateGroupHeaders: "Available group headers (choose one supporting your native endpoint)",
+    aggregateUsageHint: "Use each model’s advertised native endpoint. Pin X-Composite-Group-ID for continuations, WebSocket and resource operations; successful responses return the selected group ID. Existing account affinity and resource permissions still apply.",
+    createAggregate: "Create aggregate API key",
+    aggregateScope: "Group scope",
+    aggregateAll: "All groups (default)",
+    aggregateCustom: "Custom groups",
+    selectAggregateGroups: "Select pay-as-you-go groups",
+    aggregateCustomCount: "Custom groups ({count})",
+    aggregateUnavailable: "Unavailable group #{id} — remove to save",
+    aggregateGroupsRequired: "Select at least one pay-as-you-go group",
+    aggregateHint: "All mode dynamically includes your authorized pay-as-you-go groups. Custom mode uses your fixed selection. Requests use native endpoints and the selected group’s current personal pricing, charged to your balance.",
+
     title: 'API Keys',
     description: 'Manage your API keys and access tokens',
     searchPlaceholder: 'Search name or key...',
@@ -142,6 +154,10 @@ export default {
     keyDisabledSuccess: 'API key disabled successfully',
     failedToLoad: 'Failed to load API keys',
     failedToSave: 'Failed to save API key',
+    errors: {
+      API_KEY_COUNT_EXCEEDED: 'API key count limit reached. Delete unused keys before creating another.',
+      API_KEY_CREATE_RATE_LIMITED: 'Too many API keys created recently. Please try again later.'
+    },
     failedToDelete: 'Failed to delete API key',
     failedToUpdateStatus: 'Failed to update API key status',
     clickToChangeGroup: 'Click to change group',
