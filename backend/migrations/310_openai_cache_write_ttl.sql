@@ -22,4 +22,3 @@ ALTER TABLE channel_account_stats_pricing_intervals
     ADD COLUMN IF NOT EXISTS cache_write_12h_price NUMERIC(20,12);
 COMMENT ON COLUMN channel_account_stats_pricing_intervals.cache_write_12h_price IS
     'OpenAI 12h cache write price per token; NULL preserves the generic cache_write_price';
-
