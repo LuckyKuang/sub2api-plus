@@ -762,6 +762,8 @@ export interface CompositeRouteDecision {
 }
 
 export interface ApiKey {
+  group_binding_mode?: 'single' | 'all' | 'custom'
+  aggregate_group_ids?: number[]
   conversion_enabled?: boolean
   default_client?: string
   default_endpoint?: string
@@ -797,6 +799,8 @@ export interface ApiKey {
 }
 
 export interface CreateApiKeyRequest {
+  group_binding_mode?: 'single' | 'all' | 'custom'
+  aggregate_group_ids?: number[]
   conversion_enabled?: boolean
   default_client?: string
   default_endpoint?: string
@@ -813,6 +817,8 @@ export interface CreateApiKeyRequest {
 }
 
 export interface UpdateApiKeyRequest {
+  group_binding_mode?: 'single' | 'all' | 'custom'
+  aggregate_group_ids?: number[]
   conversion_enabled?: boolean
   default_client?: string
   default_endpoint?: string

@@ -82,6 +82,8 @@ func APIKeyFromService(k *service.APIKey) *APIKey {
 		return nil
 	}
 	out := &APIKey{
+		GroupBindingMode:   service.NormalizeGroupBindingMode(k.GroupBindingMode),
+		AggregateGroupIDs:  append([]int64{}, k.AggregateGroupIDs...),
 		ConversionEnabled:  k.ConversionEnabled,
 		DefaultClient:      k.DefaultClient,
 		DefaultEndpoint:    k.DefaultEndpoint,

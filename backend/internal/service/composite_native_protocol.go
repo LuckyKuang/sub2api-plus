@@ -121,7 +121,7 @@ func CheckCompositeNativeForward(ctx context.Context, c *gin.Context, account *A
 	}
 	keyValue, _ := c.Get("api_key")
 	key, _ := keyValue.(*APIKey)
-	if key == nil || key.Group == nil || key.Group.Platform != PlatformComposite {
+	if key == nil || key.Group == nil || (key.Group.Platform != PlatformComposite && !key.IsAggregate()) {
 		return nil
 	}
 	if key.ConversionEnabled && key.DefaultEndpoint != "" && CompositeUnifiedEndpoint(ctx) == key.DefaultEndpoint && CompositeNativeProtocolForPath(key.DefaultEndpoint) == protocol && compositeAccountConversionSupported(account, model, protocol) {

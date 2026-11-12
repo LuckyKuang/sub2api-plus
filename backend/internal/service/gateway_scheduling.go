@@ -927,6 +927,9 @@ func (s *GatewayService) resolveGatewayGroup(ctx context.Context, groupID *int64
 	currentID := *groupID
 	visited := map[int64]struct{}{}
 	for {
+		if pinned := aggregateGroupFromContext(ctx); pinned != 0 && currentID != pinned {
+			return nil, nil, ErrClaudeCodeOnly
+		}
 		if _, seen := visited[currentID]; seen {
 			return nil, nil, fmt.Errorf("fallback group cycle detected")
 		}

@@ -380,6 +380,11 @@ command logs. External Redis requires an explicitly selected nonzero database;
 missing or invalid selection fails instead of falling back to DB 0. The route
 rate-limit integration test also accepts this isolated external Redis.
 
+On Windows the launcher exports the configured proxy/integration variable names
+through its process-local `WSLENV` before invoking Docker inside WSL. It preserves
+existing entries and does not put credential values in command arguments or
+persist changes to Windows user settings.
+
 Prompt Audit uses a separate disposable database through
 `PROMPT_AUDIT_TEST_POSTGRES_DSN`, and separate Redis selection through
 `PROMPT_AUDIT_TEST_REDIS_ADDR` and `PROMPT_AUDIT_TEST_REDIS_DB`; its Redis

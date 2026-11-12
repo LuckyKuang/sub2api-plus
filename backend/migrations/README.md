@@ -4,6 +4,11 @@ SQL migrations are embedded in the application and applied automatically at
 startup. The runner records each filename and SHA256 checksum in
 `schema_migrations`.
 
+Migration `308_aggregate_api_keys.sql` adds explicit single/all/custom group
+bindings and atomic custom membership. Existing keys retain single-group or
+ungrouped behavior, including Composite conversion preferences. See
+[aggregate API keys](../../docs/AGGREGATE_API_KEYS.md).
+
 Migration `305_api_key_native_access_preferences.sql` adds empty-default client
 and endpoint presentation preferences. They grant no endpoint access and change
 no routing; omitted updates preserve values. See [native Composite access](../../docs/COMPOSITE_GROUPS.md#optional-unified-endpoint-and-native-access).

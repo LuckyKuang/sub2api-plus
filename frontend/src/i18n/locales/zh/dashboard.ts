@@ -66,6 +66,18 @@ export default {
 
   // API Keys
   keys: {
+    aggregateGroupHeaders: "可选分组请求头（任选一个，仍需匹配该组原生端点）",
+    aggregateUsageHint: "请使用模型列出的原生端点。续会话、WebSocket 和资源操作请固定 X-Composite-Group-ID 请求头；成功响应会返回实际分组 ID。分组内账号亲和性和资源权限保持不变。",
+    createAggregate: "创建聚合 API Key",
+    aggregateScope: "分组范围",
+    aggregateAll: "全部分组（默认）",
+    aggregateCustom: "自定义分组",
+    selectAggregateGroups: "选择按量分组",
+    aggregateCustomCount: "自定义分组（{count}）",
+    aggregateUnavailable: "分组 #{id} 已不可用，请移除后保存",
+    aggregateGroupsRequired: "请至少选择一个按量分组",
+    aggregateHint: "全部模式动态纳入您有权使用的按量分组；自定义模式仅使用勾选的分组。请求使用原生端点，按实际分组的当前个人价从余额扣费。",
+
     title: 'API 密钥',
     description: '管理您的 API 密钥和访问令牌',
     searchPlaceholder: '搜索名称或Key...',

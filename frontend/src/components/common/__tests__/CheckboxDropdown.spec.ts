@@ -33,6 +33,77 @@ async function key(element: Element, name: string, shiftKey = false) {
 }
 
 describe('CheckboxDropdown keyboard interaction', () => {
+  it('keeps typed option metadata in rich options and selected content while searching and changing choices', async () => {
+    const wrapper = mount(CheckboxDropdown, {
+      attachTo: document.body,
+      props: {
+        modelValue: [2],
+        options: [{ value: 1, label: 'One', platform: 'anthropic' }, { value: 2, label: 'Two', platform: 'openai' }],
+        label: 'Groups',
+        searchable: true,
+      },
+      slots: {
+        selected: '<template #selected="{ options }"><span v-for="option in options" :key="option.value" data-test="selected-platform" :data-platform="option.platform">{{ option.label }}</span></template>',
+        option: '<template #option="{ option, selected }"><span data-test="option-platform" :data-platform="option.platform" :data-selected="selected">{{ option.label }}</span></template>',
+      },
+    })
+    expect(wrapper.get('[data-test="selected-platform"]').attributes('data-platform')).toBe('openai')
+    await wrapper.get('button').trigger('click')
+    expect(document.querySelector('[data-platform="anthropic"][data-test="option-platform"]')).not.toBeNull()
+    options()[0]!.click()
+    await nextTick()
+    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([[2, 1]])
+    await wrapper.setProps({ modelValue: [2, 1] })
+    const search = document.querySelector<HTMLInputElement>('input[type="search"]')!
+    search.value = 'Two'
+    search.dispatchEvent(new Event('input', { bubbles: true }))
+    await nextTick()
+    expect(options()).toHaveLength(1)
+    expect(wrapper.findAll('[data-test="selected-platform"]').map(element => element.attributes('data-platform'))).toEqual(['anthropic', 'openai'])
+    expect(options()[0]!.getAttribute('aria-label')).toBe('Two')
+  })
+
+  it('starts at the first search result, preserves IME navigation and prevents search Enter from submitting the form', async () => {
+    const wrapper = mountDropdown()
+    await wrapper.setProps({ searchable: true })
+    await wrapper.get('button').trigger('click')
+    await nextTick()
+    const search = document.querySelector<HTMLInputElement>('input[type="search"]')!
+    const enter = await key(search, 'Enter')
+    expect(enter.defaultPrevented).toBe(true)
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    const composing = new KeyboardEvent('keydown', { key: 'ArrowDown', isComposing: true, bubbles: true, cancelable: true })
+    search.dispatchEvent(composing)
+    await nextTick()
+    expect(composing.defaultPrevented).toBe(false)
+    expect(document.activeElement).toBe(search)
+    await key(search, 'ArrowDown')
+    expect(document.activeElement).toBe(options()[0])
+  })
+
+  it('keeps search and repeated checkbox selection in one integrated dropdown', async () => {
+    const wrapper = mountDropdown()
+    await wrapper.setProps({ searchable: true, searchPlaceholder: 'Find groups' })
+    await wrapper.get('button').trigger('click')
+    await nextTick()
+    const search = document.querySelector<HTMLInputElement>('input[type="search"]')!
+    expect(document.activeElement).toBe(search)
+    search.value = 'Tw'
+    search.dispatchEvent(new Event('input', { bubbles: true }))
+    await nextTick()
+    expect(options()).toHaveLength(1)
+    expect(options()[0]!.value).toBe('2')
+    await key(search, 'ArrowDown')
+    expect(document.activeElement).toBe(options()[0])
+    options()[0]!.click()
+    await nextTick()
+    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([[]])
+    expect(search.isConnected).toBe(true)
+    expect(options()).toHaveLength(1)
+    await key(options()[0]!, 'Escape')
+    expect(document.activeElement).toBe(wrapper.get('button').element)
+  })
+
   it('enters the teleported options and keeps repeated selections inside the menu', async () => {
     const wrapper = mountDropdown()
     await wrapper.get('button').trigger('click')

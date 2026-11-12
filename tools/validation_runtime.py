@@ -128,6 +128,24 @@ def is_debian_or_ubuntu_wsl(name: str) -> bool:
     return bool(WSL_DEBIAN_UBUNTU_RE.fullmatch(cleaned))
 
 
+def configure_wsl_environment() -> None:
+    """Forward names to WSL without placing secret values in command arguments.
+
+    Docker's --env NAME reads the Linux client's environment. Windows variables
+    reach that client only when WSLENV exports them across the process boundary.
+    This changes only the current launcher process, never Windows user settings.
+    """
+    entries = os.environ.get("WSLENV", "").split(":")
+    entries = [entry for entry in entries if entry]
+    present = {entry.split("/", 1)[0] for entry in entries}
+    for name in (*PROXY_ENV_NAMES, *INTEGRATION_ENV_NAMES):
+        if os.environ.get(name) and name not in present:
+            entries.append(name)
+            present.add(name)
+    if entries:
+        os.environ["WSLENV"] = ":".join(entries)
+
+
 def probe_docker(
     prefix: Sequence[str] = (),
     *,
@@ -178,6 +196,7 @@ def probe_windows_runtime(
         )
 
     for distro in running:
+        configure_wsl_environment()
         prefix = (wsl, "-d", distro, "--")
         docker_ok, detail = probe_docker_fn(prefix)
         if not docker_ok:

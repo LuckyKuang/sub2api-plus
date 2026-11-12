@@ -14,7 +14,7 @@ import (
 	"github.com/dgraph-io/ristretto"
 )
 
-const apiKeyAuthSnapshotVersion = 28 // v28: Composite endpoint policy and group privacy gates
+const apiKeyAuthSnapshotVersion = 29 // v29: explicit aggregate group bindings
 
 type apiKeyAuthCacheConfig struct {
 	l1Size        int
@@ -336,6 +336,8 @@ func (s *APIKeyService) snapshotFromAPIKey(ctx context.Context, apiKey *APIKey) 
 		return nil
 	}
 	snapshot := &APIKeyAuthSnapshot{
+		GroupBindingMode:  NormalizeGroupBindingMode(apiKey.GroupBindingMode),
+		AggregateGroupIDs: append([]int64{}, apiKey.AggregateGroupIDs...),
 		ConversionEnabled: apiKey.ConversionEnabled,
 		DefaultClient:     apiKey.DefaultClient,
 		DefaultEndpoint:   apiKey.DefaultEndpoint,
@@ -454,6 +456,8 @@ func (s *APIKeyService) snapshotToAPIKey(key string, snapshot *APIKeyAuthSnapsho
 		return nil
 	}
 	apiKey := &APIKey{
+		GroupBindingMode:  snapshot.GroupBindingMode,
+		AggregateGroupIDs: append([]int64{}, snapshot.AggregateGroupIDs...),
 		ConversionEnabled: snapshot.ConversionEnabled,
 		DefaultClient:     snapshot.DefaultClient,
 		DefaultEndpoint:   snapshot.DefaultEndpoint,

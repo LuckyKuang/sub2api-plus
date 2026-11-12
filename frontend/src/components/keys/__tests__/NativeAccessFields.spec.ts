@@ -16,6 +16,20 @@ function mountFields(client = '', endpoint = '', enabled = false) {
 // User requirement: native access is the default; choosing a unified interface
 // is an explicit, reversible server policy, not an automatically filled hint.
 describe('optional Composite endpoint configuration', () => {
+ it('loads the aggregate key catalog without exposing conversion controls', async () => {
+  api.get.mockClear()
+  api.get.mockResolvedValueOnce({ data: { endpoints: ['/v1/responses'], conversion_endpoints: [], models: [{ name: 'gpt-6.1-sol', platform: 'openai', endpoints: ['/v1/responses'], conversion_endpoints: [], group_ids: [7, 12] }] } })
+  const page = mount(NativeAccessFields, { props: { aggregateKeyId: 44, groupId: null, client: '', endpoint: '', editable: false }, global: { plugins: [createI18n({ legacy: false, locale: 'en', missingWarn: false, fallbackWarn: false, messages: { en: {} } })] } })
+  await flushPromises()
+  expect(api.get).toHaveBeenCalledWith('/keys/44/native-access', expect.anything())
+  expect(page.find('input[type="checkbox"]').exists()).toBe(false)
+  expect(page.findAllComponents(Select)).toHaveLength(0)
+  expect(page.get('details').text()).toContain('gpt-6.1-sol')
+  expect(page.get('[data-testid="aggregate-native-groups"]').text()).toContain('X-Composite-Group-ID: 7')
+  expect(page.get('[data-testid="aggregate-native-groups"]').text()).toContain('X-Composite-Group-ID: 12')
+  page.unmount()
+ })
+
  it('leaves new and unconfigured edited keys native without auto-filling defaults', async () => {
   const page = mountFields(); await flushPromises()
   expect(page.vm.client).toBe(''); expect(page.vm.endpoint).toBe('')

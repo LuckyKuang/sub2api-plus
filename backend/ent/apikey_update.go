@@ -72,6 +72,32 @@ func (_u *APIKeyUpdate) SetNillableUserID(v *int64) *APIKeyUpdate {
 	return _u
 }
 
+// SetGroupBindingMode sets the "group_binding_mode" field.
+func (_u *APIKeyUpdate) SetGroupBindingMode(v string) *APIKeyUpdate {
+	_u.mutation.SetGroupBindingMode(v)
+	return _u
+}
+
+// SetNillableGroupBindingMode sets the "group_binding_mode" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillableGroupBindingMode(v *string) *APIKeyUpdate {
+	if v != nil {
+		_u.SetGroupBindingMode(*v)
+	}
+	return _u
+}
+
+// SetAggregateGroupIds sets the "aggregate_group_ids" field.
+func (_u *APIKeyUpdate) SetAggregateGroupIds(v []int64) *APIKeyUpdate {
+	_u.mutation.SetAggregateGroupIds(v)
+	return _u
+}
+
+// AppendAggregateGroupIds appends value to the "aggregate_group_ids" field.
+func (_u *APIKeyUpdate) AppendAggregateGroupIds(v []int64) *APIKeyUpdate {
+	_u.mutation.AppendAggregateGroupIds(v)
+	return _u
+}
+
 // SetConversionEnabled sets the "conversion_enabled" field.
 func (_u *APIKeyUpdate) SetConversionEnabled(v bool) *APIKeyUpdate {
 	_u.mutation.SetConversionEnabled(v)
@@ -587,6 +613,11 @@ func (_u *APIKeyUpdate) defaults() error {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *APIKeyUpdate) check() error {
+	if v, ok := _u.mutation.GroupBindingMode(); ok {
+		if err := apikey.GroupBindingModeValidator(v); err != nil {
+			return &ValidationError{Name: "group_binding_mode", err: fmt.Errorf(`ent: validator failed for field "APIKey.group_binding_mode": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.DefaultClient(); ok {
 		if err := apikey.DefaultClientValidator(v); err != nil {
 			return &ValidationError{Name: "default_client", err: fmt.Errorf(`ent: validator failed for field "APIKey.default_client": %w`, err)}
@@ -638,6 +669,17 @@ func (_u *APIKeyUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.DeletedAtCleared() {
 		_spec.ClearField(apikey.FieldDeletedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.GroupBindingMode(); ok {
+		_spec.SetField(apikey.FieldGroupBindingMode, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.AggregateGroupIds(); ok {
+		_spec.SetField(apikey.FieldAggregateGroupIds, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedAggregateGroupIds(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, apikey.FieldAggregateGroupIds, value)
+		})
 	}
 	if value, ok := _u.mutation.ConversionEnabled(); ok {
 		_spec.SetField(apikey.FieldConversionEnabled, field.TypeBool, value)
@@ -917,6 +959,32 @@ func (_u *APIKeyUpdateOne) SetNillableUserID(v *int64) *APIKeyUpdateOne {
 	if v != nil {
 		_u.SetUserID(*v)
 	}
+	return _u
+}
+
+// SetGroupBindingMode sets the "group_binding_mode" field.
+func (_u *APIKeyUpdateOne) SetGroupBindingMode(v string) *APIKeyUpdateOne {
+	_u.mutation.SetGroupBindingMode(v)
+	return _u
+}
+
+// SetNillableGroupBindingMode sets the "group_binding_mode" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillableGroupBindingMode(v *string) *APIKeyUpdateOne {
+	if v != nil {
+		_u.SetGroupBindingMode(*v)
+	}
+	return _u
+}
+
+// SetAggregateGroupIds sets the "aggregate_group_ids" field.
+func (_u *APIKeyUpdateOne) SetAggregateGroupIds(v []int64) *APIKeyUpdateOne {
+	_u.mutation.SetAggregateGroupIds(v)
+	return _u
+}
+
+// AppendAggregateGroupIds appends value to the "aggregate_group_ids" field.
+func (_u *APIKeyUpdateOne) AppendAggregateGroupIds(v []int64) *APIKeyUpdateOne {
+	_u.mutation.AppendAggregateGroupIds(v)
 	return _u
 }
 
@@ -1448,6 +1516,11 @@ func (_u *APIKeyUpdateOne) defaults() error {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *APIKeyUpdateOne) check() error {
+	if v, ok := _u.mutation.GroupBindingMode(); ok {
+		if err := apikey.GroupBindingModeValidator(v); err != nil {
+			return &ValidationError{Name: "group_binding_mode", err: fmt.Errorf(`ent: validator failed for field "APIKey.group_binding_mode": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.DefaultClient(); ok {
 		if err := apikey.DefaultClientValidator(v); err != nil {
 			return &ValidationError{Name: "default_client", err: fmt.Errorf(`ent: validator failed for field "APIKey.default_client": %w`, err)}
@@ -1516,6 +1589,17 @@ func (_u *APIKeyUpdateOne) sqlSave(ctx context.Context) (_node *APIKey, err erro
 	}
 	if _u.mutation.DeletedAtCleared() {
 		_spec.ClearField(apikey.FieldDeletedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.GroupBindingMode(); ok {
+		_spec.SetField(apikey.FieldGroupBindingMode, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.AggregateGroupIds(); ok {
+		_spec.SetField(apikey.FieldAggregateGroupIds, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedAggregateGroupIds(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, apikey.FieldAggregateGroupIds, value)
+		})
 	}
 	if value, ok := _u.mutation.ConversionEnabled(); ok {
 		_spec.SetField(apikey.FieldConversionEnabled, field.TypeBool, value)
