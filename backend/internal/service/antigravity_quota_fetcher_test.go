@@ -413,7 +413,7 @@ func TestFetchQuotaUsesConfiguredModelsListBodyLimit(t *testing.T) {
 
 	cfg := &config.Config{}
 	cfg.Gateway.ModelsListReadMaxBytes = 8
-	fetcher := NewAntigravityQuotaFetcher(nil, cfg)
+	fetcher := NewAntigravityQuotaFetcher(cfg)
 	_, err := fetcher.FetchQuota(context.Background(), &Account{
 		Platform: PlatformAntigravity,
 		Type:     AccountTypeOAuth,

@@ -701,12 +701,16 @@ the fixed Stainless SDK/runtime fingerprint and `X-App: cli`.
 | Empty or invalid account candidate | Configured global Claude preset → valid environment / compiled default |
 | Empty or invalid global candidate | Valid environment / compiled default |
 
-Its compiled UA remains `claude-cli/2.1.258 (external, cli)`, with client
-identifier `claude-cli` and version `2.1.258`. The identifier/version are
+Its compiled UA is `claude-cli/2.1.321 (external, cli)`, with client
+identifier `claude-cli` and version `2.1.321`. The identifier/version are
 encoded in the UA; this path does not add Codex `Originator`/`Version` headers.
 The reset-credit status and full redemption transport regressions check source priority, exact defaults,
 companion headers, the token-acquisition snapshot and final-send replacement
-of foreign SDK headers. This integration does not upgrade identity pins.
+of foreign SDK headers. The v0.2.21 sync updates only this Claude version pin. Account → global → valid
+environment / compiled-default selection is unchanged; invalid candidates fall
+through atomically. Stainless JS `0.94.0`, Node `v24.3.0`, Linux/x64 and `X-App: cli`
+remain fixed. Exact-default, lower-bound 2.1.320/321/322, owner, transport and
+billing-attribution regressions cover the update.
 
 For Sonnet 5.5, gateway request construction filters
 `fine-grained-tool-streaming-2025-05-14` from `anthropic-beta` when the final

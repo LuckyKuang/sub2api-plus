@@ -168,6 +168,7 @@ func overlayModelPricing(lower, upper *ChannelModelPricing) *ChannelModelPricing
 	}{
 		{&merged.InputPrice, lower.InputPrice}, {&merged.OutputPrice, lower.OutputPrice},
 		{&merged.CacheWritePrice, lower.CacheWritePrice}, {&merged.CacheWrite1hPrice, lower.CacheWrite1hPrice},
+		{&merged.CacheWrite12hPrice, lower.CacheWrite12hPrice},
 		{&merged.CacheReadPrice, lower.CacheReadPrice}, {&merged.ImageInputPrice, lower.ImageInputPrice},
 		{&merged.ImageOutputPrice, lower.ImageOutputPrice}, {&merged.PerRequestPrice, lower.PerRequestPrice},
 		{&merged.FastMultiplier, lower.FastMultiplier}, {&merged.FlexMultiplier, lower.FlexMultiplier},
@@ -191,12 +192,12 @@ func overlayModelPricing(lower, upper *ChannelModelPricing) *ChannelModelPricing
 
 func hasFlatTokenPrice(config *ChannelModelPricing) bool {
 	return config != nil && (config.InputPrice != nil || config.OutputPrice != nil || config.CacheWritePrice != nil ||
-		config.CacheWrite1hPrice != nil || config.CacheReadPrice != nil || config.ImageInputPrice != nil || config.ImageOutputPrice != nil)
+		config.CacheWrite1hPrice != nil || config.CacheWrite12hPrice != nil || config.CacheReadPrice != nil || config.ImageInputPrice != nil || config.ImageOutputPrice != nil)
 }
 
 func hasIntervalTokenPrice(interval *PricingInterval) bool {
 	return interval != nil && (interval.InputPrice != nil || interval.OutputPrice != nil || interval.CacheWritePrice != nil ||
-		interval.CacheWrite1hPrice != nil || interval.CacheReadPrice != nil)
+		interval.CacheWrite1hPrice != nil || interval.CacheWrite12hPrice != nil || interval.CacheReadPrice != nil)
 }
 
 func hasConfiguredPricingOverrides(config *ChannelModelPricing) bool {
@@ -415,7 +416,7 @@ func filterValidIntervals(intervals []PricingInterval) []PricingInterval {
 	var valid []PricingInterval
 	for _, iv := range intervals {
 		if iv.InputPrice != nil || iv.OutputPrice != nil ||
-			iv.CacheWritePrice != nil || iv.CacheWrite1hPrice != nil || iv.CacheReadPrice != nil ||
+			iv.CacheWritePrice != nil || iv.CacheWrite1hPrice != nil || iv.CacheWrite12hPrice != nil || iv.CacheReadPrice != nil ||
 			iv.PerRequestPrice != nil || iv.InputMultiplier != nil ||
 			iv.OutputMultiplier != nil || iv.CacheWriteMultiplier != nil ||
 			iv.CacheReadMultiplier != nil {
@@ -486,6 +487,15 @@ func intervalToModelPricing(iv *PricingInterval, base *ModelPricing, chPricing *
 		pricing.CacheCreationPricePerTokenPriority = applyMultiplier(pricing.CacheCreationPricePerTokenPriority, iv.CacheWriteMultiplier)
 		pricing.CacheCreation5mPrice = applyMultiplier(pricing.CacheCreation5mPrice, iv.CacheWriteMultiplier)
 		pricing.CacheCreation1hPrice = applyMultiplier(pricing.CacheCreation1hPrice, iv.CacheWriteMultiplier)
+		if pricing.CacheCreation12hPricePerToken != nil {
+			price := applyMultiplier(*pricing.CacheCreation12hPricePerToken, iv.CacheWriteMultiplier)
+			pricing.CacheCreation12hPricePerToken = &price
+		}
+	}
+	if iv.CacheWrite12hPrice != nil {
+		pricing.CacheCreation12hPricePerToken = iv.CacheWrite12hPrice
+	} else if iv.CacheWritePrice != nil {
+		pricing.CacheCreation12hPricePerToken = nil
 	}
 	if iv.CacheWrite1hPrice != nil {
 		enableCacheCreationBreakdown(pricing)

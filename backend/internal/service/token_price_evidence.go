@@ -63,6 +63,18 @@ func (s *BillingService) validateUsedTokenPriceEvidence(resolved *ResolvedPricin
 	if tokens.CacheReadTokens > 0 && !cacheRead {
 		return &missingTokenPriceError{dimension: "cache_read"}
 	}
+	// A valid OpenAI split needs the generic card only for 30m writes or
+	// for 12h writes without an explicit long-duration override.
+	if _, valid := openAICacheCreationTTLCost(tokens, 0, nil); valid {
+		longPrice := card.CacheWrite12hPrice != nil
+		if iv := FindMatchingInterval(resolved.Intervals, pricingContext); iv != nil {
+			longPrice = longPrice || iv.CacheWrite12hPrice != nil
+		}
+		if (tokens.CacheCreation30mTokens > 0 || (tokens.CacheCreation12hTokens > 0 && !longPrice)) && !cacheWrite {
+			return &missingTokenPriceError{dimension: "cache_write"}
+		}
+		return nil
+	}
 	write5m, write1h := normalizeCacheCreationBreakdown(tokens)
 	if write5m == 0 && write1h == 0 && tokens.CacheCreationTokens > 0 {
 		write5m = tokens.CacheCreationTokens

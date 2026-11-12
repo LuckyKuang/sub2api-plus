@@ -308,9 +308,16 @@ suffixes.
 Admission and durable settlement pin the selected card across reloads.
 
 The official 12-hour cache-write reference rate is $2.50 per million tokens
-before context and speed adjustments. The existing OpenAI usage contract
-provides aggregate cache-write tokens and uses the 30-minute card; this update
-does not add a 12-hour usage breakdown. The release pricing resource records
+before context and speed adjustments. OpenAI usage now accepts an observed, exhaustive
+`ttl_30m_tokens` / `ttl_12h_tokens` split under
+`input_tokens_details.cache_write_tokens_details`. Invalid, incomplete or absent
+splits retain the aggregate generic price. `cache_write_12h_price` is optional
+in channel/group/account-statistics cards and intervals: NULL preserves a
+legacy generic card, explicit zero is free. Registered official GPT cards derive
+12h rates as input × 2.5; applicable speed/context/group factors apply afterward.
+The two counters sum to the aggregate and are never added to it again. Existing
+Anthropic 5m/1h meters remain separate. Reference fill, user/model-plaza display,
+context tiers and frozen settlement carry the same 12h price. The release pricing resource records
 the API's 1050000 context window, 922000 maximum input and 128000 maximum output.
 These API limits are separate from the reviewed Codex client descriptor and do
 not change its pinned metadata, request behavior or identity.
@@ -437,6 +444,7 @@ platform returns `400`. A missing price is **not** an error:
       "output_price": 0.00001,
       "cache_write_price": 0.0000025,
       "cache_write_1h_price": null,
+      "cache_write_12h_price": 0.000005,
       "cache_read_price": 0.0000002,
       "fast_multiplier": 2,
       "flex_multiplier": 0.5,

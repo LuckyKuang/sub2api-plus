@@ -169,7 +169,7 @@ func TestBuildOAuthRequest_BillingMatchesWireUserAgent(t *testing.T) {
 				require.Equal(t, wantUA, getHeaderRaw(req.Header, "User-Agent"))
 				// Cached fingerprints cannot select the trusted outbound identity.
 				// Fixed suffixes are independently calculated with Node.js.
-				wantBilling := "cc_version=2.1.258.ab7;"
+				wantBilling := "cc_version=2.1.321.8ff;"
 				if tc.version != "" {
 					wantBilling = "cc_version=3.9.1.83d;"
 				}

@@ -4,6 +4,17 @@ SQL migrations are embedded in the application and applied automatically at
 startup. The runner records each filename and SHA256 checksum in
 `schema_migrations`.
 
+Migration `309_usage_log_api_key_cost_index_notx.sql` adds the concurrent
+API-key/time usage index with `actual_cost` included. A retry drops a leftover
+invalid index before recreating it; only this new nontransactional migration
+uses the invalid-index recovery hook.
+Migration `310_openai_cache_write_ttl.sql` adds non-null zero-default 30m/12h
+usage counters and nullable 12h prices in channel/group/account-statistics cards
+and intervals. Zero historical counters mean no observed split, not proof that
+the writes used either duration. NULL 12h price preserves the generic rate;
+explicit zero means free. New official 249/250 files are renumbered to 309/310;
+all historical migration filenames/checksums remain immutable.
+
 Migration `308_aggregate_api_keys.sql` adds explicit single/all/custom group
 bindings and atomic custom membership. Existing keys retain single-group or
 ungrouped behavior, including Composite conversion preferences. See

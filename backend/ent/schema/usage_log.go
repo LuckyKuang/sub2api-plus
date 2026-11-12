@@ -103,6 +103,12 @@ func (UsageLog) Fields() []ent.Field {
 			Nillable().
 			SchemaType(map[string]string{dialect.Postgres: "decimal(20,10)"}),
 
+		// OpenAI cache-write lifetimes are separate from Anthropic 5m/1h buckets.
+		field.Int("cache_creation_30m_tokens").
+			Default(0),
+		field.Int("cache_creation_12h_tokens").
+			Default(0),
+
 		// 成本字段
 		field.Float("input_cost").
 			Default(0).

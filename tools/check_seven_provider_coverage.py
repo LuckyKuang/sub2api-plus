@@ -551,6 +551,12 @@ PROFILES = {
             "TestMiniMaxOfficialFlashReleaseCandidate",
         )),
         RegressionGroup("./internal/service", (
+            "TestOpenAICacheWriteTTLRecordUsage",
+            "TestOpenAICacheWriteTTLInvalidDetailsKeepAggregate",
+            "TestOpenAICacheWriteTTLPrices",
+            "TestOpenAICacheWriteTTLFrozenGroupCard",
+            "TestAvailableFallbackOpenAI12hPriceAndPlatformIsolation",
+            "TestOpenAIWSPassthroughStrictTokenTimingEveryTurn",
             "TestGPT61TerraMessagesForwardBoundary",
             "TestGPT61TerraMessagesMinimalEffortStopsBeforeUpstream",
             "TestGPT61TerraRejectsMinimalEffort",
@@ -1063,6 +1069,8 @@ PROFILES = {
             for mode in ("success", "timeout", "refused", "authentication_required", "missing", "mismatched")
         )),
         RegressionGroup("./internal/handler", (
+            "TestUpstream021PageSnapshotCanonicalAudits",
+            "TestUpstream021PageSnapshotRealAuditsBeforeSideEffects",
             "TestCodexIncrementalExecCanonicalAudits",
             "TestCodexIncrementalExecRealAuditsBeforeSideEffects",
             "TestOpenAIErrorMessagesPreserveOpsDiagnostics",
@@ -1205,6 +1213,8 @@ PROFILES = {
             )
         )),
         RegressionGroup("./internal/repository", (
+            "TestUpstream021MigrationsRepairInvalidIndexAndPreserveTTL",
+            "TestRefreshTokenCacheConsumeRealRedis",
             "TestScopedAdminRefreshBusyRollsBackRowLockBeforeOrdinaryRotationPersists",
             "TestGrokCatalogCASPreservesSingleKeyAndRejectsStaleExpected",
             "TestGrokCatalogCASTreatsNullMissingAndKeyOrderAsSameValue",

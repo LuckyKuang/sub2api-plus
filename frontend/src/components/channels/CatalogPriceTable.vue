@@ -20,10 +20,11 @@ import type { UserSupportedModelPricing } from '@/api/channels'
 import { catalogMoney } from './catalog'
 const props = withDefaults(defineProps<{ pricing: UserSupportedModelPricing; rate?: number; token?: boolean }>(), { rate: 1, token: true })
 const { t } = useI18n()
-type PriceKey = 'input_price' | 'output_price' | 'cache_write_price' | 'cache_write_1h_price' | 'cache_read_price' | 'per_request_price' | 'image_input_price' | 'image_output_price'
+type PriceKey = 'input_price' | 'output_price' | 'cache_write_price' | 'cache_write_1h_price' | 'cache_write_12h_price' | 'cache_read_price' | 'per_request_price' | 'image_input_price' | 'image_output_price'
 const columns: { key: PriceKey; label: string }[] = [
   { key: 'input_price', label: 'inputPrice' }, { key: 'output_price', label: 'outputPrice' },
   { key: 'cache_write_price', label: 'cacheWrite5mPrice' }, { key: 'cache_write_1h_price', label: 'cacheWrite1hPrice' },
+  { key: 'cache_write_12h_price', label: 'cacheWrite12hPrice' },
   { key: 'cache_read_price', label: 'cacheReadPrice' }, { key: 'image_input_price', label: 'imageInputPrice' },
   { key: 'image_output_price', label: 'imageOutputPrice' }, { key: 'per_request_price', label: 'perRequestPrice' }
 ]

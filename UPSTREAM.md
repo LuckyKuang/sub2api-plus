@@ -6,12 +6,34 @@ publication status. Release naming and procedures live in
 
 ## Integrated Baseline
 
-The current tree integrates official `v0.2.20`, peeled commit
-`dab829a4e9b7d1cc307189aea8b0319eb29e29d0`, after official `v0.2.19`
-`dece26153621959ccd7635814f4b2d08304e681a`. Plus remains authoritative when
-upstream behavior conflicts with an intentional Plus contract. The candidate
-release is `v0.2.20+custom.001`, with status `planned` until publication and
-immutable artifact verification complete. Post-tag official main is excluded.
+The current tree integrates official `v0.2.21`, peeled commit
+`10ba8f9b4dc2e6023d4a9879ab77b21841babd10`, after official `v0.2.20`
+`dab829a4e9b7d1cc307189aea8b0319eb29e29d0`. The sync branch starts at
+Plus main `86db896584174e19c44a85ec3becf80c15bd0d33`.
+Plus remains authoritative when upstream behavior conflicts with an intentional
+Plus contract. The candidate release is `v0.2.21+custom.001`, with status
+`planned`; integration and local validation do not publish artifacts.
+Post-tag official main is excluded.
+
+The v0.2.21 import adds disjoint OpenAI 30-minute/12-hour cache-write meters and
+optional 12-hour prices, atomic console refresh-token consumption, prompt-audit
+worker wakeups, account-slot cleanup on hydration failure, memory-aware ingress
+budget defaults, EasyPay refund success-code configuration and console fixes.
+Official new migrations 249/250 become Plus 309/310; deployed SQL is unchanged.
+Claude Code's compiled version advances to `2.1.321` with its source priority,
+client family and SDK/runtime fingerprint preserved. Fable/Mythos 5.2 receive
+separate catalog, conversion and billing support; account access remains subject
+to provider eligibility. See [Claude](docs/providers/CLAUDE.md).
+
+Upstream semantic/visible TTFT settings and its injectable WS classifier are
+excluded: Plus removed that setting and retains strict nonempty token deltas,
+independent first-output/first-byte clocks and per-response WS timing windows.
+The Codex pin remains `0.167.0`, with no automatic version synchronization.
+Call-less page snapshots share the wire validator with canonical audit extraction;
+raw ingress audit still precedes account selection, pricing and forwarding.
+Plus Release-manifest pricing trust, atomic validated cache bundles, frozen
+billing, aggregate keys, owner snapshots, strict proxies, error policies, UI
+controls and container validation/release workflows remain authoritative.
 
 The import adds bounded request buffering, per-operation upload/write timeouts,
 finite post-disconnect usage draining, bounded stream parsers and background
@@ -131,9 +153,9 @@ of a new release.
 ## Current Version
 
 ```text
-Git/GitHub: v0.2.20+custom.001
-Application: 0.2.20+custom.001
-GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.20-custom.001
+Git/GitHub candidate: v0.2.21+custom.001 (planned)
+Application: 0.2.21+custom.001
+GHCR candidate: ghcr.io/luckykuang/sub2api-plus:v0.2.21-custom.001 (not published)
 ```
 
 ## Release Mapping
@@ -221,6 +243,7 @@ GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.20-custom.001
 | `v0.2.19+custom.005` | `v0.2.19` | `dece26153621959ccd7635814f4b2d08304e681a` | published |
 | `v0.2.19+custom.006` | `v0.2.19` | `dece26153621959ccd7635814f4b2d08304e681a` | published |
 | `v0.2.20+custom.001` | `v0.2.20` | `dab829a4e9b7d1cc307189aea8b0319eb29e29d0` | published |
+| `v0.2.21+custom.001` | `v0.2.21` | `10ba8f9b4dc2e6023d4a9879ab77b21841babd10` | planned |
 
 `v0.2.15+custom.003` records the integrated official main snapshot in the
 Official Commit column. Its tagged official baseline remains

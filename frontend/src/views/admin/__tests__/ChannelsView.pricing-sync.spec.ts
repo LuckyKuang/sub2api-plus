@@ -43,6 +43,7 @@ vi.mock('@/api/admin', () => ({
     },
     groups: { getAll: (...args: unknown[]) => groupsGetAll(...args) },
     accounts: { getById: vi.fn() },
+    settings: { getWebSearchEmulationConfig: vi.fn().mockResolvedValue({ enabled: false, providers: [] }) },
   },
 }))
 
@@ -138,6 +139,7 @@ const solCard = priced('gpt-6-sol', {
   input_price: 2e-6,
   output_price: 10e-6,
   cache_write_price: 2.5e-6,
+  cache_write_12h_price: 5e-6,
   cache_read_price: 0.2e-6,
   fast_multiplier: 2,
   flex_multiplier: 0.5,
@@ -414,7 +416,8 @@ describe('ChannelsView pricing sync', () => {
     // Sol $2/$10，Luna $0.10/$0.50（USD/MTok）：不得共享第一个型号的价。
     expect(priceInput(cards[0]!, 'admin.channels.form.inputPrice').value).toBe('2')
     expect(priceInput(cards[0]!, 'admin.channels.form.outputPrice').value).toBe('10')
-    expect(priceInput(cards[0]!, 'admin.channels.form.cacheWrite5mPrice').value).toBe('2.5')
+    expect(priceInput(cards[0]!, 'admin.channels.form.cacheWrite30mPrice').value).toBe('2.5')
+    expect(priceInput(cards[0]!, 'admin.channels.form.cacheWrite12hPrice').value).toBe('5')
     expect(priceInput(cards[0]!, 'admin.channels.form.cacheReadPrice').value).toBe('0.2')
     expect(priceInput(cards[1]!, 'admin.channels.form.inputPrice').value).toBe('0.1')
     expect(priceInput(cards[1]!, 'admin.channels.form.outputPrice').value).toBe('0.5')

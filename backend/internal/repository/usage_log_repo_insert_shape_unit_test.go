@@ -129,7 +129,9 @@ func TestPrepareUsageLogInsert_UpstreamRequestIDArgWiring(t *testing.T) {
 	})
 	require.Len(t, prepared.args, len(usageLogInsertArgTypes))
 
-	idx := len(prepared.args) - 14 // tier, timing, billing-policy and outbound snapshots are appended
+	// Plus 在尾部追加 tier/timing/billing-policy/outbound 快照；本轮导入又追加
+	// cache_creation_30m/12h 两列，因此相对末尾的偏移为 16。
+	idx := len(prepared.args) - 16
 	arg, ok := prepared.args[idx].(sql.NullString)
 	require.True(t, ok, "upstream_request_id arg should be sql.NullString, got %T", prepared.args[idx])
 	require.True(t, arg.Valid)

@@ -500,6 +500,11 @@ after cleanup.
 ## Refresh and motion
 
 Initial loads use skeletons; background refresh preserves rows/charts.
+Account refresh keeps the existing table and quotas visible while marking the
+region busy and suppressing overlapping row actions. Initial cost reads remain
+lazy and retain the selected aggregate-key scope. Settings use a floating save
+dock with reserved content space, responsive placement and existing permissions;
+the dock does not restore the removed TTFT setting.
 `useAutoRefresh` coalesces pending work, pauses while hidden/offline, resumes once,
 honors seconds/date `Retry-After`, and uses jittered exponential backoff capped
 at 300 seconds. Callers must return the actual pending promise. Poll errors keep

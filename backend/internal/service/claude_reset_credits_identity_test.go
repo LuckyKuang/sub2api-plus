@@ -24,9 +24,9 @@ func TestClaudeResetCompiledIdentityAndFingerprint(t *testing.T) {
 	t.Setenv(claude.CLIVersionEnv, "")
 	require.Equal(t, outboundidentity.Identity{
 		Preset: "claude", Source: "compiled_default", Originator: "claude-cli",
-		UserAgent: "claude-cli/2.1.258 (external, cli)", Version: "2.1.258",
+		UserAgent: "claude-cli/2.1.321 (external, cli)", Version: "2.1.321",
 		Headers: map[string]string{
-			"User-Agent":                  "claude-cli/2.1.258 (external, cli)",
+			"User-Agent":                  "claude-cli/2.1.321 (external, cli)",
 			"X-App":                       "cli",
 			"X-Stainless-Lang":            "js",
 			"X-Stainless-Package-Version": "0.94.0",

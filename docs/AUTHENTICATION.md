@@ -141,3 +141,12 @@ provider contract: DeepSeek and Zhipu have no business refresh action, and
 Zhipu has no existing-account UI relink action. See the
 [supported business inventory](SEVEN_PROVIDER_SUPPORTED_BUSINESS.md) and
 [native authentication contracts](providers/DOMESTIC_OAUTH.md).
+
+## Console refresh-token rotation
+
+A refresh verifies user status, token version and the existing session binding
+before atomically consuming the old refresh token in Redis. Exactly one
+concurrent redemption succeeds. Missing/replayed tokens return the existing
+invalid-token error; Redis consumption failures return service unavailable and
+issue no replacement pair. Rotation retains the token family and BindingHash
+rules. A stale request cannot redeem an already consumed or revoked token.

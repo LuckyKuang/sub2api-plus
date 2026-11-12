@@ -310,7 +310,7 @@ func (s *ModelPlazaService) catalogOffer(ctx context.Context, g *Group, ch *Chan
 	// Reference lookup is local and exact-SKU aware; it never refreshes the catalog.
 	if reference.Pricing != nil && reference.Pricing.BillingMode == BillingModeToken {
 		p := reference.Pricing
-		o.OfficialPricing = &PlazaOfficialPricing{InputPrice: p.InputPrice, OutputPrice: p.OutputPrice, CacheWritePrice: p.CacheWritePrice, CacheWrite1hPrice: p.CacheWrite1hPrice, CacheReadPrice: p.CacheReadPrice, Intervals: p.Intervals}
+		o.OfficialPricing = &PlazaOfficialPricing{InputPrice: p.InputPrice, OutputPrice: p.OutputPrice, CacheWritePrice: p.CacheWritePrice, CacheWrite1hPrice: p.CacheWrite1hPrice, CacheWrite12hPrice: p.CacheWrite12hPrice, CacheReadPrice: p.CacheReadPrice, Intervals: p.Intervals}
 	}
 	if o.BillingMode == BillingModeToken {
 		o.PriceTimeMultiplier = catalogPriceTimeMultiplier(resolved, billingModel, asOf)

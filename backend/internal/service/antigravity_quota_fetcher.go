@@ -29,13 +29,12 @@ const (
 
 // AntigravityQuotaFetcher 从 Antigravity API 获取额度
 type AntigravityQuotaFetcher struct {
-	proxyRepo ProxyRepository
-	cfg       *config.Config
+	cfg *config.Config
 }
 
 // NewAntigravityQuotaFetcher 创建 AntigravityQuotaFetcher
-func NewAntigravityQuotaFetcher(proxyRepo ProxyRepository, cfg *config.Config) *AntigravityQuotaFetcher {
-	return &AntigravityQuotaFetcher{proxyRepo: proxyRepo, cfg: cfg}
+func NewAntigravityQuotaFetcher(cfg *config.Config) *AntigravityQuotaFetcher {
+	return &AntigravityQuotaFetcher{cfg: cfg}
 }
 
 // CanFetch 检查是否可以获取此账户的额度
@@ -261,18 +260,6 @@ func buildAntigravityQuotaGroups(summary *antigravity.QuotaSummaryResponse) []*A
 		groups = append(groups, out)
 	}
 	return groups
-}
-
-// GetProxyURL 获取账户的代理 URL
-func (f *AntigravityQuotaFetcher) GetProxyURL(ctx context.Context, account *Account) string {
-	if account.ProxyID == nil || f.proxyRepo == nil {
-		return ""
-	}
-	proxy, err := f.proxyRepo.GetByID(ctx, *account.ProxyID)
-	if err != nil || proxy == nil {
-		return ""
-	}
-	return proxy.URL()
 }
 
 // classifyForbiddenType 根据 403 响应体判断禁止类型

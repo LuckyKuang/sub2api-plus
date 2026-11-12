@@ -4,7 +4,7 @@ import { cloneBillingRatePolicy } from '@/utils/billingRate'
 
 /** Empty price cards configure only policy rates and must not shadow inherited prices. */
 export function hasGroupPriceOverride(entry: PricingFormEntry): boolean {
-  return [entry.input_price, entry.output_price, entry.cache_write_price, entry.cache_write_1h_price,
+  return [entry.input_price, entry.output_price, entry.cache_write_price, entry.cache_write_1h_price, entry.cache_write_12h_price,
     entry.cache_read_price, entry.image_input_price, entry.image_output_price, entry.per_request_price,
     entry.fast_multiplier, entry.flex_multiplier]
     .some(value => value !== null && value !== undefined && value !== '') ||

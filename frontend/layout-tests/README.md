@@ -80,3 +80,8 @@ The server and browser processes stop when Playwright exits. The outer
 validation launcher owns removal of its one-shot container and temporary output
 directory (`SUB2API_LAYOUT_OUTPUT_DIR`, default `/tmp/sub2api-layout-results`).
 No screenshots, traces or videos are retained.
+
+The actual Settings page also checks its save dock at desktop and 375px widths
+in both themes and English/Chinese: the final visible field and save button
+remain in view and can receive pointer input, the dock stays within the viewport,
+and a save reaches the settings API.

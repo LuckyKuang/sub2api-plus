@@ -10,8 +10,10 @@ func TestIsSupportedCLIVersion(t *testing.T) {
 		version string
 		want    bool
 	}{
-		{"内置基线本身", CLICurrentVersion, true},
-		{"高于基线的补丁位", "2.1.259", true},
+		{"内置基线本身", "2.1.321", true},
+		{"前一补丁版本", "2.1.320", false},
+		{"旧编译基线", "2.1.258", false},
+		{"高于基线的补丁位", "2.1.322", true},
 		{"高于基线的次版本", "2.2.0", true},
 		{"高于基线的主版本", "3.0.0", true},
 		{"低于基线", "2.1.219", false},
@@ -41,13 +43,13 @@ func TestResolveCLIVersion(t *testing.T) {
 		raw  string
 		want string
 	}{
-		{"未配置时用内置基线", "", CLICurrentVersion},
-		{"只有空白等同未配置", "   ", CLICurrentVersion},
-		{"合法覆盖生效", "2.1.259", "2.1.259"},
-		{"两侧空白被裁掉", "  2.1.259  ", "2.1.259"},
-		{"非法值回落基线", "not-a-version", CLICurrentVersion},
-		{"向下覆盖被拒", "2.0.0", CLICurrentVersion},
-		{"预发布后缀被拒（会毒化账号指纹）", "2.2.0-local", CLICurrentVersion},
+		{"未配置时用内置基线", "", "2.1.321"},
+		{"只有空白等同未配置", "   ", "2.1.321"},
+		{"合法覆盖生效", "2.1.322", "2.1.322"},
+		{"两侧空白被裁掉", "  2.1.322  ", "2.1.322"},
+		{"非法值回落基线", "not-a-version", "2.1.321"},
+		{"向下覆盖被拒", "2.0.0", "2.1.321"},
+		{"预发布后缀被拒（会毒化账号指纹）", "2.2.0-local", "2.1.321"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -61,15 +63,15 @@ func TestResolveCLIVersion(t *testing.T) {
 // 伪装身份的自洽性：User-Agent 头里的版本号必须与 CLIVersion() 一致。
 // 两者由不同代码路径写入同一个请求，不一致会被上游判为非正版客户端。
 func TestDefaultHeadersUserAgentMatchesCLIVersion(t *testing.T) {
-	want := "claude-cli/" + CLIVersion() + " (external, cli)"
+	want := "claude-cli/2.1.321 (external, cli)"
 	if got := DefaultHeaders()["User-Agent"]; got != want {
 		t.Fatalf("DefaultHeaders[User-Agent] = %q, want %q", got, want)
 	}
 }
 
-// 没有配置覆盖时，CLIVersion() 必须等于内置基线——保证本 PR 对既有部署零行为变化。
+// The default identity pin is independently specified, not derived from production constants.
 func TestCLIVersionDefaultsToBuiltinPin(t *testing.T) {
-	if got := CLIVersion(); got != CLICurrentVersion {
+	if got := CLIVersion(); got != "2.1.321" {
 		t.Fatalf("CLIVersion() = %q, want built-in pin %q (测试进程未设置 %s)", got, CLICurrentVersion, CLIVersionEnv)
 	}
 }

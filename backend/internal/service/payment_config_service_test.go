@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"math"
 	"strings"
 	"testing"
 
@@ -555,4 +556,65 @@ func TestUpdatePaymentConfig_PersistsExplicitEmptyAndFalseValues(t *testing.T) {
 
 func paymentConfigStrPtr(value string) *string {
 	return &value
+}
+
+func TestUpdatePaymentConfig_PersistsBalanceRechargeMultiplierWithUpToSixDecimals(t *testing.T) {
+	tests := []struct {
+		name       string
+		multiplier float64
+		want       string
+	}{
+		{"six decimals", 0.140845, "0.140845"},
+		{"two decimals", 0.15, "0.15"},
+		{"float artifact", 0.1 + 0.2, "0.3"},
+		{"integer", 1, "1"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &paymentConfigSettingRepoStub{}
+			svc := &PaymentConfigService{settingRepo: repo}
+			multiplier := tt.multiplier
+
+			err := svc.UpdatePaymentConfig(context.Background(), UpdatePaymentConfigRequest{
+				BalanceRechargeMultiplier: &multiplier,
+			})
+			if err != nil {
+				t.Fatalf("UpdatePaymentConfig returned error: %v", err)
+			}
+			if got := repo.updates[SettingBalanceRechargeMult]; got != tt.want {
+				t.Fatalf("stored multiplier = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestUpdatePaymentConfig_RejectsBalanceRechargeMultiplierWithMoreThanSixDecimals(t *testing.T) {
+	repo := &paymentConfigSettingRepoStub{}
+	svc := &PaymentConfigService{settingRepo: repo}
+	multiplier := 0.1408454
+
+	err := svc.UpdatePaymentConfig(context.Background(), UpdatePaymentConfigRequest{
+		BalanceRechargeMultiplier: &multiplier,
+	})
+	if err == nil {
+		t.Fatal("expected UpdatePaymentConfig to reject more than 6 decimal places")
+	}
+	if _, ok := repo.updates[SettingBalanceRechargeMult]; ok {
+		t.Fatalf("multiplier was persisted despite validation error: %q", repo.updates[SettingBalanceRechargeMult])
+	}
+}
+
+// Six-decimal storage must never turn a positive input into zero or infinity.
+func TestUpdatePaymentConfig_RejectsUnrepresentableRechargeMultiplier(t *testing.T) {
+	for _, multiplier := range []float64{1e-13, math.MaxFloat64} {
+		repo := &paymentConfigSettingRepoStub{}
+		svc := &PaymentConfigService{settingRepo: repo}
+		err := svc.UpdatePaymentConfig(context.Background(), UpdatePaymentConfigRequest{BalanceRechargeMultiplier: &multiplier})
+		if err == nil {
+			t.Fatalf("accepted unrepresentable multiplier %g", multiplier)
+		}
+		if len(repo.updates) != 0 {
+			t.Fatalf("invalid multiplier wrote settings: %v", repo.updates)
+		}
+	}
 }

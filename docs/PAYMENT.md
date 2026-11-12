@@ -83,6 +83,10 @@ never participate. Amounts and percentages reuse the existing decimal and curren
 precision rules, and the promotion notice is sanitized with DOMPurify before it is
 rendered on the payment page.
 
+Recharge discount multipliers accept up to six decimal places consistently
+in settings, checkout calculation and frontend parsing; currency rounding and
+order/refund idempotency retain their existing rules.
+
 Each setting can also be provided as the same-named deployment environment variable
 (see `deploy/.env.example`); unset or blank keeps the value saved in Admin Settings.
 
@@ -165,6 +169,10 @@ Each provider type requires different credentials. Select the type when adding a
 ### EasyPay
 
 Compatible with any payment service that implements the EasyPay protocol.
+Refund success defaults to response code `1`. A provider instance may explicitly
+configure `refundSuccessCode` as `0` for compatible implementations; other
+codes fail. This affects refund API response handling only and never changes
+payment-notification signature validation or fulfillment.
 
 Notifications accept only the standard EasyPay fields (`pid`, `trade_no`,
 `out_trade_no`, `type`, `name`, `money`, `trade_status`, `param`, `sign`,
@@ -416,3 +424,5 @@ Consumption, benefits, a COMPLETED order and `REDEEM_ORDER_COMPLETED` audit comm
 Admin/user order lists and the dashboard support `order_source` filters, defaulting to both sources; unknown sources return 400 (`INVALID_ORDER_SOURCE`). Currency totals remain separate: 100 CNY redemption + 50 CNY payment + 20 USD payment = 3 orders, CNY150, USD20. Redemption does not use actual-payment limits. Every refund boundary, including forced admin refunds, returns `REDEEM_ORDER_REFUND_DISABLED` before provider lookup, deductions or state changes; UI refund controls are hidden.
 
 Subscription redemption invalidates the local entitlement cache and Redis/cross-instance caches only after the outer redemption transaction commits. A failed order or audit write leaves the prior entitlement and its valid cache intact. The next eligibility lookup after successful redemption reads the committed entitlement; cache notification failures are logged without reporting an already committed redemption as failed.
+
+Recharge multiplier storage rejects values that round to zero at six decimal places or overflow during normalization.
