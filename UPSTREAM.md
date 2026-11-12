@@ -152,10 +152,13 @@ of a new release.
 
 ## Current Version
 
+These identifiers describe the current planned source revision. Its tag and
+image are not published; the mapping status below governs publication.
+
 ```text
-Git/GitHub candidate: v0.2.21+custom.001 (planned)
+Git/GitHub: v0.2.21+custom.001
 Application: 0.2.21+custom.001
-GHCR candidate: ghcr.io/luckykuang/sub2api-plus:v0.2.21-custom.001 (not published)
+GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.21-custom.001
 ```
 
 ## Release Mapping
