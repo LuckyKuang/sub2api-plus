@@ -151,7 +151,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import { computed, nextTick, onBeforeUnmount, onMounted, onUpdated, ref, watch, type ComponentPublicInstance } from 'vue'
-import { defaultRangeExtractor, observeElementRect, useVirtualizer } from '@tanstack/vue-virtual'
+import { defaultRangeExtractor, observeElementOffset, observeElementRect, useVirtualizer } from '@tanstack/vue-virtual'
 import MatrixTooltip from './MatrixTooltip.vue'
 import type {
   LatencyMetric,
@@ -252,6 +252,18 @@ const rowVirtualizer = useVirtualizer(computed(() => {
       viewportWidth.value = rect.width
       callback(rect)
     }),
+  observeElementOffset: (instance: Parameters<typeof observeElementOffset<HTMLElement>>[0], callback: Parameters<typeof observeElementOffset<HTMLElement>>[1]) => {
+    // The upstream observer leaves a debounced scroll-end callback queued after
+    // cleanup. A detached viewport must never update its replacement's range.
+    let active = true
+    const cleanup = observeElementOffset(instance, (offset, isScrolling) => {
+      if (active) callback(offset, isScrolling)
+    })
+    return () => {
+      active = false
+      cleanup?.()
+    }
+  },
   rangeExtractor: (range: Parameters<typeof defaultRangeExtractor>[0]) => {
     const indexes = defaultRangeExtractor(range)
     // Retain the source until focus reaches the requested row. A real browser
