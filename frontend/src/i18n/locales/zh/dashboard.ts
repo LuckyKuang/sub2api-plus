@@ -142,6 +142,10 @@ export default {
     keyDisabledSuccess: 'API 密钥已禁用',
     failedToLoad: '加载 API 密钥失败',
     failedToSave: '保存 API 密钥失败',
+    errors: {
+      API_KEY_COUNT_EXCEEDED: 'API 密钥数量已达上限，请先删除不用的密钥再创建。',
+      API_KEY_CREATE_RATE_LIMITED: '近期创建 API 密钥过于频繁，请稍后再试。'
+    },
     failedToDelete: '删除 API 密钥失败',
     failedToUpdateStatus: '更新 API 密钥状态失败',
     clickToChangeGroup: '点击更换分组',

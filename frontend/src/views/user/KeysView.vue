@@ -1199,6 +1199,7 @@ import type { Column } from '@/components/common/types'
 import type { BatchApiKeyUsageStats } from '@/api/usage'
 import { formatDateTime } from '@/utils/format'
 import { maskApiKey } from '@/utils/maskApiKey'
+import { extractI18nErrorMessage } from '@/utils/apiError'
 import PlatformIcon from '@/components/common/PlatformIcon.vue'
 import { platformBadgeLightClass } from '@/utils/platformColors'
 import { KEY_GROUP_PROVIDERS, KEY_GROUP_PROVIDER_ICONS, getKeyGroupProvider, type KeyGroupProvider } from '@/utils/keyGroupProviders'
@@ -1884,9 +1885,8 @@ const handleSubmit = async () => {
     }
     closeModals()
     loadApiKeys()
-  } catch (error: any) {
-    const errorMsg = error.response?.data?.detail || t('keys.failedToSave')
-    appStore.showError(errorMsg)
+  } catch (error: unknown) {
+    appStore.showError(extractI18nErrorMessage(error, t, 'keys.errors', t('keys.failedToSave')))
     // Don't advance tour on error
   } finally {
     submitting.value = false
