@@ -380,6 +380,19 @@ the sampler; billing refresh uses the official billing endpoint. Neither path
 invents subscription quota values. Before a usable upstream observation, quota
 remains unknown while local usage is still shown.
 
+The account-list usage window prefers official weekly/monthly billing progress.
+If neither billing percentage is available, non-Free OAuth accounts show usable
+request/token rate-limit observations as **xAI rate-limit remaining**, including
+remaining/limit counts, remaining percentages and reset times when supplied.
+A `billing_observed` snapshot does not hide those headers: unified billing can
+return a valid weekly period and zero legacy monthly amounts without a usable
+`creditUsagePercent`. A missing percentage stays unknown; it must not become a
+fabricated 0% weekly usage value. The header quotas are separate from the
+subscription's weekly/monthly allowance. Missing or invalid header counts do
+not produce quota bars. Free accounts retain their rolling local 24-hour gate.
+Manual **Probe** refreshes the account-list usage batch so newly observed header
+quotas replace the unavailable-data message.
+
 Active quota probes and billing requests deep-copy the loaded credential owner
 and strictly validate its captured proxy before token lookup or refresh. A
 missing, mismatched or malformed binding fails without provider requests or

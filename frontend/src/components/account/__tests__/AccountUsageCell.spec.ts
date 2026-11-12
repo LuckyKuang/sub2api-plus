@@ -1,17 +1,19 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import AccountUsageCell from '../AccountUsageCell.vue'
-import type { Account } from '@/types'
+import type { Account, AccountUsageInfo } from '@/types'
 
-const { getUsage } = vi.hoisted(() => ({
-  getUsage: vi.fn()
+const { getUsage, queryQuota } = vi.hoisted(() => ({
+  getUsage: vi.fn(),
+  queryQuota: vi.fn()
 }))
 
 vi.mock('@/api/admin', () => ({
   adminAPI: {
     accounts: {
       getUsage
-    }
+    },
+    grok: { queryQuota }
   }
 }))
 
@@ -91,6 +93,7 @@ const cnUsageCellStubs = {
 describe('AccountUsageCell', () => {
   beforeEach(() => {
     getUsage.mockReset()
+    queryQuota.mockReset()
     Object.defineProperty(window, 'matchMedia', {
       writable: true,
       value: vi.fn().mockImplementation(() => ({
@@ -1012,8 +1015,22 @@ describe('AccountUsageCell', () => {
 		expect(badges.some(node => node.attributes('title') === 'usage.userBilled')).toBe(true)
   })
 
-  it('Grok OAuth compact UI drops local chips and header quota bars', async () => {
+  it('Grok OAuth shows observed header quotas when billing has no usable allowance', async () => {
+    // Regression: a SuperGrok unified-billing response may contain a weekly
+    // period but no usage percentage and only zero legacy monthly amounts.
+    // Requirement: display the actual xAI header quotas after probing; do not
+    // claim that headers are still awaited or invent a weekly percentage.
     getUsage.mockResolvedValue({
+      subscription_tier: 'supergrok',
+      grok_billing: {
+        period_type: 'weekly',
+        period_start: '2026-11-11T02:00:00Z',
+        period_end: '2026-11-18T02:00:00Z',
+        is_unified_billing_user: true,
+        monthly_limit_cents: 0,
+        used_cents: 0,
+        prepaid_balance: 0
+      },
       grok_local_usage: {
         requests: 4,
         tokens: 1200,
@@ -1022,11 +1039,11 @@ describe('AccountUsageCell', () => {
         user_cost: 0.34
       },
       grok_request_quota: {
-        limit: 10,
-        remaining: -2,
-        reset_at: '2026-07-09T16:00:00Z'
+        limit: 8300,
+        remaining: 8300
       },
-      grok_quota_snapshot_state: 'observed'
+      grok_token_quota: { limit: 53_000_000, remaining: 53_000_000 },
+      grok_quota_snapshot_state: 'billing_observed'
     })
 
     const wrapper = mount(AccountUsageCell, {
@@ -1036,8 +1053,8 @@ describe('AccountUsageCell', () => {
       global: {
         stubs: {
           UsageProgressBar: {
-            props: ['label', 'utilization', 'resetsAt', 'color'],
-            template: '<div class="usage-bar">{{ label }}|{{ utilization }}|{{ resetsAt }}</div>'
+            props: ['label', 'utilization', 'resetsAt', 'remainingCapacity'],
+            template: '<div class="usage-bar">{{ label }}|{{ utilization }}|{{ remainingCapacity }}</div>'
           },
           AccountQuotaInfo: true
         }
@@ -1047,7 +1064,144 @@ describe('AccountUsageCell', () => {
     await flushPromises()
     expect(getUsage).toHaveBeenCalledWith(3861)
     expect(wrapper.text()).not.toContain('4 req')
-    expect(wrapper.text()).not.toContain('admin.accounts.usageWindow.grokRequests|')
+    expect(wrapper.text()).toContain('admin.accounts.usageWindow.grokRequests|100|true')
+    expect(wrapper.text()).toContain('admin.accounts.usageWindow.grokTokens|100|true')
+    expect(wrapper.text()).toContain('8.3K / 8.3K')
+    expect(wrapper.text()).toContain('53.0M / 53.0M')
+    expect(wrapper.text()).not.toContain('admin.accounts.usageWindow.grokUnknown')
+    expect(wrapper.text()).not.toContain('7d|')
+    expect(wrapper.text()).not.toContain('30d|')
+  })
+
+  it.each([
+    { name: 'partly used', limit: 100, remaining: 25, percent: 25, amount: '25 / 100' },
+    { name: 'exhausted', limit: 100, remaining: 0, percent: 0, amount: '0 / 100' },
+    { name: 'negative remaining', limit: 100, remaining: -2, percent: 0, amount: '0 / 100' },
+    { name: 'remaining above limit', limit: 100, remaining: 101, percent: 100, amount: '100 / 100' }
+  ])('Grok header fallback displays $name with bounded remaining capacity', async ({ limit, remaining, percent, amount }) => {
+    // Requirement: use observed remaining/limit, including exhaustion, rather
+    // than inventing a subscription percentage from local usage or periods.
+    const wrapper = mount(AccountUsageCell, {
+      props: {
+        account: makeAccount({ id: 4420, platform: 'grok', type: 'oauth', extra: {} }),
+        requestBatchedUsage: vi.fn(),
+        batchedUsage: {
+          subscription_tier: 'supergrok',
+          grok_token_quota: { limit, remaining },
+          grok_quota_snapshot_state: 'billing_observed'
+        } as AccountUsageInfo
+      },
+      global: {
+        stubs: {
+          UsageProgressBar: {
+            props: ['label', 'utilization', 'remainingCapacity'],
+            template: '<div class="usage-bar">{{ label }}|{{ utilization }}|{{ remainingCapacity }}</div>'
+          },
+          AccountQuotaInfo: true
+        }
+      }
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(`admin.accounts.usageWindow.grokTokens|${percent}|true`)
+    expect(wrapper.text()).toContain(amount)
+    expect(wrapper.text()).not.toContain('admin.accounts.usageWindow.grokUnknown')
+    wrapper.unmount()
+  })
+
+  it.each([
+    { reset: { reset_at: '2026-12-01T00:00:00Z' }, expected: '2026-12-01T00:00:00.000Z' },
+    { reset: { reset_unix: 1796083200 }, expected: '2026-12-01T00:00:00.000Z' },
+    { reset: {}, expected: null },
+    { reset: { reset_at: 'invalid' }, expected: null }
+  ])('Grok header fallback only shows an observed valid reset time: $reset', async ({ reset, expected }) => {
+    const wrapper = mount(AccountUsageCell, {
+      props: {
+        account: makeAccount({ id: 4423, platform: 'grok', type: 'oauth', extra: {} }),
+        requestBatchedUsage: vi.fn(),
+        batchedUsage: {
+          subscription_tier: 'supergrok',
+          grok_token_quota: { limit: 100, remaining: 25, ...reset }
+        } as AccountUsageInfo
+      },
+      global: { stubs: { UsageProgressBar: true, AccountQuotaInfo: true } }
+    })
+    await flushPromises()
+
+    expect(wrapper.findComponent({ name: 'UsageProgressBar' }).props('resetsAt')).toBe(expected)
+    wrapper.unmount()
+  })
+
+  it.each([
+    { limit: 0, remaining: 0 },
+    { limit: -1, remaining: 10 },
+    { limit: 100, remaining: null },
+    { limit: null, remaining: 10 },
+    { limit: Infinity, remaining: 10 },
+    { limit: 100, remaining: NaN }
+  ])('Grok does not display incomplete or invalid header quotas: %j', async (quota) => {
+    const wrapper = mount(AccountUsageCell, {
+      props: {
+        account: makeAccount({ id: 4421, platform: 'grok', type: 'oauth', extra: {} }),
+        requestBatchedUsage: vi.fn(),
+        batchedUsage: {
+          subscription_tier: 'supergrok',
+          grok_billing: { period_type: 'weekly', is_unified_billing_user: true },
+          grok_token_quota: quota,
+          grok_quota_snapshot_state: 'billing_observed'
+        } as AccountUsageInfo
+      },
+      global: { stubs: { UsageProgressBar: true, AccountQuotaInfo: true } }
+    })
+    await flushPromises()
+
+    expect(wrapper.findComponent({ name: 'UsageProgressBar' }).exists()).toBe(false)
+    expect(wrapper.text()).toContain('admin.accounts.usageWindow.grokBillingQuotaUnavailable')
+    expect(wrapper.text()).not.toContain('admin.accounts.usageWindow.grokUnknown')
+    wrapper.unmount()
+  })
+
+  it('Grok manual probe refreshes the account-list batch and replaces the unknown message with quotas', async () => {
+    // Requirement: reproduce the real desktop account-list flow, including
+    // the probe button, forced parent batch refresh, and refreshed usage prop.
+    const account = makeAccount({ id: 4422, platform: 'grok', type: 'oauth', extra: {} })
+    const requestBatchedUsage = vi.fn()
+    queryQuota.mockResolvedValue({
+      source: 'hybrid_probe',
+      headers_observed: true,
+      snapshot: { tokens: { limit: 1000, remaining: 250 } }
+    })
+    const wrapper = mount(AccountUsageCell, {
+      props: {
+        account,
+        requestBatchedUsage,
+        batchedUsage: { subscription_tier: 'supergrok' } as AccountUsageInfo
+      },
+      global: { stubs: { AccountQuotaInfo: true } }
+    })
+    await flushPromises()
+    expect(wrapper.text()).toContain('admin.accounts.usageWindow.grokUnknown')
+    requestBatchedUsage.mockClear()
+
+    await wrapper.get('button').trigger('click')
+    await flushPromises()
+    expect(queryQuota).toHaveBeenCalledWith(account.id)
+    expect(requestBatchedUsage).toHaveBeenCalledWith(account, { force: true })
+
+    await wrapper.setProps({
+      batchedUsage: {
+        subscription_tier: 'supergrok',
+        grok_billing: { period_type: 'weekly', is_unified_billing_user: true },
+        grok_quota_snapshot_state: 'billing_observed',
+        grok_token_quota: { limit: 1000, remaining: 250, reset_at: '2026-12-01T00:00:00Z' }
+      } as AccountUsageInfo
+    })
+
+    expect(wrapper.text()).toContain('250 / 1.0K')
+    expect(wrapper.text()).toContain('25%')
+    expect(wrapper.text()).not.toContain('admin.accounts.usageWindow.grokUnknown')
+    expect(wrapper.findAll('[style="width: 25%;"]')).toHaveLength(1)
+    wrapper.unmount()
   })
 
   it('Grok paid monthly limits show 30d bar without free 24h', async () => {
