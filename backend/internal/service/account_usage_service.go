@@ -415,11 +415,7 @@ func (s *AccountUsageService) getUsageForAccount(ctx context.Context, account *A
 
 	// Antigravity 平台：使用 AntigravityQuotaFetcher 获取额度
 	if account.Platform == PlatformAntigravity {
-		usage, err := s.getAntigravityUsage(ctx, account, forceProbe)
-		if err == nil {
-			s.tryClearRecoverableAccountError(ctx, account)
-		}
-		return usage, err
+		return s.getAntigravityUsage(ctx, account, forceProbe)
 	}
 
 	if account.Platform == PlatformGrok {
@@ -1213,7 +1209,11 @@ func (s *AccountUsageService) getAntigravityUsage(ctx context.Context, account *
 			return degraded, nil
 		}
 
-		enrichUsageWithAccountError(fetchResult.UsageInfo, account)
+		usage := fetchResult.UsageInfo
+		if usage != nil && usage.Error == "" && usage.ErrorCode == "" && !usage.IsForbidden {
+			s.tryClearAntigravityUsageError(fetchCtx, account)
+		}
+		enrichUsageWithAccountError(usage, account)
 		s.cache.antigravityCache.Store(account.ID, &antigravityUsageCache{
 			generation: generation,
 			usageInfo:  fetchResult.UsageInfo,
@@ -1753,24 +1753,37 @@ func parseTime(s string) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("unable to parse time: %s", s)
 }
 
+func recoverableUsageError(account *Account) bool {
+	if account == nil || account.Status != StatusError {
+		return false
+	}
+	msg := strings.ToLower(strings.TrimSpace(account.ErrorMessage))
+	return strings.Contains(msg, "token refresh failed") || strings.Contains(msg, "invalid_client") ||
+		strings.Contains(msg, "missing_project_id") || strings.Contains(msg, "unauthenticated")
+}
+
+// Only a fresh successful quota fetch can recover the same saved grant/error.
+// Cache hits and degraded/forbidden results provide no recovery evidence.
+func (s *AccountUsageService) tryClearAntigravityUsageError(ctx context.Context, owner *Account) {
+	if adminaccess.RestrictedFromContext(ctx) != nil || !recoverableUsageError(owner) {
+		return
+	}
+	writer, ok := s.accountRepo.(CredentialErrorRecoveryRepository)
+	if !ok {
+		return
+	}
+	cleared, err := writer.ClearCredentialErrorIfUnchanged(ctx, owner)
+	if err != nil {
+		slog.Warn("antigravity_usage_recovery_failed", "account_id", owner.ID, "error", err)
+	} else if cleared {
+		owner.Status = StatusActive
+		owner.ErrorMessage = ""
+	}
+}
+
 func (s *AccountUsageService) tryClearRecoverableAccountError(ctx context.Context, account *Account) {
 	// 额度读取不能隐式恢复账户状态或调度。
-	if adminaccess.RestrictedFromContext(ctx) != nil {
-		return
-	}
-	if account == nil || account.Status != StatusError {
-		return
-	}
-
-	msg := strings.ToLower(strings.TrimSpace(account.ErrorMessage))
-	if msg == "" {
-		return
-	}
-
-	if !strings.Contains(msg, "token refresh failed") &&
-		!strings.Contains(msg, "invalid_client") &&
-		!strings.Contains(msg, "missing_project_id") &&
-		!strings.Contains(msg, "unauthenticated") {
+	if adminaccess.RestrictedFromContext(ctx) != nil || !recoverableUsageError(account) {
 		return
 	}
 

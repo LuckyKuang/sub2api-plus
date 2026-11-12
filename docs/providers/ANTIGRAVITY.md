@@ -74,3 +74,10 @@ or any direct request. Usage cache and concurrent refresh sharing are bound to
 the complete credential/proxy generation, so a late response for an old grant
 cannot be returned for a replacement grant. Cached countdowns are recalculated
 on a private progress value.
+
+Only a fresh, successful, non-forbidden quota response may clear a recoverable
+account error. Recovery atomically compares the saved credentials, platform,
+account type, complete proxy route and exact observed error; a concurrent token
+rotation, proxy repair or newer error prevents the write. The scheduler outbox
+commits with that write, while scheduling flags and cooldowns remain unchanged.
+Cache hits, degraded responses and scoped admin reads never recover an account.

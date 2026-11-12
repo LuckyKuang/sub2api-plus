@@ -100,3 +100,47 @@ func (r *accountRepository) SetCredentialTempUnschedulableIfUnchanged(ctx contex
 	r.deleteSchedulerAccountSnapshotDetached(ctx, id)
 	return true, nil
 }
+
+// ClearCredentialErrorIfUnchanged recovers only the grant/error whose fresh
+// quota request succeeded. The observed proxy is locked through the account
+// update and durable outbox insert; newer credentials, routes and errors win.
+// Scheduling flags and cooldowns are intentionally preserved.
+func (r *accountRepository) ClearCredentialErrorIfUnchanged(ctx context.Context, owner *service.Account) (bool, error) {
+	if err := validateCredentialMutationOwner(owner); err != nil {
+		return false, err
+	}
+	if owner.Status != service.StatusError {
+		return false, nil
+	}
+	expected, err := json.Marshal(normalizeJSONMap(owner.Credentials))
+	if err != nil {
+		return false, err
+	}
+	args := []any{service.StatusActive, owner.ID, service.StatusError, owner.ErrorMessage, owner.Platform, owner.Type, string(expected), owner.ProxyID, service.SchedulerOutboxEventAccountChanged}
+	proxyPredicate, args, err := credentialMutationProxyPredicate(owner.ProxyID, owner.Proxy, 8, args)
+	if err != nil {
+		return false, err
+	}
+	result, err := r.sql.ExecContext(ctx, `
+		WITH updated AS (
+		UPDATE accounts AS a
+		SET status = $1, error_message = '', updated_at = NOW()
+		WHERE a.id = $2 AND a.deleted_at IS NULL AND a.status = $3
+			AND COALESCE(a.error_message, '') = $4 AND a.platform = $5 AND a.type = $6
+			AND a.credentials = $7::jsonb AND a.proxy_id IS NOT DISTINCT FROM $8
+			AND `+proxyPredicate+`
+		RETURNING a.id
+		)
+		INSERT INTO scheduler_outbox (event_type, account_id, group_id, payload)
+		SELECT $9, updated.id, NULL, NULL FROM updated
+	`, args...)
+	if err != nil {
+		return false, err
+	}
+	changed, err := result.RowsAffected()
+	if err != nil || changed == 0 {
+		return false, err
+	}
+	r.deleteSchedulerAccountSnapshotDetached(ctx, owner.ID)
+	return true, nil
+}

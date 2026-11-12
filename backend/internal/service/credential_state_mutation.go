@@ -32,6 +32,13 @@ type CredentialStateMutationRepository interface {
 	ApplyCredentialStateMutation(context.Context, *Account, CredentialStateMutation) (bool, error)
 }
 
+// CredentialErrorRecoveryRepository clears only the observed error for the
+// same saved credential and proxy, atomically with its scheduler notification.
+// Unsupported repositories must not fall back to an unconditional ClearError.
+type CredentialErrorRecoveryRepository interface {
+	ClearCredentialErrorIfUnchanged(context.Context, *Account) (bool, error)
+}
+
 func credentialStateGeneration(account *Account) string {
 	if account == nil {
 		return ""
