@@ -11,8 +11,9 @@ The current tree integrates official `v0.2.21`, peeled commit
 `dab829a4e9b7d1cc307189aea8b0319eb29e29d0`. The sync branch starts at
 Plus main `86db896584174e19c44a85ec3becf80c15bd0d33`.
 Plus remains authoritative when upstream behavior conflicts with an intentional
-Plus contract. The candidate release is `v0.2.21+custom.001`, with status
-`planned`; integration and local validation do not publish artifacts.
+Plus contract. This integration prepares `v0.2.21+custom.001`; its publication
+status is recorded in the mapping table below. Integration and local validation
+do not publish artifacts.
 Post-tag official main is excluded.
 
 The v0.2.21 import adds disjoint OpenAI 30-minute/12-hour cache-write meters and
