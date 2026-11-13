@@ -1,4 +1,5 @@
 import { readdirSync, readFileSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
 import { dirname, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -1110,14 +1111,22 @@ describe('UsageView xlsx audit exception', () => {
       return fullPath === guardFile ? [] : [fullPath]
     })
 
-  it('parses no spreadsheet input anywhere under frontend/src', () => {
+  it('parses no spreadsheet input anywhere under frontend/src', async () => {
     const offenders: string[] = []
-    for (const file of collectSourceFiles(srcRoot)) {
-      const source = readFileSync(file, 'utf8')
-      if (!XLSX_SPECIFIER.test(source)) continue
-      for (const pattern of XLSX_PARSE_PATTERNS) {
-        if (pattern.test(source)) {
-          offenders.push(`${relative(frontendRoot, file)}: ${pattern.source}`)
+    const files = collectSourceFiles(srcRoot)
+    // Bound parallel reads so WSL-mounted sources do not serialize every file
+    // behind filesystem latency or exhaust descriptors on larger source trees.
+    for (let offset = 0; offset < files.length; offset += 32) {
+      const sources = await Promise.all(files.slice(offset, offset + 32).map(async (file) => ({
+        file,
+        source: await readFile(file, 'utf8'),
+      })))
+      for (const { file, source } of sources) {
+        if (!XLSX_SPECIFIER.test(source)) continue
+        for (const pattern of XLSX_PARSE_PATTERNS) {
+          if (pattern.test(source)) {
+            offenders.push(`${relative(frontendRoot, file)}: ${pattern.source}`)
+          }
         }
       }
     }
