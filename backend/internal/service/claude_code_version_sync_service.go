@@ -193,7 +193,7 @@ func (s *ClaudeCodeVersionSyncService) autoSyncEnabled(ctx context.Context) bool
 
 // latestClaudeCodeStableReleaseVersion 从 release 列表里挑出最大的稳定版 CLI 版本号。
 // 过滤条件：tag 前缀为 v、非草稿、非预发布、版本号须通过 NormalizeClaudeCodeClientVersion
-// （严格三段纯数字 semver，且不低于内置基线）。取最大值而非最新发布，
+// （严格三段纯数字 semver，且不低于固定支持下限）。取最大值而非最新发布，
 // 避免重新发布历史 tag 造成回退。
 // 主路径的单条 /releases/latest 结果也走本函数（单元素切片），保证两条取数路径的过滤语义一致。
 func latestClaudeCodeStableReleaseVersion(releases []*GitHubRelease) string {

@@ -2236,116 +2236,124 @@ func init() {
 	usagelogDescResponseServiceTier := usagelogFields[23].Descriptor()
 	// usagelog.ResponseServiceTierValidator is a validator for the "response_service_tier" field. It is called by the builders before save.
 	usagelog.ResponseServiceTierValidator = usagelogDescResponseServiceTier.Validators[0].(func(string) error)
+	// usagelogDescCacheCreation30mTokens is the schema descriptor for cache_creation_30m_tokens field.
+	usagelogDescCacheCreation30mTokens := usagelogFields[25].Descriptor()
+	// usagelog.DefaultCacheCreation30mTokens holds the default value on creation for the cache_creation_30m_tokens field.
+	usagelog.DefaultCacheCreation30mTokens = usagelogDescCacheCreation30mTokens.Default.(int)
+	// usagelogDescCacheCreation12hTokens is the schema descriptor for cache_creation_12h_tokens field.
+	usagelogDescCacheCreation12hTokens := usagelogFields[26].Descriptor()
+	// usagelog.DefaultCacheCreation12hTokens holds the default value on creation for the cache_creation_12h_tokens field.
+	usagelog.DefaultCacheCreation12hTokens = usagelogDescCacheCreation12hTokens.Default.(int)
 	// usagelogDescInputCost is the schema descriptor for input_cost field.
-	usagelogDescInputCost := usagelogFields[25].Descriptor()
+	usagelogDescInputCost := usagelogFields[27].Descriptor()
 	// usagelog.DefaultInputCost holds the default value on creation for the input_cost field.
 	usagelog.DefaultInputCost = usagelogDescInputCost.Default.(float64)
 	// usagelogDescOutputCost is the schema descriptor for output_cost field.
-	usagelogDescOutputCost := usagelogFields[26].Descriptor()
+	usagelogDescOutputCost := usagelogFields[28].Descriptor()
 	// usagelog.DefaultOutputCost holds the default value on creation for the output_cost field.
 	usagelog.DefaultOutputCost = usagelogDescOutputCost.Default.(float64)
 	// usagelogDescCacheCreationCost is the schema descriptor for cache_creation_cost field.
-	usagelogDescCacheCreationCost := usagelogFields[27].Descriptor()
+	usagelogDescCacheCreationCost := usagelogFields[29].Descriptor()
 	// usagelog.DefaultCacheCreationCost holds the default value on creation for the cache_creation_cost field.
 	usagelog.DefaultCacheCreationCost = usagelogDescCacheCreationCost.Default.(float64)
 	// usagelogDescCacheReadCost is the schema descriptor for cache_read_cost field.
-	usagelogDescCacheReadCost := usagelogFields[28].Descriptor()
+	usagelogDescCacheReadCost := usagelogFields[30].Descriptor()
 	// usagelog.DefaultCacheReadCost holds the default value on creation for the cache_read_cost field.
 	usagelog.DefaultCacheReadCost = usagelogDescCacheReadCost.Default.(float64)
 	// usagelogDescTotalCost is the schema descriptor for total_cost field.
-	usagelogDescTotalCost := usagelogFields[29].Descriptor()
+	usagelogDescTotalCost := usagelogFields[31].Descriptor()
 	// usagelog.DefaultTotalCost holds the default value on creation for the total_cost field.
 	usagelog.DefaultTotalCost = usagelogDescTotalCost.Default.(float64)
 	// usagelogDescActualCost is the schema descriptor for actual_cost field.
-	usagelogDescActualCost := usagelogFields[30].Descriptor()
+	usagelogDescActualCost := usagelogFields[32].Descriptor()
 	// usagelog.DefaultActualCost holds the default value on creation for the actual_cost field.
 	usagelog.DefaultActualCost = usagelogDescActualCost.Default.(float64)
 	// usagelogDescRateMultiplier is the schema descriptor for rate_multiplier field.
-	usagelogDescRateMultiplier := usagelogFields[31].Descriptor()
+	usagelogDescRateMultiplier := usagelogFields[33].Descriptor()
 	// usagelog.DefaultRateMultiplier holds the default value on creation for the rate_multiplier field.
 	usagelog.DefaultRateMultiplier = usagelogDescRateMultiplier.Default.(float64)
 	// usagelogDescBillingPolicyVersion is the schema descriptor for billing_policy_version field.
-	usagelogDescBillingPolicyVersion := usagelogFields[32].Descriptor()
+	usagelogDescBillingPolicyVersion := usagelogFields[34].Descriptor()
 	// usagelog.DefaultBillingPolicyVersion holds the default value on creation for the billing_policy_version field.
 	usagelog.DefaultBillingPolicyVersion = usagelogDescBillingPolicyVersion.Default.(int64)
 	// usagelogDescLongContextBillingApplied is the schema descriptor for long_context_billing_applied field.
-	usagelogDescLongContextBillingApplied := usagelogFields[34].Descriptor()
+	usagelogDescLongContextBillingApplied := usagelogFields[36].Descriptor()
 	// usagelog.DefaultLongContextBillingApplied holds the default value on creation for the long_context_billing_applied field.
 	usagelog.DefaultLongContextBillingApplied = usagelogDescLongContextBillingApplied.Default.(bool)
 	// usagelogDescBillingType is the schema descriptor for billing_type field.
-	usagelogDescBillingType := usagelogFields[36].Descriptor()
+	usagelogDescBillingType := usagelogFields[38].Descriptor()
 	// usagelog.DefaultBillingType holds the default value on creation for the billing_type field.
 	usagelog.DefaultBillingType = usagelogDescBillingType.Default.(int8)
 	// usagelogDescStream is the schema descriptor for stream field.
-	usagelogDescStream := usagelogFields[37].Descriptor()
+	usagelogDescStream := usagelogFields[39].Descriptor()
 	// usagelog.DefaultStream holds the default value on creation for the stream field.
 	usagelog.DefaultStream = usagelogDescStream.Default.(bool)
 	// usagelogDescTimingVersion is the schema descriptor for timing_version field.
-	usagelogDescTimingVersion := usagelogFields[39].Descriptor()
+	usagelogDescTimingVersion := usagelogFields[41].Descriptor()
 	// usagelog.DefaultTimingVersion holds the default value on creation for the timing_version field.
 	usagelog.DefaultTimingVersion = usagelogDescTimingVersion.Default.(int)
 	// usagelogDescFirstByteMs is the schema descriptor for first_byte_ms field.
-	usagelogDescFirstByteMs := usagelogFields[40].Descriptor()
+	usagelogDescFirstByteMs := usagelogFields[42].Descriptor()
 	// usagelog.FirstByteMsValidator is a validator for the "first_byte_ms" field. It is called by the builders before save.
 	usagelog.FirstByteMsValidator = usagelogDescFirstByteMs.Validators[0].(func(int) error)
 	// usagelogDescFirstOutputKind is the schema descriptor for first_output_kind field.
-	usagelogDescFirstOutputKind := usagelogFields[44].Descriptor()
+	usagelogDescFirstOutputKind := usagelogFields[46].Descriptor()
 	// usagelog.FirstOutputKindValidator is a validator for the "first_output_kind" field. It is called by the builders before save.
 	usagelog.FirstOutputKindValidator = usagelogDescFirstOutputKind.Validators[0].(func(string) error)
 	// usagelogDescCompletionStatus is the schema descriptor for completion_status field.
-	usagelogDescCompletionStatus := usagelogFields[46].Descriptor()
+	usagelogDescCompletionStatus := usagelogFields[48].Descriptor()
 	// usagelog.DefaultCompletionStatus holds the default value on creation for the completion_status field.
 	usagelog.DefaultCompletionStatus = usagelogDescCompletionStatus.Default.(string)
 	// usagelog.CompletionStatusValidator is a validator for the "completion_status" field. It is called by the builders before save.
 	usagelog.CompletionStatusValidator = usagelogDescCompletionStatus.Validators[0].(func(string) error)
 	// usagelogDescUsageSource is the schema descriptor for usage_source field.
-	usagelogDescUsageSource := usagelogFields[47].Descriptor()
+	usagelogDescUsageSource := usagelogFields[49].Descriptor()
 	// usagelog.DefaultUsageSource holds the default value on creation for the usage_source field.
 	usagelog.DefaultUsageSource = usagelogDescUsageSource.Default.(string)
 	// usagelog.UsageSourceValidator is a validator for the "usage_source" field. It is called by the builders before save.
 	usagelog.UsageSourceValidator = usagelogDescUsageSource.Validators[0].(func(string) error)
 	// usagelogDescUserAgent is the schema descriptor for user_agent field.
-	usagelogDescUserAgent := usagelogFields[49].Descriptor()
+	usagelogDescUserAgent := usagelogFields[51].Descriptor()
 	// usagelog.UserAgentValidator is a validator for the "user_agent" field. It is called by the builders before save.
 	usagelog.UserAgentValidator = usagelogDescUserAgent.Validators[0].(func(string) error)
 	// usagelogDescIPAddress is the schema descriptor for ip_address field.
-	usagelogDescIPAddress := usagelogFields[50].Descriptor()
+	usagelogDescIPAddress := usagelogFields[52].Descriptor()
 	// usagelog.IPAddressValidator is a validator for the "ip_address" field. It is called by the builders before save.
 	usagelog.IPAddressValidator = usagelogDescIPAddress.Validators[0].(func(string) error)
 	// usagelogDescImageCount is the schema descriptor for image_count field.
-	usagelogDescImageCount := usagelogFields[51].Descriptor()
+	usagelogDescImageCount := usagelogFields[53].Descriptor()
 	// usagelog.DefaultImageCount holds the default value on creation for the image_count field.
 	usagelog.DefaultImageCount = usagelogDescImageCount.Default.(int)
 	// usagelogDescImageSize is the schema descriptor for image_size field.
-	usagelogDescImageSize := usagelogFields[52].Descriptor()
+	usagelogDescImageSize := usagelogFields[54].Descriptor()
 	// usagelog.ImageSizeValidator is a validator for the "image_size" field. It is called by the builders before save.
 	usagelog.ImageSizeValidator = usagelogDescImageSize.Validators[0].(func(string) error)
 	// usagelogDescImageInputSize is the schema descriptor for image_input_size field.
-	usagelogDescImageInputSize := usagelogFields[53].Descriptor()
+	usagelogDescImageInputSize := usagelogFields[55].Descriptor()
 	// usagelog.ImageInputSizeValidator is a validator for the "image_input_size" field. It is called by the builders before save.
 	usagelog.ImageInputSizeValidator = usagelogDescImageInputSize.Validators[0].(func(string) error)
 	// usagelogDescImageOutputSize is the schema descriptor for image_output_size field.
-	usagelogDescImageOutputSize := usagelogFields[54].Descriptor()
+	usagelogDescImageOutputSize := usagelogFields[56].Descriptor()
 	// usagelog.ImageOutputSizeValidator is a validator for the "image_output_size" field. It is called by the builders before save.
 	usagelog.ImageOutputSizeValidator = usagelogDescImageOutputSize.Validators[0].(func(string) error)
 	// usagelogDescImageSizeSource is the schema descriptor for image_size_source field.
-	usagelogDescImageSizeSource := usagelogFields[55].Descriptor()
+	usagelogDescImageSizeSource := usagelogFields[57].Descriptor()
 	// usagelog.ImageSizeSourceValidator is a validator for the "image_size_source" field. It is called by the builders before save.
 	usagelog.ImageSizeSourceValidator = usagelogDescImageSizeSource.Validators[0].(func(string) error)
 	// usagelogDescVideoCount is the schema descriptor for video_count field.
-	usagelogDescVideoCount := usagelogFields[57].Descriptor()
+	usagelogDescVideoCount := usagelogFields[59].Descriptor()
 	// usagelog.DefaultVideoCount holds the default value on creation for the video_count field.
 	usagelog.DefaultVideoCount = usagelogDescVideoCount.Default.(int)
 	// usagelogDescVideoResolution is the schema descriptor for video_resolution field.
-	usagelogDescVideoResolution := usagelogFields[58].Descriptor()
+	usagelogDescVideoResolution := usagelogFields[60].Descriptor()
 	// usagelog.VideoResolutionValidator is a validator for the "video_resolution" field. It is called by the builders before save.
 	usagelog.VideoResolutionValidator = usagelogDescVideoResolution.Validators[0].(func(string) error)
 	// usagelogDescCacheTTLOverridden is the schema descriptor for cache_ttl_overridden field.
-	usagelogDescCacheTTLOverridden := usagelogFields[60].Descriptor()
+	usagelogDescCacheTTLOverridden := usagelogFields[62].Descriptor()
 	// usagelog.DefaultCacheTTLOverridden holds the default value on creation for the cache_ttl_overridden field.
 	usagelog.DefaultCacheTTLOverridden = usagelogDescCacheTTLOverridden.Default.(bool)
 	// usagelogDescCreatedAt is the schema descriptor for created_at field.
-	usagelogDescCreatedAt := usagelogFields[61].Descriptor()
+	usagelogDescCreatedAt := usagelogFields[63].Descriptor()
 	// usagelog.DefaultCreatedAt holds the default value on creation for the created_at field.
 	usagelog.DefaultCreatedAt = usagelogDescCreatedAt.Default.(func() time.Time)
 	userMixin := schema.User{}.Mixin()

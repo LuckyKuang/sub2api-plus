@@ -86,8 +86,12 @@ const DefaultCacheControlTTL = "5m"
 // 必须与 DefaultHeaders["User-Agent"] 中的版本号严格一致；不一致会被 Anthropic 判第三方。
 //
 // ⚠️ 读取实际生效的版本号请用 CLIVersion()，它会叠加 SUB2API_CLAUDE_CLI_VERSION 覆盖。
-// 直接引用本常量只在"表达内置基线"时才正确（例如覆盖值的下限校验）。
-const CLICurrentVersion = "2.1.258"
+// 直接引用本常量只在"表达内置默认值"时才正确；支持下限独立于默认版本。
+const CLICurrentVersion = "2.1.321"
+
+// CLIMinSupportedVersion 保留默认版本升级前已有效的账号、全局和环境版本配置。
+// 默认版本升级不能隐式改变身份来源或提升覆盖值的支持下限。
+const CLIMinSupportedVersion = "2.1.258"
 
 // FullClaudeCodeMimicryBetas 返回最"像"真实 Claude Code CLI 的完整 beta 列表，
 // 用于 OAuth 账号伪装成 Claude Code 时使用。
@@ -145,6 +149,18 @@ type Model struct {
 
 // DefaultModels Claude Code 客户端支持的默认模型列表
 var DefaultModels = []Model{
+	{
+		ID:          "claude-fable-5-2",
+		Type:        "model",
+		DisplayName: "Claude Fable 5.2",
+		CreatedAt:   "2026-11-09T00:00:00Z",
+	},
+	{
+		ID:          "claude-mythos-5-2",
+		Type:        "model",
+		DisplayName: "Claude Mythos 5.2",
+		CreatedAt:   "2026-11-09T00:00:00Z",
+	},
 	{
 		ID:          "claude-fable-5-1",
 		Type:        "model",

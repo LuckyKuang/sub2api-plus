@@ -194,3 +194,32 @@ func TestChannelPricingReferenceRefreshDisabledWithoutRemote(t *testing.T) {
 	require.Empty(t, snapshot.WarningCode)
 	require.NotEmpty(t, snapshot.Models)
 }
+
+func TestChannelPricingReferenceOpenAI12hRatesAndIsolation(t *testing.T) {
+	for _, catalog := range []string{
+		`{"gpt-6-sol":{"litellm_provider":"openai","input_cost_per_token":0.000002,"output_cost_per_token":0.00001,"cache_creation_input_token_cost":0.0000025,"long_context_input_token_threshold":272000,"long_context_input_cost_multiplier":2,"long_context_output_cost_multiplier":1.5}}`,
+		`{"other":{"litellm_provider":"test","input_cost_per_token":0.000001}}`,
+	} {
+		svc := newReferenceService(t, catalog)
+		ref, err := svc.Resolve(context.Background(), PlatformOpenAI, "gpt-6-sol")
+		require.NoError(t, err)
+		require.NotNil(t, ref.Pricing)
+		require.NotNil(t, ref.Pricing.CacheWrite12hPrice)
+		require.InDelta(t, 5e-6, *ref.Pricing.CacheWrite12hPrice, 1e-12)
+		require.Len(t, ref.Pricing.Intervals, 1)
+		require.NotNil(t, ref.Pricing.Intervals[0].CacheWrite12hPrice)
+		require.InDelta(t, 10e-6, *ref.Pricing.Intervals[0].CacheWrite12hPrice, 1e-12)
+		for _, platform := range []string{PlatformAnthropic, PlatformGrok, PlatformDeepseek, PlatformKimi, PlatformZhipu} {
+			invalid, err := svc.Resolve(context.Background(), platform, "gpt-6-sol")
+			require.NoError(t, err)
+			require.Nil(t, invalid.Pricing, "OpenAI reference rates cannot cross provider boundaries: %s", platform)
+		}
+	}
+	svc := newReferenceService(t, `{"claude-fable-5-2":{"litellm_provider":"anthropic","input_cost_per_token":0.000008,"output_cost_per_token":0.00004,"cache_creation_input_token_cost":0.00001,"cache_creation_input_token_cost_above_1hr":0.000016}}`)
+	ref, err := svc.Resolve(context.Background(), PlatformAnthropic, "claude-fable-5-2")
+	require.NoError(t, err)
+	require.NotNil(t, ref.Pricing)
+	require.Nil(t, ref.Pricing.CacheWrite12hPrice)
+	require.NotNil(t, ref.Pricing.CacheWrite1hPrice)
+	require.InDelta(t, 16e-6, *ref.Pricing.CacheWrite1hPrice, 1e-12)
+}

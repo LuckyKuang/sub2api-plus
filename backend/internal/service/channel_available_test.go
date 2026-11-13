@@ -309,3 +309,26 @@ func TestFillGlobalPricingFallback_KeepsExistingPrice(t *testing.T) {
 func newStubPricingServiceFromMap(data map[string]*LiteLLMModelPricing) *PricingService {
 	return &PricingService{pricingData: data}
 }
+
+func TestAvailableFallbackOpenAI12hPriceAndPlatformIsolation(t *testing.T) {
+	// The official registered GPT cache card charges 2.5x input for 12h.
+	// Unknown SKUs and other platforms must not acquire that inferred rate.
+	catalog := newStubPricingServiceFromMap(map[string]*LiteLLMModelPricing{
+		"gpt-6.1-sol":        {InputCostPerToken: 2e-6, OutputCostPerToken: 10e-6, CacheCreationInputTokenCost: 2.5e-6},
+		"unknown-compatible": {InputCostPerToken: 9e-6},
+	})
+	zero := 0.0
+	models := []SupportedModel{
+		{Platform: PlatformOpenAI, Name: "gpt-6.1-sol"},
+		{Platform: PlatformGrok, Name: "gpt-6.1-sol"},
+		{Platform: PlatformOpenAI, Name: "unknown-compatible"},
+		{Platform: PlatformOpenAI, Name: "gpt-6.1-sol", Pricing: &ChannelModelPricing{CacheWrite12hPrice: &zero}},
+	}
+	fillGlobalPricingFallback(catalog, models)
+	require.NotNil(t, models[0].Pricing.CacheWrite12hPrice)
+	require.InDelta(t, 5e-6, *models[0].Pricing.CacheWrite12hPrice, 1e-15)
+	require.Nil(t, models[1].Pricing.CacheWrite12hPrice)
+	require.Nil(t, models[2].Pricing.CacheWrite12hPrice)
+	require.NotNil(t, models[3].Pricing.CacheWrite12hPrice)
+	require.Zero(t, *models[3].Pricing.CacheWrite12hPrice, "an explicit operator zero cannot be overwritten")
+}

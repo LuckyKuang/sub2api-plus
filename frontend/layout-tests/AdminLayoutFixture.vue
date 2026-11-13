@@ -1,5 +1,6 @@
 <template>
-  <UsersView v-if="users" />
+  <SettingsView v-if="settings" />
+  <UsersView v-else-if="users" />
   <GroupsView v-else-if="groups" />
   <IPAccessControlView v-else-if="ipAccessControl" />
   <PromptAuditView v-else-if="promptAudit" />
@@ -49,6 +50,8 @@ import type { User } from '../src/types'
 import { useAppStore } from '../src/stores/app'
 import { useAuthStore } from '../src/stores/auth'
 
+const settings = new URLSearchParams(location.search).get('settings') === '1'
+const SettingsView = defineAsyncComponent(() => import('../src/views/admin/SettingsView.vue'))
 const usage = new URLSearchParams(location.search).get('usage') === '1'
 const riskControl = new URLSearchParams(location.search).get('riskControl') === '1'
 const proxies = new URLSearchParams(location.search).get('proxies') === '1'
@@ -71,7 +74,7 @@ app.siteName = 'Admin layout review'
 app.sidebarCollapsed = false
 const auth = useAuthStore()
 auth.user = { id: 9998, role: 'admin', email: 'fixture@example.test', username: 'Reviewer', balance: 0 } as User
-if (usage || promptAudit || users || groups || ipAccessControl || riskControl || proxies || emptyWide) auth.token = 'browser-fixture-token'
+if (settings || usage || promptAudit || users || groups || ipAccessControl || riskControl || proxies || emptyWide) auth.token = 'browser-fixture-token'
 localStorage.setItem('admin_guide', 'true')
 localStorage.setItem('admin_guide_9998_admin_v4_interactive', 'true')
 const { t } = useI18n()

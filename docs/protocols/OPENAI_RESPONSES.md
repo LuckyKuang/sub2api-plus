@@ -384,7 +384,11 @@ OpenAI capacity-shed signals (`server_is_overloaded`, `slow_down`, and messages
 such as `Our servers are currently overloaded` or `Selected model is at
 capacity`) are request-scoped. The gateway does not retry the same account and
 does not switch accounts. The first upstream response is returned to the
-client as HTTP 503. Account health, scheduling, and pause state are unchanged.
+client as HTTP 503. Account health, account-wide scheduling, and pause state
+are unchanged. An enabled explicit model-scoped temporary-unschedulable rule
+may park only the already mapped model when its status and error fields match;
+output text, request metadata, and model names cannot trigger that rule. The
+no-retry rule applies whether or not a model cooldown matches.
 
 When the error is forwarded, `server_is_overloaded` / `slow_down` are rewritten
 to `server_error` so Codex CLI does not treat them as a fatal session-ending
@@ -1218,3 +1222,32 @@ Native Anthropic-to-Chat/Responses conversion preserves the original read-limit
 or cancellation error in the returned error chain, including buffered responses.
 Already observed usage remains available as incomplete usage; failed streams
 cannot synthesize a successful terminal response.
+
+## v0.2.21 usage and compatibility
+
+Observed cache writes may include `cache_write_tokens_details` with integer,
+nonnegative `ttl_30m_tokens` and `ttl_12h_tokens` summing exactly to aggregate
+`cache_write_tokens`. Invalid or absent details retain aggregate billing;
+historical zero counters never imply an observed duration. The independent
+12h price, explicit-zero semantics, speed/context factors and frozen settlement
+are defined in [channel pricing](../CHANNEL_PRICING.md).
+The same wire validator supplies HTTP usage, typed Responses-to-Chat/Messages
+conversion, and native WS passthrough. Typed reserialization retains the nested
+duration details. Terminal usage replacement, per-turn WS results and session
+totals preserve the validated buckets without double counting; invalid or absent
+details keep aggregate billing rather than retaining an earlier split.
+
+HTTP Responses rejects invalid UTF-8 before JSON transformations, selection or
+upstream writes. Valid call-less `agent` page snapshot outputs become untrusted
+user messages only after raw ingress audit; shared wire validation supplies the
+same canonical user attribution to both audit engines. Anchored tool results
+remain tool context, and unknown valid structures retain audit pass-through.
+Namespace routing and `encrypted_function_args` markers (including null/empty
+arrays) survive compatibility handling; sealed arguments never become plaintext.
+Effort validation runs after model mapping and applicable group policies.
+
+WebSocket search activation can reconnect a pooled connection initialized
+without search before sending the newly requested search turn. Later turns are
+not replayed after semantic output. Metadata, empty reasoning announcements,
+media and terminal aggregates never start strict token timing; first byte and
+first meaningful output remain separate. The obsolete TTFT setting stays removed.

@@ -16,6 +16,7 @@ export interface IntervalFormEntry {
   output_price: number | string | null
   cache_write_price: number | string | null
   cache_write_1h_price?: number | string | null
+  cache_write_12h_price?: number | string | null
   cache_read_price: number | string | null
   input_multiplier: number | string | null
   output_multiplier: number | string | null
@@ -34,6 +35,7 @@ export interface PricingFormEntry {
   output_price: number | string | null
   cache_write_price: number | string | null
   cache_write_1h_price?: number | string | null
+  cache_write_12h_price?: number | string | null
   cache_read_price: number | string | null
   fast_multiplier?: number | string | null
   flex_multiplier?: number | string | null
@@ -254,6 +256,7 @@ function emptyPricingFormEntry(model: string): PricingFormEntry {
     output_price: null,
     cache_write_price: null,
     cache_write_1h_price: null,
+    cache_write_12h_price: null,
     cache_read_price: null,
     fast_multiplier: null,
     flex_multiplier: null,
@@ -290,6 +293,7 @@ export function referenceToPricingRule(reference: ModelPricingReference): Priced
   entry.output_price = toMTokOrNull(card.output_price)
   entry.cache_write_price = toMTokOrNull(card.cache_write_price)
   entry.cache_write_1h_price = toMTokOrNull(card.cache_write_1h_price)
+  entry.cache_write_12h_price = toMTokOrNull(card.cache_write_12h_price)
   entry.cache_read_price = toMTokOrNull(card.cache_read_price)
   entry.image_input_price = toMTokOrNull(card.image_input_price)
   entry.image_output_price = toMTokOrNull(card.image_output_price)
@@ -326,6 +330,7 @@ export function apiIntervalsToForm(intervals: PricingInterval[]): IntervalFormEn
     output_price: perTokenToMTok(iv.output_price),
     cache_write_price: perTokenToMTok(iv.cache_write_price),
     cache_write_1h_price: perTokenToMTok(iv.cache_write_1h_price),
+    cache_write_12h_price: perTokenToMTok(iv.cache_write_12h_price),
     cache_read_price: perTokenToMTok(iv.cache_read_price),
     input_multiplier: iv.input_multiplier,
     output_multiplier: iv.output_multiplier,
@@ -345,6 +350,7 @@ export function formIntervalsToAPI(intervals: IntervalFormEntry[]): PricingInter
     output_price: mTokToPerToken(iv.output_price),
     cache_write_price: mTokToPerToken(iv.cache_write_price),
     cache_write_1h_price: mTokToPerToken(iv.cache_write_1h_price),
+    cache_write_12h_price: mTokToPerToken(iv.cache_write_12h_price),
     cache_read_price: mTokToPerToken(iv.cache_read_price),
     input_multiplier: toNullableNumber(iv.input_multiplier),
     output_multiplier: toNullableNumber(iv.output_multiplier),
@@ -497,6 +503,7 @@ function validateIntervalPrices(iv: IntervalFormEntry, idx: number, t: Translate
     ['outputPrice', iv.output_price],
     ['cacheWritePrice', iv.cache_write_price],
     ['cacheWrite1hPrice', iv.cache_write_1h_price ?? null],
+    ['cacheWrite12hPrice', iv.cache_write_12h_price ?? null],
     ['cacheReadPrice', iv.cache_read_price],
     ['perRequestPrice', iv.per_request_price],
   ]

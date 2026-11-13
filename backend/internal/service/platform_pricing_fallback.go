@@ -144,7 +144,7 @@ func validPlatformFallbackPricing(price *ModelPricing) bool {
 			return false
 		}
 	}
-	for _, multiplier := range []*float64{price.FastMultiplier, price.FlexMultiplier} {
+	for _, multiplier := range []*float64{price.FastMultiplier, price.FlexMultiplier, price.CacheCreation12hPricePerToken} {
 		if multiplier != nil && !validCost(*multiplier) {
 			return false
 		}

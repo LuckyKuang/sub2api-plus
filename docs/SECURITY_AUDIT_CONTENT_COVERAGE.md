@@ -85,7 +85,9 @@ The item has a nonempty `name`, optional `namespace`, a text/content-array
 than a reply requiring a previous tool call or response anchor. Both audit
 engines retain the existing canonical tool-output extraction: name/namespace
 are source metadata, recognized current user siblings remain auditable, and
-tool context never becomes direct user text. Unknown sibling content still
+ordinary tool context stays outside direct user text. Recognized standalone
+page snapshots use the attributed external-user projection documented in the
+Official v0.2.21 section below. Unknown sibling content still
 passes without an audit-derived block. HTTP/WS and OAuth/API-key paths retain
 their original audit-before-selection, concurrency, billing and upstream-write
 ordering. Ordinary malformed or unnamed outputs keep paired-call validation.
@@ -415,7 +417,7 @@ extraction failure rather than an ordinary empty request. Both engines count
 and safely log that failure before allowing it. Unknown sibling keys remain
 ignored when the containing object has at least one recognized field.
 
-Call-less Codex automation and delegation bootstrap items are a documented
+Call-less Codex automation, delegation and page snapshot items are a documented
 Responses exception to ordinary tool-output attribution. When the shared strict
 wire validator confirms the supported namespace/name, envelope, missing call
 anchor, unique JSON-member, and empty `previous_response_id` requirements, the
@@ -424,7 +426,21 @@ message because the post-audit protocol adapter sends that exact text upstream
 as `role=user`. Ordinary function/tool outputs, unsafe or ambiguous bootstrap
 shapes, and outputs with a real call/reference anchor remain tool output and are
 excluded by both engines. The handler still audits the immutable inbound bytes
-before applying the actual request transform.
+before applying the actual request transform. Page snapshots use namespace
+`agent`, `codex_apps_open_page` or a validated
+`codex_apps_selected_page_part_N_of_M`, absent/empty string call_id, unique JSON
+members and a valid page snapshot/header. Page history can retain
+`previous_response_id`; its validator does not apply automation's bootstrap-only
+restriction. Root and nested Responses inputs share this attribution. Real call
+anchors remain tool context. Unknown sibling input still passes, and recognized
+siblings remain auditable. `upstream021_audit_contract_test.go` covers both engines,
+HTTP/WS, OAuth/API key, no-content pass-through and forbidden selection/slot/send
+side effects. HTTP invalid UTF-8 is basic validation before audit; extraction
+failures retain the existing structured, content-free error logs.
+
+Prompt-audit enqueue wakes local workers only after durable enqueue succeeds.
+Workers retain database claims, lease expiry, retry polling and cross-replica
+idempotency; wakeups never run selection or forwarding before the ingress gate.
 
 Anthropic and Bedrock `fallbacks` are outbound routing/control fields rather
 than prompt text. Sanitizing them for upstream beta compatibility happens only
@@ -1129,3 +1145,19 @@ alongside image and mask. Raw JSON and normalized audit payloads share that
 canonical media projection. `TestUpstream020MarkupEntersCanonicalAudits` covers
 both engines; `TestUpstream020EmptyNativeImageContentPassesAudits` verifies that
 empty/unknown content proceeds past both engines before scheduling.
+
+
+## Official v0.2.21 import
+
+Standalone Codex page snapshots (`agent.codex_apps_open_page` and
+`codex_apps_selected_page_part_N_of_M`) with no anchored `call_id` are projected
+to attributed external user text by the shared `openaiwire` normalizer. Both
+engines consume this projection for HTTP and flat/nested `response.create`
+payloads; Content Moderation retains its whitespace folding and Prompt Audit
+retains its prompt text formatting. A real anchored tool output remains context.
+The HTTP forwarding transformation runs after ingress audit and before tool
+continuation validation. Unknown valid sibling fields and unknown items retain
+the established pass-through behavior. `TestUpstream021PageSnapshotCanonicalAudits`
+and `TestUpstream021PageSnapshotRealAuditsBeforeSideEffects` cover literal content,
+OAuth/API-key HTTP/WS rejection before slots, account reads, billing or sends,
+and admission of unknown content through both engines.

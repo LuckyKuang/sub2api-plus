@@ -61,3 +61,23 @@ conversation context. Use separate groups to isolate them.
 gateway returns the upstream 503 immediately: it does not retry the same
 account, switch accounts, or mark the model rate-limited. Ordinary
 `RATE_LIMIT_EXCEEDED` waits or account switches are unchanged.
+
+The v0.2.21 sync keeps Pro Argon quota cooldowns isolated from other Gemini
+models. Tool-result images follow consecutive functionResponse parts rather
+than splitting their required sequence. Retry handling retains the captured
+credential owner, proxy binding, configured limits and canonical ingress audit.
+Forced quota refresh remains scoped to the authorized target account.
+
+Manual quota refresh freezes the selected credential owner and its proxy before
+network access. A configured missing or invalid proxy fails before cache lookup
+or any direct request. Usage cache and concurrent refresh sharing are bound to
+the complete credential/proxy generation, so a late response for an old grant
+cannot be returned for a replacement grant. Cached countdowns are recalculated
+on a private progress value.
+
+Only a fresh, successful, non-forbidden quota response may clear a recoverable
+account error. Recovery atomically compares the saved credentials, platform,
+account type, complete proxy route and exact observed error; a concurrent token
+rotation, proxy repair or newer error prevents the write. The scheduler outbox
+commits with that write, while scheduling flags and cooldowns remain unchanged.
+Cache hits, degraded responses and scoped admin reads never recover an account.

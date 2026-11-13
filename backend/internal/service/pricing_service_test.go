@@ -1649,3 +1649,53 @@ func TestBillingService_AntigravityClaude55TierFallbacksUseBaseRates(t *testing.
 		}
 	}
 }
+
+// A Release mirror may publish the new manifest before its immutable body is
+// available. The failed fetch must leave every committed anchor and file intact,
+// so the same manifest is retried after the body catches up.
+func TestPricingServiceHashMismatchRetriesSameManifestAfterBodyCatchesUp(t *testing.T) {
+	oldBody := []byte(`{"remote-model":{"input_cost_per_token":0.000002,"litellm_provider":"test","mode":"chat"}}`)
+	newBody := []byte(`{"remote-model":{"input_cost_per_token":0.000003,"litellm_provider":"test","mode":"chat"}}`)
+	svc, client, cfg := newReleasePricingService(t, "v0.1.169+custom.001", oldBody)
+	require.NoError(t, svc.Initialize())
+	svc.Stop()
+	oldHash, oldVersion, oldUpdated := svc.localHash, svc.localVersion, svc.lastUpdated
+	files := []string{svc.getPricingFilePath(), svc.getManifestFilePath(), svc.getValidatedPricingCacheFilePath()}
+	before := make(map[string][]byte)
+	for _, path := range files {
+		body, err := os.ReadFile(path)
+		require.NoError(t, err)
+		before[path] = body
+	}
+	digest := sha256.Sum256(newBody)
+	const url = "https://pricing.example.test/releases/download/v0.1.170+custom.001/model-pricing.json"
+	manifest, err := json.Marshal(pricingmanifest.Manifest{Version: "v0.1.170+custom.001", PricingURL: url, SHA256: hex.EncodeToString(digest[:])})
+	require.NoError(t, err)
+	client.responses[cfg.Pricing.ManifestURL] = manifest
+	client.responses[url] = oldBody
+	require.ErrorContains(t, svc.ForceUpdate(), "SHA-256 mismatch")
+	require.Equal(t, oldHash, svc.localHash)
+	require.Equal(t, oldVersion, svc.localVersion)
+	require.Equal(t, oldUpdated, svc.lastUpdated)
+	require.InDelta(t, 2e-6, svc.GetModelPricing("remote-model").InputCostPerToken, 1e-12)
+	for _, path := range files {
+		body, err := os.ReadFile(path)
+		require.NoError(t, err)
+		require.Equal(t, before[path], body, path)
+	}
+	client.responses[url] = newBody
+	require.NoError(t, svc.ForceUpdate())
+	require.Equal(t, "v0.1.170+custom.001", svc.localVersion)
+	require.Equal(t, hex.EncodeToString(digest[:]), svc.localHash)
+	require.InDelta(t, 3e-6, svc.GetModelPricing("remote-model").InputCostPerToken, 1e-12)
+	stored, err := os.ReadFile(svc.getPricingFilePath())
+	require.NoError(t, err)
+	require.Equal(t, newBody, stored)
+	fetches := 0
+	for _, request := range client.requests {
+		if request == url {
+			fetches++
+		}
+	}
+	require.Equal(t, 2, fetches, "failed body must be fetched again for the unchanged manifest")
+}

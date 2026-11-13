@@ -200,8 +200,20 @@ func (s *OpenAIGatewayService) handleOpenAIAccountUpstreamError(ctx context.Cont
 		return false
 	}
 	// Capacity shedding describes this request, not account health. Keep the
-	// account schedulable; the request itself is not retried or failed over.
+	// account healthy; Plus returns the response without retry or failover.
 	if account != nil && account.Platform == PlatformOpenAI && isOpenAIHTTPCapacityShed(statusCode, "", responseBody) {
+		// An explicit model-scoped rule may park the mapped model without
+		// turning this request-level overload into an account-wide health failure.
+		model := firstRequestedModel(canonicalModel)
+		if s != nil && s.rateLimitService != nil && model != "" && account.IsTempUnschedulableEnabled() {
+			ruleBody := openAICapacityShedRuleBody(responseBody)
+			matches := matchTempUnschedulableRules(account, statusCode, ruleBody)
+			if len(matches) > 0 && matches[0].rule.Scope == TempUnschedScopeModel {
+				stateCtx, cancel := openAIAccountStateContext(ctx)
+				defer cancel()
+				return s.rateLimitService.HandleTempUnschedulable(stateCtx, account, statusCode, ruleBody, model)
+			}
+		}
 		return false
 	}
 	stateCtx, cancel := openAIAccountStateContext(ctx)

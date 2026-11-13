@@ -367,3 +367,24 @@ reviewed 500,000 default window and low-through-ultra catalog; an API fact does
 not rewrite that client descriptor or change its identity/version selection.
 The gateway adopts the API distinction with actual compatibility-path regressions
 in `openai_gpt61_terra_test.go` and `pkg/openai/constants_test.go`.
+
+## Claude v0.2.21 integration baseline
+
+The additional Anthropic client baseline is the official
+[Claude Code v2.1.321 Release](https://github.com/anthropics/claude-code/releases/tag/v2.1.321),
+reviewed on 2026-11-12. `pkg/claude/constants.go` selects compiled `2.1.321`;
+`pkg/claude/cli_version*.go` and `service/outbound_identity*.go` retain trusted
+source precedence and the existing SDK/runtime fingerprint. This version-only
+change retains the independently fixed `2.1.258` acceptance floor and every
+previously valid account/global/environment pin. Upgrading the compiled default
+does not raise that floor. It leaves the seven provider baselines above unchanged
+and does not select an inbound or cached client identity.
+
+Model capabilities and prices use independent provider sources:
+[Fable 5.2](https://platform.claude.com/docs/en/models/fable-5-2/whats-new-fable-5-2),
+[Mythos 5.2](https://platform.claude.com/docs/en/models/mythos-5-2/overview) and
+[pricing](https://platform.claude.com/docs/en/about-claude/pricing).
+Catalog/effort/Bedrock mapping live in `pkg/claude`, conversion in `pkg/apicompat`,
+and billing/reference cards in `service/billing_service.go` and
+`service/channel_pricing_reference.go`. Provider documentation grants no local
+account entitlement; Mythos access still requires provider approval.

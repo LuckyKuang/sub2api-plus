@@ -64,7 +64,7 @@ type scopedUsageRecoveryRepo struct {
 func (r *scopedUsageRecoveryRepo) ClearError(context.Context, int64) error { r.clears++; return nil }
 
 func TestScopedAdminUsageReadDoesNotRecoverAccount(t *testing.T) {
-	for _, platform := range []string{PlatformGemini, PlatformAnthropic} {
+	for _, platform := range []string{PlatformGemini, PlatformAnthropic, PlatformAntigravity} {
 		t.Run(platform, func(t *testing.T) {
 			a := &Account{ID: 1, Platform: platform, Type: AccountTypeOAuth, GroupIDs: []int64{1}, Status: StatusError, ErrorMessage: "unauthenticated", Credentials: map[string]any{"access_token": "token", "scope": "user:profile"}}
 			repo := &scopedUsageRecoveryRepo{stubQuotaAccountRepo: stubQuotaAccountRepo{accounts: map[int64]*Account{1: a}}}

@@ -177,7 +177,11 @@ Migration 257 adds `usage_logs.timing_version` with default 0 and extends the
 first-output kind constraint. Gateway-created records are stamped 1; externally
 supplied usage measurements without this provenance remain unverified.
 The obsolete `openai_ttft_mode` setting is removed from storage, admin settings
-API, and UI. No semantic/visible compatibility switch remains.
+API, and UI. No semantic/visible compatibility switch remains. The v0.2.21 upstream
+TTFT mode and callback are deliberately excluded: SSE and WS continue to use
+the same nonempty text/reasoning/tool delta observer. Empty reasoning items,
+Codex metadata, media and terminal aggregates cannot start a token clock; each
+WS response keeps its own start and timing window.
 
 Operations and channel-monitor TTFT queries accept only strict records. Migration clears historical
 derived TTFT aggregates (not request, token, cost, or latency totals); subsequent

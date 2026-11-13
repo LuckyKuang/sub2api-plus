@@ -329,7 +329,7 @@ func (d inflightEstimateDeps) inflightConvertEffortBody(ctx context.Context, acc
 			forwarded, _ = NormalizeGLMOpenAIReasoningEffort(forwarded, model)
 		} else {
 			anthropic.Model = model
-			responses, err := anthropicToResponses(d.cfg, &anthropic)
+			responses, err := apicompat.AnthropicToResponsesWithOptions(&anthropic, apicompat.AnthropicToResponsesOptions{MinOutputTokens: configuredMinOutputTokens(d.cfg), DeferReasoningEffortValidation: true})
 			if err != nil {
 				return nil, err
 			}

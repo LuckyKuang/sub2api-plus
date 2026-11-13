@@ -1,5 +1,29 @@
 # Claude / Anthropic
 
+## Fable and Mythos 5.2
+
+`claude-fable-5-2` and `claude-mythos-5-2` have distinct registered model entries,
+provider/Bedrock spellings and same-SKU aliases. Both expose
+`low`, `medium`, `high`, `xhigh`, `max` effort and always-on adaptive thinking;
+conversion validates against the final mapped model. Older models retain their
+own thinking and effort rules. Claude Code uses compiled `2.1.321`; source
+priority and non-version identity declarations remain unchanged.
+Its independently fixed minimum remains `2.1.258`; existing explicit
+account/global/environment pins below the new default remain valid and keep
+their source priority. Model-specific provider eligibility still applies.
+
+Standard input/output/5m-cache-write/1h-cache-write/cache-read rates per million
+tokens are $8/$40/$10/$16/$0.20. Fast input/output are $16/$80.
+Reference-price lookup retains platform and exact-SKU isolation; manually
+configured prices and admitted frozen cards retain precedence. This support
+does not grant Mythos eligibility or bypass provider access errors. Official
+sources and reviewed entrypoints are indexed in
+[official-agent baselines](../OFFICIAL_AGENT_BASELINES.md#claude-v0221-integration-baseline).
+
+Sonnet 5.5 cache reads use $0.10/MTok at all supported context sizes, including
+the 1M window, in both catalog and fallback pricing. Sonnet 5 retains its own
+$0.20/MTok rate. See the [official Sonnet 5.5 pricing change](https://platform.claude.com/docs/en/models/sonnet-5-5/whats-new-sonnet-5-5).
+
 ## Model mappings and protocol conversion
 
 Chat Completions and Responses bridges resolve the account's final upstream

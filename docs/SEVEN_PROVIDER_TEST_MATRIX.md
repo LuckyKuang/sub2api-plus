@@ -1,5 +1,54 @@
 # Seven-provider business regression matrix
 
+## v0.2.21 import requirements
+
+These regressions supplement the existing business inventory. The unit gate pins
+`TestOpenAICacheWriteTTLRecordUsage`, `TestOpenAICacheWriteTTLInvalidDetailsKeepAggregate`,
+`TestOpenAICacheWriteTTLPrices`, `TestOpenAICacheWriteTTLFrozenGroupCard` and
+`TestAvailableFallbackOpenAI12hPriceAndPlatformIsolation`: observed exhaustive
+30m/12h splits, aggregate fallback, independent prices, explicit zero, legacy
+cards, group/context factors, catalog isolation and frozen settlement.
+`TestOpenAICacheWriteTTLRecordUsage` includes converted Chat and Messages,
+streaming and buffered. `TestOpenAICacheWriteTTLNativeWSSettlement` exercises
+real downstream WebSockets and the production native relay/adapter for OAuth
+and API Key accounts, then verifies duration counters, durable-log inputs and
+actual debits at configured prices; invalid/missing details use the generic rate.
+`TestRelayCacheWriteTTLTurnIsolationAndReplacement` verifies provisional/terminal
+replacement, clearing unknown classifications and exact session sums across
+three native relay turns. `TestResponsesCacheWriteTTLTypedRoundTrip` preserves
+nested details through typed decode, Chat conversion and reserialization;
+`TestCacheWriteTTLValidation` and `TestCacheWriteTTLDetailsAliasPriority` pin
+integer/exhaustive validation and canonical-versus-prompt alias priority.
+All four, native WS settlement and the Claude pin tests are in the unit gate.
+`TestClaudeIdentityDefaultUpgradePreservesExplicitPins` covers prior account and
+global versions across Anthropic account types with final-send SDK/header checks.
+`TestGetClaudeCodeClientVersionPriority` also retains saved legacy manual/synced
+pins below the new default while rejecting versions below the fixed minimum.
+The Claude package separately pins the stable minimum, environment resolution
+and exact compiled default.
+`TestOpenAIWSPassthroughStrictTokenTimingEveryTurn` retains independent per-turn
+token/output/byte timing and rejects empty reasoning or metadata as token evidence.
+
+The handler gate pins `TestUpstream021PageSnapshotCanonicalAudits` and
+`TestUpstream021PageSnapshotRealAuditsBeforeSideEffects`. Both real audit engines
+inspect page content for HTTP/WS and OAuth/API Key before slots, account reads,
+billing or sends; unknown-only content reaches admission without a supplier call.
+The canonical extraction test also covers nested frames and anchored tool context.
+This establishes WS audit attribution; the page forwarding normalization is HTTP.
+
+The integration gate pins `TestUpstream021MigrationsRepairInvalidIndexAndPreserveTTL`
+and `TestRefreshTokenCacheConsumeRealRedis` against disposable PostgreSQL/Redis:
+actual migration 309 repairs an INVALID concurrent index, 310 preserves TTL
+counters, startup reruns preserve migration checksums, and a refresh token has
+one atomic consumer. Existing TTL repository round trips supplement these checks.
+
+Anthropic 5.2 capabilities/prices and Claude version selection, Gemini body
+thinking, Antigravity quota/image/strict-owner refresh, console rotation, payment,
+memory-budget and UI regressions run as separate focused or complete suites.
+They do not extend the seven-provider inventory to new provider capabilities.
+Storage, layout and race remain independent checks; the full gate does not
+establish paid upstream generation or live OAuth entitlement.
+
 Current implementation starts at `fix/seven-platforms-main-sync@27c5e62f4` and
 adds the capability work below. Its inherited merge `85fb3c82c` combined
 `2dab72aac` with surgeonfish checkpoint `e2bbc80dc` (based on `1818c2993`).

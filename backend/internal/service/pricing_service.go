@@ -123,6 +123,14 @@ var (
 	// 官方 v0.2.10 新增：Claude Opus/Sonnet 5.5 的内置兜底卡。
 	// GPT-6 Sol/Luna 兜底由 Plus 在下方独立维护（UPSTREAM.md
 	// "Restored Upstream Pricing Branches"），此处不重复声明。
+	// Fable/Mythos 5.2 share the official price card, including both cache TTLs:
+	// https://platform.claude.com/docs/en/about-claude/pricing
+	claude52FallbackPricing = &LiteLLMModelPricing{
+		InputCostPerToken: 8e-6, OutputCostPerToken: 40e-6,
+		CacheCreationInputTokenCost: 10e-6, CacheCreationInputTokenCostAbove1hr: 16e-6,
+		CacheReadInputTokenCost: 0.2e-6,
+		LiteLLMProvider:         "anthropic", Mode: "chat", SupportsPromptCaching: true,
+	}
 	claudeOpus55FallbackPricing = &LiteLLMModelPricing{
 		InputCostPerToken: 4e-6, OutputCostPerToken: 20e-6,
 		CacheCreationInputTokenCost: 5e-6, CacheCreationInputTokenCostAbove1hr: 8e-6,
@@ -140,7 +148,7 @@ var (
 	claudeSonnet55FallbackPricing = &LiteLLMModelPricing{
 		InputCostPerToken: 2e-6, OutputCostPerToken: 10e-6,
 		CacheCreationInputTokenCost: 2.5e-6, CacheCreationInputTokenCostAbove1hr: 4e-6,
-		CacheReadInputTokenCost: 0.2e-6,
+		CacheReadInputTokenCost: 0.1e-6,
 		LiteLLMProvider:         "anthropic", Mode: "chat", SupportsPromptCaching: true,
 	}
 	claudeHaiku55FallbackPricing = &LiteLLMModelPricing{
@@ -680,6 +688,7 @@ func (s *PricingService) downloadReleasePricingData(release releasePricingManife
 		return err
 	}
 
+	// 更新内存数据
 	s.mu.Lock()
 	warnDroppedLongContextLadders(s.pricingData, data)
 	s.pricingData = data
@@ -1730,6 +1739,19 @@ func (s *PricingService) matchByModelFamily(model string) *LiteLLMModelPricing {
 	// families 子串匹配。Plus 的 opus-5.5 exact 系列条目与 phase-2 fallbackName
 	// 规则保持原样，作为非 IsOpus55/IsSonnet55 命中路径（例如点号写法、preview 后缀）
 	// 的保护，两者互补而不是互相取代。
+	var claude52Model string
+	switch {
+	case claude.IsFable52(model):
+		claude52Model = "claude-fable-5-2"
+	case claude.IsMythos52(model):
+		claude52Model = "claude-mythos-5-2"
+	}
+	if claude52Model != "" {
+		if pricing, ok := s.pricingData[claude52Model]; ok {
+			return pricing
+		}
+		return claude52FallbackPricing
+	}
 	if claude.IsOpus55(model) {
 		if pricing, ok := s.pricingData["claude-opus-5-5"]; ok {
 			return pricing

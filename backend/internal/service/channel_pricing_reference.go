@@ -476,6 +476,9 @@ func sameModelFallbackCard(platform, model string, billing *ModelPricing) *Chann
 			card.CacheWrite1hPrice = floatRef(billing.CacheCreation1hPrice)
 		}
 	}
+	if platform == PlatformOpenAI && openAIUsesCacheWritePremium(model) {
+		card.CacheWrite12hPrice = floatRef(billing.InputPricePerToken * 2.5)
+	}
 	if billing.CacheReadPricePerToken > 0 {
 		card.CacheReadPrice = floatRef(billing.CacheReadPricePerToken)
 	}
@@ -485,7 +488,11 @@ func sameModelFallbackCard(platform, model string, billing *ModelPricing) *Chann
 	}
 	if billing.LongContextInputThreshold > 0 &&
 		(billing.LongContextInputMultiplier > 1 || billing.LongContextOutputMultiplier > 1) {
-		card.Intervals = append(card.Intervals, builtinLongContextInterval(billing))
+		interval := builtinLongContextInterval(billing)
+		if card.CacheWrite12hPrice != nil {
+			interval.CacheWrite12hPrice = floatRef(*card.CacheWrite12hPrice * billing.LongContextInputMultiplier)
+		}
+		card.Intervals = append(card.Intervals, interval)
 	}
 	return card
 }
@@ -636,6 +643,9 @@ func (s *ChannelPricingReferenceService) buildPricedReference(
 		pricing.OutputPrice = floatRef(entry.OutputCostPerToken)
 		pricing.CacheWritePrice = floatRef(entry.CacheCreationInputTokenCost)
 		pricing.CacheWrite1hPrice = floatRefOrNil(entry.CacheCreationInputTokenCostAbove1hr)
+		if ref.Platform == PlatformOpenAI && openAIUsesCacheWritePremium(ref.Model) {
+			pricing.CacheWrite12hPrice = floatRef(entry.InputCostPerToken * 2.5)
+		}
 		pricing.CacheReadPrice = floatRef(entry.CacheReadInputTokenCost)
 		if entry.InputCostPerImageToken > 0 {
 			pricing.ImageInputPrice = floatRef(entry.InputCostPerImageToken)
@@ -653,7 +663,11 @@ func (s *ChannelPricingReferenceService) buildPricedReference(
 			pricing.PerRequestPrice = floatRef(entry.OutputCostPerImage)
 		}
 		if entry.LongContextInputTokenThreshold > 0 && entry.LongContextInputCostMultiplier > 1 {
-			pricing.Intervals = append(pricing.Intervals, longContextReferenceInterval(entry))
+			interval := longContextReferenceInterval(entry)
+			if pricing.CacheWrite12hPrice != nil {
+				interval.CacheWrite12hPrice = floatRef(*pricing.CacheWrite12hPrice * entry.LongContextInputCostMultiplier)
+			}
+			pricing.Intervals = append(pricing.Intervals, interval)
 		}
 	}
 

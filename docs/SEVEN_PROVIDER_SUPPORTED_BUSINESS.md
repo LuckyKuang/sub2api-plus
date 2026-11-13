@@ -15,6 +15,13 @@ Start 权益和可选 off-peak 持久恢复。完整后端 unit/integration/lint
 
 ## 平台与原生业务
 
+v0.2.21 导入增加 OpenAI 已观测的 30m/12h 缓存写入明细、独立 12h 价和冻结结算；
+缺失或不完整明细仍按总量计费，历史零值不代表已观测 TTL。HTTP page snapshot 转换
+在原始入站审计后执行，两引擎对 HTTP/WS 使用同一内容归属。WS 严格 token 计时、
+后续 turn 与 search 重连保留原身份、授权和禁止重放边界。具体断言见
+[导入回归要求](SEVEN_PROVIDER_TEST_MATRIX.md#v0221-import-requirements)。
+Anthropic/Gemini/Antigravity、支付和控制台认证专项不作为新增七平台能力声明。
+
 | 平台 | 已实现的账号与授权 | 已实现的推理和控制业务 | 必须保留的边界 |
 | --- | --- | --- | --- |
 | OpenAI / Codex | API Key、既有 OAuth 账号；授权码、设备授权、刷新与撤销等独立操作 | Responses HTTP/WS、Chat/Messages 适配、图像兼容与异步任务/S3 结果存储、模型目录、用量与配额重置、已有 Alpha Search 和 Live 创建/sideband 路径；可选 OAuth 传输插件宿主；普通凭据所有者 OAuth 账号的独立固定版 Codex CLI 单轮任务 | HTTP、WS、图像任务/存储、插件进程、CLI 任务、模型发现、预检、登录和控制请求分别验收；各账号类型不自动共享授权能力。Codex 身份优先级及字段省略规则保持不变。 |

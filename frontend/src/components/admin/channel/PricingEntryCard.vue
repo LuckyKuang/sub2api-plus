@@ -149,13 +149,18 @@
                 type="number" step="any" min="0" class="input mt-0.5 text-sm" :placeholder="t('admin.channels.form.pricePlaceholder')" />
             </div>
             <div>
-              <label class="text-xs surface-muted">{{ t('admin.channels.form.cacheWrite5mPrice') }}</label>
+              <label class="text-xs surface-muted">{{ t(props.platform === 'openai' ? 'admin.channels.form.cacheWrite30mPrice' : 'admin.channels.form.cacheWrite5mPrice') }}</label>
               <input :value="entry.cache_write_price" @input="emitField('cache_write_price', ($event.target as HTMLInputElement).value)"
                 type="number" step="any" min="0" class="input mt-0.5 text-sm" :placeholder="t('admin.channels.form.pricePlaceholder')" />
             </div>
-            <div>
+            <div v-if="props.platform !== 'openai'">
               <label class="text-xs surface-muted">{{ t('admin.channels.form.cacheWrite1hPrice') }}</label>
               <input :value="entry.cache_write_1h_price" @input="emitField('cache_write_1h_price', ($event.target as HTMLInputElement).value)"
+                type="number" step="any" min="0" class="input mt-0.5 text-sm" :placeholder="t('admin.channels.form.pricePlaceholder')" />
+            </div>
+            <div v-if="props.platform === 'openai'">
+              <label class="text-xs surface-muted" :title="t('admin.channels.form.cacheWrite12hHint')">{{ t('admin.channels.form.cacheWrite12hPrice') }}</label>
+              <input :value="entry.cache_write_12h_price" @input="emitField('cache_write_12h_price', ($event.target as HTMLInputElement).value)"
                 type="number" step="any" min="0" class="input mt-0.5 text-sm" :placeholder="t('admin.channels.form.pricePlaceholder')" />
             </div>
             <div>
@@ -204,6 +209,7 @@
                 v-for="(iv, idx) in entry.intervals"
                 :key="idx"
                 :interval="iv"
+                :platform="props.platform"
                 :mode="entry.billing_mode"
                 :enable-multipliers="enableTierMultipliers"
                 @update="updateInterval(idx, $event)"
@@ -412,6 +418,7 @@ function addInterval() {
     min_tokens: 0, max_tokens: null, tier_label: '',
     input_price: null, output_price: null, cache_write_price: null,
     cache_write_1h_price: null,
+    cache_write_12h_price: null,
     cache_read_price: null, per_request_price: null,
     input_multiplier: null, output_multiplier: null,
     cache_write_multiplier: null, cache_read_multiplier: null,
@@ -429,6 +436,7 @@ function addMediaTier() {
     min_tokens: 0, max_tokens: null, tier_label: labels[intervals.length] || '',
     input_price: null, output_price: null, cache_write_price: null,
     cache_write_1h_price: null,
+    cache_write_12h_price: null,
     cache_read_price: null, per_request_price: null,
     input_multiplier: null, output_multiplier: null,
     cache_write_multiplier: null, cache_read_multiplier: null,
@@ -482,7 +490,7 @@ const lookupStatus = ref<LookupStatus>({ state: 'idle' })
 /** 用户是否已经填过任何价格。显式 0 视为「已填」，自动填充与补齐都不得覆盖。 */
 function hasAnyPricingValue(entry: PricingFormEntry): boolean {
   const fields: Array<keyof PricingFormEntry> = [
-    'input_price', 'output_price', 'cache_write_price', 'cache_write_1h_price',
+    'input_price', 'output_price', 'cache_write_price', 'cache_write_1h_price', 'cache_write_12h_price',
     'cache_read_price', 'image_input_price', 'image_output_price', 'per_request_price',
     'fast_multiplier', 'flex_multiplier',
   ]
@@ -523,7 +531,7 @@ async function onModelsUpdate(newModels: string[]) {
   if (clearingStaleReference) {
     const target = nextEntry as unknown as Record<string, unknown>
     for (const f of [
-      'input_price', 'output_price', 'cache_write_price', 'cache_write_1h_price',
+      'input_price', 'output_price', 'cache_write_price', 'cache_write_1h_price', 'cache_write_12h_price',
       'cache_read_price', 'image_input_price', 'image_output_price', 'per_request_price',
       'fast_multiplier', 'flex_multiplier',
     ]) {
@@ -592,7 +600,7 @@ async function completeEmptyFields() {
     const current = props.entry
     const filled = { ...current } as PricingFormEntry
     const target = filled as unknown as Record<string, unknown>
-    for (const field of ['input_price', 'output_price', 'cache_write_price', 'cache_write_1h_price',
+    for (const field of ['input_price', 'output_price', 'cache_write_price', 'cache_write_1h_price', 'cache_write_12h_price',
       'cache_read_price', 'image_input_price', 'image_output_price', 'per_request_price',
       'fast_multiplier', 'flex_multiplier']) {
       if (target[field] === null || target[field] === undefined || target[field] === '') {

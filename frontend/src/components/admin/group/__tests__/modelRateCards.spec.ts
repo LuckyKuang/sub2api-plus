@@ -12,6 +12,12 @@ describe('group model rate-only cards', () => {
     expect(hasGroupPriceOverride({ ...empty(), output_price: 0 })).toBe(true)
     expect(hasGroupPriceOverride({ ...empty(), per_request_price: 0 })).toBe(true)
   })
+  it('preserves 12-hour-only prices including explicit zero and ignores blank prices', () => {
+    expect(hasGroupPriceOverride({ ...empty(), cache_write_12h_price: 5 })).toBe(true)
+    expect(hasGroupPriceOverride({ ...empty(), cache_write_12h_price: 0 })).toBe(true)
+    expect(hasGroupPriceOverride({ ...empty(), cache_write_12h_price: '' })).toBe(false)
+    expect(hasGroupPriceOverride({ ...empty(), cache_write_12h_price: null })).toBe(false)
+  })
   it('retains configured service-tier price overrides without inventing an override from blank values', () => {
     expect(hasGroupPriceOverride({ ...empty(), fast_multiplier: 3 })).toBe(true)
     expect(hasGroupPriceOverride({ ...empty(), flex_multiplier: 0.25 })).toBe(true)

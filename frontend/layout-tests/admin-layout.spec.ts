@@ -626,3 +626,36 @@ test('proxy filters and wrapping actions share control heights and stay within t
     expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false)
   }
 })
+
+test('settings save dock remains reachable without covering the final field in both page sizes', async ({ page }, info) => {
+  const theme = info.project.use.colorScheme === 'dark' ? 'dark' : 'light'
+  const locale = info.project.use.locale?.startsWith('zh') ? 'zh' : 'en'
+  await page.route('**/api/v1/admin/settings', route => route.fulfill({ json: { code: 0, data: {} } }))
+  for (const viewport of [{ width: 375, height: 600 }, { width: 1440, height: 700 }]) {
+    await page.setViewportSize(viewport)
+    await page.goto(`/layout-tests/index.html?view=admin-layout&settings=1&theme=${theme}&locale=${locale}`)
+    const dock = page.locator('[data-test="settings-save-bar"]')
+    const save = dock.getByRole('button')
+    await expect(save).toBeEnabled()
+    const lastField = page.locator('form input:visible').last()
+    await lastField.scrollIntoViewIfNeeded()
+    await expect(lastField).toBeInViewport()
+    await expect(save).toBeInViewport()
+    for (const control of [lastField, save]) {
+      expect(await control.evaluate(element => {
+        const rect = element.getBoundingClientRect()
+        return element.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2))
+      })).toBe(true)
+    }
+    const box = await dock.boundingBox()
+    expect(box!.x).toBeGreaterThanOrEqual(0)
+    expect(box!.x + box!.width).toBeLessThanOrEqual(viewport.width)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    const fill = await dock.evaluate(element => getComputedStyle(element).backgroundColor)
+    expect(fill).not.toBe('rgba(0, 0, 0, 0)')
+    if (theme === 'dark') expect(fill).not.toContain('255, 255, 255')
+    const update = page.waitForRequest(request => request.url().endsWith('/api/v1/admin/settings') && request.method() !== 'GET')
+    await save.click()
+    await update
+  }
+})

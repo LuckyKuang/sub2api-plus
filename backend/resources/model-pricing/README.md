@@ -89,13 +89,17 @@ stricter match rule than request billing:
   same-model built-in fallback are reported as `manual_required`. A missing
   price is never rendered as zero.
 - Remote mirrors can lag a model release. `gpt-6-sol`, `gpt-6-luna` and
-  `claude-opus-5-5` carry same-model built-in fallbacks in
+  `claude-opus-5-5`, `claude-fable-5-2` and `claude-mythos-5-2` carry same-model built-in fallbacks in
   `internal/service/` so an absent or stale catalog cannot silently bill them as
   a different model. If the JSON is only being byte-identical to upstream, those
   fallbacks stay as the sole net-new protection — see `docs/CHANNEL_PRICING.md`.
 
 Any change to a bundled JSON must keep its `.sha256` in sync and let the release
 workflow recompute the digest.
+
+The two Claude 5.2 rows use the independently reviewed provider prices linked
+from `docs/providers/CLAUDE.md`. Their Anthropic rows do not supply another
+platform's administrator reference price or grant provider model access.
 
 The StepFun chat entries are maintained from its official international USD
 price table, checked 2026-10-08. Model-specific rates, cache accounting, the

@@ -47,6 +47,7 @@ CI 以 `pnpm audit --prod --audit-level=high` 守护生产依赖。除能在 `fr
   `frontend/third-party/SHA256SUMS` 记录了文件名、大小、sha256、sha512、来源 URL 与获取日期，可用 `shasum -a 256 -c SHA256SUMS` 校验。SheetJS 不发布 per-release 校验文件（`.tgz.sha256`/`.tgz.sha512`/`SHA256SUMS` 均 404），故须由第二人独立重复下载并核对哈希。
 - **不得重新引入 `pnpm.auditConfig.ignoreCves`**：该设置会把 advisory 从 `pnpm audit --json` 的 `advisories` 中移除（只留在 `muted`），而 `tools/check_pnpm_audit_exceptions.py` 消费的正是 `advisories`，于是「缺少例外」与「例外过期」两项检查同时失效——旧配置下审计长期返回 `advisories: []` 却仍有 `metadata.vulnerabilities.high = 2`。例外必须写进 `.github/audit-exceptions.yml` 才能被检查器看到。
 - **回归守护**：`frontend/src/views/admin/__tests__/UsageView.spec.ts` 的 `UsageView xlsx audit exception` 断言 `frontend/src` 下（测试目录与守卫文件自身除外）不存在 `XLSX.read*`/`readFile*`/`sheet_to_*` 解析调用、`frontend/package.json` 不 pin `ignoreCves`、例外清单不含 `xlsx`。
+  全源码扫描分批并发读取文件，避免 WSL2 挂载目录的串行读取延迟触发测试超时；扫描范围、解析禁令和超时限制保持不变。
 - **再评估条件**：SheetJS CE 发布新版本；出现针对 `xlsx` 的新 advisory；或任何代码开始读取/解析外部 xlsx（`XLSX.read`/`readFile` 等）——最后一种情况下「只写不读」前提失效，必须立即重新评估该依赖。
 
 接受新例外前，先确认能通过 `pnpm.overrides` 打补丁；确无补丁且风险路径不可达时，才在 `.github/audit-exceptions.yml` 新增带 `expires_on` 与 `owner` 的条目，并在此登记同一依据与再评估条件。

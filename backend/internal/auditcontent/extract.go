@@ -80,6 +80,7 @@ func Extract(protocol string, body []byte) (Document, error) {
 	}
 	normalizedProtocol := normalizeProtocol(protocol)
 	if isResponsesProtocol(normalizedProtocol) {
+		body, _ = openaiwire.NormalizeCodexPageContext(body)
 		body, _ = openaiwire.NormalizeCodexAutomationBootstrap(body)
 		body, _ = openaiwire.NormalizeCodexDelegationBootstrap(body)
 	}
@@ -723,8 +724,8 @@ func appendResponsesItem(document *Document, value any, current bool) {
 				appendToolOutput(document, output, current)
 			}
 			// Official named outputs carry source labels without a paired call_id.
-			// Their output retains the same tool-context extraction and current-user
-			// policy as paired outputs; labels are metadata, not prompt text.
+			// Ordinary outputs retain paired tool-context policy. Recognized standalone
+			// page snapshots were projected to attributed user messages before parsing.
 			markUnknownNonEmptyFields(document, typed, "type", "id", "call_id", "name", "namespace", "output", "status")
 			return
 		case "computer_call_output":

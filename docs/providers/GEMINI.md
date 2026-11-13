@@ -115,3 +115,7 @@ Model discovery and cache writes use the credential owner's
 Vertex catalog page share the operation's snapshot. Detached cache cleanup keeps
 the same snapshot after client cancellation; recovery resolves the bound owner,
 and a different failover account resolves its own identity.
+
+The v0.2.21 Messages compatibility path excludes Gemini `thought` text from a
+non-streaming response body. Thought metadata does not become user-visible text;
+existing usage, identity, audit and billing rules are unchanged.
