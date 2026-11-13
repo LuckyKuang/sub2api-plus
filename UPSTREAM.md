@@ -24,6 +24,10 @@ Claude Code's compiled version advances to `2.1.321` with its source priority,
 client family and SDK/runtime fingerprint preserved. Fable/Mythos 5.2 receive
 separate catalog, conversion and billing support; account access remains subject
 to provider eligibility. See [Claude](docs/providers/CLAUDE.md).
+The independently fixed Claude acceptance floor remains `2.1.258`, preserving
+existing explicit pins. OpenAI cache-duration counters survive converted HTTP
+streams/buffered responses and native WS turn/session accounting, with one
+shared validator and the existing aggregate fallback for unknown durations.
 
 Upstream semantic/visible TTFT settings and its injectable WS classifier are
 excluded: Plus removed that setting and retains strict nonempty token deltas,

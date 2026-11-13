@@ -709,7 +709,11 @@ companion headers, the token-acquisition snapshot and final-send replacement
 of foreign SDK headers. The v0.2.21 sync updates only this Claude version pin. Account → global → valid
 environment / compiled-default selection is unchanged; invalid candidates fall
 through atomically. Stainless JS `0.94.0`, Node `v24.3.0`, Linux/x64 and `X-App: cli`
-remain fixed. Exact-default, lower-bound 2.1.320/321/322, owner, transport and
+remain fixed. The supported minimum stays at `2.1.258`, independently of the
+compiled default. Previously valid account/global/environment pins, including
+`2.1.258`, `2.1.300` and `2.1.320`, retain their selected source and version.
+Strict three-part version syntax and rejection below `2.1.258` remain mandatory.
+Exact-default, stable-minimum, source-priority, owner, transport and
 billing-attribution regressions cover the update.
 
 For Sonnet 5.5, gateway request construction filters

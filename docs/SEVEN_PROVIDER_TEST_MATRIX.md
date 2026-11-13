@@ -8,6 +8,24 @@ These regressions supplement the existing business inventory. The unit gate pins
 `TestAvailableFallbackOpenAI12hPriceAndPlatformIsolation`: observed exhaustive
 30m/12h splits, aggregate fallback, independent prices, explicit zero, legacy
 cards, group/context factors, catalog isolation and frozen settlement.
+`TestOpenAICacheWriteTTLRecordUsage` includes converted Chat and Messages,
+streaming and buffered. `TestOpenAICacheWriteTTLNativeWSSettlement` exercises
+real downstream WebSockets and the production native relay/adapter for OAuth
+and API Key accounts, then verifies duration counters, durable-log inputs and
+actual debits at configured prices; invalid/missing details use the generic rate.
+`TestRelayCacheWriteTTLTurnIsolationAndReplacement` verifies provisional/terminal
+replacement, clearing unknown classifications and exact session sums across
+three native relay turns. `TestResponsesCacheWriteTTLTypedRoundTrip` preserves
+nested details through typed decode, Chat conversion and reserialization;
+`TestCacheWriteTTLValidation` and `TestCacheWriteTTLDetailsAliasPriority` pin
+integer/exhaustive validation and canonical-versus-prompt alias priority.
+All four, native WS settlement and the Claude pin tests are in the unit gate.
+`TestClaudeIdentityDefaultUpgradePreservesExplicitPins` covers prior account and
+global versions across Anthropic account types with final-send SDK/header checks.
+`TestGetClaudeCodeClientVersionPriority` also retains saved legacy manual/synced
+pins below the new default while rejecting versions below the fixed minimum.
+The Claude package separately pins the stable minimum, environment resolution
+and exact compiled default.
 `TestOpenAIWSPassthroughStrictTokenTimingEveryTurn` retains independent per-turn
 token/output/byte timing and rejects empty reasoning or metadata as token evidence.
 

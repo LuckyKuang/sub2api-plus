@@ -1231,6 +1231,11 @@ nonnegative `ttl_30m_tokens` and `ttl_12h_tokens` summing exactly to aggregate
 historical zero counters never imply an observed duration. The independent
 12h price, explicit-zero semantics, speed/context factors and frozen settlement
 are defined in [channel pricing](../CHANNEL_PRICING.md).
+The same wire validator supplies HTTP usage, typed Responses-to-Chat/Messages
+conversion, and native WS passthrough. Typed reserialization retains the nested
+duration details. Terminal usage replacement, per-turn WS results and session
+totals preserve the validated buckets without double counting; invalid or absent
+details keep aggregate billing rather than retaining an earlier split.
 
 HTTP Responses rejects invalid UTF-8 before JSON transformations, selection or
 upstream writes. Valid call-less `agent` page snapshot outputs become untrusted

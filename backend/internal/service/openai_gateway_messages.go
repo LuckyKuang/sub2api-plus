@@ -1548,6 +1548,7 @@ func copyOpenAIUsageFromResponsesUsage(usage *apicompat.ResponsesUsage) OpenAIUs
 		OutputTokens:             usage.OutputTokens,
 		CacheCreationInputTokens: usage.CacheCreationInputTokens,
 	}
+	result.CacheCreation30mInputTokens, result.CacheCreation12hInputTokens = usage.CacheWriteTTLTokens()
 	if usage.InputTokensDetails != nil {
 		result.CacheReadInputTokens = usage.InputTokensDetails.CachedTokens
 	}

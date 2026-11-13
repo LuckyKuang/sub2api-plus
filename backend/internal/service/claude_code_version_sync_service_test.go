@@ -142,7 +142,7 @@ func TestLatestClaudeCodeStableReleaseVersion(t *testing.T) {
 	require.Empty(t, latestClaudeCodeStableReleaseVersion([]*GitHubRelease{{TagName: "not-a-tag"}}))
 	// 预发布 tag 即使漏标 Prerelease 也要被版本号后缀挡住。
 	require.Empty(t, latestClaudeCodeStableReleaseVersion([]*GitHubRelease{{TagName: "v" + claudeCodeTestVersion(2) + "-beta.1"}}))
-	// 低于内置基线的版本号即使形态合法也不得采信。
+	// 低于固定支持下限的版本号即使形态合法也不得采信。
 	require.Empty(t, latestClaudeCodeStableReleaseVersion([]*GitHubRelease{{TagName: "v2.1.9"}}))
 }
 
@@ -304,7 +304,7 @@ func TestClaudeCodeVersionSyncFallsBackToReleaseList(t *testing.T) {
 func TestClaudeCodeVersionSyncLatestSharesFiltering(t *testing.T) {
 	repo := newClaudeCodeVersionSyncSettingRepoStub(nil)
 	github := &claudeCodeVersionSyncGitHubStub{
-		// 剥掉 v 前缀后不满足基线校验（2.1.9 低于内置基线）的 latest
+		// 剥掉 v 前缀后不满足下限校验（2.1.9 低于固定支持下限）的 latest
 		// 必须被拒绝而不是直接采信。
 		latest:   &GitHubRelease{TagName: "v2.1.9"},
 		releases: []*GitHubRelease{{TagName: "v" + claudeCodeTestVersion(1)}},

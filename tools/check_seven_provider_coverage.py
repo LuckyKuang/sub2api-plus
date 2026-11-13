@@ -516,7 +516,21 @@ PROFILES = {
             for scenario in ("default_remains_explicitly_process_local", "missing-key", "wrong-length", "bad-json",
                              "missing-active", "retention", "stable_env_keyring_and_retention")
         )),
+        RegressionGroup("./internal/pkg/claude", (
+            "TestIsSupportedCLIVersion",
+            "TestResolveCLIVersion",
+            "TestEffectiveCLIVersionPreservesPriorPin",
+            "TestCLIVersionDefaultsToBuiltinPin",
+        )),
+        RegressionGroup("./internal/openaiwire", (
+            "TestCacheWriteTTLValidation",
+            "TestCacheWriteTTLDetailsAliasPriority",
+        )),
+        RegressionGroup("./internal/service/openai_ws_v2", (
+            "TestRelayCacheWriteTTLTurnIsolationAndReplacement",
+        )),
         RegressionGroup("./internal/pkg/apicompat", (
+            "TestResponsesCacheWriteTTLTypedRoundTrip",
             "TestDeepSeekCacheUsageProtocolBridges",
             "TestStepFunParallelChatToolsKeepIndependentAnthropicBlockLifecycles",
             "TestStepFunReviewToolStreamKeepsClosedBlocksImmutable",
@@ -551,7 +565,10 @@ PROFILES = {
             "TestMiniMaxOfficialFlashReleaseCandidate",
         )),
         RegressionGroup("./internal/service", (
+            "TestClaudeIdentityDefaultUpgradePreservesExplicitPins",
+            "TestGetClaudeCodeClientVersionPriority",
             "TestOpenAICacheWriteTTLRecordUsage",
+            "TestOpenAICacheWriteTTLNativeWSSettlement",
             "TestOpenAICacheWriteTTLInvalidDetailsKeepAggregate",
             "TestOpenAICacheWriteTTLPrices",
             "TestOpenAICacheWriteTTLFrozenGroupCard",

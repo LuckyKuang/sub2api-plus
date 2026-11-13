@@ -8,6 +8,9 @@ provider/Bedrock spellings and same-SKU aliases. Both expose
 conversion validates against the final mapped model. Older models retain their
 own thinking and effort rules. Claude Code uses compiled `2.1.321`; source
 priority and non-version identity declarations remain unchanged.
+Its independently fixed minimum remains `2.1.258`; existing explicit
+account/global/environment pins below the new default remain valid and keep
+their source priority. Model-specific provider eligibility still applies.
 
 Standard input/output/5m-cache-write/1h-cache-write/cache-read rates per million
 tokens are $8/$40/$10/$16/$0.20. Fast input/output are $16/$80.

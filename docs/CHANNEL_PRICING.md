@@ -315,8 +315,14 @@ splits retain the aggregate generic price. `cache_write_12h_price` is optional
 in channel/group/account-statistics cards and intervals: NULL preserves a
 legacy generic card, explicit zero is free. Registered official GPT cards derive
 12h rates as input × 2.5; applicable speed/context/group factors apply afterward.
-The two counters sum to the aggregate and are never added to it again. Existing
-Anthropic 5m/1h meters remain separate. Reference fill, user/model-plaza display,
+For a valid split, the two counters sum to the aggregate and are never added to it again. Existing
+Anthropic 5m/1h meters remain separate. Responses HTTP, converted Chat/Messages
+(streaming and buffered), pooled WS and native WS passthrough preserve these
+observed counters through settlement and durable logs. Native WS keeps each
+turn's counters separate and sums them only for the session aggregate. Replacing
+an aggregate with unknown/invalid duration details clears any earlier duration
+classification; it never borrows another event's or turn's split.
+Reference fill, user/model-plaza display,
 context tiers and frozen settlement carry the same 12h price. The release pricing resource records
 the API's 1050000 context window, 922000 maximum input and 128000 maximum output.
 These API limits are separate from the reviewed Codex client descriptor and do

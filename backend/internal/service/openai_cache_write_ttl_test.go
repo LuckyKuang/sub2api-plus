@@ -32,7 +32,7 @@ func TestOpenAICacheWriteTTLRecordUsage(t *testing.T) {
 		{"12h", 0, 2399},
 		{"mixed", 9, 2390},
 	} {
-		for _, route := range []string{"json", "sse", "passthrough_json", "passthrough_sse"} {
+		for _, route := range []string{"json", "sse", "passthrough_json", "passthrough_sse", "chat_json", "chat_sse", "messages_json", "messages_sse"} {
 			t.Run(tc.name+"/"+route, func(t *testing.T) {
 				const groupID int64 = 777
 				usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
@@ -45,11 +45,11 @@ func TestOpenAICacheWriteTTLRecordUsage(t *testing.T) {
 				svc.channelService.cache.Store(populateChannelCache([]Channel{channel}, map[int64]string{groupID: PlatformOpenAI}))
 				svc.resolver = NewModelPricingResolver(svc.channelService, svc.billingService)
 				svc.cfg.Gateway.MaxLineSize = defaultMaxLineSize
-				account := &Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeAPIKey}
+				account := &Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Credentials: map[string]any{"api_key": "fixture-key", "base_url": "https://api.openai.com"}}
 				response := fmt.Sprintf(`{"id":"resp_ttl","object":"response","model":"gpt-6-luna","status":"completed","output":[],"usage":{"input_tokens":2402,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":2399,"cache_write_tokens_details":{"ttl_30m_tokens":%d,"ttl_12h_tokens":%d}},"output_tokens":5,"total_tokens":2407}}`, tc.short, tc.long)
 				stream := strings.HasSuffix(route, "sse")
 				contentType := "application/json"
-				if stream {
+				if stream || strings.HasPrefix(route, "chat_") || strings.HasPrefix(route, "messages_") {
 					response = `data: {"type":"response.completed","response":` + response + "}\n\n"
 					contentType = "text/event-stream"
 				}
@@ -74,6 +74,19 @@ func TestOpenAICacheWriteTTLRecordUsage(t *testing.T) {
 					result, err := svc.handleStreamingResponsePassthrough(context.Background(), resp, c, account, time.Now(), "gpt-6-luna", "gpt-6-luna")
 					require.NoError(t, err)
 					usage = result.usage
+				default:
+					svc.httpUpstream = &httpUpstreamRecorder{resp: resp}
+					body := []byte(fmt.Sprintf(`{"model":"gpt-6-luna","stream":%t,"max_tokens":1024,"messages":[{"role":"user","content":"hello"}]}`, stream))
+					var result *OpenAIForwardResult
+					var err error
+					if strings.HasPrefix(route, "chat_") {
+						result, err = svc.ForwardAsChatCompletions(context.Background(), c, account, body, "", "")
+					} else {
+						result, err = svc.ForwardAsAnthropic(context.Background(), c, account, body, "", "")
+					}
+					require.NoError(t, err)
+					require.NotNil(t, result)
+					usage = &result.Usage
 				}
 				require.NotNil(t, usage)
 				err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{

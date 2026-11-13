@@ -44,7 +44,17 @@ func TestEffectiveCLIVersionFollowsResolver(t *testing.T) {
 	}
 }
 
-// c. resolver 返回非法值（空串、非 semver、低于内置基线）时回退 CLIVersion()。
+func TestEffectiveCLIVersionPreservesPriorPin(t *testing.T) {
+	withCLIVersionResolver(t, func() string { return "2.1.300" })
+	if got := EffectiveCLIVersion(); got != "2.1.300" {
+		t.Fatalf("EffectiveCLIVersion() = %q, want existing pin 2.1.300", got)
+	}
+	if got := DefaultUserAgent(); got != "claude-cli/2.1.300 (external, cli)" {
+		t.Fatalf("DefaultUserAgent() = %q, want existing pin identity", got)
+	}
+}
+
+// c. resolver 返回非法值（空串、非 semver、低于固定支持下限）时回退 CLIVersion()。
 func TestEffectiveCLIVersionFallsBackOnInvalidResolverValues(t *testing.T) {
 	for name, invalid := range map[string]string{
 		"empty":          "",

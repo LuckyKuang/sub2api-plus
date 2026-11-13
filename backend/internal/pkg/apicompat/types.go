@@ -7,6 +7,9 @@ package apicompat
 import (
 	"bytes"
 	"encoding/json"
+
+	"github.com/LuckyKuang/sub2api-plus/internal/openaiwire"
+	"github.com/tidwall/gjson"
 )
 
 // ---------------------------------------------------------------------------
@@ -617,18 +620,36 @@ func (u *ResponsesUsage) UnmarshalJSON(data []byte) error {
 	if canonicalCacheCreationTokens != nil {
 		u.CacheCreationInputTokens = max(*canonicalCacheCreationTokens, 0)
 	}
+	// Normalize the selected alias without making malformed TTL details a JSON
+	// decoding error. Preserve them for typed reserialization and legacy billing.
+	if details := openaiwire.CacheWriteTokenDetails(gjson.ParseBytes(data)); details.Exists() {
+		if u.InputTokensDetails == nil {
+			u.InputTokensDetails = &ResponsesInputTokensDetails{}
+		}
+		u.InputTokensDetails.CacheWriteTokensDetails = json.RawMessage(details.Raw)
+	}
 	if u.TotalTokens == 0 && (u.InputTokens != 0 || u.OutputTokens != 0) {
 		u.TotalTokens = u.InputTokens + u.OutputTokens
 	}
 	return nil
 }
 
+// CacheWriteTTLTokens returns the validated duration counters without adding
+// them to the aggregate. All wire and compatibility paths use the same rule.
+func (u *ResponsesUsage) CacheWriteTTLTokens() (int, int) {
+	if u == nil || u.InputTokensDetails == nil {
+		return 0, 0
+	}
+	return openaiwire.CacheWriteTTLTokens(gjson.ParseBytes(u.InputTokensDetails.CacheWriteTokensDetails), u.CacheCreationInputTokens)
+}
+
 // ResponsesInputTokensDetails breaks down input token usage.
 type ResponsesInputTokensDetails struct {
-	CachedTokens        int `json:"cached_tokens,omitempty"`
-	AudioTokens         int `json:"audio_tokens,omitempty"`
-	CacheCreationTokens int `json:"cache_creation_tokens,omitempty"`
-	CacheWriteTokens    int `json:"cache_write_tokens,omitempty"`
+	CachedTokens            int             `json:"cached_tokens,omitempty"`
+	AudioTokens             int             `json:"audio_tokens,omitempty"`
+	CacheCreationTokens     int             `json:"cache_creation_tokens,omitempty"`
+	CacheWriteTokens        int             `json:"cache_write_tokens,omitempty"`
+	CacheWriteTokensDetails json.RawMessage `json:"cache_write_tokens_details,omitempty"`
 }
 
 // ResponsesOutputTokensDetails breaks down output token usage.
@@ -891,13 +912,14 @@ func (u *ChatUsage) UnmarshalJSON(data []byte) error {
 //   - completion_tokens_details: reasoning_tokens, audio_tokens,
 //     accepted_prediction_tokens, rejected_prediction_tokens
 type ChatTokenDetails struct {
-	CachedTokens             int `json:"cached_tokens,omitempty"`
-	AudioTokens              int `json:"audio_tokens,omitempty"`
-	CacheCreationTokens      int `json:"cache_creation_tokens,omitempty"`
-	CacheWriteTokens         int `json:"cache_write_tokens,omitempty"`
-	ReasoningTokens          int `json:"reasoning_tokens,omitempty"`
-	AcceptedPredictionTokens int `json:"accepted_prediction_tokens,omitempty"`
-	RejectedPredictionTokens int `json:"rejected_prediction_tokens,omitempty"`
+	CachedTokens             int             `json:"cached_tokens,omitempty"`
+	AudioTokens              int             `json:"audio_tokens,omitempty"`
+	CacheCreationTokens      int             `json:"cache_creation_tokens,omitempty"`
+	CacheWriteTokens         int             `json:"cache_write_tokens,omitempty"`
+	CacheWriteTokensDetails  json.RawMessage `json:"cache_write_tokens_details,omitempty"`
+	ReasoningTokens          int             `json:"reasoning_tokens,omitempty"`
+	AcceptedPredictionTokens int             `json:"accepted_prediction_tokens,omitempty"`
+	RejectedPredictionTokens int             `json:"rejected_prediction_tokens,omitempty"`
 }
 
 // ChatCompletionsChunk is a single streaming chunk from POST /v1/chat/completions.

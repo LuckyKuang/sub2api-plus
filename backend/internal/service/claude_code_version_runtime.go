@@ -37,7 +37,7 @@ func NormalizeClaudeCodeClientVersion(version string) string {
 
 // GetClaudeCodeClientVersion 返回出站声明的 Claude Code CLI 客户端版本号。
 // 优先级：管理员面板覆写 → 自动同步到的最新稳定版 → claude.CLIVersion() 内置基线。
-// 与 Codex 客户端版本同步服务并存（双轨，互不干扰）。
+// Codex 客户端使用独立的可信身份配置，不进行自动版本同步。
 func (s *SettingService) GetClaudeCodeClientVersion(ctx context.Context) string {
 	fallback := claude.CLIVersion()
 	if s == nil || s.settingRepo == nil {

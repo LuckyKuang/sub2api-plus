@@ -22,8 +22,12 @@ func TestGetClaudeCodeClientVersionPriority(t *testing.T) {
 		{name: "归一化手动值", manual: " v" + claudeCodeTestVersion(1) + " ", synced: claudeCodeTestVersion(2), want: claudeCodeTestVersion(1)},
 		{name: "跟随同步值", synced: claudeCodeTestVersion(2), want: claudeCodeTestVersion(2)},
 		{name: "无效手动值回退", manual: "invalid", synced: claudeCodeTestVersion(2), want: claudeCodeTestVersion(2)},
-		{name: "旧手动值回退同步值", manual: "2.1.280", synced: claudeCodeTestVersion(2), want: claudeCodeTestVersion(2)},
-		{name: "旧同步值回退基线", synced: "2.1.280", want: claude.CLIVersion()},
+		// OFFICIAL_AGENT_BASELINES.md: upgrading the compiled default must not
+		// invalidate existing explicit pins or change their source priority.
+		{name: "旧手动值保持优先级", manual: "2.1.280", synced: claudeCodeTestVersion(2), want: "2.1.280"},
+		{name: "旧同步值保持有效", synced: "2.1.280", want: "2.1.280"},
+		{name: "低于固定下限的手动值回退", manual: "2.1.257", synced: claudeCodeTestVersion(2), want: claudeCodeTestVersion(2)},
+		{name: "低于固定下限的同步值回退", synced: "2.1.257", want: claude.CLIVersion()},
 		{name: "无效同步值回退", synced: "2.1.9", want: claude.CLIVersion()},
 		{name: "未配置时回退", want: claude.CLIVersion()},
 	} {
