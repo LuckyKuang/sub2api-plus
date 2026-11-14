@@ -242,6 +242,21 @@ func (s *AccountTestService) FetchOpenAIAccountModels(ctx context.Context, accou
 			model.Type = "model"
 		}
 	}
+	// The picker mirrors the models this account actually routes: an entry the
+	// account mapping does not configure cannot be tested through the account, so
+	// removing it there must remove it from the picker too. Passthrough accounts
+	// keep the whole upstream catalog because they route it unfiltered.
+	if account != nil && !account.IsOpenAIPassthroughEnabled() {
+		if mapping := account.GetModelMapping(); len(mapping) > 0 {
+			filtered := make([]openai.Model, 0, len(payload.Data))
+			for _, model := range payload.Data {
+				if _, matched := account.ResolveMappedModel(model.ID); matched {
+					filtered = append(filtered, model)
+				}
+			}
+			payload.Data = filtered
+		}
+	}
 	// Codex discovery lists Responses drivers, not image_generation tool models.
 	// Add locally supported image choices only to the OAuth test picker; keep the
 	// shared upstream catalog and API-key discovery authoritative.
