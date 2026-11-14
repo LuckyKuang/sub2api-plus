@@ -1583,15 +1583,23 @@ func (s *GatewayService) GetAvailableModels(ctx context.Context, groupID *int64,
 	// Without configured or discovered candidates, let the handler use defaults.
 	if len(modelSet) == 0 {
 		// Non-nil empty is authoritative: Start has no proven public models.
-		// A caller must not replace unknown/negative permission with defaults.
 		if startPlanOnly {
 			return []string{}
 		}
+		// No account declares a model: keep the group's own platform catalog
+		// visible so a group backed only by OAuth accounts (which never configure
+		// a mapping) still lists what it serves. A composite group enumerating a
+		// linked platform must not inject that platform's defaults, and CN vendors
+		// publish no static catalog.
+		models := s.groupDefaultModelsForListing(ctx, groupID, platform)
+		if platform == PlatformOpenAI {
+			models = filterRetiredOpenAIModelIDs(accounts, models)
+		}
 		if cacheModels && s.modelsListCache != nil {
-			s.modelsListCache.Set(cacheKey, []string(nil), s.modelsListCacheTTL)
+			s.modelsListCache.Set(cacheKey, cloneStringSlice(models), s.modelsListCacheTTL)
 			modelsListCacheStoreTotal.Add(1)
 		}
-		return nil
+		return cloneStringSlice(models)
 	}
 
 	// Convert to slice

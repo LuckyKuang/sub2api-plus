@@ -162,7 +162,7 @@ func (s *ModelPlazaService) listAvailableCatalog(ctx context.Context, groups []G
 	for _, g := range groups {
 		cg := CatalogGroup{Group: g, Models: []CatalogOffer{}, AsOf: asOf}
 		channel := bound[g.ID]
-		candidates, err := s.commercialModelCandidates(ctx, &g, channel, accountMappings[g.ID])
+		candidates, err := s.commercialModelCandidates(ctx, &g, channel, accountMappings[g.ID], requireChannel)
 		if err != nil {
 			return nil, err
 		}

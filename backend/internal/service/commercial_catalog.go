@@ -35,16 +35,52 @@ type commercialCatalogBuilder struct {
 	group         *Group
 	candidates    map[commercialModelKey]commercialModelCandidate
 	accountOwners map[string]map[string]bool
+	// servable holds the public model names an account of the platform serves;
+	// unrestricted marks platforms with an account that has no mapping, which
+	// serves the platform catalog (OAuth accounts are never configured).
+	servable     map[string]map[string]bool
+	unrestricted map[string]bool
+	hasAccounts  bool
+	// enforceAccountCoverage limits catalog membership to models an account in
+	// the group serves. The sales catalog (channel cards) enforces it; the
+	// key-quote catalog keeps its own contract.
+	enforceAccountCoverage bool
+}
+
+// allows reports whether the group can actually serve the model. Channel
+// entries, group pricing and composite routes may only advertise models an
+// account exposes; they own pricing, not catalog membership.
+func (b *commercialCatalogBuilder) allows(model SupportedModel) bool {
+	if !b.enforceAccountCoverage || !b.hasAccounts || b.unrestricted[model.Platform] {
+		return true
+	}
+	servable := b.servable[model.Platform]
+	if len(servable) == 0 {
+		// The platform declares no mapping here (dynamic entitlement such as a
+		// start-plan account or a composite route target). Keep the configured
+		// entry: static account data cannot rule it out.
+		return true
+	}
+	name := strings.ToLower(strings.TrimSpace(model.Name))
+	return name != "" && servable[name]
 }
 
 // commercialModelCandidates enumerates finite configured public IDs. Global
 // price catalogs never add models; this read does not contact a provider.
-func (s *ModelPlazaService) commercialModelCandidates(ctx context.Context, group *Group, channel *Channel, mappings []CommercialModelMapping) ([]commercialModelCandidate, error) {
+func (s *ModelPlazaService) commercialModelCandidates(ctx context.Context, group *Group, channel *Channel, mappings []CommercialModelMapping, requireAccountCoverage bool) ([]commercialModelCandidate, error) {
 	routes, err := s.commercialCatalogRoutes(ctx, group)
 	if err != nil {
 		return nil, err
 	}
-	builder := commercialCatalogBuilder{group: group, candidates: make(map[commercialModelKey]commercialModelCandidate), accountOwners: make(map[string]map[string]bool)}
+	builder := commercialCatalogBuilder{
+		group:                  group,
+		candidates:             make(map[commercialModelKey]commercialModelCandidate),
+		accountOwners:          make(map[string]map[string]bool),
+		servable:               make(map[string]map[string]bool),
+		unrestricted:           make(map[string]bool),
+		enforceAccountCoverage: requireAccountCoverage,
+	}
+	builder.seedAccountServableModels(mappings)
 	builder.seedConfiguredModels(channel, mappings, routes)
 	names := make(map[string]string)
 	for key, candidate := range builder.candidates {
@@ -100,9 +136,35 @@ func (b *commercialCatalogBuilder) add(model SupportedModel, upstream string, en
 	b.candidates[key] = commercialModelCandidate{SupportedModel: model, UpstreamModel: upstream, Endpoints: dedupeAndSortModelIDs(endpoints), RequestDependent: dependent}
 }
 
+func (b *commercialCatalogBuilder) seedAccountServableModels(mappings []CommercialModelMapping) {
+	for _, account := range mappings {
+		if !domain.IsConcretePlatform(account.Platform) || (b.group.Platform != PlatformComposite && account.Platform != b.group.Platform) {
+			continue
+		}
+		b.hasAccounts = true
+		mapping := stringMappingFromRaw(account.ModelMapping)
+		if len(mapping) == 0 {
+			b.unrestricted[account.Platform] = true
+			continue
+		}
+		if b.servable[account.Platform] == nil {
+			b.servable[account.Platform] = make(map[string]bool, len(mapping))
+		}
+		for model := range mapping {
+			name := strings.ToLower(strings.TrimSpace(model))
+			if name != "" {
+				b.servable[account.Platform][name] = true
+			}
+		}
+	}
+}
+
 func (b *commercialCatalogBuilder) seedConfiguredModels(channel *Channel, mappings []CommercialModelMapping, routes []CompositeModelRoute) {
 	if channel != nil {
 		for _, model := range channel.SupportedModels() {
+			if !b.allows(model) {
+				continue
+			}
 			b.add(model, "", nil)
 		}
 	}
@@ -112,8 +174,13 @@ func (b *commercialCatalogBuilder) seedConfiguredModels(channel *Channel, mappin
 			platform = b.group.Platform
 		}
 		for _, model := range pricing.Models {
+			candidate := SupportedModel{Name: model, Platform: platform}
+			if !b.allows(candidate) {
+				continue
+			}
 			p := pricing.Clone()
-			b.add(SupportedModel{Name: model, Platform: platform, Pricing: &p}, "", nil)
+			candidate.Pricing = &p
+			b.add(candidate, "", nil)
 		}
 	}
 	for _, account := range mappings {
@@ -134,7 +201,11 @@ func (b *commercialCatalogBuilder) seedConfiguredModels(channel *Channel, mappin
 	}
 	for _, route := range routes {
 		if route.MatchType == CompositeRouteMatchExact {
-			b.add(SupportedModel{Name: route.PublicModel, Platform: route.TargetPlatform}, "", nil)
+			routeModel := SupportedModel{Name: route.PublicModel, Platform: route.TargetPlatform}
+			if !b.allows(routeModel) {
+				continue
+			}
+			b.add(routeModel, "", nil)
 		}
 	}
 }
