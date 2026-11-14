@@ -42,6 +42,13 @@ var (
 	ErrGroupSubscriptionLimitExceeded = infraerrors.TooManyRequests("GROUP_SUBSCRIPTION_LIMIT_EXCEEDED", "one or more group subscription usage limits exceeded")
 	ErrSubscriptionNilInput           = infraerrors.BadRequest("SUBSCRIPTION_NIL_INPUT", "subscription input cannot be nil")
 	ErrAdjustWouldExpire              = infraerrors.BadRequest("ADJUST_WOULD_EXPIRE", "adjustment would result in expired subscription (remaining days must be > 0)")
+	ErrInvalidAdjustment              = infraerrors.BadRequest("INVALID_ADJUSTMENT", "provide days or expires_at, and optional quota window reset times")
+	ErrAdjustmentConflict             = infraerrors.BadRequest("ADJUSTMENT_CONFLICT", "days and expires_at cannot be set together")
+	ErrWindowResetNotInFuture         = infraerrors.BadRequest("WINDOW_RESET_NOT_IN_FUTURE", "quota window reset time must be in the future")
+	ErrWindowResetAfterExpiry         = infraerrors.BadRequest("WINDOW_RESET_AFTER_EXPIRY", "quota window reset time must be before subscription expiry")
+	ErrCannotAdjustWindowsWhenExpired = infraerrors.BadRequest("CANNOT_ADJUST_WINDOWS_WHEN_EXPIRED", "cannot change quota window reset times on an expired subscription without also extending it")
+	ErrDailyResetNotMidnight          = infraerrors.BadRequest("DAILY_RESET_NOT_MIDNIGHT", "daily quota reset time must be the configured timezone midnight")
+	ErrExpiresAtTooFar                = infraerrors.BadRequest("EXPIRES_AT_TOO_FAR", "expiration cannot be after 2099-12-31")
 )
 
 // SubscriptionService 订阅服务
@@ -770,62 +777,129 @@ func (s *SubscriptionService) RestoreSubscription(ctx context.Context, subscript
 	return restored, nil
 }
 
+// SubscriptionAdjustment is an administrator change to expiry and/or the next
+// quota-window reset times. Days and ExpiresAt are mutually exclusive. Window
+// fields are next-reset instants; usage is preserved.
+type SubscriptionAdjustment struct {
+	Days            *int
+	ExpiresAt       *time.Time
+	FiveHourResetAt *time.Time
+	DailyResetAt    *time.Time
+	WeeklyResetAt   *time.Time
+	MonthlyResetAt  *time.Time
+}
+
+func (a SubscriptionAdjustment) hasExpiryChange() bool {
+	return a.Days != nil || a.ExpiresAt != nil
+}
+
+func (a SubscriptionAdjustment) hasWindowChange() bool {
+	return a.FiveHourResetAt != nil || a.DailyResetAt != nil || a.WeeklyResetAt != nil || a.MonthlyResetAt != nil
+}
+
+func (s *SubscriptionService) currentTime() time.Time {
+	if s != nil && s.now != nil {
+		return s.now()
+	}
+	return time.Now()
+}
+
 // ExtendSubscription 调整订阅时长（正数延长，负数缩短）
 func (s *SubscriptionService) ExtendSubscription(ctx context.Context, subscriptionID int64, days int) (*UserSubscription, error) {
+	return s.AdjustSubscription(ctx, subscriptionID, SubscriptionAdjustment{Days: &days})
+}
+
+func (s *SubscriptionService) AdjustSubscription(ctx context.Context, subscriptionID int64, adjustment SubscriptionAdjustment) (*UserSubscription, error) {
+	if adjustment.Days != nil && adjustment.ExpiresAt != nil {
+		return nil, ErrAdjustmentConflict
+	}
+	if !adjustment.hasExpiryChange() && !adjustment.hasWindowChange() {
+		return nil, ErrInvalidAdjustment
+	}
+	if adjustment.Days != nil {
+		days := *adjustment.Days
+		if days == 0 || days < -MaxValidityDays || days > MaxValidityDays {
+			return nil, infraerrors.BadRequest("INVALID_ADJUSTMENT_DAYS", "days must be nonzero and between -36500 and 36500")
+		}
+	}
+
 	err := s.withSubscriptionUpdateTx(ctx, func(txCtx context.Context) error {
-		// Lock the row before reading its expiry. Without this lock, concurrent
-		// adjustments can both calculate from the same stale expiry and lose one
-		// of the updates when they write the absolute timestamp.
 		sub, err := s.userSubRepo.GetByIDForUpdate(txCtx, subscriptionID)
 		if err != nil {
 			return ErrSubscriptionNotFound
 		}
 
-		// 限制调整天数范围
-		if days > MaxValidityDays {
-			days = MaxValidityDays
-		}
-		if days < -MaxValidityDays {
-			days = -MaxValidityDays
-		}
-
-		now := time.Now()
-		if s.now != nil {
-			now = s.now()
-		}
+		now := s.currentTime()
 		isExpired := !sub.ExpiresAt.After(now)
+		newExpiresAt := sub.ExpiresAt
 
-		// 如果订阅已过期，不允许负向调整
-		if isExpired && days < 0 {
-			return infraerrors.BadRequest("CANNOT_SHORTEN_EXPIRED", "cannot shorten an expired subscription")
+		if adjustment.Days != nil {
+			days := *adjustment.Days
+			if isExpired && days < 0 {
+				return infraerrors.BadRequest("CANNOT_SHORTEN_EXPIRED", "cannot shorten an expired subscription")
+			}
+			if isExpired {
+				newExpiresAt = now.AddDate(0, 0, days)
+			} else {
+				newExpiresAt = sub.ExpiresAt.AddDate(0, 0, days)
+			}
+			if newExpiresAt.After(MaxExpiresAt) {
+				newExpiresAt = MaxExpiresAt
+			}
+		} else if adjustment.ExpiresAt != nil {
+			newExpiresAt = adjustment.ExpiresAt.UTC()
+			if newExpiresAt.After(MaxExpiresAt) {
+				return ErrExpiresAtTooFar
+			}
 		}
 
-		// 计算新的过期时间
-		var newExpiresAt time.Time
-		if isExpired {
-			// 已过期：从当前时间开始增加天数
-			newExpiresAt = now.AddDate(0, 0, days)
-		} else {
-			// 未过期：从原过期时间增加/减少天数
-			newExpiresAt = sub.ExpiresAt.AddDate(0, 0, days)
-		}
-
-		if newExpiresAt.After(MaxExpiresAt) {
-			newExpiresAt = MaxExpiresAt
-		}
-
-		// 检查新的过期时间必须大于当前时间
-		if !newExpiresAt.After(now) {
+		if adjustment.hasExpiryChange() && !newExpiresAt.After(now) {
 			return ErrAdjustWouldExpire
 		}
+		if isExpired && adjustment.hasWindowChange() && !newExpiresAt.After(now) {
+			return ErrCannotAdjustWindowsWhenExpired
+		}
 
-		if err := s.userSubRepo.ExtendExpiry(txCtx, subscriptionID, newExpiresAt); err != nil {
+		if err := validateWindowResetAt(adjustment.FiveHourResetAt, now, newExpiresAt); err != nil {
+			return err
+		}
+		if err := validateWindowResetAt(adjustment.WeeklyResetAt, now, newExpiresAt); err != nil {
+			return err
+		}
+		if err := validateWindowResetAt(adjustment.MonthlyResetAt, now, newExpiresAt); err != nil {
+			return err
+		}
+		dailyStart, err := dailyWindowStartFromResetAt(adjustment.DailyResetAt, now, newExpiresAt)
+		if err != nil {
 			return err
 		}
 
-		// 如果订阅已过期，恢复为active状态
-		if sub.Status == SubscriptionStatusExpired {
-			if err := s.userSubRepo.UpdateStatus(txCtx, subscriptionID, SubscriptionStatusActive); err != nil {
+		if adjustment.hasExpiryChange() {
+			if err := s.userSubRepo.ExtendExpiry(txCtx, subscriptionID, newExpiresAt); err != nil {
+				return err
+			}
+			if sub.Status == SubscriptionStatusExpired {
+				if err := s.userSubRepo.UpdateStatus(txCtx, subscriptionID, SubscriptionStatusActive); err != nil {
+					return err
+				}
+			}
+		}
+
+		var fiveHourStart, weeklyStart, monthlyStart *time.Time
+		if adjustment.FiveHourResetAt != nil {
+			start := avoidLegacyMidnightAnchor(adjustment.FiveHourResetAt.Add(-subscriptionFiveHourDuration), sub.StartsAt)
+			fiveHourStart = &start
+		}
+		if adjustment.WeeklyResetAt != nil {
+			start := avoidLegacyMidnightAnchor(adjustment.WeeklyResetAt.Add(-7*24*time.Hour), sub.StartsAt)
+			weeklyStart = &start
+		}
+		if adjustment.MonthlyResetAt != nil {
+			start := avoidLegacyMidnightAnchor(adjustment.MonthlyResetAt.Add(-30*24*time.Hour), sub.StartsAt)
+			monthlyStart = &start
+		}
+		if fiveHourStart != nil || dailyStart != nil || weeklyStart != nil || monthlyStart != nil {
+			if err := s.userSubRepo.UpdateQuotaWindowStarts(txCtx, subscriptionID, fiveHourStart, dailyStart, weeklyStart, monthlyStart); err != nil {
 				return err
 			}
 		}
@@ -839,11 +913,44 @@ func (s *SubscriptionService) ExtendSubscription(ctx context.Context, subscripti
 	if err != nil {
 		return nil, err
 	}
-
-	// 失效本实例和其他实例的订阅缓存。
 	s.invalidateSubscriptionCachesAsync(sub.UserID, sub.GroupID)
-
 	return sub, nil
+}
+
+func validateWindowResetAt(resetAt *time.Time, now, expiresAt time.Time) error {
+	if resetAt == nil {
+		return nil
+	}
+	if !resetAt.After(now) {
+		return ErrWindowResetNotInFuture
+	}
+	if !resetAt.Before(expiresAt) {
+		return ErrWindowResetAfterExpiry
+	}
+	return nil
+}
+
+func dailyWindowStartFromResetAt(resetAt *time.Time, now, expiresAt time.Time) (*time.Time, error) {
+	if resetAt == nil {
+		return nil, nil
+	}
+	midnight := timezone.StartOfDay(*resetAt)
+	if !resetAt.In(timezone.Location()).Equal(midnight) {
+		return nil, ErrDailyResetNotMidnight
+	}
+	if err := validateWindowResetAt(&midnight, now, expiresAt); err != nil {
+		return nil, err
+	}
+	start := midnight.AddDate(0, 0, -1)
+	return &start, nil
+}
+
+func avoidLegacyMidnightAnchor(start, startsAt time.Time) time.Time {
+	legacy := startOfDay(startsAt)
+	if legacy.Before(startsAt) && start.Equal(legacy) {
+		return start.Add(time.Nanosecond)
+	}
+	return start
 }
 
 // GetByID 根据ID获取订阅

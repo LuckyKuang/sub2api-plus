@@ -48,6 +48,7 @@ export function prepareBulkSubscriptionOperation(input: SubscriptionBulkActionRe
     request.daily = !!input.daily
     request.weekly = !!input.weekly
     request.monthly = !!input.monthly
+    request.five_hour = !!input.five_hour
   }
   const adminId = currentAdminId()
   const storageKey = adminId ? `sub2api:admin:subscription-bulk:${adminId}:${JSON.stringify(request)}` : null

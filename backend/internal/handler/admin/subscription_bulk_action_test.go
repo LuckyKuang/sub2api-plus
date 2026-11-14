@@ -212,3 +212,20 @@ func TestSubscriptionBulkAssign_RejectsInvalidUserIDsBeforeExecution(t *testing.
 		})
 	}
 }
+
+func TestSubscriptionExtend_AbsoluteExpirySetsExactTimestamp(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	expiresAt := time.Now().Add(24 * time.Hour)
+	target := time.Date(2026, 12, 31, 15, 4, 5, 0, time.UTC)
+	repo := &bulkActionHandlerSubscriptionRepo{sub: &service.UserSubscription{ID: 1, UserID: 1, GroupID: 10, Status: service.SubscriptionStatusActive, ExpiresAt: expiresAt}}
+	svc := service.NewSubscriptionService(nil, repo, nil, nil, nil)
+	t.Cleanup(svc.Stop)
+	router := gin.New()
+	router.POST("/api/v1/admin/subscriptions/:id/extend", NewSubscriptionHandler(svc).Extend)
+	body := `{"expires_at":"` + target.Format(time.RFC3339) + `"}`
+	response := bulkActionHandlerRequest(router, "/api/v1/admin/subscriptions/1/extend", body, "extend-absolute")
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	require.Equal(t, 1, repo.extendCalls)
+	require.True(t, repo.sub.ExpiresAt.Equal(target), repo.sub.ExpiresAt)
+}
+

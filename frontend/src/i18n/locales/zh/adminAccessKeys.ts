@@ -255,7 +255,7 @@ export default {
       "category": "订阅"
     },
     "subscriptions_dextend": {
-      "label": "延长订阅有效期",
+      "label": "调整订阅有效期与配额窗口重置时间",
       "category": "订阅"
     },
     "subscriptions_drevoke": {
