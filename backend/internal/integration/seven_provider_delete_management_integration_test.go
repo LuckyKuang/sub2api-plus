@@ -50,7 +50,7 @@ func TestSevenProviderProxyDeletionRechecksBindingAfterAdminPreflight(t *testing
 	release := func() { releaseOnce.Do(func() { close(observed.release) }) }
 	t.Cleanup(release)
 	admin := service.NewAdminService(&config.Config{}, nil, nil, nil, observed, nil, nil, nil, nil, nil,
-		nil, nil, nil, services.ent, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+		nil, nil, nil, services.ent, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	done := make(chan error, 1)
 	go func() { done <- admin.DeleteProxy(ctx, proxy.ID) }()
 	select {

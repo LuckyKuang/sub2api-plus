@@ -183,7 +183,7 @@ func newAdminOAuthFixture(t *testing.T, platform, scenario string) (*accountRepo
 
 func newAdminOAuthHandler(repo service.AdminAccountRepository, runtime service.AccountRuntimeBlocker, invalidator service.TokenCacheInvalidator, openAI *service.OpenAIOAuthService, grok service.GrokOAuthTokenService) *adminhandler.AccountHandler {
 	admin := service.NewAdminService(&config.Config{}, nil, nil, repo, nil, nil, nil, nil, nil, nil,
-		nil, nil, nil, integrationEntClient, nil, nil, nil, nil, runtime, nil, nil, nil, nil)
+		nil, nil, nil, integrationEntClient, nil, nil, nil, nil, runtime, nil, nil, nil, nil, nil)
 	return adminhandler.NewAccountHandler(admin, nil, openAI, nil, nil, grok, nil, nil, nil, nil, nil, nil, nil, invalidator)
 }
 

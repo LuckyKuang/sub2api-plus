@@ -53,7 +53,7 @@ func TestScopedAdminRefreshBusyRollsBackRowLockBeforeOrdinaryRotationPersists(t 
 	require.NoError(t, err)
 	adminRepo := NewAdminAccountRepository(integrationEntClient, integrationDB, nil)
 	groups := NewAdminGroupRepository(integrationEntClient, integrationDB)
-	admin := service.NewAdminService(nil, nil, groups, adminRepo, nil, nil, nil, nil, nil, nil, nil, nil, nil, integrationEntClient, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	admin := service.NewAdminService(nil, nil, groups, adminRepo, nil, nil, nil, nil, nil, nil, nil, nil, nil, integrationEntClient, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	scoped := admin.(service.ScopedAdminAccounts)
 	api := service.NewOAuthRefreshAPI(repo, nil)
 	issuerStarted, releaseIssuer := make(chan struct{}), make(chan struct{})

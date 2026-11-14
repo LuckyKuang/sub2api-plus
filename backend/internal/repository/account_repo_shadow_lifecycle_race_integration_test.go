@@ -17,7 +17,7 @@ import (
 
 func shadowLifecycleAdmin(repo service.AdminAccountRepository) service.AdminService {
 	return service.NewAdminService(&config.Config{}, nil, nil, repo, nil, nil, nil, nil, nil, nil,
-		nil, nil, nil, integrationEntClient, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+		nil, nil, nil, integrationEntClient, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 }
 
 func newShadowRaceFixture(t *testing.T) (*accountRepository, *service.Account, *service.Account, *schedulerCacheRecorder) {
