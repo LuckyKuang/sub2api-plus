@@ -130,7 +130,7 @@ watch([ordinaryAvailable, batchAvailable], () => {
   display: inline-flex;
   gap: 8px;
   padding: 6px;
-  border: 1px solid var(--surface-border, rgba(148, 163, 184, 0.25));
+  border: 1px solid var(--surface-edge, rgba(148, 163, 184, 0.25));
   border-radius: var(--surface-radius-panel, 12px);
   background: var(--surface-field, rgba(148, 163, 184, 0.06));
 }
@@ -152,8 +152,10 @@ watch([ordinaryAvailable, batchAvailable], () => {
 }
 
 .mode-card-active {
-  background: var(--surface-card, #fff);
-  border-color: var(--surface-border, rgba(148, 163, 184, 0.35));
+  /* Theme-aware selected tint; a hardcoded white surface turned the active
+     card into a white block in dark mode. */
+  background: var(--surface-selected);
+  border-color: rgb(var(--console-accent-500, 20 184 166) / 45%);
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
 }
 
