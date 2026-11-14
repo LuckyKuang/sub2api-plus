@@ -733,6 +733,23 @@ type adminServiceImpl struct {
 	compositeResolver    *CompositeRouteResolver
 	// 分组平台变更后用来失效渠道缓存；可为 nil（缓存会在 TTL 到期后自然重建）
 	channelCacheInvalidator ChannelCacheInvalidator
+	// 账号模型变化后立即失效 /v1/models 短缓存；可为 nil（TTL 到期后自然重建）
+	availableModelsInvalidator AvailableModelsCacheInvalidator
+}
+
+// AvailableModelsCacheInvalidator 失效网关侧的 /v1/models 短缓存。
+// 窄接口，避免 admin 服务依赖整个 GatewayService。
+type AvailableModelsCacheInvalidator interface {
+	InvalidateAvailableModelsCache(groupID *int64, platform string)
+}
+
+// invalidateAvailableModelsCache 清空全部分组的模型列表缓存。账号改动会影响
+// 它所在的每个分组，且列表重建很便宜，因此不做分组级精确匹配。
+func (s *adminServiceImpl) invalidateAvailableModelsCache() {
+	if s == nil || s.availableModelsInvalidator == nil {
+		return
+	}
+	s.availableModelsInvalidator.InvalidateAvailableModelsCache(nil, "")
 }
 
 // ChannelCacheInvalidator 失效渠道缓存。
@@ -774,6 +791,7 @@ func NewAdminService(
 	compositeRouteRepo CompositeModelRouteRepository,
 	compositeResolver *CompositeRouteResolver,
 	channelCacheInvalidator ChannelCacheInvalidator,
+	availableModelsInvalidator AvailableModelsCacheInvalidator,
 ) AdminService {
 	return &adminServiceImpl{
 		cfg:                  cfg,
@@ -802,6 +820,7 @@ func NewAdminService(
 		compositeRouteRepo:   compositeRouteRepo,
 		compositeResolver:    compositeResolver,
 
-		channelCacheInvalidator: channelCacheInvalidator,
+		channelCacheInvalidator:    channelCacheInvalidator,
+		availableModelsInvalidator: availableModelsInvalidator,
 	}
 }

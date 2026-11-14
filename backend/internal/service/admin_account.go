@@ -595,6 +595,7 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 		}
 	})
 
+	s.invalidateAvailableModelsCache()
 	return account, nil
 }
 
@@ -947,6 +948,8 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 	if err != nil {
 		return nil, err
 	}
+	// 模型映射、状态或可调度性变化后，下游 /v1/models 必须立刻反映出来。
+	s.invalidateAvailableModelsCache()
 	return updated, nil
 }
 
@@ -1283,6 +1286,9 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 		result.Results = append(result.Results, entry)
 	}
 
+	if len(result.SuccessIDs) > 0 {
+		s.invalidateAvailableModelsCache()
+	}
 	return result, nil
 }
 
@@ -1340,7 +1346,7 @@ func (s *adminServiceImpl) DeleteAccount(ctx context.Context, id int64) error {
 	if !ok {
 		return errors.New("account deletion requires atomic repository support")
 	}
-	return writer.RunOpenAIOAuthPolicyTransaction(ctx, func(writeCtx context.Context, repo AccountRepository) error {
+	if err := writer.RunOpenAIOAuthPolicyTransaction(ctx, func(writeCtx context.Context, repo AccountRepository) error {
 		locker, ok := repo.(AccountCredentialFamilyLocker)
 		if !ok {
 			return errors.New("account deletion requires credential family locking")
@@ -1358,7 +1364,11 @@ func (s *adminServiceImpl) DeleteAccount(ctx context.Context, id int64) error {
 			}
 		}
 		return repo.Delete(writeCtx, id)
-	})
+	}); err != nil {
+		return err
+	}
+	s.invalidateAvailableModelsCache()
+	return nil
 }
 
 func (s *adminServiceImpl) RefreshAccountCredentials(ctx context.Context, id int64) (*Account, error) {

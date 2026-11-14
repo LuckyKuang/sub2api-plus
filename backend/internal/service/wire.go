@@ -1079,6 +1079,8 @@ var ProviderSet = wire.NewSet(
 	NewGroupCapacityService,
 	ProvideChannelService,
 	wire.Bind(new(ChannelCacheInvalidator), new(*ChannelService)),
+	// 账号模型变化后立即失效 /v1/models 短缓存，避免下游在 TTL 窗口内仍看到已删除的模型。
+	wire.Bind(new(AvailableModelsCacheInvalidator), new(*GatewayService)),
 	NewModelPricingResolver,
 	ProvideModelPlazaService,
 	NewContentModerationService,
