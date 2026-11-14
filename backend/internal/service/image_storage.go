@@ -43,6 +43,13 @@ type ImageStorageReader interface {
 	Open(ctx context.Context, key string) (*ImageStorageObject, error)
 }
 
+// ImageStorageSigner is an optional companion to ImageStorage. Task history is
+// long-lived while a presigned download URL is not, so reads must mint a fresh
+// URL from the recorded object key instead of replaying the stored string.
+type ImageStorageSigner interface {
+	Sign(ctx context.Context, key string) (string, error)
+}
+
 type ImageStorageObject struct {
 	Body        io.ReadCloser
 	ContentType string
@@ -424,6 +431,23 @@ func (u *ImageResultUploader) OpenStoredTaskImage(ctx context.Context, key strin
 		object.ContentType = imageContentTypeFromExtension(extension)
 	}
 	return object, extension, nil
+}
+
+// SignStoredTaskImage returns a fresh download URL for an object written by
+// Rewrite. Adapters without signing support report an error and callers keep the
+// URL captured at upload time.
+func (u *ImageResultUploader) SignStoredTaskImage(ctx context.Context, key string) (string, error) {
+	if u == nil || u.storage == nil {
+		return "", errors.New("image storage is unavailable")
+	}
+	signer, ok := u.storage.(ImageStorageSigner)
+	if !ok {
+		return "", errors.New("image storage does not support signing stored images")
+	}
+	if strings.TrimSpace(key) == "" {
+		return "", errors.New("stored image object key is empty")
+	}
+	return signer.Sign(ctx, key)
 }
 
 func imageExtensionFromObjectKey(key string) string {

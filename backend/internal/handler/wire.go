@@ -51,6 +51,7 @@ func ProvideAdminHandlers(
 	complianceHandler *admin.ComplianceHandler,
 	auditLogHandler *admin.AuditLogHandler,
 	ipAccessControlHandler *admin.IPAccessControlHandler,
+	imageTaskSettingsHandler *admin.ImageTaskSettingsHandler,
 	ollamaCloudUsage *service.OllamaCloudUsageService,
 	usageAlert *service.UsageAlertService,
 	opencodeGoUsage *service.OpenCodeGoUsageService,
@@ -101,6 +102,7 @@ func ProvideAdminHandlers(
 		Compliance:             complianceHandler,
 		AuditLog:               auditLogHandler,
 		IPAccessControl:        ipAccessControlHandler,
+		ImageTask:              imageTaskSettingsHandler,
 	}
 }
 
@@ -270,6 +272,7 @@ func ProvideHandlers(
 	modelPlazaHandler *ModelPlazaHandler,
 	asyncImageHandler *AsyncImageHandler,
 	batchImageHandler *BatchImageHandler,
+	imageTaskUserHandler *ImageTaskUserHandler,
 	_ *service.IdempotencyCoordinator,
 	_ *service.IdempotencyCleanupService,
 	_ *service.OpenAIQuotaAutoResetService,
@@ -298,6 +301,7 @@ func ProvideHandlers(
 		ModelPlaza:       modelPlazaHandler,
 		AsyncImage:       asyncImageHandler,
 		BatchImage:       batchImageHandler,
+		ImageTasks:       imageTaskUserHandler,
 	}
 }
 
@@ -326,6 +330,7 @@ var ProviderSet = wire.NewSet(
 	NewModelPlazaHandler,
 	ProvideAsyncImageHandler,
 	ProvideBatchImageHandler,
+	NewImageTaskUserHandler,
 
 	// Admin handlers
 	admin.NewDashboardHandler,
@@ -354,6 +359,7 @@ var ProviderSet = wire.NewSet(
 	admin.NewUserAttributeHandler,
 	admin.NewErrorPassthroughHandler,
 	admin.NewTLSFingerprintProfileHandler,
+	admin.NewImageTaskSettingsHandler,
 	admin.NewPluginHandler,
 	admin.NewAdminAPIKeyHandler,
 	admin.NewScheduledTestHandler,

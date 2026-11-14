@@ -235,17 +235,10 @@ describe('feature route guard', () => {
     expect(next).toHaveBeenCalledWith(target)
   })
 
-  it('redirects a user without an eligible image API key to their keys', async () => {
-    const { navigation, next } = runGuard({ requiresAsyncImageAccess: true }, '/async-image')
-    await navigation
-
-    expect(asyncImageAccess.refreshAsyncImageAccess).toHaveBeenCalledOnce()
-    expect(next).toHaveBeenCalledWith('/keys')
-  })
-
-  it('lets an administrator open async images without a personal API key', async () => {
-    authStore.isAdmin = true
-    const { navigation, next } = runGuard({ requiresAsyncImageAccess: true }, '/async-image')
+  it('does not redirect a user without an async-capable key away from the image task page', async () => {
+    // The page itself reports per-mode availability from the backend, so a
+    // batch-only user must still reach it.
+    const { navigation, next } = runGuard({}, '/image-tasks')
     await navigation
 
     expect(asyncImageAccess.refreshAsyncImageAccess).not.toHaveBeenCalled()

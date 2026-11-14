@@ -13,6 +13,7 @@ import channelMonitorV2 from './channelMonitorV2'
 import channelMonitorV3 from './channelMonitorV3'
 import batchImage from './batchImage'
 import asyncImage from './asyncImage'
+import imageTasks from './imageTasks'
 import admin from './admin'
 import misc from './misc'
 import inspection from './inspection'
@@ -38,6 +39,7 @@ export default {
   ...channelMonitorV3,
   ...batchImage,
   ...asyncImage,
+  ...imageTasks,
   admin,
   ...misc,
 }

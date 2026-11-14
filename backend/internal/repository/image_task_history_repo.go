@@ -37,17 +37,18 @@ func (r *imageTaskHistoryRepository) Save(ctx context.Context, task *service.Ima
 
 	_, err = r.db.ExecContext(ctx, `
 INSERT INTO async_image_tasks (
-    task_id, user_id, api_key_id, request_type, model, prompt_preview,
+    task_id, user_id, api_key_id, request_type, model, platform, prompt_preview,
     status, http_status, image_url, result, error, storage_keys, requested_images, actual_images,
     created_at, completed_at, expires_at, updated_at
 ) VALUES (
-    $1, $2, $3, $4, $5, NULLIF($6, ''),
-    $7, NULLIF($8, 0), NULLIF($9, ''), $10::jsonb, $11::jsonb, $12::jsonb, $13, $14,
-    $15, $16, $17, NOW()
+    $1, $2, $3, $4, $5, $6, NULLIF($7, ''),
+    $8, NULLIF($9, 0), NULLIF($10, ''), $11::jsonb, $12::jsonb, $13::jsonb, $14, $15,
+    $16, $17, $18, NOW()
 )
 ON CONFLICT (task_id) DO UPDATE SET
     request_type = EXCLUDED.request_type,
     model = EXCLUDED.model,
+    platform = EXCLUDED.platform,
     prompt_preview = EXCLUDED.prompt_preview,
     status = EXCLUDED.status,
     http_status = EXCLUDED.http_status,
@@ -65,6 +66,7 @@ ON CONFLICT (task_id) DO UPDATE SET
 		task.APIKeyID,
 		task.RequestType,
 		task.Model,
+		task.Platform,
 		task.PromptPreview,
 		task.Status,
 		task.HTTPStatus,
@@ -81,16 +83,41 @@ ON CONFLICT (task_id) DO UPDATE SET
 	return err
 }
 
+// List returns the owner's tasks. A zero APIKeyID lists every key of the user,
+// which is what the signed-in console uses; gateway callers keep the key scope.
 func (r *imageTaskHistoryRepository) List(ctx context.Context, owner service.ImageTaskOwner, filter service.ImageTaskHistoryFilter) ([]*service.ImageTaskRecord, bool, error) {
 	if r == nil || r.db == nil {
 		return nil, false, fmt.Errorf("async image task history database is unavailable")
 	}
 	filter = normalizeRepositoryImageTaskFilter(filter)
-	query := asyncImageTaskSelectSQL + ` WHERE user_id = $1 AND api_key_id = $2`
-	args := []any{owner.UserID, owner.APIKeyID}
+	query := asyncImageTaskSelectSQL + " WHERE user_id = $1"
+	args := []any{owner.UserID}
+	if owner.APIKeyID > 0 {
+		query += " AND api_key_id = $" + strconv.Itoa(len(args)+1)
+		args = append(args, owner.APIKeyID)
+	}
 	if filter.Status != "" {
 		query += " AND status = $" + strconv.Itoa(len(args)+1)
 		args = append(args, filter.Status)
+	}
+	if filter.Platform != "" {
+		query += " AND platform = $" + strconv.Itoa(len(args)+1)
+		args = append(args, filter.Platform)
+	}
+	if filter.Model != "" {
+		// The console offers a text filter, so match the model substring rather
+		// than requiring an exact name the user has to type in full.
+		query += " AND model ILIKE '%' || $" + strconv.Itoa(len(args)+1) + " || '%'"
+		args = append(args, filter.Model)
+	}
+	if filter.Since > 0 {
+		query += " AND created_at >= $" + strconv.Itoa(len(args)+1)
+		args = append(args, time.Unix(filter.Since, 0).UTC())
+	}
+	if filter.Until > 0 {
+		// Exclusive upper bound: [since, until) is easy to page over.
+		query += " AND created_at < $" + strconv.Itoa(len(args)+1)
+		args = append(args, time.Unix(filter.Until, 0).UTC())
 	}
 	query += " ORDER BY created_at DESC, id DESC LIMIT $" + strconv.Itoa(len(args)+1) + " OFFSET $" + strconv.Itoa(len(args)+2)
 	args = append(args, filter.Limit+1, filter.Offset)
@@ -123,8 +150,14 @@ func (r *imageTaskHistoryRepository) Get(ctx context.Context, owner service.Imag
 	if r == nil || r.db == nil {
 		return nil, fmt.Errorf("async image task history database is unavailable")
 	}
-	task, err := scanImageTaskHistory(r.db.QueryRowContext(ctx, asyncImageTaskSelectSQL+`
-WHERE task_id = $1 AND user_id = $2 AND api_key_id = $3`, id, owner.UserID, owner.APIKeyID))
+	query := asyncImageTaskSelectSQL + `
+WHERE task_id = $1 AND user_id = $2`
+	args := []any{id, owner.UserID}
+	if owner.APIKeyID > 0 {
+		query += " AND api_key_id = $3"
+		args = append(args, owner.APIKeyID)
+	}
+	task, err := scanImageTaskHistory(r.db.QueryRowContext(ctx, query, args...))
 	if err == sql.ErrNoRows {
 		return nil, service.ErrImageTaskNotFound
 	}
@@ -135,10 +168,18 @@ func (r *imageTaskHistoryRepository) DeleteFailed(ctx context.Context, owner ser
 	if r == nil || r.db == nil {
 		return false, fmt.Errorf("async image task history database is unavailable")
 	}
-	result, err := r.db.ExecContext(ctx, `
+	query := `
 DELETE FROM async_image_tasks
-WHERE task_id = $1 AND user_id = $2 AND api_key_id = $3 AND status = $4`,
-		id, owner.UserID, owner.APIKeyID, service.ImageTaskStatusFailed)
+WHERE task_id = $1 AND user_id = $2`
+	args := []any{id, owner.UserID}
+	if owner.APIKeyID > 0 {
+		query += " AND api_key_id = $3"
+		args = append(args, owner.APIKeyID)
+	}
+	query += " AND status = $" + strconv.Itoa(len(args)+1)
+	args = append(args, service.ImageTaskStatusFailed)
+
+	result, err := r.db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return false, err
 	}
@@ -149,8 +190,22 @@ WHERE task_id = $1 AND user_id = $2 AND api_key_id = $3 AND status = $4`,
 	return affected > 0, nil
 }
 
+// HasAnyTaskForUser reports whether the user owns any ordinary image task. It
+// lets the console show history for users who can no longer submit.
+func (r *imageTaskHistoryRepository) HasAnyTaskForUser(ctx context.Context, userID int64) (bool, error) {
+	if r == nil || r.db == nil {
+		return false, fmt.Errorf("async image task history database is unavailable")
+	}
+	var exists bool
+	err := r.db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM async_image_tasks WHERE user_id = $1)`, userID).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+	return exists, nil
+}
+
 const asyncImageTaskColumns = `
-task_id, user_id, api_key_id, request_type, model, prompt_preview,
+task_id, user_id, api_key_id, request_type, model, platform, prompt_preview,
 status, http_status, image_url, result::text, error::text,
 storage_keys::text, requested_images, actual_images,
 created_at, completed_at, expires_at`
@@ -164,7 +219,7 @@ func scanImageTaskHistory(row interface{ Scan(...any) error }) (*service.ImageTa
 	var completedAt sql.NullTime
 	var createdAt, expiresAt time.Time
 	if err := row.Scan(
-		&task.ID, &task.UserID, &task.APIKeyID, &task.RequestType, &task.Model, &promptPreview,
+		&task.ID, &task.UserID, &task.APIKeyID, &task.RequestType, &task.Model, &task.Platform, &promptPreview,
 		&task.Status, &httpStatus, &imageURL, &result, &taskError,
 		&storageKeys, &task.RequestedImages, &task.ActualImages,
 		&createdAt, &completedAt, &expiresAt,

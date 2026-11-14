@@ -238,12 +238,18 @@ func TestImageStorageSettingsRejectSecretWithEphemeralKey(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestImageStorageSettingsIncompleteStaysDisabled(t *testing.T) {
-	svc, _, built := newImageStorageFixture(t, config.ImageStorageConfig{})
+// The ordinary-mode switch may only be turned on for a target that can actually
+// store an image. Reaching that state by resolving an incomplete configuration
+// would advertise the mode and then reject every submission.
+func TestImageStorageSettingsIncompleteEnableIsRejected(t *testing.T) {
+	svc, repo, built := newImageStorageFixture(t, config.ImageStorageConfig{})
 	ctx := context.Background()
 
 	_, err := svc.Update(ctx, ImageStorageSettings{Enabled: true, Bucket: "my-images"})
-	require.NoError(t, err)
+	require.ErrorIs(t, err, ErrImageStorageIncomplete)
+
+	raw, _ := repo.GetValue(ctx, settingKeyImageStorageConfig)
+	require.Empty(t, raw, "nothing must be persisted when the switch cannot be enabled")
 
 	_, enabled := svc.resolve()
 	require.False(t, enabled, "missing credentials must not enable the feature")

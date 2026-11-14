@@ -1,11 +1,11 @@
 <template>
-  <AppLayout appearance="user" workspace>
+  <component :is="embedded ? 'div' : AppLayout" v-bind="shellProps">
     <TablePageLayout>
       <template #filters>
         <div class="card flex flex-col gap-3 p-4">
           <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
             <div class="filter-bar w-full xl:w-auto">
-              <div class="filter-field">
+              <div v-if="supportMode" class="filter-field">
                 <Select
                   v-model="selectedApiKeyId"
                   :options="apiKeyFilterOptions"
@@ -14,6 +14,25 @@
                   data-testid="async-image-api-key-filter"
                   :aria-label="t('asyncImage.filters.apiKey')"
                   @change="selectApiKey"
+                />
+              </div>
+              <div v-if="!supportMode" class="filter-field">
+                <Select
+                  v-model="filters.platform"
+                  :options="platformFilterOptions"
+                  :disabled="loadingTasks"
+                  :searchable="false"
+                  data-testid="async-image-platform-filter"
+                  :aria-label="t('asyncImage.filters.allPlatforms')"
+                  @change="applyFilters"
+                />
+              </div>
+              <div v-if="!supportMode" class="filter-field filter-field--search">
+                <SearchInput
+                  v-model="filters.model"
+                  :placeholder="t('asyncImage.filters.modelPlaceholder')"
+                  data-testid="async-image-model-filter"
+                  @search="applyFilters"
                 />
               </div>
               <div class="filter-field">
@@ -38,7 +57,7 @@
               </button>
             </div>
           </div>
-          <p class="text-xs surface-muted">{{ t('asyncImage.list.keyHint') }}</p>
+          <p class="text-xs surface-muted">{{ t('asyncImage.list.historyHint') }}</p>
         </div>
       </template>
 
@@ -337,7 +356,7 @@
             {{ t('asyncImage.detail.countMismatch', { requested: selectedTask.requested_images || 1, actual: selectedTask.actual_images ?? taskImageUrls(selectedTask).length }) }}
           </div>
           <div class="flex justify-end">
-            <button type="button" class="btn btn-secondary btn-sm" :disabled="downloading || !selectedTaskApiKey" @click="downloadSelectedTask">
+            <button type="button" class="btn btn-secondary btn-sm" :disabled="downloading" @click="downloadSelectedTask">
               <Icon :name="downloading ? 'refresh' : 'download'" size="sm" class="mr-1.5" :class="downloading ? 'animate-spin' : ''" />
               {{ downloading ? t('common.submitting') : t('asyncImage.actions.downloadAll') }}
             </button>
@@ -363,7 +382,7 @@
       @confirm="confirmDeleteTask"
       @cancel="deleteTarget = null"
     />
-  </AppLayout>
+  </component>
 </template>
 
 <script setup lang="ts">
@@ -379,7 +398,10 @@ import Select, { type SelectOption } from '@/components/common/Select.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { keysAPI } from '@/api'
 import { AsyncImageDownloadValidationError, deleteAsyncImageTask, downloadAsyncImageZip, getAsyncImageTask, listAsyncImageModels, listAsyncImageTasks, preferredAsyncImageModel, saveAsyncImageBlob, submitAsyncImageEdit, submitAsyncImageGeneration, type AsyncImageTask } from '@/api/asyncImage'
+import { deleteUserImageTask, downloadUserImageTaskZip, getUserImageTask, listUserImageTasks } from '@/api/imageTasks'
 import { keyAllowsAsyncImage, keyCanManageAsyncImage } from '@/composables/useAsyncImageAccess'
+import { adminSupportContext } from '@/utils/adminSupportContext'
+import SearchInput from '@/components/common/SearchInput.vue'
 import { useAppStore } from '@/stores/app'
 import { isGPTImage2, isGPTImage2ExperimentalSize, validateGPTImage2CustomSize } from '@/utils/asyncImageSize'
 import type { Column } from '@/components/common/types'
@@ -399,6 +421,9 @@ interface EditImageUpload {
   file: File
   url: string
 }
+
+const props = defineProps<{ embedded?: boolean }>()
+const shellProps = computed(() => props.embedded ? { class: 'image-task-embedded' } : { appearance: 'user', workspace: true })
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -421,16 +446,25 @@ let pollTimer: ReturnType<typeof setTimeout> | null = null
 let modelRequestID = 0
 let taskListRequestID = 0
 
-const filters = reactive({ status: '' })
+const filters = reactive({ status: '', platform: '', model: '' })
 const form = reactive({ apiKeyId: 0, mode: 'generation' as AsyncImageMode, model: '', prompt: '', size: '1024x1024', customWidth: 1024, customHeight: 1024, quality: 'auto', n: 1 })
 const editImages = ref<EditImageUpload[]>([])
 const editMask = ref<EditImageUpload | null>(null)
 
+// Administrator support sessions act on behalf of a user with a selected key,
+// so they keep the gateway's key-scoped history instead of the user-scoped one.
+const supportMode = computed(() => adminSupportContext.value !== null)
 const eligibleKeys = computed(() => apiKeys.value.filter(keyAllowsAsyncImage))
 const manageableKeys = computed(() => apiKeys.value.filter(keyCanManageAsyncImage))
 const apiKeyFilterOptions = computed<SelectOption[]>(() => [
   { value: 0, label: t('asyncImage.filters.selectKey') },
-  ...manageableKeys.value.map(key => ({ value: key.id, label: key.name || `API Key #${key.id}` })),
+  ...manageableKeys.value.map(key => ({ value: key.id, label: key.name || 'API Key #' + key.id })),
+])
+const selectedApiKey = computed(() => manageableKeys.value.find(key => key.id === selectedApiKeyId.value) || null)
+const platformFilterOptions = computed<SelectOption[]>(() => [
+  { value: '', label: t('asyncImage.filters.allPlatforms') },
+  { value: 'openai', label: 'OpenAI' },
+  { value: 'grok', label: 'Grok' },
 ])
 const statusFilterOptions = computed<SelectOption[]>(() => [
   { value: '', label: t('asyncImage.filters.allStatuses') },
@@ -438,9 +472,7 @@ const statusFilterOptions = computed<SelectOption[]>(() => [
   { value: 'completed', label: t('asyncImage.status.completed') },
   { value: 'failed', label: t('asyncImage.status.failed') },
 ])
-const selectedApiKey = computed(() => manageableKeys.value.find(key => key.id === selectedApiKeyId.value) || null)
 const formApiKey = computed(() => eligibleKeys.value.find(key => key.id === form.apiKeyId) || null)
-const selectedTaskApiKey = computed(() => selectedApiKey.value)
 const selectedModelIsGPTImage2 = computed(() => isGPTImage2(form.model))
 const usingCustomSize = computed(() => selectedModelIsGPTImage2.value && form.size === 'custom')
 const customSizeValidationCode = computed(() => usingCustomSize.value ? validateGPTImage2CustomSize(form.customWidth, form.customHeight) : null)
@@ -651,7 +683,8 @@ function stopPolling() {
 
 function schedulePolling() {
   stopPolling()
-  if (!selectedApiKey.value || !tasks.value.some(task => task.status === 'processing')) return
+  if (supportMode.value && !selectedApiKey.value) return
+  if (!tasks.value.some(task => task.status === 'processing')) return
   pollTimer = setTimeout(async () => {
     await refreshProcessingTasks()
     schedulePolling()
@@ -659,11 +692,13 @@ function schedulePolling() {
 }
 
 async function refreshProcessingTasks() {
-  const key = selectedApiKey.value
-  if (!key) return
   const active = tasks.value.filter(task => task.status === 'processing')
   if (!active.length) return
-  const refreshed = await Promise.allSettled(active.map(task => getAsyncImageTask(key.key, task.task_id)))
+  const key = selectedApiKey.value
+  if (supportMode.value && !key) return
+  const refreshed = await Promise.allSettled(active.map(task => supportMode.value && key
+    ? getAsyncImageTask(key.key, task.task_id)
+    : getUserImageTask(task.task_id)))
   refreshed.forEach((result, index) => {
     if (result.status !== 'fulfilled') return
     const taskID = active[index].task_id
@@ -674,10 +709,10 @@ async function refreshProcessingTasks() {
 }
 
 async function loadTasks(showError = true): Promise<boolean> {
-  const key = selectedApiKey.value
   const requestID = ++taskListRequestID
+  const key = selectedApiKey.value
   stopPolling()
-  if (!key) {
+  if (supportMode.value && !key) {
     tasks.value = []
     hasMore.value = false
     loadingTasks.value = false
@@ -685,7 +720,15 @@ async function loadTasks(showError = true): Promise<boolean> {
   }
   loadingTasks.value = true
   try {
-    const response = await listAsyncImageTasks(key.key, { status: filters.status, limit: PAGE_SIZE, offset: offset.value })
+    const response = supportMode.value && key
+      ? await listAsyncImageTasks(key.key, { status: filters.status, limit: PAGE_SIZE, offset: offset.value })
+      : await listUserImageTasks({
+        status: filters.status,
+        platform: filters.platform,
+        model: filters.model.trim(),
+        limit: PAGE_SIZE,
+        offset: offset.value,
+      })
     if (requestID !== taskListRequestID) return false
     tasks.value = response.data || []
     hasMore.value = response.has_more === true
@@ -718,11 +761,16 @@ function selectApiKey() {
 async function confirmDeleteTask() {
   const target = deleteTarget.value
   const key = selectedApiKey.value
-  if (!target || !key || deletingTaskId.value) return
+  if (!target || deletingTaskId.value) return
+  if (supportMode.value && !key) return
 
   deletingTaskId.value = target.task_id
   try {
-    await deleteAsyncImageTask(key.key, target.task_id)
+    if (supportMode.value && key) {
+      await deleteAsyncImageTask(key.key, target.task_id)
+    } else {
+      await deleteUserImageTask(target.task_id)
+    }
     if (selectedTask.value?.task_id === target.task_id) selectedTask.value = null
     deleteTarget.value = null
     appStore.showSuccess(t('asyncImage.delete.success'))
@@ -753,9 +801,8 @@ function nextPage() {
 }
 
 function openCreateDialog() {
-  form.apiKeyId = eligibleKeys.value.some(key => key.id === selectedApiKeyId.value)
-    ? selectedApiKeyId.value
-    : eligibleKeys.value[0]?.id || 0
+  const selectedEligible = eligibleKeys.value.some(key => key.id === selectedApiKeyId.value)
+  form.apiKeyId = supportMode.value && selectedEligible ? selectedApiKeyId.value : eligibleKeys.value[0]?.id || 0
   form.mode = 'generation'
   form.size = '1024x1024'
   form.customWidth = 1024
@@ -774,11 +821,14 @@ function closeCreateDialog() {
 
 async function downloadSelectedTask() {
   const task = selectedTask.value
-  const key = selectedTaskApiKey.value
-  if (!task || !key || downloading.value || taskImageUrls(task).length === 0) return
+  const key = selectedApiKey.value
+  if (!task || downloading.value || taskImageUrls(task).length === 0) return
+  if (supportMode.value && !key) return
   downloading.value = true
   try {
-    const blob = await downloadAsyncImageZip(key.key, task.task_id)
+    const blob = supportMode.value && key
+      ? await downloadAsyncImageZip(key.key, task.task_id)
+      : await downloadUserImageTaskZip(task.task_id)
     saveAsyncImageBlob(blob, `${task.task_id}.zip`)
   } catch (error) {
     appStore.showError(error instanceof AsyncImageDownloadValidationError
@@ -828,8 +878,9 @@ async function submitTask() {
         ...(editMask.value ? { mask: editMask.value.file } : {}),
       })
       : await submitAsyncImageGeneration(key.key, payload)
-    selectedApiKeyId.value = key.id
     filters.status = ''
+    filters.platform = ''
+    filters.model = ''
     offset.value = 0
     tasks.value = [created, ...tasks.value.filter(task => task.task_id !== created.task_id)].slice(0, PAGE_SIZE)
     showCreateDialog.value = false

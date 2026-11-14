@@ -168,5 +168,16 @@ func RegisterUserRoutes(
 		monitorV3 := authenticated.Group("/channel-monitor-v3")
 		monitorV3.Use(panelRateLimiter.Heavy(), channelMonitorModeV3Guard(settingService))
 		monitorV3.GET("/snapshot", h.ChannelMonitorV3.Snapshot)
+
+		// 生图任务历史：按登录用户读取，覆盖该用户所有 API key（含已删除 key 的记录）。
+		// 网关侧 /images/tasks 仍保持 user + key 双重隔离。
+		imageTasks := authenticated.Group("/image-tasks")
+		{
+			imageTasks.GET("/modes", h.ImageTasks.Modes)
+			imageTasks.GET("", h.ImageTasks.List)
+			imageTasks.GET("/:task_id", h.ImageTasks.Get)
+			imageTasks.GET("/:task_id/download", panelRateLimiter.Heavy(), h.ImageTasks.Download)
+			imageTasks.DELETE("/:task_id", h.ImageTasks.Delete)
+		}
 	}
 }

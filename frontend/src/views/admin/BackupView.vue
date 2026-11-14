@@ -69,96 +69,6 @@
         </div>
       </div>
 
-      <!-- Async image object storage -->
-      <div class="card workspace-shell p-6">
-        <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h3 class="text-base font-semibold text-gray-900 dark:text-white">
-              {{ t('admin.backup.imageStorage.title') }}
-            </h3>
-            <p class="mt-1 text-sm surface-muted">
-              {{ t('admin.backup.imageStorage.description') }}
-            </p>
-          </div>
-          <label class="inline-flex items-center gap-2 text-sm surface-muted">
-            <input v-model="imageStorageForm.enabled" type="checkbox" />
-            <span>{{ t('admin.backup.imageStorage.enabled') }}</span>
-          </label>
-        </div>
-
-        <label class="inline-flex items-center gap-2 text-sm surface-muted">
-          <input v-model="imageStorageForm.reuse_backup_s3" type="checkbox" />
-          <span>{{ t('admin.backup.imageStorage.reuseBackupS3') }}</span>
-        </label>
-
-        <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-          <div>
-            <label class="mb-1 block text-xs font-medium surface-muted">{{ t('admin.backup.imageStorage.bucket') }}</label>
-            <input v-model="imageStorageForm.bucket" class="input w-full" :placeholder="imageStorageForm.reuse_backup_s3 ? t('admin.backup.imageStorage.bucketInherited') : ''" />
-          </div>
-          <div>
-            <div class="mb-1 flex min-h-6 items-center justify-between gap-3">
-              <label class="block text-xs font-medium surface-muted">{{ t('admin.backup.imageStorage.prefix') }}</label>
-              <div class="flex items-center gap-2">
-                <span class="text-xs surface-muted">{{ t('admin.backup.s3.appendDatePath') }}</span>
-                <Toggle v-model="imageStorageForm.append_date_path" data-testid="image-storage-date-path-toggle" :aria-label="t('admin.backup.s3.appendDatePath')" />
-              </div>
-            </div>
-            <input v-model="imageStorageForm.prefix" class="input w-full" placeholder="images/" />
-            <p class="mt-1 text-xs surface-muted">{{ t('admin.backup.s3.prefixPreview', { prefix: imageStoragePrefixPreview }) }}</p>
-          </div>
-
-          <template v-if="!imageStorageForm.reuse_backup_s3">
-            <div>
-              <label class="mb-1 block text-xs font-medium surface-muted">{{ t('admin.backup.s3.endpoint') }}</label>
-              <input v-model="imageStorageForm.endpoint" class="input w-full" placeholder="https://<account_id>.r2.cloudflarestorage.com" />
-            </div>
-            <div>
-              <label class="mb-1 block text-xs font-medium surface-muted">{{ t('admin.backup.s3.region') }}</label>
-              <input v-model="imageStorageForm.region" class="input w-full" placeholder="auto" />
-            </div>
-            <div>
-              <label class="mb-1 block text-xs font-medium surface-muted">{{ t('admin.backup.s3.accessKeyId') }}</label>
-              <input v-model="imageStorageForm.access_key_id" class="input w-full" />
-            </div>
-            <div>
-              <div class="mb-1 flex items-center text-xs font-medium surface-muted">
-                <span>{{ t('admin.backup.s3.secretAccessKey') }}</span>
-                <HelpTooltip width-class="w-80">
-                  <p>{{ t('admin.backup.s3.secretHelp') }}</p>
-                </HelpTooltip>
-                <button type="button" class="ml-2 text-primary-600 underline hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 surface-control" @click="showEncryptionKeyGuide = true">
-                  {{ t('admin.backup.s3.secretGuideLink') }}
-                </button>
-              </div>
-              <input v-model="imageStorageForm.secret_access_key" type="password" class="input w-full" :placeholder="imageStorageSecretConfigured ? t('admin.backup.s3.secretConfigured') : ''" />
-            </div>
-            <label class="inline-flex items-center gap-2 text-sm md:col-span-2 surface-muted">
-              <input v-model="imageStorageForm.force_path_style" type="checkbox" />
-              <span>{{ t('admin.backup.s3.forcePathStyle') }}</span>
-            </label>
-          </template>
-
-          <div>
-            <label class="mb-1 block text-xs font-medium surface-muted">{{ t('admin.backup.imageStorage.publicBaseUrl') }}</label>
-            <input v-model="imageStorageForm.public_base_url" class="input w-full" :placeholder="t('admin.backup.imageStorage.publicBaseUrlPlaceholder')" />
-          </div>
-          <div>
-            <label class="mb-1 block text-xs font-medium surface-muted">{{ t('admin.backup.imageStorage.presignExpiryHours') }}</label>
-            <input v-model.number="imageStorageForm.presign_expiry_hours" type="number" min="1" class="input w-full" />
-          </div>
-        </div>
-
-        <div class="mt-4 flex flex-wrap gap-2">
-          <button type="button" class="btn btn-secondary btn-sm" :disabled="testingImageStorage" @click="testImageStorage">
-            {{ testingImageStorage ? t('common.loading') : t('admin.backup.s3.testConnection') }}
-          </button>
-          <button type="button" class="btn btn-primary btn-sm" data-testid="save-image-storage" :disabled="savingImageStorage" @click="saveImageStorageConfig">
-            {{ savingImageStorage ? t('common.loading') : t('common.save') }}
-          </button>
-        </div>
-      </div>
-
       <!-- Schedule Config -->
       <div class="card workspace-shell p-6">
         <div class="mb-4">
@@ -536,7 +446,6 @@ import type {
   BackupScheduleConfig,
   BackupRecord,
   BackupDownloadPart,
-  ImageStorageConfig,
 } from '@/api/admin/backup'
 import { useStepUp, isStepUpBlocked, isStepUpCancelled, stepUpBlockReason } from '@/composables/useStepUp'
 import { extractApiErrorCode, extractApiErrorMessage } from '@/utils/apiError'
@@ -587,26 +496,6 @@ const s3SecretConfigured = ref(false)
 const savingS3 = ref(false)
 const testingS3 = ref(false)
 
-// Async image object storage. Shares the S3 client with backups, so the default is
-// to reuse the credentials configured above and only differ by prefix.
-const imageStorageForm = ref<ImageStorageConfig>({
-  enabled: false,
-  reuse_backup_s3: true,
-  bucket: '',
-  prefix: 'images/',
-  append_date_path: false,
-  public_base_url: '',
-  presign_expiry_hours: 24,
-  max_download_bytes: 33554432,
-  endpoint: '',
-  region: 'auto',
-  access_key_id: '',
-  secret_access_key: '',
-  force_path_style: false,
-})
-const imageStorageSecretConfigured = ref(false)
-const savingImageStorage = ref(false)
-const testingImageStorage = ref(false)
 
 function prefixPreview(prefix: string, fallback: string, appendDatePath: boolean): string {
   const base = prefix.trim().replace(/\/+$/, '') || fallback
@@ -614,7 +503,6 @@ function prefixPreview(prefix: string, fallback: string, appendDatePath: boolean
 }
 
 const s3PrefixPreview = computed(() => prefixPreview(s3Form.value.prefix, 'backups', s3Form.value.append_date_path))
-const imageStoragePrefixPreview = computed(() => prefixPreview(imageStorageForm.value.prefix, 'images', imageStorageForm.value.append_date_path))
 
 // Schedule config
 const scheduleForm = ref<BackupScheduleConfig>({
@@ -790,54 +678,6 @@ async function saveS3Config() {
   }
 }
 
-async function loadImageStorageConfig() {
-  try {
-    const { config, secret_configured } = await adminAPI.backup.getImageStorageConfig()
-    imageStorageForm.value = {
-      ...config,
-      prefix: config.prefix || 'images/',
-      append_date_path: config.append_date_path ?? false,
-      region: config.region || 'auto',
-      secret_access_key: '',
-    }
-    imageStorageSecretConfigured.value = secret_configured
-  } catch (error) {
-    appStore.showError((error as { message?: string })?.message || t('errors.networkError'))
-  }
-}
-
-async function saveImageStorageConfig() {
-  savingImageStorage.value = true
-  try {
-    await backupStepUp.run(() => adminAPI.backup.updateImageStorageConfig(imageStorageForm.value))
-    appStore.showSuccess(t('admin.backup.imageStorage.saved'))
-    await loadImageStorageConfig()
-  } catch (error) {
-    if (isStepUpCancelled(error)) {
-      savingImageStorage.value = false
-      return
-    }
-    reportSecretSaveError(error)
-  } finally {
-    savingImageStorage.value = false
-  }
-}
-
-async function testImageStorage() {
-  testingImageStorage.value = true
-  try {
-    const result = await adminAPI.backup.testImageStorageConnection(imageStorageForm.value)
-    if (result.ok) {
-      appStore.showSuccess(result.message || t('admin.backup.s3.testSuccess'))
-    } else {
-      appStore.showError(result.message || t('admin.backup.s3.testFailed'))
-    }
-  } catch (error) {
-    appStore.showError((error as { message?: string })?.message || t('errors.networkError'))
-  } finally {
-    testingImageStorage.value = false
-  }
-}
 
 async function testS3() {
   testingS3.value = true
@@ -1009,7 +849,7 @@ function formatDate(value?: string): string {
 
 onMounted(async () => {
   document.addEventListener('visibilitychange', handleVisibilityChange)
-  await Promise.all([loadS3Config(), loadImageStorageConfig(), loadSchedule(), loadBackups()])
+  await Promise.all([loadS3Config(), loadSchedule(), loadBackups()])
 
   // 如果有正在 running 的备份，恢复轮询
   const runningBackup = backups.value.find(r => r.status === 'running')

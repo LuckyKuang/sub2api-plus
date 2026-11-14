@@ -3,7 +3,7 @@ export default {
     title: '异步图像',
     description: '提交生成或编辑任务后在后台处理，完成后自动显示结果',
     actions: { create: '新建任务', refresh: '刷新列表', view: '查看结果', delete: '删除失败任务', submit: '提交任务', downloadAll: '一键下载图片' },
-    filters: { apiKey: 'API Key', allStatuses: '全部状态', selectKey: '请选择可用 API Key' },
+    filters: { apiKey: 'API Key', allStatuses: '全部状态', selectKey: '请选择可用 API Key', allPlatforms: '全部平台', modelPlaceholder: '按模型筛选' },
     columns: { prompt: '提示词', model: '模型', type: '类型', status: '状态', result: '结果', createdAt: '创建时间', actions: '操作' },
     requestTypes: { generation: '生成', edit: '编辑' },
     status: { processing: '生成中', completed: '已完成', failed: '失败' },
@@ -11,7 +11,7 @@ export default {
       empty: '暂无异步图像任务',
       emptyHint: '点击右上角新建任务，提交生成或编辑请求后可在此查看状态和结果。',
       previous: '上一页', next: '下一页', page: '第 {page} 页',
-      keyHint: '任务按 API Key 隔离，切换 Key 可查看其对应记录。',
+      historyHint: '历史记录归属你的账号，包含全部 API Key 的任务；删除 Key 不会影响历史图片。',
     },
     create: {
       title: '新建异步图像任务', apiKey: 'API Key', mode: '任务类型', generation: '生成图片', edit: '编辑图片',

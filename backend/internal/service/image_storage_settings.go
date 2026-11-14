@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
+	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/logger"
 	"go.uber.org/zap"
 )
@@ -17,7 +18,10 @@ const settingKeyImageStorageConfig = "image_storage_config"
 const imageStorageConfigInvalidationChannel = "sub2api:image_storage_config:invalidate"
 
 // ErrImageStorageIncomplete 表示开关已打开但凭证不全，无法启用异步生图。
-var ErrImageStorageIncomplete = errors.New("image storage is enabled but bucket/access_key_id/secret_access_key are incomplete")
+var ErrImageStorageIncomplete = infraerrors.BadRequest(
+	"IMAGE_STORAGE_INCOMPLETE",
+	"image storage is enabled but bucket/endpoint/access_key_id/secret_access_key are incomplete",
+)
 
 // ImageStorageFactory 由 repository 层提供，把配置变成一个可用的对象存储实现。
 // 与 BackupObjectStoreFactory 同样的注入方式，避免 service 反向依赖 repository。
@@ -65,8 +69,31 @@ type ImageStorageSettingService struct {
 	resolved bool
 	uploader *ImageResultUploader
 	enabled  bool
+	reason   string
 
 	invalidationOnce sync.Once
+}
+
+// ImageStorageAvailability explains why the ordinary image task mode is or is
+// not usable. An empty Reason means the mode is enabled.
+type ImageStorageAvailability struct {
+	Enabled bool
+	Reason  string
+}
+
+// Availability reports the effective mode state for the console capability
+// endpoint. It never exposes bucket, endpoint, or credentials.
+func (s *ImageStorageSettingService) Availability() ImageStorageAvailability {
+	if s == nil {
+		return ImageStorageAvailability{Reason: "disabled"}
+	}
+	s.resolve()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return ImageStorageAvailability{
+		Enabled: s.enabled,
+		Reason:  s.reason,
+	}
 }
 
 // SetInvalidationBus enables configuration fan-out for multi-instance
@@ -129,17 +156,19 @@ func (s *ImageStorageSettingService) resolve() (*ImageResultUploader, bool) {
 
 	ctx := context.Background()
 	s.resolved = true
-	s.uploader, s.enabled = nil, false
+	s.uploader, s.enabled, s.reason = nil, false, "disabled"
 
 	cfg, err := s.effectiveConfig(ctx)
 	if err != nil {
 		logger.L().Warn("image_storage.settings_load_failed; async image tasks stay disabled", zap.Error(err))
+		s.reason = "not_configured"
 		return nil, false
 	}
 	if !cfg.IsConfigured() {
 		if cfg.Enabled {
 			logger.L().Warn("image_storage is enabled but not fully configured; async image tasks are disabled",
 				zap.Strings("missing_keys", cfg.MissingCredentialKeys()))
+			s.reason = "not_configured"
 		}
 		return nil, false
 	}
@@ -147,12 +176,18 @@ func (s *ImageStorageSettingService) resolve() (*ImageResultUploader, bool) {
 	storage, err := s.factory(ctx, cfg)
 	if err != nil {
 		logger.L().Error("image_storage.client_build_failed; async image tasks stay disabled", zap.Error(err))
+		s.reason = "not_configured"
 		return nil, false
 	}
 	s.uploader = NewImageResultUploader(storage, cfg.Prefix, cfg.AppendDatePath, cfg.MaxDownloadByte, nil)
 	// Keep configured storage available for already-accepted task completion and
 	// historical ZIP downloads even while the switch blocks new submissions.
 	s.enabled = cfg.Enabled
+	if cfg.Enabled {
+		s.reason = ""
+	} else {
+		s.reason = "disabled"
+	}
 	return s.uploader, s.enabled
 }
 
@@ -165,6 +200,7 @@ func (s *ImageStorageSettingService) Invalidate() {
 	s.resolved = false
 	s.uploader = nil
 	s.enabled = false
+	s.reason = "disabled"
 	s.mu.Unlock()
 }
 
@@ -205,6 +241,10 @@ func (s *ImageStorageSettingService) Update(ctx context.Context, in ImageStorage
 	} else if in.SecretAccessKey == "" {
 		if old, err := s.load(ctx); err == nil && old != nil {
 			in.SecretAccessKey = old.SecretAccessKey
+		} else if imageStorageConnectionMatchesFallback(in, s.fallback) {
+			// Get masks the environment secret, so an administrator toggling the
+			// switch on an unchanged deployment target must keep using it.
+			in.SecretAccessKey = s.fallback.SecretAccessKey
 		}
 	} else {
 		// 拒绝用自动生成的临时密钥加密：重启后密文无法解密（#4524）。
@@ -217,6 +257,10 @@ func (s *ImageStorageSettingService) Update(ctx context.Context, in ImageStorage
 			return nil, fmt.Errorf("encrypt secret: %w", err)
 		}
 		in.SecretAccessKey = encrypted
+	}
+
+	if err := s.validateEnabledTarget(ctx, &in); err != nil {
+		return nil, err
 	}
 
 	data, err := json.Marshal(in)
@@ -235,6 +279,32 @@ func (s *ImageStorageSettingService) Update(ctx context.Context, in ImageStorage
 
 	in.SecretAccessKey = ""
 	return &in, nil
+}
+
+// validateEnabledTarget refuses to switch the ordinary image task mode on
+// while the resulting target cannot actually store an image.
+func (s *ImageStorageSettingService) validateEnabledTarget(ctx context.Context, in *ImageStorageSettings) error {
+	if in == nil || !in.Enabled {
+		return nil
+	}
+	if in.ReuseBackupS3 {
+		cfg, err := s.backupCredentials(ctx)
+		if err != nil || cfg == nil {
+			return ErrImageStorageIncomplete
+		}
+		if strings.TrimSpace(cfg.Endpoint) == "" || strings.TrimSpace(cfg.SecretAccessKey) == "" {
+			return ErrImageStorageIncomplete
+		}
+		if strings.TrimSpace(in.Bucket) == "" && strings.TrimSpace(cfg.Bucket) == "" {
+			return ErrImageStorageIncomplete
+		}
+		return nil
+	}
+	if strings.TrimSpace(in.Endpoint) == "" || strings.TrimSpace(in.Bucket) == "" ||
+		strings.TrimSpace(in.AccessKeyID) == "" || strings.TrimSpace(in.SecretAccessKey) == "" {
+		return ErrImageStorageIncomplete
+	}
+	return nil
 }
 
 // TestConnection 用给定设置试建一次客户端，用于后台的"测试连接"按钮。

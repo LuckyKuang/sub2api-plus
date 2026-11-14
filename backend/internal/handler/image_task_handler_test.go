@@ -125,7 +125,9 @@ func (h *asyncImageMemoryHistory) List(_ context.Context, owner service.ImageTas
 		if task == nil {
 			continue
 		}
-		if task.UserID != owner.UserID || task.APIKeyID != owner.APIKeyID || (filter.Status != "" && task.Status != filter.Status) {
+		if !owner.Matches(task) || (filter.Status != "" && task.Status != filter.Status) ||
+			(filter.Platform != "" && task.Platform != filter.Platform) ||
+			(filter.Model != "" && task.Model != filter.Model) {
 			continue
 		}
 		copy := *task
@@ -148,18 +150,29 @@ func (h *asyncImageMemoryHistory) Get(_ context.Context, owner service.ImageTask
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	task := h.tasks[id]
-	if task == nil || task.UserID != owner.UserID || task.APIKeyID != owner.APIKeyID {
+	if task == nil || !owner.Matches(task) {
 		return nil, service.ErrImageTaskNotFound
 	}
 	copy := *task
 	return &copy, nil
 }
 
+func (h *asyncImageMemoryHistory) HasAnyTaskForUser(_ context.Context, userID int64) (bool, error) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for _, task := range h.tasks {
+		if task != nil && task.UserID == userID {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (h *asyncImageMemoryHistory) DeleteFailed(_ context.Context, owner service.ImageTaskOwner, id string) (bool, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	task := h.tasks[id]
-	if task == nil || task.UserID != owner.UserID || task.APIKeyID != owner.APIKeyID || task.Status != service.ImageTaskStatusFailed {
+	if task == nil || !owner.Matches(task) || task.Status != service.ImageTaskStatusFailed {
 		return false, nil
 	}
 	delete(h.tasks, id)

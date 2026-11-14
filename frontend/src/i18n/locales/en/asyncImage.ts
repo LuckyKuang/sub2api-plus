@@ -3,14 +3,14 @@ export default {
     title: 'Async Images',
     description: 'Submit a generation or edit task and view its result when processing completes',
     actions: { create: 'New Task', refresh: 'Refresh', view: 'View Result', delete: 'Delete failed task', submit: 'Submit Task', downloadAll: 'Download all images' },
-    filters: { apiKey: 'API Key', allStatuses: 'All statuses', selectKey: 'Select an API key' },
+    filters: { apiKey: 'API Key', allStatuses: 'All statuses', selectKey: 'Select an API key', allPlatforms: 'All platforms', modelPlaceholder: 'Filter by model' },
     columns: { prompt: 'Prompt', model: 'Model', type: 'Type', status: 'Status', result: 'Result', createdAt: 'Created', actions: 'Actions' },
     requestTypes: { generation: 'Generation', edit: 'Edit' },
     status: { processing: 'Processing', completed: 'Completed', failed: 'Failed' },
     list: {
       empty: 'No async image tasks', emptyHint: 'Create a generation or edit task to view its status and result here.',
       previous: 'Previous', next: 'Next', page: 'Page {page}',
-      keyHint: 'Tasks are isolated by API key. Switch keys to view their history.',
+      historyHint: 'History belongs to your account and includes every API key, so deleting a key never hides past images.',
     },
     create: {
       title: 'New Async Image Task', apiKey: 'API Key', mode: 'Task type', generation: 'Generate image', edit: 'Edit image',

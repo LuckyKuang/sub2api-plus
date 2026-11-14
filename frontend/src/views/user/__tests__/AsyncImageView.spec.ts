@@ -1,4 +1,3 @@
-import { chooseSelect, openSelect } from '@/__tests__/helpers/select'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 
@@ -9,14 +8,14 @@ enableAutoUnmount(afterEach)
 
 const {
   keysList,
-  deleteAsyncImageTask,
-  listAsyncImageTasks,
+  deleteUserImageTask,
+  listUserImageTasks,
   showError,
   showSuccess,
 } = vi.hoisted(() => ({
   keysList: vi.fn(),
-  deleteAsyncImageTask: vi.fn(),
-  listAsyncImageTasks: vi.fn(),
+  deleteUserImageTask: vi.fn(),
+  listUserImageTasks: vi.fn(),
   showError: vi.fn(),
   showSuccess: vi.fn(),
 }))
@@ -27,15 +26,19 @@ vi.mock('@/api', () => ({
 
 vi.mock('@/api/asyncImage', () => ({
   AsyncImageDownloadValidationError: class AsyncImageDownloadValidationError extends Error {},
-  deleteAsyncImageTask,
-  downloadAsyncImageZip: vi.fn(),
-  getAsyncImageTask: vi.fn(),
   listAsyncImageModels: vi.fn().mockResolvedValue([]),
-  listAsyncImageTasks,
   preferredAsyncImageModel: vi.fn().mockReturnValue(''),
   saveAsyncImageBlob: vi.fn(),
   submitAsyncImageEdit: vi.fn(),
   submitAsyncImageGeneration: vi.fn(),
+}))
+
+// History is user-scoped: the console never passes an API key to read or delete.
+vi.mock('@/api/imageTasks', () => ({
+  deleteUserImageTask,
+  downloadUserImageTaskZip: vi.fn(),
+  getUserImageTask: vi.fn(),
+  listUserImageTasks,
 }))
 
 vi.mock('@/stores/app', () => ({
@@ -48,8 +51,8 @@ vi.mock('vue-i18n', async () => {
     ...actual,
     useI18n: () => ({
       t: (key: string, params?: Record<string, unknown>) => {
-        if (params?.taskId) return `${key}:${params.taskId}`
-        if (params?.page) return `${key}:${params.page}`
+        if (params?.taskId) return key + ':' + String(params.taskId)
+        if (params?.page) return key + ':' + String(params.page)
         return key
       },
     }),
@@ -66,14 +69,7 @@ const baseDialogStub = {
 }
 const dataTableStub = {
   props: ['data'],
-  template: `
-    <div class="data-table">
-      <div v-for="row in data" :key="row.task_id" class="data-row" :data-task-id="row.task_id">
-        <slot name="cell-actions" :row="row" />
-      </div>
-      <slot v-if="data.length === 0" name="empty" />
-    </div>
-  `,
+  template: '<div class="data-table"><div v-for="row in data" :key="row.task_id" class="data-row" :data-task-id="row.task_id"><slot name="cell-actions" :row="row" /></div><slot v-if="data.length === 0" name="empty" /></div>',
 }
 const iconStub = {
   props: ['name'],
@@ -98,12 +94,6 @@ const completedTask = {
   error: undefined,
 }
 
-const otherKeyTask = {
-  ...completedTask,
-  id: 'imgtask_other_key',
-  task_id: 'imgtask_other_key',
-}
-
 function mountView(realTable = false) {
   return mount(AsyncImageView, {
     attachTo: document.body,
@@ -121,20 +111,19 @@ function mountView(realTable = false) {
 
 async function clickButtonByText(wrapper: VueWrapper, text: string) {
   const button = wrapper.findAll('button').find(button => button.text() === text)
-  expect(button, `Expected button: ${text}`).toBeDefined()
+  expect(button, 'Expected button: ' + text).toBeDefined()
   await button!.trigger('click')
 }
 
 describe('AsyncImageView task management', () => {
   let removeStyles: () => void
-  // Compile the real stylesheet within the container's bounded CPU budget.
   beforeAll(async () => { removeStyles = await installAppStyles() }, 30_000)
   afterAll(() => removeStyles?.())
 
   beforeEach(() => {
     keysList.mockReset()
-    deleteAsyncImageTask.mockReset()
-    listAsyncImageTasks.mockReset()
+    deleteUserImageTask.mockReset()
+    listUserImageTasks.mockReset()
     showError.mockReset()
     showSuccess.mockReset()
     keysList.mockResolvedValue({
@@ -147,8 +136,8 @@ describe('AsyncImageView task management', () => {
         group: { platform: 'openai', allow_image_generation: true },
       }],
     })
-    deleteAsyncImageTask.mockResolvedValue(undefined)
-    listAsyncImageTasks.mockResolvedValue({ object: 'list', data: [failedTask, completedTask], has_more: false })
+    deleteUserImageTask.mockResolvedValue(undefined)
+    listUserImageTasks.mockResolvedValue({ object: 'list', data: [failedTask, completedTask], has_more: false })
   })
 
   afterEach(() => {
@@ -156,26 +145,47 @@ describe('AsyncImageView task management', () => {
     vi.clearAllMocks()
   })
 
-  it('uses matching shared Select triggers for both top filters', async () => {
+  it('uses matching shared Select triggers for the platform and status filters', async () => {
     const wrapper = mountView()
     await flushPromises()
 
-    const apiKeyFilter = wrapper.get('[data-testid="async-image-api-key-filter"]')
+    const platformFilter = wrapper.get('[data-testid="async-image-platform-filter"]')
     const statusFilter = wrapper.get('[data-testid="async-image-status-filter"]')
-    const apiKeyTrigger = apiKeyFilter
-    const statusTrigger = statusFilter
 
-    expect(apiKeyTrigger.element.tagName).toBe('BUTTON')
-    expect(statusTrigger.element.tagName).toBe('BUTTON')
-    expect(apiKeyTrigger.classes()).toEqual(statusTrigger.classes())
-    expect(apiKeyTrigger.find('[role="listbox"]').exists()).toBe(false)
-    expect(apiKeyTrigger.attributes('aria-label')).toBe('asyncImage.filters.apiKey')
-    expect(statusTrigger.attributes('aria-label')).toBe('asyncImage.filters.allStatuses')
+    expect(platformFilter.element.tagName).toBe('BUTTON')
+    expect(statusFilter.element.tagName).toBe('BUTTON')
+    expect(platformFilter.classes()).toEqual(statusFilter.classes())
+    expect(platformFilter.find('[role="listbox"]').exists()).toBe(false)
+    expect(platformFilter.attributes('aria-label')).toBe('asyncImage.filters.allPlatforms')
+    expect(statusFilter.attributes('aria-label')).toBe('asyncImage.filters.allStatuses')
+  })
+
+  it('loads every key of the signed-in user without an API key filter', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(listUserImageTasks).toHaveBeenCalledWith(expect.objectContaining({ offset: 0, platform: '', model: '' }))
+    expect(wrapper.find('[data-testid="async-image-api-key-filter"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="view-task-imgtask_failed"]').exists()).toBe(true)
+  })
+
+  it('sends the platform filter to the user-scoped list request', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="async-image-platform-filter"]').trigger('click')
+    const grokOption = Array.from(document.querySelectorAll('[role="option"]'))
+      .find(option => option.textContent?.includes('Grok'))
+    expect(grokOption).toBeTruthy()
+    ;(grokOption as HTMLElement).click()
+    await flushPromises()
+
+    expect(listUserImageTasks).toHaveBeenLastCalledWith(expect.objectContaining({ platform: 'grok', offset: 0 }))
   })
 
   it.each([1, 2, 3])('centers the actual result thumbnails for %i images under their heading', async count => {
-    const urls = Array.from({ length: count }, (_, index) => `https://images.example.test/${index}.png`)
-    listAsyncImageTasks.mockResolvedValue({ object: 'list', data: [{ ...completedTask, result: { data: urls.map(url => ({ url })) } }], has_more: false })
+    const urls = Array.from({ length: count }, (_, index) => 'https://images.example.test/' + index + '.png')
+    listUserImageTasks.mockResolvedValue({ object: 'list', data: [{ ...completedTask, result: { data: urls.map(url => ({ url })) } }], has_more: false })
     const wrapper = mountView(true)
     await flushPromises()
     const table = wrapper.get('table')
@@ -185,8 +195,6 @@ describe('AsyncImageView task management', () => {
     const cell = table.findAll('tbody tr')[0].findAll('td')[index]
     expect(cell.findAll('img').map(image => image.attributes('src'))).toEqual(urls)
     const gallery = cell.get('img').element.parentElement!.parentElement!
-    // The real result cell centers inline content; a block grid ignores that
-    // alignment. Use computed production CSS rather than utility-name checks.
     expect(getComputedStyle(cell.element).textAlign).toBe('center')
     expect(getComputedStyle(gallery).display).toBe('inline-grid')
     const columns = getComputedStyle(gallery).gridTemplateColumns
@@ -194,7 +202,7 @@ describe('AsyncImageView task management', () => {
     expect(getComputedStyle(headings[index].get('div').element).justifyContent).toBe('center')
   })
 
-  it('keeps exhausted keys selectable for history management but not task creation', async () => {
+  it('keeps history visible when the user has no key eligible for new submissions', async () => {
     keysList.mockResolvedValue({
       items: [{
         id: 11,
@@ -208,30 +216,8 @@ describe('AsyncImageView task management', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    expect(listAsyncImageTasks).toHaveBeenCalledWith('sk-exhausted-key', expect.objectContaining({ offset: 0 }))
-    expect(wrapper.get('[data-testid="async-image-api-key-filter"]').text()).toContain('Exhausted image key')
-
-    await clickButtonByText(wrapper, 'asyncImage.actions.create')
-    await vi.waitFor(() => expect(wrapper.find('.base-dialog').exists()).toBe(true))
-    expect(wrapper.text()).toContain('asyncImage.create.noKeys')
-  })
-
-  it('keeps a key selectable for history after it moves to another platform', async () => {
-    keysList.mockResolvedValue({
-      items: [{
-        id: 12,
-        user_id: 7,
-        key: 'sk-reassigned-key',
-        name: 'Reassigned key',
-        status: 'active',
-        group: { platform: 'anthropic', allow_image_generation: false },
-      }],
-    })
-    const wrapper = mountView()
-    await flushPromises()
-
-    expect(listAsyncImageTasks).toHaveBeenCalledWith('sk-reassigned-key', expect.objectContaining({ offset: 0 }))
-    expect(wrapper.get('[data-testid="async-image-api-key-filter"]').text()).toContain('Reassigned key')
+    expect(listUserImageTasks).toHaveBeenCalledWith(expect.objectContaining({ offset: 0 }))
+    expect(wrapper.find('[data-testid="view-task-imgtask_failed"]').exists()).toBe(true)
 
     await clickButtonByText(wrapper, 'asyncImage.actions.create')
     await vi.waitFor(() => expect(wrapper.find('.base-dialog').exists()).toBe(true))
@@ -250,12 +236,12 @@ describe('AsyncImageView task management', () => {
     await clickButtonByText(wrapper, 'common.cancel')
     await flushPromises()
 
-    expect(deleteAsyncImageTask).not.toHaveBeenCalled()
+    expect(deleteUserImageTask).not.toHaveBeenCalled()
     expect(wrapper.find('[data-testid="delete-task-imgtask_failed"]').exists()).toBe(true)
   })
 
   it('shows requested and actual image counts when the upstream returns fewer images', async () => {
-    listAsyncImageTasks.mockResolvedValue({
+    listUserImageTasks.mockResolvedValue({
       object: 'list',
       data: [{
         ...completedTask,
@@ -274,10 +260,10 @@ describe('AsyncImageView task management', () => {
     expect(wrapper.text()).toContain('asyncImage.detail.countMismatch')
   })
 
-  it('uses the selected API key and shows pending state only on the deleted row', async () => {
+  it('deletes a failed task by its own id and shows pending state only on that row', async () => {
     let finishDelete!: () => void
-    deleteAsyncImageTask.mockReturnValue(new Promise<void>((resolve) => { finishDelete = resolve }))
-    listAsyncImageTasks
+    deleteUserImageTask.mockReturnValue(new Promise<void>((resolve) => { finishDelete = resolve }))
+    listUserImageTasks
       .mockResolvedValueOnce({ object: 'list', data: [failedTask, completedTask], has_more: false })
       .mockResolvedValue({ object: 'list', data: [completedTask], has_more: false })
     const wrapper = mountView()
@@ -289,7 +275,7 @@ describe('AsyncImageView task management', () => {
     await clickButtonByText(wrapper, 'common.delete')
     await flushPromises()
 
-    expect(deleteAsyncImageTask).toHaveBeenCalledWith('sk-selected-key', 'imgtask_failed')
+    expect(deleteUserImageTask).toHaveBeenCalledWith('imgtask_failed')
     const deleteButton = wrapper.get('[data-testid="delete-task-imgtask_failed"]')
     expect(deleteButton.attributes('disabled')).toBeDefined()
     expect(deleteButton.get('[data-icon="refresh"]').classes()).toContain('animate-spin')
@@ -302,7 +288,7 @@ describe('AsyncImageView task management', () => {
   })
 
   it('keeps the failed row and filters when deletion is rejected', async () => {
-    deleteAsyncImageTask.mockRejectedValue(Object.assign(new Error('not allowed'), { code: 'IMAGE_TASK_DELETE_NOT_ALLOWED' }))
+    deleteUserImageTask.mockRejectedValue(Object.assign(new Error('not allowed'), { code: 'IMAGE_TASK_DELETE_NOT_ALLOWED' }))
     const wrapper = mountView()
     await flushPromises()
 
@@ -312,12 +298,12 @@ describe('AsyncImageView task management', () => {
 
     expect(showError).toHaveBeenCalledWith('asyncImage.errors.deleteNotAllowed')
     expect(wrapper.find('[data-testid="delete-task-imgtask_failed"]').exists()).toBe(true)
-    expect(listAsyncImageTasks).toHaveBeenCalledTimes(1)
+    expect(listUserImageTasks).toHaveBeenCalledTimes(1)
     expect(wrapper.get('[data-testid="async-image-status-filter"]').text()).toContain('asyncImage.filters.allStatuses')
   })
 
   it('falls back to the preceding page when deletion empties a later page', async () => {
-    listAsyncImageTasks
+    listUserImageTasks
       .mockResolvedValueOnce({ object: 'list', data: [completedTask], has_more: true })
       .mockResolvedValueOnce({ object: 'list', data: [failedTask], has_more: false })
       .mockResolvedValueOnce({ object: 'list', data: [], has_more: false })
@@ -333,60 +319,8 @@ describe('AsyncImageView task management', () => {
     await clickButtonByText(wrapper, 'common.delete')
     await flushPromises()
 
-    expect(listAsyncImageTasks).toHaveBeenCalledTimes(4)
-    expect(listAsyncImageTasks.mock.calls.map(call => call[1]?.offset)).toEqual([0, 20, 20, 0])
+    expect(listUserImageTasks).toHaveBeenCalledTimes(4)
+    expect(listUserImageTasks.mock.calls.map(call => call[0]?.offset)).toEqual([0, 20, 20, 0])
     expect(wrapper.text()).toContain('asyncImage.list.page:1')
-  })
-
-  it('does not let a stale post-delete refresh overwrite a newly selected API key', async () => {
-    let finishDeletedKeyRefresh!: (value: { object: string; data: typeof failedTask[]; has_more: boolean }) => void
-    const deletedKeyRefresh = new Promise<{ object: string; data: typeof failedTask[]; has_more: boolean }>((resolve) => {
-      finishDeletedKeyRefresh = resolve
-    })
-    keysList.mockResolvedValue({
-      items: [
-        {
-          id: 9,
-          user_id: 7,
-          key: 'sk-selected-key',
-          name: 'Primary image key',
-          status: 'active',
-          group: { platform: 'openai', allow_image_generation: true },
-        },
-        {
-          id: 10,
-          user_id: 7,
-          key: 'sk-other-key',
-          name: 'Secondary image key',
-          status: 'active',
-          group: { platform: 'openai', allow_image_generation: true },
-        },
-      ],
-    })
-    listAsyncImageTasks
-      .mockResolvedValueOnce({ object: 'list', data: [failedTask], has_more: false })
-      .mockReturnValueOnce(deletedKeyRefresh)
-      .mockResolvedValueOnce({ object: 'list', data: [otherKeyTask], has_more: false })
-    const wrapper = mountView()
-    await flushPromises()
-
-    await wrapper.get('[data-testid="delete-task-imgtask_failed"]').trigger('click')
-    await clickButtonByText(wrapper, 'common.delete')
-    await flushPromises()
-
-    const filter = wrapper.get('[data-testid="async-image-api-key-filter"]')
-    const panel = await openSelect(filter)
-    const otherKeyOption = panel.findAll('[role="option"]').find(option => option.text().includes('Secondary image key'))
-    expect(otherKeyOption).toBeDefined()
-    await chooseSelect(filter, otherKeyOption!.text())
-    await flushPromises()
-
-    expect(listAsyncImageTasks).toHaveBeenLastCalledWith('sk-other-key', expect.objectContaining({ offset: 0 }))
-    expect(wrapper.find('[data-testid="view-task-imgtask_other_key"]').exists()).toBe(true)
-
-    finishDeletedKeyRefresh({ object: 'list', data: [failedTask], has_more: false })
-    await flushPromises()
-    expect(wrapper.find('[data-testid="view-task-imgtask_other_key"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="view-task-imgtask_failed"]').exists()).toBe(false)
   })
 })

@@ -1,5 +1,5 @@
 <template>
-  <AppLayout appearance="user" workspace>
+  <component :is="embedded ? 'div' : AppLayout" v-bind="shellProps">
     <TablePageLayout>
       <template #filters>
         <div class="flex flex-col gap-3">
@@ -750,7 +750,7 @@
         </div>
       </template>
     </BaseDialog>
-  </AppLayout>
+  </component>
 </template>
 
 <script setup lang="ts">
@@ -836,6 +836,9 @@ const BATCH_IMAGE_MAX_OUTPUTS_PER_ITEM = 4
 const BATCH_IMAGE_MAX_OUTPUTS_PER_JOB = 200
 const outputCountOptions = Array.from({ length: BATCH_IMAGE_MAX_OUTPUTS_PER_ITEM }, (_, index) => index + 1)
 const batchPageSizeOptions: SelectOption[] = [20, 50, 100].map(size => ({ value: size, label: String(size) }))
+
+const props = defineProps<{ embedded?: boolean }>()
+const shellProps = computed(() => props.embedded ? { class: 'image-task-embedded' } : { appearance: 'user', workspace: true })
 
 const appStore = useAppStore()
 const { copyToClipboard } = useClipboard()

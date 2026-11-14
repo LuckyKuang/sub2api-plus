@@ -168,6 +168,12 @@ export async function downloadAsyncImageZip(apiKey: string, taskID: string): Pro
   if (!response.ok) throw await parseAsyncImageError(response)
   const contentType = response.headers.get('content-type') || ''
   const blob = await response.blob()
+  return assertAsyncImageZipResponse(contentType, blob)
+}
+
+// Shared by the gateway and console download paths: a 200 response that is not
+// a real ZIP must be reported as a failure instead of being saved as an archive.
+export async function assertAsyncImageZipResponse(contentType: string, blob: Blob): Promise<Blob> {
   if (!isZipContentType(contentType) || !(await hasZipFileHeader(blob))) {
     throw new AsyncImageDownloadValidationError()
   }

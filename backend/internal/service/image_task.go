@@ -47,6 +47,7 @@ type ImageTaskRecord struct {
 	APIKeyID        int64           `json:"api_key_id"`
 	RequestType     string          `json:"request_type,omitempty"`
 	Model           string          `json:"model,omitempty"`
+	Platform        string          `json:"platform,omitempty"`
 	PromptPreview   string          `json:"prompt_preview,omitempty"`
 	RequestedImages int             `json:"requested_images"`
 	ActualImages    int             `json:"actual_images"`
@@ -67,6 +68,7 @@ type ImageTask struct {
 	Object          string          `json:"object"`
 	RequestType     string          `json:"request_type,omitempty"`
 	Model           string          `json:"model,omitempty"`
+	Platform        string          `json:"platform,omitempty"`
 	PromptPreview   string          `json:"prompt_preview,omitempty"`
 	RequestedImages int             `json:"requested_images"`
 	ActualImages    int             `json:"actual_images"`
@@ -80,9 +82,21 @@ type ImageTask struct {
 	ExpiresAt       int64           `json:"expires_at"`
 }
 
+// ImageTaskOwner scopes a task read. A zero APIKeyID means the whole user:
+// the console lists every key of the signed-in owner, while gateway callers
+// keep the stricter user-and-key pair.
 type ImageTaskOwner struct {
 	UserID   int64
 	APIKeyID int64
+}
+
+// Matches reports whether the task belongs to this owner. It never widens
+// access for another user, even when the key scope is omitted.
+func (o ImageTaskOwner) Matches(task *ImageTaskRecord) bool {
+	if task == nil || o.UserID <= 0 || task.UserID != o.UserID {
+		return false
+	}
+	return o.APIKeyID <= 0 || task.APIKeyID == o.APIKeyID
 }
 
 type ImageTaskStore interface {
@@ -104,6 +118,16 @@ type ImageTaskService struct {
 	history          ImageTaskHistoryRepository
 	ttl              time.Duration
 	executionTimeout time.Duration
+	retryQueue       ImageTaskHistoryRetryQueue
+}
+
+// SetHistoryRetryQueue installs durable compensation for history write
+// failures. It is wired once at startup.
+func (s *ImageTaskService) SetHistoryRetryQueue(queue ImageTaskHistoryRetryQueue) {
+	if s == nil {
+		return
+	}
+	s.retryQueue = queue
 }
 
 // SetHistoryRepository enables durable list records. It is set once during
@@ -199,6 +223,7 @@ func (s *ImageTaskService) CreateWithMetadata(ctx context.Context, owner ImageTa
 		APIKeyID:        owner.APIKeyID,
 		RequestType:     metadata.RequestType,
 		Model:           metadata.Model,
+		Platform:        metadata.Platform,
 		PromptPreview:   metadata.PromptPreview,
 		RequestedImages: metadata.RequestedImages,
 		Status:          ImageTaskStatusProcessing,
@@ -238,27 +263,48 @@ func (s *ImageTaskService) List(ctx context.Context, owner ImageTaskOwner, filte
 	}
 	data := make([]*ImageTask, 0, len(records))
 	for _, record := range records {
-		data = append(data, imageTaskToPublic(record))
+		data = append(data, s.publicTask(ctx, record))
 	}
 	return &ImageTaskListResponse{Object: "list", Data: data, HasMore: hasMore}, nil
+}
+
+// Get returns one task. The execution record has a shorter lifetime than the
+// durable history row, so a poll after that TTL still resolves the task instead
+// of reporting it missing.
+// HasAnyTask reports whether the user has at least one ordinary history row.
+func (s *ImageTaskService) HasAnyTask(ctx context.Context, userID int64) (bool, error) {
+	if s == nil || s.history == nil || userID <= 0 {
+		return false, nil
+	}
+	return s.history.HasAnyTaskForUser(ctx, userID)
 }
 
 func (s *ImageTaskService) Get(ctx context.Context, owner ImageTaskOwner, id string) (*ImageTask, error) {
 	if s == nil || s.store == nil {
 		return nil, ErrImageTaskUnavailable
 	}
-	task, err := s.store.Get(ctx, strings.TrimSpace(id))
+	taskID := strings.TrimSpace(id)
+	task, err := s.store.Get(ctx, taskID)
 	if err != nil {
-		if errors.Is(err, ErrImageTaskNotFound) {
+		if !errors.Is(err, ErrImageTaskNotFound) {
+			return nil, ErrImageTaskUnavailable.WithCause(err)
+		}
+		if s.history == nil {
 			return nil, ErrImageTaskNotFound
 		}
-		return nil, ErrImageTaskUnavailable.WithCause(err)
+		task, err = s.history.Get(ctx, owner, taskID)
+		if err != nil {
+			if errors.Is(err, ErrImageTaskNotFound) {
+				return nil, ErrImageTaskNotFound
+			}
+			return nil, ErrImageTaskUnavailable.WithCause(err)
+		}
 	}
-	if task.UserID != owner.UserID || task.APIKeyID != owner.APIKeyID {
+	if !owner.Matches(task) {
 		// Do not reveal whether a random task ID exists for another caller.
 		return nil, ErrImageTaskNotFound
 	}
-	return imageTaskToPublic(task), nil
+	return s.publicTask(ctx, task), nil
 }
 
 // Delete removes a failed task's execution state and durable history. The
@@ -337,7 +383,7 @@ func (s *ImageTaskService) StreamDownloadZip(ctx context.Context, owner ImageTas
 			return 0, ErrImageTaskUnavailable.WithCause(err)
 		}
 	}
-	if task.UserID != owner.UserID || task.APIKeyID != owner.APIKeyID {
+	if !owner.Matches(task) {
 		return 0, ErrImageTaskNotFound
 	}
 	urls := imageTaskURLs(task.Result)
@@ -484,6 +530,15 @@ func (s *ImageTaskService) finish(ctx context.Context, id, status string, status
 	if s.history != nil {
 		if historyErr := s.history.Save(ctx, task); historyErr != nil {
 			logger.L().Error("image_task.history_update_failed", zap.String("task_id", id), zap.Error(historyErr))
+			// The Redis execution record expires; without this compensation the
+			// terminal state and its object keys would be lost with it.
+			if s.retryQueue != nil {
+				retryCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				if enqueueErr := s.retryQueue.Enqueue(retryCtx, task); enqueueErr != nil {
+					logger.L().Error("image_task.history_retry_enqueue_failed", zap.String("task_id", id), zap.Error(enqueueErr))
+				}
+				cancel()
+			}
 		}
 	}
 	return nil
@@ -504,6 +559,7 @@ func imageTaskToPublic(task *ImageTaskRecord) *ImageTask {
 		Object:          "image.generation.task",
 		RequestType:     task.RequestType,
 		Model:           task.Model,
+		Platform:        task.Platform,
 		PromptPreview:   task.PromptPreview,
 		RequestedImages: requestedImages,
 		ActualImages:    actualImages,
@@ -516,6 +572,81 @@ func imageTaskToPublic(task *ImageTaskRecord) *ImageTask {
 		CompletedAt:     task.CompletedAt,
 		ExpiresAt:       task.ExpiresAt,
 	}
+}
+
+// publicTask is the API view of a stored record. Stored result URLs were
+// minted when the image was uploaded; a presigned one expires long before the
+// history row does, so every read re-signs the recorded object keys instead of
+// replaying the captured string.
+func (s *ImageTaskService) publicTask(ctx context.Context, record *ImageTaskRecord) *ImageTask {
+	task := imageTaskToPublic(record)
+	if task == nil {
+		return nil
+	}
+	s.refreshTaskImageURLs(ctx, record, task)
+	return task
+}
+
+func (s *ImageTaskService) refreshTaskImageURLs(ctx context.Context, record *ImageTaskRecord, task *ImageTask) {
+	if record == nil || task == nil || len(record.StorageKeys) == 0 || len(task.Result) == 0 {
+		return
+	}
+	uploader, _ := s.current()
+	if uploader == nil {
+		return
+	}
+	urls := make([]string, 0, len(record.StorageKeys))
+	for _, key := range record.StorageKeys {
+		signed, err := uploader.SignStoredTaskImage(ctx, key)
+		if err != nil || strings.TrimSpace(signed) == "" {
+			// Keep every stored URL rather than mixing fresh and expired links in
+			// one response, which would point at different objects by position.
+			return
+		}
+		urls = append(urls, signed)
+	}
+	rewritten := imageTaskResultWithURLs(task.Result, urls)
+	if len(rewritten) == 0 {
+		return
+	}
+	task.Result = rewritten
+	task.ImageURL = firstImageTaskURL(rewritten)
+}
+
+func imageTaskResultWithURLs(result json.RawMessage, urls []string) json.RawMessage {
+	if len(result) == 0 || len(urls) == 0 || !json.Valid(result) {
+		return nil
+	}
+	var top map[string]json.RawMessage
+	if err := json.Unmarshal(result, &top); err != nil {
+		return nil
+	}
+	rawData, ok := top["data"]
+	if !ok {
+		return nil
+	}
+	var items []map[string]json.RawMessage
+	if err := json.Unmarshal(rawData, &items); err != nil || len(items) != len(urls) {
+		return nil
+	}
+	for index, item := range items {
+		encoded, err := json.Marshal(urls[index])
+		if err != nil {
+			return nil
+		}
+		item["url"] = encoded
+		items[index] = item
+	}
+	newData, err := json.Marshal(items)
+	if err != nil {
+		return nil
+	}
+	top["data"] = newData
+	out, err := json.Marshal(top)
+	if err != nil {
+		return nil
+	}
+	return out
 }
 
 func firstImageTaskURL(result json.RawMessage) string {

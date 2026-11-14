@@ -10,7 +10,6 @@ import { useAdminSettingsStore } from '@/stores/adminSettings'
 import { useAdminComplianceStore } from '@/stores/adminCompliance'
 import { useNavigationLoadingState } from '@/composables/useNavigationLoading'
 import { useRoutePrefetch } from '@/composables/useRoutePrefetch'
-import { useAsyncImageAccess } from '@/composables/useAsyncImageAccess'
 import { getSetupStatus } from '@/api/setup'
 import { resolveCompletedSetupRedirectPath } from './setupRedirect'
 import { resolveRouteDocumentTitle } from './title'
@@ -221,31 +220,22 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
-    path: '/batch-image',
-    name: 'BatchImageGuide',
-    alias: '/docs/batch-image',
-    component: () => import('@/views/user/BatchImageGuideView.vue'),
+    // One entry for both generation modes. The mode is selected inside the page,
+    // and old links keep working so existing bookmarks do not break.
+    path: '/image-tasks',
+    name: 'ImageTasks',
+    component: () => import('@/views/user/ImageTasksView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: false,
-      title: 'Batch Image Guide',
-      titleKey: 'batchImageGuide.title',
-      descriptionKey: 'batchImageGuide.description'
+      title: 'Image Tasks',
+      titleKey: 'imageTasks.title',
+      descriptionKey: 'imageTasks.description'
     }
   },
-  {
-    path: '/async-image',
-    name: 'AsyncImage',
-    component: () => import('@/views/user/AsyncImageView.vue'),
-    meta: {
-      requiresAuth: true,
-      requiresAdmin: false,
-      requiresAsyncImageAccess: true,
-      title: 'Async Images',
-      titleKey: 'asyncImage.title',
-      descriptionKey: 'asyncImage.description'
-    }
-  },
+  { path: '/async-image', redirect: { path: '/image-tasks', query: { mode: 'ordinary' } } },
+  { path: '/batch-image', redirect: { path: '/image-tasks', query: { mode: 'batch' } } },
+  { path: '/docs/batch-image', redirect: { path: '/image-tasks', query: { mode: 'batch' } } },
   {
     path: '/usage',
     name: 'Usage',
@@ -1011,14 +1001,8 @@ router.beforeEach(async (to, _from, next) => {
     }
   }
 
-  if (to.meta.requiresAsyncImageAccess && (supportResource || !authStore.isAdmin)) {
-    const { canUseAsyncImage, refreshAsyncImageAccess } = useAsyncImageAccess()
-    await refreshAsyncImageAccess()
-    if (!canUseAsyncImage.value) {
-      next('/keys')
-      return
-    }
-  }
+  // The image task page decides from backend capability which mode to show, so
+  // the router no longer blocks users who only have batch access.
 
 
   if (to.path === '/monitor' || supportResource === 'channel-status') {

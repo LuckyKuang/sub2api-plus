@@ -95,6 +95,9 @@ type BatchImagePublicService struct {
 	BillingRepo       UsageBillingRepository
 	AuthCache         APIKeyAuthCacheInvalidator
 	Config            *config.Config
+	// EnabledResolver, when set, supplies the administrator-controlled
+	// submission switch. Worker processing and settlement ignore it.
+	EnabledResolver func(ctx context.Context) bool
 }
 
 type BatchImagePricingSnapshot struct {
@@ -202,7 +205,7 @@ func NewBatchImagePublicService(repo BatchImageRepository, accountRepo AccountRe
 }
 
 func (s *BatchImagePublicService) Submit(ctx context.Context, owner BatchImageOwner, req BatchImageSubmitRequest, idempotencyKey string) (*BatchImagePublicBatch, error) {
-	if !s.enabled() {
+	if !s.enabled(ctx) {
 		return nil, ErrBatchImageDisabled
 	}
 	normalized, err := s.validateSubmitRequest(req)
@@ -694,7 +697,7 @@ func (s *BatchImagePublicService) DeleteRecord(ctx context.Context, owner BatchI
 }
 
 func (s *BatchImagePublicService) ListModels(ctx context.Context, owner BatchImageOwner) (*BatchImagePublicModelsResponse, error) {
-	if !s.enabled() {
+	if !s.enabled(ctx) {
 		return nil, ErrBatchImageDisabled
 	}
 	if s.Pricing == nil {
@@ -1186,8 +1189,14 @@ func (s *BatchImagePublicService) resolvePricingSnapshot(ctx context.Context, ow
 	}, nil
 }
 
-func (s *BatchImagePublicService) enabled() bool {
-	return s != nil && s.Repo != nil && s.AccountRepo != nil && s.Config != nil && s.Config.BatchImage.Enabled
+func (s *BatchImagePublicService) enabled(ctx context.Context) bool {
+	if s == nil || s.Repo == nil || s.AccountRepo == nil || s.Config == nil {
+		return false
+	}
+	if s.EnabledResolver != nil {
+		return s.EnabledResolver(ctx)
+	}
+	return s.Config.BatchImage.Enabled
 }
 
 func (s *BatchImagePublicService) invalidateAuthCache(ctx context.Context, userID int64) {

@@ -33,6 +33,7 @@ export default {
         gateway: 'Gateway',
         identity: 'Outbound identity',
         email: 'Email',
+        imageTasks: 'Image Tasks',
         backup: 'Backup',
         payment: 'Payment',
       },
