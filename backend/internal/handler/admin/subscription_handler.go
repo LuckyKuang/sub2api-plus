@@ -57,7 +57,23 @@ type BulkAssignSubscriptionRequest struct {
 
 // AdjustSubscriptionRequest represents adjust subscription request (extend or shorten)
 type AdjustSubscriptionRequest struct {
-	Days int `json:"days" binding:"required,min=-36500,max=36500"` // negative to shorten, positive to extend
+	Days            *int       `json:"days"`
+	ExpiresAt       *time.Time `json:"expires_at"`
+	FiveHourResetAt *time.Time `json:"five_hour_reset_at"`
+	DailyResetAt    *time.Time `json:"daily_reset_at"`
+	WeeklyResetAt   *time.Time `json:"weekly_reset_at"`
+	MonthlyResetAt  *time.Time `json:"monthly_reset_at"`
+}
+
+func (req AdjustSubscriptionRequest) toServiceAdjustment() service.SubscriptionAdjustment {
+	return service.SubscriptionAdjustment{
+		Days:            req.Days,
+		ExpiresAt:       req.ExpiresAt,
+		FiveHourResetAt: req.FiveHourResetAt,
+		DailyResetAt:    req.DailyResetAt,
+		WeeklyResetAt:   req.WeeklyResetAt,
+		MonthlyResetAt:  req.MonthlyResetAt,
+	}
 }
 
 // List handles listing all subscriptions with pagination and filters
@@ -227,7 +243,7 @@ func (h *SubscriptionHandler) Extend(c *gin.Context) {
 		Body:           req,
 	}
 	executeAdminIdempotentJSONWithResponse(c, "admin.subscriptions.extend", idempotencyPayload, service.DefaultWriteIdempotencyTTL(), func(ctx context.Context) (any, error) {
-		subscription, execErr := h.subscriptionService.ExtendSubscription(ctx, subscriptionID, req.Days)
+		subscription, execErr := h.subscriptionService.AdjustSubscription(ctx, subscriptionID, req.toServiceAdjustment())
 		if execErr != nil {
 			return nil, execErr
 		}

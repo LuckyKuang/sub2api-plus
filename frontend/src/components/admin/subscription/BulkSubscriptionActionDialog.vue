@@ -135,9 +135,9 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
-const quotaWindows = ['daily', 'weekly', 'monthly'] as const
+const quotaWindows = ['fiveHour', 'daily', 'weekly', 'monthly'] as const
 const days = ref<number | string>(30)
-const windows = reactive({ daily: true, weekly: true, monthly: true })
+const windows = reactive({ fiveHour: true, daily: true, weekly: true, monthly: true })
 const submitting = ref(false)
 const requestError = ref('')
 const result = shallowRef<SubscriptionBulkActionResult | null>(null)
@@ -192,7 +192,12 @@ async function submit() {
       action: props.action
     }
     if (request.action === 'extend') request.days = Number(days.value)
-    if (request.action === 'reset_quota') Object.assign(request, { ...windows })
+    if (request.action === 'reset_quota') {
+      request.five_hour = windows.fiveHour
+      request.daily = windows.daily
+      request.weekly = windows.weekly
+      request.monthly = windows.monthly
+    }
     pendingOperation.value = prepareBulkSubscriptionOperation(request)
     submittedAction.value = request.action
   }

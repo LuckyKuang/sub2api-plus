@@ -450,6 +450,7 @@
             <div class="table-actions">
               <button
                 v-if="row.status === 'active' || row.status === 'expired'"
+                data-test="adjust-subscription"
                 @click="handleExtend(row)"
                 class="table-action"
               >
@@ -458,6 +459,7 @@
               </button>
               <button
                 v-if="row.status === 'active'"
+                data-test="reset-quota"
                 @click="handleResetQuota(row)"
                 :disabled="resettingQuota && resettingSubscription?.id === row.id"
                 class="table-action table-action-warning"
@@ -690,7 +692,7 @@
     <BaseDialog
       :show="showExtendModal"
       :title="t('admin.subscriptions.adjustSubscription')"
-      width="narrow"
+      width="normal"
       @close="closeExtendModal"
     >
       <form
@@ -724,17 +726,80 @@
           </p>
         </div>
         <div>
+          <label class="input-label">{{ t('admin.subscriptions.form.expiryMode') }}</label>
+          <Select
+            v-model="extendForm.mode"
+            data-test="extend-expiry-mode"
+            :options="expiryModeOptions"
+            :searchable="false"
+            :aria-label="t('admin.subscriptions.form.expiryMode')"
+          />
+        </div>
+        <div v-if="extendForm.mode === 'days'">
           <label class="input-label">{{ t('admin.subscriptions.form.adjustDays') }}</label>
-          <div class="flex items-center gap-2">
-            <input
-              v-model.number="extendForm.days"
-              type="number"
-              required
-              class="input text-center"
-              :placeholder="t('admin.subscriptions.adjustDaysPlaceholder')"
+          <input
+            v-model.number="extendForm.days"
+            data-test="extend-days"
+            type="number"
+            class="input text-center"
+            :placeholder="t('admin.subscriptions.adjustDaysPlaceholder')"
+          />
+          <p class="input-hint">{{ t('admin.subscriptions.adjustHint') }}</p>
+        </div>
+        <div v-else>
+          <label class="input-label">{{ t('admin.subscriptions.form.expiresAt') }}</label>
+          <DateTimePicker
+            v-model="extendForm.expiresAtLocal"
+            data-test="extend-expires-at"
+            type="datetime-local"
+            step="1"
+            :aria-label="t('admin.subscriptions.form.expiresAt')"
+          />
+          <p class="input-hint">{{ t('admin.subscriptions.expiresAtHint', { timezone: browserTimeZone }) }}</p>
+        </div>
+        <div class="space-y-3">
+          <p class="input-label">{{ t('admin.subscriptions.form.windowResets') }}</p>
+          <p class="input-hint">{{ t('admin.subscriptions.windowResetHint') }}</p>
+          <div>
+            <label class="input-label">{{ t('admin.subscriptions.form.fiveHourReset') }}</label>
+            <DateTimePicker
+              v-model="extendForm.fiveHourResetLocal"
+              data-test="extend-five-hour-reset"
+              type="datetime-local"
+              step="1"
+              :aria-label="t('admin.subscriptions.form.fiveHourReset')"
             />
           </div>
-          <p class="input-hint">{{ t('admin.subscriptions.adjustHint') }}</p>
+          <div>
+            <label class="input-label">{{ t('admin.subscriptions.form.dailyReset') }}</label>
+            <DateTimePicker
+              v-model="extendForm.dailyResetLocal"
+              data-test="extend-daily-reset"
+              type="datetime-local"
+              step="1"
+              :aria-label="t('admin.subscriptions.form.dailyReset')"
+            />
+          </div>
+          <div>
+            <label class="input-label">{{ t('admin.subscriptions.form.weeklyReset') }}</label>
+            <DateTimePicker
+              v-model="extendForm.weeklyResetLocal"
+              data-test="extend-weekly-reset"
+              type="datetime-local"
+              step="1"
+              :aria-label="t('admin.subscriptions.form.weeklyReset')"
+            />
+          </div>
+          <div>
+            <label class="input-label">{{ t('admin.subscriptions.form.monthlyReset') }}</label>
+            <DateTimePicker
+              v-model="extendForm.monthlyResetLocal"
+              data-test="extend-monthly-reset"
+              type="datetime-local"
+              step="1"
+              :aria-label="t('admin.subscriptions.form.monthlyReset')"
+            />
+          </div>
         </div>
       </form>
       <template #footer>
@@ -777,16 +842,62 @@
       @cancel="showRestoreDialog = false"
     />
 
-    <!-- Reset Quota Confirmation Dialog -->
-    <ConfirmDialog
+    <!-- Reset Quota Dialog -->
+    <BaseDialog
       :show="showResetQuotaConfirm"
       :title="t('admin.subscriptions.resetQuotaTitle')"
-      :message="t('admin.subscriptions.resetQuotaConfirm', { user: resettingSubscription?.user?.email })"
-      :confirm-text="t('admin.subscriptions.resetQuota')"
-      :cancel-text="t('common.cancel')"
-      @confirm="confirmResetQuota"
-      @cancel="showResetQuotaConfirm = false"
-    />
+      width="narrow"
+      @close="closeResetQuotaModal"
+    >
+      <form
+        v-if="resettingSubscription"
+        id="reset-quota-form"
+        data-test="reset-quota-form"
+        class="space-y-4"
+        @submit.prevent="confirmResetQuota"
+      >
+        <p class="text-sm surface-muted">
+          {{ t('admin.subscriptions.resetQuotaConfirm', { user: resettingSubscription.user?.email }) }}
+        </p>
+        <fieldset class="space-y-3">
+          <legend class="text-sm font-medium surface-muted">
+            {{ t('admin.subscriptions.bulk.resetWindows') }}
+          </legend>
+          <div class="flex flex-wrap gap-5">
+            <label
+              v-for="window in resetQuotaWindows"
+              :key="window"
+              class="flex items-center gap-2 text-sm surface-muted"
+            >
+              <input
+                v-model="resetQuotaForm[window]"
+                :name="window"
+                type="checkbox"
+                class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                :disabled="resettingQuota"
+              />
+              {{ t(`admin.subscriptions.${window}`) }}
+            </label>
+          </div>
+          <p class="text-xs surface-muted">{{ t('admin.subscriptions.bulk.resetHint') }}</p>
+        </fieldset>
+      </form>
+      <template #footer>
+        <div v-if="resettingSubscription" class="flex justify-end gap-3">
+          <button type="button" class="btn btn-secondary" :disabled="resettingQuota" @click="closeResetQuotaModal">
+            {{ t('common.cancel') }}
+          </button>
+          <button
+            type="submit"
+            form="reset-quota-form"
+            class="btn btn-primary"
+            :disabled="resettingQuota"
+          >
+            {{ resettingQuota ? t('common.processing') : t('admin.subscriptions.resetQuota') }}
+          </button>
+        </div>
+      </template>
+    </BaseDialog>
     <!-- Subscription Guide Modal -->
     <teleport to="body">
       <transition name="modal">
@@ -880,7 +991,7 @@ import type { SubscriptionBulkAction, SubscriptionBulkActionResult, BulkAssignSu
 import { useTableSelection } from '@/composables/useTableSelection'
 import BulkSubscriptionActionDialog from '@/components/admin/subscription/BulkSubscriptionActionDialog.vue'
 import type { Column } from '@/components/common/types'
-import { formatDateTimeToMinute } from '@/utils/format'
+import { formatDateTimeToMinute, getBrowserTimeZone, parseDateTimeLocalInput } from '@/utils/format'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import TablePageLayout from '@/components/layout/TablePageLayout.vue'
@@ -888,6 +999,8 @@ import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import DateTimePicker from '@/components/common/DateTimePicker.vue'
+import type { ExtendSubscriptionRequest } from '@/types'
 import EmptyState from '@/components/common/EmptyState.vue'
 import Select from '@/components/common/Select.vue'
 import GroupBadge from '@/components/common/GroupBadge.vue'
@@ -1129,8 +1242,26 @@ const assignForm = reactive({
   validity_days: 30
 })
 
+const resetQuotaWindows = ['fiveHour', 'daily', 'weekly', 'monthly'] as const
+const resetQuotaForm = reactive({
+  fiveHour: true,
+  daily: true,
+  weekly: true,
+  monthly: true
+})
+const browserTimeZone = getBrowserTimeZone()
+const expiryModeOptions = computed(() => [
+  { value: 'days', label: t('admin.subscriptions.expiryModeDays') },
+  { value: 'absolute', label: t('admin.subscriptions.expiryModeAbsolute') }
+])
 const extendForm = reactive({
-  days: 30
+  mode: 'days' as 'days' | 'absolute',
+  days: 30 as number | string,
+  expiresAtLocal: '',
+  fiveHourResetLocal: '',
+  dailyResetLocal: '',
+  weeklyResetLocal: '',
+  monthlyResetLocal: ''
 })
 
 // Group options for filter (all groups)
@@ -1419,9 +1550,32 @@ const handleAssignSubscription = async () => {
   }
 }
 
+const padDatePart = (value: number) => String(value).padStart(2, '0')
+
+const toDateTimeLocalSeconds = (date: Date): string => {
+  if (Number.isNaN(date.getTime())) return ''
+  return `${date.getFullYear()}-${padDatePart(date.getMonth() + 1)}-${padDatePart(date.getDate())}T${padDatePart(date.getHours())}:${padDatePart(date.getMinutes())}:${padDatePart(date.getSeconds())}`
+}
+
+const parseLocalDateTime = (value: string): Date | null => {
+  const timestamp = parseDateTimeLocalInput(value)
+  if (timestamp === null) return null
+  return new Date(timestamp * 1000)
+}
+
+const toRfc3339 = (date: Date) => date.toISOString()
+
 const handleExtend = (subscription: UserSubscription) => {
   extendingSubscription.value = subscription
+  extendForm.mode = 'days'
   extendForm.days = 30
+  extendForm.expiresAtLocal = subscription.expires_at
+    ? toDateTimeLocalSeconds(new Date(subscription.expires_at))
+    : ''
+  extendForm.fiveHourResetLocal = ''
+  extendForm.dailyResetLocal = ''
+  extendForm.weeklyResetLocal = ''
+  extendForm.monthlyResetLocal = ''
   showExtendModal.value = true
 }
 
@@ -1433,21 +1587,76 @@ const closeExtendModal = () => {
 const handleExtendSubscription = async () => {
   if (!extendingSubscription.value) return
 
-  // 前端验证：调整后的过期时间必须在未来
-  if (extendingSubscription.value.expires_at) {
-    const expiresAt = new Date(extendingSubscription.value.expires_at)
-    const newExpiresAt = new Date(expiresAt.getTime() + extendForm.days * 24 * 60 * 60 * 1000)
-    if (newExpiresAt <= new Date()) {
-      appStore.showError(t('admin.subscriptions.adjustWouldExpire'))
+  const request: ExtendSubscriptionRequest = {}
+  const now = new Date()
+  if (extendForm.mode === 'days') {
+    const rawDays = extendForm.days
+    const hasDays = rawDays !== '' && rawDays !== null && rawDays !== undefined && Number.isFinite(Number(rawDays))
+    if (hasDays) {
+      const days = Number(rawDays)
+      if (!Number.isInteger(days) || days === 0 || Math.abs(days) > 36500) {
+        appStore.showError(t('admin.subscriptions.adjustOutOfRange'))
+        return
+      }
+      if (extendingSubscription.value.expires_at) {
+        const expiresAt = new Date(extendingSubscription.value.expires_at)
+        const newExpiresAt = new Date(expiresAt.getTime() + days * 24 * 60 * 60 * 1000)
+        if (newExpiresAt <= now) {
+          appStore.showError(t('admin.subscriptions.adjustWouldExpire'))
+          return
+        }
+      }
+      request.days = days
+    }
+  } else {
+    const expiresAt = parseLocalDateTime(extendForm.expiresAtLocal)
+    if (!expiresAt) {
+      appStore.showError(t('admin.subscriptions.expiresAtRequired'))
       return
     }
+    if (expiresAt <= now) {
+      appStore.showError(t('admin.subscriptions.expiresAtMustBeFuture'))
+      return
+    }
+    request.expires_at = toRfc3339(expiresAt)
+  }
+
+  const windowFields: Array<{
+    local: string
+    key: 'five_hour_reset_at' | 'daily_reset_at' | 'weekly_reset_at' | 'monthly_reset_at'
+    daily?: boolean
+  }> = [
+    { local: extendForm.fiveHourResetLocal, key: 'five_hour_reset_at' },
+    { local: extendForm.dailyResetLocal, key: 'daily_reset_at', daily: true },
+    { local: extendForm.weeklyResetLocal, key: 'weekly_reset_at' },
+    { local: extendForm.monthlyResetLocal, key: 'monthly_reset_at' }
+  ]
+  for (const field of windowFields) {
+    if (!field.local) continue
+    const resetAt = parseLocalDateTime(field.local)
+    if (!resetAt) {
+      appStore.showError(t('admin.subscriptions.windowResetMustBeFuture'))
+      return
+    }
+    if (resetAt <= now) {
+      appStore.showError(t('admin.subscriptions.windowResetMustBeFuture'))
+      return
+    }
+    if (field.daily && (resetAt.getHours() !== 0 || resetAt.getMinutes() !== 0 || resetAt.getSeconds() !== 0)) {
+      appStore.showError(t('admin.subscriptions.dailyResetMustBeMidnight'))
+      return
+    }
+    request[field.key] = toRfc3339(resetAt)
+  }
+
+  if (!request.days && !request.expires_at && !request.five_hour_reset_at && !request.daily_reset_at && !request.weekly_reset_at && !request.monthly_reset_at) {
+    appStore.showError(t('admin.subscriptions.adjustRequired'))
+    return
   }
 
   submitting.value = true
   try {
-    await adminAPI.subscriptions.extend(extendingSubscription.value.id, {
-      days: extendForm.days
-    })
+    await adminAPI.subscriptions.extend(extendingSubscription.value.id, request)
     appStore.showSuccess(t('admin.subscriptions.subscriptionAdjusted'))
     closeExtendModal()
     loadSubscriptions()
@@ -1501,15 +1710,34 @@ const confirmRestore = async () => {
 
 const handleResetQuota = (subscription: UserSubscription) => {
   resettingSubscription.value = subscription
+  resetQuotaForm.fiveHour = true
+  resetQuotaForm.daily = true
+  resetQuotaForm.weekly = true
+  resetQuotaForm.monthly = true
   showResetQuotaConfirm.value = true
+}
+
+const closeResetQuotaModal = () => {
+  if (resettingQuota.value) return
+  showResetQuotaConfirm.value = false
+  resettingSubscription.value = null
 }
 
 const confirmResetQuota = async () => {
   if (!resettingSubscription.value) return
   if (resettingQuota.value) return
+  if (!resetQuotaWindows.some(window => resetQuotaForm[window])) {
+    appStore.showError(t('admin.subscriptions.selectResetWindow'))
+    return
+  }
   resettingQuota.value = true
   try {
-    await adminAPI.subscriptions.resetQuota(resettingSubscription.value.id, { daily: true, weekly: true, monthly: true, five_hour: true })
+    await adminAPI.subscriptions.resetQuota(resettingSubscription.value.id, {
+      five_hour: resetQuotaForm.fiveHour,
+      daily: resetQuotaForm.daily,
+      weekly: resetQuotaForm.weekly,
+      monthly: resetQuotaForm.monthly
+    })
     appStore.showSuccess(t('admin.subscriptions.quotaResetSuccess'))
     showResetQuotaConfirm.value = false
     resettingSubscription.value = null

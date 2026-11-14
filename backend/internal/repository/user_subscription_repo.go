@@ -373,6 +373,28 @@ func (r *userSubscriptionRepository) UpdateNotes(ctx context.Context, subscripti
 	return translatePersistenceError(err, service.ErrSubscriptionNotFound, nil)
 }
 
+func (r *userSubscriptionRepository) UpdateQuotaWindowStarts(ctx context.Context, id int64, fiveHour, daily, weekly, monthly *time.Time) error {
+	if fiveHour == nil && daily == nil && weekly == nil && monthly == nil {
+		return nil
+	}
+	client := clientFromContext(ctx, r.client)
+	update := client.UserSubscription.UpdateOneID(id)
+	if fiveHour != nil {
+		update.SetFiveHourWindowStart(*fiveHour)
+	}
+	if daily != nil {
+		update.SetDailyWindowStart(*daily)
+	}
+	if weekly != nil {
+		update.SetWeeklyWindowStart(*weekly)
+	}
+	if monthly != nil {
+		update.SetMonthlyWindowStart(*monthly)
+	}
+	_, err := update.Save(ctx)
+	return translatePersistenceError(err, service.ErrSubscriptionNotFound, nil)
+}
+
 func (r *userSubscriptionRepository) ActivateWindows(ctx context.Context, id int64, dailyStart, periodicStart time.Time) error {
 	client := clientFromContext(ctx, r.client)
 	n, err := client.UserSubscription.Update().

@@ -2224,7 +2224,12 @@ export interface BulkAssignSubscriptionRequest {
 }
 
 export interface ExtendSubscriptionRequest {
-  days: number
+  days?: number
+  expires_at?: string
+  five_hour_reset_at?: string
+  daily_reset_at?: string
+  weekly_reset_at?: string
+  monthly_reset_at?: string
 }
 
 // ==================== Query Parameters ====================

@@ -28,6 +28,9 @@ type UserSubscriptionRepository interface {
 	ExtendExpiry(ctx context.Context, subscriptionID int64, newExpiresAt time.Time) error
 	UpdateStatus(ctx context.Context, subscriptionID int64, status string) error
 	UpdateNotes(ctx context.Context, subscriptionID int64, notes string) error
+	// UpdateQuotaWindowStarts writes selected rolling-window anchors without
+	// clearing usage. Nil pointers leave that window unchanged.
+	UpdateQuotaWindowStarts(ctx context.Context, id int64, fiveHour, daily, weekly, monthly *time.Time) error
 
 	// ActivateWindows 首次使用时激活用量窗口。日窗口按日历日对齐，锚点为当天 0 点
 	// （dailyStart）；周/月窗口为期限对齐滚动窗口，锚点为激活时刻（periodicStart）。
