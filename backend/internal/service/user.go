@@ -84,6 +84,23 @@ func (u *User) IsActive() bool {
 //   - Public groups (non-exclusive): bindable by every user, unless the user has
 //     RestrictPublicGroups set, in which case the group must be in AllowedGroups
 //   - Exclusive groups: only users with the group in AllowedGroups can bind
+//
+// UserVisibleStandardGroup reports whether a standard (pay-as-you-go) group is
+// visible and usable by the user: the group must be active and the user must be
+// authorized for it (exclusive groups and restricted public groups need an
+// explicit grant). Subscription groups keep their own subscription-based rule.
+func UserVisibleStandardGroup(user *User, group *Group) bool {
+	if user == nil || group == nil {
+		return false
+	}
+	// Any non-subscription group follows the pay-as-you-go authorization rule;
+	// legacy rows may carry an empty type, which must not become unauthorized.
+	if group.SubscriptionType == SubscriptionTypeSubscription || !group.IsActive() {
+		return false
+	}
+	return user.CanBindGroup(group.ID, group.IsExclusive)
+}
+
 func (u *User) CanBindGroup(groupID int64, isExclusive bool) bool {
 	// 公开分组（非专属）：默认所有用户都可以绑定；仅当该用户开启了公开分组
 	// 限制时，才需要落在 AllowedGroups 中。

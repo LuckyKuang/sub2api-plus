@@ -645,6 +645,7 @@ func (s *APIKeyService) List(ctx context.Context, userID int64, params paginatio
 		return nil, nil, fmt.Errorf("list api keys: %w", err)
 	}
 	s.fillCurrentConcurrency(ctx, keys)
+	s.hideUnavailableStandardGroups(ctx, userID, keys)
 	return keys, pagination, nil
 }
 
@@ -659,8 +660,71 @@ func (s *APIKeyService) listByCurrentConcurrency(ctx context.Context, userID int
 		return nil, nil, fmt.Errorf("list api keys: %w", err)
 	}
 	s.fillCurrentConcurrency(ctx, keys)
+	s.hideUnavailableStandardGroups(ctx, userID, keys)
 	sortAPIKeysByCurrentConcurrency(keys, params.NormalizedSortOrder(pagination.SortOrderDesc))
 	return paginateAPIKeys(keys, params), apiKeyPaginationResult(int64(len(keys)), params), nil
+}
+
+// hideUnavailableStandardGroups blanks the group of a key whose standard group is
+// no longer visible to the user (disabled, deleted, turned exclusive, or dropped
+// by a public-group restriction). The row and its stored binding stay intact so
+// the key remains manageable and a later grant restores the display. Aggregate
+// keys keep only the group IDs the user may still use.
+func (s *APIKeyService) hideUnavailableStandardGroups(ctx context.Context, userID int64, keys []APIKey) {
+	if len(keys) == 0 || s.userRepo == nil {
+		return
+	}
+	needsUser := false
+	needsGroups := false
+	for i := range keys {
+		if keys[i].Group != nil && keys[i].Group.SubscriptionType != SubscriptionTypeSubscription {
+			needsUser = true
+		}
+		if keys[i].GroupBindingMode == GroupBindingCustom && len(keys[i].AggregateGroupIDs) > 0 {
+			needsGroups = true
+		}
+	}
+	if !needsUser && !needsGroups {
+		return
+	}
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil || user == nil {
+		return
+	}
+	var activeByID map[int64]Group
+	if needsGroups && s.groupRepo != nil {
+		groups, listErr := s.groupRepo.ListActive(ctx)
+		if listErr != nil {
+			// Without the active catalog the aggregate scope cannot be judged;
+			// leave it untouched instead of hiding every group.
+			return
+		}
+		activeByID = make(map[int64]Group, len(groups))
+		for i := range groups {
+			activeByID[groups[i].ID] = groups[i]
+		}
+	}
+	for i := range keys {
+		key := &keys[i]
+		if key.Group != nil && key.Group.SubscriptionType != SubscriptionTypeSubscription &&
+			!UserVisibleStandardGroup(user, key.Group) {
+			key.Group = nil
+		}
+		if activeByID == nil || key.GroupBindingMode != GroupBindingCustom || len(key.AggregateGroupIDs) == 0 {
+			continue
+		}
+		visible := make([]int64, 0, len(key.AggregateGroupIDs))
+		for _, id := range key.AggregateGroupIDs {
+			group, ok := activeByID[id]
+			if !ok {
+				continue
+			}
+			if UserVisibleStandardGroup(user, &group) {
+				visible = append(visible, id)
+			}
+		}
+		key.AggregateGroupIDs = visible
+	}
 }
 
 func normalizedAPIKeySortBy(sortBy string) string {

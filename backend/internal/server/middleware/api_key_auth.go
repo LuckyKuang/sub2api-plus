@@ -466,7 +466,8 @@ func validateAPIKeyGroupAllowed(apiKey *service.APIKey) bool {
 	if group.IsSubscriptionType() {
 		return true
 	}
-	return apiKey.User.CanBindGroup(group.ID, group.IsExclusive)
+	// Standard groups share one visibility rule with every user-facing list.
+	return service.UserVisibleStandardGroup(apiKey.User, group)
 }
 
 func validateAPIKeyGroupAvailable(apiKey *service.APIKey) (string, string, bool) {

@@ -1765,13 +1765,24 @@ const handleSort = (key: string, order: 'asc' | 'desc') => {
   loadApiKeys()
 }
 
-const editKey = (key: ApiKey) => {
+const editKey = async (key: ApiKey) => {
   selectedKey.value = key
+  // The list hides groups the user can no longer use, but the stored aggregate
+  // scope must survive an unrelated edit; read it from the key detail.
+  let storedAggregateGroupIDs = [...(key.aggregate_group_ids || [])]
+  if (key.group_binding_mode === 'custom') {
+    try {
+      const detail = await keysAPI.getById(key.id)
+      storedAggregateGroupIDs = [...(detail.aggregate_group_ids || storedAggregateGroupIDs)]
+    } catch (error) {
+      console.error('Error loading API key detail:', error)
+    }
+  }
   const hasIPRestriction = (key.ip_whitelist?.length > 0) || (key.ip_blacklist?.length > 0)
   const hasExpiration = !!key.expires_at
   formData.value = {
     group_binding_mode: key.group_binding_mode || 'single',
-    aggregate_group_ids: [...(key.aggregate_group_ids || [])],
+    aggregate_group_ids: storedAggregateGroupIDs,
     name: key.name,
     conversion_enabled: key.conversion_enabled || false,
     default_client: key.default_client || '',
